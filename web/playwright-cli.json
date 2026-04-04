@@ -1,0 +1,11 @@
+{
+  "browser": {
+    "browserName": "chromium",
+    "remoteEndpoint": "ws://192.168.8.128:3100",
+    "launchOptions": {
+      "headless": false
+    }
+  },
+  "outputDir": ".playwright/output",
+  "outputMode": "file"
+}

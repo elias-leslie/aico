@@ -1,0 +1,54 @@
+import { fireEvent, render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+import { PaneOverflowMenu } from './PaneOverflowMenu'
+
+describe('PaneOverflowMenu', () => {
+  it('shows consolidated pane actions with detach and close explanations', () => {
+    render(
+      <PaneOverflowMenu
+        onDetach={vi.fn()}
+        detachLabel="Detach Pane"
+        onCloseSession={vi.fn()}
+        onReset={vi.fn()}
+        onSettings={vi.fn()}
+        onUpload={vi.fn()}
+        onVoice={vi.fn()}
+        onClean={vi.fn()}
+        onResetAll={vi.fn()}
+        onCloseAll={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pane actions' }))
+
+    const detachItem = screen.getByRole('menuitem', { name: 'Detach Pane' })
+    const closeItem = screen.getByRole('menuitem', { name: 'Close Session' })
+
+    expect(detachItem.getAttribute('title')).toBe(
+      'Detach pane: remove it from this layout but keep the session running.',
+    )
+    expect(closeItem.getAttribute('title')).toBe(
+      'Close session: terminate the underlying tmux session.',
+    )
+
+    expect(screen.getByRole('menuitem', { name: 'Reset Terminal' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Clean Prompt' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Upload File' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Voice Input' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Settings' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Reset All' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Close All' })).toBeInTheDocument()
+  })
+
+  it('invokes the selected action and closes the menu', () => {
+    const onDetach = vi.fn()
+
+    render(<PaneOverflowMenu onDetach={onDetach} detachLabel="Detach Pane" />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pane actions' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Detach Pane' }))
+
+    expect(onDetach).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  })
+})

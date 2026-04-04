@@ -1,0 +1,467 @@
+@import "tailwindcss";
+
+:root,
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --background: #081018;
+  --foreground: #e6edf3;
+  --term-bg-deep: #0a0e14;
+  --term-bg-surface: #0f151c;
+  --term-bg-elevated: #16202a;
+  --term-border: #21303d;
+  --term-border-active: #365063;
+  --term-text-primary: #e6edf3;
+  --term-text-muted: #81909c;
+  --term-accent: #00ff9f;
+  --term-accent-muted: #00c97d;
+  --term-accent-glow: rgba(0, 255, 159, 0.18);
+  --term-accent-foreground: #03130b;
+  --term-success: #3fb950;
+  --term-warning: #d29922;
+  --term-error: #f85149;
+  --term-danger: #f85149;
+  --term-error-muted: rgba(248, 81, 73, 0.12);
+  --term-error-text: #ffb4af;
+  --term-overlay-backdrop: rgba(5, 10, 16, 0.78);
+  --term-surface-glass: rgba(22, 32, 42, 0.9);
+  --term-surface-overlay: rgba(7, 12, 18, 0.34);
+  --term-surface-soft: rgba(255, 255, 255, 0.05);
+  --term-surface-soft-hover: rgba(255, 255, 255, 0.1);
+  --term-shadow-dropdown: 0 16px 36px rgba(0, 0, 0, 0.42);
+  --term-shadow-modal:
+    0 18px 56px rgba(0, 0, 0, 0.58),
+    0 0 120px color-mix(in srgb, var(--term-accent) 5%, transparent);
+  --term-kbd-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --term-scanline: rgba(0, 0, 0, 0.15);
+  --term-panel-gradient-top: color-mix(
+    in srgb,
+    var(--term-bg-surface) 94%,
+    var(--term-accent) 6%
+  );
+  --term-panel-gradient-bottom: var(--term-bg-deep);
+  --term-text-dim: rgba(230, 237, 243, 0.58);
+  --term-text-faint: rgba(230, 237, 243, 0.36);
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --background: #eef4eb;
+  --foreground: #18231a;
+  --term-bg-deep: #f3f7ef;
+  --term-bg-surface: #fbfdf8;
+  --term-bg-elevated: #e7efe2;
+  --term-border: #cad7c7;
+  --term-border-active: #9cb39d;
+  --term-text-primary: #18231a;
+  --term-text-muted: #5b6b5d;
+  --term-accent: #0f8d59;
+  --term-accent-muted: #2c7653;
+  --term-accent-glow: rgba(15, 141, 89, 0.18);
+  --term-accent-foreground: #f7fff9;
+  --term-success: #228754;
+  --term-warning: #936300;
+  --term-error: #cf443f;
+  --term-danger: #cf443f;
+  --term-error-muted: rgba(207, 68, 63, 0.12);
+  --term-error-text: #8f1d1a;
+  --term-overlay-backdrop: rgba(229, 237, 226, 0.84);
+  --term-surface-glass: rgba(251, 253, 248, 0.9);
+  --term-surface-overlay: rgba(232, 238, 227, 0.72);
+  --term-surface-soft: rgba(24, 35, 26, 0.06);
+  --term-surface-soft-hover: rgba(24, 35, 26, 0.11);
+  --term-shadow-dropdown: 0 18px 42px rgba(38, 60, 45, 0.16);
+  --term-shadow-modal:
+    0 18px 56px rgba(38, 60, 45, 0.18),
+    0 0 96px color-mix(in srgb, var(--term-accent) 8%, transparent);
+  --term-kbd-shadow: 0 1px 2px rgba(32, 51, 38, 0.16);
+  --term-scanline: rgba(24, 35, 26, 0.05);
+  --term-panel-gradient-top: color-mix(
+    in srgb,
+    var(--term-bg-surface) 92%,
+    var(--term-accent) 8%
+  );
+  --term-panel-gradient-bottom: #edf4e9;
+  --term-text-dim: rgba(24, 35, 26, 0.58);
+  --term-text-faint: rgba(24, 35, 26, 0.36);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    color-scheme: light;
+    --background: #eef4eb;
+    --foreground: #18231a;
+    --term-bg-deep: #f3f7ef;
+    --term-bg-surface: #fbfdf8;
+    --term-bg-elevated: #e7efe2;
+    --term-border: #cad7c7;
+    --term-border-active: #9cb39d;
+    --term-text-primary: #18231a;
+    --term-text-muted: #5b6b5d;
+    --term-accent: #0f8d59;
+    --term-accent-muted: #2c7653;
+    --term-accent-glow: rgba(15, 141, 89, 0.18);
+    --term-accent-foreground: #f7fff9;
+    --term-success: #228754;
+    --term-warning: #936300;
+    --term-error: #cf443f;
+    --term-danger: #cf443f;
+    --term-error-muted: rgba(207, 68, 63, 0.12);
+    --term-error-text: #8f1d1a;
+    --term-overlay-backdrop: rgba(229, 237, 226, 0.84);
+    --term-surface-glass: rgba(251, 253, 248, 0.9);
+    --term-surface-overlay: rgba(232, 238, 227, 0.72);
+    --term-surface-soft: rgba(24, 35, 26, 0.06);
+    --term-surface-soft-hover: rgba(24, 35, 26, 0.11);
+    --term-shadow-dropdown: 0 18px 42px rgba(38, 60, 45, 0.16);
+    --term-shadow-modal:
+      0 18px 56px rgba(38, 60, 45, 0.18),
+      0 0 96px color-mix(in srgb, var(--term-accent) 8%, transparent);
+    --term-kbd-shadow: 0 1px 2px rgba(32, 51, 38, 0.16);
+    --term-scanline: rgba(24, 35, 26, 0.05);
+    --term-panel-gradient-top: color-mix(
+      in srgb,
+      var(--term-bg-surface) 92%,
+      var(--term-accent) 8%
+    );
+    --term-panel-gradient-bottom: #edf4e9;
+    --term-text-dim: rgba(24, 35, 26, 0.58);
+    --term-text-faint: rgba(24, 35, 26, 0.36);
+  }
+}
+
+:root {
+  --term-text-secondary: var(--term-text-muted);
+  --term-bg: var(--term-bg-deep);
+  --term-accent-soft: color-mix(in srgb, var(--term-accent) 15%, transparent);
+  --term-accent-border: color-mix(in srgb, var(--term-accent) 35%, transparent);
+  --term-danger-soft: color-mix(in srgb, var(--term-danger) 15%, transparent);
+  --term-danger-border: color-mix(in srgb, var(--term-danger) 36%, transparent);
+  --font-ui: var(--font-dm-sans), "DM Sans", system-ui, -apple-system, sans-serif;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-mono: var(--font-jetbrains-mono);
+  --color-slate-900: #0f172a;
+  --color-slate-800: #1e293b;
+  --color-slate-700: #334155;
+  --color-slate-600: #475569;
+  --color-slate-500: #64748b;
+  --color-slate-400: #94a3b8;
+  --color-slate-300: #cbd5e1;
+  --color-slate-200: #e2e8f0;
+  --color-phosphor-400: #4ade80;
+  --color-phosphor-500: #22c55e;
+}
+
+html,
+body {
+  overflow: hidden;
+}
+
+body {
+  background:
+    radial-gradient(
+      circle at top left,
+      color-mix(in srgb, var(--term-accent) 10%, transparent),
+      transparent 32%
+    ),
+    linear-gradient(
+      180deg,
+      var(--term-bg-surface) 0%,
+      var(--background) 48%,
+      var(--term-bg-deep) 100%
+    );
+  color: var(--foreground);
+  font-family: var(--font-mono), monospace;
+}
+
+/* xterm styles - ensure consistent font rendering */
+.xterm {
+  height: 100%;
+}
+
+.xterm,
+.xterm-screen,
+.xterm-rows {
+  /* Ensure consistent font rendering for character width calculation */
+  font-family: "JetBrains Mono", "Consolas", "Monaco", "Courier New", monospace;
+  letter-spacing: 0;
+  font-feature-settings:
+    "liga" off,
+    "calt" off; /* Disable ligatures */
+  text-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.xterm-viewport {
+  overflow-y: auto;
+}
+
+/* Auto-hiding scrollbar: fades in on scroll, fades out after idle */
+.xterm-viewport::-webkit-scrollbar {
+  width: 10px;
+  background: transparent;
+}
+
+.xterm-viewport::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.xterm-viewport::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  transition: background 200ms ease;
+}
+
+.xterm-viewport:hover::-webkit-scrollbar-thumb,
+.xterm-viewport.scrolling::-webkit-scrollbar-thumb {
+  background: var(--term-accent-muted);
+  border-color: var(--term-bg-surface);
+}
+
+.xterm-viewport:hover::-webkit-scrollbar-thumb:hover,
+.xterm-viewport.scrolling::-webkit-scrollbar-thumb:hover {
+  background: var(--term-accent);
+}
+
+/* Firefox scrollbar */
+.xterm-viewport {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.xterm-viewport:hover,
+.xterm-viewport.scrolling {
+  scrollbar-color: var(--term-accent-muted) transparent;
+}
+
+/* Mobile terminal needs a persistent, wider drag target. Hover/fade behavior
+   is unreliable on touch devices and makes the scrollbar feel unresponsive. */
+.xterm-viewport.mobile-terminal-viewport::-webkit-scrollbar {
+  width: 20px;
+}
+
+.xterm-viewport.mobile-terminal-viewport::-webkit-scrollbar-thumb {
+  background: var(--term-accent-muted);
+  border-radius: 999px;
+  border: 5px solid var(--term-bg-surface);
+}
+
+.xterm-viewport.mobile-terminal-viewport::-webkit-scrollbar-thumb:hover {
+  background: var(--term-accent);
+}
+
+.xterm-viewport.mobile-terminal-viewport {
+  scrollbar-width: auto;
+  scrollbar-color: var(--term-accent-muted) transparent;
+}
+
+/* Agent indicator breathing animation */
+@keyframes agent-breathe {
+  0%,
+  100% {
+    opacity: 0.6;
+    box-shadow: 0 0 4px var(--agent-color, var(--term-accent));
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 12px var(--agent-color, var(--term-accent));
+  }
+}
+
+.agent-indicator-active {
+  animation: agent-breathe 2s ease-in-out infinite;
+}
+
+/* Mode toggle animations */
+@keyframes mode-toggle-pulse {
+  0%,
+  100% {
+    opacity: 0.2;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(1.02);
+  }
+}
+
+@keyframes mode-toggle-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.mode-toggle-btn:focus-visible {
+  outline: 2px solid var(--term-accent);
+  outline-offset: 2px;
+}
+
+.mode-toggle-btn:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.mode-toggle-glow {
+  animation: mode-toggle-pulse 2s ease-in-out infinite;
+}
+
+.mode-toggle-spin {
+  animation: mode-toggle-spin 0.8s linear infinite;
+}
+
+/* Make cursor highly visible with glow effect */
+.xterm-cursor-block {
+  box-shadow:
+    0 0 8px #ffffff,
+    0 0 16px rgba(255, 255, 255, 0.5);
+}
+
+.xterm-cursor-outline {
+  box-shadow:
+    0 0 6px #ffffff,
+    0 0 12px rgba(255, 255, 255, 0.4);
+}
+
+/* Interactive row hover states for modal lists */
+.interactive-row {
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.interactive-row:hover {
+  background-color: var(--term-bg-surface);
+}
+
+.interactive-row:active {
+  background-color: var(--term-bg-elevated);
+}
+
+/* Focus ring for form inputs */
+.term-input:focus {
+  border-color: var(--term-accent) !important;
+  box-shadow: 0 0 0 1px var(--term-accent-glow);
+}
+
+/* Global focus-visible for buttons and links */
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--term-accent);
+  outline-offset: 2px;
+}
+
+/* Terminal tab styling */
+.tab-active {
+  background-color: var(--term-bg-elevated);
+  color: var(--term-text-primary);
+  border: 1px solid var(--term-border-active);
+  border-bottom: 2px solid var(--term-accent);
+  box-shadow: inset 0 1px 0 var(--term-surface-soft);
+}
+
+.tab-inactive {
+  background-color: transparent;
+  color: var(--term-text-muted);
+  border: 1px solid transparent;
+  border-bottom: 2px solid transparent;
+  box-shadow: none;
+}
+
+.tab-inactive:hover {
+  background-color: var(--term-bg-elevated);
+  color: var(--term-text-primary);
+  border-bottom-color: color-mix(in srgb, var(--term-accent) 40%, transparent);
+}
+
+/* Resizable pane dividers (react-resizable-panels) */
+.resizable-handle-horizontal,
+.resizable-handle-vertical {
+  flex-shrink: 0;
+  position: relative;
+  background-color: transparent;
+  outline: none;
+  touch-action: none;
+  user-select: none;
+  z-index: 1;
+  transition:
+    box-shadow 0.15s ease;
+}
+
+/* Horizontal handle (vertical divider between side-by-side panes) */
+.resizable-handle-horizontal {
+  width: 8px;
+  cursor: col-resize;
+}
+
+.resizable-handle-horizontal::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  border-radius: 9999px;
+  background-color: var(--term-border-active);
+  transition:
+    width 0.15s ease,
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.resizable-handle-horizontal:hover::after,
+.resizable-handle-horizontal:focus-visible::after,
+.resizable-handle-horizontal:active::after {
+  width: 5px;
+  background-color: var(--term-accent);
+  box-shadow: 0 0 8px var(--term-accent-glow);
+}
+
+/* Vertical handle (horizontal divider between stacked panes) */
+.resizable-handle-vertical {
+  height: 8px;
+  cursor: row-resize;
+}
+
+.resizable-handle-vertical::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  transform: translateY(-50%);
+  border-radius: 9999px;
+  background-color: var(--term-border-active);
+  transition:
+    height 0.15s ease,
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.resizable-handle-vertical:hover::after,
+.resizable-handle-vertical:focus-visible::after,
+.resizable-handle-vertical:active::after {
+  height: 5px;
+  background-color: var(--term-accent);
+  box-shadow: 0 0 8px var(--term-accent-glow);
+}
+
+.terminal-pane-shell {
+  border: 1px solid var(--term-border-active);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--term-text-primary) 2%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--term-text-primary) 14%, transparent);
+}
+
+.terminal-pane-shell-drag-target {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--term-text-primary) 4%, transparent),
+    0 0 0 1px var(--term-accent-glow);
+}

@@ -1,0 +1,67 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "summitflow-terminal"
+version = "0.1.0"
+description = "SummitFlow Terminal Service - Independent web terminal microservice"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.109.0",
+    "uvicorn[standard]>=0.27.0",
+    "alembic>=1.13.0",
+    "sqlalchemy>=2.0.0",
+    "psycopg[binary,pool]>=3.1.0",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.6.0",
+    "python-multipart>=0.0.6",
+    "websockets>=12.0",
+    "httpx>=0.27.0",
+    "slowapi>=0.1.9",
+    "structlog>=24.0.0",
+    "python-json-logger>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.25.0",
+    "ruff>=0.8.0",
+    "ty>=0.0.17",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["terminal"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["terminal"]
+
+[tool.ty.rules]
+# Suppress beta-quality rules (ty 0.0.x false positives)
+# Remove these as ty matures past 0.1
+invalid-argument-type = "ignore"
+unknown-argument = "ignore"
+unresolved-import = "ignore"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "asyncio: mark tests that await async code",
+]
+filterwarnings = [
+    # slowapi 0.1.9 uses deprecated asyncio.iscoroutinefunction (removed in 3.16)
+    "ignore:'asyncio.iscoroutinefunction':DeprecationWarning:slowapi",
+]

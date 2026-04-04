@@ -1,0 +1,64 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Node
+node_modules/
+.pnpm-store/
+.next/
+out/
+*.tsbuildinfo
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env*.local
+
+# Logs
+*.log
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Secrets
+*.pem
+*.key
+credentials.json
+secrets.json
+
+# Dev tools
+.dev-tools/
+
+# Project data
+backups/
+backup-index.json
+
+# SummitFlow context
+.summitflow/
+.st/
+.index.yaml
+
+# Claude Code session state
+.claude/session-state/
+.playwright/output/

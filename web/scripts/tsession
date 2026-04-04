@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+PYTHON_BIN="$REPO_ROOT/.venv/bin/python"
+
+if [ ! -x "$PYTHON_BIN" ]; then
+  PYTHON_BIN="${PYTHON:-python3}"
+fi
+
+exec env \
+  -u DATABASE_URL \
+  -u REDIS_URL \
+  -u AGENT_HUB_DB_URL \
+  -u AGENT_HUB_REDIS_URL \
+  -u PORTFOLIO_DB_URL \
+  -u PORTFOLIO_AI_DB_URL \
+  -u HATCHET_CLIENT_TOKEN \
+  -u HATCHET_CLIENT_HOST_PORT \
+  -u HATCHET_CLIENT_TLS_STRATEGY \
+  "$PYTHON_BIN" -m terminal.cli.session_broker "$@"

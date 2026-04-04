@@ -1,0 +1,322 @@
+/* VoiceTranscriptPanel styles - modeled on PromptCleaner */
+
+/* Backdrop */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--term-overlay-backdrop);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.backdropVisible {
+  opacity: 1;
+}
+
+/* Main Panel */
+.panel {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  max-height: 70vh;
+  min-height: 240px;
+  background: linear-gradient(
+    180deg,
+    var(--term-panel-gradient-top) 0%,
+    var(--term-panel-gradient-bottom) 100%
+  );
+  border-top: 1px solid var(--term-accent-border);
+  border-radius: 16px 16px 0 0;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transform: translateY(100%);
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow:
+    var(--term-shadow-modal),
+    0 0 80px color-mix(in srgb, var(--term-accent) 10%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--term-accent) 20%, transparent);
+}
+.panelVisible {
+  transform: translateY(0);
+}
+
+/* Header */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--term-accent-soft);
+  background: var(--term-surface-overlay);
+}
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.headerTitle {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--term-accent);
+  letter-spacing: 0.5px;
+}
+.closeBtn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--term-border);
+  border-radius: 6px;
+  color: var(--term-text-muted);
+  font-size: 18px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.closeBtn:hover {
+  background: var(--term-danger-soft);
+  border-color: var(--term-danger-border);
+  color: var(--term-error);
+}
+
+/* Pulsing recording dot */
+.pulsingDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--term-error);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--term-error) 60%, transparent);
+  }
+  50% {
+    opacity: 0.7;
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--term-error) 0%, transparent);
+  }
+}
+
+/* Textarea area */
+.textareaWrapper {
+  flex: 1;
+  padding: 12px 16px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.editTextarea {
+  flex: 1;
+  background: var(--term-surface-overlay);
+  border: 1px solid var(--term-accent-border);
+  border-radius: 8px;
+  padding: 14px;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--term-text-primary);
+  resize: none;
+  outline: none;
+  min-height: 80px;
+}
+.editTextarea:focus {
+  border-color: var(--term-accent);
+  box-shadow: 0 0 0 2px var(--term-accent-soft);
+}
+
+/* Interim text styling (appended inside textarea) */
+.interimText {
+  color: var(--term-accent, #00ff9f);
+  opacity: 0.6;
+}
+
+/* Status bar */
+.statusBar {
+  padding: 4px 16px 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.statusText {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--term-text-faint);
+}
+.statusListening {
+  color: var(--term-accent);
+  animation: blink 1s infinite;
+}
+.statusError {
+  color: var(--term-error);
+}
+.statusProcessing {
+  color: var(--term-warning);
+  animation: blink 1s infinite;
+}
+@keyframes blink {
+  50% {
+    opacity: 0.5;
+  }
+}
+.charCount {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--term-text-faint);
+}
+
+/* Action Bar */
+.actionBar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 14px 16px;
+  background: var(--term-surface-overlay);
+  border-top: 1px solid var(--term-surface-soft);
+}
+.actionBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.actionBtnSecondary {
+  background: var(--term-surface-soft);
+  border: 1px solid var(--term-border);
+  color: var(--term-text-muted);
+}
+.actionBtnSecondary:hover {
+  background: var(--term-surface-soft-hover);
+  border-color: var(--term-border-active);
+  color: var(--term-text-primary);
+}
+.micBtn {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--term-accent-border);
+  background: var(--term-accent-soft);
+  color: var(--term-accent);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.micBtn:hover {
+  background: color-mix(in srgb, var(--term-accent) 22%, transparent);
+  border-color: var(--term-accent);
+}
+.micBtnActive {
+  border-color: var(--term-error);
+  background: var(--term-danger-soft);
+  color: var(--term-error);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--term-error) 30%, transparent);
+}
+.micBtnActive:hover {
+  background: color-mix(in srgb, var(--term-error) 24%, transparent);
+}
+.actionBtnPrimary {
+  flex: 1;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--term-accent) 24%, transparent),
+    color-mix(in srgb, var(--term-accent) 36%, transparent)
+  );
+  border: 1px solid var(--term-accent);
+  color: var(--term-accent-foreground);
+  box-shadow: 0 0 20px color-mix(in srgb, var(--term-accent) 20%, transparent);
+}
+.actionBtnPrimary:hover {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--term-accent) 32%, transparent),
+    color-mix(in srgb, var(--term-accent) 45%, transparent)
+  );
+  box-shadow: 0 0 30px color-mix(in srgb, var(--term-accent) 30%, transparent);
+  transform: translateY(-1px);
+}
+.actionBtnPrimary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+.insertLink {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--term-text-faint);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  padding: 4px 0 0;
+  align-self: center;
+}
+.insertLink:hover {
+  color: var(--term-text-dim);
+}
+.sendGroup {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Glow effects */
+.glowTop {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 60%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--term-accent), transparent);
+  box-shadow: 0 0 20px color-mix(in srgb, var(--term-accent) 50%, transparent);
+}
+
+/* Mobile inline mic button — pulsing border glow when listening */
+.mobileMicPulse {
+  animation: pulseRing 1.5s ease-in-out infinite;
+}
+@keyframes pulseRing {
+  0%, 100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--term-error) 50%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 8px color-mix(in srgb, var(--term-error) 0%, transparent);
+  }
+}
+
+/* Desktop mobile adjustments (bottom-sheet only) */
+@media (max-width: 768px) {
+  .panel {
+    max-height: 85vh;
+    border-radius: 12px 12px 0 0;
+  }
+  .actionBar {
+    flex-wrap: wrap;
+  }
+  .actionBtnSecondary {
+    flex: 0;
+    min-width: auto;
+  }
+  .actionBtnPrimary {
+    width: 100%;
+    order: -1;
+  }
+}

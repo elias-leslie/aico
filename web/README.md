@@ -1,0 +1,259 @@
+# SummitFlow Terminal
+
+Web-based terminal service with tmux-backed persistent sessions, multi-pane layouts, configurable CLI agent integrations, and a built-in maintenance loop.
+
+**Terminal is a standalone product.** It starts and runs independently with just PostgreSQL and tmux. SummitFlow and Agent Hub integrations are optional companion services.
+
+![SummitFlow Terminal screenshot](docs/images/terminal-home-dark.png)
+
+Terminal gives you browser-accessible tmux sessions with pane layouts, persistent shells, and optional companion tooling without turning your host runtime into a containerized sidecar.
+
+## Quickstart
+
+Native host runtime is the supported path.
+
+```bash
+cp .env.example .env.local
+# edit DATABASE_URL for your local Postgres
+
+uv sync --dev
+DATABASE_URL=postgresql://terminal:terminal@localhost:5432/terminal uv run alembic upgrade head
+corepack pnpm --dir frontend install --frozen-lockfile
+corepack pnpm --dir frontend build
+
+uv run python -m terminal
+API_URL=http://localhost:8002 HOSTNAME=0.0.0.0 PORT=3002 corepack pnpm --dir frontend start
+```
+
+## Overview
+
+SummitFlow Terminal provides browser-accessible terminal sessions backed by tmux for persistence. It supports multiple panes with split layouts, project-scoped working directories, and dual-mode operation (shell plus the configured default agent tool). Sessions survive browser disconnects, are reconciled with tmux state on startup and on a recurring maintenance interval, and expose maintenance status through `/health`.
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Backend | FastAPI, Python 3.13+, Uvicorn |
+| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 4 |
+| Terminal | xterm.js 6 (rendering), tmux (session persistence) |
+| Database | PostgreSQL (own schema; can be a dedicated database) |
+| Quality | Ruff, Ty, pytest, Vitest, Biome |
+
+## Architecture
+
+```
+terminal/
+├── terminal/              # FastAPI backend
+│   ├── api/               # REST + WebSocket endpoints
+│   │   ├── terminal.py    # WebSocket terminal I/O
+│   │   ├── sessions.py    # Session CRUD
+│   │   ├── panes.py       # Pane management
+│   │   ├── projects.py    # Project settings
+│   │   └── agent.py       # Agent startup + state endpoints
+│   ├── services/          # Business logic
+│   │   ├── lifecycle.py       # Session lifecycle facade
+│   │   ├── lifecycle_core.py  # Single-session operations
+│   │   ├── lifecycle_batch.py # Multi-session batch ops
+│   │   ├── lifecycle_reconcile.py  # DB/tmux sync + dead-session retention
+│   │   ├── maintenance.py     # Periodic maintenance loop + status tracking
+│   │   ├── pty_manager.py     # Low-level PTY operations
+│   │   └── pane_service.py    # Pane business logic
+│   ├── storage/           # Database layer
+│   └── utils/             # tmux utilities
+├── frontend/
+│   ├── app/               # Pages (App Router)
+│   ├── components/        # React components
+│   │   ├── Terminal.tsx       # xterm.js wrapper + WebSocket
+│   │   ├── TerminalTabs.tsx   # Tab management
+│   │   ├── pane-layouts/      # Split/grid layout components
+│   │   └── keyboard/          # Mobile on-screen keyboard
+│   └── lib/
+│       ├── hooks/         # Custom React hooks
+│       └── api/           # API client functions
+├── alembic/               # Database migrations
+└── scripts/               # Service management
+```
+
+## Key Features
+
+- **Persistent sessions** - tmux-backed terminals survive browser disconnects and server restarts
+- **Multi-pane layouts** - Up to 6 panes with resizable split views on wide desktops
+- **Dual mode** - Switch between shell and your configured agent tool per pane
+- **Project context** - Open terminals in project-specific working directories
+- **Project deep links** - Open `/?project=<id>&dir=<path>` to focus or create a project pane directly
+- **Mobile keyboard** - On-screen keyboard for touch devices (simple-keyboard)
+- **Periodic maintenance** - Reconciles tmux state, prunes stale uploads, repairs default agent-tool state, and deletes orphaned project settings
+- **Maintenance observability** - `/health` and `/api/internal/maintenance/runs` report maintenance state and recent persisted runs
+- **Scrollback capture** - Retrieves terminal history when reconnecting
+- **Real-time resize** - Terminal dimensions sync between browser and tmux
+- **Light and dark app themes** - Respects `prefers-color-scheme` by default and supports a persisted manual override
+
+## Standalone Usage and Optional Integrations
+
+Terminal requires only PostgreSQL and tmux. It has no hard dependency on any other service.
+
+Terminal is intended to run natively on the host under `systemd --user`. It depends on the host tmux server, host working tree, and host CLI auth/session state.
+
+### Standalone (default)
+
+All core features work without SummitFlow or Agent Hub: persistent tmux sessions, multi-pane layouts, shell/agent mode switching, project settings, maintenance, and the full REST/WebSocket API. When no external service is reachable, the project list is populated from local `terminal_project_settings` only.
+
+### Optional: SummitFlow API (`SUMMITFLOW_API_BASE`)
+
+When the SummitFlow backend is available at `SUMMITFLOW_API_BASE`, Terminal fetches project metadata (name, root path) and merges it with local terminal settings. New project panes still open in shell mode by default, but Terminal uses the SummitFlow project root to place the shell in the right working directory. If SummitFlow is unreachable, Terminal continues with local data only.
+
+### Optional: Agent Hub (`NEXT_PUBLIC_AGENT_HUB_URL`, `AGENT_HUB_URL`)
+
+When Agent Hub is configured, Terminal gains:
+
+- **Model catalog** — fetched through Terminal's same-origin `/api/agent-hub/models` proxy so cross-machine installs do not depend on browser CORS.
+- **Prompt cleaning** — sent through Terminal's same-origin `/api/agent-hub/complete` proxy for the same reason.
+- **Voice transcription** — still optional and still requires `@agent-hub/passport-client`. It is not part of the core v1 install path.
+
+Use `NEXT_PUBLIC_AGENT_HUB_URL` when the browser should expose companion UI, and set `AGENT_HUB_URL` anywhere the Terminal server itself needs to reach Agent Hub directly on another host. If Agent Hub is unavailable, Terminal falls back cleanly.
+
+## Ports
+
+| Service | Port |
+|---------|------|
+| Frontend (Next.js) | 3002 |
+| Backend (FastAPI) | 8002 |
+
+## Getting Started
+
+### Prerequisites
+
+- Python 3.13+
+- Node.js 20+
+- PostgreSQL
+- tmux
+
+### Recommended: Native Standalone
+
+```bash
+cp .env.example .env.local
+# edit DATABASE_URL for your local Postgres
+
+uv sync --dev
+DATABASE_URL=postgresql://terminal:terminal@localhost:5432/terminal uv run alembic upgrade head
+corepack pnpm --dir frontend install --frozen-lockfile
+corepack pnpm --dir frontend build
+
+# terminal API
+uv run python -m terminal
+
+# terminal frontend
+API_URL=http://localhost:8002 HOSTNAME=0.0.0.0 PORT=3002 corepack pnpm --dir frontend start
+```
+
+`pnpm --dir frontend build` stages `.next/static` and `public/` into the
+standalone runtime, and `pnpm --dir frontend start` runs the production Next.js
+server. Keep `dev` for local feature work, not for public release verification
+or install docs.
+
+### Native Companion
+
+Add these on top of the native standalone setup when SummitFlow or Agent Hub are running elsewhere:
+
+```bash
+SUMMITFLOW_API_BASE=http://HOST:8001/api
+NEXT_PUBLIC_AGENT_HUB_URL=http://HOST:8003
+AGENT_HUB_URL=http://HOST:8003
+```
+
+Then start the same production processes as native standalone:
+
+```bash
+uv run python -m terminal
+API_URL=http://localhost:8002 HOSTNAME=0.0.0.0 PORT=3002 corepack pnpm --dir frontend start
+```
+
+### Environment
+
+Runtime settings are read from repo-local `.env.local`, repo-local `.env`, or exported environment variables. Use [`.env.example`](.env.example) as the reference. Only `DATABASE_URL` is required for standalone mode.
+
+```bash
+# Required
+DATABASE_URL=postgresql://user:pass@localhost/terminal
+
+# Optional integrations (Terminal works without these)
+SUMMITFLOW_API_BASE=http://localhost:8001/api       # SummitFlow project metadata
+NEXT_PUBLIC_AGENT_HUB_URL=http://localhost:8003     # enables companion UI in the browser
+AGENT_HUB_URL=http://localhost:8003                 # server-side Agent Hub access for proxies
+
+# Optional tuning
+LOG_LEVEL=INFO
+LOG_DIR=logs
+MAINTENANCE_INTERVAL_SECONDS=900
+MAINTENANCE_SESSION_PURGE_DAYS=7
+UPLOAD_MAX_AGE_SECONDS=86400
+```
+
+## Remote Access
+
+Terminal listens on `localhost` by default. To access it from other devices — your phone, another computer, or anywhere on the internet — see the [Remote Access guide](docs/remote-access.md), which covers Tailscale, Cloudflare Tunnel, and Caddy reverse proxy setups.
+
+## API
+
+### REST Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/health` | Health check plus maintenance status payload |
+| GET | `/api/internal/maintenance` | Internal maintenance status (requires internal bearer token) |
+| GET | `/api/internal/maintenance/runs` | Recent persisted maintenance runs (requires internal bearer token) |
+| POST | `/api/internal/maintenance/run` | Trigger one maintenance cycle (requires internal bearer token) |
+| GET | `/api/terminal/sessions` | List sessions |
+| GET | `/api/terminal/sessions/{id}` | Get session |
+| PATCH | `/api/terminal/sessions/{id}` | Update session |
+| DELETE | `/api/terminal/sessions/{id}` | Delete session |
+| GET | `/api/terminal/panes` | List panes |
+| POST | `/api/terminal/panes` | Create pane (max 6) |
+| PATCH | `/api/terminal/panes/{id}` | Update pane |
+| DELETE | `/api/terminal/panes/{id}` | Delete pane |
+| GET | `/api/terminal/projects` | List project settings (merged with SummitFlow projects when available) |
+| PUT | `/api/terminal/project-settings/{id}` | Update project settings |
+| PUT | `/api/terminal/projects/{id}/mode` | Set shell/agent mode |
+| POST | `/api/terminal/projects/{id}/reset` | Reset project sessions |
+| POST | `/api/terminal/projects/{id}/disable` | Disable terminal for project |
+
+### WebSocket
+
+`/ws/terminal/{session_id}` - Terminal I/O stream
+
+| Message Type | Direction | Description |
+|-------------|-----------|-------------|
+| Text | Client → Server | Terminal input |
+| JSON `{"resize": {cols, rows}}` | Client → Server | Resize terminal |
+| JSON `{"refresh": true}` | Client → Server | Redraw terminal |
+| Binary | Server → Client | Terminal output |
+
+## Database
+
+Primary service tables: `terminal_sessions` (session state, mode, alive tracking), `terminal_panes` (pane layout and ordering), `terminal_project_settings` (per-project mode and enabled state), `agent_tools` (configured CLI agent integrations), and `terminal_maintenance_runs` (append-only maintenance audit trail). Schema is managed via Alembic migrations, with maintenance-focused indexes for session retention and project/mode lookups.
+
+## Services
+
+Terminal runs natively under `systemd --user`:
+
+- `summitflow-terminal.service` for the FastAPI backend on port `8002`
+- `summitflow-terminal-frontend.service` for the Next.js frontend on port `3002`
+
+`rebuild.sh terminal` remains the preferred local maintenance path in the SummitFlow workspace. Public installs should use the native steps above.
+
+## License
+
+Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+## Security
+
+Please report suspected vulnerabilities privately as described in
+[SECURITY.md](SECURITY.md).
+
+## Commercial
+
+Commercial use is permitted under the Apache 2.0 license.
+
+For commercial support, custom work, partnership discussions, or private
+licensing for future versions, start a thread in
+[GitHub Discussions](https://github.com/summitflow-solutions/terminal/discussions).
