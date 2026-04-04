@@ -81,11 +81,11 @@ describe('api-config', () => {
   })
 
   it('falls back to same-host Agent Hub websocket routing', () => {
-    setLocation('http://192.168.8.244:3002/')
+    setLocation('http://192.168.1.50:3002/')
     delete process.env.NEXT_PUBLIC_AGENT_HUB_URL
 
     expect(getAgentHubVoiceWsUrl()).toBe(
-      'ws://192.168.8.244:8003/api/voice/ws?user_id=terminal&app=terminal',
+      'ws://192.168.1.50:8003/api/voice/ws?user_id=terminal&app=terminal',
     )
   })
 

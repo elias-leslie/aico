@@ -193,7 +193,7 @@ def test_ensure_project_tool_session_skips_matching_mode_when_working_dir_differ
         "terminal",
         "codex",
         [
-            _make_session("codex-home", "codex", working_dir="/home/kasadis/terminal"),
+            _make_session("codex-home", "codex", working_dir="/home/tester/terminal"),
         ],
     )
     created_pane = _make_pane(
@@ -201,7 +201,7 @@ def test_ensure_project_tool_session_skips_matching_mode_when_working_dir_differ
         "terminal",
         "codex",
         [
-            _make_session("codex-srv", "codex", working_dir="/srv/workspaces/projects/terminal"),
+            _make_session("codex-workspace", "codex", working_dir="/workspace/projects/terminal"),
         ],
     )
 
@@ -218,16 +218,16 @@ def test_ensure_project_tool_session_skips_matching_mode_when_working_dir_differ
         target = ensure_project_tool_session(
             project_id="terminal",
             tool_slug="codex",
-            working_dir="/srv/workspaces/projects/terminal",
+            working_dir="/workspace/projects/terminal",
         )
 
-    assert target.session_id == "codex-srv"
+    assert target.session_id == "codex-workspace"
     assert target.created is True
     create_pane_mock.assert_called_once_with(
         pane_type="project",
         pane_name="Terminal [2]",
         project_id="terminal",
-        working_dir="/srv/workspaces/projects/terminal",
+        working_dir="/workspace/projects/terminal",
         agent_tool_slug="codex",
     )
 

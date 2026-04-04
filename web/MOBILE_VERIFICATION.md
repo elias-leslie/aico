@@ -16,8 +16,8 @@ Install the emulator stack with [`scripts/install-android-emulator.sh`](scripts/
 ## Fast Path
 
 ```bash
-bash ~/terminal/scripts/mobile-verification.sh workflow
-bash ~/terminal/scripts/mobile-verification.sh browser
+bash ./scripts/mobile-verification.sh workflow
+bash ./scripts/mobile-verification.sh browser
 ```
 
 That does four things:
@@ -30,20 +30,20 @@ That does four things:
 ## Common Commands
 
 ```bash
-bash ~/terminal/scripts/mobile-verification.sh doctor
-bash ~/terminal/scripts/mobile-verification.sh start-emulator
-bash ~/terminal/scripts/mobile-verification.sh wait-boot
-bash ~/terminal/scripts/mobile-verification.sh forward-cdp
-bash ~/terminal/scripts/mobile-verification.sh open-app
-bash ~/terminal/scripts/mobile-verification.sh browser
+bash ./scripts/mobile-verification.sh doctor
+bash ./scripts/mobile-verification.sh start-emulator
+bash ./scripts/mobile-verification.sh wait-boot
+bash ./scripts/mobile-verification.sh forward-cdp
+bash ./scripts/mobile-verification.sh open-app
+bash ./scripts/mobile-verification.sh browser
 ```
 
 Overrides:
 
 ```bash
-MOBILE_EMULATOR_HEADLESS=0 bash ~/terminal/scripts/mobile-verification.sh start-emulator
-MOBILE_CDP_PORT=9333 bash ~/terminal/scripts/mobile-verification.sh forward-cdp
-TERMINAL_MOBILE_URL=http://10.0.2.2:3002 bash ~/terminal/scripts/mobile-verification.sh open-app
+MOBILE_EMULATOR_HEADLESS=0 bash ./scripts/mobile-verification.sh start-emulator
+MOBILE_CDP_PORT=9333 bash ./scripts/mobile-verification.sh forward-cdp
+TERMINAL_MOBILE_URL=http://10.0.2.2:3002 bash ./scripts/mobile-verification.sh open-app
 ```
 
 ## What To Verify

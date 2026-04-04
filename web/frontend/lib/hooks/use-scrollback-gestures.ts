@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useEffectEvent } from 'react'
 import type { RefObject } from 'react'
 import type { Terminal } from '@xterm/xterm'
 import {
@@ -18,6 +18,10 @@ function stopAndPrevent(e: Event) {
   e.stopImmediatePropagation()
 }
 
+function readRef<T>(ref: RefObject<T | null>): T | null {
+  return ref.current
+}
+
 interface UseScrollbackGesturesOptions {
   containerRef: RefObject<HTMLDivElement | null>
   isActive: boolean
@@ -33,19 +37,17 @@ export function useScrollbackGestures({
   flushPendingLines,
   onDismiss,
 }: UseScrollbackGesturesOptions) {
-  const stableDismiss = useRef(onDismiss)
-  useEffect(() => {
-    stableDismiss.current = onDismiss
-  }, [onDismiss])
+  const dismiss = useEffectEvent(onDismiss)
 
   // Wheel scroll + scroll-past-bottom dismissal
   useEffect(() => {
-    const el = containerRef.current
+    const el = readRef(containerRef)
     if (!el || !isActive) return
 
     const handleWheel = (e: WheelEvent) => {
-      const term = xtermRef.current
+      const term = readRef(xtermRef)
       if (!term || e.deltaY === 0) return
+      const flush = readRef(flushPendingLines)
 
       const action = getScrollbackOverlayWheelAction({
         deltaY: e.deltaY,
@@ -53,21 +55,21 @@ export function useScrollbackGestures({
       })
       stopAndPrevent(e)
       if (action.kind === 'dismiss') {
-        stableDismiss.current()
+        dismiss()
         return
       }
       term.scrollLines(action.lineDelta)
       refreshTerminalViewport(term)
-      flushPendingLines.current(term)
+      flush?.(term)
     }
 
     el.addEventListener('wheel', handleWheel, { passive: false, capture: true })
     return () => el.removeEventListener('wheel', handleWheel, { capture: true })
-  }, [isActive]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [containerRef, flushPendingLines, isActive, xtermRef])
 
   // Touch scroll + scroll-past-bottom dismissal (mobile)
   useEffect(() => {
-    const el = containerRef.current
+    const el = readRef(containerRef)
     if (!el || !isActive) return
 
     let touchStartY: number | null = null
@@ -85,7 +87,7 @@ export function useScrollbackGestures({
     }
 
     const handleTouchStart = (e: TouchEvent) => {
-      const term = xtermRef.current
+      const term = readRef(xtermRef)
       if (!term) return
       touchStartY = e.touches[0].clientY
       lastTouchY = touchStartY
@@ -95,8 +97,9 @@ export function useScrollbackGestures({
     }
 
     const handleTouchMove = (e: TouchEvent) => {
-      const term = xtermRef.current
+      const term = readRef(xtermRef)
       if (!term || touchStartY === null || lastTouchY === null) return
+      const flush = readRef(flushPendingLines)
 
       const currentY = e.touches[0].clientY
       pendingScrollDeltaY += lastTouchY - currentY
@@ -110,7 +113,7 @@ export function useScrollbackGestures({
       stopAndPrevent(e)
       term.scrollLines(lineDelta)
       refreshTerminalViewport(term)
-      flushPendingLines.current(term)
+      flush?.(term)
       pendingScrollDeltaY -= lineDelta * getTouchScrollEffectiveCellHeight(cellHeight)
 
       if (!gestureLeftBottom && !isTerminalBufferAtBottom(term)) {
@@ -119,7 +122,7 @@ export function useScrollbackGestures({
     }
 
     const handleTouchEnd = () => {
-      const term = xtermRef.current
+      const term = readRef(xtermRef)
       if (
         term &&
         shouldDismissScrollbackOverlayTouchGesture({
@@ -130,7 +133,7 @@ export function useScrollbackGestures({
           isAtBottom: isTerminalBufferAtBottom(term),
         })
       ) {
-        stableDismiss.current()
+        dismiss()
       }
       resetGesture()
     }
@@ -145,5 +148,5 @@ export function useScrollbackGestures({
       el.removeEventListener('touchend', handleTouchEnd, { capture: true })
       el.removeEventListener('touchcancel', handleTouchEnd, { capture: true })
     }
-  }, [isActive]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [containerRef, flushPendingLines, isActive, xtermRef])
 }

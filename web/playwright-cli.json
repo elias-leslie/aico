@@ -1,7 +1,7 @@
 {
   "browser": {
     "browserName": "chromium",
-    "remoteEndpoint": "ws://192.168.8.128:3100",
+    "remoteEndpoint": "ws://127.0.0.1:3100",
     "launchOptions": {
       "headless": false
     }

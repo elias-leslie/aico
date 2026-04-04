@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { JetBrains_Mono, DM_Sans } from 'next/font/google'
+import Script from 'next/script'
 import { APP_THEME_COLORS, APP_THEME_INIT_SCRIPT } from '@/lib/app-theme'
 import './globals.css'
 import { Providers } from './providers'
@@ -38,7 +39,9 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: APP_THEME_INIT_SCRIPT }} />
+        <Script id="app-theme-init" strategy="beforeInteractive">
+          {APP_THEME_INIT_SCRIPT}
+        </Script>
       </head>
       <body className={`${jetbrainsMono.variable} ${dmSans.variable} antialiased`}>
         <Providers>{children}</Providers>

@@ -4,7 +4,14 @@ set -euo pipefail
 
 PROJECT_LAUNCHER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TERMINAL_SCRIPTS_DIR="$(cd "$PROJECT_LAUNCHER_DIR/.." && pwd)"
-WORKSPACES_ROOT="${ST_WORKSPACES_ROOT:-/srv/workspaces}"
+TERMINAL_REPO_ROOT="$(cd "$PROJECT_LAUNCHER_DIR/../.." && pwd)"
+
+DEFAULT_WORKSPACES_ROOT=""
+if [ "$(basename "$(dirname "$TERMINAL_REPO_ROOT")")" = "projects" ]; then
+  DEFAULT_WORKSPACES_ROOT="$(cd "$TERMINAL_REPO_ROOT/../.." && pwd)"
+fi
+
+WORKSPACES_ROOT="${ST_WORKSPACES_ROOT:-$DEFAULT_WORKSPACES_ROOT}"
 
 project_has_terminal_indicators() {
   local dir="$1"
@@ -54,10 +61,12 @@ resolve_terminal_project_dir() {
     return 0
   fi
 
-  candidate="$WORKSPACES_ROOT/projects/$project"
-  if [ -d "$candidate" ]; then
-    printf '%s\n' "$candidate"
-    return 0
+  if [ -n "$WORKSPACES_ROOT" ]; then
+    candidate="$WORKSPACES_ROOT/projects/$project"
+    if [ -d "$candidate" ]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
   fi
 
   candidate="$HOME/$project"
@@ -84,7 +93,7 @@ discover_terminal_projects() {
   local projects=()
   local base_dir
   local dir
-  for base_dir in "$WORKSPACES_ROOT/projects" "$HOME"; do
+  for base_dir in ${WORKSPACES_ROOT:+"$WORKSPACES_ROOT/projects"} "$HOME"; do
     [ -d "$base_dir" ] || continue
     for dir in "$base_dir"/*/; do
       [ -d "$dir/.git" ] || continue

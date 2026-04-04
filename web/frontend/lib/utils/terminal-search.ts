@@ -5,7 +5,11 @@ type XtermTerminal = InstanceType<typeof import('@xterm/xterm').Terminal>
 // Strips the ANSI sequences we keep in tmux-backed scrollback snapshots so
 // search coordinates line up with the visible xterm cells.
 const ANSI_SEARCH_ESCAPE_REGEX =
-  /\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\))/g
+  // biome-ignore lint/complexity/useRegexLiterals: String escapes avoid control-character false positives for ANSI matching.
+  new RegExp(
+    String.raw`\u001b(?:\[[0-?]*[ -/]*[@-~]|\][^\u0007\u001b]*(?:\u0007|\u001b\\))`,
+    'g',
+  )
 
 export interface TerminalSearchMatch {
   line: number

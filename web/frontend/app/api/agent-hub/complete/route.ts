@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { type NextRequest, NextResponse } from 'next/server'
 import { getAgentHubServerUrl } from '@/lib/server/agent-hub'
 
 const PASSTHROUGH_HEADERS = [

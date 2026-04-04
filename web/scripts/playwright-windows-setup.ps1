@@ -1,6 +1,15 @@
 # ============================================================
 # Playwright Remote Browser Service — Windows Setup
 # ============================================================
+# Optional parameters:
+#   -AllowedRemoteAddress "LocalSubnet" (default) or a CIDR like 192.168.1.0/24
+#   -Port 3100
+[CmdletBinding()]
+param(
+    [string]$AllowedRemoteAddress = "LocalSubnet",
+    [int]$Port = 3100
+)
+
 # Run this ONCE in PowerShell as Administrator.
 #
 # What it does:
@@ -9,14 +18,14 @@
 #   3. Opens firewall for LAN only
 #
 # After setup:
-#   - Browser server auto-starts at login on port 3100
-#   - Claude connects from the Linux VM via WebSocket
+#   - Browser server auto-starts at login on the chosen port
+#   - Any remote automation client can connect over WebSocket
 #   - You watch/steer via: playwright-cli show
-#   - Claude controls via: playwright-cli goto/click/snapshot etc.
+#   - Your automation client controls via: playwright-cli goto/click/snapshot etc.
 #
 # Security model:
 #   - Only browser automation exposed (no shell, no filesystem)
-#   - Firewall: port 3100 open to 192.168.8.0/24 only
+#   - Firewall: port open to the chosen subnet only
 #   - Isolated browser profile (not your real Chrome)
 # ============================================================
 
@@ -39,11 +48,11 @@ New-NetFirewallRule `
     -DisplayName $ruleName `
     -Direction Inbound `
     -Protocol TCP `
-    -LocalPort 3100 `
-    -RemoteAddress 192.168.8.0/24 `
+    -LocalPort $Port `
+    -RemoteAddress $AllowedRemoteAddress `
     -Action Allow `
     -Profile Private | Out-Null
-Write-Host "Firewall rule created (LAN only, port 3100)." -ForegroundColor Green
+Write-Host "Firewall rule created ($AllowedRemoteAddress, port $Port)." -ForegroundColor Green
 
 # --- Step 3: Register auto-start scheduled task ---
 Write-Host "`n=== Step 3: Register auto-start task ===" -ForegroundColor Cyan
@@ -58,7 +67,7 @@ Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction Silent
 
 $action = New-ScheduledTaskAction `
     -Execute $npxExe `
-    -Argument "playwright run-server --port 3100 --host 0.0.0.0"
+    -Argument "playwright run-server --port $Port --host 0.0.0.0"
 
 $trigger = New-ScheduledTaskTrigger -AtLogon
 
@@ -74,7 +83,7 @@ Register-ScheduledTask `
     -Action $action `
     -Trigger $trigger `
     -Settings $settings `
-    -Description "Playwright headed browser server for remote agent testing (port 3100, LAN only)" `
+    -Description "Playwright headed browser server for remote testing (port $Port, $AllowedRemoteAddress only)" `
     -RunLevel Highest | Out-Null
 
 Write-Host "Scheduled task '$taskName' registered (starts at login)." -ForegroundColor Green
@@ -91,7 +100,7 @@ Write-Host "`nTask status: $taskStatus" -ForegroundColor $(if ($taskStatus -eq "
 Write-Host "`n=== Setup complete ===" -ForegroundColor Green
 Write-Host @"
 
-Playwright browser server is running on port 3100.
+Playwright browser server is running on port $Port.
 
 Management:
   playwright-cli show                  Watch/steer the browser live
@@ -103,10 +112,12 @@ Management:
 "@
 
 $ip = (Get-NetIPAddress -AddressFamily IPv4 |
-    Where-Object { $_.IPAddress -like "192.168.8.*" }).IPAddress
+    Where-Object {
+        $_.IPAddress -match '^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)'
+    }).IPAddress
 if ($ip) {
     Write-Host "Your Windows IP: $ip" -ForegroundColor Yellow
-    Write-Host "Linux VM config should have: ws://${ip}:3100" -ForegroundColor Yellow
+    Write-Host "Remote client config can use: ws://${ip}:$Port" -ForegroundColor Yellow
 } else {
-    Write-Host "Could not detect 192.168.8.x IP — check ipconfig manually." -ForegroundColor Yellow
+    Write-Host "Could not detect a private LAN IP — check ipconfig manually." -ForegroundColor Yellow
 }

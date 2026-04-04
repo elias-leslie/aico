@@ -55,7 +55,7 @@ def test_is_agent_running_in_session_sync_checks_pane_tty_processes_when_tmux_re
                 returncode=0,
                 stdout=(
                     "768288 bash bash\n"
-                    "768297 bash bash /home/kasadis/bin/codex --yolo\n"
+                    "768297 bash bash /home/tester/bin/codex --yolo\n"
                     "768369 MainThread node /usr/bin/codex --yolo\n"
                     "768376 codex /path/to/codex --yolo\n"
                 ),

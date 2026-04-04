@@ -9,7 +9,7 @@ from unittest.mock import patch
 from terminal.cli.session_broker import main
 from terminal.services.session_broker import BrokerSessionTarget
 
-TERMINAL_ROOT = "/srv/workspaces/projects/terminal"
+TERMINAL_ROOT = "/workspace/projects/terminal"
 
 
 def _make_target() -> BrokerSessionTarget:
