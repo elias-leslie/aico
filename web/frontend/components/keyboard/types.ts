@@ -16,8 +16,8 @@ export interface KeyConfig {
   isModifier?: boolean
 }
 
-// Terminal input handler type
-export type TerminalInputHandler = (sequence: string) => void
+// A-Term input handler type
+export type ATermInputHandler = (sequence: string) => void
 
 // Keyboard size presets for mobile
 export type KeyboardSizePreset = 'small' | 'medium' | 'large'

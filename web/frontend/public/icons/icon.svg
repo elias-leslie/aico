@@ -7,13 +7,13 @@
   </defs>
   <!-- Background -->
   <rect width="512" height="512" rx="96" fill="url(#term-bg)"/>
-  <!-- Terminal window frame -->
+  <!-- A-Term window frame -->
   <rect x="60" y="100" width="392" height="312" rx="16" fill="#0f172a" stroke="#334155" stroke-width="4"/>
   <!-- Window buttons -->
   <circle cx="100" cy="130" r="12" fill="#ef4444"/>
   <circle cx="140" cy="130" r="12" fill="#fbbf24"/>
   <circle cx="180" cy="130" r="12" fill="#22c55e"/>
-  <!-- Terminal prompt > -->
+  <!-- A-Term prompt > -->
   <text x="100" y="240" font-family="monospace" font-size="80" font-weight="700" fill="#22c55e">$</text>
   <!-- Cursor block -->
   <rect x="170" y="190" width="40" height="60" fill="#22c55e" opacity="0.8"/>

@@ -1,9 +1,9 @@
 'use client'
 
-import type { TerminalTheme } from '../lib/constants/terminal'
-import { useScrollbackTerminal } from '../lib/hooks/use-scrollback-terminal'
+import type { ATermTheme } from '../lib/constants/aterm'
+import { useScrollbackATerm } from '../lib/hooks/use-scrollback-aterm'
 import { useScrollbackGestures } from '../lib/hooks/use-scrollback-gestures'
-import type { TerminalSearchMatch } from '../lib/utils/terminal-search'
+import type { ATermSearchMatch } from '../lib/utils/aterm-search'
 
 interface ScrollbackOverlayProps {
   isActive: boolean
@@ -11,9 +11,9 @@ interface ScrollbackOverlayProps {
   totalLines: number
   isLoading: boolean
   initialScrollLineDelta: number
-  searchMatch: TerminalSearchMatch | null
+  searchMatch: ATermSearchMatch | null
   onDismiss: () => void
-  theme: TerminalTheme
+  theme: ATermTheme
   fontFamily?: string
   fontSize?: number
 }
@@ -30,7 +30,7 @@ export function ScrollbackOverlay({
   fontFamily = "'JetBrains Mono', monospace",
   fontSize = 14,
 }: ScrollbackOverlayProps) {
-  const { containerRef, xtermRef, flushPendingLines } = useScrollbackTerminal({
+  const { containerRef, xtermRef, flushPendingLines } = useScrollbackATerm({
     isActive,
     lines,
     initialScrollLineDelta,
@@ -88,7 +88,7 @@ export function ScrollbackOverlay({
         </div>
       )}
 
-      {/* xterm.js overlay terminal */}
+      {/* xterm.js overlay aterm */}
       <div
         ref={containerRef}
         style={{

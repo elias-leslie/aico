@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from terminal.services import summitflow_client
+from aterm.services import summitflow_client
 
 
 @pytest.mark.asyncio

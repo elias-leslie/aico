@@ -1,17 +1,17 @@
 'use client'
 
-import { Terminal } from 'lucide-react'
+import { PanelsTopLeft } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { AgentTool } from '@/lib/hooks/use-agent-tools'
 import { AgentIcon, getAgentColor } from './AgentIcon'
-import type { TerminalMode } from './ModeToggle'
+import type { ATermMode } from './ModeToggle'
 
 interface ModeTogglePopoverProps {
   buttonRef: React.RefObject<HTMLButtonElement | null>
-  value: TerminalMode
+  value: ATermMode
   agentTools: AgentTool[]
   onClose: () => void
-  onSelectMode: (mode: TerminalMode) => void
+  onSelectMode: (mode: ATermMode) => void
 }
 
 export function ModeTogglePopover({
@@ -33,7 +33,7 @@ export function ModeTogglePopover({
       <div className="fixed inset-0 z-[9999]" onClick={onClose} role="presentation" aria-hidden="true" />
       <div
         role="menu"
-        aria-label="Select terminal mode"
+        aria-label="Select A-Term mode"
         className="fixed z-[10000] rounded-lg overflow-hidden animate-in fade-in slide-in-from-top-1 duration-100"
         style={{
           ...position,
@@ -53,7 +53,7 @@ export function ModeTogglePopover({
             color: value === 'shell' ? 'var(--term-accent)' : 'var(--term-text-muted)',
           }}
         >
-          <Terminal size={14} />
+          <PanelsTopLeft size={14} />
           <span style={{ fontWeight: 500 }}>Shell</span>
           {value === 'shell' && <span className="ml-auto text-[10px]">●</span>}
         </button>

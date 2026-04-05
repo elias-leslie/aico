@@ -107,7 +107,7 @@ function HeaderBar({ showDiffToggle, state, showDiff, onToggleDiff, onClose }: H
   return (
     <div className={styles.header}>
       <div className={styles.headerLeft}>
-        <span className={styles.terminalIcon}>⌘</span>
+        <span className={styles.atermIcon}>⌘</span>
         <span className={styles.headerTitle}>PROMPT_CLEANER</span>
         <span className={styles.headerVersion}>v1.0</span>
       </div>

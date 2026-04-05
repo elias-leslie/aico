@@ -61,13 +61,13 @@ def _seed_agent_tools() -> None:
 def _drop_mode_check_constraints() -> None:
     """Drop CHECK constraints on mode columns so they accept any slug."""
     op.execute("""
-        ALTER TABLE terminal_sessions DROP CONSTRAINT IF EXISTS terminal_sessions_mode_check;
+        ALTER TABLE aterm_sessions DROP CONSTRAINT IF EXISTS aterm_sessions_mode_check;
     """)
     op.execute("""
-        ALTER TABLE terminal_panes DROP CONSTRAINT IF EXISTS terminal_panes_active_mode_check;
+        ALTER TABLE aterm_panes DROP CONSTRAINT IF EXISTS aterm_panes_active_mode_check;
     """)
     op.execute("""
-        ALTER TABLE terminal_project_settings DROP CONSTRAINT IF EXISTS terminal_project_settings_active_mode_check;
+        ALTER TABLE aterm_project_settings DROP CONSTRAINT IF EXISTS aterm_project_settings_active_mode_check;
     """)
 
 
@@ -75,27 +75,27 @@ def _restore_mode_check_constraints() -> None:
     """Restore CHECK constraints (only valid if all data is 'shell' or 'claude')."""
     # Clean up any non-standard modes before restoring constraints
     op.execute("""
-        UPDATE terminal_sessions SET mode = 'shell' WHERE mode NOT IN ('shell', 'claude');
+        UPDATE aterm_sessions SET mode = 'shell' WHERE mode NOT IN ('shell', 'claude');
     """)
     op.execute("""
-        UPDATE terminal_panes SET active_mode = 'shell' WHERE active_mode NOT IN ('shell', 'claude');
+        UPDATE aterm_panes SET active_mode = 'shell' WHERE active_mode NOT IN ('shell', 'claude');
     """)
     op.execute("""
-        UPDATE terminal_project_settings SET active_mode = 'shell' WHERE active_mode NOT IN ('shell', 'claude');
+        UPDATE aterm_project_settings SET active_mode = 'shell' WHERE active_mode NOT IN ('shell', 'claude');
     """)
     op.execute("""
-        ALTER TABLE terminal_sessions
-        ADD CONSTRAINT terminal_sessions_mode_check
+        ALTER TABLE aterm_sessions
+        ADD CONSTRAINT aterm_sessions_mode_check
         CHECK (mode IN ('shell', 'claude'));
     """)
     op.execute("""
-        ALTER TABLE terminal_panes
-        ADD CONSTRAINT terminal_panes_active_mode_check
+        ALTER TABLE aterm_panes
+        ADD CONSTRAINT aterm_panes_active_mode_check
         CHECK (active_mode IN ('shell', 'claude'));
     """)
     op.execute("""
-        ALTER TABLE terminal_project_settings
-        ADD CONSTRAINT terminal_project_settings_active_mode_check
+        ALTER TABLE aterm_project_settings
+        ADD CONSTRAINT aterm_project_settings_active_mode_check
         CHECK (active_mode IN ('shell', 'claude'));
     """)
 

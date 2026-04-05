@@ -1,14 +1,14 @@
 'use client'
 
 import type React from 'react'
-import type { ScrollbackDelta } from '../terminal/line-cache'
+import type { ScrollbackDelta } from '../aterm/line-cache'
 import { getWsUrl } from '../api-config'
 import {
   CONNECTION_TIMEOUT,
   WS_CLOSE_CODE_SESSION_DEAD,
   WS_CLIENT_PING_INTERVAL,
   BACKPRESSURE_COMMIT_INTERVAL,
-} from '../constants/terminal'
+} from '../constants/aterm'
 
 export interface WebSocketConnectionRefs {
   wsRef: React.MutableRefObject<WebSocket | null>
@@ -23,7 +23,7 @@ export interface WebSocketConnectionRefs {
 }
 
 export interface WebSocketConnectionCallbacks {
-  onTerminalMessage?: (message: string) => void
+  onATermMessage?: (message: string) => void
   onMessage?: (data: string) => void
   onScrollbackSync?: (
     scrollback: string,
@@ -78,7 +78,7 @@ export function openWebSocketConnection(
     connectRef,
   } = refs
   const {
-    onTerminalMessage,
+    onATermMessage,
     onMessage,
     onBeforeReconnectData,
     onDisconnect,
@@ -105,7 +105,7 @@ export function openWebSocketConnection(
     pingIntervalRef.current = null
   }
 
-  let wsPath = `/ws/terminal/${sessionId}`
+  let wsPath = `/ws/aterm/${sessionId}`
   if (workingDir) {
     wsPath += `?working_dir=${encodeURIComponent(workingDir)}`
   }
@@ -117,7 +117,7 @@ export function openWebSocketConnection(
   } catch {
     connectingRef.current = false
     setStatus('error')
-    onTerminalMessage?.('\r\n\x1b[31mFailed to create WebSocket connection\x1b[0m')
+    onATermMessage?.('\r\n\x1b[31mFailed to create WebSocket connection\x1b[0m')
     return
   }
   wsRef.current = ws
@@ -136,7 +136,7 @@ export function openWebSocketConnection(
     if (retryCountRef.current < maxRetries) {
       const delay = Math.min(1000 * 2 ** retryCountRef.current, 30000)
       retryCountRef.current += 1
-      onTerminalMessage?.(
+      onATermMessage?.(
         `\x1b[33mConnection timeout, retrying (${retryCountRef.current}/${maxRetries})...\x1b[0m`,
       )
       setStatus('connecting')
@@ -145,7 +145,7 @@ export function openWebSocketConnection(
       }, delay)
     } else {
       setStatus('timeout')
-      onTerminalMessage?.('\r\n\x1b[31mConnection timeout after maximum retries\x1b[0m')
+      onATermMessage?.('\r\n\x1b[31mConnection timeout after maximum retries\x1b[0m')
       onDisconnect?.()
     }
   }, CONNECTION_TIMEOUT)
@@ -160,8 +160,8 @@ export function openWebSocketConnection(
 
     if (!hasConnectedRef.current) {
       hasConnectedRef.current = true
-      onTerminalMessage?.(`Connected to terminal session: ${sessionId}`)
-      onTerminalMessage?.('')
+      onATermMessage?.(`Connected to aterm session: ${sessionId}`)
+      onATermMessage?.('')
     } else {
       onBeforeReconnectData?.()
     }
@@ -252,13 +252,13 @@ export function openWebSocketConnection(
       setStatus('session_dead')
       try {
         const reason = JSON.parse(event.reason)
-        onTerminalMessage?.(`\r\n\x1b[31m${reason.message || 'Session not found'}\x1b[0m`)
+        onATermMessage?.(`\r\n\x1b[31m${reason.message || 'Session not found'}\x1b[0m`)
       } catch {
-        onTerminalMessage?.('\r\n\x1b[31mSession not found or could not be restored\x1b[0m')
+        onATermMessage?.('\r\n\x1b[31mSession not found or could not be restored\x1b[0m')
       }
     } else {
       setStatus('disconnected')
-      onTerminalMessage?.('\r\n\x1b[31mDisconnected from terminal\x1b[0m')
+      onATermMessage?.('\r\n\x1b[31mDisconnected from aterm\x1b[0m')
     }
     onDisconnect?.()
   }
@@ -268,7 +268,7 @@ export function openWebSocketConnection(
     if (pingIntervalRef.current) { clearInterval(pingIntervalRef.current); pingIntervalRef.current = null }
     if (!mountedRef.current) return
     setStatus('error')
-    onTerminalMessage?.('\r\n\x1b[31mConnection error\x1b[0m')
+    onATermMessage?.('\r\n\x1b[31mConnection error\x1b[0m')
   }
 }
 
@@ -333,7 +333,7 @@ export function dispatchControlMessage(
     }
 
     // Unknown control frames still belong to the control channel and should
-    // never be rendered into the visible terminal buffer.
+    // never be rendered into the visible aterm buffer.
     return true
   } catch {
     return false

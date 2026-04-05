@@ -1,4 +1,4 @@
-"""Tests for terminal configuration loading.
+"""Tests for aterm configuration loading.
 
 Verifies that environment variables are correctly parsed into
 configuration constants.
@@ -17,44 +17,44 @@ def test_config_database_url_required_raises_on_missing() -> None:
     # Arrange & Act & Assert
     with patch.dict("os.environ", {"DATABASE_URL": ""}, clear=False):
         with pytest.raises(ValueError, match="DATABASE_URL"):
-            import terminal.config as cfg
+            import aterm.config as cfg
             cfg.get_settings.cache_clear()
             importlib.reload(cfg)
 
 
-def test_config_terminal_port_default_is_8002() -> None:
-    """Config module -- TERMINAL_PORT defaults to 8002."""
+def test_config_aterm_port_default_is_8002() -> None:
+    """Config module -- ATERM_PORT defaults to 8002."""
     # Arrange & Act
     with patch.dict(
         "os.environ",
         {"DATABASE_URL": "postgresql://test:test@localhost/test"},
         clear=False,
     ):
-        import terminal.config as cfg
+        import aterm.config as cfg
         cfg.get_settings.cache_clear()
         importlib.reload(cfg)
 
     # Assert
-    assert cfg.TERMINAL_PORT == 8002
+    assert cfg.ATERM_PORT == 8002
 
 
-def test_config_terminal_port_custom_from_env() -> None:
-    """Config module -- TERMINAL_PORT reads from environment."""
+def test_config_aterm_port_custom_from_env() -> None:
+    """Config module -- ATERM_PORT reads from environment."""
     # Arrange & Act
     with patch.dict(
         "os.environ",
         {
             "DATABASE_URL": "postgresql://test:test@localhost/test",
-            "TERMINAL_PORT": "9999",
+            "ATERM_PORT": "9999",
         },
         clear=False,
     ):
-        import terminal.config as cfg
+        import aterm.config as cfg
         cfg.get_settings.cache_clear()
         importlib.reload(cfg)
 
     # Assert
-    assert cfg.TERMINAL_PORT == 9999
+    assert cfg.ATERM_PORT == 9999
 
 
 def test_config_tmux_dimension_constants() -> None:
@@ -65,7 +65,7 @@ def test_config_tmux_dimension_constants() -> None:
         {"DATABASE_URL": "postgresql://test:test@localhost/test"},
         clear=False,
     ):
-        import terminal.config as cfg
+        import aterm.config as cfg
         cfg.get_settings.cache_clear()
         importlib.reload(cfg)
 
@@ -89,7 +89,7 @@ def test_config_cors_origins_splits_comma_separated() -> None:
         },
         clear=False,
     ):
-        import terminal.config as cfg
+        import aterm.config as cfg
         cfg.get_settings.cache_clear()
         importlib.reload(cfg)
 
@@ -114,7 +114,7 @@ def test_config_maintenance_and_pool_settings_from_env() -> None:
         },
         clear=False,
     ):
-        import terminal.config as cfg
+        import aterm.config as cfg
         cfg.get_settings.cache_clear()
         importlib.reload(cfg)
 

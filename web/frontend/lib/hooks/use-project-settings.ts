@@ -12,7 +12,7 @@ export interface ProjectSetting {
   id: string
   name: string
   root_path: string | null
-  terminal_enabled: boolean
+  aterm_enabled: boolean
   mode: string // Active mode (shell or agent tool slug)
   display_order: number
 }
@@ -28,7 +28,7 @@ interface ProjectSettingsUpdate {
 // ============================================================================
 
 async function fetchProjects(): Promise<ProjectSetting[]> {
-  return apiFetch('/api/terminal/projects', undefined, 'Failed to fetch projects')
+  return apiFetch('/api/aterm/projects', undefined, 'Failed to fetch projects')
 }
 
 async function updateProjectSettings(
@@ -36,7 +36,7 @@ async function updateProjectSettings(
   update: ProjectSettingsUpdate,
 ): Promise<ProjectSetting> {
   return apiFetch(
-    `/api/terminal/project-settings/${projectId}`,
+    `/api/aterm/project-settings/${projectId}`,
     {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -50,7 +50,7 @@ async function bulkUpdateOrder(
   projectIds: string[],
 ): Promise<ProjectSetting[]> {
   return apiFetch(
-    '/api/terminal/project-settings/bulk-order',
+    '/api/aterm/project-settings/bulk-order',
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -65,7 +65,7 @@ async function switchProjectMode(
   mode: string,
 ): Promise<ProjectSetting> {
   return apiFetch(
-    `/api/terminal/projects/${projectId}/mode`,
+    `/api/aterm/projects/${projectId}/mode`,
     {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -75,13 +75,13 @@ async function switchProjectMode(
   )
 }
 
-async function disableProjectTerminal(projectId: string): Promise<ProjectSetting> {
+async function disableProjectATerm(projectId: string): Promise<ProjectSetting> {
   return apiFetch(
-    `/api/terminal/projects/${projectId}/disable`,
+    `/api/aterm/projects/${projectId}/disable`,
     {
       method: 'POST',
     },
-    'Failed to disable terminal',
+    'Failed to disable aterm',
   )
 }
 
@@ -90,11 +90,11 @@ async function disableProjectTerminal(projectId: string): Promise<ProjectSetting
 // ============================================================================
 
 /**
- * Hook for managing terminal project settings.
+ * Hook for managing aterm project settings.
  *
  * Provides:
- * - projects: List of all projects with terminal settings
- * - enabledProjects: Only projects where terminal_enabled=true
+ * - projects: List of all projects with aterm settings
+ * - enabledProjects: Only projects where aterm_enabled=true
  * - updateSettings: Update enabled/mode/order for a project
  * - updateOrder: Bulk update display order (for drag-and-drop)
  * - isLoading, isError: Query state
@@ -104,7 +104,7 @@ async function disableProjectTerminal(projectId: string): Promise<ProjectSetting
  * const { projects, updateSettings, updateOrder } = useProjectSettings();
  *
  * // Toggle a project
- * await updateSettings(projectId, { enabled: !project.terminal_enabled });
+ * await updateSettings(projectId, { enabled: !project.aterm_enabled });
  *
  * // Reorder after drag-drop
  * await updateOrder(newOrderedIds);
@@ -121,14 +121,14 @@ export function useProjectSettings() {
     error,
     refetch,
   } = useQuery({
-    queryKey: ['terminal-projects'],
+    queryKey: ['aterm-projects'],
     queryFn: fetchProjects,
     staleTime: 30000, // Consider fresh for 30s
   })
 
   // Derived: only enabled projects, sorted by display_order
   const enabledProjects = projects
-    .filter((p) => p.terminal_enabled)
+    .filter((p) => p.aterm_enabled)
     .sort((a, b) => a.display_order - b.display_order)
 
   // Mutation: update single project settings
@@ -139,7 +139,7 @@ export function useProjectSettings() {
     }: ProjectSettingsUpdate & { projectId: string }) =>
       updateProjectSettings(projectId, update),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['terminal-projects'] })
+      queryClient.invalidateQueries({ queryKey: ['aterm-projects'] })
     },
   })
 
@@ -147,7 +147,7 @@ export function useProjectSettings() {
   const orderMutation = useMutation({
     mutationFn: bulkUpdateOrder,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['terminal-projects'] })
+      queryClient.invalidateQueries({ queryKey: ['aterm-projects'] })
     },
   })
 
@@ -162,13 +162,13 @@ export function useProjectSettings() {
     }) => switchProjectMode(projectId, mode),
     onMutate: async ({ projectId, mode }) => {
       // Cancel any outgoing refetches
-      await queryClient.cancelQueries({ queryKey: ['terminal-projects'] })
+      await queryClient.cancelQueries({ queryKey: ['aterm-projects'] })
       // Snapshot the previous value
       const previousProjects = queryClient.getQueryData<ProjectSetting[]>([
-        'terminal-projects',
+        'aterm-projects',
       ])
       // Optimistically update to the new mode
-      queryClient.setQueryData<ProjectSetting[]>(['terminal-projects'], (old) =>
+      queryClient.setQueryData<ProjectSetting[]>(['aterm-projects'], (old) =>
         old?.map((p) => (p.id === projectId ? { ...p, mode: mode } : p)),
       )
       return { previousProjects }
@@ -177,23 +177,23 @@ export function useProjectSettings() {
       // Rollback on error
       if (context?.previousProjects) {
         queryClient.setQueryData(
-          ['terminal-projects'],
+          ['aterm-projects'],
           context.previousProjects,
         )
       }
     },
     onSettled: () => {
       // Always refetch to ensure consistency
-      queryClient.invalidateQueries({ queryKey: ['terminal-projects'] })
+      queryClient.invalidateQueries({ queryKey: ['aterm-projects'] })
     },
   })
 
   const disableMutation = useMutation({
-    mutationFn: disableProjectTerminal,
+    mutationFn: disableProjectATerm,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['terminal-projects'] })
-      queryClient.invalidateQueries({ queryKey: ['terminal-sessions'] })
-      queryClient.invalidateQueries({ queryKey: ['terminal-panes'] })
+      queryClient.invalidateQueries({ queryKey: ['aterm-projects'] })
+      queryClient.invalidateQueries({ queryKey: ['aterm-sessions'] })
+      queryClient.invalidateQueries({ queryKey: ['aterm-panes'] })
     },
   })
 

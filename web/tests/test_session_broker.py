@@ -1,11 +1,11 @@
-"""Tests for the shared Terminal session broker."""
+"""Tests for the shared A-Term session broker."""
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
 from unittest.mock import call, patch
 
-from terminal.services.session_broker import ensure_project_tool_session, list_project_tool_sessions
+from aterm.services.session_broker import ensure_project_tool_session, list_project_tool_sessions
 
 
 def _iso(ts: str) -> str:
@@ -72,11 +72,11 @@ def test_ensure_project_tool_session_reuses_existing_matching_session() -> None:
     )
 
     with (
-        patch("terminal.services.session_broker.pane_store.list_panes_with_sessions", return_value=[pane]),
-        patch("terminal.services.session_broker.lifecycle.ensure_session_alive", return_value=True),
-        patch("terminal.services.session_broker.pane_store.update_pane") as update_pane_mock,
-        patch("terminal.services.session_broker.project_settings_store.upsert_settings") as upsert_mock,
-        patch("terminal.services.session_broker.agent_service.ensure_agent_running_sync", return_value=True) as start_mock,
+        patch("aterm.services.session_broker.pane_store.list_panes_with_sessions", return_value=[pane]),
+        patch("aterm.services.session_broker.lifecycle.ensure_session_alive", return_value=True),
+        patch("aterm.services.session_broker.pane_store.update_pane") as update_pane_mock,
+        patch("aterm.services.session_broker.project_settings_store.upsert_settings") as upsert_mock,
+        patch("aterm.services.session_broker.agent_service.ensure_agent_running_sync", return_value=True) as start_mock,
     ):
         target = ensure_project_tool_session(
             project_id="summitflow",
@@ -126,13 +126,13 @@ def test_ensure_project_tool_session_prefers_most_recent_matching_session() -> N
 
     with (
         patch(
-            "terminal.services.session_broker.pane_store.list_panes_with_sessions",
+            "aterm.services.session_broker.pane_store.list_panes_with_sessions",
             return_value=[older, newer],
         ),
-        patch("terminal.services.session_broker.lifecycle.ensure_session_alive", return_value=True),
-        patch("terminal.services.session_broker.pane_store.update_pane") as update_pane_mock,
-        patch("terminal.services.session_broker.project_settings_store.upsert_settings"),
-        patch("terminal.services.session_broker.agent_service.ensure_agent_running_sync", return_value=False),
+        patch("aterm.services.session_broker.lifecycle.ensure_session_alive", return_value=True),
+        patch("aterm.services.session_broker.pane_store.update_pane") as update_pane_mock,
+        patch("aterm.services.session_broker.project_settings_store.upsert_settings"),
+        patch("aterm.services.session_broker.agent_service.ensure_agent_running_sync", return_value=False),
     ):
         target = ensure_project_tool_session(
             project_id="summitflow",
@@ -147,28 +147,28 @@ def test_ensure_project_tool_session_prefers_most_recent_matching_session() -> N
 def test_ensure_project_tool_session_creates_new_project_pane_when_missing() -> None:
     created_pane = _make_pane(
         "pane-3",
-        "terminal",
+        "aterm",
         "claude",
         [
-            _make_session("shell-3", "shell", working_dir="/workspace/terminal"),
-            _make_session("claude-3", "claude", working_dir="/workspace/terminal"),
+            _make_session("shell-3", "shell", working_dir="/workspace/aterm"),
+            _make_session("claude-3", "claude", working_dir="/workspace/aterm"),
         ],
     )
 
     with (
-        patch("terminal.services.session_broker.pane_store.list_panes_with_sessions", return_value=[]),
-        patch("terminal.services.session_broker.lifecycle.ensure_session_alive", return_value=True),
+        patch("aterm.services.session_broker.pane_store.list_panes_with_sessions", return_value=[]),
+        patch("aterm.services.session_broker.lifecycle.ensure_session_alive", return_value=True),
         patch(
-            "terminal.services.session_broker.pane_store.create_pane_with_sessions",
+            "aterm.services.session_broker.pane_store.create_pane_with_sessions",
             return_value=created_pane,
         ) as create_pane_mock,
-        patch("terminal.services.session_broker.project_settings_store.upsert_settings") as upsert_mock,
-        patch("terminal.services.session_broker.agent_service.ensure_agent_running_sync", return_value=True) as start_mock,
+        patch("aterm.services.session_broker.project_settings_store.upsert_settings") as upsert_mock,
+        patch("aterm.services.session_broker.agent_service.ensure_agent_running_sync", return_value=True) as start_mock,
     ):
         target = ensure_project_tool_session(
-            project_id="terminal",
+            project_id="aterm",
             tool_slug="claude",
-            working_dir="/workspace/terminal",
+            working_dir="/workspace/aterm",
         )
 
     assert target.session_id == "claude-3"
@@ -178,56 +178,56 @@ def test_ensure_project_tool_session_creates_new_project_pane_when_missing() -> 
     assert target.started is True
     create_pane_mock.assert_called_once_with(
         pane_type="project",
-        pane_name="Terminal",
-        project_id="terminal",
-        working_dir="/workspace/terminal",
+        pane_name="A-Term",
+        project_id="aterm",
+        working_dir="/workspace/aterm",
         agent_tool_slug="claude",
     )
-    upsert_mock.assert_called_once_with("terminal", enabled=True, active_mode="claude")
+    upsert_mock.assert_called_once_with("aterm", enabled=True, active_mode="claude")
     start_mock.assert_called_once_with("claude-3")
 
 
 def test_ensure_project_tool_session_skips_matching_mode_when_working_dir_differs() -> None:
     stale_pane = _make_pane(
         "pane-1",
-        "terminal",
+        "aterm",
         "codex",
         [
-            _make_session("codex-home", "codex", working_dir="/home/tester/terminal"),
+            _make_session("codex-home", "codex", working_dir="/home/tester/aterm"),
         ],
     )
     created_pane = _make_pane(
         "pane-2",
-        "terminal",
+        "aterm",
         "codex",
         [
-            _make_session("codex-workspace", "codex", working_dir="/workspace/projects/terminal"),
+            _make_session("codex-workspace", "codex", working_dir="/workspace/projects/aterm"),
         ],
     )
 
     with (
-        patch("terminal.services.session_broker.pane_store.list_panes_with_sessions", return_value=[stale_pane]),
-        patch("terminal.services.session_broker.lifecycle.ensure_session_alive", return_value=True),
+        patch("aterm.services.session_broker.pane_store.list_panes_with_sessions", return_value=[stale_pane]),
+        patch("aterm.services.session_broker.lifecycle.ensure_session_alive", return_value=True),
         patch(
-            "terminal.services.session_broker.pane_store.create_pane_with_sessions",
+            "aterm.services.session_broker.pane_store.create_pane_with_sessions",
             return_value=created_pane,
         ) as create_pane_mock,
-        patch("terminal.services.session_broker.project_settings_store.upsert_settings"),
-        patch("terminal.services.session_broker.agent_service.ensure_agent_running_sync", return_value=False),
+        patch("aterm.services.session_broker.project_settings_store.upsert_settings"),
+        patch("aterm.services.session_broker.agent_service.ensure_agent_running_sync", return_value=False),
     ):
         target = ensure_project_tool_session(
-            project_id="terminal",
+            project_id="aterm",
             tool_slug="codex",
-            working_dir="/workspace/projects/terminal",
+            working_dir="/workspace/projects/aterm",
         )
 
     assert target.session_id == "codex-workspace"
     assert target.created is True
     create_pane_mock.assert_called_once_with(
         pane_type="project",
-        pane_name="Terminal [2]",
-        project_id="terminal",
-        working_dir="/workspace/projects/terminal",
+        pane_name="A-Term [2]",
+        project_id="aterm",
+        working_dir="/workspace/projects/aterm",
         agent_tool_slug="codex",
     )
 
@@ -264,16 +264,16 @@ def test_ensure_project_tool_session_skips_stale_match_and_reuses_next_live_sess
 
     with (
         patch(
-            "terminal.services.session_broker.pane_store.list_panes_with_sessions",
+            "aterm.services.session_broker.pane_store.list_panes_with_sessions",
             side_effect=[[stale, fresh], [fresh]],
         ),
         patch(
-            "terminal.services.session_broker.lifecycle.ensure_session_alive",
+            "aterm.services.session_broker.lifecycle.ensure_session_alive",
             side_effect=[False, True],
         ) as ensure_mock,
-        patch("terminal.services.session_broker.pane_store.update_pane") as update_pane_mock,
-        patch("terminal.services.session_broker.project_settings_store.upsert_settings"),
-        patch("terminal.services.session_broker.agent_service.ensure_agent_running_sync", return_value=False) as start_mock,
+        patch("aterm.services.session_broker.pane_store.update_pane") as update_pane_mock,
+        patch("aterm.services.session_broker.project_settings_store.upsert_settings"),
+        patch("aterm.services.session_broker.agent_service.ensure_agent_running_sync", return_value=False) as start_mock,
     ):
         target = ensure_project_tool_session(
             project_id="summitflow",
@@ -292,28 +292,28 @@ def test_ensure_project_tool_session_skips_stale_match_and_reuses_next_live_sess
 def test_ensure_project_tool_session_reports_not_started_when_launch_fails() -> None:
     pane = _make_pane(
         "pane-1",
-        "terminal",
+        "aterm",
         "codex",
         [
             _make_session(
                 "codex-id",
                 "codex",
-                working_dir="/workspace/terminal",
+                working_dir="/workspace/aterm",
                 last_accessed_at="2026-03-18T14:00:00+00:00",
             ),
         ],
     )
 
     with (
-        patch("terminal.services.session_broker.pane_store.list_panes_with_sessions", return_value=[pane]),
-        patch("terminal.services.session_broker.lifecycle.ensure_session_alive", return_value=True),
-        patch("terminal.services.session_broker.project_settings_store.upsert_settings"),
-        patch("terminal.services.session_broker.agent_service.ensure_agent_running_sync", return_value=False),
+        patch("aterm.services.session_broker.pane_store.list_panes_with_sessions", return_value=[pane]),
+        patch("aterm.services.session_broker.lifecycle.ensure_session_alive", return_value=True),
+        patch("aterm.services.session_broker.project_settings_store.upsert_settings"),
+        patch("aterm.services.session_broker.agent_service.ensure_agent_running_sync", return_value=False),
     ):
         target = ensure_project_tool_session(
-            project_id="terminal",
+            project_id="aterm",
             tool_slug="codex",
-            working_dir="/workspace/terminal",
+            working_dir="/workspace/aterm",
         )
 
     assert target.session_id == "codex-id"
@@ -333,9 +333,9 @@ def test_list_project_tool_sessions_filters_stale_tmux_sessions() -> None:
     )
 
     with (
-        patch("terminal.services.session_broker.pane_store.list_panes_with_sessions", return_value=[pane]),
+        patch("aterm.services.session_broker.pane_store.list_panes_with_sessions", return_value=[pane]),
         patch(
-            "terminal.services.session_broker.tmux_session_exists_by_name",
+            "aterm.services.session_broker.tmux_session_exists_by_name",
             side_effect=[True, False],
         ) as exists_mock,
     ):

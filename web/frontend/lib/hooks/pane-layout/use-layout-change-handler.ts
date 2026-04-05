@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import type { Layout } from 'react-resizable-panels'
-import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
+import type { PaneSlot, ATermSlot } from '@/lib/utils/slot'
 import { isPaneSlot, getPaneId, getSlotPanelId } from '@/lib/utils/slot'
 import type { PaneLayout } from '@/types/pane-layout'
 
@@ -8,7 +8,7 @@ import type { PaneLayout } from '@/types/pane-layout'
  * Hook to create the layout change handler.
  */
 export function useLayoutChangeHandler(
-  displaySlots: (TerminalSlot | PaneSlot)[],
+  displaySlots: (ATermSlot | PaneSlot)[],
   paneCount: number,
   onLayoutChange?: (layouts: PaneLayout[]) => void,
 ) {

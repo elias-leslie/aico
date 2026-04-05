@@ -1,6 +1,6 @@
 'use client'
 
-import { Terminal } from 'lucide-react'
+import { PanelsTopLeft } from 'lucide-react'
 import Link from 'next/link'
 
 export default function NotFound() {
@@ -16,7 +16,7 @@ export default function NotFound() {
           border: '1px solid var(--term-border)',
         }}
       >
-        <Terminal
+        <PanelsTopLeft
           className="w-7 h-7"
           style={{ color: 'var(--term-text-muted)' }}
         />

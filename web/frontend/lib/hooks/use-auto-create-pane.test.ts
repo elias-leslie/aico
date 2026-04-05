@@ -3,7 +3,7 @@ import { describe, expect, it, beforeEach, vi } from 'vitest'
 import { useAutoCreatePane } from './use-auto-create-pane'
 
 const mockFetchPaneCount = vi.fn()
-vi.mock('./terminal-panes-api', () => ({
+vi.mock('./aterm-panes-api', () => ({
   fetchPaneCount: () => mockFetchPaneCount(),
 }))
 

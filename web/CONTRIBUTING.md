@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for taking the time to look at SummitFlow Terminal.
+Thanks for taking the time to look at A-Term.
 
 This repository is published primarily as a working public codebase, not as a
 high-volume community project. Contributions are welcome, but review and merge
@@ -18,7 +18,7 @@ decisions are handled on a best-effort basis.
 
 Project setup and service commands are documented in [README.md](README.md).
 
-Validate Terminal runtime behavior against the native host services.
+Validate A-Term runtime behavior against the native host services.
 
 Quality checks should use the project wrappers:
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from terminal.services.session_close import close_session
+from aterm.services.session_close import close_session
 
 
 def _make_session(
@@ -45,11 +45,11 @@ def test_close_agent_session_also_removes_shell_companion_and_pane() -> None:
     pane = _make_pane(active_mode="codex", sessions=[shell, session])
 
     with (
-        patch("terminal.services.session_close.get_external_agent_tmux_session", return_value=None),
-        patch("terminal.services.session_close.terminal_store.get_session", return_value=session),
-        patch("terminal.services.session_close.pane_store.get_pane_with_sessions", return_value=pane),
-        patch("terminal.services.session_close.delete_managed_session", return_value=True) as delete_mock,
-        patch("terminal.services.session_close.pane_store.delete_pane") as delete_pane_mock,
+        patch("aterm.services.session_close.get_external_agent_tmux_session", return_value=None),
+        patch("aterm.services.session_close.aterm_store.get_session", return_value=session),
+        patch("aterm.services.session_close.pane_store.get_pane_with_sessions", return_value=pane),
+        patch("aterm.services.session_close.delete_managed_session", return_value=True) as delete_mock,
+        patch("aterm.services.session_close.pane_store.delete_pane") as delete_pane_mock,
     ):
         result = close_session("codex-1")
 
@@ -70,11 +70,11 @@ def test_close_session_deletes_pane_when_last_session_removed() -> None:
     pane = _make_pane(active_mode="shell", sessions=[session])
 
     with (
-        patch("terminal.services.session_close.get_external_agent_tmux_session", return_value=None),
-        patch("terminal.services.session_close.terminal_store.get_session", return_value=session),
-        patch("terminal.services.session_close.pane_store.get_pane_with_sessions", return_value=pane),
-        patch("terminal.services.session_close.delete_managed_session", return_value=True),
-        patch("terminal.services.session_close.pane_store.delete_pane", return_value=True) as delete_pane_mock,
+        patch("aterm.services.session_close.get_external_agent_tmux_session", return_value=None),
+        patch("aterm.services.session_close.aterm_store.get_session", return_value=session),
+        patch("aterm.services.session_close.pane_store.get_pane_with_sessions", return_value=pane),
+        patch("aterm.services.session_close.delete_managed_session", return_value=True),
+        patch("aterm.services.session_close.pane_store.delete_pane", return_value=True) as delete_pane_mock,
     ):
         result = close_session("shell-1")
 
@@ -96,11 +96,11 @@ def test_close_agent_session_cleans_up_detached_pane_too() -> None:
     pane = _make_pane(active_mode="codex", is_detached=True, sessions=[shell, session])
 
     with (
-        patch("terminal.services.session_close.get_external_agent_tmux_session", return_value=None),
-        patch("terminal.services.session_close.terminal_store.get_session", return_value=session),
-        patch("terminal.services.session_close.pane_store.get_pane_with_sessions", return_value=pane),
-        patch("terminal.services.session_close.delete_managed_session", return_value=True) as delete_mock,
-        patch("terminal.services.session_close.pane_store.delete_pane") as delete_pane_mock,
+        patch("aterm.services.session_close.get_external_agent_tmux_session", return_value=None),
+        patch("aterm.services.session_close.aterm_store.get_session", return_value=session),
+        patch("aterm.services.session_close.pane_store.get_pane_with_sessions", return_value=pane),
+        patch("aterm.services.session_close.delete_managed_session", return_value=True) as delete_mock,
+        patch("aterm.services.session_close.pane_store.delete_pane") as delete_pane_mock,
     ):
         result = close_session("codex-1")
 
@@ -117,12 +117,12 @@ def test_close_shell_session_keeps_pane_with_agent() -> None:
     pane = _make_pane(active_mode="shell", sessions=[shell, agent])
 
     with (
-        patch("terminal.services.session_close.get_external_agent_tmux_session", return_value=None),
-        patch("terminal.services.session_close.terminal_store.get_session", return_value=shell),
-        patch("terminal.services.session_close.pane_store.get_pane_with_sessions", return_value=pane),
-        patch("terminal.services.session_close.delete_managed_session", return_value=True),
-        patch("terminal.services.session_close.pane_store.update_pane") as update_pane_mock,
-        patch("terminal.services.session_close.pane_store.delete_pane") as delete_pane_mock,
+        patch("aterm.services.session_close.get_external_agent_tmux_session", return_value=None),
+        patch("aterm.services.session_close.aterm_store.get_session", return_value=shell),
+        patch("aterm.services.session_close.pane_store.get_pane_with_sessions", return_value=pane),
+        patch("aterm.services.session_close.delete_managed_session", return_value=True),
+        patch("aterm.services.session_close.pane_store.update_pane") as update_pane_mock,
+        patch("aterm.services.session_close.pane_store.delete_pane") as delete_pane_mock,
     ):
         result = close_session("shell-1")
 
@@ -139,8 +139,8 @@ def test_close_session_kills_external_tmux_session() -> None:
     }
 
     with (
-        patch("terminal.services.session_close.get_external_agent_tmux_session", return_value=external),
-        patch("terminal.services.session_close.run_tmux_command", return_value=(True, "")) as run_mock,
+        patch("aterm.services.session_close.get_external_agent_tmux_session", return_value=external),
+        patch("aterm.services.session_close.run_tmux_command", return_value=(True, "")) as run_mock,
     ):
         result = close_session("codex-summitflow")
 

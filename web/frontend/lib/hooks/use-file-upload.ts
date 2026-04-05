@@ -32,7 +32,7 @@ interface UseFileUploadReturn {
 const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024 // 10MB
 
 /**
- * Hook for uploading files to the terminal server.
+ * Hook for uploading files to the aterm server.
  * Uses XMLHttpRequest for progress tracking.
  */
 export function useFileUpload(): UseFileUploadReturn {
@@ -110,7 +110,7 @@ export function useFileUpload(): UseFileUploadReturn {
           resolve(null)
         })
 
-        xhr.open('POST', buildApiUrl('/api/terminal/files'))
+        xhr.open('POST', buildApiUrl('/api/aterm/files'))
         xhr.send(formData)
       })
     },

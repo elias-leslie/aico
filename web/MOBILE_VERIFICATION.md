@@ -1,13 +1,13 @@
 # Mobile Verification
 
-Repeatable Android verification for Terminal lives in [`scripts/mobile-verification.sh`](scripts/mobile-verification.sh).
+Repeatable Android verification for A-Term lives in [`scripts/mobile-verification.sh`](scripts/mobile-verification.sh).
 
 The script now launches the emulator directly from the SDK, uses `sg kvm` automatically when the current shell has stale group membership, and defaults to headless mode for automation.
 
 ## Prerequisites
 
 - Local frontend running at `http://localhost:3002`
-- Android emulator launcher at `~/bin/start-terminal-android-emulator`
+- Android emulator launcher at `~/bin/start-aterm-android-emulator`
 - `adb` installed
 - `agent-browser` installed for CDP-driven inspection
 
@@ -25,7 +25,7 @@ That does four things:
 1. Checks whether `adb`, `agent-browser`, `sg`, and the emulator binary exist.
 2. Starts the emulator when needed and waits for `adb=device` plus `sys.boot_completed=1`.
 3. Forwards Android Chrome DevTools to `localhost:9222`.
-4. Opens Terminal in Android Chrome at `http://10.0.2.2:3002`.
+4. Opens A-Term in Android Chrome at `http://10.0.2.2:3002`.
 
 ## Common Commands
 
@@ -43,13 +43,13 @@ Overrides:
 ```bash
 MOBILE_EMULATOR_HEADLESS=0 bash ./scripts/mobile-verification.sh start-emulator
 MOBILE_CDP_PORT=9333 bash ./scripts/mobile-verification.sh forward-cdp
-TERMINAL_MOBILE_URL=http://10.0.2.2:3002 bash ./scripts/mobile-verification.sh open-app
+ATERM_MOBILE_URL=http://10.0.2.2:3002 bash ./scripts/mobile-verification.sh open-app
 ```
 
 ## What To Verify
 
-- Terminal viewport scrolls vertically on touch without pull-to-refresh fighting it.
-- Keyboard minimize/restore leaves the terminal session live and readable.
+- A-Term viewport scrolls vertically on touch without pull-to-refresh fighting it.
+- Keyboard minimize/restore leaves the aterm session live and readable.
 - Voice/keyboard transitions keep the operator oriented.
 - Connection state is obvious on mobile, including reconnect affordance for transient failures.
 - The active pane remains usable after Android Chrome address-bar collapse/expand.

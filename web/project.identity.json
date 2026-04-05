@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "project": {
+    "id": "aterm",
+    "repo_name": "aterm",
+    "display_name": "A-Term",
+    "legacy_ids": [
+      "terminal"
+    ],
+    "repo_aliases": [
+      "terminal"
+    ]
+  },
+  "branding": {
+    "short_name": "A-Term",
+    "description": "Host-native browser workspace for persistent tmux, shell, and agent sessions."
+  },
+  "runtime": {
+    "backend_port": 8002,
+    "frontend_port": 3002,
+    "backend_dir": ".",
+    "frontend_dir": "frontend",
+    "health_endpoint": "/health"
+  },
+  "services": {
+    "backend": "aterm-backend.service",
+    "frontend": "aterm-frontend.service",
+    "default_workers": [],
+    "optional_workers": []
+  },
+  "hosts": {
+    "production_frontend": "aterm.summitflow.dev",
+    "production_api": "atermapi.summitflow.dev"
+  },
+  "artifacts": {
+    "python_distribution": "a-term",
+    "python_module": "aterm",
+    "cache_dir_name": "a-term",
+    "upload_dir_name": "a-term-uploads"
+  },
+  "database": {
+    "shared_with": "summitflow",
+    "table_prefix": "aterm_",
+    "legacy_table_prefixes": [
+      "terminal_"
+    ],
+    "version_table": "aterm_alembic_version",
+    "legacy_version_tables": [
+      "terminal_alembic_version"
+    ]
+  }
+}

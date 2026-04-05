@@ -1,7 +1,7 @@
 /**
  * Voice transcription types.
  *
- * These mirror the types from @agent-hub/passport-client so Terminal
+ * These mirror the types from @agent-hub/passport-client so A-Term
  * can build and run without that package installed. When passport-client
  * is available, the real useTranscription hook is used; otherwise a
  * no-op stub provides safe defaults.

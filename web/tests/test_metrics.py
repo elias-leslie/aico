@@ -1,34 +1,34 @@
-"""Tests for terminal/services/metrics.py."""
+"""Tests for aterm/services/metrics.py."""
 
 from __future__ import annotations
 
 import threading
 
-from terminal.services.metrics import TerminalMetrics
+from aterm.services.metrics import ATermMetrics
 
 
-class TestTerminalMetrics:
+class TestATermMetrics:
     def test_initial_values(self) -> None:
-        m = TerminalMetrics()
+        m = ATermMetrics()
         d = m.to_dict()
         assert d["backpressure"]["pause_count"] == 0
         assert d["pty_reader"]["flush_count"] == 0
         assert d["sessions"]["active_sessions"] == 0
 
     def test_inc_dec(self) -> None:
-        m = TerminalMetrics()
+        m = ATermMetrics()
         m.inc("active_connections")
         m.inc("active_connections")
         m.dec("active_connections")
         assert m.to_dict()["websocket"]["active_connections"] == 1
 
     def test_inc_amount(self) -> None:
-        m = TerminalMetrics()
+        m = ATermMetrics()
         m.inc("total_bytes_flushed", 4096)
         assert m.to_dict()["pty_reader"]["total_bytes_flushed"] == 4096
 
     def test_record_pause_resume(self) -> None:
-        m = TerminalMetrics()
+        m = ATermMetrics()
         m.record_pause()
         m.record_resume()
         d = m.to_dict()
@@ -37,7 +37,7 @@ class TestTerminalMetrics:
         assert d["backpressure"]["total_paused_ms"] >= 0
 
     def test_to_dict_structure(self) -> None:
-        m = TerminalMetrics()
+        m = ATermMetrics()
         d = m.to_dict()
         assert "uptime_seconds" in d
         assert set(d.keys()) == {
@@ -50,7 +50,7 @@ class TestTerminalMetrics:
         }
 
     def test_thread_safety(self) -> None:
-        m = TerminalMetrics()
+        m = ATermMetrics()
         errors: list[Exception] = []
 
         def worker() -> None:

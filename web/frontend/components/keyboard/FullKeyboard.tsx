@@ -7,7 +7,7 @@ import { useModifiers } from './ModifierContext'
 import {
   KEYBOARD_SIZE_HEIGHTS,
   type KeyboardSizePreset,
-  type TerminalInputHandler,
+  type ATermInputHandler,
 } from './types'
 import { useKeyboardInput } from './useKeyboardInput'
 import { KEYBOARD_LAYOUT, KEYBOARD_DISPLAY } from './keyboardLayouts'
@@ -15,7 +15,7 @@ import { useKeyboardHandler } from './useKeyboardHandler'
 import { getKeyboardStyles } from './FullKeyboard.styles'
 
 interface FullKeyboardProps {
-  onSend: TerminalInputHandler
+  onSend: ATermInputHandler
   keyboardSize?: KeyboardSizePreset
 }
 
@@ -45,7 +45,7 @@ function FullKeyboardInner({
       layout: KEYBOARD_LAYOUT,
       display: KEYBOARD_DISPLAY,
       layoutName: 'default',
-      theme: 'hg-theme-default terminal-keyboard-theme',
+      theme: 'hg-theme-default aterm-keyboard-theme',
       mergeDisplay: true,
       physicalKeyboardHighlight: false,
       physicalKeyboardHighlightPress: false,
@@ -78,10 +78,10 @@ function FullKeyboardInner({
 
   return (
     <div
-      className="terminal-keyboard-container"
+      className="aterm-keyboard-container"
       style={{ backgroundColor: 'var(--term-bg-surface)' }}
     >
-      <div ref={containerRef} className="terminal-simple-keyboard" />
+      <div ref={containerRef} className="aterm-simple-keyboard" />
       {/* biome-ignore lint/security/noDangerouslySetInnerHtml: Dynamic CSS from trusted getKeyboardStyles() */}
       <style dangerouslySetInnerHTML={{ __html: getKeyboardStyles(rowHeight) }} />
     </div>

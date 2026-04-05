@@ -1,11 +1,11 @@
 'use client'
 
-import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
+import type { PaneSlot, ATermSlot } from '@/lib/utils/slot'
 
 interface SinglePaneLayoutProps {
   containerRef: React.RefObject<HTMLDivElement | null>
-  slot: TerminalSlot | PaneSlot
-  renderPane: (slot: TerminalSlot | PaneSlot, index: number) => React.ReactNode
+  slot: ATermSlot | PaneSlot
+  renderPane: (slot: ATermSlot | PaneSlot, index: number) => React.ReactNode
 }
 
 /**

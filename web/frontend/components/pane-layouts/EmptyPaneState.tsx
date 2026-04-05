@@ -1,6 +1,6 @@
 'use client'
 
-import { Terminal } from 'lucide-react'
+import { PanelsTopLeft } from 'lucide-react'
 
 interface EmptyPaneStateProps {
   containerRef: React.RefObject<HTMLDivElement | null>
@@ -23,7 +23,7 @@ export function EmptyPaneState({
       <button
         type="button"
         onClick={onOpenModal}
-        aria-label="Open terminal manager to create a new terminal"
+        aria-label="Open A-Term manager to create a new A-Term"
         className="flex flex-col items-center gap-4 p-8 rounded-lg cursor-pointer transition-all duration-200 hover:scale-[1.02]"
         style={{
           backgroundColor: 'var(--term-bg-surface)',
@@ -37,7 +37,7 @@ export function EmptyPaneState({
             border: '1px solid var(--term-border)',
           }}
         >
-          <Terminal
+          <PanelsTopLeft
             className="w-6 h-6"
             style={{ color: 'var(--term-accent)' }}
           />
@@ -47,7 +47,7 @@ export function EmptyPaneState({
             className="block text-sm font-medium mb-1"
             style={{ color: 'var(--term-text-primary)' }}
           >
-            Open a terminal
+            Open an A-Term
           </span>
           <span
             className="block text-xs"

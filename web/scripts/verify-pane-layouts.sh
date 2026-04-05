@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SESSION="${AGENT_BROWSER_SESSION:-terminal-layout-regression}"
+SESSION="${AGENT_BROWSER_SESSION:-aterm-layout-regression}"
 BROWSER_BIN="${AGENT_BROWSER_BIN:-$HOME/.local/bin/agent-browser}"
 URL="${1:-http://localhost:3002}"
 
@@ -31,7 +31,7 @@ click_button_with_text() {
 button_count() {
   local result
   result="$(ab eval "
-    String(document.querySelectorAll('button[title=\"Close terminal\"]').length)
+    String(document.querySelectorAll('button[title=\"Close A-Term\"]').length)
   " | tr -d '"')"
   if ! [[ "$result" =~ ^[0-9]+$ ]]; then
     echo "Failed to parse button count: $result" >&2
@@ -59,9 +59,9 @@ ensure_panes() {
   current="$(button_count)"
 
   while (( current < target )); do
-    click_button_with_text "Open terminal"
-    click_button_with_text "New Ad-Hoc Terminal"
-    click_button_with_text "Close terminal manager"
+    click_button_with_text "Open A-Term"
+    click_button_with_text "New Ad-Hoc A-Term"
+    click_button_with_text "Close A-Term manager"
     ab wait 200 >/dev/null
     current="$(button_count)"
   done
@@ -74,9 +74,9 @@ reduce_panes() {
 
   while (( current > target )); do
     ab eval "
-      const buttons = Array.from(document.querySelectorAll('button[title=\"Close terminal\"]'));
+      const buttons = Array.from(document.querySelectorAll('button[title=\"Close A-Term\"]'));
       const button = buttons[buttons.length - 1];
-      if (!button) throw new Error('Missing close terminal button');
+      if (!button) throw new Error('Missing close A-Term button');
       button.click();
       'clicked';
     " >/dev/null

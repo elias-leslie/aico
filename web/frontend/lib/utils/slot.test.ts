@@ -26,7 +26,7 @@ const makeProjectSlot = (overrides?: Partial<ProjectSlot>): ProjectSlot => ({
 const makeAdHocSlot = (overrides?: Partial<AdHocSlot>): AdHocSlot => ({
   type: 'adhoc',
   sessionId: 'adhoc-123',
-  name: 'Ad Hoc Terminal',
+  name: 'Ad Hoc A-Term',
   workingDir: '/tmp',
   ...overrides,
 })
@@ -85,8 +85,8 @@ describe('getSlotName', () => {
   })
 
   it('returns name for adhoc slot', () => {
-    const slot = makeAdHocSlot({ name: 'My Terminal' })
-    expect(getSlotName(slot)).toBe('My Terminal')
+    const slot = makeAdHocSlot({ name: 'My A-Term' })
+    expect(getSlotName(slot)).toBe('My A-Term')
   })
 })
 
@@ -97,8 +97,8 @@ describe('getSlotBaseName', () => {
   })
 
   it('returns name for adhoc slot', () => {
-    const slot = makeAdHocSlot({ name: 'Terminal X' })
-    expect(getSlotBaseName(slot)).toBe('Terminal X')
+    const slot = makeAdHocSlot({ name: 'A-Term X' })
+    expect(getSlotBaseName(slot)).toBe('A-Term X')
   })
 })
 
@@ -151,7 +151,7 @@ describe('paneToSlot', () => {
       pane_type: 'project',
       project_id: 'proj-x',
       pane_order: 0,
-      pane_name: 'Terminal',
+      pane_name: 'A-Term',
       active_mode: 'shell',
       is_detached: false,
       created_at: null,

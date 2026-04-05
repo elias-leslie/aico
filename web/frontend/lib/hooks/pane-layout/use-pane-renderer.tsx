@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState, type DragEvent } from 'react'
 import { clsx } from 'clsx'
-import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
+import type { PaneSlot, ATermSlot } from '@/lib/utils/slot'
 import {
   getSlotSessionId,
   getSlotWorkingDir,
@@ -11,8 +11,8 @@ import {
   getDraggedPaneSlotId,
   isPaneSwapDragEvent,
 } from '@/lib/utils/pane-swap-dnd'
-import { TerminalComponent, type TerminalHandle } from '@/components/Terminal'
-import { UnifiedTerminalHeader } from '@/components/UnifiedTerminalHeader'
+import { ATermComponent, type ATermHandle } from '@/components/ATerm'
+import { UnifiedATermHeader } from '@/components/UnifiedATermHeader'
 import type { ResizablePaneLayoutProps } from '@/types/pane-layout'
 
 interface UsePaneRendererOptions {
@@ -31,7 +31,7 @@ interface UsePaneRendererOptions {
     | 'isModeSwitching'
     | 'isMobile'
     | 'onSwapPanes'
-    | 'onTerminalRef'
+    | 'onATermRef'
     | 'fontFamily'
     | 'fontSize'
     | 'scrollback'
@@ -43,9 +43,9 @@ interface UsePaneRendererOptions {
     | 'layoutMode'
     | 'availableLayouts'
     | 'onLayoutModeChange'
-    | 'terminalStatuses'
+    | 'atermStatuses'
   >
-  displaySlots: (TerminalSlot | PaneSlot)[]
+  displaySlots: (ATermSlot | PaneSlot)[]
   paneCount: number
 }
 
@@ -71,7 +71,7 @@ export function usePaneRenderer({
     isModeSwitching,
     isMobile,
     onSwapPanes,
-    onTerminalRef,
+    onATermRef,
     fontFamily,
     fontSize,
     scrollback,
@@ -83,13 +83,13 @@ export function usePaneRenderer({
     layoutMode,
     availableLayouts,
     onLayoutModeChange,
-    terminalStatuses,
+    atermStatuses,
   } = props
   const [dragTargetPanelId, setDragTargetPanelId] = useState<string | null>(null)
-  const paneHandlesRef = useRef(new Map<string, TerminalHandle>())
+  const paneHandlesRef = useRef(new Map<string, ATermHandle>())
 
   const renderPane = useCallback(
-    (slot: TerminalSlot | PaneSlot, _index: number) => {
+    (slot: ATermSlot | PaneSlot, _index: number) => {
       const sessionId = getSlotSessionId(slot)
       const workingDir = getSlotWorkingDir(slot)
       const panelId = getSlotPanelId(slot)
@@ -135,12 +135,12 @@ export function usePaneRenderer({
           onDragLeave={handlePaneDragLeave}
           onDrop={handlePaneDrop}
           className={clsx(
-            'terminal-pane-shell flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-md transition-colors duration-150',
-            isDragTarget && 'terminal-pane-shell-drag-target ring-1 ring-[var(--term-accent)]',
+            'aterm-pane-shell flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-md transition-colors duration-150',
+            isDragTarget && 'aterm-pane-shell-drag-target ring-1 ring-[var(--term-accent)]',
           )}
           style={{ backgroundColor: 'var(--term-bg-surface)' }}
         >
-          <UnifiedTerminalHeader
+          <UnifiedATermHeader
             slot={slot}
             showCleanButton={canCleanSlot}
             onSwitch={onSwitch ? () => onSwitch(slot) : undefined}
@@ -148,7 +148,7 @@ export function usePaneRenderer({
             onReset={onReset && canResetSlot ? () => onReset(slot) : undefined}
             onClose={onClose ? () => onClose(slot) : undefined}
             onCloseSession={onCloseSession ? () => onCloseSession(slot) : undefined}
-            closeTooltip={isExternalSlot ? 'Detach terminal' : 'Detach pane'}
+            closeTooltip={isExternalSlot ? 'Detach aterm' : 'Detach pane'}
             onUpload={onUpload ? () => onUpload(sessionId ?? undefined) : undefined}
             onClean={onClean ? () => onClean(slot) : undefined}
             onOpenModal={onOpenModal}
@@ -173,7 +173,7 @@ export function usePaneRenderer({
             layoutMode={layoutMode}
             availableLayouts={availableLayouts}
             onLayoutModeChange={onLayoutModeChange}
-            connectionStatus={sessionId ? terminalStatuses?.get(sessionId) : undefined}
+            connectionStatus={sessionId ? atermStatuses?.get(sessionId) : undefined}
             onReconnect={sessionId ? () => paneHandlesRef.current.get(sessionId)?.reconnect() : undefined}
             onSearch={sessionId
               ? (query, options) =>
@@ -194,14 +194,14 @@ export function usePaneRenderer({
             style={{ backgroundColor: 'var(--term-bg-deep)' }}
           >
             {sessionId ? (
-              <TerminalComponent
+              <ATermComponent
                 key={sessionId}
                 ref={(handle) => {
                   if (sessionId) {
                     if (handle) paneHandlesRef.current.set(sessionId, handle)
                     else paneHandlesRef.current.delete(sessionId)
                   }
-                  onTerminalRef?.(sessionId, handle)
+                  onATermRef?.(sessionId, handle)
                 }}
                 sessionId={sessionId}
                 sessionMode={slot.type === 'project' ? slot.activeMode : slot.sessionMode}
@@ -243,7 +243,7 @@ export function usePaneRenderer({
       displaySlots,
       paneCount,
       onSwapPanes,
-      onTerminalRef,
+      onATermRef,
       fontFamily,
       fontSize,
       scrollback,
@@ -255,7 +255,7 @@ export function usePaneRenderer({
       layoutMode,
       availableLayouts,
       onLayoutModeChange,
-      terminalStatuses,
+      atermStatuses,
       dragTargetPanelId,
     ],
   )

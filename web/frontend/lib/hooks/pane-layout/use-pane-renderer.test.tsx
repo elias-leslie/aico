@@ -1,15 +1,15 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { usePaneRenderer } from './use-pane-renderer'
-import { getSlotPanelId, type PaneSlot, type TerminalSlot } from '@/lib/utils/slot'
+import { getSlotPanelId, type PaneSlot, type ATermSlot } from '@/lib/utils/slot'
 
-const terminalProps = vi.hoisted(
+const atermProps = vi.hoisted(
   () => [] as Array<{ sessionId: string; sessionMode?: string; isVisible?: boolean }>,
 )
 const headerProps = vi.hoisted(() => [] as Array<Record<string, unknown>>)
 
-vi.mock('@/components/Terminal', () => ({
-  TerminalComponent: ({
+vi.mock('@/components/ATerm', () => ({
+  ATermComponent: ({
     sessionId,
     sessionMode,
     isVisible,
@@ -18,17 +18,17 @@ vi.mock('@/components/Terminal', () => ({
     sessionMode?: string
     isVisible?: boolean
   }) => {
-    terminalProps.push({ sessionId, sessionMode, isVisible })
-    return <div data-testid={`terminal-${sessionId}`} />
+    atermProps.push({ sessionId, sessionMode, isVisible })
+    return <div data-testid={`aterm-${sessionId}`} />
   },
 }))
 
-vi.mock('@/components/UnifiedTerminalHeader', () => ({
-  UnifiedTerminalHeader: (props: Record<string, unknown>) => {
+vi.mock('@/components/UnifiedATermHeader', () => ({
+  UnifiedATermHeader: (props: Record<string, unknown>) => {
     headerProps.push(props)
     const slot = props.slot as { paneId?: string; sessionId?: string }
     const id = slot.paneId ?? slot.sessionId ?? 'unknown'
-    return <div data-testid={`terminal-header-${id}`} />
+    return <div data-testid={`aterm-header-${id}`} />
   },
 }))
 
@@ -37,7 +37,7 @@ function RenderHarness({
   onSwapPanes,
   onUpload,
 }: {
-  slots: Array<TerminalSlot | PaneSlot>
+  slots: Array<ATermSlot | PaneSlot>
   onSwapPanes?: (slotIdA: string, slotIdB: string) => void
   onUpload?: (sessionId?: string) => void
 }) {
@@ -90,8 +90,8 @@ function RenderHarness({
 }
 
 describe('usePaneRenderer', () => {
-  it('keeps all rendered desktop terminals visible', () => {
-    terminalProps.length = 0
+  it('keeps all rendered desktop aterms visible', () => {
+    atermProps.length = 0
     headerProps.length = 0
 
     const slots: PaneSlot[] = [
@@ -119,9 +119,9 @@ describe('usePaneRenderer', () => {
 
     render(<RenderHarness slots={slots} />)
 
-    expect(screen.getByTestId('terminal-session-1')).toBeInTheDocument()
-    expect(screen.getByTestId('terminal-session-2')).toBeInTheDocument()
-    expect(terminalProps).toEqual([
+    expect(screen.getByTestId('aterm-session-1')).toBeInTheDocument()
+    expect(screen.getByTestId('aterm-session-2')).toBeInTheDocument()
+    expect(atermProps).toEqual([
       { sessionId: 'session-1', sessionMode: 'shell', preferLessDestructiveSnapshots: undefined, isVisible: undefined },
       { sessionId: 'session-2', sessionMode: 'shell', preferLessDestructiveSnapshots: undefined, isVisible: undefined },
     ])
@@ -159,11 +159,11 @@ describe('usePaneRenderer', () => {
       `pane-drop-target-${getSlotPanelId(slots[1])}`,
     )
     const dataTransfer = {
-      types: ['application/x-terminal-pane-slot', 'text/plain'],
+      types: ['application/x-aterm-pane-slot', 'text/plain'],
       effectAllowed: 'move',
       dropEffect: 'move',
       getData: (type: string) =>
-        type === 'application/x-terminal-pane-slot' || type === 'text/plain'
+        type === 'application/x-aterm-pane-slot' || type === 'text/plain'
           ? getSlotPanelId(slots[0])
           : '',
     }
@@ -209,10 +209,10 @@ describe('usePaneRenderer', () => {
   })
 
   it('matches external pane capabilities with supported controls only', () => {
-    terminalProps.length = 0
+    atermProps.length = 0
     headerProps.length = 0
 
-    const slots: TerminalSlot[] = [
+    const slots: ATermSlot[] = [
       {
         type: 'adhoc',
         sessionId: 'external-codex',
@@ -226,19 +226,19 @@ describe('usePaneRenderer', () => {
     render(<RenderHarness slots={slots} />)
 
     expect(headerProps).toHaveLength(1)
-    expect(terminalProps).toEqual([
+    expect(atermProps).toEqual([
       { sessionId: 'external-codex', sessionMode: 'codex', isVisible: undefined },
     ])
     expect(headerProps[0]?.showCleanButton).toBe(true)
     expect(headerProps[0]?.onReset).toBeUndefined()
-    expect(headerProps[0]?.closeTooltip).toBe('Detach terminal')
+    expect(headerProps[0]?.closeTooltip).toBe('Detach aterm')
   })
 
   it('routes pane upload actions to the pane session', () => {
     headerProps.length = 0
     const onUpload = vi.fn()
 
-    const slots: TerminalSlot[] = [
+    const slots: ATermSlot[] = [
       {
         type: 'adhoc',
         sessionId: 'external-codex',

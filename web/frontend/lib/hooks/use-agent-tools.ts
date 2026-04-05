@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback } from 'react'
 import { apiFetch } from '../api-fetch'
-import type { TerminalPane } from './use-terminal-panes'
+import type { ATermPane } from './use-aterm-panes'
 
 // ============================================================================
 // Types
@@ -52,12 +52,12 @@ interface UpdateAgentToolInput {
 // ============================================================================
 
 async function fetchAgentTools(): Promise<AgentTool[]> {
-  return apiFetch('/api/terminal/agent-tools', undefined, 'Failed to fetch agent tools')
+  return apiFetch('/api/aterm/agent-tools', undefined, 'Failed to fetch agent tools')
 }
 
 async function createAgentTool(input: CreateAgentToolInput): Promise<AgentTool> {
   return apiFetch(
-    '/api/terminal/agent-tools',
+    '/api/aterm/agent-tools',
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -72,7 +72,7 @@ async function updateAgentTool(
   input: UpdateAgentToolInput,
 ): Promise<AgentTool> {
   return apiFetch(
-    `/api/terminal/agent-tools/${toolId}`,
+    `/api/aterm/agent-tools/${toolId}`,
     {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -84,7 +84,7 @@ async function updateAgentTool(
 
 async function deleteAgentTool(toolId: string): Promise<void> {
   await apiFetch(
-    `/api/terminal/agent-tools/${toolId}`,
+    `/api/aterm/agent-tools/${toolId}`,
     {
       method: 'DELETE',
     },
@@ -95,9 +95,9 @@ async function deleteAgentTool(toolId: string): Promise<void> {
 async function switchPaneAgentTool(
   paneId: string,
   agentToolSlug: string,
-): Promise<TerminalPane> {
+): Promise<ATermPane> {
   return apiFetch(
-    `/api/terminal/panes/${paneId}/agent-tool`,
+    `/api/aterm/panes/${paneId}/agent-tool`,
     {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -154,8 +154,8 @@ export function useAgentTools() {
     mutationFn: ({ paneId, slug }: { paneId: string; slug: string }) =>
       switchPaneAgentTool(paneId, slug),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['terminal-panes'] })
-      queryClient.invalidateQueries({ queryKey: ['terminal-sessions'] })
+      queryClient.invalidateQueries({ queryKey: ['aterm-panes'] })
+      queryClient.invalidateQueries({ queryKey: ['aterm-sessions'] })
     },
   })
 

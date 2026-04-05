@@ -3,17 +3,17 @@
 set -euo pipefail
 
 PROJECT_LAUNCHER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TERMINAL_SCRIPTS_DIR="$(cd "$PROJECT_LAUNCHER_DIR/.." && pwd)"
-TERMINAL_REPO_ROOT="$(cd "$PROJECT_LAUNCHER_DIR/../.." && pwd)"
+ATERM_SCRIPTS_DIR="$(cd "$PROJECT_LAUNCHER_DIR/.." && pwd)"
+ATERM_REPO_ROOT="$(cd "$PROJECT_LAUNCHER_DIR/../.." && pwd)"
 
 DEFAULT_WORKSPACES_ROOT=""
-if [ "$(basename "$(dirname "$TERMINAL_REPO_ROOT")")" = "projects" ]; then
-  DEFAULT_WORKSPACES_ROOT="$(cd "$TERMINAL_REPO_ROOT/../.." && pwd)"
+if [ "$(basename "$(dirname "$ATERM_REPO_ROOT")")" = "projects" ]; then
+  DEFAULT_WORKSPACES_ROOT="$(cd "$ATERM_REPO_ROOT/../.." && pwd)"
 fi
 
 WORKSPACES_ROOT="${ST_WORKSPACES_ROOT:-$DEFAULT_WORKSPACES_ROOT}"
 
-project_has_terminal_indicators() {
+project_has_aterm_indicators() {
   local dir="$1"
 
   [ -d "$dir/.claude" ] || \
@@ -51,7 +51,7 @@ for project in projects:
 '
 }
 
-resolve_terminal_project_dir() {
+resolve_aterm_project_dir() {
   local project="$1"
   local candidate
 
@@ -78,14 +78,14 @@ resolve_terminal_project_dir() {
   return 1
 }
 
-discover_terminal_projects() {
+discover_aterm_projects() {
   declare -A seen=()
   local project root
 
   while IFS=$'\t' read -r project root; do
     [ -n "$project" ] || continue
     [ -d "$root/.git" ] || continue
-    project_has_terminal_indicators "$root" || continue
+    project_has_aterm_indicators "$root" || continue
     seen["$project"]=1
     printf '%s\n' "$project"
   done < <(discover_registered_projects)
@@ -97,7 +97,7 @@ discover_terminal_projects() {
     [ -d "$base_dir" ] || continue
     for dir in "$base_dir"/*/; do
       [ -d "$dir/.git" ] || continue
-      project_has_terminal_indicators "$dir" || continue
+      project_has_aterm_indicators "$dir" || continue
       project="$(basename "$dir")"
       [ -n "${seen[$project]:-}" ] && continue
       projects+=("$project")
@@ -106,10 +106,10 @@ discover_terminal_projects() {
   printf '%s\n' "${projects[@]}"
 }
 
-select_terminal_project() {
+select_aterm_project() {
   local tool="$1"
   local active_output
-  active_output="$("$TERMINAL_SCRIPTS_DIR/tsession" list --tool "$tool" --format project-id 2>/dev/null || true)"
+  active_output="$("$ATERM_SCRIPTS_DIR/tsession" list --tool "$tool" --format project-id 2>/dev/null || true)"
 
   local -A active_projects=()
   local project
@@ -120,7 +120,7 @@ select_terminal_project() {
   local projects=()
   while IFS= read -r project; do
     [ -n "$project" ] && projects+=("$project")
-  done < <(discover_terminal_projects)
+  done < <(discover_aterm_projects)
 
   if [ ${#projects[@]} -eq 0 ]; then
     echo "No projects found (need .git + project indicator)" >&2
@@ -146,27 +146,27 @@ select_terminal_project() {
   printf '%s\n' "${selected% \[active\]}"
 }
 
-launch_terminal_project_tool() {
+launch_aterm_project_tool() {
   local tool="$1"
   local selected="${2:-}"
 
   if [ "$selected" = "-l" ]; then
-    "$TERMINAL_SCRIPTS_DIR/tsession" list --tool "$tool"
+    "$ATERM_SCRIPTS_DIR/tsession" list --tool "$tool"
     return 0
   fi
 
   if [ -z "$selected" ]; then
-    selected="$(select_terminal_project "$tool")" || return 1
+    selected="$(select_aterm_project "$tool")" || return 1
   fi
 
   local project_dir
-  project_dir="$(resolve_terminal_project_dir "$selected" || true)"
+  project_dir="$(resolve_aterm_project_dir "$selected" || true)"
   if [ ! -d "$project_dir" ]; then
     echo "Project '$selected' not found" >&2
     return 1
   fi
 
-  exec "$TERMINAL_SCRIPTS_DIR/tsession" open \
+  exec "$ATERM_SCRIPTS_DIR/tsession" open \
     --tool "$tool" \
     --project "$selected" \
     --cwd "$project_dir" \

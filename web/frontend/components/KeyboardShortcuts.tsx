@@ -9,7 +9,7 @@ interface Shortcut {
 }
 
 const SHORTCUTS: Shortcut[] = [
-  { keys: 'Ctrl+T', description: 'New terminal' },
+  { keys: 'Ctrl+T', description: 'New A-Term' },
   { keys: 'Ctrl+W', description: 'Close current tab' },
   { keys: 'Ctrl+Tab', description: 'Next tab' },
   { keys: 'Ctrl+Shift+Tab', description: 'Previous tab' },
@@ -142,17 +142,17 @@ export function KeyboardShortcuts({ isOpen, onClose }: KeyboardShortcutsProps) {
 }
 
 /**
- * Hook to register global keyboard shortcuts for terminal navigation.
+ * Hook to register global keyboard shortcuts for A-Term navigation.
  */
-export function useTerminalKeyboardShortcuts(handlers: {
-  onNewTerminal: () => void
+export function useATermKeyboardShortcuts(handlers: {
+  onNewATerm: () => void
   onCloseTab: () => void
-  /** Switch to next terminal (Ctrl+Tab) */
-  onNextTerminal?: () => void
-  /** Switch to previous terminal (Ctrl+Shift+Tab) */
-  onPrevTerminal?: () => void
-  /** Jump to terminal at position (Ctrl+1-9) */
-  onJumpToTerminal?: (index: number) => void
+  /** Switch to next A-Term (Ctrl+Tab) */
+  onNextATerm?: () => void
+  /** Switch to previous A-Term (Ctrl+Shift+Tab) */
+  onPrevATerm?: () => void
+  /** Jump to A-Term at position (Ctrl+1-9) */
+  onJumpToATerm?: (index: number) => void
   /** Toggle voice input (Pause key) */
   onVoiceToggle?: () => void
 }) {
@@ -184,10 +184,10 @@ export function useTerminalKeyboardShortcuts(handlers: {
         return
       }
 
-      // Ctrl+T for new terminal
+      // Ctrl+T for new A-Term
       if (e.ctrlKey && e.key === 't') {
         e.preventDefault()
-        handlers.onNewTerminal()
+        handlers.onNewATerm()
         return
       }
 
@@ -198,24 +198,24 @@ export function useTerminalKeyboardShortcuts(handlers: {
         return
       }
 
-      // Ctrl+Tab for next terminal
+      // Ctrl+Tab for next A-Term
       if (e.ctrlKey && e.key === 'Tab' && !e.shiftKey) {
         e.preventDefault()
-        handlers.onNextTerminal?.()
+        handlers.onNextATerm?.()
         return
       }
 
-      // Ctrl+Shift+Tab for previous terminal
+      // Ctrl+Shift+Tab for previous A-Term
       if (e.ctrlKey && e.key === 'Tab' && e.shiftKey) {
         e.preventDefault()
-        handlers.onPrevTerminal?.()
+        handlers.onPrevATerm?.()
         return
       }
 
-      // Ctrl+1-9 to jump to terminal at position
+      // Ctrl+1-9 to jump to A-Term at position
       if (e.ctrlKey && /^[1-9]$/.test(e.key)) {
         e.preventDefault()
-        handlers.onJumpToTerminal?.(parseInt(e.key, 10) - 1) // 0-indexed
+        handlers.onJumpToATerm?.(parseInt(e.key, 10) - 1) // 0-indexed
         return
       }
     },

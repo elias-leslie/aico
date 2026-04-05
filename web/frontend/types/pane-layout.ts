@@ -1,8 +1,8 @@
-import type { ConnectionStatus, TerminalHandle } from '@/components/Terminal'
-import type { TerminalMode } from '@/components/ModeToggle'
-import type { LayoutMode } from '@/lib/constants/terminal'
-import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
-import type { TerminalComponent } from '@/components/Terminal'
+import type { ConnectionStatus, ATermHandle } from '@/components/ATerm'
+import type { ATermMode } from '@/components/ModeToggle'
+import type { LayoutMode } from '@/lib/constants/aterm'
+import type { PaneSlot, ATermSlot } from '@/lib/utils/slot'
+import type { ATermComponent } from '@/components/ATerm'
 
 // Preferred pane size targets in pixels. These are capped per group so splitters
 // still have movement room on smaller viewport/pane combinations.
@@ -22,28 +22,28 @@ export interface PaneLayout {
 }
 
 export interface ResizablePaneLayoutProps {
-  slots: (TerminalSlot | PaneSlot)[]
+  slots: (ATermSlot | PaneSlot)[]
   fontFamily: string
   fontSize: number
   scrollback?: number
   cursorStyle?: 'block' | 'underline' | 'bar'
   cursorBlink?: boolean
-  theme?: Parameters<typeof TerminalComponent>[0]['theme']
-  onTerminalRef?: (sessionId: string, handle: TerminalHandle | null) => void
+  theme?: Parameters<typeof ATermComponent>[0]['theme']
+  onATermRef?: (sessionId: string, handle: ATermHandle | null) => void
   onStatusChange?: (sessionId: string, status: ConnectionStatus) => void
-  terminalStatuses?: Map<string, ConnectionStatus>
-  onSwitch?: (slot: TerminalSlot | PaneSlot) => void
+  atermStatuses?: Map<string, ConnectionStatus>
+  onSwitch?: (slot: ATermSlot | PaneSlot) => void
   onSettings?: () => void
-  onReset?: (slot: TerminalSlot | PaneSlot) => void
-  onClose?: (slot: TerminalSlot | PaneSlot) => void
-  onCloseSession?: (slot: TerminalSlot | PaneSlot) => void
+  onReset?: (slot: ATermSlot | PaneSlot) => void
+  onClose?: (slot: ATermSlot | PaneSlot) => void
+  onCloseSession?: (slot: ATermSlot | PaneSlot) => void
   onUpload?: (sessionId?: string) => void
-  onClean?: (slot: TerminalSlot | PaneSlot) => void
+  onClean?: (slot: ATermSlot | PaneSlot) => void
   onOpenModal?: () => void
   canAddPane?: boolean
   onModeSwitch?: (
-    slot: TerminalSlot | PaneSlot,
-    mode: TerminalMode,
+    slot: ATermSlot | PaneSlot,
+    mode: ATermMode,
   ) => void | Promise<void>
   isModeSwitching?: boolean
   isMobile?: boolean

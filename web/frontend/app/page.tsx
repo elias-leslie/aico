@@ -2,16 +2,16 @@
 
 import { useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
-import { TerminalTabs } from '@/components/TerminalTabs'
+import { ATermTabs } from '@/components/ATermTabs'
 
-function TerminalPage() {
+function ATermPage() {
   const searchParams = useSearchParams()
   const projectId = searchParams.get('project') || undefined
   const projectPath = searchParams.get('dir') || undefined
 
   return (
     <div className="h-dvh flex flex-col" style={{ backgroundColor: 'var(--term-bg-deep)' }}>
-      <TerminalTabs
+      <ATermTabs
         projectId={projectId}
         projectPath={projectPath}
         className="flex-1 min-h-0"
@@ -30,11 +30,11 @@ export default function Home() {
           style={{ backgroundColor: 'var(--term-bg-deep)', color: 'var(--term-text-muted)', fontFamily: 'var(--font-mono)' }}
           aria-live="polite"
         >
-          Preparing terminal workspace…
+          Preparing aterm workspace…
         </div>
       }
     >
-      <TerminalPage />
+      <ATermPage />
     </Suspense>
   )
 }

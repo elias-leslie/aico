@@ -2,15 +2,16 @@
 
 import { useEffect, useEffectEvent } from 'react'
 import type { RefObject } from 'react'
-import type { Terminal } from '@xterm/xterm'
 import {
   getTouchScrollEffectiveCellHeight,
   getTouchScrollLineDelta,
-  refreshTerminalViewport,
-} from './terminal-scrolling-utils'
+  refreshATermViewport,
+} from './aterm-scrolling-utils'
 import { getScrollbackOverlayWheelAction } from '../utils/scrollback-overlay-scroll'
 import { shouldDismissScrollbackOverlayTouchGesture } from '../utils/scrollback-overlay-touch'
-import { isTerminalBufferAtBottom } from './use-scrollback-terminal'
+import { isATermBufferAtBottom } from './use-scrollback-aterm'
+
+type XtermATerm = InstanceType<typeof import('@xterm/xterm').Terminal>
 
 function stopAndPrevent(e: Event) {
   e.preventDefault()
@@ -25,8 +26,8 @@ function readRef<T>(ref: RefObject<T | null>): T | null {
 interface UseScrollbackGesturesOptions {
   containerRef: RefObject<HTMLDivElement | null>
   isActive: boolean
-  xtermRef: RefObject<Terminal | null>
-  flushPendingLines: RefObject<(term: Terminal) => void>
+  xtermRef: RefObject<XtermATerm | null>
+  flushPendingLines: RefObject<(term: XtermATerm) => void>
   onDismiss: () => void
 }
 
@@ -51,7 +52,7 @@ export function useScrollbackGestures({
 
       const action = getScrollbackOverlayWheelAction({
         deltaY: e.deltaY,
-        isAtBottom: isTerminalBufferAtBottom(term),
+        isAtBottom: isATermBufferAtBottom(term),
       })
       stopAndPrevent(e)
       if (action.kind === 'dismiss') {
@@ -59,7 +60,7 @@ export function useScrollbackGestures({
         return
       }
       term.scrollLines(action.lineDelta)
-      refreshTerminalViewport(term)
+      refreshATermViewport(term)
       flush?.(term)
     }
 
@@ -92,7 +93,7 @@ export function useScrollbackGestures({
       touchStartY = e.touches[0].clientY
       lastTouchY = touchStartY
       pendingScrollDeltaY = 0
-      gestureStartedAtBottom = isTerminalBufferAtBottom(term)
+      gestureStartedAtBottom = isATermBufferAtBottom(term)
       gestureLeftBottom = false
     }
 
@@ -112,11 +113,11 @@ export function useScrollbackGestures({
 
       stopAndPrevent(e)
       term.scrollLines(lineDelta)
-      refreshTerminalViewport(term)
+      refreshATermViewport(term)
       flush?.(term)
       pendingScrollDeltaY -= lineDelta * getTouchScrollEffectiveCellHeight(cellHeight)
 
-      if (!gestureLeftBottom && !isTerminalBufferAtBottom(term)) {
+      if (!gestureLeftBottom && !isATermBufferAtBottom(term)) {
         gestureLeftBottom = true
       }
     }
@@ -130,7 +131,7 @@ export function useScrollbackGestures({
           gestureLeftBottom,
           touchStartY,
           touchEndY: lastTouchY,
-          isAtBottom: isTerminalBufferAtBottom(term),
+          isAtBottom: isATermBufferAtBottom(term),
         })
       ) {
         dismiss()

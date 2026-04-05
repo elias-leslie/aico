@@ -20,4 +20,4 @@ exec env \
   -u HATCHET_CLIENT_TOKEN \
   -u HATCHET_CLIENT_HOST_PORT \
   -u HATCHET_CLIENT_TLS_STRATEGY \
-  "$PYTHON_BIN" -m terminal.cli.session_broker "$@"
+  "$PYTHON_BIN" -m aterm.cli.session_broker "$@"

@@ -23,8 +23,8 @@ TOOL_FIXTURE = {
 
 
 def test_list_agent_tools(test_app: TestClient) -> None:
-    with patch("terminal.api.agent_tools.agent_tools_store.list_all", return_value=[TOOL_FIXTURE]):
-        response = test_app.get("/api/terminal/agent-tools")
+    with patch("aterm.api.agent_tools.agent_tools_store.list_all", return_value=[TOOL_FIXTURE]):
+        response = test_app.get("/api/aterm/agent-tools")
     assert response.status_code == 200
     data = response.json()
     assert len(data) == 1
@@ -32,19 +32,19 @@ def test_list_agent_tools(test_app: TestClient) -> None:
 
 
 def test_list_agent_tools_enabled_only(test_app: TestClient) -> None:
-    with patch("terminal.api.agent_tools.agent_tools_store.list_enabled", return_value=[TOOL_FIXTURE]):
-        response = test_app.get("/api/terminal/agent-tools?enabled_only=true")
+    with patch("aterm.api.agent_tools.agent_tools_store.list_enabled", return_value=[TOOL_FIXTURE]):
+        response = test_app.get("/api/aterm/agent-tools?enabled_only=true")
     assert response.status_code == 200
     assert len(response.json()) == 1
 
 
 def test_create_agent_tool(test_app: TestClient) -> None:
     with (
-        patch("terminal.api.agent_tools.agent_tools_store.get_by_slug", return_value=None),
-        patch("terminal.api.agent_tools.agent_tools_store.create", return_value=TOOL_FIXTURE),
+        patch("aterm.api.agent_tools.agent_tools_store.get_by_slug", return_value=None),
+        patch("aterm.api.agent_tools.agent_tools_store.create", return_value=TOOL_FIXTURE),
     ):
         response = test_app.post(
-            "/api/terminal/agent-tools",
+            "/api/aterm/agent-tools",
             json={
                 "name": "Claude",
                 "slug": "claude",
@@ -57,9 +57,9 @@ def test_create_agent_tool(test_app: TestClient) -> None:
 
 
 def test_create_agent_tool_duplicate_slug(test_app: TestClient) -> None:
-    with patch("terminal.api.agent_tools.agent_tools_store.get_by_slug", return_value=TOOL_FIXTURE):
+    with patch("aterm.api.agent_tools.agent_tools_store.get_by_slug", return_value=TOOL_FIXTURE):
         response = test_app.post(
-            "/api/terminal/agent-tools",
+            "/api/aterm/agent-tools",
             json={
                 "name": "Claude",
                 "slug": "claude",
@@ -73,7 +73,7 @@ def test_create_agent_tool_duplicate_slug(test_app: TestClient) -> None:
 
 def test_create_agent_tool_invalid_slug(test_app: TestClient) -> None:
     response = test_app.post(
-        "/api/terminal/agent-tools",
+        "/api/aterm/agent-tools",
         json={
             "name": "Claude",
             "slug": "INVALID SLUG!",
@@ -87,11 +87,11 @@ def test_create_agent_tool_invalid_slug(test_app: TestClient) -> None:
 def test_update_agent_tool(test_app: TestClient) -> None:
     updated = {**TOOL_FIXTURE, "name": "Claude v2"}
     with (
-        patch("terminal.api.agent_tools.agent_tools_store.get_by_id", return_value=TOOL_FIXTURE),
-        patch("terminal.api.agent_tools.agent_tools_store.update", return_value=updated),
+        patch("aterm.api.agent_tools.agent_tools_store.get_by_id", return_value=TOOL_FIXTURE),
+        patch("aterm.api.agent_tools.agent_tools_store.update", return_value=updated),
     ):
         response = test_app.patch(
-            "/api/terminal/agent-tools/tool-1",
+            "/api/aterm/agent-tools/tool-1",
             json={"name": "Claude v2"},
         )
     assert response.status_code == 200
@@ -99,18 +99,18 @@ def test_update_agent_tool(test_app: TestClient) -> None:
 
 
 def test_update_agent_tool_not_found(test_app: TestClient) -> None:
-    with patch("terminal.api.agent_tools.agent_tools_store.get_by_id", return_value=None):
+    with patch("aterm.api.agent_tools.agent_tools_store.get_by_id", return_value=None):
         response = test_app.patch(
-            "/api/terminal/agent-tools/missing",
+            "/api/aterm/agent-tools/missing",
             json={"name": "New Name"},
         )
     assert response.status_code == 404
 
 
 def test_update_agent_tool_empty_body(test_app: TestClient) -> None:
-    with patch("terminal.api.agent_tools.agent_tools_store.get_by_id", return_value=TOOL_FIXTURE):
+    with patch("aterm.api.agent_tools.agent_tools_store.get_by_id", return_value=TOOL_FIXTURE):
         response = test_app.patch(
-            "/api/terminal/agent-tools/tool-1",
+            "/api/aterm/agent-tools/tool-1",
             json={},
         )
     assert response.status_code == 200
@@ -119,26 +119,26 @@ def test_update_agent_tool_empty_body(test_app: TestClient) -> None:
 
 def test_delete_agent_tool(test_app: TestClient) -> None:
     with (
-        patch("terminal.api.agent_tools.agent_tools_store.get_by_id", return_value=TOOL_FIXTURE),
-        patch("terminal.api.agent_tools.agent_tools_store.has_active_sessions", return_value=False),
-        patch("terminal.api.agent_tools.agent_tools_store.delete", return_value=True),
+        patch("aterm.api.agent_tools.agent_tools_store.get_by_id", return_value=TOOL_FIXTURE),
+        patch("aterm.api.agent_tools.agent_tools_store.has_active_sessions", return_value=False),
+        patch("aterm.api.agent_tools.agent_tools_store.delete", return_value=True),
     ):
-        response = test_app.delete("/api/terminal/agent-tools/tool-1")
+        response = test_app.delete("/api/aterm/agent-tools/tool-1")
     assert response.status_code == 200
     assert response.json()["deleted"] is True
 
 
 def test_delete_agent_tool_with_active_sessions(test_app: TestClient) -> None:
     with (
-        patch("terminal.api.agent_tools.agent_tools_store.get_by_id", return_value=TOOL_FIXTURE),
-        patch("terminal.api.agent_tools.agent_tools_store.has_active_sessions", return_value=True),
+        patch("aterm.api.agent_tools.agent_tools_store.get_by_id", return_value=TOOL_FIXTURE),
+        patch("aterm.api.agent_tools.agent_tools_store.has_active_sessions", return_value=True),
     ):
-        response = test_app.delete("/api/terminal/agent-tools/tool-1")
+        response = test_app.delete("/api/aterm/agent-tools/tool-1")
     assert response.status_code == 409
     assert "active sessions" in response.json()["detail"]
 
 
 def test_delete_agent_tool_not_found(test_app: TestClient) -> None:
-    with patch("terminal.api.agent_tools.agent_tools_store.get_by_id", return_value=None):
-        response = test_app.delete("/api/terminal/agent-tools/missing")
+    with patch("aterm.api.agent_tools.agent_tools_store.get_by_id", return_value=None):
+        response = test_app.delete("/api/aterm/agent-tools/missing")
     assert response.status_code == 404

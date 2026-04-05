@@ -1,6 +1,6 @@
 import type { DragEvent } from 'react'
 
-export const PANE_SWAP_DRAG_MIME_TYPE = 'application/x-terminal-pane-slot'
+export const PANE_SWAP_DRAG_MIME_TYPE = 'application/x-aterm-pane-slot'
 export const PANE_SWAP_FALLBACK_MIME_TYPE = 'text/plain'
 
 let activeDraggedPaneSlotId: string | null = null

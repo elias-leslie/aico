@@ -1,16 +1,16 @@
 import { useCallback } from 'react'
 import { withCtrl, withShift } from './keyMappings'
 import { useModifiers } from './ModifierContext'
-import type { TerminalInputHandler } from './types'
+import type { ATermInputHandler } from './types'
 
 interface UseKeyboardInputProps {
-  onSend: TerminalInputHandler
+  onSend: ATermInputHandler
 }
 
 export function useKeyboardInput({ onSend }: UseKeyboardInputProps) {
   const { modifiers, resetModifiers, isActive } = useModifiers()
 
-  // Send a key sequence to the terminal, applying active modifiers
+  // Send a key sequence to the aterm, applying active modifiers
   const sendKey = useCallback(
     (sequence: string) => {
       let finalSequence = sequence
@@ -25,7 +25,7 @@ export function useKeyboardInput({ onSend }: UseKeyboardInputProps) {
         finalSequence = withShift(finalSequence)
       }
 
-      // Send to terminal
+      // Send to aterm
       onSend(finalSequence)
 
       // Reset sticky modifiers after key press

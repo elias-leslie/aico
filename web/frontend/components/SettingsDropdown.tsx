@@ -7,17 +7,17 @@ import {
 } from '@/lib/app-theme'
 import { useAppTheme } from '@/lib/hooks/use-app-theme'
 import {
-  TERMINAL_CURSOR_STYLES,
-  TERMINAL_FONT_SIZES,
-  TERMINAL_FONTS,
-  TERMINAL_SCROLLBACK_OPTIONS,
-  TERMINAL_THEMES,
-  type TerminalCursorStyle,
-  type TerminalFontId,
-  type TerminalFontSize,
-  type TerminalScrollback,
-  type TerminalThemeId,
-} from '@/lib/hooks/use-terminal-settings'
+  ATERM_CURSOR_STYLES,
+  ATERM_FONT_SIZES,
+  ATERM_FONTS,
+  ATERM_SCROLLBACK_OPTIONS,
+  ATERM_THEMES,
+  type ATermCursorStyle,
+  type ATermFontId,
+  type ATermFontSize,
+  type ATermScrollback,
+  type ATermThemeId,
+} from '@/lib/hooks/use-aterm-settings'
 import { useClickOutside } from '@/lib/hooks/use-click-outside'
 import { SettingsButton } from './settings/SettingsButton'
 import { SettingsPanel } from './settings/SettingsPanel'
@@ -28,18 +28,18 @@ import { SettingCheckbox } from './settings/SettingCheckbox'
 import type { KeyboardSizePreset } from './keyboard/types'
 
 export interface SettingsDropdownProps {
-  fontId: TerminalFontId
-  fontSize: TerminalFontSize
-  scrollback: TerminalScrollback
-  cursorStyle: TerminalCursorStyle
+  fontId: ATermFontId
+  fontSize: ATermFontSize
+  scrollback: ATermScrollback
+  cursorStyle: ATermCursorStyle
   cursorBlink: boolean
-  themeId: TerminalThemeId
-  setFontId: (id: TerminalFontId) => void
-  setFontSize: (size: TerminalFontSize) => void
-  setScrollback: (scrollback: TerminalScrollback) => void
-  setCursorStyle: (style: TerminalCursorStyle) => void
+  themeId: ATermThemeId
+  setFontId: (id: ATermFontId) => void
+  setFontSize: (size: ATermFontSize) => void
+  setScrollback: (scrollback: ATermScrollback) => void
+  setCursorStyle: (style: ATermCursorStyle) => void
   setCursorBlink: (blink: boolean) => void
-  setThemeId: (id: TerminalThemeId) => void
+  setThemeId: (id: ATermThemeId) => void
   showSettings: boolean
   setShowSettings: (show: boolean) => void
   keyboardSize?: KeyboardSizePreset
@@ -85,17 +85,17 @@ export function SettingsDropdown({
   useClickOutside(clickOutsideRefs, closeDropdown, showSettings)
 
   // Prepare options for select components
-  const fontOptions = TERMINAL_FONTS.map((font) => ({
+  const fontOptions = ATERM_FONTS.map((font) => ({
     value: font.id,
     label: font.name,
   }))
 
-  const fontSizeOptions = TERMINAL_FONT_SIZES.map((size) => ({
+  const fontSizeOptions = ATERM_FONT_SIZES.map((size) => ({
     value: size,
     label: `${size}px`,
   }))
 
-  const themeOptions = Object.entries(TERMINAL_THEMES).map(([id, { name }]) => ({
+  const themeOptions = Object.entries(ATERM_THEMES).map(([id, { name }]) => ({
     value: id,
     label: name,
   }))
@@ -105,7 +105,7 @@ export function SettingsDropdown({
     label: option.label,
   }))
 
-  const scrollbackOptions = TERMINAL_SCROLLBACK_OPTIONS.map((opt) => ({
+  const scrollbackOptions = ATERM_SCROLLBACK_OPTIONS.map((opt) => ({
     value: opt.value,
     label: opt.label,
   }))
@@ -131,14 +131,14 @@ export function SettingsDropdown({
         <SettingSelect
           label="Font Family"
           value={fontId}
-          onChange={(val) => setFontId(val as TerminalFontId)}
+          onChange={(val) => setFontId(val as ATermFontId)}
           options={fontOptions}
         />
 
         <SettingSelect
           label="Font Size"
           value={fontSize}
-          onChange={(val) => setFontSize(val as TerminalFontSize)}
+          onChange={(val) => setFontSize(val as ATermFontSize)}
           options={fontSizeOptions}
         />
 
@@ -150,16 +150,16 @@ export function SettingsDropdown({
         />
 
         <SettingSelect
-          label="Terminal Theme"
+          label="A-Term Theme"
           value={themeId}
-          onChange={(val) => setThemeId(val as TerminalThemeId)}
+          onChange={(val) => setThemeId(val as ATermThemeId)}
           options={themeOptions}
         />
 
         <SettingButtonGroup
           label="Cursor Style"
           value={cursorStyle}
-          options={TERMINAL_CURSOR_STYLES}
+          options={ATERM_CURSOR_STYLES}
           onChange={setCursorStyle}
         />
 
@@ -173,7 +173,7 @@ export function SettingsDropdown({
           <SettingSelect
             label="Scrollback Buffer"
             value={scrollback}
-            onChange={(val) => setScrollback(val as TerminalScrollback)}
+            onChange={(val) => setScrollback(val as ATermScrollback)}
             options={scrollbackOptions}
           />
         </div>

@@ -2,16 +2,16 @@
 
 import { useCallback, useState } from 'react'
 import { useLocalStorageState } from '@/lib/hooks/use-local-storage-state'
-import type { ConnectionStatus } from '../Terminal'
+import type { ConnectionStatus } from '../ATerm'
 import { ControlBar } from './ControlBar'
 import { FullKeyboard } from './FullKeyboard'
 import { ModifierProvider } from './ModifierContext'
-import type { KeyboardSizePreset, TerminalInputHandler } from './types'
+import type { KeyboardSizePreset, ATermInputHandler } from './types'
 
-const MINIMIZED_STORAGE_KEY = 'terminal-keyboard-minimized'
+const MINIMIZED_STORAGE_KEY = 'aterm-keyboard-minimized'
 
 interface MobileKeyboardProps {
-  onSend: TerminalInputHandler
+  onSend: ATermInputHandler
   connectionStatus?: ConnectionStatus
   onReconnect?: () => void
   keyboardSize?: KeyboardSizePreset

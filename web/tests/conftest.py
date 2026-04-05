@@ -1,4 +1,4 @@
-"""Shared test fixtures for terminal backend tests.
+"""Shared test fixtures for aterm backend tests.
 
 Provides mock fixtures for database, tmux, and lifecycle operations
 so that tests never hit production infrastructure.
@@ -29,13 +29,13 @@ def _mock_get_connection() -> Generator[MagicMock]:
 
 @pytest.fixture()
 def mock_db_connection() -> Generator[MagicMock]:
-    """Patch ``terminal.storage.connection.get_connection`` globally.
+    """Patch ``aterm.storage.connection.get_connection`` globally.
 
     Every storage function that opens a DB connection will receive a mock
     instead of a real psycopg connection.
     """
     with patch(
-        "terminal.storage.connection.get_connection",
+        "aterm.storage.connection.get_connection",
         side_effect=_mock_get_connection,
     ) as mock_conn:
         yield mock_conn
@@ -53,10 +53,10 @@ def mock_tmux() -> Generator[dict[str, MagicMock]]:
     return values per-function.
     """
     with (
-        patch("terminal.utils.tmux.create_tmux_session") as mock_create,
-        patch("terminal.utils.tmux.tmux_session_exists", return_value=True) as mock_exists,
-        patch("terminal.utils.tmux.run_tmux_command", return_value=(True, "")) as mock_run,
-        patch("terminal.utils.tmux.get_tmux_session_name", side_effect=lambda sid: f"summitflow-{sid}") as mock_name,
+        patch("aterm.utils.tmux.create_tmux_session") as mock_create,
+        patch("aterm.utils.tmux.tmux_session_exists", return_value=True) as mock_exists,
+        patch("aterm.utils.tmux.run_tmux_command", return_value=(True, "")) as mock_run,
+        patch("aterm.utils.tmux.get_tmux_session_name", side_effect=lambda sid: f"summitflow-{sid}") as mock_name,
     ):
         yield {
             "create_tmux_session": mock_create,
@@ -74,10 +74,10 @@ def mock_tmux() -> Generator[dict[str, MagicMock]]:
 def mock_lifecycle() -> Generator[dict[str, MagicMock]]:
     """Patch lifecycle operations used by API endpoints."""
     with (
-        patch("terminal.services.lifecycle.delete_session") as mock_delete,
-        patch("terminal.services.lifecycle.reset_session") as mock_reset,
-        patch("terminal.services.lifecycle.reset_all_sessions", return_value=0) as mock_reset_all,
-        patch("terminal.services.lifecycle.reconcile_sessions", return_value={"reconciled": 0}) as mock_reconcile,
+        patch("aterm.services.lifecycle.delete_session") as mock_delete,
+        patch("aterm.services.lifecycle.reset_session") as mock_reset,
+        patch("aterm.services.lifecycle.reset_all_sessions", return_value=0) as mock_reset_all,
+        patch("aterm.services.lifecycle.reconcile_sessions", return_value={"reconciled": 0}) as mock_reconcile,
     ):
         yield {
             "delete_session": mock_delete,
@@ -100,12 +100,12 @@ def test_app(mock_lifecycle: dict[str, MagicMock]) -> Generator[TestClient]:
     infrastructure.
     """
     with (
-        patch("terminal.main._setup_tmux_options"),
-        patch("terminal.main.close_pool"),
-        patch("terminal.main.start_scheduler"),
-        patch("terminal.main.stop_scheduler"),
+        patch("aterm.main._setup_tmux_options"),
+        patch("aterm.main.close_pool"),
+        patch("aterm.main.start_scheduler"),
+        patch("aterm.main.stop_scheduler"),
     ):
-        from terminal.main import app
+        from aterm.main import app
 
         with TestClient(app, raise_server_exceptions=False) as client:
             yield client

@@ -1,8 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useRef } from 'react'
-import { generatePaneName } from './terminal-handler-utils'
-import { fetchPaneCount } from './terminal-panes-api'
+import { generatePaneName } from './aterm-handler-utils'
+import { fetchPaneCount } from './aterm-panes-api'
 
 interface UseAutoCreatePaneProps {
   panes: Array<{ pane_type: string }>
@@ -76,7 +76,7 @@ export function useAutoCreatePane({
           try {
             const paneCount = await fetchPaneCount()
             if (!cancelled && paneCount.count === 0) {
-              await createAndFocusPane(generatePaneName('Ad-Hoc Terminal', 0))
+              await createAndFocusPane(generatePaneName('Ad-Hoc A-Term', 0))
             }
           } catch (error) {
             if (!cancelled) {
@@ -103,7 +103,7 @@ export function useAutoCreatePane({
     ) {
       isAutoCreatingRef.current = true
       const adHocCount = panes.filter((p) => p.pane_type === 'adhoc').length
-      void createAndFocusPane(generatePaneName('Ad-Hoc Terminal', adHocCount))
+      void createAndFocusPane(generatePaneName('Ad-Hoc A-Term', adHocCount))
         .catch((error) => {
           if (!cancelled) {
             console.error('Failed to auto-create pane after closing last:', error)

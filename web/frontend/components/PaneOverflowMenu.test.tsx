@@ -31,7 +31,7 @@ describe('PaneOverflowMenu', () => {
       'Close session: terminate the underlying tmux session.',
     )
 
-    expect(screen.getByRole('menuitem', { name: 'Reset Terminal' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Reset A-Term' })).toBeInTheDocument()
     expect(screen.getByRole('menuitem', { name: 'Clean Prompt' })).toBeInTheDocument()
     expect(screen.getByRole('menuitem', { name: 'Upload File' })).toBeInTheDocument()
     expect(screen.getByRole('menuitem', { name: 'Voice Input' })).toBeInTheDocument()

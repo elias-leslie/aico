@@ -25,7 +25,7 @@ function createDragEvent(dataTransfer: {
 describe('pane-swap-dnd', () => {
   it('recognizes pane drags from declared drag types before payload is readable', () => {
     const event = createDragEvent({
-      types: ['application/x-terminal-pane-slot'],
+      types: ['application/x-aterm-pane-slot'],
     })
 
     expect(isPaneSwapDragEvent(event)).toBe(true)
@@ -42,14 +42,14 @@ describe('pane-swap-dnd', () => {
     setDraggedPaneSlotId(dragStartEvent, 'pane-1')
 
     const dragOverEvent = createDragEvent({
-      types: ['application/x-terminal-pane-slot', 'text/plain'],
+      types: ['application/x-aterm-pane-slot', 'text/plain'],
       getData: () => '',
     })
 
     expect(getDraggedPaneSlotId(dragOverEvent)).toBe('pane-1')
 
     clearDraggedPaneSlotId()
-    expect(writtenData.get('application/x-terminal-pane-slot')).toBe('pane-1')
+    expect(writtenData.get('application/x-aterm-pane-slot')).toBe('pane-1')
     expect(writtenData.get('text/plain')).toBe('pane-1')
   })
 })

@@ -1,8 +1,8 @@
 """add pane_id and layout columns
 
 Syncs Alembic with production schema:
-- terminal_sessions: add pane_id FK to terminal_panes with ON DELETE SET NULL
-- terminal_panes: add width_percent, height_percent, grid_row, grid_col
+- aterm_sessions: add pane_id FK to aterm_panes with ON DELETE SET NULL
+- aterm_panes: add width_percent, height_percent, grid_row, grid_col
 
 These columns were added manually before Alembic adoption.
 Uses IF NOT EXISTS / IF EXISTS guards for idempotent re-runs.
@@ -26,9 +26,9 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     """Add pane_id FK and layout columns."""
-    # --- terminal_sessions.pane_id ---
+    # --- aterm_sessions.pane_id ---
     op.execute("""
-        ALTER TABLE terminal_sessions
+        ALTER TABLE aterm_sessions
         ADD COLUMN IF NOT EXISTS pane_id UUID;
     """)
 
@@ -39,25 +39,25 @@ def upgrade() -> None:
         BEGIN
             IF NOT EXISTS (
                 SELECT 1 FROM information_schema.table_constraints
-                WHERE constraint_name = 'terminal_sessions_pane_id_fkey'
-                  AND table_name = 'terminal_sessions'
+                WHERE constraint_name = 'aterm_sessions_pane_id_fkey'
+                  AND table_name = 'aterm_sessions'
             ) THEN
-                ALTER TABLE terminal_sessions
-                ADD CONSTRAINT terminal_sessions_pane_id_fkey
-                FOREIGN KEY (pane_id) REFERENCES terminal_panes(id)
+                ALTER TABLE aterm_sessions
+                ADD CONSTRAINT aterm_sessions_pane_id_fkey
+                FOREIGN KEY (pane_id) REFERENCES aterm_panes(id)
                 ON DELETE SET NULL;
             END IF;
         END $$;
     """)
 
     op.execute("""
-        CREATE INDEX IF NOT EXISTS idx_terminal_sessions_pane_id
-        ON terminal_sessions(pane_id) WHERE pane_id IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS idx_aterm_sessions_pane_id
+        ON aterm_sessions(pane_id) WHERE pane_id IS NOT NULL;
     """)
 
-    # --- terminal_panes layout columns ---
+    # --- aterm_panes layout columns ---
     op.execute("""
-        ALTER TABLE terminal_panes
+        ALTER TABLE aterm_panes
         ADD COLUMN IF NOT EXISTS width_percent  DOUBLE PRECISION DEFAULT 100.0,
         ADD COLUMN IF NOT EXISTS height_percent DOUBLE PRECISION DEFAULT 100.0,
         ADD COLUMN IF NOT EXISTS grid_row       INTEGER DEFAULT 0,
@@ -67,20 +67,20 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Remove pane_id FK and layout columns."""
-    op.execute("DROP INDEX IF EXISTS idx_terminal_sessions_pane_id;")
+    op.execute("DROP INDEX IF EXISTS idx_aterm_sessions_pane_id;")
 
     op.execute("""
-        ALTER TABLE terminal_sessions
-        DROP CONSTRAINT IF EXISTS terminal_sessions_pane_id_fkey;
+        ALTER TABLE aterm_sessions
+        DROP CONSTRAINT IF EXISTS aterm_sessions_pane_id_fkey;
     """)
 
     op.execute("""
-        ALTER TABLE terminal_sessions
+        ALTER TABLE aterm_sessions
         DROP COLUMN IF EXISTS pane_id;
     """)
 
     op.execute("""
-        ALTER TABLE terminal_panes
+        ALTER TABLE aterm_panes
         DROP COLUMN IF EXISTS width_percent,
         DROP COLUMN IF EXISTS height_percent,
         DROP COLUMN IF EXISTS grid_row,

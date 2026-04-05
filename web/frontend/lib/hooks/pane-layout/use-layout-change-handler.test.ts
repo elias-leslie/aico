@@ -10,7 +10,7 @@ describe('useLayoutChangeHandler', () => {
         type: 'adhoc' as const,
         paneId: 'pane-native',
         sessionId: 'native-session',
-        name: 'Ad-Hoc Terminal',
+        name: 'Ad-Hoc A-Term',
         workingDir: null,
       },
       {

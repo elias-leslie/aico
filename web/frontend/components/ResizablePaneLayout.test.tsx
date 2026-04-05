@@ -159,13 +159,13 @@ describe('ResizablePaneLayout', () => {
 
   it('switches to the correct wide-layout storage bucket when pane count changes', () => {
     window.localStorage.setItem(
-      'terminal-layout-groups:grid-3x2:5',
+      'aterm-layout-groups:grid-3x2:5',
       JSON.stringify({
         'wide-pane-root': [70, 30],
       }),
     )
     window.localStorage.setItem(
-      'terminal-layout-groups:grid-3x2:6',
+      'aterm-layout-groups:grid-3x2:6',
       JSON.stringify({
         'wide-pane-root': [45, 55],
       }),

@@ -4,11 +4,11 @@ import { FileUploadDropzone } from './FileUploadDropzone'
 
 function createPaneDragDataTransfer() {
   return {
-    types: ['application/x-terminal-pane-slot'],
+    types: ['application/x-aterm-pane-slot'],
     items: [
       {
         kind: 'string',
-        type: 'application/x-terminal-pane-slot',
+        type: 'application/x-aterm-pane-slot',
       },
     ],
     files: [],
@@ -35,7 +35,7 @@ describe('FileUploadDropzone', () => {
 
     render(
       <FileUploadDropzone onFileSelect={onFileSelect}>
-        <div>terminal content</div>
+        <div>aterm content</div>
       </FileUploadDropzone>,
     )
 
@@ -56,7 +56,7 @@ describe('FileUploadDropzone', () => {
 
     render(
       <FileUploadDropzone onFileSelect={onFileSelect}>
-        <div>terminal content</div>
+        <div>aterm content</div>
       </FileUploadDropzone>,
     )
 

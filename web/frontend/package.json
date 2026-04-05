@@ -1,5 +1,5 @@
 {
-  "name": "frontend",
+  "name": "aterm-frontend",
   "version": "0.1.0",
   "private": true,
   "license": "Apache-2.0",
@@ -10,7 +10,10 @@
     "lint": "biome lint .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepare:branding": "node scripts/generate-project-branding.mjs",
+    "prebuild": "pnpm prepare:branding",
+    "predev": "pnpm prepare:branding"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",

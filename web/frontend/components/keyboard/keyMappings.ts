@@ -1,4 +1,4 @@
-// Terminal escape sequences for special keys
+// A-Term escape sequences for special keys
 export const KEY_SEQUENCES = {
   // Control keys
   ESC: '\x1b',

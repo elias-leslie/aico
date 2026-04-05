@@ -73,7 +73,7 @@
   align-items: center;
   gap: 8px;
 }
-.terminalIcon {
+.atermIcon {
   color: var(--term-accent);
   font-size: 14px;
 }

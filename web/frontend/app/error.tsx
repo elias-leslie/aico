@@ -2,6 +2,7 @@
 
 import { AlertTriangle, RefreshCw } from 'lucide-react'
 import { useEffect } from 'react'
+import { PRODUCT_NAME } from '@/lib/project-branding'
 
 // biome-ignore lint/suspicious/noShadowRestrictedNames: Next.js App Router convention requires this export name
 export default function Error({
@@ -12,7 +13,7 @@ export default function Error({
   reset: () => void
 }) {
   useEffect(() => {
-    console.error('Terminal error boundary caught:', error)
+    console.error(`${PRODUCT_NAME} error boundary caught:`, error)
   }, [error])
 
   return (
@@ -39,7 +40,7 @@ export default function Error({
           className="text-base font-medium mb-2"
           style={{ fontFamily: 'var(--font-mono)' }}
         >
-          Terminal encountered an error
+          {PRODUCT_NAME} encountered an error
         </h1>
         <p
           className="text-sm leading-relaxed"
@@ -60,7 +61,7 @@ export default function Error({
         }}
       >
         <RefreshCw className="w-4 h-4" />
-        Reload Terminal
+        Reload {PRODUCT_NAME}
       </button>
     </div>
   )

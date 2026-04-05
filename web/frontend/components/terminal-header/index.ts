@@ -1,5 +1,0 @@
-export { UnifiedTerminalHeaderContent } from './UnifiedTerminalHeaderContent'
-export { HeaderIconButton } from './HeaderIconButton'
-export { AddTerminalButton } from './AddTerminalButton'
-export { HeaderNameDisplay } from './HeaderNameDisplay'
-export type { UnifiedTerminalHeaderProps, IconButtonProps } from './types'

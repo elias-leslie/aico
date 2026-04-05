@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ANDROID_LAUNCHER="${ANDROID_EMULATOR_LAUNCHER:-$HOME/bin/start-terminal-android-emulator}"
+ANDROID_LAUNCHER="${ANDROID_EMULATOR_LAUNCHER:-$HOME/bin/start-aterm-android-emulator}"
 ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}"
 AVD_NAME="${ANDROID_AVD_NAME:-Pixel_8_API_latest}"
 CDP_PORT="${MOBILE_CDP_PORT:-9222}"
-TERMINAL_URL="${TERMINAL_MOBILE_URL:-http://10.0.2.2:3002}"
+ATERM_URL="${ATERM_MOBILE_URL:-http://10.0.2.2:3002}"
 BOOT_TIMEOUT_SECONDS="${MOBILE_BOOT_TIMEOUT_SECONDS:-180}"
 HEADLESS_MODE="${MOBILE_EMULATOR_HEADLESS:-1}"
 
@@ -18,7 +18,7 @@ Commands:
   start-emulator   Launch the Android emulator in the background
   wait-boot        Wait for adb=device and sys.boot_completed=1
   forward-cdp      Forward Android Chrome DevTools to localhost:${CDP_PORT}
-  open-app         Open Terminal in Android Chrome at ${TERMINAL_URL}
+  open-app         Open A-Term in Android Chrome at ${ATERM_URL}
   browser [args]   Launch agent-browser attached to forwarded CDP
   workflow         Run doctor, forward-cdp, and open-app
 
@@ -27,7 +27,7 @@ Environment overrides:
   ANDROID_SDK_ROOT           Android SDK root
   ANDROID_AVD_NAME           Emulator AVD name
   MOBILE_CDP_PORT            Local forwarded CDP port
-  TERMINAL_MOBILE_URL        URL to open inside the emulator
+  ATERM_MOBILE_URL        URL to open inside the emulator
   MOBILE_BOOT_TIMEOUT_SECONDS Seconds to wait for boot completion
   MOBILE_EMULATOR_HEADLESS   1 for headless emulator, 0 for windowed
 EOF
@@ -155,11 +155,11 @@ launch_emulator_detached() {
   quoted_cmd="${quoted_cmd% }"
 
   if command -v sg >/dev/null 2>&1 && getent group kvm | grep -Eq "(^|:|,)${USER}(,|$)"; then
-    sg kvm -c "setsid -f ${quoted_cmd} >/tmp/terminal-android-emulator.log 2>&1"
+    sg kvm -c "setsid -f ${quoted_cmd} >/tmp/aterm-android-emulator.log 2>&1"
     return
   fi
 
-  setsid -f "${_EMU_CMD[@]}" >/tmp/terminal-android-emulator.log 2>&1
+  setsid -f "${_EMU_CMD[@]}" >/tmp/aterm-android-emulator.log 2>&1
 }
 
 start_emulator() {
@@ -184,11 +184,11 @@ start_emulator() {
     emulator_running=1
   fi
   if [[ "${emulator_running}" -eq 0 ]]; then
-    echo "Emulator launch failed. Check /tmp/terminal-android-emulator.log for details." >&2
+    echo "Emulator launch failed. Check /tmp/aterm-android-emulator.log for details." >&2
     exit 1
   fi
 
-  echo "Emulator started in background. Log: /tmp/terminal-android-emulator.log"
+  echo "Emulator started in background. Log: /tmp/aterm-android-emulator.log"
 }
 
 wait_for_boot() {
@@ -208,7 +208,7 @@ wait_for_boot() {
   state="$(adb devices | awk '$1 ~ /^emulator-/ { print $2; exit }')"
   if [[ "${state}" != "device" ]]; then
     echo "Timed out waiting for emulator adb transport (last state: ${state:-missing})." >&2
-    echo "Check /tmp/terminal-android-emulator.log for details." >&2
+    echo "Check /tmp/aterm-android-emulator.log for details." >&2
     exit 1
   fi
 
@@ -269,13 +269,13 @@ open_app() {
   prepare_chrome || true
   adb shell am start \
     -a android.intent.action.VIEW \
-    -d "${TERMINAL_URL}" \
+    -d "${ATERM_URL}" \
     com.android.chrome >/dev/null
   if prepare_chrome; then
-    echo "Chrome onboarding cleared and ${TERMINAL_URL} opened."
+    echo "Chrome onboarding cleared and ${ATERM_URL} opened."
     return
   fi
-  echo "Opened ${TERMINAL_URL} in Android Chrome"
+  echo "Opened ${ATERM_URL} in Android Chrome"
 }
 
 run_browser() {

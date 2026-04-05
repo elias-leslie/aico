@@ -1,5 +1,5 @@
 name: Bug Report
-description: Report a bug in SummitFlow Terminal
+description: Report a bug in SummitFlow A-Term
 labels: ["bug"]
 body:
   - type: textarea
@@ -15,7 +15,7 @@ body:
     attributes:
       label: Steps to reproduce
       placeholder: |
-        1. Open Terminal in browser
+        1. Open A-Term in browser
         2. ...
         3. See error
     validations:

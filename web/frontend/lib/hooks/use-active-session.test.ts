@@ -4,12 +4,12 @@ import {
   parsePersistedSessionId,
   shouldSyncSessionParam,
 } from './use-active-session'
-import type { TerminalSession } from './use-terminal-sessions'
+import type { ATermSession } from './use-aterm-sessions'
 
-const sessions: TerminalSession[] = [
+const sessions: ATermSession[] = [
   {
     id: 'session-1',
-    name: 'Terminal 1',
+    name: 'A-Term 1',
     user_id: null,
     project_id: null,
     working_dir: null,
@@ -21,7 +21,7 @@ const sessions: TerminalSession[] = [
   },
   {
     id: 'session-2',
-    name: 'Terminal 2',
+    name: 'A-Term 2',
     user_id: null,
     project_id: 'project-2',
     working_dir: null,

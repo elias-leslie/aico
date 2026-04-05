@@ -2,19 +2,19 @@
 
 import { ChevronDown, ChevronUp, Mic, Sparkles } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ConnectionStatus } from '@/components/terminal.types'
+import type { ConnectionStatus } from '@/components/aterm.types'
 import { getClaudeModelOptions, type ClaudeModelOption } from '@/lib/utils/agent-hub-models'
 import {
-  getMobileTerminalBannerState,
+  getMobileATermBannerState,
   isReconnectableStatus,
-} from '@/lib/utils/mobile-terminal-status'
+} from '@/lib/utils/mobile-aterm-status'
 import { KeyboardKey } from './KeyboardKey'
 import { KEY_SEQUENCES } from './keyMappings'
 import { useModifiers } from './ModifierContext'
-import type { TerminalInputHandler } from './types'
+import type { ATermInputHandler } from './types'
 
 interface ControlBarProps {
-  onSend: TerminalInputHandler
+  onSend: ATermInputHandler
   // Modifiers
   ctrlActive?: boolean
   onCtrlToggle?: () => void
@@ -131,7 +131,7 @@ export function ControlBar({
   }
 
   const isAgentMode = activeMode !== undefined && activeMode !== 'shell'
-  const bannerState = getMobileTerminalBannerState({
+  const bannerState = getMobileATermBannerState({
     connectionStatus,
     activeMode,
     voiceActive,

@@ -1,7 +1,7 @@
 import { buildApiUrl } from './api-config'
 
 /**
- * Fetch wrapper with standard error handling for Terminal API calls.
+ * Fetch wrapper with standard error handling for A-Term API calls.
  * Parses error details from JSON responses and throws with the detail message.
  */
 export async function apiFetch<T>(

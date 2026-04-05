@@ -205,7 +205,7 @@ export function PaneOverflowMenu({
           {onReset && (
             <MenuItemButton
               icon={<RefreshCw className="w-3.5 h-3.5" />}
-              label="Reset Terminal"
+              label="Reset A-Term"
               onClick={handleReset}
               isMobile={isMobile}
             />

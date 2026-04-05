@@ -1,4 +1,4 @@
-import { computeWheelLineDelta } from '../hooks/terminal-scrolling-utils'
+import { computeWheelLineDelta } from '../hooks/aterm-scrolling-utils'
 
 interface GetScrollbackOverlayWheelActionArgs {
   deltaY: number

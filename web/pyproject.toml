@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "summitflow-terminal"
+name = "a-term"
 version = "0.1.0"
-description = "SummitFlow Terminal Service - Independent web terminal microservice"
+description = "A-Term - Host-native browser workspace for persistent tmux, shell, and agent sessions"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.13"
@@ -34,7 +34,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["terminal"]
+packages = ["aterm"]
 
 [tool.ruff]
 line-length = 100
@@ -45,7 +45,7 @@ select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 ignore = ["E501"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["terminal"]
+known-first-party = ["aterm"]
 
 [tool.ty.rules]
 # Suppress beta-quality rules (ty 0.0.x false positives)

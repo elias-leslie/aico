@@ -1,6 +1,6 @@
-# SummitFlow Terminal - Testing Workflows
+# A-Term - Testing Workflows
 
-Complete checklist for testing all terminal workflows and behaviors.
+Complete checklist for testing all aterm workflows and behaviors.
 
 ---
 
@@ -11,7 +11,7 @@ Complete checklist for testing all terminal workflows and behaviors.
 | **Pane** | Container holding 1-2 sessions. Max 6 panes on ultrawide layouts. |
 | **Project Pane** | Has shell + claude sessions, mode toggle |
 | **Ad-Hoc Pane** | Shell-only, no project association |
-| **Session** | Actual tmux-backed terminal instance |
+| **Session** | Actual tmux-backed aterm instance |
 | **Mode** | Shell or Claude (project panes only) |
 
 ---
@@ -20,8 +20,8 @@ Complete checklist for testing all terminal workflows and behaviors.
 
 ### Single Mode (Default)
 
-- [ ] One terminal fills viewport with unified header at top
-- [ ] Terminal switcher dropdown in header shows all panes
+- [ ] One aterm fills viewport with unified header at top
+- [ ] A-Term switcher dropdown in header shows all panes
 - [ ] Layout button visible (shows grid option)
 - [ ] Mode toggle visible for project panes
 - [ ] Settings, upload, and action buttons accessible
@@ -29,7 +29,7 @@ Complete checklist for testing all terminal workflows and behaviors.
 ### Grid Mode (2x2)
 
 - [ ] Click layout button → grid mode activates
-- [ ] Up to 4 terminals display in 2x2 grid
+- [ ] Up to 4 aterms display in 2x2 grid
 - [ ] Each pane has its own header with controls
 - [ ] Click pane → that pane becomes active (border highlight)
 - [ ] Keyboard input goes to active pane only
@@ -50,55 +50,55 @@ Complete checklist for testing all terminal workflows and behaviors.
 
 ---
 
-## 2. TERMINAL CREATION
+## 2. ATERM CREATION
 
-### Terminal Manager Modal
+### A-Term Manager Modal
 
-- [ ] Ctrl+T opens Terminal Manager modal
-- [ ] Click + button opens Terminal Manager modal
+- [ ] Ctrl+T opens A-Term Manager modal
+- [ ] Click + button opens A-Term Manager modal
 - [ ] Modal shows list of all projects
-- [ ] Modal shows "New Ad-Hoc Terminal" option
+- [ ] Modal shows "New Ad-Hoc A-Term" option
 - [ ] Each project shows count of open panes (e.g., "1 open")
 - [ ] Click outside modal closes it
 - [ ] Esc key closes modal
 
-### Create Project Terminal
+### Create Project A-Term
 
 - [ ] Click project with no existing pane → new pane created
 - [ ] New pane opens in project's root directory
 - [ ] Default mode is shell
 - [ ] Mode toggle is visible and functional
-- [ ] Terminal switcher shows project name
+- [ ] A-Term switcher shows project name
 
-### Create Project Terminal (Existing Pane)
+### Create Project A-Term (Existing Pane)
 
 - [ ] Click project that already has pane open
 - [ ] Navigates to existing pane (no duplicate created)
 - [ ] Project shows "1 open" badge in modal
 
-### Create Ad-Hoc Terminal
+### Create Ad-Hoc A-Term
 
-- [ ] Click "New Ad-Hoc Terminal" → new pane created
-- [ ] Pane named "Ad-Hoc Terminal"
+- [ ] Click "New Ad-Hoc A-Term" → new pane created
+- [ ] Pane named "Ad-Hoc A-Term"
 - [ ] Shell mode only (no mode toggle)
-- [ ] Second ad-hoc named "Ad-Hoc Terminal [2]"
-- [ ] Third ad-hoc named "Ad-Hoc Terminal [3]"
+- [ ] Second ad-hoc named "Ad-Hoc A-Term [2]"
+- [ ] Third ad-hoc named "Ad-Hoc A-Term [3]"
 
 ### Pane Limit (viewport-dependent)
 
 - [ ] With viewport pane limit reached, + buttons are disabled
-- [ ] Terminal Manager shows "at limit" state
+- [ ] A-Term Manager shows "at limit" state
 - [ ] Cannot exceed viewport capacity (4 standard, 6 ultrawide)
 
 ---
 
-## 3. TERMINAL SWITCHER (Dropdown)
+## 3. ATERM SWITCHER (Dropdown)
 
 ### Empty State
 
-- [ ] With 0 panes, dropdown shows "No terminals open"
+- [ ] With 0 panes, dropdown shows "No aterms open"
 
-### With Terminals
+### With A-Terms
 
 - [ ] Click dropdown → opens pane list
 - [ ] All panes listed with names
@@ -115,7 +115,7 @@ Complete checklist for testing all terminal workflows and behaviors.
 
 - [ ] Mode toggle only visible for project panes
 - [ ] Mode toggle NOT visible for ad-hoc panes
-- [ ] Shell mode: dim terminal icon
+- [ ] Shell mode: dim aterm icon
 - [ ] Claude mode: glowing sparkles with animation
 
 ### Shell → Claude
@@ -139,8 +139,8 @@ Complete checklist for testing all terminal workflows and behaviors.
 
 ### Toggle After Close All
 
-- [ ] Close All Terminals
-- [ ] Create new project terminal
+- [ ] Close All A-Terms
+- [ ] Create new project aterm
 - [ ] Click mode toggle
 - [ ] Should work on FIRST click (no stale state)
 - [ ] No need to click 2-3 times
@@ -152,7 +152,7 @@ Complete checklist for testing all terminal workflows and behaviors.
 ### Reset Single Pane
 
 - [ ] Click reset button (RefreshCw icon) on pane
-- [ ] Terminal history cleared
+- [ ] A-Term history cleared
 - [ ] Session stays alive
 - [ ] Shell shows fresh prompt
 - [ ] Claude session resets if in claude mode
@@ -168,22 +168,22 @@ Complete checklist for testing all terminal workflows and behaviors.
 
 - [ ] Close the only remaining pane
 - [ ] New ad-hoc pane auto-created
-- [ ] Dropdown shows the new ad-hoc terminal
+- [ ] Dropdown shows the new ad-hoc aterm
 
 ### Reset All
 
-- [ ] Click menu → "Reset All Terminals"
+- [ ] Click menu → "Reset All A-Terms"
 - [ ] Confirmation dialog appears
 - [ ] Confirm → all sessions cleared
 - [ ] All sessions remain alive (just cleared)
 
 ### Close All
 
-- [ ] Click menu → "Close All Terminals"
+- [ ] Click menu → "Close All A-Terms"
 - [ ] Confirmation dialog appears
 - [ ] Confirm → all panes deleted
 - [ ] New ad-hoc pane auto-created
-- [ ] Dropdown shows "Ad-Hoc Terminal" (not empty "Terminal")
+- [ ] Dropdown shows "Ad-Hoc A-Term" (not empty "A-Term")
 - [ ] All Claude processes terminated
 
 ---
@@ -207,11 +207,11 @@ Complete checklist for testing all terminal workflows and behaviors.
 - [ ] Upload starts, progress toast appears
 - [ ] Progress shows 0-100%
 - [ ] Upload complete → file path inserted at cursor
-- [ ] Path appears in active terminal
+- [ ] Path appears in active aterm
 
 ### Via Drag-Drop
 
-- [ ] Drag file over terminal area
+- [ ] Drag file over aterm area
 - [ ] Drop zone overlay appears
 - [ ] Drop file → upload starts
 - [ ] Same progress/completion as button upload
@@ -242,9 +242,9 @@ Complete checklist for testing all terminal workflows and behaviors.
 
 ### Basic Flow
 
-- [ ] Type text in Claude terminal
+- [ ] Type text in Claude aterm
 - [ ] Click prompt cleaner button
-- [ ] Modal opens with last terminal line
+- [ ] Modal opens with last aterm line
 - [ ] AI processes prompt (loading state)
 - [ ] Typewriter animation shows cleaned version
 
@@ -253,7 +253,7 @@ Complete checklist for testing all terminal workflows and behaviors.
 - [ ] Toggle diff → side-by-side original vs cleaned
 - [ ] Click edit → manual editing enabled
 - [ ] Type refinement → re-processes with instructions
-- [ ] Click Send → cleaned prompt inserted into terminal
+- [ ] Click Send → cleaned prompt inserted into aterm
 - [ ] Click Cancel → modal closes, no action
 
 ---
@@ -263,7 +263,7 @@ Complete checklist for testing all terminal workflows and behaviors.
 ### Global Shortcuts
 
 - [ ] `?` → keyboard shortcuts overlay opens
-- [ ] `Ctrl+T` → Terminal Manager modal opens
+- [ ] `Ctrl+T` → A-Term Manager modal opens
 - [ ] `Ctrl+W` → closes active pane (with confirmation)
 - [ ] `Ctrl+Tab` → cycles to next pane
 - [ ] `Ctrl+Shift+Tab` → cycles to previous pane
@@ -291,14 +291,14 @@ Complete checklist for testing all terminal workflows and behaviors.
 ### Font Settings
 
 - [ ] Font family dropdown shows 10 options
-- [ ] Changing font updates terminal immediately
+- [ ] Changing font updates aterm immediately
 - [ ] Font size slider works (10-20px range)
 - [ ] Font changes persist after reload
 
 ### Theme Settings
 
 - [ ] Theme dropdown shows 5 options
-- [ ] Changing theme updates terminal colors immediately
+- [ ] Changing theme updates aterm colors immediately
 - [ ] Theme persists after reload
 
 ### Cursor Settings
@@ -326,9 +326,9 @@ Complete checklist for testing all terminal workflows and behaviors.
 
 ### Normal Connection
 
-- [ ] Terminal connects on load
+- [ ] A-Term connects on load
 - [ ] Skeleton loader during connection
-- [ ] Normal terminal after connected
+- [ ] Normal aterm after connected
 
 ### Disconnection
 
@@ -347,7 +347,7 @@ Complete checklist for testing all terminal workflows and behaviors.
 ### Session Dead
 
 - [ ] Kill tmux session externally
-- [ ] Terminal shows "session dead" message
+- [ ] A-Term shows "session dead" message
 - [ ] Close pane to cleanup
 
 ### Timeout
@@ -365,7 +365,7 @@ Complete checklist for testing all terminal workflows and behaviors.
 - [ ] Grid mode hidden on mobile (< 768px)
 - [ ] Only single mode available
 - [ ] Layout selector hidden
-- [ ] Touch scrolling works on terminal
+- [ ] Touch scrolling works on aterm
 
 ### Mobile Keyboard - Control Bar
 
@@ -406,7 +406,7 @@ Complete checklist for testing all terminal workflows and behaviors.
 
 ### Browser Navigation
 
-- [ ] Switch terminals → URL updates
+- [ ] Switch aterms → URL updates
 - [ ] Click browser back → returns to previous session
 - [ ] Click browser forward → goes to next session
 
@@ -425,11 +425,11 @@ Complete checklist for testing all terminal workflows and behaviors.
 - [ ] Create panes → survive browser close/reopen
 - [ ] Pane order persists after drag-drop reorder
 
-### Terminal History
+### A-Term History
 
 - [ ] Type commands → history visible
 - [ ] Refresh page → history preserved (tmux scrollback)
-- [ ] Reset terminal → history cleared
+- [ ] Reset aterm → history cleared
 
 ### Settings
 
@@ -449,14 +449,14 @@ Complete checklist for testing all terminal workflows and behaviors.
 ### Rapid Actions
 
 - [ ] Click mode toggle rapidly → only one switch occurs
-- [ ] Click create terminal rapidly → only one pane created
+- [ ] Click create aterm rapidly → only one pane created
 - [ ] Click close rapidly → only one confirmation shown
 
 ### Network Issues
 
 - [ ] Upload file during network drop → error handled gracefully
 - [ ] Mode switch during network drop → error handled gracefully
-- [ ] Create terminal during network drop → error handled gracefully
+- [ ] Create aterm during network drop → error handled gracefully
 
 ### Concurrent Operations
 
@@ -476,7 +476,7 @@ Complete checklist for testing all terminal workflows and behaviors.
 
 ### Mode Toggle Button
 
-- [ ] Shell (inactive): dim terminal icon
+- [ ] Shell (inactive): dim aterm icon
 - [ ] Claude (active): glowing sparkles with animation
 - [ ] Loading: spinner icon
 - [ ] Disabled: grayed out, no hover effect
@@ -495,8 +495,8 @@ Complete checklist for testing all terminal workflows and behaviors.
 
 ### Confirmation Dialogs
 
-- [ ] Close terminal: shows warning message
-- [ ] Close all: shows warning about all terminals
+- [ ] Close aterm: shows warning message
+- [ ] Close all: shows warning about all aterms
 - [ ] Reset all: shows warning about clearing history
 - [ ] Dialogs have Cancel and Confirm buttons
 

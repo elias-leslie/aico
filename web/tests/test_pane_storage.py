@@ -7,8 +7,8 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-from terminal.storage import panes as pane_store
-from terminal.utils.tmux import TmuxError
+from aterm.storage import panes as pane_store
+from aterm.utils.tmux import TmuxError
 
 
 def _mock_connection(cursor: MagicMock) -> MagicMock:
@@ -63,11 +63,11 @@ def test_create_project_pane_creates_tmux_backed_sessions() -> None:
     }
 
     with (
-        patch("terminal.storage.panes.get_connection", return_value=_mock_connection(cursor)),
-        patch("terminal.storage.panes._get_default_agent_slug", return_value="claude"),
-        patch("terminal.storage.panes.create_terminal_session", side_effect=["shell-id", "claude-id"]) as create_session_mock,
-        patch("terminal.storage.panes.create_tmux_session") as create_tmux_mock,
-        patch("terminal.storage.panes.get_terminal_session", side_effect=[shell_session, agent_session]),
+        patch("aterm.storage.panes.get_connection", return_value=_mock_connection(cursor)),
+        patch("aterm.storage.panes._get_default_agent_slug", return_value="claude"),
+        patch("aterm.storage.panes.create_aterm_session", side_effect=["shell-id", "claude-id"]) as create_session_mock,
+        patch("aterm.storage.panes.create_tmux_session") as create_tmux_mock,
+        patch("aterm.storage.panes.get_aterm_session", side_effect=[shell_session, agent_session]),
     ):
         pane = pane_store.create_pane_with_sessions(
             pane_type="project",
@@ -133,17 +133,17 @@ def test_create_project_pane_rolls_back_on_agent_tmux_failure() -> None:
     }
 
     with (
-        patch("terminal.storage.panes.get_connection", return_value=_mock_connection(cursor)),
-        patch("terminal.storage.panes._get_default_agent_slug", return_value="claude"),
-        patch("terminal.storage.panes.create_terminal_session", side_effect=["shell-id", "claude-id"]),
+        patch("aterm.storage.panes.get_connection", return_value=_mock_connection(cursor)),
+        patch("aterm.storage.panes._get_default_agent_slug", return_value="claude"),
+        patch("aterm.storage.panes.create_aterm_session", side_effect=["shell-id", "claude-id"]),
         patch(
-            "terminal.storage.panes.create_tmux_session",
+            "aterm.storage.panes.create_tmux_session",
             side_effect=[None, TmuxError("boom")],
         ),
-        patch("terminal.storage.panes.get_terminal_session", return_value=shell_session),
-        patch("terminal.storage.panes.delete_terminal_session") as delete_session_mock,
-        patch("terminal.storage.panes.run_tmux_command") as run_tmux_command_mock,
-        patch("terminal.storage.panes.delete_pane") as delete_pane_mock,
+        patch("aterm.storage.panes.get_aterm_session", return_value=shell_session),
+        patch("aterm.storage.panes.delete_aterm_session") as delete_session_mock,
+        patch("aterm.storage.panes.run_tmux_command") as run_tmux_command_mock,
+        patch("aterm.storage.panes.delete_pane") as delete_pane_mock,
         pytest.raises(TmuxError, match="boom"),
     ):
         pane_store.create_pane_with_sessions(

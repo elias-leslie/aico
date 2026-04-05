@@ -1,6 +1,6 @@
 # Remote Access
 
-By default, Terminal listens on `localhost` — accessible only from the machine running it. This guide assumes Terminal is running natively on the host so remote users connect to the same tmux/user session.
+By default, A-Term listens on `localhost` — accessible only from the machine running it. This guide assumes A-Term is running natively on the host so remote users connect to the same tmux/user session.
 
 ## Quick Comparison
 
@@ -10,19 +10,19 @@ By default, Terminal listens on `localhost` — accessible only from the machine
 | [Cloudflare Tunnel](#cloudflare-tunnel) | Anyone with the URL | Automatic | ~15 min | Sharing with others, public access with auth |
 | [Caddy reverse proxy](#caddy-reverse-proxy) | Local network | Automatic (self-signed or ACME) | ~10 min | Home/office LAN, custom domain |
 
-All three approaches sit in front of Terminal and proxy traffic to it — no changes to Terminal's configuration are required beyond CORS.
+All three approaches sit in front of A-Term and proxy traffic to it — no changes to A-Term's configuration are required beyond CORS.
 
 ## Prerequisites
 
-Terminal should already be running:
+A-Term should already be running:
 - Backend on port **8002**
 - Frontend on port **3002**
 
-For all approaches, update `CORS_ORIGINS` in your environment to include the origin you'll access Terminal from:
+For all approaches, update `CORS_ORIGINS` in your environment to include the origin you'll access A-Term from:
 
 ```bash
 # In ~/.env.local
-CORS_ORIGINS=["http://localhost:3002","https://terminal.your-domain.com"]
+CORS_ORIGINS=["http://localhost:3002","https://aterm.your-domain.com"]
 ```
 
 ---
@@ -33,7 +33,7 @@ CORS_ORIGINS=["http://localhost:3002","https://terminal.your-domain.com"]
 
 ### Setup
 
-1. **Install Tailscale** on the machine running Terminal and on any device you want to access it from:
+1. **Install Tailscale** on the machine running A-Term and on any device you want to access it from:
 
    ```bash
    # Debian/Ubuntu
@@ -56,7 +56,7 @@ CORS_ORIGINS=["http://localhost:3002","https://terminal.your-domain.com"]
    # Example: 100.64.1.42
    ```
 
-4. **Access Terminal** from any device on your Tailnet:
+4. **Access A-Term** from any device on your Tailnet:
 
    ```
    http://100.64.1.42:3002
@@ -92,7 +92,7 @@ Access at `https://your-machine-name.your-tailnet.ts.net`.
 tailscale funnel 443 on
 ```
 
-> **Note:** Funnel makes Terminal accessible to anyone with the URL. Use with caution — Terminal provides shell access to the host machine.
+> **Note:** Funnel makes A-Term accessible to anyone with the URL. Use with caution — A-Term provides shell access to the host machine.
 
 ---
 
@@ -125,23 +125,23 @@ tailscale funnel 443 on
 3. **Create a tunnel:**
 
    ```bash
-   cloudflared tunnel create terminal
+   cloudflared tunnel create aterm
    ```
 
 4. **Configure the tunnel.** Create `~/.cloudflared/config.yml`:
 
    ```yaml
-   tunnel: terminal
+   tunnel: aterm
    credentials-file: /home/YOUR_USER/.cloudflared/TUNNEL_ID.json
 
    ingress:
      # Frontend
-     - hostname: terminal.your-domain.com
+     - hostname: aterm.your-domain.com
        service: http://localhost:3002
 
      # Backend API (optional — only needed if frontend and API
      # are on separate subdomains in your setup)
-     - hostname: terminal-api.your-domain.com
+     - hostname: aterm-api.your-domain.com
        service: http://localhost:8002
 
      # Catch-all (required by cloudflared)
@@ -151,17 +151,17 @@ tailscale funnel 443 on
 5. **Create DNS records:**
 
    ```bash
-   cloudflared tunnel route dns terminal terminal.your-domain.com
-   cloudflared tunnel route dns terminal terminal-api.your-domain.com
+   cloudflared tunnel route dns aterm aterm.your-domain.com
+   cloudflared tunnel route dns aterm aterm-api.your-domain.com
    ```
 
 6. **Start the tunnel:**
 
    ```bash
-   cloudflared tunnel run terminal
+   cloudflared tunnel run aterm
    ```
 
-7. **Access Terminal** at `https://terminal.your-domain.com`.
+7. **Access A-Term** at `https://aterm.your-domain.com`.
 
 ### Run as a service
 
@@ -172,19 +172,19 @@ sudo systemctl enable --now cloudflared
 
 ### Add access control (recommended)
 
-Since Terminal provides shell access, you should add authentication via [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/policies/access/):
+Since A-Term provides shell access, you should add authentication via [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/policies/access/):
 
 1. Go to **Cloudflare Zero Trust** dashboard → **Access** → **Applications**
-2. Add a self-hosted application for `terminal.your-domain.com`
+2. Add a self-hosted application for `aterm.your-domain.com`
 3. Create a policy (e.g., allow only your email via one-time PIN)
 
-This adds an authentication layer before anyone can reach Terminal.
+This adds an authentication layer before anyone can reach A-Term.
 
 ---
 
 ## Caddy Reverse Proxy
 
-[Caddy](https://caddyserver.com) is a web server that automatically provisions HTTPS certificates. Useful for LAN access with HTTPS (required by some browser APIs) or as a reverse proxy in front of Terminal.
+[Caddy](https://caddyserver.com) is a web server that automatically provisions HTTPS certificates. Useful for LAN access with HTTPS (required by some browser APIs) or as a reverse proxy in front of A-Term.
 
 ### Setup
 
@@ -205,7 +205,7 @@ This adds an authentication layer before anyone can reach Terminal.
 
 ### Option A: LAN with self-signed HTTPS
 
-For accessing Terminal from other devices on your local network using the host machine's LAN IP:
+For accessing A-Term from other devices on your local network using the host machine's LAN IP:
 
 ```caddyfile
 # Replace with your machine's LAN IP
@@ -237,11 +237,11 @@ Access at `https://192.168.1.100:3443`. Other devices on the network will see a 
 If you have a domain pointing to your machine (via DNS, split-horizon DNS, or a local DNS server):
 
 ```caddyfile
-terminal.your-domain.com {
+aterm.your-domain.com {
     reverse_proxy localhost:3002
 }
 
-terminal-api.your-domain.com {
+aterm-api.your-domain.com {
     reverse_proxy localhost:8002
 }
 ```
@@ -255,7 +255,7 @@ sudo caddy start --config /etc/caddy/Caddyfile
 ### Option C: Single domain with path-based routing
 
 ```caddyfile
-terminal.your-domain.com {
+aterm.your-domain.com {
     handle /api/* {
         reverse_proxy localhost:8002
     }
@@ -284,10 +284,10 @@ sudo systemctl enable --now caddy
 
 ## Security Considerations
 
-Terminal gives browser-based access to a shell on the host machine. Keep these points in mind when exposing it beyond localhost:
+A-Term gives browser-based access to a shell on the host machine. Keep these points in mind when exposing it beyond localhost:
 
-- **Authentication** — Terminal does not have built-in user authentication. Use Cloudflare Access, Tailscale ACLs, or a reverse proxy auth layer to control who can connect.
+- **Authentication** — A-Term does not have built-in user authentication. Use Cloudflare Access, Tailscale ACLs, or a reverse proxy auth layer to control who can connect.
 - **Network scope** — Tailscale limits access to your Tailnet by default. Cloudflare Tunnel with Access policies restricts by identity. Caddy on LAN is only as secure as your network.
 - **CORS** — Always set `CORS_ORIGINS` to the specific origins you use. Don't use `["*"]` in production.
-- **WebSocket** — All three approaches support WebSocket proxying, which Terminal requires for real-time terminal I/O.
-- **tmux sessions** — Terminal sessions are backed by tmux on the host. Anyone with access to Terminal can interact with these sessions.
+- **WebSocket** — All three approaches support WebSocket proxying, which A-Term requires for real-time aterm I/O.
+- **tmux sessions** — A-Term sessions are backed by tmux on the host. Anyone with access to A-Term can interact with these sessions.

@@ -1,12 +1,12 @@
-# SummitFlow Terminal
+# A-Term
 
-Web-based terminal service with tmux-backed persistent sessions, multi-pane layouts, configurable CLI agent integrations, and a built-in maintenance loop.
+Host-native browser workspace with tmux-backed persistent sessions, multi-pane layouts, configurable CLI agent integrations, and a built-in maintenance loop.
 
-**Terminal is a standalone product.** It starts and runs independently with just PostgreSQL and tmux. SummitFlow and Agent Hub integrations are optional companion services.
+**A-Term is a standalone product.** It starts and runs independently with just PostgreSQL and tmux. SummitFlow and Agent Hub integrations are optional companion services.
 
-![SummitFlow Terminal screenshot](docs/images/terminal-home-dark.png)
+![A-Term screenshot](docs/images/aterm-home-dark.png)
 
-Terminal gives you browser-accessible tmux sessions with pane layouts, persistent shells, and optional companion tooling without turning your host runtime into a containerized sidecar.
+A-Term gives you browser-accessible tmux sessions with pane layouts, persistent shells, and optional companion tooling without turning your host runtime into a containerized sidecar.
 
 ## Quickstart
 
@@ -17,17 +17,17 @@ cp .env.example .env.local
 # edit DATABASE_URL for your local Postgres
 
 uv sync --dev
-DATABASE_URL=postgresql://terminal:terminal@localhost:5432/terminal uv run alembic upgrade head
+DATABASE_URL=postgresql://aterm:aterm@localhost:5432/aterm uv run alembic upgrade head
 corepack pnpm --dir frontend install --frozen-lockfile
 corepack pnpm --dir frontend build
 
-uv run python -m terminal
+uv run python -m aterm
 API_URL=http://localhost:8002 HOSTNAME=0.0.0.0 PORT=3002 corepack pnpm --dir frontend start
 ```
 
 ## Overview
 
-SummitFlow Terminal provides browser-accessible terminal sessions backed by tmux for persistence. It supports multiple panes with split layouts, project-scoped working directories, and dual-mode operation (shell plus the configured default agent tool). Sessions survive browser disconnects, are reconciled with tmux state on startup and on a recurring maintenance interval, and expose maintenance status through `/health`.
+A-Term provides browser-accessible shell and agent sessions backed by tmux for persistence. It supports multiple panes with split layouts, project-scoped working directories, and dual-mode operation (shell plus the configured default agent tool). Sessions survive browser disconnects, are reconciled with tmux state on startup and on a recurring maintenance interval, and expose maintenance status through `/health`.
 
 ## Tech Stack
 
@@ -35,17 +35,17 @@ SummitFlow Terminal provides browser-accessible terminal sessions backed by tmux
 |-------|-----------|
 | Backend | FastAPI, Python 3.13+, Uvicorn |
 | Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 4 |
-| Terminal | xterm.js 6 (rendering), tmux (session persistence) |
+| A-Term | xterm.js 6 (rendering), tmux (session persistence) |
 | Database | PostgreSQL (own schema; can be a dedicated database) |
 | Quality | Ruff, Ty, pytest, Vitest, Biome |
 
 ## Architecture
 
 ```
-terminal/
-├── terminal/              # FastAPI backend
+aterm/
+├── aterm/              # FastAPI backend
 │   ├── api/               # REST + WebSocket endpoints
-│   │   ├── terminal.py    # WebSocket terminal I/O
+│   │   ├── aterm.py    # WebSocket aterm I/O
 │   │   ├── sessions.py    # Session CRUD
 │   │   ├── panes.py       # Pane management
 │   │   ├── projects.py    # Project settings
@@ -63,8 +63,8 @@ terminal/
 ├── frontend/
 │   ├── app/               # Pages (App Router)
 │   ├── components/        # React components
-│   │   ├── Terminal.tsx       # xterm.js wrapper + WebSocket
-│   │   ├── TerminalTabs.tsx   # Tab management
+│   │   ├── ATerm.tsx        # xterm.js wrapper + WebSocket
+│   │   ├── ATermTabs.tsx    # Tab management
 │   │   ├── pane-layouts/      # Split/grid layout components
 │   │   └── keyboard/          # Mobile on-screen keyboard
 │   └── lib/
@@ -76,41 +76,41 @@ terminal/
 
 ## Key Features
 
-- **Persistent sessions** - tmux-backed terminals survive browser disconnects and server restarts
+- **Persistent sessions** - tmux-backed aterms survive browser disconnects and server restarts
 - **Multi-pane layouts** - Up to 6 panes with resizable split views on wide desktops
 - **Dual mode** - Switch between shell and your configured agent tool per pane
-- **Project context** - Open terminals in project-specific working directories
+- **Project context** - Open aterms in project-specific working directories
 - **Project deep links** - Open `/?project=<id>&dir=<path>` to focus or create a project pane directly
 - **Mobile keyboard** - On-screen keyboard for touch devices (simple-keyboard)
 - **Periodic maintenance** - Reconciles tmux state, prunes stale uploads, repairs default agent-tool state, and deletes orphaned project settings
 - **Maintenance observability** - `/health` and `/api/internal/maintenance/runs` report maintenance state and recent persisted runs
-- **Scrollback capture** - Retrieves terminal history when reconnecting
-- **Real-time resize** - Terminal dimensions sync between browser and tmux
+- **Scrollback capture** - Retrieves aterm history when reconnecting
+- **Real-time resize** - A-Term dimensions sync between browser and tmux
 - **Light and dark app themes** - Respects `prefers-color-scheme` by default and supports a persisted manual override
 
 ## Standalone Usage and Optional Integrations
 
-Terminal requires only PostgreSQL and tmux. It has no hard dependency on any other service.
+A-Term requires only PostgreSQL and tmux. It has no hard dependency on any other service.
 
-Terminal is intended to run natively on the host under `systemd --user`. It depends on the host tmux server, host working tree, and host CLI auth/session state.
+A-Term is intended to run natively on the host under `systemd --user`. It depends on the host tmux server, host working tree, and host CLI auth/session state.
 
 ### Standalone (default)
 
-All core features work without SummitFlow or Agent Hub: persistent tmux sessions, multi-pane layouts, shell/agent mode switching, project settings, maintenance, and the full REST/WebSocket API. When no external service is reachable, the project list is populated from local `terminal_project_settings` only.
+All core features work without SummitFlow or Agent Hub: persistent tmux sessions, multi-pane layouts, shell/agent mode switching, project settings, maintenance, and the full REST/WebSocket API. When no external service is reachable, the project list is populated from local `aterm_project_settings` only.
 
 ### Optional: SummitFlow API (`SUMMITFLOW_API_BASE`)
 
-When the SummitFlow backend is available at `SUMMITFLOW_API_BASE`, Terminal fetches project metadata (name, root path) and merges it with local terminal settings. New project panes still open in shell mode by default, but Terminal uses the SummitFlow project root to place the shell in the right working directory. If SummitFlow is unreachable, Terminal continues with local data only.
+When the SummitFlow backend is available at `SUMMITFLOW_API_BASE`, A-Term fetches project metadata (name, root path) and merges it with local aterm settings. New project panes still open in shell mode by default, but A-Term uses the SummitFlow project root to place the shell in the right working directory. If SummitFlow is unreachable, A-Term continues with local data only.
 
 ### Optional: Agent Hub (`NEXT_PUBLIC_AGENT_HUB_URL`, `AGENT_HUB_URL`)
 
-When Agent Hub is configured, Terminal gains:
+When Agent Hub is configured, A-Term gains:
 
-- **Model catalog** — fetched through Terminal's same-origin `/api/agent-hub/models` proxy so cross-machine installs do not depend on browser CORS.
-- **Prompt cleaning** — sent through Terminal's same-origin `/api/agent-hub/complete` proxy for the same reason.
+- **Model catalog** — fetched through A-Term's same-origin `/api/agent-hub/models` proxy so cross-machine installs do not depend on browser CORS.
+- **Prompt cleaning** — sent through A-Term's same-origin `/api/agent-hub/complete` proxy for the same reason.
 - **Voice transcription** — still optional and still requires `@agent-hub/passport-client`. It is not part of the core v1 install path.
 
-Use `NEXT_PUBLIC_AGENT_HUB_URL` when the browser should expose companion UI, and set `AGENT_HUB_URL` anywhere the Terminal server itself needs to reach Agent Hub directly on another host. If Agent Hub is unavailable, Terminal falls back cleanly.
+Use `NEXT_PUBLIC_AGENT_HUB_URL` when the browser should expose companion UI, and set `AGENT_HUB_URL` anywhere the A-Term server itself needs to reach Agent Hub directly on another host. If Agent Hub is unavailable, A-Term falls back cleanly.
 
 ## Ports
 
@@ -135,14 +135,14 @@ cp .env.example .env.local
 # edit DATABASE_URL for your local Postgres
 
 uv sync --dev
-DATABASE_URL=postgresql://terminal:terminal@localhost:5432/terminal uv run alembic upgrade head
+DATABASE_URL=postgresql://aterm:aterm@localhost:5432/aterm uv run alembic upgrade head
 corepack pnpm --dir frontend install --frozen-lockfile
 corepack pnpm --dir frontend build
 
-# terminal API
-uv run python -m terminal
+# aterm API
+uv run python -m aterm
 
-# terminal frontend
+# aterm frontend
 API_URL=http://localhost:8002 HOSTNAME=0.0.0.0 PORT=3002 corepack pnpm --dir frontend start
 ```
 
@@ -164,7 +164,7 @@ AGENT_HUB_URL=http://HOST:8003
 Then start the same production processes as native standalone:
 
 ```bash
-uv run python -m terminal
+uv run python -m aterm
 API_URL=http://localhost:8002 HOSTNAME=0.0.0.0 PORT=3002 corepack pnpm --dir frontend start
 ```
 
@@ -174,9 +174,9 @@ Runtime settings are read from repo-local `.env.local`, repo-local `.env`, or ex
 
 ```bash
 # Required
-DATABASE_URL=postgresql://user:pass@localhost/terminal
+DATABASE_URL=postgresql://user:pass@localhost/aterm
 
-# Optional integrations (Terminal works without these)
+# Optional integrations (A-Term works without these)
 SUMMITFLOW_API_BASE=http://localhost:8001/api       # SummitFlow project metadata
 NEXT_PUBLIC_AGENT_HUB_URL=http://localhost:8003     # enables companion UI in the browser
 AGENT_HUB_URL=http://localhost:8003                 # server-side Agent Hub access for proxies
@@ -191,7 +191,7 @@ UPLOAD_MAX_AGE_SECONDS=86400
 
 ## Remote Access
 
-Terminal listens on `localhost` by default. To access it from other devices — your phone, another computer, or anywhere on the internet — see the [Remote Access guide](docs/remote-access.md), which covers Tailscale, Cloudflare Tunnel, and Caddy reverse proxy setups.
+A-Term listens on `localhost` by default. To access it from other devices — your phone, another computer, or anywhere on the internet — see the [Remote Access guide](docs/remote-access.md), which covers Tailscale, Cloudflare Tunnel, and Caddy reverse proxy setups.
 
 ## API
 
@@ -203,43 +203,43 @@ Terminal listens on `localhost` by default. To access it from other devices — 
 | GET | `/api/internal/maintenance` | Internal maintenance status (requires internal bearer token) |
 | GET | `/api/internal/maintenance/runs` | Recent persisted maintenance runs (requires internal bearer token) |
 | POST | `/api/internal/maintenance/run` | Trigger one maintenance cycle (requires internal bearer token) |
-| GET | `/api/terminal/sessions` | List sessions |
-| GET | `/api/terminal/sessions/{id}` | Get session |
-| PATCH | `/api/terminal/sessions/{id}` | Update session |
-| DELETE | `/api/terminal/sessions/{id}` | Delete session |
-| GET | `/api/terminal/panes` | List panes |
-| POST | `/api/terminal/panes` | Create pane (max 6) |
-| PATCH | `/api/terminal/panes/{id}` | Update pane |
-| DELETE | `/api/terminal/panes/{id}` | Delete pane |
-| GET | `/api/terminal/projects` | List project settings (merged with SummitFlow projects when available) |
-| PUT | `/api/terminal/project-settings/{id}` | Update project settings |
-| PUT | `/api/terminal/projects/{id}/mode` | Set shell/agent mode |
-| POST | `/api/terminal/projects/{id}/reset` | Reset project sessions |
-| POST | `/api/terminal/projects/{id}/disable` | Disable terminal for project |
+| GET | `/api/aterm/sessions` | List sessions |
+| GET | `/api/aterm/sessions/{id}` | Get session |
+| PATCH | `/api/aterm/sessions/{id}` | Update session |
+| DELETE | `/api/aterm/sessions/{id}` | Delete session |
+| GET | `/api/aterm/panes` | List panes |
+| POST | `/api/aterm/panes` | Create pane (max 6) |
+| PATCH | `/api/aterm/panes/{id}` | Update pane |
+| DELETE | `/api/aterm/panes/{id}` | Delete pane |
+| GET | `/api/aterm/projects` | List project settings (merged with SummitFlow projects when available) |
+| PUT | `/api/aterm/project-settings/{id}` | Update project settings |
+| PUT | `/api/aterm/projects/{id}/mode` | Set shell/agent mode |
+| POST | `/api/aterm/projects/{id}/reset` | Reset project sessions |
+| POST | `/api/aterm/projects/{id}/disable` | Disable aterm for project |
 
 ### WebSocket
 
-`/ws/terminal/{session_id}` - Terminal I/O stream
+`/ws/aterm/{session_id}` - A-Term I/O stream
 
 | Message Type | Direction | Description |
 |-------------|-----------|-------------|
-| Text | Client → Server | Terminal input |
-| JSON `{"resize": {cols, rows}}` | Client → Server | Resize terminal |
-| JSON `{"refresh": true}` | Client → Server | Redraw terminal |
-| Binary | Server → Client | Terminal output |
+| Text | Client → Server | A-Term input |
+| JSON `{"resize": {cols, rows}}` | Client → Server | Resize aterm |
+| JSON `{"refresh": true}` | Client → Server | Redraw aterm |
+| Binary | Server → Client | A-Term output |
 
 ## Database
 
-Primary service tables: `terminal_sessions` (session state, mode, alive tracking), `terminal_panes` (pane layout and ordering), `terminal_project_settings` (per-project mode and enabled state), `agent_tools` (configured CLI agent integrations), and `terminal_maintenance_runs` (append-only maintenance audit trail). Schema is managed via Alembic migrations, with maintenance-focused indexes for session retention and project/mode lookups.
+Primary service tables: `aterm_sessions` (session state, mode, alive tracking), `aterm_panes` (pane layout and ordering), `aterm_project_settings` (per-project mode and enabled state), `agent_tools` (configured CLI agent integrations), and `aterm_maintenance_runs` (append-only maintenance audit trail). Schema is managed via Alembic migrations, with maintenance-focused indexes for session retention and project/mode lookups.
 
 ## Services
 
-Terminal runs natively under `systemd --user`:
+A-Term runs natively under `systemd --user`:
 
-- `summitflow-terminal.service` for the FastAPI backend on port `8002`
-- `summitflow-terminal-frontend.service` for the Next.js frontend on port `3002`
+- `aterm-backend.service` for the FastAPI backend on port `8002`
+- `aterm-frontend.service` for the Next.js frontend on port `3002`
 
-`rebuild.sh terminal` remains the preferred local maintenance path in the SummitFlow workspace. Public installs should use the native steps above.
+`rebuild.sh aterm` remains the preferred local maintenance path in the SummitFlow workspace. Public installs should use the native steps above.
 
 ## License
 
@@ -256,4 +256,4 @@ Commercial use is permitted under the Apache 2.0 license.
 
 For commercial support, custom work, partnership discussions, or private
 licensing for future versions, start a thread in
-[GitHub Discussions](https://github.com/summitflow-solutions/terminal/discussions).
+[GitHub Discussions](https://github.com/summitflow-solutions/aterm/discussions).

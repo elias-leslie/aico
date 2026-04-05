@@ -1,9 +1,9 @@
 import type { Layout } from 'react-resizable-panels'
-import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
+import type { PaneSlot, ATermSlot } from '@/lib/utils/slot'
 
 export interface LayoutHelperProps {
   containerRef: React.RefObject<HTMLDivElement | null>
-  displaySlots: (TerminalSlot | PaneSlot)[]
+  displaySlots: (ATermSlot | PaneSlot)[]
   getMinSizePercent: (
     direction: 'horizontal' | 'vertical',
     panelCount?: number,
@@ -18,6 +18,6 @@ export interface LayoutHelperProps {
     panelIds: string[],
     persistPaneLayouts?: boolean,
   ) => (layout: Layout) => void
-  renderPane: (slot: TerminalSlot | PaneSlot, index: number) => React.ReactNode
+  renderPane: (slot: ATermSlot | PaneSlot, index: number) => React.ReactNode
   orientation?: 'horizontal' | 'vertical'
 }

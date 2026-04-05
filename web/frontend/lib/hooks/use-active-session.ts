@@ -4,15 +4,15 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo } from 'react'
 import { useLocalStorageState } from './use-local-storage-state'
 import {
-  type ProjectTerminal,
-  useProjectTerminals,
-} from './use-project-terminals'
+  type ProjectATerm,
+  useProjectATerms,
+} from './use-project-aterms'
 import {
-  type TerminalSession,
-  useTerminalSessions,
-} from './use-terminal-sessions'
+  type ATermSession,
+  useATermSessions,
+} from './use-aterm-sessions'
 
-const LAST_ACTIVE_SESSION_KEY = 'terminal:last-active-session-id'
+const LAST_ACTIVE_SESSION_KEY = 'aterm:last-active-session-id'
 
 export function parsePersistedSessionId(storedValue: string | null): string | null {
   if (storedValue === null) {
@@ -28,7 +28,7 @@ export function parsePersistedSessionId(storedValue: string | null): string | nu
 }
 
 export function deriveActiveSessionId(
-  sessions: TerminalSession[],
+  sessions: ATermSession[],
   urlSessionId: string | null,
   urlProjectId: string | null,
   persistedSessionId: string | null = null,
@@ -71,7 +71,7 @@ export interface UseActiveSessionResult {
   activeSessionId: string | null
 
   /** The active session object (for convenience) */
-  activeSession: TerminalSession | null
+  activeSession: ATermSession | null
 
   /** Whether we're in a valid state (have sessions and have active) */
   isValid: boolean
@@ -80,19 +80,19 @@ export interface UseActiveSessionResult {
   switchToSession: (sessionId: string) => void
 
   /** For project tabs: get the right session for current mode */
-  getProjectActiveSession: (projectId: string) => TerminalSession | null
+  getProjectActiveSession: (projectId: string) => ATermSession | null
 
   /** All sessions for reference */
-  sessions: TerminalSession[]
+  sessions: ATermSession[]
 
-  /** Project terminals for reference */
-  projectTerminals: ProjectTerminal[]
+  /** Project aterms for reference */
+  projectATerms: ProjectATerm[]
 
   /** Ad-hoc sessions for reference */
-  adHocSessions: TerminalSession[]
+  adHocSessions: ATermSession[]
 
   /** External tmux sessions for reference */
-  externalSessions: TerminalSession[]
+  externalSessions: ATermSession[]
 
   /** Loading state */
   isLoading: boolean
@@ -148,14 +148,14 @@ export function useActiveSession(): UseActiveSessionResult {
     sessions: rawSessions,
     isLoading: sessionsLoading,
     isError: sessionsError,
-  } = useTerminalSessions()
+  } = useATermSessions()
   const sessions = rawSessions
   const {
-    projectTerminals,
+    projectATerms,
     adHocSessions,
     externalSessions,
     isLoading: projectsLoading,
-  } = useProjectTerminals({
+  } = useProjectATerms({
     sessionsOverride: sessions,
     sessionsLoadingOverride: sessionsLoading,
     sessionsErrorOverride: sessionsError,
@@ -231,14 +231,14 @@ export function useActiveSession(): UseActiveSessionResult {
 
   // Get the active session for a project based on its current mode
   const getProjectActiveSession = useCallback(
-    (projectId: string): TerminalSession | null => {
-      const project = projectTerminals.find((p) => p.projectId === projectId)
+    (projectId: string): ATermSession | null => {
+      const project = projectATerms.find((p) => p.projectId === projectId)
       if (!project) return null
 
-      // Return the active session (already computed by useProjectTerminals)
+      // Return the active session (already computed by useProjectATerms)
       return project.activeSession
     },
-    [projectTerminals],
+    [projectATerms],
   )
 
   return {
@@ -248,7 +248,7 @@ export function useActiveSession(): UseActiveSessionResult {
     switchToSession,
     getProjectActiveSession,
     sessions,
-    projectTerminals,
+    projectATerms,
     adHocSessions,
     externalSessions,
     isLoading,

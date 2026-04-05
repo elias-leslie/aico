@@ -1,4 +1,4 @@
-"""Tests for session REST endpoints (/api/terminal/sessions).
+"""Tests for session REST endpoints (/api/aterm/sessions).
 
 Covers:
 - List sessions
@@ -54,7 +54,7 @@ def _make_session(
 # ---------------------------------------------------------------------------
 
 def test_list_sessions_returns_items(test_app: TestClient) -> None:
-    """GET /api/terminal/sessions -- returns list of alive sessions."""
+    """GET /api/aterm/sessions -- returns list of alive sessions."""
     # Arrange
     sessions = [_make_session(name="s1"), _make_session(name="s2")]
     external = [
@@ -78,11 +78,11 @@ def test_list_sessions_returns_items(test_app: TestClient) -> None:
         }
     ]
     with (
-        patch("terminal.api.sessions.terminal_store.list_sessions", return_value=sessions),
-        patch("terminal.api.sessions.list_external_agent_tmux_sessions", return_value=external),
+        patch("aterm.api.sessions.aterm_store.list_sessions", return_value=sessions),
+        patch("aterm.api.sessions.list_external_agent_tmux_sessions", return_value=external),
     ):
         # Act
-        response = test_app.get("/api/terminal/sessions")
+        response = test_app.get("/api/aterm/sessions")
 
     # Assert
     assert response.status_code == 200
@@ -95,14 +95,14 @@ def test_list_sessions_returns_items(test_app: TestClient) -> None:
 
 
 def test_list_sessions_empty_returns_zero_total(test_app: TestClient) -> None:
-    """GET /api/terminal/sessions -- empty list returns total=0."""
+    """GET /api/aterm/sessions -- empty list returns total=0."""
     # Arrange
     with (
-        patch("terminal.api.sessions.terminal_store.list_sessions", return_value=[]),
-        patch("terminal.api.sessions.list_external_agent_tmux_sessions", return_value=[]),
+        patch("aterm.api.sessions.aterm_store.list_sessions", return_value=[]),
+        patch("aterm.api.sessions.list_external_agent_tmux_sessions", return_value=[]),
     ):
         # Act
-        response = test_app.get("/api/terminal/sessions")
+        response = test_app.get("/api/aterm/sessions")
 
     # Assert
     assert response.status_code == 200
@@ -116,22 +116,22 @@ def test_list_sessions_empty_returns_zero_total(test_app: TestClient) -> None:
 # ---------------------------------------------------------------------------
 
 def test_get_session_found_returns_200(test_app: TestClient) -> None:
-    """GET /api/terminal/sessions/{id} -- existing session returns 200."""
+    """GET /api/aterm/sessions/{id} -- existing session returns 200."""
     # Arrange
     sid = str(uuid.uuid4())
-    session = _make_session(session_id=sid, name="My Terminal")
-    with patch("terminal.api.sessions.terminal_store.get_session", return_value=session):
+    session = _make_session(session_id=sid, name="My A-Term")
+    with patch("aterm.api.sessions.aterm_store.get_session", return_value=session):
         # Act
-        response = test_app.get(f"/api/terminal/sessions/{sid}")
+        response = test_app.get(f"/api/aterm/sessions/{sid}")
 
     # Assert
     assert response.status_code == 200
     assert response.json()["id"] == sid
-    assert response.json()["name"] == "My Terminal"
+    assert response.json()["name"] == "My A-Term"
 
 
 def test_get_external_session_found_returns_200(test_app: TestClient) -> None:
-    """GET /api/terminal/sessions/{id} -- external tmux session returns 200."""
+    """GET /api/aterm/sessions/{id} -- external tmux session returns 200."""
     external = {
         "id": "codex-summitflow",
         "name": "codex-summitflow",
@@ -151,10 +151,10 @@ def test_get_external_session_found_returns_200(test_app: TestClient) -> None:
         "source": "tmux_external",
     }
     with (
-        patch("terminal.api.sessions.terminal_store.get_session", return_value=None),
-        patch("terminal.api.sessions.get_external_agent_tmux_session", return_value=external),
+        patch("aterm.api.sessions.aterm_store.get_session", return_value=None),
+        patch("aterm.api.sessions.get_external_agent_tmux_session", return_value=external),
     ):
-        response = test_app.get("/api/terminal/sessions/codex-summitflow")
+        response = test_app.get("/api/aterm/sessions/codex-summitflow")
 
     assert response.status_code == 200
     assert response.json()["id"] == "codex-summitflow"
@@ -163,24 +163,24 @@ def test_get_external_session_found_returns_200(test_app: TestClient) -> None:
 
 
 def test_get_session_not_found_returns_404(test_app: TestClient) -> None:
-    """GET /api/terminal/sessions/{id} -- missing session returns 404."""
+    """GET /api/aterm/sessions/{id} -- missing session returns 404."""
     # Arrange
     sid = str(uuid.uuid4())
-    with patch("terminal.api.sessions.terminal_store.get_session", return_value=None):
+    with patch("aterm.api.sessions.aterm_store.get_session", return_value=None):
         # Act
-        response = test_app.get(f"/api/terminal/sessions/{sid}")
+        response = test_app.get(f"/api/aterm/sessions/{sid}")
 
     # Assert
     assert response.status_code == 404
 
 
 def test_get_session_unknown_external_ref_returns_400(test_app: TestClient) -> None:
-    """GET /api/terminal/sessions/{id} -- invalid non-external ref returns 400."""
+    """GET /api/aterm/sessions/{id} -- invalid non-external ref returns 400."""
     with (
-        patch("terminal.api.sessions.terminal_store.get_session", return_value=None),
-        patch("terminal.api.sessions.get_external_agent_tmux_session", return_value=None),
+        patch("aterm.api.sessions.aterm_store.get_session", return_value=None),
+        patch("aterm.api.sessions.get_external_agent_tmux_session", return_value=None),
     ):
-        response = test_app.get("/api/terminal/sessions/not-a-uuid")
+        response = test_app.get("/api/aterm/sessions/not-a-uuid")
 
     # Assert
     assert response.status_code == 400
@@ -192,18 +192,18 @@ def test_get_session_unknown_external_ref_returns_400(test_app: TestClient) -> N
 # ---------------------------------------------------------------------------
 
 def test_update_session_name_returns_updated(test_app: TestClient) -> None:
-    """PATCH /api/terminal/sessions/{id} -- rename succeeds."""
+    """PATCH /api/aterm/sessions/{id} -- rename succeeds."""
     # Arrange
     sid = str(uuid.uuid4())
     original = _make_session(session_id=sid, name="Old Name")
     updated = {**original, "name": "New Name"}
     with (
-        patch("terminal.api.sessions.terminal_store.get_session", return_value=original),
-        patch("terminal.api.sessions.terminal_store.update_session", return_value=updated),
+        patch("aterm.api.sessions.aterm_store.get_session", return_value=original),
+        patch("aterm.api.sessions.aterm_store.update_session", return_value=updated),
     ):
         # Act
         response = test_app.patch(
-            f"/api/terminal/sessions/{sid}",
+            f"/api/aterm/sessions/{sid}",
             json={"name": "New Name"},
         )
 
@@ -213,13 +213,13 @@ def test_update_session_name_returns_updated(test_app: TestClient) -> None:
 
 
 def test_update_session_not_found_returns_404(test_app: TestClient) -> None:
-    """PATCH /api/terminal/sessions/{id} -- missing session returns 404."""
+    """PATCH /api/aterm/sessions/{id} -- missing session returns 404."""
     # Arrange
     sid = str(uuid.uuid4())
-    with patch("terminal.api.sessions.terminal_store.get_session", return_value=None):
+    with patch("aterm.api.sessions.aterm_store.get_session", return_value=None):
         # Act
         response = test_app.patch(
-            f"/api/terminal/sessions/{sid}",
+            f"/api/aterm/sessions/{sid}",
             json={"name": "Whatever"},
         )
 
@@ -228,7 +228,7 @@ def test_update_session_not_found_returns_404(test_app: TestClient) -> None:
 
 
 def test_update_external_session_returns_400(test_app: TestClient) -> None:
-    """PATCH /api/terminal/sessions/{id} -- external sessions are read-only."""
+    """PATCH /api/aterm/sessions/{id} -- external sessions are read-only."""
     external = {
         "id": "claude-summitflow",
         "name": "claude-summitflow",
@@ -248,11 +248,11 @@ def test_update_external_session_returns_400(test_app: TestClient) -> None:
         "source": "tmux_external",
     }
     with (
-        patch("terminal.api.sessions.terminal_store.get_session", return_value=None),
-        patch("terminal.api.sessions.get_external_agent_tmux_session", return_value=external),
+        patch("aterm.api.sessions.aterm_store.get_session", return_value=None),
+        patch("aterm.api.sessions.get_external_agent_tmux_session", return_value=external),
     ):
         response = test_app.patch(
-            "/api/terminal/sessions/claude-summitflow",
+            "/api/aterm/sessions/claude-summitflow",
             json={"name": "New Name"},
         )
 
@@ -261,14 +261,14 @@ def test_update_external_session_returns_400(test_app: TestClient) -> None:
 
 
 def test_update_session_no_fields_returns_existing(test_app: TestClient) -> None:
-    """PATCH /api/terminal/sessions/{id} -- empty body returns current session."""
+    """PATCH /api/aterm/sessions/{id} -- empty body returns current session."""
     # Arrange
     sid = str(uuid.uuid4())
     existing = _make_session(session_id=sid, name="Unchanged")
-    with patch("terminal.api.sessions.terminal_store.get_session", return_value=existing):
+    with patch("aterm.api.sessions.aterm_store.get_session", return_value=existing):
         # Act
         response = test_app.patch(
-            f"/api/terminal/sessions/{sid}",
+            f"/api/aterm/sessions/{sid}",
             json={},
         )
 
@@ -282,7 +282,7 @@ def test_update_session_no_fields_returns_existing(test_app: TestClient) -> None
 # ---------------------------------------------------------------------------
 
 def test_delete_session_success_returns_deleted(test_app: TestClient) -> None:
-    """DELETE /api/terminal/sessions/{id} -- returns deleted=True."""
+    """DELETE /api/aterm/sessions/{id} -- returns deleted=True."""
     sid = str(uuid.uuid4())
     result = {
         "deleted": True,
@@ -292,8 +292,8 @@ def test_delete_session_success_returns_deleted(test_app: TestClient) -> None:
         "pane_deleted": False,
         "is_external": False,
     }
-    with patch("terminal.api.sessions.close_session", return_value=result) as close_mock:
-        response = test_app.delete(f"/api/terminal/sessions/{sid}")
+    with patch("aterm.api.sessions.close_session", return_value=result) as close_mock:
+        response = test_app.delete(f"/api/aterm/sessions/{sid}")
 
     assert response.status_code == 200
     body = response.json()
@@ -304,16 +304,16 @@ def test_delete_session_success_returns_deleted(test_app: TestClient) -> None:
 
 
 def test_delete_session_invalid_uuid_returns_400(test_app: TestClient) -> None:
-    """DELETE /api/terminal/sessions/{id} -- malformed UUID returns 400."""
+    """DELETE /api/aterm/sessions/{id} -- malformed UUID returns 400."""
     # Act
-    response = test_app.delete("/api/terminal/sessions/bad-id")
+    response = test_app.delete("/api/aterm/sessions/bad-id")
 
     # Assert
     assert response.status_code == 400
 
 
 def test_delete_external_session_returns_deleted(test_app: TestClient) -> None:
-    """DELETE /api/terminal/sessions/{id} -- external tmux sessions can be closed."""
+    """DELETE /api/aterm/sessions/{id} -- external tmux sessions can be closed."""
     session_id = "codex-summitflow"
     result = {
         "deleted": True,
@@ -325,12 +325,12 @@ def test_delete_external_session_returns_deleted(test_app: TestClient) -> None:
     }
     with (
         patch(
-            "terminal.api.sessions.get_external_agent_tmux_session",
+            "aterm.api.sessions.get_external_agent_tmux_session",
             return_value={"id": session_id, "tmux_session_name": session_id},
         ),
-        patch("terminal.api.sessions.close_session", return_value=result) as close_mock,
+        patch("aterm.api.sessions.close_session", return_value=result) as close_mock,
     ):
-        response = test_app.delete(f"/api/terminal/sessions/{session_id}")
+        response = test_app.delete(f"/api/aterm/sessions/{session_id}")
 
     assert response.status_code == 200
     assert response.json()["is_external"] is True
@@ -338,7 +338,7 @@ def test_delete_external_session_returns_deleted(test_app: TestClient) -> None:
 
 
 def test_delete_session_returns_next_session_id_for_visible_pane_transition(test_app: TestClient) -> None:
-    """DELETE /api/terminal/sessions/{id} -- returns pane transition details."""
+    """DELETE /api/aterm/sessions/{id} -- returns pane transition details."""
     sid = str(uuid.uuid4())
     next_sid = str(uuid.uuid4())
     pane_id = str(uuid.uuid4())
@@ -350,8 +350,8 @@ def test_delete_session_returns_next_session_id_for_visible_pane_transition(test
         "pane_deleted": False,
         "is_external": False,
     }
-    with patch("terminal.api.sessions.close_session", return_value=result):
-        response = test_app.delete(f"/api/terminal/sessions/{sid}")
+    with patch("aterm.api.sessions.close_session", return_value=result):
+        response = test_app.delete(f"/api/aterm/sessions/{sid}")
 
     assert response.status_code == 200
     assert response.json()["next_session_id"] == next_sid

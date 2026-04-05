@@ -1,8 +1,8 @@
-"""Tests for terminal/services/diagnostics.py."""
+"""Tests for aterm/services/diagnostics.py."""
 
 from __future__ import annotations
 
-from terminal.services.diagnostics import (
+from aterm.services.diagnostics import (
     DiagnosticsRegistry,
     SessionDiagnostics,
     _NoOpDiagnostics,

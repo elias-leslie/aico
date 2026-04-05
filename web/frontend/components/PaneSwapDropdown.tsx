@@ -8,7 +8,7 @@ import {
   type PaneSlot,
   getSlotName,
   getSlotPanelId,
-  type TerminalSlot,
+  type ATermSlot,
 } from '@/lib/utils/slot'
 import {
   clearDraggedPaneSlotId,
@@ -19,13 +19,13 @@ import {
 
 export interface PaneSwapDropdownProps {
   /** Current slot being displayed */
-  currentSlot: TerminalSlot | PaneSlot
+  currentSlot: ATermSlot | PaneSlot
   /** All available slots for swapping */
-  allSlots: Array<TerminalSlot | PaneSlot>
+  allSlots: Array<ATermSlot | PaneSlot>
   /** Callback when user selects another slot to swap with (desktop: swap positions) */
   onSwapWith: (otherSlotId: string) => void
   /** Callback to switch to another slot (mobile: navigate to pane) */
-  onSwitchTo?: (slot: TerminalSlot | PaneSlot) => void
+  onSwitchTo?: (slot: ATermSlot | PaneSlot) => void
   isMobile?: boolean
 }
 

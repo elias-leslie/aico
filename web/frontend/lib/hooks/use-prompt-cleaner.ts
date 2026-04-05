@@ -63,7 +63,7 @@ export function usePromptCleaner(): UsePromptCleanerReturn {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-Source-Client': 'terminal',
+            'X-Source-Client': 'aterm',
             'X-Source-Path': 'frontend/lib/hooks/use-prompt-cleaner.ts',
           },
           body: JSON.stringify({
@@ -74,7 +74,7 @@ export function usePromptCleaner(): UsePromptCleanerReturn {
             ],
             max_tokens: 4096,
             temperature: 0.3,
-            project_id: 'terminal-prompt-cleaner',
+            project_id: 'aterm-prompt-cleaner',
             persist_session: false,
           }),
           signal: AbortSignal.timeout(10000),

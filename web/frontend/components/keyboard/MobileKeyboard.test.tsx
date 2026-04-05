@@ -27,7 +27,7 @@ describe('MobileKeyboard', () => {
   })
 
   it('hydrates legacy minimized state from storage', () => {
-    window.localStorage.setItem('terminal-keyboard-minimized', 'true')
+    window.localStorage.setItem('aterm-keyboard-minimized', 'true')
 
     render(<MobileKeyboard onSend={vi.fn()} />)
 
@@ -41,7 +41,7 @@ describe('MobileKeyboard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'toggle minimize' }))
 
     expect(screen.getByText('minimized')).toBeInTheDocument()
-    expect(window.localStorage.getItem('terminal-keyboard-minimized')).toBe(
+    expect(window.localStorage.getItem('aterm-keyboard-minimized')).toBe(
       'true',
     )
   })

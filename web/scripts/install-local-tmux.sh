@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Minimum tmux version required by Terminal.
+# Minimum tmux version required by A-Term.
 # All features used (capture-pane -e -J, window-size latest,
-# terminal-features sync) are available in tmux 3.2+.
+# aterm-features sync) are available in tmux 3.2+.
 MIN_TMUX_MAJOR=3
 MIN_TMUX_MINOR=2
 

@@ -21,28 +21,28 @@ def upgrade() -> None:
     """Add indexes aligned to maintenance queries and enforce one default tool."""
     op.execute(
         """
-        CREATE INDEX IF NOT EXISTS idx_terminal_sessions_project_mode_alive_created
-        ON terminal_sessions(project_id, mode, is_alive, created_at DESC)
+        CREATE INDEX IF NOT EXISTS idx_aterm_sessions_project_mode_alive_created
+        ON aterm_sessions(project_id, mode, is_alive, created_at DESC)
         WHERE project_id IS NOT NULL;
         """
     )
     op.execute(
         """
-        CREATE INDEX IF NOT EXISTS idx_terminal_sessions_dead_last_accessed
-        ON terminal_sessions(last_accessed_at)
+        CREATE INDEX IF NOT EXISTS idx_aterm_sessions_dead_last_accessed
+        ON aterm_sessions(last_accessed_at)
         WHERE is_alive = false;
         """
     )
     op.execute(
         """
-        CREATE INDEX IF NOT EXISTS idx_terminal_sessions_display_order_created
-        ON terminal_sessions(display_order, created_at);
+        CREATE INDEX IF NOT EXISTS idx_aterm_sessions_display_order_created
+        ON aterm_sessions(display_order, created_at);
         """
     )
     op.execute(
         """
-        CREATE INDEX IF NOT EXISTS idx_terminal_project_settings_display_order
-        ON terminal_project_settings(display_order, project_id);
+        CREATE INDEX IF NOT EXISTS idx_aterm_project_settings_display_order
+        ON aterm_project_settings(display_order, project_id);
         """
     )
     op.execute(
@@ -68,7 +68,7 @@ def downgrade() -> None:
         ON agent_tools(slug);
         """
     )
-    op.execute("DROP INDEX IF EXISTS idx_terminal_project_settings_display_order;")
-    op.execute("DROP INDEX IF EXISTS idx_terminal_sessions_display_order_created;")
-    op.execute("DROP INDEX IF EXISTS idx_terminal_sessions_dead_last_accessed;")
-    op.execute("DROP INDEX IF EXISTS idx_terminal_sessions_project_mode_alive_created;")
+    op.execute("DROP INDEX IF EXISTS idx_aterm_project_settings_display_order;")
+    op.execute("DROP INDEX IF EXISTS idx_aterm_sessions_display_order_created;")
+    op.execute("DROP INDEX IF EXISTS idx_aterm_sessions_dead_last_accessed;")
+    op.execute("DROP INDEX IF EXISTS idx_aterm_sessions_project_mode_alive_created;")

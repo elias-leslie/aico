@@ -23,7 +23,7 @@ interface UseAgentPollingReturn {
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 /**
- * Hook for starting an agent in a terminal session and polling for state changes.
+ * Hook for starting an agent in a aterm session and polling for state changes.
  *
  * Uses the /start-agent and /agent-state endpoints.
  */
@@ -61,7 +61,7 @@ export function useAgentPolling(): UseAgentPollingReturn {
 
       while (!controller.signal.aborted) {
         if (Date.now() - pollStart > AGENT_POLL_TIMEOUT_MS) {
-          queryClient.invalidateQueries({ queryKey: ['terminal-sessions'] })
+          queryClient.invalidateQueries({ queryKey: ['aterm-sessions'] })
           break
         }
 
@@ -71,7 +71,7 @@ export function useAgentPolling(): UseAgentPollingReturn {
 
         try {
           const stateRes = await fetch(
-            buildApiUrl(`/api/terminal/sessions/${sessionId}/agent-state`),
+            buildApiUrl(`/api/aterm/sessions/${sessionId}/agent-state`),
             { signal: controller.signal },
           )
           if (stateRes.ok) {
@@ -81,7 +81,7 @@ export function useAgentPolling(): UseAgentPollingReturn {
               stateData.claude_state === 'running' ||
               stateData.claude_state === 'error'
             ) {
-              queryClient.invalidateQueries({ queryKey: ['terminal-sessions'] })
+              queryClient.invalidateQueries({ queryKey: ['aterm-sessions'] })
               break
             }
           }
@@ -90,7 +90,7 @@ export function useAgentPolling(): UseAgentPollingReturn {
         }
       }
 
-      queryClient.invalidateQueries({ queryKey: ['terminal-sessions'] })
+      queryClient.invalidateQueries({ queryKey: ['aterm-sessions'] })
       setIsPolling(false)
       abortControllerRef.current = null
     },
@@ -102,7 +102,7 @@ export function useAgentPolling(): UseAgentPollingReturn {
       try {
         stopPolling()
         const res = await fetch(
-          buildApiUrl(`/api/terminal/sessions/${sessionId}/start-agent`),
+          buildApiUrl(`/api/aterm/sessions/${sessionId}/start-agent`),
           { method: 'POST' },
         )
 
@@ -113,7 +113,7 @@ export function useAgentPolling(): UseAgentPollingReturn {
 
         const data = await res.json()
 
-        queryClient.invalidateQueries({ queryKey: ['terminal-sessions'] })
+        queryClient.invalidateQueries({ queryKey: ['aterm-sessions'] })
 
         // Note: backend returns 'claude_state' field for backward compatibility
         if (data.claude_state === 'starting') {

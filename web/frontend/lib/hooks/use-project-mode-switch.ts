@@ -4,12 +4,12 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { type MutableRefObject, useCallback } from 'react'
 import { useAgentPolling } from './use-agent-polling'
-import type { TerminalPane } from './use-terminal-panes'
-import type { TerminalSession } from './use-terminal-sessions'
+import type { ATermPane } from './use-aterm-panes'
+import type { ATermSession } from './use-aterm-sessions'
 
 /** Pane list response type for query cache access */
 interface PaneListResponse {
-  items: TerminalPane[]
+  items: ATermPane[]
   total: number
   max_panes: number
 }
@@ -21,25 +21,25 @@ interface SwitchProjectModeParams {
   projectId: string
   mode: string
   /** All sessions for this project */
-  projectSessions: TerminalSession[]
+  projectSessions: ATermSession[]
   /** Pane ID if available (for direct pane mode switching) */
   paneId?: string
 }
 
 interface UseProjectModeSwitchOptions {
-  /** Function to switch mode in backend (from useProjectTerminals) */
+  /** Function to switch mode in backend (from useProjectATerms) */
   switchMode: (projectId: string, mode: string) => Promise<void>
   /** Refs to project tabs for scroll-into-view */
   projectTabRefs: MutableRefObject<Map<string, HTMLDivElement>>
   /** Panes array (new architecture) */
-  panes: TerminalPane[]
+  panes: ATermPane[]
   /** Function to set active mode on a pane */
   setActiveMode: (
     paneId: string,
     mode: string,
-  ) => Promise<TerminalPane>
+  ) => Promise<ATermPane>
   /** Function to switch agent tool on a pane (kills old tmux, creates new session) */
-  switchAgentTool?: (paneId: string, slug: string) => Promise<TerminalPane>
+  switchAgentTool?: (paneId: string, slug: string) => Promise<ATermPane>
 }
 
 interface UseProjectModeSwitchReturn {
@@ -108,7 +108,7 @@ export function useProjectModeSwitch({
       // This is critical after operations like Close All where the panes array
       // in the closure may be outdated
       const freshPanesData = queryClient.getQueryData<PaneListResponse>([
-        'terminal-panes',
+        'aterm-panes',
       ])
       const freshPanes = freshPanesData?.items ?? panes
 
@@ -126,7 +126,7 @@ export function useProjectModeSwitch({
           currentAgentSession.mode !== mode &&
           switchAgentTool
 
-        let updatedPane: TerminalPane
+        let updatedPane: ATermPane
 
         if (isAgentToAgentSwitch) {
           // Switching between agent tools: replace the agent session entirely.

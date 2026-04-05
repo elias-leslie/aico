@@ -15,8 +15,8 @@ export const SettingsButton = forwardRef<HTMLButtonElement, SettingsButtonProps>
         ref={ref}
         data-testid="settings-dropdown"
         onClick={onClick}
-        title="Terminal settings"
-        aria-label="Terminal settings"
+        title="A-Term settings"
+        aria-label="A-Term settings"
         className="p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-md transition-all duration-150"
         style={{
           backgroundColor: isActive

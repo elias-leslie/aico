@@ -1,17 +1,17 @@
 'use client'
 
-import { Loader2, Terminal } from 'lucide-react'
+import { Loader2, PanelsTopLeft } from 'lucide-react'
 import { memo, useCallback, useRef, useState } from 'react'
 import type { AgentTool } from '@/lib/hooks/use-agent-tools'
 import { AgentIcon, getAgentColor } from './AgentIcon'
 import { ModeTogglePopover } from './ModeTogglePopover'
 
-/** Mode is either 'shell' for terminal mode, or an agent tool slug */
-export type TerminalMode = string
+/** Mode is either 'shell' for aterm mode, or an agent tool slug */
+export type ATermMode = string
 
 interface ModeToggleProps {
-  value: TerminalMode
-  onChange: (mode: TerminalMode) => void | Promise<void>
+  value: ATermMode
+  onChange: (mode: ATermMode) => void | Promise<void>
   disabled?: boolean
   isMobile?: boolean
   /** External loading state - when true, toggle is disabled and shows spinner */
@@ -57,7 +57,7 @@ function ModeIcon({
       />
     )
   return (
-    <Terminal
+    <PanelsTopLeft
       width={iconSize}
       height={iconSize}
       style={{
@@ -99,7 +99,7 @@ export const ModeToggle = memo(function ModeToggle({
       e.stopPropagation()
       if (isDisabled) return
       if (hasMultipleTools) { setShowPopover((prev) => !prev); return }
-      const oppositeMode: TerminalMode = isAgentMode ? 'shell' : defaultTool?.slug ?? fallbackAgentSlug
+      const oppositeMode: ATermMode = isAgentMode ? 'shell' : defaultTool?.slug ?? fallbackAgentSlug
       setInternalLoading(true)
       try { await onChange(oppositeMode) } catch { /* caller handles errors */ } finally { setInternalLoading(false) }
     },
@@ -107,7 +107,7 @@ export const ModeToggle = memo(function ModeToggle({
   )
 
   const handleSelectMode = useCallback(
-    async (mode: TerminalMode) => {
+    async (mode: ATermMode) => {
       setShowPopover(false)
       if (mode === value) return
       setInternalLoading(true)

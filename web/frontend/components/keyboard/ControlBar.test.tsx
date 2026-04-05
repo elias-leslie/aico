@@ -73,7 +73,7 @@ describe('ControlBar', () => {
     fireEvent.click(reconnectButton)
 
     expect(onReconnect).toHaveBeenCalledTimes(1)
-    expect(screen.getByText('Reconnect to resume this terminal')).toBeInTheDocument()
+    expect(screen.getByText('Reconnect to resume this A-Term')).toBeInTheDocument()
   })
 
   it('logs model option loading failures and keeps the picker usable', async () => {

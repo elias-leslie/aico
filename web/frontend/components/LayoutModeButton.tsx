@@ -2,7 +2,7 @@
 
 import { ChevronDown } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { type LayoutMode, GRID_MIN_WIDTHS } from '@/lib/constants/terminal'
+import { type LayoutMode, GRID_MIN_WIDTHS } from '@/lib/constants/aterm'
 import { useClickOutside } from '@/lib/hooks/use-click-outside'
 import { useDropdownPosition } from '@/lib/hooks/use-dropdown-position'
 import {

@@ -40,7 +40,7 @@ def test_internal_maintenance_run_triggers_cycle(test_app: TestClient) -> None:
     """Manual maintenance endpoint runs a maintenance cycle."""
     _app(test_app).state.internal_token = "secret"
     with patch(
-        "terminal.api.terminal.run_maintenance_cycle",
+        "aterm.api.aterm.run_maintenance_cycle",
         new=AsyncMock(return_value={"reason": "manual", "skipped": False}),
     ) as mock_run:
         response = test_app.post(
@@ -60,7 +60,7 @@ def test_internal_maintenance_runs_returns_history(test_app: TestClient) -> None
         {"id": "run-1", "status": "success", "reason": "startup"},
         {"id": "run-2", "status": "failed", "reason": "interval"},
     ]
-    with patch("terminal.api.terminal.list_recent_maintenance_runs", return_value=runs) as mock_list:
+    with patch("aterm.api.aterm.list_recent_maintenance_runs", return_value=runs) as mock_list:
         response = test_app.get(
             "/api/internal/maintenance/runs?limit=2",
             headers={"Authorization": "Bearer secret"},

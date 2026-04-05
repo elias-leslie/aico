@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { JetBrains_Mono, DM_Sans } from 'next/font/google'
 import Script from 'next/script'
 import { APP_THEME_COLORS, APP_THEME_INIT_SCRIPT } from '@/lib/app-theme'
+import { PRODUCT_DESCRIPTION, PRODUCT_NAME } from '@/lib/project-branding'
 import './globals.css'
 import { Providers } from './providers'
 
@@ -17,8 +18,8 @@ const dmSans = DM_Sans({
 })
 
 export const metadata: Metadata = {
-  title: 'Terminal - SummitFlow',
-  description: 'Standalone terminal application for SummitFlow',
+  title: PRODUCT_NAME,
+  description: PRODUCT_DESCRIPTION,
 }
 
 export const viewport: Viewport = {
