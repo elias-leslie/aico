@@ -1,10 +1,10 @@
-"""Tests for aterm session validation with external tmux sessions."""
+"""Tests for a_term session validation with external tmux sessions."""
 
 from __future__ import annotations
 
 from unittest.mock import patch
 
-from aterm.api.handlers.session_validation import validate_and_prepare_session
+from a_term.api.handlers.session_validation import validate_and_prepare_session
 
 
 def test_validate_and_prepare_session_accepts_external_tmux_session() -> None:
@@ -15,7 +15,7 @@ def test_validate_and_prepare_session_accepts_external_tmux_session() -> None:
         "is_external": True,
     }
     with patch(
-        "aterm.api.handlers.session_validation.get_external_agent_tmux_session",
+        "a_term.api.handlers.session_validation.get_external_agent_tmux_session",
         return_value=external,
     ):
         session, tmux_name = validate_and_prepare_session("claude-summitflow")
@@ -32,7 +32,7 @@ def test_validate_external_session_falls_back_to_session_id_when_tmux_name_missi
         "is_external": True,
     }
     with patch(
-        "aterm.api.handlers.session_validation.get_external_agent_tmux_session",
+        "a_term.api.handlers.session_validation.get_external_agent_tmux_session",
         return_value=external,
     ):
         session, tmux_name = validate_and_prepare_session("claude-summitflow")

@@ -1,7 +1,7 @@
 import { clsx } from 'clsx'
-import type { ATermContentProps } from './aterm-content/types'
-import { ATermFileSection } from './aterm-content/ATermFileSection'
-import { ATermMobileSection } from './aterm-content/ATermMobileSection'
+import type { ATermContentProps } from './a-term-content/types'
+import { ATermFileSection } from './a-term-content/ATermFileSection'
+import { ATermMobileSection } from './a-term-content/ATermMobileSection'
 import { PromptCleaner } from './PromptCleaner'
 import { SettingsDropdown } from './SettingsDropdown'
 import { VoiceTranscriptPanel } from './VoiceTranscriptPanel'
@@ -9,11 +9,11 @@ import { VoiceTranscriptPanel } from './VoiceTranscriptPanel'
 export type { ATermContentProps }
 
 /**
- * Renders the aterm content area with all modals and overlays
+ * Renders the a-term content area with all modals and overlays
  * Extracted from ATermTabs to reduce component size
  */
 export function ATermContent({
-  atermSlots,
+  aTermSlots,
   fontFamily,
   fontSize,
   scrollback,
@@ -35,7 +35,7 @@ export function ATermContent({
   isMobile,
   setATermRef,
   handleStatusChange,
-  atermStatuses,
+  aTermStatuses,
   onSlotSwitch,
   onSlotReset,
   onSlotClose,
@@ -113,7 +113,7 @@ export function ATermContent({
 
       {/* A-Term panels, file upload input, and upload status toasts */}
       <ATermFileSection
-        atermSlots={atermSlots}
+        aTermSlots={aTermSlots}
         fontFamily={fontFamily}
         fontSize={fontSize}
         scrollback={scrollback}
@@ -122,7 +122,7 @@ export function ATermContent({
         theme={theme}
         setATermRef={setATermRef}
         handleStatusChange={handleStatusChange}
-        atermStatuses={atermStatuses}
+        aTermStatuses={aTermStatuses}
         onSlotSwitch={onSlotSwitch}
         onSlotReset={onSlotReset}
         onSlotClose={onSlotClose}

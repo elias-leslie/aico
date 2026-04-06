@@ -5,9 +5,9 @@
  * exists only for external sessions that lack a database pane record.
  */
 
-import type { ATermPane } from '@/lib/hooks/use-aterm-panes'
+import type { ATermPane } from '@/lib/hooks/use-a-term-panes'
 
-// Slot types for split-pane aterms
+// Slot types for split-pane A-Term sessions
 export interface ProjectSlot {
   type: 'project'
   projectId: string

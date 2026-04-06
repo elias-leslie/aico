@@ -10,7 +10,7 @@ interface UseKeyboardInputProps {
 export function useKeyboardInput({ onSend }: UseKeyboardInputProps) {
   const { modifiers, resetModifiers, isActive } = useModifiers()
 
-  // Send a key sequence to the aterm, applying active modifiers
+  // Send a key sequence to the aTerm, applying active modifiers
   const sendKey = useCallback(
     (sequence: string) => {
       let finalSequence = sequence
@@ -25,7 +25,7 @@ export function useKeyboardInput({ onSend }: UseKeyboardInputProps) {
         finalSequence = withShift(finalSequence)
       }
 
-      // Send to aterm
+      // Send to aTerm
       onSend(finalSequence)
 
       // Reset sticky modifiers after key press

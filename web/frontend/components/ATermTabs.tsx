@@ -1,7 +1,7 @@
 'use client'
 
 import { clsx } from 'clsx'
-import { useATermOrchestration } from '@/lib/hooks/use-aterm-orchestration'
+import { useATermOrchestration } from '@/lib/hooks/use-a-term-orchestration'
 import { KeyboardShortcuts } from './KeyboardShortcuts'
 import { ATermContent } from './ATermContent'
 import { ATermManagerModal } from './ATermManagerModal'
@@ -24,7 +24,7 @@ export function ATermTabs({
     sessions,
     externalSessions,
     detachedPanes,
-    atermSlots,
+    aTermSlots,
     fontFamily,
     fontSize,
     scrollback,
@@ -46,7 +46,7 @@ export function ATermTabs({
     isMobile,
     setATermRef,
     handleStatusChange,
-    atermStatuses,
+    aTermStatuses,
     canAddPane,
     swapPanes,
     activeSessionId,
@@ -131,7 +131,7 @@ export function ATermTabs({
   return (
     <>
       <ATermContent
-        atermSlots={atermSlots}
+        aTermSlots={aTermSlots}
         fontFamily={fontFamily}
         fontSize={fontSize}
         scrollback={scrollback}
@@ -153,7 +153,7 @@ export function ATermTabs({
         isMobile={isMobile}
         setATermRef={setATermRef}
         handleStatusChange={handleStatusChange}
-        atermStatuses={atermStatuses}
+        aTermStatuses={aTermStatuses}
         onSlotSwitch={handleSlotSwitch}
         onSlotReset={handleSlotReset}
         onSlotClose={handleSlotClose}

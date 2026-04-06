@@ -6,7 +6,7 @@ import os
 import time
 from pathlib import Path
 
-from aterm.services.upload_cleanup import cleanup_old_uploads
+from a_term.services.upload_cleanup import cleanup_old_uploads
 
 
 def _write_file(path: Path, *, age_seconds: int = 0) -> None:

@@ -1,0 +1,23 @@
+[Unit]
+Description=A-Term Backend (FastAPI)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=__PROJECT_ROOT__
+Environment="PATH=%h/bin:%h/.local/bin:__PROJECT_ROOT__/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="HOME=%h"
+EnvironmentFile=-%h/.env.local
+Environment="SUMMITFLOW_API_BASE=http://localhost:8001/api"
+ExecStart=/bin/bash -lc '__PROJECT_ROOT__/.venv/bin/uvicorn a_term.main:app --host "${A_TERM_BIND_HOST:-0.0.0.0}" --port "${A_TERM_BACKEND_PORT:-8002}"'
+Restart=always
+RestartSec=10
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=a-term-backend
+
+[Install]
+WantedBy=default.target

@@ -1,4 +1,4 @@
-export const APP_THEME_STORAGE_KEY = 'aterm-app-theme'
+export const APP_THEME_STORAGE_KEY = 'a-term-app-theme'
 
 export const APP_THEME_COLORS = {
   dark: '#0a0e14',

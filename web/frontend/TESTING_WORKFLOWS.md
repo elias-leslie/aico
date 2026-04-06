@@ -1,6 +1,6 @@
 # A-Term - Testing Workflows
 
-Complete checklist for testing all aterm workflows and behaviors.
+Complete checklist for testing all a-term workflows and behaviors.
 
 ---
 
@@ -11,7 +11,7 @@ Complete checklist for testing all aterm workflows and behaviors.
 | **Pane** | Container holding 1-2 sessions. Max 6 panes on ultrawide layouts. |
 | **Project Pane** | Has shell + claude sessions, mode toggle |
 | **Ad-Hoc Pane** | Shell-only, no project association |
-| **Session** | Actual tmux-backed aterm instance |
+| **Session** | Actual tmux-backed a-term instance |
 | **Mode** | Shell or Claude (project panes only) |
 
 ---
@@ -20,7 +20,7 @@ Complete checklist for testing all aterm workflows and behaviors.
 
 ### Single Mode (Default)
 
-- [ ] One aterm fills viewport with unified header at top
+- [ ] One a-term fills viewport with unified header at top
 - [ ] A-Term switcher dropdown in header shows all panes
 - [ ] Layout button visible (shows grid option)
 - [ ] Mode toggle visible for project panes
@@ -29,7 +29,7 @@ Complete checklist for testing all aterm workflows and behaviors.
 ### Grid Mode (2x2)
 
 - [ ] Click layout button → grid mode activates
-- [ ] Up to 4 aterms display in 2x2 grid
+- [ ] Up to 4 a-terms display in 2x2 grid
 - [ ] Each pane has its own header with controls
 - [ ] Click pane → that pane becomes active (border highlight)
 - [ ] Keyboard input goes to active pane only
@@ -50,7 +50,7 @@ Complete checklist for testing all aterm workflows and behaviors.
 
 ---
 
-## 2. ATERM CREATION
+## 2. A_TERM CREATION
 
 ### A-Term Manager Modal
 
@@ -92,11 +92,11 @@ Complete checklist for testing all aterm workflows and behaviors.
 
 ---
 
-## 3. ATERM SWITCHER (Dropdown)
+## 3. A_TERM SWITCHER (Dropdown)
 
 ### Empty State
 
-- [ ] With 0 panes, dropdown shows "No aterms open"
+- [ ] With 0 panes, dropdown shows "No a-terms open"
 
 ### With A-Terms
 
@@ -115,7 +115,7 @@ Complete checklist for testing all aterm workflows and behaviors.
 
 - [ ] Mode toggle only visible for project panes
 - [ ] Mode toggle NOT visible for ad-hoc panes
-- [ ] Shell mode: dim aterm icon
+- [ ] Shell mode: dim a-term icon
 - [ ] Claude mode: glowing sparkles with animation
 
 ### Shell → Claude
@@ -140,7 +140,7 @@ Complete checklist for testing all aterm workflows and behaviors.
 ### Toggle After Close All
 
 - [ ] Close All A-Terms
-- [ ] Create new project aterm
+- [ ] Create new project a-term
 - [ ] Click mode toggle
 - [ ] Should work on FIRST click (no stale state)
 - [ ] No need to click 2-3 times
@@ -168,7 +168,7 @@ Complete checklist for testing all aterm workflows and behaviors.
 
 - [ ] Close the only remaining pane
 - [ ] New ad-hoc pane auto-created
-- [ ] Dropdown shows the new ad-hoc aterm
+- [ ] Dropdown shows the new ad-hoc a-term
 
 ### Reset All
 
@@ -207,11 +207,11 @@ Complete checklist for testing all aterm workflows and behaviors.
 - [ ] Upload starts, progress toast appears
 - [ ] Progress shows 0-100%
 - [ ] Upload complete → file path inserted at cursor
-- [ ] Path appears in active aterm
+- [ ] Path appears in active a-term
 
 ### Via Drag-Drop
 
-- [ ] Drag file over aterm area
+- [ ] Drag file over a-term area
 - [ ] Drop zone overlay appears
 - [ ] Drop file → upload starts
 - [ ] Same progress/completion as button upload
@@ -242,9 +242,9 @@ Complete checklist for testing all aterm workflows and behaviors.
 
 ### Basic Flow
 
-- [ ] Type text in Claude aterm
+- [ ] Type text in Claude a-term
 - [ ] Click prompt cleaner button
-- [ ] Modal opens with last aterm line
+- [ ] Modal opens with last a-term line
 - [ ] AI processes prompt (loading state)
 - [ ] Typewriter animation shows cleaned version
 
@@ -253,7 +253,7 @@ Complete checklist for testing all aterm workflows and behaviors.
 - [ ] Toggle diff → side-by-side original vs cleaned
 - [ ] Click edit → manual editing enabled
 - [ ] Type refinement → re-processes with instructions
-- [ ] Click Send → cleaned prompt inserted into aterm
+- [ ] Click Send → cleaned prompt inserted into a-term
 - [ ] Click Cancel → modal closes, no action
 
 ---
@@ -291,14 +291,14 @@ Complete checklist for testing all aterm workflows and behaviors.
 ### Font Settings
 
 - [ ] Font family dropdown shows 10 options
-- [ ] Changing font updates aterm immediately
+- [ ] Changing font updates a-term immediately
 - [ ] Font size slider works (10-20px range)
 - [ ] Font changes persist after reload
 
 ### Theme Settings
 
 - [ ] Theme dropdown shows 5 options
-- [ ] Changing theme updates aterm colors immediately
+- [ ] Changing theme updates a-term colors immediately
 - [ ] Theme persists after reload
 
 ### Cursor Settings
@@ -328,7 +328,7 @@ Complete checklist for testing all aterm workflows and behaviors.
 
 - [ ] A-Term connects on load
 - [ ] Skeleton loader during connection
-- [ ] Normal aterm after connected
+- [ ] Normal a-term after connected
 
 ### Disconnection
 
@@ -365,7 +365,7 @@ Complete checklist for testing all aterm workflows and behaviors.
 - [ ] Grid mode hidden on mobile (< 768px)
 - [ ] Only single mode available
 - [ ] Layout selector hidden
-- [ ] Touch scrolling works on aterm
+- [ ] Touch scrolling works on a-term
 
 ### Mobile Keyboard - Control Bar
 
@@ -406,7 +406,7 @@ Complete checklist for testing all aterm workflows and behaviors.
 
 ### Browser Navigation
 
-- [ ] Switch aterms → URL updates
+- [ ] Switch a-terms → URL updates
 - [ ] Click browser back → returns to previous session
 - [ ] Click browser forward → goes to next session
 
@@ -429,7 +429,7 @@ Complete checklist for testing all aterm workflows and behaviors.
 
 - [ ] Type commands → history visible
 - [ ] Refresh page → history preserved (tmux scrollback)
-- [ ] Reset aterm → history cleared
+- [ ] Reset a-term → history cleared
 
 ### Settings
 
@@ -449,14 +449,14 @@ Complete checklist for testing all aterm workflows and behaviors.
 ### Rapid Actions
 
 - [ ] Click mode toggle rapidly → only one switch occurs
-- [ ] Click create aterm rapidly → only one pane created
+- [ ] Click create a-term rapidly → only one pane created
 - [ ] Click close rapidly → only one confirmation shown
 
 ### Network Issues
 
 - [ ] Upload file during network drop → error handled gracefully
 - [ ] Mode switch during network drop → error handled gracefully
-- [ ] Create aterm during network drop → error handled gracefully
+- [ ] Create a-term during network drop → error handled gracefully
 
 ### Concurrent Operations
 
@@ -476,7 +476,7 @@ Complete checklist for testing all aterm workflows and behaviors.
 
 ### Mode Toggle Button
 
-- [ ] Shell (inactive): dim aterm icon
+- [ ] Shell (inactive): dim a-term icon
 - [ ] Claude (active): glowing sparkles with animation
 - [ ] Loading: spinner icon
 - [ ] Disabled: grayed out, no hover effect
@@ -495,8 +495,8 @@ Complete checklist for testing all aterm workflows and behaviors.
 
 ### Confirmation Dialogs
 
-- [ ] Close aterm: shows warning message
-- [ ] Close all: shows warning about all aterms
+- [ ] Close a-term: shows warning message
+- [ ] Close all: shows warning about all a-terms
 - [ ] Reset all: shows warning about clearing history
 - [ ] Dialogs have Cancel and Confirm buttons
 

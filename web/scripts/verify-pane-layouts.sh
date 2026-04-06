@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SESSION="${AGENT_BROWSER_SESSION:-aterm-layout-regression}"
+SESSION="${AGENT_BROWSER_SESSION:-a-term-layout-regression}"
 BROWSER_BIN="${AGENT_BROWSER_BIN:-$HOME/.local/bin/agent-browser}"
 URL="${1:-http://localhost:3002}"
 

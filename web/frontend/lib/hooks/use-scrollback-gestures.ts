@@ -6,10 +6,10 @@ import {
   getTouchScrollEffectiveCellHeight,
   getTouchScrollLineDelta,
   refreshATermViewport,
-} from './aterm-scrolling-utils'
+} from './a-term-scrolling-utils'
 import { getScrollbackOverlayWheelAction } from '../utils/scrollback-overlay-scroll'
 import { shouldDismissScrollbackOverlayTouchGesture } from '../utils/scrollback-overlay-touch'
-import { isATermBufferAtBottom } from './use-scrollback-aterm'
+import { isATermBufferAtBottom } from './use-scrollback-a-term'
 
 type XtermATerm = InstanceType<typeof import('@xterm/xterm').Terminal>
 

@@ -1,14 +1,14 @@
 'use client'
 
 import type React from 'react'
-import type { ScrollbackDelta } from '../aterm/line-cache'
+import type { ScrollbackDelta } from '../a-term/line-cache'
 import { getWsUrl } from '../api-config'
 import {
   CONNECTION_TIMEOUT,
   WS_CLOSE_CODE_SESSION_DEAD,
   WS_CLIENT_PING_INTERVAL,
   BACKPRESSURE_COMMIT_INTERVAL,
-} from '../constants/aterm'
+} from '../constants/a-term'
 
 export interface WebSocketConnectionRefs {
   wsRef: React.MutableRefObject<WebSocket | null>
@@ -105,7 +105,7 @@ export function openWebSocketConnection(
     pingIntervalRef.current = null
   }
 
-  let wsPath = `/ws/aterm/${sessionId}`
+  let wsPath = `/ws/a-term/${sessionId}`
   if (workingDir) {
     wsPath += `?working_dir=${encodeURIComponent(workingDir)}`
   }
@@ -160,7 +160,7 @@ export function openWebSocketConnection(
 
     if (!hasConnectedRef.current) {
       hasConnectedRef.current = true
-      onATermMessage?.(`Connected to aterm session: ${sessionId}`)
+      onATermMessage?.(`Connected to a-term session: ${sessionId}`)
       onATermMessage?.('')
     } else {
       onBeforeReconnectData?.()
@@ -258,7 +258,7 @@ export function openWebSocketConnection(
       }
     } else {
       setStatus('disconnected')
-      onATermMessage?.('\r\n\x1b[31mDisconnected from aterm\x1b[0m')
+      onATermMessage?.('\r\n\x1b[31mDisconnected from a-term\x1b[0m')
     }
     onDisconnect?.()
   }
@@ -333,7 +333,7 @@ export function dispatchControlMessage(
     }
 
     // Unknown control frames still belong to the control channel and should
-    // never be rendered into the visible aterm buffer.
+    // never be rendered into the visible aTerm buffer.
     return true
   } catch {
     return false

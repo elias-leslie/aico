@@ -88,7 +88,7 @@ function GeminiIcon({ size, color }: { size: number; color: string }) {
   )
 }
 
-/** OpenCode — open aterm frame with blinking prompt */
+/** OpenCode — open a-term frame with blinking prompt */
 function OpenCodeIcon({ size, color }: { size: number; color: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -148,7 +148,7 @@ const ICON_MAP: Record<string, typeof ClaudeIcon> = {
 }
 
 /** Default brand-suggestive colors per agent slug.
- *  Spectrally distinct on a dark aterm canvas. */
+ *  Spectrally distinct on a dark a-term canvas. */
 export const AGENT_DEFAULT_COLORS: Record<string, string> = {
   claude: '#D4845A',   // Burnt sienna — warm, organic
   codex: '#22D3EE',    // Electric cyan — digital, code-native

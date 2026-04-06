@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useRef } from 'react'
-import { MAX_PANES } from '@/lib/constants/aterm'
+import { MAX_PANES } from '@/lib/constants/a-term'
 import { usePaneLayoutGroups } from '@/lib/hooks/use-pane-layout-groups'
 import type { ResizablePaneLayoutProps } from '@/types/pane-layout'
 import { getSlotPanelId } from '@/lib/utils/slot'
@@ -43,7 +43,7 @@ export function ResizablePaneLayout(props: ResizablePaneLayoutProps) {
   const displaySlots = useMemo(() => slots.slice(0, MAX_PANES), [slots])
   const paneCount = displaySlots.length
   const containerRef = useRef<HTMLDivElement>(null)
-  const layoutStorageKey = `aterm-layout-groups:${layoutMode}:${paneCount}`
+  const layoutStorageKey = `a-term-layout-groups:${layoutMode}:${paneCount}`
 
   const getMinSizePercent = useMinSizeCalculator(containerRef)
   const handleLayoutChange = useLayoutChangeHandler(

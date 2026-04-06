@@ -1,6 +1,6 @@
 import type { ConnectionStatus, ATermHandle } from '@/components/ATerm'
 import type { ATermMode } from '@/components/ModeToggle'
-import type { LayoutMode } from '@/lib/constants/aterm'
+import type { LayoutMode } from '@/lib/constants/a-term'
 import type { PaneSlot, ATermSlot } from '@/lib/utils/slot'
 import type { ATermComponent } from '@/components/ATerm'
 
@@ -31,7 +31,7 @@ export interface ResizablePaneLayoutProps {
   theme?: Parameters<typeof ATermComponent>[0]['theme']
   onATermRef?: (sessionId: string, handle: ATermHandle | null) => void
   onStatusChange?: (sessionId: string, status: ConnectionStatus) => void
-  atermStatuses?: Map<string, ConnectionStatus>
+  aTermStatuses?: Map<string, ConnectionStatus>
   onSwitch?: (slot: ATermSlot | PaneSlot) => void
   onSettings?: () => void
   onReset?: (slot: ATermSlot | PaneSlot) => void

@@ -8,7 +8,7 @@ import { FullKeyboard } from './FullKeyboard'
 import { ModifierProvider } from './ModifierContext'
 import type { KeyboardSizePreset, ATermInputHandler } from './types'
 
-const MINIMIZED_STORAGE_KEY = 'aterm-keyboard-minimized'
+const MINIMIZED_STORAGE_KEY = 'a-term-keyboard-minimized'
 
 interface MobileKeyboardProps {
   onSend: ATermInputHandler

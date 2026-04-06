@@ -6,13 +6,13 @@ import { useLocalStorageState } from './use-local-storage-state'
 import {
   type ProjectATerm,
   useProjectATerms,
-} from './use-project-aterms'
+} from './use-project-a-terms'
 import {
   type ATermSession,
   useATermSessions,
-} from './use-aterm-sessions'
+} from './use-a-term-sessions'
 
-const LAST_ACTIVE_SESSION_KEY = 'aterm:last-active-session-id'
+const LAST_ACTIVE_SESSION_KEY = 'aTerm:last-active-session-id'
 
 export function parsePersistedSessionId(storedValue: string | null): string | null {
   if (storedValue === null) {
@@ -85,7 +85,7 @@ export interface UseActiveSessionResult {
   /** All sessions for reference */
   sessions: ATermSession[]
 
-  /** Project aterms for reference */
+  /** Project a-terms for reference */
   projectATerms: ProjectATerm[]
 
   /** Ad-hoc sessions for reference */

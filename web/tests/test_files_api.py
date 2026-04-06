@@ -1,4 +1,4 @@
-"""Tests for aterm file upload API endpoint."""
+"""Tests for a_term file upload API endpoint."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 def _upload(client: TestClient, content: bytes, filename: str, content_type: str):
     """Helper to POST a file upload."""
     return client.post(
-        "/api/aterm/files",
+        "/api/a-term/files",
         files={"file": (filename, io.BytesIO(content), content_type)},
     )
 
@@ -21,21 +21,21 @@ def _upload(client: TestClient, content: bytes, filename: str, content_type: str
 
 
 def test_detect_mime_png() -> None:
-    from aterm.api.files import _detect_mime_type
+    from a_term.api.files import _detect_mime_type
 
     png_header = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
     assert _detect_mime_type(png_header, "image/png") == "image/png"
 
 
 def test_detect_mime_jpeg() -> None:
-    from aterm.api.files import _detect_mime_type
+    from a_term.api.files import _detect_mime_type
 
     jpeg_header = b"\xff\xd8\xff\xe0" + b"\x00" * 32
     assert _detect_mime_type(jpeg_header, "image/jpeg") == "image/jpeg"
 
 
 def test_detect_mime_text_trusted() -> None:
-    from aterm.api.files import _detect_mime_type
+    from a_term.api.files import _detect_mime_type
 
     assert _detect_mime_type(b"hello world", "text/plain") == "text/plain"
     assert _detect_mime_type(b"# Heading", "text/markdown") == "text/markdown"
@@ -43,7 +43,7 @@ def test_detect_mime_text_trusted() -> None:
 
 
 def test_detect_mime_unknown_binary() -> None:
-    from aterm.api.files import _detect_mime_type
+    from a_term.api.files import _detect_mime_type
 
     assert _detect_mime_type(b"\x00\x01\x02\x03", "image/png") is None
 

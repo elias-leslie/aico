@@ -6,20 +6,20 @@ import '@xterm/xterm/css/xterm.css'
 import {
   PHOSPHOR_THEME,
   SCROLLBACK,
-  ATERM_THEMES,
-} from '../lib/constants/aterm'
+  A_TERM_THEMES,
+} from '../lib/constants/a-term'
 import { useBracketedPaste } from '../lib/hooks/use-bracketed-paste'
-import { useATermDiagnostics } from '../lib/hooks/use-aterm-diagnostics'
+import { useATermDiagnostics } from '../lib/hooks/use-a-term-diagnostics'
 import { useScrollbackOverlay } from '../lib/hooks/use-scrollback-overlay'
 import { useScrollbackPager } from '../lib/hooks/use-scrollback-pager'
-import { useATermHandle } from '../lib/hooks/use-aterm-handle'
-import { useATermInstance } from '../lib/hooks/use-aterm-instance'
-import { useATermResize } from '../lib/hooks/use-aterm-resize'
-import { useATermSearch } from '../lib/hooks/use-aterm-search'
-import { useATermScrolling } from '../lib/hooks/use-aterm-scrolling'
-import { useATermWebSocket } from '../lib/hooks/use-aterm-websocket'
-import { useATermWriteQueue } from '../lib/hooks/use-aterm-write-queue'
-import { LineCache } from '../lib/aterm/line-cache'
+import { useATermHandle } from '../lib/hooks/use-a-term-handle'
+import { useATermInstance } from '../lib/hooks/use-a-term-instance'
+import { useATermResize } from '../lib/hooks/use-a-term-resize'
+import { useATermSearch } from '../lib/hooks/use-a-term-search'
+import { useATermScrolling } from '../lib/hooks/use-a-term-scrolling'
+import { useATermWebSocket } from '../lib/hooks/use-a-term-websocket'
+import { useATermWriteQueue } from '../lib/hooks/use-a-term-write-queue'
+import { LineCache } from '../lib/a-term/line-cache'
 import {
   profileAnsiColors,
 } from '../lib/utils/ansi-color-profile'
@@ -27,13 +27,13 @@ import { isMobileDevice } from '../lib/utils/device'
 import { isTuiSessionMode } from '../lib/utils/session-mode'
 import { ScrollbackOverlay } from './ScrollbackOverlay'
 import { ATermDiagnosticsOverlay } from './ATermDiagnosticsOverlay'
-import type { ATermHandle, ATermProps } from './aterm.types'
+import type { ATermHandle, ATermProps } from './a-term.types'
 
 export type {
   ConnectionStatus,
   ATermHandle,
   ATermProps,
-} from './aterm.types'
+} from './a-term.types'
 
 type XtermATerm = InstanceType<typeof import('@xterm/xterm').Terminal>
 type XtermFitAddon = InstanceType<typeof import('@xterm/addon-fit').FitAddon>
@@ -41,7 +41,7 @@ type XtermFitAddon = InstanceType<typeof import('@xterm/addon-fit').FitAddon>
 function inferThemeId(
   theme: NonNullable<ATermProps['theme']>,
 ): string {
-  for (const [themeId, candidate] of Object.entries(ATERM_THEMES)) {
+  for (const [themeId, candidate] of Object.entries(A_TERM_THEMES)) {
     if (
       candidate.theme.background === theme.background &&
       candidate.theme.foreground === theme.foreground &&
@@ -81,7 +81,7 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
     ref,
   ) {
     const containerRef = useRef<HTMLDivElement>(null)
-    const atermRef = useRef<XtermATerm | null>(null)
+    const aTermRef = useRef<XtermATerm | null>(null)
     const fitAddonRef = useRef<XtermFitAddon | null>(null)
     const isFocusedRef = useRef(false)
     const isVisibleRef = useRef(isVisible)
@@ -123,7 +123,7 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
     const isTuiSession = isTuiSessionMode(sessionMode)
 
     const { enqueueWrite, applySnapshot, resetQueue } = useATermWriteQueue({
-      atermRef,
+      aTermRef,
       isVisibleRef,
       sessionMode,
       diagnostics: {
@@ -152,10 +152,10 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
         onBeforeReconnectData: () => {
           resetQueue()
           lineCacheRef.current.reset()
-          atermRef.current?.reset()
+          aTermRef.current?.reset()
         },
         onMessage: (data) => {
-          if (!atermRef.current) return
+          if (!aTermRef.current) return
           if (diagnosticsEnabled) {
             const profile = profileAnsiColors(data)
             if (profile.hasColor) {
@@ -215,7 +215,7 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
     })
     const overlay = useScrollbackOverlay({ wsRef, sessionMode })
     const { clearSearch, overlaySearchMatch, search } = useATermSearch({
-      atermRef,
+      aTermRef,
       sessionMode,
       activateOverlay: overlay.activate,
       getOverlayLines: overlay.getCachedLines,
@@ -233,7 +233,7 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
 
     const { setupScrolling, resetCopyMode } = useATermScrolling({
       wsRef,
-      atermRef,
+      aTermRef,
       isMobile,
       sessionMode,
       onRequestScrollbackOverlay: overlay.activate,
@@ -269,11 +269,11 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
         onPaste: pasteInput,
         setupScrolling,
       },
-      { atermRef, fitAddonRef, containerRef, isFocusedRef },
+      { aTermRef, fitAddonRef, containerRef, isFocusedRef },
     )
 
     const { handleResize } = useATermResize({
-      atermRef,
+      aTermRef,
       fitAddonRef,
       containerRef,
       wsRef,
@@ -284,7 +284,7 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
       reconnect,
       sendInput,
       status,
-      atermRef,
+      aTermRef,
       search,
       clearSearch,
     })

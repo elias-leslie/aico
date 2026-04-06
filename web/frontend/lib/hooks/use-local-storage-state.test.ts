@@ -9,7 +9,7 @@ describe('useLocalStorageState', () => {
 
   it('persists non-null values', () => {
     const { result } = renderHook(() =>
-      useLocalStorageState('aterm:test-key', 'default'),
+      useLocalStorageState('aTerm:test-key', 'default'),
     )
 
     act(() => {
@@ -17,14 +17,14 @@ describe('useLocalStorageState', () => {
     })
 
     expect(result.current[0]).toBe('persisted')
-    expect(window.localStorage.getItem('aterm:test-key')).toBe('"persisted"')
+    expect(window.localStorage.getItem('aTerm:test-key')).toBe('"persisted"')
   })
 
   it('removes the storage entry when set to null', () => {
-    window.localStorage.setItem('aterm:test-key', '"persisted"')
+    window.localStorage.setItem('aTerm:test-key', '"persisted"')
 
     const { result } = renderHook(() =>
-      useLocalStorageState<string | null>('aterm:test-key', 'default'),
+      useLocalStorageState<string | null>('aTerm:test-key', 'default'),
     )
 
     act(() => {
@@ -32,12 +32,12 @@ describe('useLocalStorageState', () => {
     })
 
     expect(result.current[0]).toBe(null)
-    expect(window.localStorage.getItem('aterm:test-key')).toBeNull()
+    expect(window.localStorage.getItem('aTerm:test-key')).toBeNull()
   })
 
   it('supports functional updates', () => {
     const { result } = renderHook(() =>
-      useLocalStorageState('aterm:test-key', ['a']),
+      useLocalStorageState('aTerm:test-key', ['a']),
     )
 
     act(() => {
@@ -45,6 +45,6 @@ describe('useLocalStorageState', () => {
     })
 
     expect(result.current[0]).toEqual(['a', 'b'])
-    expect(window.localStorage.getItem('aterm:test-key')).toBe('["a","b"]')
+    expect(window.localStorage.getItem('aTerm:test-key')).toBe('["a","b"]')
   })
 })

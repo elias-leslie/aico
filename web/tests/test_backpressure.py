@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from aterm.services.backpressure import (
+from a_term.services.backpressure import (
     HIGH_WATERMARK,
     LOW_WATERMARK,
     BackpressureController,

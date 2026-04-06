@@ -3,8 +3,8 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import { useDeferredValue, useMemo, useRef, useState } from 'react'
 import { useProjectSettings } from '@/lib/hooks/use-project-settings'
-import type { ATermPane } from '@/lib/hooks/use-aterm-panes'
-import type { ATermSession } from '@/lib/hooks/use-aterm-sessions'
+import type { ATermPane } from '@/lib/hooks/use-a-term-panes'
+import type { ATermSession } from '@/lib/hooks/use-a-term-sessions'
 import {
   buildProjectRows,
   filterAndSortSessions,
@@ -132,7 +132,7 @@ export function ATermManagerModal({
           }}
         />
         <Dialog.Content
-          data-testid="aterm-manager-modal"
+          data-testid="a-term-manager-modal"
           className="fixed inset-x-3 top-3 bottom-3 z-[10001] flex flex-col overflow-hidden rounded-xl animate-in fade-in zoom-in-95 duration-150 sm:inset-x-6 sm:top-6 sm:bottom-6 md:left-1/2 md:right-auto md:top-1/2 md:bottom-auto md:w-[min(92vw,720px)] md:max-h-[min(98dvh,1100px)] md:-translate-x-1/2 md:-translate-y-1/2"
           style={{
             backgroundColor: 'var(--term-bg-elevated)',
@@ -145,7 +145,7 @@ export function ATermManagerModal({
           <ModalHeader />
           <SearchBar value={searchQuery} onChange={setSearchQuery} inputRef={searchRef} />
           <div
-            data-testid="aterm-manager-scroll-region"
+            data-testid="a-term-manager-scroll-region"
             className="flex-1 overflow-y-auto overscroll-contain px-5 py-4"
             aria-busy={isLoading}
           >

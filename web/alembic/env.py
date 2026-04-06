@@ -4,15 +4,15 @@ A-Term uses raw SQL queries (psycopg) without SQLAlchemy models,
 so we don't use autogenerate. Migrations are written manually.
 
 A-Term shares the summitflow database, so we use a separate
-version table (aterm_alembic_version) to avoid conflicts.
+version table (a_term_alembic_version) to avoid conflicts.
 """
 
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config, pool, text
 
+from a_term.config import DATABASE_URL as _APP_DB_URL
 from alembic import context
-from aterm.config import DATABASE_URL as _APP_DB_URL
 
 assert _APP_DB_URL, "DATABASE_URL env var required (set in repo .env.local, .env, or environment)"
 
@@ -27,8 +27,8 @@ if config.config_file_name is not None:
 
 target_metadata = None
 
-VERSION_TABLE = "aterm_alembic_version"
-LEGACY_VERSION_TABLES = ("terminal_alembic_version",)
+VERSION_TABLE = "a_term_alembic_version"
+LEGACY_VERSION_TABLES = ("aterm_alembic_version", "terminal_alembic_version")
 
 
 def _table_exists(connection, table_name: str) -> bool:

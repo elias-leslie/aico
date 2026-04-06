@@ -7,7 +7,7 @@ The script now launches the emulator directly from the SDK, uses `sg kvm` automa
 ## Prerequisites
 
 - Local frontend running at `http://localhost:3002`
-- Android emulator launcher at `~/bin/start-aterm-android-emulator`
+- Android emulator launcher at `~/bin/start-a-term-android-emulator`
 - `adb` installed
 - `agent-browser` installed for CDP-driven inspection
 
@@ -43,13 +43,13 @@ Overrides:
 ```bash
 MOBILE_EMULATOR_HEADLESS=0 bash ./scripts/mobile-verification.sh start-emulator
 MOBILE_CDP_PORT=9333 bash ./scripts/mobile-verification.sh forward-cdp
-ATERM_MOBILE_URL=http://10.0.2.2:3002 bash ./scripts/mobile-verification.sh open-app
+A_TERM_MOBILE_URL=http://10.0.2.2:3002 bash ./scripts/mobile-verification.sh open-app
 ```
 
 ## What To Verify
 
 - A-Term viewport scrolls vertically on touch without pull-to-refresh fighting it.
-- Keyboard minimize/restore leaves the aterm session live and readable.
+- Keyboard minimize/restore leaves the a-term session live and readable.
 - Voice/keyboard transitions keep the operator oriented.
 - Connection state is obvious on mobile, including reconnect affordance for transient failures.
 - The active pane remains usable after Android Chrome address-bar collapse/expand.

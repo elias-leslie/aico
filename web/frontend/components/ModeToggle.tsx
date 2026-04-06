@@ -6,7 +6,7 @@ import type { AgentTool } from '@/lib/hooks/use-agent-tools'
 import { AgentIcon, getAgentColor } from './AgentIcon'
 import { ModeTogglePopover } from './ModeTogglePopover'
 
-/** Mode is either 'shell' for aterm mode, or an agent tool slug */
+/** Mode is either 'shell' for a-term mode, or an agent tool slug */
 export type ATermMode = string
 
 interface ModeToggleProps {

@@ -4,15 +4,15 @@ import type { PaneSlot, ATermSlot } from '@/lib/utils/slot'
 import type { ATermMode } from './ModeToggle'
 import { type PaneLayout, ResizablePaneLayout } from './ResizablePaneLayout'
 import type { ATermComponent, ATermHandle } from './ATerm'
-import type { LayoutMode } from '@/lib/constants/aterm'
-import type { ConnectionStatus } from './aterm.types'
+import type { LayoutMode } from '@/lib/constants/a-term'
+import type { ConnectionStatus } from './a-term.types'
 import { getSlotPanelId } from '@/lib/utils/slot'
 
 export function getLayoutRemountKey(
   layoutMode: LayoutMode,
-  atermSlots: (ATermSlot | PaneSlot)[],
+  aTermSlots: (ATermSlot | PaneSlot)[],
 ): string {
-  const orderedSlotIds = atermSlots
+  const orderedSlotIds = aTermSlots
     .map((slot) => getSlotPanelId(slot))
     .join('|')
 
@@ -21,7 +21,7 @@ export function getLayoutRemountKey(
 
 interface ATermLayoutRendererProps {
   // Slots (pane-based architecture)
-  atermSlots: (ATermSlot | PaneSlot)[]
+  aTermSlots: (ATermSlot | PaneSlot)[]
 
   // A-Term settings
   fontFamily: string
@@ -34,7 +34,7 @@ interface ATermLayoutRendererProps {
   // A-Term ref and status handlers
   onATermRef: (sessionId: string, handle: ATermHandle | null) => void
   onStatusChange: (sessionId: string, status: ConnectionStatus) => void
-  atermStatuses: Map<string, ConnectionStatus>
+  aTermStatuses: Map<string, ConnectionStatus>
 
   // Slot action handlers
   onSlotSwitch: (slot: ATermSlot | PaneSlot) => void
@@ -76,7 +76,7 @@ interface ATermLayoutRendererProps {
 }
 
 export function ATermLayoutRenderer({
-  atermSlots,
+  aTermSlots,
   fontFamily,
   fontSize,
   scrollback,
@@ -85,7 +85,7 @@ export function ATermLayoutRenderer({
   theme,
   onATermRef,
   onStatusChange,
-  atermStatuses,
+  aTermStatuses,
   onSlotSwitch,
   onSlotReset,
   onSlotClose,
@@ -106,12 +106,12 @@ export function ATermLayoutRenderer({
   onLayoutChange,
   onVoice,
 }: ATermLayoutRendererProps) {
-  const layoutKey = getLayoutRemountKey(layoutMode, atermSlots)
+  const layoutKey = getLayoutRemountKey(layoutMode, aTermSlots)
 
   return (
     <ResizablePaneLayout
       key={layoutKey}
-      slots={atermSlots}
+      slots={aTermSlots}
       fontFamily={fontFamily}
       fontSize={fontSize}
       scrollback={scrollback}
@@ -120,7 +120,7 @@ export function ATermLayoutRenderer({
       theme={theme}
       onATermRef={onATermRef}
       onStatusChange={onStatusChange}
-      atermStatuses={atermStatuses}
+      aTermStatuses={aTermStatuses}
       onSwitch={onSlotSwitch}
       onSettings={onShowSettings}
       onReset={onSlotReset}

@@ -14,7 +14,7 @@ function buildProject(id: string, name: string, rootPath: string) {
     id,
     name,
     root_path: rootPath,
-    aterm_enabled: true,
+    a_term_enabled: true,
     mode: 'shell',
     display_order: 0,
   }
@@ -40,7 +40,7 @@ function renderModal(overrides: Partial<ComponentProps<typeof ATermManagerModal>
 function buildProjectSettingsState(overrides: Record<string, unknown> = {}) {
   const projects = [
     buildProject('proj-agent-hub', 'Agent Hub', '/workspace/agent-hub'),
-    buildProject('proj-aterm', 'A-Term', '/workspace/aterm'),
+    buildProject('proj-a-term', 'A-Term', '/workspace/a-term'),
     buildProject('proj-portfolio', 'Portfolio AI', '/workspace/portfolio-ai'),
   ]
 
@@ -64,11 +64,11 @@ describe('ATermManagerModal', () => {
     renderModal({
       externalSessions: [
         {
-          id: 'codex-aterm',
-          name: 'codex-aterm',
+          id: 'codex-a-term',
+          name: 'codex-a-term',
           user_id: null,
-          project_id: 'proj-aterm',
-          working_dir: '/workspace/aterm',
+          project_id: 'proj-a-term',
+          working_dir: '/workspace/a-term',
           mode: 'codex',
           display_order: 0,
           is_alive: true,
@@ -81,7 +81,7 @@ describe('ATermManagerModal', () => {
     })
 
     fireEvent.change(screen.getByPlaceholderText(/filter by project/i), {
-      target: { value: 'codex-aterm' },
+      target: { value: 'codex-a-term' },
     })
 
     expect(screen.getByText('A-Term')).toBeInTheDocument()
@@ -91,10 +91,10 @@ describe('ATermManagerModal', () => {
   it('uses a full-height mobile layout with a shared scroll region', () => {
     renderModal()
 
-    expect(screen.getByTestId('aterm-manager-modal').className).toContain('top-3')
-    expect(screen.getByTestId('aterm-manager-modal').className).toContain('bottom-3')
-    expect(screen.getByTestId('aterm-manager-scroll-region').className).toContain('flex-1')
-    expect(screen.getByTestId('aterm-manager-scroll-region').className).toContain('overflow-y-auto')
+    expect(screen.getByTestId('a-term-manager-modal').className).toContain('top-3')
+    expect(screen.getByTestId('a-term-manager-modal').className).toContain('bottom-3')
+    expect(screen.getByTestId('a-term-manager-scroll-region').className).toContain('flex-1')
+    expect(screen.getByTestId('a-term-manager-scroll-region').className).toContain('overflow-y-auto')
   })
 
   it('creates an ad-hoc A-Term from quick start', () => {
@@ -116,11 +116,11 @@ describe('ATermManagerModal', () => {
       onClose,
       externalSessions: [
         {
-          id: 'codex-aterm',
-          name: 'codex-aterm',
+          id: 'codex-a-term',
+          name: 'codex-a-term',
           user_id: null,
-          project_id: 'proj-aterm',
-          working_dir: '/workspace/aterm',
+          project_id: 'proj-a-term',
+          working_dir: '/workspace/a-term',
           mode: 'codex',
           display_order: 0,
           is_alive: true,
@@ -134,7 +134,7 @@ describe('ATermManagerModal', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Attach' }))
 
-    expect(onAttachExternalSession).toHaveBeenCalledWith('codex-aterm')
+    expect(onAttachExternalSession).toHaveBeenCalledWith('codex-a-term')
     expect(onClose).not.toHaveBeenCalled()
   })
 
@@ -190,11 +190,11 @@ describe('ATermManagerModal', () => {
       onCreateProjectATerm,
       externalSessions: [
         {
-          id: 'codex-aterm',
-          name: 'codex-aterm',
+          id: 'codex-a-term',
+          name: 'codex-a-term',
           user_id: null,
-          project_id: 'proj-aterm',
-          working_dir: '/workspace/aterm',
+          project_id: 'proj-a-term',
+          working_dir: '/workspace/a-term',
           mode: 'codex',
           display_order: 0,
           is_alive: true,
@@ -243,9 +243,9 @@ describe('ATermManagerModal', () => {
       onAttachDetachedPane,
       detachedPanes: [
         {
-          id: 'pane-aterm',
+          id: 'pane-a-term',
           pane_type: 'project',
-          project_id: 'proj-aterm',
+          project_id: 'proj-a-term',
           pane_order: 0,
           pane_name: 'A-Term',
           active_mode: 'codex',
@@ -253,21 +253,21 @@ describe('ATermManagerModal', () => {
           created_at: null,
           sessions: [
             {
-              id: 'shell-aterm',
+              id: 'shell-a-term',
               name: 'A-Term Shell',
               mode: 'shell',
               session_number: 1,
               is_alive: true,
-              working_dir: '/workspace/aterm',
+              working_dir: '/workspace/a-term',
               claude_state: 'not_started',
             },
             {
-              id: 'codex-aterm',
+              id: 'codex-a-term',
               name: 'A-Term Codex',
               mode: 'codex',
               session_number: 1,
               is_alive: true,
-              working_dir: '/workspace/aterm',
+              working_dir: '/workspace/a-term',
               claude_state: 'running',
             },
           ],
@@ -281,7 +281,7 @@ describe('ATermManagerModal', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Attach' }))
 
-    expect(onAttachDetachedPane).toHaveBeenCalledWith('pane-aterm')
+    expect(onAttachDetachedPane).toHaveBeenCalledWith('pane-a-term')
   })
 
   it('shows a shared no-match summary when the search has no results', () => {
@@ -310,7 +310,7 @@ describe('ATermManagerModal', () => {
     expect(
       screen.getByText(/Loading project workspaces/),
     ).toBeInTheDocument()
-    expect(screen.getByTestId('aterm-manager-scroll-region')).toHaveAttribute(
+    expect(screen.getByTestId('a-term-manager-scroll-region')).toHaveAttribute(
       'aria-busy',
       'true',
     )

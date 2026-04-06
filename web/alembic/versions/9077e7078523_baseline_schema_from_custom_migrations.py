@@ -1,13 +1,13 @@
 """baseline schema from custom migrations
 
-Defines the full aterm schema as of the initial Alembic adoption.
+Defines the full a_term schema as of the initial Alembic adoption.
 Uses IF NOT EXISTS / IF EXISTS guards so it is safe to run against
 databases where the tables were already created manually.
 
 Tables:
-  - aterm_sessions
-  - aterm_project_settings
-  - aterm_panes
+  - a_term_sessions
+  - a_term_project_settings
+  - a_term_panes
 
 Revision ID: 9077e7078523
 Revises:
@@ -27,18 +27,18 @@ depends_on: str | Sequence[str] | None = None
 # ---------------------------------------------------------------------------
 # Table names
 # ---------------------------------------------------------------------------
-TBL_SESSIONS = "aterm_sessions"
-TBL_PROJECT_SETTINGS = "aterm_project_settings"
-TBL_PANES = "aterm_panes"
+TBL_SESSIONS = "a_term_sessions"
+TBL_PROJECT_SETTINGS = "a_term_project_settings"
+TBL_PANES = "a_term_panes"
 
 # ---------------------------------------------------------------------------
 # Index names
 # ---------------------------------------------------------------------------
-IDX_SESSIONS_ALIVE = "idx_aterm_sessions_alive"
-IDX_SESSIONS_PROJECT = "idx_aterm_sessions_project"
+IDX_SESSIONS_ALIVE = "idx_a_term_sessions_alive"
+IDX_SESSIONS_PROJECT = "idx_a_term_sessions_project"
 IDX_TPS_ENABLED = "idx_tps_enabled"
-IDX_PANES_PROJECT_ID = "idx_aterm_panes_project_id"
-IDX_PANES_ORDER = "idx_aterm_panes_order"
+IDX_PANES_PROJECT_ID = "idx_a_term_panes_project_id"
+IDX_PANES_ORDER = "idx_a_term_panes_order"
 
 # ---------------------------------------------------------------------------
 # Constraint names
@@ -58,7 +58,7 @@ PANE_TYPE_VALUES = "'project', 'adhoc'"
 # ---------------------------------------------------------------------------
 
 def _create_sessions_table() -> None:
-    """Create aterm_sessions table and its indexes."""
+    """Create a_term_sessions table and its indexes."""
     op.execute(f"""
         CREATE TABLE IF NOT EXISTS {TBL_SESSIONS} (
             id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -93,7 +93,7 @@ def _create_sessions_table() -> None:
 
 
 def _create_project_settings_table() -> None:
-    """Create aterm_project_settings table, its index, and comment."""
+    """Create a_term_project_settings table, its index, and comment."""
     op.execute(f"""
         CREATE TABLE IF NOT EXISTS {TBL_PROJECT_SETTINGS} (
             project_id   VARCHAR(64) PRIMARY KEY,
@@ -118,7 +118,7 @@ def _create_project_settings_table() -> None:
 
 
 def _create_panes_table() -> None:
-    """Create aterm_panes table, its indexes, and comment."""
+    """Create a_term_panes table, its indexes, and comment."""
     op.execute(f"""
         CREATE TABLE IF NOT EXISTS {TBL_PANES} (
             id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -158,20 +158,20 @@ def _create_panes_table() -> None:
 # ---------------------------------------------------------------------------
 
 def _drop_panes_table() -> None:
-    """Drop aterm_panes indexes and table."""
+    """Drop a_term_panes indexes and table."""
     op.execute(f"DROP INDEX IF EXISTS {IDX_PANES_ORDER};")
     op.execute(f"DROP INDEX IF EXISTS {IDX_PANES_PROJECT_ID};")
     op.execute(f"DROP TABLE IF EXISTS {TBL_PANES};")
 
 
 def _drop_project_settings_table() -> None:
-    """Drop aterm_project_settings index and table."""
+    """Drop a_term_project_settings index and table."""
     op.execute(f"DROP INDEX IF EXISTS {IDX_TPS_ENABLED};")
     op.execute(f"DROP TABLE IF EXISTS {TBL_PROJECT_SETTINGS};")
 
 
 def _drop_sessions_table() -> None:
-    """Drop aterm_sessions indexes and table."""
+    """Drop a_term_sessions indexes and table."""
     op.execute(f"DROP INDEX IF EXISTS {IDX_SESSIONS_PROJECT};")
     op.execute(f"DROP INDEX IF EXISTS {IDX_SESSIONS_ALIVE};")
     op.execute(f"DROP TABLE IF EXISTS {TBL_SESSIONS};")
@@ -182,14 +182,14 @@ def _drop_sessions_table() -> None:
 # ---------------------------------------------------------------------------
 
 def upgrade() -> None:
-    """Create all aterm tables, indexes, and constraints."""
+    """Create all a_term tables, indexes, and constraints."""
     _create_sessions_table()
     _create_project_settings_table()
     _create_panes_table()
 
 
 def downgrade() -> None:
-    """Drop all aterm tables in reverse dependency order."""
+    """Drop all a_term tables in reverse dependency order."""
     # Drop indexes explicitly first (they go away with the tables, but
     # being explicit makes partial rollback clearer).
     _drop_panes_table()

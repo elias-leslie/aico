@@ -4,13 +4,13 @@ export function getKeyboardStyles(rowHeight: number): string {
   const iconFontSize = rowHeight <= 36 ? 20 : rowHeight <= 44 ? 22 : 24
 
   return `
-    .aterm-keyboard-theme {
+    .a-term-keyboard-theme {
       background: var(--term-bg-surface);
       padding: 4px;
       border-radius: 0;
     }
 
-    .aterm-keyboard-theme .hg-button {
+    .aTerm-keyboard-theme .hg-button {
       background: var(--term-bg-elevated);
       color: var(--term-text-primary);
       border: 1px solid var(--term-border);
@@ -27,83 +27,83 @@ export function getKeyboardStyles(rowHeight: number): string {
       transition: all 0.1s ease;
     }
 
-    .aterm-keyboard-theme .hg-button:active {
+    .aTerm-keyboard-theme .hg-button:active {
       background: var(--term-border-active);
       box-shadow: 0 0 8px var(--term-accent-glow);
     }
 
-    .aterm-keyboard-theme .hg-button.accent-key {
+    .aTerm-keyboard-theme .hg-button.accent-key {
       background: var(--term-bg-elevated);
       border-color: var(--term-border-active);
     }
 
-    .aterm-keyboard-theme .hg-button.accent-key:active {
+    .aTerm-keyboard-theme .hg-button.accent-key:active {
       background: var(--term-accent);
       color: var(--term-accent-foreground);
     }
 
-    .aterm-keyboard-theme .hg-button.wide-key {
+    .aTerm-keyboard-theme .hg-button.wide-key {
       background: var(--term-bg-elevated);
       font-size: ${wideFontSize}px;
       font-weight: 500;
     }
 
-    .aterm-keyboard-theme .hg-button[data-skbtn="{shift}"],
-    .aterm-keyboard-theme .hg-button[data-skbtn="{bksp}"],
-    .aterm-keyboard-theme .hg-button[data-skbtn="{enter}"] {
+    .aTerm-keyboard-theme .hg-button[data-skbtn="{shift}"],
+    .a-term-keyboard-theme .hg-button[data-skbtn="{bksp}"],
+    .a-term-keyboard-theme .hg-button[data-skbtn="{enter}"] {
       font-size: ${iconFontSize}px;
     }
 
-    .aterm-keyboard-theme .hg-button.modifier-sticky {
+    .a-term-keyboard-theme .hg-button.modifier-sticky {
       background: var(--term-bg-elevated);
       border: 1px solid var(--term-accent-muted);
       color: var(--term-accent);
     }
 
-    .aterm-keyboard-theme .hg-button.modifier-locked {
+    .aTerm-keyboard-theme .hg-button.modifier-locked {
       background: var(--term-accent);
       color: var(--term-accent-foreground);
       border-color: var(--term-accent);
       box-shadow: 0 0 8px var(--term-accent-glow);
     }
 
-    .aterm-keyboard-theme .hg-row {
+    .aTerm-keyboard-theme .hg-row {
       display: flex;
       flex-direction: row;
       gap: 3px;
       margin-bottom: 4px;
     }
 
-    .aterm-keyboard-theme .hg-row:last-child {
+    .aTerm-keyboard-theme .hg-row:last-child {
       margin-bottom: 0;
     }
 
-    .aterm-keyboard-theme .hg-row:nth-child(3) {
+    .aTerm-keyboard-theme .hg-row:nth-child(3) {
       padding-left: 5%;
       padding-right: 5%;
     }
 
-    .aterm-keyboard-theme .hg-button[data-skbtn="{shift}"],
-    .aterm-keyboard-theme .hg-button[data-skbtn="{bksp}"] {
+    .aTerm-keyboard-theme .hg-button[data-skbtn="{shift}"],
+    .a-term-keyboard-theme .hg-button[data-skbtn="{bksp}"] {
       flex: 1.5 1 0;
     }
 
-    .aterm-keyboard-theme .hg-button[data-skbtn="{sym}"],
-    .aterm-keyboard-theme .hg-button[data-skbtn="{abc}"] {
+    .a-term-keyboard-theme .hg-button[data-skbtn="{sym}"],
+    .a-term-keyboard-theme .hg-button[data-skbtn="{abc}"] {
       flex: 1.5 1 0;
     }
 
-    .aterm-keyboard-theme .hg-button[data-skbtn="{space}"] {
+    .a-term-keyboard-theme .hg-button[data-skbtn="{space}"] {
       flex: 4 1 0;
     }
 
-    .aterm-keyboard-theme .hg-button[data-skbtn="{enter}"] {
+    .a-term-keyboard-theme .hg-button[data-skbtn="{enter}"] {
       flex: 1.5 1 0;
     }
 
-    .aterm-keyboard-theme .hg-button[data-skbtn="'"],
-    .aterm-keyboard-theme .hg-button[data-skbtn="."],
-    .aterm-keyboard-theme .hg-button[data-skbtn=","] {
+    .a-term-keyboard-theme .hg-button[data-skbtn="'"],
+    .a-term-keyboard-theme .hg-button[data-skbtn="."],
+    .a-term-keyboard-theme .hg-button[data-skbtn=","] {
       flex: 1 1 0;
     }
   `

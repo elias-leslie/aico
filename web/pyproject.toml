@@ -34,7 +34,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["aterm"]
+packages = ["a_term"]
 
 [tool.ruff]
 line-length = 100
@@ -45,7 +45,7 @@ select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 ignore = ["E501"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["aterm"]
+known-first-party = ["a_term"]
 
 [tool.ty.rules]
 # Suppress beta-quality rules (ty 0.0.x false positives)

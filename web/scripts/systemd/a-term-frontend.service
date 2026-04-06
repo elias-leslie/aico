@@ -1,0 +1,24 @@
+[Unit]
+Description=A-Term Frontend (Next.js)
+After=network.target a-term-backend.service
+Wants=a-term-backend.service
+
+[Service]
+Type=simple
+WorkingDirectory=__PROJECT_ROOT__/frontend
+Environment="HOME=%h"
+EnvironmentFile=-%h/.env.local
+Environment="NODE_ENV=production"
+Environment="PORT=3002"
+Environment="API_URL=http://localhost:8002"
+ExecStart=/bin/bash -lc 'pnpm start --hostname 0.0.0.0 --port "${A_TERM_FRONTEND_PORT:-3002}"'
+TimeoutStopSec=10
+KillMode=mixed
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=a-term-frontend
+
+[Install]
+WantedBy=default.target

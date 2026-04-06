@@ -21,8 +21,8 @@ import os
 
 identity = json.loads((Path(os.environ["REPO_ROOT"]) / "project.identity.json").read_text())
 services = identity.get("services", {})
-print(f'BACKEND_SERVICE={services.get("backend", "aterm-backend.service")}')
-print(f'FRONTEND_SERVICE={services.get("frontend", "aterm-frontend.service")}')
+print(f'BACKEND_SERVICE={services.get("backend", "a-term-backend.service")}')
+print(f'FRONTEND_SERVICE={services.get("frontend", "a-term-frontend.service")}')
 PY
 )"
 eval "$SERVICE_ENV"

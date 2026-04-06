@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback } from 'react'
 import { apiFetch } from '../api-fetch'
-import type { ATermPane } from './use-aterm-panes'
+import type { ATermPane } from './use-a-term-panes'
 
 // ============================================================================
 // Types
@@ -52,12 +52,12 @@ interface UpdateAgentToolInput {
 // ============================================================================
 
 async function fetchAgentTools(): Promise<AgentTool[]> {
-  return apiFetch('/api/aterm/agent-tools', undefined, 'Failed to fetch agent tools')
+  return apiFetch('/api/a-term/agent-tools', undefined, 'Failed to fetch agent tools')
 }
 
 async function createAgentTool(input: CreateAgentToolInput): Promise<AgentTool> {
   return apiFetch(
-    '/api/aterm/agent-tools',
+    '/api/a-term/agent-tools',
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -72,7 +72,7 @@ async function updateAgentTool(
   input: UpdateAgentToolInput,
 ): Promise<AgentTool> {
   return apiFetch(
-    `/api/aterm/agent-tools/${toolId}`,
+    `/api/a-term/agent-tools/${toolId}`,
     {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -84,7 +84,7 @@ async function updateAgentTool(
 
 async function deleteAgentTool(toolId: string): Promise<void> {
   await apiFetch(
-    `/api/aterm/agent-tools/${toolId}`,
+    `/api/a-term/agent-tools/${toolId}`,
     {
       method: 'DELETE',
     },
@@ -97,7 +97,7 @@ async function switchPaneAgentTool(
   agentToolSlug: string,
 ): Promise<ATermPane> {
   return apiFetch(
-    `/api/aterm/panes/${paneId}/agent-tool`,
+    `/api/a-term/panes/${paneId}/agent-tool`,
     {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -154,8 +154,8 @@ export function useAgentTools() {
     mutationFn: ({ paneId, slug }: { paneId: string; slug: string }) =>
       switchPaneAgentTool(paneId, slug),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['aterm-panes'] })
-      queryClient.invalidateQueries({ queryKey: ['aterm-sessions'] })
+      queryClient.invalidateQueries({ queryKey: ['a-term-panes'] })
+      queryClient.invalidateQueries({ queryKey: ['a-term-sessions'] })
     },
   })
 

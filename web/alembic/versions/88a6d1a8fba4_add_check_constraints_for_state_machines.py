@@ -18,23 +18,23 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     op.create_check_constraint(
-        "ck_aterm_sessions_claude_state",
-        "aterm_sessions",
+        "ck_a_term_sessions_claude_state",
+        "a_term_sessions",
         "claude_state IN ('not_started', 'starting', 'running', 'stopped', 'error')",
     )
     op.create_check_constraint(
-        "ck_aterm_panes_pane_type",
-        "aterm_panes",
+        "ck_a_term_panes_pane_type",
+        "a_term_panes",
         "pane_type IN ('project', 'adhoc')",
     )
     op.create_check_constraint(
-        "ck_aterm_maintenance_runs_status",
-        "aterm_maintenance_runs",
+        "ck_a_term_maintenance_runs_status",
+        "a_term_maintenance_runs",
         "status IN ('running', 'success', 'skipped', 'failed')",
     )
 
 
 def downgrade() -> None:
-    op.drop_constraint("ck_aterm_maintenance_runs_status", "aterm_maintenance_runs")
-    op.drop_constraint("ck_aterm_panes_pane_type", "aterm_panes")
-    op.drop_constraint("ck_aterm_sessions_claude_state", "aterm_sessions")
+    op.drop_constraint("ck_a_term_maintenance_runs_status", "a_term_maintenance_runs")
+    op.drop_constraint("ck_a_term_panes_pane_type", "a_term_panes")
+    op.drop_constraint("ck_a_term_sessions_claude_state", "a_term_sessions")

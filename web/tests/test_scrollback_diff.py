@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from aterm.services.scrollback_sync import LineDiffTracker, _split_lines
+from a_term.services.scrollback_sync import LineDiffTracker, _split_lines
 
 
 class TestSplitLines:

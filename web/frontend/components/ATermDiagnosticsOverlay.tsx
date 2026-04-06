@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type {
   DiagnosticEntry,
   DiagnosticCounters,
-} from '@/lib/hooks/use-aterm-diagnostics'
+} from '@/lib/hooks/use-a-term-diagnostics'
 import type { AnsiColorProfile } from '@/lib/utils/ansi-color-profile'
 import { formatAnsiColorProfile } from '@/lib/utils/ansi-color-profile'
 

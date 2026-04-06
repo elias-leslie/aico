@@ -1,4 +1,4 @@
-"""add aterm_session_recordings table
+"""add a_term_session_recordings table
 
 Revision ID: b7d3e8f1a2c4
 Revises: 6cf65b9ca525
@@ -18,11 +18,11 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    """Create aterm_session_recordings table."""
+    """Create a_term_session_recordings table."""
     op.execute("""
-        CREATE TABLE IF NOT EXISTS aterm_session_recordings (
+        CREATE TABLE IF NOT EXISTS a_term_session_recordings (
             id SERIAL PRIMARY KEY,
-            session_id UUID NOT NULL REFERENCES aterm_sessions(id) ON DELETE CASCADE,
+            session_id UUID NOT NULL REFERENCES a_term_sessions(id) ON DELETE CASCADE,
             file_path TEXT NOT NULL,
             started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
             stopped_at TIMESTAMPTZ,
@@ -33,12 +33,12 @@ def upgrade() -> None:
         )
     """)
     op.execute("""
-        CREATE INDEX IF NOT EXISTS idx_aterm_session_recordings_session_id
-        ON aterm_session_recordings(session_id)
+        CREATE INDEX IF NOT EXISTS idx_a_term_session_recordings_session_id
+        ON a_term_session_recordings(session_id)
     """)
 
 
 def downgrade() -> None:
-    """Drop aterm_session_recordings table."""
-    op.execute("DROP INDEX IF EXISTS idx_aterm_session_recordings_session_id")
-    op.execute("DROP TABLE IF EXISTS aterm_session_recordings")
+    """Drop a_term_session_recordings table."""
+    op.execute("DROP INDEX IF EXISTS idx_a_term_session_recordings_session_id")
+    op.execute("DROP TABLE IF EXISTS a_term_session_recordings")

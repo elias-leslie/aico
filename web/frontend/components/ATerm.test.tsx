@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ATermComponent } from './ATerm'
 
 type ATermHookOptions = Parameters<
-  typeof import('../lib/hooks/use-aterm-websocket')['useATermWebSocket']
+  typeof import('../lib/hooks/use-a-term-websocket')['useATermWebSocket']
 >[0]
 
 const websocketState: {
@@ -33,17 +33,17 @@ const fakeFitAddon = {
 }
 
 const operationCallbacks: Array<() => void> = []
-let atermInstanceOptions:
+let aTermInstanceOptions:
   | Parameters<
-      typeof import('../lib/hooks/use-aterm-instance')['useATermInstance']
+      typeof import('../lib/hooks/use-a-term-instance')['useATermInstance']
     >[0]
   | null = null
-let atermInstanceReady = true
+let aTermInstanceReady = true
 const resizeHandle = vi.fn()
 const resetCopyMode = vi.fn()
 let resizeHookOptions:
   | Parameters<
-      typeof import('../lib/hooks/use-aterm-resize')['useATermResize']
+      typeof import('../lib/hooks/use-a-term-resize')['useATermResize']
     >[0]
   | null = null
 
@@ -70,7 +70,7 @@ const fakeATerm = {
   dispose: vi.fn(),
 }
 
-vi.mock('../lib/hooks/use-aterm-websocket', () => ({
+vi.mock('../lib/hooks/use-a-term-websocket', () => ({
   useATermWebSocket: (options: ATermHookOptions) => {
     websocketState.options = options
     return {
@@ -84,35 +84,35 @@ vi.mock('../lib/hooks/use-aterm-websocket', () => ({
   },
 }))
 
-vi.mock('../lib/hooks/use-aterm-instance', () => ({
+vi.mock('../lib/hooks/use-a-term-instance', () => ({
   useATermInstance: (
     options: unknown,
     refs: {
-      atermRef: { current: typeof fakeATerm | null }
+      aTermRef: { current: typeof fakeATerm | null }
       fitAddonRef: { current: typeof fakeFitAddon | null }
       isFocusedRef: { current: boolean }
     },
   ) => {
-    atermInstanceOptions = options as Parameters<
-      typeof import('../lib/hooks/use-aterm-instance')['useATermInstance']
+    aTermInstanceOptions = options as Parameters<
+      typeof import('../lib/hooks/use-a-term-instance')['useATermInstance']
     >[0]
-    refs.atermRef.current = fakeATerm
+    refs.aTermRef.current = fakeATerm
     refs.fitAddonRef.current = fakeFitAddon
     refs.isFocusedRef.current = true
-    return { isReady: atermInstanceReady }
+    return { isReady: aTermInstanceReady }
   },
 }))
 
-vi.mock('../lib/hooks/use-aterm-resize', () => ({
+vi.mock('../lib/hooks/use-a-term-resize', () => ({
   useATermResize: vi.fn((options: unknown) => {
     resizeHookOptions = options as Parameters<
-      typeof import('../lib/hooks/use-aterm-resize')['useATermResize']
+      typeof import('../lib/hooks/use-a-term-resize')['useATermResize']
     >[0]
     return { handleResize: resizeHandle }
   }),
 }))
 
-vi.mock('../lib/hooks/use-aterm-scrolling', () => ({
+vi.mock('../lib/hooks/use-a-term-scrolling', () => ({
   useATermScrolling: () => ({
     setupScrolling: () => ({
       wheelCleanup: vi.fn(),
@@ -136,8 +136,8 @@ describe('ATermComponent', () => {
     websocketState.connectCalls = 0
     websocketState.disconnectCalls = 0
     operationCallbacks.length = 0
-    atermInstanceOptions = null
-    atermInstanceReady = true
+    aTermInstanceOptions = null
+    aTermInstanceReady = true
     resizeHandle.mockClear()
     resetCopyMode.mockClear()
     resizeHookOptions = null
@@ -314,13 +314,13 @@ describe('ATermComponent', () => {
     expect(fakeATerm.write).toHaveBeenCalledTimes(1)
   })
 
-  it('routes native aterm paste through bracketed chunked input', async () => {
+  it('routes native a-term paste through bracketed chunked input', async () => {
     vi.useFakeTimers()
     try {
       render(<ATermComponent sessionId="session-native-paste" />)
 
       await act(async () => {
-        atermInstanceOptions?.onPaste('x'.repeat(5_000))
+        aTermInstanceOptions?.onPaste('x'.repeat(5_000))
         await vi.runAllTimersAsync()
       })
 
@@ -337,7 +337,7 @@ describe('ATermComponent', () => {
     }
   })
 
-  it('resets copy mode before forwarding focused aterm input', () => {
+  it('resets copy mode before forwarding focused a-term input', () => {
     websocketState.wsRefCurrent = {
       readyState: WebSocket.OPEN,
       send: vi.fn(),
@@ -346,7 +346,7 @@ describe('ATermComponent', () => {
     render(<ATermComponent sessionId="session-input" />)
 
     act(() => {
-      atermInstanceOptions?.onData('pwd')
+      aTermInstanceOptions?.onData('pwd')
     })
 
     expect(resetCopyMode).toHaveBeenCalledTimes(1)
@@ -451,8 +451,8 @@ describe('ATermComponent', () => {
     expect(fakeATerm.write).not.toHaveBeenCalled()
   })
 
-  it('waits for aterm init before connecting visible aterms', () => {
-    atermInstanceReady = false
+  it('waits for a-term init before connecting visible A-Term sessions', () => {
+    aTermInstanceReady = false
 
     const { rerender } = render(
       <ATermComponent sessionId="session-ready" isVisible />,
@@ -460,14 +460,14 @@ describe('ATermComponent', () => {
 
     expect(websocketState.connectCalls).toBe(0)
 
-    atermInstanceReady = true
+    aTermInstanceReady = true
     rerender(<ATermComponent sessionId="session-ready" isVisible />)
 
     expect(websocketState.connectCalls).toBeGreaterThanOrEqual(1)
   })
 
-  it('replays a resize once a connected aterm becomes ready', () => {
-    atermInstanceReady = false
+  it('replays a resize once a connected a-term becomes ready', () => {
+    aTermInstanceReady = false
 
     const { rerender } = render(
       <ATermComponent sessionId="session-resize" isVisible />,
@@ -475,13 +475,13 @@ describe('ATermComponent', () => {
 
     expect(resizeHandle).not.toHaveBeenCalled()
 
-    atermInstanceReady = true
+    aTermInstanceReady = true
     rerender(<ATermComponent sessionId="session-resize" isVisible />)
 
     expect(resizeHandle).toHaveBeenCalledTimes(1)
   })
 
-  it('disconnects hidden aterms and reconnects them when visible again', () => {
+  it('disconnects hidden a-terms and reconnects them when visible again', () => {
     const { rerender } = render(
       <ATermComponent sessionId="session-3" isVisible={false} />,
     )
@@ -494,7 +494,7 @@ describe('ATermComponent', () => {
     expect(websocketState.connectCalls).toBeGreaterThanOrEqual(1)
   })
 
-  it('does not reconnect or disconnect a visible aterm during ordinary rerenders', () => {
+  it('does not reconnect or disconnect a visible a-term during ordinary rerenders', () => {
     const { rerender } = render(
       <ATermComponent sessionId="session-4" isVisible />,
     )
@@ -506,7 +506,7 @@ describe('ATermComponent', () => {
       <ATermComponent
         sessionId="session-4"
         isVisible
-        className="aterm-rerender"
+        className="a-term-rerender"
       />,
     )
 

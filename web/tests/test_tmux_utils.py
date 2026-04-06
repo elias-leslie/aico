@@ -6,8 +6,8 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-from aterm.utils import tmux
-from aterm.utils.tmux import (
+from a_term.utils import tmux
+from a_term.utils.tmux import (
     TMUX_SESSION_PREFIX,
     apply_external_attach_options,
     create_tmux_session,
@@ -21,7 +21,7 @@ from aterm.utils.tmux import (
     restore_external_attach_options,
     validate_session_name,
 )
-from aterm.utils.tmux.sessions import (
+from a_term.utils.tmux.sessions import (
     _recreate_initial_window_with_session_history_limit,
 )
 
@@ -67,19 +67,19 @@ class TestListTmuxSessions:
             "summitflow-not-a-uuid",
             "other-session",
         ])
-        with patch("aterm.utils.tmux.run_tmux_command", return_value=(True, output)):
+        with patch("a_term.utils.tmux.run_tmux_command", return_value=(True, output)):
             result = list_tmux_sessions()
         assert result == {"123e4567-e89b-12d3-a456-426614174000"}
 
     def test_returns_empty_on_failure(self) -> None:
-        with patch("aterm.utils.tmux.run_tmux_command", return_value=(False, "error")):
+        with patch("a_term.utils.tmux.run_tmux_command", return_value=(False, "error")):
             assert list_tmux_sessions() == set()
 
 
-def test_list_external_agent_tmux_sessions_discovers_non_aterm_agent_sessions() -> None:
+def test_list_external_agent_tmux_sessions_discovers_non_a_term_agent_sessions() -> None:
     with (
         patch(
-            "aterm.utils.tmux.run_tmux_command",
+            "a_term.utils.tmux.run_tmux_command",
             return_value=(
                 True,
                 "\n".join(
@@ -91,7 +91,7 @@ def test_list_external_agent_tmux_sessions_discovers_non_aterm_agent_sessions() 
                 ),
             ),
         ),
-        patch("aterm.utils.tmux.subprocess.run") as mock_subprocess,
+        patch("a_term.utils.tmux.subprocess.run") as mock_subprocess,
     ):
         mock_subprocess.side_effect = [
             MagicMock(stdout="/home/testuser/summitflow\n"),
@@ -109,17 +109,17 @@ def test_list_external_agent_tmux_sessions_discovers_non_aterm_agent_sessions() 
 def test_create_tmux_session_uses_systemd_scope_when_available() -> None:
     scope_id = "123e4567-e89b-12d3-a456-426614174000"
     with (
-        patch("aterm.utils.tmux.tmux_session_exists", return_value=False),
-        patch("aterm.utils.tmux._apply_session_options") as mock_apply,
+        patch("a_term.utils.tmux.tmux_session_exists", return_value=False),
+        patch("a_term.utils.tmux._apply_session_options") as mock_apply,
         patch(
-            "aterm.utils.tmux.sessions._recreate_initial_window_with_session_history_limit"
+            "a_term.utils.tmux.sessions._recreate_initial_window_with_session_history_limit"
         ) as mock_recreate,
-        patch("aterm.utils.tmux._can_spawn_tmux_scope", return_value=True),
+        patch("a_term.utils.tmux._can_spawn_tmux_scope", return_value=True),
         patch(
-            "aterm.utils.tmux.subprocess.run",
+            "a_term.utils.tmux.subprocess.run",
             return_value=MagicMock(returncode=0, stdout="", stderr=""),
         ) as mock_run,
-        patch("aterm.utils.tmux._uuid_mod.uuid4", return_value=scope_id),
+        patch("a_term.utils.tmux._uuid_mod.uuid4", return_value=scope_id),
     ):
         session_name = create_tmux_session("abc123", working_dir="/tmp/project")
 
@@ -146,13 +146,13 @@ def test_create_tmux_session_uses_systemd_scope_when_available() -> None:
 
 def test_create_tmux_session_falls_back_without_user_scope_support() -> None:
     with (
-        patch("aterm.utils.tmux.tmux_session_exists", return_value=False),
-        patch("aterm.utils.tmux._apply_session_options") as mock_apply,
+        patch("a_term.utils.tmux.tmux_session_exists", return_value=False),
+        patch("a_term.utils.tmux._apply_session_options") as mock_apply,
         patch(
-            "aterm.utils.tmux.sessions._recreate_initial_window_with_session_history_limit"
+            "a_term.utils.tmux.sessions._recreate_initial_window_with_session_history_limit"
         ) as mock_recreate,
-        patch("aterm.utils.tmux._can_spawn_tmux_scope", return_value=False),
-        patch("aterm.utils.tmux.run_tmux_command", return_value=(True, "")) as mock_run,
+        patch("a_term.utils.tmux._can_spawn_tmux_scope", return_value=False),
+        patch("a_term.utils.tmux.run_tmux_command", return_value=(True, "")) as mock_run,
     ):
         session_name = create_tmux_session("abc123", working_dir="/tmp/project")
 
@@ -177,7 +177,7 @@ def test_create_tmux_session_falls_back_without_user_scope_support() -> None:
 
 def test_recreate_initial_window_with_session_history_limit_replaces_bootstrap_window() -> None:
     with patch(
-        "aterm.utils.tmux.run_tmux_command",
+        "a_term.utils.tmux.run_tmux_command",
         side_effect=[
             (True, "0"),
             (True, "1"),
@@ -219,13 +219,13 @@ def test_get_external_agent_tmux_session_matches_by_name() -> None:
         "tmux_session_name": "claude-summitflow",
         "is_external": True,
     }
-    with patch("aterm.utils.tmux.list_external_agent_tmux_sessions", return_value=[session]):
+    with patch("a_term.utils.tmux.list_external_agent_tmux_sessions", return_value=[session]):
         assert get_external_agent_tmux_session("claude-summitflow") == session
 
 
 def test_get_cursor_position_returns_coordinates() -> None:
     with patch(
-        "aterm.utils.tmux.run_tmux_command",
+        "a_term.utils.tmux.run_tmux_command",
         return_value=(True, "12\t34"),
     ):
         assert get_cursor_position("codex-agent-hub") == (12, 34)
@@ -233,14 +233,14 @@ def test_get_cursor_position_returns_coordinates() -> None:
 
 def test_get_cursor_position_returns_none_on_invalid_output() -> None:
     with patch(
-        "aterm.utils.tmux.run_tmux_command",
+        "a_term.utils.tmux.run_tmux_command",
         return_value=(True, "not-a-position"),
     ):
         assert get_cursor_position("codex-agent-hub") is None
 
 
 def test_reset_tmux_window_size_policy_sets_latest() -> None:
-    with patch("aterm.utils.tmux.run_tmux_command", return_value=(True, "")) as mock_run:
+    with patch("a_term.utils.tmux.run_tmux_command", return_value=(True, "")) as mock_run:
         assert reset_tmux_window_size_policy("codex-agent-hub") is True
 
     mock_run.assert_called_once_with(
@@ -250,7 +250,7 @@ def test_reset_tmux_window_size_policy_sets_latest() -> None:
 
 def test_apply_external_attach_options_refcounts_and_restores_original_values() -> None:
     with patch(
-        "aterm.utils.tmux.run_tmux_command",
+        "a_term.utils.tmux.run_tmux_command",
         side_effect=[
             (True, "on"),
             (True, "on"),
@@ -277,7 +277,7 @@ def test_apply_external_attach_options_refcounts_and_restores_original_values() 
 
 def test_apply_external_attach_options_rolls_back_partial_changes() -> None:
     with patch(
-        "aterm.utils.tmux.run_tmux_command",
+        "a_term.utils.tmux.run_tmux_command",
         side_effect=[
             (True, "on"),
             (True, "on"),

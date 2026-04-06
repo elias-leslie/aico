@@ -7,7 +7,7 @@ from unittest.mock import call, patch
 
 import pytest
 
-from aterm.services.agent_service import (
+from a_term.services.agent_service import (
     _is_agent_running_in_session_sync,
     ensure_agent_running_sync,
 )
@@ -15,7 +15,7 @@ from aterm.services.agent_service import (
 
 def test_is_agent_running_in_session_sync_matches_tmux_command_metadata() -> None:
     with patch(
-        "aterm.services.agent_service.subprocess.run",
+        "a_term.services.agent_service.subprocess.run",
         return_value=subprocess.CompletedProcess(
             args=[],
             returncode=0,
@@ -42,7 +42,7 @@ def test_is_agent_running_in_session_sync_matches_tmux_command_metadata() -> Non
 
 def test_is_agent_running_in_session_sync_checks_pane_tty_processes_when_tmux_reports_shell() -> None:
     with patch(
-        "aterm.services.agent_service.subprocess.run",
+        "a_term.services.agent_service.subprocess.run",
         side_effect=[
             subprocess.CompletedProcess(
                 args=[],
@@ -90,7 +90,7 @@ def test_is_agent_running_in_session_sync_checks_pane_tty_processes_when_tmux_re
 
 def test_ensure_agent_running_sync_returns_false_for_shell_session() -> None:
     with patch(
-        "aterm.services.agent_service.aterm_store.get_session",
+        "a_term.services.agent_service.a_term_store.get_session",
         return_value={"id": "shell-id", "mode": "shell", "claude_state": "not_started"},
     ):
         assert ensure_agent_running_sync("shell-id") is False
@@ -99,16 +99,16 @@ def test_ensure_agent_running_sync_returns_false_for_shell_session() -> None:
 def test_ensure_agent_running_sync_marks_existing_process_running() -> None:
     with (
         patch(
-            "aterm.services.agent_service.aterm_store.get_session",
+            "a_term.services.agent_service.a_term_store.get_session",
             return_value={"id": "codex-id", "mode": "codex", "claude_state": "not_started"},
         ),
         patch(
-            "aterm.services.agent_service.agent_tools_store.get_by_slug",
+            "a_term.services.agent_service.agent_tools_store.get_by_slug",
             return_value={"command": "codex --yolo", "process_name": "codex"},
         ),
-        patch("aterm.services.agent_service.lifecycle.ensure_session_alive", return_value=True),
-        patch("aterm.services.agent_service._is_agent_running_in_session_sync", return_value=True),
-        patch("aterm.services.agent_service.aterm_store.update_claude_state") as update_mock,
+        patch("a_term.services.agent_service.lifecycle.ensure_session_alive", return_value=True),
+        patch("a_term.services.agent_service._is_agent_running_in_session_sync", return_value=True),
+        patch("a_term.services.agent_service.a_term_store.update_claude_state") as update_mock,
     ):
         assert ensure_agent_running_sync("codex-id") is False
 
@@ -118,25 +118,25 @@ def test_ensure_agent_running_sync_marks_existing_process_running() -> None:
 def test_ensure_agent_running_sync_sends_command_and_verifies_startup() -> None:
     with (
         patch(
-            "aterm.services.agent_service.aterm_store.get_session",
+            "a_term.services.agent_service.a_term_store.get_session",
             return_value={"id": "claude-id", "mode": "claude", "claude_state": "not_started"},
         ),
         patch(
-            "aterm.services.agent_service.agent_tools_store.get_by_slug",
+            "a_term.services.agent_service.agent_tools_store.get_by_slug",
             return_value={
                 "command": "claude --dangerously-skip-permissions",
                 "process_name": "claude",
             },
         ),
-        patch("aterm.services.agent_service.lifecycle.ensure_session_alive", return_value=True),
+        patch("a_term.services.agent_service.lifecycle.ensure_session_alive", return_value=True),
         patch(
-            "aterm.services.agent_service._is_agent_running_in_session_sync",
+            "a_term.services.agent_service._is_agent_running_in_session_sync",
             side_effect=[False, True],
         ),
-        patch("aterm.services.agent_service.atomically_set_starting", return_value=None),
-        patch("aterm.services.agent_service.send_agent_command_sync", return_value=None) as send_mock,
-        patch("aterm.services.agent_service.time.sleep"),
-        patch("aterm.services.agent_service.aterm_store.update_claude_state") as update_mock,
+        patch("a_term.services.agent_service.atomically_set_starting", return_value=None),
+        patch("a_term.services.agent_service.send_agent_command_sync", return_value=None) as send_mock,
+        patch("a_term.services.agent_service.time.sleep"),
+        patch("a_term.services.agent_service.a_term_store.update_claude_state") as update_mock,
     ):
         assert ensure_agent_running_sync("claude-id") is True
 
@@ -151,17 +151,17 @@ def test_ensure_agent_running_sync_sends_command_and_verifies_startup() -> None:
 def test_ensure_agent_running_sync_returns_false_when_tmux_cannot_be_restored() -> None:
     with (
         patch(
-            "aterm.services.agent_service.aterm_store.get_session",
+            "a_term.services.agent_service.a_term_store.get_session",
             return_value={"id": "codex-id", "mode": "codex", "claude_state": "not_started"},
         ),
         patch(
-            "aterm.services.agent_service.agent_tools_store.get_by_slug",
+            "a_term.services.agent_service.agent_tools_store.get_by_slug",
             return_value={"command": "codex --yolo", "process_name": "codex"},
         ),
-        patch("aterm.services.agent_service.lifecycle.ensure_session_alive", return_value=False) as ensure_mock,
-        patch("aterm.services.agent_service._is_agent_running_in_session_sync") as running_mock,
-        patch("aterm.services.agent_service.send_agent_command_sync") as send_mock,
-        patch("aterm.services.agent_service.aterm_store.update_claude_state") as update_mock,
+        patch("a_term.services.agent_service.lifecycle.ensure_session_alive", return_value=False) as ensure_mock,
+        patch("a_term.services.agent_service._is_agent_running_in_session_sync") as running_mock,
+        patch("a_term.services.agent_service.send_agent_command_sync") as send_mock,
+        patch("a_term.services.agent_service.a_term_store.update_claude_state") as update_mock,
     ):
         assert ensure_agent_running_sync("codex-id") is False
 
@@ -174,22 +174,22 @@ def test_ensure_agent_running_sync_returns_false_when_tmux_cannot_be_restored() 
 def test_ensure_agent_running_sync_returns_false_when_startup_verification_fails() -> None:
     with (
         patch(
-            "aterm.services.agent_service.aterm_store.get_session",
+            "a_term.services.agent_service.a_term_store.get_session",
             return_value={"id": "codex-id", "mode": "codex", "claude_state": "not_started"},
         ),
         patch(
-            "aterm.services.agent_service.agent_tools_store.get_by_slug",
+            "a_term.services.agent_service.agent_tools_store.get_by_slug",
             return_value={"command": "codex --yolo", "process_name": "codex"},
         ),
-        patch("aterm.services.agent_service.lifecycle.ensure_session_alive", return_value=True),
+        patch("a_term.services.agent_service.lifecycle.ensure_session_alive", return_value=True),
         patch(
-            "aterm.services.agent_service._is_agent_running_in_session_sync",
+            "a_term.services.agent_service._is_agent_running_in_session_sync",
             side_effect=[False, False],
         ),
-        patch("aterm.services.agent_service.atomically_set_starting", return_value=None),
-        patch("aterm.services.agent_service.send_agent_command_sync", return_value=None) as send_mock,
-        patch("aterm.services.agent_service.time.sleep"),
-        patch("aterm.services.agent_service.aterm_store.update_claude_state") as update_mock,
+        patch("a_term.services.agent_service.atomically_set_starting", return_value=None),
+        patch("a_term.services.agent_service.send_agent_command_sync", return_value=None) as send_mock,
+        patch("a_term.services.agent_service.time.sleep"),
+        patch("a_term.services.agent_service.a_term_store.update_claude_state") as update_mock,
     ):
         assert ensure_agent_running_sync("codex-id") is False
 
@@ -199,7 +199,7 @@ def test_ensure_agent_running_sync_returns_false_when_startup_verification_fails
 
 def test_ensure_agent_running_sync_raises_for_missing_session() -> None:
     with (
-        patch("aterm.services.agent_service.aterm_store.get_session", return_value=None),
+        patch("a_term.services.agent_service.a_term_store.get_session", return_value=None),
         pytest.raises(ValueError, match="Session missing-id not found"),
     ):
         ensure_agent_running_sync("missing-id")

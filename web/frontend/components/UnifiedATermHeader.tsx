@@ -1,7 +1,7 @@
 'use client'
 
 // Re-export the main component for backward compatibility
-export { UnifiedATermHeaderContent as UnifiedATermHeader } from './aterm-header/UnifiedATermHeaderContent'
+export { UnifiedATermHeaderContent as UnifiedATermHeader } from './a-term-header/UnifiedATermHeaderContent'
 
 // Re-export types
-export type { UnifiedATermHeaderProps } from './aterm-header/types'
+export type { UnifiedATermHeaderProps } from './a-term-header/types'

@@ -239,23 +239,23 @@ body {
   scrollbar-color: var(--term-accent-muted) transparent;
 }
 
-/* Mobile aterm needs a persistent, wider drag target. Hover/fade behavior
+/* Mobile a-term needs a persistent, wider drag target. Hover/fade behavior
    is unreliable on touch devices and makes the scrollbar feel unresponsive. */
-.xterm-viewport.mobile-aterm-viewport::-webkit-scrollbar {
+.xterm-viewport.mobile-a-term-viewport::-webkit-scrollbar {
   width: 20px;
 }
 
-.xterm-viewport.mobile-aterm-viewport::-webkit-scrollbar-thumb {
+.xterm-viewport.mobile-a-term-viewport::-webkit-scrollbar-thumb {
   background: var(--term-accent-muted);
   border-radius: 999px;
   border: 5px solid var(--term-bg-surface);
 }
 
-.xterm-viewport.mobile-aterm-viewport::-webkit-scrollbar-thumb:hover {
+.xterm-viewport.mobile-a-term-viewport::-webkit-scrollbar-thumb:hover {
   background: var(--term-accent);
 }
 
-.xterm-viewport.mobile-aterm-viewport {
+.xterm-viewport.mobile-a-term-viewport {
   scrollbar-width: auto;
   scrollbar-color: var(--term-accent-muted) transparent;
 }
@@ -453,14 +453,14 @@ a:focus-visible {
   box-shadow: 0 0 8px var(--term-accent-glow);
 }
 
-.aterm-pane-shell {
+.a-term-pane-shell {
   border: 1px solid var(--term-border-active);
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--term-text-primary) 2%, transparent),
     0 0 0 1px color-mix(in srgb, var(--term-text-primary) 14%, transparent);
 }
 
-.aterm-pane-shell-drag-target {
+.a-term-pane-shell-drag-target {
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--term-text-primary) 4%, transparent),
     0 0 0 1px var(--term-accent-glow);

@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Minimum tmux version required by A-Term.
 # All features used (capture-pane -e -J, window-size latest,
-# aterm-features sync) are available in tmux 3.2+.
+# a-term-features sync) are available in tmux 3.2+.
 MIN_TMUX_MAJOR=3
 MIN_TMUX_MINOR=2
 

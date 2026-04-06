@@ -9,13 +9,13 @@ describe('usePaneLayoutGroups', () => {
 
   it('uses the new storage bucket immediately when the storage key changes', () => {
     window.localStorage.setItem(
-      'aterm-layout-groups:grid-3x2:5',
+      'a-term-layout-groups:grid-3x2:5',
       JSON.stringify({
         'wide-pane-root': [70, 30],
       }),
     )
     window.localStorage.setItem(
-      'aterm-layout-groups:grid-3x2:6',
+      'a-term-layout-groups:grid-3x2:6',
       JSON.stringify({
         'wide-pane-root': [45, 55],
       }),
@@ -24,7 +24,7 @@ describe('usePaneLayoutGroups', () => {
     const { result, rerender } = renderHook(
       ({ storageKey }: { storageKey: string }) => usePaneLayoutGroups(storageKey),
       {
-        initialProps: { storageKey: 'aterm-layout-groups:grid-3x2:5' },
+        initialProps: { storageKey: 'a-term-layout-groups:grid-3x2:5' },
       },
     )
 
@@ -32,7 +32,7 @@ describe('usePaneLayoutGroups', () => {
       70, 30,
     ])
 
-    rerender({ storageKey: 'aterm-layout-groups:grid-3x2:6' })
+    rerender({ storageKey: 'a-term-layout-groups:grid-3x2:6' })
 
     expect(result.current.getGroupSizes('wide-pane-root', 2, 50)).toEqual([
       45, 55,
@@ -43,20 +43,20 @@ describe('usePaneLayoutGroups', () => {
     const { result, rerender } = renderHook(
       ({ storageKey }: { storageKey: string }) => usePaneLayoutGroups(storageKey),
       {
-        initialProps: { storageKey: 'aterm-layout-groups:grid-3x2:5' },
+        initialProps: { storageKey: 'a-term-layout-groups:grid-3x2:5' },
       },
     )
 
-    rerender({ storageKey: 'aterm-layout-groups:grid-3x2:6' })
+    rerender({ storageKey: 'a-term-layout-groups:grid-3x2:6' })
     act(() => {
       result.current.updateGroupSizes('wide-pane-root', [40, 60])
     })
 
     expect(
-      window.localStorage.getItem('aterm-layout-groups:grid-3x2:6'),
+      window.localStorage.getItem('a-term-layout-groups:grid-3x2:6'),
     ).toBe('{"wide-pane-root":[40,60]}')
     expect(
-      window.localStorage.getItem('aterm-layout-groups:grid-3x2:5'),
+      window.localStorage.getItem('a-term-layout-groups:grid-3x2:5'),
     ).toBeNull()
   })
 
@@ -65,7 +65,7 @@ describe('usePaneLayoutGroups', () => {
 
     const { result } = renderHook(() => {
       renderCount += 1
-      return usePaneLayoutGroups('aterm-layout-groups:split-horizontal:2')
+      return usePaneLayoutGroups('a-term-layout-groups:split-horizontal:2')
     })
 
     act(() => {
@@ -77,7 +77,7 @@ describe('usePaneLayoutGroups', () => {
       result.current.getGroupSizes('two-pane-horizontal', 2, 50),
     ).toEqual([62, 38])
     expect(
-      window.localStorage.getItem('aterm-layout-groups:split-horizontal:2'),
+      window.localStorage.getItem('a-term-layout-groups:split-horizontal:2'),
     ).toBe('{"two-pane-horizontal":[62,38]}')
   })
 })

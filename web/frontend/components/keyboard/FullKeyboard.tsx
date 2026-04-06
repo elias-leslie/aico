@@ -45,7 +45,7 @@ function FullKeyboardInner({
       layout: KEYBOARD_LAYOUT,
       display: KEYBOARD_DISPLAY,
       layoutName: 'default',
-      theme: 'hg-theme-default aterm-keyboard-theme',
+      theme: 'hg-theme-default a-term-keyboard-theme',
       mergeDisplay: true,
       physicalKeyboardHighlight: false,
       physicalKeyboardHighlightPress: false,
@@ -78,10 +78,10 @@ function FullKeyboardInner({
 
   return (
     <div
-      className="aterm-keyboard-container"
+      className="a-term-keyboard-container"
       style={{ backgroundColor: 'var(--term-bg-surface)' }}
     >
-      <div ref={containerRef} className="aterm-simple-keyboard" />
+      <div ref={containerRef} className="a-term-simple-keyboard" />
       {/* biome-ignore lint/security/noDangerouslySetInnerHtml: Dynamic CSS from trusted getKeyboardStyles() */}
       <style dangerouslySetInnerHTML={{ __html: getKeyboardStyles(rowHeight) }} />
     </div>

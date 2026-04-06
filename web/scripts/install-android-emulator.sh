@@ -166,7 +166,7 @@ else
   "
 fi
 
-LAUNCHER="${TARGET_HOME}/bin/start-aterm-android-emulator"
+LAUNCHER="${TARGET_HOME}/bin/start-a-term-android-emulator"
 mkdir -p "$(dirname "${LAUNCHER}")"
 cat > "${LAUNCHER}" <<EOF
 #!/usr/bin/env bash

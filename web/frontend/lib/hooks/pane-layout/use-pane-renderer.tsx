@@ -43,7 +43,7 @@ interface UsePaneRendererOptions {
     | 'layoutMode'
     | 'availableLayouts'
     | 'onLayoutModeChange'
-    | 'atermStatuses'
+    | 'aTermStatuses'
   >
   displaySlots: (ATermSlot | PaneSlot)[]
   paneCount: number
@@ -83,7 +83,7 @@ export function usePaneRenderer({
     layoutMode,
     availableLayouts,
     onLayoutModeChange,
-    atermStatuses,
+    aTermStatuses,
   } = props
   const [dragTargetPanelId, setDragTargetPanelId] = useState<string | null>(null)
   const paneHandlesRef = useRef(new Map<string, ATermHandle>())
@@ -135,8 +135,8 @@ export function usePaneRenderer({
           onDragLeave={handlePaneDragLeave}
           onDrop={handlePaneDrop}
           className={clsx(
-            'aterm-pane-shell flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-md transition-colors duration-150',
-            isDragTarget && 'aterm-pane-shell-drag-target ring-1 ring-[var(--term-accent)]',
+            'a-term-pane-shell flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-md transition-colors duration-150',
+            isDragTarget && 'a-term-pane-shell-drag-target ring-1 ring-[var(--term-accent)]',
           )}
           style={{ backgroundColor: 'var(--term-bg-surface)' }}
         >
@@ -148,7 +148,7 @@ export function usePaneRenderer({
             onReset={onReset && canResetSlot ? () => onReset(slot) : undefined}
             onClose={onClose ? () => onClose(slot) : undefined}
             onCloseSession={onCloseSession ? () => onCloseSession(slot) : undefined}
-            closeTooltip={isExternalSlot ? 'Detach aterm' : 'Detach pane'}
+            closeTooltip={isExternalSlot ? 'Detach a-term' : 'Detach pane'}
             onUpload={onUpload ? () => onUpload(sessionId ?? undefined) : undefined}
             onClean={onClean ? () => onClean(slot) : undefined}
             onOpenModal={onOpenModal}
@@ -173,7 +173,7 @@ export function usePaneRenderer({
             layoutMode={layoutMode}
             availableLayouts={availableLayouts}
             onLayoutModeChange={onLayoutModeChange}
-            connectionStatus={sessionId ? atermStatuses?.get(sessionId) : undefined}
+            connectionStatus={sessionId ? aTermStatuses?.get(sessionId) : undefined}
             onReconnect={sessionId ? () => paneHandlesRef.current.get(sessionId)?.reconnect() : undefined}
             onSearch={sessionId
               ? (query, options) =>
@@ -255,7 +255,7 @@ export function usePaneRenderer({
       layoutMode,
       availableLayouts,
       onLayoutModeChange,
-      atermStatuses,
+      aTermStatuses,
       dragTargetPanelId,
     ],
   )

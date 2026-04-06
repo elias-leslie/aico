@@ -4,8 +4,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { type MutableRefObject, useCallback } from 'react'
 import { useAgentPolling } from './use-agent-polling'
-import type { ATermPane } from './use-aterm-panes'
-import type { ATermSession } from './use-aterm-sessions'
+import type { ATermPane } from './use-a-term-panes'
+import type { ATermSession } from './use-a-term-sessions'
 
 /** Pane list response type for query cache access */
 interface PaneListResponse {
@@ -108,7 +108,7 @@ export function useProjectModeSwitch({
       // This is critical after operations like Close All where the panes array
       // in the closure may be outdated
       const freshPanesData = queryClient.getQueryData<PaneListResponse>([
-        'aterm-panes',
+        'a-term-panes',
       ])
       const freshPanes = freshPanesData?.items ?? panes
 

@@ -1,4 +1,4 @@
-import { MOBILE_WIDTH_THRESHOLD } from '../constants/aterm'
+import { MOBILE_WIDTH_THRESHOLD } from '../constants/a-term'
 
 /**
  * Check if we're on a mobile device (used for pull-to-refresh prevention)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from aterm.services.binary_protocol import (
+from a_term.services.binary_protocol import (
     MSG_CONTROL,
     MSG_OUTPUT,
     decode_client_message,

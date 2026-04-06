@@ -7,8 +7,8 @@ from unittest.mock import ANY, AsyncMock, MagicMock, call, patch
 
 import pytest
 
-from aterm.api.handlers.websocket_connection import _run_session, _setup_connection
-from aterm.constants import SHELL_MODE
+from a_term.api.handlers.websocket_connection import _run_session, _setup_connection
+from a_term.constants import SHELL_MODE
 
 
 @pytest.mark.asyncio
@@ -22,27 +22,27 @@ async def test_setup_connection_applies_external_attach_options() -> None:
 
     with (
         patch(
-            "aterm.api.handlers.websocket_connection.validate_and_prepare_session",
+            "a_term.api.handlers.websocket_connection.validate_and_prepare_session",
             return_value=(session, "codex-agent-hub"),
         ),
         patch(
-            "aterm.api.handlers.websocket_connection.reset_tmux_window_size_policy",
+            "a_term.api.handlers.websocket_connection.reset_tmux_window_size_policy",
             return_value=True,
         ) as mock_reset,
         patch(
-            "aterm.api.handlers.websocket_connection.apply_external_attach_options",
+            "a_term.api.handlers.websocket_connection.apply_external_attach_options",
             return_value=True,
         ) as mock_apply,
         patch(
-            "aterm.api.handlers.websocket_connection.spawn_pty_for_tmux",
+            "a_term.api.handlers.websocket_connection.spawn_pty_for_tmux",
             return_value=(17, 23),
         ),
         patch(
-            "aterm.api.handlers.websocket_connection._wait_for_initial_resize",
+            "a_term.api.handlers.websocket_connection._wait_for_initial_resize",
             new=AsyncMock(),
         ) as mock_wait,
         patch(
-            "aterm.api.handlers.websocket_connection.get_scrollback",
+            "a_term.api.handlers.websocket_connection.get_scrollback",
             return_value=None,
         ),
     ):
@@ -65,27 +65,27 @@ async def test_setup_connection_restores_external_attach_options_after_setup_fai
 
     with (
         patch(
-            "aterm.api.handlers.websocket_connection.validate_and_prepare_session",
+            "a_term.api.handlers.websocket_connection.validate_and_prepare_session",
             return_value=(session, "codex-agent-hub"),
         ),
         patch(
-            "aterm.api.handlers.websocket_connection.reset_tmux_window_size_policy",
+            "a_term.api.handlers.websocket_connection.reset_tmux_window_size_policy",
             return_value=True,
         ) as mock_reset,
         patch(
-            "aterm.api.handlers.websocket_connection.apply_external_attach_options",
+            "a_term.api.handlers.websocket_connection.apply_external_attach_options",
             return_value=True,
         ),
         patch(
-            "aterm.api.handlers.websocket_connection.restore_external_attach_options",
+            "a_term.api.handlers.websocket_connection.restore_external_attach_options",
             return_value=True,
         ) as mock_restore,
         patch(
-            "aterm.api.handlers.websocket_connection.spawn_pty_for_tmux",
+            "a_term.api.handlers.websocket_connection.spawn_pty_for_tmux",
             return_value=(17, 23),
         ),
         patch(
-            "aterm.api.handlers.websocket_connection._wait_for_initial_resize",
+            "a_term.api.handlers.websocket_connection._wait_for_initial_resize",
             new=AsyncMock(side_effect=RuntimeError("resize failed")),
         ),pytest.raises(RuntimeError, match="resize failed")
     ):
@@ -109,19 +109,19 @@ async def test_setup_connection_sends_initial_shell_scrollback_as_control_snapsh
 
     with (
         patch(
-            "aterm.api.handlers.websocket_connection.validate_and_prepare_session",
+            "a_term.api.handlers.websocket_connection.validate_and_prepare_session",
             return_value=(session, "summitflow-shell"),
         ),
         patch(
-            "aterm.api.handlers.websocket_connection.spawn_pty_for_tmux",
+            "a_term.api.handlers.websocket_connection.spawn_pty_for_tmux",
             return_value=(17, 23),
         ),
         patch(
-            "aterm.api.handlers.websocket_connection._wait_for_initial_resize",
+            "a_term.api.handlers.websocket_connection._wait_for_initial_resize",
             new=AsyncMock(),
         ),
         patch(
-            "aterm.api.handlers.websocket_connection.get_scrollback_with_cursor",
+            "a_term.api.handlers.websocket_connection.get_scrollback_with_cursor",
             return_value=("line 1\nline 2\n", (4, 9)),
         ),
     ):
@@ -149,19 +149,19 @@ async def test_setup_connection_sends_initial_scrollback_page_for_agent_sessions
 
     with (
         patch(
-            "aterm.api.handlers.websocket_connection.validate_and_prepare_session",
+            "a_term.api.handlers.websocket_connection.validate_and_prepare_session",
             return_value=(session, "summitflow-agent"),
         ),
         patch(
-            "aterm.api.handlers.websocket_connection.spawn_pty_for_tmux",
+            "a_term.api.handlers.websocket_connection.spawn_pty_for_tmux",
             return_value=(17, 23),
         ),
         patch(
-            "aterm.api.handlers.websocket_connection._wait_for_initial_resize",
+            "a_term.api.handlers.websocket_connection._wait_for_initial_resize",
             new=AsyncMock(),
         ),
         patch(
-            "aterm.api.handlers.websocket_connection.get_scrollback",
+            "a_term.api.handlers.websocket_connection.get_scrollback",
             return_value="line 1\nline 2\n",
         ),
     ):
@@ -187,27 +187,27 @@ async def test_run_session_restores_external_attach_options_on_disconnect() -> N
 
     with (
         patch(
-            "aterm.api.handlers.websocket_connection._setup_connection",
+            "a_term.api.handlers.websocket_connection._setup_connection",
             new=AsyncMock(return_value=(session, "codex-agent-hub", 17, 23, False)),
         ),
         patch(
-            "aterm.api.handlers.websocket_connection._run_message_loop",
+            "a_term.api.handlers.websocket_connection._run_message_loop",
             new=AsyncMock(),
         ),
         patch(
-            "aterm.api.handlers.websocket_connection.read_pty_output",
+            "a_term.api.handlers.websocket_connection.read_pty_output",
             new=AsyncMock(),
         ),
         patch(
-            "aterm.api.handlers.websocket_connection._heartbeat_loop",
+            "a_term.api.handlers.websocket_connection._heartbeat_loop",
             new=AsyncMock(),
         ),
         patch(
-            "aterm.api.handlers.websocket_connection.restore_external_attach_options",
+            "a_term.api.handlers.websocket_connection.restore_external_attach_options",
             return_value=True,
         ) as mock_restore,
         patch(
-            "aterm.api.handlers.websocket_connection.reset_tmux_window_size_policy",
+            "a_term.api.handlers.websocket_connection.reset_tmux_window_size_policy",
             return_value=True,
         ) as mock_reset,
     ):
@@ -249,35 +249,35 @@ async def test_run_session_enables_scrollback_sync_for_all_modes(
 
     with (
         patch(
-            "aterm.api.handlers.websocket_connection._setup_connection",
+            "a_term.api.handlers.websocket_connection._setup_connection",
             new=AsyncMock(return_value=(session, tmux_name, 17, 23, not is_external)),
         ),
         patch(
-            "aterm.api.handlers.websocket_connection._run_message_loop",
+            "a_term.api.handlers.websocket_connection._run_message_loop",
             new=AsyncMock(),
         ),
         patch(
-            "aterm.api.handlers.websocket_connection.read_pty_output",
+            "a_term.api.handlers.websocket_connection.read_pty_output",
             new=AsyncMock(),
         ),
         patch(
-            "aterm.api.handlers.websocket_connection._heartbeat_loop",
+            "a_term.api.handlers.websocket_connection._heartbeat_loop",
             new=AsyncMock(),
         ),
         patch(
-            "aterm.api.handlers.websocket_connection.ScrollbackSyncScheduler",
+            "a_term.api.handlers.websocket_connection.ScrollbackSyncScheduler",
             return_value=scheduler,
         ) as mock_scheduler_cls,
         patch(
-            "aterm.api.handlers.websocket_connection.ScrollbackSyncOutputTracker",
+            "a_term.api.handlers.websocket_connection.ScrollbackSyncOutputTracker",
             return_value=tracker,
         ) as mock_tracker_cls,
         patch(
-            "aterm.api.handlers.websocket_connection.restore_external_attach_options",
+            "a_term.api.handlers.websocket_connection.restore_external_attach_options",
             return_value=True,
         ) as mock_restore,
         patch(
-            "aterm.api.handlers.websocket_connection.reset_tmux_window_size_policy",
+            "a_term.api.handlers.websocket_connection.reset_tmux_window_size_policy",
             return_value=True,
         ) as mock_reset,
     ):

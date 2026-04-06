@@ -1,8 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useRef } from 'react'
-import { generatePaneName } from './aterm-handler-utils'
-import { fetchPaneCount } from './aterm-panes-api'
+import { generatePaneName } from './a-term-handler-utils'
+import { fetchPaneCount } from './a-term-panes-api'
 
 interface UseAutoCreatePaneProps {
   panes: Array<{ pane_type: string }>

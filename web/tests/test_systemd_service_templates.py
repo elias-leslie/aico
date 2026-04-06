@@ -4,19 +4,19 @@ from pathlib import Path
 
 SYSTEMD_DIR = Path(__file__).resolve().parents[1] / "scripts" / "systemd"
 SERVICE_NAMES = [
-    "aterm-backend.service",
-    "aterm-frontend.service",
+    "a-term-backend.service",
+    "a-term-frontend.service",
 ]
 
 
-def test_aterm_units_use_project_root_placeholder() -> None:
+def test_a_term_units_use_project_root_placeholder() -> None:
     for service_name in SERVICE_NAMES:
         text = (SYSTEMD_DIR / service_name).read_text()
         assert "__PROJECT_ROOT__" in text
-        assert "%h/aterm" not in text
+        assert "%h/a_term" not in text
 
 
-def test_aterm_units_do_not_use_legacy_placeholder() -> None:
+def test_a_term_units_do_not_use_legacy_placeholder() -> None:
     legacy_placeholder = "__" + "TERMI" + "NAL_ROOT__"
     for service_name in SERVICE_NAMES:
         text = (SYSTEMD_DIR / service_name).read_text()

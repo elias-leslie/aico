@@ -7,17 +7,17 @@ import {
 } from '@/lib/app-theme'
 import { useAppTheme } from '@/lib/hooks/use-app-theme'
 import {
-  ATERM_CURSOR_STYLES,
-  ATERM_FONT_SIZES,
-  ATERM_FONTS,
-  ATERM_SCROLLBACK_OPTIONS,
-  ATERM_THEMES,
+  A_TERM_CURSOR_STYLES,
+  A_TERM_FONT_SIZES,
+  A_TERM_FONTS,
+  A_TERM_SCROLLBACK_OPTIONS,
+  A_TERM_THEMES,
   type ATermCursorStyle,
   type ATermFontId,
   type ATermFontSize,
   type ATermScrollback,
   type ATermThemeId,
-} from '@/lib/hooks/use-aterm-settings'
+} from '@/lib/hooks/use-a-term-settings'
 import { useClickOutside } from '@/lib/hooks/use-click-outside'
 import { SettingsButton } from './settings/SettingsButton'
 import { SettingsPanel } from './settings/SettingsPanel'
@@ -85,17 +85,17 @@ export function SettingsDropdown({
   useClickOutside(clickOutsideRefs, closeDropdown, showSettings)
 
   // Prepare options for select components
-  const fontOptions = ATERM_FONTS.map((font) => ({
+  const fontOptions = A_TERM_FONTS.map((font) => ({
     value: font.id,
     label: font.name,
   }))
 
-  const fontSizeOptions = ATERM_FONT_SIZES.map((size) => ({
+  const fontSizeOptions = A_TERM_FONT_SIZES.map((size) => ({
     value: size,
     label: `${size}px`,
   }))
 
-  const themeOptions = Object.entries(ATERM_THEMES).map(([id, { name }]) => ({
+  const themeOptions = Object.entries(A_TERM_THEMES).map(([id, { name }]) => ({
     value: id,
     label: name,
   }))
@@ -105,7 +105,7 @@ export function SettingsDropdown({
     label: option.label,
   }))
 
-  const scrollbackOptions = ATERM_SCROLLBACK_OPTIONS.map((opt) => ({
+  const scrollbackOptions = A_TERM_SCROLLBACK_OPTIONS.map((opt) => ({
     value: opt.value,
     label: opt.label,
   }))
@@ -159,7 +159,7 @@ export function SettingsDropdown({
         <SettingButtonGroup
           label="Cursor Style"
           value={cursorStyle}
-          options={ATERM_CURSOR_STYLES}
+          options={A_TERM_CURSOR_STYLES}
           onChange={setCursorStyle}
         />
 

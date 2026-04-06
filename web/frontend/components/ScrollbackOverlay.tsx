@@ -1,9 +1,9 @@
 'use client'
 
-import type { ATermTheme } from '../lib/constants/aterm'
-import { useScrollbackATerm } from '../lib/hooks/use-scrollback-aterm'
+import type { ATermTheme } from '../lib/constants/a-term'
+import { useScrollbackATerm } from '../lib/hooks/use-scrollback-a-term'
 import { useScrollbackGestures } from '../lib/hooks/use-scrollback-gestures'
-import type { ATermSearchMatch } from '../lib/utils/aterm-search'
+import type { ATermSearchMatch } from '../lib/utils/a-term-search'
 
 interface ScrollbackOverlayProps {
   isActive: boolean
@@ -88,7 +88,7 @@ export function ScrollbackOverlay({
         </div>
       )}
 
-      {/* xterm.js overlay aterm */}
+      {/* xterm.js overlay a-term */}
       <div
         ref={containerRef}
         style={{

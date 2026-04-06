@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef } from 'react'
 import type { PaneLayout } from '@/components/ResizablePaneLayout'
-import type { ATermPane } from './use-aterm-panes'
+import type { ATermPane } from './use-a-term-panes'
 
 interface UseLayoutPersistenceOptions {
   saveLayouts: (

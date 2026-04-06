@@ -1,4 +1,4 @@
-"""Tests for pane REST endpoints (/api/aterm/panes).
+"""Tests for pane REST endpoints (/api/a-term/panes).
 
 Covers:
 - List panes
@@ -72,12 +72,12 @@ def _make_session_in_pane(
 # ---------------------------------------------------------------------------
 
 def test_list_panes_returns_items(test_app: TestClient) -> None:
-    """GET /api/aterm/panes -- returns pane list with total and max."""
+    """GET /api/a-term/panes -- returns pane list with total and max."""
     # Arrange
     panes = [_make_pane(pane_name="p1"), _make_pane(pane_name="p2")]
-    with patch("aterm.api.panes.pane_store.list_panes_with_sessions", return_value=panes):
+    with patch("a_term.api.panes.pane_store.list_panes_with_sessions", return_value=panes):
         # Act
-        response = test_app.get("/api/aterm/panes")
+        response = test_app.get("/api/a-term/panes")
 
     # Assert
     assert response.status_code == 200
@@ -88,11 +88,11 @@ def test_list_panes_returns_items(test_app: TestClient) -> None:
 
 
 def test_list_panes_empty_returns_zero(test_app: TestClient) -> None:
-    """GET /api/aterm/panes -- empty list returns total=0."""
+    """GET /api/a-term/panes -- empty list returns total=0."""
     # Arrange
-    with patch("aterm.api.panes.pane_store.list_panes_with_sessions", return_value=[]):
+    with patch("a_term.api.panes.pane_store.list_panes_with_sessions", return_value=[]):
         # Act
-        response = test_app.get("/api/aterm/panes")
+        response = test_app.get("/api/a-term/panes")
 
     # Assert
     body = response.json()
@@ -101,10 +101,10 @@ def test_list_panes_empty_returns_zero(test_app: TestClient) -> None:
 
 
 def test_list_detached_panes_returns_items(test_app: TestClient) -> None:
-    """GET /api/aterm/panes/detached -- returns detached pane list."""
+    """GET /api/a-term/panes/detached -- returns detached pane list."""
     panes = [_make_pane(pane_name="Detached", is_detached=True)]
-    with patch("aterm.api.panes.pane_store.list_panes_with_sessions", return_value=panes):
-        response = test_app.get("/api/aterm/panes/detached")
+    with patch("a_term.api.panes.pane_store.list_panes_with_sessions", return_value=panes):
+        response = test_app.get("/api/a-term/panes/detached")
 
     assert response.status_code == 200
     body = response.json()
@@ -118,17 +118,17 @@ def test_list_detached_panes_returns_items(test_app: TestClient) -> None:
 # ---------------------------------------------------------------------------
 
 def test_create_pane_adhoc_returns_pane(test_app: TestClient) -> None:
-    """POST /api/aterm/panes -- adhoc pane creation succeeds."""
+    """POST /api/a-term/panes -- adhoc pane creation succeeds."""
     # Arrange
     shell_session = _make_session_in_pane(mode="shell")
     pane = _make_pane(pane_type="adhoc", pane_name="Ad-hoc", sessions=[shell_session])
     with (
-        patch("aterm.api.panes.pane_store.count_panes", return_value=0),
-        patch("aterm.api.panes.pane_store.create_pane_with_sessions", return_value=pane),
+        patch("a_term.api.panes.pane_store.count_panes", return_value=0),
+        patch("a_term.api.panes.pane_store.create_pane_with_sessions", return_value=pane),
     ):
         # Act
         response = test_app.post(
-            "/api/aterm/panes",
+            "/api/a-term/panes",
             json={"pane_type": "adhoc", "pane_name": "Ad-hoc"},
         )
 
@@ -141,15 +141,15 @@ def test_create_pane_adhoc_returns_pane(test_app: TestClient) -> None:
 
 
 def test_create_pane_limit_exceeded_returns_400(test_app: TestClient) -> None:
-    """POST /api/aterm/panes -- 6 panes already exist rejects creation."""
+    """POST /api/a-term/panes -- 6 panes already exist rejects creation."""
     # Arrange
     with patch(
-        "aterm.api.panes.pane_store.create_pane_with_sessions",
+        "a_term.api.panes.pane_store.create_pane_with_sessions",
         side_effect=ValueError("Maximum 6 panes allowed. Close one to add more."),
     ):
         # Act
         response = test_app.post(
-            "/api/aterm/panes",
+            "/api/a-term/panes",
             json={"pane_type": "adhoc", "pane_name": "Seventh"},
         )
 
@@ -159,12 +159,12 @@ def test_create_pane_limit_exceeded_returns_400(test_app: TestClient) -> None:
 
 
 def test_create_pane_project_without_project_id_returns_400(test_app: TestClient) -> None:
-    """POST /api/aterm/panes -- project pane without project_id returns 400."""
+    """POST /api/a-term/panes -- project pane without project_id returns 400."""
     # Arrange
-    with patch("aterm.api.panes.pane_store.count_panes", return_value=0):
+    with patch("a_term.api.panes.pane_store.count_panes", return_value=0):
         # Act
         response = test_app.post(
-            "/api/aterm/panes",
+            "/api/a-term/panes",
             json={"pane_type": "project", "pane_name": "Project Pane"},
         )
 
@@ -174,7 +174,7 @@ def test_create_pane_project_without_project_id_returns_400(test_app: TestClient
 
 
 def test_create_project_pane_passes_requested_agent_tool_slug(test_app: TestClient) -> None:
-    """POST /api/aterm/panes -- project pane forwards agent_tool_slug to storage."""
+    """POST /api/a-term/panes -- project pane forwards agent_tool_slug to storage."""
     pane = _make_pane(
         pane_type="project",
         project_id="proj-1",
@@ -186,11 +186,11 @@ def test_create_project_pane_passes_requested_agent_tool_slug(test_app: TestClie
         ],
     )
     with patch(
-        "aterm.api.panes.pane_store.create_pane_with_sessions",
+        "a_term.api.panes.pane_store.create_pane_with_sessions",
         return_value=pane,
     ) as create_mock:
         response = test_app.post(
-            "/api/aterm/panes",
+            "/api/a-term/panes",
             json={
                 "pane_type": "project",
                 "pane_name": "Project Pane",
@@ -215,13 +215,13 @@ def test_create_project_pane_passes_requested_agent_tool_slug(test_app: TestClie
 # ---------------------------------------------------------------------------
 
 def test_get_pane_found_returns_200(test_app: TestClient) -> None:
-    """GET /api/aterm/panes/{id} -- existing pane returns 200."""
+    """GET /api/a-term/panes/{id} -- existing pane returns 200."""
     # Arrange
     pid = str(uuid.uuid4())
     pane = _make_pane(pane_id=pid, pane_name="Found Pane")
-    with patch("aterm.api.panes.pane_store.get_pane_with_sessions", return_value=pane):
+    with patch("a_term.api.panes.pane_store.get_pane_with_sessions", return_value=pane):
         # Act
-        response = test_app.get(f"/api/aterm/panes/{pid}")
+        response = test_app.get(f"/api/a-term/panes/{pid}")
 
     # Assert
     assert response.status_code == 200
@@ -229,21 +229,21 @@ def test_get_pane_found_returns_200(test_app: TestClient) -> None:
 
 
 def test_get_pane_not_found_returns_404(test_app: TestClient) -> None:
-    """GET /api/aterm/panes/{id} -- missing pane returns 404."""
+    """GET /api/a-term/panes/{id} -- missing pane returns 404."""
     # Arrange
     pid = str(uuid.uuid4())
-    with patch("aterm.api.panes.pane_store.get_pane_with_sessions", return_value=None):
+    with patch("a_term.api.panes.pane_store.get_pane_with_sessions", return_value=None):
         # Act
-        response = test_app.get(f"/api/aterm/panes/{pid}")
+        response = test_app.get(f"/api/a-term/panes/{pid}")
 
     # Assert
     assert response.status_code == 404
 
 
 def test_get_pane_invalid_uuid_returns_400(test_app: TestClient) -> None:
-    """GET /api/aterm/panes/{id} -- malformed UUID returns 400."""
+    """GET /api/a-term/panes/{id} -- malformed UUID returns 400."""
     # Act
-    response = test_app.get("/api/aterm/panes/not-valid")
+    response = test_app.get("/api/a-term/panes/not-valid")
 
     # Assert
     assert response.status_code == 400
@@ -254,7 +254,7 @@ def test_get_pane_invalid_uuid_returns_400(test_app: TestClient) -> None:
 # ---------------------------------------------------------------------------
 
 def test_update_project_pane_rejects_unavailable_mode(test_app: TestClient) -> None:
-    """PATCH /api/aterm/panes/{id} -- rejects mode not present in pane sessions."""
+    """PATCH /api/a-term/panes/{id} -- rejects mode not present in pane sessions."""
     # Arrange
     pid = str(uuid.uuid4())
     pane = _make_pane(
@@ -267,10 +267,10 @@ def test_update_project_pane_rejects_unavailable_mode(test_app: TestClient) -> N
             _make_session_in_pane(mode="claude", name="Claude"),
         ],
     )
-    with patch("aterm.api.panes.pane_store.get_pane_with_sessions", return_value=pane):
+    with patch("a_term.api.panes.pane_store.get_pane_with_sessions", return_value=pane):
         # Act
         response = test_app.patch(
-            f"/api/aterm/panes/{pid}",
+            f"/api/a-term/panes/{pid}",
             json={"active_mode": "codex"},
         )
 
@@ -280,7 +280,7 @@ def test_update_project_pane_rejects_unavailable_mode(test_app: TestClient) -> N
 
 
 def test_update_project_pane_accepts_existing_mode(test_app: TestClient) -> None:
-    """PATCH /api/aterm/panes/{id} -- allows switching to an existing session mode."""
+    """PATCH /api/a-term/panes/{id} -- allows switching to an existing session mode."""
     # Arrange
     pid = str(uuid.uuid4())
     pane = _make_pane(
@@ -295,12 +295,12 @@ def test_update_project_pane_accepts_existing_mode(test_app: TestClient) -> None
     )
     updated = {**pane, "active_mode": "claude"}
     with (
-        patch("aterm.api.panes.pane_store.get_pane_with_sessions", side_effect=[pane, updated]),
-        patch("aterm.api.panes.pane_store.update_pane", return_value=updated),
+        patch("a_term.api.panes.pane_store.get_pane_with_sessions", side_effect=[pane, updated]),
+        patch("a_term.api.panes.pane_store.update_pane", return_value=updated),
     ):
         # Act
         response = test_app.patch(
-            f"/api/aterm/panes/{pid}",
+            f"/api/a-term/panes/{pid}",
             json={"active_mode": "claude"},
         )
 
@@ -315,12 +315,12 @@ def test_update_project_pane_accepts_existing_mode(test_app: TestClient) -> None
 
 
 def test_swap_panes_uses_static_route_before_pane_id(test_app: TestClient) -> None:
-    """POST /api/aterm/panes/swap -- resolves the static route instead of {pane_id}."""
+    """POST /api/a-term/panes/swap -- resolves the static route instead of {pane_id}."""
     pane_id_a = str(uuid.uuid4())
     pane_id_b = str(uuid.uuid4())
-    with patch("aterm.api.panes.pane_store.swap_pane_positions", return_value=True) as swap_mock:
+    with patch("a_term.api.panes.pane_store.swap_pane_positions", return_value=True) as swap_mock:
         response = test_app.post(
-            "/api/aterm/panes/swap",
+            "/api/a-term/panes/swap",
             json={"pane_id_a": pane_id_a, "pane_id_b": pane_id_b},
         )
 
@@ -338,16 +338,16 @@ def test_swap_panes_uses_static_route_before_pane_id(test_app: TestClient) -> No
 # ---------------------------------------------------------------------------
 
 def test_delete_pane_success_returns_deleted(test_app: TestClient) -> None:
-    """DELETE /api/aterm/panes/{id} -- successful deletion."""
+    """DELETE /api/a-term/panes/{id} -- successful deletion."""
     # Arrange
     pid = str(uuid.uuid4())
     with (
-        patch("aterm.api.panes.pane_store.fetch_sessions_for_pane", return_value=[]),
-        patch("aterm.api.panes.kill_tmux_session"),
-        patch("aterm.api.panes.pane_store.delete_pane", return_value=True),
+        patch("a_term.api.panes.pane_store.fetch_sessions_for_pane", return_value=[]),
+        patch("a_term.api.panes.kill_tmux_session"),
+        patch("a_term.api.panes.pane_store.delete_pane", return_value=True),
     ):
         # Act
-        response = test_app.delete(f"/api/aterm/panes/{pid}")
+        response = test_app.delete(f"/api/a-term/panes/{pid}")
 
     # Assert
     assert response.status_code == 200
@@ -357,30 +357,30 @@ def test_delete_pane_success_returns_deleted(test_app: TestClient) -> None:
 
 
 def test_delete_pane_not_found_returns_404(test_app: TestClient) -> None:
-    """DELETE /api/aterm/panes/{id} -- pane not in DB returns 404."""
+    """DELETE /api/a-term/panes/{id} -- pane not in DB returns 404."""
     # Arrange
     pid = str(uuid.uuid4())
     with (
-        patch("aterm.api.panes.pane_store.fetch_sessions_for_pane", return_value=[]),
-        patch("aterm.api.panes.pane_store.delete_pane", return_value=False),
+        patch("a_term.api.panes.pane_store.fetch_sessions_for_pane", return_value=[]),
+        patch("a_term.api.panes.pane_store.delete_pane", return_value=False),
     ):
         # Act
-        response = test_app.delete(f"/api/aterm/panes/{pid}")
+        response = test_app.delete(f"/api/a-term/panes/{pid}")
 
     # Assert
     assert response.status_code == 404
 
 
 def test_detach_pane_success_returns_updated_pane(test_app: TestClient) -> None:
-    """POST /api/aterm/panes/{id}/detach -- marks the pane detached."""
+    """POST /api/a-term/panes/{id}/detach -- marks the pane detached."""
     pid = str(uuid.uuid4())
     existing = _make_pane(pane_id=pid, pane_name="Detached Pane", is_detached=False)
     detached = _make_pane(pane_id=pid, pane_name="Detached Pane", is_detached=True)
     with (
-        patch("aterm.api.panes.pane_store.get_pane_with_sessions", return_value=existing),
-        patch("aterm.api.panes.pane_store.detach_pane", return_value=detached) as detach_mock,
+        patch("a_term.api.panes.pane_store.get_pane_with_sessions", return_value=existing),
+        patch("a_term.api.panes.pane_store.detach_pane", return_value=detached) as detach_mock,
     ):
-        response = test_app.post(f"/api/aterm/panes/{pid}/detach")
+        response = test_app.post(f"/api/a-term/panes/{pid}/detach")
 
     assert response.status_code == 200
     assert response.json()["id"] == pid
@@ -389,15 +389,15 @@ def test_detach_pane_success_returns_updated_pane(test_app: TestClient) -> None:
 
 
 def test_attach_pane_success_returns_updated_pane(test_app: TestClient) -> None:
-    """POST /api/aterm/panes/{id}/attach -- restores a detached pane."""
+    """POST /api/a-term/panes/{id}/attach -- restores a detached pane."""
     pid = str(uuid.uuid4())
     existing = _make_pane(pane_id=pid, pane_name="Attached Pane", is_detached=True)
     attached = _make_pane(pane_id=pid, pane_name="Attached Pane", is_detached=False)
     with (
-        patch("aterm.api.panes.pane_store.get_pane_with_sessions", return_value=existing),
-        patch("aterm.api.panes.pane_store.attach_pane", return_value=attached) as attach_mock,
+        patch("a_term.api.panes.pane_store.get_pane_with_sessions", return_value=existing),
+        patch("a_term.api.panes.pane_store.attach_pane", return_value=attached) as attach_mock,
     ):
-        response = test_app.post(f"/api/aterm/panes/{pid}/attach")
+        response = test_app.post(f"/api/a-term/panes/{pid}/attach")
 
     assert response.status_code == 200
     assert response.json()["id"] == pid
@@ -410,11 +410,11 @@ def test_attach_pane_success_returns_updated_pane(test_app: TestClient) -> None:
 # ---------------------------------------------------------------------------
 
 def test_pane_count_returns_count_and_limit(test_app: TestClient) -> None:
-    """GET /api/aterm/panes/count -- returns count, max, at_limit."""
+    """GET /api/a-term/panes/count -- returns count, max, at_limit."""
     # Arrange
-    with patch("aterm.api.panes.pane_store.count_panes", return_value=3):
+    with patch("a_term.api.panes.pane_store.count_panes", return_value=3):
         # Act
-        response = test_app.get("/api/aterm/panes/count")
+        response = test_app.get("/api/a-term/panes/count")
 
     # Assert
     assert response.status_code == 200
@@ -425,11 +425,11 @@ def test_pane_count_returns_count_and_limit(test_app: TestClient) -> None:
 
 
 def test_pane_count_at_limit_returns_true(test_app: TestClient) -> None:
-    """GET /api/aterm/panes/count -- at_limit is True when count >= max."""
+    """GET /api/a-term/panes/count -- at_limit is True when count >= max."""
     # Arrange
-    with patch("aterm.api.panes.pane_store.count_panes", return_value=6):
+    with patch("a_term.api.panes.pane_store.count_panes", return_value=6):
         # Act
-        response = test_app.get("/api/aterm/panes/count")
+        response = test_app.get("/api/a-term/panes/count")
 
     # Assert
     body = response.json()

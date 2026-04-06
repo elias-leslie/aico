@@ -1,4 +1,4 @@
-"""Tests for aterm/services/recording.py."""
+"""Tests for a_term/services/recording.py."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from aterm.services.recording import SessionRecorder
+from a_term.services.recording import SessionRecorder
 
 
 @pytest.fixture

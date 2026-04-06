@@ -15,7 +15,7 @@ const nextConfig: NextConfig = {
   transpilePackages: hasPassportClient() ? ['@agent-hub/passport-client'] : [],
   output: 'standalone',
   // Proxy /api/* and /ws/* to backend server-to-server to avoid CORS issues with CF Access
-  // In production: browser requests aterm.summitflow.dev/api/* (same-origin)
+  // In production: browser requests a-term.summitflow.dev/api/* (same-origin)
   // Next.js rewrites proxy to localhost:8002 (server-to-server, no CORS)
   async rewrites() {
     const apiUrl = process.env.API_URL || `http://localhost:${PORTS.backend}`

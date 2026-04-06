@@ -9,13 +9,13 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi import FastAPI
 
-from aterm.services.maintenance import (
+from a_term.services.maintenance import (
     MAINTENANCE_STATUS_ATTR,
     build_initial_status,
     run_cycle,
     start_scheduler,
 )
-from aterm.services.upload_cleanup import UploadCleanupStats
+from a_term.services.upload_cleanup import UploadCleanupStats
 
 
 @contextmanager
@@ -30,29 +30,29 @@ async def test_run_cycle_updates_status_and_collects_results() -> None:
     setattr(app.state, MAINTENANCE_STATUS_ATTR, build_initial_status())
 
     with (
-        patch("aterm.services.maintenance.advisory_lock", side_effect=lambda _key: _advisory_lock(True)),
+        patch("a_term.services.maintenance.advisory_lock", side_effect=lambda _key: _advisory_lock(True)),
         patch(
-            "aterm.services.maintenance.lifecycle.reconcile_sessions",
+            "a_term.services.maintenance.lifecycle.reconcile_sessions",
             return_value={"purged": 2, "orphans_killed": 1},
         ),
         patch(
-            "aterm.services.maintenance.cleanup_old_uploads",
+            "a_term.services.maintenance.cleanup_old_uploads",
             return_value=UploadCleanupStats(scanned_files=3, deleted_files=1, pruned_directories=1),
         ),
         patch(
-            "aterm.services.maintenance.agent_tools_store.ensure_default",
+            "a_term.services.maintenance.agent_tools_store.ensure_default",
             return_value={"slug": "codex"},
         ),
         patch(
-            "aterm.services.maintenance.summitflow_client.list_projects",
-            new=AsyncMock(return_value=[{"id": "aterm"}, {"id": "summitflow"}]),
+            "a_term.services.maintenance.summitflow_client.list_projects",
+            new=AsyncMock(return_value=[{"id": "a-term"}, {"id": "summitflow"}]),
         ),
         patch(
-            "aterm.services.maintenance.project_settings_store.prune_missing_projects",
+            "a_term.services.maintenance.project_settings_store.prune_missing_projects",
             return_value=1,
         ) as mock_prune,
-        patch("aterm.services.maintenance.maintenance_run_store.create_run", return_value="run-1"),
-        patch("aterm.services.maintenance.maintenance_run_store.complete_run") as mock_complete,
+        patch("a_term.services.maintenance.maintenance_run_store.create_run", return_value="run-1"),
+        patch("a_term.services.maintenance.maintenance_run_store.complete_run") as mock_complete,
     ):
         result = await run_cycle(app, reason="manual")
 
@@ -66,7 +66,7 @@ async def test_run_cycle_updates_status_and_collects_results() -> None:
     assert status["runs"] == 1
     assert status["last_success_at"] is not None
     assert status["last_result"] == result
-    mock_prune.assert_called_once_with({"aterm", "summitflow"})
+    mock_prune.assert_called_once_with({"a-term", "summitflow"})
     mock_complete.assert_called_once()
     assert mock_complete.call_args.kwargs["run_id"] == "run-1"
     assert mock_complete.call_args.kwargs["status"] == "success"
@@ -80,11 +80,11 @@ async def test_run_cycle_skips_when_lock_not_acquired() -> None:
 
     with (
         patch(
-            "aterm.services.maintenance.advisory_lock",
+            "a_term.services.maintenance.advisory_lock",
             side_effect=lambda _key: _advisory_lock(False),
         ),
-        patch("aterm.services.maintenance.maintenance_run_store.create_run", return_value="run-2"),
-        patch("aterm.services.maintenance.maintenance_run_store.complete_run") as mock_complete,
+        patch("a_term.services.maintenance.maintenance_run_store.create_run", return_value="run-2"),
+        patch("a_term.services.maintenance.maintenance_run_store.complete_run") as mock_complete,
     ):
         result = await run_cycle(app, reason="interval")
 
@@ -108,8 +108,8 @@ async def test_start_scheduler_records_startup_failure_without_task() -> None:
     app.state = SimpleNamespace()  # type: ignore[assignment]
 
     with (
-        patch("aterm.services.maintenance.run_cycle", new=AsyncMock(side_effect=RuntimeError("boom"))),
-        patch("aterm.services.maintenance.MAINTENANCE_ENABLED", False),
+        patch("a_term.services.maintenance.run_cycle", new=AsyncMock(side_effect=RuntimeError("boom"))),
+        patch("a_term.services.maintenance.MAINTENANCE_ENABLED", False),
     ):
         await start_scheduler(app)
 
@@ -126,10 +126,10 @@ async def test_run_cycle_persists_failed_runs() -> None:
     setattr(app.state, MAINTENANCE_STATUS_ATTR, build_initial_status())
 
     with (
-        patch("aterm.services.maintenance.advisory_lock", side_effect=lambda _key: _advisory_lock(True)),
-        patch("aterm.services.maintenance.maintenance_run_store.create_run", return_value="run-3"),
-        patch("aterm.services.maintenance.lifecycle.reconcile_sessions", side_effect=RuntimeError("bad reconcile")),
-        patch("aterm.services.maintenance.maintenance_run_store.complete_run") as mock_complete,
+        patch("a_term.services.maintenance.advisory_lock", side_effect=lambda _key: _advisory_lock(True)),
+        patch("a_term.services.maintenance.maintenance_run_store.create_run", return_value="run-3"),
+        patch("a_term.services.maintenance.lifecycle.reconcile_sessions", side_effect=RuntimeError("bad reconcile")),
+        patch("a_term.services.maintenance.maintenance_run_store.complete_run") as mock_complete,
         pytest.raises(RuntimeError, match="bad reconcile"),
     ):
         await run_cycle(app, reason="interval")

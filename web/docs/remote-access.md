@@ -22,7 +22,7 @@ For all approaches, update `CORS_ORIGINS` in your environment to include the ori
 
 ```bash
 # In ~/.env.local
-CORS_ORIGINS=["http://localhost:3002","https://aterm.your-domain.com"]
+CORS_ORIGINS=["http://localhost:3002","https://a_term.your-domain.com"]
 ```
 
 ---
@@ -125,23 +125,23 @@ tailscale funnel 443 on
 3. **Create a tunnel:**
 
    ```bash
-   cloudflared tunnel create aterm
+   cloudflared tunnel create a-term
    ```
 
 4. **Configure the tunnel.** Create `~/.cloudflared/config.yml`:
 
    ```yaml
-   tunnel: aterm
+   tunnel: a-term
    credentials-file: /home/YOUR_USER/.cloudflared/TUNNEL_ID.json
 
    ingress:
      # Frontend
-     - hostname: aterm.your-domain.com
+     - hostname: a_term.your-domain.com
        service: http://localhost:3002
 
      # Backend API (optional — only needed if frontend and API
      # are on separate subdomains in your setup)
-     - hostname: aterm-api.your-domain.com
+     - hostname: a-term-api.your-domain.com
        service: http://localhost:8002
 
      # Catch-all (required by cloudflared)
@@ -151,17 +151,17 @@ tailscale funnel 443 on
 5. **Create DNS records:**
 
    ```bash
-   cloudflared tunnel route dns aterm aterm.your-domain.com
-   cloudflared tunnel route dns aterm aterm-api.your-domain.com
+   cloudflared tunnel route dns a-term a_term.your-domain.com
+   cloudflared tunnel route dns a-term a-term-api.your-domain.com
    ```
 
 6. **Start the tunnel:**
 
    ```bash
-   cloudflared tunnel run aterm
+   cloudflared tunnel run a-term
    ```
 
-7. **Access A-Term** at `https://aterm.your-domain.com`.
+7. **Access A-Term** at `https://a_term.your-domain.com`.
 
 ### Run as a service
 
@@ -175,7 +175,7 @@ sudo systemctl enable --now cloudflared
 Since A-Term provides shell access, you should add authentication via [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/policies/access/):
 
 1. Go to **Cloudflare Zero Trust** dashboard → **Access** → **Applications**
-2. Add a self-hosted application for `aterm.your-domain.com`
+2. Add a self-hosted application for `a_term.your-domain.com`
 3. Create a policy (e.g., allow only your email via one-time PIN)
 
 This adds an authentication layer before anyone can reach A-Term.
@@ -237,11 +237,11 @@ Access at `https://192.168.1.100:3443`. Other devices on the network will see a 
 If you have a domain pointing to your machine (via DNS, split-horizon DNS, or a local DNS server):
 
 ```caddyfile
-aterm.your-domain.com {
+a_term.your-domain.com {
     reverse_proxy localhost:3002
 }
 
-aterm-api.your-domain.com {
+a-term-api.your-domain.com {
     reverse_proxy localhost:8002
 }
 ```
@@ -255,7 +255,7 @@ sudo caddy start --config /etc/caddy/Caddyfile
 ### Option C: Single domain with path-based routing
 
 ```caddyfile
-aterm.your-domain.com {
+a_term.your-domain.com {
     handle /api/* {
         reverse_proxy localhost:8002
     }
@@ -289,5 +289,5 @@ A-Term gives browser-based access to a shell on the host machine. Keep these poi
 - **Authentication** — A-Term does not have built-in user authentication. Use Cloudflare Access, Tailscale ACLs, or a reverse proxy auth layer to control who can connect.
 - **Network scope** — Tailscale limits access to your Tailnet by default. Cloudflare Tunnel with Access policies restricts by identity. Caddy on LAN is only as secure as your network.
 - **CORS** — Always set `CORS_ORIGINS` to the specific origins you use. Don't use `["*"]` in production.
-- **WebSocket** — All three approaches support WebSocket proxying, which A-Term requires for real-time aterm I/O.
+- **WebSocket** — All three approaches support WebSocket proxying, which A-Term requires for real-time a-term I/O.
 - **tmux sessions** — A-Term sessions are backed by tmux on the host. Anyone with access to A-Term can interact with these sessions.

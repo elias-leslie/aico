@@ -4,7 +4,7 @@ import {
   parsePersistedSessionId,
   shouldSyncSessionParam,
 } from './use-active-session'
-import type { ATermSession } from './use-aterm-sessions'
+import type { ATermSession } from './use-a-term-sessions'
 
 const sessions: ATermSession[] = [
   {

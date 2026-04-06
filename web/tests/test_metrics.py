@@ -1,10 +1,10 @@
-"""Tests for aterm/services/metrics.py."""
+"""Tests for a_term/services/metrics.py."""
 
 from __future__ import annotations
 
 import threading
 
-from aterm.services.metrics import ATermMetrics
+from a_term.services.metrics import ATermMetrics
 
 
 class TestATermMetrics:

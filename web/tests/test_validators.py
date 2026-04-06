@@ -1,4 +1,4 @@
-"""Tests for aterm.api.validators module."""
+"""Tests for a_term.api.validators module."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import uuid
 import pytest
 from fastapi import HTTPException
 
-from aterm.api.validators import (
+from a_term.api.validators import (
     require_pane_exists,
     validate_active_mode,
     validate_create_pane_request,

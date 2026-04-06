@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 
-from aterm.services.scrollback_sync import (
+from a_term.services.scrollback_sync import (
     MAX_SCROLLBACK_CHARS,
     ScrollbackSyncOutputTracker,
     ScrollbackSyncScheduler,

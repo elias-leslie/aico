@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from aterm.services._pty_reader import (
+from a_term.services._pty_reader import (
     BATCH_SIZE_LIMIT,
     _has_incomplete_escape,
     _make_on_readable,
@@ -17,7 +17,7 @@ def test_make_on_readable_enqueues_all_output(monkeypatch) -> None:
     on_readable = _make_on_readable(123, queue, session_id="session-1")
 
     monkeypatch.setattr(
-        "aterm.services._pty_reader._read_pty_data",
+        "a_term.services._pty_reader._read_pty_data",
         lambda _master_fd: b"hello",
     )
 
@@ -31,7 +31,7 @@ def test_make_on_readable_enqueues_eof(monkeypatch) -> None:
     on_readable = _make_on_readable(123, queue, session_id="session-1")
 
     monkeypatch.setattr(
-        "aterm.services._pty_reader._read_pty_data",
+        "a_term.services._pty_reader._read_pty_data",
         lambda _master_fd: None,
     )
 

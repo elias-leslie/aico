@@ -14,10 +14,10 @@ def test_get_agent_state_returns_external_tmux_state(test_app: TestClient) -> No
         "claude_state": "running",
     }
     with (
-        patch("aterm.api.agent.aterm_store.get_session", return_value=None),
-        patch("aterm.api.agent.get_external_agent_tmux_session", return_value=external),
+        patch("a_term.api.agent.a_term_store.get_session", return_value=None),
+        patch("a_term.api.agent.get_external_agent_tmux_session", return_value=external),
     ):
-        response = test_app.get("/api/aterm/sessions/claude-summitflow/agent-state")
+        response = test_app.get("/api/a-term/sessions/claude-summitflow/agent-state")
 
     assert response.status_code == 200
     assert response.json() == {
@@ -28,10 +28,10 @@ def test_get_agent_state_returns_external_tmux_state(test_app: TestClient) -> No
 
 def test_get_agent_state_session_not_found(test_app: TestClient) -> None:
     with (
-        patch("aterm.api.agent.get_external_agent_tmux_session", return_value=None),
-        patch("aterm.api.agent.aterm_store.get_session", return_value=None),
+        patch("a_term.api.agent.get_external_agent_tmux_session", return_value=None),
+        patch("a_term.api.agent.a_term_store.get_session", return_value=None),
     ):
-        response = test_app.get("/api/aterm/sessions/nonexistent/agent-state")
+        response = test_app.get("/api/a-term/sessions/nonexistent/agent-state")
 
     assert response.status_code == 404
     assert "not found" in response.json()["detail"]
@@ -40,10 +40,10 @@ def test_get_agent_state_session_not_found(test_app: TestClient) -> None:
 def test_get_agent_state_normalizes_unknown_state(test_app: TestClient) -> None:
     session = {"id": "s1", "claude_state": "bogus_state"}
     with (
-        patch("aterm.api.agent.get_external_agent_tmux_session", return_value=None),
-        patch("aterm.api.agent.aterm_store.get_session", return_value=session),
+        patch("a_term.api.agent.get_external_agent_tmux_session", return_value=None),
+        patch("a_term.api.agent.a_term_store.get_session", return_value=session),
     ):
-        response = test_app.get("/api/aterm/sessions/s1/agent-state")
+        response = test_app.get("/api/a-term/sessions/s1/agent-state")
 
     assert response.status_code == 200
     assert response.json()["claude_state"] == "not_started"
@@ -52,10 +52,10 @@ def test_get_agent_state_normalizes_unknown_state(test_app: TestClient) -> None:
 def test_legacy_claude_state_alias(test_app: TestClient) -> None:
     session = {"id": "s1", "claude_state": "running"}
     with (
-        patch("aterm.api.agent.get_external_agent_tmux_session", return_value=None),
-        patch("aterm.api.agent.aterm_store.get_session", return_value=session),
+        patch("a_term.api.agent.get_external_agent_tmux_session", return_value=None),
+        patch("a_term.api.agent.a_term_store.get_session", return_value=session),
     ):
-        response = test_app.get("/api/aterm/sessions/s1/claude-state")
+        response = test_app.get("/api/a-term/sessions/s1/claude-state")
 
     assert response.status_code == 200
     assert response.json()["claude_state"] == "running"
@@ -68,10 +68,10 @@ def test_start_agent_returns_noop_for_external_tmux_session(test_app: TestClient
         "claude_state": "running",
     }
     with (
-        patch("aterm.api.agent.aterm_store.get_session", return_value=None),
-        patch("aterm.api.agent.get_external_agent_tmux_session", return_value=external),
+        patch("a_term.api.agent.a_term_store.get_session", return_value=None),
+        patch("a_term.api.agent.get_external_agent_tmux_session", return_value=external),
     ):
-        response = test_app.post("/api/aterm/sessions/codex-summitflow/start-agent")
+        response = test_app.post("/api/a-term/sessions/codex-summitflow/start-agent")
 
     assert response.status_code == 200
     assert response.json() == {
@@ -90,16 +90,16 @@ def test_start_agent_ensures_tmux_session_before_launch(test_app: TestClient) ->
     }
     tool = {"command": "claude", "process_name": "claude"}
     with (
-        patch("aterm.api.agent.get_external_agent_tmux_session", return_value=None),
-        patch("aterm.api.agent.aterm_store.get_session", return_value=session),
-        patch("aterm.api.agent.agent_tools_store.get_by_slug", return_value=tool),
-        patch("aterm.api.agent.lifecycle.ensure_session_alive", return_value=True) as ensure_mock,
-        patch("aterm.api.agent.is_agent_running", return_value=False),
-        patch("aterm.api.agent.atomically_set_starting", return_value=None),
-        patch("aterm.api.agent.send_agent_command", return_value=None) as send_mock,
-        patch("aterm.api.agent.background_verify_agent_start"),
+        patch("a_term.api.agent.get_external_agent_tmux_session", return_value=None),
+        patch("a_term.api.agent.a_term_store.get_session", return_value=session),
+        patch("a_term.api.agent.agent_tools_store.get_by_slug", return_value=tool),
+        patch("a_term.api.agent.lifecycle.ensure_session_alive", return_value=True) as ensure_mock,
+        patch("a_term.api.agent.is_agent_running", return_value=False),
+        patch("a_term.api.agent.atomically_set_starting", return_value=None),
+        patch("a_term.api.agent.send_agent_command", return_value=None) as send_mock,
+        patch("a_term.api.agent.background_verify_agent_start"),
     ):
-        response = test_app.post("/api/aterm/sessions/session-1/start-agent")
+        response = test_app.post("/api/a-term/sessions/session-1/start-agent")
 
     assert response.status_code == 200
     ensure_mock.assert_called_once_with("session-1")

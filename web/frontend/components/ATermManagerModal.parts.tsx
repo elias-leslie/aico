@@ -6,8 +6,8 @@ import { Folder, PanelsTopLeft, Search, X } from 'lucide-react'
 import type { RefObject } from 'react'
 import { useHoverStyle } from '@/lib/hooks/use-hover-style'
 import type { ProjectSetting } from '@/lib/hooks/use-project-settings'
-import type { ATermPane } from '@/lib/hooks/use-aterm-panes'
-import type { ATermSession } from '@/lib/hooks/use-aterm-sessions'
+import type { ATermPane } from '@/lib/hooks/use-a-term-panes'
+import type { ATermSession } from '@/lib/hooks/use-a-term-sessions'
 
 export interface AttachableATermOption {
   id: string
@@ -307,7 +307,7 @@ export function ModalHeader() {
       </div>
       <Dialog.Close asChild>
         <button
-          data-testid="aterm-manager-modal-close"
+          data-testid="a-term-manager-modal-close"
           className="flex items-center justify-center w-9 h-9 rounded-lg transition-all duration-150"
           onMouseEnter={closeButtonHover.onMouseEnter}
           onMouseLeave={closeButtonHover.onMouseLeave}
@@ -336,7 +336,7 @@ export function SearchBar({
         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--term-text-muted)' }} />
         <input
           ref={inputRef}
-          id="aterm-manager-search"
+          id="a-term-manager-search"
           type="text"
           value={value}
           onChange={(event) => onChange(event.target.value)}

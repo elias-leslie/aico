@@ -2,12 +2,12 @@
 
 import { ChevronDown, ChevronUp, Mic, Sparkles } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ConnectionStatus } from '@/components/aterm.types'
+import type { ConnectionStatus } from '@/components/a-term.types'
 import { getClaudeModelOptions, type ClaudeModelOption } from '@/lib/utils/agent-hub-models'
 import {
   getMobileATermBannerState,
   isReconnectableStatus,
-} from '@/lib/utils/mobile-aterm-status'
+} from '@/lib/utils/mobile-a-term-status'
 import { KeyboardKey } from './KeyboardKey'
 import { KEY_SEQUENCES } from './keyMappings'
 import { useModifiers } from './ModifierContext'

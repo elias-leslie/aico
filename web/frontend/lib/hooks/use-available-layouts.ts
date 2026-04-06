@@ -1,11 +1,11 @@
 'use client'
 
 import { useLayoutEffect, useMemo, useState } from 'react'
-import type { LayoutMode } from '@/lib/constants/aterm'
+import type { LayoutMode } from '@/lib/constants/a-term'
 import {
   getAvailableLayoutModes,
   getPaneCapacityForViewport,
-} from '@/lib/constants/aterm'
+} from '@/lib/constants/a-term'
 
 /**
  * SSR-safe hook that returns available layout modes based on pane count and viewport width.

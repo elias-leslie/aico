@@ -30,7 +30,7 @@ export default function Home() {
           style={{ backgroundColor: 'var(--term-bg-deep)', color: 'var(--term-text-muted)', fontFamily: 'var(--font-mono)' }}
           aria-live="polite"
         >
-          Preparing aterm workspace…
+          Preparing aTerm workspace…
         </div>
       }
     >

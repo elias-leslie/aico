@@ -3,7 +3,7 @@
  *
  * Uses same-origin routing via Next.js rewrites to avoid CORS issues with CF Access:
  * - Development: http://localhost:3002/api/* -> localhost:8002/api/* (rewrite)
- * - Production: https://aterm.summitflow.dev/api/* -> localhost:8002/api/* (rewrite)
+ * - Production: https://a-term.summitflow.dev/api/* -> localhost:8002/api/* (rewrite)
  *
  * This pattern ensures all API requests go through the same origin as the frontend,
  * with Next.js server-side proxying to the backend. No cross-origin = no CORS.
@@ -20,7 +20,7 @@ export const PORTS = {
 
 function getServerApiOrigin(): string {
   return (
-    process.env.NEXT_PUBLIC_ATERM_API_URL ||
+    process.env.NEXT_PUBLIC_A_TERM_API_URL ||
     process.env.API_URL ||
     `http://localhost:${PORTS.backend}`
   )
@@ -53,7 +53,7 @@ export function getApiBaseUrl(): string {
  * path-based rules. This avoids CF Access cookie issues (cookies are subdomain-specific).
  * The Tunnel config routes /ws/* paths directly to the backend.
  *
- * @param path - WebSocket path (e.g., /ws/aterm/session-id)
+ * @param path - WebSocket path (e.g., /ws/a-term/session-id)
  * @returns Full WebSocket URL
  */
 export function getWsUrl(path: string): string {
@@ -79,7 +79,7 @@ export function getWsUrl(path: string): string {
 /**
  * Build a full API URL from a path.
  *
- * @param path - API path (e.g., /api/aterm/sessions)
+ * @param path - API path (e.g., /api/a-term/sessions)
  * @returns Full URL
  */
 export function buildApiUrl(path: string): string {
@@ -97,5 +97,5 @@ export function getAgentHubVoiceWsUrl(): string {
       )
 
   const protocol = baseUrl.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${protocol}//${baseUrl.host}/api/voice/ws?user_id=aterm&app=aterm`
+  return `${protocol}//${baseUrl.host}/api/voice/ws?user_id=a-term&app=aTerm`
 }

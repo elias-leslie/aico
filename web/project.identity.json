@@ -1,13 +1,15 @@
 {
   "schema_version": 1,
   "project": {
-    "id": "aterm",
-    "repo_name": "aterm",
+    "id": "a-term",
+    "repo_name": "a-term",
     "display_name": "A-Term",
     "legacy_ids": [
+      "aterm",
       "terminal"
     ],
     "repo_aliases": [
+      "aterm",
       "terminal"
     ]
   },
@@ -23,30 +25,42 @@
     "health_endpoint": "/health"
   },
   "services": {
-    "backend": "aterm-backend.service",
-    "frontend": "aterm-frontend.service",
+    "backend": "a-term-backend.service",
+    "frontend": "a-term-frontend.service",
     "default_workers": [],
     "optional_workers": []
   },
   "hosts": {
-    "production_frontend": "aterm.summitflow.dev",
-    "production_api": "atermapi.summitflow.dev"
+    "production_frontend": "a-term.summitflow.dev",
+    "production_api": "a-term-api.summitflow.dev"
   },
   "artifacts": {
     "python_distribution": "a-term",
-    "python_module": "aterm",
+    "python_module": "a_term",
     "cache_dir_name": "a-term",
-    "upload_dir_name": "a-term-uploads"
+    "upload_dir_name": "a-term-uploads",
+    "env_prefix": "A_TERM",
+    "legacy_python_modules": [
+      "aterm"
+    ]
   },
   "database": {
     "shared_with": "summitflow",
-    "table_prefix": "aterm_",
+    "table_prefix": "a_term_",
     "legacy_table_prefixes": [
+      "aterm_",
       "terminal_"
     ],
-    "version_table": "aterm_alembic_version",
+    "version_table": "a_term_alembic_version",
     "legacy_version_tables": [
+      "aterm_alembic_version",
       "terminal_alembic_version"
     ]
+  },
+  "repository": {
+    "owner": "elias-leslie",
+    "name": "a-term",
+    "ssh_url": "git@github.com:elias-leslie/a-term.git",
+    "https_url": "https://github.com/elias-leslie/a-term"
   }
 }

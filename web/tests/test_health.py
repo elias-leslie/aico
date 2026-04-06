@@ -29,7 +29,7 @@ def test_health_healthy_returns_status(test_app: TestClient) -> None:
     mock_cursor.__enter__ = MagicMock(return_value=mock_cursor)
     mock_cursor.__exit__ = MagicMock(return_value=False)
 
-    with patch("aterm.main.get_connection") as mock_get_conn:
+    with patch("a_term.main.get_connection") as mock_get_conn:
         mock_get_conn.return_value = mock_conn
 
         # Act
@@ -39,14 +39,14 @@ def test_health_healthy_returns_status(test_app: TestClient) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "healthy"
-    assert body["service"] == "aterm"
+    assert body["service"] == "a-term"
     assert "maintenance" in body
 
 
 def test_health_unhealthy_when_db_down(test_app: TestClient) -> None:
     """GET /health -- database unreachable returns 503 with unhealthy status."""
     # Arrange
-    with patch("aterm.main.get_connection", side_effect=RuntimeError("connection refused")):
+    with patch("a_term.main.get_connection", side_effect=RuntimeError("connection refused")):
         # Act
         response = test_app.get("/health")
 
@@ -54,21 +54,21 @@ def test_health_unhealthy_when_db_down(test_app: TestClient) -> None:
     assert response.status_code == 503
     body = response.json()
     assert body["status"] == "unhealthy"
-    assert body["service"] == "aterm"
+    assert body["service"] == "a-term"
     assert body["db"] == "down"
 
 
 def test_health_response_contains_service_field(test_app: TestClient) -> None:
     """GET /health -- response always includes the ``service`` field."""
     # Arrange
-    with patch("aterm.main.get_connection", side_effect=Exception("any error")):
+    with patch("a_term.main.get_connection", side_effect=Exception("any error")):
         # Act
         response = test_app.get("/health")
 
     # Assert
     body = response.json()
     assert "service" in body
-    assert body["service"] == "aterm"
+    assert body["service"] == "a-term"
 
 
 def test_health_response_includes_maintenance_status(test_app: TestClient) -> None:
@@ -82,7 +82,7 @@ def test_health_response_includes_maintenance_status(test_app: TestClient) -> No
     mock_cursor.__exit__ = MagicMock(return_value=False)
     _app(test_app).state.maintenance_status = {"state": "idle", "runs": 5}
 
-    with patch("aterm.main.get_connection") as mock_get_conn:
+    with patch("a_term.main.get_connection") as mock_get_conn:
         mock_get_conn.return_value = mock_conn
         response = test_app.get("/health")
 

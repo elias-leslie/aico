@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { usePaneRenderer } from './use-pane-renderer'
 import { getSlotPanelId, type PaneSlot, type ATermSlot } from '@/lib/utils/slot'
 
-const atermProps = vi.hoisted(
+const aTermProps = vi.hoisted(
   () => [] as Array<{ sessionId: string; sessionMode?: string; isVisible?: boolean }>,
 )
 const headerProps = vi.hoisted(() => [] as Array<Record<string, unknown>>)
@@ -18,8 +18,8 @@ vi.mock('@/components/ATerm', () => ({
     sessionMode?: string
     isVisible?: boolean
   }) => {
-    atermProps.push({ sessionId, sessionMode, isVisible })
-    return <div data-testid={`aterm-${sessionId}`} />
+    aTermProps.push({ sessionId, sessionMode, isVisible })
+    return <div data-testid={`a-term-${sessionId}`} />
   },
 }))
 
@@ -28,7 +28,7 @@ vi.mock('@/components/UnifiedATermHeader', () => ({
     headerProps.push(props)
     const slot = props.slot as { paneId?: string; sessionId?: string }
     const id = slot.paneId ?? slot.sessionId ?? 'unknown'
-    return <div data-testid={`aterm-header-${id}`} />
+    return <div data-testid={`a-term-header-${id}`} />
   },
 }))
 
@@ -90,8 +90,8 @@ function RenderHarness({
 }
 
 describe('usePaneRenderer', () => {
-  it('keeps all rendered desktop aterms visible', () => {
-    atermProps.length = 0
+  it('keeps all rendered desktop a-terms visible', () => {
+    aTermProps.length = 0
     headerProps.length = 0
 
     const slots: PaneSlot[] = [
@@ -119,9 +119,9 @@ describe('usePaneRenderer', () => {
 
     render(<RenderHarness slots={slots} />)
 
-    expect(screen.getByTestId('aterm-session-1')).toBeInTheDocument()
-    expect(screen.getByTestId('aterm-session-2')).toBeInTheDocument()
-    expect(atermProps).toEqual([
+    expect(screen.getByTestId('a-term-session-1')).toBeInTheDocument()
+    expect(screen.getByTestId('a-term-session-2')).toBeInTheDocument()
+    expect(aTermProps).toEqual([
       { sessionId: 'session-1', sessionMode: 'shell', preferLessDestructiveSnapshots: undefined, isVisible: undefined },
       { sessionId: 'session-2', sessionMode: 'shell', preferLessDestructiveSnapshots: undefined, isVisible: undefined },
     ])
@@ -159,11 +159,11 @@ describe('usePaneRenderer', () => {
       `pane-drop-target-${getSlotPanelId(slots[1])}`,
     )
     const dataTransfer = {
-      types: ['application/x-aterm-pane-slot', 'text/plain'],
+      types: ['application/x-a-term-pane-slot', 'text/plain'],
       effectAllowed: 'move',
       dropEffect: 'move',
       getData: (type: string) =>
-        type === 'application/x-aterm-pane-slot' || type === 'text/plain'
+        type === 'application/x-a-term-pane-slot' || type === 'text/plain'
           ? getSlotPanelId(slots[0])
           : '',
     }
@@ -209,7 +209,7 @@ describe('usePaneRenderer', () => {
   })
 
   it('matches external pane capabilities with supported controls only', () => {
-    atermProps.length = 0
+    aTermProps.length = 0
     headerProps.length = 0
 
     const slots: ATermSlot[] = [
@@ -226,12 +226,12 @@ describe('usePaneRenderer', () => {
     render(<RenderHarness slots={slots} />)
 
     expect(headerProps).toHaveLength(1)
-    expect(atermProps).toEqual([
+    expect(aTermProps).toEqual([
       { sessionId: 'external-codex', sessionMode: 'codex', isVisible: undefined },
     ])
     expect(headerProps[0]?.showCleanButton).toBe(true)
     expect(headerProps[0]?.onReset).toBeUndefined()
-    expect(headerProps[0]?.closeTooltip).toBe('Detach aterm')
+    expect(headerProps[0]?.closeTooltip).toBe('Detach a-term')
   })
 
   it('routes pane upload actions to the pane session', () => {
