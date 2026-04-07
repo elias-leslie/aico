@@ -10,7 +10,7 @@ export function getKeyboardStyles(rowHeight: number): string {
       border-radius: 0;
     }
 
-    .aTerm-keyboard-theme .hg-button {
+    .a-term-keyboard-theme .hg-button {
       background: var(--term-bg-elevated);
       color: var(--term-text-primary);
       border: 1px solid var(--term-border);
@@ -27,28 +27,28 @@ export function getKeyboardStyles(rowHeight: number): string {
       transition: all 0.1s ease;
     }
 
-    .aTerm-keyboard-theme .hg-button:active {
+    .a-term-keyboard-theme .hg-button:active {
       background: var(--term-border-active);
       box-shadow: 0 0 8px var(--term-accent-glow);
     }
 
-    .aTerm-keyboard-theme .hg-button.accent-key {
+    .a-term-keyboard-theme .hg-button.accent-key {
       background: var(--term-bg-elevated);
       border-color: var(--term-border-active);
     }
 
-    .aTerm-keyboard-theme .hg-button.accent-key:active {
+    .a-term-keyboard-theme .hg-button.accent-key:active {
       background: var(--term-accent);
       color: var(--term-accent-foreground);
     }
 
-    .aTerm-keyboard-theme .hg-button.wide-key {
+    .a-term-keyboard-theme .hg-button.wide-key {
       background: var(--term-bg-elevated);
       font-size: ${wideFontSize}px;
       font-weight: 500;
     }
 
-    .aTerm-keyboard-theme .hg-button[data-skbtn="{shift}"],
+    .a-term-keyboard-theme .hg-button[data-skbtn="{shift}"],
     .a-term-keyboard-theme .hg-button[data-skbtn="{bksp}"],
     .a-term-keyboard-theme .hg-button[data-skbtn="{enter}"] {
       font-size: ${iconFontSize}px;
@@ -60,30 +60,30 @@ export function getKeyboardStyles(rowHeight: number): string {
       color: var(--term-accent);
     }
 
-    .aTerm-keyboard-theme .hg-button.modifier-locked {
+    .a-term-keyboard-theme .hg-button.modifier-locked {
       background: var(--term-accent);
       color: var(--term-accent-foreground);
       border-color: var(--term-accent);
       box-shadow: 0 0 8px var(--term-accent-glow);
     }
 
-    .aTerm-keyboard-theme .hg-row {
+    .a-term-keyboard-theme .hg-row {
       display: flex;
       flex-direction: row;
       gap: 3px;
       margin-bottom: 4px;
     }
 
-    .aTerm-keyboard-theme .hg-row:last-child {
+    .a-term-keyboard-theme .hg-row:last-child {
       margin-bottom: 0;
     }
 
-    .aTerm-keyboard-theme .hg-row:nth-child(3) {
+    .a-term-keyboard-theme .hg-row:nth-child(3) {
       padding-left: 5%;
       padding-right: 5%;
     }
 
-    .aTerm-keyboard-theme .hg-button[data-skbtn="{shift}"],
+    .a-term-keyboard-theme .hg-button[data-skbtn="{shift}"],
     .a-term-keyboard-theme .hg-button[data-skbtn="{bksp}"] {
       flex: 1.5 1 0;
     }

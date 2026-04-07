@@ -1,26 +1,74 @@
 # A-Term
 
-Host-native browser workspace with tmux-backed persistent sessions, multi-pane layouts, files and notes tooling, optional browser-native voice input, configurable CLI agent integrations, and a built-in maintenance loop.
+**Your browser is now a terminal multiplexer.**
 
-**A-Term is a standalone product.** It starts and runs independently with just PostgreSQL and tmux. SummitFlow and Agent Hub integrations are optional companion services.
+Run AI coding agents side by side in persistent, browser-accessible tmux sessions — with a files browser, notes, and voice input built in.
 
-![A-Term screenshot](docs/images/a-term-home-dark.png)
+Built for [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex CLI](https://github.com/openai/codex), [Gemini CLI](https://github.com/google-gemini/gemini-cli), [OpenCode](https://github.com/opencode-ai/opencode), and every TUI agent that follows.
 
-A-Term gives you browser-accessible tmux sessions with pane layouts, persistent shells, pane-level files, docked notes, and optional companion tooling without turning your host runtime into a containerized sidecar.
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.13+-3776ab.svg)](https://python.org)
+[![Next.js](https://img.shields.io/badge/Next.js-16-000.svg)](https://nextjs.org)
+[![xterm.js](https://img.shields.io/badge/xterm.js-6-green.svg)](https://xtermjs.org)
 
-## Quickstart
+![A-Term — multi-pane workspace with Claude Code, shell, and project files](docs/images/a-term-home-dark.png)
 
-A-Term targets Linux hosts running under `systemd --user`. You need Node.js 20+, tmux, PostgreSQL, and `curl`. The installer bootstraps `uv` and a managed Python 3.13 when they are missing.
+## The Problem
 
-If you already have PostgreSQL running, set `DATABASE_URL` in `.env.local` and install:
+You're running Claude Code in one terminal, Codex in another, a shell for git, and a fourth for logs. You lose your session when the browser tab closes or SSH drops. Your project files are in a different window. Your notes are in a different app entirely.
+
+**A-Term puts all of it in one browser tab.**
+
+## Features
+
+**`persistent sessions`** — tmux-backed terminals survive browser closes, server restarts, and network drops. Reconnect exactly where you left off.
+
+**`multi-pane layouts`** — Up to 6 resizable panes. Run Claude Code, Codex, and a shell side by side on the same screen.
+
+![Four-pane grid layout with multiple active agents](docs/images/a-term-grid-2x2.png)
+*Four-pane grid: run multiple agents and shells simultaneously*
+
+**`files browser`** — Browse the active pane's working directory. Preview files, copy paths, insert into prompts — without leaving the terminal.
+
+![Files browser showing directory tree and README preview](docs/images/a-term-files-browser.png)
+*Browse and preview files from the active pane's working directory*
+
+**`docked notes`** — Keep prompts, context snippets, and scratchpads beside your live terminal output. Project-scoped, always available.
+
+![Notes workspace docked beside active terminal panes](docs/images/a-term-notes-workspace.png)
+*Notes panel docked alongside the workspace*
+
+**`voice input`** — Dictate commands and prompts via browser speech-to-text. Hands stay on the keyboard until they don't need to.
+
+![Voice input panel with transcript textarea and mic controls](docs/images/a-term-voice-input.png)
+*Voice input panel overlaid on the workspace*
+
+**`project deep links`** — Open `/?project=myapp&dir=/path` to jump straight into a project workspace. Bookmark your setups.
+
+**`dual mode`** — Switch any pane between raw shell and your configured AI agent with one click. Supports Claude Code, Codex, Gemini CLI, and OpenCode out of the box.
+
+![Mode switching dropdown showing Shell, Claude Code, OpenCode, Gemini CLI, and Codex](docs/images/a-term-mode-switch.png)
+*Switch between agents and shell per pane*
+
+**`mobile keyboard`** — On-screen keyboard with arrow keys, Ctrl, Esc, and modifier support for touch devices.
+
+**`light and dark themes`** — Respects `prefers-color-scheme` with a manual override that persists across sessions.
+
+## Install
 
 ```bash
+git clone https://github.com/elias-leslie/a-term.git
+cd a-term
 bash scripts/install.sh
 ```
 
-If `.env.local` does not exist yet, the installer creates it from [`.env.example`](.env.example), stops, and tells you what to edit before you rerun it.
+> Requires Linux with systemd, tmux, Node.js 20+, and PostgreSQL.
+> The installer handles Python 3.13, uv, Alembic migrations, frontend build, and systemd unit setup.
 
-For a throwaway local PostgreSQL on a fresh machine:
+Then open **http://localhost:3002** and start working.
+
+<details>
+<summary><strong>Quick PostgreSQL setup (Docker)</strong></summary>
 
 ```bash
 docker run -d \
@@ -32,150 +80,42 @@ docker run -d \
   postgres:16
 ```
 
-Then use:
+Set in `.env.local`:
 
 ```bash
 DATABASE_URL=postgresql://a-term:a-term@localhost:5432/a-term
 ```
 
-## Overview
+</details>
 
-A-Term provides browser-accessible shell and agent sessions backed by tmux for persistence. It supports multiple panes with split layouts, project-scoped working directories, and dual-mode operation (shell plus the configured default agent tool). Sessions survive browser disconnects, are reconciled with tmux state on startup and on a recurring maintenance interval, and expose maintenance status through `/health`.
+<details>
+<summary><strong>Environment variables</strong></summary>
 
-## Screenshots
-
-| Main + Side Workspace | Files Browser |
-|-------|-------|
-| ![Three-pane workspace with one large pane above two smaller panes](docs/images/a-term-home-dark.png) | ![Files browser previewing README.md from the active pane](docs/images/a-term-files-browser.png) |
-
-| Notes Workspace | Voice Input |
-|-------|-------|
-| ![Docked notes workspace beside active panes](docs/images/a-term-notes-workspace.png) | ![Voice input sheet opened from pane actions](docs/images/a-term-voice-input.png) |
-
-| Four-Pane Grid Layout |
-|-------|
-| ![Four-pane grid layout with multiple active panes](docs/images/a-term-grid-2x2.png) |
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Backend | FastAPI, Python 3.13+, Uvicorn |
-| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 4 |
-| A-Term | xterm.js 6 (rendering), tmux (session persistence) |
-| Database | PostgreSQL (own schema; can be a dedicated database) |
-| Quality | Ruff, Ty, pytest, Vitest, Biome |
-
-## Architecture
-
-- `a_term/api/` exposes REST and WebSocket endpoints.
-- `a_term/services/` owns tmux/session lifecycle, maintenance, and agent orchestration.
-- `a_term/storage/` contains database access.
-- `frontend/app/`, `frontend/components/`, and `frontend/lib/` contain the Next.js UI, client hooks, and browser/runtime helpers.
-- `scripts/` contains the public install/start/stop helpers and the systemd unit templates.
-
-## Key Features
-
-- **Persistent sessions** - tmux-backed a-terms survive browser disconnects and server restarts
-- **Multi-pane layouts** - Up to 6 panes with resizable split views on wide desktops
-- **Dual mode** - Switch between shell and your configured agent tool per pane
-- **Project context** - Open a-terms in project-specific working directories
-- **Project deep links** - Open `/?project=<id>&dir=<path>` to focus or create a project pane directly
-- **Pane files browser** - Browse the active working directory, preview files, and copy or insert paths without leaving the pane
-- **Docked notes workspace** - Keep project-scoped notes and prompts beside live terminal output
-- **Voice input** - Use speech-to-text from supported browsers, with optional Agent Hub companion integration when installed
-- **Mobile keyboard** - On-screen keyboard for touch devices (simple-keyboard)
-- **Periodic maintenance** - Reconciles tmux state, prunes stale uploads, repairs default agent-tool state, and deletes orphaned project settings
-- **Maintenance observability** - `/health` and `/api/internal/maintenance/runs` report maintenance state and recent persisted runs
-- **Scrollback capture** - Retrieves a-term history when reconnecting
-- **Real-time resize** - A-Term dimensions sync between browser and tmux
-- **Light and dark app themes** - Respects `prefers-color-scheme` by default and supports a persisted manual override
-
-## Standalone Usage and Optional Integrations
-
-A-Term requires only PostgreSQL and tmux. It has no hard dependency on any other service.
-
-A-Term is intended to run natively on the host under `systemd --user`. It depends on the host tmux server, host working tree, and host CLI auth/session state.
-
-### Standalone (default)
-
-All core features work without SummitFlow or Agent Hub: persistent tmux sessions, multi-pane layouts, shell/agent mode switching, pane files, docked notes, browser-native voice input on supported browsers, project settings, maintenance, and the full REST/WebSocket API. When no external service is reachable, the project list is populated from local `a_term_project_settings` only.
-
-### Optional: SummitFlow API (`SUMMITFLOW_API_BASE`)
-
-When the SummitFlow backend is available at `SUMMITFLOW_API_BASE`, A-Term fetches project metadata (name, root path) and merges it with local a-term settings. New project panes still open in shell mode by default, but A-Term uses the SummitFlow project root to place the shell in the right working directory. If SummitFlow is unreachable, A-Term continues with local data only.
-
-### Optional: Agent Hub (`NEXT_PUBLIC_AGENT_HUB_URL`, `AGENT_HUB_URL`)
-
-When Agent Hub is configured, A-Term gains:
-
-- **Model catalog** — fetched through A-Term's same-origin `/api/agent-hub/models` proxy so cross-machine installs do not depend on browser CORS.
-- **Prompt cleaning** — sent through A-Term's same-origin `/api/agent-hub/complete` proxy for the same reason.
-
-Browser-native voice input still works in standalone mode on browsers that expose `SpeechRecognition` or `webkitSpeechRecognition`. If `@agent-hub/passport-client` is installed, A-Term will prefer that companion path when it is available.
-
-Use `NEXT_PUBLIC_AGENT_HUB_URL` when the browser should expose companion UI, and set `AGENT_HUB_URL` anywhere the A-Term server itself needs to reach Agent Hub directly on another host. If Agent Hub is unavailable, A-Term falls back cleanly.
-
-## Ports
-
-| Service | Port |
-|---------|------|
-| Frontend (Next.js) | 3002 |
-| Backend (FastAPI) | 8002 |
-
-## Install Notes
-
-`bash scripts/install.sh` is the supported public install path. It:
-
-- creates `.env.local` from `.env.example` when missing
-- installs `uv` and Python `3.13` when the host does not already have them
-- validates tmux and links the repo tmux config
-- installs Python and frontend dependencies
-- runs Alembic migrations
-- builds the production frontend
-- renders user-level `systemd` units into `~/.config/systemd/user/`
-- enables and starts the backend and frontend services
-
-Use `bash scripts/install.sh --no-start` if you only want bootstrap/build steps.
-
-If `8002` or `3002` are already in use on the host, set `A_TERM_PORT` or `A_TERM_FRONTEND_PORT` in `.env.local` before rerunning the installer.
-
-### Optional Companions
-
-Add these to `.env.local` when SummitFlow or Agent Hub are running elsewhere:
-
-```bash
-SUMMITFLOW_API_BASE=http://HOST:8001/api
-NEXT_PUBLIC_AGENT_HUB_URL=http://HOST:8003
-AGENT_HUB_URL=http://HOST:8003
-```
-
-### Environment
-
-Runtime settings are read from repo-local `.env.local`, repo-local `.env`, or exported environment variables. Use [`.env.example`](.env.example) as the reference. Only `DATABASE_URL` is required for standalone mode.
+Copy `.env.example` to `.env.local` and set `DATABASE_URL`. Everything else is optional:
 
 ```bash
 # Required
 DATABASE_URL=postgresql://user:pass@localhost/a-term
 
-# Optional integrations (A-Term works without these)
-SUMMITFLOW_API_BASE=http://localhost:8001/api       # SummitFlow project metadata
-NEXT_PUBLIC_AGENT_HUB_URL=http://localhost:8003     # enables companion UI in the browser
-AGENT_HUB_URL=http://localhost:8003                 # server-side Agent Hub access for proxies
-
-# Optional tuning
+# Service tuning
 A_TERM_PORT=8002
-A_TERM_BIND_HOST=127.0.0.1
 A_TERM_FRONTEND_PORT=3002
-A_TERM_FRONTEND_HOST=127.0.0.1
 LOG_LEVEL=INFO
-LOG_DIR=logs
+
+# Maintenance
 MAINTENANCE_INTERVAL_SECONDS=900
 MAINTENANCE_SESSION_PURGE_DAYS=7
-UPLOAD_MAX_AGE_SECONDS=86400
+
+# Optional companion services (A-Term works without these)
+SUMMITFLOW_API_BASE=http://localhost:8001/api
+NEXT_PUBLIC_AGENT_HUB_URL=http://localhost:8003
+AGENT_HUB_URL=http://localhost:8003
 ```
 
-### Daily Commands
+</details>
+
+<details>
+<summary><strong>Daily commands</strong></summary>
 
 ```bash
 bash scripts/start.sh
@@ -184,74 +124,52 @@ journalctl --user -u a-term-backend.service -f
 journalctl --user -u a-term-frontend.service -f
 ```
 
+</details>
+
 ## Remote Access
 
-A-Term listens on `localhost` by default. To access it from other devices — your phone, another computer, or anywhere on the internet — see the [Remote Access guide](docs/remote-access.md), which covers Tailscale, Cloudflare Tunnel, and Caddy reverse proxy setups.
+A-Term listens on `localhost` by default. To access it from your phone, another machine, or anywhere on the internet, see the [Remote Access guide](docs/remote-access.md) — covers Tailscale, Cloudflare Tunnel, and Caddy reverse proxy.
 
-## API
+## Tech Stack
 
-The table below highlights the primary runtime endpoints. The full API surface is published at `/openapi.json`, including notes formatting/versioning routes, diagnostics recording endpoints, detached-pane flows, and other utility endpoints that are better read from the generated schema than maintained by hand here.
+| Layer | Technology |
+|-------|-----------|
+| Backend | FastAPI, Python 3.13+, Uvicorn |
+| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 4 |
+| Terminal | xterm.js 6 (rendering), tmux (session persistence) |
+| Database | PostgreSQL |
+| Quality | Ruff, Ty, pytest, Vitest, Biome |
 
-### Core REST Endpoints
+<details>
+<summary><strong>Architecture</strong></summary>
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/health` | Health check plus maintenance status payload |
-| GET | `/api/internal/maintenance` | Internal maintenance status (requires internal bearer token) |
-| GET | `/api/internal/maintenance/runs` | Recent persisted maintenance runs (requires internal bearer token) |
-| POST | `/api/internal/maintenance/run` | Trigger one maintenance cycle (requires internal bearer token) |
-| GET | `/api/a-term/sessions` | List sessions |
-| GET | `/api/a-term/sessions/{id}` | Get session |
-| PATCH | `/api/a-term/sessions/{id}` | Update session |
-| DELETE | `/api/a-term/sessions/{id}` | Delete session |
-| GET | `/api/a-term/panes` | List panes |
-| POST | `/api/a-term/panes` | Create pane (max 6) |
-| PATCH | `/api/a-term/panes/{id}` | Update pane |
-| DELETE | `/api/a-term/panes/{id}` | Delete pane |
-| POST | `/api/a-term/files` | Upload a file for use in pane commands |
-| GET | `/api/notes` | List notes and prompts |
-| POST | `/api/notes` | Create a note or prompt |
-| GET | `/api/a-term/projects` | List project settings (merged with SummitFlow projects when available) |
-| PUT | `/api/a-term/project-settings/{id}` | Update project settings |
-| PUT | `/api/a-term/projects/{id}/mode` | Set shell/agent mode |
-| POST | `/api/a-term/projects/{id}/reset` | Reset project sessions |
-| POST | `/api/a-term/projects/{id}/disable` | Disable a-term for project |
+- `a_term/api/` — REST and WebSocket endpoints
+- `a_term/services/` — tmux lifecycle, maintenance, agent orchestration
+- `a_term/storage/` — database access
+- `frontend/app/`, `frontend/components/`, `frontend/lib/` — Next.js UI
+- `scripts/` — install, start, stop, systemd templates
 
-### WebSocket
+Full API schema available at `/openapi.json` when running.
 
-`/ws/a-term/{session_id}` - A-Term I/O stream
+</details>
 
-| Message Type | Direction | Description |
-|-------------|-----------|-------------|
-| Text | Client → Server | A-Term input |
-| JSON `{"resize": {cols, rows}}` | Client → Server | Resize a-term |
-| JSON `{"refresh": true}` | Client → Server | Redraw a-term |
-| Binary | Server → Client | A-Term output |
+<details>
+<summary><strong>Optional companion integrations</strong></summary>
 
-## Database
+A-Term is a standalone product. All core features work without any external service.
 
-Primary service tables: `a_term_sessions` (session state, mode, alive tracking), `a_term_panes` (pane layout and ordering), `a_term_project_settings` (per-project mode and enabled state), `agent_tools` (configured CLI agent integrations), and `a_term_maintenance_runs` (append-only maintenance audit trail). Schema is managed via Alembic migrations, with maintenance-focused indexes for session retention and project/mode lookups.
+**SummitFlow** (`SUMMITFLOW_API_BASE`) — When available, A-Term fetches project metadata (name, root path) and uses it to place shells in the right working directory. Falls back to local data if unreachable.
 
-## Services
+**Agent Hub** (`NEXT_PUBLIC_AGENT_HUB_URL`, `AGENT_HUB_URL`) — Adds model catalog and prompt cleaning proxies. Browser-native voice input works standalone; Agent Hub provides an optional enhanced path.
 
-A-Term runs natively under `systemd --user`:
-
-- `a-term-backend.service` for the FastAPI backend on port `8002`
-- `a-term-frontend.service` for the Next.js frontend on port `3002`
+</details>
 
 ## License
 
-Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+Apache License 2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+Commercial use is permitted. For commercial support, custom work, or partnership discussions, start a thread in [GitHub Discussions](https://github.com/elias-leslie/a-term/discussions).
 
 ## Security
 
-Please report suspected vulnerabilities privately as described in
-[SECURITY.md](SECURITY.md).
-
-## Commercial
-
-Commercial use is permitted under the Apache 2.0 license.
-
-For commercial support, custom work, partnership discussions, or private
-licensing for future versions, start a thread in
-[GitHub Discussions](https://github.com/elias-leslie/a-term/discussions).
+Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
