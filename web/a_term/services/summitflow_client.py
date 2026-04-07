@@ -39,6 +39,35 @@ async def close_client() -> None:
     _cache = None
 
 
+def has_companion_api() -> bool:
+    """Return whether the SummitFlow companion API is configured."""
+    return bool(SUMMITFLOW_API_BASE.strip())
+
+
+async def api_request(
+    method: str,
+    path: str,
+    *,
+    params: list[tuple[str, str]] | None = None,
+    content: bytes | None = None,
+    headers: dict[str, str] | None = None,
+) -> httpx.Response:
+    """Issue a request to the configured SummitFlow API base."""
+    if not has_companion_api():
+        raise RuntimeError("SummitFlow companion API is not configured")
+
+    url = f"{SUMMITFLOW_API_BASE.rstrip('/')}/{path.lstrip('/')}"
+    client = _get_client()
+    response = await client.request(
+        method,
+        url,
+        params=params,
+        content=content,
+        headers=headers,
+    )
+    return response
+
+
 async def list_projects() -> list[dict[str, Any]]:
     """Fetch all projects from SummitFlow API (cached for 60s).
 
@@ -50,23 +79,20 @@ async def list_projects() -> list[dict[str, Any]]:
     if _cache is not None and (time.monotonic() - _cache_time) < _CACHE_TTL_SECONDS:
         return _cache
 
-    if not SUMMITFLOW_API_BASE.strip():
+    if not has_companion_api():
         return _cache or []
-
-    url = f"{SUMMITFLOW_API_BASE}/projects"
     try:
-        client = _get_client()
-        response = await client.get(url)
+        response = await api_request("GET", "/projects")
         response.raise_for_status()
         result: list[dict[str, Any]] = response.json()
         _cache = result
         _cache_time = time.monotonic()
         return result
     except httpx.ConnectError:
-        logger.warning("summitflow_api_connect_error", url=url)
+        logger.warning("summitflow_api_connect_error", path="/projects")
         return _cache or []
     except httpx.TimeoutException:
-        logger.warning("summitflow_api_timeout", url=url)
+        logger.warning("summitflow_api_timeout", path="/projects")
         return _cache or []
     except httpx.HTTPStatusError as e:
         logger.error("summitflow_api_http_error", status_code=e.response.status_code)

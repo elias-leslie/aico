@@ -52,6 +52,13 @@ describe('ControlBar', () => {
     })
   })
 
+  it('does not load Claude model options for non-Claude tools', () => {
+    renderControlBar({ activeMode: 'codex' })
+
+    expect(getClaudeModelOptions).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: /model/i })).not.toBeInTheDocument()
+  })
+
   it('hides status banner for voice active sessions', async () => {
     renderControlBar({
       activeMode: 'claude',
@@ -90,6 +97,7 @@ describe('ControlBar', () => {
       )
     })
 
+    expect(getClaudeModelOptions).toHaveBeenCalledTimes(1)
     expect(screen.getByRole('button', { name: /model/i })).toBeInTheDocument()
   })
 

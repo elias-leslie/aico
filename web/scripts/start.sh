@@ -16,6 +16,19 @@ print(identity["project"]["display_name"])
 PY
 )"
 
+RUNTIME_ENV="$(python3 - <<'PY'
+import json
+from pathlib import Path
+import os
+
+identity = json.loads((Path(os.environ["REPO_ROOT"]) / "project.identity.json").read_text())
+runtime = identity.get("runtime", {})
+print(f'DEFAULT_BACKEND_PORT={runtime.get("backend_port", 8002)}')
+print(f'DEFAULT_FRONTEND_PORT={runtime.get("frontend_port", 3002)}')
+PY
+)"
+eval "$RUNTIME_ENV"
+
 SERVICE_ENV="$(python3 - <<'PY'
 import json
 from pathlib import Path
@@ -28,6 +41,16 @@ print(f'FRONTEND_SERVICE={services.get("frontend", "a-term-frontend.service")}')
 PY
 )"
 eval "$SERVICE_ENV"
+
+if [[ -f "$REPO_ROOT/.env.local" ]]; then
+  set -a
+  # shellcheck source=/dev/null
+  source "$REPO_ROOT/.env.local"
+  set +a
+fi
+
+FRONTEND_HOST="${A_TERM_FRONTEND_HOST:-127.0.0.1}"
+FRONTEND_PORT="${A_TERM_FRONTEND_PORT:-$DEFAULT_FRONTEND_PORT}"
 
 echo "================================"
 echo "Starting ${PRODUCT_NAME}"
@@ -49,5 +72,5 @@ echo "  Backend:  $(systemctl --user is-active "$BACKEND_SERVICE" 2>/dev/null &&
 echo "  Frontend: $(systemctl --user is-active "$FRONTEND_SERVICE" 2>/dev/null && echo 'Running' || echo 'Stopped')"
 echo ""
 echo "URLs:"
-echo "  Local: http://localhost:3002"
+echo "  Local: http://${FRONTEND_HOST}:${FRONTEND_PORT}"
 echo ""

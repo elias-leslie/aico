@@ -45,8 +45,12 @@ interface PaneStatusBadgeProps {
   onReconnect?: () => void
 }
 
+export function shouldShowPaneStatus(status?: ConnectionStatus): boolean {
+  return status !== undefined && status !== 'connected'
+}
+
 export function PaneStatusBadge({ status, onReconnect }: PaneStatusBadgeProps) {
-  if (!status) return null
+  if (!status || !shouldShowPaneStatus(status)) return null
 
   const meta = STATUS_META[status]
   if (!meta) return null

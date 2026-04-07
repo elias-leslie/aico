@@ -7,6 +7,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': resolve(__dirname, '.'),
+      '@xterm/xterm/css/xterm.css': resolve(__dirname, './test-stubs/xterm-style.ts'),
     },
   },
   test: {

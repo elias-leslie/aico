@@ -20,7 +20,7 @@ from ..storage import agent_tools as agent_tools_store
 from ..storage import maintenance_runs as maintenance_run_store
 from ..storage import project_settings as project_settings_store
 from ..storage.connection import advisory_lock
-from . import lifecycle, summitflow_client
+from . import lifecycle, project_catalog
 from .upload_cleanup import cleanup_old_uploads
 
 logger = get_logger(__name__)
@@ -120,7 +120,7 @@ async def run_cycle(app: FastAPI, reason: str) -> dict[str, Any]:
             default_tool = agent_tools_store.ensure_default()
             result["default_agent_tool"] = default_tool["slug"] if default_tool else None
 
-            projects = await summitflow_client.list_projects()
+            projects = await project_catalog.list_projects()
             valid_project_ids = {str(project.get("id")) for project in projects if project.get("id")}
             result["project_count"] = len(valid_project_ids)
             if valid_project_ids:

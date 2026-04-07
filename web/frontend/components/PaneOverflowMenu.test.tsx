@@ -41,6 +41,18 @@ describe('PaneOverflowMenu', () => {
   })
 
   it('invokes the selected action and closes the menu', () => {
+    const onUpload = vi.fn()
+
+    render(<PaneOverflowMenu onUpload={onUpload} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pane actions' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Upload File' }))
+
+    expect(onUpload).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  })
+
+  it('invokes the detach action and closes the menu', () => {
     const onDetach = vi.fn()
 
     render(<PaneOverflowMenu onDetach={onDetach} detachLabel="Detach Pane" />)

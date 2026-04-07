@@ -8,14 +8,15 @@ This module provides:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from ..rate_limit import limiter
-from ..services import lifecycle, summitflow_client
+from ..services import lifecycle, project_catalog
 from ..storage import project_settings as settings_store
+from ..storage import projects as local_projects_store
 
 router = APIRouter(tags=["A-Term Projects"])
 
@@ -57,10 +58,24 @@ class BulkOrderUpdate(BaseModel):
     project_ids: list[str]
 
 
+class CreateProjectRequest(BaseModel):
+    """Request to register a local project in standalone mode."""
+
+    root_path: str = Field(..., min_length=1, max_length=4096)
+    name: str | None = Field(None, max_length=120)
+
+
+class ProjectRegistryContextResponse(BaseModel):
+    """Describe which project catalog is active."""
+
+    source: Literal["local", "companion"]
+    can_register: bool
+
+
 async def _get_project_lookup() -> dict[str, dict[str, Any]]:
-    """Fetch projects from SummitFlow and return keyed by ID."""
-    sf_projects = await summitflow_client.list_projects()
-    return {project.get("id", ""): project for project in sf_projects}
+    """Fetch projects from the active catalog and return keyed by ID."""
+    projects = await project_catalog.list_projects()
+    return {project.get("id", ""): project for project in projects if project.get("id")}
 
 
 def _build_project_response(
@@ -89,7 +104,7 @@ def _build_project_response(
 async def list_projects() -> list[ProjectResponse]:
     """List all projects with a_term settings merged.
 
-    Fetches projects from SummitFlow API and merges with local
+    Fetches projects from the active catalog source and merges with local
     a_term_project_settings. Projects without settings get defaults.
     """
     project_lookup = await _get_project_lookup()
@@ -107,6 +122,36 @@ async def list_projects() -> list[ProjectResponse]:
     result.sort(key=lambda p: (p.display_order, p.name))
 
     return result
+
+
+@router.get("/api/a-term/projects/context", response_model=ProjectRegistryContextResponse)
+async def get_project_registry_context() -> ProjectRegistryContextResponse:
+    """Describe whether the local or companion project catalog is active."""
+    return ProjectRegistryContextResponse(
+        source=project_catalog.get_catalog_source(),
+        can_register=project_catalog.can_register_projects(),
+    )
+
+
+@router.post("/api/a-term/projects", response_model=ProjectResponse)
+async def create_project(request: CreateProjectRequest) -> ProjectResponse:
+    """Register a local project in standalone mode."""
+    if not project_catalog.can_register_projects():
+        raise HTTPException(
+            status_code=409,
+            detail="Projects are managed by SummitFlow while the companion API is configured",
+        ) from None
+
+    try:
+        project = local_projects_store.create_project(
+            name=request.name,
+            root_path=request.root_path,
+        )
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err)) from None
+    settings = settings_store.get_all_settings().get(project["id"])
+    project_lookup = {project["id"]: project}
+    return _build_project_response(project["id"], settings, project_lookup)
 
 
 @router.put("/api/a-term/project-settings/{project_id}", response_model=ProjectResponse)
@@ -148,7 +193,7 @@ async def reset_project(request: Request, project_id: str) -> dict[str, Any]:
     """Reset all a_term sessions for a project.
 
     Resets the shell session and the current default agent session if they exist.
-    Uses the current project root_path from SummitFlow settings.
+    Uses the current project root_path from the active project catalog.
     Also resets mode back to shell.
     Returns new session IDs for each mode.
     """

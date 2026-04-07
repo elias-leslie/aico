@@ -1,6 +1,7 @@
 """Database connection management for A-Term Service."""
 
 import threading
+import uuid
 from collections.abc import Generator
 from contextlib import contextmanager
 
@@ -64,6 +65,18 @@ def get_connection() -> Generator[psycopg.Connection]:
     pool = _get_pool()
     with pool.connection() as conn:
         yield conn
+
+
+@contextmanager
+def get_cursor() -> Generator[psycopg.Cursor]:
+    """Get a cursor for read-mostly helpers."""
+    with get_connection() as conn, conn.cursor() as cur:
+        yield cur
+
+
+def generate_prefixed_id(prefix: str) -> str:
+    """Generate a short prefixed identifier."""
+    return f"{prefix}-{uuid.uuid4().hex[:8]}"
 
 
 def close_pool() -> None:

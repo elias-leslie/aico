@@ -23,6 +23,7 @@ from ..rate_limit import limiter
 from ..services.lifecycle import create_session, delete_session, kill_tmux_session
 from ..storage import agent_tools as agent_tools_store
 from ..storage import panes as pane_store
+from ..storage import project_settings as project_settings_store
 from .models.panes import (
     BulkLayoutUpdateRequest,
     CreatePaneRequest,
@@ -100,6 +101,9 @@ async def create_pane(request: Request, body: CreatePaneRequest) -> PaneResponse
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from None
+
+    if body.pane_type == "project" and body.project_id:
+        project_settings_store.upsert_settings(body.project_id, enabled=True)
 
     return build_pane_response(pane)
 

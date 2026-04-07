@@ -86,12 +86,16 @@ export const ModeToggle = memo(function ModeToggle({
   const buttonRef = useRef<HTMLButtonElement>(null)
 
   const isCurrentlyLoading = isLoading || internalLoading
-  const isDisabled = disabled || isCurrentlyLoading
   const isAgentMode = value !== 'shell'
   const activeTool = agentTools.find((t) => t.slug === value)
   const defaultTool = agentTools.find((t) => t.is_default) ?? agentTools[0]
-  const fallbackAgentSlug = 'claude'
-  const accentColor = getAgentColor(activeTool?.slug ?? fallbackAgentSlug, activeTool?.color)
+  const canEnterAgentMode = defaultTool !== undefined
+  const isDisabled = disabled || isCurrentlyLoading || (!isAgentMode && !canEnterAgentMode)
+  const activeAgentSlug = activeTool?.slug ?? defaultTool?.slug ?? 'agent'
+  const accentColor = getAgentColor(
+    activeAgentSlug,
+    activeTool?.color ?? defaultTool?.color,
+  )
   const hasMultipleTools = agentTools.length > 1
 
   const handleClick = useCallback(
@@ -99,11 +103,12 @@ export const ModeToggle = memo(function ModeToggle({
       e.stopPropagation()
       if (isDisabled) return
       if (hasMultipleTools) { setShowPopover((prev) => !prev); return }
-      const oppositeMode: ATermMode = isAgentMode ? 'shell' : defaultTool?.slug ?? fallbackAgentSlug
+      if (!isAgentMode && !defaultTool) return
+      const oppositeMode: ATermMode = isAgentMode ? 'shell' : defaultTool.slug
       setInternalLoading(true)
       try { await onChange(oppositeMode) } catch { /* caller handles errors */ } finally { setInternalLoading(false) }
     },
-    [isAgentMode, onChange, isDisabled, hasMultipleTools, defaultTool],
+    [defaultTool, hasMultipleTools, isAgentMode, isDisabled, onChange],
   )
 
   const handleSelectMode = useCallback(
@@ -118,6 +123,8 @@ export const ModeToggle = memo(function ModeToggle({
 
   const tooltipText = isCurrentlyLoading
     ? 'Switching mode...'
+    : !isAgentMode && !defaultTool
+      ? 'Shell mode — no agent tools configured'
     : isAgentMode
       ? `${activeTool?.name ?? 'Agent'} mode — click for ${hasMultipleTools ? 'options' : 'Shell'}`
       : `Shell mode — click for ${hasMultipleTools ? 'options' : defaultTool?.name ?? 'Agent'}`
@@ -126,49 +133,103 @@ export const ModeToggle = memo(function ModeToggle({
   const iconSize = isMobile ? 16 : 14
 
   return (
-      <div style={{ position: 'relative', display: 'inline-block' }}>
-        <button
-          ref={buttonRef}
-          data-testid="mode-toggle"
-          onClick={handleClick}
-          disabled={isDisabled}
-          onMouseEnter={() => setIsHovered(true)}
-          onMouseLeave={() => setIsHovered(false)}
-          className="mode-toggle-btn"
-          style={{
-            position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            width: size, height: size, borderRadius: 6, border: '1px solid',
-            cursor: isDisabled ? 'not-allowed' : 'pointer',
-            transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-            backgroundColor: isAgentMode
-              ? `color-mix(in srgb, ${accentColor} 8%, transparent)`
-              : isHovered && !isDisabled ? 'var(--term-bg-elevated)' : 'var(--term-bg-surface)',
-            borderColor: isAgentMode
-              ? 'var(--term-accent-muted)'
-              : isHovered && !isDisabled ? 'var(--term-border-active)' : 'var(--term-border)',
-            boxShadow: isAgentMode
-              ? `0 0 8px color-mix(in srgb, ${accentColor} 20%, transparent), inset 0 0 12px color-mix(in srgb, ${accentColor} 10%, transparent)`
-              : 'none',
-            opacity: isDisabled ? 0.5 : 1,
-          }}
-          title={tooltipText}
-          aria-label={tooltipText}
-          aria-busy={isCurrentlyLoading}
-        >
-          {isAgentMode && !isCurrentlyLoading && (
-            <span
-              className="mode-toggle-glow"
-              style={{ position: 'absolute', inset: -2, borderRadius: 8, border: `1px solid ${accentColor}`, opacity: 0.3 }}
-            />
-          )}
-          <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.2s ease, color 0.2s ease', transform: isHovered && !isDisabled && !isCurrentlyLoading ? 'scale(1.1)' : 'scale(1)' }}>
-            <ModeIcon isCurrentlyLoading={isCurrentlyLoading} isAgentMode={isAgentMode} isHovered={isHovered} isDisabled={isDisabled} accentColor={accentColor} iconSize={iconSize} agentSlug={activeTool?.slug ?? fallbackAgentSlug} />
-          </span>
-          <span style={{ position: 'absolute', bottom: 2, right: 2, width: 4, height: 4, borderRadius: '50%', backgroundColor: isAgentMode ? accentColor : 'var(--term-text-muted)', opacity: isAgentMode ? 1 : 0.4, transition: 'all 0.2s ease', boxShadow: isAgentMode ? `0 0 4px ${accentColor}` : 'none' }} />
-        </button>
-        {showPopover && hasMultipleTools && (
-          <ModeTogglePopover buttonRef={buttonRef} value={value} agentTools={agentTools} onClose={() => setShowPopover(false)} onSelectMode={handleSelectMode} />
+    <div style={{ position: 'relative', display: 'inline-block' }}>
+      <button
+        ref={buttonRef}
+        data-testid="mode-toggle"
+        onClick={handleClick}
+        disabled={isDisabled}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        className="mode-toggle-btn"
+        style={{
+          position: 'relative',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: size,
+          height: size,
+          borderRadius: 6,
+          border: '1px solid',
+          cursor: isDisabled ? 'not-allowed' : 'pointer',
+          transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+          backgroundColor: isAgentMode
+            ? `color-mix(in srgb, ${accentColor} 8%, transparent)`
+            : isHovered && !isDisabled
+              ? 'var(--term-bg-elevated)'
+              : 'var(--term-bg-surface)',
+          borderColor: isAgentMode
+            ? 'var(--term-accent-muted)'
+            : isHovered && !isDisabled
+              ? 'var(--term-border-active)'
+              : 'var(--term-border)',
+          boxShadow: isAgentMode
+            ? `0 0 8px color-mix(in srgb, ${accentColor} 20%, transparent), inset 0 0 12px color-mix(in srgb, ${accentColor} 10%, transparent)`
+            : 'none',
+          opacity: isDisabled ? 0.5 : 1,
+        }}
+        title={tooltipText}
+        aria-label={tooltipText}
+        aria-busy={isCurrentlyLoading}
+      >
+        {isAgentMode && !isCurrentlyLoading && (
+          <span
+            className="mode-toggle-glow"
+            style={{
+              position: 'absolute',
+              inset: -2,
+              borderRadius: 8,
+              border: `1px solid ${accentColor}`,
+              opacity: 0.3,
+            }}
+          />
         )}
-      </div>
+        <span
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'transform 0.2s ease, color 0.2s ease',
+            transform:
+              isHovered && !isDisabled && !isCurrentlyLoading
+                ? 'scale(1.1)'
+                : 'scale(1)',
+          }}
+        >
+          <ModeIcon
+            isCurrentlyLoading={isCurrentlyLoading}
+            isAgentMode={isAgentMode}
+            isHovered={isHovered}
+            isDisabled={isDisabled}
+            accentColor={accentColor}
+            iconSize={iconSize}
+            agentSlug={activeAgentSlug}
+          />
+        </span>
+        <span
+          style={{
+            position: 'absolute',
+            bottom: 2,
+            right: 2,
+            width: 4,
+            height: 4,
+            borderRadius: '50%',
+            backgroundColor: isAgentMode ? accentColor : 'var(--term-text-muted)',
+            opacity: isAgentMode ? 1 : 0.4,
+            transition: 'all 0.2s ease',
+            boxShadow: isAgentMode ? `0 0 4px ${accentColor}` : 'none',
+          }}
+        />
+      </button>
+      {showPopover && hasMultipleTools && (
+        <ModeTogglePopover
+          buttonRef={buttonRef}
+          value={value}
+          agentTools={agentTools}
+          onClose={() => setShowPopover(false)}
+          onSelectMode={handleSelectMode}
+        />
+      )}
+    </div>
   )
 })

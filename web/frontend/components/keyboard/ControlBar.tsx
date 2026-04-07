@@ -46,8 +46,15 @@ export function ControlBar({
   const [showModelPicker, setShowModelPicker] = useState(false)
   const [modelOptions, setModelOptions] = useState<ClaudeModelOption[]>([])
   const pickerRef = useRef<HTMLDivElement>(null)
+  const isClaudeMode = activeMode === 'claude'
 
   useEffect(() => {
+    if (!isClaudeMode) {
+      setShowModelPicker(false)
+      setModelOptions([])
+      return
+    }
+
     let mounted = true
 
     void getClaudeModelOptions()
@@ -62,7 +69,7 @@ export function ControlBar({
     return () => {
       mounted = false
     }
-  }, [])
+  }, [isClaudeMode])
 
   // Close picker on outside tap
   useEffect(() => {
@@ -130,7 +137,6 @@ export function ControlBar({
     border: '1px solid var(--term-border)',
   }
 
-  const isAgentMode = activeMode !== undefined && activeMode !== 'shell'
   const bannerState = getMobileATermBannerState({
     connectionStatus,
     activeMode,
@@ -218,8 +224,8 @@ export function ControlBar({
         {/* Spacer */}
         <div className="flex-1" />
 
-        {/* Model picker — shown in agent modes */}
-        {isAgentMode && (
+        {/* Model picker — only relevant for Claude sessions */}
+        {isClaudeMode && (
           <div className="relative" ref={pickerRef}>
             <button
               type="button"

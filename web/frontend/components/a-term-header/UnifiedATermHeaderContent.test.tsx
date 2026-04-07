@@ -28,11 +28,22 @@ vi.mock('./AddATermButton', () => ({
 }))
 
 vi.mock('./HeaderIconButton', () => ({
-  HeaderIconButton: () => null,
+  HeaderIconButton: ({
+    tooltip,
+    onClick,
+  }: {
+    tooltip: string
+    onClick: () => void
+  }) => (
+    <button type="button" onClick={onClick}>
+      {tooltip}
+    </button>
+  ),
 }))
 
 vi.mock('./PaneStatusBadge', () => ({
   PaneStatusBadge: () => null,
+  shouldShowPaneStatus: () => false,
 }))
 
 vi.mock('./PaneSearchControl', () => ({
@@ -126,5 +137,20 @@ describe('UnifiedATermHeaderContent', () => {
     )
 
     expect(screen.getByTestId('pane-search-control')).toBeInTheDocument()
+  })
+
+  it('renders a direct files action in the header when files are available', () => {
+    const onFiles = vi.fn()
+
+    render(
+      <UnifiedATermHeaderContent
+        slot={makeProjectSlot('a', 'Alpha')}
+        onFiles={onFiles}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Files' }))
+
+    expect(onFiles).toHaveBeenCalledTimes(1)
   })
 })

@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
+    "@summitflow/notes-ui": "file:../../summitflow/packages/notes-ui",
     "@tanstack/react-query": "5.90.18",
     "@xterm/addon-clipboard": "0.2.0",
     "@xterm/addon-fit": "0.11.0",
@@ -24,6 +25,7 @@
     "@xterm/xterm": "6.0.0",
     "clsx": "2.1.1",
     "lucide-react": "0.562.0",
+    "motion": "^12.0.0",
     "next": "16.1.7",
     "react": "19.2.3",
     "react-dom": "19.2.3",

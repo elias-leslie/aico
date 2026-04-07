@@ -210,6 +210,35 @@ def test_create_project_pane_passes_requested_agent_tool_slug(test_app: TestClie
     )
 
 
+def test_create_project_pane_enables_project_in_settings(test_app: TestClient) -> None:
+    """POST /api/a-term/panes -- project panes mark the project enabled."""
+    pane = _make_pane(
+        pane_type="project",
+        project_id="proj-1",
+        pane_name="Project Pane",
+        sessions=[
+            _make_session_in_pane(mode="shell", name="Shell"),
+            _make_session_in_pane(mode="codex", name="Codex"),
+        ],
+    )
+    with (
+        patch("a_term.api.panes.pane_store.create_pane_with_sessions", return_value=pane),
+        patch("a_term.api.panes.project_settings_store.upsert_settings") as upsert_mock,
+    ):
+        response = test_app.post(
+            "/api/a-term/panes",
+            json={
+                "pane_type": "project",
+                "pane_name": "Project Pane",
+                "project_id": "proj-1",
+                "working_dir": "/workspace/proj-1",
+            },
+        )
+
+    assert response.status_code == 200
+    upsert_mock.assert_called_once_with("proj-1", enabled=True)
+
+
 # ---------------------------------------------------------------------------
 # Get pane
 # ---------------------------------------------------------------------------

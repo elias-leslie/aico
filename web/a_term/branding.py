@@ -58,24 +58,71 @@ def _project_aliases(project: dict[str, Any]) -> tuple[str, ...]:
     return tuple(aliases)
 
 
-@lru_cache
-def _workspace_display_names() -> dict[str, str]:
-    projects_root = _workspace_projects_root()
-    if projects_root is None:
-        return {}
+def _read_manifest_payload(manifest_path: Path) -> dict[str, Any] | None:
+    try:
+        payload = json.loads(manifest_path.read_text())
+    except Exception:
+        return None
+    return payload if isinstance(payload, dict) else None
 
-    display_names: dict[str, str] = {}
-    for manifest_path in sorted(projects_root.glob("*/project.identity.json")):
-        try:
-            payload = json.loads(manifest_path.read_text())
-        except Exception:
+
+def get_project_identity_for_root(root_path: str | Path) -> dict[str, Any] | None:
+    """Load a project identity manifest from an explicit repo root when present."""
+    candidate = Path(root_path) / "project.identity.json"
+    return _read_manifest_payload(candidate) if candidate.is_file() else None
+
+
+@lru_cache
+def list_workspace_project_identities() -> tuple[dict[str, Any], ...]:
+    """Return manifest-backed workspace project identities, including this repo."""
+    manifest_paths: list[Path] = [_MANIFEST_PATH]
+    projects_root = _workspace_projects_root()
+    if projects_root is not None:
+        manifest_paths.extend(sorted(projects_root.glob("*/project.identity.json")))
+
+    entries: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    for manifest_path in manifest_paths:
+        payload = _read_manifest_payload(manifest_path)
+        if payload is None:
             continue
         project = payload.get("project")
+        runtime = payload.get("runtime", {})
         if not isinstance(project, dict):
             continue
+        project_id = project.get("id")
         display_name = project.get("display_name")
-        if not isinstance(display_name, str) or not display_name:
+        if not isinstance(project_id, str) or not project_id:
             continue
+        if not isinstance(display_name, str) or not display_name:
+            display_name = project_id
+        if project_id in seen_ids:
+            continue
+        seen_ids.add(project_id)
+        entries.append(
+            {
+                "id": project_id,
+                "display_name": display_name,
+                "root_path": str(manifest_path.parent),
+                "frontend_port": runtime.get("frontend_port"),
+                "backend_port": runtime.get("backend_port"),
+                "health_endpoint": runtime.get("health_endpoint"),
+            }
+        )
+
+    entries.sort(key=lambda entry: str(entry.get("display_name", entry["id"])).lower())
+    return tuple(entries)
+
+
+@lru_cache
+def _workspace_display_names() -> dict[str, str]:
+    display_names: dict[str, str] = {}
+    for entry in list_workspace_project_identities():
+        payload = get_project_identity_for_root(entry["root_path"])
+        project = payload.get("project") if isinstance(payload, dict) else None
+        if not isinstance(project, dict):
+            continue
+        display_name = entry["display_name"]
         for alias in _project_aliases(project):
             display_names.setdefault(alias, display_name)
     return display_names

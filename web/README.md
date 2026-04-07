@@ -1,33 +1,60 @@
 # A-Term
 
-Host-native browser workspace with tmux-backed persistent sessions, multi-pane layouts, configurable CLI agent integrations, and a built-in maintenance loop.
+Host-native browser workspace with tmux-backed persistent sessions, multi-pane layouts, files and notes tooling, optional browser-native voice input, configurable CLI agent integrations, and a built-in maintenance loop.
 
 **A-Term is a standalone product.** It starts and runs independently with just PostgreSQL and tmux. SummitFlow and Agent Hub integrations are optional companion services.
 
 ![A-Term screenshot](docs/images/a-term-home-dark.png)
 
-A-Term gives you browser-accessible tmux sessions with pane layouts, persistent shells, and optional companion tooling without turning your host runtime into a containerized sidecar.
+A-Term gives you browser-accessible tmux sessions with pane layouts, persistent shells, pane-level files, docked notes, and optional companion tooling without turning your host runtime into a containerized sidecar.
 
 ## Quickstart
 
-Native host runtime is the supported path.
+A-Term targets Linux hosts running under `systemd --user`. You need Node.js 20+, tmux, PostgreSQL, and `curl`. The installer bootstraps `uv` and a managed Python 3.13 when they are missing.
+
+If you already have PostgreSQL running, set `DATABASE_URL` in `.env.local` and install:
 
 ```bash
-cp .env.example .env.local
-# edit DATABASE_URL for your local Postgres
+bash scripts/install.sh
+```
 
-uv sync --dev
-DATABASE_URL=postgresql://a-term:a-term@localhost:5432/a-term uv run alembic upgrade head
-corepack pnpm --dir frontend install --frozen-lockfile
-corepack pnpm --dir frontend build
+If `.env.local` does not exist yet, the installer creates it from [`.env.example`](.env.example), stops, and tells you what to edit before you rerun it.
 
-uv run python -m a_term
-API_URL=http://localhost:8002 HOSTNAME=0.0.0.0 PORT=3002 corepack pnpm --dir frontend start
+For a throwaway local PostgreSQL on a fresh machine:
+
+```bash
+docker run -d \
+  --name a-term-postgres \
+  -e POSTGRES_DB=a-term \
+  -e POSTGRES_USER=a-term \
+  -e POSTGRES_PASSWORD=a-term \
+  -p 5432:5432 \
+  postgres:16
+```
+
+Then use:
+
+```bash
+DATABASE_URL=postgresql://a-term:a-term@localhost:5432/a-term
 ```
 
 ## Overview
 
 A-Term provides browser-accessible shell and agent sessions backed by tmux for persistence. It supports multiple panes with split layouts, project-scoped working directories, and dual-mode operation (shell plus the configured default agent tool). Sessions survive browser disconnects, are reconciled with tmux state on startup and on a recurring maintenance interval, and expose maintenance status through `/health`.
+
+## Screenshots
+
+| Main + Side Workspace | Files Browser |
+|-------|-------|
+| ![Three-pane workspace with one large pane above two smaller panes](docs/images/a-term-home-dark.png) | ![Files browser previewing README.md from the active pane](docs/images/a-term-files-browser.png) |
+
+| Notes Workspace | Voice Input |
+|-------|-------|
+| ![Docked notes workspace beside active panes](docs/images/a-term-notes-workspace.png) | ![Voice input sheet opened from pane actions](docs/images/a-term-voice-input.png) |
+
+| Four-Pane Grid Layout |
+|-------|
+| ![Four-pane grid layout with multiple active panes](docs/images/a-term-grid-2x2.png) |
 
 ## Tech Stack
 
@@ -41,38 +68,11 @@ A-Term provides browser-accessible shell and agent sessions backed by tmux for p
 
 ## Architecture
 
-```
-a-term/
-├── a_term/              # FastAPI backend
-│   ├── api/               # REST + WebSocket endpoints
-│   │   ├── a_term.py    # WebSocket a-term I/O
-│   │   ├── sessions.py    # Session CRUD
-│   │   ├── panes.py       # Pane management
-│   │   ├── projects.py    # Project settings
-│   │   └── agent.py       # Agent startup + state endpoints
-│   ├── services/          # Business logic
-│   │   ├── lifecycle.py       # Session lifecycle facade
-│   │   ├── lifecycle_core.py  # Single-session operations
-│   │   ├── lifecycle_batch.py # Multi-session batch ops
-│   │   ├── lifecycle_reconcile.py  # DB/tmux sync + dead-session retention
-│   │   ├── maintenance.py     # Periodic maintenance loop + status tracking
-│   │   ├── pty_manager.py     # Low-level PTY operations
-│   │   └── pane_service.py    # Pane business logic
-│   ├── storage/           # Database layer
-│   └── utils/             # tmux utilities
-├── frontend/
-│   ├── app/               # Pages (App Router)
-│   ├── components/        # React components
-│   │   ├── ATerm.tsx        # xterm.js wrapper + WebSocket
-│   │   ├── ATermTabs.tsx    # Tab management
-│   │   ├── pane-layouts/      # Split/grid layout components
-│   │   └── keyboard/          # Mobile on-screen keyboard
-│   └── lib/
-│       ├── hooks/         # Custom React hooks
-│       └── api/           # API client functions
-├── alembic/               # Database migrations
-└── scripts/               # Service management
-```
+- `a_term/api/` exposes REST and WebSocket endpoints.
+- `a_term/services/` owns tmux/session lifecycle, maintenance, and agent orchestration.
+- `a_term/storage/` contains database access.
+- `frontend/app/`, `frontend/components/`, and `frontend/lib/` contain the Next.js UI, client hooks, and browser/runtime helpers.
+- `scripts/` contains the public install/start/stop helpers and the systemd unit templates.
 
 ## Key Features
 
@@ -81,6 +81,9 @@ a-term/
 - **Dual mode** - Switch between shell and your configured agent tool per pane
 - **Project context** - Open a-terms in project-specific working directories
 - **Project deep links** - Open `/?project=<id>&dir=<path>` to focus or create a project pane directly
+- **Pane files browser** - Browse the active working directory, preview files, and copy or insert paths without leaving the pane
+- **Docked notes workspace** - Keep project-scoped notes and prompts beside live terminal output
+- **Voice input** - Use speech-to-text from supported browsers, with optional Agent Hub companion integration when installed
 - **Mobile keyboard** - On-screen keyboard for touch devices (simple-keyboard)
 - **Periodic maintenance** - Reconciles tmux state, prunes stale uploads, repairs default agent-tool state, and deletes orphaned project settings
 - **Maintenance observability** - `/health` and `/api/internal/maintenance/runs` report maintenance state and recent persisted runs
@@ -96,7 +99,7 @@ A-Term is intended to run natively on the host under `systemd --user`. It depend
 
 ### Standalone (default)
 
-All core features work without SummitFlow or Agent Hub: persistent tmux sessions, multi-pane layouts, shell/agent mode switching, project settings, maintenance, and the full REST/WebSocket API. When no external service is reachable, the project list is populated from local `a_term_project_settings` only.
+All core features work without SummitFlow or Agent Hub: persistent tmux sessions, multi-pane layouts, shell/agent mode switching, pane files, docked notes, browser-native voice input on supported browsers, project settings, maintenance, and the full REST/WebSocket API. When no external service is reachable, the project list is populated from local `a_term_project_settings` only.
 
 ### Optional: SummitFlow API (`SUMMITFLOW_API_BASE`)
 
@@ -108,7 +111,8 @@ When Agent Hub is configured, A-Term gains:
 
 - **Model catalog** — fetched through A-Term's same-origin `/api/agent-hub/models` proxy so cross-machine installs do not depend on browser CORS.
 - **Prompt cleaning** — sent through A-Term's same-origin `/api/agent-hub/complete` proxy for the same reason.
-- **Voice transcription** — still optional and still requires `@agent-hub/passport-client`. It is not part of the core v1 install path.
+
+Browser-native voice input still works in standalone mode on browsers that expose `SpeechRecognition` or `webkitSpeechRecognition`. If `@agent-hub/passport-client` is installed, A-Term will prefer that companion path when it is available.
 
 Use `NEXT_PUBLIC_AGENT_HUB_URL` when the browser should expose companion UI, and set `AGENT_HUB_URL` anywhere the A-Term server itself needs to reach Agent Hub directly on another host. If Agent Hub is unavailable, A-Term falls back cleanly.
 
@@ -119,53 +123,31 @@ Use `NEXT_PUBLIC_AGENT_HUB_URL` when the browser should expose companion UI, and
 | Frontend (Next.js) | 3002 |
 | Backend (FastAPI) | 8002 |
 
-## Getting Started
+## Install Notes
 
-### Prerequisites
+`bash scripts/install.sh` is the supported public install path. It:
 
-- Python 3.13+
-- Node.js 20+
-- PostgreSQL
-- tmux
+- creates `.env.local` from `.env.example` when missing
+- installs `uv` and Python `3.13` when the host does not already have them
+- validates tmux and links the repo tmux config
+- installs Python and frontend dependencies
+- runs Alembic migrations
+- builds the production frontend
+- renders user-level `systemd` units into `~/.config/systemd/user/`
+- enables and starts the backend and frontend services
 
-### Recommended: Native Standalone
+Use `bash scripts/install.sh --no-start` if you only want bootstrap/build steps.
 
-```bash
-cp .env.example .env.local
-# edit DATABASE_URL for your local Postgres
+If `8002` or `3002` are already in use on the host, set `A_TERM_PORT` or `A_TERM_FRONTEND_PORT` in `.env.local` before rerunning the installer.
 
-uv sync --dev
-DATABASE_URL=postgresql://a-term:a-term@localhost:5432/a-term uv run alembic upgrade head
-corepack pnpm --dir frontend install --frozen-lockfile
-corepack pnpm --dir frontend build
+### Optional Companions
 
-# a-term API
-uv run python -m a_term
-
-# a-term frontend
-API_URL=http://localhost:8002 HOSTNAME=0.0.0.0 PORT=3002 corepack pnpm --dir frontend start
-```
-
-`pnpm --dir frontend build` stages `.next/static` and `public/` into the
-standalone runtime, and `pnpm --dir frontend start` runs the production Next.js
-server. Keep `dev` for local feature work, not for public release verification
-or install docs.
-
-### Native Companion
-
-Add these on top of the native standalone setup when SummitFlow or Agent Hub are running elsewhere:
+Add these to `.env.local` when SummitFlow or Agent Hub are running elsewhere:
 
 ```bash
 SUMMITFLOW_API_BASE=http://HOST:8001/api
 NEXT_PUBLIC_AGENT_HUB_URL=http://HOST:8003
 AGENT_HUB_URL=http://HOST:8003
-```
-
-Then start the same production processes as native standalone:
-
-```bash
-uv run python -m a_term
-API_URL=http://localhost:8002 HOSTNAME=0.0.0.0 PORT=3002 corepack pnpm --dir frontend start
 ```
 
 ### Environment
@@ -182,11 +164,24 @@ NEXT_PUBLIC_AGENT_HUB_URL=http://localhost:8003     # enables companion UI in th
 AGENT_HUB_URL=http://localhost:8003                 # server-side Agent Hub access for proxies
 
 # Optional tuning
+A_TERM_PORT=8002
+A_TERM_BIND_HOST=127.0.0.1
+A_TERM_FRONTEND_PORT=3002
+A_TERM_FRONTEND_HOST=127.0.0.1
 LOG_LEVEL=INFO
 LOG_DIR=logs
 MAINTENANCE_INTERVAL_SECONDS=900
 MAINTENANCE_SESSION_PURGE_DAYS=7
 UPLOAD_MAX_AGE_SECONDS=86400
+```
+
+### Daily Commands
+
+```bash
+bash scripts/start.sh
+bash scripts/shutdown.sh
+journalctl --user -u a-term-backend.service -f
+journalctl --user -u a-term-frontend.service -f
 ```
 
 ## Remote Access
@@ -195,7 +190,9 @@ A-Term listens on `localhost` by default. To access it from other devices — yo
 
 ## API
 
-### REST Endpoints
+The table below highlights the primary runtime endpoints. The full API surface is published at `/openapi.json`, including notes formatting/versioning routes, diagnostics recording endpoints, detached-pane flows, and other utility endpoints that are better read from the generated schema than maintained by hand here.
+
+### Core REST Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -211,6 +208,9 @@ A-Term listens on `localhost` by default. To access it from other devices — yo
 | POST | `/api/a-term/panes` | Create pane (max 6) |
 | PATCH | `/api/a-term/panes/{id}` | Update pane |
 | DELETE | `/api/a-term/panes/{id}` | Delete pane |
+| POST | `/api/a-term/files` | Upload a file for use in pane commands |
+| GET | `/api/notes` | List notes and prompts |
+| POST | `/api/notes` | Create a note or prompt |
 | GET | `/api/a-term/projects` | List project settings (merged with SummitFlow projects when available) |
 | PUT | `/api/a-term/project-settings/{id}` | Update project settings |
 | PUT | `/api/a-term/projects/{id}/mode` | Set shell/agent mode |
@@ -238,8 +238,6 @@ A-Term runs natively under `systemd --user`:
 
 - `a-term-backend.service` for the FastAPI backend on port `8002`
 - `a-term-frontend.service` for the Next.js frontend on port `3002`
-
-`rebuild.sh a-term` remains the preferred local maintenance path in the SummitFlow workspace. Public installs should use the native steps above.
 
 ## License
 

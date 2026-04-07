@@ -7,11 +7,10 @@ Wants=a-term-backend.service
 Type=simple
 WorkingDirectory=__PROJECT_ROOT__/frontend
 Environment="HOME=%h"
-EnvironmentFile=-%h/.env.local
+EnvironmentFile=-__PROJECT_ROOT__/.env.local
+EnvironmentFile=-__PROJECT_ROOT__/.env
 Environment="NODE_ENV=production"
-Environment="PORT=3002"
-Environment="API_URL=http://localhost:8002"
-ExecStart=/bin/bash -lc 'pnpm start --hostname 0.0.0.0 --port "${A_TERM_FRONTEND_PORT:-3002}"'
+ExecStart=/bin/bash -lc 'export API_URL="${API_URL:-http://127.0.0.1:${A_TERM_PORT:-8002}}"; export HOSTNAME="${A_TERM_FRONTEND_HOST:-127.0.0.1}"; export PORT="${A_TERM_FRONTEND_PORT:-3002}"; exec corepack pnpm start --hostname "$HOSTNAME" --port "$PORT"'
 TimeoutStopSec=10
 KillMode=mixed
 Restart=always

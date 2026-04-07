@@ -17,10 +17,20 @@ export interface ProjectSetting {
   display_order: number
 }
 
+interface ProjectCreateRequest {
+  root_path: string
+  name?: string
+}
+
 interface ProjectSettingsUpdate {
   enabled?: boolean
   active_mode?: string
   display_order?: number
+}
+
+interface ProjectRegistryContext {
+  source: 'local' | 'companion'
+  can_register: boolean
 }
 
 // ============================================================================
@@ -29,6 +39,28 @@ interface ProjectSettingsUpdate {
 
 async function fetchProjects(): Promise<ProjectSetting[]> {
   return apiFetch('/api/a-term/projects', undefined, 'Failed to fetch projects')
+}
+
+async function fetchProjectRegistryContext(): Promise<ProjectRegistryContext> {
+  return apiFetch(
+    '/api/a-term/projects/context',
+    undefined,
+    'Failed to fetch project registry status',
+  )
+}
+
+async function createProject(
+  payload: ProjectCreateRequest,
+): Promise<ProjectSetting> {
+  return apiFetch(
+    '/api/a-term/projects',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    'Failed to register project',
+  )
 }
 
 async function updateProjectSettings(
@@ -125,6 +157,11 @@ export function useProjectSettings() {
     queryFn: fetchProjects,
     staleTime: 30000, // Consider fresh for 30s
   })
+  const { data: registryContext } = useQuery({
+    queryKey: ['a-term-project-registry-context'],
+    queryFn: fetchProjectRegistryContext,
+    staleTime: 30000,
+  })
 
   // Derived: only enabled projects, sorted by display_order
   const enabledProjects = projects
@@ -197,6 +234,16 @@ export function useProjectSettings() {
     },
   })
 
+  const createMutation = useMutation({
+    mutationFn: createProject,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['a-term-projects'] })
+      queryClient.invalidateQueries({
+        queryKey: ['a-term-project-registry-context'],
+      })
+    },
+  })
+
   // Update settings for a project
   const updateSettings = useCallback(
     async (projectId: string, update: ProjectSettingsUpdate) => {
@@ -228,9 +275,19 @@ export function useProjectSettings() {
     [disableMutation],
   )
 
+  const registerProject = useCallback(
+    async (payload: ProjectCreateRequest) => {
+      return createMutation.mutateAsync(payload)
+    },
+    [createMutation],
+  )
+
   return {
     projects,
     enabledProjects,
+    projectRegistrySource: registryContext?.source ?? 'companion',
+    canRegisterProjects: registryContext?.can_register ?? false,
+    registerProject,
     updateSettings,
     updateOrder,
     switchMode,
@@ -243,6 +300,7 @@ export function useProjectSettings() {
       updateMutation.isPending ||
       orderMutation.isPending ||
       switchModeMutation.isPending ||
-      disableMutation.isPending,
+      disableMutation.isPending ||
+      createMutation.isPending,
   }
 }

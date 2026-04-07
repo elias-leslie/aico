@@ -2,47 +2,48 @@
  * Transcription hook with optional passport-client dependency.
  *
  * Tries to load useTranscription from @agent-hub/passport-client at build time.
- * If the package is not installed, exports a no-op stub that reports
- * voice as unsupported. All voice UI gracefully disables itself in that case.
+ * If the package is not installed, falls back to browser-native speech
+ * recognition so standalone installs still support STT where the browser does.
  */
 
 import type { UseTranscriptionOptions, UseTranscriptionReturn } from './types'
+import { useBrowserTranscription } from './use-browser-transcription'
 
-const noop = () => {}
-
-function useTranscriptionStub(
-  _options?: UseTranscriptionOptions,
-): UseTranscriptionReturn {
-  return {
-    engine: 'none',
-    isSupported: false,
-    status: 'idle',
-    error: null,
-    interimTranscript: '',
-    finalTranscript: '',
-    startListening: noop,
-    stopListening: noop,
-    resetTranscript: noop,
-  }
-}
-
-// Resolve once at module load: real hook or stub
-let resolved: (opts?: UseTranscriptionOptions) => UseTranscriptionReturn
+let resolvedPassport:
+  | ((opts?: UseTranscriptionOptions) => UseTranscriptionReturn)
+  | null = null
 
 try {
   const dynamicRequire = Function(
     'return typeof require !== "undefined" ? require : null',
-  )() as ((id: string) => { useTranscription?: typeof useTranscriptionStub }) | null
+  )() as ((id: string) => {
+    useTranscription?: (
+      options?: UseTranscriptionOptions,
+    ) => UseTranscriptionReturn
+  }) | null
   const mod = dynamicRequire?.('@agent-hub/passport-client')
-  resolved = mod?.useTranscription ?? useTranscriptionStub
+  resolvedPassport = mod?.useTranscription ?? null
 } catch {
-  resolved = useTranscriptionStub
+  resolvedPassport = null
 }
 
 /**
- * Use voice transcription if @agent-hub/passport-client is installed,
- * otherwise return a safe no-op (isSupported: false).
+ * Prefer the Agent Hub whisper client when it is installed and supported.
+ * Fall back to browser-native STT so standalone installs still work.
  */
-export const useTranscription: (
+export function useTranscription(
   options?: UseTranscriptionOptions,
-) => UseTranscriptionReturn = resolved
+): UseTranscriptionReturn {
+  const browserTranscription = useBrowserTranscription(options)
+
+  if (!resolvedPassport) {
+    return browserTranscription
+  }
+
+  const passportTranscription = resolvedPassport(options)
+  if (passportTranscription.isSupported) {
+    return passportTranscription
+  }
+
+  return browserTranscription
+}

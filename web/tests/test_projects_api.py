@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 
 
 def test_list_projects_merges_a_term_settings(test_app: TestClient) -> None:
-    """GET /api/a-term/projects -- merges SummitFlow projects with local settings."""
-    summitflow_projects = [
+    """GET /api/a-term/projects -- merges catalog projects with local settings."""
+    catalog_projects = [
         {"id": "a-term", "name": "A-Term", "root_path": "/workspace/a-term"},
         {"id": "agent-hub", "name": "Agent Hub", "root_path": "/workspace/agent-hub"},
     ]
@@ -24,8 +24,8 @@ def test_list_projects_merges_a_term_settings(test_app: TestClient) -> None:
 
     with (
         patch(
-            "a_term.api.projects.summitflow_client.list_projects",
-            return_value=summitflow_projects,
+            "a_term.api.projects.project_catalog.list_projects",
+            new=AsyncMock(return_value=catalog_projects),
         ),
         patch(
             "a_term.api.projects.settings_store.get_all_settings",
@@ -57,14 +57,14 @@ def test_set_project_mode_returns_full_project_payload(test_app: TestClient) -> 
             return_value=settings,
         ),
         patch(
-            "a_term.api.projects.summitflow_client.list_projects",
-            return_value=[
+            "a_term.api.projects.project_catalog.list_projects",
+            new=AsyncMock(return_value=[
                 {
                     "id": "a-term",
                     "name": "A-Term",
                     "root_path": "/workspace/a-term",
                 }
-            ],
+            ]),
         ),
     ):
         response = test_app.put(
@@ -102,14 +102,14 @@ def test_disable_project_returns_disabled_project_payload(test_app: TestClient) 
             return_value=True,
         ) as mock_disable,
         patch(
-            "a_term.api.projects.summitflow_client.list_projects",
-            return_value=[
+            "a_term.api.projects.project_catalog.list_projects",
+            new=AsyncMock(return_value=[
                 {
                     "id": "a-term",
                     "name": "A-Term",
                     "root_path": "/workspace/a-term",
                 }
-            ],
+            ]),
         ),
         patch(
             "a_term.api.projects.settings_store.get_all_settings",
@@ -130,3 +130,54 @@ def test_disable_project_returns_disabled_project_payload(test_app: TestClient) 
     assert body["a_term_enabled"] is False
     assert body["mode"] == "shell"
     mock_disable.assert_called_once_with("a-term")
+
+
+def test_get_project_registry_context_reports_local_mode(test_app: TestClient) -> None:
+    with (
+        patch("a_term.api.projects.project_catalog.get_catalog_source", return_value="local"),
+        patch("a_term.api.projects.project_catalog.can_register_projects", return_value=True),
+    ):
+        response = test_app.get("/api/a-term/projects/context")
+
+    assert response.status_code == 200
+    assert response.json() == {"source": "local", "can_register": True}
+
+
+def test_create_project_registers_local_project(test_app: TestClient) -> None:
+    with (
+        patch("a_term.api.projects.project_catalog.can_register_projects", return_value=True),
+        patch(
+            "a_term.api.projects.local_projects_store.create_project",
+            return_value={
+                "id": "my-app",
+                "name": "My App",
+                "root_path": "/workspace/my-app",
+            },
+        ) as create_mock,
+        patch("a_term.api.projects.settings_store.get_all_settings", return_value={}),
+    ):
+        response = test_app.post(
+            "/api/a-term/projects",
+            json={"name": "My App", "root_path": "/workspace/my-app"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "id": "my-app",
+        "name": "My App",
+        "root_path": "/workspace/my-app",
+        "a_term_enabled": False,
+        "mode": "shell",
+        "display_order": 0,
+    }
+    create_mock.assert_called_once_with(name="My App", root_path="/workspace/my-app")
+
+
+def test_create_project_rejects_companion_mode(test_app: TestClient) -> None:
+    with patch("a_term.api.projects.project_catalog.can_register_projects", return_value=False):
+        response = test_app.post(
+            "/api/a-term/projects",
+            json={"name": "My App", "root_path": "/workspace/my-app"},
+        )
+
+    assert response.status_code == 409

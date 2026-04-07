@@ -118,7 +118,7 @@ def set_active_mode(project_id: str, mode: str) -> dict[str, Any] | None:
 
 
 def prune_missing_projects(valid_project_ids: set[str]) -> int:
-    """Delete settings rows for projects that no longer exist upstream."""
+    """Delete settings rows for projects no longer present in the active registry."""
     if not valid_project_ids:
         return 0
 
@@ -133,5 +133,4 @@ def prune_missing_projects(valid_project_ids: set[str]) -> int:
         deleted_count = cur.rowcount
         conn.commit()
     return deleted_count
-
 

@@ -1,7 +1,8 @@
 'use client'
 
+import { NotesButton, NotesProvider } from '@summitflow/notes-ui'
 import { clsx } from 'clsx'
-import { GripVertical } from 'lucide-react'
+import { FolderOpen, GripVertical } from 'lucide-react'
 import { memo, useCallback, useMemo, useState, type DragEvent } from 'react'
 import { useAgentTools } from '@/lib/hooks/use-agent-tools'
 import { useATermPanes } from '@/lib/hooks/use-a-term-panes'
@@ -16,9 +17,10 @@ import {
 import { ModeToggle } from '../ModeToggle'
 import { PaneOverflowMenu } from '../PaneOverflowMenu'
 import { AddATermButton } from './AddATermButton'
+import { HeaderIconButton } from './HeaderIconButton'
 import { HeaderNameDisplay } from './HeaderNameDisplay'
 import { PaneSearchControl } from './PaneSearchControl'
-import { PaneStatusBadge } from './PaneStatusBadge'
+import { PaneStatusBadge, shouldShowPaneStatus } from './PaneStatusBadge'
 import type { UnifiedATermHeaderProps } from './types'
 
 function formatActionLabel(label: string) {
@@ -36,6 +38,7 @@ export const UnifiedATermHeaderContent = memo(
     onClose,
     onCloseSession,
     closeTooltip,
+    onFiles,
     onUpload,
     onVoice,
     onClean,
@@ -75,6 +78,7 @@ export const UnifiedATermHeaderContent = memo(
     const shouldShowClean = showCleanButton && isAgentMode
     const slotId = getSlotPanelId(slot)
     const slotName = getSlotName(slot)
+    const showStatusBadge = shouldShowPaneStatus(connectionStatus)
     const detachLabel = formatActionLabel(closeTooltip ?? 'Detach pane')
     const detachTooltip = `${detachLabel}: remove it from this layout but keep the session running.`
     const hasPaneActions =
@@ -237,7 +241,7 @@ export const UnifiedATermHeaderContent = memo(
         <div className="flex-1" />
 
         {/* Status badge — before overflow menu (desktop + mobile) */}
-        {connectionStatus && (
+        {showStatusBadge && (
           <span
             className="h-3.5 w-px mx-0.5"
             style={{ backgroundColor: 'var(--term-border)' }}
@@ -253,6 +257,19 @@ export const UnifiedATermHeaderContent = memo(
               isMobile={isMobile}
             />
           )}
+
+          {onFiles && (
+            <HeaderIconButton
+              icon={<FolderOpen className="w-3.5 h-3.5" />}
+              onClick={onFiles}
+              tooltip="Files"
+              isMobile={isMobile}
+            />
+          )}
+
+          <NotesProvider apiPrefix="/api" projectScope="terminal">
+            <NotesButton popOutUrl="/notes" />
+          </NotesProvider>
 
           {hasPaneActions && (
             <PaneOverflowMenu

@@ -1,5 +1,5 @@
 import type { ComponentProps } from 'react'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ATermManagerModal } from './ATermManagerModal'
 
@@ -47,10 +47,14 @@ function buildProjectSettingsState(overrides: Record<string, unknown> = {}) {
   return {
     projects,
     enabledProjects: projects,
+    canRegisterProjects: false,
+    projectRegistrySource: 'companion',
+    registerProject: vi.fn(),
     isLoading: false,
     isError: false,
     error: null,
     refetch: vi.fn(),
+    isUpdating: false,
     ...overrides,
   }
 }
@@ -314,6 +318,43 @@ describe('ATermManagerModal', () => {
       'aria-busy',
       'true',
     )
+  })
+
+  it('registers a local project and opens it immediately in standalone mode', async () => {
+    const registerProject = vi.fn().mockResolvedValue({
+      id: 'my-app',
+      name: 'My App',
+      root_path: '/workspace/my-app',
+      a_term_enabled: false,
+      mode: 'shell',
+      display_order: 0,
+    })
+    const onCreateProjectATerm = vi.fn()
+    mockUseProjectSettings.mockReturnValue(
+      buildProjectSettingsState({
+        canRegisterProjects: true,
+        projectRegistrySource: 'local',
+        registerProject,
+      }),
+    )
+
+    renderModal({ onCreateProjectATerm })
+
+    fireEvent.change(screen.getByPlaceholderText('/absolute/path/to/project'), {
+      target: { value: '/workspace/my-app' },
+    })
+    fireEvent.change(screen.getByPlaceholderText('Name (optional)'), {
+      target: { value: 'My App' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+
+    await waitFor(() => {
+      expect(registerProject).toHaveBeenCalledWith({
+        root_path: '/workspace/my-app',
+        name: 'My App',
+      })
+      expect(onCreateProjectATerm).toHaveBeenCalledWith('my-app', '/workspace/my-app')
+    })
   })
 
   it('shows an error state with retry when project loading fails', () => {

@@ -84,6 +84,24 @@ def test_create_agent_tool_invalid_slug(test_app: TestClient) -> None:
     assert response.status_code == 422  # Pydantic validation
 
 
+def test_create_agent_tool_internal_error_hides_exception_text(test_app: TestClient) -> None:
+    with (
+        patch("a_term.api.agent_tools.agent_tools_store.get_by_slug", return_value=None),
+        patch("a_term.api.agent_tools.agent_tools_store.create", side_effect=RuntimeError("boom: secret path")),
+    ):
+        response = test_app.post(
+            "/api/a-term/agent-tools",
+            json={
+                "name": "Claude",
+                "slug": "claude",
+                "command": "claude",
+                "process_name": "claude",
+            },
+        )
+    assert response.status_code == 500
+    assert response.json()["detail"] == "Failed to create agent tool"
+
+
 def test_update_agent_tool(test_app: TestClient) -> None:
     updated = {**TOOL_FIXTURE, "name": "Claude v2"}
     with (

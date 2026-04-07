@@ -9,6 +9,7 @@ Provides:
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -17,6 +18,7 @@ from pydantic import BaseModel, Field
 from ..storage import agent_tools as agent_tools_store
 
 router = APIRouter(tags=["Agent Tools"])
+logger = logging.getLogger(__name__)
 
 
 # ============================================================================
@@ -114,8 +116,9 @@ def create_agent_tool(body: CreateAgentToolRequest) -> AgentToolResponse:
         )
     except (ValueError, KeyError) as e:
         raise HTTPException(status_code=400, detail=str(e)) from None
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create agent tool: {e}") from None
+    except Exception:
+        logger.exception("Failed to create agent tool")
+        raise HTTPException(status_code=500, detail="Failed to create agent tool") from None
 
     return _to_response(tool)
 
@@ -131,7 +134,11 @@ def update_agent_tool(tool_id: str, body: UpdateAgentToolRequest) -> AgentToolRe
     if not updates:
         return _to_response(existing)
 
-    tool = agent_tools_store.update(tool_id, **updates)
+    try:
+        tool = agent_tools_store.update(tool_id, **updates)
+    except Exception:
+        logger.exception("Failed to update agent tool")
+        raise HTTPException(status_code=500, detail="Failed to update agent tool") from None
     if not tool:
         raise HTTPException(status_code=500, detail="Failed to update agent tool") from None
 
@@ -151,7 +158,11 @@ def delete_agent_tool(tool_id: str) -> dict[str, Any]:
             detail=f"Cannot delete '{existing['name']}': active sessions are using it",
         ) from None
 
-    deleted = agent_tools_store.delete(tool_id)
+    try:
+        deleted = agent_tools_store.delete(tool_id)
+    except Exception:
+        logger.exception("Failed to delete agent tool")
+        raise HTTPException(status_code=500, detail="Failed to delete agent tool") from None
     if not deleted:
         raise HTTPException(status_code=500, detail="Failed to delete agent tool") from None
 

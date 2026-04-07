@@ -44,7 +44,7 @@ async def test_run_cycle_updates_status_and_collects_results() -> None:
             return_value={"slug": "codex"},
         ),
         patch(
-            "a_term.services.maintenance.summitflow_client.list_projects",
+            "a_term.services.maintenance.project_catalog.list_projects",
             new=AsyncMock(return_value=[{"id": "a-term"}, {"id": "summitflow"}]),
         ),
         patch(

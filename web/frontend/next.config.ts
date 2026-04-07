@@ -12,7 +12,10 @@ function hasPassportClient(): boolean {
 }
 
 const nextConfig: NextConfig = {
-  transpilePackages: hasPassportClient() ? ['@agent-hub/passport-client'] : [],
+  transpilePackages: [
+    '@summitflow/notes-ui',
+    ...(hasPassportClient() ? ['@agent-hub/passport-client'] : []),
+  ],
   output: 'standalone',
   // Proxy /api/* and /ws/* to backend server-to-server to avoid CORS issues with CF Access
   // In production: browser requests a-term.summitflow.dev/api/* (same-origin)

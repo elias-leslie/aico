@@ -85,17 +85,13 @@ describe('ModeToggle', () => {
     })
   })
 
-  it('falls back to claude slug when no agent tools are loaded yet', async () => {
-    const onChange = vi.fn().mockResolvedValue(undefined)
+  it('disables agent entry when no agent tools are loaded yet', () => {
+    const onChange = vi.fn()
     render(<ModeToggle value="shell" onChange={onChange} />)
 
     const button = screen.getByTestId('mode-toggle')
-    expect(button).toHaveAttribute('aria-label', 'Shell mode — click for Agent')
-    fireEvent.click(button)
-
-    await waitFor(() => {
-      expect(onChange).toHaveBeenCalledWith('claude')
-    })
+    expect(button).toHaveAttribute('aria-label', 'Shell mode — no agent tools configured')
+    expect(button).toBeDisabled()
   })
 
   it('shows loading state via aria-busy when isLoading is true', () => {

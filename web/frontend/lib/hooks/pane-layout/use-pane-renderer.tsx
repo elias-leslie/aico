@@ -5,6 +5,7 @@ import {
   getSlotSessionId,
   getSlotWorkingDir,
   getSlotPanelId,
+  isPaneSlot,
 } from '@/lib/utils/slot'
 import {
   clearDraggedPaneSlotId,
@@ -12,6 +13,7 @@ import {
   isPaneSwapDragEvent,
 } from '@/lib/utils/pane-swap-dnd'
 import { ATermComponent, type ATermHandle } from '@/components/ATerm'
+import { PaneFilesDialog } from '@/components/files/PaneFilesDialog'
 import { UnifiedATermHeader } from '@/components/UnifiedATermHeader'
 import type { ResizablePaneLayoutProps } from '@/types/pane-layout'
 
@@ -86,13 +88,26 @@ export function usePaneRenderer({
     aTermStatuses,
   } = props
   const [dragTargetPanelId, setDragTargetPanelId] = useState<string | null>(null)
+  const [filesTarget, setFilesTarget] = useState<{
+    paneId: string
+    sessionId: string
+  } | null>(null)
   const paneHandlesRef = useRef(new Map<string, ATermHandle>())
+
+  const handleInsertPath = useCallback(
+    (path: string) => {
+      if (!filesTarget) return
+      paneHandlesRef.current.get(filesTarget.sessionId)?.pasteInput(path)
+    },
+    [filesTarget],
+  )
 
   const renderPane = useCallback(
     (slot: ATermSlot | PaneSlot, _index: number) => {
       const sessionId = getSlotSessionId(slot)
       const workingDir = getSlotWorkingDir(slot)
       const panelId = getSlotPanelId(slot)
+      const paneId = isPaneSlot(slot) ? slot.paneId : null
       const isExternalSlot = slot.type === 'adhoc' && slot.isExternal
       const canResetSlot = !isExternalSlot
       const canCleanSlot =
@@ -149,6 +164,11 @@ export function usePaneRenderer({
             onClose={onClose ? () => onClose(slot) : undefined}
             onCloseSession={onCloseSession ? () => onCloseSession(slot) : undefined}
             closeTooltip={isExternalSlot ? 'Detach a-term' : 'Detach pane'}
+            onFiles={
+              paneId && sessionId
+                ? () => setFilesTarget({ paneId, sessionId })
+                : undefined
+            }
             onUpload={onUpload ? () => onUpload(sessionId ?? undefined) : undefined}
             onClean={onClean ? () => onClean(slot) : undefined}
             onOpenModal={onOpenModal}
@@ -224,6 +244,14 @@ export function usePaneRenderer({
               </div>
             )}
           </div>
+          {paneId && filesTarget?.paneId === paneId && (
+            <PaneFilesDialog
+              isOpen={true}
+              paneId={paneId}
+              onClose={() => setFilesTarget(null)}
+              onInsertPath={handleInsertPath}
+            />
+          )}
         </div>
       )
     },
@@ -257,6 +285,8 @@ export function usePaneRenderer({
       onLayoutModeChange,
       aTermStatuses,
       dragTargetPanelId,
+      filesTarget,
+      handleInsertPath,
     ],
   )
 

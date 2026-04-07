@@ -18,19 +18,22 @@ decisions are handled on a best-effort basis.
 
 Project setup and service commands are documented in [README.md](README.md).
 
-Validate A-Term runtime behavior against the native host services.
-
-Quality checks should use the project wrappers:
+Validate A-Term against the native host services. The public install path is:
 
 ```bash
-dt --check --changed-only
+bash scripts/install.sh --no-start
+bash scripts/start.sh
 ```
 
-Use the repo service scripts when you need to verify runtime behavior:
+Use standard project tooling for checks:
 
 ```bash
-bash scripts/restart.sh
-bash scripts/rebuild.sh
+uv run pytest
+uv run ruff check .
+uv run ty check
+corepack pnpm --dir frontend lint
+corepack pnpm --dir frontend exec tsc --noEmit
+corepack pnpm --dir frontend test
 ```
 
 ## Licensing

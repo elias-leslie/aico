@@ -13,12 +13,12 @@ import {
   matchesProjectRow,
   ModalHeader,
   NoMatchesBanner,
-  ProjectsSection,
   QuickStartSection,
   SearchBar,
   SessionSection,
   type AttachableATermOption,
 } from './ATermManagerModal.parts'
+import { ProjectsSection } from './ATermManagerModal.projects-section'
 
 interface ATermManagerModalProps {
   isOpen: boolean
@@ -43,9 +43,22 @@ export function ATermManagerModal({
   onAttachDetachedPane,
   panes,
 }: ATermManagerModalProps) {
-  const { projects, isLoading, isError, error, refetch } = useProjectSettings()
+  const {
+    projects,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    canRegisterProjects,
+    projectRegistrySource,
+    registerProject,
+    isUpdating,
+  } = useProjectSettings()
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedSessionsByProject, setSelectedSessionsByProject] = useState<Record<string, string>>({})
+  const [registerProjectName, setRegisterProjectName] = useState('')
+  const [registerProjectRootPath, setRegisterProjectRootPath] = useState('')
+  const [registerProjectError, setRegisterProjectError] = useState<string | null>(null)
   const deferredSearchQuery = useDeferredValue(searchQuery)
   const searchRef = useRef<HTMLInputElement>(null)
 
@@ -99,12 +112,38 @@ export function ATermManagerModal({
   const resetModalState = () => {
     setSearchQuery('')
     setSelectedSessionsByProject({})
+    setRegisterProjectName('')
+    setRegisterProjectRootPath('')
+    setRegisterProjectError(null)
   }
   const closeAndReset = () => { resetModalState(); onClose() }
   const handleCreateGeneric = () => { onCreateGenericATerm(); closeAndReset() }
   const handleCreateProjectATerm = (projectId: string, rootPath: string | null) => {
     onCreateProjectATerm(projectId, rootPath)
     closeAndReset()
+  }
+  const handleRegisterProject = async () => {
+    const trimmedRootPath = registerProjectRootPath.trim()
+    const trimmedName = registerProjectName.trim()
+    if (!trimmedRootPath) {
+      setRegisterProjectError('Project path is required.')
+      return
+    }
+    try {
+      setRegisterProjectError(null)
+      const project = await registerProject({
+        root_path: trimmedRootPath,
+        name: trimmedName || undefined,
+      })
+      onCreateProjectATerm(project.id, project.root_path)
+      closeAndReset()
+    } catch (registerError) {
+      setRegisterProjectError(
+        registerError instanceof Error
+          ? registerError.message
+          : 'Failed to register project.',
+      )
+    }
   }
   const handleAttachOption = (option: AttachableATermOption) => {
     resetModalState()
@@ -155,10 +194,25 @@ export function ATermManagerModal({
               isError={isError}
               error={error}
               refetch={refetch}
+              canRegisterProjects={canRegisterProjects}
+              projectRegistrySource={projectRegistrySource}
+              registerProjectName={registerProjectName}
+              registerProjectRootPath={registerProjectRootPath}
+              registerProjectError={registerProjectError}
+              isRegisteringProject={isUpdating}
               projects={projects}
               visibleProjectRows={visibleProjectRows}
               selectedSessionsByProject={selectedSessionsByProject}
               trimmedSearch={trimmedSearch}
+              onRegisterProjectNameChange={(value) => {
+                setRegisterProjectName(value)
+                if (registerProjectError) setRegisterProjectError(null)
+              }}
+              onRegisterProjectRootPathChange={(value) => {
+                setRegisterProjectRootPath(value)
+                if (registerProjectError) setRegisterProjectError(null)
+              }}
+              onRegisterProject={handleRegisterProject}
               onSelectSession={handleProjectSessionSelect}
               onAttachSession={handleAttachOption}
               onCreateProjectATerm={handleCreateProjectATerm}
