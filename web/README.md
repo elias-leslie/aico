@@ -164,6 +164,13 @@ A-Term is a standalone product. All core features work without any external serv
 
 </details>
 
+## Sponsors
+
+A-Term is free and open source. If it saves you time, consider [sponsoring the project](https://github.com/sponsors/elias-leslie) to support ongoing development.
+
+<!-- sponsors -->
+<!-- /sponsors -->
+
 ## License
 
 Apache License 2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
