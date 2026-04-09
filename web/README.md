@@ -187,7 +187,11 @@ A-Term is free and open source. If it saves you time, sponsor ongoing developmen
 
 [![Sponsor A-Term on GitHub Sponsors](https://img.shields.io/badge/Sponsor-A--Term%20on%20GitHub%20Sponsors-db61a2?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/elias-leslie)
 
-That helps fund continued maintenance, polish, and new features without changing the product into a paid tool.
+Sponsorship helps fund:
+
+- install and onboarding polish
+- CI, security, and release maintenance
+- continued product and UX improvements
 
 <!-- sponsors -->
 <!-- /sponsors -->
