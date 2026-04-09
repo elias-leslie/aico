@@ -28,9 +28,7 @@ describe('api-config', () => {
   it('uses backend localhost websocket on desktop localhost development', () => {
     setLocation('http://localhost:3002/')
 
-    expect(getWsUrl('/ws/a-term/session-1')).toBe(
-      'ws://localhost:8002/ws/a-term/session-1',
-    )
+    expect(getWsUrl('/ws/a-term/session-1')).toBe('ws://localhost:3002/ws/a-term/session-1')
   })
 
   it('uses same-origin websocket routing for emulator hosts', () => {
@@ -64,9 +62,7 @@ describe('api-config', () => {
   it('uses backend localhost websocket for 127.0.0.1 development', () => {
     setLocation('http://127.0.0.1:3002/')
 
-    expect(getWsUrl('/ws/a-term/session-1')).toBe(
-      'ws://localhost:8002/ws/a-term/session-1',
-    )
+    expect(getWsUrl('/ws/a-term/session-1')).toBe('ws://127.0.0.1:3002/ws/a-term/session-1')
   })
 
   it('uses configured Agent Hub URL for voice websocket routing', () => {
@@ -101,19 +97,30 @@ describe('api-config', () => {
     })
 
     it('getApiBaseUrl returns localhost backend URL on server-side', () => {
-      expect(getApiBaseUrl()).toBe('http://localhost:8002')
+      expect(getApiBaseUrl()).toBe('http://127.0.0.1:8002')
     })
 
     it('buildApiUrl returns full localhost URL on server-side', () => {
       expect(buildApiUrl('/api/a-term/sessions')).toBe(
-        'http://localhost:8002/api/a-term/sessions',
+        'http://127.0.0.1:8002/api/a-term/sessions',
       )
     })
 
     it('getWsUrl returns localhost websocket URL on server-side', () => {
       expect(getWsUrl('/ws/a-term/session-1')).toBe(
-        'ws://localhost:8002/ws/a-term/session-1',
+        'ws://127.0.0.1:8002/ws/a-term/session-1',
       )
+    })
+
+    it('prefers the configured runtime backend port on server-side', () => {
+      process.env.A_TERM_PORT = '8123'
+
+      expect(getApiBaseUrl()).toBe('http://127.0.0.1:8123')
+      expect(getWsUrl('/ws/a-term/session-1')).toBe(
+        'ws://127.0.0.1:8123/ws/a-term/session-1',
+      )
+
+      delete process.env.A_TERM_PORT
     })
   })
 })

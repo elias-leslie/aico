@@ -18,10 +18,11 @@ const nextConfig: NextConfig = {
   ],
   output: 'standalone',
   // Proxy /api/* and /ws/* to backend server-to-server to avoid CORS issues with CF Access
-  // In production: browser requests a-term.summitflow.dev/api/* (same-origin)
-  // Next.js rewrites proxy to localhost:8002 (server-to-server, no CORS)
+  // The frontend build injects API_URL from the repo runtime env so installs that
+  // move off the default backend port still proxy correctly after build.
   async rewrites() {
-    const apiUrl = process.env.API_URL || `http://localhost:${PORTS.backend}`
+    const backendPort = process.env.A_TERM_PORT || String(PORTS.backend)
+    const apiUrl = process.env.API_URL || `http://127.0.0.1:${backendPort}`
     return [
       {
         source: '/api/:path*',

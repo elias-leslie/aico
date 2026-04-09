@@ -77,7 +77,7 @@ for path in (repo_root / ".env", repo_root / ".env.local"):
         values[key] = value
 
 for key in keys:
-    value = os.environ.get(key, values.get(key, ""))
+    value = values.get(key, "")
     print(f"{key}={shlex.quote(value)}")
 PY
   )"
@@ -184,6 +184,49 @@ wait_for_postgres_container() {
   fail "PostgreSQL container ${container_name} did not become ready."
 }
 
+docker_container_host_port() {
+  local container_name="$1"
+  local container_port="${2:-5432/tcp}"
+  local inspect_json=""
+
+  inspect_json="$(docker inspect "$container_name")" || fail "Unable to inspect PostgreSQL container ${container_name}."
+  [[ -n "$inspect_json" ]] || fail "PostgreSQL container ${container_name} returned empty inspect data."
+
+  INSPECT_JSON="$inspect_json" python3 - "$container_name" "$container_port" <<'PY'
+import json
+import os
+import sys
+
+container_name = sys.argv[1]
+container_port = sys.argv[2]
+
+documents = json.loads(os.environ["INSPECT_JSON"])
+ports = documents[0].get("NetworkSettings", {}).get("Ports", {})
+bindings = ports.get(container_port) or []
+
+host_ports: list[str] = []
+for binding in bindings:
+    if not binding:
+        continue
+    host_port = binding.get("HostPort")
+    if host_port and host_port not in host_ports:
+        host_ports.append(host_port)
+
+if not host_ports:
+    raise SystemExit(
+        f"Managed PostgreSQL failed: Existing PostgreSQL container {container_name} does not expose {container_port}."
+    )
+
+if len(host_ports) > 1:
+    ports_text = ", ".join(host_ports)
+    raise SystemExit(
+        f"Managed PostgreSQL failed: Existing PostgreSQL container {container_name} exposes multiple host ports for {container_port}: {ports_text}"
+    )
+
+print(host_ports[0])
+PY
+}
+
 bootstrap_docker_postgres() {
   local container_name="${A_TERM_POSTGRES_CONTAINER_NAME:-$DEFAULT_POSTGRES_CONTAINER_NAME}"
   local host_port=""
@@ -192,12 +235,7 @@ bootstrap_docker_postgres() {
 
   if docker container inspect "$container_name" >/dev/null 2>&1; then
     docker start "$container_name" >/dev/null 2>&1 || true
-    host_port="$(
-      docker inspect \
-        -f '{{range (index .NetworkSettings.Ports "5432/tcp")}}{{.HostPort}}{{end}}' \
-        "$container_name"
-    )"
-    [[ -n "$host_port" ]] || fail "Existing PostgreSQL container ${container_name} does not expose port 5432."
+    host_port="$(docker_container_host_port "$container_name" "5432/tcp")"
   else
     host_port="$(find_available_local_port 5432 55432 56432)"
     docker run \

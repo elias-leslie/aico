@@ -1,8 +1,8 @@
 # A-Term
 
-**Your browser is now a terminal multiplexer.**
+**A browser workspace for AI coding agents, shells, files, and notes.**
 
-Run AI coding agents side by side in persistent, browser-accessible tmux sessions — with a files browser, notes, and voice input built in.
+Run AI coding agents side by side in a browser workspace that keeps your terminal sessions alive — with a files browser, notes, and voice input built in.
 
 Built for [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex CLI](https://github.com/openai/codex), [Gemini CLI](https://github.com/google-gemini/gemini-cli), [OpenCode](https://github.com/opencode-ai/opencode), and every TUI agent that follows.
 
@@ -15,11 +15,30 @@ Built for [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex 
 
 ![A-Term — multi-pane workspace with Claude Code, shell, and project files](docs/images/a-term-home-dark.png)
 
-## The Problem
+## Why A-Term
 
-You're running Claude Code in one terminal, Codex in another, a shell for git, and a fourth for logs. You lose your session when the browser tab closes or SSH drops. Your project files are in a different window. Your notes are in a different app entirely.
+If you use AI coding agents, you already know the mess: one terminal for Claude Code, another for Codex, another for git, another for logs, plus notes somewhere else.
 
-**A-Term puts all of it in one browser tab.**
+**A-Term puts the whole workspace in one browser tab and keeps it alive when your browser or connection drops.**
+
+## Quickstart
+
+```bash
+git clone https://github.com/elias-leslie/a-term.git
+cd a-term
+bash scripts/install.sh
+```
+
+Then open **http://localhost:3002** and start working.
+
+A-Term currently targets **Linux with systemd**. The installer is built to do the heavy lifting for you: it can set up `.env.local`, Node.js, corepack, Python, uv, tmux, PostgreSQL, dependencies, migrations, frontend build output, and user services.
+The first install can take a few minutes because it downloads the pieces it needs for you.
+
+If **SummitFlow** is already running on the same machine, the installer can connect A-Term to it so notes and project scopes become shared instead of staying local to A-Term.
+
+If the default ports are already taken, the installer should guide you to another open port instead of forcing you to debug it by hand.
+
+Most people can stop here. The advanced setup options are lower on the page.
 
 ## Features
 
@@ -56,24 +75,11 @@ You're running Claude Code in one terminal, Codex in another, a shell for git, a
 
 **`light and dark themes`** — Respects `prefers-color-scheme` with a manual override that persists across sessions.
 
-## Install
+## Advanced Setup
 
-```bash
-git clone https://github.com/elias-leslie/a-term.git
-cd a-term
-bash scripts/install.sh
-```
+For install smoke or CI validation on Linux hosts without a user systemd session, run `bash scripts/install.sh --skip-systemd`.
 
-> Requires Linux with systemd plus internet access.
-> The one-shot path is to leave the default `DATABASE_URL` placeholder alone and let the installer bootstrap everything else for you.
-> The installer handles `.env.local`, Node.js 22, corepack, tmux, Python 3.13, uv, managed PostgreSQL bootstrap/migrations, frontend build, and systemd unit setup.
-> When Docker is available, the managed database uses a local container. Otherwise the installer falls back to a local user-managed PostgreSQL cluster and may prompt for `sudo` to install the PostgreSQL package.
-
-Then open **http://localhost:3002** and start working.
-
-For install smoke or CI validation on Linux hosts without a user systemd session, run `bash scripts/install.sh --skip-systemd`. That exercises the same one-shot bootstrap path through migrations and frontend build, then exits before unit installation/startup.
-
-For any deployment beyond localhost, enable browser auth first. `A_TERM_AUTH_MODE=password` is the built-in path; `A_TERM_AUTH_MODE=proxy` trusts an upstream identity header from your reverse proxy.
+For any deployment beyond localhost, turn on browser auth first. `A_TERM_AUTH_MODE=password` is the built-in path. `A_TERM_AUTH_MODE=proxy` is for running behind an identity-aware reverse proxy.
 
 <details>
 <summary><strong>Use your own PostgreSQL instead of the installer-managed one</strong></summary>

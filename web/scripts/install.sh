@@ -118,6 +118,382 @@ path.write_text("\n".join(next_lines) + "\n")
 PY
 }
 
+install_is_interactive() {
+  case "${A_TERM_INSTALL_INTERACTIVE:-auto}" in
+    1|true|yes)
+      return 0
+      ;;
+    0|false|no)
+      return 1
+      ;;
+  esac
+
+  [[ -t 0 && -t 1 ]]
+}
+
+prompt_with_default() {
+  local prompt="$1"
+  local default_value="${2:-}"
+  local response=""
+
+  if [[ -n "$default_value" ]]; then
+    printf '%s [%s]: ' "$prompt" "$default_value" >&2
+  else
+    printf '%s: ' "$prompt" >&2
+  fi
+  read -r response || true
+  if [[ -z "$response" ]]; then
+    response="$default_value"
+  fi
+  printf '%s\n' "$response"
+}
+
+prompt_yes_no() {
+  local prompt="$1"
+  local default_answer="${2:-Y}"
+  local suffix="Y/n"
+  local default_value="y"
+  local response=""
+
+  case "${default_answer^^}" in
+    N)
+      suffix="y/N"
+      default_value="n"
+      ;;
+    *)
+      suffix="Y/n"
+      default_value="y"
+      ;;
+  esac
+
+  while true; do
+    printf '%s [%s]: ' "$prompt" "$suffix" >&2
+    read -r response || true
+    response="${response:-$default_value}"
+    case "${response,,}" in
+      y|yes)
+        return 0
+        ;;
+      n|no)
+        return 1
+        ;;
+    esac
+    echo "Please answer yes or no." >&2
+  done
+}
+
+probe_url() {
+  local url="$1"
+  curl --silent --show-error --fail --max-time 2 "$url" >/dev/null 2>&1
+}
+
+local_postgres_ready() {
+  if command_exists pg_isready; then
+    pg_isready -h 127.0.0.1 -p 5432 >/dev/null 2>&1
+    return
+  fi
+
+  python3 - <<'PY' >/dev/null 2>&1
+import socket
+
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    sock.settimeout(1.0)
+    sock.connect(("127.0.0.1", 5432))
+PY
+}
+
+port_is_available() {
+  local host="$1"
+  local port="$2"
+
+  python3 - "$host" "$port" <<'PY' >/dev/null 2>&1
+import socket
+import sys
+
+host = sys.argv[1]
+port = int(sys.argv[2])
+
+infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+for family, socktype, proto, _, sockaddr in infos:
+    with socket.socket(family, socktype, proto) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            sock.bind(sockaddr)
+        except OSError:
+            continue
+        raise SystemExit(0)
+
+raise SystemExit(1)
+PY
+}
+
+find_available_port_near() {
+  local host="$1"
+  local start_port="$2"
+
+  python3 - "$host" "$start_port" <<'PY'
+import socket
+import sys
+
+host = sys.argv[1]
+start_port = int(sys.argv[2])
+
+def can_bind(candidate: int) -> bool:
+    infos = socket.getaddrinfo(host, candidate, type=socket.SOCK_STREAM)
+    for family, socktype, proto, _, sockaddr in infos:
+        with socket.socket(family, socktype, proto) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                sock.bind(sockaddr)
+            except OSError:
+                continue
+            return True
+    return False
+
+for candidate in range(max(1, start_port + 1), start_port + 101):
+    if can_bind(candidate):
+        print(candidate)
+        raise SystemExit(0)
+
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    sock.bind(("127.0.0.1", 0))
+    print(sock.getsockname()[1])
+PY
+}
+
+resolve_service_port() {
+  local host="$1"
+  local requested_port="$2"
+  local label="$3"
+  local env_var="$4"
+  local suggested_port=""
+  local chosen_port=""
+
+  if port_is_available "$host" "$requested_port"; then
+    printf '%s\n' "$requested_port"
+    return
+  fi
+
+  suggested_port="$(find_available_port_near "$host" "$requested_port")"
+  [[ -n "$suggested_port" ]] || fail "Unable to find an available ${label,,} port near ${requested_port}."
+
+  if install_is_interactive; then
+    echo "${label} port ${requested_port} on ${host} is already in use." >&2
+    while true; do
+      chosen_port="$(prompt_with_default "Choose a different ${label,,} port" "$suggested_port")"
+      if [[ ! "$chosen_port" =~ ^[0-9]+$ ]]; then
+        echo "Please enter a numeric port." >&2
+        continue
+      fi
+      if port_is_available "$host" "$chosen_port"; then
+        printf '%s\n' "$chosen_port"
+        return
+      fi
+      echo "Port ${chosen_port} on ${host} is also in use." >&2
+      suggested_port="$(find_available_port_near "$host" "$chosen_port")"
+    done
+  fi
+
+  echo "${label} port ${requested_port} on ${host} is already in use. Using ${suggested_port} instead. Override ${env_var} later if you want a different value." >&2
+  printf '%s\n' "$suggested_port"
+}
+
+looks_like_postgres_url() {
+  case "$1" in
+    postgresql://*|postgres://*)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+sync_default_cors_origin() {
+  local file_path="$1"
+  local frontend_host="$2"
+  local frontend_port="$3"
+
+  python3 - "$file_path" "$frontend_host" "$frontend_port" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+frontend_host = sys.argv[2]
+frontend_port = sys.argv[3]
+
+if not path.exists():
+    raise SystemExit(0)
+
+line_prefix = "CORS_ORIGINS="
+lines = path.read_text().splitlines()
+current_value = None
+for line in lines:
+    if line.startswith(line_prefix):
+        current_value = line[len(line_prefix):].strip()
+        break
+
+managed_defaults = {
+    "",
+    '["http://localhost:3002"]',
+    '["http://127.0.0.1:3002"]',
+    '["http://0.0.0.0:3002"]',
+}
+if current_value not in managed_defaults:
+    raise SystemExit(0)
+
+origin_host = frontend_host
+if origin_host in {"127.0.0.1", "0.0.0.0", "::1", "localhost"}:
+    origin_host = "localhost"
+next_value = f'["http://{origin_host}:{frontend_port}"]'
+
+updated = False
+next_lines = []
+for line in lines:
+    if line.startswith(line_prefix):
+        next_lines.append(f"{line_prefix}{next_value}")
+        updated = True
+        continue
+    next_lines.append(line)
+
+if not updated:
+    if next_lines and next_lines[-1] != "":
+        next_lines.append("")
+    next_lines.append(f"{line_prefix}{next_value}")
+
+path.write_text("\n".join(next_lines) + "\n")
+PY
+}
+
+configure_database_choice() {
+  if [[ -n "${DATABASE_URL:-}" && "${DATABASE_URL}" != "$DATABASE_URL_PLACEHOLDER" ]]; then
+    return
+  fi
+  if ! install_is_interactive; then
+    return
+  fi
+
+  step "Database setup"
+  echo "A-Term can manage PostgreSQL for you, or connect to an existing PostgreSQL database you already run."
+  if local_postgres_ready; then
+    echo "Found a PostgreSQL listener on 127.0.0.1:5432."
+  fi
+
+  if prompt_yes_no "Use A-Term-managed PostgreSQL?" "Y"; then
+    return
+  fi
+
+  local existing_url=""
+  while true; do
+    existing_url="$(prompt_with_default "Enter your PostgreSQL connection URL" "")"
+    if [[ -z "$existing_url" ]]; then
+      echo "A PostgreSQL URL is required when you choose an existing database." >&2
+      continue
+    fi
+    if ! looks_like_postgres_url "$existing_url"; then
+      echo "That does not look like a PostgreSQL URL. Expected postgres:// or postgresql://." >&2
+      continue
+    fi
+    break
+  done
+
+  DATABASE_URL="$existing_url"
+  A_TERM_MANAGED_POSTGRES_MODE=""
+  A_TERM_POSTGRES_CONTAINER_NAME=""
+  A_TERM_POSTGRES_DATA_DIR=""
+  A_TERM_POSTGRES_PORT=""
+  update_env_value "$ENV_FILE" "DATABASE_URL" "$DATABASE_URL"
+  update_env_value "$ENV_FILE" "A_TERM_MANAGED_POSTGRES_MODE" ""
+  update_env_value "$ENV_FILE" "A_TERM_POSTGRES_CONTAINER_NAME" ""
+  update_env_value "$ENV_FILE" "A_TERM_POSTGRES_DATA_DIR" ""
+  update_env_value "$ENV_FILE" "A_TERM_POSTGRES_PORT" ""
+}
+
+configure_companion_api() {
+  local summitflow_health="http://127.0.0.1:8001/health"
+  local summitflow_api="http://127.0.0.1:8001/api"
+
+  if [[ -n "${SUMMITFLOW_API_BASE:-}" ]]; then
+    return
+  fi
+  if ! probe_url "$summitflow_health"; then
+    return
+  fi
+
+  if ! install_is_interactive; then
+    echo "Detected SummitFlow locally at ${summitflow_health}. Set SUMMITFLOW_API_BASE=${summitflow_api} in .env.local if you want shared notes and project scopes." >&2
+    return
+  fi
+
+  step "Companion mode"
+  echo "Found SummitFlow running locally."
+  echo "Companion mode lets A-Term use SummitFlow's shared notes library and project catalog."
+  if prompt_yes_no "Enable SummitFlow companion mode?" "Y"; then
+    SUMMITFLOW_API_BASE="$summitflow_api"
+    update_env_value "$ENV_FILE" "SUMMITFLOW_API_BASE" "$SUMMITFLOW_API_BASE"
+  fi
+}
+
+display_host_for_url() {
+  case "$1" in
+    127.0.0.1|0.0.0.0|::1|localhost)
+      printf 'localhost\n'
+      ;;
+    *)
+      printf '%s\n' "$1"
+      ;;
+  esac
+}
+
+print_next_steps() {
+  local frontend_host="$1"
+  local frontend_port="$2"
+  local backend_host="$3"
+  local backend_port="$4"
+  local display_frontend_host=""
+  local display_backend_host=""
+
+  display_frontend_host="$(display_host_for_url "$frontend_host")"
+  display_backend_host="$(display_host_for_url "$backend_host")"
+
+  echo
+  echo "Open A-Term:"
+  echo "  Frontend: http://${display_frontend_host}:${frontend_port}"
+  echo "  Backend:  http://${display_backend_host}:${backend_port}/health"
+  echo
+  if [[ -n "${SUMMITFLOW_API_BASE:-}" ]]; then
+    echo "Mode: SummitFlow companion (${SUMMITFLOW_API_BASE})"
+  else
+    echo "Mode: standalone local storage"
+  fi
+  echo "For secure remote access, see docs/remote-access.md:"
+  echo "  - Tailscale"
+  echo "  - Cloudflare Tunnel"
+  echo "  - Caddy reverse proxy"
+  if [[ "${A_TERM_AUTH_MODE:-none}" == "none" ]]; then
+    echo "Before exposing A-Term beyond localhost, set A_TERM_AUTH_MODE=password and provide A_TERM_AUTH_PASSWORD plus A_TERM_AUTH_SECRET."
+  fi
+}
+
+stop_existing_user_services() {
+  if [[ "$SKIP_SYSTEMD" -eq 1 ]]; then
+    return
+  fi
+  if ! command_exists systemctl; then
+    return
+  fi
+
+  local stopped_any=0
+  for service in "$BACKEND_SERVICE" "$FRONTEND_SERVICE"; do
+    if systemctl --user list-unit-files "$service" >/dev/null 2>&1; then
+      systemctl --user stop "$service" >/dev/null 2>&1 || true
+      stopped_any=1
+    fi
+  done
+
+  if [[ "$stopped_any" -eq 1 ]]; then
+    sleep 1
+  fi
+}
+
 run_as_root() {
   if [[ "$(id -u)" -eq 0 ]]; then
     "$@"
@@ -248,7 +624,6 @@ ensure_node_runtime() {
     fail "Node.js bootstrap completed, but node 20+ is still not available."
   fi
 }
-
 ensure_tmux_available() {
   if command_exists tmux; then
     return
@@ -260,6 +635,7 @@ ensure_tmux_available() {
 
 bootstrap_managed_postgres() {
   local bootstrap_mode="auto"
+  local bootstrap_output=""
 
   if ! docker_available; then
     if ! bash "$REPO_ROOT/scripts/managed-postgres.sh" local-tools-ready; then
@@ -269,9 +645,14 @@ bootstrap_managed_postgres() {
   fi
 
   step "Bootstrapping managed PostgreSQL (${bootstrap_mode})"
-  eval "$(
+  bootstrap_output="$(
     bash "$REPO_ROOT/scripts/managed-postgres.sh" bootstrap "$bootstrap_mode"
-  )"
+  )" || fail "Managed PostgreSQL bootstrap failed."
+  [[ -n "$bootstrap_output" ]] || fail "Managed PostgreSQL bootstrap returned no configuration."
+  eval "$bootstrap_output"
+  [[ -n "${DATABASE_URL:-}" ]] || fail "Managed PostgreSQL bootstrap did not produce DATABASE_URL."
+  [[ "${DATABASE_URL}" != "$DATABASE_URL_PLACEHOLDER" ]] || fail "Managed PostgreSQL bootstrap left the placeholder DATABASE_URL in place."
+  [[ -n "${A_TERM_MANAGED_POSTGRES_MODE:-}" ]] || fail "Managed PostgreSQL bootstrap did not report its runtime mode."
 
   update_env_value "$ENV_FILE" "DATABASE_URL" "$DATABASE_URL"
   update_env_value "$ENV_FILE" "A_TERM_MANAGED_POSTGRES_MODE" "$A_TERM_MANAGED_POSTGRES_MODE"
@@ -281,33 +662,6 @@ bootstrap_managed_postgres() {
   export DATABASE_URL
 
   echo "Configured managed PostgreSQL at ${DATABASE_URL} (${A_TERM_MANAGED_POSTGRES_MODE})"
-}
-
-ensure_port_available() {
-  local host="$1"
-  local port="$2"
-  local label="$3"
-  local env_var="$4"
-
-  python3 - "$host" "$port" "$label" "$env_var" <<'PY'
-import socket
-import sys
-
-host = sys.argv[1]
-port = int(sys.argv[2])
-label = sys.argv[3]
-env_var = sys.argv[4]
-
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    try:
-        sock.bind((host, port))
-    except OSError as exc:
-        raise SystemExit(
-            f"Install failed: {label} port {port} on {host} is already in use. "
-            f"Set {env_var} in .env.local and rerun the installer. ({exc})"
-        )
-PY
 }
 
 require_command python3
@@ -359,6 +713,7 @@ keys = [
     "A_TERM_BIND_HOST",
     "A_TERM_FRONTEND_PORT",
     "A_TERM_FRONTEND_HOST",
+    "SUMMITFLOW_API_BASE",
     "A_TERM_MANAGED_POSTGRES_MODE",
     "A_TERM_POSTGRES_DATA_DIR",
     "A_TERM_POSTGRES_PORT",
@@ -384,10 +739,13 @@ for path in (repo_root / ".env", repo_root / ".env.local"):
         values[key] = value
 
 for key in keys:
-    value = os.environ.get(key, values.get(key, ""))
+    value = values.get(key, "")
     print(f"{key}={shlex.quote(value)}")
 PY
 )"
+
+configure_companion_api
+configure_database_choice
 
 if [[ -z "${DATABASE_URL:-}" || "${DATABASE_URL}" == "$DATABASE_URL_PLACEHOLDER" ]]; then
   bootstrap_managed_postgres
@@ -402,6 +760,17 @@ BACKEND_HOST="${A_TERM_BIND_HOST:-127.0.0.1}"
 FRONTEND_PORT="${A_TERM_FRONTEND_PORT:-$FRONTEND_PORT_DEFAULT}"
 FRONTEND_HOST="${A_TERM_FRONTEND_HOST:-127.0.0.1}"
 PYTHON_VERSION="3.13"
+
+stop_existing_user_services
+
+BACKEND_PORT="$(resolve_service_port "$BACKEND_HOST" "$BACKEND_PORT" "Backend" "A_TERM_PORT")"
+FRONTEND_PORT="$(resolve_service_port "$FRONTEND_HOST" "$FRONTEND_PORT" "Frontend" "A_TERM_FRONTEND_PORT")"
+
+update_env_value "$ENV_FILE" "A_TERM_PORT" "$BACKEND_PORT"
+update_env_value "$ENV_FILE" "A_TERM_BIND_HOST" "$BACKEND_HOST"
+update_env_value "$ENV_FILE" "A_TERM_FRONTEND_PORT" "$FRONTEND_PORT"
+update_env_value "$ENV_FILE" "A_TERM_FRONTEND_HOST" "$FRONTEND_HOST"
+sync_default_cors_origin "$ENV_FILE" "$FRONTEND_HOST" "$FRONTEND_PORT"
 
 step "Validating tmux"
 bash "$REPO_ROOT/scripts/install-local-tmux.sh"
@@ -425,6 +794,19 @@ if [[ "$SKIP_SYSTEMD" -eq 1 ]]; then
   step "Bootstrap complete"
   echo "Install smoke passed without systemd integration."
   echo "  Re-run without --skip-systemd on a Linux user session to install and start the services."
+  echo "When you start A-Term, it will use:"
+  echo "  Frontend: http://$(display_host_for_url "$FRONTEND_HOST"):${FRONTEND_PORT}"
+  echo "  Backend:  http://$(display_host_for_url "$BACKEND_HOST"):${BACKEND_PORT}/health"
+  echo
+  if [[ -n "${SUMMITFLOW_API_BASE:-}" ]]; then
+    echo "Mode: SummitFlow companion (${SUMMITFLOW_API_BASE})"
+  else
+    echo "Mode: standalone local storage"
+  fi
+  echo "For secure remote access, see docs/remote-access.md:"
+  echo "  - Tailscale"
+  echo "  - Cloudflare Tunnel"
+  echo "  - Caddy reverse proxy"
   exit 0
 fi
 
@@ -457,8 +839,8 @@ render_service \
 step "Checking ports"
 systemctl --user stop "$BACKEND_SERVICE" "$FRONTEND_SERVICE" >/dev/null 2>&1 || true
 sleep 1
-ensure_port_available "$BACKEND_HOST" "$BACKEND_PORT" "Backend" "A_TERM_PORT"
-ensure_port_available "$FRONTEND_HOST" "$FRONTEND_PORT" "Frontend" "A_TERM_FRONTEND_PORT"
+port_is_available "$BACKEND_HOST" "$BACKEND_PORT" || fail "Backend port ${BACKEND_PORT} on ${BACKEND_HOST} is still busy after installer port selection."
+port_is_available "$FRONTEND_HOST" "$FRONTEND_PORT" || fail "Frontend port ${FRONTEND_PORT} on ${FRONTEND_HOST} is still busy after installer port selection."
 
 systemctl --user daemon-reload
 systemctl --user enable "$BACKEND_SERVICE" "$FRONTEND_SERVICE" >/dev/null
@@ -480,7 +862,7 @@ wait_for_url() {
   local attempts="${3:-45}"
 
   for ((i = 1; i <= attempts; i += 1)); do
-    if curl --silent --show-error --fail "$url" >/dev/null; then
+    if curl --silent --fail "$url" >/dev/null 2>&1; then
       return 0
     fi
     sleep 1
@@ -490,10 +872,9 @@ wait_for_url() {
 }
 
 step "Verifying runtime"
-wait_for_url "http://${BACKEND_HOST}:${BACKEND_PORT}/health" "backend"
-wait_for_url "http://${FRONTEND_HOST}:${FRONTEND_PORT}" "frontend"
+wait_for_url "http://$(display_host_for_url "$BACKEND_HOST"):${BACKEND_PORT}/health" "backend"
+wait_for_url "http://$(display_host_for_url "$FRONTEND_HOST"):${FRONTEND_PORT}" "frontend"
 
 echo
 echo "${PRODUCT_NAME} is ready."
-echo "  Frontend: http://${FRONTEND_HOST}:${FRONTEND_PORT}"
-echo "  Backend:  http://${BACKEND_HOST}:${BACKEND_PORT}/health"
+print_next_steps "$FRONTEND_HOST" "$FRONTEND_PORT" "$BACKEND_HOST" "$BACKEND_PORT"

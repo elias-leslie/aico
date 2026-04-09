@@ -16,6 +16,10 @@ def test_install_script_bootstraps_managed_postgres_instead_of_failing_after_env
     text = (REPO_ROOT / "scripts" / "install.sh").read_text()
 
     assert "bootstrap_managed_postgres" in text
+    assert 'bootstrap_output="$(' in text
+    assert 'fail "Managed PostgreSQL bootstrap failed."' in text
+    assert 'fail "Managed PostgreSQL bootstrap did not produce DATABASE_URL."' in text
+    assert 'value = os.environ.get(key, values.get(key, ""))' not in text
     assert "Created .env.local from .env.example. Set DATABASE_URL" not in text
     assert "A_TERM_MANAGED_POSTGRES_MODE" in text
     assert "A_TERM_POSTGRES_CONTAINER_NAME" in text
@@ -48,6 +52,24 @@ def test_install_script_supports_non_systemd_smoke_runs() -> None:
     assert 'if [[ "$SKIP_SYSTEMD" -eq 1 ]]; then' in text
     assert "Install smoke passed without systemd integration." in text
     assert "--skip-systemd" in readme
+
+
+def test_install_script_guides_ports_companion_and_database_choices() -> None:
+    text = (REPO_ROOT / "scripts" / "install.sh").read_text()
+    frontend_package = (REPO_ROOT / "frontend" / "package.json").read_text()
+
+    assert "install_is_interactive()" in text
+    assert "stop_existing_user_services()" in text
+    assert 'systemctl --user stop "$service"' in text
+    assert "resolve_service_port" in text
+    assert 'prompt_with_default "Choose a different ${label,,} port"' in text
+    assert "configure_companion_api" in text
+    assert "Enable SummitFlow companion mode?" in text
+    assert '"SUMMITFLOW_API_BASE",' in text
+    assert "configure_database_choice" in text
+    assert "Use A-Term-managed PostgreSQL?" in text
+    assert "For secure remote access, see docs/remote-access.md" in text
+    assert '"build": "node scripts/build-with-runtime.mjs"' in frontend_package
 
 
 def test_install_script_syncs_optional_dev_extra() -> None:
@@ -162,3 +184,29 @@ exit 0
     assert "A_TERM_POSTGRES_PORT=55432" in result.stdout
     assert (data_dir / "PG_VERSION").exists()
     assert (data_dir / "postmaster.pid").exists()
+
+
+def test_managed_postgres_helper_uses_structured_docker_port_resolution() -> None:
+    text = (REPO_ROOT / "scripts" / "managed-postgres.sh").read_text()
+
+    assert "docker_container_host_port()" in text
+    assert 'inspect_json="$(docker inspect "$container_name")"' in text
+    assert 'INSPECT_JSON="$inspect_json" python3 - "$container_name" "$container_port"' in text
+    assert "returned empty inspect data" in text
+    assert 'value = os.environ.get(key, values.get(key, ""))' not in text
+    assert "if len(host_ports) > 1:" in text
+    assert '{{range (index .NetworkSettings.Ports "5432/tcp")}}{{.HostPort}}{{end}}' not in text
+
+
+def test_standalone_projects_registry_migration_exists() -> None:
+    text = (
+        REPO_ROOT
+        / "alembic"
+        / "versions"
+        / "0eb6530a7ab7_add_local_projects_registry_table.py"
+    ).read_text()
+
+    assert "CREATE TABLE IF NOT EXISTS projects" in text
+    assert "health_endpoint TEXT DEFAULT '/health'" in text
+    assert "frontend_port   INTEGER DEFAULT 3002" in text
+    assert "backend_port    INTEGER DEFAULT 8002" in text

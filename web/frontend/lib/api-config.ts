@@ -2,8 +2,9 @@
  * API configuration for A-Term frontend.
  *
  * Uses same-origin routing via Next.js rewrites to avoid CORS issues with CF Access:
- * - Development: http://localhost:3002/api/* -> localhost:8002/api/* (rewrite)
- * - Production: https://a-term.summitflow.dev/api/* -> localhost:8002/api/* (rewrite)
+ * - Browser requests stay same-origin on /api/* and /ws/*
+ * - Next.js proxies those requests server-side to the backend origin selected at build time
+ * - Server-side code falls back to API_URL or A_TERM_PORT from the active runtime env
  *
  * This pattern ensures all API requests go through the same origin as the frontend,
  * with Next.js server-side proxying to the backend. No cross-origin = no CORS.
@@ -18,11 +19,18 @@ export const PORTS = {
   agentHub: 8003,
 } as const
 
+function getConfiguredBackendPort(): string {
+  const candidate = process.env.A_TERM_PORT?.trim()
+  return candidate && /^[0-9]+$/.test(candidate)
+    ? candidate
+    : String(PORTS.backend)
+}
+
 function getServerApiOrigin(): string {
   return (
     process.env.NEXT_PUBLIC_A_TERM_API_URL ||
     process.env.API_URL ||
-    `http://localhost:${PORTS.backend}`
+    `http://127.0.0.1:${getConfiguredBackendPort()}`
   )
 }
 
@@ -63,16 +71,9 @@ export function getWsUrl(path: string): string {
   }
 
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const hostname = window.location.hostname
   const originHost = window.location.host
-
-  // Development
-  if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    return `ws://localhost:${PORTS.backend}${path}`
-  }
-
-  // Non-local browser hosts must use same-origin /ws routing.
-  // This covers production plus emulator/device access such as 10.0.2.2:3002.
+  // Always use same-origin /ws routing in the browser so the frontend does not
+  // need to know the backend port after install-time overrides.
   return `${protocol}//${originHost}${path}`
 }
 

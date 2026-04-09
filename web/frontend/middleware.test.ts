@@ -38,7 +38,7 @@ describe('middleware', () => {
     expect(response.headers.get('x-nonce')).toBeTruthy()
     expect(connectSrc).toEqual([
       "'self'",
-      'ws://localhost:8002',
+      'ws://localhost:3002',
       'ws://localhost:8003',
     ])
   })

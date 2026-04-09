@@ -39,7 +39,7 @@ function buildConnectSrc({
     isDevelopment &&
     (request.hostname === 'localhost' || request.hostname === '127.0.0.1')
   ) {
-    sources.add(`ws://localhost:${PORTS.backend}`)
+    sources.add(`ws://${request.host}`)
   }
 
   if (request) {
