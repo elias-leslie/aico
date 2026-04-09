@@ -118,6 +118,7 @@ export function NotesButton({ className, popOutUrl = '/notes' }: { className?: s
                     style={{
                         ...NOTES_THEME_STYLE,
                         ...panelStyle,
+                        backgroundColor: 'var(--notes-bg)',
                         boxShadow: 'var(--notes-shadow)',
                     }}
                 >

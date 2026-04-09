@@ -29,6 +29,7 @@ export function NotesPanel({ onPopOut }: NotesPanelProps) {
         >
             <div
                 className="flex flex-shrink-0 items-center justify-between border-b border-[var(--notes-border)] bg-[var(--notes-bg-glass)] px-3 py-2.5"
+                style={{ backgroundColor: 'var(--notes-bg-elevated)' }}
             >
                 <div className="flex items-center gap-2">
                     <StickyNote className="h-3.5 w-3.5 text-[var(--notes-accent)]" />
@@ -68,6 +69,7 @@ export function NotesPanel({ onPopOut }: NotesPanelProps) {
                             type="button"
                             onClick={() => setShowScopeMenu(v => !v)}
                             className="flex items-center gap-1 rounded border border-[var(--notes-border)] bg-[var(--notes-bg-overlay)] px-2 py-1 text-[10px] font-medium text-[var(--notes-text-muted)] transition-colors hover:text-[var(--notes-text-primary)]"
+                            style={{ backgroundColor: 'var(--notes-bg-elevated)' }}
                             aria-label={`Notes scope: ${activeScopeLabel}`}
                         >
                             {activeScopeLabel}
