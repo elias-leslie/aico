@@ -121,8 +121,8 @@ export function createNotesApi(apiPrefix: string) {
             });
         },
 
-        resolveProposal(proposalId: string, action: 'accept' | 'discard'): Promise<{ resolved: boolean }> {
-            return request<{ resolved: boolean }>(`${base}/format-proposals/${proposalId}/resolve`, {
+        async resolveProposal(proposalId: string, action: 'accept' | 'discard'): Promise<void> {
+            await request<{ resolved: boolean }>(`${base}/format-proposals/${proposalId}/resolve`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action }),
