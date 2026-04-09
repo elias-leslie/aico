@@ -103,7 +103,7 @@ export function NoteEditor({ note, onDeleted }: NoteEditorProps) {
     }
 
     return (
-        <div className="flex flex-col h-full min-w-0 bg-slate-900">
+        <div className="flex h-full min-w-0 flex-col bg-[var(--notes-bg)]">
             <NoteEditorHeader
                 title={editor.title}
                 pinned={editor.pinned}

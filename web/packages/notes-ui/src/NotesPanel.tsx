@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { StickyNote, ExternalLink, ChevronDown } from 'lucide-react';
 import clsx from 'clsx';
-import { useNotesContext } from './NotesProvider';
+import { NOTES_THEME_STYLE, useNotesContext } from './NotesProvider';
 import { NotesList } from './NotesList';
 import { NoteEditor } from './NoteEditor';
 import type { Note } from './types';
@@ -24,33 +24,27 @@ export function NotesPanel({ onPopOut }: NotesPanelProps) {
 
     return (
         <div
-            className="flex flex-col flex-1 min-h-0 bg-slate-900"
-            style={{ backgroundColor: '#0f172a' }}
+            className="flex min-h-0 flex-1 flex-col bg-[var(--notes-bg)] text-[var(--notes-text-primary)]"
+            style={NOTES_THEME_STYLE}
         >
-            {/* ── Header bar ── */}
             <div
-                className="flex items-center justify-between px-3 py-2.5 border-b border-slate-700/50 flex-shrink-0 bg-slate-950/60"
-                style={{
-                    backgroundColor: 'rgba(2, 6, 23, 0.78)',
-                    borderColor: 'rgba(51, 65, 85, 0.5)',
-                }}
+                className="flex flex-shrink-0 items-center justify-between border-b border-[var(--notes-border)] bg-[var(--notes-bg-glass)] px-3 py-2.5"
             >
                 <div className="flex items-center gap-2">
-                    <StickyNote className="w-3.5 h-3.5 text-[var(--color-phosphor-400,#33f7ff)]" />
-                    <span className="text-xs font-semibold text-slate-200 tracking-wide" style={{ fontFamily: 'var(--font-display, inherit)' }}>Notes</span>
+                    <StickyNote className="h-3.5 w-3.5 text-[var(--notes-accent)]" />
+                    <span className="text-xs font-semibold tracking-wide text-[var(--notes-text-primary)]" style={{ fontFamily: 'var(--notes-font-display)' }}>Notes</span>
                 </div>
 
                 <div className="flex items-center gap-1.5">
-                    {/* Tab switcher */}
-                    <div className="flex items-center bg-slate-800/80 rounded-md border border-slate-700/50 mr-1">
+                    <div className="mr-1 flex items-center rounded-md border border-[var(--notes-border)] bg-[var(--notes-bg-elevated)]">
                         <button
                             type="button"
                             onClick={() => { setActiveTab('note'); setSelectedNote(null); }}
                             className={clsx(
                                 'px-2.5 py-1 text-[10px] font-medium rounded-l-md transition-colors',
                                 activeTab === 'note'
-                                    ? 'text-slate-200 bg-slate-700'
-                                    : 'text-slate-500 hover:text-slate-400',
+                                    ? 'bg-[var(--notes-bg-soft-hover)] text-[var(--notes-text-primary)]'
+                                    : 'text-[var(--notes-text-dim)] hover:text-[var(--notes-text-muted)]',
                             )}
                         >
                             Notes
@@ -61,34 +55,31 @@ export function NotesPanel({ onPopOut }: NotesPanelProps) {
                             className={clsx(
                                 'px-2.5 py-1 text-[10px] font-medium rounded-r-md transition-colors',
                                 activeTab === 'prompt'
-                                    ? 'text-amber-300 bg-slate-700'
-                                    : 'text-slate-500 hover:text-slate-400',
+                                    ? 'bg-[var(--notes-warning-soft)] text-[var(--notes-warning)]'
+                                    : 'text-[var(--notes-text-dim)] hover:text-[var(--notes-text-muted)]',
                             )}
                         >
                             Prompts
                         </button>
                     </div>
 
-                    {/* Scope selector */}
                     <div className="relative">
                         <button
                             type="button"
                             onClick={() => setShowScopeMenu(v => !v)}
-                            className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium text-slate-400 hover:text-slate-300 bg-slate-800/50 rounded border border-slate-700/50 transition-colors"
+                            className="flex items-center gap-1 rounded border border-[var(--notes-border)] bg-[var(--notes-bg-overlay)] px-2 py-1 text-[10px] font-medium text-[var(--notes-text-muted)] transition-colors hover:text-[var(--notes-text-primary)]"
                             aria-label={`Notes scope: ${activeScopeLabel}`}
                         >
                             {activeScopeLabel}
-                            <ChevronDown className="w-2.5 h-2.5" />
+                            <ChevronDown className="h-2.5 w-2.5" />
                         </button>
                         {showScopeMenu && (
                             <>
                                 <div className="fixed inset-0 z-[101]" onClick={() => setShowScopeMenu(false)} />
                                 <div
-                                    className="absolute right-0 top-full mt-1 w-40 bg-slate-900 border border-slate-700 rounded-md shadow-xl z-[102] py-1 overflow-hidden"
+                                    className="absolute right-0 top-full z-[102] mt-1 w-40 overflow-hidden rounded-md border border-[var(--notes-border)] bg-[var(--notes-bg)] py-1"
                                     style={{
-                                        backgroundColor: '#0f172a',
-                                        borderColor: 'rgba(51, 65, 85, 0.8)',
-                                        boxShadow: '0 18px 36px rgba(0, 0, 0, 0.42)',
+                                        boxShadow: 'var(--notes-shadow)',
                                     }}
                                 >
                                     {availableScopeOptions.map(scope => (
@@ -98,7 +89,7 @@ export function NotesPanel({ onPopOut }: NotesPanelProps) {
                                             onClick={() => { setScopeFilter(scope.value); setShowScopeMenu(false); }}
                                             className={clsx(
                                                 'w-full text-left px-3 py-1.5 text-[11px] transition-colors',
-                                                scopeFilter === scope.value ? 'text-[var(--color-phosphor-400,#33f7ff)] bg-slate-800/50' : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/30',
+                                                scopeFilter === scope.value ? 'bg-[var(--notes-accent-soft)] text-[var(--notes-accent)]' : 'text-[var(--notes-text-muted)] hover:bg-[var(--notes-bg-soft)] hover:text-[var(--notes-text-primary)]',
                                             )}
                                         >
                                             {scope.label}
@@ -109,24 +100,21 @@ export function NotesPanel({ onPopOut }: NotesPanelProps) {
                         )}
                     </div>
 
-                    {/* Pop-out button */}
                     {onPopOut && (
                         <button
                             type="button"
                             onClick={onPopOut}
-                            className="p-1 text-slate-500 hover:text-[var(--color-phosphor-400,#33f7ff)] rounded transition-colors"
+                            className="rounded p-1 text-[var(--notes-text-dim)] transition-colors hover:text-[var(--notes-accent)]"
                             title="Open in separate window"
                         >
-                            <ExternalLink className="w-3.5 h-3.5" />
+                            <ExternalLink className="h-3.5 w-3.5" />
                         </button>
                     )}
                 </div>
             </div>
 
-            {/* ── Body: list + editor ── */}
             <div
-                className="flex flex-1 min-h-0 overflow-hidden bg-slate-900"
-                style={{ backgroundColor: '#0f172a' }}
+                className="flex min-h-0 flex-1 overflow-hidden bg-[var(--notes-bg)]"
             >
                 <NotesList
                     activeTab={activeTab}
@@ -134,22 +122,22 @@ export function NotesPanel({ onPopOut }: NotesPanelProps) {
                     selectedId={selectedNote?.id ?? null}
                     onSelect={setSelectedNote}
                 />
-                <div className="flex-1 min-w-0 bg-slate-900" style={{ backgroundColor: '#0f172a' }}>
+                <div className="min-w-0 flex-1 bg-[var(--notes-bg)]">
                     {selectedNote ? (
                         <NoteEditor
                             note={selectedNote}
                             onDeleted={() => setSelectedNote(null)}
                         />
                     ) : (
-                        <div className="flex items-center justify-center h-full bg-slate-900" style={{ backgroundColor: '#0f172a' }}>
+                        <div className="flex h-full items-center justify-center bg-[var(--notes-bg)]">
                             <div className="text-center space-y-3">
                                 <div className="relative mx-auto w-12 h-12 flex items-center justify-center">
-                                    <div className="absolute inset-0 rounded-xl bg-[var(--color-phosphor-500,#00f5ff)]/5 border border-[var(--color-phosphor-500,#00f5ff)]/10" />
-                                    <StickyNote className="w-5 h-5 text-slate-600 relative" />
+                                    <div className="absolute inset-0 rounded-xl border border-[var(--notes-accent-border)] bg-[var(--notes-accent-soft)]" />
+                                    <StickyNote className="relative h-5 w-5 text-[var(--notes-text-dim)]" />
                                 </div>
                                 <div>
-                                    <p className="text-xs text-slate-500 font-medium">Select or create a {activeTab}</p>
-                                    <p className="text-[10px] text-slate-600 mt-1">Use the sidebar to browse, or press + to start fresh</p>
+                                    <p className="text-xs font-medium text-[var(--notes-text-muted)]">Select or create a {activeTab}</p>
+                                    <p className="mt-1 text-[10px] text-[var(--notes-text-dim)]">Use the sidebar to browse, or press + to start fresh</p>
                                 </div>
                             </div>
                         </div>

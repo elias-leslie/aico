@@ -10,12 +10,12 @@ interface NoteEditorTagsBarProps {
 
 export function NoteEditorTagsBar({ tags, tagInput, onTagInputChange, onTagKeyDown, onRemoveTag }: NoteEditorTagsBarProps) {
     return (
-        <div className="flex items-center gap-1.5 px-4 py-2 border-b border-slate-800/50 overflow-x-auto scrollbar-none">
+        <div className="flex items-center gap-1.5 overflow-x-auto border-b border-[var(--notes-border)] px-4 py-2 scrollbar-none">
             {tags.map(tag => (
-                <span key={tag} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-800 text-slate-400 border border-slate-700/50 flex-shrink-0">
+                <span key={tag} className="inline-flex flex-shrink-0 items-center gap-1 rounded border border-[var(--notes-border)] bg-[var(--notes-bg-elevated)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--notes-text-muted)]">
                     {tag}
-                    <button type="button" onClick={() => onRemoveTag(tag)} className="hover:text-slate-200 transition-colors">
-                        <X className="w-2.5 h-2.5" />
+                    <button type="button" onClick={() => onRemoveTag(tag)} className="transition-colors hover:text-[var(--notes-text-primary)]">
+                        <X className="h-2.5 w-2.5" />
                     </button>
                 </span>
             ))}
@@ -24,7 +24,7 @@ export function NoteEditorTagsBar({ tags, tagInput, onTagInputChange, onTagKeyDo
                 onChange={e => onTagInputChange(e.target.value)}
                 onKeyDown={onTagKeyDown}
                 placeholder={tags.length === 0 ? 'add tags...' : '+'}
-                className="bg-transparent text-[10px] text-slate-500 placeholder:text-slate-700 outline-none min-w-[40px] flex-shrink-0"
+                className="min-w-[40px] flex-shrink-0 bg-transparent text-[10px] text-[var(--notes-text-muted)] outline-none placeholder:text-[var(--notes-text-dim)]"
             />
         </div>
     );

@@ -1,6 +1,7 @@
 import { NotesButton, NotesProvider } from '@summitflow/notes-ui'
 import { render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { DEFAULT_NOTES_PROJECT_SCOPE } from '@/lib/notes-config'
 
 describe('NotesButton', () => {
   afterEach(() => {
@@ -13,7 +14,7 @@ describe('NotesButton', () => {
     vi.stubGlobal('fetch', fetchSpy)
 
     render(
-      <NotesProvider apiPrefix="/api" projectScope="terminal">
+      <NotesProvider apiPrefix="/api" projectScope={DEFAULT_NOTES_PROJECT_SCOPE}>
         <NotesButton popOutUrl="/notes" />
       </NotesProvider>,
     )

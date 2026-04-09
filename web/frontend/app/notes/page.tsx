@@ -6,6 +6,7 @@ import {
   fetchNotesStatus,
   type NotesStatusResponse,
 } from '@/lib/api/notes-status'
+import { DEFAULT_NOTES_PROJECT_SCOPE } from '@/lib/notes-config'
 
 function formatStorageMode(mode: NotesStatusResponse['storage_mode']): string {
   return mode === 'companion'
@@ -63,7 +64,7 @@ function NotesWorkspacePage() {
   }, [])
 
   return (
-    <NotesProvider apiPrefix="/api" projectScope="a-term">
+    <NotesProvider apiPrefix="/api" projectScope={DEFAULT_NOTES_PROJECT_SCOPE}>
       <div
         className="flex h-dvh flex-col px-4 py-4 sm:px-6 sm:py-6"
         style={{ backgroundColor: 'var(--term-bg-deep)' }}
@@ -111,7 +112,7 @@ function NotesWorkspacePage() {
                 color: 'var(--term-text-muted)',
               }}
             >
-              Scope: a-term
+              Default scope: {DEFAULT_NOTES_PROJECT_SCOPE}
             </span>
             {status ? (
               <>
@@ -150,10 +151,11 @@ function NotesWorkspacePage() {
         </header>
 
         <div
-          className="min-h-0 flex-1 overflow-hidden rounded-[2rem] border shadow-[0_24px_72px_rgba(0,0,0,0.34)]"
+          className="min-h-0 flex-1 overflow-hidden rounded-[2rem] border"
           style={{
             borderColor: 'var(--term-border)',
-            backgroundColor: 'rgba(8, 12, 18, 0.7)',
+            backgroundColor: 'var(--term-surface-glass)',
+            boxShadow: 'var(--term-shadow-modal)',
           }}
         >
           <NotesPanel />

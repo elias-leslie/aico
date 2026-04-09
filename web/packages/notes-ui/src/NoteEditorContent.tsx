@@ -1,5 +1,6 @@
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { NOTES_PROSE_CLASS_NAME } from './NotesProvider';
 import type { EditMode } from './useNoteEditorState';
 
 interface NoteEditorContentProps {
@@ -16,7 +17,7 @@ export function NoteEditorContent({ mode, content, onContentChange }: NoteEditor
                     value={content}
                     onChange={e => onContentChange(e.target.value)}
                     placeholder="Write something..."
-                    className="w-full h-full px-4 py-3 bg-transparent text-sm text-slate-300 placeholder:text-slate-700 outline-none resize-none font-mono leading-relaxed"
+                    className="h-full w-full resize-none bg-transparent px-4 py-3 font-mono text-sm leading-relaxed text-[var(--notes-text-primary)] outline-none placeholder:text-[var(--notes-text-dim)]"
                     spellCheck={false}
                 />
             </div>
@@ -24,10 +25,10 @@ export function NoteEditorContent({ mode, content, onContentChange }: NoteEditor
     }
     return (
         <div className="flex-1 min-h-0 overflow-y-auto">
-            <div className="px-4 py-3 text-sm text-slate-300 prose prose-invert prose-sm max-w-none prose-headings:text-slate-200 prose-a:text-[var(--color-phosphor-400,#33f7ff)] prose-code:text-amber-300 prose-code:bg-slate-800 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-slate-950 prose-pre:border prose-pre:border-slate-700/50">
+            <div className={`px-4 py-3 text-sm ${NOTES_PROSE_CLASS_NAME}`}>
                 {content
                     ? <Markdown remarkPlugins={[remarkGfm]}>{content}</Markdown>
-                    : <p className="text-slate-600 italic">Nothing here yet.</p>
+                    : <p className="italic text-[var(--notes-text-dim)]">Nothing here yet.</p>
                 }
             </div>
         </div>

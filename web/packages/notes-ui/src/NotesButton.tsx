@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { StickyNote } from 'lucide-react';
 import clsx from 'clsx';
-import { useNotesContext } from './NotesProvider';
+import { NOTES_THEME_STYLE, useNotesContext } from './NotesProvider';
 import { NotesPanel } from './NotesPanel';
 
 const POPUP_FEATURES = 'width=700,height=800,menubar=no,toolbar=no,location=no,status=no';
@@ -89,19 +89,20 @@ export function NotesButton({ className, popOutUrl = '/notes' }: { className?: s
                 onClick={toggle}
                 className={clsx(
                     'relative p-2 rounded-lg transition-all duration-200',
-                    'text-slate-400 hover:text-[var(--color-phosphor-400,#33f7ff)] hover:bg-slate-800/50',
-                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-phosphor-500,#00f5ff)]/40',
-                    'active:bg-slate-800',
-                    open && 'text-[var(--color-phosphor-400,#33f7ff)] bg-slate-800/50',
+                    'text-[var(--notes-text-muted)] hover:text-[var(--notes-accent)] hover:bg-[var(--notes-bg-soft)]',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--notes-accent-border)]',
+                    'active:bg-[var(--notes-bg-soft-hover)]',
+                    open && 'text-[var(--notes-accent)] bg-[var(--notes-bg-soft)]',
                     className,
                 )}
+                style={NOTES_THEME_STYLE}
                 aria-label="Notes"
                 aria-expanded={open}
                 title="Notes"
             >
                 <StickyNote className="w-4 h-4" />
                 {open && (
-                    <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-[var(--color-phosphor-500,#00f5ff)]" />
+                    <span className="absolute bottom-0 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-[var(--notes-accent)]" />
                 )}
             </button>
 
@@ -110,21 +111,18 @@ export function NotesButton({ className, popOutUrl = '/notes' }: { className?: s
                 <div
                     ref={panelRef}
                     className={clsx(
-                        'fixed flex flex-col bg-slate-900',
-                        'border border-slate-700/70 rounded-lg',
-                        'shadow-2xl shadow-black/60',
+                        'fixed flex flex-col overflow-hidden rounded-lg border',
+                        'bg-[var(--notes-bg)] border-[var(--notes-border)]',
                         'overflow-hidden',
                     )}
                     style={{
+                        ...NOTES_THEME_STYLE,
                         ...panelStyle,
-                        backgroundColor: '#0f172a',
-                        borderColor: 'rgba(51, 65, 85, 0.7)',
-                        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.55)',
+                        boxShadow: 'var(--notes-shadow)',
                     }}
                 >
-                    {/* Phosphor glow line */}
                     <div className="h-px w-full flex-shrink-0" style={{
-                        background: 'linear-gradient(90deg, transparent 0%, var(--color-phosphor-500, #00f5ff) 30%, var(--color-phosphor-400, #33f7ff) 50%, var(--color-phosphor-500, #00f5ff) 70%, transparent 100%)',
+                        background: 'linear-gradient(90deg, transparent 0%, var(--notes-accent) 30%, color-mix(in srgb, var(--notes-accent) 70%, white 30%) 50%, var(--notes-accent) 70%, transparent 100%)',
                         opacity: 0.35,
                     }} />
 

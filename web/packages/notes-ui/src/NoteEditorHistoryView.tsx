@@ -23,27 +23,27 @@ function relativeTime(dateStr: string | null): string {
 
 function VersionItem({ v, onRevert }: { v: NoteVersion; onRevert: (id: string) => void }) {
     return (
-        <div className="px-4 py-3 border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors group">
+        <div className="group border-b border-[var(--notes-border)] px-4 py-3 transition-colors hover:bg-[var(--notes-bg-soft)]">
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-300 font-medium">v{v.version}</span>
-                    <span className="text-[10px] text-slate-600">{relativeTime(v.created_at)}</span>
+                    <span className="text-xs font-medium text-[var(--notes-text-primary)]">v{v.version}</span>
+                    <span className="text-[10px] text-[var(--notes-text-dim)]">{relativeTime(v.created_at)}</span>
                     <span className={clsx(
                         'text-[10px] px-1.5 py-0.5 rounded border',
-                        v.change_source === 'format_accept' ? 'text-amber-400/70 border-amber-500/20 bg-amber-500/5' :
-                        v.change_source === 'revert' ? 'text-[var(--color-phosphor-400,#33f7ff)]/70 border-[var(--color-phosphor-500,#00f5ff)]/20 bg-[var(--color-phosphor-500,#00f5ff)]/5' :
-                        'text-slate-500 border-slate-700/50 bg-slate-800/30',
+                        v.change_source === 'format_accept' ? 'border-[var(--notes-warning-border)] bg-[var(--notes-warning-soft)] text-[var(--notes-warning)]' :
+                        v.change_source === 'revert' ? 'border-[var(--notes-accent-border)] bg-[var(--notes-accent-soft)] text-[var(--notes-accent)]' :
+                        'border-[var(--notes-border)] bg-[var(--notes-bg-elevated)] text-[var(--notes-text-dim)]',
                     )}>
                         {v.change_source.replace('_', ' ')}
                     </span>
                 </div>
                 <button type="button" onClick={() => onRevert(v.id)}
-                    className="opacity-0 group-hover:opacity-100 inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium text-[var(--color-phosphor-400,#33f7ff)] border border-[var(--color-phosphor-500,#00f5ff)]/20 hover:bg-[var(--color-phosphor-500,#00f5ff)]/10 transition-all">
-                    <RotateCcw className="w-2.5 h-2.5" /> Revert
+                    className="inline-flex items-center gap-1 rounded border border-[var(--notes-accent-border)] px-2 py-1 text-[10px] font-medium text-[var(--notes-accent)] opacity-0 transition-all hover:bg-[var(--notes-accent-soft)] group-hover:opacity-100">
+                    <RotateCcw className="h-2.5 w-2.5" /> Revert
                 </button>
             </div>
-            <p className="text-[11px] text-slate-400 mt-1 truncate">{v.title || 'Untitled'}</p>
-            <p className="text-[10px] text-slate-600 mt-0.5 line-clamp-2">{v.content.substring(0, 150)}</p>
+            <p className="mt-1 truncate text-[11px] text-[var(--notes-text-muted)]">{v.title || 'Untitled'}</p>
+            <p className="mt-0.5 line-clamp-2 text-[10px] text-[var(--notes-text-dim)]">{v.content.substring(0, 150)}</p>
         </div>
     );
 }
@@ -56,26 +56,26 @@ export function NoteEditorHistoryView({
     onRevert,
 }: NoteEditorHistoryViewProps) {
     return (
-        <div className="flex flex-col h-full min-w-0 bg-slate-900">
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-700/50">
+        <div className="flex h-full min-w-0 flex-col bg-[var(--notes-bg)]">
+            <div className="flex items-center justify-between border-b border-[var(--notes-border)] px-4 py-2.5">
                 <div className="flex items-center gap-2">
-                    <History className="w-3.5 h-3.5 text-[var(--color-phosphor-400,#33f7ff)]" />
-                    <span className="text-xs font-medium text-slate-300">Version History</span>
-                    <span className="text-[10px] text-slate-500">({versions.length})</span>
+                    <History className="h-3.5 w-3.5 text-[var(--notes-accent)]" />
+                    <span className="text-xs font-medium text-[var(--notes-text-primary)]">Version History</span>
+                    <span className="text-[10px] text-[var(--notes-text-dim)]">({versions.length})</span>
                 </div>
-                <button type="button" onClick={onClose} className="p-1 text-slate-500 hover:text-slate-300 rounded transition-colors">
-                    <X className="w-3.5 h-3.5" />
+                <button type="button" onClick={onClose} className="rounded p-1 text-[var(--notes-text-dim)] transition-colors hover:text-[var(--notes-text-primary)]">
+                    <X className="h-3.5 w-3.5" />
                 </button>
             </div>
             <div className="flex-1 overflow-y-auto">
-                {loadingVersions && <div className="px-4 py-6 text-center text-xs text-slate-600">Loading...</div>}
+                {loadingVersions && <div className="px-4 py-6 text-center text-xs text-[var(--notes-text-dim)]">Loading...</div>}
                 {!loadingVersions && versionError && (
-                    <div className="px-4 py-6 text-center text-xs text-rose-400/80">
+                    <div className="px-4 py-6 text-center text-xs text-[var(--notes-danger)]">
                         Unable to load versions
                     </div>
                 )}
                 {!loadingVersions && !versionError && versions.length === 0 && (
-                    <div className="px-4 py-6 text-center text-xs text-slate-600">No versions yet</div>
+                    <div className="px-4 py-6 text-center text-xs text-[var(--notes-text-dim)]">No versions yet</div>
                 )}
                 {!loadingVersions && versions.map(v => <VersionItem key={v.id} v={v} onRevert={onRevert} />)}
             </div>

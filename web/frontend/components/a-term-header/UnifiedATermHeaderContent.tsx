@@ -18,6 +18,7 @@ import { ModeToggle } from '../ModeToggle'
 import { PaneOverflowMenu } from '../PaneOverflowMenu'
 import { AddATermButton } from './AddATermButton'
 import { HeaderIconButton } from './HeaderIconButton'
+import { DEFAULT_NOTES_PROJECT_SCOPE } from '@/lib/notes-config'
 import { HeaderNameDisplay } from './HeaderNameDisplay'
 import { PaneSearchControl } from './PaneSearchControl'
 import { PaneStatusBadge, shouldShowPaneStatus } from './PaneStatusBadge'
@@ -264,7 +265,10 @@ export const UnifiedATermHeaderContent = memo(
             />
           )}
 
-          <NotesProvider apiPrefix="/api" projectScope="terminal">
+          <NotesProvider
+            apiPrefix="/api"
+            projectScope={DEFAULT_NOTES_PROJECT_SCOPE}
+          >
             <NotesButton popOutUrl="/notes" />
           </NotesProvider>
 
