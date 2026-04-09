@@ -9,7 +9,7 @@ export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
 
 usage() {
   cat <<'EOF'
-Usage: bash scripts/install.sh [--no-start]
+Usage: bash scripts/install.sh [--no-start] [--skip-systemd]
 
 Bootstraps A-Term for a native Linux install:
   - prepares .env.local when missing
@@ -21,13 +21,22 @@ Bootstraps A-Term for a native Linux install:
   - builds the production frontend
   - installs user-level systemd units
   - optionally starts the services and verifies health
+
+Verification / CI support:
+  --skip-systemd  Skip user-level systemd unit installation and service startup.
+                  Useful for install smoke runs on hosts without a user systemd session.
 EOF
 }
 
 NO_START=0
+SKIP_SYSTEMD=0
 for arg in "$@"; do
   case "$arg" in
     --no-start)
+      NO_START=1
+      ;;
+    --skip-systemd)
+      SKIP_SYSTEMD=1
       NO_START=1
       ;;
     -h|--help)
@@ -222,7 +231,9 @@ require_command curl
 require_command node
 require_command corepack
 require_command tmux
-require_command systemctl
+if [[ "$SKIP_SYSTEMD" -eq 0 ]]; then
+  require_command systemctl
+fi
 ensure_uv
 
 eval "$(
@@ -316,7 +327,7 @@ step "Installing Python ${PYTHON_VERSION}"
 uv python install "$PYTHON_VERSION"
 
 step "Installing Python dependencies"
-uv sync --dev --managed-python --python "$PYTHON_VERSION"
+uv sync --extra dev --managed-python --python "$PYTHON_VERSION"
 
 step "Running database migrations"
 uv run --managed-python --python "$PYTHON_VERSION" alembic upgrade head
@@ -326,6 +337,13 @@ corepack pnpm --dir "$REPO_ROOT/frontend" install --frozen-lockfile
 
 step "Building frontend"
 corepack pnpm --dir "$REPO_ROOT/frontend" build
+
+if [[ "$SKIP_SYSTEMD" -eq 1 ]]; then
+  step "Bootstrap complete"
+  echo "Install smoke passed without systemd integration."
+  echo "  Re-run without --skip-systemd on a Linux user session to install and start the services."
+  exit 0
+fi
 
 step "Installing systemd user units"
 SYSTEMD_USER_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"

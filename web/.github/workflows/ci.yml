@@ -50,7 +50,7 @@ jobs:
         run: corepack enable
 
       - name: Install Python dependencies
-        run: uv sync --dev --frozen
+        run: uv sync --extra dev --frozen
 
       - name: Install frontend dependencies
         run: corepack pnpm --dir frontend install --frozen-lockfile

@@ -69,6 +69,8 @@ bash scripts/install.sh
 
 Then open **http://localhost:3002** and start working.
 
+For install smoke or CI validation on Linux hosts without a user systemd session, run `bash scripts/install.sh --skip-systemd`. That exercises the same one-shot bootstrap path through migrations and frontend build, then exits before unit installation/startup.
+
 For any deployment beyond localhost, enable browser auth first. `A_TERM_AUTH_MODE=password` is the built-in path; `A_TERM_AUTH_MODE=proxy` trusts an upstream identity header from your reverse proxy.
 
 <details>

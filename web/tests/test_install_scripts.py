@@ -26,3 +26,20 @@ def test_env_example_documents_installer_managed_database_path() -> None:
 
     assert "Leave the placeholder DATABASE_URL below" in text
     assert "bootstrap a local Docker PostgreSQL automatically" in text
+
+
+def test_install_script_supports_non_systemd_smoke_runs() -> None:
+    text = (REPO_ROOT / "scripts" / "install.sh").read_text()
+    readme = (REPO_ROOT / "README.md").read_text()
+
+    assert "--skip-systemd" in text
+    assert 'if [[ "$SKIP_SYSTEMD" -eq 1 ]]; then' in text
+    assert "Install smoke passed without systemd integration." in text
+    assert "--skip-systemd" in readme
+
+
+def test_install_script_syncs_optional_dev_extra() -> None:
+    text = (REPO_ROOT / "scripts" / "install.sh").read_text()
+
+    assert "uv sync --extra dev" in text
+    assert "uv sync --dev" not in text
