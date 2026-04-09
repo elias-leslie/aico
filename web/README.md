@@ -63,15 +63,16 @@ cd a-term
 bash scripts/install.sh
 ```
 
-> Requires Linux with systemd, tmux, Node.js 20+, and PostgreSQL.
-> The installer handles Python 3.13, uv, Alembic migrations, frontend build, and systemd unit setup.
+> Requires Linux with systemd, tmux, Node.js 20+, and either Docker or an existing PostgreSQL URL.
+> The supported one-shot path is to leave the default `DATABASE_URL` placeholder alone and let the installer bootstrap a local PostgreSQL container for you.
+> The installer handles `.env.local`, Python 3.13, uv, database bootstrap/migrations, frontend build, and systemd unit setup.
 
 Then open **http://localhost:3002** and start working.
 
 For any deployment beyond localhost, enable browser auth first. `A_TERM_AUTH_MODE=password` is the built-in path; `A_TERM_AUTH_MODE=proxy` trusts an upstream identity header from your reverse proxy.
 
 <details>
-<summary><strong>Quick PostgreSQL setup (Docker)</strong></summary>
+<summary><strong>Use your own PostgreSQL instead of the installer-managed one</strong></summary>
 
 ```bash
 docker run -d \
@@ -94,7 +95,9 @@ DATABASE_URL=postgresql://a-term:a-term@localhost:5432/a-term
 <details>
 <summary><strong>Environment variables</strong></summary>
 
-Copy `.env.example` to `.env.local` and set `DATABASE_URL`. Everything else is optional:
+Copy `.env.example` to `.env.local` only if you want to review or override settings first. For the default one-shot install, `bash scripts/install.sh` will create `.env.local` and replace the placeholder `DATABASE_URL` with a local Docker PostgreSQL automatically.
+
+If you want to use your own PostgreSQL instead, set `DATABASE_URL` yourself. Everything else is optional:
 
 ```bash
 # Required

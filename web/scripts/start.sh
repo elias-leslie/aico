@@ -51,11 +51,18 @@ fi
 
 FRONTEND_HOST="${A_TERM_FRONTEND_HOST:-127.0.0.1}"
 FRONTEND_PORT="${A_TERM_FRONTEND_PORT:-$DEFAULT_FRONTEND_PORT}"
+MANAGED_POSTGRES="${A_TERM_INSTALL_MANAGED_POSTGRES:-false}"
+POSTGRES_CONTAINER_NAME="${A_TERM_POSTGRES_CONTAINER_NAME:-a-term-postgres}"
 
 echo "================================"
 echo "Starting ${PRODUCT_NAME}"
 echo "================================"
 echo ""
+
+if [[ "$MANAGED_POSTGRES" == "true" ]] && command -v docker >/dev/null 2>&1; then
+  echo "Starting managed PostgreSQL container..."
+  docker start "$POSTGRES_CONTAINER_NAME" >/dev/null 2>&1 || true
+fi
 
 echo "Starting ${PRODUCT_NAME} backend..."
 systemctl --user start "$BACKEND_SERVICE"
