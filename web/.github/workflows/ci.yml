@@ -61,22 +61,22 @@ jobs:
         run: uv run alembic upgrade head
 
       - name: Ruff
-        run: dt ruff
+        run: uv run dt ruff
 
       - name: Ty
-        run: dt types
+        run: uv run dt types
 
       - name: Pytest
-        run: dt pytest
+        run: uv run dt pytest
 
       - name: Biome
-        run: dt biome
+        run: uv run dt biome
 
       - name: TypeScript
-        run: dt tsc
+        run: uv run dt tsc
 
       - name: Vitest
-        run: dt vitest
+        run: uv run dt vitest
 
       - name: Frontend build
         run: pnpm --dir frontend build
