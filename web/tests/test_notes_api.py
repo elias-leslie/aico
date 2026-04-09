@@ -33,6 +33,39 @@ def test_notes_capabilities_local_mode(test_app: TestClient) -> None:
     }
 
 
+def test_notes_capabilities_companion_mode_proxy_forwards_upstream(test_app: TestClient) -> None:
+    upstream = httpx.Response(
+        200,
+        headers={"content-type": "application/json"},
+        content=json.dumps(
+            {
+                "title_generation": True,
+                "formatting": True,
+                "prompt_refinement": True,
+            }
+        ).encode(),
+    )
+    with (
+        patch("a_term.api.notes.summitflow_client.has_companion_api", return_value=True),
+        patch(
+            "a_term.api.notes.summitflow_client.api_request",
+            new=AsyncMock(return_value=upstream),
+        ) as mock_request,
+    ):
+        response = test_app.get("/api/notes/capabilities")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "title_generation": True,
+        "formatting": True,
+        "prompt_refinement": True,
+    }
+    mock_request.assert_awaited_once()
+    await_args = mock_request.await_args
+    assert await_args is not None
+    assert await_args.args == ("GET", "/notes/capabilities")
+
+
 def test_notes_status_local_mode_reports_standalone(test_app: TestClient) -> None:
     with (
         patch("a_term.api.notes.summitflow_client.has_companion_api", return_value=False),
@@ -87,6 +120,37 @@ def test_notes_scopes_local_mode_uses_project_registry(test_app: TestClient) -> 
         {"value": "agent-hub", "label": "Agent-Hub", "known": True},
         {"value": "legacy-scope", "label": "legacy-scope", "known": False},
     ]
+
+
+def test_notes_scopes_companion_mode_proxy_forwards_upstream(test_app: TestClient) -> None:
+    upstream = httpx.Response(
+        200,
+        headers={"content-type": "application/json"},
+        content=json.dumps(
+            [
+                {"value": "global", "label": "Global", "known": True},
+                {"value": "portfolio-ai", "label": "Portfolio AI", "known": True},
+            ]
+        ).encode(),
+    )
+    with (
+        patch("a_term.api.notes.summitflow_client.has_companion_api", return_value=True),
+        patch(
+            "a_term.api.notes.summitflow_client.api_request",
+            new=AsyncMock(return_value=upstream),
+        ) as mock_request,
+    ):
+        response = test_app.get("/api/notes/scopes")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {"value": "global", "label": "Global", "known": True},
+        {"value": "portfolio-ai", "label": "Portfolio AI", "known": True},
+    ]
+    mock_request.assert_awaited_once()
+    await_args = mock_request.await_args
+    assert await_args is not None
+    assert await_args.args == ("GET", "/notes/scopes")
 
 
 def test_list_notes_local_mode(test_app: TestClient) -> None:

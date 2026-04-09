@@ -34,7 +34,7 @@ You're running Claude Code in one terminal, Codex in another, a shell for git, a
 ![Files browser showing directory tree and relative-path preview](docs/images/a-term-files-browser.svg)
 *Browse and preview files from the active pane's working directory*
 
-**`docked notes`** — Keep prompts, context snippets, and scratchpads beside your live terminal output. Works standalone inside A-Term and can switch to a shared cross-project library when the SummitFlow companion API is configured.
+**`docked notes`** — Keep prompts, context snippets, and scratchpads beside your live terminal output. In standalone installs, notes and prompts are stored inside A-Term itself. When the SummitFlow companion API is configured, the same notes workspace switches to SummitFlow's shared cross-project library.
 
 ![Notes workspace with standalone and shared-library modes](docs/images/a-term-notes-workspace.svg)
 *Notes panel docked alongside the workspace*
@@ -168,7 +168,7 @@ Full API schema available at `/openapi.json` when running.
 
 A-Term is a standalone product. All core features work without any external service.
 
-**SummitFlow** (`SUMMITFLOW_API_BASE`) — When available, A-Term fetches project metadata and lets notes switch from standalone local storage to a shared companion-backed library. Falls back to local data if unreachable.
+**SummitFlow** (`SUMMITFLOW_API_BASE`) — When available, A-Term fetches project metadata and switches notes and prompts from A-Term-owned local storage to SummitFlow's central shared notes library. Without it, A-Term keeps notes, prompts, and project scopes local to A-Term.
 
 **Agent Hub** (`NEXT_PUBLIC_AGENT_HUB_URL`, `AGENT_HUB_URL`) — Adds model catalog and prompt cleaning proxies. Browser-native voice input works standalone; Agent Hub provides an optional enhanced path.
 

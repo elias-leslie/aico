@@ -14,8 +14,8 @@ const NotesContext = createContext<NotesContextValue | null>(null);
 
 const DEFAULT_CAPABILITIES: NotesCapabilities = {
     title_generation: true,
-    formatting: true,
-    prompt_refinement: true,
+    formatting: false,
+    prompt_refinement: false,
 };
 
 export function useNotesContext(): NotesContextValue {
