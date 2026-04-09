@@ -8,6 +8,7 @@ Built for [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex 
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![CI](https://github.com/elias-leslie/a-term/actions/workflows/ci.yml/badge.svg)](https://github.com/elias-leslie/a-term/actions/workflows/ci.yml)
+[![Releases](https://img.shields.io/github/v/release/elias-leslie/a-term?display_name=tag)](https://github.com/elias-leslie/a-term/releases)
 [![Sponsor](https://img.shields.io/badge/sponsor-GitHub%20Sponsors-db61a2?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/elias-leslie)
 [![Python](https://img.shields.io/badge/python-3.13+-3776ab.svg)](https://python.org)
 [![Next.js](https://img.shields.io/badge/Next.js-16-000.svg)](https://nextjs.org)
@@ -39,6 +40,8 @@ If **SummitFlow** is already running on the same machine, the installer can conn
 If the default ports are already taken, the installer should guide you to another open port instead of forcing you to debug it by hand.
 
 Most people can stop here. The advanced setup options are lower on the page.
+
+Want the latest shipped changes? See [Releases](https://github.com/elias-leslie/a-term/releases).
 
 ## Features
 
