@@ -186,10 +186,16 @@ def test_create_project_pane_passes_requested_agent_tool_slug(test_app: TestClie
             _make_session_in_pane(mode="codex", name="Codex"),
         ],
     )
-    with patch(
-        "a_term.api.panes.pane_store.create_pane_with_sessions",
-        return_value=pane,
-    ) as create_mock:
+    with (
+        patch(
+            "a_term.api.panes.agent_tools_store.get_by_slug",
+            return_value={"slug": "codex", "name": "Codex", "enabled": True},
+        ),
+        patch(
+            "a_term.api.panes.pane_store.create_pane_with_sessions",
+            return_value=pane,
+        ) as create_mock,
+    ):
         response = test_app.post(
             "/api/a-term/panes",
             json={
