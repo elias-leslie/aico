@@ -31,6 +31,22 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
+      - name: Check out SummitFlow dev tools
+        uses: actions/checkout@v6
+        with:
+          repository: elias-leslie/summitflow
+          ref: 7da4a4f4d1c25060f5142b847ed3549e4fc4f9d3
+          path: .summitflow-tools
+          sparse-checkout: |
+            scripts
+
+      - name: Set up dt
+        run: |
+          mkdir -p .bin
+          chmod +x .summitflow-tools/scripts/dev-tools.sh
+          ln -sfn "$PWD/.summitflow-tools/scripts/dev-tools.sh" .bin/dt
+          echo "$PWD/.bin" >> "$GITHUB_PATH"
+
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
@@ -61,22 +77,22 @@ jobs:
         run: uv run alembic upgrade head
 
       - name: Ruff
-        run: uv run dt ruff
+        run: dt ruff
 
       - name: Ty
-        run: uv run dt types
+        run: dt types
 
       - name: Pytest
-        run: uv run dt pytest
+        run: dt pytest
 
       - name: Biome
-        run: uv run dt biome
+        run: dt biome
 
       - name: TypeScript
-        run: uv run dt tsc
+        run: dt tsc
 
       - name: Vitest
-        run: uv run dt vitest
+        run: dt vitest
 
       - name: Frontend build
         run: pnpm --dir frontend build
