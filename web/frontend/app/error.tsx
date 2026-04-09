@@ -4,6 +4,10 @@ import { AlertTriangle, RefreshCw } from 'lucide-react'
 import { useEffect } from 'react'
 import { PRODUCT_NAME } from '@/lib/project-branding'
 
+function getDisplayMessage(productName: string): string {
+  return `An unexpected error interrupted ${productName}. Reload to restore your session.`
+}
+
 // biome-ignore lint/suspicious/noShadowRestrictedNames: Next.js App Router convention requires this export name
 export default function Error({
   error,
@@ -46,8 +50,16 @@ export default function Error({
           className="text-sm leading-relaxed"
           style={{ color: 'var(--term-text-muted)', fontFamily: 'var(--font-mono)' }}
         >
-          {error.message || 'An unexpected error occurred. Try reloading to restore your session.'}
+          {getDisplayMessage(PRODUCT_NAME)}
         </p>
+        {error.digest ? (
+          <p
+            className="mt-2 text-xs"
+            style={{ color: 'var(--term-text-dim)', fontFamily: 'var(--font-mono)' }}
+          >
+            Reference: {error.digest}
+          </p>
+        ) : null}
       </div>
       <button
         type="button"

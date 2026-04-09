@@ -16,7 +16,7 @@ function applySecurityHeaders(response: NextResponse, nonce: string, csp: string
 
 export function middleware(request: NextRequest) {
   const nonce = createCspNonce()
-  const csp = buildContentSecurityPolicy({ nonce })
+  const csp = buildContentSecurityPolicy({ nonce, requestUrl: request.url })
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set('x-nonce', nonce)
 
