@@ -13,7 +13,7 @@ Built for [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex 
 [![Next.js](https://img.shields.io/badge/Next.js-16-000.svg)](https://nextjs.org)
 [![xterm.js](https://img.shields.io/badge/xterm.js-6-green.svg)](https://xtermjs.org)
 
-![A-Term — multi-pane workspace with agent panes, shell, and git context](docs/images/a-term-home-dark.svg)
+![A-Term — multi-pane workspace with Claude Code, shell, and project files](docs/images/a-term-home-dark.png)
 
 ## The Problem
 
@@ -27,29 +27,29 @@ You're running Claude Code in one terminal, Codex in another, a shell for git, a
 
 **`multi-pane layouts`** — Up to 6 resizable panes. Run Claude Code, Codex, and a shell side by side on the same screen.
 
-![Four-pane grid layout with multiple active agents](docs/images/a-term-grid-2x2.svg)
+![Four-pane grid layout with multiple active agents](docs/images/a-term-grid-2x2.png)
 *Four-pane grid: run multiple agents and shells simultaneously*
 
 **`files browser`** — Browse the active pane's working directory. Preview files, copy paths, insert into prompts — without leaving the terminal.
 
-![Files browser showing directory tree and relative-path preview](docs/images/a-term-files-browser.svg)
+![Files browser showing directory tree and README preview](docs/images/a-term-files-browser.png)
 *Browse and preview files from the active pane's working directory*
 
 **`docked notes`** — Keep prompts, context snippets, and scratchpads beside your live terminal output. In standalone installs, notes and prompts are stored inside A-Term itself. When the SummitFlow companion API is configured, the same notes workspace switches to SummitFlow's shared cross-project library.
 
-![Notes workspace with standalone and shared-library modes](docs/images/a-term-notes-workspace.svg)
+![Notes workspace docked beside active terminal panes](docs/images/a-term-notes-workspace.png)
 *Notes panel docked alongside the workspace*
 
 **`voice input`** — Dictate commands and prompts via browser speech-to-text. Hands stay on the keyboard until they don't need to.
 
-![Voice input panel with transcript textarea and mic controls](docs/images/a-term-voice-input.svg)
+![Voice input panel with transcript textarea and mic controls](docs/images/a-term-voice-input.png)
 *Voice input panel overlaid on the workspace*
 
 **`project deep links`** — Open `/?project=myapp&dir=/path` to jump straight into a project workspace. Bookmark your setups.
 
 **`dual mode`** — Switch any pane between raw shell and your configured AI agent with one click. Supports Claude Code, Codex, Gemini CLI, and OpenCode out of the box.
 
-![Mode switching dropdown showing Shell, Claude Code, OpenCode, Gemini CLI, and Codex](docs/images/a-term-mode-switch.svg)
+![Mode switching dropdown showing Shell, Claude Code, OpenCode, Gemini CLI, and Codex](docs/images/a-term-mode-switch.png)
 *Switch between agents and shell per pane*
 
 **`mobile keyboard`** — On-screen keyboard with arrow keys, Ctrl, Esc, and modifier support for touch devices.
