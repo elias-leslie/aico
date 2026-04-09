@@ -23,8 +23,8 @@ vi.mock('@/components/ATerm', () => ({
   },
 }))
 
-vi.mock('@/components/UnifiedATermHeader', () => ({
-  UnifiedATermHeader: (props: Record<string, unknown>) => {
+vi.mock('@/components/a-term-header', () => ({
+  UnifiedATermHeaderContent: (props: Record<string, unknown>) => {
     headerProps.push(props)
     const slot = props.slot as { paneId?: string; sessionId?: string }
     const id = slot.paneId ?? slot.sessionId ?? 'unknown'

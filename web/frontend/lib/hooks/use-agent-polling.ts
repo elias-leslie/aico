@@ -3,6 +3,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { buildApiUrl } from '../api-config'
+import { getAgentState } from '../utils/agent-state'
 
 /** Poll interval for agent state check (500ms) */
 export const AGENT_POLL_INTERVAL_MS = 500
@@ -76,10 +77,10 @@ export function useAgentPolling(): UseAgentPollingReturn {
           )
           if (stateRes.ok) {
             const stateData = await stateRes.json()
-            // Note: backend returns 'claude_state' field for backward compatibility
+            const agentState = getAgentState(stateData)
             if (
-              stateData.claude_state === 'running' ||
-              stateData.claude_state === 'error'
+              agentState === 'running' ||
+              agentState === 'error'
             ) {
               queryClient.invalidateQueries({ queryKey: ['a-term-sessions'] })
               break
@@ -115,8 +116,7 @@ export function useAgentPolling(): UseAgentPollingReturn {
 
         queryClient.invalidateQueries({ queryKey: ['a-term-sessions'] })
 
-        // Note: backend returns 'claude_state' field for backward compatibility
-        if (data.claude_state === 'starting') {
+        if (getAgentState(data) === 'starting') {
           // Fire and forget - don't await
           pollForAgentState(sessionId)
         }

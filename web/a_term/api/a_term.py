@@ -13,6 +13,7 @@ from typing import Any
 from fastapi import APIRouter, Query, Request, WebSocket
 from fastapi.responses import JSONResponse
 
+from ..auth import UNAUTHORIZED_WS_CODE, authenticate_websocket
 from ..services.maintenance import get_status as get_maintenance_status
 from ..services.maintenance import run_cycle as run_maintenance_cycle
 from ..storage.maintenance_runs import list_recent_runs as list_recent_maintenance_runs
@@ -82,4 +83,7 @@ async def a_term_websocket(
         websocket: WebSocket connection
         session_id: A-Term session identifier
     """
+    if authenticate_websocket(websocket) is None:
+        await websocket.close(code=UNAUTHORIZED_WS_CODE, reason="Authentication required")
+        return
     await handle_a_term_connection(websocket, session_id)

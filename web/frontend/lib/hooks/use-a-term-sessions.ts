@@ -15,6 +15,7 @@ export interface ATermSession {
   is_alive: boolean
   created_at: string | null
   last_accessed_at: string | null
+  agent_state?: 'not_started' | 'starting' | 'running' | 'stopped' | 'error'
   claude_state?: 'not_started' | 'starting' | 'running' | 'stopped' | 'error'
   tmux_session_name?: string | null
   tmux_pane_id?: string | null

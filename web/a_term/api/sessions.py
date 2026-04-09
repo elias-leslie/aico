@@ -14,7 +14,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..logging_config import get_logger
 from ..rate_limit import limiter
@@ -50,11 +50,24 @@ class ATermSessionResponse(BaseModel):
     is_alive: bool
     created_at: str | None
     last_accessed_at: str | None
+    agent_state: str | None = None  # canonical agent state field
     claude_state: str | None = None  # not_started, starting, running, stopped, error
     tmux_session_name: str | None = None
     tmux_pane_id: str | None = None
     is_external: bool = False
     source: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def populate_agent_state(cls, values: Any) -> Any:
+        if not isinstance(values, dict):
+            return values
+        agent_state = values.get("agent_state") or values.get("claude_state") or "not_started"
+        return {
+            **values,
+            "agent_state": agent_state,
+            "claude_state": values.get("claude_state") or agent_state,
+        }
 
 
 class ATermSessionListResponse(BaseModel):

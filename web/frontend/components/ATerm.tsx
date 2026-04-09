@@ -214,11 +214,12 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
       onWrite: enqueueWrite,
     })
     const overlay = useScrollbackOverlay({ wsRef, sessionMode })
-    const { clearSearch, overlaySearchMatch, search } = useATermSearch({
+    const { clearSearch, overlaySearchState, search } = useATermSearch({
       aTermRef,
       sessionMode,
       activateOverlay: overlay.activate,
       getOverlayLines: overlay.getCachedLines,
+      overlaySearchVersion: overlay.searchVersion,
     })
     useEffect(() => {
       viewportInitRef.current = handleViewportInit
@@ -320,7 +321,8 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
           totalLines={overlay.totalLines}
           isLoading={overlay.isLoading}
           initialScrollLineDelta={overlay.initialScrollLineDelta}
-          searchMatch={overlaySearchMatch}
+          searchQuery={overlaySearchState?.query ?? ''}
+          searchActiveIndex={overlaySearchState?.activeIndex ?? -1}
           onDismiss={overlay.deactivate}
           theme={theme}
           fontFamily={fontFamily}

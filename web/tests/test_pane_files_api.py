@@ -53,7 +53,6 @@ def test_get_pane_file_tree_uses_shell_working_dir(test_app: TestClient) -> None
             return_value={
                 "entries": [],
                 "path": "",
-                "root": "/workspace/root",
                 "total": 0,
             },
         ) as list_directory,
@@ -61,7 +60,7 @@ def test_get_pane_file_tree_uses_shell_working_dir(test_app: TestClient) -> None
         response = test_app.get(f"/api/a-term/panes/{pane['id']}/files/tree")
 
     assert response.status_code == 200
-    assert response.json()["root"] == "/workspace/root"
+    assert "root" not in response.json()
     list_directory.assert_called_once_with("/workspace/root", "")
 
 
@@ -85,7 +84,6 @@ def test_get_pane_file_tree_falls_back_to_active_session_working_dir(test_app: T
             return_value={
                 "entries": [],
                 "path": "",
-                "root": "/workspace/other",
                 "total": 0,
             },
         ) as list_directory,
@@ -93,7 +91,7 @@ def test_get_pane_file_tree_falls_back_to_active_session_working_dir(test_app: T
         response = test_app.get(f"/api/a-term/panes/{pane['id']}/files/tree")
 
     assert response.status_code == 200
-    assert response.json()["root"] == "/workspace/other"
+    assert "root" not in response.json()
     list_directory.assert_called_once_with("/workspace/other", "")
 
 
@@ -107,7 +105,6 @@ def test_get_pane_file_content_returns_payload(test_app: TestClient) -> None:
             "a_term.api.pane_files.file_browser.read_file",
             return_value={
                 "path": "README.md",
-                "absolute_path": "/workspace/root/README.md",
                 "name": "README.md",
                 "content": "hello",
                 "size": 5,
@@ -125,7 +122,8 @@ def test_get_pane_file_content_returns_payload(test_app: TestClient) -> None:
         )
 
     assert response.status_code == 200
-    assert response.json()["absolute_path"] == "/workspace/root/README.md"
+    assert response.json()["path"] == "README.md"
+    assert "absolute_path" not in response.json()
 
 
 def test_get_pane_file_tree_translates_permission_errors(test_app: TestClient) -> None:

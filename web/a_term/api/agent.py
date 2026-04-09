@@ -43,7 +43,8 @@ logger = get_logger(__name__)
 class AgentStateResponse(BaseModel):
     """Agent state for a a_term session (state machine based)."""
     session_id: str
-    claude_state: AgentState  # Keep field name for backward compat
+    agent_state: AgentState
+    claude_state: AgentState  # Deprecated compatibility alias
 
 
 class StartAgentResponse(BaseModel):
@@ -51,7 +52,8 @@ class StartAgentResponse(BaseModel):
     session_id: str
     started: bool
     message: str
-    claude_state: AgentState  # Keep field name for backward compat
+    agent_state: AgentState
+    claude_state: AgentState  # Deprecated compatibility alias
 
 
 # ============================================================================
@@ -82,7 +84,13 @@ def _get_agent_tool_for_session(session: dict) -> tuple[str, str]:
 
 
 def _early_return(session_id: str, state: AgentState, msg: str) -> StartAgentResponse:
-    return StartAgentResponse(session_id=session_id, started=False, message=msg, claude_state=state)
+    return StartAgentResponse(
+        session_id=session_id,
+        started=False,
+        message=msg,
+        agent_state=state,
+        claude_state=state,
+    )
 
 
 def _normalize_agent_state(value: object) -> AgentState:
@@ -104,15 +112,27 @@ async def get_agent_state_endpoint(session_id: str) -> AgentStateResponse:
     """Get agent state for a a_term session."""
     external_session = get_external_agent_tmux_session(session_id)
     if external_session:
-        claude_state = _normalize_agent_state(external_session.get("claude_state", "not_started"))
-        return AgentStateResponse(session_id=session_id, claude_state=claude_state)
+        agent_state = _normalize_agent_state(
+            external_session.get("agent_state") or external_session.get("claude_state", "not_started")
+        )
+        return AgentStateResponse(
+            session_id=session_id,
+            agent_state=agent_state,
+            claude_state=agent_state,
+        )
 
     session = a_term_store.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found") from None
 
-    claude_state = _normalize_agent_state(session.get("claude_state", "not_started"))
-    return AgentStateResponse(session_id=session_id, claude_state=claude_state)
+    agent_state = _normalize_agent_state(
+        session.get("agent_state") or session.get("claude_state", "not_started")
+    )
+    return AgentStateResponse(
+        session_id=session_id,
+        agent_state=agent_state,
+        claude_state=agent_state,
+    )
 
 
 # Legacy alias
@@ -140,7 +160,7 @@ async def start_agent(session_id: str, background_tasks: BackgroundTasks) -> Sta
     if external:
         return _early_return(
             session_id,
-            _normalize_agent_state(external.get("claude_state", "running")),
+            _normalize_agent_state(external.get("agent_state") or external.get("claude_state", "running")),
             "External tmux agent session is already running",
         )
 
@@ -149,7 +169,9 @@ async def start_agent(session_id: str, background_tasks: BackgroundTasks) -> Sta
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found") from None
 
     command, process_name = _get_agent_tool_for_session(session)
-    current_state: AgentState = _normalize_agent_state(session.get("claude_state", "not_started"))
+    current_state: AgentState = _normalize_agent_state(
+        session.get("agent_state") or session.get("claude_state", "not_started")
+    )
 
     if current_state == "starting":
         return _early_return(session_id, "starting", "Agent is already starting")
@@ -177,8 +199,11 @@ async def start_agent(session_id: str, background_tasks: BackgroundTasks) -> Sta
     background_tasks.add_task(background_verify_agent_start, session_id, tmux_session, process_name)
     logger.info("agent_start_initiated", session_id=session_id, tmux_session=tmux_session)
     return StartAgentResponse(
-        session_id=session_id, started=True,
-        message="Agent command sent, verifying startup...", claude_state="starting",
+        session_id=session_id,
+        started=True,
+        message="Agent command sent, verifying startup...",
+        agent_state="starting",
+        claude_state="starting",
     )
 
 

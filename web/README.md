@@ -7,11 +7,12 @@ Run AI coding agents side by side in persistent, browser-accessible tmux session
 Built for [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex CLI](https://github.com/openai/codex), [Gemini CLI](https://github.com/google-gemini/gemini-cli), [OpenCode](https://github.com/opencode-ai/opencode), and every TUI agent that follows.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![CI](https://github.com/elias-leslie/a-term/actions/workflows/ci.yml/badge.svg)](https://github.com/elias-leslie/a-term/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.13+-3776ab.svg)](https://python.org)
 [![Next.js](https://img.shields.io/badge/Next.js-16-000.svg)](https://nextjs.org)
 [![xterm.js](https://img.shields.io/badge/xterm.js-6-green.svg)](https://xtermjs.org)
 
-![A-Term — multi-pane workspace with Claude Code, shell, and project files](docs/images/a-term-home-dark.png)
+![A-Term — multi-pane workspace with agent panes, shell, and git context](docs/images/a-term-home-dark.svg)
 
 ## The Problem
 
@@ -25,29 +26,29 @@ You're running Claude Code in one terminal, Codex in another, a shell for git, a
 
 **`multi-pane layouts`** — Up to 6 resizable panes. Run Claude Code, Codex, and a shell side by side on the same screen.
 
-![Four-pane grid layout with multiple active agents](docs/images/a-term-grid-2x2.png)
+![Four-pane grid layout with multiple active agents](docs/images/a-term-grid-2x2.svg)
 *Four-pane grid: run multiple agents and shells simultaneously*
 
 **`files browser`** — Browse the active pane's working directory. Preview files, copy paths, insert into prompts — without leaving the terminal.
 
-![Files browser showing directory tree and README preview](docs/images/a-term-files-browser.png)
+![Files browser showing directory tree and relative-path preview](docs/images/a-term-files-browser.svg)
 *Browse and preview files from the active pane's working directory*
 
-**`docked notes`** — Keep prompts, context snippets, and scratchpads beside your live terminal output. Project-scoped, always available.
+**`docked notes`** — Keep prompts, context snippets, and scratchpads beside your live terminal output. Works standalone inside A-Term and can switch to a shared cross-project library when the SummitFlow companion API is configured.
 
-![Notes workspace docked beside active terminal panes](docs/images/a-term-notes-workspace.png)
+![Notes workspace with standalone and shared-library modes](docs/images/a-term-notes-workspace.svg)
 *Notes panel docked alongside the workspace*
 
 **`voice input`** — Dictate commands and prompts via browser speech-to-text. Hands stay on the keyboard until they don't need to.
 
-![Voice input panel with transcript textarea and mic controls](docs/images/a-term-voice-input.png)
+![Voice input panel with transcript textarea and mic controls](docs/images/a-term-voice-input.svg)
 *Voice input panel overlaid on the workspace*
 
 **`project deep links`** — Open `/?project=myapp&dir=/path` to jump straight into a project workspace. Bookmark your setups.
 
 **`dual mode`** — Switch any pane between raw shell and your configured AI agent with one click. Supports Claude Code, Codex, Gemini CLI, and OpenCode out of the box.
 
-![Mode switching dropdown showing Shell, Claude Code, OpenCode, Gemini CLI, and Codex](docs/images/a-term-mode-switch.png)
+![Mode switching dropdown showing Shell, Claude Code, OpenCode, Gemini CLI, and Codex](docs/images/a-term-mode-switch.svg)
 *Switch between agents and shell per pane*
 
 **`mobile keyboard`** — On-screen keyboard with arrow keys, Ctrl, Esc, and modifier support for touch devices.
@@ -66,6 +67,8 @@ bash scripts/install.sh
 > The installer handles Python 3.13, uv, Alembic migrations, frontend build, and systemd unit setup.
 
 Then open **http://localhost:3002** and start working.
+
+For any deployment beyond localhost, enable browser auth first. `A_TERM_AUTH_MODE=password` is the built-in path; `A_TERM_AUTH_MODE=proxy` trusts an upstream identity header from your reverse proxy.
 
 <details>
 <summary><strong>Quick PostgreSQL setup (Docker)</strong></summary>
@@ -99,8 +102,15 @@ DATABASE_URL=postgresql://user:pass@localhost/a-term
 
 # Service tuning
 A_TERM_PORT=8002
+A_TERM_BIND_HOST=127.0.0.1
 A_TERM_FRONTEND_PORT=3002
 LOG_LEVEL=INFO
+
+# Public auth
+A_TERM_AUTH_MODE=password
+A_TERM_AUTH_PASSWORD=change-me
+A_TERM_AUTH_SECRET=replace-with-a-long-random-string
+A_TERM_AUTH_COOKIE_SECURE=true
 
 # Maintenance
 MAINTENANCE_INTERVAL_SECONDS=900
@@ -128,7 +138,7 @@ journalctl --user -u a-term-frontend.service -f
 
 ## Remote Access
 
-A-Term listens on `localhost` by default. To access it from your phone, another machine, or anywhere on the internet, see the [Remote Access guide](docs/remote-access.md) — covers Tailscale, Cloudflare Tunnel, and Caddy reverse proxy.
+A-Term listens on `localhost` by default. To access it from your phone, another machine, or anywhere on the internet, see the [Remote Access guide](docs/remote-access.md) — covers Tailscale, Cloudflare Tunnel, and Caddy reverse proxy. Public deployments should use either built-in password auth or `proxy` mode behind an identity-aware gateway.
 
 ## Tech Stack
 
@@ -158,7 +168,7 @@ Full API schema available at `/openapi.json` when running.
 
 A-Term is a standalone product. All core features work without any external service.
 
-**SummitFlow** (`SUMMITFLOW_API_BASE`) — When available, A-Term fetches project metadata (name, root path) and uses it to place shells in the right working directory. Falls back to local data if unreachable.
+**SummitFlow** (`SUMMITFLOW_API_BASE`) — When available, A-Term fetches project metadata and lets notes switch from standalone local storage to a shared companion-backed library. Falls back to local data if unreachable.
 
 **Agent Hub** (`NEXT_PUBLIC_AGENT_HUB_URL`, `AGENT_HUB_URL`) — Adds model catalog and prompt cleaning proxies. Browser-native voice input works standalone; Agent Hub provides an optional enhanced path.
 

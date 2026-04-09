@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: a-term
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d a-term"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/a-term
+      A_TERM_BIND_HOST: 127.0.0.1
+      A_TERM_AUTH_MODE: none
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install Python dependencies
+        run: uv sync --dev --frozen
+
+      - name: Install frontend dependencies
+        run: corepack pnpm --dir frontend install --frozen-lockfile
+
+      - name: Ruff
+        run: uv run ruff check .
+
+      - name: Ty
+        run: uv run ty check
+
+      - name: Pytest
+        run: uv run pytest -q
+
+      - name: Biome
+        run: corepack pnpm --dir frontend exec biome check .
+
+      - name: TypeScript
+        run: corepack pnpm --dir frontend exec tsc --noEmit
+
+      - name: Vitest
+        run: corepack pnpm --dir frontend exec vitest run
+
+      - name: Frontend build
+        run: corepack pnpm --dir frontend build
+
+      - name: Python build
+        run: uv build

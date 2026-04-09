@@ -1,0 +1,25 @@
+<svg width="1440" height="900" viewBox="0 0 1440 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1440" height="900" rx="32" fill="#050812"/>
+  <rect x="64" y="64" width="1312" height="772" rx="30" fill="#0B1220" stroke="#223248"/>
+  <rect x="96" y="96" width="1248" height="72" rx="20" fill="#10182A"/>
+  <text x="132" y="140" fill="#DDE7F5" font-family="monospace" font-size="24">Notes</text>
+  <text x="254" y="140" fill="#93A4BC" font-family="monospace" font-size="18">standalone by default, shared when a companion API is configured</text>
+  <rect x="96" y="204" width="324" height="592" rx="24" fill="#0D1524" stroke="#2B405A"/>
+  <rect x="448" y="204" width="896" height="592" rx="24" fill="#0E1624" stroke="#2B405A"/>
+  <text x="128" y="252" fill="#93A4BC" font-family="monospace" font-size="18">library</text>
+  <rect x="128" y="284" width="260" height="42" rx="12" fill="#111B2D"/>
+  <text x="148" y="311" fill="#DDE7F5" font-family="monospace" font-size="16">release checklist</text>
+  <rect x="128" y="340" width="260" height="42" rx="12" fill="#0F1727"/>
+  <text x="148" y="367" fill="#DDE7F5" font-family="monospace" font-size="16">prompt snippets</text>
+  <rect x="128" y="396" width="260" height="42" rx="12" fill="#0F1727"/>
+  <text x="148" y="423" fill="#DDE7F5" font-family="monospace" font-size="16">cross-project context</text>
+  <text x="480" y="252" fill="#93A4BC" font-family="monospace" font-size="18">editor</text>
+  <text x="480" y="312" fill="#DDE7F5" font-family="monospace" font-size="22">Release notes integration</text>
+  <text x="480" y="362" fill="#DDE7F5" font-family="monospace" font-size="18">- installable in standalone A-Term</text>
+  <text x="480" y="398" fill="#DDE7F5" font-family="monospace" font-size="18">- can switch to shared companion-backed storage</text>
+  <text x="480" y="434" fill="#DDE7F5" font-family="monospace" font-size="18">- remains available from the header popout</text>
+  <rect x="1076" y="112" width="124" height="34" rx="12" fill="#111B2D"/>
+  <text x="1108" y="134" fill="#DDE7F5" font-family="monospace" font-size="14">A-Term</text>
+  <rect x="1214" y="112" width="98" height="34" rx="12" fill="#132A22"/>
+  <text x="1238" y="134" fill="#53F2AE" font-family="monospace" font-size="14">shared</text>
+</svg>

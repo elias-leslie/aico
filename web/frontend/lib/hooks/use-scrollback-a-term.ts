@@ -3,14 +3,17 @@
 import { useEffect, useRef } from 'react'
 import type { FitAddon } from '@xterm/addon-fit'
 import type { ATermTheme } from '../constants/a-term'
+import { getATermBufferLines } from '../utils/a-term-buffer'
+import {
+  applyATermSearchSelection,
+  findATermSearchMatches,
+} from '../utils/a-term-search'
 import { refreshATermViewport } from './a-term-scrolling-utils'
 import { applyMobileATermTouchStyles } from '../utils/mobile-a-term-touch'
 import {
   shouldDeferScrollbackOverlayWrite,
   shouldFlushPendingScrollbackOverlayWrite,
 } from '../utils/scrollback-overlay-update'
-import type { ATermSearchMatch } from '../utils/a-term-search'
-import { applyATermSearchSelection } from '../utils/a-term-search'
 
 type XtermATerm = InstanceType<typeof import('@xterm/xterm').Terminal>
 
@@ -32,17 +35,44 @@ interface UseScrollbackATermOptions {
   isActive: boolean
   lines: string[]
   initialScrollLineDelta: number
-  searchMatch: ATermSearchMatch | null
+  searchQuery: string
+  searchActiveIndex: number
   theme: ATermTheme
   fontFamily: string
   fontSize: number
+}
+
+export function applyOverlaySearchSelection(
+  term: XtermATerm,
+  query: string,
+  activeIndex: number,
+): boolean {
+  const trimmedQuery = query.trim()
+  if (!trimmedQuery || activeIndex < 0) {
+    term.clearSelection()
+    return false
+  }
+
+  const matches = findATermSearchMatches(
+    getATermBufferLines(term),
+    trimmedQuery,
+  )
+  if (matches.length === 0) {
+    term.clearSelection()
+    return false
+  }
+
+  const nextIndex = Math.min(activeIndex, matches.length - 1)
+  applyATermSearchSelection(term, matches[nextIndex])
+  return true
 }
 
 export function useScrollbackATerm({
   isActive,
   lines,
   initialScrollLineDelta,
-  searchMatch,
+  searchQuery,
+  searchActiveIndex,
   theme,
   fontFamily,
   fontSize,
@@ -53,7 +83,8 @@ export function useScrollbackATerm({
   const hasScrolledRef = useRef(false)
   const pendingLinesRef = useRef<string[]>([])
   const pendingInitialScrollLineDeltaRef = useRef(0)
-  const currentSearchMatchRef = useRef<ATermSearchMatch | null>(null)
+  const currentSearchQueryRef = useRef('')
+  const currentSearchIndexRef = useRef(-1)
 
   const writeLines = useRef((term: XtermATerm, lns: string[]) => {
     if (lns.length === 0) return
@@ -74,8 +105,12 @@ export function useScrollbackATerm({
         pendingInitialScrollLineDeltaRef.current = 0
       }
       hasScrolledRef.current = true
-      if (currentSearchMatchRef.current) {
-        applyATermSearchSelection(term, currentSearchMatchRef.current)
+      if (currentSearchQueryRef.current && currentSearchIndexRef.current >= 0) {
+        applyOverlaySearchSelection(
+          term,
+          currentSearchQueryRef.current,
+          currentSearchIndexRef.current,
+        )
       }
       refreshATermViewport(term)
     })
@@ -134,8 +169,12 @@ export function useScrollbackATerm({
         fitAddonRef.current = fit
         if (pendingLinesRef.current.length > 0) {
           writeLines.current(term, pendingLinesRef.current)
-        } else if (currentSearchMatchRef.current) {
-          applyATermSearchSelection(term, currentSearchMatchRef.current)
+        } else if (currentSearchQueryRef.current && currentSearchIndexRef.current >= 0) {
+          applyOverlaySearchSelection(
+            term,
+            currentSearchQueryRef.current,
+            currentSearchIndexRef.current,
+          )
         }
       },
     )
@@ -162,14 +201,19 @@ export function useScrollbackATerm({
   }, [lines])
 
   useEffect(() => {
-    currentSearchMatchRef.current = searchMatch
+    currentSearchQueryRef.current = searchQuery
+    currentSearchIndexRef.current = searchActiveIndex
     if (!xtermRef.current) return
-    if (!searchMatch) {
+    if (!searchQuery || searchActiveIndex < 0) {
       xtermRef.current.clearSelection()
       return
     }
-    applyATermSearchSelection(xtermRef.current, searchMatch)
-  }, [searchMatch])
+    applyOverlaySearchSelection(
+      xtermRef.current,
+      searchQuery,
+      searchActiveIndex,
+    )
+  }, [searchQuery, searchActiveIndex])
 
   // Fit on resize
   useEffect(() => {

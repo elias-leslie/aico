@@ -11,7 +11,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
@@ -21,6 +21,7 @@ from .api import (
     a_term,
     agent,
     agent_tools,
+    auth,
     diagnostics,
     files,
     notes,
@@ -29,8 +30,9 @@ from .api import (
     projects,
     sessions,
 )
+from .auth import require_request_auth
 from .branding import DESCRIPTION, DISPLAY_NAME, get_cache_root
-from .config import A_TERM_PORT, CORS_ORIGINS
+from .config import A_TERM_BIND_HOST, A_TERM_PORT, CORS_ORIGINS
 from .logging_config import SyslogPrefixFormatter, configure_logging, get_logger
 from .rate_limit import limiter
 from .services.maintenance import get_status as get_maintenance_status
@@ -149,6 +151,26 @@ app.add_middleware(
 
 
 @app.middleware("http")
+async def auth_guard(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
+    """Require auth for public API routes when configured."""
+    if request.method != "OPTIONS":
+        path = request.url.path
+        if path != "/health" and not path.startswith("/api/auth/") and not path.startswith(
+            "/api/internal/"
+        ):
+            try:
+                require_request_auth(request)
+            except HTTPException as err:
+                return JSONResponse(
+                    status_code=err.status_code,
+                    content={"detail": err.detail},
+                )
+    return await call_next(request)
+
+
+@app.middleware("http")
 async def security_headers(
     request: Request, call_next: Callable[[Request], Awaitable[Response]]
 ) -> Response:
@@ -164,6 +186,7 @@ async def security_headers(
 
 # Include routers
 app.include_router(a_term.router)
+app.include_router(auth.router)
 app.include_router(sessions.router)
 app.include_router(panes.router)
 app.include_router(projects.router)
@@ -213,7 +236,7 @@ def main() -> None:
     """Run the a_term service."""
     uvicorn.run(
         "a_term.main:app",
-        host="0.0.0.0",
+        host=A_TERM_BIND_HOST,
         port=A_TERM_PORT,
         log_level="info",
         ws_per_message_deflate=True,

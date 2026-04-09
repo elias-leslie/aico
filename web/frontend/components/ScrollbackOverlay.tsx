@@ -3,15 +3,14 @@
 import type { ATermTheme } from '../lib/constants/a-term'
 import { useScrollbackATerm } from '../lib/hooks/use-scrollback-a-term'
 import { useScrollbackGestures } from '../lib/hooks/use-scrollback-gestures'
-import type { ATermSearchMatch } from '../lib/utils/a-term-search'
-
 interface ScrollbackOverlayProps {
   isActive: boolean
   lines: string[]
   totalLines: number
   isLoading: boolean
   initialScrollLineDelta: number
-  searchMatch: ATermSearchMatch | null
+  searchQuery: string
+  searchActiveIndex: number
   onDismiss: () => void
   theme: ATermTheme
   fontFamily?: string
@@ -24,7 +23,8 @@ export function ScrollbackOverlay({
   totalLines,
   isLoading,
   initialScrollLineDelta,
-  searchMatch,
+  searchQuery,
+  searchActiveIndex,
   onDismiss,
   theme,
   fontFamily = "'JetBrains Mono', monospace",
@@ -34,7 +34,8 @@ export function ScrollbackOverlay({
     isActive,
     lines,
     initialScrollLineDelta,
-    searchMatch,
+    searchQuery,
+    searchActiveIndex,
     theme,
     fontFamily,
     fontSize,

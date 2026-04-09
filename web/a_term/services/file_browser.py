@@ -92,7 +92,6 @@ def _entry_info(entry: Path, root: Path) -> dict[str, object]:
     data: dict[str, object] = {
         "name": entry.name,
         "path": relative,
-        "absolute_path": str(entry),
         "is_directory": entry.is_dir(),
     }
     if entry.is_dir():
@@ -131,7 +130,6 @@ def list_directory(root_path: str, relative_path: str = "") -> dict[str, object]
     return {
         "entries": entries,
         "path": relative_path or "",
-        "root": str(root),
         "total": len(entries),
     }
 
@@ -171,7 +169,6 @@ def read_file(root_path: str, relative_path: str) -> dict[str, object]:
     extension = target.suffix.lower()
     base: dict[str, object] = {
         "path": relative_path,
-        "absolute_path": str(target),
         "name": target.name,
         "size": stat.st_size,
         "extension": extension or None,

@@ -6,6 +6,7 @@
  */
 
 import type { ATermPane } from '@/lib/hooks/use-a-term-panes'
+import { getAgentState } from './agent-state'
 
 // Slot types for split-pane A-Term sessions
 export interface ProjectSlot {
@@ -129,7 +130,7 @@ export function paneToSlot(pane: ATermPane): PaneSlot {
       activeMode: pane.active_mode,
       activeSessionId: activeSession?.id ?? null,
       sessionBadge: null, // Badge is now part of pane_name
-      claudeState: agentSession?.claude_state,
+      claudeState: getAgentState(agentSession),
     }
   }
 

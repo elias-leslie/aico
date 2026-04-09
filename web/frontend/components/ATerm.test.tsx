@@ -1,5 +1,7 @@
+import { createRef } from 'react'
 import { act, render, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { ATermHandle } from './ATerm'
 import { ATermComponent } from './ATerm'
 
 type ATermHookOptions = Parameters<
@@ -70,6 +72,16 @@ const fakeATerm = {
   dispose: vi.fn(),
 }
 
+const scrollbackOverlayState: Array<{
+  isActive: boolean
+  lines: string[]
+  totalLines: number
+  isLoading: boolean
+  initialScrollLineDelta: number
+  searchQuery: string
+  searchActiveIndex: number
+}> = []
+
 vi.mock('../lib/hooks/use-a-term-websocket', () => ({
   useATermWebSocket: (options: ATermHookOptions) => {
     websocketState.options = options
@@ -126,6 +138,23 @@ vi.mock('../lib/utils/device', () => ({
   isMobileDevice: () => false,
 }))
 
+vi.mock('./ScrollbackOverlay', () => ({
+  ScrollbackOverlay: (
+    props: {
+      isActive: boolean
+      lines: string[]
+      totalLines: number
+      isLoading: boolean
+      initialScrollLineDelta: number
+      searchQuery: string
+      searchActiveIndex: number
+    },
+  ) => {
+    scrollbackOverlayState.push(props)
+    return null
+  },
+}))
+
 describe('ATermComponent', () => {
   afterEach(() => {
     websocketState.options = null
@@ -145,6 +174,7 @@ describe('ATermComponent', () => {
     fakeATerm.reset.mockClear()
     fakeATerm.scrollToLine.mockClear()
     fakeATerm.write.mockClear()
+    scrollbackOverlayState.length = 0
     fakeATerm.buffer.active.baseY = 100
     fakeATerm.buffer.active.viewportY = 100
     fakeATerm.buffer.active.cursorY = 0
@@ -449,6 +479,41 @@ describe('ATermComponent', () => {
 
     expect(fakeATerm.reset).not.toHaveBeenCalled()
     expect(fakeATerm.write).not.toHaveBeenCalled()
+  })
+
+  it('routes TUI pane searches through overlay query and index state', async () => {
+    const ref = createRef<ATermHandle>()
+
+    render(
+      <ATermComponent
+        ref={ref}
+        sessionId="session-search-overlay"
+        sessionMode="agent-codex"
+      />,
+    )
+
+    websocketState.options?.onScrollbackSync?.(
+      'prefix\r\nvery long logical \r\nline with needle\r\nsuffix\r\n',
+    )
+    await Promise.resolve()
+
+    expect(
+      ref.current?.search('needle', { direction: 'next', reset: true }),
+    ).toEqual({
+      query: 'needle',
+      totalMatches: 1,
+      activeIndex: 0,
+      found: true,
+    })
+
+    await waitFor(() => {
+      expect(scrollbackOverlayState.at(-1)).toMatchObject({
+        isActive: true,
+        searchQuery: 'needle',
+        searchActiveIndex: 0,
+        lines: ['prefix', 'very long logical ', 'line with needle', 'suffix'],
+      })
+    })
   })
 
   it('waits for a-term init before connecting visible A-Term sessions', () => {

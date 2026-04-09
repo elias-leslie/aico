@@ -3,7 +3,6 @@ import { apiFetch } from '@/lib/api-fetch'
 export interface PaneFileTreeEntry {
   name: string
   path: string
-  absolute_path: string
   is_directory: boolean
   size?: number
   extension?: string | null
@@ -13,13 +12,11 @@ export interface PaneFileTreeEntry {
 export interface PaneFileTreeResponse {
   entries: PaneFileTreeEntry[]
   path: string
-  root: string
   total: number
 }
 
 export interface PaneFileContentResponse {
   path: string
-  absolute_path: string
   name: string
   content: string | null
   size: number

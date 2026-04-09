@@ -1,5 +1,6 @@
 import type { ATermPane, PaneSession } from '@/lib/hooks/use-a-term-panes'
 import type { ATermSession } from '@/lib/hooks/use-a-term-sessions'
+import { getAgentState } from '@/lib/utils/agent-state'
 
 // Init delay for tmux session
 export const TMUX_INIT_DELAY_MS = 300
@@ -57,8 +58,7 @@ export function shouldStartAgent(
   return (
     pane.active_mode !== 'shell' &&
     targetSession.is_alive &&
-    // Note: claude_state field name is intentional - it's the field returned by the backend for agent state
-    !sessions.find((s) => s.id === targetSession.id && s.claude_state === 'running')
+    !sessions.find((s) => s.id === targetSession.id && getAgentState(s) === 'running')
   )
 }
 

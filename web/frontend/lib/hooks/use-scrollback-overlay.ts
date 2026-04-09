@@ -20,6 +20,7 @@ interface UseScrollbackOverlayReturn {
   totalLines: number
   isLoading: boolean
   initialScrollLineDelta: number
+  searchVersion: number
   activate: (initialScrollLineDelta?: number) => void
   deactivate: () => void
   getCachedLines: () => string[]
@@ -39,6 +40,7 @@ export function useScrollbackOverlay({
   const [totalLines, setTotalLines] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
   const [initialScrollLineDelta, setInitialScrollLineDelta] = useState(0)
+  const [searchVersion, setSearchVersion] = useState(0)
   const activeRef = useRef(false)
 
   const isTui = isTuiSessionMode(sessionMode)
@@ -58,6 +60,8 @@ export function useScrollbackOverlay({
       )
     }
   }, [wsRef])
+
+  const getCachedLines = useCallback(() => cachedLinesRef.current.slice(), [])
 
   const activate = useCallback((nextInitialScrollLineDelta = 0) => {
     if (!isTui || activeRef.current) return
@@ -91,6 +95,9 @@ export function useScrollbackOverlay({
   }, [])
 
   const handleScrollbackPage = useCallback((data: ScrollbackPage) => {
+    if (data.lines.length > 0) {
+      setSearchVersion((current) => current + 1)
+    }
     // Never shrink the cache — a small scroll_request response must not
     // overwrite a larger prefetch or sync that arrived earlier.
     if (data.lines.length > cachedLinesRef.current.length) {
@@ -123,6 +130,7 @@ export function useScrollbackOverlay({
     }
     if (parsed.length === 0) return
 
+    setSearchVersion((current) => current + 1)
     cachedLinesRef.current = parsed
     cachedTotalLinesRef.current = parsed.length
 
@@ -139,9 +147,10 @@ export function useScrollbackOverlay({
     totalLines,
     isLoading,
     initialScrollLineDelta,
+    searchVersion,
     activate,
     deactivate,
-    getCachedLines: () => cachedLinesRef.current.slice(),
+    getCachedLines,
     handleScrollbackPage,
     updateCacheFromSync,
   }

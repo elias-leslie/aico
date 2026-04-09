@@ -5,6 +5,7 @@ export interface PaneSession {
   session_number: number
   is_alive: boolean
   working_dir: string | null
+  agent_state?: 'not_started' | 'starting' | 'running' | 'stopped' | 'error'
   claude_state: 'not_started' | 'starting' | 'running' | 'stopped' | 'error'
 }
 

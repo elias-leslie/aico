@@ -3,6 +3,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { type MutableRefObject, useCallback } from 'react'
+import { getAgentState } from '../utils/agent-state'
 import { useAgentPolling } from './use-agent-polling'
 import type { ATermPane } from './use-a-term-panes'
 import type { ATermSession } from './use-a-term-sessions'
@@ -145,8 +146,8 @@ export function useProjectModeSwitch({
 
         if (mode !== 'shell') {
           const agentState =
-            targetSession.claude_state ??
-            projectSessions.find((s) => s.id === targetSession.id)?.claude_state
+            getAgentState(targetSession) ??
+            getAgentState(projectSessions.find((s) => s.id === targetSession.id))
           const needsAgentStart =
             agentState !== 'running' && agentState !== 'starting'
 
@@ -164,7 +165,7 @@ export function useProjectModeSwitch({
         const matchingSession = projectSessions.find((s) => s.mode === mode)
         if (matchingSession) {
           if (mode !== 'shell') {
-            const agentState = matchingSession.claude_state
+            const agentState = getAgentState(matchingSession)
             const needsAgentStart =
               agentState !== 'running' && agentState !== 'starting'
             if (needsAgentStart) {

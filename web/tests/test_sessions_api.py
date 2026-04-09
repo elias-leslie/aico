@@ -90,7 +90,9 @@ def test_list_sessions_returns_items(test_app: TestClient) -> None:
     assert body["total"] == 3
     assert len(body["items"]) == 3
     assert body["items"][0]["name"] == "s1"
+    assert body["items"][0]["agent_state"] == "not_started"
     assert body["items"][2]["id"] == "claude-summitflow"
+    assert body["items"][2]["agent_state"] == "running"
     assert body["items"][2]["is_external"] is True
 
 
@@ -128,6 +130,7 @@ def test_get_session_found_returns_200(test_app: TestClient) -> None:
     assert response.status_code == 200
     assert response.json()["id"] == sid
     assert response.json()["name"] == "My A-Term"
+    assert response.json()["agent_state"] == "not_started"
 
 
 def test_get_external_session_found_returns_200(test_app: TestClient) -> None:
@@ -158,6 +161,7 @@ def test_get_external_session_found_returns_200(test_app: TestClient) -> None:
 
     assert response.status_code == 200
     assert response.json()["id"] == "codex-summitflow"
+    assert response.json()["agent_state"] == "running"
     assert response.json()["tmux_session_name"] == "codex-summitflow"
     assert response.json()["is_external"] is True
 

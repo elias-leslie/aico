@@ -33,6 +33,34 @@ def test_notes_capabilities_local_mode(test_app: TestClient) -> None:
     }
 
 
+def test_notes_status_local_mode_reports_standalone(test_app: TestClient) -> None:
+    with (
+        patch("a_term.api.notes.summitflow_client.has_companion_api", return_value=False),
+        patch("a_term.api.notes.project_catalog.get_catalog_source", return_value="local"),
+    ):
+        response = test_app.get("/api/notes/status")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "storage_mode": "standalone",
+        "project_catalog_source": "local",
+    }
+
+
+def test_notes_status_companion_mode_reports_shared_backend(test_app: TestClient) -> None:
+    with (
+        patch("a_term.api.notes.summitflow_client.has_companion_api", return_value=True),
+        patch("a_term.api.notes.project_catalog.get_catalog_source", return_value="companion"),
+    ):
+        response = test_app.get("/api/notes/status")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "storage_mode": "companion",
+        "project_catalog_source": "companion",
+    }
+
+
 def test_notes_scopes_local_mode_uses_project_registry(test_app: TestClient) -> None:
     with (
         patch("a_term.api.notes.summitflow_client.has_companion_api", return_value=False),

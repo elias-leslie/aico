@@ -1,0 +1,37 @@
+<svg width="1440" height="900" viewBox="0 0 1440 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1440" height="900" rx="32" fill="#050812"/>
+  <rect x="24" y="24" width="1392" height="852" rx="26" fill="#0A0F18" stroke="#1B2635"/>
+  <rect x="48" y="48" width="1344" height="42" rx="14" fill="#101826"/>
+  <circle cx="76" cy="69" r="7" fill="#FF6B6B"/>
+  <circle cx="100" cy="69" r="7" fill="#F4B942"/>
+  <circle cx="124" cy="69" r="7" fill="#34D399"/>
+  <text x="164" y="76" fill="#DDE7F5" font-family="monospace" font-size="22">A-Term workspace</text>
+  <rect x="48" y="112" width="424" height="732" rx="22" fill="#0E1624" stroke="#223248"/>
+  <rect x="484" y="112" width="424" height="732" rx="22" fill="#0B111B" stroke="#223248"/>
+  <rect x="920" y="112" width="472" height="732" rx="22" fill="#0B111B" stroke="#223248"/>
+  <text x="76" y="154" fill="#93A4BC" font-family="monospace" font-size="18">agent log</text>
+  <text x="512" y="154" fill="#93A4BC" font-family="monospace" font-size="18">codex pane</text>
+  <text x="948" y="154" fill="#93A4BC" font-family="monospace" font-size="18">git shell</text>
+  <text x="76" y="214" fill="#53F2AE" font-family="monospace" font-size="24">$ a-term audit --public-release</text>
+  <text x="76" y="258" fill="#DDE7F5" font-family="monospace" font-size="20">- notes stay docked beside the live grid</text>
+  <text x="76" y="298" fill="#DDE7F5" font-family="monospace" font-size="20">- file browser stays scoped to the active pane</text>
+  <text x="76" y="338" fill="#DDE7F5" font-family="monospace" font-size="20">- reconnect lands on the same tmux-backed session</text>
+  <text x="76" y="378" fill="#F4B942" font-family="monospace" font-size="20">- shared notes mode appears when the companion API is configured</text>
+  <rect x="512" y="192" width="360" height="148" rx="18" fill="#131D2D" stroke="#29415C"/>
+  <text x="544" y="238" fill="#DDE7F5" font-family="monospace" font-size="24">OpenAI Codex (gpt-5.4)</text>
+  <text x="544" y="282" fill="#93A4BC" font-family="monospace" font-size="18">project: /workspace/demo-app</text>
+  <text x="544" y="314" fill="#93A4BC" font-family="monospace" font-size="18">mode: agent · tmux-backed · browser-attached</text>
+  <rect x="512" y="384" width="360" height="404" rx="18" fill="#0C131F"/>
+  <text x="544" y="438" fill="#53F2AE" font-family="monospace" font-size="22">$ clear</text>
+  <text x="544" y="478" fill="#DDE7F5" font-family="monospace" font-size="20">Tip: switch panes, not windows.</text>
+  <text x="544" y="518" fill="#DDE7F5" font-family="monospace" font-size="20">Files, notes, and voice live in the same tab.</text>
+  <rect x="948" y="192" width="416" height="248" rx="18" fill="#111A29"/>
+  <text x="980" y="236" fill="#93A4BC" font-family="monospace" font-size="18">recent commits</text>
+  <text x="980" y="286" fill="#53F2AE" font-family="monospace" font-size="20">a5c9d20  package local notes-ui for standalone installs</text>
+  <text x="980" y="326" fill="#53F2AE" font-family="monospace" font-size="20">80af0ec  add auth gate for browser and websocket access</text>
+  <text x="980" y="366" fill="#53F2AE" font-family="monospace" font-size="20">7b9e8fd  remove host absolute paths from file browser API</text>
+  <rect x="948" y="474" width="416" height="314" rx="18" fill="#0C131F"/>
+  <text x="980" y="526" fill="#DDE7F5" font-family="monospace" font-size="20">$ git status</text>
+  <text x="980" y="570" fill="#DDE7F5" font-family="monospace" font-size="20">On branch main</text>
+  <text x="980" y="610" fill="#DDE7F5" font-family="monospace" font-size="20">working tree clean</text>
+</svg>

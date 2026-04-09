@@ -4,12 +4,19 @@ from __future__ import annotations
 
 from typing import Any
 
-from .models.panes import PaneResponse, SessionInPaneResponse
+from .models.pane_responses import PaneResponse, SessionInPaneResponse
 
 
 def build_pane_response(pane: dict[str, Any]) -> PaneResponse:
     """Convert storage pane dict to API response."""
-    sessions = pane.get("sessions", [])
+    sessions = [
+        {
+            **session,
+            "agent_state": session.get("agent_state") or session.get("claude_state") or "not_started",
+            "claude_state": session.get("claude_state") or session.get("agent_state") or "not_started",
+        }
+        for session in pane.get("sessions", [])
+    ]
     return PaneResponse(
         id=pane["id"],
         pane_type=pane["pane_type"],

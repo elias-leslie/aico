@@ -166,12 +166,12 @@ export function PaneFilesDialog({
     }
   }, [isOpen])
 
-  const selectedAbsolutePath = content.data?.absolute_path ?? selectedEntry?.absolute_path ?? null
+  const selectedPath = content.data?.path ?? selectedEntry?.path ?? null
 
   const handleCopy = useCallback(async (kind: 'path' | 'content') => {
     const value =
       kind === 'path'
-        ? selectedAbsolutePath
+        ? selectedPath
         : content.data?.content
     if (!value) return
     try {
@@ -179,13 +179,13 @@ export function PaneFilesDialog({
       setCopiedThing(kind)
       window.setTimeout(() => setCopiedThing(null), 1500)
     } catch {}
-  }, [content.data?.content, selectedAbsolutePath])
+  }, [content.data?.content, selectedPath])
 
   const handleInsertPath = useCallback(() => {
-    if (!selectedAbsolutePath) return
-    onInsertPath(selectedAbsolutePath)
+    if (!selectedPath) return
+    onInsertPath(selectedPath)
     onClose()
-  }, [onClose, onInsertPath, selectedAbsolutePath])
+  }, [onClose, onInsertPath, selectedPath])
 
   const infoPills = useMemo(() => {
     if (!content.data) return []
@@ -212,7 +212,7 @@ export function PaneFilesDialog({
                 Files
               </Dialog.Title>
               <p className="truncate text-xs text-slate-500">
-                {tree.data?.root ?? 'Loading pane root...'}
+                {tree.data?.path ? `Current folder: ${tree.data.path}` : 'Pane workspace'}
               </p>
             </div>
             <button
@@ -285,7 +285,7 @@ export function PaneFilesDialog({
                         {content.data.name}
                       </div>
                       <div className="truncate text-xs text-slate-500">
-                        {content.data.absolute_path}
+                        {content.data.path}
                       </div>
                     </div>
                     {infoPills.map((pill) => (

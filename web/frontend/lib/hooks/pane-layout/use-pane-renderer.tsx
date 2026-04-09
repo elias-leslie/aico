@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState, type DragEvent } from 'react'
 import { clsx } from 'clsx'
 import type { PaneSlot, ATermSlot } from '@/lib/utils/slot'
+import { UnifiedATermHeaderContent as UnifiedATermHeader } from '@/components/a-term-header'
 import {
   getSlotSessionId,
   getSlotWorkingDir,
@@ -14,7 +15,6 @@ import {
 } from '@/lib/utils/pane-swap-dnd'
 import { ATermComponent, type ATermHandle } from '@/components/ATerm'
 import { PaneFilesDialog } from '@/components/files/PaneFilesDialog'
-import { UnifiedATermHeader } from '@/components/UnifiedATermHeader'
 import type { ResizablePaneLayoutProps } from '@/types/pane-layout'
 
 interface UsePaneRendererOptions {

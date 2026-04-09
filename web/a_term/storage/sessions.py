@@ -60,8 +60,9 @@ def normalize_session_row(row: dict[str, Any]) -> dict[str, Any]:
         row["created_at"] = row["created_at"].isoformat()
     if row.get("last_accessed_at") is not None:
         row["last_accessed_at"] = row["last_accessed_at"].isoformat()
-    if row.get("claude_state") is None:
-        row["claude_state"] = "not_started"
+    agent_state = row.get("agent_state") or row.get("claude_state") or "not_started"
+    row["agent_state"] = agent_state
+    row["claude_state"] = agent_state
     return row
 
 

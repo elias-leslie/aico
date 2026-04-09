@@ -22,6 +22,7 @@ def test_get_agent_state_returns_external_tmux_state(test_app: TestClient) -> No
     assert response.status_code == 200
     assert response.json() == {
         "session_id": "claude-summitflow",
+        "agent_state": "running",
         "claude_state": "running",
     }
 
@@ -46,6 +47,7 @@ def test_get_agent_state_normalizes_unknown_state(test_app: TestClient) -> None:
         response = test_app.get("/api/a-term/sessions/s1/agent-state")
 
     assert response.status_code == 200
+    assert response.json()["agent_state"] == "not_started"
     assert response.json()["claude_state"] == "not_started"
 
 
@@ -58,6 +60,7 @@ def test_legacy_claude_state_alias(test_app: TestClient) -> None:
         response = test_app.get("/api/a-term/sessions/s1/claude-state")
 
     assert response.status_code == 200
+    assert response.json()["agent_state"] == "running"
     assert response.json()["claude_state"] == "running"
 
 
@@ -78,6 +81,7 @@ def test_start_agent_returns_noop_for_external_tmux_session(test_app: TestClient
         "session_id": "codex-summitflow",
         "started": False,
         "message": "External tmux agent session is already running",
+        "agent_state": "running",
         "claude_state": "running",
     }
 

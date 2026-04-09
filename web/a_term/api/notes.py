@@ -78,6 +78,11 @@ class NotesScopeOptionResponse(BaseModel):
     known: bool
 
 
+class NotesStatusResponse(BaseModel):
+    storage_mode: Literal["standalone", "companion"]
+    project_catalog_source: project_catalog.ProjectCatalogSource
+
+
 _LOCAL_CAPABILITIES = NotesCapabilitiesResponse(
     title_generation=True,
     formatting=False,
@@ -256,6 +261,14 @@ async def get_notes_capabilities(request: Request) -> NotesCapabilitiesResponse 
     if _is_remote_mode():
         return await _proxy_notes_request(request, "/capabilities")
     return _LOCAL_CAPABILITIES
+
+
+@router.get("/api/notes/status", response_model=NotesStatusResponse)
+async def get_notes_status() -> NotesStatusResponse:
+    return NotesStatusResponse(
+        storage_mode="companion" if _is_remote_mode() else "standalone",
+        project_catalog_source=project_catalog.get_catalog_source(),
+    )
 
 
 @router.get("/api/notes/scopes", response_model=list[NotesScopeOptionResponse])

@@ -1,0 +1,22 @@
+<svg width="1440" height="900" viewBox="0 0 1440 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1440" height="900" rx="32" fill="#07101A"/>
+  <rect x="40" y="40" width="1360" height="820" rx="28" fill="#0C1421" stroke="#203247"/>
+  <rect x="64" y="64" width="1312" height="46" rx="14" fill="#101826"/>
+  <text x="96" y="93" fill="#DDE7F5" font-family="monospace" font-size="22">Four-pane agent grid</text>
+  <rect x="64" y="136" width="628" height="340" rx="22" fill="#0F1827" stroke="#29415C"/>
+  <rect x="748" y="136" width="628" height="340" rx="22" fill="#0F1827" stroke="#29415C"/>
+  <rect x="64" y="520" width="628" height="300" rx="22" fill="#0F1827" stroke="#29415C"/>
+  <rect x="748" y="520" width="628" height="300" rx="22" fill="#0F1827" stroke="#29415C"/>
+  <text x="96" y="180" fill="#93A4BC" font-family="monospace" font-size="18">shell</text>
+  <text x="780" y="180" fill="#93A4BC" font-family="monospace" font-size="18">claude code</text>
+  <text x="96" y="564" fill="#93A4BC" font-family="monospace" font-size="18">codex</text>
+  <text x="780" y="564" fill="#93A4BC" font-family="monospace" font-size="18">tests + logs</text>
+  <text x="96" y="240" fill="#53F2AE" font-family="monospace" font-size="22">$ npm run dev</text>
+  <text x="96" y="282" fill="#DDE7F5" font-family="monospace" font-size="20">watching frontend + backend</text>
+  <text x="780" y="240" fill="#53F2AE" font-family="monospace" font-size="22">/review onboarding + CI plan</text>
+  <text x="780" y="282" fill="#DDE7F5" font-family="monospace" font-size="20">pane-local context, shared tmux history</text>
+  <text x="96" y="624" fill="#53F2AE" font-family="monospace" font-size="22">codex --model gpt-5.4</text>
+  <text x="96" y="666" fill="#DDE7F5" font-family="monospace" font-size="20">patching auth gate and notes route</text>
+  <text x="780" y="624" fill="#53F2AE" font-family="monospace" font-size="22">dt --check</text>
+  <text x="780" y="666" fill="#DDE7F5" font-family="monospace" font-size="20">pytest · vitest · biome · tsc</text>
+</svg>

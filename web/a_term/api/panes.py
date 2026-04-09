@@ -24,17 +24,15 @@ from ..services.lifecycle import create_session, delete_session, kill_tmux_sessi
 from ..storage import agent_tools as agent_tools_store
 from ..storage import panes as pane_store
 from ..storage import project_settings as project_settings_store
-from .models.panes import (
-    BulkLayoutUpdateRequest,
+from .models.pane_layout import BulkLayoutUpdateRequest, UpdatePaneLayoutRequest
+from .models.pane_requests import (
     CreatePaneRequest,
-    PaneListResponse,
-    PaneResponse,
     SwapPanesRequest,
     SwitchAgentToolRequest,
-    UpdatePaneLayoutRequest,
     UpdatePaneOrderRequest,
     UpdatePaneRequest,
 )
+from .models.pane_responses import PaneListResponse, PaneResponse
 from .pane_responses import build_pane_response
 from .validators import (
     require_pane_exists,

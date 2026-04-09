@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next'
+import { headers } from 'next/headers'
 import { JetBrains_Mono, DM_Sans } from 'next/font/google'
 import Script from 'next/script'
 import { APP_THEME_COLORS, APP_THEME_INIT_SCRIPT } from '@/lib/app-theme'
@@ -7,6 +8,7 @@ import {
   PRODUCT_NAME,
   PRODUCT_SHORT_NAME,
 } from '@/lib/project-branding'
+import { PWA_REGISTER_SCRIPT } from '@/lib/runtime-scripts'
 import './globals.css'
 import { Providers } from './providers'
 
@@ -50,25 +52,21 @@ export const viewport: Viewport = {
   viewportFit: 'cover',
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const nonce = (await headers()).get('x-nonce') ?? undefined
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <Script id="app-theme-init" strategy="beforeInteractive">
+        <Script id="app-theme-init" nonce={nonce} strategy="beforeInteractive">
           {APP_THEME_INIT_SCRIPT}
         </Script>
-        <Script id="pwa-register" strategy="afterInteractive">
-          {`
-            if ('serviceWorker' in navigator) {
-              window.addEventListener('load', function () {
-                navigator.serviceWorker.register('/sw.js').catch(function () {});
-              });
-            }
-          `}
+        <Script id="pwa-register" nonce={nonce} strategy="afterInteractive">
+          {PWA_REGISTER_SCRIPT}
         </Script>
       </head>
       <body className={`${jetbrainsMono.variable} ${dmSans.variable} antialiased`}>

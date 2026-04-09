@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, model_validator
 
 
 class SessionInPaneResponse(BaseModel):
@@ -16,7 +18,20 @@ class SessionInPaneResponse(BaseModel):
     session_number: int
     is_alive: bool
     working_dir: str | None
+    agent_state: str = "not_started"
     claude_state: str = "not_started"
+
+    @model_validator(mode="before")
+    @classmethod
+    def populate_agent_state(cls, values: Any) -> Any:
+        if not isinstance(values, dict):
+            return values
+        agent_state = values.get("agent_state") or values.get("claude_state") or "not_started"
+        return {
+            **values,
+            "agent_state": agent_state,
+            "claude_state": values.get("claude_state") or agent_state,
+        }
 
 
 class PaneResponse(BaseModel):

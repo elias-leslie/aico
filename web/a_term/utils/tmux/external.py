@@ -79,7 +79,7 @@ def list_external_agent_tmux_sessions() -> list[dict[str, object]]:
         session_name, pane_id, working_dir, current_command = parts
         if not session_name or pkg.is_managed_tmux_session_name(session_name):  # type: ignore[union-attr]
             continue
-        mode, claude_state = _infer_external_mode(session_name, current_command)
+        mode, agent_state = _infer_external_mode(session_name, current_command)
         if mode == "shell":
             continue
         existing = sessions.get(session_name)
@@ -97,7 +97,8 @@ def list_external_agent_tmux_sessions() -> list[dict[str, object]]:
             "is_alive": True,
             "created_at": None,
             "last_accessed_at": None,
-            "claude_state": claude_state,
+            "agent_state": agent_state,
+            "claude_state": agent_state,
             "tmux_session_name": session_name,
             "tmux_pane_id": pane_id or None,
             "is_external": True,

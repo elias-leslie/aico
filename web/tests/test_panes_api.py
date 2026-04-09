@@ -138,6 +138,7 @@ def test_create_pane_adhoc_returns_pane(test_app: TestClient) -> None:
     assert body["pane_type"] == "adhoc"
     assert body["pane_name"] == "Ad-hoc"
     assert len(body["sessions"]) == 1
+    assert body["sessions"][0]["agent_state"] == "not_started"
 
 
 def test_create_pane_limit_exceeded_returns_400(test_app: TestClient) -> None:

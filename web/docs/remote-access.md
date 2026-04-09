@@ -10,7 +10,7 @@ By default, A-Term listens on `localhost` — accessible only from the machine r
 | [Cloudflare Tunnel](#cloudflare-tunnel) | Anyone with the URL | Automatic | ~15 min | Sharing with others, public access with auth |
 | [Caddy reverse proxy](#caddy-reverse-proxy) | Local network | Automatic (self-signed or ACME) | ~10 min | Home/office LAN, custom domain |
 
-All three approaches sit in front of A-Term and proxy traffic to it — no changes to A-Term's configuration are required beyond CORS.
+All three approaches sit in front of A-Term and proxy traffic to it. For anything beyond localhost, configure browser auth first with either `A_TERM_AUTH_MODE=password` or `A_TERM_AUTH_MODE=proxy`.
 
 ## Prerequisites
 
@@ -18,11 +18,14 @@ A-Term should already be running:
 - Backend on port **8002**
 - Frontend on port **3002**
 
-For all approaches, update `CORS_ORIGINS` in your environment to include the origin you'll access A-Term from:
+For all approaches, update `CORS_ORIGINS` in your environment to include the origin you'll access A-Term from and make sure auth is enabled before exposing a non-loopback bind:
 
 ```bash
 # In ~/.env.local
-CORS_ORIGINS=["http://localhost:3002","https://a_term.your-domain.com"]
+CORS_ORIGINS=["http://localhost:3002","https://a-term.your-domain.com"]
+A_TERM_AUTH_MODE=password
+A_TERM_AUTH_PASSWORD=change-me
+A_TERM_AUTH_SECRET=replace-with-a-long-random-string
 ```
 
 ---
@@ -136,7 +139,7 @@ tailscale funnel 443 on
 
    ingress:
      # Frontend
-     - hostname: a_term.your-domain.com
+     - hostname: a-term.your-domain.com
        service: http://localhost:3002
 
      # Backend API (optional — only needed if frontend and API
@@ -151,7 +154,7 @@ tailscale funnel 443 on
 5. **Create DNS records:**
 
    ```bash
-   cloudflared tunnel route dns a-term a_term.your-domain.com
+   cloudflared tunnel route dns a-term a-term.your-domain.com
    cloudflared tunnel route dns a-term a-term-api.your-domain.com
    ```
 
@@ -161,7 +164,7 @@ tailscale funnel 443 on
    cloudflared tunnel run a-term
    ```
 
-7. **Access A-Term** at `https://a_term.your-domain.com`.
+7. **Access A-Term** at `https://a-term.your-domain.com`.
 
 ### Run as a service
 
@@ -175,7 +178,7 @@ sudo systemctl enable --now cloudflared
 Since A-Term provides shell access, you should add authentication via [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/policies/access/):
 
 1. Go to **Cloudflare Zero Trust** dashboard → **Access** → **Applications**
-2. Add a self-hosted application for `a_term.your-domain.com`
+2. Add a self-hosted application for `a-term.your-domain.com`
 3. Create a policy (e.g., allow only your email via one-time PIN)
 
 This adds an authentication layer before anyone can reach A-Term.
@@ -237,7 +240,7 @@ Access at `https://192.168.1.100:3443`. Other devices on the network will see a 
 If you have a domain pointing to your machine (via DNS, split-horizon DNS, or a local DNS server):
 
 ```caddyfile
-a_term.your-domain.com {
+a-term.your-domain.com {
     reverse_proxy localhost:3002
 }
 
@@ -255,7 +258,7 @@ sudo caddy start --config /etc/caddy/Caddyfile
 ### Option C: Single domain with path-based routing
 
 ```caddyfile
-a_term.your-domain.com {
+a-term.your-domain.com {
     handle /api/* {
         reverse_proxy localhost:8002
     }
@@ -286,7 +289,7 @@ sudo systemctl enable --now caddy
 
 A-Term gives browser-based access to a shell on the host machine. Keep these points in mind when exposing it beyond localhost:
 
-- **Authentication** — A-Term does not have built-in user authentication. Use Cloudflare Access, Tailscale ACLs, or a reverse proxy auth layer to control who can connect.
+- **Authentication** — Public deployments should use built-in password auth (`A_TERM_AUTH_MODE=password`) or proxy auth (`A_TERM_AUTH_MODE=proxy`) in front of an identity-aware gateway such as Cloudflare Access.
 - **Network scope** — Tailscale limits access to your Tailnet by default. Cloudflare Tunnel with Access policies restricts by identity. Caddy on LAN is only as secure as your network.
 - **CORS** — Always set `CORS_ORIGINS` to the specific origins you use. Don't use `["*"]` in production.
 - **WebSocket** — All three approaches support WebSocket proxying, which A-Term requires for real-time a-term I/O.

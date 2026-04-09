@@ -15,8 +15,8 @@ importers:
         specifier: ^1.1.15
         version: 1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       '@summitflow/notes-ui':
-        specifier: file:../../summitflow/packages/notes-ui
-        version: file:../../summitflow/packages/notes-ui(@tanstack/react-query@5.90.18(react@19.2.3))(@types/react@19.2.14)(clsx@2.1.1)(lucide-react@0.562.0(react@19.2.3))(motion@12.38.0(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+        specifier: file:../packages/notes-ui
+        version: file:../packages/notes-ui(@tanstack/react-query@5.90.18(react@19.2.3))(@types/react@19.2.14)(clsx@2.1.1)(lucide-react@0.562.0(react@19.2.3))(motion@12.38.0(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       '@tanstack/react-query':
         specifier: 5.90.18
         version: 5.90.18(react@19.2.3)
@@ -976,8 +976,8 @@ packages:
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
 
-  '@summitflow/notes-ui@file:../../summitflow/packages/notes-ui':
-    resolution: {directory: ../../summitflow/packages/notes-ui, type: directory}
+  '@summitflow/notes-ui@file:../packages/notes-ui':
+    resolution: {directory: ../packages/notes-ui, type: directory}
     peerDependencies:
       '@tanstack/react-query': ^5.0.0
       clsx: ^2.0.0
@@ -2838,7 +2838,7 @@ snapshots:
 
   '@standard-schema/spec@1.1.0': {}
 
-  '@summitflow/notes-ui@file:../../summitflow/packages/notes-ui(@tanstack/react-query@5.90.18(react@19.2.3))(@types/react@19.2.14)(clsx@2.1.1)(lucide-react@0.562.0(react@19.2.3))(motion@12.38.0(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)':
+  '@summitflow/notes-ui@file:../packages/notes-ui(@tanstack/react-query@5.90.18(react@19.2.3))(@types/react@19.2.14)(clsx@2.1.1)(lucide-react@0.562.0(react@19.2.3))(motion@12.38.0(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)':
     dependencies:
       '@tanstack/react-query': 5.90.18(react@19.2.3)
       clsx: 2.1.1

@@ -17,7 +17,6 @@ router = APIRouter(tags=["A-Term Files"])
 class FileTreeEntryResponse(BaseModel):
     name: str
     path: str
-    absolute_path: str
     is_directory: bool
     size: int | None = None
     extension: str | None = None
@@ -27,13 +26,11 @@ class FileTreeEntryResponse(BaseModel):
 class FileTreeResponse(BaseModel):
     entries: list[FileTreeEntryResponse]
     path: str
-    root: str
     total: int
 
 
 class FileContentResponse(BaseModel):
     path: str
-    absolute_path: str
     name: str
     content: str | None
     size: int
