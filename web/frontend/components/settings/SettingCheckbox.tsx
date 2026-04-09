@@ -17,7 +17,9 @@ export function SettingCheckbox({
         <span
           className="relative flex items-center justify-center w-5 h-5 rounded border transition-all duration-150"
           style={{
-            backgroundColor: checked ? 'var(--term-accent)' : 'var(--term-bg-deep)',
+            backgroundColor: checked
+              ? 'var(--term-accent)'
+              : 'var(--term-bg-deep)',
             borderColor: checked ? 'var(--term-accent)' : 'var(--term-border)',
             boxShadow: checked ? '0 0 6px var(--term-accent-glow)' : 'none',
           }}
@@ -46,7 +48,11 @@ export function SettingCheckbox({
         </span>
         <span
           className="text-sm"
-          style={{ color: checked ? 'var(--term-text-primary)' : 'var(--term-text-muted)' }}
+          style={{
+            color: checked
+              ? 'var(--term-text-primary)'
+              : 'var(--term-text-muted)',
+          }}
         >
           {label}
         </span>

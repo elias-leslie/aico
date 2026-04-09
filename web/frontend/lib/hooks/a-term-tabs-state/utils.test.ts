@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
+import type { PaneSlot } from '@/lib/utils/slot'
 import {
   getOrderedIds,
   orderATermSlots,
   reconcileOrderedIds,
   swapOrderedIds,
 } from './utils'
-import type { PaneSlot } from '@/lib/utils/slot'
 
 function makePaneSlot(paneId: string, name: string): PaneSlot {
   return {
@@ -22,16 +22,21 @@ function makePaneSlot(paneId: string, name: string): PaneSlot {
 
 describe('a-term-tabs-state utils', () => {
   it('reconciles stored order with the current visible slots', () => {
-    const slots = [makePaneSlot('pane-a', 'Alpha'), makePaneSlot('pane-b', 'Beta')]
+    const slots = [
+      makePaneSlot('pane-a', 'Alpha'),
+      makePaneSlot('pane-b', 'Beta'),
+    ]
 
-    expect(reconcileOrderedIds(slots, ['pane-pane-b', 'missing-slot'])).toEqual([
-      'pane-pane-b',
-      'pane-pane-a',
-    ])
+    expect(reconcileOrderedIds(slots, ['pane-pane-b', 'missing-slot'])).toEqual(
+      ['pane-pane-b', 'pane-pane-a'],
+    )
   })
 
   it('orders visible slots using the reconciled ids', () => {
-    const slots = [makePaneSlot('pane-a', 'Alpha'), makePaneSlot('pane-b', 'Beta')]
+    const slots = [
+      makePaneSlot('pane-a', 'Alpha'),
+      makePaneSlot('pane-b', 'Beta'),
+    ]
     const ordered = orderATermSlots(slots, ['pane-pane-b', 'pane-pane-a'])
 
     expect(getOrderedIds(ordered)).toEqual(['pane-pane-b', 'pane-pane-a'])

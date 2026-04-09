@@ -46,7 +46,9 @@ export function useFileUpload(): UseFileUploadReturn {
       // Client-side size validation before uploading
       if (file.size > MAX_UPLOAD_SIZE_BYTES) {
         const sizeMB = (file.size / (1024 * 1024)).toFixed(1)
-        setError({ message: `File too large (${sizeMB}MB). Maximum size: 10MB` })
+        setError({
+          message: `File too large (${sizeMB}MB). Maximum size: 10MB`,
+        })
         return null
       }
 
@@ -118,7 +120,12 @@ export function useFileUpload(): UseFileUploadReturn {
   )
 
   // Abort any in-flight upload on unmount
-  useEffect(() => () => { xhrRef.current?.abort() }, [])
+  useEffect(
+    () => () => {
+      xhrRef.current?.abort()
+    },
+    [],
+  )
 
   const clearError = useCallback(() => {
     setError(null)

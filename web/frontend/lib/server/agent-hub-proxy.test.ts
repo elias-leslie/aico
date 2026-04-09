@@ -79,7 +79,9 @@ describe('proxyAgentHubRequest', () => {
 
   it('forwards allowed headers for completion requests and hides network errors', async () => {
     vi.mocked(getAgentHubServerUrl).mockReturnValue('http://agent-hub.test')
-    const fetchSpy = vi.fn().mockRejectedValue(new Error('ECONNREFUSED 10.0.0.9'))
+    const fetchSpy = vi
+      .fn()
+      .mockRejectedValue(new Error('ECONNREFUSED 10.0.0.9'))
     vi.spyOn(console, 'error').mockImplementation(() => {})
     vi.stubGlobal('fetch', fetchSpy)
 

@@ -72,15 +72,22 @@ function NotesWorkspacePage() {
           <div className="max-w-2xl">
             <div
               className="mb-3 inline-flex rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.18em]"
-              style={{ borderColor: 'var(--term-border-active)', color: 'var(--term-text-muted)' }}
+              style={{
+                borderColor: 'var(--term-border-active)',
+                color: 'var(--term-text-muted)',
+              }}
             >
               A-Term Notes
             </div>
             <h1
               className="text-2xl font-semibold sm:text-3xl"
-              style={{ color: 'var(--term-text-primary)', fontFamily: 'var(--font-ui)' }}
+              style={{
+                color: 'var(--term-text-primary)',
+                fontFamily: 'var(--font-ui)',
+              }}
             >
-              Notes stay local in standalone installs and switch to SummitFlow's shared library when the companion is configured.
+              Notes stay local in standalone installs and switch to SummitFlow's
+              shared library when the companion is configured.
             </h1>
             <p
               className="mt-2 max-w-2xl text-sm leading-6 sm:text-[15px]"
@@ -99,7 +106,10 @@ function NotesWorkspacePage() {
           <div className="flex flex-wrap gap-2">
             <span
               className="rounded-full border px-3 py-1 text-xs"
-              style={{ borderColor: 'var(--term-border)', color: 'var(--term-text-muted)' }}
+              style={{
+                borderColor: 'var(--term-border)',
+                color: 'var(--term-text-muted)',
+              }}
             >
               Scope: a-term
             </span>
@@ -107,19 +117,28 @@ function NotesWorkspacePage() {
               <>
                 <span
                   className="rounded-full border px-3 py-1 text-xs"
-                  style={{ borderColor: 'var(--term-border)', color: 'var(--term-text-muted)' }}
+                  style={{
+                    borderColor: 'var(--term-border)',
+                    color: 'var(--term-text-muted)',
+                  }}
                 >
                   {formatStorageMode(status.storage_mode)}
                 </span>
                 <span
                   className="rounded-full border px-3 py-1 text-xs"
-                  style={{ borderColor: 'var(--term-border)', color: 'var(--term-text-muted)' }}
+                  style={{
+                    borderColor: 'var(--term-border)',
+                    color: 'var(--term-text-muted)',
+                  }}
                 >
                   {formatCatalogSource(status.project_catalog_source)}
                 </span>
                 <span
                   className="rounded-full border px-3 py-1 text-xs"
-                  style={{ borderColor: 'var(--term-border)', color: 'var(--term-text-muted)' }}
+                  style={{
+                    borderColor: 'var(--term-border)',
+                    color: 'var(--term-text-muted)',
+                  }}
                 >
                   {status.storage_mode === 'companion'
                     ? 'Shared prompts can span projects'
@@ -132,7 +151,10 @@ function NotesWorkspacePage() {
 
         <div
           className="min-h-0 flex-1 overflow-hidden rounded-[2rem] border shadow-[0_24px_72px_rgba(0,0,0,0.34)]"
-          style={{ borderColor: 'var(--term-border)', backgroundColor: 'rgba(8, 12, 18, 0.7)' }}
+          style={{
+            borderColor: 'var(--term-border)',
+            backgroundColor: 'rgba(8, 12, 18, 0.7)',
+          }}
         >
           <NotesPanel />
         </div>

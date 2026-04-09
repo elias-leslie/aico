@@ -1,4 +1,7 @@
-import type { ATermSearchDirection, ATermSearchResult } from '@/components/a-term.types'
+import type {
+  ATermSearchDirection,
+  ATermSearchResult,
+} from '@/components/a-term.types'
 
 type XtermATerm = InstanceType<typeof import('@xterm/xterm').Terminal>
 

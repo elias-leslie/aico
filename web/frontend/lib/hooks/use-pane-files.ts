@@ -14,11 +14,7 @@ const fileQueryKeys = {
     [...fileQueryKeys.all, 'content', paneId, path] as const,
 }
 
-export function usePaneFileTree(
-  paneId: string,
-  path = '',
-  enabled = true,
-) {
+export function usePaneFileTree(paneId: string, path = '', enabled = true) {
   return useQuery<PaneFileTreeResponse>({
     queryKey: fileQueryKeys.tree(paneId, path),
     queryFn: () => fetchPaneFileTree(paneId, path),

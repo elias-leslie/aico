@@ -1,5 +1,5 @@
-import { renderHook, act } from '@testing-library/react'
-import { describe, expect, it, beforeEach } from 'vitest'
+import { act, renderHook } from '@testing-library/react'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { useLocalStorageState } from './use-local-storage-state'
 
 describe('useLocalStorageState', () => {

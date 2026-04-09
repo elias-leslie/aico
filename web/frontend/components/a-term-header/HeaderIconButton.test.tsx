@@ -1,17 +1,13 @@
-import { render, screen, fireEvent } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { createElement } from 'react'
+import { describe, expect, it, vi } from 'vitest'
 import { HeaderIconButton } from './HeaderIconButton'
 
 describe('HeaderIconButton', () => {
   it('renders with tooltip and aria-label', () => {
     const icon = createElement('span', { 'data-testid': 'icon' }, 'X')
     render(
-      <HeaderIconButton
-        icon={icon}
-        onClick={vi.fn()}
-        tooltip="Close A-Term"
-      />,
+      <HeaderIconButton icon={icon} onClick={vi.fn()} tooltip="Close A-Term" />,
     )
 
     const button = screen.getByTitle('Close A-Term')
@@ -24,11 +20,7 @@ describe('HeaderIconButton', () => {
     const handleClick = vi.fn()
     const icon = createElement('span', null, 'X')
     render(
-      <HeaderIconButton
-        icon={icon}
-        onClick={handleClick}
-        tooltip="Click me"
-      />,
+      <HeaderIconButton icon={icon} onClick={handleClick} tooltip="Click me" />,
     )
 
     fireEvent.click(screen.getByTitle('Click me'))
@@ -53,11 +45,7 @@ describe('HeaderIconButton', () => {
   it('applies default variant styling when no variant specified', () => {
     const icon = createElement('span', null, 'X')
     render(
-      <HeaderIconButton
-        icon={icon}
-        onClick={vi.fn()}
-        tooltip="Settings"
-      />,
+      <HeaderIconButton icon={icon} onClick={vi.fn()} tooltip="Settings" />,
     )
 
     const button = screen.getByTitle('Settings')

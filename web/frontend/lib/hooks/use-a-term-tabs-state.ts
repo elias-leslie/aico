@@ -1,45 +1,45 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { ATermHandle, ConnectionStatus } from '@/components/ATerm'
 import type { KeyboardSizePreset } from '@/components/keyboard/types'
-import type { ConnectionStatus, ATermHandle } from '@/components/ATerm'
+import { getDefaultLayoutMode, type LayoutMode } from '@/lib/constants/a-term'
+import {
+  findSessionByMode,
+  generateProjectPaneName,
+} from '@/lib/hooks/a-term-handler-utils'
+import { useATermHandlers } from '@/lib/hooks/use-a-term-handlers'
+import { useATermPanes } from '@/lib/hooks/use-a-term-panes'
+import { useATermSettings } from '@/lib/hooks/use-a-term-settings'
 import { useActiveSession } from '@/lib/hooks/use-active-session'
 import { useAutoCreatePane } from '@/lib/hooks/use-auto-create-pane'
 import {
   useAvailableLayouts,
   usePaneCapacity,
 } from '@/lib/hooks/use-available-layouts'
-import {
-  getDefaultLayoutMode,
-  type LayoutMode,
-} from '@/lib/constants/a-term'
 import { useLocalStorageState } from '@/lib/hooks/use-local-storage-state'
 import { useMediaQuery } from '@/lib/hooks/use-media-query'
 import { useTabEditing } from '@/lib/hooks/use-tab-editing'
-import { useATermHandlers } from '@/lib/hooks/use-a-term-handlers'
-import { useATermPanes } from '@/lib/hooks/use-a-term-panes'
-import { useATermSettings } from '@/lib/hooks/use-a-term-settings'
-import {
-  findSessionByMode,
-  generateProjectPaneName,
-} from '@/lib/hooks/a-term-handler-utils'
 import { getSlotPanelId, isPaneSlot } from '@/lib/utils/slot'
+import {
+  useConnectionStatus,
+  useLayoutAutoDowngrade,
+} from './a-term-tabs-state/hooks'
 import type { UseATermTabsStateProps } from './a-term-tabs-state/types'
 import {
   getActiveSessionProjectId,
-  getPanesToSlots,
   getOrderedIds,
+  getPanesToSlots,
   isGridLayoutMode,
   orderATermSlots,
   reconcileOrderedIds,
   swapOrderedIds,
 } from './a-term-tabs-state/utils'
-import {
-  useLayoutAutoDowngrade,
-  useConnectionStatus,
-} from './a-term-tabs-state/hooks'
 
-export function useATermTabsState({ projectId, projectPath }: UseATermTabsStateProps) {
+export function useATermTabsState({
+  projectId,
+  projectPath,
+}: UseATermTabsStateProps) {
   const {
     activeSessionId,
     switchToSession,
@@ -75,22 +75,45 @@ export function useATermTabsState({ projectId, projectPath }: UseATermTabsStateP
     'a-term-layout-mode',
     getDefaultLayoutMode(initialPaneCount, initialViewportWidth),
   )
-  const activeSessionProjectId = useMemo(() => getActiveSessionProjectId(activeSessionId, sessions), [activeSessionId, sessions])
-  const { fontId, fontSize, fontFamily, scrollback, cursorStyle, cursorBlink, themeId, theme, setFontId, setFontSize, setScrollback, setCursorStyle, setCursorBlink, setThemeId } = useATermSettings(activeSessionProjectId)
+  const activeSessionProjectId = useMemo(
+    () => getActiveSessionProjectId(activeSessionId, sessions),
+    [activeSessionId, sessions],
+  )
+  const {
+    fontId,
+    fontSize,
+    fontFamily,
+    scrollback,
+    cursorStyle,
+    cursorBlink,
+    themeId,
+    theme,
+    setFontId,
+    setFontSize,
+    setScrollback,
+    setCursorStyle,
+    setCursorBlink,
+    setThemeId,
+  } = useATermSettings(activeSessionProjectId)
   const isMobile = useMediaQuery('(max-width: 767px)')
   const [showSettings, setShowSettings] = useState(false)
-  const [keyboardSize, setKeyboardSize] = useLocalStorageState<KeyboardSizePreset>('a-term-keyboard-size', 'medium')
-  const [storedSlotOrderIds, setStoredSlotOrderIds] = useLocalStorageState<string[]>('a-term-slot-order', [])
-  const [attachedExternalSessionIds, setAttachedExternalSessionIds] = useLocalStorageState<string[]>(
-    'a-term-attached-external-session-ids',
-    [],
-  )
+  const [keyboardSize, setKeyboardSize] =
+    useLocalStorageState<KeyboardSizePreset>('a-term-keyboard-size', 'medium')
+  const [storedSlotOrderIds, setStoredSlotOrderIds] = useLocalStorageState<
+    string[]
+  >('a-term-slot-order', [])
+  const [attachedExternalSessionIds, setAttachedExternalSessionIds] =
+    useLocalStorageState<string[]>('a-term-attached-external-session-ids', [])
   const [showATermManager, setShowATermManager] = useState(false)
   const aTermRefs = useRef<Map<string, ATermHandle>>(new Map())
-  const [aTermStatuses, setATermStatuses] = useState<Map<string, ConnectionStatus>>(new Map())
+  const [aTermStatuses, setATermStatuses] = useState<
+    Map<string, ConnectionStatus>
+  >(new Map())
   const projectTabRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const attachedExternalSessions = useMemo(() => {
-    const sessionsById = new Map(externalSessions.map((session) => [session.id, session]))
+    const sessionsById = new Map(
+      externalSessions.map((session) => [session.id, session]),
+    )
     return attachedExternalSessionIds.flatMap((sessionId) => {
       const session = sessionsById.get(sessionId)
       return session ? [session] : []
@@ -103,28 +126,38 @@ export function useATermTabsState({ projectId, projectPath }: UseATermTabsStateP
   useEffect(() => {
     if (activeSessionLoading) return
     setAttachedExternalSessionIds((current) =>
-      current.filter((sessionId) => externalSessions.some((session) => session.id === sessionId)),
+      current.filter((sessionId) =>
+        externalSessions.some((session) => session.id === sessionId),
+      ),
     )
   }, [activeSessionLoading, externalSessions, setAttachedExternalSessionIds])
 
-  const attachExternalSession = useCallback((sessionId: string) => {
-    setAttachedExternalSessionIds((current) =>
-      current.includes(sessionId) || current.length + panes.length >= paneCountLimit || backendPanesAtLimit
-        ? current
-        : [...current, sessionId],
-    )
-  }, [
-    backendPanesAtLimit,
-    paneCountLimit,
-    panes.length,
-    setAttachedExternalSessionIds,
-  ])
+  const attachExternalSession = useCallback(
+    (sessionId: string) => {
+      setAttachedExternalSessionIds((current) =>
+        current.includes(sessionId) ||
+        current.length + panes.length >= paneCountLimit ||
+        backendPanesAtLimit
+          ? current
+          : [...current, sessionId],
+      )
+    },
+    [
+      backendPanesAtLimit,
+      paneCountLimit,
+      panes.length,
+      setAttachedExternalSessionIds,
+    ],
+  )
 
-  const detachExternalSession = useCallback((sessionId: string) => {
-    setAttachedExternalSessionIds((current) =>
-      current.filter((currentSessionId) => currentSessionId !== sessionId),
-    )
-  }, [setAttachedExternalSessionIds])
+  const detachExternalSession = useCallback(
+    (sessionId: string) => {
+      setAttachedExternalSessionIds((current) =>
+        current.filter((currentSessionId) => currentSessionId !== sessionId),
+      )
+    },
+    [setAttachedExternalSessionIds],
+  )
 
   const {
     handleKeyboardSizeChange,
@@ -161,7 +194,8 @@ export function useATermTabsState({ projectId, projectPath }: UseATermTabsStateP
     removePane,
   })
 
-  const isLoading = activeSessionLoading || sessionsLoading || projectsLoading || panesLoading
+  const isLoading =
+    activeSessionLoading || sessionsLoading || projectsLoading || panesLoading
   const availableLayouts = useAvailableLayouts(visiblePaneCount)
   const visibleSlots = useMemo(() => {
     const paneSlots = getPanesToSlots(panes)
@@ -181,7 +215,10 @@ export function useATermTabsState({ projectId, projectPath }: UseATermTabsStateP
   )
   useEffect(() => {
     if (activeSessionLoading) return
-    if (JSON.stringify(reconciledSlotOrderIds) !== JSON.stringify(storedSlotOrderIds)) {
+    if (
+      JSON.stringify(reconciledSlotOrderIds) !==
+      JSON.stringify(storedSlotOrderIds)
+    ) {
       setStoredSlotOrderIds(reconciledSlotOrderIds)
     }
   }, [
@@ -249,7 +286,11 @@ export function useATermTabsState({ projectId, projectPath }: UseATermTabsStateP
     createAdHocPane,
     switchToSession,
   })
-  const tabEditingProps = useTabEditing({ onSave: async (sessionId: string, newName: string) => { await update(sessionId, { name: newName }) } })
+  const tabEditingProps = useTabEditing({
+    onSave: async (sessionId: string, newName: string) => {
+      await update(sessionId, { name: newName })
+    },
+  })
   const startupLaunchKeyRef = useRef<string | null>(null)
   const handleCloseAllWithDetachedExternal = useCallback(async () => {
     setAttachedExternalSessionIds([])

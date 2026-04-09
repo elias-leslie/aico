@@ -22,7 +22,8 @@ describe('usePaneLayoutGroups', () => {
     )
 
     const { result, rerender } = renderHook(
-      ({ storageKey }: { storageKey: string }) => usePaneLayoutGroups(storageKey),
+      ({ storageKey }: { storageKey: string }) =>
+        usePaneLayoutGroups(storageKey),
       {
         initialProps: { storageKey: 'a-term-layout-groups:grid-3x2:5' },
       },
@@ -41,7 +42,8 @@ describe('usePaneLayoutGroups', () => {
 
   it('writes updates into the active storage bucket after a key change', () => {
     const { result, rerender } = renderHook(
-      ({ storageKey }: { storageKey: string }) => usePaneLayoutGroups(storageKey),
+      ({ storageKey }: { storageKey: string }) =>
+        usePaneLayoutGroups(storageKey),
       {
         initialProps: { storageKey: 'a-term-layout-groups:grid-3x2:5' },
       },
@@ -52,9 +54,9 @@ describe('usePaneLayoutGroups', () => {
       result.current.updateGroupSizes('wide-pane-root', [40, 60])
     })
 
-    expect(
-      window.localStorage.getItem('a-term-layout-groups:grid-3x2:6'),
-    ).toBe('{"wide-pane-root":[40,60]}')
+    expect(window.localStorage.getItem('a-term-layout-groups:grid-3x2:6')).toBe(
+      '{"wide-pane-root":[40,60]}',
+    )
     expect(
       window.localStorage.getItem('a-term-layout-groups:grid-3x2:5'),
     ).toBeNull()
@@ -73,9 +75,9 @@ describe('usePaneLayoutGroups', () => {
     })
 
     expect(renderCount).toBe(1)
-    expect(
-      result.current.getGroupSizes('two-pane-horizontal', 2, 50),
-    ).toEqual([62, 38])
+    expect(result.current.getGroupSizes('two-pane-horizontal', 2, 50)).toEqual([
+      62, 38,
+    ])
     expect(
       window.localStorage.getItem('a-term-layout-groups:split-horizontal:2'),
     ).toBe('{"two-pane-horizontal":[62,38]}')

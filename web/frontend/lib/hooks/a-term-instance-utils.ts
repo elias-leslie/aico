@@ -168,8 +168,7 @@ export function replaceScrollingHandlers(
 export function setupScrollbarAutoHide(
   container: HTMLElement,
 ): (() => void) | null {
-  const viewport =
-    container.querySelector<HTMLElement>('.xterm-viewport')
+  const viewport = container.querySelector<HTMLElement>('.xterm-viewport')
   let scrollTimer: ReturnType<typeof setTimeout> | null = null
 
   if (!viewport || isMobileDevice()) return null
@@ -197,8 +196,9 @@ export function setupScrollbarAutoHide(
 export function setupMobileATerm(container: HTMLElement): void {
   if (!isMobileDevice()) return
 
-  const textarea =
-    container.querySelector<HTMLTextAreaElement>('.xterm-helper-textarea')
+  const textarea = container.querySelector<HTMLTextAreaElement>(
+    '.xterm-helper-textarea',
+  )
   if (textarea) {
     textarea.inputMode = 'none'
     textarea.readOnly = true

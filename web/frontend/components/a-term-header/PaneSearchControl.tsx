@@ -10,10 +10,7 @@ import type {
 import { HeaderIconButton } from './HeaderIconButton'
 
 interface PaneSearchControlProps {
-  onSearch: (
-    query: string,
-    options?: ATermSearchOptions,
-  ) => ATermSearchResult
+  onSearch: (query: string, options?: ATermSearchOptions) => ATermSearchResult
   onClearSearch: () => void
   isMobile?: boolean
 }
@@ -47,10 +44,7 @@ export function PaneSearchControl({
     onClearSearch()
   }
 
-  const runSearch = (
-    nextQuery: string,
-    options?: ATermSearchOptions,
-  ) => {
+  const runSearch = (nextQuery: string, options?: ATermSearchOptions) => {
     if (!nextQuery.trim()) {
       setResult(EMPTY_RESULT)
       onClearSearch()
@@ -126,14 +120,14 @@ export function PaneSearchControl({
       <span
         className="rounded px-1 py-0.5 text-[10px]"
         style={{
-          color: result.found
-            ? 'var(--term-accent)'
-            : 'var(--term-text-muted)',
+          color: result.found ? 'var(--term-accent)' : 'var(--term-text-muted)',
           backgroundColor: 'var(--term-bg-surface)',
           fontFamily: 'var(--font-mono)',
         }}
       >
-        {result.found ? `${result.activeIndex + 1}/${result.totalMatches}` : '0'}
+        {result.found
+          ? `${result.activeIndex + 1}/${result.totalMatches}`
+          : '0'}
       </span>
       <button
         type="button"

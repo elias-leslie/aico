@@ -2,20 +2,20 @@
 
 import {
   createContext,
+  type ReactNode,
   useCallback,
   useContext,
   useEffect,
   useMemo,
   useState,
-  type ReactNode,
 } from 'react'
 import {
   APP_THEME_STORAGE_KEY,
+  type AppThemePreference,
   getThemeColor,
+  type ResolvedAppTheme,
   resolveAppTheme,
   sanitizeAppThemePreference,
-  type AppThemePreference,
-  type ResolvedAppTheme,
 } from '@/lib/app-theme'
 import { useLocalStorageState } from './use-local-storage-state'
 

@@ -78,10 +78,7 @@ export function useAgentPolling(): UseAgentPollingReturn {
           if (stateRes.ok) {
             const stateData = await stateRes.json()
             const agentState = getAgentState(stateData)
-            if (
-              agentState === 'running' ||
-              agentState === 'error'
-            ) {
+            if (agentState === 'running' || agentState === 'error') {
               queryClient.invalidateQueries({ queryKey: ['a-term-sessions'] })
               break
             }

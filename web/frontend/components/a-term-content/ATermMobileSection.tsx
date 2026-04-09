@@ -1,11 +1,8 @@
 import type { ConnectionStatus } from '@/components/a-term.types'
-import type { KeyboardSizePreset } from '@/components/keyboard/types'
-import type {
-  TranscriptionError,
-  TranscriptionStatus,
-} from '@/lib/voice/types'
 import { MobileKeyboard } from '@/components/keyboard/MobileKeyboard'
+import type { KeyboardSizePreset } from '@/components/keyboard/types'
 import { VoiceTranscriptPanel } from '@/components/VoiceTranscriptPanel'
+import type { TranscriptionError, TranscriptionStatus } from '@/lib/voice/types'
 
 interface ATermMobileSectionProps {
   sessions: Array<{ id: string }>

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
-  MIN_PANE_WIDTH_PX,
-  MIN_PANE_HEIGHT_PX,
-  MIN_RESIZE_HEADROOM_PERCENT,
   DEFAULT_MIN_SIZE_PERCENT,
+  MIN_PANE_HEIGHT_PX,
+  MIN_PANE_WIDTH_PX,
+  MIN_RESIZE_HEADROOM_PERCENT,
 } from '@/types/pane-layout'
 
 interface ContainerSize {
@@ -60,7 +60,9 @@ export function useMinSizeCalculator(
     (direction: 'horizontal' | 'vertical', panelCount = 2) => {
       const maxMinSizePercent = getMaxMinSizePercent(panelCount)
       const axisSize =
-        direction === 'horizontal' ? containerSize?.width : containerSize?.height
+        direction === 'horizontal'
+          ? containerSize?.width
+          : containerSize?.height
 
       if (!axisSize || axisSize <= 0) {
         return Math.min(DEFAULT_MIN_SIZE_PERCENT, maxMinSizePercent)

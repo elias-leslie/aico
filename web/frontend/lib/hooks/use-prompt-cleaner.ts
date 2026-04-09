@@ -1,8 +1,8 @@
 'use client'
 
 import { useCallback, useState } from 'react'
-import { getAgentHubProxyUrl } from '../utils/agent-hub-proxy'
 import { getPromptCleanerModel } from '../utils/agent-hub-models'
+import { getAgentHubProxyUrl } from '../utils/agent-hub-proxy'
 
 interface UsePromptCleanerReturn {
   /** Clean a prompt using agent-hub */

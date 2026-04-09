@@ -4,10 +4,10 @@ import type React from 'react'
 import type { ScrollbackDelta } from '../a-term/line-cache'
 import { getWsUrl } from '../api-config'
 import {
-  CONNECTION_TIMEOUT,
-  WS_CLOSE_CODE_SESSION_DEAD,
-  WS_CLIENT_PING_INTERVAL,
   BACKPRESSURE_COMMIT_INTERVAL,
+  CONNECTION_TIMEOUT,
+  WS_CLIENT_PING_INTERVAL,
+  WS_CLOSE_CODE_SESSION_DEAD,
 } from '../constants/a-term'
 
 export interface WebSocketConnectionRefs {
@@ -54,7 +54,12 @@ const MSG_INPUT = 0x01 // client→server input (same value as OUTPUT, different
 const MSG_CONTROL = 0x02
 
 /** Client capabilities advertised in the initial resize message. */
-const CLIENT_CAPABILITIES = ['backpressure', 'diff_sync', 'binary_protocol', 'demand_paging']
+const CLIENT_CAPABILITIES = [
+  'backpressure',
+  'diff_sync',
+  'binary_protocol',
+  'demand_paging',
+]
 
 const textEncoder = new TextEncoder()
 const textDecoder = new TextDecoder()
@@ -145,7 +150,9 @@ export function openWebSocketConnection(
       }, delay)
     } else {
       setStatus('timeout')
-      onATermMessage?.('\r\n\x1b[31mConnection timeout after maximum retries\x1b[0m')
+      onATermMessage?.(
+        '\r\n\x1b[31mConnection timeout after maximum retries\x1b[0m',
+      )
       onDisconnect?.()
     }
   }, CONNECTION_TIMEOUT)
@@ -245,16 +252,23 @@ export function openWebSocketConnection(
   ws.onclose = (event) => {
     connectingRef.current = false
     if (timeoutIdRef.current) clearTimeout(timeoutIdRef.current)
-    if (pingIntervalRef.current) { clearInterval(pingIntervalRef.current); pingIntervalRef.current = null }
+    if (pingIntervalRef.current) {
+      clearInterval(pingIntervalRef.current)
+      pingIntervalRef.current = null
+    }
     if (!mountedRef.current) return
 
     if (event.code === WS_CLOSE_CODE_SESSION_DEAD) {
       setStatus('session_dead')
       try {
         const reason = JSON.parse(event.reason)
-        onATermMessage?.(`\r\n\x1b[31m${reason.message || 'Session not found'}\x1b[0m`)
+        onATermMessage?.(
+          `\r\n\x1b[31m${reason.message || 'Session not found'}\x1b[0m`,
+        )
       } catch {
-        onATermMessage?.('\r\n\x1b[31mSession not found or could not be restored\x1b[0m')
+        onATermMessage?.(
+          '\r\n\x1b[31mSession not found or could not be restored\x1b[0m',
+        )
       }
     } else {
       setStatus('disconnected')
@@ -265,7 +279,10 @@ export function openWebSocketConnection(
 
   ws.onerror = () => {
     if (timeoutIdRef.current) clearTimeout(timeoutIdRef.current)
-    if (pingIntervalRef.current) { clearInterval(pingIntervalRef.current); pingIntervalRef.current = null }
+    if (pingIntervalRef.current) {
+      clearInterval(pingIntervalRef.current)
+      pingIntervalRef.current = null
+    }
     if (!mountedRef.current) return
     setStatus('error')
     onATermMessage?.('\r\n\x1b[31mConnection error\x1b[0m')
@@ -354,7 +371,10 @@ export function sendBinaryInput(ws: WebSocket, data: string): void {
 /**
  * Send a control message via binary protocol.
  */
-export function sendBinaryControl(ws: WebSocket, payload: Record<string, unknown>): void {
+export function sendBinaryControl(
+  ws: WebSocket,
+  payload: Record<string, unknown>,
+): void {
   const encoded = textEncoder.encode(JSON.stringify(payload))
   const frame = new Uint8Array(1 + encoded.length)
   frame[0] = MSG_CONTROL

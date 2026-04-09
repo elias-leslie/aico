@@ -109,7 +109,9 @@ describe('useATermModals', () => {
     result.current.handleAttachExternalSession('codex-a-term')
 
     expect(onAttachExternalSession).toHaveBeenCalledWith('codex-a-term')
-    expect(mockReplace).toHaveBeenCalledWith('/?session=codex-a-term', { scroll: false })
+    expect(mockReplace).toHaveBeenCalledWith('/?session=codex-a-term', {
+      scroll: false,
+    })
   })
 
   it('runs the detached pane attach callback and syncs the active session URL', async () => {
@@ -130,6 +132,8 @@ describe('useATermModals', () => {
     await result.current.handleAttachDetachedPane('pane-1')
 
     expect(onAttachDetachedPane).toHaveBeenCalledWith('pane-1')
-    expect(mockReplace).toHaveBeenCalledWith('/?session=managed-session-1', { scroll: false })
+    expect(mockReplace).toHaveBeenCalledWith('/?session=managed-session-1', {
+      scroll: false,
+    })
   })
 })

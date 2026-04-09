@@ -49,19 +49,16 @@ function ModeIcon({
       />
     )
   if (isAgentMode)
-    return (
-      <AgentIcon
-        slug={agentSlug}
-        size={iconSize}
-        color={accentColor}
-      />
-    )
+    return <AgentIcon slug={agentSlug} size={iconSize} color={accentColor} />
   return (
     <PanelsTopLeft
       width={iconSize}
       height={iconSize}
       style={{
-        color: isHovered && !isDisabled ? 'var(--term-text-primary)' : 'var(--term-text-muted)',
+        color:
+          isHovered && !isDisabled
+            ? 'var(--term-text-primary)'
+            : 'var(--term-text-muted)',
       }}
     />
   )
@@ -90,7 +87,8 @@ export const ModeToggle = memo(function ModeToggle({
   const activeTool = agentTools.find((t) => t.slug === value)
   const defaultTool = agentTools.find((t) => t.is_default) ?? agentTools[0]
   const canEnterAgentMode = defaultTool !== undefined
-  const isDisabled = disabled || isCurrentlyLoading || (!isAgentMode && !canEnterAgentMode)
+  const isDisabled =
+    disabled || isCurrentlyLoading || (!isAgentMode && !canEnterAgentMode)
   const activeAgentSlug = activeTool?.slug ?? defaultTool?.slug ?? 'agent'
   const accentColor = getAgentColor(
     activeAgentSlug,
@@ -102,11 +100,20 @@ export const ModeToggle = memo(function ModeToggle({
     async (e: React.MouseEvent) => {
       e.stopPropagation()
       if (isDisabled) return
-      if (hasMultipleTools) { setShowPopover((prev) => !prev); return }
+      if (hasMultipleTools) {
+        setShowPopover((prev) => !prev)
+        return
+      }
       if (!isAgentMode && !defaultTool) return
       const oppositeMode: ATermMode = isAgentMode ? 'shell' : defaultTool.slug
       setInternalLoading(true)
-      try { await onChange(oppositeMode) } catch { /* caller handles errors */ } finally { setInternalLoading(false) }
+      try {
+        await onChange(oppositeMode)
+      } catch {
+        /* caller handles errors */
+      } finally {
+        setInternalLoading(false)
+      }
     },
     [defaultTool, hasMultipleTools, isAgentMode, isDisabled, onChange],
   )
@@ -116,7 +123,13 @@ export const ModeToggle = memo(function ModeToggle({
       setShowPopover(false)
       if (mode === value) return
       setInternalLoading(true)
-      try { await onChange(mode) } catch { /* caller handles errors */ } finally { setInternalLoading(false) }
+      try {
+        await onChange(mode)
+      } catch {
+        /* caller handles errors */
+      } finally {
+        setInternalLoading(false)
+      }
     },
     [onChange, value],
   )
@@ -125,9 +138,9 @@ export const ModeToggle = memo(function ModeToggle({
     ? 'Switching mode...'
     : !isAgentMode && !defaultTool
       ? 'Shell mode — no agent tools configured'
-    : isAgentMode
-      ? `${activeTool?.name ?? 'Agent'} mode — click for ${hasMultipleTools ? 'options' : 'Shell'}`
-      : `Shell mode — click for ${hasMultipleTools ? 'options' : defaultTool?.name ?? 'Agent'}`
+      : isAgentMode
+        ? `${activeTool?.name ?? 'Agent'} mode — click for ${hasMultipleTools ? 'options' : 'Shell'}`
+        : `Shell mode — click for ${hasMultipleTools ? 'options' : (defaultTool?.name ?? 'Agent')}`
 
   const size = isMobile ? 32 : 26
   const iconSize = isMobile ? 16 : 14
@@ -214,7 +227,9 @@ export const ModeToggle = memo(function ModeToggle({
             width: 4,
             height: 4,
             borderRadius: '50%',
-            backgroundColor: isAgentMode ? accentColor : 'var(--term-text-muted)',
+            backgroundColor: isAgentMode
+              ? accentColor
+              : 'var(--term-text-muted)',
             opacity: isAgentMode ? 1 : 0.4,
             transition: 'all 0.2s ease',
             boxShadow: isAgentMode ? `0 0 4px ${accentColor}` : 'none',

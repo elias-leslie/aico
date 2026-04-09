@@ -29,8 +29,7 @@
       "suspicious": {
         "noUnknownAtRules": "off"
       },
-      "correctness": {
-      },
+      "correctness": {},
       "complexity": {
         "noImportantStyles": "off"
       },

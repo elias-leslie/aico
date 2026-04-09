@@ -25,44 +25,47 @@ export function useKeyboardHandler({
   sendRawRef.current = sendRaw
   toggleModifierRef.current = toggleModifier
 
-  const handleKeyPress = useCallback((button: string) => {
-    switch (button) {
-      case '{enter}':
-        sendRawRef.current(KEY_SEQUENCES.ENTER)
-        break
-      case '{bksp}':
-        sendRawRef.current(KEY_SEQUENCES.BACKSPACE)
-        break
-      case '{space}':
-        sendKeyRef.current(' ')
-        break
-      case '{shift}':
-        toggleModifierRef.current('shift')
-        if (keyboardRef.current) {
-          const currentLayout = keyboardRef.current.options.layoutName
-          if (currentLayout !== 'symbols') {
-            keyboardRef.current.setOptions({
-              layoutName: currentLayout === 'shift' ? 'default' : 'shift',
-            })
+  const handleKeyPress = useCallback(
+    (button: string) => {
+      switch (button) {
+        case '{enter}':
+          sendRawRef.current(KEY_SEQUENCES.ENTER)
+          break
+        case '{bksp}':
+          sendRawRef.current(KEY_SEQUENCES.BACKSPACE)
+          break
+        case '{space}':
+          sendKeyRef.current(' ')
+          break
+        case '{shift}':
+          toggleModifierRef.current('shift')
+          if (keyboardRef.current) {
+            const currentLayout = keyboardRef.current.options.layoutName
+            if (currentLayout !== 'symbols') {
+              keyboardRef.current.setOptions({
+                layoutName: currentLayout === 'shift' ? 'default' : 'shift',
+              })
+            }
           }
-        }
-        break
-      case '{sym}':
-        keyboardRef.current?.setOptions({ layoutName: 'symbols' })
-        break
-      case '{abc}':
-        keyboardRef.current?.setOptions({ layoutName: 'default' })
-        break
-      default:
-        sendKeyRef.current(button)
-        break
-    }
+          break
+        case '{sym}':
+          keyboardRef.current?.setOptions({ layoutName: 'symbols' })
+          break
+        case '{abc}':
+          keyboardRef.current?.setOptions({ layoutName: 'default' })
+          break
+        default:
+          sendKeyRef.current(button)
+          break
+      }
 
-    // Haptic feedback
-    if (typeof navigator !== 'undefined' && navigator.vibrate) {
-      navigator.vibrate(10)
-    }
-  }, [keyboardRef])
+      // Haptic feedback
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate(10)
+      }
+    },
+    [keyboardRef],
+  )
 
   return handleKeyPress
 }

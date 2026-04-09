@@ -101,17 +101,16 @@ describe('AppThemeProvider', () => {
     expect(screen.getByTestId('resolved-theme').textContent).toBe('light')
     expect(document.documentElement.dataset.theme).toBe('light')
     expect(document.documentElement.style.colorScheme).toBe('light')
-    expect(document.querySelector('meta[name="theme-color"]')?.getAttribute('content')).toBe(
-      APP_THEME_COLORS.light,
-    )
+    expect(
+      document
+        .querySelector('meta[name="theme-color"]')
+        ?.getAttribute('content'),
+    ).toBe(APP_THEME_COLORS.light)
   })
 
   it('loads stored theme preference and persists updates', () => {
     installMatchMedia(false)
-    window.localStorage.setItem(
-      APP_THEME_STORAGE_KEY,
-      JSON.stringify('dark'),
-    )
+    window.localStorage.setItem(APP_THEME_STORAGE_KEY, JSON.stringify('dark'))
 
     render(
       <AppThemeProvider>
@@ -122,9 +121,11 @@ describe('AppThemeProvider', () => {
     expect(screen.getByTestId('theme-preference').textContent).toBe('dark')
     expect(screen.getByTestId('resolved-theme').textContent).toBe('dark')
     expect(document.documentElement.dataset.theme).toBe('dark')
-    expect(document.querySelector('meta[name="theme-color"]')?.getAttribute('content')).toBe(
-      APP_THEME_COLORS.dark,
-    )
+    expect(
+      document
+        .querySelector('meta[name="theme-color"]')
+        ?.getAttribute('content'),
+    ).toBe(APP_THEME_COLORS.dark)
 
     fireEvent.click(screen.getByRole('button', { name: 'light' }))
 
@@ -133,9 +134,11 @@ describe('AppThemeProvider', () => {
     expect(window.localStorage.getItem(APP_THEME_STORAGE_KEY)).toBe(
       JSON.stringify('light'),
     )
-    expect(document.querySelector('meta[name="theme-color"]')?.getAttribute('content')).toBe(
-      APP_THEME_COLORS.light,
-    )
+    expect(
+      document
+        .querySelector('meta[name="theme-color"]')
+        ?.getAttribute('content'),
+    ).toBe(APP_THEME_COLORS.light)
   })
 
   it('tracks system preference changes when set to system', () => {

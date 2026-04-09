@@ -1,12 +1,12 @@
 'use client'
 
-import type { PaneSlot, ATermSlot } from '@/lib/utils/slot'
+import type { LayoutMode } from '@/lib/constants/a-term'
+import type { ATermSlot, PaneSlot } from '@/lib/utils/slot'
+import { getSlotPanelId } from '@/lib/utils/slot'
+import type { ATermComponent, ATermHandle } from './ATerm'
+import type { ConnectionStatus } from './a-term.types'
 import type { ATermMode } from './ModeToggle'
 import { type PaneLayout, ResizablePaneLayout } from './ResizablePaneLayout'
-import type { ATermComponent, ATermHandle } from './ATerm'
-import type { LayoutMode } from '@/lib/constants/a-term'
-import type { ConnectionStatus } from './a-term.types'
-import { getSlotPanelId } from '@/lib/utils/slot'
 
 export function getLayoutRemountKey(
   layoutMode: LayoutMode,

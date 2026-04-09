@@ -1,6 +1,6 @@
 'use client'
 
-import type { PaneSlot, ATermSlot } from '@/lib/utils/slot'
+import type { ATermSlot, PaneSlot } from '@/lib/utils/slot'
 
 interface SinglePaneLayoutProps {
   containerRef: React.RefObject<HTMLDivElement | null>

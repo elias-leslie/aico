@@ -1,20 +1,20 @@
-import { useCallback, useRef, useState, type DragEvent } from 'react'
 import { clsx } from 'clsx'
-import type { PaneSlot, ATermSlot } from '@/lib/utils/slot'
+import { type DragEvent, useCallback, useRef, useState } from 'react'
+import { ATermComponent, type ATermHandle } from '@/components/ATerm'
 import { UnifiedATermHeaderContent as UnifiedATermHeader } from '@/components/a-term-header'
-import {
-  getSlotSessionId,
-  getSlotWorkingDir,
-  getSlotPanelId,
-  isPaneSlot,
-} from '@/lib/utils/slot'
+import { PaneFilesDialog } from '@/components/files/PaneFilesDialog'
 import {
   clearDraggedPaneSlotId,
   getDraggedPaneSlotId,
   isPaneSwapDragEvent,
 } from '@/lib/utils/pane-swap-dnd'
-import { ATermComponent, type ATermHandle } from '@/components/ATerm'
-import { PaneFilesDialog } from '@/components/files/PaneFilesDialog'
+import type { ATermSlot, PaneSlot } from '@/lib/utils/slot'
+import {
+  getSlotPanelId,
+  getSlotSessionId,
+  getSlotWorkingDir,
+  isPaneSlot,
+} from '@/lib/utils/slot'
 import type { ResizablePaneLayoutProps } from '@/types/pane-layout'
 
 interface UsePaneRendererOptions {
@@ -87,7 +87,9 @@ export function usePaneRenderer({
     onLayoutModeChange,
     aTermStatuses,
   } = props
-  const [dragTargetPanelId, setDragTargetPanelId] = useState<string | null>(null)
+  const [dragTargetPanelId, setDragTargetPanelId] = useState<string | null>(
+    null,
+  )
   const [filesTarget, setFilesTarget] = useState<{
     paneId: string
     sessionId: string
@@ -111,7 +113,8 @@ export function usePaneRenderer({
       const isExternalSlot = slot.type === 'adhoc' && slot.isExternal
       const canResetSlot = !isExternalSlot
       const canCleanSlot =
-        (slot.type === 'project' && slot.activeMode !== 'shell') || isExternalSlot
+        (slot.type === 'project' && slot.activeMode !== 'shell') ||
+        isExternalSlot
       const canSwapByDrop = !!onSwapPanes && paneCount > 1
       const isDragTarget = dragTargetPanelId === panelId
 
@@ -151,7 +154,8 @@ export function usePaneRenderer({
           onDrop={handlePaneDrop}
           className={clsx(
             'a-term-pane-shell flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-md transition-colors duration-150',
-            isDragTarget && 'a-term-pane-shell-drag-target ring-1 ring-[var(--term-accent)]',
+            isDragTarget &&
+              'a-term-pane-shell-drag-target ring-1 ring-[var(--term-accent)]',
           )}
           style={{ backgroundColor: 'var(--term-bg-surface)' }}
         >
@@ -162,14 +166,18 @@ export function usePaneRenderer({
             onSettings={onSettings}
             onReset={onReset && canResetSlot ? () => onReset(slot) : undefined}
             onClose={onClose ? () => onClose(slot) : undefined}
-            onCloseSession={onCloseSession ? () => onCloseSession(slot) : undefined}
+            onCloseSession={
+              onCloseSession ? () => onCloseSession(slot) : undefined
+            }
             closeTooltip={isExternalSlot ? 'Detach a-term' : 'Detach pane'}
             onFiles={
               paneId && sessionId
                 ? () => setFilesTarget({ paneId, sessionId })
                 : undefined
             }
-            onUpload={onUpload ? () => onUpload(sessionId ?? undefined) : undefined}
+            onUpload={
+              onUpload ? () => onUpload(sessionId ?? undefined) : undefined
+            }
             onClean={onClean ? () => onClean(slot) : undefined}
             onOpenModal={onOpenModal}
             canAddPane={canAddPane}
@@ -177,7 +185,9 @@ export function usePaneRenderer({
               onModeSwitch ? (mode) => onModeSwitch(slot, mode) : undefined
             }
             isModeSwitching={isModeSwitching}
-            onVoice={onVoice ? () => onVoice(sessionId ?? undefined) : undefined}
+            onVoice={
+              onVoice ? () => onVoice(sessionId ?? undefined) : undefined
+            }
             isMobile={isMobile}
             allSlots={paneCount > 1 ? displaySlots : undefined}
             onSwapWith={
@@ -193,20 +203,32 @@ export function usePaneRenderer({
             layoutMode={layoutMode}
             availableLayouts={availableLayouts}
             onLayoutModeChange={onLayoutModeChange}
-            connectionStatus={sessionId ? aTermStatuses?.get(sessionId) : undefined}
-            onReconnect={sessionId ? () => paneHandlesRef.current.get(sessionId)?.reconnect() : undefined}
-            onSearch={sessionId
-              ? (query, options) =>
-                  paneHandlesRef.current.get(sessionId)?.search(query, options) ?? {
-                    query,
-                    totalMatches: 0,
-                    activeIndex: -1,
-                    found: false,
-                  }
-              : undefined}
-            onClearSearch={sessionId
-              ? () => paneHandlesRef.current.get(sessionId)?.clearSearch()
-              : undefined}
+            connectionStatus={
+              sessionId ? aTermStatuses?.get(sessionId) : undefined
+            }
+            onReconnect={
+              sessionId
+                ? () => paneHandlesRef.current.get(sessionId)?.reconnect()
+                : undefined
+            }
+            onSearch={
+              sessionId
+                ? (query, options) =>
+                    paneHandlesRef.current
+                      .get(sessionId)
+                      ?.search(query, options) ?? {
+                      query,
+                      totalMatches: 0,
+                      activeIndex: -1,
+                      found: false,
+                    }
+                : undefined
+            }
+            onClearSearch={
+              sessionId
+                ? () => paneHandlesRef.current.get(sessionId)?.clearSearch()
+                : undefined
+            }
           />
 
           <div
@@ -224,7 +246,9 @@ export function usePaneRenderer({
                   onATermRef?.(sessionId, handle)
                 }}
                 sessionId={sessionId}
-                sessionMode={slot.type === 'project' ? slot.activeMode : slot.sessionMode}
+                sessionMode={
+                  slot.type === 'project' ? slot.activeMode : slot.sessionMode
+                }
                 workingDir={workingDir || undefined}
                 className="h-full"
                 fontFamily={fontFamily}

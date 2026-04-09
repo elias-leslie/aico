@@ -1,11 +1,7 @@
 'use client'
 
 import { useCallback, useMemo, useRef } from 'react'
-import {
-  APP_THEME_OPTIONS,
-  type AppThemePreference,
-} from '@/lib/app-theme'
-import { useAppTheme } from '@/lib/hooks/use-app-theme'
+import { APP_THEME_OPTIONS, type AppThemePreference } from '@/lib/app-theme'
 import {
   A_TERM_CURSOR_STYLES,
   A_TERM_FONT_SIZES,
@@ -18,14 +14,15 @@ import {
   type ATermScrollback,
   type ATermThemeId,
 } from '@/lib/hooks/use-a-term-settings'
+import { useAppTheme } from '@/lib/hooks/use-app-theme'
 import { useClickOutside } from '@/lib/hooks/use-click-outside'
+import type { KeyboardSizePreset } from './keyboard/types'
+import { AgentToolsSettings } from './settings/AgentToolsSettings'
+import { SettingButtonGroup } from './settings/SettingButtonGroup'
+import { SettingCheckbox } from './settings/SettingCheckbox'
+import { SettingSelect } from './settings/SettingSelect'
 import { SettingsButton } from './settings/SettingsButton'
 import { SettingsPanel } from './settings/SettingsPanel'
-import { SettingSelect } from './settings/SettingSelect'
-import { SettingButtonGroup } from './settings/SettingButtonGroup'
-import { AgentToolsSettings } from './settings/AgentToolsSettings'
-import { SettingCheckbox } from './settings/SettingCheckbox'
-import type { KeyboardSizePreset } from './keyboard/types'
 
 export interface SettingsDropdownProps {
   fontId: ATermFontId
@@ -110,7 +107,8 @@ export function SettingsDropdown({
     label: opt.label,
   }))
 
-  const showKeyboardSettings = isMobile && keyboardSize !== undefined && setKeyboardSize
+  const showKeyboardSettings =
+    isMobile && keyboardSize !== undefined && setKeyboardSize
 
   return (
     <div className={renderTrigger ? 'relative ml-2' : ''}>

@@ -70,7 +70,9 @@ export function buildContentSecurityPolicy({
     `'nonce-${nonce}'`,
     "'strict-dynamic'",
     isDevelopment ? "'unsafe-eval'" : '',
-  ].filter(Boolean).join(' ')
+  ]
+    .filter(Boolean)
+    .join(' ')
   const connectSrc = buildConnectSrc({ isDevelopment, requestUrl })
 
   return [

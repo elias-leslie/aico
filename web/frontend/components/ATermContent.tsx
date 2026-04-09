@@ -1,7 +1,7 @@
 import { clsx } from 'clsx'
-import type { ATermContentProps } from './a-term-content/types'
 import { ATermFileSection } from './a-term-content/ATermFileSection'
 import { ATermMobileSection } from './a-term-content/ATermMobileSection'
+import type { ATermContentProps } from './a-term-content/types'
 import { PromptCleaner } from './PromptCleaner'
 import { SettingsDropdown } from './SettingsDropdown'
 import { VoiceTranscriptPanel } from './VoiceTranscriptPanel'
@@ -88,7 +88,12 @@ export function ATermContent({
   className,
 }: ATermContentProps) {
   return (
-    <div className={clsx('flex h-full min-h-0 min-w-0 flex-col overflow-visible', className)}>
+    <div
+      className={clsx(
+        'flex h-full min-h-0 min-w-0 flex-col overflow-visible',
+        className,
+      )}
+    >
       {/* Settings dropdown - all settings controls */}
       <SettingsDropdown
         fontId={fontId}

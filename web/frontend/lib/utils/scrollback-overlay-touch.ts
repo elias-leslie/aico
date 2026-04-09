@@ -18,7 +18,5 @@ export function shouldDismissScrollbackOverlayTouchGesture({
   if (touchStartY === null || touchEndY === null) return false
   if (!gestureStartedAtBottom || gestureLeftBottom || !isAtBottom) return false
 
-  return (
-    touchStartY - touchEndY > SCROLLBACK_OVERLAY_TOUCH_DISMISS_THRESHOLD_PX
-  )
+  return touchStartY - touchEndY > SCROLLBACK_OVERLAY_TOUCH_DISMISS_THRESHOLD_PX
 }

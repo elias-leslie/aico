@@ -1,6 +1,6 @@
+import { NotesButton, NotesProvider } from '@summitflow/notes-ui'
 import { render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { NotesButton, NotesProvider } from '@summitflow/notes-ui'
 
 describe('NotesButton', () => {
   afterEach(() => {

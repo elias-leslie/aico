@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   applyATermSearchSelection,
-  buildEmptyATermSearchResult,
   buildATermSearchResult,
+  buildEmptyATermSearchResult,
   findATermSearchMatches,
   getATermSearchIndex,
 } from './a-term-search'
@@ -10,10 +10,7 @@ import {
 describe('findATermSearchMatches', () => {
   it('finds all case-insensitive matches across lines', () => {
     expect(
-      findATermSearchMatches(
-        ['Alpha beta alpha', 'gamma', 'ALPHA'],
-        'alpha',
-      ),
+      findATermSearchMatches(['Alpha beta alpha', 'gamma', 'ALPHA'], 'alpha'),
     ).toEqual([
       { line: 0, column: 0, length: 5 },
       { line: 0, column: 11, length: 5 },
@@ -31,9 +28,7 @@ describe('findATermSearchMatches', () => {
         ['prefix \x1b[32mSummitFlow\x1b[0m suffix'],
         'SummitFlow',
       ),
-    ).toEqual([
-      { line: 0, column: 7, length: 10 },
-    ])
+    ).toEqual([{ line: 0, column: 7, length: 10 }])
   })
 })
 

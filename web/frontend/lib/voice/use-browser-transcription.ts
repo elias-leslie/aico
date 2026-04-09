@@ -55,9 +55,7 @@ declare global {
   }
 }
 
-function getRecognitionConstructor():
-  | SpeechRecognitionConstructorLike
-  | null {
+function getRecognitionConstructor(): SpeechRecognitionConstructorLike | null {
   if (typeof window === 'undefined') return null
 
   return window.SpeechRecognition ?? window.webkitSpeechRecognition ?? null
@@ -92,8 +90,7 @@ function getDefaultLanguage(preferredLanguage?: string): string {
 export function useBrowserTranscription(
   options?: UseTranscriptionOptions,
 ): UseTranscriptionReturn {
-  const [status, setStatus] =
-    useState<UseTranscriptionReturn['status']>('idle')
+  const [status, setStatus] = useState<UseTranscriptionReturn['status']>('idle')
   const [error, setError] = useState<TranscriptionError>(null)
   const [interimTranscript, setInterimTranscript] = useState('')
   const [finalTranscript, setFinalTranscript] = useState('')
@@ -202,7 +199,11 @@ export function useBrowserTranscription(
       let nextFinalTranscript = finalTranscriptRef.current
       let nextInterimTranscript = ''
 
-      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+      for (
+        let index = event.resultIndex;
+        index < event.results.length;
+        index += 1
+      ) {
         const result = event.results[index]
         const transcript = result[0]?.transcript?.trim()
         if (!transcript) continue

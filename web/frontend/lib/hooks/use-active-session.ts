@@ -2,19 +2,15 @@
 
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo } from 'react'
+import { type ATermSession, useATermSessions } from './use-a-term-sessions'
 import { useLocalStorageState } from './use-local-storage-state'
-import {
-  type ProjectATerm,
-  useProjectATerms,
-} from './use-project-a-terms'
-import {
-  type ATermSession,
-  useATermSessions,
-} from './use-a-term-sessions'
+import { type ProjectATerm, useProjectATerms } from './use-project-a-terms'
 
 const LAST_ACTIVE_SESSION_KEY = 'aTerm:last-active-session-id'
 
-export function parsePersistedSessionId(storedValue: string | null): string | null {
+export function parsePersistedSessionId(
+  storedValue: string | null,
+): string | null {
   if (storedValue === null) {
     return null
   }
@@ -42,13 +38,18 @@ export function deriveActiveSessionId(
   }
 
   if (urlProjectId) {
-    const projectSession = sessions.find((session) => session.project_id === urlProjectId)
+    const projectSession = sessions.find(
+      (session) => session.project_id === urlProjectId,
+    )
     if (projectSession) {
       return projectSession.id
     }
   }
 
-  if (persistedSessionId && sessions.some((session) => session.id === persistedSessionId)) {
+  if (
+    persistedSessionId &&
+    sessions.some((session) => session.id === persistedSessionId)
+  ) {
     return persistedSessionId
   }
 
@@ -137,11 +138,9 @@ export interface UseActiveSessionResult {
 export function useActiveSession(): UseActiveSessionResult {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const [persistedSessionId, setPersistedSessionId] =
-    useLocalStorageState<string | null>(
-      LAST_ACTIVE_SESSION_KEY,
-      null,
-    )
+  const [persistedSessionId, setPersistedSessionId] = useLocalStorageState<
+    string | null
+  >(LAST_ACTIVE_SESSION_KEY, null)
 
   // Get session data from existing hooks
   const {

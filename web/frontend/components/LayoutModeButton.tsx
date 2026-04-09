@@ -2,14 +2,14 @@
 
 import { ChevronDown } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { type LayoutMode, GRID_MIN_WIDTHS } from '@/lib/constants/a-term'
+import { GRID_MIN_WIDTHS, type LayoutMode } from '@/lib/constants/a-term'
 import { useClickOutside } from '@/lib/hooks/use-click-outside'
 import { useDropdownPosition } from '@/lib/hooks/use-dropdown-position'
 import {
   ColumnsSideBySideIcon,
-  RowsStackedIcon,
-  MainSideIcon,
   GridIcon,
+  MainSideIcon,
+  RowsStackedIcon,
   WideGridIcon,
 } from './LayoutIcons'
 
@@ -121,8 +121,14 @@ export function LayoutModeButtons({
     [filteredOptions.length, highlightedIndex],
   )
 
-  const handleButtonKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
-    if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') {
+  const handleButtonKeyDown = (
+    event: React.KeyboardEvent<HTMLButtonElement>,
+  ) => {
+    if (
+      event.key === 'ArrowDown' ||
+      event.key === 'Enter' ||
+      event.key === ' '
+    ) {
       event.preventDefault()
       setIsOpen(true)
     }

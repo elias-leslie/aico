@@ -20,9 +20,7 @@ export function isAppThemePreference(
   return value === 'system' || value === 'dark' || value === 'light'
 }
 
-export function sanitizeAppThemePreference(
-  value: unknown,
-): AppThemePreference {
+export function sanitizeAppThemePreference(value: unknown): AppThemePreference {
   return isAppThemePreference(value) ? value : 'system'
 }
 

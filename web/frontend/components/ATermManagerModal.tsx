@@ -2,21 +2,21 @@
 
 import * as Dialog from '@radix-ui/react-dialog'
 import { useDeferredValue, useMemo, useRef, useState } from 'react'
-import { useProjectSettings } from '@/lib/hooks/use-project-settings'
 import type { ATermPane } from '@/lib/hooks/use-a-term-panes'
 import type { ATermSession } from '@/lib/hooks/use-a-term-sessions'
+import { useProjectSettings } from '@/lib/hooks/use-project-settings'
 import {
+  type AttachableATermOption,
   buildProjectRows,
   filterAndSortSessions,
+  ModalHeader,
   makeDetachedPaneAttachableOption,
   makeExternalAttachableOption,
   matchesProjectRow,
-  ModalHeader,
   NoMatchesBanner,
   QuickStartSection,
   SearchBar,
   SessionSection,
-  type AttachableATermOption,
 } from './ATermManagerModal.parts'
 import { ProjectsSection } from './ATermManagerModal.projects-section'
 
@@ -55,10 +55,14 @@ export function ATermManagerModal({
     isUpdating,
   } = useProjectSettings()
   const [searchQuery, setSearchQuery] = useState('')
-  const [selectedSessionsByProject, setSelectedSessionsByProject] = useState<Record<string, string>>({})
+  const [selectedSessionsByProject, setSelectedSessionsByProject] = useState<
+    Record<string, string>
+  >({})
   const [registerProjectName, setRegisterProjectName] = useState('')
   const [registerProjectRootPath, setRegisterProjectRootPath] = useState('')
-  const [registerProjectError, setRegisterProjectError] = useState<string | null>(null)
+  const [registerProjectError, setRegisterProjectError] = useState<
+    string | null
+  >(null)
   const deferredSearchQuery = useDeferredValue(searchQuery)
   const searchRef = useRef<HTMLInputElement>(null)
 
@@ -77,7 +81,8 @@ export function ATermManagerModal({
   const normalizedSearch = deferredSearchQuery.trim().toLowerCase()
 
   const projectRows = useMemo(
-    () => buildProjectRows(projects, externalSessions, detachedPanes, paneCounts),
+    () =>
+      buildProjectRows(projects, externalSessions, detachedPanes, paneCounts),
     [projects, externalSessions, detachedPanes, paneCounts],
   )
 
@@ -92,20 +97,30 @@ export function ATermManagerModal({
   )
 
   const unmatchedExternalSessions = useMemo(
-    () => externalSessions.filter((s) => !s.project_id || !knownProjectIds.has(s.project_id)),
+    () =>
+      externalSessions.filter(
+        (s) => !s.project_id || !knownProjectIds.has(s.project_id),
+      ),
     [externalSessions, knownProjectIds],
   )
 
   const unmatchedDetachedPanes = useMemo(
-    () => detachedPanes.filter((p) => !p.project_id || !knownProjectIds.has(p.project_id)),
+    () =>
+      detachedPanes.filter(
+        (p) => !p.project_id || !knownProjectIds.has(p.project_id),
+      ),
     [detachedPanes, knownProjectIds],
   )
 
   const visibleOtherSessions = useMemo(
-    () => filterAndSortSessions([
-      ...unmatchedExternalSessions.map(makeExternalAttachableOption),
-      ...unmatchedDetachedPanes.map(makeDetachedPaneAttachableOption),
-    ], normalizedSearch),
+    () =>
+      filterAndSortSessions(
+        [
+          ...unmatchedExternalSessions.map(makeExternalAttachableOption),
+          ...unmatchedDetachedPanes.map(makeDetachedPaneAttachableOption),
+        ],
+        normalizedSearch,
+      ),
     [normalizedSearch, unmatchedDetachedPanes, unmatchedExternalSessions],
   )
 
@@ -116,9 +131,18 @@ export function ATermManagerModal({
     setRegisterProjectRootPath('')
     setRegisterProjectError(null)
   }
-  const closeAndReset = () => { resetModalState(); onClose() }
-  const handleCreateGeneric = () => { onCreateGenericATerm(); closeAndReset() }
-  const handleCreateProjectATerm = (projectId: string, rootPath: string | null) => {
+  const closeAndReset = () => {
+    resetModalState()
+    onClose()
+  }
+  const handleCreateGeneric = () => {
+    onCreateGenericATerm()
+    closeAndReset()
+  }
+  const handleCreateProjectATerm = (
+    projectId: string,
+    rootPath: string | null,
+  ) => {
     onCreateProjectATerm(projectId, rootPath)
     closeAndReset()
   }
@@ -154,14 +178,25 @@ export function ATermManagerModal({
     }
   }
   const handleProjectSessionSelect = (projectId: string, sessionId: string) => {
-    setSelectedSessionsByProject((current) => ({ ...current, [projectId]: sessionId }))
+    setSelectedSessionsByProject((current) => ({
+      ...current,
+      [projectId]: sessionId,
+    }))
   }
 
   const trimmedSearch = deferredSearchQuery.trim()
-  const noMatches = normalizedSearch && visibleProjectRows.length === 0 && visibleOtherSessions.length === 0
+  const noMatches =
+    normalizedSearch &&
+    visibleProjectRows.length === 0 &&
+    visibleOtherSessions.length === 0
 
   return (
-    <Dialog.Root open={isOpen} onOpenChange={(open) => { if (!open) closeAndReset() }}>
+    <Dialog.Root
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) closeAndReset()
+      }}
+    >
       <Dialog.Portal>
         <Dialog.Overlay
           className="fixed inset-0 z-[10000]"
@@ -179,16 +214,26 @@ export function ATermManagerModal({
             boxShadow: 'var(--term-shadow-modal)',
             fontFamily: 'var(--font-ui)',
           }}
-          onOpenAutoFocus={(event) => { event.preventDefault(); searchRef.current?.focus() }}
+          onOpenAutoFocus={(event) => {
+            event.preventDefault()
+            searchRef.current?.focus()
+          }}
         >
           <ModalHeader />
-          <SearchBar value={searchQuery} onChange={setSearchQuery} inputRef={searchRef} />
+          <SearchBar
+            value={searchQuery}
+            onChange={setSearchQuery}
+            inputRef={searchRef}
+          />
           <div
             data-testid="a-term-manager-scroll-region"
             className="flex-1 overflow-y-auto overscroll-contain px-5 py-4"
             aria-busy={isLoading}
           >
-            <QuickStartSection paneCount={paneCounts.__adhoc || 0} onCreateGeneric={handleCreateGeneric} />
+            <QuickStartSection
+              paneCount={paneCounts.__adhoc || 0}
+              onCreateGeneric={handleCreateGeneric}
+            />
             <ProjectsSection
               isLoading={isLoading}
               isError={isError}
@@ -220,7 +265,9 @@ export function ATermManagerModal({
             <SessionSection
               title="Other Attachables"
               countLabel={`${visibleOtherSessions.length} attachable${visibleOtherSessions.length === 1 ? '' : 's'}`}
-              total={unmatchedExternalSessions.length + unmatchedDetachedPanes.length}
+              total={
+                unmatchedExternalSessions.length + unmatchedDetachedPanes.length
+              }
               visible={visibleOtherSessions}
               searchQuery={trimmedSearch}
               emptyLabel="other attachables"

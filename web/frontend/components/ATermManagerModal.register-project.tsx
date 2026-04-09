@@ -32,13 +32,19 @@ export function RegisterProjectCard({
       <div className="mb-3">
         <p
           className="text-sm font-medium"
-          style={{ color: 'var(--term-text-primary)', fontFamily: 'var(--font-ui)' }}
+          style={{
+            color: 'var(--term-text-primary)',
+            fontFamily: 'var(--font-ui)',
+          }}
         >
           Register Local Project
         </p>
         <p
           className="mt-1 text-[11px]"
-          style={{ color: 'var(--term-text-muted)', fontFamily: 'var(--font-mono)' }}
+          style={{
+            color: 'var(--term-text-muted)',
+            fontFamily: 'var(--font-mono)',
+          }}
         >
           {projectRegistrySource === 'local'
             ? 'Add a repo path once, then A-Term can reopen it as a named project workspace.'
@@ -62,7 +68,9 @@ export function RegisterProjectCard({
         <input
           type="text"
           value={registerProjectRootPath}
-          onChange={(event) => onRegisterProjectRootPathChange(event.target.value)}
+          onChange={(event) =>
+            onRegisterProjectRootPathChange(event.target.value)
+          }
           placeholder="/absolute/path/to/project"
           className="term-input rounded-md px-3 py-2 text-sm outline-none"
           style={{
@@ -78,8 +86,10 @@ export function RegisterProjectCard({
           disabled={isRegisteringProject}
           className="rounded-md border px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.12em] transition-all duration-150"
           style={{
-            backgroundColor: 'color-mix(in srgb, var(--term-accent) 8%, transparent)',
-            borderColor: 'color-mix(in srgb, var(--term-accent) 30%, transparent)',
+            backgroundColor:
+              'color-mix(in srgb, var(--term-accent) 8%, transparent)',
+            borderColor:
+              'color-mix(in srgb, var(--term-accent) 30%, transparent)',
             color: 'var(--term-accent)',
             fontFamily: 'var(--font-ui)',
             opacity: isRegisteringProject ? 0.6 : 1,
@@ -89,7 +99,10 @@ export function RegisterProjectCard({
         </button>
       </div>
       {registerProjectError && (
-        <p className="mt-2 text-xs" style={{ color: 'var(--term-accent-danger, #f97316)' }}>
+        <p
+          className="mt-2 text-xs"
+          style={{ color: 'var(--term-accent-danger, #f97316)' }}
+        >
           {registerProjectError}
         </p>
       )}

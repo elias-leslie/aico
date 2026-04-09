@@ -1,5 +1,5 @@
-import { useCallback, useEffect } from 'react'
 import type { FitAddon } from '@xterm/addon-fit'
+import { useCallback, useEffect } from 'react'
 import { RESIZE_DEBOUNCE_MS } from '../constants/a-term'
 
 type XtermATerm = InstanceType<typeof import('@xterm/xterm').Terminal>
@@ -22,7 +22,9 @@ export function attachViewportResizeListeners(
   viewport: ViewportEventTarget | null = window.visualViewport,
 ) {
   window.addEventListener('resize', onViewportChange, { passive: true })
-  window.addEventListener('orientationchange', onViewportChange, { passive: true })
+  window.addEventListener('orientationchange', onViewportChange, {
+    passive: true,
+  })
 
   viewport?.addEventListener('resize', onViewportChange, { passive: true })
   viewport?.addEventListener('scroll', onViewportChange, { passive: true })

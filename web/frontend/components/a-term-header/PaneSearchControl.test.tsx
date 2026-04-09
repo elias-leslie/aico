@@ -11,12 +11,7 @@ describe('PaneSearchControl', () => {
       found: true,
     })
 
-    render(
-      <PaneSearchControl
-        onSearch={onSearch}
-        onClearSearch={vi.fn()}
-      />,
-    )
+    render(<PaneSearchControl onSearch={onSearch} onClearSearch={vi.fn()} />)
 
     fireEvent.click(screen.getByTitle('Search pane output'))
     fireEvent.change(screen.getByTestId('pane-search-input'), {
@@ -48,10 +43,7 @@ describe('PaneSearchControl', () => {
     const onClearSearch = vi.fn()
 
     render(
-      <PaneSearchControl
-        onSearch={onSearch}
-        onClearSearch={onClearSearch}
-      />,
+      <PaneSearchControl onSearch={onSearch} onClearSearch={onClearSearch} />,
     )
 
     fireEvent.click(screen.getByTitle('Search pane output'))

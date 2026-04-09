@@ -70,7 +70,7 @@ jobs:
         run: uv run pytest -q
 
       - name: Biome
-        run: pnpm --dir frontend exec biome check .
+        run: pnpm --dir frontend exec biome check . --max-diagnostics=100
 
       - name: TypeScript
         run: pnpm --dir frontend exec tsc --noEmit

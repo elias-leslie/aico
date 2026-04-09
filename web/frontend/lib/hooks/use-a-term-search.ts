@@ -8,12 +8,12 @@ import type {
 } from '@/components/a-term.types'
 import { getATermBufferLines } from '../utils/a-term-buffer'
 import {
-  buildEmptyATermSearchResult,
+  applyATermSearchSelection,
   buildATermSearchResult,
+  buildEmptyATermSearchResult,
   findATermSearchMatches,
   getATermSearchIndex,
 } from '../utils/a-term-search'
-import { applyATermSearchSelection } from '../utils/a-term-search'
 import { isTuiSessionMode } from '../utils/session-mode'
 
 type XtermATerm = InstanceType<typeof import('@xterm/xterm').Terminal>
@@ -39,10 +39,7 @@ interface OverlaySearchState {
 interface UseATermSearchReturn {
   clearSearch: () => void
   overlaySearchState: OverlaySearchState | null
-  search: (
-    query: string,
-    options?: ATermSearchOptions,
-  ) => ATermSearchResult
+  search: (query: string, options?: ATermSearchOptions) => ATermSearchResult
 }
 
 const INITIAL_SEARCH_STATE: SearchState = {
@@ -69,14 +66,10 @@ export function useATermSearch({
   }, [aTermRef])
 
   const search = useCallback(
-    (
-      rawQuery: string,
-      options?: ATermSearchOptions,
-    ): ATermSearchResult => {
+    (rawQuery: string, options?: ATermSearchOptions): ATermSearchResult => {
       const query = rawQuery.trim()
       const direction: ATermSearchDirection = options?.direction ?? 'next'
-      const reset =
-        options?.reset ?? searchStateRef.current.query !== query
+      const reset = options?.reset ?? searchStateRef.current.query !== query
 
       if (!query) {
         clearSearch()
@@ -84,9 +77,10 @@ export function useATermSearch({
       }
 
       const overlayLines = isTuiSession ? getOverlayLines() : []
-      const lines = overlayLines.length > 0
-        ? overlayLines
-        : getATermBufferLines(aTermRef.current)
+      const lines =
+        overlayLines.length > 0
+          ? overlayLines
+          : getATermBufferLines(aTermRef.current)
       const matches = findATermSearchMatches(lines, query)
 
       if (matches.length === 0) {
@@ -146,9 +140,8 @@ export function useATermSearch({
       return
     }
 
-    const nextIndex = activeIndex < 0
-      ? 0
-      : Math.min(activeIndex, matches.length - 1)
+    const nextIndex =
+      activeIndex < 0 ? 0 : Math.min(activeIndex, matches.length - 1)
 
     searchStateRef.current = {
       query,

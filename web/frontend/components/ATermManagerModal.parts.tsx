@@ -4,10 +4,10 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import { Folder, PanelsTopLeft, Search, X } from 'lucide-react'
 import type { RefObject } from 'react'
-import { useHoverStyle } from '@/lib/hooks/use-hover-style'
-import type { ProjectSetting } from '@/lib/hooks/use-project-settings'
 import type { ATermPane } from '@/lib/hooks/use-a-term-panes'
 import type { ATermSession } from '@/lib/hooks/use-a-term-sessions'
+import { useHoverStyle } from '@/lib/hooks/use-hover-style'
+import type { ProjectSetting } from '@/lib/hooks/use-project-settings'
 
 export interface AttachableATermOption {
   id: string
@@ -25,14 +25,23 @@ export interface ProjectRowData {
 }
 
 export const iconStyle = { color: 'var(--term-accent)', flexShrink: 0 } as const
-export const sectionHeaderStyle = { color: 'var(--term-text-muted)', fontFamily: 'var(--font-ui)' } as const
+export const sectionHeaderStyle = {
+  color: 'var(--term-text-muted)',
+  fontFamily: 'var(--font-ui)',
+} as const
 
-function formatProjectDescription(project: ProjectSetting, attachableCount: number): string {
+function formatProjectDescription(
+  project: ProjectSetting,
+  attachableCount: number,
+): string {
   const path = project.root_path ?? 'no working directory'
   if (attachableCount === 0) {
     return path
   }
-  const suffix = attachableCount === 1 ? '1 attachable session' : `${attachableCount} attachable sessions`
+  const suffix =
+    attachableCount === 1
+      ? '1 attachable session'
+      : `${attachableCount} attachable sessions`
   return `${path} · ${suffix}`
 }
 
@@ -42,12 +51,16 @@ export function formatSessionDescription(session: ATermSession): string {
 }
 
 export function formatDetachedPaneDescription(pane: ATermPane): string {
-  const activeSession = pane.sessions.find((session) => session.mode === pane.active_mode) ?? pane.sessions[0]
+  const activeSession =
+    pane.sessions.find((session) => session.mode === pane.active_mode) ??
+    pane.sessions[0]
   const location = activeSession?.working_dir || 'no working directory'
   return `${pane.project_id ?? 'detached'} · ${pane.active_mode} · ${location}`
 }
 
-export function makeExternalAttachableOption(session: ATermSession): AttachableATermOption {
+export function makeExternalAttachableOption(
+  session: ATermSession,
+): AttachableATermOption {
   return {
     id: session.id,
     label: `${session.name} (${session.mode})`,
@@ -58,7 +71,9 @@ export function makeExternalAttachableOption(session: ATermSession): AttachableA
   }
 }
 
-export function makeDetachedPaneAttachableOption(pane: ATermPane): AttachableATermOption {
+export function makeDetachedPaneAttachableOption(
+  pane: ATermPane,
+): AttachableATermOption {
   return {
     id: pane.id,
     label: `${pane.pane_name} (${pane.active_mode})`,
@@ -84,7 +99,10 @@ export function matchesProjectRow(row: ProjectRowData, query: string): boolean {
   const searchable = [
     row.project.name,
     row.project.root_path ?? '',
-    ...row.attachableOptions.flatMap((option) => [option.label, option.description]),
+    ...row.attachableOptions.flatMap((option) => [
+      option.label,
+      option.description,
+    ]),
   ]
   return searchable.join(' ').toLowerCase().includes(query)
 }
@@ -96,18 +114,29 @@ export function filterAndSortSessions(
   const sorted = [...sessions].sort((a, b) => a.label.localeCompare(b.label))
   if (!query) return sorted
   return sorted.filter((session) =>
-    `${session.label} ${session.description}`.toLowerCase().includes(query)
+    `${session.label} ${session.description}`.toLowerCase().includes(query),
   )
 }
 
-export function SectionHeader({ title, countLabel }: { title: string; countLabel: string }) {
+export function SectionHeader({
+  title,
+  countLabel,
+}: {
+  title: string
+  countLabel: string
+}) {
   return (
     <div
       className="mb-2.5 flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.16em]"
       style={sectionHeaderStyle}
     >
       <span>{title}</span>
-      <span className="text-[10px] font-normal tracking-[0.12em]" style={{ color: 'var(--term-text-muted)', opacity: 0.7 }}>{countLabel}</span>
+      <span
+        className="text-[10px] font-normal tracking-[0.12em]"
+        style={{ color: 'var(--term-text-muted)', opacity: 0.7 }}
+      >
+        {countLabel}
+      </span>
     </div>
   )
 }
@@ -126,10 +155,18 @@ function ActionButton({
   disabled?: boolean
 }) {
   const hoverStyle = useHoverStyle({
-    hoverBg: accent ? 'color-mix(in srgb, var(--term-accent) 15%, transparent)' : 'var(--term-bg-surface)',
-    defaultBg: accent ? 'color-mix(in srgb, var(--term-accent) 8%, transparent)' : 'transparent',
+    hoverBg: accent
+      ? 'color-mix(in srgb, var(--term-accent) 15%, transparent)'
+      : 'var(--term-bg-surface)',
+    defaultBg: accent
+      ? 'color-mix(in srgb, var(--term-accent) 8%, transparent)'
+      : 'transparent',
     hoverColor: accent ? 'var(--term-accent)' : 'var(--term-text-primary)',
-    defaultColor: muted ? 'var(--term-text-muted)' : accent ? 'var(--term-accent)' : 'var(--term-text-primary)',
+    defaultColor: muted
+      ? 'var(--term-text-muted)'
+      : accent
+        ? 'var(--term-accent)'
+        : 'var(--term-text-primary)',
   })
 
   return (
@@ -140,7 +177,9 @@ function ActionButton({
       className="rounded-md border px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.12em] transition-all duration-150"
       style={{
         ...hoverStyle.style,
-        borderColor: accent ? 'color-mix(in srgb, var(--term-accent) 30%, transparent)' : 'var(--term-border)',
+        borderColor: accent
+          ? 'color-mix(in srgb, var(--term-accent) 30%, transparent)'
+          : 'var(--term-border)',
         fontFamily: 'var(--font-ui)',
         opacity: disabled ? 0.6 : 1,
       }}
@@ -173,7 +212,9 @@ export function ProjectSessionRow({
     hoverColor: 'var(--term-text-primary)',
     defaultColor: 'var(--term-text-secondary)',
   })
-  const selectedOption = row.attachableOptions.find((option) => option.id === selectedSessionId)
+  const selectedOption = row.attachableOptions.find(
+    (option) => option.id === selectedSessionId,
+  )
   const attachTarget = selectedOption ?? row.attachableOptions[0] ?? null
 
   return (
@@ -183,15 +224,27 @@ export function ProjectSessionRow({
         ...hoverStyle.style,
         border: '1px solid var(--term-border)',
         borderLeftWidth: 3,
-        borderLeftColor: row.paneCount > 0 ? 'var(--term-accent)' : 'var(--term-border)',
+        borderLeftColor:
+          row.paneCount > 0 ? 'var(--term-accent)' : 'var(--term-border)',
       }}
       onMouseEnter={hoverStyle.onMouseEnter}
       onMouseLeave={hoverStyle.onMouseLeave}
     >
       <Folder size={16} style={iconStyle} />
       <span className="min-w-0 flex-1">
-        <span className="block text-sm font-medium truncate" style={{ fontFamily: 'var(--font-ui)' }}>{row.project.name}</span>
-        <span className="block text-[11px] truncate" style={{ color: 'var(--term-text-muted)', fontFamily: 'var(--font-mono)' }}>
+        <span
+          className="block text-sm font-medium truncate"
+          style={{ fontFamily: 'var(--font-ui)' }}
+        >
+          {row.project.name}
+        </span>
+        <span
+          className="block text-[11px] truncate"
+          style={{
+            color: 'var(--term-text-muted)',
+            fontFamily: 'var(--font-mono)',
+          }}
+        >
           {formatProjectDescription(row.project, row.attachableOptions.length)}
         </span>
       </span>
@@ -199,7 +252,8 @@ export function ProjectSessionRow({
         <span
           className="text-[10px] font-medium px-2 py-0.5 rounded-full"
           style={{
-            backgroundColor: 'color-mix(in srgb, var(--term-accent) 12%, transparent)',
+            backgroundColor:
+              'color-mix(in srgb, var(--term-accent) 12%, transparent)',
             color: 'var(--term-accent)',
             fontFamily: 'var(--font-ui)',
           }}
@@ -208,7 +262,10 @@ export function ProjectSessionRow({
         </span>
       )}
       {row.attachableOptions.length > 1 && (
-        <label className="sr-only" htmlFor={`project-session-select-${row.project.id}`}>
+        <label
+          className="sr-only"
+          htmlFor={`project-session-select-${row.project.id}`}
+        >
           Select existing session for {row.project.name}
         </label>
       )}
@@ -216,7 +273,9 @@ export function ProjectSessionRow({
         <select
           id={`project-session-select-${row.project.id}`}
           value={attachTarget?.id ?? ''}
-          onChange={(event) => onSelectSession(row.project.id, event.target.value)}
+          onChange={(event) =>
+            onSelectSession(row.project.id, event.target.value)
+          }
           className="max-w-[220px] rounded-md px-2.5 py-1.5 text-xs outline-none"
           style={{
             backgroundColor: 'var(--term-bg-deep)',
@@ -242,7 +301,9 @@ export function ProjectSessionRow({
         label="New"
         accent={!attachTarget}
         muted={Boolean(attachTarget)}
-        onClick={() => onCreateProjectATerm(row.project.id, row.project.root_path)}
+        onClick={() =>
+          onCreateProjectATerm(row.project.id, row.project.root_path)
+        }
       />
     </div>
   )
@@ -297,15 +358,24 @@ export function ModalHeader() {
     defaultColor: 'var(--term-text-muted)',
   })
   return (
-    <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--term-border)' }}>
+    <div
+      className="flex items-center justify-between px-5 py-4"
+      style={{ borderBottom: '1px solid var(--term-border)' }}
+    >
       <div className="min-w-0">
         <Dialog.Title
           className="text-sm font-semibold tracking-wide"
-          style={{ color: 'var(--term-text-primary)', fontFamily: 'var(--font-ui)' }}
+          style={{
+            color: 'var(--term-text-primary)',
+            fontFamily: 'var(--font-ui)',
+          }}
         >
           A-Term Manager
         </Dialog.Title>
-        <Dialog.Description className="mt-0.5 text-xs" style={{ color: 'var(--term-text-muted)' }}>
+        <Dialog.Description
+          className="mt-0.5 text-xs"
+          style={{ color: 'var(--term-text-muted)' }}
+        >
           Create, attach, or manage A-Term sessions across projects.
         </Dialog.Description>
       </div>
@@ -335,9 +405,16 @@ export function SearchBar({
   inputRef: RefObject<HTMLInputElement | null>
 }) {
   return (
-    <div className="px-5 py-3" style={{ borderBottom: '1px solid var(--term-border)' }}>
+    <div
+      className="px-5 py-3"
+      style={{ borderBottom: '1px solid var(--term-border)' }}
+    >
       <div className="relative">
-        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--term-text-muted)' }} />
+        <Search
+          size={14}
+          className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+          style={{ color: 'var(--term-text-muted)' }}
+        />
         <input
           ref={inputRef}
           id="a-term-manager-search"
@@ -359,7 +436,13 @@ export function SearchBar({
   )
 }
 
-export function QuickStartSection({ paneCount, onCreateGeneric }: { paneCount: number; onCreateGeneric: () => void }) {
+export function QuickStartSection({
+  paneCount,
+  onCreateGeneric,
+}: {
+  paneCount: number
+  onCreateGeneric: () => void
+}) {
   return (
     <>
       <SectionHeader title="Quick Start" countLabel={`${paneCount} open`} />
@@ -367,20 +450,37 @@ export function QuickStartSection({ paneCount, onCreateGeneric }: { paneCount: n
         type="button"
         onClick={onCreateGeneric}
         className="interactive-row flex items-center gap-3 w-full px-3.5 py-3 min-h-[44px] rounded-lg text-left transition-all duration-150"
-        style={{ fontFamily: 'var(--font-ui)', backgroundColor: 'var(--term-bg-surface)', border: '1px solid var(--term-border)' }}
+        style={{
+          fontFamily: 'var(--font-ui)',
+          backgroundColor: 'var(--term-bg-surface)',
+          border: '1px solid var(--term-border)',
+        }}
       >
         <PanelsTopLeft size={16} style={iconStyle} />
         <span className="min-w-0 flex-1">
-          <span className="block text-sm font-medium truncate">New Ad-Hoc A-Term</span>
-          <span className="block text-[11px] truncate" style={{ color: 'var(--term-text-muted)', fontFamily: 'var(--font-mono)' }}>
+          <span className="block text-sm font-medium truncate">
+            New Ad-Hoc A-Term
+          </span>
+          <span
+            className="block text-[11px] truncate"
+            style={{
+              color: 'var(--term-text-muted)',
+              fontFamily: 'var(--font-mono)',
+            }}
+          >
             Scratch shell outside any project
           </span>
         </span>
-        <span className="text-[11px] font-medium uppercase tracking-[0.12em] px-2.5 py-1 rounded-md" style={{
-          color: 'var(--term-accent)',
-          backgroundColor: 'color-mix(in srgb, var(--term-accent) 8%, transparent)',
-          border: '1px solid color-mix(in srgb, var(--term-accent) 20%, transparent)',
-        }}>
+        <span
+          className="text-[11px] font-medium uppercase tracking-[0.12em] px-2.5 py-1 rounded-md"
+          style={{
+            color: 'var(--term-accent)',
+            backgroundColor:
+              'color-mix(in srgb, var(--term-accent) 8%, transparent)',
+            border:
+              '1px solid color-mix(in srgb, var(--term-accent) 20%, transparent)',
+          }}
+        >
           New
         </span>
       </button>
@@ -390,11 +490,20 @@ export function QuickStartSection({ paneCount, onCreateGeneric }: { paneCount: n
 
 export function NoMatchesBanner({ trimmedSearch }: { trimmedSearch: string }) {
   return (
-    <div className="mt-6 text-center py-8 rounded-lg" style={{ backgroundColor: 'var(--term-bg-surface)', border: '1px solid var(--term-border)' }}>
+    <div
+      className="mt-6 text-center py-8 rounded-lg"
+      style={{
+        backgroundColor: 'var(--term-bg-surface)',
+        border: '1px solid var(--term-border)',
+      }}
+    >
       <p className="text-sm" style={{ color: 'var(--term-text-muted)' }}>
         No A-Terms match &quot;{trimmedSearch}&quot;
       </p>
-      <p className="text-xs mt-1" style={{ color: 'var(--term-text-muted)', opacity: 0.6 }}>
+      <p
+        className="text-xs mt-1"
+        style={{ color: 'var(--term-text-muted)', opacity: 0.6 }}
+      >
         Try a different search term or create a new A-Term.
       </p>
     </div>
@@ -430,19 +539,40 @@ export function SessionSection({
           >
             <PanelsTopLeft size={16} style={iconStyle} />
             <span className="min-w-0 flex-1">
-              <span className="block text-sm font-medium truncate">{session.label}</span>
-              <span className="block text-[11px] truncate" style={{ color: 'var(--term-text-muted)', fontFamily: 'var(--font-mono)' }}>
+              <span className="block text-sm font-medium truncate">
+                {session.label}
+              </span>
+              <span
+                className="block text-[11px] truncate"
+                style={{
+                  color: 'var(--term-text-muted)',
+                  fontFamily: 'var(--font-mono)',
+                }}
+              >
                 {session.description}
               </span>
             </span>
-            <span className="text-[11px] font-medium uppercase tracking-[0.12em]" style={{ color: 'var(--term-text-muted)', flexShrink: 0, fontFamily: 'var(--font-ui)' }}>
+            <span
+              className="text-[11px] font-medium uppercase tracking-[0.12em]"
+              style={{
+                color: 'var(--term-text-muted)',
+                flexShrink: 0,
+                fontFamily: 'var(--font-ui)',
+              }}
+            >
               {actionLabel}
             </span>
           </button>
         ))}
       </div>
       {visible.length === 0 && (
-        <p className="px-3 py-6 text-center text-sm" style={{ color: 'var(--term-text-muted)', fontFamily: 'var(--font-ui)' }}>
+        <p
+          className="px-3 py-6 text-center text-sm"
+          style={{
+            color: 'var(--term-text-muted)',
+            fontFamily: 'var(--font-ui)',
+          }}
+        >
           No {emptyLabel} match &quot;{searchQuery}&quot;.
         </p>
       )}

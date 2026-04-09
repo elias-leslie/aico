@@ -1,7 +1,7 @@
 'use client'
 
-import { memo } from 'react'
 import { clsx } from 'clsx'
+import { memo } from 'react'
 import type { IconButtonProps } from './types'
 
 export const HeaderIconButton = memo(function HeaderIconButton({

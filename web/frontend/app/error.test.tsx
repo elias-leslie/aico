@@ -8,9 +8,12 @@ describe('global error page', () => {
 
     render(
       <ErrorPage
-        error={Object.assign(new Error('Database stack trace: password=secret'), {
-          digest: 'digest-123',
-        })}
+        error={Object.assign(
+          new Error('Database stack trace: password=secret'),
+          {
+            digest: 'digest-123',
+          },
+        )}
         reset={reset}
       />,
     )

@@ -3,11 +3,7 @@ import { useRef } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { useClickOutside } from './use-click-outside'
 
-function TestHarness({
-  onOutside,
-}: {
-  onOutside: () => void
-}) {
+function TestHarness({ onOutside }: { onOutside: () => void }) {
   const insideRef = useRef<HTMLDivElement>(null)
   useClickOutside([insideRef], onOutside, true)
 

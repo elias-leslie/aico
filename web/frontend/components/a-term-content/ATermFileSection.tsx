@@ -1,13 +1,19 @@
-import type { RefObject } from 'react'
 import { clsx } from 'clsx'
-import type { PaneSlot, ATermSlot } from '@/lib/utils/slot'
-import type { ATermHandle, ConnectionStatus } from '@/components/a-term.types'
-import type { LayoutMode } from '@/lib/constants/a-term'
-import type { ATermFontSize, ATermScrollback } from '@/lib/hooks/use-a-term-settings'
-import type { PaneLayout } from '@/types/pane-layout'
-import { FileUploadDropzone } from '@/components/FileUploadDropzone'
+import type { RefObject } from 'react'
 import { ATermLayoutRenderer } from '@/components/ATermLayoutRenderer'
-import { UploadErrorToast, UploadProgressToast } from '@/components/UploadStatusToast'
+import type { ATermHandle, ConnectionStatus } from '@/components/a-term.types'
+import { FileUploadDropzone } from '@/components/FileUploadDropzone'
+import {
+  UploadErrorToast,
+  UploadProgressToast,
+} from '@/components/UploadStatusToast'
+import type { LayoutMode } from '@/lib/constants/a-term'
+import type {
+  ATermFontSize,
+  ATermScrollback,
+} from '@/lib/hooks/use-a-term-settings'
+import type { ATermSlot, PaneSlot } from '@/lib/utils/slot'
+import type { PaneLayout } from '@/types/pane-layout'
 
 interface ATermFileSectionProps {
   aTermSlots: (ATermSlot | PaneSlot)[]
@@ -101,7 +107,12 @@ export function ATermFileSection({
 
       {/* Upload status indicators */}
       {isUploading && <UploadProgressToast progress={progress} />}
-      {uploadError && <UploadErrorToast message={uploadError.message} onDismiss={clearUploadError} />}
+      {uploadError && (
+        <UploadErrorToast
+          message={uploadError.message}
+          onDismiss={clearUploadError}
+        />
+      )}
 
       {/* A-Term panels with drag-drop upload */}
       <FileUploadDropzone

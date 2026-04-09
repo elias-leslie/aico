@@ -6,9 +6,7 @@ describe('PaneStatusBadge', () => {
   it('stays hidden for connected panes', () => {
     render(<PaneStatusBadge status="connected" />)
 
-    expect(
-      screen.queryByLabelText(/Pane status:/i),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/Pane status:/i)).not.toBeInTheDocument()
     expect(
       screen.queryByLabelText(/Reconnect A-Term session/i),
     ).not.toBeInTheDocument()

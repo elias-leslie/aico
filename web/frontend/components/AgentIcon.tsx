@@ -18,7 +18,13 @@ interface AgentIconProps {
 /** Claude — abstract angular "C" with an inner spark */
 function ClaudeIcon({ size, color }: { size: number; color: string }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
       <path
         d="M15.5 4.5C13.8 3.5 11.7 3.2 9.8 3.8C6 5 3.8 9 5 12.8C6.2 16.6 10.2 18.8 14 17.6C15.9 17 17.4 15.6 18.2 13.8"
         stroke={color}
@@ -37,7 +43,13 @@ function ClaudeIcon({ size, color }: { size: number; color: string }) {
 /** Codex — stylized code brackets with a cursor line */
 function CodexIcon({ size, color }: { size: number; color: string }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
       <path
         d="M8 6L3 12L8 18"
         stroke={color}
@@ -53,7 +65,10 @@ function CodexIcon({ size, color }: { size: number; color: string }) {
         strokeLinejoin="round"
       />
       <line
-        x1="12" y1="7" x2="12" y2="17"
+        x1="12"
+        y1="7"
+        x2="12"
+        y2="17"
         stroke={color}
         strokeWidth="1.5"
         strokeLinecap="round"
@@ -66,7 +81,13 @@ function CodexIcon({ size, color }: { size: number; color: string }) {
 /** Gemini — twin faceted diamonds */
 function GeminiIcon({ size, color }: { size: number; color: string }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
       <path
         d="M8.5 4L5 12L8.5 20"
         stroke={color}
@@ -83,7 +104,15 @@ function GeminiIcon({ size, color }: { size: number; color: string }) {
       />
       <circle cx="12" cy="8" r="1.5" fill={color} opacity="0.8" />
       <circle cx="12" cy="16" r="1.5" fill={color} opacity="0.8" />
-      <line x1="12" y1="9.5" x2="12" y2="14.5" stroke={color} strokeWidth="1" opacity="0.4" />
+      <line
+        x1="12"
+        y1="9.5"
+        x2="12"
+        y2="14.5"
+        stroke={color}
+        strokeWidth="1"
+        opacity="0.4"
+      />
     </svg>
   )
 }
@@ -91,9 +120,19 @@ function GeminiIcon({ size, color }: { size: number; color: string }) {
 /** OpenCode — open a-term frame with blinking prompt */
 function OpenCodeIcon({ size, color }: { size: number; color: string }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
       <rect
-        x="3" y="4" width="18" height="16" rx="3"
+        x="3"
+        y="4"
+        width="18"
+        height="16"
+        rx="3"
         stroke={color}
         strokeWidth="1.5"
         opacity="0.7"
@@ -106,14 +145,20 @@ function OpenCodeIcon({ size, color }: { size: number; color: string }) {
         strokeLinejoin="round"
       />
       <line
-        x1="11" y1="12" x2="16" y2="12"
+        x1="11"
+        y1="12"
+        x2="16"
+        y2="12"
         stroke={color}
         strokeWidth="2"
         strokeLinecap="round"
         opacity="0.7"
       />
       <line
-        x1="7" y1="16" x2="17" y2="16"
+        x1="7"
+        y1="16"
+        x2="17"
+        y2="16"
         stroke={color}
         strokeWidth="1"
         strokeLinecap="round"
@@ -126,8 +171,21 @@ function OpenCodeIcon({ size, color }: { size: number; color: string }) {
 /** Fallback — generic AI/bot indicator */
 function GenericAgentIcon({ size, color }: { size: number; color: string }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="12" cy="12" r="8" stroke={color} strokeWidth="1.5" opacity="0.5" />
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="8"
+        stroke={color}
+        strokeWidth="1.5"
+        opacity="0.5"
+      />
       <circle cx="9" cy="10.5" r="1.5" fill={color} />
       <circle cx="15" cy="10.5" r="1.5" fill={color} />
       <path
@@ -150,9 +208,9 @@ const ICON_MAP: Record<string, typeof ClaudeIcon> = {
 /** Default brand-suggestive colors per agent slug.
  *  Spectrally distinct on a dark a-term canvas. */
 export const AGENT_DEFAULT_COLORS: Record<string, string> = {
-  claude: '#D4845A',   // Burnt sienna — warm, organic
-  codex: '#22D3EE',    // Electric cyan — digital, code-native
-  gemini: '#A78BFA',   // Soft violet — dual/twin energy
+  claude: '#D4845A', // Burnt sienna — warm, organic
+  codex: '#22D3EE', // Electric cyan — digital, code-native
+  gemini: '#A78BFA', // Soft violet — dual/twin energy
   opencode: '#60A5FA', // Cerulean blue — open sky
 }
 
@@ -173,7 +231,15 @@ export const AgentIcon = memo(function AgentIcon({
 }: AgentIconProps) {
   const IconComponent = ICON_MAP[slug] ?? GenericAgentIcon
   return (
-    <span className={className} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+    <span
+      className={className}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+      }}
+    >
       <IconComponent size={size} color={color} />
     </span>
   )

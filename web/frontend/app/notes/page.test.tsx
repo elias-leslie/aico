@@ -31,12 +31,16 @@ describe('Notes page', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText(/A-Term owns the notes and prompt storage in this mode/i),
+        screen.getByText(
+          /A-Term owns the notes and prompt storage in this mode/i,
+        ),
       ).toBeInTheDocument()
     })
 
     expect(
-      screen.getByText(/Scope options come from A-Term's own project registry/i),
+      screen.getByText(
+        /Scope options come from A-Term's own project registry/i,
+      ),
     ).toBeInTheDocument()
     expect(
       screen.getByText(/Prompt refinement stays off in standalone mode/i),
@@ -54,12 +58,16 @@ describe('Notes page', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText(/SummitFlow now owns the shared notes and prompt library/i),
+        screen.getByText(
+          /SummitFlow now owns the shared notes and prompt library/i,
+        ),
       ).toBeInTheDocument()
     })
 
     expect(
-      screen.getByText(/Scope options come from the companion project catalog/i),
+      screen.getByText(
+        /Scope options come from the companion project catalog/i,
+      ),
     ).toBeInTheDocument()
     expect(
       screen.getByText(/Shared prompts can span projects/i),

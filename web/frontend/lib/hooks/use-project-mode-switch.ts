@@ -4,9 +4,9 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { type MutableRefObject, useCallback } from 'react'
 import { getAgentState } from '../utils/agent-state'
-import { useAgentPolling } from './use-agent-polling'
 import type { ATermPane } from './use-a-term-panes'
 import type { ATermSession } from './use-a-term-sessions'
+import { useAgentPolling } from './use-agent-polling'
 
 /** Pane list response type for query cache access */
 interface PaneListResponse {
@@ -35,10 +35,7 @@ interface UseProjectModeSwitchOptions {
   /** Panes array (new architecture) */
   panes: ATermPane[]
   /** Function to set active mode on a pane */
-  setActiveMode: (
-    paneId: string,
-    mode: string,
-  ) => Promise<ATermPane>
+  setActiveMode: (paneId: string, mode: string) => Promise<ATermPane>
   /** Function to switch agent tool on a pane (kills old tmux, creates new session) */
   switchAgentTool?: (paneId: string, slug: string) => Promise<ATermPane>
 }
@@ -120,7 +117,9 @@ export function useProjectModeSwitch({
 
       if (pane) {
         // Check if we need to swap agent tool sessions (switching between different agent tools)
-        const currentAgentSession = pane.sessions.find((s) => s.mode !== 'shell')
+        const currentAgentSession = pane.sessions.find(
+          (s) => s.mode !== 'shell',
+        )
         const isAgentToAgentSwitch =
           mode !== 'shell' &&
           currentAgentSession &&
@@ -147,7 +146,9 @@ export function useProjectModeSwitch({
         if (mode !== 'shell') {
           const agentState =
             getAgentState(targetSession) ??
-            getAgentState(projectSessions.find((s) => s.id === targetSession.id))
+            getAgentState(
+              projectSessions.find((s) => s.id === targetSession.id),
+            )
           const needsAgentStart =
             agentState !== 'running' && agentState !== 'starting'
 

@@ -25,7 +25,9 @@ function createATermSession(
 ): ATermSession {
   return {
     id: sessionId,
-    name: project ? `Project: ${project.projectId} (${mode.charAt(0).toUpperCase() + mode.slice(1)})` : mode.charAt(0).toUpperCase() + mode.slice(1),
+    name: project
+      ? `Project: ${project.projectId} (${mode.charAt(0).toUpperCase() + mode.slice(1)})`
+      : mode.charAt(0).toUpperCase() + mode.slice(1),
     user_id: null,
     project_id: projectId,
     working_dir: project?.rootPath ?? null,
@@ -60,35 +62,46 @@ export function useResetProjectMutation(
       const project = projectATerms.find((p) => p.projectId === projectId)
       const oldSessionIds = project?.sessions.map((ps) => ps.session.id) ?? []
 
-      return { previousSessions, projectId, oldSessionIds } as ResetMutationContext
+      return {
+        previousSessions,
+        projectId,
+        oldSessionIds,
+      } as ResetMutationContext
     },
     onSuccess: (data, projectId, context) => {
       const project = projectATerms.find((p) => p.projectId === projectId)
 
-      queryClient.setQueryData<ATermSession[]>(
-        ['a-term-sessions'],
-        (old) => {
-          if (!old) return old
+      queryClient.setQueryData<ATermSession[]>(['a-term-sessions'], (old) => {
+        if (!old) return old
 
-          const filtered = old.filter(
-            (s) => !context?.oldSessionIds?.includes(s.id),
+        const filtered = old.filter(
+          (s) => !context?.oldSessionIds?.includes(s.id),
+        )
+
+        const newSessions: ATermSession[] = []
+        if (data.shell_session_id) {
+          newSessions.push(
+            createATermSession(
+              data.shell_session_id,
+              projectId,
+              'shell',
+              project,
+            ),
           )
+        }
+        if (data.agent_session_id) {
+          newSessions.push(
+            createATermSession(
+              data.agent_session_id,
+              projectId,
+              data.agent_mode ?? data.mode,
+              project,
+            ),
+          )
+        }
 
-          const newSessions: ATermSession[] = []
-          if (data.shell_session_id) {
-            newSessions.push(
-              createATermSession(data.shell_session_id, projectId, 'shell', project),
-            )
-          }
-          if (data.agent_session_id) {
-            newSessions.push(
-              createATermSession(data.agent_session_id, projectId, data.agent_mode ?? data.mode, project),
-            )
-          }
-
-          return [...filtered, ...newSessions]
-        },
-      )
+        return [...filtered, ...newSessions]
+      })
 
       if (data.shell_session_id) {
         switchToSessionViaUrl(data.shell_session_id)
@@ -96,10 +109,7 @@ export function useResetProjectMutation(
     },
     onError: (_err, _projectId, context) => {
       if (context?.previousSessions) {
-        queryClient.setQueryData(
-          ['a-term-sessions'],
-          context.previousSessions,
-        )
+        queryClient.setQueryData(['a-term-sessions'], context.previousSessions)
       }
     },
     onSettled: () => {

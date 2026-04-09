@@ -1,10 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type {
-  TranscriptionError,
-  TranscriptionStatus,
-} from '@/lib/voice/types'
+import type { TranscriptionError, TranscriptionStatus } from '@/lib/voice/types'
 import { VoiceDesktopPanel } from './voice/VoiceDesktopPanel'
 import { VoiceMobilePanel } from './voice/VoiceMobilePanel'
 
@@ -67,9 +64,12 @@ export function VoiceTranscriptPanel({
   }, [editedText, onInsert])
 
   // Clean up close animation timer on unmount
-  useEffect(() => () => {
-    if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
-  }, [])
+  useEffect(
+    () => () => {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+    },
+    [],
+  )
 
   const handleClose = useCallback(() => {
     if (isMobile) {

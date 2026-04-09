@@ -6,7 +6,7 @@ import type { ConnectionStatus } from '../ATerm'
 import { ControlBar } from './ControlBar'
 import { FullKeyboard } from './FullKeyboard'
 import { ModifierProvider } from './ModifierContext'
-import type { KeyboardSizePreset, ATermInputHandler } from './types'
+import type { ATermInputHandler, KeyboardSizePreset } from './types'
 
 const MINIMIZED_STORAGE_KEY = 'a-term-keyboard-minimized'
 

@@ -48,7 +48,8 @@ async function fetchModelsFromApi(): Promise<AgentHubCatalogModel[]> {
 
   try {
     const response = await fetch(endpoint)
-    if (!response.ok) throw new Error(`Failed to fetch models: ${response.status}`)
+    if (!response.ok)
+      throw new Error(`Failed to fetch models: ${response.status}`)
     const data: AgentHubModelsResponse = await response.json()
     return data.models || []
   } catch (error) {

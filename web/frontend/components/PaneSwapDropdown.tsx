@@ -2,20 +2,20 @@
 
 import { clsx } from 'clsx'
 import { ArrowLeftRight, ChevronDown } from 'lucide-react'
-import { useCallback, useMemo, useRef, useState, type DragEvent } from 'react'
+import { type DragEvent, useCallback, useMemo, useRef, useState } from 'react'
 import { useClickOutside } from '@/lib/hooks/use-click-outside'
-import {
-  type PaneSlot,
-  getSlotName,
-  getSlotPanelId,
-  type ATermSlot,
-} from '@/lib/utils/slot'
 import {
   clearDraggedPaneSlotId,
   getDraggedPaneSlotId,
   isPaneSwapDragEvent,
   setDraggedPaneSlotId,
 } from '@/lib/utils/pane-swap-dnd'
+import {
+  type ATermSlot,
+  getSlotName,
+  getSlotPanelId,
+  type PaneSlot,
+} from '@/lib/utils/slot'
 
 export interface PaneSwapDropdownProps {
   /** Current slot being displayed */
@@ -84,14 +84,11 @@ export function PaneSwapDropdown({
     [currentId, readDraggedSlotId],
   )
 
-  const handleDragLeave = useCallback(
-    (event: DragEvent<HTMLButtonElement>) => {
-      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-        setIsDragTarget(false)
-      }
-    },
-    [],
-  )
+  const handleDragLeave = useCallback((event: DragEvent<HTMLButtonElement>) => {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+      setIsDragTarget(false)
+    }
+  }, [])
 
   const handleDrop = useCallback(
     (event: DragEvent<HTMLButtonElement>) => {
@@ -134,7 +131,8 @@ export function PaneSwapDropdown({
           'flex items-center gap-1 px-1.5 py-0.5 rounded text-xs truncate max-w-[140px] transition-all duration-150',
           !isMobile && 'cursor-grab active:cursor-grabbing',
           'hover:bg-[var(--term-bg-elevated)]',
-          isDragTarget && 'ring-1 ring-[var(--term-accent)] bg-[var(--term-bg-elevated)]',
+          isDragTarget &&
+            'ring-1 ring-[var(--term-accent)] bg-[var(--term-bg-elevated)]',
         )}
         style={{
           color: 'var(--term-text-primary)',

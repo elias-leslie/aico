@@ -7,7 +7,9 @@ interface HomePageProps {
   }>
 }
 
-function getSingleSearchParam(value: string | string[] | undefined): string | undefined {
+function getSingleSearchParam(
+  value: string | string[] | undefined,
+): string | undefined {
   if (typeof value === 'string' && value.length > 0) {
     return value
   }
@@ -23,7 +25,10 @@ export default async function Home({ searchParams }: HomePageProps) {
   const projectPath = getSingleSearchParam(resolvedSearchParams.dir)
 
   return (
-    <div className="h-dvh flex flex-col" style={{ backgroundColor: 'var(--term-bg-deep)' }}>
+    <div
+      className="h-dvh flex flex-col"
+      style={{ backgroundColor: 'var(--term-bg-deep)' }}
+    >
       <ATermTabs
         projectId={projectId}
         projectPath={projectPath}

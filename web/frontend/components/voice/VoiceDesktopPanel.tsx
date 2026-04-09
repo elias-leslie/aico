@@ -3,8 +3,8 @@
 import { clsx } from 'clsx'
 import { Mic, MicOff, Send, X } from 'lucide-react'
 import type { TranscriptionError, TranscriptionStatus } from '@/lib/voice/types'
-import { ERROR_MESSAGES } from './voiceErrorMessages'
 import styles from '../VoiceTranscriptPanel.module.css'
+import { ERROR_MESSAGES } from './voiceErrorMessages'
 
 interface VoiceDesktopPanelProps {
   editedText: string
@@ -60,11 +60,7 @@ export function VoiceDesktopPanel({
             {isListening && <div className={styles.pulsingDot} />}
             <span className={styles.headerTitle}>VOICE_INPUT</span>
           </div>
-          <button
-            type="button"
-            className={styles.closeBtn}
-            onClick={onClose}
-          >
+          <button type="button" className={styles.closeBtn} onClick={onClose}>
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -102,16 +98,14 @@ export function VoiceDesktopPanel({
             )}
           >
             {status === 'error' && error
-              ? ERROR_MESSAGES[error] ?? 'Unknown error'
+              ? (ERROR_MESSAGES[error] ?? 'Unknown error')
               : isListening
                 ? 'Listening...'
                 : isProcessing
                   ? 'Processing...'
                   : 'Ready'}
           </span>
-          <span className={styles.charCount}>
-            {editedText.length} chars
-          </span>
+          <span className={styles.charCount}>{editedText.length} chars</span>
         </div>
 
         {/* Action bar */}
@@ -127,10 +121,7 @@ export function VoiceDesktopPanel({
 
           <button
             type="button"
-            className={clsx(
-              styles.micBtn,
-              isListening && styles.micBtnActive,
-            )}
+            className={clsx(styles.micBtn, isListening && styles.micBtnActive)}
             onClick={() => {
               if (status === 'error') onReset()
               onToggleListening()

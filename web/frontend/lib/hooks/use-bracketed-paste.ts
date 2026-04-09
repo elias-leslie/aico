@@ -24,7 +24,11 @@ export function useBracketedPaste(
         .then(async () => {
           sendInput(BRACKETED_PASTE_START)
 
-          for (let start = 0; start < normalized.length; start += PASTE_CHUNK_CHARS) {
+          for (
+            let start = 0;
+            start < normalized.length;
+            start += PASTE_CHUNK_CHARS
+          ) {
             sendInput(normalized.slice(start, start + PASTE_CHUNK_CHARS))
             if (start + PASTE_CHUNK_CHARS < normalized.length) {
               await new Promise((resolve) =>

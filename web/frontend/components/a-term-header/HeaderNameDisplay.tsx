@@ -1,9 +1,9 @@
 'use client'
 
-import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { clsx } from 'clsx'
 import { ChevronDown } from 'lucide-react'
-import { getSlotName, type PaneSlot, type ATermSlot } from '@/lib/utils/slot'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { type ATermSlot, getSlotName, type PaneSlot } from '@/lib/utils/slot'
 import { PaneSwapDropdown } from '../PaneSwapDropdown'
 
 interface HeaderNameDisplayProps {
@@ -72,8 +72,13 @@ export const HeaderNameDisplay = memo(function HeaderNameDisplay({
         value={editValue}
         onChange={(e) => setEditValue(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') { e.preventDefault(); commitEdit() }
-          else if (e.key === 'Escape') { e.preventDefault(); cancelEdit() }
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            commitEdit()
+          } else if (e.key === 'Escape') {
+            e.preventDefault()
+            cancelEdit()
+          }
           e.stopPropagation()
         }}
         onBlur={commitEdit}
@@ -82,7 +87,8 @@ export const HeaderNameDisplay = memo(function HeaderNameDisplay({
           color: 'var(--term-text-primary)',
           backgroundColor: 'var(--term-bg-deep)',
           border: '1px solid var(--term-accent)',
-          boxShadow: '0 0 6px var(--term-accent-glow), inset 0 0 4px rgba(0, 255, 159, 0.05)',
+          boxShadow:
+            '0 0 6px var(--term-accent-glow), inset 0 0 4px rgba(0, 255, 159, 0.05)',
           outline: 'none',
           fontFamily: 'var(--font-ui)',
           caretColor: 'var(--term-accent)',

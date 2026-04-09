@@ -60,12 +60,16 @@ const deleteSession = (sessionId: string) =>
   })
 
 const resetSession = (sessionId: string) =>
-  apiFetch<ATermSession>(`/api/a-term/sessions/${sessionId}/reset`, { method: 'POST' })
+  apiFetch<ATermSession>(`/api/a-term/sessions/${sessionId}/reset`, {
+    method: 'POST',
+  })
 
 const resetAllSessions = () =>
   apiFetch<{ reset_count: number }>('/api/a-term/reset-all', { method: 'POST' })
 
-const invalidatePanesAndSessions = (queryClient: ReturnType<typeof useQueryClient>) => {
+const invalidatePanesAndSessions = (
+  queryClient: ReturnType<typeof useQueryClient>,
+) => {
   queryClient.invalidateQueries({ queryKey: ['a-term-panes'] })
   queryClient.invalidateQueries({ queryKey: ['a-term-sessions'] })
 }
@@ -73,7 +77,8 @@ const invalidatePanesAndSessions = (queryClient: ReturnType<typeof useQueryClien
 /** Hook for managing aTerm sessions with backend sync */
 export function useATermSessions() {
   const queryClient = useQueryClient()
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['a-term-sessions'] })
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ['a-term-sessions'] })
 
   const {
     data: sessions = [],
@@ -86,7 +91,10 @@ export function useATermSessions() {
   })
 
   const updateMutation = useMutation({
-    mutationFn: ({ sessionId, ...request }: UpdateSessionRequest & { sessionId: string }) =>
+    mutationFn: ({
+      sessionId,
+      ...request
+    }: UpdateSessionRequest & { sessionId: string }) =>
       updateSession(sessionId, request),
     onSuccess: invalidate,
   })
@@ -102,13 +110,16 @@ export function useATermSessions() {
       await queryClient.cancelQueries({ queryKey: ['a-term-sessions'] })
       return {
         oldSessionId,
-        previousSessions: queryClient.getQueryData<ATermSession[]>(['a-term-sessions']),
+        previousSessions: queryClient.getQueryData<ATermSession[]>([
+          'a-term-sessions',
+        ]),
       }
     },
     onSuccess: (newSession, oldSessionId) => {
-      queryClient.setQueryData<ATermSession[]>(
-        ['a-term-sessions'],
-        (old) => (old ? [...old.filter((s) => s.id !== oldSessionId), newSession] : [newSession]),
+      queryClient.setQueryData<ATermSession[]>(['a-term-sessions'], (old) =>
+        old
+          ? [...old.filter((s) => s.id !== oldSessionId), newSession]
+          : [newSession],
       )
     },
     onError: (_err, _oldSessionId, ctx) =>
@@ -138,7 +149,10 @@ export function useATermSessions() {
     [resetMutation],
   )
 
-  const resetAll = useCallback(() => resetAllMutation.mutateAsync(), [resetAllMutation])
+  const resetAll = useCallback(
+    () => resetAllMutation.mutateAsync(),
+    [resetAllMutation],
+  )
 
   return {
     sessions,

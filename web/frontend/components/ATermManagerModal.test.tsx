@@ -1,5 +1,5 @@
-import type { ComponentProps } from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import type { ComponentProps } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ATermManagerModal } from './ATermManagerModal'
 
@@ -20,7 +20,9 @@ function buildProject(id: string, name: string, rootPath: string) {
   }
 }
 
-function renderModal(overrides: Partial<ComponentProps<typeof ATermManagerModal>> = {}) {
+function renderModal(
+  overrides: Partial<ComponentProps<typeof ATermManagerModal>> = {},
+) {
   return render(
     <ATermManagerModal
       isOpen={true}
@@ -95,10 +97,18 @@ describe('ATermManagerModal', () => {
   it('uses a full-height mobile layout with a shared scroll region', () => {
     renderModal()
 
-    expect(screen.getByTestId('a-term-manager-modal').className).toContain('top-3')
-    expect(screen.getByTestId('a-term-manager-modal').className).toContain('bottom-3')
-    expect(screen.getByTestId('a-term-manager-scroll-region').className).toContain('flex-1')
-    expect(screen.getByTestId('a-term-manager-scroll-region').className).toContain('overflow-y-auto')
+    expect(screen.getByTestId('a-term-manager-modal').className).toContain(
+      'top-3',
+    )
+    expect(screen.getByTestId('a-term-manager-modal').className).toContain(
+      'bottom-3',
+    )
+    expect(
+      screen.getByTestId('a-term-manager-scroll-region').className,
+    ).toContain('flex-1')
+    expect(
+      screen.getByTestId('a-term-manager-scroll-region').className,
+    ).toContain('overflow-y-auto')
   })
 
   it('creates an ad-hoc A-Term from quick start', () => {
@@ -179,9 +189,12 @@ describe('ATermManagerModal', () => {
       ],
     })
 
-    fireEvent.change(screen.getByLabelText('Select existing session for Agent Hub'), {
-      target: { value: 'codex-agent-hub' },
-    })
+    fireEvent.change(
+      screen.getByLabelText('Select existing session for Agent Hub'),
+      {
+        target: { value: 'codex-agent-hub' },
+      },
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Attach' }))
 
     expect(onAttachExternalSession).toHaveBeenCalledWith('codex-agent-hub')
@@ -213,7 +226,10 @@ describe('ATermManagerModal', () => {
     const newButtons = screen.getAllByRole('button', { name: 'New' })
     fireEvent.click(newButtons[0])
 
-    expect(onCreateProjectATerm).toHaveBeenCalledWith('proj-agent-hub', '/workspace/agent-hub')
+    expect(onCreateProjectATerm).toHaveBeenCalledWith(
+      'proj-agent-hub',
+      '/workspace/agent-hub',
+    )
   })
 
   it('shows unmatched attachables in an other sessions fallback section', () => {
@@ -237,7 +253,9 @@ describe('ATermManagerModal', () => {
     })
 
     expect(screen.getByText('Other Attachables')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /codex-unknown/i })).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /codex-unknown/i }),
+    ).toBeInTheDocument()
   })
 
   it('reattaches a detached managed pane from the matching project row', () => {
@@ -311,9 +329,7 @@ describe('ATermManagerModal', () => {
 
     renderModal()
 
-    expect(
-      screen.getByText(/Loading project workspaces/),
-    ).toBeInTheDocument()
+    expect(screen.getByText(/Loading project workspaces/)).toBeInTheDocument()
     expect(screen.getByTestId('a-term-manager-scroll-region')).toHaveAttribute(
       'aria-busy',
       'true',
@@ -353,7 +369,10 @@ describe('ATermManagerModal', () => {
         root_path: '/workspace/my-app',
         name: 'My App',
       })
-      expect(onCreateProjectATerm).toHaveBeenCalledWith('my-app', '/workspace/my-app')
+      expect(onCreateProjectATerm).toHaveBeenCalledWith(
+        'my-app',
+        '/workspace/my-app',
+      )
     })
   })
 

@@ -1,19 +1,19 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
 import type { FitAddon } from '@xterm/addon-fit'
+import { useEffect, useRef } from 'react'
 import type { ATermTheme } from '../constants/a-term'
 import { getATermBufferLines } from '../utils/a-term-buffer'
 import {
   applyATermSearchSelection,
   findATermSearchMatches,
 } from '../utils/a-term-search'
-import { refreshATermViewport } from './a-term-scrolling-utils'
 import { applyMobileATermTouchStyles } from '../utils/mobile-a-term-touch'
 import {
   shouldDeferScrollbackOverlayWrite,
   shouldFlushPendingScrollbackOverlayWrite,
 } from '../utils/scrollback-overlay-update'
+import { refreshATermViewport } from './a-term-scrolling-utils'
 
 type XtermATerm = InstanceType<typeof import('@xterm/xterm').Terminal>
 
@@ -101,7 +101,12 @@ export function useScrollbackATerm({
     term.reset()
     term.write(lns.join('\r\n'), () => {
       term.scrollToBottom()
-      if (applyInitialOverlayViewportScroll(term, pendingInitialScrollLineDeltaRef.current)) {
+      if (
+        applyInitialOverlayViewportScroll(
+          term,
+          pendingInitialScrollLineDeltaRef.current,
+        )
+      ) {
         pendingInitialScrollLineDeltaRef.current = 0
       }
       hasScrolledRef.current = true
@@ -169,7 +174,10 @@ export function useScrollbackATerm({
         fitAddonRef.current = fit
         if (pendingLinesRef.current.length > 0) {
           writeLines.current(term, pendingLinesRef.current)
-        } else if (currentSearchQueryRef.current && currentSearchIndexRef.current >= 0) {
+        } else if (
+          currentSearchQueryRef.current &&
+          currentSearchIndexRef.current >= 0
+        ) {
           applyOverlaySearchSelection(
             term,
             currentSearchQueryRef.current,

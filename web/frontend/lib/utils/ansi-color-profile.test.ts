@@ -13,7 +13,9 @@ describe('profileAnsiColors', () => {
   })
 
   it('counts 256-color escapes', () => {
-    const profile = profileAnsiColors('\x1b[38;5;196mred\x1b[48;5;21mblue\x1b[0m')
+    const profile = profileAnsiColors(
+      '\x1b[38;5;196mred\x1b[48;5;21mblue\x1b[0m',
+    )
 
     expect(profile.color256).toBe(2)
     expect(profile.dominantMode).toBe('256')

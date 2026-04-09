@@ -94,7 +94,8 @@
   animation: pulse 1.5s ease-in-out infinite;
 }
 @keyframes pulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
     box-shadow: 0 0 0 0 color-mix(in srgb, var(--term-error) 60%, transparent);
   }
@@ -285,7 +286,12 @@
   transform: translateX(-50%);
   width: 60%;
   height: 1px;
-  background: linear-gradient(90deg, transparent, var(--term-accent), transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--term-accent),
+    transparent
+  );
   box-shadow: 0 0 20px color-mix(in srgb, var(--term-accent) 50%, transparent);
 }
 
@@ -294,7 +300,8 @@
   animation: pulseRing 1.5s ease-in-out infinite;
 }
 @keyframes pulseRing {
-  0%, 100% {
+  0%,
+  100% {
     box-shadow: 0 0 0 0 color-mix(in srgb, var(--term-error) 50%, transparent);
   }
   50% {

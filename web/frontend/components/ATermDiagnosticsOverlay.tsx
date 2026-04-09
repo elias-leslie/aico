@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import type {
-  DiagnosticEntry,
   DiagnosticCounters,
+  DiagnosticEntry,
 } from '@/lib/hooks/use-a-term-diagnostics'
 import type { AnsiColorProfile } from '@/lib/utils/ansi-color-profile'
 import { formatAnsiColorProfile } from '@/lib/utils/ansi-color-profile'
@@ -82,7 +82,10 @@ export function ATermDiagnosticsOverlay({
 
   const details = useMemo(() => {
     const lastLive = findLatest(snapshot.log, 'live_write_color_profile')
-    const lastSnapshot = findLatest(snapshot.log, 'scrollback_sync_color_profile')
+    const lastSnapshot = findLatest(
+      snapshot.log,
+      'scrollback_sync_color_profile',
+    )
     const lastApply = findLatestAny(snapshot.log, [
       'snapshot_full_reset_applied',
       'snapshot_tail_patch_applied',
@@ -108,23 +111,21 @@ export function ATermDiagnosticsOverlay({
         fontFamily: "'JetBrains Mono', monospace",
       }}
     >
-      <div>diag theme={themeId} mode={sessionMode ?? 'shell'}</div>
+      <div>
+        diag theme={themeId} mode={sessionMode ?? 'shell'}
+      </div>
       <div>
         writes={snapshot.frontend.writesFlushed}/
         {snapshot.frontend.writesEnqueued} snapshots=
-        {snapshot.frontend.snapshotReceived}/
-        {snapshot.frontend.snapshotApplied}
+        {snapshot.frontend.snapshotReceived}/{snapshot.frontend.snapshotApplied}
       </div>
-      <div>
-        reset={snapshot.frontend.fullResetApplied}
-      </div>
-      <div>
-        skip(prompt)={snapshot.frontend.snapshotSkippedPromptInput}
-      </div>
+      <div>reset={snapshot.frontend.fullResetApplied}</div>
+      <div>skip(prompt)={snapshot.frontend.snapshotSkippedPromptInput}</div>
       <div>live {formatProfileFromEntry(details.lastLive)}</div>
       <div>snap {formatProfileFromEntry(details.lastSnapshot)}</div>
       <div>
-        last={details.lastApply?.event ?? 'none'} {formatEventAge(details.lastApply)}
+        last={details.lastApply?.event ?? 'none'}{' '}
+        {formatEventAge(details.lastApply)}
       </div>
     </div>
   )

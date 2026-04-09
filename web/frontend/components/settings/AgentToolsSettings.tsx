@@ -2,11 +2,8 @@
 
 import { Plus } from 'lucide-react'
 import { useCallback, useState } from 'react'
-import {
-  type AgentTool,
-  useAgentTools,
-} from '@/lib/hooks/use-agent-tools'
 import { ConfirmationDialog } from '@/components/ConfirmationDialog'
+import { type AgentTool, useAgentTools } from '@/lib/hooks/use-agent-tools'
 import { EMPTY_FORM, ToolForm, type ToolFormData } from './ToolForm'
 import { ToolRow } from './ToolRow'
 
@@ -31,7 +28,9 @@ export function AgentToolsSettings() {
         setFeedback(null)
         setShowAddForm(false)
       } catch (err) {
-        setFeedback(err instanceof Error ? err.message : 'Failed to create tool')
+        setFeedback(
+          err instanceof Error ? err.message : 'Failed to create tool',
+        )
       }
     },
     [create],
@@ -51,7 +50,9 @@ export function AgentToolsSettings() {
         setFeedback(null)
         setEditingTool(null)
       } catch (err) {
-        setFeedback(err instanceof Error ? err.message : 'Failed to update tool')
+        setFeedback(
+          err instanceof Error ? err.message : 'Failed to update tool',
+        )
       }
     },
     [editingTool, update],
@@ -75,18 +76,26 @@ export function AgentToolsSettings() {
         await update(tool.id, { is_default: true })
         setFeedback(null)
       } catch (err) {
-        setFeedback(err instanceof Error ? err.message : 'Failed to update default tool')
+        setFeedback(
+          err instanceof Error ? err.message : 'Failed to update default tool',
+        )
       }
     },
     [update],
   )
 
   return (
-    <div className="mt-4 pt-4" style={{ borderTop: '1px solid var(--term-border)' }}>
+    <div
+      className="mt-4 pt-4"
+      style={{ borderTop: '1px solid var(--term-border)' }}
+    >
       <div className="flex items-center justify-between mb-2">
         <span
           className="text-[10px] font-medium tracking-wider"
-          style={{ color: 'var(--term-text-muted)', fontFamily: 'var(--font-mono)' }}
+          style={{
+            color: 'var(--term-text-muted)',
+            fontFamily: 'var(--font-mono)',
+          }}
         >
           AGENT TOOLS
         </span>
@@ -94,7 +103,10 @@ export function AgentToolsSettings() {
           <button
             onClick={() => setShowAddForm(true)}
             className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] hover:bg-white/5 transition-colors"
-            style={{ color: 'var(--term-accent)', fontFamily: 'var(--font-mono)' }}
+            style={{
+              color: 'var(--term-accent)',
+              fontFamily: 'var(--font-mono)',
+            }}
           >
             <Plus size={10} />
             Add
@@ -105,7 +117,10 @@ export function AgentToolsSettings() {
       {feedback && (
         <div
           className="mb-2 rounded px-2 py-1.5 text-[10px]"
-          style={{ backgroundColor: 'var(--term-error-muted)', color: 'var(--term-error-text)' }}
+          style={{
+            backgroundColor: 'var(--term-error-muted)',
+            color: 'var(--term-error-text)',
+          }}
           role="alert"
         >
           {feedback}
@@ -150,7 +165,10 @@ export function AgentToolsSettings() {
         )}
 
         {agentTools.length === 0 && !showAddForm && (
-          <div className="text-[10px] text-center py-2" style={{ color: 'var(--term-text-muted)' }}>
+          <div
+            className="text-[10px] text-center py-2"
+            style={{ color: 'var(--term-text-muted)' }}
+          >
             No agent tools configured
           </div>
         )}

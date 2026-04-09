@@ -1,6 +1,11 @@
-import type { ATermSession } from '@/lib/hooks/use-a-term-sessions'
-import { getSlotPanelId, type PaneSlot, panesToSlots, type ATermSlot } from '@/lib/utils/slot'
 import type { ATermPane } from '@/lib/hooks/a-term-panes-types'
+import type { ATermSession } from '@/lib/hooks/use-a-term-sessions'
+import {
+  type ATermSlot,
+  getSlotPanelId,
+  type PaneSlot,
+  panesToSlots,
+} from '@/lib/utils/slot'
 
 /**
  * Get active session's project_id for per-project settings
@@ -24,7 +29,9 @@ export function getPanesToSlots(panes: ATermPane[]): PaneSlot[] {
 /**
  * Get ordered slot IDs from aTerm slots
  */
-export function getOrderedIds(aTermSlots: Array<ATermSlot | PaneSlot>): string[] {
+export function getOrderedIds(
+  aTermSlots: Array<ATermSlot | PaneSlot>,
+): string[] {
   return aTermSlots.map((slot) => getSlotPanelId(slot))
 }
 
@@ -47,8 +54,10 @@ export function orderATermSlots(
   const orderIndex = new Map(orderedIds.map((id, index) => [id, index]))
 
   return [...aTermSlots].sort((slotA, slotB) => {
-    const indexA = orderIndex.get(getSlotPanelId(slotA)) ?? Number.MAX_SAFE_INTEGER
-    const indexB = orderIndex.get(getSlotPanelId(slotB)) ?? Number.MAX_SAFE_INTEGER
+    const indexA =
+      orderIndex.get(getSlotPanelId(slotA)) ?? Number.MAX_SAFE_INTEGER
+    const indexB =
+      orderIndex.get(getSlotPanelId(slotB)) ?? Number.MAX_SAFE_INTEGER
     return indexA - indexB
   })
 }

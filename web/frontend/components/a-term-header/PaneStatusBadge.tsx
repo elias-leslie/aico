@@ -2,7 +2,11 @@
 
 import type { ConnectionStatus } from '@/components/a-term.types'
 
-const RECONNECTABLE: Set<ConnectionStatus> = new Set(['disconnected', 'error', 'timeout'])
+const RECONNECTABLE: Set<ConnectionStatus> = new Set([
+  'disconnected',
+  'error',
+  'timeout',
+])
 
 const STATUS_META: Record<
   ConnectionStatus,
@@ -70,7 +74,9 @@ export function PaneStatusBadge({ status, onReconnect }: PaneStatusBadgeProps) {
         className="h-1.5 w-1.5 rounded-full"
         style={{
           backgroundColor: meta.tone,
-          ...(canReconnect ? { animation: 'agent-breathe 1.5s ease-in-out infinite' } : {}),
+          ...(canReconnect
+            ? { animation: 'agent-breathe 1.5s ease-in-out infinite' }
+            : {}),
         }}
       />
       <span>{canReconnect ? 'Reconnect' : meta.label}</span>

@@ -52,7 +52,10 @@ interface UploadErrorToastProps {
   onDismiss?: () => void
 }
 
-export function UploadErrorToast({ message, onDismiss }: UploadErrorToastProps) {
+export function UploadErrorToast({
+  message,
+  onDismiss,
+}: UploadErrorToastProps) {
   return (
     <div
       data-testid="upload-error-toast"

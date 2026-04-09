@@ -2,21 +2,21 @@
 
 import { useMemo, useRef } from 'react'
 import { MAX_PANES } from '@/lib/constants/a-term'
-import { usePaneLayoutGroups } from '@/lib/hooks/use-pane-layout-groups'
-import type { ResizablePaneLayoutProps } from '@/types/pane-layout'
-import { getSlotPanelId } from '@/lib/utils/slot'
 import {
+  useLayoutChangeHandler,
   useMinSizeCalculator,
   usePaneRenderer,
-  useLayoutChangeHandler,
 } from '@/lib/hooks/pane-layout'
+import { usePaneLayoutGroups } from '@/lib/hooks/use-pane-layout-groups'
+import { getSlotPanelId } from '@/lib/utils/slot'
+import type { ResizablePaneLayoutProps } from '@/types/pane-layout'
 import {
   EmptyPaneState,
-  LinearPaneLayout,
-  SinglePaneLayout,
   FourPaneLayout,
-  WidePaneLayout,
+  LinearPaneLayout,
   MainSidePaneLayout,
+  SinglePaneLayout,
+  WidePaneLayout,
 } from './pane-layouts'
 
 /**
@@ -59,23 +59,23 @@ export function ResizablePaneLayout(props: ResizablePaneLayoutProps) {
     [displaySlots],
   )
   const getStoredGroupLayout = useMemo(
-    () =>
-      (groupId: string, panelCountForGroup: number, defaultSize: number) =>
-        getGroupSizes(groupId, panelCountForGroup, defaultSize),
+    () => (groupId: string, panelCountForGroup: number, defaultSize: number) =>
+      getGroupSizes(groupId, panelCountForGroup, defaultSize),
     [getGroupSizes],
   )
   const createGroupLayoutChangeHandler = useMemo(
     () =>
-      (
-        groupId: string,
-        panelIds: string[],
-        persistPaneLayouts = false,
-      ) =>
+      (groupId: string, panelIds: string[], persistPaneLayouts = false) =>
       (layout: Record<string, number>) => {
-        const sizes = panelIds.map((panelId) => layout[panelId] ?? 100 / panelIds.length)
+        const sizes = panelIds.map(
+          (panelId) => layout[panelId] ?? 100 / panelIds.length,
+        )
         updateGroupSizes(groupId, sizes)
 
-        if (persistPaneLayouts && panelIds.every((panelId) => displaySlotPanelIds.has(panelId))) {
+        if (
+          persistPaneLayouts &&
+          panelIds.every((panelId) => displaySlotPanelIds.has(panelId))
+        ) {
           handleLayoutChange(layout)
         }
       },
@@ -184,4 +184,4 @@ export function ResizablePaneLayout(props: ResizablePaneLayoutProps) {
   )
 }
 
-export type { ResizablePaneLayoutProps, PaneLayout } from '@/types/pane-layout'
+export type { PaneLayout, ResizablePaneLayoutProps } from '@/types/pane-layout'

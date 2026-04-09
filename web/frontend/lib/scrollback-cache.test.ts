@@ -24,7 +24,10 @@ describe('ScrollbackLineCache', () => {
     cache.markRequestPending(0, 100)
     expect(cache.isRequestPending(0, 100)).toBe(true)
     // Setting lines clears the pending request
-    cache.setLines(0, Array.from({ length: 100 }, (_, i) => `line${i}`))
+    cache.setLines(
+      0,
+      Array.from({ length: 100 }, (_, i) => `line${i}`),
+    )
     expect(cache.isRequestPending(0, 100)).toBe(false)
   })
 

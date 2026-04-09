@@ -8,8 +8,7 @@ export const MOBILE_A_TERM_TOUCH_SURFACE_SELECTORS = [
   '.xterm-viewport',
 ] as const
 
-export const MOBILE_A_TERM_VIEWPORT_CLASS =
-  'mobile-a-term-viewport'
+export const MOBILE_A_TERM_VIEWPORT_CLASS = 'mobile-a-term-viewport'
 
 /**
  * Disable native touch gesture handling so JavaScript controls all scrolling.

@@ -12,7 +12,6 @@ describe('getMobileATermTouchStyles', () => {
       touchAction: 'none',
     })
   })
-
 })
 
 describe('applyMobileATermTouchStyles', () => {
@@ -33,11 +32,9 @@ describe('applyMobileATermTouchStyles', () => {
     expect(screen.style.touchAction).toBe('none')
     expect(viewport.style.overscrollBehavior).toBe('none')
     expect(viewport.style.touchAction).toBe('none')
-    expect(
-      viewport.style.getPropertyValue('-webkit-overflow-scrolling'),
-    ).toBe('touch')
-    expect(
-      viewport.classList.contains(MOBILE_A_TERM_VIEWPORT_CLASS),
-    ).toBe(true)
+    expect(viewport.style.getPropertyValue('-webkit-overflow-scrolling')).toBe(
+      'touch',
+    )
+    expect(viewport.classList.contains(MOBILE_A_TERM_VIEWPORT_CLASS)).toBe(true)
   })
 })

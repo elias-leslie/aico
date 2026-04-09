@@ -6,7 +6,9 @@ export function isAgentHubConfigured(): boolean {
   return Boolean(process.env.NEXT_PUBLIC_AGENT_HUB_URL)
 }
 
-export function getAgentHubProxyUrl(path: 'models' | 'complete'): string | null {
+export function getAgentHubProxyUrl(
+  path: 'models' | 'complete',
+): string | null {
   if (!isAgentHubConfigured()) {
     return null
   }

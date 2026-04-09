@@ -1,5 +1,7 @@
 import { renderHook } from '@testing-library/react'
+
 type XtermATerm = InstanceType<typeof import('@xterm/xterm').Terminal>
+
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   getTouchScrollEffectiveCellHeight,
@@ -276,7 +278,8 @@ describe('useATermScrolling', () => {
       }),
     )
 
-    const { wheelCleanup, touchCleanup } = result.current.setupScrolling(container)
+    const { wheelCleanup, touchCleanup } =
+      result.current.setupScrolling(container)
 
     container.dispatchEvent(createTouchEvent('touchstart', 200))
     container.dispatchEvent(createTouchEvent('touchmove', 260))
@@ -314,7 +317,8 @@ describe('useATermScrolling', () => {
       }),
     )
 
-    const { wheelCleanup, touchCleanup } = result.current.setupScrolling(container)
+    const { wheelCleanup, touchCleanup } =
+      result.current.setupScrolling(container)
 
     container.dispatchEvent(createTouchEvent('touchstart', 260))
     container.dispatchEvent(createTouchEvent('touchmove', 200))

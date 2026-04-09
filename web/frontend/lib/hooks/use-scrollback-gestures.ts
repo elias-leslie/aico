@@ -1,14 +1,14 @@
 'use client'
 
-import { useEffect, useEffectEvent } from 'react'
 import type { RefObject } from 'react'
+import { useEffect, useEffectEvent } from 'react'
+import { getScrollbackOverlayWheelAction } from '../utils/scrollback-overlay-scroll'
+import { shouldDismissScrollbackOverlayTouchGesture } from '../utils/scrollback-overlay-touch'
 import {
   getTouchScrollEffectiveCellHeight,
   getTouchScrollLineDelta,
   refreshATermViewport,
 } from './a-term-scrolling-utils'
-import { getScrollbackOverlayWheelAction } from '../utils/scrollback-overlay-scroll'
-import { shouldDismissScrollbackOverlayTouchGesture } from '../utils/scrollback-overlay-touch'
 import { isATermBufferAtBottom } from './use-scrollback-a-term'
 
 type XtermATerm = InstanceType<typeof import('@xterm/xterm').Terminal>
@@ -107,7 +107,9 @@ export function useScrollbackGestures({
       lastTouchY = currentY
 
       const screen = el.querySelector<HTMLElement>('.xterm-screen')
-      const cellHeight = screen ? screen.clientHeight / Math.max(term.rows, 1) : 0
+      const cellHeight = screen
+        ? screen.clientHeight / Math.max(term.rows, 1)
+        : 0
       const lineDelta = getTouchScrollLineDelta(pendingScrollDeltaY, cellHeight)
       if (lineDelta === 0) return
 
@@ -115,7 +117,8 @@ export function useScrollbackGestures({
       term.scrollLines(lineDelta)
       refreshATermViewport(term)
       flush?.(term)
-      pendingScrollDeltaY -= lineDelta * getTouchScrollEffectiveCellHeight(cellHeight)
+      pendingScrollDeltaY -=
+        lineDelta * getTouchScrollEffectiveCellHeight(cellHeight)
 
       if (!gestureLeftBottom && !isATermBufferAtBottom(term)) {
         gestureLeftBottom = true
@@ -139,10 +142,22 @@ export function useScrollbackGestures({
       resetGesture()
     }
 
-    el.addEventListener('touchstart', handleTouchStart, { passive: true, capture: true })
-    el.addEventListener('touchmove', handleTouchMove, { passive: false, capture: true })
-    el.addEventListener('touchend', handleTouchEnd, { passive: true, capture: true })
-    el.addEventListener('touchcancel', handleTouchEnd, { passive: true, capture: true })
+    el.addEventListener('touchstart', handleTouchStart, {
+      passive: true,
+      capture: true,
+    })
+    el.addEventListener('touchmove', handleTouchMove, {
+      passive: false,
+      capture: true,
+    })
+    el.addEventListener('touchend', handleTouchEnd, {
+      passive: true,
+      capture: true,
+    })
+    el.addEventListener('touchcancel', handleTouchEnd, {
+      passive: true,
+      capture: true,
+    })
     return () => {
       el.removeEventListener('touchstart', handleTouchStart, { capture: true })
       el.removeEventListener('touchmove', handleTouchMove, { capture: true })

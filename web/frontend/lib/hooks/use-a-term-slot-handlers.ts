@@ -1,16 +1,22 @@
-import { type MutableRefObject, useCallback, useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import type { ATermMode } from '@/components/ModeToggle'
+import {
+  type MutableRefObject,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
 import type { ATermHandle } from '@/components/ATerm'
+import type { ATermMode } from '@/components/ModeToggle'
 import type {
-  DeleteSessionResult,
   ATermSession,
+  DeleteSessionResult,
 } from '@/lib/hooks/use-a-term-sessions'
 import {
+  type ATermSlot,
   getSlotSessionId,
   isPaneSlot,
   type PaneSlot,
-  type ATermSlot,
 } from '@/lib/utils/slot'
 
 interface UseATermSlotHandlersParams {
@@ -58,23 +64,31 @@ export function useATermSlotHandlers({
   const [isModeSwitching, setIsModeSwitching] = useState(false)
   // Ref to avoid stale closure on sessions in handleSlotModeSwitch
   const sessionsRef = useRef(sessions)
-  useEffect(() => { sessionsRef.current = sessions }, [sessions])
+  useEffect(() => {
+    sessionsRef.current = sessions
+  }, [sessions])
 
   const findSession = useCallback(
     (sessionId: string | null | undefined) =>
-      sessionId ? sessionsRef.current.find((session) => session.id === sessionId) ?? null : null,
+      sessionId
+        ? (sessionsRef.current.find((session) => session.id === sessionId) ??
+          null)
+        : null,
     [],
   )
-  const findNextVisibleSessionId = useCallback((currentSlot: ATermSlot | PaneSlot) => {
-    for (const slot of visibleSlots) {
-      if (slot === currentSlot) continue
-      const sessionId = getSlotSessionId(slot)
-      if (sessionId) {
-        return sessionId
+  const findNextVisibleSessionId = useCallback(
+    (currentSlot: ATermSlot | PaneSlot) => {
+      for (const slot of visibleSlots) {
+        if (slot === currentSlot) continue
+        const sessionId = getSlotSessionId(slot)
+        if (sessionId) {
+          return sessionId
+        }
       }
-    }
-    return null
-  }, [visibleSlots])
+      return null
+    },
+    [visibleSlots],
+  )
   // Handler for switching to a slot's aTerm
   const handleSlotSwitch = useCallback(
     (slot: ATermSlot) => {
@@ -90,7 +104,8 @@ export function useATermSlotHandlers({
   // Resets ONLY the visible session (shell OR claude, not both)
   const handleSlotReset = useCallback(
     async (slot: ATermSlot) => {
-      const sessionId = slot.type === 'project' ? slot.activeSessionId : slot.sessionId
+      const sessionId =
+        slot.type === 'project' ? slot.activeSessionId : slot.sessionId
       if (!sessionId) return
       if (findSession(sessionId)?.is_external) return
 

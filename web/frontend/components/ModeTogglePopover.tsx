@@ -25,12 +25,19 @@ export function ModeTogglePopover({
 
   useEffect(() => {
     const rect = buttonRef.current?.getBoundingClientRect()
-    setPosition(rect ? { top: rect.bottom + 4, left: rect.left } : { top: 0, left: 0 })
+    setPosition(
+      rect ? { top: rect.bottom + 4, left: rect.left } : { top: 0, left: 0 },
+    )
   }, [buttonRef])
 
   return (
     <>
-      <div className="fixed inset-0 z-[9999]" onClick={onClose} role="presentation" aria-hidden="true" />
+      <div
+        className="fixed inset-0 z-[9999]"
+        onClick={onClose}
+        role="presentation"
+        aria-hidden="true"
+      />
       <div
         role="menu"
         aria-label="Select A-Term mode"
@@ -50,7 +57,10 @@ export function ModeTogglePopover({
           onClick={() => onSelectMode('shell')}
           className="flex items-center gap-2.5 w-full px-3 py-2.5 text-left text-xs hover:bg-[var(--term-bg-surface)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--term-accent)]"
           style={{
-            color: value === 'shell' ? 'var(--term-accent)' : 'var(--term-text-muted)',
+            color:
+              value === 'shell'
+                ? 'var(--term-accent)'
+                : 'var(--term-text-muted)',
           }}
         >
           <PanelsTopLeft size={14} />
@@ -70,9 +80,19 @@ export function ModeTogglePopover({
                   : 'var(--term-text-muted)',
             }}
           >
-            <AgentIcon slug={tool.slug} size={14} color={value === tool.slug ? getAgentColor(tool.slug, tool.color) : 'var(--term-text-muted)'} />
+            <AgentIcon
+              slug={tool.slug}
+              size={14}
+              color={
+                value === tool.slug
+                  ? getAgentColor(tool.slug, tool.color)
+                  : 'var(--term-text-muted)'
+              }
+            />
             <span style={{ fontWeight: 500 }}>{tool.name}</span>
-            {value === tool.slug && <span className="ml-auto text-[10px]">●</span>}
+            {value === tool.slug && (
+              <span className="ml-auto text-[10px]">●</span>
+            )}
           </button>
         ))}
       </div>

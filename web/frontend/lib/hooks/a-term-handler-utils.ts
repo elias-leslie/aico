@@ -58,7 +58,9 @@ export function shouldStartAgent(
   return (
     pane.active_mode !== 'shell' &&
     targetSession.is_alive &&
-    !sessions.find((s) => s.id === targetSession.id && getAgentState(s) === 'running')
+    !sessions.find(
+      (s) => s.id === targetSession.id && getAgentState(s) === 'running',
+    )
   )
 }
 

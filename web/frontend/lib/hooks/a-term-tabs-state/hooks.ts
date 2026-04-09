@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo } from 'react'
-import type { LayoutMode } from '@/lib/constants/a-term'
 import type { ConnectionStatus } from '@/components/ATerm'
-import type { PaneSlot, ATermSlot } from '@/lib/utils/slot'
+import type { LayoutMode } from '@/lib/constants/a-term'
+import type { ATermSlot, PaneSlot } from '@/lib/utils/slot'
 import { getSlotPanelId, isPaneSlot } from '@/lib/utils/slot'
 
 /**

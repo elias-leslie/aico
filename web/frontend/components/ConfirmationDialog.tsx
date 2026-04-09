@@ -36,7 +36,12 @@ export function ConfirmationDialog({
     variant === 'danger' ? 'var(--term-error)' : 'var(--term-warning, #f59e0b)'
 
   return (
-    <Dialog.Root open={isOpen} onOpenChange={(open) => { if (!open) onCancel() }}>
+    <Dialog.Root
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) onCancel()
+      }}
+    >
       <Dialog.Portal>
         <Dialog.Overlay
           className="fixed inset-0 z-[10000]"
@@ -125,7 +130,8 @@ export function ConfirmationDialog({
                   fontFamily: 'var(--font-mono)',
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--term-bg-surface)'
+                  e.currentTarget.style.backgroundColor =
+                    'var(--term-bg-surface)'
                   e.currentTarget.style.color = 'var(--term-text-primary)'
                 }}
                 onMouseLeave={(e) => {

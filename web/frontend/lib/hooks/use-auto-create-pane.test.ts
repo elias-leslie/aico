@@ -1,5 +1,5 @@
 import { renderHook, waitFor } from '@testing-library/react'
-import { describe, expect, it, beforeEach, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAutoCreatePane } from './use-auto-create-pane'
 
 const mockFetchPaneCount = vi.fn()
@@ -32,11 +32,14 @@ describe('useAutoCreatePane', () => {
     expect(createAdHocPane).not.toHaveBeenCalled()
     expect(switchToSession).not.toHaveBeenCalled()
 
-    await waitFor(() => {
-      expect(mockFetchPaneCount).not.toHaveBeenCalled()
-      expect(createAdHocPane).not.toHaveBeenCalled()
-      expect(switchToSession).not.toHaveBeenCalled()
-    }, { timeout: 100 })
+    await waitFor(
+      () => {
+        expect(mockFetchPaneCount).not.toHaveBeenCalled()
+        expect(createAdHocPane).not.toHaveBeenCalled()
+        expect(switchToSession).not.toHaveBeenCalled()
+      },
+      { timeout: 100 },
+    )
   })
 
   it('auto-creates exactly one ad-hoc pane after an empty initial load is confirmed', async () => {
@@ -82,9 +85,12 @@ describe('useAutoCreatePane', () => {
       }),
     )
 
-    await waitFor(() => {
-      expect(createAdHocPane).not.toHaveBeenCalled()
-    }, { timeout: 100 })
+    await waitFor(
+      () => {
+        expect(createAdHocPane).not.toHaveBeenCalled()
+      },
+      { timeout: 100 },
+    )
 
     expect(mockFetchPaneCount).not.toHaveBeenCalled()
     expect(switchToSession).not.toHaveBeenCalled()

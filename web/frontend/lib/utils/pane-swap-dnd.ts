@@ -15,9 +15,7 @@ export function setDraggedPaneSlotId(
   event.dataTransfer.setData(PANE_SWAP_FALLBACK_MIME_TYPE, slotId)
 }
 
-export function isPaneSwapDragEvent(
-  event: DragEvent<HTMLElement>,
-): boolean {
+export function isPaneSwapDragEvent(event: DragEvent<HTMLElement>): boolean {
   const types = Array.from(event.dataTransfer?.types ?? [])
   return (
     !!activeDraggedPaneSlotId ||
@@ -26,11 +24,11 @@ export function isPaneSwapDragEvent(
   )
 }
 
-export function getDraggedPaneSlotId(
-  event: DragEvent<HTMLElement>,
-): string {
-  const customSlotId = event.dataTransfer?.getData(PANE_SWAP_DRAG_MIME_TYPE) ?? ''
-  const fallbackSlotId = event.dataTransfer?.getData(PANE_SWAP_FALLBACK_MIME_TYPE) ?? ''
+export function getDraggedPaneSlotId(event: DragEvent<HTMLElement>): string {
+  const customSlotId =
+    event.dataTransfer?.getData(PANE_SWAP_DRAG_MIME_TYPE) ?? ''
+  const fallbackSlotId =
+    event.dataTransfer?.getData(PANE_SWAP_FALLBACK_MIME_TYPE) ?? ''
 
   return customSlotId || fallbackSlotId || activeDraggedPaneSlotId || ''
 }

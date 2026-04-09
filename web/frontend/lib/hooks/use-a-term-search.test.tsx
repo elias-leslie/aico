@@ -1,5 +1,5 @@
-import type { RefObject } from 'react'
 import { act, renderHook } from '@testing-library/react'
+import type { RefObject } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { useATermSearch } from './use-a-term-search'
 
@@ -29,16 +29,19 @@ describe('useATermSearch', () => {
     const getOverlayLines = () => overlayLines
     const aTermRef = {
       current: createMockTerm(['current context', 'project flag']),
-    } as unknown as RefObject<InstanceType<typeof import('@xterm/xterm').Terminal> | null>
+    } as unknown as RefObject<InstanceType<
+      typeof import('@xterm/xterm').Terminal
+    > | null>
 
     const { result, rerender } = renderHook(
-      ({ overlaySearchVersion }: { overlaySearchVersion: number }) => useATermSearch({
-        aTermRef,
-        sessionMode: 'agent-codex',
-        activateOverlay,
-        getOverlayLines,
-        overlaySearchVersion,
-      }),
+      ({ overlaySearchVersion }: { overlaySearchVersion: number }) =>
+        useATermSearch({
+          aTermRef,
+          sessionMode: 'agent-codex',
+          activateOverlay,
+          getOverlayLines,
+          overlaySearchVersion,
+        }),
       {
         initialProps: {
           overlaySearchVersion: 0,

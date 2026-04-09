@@ -16,7 +16,9 @@ function isFileDragEvent(event: React.DragEvent): boolean {
     return true
   }
 
-  return Array.from(event.dataTransfer?.items ?? []).some((item) => item.kind === 'file')
+  return Array.from(event.dataTransfer?.items ?? []).some(
+    (item) => item.kind === 'file',
+  )
 }
 
 /**

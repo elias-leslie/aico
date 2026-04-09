@@ -3,17 +3,17 @@
 import { NotesButton, NotesProvider } from '@summitflow/notes-ui'
 import { clsx } from 'clsx'
 import { FolderOpen, GripVertical } from 'lucide-react'
-import { memo, useCallback, useMemo, useState, type DragEvent } from 'react'
-import { useAgentTools } from '@/lib/hooks/use-agent-tools'
-import { useATermPanes } from '@/lib/hooks/use-a-term-panes'
+import { type DragEvent, memo, useCallback, useMemo, useState } from 'react'
 import { LayoutModeButtons } from '@/components/LayoutModeButton'
-import { getSlotName, getSlotPanelId, isPaneSlot } from '@/lib/utils/slot'
+import { useATermPanes } from '@/lib/hooks/use-a-term-panes'
+import { useAgentTools } from '@/lib/hooks/use-agent-tools'
 import {
   clearDraggedPaneSlotId,
   getDraggedPaneSlotId,
   isPaneSwapDragEvent,
   setDraggedPaneSlotId,
 } from '@/lib/utils/pane-swap-dnd'
+import { getSlotName, getSlotPanelId, isPaneSlot } from '@/lib/utils/slot'
 import { ModeToggle } from '../ModeToggle'
 import { PaneOverflowMenu } from '../PaneOverflowMenu'
 import { AddATermButton } from './AddATermButton'
@@ -122,14 +122,11 @@ export const UnifiedATermHeaderContent = memo(
       [canSwapByDrag, slotId],
     )
 
-    const handleDragLeave = useCallback(
-      (event: DragEvent<HTMLDivElement>) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-          setIsDragTarget(false)
-        }
-      },
-      [],
-    )
+    const handleDragLeave = useCallback((event: DragEvent<HTMLDivElement>) => {
+      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+        setIsDragTarget(false)
+      }
+    }, [])
 
     const handleDrop = useCallback(
       (event: DragEvent<HTMLDivElement>) => {
@@ -230,12 +227,12 @@ export const UnifiedATermHeaderContent = memo(
           onLayoutModeChange &&
           availableLayouts &&
           availableLayouts.length > 1 && (
-          <LayoutModeButtons
-            layoutMode={layoutMode}
-            onLayoutChange={onLayoutModeChange}
-            availableLayouts={availableLayouts}
-          />
-        )}
+            <LayoutModeButtons
+              layoutMode={layoutMode}
+              onLayoutChange={onLayoutModeChange}
+              availableLayouts={availableLayouts}
+            />
+          )}
 
         {/* Spacer */}
         <div className="flex-1" />

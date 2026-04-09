@@ -1,21 +1,18 @@
 import type { RefObject } from 'react'
-import type { PaneSlot, ATermSlot } from '@/lib/utils/slot'
+import type { ATermLayoutRenderer } from '@/components/ATermLayoutRenderer'
 import type { ATermHandle, ConnectionStatus } from '@/components/a-term.types'
+import type { KeyboardSizePreset } from '@/components/keyboard/types'
+import type { LayoutMode } from '@/lib/constants/a-term'
 import type {
+  ATermCursorStyle,
   ATermFontId,
   ATermFontSize,
   ATermScrollback,
-  ATermCursorStyle,
   ATermThemeId,
 } from '@/lib/hooks/use-a-term-settings'
-import type { LayoutMode } from '@/lib/constants/a-term'
-import type { KeyboardSizePreset } from '@/components/keyboard/types'
+import type { ATermSlot, PaneSlot } from '@/lib/utils/slot'
+import type { TranscriptionError, TranscriptionStatus } from '@/lib/voice/types'
 import type { PaneLayout } from '@/types/pane-layout'
-import type {
-  TranscriptionError,
-  TranscriptionStatus,
-} from '@/lib/voice/types'
-import type { ATermLayoutRenderer } from '@/components/ATermLayoutRenderer'
 
 export interface ATermContentProps {
   // A-Term state

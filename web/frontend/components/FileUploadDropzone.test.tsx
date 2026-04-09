@@ -46,7 +46,9 @@ describe('FileUploadDropzone', () => {
     fireEvent.dragOver(dropzone, { dataTransfer })
     fireEvent.drop(dropzone, { dataTransfer })
 
-    expect(screen.queryByLabelText('Drop file to upload')).not.toBeInTheDocument()
+    expect(
+      screen.queryByLabelText('Drop file to upload'),
+    ).not.toBeInTheDocument()
     expect(onFileSelect).not.toHaveBeenCalled()
   })
 
@@ -69,6 +71,8 @@ describe('FileUploadDropzone', () => {
     fireEvent.drop(dropzone, { dataTransfer })
 
     expect(onFileSelect).toHaveBeenCalledWith(file)
-    expect(screen.queryByLabelText('Drop file to upload')).not.toBeInTheDocument()
+    expect(
+      screen.queryByLabelText('Drop file to upload'),
+    ).not.toBeInTheDocument()
   })
 })

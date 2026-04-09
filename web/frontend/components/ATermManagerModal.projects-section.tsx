@@ -1,13 +1,13 @@
 'use client'
 
 import type { ProjectSetting } from '@/lib/hooks/use-project-settings'
-import { RegisterProjectCard } from './ATermManagerModal.register-project'
 import {
   type AttachableATermOption,
   type ProjectRowData,
   ProjectSessionRow,
   SectionHeader,
 } from './ATermManagerModal.parts'
+import { RegisterProjectCard } from './ATermManagerModal.register-project'
 
 interface ProjectsSectionProps {
   isLoading: boolean
@@ -92,39 +92,74 @@ export function ProjectsSection({
         )}
         {isLoading && (
           <div className="flex items-center justify-center py-8">
-            <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--term-text-muted)' }}>
+            <div
+              className="flex items-center gap-2 text-sm"
+              style={{ color: 'var(--term-text-muted)' }}
+            >
               <div className="w-4 h-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
               <span>Loading project workspaces...</span>
             </div>
           </div>
         )}
         {isError && (
-          <div className="px-3 py-6 text-center rounded-lg" style={{ backgroundColor: 'var(--term-bg-surface)', border: '1px solid var(--term-border)' }}>
+          <div
+            className="px-3 py-6 text-center rounded-lg"
+            style={{
+              backgroundColor: 'var(--term-bg-surface)',
+              border: '1px solid var(--term-border)',
+            }}
+          >
             <p className="text-sm" style={{ color: 'var(--term-text-muted)' }}>
-              {error instanceof Error ? error.message : 'Failed to load project workspaces.'}
+              {error instanceof Error
+                ? error.message
+                : 'Failed to load project workspaces.'}
             </p>
             <button
               type="button"
-              onClick={() => { void refetch() }}
+              onClick={() => {
+                void refetch()
+              }}
               className="mt-3 rounded-md border px-3 py-2 text-xs font-medium uppercase tracking-[0.12em] transition-colors"
-              style={{ borderColor: 'color-mix(in srgb, var(--term-accent) 30%, transparent)', color: 'var(--term-accent)', fontFamily: 'var(--font-ui)' }}
+              style={{
+                borderColor:
+                  'color-mix(in srgb, var(--term-accent) 30%, transparent)',
+                color: 'var(--term-accent)',
+                fontFamily: 'var(--font-ui)',
+              }}
             >
               Retry
             </button>
           </div>
         )}
         {!isLoading && !isError && projects.length === 0 && (
-          <p className="px-3 py-6 text-center text-sm rounded-lg" style={{ color: 'var(--term-text-muted)', backgroundColor: 'var(--term-bg-surface)', border: '1px solid var(--term-border)' }}>
+          <p
+            className="px-3 py-6 text-center text-sm rounded-lg"
+            style={{
+              color: 'var(--term-text-muted)',
+              backgroundColor: 'var(--term-bg-surface)',
+              border: '1px solid var(--term-border)',
+            }}
+          >
             {canRegisterProjects
               ? 'No projects registered yet. Add a repo path above or open an ad-hoc shell.'
               : 'No projects found yet. Check the SummitFlow project registry or open an ad-hoc shell.'}
           </p>
         )}
-        {!isLoading && !isError && projects.length > 0 && visibleProjectRows.length === 0 && (
-          <p className="px-3 py-6 text-center text-sm rounded-lg" style={{ color: 'var(--term-text-muted)', backgroundColor: 'var(--term-bg-surface)', border: '1px solid var(--term-border)' }}>
-            No projects match &quot;{trimmedSearch}&quot;.
-          </p>
-        )}
+        {!isLoading &&
+          !isError &&
+          projects.length > 0 &&
+          visibleProjectRows.length === 0 && (
+            <p
+              className="px-3 py-6 text-center text-sm rounded-lg"
+              style={{
+                color: 'var(--term-text-muted)',
+                backgroundColor: 'var(--term-bg-surface)',
+                border: '1px solid var(--term-border)',
+              }}
+            >
+              No projects match &quot;{trimmedSearch}&quot;.
+            </p>
+          )}
       </div>
     </div>
   )

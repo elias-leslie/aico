@@ -18,11 +18,8 @@ import {
   X,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import {
-  usePaneFileContent,
-  usePaneFileTree,
-} from '@/lib/hooks/use-pane-files'
 import type { PaneFileTreeEntry } from '@/lib/api/pane-files'
+import { usePaneFileContent, usePaneFileTree } from '@/lib/hooks/use-pane-files'
 
 interface PaneFilesDialogProps {
   isOpen: boolean
@@ -32,14 +29,43 @@ interface PaneFilesDialogProps {
 }
 
 const CODE_EXTENSIONS = new Set([
-  '.ts', '.tsx', '.js', '.jsx', '.py', '.rs', '.go', '.java',
-  '.cpp', '.c', '.h', '.hpp', '.php', '.rb', '.swift', '.kt',
-  '.sh', '.bash', '.zsh', '.css', '.scss', '.html', '.htm',
-  '.xml', '.sql',
+  '.ts',
+  '.tsx',
+  '.js',
+  '.jsx',
+  '.py',
+  '.rs',
+  '.go',
+  '.java',
+  '.cpp',
+  '.c',
+  '.h',
+  '.hpp',
+  '.php',
+  '.rb',
+  '.swift',
+  '.kt',
+  '.sh',
+  '.bash',
+  '.zsh',
+  '.css',
+  '.scss',
+  '.html',
+  '.htm',
+  '.xml',
+  '.sql',
 ])
 const JSON_EXTENSIONS = new Set(['.json', '.jsonc', '.json5'])
 const TEXT_EXTENSIONS = new Set([
-  '.md', '.mdx', '.yaml', '.yml', '.txt', '.toml', '.ini', '.cfg', '.env',
+  '.md',
+  '.mdx',
+  '.yaml',
+  '.yml',
+  '.txt',
+  '.toml',
+  '.ini',
+  '.cfg',
+  '.env',
 ])
 
 function formatSize(bytes: number): string {
@@ -74,7 +100,11 @@ function TreeNode({
 }: TreeNodeProps) {
   const [expanded, setExpanded] = useState(false)
   const isSelected = selectedPath === entry.path
-  const childTree = usePaneFileTree(paneId, entry.path, expanded && entry.is_directory)
+  const childTree = usePaneFileTree(
+    paneId,
+    entry.path,
+    expanded && entry.is_directory,
+  )
   const FileIcon = getFileIcon(entry)
 
   const handleClick = useCallback(() => {
@@ -132,16 +162,18 @@ function TreeNode({
               <Loader2 className="h-3 w-3 animate-spin" />
               Loading...
             </li>
-          ) : childTree.data?.entries?.map((child) => (
-            <TreeNode
-              key={child.path}
-              paneId={paneId}
-              entry={child}
-              depth={depth + 1}
-              selectedPath={selectedPath}
-              onSelect={onSelect}
-            />
-          ))}
+          ) : (
+            childTree.data?.entries?.map((child) => (
+              <TreeNode
+                key={child.path}
+                paneId={paneId}
+                entry={child}
+                depth={depth + 1}
+                selectedPath={selectedPath}
+                onSelect={onSelect}
+              />
+            ))
+          )}
         </ul>
       )}
     </li>
@@ -155,9 +187,17 @@ export function PaneFilesDialog({
   onInsertPath,
 }: PaneFilesDialogProps) {
   const tree = usePaneFileTree(paneId, '', isOpen)
-  const [selectedEntry, setSelectedEntry] = useState<PaneFileTreeEntry | null>(null)
-  const [copiedThing, setCopiedThing] = useState<'path' | 'content' | null>(null)
-  const content = usePaneFileContent(paneId, selectedEntry?.path ?? null, isOpen)
+  const [selectedEntry, setSelectedEntry] = useState<PaneFileTreeEntry | null>(
+    null,
+  )
+  const [copiedThing, setCopiedThing] = useState<'path' | 'content' | null>(
+    null,
+  )
+  const content = usePaneFileContent(
+    paneId,
+    selectedEntry?.path ?? null,
+    isOpen,
+  )
 
   useEffect(() => {
     if (!isOpen) {
@@ -168,18 +208,18 @@ export function PaneFilesDialog({
 
   const selectedPath = content.data?.path ?? selectedEntry?.path ?? null
 
-  const handleCopy = useCallback(async (kind: 'path' | 'content') => {
-    const value =
-      kind === 'path'
-        ? selectedPath
-        : content.data?.content
-    if (!value) return
-    try {
-      await navigator.clipboard.writeText(value)
-      setCopiedThing(kind)
-      window.setTimeout(() => setCopiedThing(null), 1500)
-    } catch {}
-  }, [content.data?.content, selectedPath])
+  const handleCopy = useCallback(
+    async (kind: 'path' | 'content') => {
+      const value = kind === 'path' ? selectedPath : content.data?.content
+      if (!value) return
+      try {
+        await navigator.clipboard.writeText(value)
+        setCopiedThing(kind)
+        window.setTimeout(() => setCopiedThing(null), 1500)
+      } catch {}
+    },
+    [content.data?.content, selectedPath],
+  )
 
   const handleInsertPath = useCallback(() => {
     if (!selectedPath) return
@@ -212,7 +252,9 @@ export function PaneFilesDialog({
                 Files
               </Dialog.Title>
               <p className="truncate text-xs text-slate-500">
-                {tree.data?.path ? `Current folder: ${tree.data.path}` : 'Pane workspace'}
+                {tree.data?.path
+                  ? `Current folder: ${tree.data.path}`
+                  : 'Pane workspace'}
               </p>
             </div>
             <button
@@ -266,7 +308,8 @@ export function PaneFilesDialog({
             <div className="min-h-0 flex-1 overflow-hidden">
               {!selectedEntry ? (
                 <div className="flex h-full items-center justify-center px-6 text-center text-sm text-slate-500">
-                  Select a file to preview it and insert its path into the terminal.
+                  Select a file to preview it and insert its path into the
+                  terminal.
                 </div>
               ) : content.isLoading ? (
                 <div className="flex h-full items-center justify-center gap-2 text-sm text-slate-500">

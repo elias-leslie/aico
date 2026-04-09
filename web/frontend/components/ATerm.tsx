@@ -3,44 +3,40 @@
 import { clsx } from 'clsx'
 import { forwardRef, useCallback, useEffect, useMemo, useRef } from 'react'
 import '@xterm/xterm/css/xterm.css'
+import { LineCache } from '../lib/a-term/line-cache'
 import {
+  A_TERM_THEMES,
   PHOSPHOR_THEME,
   SCROLLBACK,
-  A_TERM_THEMES,
 } from '../lib/constants/a-term'
-import { useBracketedPaste } from '../lib/hooks/use-bracketed-paste'
 import { useATermDiagnostics } from '../lib/hooks/use-a-term-diagnostics'
-import { useScrollbackOverlay } from '../lib/hooks/use-scrollback-overlay'
-import { useScrollbackPager } from '../lib/hooks/use-scrollback-pager'
 import { useATermHandle } from '../lib/hooks/use-a-term-handle'
 import { useATermInstance } from '../lib/hooks/use-a-term-instance'
 import { useATermResize } from '../lib/hooks/use-a-term-resize'
-import { useATermSearch } from '../lib/hooks/use-a-term-search'
 import { useATermScrolling } from '../lib/hooks/use-a-term-scrolling'
+import { useATermSearch } from '../lib/hooks/use-a-term-search'
 import { useATermWebSocket } from '../lib/hooks/use-a-term-websocket'
 import { useATermWriteQueue } from '../lib/hooks/use-a-term-write-queue'
-import { LineCache } from '../lib/a-term/line-cache'
-import {
-  profileAnsiColors,
-} from '../lib/utils/ansi-color-profile'
+import { useBracketedPaste } from '../lib/hooks/use-bracketed-paste'
+import { useScrollbackOverlay } from '../lib/hooks/use-scrollback-overlay'
+import { useScrollbackPager } from '../lib/hooks/use-scrollback-pager'
+import { profileAnsiColors } from '../lib/utils/ansi-color-profile'
 import { isMobileDevice } from '../lib/utils/device'
 import { isTuiSessionMode } from '../lib/utils/session-mode'
-import { ScrollbackOverlay } from './ScrollbackOverlay'
 import { ATermDiagnosticsOverlay } from './ATermDiagnosticsOverlay'
 import type { ATermHandle, ATermProps } from './a-term.types'
+import { ScrollbackOverlay } from './ScrollbackOverlay'
 
 export type {
-  ConnectionStatus,
   ATermHandle,
   ATermProps,
+  ConnectionStatus,
 } from './a-term.types'
 
 type XtermATerm = InstanceType<typeof import('@xterm/xterm').Terminal>
 type XtermFitAddon = InstanceType<typeof import('@xterm/addon-fit').FitAddon>
 
-function inferThemeId(
-  theme: NonNullable<ATermProps['theme']>,
-): string {
+function inferThemeId(theme: NonNullable<ATermProps['theme']>): string {
   for (const [themeId, candidate] of Object.entries(A_TERM_THEMES)) {
     if (
       candidate.theme.background === theme.background &&
@@ -134,13 +130,39 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
     })
 
     // Refs for pager/overlay callbacks — breaks circular dep between WebSocket and consumer hooks
-    const viewportInitRef =
-      useRef<((data: Parameters<NonNullable<Parameters<typeof useATermWebSocket>[0]['onViewportInit']>>[0]) => void) | null>(null)
-    const scrollbackPageRef =
-      useRef<((data: Parameters<NonNullable<Parameters<typeof useATermWebSocket>[0]['onScrollbackPage']>>[0]) => void) | null>(null)
-    const overlayPageRef =
-      useRef<((data: Parameters<NonNullable<Parameters<typeof useATermWebSocket>[0]['onScrollbackPage']>>[0]) => void) | null>(null)
-    const overlayCacheUpdateRef = useRef<((scrollback: string) => void) | null>(null)
+    const viewportInitRef = useRef<
+      | ((
+          data: Parameters<
+            NonNullable<
+              Parameters<typeof useATermWebSocket>[0]['onViewportInit']
+            >
+          >[0],
+        ) => void)
+      | null
+    >(null)
+    const scrollbackPageRef = useRef<
+      | ((
+          data: Parameters<
+            NonNullable<
+              Parameters<typeof useATermWebSocket>[0]['onScrollbackPage']
+            >
+          >[0],
+        ) => void)
+      | null
+    >(null)
+    const overlayPageRef = useRef<
+      | ((
+          data: Parameters<
+            NonNullable<
+              Parameters<typeof useATermWebSocket>[0]['onScrollbackPage']
+            >
+          >[0],
+        ) => void)
+      | null
+    >(null)
+    const overlayCacheUpdateRef = useRef<((scrollback: string) => void) | null>(
+      null,
+    )
 
     const { status, wsRef, reconnect, sendInput, connect, disconnect } =
       useATermWebSocket({
@@ -226,7 +248,12 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
       scrollbackPageRef.current = handleScrollbackPage
       overlayPageRef.current = overlay.handleScrollbackPage
       overlayCacheUpdateRef.current = overlay.updateCacheFromSync
-    }, [handleViewportInit, handleScrollbackPage, overlay.handleScrollbackPage, overlay.updateCacheFromSync])
+    }, [
+      handleViewportInit,
+      handleScrollbackPage,
+      overlay.handleScrollbackPage,
+      overlay.updateCacheFromSync,
+    ])
 
     const pasteInput = useBracketedPaste(sendInput)
 

@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { UnifiedATermHeaderContent } from './UnifiedATermHeaderContent'
 import type { PaneSlot } from '@/lib/utils/slot'
+import { UnifiedATermHeaderContent } from './UnifiedATermHeaderContent'
 
 vi.mock('@/lib/hooks/use-agent-tools', () => ({
   useAgentTools: () => ({ enabledTools: [] }),

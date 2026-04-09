@@ -32,9 +32,15 @@ describe('middleware', () => {
     const connectSrc = getDirectiveTokens(response, 'connect-src')
 
     expect(response.headers.get('location')).toBeNull()
-    expect(response.headers.get('content-security-policy')).toContain("script-src 'self' 'nonce-")
+    expect(response.headers.get('content-security-policy')).toContain(
+      "script-src 'self' 'nonce-",
+    )
     expect(response.headers.get('x-nonce')).toBeTruthy()
-    expect(connectSrc).toEqual(["'self'", 'ws://localhost:8002', 'ws://localhost:8003'])
+    expect(connectSrc).toEqual([
+      "'self'",
+      'ws://localhost:8002',
+      'ws://localhost:8003',
+    ])
   })
 
   it('redirects protected routes to login when password auth has no session cookie', async () => {
@@ -46,7 +52,9 @@ describe('middleware', () => {
     expect(response.headers.get('location')).toBe(
       'http://localhost:3002/login?next=%2Fnotes',
     )
-    expect(response.headers.get('content-security-policy')).toContain("script-src 'self' 'nonce-")
+    expect(response.headers.get('content-security-policy')).toContain(
+      "script-src 'self' 'nonce-",
+    )
   })
 
   it('allows protected routes when password auth has the session cookie', async () => {
@@ -62,7 +70,9 @@ describe('middleware', () => {
     )
 
     expect(response.headers.get('location')).toBeNull()
-    expect(response.headers.get('content-security-policy')).toContain("script-src 'self' 'nonce-")
+    expect(response.headers.get('content-security-policy')).toContain(
+      "script-src 'self' 'nonce-",
+    )
     expect(response.headers.get('x-nonce')).toBeTruthy()
   })
 
@@ -71,7 +81,9 @@ describe('middleware', () => {
     vi.stubEnv('NEXT_PUBLIC_AGENT_HUB_URL', 'https://agent-hub.example.com')
     const { middleware } = await importMiddleware()
 
-    const response = middleware(new NextRequest('https://a-term.summitflow.dev/'))
+    const response = middleware(
+      new NextRequest('https://a-term.summitflow.dev/'),
+    )
     const connectSrc = getDirectiveTokens(response, 'connect-src')
 
     expect(connectSrc).toContain("'self'")

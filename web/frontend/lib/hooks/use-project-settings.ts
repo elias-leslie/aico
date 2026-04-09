@@ -190,13 +190,8 @@ export function useProjectSettings() {
 
   // Mutation: switch project mode
   const switchModeMutation = useMutation({
-    mutationFn: ({
-      projectId,
-      mode,
-    }: {
-      projectId: string
-      mode: string
-    }) => switchProjectMode(projectId, mode),
+    mutationFn: ({ projectId, mode }: { projectId: string; mode: string }) =>
+      switchProjectMode(projectId, mode),
     onMutate: async ({ projectId, mode }) => {
       // Cancel any outgoing refetches
       await queryClient.cancelQueries({ queryKey: ['a-term-projects'] })
@@ -213,10 +208,7 @@ export function useProjectSettings() {
     onError: (_err, _variables, context) => {
       // Rollback on error
       if (context?.previousProjects) {
-        queryClient.setQueryData(
-          ['a-term-projects'],
-          context.previousProjects,
-        )
+        queryClient.setQueryData(['a-term-projects'], context.previousProjects)
       }
     },
     onSettled: () => {

@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 :root,
-:root[data-theme='dark'] {
+:root[data-theme="dark"] {
   color-scheme: dark;
   --background: #081018;
   --foreground: #e6edf3;
@@ -43,7 +43,7 @@
   --term-text-faint: rgba(230, 237, 243, 0.36);
 }
 
-:root[data-theme='light'] {
+:root[data-theme="light"] {
   color-scheme: light;
   --background: #eef4eb;
   --foreground: #18231a;
@@ -136,7 +136,8 @@
   --term-accent-border: color-mix(in srgb, var(--term-accent) 35%, transparent);
   --term-danger-soft: color-mix(in srgb, var(--term-danger) 15%, transparent);
   --term-danger-border: color-mix(in srgb, var(--term-danger) 36%, transparent);
-  --font-ui: var(--font-dm-sans), "DM Sans", system-ui, -apple-system, sans-serif;
+  --font-ui:
+    var(--font-dm-sans), "DM Sans", system-ui, -apple-system, sans-serif;
 }
 
 @theme inline {
@@ -332,7 +333,9 @@ body {
 /* Interactive row hover states for modal lists */
 .interactive-row {
   cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
 }
 
 .interactive-row:hover {
@@ -389,8 +392,7 @@ a:focus-visible {
   touch-action: none;
   user-select: none;
   z-index: 1;
-  transition:
-    box-shadow 0.15s ease;
+  transition: box-shadow 0.15s ease;
 }
 
 /* Horizontal handle (vertical divider between side-by-side panes) */
@@ -400,7 +402,7 @@ a:focus-visible {
 }
 
 .resizable-handle-horizontal::after {
-  content: '';
+  content: "";
   position: absolute;
   top: 0;
   bottom: 0;
@@ -430,7 +432,7 @@ a:focus-visible {
 }
 
 .resizable-handle-vertical::after {
-  content: '';
+  content: "";
   position: absolute;
   left: 0;
   right: 0;

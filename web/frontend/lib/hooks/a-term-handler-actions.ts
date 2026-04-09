@@ -1,9 +1,9 @@
-import type { ProjectATerm } from '@/lib/hooks/use-project-a-terms'
 import type { ATermPane } from '@/lib/hooks/use-a-term-panes'
+import type { ProjectATerm } from '@/lib/hooks/use-project-a-terms'
 import {
+  findSessionByMode,
   generateAdHocPaneName,
   generateProjectPaneName,
-  findSessionByMode,
   waitForTmuxInit,
 } from './a-term-handler-utils'
 
@@ -13,7 +13,10 @@ import {
 export async function addAdHocPaneAction(
   panes: ATermPane[],
   panesAtLimit: boolean,
-  createAdHocPane: (paneName: string, workingDir?: string) => Promise<ATermPane>,
+  createAdHocPane: (
+    paneName: string,
+    workingDir?: string,
+  ) => Promise<ATermPane>,
   navigateToSession: (sessionId: string) => void,
 ): Promise<void> {
   if (panesAtLimit) return
@@ -96,7 +99,10 @@ export async function addProjectPaneAction(
 export async function closeAllPanesAction(
   panes: ATermPane[],
   removePane: (paneId: string) => Promise<void>,
-  createAdHocPane: (paneName: string, workingDir?: string) => Promise<ATermPane>,
+  createAdHocPane: (
+    paneName: string,
+    workingDir?: string,
+  ) => Promise<ATermPane>,
   navigateToSession: (sessionId: string) => void,
 ): Promise<void> {
   for (const pane of panes) {

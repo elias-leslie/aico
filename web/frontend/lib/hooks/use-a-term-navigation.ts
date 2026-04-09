@@ -1,9 +1,9 @@
 import { useCallback } from 'react'
 import {
+  type ATermSlot,
   getSlotPanelId,
   getSlotSessionId,
   type PaneSlot,
-  type ATermSlot,
 } from '@/lib/utils/slot'
 
 interface UseATermNavigationProps {

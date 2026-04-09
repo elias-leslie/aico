@@ -58,9 +58,7 @@ describe('api-config', () => {
   it('buildApiUrl concatenates base URL with path on client-side', () => {
     setLocation('http://localhost:3002/')
 
-    expect(buildApiUrl('/api/a-term/sessions')).toBe(
-      '/api/a-term/sessions',
-    )
+    expect(buildApiUrl('/api/a-term/sessions')).toBe('/api/a-term/sessions')
   })
 
   it('uses backend localhost websocket for 127.0.0.1 development', () => {

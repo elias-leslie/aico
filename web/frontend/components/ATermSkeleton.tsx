@@ -26,11 +26,17 @@ export function ATermSkeleton() {
         />
         <div
           className="h-3.5 w-20 rounded animate-pulse"
-          style={{ backgroundColor: 'var(--term-bg-elevated)', animationDelay: '50ms' }}
+          style={{
+            backgroundColor: 'var(--term-bg-elevated)',
+            animationDelay: '50ms',
+          }}
         />
         <div
           className="h-3 w-12 rounded-full animate-pulse"
-          style={{ backgroundColor: 'var(--term-bg-elevated)', animationDelay: '100ms' }}
+          style={{
+            backgroundColor: 'var(--term-bg-elevated)',
+            animationDelay: '100ms',
+          }}
         />
         <div className="flex-1" />
         <div className="flex gap-1">
@@ -38,7 +44,10 @@ export function ATermSkeleton() {
             <div
               key={`header-dot-${i}`}
               className="h-3.5 w-3.5 rounded animate-pulse"
-              style={{ backgroundColor: 'var(--term-bg-elevated)', animationDelay: `${150 + i * 50}ms` }}
+              style={{
+                backgroundColor: 'var(--term-bg-elevated)',
+                animationDelay: `${150 + i * 50}ms`,
+              }}
             />
           ))}
         </div>
@@ -54,7 +63,10 @@ export function ATermSkeleton() {
           />
           <div
             className="h-3.5 w-28 rounded animate-pulse"
-            style={{ backgroundColor: 'var(--term-bg-elevated)', animationDelay: '100ms' }}
+            style={{
+              backgroundColor: 'var(--term-bg-elevated)',
+              animationDelay: '100ms',
+            }}
           />
         </div>
 

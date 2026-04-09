@@ -1,6 +1,6 @@
 'use client'
 
-import { forwardRef, useLayoutEffect, useState, type ReactNode } from 'react'
+import { forwardRef, type ReactNode, useLayoutEffect, useState } from 'react'
 
 export interface SettingsPanelProps {
   isOpen: boolean

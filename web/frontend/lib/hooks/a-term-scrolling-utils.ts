@@ -47,7 +47,9 @@ export function getTouchScrollLineDelta(
 
 export function getTouchScrollEffectiveCellHeight(cellHeight: number): number {
   if (cellHeight <= 0) return 0
-  return cellHeight / (MOBILE_TOUCH_SCROLL_SENSITIVITY * SCROLL_SPEED_MULTIPLIER)
+  return (
+    cellHeight / (MOBILE_TOUCH_SCROLL_SENSITIVITY * SCROLL_SPEED_MULTIPLIER)
+  )
 }
 
 export function refreshATermViewport(aTerm: XtermATerm): void {
@@ -84,10 +86,11 @@ export function initializeTouchTracking(currentY: number): {
 }
 
 export function computeWheelLineDelta(deltaY: number): number {
-  return Math.max(
-    1,
-    Math.floor(Math.abs(deltaY) / DESKTOP_WHEEL_LINE_HEIGHT_PX),
-  ) * SCROLL_SPEED_MULTIPLIER * (deltaY > 0 ? 1 : -1)
+  return (
+    Math.max(1, Math.floor(Math.abs(deltaY) / DESKTOP_WHEEL_LINE_HEIGHT_PX)) *
+    SCROLL_SPEED_MULTIPLIER *
+    (deltaY > 0 ? 1 : -1)
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -119,11 +122,7 @@ export function setupTouchHandlers(
     pendingNormalScrollDeltaY = 0
 
     const aTerm = deps.aTermRef.current
-    if (
-      aTerm &&
-      !isAlternateScreen(aTerm) &&
-      isMouseTrackingActive(aTerm)
-    ) {
+    if (aTerm && !isAlternateScreen(aTerm) && isMouseTrackingActive(aTerm)) {
       deps.enterCopyMode()
     }
   }

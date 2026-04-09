@@ -118,7 +118,18 @@ export function useATermWebSocket({
     onScrollbackPageRef.current = onScrollbackPage
     onBeforeReconnectDataRef.current = onBeforeReconnectData
     getDimensionsRef.current = getDimensions
-  }, [onStatusChange, onDisconnect, onMessage, onATermMessage, onScrollbackSync, onScrollbackDelta, onViewportInit, onScrollbackPage, onBeforeReconnectData, getDimensions])
+  }, [
+    onStatusChange,
+    onDisconnect,
+    onMessage,
+    onATermMessage,
+    onScrollbackSync,
+    onScrollbackDelta,
+    onViewportInit,
+    onScrollbackPage,
+    onBeforeReconnectData,
+    getDimensions,
+  ])
 
   // Notify parent of status changes
   useEffect(() => {
@@ -128,40 +139,44 @@ export function useATermWebSocket({
   // Track mounted state for cleanup
   useEffect(() => {
     mountedRef.current = true
-    return () => { mountedRef.current = false }
+    return () => {
+      mountedRef.current = false
+    }
   }, [])
 
   const connect = useCallback(() => {
     if (connectingRef.current) return
     connectingRef.current = true
 
-    openWebSocketConnection(sessionId, workingDir, {
-      wsRef,
-      mountedRef,
-      connectingRef,
-      hasConnectedRef,
-      retryCountRef,
-      timeoutIdRef,
-      retryTimeoutRef,
-      pingIntervalRef,
-      connectRef,
-    }, {
-      onATermMessage: (msg) => onATermMessageRef.current?.(msg),
-      onMessage: (data) => onMessageRef.current?.(data),
-      onScrollbackSync: (scrollback, cursorPosition) =>
-        onScrollbackSyncRef.current?.(scrollback, cursorPosition),
-      onScrollbackDelta: (delta) =>
-        onScrollbackDeltaRef.current?.(delta),
-      onViewportInit: (data) =>
-        onViewportInitRef.current?.(data),
-      onScrollbackPage: (data) =>
-        onScrollbackPageRef.current?.(data),
-      onBeforeReconnectData: () => onBeforeReconnectDataRef.current?.(),
-      onDisconnect: () => onDisconnectRef.current?.(),
-      getDimensions: () => getDimensionsRef.current?.() ?? null,
-      sendInitialResize,
-      setStatus: (s) => setStatus(s as ConnectionStatus),
-    })
+    openWebSocketConnection(
+      sessionId,
+      workingDir,
+      {
+        wsRef,
+        mountedRef,
+        connectingRef,
+        hasConnectedRef,
+        retryCountRef,
+        timeoutIdRef,
+        retryTimeoutRef,
+        pingIntervalRef,
+        connectRef,
+      },
+      {
+        onATermMessage: (msg) => onATermMessageRef.current?.(msg),
+        onMessage: (data) => onMessageRef.current?.(data),
+        onScrollbackSync: (scrollback, cursorPosition) =>
+          onScrollbackSyncRef.current?.(scrollback, cursorPosition),
+        onScrollbackDelta: (delta) => onScrollbackDeltaRef.current?.(delta),
+        onViewportInit: (data) => onViewportInitRef.current?.(data),
+        onScrollbackPage: (data) => onScrollbackPageRef.current?.(data),
+        onBeforeReconnectData: () => onBeforeReconnectDataRef.current?.(),
+        onDisconnect: () => onDisconnectRef.current?.(),
+        getDimensions: () => getDimensionsRef.current?.() ?? null,
+        sendInitialResize,
+        setStatus: (s) => setStatus(s as ConnectionStatus),
+      },
+    )
   }, [sendInitialResize, sessionId, workingDir])
 
   // Keep ref in sync for recursive timeout calls
@@ -171,10 +186,22 @@ export function useATermWebSocket({
 
   const disconnect = useCallback(() => {
     connectingRef.current = false
-    if (timeoutIdRef.current) { clearTimeout(timeoutIdRef.current); timeoutIdRef.current = null }
-    if (retryTimeoutRef.current) { clearTimeout(retryTimeoutRef.current); retryTimeoutRef.current = null }
-    if (pingIntervalRef.current) { clearInterval(pingIntervalRef.current); pingIntervalRef.current = null }
-    if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
+    if (timeoutIdRef.current) {
+      clearTimeout(timeoutIdRef.current)
+      timeoutIdRef.current = null
+    }
+    if (retryTimeoutRef.current) {
+      clearTimeout(retryTimeoutRef.current)
+      retryTimeoutRef.current = null
+    }
+    if (pingIntervalRef.current) {
+      clearInterval(pingIntervalRef.current)
+      pingIntervalRef.current = null
+    }
+    if (wsRef.current) {
+      wsRef.current.close()
+      wsRef.current = null
+    }
   }, [])
 
   const reconnect = useCallback(() => {
@@ -197,16 +224,25 @@ export function useATermWebSocket({
       if (document.visibilityState !== 'visible') return
       if (!mountedRef.current) return
       const ws = wsRef.current
-      if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+      if (
+        !ws ||
+        ws.readyState === WebSocket.CLOSED ||
+        ws.readyState === WebSocket.CLOSING
+      ) {
         reconnect()
       }
     }
     document.addEventListener('visibilitychange', handleVisibilityChange)
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+    return () =>
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
   }, [reconnect])
 
   // Cleanup on unmount
-  useEffect(() => { return () => { disconnect() } }, [disconnect])
+  useEffect(() => {
+    return () => {
+      disconnect()
+    }
+  }, [disconnect])
 
   return { status, wsRef, reconnect, sendInput, connect, disconnect }
 }

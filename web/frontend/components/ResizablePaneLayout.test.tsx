@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ResizablePaneLayout } from './ResizablePaneLayout'
 import type { PaneSlot } from '@/lib/utils/slot'
+import { ResizablePaneLayout } from './ResizablePaneLayout'
 
 vi.mock('@/lib/hooks/pane-layout', () => ({
   useMinSizeCalculator: () => () => 20,

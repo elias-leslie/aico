@@ -31,7 +31,10 @@ export function FourPaneLayout({
   const rootSizes = getStoredGroupLayout('four-pane-root', 2, 50)
   const topRowSizes = getStoredGroupLayout('four-pane-top-row', 2, 50)
   const bottomRowSizes = getStoredGroupLayout('four-pane-bottom-row', 2, 50)
-  const rowMinSizePercent = getMinSizePercent('horizontal', topRowPanelIds.length)
+  const rowMinSizePercent = getMinSizePercent(
+    'horizontal',
+    topRowPanelIds.length,
+  )
   const columnMinSizePercent = getMinSizePercent('vertical', 2)
 
   return (

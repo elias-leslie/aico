@@ -4,13 +4,13 @@ import { useCallback, useEffect, useRef } from 'react'
 import { COPY_MODE_TIMEOUT_MS } from '../constants/a-term'
 import { prefersLocalViewportScrollForMode } from '../utils/session-mode'
 import {
-  ARROW_UP,
   ARROW_DOWN,
+  ARROW_UP,
   COPY_MODE_ENTER,
-  COPY_MODE_SCROLL_UP,
   COPY_MODE_SCROLL_DOWN,
-  isAlternateScreen,
+  COPY_MODE_SCROLL_UP,
   computeWheelLineDelta,
+  isAlternateScreen,
   refreshATermViewport,
   setupTouchHandlers,
 } from './a-term-scrolling-utils'
@@ -21,8 +21,8 @@ type XtermATerm = InstanceType<typeof import('@xterm/xterm').Terminal>
 export {
   getTouchScrollEffectiveCellHeight,
   getTouchScrollLineDelta,
-  refreshATermViewport,
   initializeTouchTracking,
+  refreshATermViewport,
 } from './a-term-scrolling-utils'
 
 interface CopyModeState {

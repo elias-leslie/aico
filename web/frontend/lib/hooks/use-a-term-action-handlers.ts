@@ -68,7 +68,7 @@ export function useATermActionHandlers({
       const result = await uploadFile(file)
       if (result) {
         const aTermRef = uploadTargetRef.current
-          ? aTermRefs.current.get(uploadTargetRef.current) ?? null
+          ? (aTermRefs.current.get(uploadTargetRef.current) ?? null)
           : findActiveRef(aTermRefs.current, activeSessionId)
         if (aTermRef) {
           aTermRef.pasteInput(result.path)
@@ -118,17 +118,20 @@ export function useATermActionHandlers({
   // Track which a-term pane triggered voice input
   const voiceTargetRef = useRef<string | null>(null)
 
-  const handleVoiceOpen = useCallback((targetSessionId?: string) => {
-    voiceTargetRef.current = targetSessionId ?? null
-    setShowVoice(true)
-    voiceStartListening()
-  }, [setShowVoice, voiceStartListening])
+  const handleVoiceOpen = useCallback(
+    (targetSessionId?: string) => {
+      voiceTargetRef.current = targetSessionId ?? null
+      setShowVoice(true)
+      voiceStartListening()
+    },
+    [setShowVoice, voiceStartListening],
+  )
 
   const handleVoiceSend = useCallback(
     (text: string) => {
       // Use the specific pane that triggered voice, fall back to active/first available
       const aTermRef = voiceTargetRef.current
-        ? aTermRefs.current.get(voiceTargetRef.current) ?? null
+        ? (aTermRefs.current.get(voiceTargetRef.current) ?? null)
         : findActiveRef(aTermRefs.current, activeSessionId)
       if (aTermRef) {
         // Use bracketed paste so TUI apps (Claude Code, vim, etc.) recognize the input
@@ -141,13 +144,19 @@ export function useATermActionHandlers({
       voiceResetTranscript()
       setShowVoice(false)
     },
-    [activeSessionId, aTermRefs, voiceStopListening, voiceResetTranscript, setShowVoice],
+    [
+      activeSessionId,
+      aTermRefs,
+      voiceStopListening,
+      voiceResetTranscript,
+      setShowVoice,
+    ],
   )
 
   const handleVoiceInsert = useCallback(
     (text: string) => {
       const aTermRef = voiceTargetRef.current
-        ? aTermRefs.current.get(voiceTargetRef.current) ?? null
+        ? (aTermRefs.current.get(voiceTargetRef.current) ?? null)
         : findActiveRef(aTermRefs.current, activeSessionId)
       if (aTermRef) {
         aTermRef.pasteInput(text)
@@ -157,7 +166,13 @@ export function useATermActionHandlers({
       voiceResetTranscript()
       setShowVoice(false)
     },
-    [activeSessionId, aTermRefs, voiceStopListening, voiceResetTranscript, setShowVoice],
+    [
+      activeSessionId,
+      aTermRefs,
+      voiceStopListening,
+      voiceResetTranscript,
+      setShowVoice,
+    ],
   )
 
   const handleVoiceCancel = useCallback(() => {

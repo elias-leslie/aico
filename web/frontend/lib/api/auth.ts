@@ -15,7 +15,9 @@ export function fetchAuthSession(): Promise<AuthSessionResponse> {
   )
 }
 
-export function loginWithPassword(password: string): Promise<AuthSessionResponse> {
+export function loginWithPassword(
+  password: string,
+): Promise<AuthSessionResponse> {
   return apiFetch<AuthSessionResponse>(
     '/api/auth/login',
     {

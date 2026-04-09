@@ -52,10 +52,16 @@ interface UpdateAgentToolInput {
 // ============================================================================
 
 async function fetchAgentTools(): Promise<AgentTool[]> {
-  return apiFetch('/api/a-term/agent-tools', undefined, 'Failed to fetch agent tools')
+  return apiFetch(
+    '/api/a-term/agent-tools',
+    undefined,
+    'Failed to fetch agent tools',
+  )
 }
 
-async function createAgentTool(input: CreateAgentToolInput): Promise<AgentTool> {
+async function createAgentTool(
+  input: CreateAgentToolInput,
+): Promise<AgentTool> {
   return apiFetch(
     '/api/a-term/agent-tools',
     {
@@ -136,7 +142,10 @@ export function useAgentTools() {
   })
 
   const updateMutation = useMutation({
-    mutationFn: ({ toolId, ...input }: UpdateAgentToolInput & { toolId: string }) =>
+    mutationFn: ({
+      toolId,
+      ...input
+    }: UpdateAgentToolInput & { toolId: string }) =>
       updateAgentTool(toolId, input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['agent-tools'] })

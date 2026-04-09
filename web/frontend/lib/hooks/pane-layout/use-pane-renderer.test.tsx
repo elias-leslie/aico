@@ -1,10 +1,15 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import { type ATermSlot, getSlotPanelId, type PaneSlot } from '@/lib/utils/slot'
 import { usePaneRenderer } from './use-pane-renderer'
-import { getSlotPanelId, type PaneSlot, type ATermSlot } from '@/lib/utils/slot'
 
 const aTermProps = vi.hoisted(
-  () => [] as Array<{ sessionId: string; sessionMode?: string; isVisible?: boolean }>,
+  () =>
+    [] as Array<{
+      sessionId: string
+      sessionMode?: string
+      isVisible?: boolean
+    }>,
 )
 const headerProps = vi.hoisted(() => [] as Array<Record<string, unknown>>)
 
@@ -122,8 +127,18 @@ describe('usePaneRenderer', () => {
     expect(screen.getByTestId('a-term-session-1')).toBeInTheDocument()
     expect(screen.getByTestId('a-term-session-2')).toBeInTheDocument()
     expect(aTermProps).toEqual([
-      { sessionId: 'session-1', sessionMode: 'shell', preferLessDestructiveSnapshots: undefined, isVisible: undefined },
-      { sessionId: 'session-2', sessionMode: 'shell', preferLessDestructiveSnapshots: undefined, isVisible: undefined },
+      {
+        sessionId: 'session-1',
+        sessionMode: 'shell',
+        preferLessDestructiveSnapshots: undefined,
+        isVisible: undefined,
+      },
+      {
+        sessionId: 'session-2',
+        sessionMode: 'shell',
+        preferLessDestructiveSnapshots: undefined,
+        isVisible: undefined,
+      },
     ])
   })
 
@@ -227,7 +242,11 @@ describe('usePaneRenderer', () => {
 
     expect(headerProps).toHaveLength(1)
     expect(aTermProps).toEqual([
-      { sessionId: 'external-codex', sessionMode: 'codex', isVisible: undefined },
+      {
+        sessionId: 'external-codex',
+        sessionMode: 'codex',
+        isVisible: undefined,
+      },
     ])
     expect(headerProps[0]?.showCleanButton).toBe(true)
     expect(headerProps[0]?.onReset).toBeUndefined()

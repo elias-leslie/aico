@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { renderHook, act } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
 import { createElement } from 'react'
-import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useProjectModeSwitch } from './use-project-mode-switch'
 
 const mockPush = vi.fn()
@@ -177,7 +177,9 @@ describe('useProjectModeSwitch', () => {
     expect(switchAgentTool).toHaveBeenCalledWith('pane-a', 'codex')
     expect(setActiveMode).not.toHaveBeenCalled()
     expect(mockStartAgent).toHaveBeenCalledWith('session-codex')
-    expect(mockPush).toHaveBeenCalledWith('?session=session-codex', { scroll: false })
+    expect(mockPush).toHaveBeenCalledWith('?session=session-codex', {
+      scroll: false,
+    })
 
     act(() => {
       vi.runAllTimers()

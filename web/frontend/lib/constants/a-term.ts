@@ -70,7 +70,8 @@ export function getAvailableLayoutModes(
 
   if (count <= 1) return ['split-horizontal']
   if (count === 2) return ['split-horizontal', 'split-vertical']
-  if (count === 3) return ['split-horizontal', 'split-vertical', 'split-main-side']
+  if (count === 3)
+    return ['split-horizontal', 'split-vertical', 'split-main-side']
   if (count === 4) return ['split-horizontal', 'grid-2x2']
   return ['split-horizontal', 'grid-3x2']
 }

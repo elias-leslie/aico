@@ -1,5 +1,5 @@
-export { UnifiedATermHeaderContent } from './UnifiedATermHeaderContent'
-export { HeaderIconButton } from './HeaderIconButton'
 export { AddATermButton } from './AddATermButton'
+export { HeaderIconButton } from './HeaderIconButton'
 export { HeaderNameDisplay } from './HeaderNameDisplay'
-export type { UnifiedATermHeaderProps, IconButtonProps } from './types'
+export type { IconButtonProps, UnifiedATermHeaderProps } from './types'
+export { UnifiedATermHeaderContent } from './UnifiedATermHeaderContent'

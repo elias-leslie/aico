@@ -54,11 +54,7 @@ describe('applyOverlaySearchSelection', () => {
       },
     }
 
-    const applied = applyOverlaySearchSelection(
-      term as never,
-      'needle',
-      0,
-    )
+    const applied = applyOverlaySearchSelection(term as never, 'needle', 0)
 
     expect(applied).toBe(true)
     expect(clearSelection).toHaveBeenCalled()
@@ -90,11 +86,7 @@ describe('applyOverlaySearchSelection', () => {
       },
     }
 
-    const applied = applyOverlaySearchSelection(
-      term as never,
-      'needle',
-      0,
-    )
+    const applied = applyOverlaySearchSelection(term as never, 'needle', 0)
 
     expect(applied).toBe(false)
     expect(clearSelection).toHaveBeenCalled()

@@ -2,15 +2,15 @@
 
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback } from 'react'
+import type { ATermHandle, ConnectionStatus } from '@/components/ATerm'
 import type { KeyboardSizePreset } from '@/components/keyboard/types'
-import type { ConnectionStatus, ATermHandle } from '@/components/ATerm'
-import { useAgentPolling } from '@/lib/hooks/use-agent-polling'
-import { useAgentTools } from '@/lib/hooks/use-agent-tools'
 import type { LayoutMode } from '@/lib/constants/a-term'
-import { useProjectModeSwitch } from '@/lib/hooks/use-project-mode-switch'
-import { useProjectATerms } from '@/lib/hooks/use-project-a-terms'
 import type { ATermSession } from '@/lib/hooks/use-a-term-sessions'
 import { useATermSessions } from '@/lib/hooks/use-a-term-sessions'
+import { useAgentPolling } from '@/lib/hooks/use-agent-polling'
+import { useAgentTools } from '@/lib/hooks/use-agent-tools'
+import { useProjectATerms } from '@/lib/hooks/use-project-a-terms'
+import { useProjectModeSwitch } from '@/lib/hooks/use-project-mode-switch'
 import {
   addAdHocPaneAction,
   addProjectPaneAction,
@@ -97,34 +97,33 @@ export function useATermHandlers({
     },
     [activeSessionId, aTermRefs],
   )
-  const handleReconnect = useCallback(
-    () => {
-      const handle = activeSessionId
-        ? aTermRefs.current.get(activeSessionId)
-        : undefined
-      if (handle) {
-        handle.reconnect()
-        return
-      }
-      aTermRefs.current.values().next().value?.reconnect()
-    },
-    [activeSessionId, aTermRefs],
-  )
+  const handleReconnect = useCallback(() => {
+    const handle = activeSessionId
+      ? aTermRefs.current.get(activeSessionId)
+      : undefined
+    if (handle) {
+      handle.reconnect()
+      return
+    }
+    aTermRefs.current.values().next().value?.reconnect()
+  }, [activeSessionId, aTermRefs])
   const handleLayoutModeChange = useCallback(
     async (mode: LayoutMode) => setLayoutMode(mode),
     [setLayoutMode],
   )
   const handleAddTab = useCallback(
-    () => addAdHocPaneAction(panes, panesAtLimit, createAdHocPane, navigateToSession),
+    () =>
+      addAdHocPaneAction(
+        panes,
+        panesAtLimit,
+        createAdHocPane,
+        navigateToSession,
+      ),
     [panes, panesAtLimit, createAdHocPane, navigateToSession],
   )
 
   const handleNewATermForProject = useCallback(
-    (
-      targetProjectId: string,
-      mode?: string,
-      rootPath?: string | null,
-    ) =>
+    (targetProjectId: string, mode?: string, rootPath?: string | null) =>
       addProjectPaneAction(
         targetProjectId,
         mode,
@@ -152,16 +151,30 @@ export function useATermHandlers({
       newMode: string,
       projectSessions: ATermSession[],
       paneId?: string,
-    ) => switchProjectMode({ projectId: projectIdArg, mode: newMode, projectSessions, paneId }),
+    ) =>
+      switchProjectMode({
+        projectId: projectIdArg,
+        mode: newMode,
+        projectSessions,
+        paneId,
+      }),
     [switchProjectMode],
   )
   const handleCloseAll = useCallback(
-    () => closeAllPanesAction(panes, removePane, createAdHocPane, navigateToSession),
+    () =>
+      closeAllPanesAction(
+        panes,
+        removePane,
+        createAdHocPane,
+        navigateToSession,
+      ),
     [panes, removePane, createAdHocPane, navigateToSession],
   )
   const setATermRef = useCallback(
     (sessionId: string, handle: ATermHandle | null) =>
-      handle ? aTermRefs.current.set(sessionId, handle) : aTermRefs.current.delete(sessionId),
+      handle
+        ? aTermRefs.current.set(sessionId, handle)
+        : aTermRefs.current.delete(sessionId),
     [aTermRefs],
   )
 

@@ -1,12 +1,9 @@
-import type { LayoutMode } from '@/lib/constants/a-term'
+import type { ATermHandle, ConnectionStatus } from '@/components/ATerm'
 import type { KeyboardSizePreset } from '@/components/keyboard/types'
-import type { ConnectionStatus, ATermHandle } from '@/components/ATerm'
-import type {
-  ProjectATerm,
-  useProjectATerms,
-} from './use-project-a-terms'
+import type { LayoutMode } from '@/lib/constants/a-term'
 import type { ATermPane } from './use-a-term-panes'
 import type { ATermSession, useATermSessions } from './use-a-term-sessions'
+import type { ProjectATerm, useProjectATerms } from './use-project-a-terms'
 
 export interface UseATermHandlersProps {
   projectATerms: ProjectATerm[]
@@ -27,10 +24,7 @@ export interface UseATermHandlersProps {
     agentToolSlug?: string,
   ) => Promise<ATermPane>
   createAdHocPane: (paneName: string, workingDir?: string) => Promise<ATermPane>
-  setActiveMode: (
-    paneId: string,
-    mode: string,
-  ) => Promise<ATermPane>
+  setActiveMode: (paneId: string, mode: string) => Promise<ATermPane>
   removePane: (paneId: string) => Promise<void>
 }
 

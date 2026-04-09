@@ -3,16 +3,16 @@
 import { useEffect, useRef } from 'react'
 import Keyboard from 'simple-keyboard'
 import 'simple-keyboard/build/css/index.css'
+import { getKeyboardStyles } from './FullKeyboard.styles'
+import { KEYBOARD_DISPLAY, KEYBOARD_LAYOUT } from './keyboardLayouts'
 import { useModifiers } from './ModifierContext'
 import {
+  type ATermInputHandler,
   KEYBOARD_SIZE_HEIGHTS,
   type KeyboardSizePreset,
-  type ATermInputHandler,
 } from './types'
-import { useKeyboardInput } from './useKeyboardInput'
-import { KEYBOARD_LAYOUT, KEYBOARD_DISPLAY } from './keyboardLayouts'
 import { useKeyboardHandler } from './useKeyboardHandler'
-import { getKeyboardStyles } from './FullKeyboard.styles'
+import { useKeyboardInput } from './useKeyboardInput'
 
 interface FullKeyboardProps {
   onSend: ATermInputHandler
@@ -82,8 +82,7 @@ function FullKeyboardInner({
       style={{ backgroundColor: 'var(--term-bg-surface)' }}
     >
       <div ref={containerRef} className="a-term-simple-keyboard" />
-      {/* biome-ignore lint/security/noDangerouslySetInnerHtml: Dynamic CSS from trusted getKeyboardStyles() */}
-      <style dangerouslySetInnerHTML={{ __html: getKeyboardStyles(rowHeight) }} />
+      <style>{getKeyboardStyles(rowHeight)}</style>
     </div>
   )
 }

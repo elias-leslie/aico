@@ -1,10 +1,10 @@
 import type { MetadataRoute } from 'next'
+import { APP_THEME_COLORS } from '@/lib/app-theme'
 import {
   PRODUCT_DESCRIPTION,
   PRODUCT_NAME,
   PRODUCT_SHORT_NAME,
 } from '@/lib/project-branding'
-import { APP_THEME_COLORS } from '@/lib/app-theme'
 
 export default function manifest(): MetadataRoute.Manifest {
   return {

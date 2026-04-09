@@ -2,8 +2,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ComponentProps } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getClaudeModelOptions } from '@/lib/utils/agent-hub-models'
-import { ModifierProvider } from './ModifierContext'
 import { ControlBar } from './ControlBar'
+import { ModifierProvider } from './ModifierContext'
 
 vi.mock('@/lib/utils/agent-hub-models', () => ({
   getClaudeModelOptions: vi.fn().mockResolvedValue([]),
@@ -19,7 +19,9 @@ function createDeferred<T>() {
   return { promise, resolve, reject }
 }
 
-function renderControlBar(overrides: Partial<ComponentProps<typeof ControlBar>> = {}) {
+function renderControlBar(
+  overrides: Partial<ComponentProps<typeof ControlBar>> = {},
+) {
   const onSend = vi.fn()
   const onReconnect = vi.fn()
 
@@ -56,7 +58,9 @@ describe('ControlBar', () => {
     renderControlBar({ activeMode: 'codex' })
 
     expect(getClaudeModelOptions).not.toHaveBeenCalled()
-    expect(screen.queryByRole('button', { name: /model/i })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /model/i }),
+    ).not.toBeInTheDocument()
   })
 
   it('hides status banner for voice active sessions', async () => {
@@ -76,11 +80,15 @@ describe('ControlBar', () => {
       connectionStatus: 'disconnected',
     })
 
-    const reconnectButton = await screen.findByRole('button', { name: 'Reconnect' })
+    const reconnectButton = await screen.findByRole('button', {
+      name: 'Reconnect',
+    })
     fireEvent.click(reconnectButton)
 
     expect(onReconnect).toHaveBeenCalledTimes(1)
-    expect(screen.getByText('Reconnect to resume this A-Term')).toBeInTheDocument()
+    expect(
+      screen.getByText('Reconnect to resume this A-Term'),
+    ).toBeInTheDocument()
   })
 
   it('logs model option loading failures and keeps the picker usable', async () => {
@@ -102,7 +110,8 @@ describe('ControlBar', () => {
   })
 
   it('does not update picker state after unmount when model loading fails', async () => {
-    const deferred = createDeferred<Awaited<ReturnType<typeof getClaudeModelOptions>>>()
+    const deferred =
+      createDeferred<Awaited<ReturnType<typeof getClaudeModelOptions>>>()
     const error = new Error('request aborted')
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
     vi.mocked(getClaudeModelOptions).mockReturnValueOnce(deferred.promise)

@@ -2,12 +2,9 @@
 
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useMemo } from 'react'
-import { useProjectSettings } from './use-project-settings'
-import {
-  type ATermSession,
-  useATermSessions,
-} from './use-a-term-sessions'
+import { type ATermSession, useATermSessions } from './use-a-term-sessions'
 import { useResetProjectMutation } from './use-project-a-terms-mutations'
+import { useProjectSettings } from './use-project-settings'
 
 interface UseProjectATermsOptions {
   sessionsOverride?: ATermSession[]
@@ -58,8 +55,11 @@ function buildProjectATerm(
     (session, index) => ({ session, badge: index + 1 }),
   )
 
-  const activeSession = projectSessions.find((s) => s.mode === project.mode) ?? null
-  const sessionBadge = sessionsWithBadges.find((ps) => ps.session.id === activeSession?.id)?.badge ?? null
+  const activeSession =
+    projectSessions.find((s) => s.mode === project.mode) ?? null
+  const sessionBadge =
+    sessionsWithBadges.find((ps) => ps.session.id === activeSession?.id)
+      ?.badge ?? null
 
   return {
     projectId: project.id,
@@ -89,7 +89,8 @@ export function useProjectATerms(
 
   const sessionQuery = useATermSessions()
   const sessions = options.sessionsOverride ?? sessionQuery.sessions
-  const sessionsLoading = options.sessionsLoadingOverride ?? sessionQuery.isLoading
+  const sessionsLoading =
+    options.sessionsLoadingOverride ?? sessionQuery.isLoading
   const sessionsError = options.sessionsErrorOverride ?? sessionQuery.isError
 
   const switchToSessionViaUrl = useCallback(
@@ -102,7 +103,8 @@ export function useProjectATerms(
   )
 
   const projectATerms = useMemo(
-    () => enabledProjects.map((project) => buildProjectATerm(project, sessions)),
+    () =>
+      enabledProjects.map((project) => buildProjectATerm(project, sessions)),
     [enabledProjects, sessions],
   )
 

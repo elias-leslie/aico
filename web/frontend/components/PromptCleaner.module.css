@@ -65,7 +65,8 @@
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  border-bottom: 1px solid color-mix(in srgb, var(--term-accent) 15%, transparent);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--term-accent) 15%, transparent);
   background: var(--term-surface-overlay);
 }
 .headerLeft {
@@ -170,7 +171,12 @@
   left: 0;
   right: 0;
   height: 2px;
-  background: linear-gradient(90deg, transparent, var(--term-accent), transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--term-accent),
+    transparent
+  );
   box-shadow:
     0 0 20px var(--term-accent),
     0 0 40px color-mix(in srgb, var(--term-accent) 50%, transparent);
@@ -205,7 +211,11 @@
 }
 .progressFill {
   height: 100%;
-  background: linear-gradient(90deg, var(--term-accent), color-mix(in srgb, var(--term-accent) 80%, #000));
+  background: linear-gradient(
+    90deg,
+    var(--term-accent),
+    color-mix(in srgb, var(--term-accent) 80%, #000)
+  );
   box-shadow: 0 0 10px var(--term-accent);
   transition: width 0.05s linear;
 }
@@ -225,7 +235,8 @@
   justify-content: space-between;
   gap: 12px;
   padding: 10px 16px;
-  border-bottom: 1px solid color-mix(in srgb, var(--term-error) 25%, transparent);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--term-error) 25%, transparent);
   background: var(--term-error-muted);
   color: var(--term-error-text);
   font-family: var(--font-mono);
@@ -345,7 +356,8 @@
   font-weight: 600;
   color: var(--term-accent);
   background: color-mix(in srgb, var(--term-accent) 5%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--term-accent) 10%, transparent);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--term-accent) 10%, transparent);
   letter-spacing: 0.5px;
 }
 .labelIcon {
@@ -526,7 +538,12 @@
   transform: translateX(-50%);
   width: 60%;
   height: 1px;
-  background: linear-gradient(90deg, transparent, var(--term-accent), transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--term-accent),
+    transparent
+  );
   box-shadow: 0 0 20px color-mix(in srgb, var(--term-accent) 50%, transparent);
 }
 .glowBottom {
@@ -535,7 +552,11 @@
   left: 0;
   right: 0;
   height: 80px;
-  background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--term-accent) 3%, transparent));
+  background: linear-gradient(
+    180deg,
+    transparent,
+    color-mix(in srgb, var(--term-accent) 3%, transparent)
+  );
   pointer-events: none;
 }
 

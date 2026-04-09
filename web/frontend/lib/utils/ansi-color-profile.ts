@@ -36,7 +36,11 @@ export function profileAnsiColors(
 
   // biome-ignore lint/suspicious/noControlCharactersInRegex: ESC is required to detect ANSI SGR sequences
   const sgrRegex = /\x1b\[([0-9;:]*)m/g
-  for (let match = sgrRegex.exec(analyzed); match !== null; match = sgrRegex.exec(analyzed)) {
+  for (
+    let match = sgrRegex.exec(analyzed);
+    match !== null;
+    match = sgrRegex.exec(analyzed)
+  ) {
     const params = parseSgrParams(match[1] ?? '')
     for (let i = 0; i < params.length; i += 1) {
       const value = params[i]
@@ -44,17 +48,11 @@ export function profileAnsiColors(
         resetCount += 1
         continue
       }
-      if (
-        (value >= 30 && value <= 37) ||
-        (value >= 40 && value <= 47)
-      ) {
+      if ((value >= 30 && value <= 37) || (value >= 40 && value <= 47)) {
         basicColors += 1
         continue
       }
-      if (
-        (value >= 90 && value <= 97) ||
-        (value >= 100 && value <= 107)
-      ) {
+      if ((value >= 90 && value <= 97) || (value >= 100 && value <= 107)) {
         brightColors += 1
         continue
       }
@@ -75,7 +73,11 @@ export function profileAnsiColors(
 
   // biome-ignore lint/suspicious/noControlCharactersInRegex: ESC is required to detect ANSI OSC sequences
   const oscRegex = /\x1b\]([0-9]+);/g
-  for (let match = oscRegex.exec(analyzed); match !== null; match = oscRegex.exec(analyzed)) {
+  for (
+    let match = oscRegex.exec(analyzed);
+    match !== null;
+    match = oscRegex.exec(analyzed)
+  ) {
     const code = Number.parseInt(match[1] ?? '', 10)
     if (code === 8) {
       oscHyperlinks += 1

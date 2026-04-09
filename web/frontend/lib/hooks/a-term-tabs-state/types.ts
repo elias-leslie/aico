@@ -1,4 +1,4 @@
-import type { ConnectionStatus, ATermHandle } from '@/components/ATerm'
+import type { ATermHandle, ConnectionStatus } from '@/components/ATerm'
 import type { KeyboardSizePreset } from '@/components/keyboard/types'
 import type { LayoutMode } from '@/lib/constants/a-term'
 
@@ -14,7 +14,9 @@ export interface ATermRefsMap {
 
 export interface ATermStatusState {
   aTermStatuses: Map<string, ConnectionStatus>
-  setATermStatuses: React.Dispatch<React.SetStateAction<Map<string, ConnectionStatus>>>
+  setATermStatuses: React.Dispatch<
+    React.SetStateAction<Map<string, ConnectionStatus>>
+  >
 }
 
 export interface LayoutState {

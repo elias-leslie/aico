@@ -31,7 +31,7 @@ vi.mock('@/lib/hooks/use-a-term-handlers', () => ({
 }))
 
 vi.mock('@/lib/hooks/use-local-storage-state', () => ({
-  useLocalStorageState: <T,>(key: string, defaultValue: T) =>
+  useLocalStorageState: <T>(key: string, defaultValue: T) =>
     mockUseLocalStorageState(key, defaultValue),
 }))
 
@@ -40,7 +40,8 @@ vi.mock('@/lib/hooks/use-tab-editing', () => ({
 }))
 
 vi.mock('@/lib/hooks/use-available-layouts', () => ({
-  useAvailableLayouts: (paneCount: number) => mockUseAvailableLayouts(paneCount),
+  useAvailableLayouts: (paneCount: number) =>
+    mockUseAvailableLayouts(paneCount),
   usePaneCapacity: () => mockUsePaneCapacity(),
 }))
 
@@ -52,7 +53,9 @@ vi.mock('@/lib/hooks/use-auto-create-pane', () => ({
   useAutoCreatePane: (params: unknown) => mockUseAutoCreatePane(params),
 }))
 
-function buildActiveSessionState(overrides: Partial<ReturnType<typeof mockUseActiveSession>> = {}) {
+function buildActiveSessionState(
+  overrides: Partial<ReturnType<typeof mockUseActiveSession>> = {},
+) {
   const sessions = [
     {
       id: 'session-project-a',
@@ -146,8 +149,8 @@ describe('useATermTabsState', () => {
       projectsLoading: false,
     })
 
-    mockUseLocalStorageState.mockImplementation((_key: string, defaultValue: unknown) =>
-      useState(defaultValue),
+    mockUseLocalStorageState.mockImplementation(
+      (_key: string, defaultValue: unknown) => useState(defaultValue),
     )
     mockUseTabEditing.mockReturnValue({
       editingSessionId: null,
@@ -550,7 +553,10 @@ describe('useATermTabsState', () => {
       result.current.attachExternalSession('external-codex')
     })
     expect(result.current.aTermSlots).toHaveLength(2)
-    expect(result.current.orderedIds).toEqual(['pane-pane-project-a', 'adhoc-external-codex'])
+    expect(result.current.orderedIds).toEqual([
+      'pane-pane-project-a',
+      'adhoc-external-codex',
+    ])
 
     act(() => {
       result.current.detachExternalSession('external-codex')
@@ -560,8 +566,8 @@ describe('useATermTabsState', () => {
 
   it('swaps externally attached panes in the visible slot order', async () => {
     const swapPanePositions = vi.fn()
-    mockUseLocalStorageState.mockImplementation((_key: string, defaultValue: unknown) =>
-      useState(defaultValue),
+    mockUseLocalStorageState.mockImplementation(
+      (_key: string, defaultValue: unknown) => useState(defaultValue),
     )
     mockUseActiveSession.mockReturnValue(
       buildActiveSessionState({
@@ -627,7 +633,10 @@ describe('useATermTabsState', () => {
     ])
 
     await act(async () => {
-      await result.current.swapPanes('adhoc-external-codex', 'adhoc-external-claude')
+      await result.current.swapPanes(
+        'adhoc-external-codex',
+        'adhoc-external-claude',
+      )
     })
 
     expect(result.current.orderedIds).toEqual([
@@ -649,11 +658,14 @@ describe('useATermTabsState', () => {
     }
 
     mockUseActiveSession.mockImplementation(() => activeSessionState)
-    mockUseLocalStorageState.mockImplementation((key: string, defaultValue: unknown) =>
-      useState((persistedState[key] ?? defaultValue) as typeof defaultValue),
+    mockUseLocalStorageState.mockImplementation(
+      (key: string, defaultValue: unknown) =>
+        useState((persistedState[key] ?? defaultValue) as typeof defaultValue),
     )
     mockUseAvailableLayouts.mockImplementation((paneCount: number) =>
-      paneCount > 1 ? ['split-horizontal', 'split-vertical'] : ['split-horizontal'],
+      paneCount > 1
+        ? ['split-horizontal', 'split-vertical']
+        : ['split-horizontal'],
     )
     mockUseATermPanes.mockReturnValue({
       panes: [

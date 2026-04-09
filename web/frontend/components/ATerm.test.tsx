@@ -1,5 +1,5 @@
-import { createRef } from 'react'
 import { act, render, waitFor } from '@testing-library/react'
+import { createRef } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ATermHandle } from './ATerm'
 import { ATermComponent } from './ATerm'
@@ -139,17 +139,15 @@ vi.mock('../lib/utils/device', () => ({
 }))
 
 vi.mock('./ScrollbackOverlay', () => ({
-  ScrollbackOverlay: (
-    props: {
-      isActive: boolean
-      lines: string[]
-      totalLines: number
-      isLoading: boolean
-      initialScrollLineDelta: number
-      searchQuery: string
-      searchActiveIndex: number
-    },
-  ) => {
+  ScrollbackOverlay: (props: {
+    isActive: boolean
+    lines: string[]
+    totalLines: number
+    isLoading: boolean
+    initialScrollLineDelta: number
+    searchQuery: string
+    searchActiveIndex: number
+  }) => {
     scrollbackOverlayState.push(props)
     return null
   },
@@ -408,7 +406,9 @@ describe('ATermComponent', () => {
       />,
     )
 
-    websocketState.options?.onScrollbackSync?.('line-1\r\nline-2\r\nline-3\r\nline-4\r\n')
+    websocketState.options?.onScrollbackSync?.(
+      'line-1\r\nline-2\r\nline-3\r\nline-4\r\n',
+    )
     await Promise.resolve()
 
     fakeATerm.reset.mockClear()
@@ -463,7 +463,9 @@ describe('ATermComponent', () => {
       />,
     )
 
-    websocketState.options?.onScrollbackSync?.('line-1\r\nline-2\r\nline-3\r\nline-4\r\n')
+    websocketState.options?.onScrollbackSync?.(
+      'line-1\r\nline-2\r\nline-3\r\nline-4\r\n',
+    )
     await Promise.resolve()
 
     expect(fakeATerm.reset).not.toHaveBeenCalled()

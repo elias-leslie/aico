@@ -33,10 +33,7 @@ export interface UseATermDiagnosticsReturn {
   enabled: boolean
   countersRef: React.RefObject<DiagnosticCounters>
   logRef: React.RefObject<DiagnosticEntry[]>
-  incrementCounter: (
-    counter: keyof DiagnosticCounters,
-    delta?: number,
-  ) => void
+  incrementCounter: (counter: keyof DiagnosticCounters, delta?: number) => void
   record: (event: string, details?: Record<string, unknown>) => void
   getDiagnostics: () => {
     frontend: DiagnosticCounters
@@ -139,10 +136,7 @@ export function useATermDiagnostics(
   useEffect(() => {
     if (!enabled.current || !sessionId || typeof window === 'undefined') return
     const target = window as typeof window & {
-      __aTermDiagnostics?: Record<
-        string,
-        ReturnType<typeof getDiagnostics>
-      >
+      __aTermDiagnostics?: Record<string, ReturnType<typeof getDiagnostics>>
     }
     if (!target.__aTermDiagnostics) {
       target.__aTermDiagnostics = {}
@@ -158,10 +152,7 @@ export function useATermDiagnostics(
   useEffect(() => {
     if (!enabled.current || !sessionId || typeof window === 'undefined') return
     const target = window as typeof window & {
-      __aTermDiagnostics?: Record<
-        string,
-        ReturnType<typeof getDiagnostics>
-      >
+      __aTermDiagnostics?: Record<string, ReturnType<typeof getDiagnostics>>
     }
     const interval = window.setInterval(() => {
       if (!target.__aTermDiagnostics) return

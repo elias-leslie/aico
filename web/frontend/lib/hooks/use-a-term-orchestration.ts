@@ -1,15 +1,15 @@
 import { useCallback, useState } from 'react'
+import { useATermKeyboardShortcuts } from '@/components/KeyboardShortcuts'
 import { getAgentHubVoiceWsUrl } from '@/lib/api-config'
 import { useTranscription } from '@/lib/voice/use-transcription'
-import { useLayoutPersistence } from './use-layout-persistence'
-import { usePromptCleaner } from './use-prompt-cleaner'
+import { findSessionByMode } from './a-term-handler-utils'
 import { useATermActionHandlers } from './use-a-term-action-handlers'
 import { useATermModals } from './use-a-term-modals'
 import { useATermNavigation } from './use-a-term-navigation'
 import { useATermSlotHandlers } from './use-a-term-slot-handlers'
 import { useATermTabsState } from './use-a-term-tabs-state'
-import { findSessionByMode } from './a-term-handler-utils'
-import { useATermKeyboardShortcuts } from '@/components/KeyboardShortcuts'
+import { useLayoutPersistence } from './use-layout-persistence'
+import { usePromptCleaner } from './use-prompt-cleaner'
 
 interface UseATermOrchestrationProps {
   projectId?: string

@@ -77,20 +77,14 @@ export function useATermWriteQueue({
   )
 
   const bumpCounter = useCallback(
-    (
-      counter: keyof DiagnosticCounters,
-      delta = 1,
-    ) => {
+    (counter: keyof DiagnosticCounters, delta = 1) => {
       diagnostics?.incrementCounter(counter, delta)
     },
     [diagnostics],
   )
 
   const runOperation = useCallback(
-    (
-      operation: ATermOperation,
-      generation: number,
-    ) =>
+    (operation: ATermOperation, generation: number) =>
       new Promise<void>((resolve) => {
         const term = aTermRef.current
         const isStale = () => generation !== resetGenerationRef.current
@@ -110,12 +104,7 @@ export function useATermWriteQueue({
             const nextTerm = aTermRef.current
             const nextBuffer = nextTerm?.buffer.active
 
-            if (
-              !isStale() &&
-              isScrolledUp &&
-              nextTerm &&
-              nextBuffer
-            ) {
+            if (!isStale() && isScrolledUp && nextTerm && nextBuffer) {
               const targetLine = Math.max(
                 nextBuffer.baseY - savedLinesFromBottom,
                 0,
@@ -190,13 +179,7 @@ export function useATermWriteQueue({
           resolve()
         })
       }),
-    [
-      bumpCounter,
-      diagnostics,
-      hasPendingPromptInput,
-      isVisibleRef,
-      aTermRef,
-    ],
+    [bumpCounter, diagnostics, hasPendingPromptInput, isVisibleRef, aTermRef],
   )
 
   const drainQueue = useCallback(async () => {
@@ -243,7 +226,8 @@ export function useATermWriteQueue({
         const lastOperation = pendingOperationsRef.current.at(-1)
         if (
           lastOperation?.type === 'write' &&
-          lastOperation.data.length + operation.data.length <= MAX_COALESCE_CHARS
+          lastOperation.data.length + operation.data.length <=
+            MAX_COALESCE_CHARS
         ) {
           lastOperation.data += operation.data
         } else {

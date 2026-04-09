@@ -23,7 +23,10 @@ export default function Error({
   return (
     <div
       className="h-dvh flex flex-col items-center justify-center gap-5 px-6"
-      style={{ backgroundColor: 'var(--term-bg-deep)', color: 'var(--term-text-primary)' }}
+      style={{
+        backgroundColor: 'var(--term-bg-deep)',
+        color: 'var(--term-text-primary)',
+      }}
       role="alert"
       aria-live="assertive"
     >
@@ -48,14 +51,20 @@ export default function Error({
         </h1>
         <p
           className="text-sm leading-relaxed"
-          style={{ color: 'var(--term-text-muted)', fontFamily: 'var(--font-mono)' }}
+          style={{
+            color: 'var(--term-text-muted)',
+            fontFamily: 'var(--font-mono)',
+          }}
         >
           {getDisplayMessage(PRODUCT_NAME)}
         </p>
         {error.digest ? (
           <p
             className="mt-2 text-xs"
-            style={{ color: 'var(--term-text-dim)', fontFamily: 'var(--font-mono)' }}
+            style={{
+              color: 'var(--term-text-dim)',
+              fontFamily: 'var(--font-mono)',
+            }}
           >
             Reference: {error.digest}
           </p>

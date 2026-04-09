@@ -2,15 +2,12 @@
 
 import { useImperativeHandle } from 'react'
 import type {
-  ConnectionStatus,
   ATermHandle,
   ATermSearchOptions,
   ATermSearchResult,
+  ConnectionStatus,
 } from '../../components/a-term.types'
-import {
-  getATermContent,
-  getATermLastLine,
-} from '../utils/a-term-buffer'
+import { getATermContent, getATermLastLine } from '../utils/a-term-buffer'
 import { useBracketedPaste } from './use-bracketed-paste'
 
 type XtermATerm = InstanceType<typeof import('@xterm/xterm').Terminal>
@@ -20,10 +17,7 @@ interface UseATermHandleOptions {
   sendInput: (data: string) => void
   status: ConnectionStatus
   aTermRef: React.RefObject<XtermATerm | null>
-  search: (
-    query: string,
-    options?: ATermSearchOptions,
-  ) => ATermSearchResult
+  search: (query: string, options?: ATermSearchOptions) => ATermSearchResult
   clearSearch: () => void
 }
 

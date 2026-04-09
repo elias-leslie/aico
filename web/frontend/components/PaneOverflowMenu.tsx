@@ -121,7 +121,13 @@ export function PaneOverflowMenu({
   }, [onRename])
 
   const hasPaneSessionActions = !!(onDetach || onCloseSession)
-  const hasPaneUtilityActions = !!(onReset || onSettings || onUpload || onVoice || onClean)
+  const hasPaneUtilityActions = !!(
+    onReset ||
+    onSettings ||
+    onUpload ||
+    onVoice ||
+    onClean
+  )
   const hasBulkActions = !!(onResetAll || onCloseAll)
 
   return (
@@ -242,12 +248,13 @@ export function PaneOverflowMenu({
               isMobile={isMobile}
             />
           )}
-          {(hasPaneSessionActions || hasPaneUtilityActions) && hasBulkActions && (
-            <div
-              className="mx-2 my-1 h-px"
-              style={{ backgroundColor: 'var(--term-border)' }}
-            />
-          )}
+          {(hasPaneSessionActions || hasPaneUtilityActions) &&
+            hasBulkActions && (
+              <div
+                className="mx-2 my-1 h-px"
+                style={{ backgroundColor: 'var(--term-border)' }}
+              />
+            )}
           {onResetAll && (
             <MenuItemButton
               icon={<RefreshCw className="w-3.5 h-3.5" />}

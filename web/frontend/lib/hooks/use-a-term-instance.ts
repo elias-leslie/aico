@@ -1,27 +1,27 @@
 import { useEffect, useRef, useState } from 'react'
-import { setupATermMouseHandling } from './use-a-term-mouse-handling'
 import {
   type ATermInstanceOptions,
   type ATermInstanceRefs,
+  createATermWithAddons,
   type FocusPasteCleanup,
   installBootstrapWheelBlocker,
+  loadXtermModules,
   replaceScrollingHandlers,
-  setupScrollbarAutoHide,
+  setupFocusAndPasteTracking,
   setupMobileATerm,
   setupMobileContextMenuPaste,
-  setupFocusAndPasteTracking,
-  loadXtermModules,
-  createATermWithAddons,
+  setupScrollbarAutoHide,
 } from './a-term-instance-utils'
+import { setupATermMouseHandling } from './use-a-term-mouse-handling'
 
+export type {
+  ATermInstanceOptions,
+  ATermInstanceRefs,
+} from './a-term-instance-utils'
 // Re-export public API used by tests and other consumers
 export {
   installBootstrapWheelBlocker,
   replaceScrollingHandlers,
-} from './a-term-instance-utils'
-export type {
-  ATermInstanceOptions,
-  ATermInstanceRefs,
 } from './a-term-instance-utils'
 
 /**
@@ -71,8 +71,9 @@ export function useATermInstance(
     async function initATerm() {
       if (!containerRef.current) return
 
-      bootstrapWheelCleanupRef.current =
-        installBootstrapWheelBlocker(containerRef.current)
+      bootstrapWheelCleanupRef.current = installBootstrapWheelBlocker(
+        containerRef.current,
+      )
 
       const modules = await loadXtermModules()
       if (!mounted) return

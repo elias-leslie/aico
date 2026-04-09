@@ -15,7 +15,11 @@ interface MobileATermStatusOptions {
   canReconnect?: boolean
 }
 
-const RECONNECTABLE_STATUSES: ConnectionStatus[] = ['disconnected', 'error', 'timeout']
+const RECONNECTABLE_STATUSES: ConnectionStatus[] = [
+  'disconnected',
+  'error',
+  'timeout',
+]
 
 export function isReconnectableStatus(status?: ConnectionStatus): boolean {
   return status !== undefined && RECONNECTABLE_STATUSES.includes(status)

@@ -63,27 +63,30 @@ export function useScrollbackOverlay({
 
   const getCachedLines = useCallback(() => cachedLinesRef.current.slice(), [])
 
-  const activate = useCallback((nextInitialScrollLineDelta = 0) => {
-    if (!isTui || activeRef.current) return
-    activeRef.current = true
-    setInitialScrollLineDelta(nextInitialScrollLineDelta)
-    setIsActive(true)
+  const activate = useCallback(
+    (nextInitialScrollLineDelta = 0) => {
+      if (!isTui || activeRef.current) return
+      activeRef.current = true
+      setInitialScrollLineDelta(nextInitialScrollLineDelta)
+      setIsActive(true)
 
-    // Show cached data instantly (no loading spinner)
-    if (cachedLinesRef.current.length > 0) {
-      setLines(cachedLinesRef.current.slice())
-      setTotalLines(cachedTotalLinesRef.current)
-      setIsLoading(false)
-    } else {
-      setIsLoading(true)
-      setLines([])
-    }
+      // Show cached data instantly (no loading spinner)
+      if (cachedLinesRef.current.length > 0) {
+        setLines(cachedLinesRef.current.slice())
+        setTotalLines(cachedTotalLinesRef.current)
+        setIsLoading(false)
+      } else {
+        setIsLoading(true)
+        setLines([])
+      }
 
-    // Always fetch fresh data — cache may be stale if the agent has
-    // produced new output since the last sync. The server response
-    // will update the displayed content via handleScrollbackPage.
-    requestFreshData()
-  }, [isTui, requestFreshData])
+      // Always fetch fresh data — cache may be stale if the agent has
+      // produced new output since the last sync. The server response
+      // will update the displayed content via handleScrollbackPage.
+      requestFreshData()
+    },
+    [isTui, requestFreshData],
+  )
 
   const deactivate = useCallback(() => {
     activeRef.current = false
@@ -116,8 +119,10 @@ export function useScrollbackOverlay({
       return
     }
     // Show whichever has more content: the incoming page or the cache
-    const best = data.lines.length >= cachedLinesRef.current.length
-      ? data.lines : cachedLinesRef.current
+    const best =
+      data.lines.length >= cachedLinesRef.current.length
+        ? data.lines
+        : cachedLinesRef.current
     setLines(best)
     setTotalLines(Math.max(data.total_lines, cachedTotalLinesRef.current))
     setIsLoading(false)

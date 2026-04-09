@@ -47,7 +47,13 @@ describe('ToolForm', () => {
 
     render(
       <ToolForm
-        initial={{ ...EMPTY_FORM, name: 'Codex', slug: 'codex', command: 'codex', process_name: 'codex' }}
+        initial={{
+          ...EMPTY_FORM,
+          name: 'Codex',
+          slug: 'codex',
+          command: 'codex',
+          process_name: 'codex',
+        }}
         onSubmit={onSubmit}
         onCancel={vi.fn()}
         isEdit={false}

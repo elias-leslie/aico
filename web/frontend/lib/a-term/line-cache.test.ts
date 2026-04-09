@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { LineCache } from './line-cache'
 import type { ScrollbackDelta } from './line-cache'
+import { LineCache } from './line-cache'
 
 describe('LineCache', () => {
   it('applies a delta with changes', () => {

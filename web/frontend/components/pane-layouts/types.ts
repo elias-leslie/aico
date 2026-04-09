@@ -1,5 +1,5 @@
 import type { Layout } from 'react-resizable-panels'
-import type { PaneSlot, ATermSlot } from '@/lib/utils/slot'
+import type { ATermSlot, PaneSlot } from '@/lib/utils/slot'
 
 export interface LayoutHelperProps {
   containerRef: React.RefObject<HTMLDivElement | null>

@@ -16,11 +16,13 @@ let resolvedPassport:
 try {
   const dynamicRequire = Function(
     'return typeof require !== "undefined" ? require : null',
-  )() as ((id: string) => {
-    useTranscription?: (
-      options?: UseTranscriptionOptions,
-    ) => UseTranscriptionReturn
-  }) | null
+  )() as
+    | ((id: string) => {
+        useTranscription?: (
+          options?: UseTranscriptionOptions,
+        ) => UseTranscriptionReturn
+      })
+    | null
   const mod = dynamicRequire?.('@agent-hub/passport-client')
   resolvedPassport = mod?.useTranscription ?? null
 } catch {

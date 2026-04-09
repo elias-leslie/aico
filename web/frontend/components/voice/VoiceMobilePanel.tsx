@@ -3,8 +3,8 @@
 import { clsx } from 'clsx'
 import { Keyboard, Mic, MicOff, Send, X } from 'lucide-react'
 import type { TranscriptionError, TranscriptionStatus } from '@/lib/voice/types'
-import { SHORT_ERROR_MESSAGES } from './voiceErrorMessages'
 import styles from '../VoiceTranscriptPanel.module.css'
+import { SHORT_ERROR_MESSAGES } from './voiceErrorMessages'
 
 interface VoiceMobilePanelProps {
   editedText: string
@@ -36,7 +36,7 @@ export function VoiceMobilePanel({
 
   const statusMessage =
     status === 'error' && error
-      ? SHORT_ERROR_MESSAGES[error] ?? 'Error'
+      ? (SHORT_ERROR_MESSAGES[error] ?? 'Error')
       : isListening
         ? 'Listening...'
         : isProcessing
@@ -149,18 +149,14 @@ export function VoiceMobilePanel({
             cursor: isProcessing ? 'not-allowed' : 'pointer',
             transition: 'all 0.2s',
             border: `2px solid ${
-              showPulse
-                ? 'var(--term-error)'
-                : 'var(--term-accent)'
+              showPulse ? 'var(--term-error)' : 'var(--term-accent)'
             }`,
             background: showPulse
               ? 'color-mix(in srgb, var(--term-error) 15%, transparent)'
               : showSendIcon
                 ? 'color-mix(in srgb, var(--term-accent) 15%, transparent)'
                 : 'color-mix(in srgb, var(--term-accent) 8%, transparent)',
-            color: showPulse
-              ? 'var(--term-error)'
-              : 'var(--term-accent)',
+            color: showPulse ? 'var(--term-error)' : 'var(--term-accent)',
             opacity: isProcessing ? 0.5 : 1,
           }}
         >

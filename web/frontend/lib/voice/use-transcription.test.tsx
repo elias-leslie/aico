@@ -55,7 +55,8 @@ describe('useTranscription', () => {
   beforeEach(() => {
     vi.resetModules()
     FakeSpeechRecognition.instances = []
-    window.SpeechRecognition = FakeSpeechRecognition as unknown as typeof window.SpeechRecognition
+    window.SpeechRecognition =
+      FakeSpeechRecognition as unknown as typeof window.SpeechRecognition
     window.webkitSpeechRecognition = undefined
   })
 

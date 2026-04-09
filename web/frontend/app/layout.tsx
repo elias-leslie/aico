@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next'
+import { DM_Sans, JetBrains_Mono } from 'next/font/google'
 import { headers } from 'next/headers'
-import { JetBrains_Mono, DM_Sans } from 'next/font/google'
 import Script from 'next/script'
 import { APP_THEME_COLORS, APP_THEME_INIT_SCRIPT } from '@/lib/app-theme'
 import {
@@ -38,7 +38,9 @@ export const metadata: Metadata = {
       { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
       { url: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
     ],
-    apple: [{ url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' }],
+    apple: [
+      { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+    ],
   },
 }
 
@@ -69,7 +71,9 @@ export default async function RootLayout({
           {PWA_REGISTER_SCRIPT}
         </Script>
       </head>
-      <body className={`${jetbrainsMono.variable} ${dmSans.variable} antialiased`}>
+      <body
+        className={`${jetbrainsMono.variable} ${dmSans.variable} antialiased`}
+      >
         <Providers>{children}</Providers>
       </body>
     </html>

@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import type { AdHocSlot, ProjectSlot } from './slot'
 import {
+  getPaneId,
   getSlotBaseName,
   getSlotName,
   getSlotPanelId,
   getSlotSessionId,
   getSlotWorkingDir,
   isPaneSlot,
-  getPaneId,
-  paneToSlot,
   type PaneSlot,
+  paneToSlot,
 } from './slot'
 
 const makeProjectSlot = (overrides?: Partial<ProjectSlot>): ProjectSlot => ({
@@ -160,8 +160,24 @@ describe('paneToSlot', () => {
       grid_row: 0,
       grid_col: 0,
       sessions: [
-        { id: 's1', name: 'Shell', mode: 'shell', session_number: 1, is_alive: true, working_dir: '/ws', claude_state: 'not_started' },
-        { id: 's2', name: 'Agent', mode: 'claude', session_number: 2, is_alive: true, working_dir: '/ws', claude_state: 'running' },
+        {
+          id: 's1',
+          name: 'Shell',
+          mode: 'shell',
+          session_number: 1,
+          is_alive: true,
+          working_dir: '/ws',
+          claude_state: 'not_started',
+        },
+        {
+          id: 's2',
+          name: 'Agent',
+          mode: 'claude',
+          session_number: 2,
+          is_alive: true,
+          working_dir: '/ws',
+          claude_state: 'running',
+        },
       ],
     })
 
@@ -189,7 +205,15 @@ describe('paneToSlot', () => {
       grid_row: 0,
       grid_col: 0,
       sessions: [
-        { id: 's3', name: 'Shell', mode: 'shell', session_number: 1, is_alive: true, working_dir: '/tmp', claude_state: 'not_started' },
+        {
+          id: 's3',
+          name: 'Shell',
+          mode: 'shell',
+          session_number: 1,
+          is_alive: true,
+          working_dir: '/tmp',
+          claude_state: 'not_started',
+        },
       ],
     })
 

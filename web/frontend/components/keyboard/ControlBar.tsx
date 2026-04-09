@@ -3,7 +3,10 @@
 import { ChevronDown, ChevronUp, Mic, Sparkles } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ConnectionStatus } from '@/components/a-term.types'
-import { getClaudeModelOptions, type ClaudeModelOption } from '@/lib/utils/agent-hub-models'
+import {
+  type ClaudeModelOption,
+  getClaudeModelOptions,
+} from '@/lib/utils/agent-hub-models'
 import {
   getMobileATermBannerState,
   isReconnectableStatus,
@@ -142,7 +145,8 @@ export function ControlBar({
     activeMode,
     voiceActive,
     minimized,
-    canReconnect: isReconnectableStatus(connectionStatus) && onReconnect !== undefined,
+    canReconnect:
+      isReconnectableStatus(connectionStatus) && onReconnect !== undefined,
   })
 
   const bannerToneStyles = {
@@ -231,11 +235,15 @@ export function ControlBar({
               type="button"
               onClick={() => setShowModelPicker((p) => !p)}
               className="flex items-center gap-1.5 h-11 px-3 rounded-md text-xs font-medium transition-all duration-150 active:scale-95"
-              style={showModelPicker ? {
-                backgroundColor: 'var(--term-accent-soft)',
-                color: 'var(--term-accent)',
-                border: '1px solid var(--term-accent)',
-              } : btnStyle}
+              style={
+                showModelPicker
+                  ? {
+                      backgroundColor: 'var(--term-accent-soft)',
+                      color: 'var(--term-accent)',
+                      border: '1px solid var(--term-accent)',
+                    }
+                  : btnStyle
+              }
               title="Switch Claude model"
             >
               <Sparkles className="w-4 h-4" />

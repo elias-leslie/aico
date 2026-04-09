@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { AgentTool } from '@/lib/hooks/use-agent-tools'
 import { ModeToggle } from './ModeToggle'
@@ -32,7 +32,10 @@ describe('ModeToggle', () => {
 
     const button = screen.getByTestId('mode-toggle')
     expect(button).toBeInTheDocument()
-    expect(button).toHaveAttribute('aria-label', 'Shell mode — click for Claude')
+    expect(button).toHaveAttribute(
+      'aria-label',
+      'Shell mode — click for Claude',
+    )
   })
 
   it('renders in agent mode with tool name in aria-label', () => {
@@ -46,7 +49,10 @@ describe('ModeToggle', () => {
     )
 
     const button = screen.getByTestId('mode-toggle')
-    expect(button).toHaveAttribute('aria-label', 'Claude mode — click for Shell')
+    expect(button).toHaveAttribute(
+      'aria-label',
+      'Claude mode — click for Shell',
+    )
   })
 
   it('calls onChange with opposite mode when clicked in shell mode', async () => {
@@ -90,7 +96,10 @@ describe('ModeToggle', () => {
     render(<ModeToggle value="shell" onChange={onChange} />)
 
     const button = screen.getByTestId('mode-toggle')
-    expect(button).toHaveAttribute('aria-label', 'Shell mode — no agent tools configured')
+    expect(button).toHaveAttribute(
+      'aria-label',
+      'Shell mode — no agent tools configured',
+    )
     expect(button).toBeDisabled()
   })
 

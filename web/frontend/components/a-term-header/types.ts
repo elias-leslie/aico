@@ -1,11 +1,11 @@
-import type { PaneSlot, ATermSlot } from '@/lib/utils/slot'
-import type { ATermMode } from '../ModeToggle'
-import type { LayoutMode } from '@/lib/constants/a-term'
 import type {
-  ConnectionStatus,
   ATermSearchOptions,
   ATermSearchResult,
+  ConnectionStatus,
 } from '@/components/a-term.types'
+import type { LayoutMode } from '@/lib/constants/a-term'
+import type { ATermSlot, PaneSlot } from '@/lib/utils/slot'
+import type { ATermMode } from '../ModeToggle'
 
 export interface UnifiedATermHeaderProps {
   slot: ATermSlot | PaneSlot
@@ -46,10 +46,7 @@ export interface UnifiedATermHeaderProps {
   connectionStatus?: ConnectionStatus
   /** Callback to reconnect the pane's session */
   onReconnect?: () => void
-  onSearch?: (
-    query: string,
-    options?: ATermSearchOptions,
-  ) => ATermSearchResult
+  onSearch?: (query: string, options?: ATermSearchOptions) => ATermSearchResult
   onClearSearch?: () => void
 }
 

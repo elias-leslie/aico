@@ -3,6 +3,7 @@
 import type { ATermTheme } from '../lib/constants/a-term'
 import { useScrollbackATerm } from '../lib/hooks/use-scrollback-a-term'
 import { useScrollbackGestures } from '../lib/hooks/use-scrollback-gestures'
+
 interface ScrollbackOverlayProps {
   isActive: boolean
   lines: string[]
@@ -41,7 +42,13 @@ export function ScrollbackOverlay({
     fontSize,
   })
 
-  useScrollbackGestures({ containerRef, isActive, xtermRef, flushPendingLines, onDismiss })
+  useScrollbackGestures({
+    containerRef,
+    isActive,
+    xtermRef,
+    flushPendingLines,
+    onDismiss,
+  })
 
   if (!isActive) return null
 

@@ -2,10 +2,10 @@
 
 import { clsx } from 'clsx'
 import { useATermOrchestration } from '@/lib/hooks/use-a-term-orchestration'
-import { KeyboardShortcuts } from './KeyboardShortcuts'
 import { ATermContent } from './ATermContent'
 import { ATermManagerModal } from './ATermManagerModal'
 import { ATermSkeleton } from './ATermSkeleton'
+import { KeyboardShortcuts } from './KeyboardShortcuts'
 
 interface ATermTabsProps {
   projectId?: string
@@ -226,7 +226,6 @@ export function ATermTabs({
         isOpen={showKeyboardHelp}
         onClose={handleCloseKeyboardHelp}
       />
-
     </>
   )
 }

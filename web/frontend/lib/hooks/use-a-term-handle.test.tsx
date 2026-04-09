@@ -1,5 +1,5 @@
-import { createRef, forwardRef } from 'react'
 import { act, render } from '@testing-library/react'
+import { createRef, forwardRef } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ATermHandle } from '@/components/ATerm'
 import { useATermHandle } from './use-a-term-handle'

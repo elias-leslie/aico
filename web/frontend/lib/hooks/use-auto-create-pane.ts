@@ -80,7 +80,10 @@ export function useAutoCreatePane({
             }
           } catch (error) {
             if (!cancelled) {
-              console.error('Failed to auto-create pane on initial load:', error)
+              console.error(
+                'Failed to auto-create pane on initial load:',
+                error,
+              )
             }
           } finally {
             if (!cancelled) {
@@ -106,7 +109,10 @@ export function useAutoCreatePane({
       void createAndFocusPane(generatePaneName('Ad-Hoc A-Term', adHocCount))
         .catch((error) => {
           if (!cancelled) {
-            console.error('Failed to auto-create pane after closing last:', error)
+            console.error(
+              'Failed to auto-create pane after closing last:',
+              error,
+            )
           }
         })
         .finally(() => {
