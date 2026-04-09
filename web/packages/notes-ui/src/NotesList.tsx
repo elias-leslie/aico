@@ -57,12 +57,12 @@ export function NotesList({ activeTab, scopeFilter, selectedId, onSelect }: Note
         >
             <div className="px-2 pt-2 pb-1.5">
                 <div className="relative">
-                    <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-[var(--notes-text-dim)]" />
+                    <Search className="pointer-events-none absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--notes-text-dim)]" />
                     <input
                         value={search}
                         onChange={e => setSearch(e.target.value)}
-                        placeholder="Search..."
-                        className="w-full rounded-lg border border-[var(--notes-border)] bg-[var(--notes-bg-elevated)] py-1.5 pl-8 pr-2 text-xs text-[var(--notes-text-primary)] outline-none transition-all placeholder:text-[var(--notes-text-dim)] focus:border-[var(--notes-accent-border)] focus:ring-1 focus:ring-[var(--notes-accent-border)]"
+                        aria-label={`Search ${activeTab}s`}
+                        className="w-full rounded-lg border border-[var(--notes-border)] bg-[var(--notes-bg-elevated)] py-1.5 pl-12 pr-2 text-xs text-[var(--notes-text-primary)] outline-none transition-all focus:border-[var(--notes-accent-border)] focus:ring-1 focus:ring-[var(--notes-accent-border)]"
                     />
                 </div>
             </div>
