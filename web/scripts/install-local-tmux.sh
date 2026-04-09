@@ -19,12 +19,7 @@ fi
 # ── Check for tmux ──────────────────────────────────────────────
 if ! command -v tmux >/dev/null 2>&1; then
   echo "tmux is not installed." >&2
-  echo "" >&2
-  echo "Install it with your package manager:" >&2
-  echo "  Ubuntu/Debian: sudo apt install tmux" >&2
-  echo "  Fedora/RHEL:   sudo dnf install tmux" >&2
-  echo "  Arch:          sudo pacman -S tmux" >&2
-  echo "  macOS:         brew install tmux" >&2
+  echo "Run 'bash scripts/install.sh' to let the installer add tmux automatically." >&2
   exit 1
 fi
 

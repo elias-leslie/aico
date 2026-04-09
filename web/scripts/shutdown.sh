@@ -1,5 +1,6 @@
 #!/bin/bash
 # Stop A-Term services via systemd (User Mode)
+set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 export REPO_ROOT
@@ -37,6 +38,9 @@ systemctl --user stop "$FRONTEND_SERVICE" || true
 
 echo "Stopping ${PRODUCT_NAME} backend..."
 systemctl --user stop "$BACKEND_SERVICE" || true
+
+echo "Stopping managed PostgreSQL (if configured)..."
+bash "$REPO_ROOT/scripts/managed-postgres.sh" stop || true
 
 echo ""
 echo "${PRODUCT_NAME} stopped."

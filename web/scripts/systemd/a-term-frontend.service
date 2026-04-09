@@ -6,6 +6,7 @@ Wants=a-term-backend.service
 [Service]
 Type=simple
 WorkingDirectory=__PROJECT_ROOT__/frontend
+Environment="PATH=%h/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin"
 Environment="HOME=%h"
 EnvironmentFile=-__PROJECT_ROOT__/.env.local
 EnvironmentFile=-__PROJECT_ROOT__/.env

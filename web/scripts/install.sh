@@ -13,9 +13,9 @@ Usage: bash scripts/install.sh [--no-start] [--skip-systemd]
 
 Bootstraps A-Term for a native Linux install:
   - prepares .env.local when missing
-  - bootstraps a local PostgreSQL Docker container when DATABASE_URL is unset
-  - bootstraps uv and Python 3.13 when needed
-  - validates tmux and links the repo tmux config
+  - bootstraps Node.js 22, corepack, uv, and Python 3.13 when needed
+  - installs tmux automatically when it is missing
+  - bootstraps managed PostgreSQL automatically when DATABASE_URL is unset
   - installs Python and frontend dependencies
   - runs database migrations
   - builds the production frontend
@@ -51,23 +51,26 @@ for arg in "$@"; do
   esac
 done
 
+command_exists() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+docker_available() {
+  command_exists docker && docker info >/dev/null 2>&1
+}
+
 require_command() {
-  if ! command -v "$1" >/dev/null 2>&1; then
-    echo "Missing required command: $1" >&2
-    exit 1
-  fi
+  command_exists "$1" || fail "Missing required command: $1"
 }
 
 ensure_uv() {
-  if command -v uv >/dev/null 2>&1; then
+  if command_exists uv; then
     return
   fi
-
   step "Installing uv"
   curl -LsSf https://astral.sh/uv/install.sh | sh
   export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
-
-  if ! command -v uv >/dev/null 2>&1; then
+  if ! command_exists uv; then
     fail "uv installation completed, but uv is still not on PATH."
   fi
 }
@@ -115,88 +118,169 @@ path.write_text("\n".join(next_lines) + "\n")
 PY
 }
 
-find_available_local_port() {
-  python3 - "$@" <<'PY'
-import socket
-import sys
-
-for raw_port in sys.argv[1:]:
-    port = int(raw_port)
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        try:
-            sock.bind(("127.0.0.1", port))
-        except OSError:
-            continue
-        print(port)
-        raise SystemExit(0)
-
-raise SystemExit("Install failed: no free local PostgreSQL port was available for bootstrap.")
-PY
+run_as_root() {
+  if [[ "$(id -u)" -eq 0 ]]; then
+    "$@"
+    return
+  fi
+  command_exists sudo || fail "sudo is required to install missing system packages automatically."
+  sudo "$@"
 }
 
-wait_for_postgres_container() {
-  local container_name="$1"
-  local db_user="$2"
-  local db_name="$3"
-  local attempts="${4:-45}"
+detect_package_manager() {
+  if command_exists apt-get; then
+    printf 'apt-get\n'
+    return
+  fi
+  if command_exists dnf; then
+    printf 'dnf\n'
+    return
+  fi
+  if command_exists pacman; then
+    printf 'pacman\n'
+    return
+  fi
 
-  for ((i = 1; i <= attempts; i += 1)); do
-    if docker exec "$container_name" pg_isready -U "$db_user" -d "$db_name" >/dev/null 2>&1; then
-      return 0
-    fi
-    sleep 1
-  done
-
-  fail "PostgreSQL container ${container_name} did not become ready."
+  fail "Automatic package installation supports apt-get, dnf, and pacman right now."
 }
 
-bootstrap_local_postgres() {
-  local env_file="$1"
-  local container_name="$2"
-  local postgres_db="a-term"
-  local postgres_user="a-term"
-  local postgres_password="a-term"
-  local host_port=""
+install_system_role() {
+  local role="$1"
+  local manager=""
+  local packages=()
 
-  if ! command -v docker >/dev/null 2>&1; then
-    fail "DATABASE_URL is unset and docker is not installed. Install Docker for the supported one-shot bootstrap path, or set DATABASE_URL to an existing PostgreSQL instance in .env.local."
+  manager="$(detect_package_manager)"
+  case "${manager}:${role}" in
+    apt-get:tmux)
+      packages=(tmux)
+      ;;
+    apt-get:postgresql_server)
+      packages=(postgresql)
+      ;;
+    dnf:tmux)
+      packages=(tmux)
+      ;;
+    dnf:postgresql_server)
+      packages=(postgresql-server)
+      ;;
+    pacman:tmux)
+      packages=(tmux)
+      ;;
+    pacman:postgresql_server)
+      packages=(postgresql)
+      ;;
+    *)
+      fail "Unsupported package role: ${role}"
+      ;;
+  esac
+
+  step "Installing ${role//_/ }"
+  case "$manager" in
+    apt-get)
+      run_as_root apt-get update
+      run_as_root apt-get install -y "${packages[@]}"
+      ;;
+    dnf)
+      run_as_root dnf install -y "${packages[@]}"
+      ;;
+    pacman)
+      run_as_root pacman -Sy --noconfirm "${packages[@]}"
+      ;;
+  esac
+}
+
+node_major_version() {
+  node -p 'process.versions.node.split(".")[0]'
+}
+
+ensure_corepack() {
+  command_exists corepack || fail "corepack is not available after Node.js bootstrap."
+  corepack enable --install-directory "$HOME/.local/bin" >/dev/null 2>&1 || true
+}
+
+ensure_node_runtime() {
+  local node_version="${A_TERM_NODE_VERSION:-v22.21.1}"
+  local install_root="$HOME/.local/share/a-term/node"
+  local arch=""
+  local install_dir=""
+  local archive_path=""
+  local download_url=""
+
+  if command_exists node && command_exists corepack && [[ "$(node_major_version)" -ge 20 ]]; then
+    ensure_corepack
+    return
   fi
 
-  if docker container inspect "$container_name" >/dev/null 2>&1; then
-    step "Reusing local PostgreSQL container"
-    docker start "$container_name" >/dev/null 2>&1 || true
-    host_port="$(
-      docker inspect \
-        -f '{{range (index .NetworkSettings.Ports "5432/tcp")}}{{.HostPort}}{{end}}' \
-        "$container_name"
-    )"
-    if [[ -z "$host_port" ]]; then
-      fail "Existing PostgreSQL container ${container_name} does not expose port 5432."
+  [[ "$(uname -s)" == "Linux" ]] || fail "Automatic Node.js bootstrap currently supports Linux only."
+
+  case "$(uname -m)" in
+    x86_64)
+      arch="x64"
+      ;;
+    aarch64|arm64)
+      arch="arm64"
+      ;;
+    *)
+      fail "Unsupported CPU architecture for automatic Node.js bootstrap: $(uname -m)"
+      ;;
+  esac
+
+  install_dir="${install_root}/node-${node_version}-linux-${arch}"
+  if [[ ! -x "${install_dir}/bin/node" ]]; then
+    step "Installing Node.js ${node_version}"
+    archive_path="$(mktemp)"
+    download_url="https://nodejs.org/dist/${node_version}/node-${node_version}-linux-${arch}.tar.xz"
+    curl -fsSL "$download_url" -o "$archive_path"
+    mkdir -p "$install_root"
+    tar -xJf "$archive_path" -C "$install_root"
+    rm -f "$archive_path"
+  fi
+
+  mkdir -p "$HOME/.local/bin"
+  ln -sfn "${install_dir}/bin/node" "$HOME/.local/bin/node"
+  ln -sfn "${install_dir}/bin/npm" "$HOME/.local/bin/npm"
+  ln -sfn "${install_dir}/bin/npx" "$HOME/.local/bin/npx"
+  ln -sfn "${install_dir}/bin/corepack" "$HOME/.local/bin/corepack"
+  hash -r
+  ensure_corepack
+
+  if ! command_exists node || [[ "$(node_major_version)" -lt 20 ]]; then
+    fail "Node.js bootstrap completed, but node 20+ is still not available."
+  fi
+}
+
+ensure_tmux_available() {
+  if command_exists tmux; then
+    return
+  fi
+
+  install_system_role tmux
+  command_exists tmux || fail "tmux installation completed, but tmux is still not on PATH."
+}
+
+bootstrap_managed_postgres() {
+  local bootstrap_mode="auto"
+
+  if ! docker_available; then
+    if ! bash "$REPO_ROOT/scripts/managed-postgres.sh" local-tools-ready; then
+      install_system_role postgresql_server
     fi
-  else
-    step "Bootstrapping local PostgreSQL with Docker"
-    host_port="$(find_available_local_port 5432 55432 56432)"
-    docker run \
-      -d \
-      --name "$container_name" \
-      --restart unless-stopped \
-      -e POSTGRES_DB="$postgres_db" \
-      -e POSTGRES_USER="$postgres_user" \
-      -e POSTGRES_PASSWORD="$postgres_password" \
-      -p "${host_port}:5432" \
-      postgres:16 >/dev/null
+    bootstrap_mode="local"
   fi
 
-  wait_for_postgres_container "$container_name" "$postgres_user" "$postgres_db"
+  step "Bootstrapping managed PostgreSQL (${bootstrap_mode})"
+  eval "$(
+    bash "$REPO_ROOT/scripts/managed-postgres.sh" bootstrap "$bootstrap_mode"
+  )"
 
-  DATABASE_URL="postgresql://${postgres_user}:${postgres_password}@127.0.0.1:${host_port}/${postgres_db}"
-  update_env_value "$env_file" "DATABASE_URL" "$DATABASE_URL"
-  update_env_value "$env_file" "A_TERM_INSTALL_MANAGED_POSTGRES" "true"
-  update_env_value "$env_file" "A_TERM_POSTGRES_CONTAINER_NAME" "$container_name"
+  update_env_value "$ENV_FILE" "DATABASE_URL" "$DATABASE_URL"
+  update_env_value "$ENV_FILE" "A_TERM_MANAGED_POSTGRES_MODE" "$A_TERM_MANAGED_POSTGRES_MODE"
+  update_env_value "$ENV_FILE" "A_TERM_POSTGRES_CONTAINER_NAME" "${A_TERM_POSTGRES_CONTAINER_NAME:-}"
+  update_env_value "$ENV_FILE" "A_TERM_POSTGRES_DATA_DIR" "${A_TERM_POSTGRES_DATA_DIR:-}"
+  update_env_value "$ENV_FILE" "A_TERM_POSTGRES_PORT" "${A_TERM_POSTGRES_PORT:-}"
   export DATABASE_URL
 
-  echo "Configured local PostgreSQL at ${DATABASE_URL}"
+  echo "Configured managed PostgreSQL at ${DATABASE_URL} (${A_TERM_MANAGED_POSTGRES_MODE})"
 }
 
 ensure_port_available() {
@@ -228,13 +312,12 @@ PY
 
 require_command python3
 require_command curl
-require_command node
-require_command corepack
-require_command tmux
 if [[ "$SKIP_SYSTEMD" -eq 0 ]]; then
   require_command systemctl
 fi
+ensure_node_runtime
 ensure_uv
+ensure_tmux_available
 
 eval "$(
   python3 - <<'PY'
@@ -257,7 +340,6 @@ PY
 cd "$REPO_ROOT"
 ENV_FILE="$REPO_ROOT/.env.local"
 DATABASE_URL_PLACEHOLDER="postgresql://USER:PASSWORD@localhost:5432/a-term"
-DEFAULT_POSTGRES_CONTAINER_NAME="a-term-postgres"
 
 if [[ ! -f "$ENV_FILE" ]]; then
   step "Creating .env.local"
@@ -277,6 +359,9 @@ keys = [
     "A_TERM_BIND_HOST",
     "A_TERM_FRONTEND_PORT",
     "A_TERM_FRONTEND_HOST",
+    "A_TERM_MANAGED_POSTGRES_MODE",
+    "A_TERM_POSTGRES_DATA_DIR",
+    "A_TERM_POSTGRES_PORT",
     "A_TERM_INSTALL_MANAGED_POSTGRES",
     "A_TERM_POSTGRES_CONTAINER_NAME",
 ]
@@ -304,14 +389,12 @@ for key in keys:
 PY
 )"
 
-POSTGRES_CONTAINER_NAME="${A_TERM_POSTGRES_CONTAINER_NAME:-$DEFAULT_POSTGRES_CONTAINER_NAME}"
-
 if [[ -z "${DATABASE_URL:-}" || "${DATABASE_URL}" == "$DATABASE_URL_PLACEHOLDER" ]]; then
-  bootstrap_local_postgres "$ENV_FILE" "$POSTGRES_CONTAINER_NAME"
+  bootstrap_managed_postgres
 fi
 
 if [[ -z "${DATABASE_URL:-}" ]]; then
-  fail "DATABASE_URL is required. Leave the placeholder to let the installer bootstrap Docker PostgreSQL automatically, or set your own PostgreSQL URL in .env.local."
+  fail "DATABASE_URL is required. Leave the placeholder to let the installer bootstrap managed PostgreSQL automatically, or set your own PostgreSQL URL in .env.local."
 fi
 
 BACKEND_PORT="${A_TERM_PORT:-$BACKEND_PORT_DEFAULT}"

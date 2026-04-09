@@ -1,7 +1,7 @@
 #!/bin/bash
 # Start A-Term services via systemd (User Mode)
 
-set -e
+set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 export REPO_ROOT
@@ -42,27 +42,53 @@ PY
 )"
 eval "$SERVICE_ENV"
 
-if [[ -f "$REPO_ROOT/.env.local" ]]; then
-  set -a
-  # shellcheck source=/dev/null
-  source "$REPO_ROOT/.env.local"
-  set +a
-fi
+FRONTEND_ENV="$(python3 - <<'PY'
+import os
+import shlex
+from pathlib import Path
 
-FRONTEND_HOST="${A_TERM_FRONTEND_HOST:-127.0.0.1}"
-FRONTEND_PORT="${A_TERM_FRONTEND_PORT:-$DEFAULT_FRONTEND_PORT}"
-MANAGED_POSTGRES="${A_TERM_INSTALL_MANAGED_POSTGRES:-false}"
-POSTGRES_CONTAINER_NAME="${A_TERM_POSTGRES_CONTAINER_NAME:-a-term-postgres}"
+repo_root = Path(os.environ["REPO_ROOT"])
+values = {
+    "A_TERM_FRONTEND_HOST": "",
+    "A_TERM_FRONTEND_PORT": "",
+}
+
+for path in (repo_root / ".env", repo_root / ".env.local"):
+    if not path.exists():
+        continue
+    for raw_line in path.read_text().splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in raw_line:
+            continue
+        key, value = raw_line.split("=", 1)
+        key = key.strip()
+        if key not in values:
+            continue
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+            value = value[1:-1]
+        values[key] = value
+
+for key, default in (
+    ("A_TERM_FRONTEND_HOST", "127.0.0.1"),
+    ("A_TERM_FRONTEND_PORT", str(os.environ.get("DEFAULT_FRONTEND_PORT", "3002"))),
+):
+    value = os.environ.get(key, values.get(key) or default)
+    print(f"{key}={shlex.quote(value)}")
+PY
+)"
+eval "$FRONTEND_ENV"
+
+FRONTEND_HOST="${A_TERM_FRONTEND_HOST}"
+FRONTEND_PORT="${A_TERM_FRONTEND_PORT}"
 
 echo "================================"
 echo "Starting ${PRODUCT_NAME}"
 echo "================================"
 echo ""
 
-if [[ "$MANAGED_POSTGRES" == "true" ]] && command -v docker >/dev/null 2>&1; then
-  echo "Starting managed PostgreSQL container..."
-  docker start "$POSTGRES_CONTAINER_NAME" >/dev/null 2>&1 || true
-fi
+echo "Starting managed PostgreSQL (if configured)..."
+bash "$REPO_ROOT/scripts/managed-postgres.sh" start
 
 echo "Starting ${PRODUCT_NAME} backend..."
 systemctl --user start "$BACKEND_SERVICE"

@@ -63,9 +63,10 @@ cd a-term
 bash scripts/install.sh
 ```
 
-> Requires Linux with systemd, tmux, Node.js 20+, and either Docker or an existing PostgreSQL URL.
-> The supported one-shot path is to leave the default `DATABASE_URL` placeholder alone and let the installer bootstrap a local PostgreSQL container for you.
-> The installer handles `.env.local`, Python 3.13, uv, database bootstrap/migrations, frontend build, and systemd unit setup.
+> Requires Linux with systemd plus internet access.
+> The one-shot path is to leave the default `DATABASE_URL` placeholder alone and let the installer bootstrap everything else for you.
+> The installer handles `.env.local`, Node.js 22, corepack, tmux, Python 3.13, uv, managed PostgreSQL bootstrap/migrations, frontend build, and systemd unit setup.
+> When Docker is available, the managed database uses a local container. Otherwise the installer falls back to a local user-managed PostgreSQL cluster and may prompt for `sudo` to install the PostgreSQL package.
 
 Then open **http://localhost:3002** and start working.
 
@@ -97,7 +98,7 @@ DATABASE_URL=postgresql://a-term:a-term@localhost:5432/a-term
 <details>
 <summary><strong>Environment variables</strong></summary>
 
-Copy `.env.example` to `.env.local` only if you want to review or override settings first. For the default one-shot install, `bash scripts/install.sh` will create `.env.local` and replace the placeholder `DATABASE_URL` with a local Docker PostgreSQL automatically.
+Copy `.env.example` to `.env.local` only if you want to review or override settings first. For the default one-shot install, `bash scripts/install.sh` will create `.env.local` and replace the placeholder `DATABASE_URL` with managed PostgreSQL automatically. That path prefers Docker when it is already installed and otherwise bootstraps a local PostgreSQL cluster for you.
 
 If you want to use your own PostgreSQL instead, set `DATABASE_URL` yourself. Everything else is optional:
 
