@@ -8,6 +8,7 @@ Built for [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex 
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![CI](https://github.com/elias-leslie/a-term/actions/workflows/ci.yml/badge.svg)](https://github.com/elias-leslie/a-term/actions/workflows/ci.yml)
+[![Sponsor](https://img.shields.io/badge/sponsor-GitHub%20Sponsors-db61a2?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/elias-leslie)
 [![Python](https://img.shields.io/badge/python-3.13+-3776ab.svg)](https://python.org)
 [![Next.js](https://img.shields.io/badge/Next.js-16-000.svg)](https://nextjs.org)
 [![xterm.js](https://img.shields.io/badge/xterm.js-6-green.svg)](https://xtermjs.org)
@@ -182,7 +183,11 @@ A-Term is a standalone product. All core features work without any external serv
 
 ## Sponsors
 
-A-Term is free and open source. If it saves you time, consider [sponsoring the project](https://github.com/sponsors/elias-leslie) to support ongoing development.
+A-Term is free and open source. If it saves you time, sponsor ongoing development here:
+
+[![Sponsor A-Term on GitHub Sponsors](https://img.shields.io/badge/Sponsor-A--Term%20on%20GitHub%20Sponsors-db61a2?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/elias-leslie)
+
+That helps fund continued maintenance, polish, and new features without changing the product into a paid tool.
 
 <!-- sponsors -->
 <!-- /sponsors -->
