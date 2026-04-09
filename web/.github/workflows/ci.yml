@@ -31,22 +31,6 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
-      - name: Check out SummitFlow dev tools
-        uses: actions/checkout@v6
-        with:
-          repository: elias-leslie/summitflow
-          ref: 7da4a4f4d1c25060f5142b847ed3549e4fc4f9d3
-          path: .summitflow-tools
-          sparse-checkout: |
-            scripts
-
-      - name: Set up dt
-        run: |
-          mkdir -p .bin
-          chmod +x .summitflow-tools/scripts/dev-tools.sh
-          ln -sfn "$PWD/.summitflow-tools/scripts/dev-tools.sh" .bin/dt
-          echo "$PWD/.bin" >> "$GITHUB_PATH"
-
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
@@ -77,22 +61,24 @@ jobs:
         run: uv run alembic upgrade head
 
       - name: Ruff
-        run: dt ruff
+        run: uv run ruff check .
 
       - name: Ty
-        run: dt types
+        run: uv run ty check
 
       - name: Pytest
-        run: dt pytest
+        run: uv run pytest -q
 
+      # Public CI cannot consume the host-level SummitFlow dt wrapper yet.
+      # Keep explicit repo-local commands here until dt has a real install path.
       - name: Biome
-        run: dt biome
+        run: pnpm --dir frontend exec biome check . --max-diagnostics=100
 
       - name: TypeScript
-        run: dt tsc
+        run: pnpm --dir frontend exec tsc --noEmit
 
       - name: Vitest
-        run: dt vitest
+        run: pnpm --dir frontend exec vitest run
 
       - name: Frontend build
         run: pnpm --dir frontend build

@@ -7,6 +7,7 @@ import { type DragEvent, memo, useCallback, useMemo, useState } from 'react'
 import { LayoutModeButtons } from '@/components/LayoutModeButton'
 import { useATermPanes } from '@/lib/hooks/use-a-term-panes'
 import { useAgentTools } from '@/lib/hooks/use-agent-tools'
+import { DEFAULT_NOTES_PROJECT_SCOPE } from '@/lib/notes-config'
 import {
   clearDraggedPaneSlotId,
   getDraggedPaneSlotId,
@@ -18,7 +19,6 @@ import { ModeToggle } from '../ModeToggle'
 import { PaneOverflowMenu } from '../PaneOverflowMenu'
 import { AddATermButton } from './AddATermButton'
 import { HeaderIconButton } from './HeaderIconButton'
-import { DEFAULT_NOTES_PROJECT_SCOPE } from '@/lib/notes-config'
 import { HeaderNameDisplay } from './HeaderNameDisplay'
 import { PaneSearchControl } from './PaneSearchControl'
 import { PaneStatusBadge, shouldShowPaneStatus } from './PaneStatusBadge'

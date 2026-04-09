@@ -14,7 +14,10 @@ describe('NotesButton', () => {
     vi.stubGlobal('fetch', fetchSpy)
 
     render(
-      <NotesProvider apiPrefix="/api" projectScope={DEFAULT_NOTES_PROJECT_SCOPE}>
+      <NotesProvider
+        apiPrefix="/api"
+        projectScope={DEFAULT_NOTES_PROJECT_SCOPE}
+      >
         <NotesButton popOutUrl="/notes" />
       </NotesProvider>,
     )
