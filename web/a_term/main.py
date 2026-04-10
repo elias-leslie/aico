@@ -129,7 +129,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(
     title=DISPLAY_NAME,
     description=DESCRIPTION,
-    version="0.2.0",
+    version="0.2.1",
     lifespan=lifespan,
 )
 
