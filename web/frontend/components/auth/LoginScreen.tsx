@@ -7,11 +7,19 @@ interface LoginScreenProps {
   authMode: 'none' | 'password' | 'proxy'
 }
 
-function getNextPath(): string {
+export function getNextPath(): string {
   if (typeof window === 'undefined') return '/'
   const params = new URLSearchParams(window.location.search)
   const next = params.get('next')
-  return next?.startsWith('/') ? next : '/'
+  if (!next) return '/'
+  try {
+    const target = new URL(next, window.location.origin)
+    if (target.origin !== window.location.origin) return '/'
+    const safePath = `${target.pathname}${target.search}${target.hash}`
+    return safePath.startsWith('/login') ? '/' : safePath
+  } catch {
+    return '/'
+  }
 }
 
 export function LoginScreen({ authMode }: LoginScreenProps) {

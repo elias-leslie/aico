@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from datetime import UTC, datetime
 from pathlib import Path
@@ -84,9 +85,10 @@ def _next_available_project_id(base_id: str) -> str:
 
 
 def _resolve_root_path(root_path: str) -> str:
-    candidate = Path(root_path).expanduser()
+    if "\x00" in root_path:
+        raise ValueError("Invalid project path")
     try:
-        resolved = candidate.resolve()
+        resolved = Path(os.path.realpath(os.path.abspath(os.path.expanduser(root_path))))
     except OSError as err:
         raise ValueError(f"Unable to resolve project path: {root_path}") from err
     if not resolved.exists():

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 BINARY_EXTENSIONS: frozenset[str] = frozenset(
@@ -76,14 +77,30 @@ SKIP_DIRS: frozenset[str] = frozenset(
 MAX_FILE_SIZE = 1_048_576
 
 
+def _safe_root(root_path: str) -> Path:
+    if "\x00" in root_path:
+        raise ValueError("Invalid pane root path")
+    return Path(os.path.realpath(os.path.abspath(os.path.expanduser(root_path))))
+
+
+def _safe_relative(relative_path: str) -> Path:
+    if "\x00" in relative_path:
+        raise PermissionError("Access denied: invalid path")
+    candidate = Path(relative_path or "")
+    if candidate.is_absolute():
+        raise PermissionError("Access denied: absolute paths are not allowed")
+    for part in candidate.parts:
+        if part in ("..", *FORBIDDEN_DIRS):
+            raise PermissionError(f"Access denied: {part}")
+    return candidate
+
+
 def resolve_safe_path(root_path: str, relative_path: str) -> Path:
     """Resolve a path inside the pane root without allowing traversal."""
-    root = Path(root_path).resolve()
-    target = (root / relative_path).resolve()
-    target.relative_to(root)
-    for part in Path(relative_path).parts:
-        if part in FORBIDDEN_DIRS:
-            raise PermissionError(f"Access denied: {part}")
+    root = _safe_root(root_path)
+    target = (root / _safe_relative(relative_path)).resolve()
+    if os.path.commonpath([str(root), str(target)]) != str(root):
+        raise PermissionError("Access denied: path escapes pane root")
     return target
 
 
@@ -119,7 +136,7 @@ def list_directory(root_path: str, relative_path: str = "") -> dict[str, object]
     if not target.is_dir():
         raise FileNotFoundError(f"Not a directory: {relative_path}")
 
-    root = Path(root_path).resolve()
+    root = _safe_root(root_path)
     entries = []
     for entry in sorted(target.iterdir(), key=lambda candidate: (not candidate.is_dir(), candidate.name.lower())):
         if entry.name.startswith(".") and entry.is_dir():
