@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.4 - 2026-04-10
+
+- Added low-noise Dependabot coverage with monthly grouped updates and semver-major updates ignored by default.
+- Updated frontend dependencies, including the Next.js security patch to 16.2.3.
+- Fixed prompt preview line keys so the upgraded Biome gate passes cleanly without suppressions.
+- Verified the public repo has no open Dependabot, CodeQL, or secret scanning alerts.
+
 ## 0.2.3 - 2026-04-10
 
 - Refreshed the public README around A-Term's core strengths: persistent agent panes, file browsing, prompt-ready Notes, and release-oriented workflows.
