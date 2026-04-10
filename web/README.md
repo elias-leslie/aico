@@ -45,7 +45,7 @@ Then open **http://localhost:3002** and start working.
 A-Term currently targets **Linux with systemd**. The installer is built to do the heavy lifting for you: it can set up `.env.local`, Node.js, corepack, Python, uv, tmux, PostgreSQL, dependencies, migrations, frontend build output, and user services.
 The first install can take a few minutes because it downloads the pieces it needs for you.
 
-If you already run a compatible companion API on the same machine, the installer can connect A-Term to it so notes and project scopes become shared instead of staying local to A-Term. Public installs can ignore this and run fully standalone.
+A-Term can also connect to an optional companion service for shared notes and project metadata. That broader public path is coming later with SummitFlow; for now, the standard public install runs fully standalone.
 
 If the default ports are already taken, the installer should guide you to another open port instead of forcing you to debug it by hand.
 
@@ -69,7 +69,7 @@ Want the latest shipped changes? See [Releases](https://github.com/elias-leslie/
 
 **`prompt-ready notes`** — Keep scratch notes, project context, and reusable prompts beside your live terminal output. Save prompts, search them, tag them, scope them to a project, refine them when companion services are available, and inject them into the active pane when it is time to run.
 
-In standalone installs, notes and prompts are stored inside A-Term itself. With an optional companion API configured, the same workspace can switch to a shared cross-project library and expose enhanced prompt refinement and formatting actions.
+In standalone installs, notes and prompts are stored inside A-Term itself. A shared cross-project library and companion metadata path already exists behind the optional companion API and is planned to open up more broadly once SummitFlow is released publicly.
 
 ![Pop-out Notes workspace with a reusable release review prompt](docs/images/a-term-notes-workspace.png)
 *Pop out the prompt library when you want notes and reusable prompts on a second screen*
@@ -193,7 +193,7 @@ Full API schema available at `/openapi.json` when running.
 
 A-Term is a standalone product. All core features work without any external service.
 
-**Optional external project and notes API** (`SUMMITFLOW_API_BASE`) — Advanced/private integration hook for fetching external project metadata and switching notes and prompts to a shared library. Public installs do not need this. Without it, A-Term keeps notes, prompts, and project scopes local to A-Term.
+**Optional external project and notes API** (`SUMMITFLOW_API_BASE`) — Integration hook for A-Term's shared project metadata and notes mode. Today it is mainly useful for private/internal deployments. Once SummitFlow is released publicly, this becomes the public companion path; until then, A-Term keeps notes, prompts, and project scopes local by default.
 
 **Agent Hub** (`NEXT_PUBLIC_AGENT_HUB_URL`, `AGENT_HUB_URL`) — Adds model catalog and prompt cleaning/refinement proxies. Browser-native voice input works standalone; Agent Hub provides an optional enhanced path.
 
