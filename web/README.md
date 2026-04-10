@@ -8,7 +8,7 @@ Built for [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex 
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![CI](https://github.com/elias-leslie/a-term/actions/workflows/ci.yml/badge.svg)](https://github.com/elias-leslie/a-term/actions/workflows/ci.yml)
-[![Latest release](https://img.shields.io/badge/release-latest-2ea043)](https://github.com/elias-leslie/a-term/releases/latest)
+[![Latest release](https://img.shields.io/github/v/release/elias-leslie/a-term?label=release&color=2ea043)](https://github.com/elias-leslie/a-term/releases/latest)
 [![Sponsor](https://img.shields.io/badge/sponsor-GitHub%20Sponsors-db61a2?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/elias-leslie)
 [![Python](https://img.shields.io/badge/python-3.13+-3776ab.svg)](https://python.org)
 [![Next.js](https://img.shields.io/badge/Next.js-16-000.svg)](https://nextjs.org)
