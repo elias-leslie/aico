@@ -52,6 +52,21 @@ interface ErrorBannerProps {
   onDismiss?: () => void
 }
 
+function getPromptPreviewLines(prompt: string) {
+  const previewLines: Array<{ id: string; text: string }> = []
+  let offset = 0
+
+  for (const line of prompt.split('\n')) {
+    previewLines.push({
+      id: `${offset}:${line.length}:${line}`,
+      text: line,
+    })
+    offset += line.length + 1
+  }
+
+  return previewLines
+}
+
 function ProcessingView({
   state,
   rawPrompt,
@@ -65,9 +80,9 @@ function ProcessingView({
           {state === 'refining' ? '> REFINING...' : '> ANALYZING PROMPT...'}
         </div>
         <div className={styles.originalPreview}>
-          {rawPrompt.split('\n').map((line, i) => (
-            <div key={`${i}-${line}`} className={styles.scanLineText}>
-              {line || '\u00A0'}
+          {getPromptPreviewLines(rawPrompt).map((line) => (
+            <div key={line.id} className={styles.scanLineText}>
+              {line.text || '\u00A0'}
             </div>
           ))}
         </div>
