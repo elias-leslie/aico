@@ -101,7 +101,11 @@ async def create_pane(request: Request, body: CreatePaneRequest) -> PaneResponse
         raise HTTPException(status_code=400, detail=str(e)) from None
 
     if body.pane_type == "project" and body.project_id:
-        project_settings_store.upsert_settings(body.project_id, enabled=True)
+        project_settings_store.upsert_settings(
+            body.project_id,
+            enabled=True,
+            active_mode=pane["active_mode"],
+        )
 
     return build_pane_response(pane)
 

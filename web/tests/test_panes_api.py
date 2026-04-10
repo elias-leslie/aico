@@ -217,12 +217,13 @@ def test_create_project_pane_passes_requested_agent_tool_slug(test_app: TestClie
     )
 
 
-def test_create_project_pane_enables_project_in_settings(test_app: TestClient) -> None:
-    """POST /api/a-term/panes -- project panes mark the project enabled."""
+def test_create_project_pane_persists_resolved_active_mode(test_app: TestClient) -> None:
+    """POST /api/a-term/panes -- project panes persist the created active mode."""
     pane = _make_pane(
         pane_type="project",
         project_id="proj-1",
         pane_name="Project Pane",
+        active_mode="codex",
         sessions=[
             _make_session_in_pane(mode="shell", name="Shell"),
             _make_session_in_pane(mode="codex", name="Codex"),
@@ -243,7 +244,11 @@ def test_create_project_pane_enables_project_in_settings(test_app: TestClient) -
         )
 
     assert response.status_code == 200
-    upsert_mock.assert_called_once_with("proj-1", enabled=True)
+    upsert_mock.assert_called_once_with(
+        "proj-1",
+        enabled=True,
+        active_mode="codex",
+    )
 
 
 # ---------------------------------------------------------------------------

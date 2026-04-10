@@ -31,7 +31,7 @@ def test_create_project_pane_creates_tmux_backed_sessions() -> None:
             "project_id": "monkey-fight",
             "pane_order": 0,
             "pane_name": "Monkey Fight",
-            "active_mode": "shell",
+            "active_mode": "claude",
             "is_detached": False,
             "created_at": datetime.now(UTC),
             "width_percent": 100.0,
@@ -77,7 +77,7 @@ def test_create_project_pane_creates_tmux_backed_sessions() -> None:
             pane_order=0,
         )
 
-    assert pane["active_mode"] == "shell"
+    assert pane["active_mode"] == "claude"
     assert [session["mode"] for session in pane["sessions"]] == ["shell", "claude"]
     assert create_session_mock.call_args_list == [
         call(
@@ -111,7 +111,7 @@ def test_create_project_pane_rolls_back_on_agent_tmux_failure() -> None:
             "project_id": "monkey-fight",
             "pane_order": 0,
             "pane_name": "Monkey Fight",
-            "active_mode": "shell",
+            "active_mode": "claude",
             "is_detached": False,
             "created_at": datetime.now(UTC),
             "width_percent": 100.0,

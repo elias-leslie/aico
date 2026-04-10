@@ -117,8 +117,7 @@ def create_pane_with_sessions(
     if pane_type == "adhoc" and project_id:
         raise ValueError("project_id must be None for adhoc panes")
     tool_slug = agent_tool_slug or _get_default_agent_slug()
-    # New project panes should land in a guaranteed-working shell first.
-    default_mode = "shell"
+    default_mode = tool_slug if pane_type == "project" else "shell"
     with get_connection() as conn, conn.cursor(row_factory=dict_row) as cur:
         order = _prepare_pane_slot(cur, pane_order)
         cur.execute(
