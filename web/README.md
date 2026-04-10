@@ -4,6 +4,8 @@
 
 Run Claude Code, Codex, Gemini CLI, OpenCode, shells, files, and prompt notes side by side in one browser tab. Sessions stay alive when the browser closes, so you can reconnect instead of rebuilding your working context.
 
+Assemble your agent crew in one place: a planner, builder, reviewer, release shell, files browser, and prompt library that keep working as one durable workspace.
+
 Built for [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex CLI](https://github.com/openai/codex), [Gemini CLI](https://github.com/google-gemini/gemini-cli), [OpenCode](https://github.com/opencode-ai/opencode), and every TUI agent that follows.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
@@ -49,13 +51,13 @@ If the default ports are already taken, the installer should guide you to anothe
 
 Most people can stop here. The advanced setup options are lower on the page.
 
-Want the latest shipped changes? See [Releases](https://github.com/elias-leslie/a-term/releases).
+Want the latest shipped changes? See [Releases](https://github.com/elias-leslie/a-term/releases) and the [Changelog](CHANGELOG.md).
 
 ## Features
 
 **`persistent sessions`** — tmux-backed terminals survive browser closes, server restarts, and network drops. Reconnect exactly where you left off.
 
-**`multi-pane layouts`** — Up to 6 resizable panes. Run Claude Code, Codex, and a shell side by side on the same screen.
+**`multi-pane layouts`** — Up to 6 resizable panes. Put planning, implementation, review, release checks, files, and notes on the same screen.
 
 ![Four-pane grid layout with multiple active agents](docs/images/a-term-grid-2x2.png)
 *Four-pane grid: run multiple agents and shells simultaneously*
@@ -65,15 +67,14 @@ Want the latest shipped changes? See [Releases](https://github.com/elias-leslie/
 ![Files browser showing directory tree and README preview](docs/images/a-term-files-browser.png)
 *Browse and preview files from the active pane's working directory*
 
-**`prompt-ready notes`** — Keep scratch notes, project context, and reusable prompts beside your live terminal output. Save prompts, search them, scope them to a project, copy them, or inject them into the active pane. In standalone installs, notes and prompts are stored inside A-Term itself. With the SummitFlow companion API configured, the same workspace switches to SummitFlow's shared cross-project library and can expose enhanced prompt refinement/formatting actions.
+**`prompt-ready notes`** — Keep scratch notes, project context, and reusable prompts beside your live terminal output. Save prompts, search them, tag them, scope them to a project, refine them when companion services are available, and inject them into the active pane when it is time to run.
 
-![Notes workspace docked beside active terminal panes](docs/images/a-term-notes-workspace.png)
-*Notes and prompts docked alongside the workspace*
+In standalone installs, notes and prompts are stored inside A-Term itself. With the SummitFlow companion API configured, the same workspace switches to SummitFlow's shared cross-project library and can expose enhanced prompt refinement/formatting actions.
 
-**`voice input`** — Dictate commands and prompts via browser speech-to-text. Hands stay on the keyboard until they don't need to.
+![Pop-out Notes workspace with a reusable release review prompt](docs/images/a-term-notes-workspace.png)
+*Pop out the prompt library when you want notes and reusable prompts on a second screen*
 
-![Voice input panel with transcript textarea and mic controls](docs/images/a-term-voice-input.png)
-*Voice input panel overlaid on the workspace*
+**`voice input`** — Dictate commands and prompts via browser speech-to-text when your browser and microphone permissions support it.
 
 **`project deep links`** — Open `/?project=myapp&dir=/path` to jump straight into a project workspace. Bookmark your setups.
 
