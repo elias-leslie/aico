@@ -1,7 +1,7 @@
+import { NotesPanel, NotesProvider } from '@summitflow/notes-ui'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { NotesPanel, NotesProvider } from '@summitflow/notes-ui'
 
 function jsonResponse(body: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(body), {
@@ -50,7 +50,8 @@ function buildFetchMock(capabilities: {
               project_scope: 'global',
               type: 'prompt',
               title: 'Shared Prompt',
-              content: 'Prompt content that stays under the note editor threshold.',
+              content:
+                'Prompt content that stays under the note editor threshold.',
               tags: [],
               pinned: false,
               metadata: {},
