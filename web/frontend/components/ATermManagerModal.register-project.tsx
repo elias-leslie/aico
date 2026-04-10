@@ -48,7 +48,7 @@ export function RegisterProjectCard({
         >
           {projectRegistrySource === 'local'
             ? 'Add a repo path once, then A-Term can reopen it as a named project workspace.'
-            : 'Project registration is managed by SummitFlow in companion mode.'}
+            : 'Project registration is managed by the external companion API.'}
         </p>
       </div>
       <div className="grid gap-2 md:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)_auto]">

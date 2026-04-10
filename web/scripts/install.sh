@@ -419,14 +419,14 @@ configure_companion_api() {
   fi
 
   if ! install_is_interactive; then
-    echo "Detected SummitFlow locally at ${summitflow_health}. Set SUMMITFLOW_API_BASE=${summitflow_api} in .env.local if you want shared notes and project scopes." >&2
+    echo "Detected an optional companion API locally at ${summitflow_health}. Set SUMMITFLOW_API_BASE=${summitflow_api} in .env.local if you want shared notes and project scopes." >&2
     return
   fi
 
   step "Companion mode"
-  echo "Found SummitFlow running locally."
-  echo "Companion mode lets A-Term use SummitFlow's shared notes library and project catalog."
-  if prompt_yes_no "Enable SummitFlow companion mode?" "Y"; then
+  echo "Found an optional companion API running locally."
+  echo "Companion mode lets A-Term use a shared notes library and project catalog."
+  if prompt_yes_no "Enable companion API mode?" "Y"; then
     SUMMITFLOW_API_BASE="$summitflow_api"
     update_env_value "$ENV_FILE" "SUMMITFLOW_API_BASE" "$SUMMITFLOW_API_BASE"
   fi
@@ -460,7 +460,7 @@ print_next_steps() {
   echo "  Backend:  http://${display_backend_host}:${backend_port}/health"
   echo
   if [[ -n "${SUMMITFLOW_API_BASE:-}" ]]; then
-    echo "Mode: SummitFlow companion (${SUMMITFLOW_API_BASE})"
+    echo "Mode: companion API (${SUMMITFLOW_API_BASE})"
   else
     echo "Mode: standalone local storage"
   fi
@@ -799,7 +799,7 @@ if [[ "$SKIP_SYSTEMD" -eq 1 ]]; then
   echo "  Backend:  http://$(display_host_for_url "$BACKEND_HOST"):${BACKEND_PORT}/health"
   echo
   if [[ -n "${SUMMITFLOW_API_BASE:-}" ]]; then
-    echo "Mode: SummitFlow companion (${SUMMITFLOW_API_BASE})"
+    echo "Mode: companion API (${SUMMITFLOW_API_BASE})"
   else
     echo "Mode: standalone local storage"
   fi

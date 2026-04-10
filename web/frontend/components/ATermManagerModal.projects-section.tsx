@@ -142,7 +142,7 @@ export function ProjectsSection({
           >
             {canRegisterProjects
               ? 'No projects registered yet. Add a repo path above or open an ad-hoc shell.'
-              : 'No projects found yet. Check the SummitFlow project registry or open an ad-hoc shell.'}
+              : 'No projects found yet. Check the external project registry or open an ad-hoc shell.'}
           </p>
         )}
         {!isLoading &&

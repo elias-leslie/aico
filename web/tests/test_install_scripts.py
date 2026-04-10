@@ -64,7 +64,7 @@ def test_install_script_guides_ports_companion_and_database_choices() -> None:
     assert "resolve_service_port" in text
     assert 'prompt_with_default "Choose a different ${label,,} port"' in text
     assert "configure_companion_api" in text
-    assert "Enable SummitFlow companion mode?" in text
+    assert "Enable companion API mode?" in text
     assert '"SUMMITFLOW_API_BASE",' in text
     assert "configure_database_choice" in text
     assert "Use A-Term-managed PostgreSQL?" in text
