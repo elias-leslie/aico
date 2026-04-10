@@ -95,11 +95,7 @@ describe('usePaneLayoutGroups', () => {
       usePaneLayoutGroups('a-term-layout-groups:grid-3x2:5'),
     )
 
-    const sizes = result.current.getGroupSizes(
-      'wide-pane-top-row',
-      3,
-      100 / 3,
-    )
+    const sizes = result.current.getGroupSizes('wide-pane-top-row', 3, 100 / 3)
 
     expect(sizes.reduce((sum, size) => sum + size, 0)).toBeCloseTo(100)
     expect(sizes[0]).toBeCloseTo(100 / 3)

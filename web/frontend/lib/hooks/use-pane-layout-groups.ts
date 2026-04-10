@@ -101,7 +101,10 @@ export function usePaneLayoutGroups(storageKey: string) {
     (groupId: string, panelCount: number, defaultSize: number) => {
       const groups = getActiveGroups()
       const stored = groups[groupId]
-      return normalizeSizes(stored, panelCount) ?? defaultSizes(panelCount, defaultSize)
+      return (
+        normalizeSizes(stored, panelCount) ??
+        defaultSizes(panelCount, defaultSize)
+      )
     },
     [getActiveGroups],
   )
