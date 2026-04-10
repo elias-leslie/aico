@@ -1,9 +1,9 @@
 import { NextRequest } from 'next/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-async function importMiddleware() {
+async function importProxy() {
   vi.resetModules()
-  return import('./middleware')
+  return import('./proxy')
 }
 
 function getDirective(response: Response, name: string): string | undefined {
@@ -17,7 +17,7 @@ function getDirectiveTokens(response: Response, name: string): string[] {
   return getDirective(response, name)?.split(' ').slice(1) ?? []
 }
 
-describe('middleware', () => {
+describe('proxy', () => {
   afterEach(() => {
     vi.unstubAllEnvs()
     vi.resetModules()
@@ -26,9 +26,9 @@ describe('middleware', () => {
   it('does not redirect protected routes when auth mode is none', async () => {
     vi.stubEnv('A_TERM_AUTH_MODE', 'none')
     vi.stubEnv('NODE_ENV', 'development')
-    const { middleware } = await importMiddleware()
+    const { proxy } = await importProxy()
 
-    const response = middleware(new NextRequest('http://localhost:3002/'))
+    const response = proxy(new NextRequest('http://localhost:3002/'))
     const connectSrc = getDirectiveTokens(response, 'connect-src')
 
     expect(response.headers.get('location')).toBeNull()
@@ -45,9 +45,9 @@ describe('middleware', () => {
 
   it('redirects protected routes to login when password auth has no session cookie', async () => {
     vi.stubEnv('A_TERM_AUTH_MODE', 'password')
-    const { middleware } = await importMiddleware()
+    const { proxy } = await importProxy()
 
-    const response = middleware(new NextRequest('http://localhost:3002/notes'))
+    const response = proxy(new NextRequest('http://localhost:3002/notes'))
 
     expect(response.headers.get('location')).toBe(
       'http://localhost:3002/login?next=%2Fnotes',
@@ -59,9 +59,9 @@ describe('middleware', () => {
 
   it('allows protected routes when password auth has the session cookie', async () => {
     vi.stubEnv('A_TERM_AUTH_MODE', 'password')
-    const { middleware } = await importMiddleware()
+    const { proxy } = await importProxy()
 
-    const response = middleware(
+    const response = proxy(
       new NextRequest('http://localhost:3002/', {
         headers: {
           cookie: 'a_term_session=present',
@@ -79,11 +79,9 @@ describe('middleware', () => {
   it('adds only explicit companion origins to connect-src', async () => {
     vi.stubEnv('A_TERM_AUTH_MODE', 'none')
     vi.stubEnv('NEXT_PUBLIC_AGENT_HUB_URL', 'https://agent-hub.example.com')
-    const { middleware } = await importMiddleware()
+    const { proxy } = await importProxy()
 
-    const response = middleware(
-      new NextRequest('https://a-term.summitflow.dev/'),
-    )
+    const response = proxy(new NextRequest('https://a-term.summitflow.dev/'))
     const connectSrc = getDirectiveTokens(response, 'connect-src')
 
     expect(connectSrc).toContain("'self'")

@@ -9,6 +9,7 @@ import secrets
 import subprocess
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from importlib.metadata import PackageNotFoundError, version
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request, Response
@@ -62,6 +63,13 @@ if not os.getenv("PYTEST_CURRENT_TEST"):
             )
 
 logger = get_logger(__name__)
+
+
+def _app_version() -> str:
+    try:
+        return version("a-term")
+    except PackageNotFoundError:
+        return "0.0.0"
 
 
 def _setup_tmux_options(token: str) -> None:
@@ -129,7 +137,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(
     title=DISPLAY_NAME,
     description=DESCRIPTION,
-    version="0.2.1",
+    version=_app_version(),
     lifespan=lifespan,
 )
 

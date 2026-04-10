@@ -1,6 +1,6 @@
 {
   "name": "a-term-frontend",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "license": "Apache-2.0",
   "funding": "https://github.com/sponsors/elias-leslie",
@@ -49,6 +49,10 @@
     "vitest": "^4.0.17"
   },
   "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "sharp"
+    ],
     "overrides": {
       "picomatch": ">=4.0.4"
     }

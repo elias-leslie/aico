@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import nextConfig from './next.config'
 
 describe('next.config headers', () => {
-  it('leaves CSP to middleware while keeping other security headers', async () => {
+  it('leaves CSP to the request proxy while keeping other security headers', async () => {
     const routes = await nextConfig.headers?.()
     const rootHeaders =
       routes?.find((route) => route.source === '/(.*)')?.headers ?? []
