@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from functools import lru_cache
 from pathlib import Path
@@ -66,9 +67,19 @@ def _read_manifest_payload(manifest_path: Path) -> dict[str, Any] | None:
     return payload if isinstance(payload, dict) else None
 
 
+def _manifest_path_for_root(root_path: str | Path) -> Path | None:
+    root = Path(os.path.realpath(os.path.abspath(os.path.expanduser(str(root_path)))))
+    candidate = (root / "project.identity.json").resolve()
+    if os.path.commonpath([str(root), str(candidate)]) != str(root):
+        return None
+    return candidate
+
+
 def get_project_identity_for_root(root_path: str | Path) -> dict[str, Any] | None:
     """Load a project identity manifest from an explicit repo root when present."""
-    candidate = Path(root_path) / "project.identity.json"
+    candidate = _manifest_path_for_root(root_path)
+    if candidate is None:
+        return None
     return _read_manifest_payload(candidate) if candidate.is_file() else None
 
 
