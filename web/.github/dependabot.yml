@@ -1,0 +1,42 @@
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    groups:
+      python:
+        patterns:
+          - "*"
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    groups:
+      frontend:
+        patterns:
+          - "*"
+
+  - package-ecosystem: npm
+    directory: /packages/notes-ui
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    groups:
+      notes-ui:
+        patterns:
+          - "*"
