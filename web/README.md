@@ -1,8 +1,8 @@
 # A-Term
 
-**A browser workspace for AI coding agents, shells, files, and notes.**
+**A persistent browser workspace for AI coding agents, shells, files, notes, and reusable prompts.**
 
-Run AI coding agents side by side in a browser workspace that keeps your terminal sessions alive — with a files browser, notes, and voice input built in.
+Run Claude Code, Codex, Gemini CLI, OpenCode, shells, files, and prompt notes side by side in one browser tab. Sessions stay alive when the browser closes, so you can reconnect instead of rebuilding your working context.
 
 Built for [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex CLI](https://github.com/openai/codex), [Gemini CLI](https://github.com/google-gemini/gemini-cli), [OpenCode](https://github.com/opencode-ai/opencode), and every TUI agent that follows.
 
@@ -18,9 +18,17 @@ Built for [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex 
 
 ## Why A-Term
 
-If you use AI coding agents, you already know the mess: one terminal for Claude Code, another for Codex, another for git, another for logs, plus notes somewhere else.
+If you use AI coding agents, you already know the mess: one terminal for Claude Code, another for Codex, another for git, another for logs, plus prompts and notes scattered somewhere else.
 
-**A-Term puts the whole workspace in one browser tab and keeps it alive when your browser or connection drops.**
+**A-Term keeps the whole coding loop in one durable browser workspace: agents, shells, files, notes, and prompts.**
+
+Use it when you want to:
+
+- keep multiple agent sessions alive across reconnects
+- compare or hand off work between Claude Code, Codex, Gemini CLI, OpenCode, and shell panes
+- browse files beside the terminal instead of switching tools
+- keep reusable prompts, scratch notes, and project context next to the work they belong to
+- inject saved prompts into the active pane when it is time to run them
 
 ## Quickstart
 
@@ -52,15 +60,15 @@ Want the latest shipped changes? See [Releases](https://github.com/elias-leslie/
 ![Four-pane grid layout with multiple active agents](docs/images/a-term-grid-2x2.png)
 *Four-pane grid: run multiple agents and shells simultaneously*
 
-**`files browser`** — Browse the active pane's working directory. Preview files, copy paths, insert into prompts — without leaving the terminal.
+**`files browser`** — Browse the active pane's working directory. Preview files, copy paths, insert paths into prompts — without leaving the terminal.
 
 ![Files browser showing directory tree and README preview](docs/images/a-term-files-browser.png)
 *Browse and preview files from the active pane's working directory*
 
-**`docked notes`** — Keep prompts, context snippets, and scratchpads beside your live terminal output. In standalone installs, notes and prompts are stored inside A-Term itself. When the SummitFlow companion API is configured, the same notes workspace switches to SummitFlow's shared cross-project library.
+**`prompt-ready notes`** — Keep scratch notes, project context, and reusable prompts beside your live terminal output. Save prompts, search them, scope them to a project, copy them, or inject them into the active pane. In standalone installs, notes and prompts are stored inside A-Term itself. With the SummitFlow companion API configured, the same workspace switches to SummitFlow's shared cross-project library and can expose enhanced prompt refinement/formatting actions.
 
 ![Notes workspace docked beside active terminal panes](docs/images/a-term-notes-workspace.png)
-*Notes panel docked alongside the workspace*
+*Notes and prompts docked alongside the workspace*
 
 **`voice input`** — Dictate commands and prompts via browser speech-to-text. Hands stay on the keyboard until they don't need to.
 
@@ -186,7 +194,7 @@ A-Term is a standalone product. All core features work without any external serv
 
 **SummitFlow** (`SUMMITFLOW_API_BASE`) — When available, A-Term fetches project metadata and switches notes and prompts from A-Term-owned local storage to SummitFlow's central shared notes library. Without it, A-Term keeps notes, prompts, and project scopes local to A-Term.
 
-**Agent Hub** (`NEXT_PUBLIC_AGENT_HUB_URL`, `AGENT_HUB_URL`) — Adds model catalog and prompt cleaning proxies. Browser-native voice input works standalone; Agent Hub provides an optional enhanced path.
+**Agent Hub** (`NEXT_PUBLIC_AGENT_HUB_URL`, `AGENT_HUB_URL`) — Adds model catalog and prompt cleaning/refinement proxies. Browser-native voice input works standalone; Agent Hub provides an optional enhanced path.
 
 </details>
 

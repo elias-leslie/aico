@@ -82,4 +82,42 @@ describe('usePaneLayoutGroups', () => {
       window.localStorage.getItem('a-term-layout-groups:split-horizontal:2'),
     ).toBe('{"two-pane-horizontal":[62,38]}')
   })
+
+  it('normalizes stale stored sizes that no longer fill the row', () => {
+    window.localStorage.setItem(
+      'a-term-layout-groups:grid-3x2:5',
+      JSON.stringify({
+        'wide-pane-top-row': [25, 25, 25],
+      }),
+    )
+
+    const { result } = renderHook(() =>
+      usePaneLayoutGroups('a-term-layout-groups:grid-3x2:5'),
+    )
+
+    const sizes = result.current.getGroupSizes(
+      'wide-pane-top-row',
+      3,
+      100 / 3,
+    )
+
+    expect(sizes.reduce((sum, size) => sum + size, 0)).toBeCloseTo(100)
+    expect(sizes[0]).toBeCloseTo(100 / 3)
+  })
+
+  it('normalizes updates before writing them to local storage', () => {
+    const { result } = renderHook(() =>
+      usePaneLayoutGroups('a-term-layout-groups:grid-3x2:5'),
+    )
+
+    act(() => {
+      result.current.updateGroupSizes('wide-pane-top-row', [25, 25, 25])
+    })
+
+    const stored = JSON.parse(
+      window.localStorage.getItem('a-term-layout-groups:grid-3x2:5') ?? '{}',
+    )
+
+    expect(stored['wide-pane-top-row'][0]).toBeCloseTo(100 / 3)
+  })
 })

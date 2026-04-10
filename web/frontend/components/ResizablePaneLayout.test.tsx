@@ -28,7 +28,12 @@ vi.mock('./pane-layouts', () => ({
     ) => number[]
   }) => (
     <div data-testid="wide-pane-layout">
-      {getStoredGroupLayout('wide-pane-root', 2, 50).join(',')}
+      <span data-testid="wide-root">
+        {getStoredGroupLayout('wide-pane-root', 2, 50).join(',')}
+      </span>
+      <span data-testid="wide-top-row">
+        {getStoredGroupLayout('wide-pane-top-row', 3, 100 / 3).join(',')}
+      </span>
     </div>
   ),
 }))
@@ -186,7 +191,7 @@ describe('ResizablePaneLayout', () => {
       />,
     )
 
-    expect(screen.getByTestId('wide-pane-layout')).toHaveTextContent('70,30')
+    expect(screen.getByTestId('wide-root')).toHaveTextContent('70,30')
 
     rerender(
       <ResizablePaneLayout
@@ -204,6 +209,38 @@ describe('ResizablePaneLayout', () => {
       />,
     )
 
-    expect(screen.getByTestId('wide-pane-layout')).toHaveTextContent('45,55')
+    expect(screen.getByTestId('wide-root')).toHaveTextContent('45,55')
+  })
+
+  it('normalizes stale wide row sizes so screenshots do not leave empty gaps', () => {
+    window.localStorage.setItem(
+      'a-term-layout-groups:grid-3x2:5',
+      JSON.stringify({
+        'wide-pane-top-row': [25, 25, 25],
+      }),
+    )
+
+    render(
+      <ResizablePaneLayout
+        slots={[
+          makeProjectSlot('1'),
+          makeProjectSlot('2'),
+          makeProjectSlot('3'),
+          makeProjectSlot('4'),
+          makeProjectSlot('5'),
+        ]}
+        fontFamily="monospace"
+        fontSize={14}
+        layoutMode="grid-3x2"
+      />,
+    )
+
+    const sizes =
+      screen.getByTestId('wide-top-row').textContent?.split(',').map(Number) ??
+      []
+
+    expect(sizes).toHaveLength(3)
+    expect(sizes.reduce((sum, size) => sum + size, 0)).toBeCloseTo(100)
+    expect(sizes[0]).toBeCloseTo(100 / 3)
   })
 })

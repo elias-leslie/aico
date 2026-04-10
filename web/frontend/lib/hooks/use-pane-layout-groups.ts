@@ -9,6 +9,32 @@ function sameSizes(left: number[] | undefined, right: number[]): boolean {
   return left.every((size, index) => Math.abs(size - right[index]) < 0.01)
 }
 
+function defaultSizes(panelCount: number, defaultSize: number): number[] {
+  return Array.from({ length: panelCount }, () => defaultSize)
+}
+
+function normalizeSizes(
+  sizes: number[] | undefined,
+  panelCount: number,
+): number[] | null {
+  if (
+    !sizes ||
+    sizes.length !== panelCount ||
+    sizes.some((value) => !Number.isFinite(value) || value <= 0)
+  ) {
+    return null
+  }
+
+  const total = sizes.reduce((sum, value) => sum + value, 0)
+  if (!Number.isFinite(total) || total <= 0) return null
+
+  if (Math.abs(total - 100) < 0.01) {
+    return sizes
+  }
+
+  return sizes.map((value) => (value / total) * 100)
+}
+
 function readPaneLayoutGroups(storageKey: string): PaneLayoutGroups {
   if (typeof window === 'undefined') return {}
 
@@ -50,12 +76,13 @@ export function usePaneLayoutGroups(storageKey: string) {
   const updateGroupSizes = useCallback(
     (groupId: string, sizes: number[]) => {
       const currentGroups = getActiveGroups()
+      const normalizedSizes = normalizeSizes(sizes, sizes.length) ?? sizes
 
-      if (sameSizes(currentGroups[groupId], sizes)) {
+      if (sameSizes(currentGroups[groupId], normalizedSizes)) {
         return
       }
 
-      const nextGroups = { ...currentGroups, [groupId]: sizes }
+      const nextGroups = { ...currentGroups, [groupId]: normalizedSizes }
       stateRef.current = {
         storageKey,
         groups: nextGroups,
@@ -74,14 +101,7 @@ export function usePaneLayoutGroups(storageKey: string) {
     (groupId: string, panelCount: number, defaultSize: number) => {
       const groups = getActiveGroups()
       const stored = groups[groupId]
-      if (
-        stored &&
-        stored.length === panelCount &&
-        stored.every((v) => Number.isFinite(v))
-      ) {
-        return stored
-      }
-      return Array.from({ length: panelCount }, () => defaultSize)
+      return normalizeSizes(stored, panelCount) ?? defaultSizes(panelCount, defaultSize)
     },
     [getActiveGroups],
   )
