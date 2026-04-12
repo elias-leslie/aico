@@ -19,6 +19,12 @@ from .core import (
 
 logger = get_logger(__name__)
 
+_COMPANION_ENV_KEYS = (
+    "AGENT_HUB_URL",
+    "NEXT_PUBLIC_AGENT_HUB_URL",
+    "SUMMITFLOW_API_BASE",
+)
+
 
 def _pkg() -> object:
     """Return the a_term.utils.tmux package module (avoids circular import)."""
@@ -131,6 +137,21 @@ def _can_spawn_tmux_scope() -> bool:
     return shutil.which("systemd-run") is not None and (Path(runtime_dir) / "systemd/private").exists()
 
 
+def _build_tmux_scope_env() -> dict[str, str]:
+    """Return child env without blank companion placeholders."""
+    env = os.environ.copy()
+    for key in _COMPANION_ENV_KEYS:
+        value = env.get(key)
+        if value is None:
+            continue
+        stripped = value.strip()
+        if stripped:
+            env[key] = stripped
+        else:
+            env.pop(key, None)
+    return env
+
+
 def _run_tmux_new_session(args: list[str], session_name: str) -> tuple[bool, str]:
     """Create a tmux session from a transient user scope when user systemd is available."""
     pkg = _pkg()
@@ -149,7 +170,13 @@ def _run_tmux_new_session(args: list[str], session_name: str) -> tuple[bool, str
         *args,
     ]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=TMUX_COMMAND_TIMEOUT)
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=TMUX_COMMAND_TIMEOUT,
+            env=_build_tmux_scope_env(),
+        )
     except subprocess.TimeoutExpired:
         error_msg = f"tmux session spawn timed out after {TMUX_COMMAND_TIMEOUT}s"
         logger.error("tmux_scoped_create_timeout", session=session_name)

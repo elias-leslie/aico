@@ -42,6 +42,12 @@ def test_env_example_documents_installer_managed_database_path() -> None:
     assert "Leave the placeholder DATABASE_URL below" in text
     assert "bootstrap managed PostgreSQL automatically" in text
     assert "prefers Docker" in text
+    assert "\nNEXT_PUBLIC_AGENT_HUB_URL=\n" not in text
+    assert "\nAGENT_HUB_URL=\n" not in text
+    assert "\nSUMMITFLOW_API_BASE=\n" not in text
+    assert "# NEXT_PUBLIC_AGENT_HUB_URL=http://127.0.0.1:8003" in text
+    assert "# AGENT_HUB_URL=http://127.0.0.1:8003" in text
+    assert "# SUMMITFLOW_API_BASE=http://127.0.0.1:8001/api" in text
 
 
 def test_install_script_supports_non_systemd_smoke_runs() -> None:
@@ -65,7 +71,12 @@ def test_install_script_guides_ports_companion_and_database_choices() -> None:
     assert 'prompt_with_default "Choose a different ${label,,} port"' in text
     assert "configure_companion_api" in text
     assert "Enable companion API mode?" in text
+    assert "configure_agent_hub_companion" in text
+    assert "Enable Agent Hub companion mode?" in text
+    assert "remove_blank_env_keys" in text
     assert '"SUMMITFLOW_API_BASE",' in text
+    assert '"NEXT_PUBLIC_AGENT_HUB_URL",' in text
+    assert '"AGENT_HUB_URL",' in text
     assert "configure_database_choice" in text
     assert "Use A-Term-managed PostgreSQL?" in text
     assert "For secure remote access, see docs/remote-access.md" in text

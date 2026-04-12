@@ -118,6 +118,33 @@ path.write_text("\n".join(next_lines) + "\n")
 PY
 }
 
+remove_blank_env_keys() {
+  local file_path="$1"
+  shift
+
+  python3 - "$file_path" "$@" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+keys = {key.strip() for key in sys.argv[2:] if key.strip()}
+if not path.exists() or not keys:
+    raise SystemExit(0)
+
+lines = path.read_text().splitlines()
+next_lines: list[str] = []
+for line in lines:
+    stripped = line.strip()
+    if "=" in line and not stripped.startswith("#"):
+        key, value = line.split("=", 1)
+        if key.strip() in keys and not value.strip():
+            continue
+    next_lines.append(line)
+
+path.write_text("\n".join(next_lines) + ("\n" if next_lines else ""))
+PY
+}
+
 install_is_interactive() {
   case "${A_TERM_INSTALL_INTERACTIVE:-auto}" in
     1|true|yes)
@@ -432,6 +459,40 @@ configure_companion_api() {
   fi
 }
 
+configure_agent_hub_companion() {
+  local agent_hub_health="http://127.0.0.1:8003/health"
+  local agent_hub_url="http://127.0.0.1:8003"
+
+  if [[ -n "${AGENT_HUB_URL:-}" || -n "${NEXT_PUBLIC_AGENT_HUB_URL:-}" ]]; then
+    if [[ -n "${AGENT_HUB_URL:-}" && -z "${NEXT_PUBLIC_AGENT_HUB_URL:-}" ]]; then
+      NEXT_PUBLIC_AGENT_HUB_URL="$AGENT_HUB_URL"
+      update_env_value "$ENV_FILE" "NEXT_PUBLIC_AGENT_HUB_URL" "$NEXT_PUBLIC_AGENT_HUB_URL"
+    elif [[ -z "${AGENT_HUB_URL:-}" && -n "${NEXT_PUBLIC_AGENT_HUB_URL:-}" ]]; then
+      AGENT_HUB_URL="$NEXT_PUBLIC_AGENT_HUB_URL"
+      update_env_value "$ENV_FILE" "AGENT_HUB_URL" "$AGENT_HUB_URL"
+    fi
+    return
+  fi
+  if ! probe_url "$agent_hub_health"; then
+    return
+  fi
+
+  if ! install_is_interactive; then
+    echo "Detected optional Agent Hub locally at ${agent_hub_health}. Set AGENT_HUB_URL=${agent_hub_url} and NEXT_PUBLIC_AGENT_HUB_URL=${agent_hub_url} in .env.local if you want model catalog, prompt cleaning, and Agent Hub voice integration." >&2
+    return
+  fi
+
+  step "Agent Hub mode"
+  echo "Found Agent Hub running locally."
+  echo "Agent Hub mode enables model catalog, prompt cleaning, and voice integration."
+  if prompt_yes_no "Enable Agent Hub companion mode?" "Y"; then
+    AGENT_HUB_URL="$agent_hub_url"
+    NEXT_PUBLIC_AGENT_HUB_URL="$agent_hub_url"
+    update_env_value "$ENV_FILE" "AGENT_HUB_URL" "$AGENT_HUB_URL"
+    update_env_value "$ENV_FILE" "NEXT_PUBLIC_AGENT_HUB_URL" "$NEXT_PUBLIC_AGENT_HUB_URL"
+  fi
+}
+
 display_host_for_url() {
   case "$1" in
     127.0.0.1|0.0.0.0|::1|localhost)
@@ -700,6 +761,15 @@ if [[ ! -f "$ENV_FILE" ]]; then
   cp "$REPO_ROOT/.env.example" "$ENV_FILE"
 fi
 
+remove_blank_env_keys "$REPO_ROOT/.env.local" \
+  "SUMMITFLOW_API_BASE" \
+  "NEXT_PUBLIC_AGENT_HUB_URL" \
+  "AGENT_HUB_URL"
+remove_blank_env_keys "$REPO_ROOT/.env" \
+  "SUMMITFLOW_API_BASE" \
+  "NEXT_PUBLIC_AGENT_HUB_URL" \
+  "AGENT_HUB_URL"
+
 eval "$(
   python3 - <<'PY'
 import os
@@ -714,6 +784,8 @@ keys = [
     "A_TERM_FRONTEND_PORT",
     "A_TERM_FRONTEND_HOST",
     "SUMMITFLOW_API_BASE",
+    "NEXT_PUBLIC_AGENT_HUB_URL",
+    "AGENT_HUB_URL",
     "A_TERM_MANAGED_POSTGRES_MODE",
     "A_TERM_POSTGRES_DATA_DIR",
     "A_TERM_POSTGRES_PORT",
@@ -745,6 +817,7 @@ PY
 )"
 
 configure_companion_api
+configure_agent_hub_companion
 configure_database_choice
 
 if [[ -z "${DATABASE_URL:-}" || "${DATABASE_URL}" == "$DATABASE_URL_PLACEHOLDER" ]]; then

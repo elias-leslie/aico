@@ -22,7 +22,9 @@ from a_term.utils.tmux import (
     validate_session_name,
 )
 from a_term.utils.tmux.sessions import (
+    _build_tmux_scope_env,
     _recreate_initial_window_with_session_history_limit,
+    _run_tmux_new_session,
 )
 
 
@@ -173,6 +175,45 @@ def test_create_tmux_session_falls_back_without_user_scope_support() -> None:
     )
     mock_apply.assert_called_once_with("summitflow-abc123", True)
     mock_recreate.assert_called_once_with("summitflow-abc123", "/tmp/project")
+
+
+def test_build_tmux_scope_env_drops_blank_companion_vars(monkeypatch) -> None:
+    monkeypatch.setenv("AGENT_HUB_URL", "   ")
+    monkeypatch.setenv("NEXT_PUBLIC_AGENT_HUB_URL", "")
+    monkeypatch.setenv("SUMMITFLOW_API_BASE", " http://127.0.0.1:8001/api ")
+    monkeypatch.setenv("UNCHANGED_ENV", "keep-me")
+
+    env = _build_tmux_scope_env()
+
+    assert "AGENT_HUB_URL" not in env
+    assert "NEXT_PUBLIC_AGENT_HUB_URL" not in env
+    assert env["SUMMITFLOW_API_BASE"] == "http://127.0.0.1:8001/api"
+    assert env["UNCHANGED_ENV"] == "keep-me"
+
+
+def test_run_tmux_new_session_uses_sanitized_scope_env(monkeypatch) -> None:
+    monkeypatch.setenv("AGENT_HUB_URL", "")
+    monkeypatch.setenv("NEXT_PUBLIC_AGENT_HUB_URL", "")
+    monkeypatch.setenv("SUMMITFLOW_API_BASE", " http://127.0.0.1:8001/api ")
+    monkeypatch.setenv("UNCHANGED_ENV", "keep-me")
+
+    with (
+        patch("a_term.utils.tmux._can_spawn_tmux_scope", return_value=True),
+        patch(
+            "a_term.utils.tmux.subprocess.run",
+            return_value=MagicMock(returncode=0, stdout="", stderr=""),
+        ) as mock_run,
+        patch("a_term.utils.tmux._uuid_mod.uuid4", return_value="123e4567-e89b-12d3-a456-426614174000"),
+    ):
+        success, output = _run_tmux_new_session(["new-session", "-d"], "summitflow-abc123")
+
+    assert success is True
+    assert output == ""
+    env = mock_run.call_args.kwargs["env"]
+    assert "AGENT_HUB_URL" not in env
+    assert "NEXT_PUBLIC_AGENT_HUB_URL" not in env
+    assert env["SUMMITFLOW_API_BASE"] == "http://127.0.0.1:8001/api"
+    assert env["UNCHANGED_ENV"] == "keep-me"
 
 
 def test_recreate_initial_window_with_session_history_limit_replaces_bootstrap_window() -> None:
