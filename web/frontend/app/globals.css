@@ -198,7 +198,10 @@ body {
 }
 
 .xterm-viewport {
-  overflow-y: auto;
+  /* Keep the viewport width stable while scrolling so xterm's fitted
+     character grid doesn't shift when the native scrollbar activates. */
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
 }
 
 /* Auto-hiding scrollbar: fades in on scroll, fades out after idle */
