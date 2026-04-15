@@ -160,7 +160,7 @@ describe('useATermScrolling', () => {
     wheelCleanup()
   })
 
-  it('opens scrollback overlay for non-shell alternate-screen upward wheel events', () => {
+  it('opens scrollback overlay at the live bottom page for non-shell alternate-screen upward wheel events', () => {
     const aTerm = {
       buffer: { active: { type: 'alternate' } },
       modes: { mouseTrackingMode: 'none' },
@@ -198,7 +198,7 @@ describe('useATermScrolling', () => {
     container.dispatchEvent(event)
 
     expect(event.defaultPrevented).toBe(true)
-    expect(requestOverlay).toHaveBeenCalledWith(-10)
+    expect(requestOverlay).toHaveBeenCalledWith()
     expect(aTerm.scrollLines).not.toHaveBeenCalled()
     expect(aTerm.refresh).not.toHaveBeenCalled()
     expect(downstreamListener).not.toHaveBeenCalled()

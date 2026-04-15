@@ -113,7 +113,9 @@ export function useATermScrolling({
         const isAltScreen = isAlternateScreen(aTerm)
         if (isAltScreen && !prefersLocalViewportScroll) return
 
-        // TUI sessions: activate scrollback overlay on scroll-up.
+        // TUI sessions: first upward wheel tick should open the overlay
+        // anchored at the live bottom page. Do not also consume that tick
+        // as history movement or the user lands above the current output.
         // Use sessionMode as the authoritative signal, not isAltScreen —
         // after a page refresh xterm.js hasn't received the alt-screen-enter
         // escape sequence yet, so isAltScreen is false even though the
@@ -123,7 +125,7 @@ export function useATermScrolling({
           e.stopPropagation()
           e.stopImmediatePropagation()
           if (e.deltaY < 0 && !isScrollbackOverlayActive) {
-            onRequestScrollbackOverlay?.(computeWheelLineDelta(e.deltaY))
+            onRequestScrollbackOverlay?.()
           }
           return
         }
