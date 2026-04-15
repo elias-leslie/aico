@@ -9,10 +9,6 @@ import {
   findATermSearchMatches,
 } from '../utils/a-term-search'
 import { applyMobileATermTouchStyles } from '../utils/mobile-a-term-touch'
-import {
-  shouldDeferScrollbackOverlayWrite,
-  shouldFlushPendingScrollbackOverlayWrite,
-} from '../utils/scrollback-overlay-update'
 import { refreshATermViewport } from './a-term-scrolling-utils'
 
 type XtermATerm = InstanceType<typeof import('@xterm/xterm').Terminal>
@@ -29,6 +25,13 @@ export function applyInitialOverlayViewportScroll(
   if (lineDelta === 0) return false
   term.scrollLines(lineDelta)
   return true
+}
+
+export function getOverlayViewportRestoreLine(
+  previousViewportY: number,
+  nextBaseY: number,
+): number {
+  return Math.min(previousViewportY, nextBaseY)
 }
 
 interface UseScrollbackATermOptions {
@@ -80,7 +83,6 @@ export function useScrollbackATerm({
   const containerRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<XtermATerm | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
-  const hasScrolledRef = useRef(false)
   const pendingLinesRef = useRef<string[]>([])
   const pendingInitialScrollLineDeltaRef = useRef(0)
   const currentSearchQueryRef = useRef('')
@@ -88,28 +90,29 @@ export function useScrollbackATerm({
 
   const writeLines = useRef((term: XtermATerm, lns: string[]) => {
     if (lns.length === 0) return
-    if (
-      shouldDeferScrollbackOverlayWrite({
-        hasScrolled: hasScrolledRef.current,
-        isAtBottom: isATermBufferAtBottom(term),
-      })
-    ) {
-      pendingLinesRef.current = lns
-      return
-    }
     pendingLinesRef.current = []
+    const wasAtBottom = isATermBufferAtBottom(term)
+    const previousViewportY = term.buffer.active.viewportY
     term.reset()
     term.write(lns.join('\r\n'), () => {
-      term.scrollToBottom()
-      if (
-        applyInitialOverlayViewportScroll(
-          term,
-          pendingInitialScrollLineDeltaRef.current,
+      if (wasAtBottom) {
+        term.scrollToBottom()
+        if (
+          applyInitialOverlayViewportScroll(
+            term,
+            pendingInitialScrollLineDeltaRef.current,
+          )
+        ) {
+          pendingInitialScrollLineDeltaRef.current = 0
+        }
+      } else {
+        term.scrollToLine(
+          getOverlayViewportRestoreLine(
+            previousViewportY,
+            term.buffer.active.baseY,
+          ),
         )
-      ) {
-        pendingInitialScrollLineDeltaRef.current = 0
       }
-      hasScrolledRef.current = true
       if (currentSearchQueryRef.current && currentSearchIndexRef.current >= 0) {
         applyOverlaySearchSelection(
           term,
@@ -121,19 +124,7 @@ export function useScrollbackATerm({
     })
   })
 
-  const flushPendingLines = useRef((term: XtermATerm) => {
-    if (
-      !shouldFlushPendingScrollbackOverlayWrite({
-        hasPendingLines: pendingLinesRef.current.length > 0,
-        isAtBottom: isATermBufferAtBottom(term),
-      })
-    ) {
-      return
-    }
-    const nextLines = pendingLinesRef.current
-    pendingLinesRef.current = []
-    writeLines.current(term, nextLines)
-  })
+  const flushPendingLines = useRef((_term: XtermATerm) => {})
 
   // Create/destroy xterm instance when overlay activates/deactivates
   useEffect(() => {
@@ -143,7 +134,6 @@ export function useScrollbackATerm({
         xtermRef.current = null
         fitAddonRef.current = null
       }
-      hasScrolledRef.current = false
       pendingLinesRef.current = []
       pendingInitialScrollLineDeltaRef.current = 0
       return

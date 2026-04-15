@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   applyInitialOverlayViewportScroll,
+  getOverlayViewportRestoreLine,
   applyOverlaySearchSelection,
 } from './use-scrollback-a-term'
 
@@ -92,5 +93,15 @@ describe('applyOverlaySearchSelection', () => {
     expect(clearSelection).toHaveBeenCalled()
     expect(select).not.toHaveBeenCalled()
     expect(scrollToLine).not.toHaveBeenCalled()
+  })
+})
+
+describe('getOverlayViewportRestoreLine', () => {
+  it('keeps the same viewport line when refreshed content grows', () => {
+    expect(getOverlayViewportRestoreLine(120, 180)).toBe(120)
+  })
+
+  it('clamps to the newest base line when refreshed content shrinks', () => {
+    expect(getOverlayViewportRestoreLine(120, 90)).toBe(90)
   })
 })

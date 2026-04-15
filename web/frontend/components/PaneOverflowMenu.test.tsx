@@ -7,7 +7,7 @@ describe('PaneOverflowMenu', () => {
     render(
       <PaneOverflowMenu
         onDetach={vi.fn()}
-        detachLabel="Detach Pane"
+        onClosePane={vi.fn()}
         onCloseSession={vi.fn()}
         onReset={vi.fn()}
         onSettings={vi.fn()}
@@ -22,10 +22,14 @@ describe('PaneOverflowMenu', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Pane actions' }))
 
     const detachItem = screen.getByRole('menuitem', { name: 'Detach Pane' })
+    const closePaneItem = screen.getByRole('menuitem', { name: 'Close Pane' })
     const closeItem = screen.getByRole('menuitem', { name: 'Close Session' })
 
     expect(detachItem.getAttribute('title')).toBe(
-      'Detach pane: remove it from this layout but keep the session running.',
+      'Detach pane: open this pane in its own window.',
+    )
+    expect(closePaneItem.getAttribute('title')).toBe(
+      'Close pane: remove it from this layout but keep the session running.',
     )
     expect(closeItem.getAttribute('title')).toBe(
       'Close session: terminate the underlying tmux session.',
@@ -69,12 +73,24 @@ describe('PaneOverflowMenu', () => {
   it('invokes the detach action and closes the menu', () => {
     const onDetach = vi.fn()
 
-    render(<PaneOverflowMenu onDetach={onDetach} detachLabel="Detach Pane" />)
+    render(<PaneOverflowMenu onDetach={onDetach} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Pane actions' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Detach Pane' }))
 
     expect(onDetach).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  })
+
+  it('invokes the close-pane action and closes the menu', () => {
+    const onClosePane = vi.fn()
+
+    render(<PaneOverflowMenu onClosePane={onClosePane} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pane actions' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Close Pane' }))
+
+    expect(onClosePane).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
   })
 })

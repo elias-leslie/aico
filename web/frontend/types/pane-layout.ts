@@ -35,6 +35,7 @@ export interface ResizablePaneLayoutProps {
   onSwitch?: (slot: ATermSlot | PaneSlot) => void
   onSettings?: () => void
   onReset?: (slot: ATermSlot | PaneSlot) => void
+  onDetach?: (slot: ATermSlot | PaneSlot) => void
   onClose?: (slot: ATermSlot | PaneSlot) => void
   onCloseSession?: (slot: ATermSlot | PaneSlot) => void
   onUpload?: (sessionId?: string) => void

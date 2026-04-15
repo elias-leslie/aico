@@ -23,6 +23,7 @@ interface UsePaneRendererOptions {
     | 'onSwitch'
     | 'onSettings'
     | 'onReset'
+    | 'onDetach'
     | 'onClose'
     | 'onCloseSession'
     | 'onUpload'
@@ -63,6 +64,7 @@ export function usePaneRenderer({
     onSwitch,
     onSettings,
     onReset,
+    onDetach,
     onClose,
     onCloseSession,
     onUpload,
@@ -165,11 +167,14 @@ export function usePaneRenderer({
             onSwitch={onSwitch ? () => onSwitch(slot) : undefined}
             onSettings={onSettings}
             onReset={onReset && canResetSlot ? () => onReset(slot) : undefined}
+            onDetach={
+              onDetach && isPaneSlot(slot) ? () => onDetach(slot) : undefined
+            }
             onClose={onClose ? () => onClose(slot) : undefined}
             onCloseSession={
               onCloseSession ? () => onCloseSession(slot) : undefined
             }
-            closeTooltip={isExternalSlot ? 'Detach a-term' : 'Detach pane'}
+            closeTooltip={isExternalSlot ? 'Detach a-term' : 'Close pane'}
             onFiles={
               paneId && sessionId
                 ? () => setFilesTarget({ paneId, sessionId })
@@ -283,6 +288,7 @@ export function usePaneRenderer({
       onSwitch,
       onSettings,
       onReset,
+      onDetach,
       onClose,
       onCloseSession,
       onUpload,

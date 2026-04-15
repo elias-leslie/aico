@@ -56,9 +56,7 @@ const fetchSessions = async (
     params.set('include_detached', 'true')
   }
   const query = params.toString()
-  const path = query
-    ? `/api/a-term/sessions?${query}`
-    : '/api/a-term/sessions'
+  const path = query ? `/api/a-term/sessions?${query}` : '/api/a-term/sessions'
   return (await apiFetch<SessionListResponse>(path)).items
 }
 

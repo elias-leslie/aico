@@ -73,6 +73,7 @@ export function ATermTabs({
     // Slot handlers
     handleSlotSwitch,
     handleSlotReset,
+    handleSlotDetach,
     handleSlotClose,
     handleSlotCloseSession,
     handleSlotClean,
@@ -160,6 +161,7 @@ export function ATermTabs({
         aTermStatuses={aTermStatuses}
         onSlotSwitch={handleSlotSwitch}
         onSlotReset={handleSlotReset}
+        onSlotDetach={handleSlotDetach}
         onSlotClose={handleSlotClose}
         onSlotCloseSession={handleSlotCloseSession}
         onSlotClean={handleSlotClean}

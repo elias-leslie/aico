@@ -18,6 +18,11 @@ import {
   isPaneSlot,
   type PaneSlot,
 } from '@/lib/utils/slot'
+import {
+  buildDetachedPaneWindowUrl,
+  getDetachedPaneWindowFeatures,
+  getDetachedPaneWindowName,
+} from '@/lib/utils/detached-pane-window'
 
 interface UseATermSlotHandlersParams {
   aTermRefs: MutableRefObject<Map<string, ATermHandle | null>>
@@ -41,6 +46,7 @@ interface UseATermSlotHandlersParams {
     projectSessions: ATermSession[],
     paneId?: string,
   ) => Promise<void>
+  detachedPaneId?: string
 }
 
 export function useATermSlotHandlers({
@@ -58,6 +64,7 @@ export function useATermSlotHandlers({
   sessions,
   visibleSlots,
   handleProjectModeChange,
+  detachedPaneId,
 }: UseATermSlotHandlersParams) {
   const queryClient = useQueryClient()
   // Track mode switch loading state
@@ -138,6 +145,12 @@ export function useATermSlotHandlers({
       }
 
       if (detachPane && isPaneSlot(slot)) {
+        if (detachedPaneId === slot.paneId) {
+          if (typeof window !== 'undefined' && window.opener) {
+            window.close()
+          }
+          return
+        }
         await detachPane(slot.paneId)
         if (nextVisibleSessionId) {
           switchToSession(nextVisibleSessionId)
@@ -169,6 +182,63 @@ export function useATermSlotHandlers({
       findNextVisibleSessionId,
       detachPane,
       detachExternalSession,
+      switchToSession,
+      detachedPaneId,
+    ],
+  )
+
+  const handleSlotDetach = useCallback(
+    async (slot: ATermSlot | PaneSlot) => {
+      if (!detachPane || !isPaneSlot(slot)) {
+        await handleSlotClose(slot)
+        return
+      }
+
+      const sessionId = getSlotSessionId(slot)
+      const nextVisibleSessionId =
+        activeSessionId && sessionId === activeSessionId
+          ? findNextVisibleSessionId(slot)
+          : null
+      const popup =
+        typeof window === 'undefined'
+          ? null
+          : window.open(
+              '',
+              getDetachedPaneWindowName(slot.paneId),
+              getDetachedPaneWindowFeatures(),
+            )
+
+      if (typeof window !== 'undefined' && popup === null) {
+        return
+      }
+
+      try {
+        await detachPane(slot.paneId)
+      } catch (error) {
+        popup?.close()
+        throw error
+      }
+
+      if (nextVisibleSessionId) {
+        switchToSession(nextVisibleSessionId)
+      }
+
+      if (!popup || popup.closed || typeof window === 'undefined') {
+        return
+      }
+
+      popup.location.href = buildDetachedPaneWindowUrl(
+        window.location.href,
+        slot.paneId,
+        sessionId,
+      )
+      popup.focus?.()
+    },
+    [
+      activeSessionId,
+      detachPane,
+      findNextVisibleSessionId,
+      handleSlotClose,
       switchToSession,
     ],
   )
@@ -253,6 +323,7 @@ export function useATermSlotHandlers({
   return {
     handleSlotSwitch,
     handleSlotReset,
+    handleSlotDetach,
     handleSlotClose,
     handleSlotCloseSession,
     handleSlotClean,

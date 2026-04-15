@@ -38,6 +38,7 @@ export function ATermContent({
   aTermStatuses,
   onSlotSwitch,
   onSlotReset,
+  onSlotDetach,
   onSlotClose,
   onSlotCloseSession,
   onSlotClean,
@@ -130,6 +131,7 @@ export function ATermContent({
         aTermStatuses={aTermStatuses}
         onSlotSwitch={onSlotSwitch}
         onSlotReset={onSlotReset}
+        onSlotDetach={onSlotDetach}
         onSlotClose={onSlotClose}
         onSlotCloseSession={onSlotCloseSession}
         onSlotClean={onSlotClean}

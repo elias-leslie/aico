@@ -19,8 +19,10 @@ import { MenuItemButton } from './MenuItemButton'
 
 export interface PaneOverflowMenuProps {
   onDetach?: () => void
-  detachLabel?: string
   detachTooltip?: string
+  onClosePane?: () => void
+  closePaneLabel?: string
+  closePaneTooltip?: string
   onCloseSession?: () => void
   closeSessionTooltip?: string
   onReset?: () => void
@@ -39,8 +41,10 @@ export interface PaneOverflowMenuProps {
  */
 export function PaneOverflowMenu({
   onDetach,
-  detachLabel = 'Detach Pane',
-  detachTooltip = 'Detach pane: remove it from this layout but keep the session running.',
+  detachTooltip = 'Detach pane: open this pane in its own window.',
+  onClosePane,
+  closePaneLabel = 'Close Pane',
+  closePaneTooltip = 'Close pane: remove it from this layout but keep the session running.',
   onCloseSession,
   closeSessionTooltip = 'Close session: terminate the underlying tmux session.',
   onReset,
@@ -74,6 +78,11 @@ export function PaneOverflowMenu({
     onDetach?.()
     setIsOpen(false)
   }, [onDetach])
+
+  const handleClosePane = useCallback(() => {
+    onClosePane?.()
+    setIsOpen(false)
+  }, [onClosePane])
 
   const handleResetAll = useCallback(() => {
     onResetAll?.()
@@ -120,7 +129,7 @@ export function PaneOverflowMenu({
     setIsOpen(false)
   }, [onRename])
 
-  const hasPaneSessionActions = !!(onDetach || onCloseSession)
+  const hasPaneSessionActions = !!(onDetach || onClosePane || onCloseSession)
   const hasPaneUtilityActions = !!(
     onReset ||
     onSettings ||
@@ -177,10 +186,19 @@ export function PaneOverflowMenu({
           {onDetach && (
             <MenuItemButton
               icon={<LogOut className="w-3.5 h-3.5" />}
-              label={detachLabel}
+              label="Detach Pane"
               onClick={handleDetach}
               isMobile={isMobile}
               title={detachTooltip}
+            />
+          )}
+          {onClosePane && (
+            <MenuItemButton
+              icon={<X className="w-3.5 h-3.5" />}
+              label={closePaneLabel}
+              onClick={handleClosePane}
+              isMobile={isMobile}
+              title={closePaneTooltip}
             />
           )}
           {onCloseSession && (

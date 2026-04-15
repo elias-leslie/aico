@@ -93,6 +93,7 @@ export function useATermOrchestration({
     disableProject,
     remove,
     detachExternalSession,
+    detachedPaneId,
     detachPane,
     removePane,
     setShowCleaner,

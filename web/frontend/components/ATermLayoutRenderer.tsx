@@ -39,6 +39,7 @@ interface ATermLayoutRendererProps {
   // Slot action handlers
   onSlotSwitch: (slot: ATermSlot | PaneSlot) => void
   onSlotReset: (slot: ATermSlot | PaneSlot) => void
+  onSlotDetach: (slot: ATermSlot | PaneSlot) => void
   onSlotClose: (slot: ATermSlot | PaneSlot) => void
   onSlotCloseSession: (slot: ATermSlot | PaneSlot) => void
   onSlotClean: (slot: ATermSlot | PaneSlot) => void
@@ -48,7 +49,7 @@ interface ATermLayoutRendererProps {
 
   // UI callbacks
   onShowSettings: () => void
-  onShowATermManager: () => void
+  onShowATermManager?: () => void
   onUploadClick: (sessionId?: string) => void
 
   // Mode switch handler for project slots
@@ -88,6 +89,7 @@ export function ATermLayoutRenderer({
   aTermStatuses,
   onSlotSwitch,
   onSlotReset,
+  onSlotDetach,
   onSlotClose,
   onSlotCloseSession,
   onSlotClean,
@@ -124,6 +126,7 @@ export function ATermLayoutRenderer({
       onSwitch={onSlotSwitch}
       onSettings={onShowSettings}
       onReset={onSlotReset}
+      onDetach={onSlotDetach}
       onClose={onSlotClose}
       onCloseSession={onSlotCloseSession}
       onUpload={onUploadClick}

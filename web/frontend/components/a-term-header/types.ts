@@ -14,6 +14,7 @@ export interface UnifiedATermHeaderProps {
   onSwitch?: () => void
   onSettings?: () => void
   onReset?: () => void
+  onDetach?: () => void
   onClose?: () => void
   onCloseSession?: () => void
   closeTooltip?: string

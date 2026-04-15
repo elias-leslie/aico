@@ -36,6 +36,7 @@ export const UnifiedATermHeaderContent = memo(
     onSwitch,
     onSettings,
     onReset,
+    onDetach,
     onClose,
     onCloseSession,
     closeTooltip,
@@ -80,10 +81,11 @@ export const UnifiedATermHeaderContent = memo(
     const slotId = getSlotPanelId(slot)
     const slotName = getSlotName(slot)
     const showStatusBadge = shouldShowPaneStatus(connectionStatus)
-    const detachLabel = formatActionLabel(closeTooltip ?? 'Detach pane')
-    const detachTooltip = `${detachLabel}: remove it from this layout but keep the session running.`
+    const closePaneLabel = formatActionLabel(closeTooltip ?? 'Close pane')
+    const closePaneTooltip = `${closePaneLabel}: remove it from this layout but keep the session running.`
     const hasPaneActions =
       shouldShowClean ||
+      !!onDetach ||
       !!onVoice ||
       !!onUpload ||
       !!onSettings ||
@@ -275,9 +277,10 @@ export const UnifiedATermHeaderContent = memo(
           {hasPaneActions && (
             <PaneOverflowMenu
               onRename={paneId ? () => setIsRenaming(true) : undefined}
-              onDetach={onClose}
-              detachLabel={detachLabel}
-              detachTooltip={detachTooltip}
+              onDetach={onDetach}
+              onClosePane={onClose}
+              closePaneLabel={closePaneLabel}
+              closePaneTooltip={closePaneTooltip}
               onCloseSession={onCloseSession}
               onReset={onReset}
               onSettings={onSettings}

@@ -75,7 +75,7 @@ export function useATermTabsState({
   const scopedDetachedPane = useMemo(
     () =>
       detachedPaneId
-        ? detachedPanes.find((pane) => pane.id === detachedPaneId) ?? null
+        ? (detachedPanes.find((pane) => pane.id === detachedPaneId) ?? null)
         : null,
     [detachedPaneId, detachedPanes],
   )
@@ -133,9 +133,14 @@ export function useATermTabsState({
       const session = sessionsById.get(sessionId)
       return session ? [session] : []
     })
-  }, [attachedExternalSessionIds, externalSessions])
+  }, [attachedExternalSessionIds, externalSessions, isDetachedPaneWindow])
   const visiblePanes = useMemo(
-    () => (isDetachedPaneWindow ? (scopedDetachedPane ? [scopedDetachedPane] : []) : panes),
+    () =>
+      isDetachedPaneWindow
+        ? scopedDetachedPane
+          ? [scopedDetachedPane]
+          : []
+        : panes,
     [isDetachedPaneWindow, panes, scopedDetachedPane],
   )
   const visiblePaneCount = visiblePanes.length + attachedExternalSessions.length

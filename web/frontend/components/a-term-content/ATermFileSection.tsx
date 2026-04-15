@@ -28,12 +28,13 @@ interface ATermFileSectionProps {
   aTermStatuses: Map<string, ConnectionStatus>
   onSlotSwitch: (slot: ATermSlot | PaneSlot) => void
   onSlotReset: (slot: ATermSlot | PaneSlot) => void
+  onSlotDetach: (slot: ATermSlot | PaneSlot) => void
   onSlotClose: (slot: ATermSlot | PaneSlot) => void
   onSlotCloseSession: (slot: ATermSlot | PaneSlot) => void
   onSlotClean: (slot: ATermSlot | PaneSlot) => void
   canAddPane: boolean
   handleOpenSettings: () => void
-  handleOpenATermManager: () => void
+  handleOpenATermManager?: () => void
   handleUploadClick: () => void
   onModeSwitch: (slot: ATermSlot | PaneSlot, mode: string) => void
   isModeSwitching: boolean
@@ -68,6 +69,7 @@ export function ATermFileSection({
   aTermStatuses,
   onSlotSwitch,
   onSlotReset,
+  onSlotDetach,
   onSlotClose,
   onSlotCloseSession,
   onSlotClean,
@@ -136,6 +138,7 @@ export function ATermFileSection({
           aTermStatuses={aTermStatuses}
           onSlotSwitch={onSlotSwitch}
           onSlotReset={onSlotReset}
+          onSlotDetach={onSlotDetach}
           onSlotClose={onSlotClose}
           onSlotCloseSession={onSlotCloseSession}
           onSlotClean={onSlotClean}
