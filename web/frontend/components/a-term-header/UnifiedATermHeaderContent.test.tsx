@@ -180,15 +180,15 @@ describe('UnifiedATermHeaderContent', () => {
     render(<UnifiedATermHeaderContent slot={slot} onSwitch={vi.fn()} />)
 
     expect(screen.getByText('Alpha')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Alpha' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Alpha' }),
+    ).not.toBeInTheDocument()
   })
 
   it('hides the pane title when the project switcher is shown', () => {
     const slot = makeProjectSlot('a', 'Alpha')
 
-    render(
-      <UnifiedATermHeaderContent slot={slot} onProjectSwitch={vi.fn()} />,
-    )
+    render(<UnifiedATermHeaderContent slot={slot} onProjectSwitch={vi.fn()} />)
 
     expect(screen.getByTestId('pane-project-switcher')).toBeInTheDocument()
     expect(screen.queryByText('Alpha')).not.toBeInTheDocument()
@@ -207,7 +207,9 @@ describe('UnifiedATermHeaderContent', () => {
       />,
     )
 
-    expect(screen.queryByTestId('pane-project-switcher')).not.toBeInTheDocument()
+    expect(
+      screen.queryByTestId('pane-project-switcher'),
+    ).not.toBeInTheDocument()
     expect(screen.getByTestId('pane-swap-dropdown')).toBeInTheDocument()
   })
 
@@ -225,7 +227,9 @@ describe('UnifiedATermHeaderContent', () => {
       />,
     )
 
-    expect(screen.queryByTestId('pane-project-switcher')).not.toBeInTheDocument()
+    expect(
+      screen.queryByTestId('pane-project-switcher'),
+    ).not.toBeInTheDocument()
     expect(screen.getByTestId('pane-swap-dropdown')).toBeInTheDocument()
   })
 

@@ -102,8 +102,13 @@ export function useProjectModeSwitch({
   // Main orchestration function
   const switchProjectMode = useCallback(
     async (params: SwitchProjectModeParams): Promise<void> => {
-      const { projectId, mode, projectSessions, paneId, pane: paneSnapshot } =
-        params
+      const {
+        projectId,
+        mode,
+        projectSessions,
+        paneId,
+        pane: paneSnapshot,
+      } = params
 
       // Get fresh pane data from query cache to avoid stale closure issues
       // This is critical after operations like Close All where the panes array
@@ -111,9 +116,9 @@ export function useProjectModeSwitch({
       const freshPanesData = queryClient.getQueryData<PaneListResponse>([
         'a-term-panes',
       ])
-      const freshDetachedPanesData = queryClient.getQueryData<PaneListResponse>([
-        'a-term-detached-panes',
-      ])
+      const freshDetachedPanesData = queryClient.getQueryData<PaneListResponse>(
+        ['a-term-detached-panes'],
+      )
       const freshPanes = [
         ...(freshPanesData?.items ?? panes),
         ...(freshDetachedPanesData?.items ?? []),

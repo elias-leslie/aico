@@ -1,23 +1,26 @@
 import { useCallback, useState } from 'react'
 import { useATermKeyboardShortcuts } from '@/components/KeyboardShortcuts'
 import { getAgentHubVoiceWsUrl } from '@/lib/api-config'
-import { useTranscription } from '@/lib/voice/use-transcription'
-import { findSessionByMode, generateProjectPaneName } from './a-term-handler-utils'
-import { useATermActionHandlers } from './use-a-term-action-handlers'
-import { useATermModals } from './use-a-term-modals'
-import { useATermNavigation } from './use-a-term-navigation'
-import { useATermSlotHandlers } from './use-a-term-slot-handlers'
-import { useATermTabsState } from './use-a-term-tabs-state'
-import { useDetachedPaneWindow } from './use-detached-pane-window'
-import { useLayoutPersistence } from './use-layout-persistence'
-import { usePromptCleaner } from './use-prompt-cleaner'
 import {
   DETACHED_PANE_PARAM,
   DETACHED_WINDOW_PANES_PARAM,
   DETACHED_WINDOW_SCOPE_PARAM,
 } from '@/lib/utils/detached-pane-window'
-import { isPaneSlot, type ATermSlot, type PaneSlot } from '@/lib/utils/slot'
+import { type ATermSlot, isPaneSlot, type PaneSlot } from '@/lib/utils/slot'
+import { useTranscription } from '@/lib/voice/use-transcription'
+import {
+  findSessionByMode,
+  generateProjectPaneName,
+} from './a-term-handler-utils'
+import { useATermActionHandlers } from './use-a-term-action-handlers'
+import { useATermModals } from './use-a-term-modals'
+import { useATermNavigation } from './use-a-term-navigation'
 import type { ATermSession } from './use-a-term-sessions'
+import { useATermSlotHandlers } from './use-a-term-slot-handlers'
+import { useATermTabsState } from './use-a-term-tabs-state'
+import { useDetachedPaneWindow } from './use-detached-pane-window'
+import { useLayoutPersistence } from './use-layout-persistence'
+import { usePromptCleaner } from './use-prompt-cleaner'
 
 interface UseATermOrchestrationProps {
   projectId?: string
@@ -118,8 +121,7 @@ export function useATermOrchestration({
           urlUpdates: {
             [DETACHED_PANE_PARAM]: nextPaneIds[0] ?? paneId,
             [DETACHED_WINDOW_PANES_PARAM]: nextPaneIds.join(','),
-            [DETACHED_WINDOW_SCOPE_PARAM]:
-              detachedWindow.detachedWindowScopeId,
+            [DETACHED_WINDOW_SCOPE_PARAM]: detachedWindow.detachedWindowScopeId,
           },
         }
       }
@@ -277,14 +279,19 @@ export function useATermOrchestration({
       const targetDetachedPane =
         detachedPanes.find(
           (pane) =>
-            pane.id !== slot.paneId && pane.pane_type === 'project' && pane.project_id === targetProjectId,
+            pane.id !== slot.paneId &&
+            pane.pane_type === 'project' &&
+            pane.project_id === targetProjectId,
         ) ?? null
 
       if (detachedWindow.isDetachedPaneWindow) {
         const targetPane =
           targetDetachedPane ??
           (await createProjectPane(
-            generateProjectPaneName(targetProjectId, [...panes, ...detachedPanes]),
+            generateProjectPaneName(targetProjectId, [
+              ...panes,
+              ...detachedPanes,
+            ]),
             targetProjectId,
             rootPath ?? undefined,
             desiredMode !== 'shell' ? desiredMode : undefined,
@@ -314,22 +321,24 @@ export function useATermOrchestration({
       await detachPane(slot.paneId)
 
       try {
-        const targetPane =
-          targetDetachedPane
-            ? await attachDetachedPane(targetDetachedPane.id, placement)
-            : await createProjectPane(
-                generateProjectPaneName(targetProjectId, [...panes, ...detachedPanes]),
-                targetProjectId,
-                rootPath ?? undefined,
-                desiredMode !== 'shell' ? desiredMode : undefined,
-                {
-                  paneOrder: placement.pane_order,
-                  widthPercent: placement.width_percent,
-                  heightPercent: placement.height_percent,
-                  gridRow: placement.grid_row,
-                  gridCol: placement.grid_col,
-                },
-              )
+        const targetPane = targetDetachedPane
+          ? await attachDetachedPane(targetDetachedPane.id, placement)
+          : await createProjectPane(
+              generateProjectPaneName(targetProjectId, [
+                ...panes,
+                ...detachedPanes,
+              ]),
+              targetProjectId,
+              rootPath ?? undefined,
+              desiredMode !== 'shell' ? desiredMode : undefined,
+              {
+                paneOrder: placement.pane_order,
+                widthPercent: placement.width_percent,
+                heightPercent: placement.height_percent,
+                gridRow: placement.grid_row,
+                gridCol: placement.grid_col,
+              },
+            )
         const modeResult = await alignTargetPaneMode(
           targetPane,
           targetProjectId,

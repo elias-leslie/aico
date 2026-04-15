@@ -462,8 +462,12 @@ describe('useATermTabsState', () => {
     expect(result.current.aTermSlots).toHaveLength(3)
     expect(
       result.current.aTermSlots.filter(
-        (slot): slot is Extract<(typeof result.current.aTermSlots)[number], { type: 'project' }> =>
-          slot.type === 'project' && slot.projectId === 'project-a',
+        (
+          slot,
+        ): slot is Extract<
+          (typeof result.current.aTermSlots)[number],
+          { type: 'project' }
+        > => slot.type === 'project' && slot.projectId === 'project-a',
       ),
     ).toHaveLength(2)
     expect(
@@ -471,8 +475,10 @@ describe('useATermTabsState', () => {
         .filter(
           (
             slot,
-          ): slot is Extract<(typeof result.current.aTermSlots)[number], { type: 'project' }> =>
-            slot.type === 'project' && slot.projectId === 'project-a',
+          ): slot is Extract<
+            (typeof result.current.aTermSlots)[number],
+            { type: 'project' }
+          > => slot.type === 'project' && slot.projectId === 'project-a',
         )
         .map((slot) => slot.activeMode)
         .sort(),
@@ -649,11 +655,9 @@ describe('useATermTabsState', () => {
       await result.current.handleAddTab()
     })
 
-    expect(createAdHocPane).toHaveBeenCalledWith(
-      'Ad-Hoc A-Term',
-      undefined,
-      { detached: true },
-    )
+    expect(createAdHocPane).toHaveBeenCalledWith('Ad-Hoc A-Term', undefined, {
+      detached: true,
+    })
     expect(addDetachedWindowPane).toHaveBeenCalledWith(
       'pane-detached-new',
       'session-detached-new',

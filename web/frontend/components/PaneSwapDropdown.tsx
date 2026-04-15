@@ -208,51 +208,50 @@ export function PaneSwapDropdown({
         />
       </button>
 
-      {!isMobile &&
-        isOpen && (
+      {!isMobile && isOpen && (
+        <div
+          data-testid="pane-swap-dropdown-menu"
+          className="absolute left-0 top-full mt-1 z-50 min-w-[180px] rounded-md shadow-lg overflow-hidden animate-in fade-in slide-in-from-top-1 duration-100"
+          style={{
+            backgroundColor: 'var(--term-surface-glass)',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
+            border: '1px solid var(--term-border-active)',
+            boxShadow: 'var(--term-shadow-dropdown)',
+          }}
+        >
           <div
-            data-testid="pane-swap-dropdown-menu"
-            className="absolute left-0 top-full mt-1 z-50 min-w-[180px] rounded-md shadow-lg overflow-hidden animate-in fade-in slide-in-from-top-1 duration-100"
+            className="px-2 py-1.5 text-[10px] uppercase tracking-wide flex items-center gap-1"
             style={{
-              backgroundColor: 'var(--term-surface-glass)',
-              backdropFilter: 'blur(12px)',
-              WebkitBackdropFilter: 'blur(12px)',
-              border: '1px solid var(--term-border-active)',
-              boxShadow: 'var(--term-shadow-dropdown)',
+              color: 'var(--term-text-muted)',
+              backgroundColor: 'var(--term-bg-surface)',
             }}
           >
-            <div
-              className="px-2 py-1.5 text-[10px] uppercase tracking-wide flex items-center gap-1"
+            <ArrowLeftRight className="w-3 h-3" />
+            Swap position with
+          </div>
+
+          {dropdownSlots.map(({ id, label }) => (
+            <button
+              key={id}
+              onClick={() => {
+                onSwapWith?.(id)
+                setIsOpen(false)
+              }}
+              className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-left transition-colors hover:bg-[var(--term-bg-surface)]"
               style={{
-                color: 'var(--term-text-muted)',
-                backgroundColor: 'var(--term-bg-surface)',
+                color: 'var(--term-text-primary)',
               }}
             >
-              <ArrowLeftRight className="w-3 h-3" />
-              Swap position with
-            </div>
-
-            {dropdownSlots.map(({ id, label }) => (
-              <button
-                key={id}
-                onClick={() => {
-                  onSwapWith?.(id)
-                  setIsOpen(false)
-                }}
-                className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-left transition-colors hover:bg-[var(--term-bg-surface)]"
-                style={{
-                  color: 'var(--term-text-primary)',
-                }}
-              >
-                <ArrowLeftRight
-                  className="w-3 h-3 flex-shrink-0"
-                  style={{ color: 'var(--term-text-muted)' }}
-                />
-                <span className="truncate flex-1">{label}</span>
-              </button>
-            ))}
-          </div>
-        )}
+              <ArrowLeftRight
+                className="w-3 h-3 flex-shrink-0"
+                style={{ color: 'var(--term-text-muted)' }}
+              />
+              <span className="truncate flex-1">{label}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {isMobile &&
         isOpen &&

@@ -13,16 +13,16 @@ import type {
   DeleteSessionResult,
 } from '@/lib/hooks/use-a-term-sessions'
 import {
+  buildDetachedPaneWindowUrl,
+  getDetachedPaneWindowFeatures,
+  getDetachedPaneWindowName,
+} from '@/lib/utils/detached-pane-window'
+import {
   type ATermSlot,
   getSlotSessionId,
   isPaneSlot,
   type PaneSlot,
 } from '@/lib/utils/slot'
-import {
-  buildDetachedPaneWindowUrl,
-  getDetachedPaneWindowFeatures,
-  getDetachedPaneWindowName,
-} from '@/lib/utils/detached-pane-window'
 
 interface UseATermSlotHandlersParams {
   aTermRefs: MutableRefObject<Map<string, ATermHandle | null>>
@@ -49,10 +49,7 @@ interface UseATermSlotHandlersParams {
   ) => Promise<void>
   detachedPaneId?: string
   isDetachedPaneWindow?: boolean
-  removeDetachedWindowPane?: (
-    paneId: string,
-    sessionId?: string | null,
-  ) => void
+  removeDetachedWindowPane?: (paneId: string, sessionId?: string | null) => void
 }
 
 export function useATermSlotHandlers({

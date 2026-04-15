@@ -1,7 +1,7 @@
 import { apiFetch } from '../api-fetch'
 import type {
-  AttachPaneRequest,
   ATermPane,
+  AttachPaneRequest,
   BulkLayoutUpdateRequest,
   CreatePaneRequest,
   PaneCountResponse,

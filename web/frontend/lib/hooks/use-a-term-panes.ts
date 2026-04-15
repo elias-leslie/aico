@@ -218,8 +218,8 @@ export function useATermPanes() {
 }
 
 export type {
-  AttachPaneRequest,
   ATermPane,
+  AttachPaneRequest,
   CreatePaneRequest,
   PanePlacementOptions,
   PaneSession,

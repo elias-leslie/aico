@@ -34,7 +34,10 @@ export function parseDetachedWindowPaneIds(
 }
 
 export function makeDetachedWindowScopeId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+  if (
+    typeof crypto !== 'undefined' &&
+    typeof crypto.randomUUID === 'function'
+  ) {
     return crypto.randomUUID()
   }
   return `detached-${Math.random().toString(36).slice(2, 10)}`

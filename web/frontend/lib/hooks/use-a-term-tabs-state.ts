@@ -97,7 +97,9 @@ export function useATermTabsState({
       visibleDetachedPaneIds.length === 0
         ? []
         : visibleDetachedPaneIds.flatMap((paneId) => {
-            const pane = detachedPanes.find((candidate) => candidate.id === paneId)
+            const pane = detachedPanes.find(
+              (candidate) => candidate.id === paneId,
+            )
             return pane ? [pane] : []
           }),
     [detachedPanes, visibleDetachedPaneIds],
@@ -108,23 +110,24 @@ export function useATermTabsState({
     getScopedATermStorageKey('a-term-layout-mode', storageScopeId),
     getDefaultLayoutMode(initialPaneCount, initialViewportWidth),
   )
-  const activeSessionProjectId = useMemo(
-    () => {
-      const scopedProjectId =
-        scopedDetachedPanes.find((pane) =>
+  const activeSessionProjectId = useMemo(() => {
+    const scopedProjectId =
+      scopedDetachedPanes.find((pane) =>
         pane.sessions.some((session) => session.id === activeSessionId),
-        )?.project_id ??
-        scopedDetachedPanes[0]?.project_id ??
-        undefined
+      )?.project_id ??
+      scopedDetachedPanes[0]?.project_id ??
+      undefined
 
-      if (isDetachedWindow) {
-        return scopedProjectId ?? getActiveSessionProjectId(activeSessionId, sessions)
-      }
+    if (isDetachedWindow) {
+      return (
+        scopedProjectId ?? getActiveSessionProjectId(activeSessionId, sessions)
+      )
+    }
 
-      return getActiveSessionProjectId(activeSessionId, sessions) ?? scopedProjectId
-    },
-    [activeSessionId, isDetachedWindow, scopedDetachedPanes, sessions],
-  )
+    return (
+      getActiveSessionProjectId(activeSessionId, sessions) ?? scopedProjectId
+    )
+  }, [activeSessionId, isDetachedWindow, scopedDetachedPanes, sessions])
   const {
     fontId,
     fontSize,
@@ -223,7 +226,14 @@ export function useATermTabsState({
 
       return pane ? { ...adHocSlot, paneId: pane.id } : adHocSlot
     })
-  }, [detachedPanes, isDetachedWindow, isMobile, panes, projectATerms, sessions])
+  }, [
+    detachedPanes,
+    isDetachedWindow,
+    isMobile,
+    panes,
+    projectATerms,
+    sessions,
+  ])
   const visiblePaneCount = visiblePanes.length + attachedExternalSessions.length
   const paneCountLimit = Math.min(maxPanes, viewportPaneCapacity)
   const visiblePanesAtLimit = visiblePaneCount >= paneCountLimit
@@ -319,8 +329,7 @@ export function useATermTabsState({
     return [...paneSlots, ...externalSlots]
   }, [attachedExternalSessions, visiblePanes])
   const slotSource = useMemo(
-    () =>
-      isMobile && !isDetachedWindow ? mobileGlobalSlots : visibleSlots,
+    () => (isMobile && !isDetachedWindow ? mobileGlobalSlots : visibleSlots),
     [isDetachedWindow, isMobile, mobileGlobalSlots, visibleSlots],
   )
   const resolvedActiveSessionId = useMemo(() => {
@@ -454,7 +463,11 @@ export function useATermTabsState({
     switchToSession(targetSessionId)
   }, [addDetachedWindowPane, createAdHocPane, detachedPanes, switchToSession])
   const handleDetachedNewATermForProject = useCallback(
-    async (targetProjectId: string, _mode?: string, rootPath?: string | null) => {
+    async (
+      targetProjectId: string,
+      _mode?: string,
+      rootPath?: string | null,
+    ) => {
       const newPane = await createProjectPane(
         generateProjectPaneName(targetProjectId, [...panes, ...detachedPanes]),
         targetProjectId,
@@ -501,7 +514,12 @@ export function useATermTabsState({
       startupLaunchKeyRef.current = null
       return
     }
-    if (isDetachedWindow || isLoading || isPaneCreating || visiblePanesAtLimit) {
+    if (
+      isDetachedWindow ||
+      isLoading ||
+      isPaneCreating ||
+      visiblePanesAtLimit
+    ) {
       return
     }
 
@@ -559,7 +577,9 @@ export function useATermTabsState({
     projectATerms,
     switchToSession,
   ])
-  const effectiveHandleAddTab = isDetachedWindow ? handleDetachedAddTab : handleAddTab
+  const effectiveHandleAddTab = isDetachedWindow
+    ? handleDetachedAddTab
+    : handleAddTab
   const effectiveHandleNewATermForProject = isDetachedWindow
     ? handleDetachedNewATermForProject
     : handleNewATermForProject

@@ -5,7 +5,10 @@ import { useProjectSettings } from '@/lib/hooks/use-project-settings'
 
 interface PaneProjectSwitcherProps {
   projectId: string
-  onProjectSwitch: (projectId: string, rootPath: string | null) => Promise<void> | void
+  onProjectSwitch: (
+    projectId: string,
+    rootPath: string | null,
+  ) => Promise<void> | void
   isMobile?: boolean
 }
 
@@ -36,7 +39,9 @@ export function PaneProjectSwitcher({
             return
           }
 
-          const nextProject = projects.find((project) => project.id === nextProjectId)
+          const nextProject = projects.find(
+            (project) => project.id === nextProjectId,
+          )
           if (!nextProject) {
             setSelectedProjectId(projectId)
             return

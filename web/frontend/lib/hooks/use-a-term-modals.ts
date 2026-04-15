@@ -7,9 +7,7 @@ interface UseATermModalsProps {
   showKeyboardHelp: boolean
   setShowKeyboardHelp: (show: boolean) => void
   onAttachExternalSession?: (sessionId: string) => void
-  onAttachDetachedPane?: (
-    paneId: string,
-  ) => Promise<{
+  onAttachDetachedPane?: (paneId: string) => Promise<{
     sessionId: string | null
     urlUpdates?: Record<string, string | null>
   }>
