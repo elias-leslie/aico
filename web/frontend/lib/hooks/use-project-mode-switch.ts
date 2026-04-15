@@ -25,6 +25,8 @@ interface SwitchProjectModeParams {
   projectSessions: ATermSession[]
   /** Pane ID if available (for direct pane mode switching) */
   paneId?: string
+  /** Concrete pane snapshot for just-created or just-attached panes */
+  pane?: ATermPane
 }
 
 interface UseProjectModeSwitchOptions {
@@ -100,7 +102,8 @@ export function useProjectModeSwitch({
   // Main orchestration function
   const switchProjectMode = useCallback(
     async (params: SwitchProjectModeParams): Promise<void> => {
-      const { projectId, mode, projectSessions, paneId } = params
+      const { projectId, mode, projectSessions, paneId, pane: paneSnapshot } =
+        params
 
       // Get fresh pane data from query cache to avoid stale closure issues
       // This is critical after operations like Close All where the panes array
@@ -108,12 +111,20 @@ export function useProjectModeSwitch({
       const freshPanesData = queryClient.getQueryData<PaneListResponse>([
         'a-term-panes',
       ])
-      const freshPanes = freshPanesData?.items ?? panes
+      const freshDetachedPanesData = queryClient.getQueryData<PaneListResponse>([
+        'a-term-detached-panes',
+      ])
+      const freshPanes = [
+        ...(freshPanesData?.items ?? panes),
+        ...(freshDetachedPanesData?.items ?? []),
+      ]
 
       // 1. Find pane - prefer by paneId (exact match), fallback to projectId
-      const pane = paneId
-        ? freshPanes.find((p) => p.id === paneId)
-        : freshPanes.find((p) => p.project_id === projectId)
+      const pane =
+        paneSnapshot ??
+        (paneId
+          ? freshPanes.find((p) => p.id === paneId)
+          : freshPanes.find((p) => p.project_id === projectId))
 
       if (pane) {
         // Check if we need to swap agent tool sessions (switching between different agent tools)

@@ -187,4 +187,133 @@ describe('useProjectModeSwitch', () => {
 
     expect(tabElement.scrollIntoView).toHaveBeenCalled()
   })
+
+  it('uses provided pane snapshot when the pane is not yet in cache', async () => {
+    const switchMode = vi.fn()
+    const setActiveMode = vi.fn()
+    const switchAgentTool = vi.fn().mockResolvedValue({
+      id: 'pane-b',
+      pane_type: 'project',
+      project_id: 'project-b',
+      pane_order: 1,
+      pane_name: 'Project B',
+      active_mode: 'codex',
+      is_detached: false,
+      created_at: '2026-04-15T00:00:00Z',
+      sessions: [
+        {
+          id: 'session-b-shell',
+          name: 'Shell',
+          mode: 'shell',
+          session_number: 1,
+          is_alive: true,
+          working_dir: '/workspace/project-b',
+          claude_state: 'not_started',
+        },
+        {
+          id: 'session-b-codex',
+          name: 'Codex',
+          mode: 'codex',
+          session_number: 1,
+          is_alive: true,
+          working_dir: '/workspace/project-b',
+          claude_state: 'not_started',
+        },
+      ],
+      width_percent: 100,
+      height_percent: 100,
+      grid_row: 0,
+      grid_col: 0,
+    })
+    const paneSnapshot = {
+      id: 'pane-b',
+      pane_type: 'project' as const,
+      project_id: 'project-b',
+      pane_order: 1,
+      pane_name: 'Project B',
+      active_mode: 'claude',
+      is_detached: false,
+      created_at: '2026-04-15T00:00:00Z',
+      sessions: [
+        {
+          id: 'session-b-shell',
+          name: 'Shell',
+          mode: 'shell',
+          session_number: 1,
+          is_alive: true,
+          working_dir: '/workspace/project-b',
+          claude_state: 'not_started' as const,
+        },
+        {
+          id: 'session-b-claude',
+          name: 'Claude',
+          mode: 'claude',
+          session_number: 1,
+          is_alive: true,
+          working_dir: '/workspace/project-b',
+          claude_state: 'running' as const,
+        },
+      ],
+      width_percent: 100,
+      height_percent: 100,
+      grid_row: 0,
+      grid_col: 0,
+    }
+    const { result } = renderHook(
+      () =>
+        useProjectModeSwitch({
+          switchMode,
+          projectTabRefs: { current: new Map() },
+          panes: [],
+          setActiveMode,
+          switchAgentTool,
+        }),
+      { wrapper: createWrapper() },
+    )
+
+    await act(async () => {
+      await result.current.switchProjectMode({
+        projectId: 'project-b',
+        mode: 'codex',
+        projectSessions: [
+          {
+            id: 'session-b-shell',
+            name: 'Shell',
+            user_id: null,
+            project_id: 'project-b',
+            working_dir: '/workspace/project-b',
+            mode: 'shell',
+            display_order: 0,
+            is_alive: true,
+            created_at: '2026-04-15T00:00:00Z',
+            last_accessed_at: '2026-04-15T00:00:00Z',
+            claude_state: 'not_started',
+          },
+          {
+            id: 'session-b-claude',
+            name: 'Claude',
+            user_id: null,
+            project_id: 'project-b',
+            working_dir: '/workspace/project-b',
+            mode: 'claude',
+            display_order: 1,
+            is_alive: true,
+            created_at: '2026-04-15T00:00:00Z',
+            last_accessed_at: '2026-04-15T00:00:00Z',
+            claude_state: 'running',
+          },
+        ],
+        paneId: 'pane-b',
+        pane: paneSnapshot,
+      })
+    })
+
+    expect(switchAgentTool).toHaveBeenCalledWith('pane-b', 'codex')
+    expect(setActiveMode).not.toHaveBeenCalled()
+    expect(switchMode).not.toHaveBeenCalled()
+    expect(mockStartAgent).toHaveBeenCalledWith('session-b-codex')
+    expect(mockPush).toHaveBeenCalledWith('?session=session-b-codex', {
+      scroll: false,
+    })
+  })
 })

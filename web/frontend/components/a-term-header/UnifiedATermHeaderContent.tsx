@@ -21,6 +21,7 @@ import { AddATermButton } from './AddATermButton'
 import { HeaderIconButton } from './HeaderIconButton'
 import { HeaderNameDisplay } from './HeaderNameDisplay'
 import { PaneSearchControl } from './PaneSearchControl'
+import { PaneProjectSwitcher } from './PaneProjectSwitcher'
 import { PaneStatusBadge, shouldShowPaneStatus } from './PaneStatusBadge'
 import type { UnifiedATermHeaderProps } from './types'
 
@@ -47,6 +48,7 @@ export const UnifiedATermHeaderContent = memo(
     onOpenModal,
     canAddPane = true,
     onModeSwitch,
+    onProjectSwitch,
     isModeSwitching = false,
     isMobile = false,
     allSlots,
@@ -80,9 +82,24 @@ export const UnifiedATermHeaderContent = memo(
     const shouldShowClean = showCleanButton && isAgentMode
     const slotId = getSlotPanelId(slot)
     const slotName = getSlotName(slot)
+    const showProjectSwitcher =
+      !isMobile && slot.type === 'project' && !!onProjectSwitch
+    const showHeaderName = isMobile || !showProjectSwitcher
     const showStatusBadge = shouldShowPaneStatus(connectionStatus)
     const closePaneLabel = formatActionLabel(closeTooltip ?? 'Close pane')
     const closePaneTooltip = `${closePaneLabel}: remove it from this layout but keep the session running.`
+    const swapTargets = useMemo(
+      () =>
+        !isMobile && onSwapWith && allSlots
+          ? allSlots
+              .filter((candidate) => getSlotPanelId(candidate) !== slotId)
+              .map((candidate) => ({
+                id: getSlotPanelId(candidate),
+                label: getSlotName(candidate),
+              }))
+          : [],
+      [allSlots, isMobile, onSwapWith, slotId],
+    )
     const hasPaneActions =
       shouldShowClean ||
       !!onDetach ||
@@ -202,20 +219,28 @@ export const UnifiedATermHeaderContent = memo(
             agentTools={enabledTools}
           />
         )}
+        {showProjectSwitcher && (
+          <PaneProjectSwitcher
+            projectId={slot.projectId}
+            onProjectSwitch={onProjectSwitch}
+            isMobile={isMobile}
+          />
+        )}
 
-        {/* A-Term name/switcher */}
-        <HeaderNameDisplay
-          slot={slot}
-          isActive={isActive}
-          isMobile={isMobile}
-          allSlots={allSlots}
-          onSwapWith={onSwapWith}
-          onSwitchTo={onSwitchTo}
-          onSwitch={onSwitch}
-          onRename={paneId ? handleRename : undefined}
-          isEditing={isRenaming}
-          onEditingChange={setIsRenaming}
-        />
+        {showHeaderName && (
+          <HeaderNameDisplay
+            slot={slot}
+            isActive={isActive}
+            isMobile={isMobile}
+            allSlots={allSlots}
+            onSwapWith={onSwapWith}
+            onSwitchTo={onSwitchTo}
+            onSwitch={onSwitch}
+            onRename={paneId ? handleRename : undefined}
+            isEditing={isRenaming}
+            onEditingChange={setIsRenaming}
+          />
+        )}
 
         {/* Add a-term button */}
         {onOpenModal && (
@@ -229,6 +254,7 @@ export const UnifiedATermHeaderContent = memo(
         {layoutMode &&
           onLayoutModeChange &&
           availableLayouts &&
+          !isMobile &&
           availableLayouts.length > 1 && (
             <LayoutModeButtons
               layoutMode={layoutMode}
@@ -289,6 +315,8 @@ export const UnifiedATermHeaderContent = memo(
               onClean={shouldShowClean ? onClean : undefined}
               onResetAll={onResetAll}
               onCloseAll={onCloseAll}
+              onSwapWith={onSwapWith}
+              swapTargets={swapTargets}
               isMobile={isMobile}
             />
           )}

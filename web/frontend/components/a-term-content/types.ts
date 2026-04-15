@@ -54,6 +54,11 @@ export interface ATermContentProps {
   handleOpenATermManager?: () => void
   handleUploadClick: () => void
   onModeSwitch: (slot: ATermSlot | PaneSlot, mode: string) => void
+  onProjectSwitch?: (
+    slot: ATermSlot | PaneSlot,
+    projectId: string,
+    rootPath: string | null,
+  ) => Promise<void> | void
   isModeSwitching: boolean
   onSwapPanes: (slotIdA: string, slotIdB: string) => void
   onLayoutChange?: (layouts: PaneLayout[]) => void
@@ -83,6 +88,7 @@ export interface ATermContentProps {
   // Mobile keyboard
   sessions: Array<{ id: string }>
   activeSessionId?: string | null
+  storageScopeId?: string | null
   activeMode?: string
   activeStatus?: ConnectionStatus
   handleKeyboardInput: (input: string) => void

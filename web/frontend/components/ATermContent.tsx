@@ -47,6 +47,7 @@ export function ATermContent({
   handleOpenATermManager,
   handleUploadClick,
   onModeSwitch,
+  onProjectSwitch,
   isModeSwitching,
   onSwapPanes,
   layoutMode,
@@ -70,6 +71,7 @@ export function ATermContent({
   isCleaningPrompt,
   sessions,
   activeSessionId,
+  storageScopeId,
   activeMode,
   activeStatus,
   handleKeyboardInput,
@@ -140,6 +142,7 @@ export function ATermContent({
         handleOpenATermManager={handleOpenATermManager}
         handleUploadClick={handleUploadClick}
         onModeSwitch={onModeSwitch}
+        onProjectSwitch={onProjectSwitch}
         isModeSwitching={isModeSwitching}
         onSwapPanes={onSwapPanes}
         layoutMode={layoutMode}
@@ -154,6 +157,7 @@ export function ATermContent({
         handleFileInputChange={handleFileInputChange}
         handleFileSelect={handleFileSelect}
         activeSessionId={activeSessionId}
+        storageScopeId={storageScopeId}
         isVoiceSupported={isVoiceSupported}
         handleVoiceOpen={handleVoiceOpen}
         isMobile={isMobile}

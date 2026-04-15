@@ -2,14 +2,22 @@ import { useCallback, useState } from 'react'
 import { useATermKeyboardShortcuts } from '@/components/KeyboardShortcuts'
 import { getAgentHubVoiceWsUrl } from '@/lib/api-config'
 import { useTranscription } from '@/lib/voice/use-transcription'
-import { findSessionByMode } from './a-term-handler-utils'
+import { findSessionByMode, generateProjectPaneName } from './a-term-handler-utils'
 import { useATermActionHandlers } from './use-a-term-action-handlers'
 import { useATermModals } from './use-a-term-modals'
 import { useATermNavigation } from './use-a-term-navigation'
 import { useATermSlotHandlers } from './use-a-term-slot-handlers'
 import { useATermTabsState } from './use-a-term-tabs-state'
+import { useDetachedPaneWindow } from './use-detached-pane-window'
 import { useLayoutPersistence } from './use-layout-persistence'
 import { usePromptCleaner } from './use-prompt-cleaner'
+import {
+  DETACHED_PANE_PARAM,
+  DETACHED_WINDOW_PANES_PARAM,
+  DETACHED_WINDOW_SCOPE_PARAM,
+} from '@/lib/utils/detached-pane-window'
+import { isPaneSlot, type ATermSlot, type PaneSlot } from '@/lib/utils/slot'
+import type { ATermSession } from './use-a-term-sessions'
 
 interface UseATermOrchestrationProps {
   projectId?: string
@@ -26,11 +34,20 @@ export function useATermOrchestration({
   projectPath,
   detachedPaneId,
 }: UseATermOrchestrationProps) {
+  const detachedWindow = useDetachedPaneWindow({
+    fallbackDetachedPaneId: detachedPaneId,
+  })
+
   // Core aTerm state
   const aTermState = useATermTabsState({
     projectId,
     projectPath,
     detachedPaneId,
+    isDetachedPaneWindow: detachedWindow.isDetachedPaneWindow,
+    detachedWindowPaneIds: detachedWindow.detachedWindowPaneIds,
+    storageScopeId: detachedWindow.storageScopeId,
+    addDetachedWindowPane: detachedWindow.addDetachedWindowPane,
+    setDetachedWindowPaneIds: detachedWindow.setDetachedWindowPaneIds,
   })
 
   const {
@@ -40,6 +57,7 @@ export function useATermOrchestration({
     aTermSlots,
     orderedIds,
     aTermRefs,
+    panes,
     reset,
     disableProject,
     remove,
@@ -49,6 +67,7 @@ export function useATermOrchestration({
     attachExternalSession,
     attachDetachedPane,
     detachExternalSession,
+    createProjectPane,
     detachedPanes,
     showATermManager,
     setShowATermManager,
@@ -59,6 +78,11 @@ export function useATermOrchestration({
   const [showCleaner, setShowCleaner] = useState(false)
   const [cleanerRawPrompt, setCleanerRawPrompt] = useState('')
   const [keyboardHelpState, setKeyboardHelpState] = useState(false)
+  const availableDetachedPanes = detachedWindow.isDetachedPaneWindow
+    ? detachedPanes.filter(
+        (pane) => !detachedWindow.detachedWindowPaneIds.includes(pane.id),
+      )
+    : detachedPanes
 
   // Voice input state
   const [showVoice, setShowVoice] = useState(false)
@@ -74,13 +98,39 @@ export function useATermOrchestration({
     setShowKeyboardHelp: setKeyboardHelpState,
     onAttachExternalSession: attachExternalSession,
     onAttachDetachedPane: async (paneId) => {
+      if (detachedWindow.isDetachedPaneWindow) {
+        const pane = detachedPanes.find((candidate) => candidate.id === paneId)
+        const sessionId =
+          pane &&
+          (findSessionByMode(pane, pane.active_mode)?.id ??
+            findSessionByMode(pane, 'shell')?.id ??
+            pane.sessions[0]?.id ??
+            null)
+        if (!sessionId) {
+          return { sessionId: null }
+        }
+        const nextPaneIds = [...detachedWindow.detachedWindowPaneIds]
+        if (!nextPaneIds.includes(paneId)) {
+          nextPaneIds.push(paneId)
+        }
+        return {
+          sessionId,
+          urlUpdates: {
+            [DETACHED_PANE_PARAM]: nextPaneIds[0] ?? paneId,
+            [DETACHED_WINDOW_PANES_PARAM]: nextPaneIds.join(','),
+            [DETACHED_WINDOW_SCOPE_PARAM]:
+              detachedWindow.detachedWindowScopeId,
+          },
+        }
+      }
       const pane = await attachDetachedPane(paneId)
-      return (
-        findSessionByMode(pane, pane.active_mode)?.id ??
-        findSessionByMode(pane, 'shell')?.id ??
-        pane.sessions[0]?.id ??
-        null
-      )
+      return {
+        sessionId:
+          findSessionByMode(pane, pane.active_mode)?.id ??
+          findSessionByMode(pane, 'shell')?.id ??
+          pane.sessions[0]?.id ??
+          null,
+      }
     },
   })
 
@@ -101,11 +151,14 @@ export function useATermOrchestration({
     sessions,
     visibleSlots: aTermSlots,
     handleProjectModeChange,
+    isDetachedPaneWindow: detachedWindow.isDetachedPaneWindow,
+    removeDetachedWindowPane: detachedWindow.removeDetachedWindowPane,
   })
 
   // Layout persistence
   const { handleLayoutChange } = useLayoutPersistence({
     saveLayouts,
+    storageScopeId: detachedWindow.storageScopeId,
     debounceMs: 500,
   })
 
@@ -137,6 +190,170 @@ export function useATermOrchestration({
     voiceResetTranscript: transcription.resetTranscript,
     voiceStatus: transcription.status,
   })
+  const buildProjectSessionsFromPane = useCallback(
+    (pane: (typeof panes)[number]): ATermSession[] =>
+      pane.sessions.map((session, index) => ({
+        id: session.id,
+        name: session.name,
+        user_id: null,
+        project_id: pane.project_id,
+        working_dir: session.working_dir,
+        mode: session.mode,
+        display_order: index,
+        is_alive: session.is_alive,
+        created_at: pane.created_at,
+        last_accessed_at: pane.created_at,
+        agent_state: session.agent_state,
+        claude_state: session.claude_state,
+      })),
+    [],
+  )
+  const alignTargetPaneMode = useCallback(
+    async (
+      pane: (typeof panes)[number],
+      targetProjectId: string,
+      desiredMode: string,
+    ) => {
+      const initialSessionId =
+        findSessionByMode(pane, desiredMode)?.id ??
+        findSessionByMode(pane, pane.active_mode)?.id ??
+        findSessionByMode(pane, 'shell')?.id ??
+        pane.sessions[0]?.id ??
+        null
+
+      if (pane.active_mode === desiredMode) {
+        if (desiredMode !== 'shell') {
+          await handleProjectModeChange(
+            targetProjectId,
+            desiredMode,
+            buildProjectSessionsFromPane(pane),
+            pane.id,
+            pane,
+          )
+          return {
+            didNavigate: true,
+            sessionId: initialSessionId,
+          }
+        }
+        return {
+          didNavigate: false,
+          sessionId: initialSessionId,
+        }
+      }
+
+      await handleProjectModeChange(
+        targetProjectId,
+        desiredMode,
+        buildProjectSessionsFromPane(pane),
+        pane.id,
+        pane,
+      )
+
+      return {
+        didNavigate: true,
+        sessionId: initialSessionId,
+      }
+    },
+    [buildProjectSessionsFromPane, handleProjectModeChange],
+  )
+  const handleSlotProjectSwitch = useCallback(
+    async (
+      slot: PaneSlot,
+      targetProjectId: string,
+      rootPath: string | null,
+    ) => {
+      if (slot.type !== 'project' || slot.projectId === targetProjectId) {
+        return
+      }
+      const desiredMode = slot.activeMode
+
+      const currentPane =
+        [...panes, ...detachedPanes].find((pane) => pane.id === slot.paneId) ??
+        null
+      if (!currentPane) {
+        return
+      }
+
+      const targetDetachedPane =
+        detachedPanes.find(
+          (pane) =>
+            pane.id !== slot.paneId && pane.pane_type === 'project' && pane.project_id === targetProjectId,
+        ) ?? null
+
+      if (detachedWindow.isDetachedPaneWindow) {
+        const targetPane =
+          targetDetachedPane ??
+          (await createProjectPane(
+            generateProjectPaneName(targetProjectId, [...panes, ...detachedPanes]),
+            targetProjectId,
+            rootPath ?? undefined,
+            desiredMode !== 'shell' ? desiredMode : undefined,
+            { detached: true },
+          ))
+        const modeResult = await alignTargetPaneMode(
+          targetPane,
+          targetProjectId,
+          desiredMode,
+        )
+        detachedWindow.replaceDetachedWindowPane(
+          slot.paneId,
+          targetPane.id,
+          modeResult.sessionId,
+        )
+        return
+      }
+
+      const placement = {
+        pane_order: currentPane.pane_order,
+        width_percent: currentPane.width_percent,
+        height_percent: currentPane.height_percent,
+        grid_row: currentPane.grid_row,
+        grid_col: currentPane.grid_col,
+      }
+
+      await detachPane(slot.paneId)
+
+      try {
+        const targetPane =
+          targetDetachedPane
+            ? await attachDetachedPane(targetDetachedPane.id, placement)
+            : await createProjectPane(
+                generateProjectPaneName(targetProjectId, [...panes, ...detachedPanes]),
+                targetProjectId,
+                rootPath ?? undefined,
+                desiredMode !== 'shell' ? desiredMode : undefined,
+                {
+                  paneOrder: placement.pane_order,
+                  widthPercent: placement.width_percent,
+                  heightPercent: placement.height_percent,
+                  gridRow: placement.grid_row,
+                  gridCol: placement.grid_col,
+                },
+              )
+        const modeResult = await alignTargetPaneMode(
+          targetPane,
+          targetProjectId,
+          desiredMode,
+        )
+        if (!modeResult.didNavigate && modeResult.sessionId) {
+          switchToSession(modeResult.sessionId)
+        }
+      } catch (error) {
+        await attachDetachedPane(slot.paneId, placement).catch(() => undefined)
+        throw error
+      }
+    },
+    [
+      alignTargetPaneMode,
+      attachDetachedPane,
+      createProjectPane,
+      detachPane,
+      detachedPanes,
+      detachedWindow,
+      panes,
+      switchToSession,
+    ],
+  )
 
   // Pause key: first press opens voice, second press sends transcript
   const handlePauseVoiceSend = useCallback(() => {
@@ -198,6 +415,16 @@ export function useATermOrchestration({
     voiceStatus: transcription.status,
     voiceError: transcription.error,
     isVoiceSupported: transcription.isSupported,
-    detachedPanes,
+    detachedPanes: availableDetachedPanes,
+    isDetachedPaneWindow: detachedWindow.isDetachedPaneWindow,
+    storageScopeId: detachedWindow.storageScopeId,
+    handleSlotProjectSwitch: (
+      slot: ATermSlot | PaneSlot,
+      projectId: string,
+      rootPath: string | null,
+    ) =>
+      isPaneSlot(slot)
+        ? handleSlotProjectSwitch(slot, projectId, rootPath)
+        : undefined,
   }
 }

@@ -45,8 +45,14 @@ interface UseATermSlotHandlersParams {
     newMode: string,
     projectSessions: ATermSession[],
     paneId?: string,
+    pane?: import('./use-a-term-panes').ATermPane,
   ) => Promise<void>
   detachedPaneId?: string
+  isDetachedPaneWindow?: boolean
+  removeDetachedWindowPane?: (
+    paneId: string,
+    sessionId?: string | null,
+  ) => void
 }
 
 export function useATermSlotHandlers({
@@ -65,6 +71,8 @@ export function useATermSlotHandlers({
   visibleSlots,
   handleProjectModeChange,
   detachedPaneId,
+  isDetachedPaneWindow = false,
+  removeDetachedWindowPane,
 }: UseATermSlotHandlersParams) {
   const queryClient = useQueryClient()
   // Track mode switch loading state
@@ -144,6 +152,11 @@ export function useATermSlotHandlers({
         return
       }
 
+      if (isDetachedPaneWindow && isPaneSlot(slot)) {
+        removeDetachedWindowPane?.(slot.paneId, nextVisibleSessionId ?? null)
+        return
+      }
+
       if (detachPane && isPaneSlot(slot)) {
         if (detachedPaneId === slot.paneId) {
           if (typeof window !== 'undefined' && window.opener) {
@@ -182,6 +195,8 @@ export function useATermSlotHandlers({
       findNextVisibleSessionId,
       detachPane,
       detachExternalSession,
+      isDetachedPaneWindow,
+      removeDetachedWindowPane,
       switchToSession,
       detachedPaneId,
     ],
@@ -212,11 +227,15 @@ export function useATermSlotHandlers({
         return
       }
 
-      try {
-        await detachPane(slot.paneId)
-      } catch (error) {
-        popup?.close()
-        throw error
+      if (isDetachedPaneWindow) {
+        removeDetachedWindowPane?.(slot.paneId, nextVisibleSessionId ?? null)
+      } else {
+        try {
+          await detachPane(slot.paneId)
+        } catch (error) {
+          popup?.close()
+          throw error
+        }
       }
 
       if (nextVisibleSessionId) {
@@ -231,6 +250,7 @@ export function useATermSlotHandlers({
         window.location.href,
         slot.paneId,
         sessionId,
+        { paneIds: [slot.paneId] },
       )
       popup.focus?.()
     },
@@ -239,6 +259,8 @@ export function useATermSlotHandlers({
       detachPane,
       findNextVisibleSessionId,
       handleSlotClose,
+      isDetachedPaneWindow,
+      removeDetachedWindowPane,
       switchToSession,
     ],
   )
@@ -260,6 +282,14 @@ export function useATermSlotHandlers({
         return
       }
 
+      if (result.pane_deleted && isDetachedPaneWindow && isPaneSlot(slot)) {
+        removeDetachedWindowPane?.(
+          slot.paneId,
+          result.next_session_id ?? nextVisibleSessionId ?? null,
+        )
+        return
+      }
+
       if (result.next_session_id) {
         switchToSession(result.next_session_id)
         return
@@ -273,7 +303,9 @@ export function useATermSlotHandlers({
       activeSessionId,
       detachExternalSession,
       findNextVisibleSessionId,
+      isDetachedPaneWindow,
       remove,
+      removeDetachedWindowPane,
       switchToSession,
     ],
   )

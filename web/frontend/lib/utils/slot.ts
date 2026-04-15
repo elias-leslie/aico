@@ -10,6 +10,7 @@ import { getAgentState } from './agent-state'
 
 // Slot types for split-pane A-Term sessions
 export interface ProjectSlot {
+  slotId?: string
   type: 'project'
   projectId: string
   projectName: string
@@ -24,6 +25,7 @@ export interface ProjectSlot {
 }
 
 export interface AdHocSlot {
+  slotId?: string
   type: 'adhoc'
   sessionId: string
   name: string
@@ -50,6 +52,9 @@ export function getSlotSessionId(slot: ATermSlot | PaneSlot): string | null {
  * Get a unique panel ID for a slot.
  */
 export function getSlotPanelId(slot: ATermSlot | PaneSlot): string {
+  if (slot.slotId) {
+    return slot.slotId
+  }
   if (isPaneSlot(slot)) {
     return `pane-${slot.paneId}`
   }

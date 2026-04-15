@@ -7,7 +7,12 @@ interface UseATermModalsProps {
   showKeyboardHelp: boolean
   setShowKeyboardHelp: (show: boolean) => void
   onAttachExternalSession?: (sessionId: string) => void
-  onAttachDetachedPane?: (paneId: string) => Promise<string | null>
+  onAttachDetachedPane?: (
+    paneId: string,
+  ) => Promise<{
+    sessionId: string | null
+    urlUpdates?: Record<string, string | null>
+  }>
 }
 
 interface UseATermModalsReturn {
@@ -85,10 +90,13 @@ export function useATermModals({
   const handleAttachDetachedPane = useCallback(
     async (paneId: string) => {
       setShowATermManager(false)
-      const sessionId = await onAttachDetachedPane?.(paneId)
-      const updates: Record<string, string | null> = { modal: null }
-      if (sessionId) {
-        updates.session = sessionId
+      const result = await onAttachDetachedPane?.(paneId)
+      const updates: Record<string, string | null> = {
+        modal: null,
+        ...(result?.urlUpdates ?? {}),
+      }
+      if (result?.sessionId) {
+        updates.session = result.sessionId
       }
       updateUrlParams(updates)
     },

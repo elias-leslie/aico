@@ -26,6 +26,7 @@ from ..storage import panes as pane_store
 from ..storage import project_settings as project_settings_store
 from .models.pane_layout import BulkLayoutUpdateRequest, UpdatePaneLayoutRequest
 from .models.pane_requests import (
+    AttachPaneRequest,
     CreatePaneRequest,
     SwapPanesRequest,
     SwitchAgentToolRequest,
@@ -90,12 +91,28 @@ async def create_pane(request: Request, body: CreatePaneRequest) -> PaneResponse
         _validate_agent_tool(body.agent_tool_slug)
 
     try:
+        create_kwargs: dict[str, Any] = {
+            "pane_type": body.pane_type,
+            "pane_name": body.pane_name,
+            "project_id": body.project_id,
+            "working_dir": body.working_dir,
+            "agent_tool_slug": body.agent_tool_slug,
+        }
+        if body.detached:
+            create_kwargs["is_detached"] = True
+        if body.pane_order is not None:
+            create_kwargs["pane_order"] = body.pane_order
+        if body.width_percent is not None:
+            create_kwargs["width_percent"] = body.width_percent
+        if body.height_percent is not None:
+            create_kwargs["height_percent"] = body.height_percent
+        if body.grid_row is not None:
+            create_kwargs["grid_row"] = body.grid_row
+        if body.grid_col is not None:
+            create_kwargs["grid_col"] = body.grid_col
+
         pane = pane_store.create_pane_with_sessions(
-            pane_type=body.pane_type,
-            pane_name=body.pane_name,
-            project_id=body.project_id,
-            working_dir=body.working_dir,
-            agent_tool_slug=body.agent_tool_slug,
+            **create_kwargs,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from None
@@ -178,7 +195,10 @@ async def detach_pane(pane_id: str) -> PaneResponse:
 
 
 @router.post("/api/a-term/panes/{pane_id}/attach", response_model=PaneResponse)
-async def attach_pane(pane_id: str) -> PaneResponse:
+async def attach_pane(
+    pane_id: str,
+    request: AttachPaneRequest | None = None,
+) -> PaneResponse:
     """Attach a detached pane back into the visible layout."""
     validate_uuid(pane_id)
 
@@ -187,7 +207,20 @@ async def attach_pane(pane_id: str) -> PaneResponse:
         return build_pane_response(pane)
 
     try:
-        updated = pane_store.attach_pane(pane_id)
+        attach_kwargs: dict[str, Any] = {}
+        if request:
+            if request.pane_order is not None:
+                attach_kwargs["pane_order"] = request.pane_order
+            if request.width_percent is not None:
+                attach_kwargs["width_percent"] = request.width_percent
+            if request.height_percent is not None:
+                attach_kwargs["height_percent"] = request.height_percent
+            if request.grid_row is not None:
+                attach_kwargs["grid_row"] = request.grid_row
+            if request.grid_col is not None:
+                attach_kwargs["grid_col"] = request.grid_col
+
+        updated = pane_store.attach_pane(pane_id, **attach_kwargs)
     except ValueError as err:
         raise HTTPException(status_code=400, detail=str(err)) from None
 

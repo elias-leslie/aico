@@ -251,6 +251,48 @@ def test_create_project_pane_persists_resolved_active_mode(test_app: TestClient)
     )
 
 
+def test_create_pane_forwards_detached_layout_fields_when_present(test_app: TestClient) -> None:
+    """POST /api/a-term/panes -- forwards detached/layout fields only when requested."""
+    pane = _make_pane(
+        pane_type="adhoc",
+        pane_name="Detached Pane",
+        is_detached=True,
+        pane_order=3,
+    )
+    with patch(
+        "a_term.api.panes.pane_store.create_pane_with_sessions",
+        return_value=pane,
+    ) as create_mock:
+        response = test_app.post(
+            "/api/a-term/panes",
+            json={
+                "pane_type": "adhoc",
+                "pane_name": "Detached Pane",
+                "detached": True,
+                "pane_order": 3,
+                "width_percent": 55.0,
+                "height_percent": 45.0,
+                "grid_row": 1,
+                "grid_col": 2,
+            },
+        )
+
+    assert response.status_code == 200
+    create_mock.assert_called_once_with(
+        pane_type="adhoc",
+        pane_name="Detached Pane",
+        project_id=None,
+        working_dir=None,
+        agent_tool_slug=None,
+        is_detached=True,
+        pane_order=3,
+        width_percent=55.0,
+        height_percent=45.0,
+        grid_row=1,
+        grid_col=2,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Get pane
 # ---------------------------------------------------------------------------
@@ -444,6 +486,37 @@ def test_attach_pane_success_returns_updated_pane(test_app: TestClient) -> None:
     assert response.json()["id"] == pid
     assert response.json()["is_detached"] is False
     attach_mock.assert_called_once_with(pid)
+
+
+def test_attach_pane_forwards_requested_layout_fields(test_app: TestClient) -> None:
+    """POST /api/a-term/panes/{id}/attach -- forwards placement fields when supplied."""
+    pid = str(uuid.uuid4())
+    existing = _make_pane(pane_id=pid, pane_name="Attach Layout", is_detached=True)
+    attached = _make_pane(pane_id=pid, pane_name="Attach Layout", is_detached=False)
+    with (
+        patch("a_term.api.panes.pane_store.get_pane_with_sessions", return_value=existing),
+        patch("a_term.api.panes.pane_store.attach_pane", return_value=attached) as attach_mock,
+    ):
+        response = test_app.post(
+            f"/api/a-term/panes/{pid}/attach",
+            json={
+                "pane_order": 4,
+                "width_percent": 60.0,
+                "height_percent": 40.0,
+                "grid_row": 1,
+                "grid_col": 0,
+            },
+        )
+
+    assert response.status_code == 200
+    attach_mock.assert_called_once_with(
+        pid,
+        pane_order=4,
+        width_percent=60.0,
+        height_percent=40.0,
+        grid_row=1,
+        grid_col=0,
+    )
 
 
 # ---------------------------------------------------------------------------

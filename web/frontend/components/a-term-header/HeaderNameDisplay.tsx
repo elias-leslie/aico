@@ -100,8 +100,8 @@ export const HeaderNameDisplay = memo(function HeaderNameDisplay({
     )
   }
 
-  // Swap dropdown in split/grid mode
-  if (allSlots && onSwapWith) {
+  // Mobile uses the pane switcher trigger for all pane/session navigation.
+  if (isMobile && allSlots && (onSwitchTo || onSwapWith)) {
     return (
       <PaneSwapDropdown
         currentSlot={slot}
@@ -113,8 +113,8 @@ export const HeaderNameDisplay = memo(function HeaderNameDisplay({
     )
   }
 
-  // Switchable button (single pane mode)
-  if (onSwitch) {
+  // Mobile keeps explicit switch button when drag or tab targets are not ideal.
+  if (isMobile && onSwitch) {
     return (
       <button
         onClick={onSwitch}

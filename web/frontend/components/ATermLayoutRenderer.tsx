@@ -57,11 +57,17 @@ interface ATermLayoutRendererProps {
     slot: ATermSlot | PaneSlot,
     mode: ATermMode,
   ) => void | Promise<void>
+  onProjectSwitch?: (
+    slot: ATermSlot | PaneSlot,
+    projectId: string,
+    rootPath: string | null,
+  ) => void | Promise<void>
   isModeSwitching?: boolean
 
   // Device
   isMobile: boolean
   activeSessionId?: string | null
+  storageScopeId?: string | null
 
   // Pane swap (for dropdown swap)
   onSwapPanes?: (slotIdA: string, slotIdB: string) => void
@@ -98,9 +104,11 @@ export function ATermLayoutRenderer({
   onShowATermManager,
   onUploadClick,
   onModeSwitch,
+  onProjectSwitch,
   isModeSwitching,
   isMobile,
   activeSessionId,
+  storageScopeId,
   onSwapPanes,
   layoutMode,
   availableLayouts,
@@ -134,9 +142,11 @@ export function ATermLayoutRenderer({
       onOpenModal={onShowATermManager}
       canAddPane={canAddPane}
       onModeSwitch={onModeSwitch}
+      onProjectSwitch={onProjectSwitch}
       isModeSwitching={isModeSwitching}
       isMobile={isMobile}
       activeSessionId={activeSessionId}
+      storageScopeId={storageScopeId}
       layoutMode={layoutMode}
       availableLayouts={availableLayouts}
       onLayoutModeChange={onLayoutModeChange}

@@ -6,6 +6,14 @@ export interface UseATermTabsStateProps {
   projectId?: string
   projectPath?: string
   detachedPaneId?: string
+  isDetachedPaneWindow?: boolean
+  detachedWindowPaneIds?: string[]
+  storageScopeId?: string | null
+  addDetachedWindowPane?: (paneId: string, sessionId?: string | null) => void
+  setDetachedWindowPaneIds?: (
+    paneIds: string[],
+    sessionId?: string | null,
+  ) => void
 }
 
 export interface ATermRefsMap {

@@ -2,6 +2,7 @@
 
 import { clsx } from 'clsx'
 import {
+  ArrowLeftRight,
   LogOut,
   Menu,
   Mic,
@@ -33,6 +34,8 @@ export interface PaneOverflowMenuProps {
   onResetAll?: () => void
   onCloseAll?: () => void
   onRename?: () => void
+  onSwapWith?: (slotId: string) => void
+  swapTargets?: Array<{ id: string; label: string }>
   isMobile?: boolean
 }
 
@@ -55,6 +58,8 @@ export function PaneOverflowMenu({
   onResetAll,
   onCloseAll,
   onRename,
+  onSwapWith,
+  swapTargets = [],
   isMobile = false,
 }: PaneOverflowMenuProps) {
   const [isOpen, setIsOpen] = useState(false)
@@ -128,8 +133,20 @@ export function PaneOverflowMenu({
     onRename?.()
     setIsOpen(false)
   }, [onRename])
+  const handleSwapWith = useCallback(
+    (slotId: string) => {
+      onSwapWith?.(slotId)
+      setIsOpen(false)
+    },
+    [onSwapWith],
+  )
 
-  const hasPaneSessionActions = !!(onDetach || onClosePane || onCloseSession)
+  const hasPaneSessionActions = !!(
+    onDetach ||
+    onClosePane ||
+    onCloseSession ||
+    (onSwapWith && swapTargets.length > 0)
+  )
   const hasPaneUtilityActions = !!(
     onReset ||
     onSettings ||
@@ -220,6 +237,17 @@ export function PaneOverflowMenu({
               title="Rename this pane"
             />
           )}
+          {onSwapWith &&
+            swapTargets.map((target) => (
+              <MenuItemButton
+                key={target.id}
+                icon={<ArrowLeftRight className="w-3.5 h-3.5" />}
+                label={`Swap With ${target.label}`}
+                onClick={() => handleSwapWith(target.id)}
+                isMobile={isMobile}
+                title={`Swap this pane with ${target.label}`}
+              />
+            ))}
           {(hasPaneSessionActions || !!onRename) && hasPaneUtilityActions && (
             <div
               className="mx-2 my-1 h-px"

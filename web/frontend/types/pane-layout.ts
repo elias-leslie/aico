@@ -46,9 +46,15 @@ export interface ResizablePaneLayoutProps {
     slot: ATermSlot | PaneSlot,
     mode: ATermMode,
   ) => void | Promise<void>
+  onProjectSwitch?: (
+    slot: ATermSlot | PaneSlot,
+    projectId: string,
+    rootPath: string | null,
+  ) => void | Promise<void>
   isModeSwitching?: boolean
   isMobile?: boolean
   activeSessionId?: string | null
+  storageScopeId?: string | null
   layoutMode?: LayoutMode
   availableLayouts?: LayoutMode[]
   onLayoutModeChange?: (mode: LayoutMode) => void

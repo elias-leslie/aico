@@ -93,4 +93,24 @@ describe('PaneOverflowMenu', () => {
     expect(onClosePane).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
   })
+
+  it('shows swap targets and swaps panes from the overflow menu', () => {
+    const onSwapWith = vi.fn()
+
+    render(
+      <PaneOverflowMenu
+        onSwapWith={onSwapWith}
+        swapTargets={[
+          { id: 'pane-b', label: 'Beta' },
+          { id: 'pane-c', label: 'Gamma' },
+        ]}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pane actions' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Swap With Beta' }))
+
+    expect(onSwapWith).toHaveBeenCalledWith('pane-b')
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  })
 })

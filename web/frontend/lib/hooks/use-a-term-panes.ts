@@ -4,7 +4,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback } from 'react'
 import { MAX_PANES } from '@/lib/constants/a-term'
 import * as api from './a-term-panes-api'
-import type { PaneListResponse, UpdatePaneRequest } from './a-term-panes-types'
+import type {
+  AttachPaneRequest,
+  PaneListResponse,
+  PanePlacementOptions,
+  UpdatePaneRequest,
+} from './a-term-panes-types'
 
 const invalidatePanesAndSessions = (qc: ReturnType<typeof useQueryClient>) => {
   qc.invalidateQueries({ queryKey: ['a-term-panes'] })
@@ -50,7 +55,13 @@ export function useATermPanes() {
     onSuccess: () => invalidatePanesAndSessions(queryClient),
   })
   const attachMutation = useMutation({
-    mutationFn: api.attachPane,
+    mutationFn: ({
+      paneId,
+      request,
+    }: {
+      paneId: string
+      request?: AttachPaneRequest
+    }) => api.attachPane(paneId, request),
     onSuccess: () => invalidatePanesAndSessions(queryClient),
   })
 
@@ -93,6 +104,7 @@ export function useATermPanes() {
       projectId: string,
       workingDir?: string,
       agentToolSlug?: string,
+      options?: PanePlacementOptions,
     ) =>
       createMutation.mutateAsync({
         pane_type: 'project',
@@ -100,16 +112,28 @@ export function useATermPanes() {
         project_id: projectId,
         working_dir: workingDir,
         agent_tool_slug: agentToolSlug,
+        detached: options?.detached,
+        pane_order: options?.paneOrder,
+        width_percent: options?.widthPercent,
+        height_percent: options?.heightPercent,
+        grid_row: options?.gridRow,
+        grid_col: options?.gridCol,
       }),
     [createMutation],
   )
 
   const createAdHocPane = useCallback(
-    (name: string, workingDir?: string) =>
+    (name: string, workingDir?: string, options?: PanePlacementOptions) =>
       createMutation.mutateAsync({
         pane_type: 'adhoc',
         pane_name: name,
         working_dir: workingDir,
+        detached: options?.detached,
+        pane_order: options?.paneOrder,
+        width_percent: options?.widthPercent,
+        height_percent: options?.heightPercent,
+        grid_row: options?.gridRow,
+        grid_col: options?.gridCol,
       }),
     [createMutation],
   )
@@ -135,7 +159,8 @@ export function useATermPanes() {
     [detachMutation],
   )
   const attachPane = useCallback(
-    (paneId: string) => attachMutation.mutateAsync(paneId),
+    (paneId: string, request?: AttachPaneRequest) =>
+      attachMutation.mutateAsync({ paneId, request }),
     [attachMutation],
   )
 
@@ -193,8 +218,10 @@ export function useATermPanes() {
 }
 
 export type {
+  AttachPaneRequest,
   ATermPane,
   CreatePaneRequest,
+  PanePlacementOptions,
   PaneSession,
   SwapPanesRequest,
   UpdatePaneRequest,

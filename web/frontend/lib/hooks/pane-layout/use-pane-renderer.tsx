@@ -31,6 +31,7 @@ interface UsePaneRendererOptions {
     | 'onOpenModal'
     | 'canAddPane'
     | 'onModeSwitch'
+    | 'onProjectSwitch'
     | 'isModeSwitching'
     | 'isMobile'
     | 'onSwapPanes'
@@ -72,6 +73,7 @@ export function usePaneRenderer({
     onOpenModal,
     canAddPane,
     onModeSwitch,
+    onProjectSwitch,
     isModeSwitching,
     isMobile,
     onSwapPanes,
@@ -189,19 +191,27 @@ export function usePaneRenderer({
             onModeSwitch={
               onModeSwitch ? (mode) => onModeSwitch(slot, mode) : undefined
             }
+            onProjectSwitch={
+              onProjectSwitch
+                ? (projectId, rootPath) =>
+                    onProjectSwitch(slot, projectId, rootPath)
+                : undefined
+            }
             isModeSwitching={isModeSwitching}
             onVoice={
               onVoice ? () => onVoice(sessionId ?? undefined) : undefined
             }
             isMobile={isMobile}
-            allSlots={paneCount > 1 ? displaySlots : undefined}
+            allSlots={
+              isMobile ? displaySlots : paneCount > 1 ? displaySlots : undefined
+            }
             onSwapWith={
-              onSwapPanes && paneCount > 1
+              !isMobile && onSwapPanes && paneCount > 1
                 ? (otherSlotId) => onSwapPanes(panelId, otherSlotId)
                 : undefined
             }
             onSwitchTo={
-              isMobile && onSwitch && paneCount > 1
+              isMobile && onSwitch
                 ? (targetSlot) => onSwitch(targetSlot)
                 : undefined
             }
@@ -296,6 +306,7 @@ export function usePaneRenderer({
       onOpenModal,
       canAddPane,
       onModeSwitch,
+      onProjectSwitch,
       isModeSwitching,
       isMobile,
       displaySlots,

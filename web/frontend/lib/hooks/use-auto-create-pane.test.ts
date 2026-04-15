@@ -95,4 +95,69 @@ describe('useAutoCreatePane', () => {
     expect(mockFetchPaneCount).not.toHaveBeenCalled()
     expect(switchToSession).not.toHaveBeenCalled()
   })
+
+  it('does not auto-create after a zero-pane transition when global panes still exist', async () => {
+    const createAdHocPane = vi.fn()
+    const switchToSession = vi.fn()
+
+    mockFetchPaneCount.mockResolvedValueOnce({ count: 1 })
+
+    const { rerender } = renderHook(
+      ({ panes }) =>
+        useAutoCreatePane({
+          panes,
+          hasVisibleExternalSlot: false,
+          isLoading: false,
+          hasLoadedOnce: true,
+          isPaneCreating: false,
+          createAdHocPane,
+          switchToSession,
+        }),
+      {
+        initialProps: { panes: [{ pane_type: 'project' }] },
+      },
+    )
+
+    rerender({ panes: [] })
+
+    await waitFor(() => {
+      expect(mockFetchPaneCount).toHaveBeenCalledTimes(1)
+    })
+
+    expect(createAdHocPane).not.toHaveBeenCalled()
+    expect(switchToSession).not.toHaveBeenCalled()
+  })
+
+  it('auto-creates after a zero-pane transition only when global pane count is zero', async () => {
+    const createAdHocPane = vi.fn().mockResolvedValue({
+      sessions: [{ id: 'session-2', mode: 'shell' }],
+    })
+    const switchToSession = vi.fn()
+
+    mockFetchPaneCount.mockResolvedValueOnce({ count: 0 })
+
+    const { rerender } = renderHook(
+      ({ panes }) =>
+        useAutoCreatePane({
+          panes,
+          hasVisibleExternalSlot: false,
+          isLoading: false,
+          hasLoadedOnce: true,
+          isPaneCreating: false,
+          createAdHocPane,
+          switchToSession,
+        }),
+      {
+        initialProps: { panes: [{ pane_type: 'project' }] },
+      },
+    )
+
+    rerender({ panes: [] })
+
+    await waitFor(() => {
+      expect(createAdHocPane).toHaveBeenCalledTimes(1)
+    })
+
+    expect(switchToSession).toHaveBeenCalledWith('session-2')
+  })
 })

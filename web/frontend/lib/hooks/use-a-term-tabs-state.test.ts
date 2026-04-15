@@ -268,20 +268,220 @@ describe('useATermTabsState', () => {
         projectId: undefined,
         projectPath: undefined,
         detachedPaneId: 'pane-detached',
+        isDetachedPaneWindow: true,
+        detachedWindowPaneIds: ['pane-detached'],
       }),
     )
 
-    expect(mockUseActiveSession).toHaveBeenCalledWith({ includeDetached: true })
+    expect(mockUseActiveSession).toHaveBeenCalledWith({
+      includeDetached: true,
+      persistKey: 'aTerm:last-active-session-id',
+    })
     expect(result.current.themeId).toBe('tokyo-night')
     expect(result.current.aTermSlots).toHaveLength(1)
     expect(result.current.aTermSlots[0]).toMatchObject({
       paneId: 'pane-detached',
       projectId: 'project-b',
     })
-    expect(result.current.canAddPane()).toBe(false)
+    expect(result.current.canAddPane()).toBe(true)
     expect(mockUseAutoCreatePane).toHaveBeenLastCalledWith(
       expect.objectContaining({
         enabled: false,
+      }),
+    )
+  })
+
+  it('uses a global mobile slot list without auto-creating a new pane', () => {
+    mockUseMediaQuery.mockReturnValue(true)
+    mockUseActiveSession.mockReturnValue({
+      activeSessionId: 'project-a-codex',
+      activeSession: {
+        id: 'project-a-codex',
+        name: 'Project A Codex',
+        user_id: null,
+        project_id: 'project-a',
+        working_dir: '/workspace/project-a',
+        mode: 'codex',
+        display_order: 1,
+        is_alive: true,
+        created_at: '2026-03-06T00:00:00Z',
+        last_accessed_at: '2026-03-06T00:00:00Z',
+      },
+      switchToSession: vi.fn(),
+      sessions: [
+        {
+          id: 'project-a-shell',
+          name: 'Project A Shell',
+          user_id: null,
+          project_id: 'project-a',
+          working_dir: '/workspace/project-a',
+          mode: 'shell',
+          display_order: 0,
+          is_alive: true,
+          created_at: '2026-03-06T00:00:00Z',
+          last_accessed_at: '2026-03-06T00:00:00Z',
+        },
+        {
+          id: 'project-a-codex',
+          name: 'Project A Codex',
+          user_id: null,
+          project_id: 'project-a',
+          working_dir: '/workspace/project-a',
+          mode: 'codex',
+          display_order: 1,
+          is_alive: true,
+          created_at: '2026-03-06T00:00:00Z',
+          last_accessed_at: '2026-03-06T00:00:00Z',
+        },
+        {
+          id: 'project-b-shell',
+          name: 'Project B Shell',
+          user_id: null,
+          project_id: 'project-b',
+          working_dir: '/workspace/project-b',
+          mode: 'shell',
+          display_order: 2,
+          is_alive: true,
+          created_at: '2026-03-06T00:00:00Z',
+          last_accessed_at: '2026-03-06T00:00:00Z',
+        },
+      ],
+      projectATerms: [
+        {
+          projectId: 'project-a',
+          projectName: 'Project A',
+          rootPath: '/workspace/project-a',
+          activeMode: 'codex',
+          sessions: [],
+          activeSession: null,
+          activeSessionId: 'project-a-codex',
+          sessionBadge: null,
+        },
+        {
+          projectId: 'project-b',
+          projectName: 'Project B',
+          rootPath: '/workspace/project-b',
+          activeMode: 'shell',
+          sessions: [],
+          activeSession: null,
+          activeSessionId: 'project-b-shell',
+          sessionBadge: null,
+        },
+      ],
+      adHocSessions: [],
+      externalSessions: [],
+      isLoading: false,
+    })
+    mockUseATermPanes.mockReturnValue({
+      panes: [
+        {
+          id: 'pane-project-a',
+          pane_type: 'project',
+          project_id: 'project-a',
+          pane_order: 0,
+          pane_name: 'Project A',
+          active_mode: 'codex',
+          created_at: '2026-03-06T00:00:00Z',
+          sessions: [
+            {
+              id: 'project-a-shell',
+              name: 'Project A Shell',
+              mode: 'shell',
+              session_number: 1,
+              is_alive: true,
+              working_dir: '/workspace/project-a',
+              claude_state: 'not_started',
+            },
+            {
+              id: 'project-a-codex',
+              name: 'Project A Codex',
+              mode: 'codex',
+              session_number: 2,
+              is_alive: true,
+              working_dir: '/workspace/project-a',
+              claude_state: 'running',
+            },
+          ],
+          width_percent: 100,
+          height_percent: 100,
+          grid_row: 0,
+          grid_col: 0,
+        },
+      ],
+      detachedPanes: [
+        {
+          id: 'pane-detached',
+          pane_type: 'project',
+          project_id: 'project-b',
+          pane_order: 1,
+          pane_name: 'Project B Detached',
+          active_mode: 'shell',
+          is_detached: true,
+          created_at: '2026-03-06T00:00:00Z',
+          sessions: [
+            {
+              id: 'project-b-shell',
+              name: 'Project B Shell',
+              mode: 'shell',
+              session_number: 1,
+              is_alive: true,
+              working_dir: '/workspace/project-b',
+              claude_state: 'not_started',
+            },
+          ],
+          width_percent: 100,
+          height_percent: 100,
+          grid_row: 0,
+          grid_col: 0,
+        },
+      ],
+      atLimit: false,
+      isLoading: false,
+      detachedLoadedOnce: true,
+      hasLoadedOnce: true,
+      swapPanePositions: vi.fn(),
+      removePane: vi.fn(),
+      detachPane: vi.fn(),
+      attachPane: vi.fn(),
+      setActiveMode: vi.fn(),
+      createAdHocPane: vi.fn(),
+      createProjectPane: vi.fn(),
+      isCreating: false,
+      saveLayouts: vi.fn(),
+      maxPanes: 6,
+    })
+
+    const { result } = renderHook(() =>
+      useATermTabsState({ projectId: undefined, projectPath: undefined }),
+    )
+
+    expect(mockUseActiveSession).toHaveBeenCalledWith({
+      includeDetached: true,
+      persistKey: 'aTerm:last-active-session-id',
+    })
+    expect(result.current.aTermSlots).toHaveLength(3)
+    expect(
+      result.current.aTermSlots.filter(
+        (slot): slot is Extract<(typeof result.current.aTermSlots)[number], { type: 'project' }> =>
+          slot.type === 'project' && slot.projectId === 'project-a',
+      ),
+    ).toHaveLength(2)
+    expect(
+      result.current.aTermSlots
+        .filter(
+          (
+            slot,
+          ): slot is Extract<(typeof result.current.aTermSlots)[number], { type: 'project' }> =>
+            slot.type === 'project' && slot.projectId === 'project-a',
+        )
+        .map((slot) => slot.activeMode)
+        .sort(),
+    ).toEqual(['codex', 'shell'])
+    expect(new Set(result.current.orderedIds).size).toBe(3)
+    expect(mockUseAutoCreatePane).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        enabled: true,
+        hasVisibleExternalSlot: true,
       }),
     )
   })
@@ -341,6 +541,124 @@ describe('useATermTabsState', () => {
     expect(result.current.activeSessionId).toBe('session-adhoc')
     expect(result.current.themeId).toBe('phosphor')
     expect(mockUseATermSettings).toHaveBeenLastCalledWith(undefined)
+  })
+
+  it('creates detached panes inside a detached window when adding a new a-term', async () => {
+    const switchToSession = vi.fn()
+    const addDetachedWindowPane = vi.fn()
+    const createAdHocPane = vi.fn().mockResolvedValue({
+      id: 'pane-detached-new',
+      pane_type: 'adhoc',
+      project_id: null,
+      pane_order: 1,
+      pane_name: 'Ad-Hoc A-Term 2',
+      active_mode: 'shell',
+      created_at: '2026-03-06T00:00:00Z',
+      sessions: [
+        {
+          id: 'session-detached-new',
+          name: 'Detached Shell',
+          mode: 'shell',
+          session_number: 1,
+          is_alive: true,
+          working_dir: '/tmp',
+          claude_state: 'not_started',
+        },
+      ],
+      width_percent: 100,
+      height_percent: 100,
+      grid_row: 0,
+      grid_col: 0,
+    })
+
+    mockUseActiveSession.mockReturnValue(
+      buildActiveSessionState({
+        activeSessionId: 'session-project-b',
+        activeSession: {
+          id: 'session-project-b',
+          name: 'Project B Shell',
+          user_id: null,
+          project_id: 'project-b',
+          working_dir: '/workspace/project-b',
+          mode: 'shell',
+          display_order: 1,
+          is_alive: true,
+          created_at: '2026-03-06T00:00:00Z',
+          last_accessed_at: '2026-03-06T00:00:00Z',
+        },
+        switchToSession,
+      }),
+    )
+    mockUseATermPanes.mockReturnValue({
+      panes: [],
+      detachedPanes: [
+        {
+          id: 'pane-detached',
+          pane_type: 'project',
+          project_id: 'project-b',
+          pane_order: 0,
+          pane_name: 'Project B Detached',
+          active_mode: 'shell',
+          is_detached: true,
+          created_at: '2026-03-06T00:00:00Z',
+          sessions: [
+            {
+              id: 'session-project-b',
+              name: 'Project B Shell',
+              mode: 'shell',
+              session_number: 1,
+              is_alive: true,
+              working_dir: '/workspace/project-b',
+              claude_state: 'not_started',
+            },
+          ],
+          width_percent: 100,
+          height_percent: 100,
+          grid_row: 0,
+          grid_col: 0,
+        },
+      ],
+      atLimit: false,
+      isLoading: false,
+      detachedLoadedOnce: true,
+      hasLoadedOnce: true,
+      swapPanePositions: vi.fn(),
+      removePane: vi.fn(),
+      detachPane: vi.fn(),
+      attachPane: vi.fn(),
+      setActiveMode: vi.fn(),
+      createAdHocPane,
+      createProjectPane: vi.fn(),
+      isCreating: false,
+      saveLayouts: vi.fn(),
+      maxPanes: 6,
+    })
+
+    const { result } = renderHook(() =>
+      useATermTabsState({
+        projectId: undefined,
+        projectPath: undefined,
+        detachedPaneId: 'pane-detached',
+        isDetachedPaneWindow: true,
+        detachedWindowPaneIds: ['pane-detached'],
+        addDetachedWindowPane,
+      }),
+    )
+
+    await act(async () => {
+      await result.current.handleAddTab()
+    })
+
+    expect(createAdHocPane).toHaveBeenCalledWith(
+      'Ad-Hoc A-Term',
+      undefined,
+      { detached: true },
+    )
+    expect(addDetachedWindowPane).toHaveBeenCalledWith(
+      'pane-detached-new',
+      'session-detached-new',
+    )
+    expect(switchToSession).toHaveBeenCalledWith('session-detached-new')
   })
 
   it('creates and focuses a project pane when a project deep link is provided', async () => {

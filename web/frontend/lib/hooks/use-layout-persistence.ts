@@ -12,6 +12,7 @@ interface UseLayoutPersistenceOptions {
       heightPercent?: number
     }>,
   ) => Promise<ATermPane[]>
+  storageScopeId?: string | null
   debounceMs?: number
 }
 
@@ -30,6 +31,7 @@ interface UseLayoutPersistenceOptions {
  */
 export function useLayoutPersistence({
   saveLayouts,
+  storageScopeId: _storageScopeId,
   debounceMs = 500,
 }: UseLayoutPersistenceOptions) {
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)

@@ -12,7 +12,7 @@ vi.mock('@/lib/hooks/use-a-term-panes', () => ({
 }))
 
 vi.mock('@/components/LayoutModeButton', () => ({
-  LayoutModeButtons: () => null,
+  LayoutModeButtons: () => <div data-testid="layout-mode-buttons" />,
 }))
 
 vi.mock('../ModeToggle', () => ({
@@ -25,6 +25,10 @@ vi.mock('../PaneOverflowMenu', () => ({
 
 vi.mock('./AddATermButton', () => ({
   AddATermButton: () => null,
+}))
+
+vi.mock('./PaneProjectSwitcher', () => ({
+  PaneProjectSwitcher: () => <div data-testid="pane-project-switcher" />,
 }))
 
 vi.mock('./HeaderIconButton', () => ({
@@ -152,5 +156,107 @@ describe('UnifiedATermHeaderContent', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Files' }))
 
     expect(onFiles).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not render the swap dropdown on desktop when drag-swap is available', () => {
+    const slotA = makeProjectSlot('a', 'Alpha')
+    const slotB = makeProjectSlot('b', 'Beta')
+
+    render(
+      <UnifiedATermHeaderContent
+        slot={slotA}
+        allSlots={[slotA, slotB]}
+        onSwapWith={vi.fn()}
+      />,
+    )
+
+    expect(screen.queryByTestId('pane-swap-dropdown')).not.toBeInTheDocument()
+    expect(screen.getByTestId('pane-drag-handle-pane-a')).toBeInTheDocument()
+  })
+
+  it('renders the pane title as static text on desktop even when onSwitch exists', () => {
+    const slot = makeProjectSlot('a', 'Alpha')
+
+    render(<UnifiedATermHeaderContent slot={slot} onSwitch={vi.fn()} />)
+
+    expect(screen.getByText('Alpha')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Alpha' })).not.toBeInTheDocument()
+  })
+
+  it('hides the pane title when the project switcher is shown', () => {
+    const slot = makeProjectSlot('a', 'Alpha')
+
+    render(
+      <UnifiedATermHeaderContent slot={slot} onProjectSwitch={vi.fn()} />,
+    )
+
+    expect(screen.getByTestId('pane-project-switcher')).toBeInTheDocument()
+    expect(screen.queryByText('Alpha')).not.toBeInTheDocument()
+  })
+
+  it('keeps the project switcher desktop-only on mobile', () => {
+    const slot = makeProjectSlot('a', 'Alpha')
+
+    render(
+      <UnifiedATermHeaderContent
+        slot={slot}
+        onProjectSwitch={vi.fn()}
+        isMobile={true}
+        allSlots={[slot]}
+        onSwitchTo={vi.fn()}
+      />,
+    )
+
+    expect(screen.queryByTestId('pane-project-switcher')).not.toBeInTheDocument()
+    expect(screen.getByTestId('pane-swap-dropdown')).toBeInTheDocument()
+  })
+
+  it('uses the pane switcher on mobile when multiple panes exist', () => {
+    const slotA = makeProjectSlot('a', 'Alpha')
+    const slotB = makeProjectSlot('b', 'Beta')
+
+    render(
+      <UnifiedATermHeaderContent
+        slot={slotA}
+        allSlots={[slotA, slotB]}
+        onSwitchTo={vi.fn()}
+        onProjectSwitch={vi.fn()}
+        isMobile={true}
+      />,
+    )
+
+    expect(screen.queryByTestId('pane-project-switcher')).not.toBeInTheDocument()
+    expect(screen.getByTestId('pane-swap-dropdown')).toBeInTheDocument()
+  })
+
+  it('hides layout controls on mobile', () => {
+    const slot = makeProjectSlot('a', 'Alpha')
+
+    render(
+      <UnifiedATermHeaderContent
+        slot={slot}
+        isMobile={true}
+        layoutMode="split-horizontal"
+        availableLayouts={['split-horizontal', 'split-vertical']}
+        onLayoutModeChange={vi.fn()}
+      />,
+    )
+
+    expect(screen.queryByTestId('layout-mode-buttons')).not.toBeInTheDocument()
+  })
+
+  it('renders layout controls on desktop when multiple layouts exist', () => {
+    const slot = makeProjectSlot('a', 'Alpha')
+
+    render(
+      <UnifiedATermHeaderContent
+        slot={slot}
+        layoutMode="split-horizontal"
+        availableLayouts={['split-horizontal', 'split-vertical']}
+        onLayoutModeChange={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByTestId('layout-mode-buttons')).toBeInTheDocument()
   })
 })

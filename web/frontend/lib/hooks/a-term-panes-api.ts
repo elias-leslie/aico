@@ -1,5 +1,6 @@
 import { apiFetch } from '../api-fetch'
 import type {
+  AttachPaneRequest,
   ATermPane,
   BulkLayoutUpdateRequest,
   CreatePaneRequest,
@@ -54,8 +55,15 @@ export async function detachPane(paneId: string): Promise<ATermPane> {
   return apiFetch(`/api/a-term/panes/${paneId}/detach`, { method: 'POST' })
 }
 
-export async function attachPane(paneId: string): Promise<ATermPane> {
-  return apiFetch(`/api/a-term/panes/${paneId}/attach`, { method: 'POST' })
+export async function attachPane(
+  paneId: string,
+  request?: AttachPaneRequest,
+): Promise<ATermPane> {
+  return apiFetch(`/api/a-term/panes/${paneId}/attach`, {
+    method: 'POST',
+    headers: request ? { 'Content-Type': 'application/json' } : undefined,
+    body: request ? JSON.stringify(request) : undefined,
+  })
 }
 
 export async function swapPanes(request: SwapPanesRequest): Promise<void> {

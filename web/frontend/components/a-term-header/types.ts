@@ -28,6 +28,10 @@ export interface UnifiedATermHeaderProps {
   canAddPane?: boolean
   /** Callback for mode switch (shell <-> agent) - only for project slots */
   onModeSwitch?: (mode: ATermMode) => void | Promise<void>
+  onProjectSwitch?: (
+    projectId: string,
+    rootPath: string | null,
+  ) => void | Promise<void>
   /** Whether mode switch is in progress */
   isModeSwitching?: boolean
   isMobile?: boolean

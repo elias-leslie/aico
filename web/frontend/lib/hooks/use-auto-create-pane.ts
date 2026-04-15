@@ -38,6 +38,11 @@ export function useAutoCreatePane({
   const initialLoadProcessed = useRef(false)
   const prevPanesLengthRef = useRef<number | null>(null)
 
+  const shouldAutoCreate = useCallback(async () => {
+    const paneCount = await fetchPaneCount()
+    return paneCount.count === 0
+  }, [])
+
   const createAndFocusPane = useCallback(
     async (paneName: string) => {
       const newPane = await createAdHocPane(paneName)
@@ -77,8 +82,7 @@ export function useAutoCreatePane({
         isAutoCreatingRef.current = true
         void (async () => {
           try {
-            const paneCount = await fetchPaneCount()
-            if (!cancelled && paneCount.count === 0) {
+            if (!cancelled && (await shouldAutoCreate())) {
               await createAndFocusPane(generatePaneName('Ad-Hoc A-Term', 0))
             }
           } catch (error) {
@@ -109,20 +113,26 @@ export function useAutoCreatePane({
     ) {
       isAutoCreatingRef.current = true
       const adHocCount = panes.filter((p) => p.pane_type === 'adhoc').length
-      void createAndFocusPane(generatePaneName('Ad-Hoc A-Term', adHocCount))
-        .catch((error) => {
+      void (async () => {
+        try {
+          if (!cancelled && (await shouldAutoCreate())) {
+            await createAndFocusPane(
+              generatePaneName('Ad-Hoc A-Term', adHocCount),
+            )
+          }
+        } catch (error) {
           if (!cancelled) {
             console.error(
               'Failed to auto-create pane after closing last:',
               error,
             )
           }
-        })
-        .finally(() => {
+        } finally {
           if (!cancelled) {
             isAutoCreatingRef.current = false
           }
-        })
+        }
+      })()
     }
 
     return () => {
@@ -136,5 +146,6 @@ export function useAutoCreatePane({
     hasVisibleExternalSlot,
     isPaneCreating,
     createAndFocusPane,
+    shouldAutoCreate,
   ])
 }

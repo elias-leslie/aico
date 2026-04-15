@@ -3,6 +3,7 @@
 import { clsx } from 'clsx'
 import { ArrowLeftRight, ChevronDown } from 'lucide-react'
 import { type DragEvent, useCallback, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useClickOutside } from '@/lib/hooks/use-click-outside'
 import {
   clearDraggedPaneSlotId,
@@ -17,13 +18,24 @@ import {
   type PaneSlot,
 } from '@/lib/utils/slot'
 
+function getSlotMode(slot: ATermSlot | PaneSlot): string {
+  if (slot.type === 'project') {
+    return slot.activeMode
+  }
+  return slot.sessionMode ?? 'shell'
+}
+
+function getMobileSlotLabel(slot: ATermSlot | PaneSlot): string {
+  return `${getSlotName(slot)} [${getSlotMode(slot)}]`
+}
+
 export interface PaneSwapDropdownProps {
   /** Current slot being displayed */
   currentSlot: ATermSlot | PaneSlot
   /** All available slots for swapping */
   allSlots: Array<ATermSlot | PaneSlot>
   /** Callback when user selects another slot to swap with (desktop: swap positions) */
-  onSwapWith: (otherSlotId: string) => void
+  onSwapWith?: (otherSlotId: string) => void
   /** Callback to switch to another slot (mobile: navigate to pane) */
   onSwitchTo?: (slot: ATermSlot | PaneSlot) => void
   isMobile?: boolean
@@ -44,14 +56,52 @@ export function PaneSwapDropdown({
   const [isOpen, setIsOpen] = useState(false)
   const [isDragTarget, setIsDragTarget] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const mobileSheetRef = useRef<HTMLDivElement>(null)
   const currentName = getSlotName(currentSlot)
   const currentId = getSlotPanelId(currentSlot)
 
-  // Other slots to show in dropdown (exclude current)
-  const otherSlots = allSlots.filter((s) => getSlotPanelId(s) !== currentId)
+  const dropdownSlots = useMemo(() => {
+    if (!isMobile) {
+      return allSlots
+        .filter((slot) => getSlotPanelId(slot) !== currentId)
+        .map((slot) => ({
+          id: getSlotPanelId(slot),
+          label: getSlotName(slot),
+          slot,
+        }))
+    }
+
+    const sortedSlots = [...allSlots].sort((slotA, slotB) => {
+      const labelCompare = getMobileSlotLabel(slotA).localeCompare(
+        getMobileSlotLabel(slotB),
+        undefined,
+        { sensitivity: 'base' },
+      )
+      if (labelCompare !== 0) {
+        return labelCompare
+      }
+      return getSlotPanelId(slotA).localeCompare(getSlotPanelId(slotB))
+    })
+
+    const seenLabelCounts = new Map<string, number>()
+
+    return sortedSlots.map((slot) => {
+      const baseLabel = getMobileSlotLabel(slot)
+      const count = (seenLabelCounts.get(baseLabel) ?? 0) + 1
+      seenLabelCounts.set(baseLabel, count)
+      return {
+        id: getSlotPanelId(slot),
+        label: count > 1 ? `${baseLabel} #${count}` : baseLabel,
+        slot,
+      }
+    })
+  }, [allSlots, currentId, isMobile])
 
   const closeDropdown = useCallback(() => setIsOpen(false), [])
-  const clickOutsideRefs = useMemo(() => [dropdownRef], [])
+  const clickOutsideRefs = useMemo(
+    () => (isMobile ? [dropdownRef, mobileSheetRef] : [dropdownRef]),
+    [isMobile],
+  )
   useClickOutside(clickOutsideRefs, closeDropdown, isOpen)
 
   const readDraggedSlotId = useCallback(
@@ -97,13 +147,12 @@ export function PaneSwapDropdown({
       setIsDragTarget(false)
       if (!draggedSlotId || draggedSlotId === currentId) return
       event.preventDefault()
-      onSwapWith(draggedSlotId)
+      onSwapWith?.(draggedSlotId)
     },
     [currentId, onSwapWith, readDraggedSlotId],
   )
 
-  // Don't show dropdown if there's nothing to swap with
-  if (otherSlots.length === 0) {
+  if (!isMobile && dropdownSlots.length === 0) {
     return (
       <span
         className="flex items-center px-1.5 py-0.5 text-xs truncate max-w-[140px]"
@@ -137,9 +186,17 @@ export function PaneSwapDropdown({
         style={{
           color: 'var(--term-text-primary)',
         }}
-        title={`${currentName} (click to swap position${isMobile ? '' : ' or drag to another pane'})`}
-        aria-label={`Swap ${currentName} with another pane`}
-        aria-haspopup="menu"
+        title={
+          isMobile
+            ? `${currentName} (tap to switch panes)`
+            : `${currentName} (click to swap position or drag to another pane)`
+        }
+        aria-label={
+          isMobile
+            ? `Switch panes from ${currentName}`
+            : `Swap ${currentName} with another pane`
+        }
+        aria-haspopup={isMobile ? 'dialog' : 'menu'}
         aria-expanded={isOpen}
       >
         <span className="truncate">{currentName}</span>
@@ -151,47 +208,35 @@ export function PaneSwapDropdown({
         />
       </button>
 
-      {/* Dropdown showing other panes */}
-      {isOpen && (
-        <div
-          data-testid="pane-swap-dropdown-menu"
-          className={clsx(
-            'absolute left-0 top-full mt-1 z-50 rounded-md shadow-lg overflow-hidden animate-in fade-in slide-in-from-top-1 duration-100',
-            isMobile ? 'min-w-[200px]' : 'min-w-[180px]',
-          )}
-          style={{
-            backgroundColor: 'var(--term-surface-glass)',
-            backdropFilter: 'blur(12px)',
-            WebkitBackdropFilter: 'blur(12px)',
-            border: '1px solid var(--term-border-active)',
-            boxShadow: 'var(--term-shadow-dropdown)',
-          }}
-        >
-          {/* Header */}
+      {!isMobile &&
+        isOpen && (
           <div
-            className="px-2 py-1.5 text-[10px] uppercase tracking-wide flex items-center gap-1"
+            data-testid="pane-swap-dropdown-menu"
+            className="absolute left-0 top-full mt-1 z-50 min-w-[180px] rounded-md shadow-lg overflow-hidden animate-in fade-in slide-in-from-top-1 duration-100"
             style={{
-              color: 'var(--term-text-muted)',
-              backgroundColor: 'var(--term-bg-surface)',
+              backgroundColor: 'var(--term-surface-glass)',
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+              border: '1px solid var(--term-border-active)',
+              boxShadow: 'var(--term-shadow-dropdown)',
             }}
           >
-            <ArrowLeftRight className="w-3 h-3" />
-            {isMobile ? 'Switch to' : 'Swap position with'}
-          </div>
+            <div
+              className="px-2 py-1.5 text-[10px] uppercase tracking-wide flex items-center gap-1"
+              style={{
+                color: 'var(--term-text-muted)',
+                backgroundColor: 'var(--term-bg-surface)',
+              }}
+            >
+              <ArrowLeftRight className="w-3 h-3" />
+              Swap position with
+            </div>
 
-          {/* Other panes */}
-          {otherSlots.map((slot) => {
-            const slotId = getSlotPanelId(slot)
-            const slotName = getSlotName(slot)
-            return (
+            {dropdownSlots.map(({ id, label }) => (
               <button
-                key={slotId}
+                key={id}
                 onClick={() => {
-                  if (isMobile && onSwitchTo) {
-                    onSwitchTo(slot)
-                  } else {
-                    onSwapWith(slotId)
-                  }
+                  onSwapWith?.(id)
                   setIsOpen(false)
                 }}
                 className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-left transition-colors hover:bg-[var(--term-bg-surface)]"
@@ -203,12 +248,99 @@ export function PaneSwapDropdown({
                   className="w-3 h-3 flex-shrink-0"
                   style={{ color: 'var(--term-text-muted)' }}
                 />
-                <span className="truncate flex-1">{slotName}</span>
+                <span className="truncate flex-1">{label}</span>
               </button>
-            )
-          })}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+
+      {isMobile &&
+        isOpen &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            data-testid="pane-swap-mobile-sheet"
+            className="fixed inset-0 z-[90] flex items-end"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Switch pane"
+          >
+            <button
+              type="button"
+              aria-label="Close pane switcher"
+              className="absolute inset-0 bg-black/50"
+              onClick={closeDropdown}
+            />
+            <div
+              ref={mobileSheetRef}
+              className="relative z-[91] max-h-[70vh] w-full overflow-hidden rounded-t-2xl border-t animate-in slide-in-from-bottom-3 duration-150"
+              style={{
+                backgroundColor: 'var(--term-bg-surface)',
+                borderColor: 'var(--term-border-active)',
+                boxShadow: 'var(--term-shadow-dropdown)',
+              }}
+            >
+              <div
+                className="mx-auto mt-2 h-1.5 w-12 rounded-full"
+                style={{ backgroundColor: 'var(--term-border)' }}
+              />
+              <div
+                className="px-4 py-3 text-[11px] uppercase tracking-wide"
+                style={{ color: 'var(--term-text-muted)' }}
+              >
+                Switch pane
+              </div>
+              <div
+                data-testid="pane-swap-mobile-sheet-scroll"
+                className="max-h-[calc(70vh-3.5rem)] overflow-y-auto overscroll-contain px-2 pb-3"
+                style={{
+                  WebkitOverflowScrolling: 'touch',
+                  overscrollBehavior: 'contain',
+                  scrollbarGutter: 'stable',
+                  touchAction: 'pan-y',
+                }}
+              >
+                {dropdownSlots.map(({ id, label, slot }) => {
+                  const isCurrent = id === currentId
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => {
+                        onSwitchTo?.(slot)
+                        setIsOpen(false)
+                      }}
+                      className={clsx(
+                        'mb-1 flex w-full items-center justify-between rounded-lg px-3 py-3 text-left text-sm transition-colors',
+                        isCurrent && 'ring-1',
+                      )}
+                      style={{
+                        color: 'var(--term-text-primary)',
+                        backgroundColor: isCurrent
+                          ? 'var(--term-bg-elevated)'
+                          : 'transparent',
+                        borderColor: isCurrent
+                          ? 'var(--term-accent-muted)'
+                          : 'transparent',
+                      }}
+                    >
+                      <span className="truncate">{label}</span>
+                      {isCurrent && (
+                        <span
+                          className="ml-3 shrink-0 text-[11px] uppercase tracking-wide"
+                          style={{ color: 'var(--term-text-muted)' }}
+                        >
+                          Current
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   )
 }

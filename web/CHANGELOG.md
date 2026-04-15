@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.5 - 2026-04-15
+
+- Detached panes now open into dedicated scoped windows, with `Close Pane` keeping the prior remove-from-layout behavior.
+- Added same-pane project switching with mode carry-over so project swaps stay in the active tool mode instead of dropping back to plain shell.
+- Fixed detached-window attach/reopen flow so panes no longer get stuck on `Open an A-Term` after attach/open actions.
+- Restored a mobile-first session switcher model: one touch-friendly bottom sheet, global session visibility across attached and detached work, and no duplicate desktop-only header controls.
+- Stopped stray ad-hoc panes from auto-spawning during temporary zero-pane transitions by verifying true global pane count before auto-create.
+- Tightened overlay/mobile pane-selection scrolling so long switcher lists can be scrolled reliably on touch devices.
+
 ## 0.2.4 - 2026-04-10
 
 - Added low-noise Dependabot coverage with monthly grouped updates and semver-major updates ignored by default.

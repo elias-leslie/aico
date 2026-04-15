@@ -117,7 +117,9 @@ describe('useATermModals', () => {
   it('runs the detached pane attach callback and syncs the active session URL', async () => {
     const setShowATermManager = vi.fn()
     const setShowKeyboardHelp = vi.fn()
-    const onAttachDetachedPane = vi.fn().mockResolvedValue('managed-session-1')
+    const onAttachDetachedPane = vi.fn().mockResolvedValue({
+      sessionId: 'managed-session-1',
+    })
 
     const { result } = renderHook(() =>
       useATermModals({
@@ -135,5 +137,43 @@ describe('useATermModals', () => {
     expect(mockReplace).toHaveBeenCalledWith('/?session=managed-session-1', {
       scroll: false,
     })
+  })
+
+  it('merges detached-window URL updates when attaching a pane into an empty scoped window', async () => {
+    const setShowATermManager = vi.fn()
+    const setShowKeyboardHelp = vi.fn()
+    mockSearchParams.set('modal', 'a-term-manager')
+    mockSearchParams.set('windowScope', 'scope-1')
+    mockSearchParams.set('detachedPane', 'old-pane')
+    const onAttachDetachedPane = vi.fn().mockResolvedValue({
+      sessionId: 'managed-session-2',
+      urlUpdates: {
+        detachedPane: 'pane-2',
+        windowPanes: 'pane-2',
+        windowScope: 'scope-1',
+      },
+    })
+
+    const { result } = renderHook(() =>
+      useATermModals({
+        showATermManager: true,
+        setShowATermManager,
+        showKeyboardHelp: false,
+        setShowKeyboardHelp,
+        onAttachDetachedPane,
+      }),
+    )
+
+    await result.current.handleAttachDetachedPane('pane-2')
+
+    expect(mockReplace).toHaveBeenCalledTimes(1)
+    const [url, options] = mockReplace.mock.calls[0]
+    const params = new URL(url, 'http://localhost').searchParams
+
+    expect(params.get('windowScope')).toBe('scope-1')
+    expect(params.get('detachedPane')).toBe('pane-2')
+    expect(params.get('windowPanes')).toBe('pane-2')
+    expect(params.get('session')).toBe('managed-session-2')
+    expect(options).toEqual({ scroll: false })
   })
 })

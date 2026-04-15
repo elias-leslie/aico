@@ -1,7 +1,7 @@
 import type { ATermHandle, ConnectionStatus } from '@/components/ATerm'
 import type { KeyboardSizePreset } from '@/components/keyboard/types'
 import type { LayoutMode } from '@/lib/constants/a-term'
-import type { ATermPane } from './use-a-term-panes'
+import type { ATermPane, PanePlacementOptions } from './use-a-term-panes'
 import type { ATermSession, useATermSessions } from './use-a-term-sessions'
 import type { ProjectATerm, useProjectATerms } from './use-project-a-terms'
 
@@ -22,8 +22,13 @@ export interface UseATermHandlersProps {
     projectId: string,
     workingDir?: string,
     agentToolSlug?: string,
+    options?: PanePlacementOptions,
   ) => Promise<ATermPane>
-  createAdHocPane: (paneName: string, workingDir?: string) => Promise<ATermPane>
+  createAdHocPane: (
+    paneName: string,
+    workingDir?: string,
+    options?: PanePlacementOptions,
+  ) => Promise<ATermPane>
   setActiveMode: (paneId: string, mode: string) => Promise<ATermPane>
   removePane: (paneId: string) => Promise<void>
 }
@@ -45,6 +50,7 @@ export interface UseATermHandlersReturn {
     newMode: string,
     projectSessions: ATermSession[],
     paneId?: string,
+    pane?: ATermPane,
   ) => Promise<void>
   handleCloseAll: () => Promise<void>
   setATermRef: (sessionId: string, handle: ATermHandle | null) => void

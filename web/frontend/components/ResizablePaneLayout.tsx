@@ -8,6 +8,7 @@ import {
   usePaneRenderer,
 } from '@/lib/hooks/pane-layout'
 import { usePaneLayoutGroups } from '@/lib/hooks/use-pane-layout-groups'
+import { getScopedATermStorageKey } from '@/lib/utils/detached-pane-window'
 import { getSlotPanelId } from '@/lib/utils/slot'
 import type { ResizablePaneLayoutProps } from '@/types/pane-layout'
 import {
@@ -38,12 +39,16 @@ export function ResizablePaneLayout(props: ResizablePaneLayoutProps) {
     onLayoutChange,
     onOpenModal,
     layoutMode = 'split-horizontal',
+    storageScopeId,
   } = props
 
   const displaySlots = useMemo(() => slots.slice(0, MAX_PANES), [slots])
   const paneCount = displaySlots.length
   const containerRef = useRef<HTMLDivElement>(null)
-  const layoutStorageKey = `a-term-layout-groups:${layoutMode}:${paneCount}`
+  const layoutStorageKey = getScopedATermStorageKey(
+    `a-term-layout-groups:${layoutMode}:${paneCount}`,
+    storageScopeId,
+  )
 
   const getMinSizePercent = useMinSizeCalculator(containerRef)
   const handleLayoutChange = useLayoutChangeHandler(

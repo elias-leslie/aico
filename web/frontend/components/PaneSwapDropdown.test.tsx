@@ -102,4 +102,50 @@ describe('PaneSwapDropdown', () => {
 
     expect(onSwap).not.toHaveBeenCalled()
   })
+
+  it('switches panes on mobile even without desktop swap wiring', () => {
+    const slotA = makeProjectSlot('a', 'Alpha')
+    const slotB = makeProjectSlot('b', 'Beta')
+    const onSwitchTo = vi.fn()
+
+    render(
+      <PaneSwapDropdown
+        currentSlot={slotA}
+        allSlots={[slotA, slotB]}
+        onSwitchTo={onSwitchTo}
+        isMobile={true}
+      />,
+    )
+
+    fireEvent.click(screen.getByTestId('pane-swap-dropdown'))
+    expect(screen.getByTestId('pane-swap-mobile-sheet')).toBeInTheDocument()
+    expect(screen.getByText('Alpha [shell]')).toBeInTheDocument()
+    const scrollRegion = screen.getByTestId('pane-swap-mobile-sheet-scroll')
+    expect(scrollRegion.className).toContain('overflow-y-auto')
+    expect(scrollRegion.getAttribute('style')).toContain(
+      '-webkit-overflow-scrolling: touch',
+    )
+    fireEvent.click(screen.getByRole('button', { name: /beta \[shell\]/i }))
+
+    expect(onSwitchTo).toHaveBeenCalledWith(slotB)
+  })
+
+  it('disambiguates duplicate mobile labels', () => {
+    const slotA = makeProjectSlot('a', 'Alpha')
+    const slotB = makeProjectSlot('b', 'Alpha')
+
+    render(
+      <PaneSwapDropdown
+        currentSlot={slotA}
+        allSlots={[slotA, slotB]}
+        onSwitchTo={vi.fn()}
+        isMobile={true}
+      />,
+    )
+
+    fireEvent.click(screen.getByTestId('pane-swap-dropdown'))
+
+    expect(screen.getByText('Alpha [shell]')).toBeInTheDocument()
+    expect(screen.getByText('Alpha [shell] #2')).toBeInTheDocument()
+  })
 })

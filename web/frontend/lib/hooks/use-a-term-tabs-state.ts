@@ -6,6 +6,7 @@ import type { KeyboardSizePreset } from '@/components/keyboard/types'
 import { getDefaultLayoutMode, type LayoutMode } from '@/lib/constants/a-term'
 import {
   findSessionByMode,
+  generatePaneName,
   generateProjectPaneName,
 } from '@/lib/hooks/a-term-handler-utils'
 import { useATermHandlers } from '@/lib/hooks/use-a-term-handlers'
@@ -20,7 +21,8 @@ import {
 import { useLocalStorageState } from '@/lib/hooks/use-local-storage-state'
 import { useMediaQuery } from '@/lib/hooks/use-media-query'
 import { useTabEditing } from '@/lib/hooks/use-tab-editing'
-import { getSlotPanelId, isPaneSlot } from '@/lib/utils/slot'
+import { getScopedATermStorageKey } from '@/lib/utils/detached-pane-window'
+import { getSlotPanelId, getSlotSessionId, isPaneSlot } from '@/lib/utils/slot'
 import {
   useConnectionStatus,
   useLayoutAutoDowngrade,
@@ -40,7 +42,20 @@ export function useATermTabsState({
   projectId,
   projectPath,
   detachedPaneId,
+  isDetachedPaneWindow = false,
+  detachedWindowPaneIds = [],
+  storageScopeId = null,
+  addDetachedWindowPane,
+  setDetachedWindowPaneIds,
 }: UseATermTabsStateProps) {
+  const isDetachedWindow = isDetachedPaneWindow || !!detachedPaneId
+  const isMobile = useMediaQuery('(max-width: 767px)')
+  const visibleDetachedPaneIds =
+    detachedWindowPaneIds.length > 0
+      ? detachedWindowPaneIds
+      : detachedPaneId
+        ? [detachedPaneId]
+        : []
   const {
     activeSessionId,
     switchToSession,
@@ -49,7 +64,13 @@ export function useATermTabsState({
     adHocSessions,
     externalSessions,
     isLoading: activeSessionLoading,
-  } = useActiveSession({ includeDetached: !!detachedPaneId })
+  } = useActiveSession({
+    includeDetached: isDetachedWindow || isMobile,
+    persistKey: getScopedATermStorageKey(
+      'aTerm:last-active-session-id',
+      storageScopeId,
+    ),
+  })
 
   const {
     panes,
@@ -71,25 +92,38 @@ export function useATermTabsState({
   } = useATermPanes()
 
   const viewportPaneCapacity = usePaneCapacity()
-  const isDetachedPaneWindow = !!detachedPaneId
-  const scopedDetachedPane = useMemo(
+  const scopedDetachedPanes = useMemo(
     () =>
-      detachedPaneId
-        ? (detachedPanes.find((pane) => pane.id === detachedPaneId) ?? null)
-        : null,
-    [detachedPaneId, detachedPanes],
+      visibleDetachedPaneIds.length === 0
+        ? []
+        : visibleDetachedPaneIds.flatMap((paneId) => {
+            const pane = detachedPanes.find((candidate) => candidate.id === paneId)
+            return pane ? [pane] : []
+          }),
+    [detachedPanes, visibleDetachedPaneIds],
   )
   const initialPaneCount = 1
   const initialViewportWidth = 0
   const [layoutMode, setLayoutMode] = useLocalStorageState<LayoutMode>(
-    'a-term-layout-mode',
+    getScopedATermStorageKey('a-term-layout-mode', storageScopeId),
     getDefaultLayoutMode(initialPaneCount, initialViewportWidth),
   )
   const activeSessionProjectId = useMemo(
-    () =>
-      scopedDetachedPane?.project_id ??
-      getActiveSessionProjectId(activeSessionId, sessions),
-    [activeSessionId, scopedDetachedPane?.project_id, sessions],
+    () => {
+      const scopedProjectId =
+        scopedDetachedPanes.find((pane) =>
+        pane.sessions.some((session) => session.id === activeSessionId),
+        )?.project_id ??
+        scopedDetachedPanes[0]?.project_id ??
+        undefined
+
+      if (isDetachedWindow) {
+        return scopedProjectId ?? getActiveSessionProjectId(activeSessionId, sessions)
+      }
+
+      return getActiveSessionProjectId(activeSessionId, sessions) ?? scopedProjectId
+    },
+    [activeSessionId, isDetachedWindow, scopedDetachedPanes, sessions],
   )
   const {
     fontId,
@@ -107,15 +141,20 @@ export function useATermTabsState({
     setCursorBlink,
     setThemeId,
   } = useATermSettings(activeSessionProjectId)
-  const isMobile = useMediaQuery('(max-width: 767px)')
   const [showSettings, setShowSettings] = useState(false)
   const [keyboardSize, setKeyboardSize] =
     useLocalStorageState<KeyboardSizePreset>('a-term-keyboard-size', 'medium')
   const [storedSlotOrderIds, setStoredSlotOrderIds] = useLocalStorageState<
     string[]
-  >('a-term-slot-order', [])
+  >(getScopedATermStorageKey('a-term-slot-order', storageScopeId), [])
   const [attachedExternalSessionIds, setAttachedExternalSessionIds] =
-    useLocalStorageState<string[]>('a-term-attached-external-session-ids', [])
+    useLocalStorageState<string[]>(
+      getScopedATermStorageKey(
+        'a-term-attached-external-session-ids',
+        storageScopeId,
+      ),
+      [],
+    )
   const [showATermManager, setShowATermManager] = useState(false)
   const aTermRefs = useRef<Map<string, ATermHandle>>(new Map())
   const [aTermStatuses, setATermStatuses] = useState<
@@ -123,9 +162,6 @@ export function useATermTabsState({
   >(new Map())
   const projectTabRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const attachedExternalSessions = useMemo(() => {
-    if (isDetachedPaneWindow) {
-      return []
-    }
     const sessionsById = new Map(
       externalSessions.map((session) => [session.id, session]),
     )
@@ -133,16 +169,61 @@ export function useATermTabsState({
       const session = sessionsById.get(sessionId)
       return session ? [session] : []
     })
-  }, [attachedExternalSessionIds, externalSessions, isDetachedPaneWindow])
+  }, [attachedExternalSessionIds, externalSessions])
   const visiblePanes = useMemo(
-    () =>
-      isDetachedPaneWindow
-        ? scopedDetachedPane
-          ? [scopedDetachedPane]
-          : []
-        : panes,
-    [isDetachedPaneWindow, panes, scopedDetachedPane],
+    () => (isDetachedWindow ? scopedDetachedPanes : panes),
+    [isDetachedWindow, panes, scopedDetachedPanes],
   )
+  const mobileGlobalSlots = useMemo(() => {
+    if (!isMobile || isDetachedWindow) {
+      return []
+    }
+
+    const paneBySessionId = new Map(
+      [...panes, ...detachedPanes].flatMap((pane) =>
+        pane.sessions.map((session) => [session.id, pane] as const),
+      ),
+    )
+    const projectNames = new Map(
+      projectATerms.map((project) => [project.projectId, project.projectName]),
+    )
+
+    return sessions.map((session) => {
+      const slotId = `session-${session.id}`
+      const pane = paneBySessionId.get(session.id)
+
+      if (session.project_id) {
+        const projectSlot = {
+          slotId,
+          type: 'project' as const,
+          projectId: session.project_id,
+          projectName:
+            pane?.pane_name ??
+            projectNames.get(session.project_id) ??
+            session.name,
+          rootPath: session.working_dir,
+          activeMode: session.mode,
+          activeSessionId: session.id,
+          sessionBadge: null,
+          claudeState: session.claude_state,
+        }
+
+        return pane ? { ...projectSlot, paneId: pane.id } : projectSlot
+      }
+
+      const adHocSlot = {
+        slotId,
+        type: 'adhoc' as const,
+        sessionId: session.id,
+        name: pane?.pane_name ?? session.name,
+        workingDir: session.working_dir,
+        sessionMode: session.mode,
+        isExternal: session.is_external,
+      }
+
+      return pane ? { ...adHocSlot, paneId: pane.id } : adHocSlot
+    })
+  }, [detachedPanes, isDetachedWindow, isMobile, panes, projectATerms, sessions])
   const visiblePaneCount = visiblePanes.length + attachedExternalSessions.length
   const paneCountLimit = Math.min(maxPanes, viewportPaneCapacity)
   const visiblePanesAtLimit = visiblePaneCount >= paneCountLimit
@@ -223,7 +304,7 @@ export function useATermTabsState({
     sessionsLoading ||
     projectsLoading ||
     panesLoading ||
-    (isDetachedPaneWindow && !detachedLoadedOnce)
+    (isDetachedWindow && !detachedLoadedOnce)
   const availableLayouts = useAvailableLayouts(visiblePaneCount)
   const visibleSlots = useMemo(() => {
     const paneSlots = getPanesToSlots(visiblePanes)
@@ -237,10 +318,39 @@ export function useATermTabsState({
     }))
     return [...paneSlots, ...externalSlots]
   }, [attachedExternalSessions, visiblePanes])
-  const reconciledSlotOrderIds = useMemo(
-    () => reconcileOrderedIds(visibleSlots, storedSlotOrderIds),
-    [storedSlotOrderIds, visibleSlots],
+  const slotSource = useMemo(
+    () =>
+      isMobile && !isDetachedWindow ? mobileGlobalSlots : visibleSlots,
+    [isDetachedWindow, isMobile, mobileGlobalSlots, visibleSlots],
   )
+  const resolvedActiveSessionId = useMemo(() => {
+    const visibleSessionIds = slotSource.flatMap((slot) => {
+      const sessionId = getSlotSessionId(slot)
+      return sessionId ? [sessionId] : []
+    })
+
+    if (
+      activeSessionId &&
+      visibleSessionIds.some((sessionId) => sessionId === activeSessionId)
+    ) {
+      return activeSessionId
+    }
+
+    return visibleSessionIds[0] ?? activeSessionId
+  }, [activeSessionId, slotSource])
+  const reconciledSlotOrderIds = useMemo(
+    () => reconcileOrderedIds(slotSource, storedSlotOrderIds),
+    [slotSource, storedSlotOrderIds],
+  )
+  useEffect(() => {
+    if (
+      resolvedActiveSessionId &&
+      activeSessionId &&
+      resolvedActiveSessionId !== activeSessionId
+    ) {
+      switchToSession(resolvedActiveSessionId)
+    }
+  }, [activeSessionId, resolvedActiveSessionId, switchToSession])
   useEffect(() => {
     if (activeSessionLoading) return
     if (
@@ -256,11 +366,13 @@ export function useATermTabsState({
     storedSlotOrderIds,
   ])
   const aTermSlots = useMemo(
-    () => orderATermSlots(visibleSlots, reconciledSlotOrderIds),
-    [reconciledSlotOrderIds, visibleSlots],
+    () => orderATermSlots(slotSource, reconciledSlotOrderIds),
+    [reconciledSlotOrderIds, slotSource],
   )
   const orderedIds = useMemo(() => getOrderedIds(aTermSlots), [aTermSlots])
-  const hasVisibleExternalSlot = attachedExternalSessions.length > 0
+  const hasVisibleExternalSlot =
+    attachedExternalSessions.length > 0 ||
+    (isMobile && !isDetachedWindow && mobileGlobalSlots.length > 0)
   const swapPanes = useCallback(
     async (slotIdA: string, slotIdB: string) => {
       const slotA = aTermSlots.find((slot) => getSlotPanelId(slot) === slotIdA)
@@ -288,25 +400,23 @@ export function useATermTabsState({
   )
   const canAddPane = useCallback(
     () =>
-      !isDetachedPaneWindow &&
-      visiblePaneCount < paneCountLimit &&
-      !backendPanesAtLimit,
-    [
-      backendPanesAtLimit,
-      isDetachedPaneWindow,
-      paneCountLimit,
-      visiblePaneCount,
-    ],
+      isDetachedWindow
+        ? visiblePaneCount < paneCountLimit
+        : visiblePaneCount < paneCountLimit && !backendPanesAtLimit,
+    [backendPanesAtLimit, isDetachedWindow, paneCountLimit, visiblePaneCount],
   )
   const isGridMode = isGridLayoutMode(layoutMode)
-  const { activeStatus } = useConnectionStatus(activeSessionId, aTermStatuses)
+  const resolvedActiveStatus = useConnectionStatus(
+    resolvedActiveSessionId,
+    aTermStatuses,
+  ).activeStatus
 
   // Derive active mode from the active session (for ControlBar model picker)
   const activeMode = useMemo<string | undefined>(() => {
-    if (!activeSessionId) return undefined
-    const session = sessions.find((s) => s.id === activeSessionId)
+    if (!resolvedActiveSessionId) return undefined
+    const session = sessions.find((s) => s.id === resolvedActiveSessionId)
     return session?.mode
-  }, [activeSessionId, sessions])
+  }, [resolvedActiveSessionId, sessions])
   useLayoutAutoDowngrade(
     availableLayouts,
     layoutMode,
@@ -314,7 +424,7 @@ export function useATermTabsState({
     panesLoadedOnce && !activeSessionLoading && visiblePaneCount > 0,
   )
   useAutoCreatePane({
-    enabled: !isDetachedPaneWindow,
+    enabled: !isDetachedWindow,
     panes: visiblePanes,
     hasVisibleExternalSlot,
     isLoading,
@@ -328,19 +438,70 @@ export function useATermTabsState({
       await update(sessionId, { name: newName })
     },
   })
+  const handleDetachedAddTab = useCallback(async () => {
+    const newPane = await createAdHocPane(
+      generatePaneName(
+        'Ad-Hoc A-Term',
+        detachedPanes.filter((pane) => pane.pane_type === 'adhoc').length,
+      ),
+      undefined,
+      { detached: true },
+    )
+    const targetSessionId =
+      findSessionByMode(newPane, 'shell')?.id ?? newPane.sessions[0]?.id ?? null
+    if (!targetSessionId) return
+    addDetachedWindowPane?.(newPane.id, targetSessionId)
+    switchToSession(targetSessionId)
+  }, [addDetachedWindowPane, createAdHocPane, detachedPanes, switchToSession])
+  const handleDetachedNewATermForProject = useCallback(
+    async (targetProjectId: string, _mode?: string, rootPath?: string | null) => {
+      const newPane = await createProjectPane(
+        generateProjectPaneName(targetProjectId, [...panes, ...detachedPanes]),
+        targetProjectId,
+        rootPath ?? undefined,
+        undefined,
+        { detached: true },
+      )
+      const targetSessionId =
+        findSessionByMode(newPane, newPane.active_mode)?.id ??
+        findSessionByMode(newPane, 'shell')?.id ??
+        newPane.sessions[0]?.id ??
+        null
+      if (!targetSessionId) return
+      addDetachedWindowPane?.(newPane.id, targetSessionId)
+      switchToSession(targetSessionId)
+    },
+    [
+      addDetachedWindowPane,
+      createProjectPane,
+      detachedPanes,
+      panes,
+      switchToSession,
+    ],
+  )
   const startupLaunchKeyRef = useRef<string | null>(null)
   const handleCloseAllWithDetachedExternal = useCallback(async () => {
     setAttachedExternalSessionIds([])
     setStoredSlotOrderIds([])
+    if (isDetachedWindow) {
+      setDetachedWindowPaneIds?.([], null)
+      return
+    }
     await handleCloseAll()
-  }, [handleCloseAll, setAttachedExternalSessionIds, setStoredSlotOrderIds])
+  }, [
+    handleCloseAll,
+    isDetachedWindow,
+    setAttachedExternalSessionIds,
+    setDetachedWindowPaneIds,
+    setStoredSlotOrderIds,
+  ])
 
   useEffect(() => {
     if (!projectId) {
       startupLaunchKeyRef.current = null
       return
     }
-    if (isLoading || isPaneCreating || visiblePanesAtLimit) {
+    if (isDetachedWindow || isLoading || isPaneCreating || visiblePanesAtLimit) {
       return
     }
 
@@ -389,6 +550,7 @@ export function useATermTabsState({
     activeSessionId,
     createProjectPane,
     isLoading,
+    isDetachedWindow,
     isPaneCreating,
     panes,
     visiblePanesAtLimit,
@@ -397,9 +559,13 @@ export function useATermTabsState({
     projectATerms,
     switchToSession,
   ])
+  const effectiveHandleAddTab = isDetachedWindow ? handleDetachedAddTab : handleAddTab
+  const effectiveHandleNewATermForProject = isDetachedWindow
+    ? handleDetachedNewATermForProject
+    : handleNewATermForProject
 
   return {
-    activeSessionId,
+    activeSessionId: resolvedActiveSessionId,
     switchToSession,
     sessions,
     projectATerms,
@@ -453,14 +619,14 @@ export function useATermTabsState({
     showATermManager,
     setShowATermManager,
     activeMode,
-    activeStatus,
+    activeStatus: resolvedActiveStatus,
     ...tabEditingProps,
     handleStatusChange,
     handleKeyboardInput,
     handleReconnect,
     handleLayoutModeChange,
-    handleAddTab,
-    handleNewATermForProject,
+    handleAddTab: effectiveHandleAddTab,
+    handleNewATermForProject: effectiveHandleNewATermForProject,
     handleProjectModeChange,
     handleCloseAll: handleCloseAllWithDetachedExternal,
     resetProject,

@@ -151,12 +151,14 @@ export function useATermHandlers({
       newMode: string,
       projectSessions: ATermSession[],
       paneId?: string,
+      pane?: import('./use-a-term-panes').ATermPane,
     ) =>
       switchProjectMode({
         projectId: projectIdArg,
         mode: newMode,
         projectSessions,
         paneId,
+        pane,
       }),
     [switchProjectMode],
   )

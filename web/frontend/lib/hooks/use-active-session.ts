@@ -101,6 +101,7 @@ export interface UseActiveSessionResult {
 
 interface UseActiveSessionOptions {
   includeDetached?: boolean
+  persistKey?: string
 }
 
 // ============================================================================
@@ -144,9 +145,10 @@ export function useActiveSession(
 ): UseActiveSessionResult {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const persistKey = options.persistKey ?? LAST_ACTIVE_SESSION_KEY
   const [persistedSessionId, setPersistedSessionId] = useLocalStorageState<
     string | null
-  >(LAST_ACTIVE_SESSION_KEY, null)
+  >(persistKey, null)
 
   // Get session data from existing hooks
   const {
@@ -198,12 +200,12 @@ export function useActiveSession(
     }
 
     const migratedSessionId = parsePersistedSessionId(
-      window.localStorage.getItem(LAST_ACTIVE_SESSION_KEY),
+      window.localStorage.getItem(persistKey),
     )
     if (migratedSessionId !== null) {
       setPersistedSessionId(migratedSessionId)
     }
-  }, [persistedSessionId, setPersistedSessionId])
+  }, [persistKey, persistedSessionId, setPersistedSessionId])
 
   useEffect(() => {
     if (!shouldSyncSessionParam(activeSessionId, urlSessionId)) {

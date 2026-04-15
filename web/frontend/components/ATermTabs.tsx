@@ -56,6 +56,7 @@ export function ATermTabs({
     activeStatus,
     layoutMode,
     availableLayouts,
+    storageScopeId,
     handleKeyboardInput,
     handleReconnect,
     panes,
@@ -78,6 +79,7 @@ export function ATermTabs({
     handleSlotCloseSession,
     handleSlotClean,
     handleSlotModeSwitch,
+    handleSlotProjectSwitch,
     isModeSwitching,
 
     // Layout handlers
@@ -122,8 +124,6 @@ export function ATermTabs({
     handleVoiceReset,
   } = useATermOrchestration({ projectId, projectPath, detachedPaneId })
 
-  const isDetachedPaneWindow = !!detachedPaneId
-
   // Loading state - show skeleton
   if (isLoading) {
     return (
@@ -165,13 +165,12 @@ export function ATermTabs({
         onSlotClose={handleSlotClose}
         onSlotCloseSession={handleSlotCloseSession}
         onSlotClean={handleSlotClean}
-        canAddPane={isDetachedPaneWindow ? false : canAddPane()}
+        canAddPane={canAddPane()}
         handleOpenSettings={() => setShowSettings(true)}
-        handleOpenATermManager={
-          isDetachedPaneWindow ? undefined : handleOpenATermManager
-        }
+        handleOpenATermManager={handleOpenATermManager}
         handleUploadClick={handleUploadClick}
         onModeSwitch={handleSlotModeSwitch}
+        onProjectSwitch={handleSlotProjectSwitch}
         isModeSwitching={!!isModeSwitching}
         onSwapPanes={swapPanes}
         layoutMode={layoutMode}
@@ -195,6 +194,7 @@ export function ATermTabs({
         isCleaningPrompt={isCleaningPrompt}
         sessions={sessions}
         activeSessionId={activeSessionId}
+        storageScopeId={storageScopeId}
         activeMode={activeMode}
         activeStatus={activeStatus}
         handleKeyboardInput={handleKeyboardInput}
@@ -215,21 +215,19 @@ export function ATermTabs({
       />
 
       {/* A-Term Manager Modal */}
-      {!isDetachedPaneWindow && (
-        <ATermManagerModal
-          isOpen={showATermManager}
-          onClose={handleCloseATermManager}
-          onCreateGenericATerm={handleAddTab}
-          onCreateProjectATerm={(projectId, rootPath) =>
-            handleNewATermForProject(projectId, undefined, rootPath)
-          }
-          externalSessions={externalSessions}
-          detachedPanes={detachedPanes}
-          onAttachExternalSession={handleAttachExternalSession}
-          onAttachDetachedPane={handleAttachDetachedPane}
-          panes={panes}
-        />
-      )}
+      <ATermManagerModal
+        isOpen={showATermManager}
+        onClose={handleCloseATermManager}
+        onCreateGenericATerm={handleAddTab}
+        onCreateProjectATerm={(projectId, rootPath) =>
+          handleNewATermForProject(projectId, undefined, rootPath)
+        }
+        externalSessions={externalSessions}
+        detachedPanes={detachedPanes}
+        onAttachExternalSession={handleAttachExternalSession}
+        onAttachDetachedPane={handleAttachDetachedPane}
+        panes={panes}
+      />
 
       {/* Keyboard shortcuts help overlay */}
       <KeyboardShortcuts

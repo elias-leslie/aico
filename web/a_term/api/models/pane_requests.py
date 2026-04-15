@@ -15,6 +15,22 @@ class CreatePaneRequest(BaseModel):
     project_id: str | None = None
     working_dir: str | None = None
     agent_tool_slug: str | None = Field(None, min_length=1, pattern=r"^[a-z0-9_-]+$")
+    detached: bool = False
+    pane_order: int | None = None
+    width_percent: float | None = None
+    height_percent: float | None = None
+    grid_row: int | None = None
+    grid_col: int | None = None
+
+
+class AttachPaneRequest(BaseModel):
+    """Request to attach a detached pane into a specific slot."""
+
+    pane_order: int | None = None
+    width_percent: float | None = None
+    height_percent: float | None = None
+    grid_row: int | None = None
+    grid_col: int | None = None
 
 
 class UpdatePaneRequest(BaseModel):

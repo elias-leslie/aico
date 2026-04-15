@@ -43,11 +43,34 @@ export interface CreatePaneRequest {
   project_id?: string
   working_dir?: string
   agent_tool_slug?: string
+  detached?: boolean
+  pane_order?: number
+  width_percent?: number
+  height_percent?: number
+  grid_row?: number
+  grid_col?: number
 }
 
 export interface UpdatePaneRequest {
   pane_name?: string
   active_mode?: string
+}
+
+export interface AttachPaneRequest {
+  pane_order?: number
+  width_percent?: number
+  height_percent?: number
+  grid_row?: number
+  grid_col?: number
+}
+
+export interface PanePlacementOptions {
+  detached?: boolean
+  paneOrder?: number
+  widthPercent?: number
+  heightPercent?: number
+  gridRow?: number
+  gridCol?: number
 }
 
 export interface SwapPanesRequest {

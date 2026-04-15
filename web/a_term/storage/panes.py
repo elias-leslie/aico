@@ -110,6 +110,11 @@ def create_pane_with_sessions(
     working_dir: str | None = None,
     pane_order: int | None = None,
     agent_tool_slug: str | None = None,
+    is_detached: bool = False,
+    width_percent: float | None = None,
+    height_percent: float | None = None,
+    grid_row: int | None = None,
+    grid_col: int | None = None,
 ) -> dict[str, Any]:
     """Create a pane and its tmux-backed sessions with rollback on failure."""
     if pane_type == "project" and not project_id:
@@ -119,10 +124,45 @@ def create_pane_with_sessions(
     tool_slug = agent_tool_slug or _get_default_agent_slug()
     default_mode = tool_slug if pane_type == "project" else "shell"
     with get_connection() as conn, conn.cursor(row_factory=dict_row) as cur:
-        order = _prepare_pane_slot(cur, pane_order)
+        if is_detached:
+            cur.execute("LOCK TABLE a_term_panes IN SHARE ROW EXCLUSIVE MODE")
+            if pane_order is None:
+                cur.execute(
+                    "SELECT COALESCE(MAX(pane_order), -1) + 1 AS next_order FROM a_term_panes"
+                )
+                row = cur.fetchone()
+                order = row["next_order"] if row else 0
+            else:
+                order = pane_order
+        else:
+            order = _prepare_pane_slot(cur, pane_order)
         cur.execute(
-            f"INSERT INTO a_term_panes (pane_type, project_id, pane_order, pane_name, active_mode) VALUES (%s, %s, %s, %s, %s) RETURNING {PANE_FIELDS}",
-            (pane_type, project_id, order, pane_name, default_mode),
+            f"""INSERT INTO a_term_panes (
+                    pane_type,
+                    project_id,
+                    pane_order,
+                    pane_name,
+                    active_mode,
+                    is_detached,
+                    width_percent,
+                    height_percent,
+                    grid_row,
+                    grid_col
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, COALESCE(%s, 100.0), COALESCE(%s, 100.0), COALESCE(%s, 0), COALESCE(%s, 0))
+                RETURNING {PANE_FIELDS}""",
+            (
+                pane_type,
+                project_id,
+                order,
+                pane_name,
+                default_mode,
+                is_detached,
+                width_percent,
+                height_percent,
+                grid_row,
+                grid_col,
+            ),
         )
         pane_row = cur.fetchone()
         if not pane_row:
@@ -185,14 +225,29 @@ def detach_pane(pane_id: PaneId) -> dict[str, Any] | None:
     return update_pane(pane_id, is_detached=True)
 
 
-def attach_pane(pane_id: PaneId) -> dict[str, Any] | None:
+def attach_pane(
+    pane_id: PaneId,
+    pane_order: int | None = None,
+    width_percent: float | None = None,
+    height_percent: float | None = None,
+    grid_row: int | None = None,
+    grid_col: int | None = None,
+) -> dict[str, Any] | None:
     """Reattach a detached pane to the active layout."""
     nid = str(pane_id)
     with get_connection() as conn, conn.cursor(row_factory=dict_row) as cur:
-        order = _prepare_pane_slot(cur)
+        order = _prepare_pane_slot(cur, pane_order)
         cur.execute(
-            f"UPDATE a_term_panes SET is_detached = false, pane_order = %s WHERE id = %s RETURNING {PANE_FIELDS}",
-            (order, nid),
+            f"""UPDATE a_term_panes
+                SET is_detached = false,
+                    pane_order = %s,
+                    width_percent = COALESCE(%s, width_percent),
+                    height_percent = COALESCE(%s, height_percent),
+                    grid_row = COALESCE(%s, grid_row),
+                    grid_col = COALESCE(%s, grid_col)
+                WHERE id = %s
+                RETURNING {PANE_FIELDS}""",
+            (order, width_percent, height_percent, grid_row, grid_col, nid),
         )
         row = cur.fetchone()
         conn.commit()

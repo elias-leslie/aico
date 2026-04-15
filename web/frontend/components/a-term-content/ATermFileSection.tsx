@@ -37,6 +37,11 @@ interface ATermFileSectionProps {
   handleOpenATermManager?: () => void
   handleUploadClick: () => void
   onModeSwitch: (slot: ATermSlot | PaneSlot, mode: string) => void
+  onProjectSwitch?: (
+    slot: ATermSlot | PaneSlot,
+    projectId: string,
+    rootPath: string | null,
+  ) => Promise<void> | void
   isModeSwitching: boolean
   onSwapPanes: (slotIdA: string, slotIdB: string) => void
   layoutMode: LayoutMode
@@ -51,6 +56,7 @@ interface ATermFileSectionProps {
   handleFileInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void
   handleFileSelect: (file: File) => void
   activeSessionId?: string | null
+  storageScopeId?: string | null
   isVoiceSupported: boolean
   handleVoiceOpen: () => void
   isMobile?: boolean
@@ -78,6 +84,7 @@ export function ATermFileSection({
   handleOpenATermManager,
   handleUploadClick,
   onModeSwitch,
+  onProjectSwitch,
   isModeSwitching,
   onSwapPanes,
   layoutMode,
@@ -92,6 +99,7 @@ export function ATermFileSection({
   handleFileInputChange,
   handleFileSelect,
   activeSessionId,
+  storageScopeId,
   isVoiceSupported,
   handleVoiceOpen,
   isMobile,
@@ -147,9 +155,11 @@ export function ATermFileSection({
           onShowATermManager={handleOpenATermManager}
           onUploadClick={handleUploadClick}
           onModeSwitch={onModeSwitch}
+          onProjectSwitch={onProjectSwitch}
           isModeSwitching={isModeSwitching}
           isMobile={isMobile ?? false}
           activeSessionId={activeSessionId}
+          storageScopeId={storageScopeId}
           layoutMode={layoutMode}
           availableLayouts={availableLayouts}
           onLayoutModeChange={onLayoutModeChange}
