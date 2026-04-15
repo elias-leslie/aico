@@ -36,6 +36,16 @@ dev = [
 [tool.hatch.build.targets.wheel]
 packages = ["a_term"]
 
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "/frontend/.next",
+    "/frontend/node_modules",
+    "/frontend/out",
+    "/packages/notes-ui/.ruff_cache",
+    "/packages/notes-ui/dist",
+    "/packages/notes-ui/node_modules",
+]
+
 [tool.ruff]
 line-length = 100
 target-version = "py313"
