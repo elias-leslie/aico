@@ -169,6 +169,7 @@ export function useATermPanes() {
     maxPanes,
     atLimit,
     isLoading,
+    detachedLoadedOnce: detachedData !== undefined,
     hasLoadedOnce: data !== undefined,
     isError,
     error,

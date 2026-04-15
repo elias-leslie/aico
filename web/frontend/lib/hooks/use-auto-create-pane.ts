@@ -5,6 +5,7 @@ import { generatePaneName } from './a-term-handler-utils'
 import { fetchPaneCount } from './a-term-panes-api'
 
 interface UseAutoCreatePaneProps {
+  enabled?: boolean
   panes: Array<{ pane_type: string }>
   hasVisibleExternalSlot: boolean
   isLoading: boolean
@@ -24,6 +25,7 @@ interface UseAutoCreatePaneProps {
  * Prevents race conditions with refs to track creation state.
  */
 export function useAutoCreatePane({
+  enabled = true,
   panes,
   hasVisibleExternalSlot,
   isLoading,
@@ -52,6 +54,7 @@ export function useAutoCreatePane({
 
     // Skip if still loading or already creating
     if (
+      !enabled ||
       isLoading ||
       !hasLoadedOnce ||
       isPaneCreating ||
@@ -127,6 +130,7 @@ export function useAutoCreatePane({
     }
   }, [
     isLoading,
+    enabled,
     hasLoadedOnce,
     panes,
     hasVisibleExternalSlot,

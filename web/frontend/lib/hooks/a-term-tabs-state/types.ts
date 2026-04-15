@@ -5,6 +5,7 @@ import type { LayoutMode } from '@/lib/constants/a-term'
 export interface UseATermTabsStateProps {
   projectId?: string
   projectPath?: string
+  detachedPaneId?: string
 }
 
 export interface ATermRefsMap {

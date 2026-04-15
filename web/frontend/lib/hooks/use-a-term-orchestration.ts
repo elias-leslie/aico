@@ -14,6 +14,7 @@ import { usePromptCleaner } from './use-prompt-cleaner'
 interface UseATermOrchestrationProps {
   projectId?: string
   projectPath?: string
+  detachedPaneId?: string
 }
 
 /**
@@ -23,9 +24,14 @@ interface UseATermOrchestrationProps {
 export function useATermOrchestration({
   projectId,
   projectPath,
+  detachedPaneId,
 }: UseATermOrchestrationProps) {
   // Core aTerm state
-  const aTermState = useATermTabsState({ projectId, projectPath })
+  const aTermState = useATermTabsState({
+    projectId,
+    projectPath,
+    detachedPaneId,
+  })
 
   const {
     activeSessionId,

@@ -15,7 +15,7 @@ const mockUseMediaQuery = vi.fn()
 const mockUseAutoCreatePane = vi.fn()
 
 vi.mock('@/lib/hooks/use-active-session', () => ({
-  useActiveSession: () => mockUseActiveSession(),
+  useActiveSession: (params: unknown) => mockUseActiveSession(params),
 }))
 
 vi.mock('@/lib/hooks/use-a-term-panes', () => ({
@@ -115,11 +115,15 @@ describe('useATermTabsState', () => {
 
     mockUseATermPanes.mockReturnValue({
       panes: [],
+      detachedPanes: [],
       atLimit: false,
       isLoading: false,
+      detachedLoadedOnce: true,
       hasLoadedOnce: true,
       swapPanePositions: vi.fn(),
       removePane: vi.fn(),
+      detachPane: vi.fn(),
+      attachPane: vi.fn(),
       setActiveMode: vi.fn(),
       createAdHocPane: vi.fn(),
       createProjectPane: vi.fn(),
@@ -185,6 +189,101 @@ describe('useATermTabsState', () => {
       setCursorBlink: vi.fn(),
       setThemeId: vi.fn(),
     }))
+  })
+
+  it('scopes a detached-pane window to the requested pane and includes detached sessions', () => {
+    mockUseActiveSession.mockReturnValue(buildActiveSessionState())
+    mockUseATermPanes.mockReturnValue({
+      panes: [
+        {
+          id: 'pane-project-a',
+          pane_type: 'project',
+          project_id: 'project-a',
+          pane_order: 0,
+          pane_name: 'Project A',
+          active_mode: 'shell',
+          created_at: '2026-03-06T00:00:00Z',
+          sessions: [
+            {
+              id: 'session-project-a',
+              name: 'Project A Shell',
+              mode: 'shell',
+              session_number: 1,
+              is_alive: true,
+              working_dir: '/workspace/project-a',
+              claude_state: 'not_started',
+            },
+          ],
+          width_percent: 100,
+          height_percent: 100,
+          grid_row: 0,
+          grid_col: 0,
+        },
+      ],
+      detachedPanes: [
+        {
+          id: 'pane-detached',
+          pane_type: 'project',
+          project_id: 'project-b',
+          pane_order: 1,
+          pane_name: 'Project B Detached',
+          active_mode: 'shell',
+          is_detached: true,
+          created_at: '2026-03-06T00:00:00Z',
+          sessions: [
+            {
+              id: 'session-project-b',
+              name: 'Project B Shell',
+              mode: 'shell',
+              session_number: 1,
+              is_alive: true,
+              working_dir: '/workspace/project-b',
+              claude_state: 'not_started',
+            },
+          ],
+          width_percent: 100,
+          height_percent: 100,
+          grid_row: 0,
+          grid_col: 0,
+        },
+      ],
+      atLimit: false,
+      isLoading: false,
+      detachedLoadedOnce: true,
+      hasLoadedOnce: true,
+      swapPanePositions: vi.fn(),
+      removePane: vi.fn(),
+      detachPane: vi.fn(),
+      attachPane: vi.fn(),
+      setActiveMode: vi.fn(),
+      createAdHocPane: vi.fn(),
+      createProjectPane: vi.fn(),
+      isCreating: false,
+      saveLayouts: vi.fn(),
+      maxPanes: 6,
+    })
+
+    const { result } = renderHook(() =>
+      useATermTabsState({
+        projectId: undefined,
+        projectPath: undefined,
+        detachedPaneId: 'pane-detached',
+      }),
+    )
+
+    expect(mockUseActiveSession).toHaveBeenCalledWith({ includeDetached: true })
+    expect(result.current.themeId).toBe('tokyo-night')
+    expect(result.current.aTermSlots).toHaveLength(1)
+    expect(result.current.aTermSlots[0]).toMatchObject({
+      paneId: 'pane-detached',
+      projectId: 'project-b',
+    })
+    expect(result.current.canAddPane()).toBe(false)
+    expect(mockUseAutoCreatePane).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        enabled: false,
+      }),
+    )
   })
 
   it('recomputes scoped settings when the resolved active session falls back to a different context', () => {
@@ -283,11 +382,15 @@ describe('useATermTabsState', () => {
     )
     mockUseATermPanes.mockReturnValue({
       panes: [],
+      detachedPanes: [],
       atLimit: false,
       isLoading: false,
+      detachedLoadedOnce: true,
       hasLoadedOnce: true,
       swapPanePositions: vi.fn(),
       removePane: vi.fn(),
+      detachPane: vi.fn(),
+      attachPane: vi.fn(),
       setActiveMode: vi.fn(),
       createAdHocPane: vi.fn(),
       createProjectPane,
@@ -361,11 +464,15 @@ describe('useATermTabsState', () => {
     )
     mockUseATermPanes.mockReturnValue({
       panes: [],
+      detachedPanes: [],
       atLimit: false,
       isLoading: false,
+      detachedLoadedOnce: true,
       hasLoadedOnce: true,
       swapPanePositions: vi.fn(),
       removePane: vi.fn(),
+      detachPane: vi.fn(),
+      attachPane: vi.fn(),
       setActiveMode: vi.fn(),
       createAdHocPane: vi.fn(),
       createProjectPane,
@@ -458,11 +565,15 @@ describe('useATermTabsState', () => {
     )
     mockUseATermPanes.mockReturnValue({
       panes: [],
+      detachedPanes: [],
       atLimit: false,
       isLoading: false,
+      detachedLoadedOnce: true,
       hasLoadedOnce: true,
       swapPanePositions: vi.fn(),
       removePane: vi.fn(),
+      detachPane: vi.fn(),
+      attachPane: vi.fn(),
       setActiveMode: vi.fn(),
       createAdHocPane: vi.fn(),
       createProjectPane,
@@ -530,11 +641,15 @@ describe('useATermTabsState', () => {
           grid_col: 0,
         },
       ],
+      detachedPanes: [],
       atLimit: false,
       isLoading: false,
+      detachedLoadedOnce: true,
       hasLoadedOnce: true,
       swapPanePositions: vi.fn(),
       removePane: vi.fn(),
+      detachPane: vi.fn(),
+      attachPane: vi.fn(),
       setActiveMode: vi.fn(),
       createAdHocPane: vi.fn(),
       createProjectPane: vi.fn(),
@@ -605,11 +720,15 @@ describe('useATermTabsState', () => {
     )
     mockUseATermPanes.mockReturnValue({
       panes: [],
+      detachedPanes: [],
       atLimit: false,
       isLoading: false,
+      detachedLoadedOnce: true,
       hasLoadedOnce: true,
       swapPanePositions,
       removePane: vi.fn(),
+      detachPane: vi.fn(),
+      attachPane: vi.fn(),
       setActiveMode: vi.fn(),
       createAdHocPane: vi.fn(),
       createProjectPane: vi.fn(),
@@ -694,11 +813,15 @@ describe('useATermTabsState', () => {
           grid_col: 0,
         },
       ],
+      detachedPanes: [],
       atLimit: false,
       isLoading: false,
+      detachedLoadedOnce: true,
       hasLoadedOnce: true,
       swapPanePositions: vi.fn(),
       removePane: vi.fn(),
+      detachPane: vi.fn(),
+      attachPane: vi.fn(),
       setActiveMode: vi.fn(),
       createAdHocPane: vi.fn(),
       createProjectPane: vi.fn(),

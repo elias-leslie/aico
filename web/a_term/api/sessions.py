@@ -90,13 +90,16 @@ class UpdateSessionRequest(BaseModel):
 
 
 @router.get("/api/a-term/sessions", response_model=ATermSessionListResponse)
-async def list_sessions() -> ATermSessionListResponse:
+async def list_sessions(include_detached: bool = False) -> ATermSessionListResponse:
     """List all alive a_term sessions.
 
     Returns only sessions where is_alive=True.
     Sessions are ordered by display_order, then created_at.
     """
-    sessions = a_term_store.list_sessions(include_dead=False, include_detached=False)
+    sessions = a_term_store.list_sessions(
+        include_dead=False,
+        include_detached=include_detached,
+    )
     external_sessions = list_external_agent_tmux_sessions()
     all_sessions = [*sessions, *external_sessions]
 

@@ -107,4 +107,29 @@ describe('useATermSessions', () => {
 
     expect(result.current.error).toBeDefined()
   })
+
+  it('can include detached sessions for detached-pane windows', async () => {
+    const body = JSON.stringify({ items: mockSessions, total: 2 })
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      text: async () => body,
+      json: async () => JSON.parse(body),
+    })
+
+    const { result } = renderHook(
+      () => useATermSessions({ includeDetached: true }),
+      {
+        wrapper: createWrapper(),
+      },
+    )
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false)
+    })
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      'http://localhost:8002/api/a-term/sessions?include_detached=true',
+      undefined,
+    )
+  })
 })

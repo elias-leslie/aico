@@ -10,12 +10,14 @@ import { KeyboardShortcuts } from './KeyboardShortcuts'
 interface ATermTabsProps {
   projectId?: string
   projectPath?: string
+  detachedPaneId?: string
   className?: string
 }
 
 export function ATermTabs({
   projectId,
   projectPath,
+  detachedPaneId,
   className,
 }: ATermTabsProps) {
   const {
@@ -117,7 +119,9 @@ export function ATermTabs({
     handleVoiceCancel,
     handleVoiceToggle,
     handleVoiceReset,
-  } = useATermOrchestration({ projectId, projectPath })
+  } = useATermOrchestration({ projectId, projectPath, detachedPaneId })
+
+  const isDetachedPaneWindow = !!detachedPaneId
 
   // Loading state - show skeleton
   if (isLoading) {
@@ -159,9 +163,11 @@ export function ATermTabs({
         onSlotClose={handleSlotClose}
         onSlotCloseSession={handleSlotCloseSession}
         onSlotClean={handleSlotClean}
-        canAddPane={canAddPane()}
+        canAddPane={isDetachedPaneWindow ? false : canAddPane()}
         handleOpenSettings={() => setShowSettings(true)}
-        handleOpenATermManager={handleOpenATermManager}
+        handleOpenATermManager={
+          isDetachedPaneWindow ? undefined : handleOpenATermManager
+        }
         handleUploadClick={handleUploadClick}
         onModeSwitch={handleSlotModeSwitch}
         isModeSwitching={!!isModeSwitching}
@@ -207,19 +213,21 @@ export function ATermTabs({
       />
 
       {/* A-Term Manager Modal */}
-      <ATermManagerModal
-        isOpen={showATermManager}
-        onClose={handleCloseATermManager}
-        onCreateGenericATerm={handleAddTab}
-        onCreateProjectATerm={(projectId, rootPath) =>
-          handleNewATermForProject(projectId, undefined, rootPath)
-        }
-        externalSessions={externalSessions}
-        detachedPanes={detachedPanes}
-        onAttachExternalSession={handleAttachExternalSession}
-        onAttachDetachedPane={handleAttachDetachedPane}
-        panes={panes}
-      />
+      {!isDetachedPaneWindow && (
+        <ATermManagerModal
+          isOpen={showATermManager}
+          onClose={handleCloseATermManager}
+          onCreateGenericATerm={handleAddTab}
+          onCreateProjectATerm={(projectId, rootPath) =>
+            handleNewATermForProject(projectId, undefined, rootPath)
+          }
+          externalSessions={externalSessions}
+          detachedPanes={detachedPanes}
+          onAttachExternalSession={handleAttachExternalSession}
+          onAttachDetachedPane={handleAttachDetachedPane}
+          panes={panes}
+        />
+      )}
 
       {/* Keyboard shortcuts help overlay */}
       <KeyboardShortcuts

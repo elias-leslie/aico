@@ -99,6 +99,10 @@ export interface UseActiveSessionResult {
   isLoading: boolean
 }
 
+interface UseActiveSessionOptions {
+  includeDetached?: boolean
+}
+
 // ============================================================================
 // Hook
 // ============================================================================
@@ -135,7 +139,9 @@ export interface UseActiveSessionResult {
  * );
  * ```
  */
-export function useActiveSession(): UseActiveSessionResult {
+export function useActiveSession(
+  options: UseActiveSessionOptions = {},
+): UseActiveSessionResult {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [persistedSessionId, setPersistedSessionId] = useLocalStorageState<
@@ -147,7 +153,7 @@ export function useActiveSession(): UseActiveSessionResult {
     sessions: rawSessions,
     isLoading: sessionsLoading,
     isError: sessionsError,
-  } = useATermSessions()
+  } = useATermSessions({ includeDetached: options.includeDetached })
   const sessions = rawSessions
   const {
     projectATerms,

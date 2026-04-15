@@ -28,6 +28,10 @@ interface SessionListResponse {
   total: number
 }
 
+interface UseATermSessionsOptions {
+  includeDetached?: boolean
+}
+
 interface UpdateSessionRequest {
   name?: string
   display_order?: number
@@ -44,8 +48,19 @@ export interface DeleteSessionResult {
 
 const jsonHeaders = { 'Content-Type': 'application/json' }
 
-const fetchSessions = async (): Promise<ATermSession[]> =>
-  (await apiFetch<SessionListResponse>('/api/a-term/sessions')).items
+const fetchSessions = async (
+  includeDetached = false,
+): Promise<ATermSession[]> => {
+  const params = new URLSearchParams()
+  if (includeDetached) {
+    params.set('include_detached', 'true')
+  }
+  const query = params.toString()
+  const path = query
+    ? `/api/a-term/sessions?${query}`
+    : '/api/a-term/sessions'
+  return (await apiFetch<SessionListResponse>(path)).items
+}
 
 const updateSession = (sessionId: string, req: UpdateSessionRequest) =>
   apiFetch<ATermSession>(`/api/a-term/sessions/${sessionId}`, {
@@ -75,7 +90,8 @@ const invalidatePanesAndSessions = (
 }
 
 /** Hook for managing aTerm sessions with backend sync */
-export function useATermSessions() {
+export function useATermSessions(options: UseATermSessionsOptions = {}) {
+  const { includeDetached = false } = options
   const queryClient = useQueryClient()
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ['a-term-sessions'] })
@@ -86,8 +102,8 @@ export function useATermSessions() {
     isError,
     error,
   } = useQuery({
-    queryKey: ['a-term-sessions'],
-    queryFn: fetchSessions,
+    queryKey: ['a-term-sessions', includeDetached],
+    queryFn: () => fetchSessions(includeDetached),
   })
 
   const updateMutation = useMutation({

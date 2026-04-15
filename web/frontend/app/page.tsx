@@ -4,6 +4,7 @@ interface HomePageProps {
   searchParams?: Promise<{
     project?: string | string[]
     dir?: string | string[]
+    detachedPane?: string | string[]
   }>
 }
 
@@ -23,6 +24,7 @@ export default async function Home({ searchParams }: HomePageProps) {
   const resolvedSearchParams = (await searchParams) ?? {}
   const projectId = getSingleSearchParam(resolvedSearchParams.project)
   const projectPath = getSingleSearchParam(resolvedSearchParams.dir)
+  const detachedPaneId = getSingleSearchParam(resolvedSearchParams.detachedPane)
 
   return (
     <div
@@ -32,6 +34,7 @@ export default async function Home({ searchParams }: HomePageProps) {
       <ATermTabs
         projectId={projectId}
         projectPath={projectPath}
+        detachedPaneId={detachedPaneId}
         className="flex-1 min-h-0"
       />
     </div>
