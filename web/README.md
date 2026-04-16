@@ -2,7 +2,7 @@
 
 **A persistent browser workspace for AI coding agents, shells, files, notes, and reusable prompts.**
 
-Run Claude Code, Codex, Gemini CLI, OpenCode, shells, files, and prompt notes side by side in one browser tab. Sessions stay alive when the browser closes, so you can reconnect instead of rebuilding your working context.
+Run Claude Code, Codex, Gemini CLI, OpenCode, shells, files, and prompt notes side by side in one browser workspace. Sessions stay alive when the browser closes, so you can reconnect instead of rebuilding your working context.
 
 Assemble your agent crew in one place: a planner, builder, reviewer, release shell, files browser, and prompt library that keep working as one durable workspace.
 
@@ -57,7 +57,7 @@ Want the latest shipped changes? See [Releases](https://github.com/elias-leslie/
 
 **`persistent sessions`** — tmux-backed terminals survive browser closes, server restarts, and network drops. Reconnect exactly where you left off.
 
-**`multi-pane layouts`** — Up to 6 resizable panes. Put planning, implementation, review, release checks, files, and notes on the same screen.
+**`multi-pane layouts`** — Up to 6 resizable panes. Put planning, implementation, review, release checks, files, and notes on the same screen, then detach any pane into its own browser window when you want to spread work across monitors.
 
 ![Four-pane grid layout with multiple active agents](docs/images/a-term-grid-2x2.png)
 *Four-pane grid: run multiple agents and shells simultaneously*
@@ -78,12 +78,16 @@ In standalone installs, notes and prompts are stored inside A-Term itself. A sha
 
 **`project deep links`** — Open `/?project=myapp&dir=/path` to jump straight into a project workspace. Bookmark your setups.
 
+**`same-pane project switching`** — Swap a pane to another project from the header instead of closing and reopening work by hand. A-Term keeps the current tool mode when possible, so moving from one project to another in `codex`, `claude`, or shell does not drop you back to a generic terminal first.
+
 **`dual mode`** — Switch any pane between raw shell and your configured AI agent with one click. Supports Claude Code, Codex, Gemini CLI, and OpenCode out of the box.
 
 ![Mode switching dropdown showing Shell, Claude Code, OpenCode, Gemini CLI, and Codex](docs/images/a-term-mode-switch.png)
 *Switch between agents and shell per pane*
 
-**`mobile keyboard`** — On-screen keyboard with arrow keys, Ctrl, Esc, and modifier support for touch devices.
+**`agent scrollback overlay`** — Scroll tmux-backed history for agent and TUI sessions without losing the live bottom page. First wheel-up or touch entry opens history at the current output, then normal scrolling carries you back through prior work.
+
+**`mobile workspace controls`** — On-screen keyboard with arrow keys, Ctrl, Esc, and modifier support for touch devices, plus a touch-friendly session switcher that can jump into any attached or detached session from your phone.
 
 **`light and dark themes`** — Respects `prefers-color-scheme` with a manual override that persists across sessions.
 
