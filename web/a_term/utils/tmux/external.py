@@ -13,7 +13,7 @@ from .core import TMUX_COMMAND_TIMEOUT
 
 logger = get_logger(__name__)
 
-_EXTERNAL_AGENT_TOKENS = ("claude", "codex", "opencode", "aider", "gemini")
+_EXTERNAL_AGENT_TOKENS = ("claude", "codex", "opencode", "aider", "gemini", "hermes")
 
 _EXTERNAL_ATTACH_LOCK = Lock()
 _EXTERNAL_ATTACH_STATES: dict[str, _ExternalAttachState] = {}

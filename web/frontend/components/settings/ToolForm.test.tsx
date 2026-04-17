@@ -70,4 +70,22 @@ describe('ToolForm', () => {
     ).toBeInTheDocument()
     expect(onSubmit).not.toHaveBeenCalled()
   })
+
+  it('prefills Hermes slug and built-in color from the tool name', () => {
+    render(
+      <ToolForm
+        initial={EMPTY_FORM}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+        isEdit={false}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText('Tool name'), {
+      target: { value: 'Hermes' },
+    })
+
+    expect(screen.getByLabelText('Tool slug')).toHaveValue('hermes')
+    expect(screen.getByLabelText('Tool color')).toHaveValue('#F59E0B')
+  })
 })

@@ -2,11 +2,11 @@
 
 **A persistent browser workspace for AI coding agents, shells, files, notes, and reusable prompts.**
 
-Run Claude Code, Codex, Gemini CLI, OpenCode, shells, files, and prompt notes side by side in one browser workspace. Sessions stay alive when the browser closes, so you can reconnect instead of rebuilding your working context.
+Run Claude Code, Codex, Gemini CLI, Hermes, OpenCode, shells, files, and prompt notes side by side in one browser workspace. Sessions stay alive when the browser closes, so you can reconnect instead of rebuilding your working context.
 
 Assemble your agent crew in one place: a planner, builder, reviewer, release shell, files browser, and prompt library that keep working as one durable workspace.
 
-Built for [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex CLI](https://github.com/openai/codex), [Gemini CLI](https://github.com/google-gemini/gemini-cli), [OpenCode](https://github.com/opencode-ai/opencode), and every TUI agent that follows.
+Built for [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex CLI](https://github.com/openai/codex), [Gemini CLI](https://github.com/google-gemini/gemini-cli), [Hermes Agent](https://github.com/NousResearch/hermes-agent), [OpenCode](https://github.com/opencode-ai/opencode), and every TUI agent that follows.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![CI](https://github.com/elias-leslie/a-term/actions/workflows/ci.yml/badge.svg)](https://github.com/elias-leslie/a-term/actions/workflows/ci.yml)
@@ -27,7 +27,7 @@ If you use AI coding agents, you already know the mess: one terminal for Claude 
 Use it when you want to:
 
 - keep multiple agent sessions alive across reconnects
-- compare or hand off work between Claude Code, Codex, Gemini CLI, OpenCode, and shell panes
+- compare or hand off work between Claude Code, Codex, Gemini CLI, Hermes, OpenCode, and shell panes
 - browse files beside the terminal instead of switching tools
 - keep reusable prompts, scratch notes, and project context next to the work they belong to
 - inject saved prompts into the active pane when it is time to run them
@@ -80,7 +80,7 @@ In standalone installs, notes and prompts are stored inside A-Term itself. A sha
 
 **`same-pane project switching`** — Swap a pane to another project from the header instead of closing and reopening work by hand. A-Term keeps the current tool mode when possible, so moving from one project to another in `codex`, `claude`, or shell does not drop you back to a generic terminal first.
 
-**`dual mode`** — Switch any pane between raw shell and your configured AI agent with one click. Supports Claude Code, Codex, Gemini CLI, and OpenCode out of the box.
+**`dual mode`** — Switch any pane between raw shell and your configured AI agent with one click. Supports Claude Code, Codex, Gemini CLI, Hermes, and OpenCode out of the box.
 
 ![Mode switching dropdown showing Shell, Claude Code, OpenCode, Gemini CLI, and Codex](docs/images/a-term-mode-switch.png)
 *Switch between agents and shell per pane*

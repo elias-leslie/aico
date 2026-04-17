@@ -89,6 +89,7 @@ def test_list_external_agent_tmux_sessions_discovers_non_a_term_agent_sessions()
                         "claude-summitflow\t%1\t/home/testuser/summitflow\tclaude",
                         "summitflow-123e4567-e89b-12d3-a456-426614174000\t%2\t/home/testuser/summitflow\tbash",
                         "codex-agent-hub\t%3\t/home/testuser/agent-hub\tcodex",
+                        "hermes-research\t%4\t/home/testuser/research\thermes",
                     ]
                 ),
             ),
@@ -98,14 +99,21 @@ def test_list_external_agent_tmux_sessions_discovers_non_a_term_agent_sessions()
         mock_subprocess.side_effect = [
             MagicMock(stdout="/home/testuser/summitflow\n"),
             MagicMock(stdout="/home/testuser/agent-hub\n"),
+            MagicMock(stdout="/home/testuser/research\n"),
         ]
         sessions = list_external_agent_tmux_sessions()
 
-    assert [session["id"] for session in sessions] == ["claude-summitflow", "codex-agent-hub"]
+    assert [session["id"] for session in sessions] == [
+        "claude-summitflow",
+        "codex-agent-hub",
+        "hermes-research",
+    ]
     assert sessions[0]["project_id"] == "summitflow"
     assert sessions[0]["mode"] == "claude"
     assert sessions[1]["project_id"] == "agent-hub"
     assert sessions[1]["mode"] == "codex"
+    assert sessions[2]["project_id"] == "research"
+    assert sessions[2]["mode"] == "hermes"
 
 
 def test_create_tmux_session_uses_systemd_scope_when_available() -> None:

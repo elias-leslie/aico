@@ -168,6 +168,68 @@ function OpenCodeIcon({ size, color }: { size: number; color: string }) {
   )
 }
 
+/** Hermes — H frame with courier speed lines */
+function HermesIcon({ size, color }: { size: number; color: string }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <line
+        x1="8"
+        y1="5"
+        x2="8"
+        y2="19"
+        stroke={color}
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      <line
+        x1="16"
+        y1="5"
+        x2="16"
+        y2="19"
+        stroke={color}
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      <line
+        x1="8"
+        y1="12"
+        x2="16"
+        y2="12"
+        stroke={color}
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      <path
+        d="M3.5 9H6.5"
+        stroke={color}
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        opacity="0.75"
+      />
+      <path
+        d="M2.5 12H5.5"
+        stroke={color}
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        opacity="0.55"
+      />
+      <path
+        d="M3.5 15H6.5"
+        stroke={color}
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        opacity="0.35"
+      />
+    </svg>
+  )
+}
+
 /** Fallback — generic AI/bot indicator */
 function GenericAgentIcon({ size, color }: { size: number; color: string }) {
   return (
@@ -202,6 +264,7 @@ const ICON_MAP: Record<string, typeof ClaudeIcon> = {
   claude: ClaudeIcon,
   codex: CodexIcon,
   gemini: GeminiIcon,
+  hermes: HermesIcon,
   opencode: OpenCodeIcon,
 }
 
@@ -211,6 +274,7 @@ export const AGENT_DEFAULT_COLORS: Record<string, string> = {
   claude: '#D4845A', // Burnt sienna — warm, organic
   codex: '#22D3EE', // Electric cyan — digital, code-native
   gemini: '#A78BFA', // Soft violet — dual/twin energy
+  hermes: '#F59E0B', // Amber — courier / signal energy
   opencode: '#60A5FA', // Cerulean blue — open sky
 }
 

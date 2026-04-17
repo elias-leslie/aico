@@ -181,7 +181,7 @@ export function ToolForm({
           style={inputStyle}
           value={form.command}
           onChange={(e) => handleCommandChange(e.target.value)}
-          placeholder="codex --model gpt-5.4"
+          placeholder="codex --yolo"
           aria-label="Tool command"
         />
       </div>
