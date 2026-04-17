@@ -136,14 +136,20 @@ export function useScrollbackOverlay({
     if (parsed.length === 0) return
 
     setSearchVersion((current) => current + 1)
-    cachedLinesRef.current = parsed
-    cachedTotalLinesRef.current = parsed.length
 
-    // If overlay is open, update displayed content so it stays current
-    if (activeRef.current) {
-      setLines(parsed)
-      setTotalLines(parsed.length)
+    if (parsed.length >= cachedLinesRef.current.length) {
+      cachedLinesRef.current = parsed
     }
+    cachedTotalLinesRef.current = Math.max(
+      cachedTotalLinesRef.current,
+      parsed.length,
+    )
+
+    if (!activeRef.current) return
+
+    setLines((current) => (parsed.length >= current.length ? parsed : current))
+    setTotalLines((current) => Math.max(current, parsed.length))
+    setIsLoading(false)
   }, [])
 
   return {

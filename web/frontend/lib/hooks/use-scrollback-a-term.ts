@@ -9,6 +9,10 @@ import {
   findATermSearchMatches,
 } from '../utils/a-term-search'
 import { applyMobileATermTouchStyles } from '../utils/mobile-a-term-touch'
+import {
+  shouldDeferScrollbackOverlayWrite,
+  shouldFlushPendingScrollbackOverlayWrite,
+} from '../utils/scrollback-overlay-update'
 import { refreshATermViewport } from './a-term-scrolling-utils'
 
 type XtermATerm = InstanceType<typeof import('@xterm/xterm').Terminal>
@@ -85,6 +89,7 @@ export function useScrollbackATerm({
   const fitAddonRef = useRef<FitAddon | null>(null)
   const pendingLinesRef = useRef<string[]>([])
   const pendingInitialScrollLineDeltaRef = useRef(0)
+  const hasScrolledRef = useRef(false)
   const currentSearchQueryRef = useRef('')
   const currentSearchIndexRef = useRef(-1)
 
@@ -124,7 +129,26 @@ export function useScrollbackATerm({
     })
   })
 
-  const flushPendingLines = useRef((_term: XtermATerm) => {})
+  const flushPendingLines = useRef((term: XtermATerm) => {
+    const isAtBottom = isATermBufferAtBottom(term)
+    if (!isAtBottom) {
+      hasScrolledRef.current = true
+      return
+    }
+
+    if (
+      !shouldFlushPendingScrollbackOverlayWrite({
+        hasPendingLines: pendingLinesRef.current.length > 0,
+        isAtBottom,
+      })
+    ) {
+      hasScrolledRef.current = false
+      return
+    }
+
+    hasScrolledRef.current = false
+    writeLines.current(term, pendingLinesRef.current)
+  })
 
   // Create/destroy xterm instance when overlay activates/deactivates
   useEffect(() => {
@@ -136,10 +160,12 @@ export function useScrollbackATerm({
       }
       pendingLinesRef.current = []
       pendingInitialScrollLineDeltaRef.current = 0
+      hasScrolledRef.current = false
       return
     }
 
     pendingInitialScrollLineDeltaRef.current = initialScrollLineDelta
+    hasScrolledRef.current = false
     let disposed = false
 
     Promise.all([import('@xterm/xterm'), import('@xterm/addon-fit')]).then(
@@ -191,11 +217,27 @@ export function useScrollbackATerm({
   useEffect(() => {
     if (lines.length === 0) return
     const term = xtermRef.current
-    if (term) {
-      writeLines.current(term, lines)
-    } else {
+    if (!term) {
       pendingLinesRef.current = lines
+      return
     }
+
+    const isAtBottom = isATermBufferAtBottom(term)
+    if (!isAtBottom) {
+      hasScrolledRef.current = true
+    }
+
+    if (
+      shouldDeferScrollbackOverlayWrite({
+        hasScrolled: hasScrolledRef.current,
+        isAtBottom,
+      })
+    ) {
+      pendingLinesRef.current = lines
+      return
+    }
+
+    writeLines.current(term, lines)
   }, [lines])
 
   useEffect(() => {
