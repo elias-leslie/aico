@@ -71,6 +71,8 @@ Want the latest shipped changes? See [Releases](https://github.com/elias-leslie/
 
 In standalone installs, notes and prompts are stored inside A-Term itself. A shared cross-project library and companion metadata path already exists behind the optional companion API and is planned to open up more broadly once SummitFlow is released publicly.
 
+With Agent Hub connected, A-Term can clean a draft prompt, show an original-vs-cleaned diff, take follow-up refinement instructions, let you edit the result before sending, and fall back to the original prompt if the cleaner is unavailable.
+
 ![Pop-out Notes workspace with a reusable release review prompt](docs/images/a-term-notes-workspace.png)
 *Pop out the prompt library when you want notes and reusable prompts on a second screen*
 
@@ -78,9 +80,11 @@ In standalone installs, notes and prompts are stored inside A-Term itself. A sha
 
 **`project deep links`** — Open `/?project=myapp&dir=/path` to jump straight into a project workspace. Bookmark your setups.
 
-**`same-pane project switching`** — Swap a pane to another project from the header instead of closing and reopening work by hand. A-Term keeps the current tool mode when possible, so moving from one project to another in `codex`, `claude`, or shell does not drop you back to a generic terminal first.
+**`same-pane project switching`** — Swap a pane to another project from the header instead of closing and reopening work by hand. A-Term keeps the current tool mode when possible, so moving from one project to another in `codex`, `claude`, `hermes`, `opencode`, or shell does not drop you back to a generic terminal first.
 
 **`dual mode`** — Switch any pane between raw shell and your configured AI agent with one click. Supports Claude Code, Codex, Gemini CLI, Hermes, and OpenCode out of the box.
+
+**`agent presets and custom tools`** — Built-in profiles for Claude Code, Codex, Gemini CLI, Hermes, and OpenCode appear in Settings by default. Pick a default tool, tune the launch command or process name, color-code panes, and add your own TUI agent commands when your workflow expands.
 
 ![Mode switching dropdown showing Shell, Claude Code, OpenCode, Gemini CLI, and Codex](docs/images/a-term-mode-switch.png)
 *Switch between agents and shell per pane*

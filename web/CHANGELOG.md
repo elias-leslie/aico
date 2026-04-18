@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.6 - 2026-04-18
+
+- Added Hermes as a built-in agent tool preset across mode switching, Settings, and external tmux session detection.
+- Hardened the Hermes/TUI prompt workflow: prompt cleaning now has stronger diff/refinement/edit coverage and graceful fallback to the original prompt when the cleaner errors.
+- Fixed the Hermes scrollback overlay regression so history entry still anchors at the live bottom output before you scroll backward.
+- Excluded frontend build artifacts from Python sdists so release bundles stay clean.
+- Documented built-in agent presets and the Agent Hub prompt-cleaning flow in the README.
+- Bumped security-sensitive dependencies, including `python-multipart` to `0.0.26` and `mako` to `1.3.11`.
+
 ## 0.2.5 - 2026-04-15
 
 - Detached panes now open into dedicated scoped windows, with `Close Pane` keeping the prior remove-from-layout behavior.
