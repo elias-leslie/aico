@@ -57,6 +57,7 @@ export function useATermOrchestration({
     activeSessionId,
     switchToSession,
     sessions,
+    projectATerms = [],
     aTermSlots,
     orderedIds,
     aTermRefs,
@@ -267,7 +268,14 @@ export function useATermOrchestration({
       if (slot.type !== 'project' || slot.projectId === targetProjectId) {
         return
       }
-      const desiredMode = slot.activeMode
+      const targetProjectATerm =
+        projectATerms.find(
+          (project) => project.projectId === targetProjectId,
+        ) ?? null
+      const desiredMode =
+        slot.activeMode === 'shell'
+          ? (targetProjectATerm?.activeMode ?? 'shell')
+          : slot.activeMode
 
       const currentPane =
         [...panes, ...detachedPanes].find((pane) => pane.id === slot.paneId) ??
@@ -360,6 +368,7 @@ export function useATermOrchestration({
       detachedPanes,
       detachedWindow,
       panes,
+      projectATerms,
       switchToSession,
     ],
   )

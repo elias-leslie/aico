@@ -144,6 +144,8 @@ async def update_pane(pane_id: str, request: UpdatePaneRequest) -> PaneResponse:
     existing = require_pane_exists(pane_store.get_pane_with_sessions(pane_id), pane_id)
 
     if request.active_mode is not None:
+        if request.active_mode == "shell":
+            existing = _ensure_project_shell_session(pane_id, existing)
         available_modes = {s.get("mode", "shell") for s in existing.get("sessions", [])}
         validate_active_mode(existing["pane_type"], request.active_mode, available_modes)
 
@@ -297,6 +299,33 @@ def _validate_agent_tool(slug: str) -> None:
         raise HTTPException(status_code=404, detail=f"Agent tool '{slug}' not found") from None
     if not tool["enabled"]:
         raise HTTPException(status_code=400, detail=f"Agent tool '{tool['name']}' is disabled") from None
+
+
+def _ensure_project_shell_session(pane_id: str, pane: dict[str, Any]) -> dict[str, Any]:
+    """Restore a missing shell session on a project pane and return a fresh snapshot."""
+    if pane.get("pane_type") != "project" or not pane.get("project_id"):
+        return pane
+
+    sessions = pane.get("sessions", [])
+    if any(session.get("mode") == "shell" for session in sessions):
+        return pane
+
+    seed_session = sessions[0] if sessions else None
+    project_id = pane["project_id"]
+    session_name = (
+        seed_session.get("name")
+        if seed_session and seed_session.get("name")
+        else f"Project: {project_id}"
+    )
+    working_dir = seed_session.get("working_dir") if seed_session else None
+    create_session(
+        name=session_name,
+        project_id=project_id,
+        working_dir=working_dir,
+        mode="shell",
+        pane_id=pane_id,
+    )
+    return require_pane_exists(pane_store.get_pane_with_sessions(pane_id), pane_id)
 
 
 def _replace_agent_session(pane: dict[str, Any], pane_id: str, agent_tool_slug: str) -> None:

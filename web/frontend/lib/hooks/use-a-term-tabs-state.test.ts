@@ -1087,6 +1087,131 @@ describe('useATermTabsState', () => {
     expect(swapPanePositions).not.toHaveBeenCalled()
   })
 
+  it('switches to Main + Side when the pane count transitions to three', async () => {
+    let panes = [
+      {
+        id: 'pane-project-a',
+        pane_type: 'project' as const,
+        project_id: 'project-a',
+        pane_order: 0,
+        pane_name: 'Project A',
+        active_mode: 'shell',
+        created_at: '2026-03-06T00:00:00Z',
+        sessions: [
+          {
+            id: 'session-project-a',
+            name: 'Project A Shell',
+            mode: 'shell',
+            session_number: 1,
+            is_alive: true,
+            working_dir: '/workspace/project-a',
+            claude_state: 'not_started',
+          },
+        ],
+        width_percent: 50,
+        height_percent: 100,
+        grid_row: 0,
+        grid_col: 0,
+      },
+      {
+        id: 'pane-project-b',
+        pane_type: 'project' as const,
+        project_id: 'project-b',
+        pane_order: 1,
+        pane_name: 'Project B',
+        active_mode: 'shell',
+        created_at: '2026-03-06T00:00:00Z',
+        sessions: [
+          {
+            id: 'session-project-b',
+            name: 'Project B Shell',
+            mode: 'shell',
+            session_number: 1,
+            is_alive: true,
+            working_dir: '/workspace/project-b',
+            claude_state: 'not_started',
+          },
+        ],
+        width_percent: 50,
+        height_percent: 100,
+        grid_row: 0,
+        grid_col: 1,
+      },
+    ]
+
+    mockUseActiveSession.mockReturnValue(buildActiveSessionState())
+    mockUseLocalStorageState.mockImplementation(
+      (_key: string, defaultValue: unknown) => useState(defaultValue),
+    )
+    mockUseAvailableLayouts.mockImplementation((paneCount: number) => {
+      if (paneCount === 3) {
+        return ['split-horizontal', 'split-vertical', 'split-main-side']
+      }
+      if (paneCount === 2) {
+        return ['split-horizontal', 'split-vertical']
+      }
+      return ['split-horizontal']
+    })
+    mockUseATermPanes.mockImplementation(() => ({
+      panes,
+      detachedPanes: [],
+      atLimit: false,
+      isLoading: false,
+      detachedLoadedOnce: true,
+      hasLoadedOnce: true,
+      swapPanePositions: vi.fn(),
+      removePane: vi.fn(),
+      detachPane: vi.fn(),
+      attachPane: vi.fn(),
+      setActiveMode: vi.fn(),
+      createAdHocPane: vi.fn(),
+      createProjectPane: vi.fn(),
+      isCreating: false,
+      saveLayouts: vi.fn(),
+      maxPanes: 6,
+    }))
+
+    const { result, rerender } = renderHook(() =>
+      useATermTabsState({ projectId: undefined, projectPath: undefined }),
+    )
+
+    expect(result.current.layoutMode).toBe('split-horizontal')
+
+    panes = [
+      ...panes,
+      {
+        id: 'pane-project-c',
+        pane_type: 'project' as const,
+        project_id: 'project-c',
+        pane_order: 2,
+        pane_name: 'Project C',
+        active_mode: 'shell',
+        created_at: '2026-03-06T00:00:00Z',
+        sessions: [
+          {
+            id: 'session-project-c',
+            name: 'Project C Shell',
+            mode: 'shell',
+            session_number: 1,
+            is_alive: true,
+            working_dir: '/workspace/project-c',
+            claude_state: 'not_started',
+          },
+        ],
+        width_percent: 33.333,
+        height_percent: 100,
+        grid_row: 0,
+        grid_col: 2,
+      },
+    ]
+
+    rerender()
+
+    await waitFor(() => {
+      expect(result.current.layoutMode).toBe('split-main-side')
+    })
+  })
+
   it('restores persisted attached external panes and keeps the persisted layout after refresh', () => {
     let activeSessionState = buildActiveSessionState({
       externalSessions: [],

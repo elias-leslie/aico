@@ -392,6 +392,64 @@ def test_update_project_pane_accepts_existing_mode(test_app: TestClient) -> None
     assert response.json()["active_mode"] == "claude"
 
 
+def test_update_project_pane_recovers_missing_shell_session_when_switching_to_shell(test_app: TestClient) -> None:
+    """PATCH /api/a-term/panes/{id} -- recreates a missing shell session before switching."""
+    pid = str(uuid.uuid4())
+    existing = _make_pane(
+        pane_id=pid,
+        pane_type="project",
+        project_id="proj-1",
+        active_mode="hermes",
+        sessions=[
+            {
+                **_make_session_in_pane(mode="hermes", name="Project: proj-1"),
+                "working_dir": "/workspace/proj-1",
+            },
+        ],
+    )
+    healed = {
+        **existing,
+        "sessions": [
+            {
+                **_make_session_in_pane(
+                    session_id="shell-session",
+                    mode="shell",
+                    name="Project: proj-1",
+                ),
+                "working_dir": "/workspace/proj-1",
+            },
+            {
+                **_make_session_in_pane(mode="hermes", name="Project: proj-1"),
+                "working_dir": "/workspace/proj-1",
+            },
+        ],
+    }
+    switched = {**healed, "active_mode": "shell"}
+    with (
+        patch(
+            "a_term.api.panes.pane_store.get_pane_with_sessions",
+            side_effect=[existing, healed, switched],
+        ),
+        patch("a_term.api.panes.create_session", return_value="shell-session") as create_mock,
+        patch("a_term.api.panes.pane_store.update_pane", return_value=switched) as update_mock,
+    ):
+        response = test_app.patch(
+            f"/api/a-term/panes/{pid}",
+            json={"active_mode": "shell"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["active_mode"] == "shell"
+    create_mock.assert_called_once_with(
+        name="Project: proj-1",
+        project_id="proj-1",
+        working_dir="/workspace/proj-1",
+        mode="shell",
+        pane_id=pid,
+    )
+    update_mock.assert_called_once_with(pid, active_mode="shell")
+
+
 # ---------------------------------------------------------------------------
 # Swap panes
 # ---------------------------------------------------------------------------

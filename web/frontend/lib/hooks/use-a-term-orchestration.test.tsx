@@ -1,6 +1,6 @@
 import { renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import type { PaneSlot } from '@/lib/utils/slot'
+import type { PaneBasedSlot } from '@/lib/utils/slot'
 import { useATermOrchestration } from './use-a-term-orchestration'
 
 const mockUseDetachedPaneWindow = vi.fn()
@@ -89,7 +89,9 @@ vi.mock('@/lib/voice/use-transcription', () => ({
   }),
 }))
 
-function makeProjectSlot(): PaneSlot {
+function makeProjectSlot(
+  overrides: Partial<PaneBasedSlot> = {},
+): PaneBasedSlot {
   return {
     type: 'project',
     paneId: 'pane-a',
@@ -99,6 +101,7 @@ function makeProjectSlot(): PaneSlot {
     activeMode: 'codex',
     activeSessionId: 'session-a-codex',
     sessionBadge: null,
+    ...overrides,
   }
 }
 
@@ -350,5 +353,159 @@ describe('useATermOrchestration', () => {
       }),
     )
     expect(switchToSession).not.toHaveBeenCalled()
+  })
+
+  it('uses the target project default mode when switching projects from shell', async () => {
+    const detachPane = vi.fn().mockResolvedValue(undefined)
+    const attachDetachedPane = vi.fn().mockResolvedValue({
+      id: 'pane-b',
+      pane_type: 'project',
+      project_id: 'project-b',
+      pane_order: 2,
+      pane_name: 'Project B',
+      active_mode: 'hermes',
+      is_detached: false,
+      created_at: '2026-04-15T00:00:00Z',
+      sessions: [
+        {
+          id: 'session-b-hermes',
+          name: 'Project B Hermes',
+          mode: 'hermes',
+          session_number: 1,
+          is_alive: true,
+          working_dir: '/workspace/project-b',
+          claude_state: 'running',
+          agent_state: 'running',
+        },
+      ],
+      width_percent: 60,
+      height_percent: 40,
+      grid_row: 0,
+      grid_col: 1,
+    })
+    const handleProjectModeChange = vi.fn().mockResolvedValue(undefined)
+
+    mockUseDetachedPaneWindow.mockReturnValue({
+      isDetachedPaneWindow: false,
+      detachedWindowPaneIds: [],
+      storageScopeId: null,
+      addDetachedWindowPane: vi.fn(),
+      setDetachedWindowPaneIds: vi.fn(),
+      removeDetachedWindowPane: vi.fn(),
+      replaceDetachedWindowPane: vi.fn(),
+    })
+    mockUseATermTabsState.mockReturnValue({
+      activeSessionId: 'session-a-shell',
+      switchToSession: vi.fn(),
+      sessions: [],
+      projectATerms: [
+        {
+          projectId: 'project-b',
+          projectName: 'Project B',
+          rootPath: '/workspace/project-b',
+          activeMode: 'hermes',
+          sessions: [],
+          activeSession: null,
+          activeSessionId: null,
+          sessionBadge: null,
+        },
+      ],
+      aTermSlots: [
+        makeProjectSlot({
+          activeMode: 'shell',
+          activeSessionId: 'session-a-shell',
+        }),
+      ],
+      orderedIds: ['pane-pane-a'],
+      aTermRefs: { current: new Map() },
+      panes: [
+        {
+          id: 'pane-a',
+          pane_type: 'project',
+          project_id: 'project-a',
+          pane_order: 1,
+          pane_name: 'Project A',
+          active_mode: 'shell',
+          is_detached: false,
+          created_at: '2026-04-15T00:00:00Z',
+          sessions: [],
+          width_percent: 55,
+          height_percent: 45,
+          grid_row: 0,
+          grid_col: 0,
+        },
+      ],
+      reset: vi.fn(),
+      disableProject: vi.fn(),
+      remove: vi.fn(),
+      removePane: vi.fn(),
+      detachPane,
+      handleProjectModeChange,
+      attachExternalSession: vi.fn(),
+      attachDetachedPane,
+      detachExternalSession: vi.fn(),
+      createProjectPane: vi.fn(),
+      detachedPanes: [
+        {
+          id: 'pane-b',
+          pane_type: 'project',
+          project_id: 'project-b',
+          pane_order: 2,
+          pane_name: 'Project B',
+          active_mode: 'hermes',
+          is_detached: true,
+          created_at: '2026-04-15T00:00:00Z',
+          sessions: [
+            {
+              id: 'session-b-hermes',
+              name: 'Project B Hermes',
+              mode: 'hermes',
+              session_number: 1,
+              is_alive: true,
+              working_dir: '/workspace/project-b',
+              claude_state: 'running',
+              agent_state: 'running',
+            },
+          ],
+          width_percent: 60,
+          height_percent: 40,
+          grid_row: 0,
+          grid_col: 1,
+        },
+      ],
+      showATermManager: false,
+      setShowATermManager: vi.fn(),
+      saveLayouts: vi.fn(),
+    })
+
+    const { result } = renderHook(() => useATermOrchestration({}))
+
+    await result.current.handleSlotProjectSwitch(
+      makeProjectSlot({
+        activeMode: 'shell',
+        activeSessionId: 'session-a-shell',
+      }),
+      'project-b',
+      '/workspace/project-b',
+    )
+
+    expect(detachPane).toHaveBeenCalledWith('pane-a')
+    expect(attachDetachedPane).toHaveBeenCalledWith('pane-b', {
+      pane_order: 1,
+      width_percent: 55,
+      height_percent: 45,
+      grid_row: 0,
+      grid_col: 0,
+    })
+    expect(handleProjectModeChange).toHaveBeenCalledWith(
+      'project-b',
+      'hermes',
+      expect.any(Array),
+      'pane-b',
+      expect.objectContaining({
+        id: 'pane-b',
+        active_mode: 'hermes',
+      }),
+    )
   })
 })

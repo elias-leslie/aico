@@ -81,7 +81,7 @@ export function getDefaultLayoutMode(
   viewportWidth: number,
 ): LayoutMode {
   const availableLayouts = getAvailableLayoutModes(paneCount, viewportWidth)
-  if (paneCount <= 3) {
+  if (paneCount <= 2) {
     return 'split-horizontal'
   }
   return availableLayouts[availableLayouts.length - 1] ?? 'split-horizontal'

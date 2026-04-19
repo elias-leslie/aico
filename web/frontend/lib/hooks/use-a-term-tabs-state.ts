@@ -316,6 +316,22 @@ export function useATermTabsState({
     panesLoading ||
     (isDetachedWindow && !detachedLoadedOnce)
   const availableLayouts = useAvailableLayouts(visiblePaneCount)
+  const previousVisiblePaneCountRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    const previousVisiblePaneCount = previousVisiblePaneCountRef.current
+    if (
+      previousVisiblePaneCount !== null &&
+      previousVisiblePaneCount !== visiblePaneCount &&
+      visiblePaneCount === 3 &&
+      availableLayouts.includes('split-main-side') &&
+      layoutMode !== 'split-main-side'
+    ) {
+      setLayoutMode('split-main-side')
+    }
+    previousVisiblePaneCountRef.current = visiblePaneCount
+  }, [availableLayouts, layoutMode, setLayoutMode, visiblePaneCount])
+
   const visibleSlots = useMemo(() => {
     const paneSlots = getPanesToSlots(visiblePanes)
     const externalSlots = attachedExternalSessions.map((session) => ({

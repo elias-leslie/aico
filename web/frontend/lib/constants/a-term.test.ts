@@ -67,8 +67,8 @@ describe('getDefaultLayoutMode', () => {
     expect(getDefaultLayoutMode(2, 1440)).toBe('split-horizontal')
   })
 
-  it('defaults larger desktop layouts to the grid that fits them', () => {
-    expect(getDefaultLayoutMode(3, 1440)).toBe('split-horizontal')
+  it('defaults larger desktop layouts to the layout that best fits them', () => {
+    expect(getDefaultLayoutMode(3, 1440)).toBe('split-main-side')
     expect(getDefaultLayoutMode(4, 1440)).toBe('grid-2x2')
     expect(getDefaultLayoutMode(6, 2560)).toBe('grid-3x2')
   })
