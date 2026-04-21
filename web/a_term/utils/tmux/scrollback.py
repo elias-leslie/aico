@@ -12,6 +12,25 @@ logger = get_logger(__name__)
 _CURSOR_SENTINEL = "<<CURSOR>>"
 
 
+def _is_missing_tmux_target_error(error: str | None) -> bool:
+    if not error:
+        return False
+    lowered = error.lower()
+    return (
+        lowered.startswith("can't find pane:")
+        or lowered.startswith("can't find session:")
+        or lowered.startswith("no such pane:")
+        or lowered.startswith("no such session:")
+    )
+
+
+def _log_tmux_capture_failure(event: str, session_name: str, error: str | None) -> None:
+    if _is_missing_tmux_target_error(error):
+        logger.debug(event, session=session_name, error=error)
+        return
+    logger.warning(event, session=session_name, error=error)
+
+
 def _pkg() -> object:
     """Return the a_term.utils.tmux package module (avoids circular import)."""
     return sys.modules["a_term.utils.tmux"]
@@ -34,7 +53,11 @@ def get_scrollback(session_name: str, max_lines: int = 5000) -> str | None:
     )
 
     if not success:
-        logger.warning("tmux_scrollback_capture_failed", session=session_name)
+        _log_tmux_capture_failure(
+            "tmux_scrollback_capture_failed",
+            session_name,
+            output,
+        )
         return None
 
     return output
@@ -54,7 +77,11 @@ def get_cursor_position(session_name: str) -> tuple[int, int] | None:
     )
 
     if not success:
-        logger.warning("tmux_cursor_position_failed", session=session_name)
+        _log_tmux_capture_failure(
+            "tmux_cursor_position_failed",
+            session_name,
+            output,
+        )
         return None
 
     try:
@@ -93,7 +120,11 @@ def get_scrollback_with_cursor(
     ])
 
     if not success:
-        logger.warning("tmux_scrollback_with_cursor_failed", session=session_name)
+        _log_tmux_capture_failure(
+            "tmux_scrollback_with_cursor_failed",
+            session_name,
+            output,
+        )
         return None, None
 
     # Split on sentinel — everything before is scrollback, after is cursor

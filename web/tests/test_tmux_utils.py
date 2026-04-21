@@ -13,6 +13,7 @@ from a_term.utils.tmux import (
     create_tmux_session,
     get_cursor_position,
     get_external_agent_tmux_session,
+    get_scrollback_with_cursor,
     get_tmux_session_name,
     is_managed_tmux_session_name,
     list_external_agent_tmux_sessions,
@@ -286,6 +287,44 @@ def test_get_cursor_position_returns_none_on_invalid_output() -> None:
         return_value=(True, "not-a-position"),
     ):
         assert get_cursor_position("codex-agent-hub") is None
+
+
+def test_get_scrollback_with_cursor_suppresses_missing_target_warning() -> None:
+    with (
+        patch(
+            "a_term.utils.tmux.run_tmux_command",
+            return_value=(False, "can't find pane: summitflow-missing"),
+        ),
+        patch("a_term.utils.tmux.scrollback.logger.warning") as mock_warning,
+        patch("a_term.utils.tmux.scrollback.logger.debug") as mock_debug,
+    ):
+        assert get_scrollback_with_cursor("summitflow-missing") == (None, None)
+
+    mock_warning.assert_not_called()
+    mock_debug.assert_called_once_with(
+        "tmux_scrollback_with_cursor_failed",
+        session="summitflow-missing",
+        error="can't find pane: summitflow-missing",
+    )
+
+
+def test_get_scrollback_with_cursor_warns_on_generic_failure() -> None:
+    with (
+        patch(
+            "a_term.utils.tmux.run_tmux_command",
+            return_value=(False, "permission denied"),
+        ),
+        patch("a_term.utils.tmux.scrollback.logger.warning") as mock_warning,
+        patch("a_term.utils.tmux.scrollback.logger.debug") as mock_debug,
+    ):
+        assert get_scrollback_with_cursor("summitflow-problem") == (None, None)
+
+    mock_debug.assert_not_called()
+    mock_warning.assert_called_once_with(
+        "tmux_scrollback_with_cursor_failed",
+        session="summitflow-problem",
+        error="permission denied",
+    )
 
 
 def test_reset_tmux_window_size_policy_sets_latest() -> None:
