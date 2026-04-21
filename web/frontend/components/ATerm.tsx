@@ -57,6 +57,12 @@ function isObserverModeEnabled(search: string): boolean {
   return value === '1' || value === 'true'
 }
 
+// xterm's FitAddon subtracts 14px from available width whenever scrollback is
+// enabled. Our TUI overlay uses scrollback, while the live TUI terminal keeps
+// scrollback at 0 to avoid duplicate native history. Reserve the same rail in
+// the live view so opening the overlay does not suddenly drop columns.
+const TUI_SCROLLBAR_RAIL_WIDTH_PX = 14
+
 export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
   function ATermComponent(
     {
@@ -339,9 +345,30 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
       >
         <div
           ref={containerRef}
-          className="w-full h-full min-h-0 min-w-0 overflow-hidden"
-          style={{ backgroundColor: theme.background }}
+          data-testid="a-term-live-container"
+          className="h-full min-h-0 min-w-0 overflow-hidden"
+          style={{
+            backgroundColor: theme.background,
+            width: isTuiSession
+              ? `calc(100% - ${TUI_SCROLLBAR_RAIL_WIDTH_PX}px)`
+              : '100%',
+          }}
         />
+        {isTuiSession && (
+          <div
+            data-testid="a-term-scrollbar-rail"
+            style={{
+              position: 'absolute',
+              top: 0,
+              right: 0,
+              bottom: 0,
+              width: `${TUI_SCROLLBAR_RAIL_WIDTH_PX}px`,
+              backgroundColor: theme.background,
+              borderLeft: `1px solid ${theme.brightBlack}26`,
+              pointerEvents: 'none',
+            }}
+          />
+        )}
         <ScrollbackOverlay
           isActive={overlay.isActive}
           lines={overlay.lines}

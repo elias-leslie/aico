@@ -200,6 +200,34 @@ describe('ATermComponent', () => {
     expect(resizeHookOptions?.sendBackendResize).toBe(true)
   })
 
+  it('reserves a permanent scrollbar rail for TUI sessions so overlay activation does not steal columns', () => {
+    const { getByTestId } = render(
+      <ATermComponent sessionId="session-tui" sessionMode="claude" isVisible />,
+    )
+
+    expect(
+      getByTestId('a-term-live-container').getAttribute('style'),
+    ).toContain('width: calc(100% - 14px)')
+    expect(
+      getByTestId('a-term-scrollbar-rail').getAttribute('style'),
+    ).toContain('width: 14px')
+  })
+
+  it('does not reserve the overlay scrollbar rail for shell sessions', () => {
+    const { getByTestId, queryByTestId } = render(
+      <ATermComponent
+        sessionId="session-shell"
+        sessionMode="shell"
+        isVisible
+      />,
+    )
+
+    expect(
+      getByTestId('a-term-live-container').getAttribute('style'),
+    ).not.toContain('calc(100% - 14px)')
+    expect(queryByTestId('a-term-scrollbar-rail')).toBeNull()
+  })
+
   it('serializes live output before applying scrollback snapshots', async () => {
     render(<ATermComponent sessionId="session-1" />)
 
