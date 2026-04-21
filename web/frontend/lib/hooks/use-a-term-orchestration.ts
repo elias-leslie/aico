@@ -272,10 +272,6 @@ export function useATermOrchestration({
         projectATerms.find(
           (project) => project.projectId === targetProjectId,
         ) ?? null
-      const desiredMode =
-        slot.activeMode === 'shell'
-          ? (targetProjectATerm?.activeMode ?? 'shell')
-          : slot.activeMode
 
       const currentPane =
         [...panes, ...detachedPanes].find((pane) => pane.id === slot.paneId) ??
@@ -291,6 +287,11 @@ export function useATermOrchestration({
             pane.pane_type === 'project' &&
             pane.project_id === targetProjectId,
         ) ?? null
+      const desiredMode = targetDetachedPane
+        ? targetDetachedPane.active_mode
+        : slot.activeMode === 'shell'
+          ? (targetProjectATerm?.activeMode ?? 'shell')
+          : slot.activeMode
 
       if (detachedWindow.isDetachedPaneWindow) {
         const targetPane =
