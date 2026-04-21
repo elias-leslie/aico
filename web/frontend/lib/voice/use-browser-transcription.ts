@@ -97,6 +97,7 @@ export function useBrowserTranscription(
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null)
   const stopRequestedRef = useRef(false)
   const finalTranscriptRef = useRef('')
+  const finalTranscriptSegmentsRef = useRef<string[]>([])
   const errorRef = useRef<TranscriptionError>(null)
   const isSupported = getRecognitionConstructor() !== null
 
@@ -141,6 +142,7 @@ export function useBrowserTranscription(
     }
     stopRequestedRef.current = false
     finalTranscriptRef.current = ''
+    finalTranscriptSegmentsRef.current = []
     errorRef.current = null
     setFinalTranscript('')
     setInterimTranscript('')
@@ -181,9 +183,12 @@ export function useBrowserTranscription(
     }
 
     stopRequestedRef.current = false
+    finalTranscriptSegmentsRef.current = []
+    finalTranscriptRef.current = ''
     errorRef.current = null
     setError(null)
     setInterimTranscript('')
+    setFinalTranscript('')
 
     const recognition = new Recognition()
     recognition.continuous = true
@@ -196,8 +201,10 @@ export function useBrowserTranscription(
     }
 
     recognition.onresult = (event) => {
-      let nextFinalTranscript = finalTranscriptRef.current
-      let nextInterimTranscript = ''
+      const nextFinalTranscriptSegments = [
+        ...finalTranscriptSegmentsRef.current,
+      ]
+      const nextInterimTranscriptSegments: string[] = []
 
       for (
         let index = event.resultIndex;
@@ -206,19 +213,24 @@ export function useBrowserTranscription(
       ) {
         const result = event.results[index]
         const transcript = result[0]?.transcript?.trim()
-        if (!transcript) continue
 
         if (result.isFinal) {
-          nextFinalTranscript = nextFinalTranscript
-            ? `${nextFinalTranscript} ${transcript}`
-            : transcript
-        } else {
-          nextInterimTranscript = nextInterimTranscript
-            ? `${nextInterimTranscript} ${transcript}`
-            : transcript
+          if (transcript) {
+            nextFinalTranscriptSegments[index] = transcript
+          } else {
+            delete nextFinalTranscriptSegments[index]
+          }
+        } else if (transcript) {
+          nextInterimTranscriptSegments.push(transcript)
         }
       }
 
+      const nextFinalTranscript = nextFinalTranscriptSegments
+        .filter(Boolean)
+        .join(' ')
+      const nextInterimTranscript = nextInterimTranscriptSegments.join(' ')
+
+      finalTranscriptSegmentsRef.current = nextFinalTranscriptSegments
       finalTranscriptRef.current = nextFinalTranscript
       setFinalTranscript(nextFinalTranscript)
       setInterimTranscript(nextInterimTranscript)

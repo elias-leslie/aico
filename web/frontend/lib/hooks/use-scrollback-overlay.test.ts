@@ -40,7 +40,7 @@ describe('useScrollbackOverlay', () => {
     expect(result.current.totalLines).toBe(3)
   })
 
-  it('does not replace an active longer overlay with a shorter page response', () => {
+  it('does not replace an active longer overlay with an older shorter page response', () => {
     const wsRef = createMockWsRef()
 
     const { result } = renderHook(() =>
@@ -73,6 +73,45 @@ describe('useScrollbackOverlay', () => {
       'line-3',
       'line-4',
     ])
+    expect(result.current.totalLines).toBe(120)
+  })
+
+  it('replaces stale cached overlay content when a newer latest-tail page is shorter', () => {
+    const wsRef = createMockWsRef()
+
+    const { result } = renderHook(() =>
+      useScrollbackOverlay({
+        wsRef,
+        sessionMode: 'agent-hermes',
+      }),
+    )
+
+    act(() => {
+      result.current.updateCacheFromSync(
+        'stale-1\r\nstale-2\r\nstale-3\r\nstale-4\r\n',
+      )
+    })
+    act(() => {
+      result.current.activate()
+    })
+
+    act(() => {
+      result.current.handleScrollbackPage({
+        from_line: 118,
+        lines: ['fresh-119', 'fresh-120'],
+        total_lines: 120,
+      })
+    })
+
+    expect(result.current.lines).toEqual(['fresh-119', 'fresh-120'])
+    expect(result.current.totalLines).toBe(120)
+
+    act(() => {
+      result.current.deactivate()
+      result.current.activate()
+    })
+
+    expect(result.current.lines).toEqual(['fresh-119', 'fresh-120'])
     expect(result.current.totalLines).toBe(120)
   })
 

@@ -9,6 +9,10 @@ interface ScrollbackPage {
   total_lines: number
 }
 
+function isLatestTailPage(data: ScrollbackPage): boolean {
+  return data.from_line + data.lines.length >= data.total_lines
+}
+
 interface UseScrollbackOverlayOptions {
   wsRef: React.RefObject<WebSocket | null>
   sessionMode?: string
@@ -98,12 +102,17 @@ export function useScrollbackOverlay({
   }, [])
 
   const handleScrollbackPage = useCallback((data: ScrollbackPage) => {
+    const latestTailPage = isLatestTailPage(data)
+
     if (data.lines.length > 0) {
       setSearchVersion((current) => current + 1)
     }
-    // Never shrink the cache — a small scroll_request response must not
-    // overwrite a larger prefetch or sync that arrived earlier.
-    if (data.lines.length > cachedLinesRef.current.length) {
+
+    if (latestTailPage) {
+      cachedLinesRef.current = data.lines
+      cachedTotalLinesRef.current = data.total_lines
+    } else if (data.lines.length > cachedLinesRef.current.length) {
+      // Never let an older page response overwrite a newer latest-tail cache.
       cachedLinesRef.current = data.lines
       cachedTotalLinesRef.current = data.total_lines
     } else if (data.total_lines > cachedTotalLinesRef.current) {
@@ -118,7 +127,15 @@ export function useScrollbackOverlay({
       setInitialScrollLineDelta(0)
       return
     }
-    // Show whichever has more content: the incoming page or the cache
+
+    if (latestTailPage) {
+      setLines(data.lines)
+      setTotalLines(data.total_lines)
+      setIsLoading(false)
+      return
+    }
+
+    // Older partial pages should not shrink a fresher latest-tail cache.
     const best =
       data.lines.length >= cachedLinesRef.current.length
         ? data.lines

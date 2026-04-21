@@ -39,9 +39,12 @@ class FakeSpeechRecognition {
       isFinal: boolean
       transcript: string
     }>,
+    options?: {
+      resultIndex?: number
+    },
   ) {
     this.onresult?.({
-      resultIndex: 0,
+      resultIndex: options?.resultIndex ?? 0,
       results: results.map((result) => ({
         isFinal: result.isFinal,
         0: { transcript: result.transcript },
@@ -98,6 +101,43 @@ describe('useTranscription', () => {
 
     await waitFor(() => {
       expect(result.current.status).toBe('idle')
+    })
+  })
+
+  it('does not duplicate final phrases when the browser re-delivers prior finalized results', async () => {
+    const { useTranscription } = await import('./use-transcription')
+    const { result } = renderHook(() => useTranscription())
+
+    act(() => {
+      result.current.startListening()
+    })
+
+    await waitFor(() => {
+      expect(result.current.status).toBe('listening')
+    })
+
+    act(() => {
+      FakeSpeechRecognition.instances[0]?.emitResult([
+        { isFinal: true, transcript: 'hello' },
+      ])
+    })
+
+    await waitFor(() => {
+      expect(result.current.finalTranscript).toBe('hello')
+    })
+
+    act(() => {
+      FakeSpeechRecognition.instances[0]?.emitResult(
+        [
+          { isFinal: true, transcript: 'hello' },
+          { isFinal: true, transcript: 'world' },
+        ],
+        { resultIndex: 0 },
+      )
+    })
+
+    await waitFor(() => {
+      expect(result.current.finalTranscript).toBe('hello world')
     })
   })
 
