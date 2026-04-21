@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.7 - 2026-04-21
+
+- Fixed same-pane pane/project switching and 3-pane layout behavior so project swaps preserve the active workflow more reliably.
+- Fixed browser voice transcription fallback so re-delivered finalized phrases no longer duplicate dictated words.
+- Fixed scrollback overlay freshness so the newest live tail wins even when the latest page is shorter than cached history.
+- Reserved the TUI overlay scrollbar rail up front so opening agent/TUI scrollback no longer steals columns and shoves text sideways.
+
 ## 0.2.6 - 2026-04-18
 
 - Added Hermes as a built-in agent tool preset across mode switching, Settings, and external tmux session detection.
