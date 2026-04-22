@@ -11,9 +11,11 @@ Environment="HOME=%h"
 EnvironmentFile=-__PROJECT_ROOT__/.env.local
 EnvironmentFile=-__PROJECT_ROOT__/.env
 Environment="NODE_ENV=production"
-ExecStart=/bin/bash -lc 'export API_URL="${API_URL:-http://127.0.0.1:${A_TERM_PORT:-8002}}"; export HOSTNAME="${A_TERM_FRONTEND_HOST:-127.0.0.1}"; export PORT="${A_TERM_FRONTEND_PORT:-3002}"; exec corepack pnpm start --hostname "$HOSTNAME" --port "$PORT"'
+ExecStart=/bin/bash -lc 'export API_URL="${API_URL:-http://127.0.0.1:${A_TERM_PORT:-8002}}"; export HOSTNAME="${A_TERM_FRONTEND_HOST:-127.0.0.1}"; export PORT="${A_TERM_FRONTEND_PORT:-3002}"; exec /usr/bin/node .next/standalone/server.js --hostname "$HOSTNAME" --port "$PORT"'
 TimeoutStopSec=10
-KillMode=mixed
+KillMode=process
+KillSignal=SIGKILL
+SuccessExitStatus=SIGKILL
 Restart=always
 RestartSec=3
 StandardOutput=journal

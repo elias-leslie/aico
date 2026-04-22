@@ -43,3 +43,13 @@ def test_a_term_units_default_to_localhost_bindings() -> None:
 def test_a_term_backend_unit_has_no_forced_summitflow_dependency() -> None:
     backend = (SYSTEMD_DIR / "a-term-backend.service").read_text()
     assert "SUMMITFLOW_API_BASE=" not in backend
+
+
+def test_a_term_frontend_unit_uses_direct_standalone_shutdown_path() -> None:
+    frontend = (SYSTEMD_DIR / "a-term-frontend.service").read_text()
+
+    assert "KillMode=process" in frontend
+    assert "KillSignal=SIGKILL" in frontend
+    assert "SuccessExitStatus=SIGKILL" in frontend
+    assert "corepack pnpm start" not in frontend
+    assert 'exec /usr/bin/node .next/standalone/server.js' in frontend
