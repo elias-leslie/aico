@@ -291,7 +291,7 @@ describe('useATermTabsState', () => {
     )
   })
 
-  it('uses a global mobile slot list without auto-creating a new pane', () => {
+  it('uses pane-based mobile slots so one project pane appears once even when it has shell and agent sessions', () => {
     mockUseMediaQuery.mockReturnValue(true)
     mockUseActiveSession.mockReturnValue({
       activeSessionId: 'project-a-codex',
@@ -459,7 +459,7 @@ describe('useATermTabsState', () => {
       includeDetached: true,
       persistKey: 'aTerm:last-active-session-id',
     })
-    expect(result.current.aTermSlots).toHaveLength(3)
+    expect(result.current.aTermSlots).toHaveLength(2)
     expect(
       result.current.aTermSlots.filter(
         (
@@ -469,21 +469,22 @@ describe('useATermTabsState', () => {
           { type: 'project' }
         > => slot.type === 'project' && slot.projectId === 'project-a',
       ),
-    ).toHaveLength(2)
+    ).toHaveLength(1)
     expect(
-      result.current.aTermSlots
-        .filter(
-          (
-            slot,
-          ): slot is Extract<
-            (typeof result.current.aTermSlots)[number],
-            { type: 'project' }
-          > => slot.type === 'project' && slot.projectId === 'project-a',
-        )
-        .map((slot) => slot.activeMode)
-        .sort(),
-    ).toEqual(['codex', 'shell'])
-    expect(new Set(result.current.orderedIds).size).toBe(3)
+      result.current.aTermSlots.find(
+        (
+          slot,
+        ): slot is Extract<
+          (typeof result.current.aTermSlots)[number],
+          { type: 'project' }
+        > => slot.type === 'project' && slot.projectId === 'project-a',
+      ),
+    ).toMatchObject({
+      paneId: 'pane-project-a',
+      activeMode: 'codex',
+      activeSessionId: 'project-a-codex',
+    })
+    expect(new Set(result.current.orderedIds).size).toBe(2)
     expect(mockUseAutoCreatePane).toHaveBeenLastCalledWith(
       expect.objectContaining({
         enabled: true,

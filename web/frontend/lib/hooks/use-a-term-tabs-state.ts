@@ -182,50 +182,46 @@ export function useATermTabsState({
       return []
     }
 
-    const paneBySessionId = new Map(
-      [...panes, ...detachedPanes].flatMap((pane) =>
-        pane.sessions.map((session) => [session.id, pane] as const),
-      ),
+    const mobilePanes = [...panes, ...detachedPanes]
+    const paneSlots = getPanesToSlots(mobilePanes)
+    const paneSessionIds = new Set(
+      mobilePanes.flatMap((pane) => pane.sessions.map((session) => session.id)),
     )
     const projectNames = new Map(
       projectATerms.map((project) => [project.projectId, project.projectName]),
     )
 
-    return sessions.map((session) => {
-      const slotId = `session-${session.id}`
-      const pane = paneBySessionId.get(session.id)
+    const fallbackSessionSlots = sessions
+      .filter((session) => !paneSessionIds.has(session.id))
+      .map((session) => {
+        const slotId = `session-${session.id}`
 
-      if (session.project_id) {
-        const projectSlot = {
-          slotId,
-          type: 'project' as const,
-          projectId: session.project_id,
-          projectName:
-            pane?.pane_name ??
-            projectNames.get(session.project_id) ??
-            session.name,
-          rootPath: session.working_dir,
-          activeMode: session.mode,
-          activeSessionId: session.id,
-          sessionBadge: null,
-          claudeState: session.claude_state,
+        if (session.project_id) {
+          return {
+            slotId,
+            type: 'project' as const,
+            projectId: session.project_id,
+            projectName: projectNames.get(session.project_id) ?? session.name,
+            rootPath: session.working_dir,
+            activeMode: session.mode,
+            activeSessionId: session.id,
+            sessionBadge: null,
+            claudeState: session.claude_state,
+          }
         }
 
-        return pane ? { ...projectSlot, paneId: pane.id } : projectSlot
-      }
+        return {
+          slotId,
+          type: 'adhoc' as const,
+          sessionId: session.id,
+          name: session.name,
+          workingDir: session.working_dir,
+          sessionMode: session.mode,
+          isExternal: session.is_external,
+        }
+      })
 
-      const adHocSlot = {
-        slotId,
-        type: 'adhoc' as const,
-        sessionId: session.id,
-        name: pane?.pane_name ?? session.name,
-        workingDir: session.working_dir,
-        sessionMode: session.mode,
-        isExternal: session.is_external,
-      }
-
-      return pane ? { ...adHocSlot, paneId: pane.id } : adHocSlot
-    })
+    return [...paneSlots, ...fallbackSessionSlots]
   }, [
     detachedPanes,
     isDetachedWindow,

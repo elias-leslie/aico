@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.8 - 2026-04-22
+
+- Fixed the mobile pane switcher so project panes no longer show duplicate shell and Hermes rows just because one pane owns both sessions.
+- Fixed same-pane project switching so reusing an existing target pane preserves that pane's own active workflow state more reliably.
+- Suppressed stale tmux scrollback warning spam so long-running TUI sessions stop emitting noisy false-positive history warnings.
+- Hard-stopped frontend systemd restarts when the a-term Next.js process exits so restart loops fail fast instead of silently churning.
+
 ## 0.2.7 - 2026-04-21
 
 - Fixed same-pane pane/project switching and 3-pane layout behavior so project swaps preserve the active workflow more reliably.
