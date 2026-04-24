@@ -43,8 +43,12 @@ export function ATermTabs({
     setCursorBlink,
     setThemeId,
     setShowSettings,
+    keyboardMode,
     keyboardSize,
+    keyboardSpacing,
+    handleKeyboardModeChange,
     handleKeyboardSizeChange,
+    handleKeyboardSpacingChange,
     isMobile,
     setATermRef,
     handleStatusChange,
@@ -153,8 +157,12 @@ export function ATermTabs({
         setCursorBlink={setCursorBlink}
         setThemeId={setThemeId}
         setShowSettings={setShowSettings}
+        keyboardMode={keyboardMode}
         keyboardSize={keyboardSize}
+        keyboardSpacing={keyboardSpacing}
+        handleKeyboardModeChange={handleKeyboardModeChange}
         handleKeyboardSizeChange={handleKeyboardSizeChange}
+        handleKeyboardSpacingChange={handleKeyboardSpacingChange}
         isMobile={isMobile}
         setATermRef={setATermRef}
         handleStatusChange={handleStatusChange}

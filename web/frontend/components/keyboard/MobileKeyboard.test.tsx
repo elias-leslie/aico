@@ -21,6 +21,12 @@ vi.mock('./FullKeyboard', () => ({
   FullKeyboard: () => <div data-testid="full-keyboard">keyboard</div>,
 }))
 
+vi.mock('./NativeKeyboardInput', () => ({
+  NativeKeyboardInput: () => (
+    <div data-testid="native-keyboard-input">native</div>
+  ),
+}))
+
 describe('MobileKeyboard', () => {
   beforeEach(() => {
     window.localStorage.clear()
@@ -44,5 +50,12 @@ describe('MobileKeyboard', () => {
     expect(window.localStorage.getItem('a-term-keyboard-minimized')).toBe(
       'true',
     )
+  })
+
+  it('renders native ribbon input instead of the custom keyboard in native mode', () => {
+    render(<MobileKeyboard onSend={vi.fn()} keyboardMode="native" />)
+
+    expect(screen.getByTestId('native-keyboard-input')).toBeInTheDocument()
+    expect(screen.queryByTestId('full-keyboard')).not.toBeInTheDocument()
   })
 })

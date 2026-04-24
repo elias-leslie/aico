@@ -14,7 +14,14 @@ import {
 import { KeyboardKey } from './KeyboardKey'
 import { KEY_SEQUENCES } from './keyMappings'
 import { useModifiers } from './ModifierContext'
-import type { ATermInputHandler } from './types'
+import {
+  type ATermInputHandler,
+  CONTROL_BAR_ARROW_SIZES,
+  CONTROL_BAR_BUTTON_SIZES,
+  KEYBOARD_SPACING_METRICS,
+  type KeyboardSizePreset,
+  type KeyboardSpacingPreset,
+} from './types'
 
 interface ControlBarProps {
   onSend: ATermInputHandler
@@ -31,6 +38,9 @@ interface ControlBarProps {
   activeMode?: string
   connectionStatus?: ConnectionStatus
   onReconnect?: () => void
+  keyboardSize?: KeyboardSizePreset
+  keyboardSpacing?: KeyboardSpacingPreset
+  collapseTarget?: 'keyboard' | 'ribbon'
 }
 
 export function ControlBar({
@@ -44,6 +54,9 @@ export function ControlBar({
   activeMode,
   connectionStatus,
   onReconnect,
+  keyboardSize = 'medium',
+  keyboardSpacing = 'normal',
+  collapseTarget = 'keyboard',
 }: ControlBarProps) {
   const { resetModifiers } = useModifiers()
   const [showModelPicker, setShowModelPicker] = useState(false)
@@ -139,6 +152,17 @@ export function ControlBar({
     color: 'var(--term-text-muted)',
     border: '1px solid var(--term-border)',
   }
+  const spacing = KEYBOARD_SPACING_METRICS[keyboardSpacing]
+  const controlButtonSize = CONTROL_BAR_BUTTON_SIZES[keyboardSize]
+  const arrowButtonSize = CONTROL_BAR_ARROW_SIZES[keyboardSize]
+  const smallKeySize = Math.max(36, controlButtonSize - 4)
+  const iconSize =
+    keyboardSize === 'small' ? 18 : keyboardSize === 'large' ? 22 : 20
+  const topRowButtonStyle = {
+    height: controlButtonSize,
+    minWidth: controlButtonSize,
+    borderRadius: spacing.keyRadius,
+  }
 
   const bannerState = getMobileATermBannerState({
     connectionStatus,
@@ -180,21 +204,24 @@ export function ControlBar({
 
   return (
     <div
-      className="flex flex-col gap-1 px-1.5 py-1"
+      className="flex flex-col"
       style={{
         backgroundColor: 'var(--term-bg-surface)',
         borderTop: '1px solid var(--term-border)',
+        gap: spacing.controlRowGap,
+        padding: `${spacing.controlPaddingY}px ${spacing.controlPaddingX}px`,
       }}
     >
-      {/* Row 1: [▲/▼] [⇧TAB]  ·····  [MODEL?] [MIC] */}
-      <div className="flex items-center gap-1.5">
+      {/* Row 1: [▲/▼] [TAB] [⇧TAB]  ·····  [MODEL?] [MIC] */}
+      <div className="flex items-center" style={{ gap: spacing.keyGap + 2 }}>
         {/* Keyboard toggle — far left */}
         {onToggleMinimize && (
           <button
             type="button"
             onClick={onToggleMinimize}
-            className="flex items-center justify-center h-11 w-11 rounded-md transition-all duration-150"
+            className="flex items-center justify-center transition-all duration-150"
             style={{
+              ...topRowButtonStyle,
               backgroundColor: minimized
                 ? 'var(--term-accent)'
                 : 'var(--term-bg-elevated)',
@@ -204,22 +231,49 @@ export function ControlBar({
               border: `1px solid ${minimized ? 'var(--term-accent)' : 'var(--term-border)'}`,
               boxShadow: minimized ? '0 0 8px var(--term-accent-glow)' : 'none',
             }}
-            title={minimized ? 'Show keyboard' : 'Hide keyboard'}
+            title={
+              minimized ? `Show ${collapseTarget}` : `Hide ${collapseTarget}`
+            }
           >
             {minimized ? (
-              <ChevronUp className="w-5 h-5" />
+              <ChevronUp
+                className="shrink-0"
+                style={{ width: iconSize, height: iconSize }}
+              />
             ) : (
-              <ChevronDown className="w-5 h-5" />
+              <ChevronDown
+                className="shrink-0"
+                style={{ width: iconSize, height: iconSize }}
+              />
             )}
           </button>
         )}
+
+        <button
+          type="button"
+          onClick={() => {
+            onSend('\t')
+            clearModifiers()
+          }}
+          className="px-3 text-xs font-medium transition-all duration-150 active:scale-95"
+          style={{
+            ...btnStyle,
+            ...topRowButtonStyle,
+          }}
+          title="Tab"
+        >
+          TAB
+        </button>
 
         {/* Shift+Tab */}
         <button
           type="button"
           onClick={handleShiftTab}
-          className="h-11 px-3 rounded-md text-xs font-medium transition-all duration-150 active:scale-95"
-          style={btnStyle}
+          className="px-3 text-xs font-medium transition-all duration-150 active:scale-95"
+          style={{
+            ...btnStyle,
+            ...topRowButtonStyle,
+          }}
           title="Shift+Tab (backtab)"
         >
           ⇧TAB
@@ -234,19 +288,29 @@ export function ControlBar({
             <button
               type="button"
               onClick={() => setShowModelPicker((p) => !p)}
-              className="flex items-center gap-1.5 h-11 px-3 rounded-md text-xs font-medium transition-all duration-150 active:scale-95"
+              className="flex items-center gap-1.5 px-3 text-xs font-medium transition-all duration-150 active:scale-95"
               style={
                 showModelPicker
                   ? {
+                      ...topRowButtonStyle,
                       backgroundColor: 'var(--term-accent-soft)',
                       color: 'var(--term-accent)',
                       border: '1px solid var(--term-accent)',
                     }
-                  : btnStyle
+                  : {
+                      ...btnStyle,
+                      ...topRowButtonStyle,
+                    }
               }
               title="Switch Claude model"
             >
-              <Sparkles className="w-4 h-4" />
+              <Sparkles
+                className="shrink-0"
+                style={{
+                  width: keyboardSize === 'small' ? 14 : 16,
+                  height: keyboardSize === 'small' ? 14 : 16,
+                }}
+              />
               MODEL
             </button>
 
@@ -298,52 +362,91 @@ export function ControlBar({
               navigator.vibrate?.(10)
               onVoice()
             }}
-            className="flex items-center justify-center h-11 w-11 rounded-md transition-all duration-150 active:scale-95"
-            style={btnStyle}
+            className="flex items-center justify-center transition-all duration-150 active:scale-95"
+            style={{
+              ...btnStyle,
+              ...topRowButtonStyle,
+            }}
             title="Voice input"
           >
-            <Mic className="w-5 h-5" />
+            <Mic
+              className="shrink-0"
+              style={{ width: iconSize, height: iconSize }}
+            />
           </button>
         )}
       </div>
 
       {/* Row 2: [ESC]  ·  [← ↑ ↓ →]  ·  [CTRL] */}
-      <div className="flex items-center justify-center gap-4">
+      <div
+        className="flex items-center justify-center"
+        style={{ gap: spacing.arrowGroupGap }}
+      >
         <KeyboardKey
           label="ESC"
           onPress={handleEsc}
-          className="w-10 h-10 text-[10px]"
+          className="text-[10px]"
+          style={{
+            width: smallKeySize,
+            height: smallKeySize,
+            minWidth: smallKeySize,
+          }}
         />
 
         {/* Arrow keys — large targets with wide spacing */}
-        <div className="flex items-center gap-4">
+        <div
+          className="flex items-center"
+          style={{ gap: spacing.arrowGroupGap }}
+        >
           <KeyboardKey
             label="←"
             onPress={handleArrowLeft}
-            className="w-14 h-14 text-xl"
+            className="text-xl"
+            style={{
+              width: arrowButtonSize,
+              height: arrowButtonSize,
+              minWidth: arrowButtonSize,
+            }}
           />
           <KeyboardKey
             label="↑"
             onPress={handleArrowUp}
-            className="w-14 h-14 text-xl"
+            className="text-xl"
+            style={{
+              width: arrowButtonSize,
+              height: arrowButtonSize,
+              minWidth: arrowButtonSize,
+            }}
           />
           <KeyboardKey
             label="↓"
             onPress={handleArrowDown}
-            className="w-14 h-14 text-xl"
+            className="text-xl"
+            style={{
+              width: arrowButtonSize,
+              height: arrowButtonSize,
+              minWidth: arrowButtonSize,
+            }}
           />
           <KeyboardKey
             label="→"
             onPress={handleArrowRight}
-            className="w-14 h-14 text-xl"
+            className="text-xl"
+            style={{
+              width: arrowButtonSize,
+              height: arrowButtonSize,
+              minWidth: arrowButtonSize,
+            }}
           />
         </div>
 
         <button
           type="button"
           onClick={onCtrlToggle}
-          className="w-10 h-10 rounded-md text-[10px] font-medium transition-all duration-150 active:scale-95"
+          className="rounded-md text-[10px] font-medium transition-all duration-150 active:scale-95"
           style={{
+            width: smallKeySize,
+            height: smallKeySize,
             backgroundColor: ctrlActive
               ? 'var(--term-accent)'
               : 'var(--term-bg-elevated)',
@@ -361,7 +464,7 @@ export function ControlBar({
       {/* Status banner — only shown for error/disconnect states that need
           user action. Connected/minimized/voice status is in the header badge. */}
       {(bannerState.tone === 'danger' || bannerState.tone === 'warning') && (
-        <div className="flex items-center gap-2 px-1 pt-1">
+        <div className="flex items-center gap-2 px-1">
           <div
             className="flex min-w-0 flex-1 items-center gap-2 rounded-md border px-2.5 py-2"
             style={{

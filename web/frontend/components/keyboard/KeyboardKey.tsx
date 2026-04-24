@@ -10,6 +10,7 @@ interface KeyboardKeyProps {
   state?: ModifierState
   width?: number // Width multiplier (1 = normal, 1.5 = 1.5x width, etc.)
   className?: string
+  style?: React.CSSProperties
 }
 
 // Provide haptic feedback if available
@@ -25,6 +26,7 @@ export function KeyboardKey({
   state = 'off',
   width = 1,
   className,
+  style,
 }: KeyboardKeyProps) {
   // Track if touch event was used to prevent duplicate onClick
   const touchedRef = useRef(false)
@@ -94,6 +96,7 @@ export function KeyboardKey({
         flex: width,
         minWidth: `${width * 36}px`, // 36px base width for compact layout
         ...getStateStyles(),
+        ...style,
       }}
     >
       {label}

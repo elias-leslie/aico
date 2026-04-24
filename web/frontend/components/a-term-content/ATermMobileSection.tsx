@@ -1,6 +1,10 @@
 import type { ConnectionStatus } from '@/components/a-term.types'
 import { MobileKeyboard } from '@/components/keyboard/MobileKeyboard'
-import type { KeyboardSizePreset } from '@/components/keyboard/types'
+import type {
+  KeyboardSizePreset,
+  KeyboardSpacingPreset,
+  MobileKeyboardMode,
+} from '@/components/keyboard/types'
 import { VoiceTranscriptPanel } from '@/components/VoiceTranscriptPanel'
 import type { TranscriptionError, TranscriptionStatus } from '@/lib/voice/types'
 
@@ -10,7 +14,9 @@ interface ATermMobileSectionProps {
   activeMode?: string
   handleKeyboardInput: (input: string) => void
   handleReconnect: () => void
+  keyboardMode?: MobileKeyboardMode
   keyboardSize?: KeyboardSizePreset
+  keyboardSpacing?: KeyboardSpacingPreset
   isVoiceSupported: boolean
   handleVoiceOpen: () => void
   showVoice: boolean
@@ -32,7 +38,9 @@ export function ATermMobileSection({
   activeMode,
   handleKeyboardInput,
   handleReconnect,
+  keyboardMode,
   keyboardSize,
+  keyboardSpacing,
   isVoiceSupported,
   handleVoiceOpen,
   showVoice,
@@ -50,12 +58,14 @@ export function ATermMobileSection({
   if (!isMobile || sessions.length === 0) return null
 
   return (
-    <div className="order-3">
+    <div className="order-3 shrink-0">
       <MobileKeyboard
         onSend={handleKeyboardInput}
         connectionStatus={activeStatus}
         onReconnect={handleReconnect}
+        keyboardMode={keyboardMode}
         keyboardSize={keyboardSize}
+        keyboardSpacing={keyboardSpacing}
         onVoice={isVoiceSupported ? handleVoiceOpen : undefined}
         voiceActive={showVoice}
         activeMode={activeMode}

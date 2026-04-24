@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ATermHandle, ConnectionStatus } from '@/components/ATerm'
-import type { KeyboardSizePreset } from '@/components/keyboard/types'
+import type {
+  KeyboardSizePreset,
+  KeyboardSpacingPreset,
+  MobileKeyboardMode,
+} from '@/components/keyboard/types'
 import { getDefaultLayoutMode, type LayoutMode } from '@/lib/constants/a-term'
 import {
   findSessionByMode,
@@ -145,8 +149,15 @@ export function useATermTabsState({
     setThemeId,
   } = useATermSettings(activeSessionProjectId)
   const [showSettings, setShowSettings] = useState(false)
+  const [keyboardMode, setKeyboardMode] =
+    useLocalStorageState<MobileKeyboardMode>('a-term-keyboard-mode', 'custom')
   const [keyboardSize, setKeyboardSize] =
     useLocalStorageState<KeyboardSizePreset>('a-term-keyboard-size', 'medium')
+  const [keyboardSpacing, setKeyboardSpacing] =
+    useLocalStorageState<KeyboardSpacingPreset>(
+      'a-term-keyboard-spacing',
+      'normal',
+    )
   const [storedSlotOrderIds, setStoredSlotOrderIds] = useLocalStorageState<
     string[]
   >(getScopedATermStorageKey('a-term-slot-order', storageScopeId), [])
@@ -231,6 +242,7 @@ export function useATermTabsState({
     sessions,
   ])
   const visiblePaneCount = visiblePanes.length + attachedExternalSessions.length
+  const visibleManagedPaneCount = visiblePanes.length
   const paneCountLimit = Math.min(maxPanes, viewportPaneCapacity)
   const visiblePanesAtLimit = visiblePaneCount >= paneCountLimit
 
@@ -271,7 +283,9 @@ export function useATermTabsState({
   )
 
   const {
+    handleKeyboardModeChange,
     handleKeyboardSizeChange,
+    handleKeyboardSpacingChange,
     handleStatusChange,
     handleKeyboardInput,
     handleReconnect,
@@ -296,7 +310,9 @@ export function useATermTabsState({
     projectTabRefs,
     setATermStatuses,
     setLayoutMode,
+    setKeyboardMode,
     setKeyboardSize,
+    setKeyboardSpacing,
     panes,
     panesAtLimit: visiblePanesAtLimit,
     createProjectPane,
@@ -312,21 +328,7 @@ export function useATermTabsState({
     panesLoading ||
     (isDetachedWindow && !detachedLoadedOnce)
   const availableLayouts = useAvailableLayouts(visiblePaneCount)
-  const previousVisiblePaneCountRef = useRef<number | null>(null)
-
-  useEffect(() => {
-    const previousVisiblePaneCount = previousVisiblePaneCountRef.current
-    if (
-      previousVisiblePaneCount !== null &&
-      previousVisiblePaneCount !== visiblePaneCount &&
-      visiblePaneCount === 3 &&
-      availableLayouts.includes('split-main-side') &&
-      layoutMode !== 'split-main-side'
-    ) {
-      setLayoutMode('split-main-side')
-    }
-    previousVisiblePaneCountRef.current = visiblePaneCount
-  }, [availableLayouts, layoutMode, setLayoutMode, visiblePaneCount])
+  const previousPaneCountRef = useRef<number | null>(null)
 
   const visibleSlots = useMemo(() => {
     const paneSlots = getPanesToSlots(visiblePanes)
@@ -444,6 +446,30 @@ export function useATermTabsState({
     setLayoutMode,
     panesLoadedOnce && !activeSessionLoading && visiblePaneCount > 0,
   )
+  useEffect(() => {
+    const previousPaneCount = previousPaneCountRef.current
+    if (
+      previousPaneCount !== null &&
+      previousPaneCount !== visibleManagedPaneCount
+    ) {
+      if (visiblePaneCount === 2 && layoutMode !== 'split-horizontal') {
+        setLayoutMode('split-horizontal')
+      } else if (
+        visiblePaneCount === 3 &&
+        availableLayouts.includes('split-main-side') &&
+        layoutMode !== 'split-main-side'
+      ) {
+        setLayoutMode('split-main-side')
+      }
+    }
+    previousPaneCountRef.current = visibleManagedPaneCount
+  }, [
+    availableLayouts,
+    layoutMode,
+    setLayoutMode,
+    visibleManagedPaneCount,
+    visiblePaneCount,
+  ])
   useAutoCreatePane({
     enabled: !isDetachedWindow,
     panes: visiblePanes,
@@ -645,8 +671,12 @@ export function useATermTabsState({
     setThemeId,
     showSettings,
     setShowSettings,
+    keyboardMode,
     keyboardSize,
+    keyboardSpacing,
+    handleKeyboardModeChange,
     handleKeyboardSizeChange,
+    handleKeyboardSpacingChange,
     isMobile,
     showATermManager,
     setShowATermManager,

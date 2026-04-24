@@ -30,8 +30,12 @@ export function ATermContent({
   setCursorBlink,
   setThemeId,
   setShowSettings,
+  keyboardMode,
   keyboardSize,
+  keyboardSpacing,
+  handleKeyboardModeChange,
   handleKeyboardSizeChange,
+  handleKeyboardSpacingChange,
   isMobile,
   setATermRef,
   handleStatusChange,
@@ -113,8 +117,12 @@ export function ATermContent({
         setThemeId={setThemeId}
         showSettings={showSettings}
         setShowSettings={setShowSettings}
+        keyboardMode={keyboardMode}
         keyboardSize={keyboardSize}
+        keyboardSpacing={keyboardSpacing}
+        setKeyboardMode={handleKeyboardModeChange}
         setKeyboardSize={handleKeyboardSizeChange}
+        setKeyboardSpacing={handleKeyboardSpacingChange}
         isMobile={isMobile}
         renderTrigger={false}
       />
@@ -170,7 +178,9 @@ export function ATermContent({
         activeMode={activeMode}
         handleKeyboardInput={handleKeyboardInput}
         handleReconnect={handleReconnect}
+        keyboardMode={keyboardMode}
         keyboardSize={keyboardSize}
+        keyboardSpacing={keyboardSpacing}
         isVoiceSupported={isVoiceSupported}
         handleVoiceOpen={handleVoiceOpen}
         showVoice={showVoice}

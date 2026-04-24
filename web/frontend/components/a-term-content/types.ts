@@ -1,7 +1,11 @@
 import type { RefObject } from 'react'
 import type { ATermLayoutRenderer } from '@/components/ATermLayoutRenderer'
 import type { ATermHandle, ConnectionStatus } from '@/components/a-term.types'
-import type { KeyboardSizePreset } from '@/components/keyboard/types'
+import type {
+  KeyboardSizePreset,
+  KeyboardSpacingPreset,
+  MobileKeyboardMode,
+} from '@/components/keyboard/types'
 import type { LayoutMode } from '@/lib/constants/a-term'
 import type {
   ATermCursorStyle,
@@ -35,8 +39,12 @@ export interface ATermContentProps {
   setCursorBlink: (blink: boolean) => void
   setThemeId: (id: ATermThemeId) => void
   setShowSettings: (show: boolean) => void
+  keyboardMode?: MobileKeyboardMode
   keyboardSize?: KeyboardSizePreset
+  keyboardSpacing?: KeyboardSpacingPreset
+  handleKeyboardModeChange: (mode: MobileKeyboardMode) => void
   handleKeyboardSizeChange: (size: KeyboardSizePreset) => void
+  handleKeyboardSpacingChange: (spacing: KeyboardSpacingPreset) => void
   isMobile?: boolean
 
   // Handlers

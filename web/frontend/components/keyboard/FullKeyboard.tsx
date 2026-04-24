@@ -10,6 +10,7 @@ import {
   type ATermInputHandler,
   KEYBOARD_SIZE_HEIGHTS,
   type KeyboardSizePreset,
+  type KeyboardSpacingPreset,
 } from './types'
 import { useKeyboardHandler } from './useKeyboardHandler'
 import { useKeyboardInput } from './useKeyboardInput'
@@ -17,11 +18,13 @@ import { useKeyboardInput } from './useKeyboardInput'
 interface FullKeyboardProps {
   onSend: ATermInputHandler
   keyboardSize?: KeyboardSizePreset
+  keyboardSpacing?: KeyboardSpacingPreset
 }
 
 function FullKeyboardInner({
   onSend,
   keyboardSize = 'medium',
+  keyboardSpacing = 'normal',
 }: FullKeyboardProps) {
   const keyboardRef = useRef<Keyboard | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -82,7 +85,7 @@ function FullKeyboardInner({
       style={{ backgroundColor: 'var(--term-bg-surface)' }}
     >
       <div ref={containerRef} className="a-term-simple-keyboard" />
-      <style>{getKeyboardStyles(rowHeight)}</style>
+      <style>{getKeyboardStyles(rowHeight, keyboardSpacing)}</style>
     </div>
   )
 }

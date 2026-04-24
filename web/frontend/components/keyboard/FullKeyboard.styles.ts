@@ -1,12 +1,18 @@
-export function getKeyboardStyles(rowHeight: number): string {
+import { KEYBOARD_SPACING_METRICS, type KeyboardSpacingPreset } from './types'
+
+export function getKeyboardStyles(
+  rowHeight: number,
+  keyboardSpacing: KeyboardSpacingPreset,
+): string {
   const baseFontSize = rowHeight <= 36 ? 16 : rowHeight <= 44 ? 18 : 20
   const wideFontSize = rowHeight <= 36 ? 12 : rowHeight <= 44 ? 13 : 14
   const iconFontSize = rowHeight <= 36 ? 20 : rowHeight <= 44 ? 22 : 24
+  const spacing = KEYBOARD_SPACING_METRICS[keyboardSpacing]
 
   return `
     .a-term-keyboard-theme {
       background: var(--term-bg-surface);
-      padding: 4px;
+      padding: ${spacing.keyboardPadding}px;
       border-radius: 0;
     }
 
@@ -14,9 +20,9 @@ export function getKeyboardStyles(rowHeight: number): string {
       background: var(--term-bg-elevated);
       color: var(--term-text-primary);
       border: 1px solid var(--term-border);
-      border-radius: 6px;
+      border-radius: ${spacing.keyRadius}px;
       height: ${rowHeight}px;
-      min-width: 28px;
+      min-width: ${spacing.minKeyWidth}px;
       font-size: ${baseFontSize}px;
       font-weight: 400;
       box-shadow: none;
@@ -70,8 +76,8 @@ export function getKeyboardStyles(rowHeight: number): string {
     .a-term-keyboard-theme .hg-row {
       display: flex;
       flex-direction: row;
-      gap: 3px;
-      margin-bottom: 4px;
+      gap: ${spacing.keyGap}px;
+      margin-bottom: ${spacing.rowGap}px;
     }
 
     .a-term-keyboard-theme .hg-row:last-child {
@@ -79,8 +85,8 @@ export function getKeyboardStyles(rowHeight: number): string {
     }
 
     .a-term-keyboard-theme .hg-row:nth-child(3) {
-      padding-left: 5%;
-      padding-right: 5%;
+      padding-left: ${spacing.rowInsetPercent}%;
+      padding-right: ${spacing.rowInsetPercent}%;
     }
 
     .a-term-keyboard-theme .hg-button[data-skbtn="{shift}"],

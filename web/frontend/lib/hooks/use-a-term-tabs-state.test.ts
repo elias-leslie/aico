@@ -133,7 +133,9 @@ describe('useATermTabsState', () => {
     })
 
     mockUseATermHandlers.mockReturnValue({
+      handleKeyboardModeChange: vi.fn(),
       handleKeyboardSizeChange: vi.fn(),
+      handleKeyboardSpacingChange: vi.fn(),
       handleStatusChange: vi.fn(),
       handleKeyboardInput: vi.fn(),
       handleReconnect: vi.fn(),
@@ -1210,6 +1212,229 @@ describe('useATermTabsState', () => {
 
     await waitFor(() => {
       expect(result.current.layoutMode).toBe('split-main-side')
+    })
+  })
+
+  it('switches to side-by-side when the pane count transitions from three to two', async () => {
+    let panes = [
+      {
+        id: 'pane-project-a',
+        pane_type: 'project' as const,
+        project_id: 'project-a',
+        pane_order: 0,
+        pane_name: 'Project A',
+        active_mode: 'shell',
+        created_at: '2026-03-06T00:00:00Z',
+        sessions: [
+          {
+            id: 'session-project-a',
+            name: 'Project A Shell',
+            mode: 'shell',
+            session_number: 1,
+            is_alive: true,
+            working_dir: '/workspace/project-a',
+            claude_state: 'not_started',
+          },
+        ],
+        width_percent: 33.333,
+        height_percent: 100,
+        grid_row: 0,
+        grid_col: 0,
+      },
+      {
+        id: 'pane-project-b',
+        pane_type: 'project' as const,
+        project_id: 'project-b',
+        pane_order: 1,
+        pane_name: 'Project B',
+        active_mode: 'shell',
+        created_at: '2026-03-06T00:00:00Z',
+        sessions: [
+          {
+            id: 'session-project-b',
+            name: 'Project B Shell',
+            mode: 'shell',
+            session_number: 1,
+            is_alive: true,
+            working_dir: '/workspace/project-b',
+            claude_state: 'not_started',
+          },
+        ],
+        width_percent: 33.333,
+        height_percent: 100,
+        grid_row: 0,
+        grid_col: 1,
+      },
+      {
+        id: 'pane-project-c',
+        pane_type: 'project' as const,
+        project_id: 'project-c',
+        pane_order: 2,
+        pane_name: 'Project C',
+        active_mode: 'shell',
+        created_at: '2026-03-06T00:00:00Z',
+        sessions: [
+          {
+            id: 'session-project-c',
+            name: 'Project C Shell',
+            mode: 'shell',
+            session_number: 1,
+            is_alive: true,
+            working_dir: '/workspace/project-c',
+            claude_state: 'not_started',
+          },
+        ],
+        width_percent: 33.333,
+        height_percent: 100,
+        grid_row: 0,
+        grid_col: 2,
+      },
+    ]
+
+    mockUseActiveSession.mockReturnValue(buildActiveSessionState())
+    mockUseLocalStorageState.mockImplementation(
+      (key: string, defaultValue: unknown) =>
+        useState(
+          (key === 'a-term-layout-mode'
+            ? 'split-main-side'
+            : defaultValue) as typeof defaultValue,
+        ),
+    )
+    mockUseAvailableLayouts.mockImplementation((paneCount: number) => {
+      if (paneCount === 3) {
+        return ['split-horizontal', 'split-vertical', 'split-main-side']
+      }
+      if (paneCount === 2) {
+        return ['split-horizontal', 'split-vertical']
+      }
+      return ['split-horizontal']
+    })
+    mockUseATermPanes.mockImplementation(() => ({
+      panes,
+      detachedPanes: [],
+      atLimit: false,
+      isLoading: false,
+      detachedLoadedOnce: true,
+      hasLoadedOnce: true,
+      swapPanePositions: vi.fn(),
+      removePane: vi.fn(),
+      detachPane: vi.fn(),
+      attachPane: vi.fn(),
+      setActiveMode: vi.fn(),
+      createAdHocPane: vi.fn(),
+      createProjectPane: vi.fn(),
+      isCreating: false,
+      saveLayouts: vi.fn(),
+      maxPanes: 6,
+    }))
+
+    const { result, rerender } = renderHook(() =>
+      useATermTabsState({ projectId: undefined, projectPath: undefined }),
+    )
+
+    expect(result.current.layoutMode).toBe('split-main-side')
+
+    panes = panes.slice(0, 2)
+
+    rerender()
+
+    await waitFor(() => {
+      expect(result.current.layoutMode).toBe('split-horizontal')
+    })
+  })
+
+  it('keeps two-pane transitions side-by-side when adding a second pane', async () => {
+    let panes = [
+      {
+        id: 'pane-project-a',
+        pane_type: 'project' as const,
+        project_id: 'project-a',
+        pane_order: 0,
+        pane_name: 'Project A',
+        active_mode: 'shell',
+        created_at: '2026-03-06T00:00:00Z',
+        sessions: [
+          {
+            id: 'session-project-a',
+            name: 'Project A Shell',
+            mode: 'shell',
+            session_number: 1,
+            is_alive: true,
+            working_dir: '/workspace/project-a',
+            claude_state: 'not_started',
+          },
+        ],
+        width_percent: 100,
+        height_percent: 100,
+        grid_row: 0,
+        grid_col: 0,
+      },
+    ]
+
+    mockUseActiveSession.mockReturnValue(buildActiveSessionState())
+    mockUseAvailableLayouts.mockImplementation((paneCount: number) => {
+      if (paneCount === 2) {
+        return ['split-horizontal', 'split-vertical']
+      }
+      return ['split-horizontal']
+    })
+    mockUseATermPanes.mockImplementation(() => ({
+      panes,
+      detachedPanes: [],
+      atLimit: false,
+      isLoading: false,
+      detachedLoadedOnce: true,
+      hasLoadedOnce: true,
+      swapPanePositions: vi.fn(),
+      removePane: vi.fn(),
+      detachPane: vi.fn(),
+      attachPane: vi.fn(),
+      setActiveMode: vi.fn(),
+      createAdHocPane: vi.fn(),
+      createProjectPane: vi.fn(),
+      isCreating: false,
+      saveLayouts: vi.fn(),
+      maxPanes: 6,
+    }))
+
+    const { result, rerender } = renderHook(() =>
+      useATermTabsState({ projectId: undefined, projectPath: undefined }),
+    )
+
+    expect(result.current.layoutMode).toBe('split-horizontal')
+
+    panes = [
+      ...panes,
+      {
+        id: 'pane-project-b',
+        pane_type: 'project' as const,
+        project_id: 'project-b',
+        pane_order: 1,
+        pane_name: 'Project B',
+        active_mode: 'shell',
+        created_at: '2026-03-06T00:00:00Z',
+        sessions: [
+          {
+            id: 'session-project-b',
+            name: 'Project B Shell',
+            mode: 'shell',
+            session_number: 1,
+            is_alive: true,
+            working_dir: '/workspace/project-b',
+            claude_state: 'not_started',
+          },
+        ],
+        width_percent: 50,
+        height_percent: 100,
+        grid_row: 0,
+        grid_col: 1,
+      },
+    ]
+
+    rerender()
+
+    await waitFor(() => {
+      expect(result.current.layoutMode).toBe('split-horizontal')
     })
   })
 

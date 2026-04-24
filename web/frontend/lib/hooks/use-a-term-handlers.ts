@@ -3,7 +3,11 @@
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback } from 'react'
 import type { ATermHandle, ConnectionStatus } from '@/components/ATerm'
-import type { KeyboardSizePreset } from '@/components/keyboard/types'
+import type {
+  KeyboardSizePreset,
+  KeyboardSpacingPreset,
+  MobileKeyboardMode,
+} from '@/components/keyboard/types'
 import type { LayoutMode } from '@/lib/constants/a-term'
 import type { ATermSession } from '@/lib/hooks/use-a-term-sessions'
 import { useATermSessions } from '@/lib/hooks/use-a-term-sessions'
@@ -28,7 +32,9 @@ export function useATermHandlers({
   projectTabRefs,
   setATermStatuses,
   setLayoutMode,
+  setKeyboardMode,
   setKeyboardSize,
+  setKeyboardSpacing,
   panes,
   panesAtLimit,
   createProjectPane,
@@ -73,6 +79,14 @@ export function useATermHandlers({
   const handleKeyboardSizeChange = useCallback(
     (size: KeyboardSizePreset) => setKeyboardSize(size),
     [setKeyboardSize],
+  )
+  const handleKeyboardModeChange = useCallback(
+    (mode: MobileKeyboardMode) => setKeyboardMode(mode),
+    [setKeyboardMode],
+  )
+  const handleKeyboardSpacingChange = useCallback(
+    (spacing: KeyboardSpacingPreset) => setKeyboardSpacing(spacing),
+    [setKeyboardSpacing],
   )
   const handleStatusChange = useCallback(
     (sessionId: string, status: ConnectionStatus) =>
@@ -181,7 +195,9 @@ export function useATermHandlers({
   )
 
   return {
+    handleKeyboardModeChange,
     handleKeyboardSizeChange,
+    handleKeyboardSpacingChange,
     handleStatusChange,
     handleKeyboardInput,
     handleReconnect,
