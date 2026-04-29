@@ -26,6 +26,7 @@ describe('proxy', () => {
   it('does not redirect protected routes when auth mode is none', async () => {
     vi.stubEnv('A_TERM_AUTH_MODE', 'none')
     vi.stubEnv('NODE_ENV', 'development')
+    vi.stubEnv('NEXT_PUBLIC_AGENT_HUB_URL', '')
     const { proxy } = await importProxy()
 
     const response = proxy(new NextRequest('http://localhost:3002/'))

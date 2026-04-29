@@ -230,6 +230,54 @@ function HermesIcon({ size, color }: { size: number; color: string }) {
   )
 }
 
+/** Pi — minimal circular prompt mark */
+function PiIcon({ size, color }: { size: number; color: string }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="8"
+        stroke={color}
+        strokeWidth="1.5"
+        opacity="0.55"
+      />
+      <path
+        d="M7 9.5H17"
+        stroke={color}
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      <path
+        d="M10 9.5V17"
+        stroke={color}
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      <path
+        d="M14 9.5V17"
+        stroke={color}
+        strokeWidth="2"
+        strokeLinecap="round"
+        opacity="0.75"
+      />
+      <path
+        d="M7.5 17H16.5"
+        stroke={color}
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        opacity="0.45"
+      />
+    </svg>
+  )
+}
+
 /** Fallback — generic AI/bot indicator */
 function GenericAgentIcon({ size, color }: { size: number; color: string }) {
   return (
@@ -266,6 +314,7 @@ const ICON_MAP: Record<string, typeof ClaudeIcon> = {
   gemini: GeminiIcon,
   hermes: HermesIcon,
   opencode: OpenCodeIcon,
+  pi: PiIcon,
 }
 
 /** Default brand-suggestive colors per agent slug.
@@ -276,6 +325,7 @@ export const AGENT_DEFAULT_COLORS: Record<string, string> = {
   gemini: '#A78BFA', // Soft violet — dual/twin energy
   hermes: '#F59E0B', // Amber — courier / signal energy
   opencode: '#60A5FA', // Cerulean blue — open sky
+  pi: '#EC4899', // Pink — compact signal mark
 }
 
 /** Resolve display color for an agent tool.

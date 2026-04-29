@@ -91,6 +91,7 @@ def test_list_external_agent_tmux_sessions_discovers_non_a_term_agent_sessions()
                         "summitflow-123e4567-e89b-12d3-a456-426614174000\t%2\t/home/testuser/summitflow\tbash",
                         "codex-agent-hub\t%3\t/home/testuser/agent-hub\tcodex",
                         "hermes-research\t%4\t/home/testuser/research\thermes",
+                        "pi-a-term\t%5\t/home/testuser/a-term\tpi",
                     ]
                 ),
             ),
@@ -101,6 +102,7 @@ def test_list_external_agent_tmux_sessions_discovers_non_a_term_agent_sessions()
             MagicMock(stdout="/home/testuser/summitflow\n"),
             MagicMock(stdout="/home/testuser/agent-hub\n"),
             MagicMock(stdout="/home/testuser/research\n"),
+            MagicMock(stdout="/home/testuser/a-term\n"),
         ]
         sessions = list_external_agent_tmux_sessions()
 
@@ -108,6 +110,7 @@ def test_list_external_agent_tmux_sessions_discovers_non_a_term_agent_sessions()
         "claude-summitflow",
         "codex-agent-hub",
         "hermes-research",
+        "pi-a-term",
     ]
     assert sessions[0]["project_id"] == "summitflow"
     assert sessions[0]["mode"] == "claude"
@@ -115,6 +118,13 @@ def test_list_external_agent_tmux_sessions_discovers_non_a_term_agent_sessions()
     assert sessions[1]["mode"] == "codex"
     assert sessions[2]["project_id"] == "research"
     assert sessions[2]["mode"] == "hermes"
+    assert sessions[3]["project_id"] == "a-term"
+    assert sessions[3]["mode"] == "pi"
+
+
+def test_external_mode_inference_requires_token_boundaries() -> None:
+    assert tmux._infer_external_mode("pi-a-term", "node") == ("pi", "running")
+    assert tmux._infer_external_mode("api-service", "python") == ("shell", "not_started")
 
 
 def test_create_tmux_session_uses_systemd_scope_when_available() -> None:

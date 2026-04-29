@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -13,7 +14,7 @@ from .core import TMUX_COMMAND_TIMEOUT
 
 logger = get_logger(__name__)
 
-_EXTERNAL_AGENT_TOKENS = ("claude", "codex", "opencode", "aider", "gemini", "hermes")
+_EXTERNAL_AGENT_TOKENS = ("claude", "codex", "opencode", "aider", "gemini", "hermes", "pi")
 
 _EXTERNAL_ATTACH_LOCK = Lock()
 _EXTERNAL_ATTACH_STATES: dict[str, _ExternalAttachState] = {}
@@ -34,7 +35,7 @@ def _pkg() -> object:
 def _infer_external_mode(session_name: str, current_command: str) -> tuple[str, str]:
     label = f"{session_name} {current_command}".lower()
     for token in _EXTERNAL_AGENT_TOKENS:
-        if token in label:
+        if re.search(rf"(^|[^a-z0-9]){re.escape(token)}([^a-z0-9]|$)", label):
             return token, "running"
     return "shell", "not_started"
 
