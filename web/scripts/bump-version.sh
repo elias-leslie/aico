@@ -20,16 +20,32 @@ from pathlib import Path
 
 version = sys.argv[1]
 
+
+def replace_project_version(text: str, version: str) -> str:
+    lines = text.splitlines(keepends=True)
+    in_project = False
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped == "[project]":
+            in_project = True
+            continue
+        if in_project and stripped.startswith("[") and stripped.endswith("]"):
+            break
+        if in_project and re.match(r'^version = "[^"]+"', line):
+            lines[index] = re.sub(r'(^version = ")[^"]+(")', rf"\g<1>{version}\2", line)
+            return "".join(lines)
+    raise SystemExit("ERROR: could not update pyproject.toml [project].version")
+
+
 replacements = {
-    Path("pyproject.toml"): (
-        r'(?m)^version = "[^"]+"',
-        f'version = "{version}"',
-    ),
     Path("uv.lock"): (
         r'(?m)(\[\[package\]\]\nname = "a-term"\nversion = ")[^"]+(")',
         rf"\g<1>{version}\2",
     ),
 }
+
+pyproject = Path("pyproject.toml")
+pyproject.write_text(replace_project_version(pyproject.read_text(), version))
 
 for path, (pattern, replacement) in replacements.items():
     text = path.read_text()

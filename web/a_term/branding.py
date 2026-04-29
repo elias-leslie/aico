@@ -70,7 +70,11 @@ def _read_manifest_payload(manifest_path: Path) -> dict[str, Any] | None:
 def _manifest_path_for_root(root_path: str | Path) -> Path | None:
     root = Path(os.path.realpath(os.path.abspath(os.path.expanduser(str(root_path)))))
     candidate = (root / "project.identity.json").resolve()
-    if os.path.commonpath([str(root), str(candidate)]) != str(root):
+    try:
+        inside_root = os.path.commonpath([str(root), str(candidate)]) == str(root)
+    except ValueError:
+        return None
+    if not inside_root:
         return None
     return candidate
 
