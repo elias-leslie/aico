@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import shutil
 from functools import lru_cache
 from pathlib import Path
@@ -68,13 +67,21 @@ def _read_manifest_payload(manifest_path: Path) -> dict[str, Any] | None:
 
 
 def _manifest_path_for_root(root_path: str | Path) -> Path | None:
-    root = Path(os.path.realpath(os.path.abspath(os.path.expanduser(str(root_path)))))
-    candidate = (root / "project.identity.json").resolve()
     try:
-        inside_root = os.path.commonpath([str(root), str(candidate)]) == str(root)
-    except ValueError:
+        root = Path(str(root_path)).expanduser().resolve(strict=True)
+    except (OSError, RuntimeError, ValueError):
         return None
-    if not inside_root:
+    if not root.is_dir():
+        return None
+
+    try:
+        candidate = (root / "project.identity.json").resolve(strict=False)
+        relative_candidate = candidate.relative_to(root)
+    except (OSError, RuntimeError, ValueError):
+        return None
+    if relative_candidate.parts != ("project.identity.json",):
+        return None
+    if not candidate.is_file():
         return None
     return candidate
 
