@@ -31,6 +31,7 @@
     "optional_workers": []
   },
   "hosts": {
+    "browser_frontend": "terminal.summitflow.dev",
     "production_frontend": "a-term.summitflow.dev",
     "production_api": "a-term-api.summitflow.dev"
   },
