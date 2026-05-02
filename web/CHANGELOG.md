@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.9 - 2026-05-02
+
+- Added a pane overflow menu `Refresh Layout` action that remounts the pane terminal and re-runs viewport sizing without restarting the tmux session.
+- Fixed detached-window attach/re-attach behavior so unowned detached panes stay attachable from any window instead of getting stranded by stale URL pane scope.
+- Fixed browser speech-to-text transcript merging so cumulative interim/final chunks no longer duplicate dictated words.
+- Tightened mobile keyboard viewport sizing so the bottom keyboard/action row remains inside the visible viewport when the native keyboard changes screen height.
+
 ## 0.2.8 - 2026-04-22
 
 - Fixed the mobile pane switcher so project panes no longer show duplicate shell and Hermes rows just because one pane owns both sessions.

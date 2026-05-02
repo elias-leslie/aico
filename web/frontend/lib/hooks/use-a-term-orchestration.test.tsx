@@ -106,6 +106,85 @@ function makeProjectSlot(
 }
 
 describe('useATermOrchestration', () => {
+  it('offers stale detached URL panes for attachment when they are not visible in this window', () => {
+    mockUseDetachedPaneWindow.mockReturnValue({
+      isDetachedPaneWindow: true,
+      detachedWindowPaneIds: ['stale-pane', 'visible-pane'],
+      detachedWindowScopeId: 'scope-1',
+      storageScopeId: 'scope-1',
+      addDetachedWindowPane: vi.fn(),
+      setDetachedWindowPaneIds: vi.fn(),
+      removeDetachedWindowPane: vi.fn(),
+      replaceDetachedWindowPane: vi.fn(),
+    })
+    mockUseATermTabsState.mockReturnValue({
+      activeSessionId: 'visible-session',
+      switchToSession: vi.fn(),
+      sessions: [],
+      projectATerms: [],
+      aTermSlots: [
+        makeProjectSlot({
+          paneId: 'visible-pane',
+          activeSessionId: 'visible-session',
+        }),
+      ],
+      orderedIds: ['pane-visible-pane'],
+      aTermRefs: { current: new Map() },
+      panes: [],
+      reset: vi.fn(),
+      disableProject: vi.fn(),
+      remove: vi.fn(),
+      removePane: vi.fn(),
+      detachPane: vi.fn(),
+      handleProjectModeChange: vi.fn(),
+      attachExternalSession: vi.fn(),
+      attachDetachedPane: vi.fn(),
+      detachExternalSession: vi.fn(),
+      createProjectPane: vi.fn(),
+      detachedPanes: [
+        {
+          id: 'stale-pane',
+          pane_type: 'adhoc',
+          project_id: null,
+          pane_order: 0,
+          pane_name: 'Stale Detached',
+          active_mode: 'shell',
+          is_detached: true,
+          created_at: '2026-04-15T00:00:00Z',
+          sessions: [],
+          width_percent: 100,
+          height_percent: 100,
+          grid_row: 0,
+          grid_col: 0,
+        },
+        {
+          id: 'visible-pane',
+          pane_type: 'adhoc',
+          project_id: null,
+          pane_order: 1,
+          pane_name: 'Visible Detached',
+          active_mode: 'shell',
+          is_detached: true,
+          created_at: '2026-04-15T00:00:00Z',
+          sessions: [],
+          width_percent: 100,
+          height_percent: 100,
+          grid_row: 0,
+          grid_col: 0,
+        },
+      ],
+      showATermManager: false,
+      setShowATermManager: vi.fn(),
+      saveLayouts: vi.fn(),
+    })
+
+    const { result } = renderHook(() => useATermOrchestration({}))
+
+    expect(result.current.detachedPanes.map((pane) => pane.id)).toEqual([
+      'stale-pane',
+    ])
+  })
+
   it('restores the detached target pane session when switching back to an existing project', async () => {
     const detachPane = vi.fn().mockResolvedValue(undefined)
     const attachDetachedPane = vi.fn().mockResolvedValue({

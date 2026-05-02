@@ -38,6 +38,7 @@ export interface ResizablePaneLayoutProps {
   onDetach?: (slot: ATermSlot | PaneSlot) => void
   onClose?: (slot: ATermSlot | PaneSlot) => void
   onCloseSession?: (slot: ATermSlot | PaneSlot) => void
+  onRefresh?: (slot: ATermSlot | PaneSlot) => void
   onUpload?: (sessionId?: string) => void
   onClean?: (slot: ATermSlot | PaneSlot) => void
   onOpenModal?: () => void

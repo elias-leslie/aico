@@ -41,6 +41,7 @@ export const UnifiedATermHeaderContent = memo(
     onClose,
     onCloseSession,
     closeTooltip,
+    onRefresh,
     onFiles,
     onUpload,
     onVoice,
@@ -106,6 +107,7 @@ export const UnifiedATermHeaderContent = memo(
       !!onVoice ||
       !!onUpload ||
       !!onSettings ||
+      !!onRefresh ||
       !!onReset ||
       !!onClose ||
       !!onCloseSession ||
@@ -308,6 +310,7 @@ export const UnifiedATermHeaderContent = memo(
               closePaneLabel={closePaneLabel}
               closePaneTooltip={closePaneTooltip}
               onCloseSession={onCloseSession}
+              onRefresh={onRefresh}
               onReset={onReset}
               onSettings={onSettings}
               onUpload={onUpload}

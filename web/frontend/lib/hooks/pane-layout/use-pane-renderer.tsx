@@ -26,6 +26,7 @@ interface UsePaneRendererOptions {
     | 'onDetach'
     | 'onClose'
     | 'onCloseSession'
+    | 'onRefresh'
     | 'onUpload'
     | 'onClean'
     | 'onOpenModal'
@@ -68,6 +69,7 @@ export function usePaneRenderer({
     onDetach,
     onClose,
     onCloseSession,
+    onRefresh,
     onUpload,
     onClean,
     onOpenModal,
@@ -94,11 +96,27 @@ export function usePaneRenderer({
   const [dragTargetPanelId, setDragTargetPanelId] = useState<string | null>(
     null,
   )
+  const [refreshVersions, setRefreshVersions] = useState<
+    Record<string, number>
+  >({})
   const [filesTarget, setFilesTarget] = useState<{
     paneId: string
     sessionId: string
   } | null>(null)
   const paneHandlesRef = useRef(new Map<string, ATermHandle>())
+
+  const refreshPane = useCallback((panelId: string) => {
+    setRefreshVersions((current) => ({
+      ...current,
+      [panelId]: (current[panelId] ?? 0) + 1,
+    }))
+
+    if (typeof window !== 'undefined') {
+      requestAnimationFrame(() => {
+        window.dispatchEvent(new Event('resize'))
+      })
+    }
+  }, [])
 
   const handleInsertPath = useCallback(
     (path: string) => {
@@ -115,6 +133,7 @@ export function usePaneRenderer({
       const panelId = getSlotPanelId(slot)
       const paneId = isPaneSlot(slot) ? slot.paneId : null
       const isExternalSlot = slot.type === 'adhoc' && slot.isExternal
+      const refreshVersion = refreshVersions[panelId] ?? 0
       const canResetSlot = !isExternalSlot
       const canCleanSlot =
         (slot.type === 'project' && slot.activeMode !== 'shell') ||
@@ -175,6 +194,9 @@ export function usePaneRenderer({
             onClose={onClose ? () => onClose(slot) : undefined}
             onCloseSession={
               onCloseSession ? () => onCloseSession(slot) : undefined
+            }
+            onRefresh={
+              onRefresh ? () => onRefresh(slot) : () => refreshPane(panelId)
             }
             closeTooltip={isExternalSlot ? 'Detach a-term' : 'Close pane'}
             onFiles={
@@ -252,7 +274,7 @@ export function usePaneRenderer({
           >
             {sessionId ? (
               <ATermComponent
-                key={sessionId}
+                key={`${sessionId}:${refreshVersion}`}
                 ref={(handle) => {
                   if (sessionId) {
                     if (handle) paneHandlesRef.current.set(sessionId, handle)
@@ -301,6 +323,7 @@ export function usePaneRenderer({
       onDetach,
       onClose,
       onCloseSession,
+      onRefresh,
       onUpload,
       onClean,
       onOpenModal,
@@ -326,6 +349,8 @@ export function usePaneRenderer({
       onLayoutModeChange,
       aTermStatuses,
       dragTargetPanelId,
+      refreshVersions,
+      refreshPane,
       filesTarget,
       handleInsertPath,
     ],

@@ -112,7 +112,7 @@ export function MobileKeyboard({
       <div
         className="flex shrink-0 flex-col"
         style={{
-          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+          paddingBottom: voiceActive ? 0 : 'env(safe-area-inset-bottom, 0px)',
         }}
       >
         {isNativeMode && ribbonCollapsed ? (

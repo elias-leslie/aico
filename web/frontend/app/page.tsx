@@ -29,7 +29,10 @@ export default async function Home({ searchParams }: HomePageProps) {
   return (
     <div
       className="h-dvh flex flex-col"
-      style={{ backgroundColor: 'var(--term-bg-deep)' }}
+      style={{
+        backgroundColor: 'var(--term-bg-deep)',
+        height: 'var(--a-term-viewport-height, 100dvh)',
+      }}
     >
       <ATermTabs
         projectId={projectId}

@@ -2,6 +2,7 @@
 
 import { clsx } from 'clsx'
 import { useATermOrchestration } from '@/lib/hooks/use-a-term-orchestration'
+import { useVisualViewportHeight } from '@/lib/hooks/use-visual-viewport-height'
 import { ATermContent } from './ATermContent'
 import { ATermManagerModal } from './ATermManagerModal'
 import { ATermSkeleton } from './ATermSkeleton'
@@ -20,6 +21,8 @@ export function ATermTabs({
   detachedPaneId,
   className,
 }: ATermTabsProps) {
+  useVisualViewportHeight()
+
   const {
     // Core state
     isLoading,

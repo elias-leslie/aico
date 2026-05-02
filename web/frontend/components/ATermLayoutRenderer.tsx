@@ -42,6 +42,7 @@ interface ATermLayoutRendererProps {
   onSlotDetach: (slot: ATermSlot | PaneSlot) => void
   onSlotClose: (slot: ATermSlot | PaneSlot) => void
   onSlotCloseSession: (slot: ATermSlot | PaneSlot) => void
+  onSlotRefresh?: (slot: ATermSlot | PaneSlot) => void
   onSlotClean: (slot: ATermSlot | PaneSlot) => void
 
   // Pane limits
@@ -98,6 +99,7 @@ export function ATermLayoutRenderer({
   onSlotDetach,
   onSlotClose,
   onSlotCloseSession,
+  onSlotRefresh,
   onSlotClean,
   canAddPane,
   onShowSettings,
@@ -137,6 +139,7 @@ export function ATermLayoutRenderer({
       onDetach={onSlotDetach}
       onClose={onSlotClose}
       onCloseSession={onSlotCloseSession}
+      onRefresh={onSlotRefresh}
       onUpload={onUploadClick}
       onClean={onSlotClean}
       onOpenModal={onShowATermManager}

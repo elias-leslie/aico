@@ -58,4 +58,14 @@ describe('MobileKeyboard', () => {
     expect(screen.getByTestId('native-keyboard-input')).toBeInTheDocument()
     expect(screen.queryByTestId('full-keyboard')).not.toBeInTheDocument()
   })
+
+  it('lets the voice panel own bottom safe-area padding while voice is active', () => {
+    const { container } = render(
+      <MobileKeyboard onSend={vi.fn()} voiceActive={true} />,
+    )
+
+    expect((container.firstChild as HTMLElement).style.paddingBottom).toBe(
+      '0px',
+    )
+  })
 })

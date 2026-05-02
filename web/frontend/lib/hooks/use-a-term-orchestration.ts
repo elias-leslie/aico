@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useATermKeyboardShortcuts } from '@/components/KeyboardShortcuts'
 import { getAgentHubVoiceWsUrl } from '@/lib/api-config'
 import {
@@ -82,10 +82,12 @@ export function useATermOrchestration({
   const [showCleaner, setShowCleaner] = useState(false)
   const [cleanerRawPrompt, setCleanerRawPrompt] = useState('')
   const [keyboardHelpState, setKeyboardHelpState] = useState(false)
+  const visibleDetachedPaneIds = useMemo(
+    () => new Set(aTermSlots.filter(isPaneSlot).map((slot) => slot.paneId)),
+    [aTermSlots],
+  )
   const availableDetachedPanes = detachedWindow.isDetachedPaneWindow
-    ? detachedPanes.filter(
-        (pane) => !detachedWindow.detachedWindowPaneIds.includes(pane.id),
-      )
+    ? detachedPanes.filter((pane) => !visibleDetachedPaneIds.has(pane.id))
     : detachedPanes
 
   // Voice input state
@@ -113,7 +115,7 @@ export function useATermOrchestration({
         if (!sessionId) {
           return { sessionId: null }
         }
-        const nextPaneIds = [...detachedWindow.detachedWindowPaneIds]
+        const nextPaneIds = Array.from(visibleDetachedPaneIds)
         if (!nextPaneIds.includes(paneId)) {
           nextPaneIds.push(paneId)
         }

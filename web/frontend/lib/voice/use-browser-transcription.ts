@@ -1,6 +1,10 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  mergeTranscriptSegments,
+  normalizeTranscript,
+} from './transcript-merge'
 import type {
   TranscriptionError,
   UseTranscriptionOptions,
@@ -212,7 +216,7 @@ export function useBrowserTranscription(
         index += 1
       ) {
         const result = event.results[index]
-        const transcript = result[0]?.transcript?.trim()
+        const transcript = normalizeTranscript(result[0]?.transcript)
 
         if (result.isFinal) {
           if (transcript) {
@@ -225,10 +229,12 @@ export function useBrowserTranscription(
         }
       }
 
-      const nextFinalTranscript = nextFinalTranscriptSegments
-        .filter(Boolean)
-        .join(' ')
-      const nextInterimTranscript = nextInterimTranscriptSegments.join(' ')
+      const nextFinalTranscript = mergeTranscriptSegments(
+        nextFinalTranscriptSegments,
+      )
+      const nextInterimTranscript = mergeTranscriptSegments(
+        nextInterimTranscriptSegments,
+      )
 
       finalTranscriptSegmentsRef.current = nextFinalTranscriptSegments
       finalTranscriptRef.current = nextFinalTranscript

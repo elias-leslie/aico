@@ -45,6 +45,7 @@ export function ATermContent({
   onSlotDetach,
   onSlotClose,
   onSlotCloseSession,
+  onSlotRefresh,
   onSlotClean,
   canAddPane,
   handleOpenSettings,
@@ -144,6 +145,7 @@ export function ATermContent({
         onSlotDetach={onSlotDetach}
         onSlotClose={onSlotClose}
         onSlotCloseSession={onSlotCloseSession}
+        onSlotRefresh={onSlotRefresh}
         onSlotClean={onSlotClean}
         canAddPane={canAddPane}
         handleOpenSettings={handleOpenSettings}

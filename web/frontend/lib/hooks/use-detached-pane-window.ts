@@ -47,8 +47,6 @@ export function useDetachedPaneWindow({
 
   const detachedPaneId =
     searchParams.get(DETACHED_PANE_PARAM) ?? fallbackDetachedPaneId ?? null
-  const detachedWindowScopeId =
-    searchParams.get(DETACHED_WINDOW_SCOPE_PARAM) ?? detachedPaneId ?? null
   const detachedWindowPaneIds = useMemo(
     () =>
       parseDetachedWindowPaneIds(
@@ -57,13 +55,28 @@ export function useDetachedPaneWindow({
       ),
     [searchParams, detachedPaneId],
   )
+  const detachedWindowScopeId =
+    searchParams.get(DETACHED_WINDOW_SCOPE_PARAM) ??
+    detachedPaneId ??
+    detachedWindowPaneIds[0] ??
+    null
   const isDetachedPaneWindow =
     detachedWindowScopeId !== null || detachedWindowPaneIds.length > 0
+
+  const getCurrentDetachedWindowPaneIds = useCallback(() => {
+    const params = latestParams()
+    return parseDetachedWindowPaneIds(
+      params.get(DETACHED_WINDOW_PANES_PARAM),
+      params.get(DETACHED_PANE_PARAM) ?? fallbackDetachedPaneId,
+    )
+  }, [fallbackDetachedPaneId, latestParams])
 
   const setDetachedWindowPaneIds = useCallback(
     (paneIds: string[], sessionId?: string | null) => {
       const params = latestParams()
       const normalizedPaneIds = parseDetachedWindowPaneIds(paneIds.join(','))
+      const currentScopeId =
+        params.get(DETACHED_WINDOW_SCOPE_PARAM) ?? detachedWindowScopeId
 
       if (normalizedPaneIds.length > 0) {
         params.set(DETACHED_PANE_PARAM, normalizedPaneIds[0])
@@ -73,8 +86,8 @@ export function useDetachedPaneWindow({
         params.delete(DETACHED_WINDOW_PANES_PARAM)
       }
 
-      if (detachedWindowScopeId) {
-        params.set(DETACHED_WINDOW_SCOPE_PARAM, detachedWindowScopeId)
+      if (currentScopeId) {
+        params.set(DETACHED_WINDOW_SCOPE_PARAM, currentScopeId)
       } else if (normalizedPaneIds.length === 0) {
         params.delete(DETACHED_WINDOW_SCOPE_PARAM)
       }
@@ -95,29 +108,33 @@ export function useDetachedPaneWindow({
 
   const addDetachedWindowPane = useCallback(
     (paneId: string, sessionId?: string | null) => {
-      setDetachedWindowPaneIds([...detachedWindowPaneIds, paneId], sessionId)
+      setDetachedWindowPaneIds(
+        [...getCurrentDetachedWindowPaneIds(), paneId],
+        sessionId,
+      )
     },
-    [detachedWindowPaneIds, setDetachedWindowPaneIds],
+    [getCurrentDetachedWindowPaneIds, setDetachedWindowPaneIds],
   )
 
   const removeDetachedWindowPane = useCallback(
     (paneId: string, sessionId?: string | null) => {
       setDetachedWindowPaneIds(
-        detachedWindowPaneIds.filter((id) => id !== paneId),
+        getCurrentDetachedWindowPaneIds().filter((id) => id !== paneId),
         sessionId,
       )
     },
-    [detachedWindowPaneIds, setDetachedWindowPaneIds],
+    [getCurrentDetachedWindowPaneIds, setDetachedWindowPaneIds],
   )
 
   const replaceDetachedWindowPane = useCallback(
     (paneId: string, nextPaneId: string, sessionId?: string | null) => {
-      const replaced = detachedWindowPaneIds.map((id) =>
-        id === paneId ? nextPaneId : id,
-      )
+      const currentPaneIds = getCurrentDetachedWindowPaneIds()
+      const replaced = currentPaneIds.includes(paneId)
+        ? currentPaneIds.map((id) => (id === paneId ? nextPaneId : id))
+        : [...currentPaneIds, nextPaneId]
       setDetachedWindowPaneIds(replaced, sessionId)
     },
-    [detachedWindowPaneIds, setDetachedWindowPaneIds],
+    [getCurrentDetachedWindowPaneIds, setDetachedWindowPaneIds],
   )
 
   return {

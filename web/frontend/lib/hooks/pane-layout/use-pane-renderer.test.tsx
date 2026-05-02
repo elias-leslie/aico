@@ -277,4 +277,25 @@ describe('usePaneRenderer', () => {
 
     expect(onUpload).toHaveBeenCalledWith('external-codex')
   })
+
+  it('exposes pane refresh from the header without requiring a parent callback', () => {
+    headerProps.length = 0
+
+    const slots: PaneSlot[] = [
+      {
+        type: 'project',
+        paneId: 'pane-1',
+        projectId: 'project-1',
+        projectName: 'Project 1',
+        rootPath: '/tmp/project-1',
+        activeMode: 'shell',
+        activeSessionId: 'session-1',
+        sessionBadge: null,
+      },
+    ]
+
+    render(<RenderHarness slots={slots} />)
+
+    expect(headerProps[0]?.onRefresh).toBeTypeOf('function')
+  })
 })

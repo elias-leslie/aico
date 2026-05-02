@@ -130,6 +130,7 @@
 }
 
 :root {
+  --a-term-viewport-height: 100dvh;
   --term-text-secondary: var(--term-text-muted);
   --term-bg: var(--term-bg-deep);
   --term-accent-soft: color-mix(in srgb, var(--term-accent) 15%, transparent);

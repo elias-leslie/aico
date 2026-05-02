@@ -57,7 +57,7 @@ Want the latest shipped changes? See [Releases](https://github.com/elias-leslie/
 
 **`persistent sessions`** — tmux-backed terminals survive browser closes, server restarts, and network drops. Reconnect exactly where you left off.
 
-**`multi-pane layouts`** — Up to 6 resizable panes. Put planning, implementation, review, release checks, files, and notes on the same screen, then detach any pane into its own browser window when you want to spread work across monitors.
+**`multi-pane layouts`** — Up to 6 resizable panes. Put planning, implementation, review, release checks, files, and notes on the same screen, detach any pane into its own browser window when you want to spread work across monitors, and use the pane menu's Refresh Layout action to remount a pane cleanly without restarting its tmux session.
 
 ![Four-pane grid layout with multiple active agents](docs/images/a-term-grid-2x2.png)
 *Four-pane grid: run multiple agents and shells simultaneously*
@@ -76,7 +76,7 @@ With Agent Hub connected, A-Term can clean a draft prompt, show an original-vs-c
 ![Pop-out Notes workspace with a reusable release review prompt](docs/images/a-term-notes-workspace.png)
 *Pop out the prompt library when you want notes and reusable prompts on a second screen*
 
-**`voice input`** — Dictate commands and prompts via browser speech-to-text when your browser and microphone permissions support it.
+**`voice input`** — Dictate commands and prompts via browser speech-to-text when your browser and microphone permissions support it. A-Term merges cumulative browser speech chunks so dictated phrases do not repeat as interim text becomes final.
 
 **`project deep links`** — Open `/?project=myapp&dir=/path` to jump straight into a project workspace. Bookmark your setups.
 
@@ -91,7 +91,7 @@ With Agent Hub connected, A-Term can clean a draft prompt, show an original-vs-c
 
 **`agent scrollback overlay`** — Scroll tmux-backed history for agent and TUI sessions without losing the live bottom page. First wheel-up or touch entry opens history at the current output, then normal scrolling carries you back through prior work.
 
-**`mobile workspace controls`** — On-screen keyboard with arrow keys, Ctrl, Esc, and modifier support for touch devices, plus a touch-friendly session switcher that can jump into any attached or detached session from your phone.
+**`mobile workspace controls`** — On-screen keyboard with arrow keys, Ctrl, Esc, and modifier support for touch devices, visible-bottom-row viewport handling, plus a touch-friendly session switcher that can jump into any attached or detached session from your phone.
 
 **`light and dark themes`** — Respects `prefers-color-scheme` with a manual override that persists across sessions.
 

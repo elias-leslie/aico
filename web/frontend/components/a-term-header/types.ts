@@ -18,6 +18,7 @@ export interface UnifiedATermHeaderProps {
   onClose?: () => void
   onCloseSession?: () => void
   closeTooltip?: string
+  onRefresh?: () => void
   onFiles?: () => void
   onUpload?: () => void
   onVoice?: () => void

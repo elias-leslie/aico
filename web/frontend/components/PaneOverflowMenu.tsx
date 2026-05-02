@@ -26,6 +26,7 @@ export interface PaneOverflowMenuProps {
   closePaneTooltip?: string
   onCloseSession?: () => void
   closeSessionTooltip?: string
+  onRefresh?: () => void
   onReset?: () => void
   onSettings?: () => void
   onUpload?: () => void
@@ -50,6 +51,7 @@ export function PaneOverflowMenu({
   closePaneTooltip = 'Close pane: remove it from this layout but keep the session running.',
   onCloseSession,
   closeSessionTooltip = 'Close session: terminate the underlying tmux session.',
+  onRefresh,
   onReset,
   onSettings,
   onUpload,
@@ -109,6 +111,11 @@ export function PaneOverflowMenu({
     setIsOpen(false)
   }, [onReset])
 
+  const handleRefresh = useCallback(() => {
+    onRefresh?.()
+    setIsOpen(false)
+  }, [onRefresh])
+
   const handleSettings = useCallback(() => {
     onSettings?.()
     setIsOpen(false)
@@ -152,7 +159,8 @@ export function PaneOverflowMenu({
     onSettings ||
     onUpload ||
     onVoice ||
-    onClean
+    onClean ||
+    onRefresh
   )
   const hasBulkActions = !!(onResetAll || onCloseAll)
 
@@ -260,6 +268,15 @@ export function PaneOverflowMenu({
               label="Reset A-Term"
               onClick={handleReset}
               isMobile={isMobile}
+            />
+          )}
+          {onRefresh && (
+            <MenuItemButton
+              icon={<RefreshCw className="w-3.5 h-3.5" />}
+              label="Refresh Layout"
+              onClick={handleRefresh}
+              isMobile={isMobile}
+              title="Refresh this pane layout without restarting the session"
             />
           )}
           {onClean && (

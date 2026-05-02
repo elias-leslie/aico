@@ -9,6 +9,7 @@ describe('PaneOverflowMenu', () => {
         onDetach={vi.fn()}
         onClosePane={vi.fn()}
         onCloseSession={vi.fn()}
+        onRefresh={vi.fn()}
         onReset={vi.fn()}
         onSettings={vi.fn()}
         onUpload={vi.fn()}
@@ -37,6 +38,9 @@ describe('PaneOverflowMenu', () => {
 
     expect(
       screen.getByRole('menuitem', { name: 'Reset A-Term' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('menuitem', { name: 'Refresh Layout' }),
     ).toBeInTheDocument()
     expect(
       screen.getByRole('menuitem', { name: 'Clean Prompt' }),
@@ -91,6 +95,18 @@ describe('PaneOverflowMenu', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: 'Close Pane' }))
 
     expect(onClosePane).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  })
+
+  it('invokes the refresh action and closes the menu', () => {
+    const onRefresh = vi.fn()
+
+    render(<PaneOverflowMenu onRefresh={onRefresh} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pane actions' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Refresh Layout' }))
+
+    expect(onRefresh).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
   })
 

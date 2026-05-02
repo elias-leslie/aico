@@ -1,6 +1,10 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  getTranscriptAppendSuffix,
+  mergeTranscriptSegments,
+} from '@/lib/voice/transcript-merge'
 import type { TranscriptionError, TranscriptionStatus } from '@/lib/voice/types'
 import { VoiceDesktopPanel } from './voice/VoiceDesktopPanel'
 import { VoiceMobilePanel } from './voice/VoiceMobilePanel'
@@ -53,15 +57,21 @@ export function VoiceTranscriptPanel({
     }
   }, [visible, isMobile])
 
+  const interimSuffix = getTranscriptAppendSuffix(editedText, interimTranscript)
+  const combinedTranscript = mergeTranscriptSegments([
+    editedText,
+    interimTranscript,
+  ])
+
   const handleSend = useCallback(() => {
-    const text = editedText.trim()
+    const text = combinedTranscript.trim()
     if (text) onSend(text)
-  }, [editedText, onSend])
+  }, [combinedTranscript, onSend])
 
   const handleInsert = useCallback(() => {
-    const text = editedText.trim()
+    const text = combinedTranscript.trim()
     if (text) onInsert(text)
-  }, [editedText, onInsert])
+  }, [combinedTranscript, onInsert])
 
   // Clean up close animation timer on unmount
   useEffect(
@@ -93,7 +103,7 @@ export function VoiceTranscriptPanel({
     [handleSend, handleClose],
   )
 
-  const hasText = editedText.trim().length > 0 || interimTranscript.length > 0
+  const hasText = combinedTranscript.trim().length > 0
 
   const handleMicTap = useCallback(() => {
     if (status === 'error') onReset()
@@ -108,7 +118,7 @@ export function VoiceTranscriptPanel({
     return (
       <VoiceMobilePanel
         editedText={editedText}
-        interimTranscript={interimTranscript}
+        interimTranscript={interimSuffix}
         status={status}
         error={error}
         hasText={hasText}
@@ -122,7 +132,7 @@ export function VoiceTranscriptPanel({
     <VoiceDesktopPanel
       editedText={editedText}
       setEditedText={setEditedText}
-      interimTranscript={interimTranscript}
+      interimTranscript={interimSuffix}
       status={status}
       error={error}
       hasText={hasText}

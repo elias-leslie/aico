@@ -141,6 +141,43 @@ describe('useTranscription', () => {
     })
   })
 
+  it('does not duplicate final phrases when a later result contains prior words', async () => {
+    const { useTranscription } = await import('./use-transcription')
+    const { result } = renderHook(() => useTranscription())
+
+    act(() => {
+      result.current.startListening()
+    })
+
+    await waitFor(() => {
+      expect(result.current.status).toBe('listening')
+    })
+
+    act(() => {
+      FakeSpeechRecognition.instances[0]?.emitResult([
+        { isFinal: true, transcript: 'hello' },
+      ])
+    })
+
+    await waitFor(() => {
+      expect(result.current.finalTranscript).toBe('hello')
+    })
+
+    act(() => {
+      FakeSpeechRecognition.instances[0]?.emitResult(
+        [
+          { isFinal: true, transcript: 'hello' },
+          { isFinal: true, transcript: 'hello world' },
+        ],
+        { resultIndex: 1 },
+      )
+    })
+
+    await waitFor(() => {
+      expect(result.current.finalTranscript).toBe('hello world')
+    })
+  })
+
   it('reports unsupported when no speech recognition engine is available', async () => {
     delete window.SpeechRecognition
     delete window.webkitSpeechRecognition

@@ -56,6 +56,7 @@ export interface ATermContentProps {
   onSlotDetach: (slot: ATermSlot | PaneSlot) => void
   onSlotClose: (slot: ATermSlot | PaneSlot) => void
   onSlotCloseSession: (slot: ATermSlot | PaneSlot) => void
+  onSlotRefresh?: (slot: ATermSlot | PaneSlot) => void
   onSlotClean: (slot: ATermSlot | PaneSlot) => void
   canAddPane: boolean
   handleOpenSettings: () => void
