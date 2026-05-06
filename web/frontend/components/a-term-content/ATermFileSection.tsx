@@ -55,7 +55,7 @@ interface ATermFileSectionProps {
   uploadError: { message: string } | null
   clearUploadError?: () => void
   handleFileInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void
-  handleFileSelect: (file: File) => void
+  handleFileSelect: (file: File, targetSessionId?: string) => void
   activeSessionId?: string | null
   storageScopeId?: string | null
   isVoiceSupported: boolean
@@ -157,6 +157,7 @@ export function ATermFileSection({
           onShowSettings={handleOpenSettings}
           onShowATermManager={handleOpenATermManager}
           onUploadClick={handleUploadClick}
+          onFilePaste={handleFileSelect}
           onModeSwitch={onModeSwitch}
           onProjectSwitch={onProjectSwitch}
           isModeSwitching={isModeSwitching}

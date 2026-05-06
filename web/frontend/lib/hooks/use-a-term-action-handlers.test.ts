@@ -81,4 +81,61 @@ describe('useATermActionHandlers', () => {
     expect(externalPasteInput).toHaveBeenCalledWith('/tmp/uploaded.txt')
     expect(nativePasteInput).not.toHaveBeenCalled()
   })
+
+  it('pastes clipboard image upload paths into the pane where paste happened', async () => {
+    const nativePasteInput = vi.fn()
+    const externalPasteInput = vi.fn()
+    const aTermRefs = {
+      current: new Map<string, ATermHandle | null>([
+        [
+          'native-session',
+          {
+            pasteInput: nativePasteInput,
+            search: vi.fn(),
+            clearSearch: vi.fn(),
+          } as unknown as ATermHandle,
+        ],
+        [
+          'external-session',
+          {
+            pasteInput: externalPasteInput,
+            search: vi.fn(),
+            clearSearch: vi.fn(),
+          } as unknown as ATermHandle,
+        ],
+      ]),
+    }
+
+    mocks.uploadFile.mockResolvedValue({
+      path: '/tmp/pasted.png',
+      filename: 'pasted.png',
+      size: 32,
+      mime_type: 'image/png',
+    })
+
+    const { result } = renderHook(() =>
+      useATermActionHandlers({
+        aTermRefs,
+        activeSessionId: 'native-session',
+        showCleaner: false,
+        setShowCleaner: vi.fn(),
+        setCleanerRawPrompt: vi.fn(),
+        setShowVoice: vi.fn(),
+        voiceStartListening: vi.fn(),
+        voiceStopListening: vi.fn(),
+        voiceResetTranscript: vi.fn(),
+        voiceStatus: 'idle',
+      }),
+    )
+
+    await act(async () => {
+      await result.current.handleFileSelect(
+        new File(['image'], 'pasted.png', { type: 'image/png' }),
+        'external-session',
+      )
+    })
+
+    expect(externalPasteInput).toHaveBeenCalledWith('/tmp/pasted.png')
+    expect(nativePasteInput).not.toHaveBeenCalled()
+  })
 })

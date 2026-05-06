@@ -64,11 +64,12 @@ export function useATermActionHandlers({
   }, [])
 
   const handleFileSelect = useCallback(
-    async (file: File) => {
+    async (file: File, targetSessionId?: string) => {
+      const uploadTargetSessionId = targetSessionId ?? uploadTargetRef.current
       const result = await uploadFile(file)
       if (result) {
-        const aTermRef = uploadTargetRef.current
-          ? (aTermRefs.current.get(uploadTargetRef.current) ?? null)
+        const aTermRef = uploadTargetSessionId
+          ? (aTermRefs.current.get(uploadTargetSessionId) ?? null)
           : findActiveRef(aTermRefs.current, activeSessionId)
         if (aTermRef) {
           aTermRef.pasteInput(result.path)

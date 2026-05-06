@@ -14,6 +14,7 @@ export interface ATermProps {
   cursorBlink?: boolean
   theme?: ATermTheme
   isVisible?: boolean
+  onFilePaste?: (file: File, sessionId: string) => void | Promise<void>
 }
 
 export type ConnectionStatus =

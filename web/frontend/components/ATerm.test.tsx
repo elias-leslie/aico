@@ -393,6 +393,28 @@ describe('ATermComponent', () => {
     }
   })
 
+  it('routes native a-term image paste to the session file handler', () => {
+    const onFilePaste = vi.fn()
+    const image = new File(['image'], 'pasted.png', { type: 'image/png' })
+
+    render(
+      <ATermComponent
+        sessionId="session-native-image-paste"
+        onFilePaste={onFilePaste}
+      />,
+    )
+
+    act(() => {
+      aTermInstanceOptions?.onFilePaste?.(image)
+    })
+
+    expect(onFilePaste).toHaveBeenCalledWith(
+      image,
+      'session-native-image-paste',
+    )
+    expect(websocketState.sendInput).not.toHaveBeenCalled()
+  })
+
   it('resets copy mode before forwarding focused a-term input', () => {
     websocketState.wsRefCurrent = {
       readyState: WebSocket.OPEN,

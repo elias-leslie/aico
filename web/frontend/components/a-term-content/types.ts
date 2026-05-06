@@ -82,7 +82,7 @@ export interface ATermContentProps {
   uploadError: { message: string } | null
   clearUploadError?: () => void
   handleFileInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void
-  handleFileSelect: (file: File) => void
+  handleFileSelect: (file: File, targetSessionId?: string) => void
 
   // Prompt cleaner
   showCleaner: boolean
