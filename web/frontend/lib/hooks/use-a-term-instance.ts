@@ -117,6 +117,7 @@ export function useATermInstance(
           term.textarea,
           isFocusedRef,
           opts.onPaste,
+          opts.onFilePaste,
         )
       }
 

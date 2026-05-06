@@ -79,6 +79,7 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
       cursorBlink = true,
       theme = PHOSPHOR_THEME,
       isVisible = true,
+      onFilePaste,
     },
     ref,
   ) {
@@ -262,6 +263,12 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
     ])
 
     const pasteInput = useBracketedPaste(sendInput)
+    const pasteFile = useCallback(
+      (file: File) => {
+        void onFilePaste?.(file, sessionId)
+      },
+      [onFilePaste, sessionId],
+    )
 
     const isMobile = useMemo(() => isMobileDevice(), [])
 
@@ -301,6 +308,7 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
         theme,
         onData: handleATermData,
         onPaste: pasteInput,
+        onFilePaste: pasteFile,
         setupScrolling,
       },
       { aTermRef, fitAddonRef, containerRef, isFocusedRef },

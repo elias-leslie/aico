@@ -100,6 +100,7 @@ export interface ATermInstanceOptions {
   }
   onData: (data: string) => void
   onPaste: (data: string) => void
+  onFilePaste?: (file: File) => void
   setupScrolling: (container: HTMLElement) => {
     wheelCleanup: () => void
     touchCleanup: () => void
@@ -216,6 +217,24 @@ export interface FocusPasteCleanup {
   pasteCleanup: () => void
 }
 
+function getClipboardImageFile(
+  clipboardData: DataTransfer | null,
+): File | null {
+  if (!clipboardData) return null
+
+  for (const item of Array.from(clipboardData.items ?? [])) {
+    if (item.kind !== 'file' || !item.type.startsWith('image/')) continue
+    const file = item.getAsFile()
+    if (file) return file
+  }
+
+  for (const file of Array.from(clipboardData.files ?? [])) {
+    if (file.type.startsWith('image/')) return file
+  }
+
+  return null
+}
+
 // ---------------------------------------------------------------------------
 // Mobile context-menu paste
 // ---------------------------------------------------------------------------
@@ -264,6 +283,7 @@ export function setupFocusAndPasteTracking(
   textarea: HTMLTextAreaElement,
   isFocusedRef: React.MutableRefObject<boolean>,
   onPaste: (data: string) => void,
+  onFilePaste?: (file: File) => void,
 ): FocusPasteCleanup {
   const handleFocus = () => {
     isFocusedRef.current = true
@@ -272,6 +292,14 @@ export function setupFocusAndPasteTracking(
     isFocusedRef.current = false
   }
   const handlePaste = (event: ClipboardEvent) => {
+    const pastedImage = getClipboardImageFile(event.clipboardData)
+    if (pastedImage) {
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      onFilePaste?.(pastedImage)
+      return
+    }
+
     const pastedText = event.clipboardData?.getData('text')
     if (!pastedText) return
     event.preventDefault()

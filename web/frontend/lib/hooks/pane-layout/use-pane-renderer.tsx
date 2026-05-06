@@ -28,6 +28,7 @@ interface UsePaneRendererOptions {
     | 'onCloseSession'
     | 'onRefresh'
     | 'onUpload'
+    | 'onFilePaste'
     | 'onClean'
     | 'onOpenModal'
     | 'canAddPane'
@@ -71,6 +72,7 @@ export function usePaneRenderer({
     onCloseSession,
     onRefresh,
     onUpload,
+    onFilePaste,
     onClean,
     onOpenModal,
     canAddPane,
@@ -295,6 +297,13 @@ export function usePaneRenderer({
                 cursorBlink={cursorBlink}
                 theme={theme}
                 onStatusChange={(status) => onStatusChange?.(sessionId, status)}
+                onFilePaste={
+                  onFilePaste
+                    ? (file) => {
+                        void onFilePaste(file, sessionId)
+                      }
+                    : undefined
+                }
               />
             ) : (
               <div
@@ -325,6 +334,7 @@ export function usePaneRenderer({
       onCloseSession,
       onRefresh,
       onUpload,
+      onFilePaste,
       onClean,
       onOpenModal,
       canAddPane,

@@ -52,6 +52,7 @@ interface ATermLayoutRendererProps {
   onShowSettings: () => void
   onShowATermManager?: () => void
   onUploadClick: (sessionId?: string) => void
+  onFilePaste?: (file: File, sessionId?: string) => void | Promise<void>
 
   // Mode switch handler for project slots
   onModeSwitch?: (
@@ -105,6 +106,7 @@ export function ATermLayoutRenderer({
   onShowSettings,
   onShowATermManager,
   onUploadClick,
+  onFilePaste,
   onModeSwitch,
   onProjectSwitch,
   isModeSwitching,
@@ -141,6 +143,7 @@ export function ATermLayoutRenderer({
       onCloseSession={onSlotCloseSession}
       onRefresh={onSlotRefresh}
       onUpload={onUploadClick}
+      onFilePaste={onFilePaste}
       onClean={onSlotClean}
       onOpenModal={onShowATermManager}
       canAddPane={canAddPane}
