@@ -63,6 +63,11 @@ const CLIENT_CAPABILITIES = [
 
 const textEncoder = new TextEncoder()
 const textDecoder = new TextDecoder()
+const MAX_RECONNECT_ATTEMPTS = 10
+
+function getReconnectDelay(attemptIndex: number): number {
+  return Math.min(1000 * 2 ** attemptIndex, 30000)
+}
 
 /** Build and open a WebSocket, wiring all event handlers for connection lifecycle. */
 export function openWebSocketConnection(
@@ -91,6 +96,30 @@ export function openWebSocketConnection(
     sendInitialResize = true,
     setStatus,
   } = callbacks
+  const scheduleReconnect = (
+    reason: string,
+    exhaustedStatus: string,
+    exhaustedMessage: string,
+  ) => {
+    if (retryCountRef.current < MAX_RECONNECT_ATTEMPTS) {
+      const attempt = retryCountRef.current + 1
+      const delay = getReconnectDelay(retryCountRef.current)
+      retryCountRef.current = attempt
+      onATermMessage?.(
+        `\r\n\x1b[33m${reason}, retrying (${attempt}/${MAX_RECONNECT_ATTEMPTS})...\x1b[0m`,
+      )
+      setStatus('connecting')
+      retryTimeoutRef.current = setTimeout(() => {
+        retryTimeoutRef.current = null
+        if (mountedRef.current) connectRef.current?.()
+      }, delay)
+      return
+    }
+
+    setStatus(exhaustedStatus)
+    onATermMessage?.(exhaustedMessage)
+    onDisconnect?.()
+  }
 
   // Close any existing connection
   if (wsRef.current) {
@@ -133,31 +162,23 @@ export function openWebSocketConnection(
 
   // Set up connection timeout with exponential-backoff retry
   timeoutIdRef.current = setTimeout(() => {
+    if (wsRef.current !== ws) return
     if (ws.readyState !== WebSocket.CONNECTING) return
+    wsRef.current = null
     ws.close()
     if (!mountedRef.current) return
-
-    const maxRetries = 10
-    if (retryCountRef.current < maxRetries) {
-      const delay = Math.min(1000 * 2 ** retryCountRef.current, 30000)
-      retryCountRef.current += 1
-      onATermMessage?.(
-        `\x1b[33mConnection timeout, retrying (${retryCountRef.current}/${maxRetries})...\x1b[0m`,
-      )
-      setStatus('connecting')
-      retryTimeoutRef.current = setTimeout(() => {
-        if (mountedRef.current) connectRef.current?.()
-      }, delay)
-    } else {
-      setStatus('timeout')
-      onATermMessage?.(
-        '\r\n\x1b[31mConnection timeout after maximum retries\x1b[0m',
-      )
-      onDisconnect?.()
-    }
+    scheduleReconnect(
+      'Connection timeout',
+      'timeout',
+      '\r\n\x1b[31mConnection timeout after maximum retries\x1b[0m',
+    )
   }, CONNECTION_TIMEOUT)
 
   ws.onopen = () => {
+    if (wsRef.current !== ws) {
+      ws.close()
+      return
+    }
     connectingRef.current = false
     if (timeoutIdRef.current) clearTimeout(timeoutIdRef.current)
     if (!mountedRef.current) return
@@ -195,6 +216,7 @@ export function openWebSocketConnection(
   }
 
   ws.onmessage = (event) => {
+    if (wsRef.current !== ws) return
     if (!mountedRef.current) return
     try {
       // Phase 5: Binary protocol handling
@@ -242,7 +264,9 @@ export function openWebSocketConnection(
         }
         onMessage?.(event.data)
       } else if (event.data instanceof Blob) {
-        event.data.text().then((text) => onMessage?.(text))
+        event.data.text().then((text) => {
+          if (mountedRef.current && wsRef.current === ws) onMessage?.(text)
+        })
       }
     } catch (error) {
       console.error('Error handling WebSocket message:', error)
@@ -250,6 +274,8 @@ export function openWebSocketConnection(
   }
 
   ws.onclose = (event) => {
+    if (wsRef.current !== ws) return
+    wsRef.current = null
     connectingRef.current = false
     if (timeoutIdRef.current) clearTimeout(timeoutIdRef.current)
     if (pingIntervalRef.current) {
@@ -271,21 +297,37 @@ export function openWebSocketConnection(
         )
       }
     } else {
-      setStatus('disconnected')
-      onATermMessage?.('\r\n\x1b[31mDisconnected from a-term\x1b[0m')
+      scheduleReconnect(
+        'Disconnected from a-term',
+        'disconnected',
+        '\r\n\x1b[31mDisconnected from a-term after maximum reconnect retries\x1b[0m',
+      )
+      return
     }
     onDisconnect?.()
   }
 
   ws.onerror = () => {
+    if (wsRef.current !== ws) return
+    wsRef.current = null
+    connectingRef.current = false
     if (timeoutIdRef.current) clearTimeout(timeoutIdRef.current)
     if (pingIntervalRef.current) {
       clearInterval(pingIntervalRef.current)
       pingIntervalRef.current = null
     }
     if (!mountedRef.current) return
-    setStatus('error')
-    onATermMessage?.('\r\n\x1b[31mConnection error\x1b[0m')
+    if (
+      ws.readyState !== WebSocket.CLOSING &&
+      ws.readyState !== WebSocket.CLOSED
+    ) {
+      ws.close()
+    }
+    scheduleReconnect(
+      'Connection error',
+      'error',
+      '\r\n\x1b[31mConnection error after maximum reconnect retries\x1b[0m',
+    )
   }
 }
 
