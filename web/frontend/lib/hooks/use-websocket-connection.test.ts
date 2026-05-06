@@ -53,6 +53,7 @@ function buildCallbacks() {
   return {
     getDimensions: vi.fn(() => null),
     onATermMessage: vi.fn(),
+    onBeforeReconnectData: vi.fn(),
     onDisconnect: vi.fn(),
     onScrollbackPage: vi.fn(),
     setStatus: vi.fn(),
@@ -165,7 +166,7 @@ describe('openWebSocketConnection', () => {
     expect(refs.retryCountRef.current).toBe(1)
     expect(refs.wsRef.current).toBe(null)
 
-    vi.advanceTimersByTime(999)
+    vi.advanceTimersByTime(249)
     expect(sockets).toHaveLength(1)
     vi.advanceTimersByTime(1)
 
@@ -211,9 +212,41 @@ describe('openWebSocketConnection', () => {
     expect(callbacks.onDisconnect).not.toHaveBeenCalled()
     expect(refs.wsRef.current).toBe(null)
 
-    vi.advanceTimersByTime(1000)
+    vi.advanceTimersByTime(250)
 
     expect(sockets).toHaveLength(2)
     expect(refs.wsRef.current).toBe(sockets[1])
+  })
+
+  it('does not write transient retry messages into the terminal buffer', () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('WebSocket', MockWebSocket)
+    const refs = buildRefs()
+    const callbacks = buildCallbacks()
+    refs.connectRef.current = () => connect(refs, callbacks)
+
+    connect(refs, callbacks)
+    sockets[0].emitError()
+
+    expect(callbacks.setStatus).toHaveBeenCalledWith('connecting')
+    expect(callbacks.onATermMessage).not.toHaveBeenCalled()
+  })
+
+  it('clears any first-load retry residue when the socket eventually opens', () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('WebSocket', MockWebSocket)
+    const refs = buildRefs()
+    const callbacks = buildCallbacks()
+    refs.connectRef.current = () => connect(refs, callbacks)
+
+    connect(refs, callbacks)
+    sockets[0].emitError()
+    vi.advanceTimersByTime(250)
+
+    sockets[1].emitOpen()
+
+    expect(callbacks.onBeforeReconnectData).toHaveBeenCalledTimes(1)
+    expect(callbacks.onATermMessage).not.toHaveBeenCalled()
+    expect(callbacks.setStatus).toHaveBeenLastCalledWith('connected')
   })
 })

@@ -207,7 +207,6 @@ export function useATermWebSocket({
   const reconnect = useCallback(() => {
     disconnect()
     retryCountRef.current = 0
-    onATermMessageRef.current?.('\x1b[33mReconnecting...\x1b[0m')
     setStatus('connecting')
     connect()
   }, [connect, disconnect])

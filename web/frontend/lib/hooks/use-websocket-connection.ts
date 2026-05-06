@@ -63,10 +63,15 @@ const CLIENT_CAPABILITIES = [
 
 const textEncoder = new TextEncoder()
 const textDecoder = new TextDecoder()
-const MAX_RECONNECT_ATTEMPTS = 10
+const MAX_RECONNECT_ATTEMPTS = 30
+const INITIAL_RECONNECT_DELAY_MS = 250
+const MAX_RECONNECT_DELAY_MS = 2000
 
 function getReconnectDelay(attemptIndex: number): number {
-  return Math.min(1000 * 2 ** attemptIndex, 30000)
+  return Math.min(
+    INITIAL_RECONNECT_DELAY_MS * 1.5 ** attemptIndex,
+    MAX_RECONNECT_DELAY_MS,
+  )
 }
 
 /** Build and open a WebSocket, wiring all event handlers for connection lifecycle. */
@@ -97,7 +102,6 @@ export function openWebSocketConnection(
     setStatus,
   } = callbacks
   const scheduleReconnect = (
-    reason: string,
     exhaustedStatus: string,
     exhaustedMessage: string,
   ) => {
@@ -105,9 +109,6 @@ export function openWebSocketConnection(
       const attempt = retryCountRef.current + 1
       const delay = getReconnectDelay(retryCountRef.current)
       retryCountRef.current = attempt
-      onATermMessage?.(
-        `\r\n\x1b[33m${reason}, retrying (${attempt}/${MAX_RECONNECT_ATTEMPTS})...\x1b[0m`,
-      )
       setStatus('connecting')
       retryTimeoutRef.current = setTimeout(() => {
         retryTimeoutRef.current = null
@@ -168,7 +169,6 @@ export function openWebSocketConnection(
     ws.close()
     if (!mountedRef.current) return
     scheduleReconnect(
-      'Connection timeout',
       'timeout',
       '\r\n\x1b[31mConnection timeout after maximum retries\x1b[0m',
     )
@@ -183,13 +183,15 @@ export function openWebSocketConnection(
     if (timeoutIdRef.current) clearTimeout(timeoutIdRef.current)
     if (!mountedRef.current) return
 
+    const hadRetries = retryCountRef.current > 0
     retryCountRef.current = 0
     setStatus('connected')
 
     if (!hasConnectedRef.current) {
       hasConnectedRef.current = true
-      onATermMessage?.(`Connected to a-term session: ${sessionId}`)
-      onATermMessage?.('')
+      if (hadRetries) {
+        onBeforeReconnectData?.()
+      }
     } else {
       onBeforeReconnectData?.()
     }
@@ -298,7 +300,6 @@ export function openWebSocketConnection(
       }
     } else {
       scheduleReconnect(
-        'Disconnected from a-term',
         'disconnected',
         '\r\n\x1b[31mDisconnected from a-term after maximum reconnect retries\x1b[0m',
       )
@@ -324,7 +325,6 @@ export function openWebSocketConnection(
       ws.close()
     }
     scheduleReconnect(
-      'Connection error',
       'error',
       '\r\n\x1b[31mConnection error after maximum reconnect retries\x1b[0m',
     )
