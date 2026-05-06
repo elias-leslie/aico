@@ -93,7 +93,7 @@ def get_pane_with_sessions(pane_id: PaneId) -> dict[str, Any] | None:
 
 
 def list_panes_with_sessions(include_detached: bool = False) -> list[dict[str, Any]]:
-    """List panes with their sessions."""
+    """List panes with live sessions."""
     panes = list_panes(include_detached=include_detached)
     if not panes:
         return []

@@ -45,10 +45,20 @@ from .validators import (
 router = APIRouter(tags=["A-Term Panes"])
 
 
+def _has_live_sessions(pane: dict[str, Any]) -> bool:
+    return any(session.get("is_alive") for session in pane.get("sessions", []))
+
+
+def _require_live_pane(pane: dict[str, Any], pane_id: str) -> dict[str, Any]:
+    if not _has_live_sessions(pane):
+        raise HTTPException(status_code=404, detail=f"Pane {pane_id} has no live sessions") from None
+    return pane
+
+
 @router.get("/api/a-term/panes", response_model=PaneListResponse)
 async def list_panes() -> PaneListResponse:
     """List all a_term panes with their sessions."""
-    panes = pane_store.list_panes_with_sessions()
+    panes = [p for p in pane_store.list_panes_with_sessions() if _has_live_sessions(p)]
     return PaneListResponse(
         items=[build_pane_response(p) for p in panes],
         total=len(panes),
@@ -59,7 +69,11 @@ async def list_panes() -> PaneListResponse:
 @router.get("/api/a-term/panes/detached", response_model=PaneListResponse)
 async def list_detached_panes() -> PaneListResponse:
     """List detached panes that can be reattached."""
-    panes = [p for p in pane_store.list_panes_with_sessions(include_detached=True) if p.get("is_detached")]
+    panes = [
+        p
+        for p in pane_store.list_panes_with_sessions(include_detached=True)
+        if p.get("is_detached") and _has_live_sessions(p)
+    ]
     return PaneListResponse(
         items=[build_pane_response(p) for p in panes],
         total=len(panes),
@@ -133,6 +147,7 @@ async def get_pane(pane_id: str) -> PaneResponse:
     validate_uuid(pane_id)
 
     pane = require_pane_exists(pane_store.get_pane_with_sessions(pane_id), pane_id)
+    _require_live_pane(pane, pane_id)
     return build_pane_response(pane)
 
 
@@ -142,6 +157,7 @@ async def update_pane(pane_id: str, request: UpdatePaneRequest) -> PaneResponse:
     validate_uuid(pane_id)
 
     existing = require_pane_exists(pane_store.get_pane_with_sessions(pane_id), pane_id)
+    _require_live_pane(existing, pane_id)
 
     if request.active_mode is not None:
         if request.active_mode == "shell":
@@ -187,6 +203,7 @@ async def detach_pane(pane_id: str) -> PaneResponse:
     validate_uuid(pane_id)
 
     pane = require_pane_exists(pane_store.get_pane_with_sessions(pane_id), pane_id)
+    _require_live_pane(pane, pane_id)
     if pane.get("is_detached"):
         return build_pane_response(pane)
 
@@ -205,6 +222,7 @@ async def attach_pane(
     validate_uuid(pane_id)
 
     pane = require_pane_exists(pane_store.get_pane_with_sessions(pane_id), pane_id)
+    _require_live_pane(pane, pane_id)
     if not pane.get("is_detached"):
         return build_pane_response(pane)
 
