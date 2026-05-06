@@ -38,8 +38,19 @@ def swap_pane_positions(pane_id_a: PaneId, pane_id_b: PaneId) -> bool:
 
 
 def count_panes(include_detached: bool = False) -> int:
-    """Count panes, optionally including detached."""
-    sql = "SELECT COUNT(*) FROM a_term_panes" + ("" if include_detached else " WHERE is_detached = false")
+    """Count panes with at least one live session, optionally including detached."""
+    detached_clause = "" if include_detached else "AND p.is_detached = false"
+    sql = f"""
+        SELECT COUNT(*)
+        FROM a_term_panes p
+        WHERE EXISTS (
+            SELECT 1
+            FROM a_term_sessions s
+            WHERE s.pane_id = p.id
+              AND s.is_alive = true
+        )
+        {detached_clause}
+    """
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(sql)
         row = cur.fetchone()

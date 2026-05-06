@@ -668,6 +668,137 @@ describe('useATermTabsState', () => {
     expect(switchToSession).toHaveBeenCalledWith('session-detached-new')
   })
 
+  it('starts the default agent when creating project panes inside detached windows', async () => {
+    const switchToSession = vi.fn()
+    const addDetachedWindowPane = vi.fn()
+    const handleProjectModeChange = vi.fn().mockResolvedValue(undefined)
+    const createProjectPane = vi.fn().mockResolvedValue({
+      id: 'pane-project-a',
+      pane_type: 'project',
+      project_id: 'project-a',
+      pane_order: 0,
+      pane_name: 'Project A',
+      active_mode: 'codex',
+      created_at: '2026-03-06T00:00:00Z',
+      sessions: [
+        {
+          id: 'session-shell',
+          name: 'Project A Shell',
+          mode: 'shell',
+          session_number: 1,
+          is_alive: true,
+          working_dir: '/workspace/project-a',
+          claude_state: 'not_started',
+        },
+        {
+          id: 'session-codex',
+          name: 'Project A Codex',
+          mode: 'codex',
+          session_number: 1,
+          is_alive: true,
+          working_dir: '/workspace/project-a',
+          agent_state: 'not_started',
+          claude_state: 'not_started',
+        },
+      ],
+      width_percent: 100,
+      height_percent: 100,
+      grid_row: 0,
+      grid_col: 0,
+    })
+
+    mockUseActiveSession.mockReturnValue(
+      buildActiveSessionState({
+        activeSessionId: null,
+        activeSession: null,
+        switchToSession,
+        projectATerms: [],
+        sessions: [],
+        adHocSessions: [],
+      }),
+    )
+    mockUseATermHandlers.mockReturnValue({
+      handleKeyboardModeChange: vi.fn(),
+      handleKeyboardSizeChange: vi.fn(),
+      handleKeyboardSpacingChange: vi.fn(),
+      handleStatusChange: vi.fn(),
+      handleKeyboardInput: vi.fn(),
+      handleReconnect: vi.fn(),
+      handleLayoutModeChange: vi.fn(),
+      handleAddTab: vi.fn(),
+      handleNewATermForProject: vi.fn(),
+      handleProjectModeChange,
+      handleCloseAll: vi.fn(),
+      setATermRef: vi.fn(),
+      update: vi.fn(),
+      remove: vi.fn(),
+      reset: vi.fn(),
+      resetAll: vi.fn(),
+      resetProject: vi.fn(),
+      disableProject: vi.fn(),
+      sessionsLoading: false,
+      projectsLoading: false,
+    })
+    mockUseATermPanes.mockReturnValue({
+      panes: [],
+      detachedPanes: [],
+      atLimit: false,
+      isLoading: false,
+      detachedLoadedOnce: true,
+      hasLoadedOnce: true,
+      swapPanePositions: vi.fn(),
+      removePane: vi.fn(),
+      detachPane: vi.fn(),
+      attachPane: vi.fn(),
+      setActiveMode: vi.fn(),
+      createAdHocPane: vi.fn(),
+      createProjectPane,
+      isCreating: false,
+      saveLayouts: vi.fn(),
+      maxPanes: 6,
+    })
+
+    const { result } = renderHook(() =>
+      useATermTabsState({
+        projectId: undefined,
+        projectPath: undefined,
+        isDetachedPaneWindow: true,
+        detachedWindowPaneIds: [],
+        addDetachedWindowPane,
+      }),
+    )
+
+    await act(async () => {
+      await result.current.handleNewATermForProject(
+        'project-a',
+        undefined,
+        '/workspace/project-a',
+      )
+    })
+
+    expect(createProjectPane).toHaveBeenCalledWith(
+      'Project-a',
+      'project-a',
+      '/workspace/project-a',
+      undefined,
+      { detached: true },
+    )
+    expect(addDetachedWindowPane).toHaveBeenCalledWith(
+      'pane-project-a',
+      'session-codex',
+    )
+    expect(handleProjectModeChange).toHaveBeenCalledWith(
+      'project-a',
+      'codex',
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'session-codex', mode: 'codex' }),
+      ]),
+      'pane-project-a',
+      expect.objectContaining({ id: 'pane-project-a' }),
+    )
+    expect(switchToSession).not.toHaveBeenCalled()
+  })
+
   it('creates and focuses a project pane when a project deep link is provided', async () => {
     const switchToSession = vi.fn()
     const createProjectPane = vi.fn().mockResolvedValue({

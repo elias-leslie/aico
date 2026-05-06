@@ -49,7 +49,19 @@ def _execute_write(query: Any, params: Any) -> dict[str, Any] | None:
 def _prepare_pane_slot(cur: Any, pane_order: int | None = None) -> int:
     """Lock table, enforce pane limit, and return the next available pane_order."""
     cur.execute("LOCK TABLE a_term_panes IN SHARE ROW EXCLUSIVE MODE")
-    cur.execute("SELECT COUNT(*) AS cnt FROM a_term_panes WHERE is_detached = false")
+    cur.execute(
+        """
+        SELECT COUNT(*) AS cnt
+        FROM a_term_panes p
+        WHERE p.is_detached = false
+          AND EXISTS (
+              SELECT 1
+              FROM a_term_sessions s
+              WHERE s.pane_id = p.id
+                AND s.is_alive = true
+          )
+        """
+    )
     row = cur.fetchone()
     if row and int(row["cnt"]) >= MAX_PANES:
         raise ValueError(f"Maximum {MAX_PANES} panes allowed. Close one to add more.")

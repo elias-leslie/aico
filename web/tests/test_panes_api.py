@@ -74,7 +74,10 @@ def _make_session_in_pane(
 def test_list_panes_returns_items(test_app: TestClient) -> None:
     """GET /api/a-term/panes -- returns pane list with total and max."""
     # Arrange
-    panes = [_make_pane(pane_name="p1"), _make_pane(pane_name="p2")]
+    panes = [
+        _make_pane(pane_name="p1", sessions=[_make_session_in_pane()]),
+        _make_pane(pane_name="p2", sessions=[_make_session_in_pane()]),
+    ]
     with patch("a_term.api.panes.pane_store.list_panes_with_sessions", return_value=panes):
         # Act
         response = test_app.get("/api/a-term/panes")
@@ -100,9 +103,32 @@ def test_list_panes_empty_returns_zero(test_app: TestClient) -> None:
     assert body["items"] == []
 
 
+def test_list_panes_hides_panes_without_live_sessions(test_app: TestClient) -> None:
+    """GET /api/a-term/panes -- closed panes are not rendered as active panes."""
+    dead_session = {**_make_session_in_pane(), "is_alive": False}
+    panes = [
+        _make_pane(pane_name="Dead", sessions=[dead_session]),
+        _make_pane(pane_name="Empty", sessions=[]),
+        _make_pane(pane_name="Live", sessions=[_make_session_in_pane()]),
+    ]
+    with patch("a_term.api.panes.pane_store.list_panes_with_sessions", return_value=panes):
+        response = test_app.get("/api/a-term/panes")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert body["items"][0]["pane_name"] == "Live"
+
+
 def test_list_detached_panes_returns_items(test_app: TestClient) -> None:
     """GET /api/a-term/panes/detached -- returns detached pane list."""
-    panes = [_make_pane(pane_name="Detached", is_detached=True)]
+    panes = [
+        _make_pane(
+            pane_name="Detached",
+            is_detached=True,
+            sessions=[_make_session_in_pane()],
+        )
+    ]
     with patch("a_term.api.panes.pane_store.list_panes_with_sessions", return_value=panes):
         response = test_app.get("/api/a-term/panes/detached")
 
@@ -111,6 +137,33 @@ def test_list_detached_panes_returns_items(test_app: TestClient) -> None:
     assert body["total"] == 1
     assert body["items"][0]["pane_name"] == "Detached"
     assert body["items"][0]["is_detached"] is True
+
+
+def test_list_detached_panes_hides_panes_without_live_sessions(
+    test_app: TestClient,
+) -> None:
+    """GET /api/a-term/panes/detached -- closed panes are not attachable."""
+    dead_session = {**_make_session_in_pane(), "is_alive": False}
+    panes = [
+        _make_pane(pane_name="Dead", is_detached=True, sessions=[dead_session]),
+        _make_pane(
+            pane_name="Empty",
+            is_detached=True,
+            sessions=[],
+        ),
+        _make_pane(
+            pane_name="Live",
+            is_detached=True,
+            sessions=[_make_session_in_pane()],
+        ),
+    ]
+    with patch("a_term.api.panes.pane_store.list_panes_with_sessions", return_value=panes):
+        response = test_app.get("/api/a-term/panes/detached")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert body["items"][0]["pane_name"] == "Live"
 
 
 # ---------------------------------------------------------------------------
@@ -258,6 +311,7 @@ def test_create_pane_forwards_detached_layout_fields_when_present(test_app: Test
         pane_name="Detached Pane",
         is_detached=True,
         pane_order=3,
+        sessions=[_make_session_in_pane()],
     )
     with patch(
         "a_term.api.panes.pane_store.create_pane_with_sessions",
@@ -301,7 +355,11 @@ def test_get_pane_found_returns_200(test_app: TestClient) -> None:
     """GET /api/a-term/panes/{id} -- existing pane returns 200."""
     # Arrange
     pid = str(uuid.uuid4())
-    pane = _make_pane(pane_id=pid, pane_name="Found Pane")
+    pane = _make_pane(
+        pane_id=pid,
+        pane_name="Found Pane",
+        sessions=[_make_session_in_pane()],
+    )
     with patch("a_term.api.panes.pane_store.get_pane_with_sessions", return_value=pane):
         # Act
         response = test_app.get(f"/api/a-term/panes/{pid}")
@@ -309,6 +367,17 @@ def test_get_pane_found_returns_200(test_app: TestClient) -> None:
     # Assert
     assert response.status_code == 200
     assert response.json()["id"] == pid
+
+
+def test_get_pane_without_live_sessions_returns_404(test_app: TestClient) -> None:
+    """GET /api/a-term/panes/{id} -- stale pane cannot be opened."""
+    pid = str(uuid.uuid4())
+    pane = _make_pane(pane_id=pid, pane_name="Dead Pane")
+    with patch("a_term.api.panes.pane_store.get_pane_with_sessions", return_value=pane):
+        response = test_app.get(f"/api/a-term/panes/{pid}")
+
+    assert response.status_code == 404
+    assert "no live sessions" in response.json()["detail"]
 
 
 def test_get_pane_not_found_returns_404(test_app: TestClient) -> None:
@@ -515,8 +584,19 @@ def test_delete_pane_not_found_returns_404(test_app: TestClient) -> None:
 def test_detach_pane_success_returns_updated_pane(test_app: TestClient) -> None:
     """POST /api/a-term/panes/{id}/detach -- marks the pane detached."""
     pid = str(uuid.uuid4())
-    existing = _make_pane(pane_id=pid, pane_name="Detached Pane", is_detached=False)
-    detached = _make_pane(pane_id=pid, pane_name="Detached Pane", is_detached=True)
+    sessions = [_make_session_in_pane()]
+    existing = _make_pane(
+        pane_id=pid,
+        pane_name="Detached Pane",
+        is_detached=False,
+        sessions=sessions,
+    )
+    detached = _make_pane(
+        pane_id=pid,
+        pane_name="Detached Pane",
+        is_detached=True,
+        sessions=sessions,
+    )
     with (
         patch("a_term.api.panes.pane_store.get_pane_with_sessions", return_value=existing),
         patch("a_term.api.panes.pane_store.detach_pane", return_value=detached) as detach_mock,
@@ -532,8 +612,19 @@ def test_detach_pane_success_returns_updated_pane(test_app: TestClient) -> None:
 def test_attach_pane_success_returns_updated_pane(test_app: TestClient) -> None:
     """POST /api/a-term/panes/{id}/attach -- restores a detached pane."""
     pid = str(uuid.uuid4())
-    existing = _make_pane(pane_id=pid, pane_name="Attached Pane", is_detached=True)
-    attached = _make_pane(pane_id=pid, pane_name="Attached Pane", is_detached=False)
+    sessions = [_make_session_in_pane()]
+    existing = _make_pane(
+        pane_id=pid,
+        pane_name="Attached Pane",
+        is_detached=True,
+        sessions=sessions,
+    )
+    attached = _make_pane(
+        pane_id=pid,
+        pane_name="Attached Pane",
+        is_detached=False,
+        sessions=sessions,
+    )
     with (
         patch("a_term.api.panes.pane_store.get_pane_with_sessions", return_value=existing),
         patch("a_term.api.panes.pane_store.attach_pane", return_value=attached) as attach_mock,
@@ -546,11 +637,37 @@ def test_attach_pane_success_returns_updated_pane(test_app: TestClient) -> None:
     attach_mock.assert_called_once_with(pid)
 
 
+def test_attach_pane_without_live_sessions_returns_404(test_app: TestClient) -> None:
+    """POST /api/a-term/panes/{id}/attach -- stale pane cannot be attached."""
+    pid = str(uuid.uuid4())
+    existing = _make_pane(pane_id=pid, pane_name="Dead Pane", is_detached=True)
+    with (
+        patch("a_term.api.panes.pane_store.get_pane_with_sessions", return_value=existing),
+        patch("a_term.api.panes.pane_store.attach_pane") as attach_mock,
+    ):
+        response = test_app.post(f"/api/a-term/panes/{pid}/attach")
+
+    assert response.status_code == 404
+    assert "no live sessions" in response.json()["detail"]
+    attach_mock.assert_not_called()
+
+
 def test_attach_pane_forwards_requested_layout_fields(test_app: TestClient) -> None:
     """POST /api/a-term/panes/{id}/attach -- forwards placement fields when supplied."""
     pid = str(uuid.uuid4())
-    existing = _make_pane(pane_id=pid, pane_name="Attach Layout", is_detached=True)
-    attached = _make_pane(pane_id=pid, pane_name="Attach Layout", is_detached=False)
+    sessions = [_make_session_in_pane()]
+    existing = _make_pane(
+        pane_id=pid,
+        pane_name="Attach Layout",
+        is_detached=True,
+        sessions=sessions,
+    )
+    attached = _make_pane(
+        pane_id=pid,
+        pane_name="Attach Layout",
+        is_detached=False,
+        sessions=sessions,
+    )
     with (
         patch("a_term.api.panes.pane_store.get_pane_with_sessions", return_value=existing),
         patch("a_term.api.panes.pane_store.attach_pane", return_value=attached) as attach_mock,

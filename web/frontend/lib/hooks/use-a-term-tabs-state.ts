@@ -14,7 +14,8 @@ import {
   generateProjectPaneName,
 } from '@/lib/hooks/a-term-handler-utils'
 import { useATermHandlers } from '@/lib/hooks/use-a-term-handlers'
-import { useATermPanes } from '@/lib/hooks/use-a-term-panes'
+import { type ATermPane, useATermPanes } from '@/lib/hooks/use-a-term-panes'
+import type { ATermSession } from '@/lib/hooks/use-a-term-sessions'
 import { useATermSettings } from '@/lib/hooks/use-a-term-settings'
 import { useActiveSession } from '@/lib/hooks/use-active-session'
 import { useAutoCreatePane } from '@/lib/hooks/use-auto-create-pane'
@@ -41,6 +42,23 @@ import {
   reconcileOrderedIds,
   swapOrderedIds,
 } from './a-term-tabs-state/utils'
+
+function buildProjectSessionsFromPane(pane: ATermPane): ATermSession[] {
+  return pane.sessions.map((session, index) => ({
+    id: session.id,
+    name: session.name,
+    user_id: null,
+    project_id: pane.project_id,
+    working_dir: session.working_dir,
+    mode: session.mode,
+    display_order: index,
+    is_alive: session.is_alive,
+    created_at: pane.created_at,
+    last_accessed_at: pane.created_at,
+    agent_state: session.agent_state,
+    claude_state: session.claude_state,
+  }))
+}
 
 export function useATermTabsState({
   projectId,
@@ -503,29 +521,42 @@ export function useATermTabsState({
   const handleDetachedNewATermForProject = useCallback(
     async (
       targetProjectId: string,
-      _mode?: string,
+      mode?: string,
       rootPath?: string | null,
     ) => {
+      const requestedMode = mode ?? undefined
       const newPane = await createProjectPane(
         generateProjectPaneName(targetProjectId, [...panes, ...detachedPanes]),
         targetProjectId,
         rootPath ?? undefined,
-        undefined,
+        requestedMode && requestedMode !== 'shell' ? requestedMode : undefined,
         { detached: true },
       )
+      const targetMode = requestedMode ?? newPane.active_mode
       const targetSessionId =
-        findSessionByMode(newPane, newPane.active_mode)?.id ??
+        findSessionByMode(newPane, targetMode)?.id ??
         findSessionByMode(newPane, 'shell')?.id ??
         newPane.sessions[0]?.id ??
         null
       if (!targetSessionId) return
       addDetachedWindowPane?.(newPane.id, targetSessionId)
+      if (targetMode !== 'shell') {
+        await handleProjectModeChange(
+          targetProjectId,
+          targetMode,
+          buildProjectSessionsFromPane(newPane),
+          newPane.id,
+          newPane,
+        )
+        return
+      }
       switchToSession(targetSessionId)
     },
     [
       addDetachedWindowPane,
       createProjectPane,
       detachedPanes,
+      handleProjectModeChange,
       panes,
       switchToSession,
     ],
