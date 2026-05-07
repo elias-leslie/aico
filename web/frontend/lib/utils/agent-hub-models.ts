@@ -21,7 +21,7 @@ interface AgentHubModelsResponse {
 }
 
 const CLAUDE_MODEL_ALIASES = ['opus', 'sonnet', 'haiku'] as const
-const CLAUDE_MODEL_PREFERENCE = ['haiku', 'sonnet', 'opus'] as const
+const PROMPT_CLEANER_AGENT_SLUG = 'prompt-builder'
 
 let cachedModels: AgentHubCatalogModel[] | null = null
 let fetchPromise: Promise<AgentHubCatalogModel[]> | null = null
@@ -98,17 +98,8 @@ export async function getClaudeModelOptions(): Promise<ClaudeModelOption[]> {
   return options.length > 0 ? options : getFallbackClaudeModelOptions()
 }
 
-export async function getPromptCleanerModel(): Promise<string> {
-  const models = await getAgentHubModels()
-
-  for (const alias of CLAUDE_MODEL_PREFERENCE) {
-    const model = models.find(
-      (entry) => entry.provider === 'claude' && entry.alias === alias,
-    )
-    if (model) return model.id
-  }
-
-  return 'claude-haiku-4-5'
+export function getPromptCleanerAgentSlug(): string {
+  return PROMPT_CLEANER_AGENT_SLUG
 }
 
 export function clearAgentHubModelCache(): void {

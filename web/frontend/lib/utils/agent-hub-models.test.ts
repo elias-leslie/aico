@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   clearAgentHubModelCache,
   getClaudeModelOptions,
-  getPromptCleanerModel,
+  getPromptCleanerAgentSlug,
 } from './agent-hub-models'
 import { getAgentHubProxyUrl, isAgentHubConfigured } from './agent-hub-proxy'
 
@@ -81,43 +81,7 @@ describe('agent-hub-models', () => {
     ])
   })
 
-  it('prefers the fastest Claude model for prompt cleaning', async () => {
-    process.env.NEXT_PUBLIC_AGENT_HUB_URL = 'http://agent-hub.test'
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          models: [
-            {
-              id: 'claude-opus-4-6',
-              name: 'Claude Opus 4.6',
-              alias: 'opus',
-              provider: 'claude',
-            },
-            {
-              id: 'claude-sonnet-4-6',
-              name: 'Claude Sonnet 4.6',
-              alias: 'sonnet',
-              provider: 'claude',
-            },
-            {
-              id: 'claude-haiku-4-5',
-              name: 'Claude Haiku 4.5',
-              alias: 'haiku',
-              provider: 'claude',
-            },
-            {
-              id: 'gemini-3-flash-preview',
-              name: 'Gemini 3 Flash',
-              alias: 'flash',
-              provider: 'gemini',
-            },
-          ],
-        }),
-      }),
-    )
-
-    await expect(getPromptCleanerModel()).resolves.toBe('claude-haiku-4-5')
+  it('routes prompt cleaning through a fixed agent slug', () => {
+    expect(getPromptCleanerAgentSlug()).toBe('prompt-builder')
   })
 })

@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useState } from 'react'
-import { getPromptCleanerModel } from '../utils/agent-hub-models'
+import { getPromptCleanerAgentSlug } from '../utils/agent-hub-models'
 import { getAgentHubProxyUrl } from '../utils/agent-hub-proxy'
 
 interface UsePromptCleanerReturn {
@@ -33,7 +33,7 @@ Rules:
 
 /**
  * Hook for cleaning prompts via agent-hub.
- * Uses Claude Haiku for fast, cheap processing.
+ * Routes through the prompt-builder agent.
  */
 export function usePromptCleaner(): UsePromptCleanerReturn {
   const [isLoading, setIsLoading] = useState(false)
@@ -57,8 +57,6 @@ export function usePromptCleaner(): UsePromptCleanerReturn {
           userMessage += `\n\nAdditional instruction: ${refinement}`
         }
 
-        const model = await getPromptCleanerModel()
-
         const response = await fetch(endpoint, {
           method: 'POST',
           headers: {
@@ -67,7 +65,7 @@ export function usePromptCleaner(): UsePromptCleanerReturn {
             'X-Source-Path': 'frontend/lib/hooks/use-prompt-cleaner.ts',
           },
           body: JSON.stringify({
-            model,
+            agent_slug: getPromptCleanerAgentSlug(),
             messages: [
               { role: 'system', content: SYSTEM_PROMPT },
               { role: 'user', content: userMessage },
