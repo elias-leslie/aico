@@ -19,7 +19,7 @@
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
     "@summitflow/notes-ui": "file:../packages/notes-ui",
-    "@tanstack/react-query": "5.97.0",
+    "@tanstack/react-query": "5.100.9",
     "@xterm/addon-clipboard": "0.2.0",
     "@xterm/addon-fit": "0.11.0",
     "@xterm/addon-web-links": "0.12.0",
@@ -27,26 +27,26 @@
     "clsx": "2.1.1",
     "lucide-react": "0.577.0",
     "motion": "^12.0.0",
-    "next": "16.2.3",
-    "react": "19.2.5",
-    "react-dom": "19.2.5",
-    "react-resizable-panels": "4.9.0",
-    "simple-keyboard": "3.8.129"
+    "next": "16.2.6",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "react-resizable-panels": "4.11.0",
+    "simple-keyboard": "3.8.140"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.11",
+    "@biomejs/biome": "2.4.15",
     "@tailwindcss/postcss": "4",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.1",
-    "@types/node": "22.19.17",
+    "@types/node": "22.19.18",
     "@types/react": "19",
     "@types/react-dom": "19",
     "@vitejs/plugin-react": "^4.7.0",
     "jsdom": "^26.1.0",
     "tailwindcss": "4",
     "typescript": "5",
-    "vite": "7.3.2",
-    "vitest": "^4.1.4"
+    "vite": "7.3.3",
+    "vitest": "^4.1.5"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
