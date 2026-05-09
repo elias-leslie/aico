@@ -66,12 +66,38 @@ def _read_manifest_payload(manifest_path: Path) -> dict[str, Any] | None:
     return payload if isinstance(payload, dict) else None
 
 
+def _allowed_root_paths() -> tuple[Path, ...]:
+    allowed: list[Path] = []
+    seen: set[str] = set()
+
+    def _add(candidate: Path | None) -> None:
+        if candidate is None:
+            return
+        try:
+            resolved = candidate.expanduser().resolve(strict=True)
+        except (OSError, RuntimeError, ValueError):
+            return
+        if not resolved.is_dir():
+            return
+        key = str(resolved)
+        if key in seen:
+            return
+        seen.add(key)
+        allowed.append(resolved)
+
+    _add(Path.home())
+    _add(_workspace_projects_root())
+    return tuple(allowed)
+
+
 def _manifest_path_for_root(root_path: str | Path) -> Path | None:
     try:
         root = Path(str(root_path)).expanduser().resolve(strict=True)
     except (OSError, RuntimeError, ValueError):
         return None
     if not root.is_dir():
+        return None
+    if not any(root.is_relative_to(base) for base in _allowed_root_paths()):
         return None
 
     try:

@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
+import pytest
+
 from a_term import branding
+
+
+@pytest.fixture(autouse=True)
+def _allow_tmp_path_as_root(monkeypatch, tmp_path):
+    monkeypatch.setattr(branding, "_allowed_root_paths", lambda: (tmp_path.resolve(),))
 
 
 def test_get_project_identity_for_root_rejects_symlink_escape(tmp_path) -> None:
@@ -33,3 +40,17 @@ def test_get_project_identity_for_root_rejects_file_root(tmp_path) -> None:
     root.write_text('{"project": {"id": "local"}}')
 
     assert branding.get_project_identity_for_root(root) is None
+
+
+def test_get_project_identity_for_root_rejects_path_outside_allowed_roots(
+    monkeypatch, tmp_path
+) -> None:
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    monkeypatch.setattr(branding, "_allowed_root_paths", lambda: (allowed.resolve(),))
+
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "project.identity.json").write_text('{"project": {"id": "outside"}}')
+
+    assert branding.get_project_identity_for_root(outside) is None
