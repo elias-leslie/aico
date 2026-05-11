@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.10 - 2026-05-10
+
+- Switched the xterm renderer to WebGL (`@xterm/addon-webgl`) with automatic DOM fallback on context loss, dramatically reducing redraw cost for heavy TUI sessions like Claude Code and Codex CLI.
+- Split the resize debounce into two stages so xterm fits to the container on a fast 16ms tick while the backend PTY resize message only fires on a trailing 250ms quiet — eliminates SIGWINCH storms and prompt flicker during window drags.
+- Gated the scrollback overlay's per-delta search-version bump behind active consumers (overlay open or query in flight), so scrollback updates no longer force a parent re-render of the terminal component on every server delta.
+
 ## 0.2.9 - 2026-05-02
 
 - Added a pane overflow menu `Refresh Layout` action that remounts the pane terminal and re-runs viewport sizing without restarting the tmux session.

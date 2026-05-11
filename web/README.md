@@ -179,7 +179,7 @@ A-Term listens on `localhost` by default. To access it from your phone, another 
 |-------|-----------|
 | Backend | FastAPI, Python 3.13+, Uvicorn |
 | Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 4 |
-| Terminal | xterm.js 6 (rendering), tmux (session persistence) |
+| Terminal | xterm.js 6 with WebGL renderer (DOM fallback), tmux (session persistence) |
 | Database | PostgreSQL |
 | Quality | Ruff, Ty, pytest, Vitest, Biome |
 
