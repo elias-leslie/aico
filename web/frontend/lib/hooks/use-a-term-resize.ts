@@ -1,6 +1,6 @@
 import type { FitAddon } from '@xterm/addon-fit'
 import { useCallback, useEffect } from 'react'
-import { RESIZE_DEBOUNCE_MS } from '../constants/a-term'
+import { FIT_DEBOUNCE_MS, PTY_RESIZE_DEBOUNCE_MS } from '../constants/a-term'
 
 type XtermATerm = InstanceType<typeof import('@xterm/xterm').Terminal>
 
@@ -39,7 +39,12 @@ export function attachViewportResizeListeners(
 
 /**
  * Hook to manage aTerm resizing with ResizeObserver and WebSocket dimension updates.
- * Handles container size changes and sends resize events to backend when connected.
+ *
+ * Two-stage debounce: the local xterm fit runs on a short debounce so the visual
+ * keeps up with window drags, but the backend (PTY) resize message only fires
+ * on the trailing edge — SIGWINCH mid-drag causes shells with fancy prompts and
+ * heavy TUIs (Claude Code, Codex CLI) to redraw repeatedly, which the user
+ * perceives as flicker and slow resize. The shell only cares about the final size.
  */
 export function useATermResize(options: ATermResizeOptions) {
   const {
@@ -50,35 +55,66 @@ export function useATermResize(options: ATermResizeOptions) {
     sendBackendResize = true,
   } = options
 
-  // Handle resize - always fit the aTerm, send dims only if WS connected
-  const handleResize = useCallback(() => {
-    if (fitAddonRef.current && aTermRef.current) {
-      fitAddonRef.current.fit()
+  const sendBackendResizeIfChanged = useCallback(
+    (lastSent: { cols: number; rows: number }): void => {
+      if (!sendBackendResize) return
+      if (wsRef.current?.readyState !== WebSocket.OPEN) return
+      const dims = fitAddonRef.current?.proposeDimensions()
+      if (!dims) return
+      if (dims.cols === lastSent.cols && dims.rows === lastSent.rows) return
+      lastSent.cols = dims.cols
+      lastSent.rows = dims.rows
+      wsRef.current.send(
+        JSON.stringify({
+          __ctrl: true,
+          resize: { cols: dims.cols, rows: dims.rows },
+        }),
+      )
+    },
+    [fitAddonRef, sendBackendResize, wsRef],
+  )
 
-      // Only send resize to backend if WS is connected
-      if (sendBackendResize && wsRef.current?.readyState === WebSocket.OPEN) {
-        const dims = fitAddonRef.current.proposeDimensions()
-        if (dims) {
-          wsRef.current.send(
-            JSON.stringify({
-              __ctrl: true,
-              resize: { cols: dims.cols, rows: dims.rows },
-            }),
-          )
-        }
+  // Imperative resize used on visibility/status changes — fits and signals
+  // the backend immediately; not part of the drag debounce flow.
+  const handleResize = useCallback(() => {
+    if (!fitAddonRef.current || !aTermRef.current) return
+    fitAddonRef.current.fit()
+    if (sendBackendResize && wsRef.current?.readyState === WebSocket.OPEN) {
+      const dims = fitAddonRef.current.proposeDimensions()
+      if (dims) {
+        wsRef.current.send(
+          JSON.stringify({
+            __ctrl: true,
+            resize: { cols: dims.cols, rows: dims.rows },
+          }),
+        )
       }
     }
-  }, [fitAddonRef, sendBackendResize, aTermRef, wsRef])
+  }, [aTermRef, fitAddonRef, sendBackendResize, wsRef])
 
-  // Handle container resize with debounce
   useEffect(() => {
     if (!containerRef.current) return
-    let resizeTimeout: ReturnType<typeof setTimeout> | null = null
+    let fitTimer: ReturnType<typeof setTimeout> | null = null
+    let ptyTimer: ReturnType<typeof setTimeout> | null = null
     let lastWidth = 0
     let lastHeight = 0
+    const lastSent = { cols: 0, rows: 0 }
+
+    const flushPtyResize = () => {
+      ptyTimer = null
+      sendBackendResizeIfChanged(lastSent)
+    }
+
     const scheduleResize = () => {
-      if (resizeTimeout) clearTimeout(resizeTimeout)
-      resizeTimeout = setTimeout(() => handleResize(), RESIZE_DEBOUNCE_MS)
+      if (fitTimer) clearTimeout(fitTimer)
+      fitTimer = setTimeout(() => {
+        fitTimer = null
+        if (fitAddonRef.current && aTermRef.current) {
+          fitAddonRef.current.fit()
+        }
+        if (ptyTimer) clearTimeout(ptyTimer)
+        ptyTimer = setTimeout(flushPtyResize, PTY_RESIZE_DEBOUNCE_MS)
+      }, FIT_DEBOUNCE_MS)
     }
 
     const resizeObserver = new ResizeObserver((entries) => {
@@ -95,11 +131,12 @@ export function useATermResize(options: ATermResizeOptions) {
     const viewportCleanup = attachViewportResizeListeners(scheduleResize)
 
     return () => {
-      if (resizeTimeout) clearTimeout(resizeTimeout)
+      if (fitTimer) clearTimeout(fitTimer)
+      if (ptyTimer) clearTimeout(ptyTimer)
       viewportCleanup()
       resizeObserver.disconnect()
     }
-  }, [containerRef, handleResize])
+  }, [aTermRef, containerRef, fitAddonRef, sendBackendResizeIfChanged])
 
   return { handleResize }
 }

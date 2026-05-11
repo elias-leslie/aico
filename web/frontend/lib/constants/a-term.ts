@@ -19,8 +19,13 @@ export const WS_CLIENT_PING_INTERVAL = 25000
 /** Bytes between backpressure commit messages (Phase 1) */
 export const BACKPRESSURE_COMMIT_INTERVAL = 256 * 1024
 
-/** ResizeObserver debounce delay in milliseconds */
-export const RESIZE_DEBOUNCE_MS = 150
+/** Local fit-to-container debounce — short so xterm visually keeps up with drags. */
+export const FIT_DEBOUNCE_MS = 16
+
+/** Backend (PTY) resize debounce — trailing edge only, so SIGWINCH fires once
+ * at the end of a drag instead of bursting throughout. Prevents shells with
+ * fancy prompts (and TUIs like Claude Code) from redrawing repeatedly mid-drag. */
+export const PTY_RESIZE_DEBOUNCE_MS = 250
 
 /** Scroll threshold for touch scroll handling (pixels) */
 export const SCROLL_THRESHOLD = 50
