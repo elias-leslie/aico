@@ -5,6 +5,7 @@ import {
   createATermWithAddons,
   type FocusPasteCleanup,
   installBootstrapWheelBlocker,
+  loadWebglRenderer,
   loadXtermModules,
   replaceScrollingHandlers,
   setupFocusAndPasteTracking,
@@ -50,6 +51,7 @@ export function useATermInstance(
   const contextMenuPasteCleanupRef = useRef<(() => void) | null>(null)
   const scrollbarCleanupRef = useRef<(() => void) | null>(null)
   const bootstrapWheelCleanupRef = useRef<(() => void) | null>(null)
+  const webglDisposeRef = useRef<(() => void) | null>(null)
 
   // Store options in ref so init effect reads current values without
   // depending on them (prevents aTerm destruction on settings change)
@@ -85,6 +87,10 @@ export function useATermInstance(
       if (!containerRef.current) return
       term.open(containerRef.current)
       if (!mounted) return
+
+      // WebGL must load after term.open() so the canvas exists. On failure or
+      // context loss, xterm transparently falls back to the DOM renderer.
+      webglDisposeRef.current = loadWebglRenderer(term, modules)
 
       mouseCleanupRef.current = setupATermMouseHandling(
         term,
@@ -146,6 +152,11 @@ export function useATermInstance(
       }
       bootstrapWheelCleanupRef.current?.()
       bootstrapWheelCleanupRef.current = null
+      // Dispose the WebGL addon before the term so it can release the GL
+      // context cleanly; term.dispose() would do it implicitly but explicit
+      // ordering avoids edge-case warnings on some drivers.
+      webglDisposeRef.current?.()
+      webglDisposeRef.current = null
       if (aTermRef.current) {
         aTermRef.current.dispose()
         aTermRef.current = null

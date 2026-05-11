@@ -1,4 +1,5 @@
 import type { FitAddon } from '@xterm/addon-fit'
+import type { WebglAddon } from '@xterm/addon-webgl'
 import { isMobileDevice } from '../utils/device'
 import { applyMobileATermTouchStyles } from '../utils/mobile-a-term-touch'
 
@@ -14,21 +15,51 @@ export interface XtermModules {
   FitAddon: typeof FitAddon
   WebLinksAddon: typeof import('@xterm/addon-web-links').WebLinksAddon
   ClipboardAddon: typeof import('@xterm/addon-clipboard').ClipboardAddon
+  WebglAddon: typeof WebglAddon
 }
 
 export async function loadXtermModules(): Promise<XtermModules> {
-  const [xtermModule, fitModule, webLinksModule, clipboardModule] =
-    await Promise.all([
-      import('@xterm/xterm'),
-      import('@xterm/addon-fit'),
-      import('@xterm/addon-web-links'),
-      import('@xterm/addon-clipboard'),
-    ])
+  const [
+    xtermModule,
+    fitModule,
+    webLinksModule,
+    clipboardModule,
+    webglModule,
+  ] = await Promise.all([
+    import('@xterm/xterm'),
+    import('@xterm/addon-fit'),
+    import('@xterm/addon-web-links'),
+    import('@xterm/addon-clipboard'),
+    import('@xterm/addon-webgl'),
+  ])
   return {
     XtermATerm: xtermModule.Terminal,
     FitAddon: fitModule.FitAddon,
     WebLinksAddon: webLinksModule.WebLinksAddon,
     ClipboardAddon: clipboardModule.ClipboardAddon,
+    WebglAddon: webglModule.WebglAddon,
+  }
+}
+
+/**
+ * Load the WebGL renderer after term.open(). Must be called after the canvas
+ * is mounted. Returns a cleanup function on success, or null if WebGL is
+ * unavailable (caller stays on the DOM renderer). The addon also self-disposes
+ * on context loss so xterm transparently falls back.
+ */
+export function loadWebglRenderer(
+  term: XtermATerm,
+  modules: XtermModules,
+): (() => void) | null {
+  try {
+    const addon = new modules.WebglAddon()
+    addon.onContextLoss(() => addon.dispose())
+    term.loadAddon(addon)
+    return () => addon.dispose()
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.warn('WebGL renderer unavailable, falling back to DOM:', error)
+    return null
   }
 }
 
