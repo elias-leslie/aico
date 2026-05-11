@@ -249,6 +249,7 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
       activateOverlay: overlay.activate,
       getOverlayLines: overlay.getCachedLines,
       overlaySearchVersion: overlay.searchVersion,
+      setOverlaySearchActive: overlay.setSearchActive,
     })
     useEffect(() => {
       viewportInitRef.current = handleViewportInit

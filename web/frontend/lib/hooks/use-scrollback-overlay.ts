@@ -31,6 +31,9 @@ interface UseScrollbackOverlayReturn {
   handleScrollbackPage: (data: ScrollbackPage) => void
   /** Update cache from raw scrollback text (e.g. from scrollback_sync). */
   updateCacheFromSync: (scrollback: string) => void
+  /** Search hook tells the overlay whether a query is active so the overlay
+   * can skip re-render-triggering version bumps when nothing consumes them. */
+  setSearchActive: (active: boolean) => void
 }
 
 const FETCH_COUNT = 5000
@@ -46,6 +49,19 @@ export function useScrollbackOverlay({
   const [initialScrollLineDelta, setInitialScrollLineDelta] = useState(0)
   const [searchVersion, setSearchVersion] = useState(0)
   const activeRef = useRef(false)
+  const searchActiveRef = useRef(false)
+
+  // Bump the search version only when the overlay is open or a search query
+  // is in flight. Otherwise nothing consumes it and the setState forces a
+  // wasted re-render of the parent ATerm component on every scrollback delta.
+  const bumpSearchVersionIfNeeded = useCallback(() => {
+    if (!activeRef.current && !searchActiveRef.current) return
+    setSearchVersion((current) => current + 1)
+  }, [])
+
+  const setSearchActive = useCallback((active: boolean) => {
+    searchActiveRef.current = active
+  }, [])
 
   const isTui = isTuiSessionMode(sessionMode)
 
@@ -105,7 +121,7 @@ export function useScrollbackOverlay({
     const latestTailPage = isLatestTailPage(data)
 
     if (data.lines.length > 0) {
-      setSearchVersion((current) => current + 1)
+      bumpSearchVersionIfNeeded()
     }
 
     if (latestTailPage) {
@@ -143,7 +159,7 @@ export function useScrollbackOverlay({
     setLines(best)
     setTotalLines(Math.max(data.total_lines, cachedTotalLinesRef.current))
     setIsLoading(false)
-  }, [])
+  }, [bumpSearchVersionIfNeeded])
 
   const updateCacheFromSync = useCallback((scrollback: string) => {
     const parsed = scrollback.split(/\r?\n/)
@@ -152,7 +168,7 @@ export function useScrollbackOverlay({
     }
     if (parsed.length === 0) return
 
-    setSearchVersion((current) => current + 1)
+    bumpSearchVersionIfNeeded()
 
     if (parsed.length >= cachedLinesRef.current.length) {
       cachedLinesRef.current = parsed
@@ -167,7 +183,7 @@ export function useScrollbackOverlay({
     setLines((current) => (parsed.length >= current.length ? parsed : current))
     setTotalLines((current) => Math.max(current, parsed.length))
     setIsLoading(false)
-  }, [])
+  }, [bumpSearchVersionIfNeeded])
 
   return {
     isActive,
@@ -181,5 +197,6 @@ export function useScrollbackOverlay({
     getCachedLines,
     handleScrollbackPage,
     updateCacheFromSync,
+    setSearchActive,
   }
 }

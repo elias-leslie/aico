@@ -24,6 +24,9 @@ interface UseATermSearchOptions {
   activateOverlay: () => void
   getOverlayLines: () => string[]
   overlaySearchVersion: number
+  /** Notify the overlay hook whether a search query is active so it can skip
+   * re-render-triggering version bumps when nothing consumes them. */
+  setOverlaySearchActive?: (active: boolean) => void
 }
 
 interface SearchState {
@@ -53,6 +56,7 @@ export function useATermSearch({
   activateOverlay,
   getOverlayLines,
   overlaySearchVersion,
+  setOverlaySearchActive,
 }: UseATermSearchOptions): UseATermSearchReturn {
   const [overlaySearchState, setOverlaySearchState] =
     useState<OverlaySearchState | null>(null)
@@ -62,8 +66,9 @@ export function useATermSearch({
   const clearSearch = useCallback(() => {
     searchStateRef.current = INITIAL_SEARCH_STATE
     setOverlaySearchState(null)
+    setOverlaySearchActive?.(false)
     aTermRef.current?.clearSelection()
-  }, [aTermRef])
+  }, [aTermRef, setOverlaySearchActive])
 
   const search = useCallback(
     (rawQuery: string, options?: ATermSearchOptions): ATermSearchResult => {
@@ -75,6 +80,8 @@ export function useATermSearch({
         clearSearch()
         return buildEmptyATermSearchResult()
       }
+
+      setOverlaySearchActive?.(true)
 
       const overlayLines = isTuiSession ? getOverlayLines() : []
       const lines =
@@ -115,7 +122,14 @@ export function useATermSearch({
 
       return buildATermSearchResult(query, matches.length, activeIndex)
     },
-    [activateOverlay, clearSearch, getOverlayLines, isTuiSession, aTermRef],
+    [
+      activateOverlay,
+      clearSearch,
+      getOverlayLines,
+      isTuiSession,
+      aTermRef,
+      setOverlaySearchActive,
+    ],
   )
 
   useEffect(() => {
