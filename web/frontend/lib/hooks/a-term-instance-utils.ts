@@ -19,19 +19,14 @@ export interface XtermModules {
 }
 
 export async function loadXtermModules(): Promise<XtermModules> {
-  const [
-    xtermModule,
-    fitModule,
-    webLinksModule,
-    clipboardModule,
-    webglModule,
-  ] = await Promise.all([
-    import('@xterm/xterm'),
-    import('@xterm/addon-fit'),
-    import('@xterm/addon-web-links'),
-    import('@xterm/addon-clipboard'),
-    import('@xterm/addon-webgl'),
-  ])
+  const [xtermModule, fitModule, webLinksModule, clipboardModule, webglModule] =
+    await Promise.all([
+      import('@xterm/xterm'),
+      import('@xterm/addon-fit'),
+      import('@xterm/addon-web-links'),
+      import('@xterm/addon-clipboard'),
+      import('@xterm/addon-webgl'),
+    ])
   return {
     XtermATerm: xtermModule.Terminal,
     FitAddon: fitModule.FitAddon,

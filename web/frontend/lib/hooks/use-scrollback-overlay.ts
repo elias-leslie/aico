@@ -117,73 +117,81 @@ export function useScrollbackOverlay({
     setInitialScrollLineDelta(0)
   }, [])
 
-  const handleScrollbackPage = useCallback((data: ScrollbackPage) => {
-    const latestTailPage = isLatestTailPage(data)
+  const handleScrollbackPage = useCallback(
+    (data: ScrollbackPage) => {
+      const latestTailPage = isLatestTailPage(data)
 
-    if (data.lines.length > 0) {
+      if (data.lines.length > 0) {
+        bumpSearchVersionIfNeeded()
+      }
+
+      if (latestTailPage) {
+        cachedLinesRef.current = data.lines
+        cachedTotalLinesRef.current = data.total_lines
+      } else if (data.lines.length > cachedLinesRef.current.length) {
+        // Never let an older page response overwrite a newer latest-tail cache.
+        cachedLinesRef.current = data.lines
+        cachedTotalLinesRef.current = data.total_lines
+      } else if (data.total_lines > cachedTotalLinesRef.current) {
+        cachedTotalLinesRef.current = data.total_lines
+      }
+
+      if (!activeRef.current) return
+      if (data.lines.length === 0) {
+        activeRef.current = false
+        setIsActive(false)
+        setIsLoading(false)
+        setInitialScrollLineDelta(0)
+        return
+      }
+
+      if (latestTailPage) {
+        setLines(data.lines)
+        setTotalLines(data.total_lines)
+        setIsLoading(false)
+        return
+      }
+
+      // Older partial pages should not shrink a fresher latest-tail cache.
+      const best =
+        data.lines.length >= cachedLinesRef.current.length
+          ? data.lines
+          : cachedLinesRef.current
+      setLines(best)
+      setTotalLines(Math.max(data.total_lines, cachedTotalLinesRef.current))
+      setIsLoading(false)
+    },
+    [bumpSearchVersionIfNeeded],
+  )
+
+  const updateCacheFromSync = useCallback(
+    (scrollback: string) => {
+      const parsed = scrollback.split(/\r?\n/)
+      while (parsed.length > 0 && parsed.at(-1) === '') {
+        parsed.pop()
+      }
+      if (parsed.length === 0) return
+
       bumpSearchVersionIfNeeded()
-    }
 
-    if (latestTailPage) {
-      cachedLinesRef.current = data.lines
-      cachedTotalLinesRef.current = data.total_lines
-    } else if (data.lines.length > cachedLinesRef.current.length) {
-      // Never let an older page response overwrite a newer latest-tail cache.
-      cachedLinesRef.current = data.lines
-      cachedTotalLinesRef.current = data.total_lines
-    } else if (data.total_lines > cachedTotalLinesRef.current) {
-      cachedTotalLinesRef.current = data.total_lines
-    }
+      if (parsed.length >= cachedLinesRef.current.length) {
+        cachedLinesRef.current = parsed
+      }
+      cachedTotalLinesRef.current = Math.max(
+        cachedTotalLinesRef.current,
+        parsed.length,
+      )
 
-    if (!activeRef.current) return
-    if (data.lines.length === 0) {
-      activeRef.current = false
-      setIsActive(false)
+      if (!activeRef.current) return
+
+      setLines((current) =>
+        parsed.length >= current.length ? parsed : current,
+      )
+      setTotalLines((current) => Math.max(current, parsed.length))
       setIsLoading(false)
-      setInitialScrollLineDelta(0)
-      return
-    }
-
-    if (latestTailPage) {
-      setLines(data.lines)
-      setTotalLines(data.total_lines)
-      setIsLoading(false)
-      return
-    }
-
-    // Older partial pages should not shrink a fresher latest-tail cache.
-    const best =
-      data.lines.length >= cachedLinesRef.current.length
-        ? data.lines
-        : cachedLinesRef.current
-    setLines(best)
-    setTotalLines(Math.max(data.total_lines, cachedTotalLinesRef.current))
-    setIsLoading(false)
-  }, [bumpSearchVersionIfNeeded])
-
-  const updateCacheFromSync = useCallback((scrollback: string) => {
-    const parsed = scrollback.split(/\r?\n/)
-    while (parsed.length > 0 && parsed.at(-1) === '') {
-      parsed.pop()
-    }
-    if (parsed.length === 0) return
-
-    bumpSearchVersionIfNeeded()
-
-    if (parsed.length >= cachedLinesRef.current.length) {
-      cachedLinesRef.current = parsed
-    }
-    cachedTotalLinesRef.current = Math.max(
-      cachedTotalLinesRef.current,
-      parsed.length,
-    )
-
-    if (!activeRef.current) return
-
-    setLines((current) => (parsed.length >= current.length ? parsed : current))
-    setTotalLines((current) => Math.max(current, parsed.length))
-    setIsLoading(false)
-  }, [bumpSearchVersionIfNeeded])
+    },
+    [bumpSearchVersionIfNeeded],
+  )
 
   return {
     isActive,
