@@ -166,6 +166,26 @@ def test_list_detached_panes_hides_panes_without_live_sessions(
     assert body["items"][0]["pane_name"] == "Live"
 
 
+def test_get_pane_falls_back_to_live_session_when_active_mode_is_missing(
+    test_app: TestClient,
+) -> None:
+    """GET /api/a-term/panes/{id} -- stale active_mode does not render an empty pane."""
+    pid = str(uuid.uuid4())
+    pane = _make_pane(
+        pane_id=pid,
+        pane_type="project",
+        project_id="agent-hub",
+        pane_name="Agent Hub",
+        active_mode="codex",
+        sessions=[_make_session_in_pane(mode="shell", name="Project: agent-hub")],
+    )
+    with patch("a_term.api.panes.pane_store.get_pane_with_sessions", return_value=pane):
+        response = test_app.get(f"/api/a-term/panes/{pid}")
+
+    assert response.status_code == 200
+    assert response.json()["active_mode"] == "shell"
+
+
 # ---------------------------------------------------------------------------
 # Create pane
 # ---------------------------------------------------------------------------

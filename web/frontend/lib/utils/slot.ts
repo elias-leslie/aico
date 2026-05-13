@@ -124,7 +124,10 @@ export type PaneSlot = PaneBasedSlot | AdHocPaneSlot
  */
 export function paneToSlot(pane: ATermPane): PaneSlot {
   if (pane.pane_type === 'project') {
-    const activeSession = pane.sessions.find((s) => s.mode === pane.active_mode)
+    const activeSession =
+      pane.sessions.find((s) => s.mode === pane.active_mode) ??
+      pane.sessions.find((s) => s.mode === 'shell') ??
+      pane.sessions[0]
     const agentSession = pane.sessions.find((s) => s.mode !== 'shell')
     return {
       type: 'project',
@@ -132,7 +135,7 @@ export function paneToSlot(pane: ATermPane): PaneSlot {
       projectId: pane.project_id!,
       projectName: pane.pane_name,
       rootPath: activeSession?.working_dir ?? null,
-      activeMode: pane.active_mode,
+      activeMode: activeSession?.mode ?? pane.active_mode,
       activeSessionId: activeSession?.id ?? null,
       sessionBadge: null, // Badge is now part of pane_name
       claudeState: getAgentState(agentSession),

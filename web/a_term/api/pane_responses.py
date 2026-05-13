@@ -17,13 +17,20 @@ def build_pane_response(pane: dict[str, Any]) -> PaneResponse:
         }
         for session in pane.get("sessions", [])
     ]
+    active_mode = pane.get("active_mode", "shell")
+    if sessions and active_mode not in {session.get("mode") for session in sessions}:
+        fallback_session = next(
+            (session for session in sessions if session.get("mode") == "shell"),
+            sessions[0],
+        )
+        active_mode = fallback_session.get("mode", "shell")
     return PaneResponse(
         id=pane["id"],
         pane_type=pane["pane_type"],
         project_id=pane.get("project_id"),
         pane_order=pane["pane_order"],
         pane_name=pane["pane_name"],
-        active_mode=pane.get("active_mode", "shell"),
+        active_mode=active_mode,
         is_detached=bool(pane.get("is_detached", False)),
         created_at=pane["created_at"].isoformat() if pane.get("created_at") else None,
         sessions=[SessionInPaneResponse.model_validate(s) for s in sessions],

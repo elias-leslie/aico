@@ -53,10 +53,17 @@ def _resurrect_session_record(
     name: str,
     working_dir: str | None,
     mode: str,
+    pane_id: str | None,
 ) -> None:
     """Update DB record and create tmux session for resurrection."""
     logger.info("resurrecting_dead_session", session_id=session_id, project_id=project_id, mode=mode)
-    a_term_store.update_session(session_id, name=name, working_dir=working_dir, is_alive=True)
+    a_term_store.update_session(
+        session_id,
+        name=name,
+        working_dir=working_dir,
+        is_alive=True,
+        pane_id=pane_id,
+    )
     try:
         create_tmux_session(session_id, working_dir)
     except TmuxError as e:
@@ -67,14 +74,18 @@ def _resurrect_session_record(
 
 
 def _claim_and_resurrect(
-    project_id: str, mode: str, name: str, working_dir: str | None,
+    project_id: str,
+    mode: str,
+    name: str,
+    working_dir: str | None,
+    pane_id: str | None,
 ) -> str | None:
     """Atomically claim a dead session and resurrect it. Returns session ID or None."""
     claimed = a_term_store.claim_dead_session_by_project(project_id, mode)
     if not claimed:
         return None
     session_id: str = claimed["id"]
-    _resurrect_session_record(session_id, project_id, name, working_dir, mode)
+    _resurrect_session_record(session_id, project_id, name, working_dir, mode, pane_id)
     return session_id
 
 
@@ -108,7 +119,7 @@ def create_session(
     If a dead session exists for the same project_id+mode, resurrects it instead.
     """
     if project_id:
-        resurrected = _claim_and_resurrect(project_id, mode, name, working_dir)
+        resurrected = _claim_and_resurrect(project_id, mode, name, working_dir, pane_id)
         if resurrected:
             return resurrected
 

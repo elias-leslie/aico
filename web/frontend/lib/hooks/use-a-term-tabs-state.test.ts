@@ -13,6 +13,7 @@ const mockUseAvailableLayouts = vi.fn()
 const mockUsePaneCapacity = vi.fn()
 const mockUseMediaQuery = vi.fn()
 const mockUseAutoCreatePane = vi.fn()
+const TEST_WINDOW_SCOPE = 'test-window'
 
 vi.mock('@/lib/hooks/use-active-session', () => ({
   useActiveSession: (params: unknown) => mockUseActiveSession(params),
@@ -112,6 +113,9 @@ function buildActiveSessionState(
 describe('useATermTabsState', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    window.localStorage.clear()
+    window.sessionStorage.clear()
+    window.sessionStorage.setItem('a-term-window-id', TEST_WINDOW_SCOPE)
 
     mockUseATermPanes.mockReturnValue({
       panes: [],
@@ -291,6 +295,151 @@ describe('useATermTabsState', () => {
         enabled: false,
       }),
     )
+  })
+
+  it('starts a new browser window empty when another live window owns the existing panes', () => {
+    const now = Date.now()
+    window.localStorage.setItem(
+      'a-term-window-pane-owners',
+      JSON.stringify({
+        'other-window': {
+          paneIds: ['pane-project-a'],
+          updatedAt: now,
+        },
+      }),
+    )
+    mockUseActiveSession.mockReturnValue(buildActiveSessionState())
+    mockUseATermPanes.mockReturnValue({
+      panes: [
+        {
+          id: 'pane-project-a',
+          pane_type: 'project',
+          project_id: 'project-a',
+          pane_order: 0,
+          pane_name: 'Project A',
+          active_mode: 'shell',
+          is_detached: false,
+          created_at: '2026-03-06T00:00:00Z',
+          sessions: [
+            {
+              id: 'session-project-a',
+              name: 'Project A Shell',
+              mode: 'shell',
+              session_number: 1,
+              is_alive: true,
+              working_dir: '/workspace/project-a',
+              claude_state: 'not_started',
+            },
+          ],
+          width_percent: 100,
+          height_percent: 100,
+          grid_row: 0,
+          grid_col: 0,
+        },
+      ],
+      detachedPanes: [],
+      atLimit: false,
+      isLoading: false,
+      detachedLoadedOnce: true,
+      hasLoadedOnce: true,
+      swapPanePositions: vi.fn(),
+      removePane: vi.fn(),
+      detachPane: vi.fn(),
+      attachPane: vi.fn(),
+      setActiveMode: vi.fn(),
+      createAdHocPane: vi.fn(),
+      createProjectPane: vi.fn(),
+      isCreating: false,
+      saveLayouts: vi.fn(),
+      maxPanes: 6,
+    })
+
+    const { result } = renderHook(() =>
+      useATermTabsState({ projectId: undefined, projectPath: undefined }),
+    )
+
+    expect(result.current.aTermSlots).toEqual([])
+    expect(result.current.activeSessionId).toBeNull()
+    expect(mockUseAutoCreatePane).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        panes: [],
+      }),
+    )
+  })
+
+  it('does not auto-create an ad-hoc pane while launching a requested project pane', async () => {
+    const switchToSession = vi.fn()
+    const createProjectPane = vi.fn().mockResolvedValue({
+      id: 'pane-project-a-new',
+      pane_type: 'project',
+      project_id: 'project-a',
+      pane_order: 0,
+      pane_name: 'Project A',
+      active_mode: 'shell',
+      is_detached: false,
+      created_at: '2026-03-06T00:00:00Z',
+      sessions: [
+        {
+          id: 'session-project-a-new',
+          name: 'Project A Shell',
+          mode: 'shell',
+          session_number: 1,
+          is_alive: true,
+          working_dir: '/workspace/project-a',
+          claude_state: 'not_started',
+        },
+      ],
+      width_percent: 100,
+      height_percent: 100,
+      grid_row: 0,
+      grid_col: 0,
+    })
+    mockUseActiveSession.mockReturnValue(
+      buildActiveSessionState({
+        activeSessionId: null,
+        activeSession: null,
+        switchToSession,
+        sessions: [],
+        projectATerms: [],
+        adHocSessions: [],
+      }),
+    )
+    mockUseATermPanes.mockReturnValue({
+      panes: [],
+      detachedPanes: [],
+      atLimit: false,
+      isLoading: false,
+      detachedLoadedOnce: true,
+      hasLoadedOnce: true,
+      swapPanePositions: vi.fn(),
+      removePane: vi.fn(),
+      detachPane: vi.fn(),
+      attachPane: vi.fn(),
+      setActiveMode: vi.fn(),
+      createAdHocPane: vi.fn(),
+      createProjectPane,
+      isCreating: false,
+      saveLayouts: vi.fn(),
+      maxPanes: 6,
+    })
+
+    renderHook(() =>
+      useATermTabsState({
+        projectId: 'project-a',
+        projectPath: '/workspace/project-a',
+      }),
+    )
+
+    expect(mockUseAutoCreatePane).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        enabled: false,
+        panes: [],
+      }),
+    )
+    await waitFor(() => {
+      expect(createProjectPane).toHaveBeenCalledTimes(1)
+    })
+    expect(switchToSession).toHaveBeenCalledWith('session-project-a-new')
   })
 
   it('uses pane-based mobile slots so one project pane appears once even when it has shell and agent sessions', () => {
@@ -1426,7 +1575,7 @@ describe('useATermTabsState', () => {
     mockUseLocalStorageState.mockImplementation(
       (key: string, defaultValue: unknown) =>
         useState(
-          (key === 'a-term-layout-mode'
+          (key === `a-term-layout-mode:${TEST_WINDOW_SCOPE}`
             ? 'split-main-side'
             : defaultValue) as typeof defaultValue,
         ),
@@ -1575,9 +1724,14 @@ describe('useATermTabsState', () => {
       isLoading: true,
     })
     const persistedState: Record<string, unknown> = {
-      'a-term-layout-mode': 'split-vertical',
-      'a-term-slot-order': ['pane-pane-project-a', 'adhoc-external-codex'],
-      'a-term-attached-external-session-ids': ['external-codex'],
+      [`a-term-layout-mode:${TEST_WINDOW_SCOPE}`]: 'split-vertical',
+      [`a-term-slot-order:${TEST_WINDOW_SCOPE}`]: [
+        'pane-pane-project-a',
+        'adhoc-external-codex',
+      ],
+      [`a-term-attached-external-session-ids:${TEST_WINDOW_SCOPE}`]: [
+        'external-codex',
+      ],
     }
 
     mockUseActiveSession.mockImplementation(() => activeSessionState)

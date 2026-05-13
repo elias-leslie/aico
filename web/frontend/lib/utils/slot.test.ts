@@ -190,6 +190,40 @@ describe('paneToSlot', () => {
     }
   })
 
+  it('falls back to a live shell session when project active_mode is stale', () => {
+    const slot = paneToSlot({
+      id: 'pane-1',
+      pane_type: 'project',
+      project_id: 'proj-x',
+      pane_order: 0,
+      pane_name: 'A-Term',
+      active_mode: 'codex',
+      is_detached: false,
+      created_at: null,
+      width_percent: 50,
+      height_percent: 100,
+      grid_row: 0,
+      grid_col: 0,
+      sessions: [
+        {
+          id: 's1',
+          name: 'Shell',
+          mode: 'shell',
+          session_number: 1,
+          is_alive: true,
+          working_dir: '/ws',
+          claude_state: 'not_started',
+        },
+      ],
+    })
+
+    expect(slot.type).toBe('project')
+    if (slot.type === 'project') {
+      expect(slot.activeMode).toBe('shell')
+      expect(slot.activeSessionId).toBe('s1')
+    }
+  })
+
   it('converts an adhoc pane to an AdHocPaneSlot', () => {
     const slot = paneToSlot({
       id: 'pane-2',

@@ -77,6 +77,8 @@ export function useATermOrchestration({
     setShowATermManager,
     saveLayouts,
   } = aTermState
+  const effectiveStorageScopeId =
+    aTermState.storageScopeId ?? detachedWindow.storageScopeId
 
   // Prompt cleaner state
   const [showCleaner, setShowCleaner] = useState(false)
@@ -163,7 +165,7 @@ export function useATermOrchestration({
   // Layout persistence
   const { handleLayoutChange } = useLayoutPersistence({
     saveLayouts,
-    storageScopeId: detachedWindow.storageScopeId,
+    storageScopeId: effectiveStorageScopeId,
     debounceMs: 500,
   })
 
@@ -438,7 +440,7 @@ export function useATermOrchestration({
     isVoiceSupported: transcription.isSupported,
     detachedPanes: availableDetachedPanes,
     isDetachedPaneWindow: detachedWindow.isDetachedPaneWindow,
-    storageScopeId: detachedWindow.storageScopeId,
+    storageScopeId: effectiveStorageScopeId,
     handleSlotProjectSwitch: (
       slot: ATermSlot | PaneSlot,
       projectId: string,

@@ -163,8 +163,8 @@ def create_session(
 
 
 def update_session(session_id: SessionId, **fields: Any) -> dict[str, Any] | None:
-    """Update session metadata. Allowed: name, display_order, is_alive, working_dir."""
-    allowed_fields = {"name", "display_order", "is_alive", "working_dir"}
+    """Update session metadata."""
+    allowed_fields = {"name", "display_order", "is_alive", "working_dir", "pane_id"}
     unknown_fields = set(fields.keys()) - allowed_fields
     if unknown_fields:
         logger.warning("update_session_unknown_fields", session_id=str(session_id), fields=list(unknown_fields))
