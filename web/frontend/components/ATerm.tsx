@@ -9,6 +9,7 @@ import {
   PHOSPHOR_THEME,
   SCROLLBACK,
 } from '../lib/constants/a-term'
+import type { ATermRendererStatus } from '../lib/hooks/a-term-instance-utils'
 import { useATermDiagnostics } from '../lib/hooks/use-a-term-diagnostics'
 import { useATermHandle } from '../lib/hooks/use-a-term-handle'
 import { useATermInstance } from '../lib/hooks/use-a-term-instance'
@@ -88,6 +89,7 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
     const fitAddonRef = useRef<XtermFitAddon | null>(null)
     const isFocusedRef = useRef(false)
     const isVisibleRef = useRef(isVisible)
+    const rendererStatusRef = useRef<ATermRendererStatus | null>(null)
     const diagnostics = useATermDiagnostics(sessionId)
     const recordDiagnostic = diagnostics.record
     const getDiagnostics = diagnostics.getDiagnostics
@@ -238,6 +240,34 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
         getDimensions: () => fitAddonRef.current?.proposeDimensions() ?? null,
       })
 
+    const sendRendererStatus = useCallback(
+      (rendererStatus: ATermRendererStatus) => {
+        rendererStatusRef.current = rendererStatus
+        recordDiagnostic('renderer_status', { ...rendererStatus })
+        if (wsRef.current?.readyState !== WebSocket.OPEN) return
+        wsRef.current.send(
+          JSON.stringify({
+            __ctrl: true,
+            renderer_status: rendererStatus,
+          }),
+        )
+      },
+      [recordDiagnostic, wsRef],
+    )
+
+    useEffect(() => {
+      if (status !== 'connected') return
+      const rendererStatus = rendererStatusRef.current
+      if (!rendererStatus) return
+      if (wsRef.current?.readyState !== WebSocket.OPEN) return
+      wsRef.current.send(
+        JSON.stringify({
+          __ctrl: true,
+          renderer_status: rendererStatus,
+        }),
+      )
+    }, [status, wsRef])
+
     const { handleViewportInit, handleScrollbackPage } = useScrollbackPager({
       wsRef,
       onWrite: enqueueWrite,
@@ -310,6 +340,7 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
         onData: handleATermData,
         onPaste: pasteInput,
         onFilePaste: pasteFile,
+        onRendererStatus: sendRendererStatus,
         setupScrolling,
       },
       { aTermRef, fitAddonRef, containerRef, isFocusedRef },

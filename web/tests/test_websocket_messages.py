@@ -81,6 +81,50 @@ def test_handle_text_message_no_capabilities_when_absent() -> None:
     assert capabilities == []
 
 
+def test_handle_text_message_logs_renderer_status_without_writing_to_pty() -> None:
+    message = {
+        "text": json.dumps({
+            "__ctrl": True,
+            "renderer_status": {
+                "renderer": "webgl",
+                "webglContextAvailable": True,
+                "webgl2ContextAvailable": True,
+                "webglAddonLoaded": True,
+                "canvasCount": 4,
+                "termClassName": "terminal xterm",
+                "userAgent": "Chrome",
+            },
+        })
+    }
+
+    with (
+        patch("a_term.api.handlers.websocket_messages.os.write") as mock_write,
+        patch("a_term.api.handlers.websocket_messages.logger") as mock_logger,
+    ):
+        result = asyncio.run(
+            handle_websocket_message(
+                message,
+                master_fd=7,
+                session_id="test-session",
+                tmux_session_name="summitflow-test-session",
+            )
+        )
+
+    assert result is None
+    mock_write.assert_not_called()
+    mock_logger.info.assert_called_once_with(
+        "a_term_renderer_status",
+        session_id="test-session",
+        renderer="webgl",
+        webgl_context_available=True,
+        webgl2_context_available=True,
+        webgl_addon_loaded=True,
+        canvas_count=4,
+        term_class_name="terminal xterm",
+        user_agent="Chrome",
+    )
+
+
 def test_handle_websocket_message_resizes_tmux_for_managed_sessions() -> None:
     message = {"text": '{"__ctrl": true, "resize": {"cols": 120, "rows": 32}}'}
 

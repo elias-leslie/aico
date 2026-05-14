@@ -8,11 +8,13 @@ import {
   applyATermSearchSelection,
   findATermSearchMatches,
 } from '../utils/a-term-search'
+import { isMobileDevice } from '../utils/device'
 import { applyMobileATermTouchStyles } from '../utils/mobile-a-term-touch'
 import {
   shouldDeferScrollbackOverlayWrite,
   shouldFlushPendingScrollbackOverlayWrite,
 } from '../utils/scrollback-overlay-update'
+import { loadWebglRenderer } from './a-term-instance-utils'
 import { refreshATermViewport } from './a-term-scrolling-utils'
 
 type XtermATerm = InstanceType<typeof import('@xterm/xterm').Terminal>
@@ -87,6 +89,7 @@ export function useScrollbackATerm({
   const containerRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<XtermATerm | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
+  const webglDisposeRef = useRef<(() => void) | null>(null)
   const pendingLinesRef = useRef<string[]>([])
   const pendingInitialScrollLineDeltaRef = useRef(0)
   const hasScrolledRef = useRef(false)
@@ -154,6 +157,8 @@ export function useScrollbackATerm({
   useEffect(() => {
     if (!isActive || !containerRef.current) {
       if (xtermRef.current) {
+        webglDisposeRef.current?.()
+        webglDisposeRef.current = null
         xtermRef.current.dispose()
         xtermRef.current = null
         fitAddonRef.current = null
@@ -168,44 +173,52 @@ export function useScrollbackATerm({
     hasScrolledRef.current = false
     let disposed = false
 
-    Promise.all([import('@xterm/xterm'), import('@xterm/addon-fit')]).then(
-      ([xtermModule, { FitAddon: XFitAddon }]) => {
-        if (disposed || !containerRef.current) return
-        const term = new xtermModule.Terminal({
-          fontSize,
-          fontFamily,
-          theme,
-          scrollback: 50000,
-          disableStdin: true,
-          cursorStyle: 'bar',
-          cursorBlink: false,
-          cursorInactiveStyle: 'none',
-        })
-        const fit = new XFitAddon()
-        term.loadAddon(fit)
-        term.open(containerRef.current)
+    Promise.all([
+      import('@xterm/xterm'),
+      import('@xterm/addon-fit'),
+      import('@xterm/addon-webgl'),
+    ]).then(([xtermModule, { FitAddon: XFitAddon }, { WebglAddon }]) => {
+      if (disposed || !containerRef.current) return
+      const term = new xtermModule.Terminal({
+        fontSize,
+        fontFamily,
+        theme,
+        allowProposedApi: true,
+        scrollback: 50000,
+        disableStdin: true,
+        cursorStyle: 'bar',
+        cursorBlink: false,
+        cursorInactiveStyle: 'none',
+      })
+      const fit = new XFitAddon()
+      term.loadAddon(fit)
+      term.open(containerRef.current)
+      webglDisposeRef.current = loadWebglRenderer(term, { WebglAddon })
+      if (isMobileDevice()) {
         applyMobileATermTouchStyles(containerRef.current)
-        fit.fit()
-        xtermRef.current = term
-        fitAddonRef.current = fit
-        if (pendingLinesRef.current.length > 0) {
-          writeLines.current(term, pendingLinesRef.current)
-        } else if (
-          currentSearchQueryRef.current &&
-          currentSearchIndexRef.current >= 0
-        ) {
-          applyOverlaySearchSelection(
-            term,
-            currentSearchQueryRef.current,
-            currentSearchIndexRef.current,
-          )
-        }
-      },
-    )
+      }
+      fit.fit()
+      xtermRef.current = term
+      fitAddonRef.current = fit
+      if (pendingLinesRef.current.length > 0) {
+        writeLines.current(term, pendingLinesRef.current)
+      } else if (
+        currentSearchQueryRef.current &&
+        currentSearchIndexRef.current >= 0
+      ) {
+        applyOverlaySearchSelection(
+          term,
+          currentSearchQueryRef.current,
+          currentSearchIndexRef.current,
+        )
+      }
+    })
 
     return () => {
       disposed = true
       if (xtermRef.current) {
+        webglDisposeRef.current?.()
+        webglDisposeRef.current = null
         xtermRef.current.dispose()
         xtermRef.current = null
         fitAddonRef.current = null

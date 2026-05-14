@@ -1,6 +1,8 @@
 import { render, waitFor } from '@testing-library/react'
 import { useEffect } from 'react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { isMobileDevice } from '../utils/device'
+import { applyMobileATermTouchStyles } from '../utils/mobile-a-term-touch'
 import { useScrollbackATerm } from './use-scrollback-a-term'
 
 const fitMock = {
@@ -52,6 +54,17 @@ class FakeTerminal {
   }
 }
 
+class FakeWebglAddon {
+  static instances: FakeWebglAddon[] = []
+
+  onContextLoss = vi.fn()
+  dispose = vi.fn()
+
+  constructor() {
+    FakeWebglAddon.instances.push(this)
+  }
+}
+
 vi.mock('@xterm/xterm', () => ({
   Terminal: FakeTerminal,
 }))
@@ -62,9 +75,20 @@ vi.mock('@xterm/addon-fit', () => ({
   },
 }))
 
+vi.mock('@xterm/addon-webgl', () => ({
+  WebglAddon: FakeWebglAddon,
+}))
+
+vi.mock('../utils/device', () => ({
+  isMobileDevice: vi.fn(() => false),
+}))
+
 vi.mock('../utils/mobile-a-term-touch', () => ({
   applyMobileATermTouchStyles: vi.fn(),
 }))
+
+const mockIsMobileDevice = vi.mocked(isMobileDevice)
+const mockApplyMobileATermTouchStyles = vi.mocked(applyMobileATermTouchStyles)
 
 type HarnessProps = Parameters<typeof useScrollbackATerm>[0]
 
@@ -82,45 +106,117 @@ function HookHarness(
   return <div ref={hook.containerRef} data-testid="overlay-container" />
 }
 
+function makeBaseProps(): HarnessProps {
+  return {
+    isActive: true,
+    lines: ['line-1', 'line-2'],
+    initialScrollLineDelta: 0,
+    searchQuery: '',
+    searchActiveIndex: -1,
+    theme: {
+      background: '#000000',
+      foreground: '#ffffff',
+      cursor: '#00ff9f',
+      cursorAccent: '#000000',
+      selectionBackground: '#224433',
+      black: '#000000',
+      red: '#ff5555',
+      green: '#00ff9f',
+      yellow: '#facc15',
+      blue: '#60a5fa',
+      magenta: '#c084fc',
+      cyan: '#22d3ee',
+      white: '#f8fafc',
+      brightBlack: '#94a3b8',
+      brightRed: '#f87171',
+      brightGreen: '#4ade80',
+      brightYellow: '#fde047',
+      brightBlue: '#93c5fd',
+      brightMagenta: '#d8b4fe',
+      brightCyan: '#67e8f9',
+      brightWhite: '#ffffff',
+    },
+    fontFamily: 'monospace',
+    fontSize: 14,
+  }
+}
+
 describe('useScrollbackATerm', () => {
+  beforeEach(() => {
+    FakeTerminal.instances = []
+    FakeWebglAddon.instances = []
+    fitMock.fit.mockClear()
+    mockIsMobileDevice.mockReturnValue(false)
+    mockApplyMobileATermTouchStyles.mockClear()
+  })
+
+  it('uses the WebGL renderer path for scrollback overlays', async () => {
+    render(<HookHarness {...makeBaseProps()} expose={() => {}} />)
+
+    await waitFor(() => {
+      expect(FakeTerminal.instances.length).toBe(1)
+      expect(FakeWebglAddon.instances.length).toBe(1)
+    })
+
+    const term = FakeTerminal.instances[0]
+    const webglAddon = FakeWebglAddon.instances[0]
+    expect(term.loadAddon).toHaveBeenCalledWith(webglAddon)
+    expect(webglAddon.onContextLoss).toHaveBeenCalledTimes(1)
+  })
+
+  it('uses desktop scrollbar styling for desktop scrollback overlays', async () => {
+    render(<HookHarness {...makeBaseProps()} expose={() => {}} />)
+
+    await waitFor(() => {
+      expect(FakeTerminal.instances.length).toBe(1)
+    })
+
+    expect(mockApplyMobileATermTouchStyles).not.toHaveBeenCalled()
+  })
+
+  it('keeps touch-safe scrollbar styling for mobile scrollback overlays', async () => {
+    mockIsMobileDevice.mockReturnValue(true)
+
+    const { getByTestId } = render(
+      <HookHarness {...makeBaseProps()} expose={() => {}} />,
+    )
+
+    await waitFor(() => {
+      expect(FakeTerminal.instances.length).toBe(1)
+    })
+
+    expect(mockApplyMobileATermTouchStyles).toHaveBeenCalledWith(
+      getByTestId('overlay-container'),
+    )
+  })
+
+  it('disposes the overlay WebGL renderer before disposing the terminal', async () => {
+    const baseProps = makeBaseProps()
+    const { rerender } = render(
+      <HookHarness {...baseProps} expose={() => {}} />,
+    )
+
+    await waitFor(() => {
+      expect(FakeTerminal.instances.length).toBe(1)
+      expect(FakeWebglAddon.instances.length).toBe(1)
+    })
+
+    const term = FakeTerminal.instances[0]
+    const webglAddon = FakeWebglAddon.instances[0]
+
+    rerender(<HookHarness {...baseProps} isActive={false} expose={() => {}} />)
+
+    expect(webglAddon.dispose).toHaveBeenCalledTimes(1)
+    expect(term.dispose).toHaveBeenCalledTimes(1)
+  })
+
   it('defers overlay rewrites while the reader is scrolled up and flushes them at bottom', async () => {
     let latestHook: ReturnType<typeof useScrollbackATerm> | null = null
     const expose = (value: ReturnType<typeof useScrollbackATerm>) => {
       latestHook = value
     }
 
-    const baseProps: HarnessProps = {
-      isActive: true,
-      lines: ['line-1', 'line-2'],
-      initialScrollLineDelta: 0,
-      searchQuery: '',
-      searchActiveIndex: -1,
-      theme: {
-        background: '#000000',
-        foreground: '#ffffff',
-        cursor: '#00ff9f',
-        cursorAccent: '#000000',
-        selectionBackground: '#224433',
-        black: '#000000',
-        red: '#ff5555',
-        green: '#00ff9f',
-        yellow: '#facc15',
-        blue: '#60a5fa',
-        magenta: '#c084fc',
-        cyan: '#22d3ee',
-        white: '#f8fafc',
-        brightBlack: '#94a3b8',
-        brightRed: '#f87171',
-        brightGreen: '#4ade80',
-        brightYellow: '#fde047',
-        brightBlue: '#93c5fd',
-        brightMagenta: '#d8b4fe',
-        brightCyan: '#67e8f9',
-        brightWhite: '#ffffff',
-      },
-      fontFamily: 'monospace',
-      fontSize: 14,
-    }
+    const baseProps = makeBaseProps()
 
     const { rerender } = render(<HookHarness {...baseProps} expose={expose} />)
 

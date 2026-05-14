@@ -18,6 +18,16 @@ export interface XtermModules {
   WebglAddon: typeof WebglAddon
 }
 
+export interface ATermRendererStatus {
+  renderer: 'webgl' | 'dom'
+  webglContextAvailable: boolean
+  webgl2ContextAvailable: boolean
+  webglAddonLoaded: boolean
+  canvasCount: number
+  termClassName: string
+  userAgent: string
+}
+
 export async function loadXtermModules(): Promise<XtermModules> {
   const [xtermModule, fitModule, webLinksModule, clipboardModule, webglModule] =
     await Promise.all([
@@ -44,7 +54,7 @@ export async function loadXtermModules(): Promise<XtermModules> {
  */
 export function loadWebglRenderer(
   term: XtermATerm,
-  modules: XtermModules,
+  modules: Pick<XtermModules, 'WebglAddon'>,
 ): (() => void) | null {
   try {
     const addon = new modules.WebglAddon()
@@ -55,6 +65,26 @@ export function loadWebglRenderer(
     // eslint-disable-next-line no-console
     console.warn('WebGL renderer unavailable, falling back to DOM:', error)
     return null
+  }
+}
+
+export function collectATermRendererStatus(
+  term: XtermATerm,
+  webglAddonLoaded: boolean,
+): ATermRendererStatus {
+  const canvas = document.createElement('canvas')
+  const webglContextAvailable = !!canvas.getContext('webgl')
+  const webgl2ContextAvailable = !!canvas.getContext('webgl2')
+  const canvasCount = term.element?.querySelectorAll('canvas').length ?? 0
+
+  return {
+    renderer: canvasCount > 0 ? 'webgl' : 'dom',
+    webglContextAvailable,
+    webgl2ContextAvailable,
+    webglAddonLoaded,
+    canvasCount,
+    termClassName: term.element?.className ?? '',
+    userAgent: navigator.userAgent,
   }
 }
 
@@ -127,6 +157,7 @@ export interface ATermInstanceOptions {
   onData: (data: string) => void
   onPaste: (data: string) => void
   onFilePaste?: (file: File) => void
+  onRendererStatus?: (status: ATermRendererStatus) => void
   setupScrolling: (container: HTMLElement) => {
     wheelCleanup: () => void
     touchCleanup: () => void

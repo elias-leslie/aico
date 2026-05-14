@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.11 - 2026-05-14
+
+- Matched TUI scrollback overlays to the live xterm WebGL renderer so entering scrollback no longer changes font spacing, wrap points, or terminal columns.
+- Kept desktop scrollback overlays on desktop scrollbar styling while preserving the wider mobile touch scrollbar only for mobile devices.
+- Added renderer-status diagnostics for live terminals so WebGL/DOM fallback state can be confirmed from backend logs when rendering issues appear.
+
 ## 0.2.10 - 2026-05-10
 
 - Switched the xterm renderer to WebGL (`@xterm/addon-webgl`) with automatic DOM fallback on context loss, dramatically reducing redraw cost for heavy TUI sessions like Claude Code and Codex CLI.

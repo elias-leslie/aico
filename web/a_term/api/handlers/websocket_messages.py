@@ -129,6 +129,22 @@ async def _handle_ctrl_message(
     if data.get("ping"):
         return None
 
+    if "renderer_status" in data:
+        status = data.get("renderer_status")
+        if isinstance(status, dict):
+            logger.info(
+                "a_term_renderer_status",
+                session_id=session_id,
+                renderer=status.get("renderer"),
+                webgl_context_available=status.get("webglContextAvailable"),
+                webgl2_context_available=status.get("webgl2ContextAvailable"),
+                webgl_addon_loaded=status.get("webglAddonLoaded"),
+                canvas_count=status.get("canvasCount"),
+                term_class_name=status.get("termClassName"),
+                user_agent=status.get("userAgent"),
+            )
+        return None
+
     if data.get("refresh"):
         await asyncio.to_thread(os.write, master_fd, b"\x0c")
         logger.debug("a_term_refreshed", session_id=session_id)

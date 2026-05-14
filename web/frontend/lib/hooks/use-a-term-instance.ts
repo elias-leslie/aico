@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import {
   type ATermInstanceOptions,
   type ATermInstanceRefs,
+  collectATermRendererStatus,
   createATermWithAddons,
   type FocusPasteCleanup,
   installBootstrapWheelBlocker,
@@ -116,6 +117,12 @@ export function useATermInstance(
         opts.onPaste,
       )
       fitAddon.fit()
+      window.setTimeout(() => {
+        if (!mounted || aTermRef.current !== term) return
+        opts.onRendererStatus?.(
+          collectATermRendererStatus(term, !!webglDisposeRef.current),
+        )
+      }, 0)
       setIsReady(true)
 
       if (term.textarea) {

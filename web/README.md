@@ -57,6 +57,8 @@ Want the latest shipped changes? See [Releases](https://github.com/elias-leslie/
 
 **`persistent sessions`** — tmux-backed terminals survive browser closes, server restarts, and network drops. Reconnect exactly where you left off.
 
+**`stable scrollback rendering`** — Live TUI panes and scrollback overlays share the same xterm.js WebGL renderer with DOM fallback, so opening history keeps font metrics, wrap points, and columns aligned.
+
 **`multi-pane layouts`** — Up to 6 resizable panes. Put planning, implementation, review, release checks, files, and notes on the same screen, detach any pane into its own browser window when you want to spread work across monitors, and use the pane menu's Refresh Layout action to remount a pane cleanly without restarting its tmux session.
 
 ![Four-pane grid layout with multiple active agents](docs/images/a-term-grid-2x2.png)
