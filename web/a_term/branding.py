@@ -91,15 +91,12 @@ def _allowed_root_paths() -> tuple[Path, ...]:
     return tuple(allowed)
 
 
-def _is_relative_to_path(path: Path, base: Path) -> bool:
-    try:
-        return os.path.commonpath([str(path), str(base)]) == str(base)
-    except ValueError:
-        return False
-
-
-def _is_under_allowed_root(path: Path) -> bool:
-    return any(_is_relative_to_path(path, base) for base in _allowed_root_paths())
+def _safe_root_prefixes() -> tuple[str, ...]:
+    prefixes: list[str] = []
+    for base in _allowed_root_paths():
+        base_path = os.path.realpath(str(base))
+        prefixes.append(base_path if base_path.endswith(os.sep) else f"{base_path}{os.sep}")
+    return tuple(prefixes)
 
 
 def _resolve_root_path(root_path: str | Path) -> Path | None:
@@ -107,12 +104,12 @@ def _resolve_root_path(root_path: str | Path) -> Path | None:
     if "\x00" in raw_path:
         return None
     try:
-        resolved = Path(os.path.realpath(os.path.abspath(os.path.expanduser(raw_path))))
+        resolved = os.path.realpath(os.path.abspath(os.path.expanduser(raw_path)))
     except (OSError, RuntimeError, ValueError):
         return None
-    if not resolved.is_dir():
+    if not any(f"{resolved}{os.sep}".startswith(prefix) for prefix in _safe_root_prefixes()):
         return None
-    return resolved if _is_under_allowed_root(resolved) else None
+    return Path(resolved)
 
 
 def _manifest_path_for_root(root_path: str | Path) -> Path | None:
@@ -121,15 +118,13 @@ def _manifest_path_for_root(root_path: str | Path) -> Path | None:
         return None
 
     try:
-        candidate = (root / "project.identity.json").resolve(strict=True)
-        relative_candidate = candidate.relative_to(root)
+        expected = os.path.join(str(root), "project.identity.json")
+        manifest_path = os.path.realpath(expected)
     except (OSError, RuntimeError, ValueError):
         return None
-    if relative_candidate.parts != ("project.identity.json",):
+    if manifest_path != expected:
         return None
-    if not candidate.is_file():
-        return None
-    return candidate
+    return Path(manifest_path)
 
 
 def get_project_identity_for_root(root_path: str | Path) -> dict[str, Any] | None:
@@ -137,7 +132,7 @@ def get_project_identity_for_root(root_path: str | Path) -> dict[str, Any] | Non
     candidate = _manifest_path_for_root(root_path)
     if candidate is None:
         return None
-    return _read_manifest_payload(candidate) if candidate.is_file() else None
+    return _read_manifest_payload(candidate)
 
 
 @lru_cache
