@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from functools import lru_cache
 from pathlib import Path
@@ -90,18 +91,37 @@ def _allowed_root_paths() -> tuple[Path, ...]:
     return tuple(allowed)
 
 
-def _manifest_path_for_root(root_path: str | Path) -> Path | None:
+def _is_relative_to_path(path: Path, base: Path) -> bool:
     try:
-        root = Path(str(root_path)).expanduser().resolve(strict=True)
+        return os.path.commonpath([str(path), str(base)]) == str(base)
+    except ValueError:
+        return False
+
+
+def _is_under_allowed_root(path: Path) -> bool:
+    return any(_is_relative_to_path(path, base) for base in _allowed_root_paths())
+
+
+def _resolve_root_path(root_path: str | Path) -> Path | None:
+    raw_path = str(root_path)
+    if "\x00" in raw_path:
+        return None
+    try:
+        resolved = Path(os.path.realpath(os.path.abspath(os.path.expanduser(raw_path))))
     except (OSError, RuntimeError, ValueError):
         return None
-    if not root.is_dir():
+    if not resolved.is_dir():
         return None
-    if not any(root.is_relative_to(base) for base in _allowed_root_paths()):
+    return resolved if _is_under_allowed_root(resolved) else None
+
+
+def _manifest_path_for_root(root_path: str | Path) -> Path | None:
+    root = _resolve_root_path(root_path)
+    if root is None:
         return None
 
     try:
-        candidate = (root / "project.identity.json").resolve(strict=False)
+        candidate = (root / "project.identity.json").resolve(strict=True)
         relative_candidate = candidate.relative_to(root)
     except (OSError, RuntimeError, ValueError):
         return None

@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { createBrowserScopeId } from '@/lib/utils/browser-scope-id'
 import type { ATermPane } from './use-a-term-panes'
 
 const WINDOW_ID_KEY = 'a-term-window-id'
@@ -27,13 +28,7 @@ function normalizePaneIds(paneIds: Iterable<string>): string[] {
 }
 
 function makeWindowId(): string {
-  if (
-    typeof crypto !== 'undefined' &&
-    typeof crypto.randomUUID === 'function'
-  ) {
-    return crypto.randomUUID()
-  }
-  return `window-${Math.random().toString(36).slice(2, 10)}`
+  return createBrowserScopeId('window')
 }
 
 function getWindowId(): string | null {

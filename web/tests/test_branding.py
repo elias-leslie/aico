@@ -23,6 +23,21 @@ def test_get_project_identity_for_root_rejects_symlink_escape(tmp_path) -> None:
     assert branding.get_project_identity_for_root(root) is None
 
 
+def test_get_project_identity_for_root_rejects_root_symlink_escape(
+    monkeypatch, tmp_path
+) -> None:
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    monkeypatch.setattr(branding, "_allowed_root_paths", lambda: (allowed.resolve(),))
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "project.identity.json").write_text('{"project": {"id": "outside"}}')
+    root = allowed / "root-link"
+    root.symlink_to(outside, target_is_directory=True)
+
+    assert branding.get_project_identity_for_root(root) is None
+
+
 def test_get_project_identity_for_root_reads_local_manifest(tmp_path) -> None:
     root = tmp_path / "root"
     root.mkdir()

@@ -1,3 +1,5 @@
+import { createBrowserScopeId } from './browser-scope-id'
+
 const DETACHED_PANE_WINDOW_WIDTH = 1280
 const DETACHED_PANE_WINDOW_HEIGHT = 900
 const DETACHED_PANE_WINDOW_LEFT = 80
@@ -34,13 +36,7 @@ export function parseDetachedWindowPaneIds(
 }
 
 export function makeDetachedWindowScopeId(): string {
-  if (
-    typeof crypto !== 'undefined' &&
-    typeof crypto.randomUUID === 'function'
-  ) {
-    return crypto.randomUUID()
-  }
-  return `detached-${Math.random().toString(36).slice(2, 10)}`
+  return createBrowserScopeId('detached')
 }
 
 export function getScopedATermStorageKey(
