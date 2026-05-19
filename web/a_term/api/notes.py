@@ -249,11 +249,14 @@ async def _proxy_notes_request(request: Request, path: str) -> Response:
             if key.lower() in {"content-type", "accept"}
         },
     )
-    proxied = Response(content=response.content, status_code=response.status_code)
-    content_type = response.headers.get("content-type")
-    if content_type:
-        proxied.headers["content-type"] = content_type
-    return proxied
+    try:
+        proxied = Response(content=response.content, status_code=response.status_code)
+        content_type = response.headers.get("content-type")
+        if content_type:
+            proxied.headers["content-type"] = content_type
+        return proxied
+    finally:
+        await response.aclose()
 
 
 @router.get("/api/notes/capabilities", response_model=NotesCapabilitiesResponse)

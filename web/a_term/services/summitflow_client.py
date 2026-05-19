@@ -81,8 +81,9 @@ async def list_projects() -> list[dict[str, Any]]:
 
     if not has_companion_api():
         return _cache or []
+    response: httpx.Response | None = None
     try:
-        response = await api_request("GET", "/projects")
+        response = await api_request("GET", "/projects", headers={"Connection": "close"})
         response.raise_for_status()
         result: list[dict[str, Any]] = response.json()
         _cache = result
@@ -100,3 +101,6 @@ async def list_projects() -> list[dict[str, Any]]:
     except Exception as e:
         logger.error("summitflow_api_unexpected_error", error=str(e))
         return _cache or []
+    finally:
+        if response is not None:
+            await response.aclose()

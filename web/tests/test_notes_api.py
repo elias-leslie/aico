@@ -46,6 +46,7 @@ def test_notes_capabilities_companion_mode_proxy_forwards_upstream(test_app: Tes
         ).encode(),
     )
     with (
+        patch.object(upstream, "aclose", wraps=upstream.aclose) as close_response,
         patch("a_term.api.notes.summitflow_client.has_companion_api", return_value=True),
         patch(
             "a_term.api.notes.summitflow_client.api_request",
@@ -64,6 +65,7 @@ def test_notes_capabilities_companion_mode_proxy_forwards_upstream(test_app: Tes
     await_args = mock_request.await_args
     assert await_args is not None
     assert await_args.args == ("GET", "/notes/capabilities")
+    close_response.assert_awaited_once()
 
 
 def test_notes_status_local_mode_reports_standalone(test_app: TestClient) -> None:
@@ -210,6 +212,7 @@ def test_notes_proxy_mode_forwards_upstream_response(test_app: TestClient) -> No
         content=json.dumps({"items": [], "total": 0}).encode(),
     )
     with (
+        patch.object(upstream, "aclose", wraps=upstream.aclose) as close_response,
         patch("a_term.api.notes.summitflow_client.has_companion_api", return_value=True),
         patch(
             "a_term.api.notes.summitflow_client.api_request",
@@ -225,3 +228,4 @@ def test_notes_proxy_mode_forwards_upstream_response(test_app: TestClient) -> No
     assert await_args is not None
     assert await_args.args == ("GET", "/notes")
     assert await_args.kwargs["params"] == [("limit", "5")]
+    close_response.assert_awaited_once()
