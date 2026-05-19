@@ -238,16 +238,18 @@ def _is_remote_mode() -> bool:
 
 
 async def _proxy_notes_request(request: Request, path: str) -> Response:
+    headers = {
+        key: value
+        for key, value in request.headers.items()
+        if key.lower() in {"content-type", "accept"}
+    }
+    headers["Connection"] = "close"
     response = await summitflow_client.api_request(
         request.method,
         f"/notes{path}",
         params=list(request.query_params.multi_items()),
         content=await request.body(),
-        headers={
-            key: value
-            for key, value in request.headers.items()
-            if key.lower() in {"content-type", "accept"}
-        },
+        headers=headers,
     )
     try:
         proxied = Response(content=response.content, status_code=response.status_code)

@@ -65,6 +65,7 @@ def test_notes_capabilities_companion_mode_proxy_forwards_upstream(test_app: Tes
     await_args = mock_request.await_args
     assert await_args is not None
     assert await_args.args == ("GET", "/notes/capabilities")
+    assert await_args.kwargs["headers"]["Connection"] == "close"
     close_response.assert_awaited_once()
 
 
@@ -228,4 +229,5 @@ def test_notes_proxy_mode_forwards_upstream_response(test_app: TestClient) -> No
     assert await_args is not None
     assert await_args.args == ("GET", "/notes")
     assert await_args.kwargs["params"] == [("limit", "5")]
+    assert await_args.kwargs["headers"]["Connection"] == "close"
     close_response.assert_awaited_once()
