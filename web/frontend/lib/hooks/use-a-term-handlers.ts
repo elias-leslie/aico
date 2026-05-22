@@ -69,7 +69,10 @@ export function useATermHandlers({
 
   const navigateToSession = useCallback(
     (sessionId: string) => {
-      const params = new URLSearchParams(searchParams.toString())
+      const params =
+        typeof window !== 'undefined'
+          ? new URLSearchParams(window.location.search)
+          : new URLSearchParams(searchParams.toString())
       params.set('session', sessionId)
       router.push(`?${params.toString()}`, { scroll: false })
     },

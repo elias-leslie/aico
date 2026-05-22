@@ -367,6 +367,94 @@ describe('useATermTabsState', () => {
     )
   })
 
+  it('claims a reattached pane for the current browser window', async () => {
+    const attachedPane = {
+      id: 'pane-detached',
+      pane_type: 'project' as const,
+      project_id: 'project-b',
+      pane_order: 1,
+      pane_name: 'Project B',
+      active_mode: 'shell',
+      is_detached: false,
+      created_at: '2026-03-06T00:00:00Z',
+      sessions: [
+        {
+          id: 'session-project-b',
+          name: 'Project B Shell',
+          mode: 'shell',
+          session_number: 1,
+          is_alive: true,
+          working_dir: '/workspace/project-b',
+          claude_state: 'not_started' as const,
+        },
+      ],
+      width_percent: 100,
+      height_percent: 100,
+      grid_row: 0,
+      grid_col: 0,
+    }
+    const attachPane = vi.fn().mockResolvedValue(attachedPane)
+    mockUseActiveSession.mockReturnValue(buildActiveSessionState())
+    mockUseATermPanes.mockReturnValue({
+      panes: [
+        {
+          id: 'pane-project-a',
+          pane_type: 'project',
+          project_id: 'project-a',
+          pane_order: 0,
+          pane_name: 'Project A',
+          active_mode: 'shell',
+          is_detached: false,
+          created_at: '2026-03-06T00:00:00Z',
+          sessions: [
+            {
+              id: 'session-project-a',
+              name: 'Project A Shell',
+              mode: 'shell',
+              session_number: 1,
+              is_alive: true,
+              working_dir: '/workspace/project-a',
+              claude_state: 'not_started',
+            },
+          ],
+          width_percent: 100,
+          height_percent: 100,
+          grid_row: 0,
+          grid_col: 0,
+        },
+      ],
+      detachedPanes: [{ ...attachedPane, is_detached: true }],
+      atLimit: false,
+      isLoading: false,
+      detachedLoadedOnce: true,
+      hasLoadedOnce: true,
+      swapPanePositions: vi.fn(),
+      removePane: vi.fn(),
+      detachPane: vi.fn(),
+      attachPane,
+      setActiveMode: vi.fn(),
+      createAdHocPane: vi.fn(),
+      createProjectPane: vi.fn(),
+      isCreating: false,
+      saveLayouts: vi.fn(),
+      maxPanes: 6,
+    })
+
+    const { result } = renderHook(() =>
+      useATermTabsState({ projectId: undefined, projectPath: undefined }),
+    )
+
+    await act(async () => {
+      await result.current.attachDetachedPane('pane-detached')
+    })
+
+    const registry = JSON.parse(
+      window.localStorage.getItem('a-term-window-pane-owners') ?? '{}',
+    )
+    expect(attachPane).toHaveBeenCalledWith('pane-detached', undefined)
+    expect(registry[TEST_WINDOW_SCOPE].paneIds).toContain('pane-detached')
+  })
+
   it('does not auto-create an ad-hoc pane while launching a requested project pane', async () => {
     const switchToSession = vi.fn()
     const createProjectPane = vi.fn().mockResolvedValue({
@@ -814,7 +902,7 @@ describe('useATermTabsState', () => {
       'pane-detached-new',
       'session-detached-new',
     )
-    expect(switchToSession).toHaveBeenCalledWith('session-detached-new')
+    expect(switchToSession).not.toHaveBeenCalled()
   })
 
   it('starts the default agent when creating project panes inside detached windows', async () => {

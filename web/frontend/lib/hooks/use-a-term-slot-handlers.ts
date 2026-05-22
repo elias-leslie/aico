@@ -16,6 +16,7 @@ import {
   buildDetachedPaneWindowUrl,
   getDetachedPaneWindowFeatures,
   getDetachedPaneWindowName,
+  makeDetachedWindowScopeId,
 } from '@/lib/utils/detached-pane-window'
 import {
   type ATermSlot,
@@ -211,14 +212,16 @@ export function useATermSlotHandlers({
         activeSessionId && sessionId === activeSessionId
           ? findNextVisibleSessionId(slot)
           : null
+      const detachedWindowScopeId = isDetachedPaneWindow
+        ? makeDetachedWindowScopeId()
+        : null
+      const popupName = detachedWindowScopeId
+        ? getDetachedPaneWindowName(`${slot.paneId}-${detachedWindowScopeId}`)
+        : getDetachedPaneWindowName(slot.paneId)
       const popup =
         typeof window === 'undefined'
           ? null
-          : window.open(
-              '',
-              getDetachedPaneWindowName(slot.paneId),
-              getDetachedPaneWindowFeatures(),
-            )
+          : window.open('', popupName, getDetachedPaneWindowFeatures())
 
       if (typeof window !== 'undefined' && popup === null) {
         return
@@ -235,7 +238,7 @@ export function useATermSlotHandlers({
         }
       }
 
-      if (nextVisibleSessionId) {
+      if (nextVisibleSessionId && !isDetachedPaneWindow) {
         switchToSession(nextVisibleSessionId)
       }
 
@@ -247,7 +250,7 @@ export function useATermSlotHandlers({
         window.location.href,
         slot.paneId,
         sessionId,
-        { paneIds: [slot.paneId] },
+        { paneIds: [slot.paneId], windowScopeId: detachedWindowScopeId },
       )
       popup.focus?.()
     },

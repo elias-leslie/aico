@@ -174,6 +174,12 @@ export function useActiveSession(
   const urlSessionId = searchParams.get('session')
   const urlProjectId = searchParams.get('project')
   const searchParamsString = searchParams.toString()
+  const getLatestSearchParams = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      return new URLSearchParams(window.location.search)
+    }
+    return new URLSearchParams(searchParamsString)
+  }, [searchParamsString])
 
   // Derive active session ID from URL + available sessions
   const activeSessionId = useMemo(() => {
@@ -229,11 +235,11 @@ export function useActiveSession(
   // Switch to a different session by updating the URL
   const switchToSession = useCallback(
     (sessionId: string) => {
-      const params = new URLSearchParams(searchParamsString)
+      const params = getLatestSearchParams()
       params.set('session', sessionId)
       router.push(`?${params.toString()}`, { scroll: false })
     },
-    [searchParamsString, router],
+    [getLatestSearchParams, router],
   )
 
   // Get the active session for a project based on its current mode

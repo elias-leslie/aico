@@ -16,6 +16,7 @@ import {
 import { useATermHandlers } from '@/lib/hooks/use-a-term-handlers'
 import {
   type ATermPane,
+  type AttachPaneRequest,
   type PanePlacementOptions,
   useATermPanes,
 } from '@/lib/hooks/use-a-term-panes'
@@ -271,6 +272,16 @@ export function useATermTabsState({
       return pane
     },
     [claimPane, createAdHocPane],
+  )
+  const attachPaneForWindow = useCallback(
+    async (paneId: string, request?: AttachPaneRequest) => {
+      const pane = await attachPane(paneId, request)
+      if (!isDetachedWindow) {
+        claimPane(pane.id)
+      }
+      return pane
+    },
+    [attachPane, claimPane, isDetachedWindow],
   )
   const mobileGlobalSlots = useMemo(() => {
     if (!isMobile || isDetachedWindow) {
@@ -582,8 +593,7 @@ export function useATermTabsState({
       findSessionByMode(newPane, 'shell')?.id ?? newPane.sessions[0]?.id ?? null
     if (!targetSessionId) return
     addDetachedWindowPane?.(newPane.id, targetSessionId)
-    switchToSession(targetSessionId)
-  }, [addDetachedWindowPane, createAdHocPane, detachedPanes, switchToSession])
+  }, [addDetachedWindowPane, createAdHocPane, detachedPanes])
   const handleDetachedNewATermForProject = useCallback(
     async (
       targetProjectId: string,
@@ -614,9 +624,9 @@ export function useATermTabsState({
           newPane.id,
           newPane,
         )
+        addDetachedWindowPane?.(newPane.id, targetSessionId)
         return
       }
-      switchToSession(targetSessionId)
     },
     [
       addDetachedWindowPane,
@@ -624,7 +634,6 @@ export function useATermTabsState({
       detachedPanes,
       handleProjectModeChange,
       panes,
-      switchToSession,
     ],
   )
   const startupLaunchKeyRef = useRef<string | null>(null)
@@ -750,7 +759,7 @@ export function useATermTabsState({
     panesAtLimit: visiblePanesAtLimit,
     attachExternalSession,
     detachExternalSession,
-    attachDetachedPane: attachPane,
+    attachDetachedPane: attachPaneForWindow,
     detachPane,
     removePane,
     setActiveMode,
