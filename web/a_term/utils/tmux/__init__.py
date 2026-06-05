@@ -21,13 +21,17 @@ from .core import (
     TMUX_COMMAND_TIMEOUT,
     TMUX_SESSION_PREFIX,
     TmuxError,
+    build_tmux_command,
     run_tmux_command,
     validate_session_name,
+    validate_socket_name,
 )
 from .external import (
     _EXTERNAL_AGENT_TOKENS,  # noqa: F401
     _EXTERNAL_ATTACH_LOCK,  # noqa: F401
     _EXTERNAL_ATTACH_STATES,  # noqa: F401
+    _EXTERNAL_TMUX_SOURCES,  # noqa: F401
+    ExternalTmuxSource,
     _ExternalAttachState,  # noqa: F401
     _infer_external_mode,  # noqa: F401
     _infer_project_id,  # noqa: F401
@@ -36,6 +40,7 @@ from .external import (
     get_external_agent_tmux_session,
     get_tmux_session_option,
     list_external_agent_tmux_sessions,
+    list_external_tmux_sessions,
     restore_external_attach_options,
     set_tmux_session_option,
 )
@@ -63,8 +68,10 @@ __all__ = [
     "FILTERED_ENV_VARS",
     "TMUX_COMMAND_TIMEOUT",
     "TMUX_SESSION_PREFIX",
+    "ExternalTmuxSource",
     "TmuxError",
     "apply_external_attach_options",
+    "build_tmux_command",
     "create_tmux_session",
     "get_cursor_position",
     "get_external_agent_tmux_session",
@@ -74,6 +81,7 @@ __all__ = [
     "get_tmux_session_option",
     "is_managed_tmux_session_name",
     "list_external_agent_tmux_sessions",
+    "list_external_tmux_sessions",
     "list_tmux_sessions",
     "reset_tmux_window_size_policy",
     "resize_tmux_window",
@@ -83,4 +91,5 @@ __all__ = [
     "tmux_session_exists",
     "tmux_session_exists_by_name",
     "validate_session_name",
+    "validate_socket_name",
 ]

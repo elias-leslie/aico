@@ -83,7 +83,7 @@ def test_list_sessions_returns_items(test_app: TestClient) -> None:
             return_value=sessions,
         ) as list_sessions_mock,
         patch(
-            "a_term.api.sessions.list_external_agent_tmux_sessions",
+            "a_term.api.sessions.list_external_tmux_sessions",
             return_value=external,
         ),
     ):
@@ -114,7 +114,7 @@ def test_list_sessions_can_include_detached_panes(test_app: TestClient) -> None:
             return_value=[],
         ) as list_sessions_mock,
         patch(
-            "a_term.api.sessions.list_external_agent_tmux_sessions",
+            "a_term.api.sessions.list_external_tmux_sessions",
             return_value=[],
         ),
     ):
@@ -132,7 +132,7 @@ def test_list_sessions_empty_returns_zero_total(test_app: TestClient) -> None:
     # Arrange
     with (
         patch("a_term.api.sessions.a_term_store.list_sessions", return_value=[]),
-        patch("a_term.api.sessions.list_external_agent_tmux_sessions", return_value=[]),
+        patch("a_term.api.sessions.list_external_tmux_sessions", return_value=[]),
     ):
         # Act
         response = test_app.get("/api/a-term/sessions")

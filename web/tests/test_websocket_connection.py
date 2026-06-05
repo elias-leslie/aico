@@ -55,6 +55,53 @@ async def test_setup_connection_applies_external_attach_options() -> None:
 
 
 @pytest.mark.asyncio
+async def test_setup_connection_uses_external_tmux_socket() -> None:
+    session = {
+        "is_external": True,
+        "mode": "codex",
+        "last_claude_session": None,
+        "tmux_socket": "aico",
+    }
+    websocket = AsyncMock()
+
+    with (
+        patch(
+            "a_term.api.handlers.websocket_connection.validate_and_prepare_session",
+            return_value=(session, "aico-7"),
+        ),
+        patch(
+            "a_term.api.handlers.websocket_connection.reset_tmux_window_size_policy",
+            return_value=True,
+        ) as mock_reset,
+        patch(
+            "a_term.api.handlers.websocket_connection.apply_external_attach_options",
+            return_value=True,
+        ) as mock_apply,
+        patch(
+            "a_term.api.handlers.websocket_connection.spawn_pty_for_tmux",
+            return_value=(17, 23),
+        ) as mock_spawn,
+        patch(
+            "a_term.api.handlers.websocket_connection._wait_for_initial_resize",
+            new=AsyncMock(),
+        ) as mock_wait,
+        patch(
+            "a_term.api.handlers.websocket_connection.get_scrollback",
+            return_value=None,
+        ),
+    ):
+        result = await _setup_connection(websocket, "tmux:aico:aico-7", [])
+
+    assert result == (session, "aico-7", 17, 23, False)
+    mock_reset.assert_called_once_with("aico-7", "aico")
+    mock_apply.assert_called_once_with("aico-7", "aico")
+    mock_spawn.assert_called_once_with("aico-7", None, "aico")
+    wait_args = mock_wait.await_args
+    assert wait_args is not None
+    assert wait_args.kwargs["tmux_socket_name"] == "aico"
+
+
+@pytest.mark.asyncio
 async def test_setup_connection_restores_external_attach_options_after_setup_failure() -> None:
     session = {
         "is_external": True,

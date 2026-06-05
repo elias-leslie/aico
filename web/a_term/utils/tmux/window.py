@@ -14,12 +14,19 @@ def _pkg() -> object:
     return sys.modules["a_term.utils.tmux"]
 
 
-def resize_tmux_window(session_name: str, cols: int, rows: int) -> bool:
+def resize_tmux_window(
+    session_name: str,
+    cols: int,
+    rows: int,
+    socket_name: str | None = None,
+) -> bool:
     """Resize tmux window to match frontend dimensions."""
     pkg = _pkg()
-    success, _ = pkg.run_tmux_command(  # type: ignore[union-attr]
-        ["resize-window", "-t", session_name, "-x", str(cols), "-y", str(rows)]
-    )
+    args = ["resize-window", "-t", session_name, "-x", str(cols), "-y", str(rows)]
+    if socket_name:
+        success, _ = pkg.run_tmux_command(args, socket_name=socket_name)  # type: ignore[union-attr]
+    else:
+        success, _ = pkg.run_tmux_command(args)  # type: ignore[union-attr]
 
     if success:
         logger.debug("tmux_window_resized", session=session_name, cols=cols, rows=rows)
@@ -28,7 +35,10 @@ def resize_tmux_window(session_name: str, cols: int, rows: int) -> bool:
     return success
 
 
-def reset_tmux_window_size_policy(session_name: str) -> bool:
+def reset_tmux_window_size_policy(
+    session_name: str,
+    socket_name: str | None = None,
+) -> bool:
     """Return a tmux window to client-driven sizing.
 
     External shared sessions should not remain pinned to a manual geometry after
@@ -36,9 +46,11 @@ def reset_tmux_window_size_policy(session_name: str) -> bool:
     reclaim its own size instead of preserving a stale manual resize.
     """
     pkg = _pkg()
-    success, _ = pkg.run_tmux_command(  # type: ignore[union-attr]
-        ["set-window-option", "-t", session_name, "window-size", "latest"]
-    )
+    args = ["set-window-option", "-t", session_name, "window-size", "latest"]
+    if socket_name:
+        success, _ = pkg.run_tmux_command(args, socket_name=socket_name)  # type: ignore[union-attr]
+    else:
+        success, _ = pkg.run_tmux_command(args)  # type: ignore[union-attr]
     if success:
         logger.debug("tmux_window_size_policy_reset", session=session_name, policy="latest")
     else:

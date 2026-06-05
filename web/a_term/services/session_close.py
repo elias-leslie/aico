@@ -77,7 +77,14 @@ def close_session(session_ref: str) -> dict[str, Any]:
     external_session = get_external_agent_tmux_session(session_ref)
     if external_session:
         tmux_session_name = external_session.get("tmux_session_name") or session_ref
-        run_tmux_command(["kill-session", "-t", str(tmux_session_name)])
+        tmux_socket_name = external_session.get("tmux_socket")
+        if tmux_socket_name:
+            run_tmux_command(
+                ["kill-session", "-t", str(tmux_session_name)],
+                socket_name=str(tmux_socket_name),
+            )
+        else:
+            run_tmux_command(["kill-session", "-t", str(tmux_session_name)])
         return _build_result(session_ref, is_external=True)
 
     session = a_term_store.get_session(session_ref)

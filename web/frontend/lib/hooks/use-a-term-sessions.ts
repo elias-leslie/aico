@@ -19,6 +19,9 @@ export interface ATermSession {
   claude_state?: 'not_started' | 'starting' | 'running' | 'stopped' | 'error'
   tmux_session_name?: string | null
   tmux_pane_id?: string | null
+  tmux_socket?: string | null
+  tmux_source?: string | null
+  tmux_source_label?: string | null
   is_external?: boolean
   source?: string | null
 }

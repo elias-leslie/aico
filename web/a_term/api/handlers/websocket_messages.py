@@ -50,6 +50,7 @@ async def _handle_resize_command(
     master_fd: int,
     session_id: str,
     tmux_session_name: str | None,
+    tmux_socket_name: str | None,
     last_resize: list[int] | None,
     resize_tmux: bool,
 ) -> tuple[int, int]:
@@ -62,7 +63,10 @@ async def _handle_resize_command(
     if not last_resize or cols != last_resize[0] or rows != last_resize[1]:
         resize_pty(master_fd, cols, rows)
         if resize_tmux and tmux_session_name:
-            await asyncio.to_thread(resize_tmux_window, tmux_session_name, cols, rows)
+            resize_args = [tmux_session_name, cols, rows]
+            if tmux_socket_name:
+                resize_args.append(tmux_socket_name)
+            await asyncio.to_thread(resize_tmux_window, *resize_args)
         if last_resize is not None:
             last_resize[0] = cols
             last_resize[1] = rows
@@ -75,6 +79,7 @@ async def _handle_scroll_request(
     data: dict[str, Any],
     websocket: WebSocket,
     tmux_session_name: str | None,
+    tmux_socket_name: str | None,
 ) -> None:
     """Handle a scroll_request control message — return a scrollback page."""
     req = data.get("scroll_request", {})
@@ -89,12 +94,22 @@ async def _handle_scroll_request(
     if "from_line" in req:
         from_line = int(req["from_line"])
     else:
-        total = await asyncio.to_thread(get_scrollback_line_count, tmux_session_name)
+        total = await asyncio.to_thread(
+            get_scrollback_line_count,
+            tmux_session_name,
+            tmux_socket_name,
+        )
         if total is None:
             return
         from_line = max(0, total - count)
 
-    result = await asyncio.to_thread(get_scrollback_range, tmux_session_name, from_line, count)
+    result = await asyncio.to_thread(
+        get_scrollback_range,
+        tmux_session_name,
+        from_line,
+        count,
+        tmux_socket_name,
+    )
     if result is None:
         return
 
@@ -115,6 +130,7 @@ async def _handle_ctrl_message(
     master_fd: int,
     session_id: str,
     tmux_session_name: str | None,
+    tmux_socket_name: str | None,
     last_resize: list[int] | None,
     resize_tmux: bool,
     backpressure: BackpressureController | None,
@@ -124,7 +140,15 @@ async def _handle_ctrl_message(
     """Dispatch a validated __ctrl message to the appropriate handler."""
     if "resize" in data:
         _extract_capabilities(data, capabilities)
-        return await _handle_resize_command(data, master_fd, session_id, tmux_session_name, last_resize, resize_tmux)
+        return await _handle_resize_command(
+            data,
+            master_fd,
+            session_id,
+            tmux_session_name,
+            tmux_socket_name,
+            last_resize,
+            resize_tmux,
+        )
 
     if data.get("ping"):
         return None
@@ -157,7 +181,7 @@ async def _handle_ctrl_message(
 
     # Phase 3: Scroll request
     if "scroll_request" in data and websocket is not None:
-        await _handle_scroll_request(data, websocket, tmux_session_name)
+        await _handle_scroll_request(data, websocket, tmux_session_name, tmux_socket_name)
         return None
 
     return None
@@ -168,6 +192,7 @@ async def _handle_text_message(
     master_fd: int,
     session_id: str,
     tmux_session_name: str | None,
+    tmux_socket_name: str | None,
     last_resize: list[int] | None,
     resize_tmux: bool,
     backpressure: BackpressureController | None = None,
@@ -190,7 +215,7 @@ async def _handle_text_message(
         if data.get("__ctrl"):
             return await _handle_ctrl_message(
                 data, master_fd, session_id, tmux_session_name,
-                last_resize, resize_tmux, backpressure, websocket, capabilities,
+                tmux_socket_name, last_resize, resize_tmux, backpressure, websocket, capabilities,
             )
 
     input_bytes = text.encode("utf-8")
@@ -205,6 +230,7 @@ async def _handle_binary_message(
     master_fd: int,
     session_id: str,
     tmux_session_name: str | None,
+    tmux_socket_name: str | None,
     last_resize: list[int] | None,
     resize_tmux: bool,
     backpressure: BackpressureController | None,
@@ -228,7 +254,7 @@ async def _handle_binary_message(
                 text = payload.decode("utf-8")
                 return await _handle_text_message(
                     text, master_fd, session_id, tmux_session_name,
-                    last_resize, resize_tmux, backpressure, websocket, capabilities, recorder,
+                    tmux_socket_name, last_resize, resize_tmux, backpressure, websocket, capabilities, recorder,
                 )
             except (json.JSONDecodeError, UnicodeDecodeError):
                 pass
@@ -244,6 +270,7 @@ async def handle_websocket_message(
     session_id: str,
     tmux_session_name: str | None = None,
     last_resize: list[int] | None = None,
+    tmux_socket_name: str | None = None,
     resize_tmux: bool = True,
     backpressure: BackpressureController | None = None,
     websocket: WebSocket | None = None,
@@ -257,6 +284,7 @@ async def handle_websocket_message(
         master_fd: Master file descriptor to write to
         session_id: A-Term session ID (for logging)
         tmux_session_name: tmux session name for resize operations
+        tmux_socket_name: optional tmux socket name for non-default servers.
         last_resize: Mutable [cols, rows] tracker for deduplication.
         resize_tmux: Whether to resize the tmux window.
         backpressure: Optional controller for flow control.
@@ -269,13 +297,25 @@ async def handle_websocket_message(
     if "text" in message:
         return await _handle_text_message(
             message["text"], master_fd, session_id, tmux_session_name,
-            last_resize, resize_tmux, backpressure, websocket, capabilities, recorder,
+            tmux_socket_name,
+            last_resize,
+            resize_tmux,
+            backpressure,
+            websocket,
+            capabilities,
+            recorder,
         )
 
     if "bytes" in message:
         return await _handle_binary_message(
             message["bytes"], master_fd, session_id, tmux_session_name,
-            last_resize, resize_tmux, backpressure, websocket, capabilities, recorder,
+            tmux_socket_name,
+            last_resize,
+            resize_tmux,
+            backpressure,
+            websocket,
+            capabilities,
+            recorder,
         )
 
     return None

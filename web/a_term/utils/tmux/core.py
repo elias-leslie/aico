@@ -12,6 +12,7 @@ logger = get_logger(__name__)
 TMUX_COMMAND_TIMEOUT = 10  # seconds for tmux subprocess calls
 TMUX_SESSION_PREFIX = "summitflow-"
 _SESSION_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_\-]+$")
+_SOCKET_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_\-]+$")
 
 # Secrets filtered from tmux session environments
 FILTERED_ENV_VARS = {
@@ -42,26 +43,53 @@ def validate_session_name(name: str) -> bool:
     return bool(_SESSION_NAME_PATTERN.match(name)) and len(name) < 256
 
 
-def run_tmux_command(args: list[str], check: bool = False) -> tuple[bool, str]:
+def validate_socket_name(name: str | None) -> bool:
+    """Validate a tmux socket name used with ``tmux -L``."""
+    if name is None:
+        return True
+    return bool(_SOCKET_NAME_PATTERN.match(name)) and len(name) < 128
+
+
+def build_tmux_command(args: list[str], socket_name: str | None = None) -> list[str]:
+    """Build a tmux command for the default server or a named socket."""
+    if not validate_socket_name(socket_name):
+        raise TmuxError(f"Invalid tmux socket name: {str(socket_name)[:50]}")
+    cmd = ["tmux"]
+    if socket_name:
+        cmd.extend(["-L", socket_name])
+    cmd.extend(args)
+    return cmd
+
+
+def run_tmux_command(
+    args: list[str],
+    check: bool = False,
+    socket_name: str | None = None,
+) -> tuple[bool, str]:
     """Run a tmux command with standardized error handling.
 
     Returns: (success, output_or_error)
     Raises: TmuxError if check=True and command fails
     """
-    cmd = ["tmux", *args]
+    try:
+        cmd = build_tmux_command(args, socket_name)
+    except TmuxError as err:
+        if check:
+            raise
+        return False, str(err)
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=TMUX_COMMAND_TIMEOUT)
         if result.returncode == 0:
             return True, result.stdout.strip()
 
         error_msg = result.stderr.strip() or f"tmux exited with code {result.returncode}"
-        logger.debug("tmux_command_failed", cmd=args, error=error_msg)
+        logger.debug("tmux_command_failed", cmd=args, socket=socket_name, error=error_msg)
         if check:
             raise TmuxError(error_msg)
         return False, error_msg
     except subprocess.TimeoutExpired as err:
         error_msg = f"tmux command timed out after {TMUX_COMMAND_TIMEOUT}s"
-        logger.error("tmux_command_timeout", cmd=args)
+        logger.error("tmux_command_timeout", cmd=args, socket=socket_name)
         if check:
             raise TmuxError(error_msg) from err
         return False, error_msg

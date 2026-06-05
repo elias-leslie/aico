@@ -11,6 +11,7 @@ import contextlib
 import json
 import os
 import signal
+from collections.abc import Callable
 
 from fastapi import WebSocket, WebSocketDisconnect
 
@@ -70,6 +71,7 @@ async def _poll_for_resize(
     master_fd: int,
     session_id: str,
     tmux_session_name: str,
+    tmux_socket_name: str | None,
     resize_tmux: bool,
     capabilities: list[str] | None = None,
 ) -> bool:
@@ -83,6 +85,7 @@ async def _poll_for_resize(
             master_fd,
             session_id,
             tmux_session_name,
+            tmux_socket_name=tmux_socket_name,
             resize_tmux=resize_tmux,
             capabilities=capabilities,
         )
@@ -101,6 +104,7 @@ async def _wait_for_initial_resize(
     master_fd: int,
     session_id: str,
     tmux_session_name: str,
+    tmux_socket_name: str | None = None,
     resize_tmux: bool = True,
     timeout: float = 5.0,
     capabilities: list[str] | None = None,
@@ -113,6 +117,7 @@ async def _wait_for_initial_resize(
                 master_fd,
                 session_id,
                 tmux_session_name,
+                tmux_socket_name,
                 resize_tmux,
                 capabilities,
             ),
@@ -172,6 +177,16 @@ async def _cleanup_tasks(*tasks: asyncio.Task[object]) -> None:
             await task
 
 
+async def _call_tmux_session_fn(
+    fn: Callable[..., object],
+    tmux_session_name: str,
+    tmux_socket_name: str | None,
+) -> object:
+    if tmux_socket_name:
+        return await asyncio.to_thread(fn, tmux_session_name, tmux_socket_name)
+    return await asyncio.to_thread(fn, tmux_session_name)
+
+
 # ---------------------------------------------------------------------------
 # Initial scrollback helpers
 # ---------------------------------------------------------------------------
@@ -180,15 +195,20 @@ async def _send_viewport_init(
     websocket: WebSocket,
     session_id: str,
     tmux_session_name: str,
+    tmux_socket_name: str | None = None,
 ) -> None:
     """Send viewport_init control message for demand-paging clients."""
     viewport_result = await asyncio.to_thread(
-        get_viewport_lines, tmux_session_name, 50,
+        get_viewport_lines, tmux_session_name, 50, tmux_socket_name,
     )
     if not viewport_result:
         return
     viewport_text, total_lines, viewport_start = viewport_result
-    cursor_position = await asyncio.to_thread(get_cursor_position, tmux_session_name)
+    cursor_position = await asyncio.to_thread(
+        get_cursor_position,
+        tmux_session_name,
+        tmux_socket_name,
+    )
     viewport_init: dict = {
         "lines": viewport_text,
         "total_lines": total_lines,
@@ -207,10 +227,11 @@ async def _send_shell_legacy_scrollback(
     websocket: WebSocket,
     session_id: str,
     tmux_session_name: str,
+    tmux_socket_name: str | None = None,
 ) -> None:
     """Send full scrollback snapshot for shell sessions without demand-paging."""
     scrollback, cursor_position = await asyncio.to_thread(
-        get_scrollback_with_cursor, tmux_session_name,
+        get_scrollback_with_cursor, tmux_session_name, 5000, tmux_socket_name,
     )
     if not scrollback:
         return
@@ -232,9 +253,15 @@ async def _send_tui_prefetch_scrollback(
     websocket: WebSocket,
     session_id: str,
     tmux_session_name: str,
+    tmux_socket_name: str | None = None,
 ) -> None:
     """Pre-populate overlay cache for TUI/agent sessions on connect."""
-    scrollback_raw = await asyncio.to_thread(get_scrollback, tmux_session_name)
+    scrollback_raw = await asyncio.to_thread(
+        get_scrollback,
+        tmux_session_name,
+        5000,
+        tmux_socket_name,
+    )
     if not scrollback_raw:
         return
     sb_lines = scrollback_raw.split("\n")
@@ -295,6 +322,7 @@ def _create_session_recorder(session_id: str) -> SessionRecorder | None:
 def _create_scrollback_sync(
     websocket: WebSocket,
     tmux_session_name: str,
+    tmux_socket_name: str | None,
     capabilities: list[str],
     diag: object,
     recorder: SessionRecorder | None,
@@ -302,12 +330,19 @@ def _create_scrollback_sync(
     """Create scrollback sync scheduler and tracker for the session."""
     use_binary = "binary_protocol" in capabilities
     diff_tracker = LineDiffTracker() if "diff_sync" in capabilities else None
+    scheduler_kwargs = {
+        "use_binary": use_binary,
+        "diff_tracker": diff_tracker,
+        "diag": diag,
+    }
+    if tmux_socket_name:
+        scheduler_kwargs["get_scrollback_with_cursor_fn"] = (
+            lambda name: get_scrollback_with_cursor(name, socket_name=tmux_socket_name)
+        )
     scrollback_sync = ScrollbackSyncScheduler(
         websocket,
         tmux_session_name,
-        use_binary=use_binary,
-        diff_tracker=diff_tracker,
-        diag=diag,
+        **scheduler_kwargs,
     )
     scrollback_tracker = ScrollbackSyncOutputTracker(
         scrollback_sync,
@@ -339,6 +374,7 @@ def _make_output_flush_callback(
 async def _teardown_session_resources(
     session: dict,
     tmux_session_name: str,
+    tmux_socket_name: str | None,
     session_id: str,
     backpressure: BackpressureController | None,
     scrollback_sync: ScrollbackSyncScheduler | None,
@@ -357,8 +393,16 @@ async def _teardown_session_resources(
     a_term_metrics.dec("active_connections")  # type: ignore[union-attr]
     a_term_metrics.dec("active_sessions")  # type: ignore[union-attr]
     if session.get("is_external"):
-        await asyncio.to_thread(restore_external_attach_options, tmux_session_name)
-        await asyncio.to_thread(reset_tmux_window_size_policy, tmux_session_name)
+        await _call_tmux_session_fn(
+            restore_external_attach_options,
+            tmux_session_name,
+            tmux_socket_name,
+        )
+        await _call_tmux_session_fn(
+            reset_tmux_window_size_policy,
+            tmux_session_name,
+            tmux_socket_name,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -381,38 +425,77 @@ async def _setup_connection(
     session, tmux_session_name = await asyncio.to_thread(
         validate_and_prepare_session, session_id
     )
+    tmux_socket_name = (
+        str(session.get("tmux_socket")) if session.get("tmux_socket") else None
+    )
     resize_tmux = not bool(session.get("is_external"))
     external_attach_applied = False
     try:
         if session.get("is_external"):
-            await asyncio.to_thread(reset_tmux_window_size_policy, tmux_session_name)
-            external_attach_applied = await asyncio.to_thread(
-                apply_external_attach_options,
+            await _call_tmux_session_fn(
+                reset_tmux_window_size_policy,
                 tmux_session_name,
+                tmux_socket_name,
+            )
+            external_attach_applied = bool(
+                await _call_tmux_session_fn(
+                    apply_external_attach_options,
+                    tmux_session_name,
+                    tmux_socket_name,
+                )
             )
 
         stored_target_session = session.get("last_claude_session")
-        master_fd, pid = spawn_pty_for_tmux(tmux_session_name, stored_target_session)
+        master_fd, pid = spawn_pty_for_tmux(
+            tmux_session_name,
+            stored_target_session,
+            tmux_socket_name,
+        )
         await _wait_for_initial_resize(
             websocket, master_fd, session_id, tmux_session_name,
-            resize_tmux=resize_tmux, capabilities=capabilities,
+            tmux_socket_name=tmux_socket_name,
+            resize_tmux=resize_tmux,
+            capabilities=capabilities,
         )
 
         is_shell = session.get("mode") == SHELL_MODE
         if is_shell:
             if "demand_paging" in capabilities:
-                await _send_viewport_init(websocket, session_id, tmux_session_name)
+                await _send_viewport_init(
+                    websocket,
+                    session_id,
+                    tmux_session_name,
+                    tmux_socket_name,
+                )
             else:
-                await _send_shell_legacy_scrollback(websocket, session_id, tmux_session_name)
+                await _send_shell_legacy_scrollback(
+                    websocket,
+                    session_id,
+                    tmux_session_name,
+                    tmux_socket_name,
+                )
         else:
-            await _send_tui_prefetch_scrollback(websocket, session_id, tmux_session_name)
+            await _send_tui_prefetch_scrollback(
+                websocket,
+                session_id,
+                tmux_session_name,
+                tmux_socket_name,
+            )
 
         return session, tmux_session_name, master_fd, pid, resize_tmux
     except Exception:
         if external_attach_applied:
-            await asyncio.to_thread(restore_external_attach_options, tmux_session_name)
+            await _call_tmux_session_fn(
+                restore_external_attach_options,
+                tmux_session_name,
+                tmux_socket_name,
+            )
         if session.get("is_external"):
-            await asyncio.to_thread(reset_tmux_window_size_policy, tmux_session_name)
+            await _call_tmux_session_fn(
+                reset_tmux_window_size_policy,
+                tmux_session_name,
+                tmux_socket_name,
+            )
         raise
 
 
@@ -424,6 +507,7 @@ async def _run_message_loop(
     resize_tmux: bool,
     output_task: asyncio.Task,
     heartbeat_task: asyncio.Task,
+    tmux_socket_name: str | None = None,
     backpressure: BackpressureController | None = None,
     capabilities: list[str] | None = None,
     recorder: SessionRecorder | None = None,
@@ -443,6 +527,7 @@ async def _run_message_loop(
                 session_id,
                 tmux_session_name,
                 last_resize,
+                tmux_socket_name=tmux_socket_name,
                 resize_tmux=resize_tmux,
                 backpressure=backpressure,
                 websocket=websocket,
@@ -484,8 +569,9 @@ async def _run_session(
     a_term_metrics.inc("active_sessions")
     a_term_metrics.inc("total_sessions_created")
     recorder = _create_session_recorder(session_id)
+    tmux_socket_name = str(session.get("tmux_socket")) if session.get("tmux_socket") else None
     scrollback_sync, scrollback_tracker = _create_scrollback_sync(
-        websocket, tmux_session_name, capabilities, diag, recorder
+        websocket, tmux_session_name, tmux_socket_name, capabilities, diag, recorder
     )
     on_flush = _make_output_flush_callback(a_term_metrics, scrollback_tracker, recorder)
     output_task = asyncio.create_task(
@@ -500,11 +586,16 @@ async def _run_session(
         await _run_message_loop(
             websocket, master_fd, session_id, tmux_session_name, resize_tmux,
             output_task, heartbeat_task,
+            tmux_socket_name,
             backpressure=backpressure, capabilities=capabilities, recorder=recorder,
         )
     finally:
         await _teardown_session_resources(
-            session, tmux_session_name, session_id, backpressure,
+            session,
+            tmux_session_name,
+            tmux_socket_name,
+            session_id,
+            backpressure,
             scrollback_sync, recorder, diag_registry, a_term_metrics,
         )
     return pid, master_fd

@@ -21,7 +21,7 @@ from ..rate_limit import limiter
 from ..services import lifecycle
 from ..services.session_close import close_session
 from ..storage import sessions as a_term_store
-from ..utils.tmux import get_external_agent_tmux_session, list_external_agent_tmux_sessions
+from ..utils.tmux import get_external_agent_tmux_session, list_external_tmux_sessions
 from .validators import validate_uuid
 
 logger = get_logger(__name__)
@@ -54,6 +54,9 @@ class ATermSessionResponse(BaseModel):
     claude_state: str | None = None  # not_started, starting, running, stopped, error
     tmux_session_name: str | None = None
     tmux_pane_id: str | None = None
+    tmux_socket: str | None = None
+    tmux_source: str | None = None
+    tmux_source_label: str | None = None
     is_external: bool = False
     source: str | None = None
 
@@ -100,7 +103,7 @@ async def list_sessions(include_detached: bool = False) -> ATermSessionListRespo
         include_dead=False,
         include_detached=include_detached,
     )
-    external_sessions = list_external_agent_tmux_sessions()
+    external_sessions = list_external_tmux_sessions()
     all_sessions = [*sessions, *external_sessions]
 
     return ATermSessionListResponse(

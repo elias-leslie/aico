@@ -13,14 +13,18 @@ import asyncio
 import fcntl
 import os
 import pty
-import shlex
 import struct
 import termios
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
 from ..logging_config import get_logger
-from ..utils.tmux import run_tmux_command, validate_session_name
+from ..utils.tmux import (
+    build_tmux_command,
+    run_tmux_command,
+    validate_session_name,
+    validate_socket_name,
+)
 from ._pty_reader import _make_on_readable, _run_batch_loop
 
 if TYPE_CHECKING:
@@ -36,7 +40,10 @@ logger = get_logger(__name__)
 __all__ = ["read_pty_output", "resize_pty", "spawn_pty_for_tmux"]
 
 
-def _resolve_target_session(stored_target_session: str | None) -> str | None:
+def _resolve_target_session(
+    stored_target_session: str | None,
+    tmux_socket_name: str | None = None,
+) -> str | None:
     """Validate and check if the stored target session still exists.
 
     Returns the session name if it is valid and alive, else None.
@@ -46,34 +53,42 @@ def _resolve_target_session(stored_target_session: str | None) -> str | None:
     if not validate_session_name(stored_target_session):
         logger.warning("invalid_target_session_name", session=stored_target_session[:50])
         return None
-    success, _ = run_tmux_command(["has-session", "-t", stored_target_session])
+    success, _ = run_tmux_command(
+        ["has-session", "-t", stored_target_session],
+        socket_name=tmux_socket_name,
+    )
     if not success:
         return None
     logger.info("using_stored_target_session", session=stored_target_session)
     return stored_target_session
 
 
-def _exec_tmux_attach(tmux_session: str, target_session: str | None) -> None:
+def _exec_tmux_attach(
+    tmux_session: str,
+    target_session: str | None,
+    tmux_socket_name: str | None = None,
+) -> None:
     """Replace the child process image with tmux attach (never returns)."""
     os.environ["TERM"] = "xterm-256color"
     if target_session:
-        safe_base = shlex.quote(tmux_session)
-        safe_target = shlex.quote(target_session)
         os.execvp(
-            "bash",
-            [
-                "bash",
-                "-c",
-                f"tmux attach-session -t {safe_base} \\; switch-client -t {safe_target}",
-            ],
+            "tmux",
+            build_tmux_command(
+                ["attach-session", "-t", tmux_session, ";", "switch-client", "-t", target_session],
+                tmux_socket_name,
+            ),
         )
     else:
-        os.execvp("tmux", ["tmux", "attach-session", "-t", tmux_session])
+        os.execvp(
+            "tmux",
+            build_tmux_command(["attach-session", "-t", tmux_session], tmux_socket_name),
+        )
 
 
 def spawn_pty_for_tmux(
     tmux_session: str,
     stored_target_session: str | None = None,
+    tmux_socket_name: str | None = None,
 ) -> tuple[int, int]:
     """Spawn a PTY attached to a tmux session.
 
@@ -88,18 +103,19 @@ def spawn_pty_for_tmux(
         ValueError: If tmux session name is invalid
 
     Security:
-        Session names are validated with validate_session_name() before use.
-        shlex.quote() provides additional protection for shell commands.
+        Session and socket names are validated before tmux is exec'd directly.
     """
     if not validate_session_name(tmux_session):
         raise ValueError(f"Invalid tmux session name: {tmux_session[:50]}")
+    if not validate_socket_name(tmux_socket_name):
+        raise ValueError(f"Invalid tmux socket name: {str(tmux_socket_name)[:50]}")
 
-    target_session = _resolve_target_session(stored_target_session)
+    target_session = _resolve_target_session(stored_target_session, tmux_socket_name)
     pid, master_fd = pty.fork()
 
     if pid == 0:
         # Child process — replace with tmux attach (never returns)
-        _exec_tmux_attach(tmux_session, target_session)
+        _exec_tmux_attach(tmux_session, target_session, tmux_socket_name)
         raise RuntimeError("PTY fork failed")  # unreachable
 
     # Parent: make fd non-blocking and return

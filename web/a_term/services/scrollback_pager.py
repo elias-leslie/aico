@@ -9,20 +9,25 @@ from __future__ import annotations
 import re
 
 from ..logging_config import get_logger
-from ..utils.tmux import run_tmux_command, validate_session_name
+from ..utils.tmux import run_tmux_command, validate_session_name, validate_socket_name
 
 logger = get_logger(__name__)
 
 MAX_PAGE_SIZE = 5000  # max lines per scroll_request
 
 
-def get_scrollback_line_count(session_name: str) -> int | None:
+def get_scrollback_line_count(
+    session_name: str,
+    socket_name: str | None = None,
+) -> int | None:
     """Return the total history_size for the session, or None on failure."""
-    if not validate_session_name(session_name):
+    if not validate_session_name(session_name) or not validate_socket_name(socket_name):
         return None
-    ok, output = run_tmux_command(
-        ["display-message", "-t", session_name, "-p", "#{history_size}"],
-    )
+    args = ["display-message", "-t", session_name, "-p", "#{history_size}"]
+    if socket_name:
+        ok, output = run_tmux_command(args, socket_name=socket_name)
+    else:
+        ok, output = run_tmux_command(args)
     if not ok or not output:
         return None
     m = re.search(r"(\d+)", output.strip())
@@ -33,6 +38,7 @@ def get_scrollback_range(
     session_name: str,
     from_line: int,
     count: int,
+    socket_name: str | None = None,
 ) -> tuple[list[str], int] | None:
     """Capture a range of scrollback lines from tmux.
 
@@ -44,10 +50,10 @@ def get_scrollback_range(
     Returns:
         (lines, total_lines) or None on failure.
     """
-    if not validate_session_name(session_name):
+    if not validate_session_name(session_name) or not validate_socket_name(socket_name):
         return None
     count = min(count, MAX_PAGE_SIZE)
-    total = get_scrollback_line_count(session_name)
+    total = get_scrollback_line_count(session_name, socket_name)
     if total is None:
         return None
 
@@ -74,9 +80,11 @@ def get_scrollback_range(
     # so calculated end values exclude the visible viewport. Without -E,
     # tmux captures from start through the current viewport, which is what
     # the overlay needs to show the latest content.
-    ok, output = run_tmux_command(
-        ["capture-pane", "-t", session_name, "-p", "-e", "-S", str(start)],
-    )
+    args = ["capture-pane", "-t", session_name, "-p", "-e", "-S", str(start)]
+    if socket_name:
+        ok, output = run_tmux_command(args, socket_name=socket_name)
+    else:
+        ok, output = run_tmux_command(args)
     if not ok:
         return None
 
@@ -91,6 +99,7 @@ def get_scrollback_range(
 def get_viewport_lines(
     session_name: str,
     rows: int,
+    socket_name: str | None = None,
 ) -> tuple[str, int, int] | None:
     """Capture the current viewport content.
 
@@ -101,17 +110,19 @@ def get_viewport_lines(
     Returns:
         (viewport_text, total_lines, viewport_start_line) or None.
     """
-    if not validate_session_name(session_name):
+    if not validate_session_name(session_name) or not validate_socket_name(socket_name):
         return None
 
-    total = get_scrollback_line_count(session_name)
+    total = get_scrollback_line_count(session_name, socket_name)
     if total is None:
         return None
 
     # Capture visible pane (no -S/-E = current viewport)
-    ok, output = run_tmux_command(
-        ["capture-pane", "-t", session_name, "-p"],
-    )
+    args = ["capture-pane", "-t", session_name, "-p"]
+    if socket_name:
+        ok, output = run_tmux_command(args, socket_name=socket_name)
+    else:
+        ok, output = run_tmux_command(args)
     if not ok:
         return None
 

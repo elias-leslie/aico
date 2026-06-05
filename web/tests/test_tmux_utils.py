@@ -122,6 +122,46 @@ def test_list_external_agent_tmux_sessions_discovers_non_a_term_agent_sessions()
     assert sessions[3]["mode"] == "pi"
 
 
+def test_list_external_agent_tmux_sessions_discovers_aico_socket_sessions() -> None:
+    def fake_run_tmux_command(args, check=False, socket_name=None):
+        if args[:2] != ["list-panes", "-a"]:
+            return False, "unexpected"
+        if socket_name == "aico":
+            return (
+                True,
+                "\n".join(
+                    [
+                        "aico-7\t%1\t/home/testuser/aico\tbash",
+                        "aico-8\t%2\t/home/testuser/agent-hub\tcodex",
+                        "other\t%3\t/home/testuser/other\tcodex",
+                    ]
+                ),
+            )
+        return True, "codex-default\t%4\t/home/testuser/default\tcodex"
+
+    with (
+        patch("a_term.utils.tmux.run_tmux_command", side_effect=fake_run_tmux_command),
+        patch("a_term.utils.tmux.subprocess.run") as mock_subprocess,
+    ):
+        mock_subprocess.side_effect = [
+            MagicMock(stdout="/home/testuser/default\n"),
+            MagicMock(stdout="/home/testuser/aico\n"),
+            MagicMock(stdout="/home/testuser/agent-hub\n"),
+        ]
+        sessions = list_external_agent_tmux_sessions()
+
+    assert [session["id"] for session in sessions] == [
+        "tmux:aico:aico-7",
+        "tmux:aico:aico-8",
+        "codex-default",
+    ]
+    assert sessions[0]["mode"] == "shell"
+    assert sessions[0]["tmux_socket"] == "aico"
+    assert sessions[0]["tmux_source"] == "aico"
+    assert sessions[1]["mode"] == "codex"
+    assert sessions[2]["tmux_socket"] is None
+
+
 def test_external_mode_inference_requires_token_boundaries() -> None:
     assert tmux._infer_external_mode("pi-a-term", "node") == ("pi", "running")
     assert tmux._infer_external_mode("api-service", "python") == ("shell", "not_started")
@@ -392,4 +432,25 @@ def test_apply_external_attach_options_rolls_back_partial_changes() -> None:
         call(["set-option", "-t", "codex-agent-hub", "status", "off"]),
         call(["set-option", "-t", "codex-agent-hub", "mouse", "off"]),
         call(["set-option", "-t", "codex-agent-hub", "status", "on"]),
+    ]
+
+
+def test_apply_external_attach_options_targets_named_socket() -> None:
+    with patch(
+        "a_term.utils.tmux.run_tmux_command",
+        side_effect=[
+            (True, "on"),
+            (True, "off"),
+            (True, ""),
+            (True, ""),
+        ],
+    ) as mock_run:
+        assert apply_external_attach_options("aico-7", "aico") is True
+        assert restore_external_attach_options("aico-7", "aico") is True
+
+    assert mock_run.call_args_list == [
+        call(["show-options", "-qv", "-t", "aico-7", "status"], socket_name="aico"),
+        call(["show-options", "-qv", "-t", "aico-7", "mouse"], socket_name="aico"),
+        call(["set-option", "-t", "aico-7", "status", "off"], socket_name="aico"),
+        call(["set-option", "-t", "aico-7", "status", "on"], socket_name="aico"),
     ]

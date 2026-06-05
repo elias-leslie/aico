@@ -47,7 +47,8 @@ function formatProjectDescription(
 
 export function formatSessionDescription(session: ATermSession): string {
   const location = session.working_dir || 'no working directory'
-  return `${session.project_id ?? 'external'} · ${session.mode} · ${location}`
+  const source = session.tmux_source_label ?? session.project_id ?? 'external'
+  return `${source} · ${session.mode} · ${location}`
 }
 
 export function formatDetachedPaneDescription(pane: ATermPane): string {
