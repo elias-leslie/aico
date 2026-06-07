@@ -72,8 +72,8 @@ describe('project catalog', () => {
   it('prepends Personal Workspace to `st projects list` results', () => {
     const exec = () =>
       JSON.stringify([
-        { id: 'aico', name: 'Aico', root_path: '/srv/aico', current: true },
-        { id: 'a-term', name: 'A-Term', root_path: '/srv/a-term', current: false },
+        { id: 'aico', name: 'Aico', root_path: '/opt/aico', current: true },
+        { id: 'a-term', name: 'A-Term', root_path: '/opt/a-term', current: false },
       ])
     expect(listProjects(exec)).toEqual([
       {
@@ -82,8 +82,8 @@ describe('project catalog', () => {
         root: personalWorkspaceRoot(),
         current: false,
       },
-      { id: 'aico', name: 'Aico', root: '/srv/aico', current: true },
-      { id: 'a-term', name: 'A-Term', root: '/srv/a-term', current: false },
+      { id: 'aico', name: 'Aico', root: '/opt/aico', current: true },
+      { id: 'a-term', name: 'A-Term', root: '/opt/a-term', current: false },
     ])
   })
 

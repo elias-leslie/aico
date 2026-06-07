@@ -73,8 +73,8 @@ describe('action registry', () => {
   })
 
   it('treats discovered tmux sessions as pinnable attach actions', () => {
-    setTmuxSessionActions([{ id: 'default:summitflow-abc', label: 'A-Term abc', source: 'A-Term' }])
-    const a = findAction('tmux:default:summitflow-abc')
+    setTmuxSessionActions([{ id: 'default:a-term-demo', label: 'A-Term demo', source: 'A-Term' }])
+    const a = findAction('tmux:default:a-term-demo')
     expect(typeof a?.run).toBe('function')
     expect(a && isPinnable(a)).toBe(true)
   })

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  A_TERM_SESSION_PREFIX,
   attachArgs,
   attachTargetArgs,
   captureArgs,
@@ -34,6 +35,8 @@ import {
   widgetIdFromSession,
 } from './tmux'
 
+const EXTERNAL_A_TERM_SESSION = `${A_TERM_SESSION_PREFIX}123e4567-e89b-12d3-a456-426614174000`
+
 describe('tmux model', () => {
   it('names sessions per widget', () => {
     expect(sessionName('7')).toBe('aico-7')
@@ -63,38 +66,26 @@ describe('tmux model', () => {
   })
 
   it('builds target commands for externally-owned default-socket sessions', () => {
-    const target = { socket: null, session: 'summitflow-123e4567-e89b-12d3-a456-426614174000' }
-    expect(attachTargetArgs(target)).toEqual([
-      'attach-session',
-      '-t',
-      'summitflow-123e4567-e89b-12d3-a456-426614174000',
-    ])
+    const target = { socket: null, session: EXTERNAL_A_TERM_SESSION }
+    expect(attachTargetArgs(target)).toEqual(['attach-session', '-t', EXTERNAL_A_TERM_SESSION])
     expect(captureTargetArgs(target).slice(0, 3)).toEqual([
       'capture-pane',
       '-t',
-      'summitflow-123e4567-e89b-12d3-a456-426614174000',
+      EXTERNAL_A_TERM_SESSION,
     ])
-    expect(hasTargetArgs(target)).toEqual([
-      'has-session',
-      '-t',
-      'summitflow-123e4567-e89b-12d3-a456-426614174000',
-    ])
-    expect(killTargetArgs(target)).toEqual([
-      'kill-session',
-      '-t',
-      'summitflow-123e4567-e89b-12d3-a456-426614174000',
-    ])
+    expect(hasTargetArgs(target)).toEqual(['has-session', '-t', EXTERNAL_A_TERM_SESSION])
+    expect(killTargetArgs(target)).toEqual(['kill-session', '-t', EXTERNAL_A_TERM_SESSION])
     expect(sendTextTargetArgs(target, 'hi')).toEqual([
       'send-keys',
       '-t',
-      'summitflow-123e4567-e89b-12d3-a456-426614174000',
+      EXTERNAL_A_TERM_SESSION,
       '-l',
       'hi',
     ])
     expect(listClientsTargetArgs(target)).toEqual([
       'list-clients',
       '-t',
-      'summitflow-123e4567-e89b-12d3-a456-426614174000',
+      EXTERNAL_A_TERM_SESSION,
       '-F',
       '#{client_name}',
     ])
@@ -102,7 +93,7 @@ describe('tmux model', () => {
       'display-message',
       '-p',
       '-t',
-      'summitflow-123e4567-e89b-12d3-a456-426614174000',
+      EXTERNAL_A_TERM_SESSION,
       '#{pane_pid}',
     ])
   })
@@ -282,7 +273,7 @@ describe('tmux model', () => {
   })
 
   it('identifies A-Term managed sessions on the default tmux server', () => {
-    expect(isATermSessionName('summitflow-123e4567-e89b-12d3-a456-426614174000')).toBe(true)
+    expect(isATermSessionName(EXTERNAL_A_TERM_SESSION)).toBe(true)
     expect(isATermSessionName('aico-123e4567-e89b-12d3-a456-426614174000')).toBe(false)
   })
 

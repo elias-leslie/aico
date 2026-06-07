@@ -4,11 +4,11 @@ import { healthUrl, resolvePython, Sidecar, sidecarArgs, waitForHealth } from '.
 
 describe('sidecar helpers', () => {
   it('resolves the venv interpreter by default', () => {
-    expect(resolvePython('/srv/aico', {})).toBe('/srv/aico/.venv/bin/python')
+    expect(resolvePython('/opt/aico', {})).toBe('/opt/aico/.venv/bin/python')
   })
 
   it('honors an explicit interpreter override', () => {
-    expect(resolvePython('/srv/aico', { AICO_SIDECAR_PYTHON: '/usr/bin/python3' })).toBe(
+    expect(resolvePython('/opt/aico', { AICO_SIDECAR_PYTHON: '/usr/bin/python3' })).toBe(
       '/usr/bin/python3',
     )
   })
@@ -63,7 +63,7 @@ function fakeChild() {
   return child
 }
 
-const OPTS = { host: '127.0.0.1', port: 8005, repoRoot: '/srv/aico', stateDir: '/tmp/state' }
+const OPTS = { host: '127.0.0.1', port: 8005, repoRoot: '/opt/aico', stateDir: '/tmp/state' }
 
 describe('Sidecar', () => {
   it('reports ready and stays alive when health passes', async () => {
