@@ -6,11 +6,73 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
 npm install
-# Some clean hosts have npm configured to skip lifecycle scripts. Make the two
-# runtime native/binary packages explicit so a source install cannot pass tests
-# and then fail at `electron .` because `node_modules/electron/path.txt` is
-# missing.
+# Some clean hosts have npm configured to skip lifecycle scripts. Make the
+# runtime native package explicit, then verify Electron's downloaded binary
+# exists; if the upstream installer leaves only package files behind, fetch the
+# zip with @electron/get and extract it with Python's zipfile.
 npm rebuild electron node-pty
+
+ensure_electron_binary() {
+  local electron_dir="node_modules/electron"
+  local platform_path="electron"
+  case "$(node -p 'process.platform')" in
+    win32) platform_path="electron.exe" ;;
+    darwin) platform_path="Electron.app/Contents/MacOS/Electron" ;;
+  esac
+
+  if [ -f "$electron_dir/path.txt" ] && [ -e "$electron_dir/dist/$platform_path" ]; then
+    return 0
+  fi
+
+  echo "Electron: fetching runtime binary..."
+  local info zip_path
+  info="$(
+    node <<'NODE'
+const { downloadArtifact } = require('@electron/get')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
+
+const electronDir = path.join(process.cwd(), 'node_modules', 'electron')
+const version = require(path.join(electronDir, 'package.json')).version
+const platform = process.env.ELECTRON_INSTALL_PLATFORM || process.env.npm_config_platform || process.platform
+const arch = process.env.ELECTRON_INSTALL_ARCH || process.env.npm_config_arch || process.arch
+
+downloadArtifact({
+  version,
+  artifactName: 'electron',
+  platform,
+  arch,
+  checksums: require(path.join(electronDir, 'checksums.json')),
+  cacheRoot: fs.mkdtempSync(path.join(os.tmpdir(), 'aico-electron-cache-')),
+})
+  .then((zip) => console.log(JSON.stringify({ zip })))
+  .catch((err) => {
+    console.error(err)
+    process.exit(1)
+  })
+NODE
+  )"
+  zip_path="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read())["zip"])' <<<"$info")"
+  python3 - "$zip_path" "$electron_dir/dist" <<'PY'
+import shutil
+import sys
+import zipfile
+from pathlib import Path
+
+zip_path = Path(sys.argv[1])
+dist = Path(sys.argv[2])
+shutil.rmtree(dist, ignore_errors=True)
+dist.mkdir(parents=True, exist_ok=True)
+with zipfile.ZipFile(zip_path) as archive:
+    archive.extractall(dist)
+PY
+  printf '%s' "$platform_path" >"$electron_dir/path.txt"
+  chmod +x "$electron_dir/dist/$platform_path" 2>/dev/null || true
+  test -e "$electron_dir/dist/$platform_path"
+}
+
+ensure_electron_binary
 uv venv --python 3.13
 uv pip install -e '.[dev]'
 
