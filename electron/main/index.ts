@@ -582,7 +582,10 @@ interface AttachableTmuxSession {
 function listAttachableTmuxSessions(): AttachableTmuxSession[] {
   let out = ''
   try {
-    out = execFileSync('tmux', listDefaultPanesArgs(), { encoding: 'utf8' })
+    out = execFileSync('tmux', listDefaultPanesArgs(), {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
   } catch {
     return []
   }
@@ -713,7 +716,10 @@ function pushTitles(): void {
 function adoptOrphans(): void {
   let out = ''
   try {
-    out = execFileSync('tmux', listArgs(), { encoding: 'utf8' })
+    out = execFileSync('tmux', listArgs(), {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
   } catch {
     return // no tmux server => no sessions to adopt
   }
@@ -735,7 +741,10 @@ function adoptOrphans(): void {
 function reapIdleSessions(): void {
   let out = ''
   try {
-    out = execFileSync('tmux', listActivityArgs(), { encoding: 'utf8' })
+    out = execFileSync('tmux', listActivityArgs(), {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
   } catch {
     return // no tmux server => nothing to reap
   }
