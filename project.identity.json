@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "project": {
+    "id": "aico",
+    "repo_name": "aico",
+    "display_name": "Aico"
+  },
+  "branding": {
+    "short_name": "Aico",
+    "description": "Floating-widget desktop AI companion. Wraps terminal AI agents and shell CLIs in Electron widgets with tmux-backed continuity and click-to-context capture."
+  },
+  "runtime": {
+    "backend_port": 8005,
+    "frontend_port": 0,
+    "backend_dir": "sidecar",
+    "frontend_dir": "electron",
+    "health_endpoint": "/health"
+  },
+  "services": {
+    "backend": "aico-shell.service",
+    "frontend": "",
+    "default_workers": [],
+    "optional_workers": []
+  },
+  "hosts": {},
+  "repository": {
+    "owner": "elias-leslie",
+    "name": "aico",
+    "ssh_url": "git@github.com:elias-leslie/aico.git",
+    "https_url": "https://github.com/elias-leslie/aico"
+  }
+}

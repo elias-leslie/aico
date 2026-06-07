@@ -1,0 +1,556 @@
+/* Lantern widget chrome: frameless transparent window -> solid --rim shell
+   wrapping a solid --ink terminal. The shell is opaque (legible regardless of
+   compositor blur support); the transparent window margin leaves room for the
+   soft drop shadow and the breathing amber halo to render beyond the shell edge. */
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+}
+body {
+  font-family: var(--font-ui);
+  color: var(--bone);
+  -webkit-font-smoothing: antialiased;
+  /* The frame glow tracks activity: green = idle/ready, yellow = busy. Set on
+     body so both the halo and the shell rim read the same status color. */
+  --status-glow: var(--glow-idle);
+}
+body.thinking {
+  --status-glow: var(--glow-busy);
+}
+
+/* Breathing status halo — a ring hugging the chrome plus a soft glow. Sits behind
+   the shell. Steady green when idle (ready for you); pulses yellow when busy. */
+.halo {
+  position: absolute;
+  inset: var(--frame-inset);
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 3px var(--status-glow),
+    0 0 18px 5px var(--status-glow);
+  /* Always lit, focused or not, so the status color (green idle / amber busy) is
+     comparable across every open widget at a glance. Focus is shown by the eyes,
+     not by hiding the glow. (Busy adds the breathe pulse below.) */
+  opacity: 0.34;
+  pointer-events: none;
+  z-index: 0;
+  transition: opacity 0.4s var(--ease-arrival);
+}
+
+/* Opaque shell. Whole shell is the drag region; children opt out with no-drag. */
+.shell {
+  position: absolute;
+  inset: var(--frame-inset);
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  border-radius: 14px;
+  background: var(--rim);
+  /* Inner rim reads the status color too, always — reinforces the edge glow. */
+  box-shadow:
+    var(--shadow-soft),
+    inset 0 0 0 1px var(--status-glow);
+  -webkit-app-region: drag;
+  transition: filter 0.24s var(--ease-arrival);
+}
+/* Fine grain texture (~3%) on the chrome. */
+.shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0.03;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Unfocused windows are NOT dimmed — keeping them at full brightness (and full
+   status glow) means several open widgets stay equally readable and comparable.
+   The eyes in the titlebar are what tell you which window has focus. */
+
+/* Titlebar — no OS title bar. The TUI icon sits beside the eyes; the widget
+   name is centered (absolutely, so the side clusters don't pull it off-center). */
+.titlebar {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 10px 0 14px;
+}
+/* TUI mark — a small SVG in the tool's accent (color set from JS), nestled
+   between the eyes. Fixed box, so it never morphs with the terminal font. */
+.tui-icon {
+  flex: 0 0 auto;
+  -webkit-app-region: no-drag;
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  color: var(--mist);
+}
+.tui-icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+/* Widget name, centered in the bar; capped so it never reaches the clusters. */
+.tag {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+  height: 100%;
+  display: flex;
+  align-items: center;
+  max-width: 40%;
+  font-family: var(--font-display);
+  font-weight: 450;
+  font-size: 12px;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+/* The widget name — a click-to-rename button styled as plain title text. */
+.wname {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  -webkit-app-region: no-drag;
+  margin: 0;
+  padding: 0 2px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  font: inherit;
+  letter-spacing: inherit;
+  color: var(--bone);
+  cursor: text;
+}
+.wname:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.wname-input {
+  flex: 0 0 auto;
+  -webkit-app-region: no-drag;
+  width: 11ch;
+  margin: 0;
+  padding: 0 2px;
+  border: none;
+  border-radius: 3px;
+  outline: 1px solid var(--status-glow, rgba(229, 166, 71, 0.6));
+  background: rgba(255, 255, 255, 0.06);
+  font: inherit;
+  letter-spacing: inherit;
+  color: var(--bone);
+}
+/* Aico's eyes — the focus cue (and a bit of personality). Focused: they look
+   forward and blink at you. Unfocused: the pupils follow the mouse cursor (driven
+   from the main process; see wireEyes in renderer.ts). Status lives on the frame
+   glow, so the eyes stay neutral and are purely about *focus*. */
+.eyes {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 2px;
+  -webkit-app-region: no-drag;
+}
+.eye {
+  position: relative;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--bone);
+  box-shadow: inset 0 -1px 2px rgba(0, 0, 0, 0.22);
+  overflow: hidden;
+  transition: transform 90ms var(--ease-arrival); /* eyelid for the blink */
+}
+.eye.blink {
+  transform: scaleY(0.12);
+}
+.pupil {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  border-radius: 50%;
+  background: var(--ink);
+  /* --px/--py (px) are set by wireEyes to aim the gaze. */
+  transform: translate(var(--px, 0px), var(--py, 0px));
+  transition: transform 0.14s var(--ease-arrival);
+}
+@media (prefers-reduced-motion: reduce) {
+  .eye,
+  .pupil {
+    transition: none;
+  }
+}
+.spacer {
+  flex: 1;
+}
+
+/* Window-control dots — clearly visible; glyph fills in on hover. No traffic lights. */
+.controls {
+  display: flex;
+  gap: 8px;
+  -webkit-app-region: no-drag;
+}
+.ctl {
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(231, 226, 214, 0.28);
+  color: transparent;
+  font-family: var(--font-ui);
+  font-size: 9px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    background 0.15s var(--ease-arrival),
+    color 0.15s var(--ease-arrival);
+}
+.controls:hover .ctl {
+  color: var(--bone);
+  background: var(--paper-veil);
+}
+.ctl.close:hover {
+  background: var(--ember);
+  color: var(--bone);
+}
+
+/* Terminal: solid --ink, inner radius, framed by the frosted padding. */
+#terminal {
+  --terminal-content-right: 8px;
+  flex: 1;
+  position: relative;
+  margin: 0 12px 12px 12px;
+  padding: 6px var(--terminal-content-right) 6px 8px;
+  border-radius: 8px;
+  background: var(--ink);
+  overflow: hidden;
+  -webkit-app-region: no-drag;
+}
+
+#terminal.tui-scrollback-rail {
+  --terminal-content-right: 22px; /* normal 8px padding + A-Term's 14px rail */
+}
+
+#terminal.tui-scrollback-rail::after {
+  content: "";
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  bottom: 6px;
+  width: 14px;
+  background: var(--ink);
+  border-left: 1px solid rgba(231, 226, 214, 0.14);
+  pointer-events: none;
+  z-index: 9;
+}
+
+#terminal .xterm-viewport {
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+#terminal .xterm-viewport::-webkit-scrollbar {
+  width: 10px;
+  background: transparent;
+}
+
+#terminal .xterm-viewport::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#terminal .xterm-viewport::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0);
+  border: 2px solid transparent;
+  border-radius: 4px;
+}
+
+/* Resize handles around every edge and corner. Thin, invisible, slightly
+   overhanging the shell into the transparent margin so the edge is grabbable.
+   The SE corner also shows a subtle amber chevron affordance on hover. */
+.rz {
+  position: absolute;
+  z-index: 3;
+  -webkit-app-region: no-drag;
+}
+.rz.n {
+  top: -3px;
+  left: 10px;
+  right: 10px;
+  height: 8px;
+  cursor: ns-resize;
+}
+.rz.s {
+  bottom: -3px;
+  left: 10px;
+  right: 10px;
+  height: 8px;
+  cursor: ns-resize;
+}
+.rz.e {
+  top: 10px;
+  bottom: 10px;
+  right: -3px;
+  width: 8px;
+  cursor: ew-resize;
+}
+.rz.w {
+  top: 10px;
+  bottom: 10px;
+  left: -3px;
+  width: 8px;
+  cursor: ew-resize;
+}
+.rz.ne {
+  top: -3px;
+  right: -3px;
+  width: 14px;
+  height: 14px;
+  cursor: nesw-resize;
+}
+.rz.sw {
+  bottom: -3px;
+  left: -3px;
+  width: 14px;
+  height: 14px;
+  cursor: nesw-resize;
+}
+.rz.nw {
+  top: -3px;
+  left: -3px;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+}
+.rz.se {
+  bottom: -3px;
+  right: -3px;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+}
+.rz.se::after {
+  content: "";
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--lantern);
+  border-bottom: 2px solid var(--lantern);
+  border-bottom-right-radius: 2px;
+  opacity: 0;
+  transition: opacity 0.2s var(--ease-arrival);
+}
+.rz.se:hover::after {
+  opacity: 0.8;
+}
+
+/* Motion: 3s sinusoidal breathing on the halo when thinking. */
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 0.15;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+body.thinking .halo {
+  animation: breathe 3s ease-in-out infinite;
+}
+
+/* prefers-reduced-motion: no pulse — a static, brighter amber ring instead. */
+@media (prefers-reduced-motion: reduce) {
+  body.thinking .halo {
+    animation: none;
+    opacity: 0.42;
+  }
+}
+
+/* Click-to-context selection toast: a frosted pill docked low-center on the
+   widget that received an indicated selection. Soft amber glow on arrival, no
+   shadow; fades after ~2.5s (duration set in renderer.ts). */
+.selection-toast {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translate(-50%, 6px);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 80%;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--paper);
+  backdrop-filter: blur(24px);
+  box-shadow: 0 0 0 1px var(--lantern-glow);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--bone);
+  pointer-events: none;
+  opacity: 0;
+  transition:
+    opacity 0.2s var(--ease-arrival),
+    transform 0.2s var(--ease-arrival);
+}
+.selection-toast.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+.selection-toast .chip {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--lantern);
+}
+.selection-toast .snip {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--mist);
+}
+@media (prefers-reduced-motion: reduce) {
+  .selection-toast {
+    transition: opacity 0.2s linear;
+    transform: translate(-50%, 0);
+  }
+  .selection-toast.show {
+    transform: translate(-50%, 0);
+  }
+}
+
+/* Mandate-missing warning: the launched TUI has no mandate hook, so the core
+   "agents launch with their mandates" guarantee is broken. Surfaced two ways
+   (fed by context:mandate): a persistent titlebar badge and a transient launch
+   toast. Ember (danger) — the one place red is warranted. */
+.mandate-warn {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 4px;
+  font-size: 13px;
+  line-height: 1;
+  cursor: default;
+  user-select: none;
+  /* Carve out of the titlebar drag region — over a drag region the OS owns the
+     pointer for window-dragging, so the native `title` tooltip never appears on
+     hover. Every other interactive titlebar element does this too. */
+  -webkit-app-region: no-drag;
+}
+/* Two status states (set by wireMandate). Green tick = mandates inject; ember
+   warning = they won't (red is warranted here — the safety guarantee is broken).
+   Color lives on the state classes, never the base, so an unclassed badge is
+   never miscoloured. */
+.mandate-warn.ctx-ok {
+  color: var(--jade);
+}
+.mandate-warn.ctx-missing {
+  color: var(--ember);
+}
+/* display:inline-flex above would otherwise beat the UA [hidden] rule, pinning
+   the badge permanently visible regardless of badge.hidden — keep `hidden`
+   authoritative (cf. .aico-palette[hidden]). This is THE reason the badge showed
+   even when context:mandate reported ok. */
+.mandate-warn[hidden] {
+  display: none;
+}
+.mandate-toast {
+  position: absolute;
+  bottom: 52px; /* stacks above the selection-toast if both ever show */
+  left: 50%;
+  transform: translate(-50%, 6px);
+  z-index: 3;
+  max-width: 80%;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--paper);
+  backdrop-filter: blur(24px);
+  box-shadow: 0 0 0 1px var(--ember);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--bone);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  opacity: 0;
+  transition:
+    opacity 0.2s var(--ease-arrival),
+    transform 0.2s var(--ease-arrival);
+}
+.mandate-toast.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+@media (prefers-reduced-motion: reduce) {
+  .mandate-toast {
+    transition: opacity 0.2s linear;
+    transform: translate(-50%, 0);
+  }
+  .mandate-toast.show {
+    transform: translate(-50%, 0);
+  }
+}
+
+/* Voice indicator (Phase 4): a single amber waveform line docked to the bottom
+   edge of the widget while dictation is active. Breathes when listening; steady
+   amber glow while the transcript is being processed. Amber only, never red. */
+.voice-indicator {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  pointer-events: none;
+}
+.voice-indicator .wave {
+  display: block;
+  width: 64px;
+  height: 2px;
+  border-radius: 2px;
+  transform-origin: center;
+  background: var(--lantern);
+  box-shadow: 0 0 8px var(--lantern-glow);
+}
+.voice-indicator.listening .wave {
+  animation: voice-breathe 1.5s var(--ease-arrival) infinite;
+}
+.voice-indicator.processing .wave {
+  opacity: 0.85;
+}
+@keyframes voice-breathe {
+  0%,
+  100% {
+    transform: scaleX(0.55);
+    opacity: 0.65;
+  }
+  50% {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .voice-indicator.listening .wave {
+    animation: none;
+    opacity: 0.9;
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Aico — Send to Aico",
+  "version": "0.1.0",
+  "description": "Grab any web page's text, element, link, or image and send it to your active Aico widget.",
+  "permissions": ["contextMenus"],
+  "host_permissions": ["http://127.0.0.1:8005/*"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

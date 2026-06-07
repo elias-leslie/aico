@@ -1,0 +1,42 @@
+/* Lantern design tokens — see plan: "UI/UX direction — Lantern". */
+:root {
+  /* Surfaces */
+  --ink: #0b0d11; /* terminal bg, deepest */
+  --rim: #1c1f24; /* chrome interior */
+  --paper: rgba(245, 240, 233, 0.06); /* frosted shell base */
+  --paper-veil: rgba(245, 240, 233, 0.12); /* hover-lift on chrome */
+
+  /* Identity */
+  --lantern: #e5a647; /* warm amber, the accent */
+  --lantern-deep: #b47a2a; /* pressed/focused state */
+  --lantern-glow: rgba(229, 166, 71, 0.35); /* amber halo — toast/voice accents */
+
+  /* Status glow: the breathing frame reads activity. Green = idle, ready for you
+     to review/prompt; yellow = busy, output is flowing. */
+  --glow-idle: rgba(122, 214, 138, 0.52); /* calm green — ready */
+  --glow-busy: rgba(242, 208, 92, 0.52); /* amber — working */
+  --busy: #ecc14e; /* solid yellow for the titlebar activity dot */
+  --jade: #7ad68a; /* solid calm green — "good" status (context-injecting badge) */
+
+  /* Frame: transparent window margin that holds the shell's soft shadow + glow.
+     Small, so the shell claims the real estate; just enough for the halo to read. */
+  --frame-inset: 8px;
+
+  /* Type */
+  --mist: #8b8f94; /* secondary text */
+  --bone: #e7e2d6; /* primary text on dark */
+  --ember: #c9483d; /* danger only — rare */
+
+  /* Atmosphere */
+  --shadow-soft: 0 24px 64px -16px rgba(0, 0, 0, 0.55);
+  --shadow-rim: 0 0 0 1px rgba(255, 255, 255, 0.04);
+
+  /* Motion */
+  --ease-arrival: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-departure: cubic-bezier(0.4, 0, 1, 1);
+
+  /* Fonts */
+  --font-display: "Fraunces", Georgia, serif;
+  --font-ui: "Pretendard", system-ui, sans-serif;
+  --font-mono: "Iosevka", ui-monospace, monospace;
+}

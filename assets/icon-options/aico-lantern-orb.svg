@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Aico lantern orb icon</title>
+  <desc id="desc">A warm amber lantern glow inside a dark rounded app icon, with a terminal prompt in the light.</desc>
+  <defs>
+    <radialGradient id="orb-halo" cx="50%" cy="57%" r="56%">
+      <stop offset="0" stop-color="#FFE3A3" stop-opacity="0.92" />
+      <stop offset="0.34" stop-color="#E5A647" stop-opacity="0.74" />
+      <stop offset="0.68" stop-color="#9E6121" stop-opacity="0.28" />
+      <stop offset="1" stop-color="#0B0D11" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="amber-shell" x1="160" y1="92" x2="352" y2="438" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFE1A0" />
+      <stop offset="0.48" stop-color="#E5A647" />
+      <stop offset="1" stop-color="#8A551F" />
+    </linearGradient>
+    <linearGradient id="glass" x1="184" y1="164" x2="328" y2="360" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFF0C5" />
+      <stop offset="0.58" stop-color="#E5A647" />
+      <stop offset="1" stop-color="#B87725" />
+    </linearGradient>
+    <filter id="soft-glow" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="8" result="blur" />
+      <feColorMatrix in="blur" type="matrix" values="1 0 0 0 0.9  0 1 0 0 0.48  0 0 1 0 0.12  0 0 0 0.82 0" result="glow" />
+      <feMerge>
+        <feMergeNode in="glow" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+  <rect x="32" y="32" width="448" height="448" rx="108" fill="#0B0D11" />
+  <path d="M104 419C83 381 70 335 70 286c0-112 78-205 186-205s186 93 186 205c0 49-13 95-34 133-37 20-88 33-152 33s-115-13-152-33Z" fill="url(#orb-halo)" opacity="0.94" />
+  <g>
+    <path d="M218 129v-18c0-22 16-39 38-39s38 17 38 39v18" fill="none" stroke="url(#amber-shell)" stroke-width="18" stroke-linecap="round" />
+    <path d="M180 126h152l24 47H156l24-47Z" fill="url(#amber-shell)" />
+    <path d="M162 172h188c14 0 26 12 26 26v142c0 18-15 33-33 33H169c-18 0-33-15-33-33V198c0-14 12-26 26-26Z" fill="#1F170D" stroke="url(#amber-shell)" stroke-width="16" />
+    <path d="M189 201h134c12 0 22 10 22 22v94c0 13-10 23-23 23H190c-13 0-23-10-23-23v-94c0-12 10-22 22-22Z" fill="#E5A647" opacity="0.98" />
+    <path d="M186 374h140l24 56H162l24-56Z" fill="url(#amber-shell)" />
+    <circle cx="256" cy="444" r="18" fill="#E5A647" />
+  </g>
+  <path d="M229 249l-34 31 34 31" fill="none" stroke="#FFF1C8" stroke-width="17" stroke-linecap="round" stroke-linejoin="round" opacity="0.38" />
+  <path d="M229 246l-34 31 34 31" fill="none" stroke="#0B0D11" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M263 309h58" fill="none" stroke="#0B0D11" stroke-width="12" stroke-linecap="round" />
+  <path d="M263 313h58" fill="none" stroke="#FFF1C8" stroke-width="4" stroke-linecap="round" opacity="0.24" />
+  <path d="M123 72c35-21 80-33 133-33s98 12 133 33" fill="none" stroke="#E5A647" stroke-width="6" stroke-linecap="round" opacity="0.28" />
+</svg>

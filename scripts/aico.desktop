@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Aico
+GenericName=AI Companion
+Comment=Floating terminal-widget AI companion
+Exec=__PROJECT_ROOT__/scripts/aico-launch.sh
+Icon=__PROJECT_ROOT__/assets/icon.png
+Terminal=false
+Categories=Development;
+StartupWMClass=aico
+StartupNotify=true

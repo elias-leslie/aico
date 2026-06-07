@@ -1,0 +1,56 @@
+# Python (sidecar)
+__pycache__/
+*.py[cod]
+.venv/
+sidecar/.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Node / Electron
+node_modules/
+electron/node_modules/
+electron/.next/
+*.tsbuildinfo
+out/
+release/
+dist/
+
+# Environment
+.env
+.env.local
+.env*.local
+
+# Electron build artifacts
+*.AppImage
+*.dmg
+*.exe
+*.snap
+*.deb
+
+# SQLite local state
+*.db
+!*.db-journal
+
+# Coverage
+.coverage
+htmlcov/
+
+# Dev tooling
+.dev-tools/
+.fallow/
+.st/
+.index.yaml
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Local AI tooling config
+.claude/

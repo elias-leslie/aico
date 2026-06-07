@@ -1,0 +1,33 @@
+# Regenerable build artifacts
+node_modules
+electron/node_modules
+dist
+out
+release
+
+# Python venvs
+.venv
+sidecar/.venv
+
+# Electron packaged binaries
+*.AppImage
+*.dmg
+*.exe
+*.snap
+*.deb
+
+# Build caches
+.next
+.tsbuildinfo
+.pytest_cache
+.ruff_cache
+.mypy_cache
+__pycache__
+.fallow
+.st
+.dev-tools
+.index.yaml
+
+# Coverage
+.coverage
+htmlcov

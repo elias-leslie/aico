@@ -1,0 +1,23 @@
+# TEMPLATE — do not `cp` this into systemd directly: `__PROJECT_ROOT__` is a
+# placeholder. `st service rebuild aico` renders it (substituting the repo path)
+# and installs the unit to ~/.config/systemd/user/. That is the supported path;
+# see docs/INSTALL.md ("managed-service path").
+[Unit]
+Description=Aico desktop shell
+After=graphical-session.target
+
+[Service]
+Type=simple
+WorkingDirectory=__PROJECT_ROOT__
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=%t/gdm/Xauthority
+# Optional local agent launcher wrappers may live in %h/.claude/bin and
+# %h/.codex/bin. Keep common user bin paths ahead of system paths.
+Environment=PATH=%h/.claude/bin:%h/.codex/bin:%h/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=__PROJECT_ROOT__/scripts/aico-run-foreground.sh
+ExecStop=__PROJECT_ROOT__/scripts/aico-stop.sh
+TimeoutStartSec=60
+TimeoutStopSec=20
+
+[Install]
+WantedBy=default.target

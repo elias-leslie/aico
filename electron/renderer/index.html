@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>aico</title>
+  </head>
+  <body>
+    <div class="halo"></div>
+    <div class="shell">
+      <header class="titlebar">
+        <span class="eyes" aria-hidden="true">
+          <span class="eye"><span class="pupil"></span></span>
+          <span class="tui-icon" id="tui-icon"></span>
+          <span class="eye"><span class="pupil"></span></span>
+        </span>
+        <span class="spacer"></span>
+        <span class="tag" id="tag">
+          <button class="wname" id="wname" type="button" title="Rename this widget">aico</button>
+          <input class="wname-input" id="wname-input" type="text" maxlength="40" spellcheck="false" hidden />
+        </span>
+        <span class="mandate-warn" id="mandate-warn" role="img" aria-label="Context injection status" hidden></span>
+        <div class="pinned" id="pinned"></div>
+        <button class="lantern-glyph" id="lantern-menu-btn" type="button" title="Aico menu" aria-label="Aico menu">&#9671;</button>
+        <div class="controls">
+          <button class="ctl min" type="button" title="Minimize" aria-label="Minimize">&minus;</button>
+          <button class="ctl max" type="button" title="Maximize" aria-label="Maximize">&#9634;</button>
+          <button class="ctl close" type="button" title="Close" aria-label="Close">&times;</button>
+        </div>
+      </header>
+      <div id="terminal"></div>
+      <nav class="aico-menu" id="aico-menu" aria-label="Aico actions" hidden></nav>
+      <div class="aico-palette" id="aico-palette" hidden></div>
+      <div class="selection-toast" hidden>
+        <span class="chip"></span><span class="snip"></span>
+      </div>
+      <div class="mandate-toast" hidden></div>
+      <div class="voice-indicator" hidden aria-hidden="true"><span class="wave"></span></div>
+      <div class="rz n"></div>
+      <div class="rz s"></div>
+      <div class="rz e"></div>
+      <div class="rz w"></div>
+      <div class="rz ne"></div>
+      <div class="rz nw"></div>
+      <div class="rz se" title="Resize"></div>
+      <div class="rz sw"></div>
+    </div>
+    <script type="module" src="./renderer.ts"></script>
+  </body>
+</html>

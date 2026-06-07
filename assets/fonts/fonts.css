@@ -1,0 +1,40 @@
+/* Lantern typefaces — vendored woff2 (Latin subsets). See README.md for sources.
+   Fraunces = display (variable wght+ital), Pretendard = UI, Iosevka = mono. */
+
+@font-face {
+  font-family: 'Fraunces';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('./Fraunces-Variable.woff2') format('woff2-variations');
+}
+@font-face {
+  font-family: 'Fraunces';
+  font-style: italic;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('./Fraunces-Variable-Italic.woff2') format('woff2-variations');
+}
+
+@font-face {
+  font-family: 'Pretendard';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Pretendard-Regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Pretendard';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('./Pretendard-SemiBold.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Iosevka';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Iosevka-400.woff2') format('woff2');
+}

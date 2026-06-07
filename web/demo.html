@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Aico selection source — demo</title>
+    <style>
+      body {
+        font: 16px/1.6 system-ui, sans-serif;
+        max-width: 40rem;
+        margin: 4rem auto;
+        padding: 0 1.5rem;
+        color: #222;
+      }
+      h1 { font-size: 1.4rem; }
+      .hint { color: #777; font-size: 0.9rem; }
+      blockquote {
+        border-left: 3px solid #e5a647;
+        margin: 1.5rem 0;
+        padding: 0.4rem 1rem;
+        background: #faf6ef;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Aico selection source — demo page</h1>
+    <p class="hint">
+      Select any text below, then press your Aico "indicate" hotkey. The
+      selection is reported to the sidecar bus; the hotkey inserts a compact
+      reference at the prompt of your last-focused widget.
+    </p>
+    <blockquote id="quote">
+      The terminal is the bright center; the chrome is warm rice paper. Select
+      this sentence to push a DOM capture onto the bus.
+    </blockquote>
+    <p>
+      Any paragraph works too — the source reports whatever
+      <code>window.getSelection()</code> holds, capped to a short snippet, plus
+      the page URL, title, and a short CSS path of the anchor.
+    </p>
+    <script src="./selection-source.js"></script>
+  </body>
+</html>

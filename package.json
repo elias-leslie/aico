@@ -1,0 +1,37 @@
+{
+  "name": "aico",
+  "version": "0.1.0",
+  "description": "Floating-widget desktop AI companion (Electron + tmux + xterm.js).",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "out/main/index.js",
+  "scripts": {
+    "start": "npm run build && electron-vite preview",
+    "build": "electron-vite build",
+    "dev": "electron-vite dev",
+    "rebuild": "electron-rebuild -f -w node-pty",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:sidecar": ".venv/bin/python -m pytest sidecar/tests",
+    "check": "npm run lint && npm run typecheck && npm test && npm run test:sidecar && npm run build",
+    "lint": "biome check .",
+    "check:context": "esbuild scripts/check-context.ts --bundle --platform=node --format=esm --outfile=.dev-tools/check-context.mjs && node .dev-tools/check-context.mjs"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.3.11",
+    "@electron/rebuild": "^4.0.4",
+    "@resvg/resvg-js": "^2.6.2",
+    "@types/node": "^22.19.7",
+    "electron": "^42.2.0",
+    "electron-vite": "^5.0.0",
+    "typescript": "^5.7.0",
+    "vite": "^7.3.3",
+    "vitest": "^4.1.6"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/addon-webgl": "^0.19.0",
+    "@xterm/xterm": "^6.0.0",
+    "node-pty": "^1.1.0"
+  }
+}
