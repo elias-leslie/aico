@@ -31,6 +31,7 @@ Required:
 - [uv](https://docs.astral.sh/uv/) for the Python sidecar environment
 - `tmux`
 - common native build tools for `node-pty` (`python3`, `make`, `g++` on Debian/Ubuntu)
+- Electron runtime libraries (`libgtk-3-0`, `libnss3`, `libatk1.0-0`, `libatk-bridge2.0-0`, `libcups2`, `libgbm1`, `libasound2t64`, and related X11/desktop libraries on Debian/Ubuntu)
 
 Recommended for the full desktop experience:
 

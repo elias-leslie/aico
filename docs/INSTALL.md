@@ -8,7 +8,11 @@ On Debian/Ubuntu-like systems, install the basics first:
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y git curl build-essential tmux python3 make g++
+sudo apt-get install -y \
+  git curl ca-certificates build-essential tmux python3 make g++ \
+  libgtk-3-0 libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
+  libgbm1 libasound2t64 libxss1 libxtst6 libxrandr2 libxdamage1 \
+  libxcomposite1 libxkbcommon0 libxshmfence1 libpango-1.0-0 libcairo2
 ```
 
 Install Node.js 22+ and `uv` using the methods you trust for your system. The Python sidecar requires Python 3.13+; `uv venv --python 3.13` can use an existing Python 3.13 interpreter or a uv-managed one.
