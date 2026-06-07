@@ -6,6 +6,11 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
 npm install
+# Some clean hosts have npm configured to skip lifecycle scripts. Make the two
+# runtime native/binary packages explicit so a source install cannot pass tests
+# and then fail at `electron .` because `node_modules/electron/path.txt` is
+# missing.
+npm rebuild electron node-pty
 uv venv --python 3.13
 uv pip install -e '.[dev]'
 
