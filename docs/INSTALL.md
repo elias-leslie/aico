@@ -25,6 +25,9 @@ cd aico
 scripts/aico-install.sh
 ```
 
+The installer runs `npm install`, rebuilds native Electron modules, creates `.venv` with Python 3.13, installs the sidecar in editable mode, and writes a desktop entry under `~/.local/share/applications`.
+On Linux it also configures Electron's `chrome-sandbox` helper with root ownership when passwordless `sudo` is available; otherwise it prints the manual `sudo chown`/`chmod` commands needed before launching the sandboxed app.
+
 Launch and stop:
 
 ```bash

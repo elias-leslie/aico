@@ -55,6 +55,7 @@ The installer performs a source install in the current checkout:
 - `uv pip install -e '.[dev]'`
 - installs a desktop launcher at `~/.local/share/applications/aico.desktop`
 - optionally installs GNOME capture hotkeys when `gsettings` is available
+- configures Electron's Linux `chrome-sandbox` helper when passwordless `sudo` is available, or prints the manual commands
 - optionally loads an AppArmor profile for Electron's sandbox on Ubuntu 24.04+
 
 Stop Aico with:

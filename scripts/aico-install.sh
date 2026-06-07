@@ -73,6 +73,26 @@ PY
 }
 
 ensure_electron_binary
+
+configure_electron_suid_sandbox() {
+  [ "$(node -p 'process.platform')" = "linux" ] || return 0
+  local sandbox="$REPO/node_modules/electron/dist/chrome-sandbox"
+  [ -e "$sandbox" ] || return 0
+  if [ "$(stat -c '%u:%a' "$sandbox" 2>/dev/null || true)" = "0:4755" ]; then
+    return 0
+  fi
+  if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+    echo "Electron: configuring chrome-sandbox helper..."
+    sudo chown root:root "$sandbox"
+    sudo chmod 4755 "$sandbox"
+  else
+    echo "Electron: chrome-sandbox helper needs root ownership for sandboxed launches:"
+    echo "  sudo chown root:root $sandbox"
+    echo "  sudo chmod 4755 $sandbox"
+  fi
+}
+
+configure_electron_suid_sandbox
 uv venv --python 3.13
 uv pip install -e '.[dev]'
 
