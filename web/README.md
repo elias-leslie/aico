@@ -16,6 +16,10 @@ Built for [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex 
 [![Next.js](https://img.shields.io/badge/Next.js-16-000.svg)](https://nextjs.org)
 [![xterm.js](https://img.shields.io/badge/xterm.js-6-green.svg)](https://xtermjs.org)
 
+![A-Term — agents, shells, files, and notes in one persistent browser workspace](docs/images/a-term-demo.gif)
+
+*One workspace: agents and shells side by side, a built-in file browser and prompt library, and tmux-backed sessions that survive closing the browser.*
+
 ![A-Term — multi-pane workspace with Claude Code, shell, and project files](docs/images/a-term-home-dark.png)
 
 ## Why A-Term
