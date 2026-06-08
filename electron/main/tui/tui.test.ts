@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ensureContext } from './context'
-import { launchLine } from './launch'
+import { launchLine, paneCommand } from './launch'
 import {
   clearRegistry,
   defaultTui,
@@ -109,6 +109,14 @@ describe('launchLine', () => {
   it('exports per-TUI env inline before the command', () => {
     expect(launchLine(spec({ command: ['claude'], env: { FOO: 'bar' } }))).toBe(
       'env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 FOO=bar claude',
+    )
+  })
+})
+
+describe('paneCommand', () => {
+  it('runs the TUI then execs an interactive shell so the pane survives its exit', () => {
+    expect(paneCommand('env -u NO_COLOR claude')).toBe(
+      `env -u NO_COLOR claude; exec "\${SHELL:-/bin/bash}"`,
     )
   })
 })

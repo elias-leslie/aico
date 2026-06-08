@@ -25,7 +25,6 @@ import {
   refreshClientArgs,
   respawnArgs,
   scrollbackPageBounds,
-  sendKeysArgs,
   sendTextArgs,
   sendTextTargetArgs,
   sessionName,
@@ -42,7 +41,7 @@ describe('tmux model', () => {
     expect(sessionName('7')).toBe('aico-7')
   })
 
-  it('creates the session detached with conf, size, and cwd', () => {
+  it('creates the session detached with conf, size, and cwd (bare shell)', () => {
     expect(newDetachedArgs('7', 200, 50, '/state/tmux.conf', '/home/me')).toEqual([
       '-L',
       'aico',
@@ -58,6 +57,28 @@ describe('tmux model', () => {
       '50',
       '-c',
       '/home/me',
+    ])
+  })
+
+  it('appends the TUI command as the pane process when given', () => {
+    expect(
+      newDetachedArgs('7', 200, 50, '/state/tmux.conf', '/home/me', 'claude; exec sh'),
+    ).toEqual([
+      '-L',
+      'aico',
+      '-f',
+      '/state/tmux.conf',
+      'new-session',
+      '-d',
+      '-s',
+      'aico-7',
+      '-x',
+      '200',
+      '-y',
+      '50',
+      '-c',
+      '/home/me',
+      'claude; exec sh',
     ])
   })
 
@@ -98,17 +119,8 @@ describe('tmux model', () => {
     ])
   })
 
-  it('probes session existence and sends the launch line', () => {
+  it('probes session existence', () => {
     expect(hasSessionArgs('7')).toEqual(['-L', 'aico', 'has-session', '-t', 'aico-7'])
-    expect(sendKeysArgs('7', 'claude')).toEqual([
-      '-L',
-      'aico',
-      'send-keys',
-      '-t',
-      'aico-7',
-      'claude',
-      'Enter',
-    ])
   })
 
   it('respawns the pane (kills the running TUI) in cwd for "Replace with"', () => {
@@ -121,6 +133,20 @@ describe('tmux model', () => {
       '/home/me',
       '-t',
       'aico-7',
+    ])
+  })
+
+  it('respawns with the TUI command as the pane process when given', () => {
+    expect(respawnArgs('7', '/home/me', 'claude; exec sh')).toEqual([
+      '-L',
+      'aico',
+      'respawn-pane',
+      '-k',
+      '-c',
+      '/home/me',
+      '-t',
+      'aico-7',
+      'claude; exec sh',
     ])
   })
 

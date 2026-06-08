@@ -249,8 +249,11 @@ export function hasTargetArgs(target: TmuxTarget): string[] {
  * `tmux` argv that creates the widget's session detached, in `cwd`. Carries
  * `-f confPath` (the global flag that configures the server when it first
  * starts, applying the high history-limit). Creation is split from attach so
- * the TUI launch command is sent exactly once, on first create — reattaching a
- * window must not relaunch a running agent.
+ * the TUI launch command runs exactly once, on first create — reattaching a
+ * window must not relaunch a running agent. `command` (when given) becomes the
+ * pane's process directly, so the TUI is the pane from the first paint — no
+ * interactive shell echoes the launch line into scrollback above it; without it
+ * the pane is a plain shell.
  */
 export function newDetachedArgs(
   widgetId: string,
@@ -258,8 +261,9 @@ export function newDetachedArgs(
   rows: number,
   confPath: string,
   cwd: string,
+  command?: string,
 ): string[] {
-  return [
+  const args = [
     '-L',
     TMUX_SOCKET,
     '-f',
@@ -275,22 +279,21 @@ export function newDetachedArgs(
     '-c',
     cwd,
   ]
-}
-
-/** `tmux` argv that types `line` + Enter into the session (launches the TUI). */
-export function sendKeysArgs(widgetId: string, line: string): string[] {
-  return ['-L', TMUX_SOCKET, 'send-keys', '-t', sessionName(widgetId), line, 'Enter']
+  if (command) args.push(command) // trailing shell-command → the pane's process
+  return args
 }
 
 /**
  * `tmux` argv that respawns the session's pane in `cwd`, killing whatever is
- * currently running (`-k`) and restarting the default shell. Used by "Replace
- * with <TUI>": one pane runs one foreground program, so loading a TUI into a
- * live widget atomically replaces the old one with a fresh shell, into which the
- * launch line is then sent.
+ * currently running (`-k`). Used by "Replace with <TUI>": one pane runs one
+ * foreground program, so loading a TUI into a live widget atomically replaces
+ * the old one. `command` (when given) becomes the new pane process directly (no
+ * echoed launch line); without it the pane respawns as a plain shell.
  */
-export function respawnArgs(widgetId: string, cwd: string): string[] {
-  return ['-L', TMUX_SOCKET, 'respawn-pane', '-k', '-c', cwd, '-t', sessionName(widgetId)]
+export function respawnArgs(widgetId: string, cwd: string, command?: string): string[] {
+  const args = ['-L', TMUX_SOCKET, 'respawn-pane', '-k', '-c', cwd, '-t', sessionName(widgetId)]
+  if (command) args.push(command) // trailing shell-command → the pane's process
+  return args
 }
 
 /**

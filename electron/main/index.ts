@@ -65,7 +65,6 @@ import {
   refreshClientArgs,
   respawnArgs,
   scrollbackPageBounds,
-  sendKeysArgs,
   sendTextTargetArgs,
   staleWidgetIds,
   type TmuxTarget,
@@ -74,7 +73,14 @@ import {
   widgetIdFromSession,
 } from './tmux'
 import { createTray, refreshTray, setWidgetActivity, type TrayWidget } from './tray'
-import { ensureContext, getTui, launchLine, listTuis, registerBuiltinTuis } from './tui'
+import {
+  ensureContext,
+  getTui,
+  launchLine,
+  listTuis,
+  paneCommand,
+  registerBuiltinTuis,
+} from './tui'
 import { detectTuiFromProcessNames, parseProcessTable, processTreeNames } from './tui/detect'
 
 const execFileAsync = promisify(execFile)
@@ -285,28 +291,26 @@ function ensureSession(widgetId: string, size: PtySize): void {
     // not running; create it below
   }
   const cwd = cwdForWidget(widgetId)
+  // The TUI (if any) is baked into session creation as the pane's own process,
+  // so it paints clean — no interactive shell echoes the launch line into
+  // scrollback above it. A bare shell (line === null) creates a plain session.
+  const tool = getTui(getWidget(widgetId)?.tool ?? 'shell')
+  const line = tool ? launchLine(tool) : null
+  const command = line ? paneCommand(line) : undefined
   try {
-    execFileSync('tmux', newDetachedArgs(widgetId, size.cols, size.rows, tmuxConfPath, cwd), {
-      env: terminalClientEnv(),
-    })
+    execFileSync(
+      'tmux',
+      newDetachedArgs(widgetId, size.cols, size.rows, tmuxConfPath, cwd, command),
+      { env: terminalClientEnv() },
+    )
   } catch (e) {
     // No session to attach to; surface why rather than letting startPty's attach
     // fail into a blank terminal with no explanation.
     console.error(`[aico] failed to create tmux session for ${widgetId}:`, e)
     return
   }
-
-  const tool = getTui(getWidget(widgetId)?.tool ?? 'shell')
-  const line = tool ? launchLine(tool) : null
-  if (!tool || !line) return // unknown slug or bare shell: leave the plain shell
   // Verify-only; never blocks launch (a missing hook just means no mandates).
-  reportContext(widgetId, tool)
-  try {
-    execFileSync('tmux', sendKeysArgs(widgetId, line))
-  } catch (e) {
-    // Session exists but the TUI didn't launch; the pane is a usable shell.
-    console.error(`[aico] failed to launch ${tool.slug} in ${widgetId}:`, e)
-  }
+  if (tool && line) reportContext(widgetId, tool)
 }
 
 // Verify a TUI's mandate-injection hook and surface the result to its widget
@@ -344,22 +348,19 @@ function respawnAndRelaunch(widgetId: string, tool: ReturnType<typeof getTui>): 
     console.warn(`[aico] refusing to respawn externally-owned tmux session ${widgetId}`)
     return
   }
+  // Same as ensureSession: the TUI is respawned as the pane's own process so it
+  // paints clean (no echoed launch line); a bare shell respawns a plain prompt.
+  const line = tool ? launchLine(tool) : null
+  const command = line ? paneCommand(line) : undefined
   try {
-    execFileSync('tmux', respawnArgs(widgetId, cwdForWidget(widgetId)))
+    execFileSync('tmux', respawnArgs(widgetId, cwdForWidget(widgetId), command))
   } catch (e) {
     // Respawn failed; the old foreground program is still running. Surface it
     // rather than silently leaving the stored tool/project out of sync.
     console.error(`[aico] failed to respawn pane for ${widgetId}:`, e)
     return
   }
-  const line = tool ? launchLine(tool) : null
-  if (!tool || !line) return // bare shell: the respawn already left a plain prompt
-  reportContext(widgetId, tool)
-  try {
-    execFileSync('tmux', sendKeysArgs(widgetId, line))
-  } catch (e) {
-    console.error(`[aico] failed to relaunch ${tool.slug} in ${widgetId}:`, e)
-  }
+  if (tool && line) reportContext(widgetId, tool)
 }
 
 // Replace whatever runs in a live widget's pane with `slug`'s TUI ("Replace
