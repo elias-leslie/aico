@@ -17,7 +17,7 @@
     "predev": "pnpm prepare:branding"
   },
   "dependencies": {
-    "@radix-ui/react-dialog": "^1.1.15",
+    "@radix-ui/react-dialog": "^1.1.16",
     "@summitflow/notes-ui": "file:../packages/notes-ui",
     "@tanstack/react-query": "5.101.0",
     "@xterm/addon-clipboard": "0.2.0",
@@ -32,14 +32,14 @@
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "react-resizable-panels": "4.11.2",
-    "simple-keyboard": "3.8.150"
+    "simple-keyboard": "3.8.151"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.16",
     "@tailwindcss/postcss": "4",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.1",
-    "@types/node": "22.19.19",
+    "@types/node": "22.19.20",
     "@types/react": "19",
     "@types/react-dom": "19",
     "@vitejs/plugin-react": "^4.7.0",
