@@ -10,7 +10,7 @@ Aico is a Linux desktop companion for people who work with terminal AI tools. It
 [![Electron](https://img.shields.io/badge/Electron-42-47848f.svg)](https://www.electronjs.org/)
 [![xterm.js](https://img.shields.io/badge/xterm.js-6-green.svg)](https://xtermjs.org/)
 
-![Aico lantern — a floating desktop widget running a Claude Code session on Linux](docs/images/aico-hero.png)
+![Aico — summon the command palette in a floating desktop lantern and launch a Claude Code agent into any workspace on Linux](docs/images/aico-demo.gif)
 
 ## What it does
 
