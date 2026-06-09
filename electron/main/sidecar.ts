@@ -15,6 +15,14 @@ export interface SidecarOptions {
   /** State dir passed through so logs/db land where the rest of Aico expects. */
   stateDir: string
   env?: NodeJS.ProcessEnv
+  /**
+   * Packaged builds set this to the bundled sidecar executable (shipped via
+   * electron-builder extraResources). When present it is spawned directly with
+   * `args`, instead of `python -m aico_sidecar` — so the packaged app needs no
+   * Python/uv/.venv. Dev (unset) keeps the editable-install interpreter path.
+   */
+  command?: string
+  args?: string[]
 }
 
 /** Lifecycle transitions, logged by main and useful for a future status surface. */
@@ -32,6 +40,15 @@ export function resolvePython(repoRoot: string, env: NodeJS.ProcessEnv = process
 /** argv for `python -m aico_sidecar`. */
 export function sidecarArgs(): string[] {
   return ['-m', 'aico_sidecar']
+}
+
+/**
+ * The bundled sidecar executable inside a packaged build: shipped by
+ * electron-builder `extraResources` as `<resources>/sidecar/aico-sidecar/`,
+ * a PyInstaller onedir whose launcher binary shares the bundle name.
+ */
+export function bundledSidecar(resourcesPath: string): string {
+  return join(resourcesPath, 'sidecar', 'aico-sidecar', 'aico-sidecar')
 }
 
 export function healthUrl(host: string, port: number): string {
@@ -91,11 +108,14 @@ export class Sidecar {
 
   /** Spawn the sidecar and resolve once it reports healthy (or fails to). */
   async start(): Promise<boolean> {
-    const { host, port, repoRoot, stateDir, env = process.env } = this.opts
-    const python = resolvePython(repoRoot, env)
-    this.onStatus('starting', `${python} ${sidecarArgs().join(' ')} :${port}`)
+    const { host, port, repoRoot, stateDir, env = process.env, command, args } = this.opts
+    // Packaged: the bundled executable + empty argv. Dev: the .venv interpreter
+    // running `-m aico_sidecar`.
+    const exe = command ?? resolvePython(repoRoot, env)
+    const argv = args ?? sidecarArgs()
+    this.onStatus('starting', `${exe} ${argv.join(' ')} :${port}`)
 
-    this.child = this.spawn(python, sidecarArgs(), {
+    this.child = this.spawn(exe, argv, {
       cwd: repoRoot,
       env: {
         ...env,

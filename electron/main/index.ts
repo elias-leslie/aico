@@ -25,7 +25,7 @@ import {
   widgetCwd,
 } from './project'
 import { compactRef, parseSse, type SelectionRecord } from './selection'
-import { Sidecar } from './sidecar'
+import { bundledSidecar, Sidecar } from './sidecar'
 import {
   getSetting,
   getWidget,
@@ -836,8 +836,15 @@ async function selectionGrab(): Promise<void> {
 // bare focused-window grab would only ever shoot Aico), and a region grab passes
 // `-r`. Env mirrors the hotkey install: keep a usable DISPLAY fallback and
 // prepend common user bin dirs where optional capture tools may live.
+// Resolve a bundled `scripts/` file to a real on-disk path bash can exec. When
+// packaged, scripts/ is asar-unpacked (a script inside app.asar can't be run by
+// a child process), so point at the unpacked mirror under resources.
+function scriptsRoot(): string {
+  return app.isPackaged ? join(process.resourcesPath, 'app.asar.unpacked') : app.getAppPath()
+}
+
 function runDesktopGrab(args: string[]): void {
-  const script = join(app.getAppPath(), 'scripts', 'aico-grab.sh')
+  const script = join(scriptsRoot(), 'scripts', 'aico-grab.sh')
   const home = homedir()
   const env = {
     ...process.env,
@@ -924,8 +931,16 @@ function installContentSecurityPolicy(): void {
 }
 
 function startSidecar(): void {
+  // Packaged: spawn the bundled PyInstaller executable from resources (no Python
+  // needed). Dev: `app.getAppPath()` is the repo root, so resolvePython finds the
+  // .venv and runs `-m aico_sidecar`. The packaged spawn cwd is a real directory
+  // (resourcesPath) since app.asar isn't a chdir-able path.
+  const packaged = app.isPackaged
+  const repoRoot = packaged ? process.resourcesPath : app.getAppPath()
+  const command = packaged ? bundledSidecar(process.resourcesPath) : undefined
+  const args = packaged ? [] : undefined
   sidecar = new Sidecar(
-    { host: sidecarHost, port: sidecarPort, repoRoot: app.getAppPath(), stateDir },
+    { host: sidecarHost, port: sidecarPort, repoRoot, stateDir, command, args },
     (status, detail) => console.log(`[aico] sidecar ${status}${detail ? `: ${detail}` : ''}`),
   )
   // Fire-and-forget: widgets render against tmux without the sidecar, so don't

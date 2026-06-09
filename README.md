@@ -90,6 +90,30 @@ For a one-off foreground run during development:
 npm start
 ```
 
+## Standalone AppImage (no Python at runtime)
+
+The source install above runs the sidecar from a `uv` virtualenv. To produce a
+**self-contained AppImage** that bundles the sidecar — so the packaged app needs
+no Python, `uv`, or `.venv` at runtime — build a distributable from a dev checkout:
+
+```bash
+npm run dist
+```
+
+This bundles the FastAPI sidecar into a standalone executable (PyInstaller),
+builds the Electron app, and emits `dist/electron/Aico-<version>.AppImage`. Run it
+directly:
+
+```bash
+chmod +x dist/electron/Aico-*.AppImage
+./dist/electron/Aico-*.AppImage
+```
+
+`tmux` and whichever terminal AI CLIs you launch (`claude`, `codex`, …) remain
+runtime prerequisites — Aico hosts them. The browser-driven context capture works
+through the bundled sidecar with no extra setup; the desktop window/region *grab*
+gesture additionally uses the `st` capture CLI when it is installed.
+
 ## Configuration
 
 Copy `.env.example` only if you want to override defaults:
@@ -184,7 +208,7 @@ Aico degrades when optional tools are missing: unavailable agent CLIs simply fai
 
 - Linux desktop is the supported path. macOS and Windows packaging are not implemented.
 - X11 is the best-supported session for global shortcuts and screen capture.
-- Source install is the release path today; packaged `.deb`/AppImage builds are not shipped yet.
+- `npm run dist` produces a self-contained AppImage (the sidecar is bundled, so the packaged app needs no Python); pre-built downloads on the [Releases](https://github.com/elias-leslie/aico/releases) page are coming next. `.deb` packaging is not implemented yet.
 - Voice dictation requires a separately running compatible speech-to-text websocket.
 - The browser extension is loaded unpacked for development; it is not published in a browser store.
 
