@@ -36,6 +36,26 @@ Use it when you want to:
 - keep reusable prompts, scratch notes, and project context next to the work they belong to
 - inject saved prompts into the active pane when it is time to run them
 
+## How it compares
+
+Browser terminals, modern desktop terminals, and tmux each solve part of this.
+A-Term's niche is the **combination**: a browser-accessible workspace that runs
+*several* AI coding agents side by side, keeps them alive with tmux, and bundles
+a file browser and reusable prompt library — self-hosted on your own machine.
+
+| | A-Term | Warp | ttyd · Wetty | tmux |
+|---|:---:|:---:|:---:|:---:|
+| Runs in the browser, reconnect from any device | ✅ | ❌ desktop app | ✅ | ❌ |
+| Multiple AI CLI agents side by side (Claude Code, Codex, Gemini, …) | ✅ | its own agent | ❌ single shell | DIY |
+| Sessions survive browser and server restarts | ✅ tmux-backed | local only | ❌ | ✅ |
+| Built-in file browser + reusable prompt library | ✅ | ❌ | ❌ | ❌ |
+| Self-hosted, no account or cloud service | ✅ | ❌ | ✅ | ✅ |
+
+A-Term isn't trying to replace your terminal emulator — it wraps the agents,
+shells, files, and prompts of the whole coding loop into one durable workspace.
+
+> ⭐ If A-Term fits how you work with AI agents, a star helps others find it.
+
 ## Quickstart
 
 ```bash
