@@ -1,6 +1,6 @@
 {
   "name": "aico",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Floating-widget desktop AI companion (Electron + tmux + xterm.js).",
   "license": "Apache-2.0",
   "type": "module",

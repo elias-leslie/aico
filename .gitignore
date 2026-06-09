@@ -54,3 +54,4 @@ Thumbs.db
 
 # Local AI tooling config
 .claude/
+AGENT_AUDIT.md

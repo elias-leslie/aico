@@ -1,0 +1,59 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to build and attach release assets to
+        required: true
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: astral-sh/setup-uv@v8.2.0
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y tmux build-essential
+      - name: Install Node dependencies
+        run: npm ci
+      - name: Install sidecar build dependencies
+        run: uv venv --python 3.13 && uv pip install -e '.[dev]' pyinstaller
+      - name: Build AppImage
+        # AppImage tooling runs without FUSE on CI runners via extract-and-run.
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+        run: npm run dist
+      - name: Generate checksums
+        working-directory: dist/electron
+        run: |
+          sha256sum Aico-*.AppImage > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/electron/Aico-*.AppImage
+      - name: Publish release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          fail_on_unmatched_files: true
+          files: |
+            dist/electron/Aico-*.AppImage
+            dist/electron/SHA256SUMS.txt
