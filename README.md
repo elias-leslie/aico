@@ -14,12 +14,16 @@ Aico is a Linux desktop companion for people who work with terminal AI tools. It
 
 ## What it does
 
-- **Floating terminal widgets** — one or more compact Electron windows, each running a tmux-backed terminal.
-- **Persistent sessions** — closing a widget detaches the tmux client; the underlying session can be reattached later.
-- **Agent launcher menu** — start Claude Code, Codex, opencode, Gemini CLI, Pi, Hermes, or a plain shell from the same lantern menu.
+- **Floating terminal widgets** — one or more compact Electron windows, each running a tmux-backed terminal with a WebGL renderer (DOM fallback), configurable font, animated "eyes" that track your cursor, and a "thinking" halo while the agent is working.
+- **Persistent sessions** — each widget owns a named tmux session on a dedicated `aico` socket; closing a widget detaches (does not kill) so the same session reattaches across close/reopen/restart. Idle sessions are reaped after a TTL and orphaned sessions are re-adopted on launch.
+- **Agent launcher menu** — start Claude Code, Codex, opencode, Gemini CLI, Pi, Hermes, or a plain shell from the same lantern menu, choosing the TUI and the workspace to launch it into; "Replace TUI" swaps the tool in the focused widget.
+- **Command palette & pinned controls** — a searchable command palette (`Ctrl+Shift+P`) and a pinned, drag-reorderable titlebar cluster, both driven by one action registry. Rename widgets inline.
+- **Context-mandate verification** — before launch, Aico checks that each agent family (Claude, Codex, Gemini, Hermes) is wired to its configured system-prompt/hooks and surfaces a green ✓ / red ⚠ badge. It verifies only — it never installs hooks for you.
+- **Read-only scrollback overlay** — wheel up to browse tmux history (paged from the session) without disturbing the live view.
 - **Workspace picker** — always includes a local Personal Workspace; optionally reads an `st projects` catalog when that tool is installed.
-- **Click-to-context capture** — the sidecar accepts local browser/extension captures and sends compact references to the focused widget.
-- **Optional desktop capture hotkeys** — when local `st ui` capture tooling is available, GNOME shortcuts can send screenshots/OCR packages to Aico.
+- **Click-to-context capture** — the loopback sidecar accepts local browser/extension and desktop captures and inserts a compact reference into the focused widget's prompt (single, batch, or an image+OCR "package").
+- **Attach external tmux sessions** — detects A-Term/SummitFlow tmux sessions and offers to attach them as widgets from the tray or palette.
+- **Optional desktop capture hotkeys** — when local `st ui` capture tooling is available, GNOME shortcuts (or in-app grab actions) can package a focused window, a picked window, a drag-selected region, or text-only OCR into Aico.
 - **Optional voice dictation** — when `AICO_VOICE_WS` points at a compatible local Whisper websocket, push-to-talk streams microphone audio and inserts the transcript.
 
 ## How it compares
@@ -185,7 +189,8 @@ Main endpoints:
 - `GET /health` — liveness check.
 - `POST /widgets/{widget_id}/events` — append bounded JSONL widget events under the local state directory.
 - `POST /selection` and `POST /selection/send` — local selection/capture bus used by the web helper and browser extension.
-- `GET /selection/current`, `GET /selection/history`, and `GET /selection/stream` — read recent captures or subscribe to delivery events.
+- `GET /selection/current`, `GET /selection/history` — read recent captures.
+- `GET /selection/events` — Server-Sent Events stream of delivery events (the Wayland-safe path for routing captures into a widget).
 
 The sidecar is loopback-only by default and rejects non-local browser origins.
 
