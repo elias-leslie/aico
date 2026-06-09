@@ -11,7 +11,7 @@
     "dev": "electron-vite dev",
     "rebuild": "electron-rebuild -f -w node-pty",
     "dist:sidecar": ".venv/bin/pyinstaller --noconfirm --clean --log-level WARN --name aico-sidecar --distpath dist/sidecar --workpath dist/.pyi-build --specpath dist/.pyi-build --paths sidecar --collect-submodules uvicorn --collect-submodules aico_sidecar --hidden-import aico_sidecar.app sidecar/aico_sidecar/__main__.py",
-    "dist": "npm run dist:sidecar && npm run build && electron-builder --linux AppImage",
+    "dist": "npm run dist:sidecar && npm run build && electron-builder --linux AppImage --publish never",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:sidecar": ".venv/bin/python -m pytest sidecar/tests",
