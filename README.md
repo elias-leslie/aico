@@ -61,6 +61,23 @@ Recommended for the full desktop experience:
 
 ## Quickstart
 
+### Download and run
+
+Download the latest self-contained `Aico-*.AppImage` from the
+[Releases](https://github.com/elias-leslie/aico/releases/latest) page — it bundles
+the FastAPI sidecar, so it needs no Python, `uv`, or `.venv` at runtime:
+
+```bash
+chmod +x Aico-*.AppImage
+./Aico-*.AppImage
+```
+
+Each release also ships `SHA256SUMS.txt`; verify with `sha256sum -c SHA256SUMS.txt`.
+`tmux` and whichever terminal AI CLIs you launch (`claude`, `codex`, …) remain
+runtime prerequisites — Aico hosts them.
+
+### Build from source
+
 ```bash
 git clone https://github.com/elias-leslie/aico.git
 cd aico
@@ -208,7 +225,7 @@ Aico degrades when optional tools are missing: unavailable agent CLIs simply fai
 
 - Linux desktop is the supported path. macOS and Windows packaging are not implemented.
 - X11 is the best-supported session for global shortcuts and screen capture.
-- `npm run dist` produces a self-contained AppImage (the sidecar is bundled, so the packaged app needs no Python); pre-built downloads on the [Releases](https://github.com/elias-leslie/aico/releases) page are coming next. `.deb` packaging is not implemented yet.
+- Pre-built `Aico-*.AppImage` downloads are available on the [Releases](https://github.com/elias-leslie/aico/releases/latest) page (built in CI with a SHA256 checksum and a build-provenance attestation); `npm run dist` reproduces one locally. `.deb` packaging is not implemented yet.
 - Voice dictation requires a separately running compatible speech-to-text websocket.
 - The browser extension is loaded unpacked for development; it is not published in a browser store.
 
