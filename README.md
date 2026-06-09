@@ -22,6 +22,24 @@ Aico is a Linux desktop companion for people who work with terminal AI tools. It
 - **Optional desktop capture hotkeys** — when local `st ui` capture tooling is available, GNOME shortcuts can send screenshots/OCR packages to Aico.
 - **Optional voice dictation** — when `AICO_VOICE_WS` points at a compatible local Whisper websocket, push-to-talk streams microphone audio and inserts the transcript.
 
+## How it compares
+
+Aico's distinctive move is **context, on demand**: right-click a page or selection
+in your browser, or tag any desktop window, and it lands directly in your *running
+terminal agent's* session. Everything else either records your whole screen and
+makes you search it, routes capture into its own chat, or only runs on macOS.
+
+| | Aico | Raycast "Send to AI" | Warp | Screenpipe |
+|---|:---:|:---:|:---:|:---:|
+| Tag a browser page/selection → into the agent | ✅ | — | — | history search |
+| Tag any desktop window/region → into the agent | ✅ | macOS only | paste image yourself | always-on recording |
+| Target is your own terminal CLI agent (Claude Code, Codex…) | ✅ | its own chat | built-in agent | MCP query |
+| Persistent tmux-backed sessions | ✅ | — | — | — |
+| Runs on Linux | ✅ | — | ✅ | ✅ |
+
+Deliberate, on-demand tagging into a persistent terminal agent on Linux is the
+combination no other tool ships.
+
 ## Requirements
 
 Aico currently targets a **single-user Linux desktop**.
