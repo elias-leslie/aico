@@ -2,11 +2,11 @@
 
 **A persistent browser workspace for AI coding agents, shells, files, notes, and reusable prompts.**
 
-Run Claude Code, Codex, Gemini CLI, Hermes, OpenCode, shells, files, and prompt notes side by side in one browser workspace. Sessions stay alive when the browser closes, so you can reconnect instead of rebuilding your working context.
+Run Claude Code, Codex, Gemini CLI, Hermes, OpenCode, Pi, shells, files, and prompt notes side by side in one browser workspace. Sessions stay alive when the browser closes, so you can reconnect instead of rebuilding your working context.
 
 Assemble your agent crew in one place: a planner, builder, reviewer, release shell, files browser, and prompt library that keep working as one durable workspace.
 
-Built for [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex CLI](https://github.com/openai/codex), [Gemini CLI](https://github.com/google-gemini/gemini-cli), [Hermes Agent](https://github.com/NousResearch/hermes-agent), [OpenCode](https://github.com/opencode-ai/opencode), and every TUI agent that follows.
+Built for [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex CLI](https://github.com/openai/codex), [Gemini CLI](https://github.com/google-gemini/gemini-cli), [Hermes Agent](https://github.com/NousResearch/hermes-agent), [OpenCode](https://github.com/opencode-ai/opencode), Pi, and every TUI agent that follows.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![CI](https://github.com/elias-leslie/a-term/actions/workflows/ci.yml/badge.svg)](https://github.com/elias-leslie/a-term/actions/workflows/ci.yml)
@@ -31,7 +31,7 @@ If you use AI coding agents, you already know the mess: one terminal for Claude 
 Use it when you want to:
 
 - keep multiple agent sessions alive across reconnects
-- compare or hand off work between Claude Code, Codex, Gemini CLI, Hermes, OpenCode, and shell panes
+- compare or hand off work between Claude Code, Codex, Gemini CLI, Hermes, OpenCode, Pi, and shell panes
 - browse files beside the terminal instead of switching tools
 - keep reusable prompts, scratch notes, and project context next to the work they belong to
 - inject saved prompts into the active pane when it is time to run them
@@ -108,9 +108,9 @@ With Agent Hub connected, A-Term can clean a draft prompt, show an original-vs-c
 
 **`same-pane project switching`** — Swap a pane to another project from the header instead of closing and reopening work by hand. A-Term keeps the current tool mode when possible, so moving from one project to another in `codex`, `claude`, `hermes`, `opencode`, or shell does not drop you back to a generic terminal first.
 
-**`dual mode`** — Switch any pane between raw shell and your configured AI agent with one click. Supports Claude Code, Codex, Gemini CLI, Hermes, and OpenCode out of the box.
+**`dual mode`** — Switch any pane between raw shell and your configured AI agent with one click. Supports Claude Code, Codex, Gemini CLI, Hermes, OpenCode, and Pi out of the box.
 
-**`agent presets and custom tools`** — Built-in profiles for Claude Code, Codex, Gemini CLI, Hermes, and OpenCode appear in Settings by default. Pick a default tool, tune the launch command or process name, color-code panes, and add your own TUI agent commands when your workflow expands.
+**`agent presets and custom tools`** — Built-in profiles for Claude Code, Codex, Gemini CLI, Hermes, OpenCode, and Pi appear in Settings by default. Pick a default tool, tune the launch command or process name, color-code panes, and add your own TUI agent commands when your workflow expands. A-Term also discovers externally created tmux sessions (`claude`, `codex`, `opencode`, `aider`, `gemini`, `hermes`, `pi`, and Aico widget sessions) and lists them read-only alongside your own panes.
 
 ![Mode switching dropdown showing Shell, Claude Code, OpenCode, Gemini CLI, and Codex](docs/images/a-term-mode-switch.png)
 *Switch between agents and shell per pane*
@@ -119,7 +119,23 @@ With Agent Hub connected, A-Term can clean a draft prompt, show an original-vs-c
 
 **`mobile workspace controls`** — On-screen keyboard with arrow keys, Ctrl, Esc, and modifier support for touch devices, visible-bottom-row viewport handling, plus a touch-friendly session switcher that can jump into any attached or detached session from your phone.
 
-**`light and dark themes`** — Respects `prefers-color-scheme` with a manual override that persists across sessions.
+**`terminal themes and tuning`** — Five built-in xterm color palettes (Phosphor, Dracula, Monokai, Solarized Dark, Tokyo Night) plus a system/light/dark app theme that respects `prefers-color-scheme`. Settings also configure font family, font size, cursor style, cursor blink, and scrollback buffer size — all persisted across sessions.
+
+**`in-terminal search`** — Search the live buffer and scrollback for a string and step through matches, without leaving the pane.
+
+**`clickable links and clipboard`** — URLs in terminal output are clickable (web-links addon) and copy/paste flows use the xterm clipboard addon, including bracketed-paste support.
+
+**`file upload`** — Drag and drop images and docs (PNG/JPG/GIF/WebP/Markdown/text/JSON/PDF, up to 10 MB) into a pane; A-Term validates the file by magic bytes and returns a `~`-relative path you can drop straight into a command.
+
+**`note history and prompt cleaning`** — Notes and prompts keep a version history with automatic edit checkpoints and one-click revert. With Agent Hub connected, A-Term can clean a draft prompt, show an original-vs-cleaned diff, take a follow-up refinement instruction, let you edit the result, and fall back to the original if the cleaner is unavailable.
+
+**`session recording and diagnostics`** — Optional, off by default: record a session to JSONL (output/input/resize) for later replay, and capture per-session render/diagnostic events to debug terminal behavior.
+
+**`install as a PWA`** — A-Term ships a web-app manifest, so you can install it to your phone or desktop and run it standalone.
+
+**`auth modes for remote access`** — Ships loopback-only (`none`) by default, with built-in password auth (signed-cookie sessions) or `proxy` mode for an identity-aware reverse proxy. Security headers, a CSP with per-request nonces, CORS allowlisting, and per-route rate limiting are on by default.
+
+**`self-maintaining`** — A background maintenance loop reconciles and purges stale sessions, cleans up old uploads, and prunes orphaned project settings; `/health` and `/metrics` expose runtime status.
 
 ## Advanced Setup
 
