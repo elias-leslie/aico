@@ -3,12 +3,16 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  fetchProjectRoot,
+  fetchProjects,
+  invalidateProjectCache,
   listProjects,
   PERSONAL_WORKSPACE_ID,
   PERSONAL_WORKSPACE_NAME,
   personalWorkspaceRoot,
   projectRoot,
   readActiveProjectRoot,
+  refreshProjects,
   widgetCwd,
 } from './project'
 
@@ -75,7 +79,7 @@ describe('project catalog', () => {
         { id: 'aico', name: 'Aico', root_path: '/opt/aico', current: true },
         { id: 'a-term', name: 'A-Term', root_path: '/opt/a-term', current: false },
       ])
-    expect(listProjects(exec)).toEqual([
+    expect(fetchProjects(exec)).toEqual([
       {
         id: PERSONAL_WORKSPACE_ID,
         name: PERSONAL_WORKSPACE_NAME,
@@ -87,9 +91,9 @@ describe('project catalog', () => {
     ])
   })
 
-  it('listProjects still returns Personal Workspace when st is unavailable', () => {
+  it('fetchProjects still returns Personal Workspace when st is unavailable', () => {
     expect(
-      listProjects(() => {
+      fetchProjects(() => {
         throw new Error('command not found: st')
       }),
     ).toEqual([
@@ -102,8 +106,8 @@ describe('project catalog', () => {
     ])
   })
 
-  it('listProjects still returns Personal Workspace for malformed output', () => {
-    expect(listProjects(() => 'not json')).toEqual([
+  it('fetchProjects still returns Personal Workspace for malformed output', () => {
+    expect(fetchProjects(() => 'not json')).toEqual([
       {
         id: PERSONAL_WORKSPACE_ID,
         name: PERSONAL_WORKSPACE_NAME,
@@ -113,28 +117,77 @@ describe('project catalog', () => {
     ])
   })
 
-  it('projectRoot creates and returns the Personal Workspace root', () => {
+  it('fetchProjectRoot creates and returns the Personal Workspace root', () => {
     vi.stubEnv('HOME', dir)
-    const root = projectRoot(PERSONAL_WORKSPACE_ID, () => {
+    const root = fetchProjectRoot(PERSONAL_WORKSPACE_ID, () => {
       throw new Error('st should not be called for Personal Workspace')
     })
     expect(root).toBe(join(dir, '.local', 'share', 'aico', 'personal-workspace'))
     expect(root && existsSync(root)).toBe(true)
   })
 
-  it('projectRoot returns the root when it is an existing directory', () => {
-    expect(projectRoot('aico', () => `${dir}\n`)).toBe(dir)
+  it('fetchProjectRoot returns the root when it is an existing directory', () => {
+    expect(fetchProjectRoot('aico', () => `${dir}\n`)).toBe(dir)
   })
 
-  it('projectRoot returns null when the root no longer exists', () => {
-    expect(projectRoot('aico', () => '/gone/missing')).toBeNull()
+  it('fetchProjectRoot returns null when the root no longer exists', () => {
+    expect(fetchProjectRoot('aico', () => '/gone/missing')).toBeNull()
   })
 
-  it('projectRoot returns null when st fails (unknown slug)', () => {
+  it('fetchProjectRoot returns null when st fails (unknown slug)', () => {
     expect(
-      projectRoot('nope', () => {
+      fetchProjectRoot('nope', () => {
         throw new Error('unknown project')
       }),
     ).toBeNull()
+  })
+})
+
+describe('cached catalog', () => {
+  let dir: string
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'aico-cache-'))
+    invalidateProjectCache()
+  })
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  const stOutput = (root: string) =>
+    JSON.stringify([{ id: 'aico', name: 'Aico', root_path: root, current: true }])
+
+  it('listProjects serves the refreshed list synchronously', async () => {
+    await refreshProjects(async () => stOutput(dir))
+    expect(listProjects().map((p) => p.id)).toEqual([PERSONAL_WORKSPACE_ID, 'aico'])
+  })
+
+  it('a failed refresh keeps the previous list', async () => {
+    await refreshProjects(async () => stOutput(dir))
+    invalidateProjectCache()
+    await refreshProjects(async () => {
+      throw new Error('st broke')
+    })
+    expect(listProjects().map((p) => p.id)).toEqual([PERSONAL_WORKSPACE_ID, 'aico'])
+  })
+
+  it('concurrent refreshes share one st read', async () => {
+    let calls = 0
+    const exec = async () => {
+      calls++
+      return stOutput(dir)
+    }
+    await Promise.all([refreshProjects(exec), refreshProjects(exec)])
+    expect(calls).toBe(1)
+  })
+
+  it('projectRoot resolves a cached project without spawning st', async () => {
+    await refreshProjects(async () => stOutput(dir))
+    expect(projectRoot('aico')).toBe(dir)
+  })
+
+  it('projectRoot returns null for a cached project whose root vanished', async () => {
+    await refreshProjects(async () => stOutput('/gone/missing'))
+    expect(projectRoot('aico')).toBeNull()
   })
 })

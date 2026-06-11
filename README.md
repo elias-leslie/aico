@@ -205,6 +205,12 @@ The `extension/` directory contains a development MV3 extension that can send se
 
 See [`extension/README.md`](extension/README.md) for details.
 
+## Mobile access
+
+Every Aico widget is a plain tmux session (`aico-<id>` on the dedicated `aico` socket), so any tmux-capable client on the same machine can attach to it — no Aico-side server, auth, or port exposure needed. In particular, [A-term](../a-term) already lists Aico widgets as an external session source ("Aico") and attaches to them over its own authenticated WebSocket, so opening the A-term PWA on a phone gives live, two-way access to every running widget: output mirrors the desktop in real time and keystrokes feed the same session.
+
+What you get on mobile is the terminal itself; Aico's desktop chrome (eyes, lantern menu, capture gestures) stays on the desktop. Without A-term, `ssh` + `tmux -L aico attach -t aico-<id>` from any terminal app works the same way.
+
 ## Architecture
 
 ```text

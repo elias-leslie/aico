@@ -3,10 +3,11 @@
 // writes the active project's root to ~/.local/share/st/active-project.json; new
 // widgets launch their TUI in that directory.
 
-import { execFileSync } from 'node:child_process'
+import { execFile, execFileSync } from 'node:child_process'
 import { mkdirSync, readFileSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { promisify } from 'node:util'
 
 export const PERSONAL_WORKSPACE_ID = '__aico_personal_workspace__'
 export const PERSONAL_WORKSPACE_NAME = 'Personal Workspace'
@@ -79,40 +80,47 @@ function personalWorkspaceProject(): ProjectInfo {
 type Exec = (cmd: string, args: string[]) => string
 const runSt: Exec = (cmd, args) => execFileSync(cmd, args, { encoding: 'utf8' })
 
-/**
- * Aico's workspace picker: an Aico-local Personal Workspace plus the optional
- * `st` project catalog. Never throws — if `st` is missing or unparseable, the
- * Personal Workspace still lets a widget launch without binding to a repo.
- */
-export function listProjects(exec: Exec = runSt): ProjectInfo[] {
+/** Parse `st projects list` JSON into the picker list (Personal Workspace first). */
+function parseProjectList(out: string): ProjectInfo[] {
   const personal = personalWorkspaceProject()
+  const parsed = JSON.parse(out) as {
+    id: string
+    name: string
+    root_path: string
+    current?: boolean
+  }[]
+  if (!Array.isArray(parsed)) return [personal]
+  return [
+    personal,
+    ...parsed.map((p) => ({
+      id: p.id,
+      name: p.name,
+      root: p.root_path,
+      current: p.current === true,
+    })),
+  ]
+}
+
+/**
+ * One blocking `st projects list` read. Never throws — if `st` is missing or
+ * unparseable, the Personal Workspace still lets a widget launch without
+ * binding to a repo. Prefer the cached `listProjects()` outside tests: the `st`
+ * CLI takes hundreds of ms to start and this blocks the main process.
+ */
+export function fetchProjects(exec: Exec = runSt): ProjectInfo[] {
   try {
-    const parsed = JSON.parse(exec('st', ['projects', 'list'])) as {
-      id: string
-      name: string
-      root_path: string
-      current?: boolean
-    }[]
-    if (!Array.isArray(parsed)) return [personal]
-    return [
-      personal,
-      ...parsed.map((p) => ({
-        id: p.id,
-        name: p.name,
-        root: p.root_path,
-        current: p.current === true,
-      })),
-    ]
+    return parseProjectList(exec('st', ['projects', 'list']))
   } catch {
-    return [personal]
+    return [personalWorkspaceProject()]
   }
 }
 
 /**
- * A project's canonical fs root, or null when the slug is unknown or the root no
- * longer exists (a stale binding must never strand a widget in a dead path).
+ * One blocking `st projects root` read; null when the slug is unknown or the
+ * root no longer exists (a stale binding must never strand a widget in a dead
+ * path). Only the cache-miss fallback of `projectRoot()` should need this.
  */
-export function projectRoot(id: string, exec: Exec = runSt): string | null {
+export function fetchProjectRoot(id: string, exec: Exec = runSt): string | null {
   if (id === PERSONAL_WORKSPACE_ID) return ensurePersonalWorkspaceRoot()
   try {
     const root = exec('st', ['projects', 'root', id]).trim()
@@ -120,6 +128,77 @@ export function projectRoot(id: string, exec: Exec = runSt): string | null {
   } catch {
     return null
   }
+}
+
+// ---------------------------------------------------------------------------
+// Cached catalog. `listProjects()` runs on hot paths (titlebar pushes, tray
+// sync, focus reconcile); a synchronous `st` spawn there freezes every window.
+// Reads return the cached list immediately; a stale cache kicks off one
+// background refresh and consumers repaint via onProjectsRefreshed.
+
+const PROJECT_CACHE_TTL_MS = 15_000
+
+type ExecAsync = (cmd: string, args: string[]) => Promise<string>
+const execFileAsync = promisify(execFile)
+const runStAsync: ExecAsync = async (cmd, args) =>
+  (await execFileAsync(cmd, args, { encoding: 'utf8' })).stdout
+
+let cachedProjects: ProjectInfo[] = [personalWorkspaceProject()]
+let cacheFetchedAt = 0
+let refreshInFlight: Promise<void> | null = null
+let onRefreshed: (() => void) | null = null
+
+/** Repaint hook: fires after each refresh that completed (success or failure). */
+export function onProjectsRefreshed(cb: (() => void) | null): void {
+  onRefreshed = cb
+}
+
+/** Force the next `listProjects()` to refresh (e.g. after a project switch). */
+export function invalidateProjectCache(): void {
+  cacheFetchedAt = 0
+}
+
+/**
+ * Refresh the cache off the main thread; single-flight. A failed read keeps
+ * the previous (stale) list — a broken `st` must not blank the picker, and
+ * stamping `cacheFetchedAt` either way stops failure-spawn storms.
+ */
+export function refreshProjects(exec: ExecAsync = runStAsync): Promise<void> {
+  if (refreshInFlight) return refreshInFlight
+  refreshInFlight = (async () => {
+    try {
+      cachedProjects = parseProjectList(await exec('st', ['projects', 'list']))
+    } catch {
+      // keep stale cache
+    } finally {
+      cacheFetchedAt = Date.now()
+      refreshInFlight = null
+    }
+    onRefreshed?.()
+  })()
+  return refreshInFlight
+}
+
+/**
+ * Aico's workspace picker: an Aico-local Personal Workspace plus the optional
+ * `st` project catalog. Returns the cache synchronously (never blocks, never
+ * throws); schedules a background refresh when stale.
+ */
+export function listProjects(): ProjectInfo[] {
+  if (Date.now() - cacheFetchedAt > PROJECT_CACHE_TTL_MS) void refreshProjects()
+  return cachedProjects
+}
+
+/**
+ * A project's canonical fs root, or null when the slug is unknown or the root
+ * no longer exists. Resolves from the cached catalog; an unknown slug falls
+ * back to one blocking `st` read (rare: user-initiated open/switch only).
+ */
+export function projectRoot(id: string): string | null {
+  if (id === PERSONAL_WORKSPACE_ID) return ensurePersonalWorkspaceRoot()
+  const hit = cachedProjects.find((p) => p.id === id)
+  if (hit) return isDir(hit.root) ? hit.root : null
+  return fetchProjectRoot(id)
 }
 
 /**

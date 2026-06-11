@@ -178,16 +178,13 @@ describe('tmux model', () => {
     expect(tmuxConf()).toContain('set-environment -g COLORTERM truecolor')
   })
 
-  it('builds runtime profile commands for an already-running tmux server', () => {
-    expect(tmuxProfileArgs()).toContainEqual(['-L', 'aico', 'set-environment', '-gu', 'NO_COLOR'])
-    expect(tmuxProfileArgs()).toContainEqual([
-      '-L',
-      'aico',
-      'set-option',
-      '-g',
-      'terminal-overrides',
-      ',xterm-256color:Tc',
-    ])
+  it('builds one chained profile command for an already-running tmux server', () => {
+    const args = tmuxProfileArgs()
+    expect(args.slice(0, 2)).toEqual(['-L', 'aico'])
+    expect(args.join(' ')).toContain('set-environment -gu NO_COLOR')
+    expect(args.join(' ')).toContain('set-option -g terminal-overrides ,xterm-256color:Tc')
+    // tmux's `;` separator chains the per-option commands into a single spawn.
+    expect(args.filter((a) => a === ';')).toHaveLength(8)
   })
 
   it('captures the whole scrollback with colors for the overlay', () => {

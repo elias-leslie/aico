@@ -76,9 +76,12 @@ function tmuxProfileLines(): string[] {
   ]
 }
 
-/** Runtime updates for an already-running Aico tmux server. */
-export function tmuxProfileArgs(): string[][] {
-  return [
+/**
+ * Runtime updates for an already-running Aico tmux server, chained with tmux's
+ * `;` command separator so one spawn applies the whole profile.
+ */
+export function tmuxProfileArgs(): string[] {
+  const commands = [
     ['set-option', '-g', 'history-limit', String(HISTORY_LIMIT)],
     ['set-option', '-g', 'mouse', 'off'],
     ['set-option', '-g', 'status', 'off'],
@@ -88,7 +91,8 @@ export function tmuxProfileArgs(): string[][] {
     ['set-environment', '-gu', 'NO_COLOR'],
     ['set-environment', '-g', 'COLORTERM', 'truecolor'],
     ['set-environment', '-g', 'CLICOLOR', '1'],
-  ].map((args) => ['-L', TMUX_SOCKET, ...args])
+  ]
+  return ['-L', TMUX_SOCKET, ...commands.flatMap((args, i) => (i === 0 ? args : [';', ...args]))]
 }
 
 /**

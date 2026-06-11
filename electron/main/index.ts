@@ -19,9 +19,11 @@ import { parseTerminalFontSettings } from '../shared/font-settings'
 import {
   isDir,
   listProjects,
+  onProjectsRefreshed,
   PERSONAL_WORKSPACE_ID,
   type ProjectInfo,
   projectRoot,
+  refreshProjects,
   widgetCwd,
 } from './project'
 import { compactRef, parseSse, type SelectionRecord } from './selection'
@@ -115,12 +117,17 @@ let quitting = false
 // one window is unfocused, so an all-focused desktop pays nothing.
 const blurredWins = new Set<number>()
 let cursorTimer: NodeJS.Timeout | undefined
+let lastCursorPt: { x: number; y: number } | null = null
 function syncCursorPump(): void {
+  lastCursorPt = null // a focus change always gets one fresh send
   if (blurredWins.size > 0 && !cursorTimer) {
     cursorTimer = setInterval(() => {
       const pt = screen.getCursorScreenPoint()
-      for (const win of BrowserWindow.getAllWindows()) {
-        if (!win.isDestroyed()) win.webContents.send('win:cursor', pt)
+      if (lastCursorPt && pt.x === lastCursorPt.x && pt.y === lastCursorPt.y) return
+      lastCursorPt = pt
+      for (const id of blurredWins) {
+        const win = BrowserWindow.fromId(id)
+        if (win && !win.isDestroyed()) win.webContents.send('win:cursor', pt)
       }
     }, 60)
   } else if (blurredWins.size === 0 && cursorTimer) {
@@ -184,12 +191,10 @@ function ensureTmuxConf(): void {
 }
 
 function syncTmuxProfile(): void {
-  for (const args of tmuxProfileArgs()) {
-    try {
-      execFileSync('tmux', args, { env: terminalClientEnv(), stdio: 'ignore' })
-    } catch {
-      // No tmux server yet; the config file applies the same profile on create.
-    }
+  try {
+    execFileSync('tmux', tmuxProfileArgs(), { env: terminalClientEnv(), stdio: 'ignore' })
+  } catch {
+    // No tmux server yet; the config file applies the same profile on create.
   }
 }
 
@@ -691,7 +696,7 @@ function widgetProjectName(row: WidgetRow, projects: ProjectInfo[]): string | nu
 // (drawn between the eyes). All of it changes only on Aico events — attach, rename,
 // "Replace with <TUI>", "Open workspace" — so this is event-driven, not polled.
 function pushTitles(): void {
-  const projects = listProjects() // one `st` read per event; off the hot path
+  const projects = listProjects() // cached; never blocks this event path
   for (const win of BrowserWindow.getAllWindows()) {
     if (win.isDestroyed()) continue
     const widgetId = widgetOf.get(win.id)
@@ -976,6 +981,14 @@ app.whenReady().then(() => {
   initStore(dbPath)
   installContentSecurityPolicy()
   startSidecar()
+
+  // Project names render from the cache; repaint whenever a background `st`
+  // read lands (including the startup prime below).
+  onProjectsRefreshed(() => {
+    pushTitles()
+    syncTray()
+  })
+  void refreshProjects()
 
   // No application menu — the Lantern chrome owns window controls, and the
   // default Edit menu's paste role mangled bracketed paste (handled in renderer).
