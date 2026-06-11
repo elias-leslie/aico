@@ -47,6 +47,10 @@ const term = new Terminal({
 const fit = new FitAddon()
 term.loadAddon(fit)
 
+// Single debounced fit shared by every layout-change source (window resize,
+// scrollback-rail toggle, font change). Two independent debouncers used to be
+// able to fire fit+resize back-to-back mid-output — exactly the racing-reflow
+// garble the debounce exists to prevent — so all paths coalesce here.
 function scheduleTerminalLayoutFit(): void {
   if (!terminalLayoutReady) return
   if (terminalLayoutTimer) clearTimeout(terminalLayoutTimer)
@@ -54,7 +58,7 @@ function scheduleTerminalLayoutFit(): void {
     fit.fit()
     window.aico.pty.resize({ cols: term.cols, rows: term.rows })
     overlay.fitToWindow()
-  }, 0)
+  }, 60)
 }
 
 // Window chrome: controls, focus state, custom SE resize. Independent of the
@@ -444,24 +448,22 @@ scheduleScrollbackPrefetch(1000)
 // Debounce resizes: a burst of observer callbacks (drag-resize, maximize) each
 // reflows tmux, and racing reflows are a prime cause of duplicated/garbled
 // output. Coalescing to one fit ~60ms after the last change avoids the race.
-let resizeTimer: number | undefined
-const observer = new ResizeObserver(() => {
-  if (resizeTimer) clearTimeout(resizeTimer)
-  resizeTimer = window.setTimeout(() => {
-    fit.fit()
-    window.aico.pty.resize({ cols: term.cols, rows: term.rows })
-    overlay.fitToWindow()
-  }, 60)
-})
+const observer = new ResizeObserver(() => scheduleTerminalLayoutFit())
 observer.observe(host)
 
 // Manual Refresh (lantern menu / palette / Ctrl+Shift+R): repair a desynced
 // view without disturbing the running program. Clear the WebGL glyph atlas (a
-// glitched atlas is a common corruption source), have tmux re-send its grid,
-// and force xterm to repaint every row from it.
+// glitched atlas is a common corruption source), wipe the buffer CONTENT
+// (term.clear keeps terminal modes — mouse reporting, bracketed paste — that a
+// reset would strip from the running TUI), then have tmux re-send its grid and
+// repaint every row from it. The refresh carries the live grid size so main
+// can re-pair a drifted pty: when the pty believes a different size than the
+// renderer, every tmux repaint wrap-garbles, and refresh-client alone can
+// never fix that class of corruption.
 function refreshTerminal(): void {
   webgl?.clearTextureAtlas()
-  window.aico.pty.refresh()
+  term.clear()
+  window.aico.pty.refresh({ cols: term.cols, rows: term.rows })
   term.refresh(0, term.rows - 1)
 }
 window.addEventListener('aico:refresh', refreshTerminal)

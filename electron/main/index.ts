@@ -1022,10 +1022,29 @@ app.whenReady().then(() => {
   // attached to this widget's session to repaint from it — recovering an xterm
   // view that desynced (resize-reflow race, WebGL glitch, dropped/duped bytes).
   // Best-effort: a missing session or no clients is a no-op, never a crash.
-  ipcMain.on('pty:refresh', (event) => {
+  ipcMain.on('pty:refresh', (event, size?: PtySize) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     const widgetId = win ? widgetOf.get(win.id) : undefined
     if (!widgetId) return
+    // Re-pair a drifted pty before the repaint: if the pty's size disagrees
+    // with the renderer's live grid, tmux paints for the wrong geometry and
+    // every repaint wrap-garbles — the one corruption refresh-client can't
+    // repair (reopening the window used to be the only fix). Logged so a
+    // recurrence pins down which path let the sizes diverge.
+    const pty = ptyFor(event.sender)
+    if (pty && size) {
+      const { cols, rows } = clampSize(size)
+      if (pty.cols !== cols || pty.rows !== rows) {
+        console.warn(
+          `[aico] refresh: size desync (pty ${pty.cols}x${pty.rows}, term ${cols}x${rows}); re-pairing`,
+        )
+        try {
+          pty.resize(cols, rows)
+        } catch (err) {
+          console.warn('[aico] pty resize failed:', err)
+        }
+      }
+    }
     const target = tmuxTargetForWidget(widgetId)
     try {
       const out = execFileSync('tmux', listClientsTargetArgs(target), { encoding: 'utf8' })

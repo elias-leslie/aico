@@ -7,8 +7,9 @@ contextBridge.exposeInMainWorld('aico', {
     start: (size: { cols: number; rows: number }) => ipcRenderer.send('pty:start', size),
     input: (data: string) => ipcRenderer.send('pty:input', data),
     resize: (size: { cols: number; rows: number }) => ipcRenderer.send('pty:resize', size),
-    /** Ask tmux to re-send its authoritative grid (manual Refresh). */
-    refresh: () => ipcRenderer.send('pty:refresh'),
+    /** Ask tmux to re-send its authoritative grid (manual Refresh). Carries the
+     * renderer's live grid size so main can re-pair a drifted pty first. */
+    refresh: (size: { cols: number; rows: number }) => ipcRenderer.send('pty:refresh', size),
     onData: (cb: (data: string) => void) => {
       const listener = (_event: unknown, data: string) => cb(data)
       ipcRenderer.on('pty:data', listener)

@@ -13,8 +13,9 @@ export interface AicoApi {
     start(size: { cols: number; rows: number }): void
     input(data: string): void
     resize(size: { cols: number; rows: number }): void
-    /** Ask tmux to re-send its authoritative grid (manual Refresh). */
-    refresh(): void
+    /** Ask tmux to re-send its authoritative grid (manual Refresh). Carries the
+     * renderer's live grid size so main can re-pair a drifted pty first. */
+    refresh(size: { cols: number; rows: number }): void
     /** Subscribe to PTY output; returns an unsubscribe function. */
     onData(cb: (data: string) => void): () => void
   }
