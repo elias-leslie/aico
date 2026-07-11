@@ -26,8 +26,13 @@ interface OverlayDeps {
 }
 
 /** tmux capture-pane pads to the screen height; drop trailing blank lines. */
-function trimTrailingBlankLines(text: string): string {
-  return text.replace(/[ \t]*\r?\n(\s*\r?\n)*\s*$/, '')
+export function trimTrailingBlankLines(text: string): string {
+  // Avoid a nested-whitespace regex here. Long tmux histories commonly contain
+  // runs of blank screen rows between TUI redraws; the previous expression
+  // backtracked exponentially across those runs and pinned the renderer at 100%
+  // CPU while the live scrollback prefetch was being applied.
+  const trimmed = text.trimEnd()
+  return text.indexOf('\n', trimmed.length) === -1 ? text : trimmed
 }
 
 function splitCaptureLines(text: string): string[] {
