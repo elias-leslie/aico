@@ -312,3 +312,33 @@ aico-906cd339|$1|1783981135
 aico-bc6056c3|$0|1783981135
 aico-d24ad045|$2|1783981135
 ```
+
+## Post-recovery final verification
+
+After the authorized GDM recovery, the user logged into a fresh Xorg session on
+VT2. DP-0 was again 5120x2160 at 120 Hz with an 8192x3456 scaled desktop, DPMS
+reported the monitor on, and no second Xorg/Xvfb process remained.
+
+The canonical desktop-launcher path was then exercised twice. GNOME moved the
+Electron MainPID into its exact `app-aico-<pid>.scope` while helpers remained in
+`aico-shell.service`, and Electron cleared its inherited process environment.
+The stopper therefore proves ownership with the canonical service MainPID,
+executable/cwd, PID-derived scope cgroup, and immutable InvocationID rather than
+depending on the cleared environment. It stopped both exact boundaries, proved
+their cgroups removed or `populated 0`, and did not touch the tmux server. A
+subsequent desktop launch created MainPID 112899, passed exact-scope validation,
+and reattached all three windows.
+
+Final live accounting was approximately 285 MB for the helper service plus 92 MB
+for the exact Electron application scope and 83 MB for the durable tmux server;
+all three reported zero current and peak swap. The rebuilt Aico window rendered
+at 3560x3360. No new GPU context reset, uncaught exception, renderer failure,
+or lifecycle error appeared; only the already-recorded non-fatal Mesa GBM probe
+warning remained.
+
+Harness run `1783983238-110550-8166` repeated bare-pane placement, detached
+`setsid` children, attachment crash, real reconnect, replacement, parent crash,
+peer isolation, exact cleanup, and private-server teardown. It reported
+`passed=true` and `residue=0`; the production roster above was unchanged. The
+full quality gate passed 49 Python tests and 203 Vitest tests plus architecture,
+types, Ruff, Biome, and TypeScript checks.

@@ -93,8 +93,8 @@ This harness intentionally is not part of the ordinary unit-test suite: a build
 container without a systemd user manager or tmux's Linux scope integration
 cannot provide evidence for the lifecycle behavior under test.
 
-The final host run was `final-1783981474-39090`. It completed in under one
-second, ended with `passed=true` and `residue=0`, and left the three production
-Aico sessions byte-for-byte identical in the before/after roster. The run log is
-kept as local verification evidence under `.dev-tools/`; generated PIDs, scopes,
-socket, service, and temporary directory were absent after cleanup.
+The final post-recovery host run was `1783983238-110550-8166`. It completed in
+under one second, ended with `passed=true` and `residue=0`, and left the three
+production Aico sessions byte-for-byte identical in the before/after roster.
+Generated PIDs, scopes, socket, service, and temporary directory were absent
+after cleanup.
