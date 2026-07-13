@@ -1,9 +1,10 @@
 # July 2026 process-containment incident
 
-Status: confirmed. The Aico and shared Codex ownership repairs are deployed; a
-second hardware-Xorg launch on 2026-07-13 proved that the Codex cleanup boundary
-works, while also proving that containment is not permission to run direct Xorg
-against the operator workstation's GPU or virtual terminals.
+Status: confirmed. The Aico-owned session/pane repairs are deployed. An
+experimental local Codex modification demonstrated a finer per-execution cleanup
+boundary during the recurrence, but modifying and installing an OpenAI-owned
+binary was not an acceptable production dependency; it was reverted to the
+official package-managed `codex-cli 0.144.3` binary on 2026-07-13.
 
 This document records the evidence and recovery boundary for the two processes
 that destabilized `davion-sidarli`. It is intentionally specific: process names,
@@ -91,7 +92,8 @@ sudo -n /usr/lib/xorg/Xorg :99 -noreset -nolisten tcp -ac \
   -logfile /srv/workspaces/projects/the-aftertimes/.dev-tools/agent_runs/2026-07-13-overworld-redesign-performance-final-5d06cb83/Xorg.log
 ```
 
-This execution was attributable to the exact deployed Codex scope:
+This execution was attributable to the exact temporarily installed experimental
+Codex scope:
 
 ```text
 codex-exec-16689-exec-4753744b-8018-40a6-b24e-67da75342056-10546-df02360b49d1eb74-214.scope
@@ -108,8 +110,9 @@ desktop server; `:99` changed only the display number.
 Stopping that one verified execution scope removed the launcher, root Xorg,
 Python process, and game process; its cgroup subsequently reported
 `populated 0`. No peer Codex execution, tmux pane scope, tmux server, or durable
-session was stopped. This is real-runtime evidence that per-execution containment
-now handles privilege transition, reparenting, and whole-tree cleanup.
+session was stopped. This is real-runtime evidence that the experimental design
+handled privilege transition, reparenting, and whole-tree cleanup; it is not a
+claim about the restored official Codex package.
 
 The cleanup did not undo GPU/display-server disruption that had already occurred.
 The old desktop Xorg could again answer display queries, but the user still saw a
@@ -186,38 +189,36 @@ A-Term discovers both the historical socket and validated active generation
 sockets through read-only SQLite access. Generation-qualified source IDs prevent
 same-name sessions on different sockets from colliding.
 
-The shared Codex unified-exec repair applies the same finer-grained cgroup
-principle to each temporary tool execution. It is required for cancel/completion
-cleanup without retiring the durable agent session itself.
+Per-execution cleanup still needs an owner-supported implementation below the
+durable Aico pane. Aico can attribute and retire its exact pane scope, but cannot
+safely manufacture cleanup authority for one temporary execution inside an
+OpenAI-owned Codex process.
 
-### Shared Codex launcher deployment
+### Reverted Codex experiment
 
-- The shared Codex repair is commit
+- An experimental branch used commit
   `448b1493346fbb82ae1a1b2d846622347f54ca4f` on branch
-  `fix/linux-execution-containment`.
-- The installed native binary has SHA-256
-  `e7c5941f39c8162473d3a5647084d9159a8190ac1a104996952c426aa2f9ee13`.
-  The pre-deployment binary is preserved at
-  `~/.local/share/codex-rollbacks/0.144.3-448b149/` with SHA-256
-  `37e6f5953f191b04f7b62cb07dae90f51d0947ad89f0355665b421fbde28700b`.
-- Each covered execution receives a stable execution ID, an owning transient
+  `fix/linux-execution-containment`. It was never an OpenAI release and must not
+  be treated as an upstream or production plan.
+- The experiment gave each covered execution a stable execution ID, a transient
   systemd scope, structured ownership logs, an owner-liveness pipe, and exact
   scope cleanup. `cgroup.kill` removes descendants that fork, call `setsid`,
   reparent, or cross to root through `sudo`, without touching the durable agent
   or another execution.
-- Five lifecycle regressions passed: normal completion, cancellation, peer
+- Five experimental lifecycle regressions passed: normal completion, cancellation, peer
   isolation, owner EOF/parent loss, and a root `sudo` child. The execution-scope
   manager regression also passed.
-- Deployment was inode-safe: Codex processes already running at installation
-  kept the previous executable inode and were not interrupted. New Codex starts
-  use the patched binary; an existing durable session gains this protection when
-  its Codex process is next restarted.
+- The recurrence proved the experimental boundary could remove the exact root
+  Xorg execution. That is historical design evidence, not a current guarantee of
+  the official Codex package.
 
-This deployment currently covers Linux local **non-TTY unified exec with empty
-inherited file descriptors**. It does not yet claim containment for PTY or
-inherited-FD executions, MCP/browser tool hosts, or a child that deliberately
-migrates itself to another cgroup. A package update can replace the host hotfix
-until the branch is released through the normal Codex distribution channel.
+The package-managed native binary was atomically restored with SHA-256
+`37e6f5953f191b04f7b62cb07dae90f51d0947ad89f0355665b421fbde28700b`.
+`codex --version` reports `codex-cli 0.144.3`, and both `codex` and `codex-real`
+resolve through the normal global npm package. No persistent service, launcher,
+or update hook references the experimental branch. Existing Codex processes were
+not interrupted during restoration and retain their old executable inode until
+they naturally exit; every fresh start uses the official binary.
 
 ## Safe recovery
 
@@ -290,8 +291,8 @@ no Chromium debug listener, and survived forced Electron-main termination.
 The debug listener was released, the durable session reattached through a new
 Electron process, and detached user and `sudo` children remained attributable
 to the exact pane scope. Exact root-descendant removal is additionally covered
-by the deployed Codex execution-scope regression; the final harness uses only
-unprivileged synthetic sleeps by design.
+by the later-reverted experimental Codex execution-scope regression; the final
+harness uses only unprivileged synthetic sleeps by design.
 
 The rebuilt production UI was then inspected as the running Electron
 application: all three windows rendered and remained attached, the Aico window

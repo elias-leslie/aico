@@ -64,17 +64,18 @@ and transcript locations.
 7. A second Aftertimes launch at 18:27 EDT used `sudo -n` to start direct Xorg
    `:99` with a generated AMD config. It displaced the normal Xorg's DRM master,
    caused Electron GPU context resets, and left the physical display black. The
-   deployed Codex execution scope identified and removed the complete privileged
-   tree without harming tmux peers, but cleanup could not reverse disruption
-   already inflicted on the graphical stack; operator-authorized GDM recovery
-   was subsequently required.
+   temporarily installed experimental Codex execution scope identified and
+   removed the complete privileged tree without harming tmux peers, but cleanup
+   could not reverse disruption already inflicted on the graphical stack;
+   operator-authorized GDM recovery was subsequently required. That vendor
+   modification was later reverted.
 
 ## Ranked findings and disposition
 
 | Severity | Finding and impact | Root repair | Verification |
 | --- | --- | --- | --- |
-| Critical | Temporary Node/root-Xorg descendants could escape cancellation and destabilize the host. | Codex per-execution systemd scopes plus exact `cgroup.kill`; Aico gate-first pane launch and exact pane scopes. Direct hardware-Xorg tests are prohibited on the operator host and must use Xvfb or an isolated VM according to test needs. | Detached, setsid, root, cancel, parent-crash, and isolation regressions; the 18:27 recurrence's exact scope removed root Xorg, Python, game, and launcher processes with `populated 0` while all three tmux sessions survived. |
-| Critical | One broad scope mixed Electron, durable sessions, agents, and tools. | Managed desktop service, immutable tmux-server generations, stable pane/session IDs, and per-execution identities. | Compare cgroups/InvocationIDs and preserve peer tmux roster across restart/retire. |
+| Critical | Temporary Node/root-Xorg descendants could escape cancellation and destabilize the host. | Aico gate-first pane launch and exact pane scopes limit ownership to one durable session; direct hardware-Xorg tests are prohibited on the operator host and must use Xvfb or an isolated VM. Fine-grained cleanup of one Codex execution remains open at the official owner boundary. | A reverted experiment proved the cgroup design against detached/root children, but it is not a production Codex guarantee. Aico's supported harness proves pane-level crash, reconnect, and peer isolation. |
+| Critical | One broad scope mixed Electron, durable sessions, agents, and tools. | Managed desktop service, immutable tmux-server generations, and stable pane/session identities. | Compare cgroups/InvocationIDs and preserve peer tmux roster across restart/retire. |
 | High | A caller-spawned durable tmux `.scope` inherited Electron/Chromium descriptors and could retain a listening socket after Electron died. | New generations are user-manager-spawned transient `.service` units with clean stdio and `ExitType=cgroup`; existing `.scope` generations remain compatible. | Kill only an isolated Electron parent, compare the tmux server FD table, and prove the synthetic debugging port is released while tmux remains reconnectable. |
 | Critical | Cached/name-only tmux absence could target the wrong generation after socket replacement. | Fresh roster PID + persisted PID/starttime/cgroup/unit/Invocation classification before absence-authorized cleanup. | Socket collision and transport-failure tests; destructive paths fail closed. |
 | High | Legacy rows or same-name sessions could be recreated/rebound silently. | `legacy-unclassified` state, write-once stable IDs, and no cross-live-generation rebind. | Migration, renamed/name-reuse, and generation-CAS tests. |
@@ -111,26 +112,21 @@ and transcript locations.
 
 ## Roadmap
 
-### Phase 0 — host safety (implemented in this repair)
+### Phase 0 — Aico-owned host safety (implemented in this repair)
 
 - Immutable server/session/pane ownership and gate-first launch.
 - Exact whole-tree cleanup and crash/startup reconciliation.
-- Codex unified-exec containment and deployment.
+- Explicitly documented vendor boundary: no private Codex binary or update-path fork.
 - Detached-pane event reconciliation.
 - A-Term multi-socket compatibility.
 - Managed service and sidecar/input hardening.
 
-The Codex portion is deployed from
-`448b1493346fbb82ae1a1b2d846622347f54ca4f`. The installed native binary
-SHA-256 is
-`e7c5941f39c8162473d3a5647084d9159a8190ac1a104996952c426aa2f9ee13`; the
-preserved pre-deployment rollback SHA-256 is
+An experimental Codex modification exercised five lifecycle cases and proved the
+per-execution cgroup design during the recurrence, but installing a private build
+of an OpenAI-owned dependency was not acceptable. It was reverted atomically.
+The package-managed binary is again official `codex-cli 0.144.3` with SHA-256
 `37e6f5953f191b04f7b62cb07dae90f51d0947ad89f0355665b421fbde28700b`.
-Five lifecycle cases (normal completion, cancellation, peer isolation, owner
-EOF/parent loss, and a root `sudo` child) and the scope-manager regression
-passed. Installation did not restart active Codex processes: existing sessions
-continue on their old executable inode until their Codex process restarts, while
-new starts use the patched binary.
+Fresh launches follow the normal npm update path; no hotfix hook remains.
 
 ### Phase 1 — operator trust
 
@@ -171,13 +167,11 @@ new starts use the patched binary.
 
 ## Remaining risks
 
-- Codex containment currently covers Linux local non-TTY unified exec with empty
-  inherited file descriptors. PTY and inherited-FD executions, MCP/browser tool
-  hosts, and children that deliberately migrate to another cgroup need
-  equivalent owner integration.
-- The locally deployed Codex binary is a host hotfix and can be replaced by a
-  package update until commit `448b1493346fbb82ae1a1b2d846622347f54ca4f`
-  is released through the normal distribution channel.
+- Official Codex `0.144.3` does not provide the experimental per-execution
+  boundary demonstrated during this incident. Aico can clean one exact durable
+  pane, but not one temporary Codex execution without ending that pane. Any finer
+  boundary must come from an OpenAI-supported interface or an owned external
+  sandbox that does not replace vendor code.
 - A same-user local process can still interact with loopback services; origin
   checks are not strong per-process authentication.
 - Live-unreachable tmux generations fail closed but do not yet expose a guided
@@ -196,30 +190,28 @@ new starts use the patched binary.
   Chromium's GPU process remained functional and substantially below the prior
   repaint baseline, so changing host graphics policy was explicitly out of
   scope for this lifecycle repair.
-- Per-execution containment prevents a privileged child from becoming an
-  unattributed long-lived orphan, but it cannot prevent immediate GPU/VT damage
-  while a deliberately launched direct hardware Xorg is alive. The operational
-  prohibition and VM/Xvfb boundary must be enforced at the originating shared
+- The reverted experiment showed that per-execution containment can prevent a
+  privileged child from becoming an unattributed long-lived orphan, but Aico does
+  not claim that protection from the official Codex package. The operational
+  prohibition and VM/Xvfb boundary must be enforced at the originating owned
   launcher or test workflow; a cgroup is cleanup authority, not a device sandbox.
 
 ## Final assessment and confidence
 
-Confidence is **high** in the repaired Linux ownership boundary: source
-transcripts identify both incident launch paths, unit tests exercise fail-closed
-identity transitions, the host harness proves detached-child and peer-isolation
-behavior, Codex regressions include a privileged child, and the 18:27 recurrence
-proved exact removal of a live root-Xorg execution without tmux loss. Confidence
-is **medium** outside that
-boundary because PTY/inherited-FD Codex executions, MCP/browser tool hosts, and
-cross-cgroup escape remain explicitly uncovered, and execution containment is
-not a GPU/VT sandbox.
+Confidence is **high** in the repaired Aico-owned desktop/tmux/pane boundary:
+source transcripts identify both launch paths, unit tests exercise fail-closed
+identity transitions, and the host harness proves detached-child and peer
+isolation at pane granularity. Confidence is **medium-low** for temporary tool
+execution cleanup because the official Codex package does not expose the
+experimental per-execution owner boundary, and containment is not a GPU/VT
+sandbox.
 
 Aico is now substantially safer and more trustworthy, but it is not yet
-unqualified best-in-class. The critical attribution and orphan-cleanup defect is
-fixed for the covered execution path. Prevention of direct host-hardware Xorg
-must still be enforced by the originating test workflow and isolation policy;
-the recurrence showed that exact cleanup can succeed after the workstation has
-already been disrupted. The remaining differentiators are that enforced launch
-boundary, an aggregate operator view, first-class execution provenance in the
-UI, broader tool-host containment, and measured startup/accessibility work.
-Those needs do not justify another broad Aico lifecycle rewrite.
+unqualified best-in-class. Session- and pane-level attribution is repaired;
+fine-grained temporary Codex execution cleanup remains unresolved without an
+owner-supported interface. Prevention of direct host-hardware Xorg must be
+enforced by the originating test workflow and isolation policy. The remaining
+differentiators are that enforced launch boundary, an aggregate operator view,
+first-class execution provenance in the UI, owned tool-host containment, and
+measured startup/accessibility work. Those needs do not justify a private vendor
+fork or another broad Aico lifecycle rewrite.
