@@ -20,6 +20,30 @@ export function setPaletteOpener(fn: () => void): void {
   paletteOpener = fn
 }
 
+export const AICO_TOAST_EVENT = 'aico:toast'
+
+export interface AicoToastDetail {
+  kind: string
+  snippet: string
+}
+
+function showToast(detail: AicoToastDetail): void {
+  window.dispatchEvent(new CustomEvent<AicoToastDetail>(AICO_TOAST_EVENT, { detail }))
+}
+
+/** Copy a stable, human-readable snapshot rather than leaking an unhandled IPC
+ * rejection into the renderer. Both outcomes use the existing safe text toast. */
+export async function copySessionDiagnostics(): Promise<void> {
+  try {
+    const diagnostics = await window.aico.actions.sessionDiagnostics()
+    window.aico.clipboard.write(JSON.stringify(diagnostics, null, 2))
+    showToast({ kind: 'Copied', snippet: 'Session diagnostics' })
+  } catch (error) {
+    console.warn('[aico] failed to copy session diagnostics:', error)
+    showToast({ kind: 'Error', snippet: 'Could not copy session diagnostics' })
+  }
+}
+
 export interface Action {
   id: string
   /** Group header in the menu, in first-seen order. */
@@ -156,6 +180,15 @@ export const ACTIONS: Action[] = [
     shortcut: '',
     icon: '⇱',
     opensFlyout: true,
+  },
+  {
+    id: 'copy-session-diagnostics',
+    section: 'Widget',
+    label: 'Copy session diagnostics',
+    shortcut: '',
+    icon: '⧉',
+    note: "Copy this widget's ownership, tmux, resource, and warning snapshot as formatted JSON.",
+    run: () => void copySessionDiagnostics(),
   },
   {
     id: 'retire-widget',

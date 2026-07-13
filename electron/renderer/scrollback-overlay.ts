@@ -7,8 +7,8 @@ import { wheelLineDelta } from './wheel'
 // An attached tmux client drives xterm's alternate screen, which has no
 // scrollback. So "scroll back" is a separate, read-only xterm overlaid on top
 // of the live terminal and filled with tmux's captured history. The overlay is
-// still xterm/WebGL; the performance fix is that scrollback is prefetched and
-// fetched in bounded pages instead of capturing all history on the wheel event.
+// still xterm/WebGL; scrollback is fetched in bounded pages instead of capturing
+// all history on the wheel event.
 
 const PAGE_LINES = 5000
 
@@ -74,7 +74,6 @@ export class ScrollbackOverlay {
   private term: Terminal | null = null
   private fit: FitAddon | null = null
   private entering = false
-  private prefetching: Promise<void> | null = null
   private loadingOlder = false
   private lines: string[] = []
   private fromLine = 0
@@ -160,22 +159,6 @@ export class ScrollbackOverlay {
     return this.applyTailPage(page)
   }
 
-  async prefetch(): Promise<void> {
-    if (this.active) return
-    if (this.prefetching) return this.prefetching
-
-    this.prefetching = this.deps
-      .capturePage({ count: PAGE_LINES })
-      .then((page) => {
-        this.applyTailPage(page)
-      })
-      .catch((err) => console.warn('[aico] scrollback prefetch failed:', err))
-      .finally(() => {
-        this.prefetching = null
-      })
-    return this.prefetching
-  }
-
   private writeOverlay(initialWheelDeltaLines: number, restoreLine?: number): void {
     const term = this.ensureTerm()
     this.active = true
@@ -250,15 +233,13 @@ export class ScrollbackOverlay {
   }
 
   /**
-   * Show the overlay from a fresh bounded tail page. A warmed cache is useful
-   * for search and future polish, but activation follows A-Term's rule: always
-   * ask tmux for the latest page because agent output can make cache stale.
+   * Show the overlay from a fresh bounded tail page. Always ask tmux for the
+   * latest page because agent output can make cached history stale.
    */
   async enter(initialWheelDeltaLines: number): Promise<void> {
     if (this.active || this.entering) return
     this.entering = true
     try {
-      await this.prefetching
       await this.captureTailPage()
       if (!this.lines.length) return
 

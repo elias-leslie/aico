@@ -1,8 +1,77 @@
 // tmux session model. Pure helpers (no electron/node-pty imports) so they
-// unit-test cheaply. Aico runs its own isolated tmux server on a private
-// socket ("-L aico") so it never touches the user's normal tmux sessions.
+// unit-test cheaply. Aico addresses its private server by an absolute socket
+// path, never by tmux's ambient TMUX_TMPDIR-dependent label resolution.
 
-export const TMUX_SOCKET = 'aico'
+const PRODUCTION_SOCKET_LABEL = 'aico'
+const MAX_UNIX_SOCKET_PATH_BYTES = 107
+const SAFE_SOCKET_LABEL = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/
+const SAFE_SOCKET_PATH_SEGMENT = /^[A-Za-z0-9_.-]+$/
+const MANAGED_SERVER_GENERATION_ID = /^[0-9a-f]{8,64}$/
+const PANE_EXITED_FILE_PREFIX = 'pane-exited-'
+
+function effectiveUid(): number {
+  const uid = process.getuid?.()
+  if (!Number.isSafeInteger(uid) || (uid as number) < 0) {
+    throw new Error('Aico requires a numeric Unix uid to address its durable tmux socket')
+  }
+  return uid as number
+}
+
+/**
+ * Resolve the internal server's socket to an absolute path. `-L aico`
+ * historically resolves to `/tmp/tmux-<uid>/aico`; spelling that path out
+ * preserves existing sessions while preventing an inherited TMUX_TMPDIR from
+ * silently selecting or creating a different server.
+ *
+ * AICO_TMUX_SOCKET is a test/recovery override. A safe label remains rooted in
+ * the historical per-user tmux directory, while an explicit absolute path is
+ * accepted for an isolated test directory. Empty, relative-path, traversal,
+ * control-character, and overlong values fail closed.
+ */
+export function resolveInternalTmuxSocket(
+  override: string | undefined,
+  uid: number = effectiveUid(),
+): string {
+  if (!Number.isSafeInteger(uid) || uid < 0) throw new Error(`unsafe tmux uid: ${uid}`)
+  const value = override === undefined ? PRODUCTION_SOCKET_LABEL : override
+  if (value.length === 0) throw new Error('AICO_TMUX_SOCKET must not be empty')
+
+  const socketPath = value.startsWith('/')
+    ? value
+    : `/tmp/tmux-${uid}/${validateSocketLabel(value)}`
+  validateAbsoluteSocketPath(socketPath)
+  return socketPath
+}
+
+function validateSocketLabel(label: string): string {
+  if (!SAFE_SOCKET_LABEL.test(label)) throw new Error(`unsafe tmux socket label: ${label}`)
+  return label
+}
+
+function validateAbsoluteSocketPath(socketPath: string): string {
+  if (!socketPath.startsWith('/'))
+    throw new Error(`tmux socket path must be absolute: ${socketPath}`)
+  if (Buffer.byteLength(socketPath) > MAX_UNIX_SOCKET_PATH_BYTES) {
+    throw new Error(`tmux socket path is too long: ${socketPath}`)
+  }
+  const segments = socketPath.slice(1).split('/')
+  if (
+    segments.length === 0 ||
+    segments.some(
+      (segment) =>
+        segment.length === 0 ||
+        segment === '.' ||
+        segment === '..' ||
+        !SAFE_SOCKET_PATH_SEGMENT.test(segment),
+    )
+  ) {
+    throw new Error(`unsafe tmux socket path: ${socketPath}`)
+  }
+  return socketPath
+}
+
+/** Absolute path to Aico's durable internal tmux server. */
+export const TMUX_SOCKET = resolveInternalTmuxSocket(process.env.AICO_TMUX_SOCKET)
 // A-Term currently exposes attachable tmux sessions with this legacy prefix.
 export const A_TERM_SESSION_PREFIX = 'summitflow-'
 
@@ -10,6 +79,8 @@ export interface TmuxTarget {
   socket: string | null
   session: string
 }
+
+export type TmuxEnvironment = Record<string, string>
 
 export interface ScrollbackPageBounds {
   fromLine: number
@@ -19,12 +90,33 @@ export interface ScrollbackPageBounds {
   endCoord: number
 }
 
+/** Only a reply from a reachable tmux server proving that the requested
+ * durable session does not exist may authorize absence cleanup. Permission,
+ * timeout, protocol, and socket transport failures remain unknown. */
+export function isDefinitiveTmuxAbsence(stderr: string): boolean {
+  return stderr.split(/\r?\n/).some((line) => /^\s*can't find session:\s*\S.*$/i.test(line))
+}
+
+/**
+ * Classifies a missing/unreachable tmux transport for diagnostics and startup
+ * bootstrap only. This is deliberately separate from definitive session
+ * absence: callers must never use it as authority to retire persisted work.
+ */
+export function isTmuxTransportUnavailable(stderr: string): boolean {
+  return (
+    /error connecting to .+\(No such file or directory\)/i.test(stderr) ||
+    /no server running on /i.test(stderr)
+  )
+}
+
 export function internalTarget(widgetId: string): TmuxTarget {
   return { socket: TMUX_SOCKET, session: sessionName(widgetId) }
 }
 
 function socketArgs(socket: string | null): string[] {
-  return socket ? ['-L', socket] : []
+  if (socket === null) return []
+  if (socket.startsWith('/')) return ['-S', validateAbsoluteSocketPath(socket)]
+  return ['-L', validateSocketLabel(socket)]
 }
 
 function targetArgs(target: TmuxTarget, args: string[]): string[] {
@@ -81,6 +173,10 @@ function tmuxProfileLines(): string[] {
  * `;` command separator so one spawn applies the whole profile.
  */
 export function tmuxProfileArgs(): string[] {
+  return tmuxProfileTargetArgs(TMUX_SOCKET)
+}
+
+export function tmuxProfileTargetArgs(socket: string): string[] {
   const commands = [
     ['set-option', '-g', 'history-limit', String(HISTORY_LIMIT)],
     ['set-option', '-g', 'mouse', 'off'],
@@ -92,7 +188,54 @@ export function tmuxProfileArgs(): string[] {
     ['set-environment', '-g', 'COLORTERM', 'truecolor'],
     ['set-environment', '-g', 'CLICOLOR', '1'],
   ]
-  return ['-L', TMUX_SOCKET, ...commands.flatMap((args, i) => (i === 0 ? args : [';', ...args]))]
+  return [
+    ...socketArgs(socket),
+    ...commands.flatMap((args, i) => (i === 0 ? args : [';', ...args])),
+  ]
+}
+
+export function paneExitedEventPath(serverId: string, uid: number = effectiveUid()): string {
+  if (!MANAGED_SERVER_GENERATION_ID.test(serverId)) {
+    throw new Error(`invalid tmux server generation id: ${serverId}`)
+  }
+  if (!Number.isSafeInteger(uid) || uid < 0) throw new Error(`unsafe tmux uid: ${uid}`)
+  return `/run/user/${uid}/aico/${PANE_EXITED_FILE_PREFIX}${serverId}`
+}
+
+/**
+ * Install the one global event bridge used to reconcile panes that exit while
+ * Electron is detached. The hook writes one durable generation-tagged marker
+ * in the user's runtime directory. Aico watches it in-process and retains it as
+ * level-triggered recovery evidence, so an app crash cannot lose the signal or
+ * orphan a blocking tmux client.
+ */
+export function paneExitedHookTargetArgs(
+  socket: string,
+  serverId: string,
+  uid: number = effectiveUid(),
+): string[] {
+  return [
+    '-S',
+    validateAbsoluteSocketPath(socket),
+    'set-hook',
+    '-g',
+    'pane-exited',
+    paneExitedHookCommand(serverId, uid),
+  ]
+}
+
+export function paneExitedHookCommand(serverId: string, uid: number = effectiveUid()): string {
+  // tmux canonicalizes the command list to a double-quoted run-shell argument;
+  // generate that exact representation so the pre-dispatch live query can use
+  // byte equality rather than an unsafe semantic shell parser.
+  return `run-shell "/usr/bin/touch ${paneExitedEventPath(serverId, uid)}"`
+}
+
+/** Read the exact stored global hook value immediately before a launch leaves
+ * its gate. Cached installation success is not enough because a later tmux
+ * source-file or set-hook command can replace the cleanup bridge. */
+export function showPaneExitedHookTargetArgs(socket: string): string[] {
+  return ['-S', validateAbsoluteSocketPath(socket), 'show-options', '-gHqv', 'pane-exited']
 }
 
 /**
@@ -175,7 +318,22 @@ export function capturePageTargetArgs(target: TmuxTarget, bounds: ScrollbackPage
  * "<session_name> <created_epoch_seconds>" so the catalog can preserve age order.
  */
 export function listArgs(): string[] {
-  return ['-L', TMUX_SOCKET, 'list-sessions', '-F', '#{session_name} #{session_created}']
+  return listServerSessionsArgs(TMUX_SOCKET)
+}
+
+function listServerSessionsArgs(socket: string): string[] {
+  return [...socketArgs(socket), 'list-sessions', '-F', '#{session_name} #{session_created}']
+}
+
+/** One verified roster read carries the server PID on every row so callers can
+ * reject a socket collision before interpreting session presence/absence. */
+export function serverRosterArgs(socket: string): string[] {
+  return [
+    ...socketArgs(socket),
+    'list-sessions',
+    '-F',
+    '#{pid}\t#{session_id}\t#{session_name}\t#{session_created}',
+  ]
 }
 
 /** `tmux` argv that kills a widget's session (used by an explicit Discard). */
@@ -185,48 +343,6 @@ export function killArgs(widgetId: string): string[] {
 
 export function killTargetArgs(target: TmuxTarget): string[] {
   return targetArgs(target, ['kill-session', '-t', target.session])
-}
-
-/** Sessions untouched longer than this (and unattached) are reaped at launch, so
- * forgotten sessions don't pile up on the server across days. 72h keeps anything
- * worked on yesterday — or over a normal weekend — alive to reattach. */
-export const IDLE_TTL_MS = 72 * 60 * 60 * 1000
-
-/**
- * `tmux` argv listing each session as
- * "<session_name> <activity_epoch_seconds> <attached_count>" — the inputs the
- * idle reaper needs to decide what's stale and unattached.
- */
-export function listActivityArgs(): string[] {
-  return [
-    '-L',
-    TMUX_SOCKET,
-    'list-sessions',
-    '-F',
-    '#{session_name} #{session_activity} #{session_attached}',
-  ]
-}
-
-/**
- * Widget ids of `aico-*` sessions that are stale (last activity older than
- * `ttlMs`) AND have no client attached. Pure (takes `now`/`ttlMs`, parses raw
- * `listActivityArgs` stdout) so it unit-tests without a tmux server. An attached
- * session — i.e. an open widget — is never reaped regardless of idle time.
- */
-export function staleWidgetIds(lines: string, now: number, ttlMs: number): string[] {
-  const stale: string[] = []
-  for (const line of lines.split('\n')) {
-    const parts = line.trim().split(' ')
-    if (parts.length < 3) continue
-    const [name, activity, attached] = parts
-    const id = widgetIdFromSession(name)
-    if (!id) continue // not an aico session
-    if (attached !== '0') continue // a client is attached — leave it
-    const last = Number(activity)
-    if (!Number.isFinite(last) || last <= 0) continue // unknown activity — keep it
-    if (now - last * 1000 > ttlMs) stale.push(id)
-  }
-  return stale
 }
 
 /** Extract the widget id from an `aico-<id>` session name, or null. */
@@ -254,28 +370,40 @@ export function hasTargetArgs(target: TmuxTarget): string[] {
  * `-f confPath` (the global flag that configures the server when it first
  * starts, applying the high history-limit). Creation is split from attach so
  * the TUI launch command runs exactly once, on first create — reattaching a
- * window must not relaunch a running agent. `command` (when given) becomes the
- * pane's process directly, so the TUI is the pane from the first paint — no
- * interactive shell echoes the launch line into scrollback above it; without it
- * the pane is a plain shell.
+ * window must not relaunch a running agent. The pane starts in a fixed,
+ * no-profile/no-RC gate shell; only after tmux finishes its per-pane cgroup
+ * placement does Aico send the real interactive-shell or TUI command with
+ * `runInPaneArgs`.
  */
+export const PANE_GATE_COMMAND = 'exec /bin/bash --noprofile --norc'
+
 export function newDetachedArgs(
   widgetId: string,
   cols: number,
   rows: number,
   confPath: string,
   cwd: string,
-  command?: string,
+  environment: TmuxEnvironment = {},
+): string[] {
+  return newDetachedTargetArgs(internalTarget(widgetId), cols, rows, confPath, cwd, environment)
+}
+
+export function newDetachedTargetArgs(
+  target: TmuxTarget,
+  cols: number,
+  rows: number,
+  confPath: string,
+  cwd: string,
+  environment: TmuxEnvironment = {},
 ): string[] {
   const args = [
-    '-L',
-    TMUX_SOCKET,
+    ...socketArgs(target.socket),
     '-f',
     confPath,
     'new-session',
     '-d', // detached; the node-pty client attaches separately
     '-s',
-    sessionName(widgetId),
+    target.session,
     '-x',
     String(cols),
     '-y',
@@ -283,7 +411,8 @@ export function newDetachedArgs(
     '-c',
     cwd,
   ]
-  if (command) args.push(command) // trailing shell-command → the pane's process
+  for (const [key, value] of Object.entries(environment)) args.push('-e', `${key}=${value}`)
+  args.push(PANE_GATE_COMMAND)
   return args
 }
 
@@ -291,13 +420,54 @@ export function newDetachedArgs(
  * `tmux` argv that respawns the session's pane in `cwd`, killing whatever is
  * currently running (`-k`). Used by "Replace with <TUI>": one pane runs one
  * foreground program, so loading a TUI into a live widget atomically replaces
- * the old one. `command` (when given) becomes the new pane process directly (no
- * echoed launch line); without it the pane respawns as a plain shell.
+ * the old one. As with creation, the replacement starts in the fixed gate shell
+ * so tmux can finish cgroup placement before `runInPaneArgs` starts the TUI.
  */
-export function respawnArgs(widgetId: string, cwd: string, command?: string): string[] {
-  const args = ['-L', TMUX_SOCKET, 'respawn-pane', '-k', '-c', cwd, '-t', sessionName(widgetId)]
-  if (command) args.push(command) // trailing shell-command → the pane's process
+export function respawnArgs(
+  widgetId: string,
+  cwd: string,
+  environment: TmuxEnvironment = {},
+): string[] {
+  return respawnTargetArgs(internalTarget(widgetId), cwd, environment)
+}
+
+export function respawnTargetArgs(
+  target: TmuxTarget,
+  cwd: string,
+  environment: TmuxEnvironment = {},
+): string[] {
+  const args = targetArgs(target, ['respawn-pane', '-k', '-c', cwd, '-t', target.session])
+  for (const [key, value] of Object.entries(environment)) args.push('-e', `${key}=${value}`)
+  args.push(PANE_GATE_COMMAND)
   return args
+}
+
+/** Launch a command only after tmux has created and cgroup-migrated the gated
+ * pane. This ordering is lifecycle-critical: giving the real user/TUI command
+ * directly to new-session/respawn-pane lets shell RC files or that workload
+ * fork before Ubuntu tmux finishes moving the pane into its dedicated scope. */
+export function runInPaneArgs(widgetId: string, command: string): string[] {
+  return runInPaneTargetArgs(internalTarget(widgetId), command)
+}
+
+export function runInPaneTargetArgs(target: TmuxTarget, command: string): string[] {
+  return targetArgs(target, [
+    'send-keys',
+    '-t',
+    target.session,
+    'C-u',
+    ';',
+    'send-keys',
+    '-t',
+    target.session,
+    '-l',
+    command,
+    ';',
+    'send-keys',
+    '-t',
+    target.session,
+    'Enter',
+  ])
 }
 
 /**
@@ -333,6 +503,40 @@ export function listClientsArgs(widgetId: string): string[] {
 
 export function listClientsTargetArgs(target: TmuxTarget): string[] {
   return targetArgs(target, ['list-clients', '-t', target.session, '-F', '#{client_name}'])
+}
+
+/** Stable server-assigned identity of an internal durable tmux session. */
+export function sessionIdArgs(widgetId: string): string[] {
+  return sessionIdTargetArgs(internalTarget(widgetId))
+}
+
+export function sessionIdTargetArgs(target: TmuxTarget): string[] {
+  return targetArgs(target, ['display-message', '-p', '-t', target.session, '#{session_id}'])
+}
+
+/**
+ * Every pane currently belonging to a session, with server-stable pane ID and
+ * root PID. Lifecycle code must fail closed unless exactly one row is present;
+ * a session name alone is not a stable target after splits or replacements.
+ */
+export function listSessionPanesArgs(widgetId: string): string[] {
+  return listSessionPanesTargetArgs(internalTarget(widgetId))
+}
+
+export function listSessionPanesTargetArgs(target: TmuxTarget): string[] {
+  return targetArgs(target, ['list-panes', '-t', target.session, '-F', '#{pane_id}\t#{pane_pid}'])
+}
+
+/** Pane diagnostics for the complete session. Lifecycle callers still require
+ * exactly one row before treating any pane as the widget's owned root. */
+export function listSessionPaneDetailsTargetArgs(target: TmuxTarget): string[] {
+  return targetArgs(target, [
+    'list-panes',
+    '-t',
+    target.session,
+    '-F',
+    '#{pane_id}\t#{pane_pid}\t#{pane_current_command}\t#{pane_current_path}',
+  ])
 }
 
 /** `tmux` argv that returns the root pid of a widget pane. Used to reconcile

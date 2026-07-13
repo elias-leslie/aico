@@ -25,14 +25,24 @@ export function launchLine(spec: TuiSpec): string | null {
 }
 
 /**
- * Wrap a launch line into the command tmux runs as the pane's own process. The
- * TUI is the pane from the first paint, so nothing echoes the launch line into
- * scrollback the way typing it into an interactive shell did. Dropping to an
- * interactive shell when the TUI exits keeps a bare-shell widget's behavior:
- * exiting the agent leaves a usable prompt rather than a dead pane.
+ * Build the command Aico sends only after the pane's containment identity is
+ * verified. `null` replaces the no-RC gate with the user's real interactive
+ * shell. A TUI is followed by that same shell so exiting the agent leaves a
+ * usable prompt rather than a dead pane.
  */
-export function paneCommand(line: string): string {
-  // `\${SHELL:-/bin/bash}` is escaped so it reaches the pane shell verbatim for
-  // it to expand — it is the shell's parameter expansion, not JS interpolation.
-  return `${line}; exec "\${SHELL:-/bin/bash}"`
+export function paneCommand(line: string | null): string {
+  const interactiveShell = `exec "\${SHELL:-/bin/bash}"`
+  if (line === null) return interactiveShell
+
+  // `runInPaneArgs` types this line into the already-contained no-RC gate. Clear
+  // the typed launcher from both the visible grid and scrollback before the TUI
+  // paints, preserving the clean first frame without racing tmux's cgroup move.
+  const clearTypedLauncher = "printf '\\033[3J\\033[H\\033[2J'"
+  // Replace the no-RC gate itself with a small supervisor shell. Leaving the
+  // gate as the pane root while the TUI ran as its child made every healthy
+  // workload indistinguishable from a contaminated pre-launch gate during
+  // restart reconciliation. The supervisor is deliberately a different exact
+  // argv; after the TUI exits it still execs the user's interactive shell.
+  const supervisorScript = `${clearTypedLauncher}; ${line}; ${interactiveShell}`
+  return `exec /bin/bash --noprofile --norc -c ${shellQuote(supervisorScript)}`
 }

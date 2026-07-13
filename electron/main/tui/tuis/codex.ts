@@ -4,9 +4,9 @@ import type { TuiSpec } from '../spec'
  * leaves the pane's current command as the shell, so pane-metadata detection
  * (when added) must fall back to the TTY process list. Mandates inject via the
  * codex launcher's `model_instructions_file` (verified by context.ts `codex-hooks`).
- * Launched permission-bypassed by default (à la a-term's `codex --yolo`);
- * `--dangerously-bypass-approvals-and-sandbox` is the documented flag (`--yolo`
- * is the legacy alias for the same). */
+ * Aico deliberately keeps Codex's normal approval/sandbox policy. Autonomous
+ * execution must be an explicit, visible Agent Hub profile rather than a hidden
+ * launcher default. */
 export const codexTui: TuiSpec = {
   slug: 'codex',
   displayName: 'Codex',
@@ -15,7 +15,7 @@ export const codexTui: TuiSpec = {
   accent: '#10A37F', // teal
   order: 1,
   enabled: true,
-  command: ['codex', '--dangerously-bypass-approvals-and-sandbox'],
+  command: ['codex'],
   processName: 'codex',
   context: { kind: 'codex-hooks' },
 }

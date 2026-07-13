@@ -2,8 +2,8 @@ import type { TuiSpec } from '../spec'
 
 /** Claude Code — the default widget TUI. Mandates inject via the existing
  * `~/.claude/hooks/SessionStart.sh` hook (verified, not installed, by Aico).
- * Launched permission-bypassed by default (autonomous companion, à la a-term);
- * `--dangerously-skip-permissions` is the documented flag. */
+ * Keep the CLI's normal permission prompts. Autonomous execution must be an
+ * explicit, visible Agent Hub profile rather than a hidden launcher default. */
 export const claudeCodeTui: TuiSpec = {
   slug: 'claude-code',
   displayName: 'Claude Code',
@@ -12,7 +12,7 @@ export const claudeCodeTui: TuiSpec = {
   accent: '#E5A647', // Lantern amber
   order: 0,
   enabled: true,
-  command: ['claude', '--dangerously-skip-permissions'],
+  command: ['claude'],
   processName: 'claude',
   context: { kind: 'claude-session-start' },
 }

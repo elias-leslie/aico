@@ -1,18 +1,53 @@
 #!/usr/bin/env bash
-# Foreground runner for systemd. Unlike aico-launch.sh, this does not fork away:
-# systemd tracks this process, while the pidfile still names the process group
-# so aico-stop.sh can tear down the whole Electron/sidecar tree safely.
+# Foreground runner for systemd. It never detaches: the script, build, Electron,
+# Chromium helpers, and sidecar all remain in the exact service cgroup. The
+# pidfile names systemd's MainPID so aico-stop.sh can prove unit ownership.
 set -euo pipefail
 
-# Optional local agent launcher wrappers may live in ~/.claude/bin or
-# ~/.codex/bin. Keep common user bin paths ahead of system paths without making
-# those wrappers required.
-export PATH="$HOME/.claude/bin:$HOME/.codex/bin:/usr/local/bin:$PATH"
+# Preserve the agent-wrapper PATH for Electron, but run lifecycle checks and the
+# build through trusted system tool locations. npm adds this repo's
+# node_modules/.bin for its build script itself.
+RUNTIME_PATH="$HOME/.claude/bin:$HOME/.codex/bin:/usr/local/bin:$PATH"
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 REPO="${AICO_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/aico"
 PIDFILE="$LOG_DIR/aico.pid"
+LOCKFILE="$LOG_DIR/aico.lock"
+RUNTIME_UNIT="${AICO_RUNTIME_UNIT:-aico-shell.service}"
 mkdir -p "$LOG_DIR"
+cd "$REPO"
+
+case "$RUNTIME_UNIT" in
+  aico-shell.service|aico-shell-runtime.service) ;;
+  *)
+    echo "aico-run-foreground: refusing unknown runtime unit '$RUNTIME_UNIT'" >&2
+    exit 1
+    ;;
+esac
+if [ "${AICO_OWNER:-}" != aico ] || [ "${AICO_WORKLOAD_CLASS:-}" != desktop-runtime ]; then
+  echo "aico-run-foreground: required desktop-runtime ownership markers are missing" >&2
+  exit 1
+fi
+
+# Fail closed if this script was invoked directly or systemd placed it somewhere
+# unexpected. The supported launchers create only these two exact user services;
+# durable tmux scopes necessarily have a different cgroup leaf.
+EXPECTED_CONTROL_GROUP="/user.slice/user-${UID}.slice/user@${UID}.service/app.slice/$RUNTIME_UNIT"
+PROCESS_CONTROL_GROUP="$(awk -F: '$1 == "0" && $2 == "" { print $3; exit }' "/proc/$$/cgroup" 2>/dev/null || true)"
+if [ "$PROCESS_CONTROL_GROUP" != "$EXPECTED_CONTROL_GROUP" ]; then
+  echo "aico-run-foreground: refusing uncontained launch from '$PROCESS_CONTROL_GROUP'" >&2
+  exit 1
+fi
+
+# Share the launcher's lock across the entire desktop-runtime lifetime. A second
+# managed or transient launcher therefore fails even if the pidfile is removed;
+# the descriptor dies with this exact systemd-controlled runtime.
+exec 9>"$LOCKFILE"
+if ! flock -n 9; then
+  echo "aico-run-foreground: another Aico launch is in progress" >&2
+  exit 1
+fi
 
 # Same cmdline/cwd guard the launcher and stopper use: the pidfile survives a
 # reboot, so a bare `kill -0` on it can match a recycled PID and wrongly declare
@@ -41,23 +76,34 @@ if [ -f "$PIDFILE" ]; then
   PID="$(cat "$PIDFILE" 2>/dev/null || true)"
   if [[ "$PID" =~ ^[0-9]+$ ]] && kill -0 "$PID" 2>/dev/null && is_aico_process "$PID"; then
     echo "aico-run-foreground: already running (pid $PID)" >&2
-    exit 0
+    exit 1
   fi
   echo "aico-run-foreground: clearing stale pidfile (pid '$PID' is not a live Aico)" >&2
 fi
 rm -f "$PIDFILE"
 
-# Build with electron-vite, then exec bare electron — same env-hygiene rationale
-# as aico-launch.sh: keeping electron-vite (`npm start` -> preview) out of the
-# runtime parent means electron, and the tmux panes and sidecar it spawns,
-# inherit a clean env instead of npm's build-time pollution. `exec` keeps the
-# pidfile's pid valid (electron replaces this bash in place).
-exec setsid --wait bash -c '
-  set -euo pipefail
-  pidfile="$1"
-  repo="$2"
-  echo $$ >"$pidfile"
-  cd "$repo"
-  npm run build
-  exec ./node_modules/.bin/electron .
-' bash "$PIDFILE" "$REPO"
+# Atomic registration prevents the stopper from observing a partially-written
+# PID. Remove only our own registration if build/exec fails before Electron
+# replaces this shell; a successful exec discards the shell trap automatically.
+PREVIOUS_UMASK="$(umask)"
+umask 077
+PIDFILE_TMP="$PIDFILE.tmp.$$"
+printf '%s\n' "$$" >"$PIDFILE_TMP"
+mv -f "$PIDFILE_TMP" "$PIDFILE"
+umask "$PREVIOUS_UMASK"
+cleanup_failed_start() {
+  if [ "$(cat "$PIDFILE" 2>/dev/null || true)" = "$$" ]; then rm -f "$PIDFILE"; fi
+}
+trap cleanup_failed_start EXIT
+
+# Build with electron-vite, then exec the Electron binary directly. The package
+# shim is a Node launcher which spawns the real binary; using it would leave the
+# shim as systemd's MainPID while Electron can move its own PID into a desktop
+# application scope. A stop would then signal the shim instead of the process
+# that owns the windows. Direct exec preserves this PID across the transition,
+# so systemd keeps exact authority over Electron even if the desktop reclassifies
+# its MainPID. No setsid is needed inside a systemd service: KillMode=mixed is
+# the whole-runtime boundary and fd 9 keeps the launch lock until Electron exits.
+npm run build
+export PATH="$RUNTIME_PATH"
+exec ./node_modules/electron/dist/electron .

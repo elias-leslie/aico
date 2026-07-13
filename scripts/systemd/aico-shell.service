@@ -5,17 +5,42 @@
 [Unit]
 Description=Aico desktop shell
 After=graphical-session.target
+# The default user target can start before GNOME imports DISPLAY into the user
+# manager. Skip that early attempt rather than launching Electron without X11;
+# the desktop launcher imports its explicit display variables and starts this
+# same canonical unit once the graphical session is ready.
+ConditionEnvironment=DISPLAY
+# Historical desktop launches used a transient runtime service. Starting the
+# canonical managed unit retires only that desktop-runtime unit; durable tmux
+# server and pane units have different names and are never conflicted.
+Conflicts=aico-shell-runtime.service
 
 [Service]
 Type=simple
+Slice=app.slice
 WorkingDirectory=__PROJECT_ROOT__
+# Keep the desktop/runtime tree in one bounded cgroup. Durable tmux servers and
+# pane workloads are created in separate scopes by Electron and survive this
+# unit stopping; Chromium helpers and the optional sidecar must not.
+# SIGTERM only the Electron main process so app.quit can detach PTYs and close
+# renderers cleanly; systemd still SIGKILLs any remaining helper in this exact
+# cgroup after the main process exits/TimeoutStopSec.
+KillMode=mixed
+CPUAccounting=yes
+MemoryAccounting=yes
+TasksAccounting=yes
+Environment=AICO_OWNER=aico
+Environment=AICO_WORKLOAD_CLASS=desktop-runtime
+Environment=AICO_RUNTIME_UNIT=aico-shell.service
 # Inherit DISPLAY/XAUTHORITY from the graphical user manager. Hard-coding :0
 # prevents the shell from starting when GDM assigns the active session :1.
 # Optional local agent launcher wrappers may live in %h/.claude/bin and
 # %h/.codex/bin. Keep common user bin paths ahead of system paths.
 Environment=PATH=%h/.claude/bin:%h/.codex/bin:%h/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 ExecStart=__PROJECT_ROOT__/scripts/aico-run-foreground.sh
-ExecStop=__PROJECT_ROOT__/scripts/aico-stop.sh
+# No ExecStop wrapper: systemd applies KillMode=mixed directly to this
+# exact unit. scripts/aico-stop.sh is the guarded operator-facing stop path;
+# invoking it recursively as this unit's ExecStop would deadlock unit teardown.
 TimeoutStartSec=60
 TimeoutStopSec=20
 

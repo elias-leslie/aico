@@ -45,8 +45,8 @@ export interface TuiSpec {
   order: number
   /** Hidden from the tray when false, but still resolvable by slug. */
   enabled: boolean
-  /** argv run inside the tmux session, including default flags. Opaque — e.g.
-   * ['claude', '--dangerously-skip-permissions']. Empty for a bare shell. */
+  /** argv run inside the tmux session, including safe default flags. Opaque —
+   * dangerous approval-bypass flags must never be hidden here. Empty for shell. */
   command: string[]
   /** Process name for pane detection (Codex leaves pane cmd as the shell). */
   processName: string

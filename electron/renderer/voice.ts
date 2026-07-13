@@ -2,7 +2,14 @@
 // compatible local Whisper websocket, Aico captures the mic, streams 16 kHz PCM,
 // and types the transcript into this widget's PTY prompt. When the websocket is
 // absent, the feature reports a warning and leaves the rest of the app working.
-export type TranscriptionStatus = 'idle' | 'listening' | 'processing' | 'error'
+import { sanitizeTerminalText } from '../shared/terminal-text'
+
+type TranscriptionStatus = 'idle' | 'listening' | 'processing' | 'error'
+
+// A transcript is typed into an interactive PTY, not uploaded as a document.
+// 4,096 Unicode code points is ample for dictation while bounding one malformed
+// or compromised websocket message before it reaches xterm/node-pty.
+export const VOICE_TRANSCRIPT_MAX_CODE_POINTS = 4096
 
 type VoiceError = 'not-allowed' | 'network' | 'voice-unavailable' | null
 
@@ -117,7 +124,12 @@ class WhisperVoiceClient {
     }
     if (!isTranscriptMessage(msg)) return
 
-    this.cumulative = this.cumulative ? `${this.cumulative} ${msg.data}` : msg.data
+    // Bound and neutralize the untrusted websocket payload before retaining it
+    // as renderer state. The PTY sink repeats this policy as defense in depth.
+    const transcript = sanitizeVoiceTranscript(msg.data)
+    this.cumulative = sanitizeVoiceTranscript(
+      this.cumulative ? `${this.cumulative} ${transcript}` : transcript,
+    )
     this.callbacks.onFinalTranscript(this.cumulative)
     this.cleanup(true)
     this.setStatus('idle')
@@ -179,9 +191,27 @@ export function transcriptDelta(prev: string, full: string): string {
   return delta.trim()
 }
 
+/**
+ * Neutralize terminal controls at the untrusted websocket -> PTY boundary.
+ * Printable punctuation remains editable, but CR/LF/ESC can never submit a
+ * command or inject a terminal escape sequence.
+ */
+export function sanitizeVoiceTranscript(text: string): string {
+  return Array.from(sanitizeTerminalText(text).trim())
+    .slice(0, VOICE_TRANSCRIPT_MAX_CODE_POINTS)
+    .join('')
+}
+
 function setVoiceStatus(el: HTMLElement | null, status: TranscriptionStatus): void {
   if (!el) return
   const active = status === 'listening' || status === 'processing'
+  const labels: Record<TranscriptionStatus, string> = {
+    idle: 'Voice dictation idle',
+    listening: 'Voice dictation listening',
+    processing: 'Voice dictation processing',
+    error: 'Voice dictation error',
+  }
+  el.setAttribute('aria-label', labels[status])
   el.classList.toggle('listening', status === 'listening')
   el.classList.toggle('processing', status === 'processing')
   el.hidden = !active
@@ -194,7 +224,7 @@ export async function wireVoice(): Promise<void> {
   let cumulative = ''
   const manager = new WhisperVoiceClient(wsUrl, {
     onFinalTranscript: (full) => {
-      const text = transcriptDelta(cumulative, full)
+      const text = sanitizeVoiceTranscript(transcriptDelta(cumulative, full))
       cumulative = full
       if (text) window.aico.pty.input(text)
     },

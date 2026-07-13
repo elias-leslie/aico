@@ -7,6 +7,7 @@ import {
   fetchProjects,
   invalidateProjectCache,
   listProjects,
+  listProjectsFresh,
   PERSONAL_WORKSPACE_ID,
   PERSONAL_WORKSPACE_NAME,
   personalWorkspaceRoot,
@@ -160,6 +161,47 @@ describe('cached catalog', () => {
   it('listProjects serves the refreshed list synchronously', async () => {
     await refreshProjects(async () => stOutput(dir))
     expect(listProjects().map((p) => p.id)).toEqual([PERSONAL_WORKSPACE_ID, 'aico'])
+  })
+
+  it('listProjectsFresh waits for the initial catalog instead of serving the seed', async () => {
+    let resolveRead!: (value: string) => void
+    const read = new Promise<string>((resolve) => {
+      resolveRead = resolve
+    })
+    let settled = false
+    const pending = listProjectsFresh(async () => read)
+    void pending.then(() => {
+      settled = true
+    })
+
+    await Promise.resolve()
+    expect(settled).toBe(false)
+    resolveRead(stOutput(dir))
+
+    await expect(pending).resolves.toEqual([
+      expect.objectContaining({ id: PERSONAL_WORKSPACE_ID }),
+      expect.objectContaining({ id: 'aico', root: dir }),
+    ])
+  })
+
+  it('listProjectsFresh shares an in-flight startup read', async () => {
+    let calls = 0
+    let resolveRead!: (value: string) => void
+    const read = new Promise<string>((resolve) => {
+      resolveRead = resolve
+    })
+    const exec = async () => {
+      calls++
+      return read
+    }
+
+    const first = listProjectsFresh(exec)
+    const second = listProjectsFresh(exec)
+    expect(calls).toBe(1)
+    resolveRead(stOutput(dir))
+
+    await Promise.all([first, second])
+    expect(calls).toBe(1)
   })
 
   it('a failed refresh keeps the previous list', async () => {

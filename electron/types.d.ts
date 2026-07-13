@@ -62,6 +62,8 @@ export interface AicoApi {
     listTmuxSessions(): Promise<{ id: string; label: string; source: string }[]>
     /** Attach an externally-owned tmux session as a widget. */
     attachTmuxSession(id: string): void
+    /** Snapshot ownership, tmux, and resource diagnostics for this session. */
+    sessionDiagnostics(): Promise<Record<string, unknown>>
     /** Move the focused widget to workspace `id` (respawns its pane there, same tool). */
     switchProject(id: string): void
     /** Hub view: surface every widget. */

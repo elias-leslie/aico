@@ -15,7 +15,8 @@ Aico is a Linux desktop companion for people who work with terminal AI tools. It
 ## What it does
 
 - **Floating terminal widgets** — one or more compact Electron windows, each running a tmux-backed terminal with a WebGL renderer (DOM fallback), configurable font, animated "eyes" that track your cursor, and a "thinking" halo while the agent is working.
-- **Persistent sessions** — each widget owns a named tmux session on a dedicated `aico` socket; closing a widget detaches (does not kill) so the same session reattaches across close/reopen/restart. Idle sessions are reaped after a TTL and orphaned sessions are re-adopted on launch.
+- **Persistent, owned sessions** — each widget owns stable server-generation, session, and pane IDs. Closing a widget only detaches, so work reattaches across close/reopen/restart; Aico never retires durable work merely because it is old or unattached. New panes carry widget/project/agent ownership metadata and run in a narrow per-pane scope. Historical sessions remain on the canonical `aico` socket and are preserved read-only from lifecycle mutation.
+- **Lifecycle diagnostics** — “Copy session diagnostics” reports the owning widget/project/session, tmux target, command, scope, age, CPU time, memory, swap, process/task counts, and containment warnings without broad process-name scans.
 - **Agent launcher menu** — start Claude Code, Codex, opencode, Gemini CLI, Pi, Hermes, or a plain shell from the same lantern menu, choosing the TUI and the workspace to launch it into; "Replace TUI" swaps the tool in the focused widget.
 - **Command palette & pinned controls** — a searchable command palette (`Ctrl+Shift+P`) and a pinned, drag-reorderable titlebar cluster, both driven by one action registry. Rename widgets inline.
 - **Context-mandate verification** — before launch, Aico checks that each agent family (Claude, Codex, Gemini, Hermes) is wired to its configured system-prompt/hooks and surfaces a green ✓ / red ⚠ badge. It verifies only — it never installs hooks for you.
@@ -54,6 +55,11 @@ Required:
 - Python 3.13+
 - [uv](https://docs.astral.sh/uv/) for the Python sidecar environment
 - `tmux`
+- a systemd 254+ user manager with cgroup v2 and a tmux build that assigns each pane
+  a `tmux-spawn-<uuid>.scope`
+- user lingering (`loginctl show-user "$UID" -p Linger`) so the durable tmux
+  service and pane scopes survive a normal graphical logout; the source
+  installer enables and verifies it
 - common native build tools for `node-pty` (`python3`, `make`, `g++` on Debian/Ubuntu)
 - Electron runtime libraries (`libgtk-3-0`, `libnss3`, `libatk1.0-0`, `libatk-bridge2.0-0`, `libcups2`, `libgbm1`, `libasound2t64`, and related X11/desktop libraries on Debian/Ubuntu)
 
@@ -91,9 +97,8 @@ scripts/aico-launch.sh
 
 The installer performs a source install in the current checkout:
 
-- `npm install`
-- `uv venv --python 3.13`
-- `uv pip install -e '.[dev]'`
+- `npm ci`
+- `uv sync --frozen --python 3.13 --extra dev`
 - installs a desktop launcher at `~/.local/share/applications/aico.desktop`
 - optionally installs GNOME capture hotkeys when `gsettings` is available
 - configures Electron's Linux `chrome-sandbox` helper when passwordless `sudo` is available, or prints the manual commands
@@ -118,6 +123,7 @@ The source install above runs the sidecar from a `uv` virtualenv. To produce a
 no Python, `uv`, or `.venv` at runtime — build a distributable from a dev checkout:
 
 ```bash
+uv sync --frozen --python 3.13 --extra dev --extra release
 npm run dist
 ```
 
@@ -156,6 +162,13 @@ Important variables:
 | `AICO_VOICE_HOTKEY` | `CommandOrControl+Shift+M` | Electron global shortcut for push-to-talk toggle. |
 
 Aico intentionally does not store third-party AI provider secrets. Authenticate each AI CLI with its own documented login/config flow.
+
+New durable sessions fail closed if user linger or narrow tmux pane containment
+cannot be verified. Existing sessions are preserved. To enable linger manually:
+
+```bash
+sudo loginctl enable-linger "$USER"
+```
 
 ## Test, lint, typecheck, build
 
@@ -207,16 +220,18 @@ See [`extension/README.md`](extension/README.md) for details.
 
 ## Mobile access
 
-Every Aico widget is a plain tmux session (`aico-<id>` on the dedicated `aico` socket), so any tmux-capable client on the same machine can attach to it — no Aico-side server, auth, or port exposure needed. In particular, [A-term](../a-term) already lists Aico widgets as an external session source ("Aico") and attaches to them over its own authenticated WebSocket, so opening the A-term PWA on a phone gives live, two-way access to every running widget: output mirrors the desktop in real time and keystrokes feed the same session.
+Every Aico widget is a plain `aico-<id>` tmux session on a catalogued absolute socket, so any tmux-capable client on the same machine can attach — no Aico-side server, auth, or port exposure is needed. [A-term](../a-term) reads Aico's server catalog in SQLite read-only mode, preserves the historical `aico` source, and exposes managed generations with generation-qualified identities over its authenticated WebSocket. Opening the A-term PWA on a phone therefore gives live, two-way access to both historical and newly managed widgets.
 
-What you get on mobile is the terminal itself; Aico's desktop chrome (eyes, lantern menu, capture gestures) stays on the desktop. Without A-term, `ssh` + `tmux -L aico attach -t aico-<id>` from any terminal app works the same way.
+What you get on mobile is the terminal itself; Aico's desktop chrome (eyes, lantern menu, capture gestures) stays on the desktop. Without A-term, copy **Session diagnostics** and use its exact `tmux.socket` and stable session target with `tmux -S <absolute-socket> attach -t <session>`. Historical lifecycle-v0 sessions still use `/tmp/tmux-$(id -u)/aico`. The absolute path is deliberate: it cannot be redirected by an inherited `TMUX_TMPDIR`.
 
 ## Architecture
 
 ```text
 Electron main process
   ├─ owns widget windows, global shortcuts, tray, tmux lifecycle, and sidecar lifecycle
-  ├─ attaches each widget to an isolated tmux server/socket
+  ├─ adopts `/tmp/tmux-<uid>/aico` read-only and provisions managed generations on private absolute sockets
+  ├─ asks the user manager to spawn each tmux server in a clean-FD durable service; each pane gets its own scope
+  ├─ watches generation-specific `pane-exited` events so detached failures reconcile while Aico stays open
   └─ starts Python sidecar and health-checks it
 
 Electron renderer
@@ -231,6 +246,10 @@ Python sidecar
 ```
 
 Aico degrades when optional tools are missing: unavailable agent CLIs simply fail in their pane, missing `st` project/capture tooling leaves Personal Workspace and core widgets working, and missing voice websocket disables dictation only.
+
+For the process-containment design, regression harness, and targeted recovery
+procedure, see [the July 2026 incident report](docs/INCIDENT-2026-07-PROCESS-ESCAPES.md)
+and [lifecycle harness guide](docs/LIFECYCLE_HARNESS.md).
 
 ## Current limitations
 

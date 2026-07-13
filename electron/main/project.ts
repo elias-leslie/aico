@@ -137,11 +137,23 @@ export function fetchProjectRoot(id: string, exec: Exec = runSt): string | null 
 // background refresh and consumers repaint via onProjectsRefreshed.
 
 const PROJECT_CACHE_TTL_MS = 15_000
+// `st` is an optional external process. Once a renderer waits for the first
+// catalog load, an unbounded child would also leave that window's chrome
+// initialization waiting forever. Five seconds is deliberately generous for
+// the local metadata read while still bounding that intrinsic subprocess
+// failure mode.
+const PROJECT_REFRESH_TIMEOUT_MS = 5_000
 
 type ExecAsync = (cmd: string, args: string[]) => Promise<string>
 const execFileAsync = promisify(execFile)
 const runStAsync: ExecAsync = async (cmd, args) =>
-  (await execFileAsync(cmd, args, { encoding: 'utf8' })).stdout
+  (
+    await execFileAsync(cmd, args, {
+      encoding: 'utf8',
+      timeout: PROJECT_REFRESH_TIMEOUT_MS,
+      killSignal: 'SIGKILL',
+    })
+  ).stdout
 
 let cachedProjects: ProjectInfo[] = [personalWorkspaceProject()]
 let cacheFetchedAt = 0
@@ -186,6 +198,17 @@ export function refreshProjects(exec: ExecAsync = runStAsync): Promise<void> {
  */
 export function listProjects(): ProjectInfo[] {
   if (Date.now() - cacheFetchedAt > PROJECT_CACHE_TTL_MS) void refreshProjects()
+  return cachedProjects
+}
+
+/**
+ * Await a stale/in-flight catalog refresh before returning the picker snapshot.
+ * Renderer initialization is already asynchronous, so unlike hot-path
+ * `listProjects()` callers it can wait for the initial `st` result and avoid a
+ * permanently Personal-Workspace-only menu caused by the startup race.
+ */
+export async function listProjectsFresh(exec: ExecAsync = runStAsync): Promise<ProjectInfo[]> {
+  if (Date.now() - cacheFetchedAt > PROJECT_CACHE_TTL_MS) await refreshProjects(exec)
   return cachedProjects
 }
 

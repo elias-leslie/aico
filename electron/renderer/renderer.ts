@@ -12,6 +12,7 @@ import {
   fontLoadFaceFor,
   parseTerminalFontSettings,
 } from '../shared/font-settings'
+import { AICO_TOAST_EVENT, type AicoToastDetail } from './actions'
 import { initControlSurface } from './control-surface'
 import { mouseReportingActive, setupMouseShim } from './mouse-shim'
 import { ScrollbackOverlay } from './scrollback-overlay'
@@ -39,7 +40,11 @@ const term = new Terminal({
   // Scrollback lives in tmux history (surfaced via the overlay), not here — the
   // live view is tmux's alternate screen, which has no scrollback of its own.
   scrollback: 0,
-  cursorBlink: true,
+  // A blinking xterm cursor kept every large transparent widget repainting even
+  // when its session was idle; three visible 4K-scale windows held Chromium's
+  // GPU process near one-third of a core. A static cursor preserves location
+  // without creating a permanent render loop.
+  cursorBlink: false,
   theme,
   allowProposedApi: true,
 })
@@ -264,24 +269,31 @@ function wireEyes(): void {
 }
 wireEyes()
 
-// Click-to-context selection toast: a frosted pill (discriminator chip + short
-// snippet) that flashes on this widget when an indicated selection is delivered
-// here, then fades. The capture itself already landed at the prompt.
+// Shared text-only status toast: selection delivery and local action confirmation
+// both use this frosted pill. Content is always assigned with textContent.
 function wireSelectionToast(): void {
   const toast = document.querySelector<HTMLElement>('.selection-toast')
   const chip = toast?.querySelector<HTMLElement>('.chip')
   const snip = toast?.querySelector<HTMLElement>('.snip')
   if (!toast || !chip || !snip) return
   let hideTimer: number | undefined
-  window.aico.selection.onToast(({ kind, snippet }) => {
+
+  const show = ({ kind, snippet }: AicoToastDetail): void => {
+    // Expose the live region before changing its text. Updating a subtree while
+    // it is `hidden` is not announced consistently by assistive technology.
+    toast.hidden = false
     chip.textContent = kind
     snip.textContent = snippet.slice(0, 40) // textContent, never innerHTML (untrusted)
-    toast.hidden = false
     // Reflow so the .show transition replays on a back-to-back capture.
     void toast.offsetWidth
     toast.classList.add('show')
     if (hideTimer) clearTimeout(hideTimer)
     hideTimer = window.setTimeout(() => toast.classList.remove('show'), 2500)
+  }
+
+  window.aico.selection.onToast(show)
+  window.addEventListener(AICO_TOAST_EVENT, (event) => {
+    show((event as CustomEvent<AicoToastDetail>).detail)
   })
   toast.addEventListener('transitionend', () => {
     if (!toast.classList.contains('show')) toast.hidden = true
@@ -380,8 +392,8 @@ fit.fit()
 
 // Scroll-back overlay: wheel-up on the live terminal opens a read-only xterm
 // view of tmux history. It stays on the same xterm/WebGL renderer path as the
-// live terminal, but its data is prefetched in bounded pages so wheel-up does
-// not synchronously capture and write the entire tmux history.
+// live terminal and loads bounded pages on demand so wheel-up does not capture
+// and write the entire tmux history.
 const overlay = new ScrollbackOverlay(
   {
     theme,
@@ -393,25 +405,6 @@ const overlay = new ScrollbackOverlay(
   },
   host,
 )
-
-let scrollbackPrefetchTimer: number | undefined
-let lastScrollbackPrefetchAt = 0
-const SCROLLBACK_PREFETCH_MIN_INTERVAL_MS = 5000
-
-function scheduleScrollbackPrefetch(delayMs = 700): void {
-  if (scrollbackPrefetchTimer) clearTimeout(scrollbackPrefetchTimer)
-  scrollbackPrefetchTimer = window.setTimeout(() => {
-    const sinceLastPrefetch = Date.now() - lastScrollbackPrefetchAt
-    if (sinceLastPrefetch < SCROLLBACK_PREFETCH_MIN_INTERVAL_MS) {
-      scheduleScrollbackPrefetch(SCROLLBACK_PREFETCH_MIN_INTERVAL_MS - sinceLastPrefetch)
-      return
-    }
-    lastScrollbackPrefetchAt = Date.now()
-    void overlay.prefetch().finally(() => {
-      lastScrollbackPrefetchAt = Date.now()
-    })
-  }, delayMs)
-}
 
 // Renderer -> PTY keystrokes; PTY -> renderer output. PTY output also drives the
 // "thinking" halo heuristic: pulse while output flows, settle ~0.5s after it
@@ -435,7 +428,6 @@ term.onData((data) => window.aico.pty.input(data))
 window.aico.pty.onData((data) => {
   term.write(data)
   pokeThinking()
-  scheduleScrollbackPrefetch()
 })
 
 // (Re)attach the tmux session for this window at the current viewport size.
@@ -443,7 +435,6 @@ window.aico.pty.onData((data) => {
 window.aico.pty.start({ cols: term.cols, rows: term.rows })
 terminalLayoutReady = true
 scheduleTerminalLayoutFit()
-scheduleScrollbackPrefetch(1000)
 
 // Debounce resizes: a burst of observer callbacks (drag-resize, maximize) each
 // reflows tmux, and racing reflows are a prime cause of duplicated/garbled

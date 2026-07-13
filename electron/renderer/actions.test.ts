@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   ACTIONS,
+  AICO_TOAST_EVENT,
+  copySessionDiagnostics,
   DEFAULT_PINS,
   findAction,
   isPinnable,
@@ -11,6 +13,11 @@ import {
   setTuiActions,
   togglePin,
 } from './actions'
+
+afterEach(() => {
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+})
 
 describe('action registry', () => {
   it('has unique ids and shortcuts', () => {
@@ -36,7 +43,15 @@ describe('action registry', () => {
     expect(isPinnable(findAction('grab-image') as never)).toBe(true)
     expect(isPinnable(findAction('switch-project') as never)).toBe(true)
     expect(isPinnable(findAction('attach-tmux') as never)).toBe(true)
+    expect(isPinnable(findAction('copy-session-diagnostics') as never)).toBe(true)
     expect(isPinnable(findAction('copy') as never)).toBe(false)
+  })
+
+  it('registers session diagnostics as a runnable, discoverable action', () => {
+    const action = findAction('copy-session-diagnostics')
+
+    expect(action?.label).toBe('Copy session diagnostics')
+    expect(typeof action?.run).toBe('function')
   })
 
   it('seeds defaults that are all pinnable', () => {
@@ -77,6 +92,52 @@ describe('action registry', () => {
     const a = findAction('tmux:default:a-term-demo')
     expect(typeof a?.run).toBe('function')
     expect(a && isPinnable(a)).toBe(true)
+  })
+})
+
+describe('copySessionDiagnostics', () => {
+  it('copies pretty JSON and publishes a confirmation event', async () => {
+    const diagnostics = {
+      capturedAt: '2026-07-13T12:00:00.000Z',
+      ownership: { widgetId: 'w-1', scopeUnit: 'aico-pane-w-1.scope' },
+      warnings: [],
+    }
+    const sessionDiagnostics = vi.fn().mockResolvedValue(diagnostics)
+    const write = vi.fn()
+    const dispatchEvent = vi.fn()
+    vi.stubGlobal('window', {
+      aico: { actions: { sessionDiagnostics }, clipboard: { write } },
+      dispatchEvent,
+    })
+
+    await copySessionDiagnostics()
+
+    expect(sessionDiagnostics).toHaveBeenCalledOnce()
+    expect(write).toHaveBeenCalledWith(JSON.stringify(diagnostics, null, 2))
+    const event = dispatchEvent.mock.calls[0]?.[0] as CustomEvent
+    expect(event.type).toBe(AICO_TOAST_EVENT)
+    expect(event.detail).toEqual({ kind: 'Copied', snippet: 'Session diagnostics' })
+  })
+
+  it('does not overwrite the clipboard when diagnostics fail', async () => {
+    const error = new Error('IPC failed')
+    const write = vi.fn()
+    const dispatchEvent = vi.fn()
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.stubGlobal('window', {
+      aico: {
+        actions: { sessionDiagnostics: vi.fn().mockRejectedValue(error) },
+        clipboard: { write },
+      },
+      dispatchEvent,
+    })
+
+    await copySessionDiagnostics()
+
+    expect(write).not.toHaveBeenCalled()
+    const event = dispatchEvent.mock.calls[0]?.[0] as CustomEvent
+    expect(event.type).toBe(AICO_TOAST_EVENT)
+    expect(event.detail).toEqual({ kind: 'Error', snippet: 'Could not copy session diagnostics' })
   })
 })
 

@@ -1,13 +1,13 @@
-/* Lantern widget chrome: frameless transparent window -> solid --rim shell
-   wrapping a solid --ink terminal. The shell is opaque (legible regardless of
-   compositor blur support); the transparent window margin leaves room for the
-   soft drop shadow and the breathing amber halo to render beyond the shell edge. */
+/* Lantern widget chrome: a frameless opaque native window containing the
+   --rim shell and solid --ink terminal. Keeping the 8px frame margin opaque
+   lets the compositor use an opaque region instead of alpha-compositing every
+   large terminal repaint merely to preserve cosmetic rounded outer corners. */
 
 html,
 body {
   margin: 0;
   height: 100%;
-  background: transparent;
+  background: var(--ink);
   overflow: hidden;
 }
 body {
@@ -363,26 +363,12 @@ body.thinking {
   opacity: 0.8;
 }
 
-/* Motion: 3s sinusoidal breathing on the halo when thinking. */
-@keyframes breathe {
-  0%,
-  100% {
-    opacity: 0.15;
-  }
-  50% {
-    opacity: 0.45;
-  }
-}
+/* Keep active status static. Animating opacity on this full-window transparent
+   surface forced Chromium to composite every large widget continuously; three
+   visible 4K-scale widgets held the shared GPU process near half a core. Color
+   still distinguishes active (amber) from ready (green) without a render loop. */
 body.thinking .halo {
-  animation: breathe 3s ease-in-out infinite;
-}
-
-/* prefers-reduced-motion: no pulse — a static, brighter amber ring instead. */
-@media (prefers-reduced-motion: reduce) {
-  body.thinking .halo {
-    animation: none;
-    opacity: 0.42;
-  }
+  opacity: 0.42;
 }
 
 /* Click-to-context selection toast: a frosted pill docked low-center on the

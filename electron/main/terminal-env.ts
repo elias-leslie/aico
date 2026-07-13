@@ -6,6 +6,12 @@ export function terminalClientEnv(base: NodeJS.ProcessEnv = process.env): Record
   }
 
   delete env.NO_COLOR
+  // Every Aico client names its private socket explicitly. Inheriting a parent
+  // pane's nesting markers can make tmux reject attach/create operations and
+  // obscures which server owns a process when Aico is launched from a terminal.
+  delete env.TMUX
+  delete env.TMUX_PANE
+  delete env.TMUX_TMPDIR
   env.TERM = 'xterm-256color'
   env.COLORTERM = 'truecolor'
   env.CLICOLOR = env.CLICOLOR || '1'

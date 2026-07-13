@@ -71,16 +71,14 @@ describe('registry', () => {
     expect(defaultTui().slug).toBe('claude-code')
   })
 
-  it('launches the built-in agent TUIs permission-bypassed by default', () => {
+  it('keeps the built-in agent TUIs on their normal approval policies', () => {
     registerBuiltinTuis()
     const claude = getTui('claude-code')
     const codex = getTui('codex')
     expect(claude && launchLine(claude)).toBe(
-      'env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 claude --dangerously-skip-permissions',
+      'env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 claude',
     )
-    expect(codex && launchLine(codex)).toBe(
-      'env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 codex --dangerously-bypass-approvals-and-sandbox',
-    )
+    expect(codex && launchLine(codex)).toBe('env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 codex')
   })
 
   it('rejects duplicate slugs', () => {
@@ -114,9 +112,13 @@ describe('launchLine', () => {
 })
 
 describe('paneCommand', () => {
+  it('replaces the verified gate with the real interactive shell for a shell widget', () => {
+    expect(paneCommand(null)).toBe(`exec "\${SHELL:-/bin/bash}"`)
+  })
+
   it('runs the TUI then execs an interactive shell so the pane survives its exit', () => {
     expect(paneCommand('env -u NO_COLOR claude')).toBe(
-      `env -u NO_COLOR claude; exec "\${SHELL:-/bin/bash}"`,
+      `exec /bin/bash --noprofile --norc -c 'printf '\\''\\033[3J\\033[H\\033[2J'\\''; env -u NO_COLOR claude; exec "\${SHELL:-/bin/bash}"'`,
     )
   })
 })

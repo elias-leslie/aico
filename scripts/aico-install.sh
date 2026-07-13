@@ -5,7 +5,38 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
-npm install
+require_durable_user_manager() {
+  if ! command -v systemd-run >/dev/null 2>&1 ||
+    ! command -v systemctl >/dev/null 2>&1 ||
+    ! command -v loginctl >/dev/null 2>&1; then
+    echo "Aico requires a systemd user manager (systemd-run, systemctl, loginctl)." >&2
+    exit 1
+  fi
+  if [ ! -f /sys/fs/cgroup/cgroup.controllers ]; then
+    echo "Aico requires cgroup v2 for exact per-session process cleanup." >&2
+    exit 1
+  fi
+
+  local linger
+  linger="$(loginctl show-user "${UID}" --property=Linger --value 2>/dev/null || true)"
+  if [ "$linger" != yes ]; then
+    echo "Aico: enabling user linger so durable tmux sessions survive graphical logout..."
+    if ! loginctl enable-linger "${USER}"; then
+      echo "Enable it, then rerun the installer: sudo loginctl enable-linger ${USER}" >&2
+      exit 1
+    fi
+    linger="$(loginctl show-user "${UID}" --property=Linger --value 2>/dev/null || true)"
+  fi
+  if [ "$linger" != yes ]; then
+    echo "Aico cannot guarantee logout durability because user linger is disabled." >&2
+    echo "Enable it, then rerun the installer: sudo loginctl enable-linger ${USER}" >&2
+    exit 1
+  fi
+}
+
+require_durable_user_manager
+
+npm ci
 # Some clean hosts have npm configured to skip lifecycle scripts. Make the
 # runtime native package explicit, then verify Electron's downloaded binary
 # exists; if the upstream installer leaves only package files behind, fetch the
@@ -93,8 +124,7 @@ configure_electron_suid_sandbox() {
 }
 
 configure_electron_suid_sandbox
-uv venv --python 3.13
-uv pip install -e '.[dev]'
+uv sync --frozen --python 3.13 --extra dev
 
 mkdir -p "$HOME/.local/share/applications"
 sed "s#__PROJECT_ROOT__#$REPO#g" scripts/aico.desktop >"$HOME/.local/share/applications/aico.desktop"

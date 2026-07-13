@@ -34,7 +34,7 @@ jobs:
       - name: Install Node dependencies
         run: npm ci
       - name: Install sidecar build dependencies
-        run: uv venv --python 3.13 && uv pip install -e '.[dev]' pyinstaller
+        run: uv sync --frozen --python 3.13 --extra dev --extra release
       - name: Build AppImage
         # AppImage tooling runs without FUSE on CI runners via extract-and-run.
         env:

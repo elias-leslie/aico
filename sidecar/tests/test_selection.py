@@ -130,10 +130,10 @@ class TestSelectionSend:
 
     def test_events_route_registered(self, tmp_path) -> None:
         # Streaming SSE can't be drained by the sync TestClient without blocking on
-        # the keepalive loop, so assert the route is mounted rather than consuming it.
+        # the keepalive loop. Assert against FastAPI's public OpenAPI surface rather
+        # than app.routes: FastAPI 0.139 lazily nests included routers there.
         app = create_app(Settings(state_dir=tmp_path))
-        paths = {getattr(r, "path", None) for r in app.routes}
-        assert "/selection/events" in paths
+        assert "/selection/events" in app.openapi()["paths"]
 
 
 class TestEventHub:

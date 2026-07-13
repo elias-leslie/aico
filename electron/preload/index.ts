@@ -78,6 +78,9 @@ contextBridge.exposeInMainWorld('aico', {
       ipcRenderer.invoke('tmux:list-attachable'),
     /** Attach an externally-owned tmux session as a widget. */
     attachTmuxSession: (id: string) => ipcRenderer.send('tmux:attach', id),
+    /** Snapshot ownership, tmux, and resource diagnostics for the focused session. */
+    sessionDiagnostics: (): Promise<Record<string, unknown>> =>
+      ipcRenderer.invoke('session:diagnostics'),
     /** Move the focused widget to workspace `id` (respawns its pane there, same tool). */
     switchProject: (id: string) => ipcRenderer.send('widget:switch-project', id),
     /** Hub view: surface every widget. */
