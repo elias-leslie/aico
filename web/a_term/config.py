@@ -90,6 +90,7 @@ class Settings(BaseSettings):
 
     # Optional integrations
     summitflow_api_base: str = ""
+    a_term_aico_state_dir: Path | None = None
 
     # Diagnostics & recording
     diagnostics_enabled: bool = False

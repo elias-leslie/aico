@@ -2,19 +2,26 @@
 
 from __future__ import annotations
 
+import os
 import re
+import sqlite3
 import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Lock
 
+from ...config import get_settings
 from ...logging_config import get_logger
-from .core import TMUX_COMMAND_TIMEOUT
+from .core import TMUX_COMMAND_TIMEOUT, validate_socket_name
 
 logger = get_logger(__name__)
 
 _EXTERNAL_AGENT_TOKENS = ("claude", "codex", "opencode", "aider", "gemini", "hermes", "pi")
+_AICO_SERVER_ID_PATTERN = re.compile(r"^[0-9a-f]{8,64}$")
+_AICO_DB_FILENAME = "aico.db"
+_AICO_MANAGED_SOCKET_DIR = "tmux"
+_AICO_MANAGED_SOCKET_FILENAME = "server.sock"
 
 _EXTERNAL_ATTACH_LOCK = Lock()
 _EXTERNAL_ATTACH_STATES: dict[str, _ExternalAttachState] = {}
@@ -54,6 +61,117 @@ _EXTERNAL_TMUX_SOURCES = (
         include_shell=True,
     ),
 )
+
+
+def _aico_state_dir() -> Path | None:
+    """Return Aico's configured state directory, or fail closed.
+
+    Aico itself accepts ``AICO_STATE_DIR`` and otherwise uses
+    ``~/.local/state/aico``. ``A_TERM_AICO_STATE_DIR`` lets the A-Term service
+    point at a non-default Aico instance without changing Aico's environment.
+    """
+    configured = (
+        os.environ.get("A_TERM_AICO_STATE_DIR")
+        or os.environ.get("AICO_STATE_DIR")
+        or get_settings().a_term_aico_state_dir
+    )
+    state_dir = (
+        Path(configured).expanduser()
+        if configured
+        else Path.home() / ".local" / "state" / "aico"
+    )
+    if not state_dir.is_absolute():
+        logger.debug("aico_tmux_catalog_state_dir_rejected", path=str(state_dir))
+        return None
+    return state_dir
+
+
+def _catalogued_aico_tmux_sources() -> tuple[ExternalTmuxSource, ...]:
+    """Read active Aico managed-server generations without taking write locks.
+
+    Catalog rows identify candidate sockets; a successful tmux ``list-panes``
+    response remains the liveness authority. Rows are accepted only when their
+    id and socket path match Aico's generation-owned directory layout.
+    """
+    state_dir = _aico_state_dir()
+    if state_dir is None:
+        return ()
+    database_path = state_dir / _AICO_DB_FILENAME
+    if not database_path.is_file():
+        return ()
+
+    connection: sqlite3.Connection | None = None
+    try:
+        connection = sqlite3.connect(
+            f"{database_path.as_uri()}?mode=ro",
+            uri=True,
+            timeout=0.0,
+            isolation_level=None,
+        )
+        connection.execute("PRAGMA query_only = ON")
+        if connection.execute(
+            "SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'tmux_servers'"
+        ).fetchone() is None:
+            return ()
+        rows = connection.execute(
+            """
+            SELECT id, socket_path
+            FROM tmux_servers
+            WHERE kind = 'managed' AND phase = 'active'
+            ORDER BY created_at ASC, id ASC
+            """
+        ).fetchall()
+    except (OSError, sqlite3.Error, ValueError) as error:
+        # A missing old schema, a concurrent exclusive schema migration, or an
+        # unavailable state directory must not break external-session listing.
+        logger.debug("aico_tmux_catalog_unavailable", path=str(database_path), error=str(error))
+        return ()
+    finally:
+        if connection is not None:
+            connection.close()
+
+    sources: list[ExternalTmuxSource] = []
+    for raw_server_id, raw_socket_path in rows:
+        if not isinstance(raw_server_id, str) or not _AICO_SERVER_ID_PATTERN.fullmatch(
+            raw_server_id
+        ):
+            logger.debug("aico_tmux_catalog_row_rejected", reason="server_id")
+            continue
+        if not isinstance(raw_socket_path, str):
+            logger.debug(
+                "aico_tmux_catalog_row_rejected",
+                server=raw_server_id,
+                reason="socket_type",
+            )
+            continue
+        expected_socket_path = str(
+            state_dir
+            / _AICO_MANAGED_SOCKET_DIR
+            / raw_server_id
+            / _AICO_MANAGED_SOCKET_FILENAME
+        )
+        if raw_socket_path != expected_socket_path or not validate_socket_name(raw_socket_path):
+            logger.debug(
+                "aico_tmux_catalog_row_rejected",
+                server=raw_server_id,
+                reason="socket_path",
+            )
+            continue
+        sources.append(
+            ExternalTmuxSource(
+                id=f"aico-{raw_server_id}",
+                label=f"Aico ({raw_server_id[:8]})",
+                socket_name=raw_socket_path,
+                session_prefix="aico-",
+                include_shell=True,
+            )
+        )
+    return tuple(sources)
+
+
+def _external_tmux_sources() -> tuple[ExternalTmuxSource, ...]:
+    """Return stable legacy sources plus current Aico server generations."""
+    return (*_EXTERNAL_TMUX_SOURCES, *_catalogued_aico_tmux_sources())
 
 
 def _pkg() -> object:
@@ -103,7 +221,7 @@ def list_external_tmux_sessions() -> list[dict[str, object]]:
     """List externally created tmux sessions that A-Term can attach to."""
     pkg = _pkg()
     sessions: dict[str, dict[str, object]] = {}
-    for source in _EXTERNAL_TMUX_SOURCES:
+    for source in _external_tmux_sources():
         list_args = [
             "list-panes",
             "-a",

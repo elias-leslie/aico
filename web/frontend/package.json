@@ -48,16 +48,5 @@
     "typescript": "5",
     "vite": "7.3.5",
     "vitest": "^4.1.8"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild",
-      "sharp"
-    ],
-    "overrides": {
-      "picomatch": ">=4.0.4",
-      "postcss": ">=8.5.10",
-      "ws": ">=8.20.1"
-    }
   }
 }

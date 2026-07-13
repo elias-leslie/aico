@@ -13,6 +13,8 @@ TMUX_COMMAND_TIMEOUT = 10  # seconds for tmux subprocess calls
 TMUX_SESSION_PREFIX = "summitflow-"
 _SESSION_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_\-]+$")
 _SOCKET_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_\-]+$")
+_SOCKET_PATH_SEGMENT_PATTERN = re.compile(r"^[a-zA-Z0-9_.\-]+$")
+_MAX_UNIX_SOCKET_PATH_BYTES = 107
 
 # Secrets filtered from tmux session environments
 FILTERED_ENV_VARS = {
@@ -44,19 +46,36 @@ def validate_session_name(name: str) -> bool:
 
 
 def validate_socket_name(name: str | None) -> bool:
-    """Validate a tmux socket name used with ``tmux -L``."""
+    """Validate a tmux socket selector used with ``tmux -L`` or ``tmux -S``.
+
+    Named sockets retain the original public behavior. Absolute paths support
+    catalogued Aico server generations, but only the conservative path syntax
+    accepted by Aico itself is allowed.
+    """
     if name is None:
         return True
-    return bool(_SOCKET_NAME_PATTERN.match(name)) and len(name) < 128
+    if name.startswith("/"):
+        try:
+            if len(name.encode()) > _MAX_UNIX_SOCKET_PATH_BYTES:
+                return False
+        except UnicodeEncodeError:
+            return False
+        segments = name[1:].split("/")
+        return bool(segments) and all(
+            segment not in {"", ".", ".."}
+            and bool(_SOCKET_PATH_SEGMENT_PATTERN.fullmatch(segment))
+            for segment in segments
+        )
+    return bool(_SOCKET_NAME_PATTERN.fullmatch(name)) and len(name) < 128
 
 
 def build_tmux_command(args: list[str], socket_name: str | None = None) -> list[str]:
-    """Build a tmux command for the default server or a named socket."""
+    """Build a tmux command for the default, named, or absolute-path socket."""
     if not validate_socket_name(socket_name):
         raise TmuxError(f"Invalid tmux socket name: {str(socket_name)[:50]}")
     cmd = ["tmux"]
     if socket_name:
-        cmd.extend(["-L", socket_name])
+        cmd.extend(["-S" if socket_name.startswith("/") else "-L", socket_name])
     cmd.extend(args)
     return cmd
 

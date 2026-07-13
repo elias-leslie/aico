@@ -125,3 +125,21 @@ def test_config_maintenance_and_pool_settings_from_env() -> None:
     assert cfg.MAINTENANCE_INTERVAL_SECONDS == 120
     assert cfg.MAINTENANCE_SESSION_PURGE_DAYS == 14
     assert cfg.UPLOAD_MAX_AGE_SECONDS == 1800
+
+
+def test_config_aico_state_directory_from_env() -> None:
+    """Aico catalog discovery can follow a non-default state directory."""
+    with patch.dict(
+        "os.environ",
+        {
+            "DATABASE_URL": "postgresql://test:test@localhost/test",
+            "A_TERM_AICO_STATE_DIR": "/tmp/aico-isolated-state",
+        },
+        clear=False,
+    ):
+        import a_term.config as cfg
+
+        cfg.get_settings.cache_clear()
+        importlib.reload(cfg)
+        assert str(cfg.get_settings().a_term_aico_state_dir) == "/tmp/aico-isolated-state"
+    cfg.get_settings.cache_clear()

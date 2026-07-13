@@ -10,6 +10,7 @@ from a_term.utils import tmux
 from a_term.utils.tmux import (
     TMUX_SESSION_PREFIX,
     apply_external_attach_options,
+    build_tmux_command,
     create_tmux_session,
     get_cursor_position,
     get_external_agent_tmux_session,
@@ -21,6 +22,7 @@ from a_term.utils.tmux import (
     reset_tmux_window_size_policy,
     restore_external_attach_options,
     validate_session_name,
+    validate_socket_name,
 )
 from a_term.utils.tmux.sessions import (
     _build_tmux_scope_env,
@@ -47,6 +49,44 @@ class TestValidateSessionName:
         assert validate_session_name("has space") is False
         assert validate_session_name("has;semicolon") is False
         assert validate_session_name("a" * 256) is False
+
+
+class TestValidateSocketName:
+    def test_accepts_named_and_safe_absolute_sockets(self) -> None:
+        assert validate_socket_name("aico") is True
+        assert validate_socket_name("/home/testuser/.local/state/aico/tmux/abc12345/server.sock")
+
+    @pytest.mark.parametrize(
+        "socket_name",
+        [
+            "relative/path",
+            "aico\n",
+            "/tmp/../aico.sock",
+            "/tmp//aico.sock",
+            "/tmp/aico socket",
+            "/tmp/aico:semicolon",
+            "/" + "a" * 107,
+        ],
+    )
+    def test_rejects_unsafe_socket_selectors(self, socket_name: str) -> None:
+        assert validate_socket_name(socket_name) is False
+
+    def test_build_tmux_command_preserves_named_socket_compatibility(self) -> None:
+        assert build_tmux_command(["list-sessions"], "aico") == [
+            "tmux",
+            "-L",
+            "aico",
+            "list-sessions",
+        ]
+
+    def test_build_tmux_command_uses_absolute_socket_path(self) -> None:
+        socket_path = "/home/testuser/.local/state/aico/tmux/abc12345/server.sock"
+        assert build_tmux_command(["list-sessions"], socket_path) == [
+            "tmux",
+            "-S",
+            socket_path,
+            "list-sessions",
+        ]
 
 
 class TestSessionNameHelpers:
@@ -96,6 +136,7 @@ def test_list_external_agent_tmux_sessions_discovers_non_a_term_agent_sessions()
                 ),
             ),
         ),
+        patch("a_term.utils.tmux.external._catalogued_aico_tmux_sources", return_value=()),
         patch("a_term.utils.tmux.subprocess.run") as mock_subprocess,
     ):
         mock_subprocess.side_effect = [
@@ -141,6 +182,7 @@ def test_list_external_agent_tmux_sessions_discovers_aico_socket_sessions() -> N
 
     with (
         patch("a_term.utils.tmux.run_tmux_command", side_effect=fake_run_tmux_command),
+        patch("a_term.utils.tmux.external._catalogued_aico_tmux_sources", return_value=()),
         patch("a_term.utils.tmux.subprocess.run") as mock_subprocess,
     ):
         mock_subprocess.side_effect = [
