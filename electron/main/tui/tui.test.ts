@@ -71,14 +71,22 @@ describe('registry', () => {
     expect(defaultTui().slug).toBe('claude-code')
   })
 
-  it('keeps the built-in agent TUIs on their normal approval policies', () => {
+  it('launches supported agent TUIs with explicit no-prompt execution defaults', () => {
     registerBuiltinTuis()
     const claude = getTui('claude-code')
     const codex = getTui('codex')
+    const gemini = getTui('gemini')
+    const pi = getTui('pi')
     expect(claude && launchLine(claude)).toBe(
-      'env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 claude',
+      'env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 claude --dangerously-skip-permissions',
     )
-    expect(codex && launchLine(codex)).toBe('env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 codex')
+    expect(codex && launchLine(codex)).toBe(
+      'env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 codex --yolo --dangerously-bypass-hook-trust',
+    )
+    expect(gemini && launchLine(gemini)).toBe(
+      'env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 gemini --yolo --skip-trust',
+    )
+    expect(pi && launchLine(pi)).toBe('env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 pi --approve')
   })
 
   it('rejects duplicate slugs', () => {

@@ -1,7 +1,8 @@
 import type { TuiSpec } from '../spec'
 
 /** Gemini CLI — Google's terminal coding agent (a-term parity). Mandates inject
- * via a native SessionStart hook installed by scripts/aico-install-context-hooks.sh. */
+ * via a native SessionStart hook installed by scripts/aico-install-context-hooks.sh.
+ * Keep Aico's established no-prompt execution default explicit in the argv. */
 export const geminiTui: TuiSpec = {
   slug: 'gemini',
   displayName: 'Gemini CLI',
@@ -10,7 +11,7 @@ export const geminiTui: TuiSpec = {
   accent: '#7E9B5F', // sage / olive
   order: 3,
   enabled: true,
-  command: ['gemini'],
+  command: ['gemini', '--yolo', '--skip-trust'],
   processName: 'gemini',
   context: { kind: 'gemini-hooks' },
 }

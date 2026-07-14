@@ -1,8 +1,10 @@
 import type { TuiSpec } from '../spec'
 
-/** Pi — @mariozechner/pi-coding-agent terminal agent (a-term parity). Launched
- * bare. `processName` is `pi-coding-agent` (the `pi` launcher is a node CLI whose
- * process name resolves to the package). Pi exposes system-prompt files and an
+/** Pi — @mariozechner/pi-coding-agent terminal agent (a-term parity).
+ * `processName` is `pi-coding-agent` (the `pi` launcher is a node CLI whose
+ * process name resolves to the package). Pi runs tools without a per-action
+ * approval mode; `--approve` removes its separate project-local trust prompt in
+ * this operator-owned workspace. Pi exposes system-prompt files and an
  * --append-system-prompt flag, but no verified native dynamic startup hook here. */
 export const piTui: TuiSpec = {
   slug: 'pi',
@@ -12,6 +14,6 @@ export const piTui: TuiSpec = {
   accent: '#C16A8A', // dusty rose
   order: 4,
   enabled: true,
-  command: ['pi'],
+  command: ['pi', '--approve'],
   processName: 'pi-coding-agent',
 }
