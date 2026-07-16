@@ -3,7 +3,7 @@
 // TUI that declares that kind. New TUIs reuse a kind; only a genuinely new
 // injection mechanism adds a handler. No per-tool injection code lives outside.
 
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -45,19 +45,19 @@ function resolveLauncher(name: string): Promise<string | null> {
   })
 }
 
-/** Claude Code (and any Claude-family TUI): two channels carry the mandate union,
- * and a healthy launch needs the second. (1) The host-provisioned SessionStart
- * hook emits context on stdout — but Claude Code hard-caps hook stdout (~10K) and
- * silently truncates the ~18K union, dropping rules before the model sees them.
- * (2) A local `claude` launcher wrapper can pass the full render via
- * `--append-system-prompt-file` (no cap). So `ok` requires BOTH the hook present
- * AND the `claude` that will run being the wrapper; a bare upstream `claude`
- * reports missing because mandates then inject only truncated. Symmetric with
- * codexHooks(): verify the launcher that runs, not a file that merely exists. */
+/** Claude Code: the source-linked launcher appends canonical context without
+ * replacing Claude's native prompt. Native SessionStart and SubagentStart hooks
+ * cover direct-binary launches, lifecycle refreshes, and spawned agents. */
 async function claudeSessionStart(): Promise<ContextStatus> {
-  const hook = join(homedir(), '.claude', 'hooks', 'SessionStart.sh')
-  if (!existsSync(hook)) {
-    return { state: 'missing', detail: `${hook} absent — mandates will not inject` }
+  const settings = join(homedir(), '.claude', 'settings.json')
+  const client = join(homedir(), '.local', 'bin', 'agent-hub-context-client')
+  const repo = process.env.AGENT_HUB_REPO || '/srv/workspaces/projects/agent-hub'
+  const expectedLauncher = join(repo, 'integrations', 'context-delivery', 'claude', 'launcher')
+  if (!existsSync(settings) || !existsSync(client)) {
+    return {
+      state: 'missing',
+      detail: `${settings} or ${client} absent — canonical context cannot deliver`,
+    }
   }
   const launcher = await resolveLauncher('claude')
   if (!launcher) {
@@ -66,21 +66,30 @@ async function claudeSessionStart(): Promise<ContextStatus> {
       detail: 'claude not on the login-shell PATH — mandates will not inject',
     }
   }
-  let body: string
   try {
-    body = readFileSync(launcher, 'utf8')
-  } catch {
-    body = '' // unreadable (e.g. a raw binary) → not the shell wrapper
-  }
-  return body.includes('--append-system-prompt-file')
-    ? {
+    const parsed = JSON.parse(readFileSync(settings, 'utf8')) as {
+      hooks?: Record<string, Array<{ hooks?: Array<{ command?: string }> }>>
+    }
+    const expectedCommand = `${client} hook --surface claude_code`
+    const hasHook = (event: string): boolean =>
+      parsed.hooks?.[event]?.some((group) =>
+        group.hooks?.some((hook) => hook.command === expectedCommand),
+      ) ?? false
+    const canonicalLauncher = realpathSync(launcher) === expectedLauncher
+    const additive = readFileSync(launcher, 'utf8').includes('--append-system-prompt-file')
+    if (canonicalLauncher && additive && hasHook('SessionStart') && hasHook('SubagentStart')) {
+      return {
         state: 'ok',
-        detail: `${launcher} injects the full mandate union via --append-system-prompt-file`,
+        detail: `${launcher} and native SessionStart + SubagentStart hooks use canonical Agent Hub context`,
       }
-    : {
-        state: 'missing',
-        detail: `${launcher} does not pass --append-system-prompt-file — mandates inject only truncated via the capped SessionStart hook`,
-      }
+    }
+  } catch {
+    // Fall through to the single fail-closed result below.
+  }
+  return {
+    state: 'missing',
+    detail: `${launcher} or Claude native hooks are drifted from canonical Agent Hub sources`,
+  }
 }
 
 /** Codex: canonical context rides native SessionStart and SubagentStart hooks.
@@ -103,61 +112,112 @@ async function codexHooks(): Promise<ContextStatus> {
     return { state: 'missing', detail: `${client} absent — canonical context cannot deliver` }
   }
 
-  return new Promise((resolve) => {
-    const child = execFile(
-      launcher,
-      ['app-server'],
-      { timeout: 5000, maxBuffer: 1024 * 1024 },
-      (error, stdout, stderr) => {
-        if (error) {
-          resolve({
-            state: 'missing',
-            detail: `codex app-server hook check failed: ${stderr.trim() || error.message}`,
-          })
-          return
-        }
+  const codexConfigRepo = process.env.CODEX_CONFIG_REPO || '/srv/workspaces/projects/codex-config'
+  const expectedLauncher = join(codexConfigRepo, 'bin', 'codex')
+  try {
+    const body = readFileSync(launcher, 'utf8')
+    const executableBody = body
+      .split('\n')
+      .filter((line) => !line.trimStart().startsWith('#'))
+      .join('\n')
+    const canonicalLauncher = realpathSync(launcher) === expectedLauncher
+    const thin =
+      executableBody.includes('CODEX_REAL') &&
+      executableBody.includes('"$@"') &&
+      !executableBody.includes('model_instructions_file') &&
+      !executableBody.includes('runtime-context-startup')
+    if (!canonicalLauncher || !thin) {
+      return {
+        state: 'missing',
+        detail: `${launcher} is not the canonical thin Codex launcher`,
+      }
+    }
+  } catch {
+    return { state: 'missing', detail: `${launcher} is unreadable — cannot verify Codex launcher` }
+  }
 
-        try {
-          const messages = stdout
-            .split('\n')
-            .filter(Boolean)
-            .map((line) => JSON.parse(line) as Record<string, unknown>)
-          const response = messages.find((message) => message.id === 1) as
-            | { result?: { data?: Array<{ hooks?: Array<Record<string, unknown>> }> } }
-            | undefined
-          const hooks = response?.result?.data?.[0]?.hooks ?? []
-          const expectedCommand = `${client} hook --surface codex`
-          const required = ['sessionStart', 'subagentStart']
-          const unhealthy = required.filter(
-            (eventName) =>
-              !hooks.some(
-                (hook) =>
-                  hook.eventName === eventName &&
-                  hook.command === expectedCommand &&
-                  hook.enabled === true &&
-                  hook.trustStatus === 'trusted',
-              ),
-          )
-          resolve(
-            unhealthy.length === 0
-              ? {
-                  state: 'ok',
-                  detail: `${launcher} has trusted native SessionStart + SubagentStart Agent Hub hooks`,
-                }
-              : {
-                  state: 'missing',
-                  detail: `Codex canonical hooks missing/untrusted: ${unhealthy.join(', ')}`,
-                },
-          )
-        } catch (parseError) {
-          resolve({
-            state: 'missing',
-            detail: `codex app-server returned unreadable hook state: ${String(parseError)}`,
-          })
+  return new Promise((resolve) => {
+    const child = spawn(launcher, ['app-server'], { stdio: ['pipe', 'pipe', 'pipe'] })
+    let stdout = ''
+    let stderr = ''
+    let settled = false
+    const finish = (status: ContextStatus): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      child.kill()
+      resolve(status)
+    }
+    const inspectLines = (): void => {
+      for (;;) {
+        const newline = stdout.indexOf('\n')
+        if (newline < 0) return
+        const line = stdout.slice(0, newline).trim()
+        stdout = stdout.slice(newline + 1)
+        if (!line) continue
+        let response: {
+          id?: number
+          result?: { data?: Array<{ hooks?: Array<Record<string, unknown>> }> }
         }
-      },
+        try {
+          response = JSON.parse(line) as typeof response
+        } catch {
+          continue
+        }
+        if (response.id !== 1) continue
+        const hooks = response.result?.data?.[0]?.hooks ?? []
+        const expectedCommand = `${client} hook --surface codex`
+        const unhealthy = ['sessionStart', 'subagentStart'].filter(
+          (eventName) =>
+            !hooks.some(
+              (hook) =>
+                hook.eventName === eventName &&
+                hook.command === expectedCommand &&
+                hook.enabled === true &&
+                hook.trustStatus === 'trusted',
+            ),
+        )
+        finish(
+          unhealthy.length === 0
+            ? {
+                state: 'ok',
+                detail: `${launcher} has trusted native SessionStart + SubagentStart Agent Hub hooks`,
+              }
+            : {
+                state: 'missing',
+                detail: `Codex canonical hooks missing/untrusted: ${unhealthy.join(', ')}`,
+              },
+        )
+        return
+      }
+    }
+    const timer = setTimeout(
+      () =>
+        finish({
+          state: 'missing',
+          detail: `codex app-server hook check timed out: ${stderr.trim() || 'no response'}`,
+        }),
+      5000,
     )
-    child.stdin?.end(
+    child.stdout.on('data', (chunk: Buffer) => {
+      stdout += chunk.toString('utf8')
+      inspectLines()
+    })
+    child.stderr.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString('utf8')
+    })
+    child.on('error', (error) => {
+      finish({ state: 'missing', detail: `codex app-server hook check failed: ${error.message}` })
+    })
+    child.on('close', () => {
+      if (!settled) {
+        finish({
+          state: 'missing',
+          detail: `codex app-server closed before hook state: ${stderr.trim() || 'no response'}`,
+        })
+      }
+    })
+    child.stdin.write(
       [
         JSON.stringify({
           method: 'initialize',

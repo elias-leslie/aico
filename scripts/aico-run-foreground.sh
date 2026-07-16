@@ -40,11 +40,12 @@ if [ "$PROCESS_CONTROL_GROUP" != "$EXPECTED_CONTROL_GROUP" ]; then
   exit 1
 fi
 
-# Share the launcher's lock across the entire desktop-runtime lifetime. A second
-# managed or transient launcher therefore fails even if the pidfile is removed;
-# the descriptor dies with this exact systemd-controlled runtime.
+# Share the launcher's lock across the entire desktop-runtime lifetime. During a
+# managed restart, Electron helpers can take a moment to exit and release their
+# inherited descriptor after systemd has stopped the old MainPID. Wait briefly
+# for that proven teardown race; a genuinely concurrent launcher still fails.
 exec 9>"$LOCKFILE"
-if ! flock -n 9; then
+if ! flock -w 5 9; then
   echo "aico-run-foreground: another Aico launch is in progress" >&2
   exit 1
 fi

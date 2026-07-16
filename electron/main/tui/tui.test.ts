@@ -1,4 +1,5 @@
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
+import { EventEmitter } from 'node:events'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -20,7 +21,7 @@ vi.mock('node:fs', () => ({
   readFileSync: vi.fn(),
   realpathSync: vi.fn(),
 }))
-vi.mock('node:child_process', () => ({ execFile: vi.fn() }))
+vi.mock('node:child_process', () => ({ execFile: vi.fn(), spawn: vi.fn() }))
 
 // Drive resolveLauncher's `bash -lc 'command -v <name>'` probe: a non-null path
 // resolves on the login shell, null means not found (execFile errors).
@@ -44,33 +45,40 @@ function mockCodexHooks(
   path: string,
   events: Array<{ eventName: string; trusted?: boolean }>,
 ): void {
-  vi.mocked(execFile).mockImplementation(((
-    command: string,
-    _args: string[],
-    _opts: unknown,
-    cb: unknown,
-  ) => {
-    const callback = cb as (e: Error | null, out: string, err: string) => void
-    if (command === 'bash') {
-      callback(null, `${path}\n`, '')
-    } else {
-      const client = join(homedir(), '.local', 'bin', 'agent-hub-context-client')
-      const hooks = events.map(({ eventName, trusted = true }) => ({
-        eventName,
-        command: `${client} hook --surface codex`,
-        enabled: true,
-        trustStatus: trusted ? 'trusted' : 'untrusted',
-      }))
-      callback(
-        null,
-        `${JSON.stringify({ id: 0, result: {} })}\n${JSON.stringify({
-          id: 1,
-          result: { data: [{ hooks }] },
-        })}\n`,
-        '',
-      )
+  mockLoginResolve(path)
+  vi.mocked(spawn).mockImplementation((() => {
+    const process = new EventEmitter() as EventEmitter & {
+      stdin: { write: (value: string) => void }
+      stdout: EventEmitter
+      stderr: EventEmitter
+      kill: ReturnType<typeof vi.fn>
     }
-    return { stdin: { end: vi.fn() } } as never
+    process.stdout = new EventEmitter()
+    process.stderr = new EventEmitter()
+    process.kill = vi.fn()
+    process.stdin = {
+      write: () => {
+        const client = join(homedir(), '.local', 'bin', 'agent-hub-context-client')
+        const hooks = events.map(({ eventName, trusted = true }) => ({
+          eventName,
+          command: `${client} hook --surface codex`,
+          enabled: true,
+          trustStatus: trusted ? 'trusted' : 'untrusted',
+        }))
+        queueMicrotask(() => {
+          process.stdout.emit(
+            'data',
+            Buffer.from(
+              `${JSON.stringify({ id: 0, result: {} })}\n${JSON.stringify({
+                id: 1,
+                result: { data: [{ hooks }] },
+              })}\n`,
+            ),
+          )
+        })
+      },
+    }
+    return process as never
   }) as never)
 }
 
@@ -179,20 +187,33 @@ describe('ensureContext', () => {
     })
   })
 
-  it('reports ok when the login-shell claude resolves to a context wrapper', async () => {
-    vi.mocked(existsSync).mockReturnValue(true) // hook present + resolved path exists
+  it('reports ok when Claude launcher and lifecycle hooks are canonical', async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
     mockLoginResolve('/home/demo/.claude/bin/claude')
-    vi.mocked(readFileSync).mockReturnValue(
-      'exec "$REAL_CLAUDE" --append-system-prompt-file "$CONTEXT_FILE" "$@"\n',
+    vi.mocked(realpathSync).mockReturnValue(
+      '/srv/workspaces/projects/agent-hub/integrations/context-delivery/claude/launcher',
     )
+    vi.mocked(readFileSync).mockImplementation(((path: string) => {
+      if (path.endsWith('settings.json')) {
+        const command = `${join(homedir(), '.local', 'bin', 'agent-hub-context-client')} hook --surface claude_code`
+        return JSON.stringify({
+          hooks: {
+            SessionStart: [{ hooks: [{ command }] }],
+            SubagentStart: [{ hooks: [{ command }] }],
+          },
+        })
+      }
+      return 'exec "$REAL_CLAUDE" --append-system-prompt-file "$CONTEXT_FILE" "$@"\n'
+    }) as never)
     const s = await ensureContext(spec({ context: { kind: 'claude-session-start' } }))
     expect(s.state).toBe('ok')
-    expect(s.detail).toContain('--append-system-prompt-file')
+    expect(s.detail).toContain('SessionStart + SubagentStart')
   })
 
   it('reports missing when the login-shell claude is the stock upstream binary', async () => {
     vi.mocked(existsSync).mockReturnValue(true)
     mockLoginResolve('/home/demo/.local/bin/claude') // a claude resolves, but not the wrapper
+    vi.mocked(realpathSync).mockReturnValue('/home/demo/.local/bin/claude')
     vi.mocked(readFileSync).mockReturnValue('\x7fELF stock claude binary bytes\n')
     expect((await ensureContext(spec({ context: { kind: 'claude-session-start' } }))).state).toBe(
       'missing',
@@ -207,7 +228,7 @@ describe('ensureContext', () => {
     )
   })
 
-  it('reports missing when the Claude SessionStart hook is absent', async () => {
+  it('reports missing when Claude settings or client is absent', async () => {
     vi.mocked(existsSync).mockReturnValue(false)
     expect((await ensureContext(spec({ context: { kind: 'claude-session-start' } }))).state).toBe(
       'missing',
@@ -220,6 +241,8 @@ describe('ensureContext', () => {
       { eventName: 'sessionStart' },
       { eventName: 'subagentStart' },
     ])
+    vi.mocked(realpathSync).mockReturnValue('/srv/workspaces/projects/codex-config/bin/codex')
+    vi.mocked(readFileSync).mockReturnValue('exec "${CODEX_REAL}" "$@"\n')
     const s = await ensureContext(spec({ context: { kind: 'codex-hooks' } }))
     expect(s.state).toBe('ok')
     expect(s.detail).toContain('trusted native SessionStart + SubagentStart')
@@ -231,13 +254,32 @@ describe('ensureContext', () => {
       { eventName: 'sessionStart' },
       { eventName: 'subagentStart', trusted: false },
     ])
+    vi.mocked(realpathSync).mockReturnValue('/srv/workspaces/projects/codex-config/bin/codex')
+    vi.mocked(readFileSync).mockReturnValue('exec "${CODEX_REAL}" "$@"\n')
     expect((await ensureContext(spec({ context: { kind: 'codex-hooks' } }))).state).toBe('missing')
   })
 
   it('reports missing when the native Codex subagent hook is absent', async () => {
     vi.mocked(existsSync).mockReturnValue(true)
     mockCodexHooks('/home/demo/.local/bin/codex', [{ eventName: 'sessionStart' }])
+    vi.mocked(realpathSync).mockReturnValue('/srv/workspaces/projects/codex-config/bin/codex')
+    vi.mocked(readFileSync).mockReturnValue('exec "${CODEX_REAL}" "$@"\n')
     expect((await ensureContext(spec({ context: { kind: 'codex-hooks' } }))).state).toBe('missing')
+  })
+
+  it('reports missing when Codex resolves to a legacy context-replacing wrapper', async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    mockCodexHooks('/home/demo/.codex/bin/codex', [
+      { eventName: 'sessionStart' },
+      { eventName: 'subagentStart' },
+    ])
+    vi.mocked(realpathSync).mockReturnValue('/home/demo/.codex/bin/codex')
+    vi.mocked(readFileSync).mockReturnValue(
+      'exec "$CODEX_REAL" -c model_instructions_file="$CONTEXT_FILE" "$@"\n',
+    )
+    const status = await ensureContext(spec({ context: { kind: 'codex-hooks' } }))
+    expect(status.state).toBe('missing')
+    expect(status.detail).toContain('canonical thin Codex launcher')
   })
 
   it('reports missing when codex is not on the login-shell PATH', async () => {
