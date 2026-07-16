@@ -302,12 +302,12 @@ function wireSelectionToast(): void {
 
 wireSelectionToast()
 
-// Mandate-injection status: main pushes `context:mandate` for this widget's TUI
-// on load and at each launch/relaunch. Surface it two ways (the core safety
-// guarantee must not fail silently): a PERSISTENT titlebar status badge that is
-// always visible while the TUI carries mandates — a calm green tick when they
-// inject, a red warning when they won't — and a transient warning toast on a
-// `missing` launch. The badge hides only for TUIs with no mandate hook at all.
+// Supplemental Agent Hub context status: main pushes `context:mandate` for this
+// widget's TUI on load and at each launch/relaunch. Surface it two ways so
+// degraded delivery stays visible without blocking the native model: a
+// PERSISTENT titlebar badge — calm green when the adapter and live delivery are
+// verified, red when supplemental context is unavailable — plus a transient
+// warning toast on a `missing` launch. TUIs with no applicable hook hide it.
 function wireMandate(): void {
   const badge = document.querySelector<HTMLElement>('#mandate-warn')
   const toast = document.querySelector<HTMLElement>('.mandate-toast')
@@ -321,19 +321,21 @@ function wireMandate(): void {
       return
     }
     const missing = state === 'missing'
-    // Persistent status badge: green tick = injecting, red warning = won't. The
-    // tooltip carries the full status + detail in BOTH states. textContent is a
-    // fixed glyph (never the main-built detail) — that rides title only.
+    // Persistent status badge: green tick = adapter verified, red warning =
+    // native model running without supplemental Agent Hub context. The tooltip
+    // carries full status + detail in both states.
     badge.hidden = false
     badge.classList.toggle('ctx-missing', missing)
     badge.classList.toggle('ctx-ok', !missing)
     badge.textContent = missing ? '⚠' : '✓' // ⚠ / ✓
     badge.title = missing
-      ? `${slug}: mandates will NOT inject — ${detail}`
-      : `${slug}: mandates injecting — ${detail}`
+      ? `${slug}: supplemental Agent Hub context unavailable; native model continues — ${detail}`
+      : `${slug}: Agent Hub context adapter verified — ${detail}`
     badge.setAttribute(
       'aria-label',
-      missing ? `${slug}: mandates not injecting` : `${slug}: mandates injecting`,
+      missing
+        ? `${slug}: native model active without supplemental Agent Hub context`
+        : `${slug}: Agent Hub context adapter verified`,
     )
     if (!missing) {
       toast.classList.remove('show')
@@ -341,7 +343,7 @@ function wireMandate(): void {
     }
     // Transient launch toast. textContent (never innerHTML) — detail is built by
     // main but kept plain-text to match the untrusted-toast discipline above.
-    toast.textContent = `⚠ ${slug}: mandates will not inject`
+    toast.textContent = `⚠ ${slug}: native model started without supplemental Agent Hub context`
     toast.hidden = false
     void toast.offsetWidth // reflow so .show replays on a back-to-back relaunch
     toast.classList.add('show')

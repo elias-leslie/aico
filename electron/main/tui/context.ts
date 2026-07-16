@@ -10,21 +10,93 @@ import { join } from 'node:path'
 import { effectiveTuiPath } from './launch'
 import type { ContextStatus, TuiSpec } from './spec'
 
+interface ContextProbe {
+  cwd?: string
+  session?: string
+}
+
 /** Verify (not install) a TUI's mandate-injection hook before launch. */
-export async function ensureContext(spec: TuiSpec): Promise<ContextStatus> {
+export async function ensureContext(
+  spec: TuiSpec,
+  probe: ContextProbe = {},
+): Promise<ContextStatus> {
   if (!spec.context) return { state: 'ok', detail: 'no context hook' }
+  let installed: ContextStatus
   switch (spec.context.kind) {
     case 'claude-session-start':
-      return claudeSessionStart(spec)
+      installed = await claudeSessionStart(spec)
+      break
     case 'codex-hooks':
-      return codexHooks(spec)
+      installed = await codexHooks(spec)
+      break
     case 'gemini-hooks':
-      return geminiHooks()
+      installed = geminiHooks()
+      break
     case 'pi-extension':
-      return piExtension()
+      installed = piExtension()
+      break
     case 'hermes-shell-hooks':
       return hermesShellHooks()
   }
+  if (installed.state !== 'ok') return installed
+  const surface =
+    spec.context.kind === 'claude-session-start'
+      ? 'claude_code'
+      : spec.context.kind === 'codex-hooks'
+        ? 'codex'
+        : spec.context.kind === 'gemini-hooks'
+          ? 'gemini'
+          : 'pi'
+  return verifyLiveDelivery(surface, installed.detail, probe)
+}
+
+/** A green badge means both the source-owned chain and one real canonical
+ * delivery succeeded. This probe is observability only and runs after native
+ * pane dispatch; failure returns degraded status but never stops the model. */
+function verifyLiveDelivery(
+  surface: string,
+  installedDetail: string,
+  probe: ContextProbe,
+): Promise<ContextStatus> {
+  const client = join(homedir(), '.local', 'bin', 'agent-hub-context-client')
+  const args = [
+    'deliver',
+    '--surface',
+    surface,
+    '--cwd',
+    probe.cwd ?? process.cwd(),
+    '--phase',
+    'aico_status',
+    '--emit',
+    'descriptor',
+  ]
+  if (probe.session) args.push('--session', probe.session)
+  return new Promise((resolve) => {
+    execFile(client, args, { timeout: 20000 }, (error, stdout, stderr) => {
+      try {
+        const descriptor = JSON.parse(stdout) as { status?: unknown; payload_hash?: unknown }
+        if (
+          !error &&
+          descriptor.status === 'ok' &&
+          typeof descriptor.payload_hash === 'string' &&
+          /^[0-9a-f]{64}$/.test(descriptor.payload_hash)
+        ) {
+          resolve({
+            state: 'ok',
+            detail: `${installedDetail}; live delivery ${descriptor.payload_hash.slice(0, 8)}`,
+          })
+          return
+        }
+      } catch {
+        // Use the single degraded result below.
+      }
+      const detail = stderr.trim() || error?.message || 'invalid delivery descriptor'
+      resolve({
+        state: 'missing',
+        detail: `Agent Hub live delivery failed; native model continues without supplemental context (${detail})`,
+      })
+    })
+  })
 }
 
 /** Resolve `name` with the exact PATH inherited by the no-profile/no-RC pane.
@@ -51,24 +123,29 @@ function resolveLauncher(name: string, spec: TuiSpec): Promise<string | null> {
 /** Claude Code: the source-linked launcher exposes exact canonical context as
  * one immutable additional-directory CLAUDE.md without replacing Claude's
  * native prompt. Claude preloads it for parent and spawned agents. Native
- * SessionStart/SubagentStart hooks bind that artifact to real IDs and block
- * direct-binary bypass; they do not inject a second, size-spilled copy. */
+ * SessionStart/SubagentStart hooks bind that artifact to real IDs and warn on
+ * degraded delivery; they do not block native launch or inject a second copy. */
 async function claudeSessionStart(spec: TuiSpec): Promise<ContextStatus> {
   const settings = join(homedir(), '.claude', 'settings.json')
   const client = join(homedir(), '.local', 'bin', 'agent-hub-context-client')
   const repo = process.env.AGENT_HUB_REPO || '/srv/workspaces/projects/agent-hub'
   const expectedLauncher = join(repo, 'integrations', 'context-delivery', 'claude', 'launcher')
+  const claudeConfigRepo =
+    process.env.CLAUDE_CONFIG_REPO || '/srv/workspaces/projects/claude-config'
+  const expectedGptLauncher = join(claudeConfigRepo, 'bin', 'claude-gpt')
+  const expectedGptSettings = join(claudeConfigRepo, 'claude-gpt-settings.json')
   if (!existsSync(settings) || !existsSync(client)) {
     return {
       state: 'missing',
       detail: `${settings} or ${client} absent — canonical context cannot deliver`,
     }
   }
-  const launcher = await resolveLauncher('claude', spec)
+  const command = spec.command[0]
+  const launcher = command ? await resolveLauncher(command, spec) : null
   if (!launcher) {
     return {
       state: 'missing',
-      detail: 'claude not on the managed pane PATH — mandates will not inject',
+      detail: `${command || 'Claude command'} not on the managed pane PATH — supplemental context will be unavailable`,
     }
   }
   try {
@@ -80,20 +157,39 @@ async function claudeSessionStart(spec: TuiSpec): Promise<ContextStatus> {
       parsed.hooks?.[event]?.some((group) =>
         group.hooks?.some((hook) => hook.command === expectedCommand),
       ) ?? false
-    const canonicalLauncher = realpathSync(launcher) === expectedLauncher
-    const launcherBody = readFileSync(launcher, 'utf8')
+    const resolved = realpathSync(launcher)
+    const canonicalLauncher = resolved === expectedLauncher
+    const gptTransport = resolved === expectedGptLauncher
+    const canonicalEntry = join(homedir(), '.claude', 'bin', 'claude')
+    const launcherBody = readFileSync(canonicalLauncher ? launcher : canonicalEntry, 'utf8')
     const additive =
+      realpathSync(canonicalLauncher ? launcher : canonicalEntry) === expectedLauncher &&
       launcherBody.includes('CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD') &&
       launcherBody.includes('"--add-dir"') &&
       launcherBody.includes('CLAUDE.md')
-    if (canonicalLauncher && additive && hasHook('SessionStart') && hasHook('SubagentStart')) {
+    let transportValid = canonicalLauncher
+    if (gptTransport) {
+      const transportBody = readFileSync(launcher, 'utf8')
+      const gptSettings = join(homedir(), '.claude', 'claude-gpt-settings.json')
+      const additionalSettings = JSON.parse(readFileSync(gptSettings, 'utf8')) as {
+        hooks?: unknown
+      }
+      transportValid =
+        realpathSync(gptSettings) === expectedGptSettings &&
+        transportBody.includes('$' + '{HOME}/.claude/bin/claude') &&
+        transportBody.includes('AGENT_HUB_CONTEXT_PROVIDER=openai') &&
+        transportBody.includes('AGENT_HUB_CONTEXT_TRANSPORT_VARIANT=claude-gpt') &&
+        !transportBody.includes('agent-hub-context-client') &&
+        additionalSettings.hooks === undefined
+    }
+    if (transportValid && additive && hasHook('SessionStart') && hasHook('SubagentStart')) {
       return {
         state: 'ok',
-        detail: `${launcher} injects lossless context and native hooks bind its session IDs`,
+        detail: `${launcher} reaches the canonical additive Claude launcher and native hooks bind its session IDs`,
       }
     }
   } catch {
-    // Fall through to the single fail-closed result below.
+    // Fall through to the single degraded result below.
   }
   return {
     state: 'missing',
@@ -111,7 +207,8 @@ async function codexHooks(spec: TuiSpec): Promise<ContextStatus> {
   if (!launcher) {
     return {
       state: 'missing',
-      detail: 'codex not on the managed pane PATH — mandates will not inject',
+      detail:
+        'codex not on the managed pane PATH — native Codex will continue without supplemental Agent Hub context',
     }
   }
 
@@ -249,7 +346,10 @@ function geminiHooks(): ContextStatus {
   const base = process.env.GEMINI_CLI_HOME || join(homedir(), '.gemini')
   const config = join(base, 'settings.json')
   if (!existsSync(config)) {
-    return { state: 'missing', detail: `${config} absent — mandates will not inject` }
+    return {
+      state: 'missing',
+      detail: `${config} absent — native Gemini will continue without supplemental Agent Hub context`,
+    }
   }
   try {
     const parsed = JSON.parse(readFileSync(config, 'utf8')) as {
@@ -269,7 +369,10 @@ function geminiHooks(): ContextStatus {
           detail: `${config} lacks the canonical BeforeModel hook or still contains the legacy Aico shim`,
         }
   } catch {
-    return { state: 'missing', detail: `${config} is not readable JSON — mandates will not inject` }
+    return {
+      state: 'missing',
+      detail: `${config} is not readable JSON — native Gemini will continue without supplemental Agent Hub context`,
+    }
   }
 }
 

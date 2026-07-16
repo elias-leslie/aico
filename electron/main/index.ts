@@ -2453,14 +2453,18 @@ function publishContextStatus(
 }
 
 // Verify a TUI's mandate-injection hook and surface the result to its widget
-// window: a persistent titlebar status badge (green tick when mandates inject,
-// red warning when they won't) plus a warning toast on a `missing` launch. (The
-// core product guarantee is that agents launch with their mandates; a silent
-// console.log the packaged-app user never sees let a genuinely-missing hook
-// launch an unguarded agent unnoticed.) Always emits — the badge reflects the
-// latest verified state. This is observability only and never gates launch.
+// window: a persistent titlebar status badge (green when the adapter + live
+// delivery verify, red when supplemental context is unavailable) plus a warning
+// toast on a `missing` launch. (The
+// native model always continues; supplemental Agent Hub context is best effort,
+// and unavailable delivery must be visible rather than hidden in a packaged-app
+// console.) Always emits — the badge reflects the latest verified state. This
+// is observability only and never gates launch.
 function reportContext(widgetId: string, tool: NonNullable<ReturnType<typeof getTui>>): void {
-  ensureContext(tool)
+  ensureContext(tool, {
+    cwd: cwdForWidget(widgetId),
+    session: getWidget(widgetId)?.sessionId,
+  })
     .then((status) => publishContextStatus(widgetId, tool, status))
     .catch((error) =>
       publishContextStatus(widgetId, tool, {

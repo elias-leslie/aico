@@ -5,11 +5,12 @@
 // registry, one engine. Tools are declarative entries; cross-cutting behavior is
 // shared.
 
-/** Declarative reference to a SHARED context-injection mechanism. Each `kind`
- * is implemented exactly once in context.ts and reused by every TUI that
+/** Declarative reference to a SHARED supplemental-context mechanism. Each
+ * `kind` is implemented exactly once in context.ts and reused by every TUI that
  * declares it — so a new Claude-family TUI reuses `claude-session-start` rather
- * than reimplementing hook injection. Aico delivers mandates through each TUI's
- * own hook surface; that surface differs per family, the `kind` selects it. */
+ * than reimplementing delivery. Aico verifies best-effort Agent Hub delivery
+ * through each TUI's own hook surface; failure stays visible but never blocks
+ * the native TUI/model. The surface differs per family, so `kind` selects it. */
 export type ContextHook =
   | { kind: 'claude-session-start' }
   | { kind: 'codex-hooks' }

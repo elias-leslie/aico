@@ -3,7 +3,7 @@ import { EventEmitter } from 'node:events'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ensureContext } from './context'
 import { effectiveTuiPath, launchLine, paneCommand, paneGatePath } from './launch'
 import {
@@ -27,11 +27,19 @@ vi.mock('node:child_process', () => ({ execFile: vi.fn(), spawn: vi.fn() }))
 // resolves exactly as the pane does, null means not found (execFile errors).
 function mockPaneResolve(path: string | null): void {
   vi.mocked(execFile).mockImplementation(((
-    _cmd: string,
+    cmd: string,
     _args: string[],
     _opts: unknown,
     cb: unknown,
   ) => {
+    if (cmd !== '/bin/sh') {
+      ;(cb as (e: Error | null, out: string, err: string) => void)(
+        null,
+        `${JSON.stringify({ status: 'ok', payload_hash: 'a'.repeat(64) })}\n`,
+        '',
+      )
+      return undefined as never
+    }
     ;(cb as (e: Error | null, out: string, err: string) => void)(
       path ? null : new Error('not found'),
       path ? `${path}\n` : '',
@@ -40,6 +48,10 @@ function mockPaneResolve(path: string | null): void {
     return undefined as never
   }) as never)
 }
+
+beforeEach(() => {
+  mockPaneResolve(null)
+})
 
 function mockCodexHooks(
   path: string,
@@ -244,6 +256,61 @@ describe('ensureContext', () => {
     )
   })
 
+  it('verifies the source-owned Claude GPT transport through the canonical Claude launcher', async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    mockPaneResolve('/home/demo/.local/bin/claude-gpt')
+    vi.mocked(realpathSync).mockImplementation(((path: string) => {
+      if (path.endsWith('/.local/bin/claude-gpt')) {
+        return '/srv/workspaces/projects/claude-config/bin/claude-gpt'
+      }
+      if (path.endsWith('/claude-gpt-settings.json')) {
+        return '/srv/workspaces/projects/claude-config/claude-gpt-settings.json'
+      }
+      if (path.endsWith('/.claude/bin/claude')) {
+        return '/srv/workspaces/projects/agent-hub/integrations/context-delivery/claude/launcher'
+      }
+      return path
+    }) as never)
+    vi.mocked(readFileSync).mockImplementation(((path: string) => {
+      if (path.endsWith('/.claude/settings.json')) {
+        const command = `${join(homedir(), '.local', 'bin', 'agent-hub-context-client')} bind --surface claude_code`
+        return JSON.stringify({
+          hooks: {
+            SessionStart: [{ hooks: [{ command }] }],
+            SubagentStart: [{ hooks: [{ command }] }],
+          },
+        })
+      }
+      if (path.endsWith('/claude-gpt-settings.json')) {
+        return JSON.stringify({ model: 'gpt-5.6-sol[1m]', env: { ANTHROPIC_AUTH_TOKEN: 'unused' } })
+      }
+      if (path.endsWith('/.local/bin/claude-gpt')) {
+        return (
+          '$' +
+          '{HOME}/.claude/bin/claude AGENT_HUB_CONTEXT_PROVIDER=openai AGENT_HUB_CONTEXT_TRANSPORT_VARIANT=claude-gpt'
+        )
+      }
+      return 'CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1 "--add-dir" CLAUDE.md'
+    }) as never)
+
+    const status = await ensureContext(
+      spec({
+        slug: 'claude-gpt',
+        command: ['claude-gpt', '--dangerously-skip-permissions'],
+        context: { kind: 'claude-session-start' },
+      }),
+    )
+
+    expect(status.state).toBe('ok')
+    expect(status.detail).toContain('canonical additive Claude launcher')
+    expect(execFile).toHaveBeenCalledWith(
+      '/bin/sh',
+      ['-c', 'command -v -- "$1"', 'aico-resolve-launcher', 'claude-gpt'],
+      expect.any(Object),
+      expect.any(Function),
+    )
+  })
+
   it('reports missing when the managed pane resolves the stock upstream Claude binary', async () => {
     vi.mocked(existsSync).mockReturnValue(true)
     mockPaneResolve('/home/demo/.local/bin/claude') // a claude resolves, but not the wrapper
@@ -342,6 +409,36 @@ describe('ensureContext', () => {
     const s = await ensureContext(spec({ context: { kind: 'gemini-hooks' } }))
     expect(s.state).toBe('ok')
     expect(s.detail).toContain('BeforeModel')
+    expect(s.detail).toContain('live delivery aaaaaaaa')
+  })
+
+  it('shows degraded status when the adapter is installed but live delivery fails', async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    const client = join(homedir(), '.local', 'bin', 'agent-hub-context-client')
+    vi.mocked(readFileSync).mockReturnValue(
+      JSON.stringify({
+        hooks: {
+          BeforeModel: [
+            { hooks: [{ type: 'command', command: `${client} hook --surface gemini` }] },
+          ],
+        },
+      }),
+    )
+    vi.mocked(execFile).mockImplementation(((
+      _cmd: string,
+      _args: string[],
+      _opts: unknown,
+      callback: (error: Error | null, stdout: string, stderr: string) => void,
+    ) => {
+      callback(new Error('Agent Hub unavailable'), '', 'delivery unavailable')
+      return undefined as never
+    }) as never)
+
+    const status = await ensureContext(spec({ context: { kind: 'gemini-hooks' } }))
+
+    expect(status.state).toBe('missing')
+    expect(status.detail).toContain('native model continues without supplemental context')
+    expect(status.detail).toContain('delivery unavailable')
   })
 
   it('reports missing when Gemini settings retain the legacy Aico shim', async () => {
