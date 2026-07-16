@@ -7,6 +7,7 @@ import { execFile, spawn } from 'node:child_process'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { effectiveTuiPath } from './launch'
 import type { ContextStatus, TuiSpec } from './spec'
 
 /** Verify (not install) a TUI's mandate-injection hook before launch. */
@@ -14,9 +15,9 @@ export async function ensureContext(spec: TuiSpec): Promise<ContextStatus> {
   if (!spec.context) return { state: 'ok', detail: 'no context hook' }
   switch (spec.context.kind) {
     case 'claude-session-start':
-      return claudeSessionStart()
+      return claudeSessionStart(spec)
     case 'codex-hooks':
-      return codexHooks()
+      return codexHooks(spec)
     case 'gemini-hooks':
       return geminiHooks()
     case 'pi-extension':
@@ -26,29 +27,33 @@ export async function ensureContext(spec: TuiSpec): Promise<ContextStatus> {
   }
 }
 
-/** Resolve `name` the way a spawned agent pane actually will: through a LOGIN
- * shell, which sources the user's profile — where optional launcher-wrapper
- * dirs may be placed ahead of ~/.local/bin. Aico launches agents by typing
- * `env … name …` into a login-shell tmux pane, so a login shell IS the mechanism
- * that runs. Resolving via aico's OWN process.env.PATH instead would make the
- * badge hostage to however *aico* was started — e.g. another agent restarting it
- * from a shell without the wrapper dirs would flip a perfectly-injecting setup to
- * a false `missing`. This check only depends on the user's profile + the wrapper
- * install, both of which survive any aico restart. */
-function resolveLauncher(name: string): Promise<string | null> {
+/** Resolve `name` with the exact PATH inherited by the no-profile/no-RC pane.
+ * No login shell participates in launch: Aico explicitly writes its service
+ * PATH into each tmux session/respawn environment, and a TUI may override it
+ * declaratively. The verifier must therefore use that same value rather than a
+ * separately sourced profile that could resolve a launcher the pane cannot. */
+function resolveLauncher(name: string, spec: TuiSpec): Promise<string | null> {
+  const pathValue = effectiveTuiPath(spec)
   return new Promise((resolve) => {
-    execFile('bash', ['-lc', `command -v -- ${name}`], { timeout: 5000 }, (err, stdout) => {
-      if (err) return resolve(null)
-      const path = stdout.trim()
-      resolve(path && existsSync(path) ? path : null)
-    })
+    execFile(
+      '/bin/sh',
+      ['-c', 'command -v -- "$1"', 'aico-resolve-launcher', name],
+      { env: { ...process.env, PATH: pathValue }, timeout: 5000 },
+      (err, stdout) => {
+        if (err) return resolve(null)
+        const path = stdout.trim()
+        resolve(path.startsWith('/') && existsSync(path) ? path : null)
+      },
+    )
   })
 }
 
-/** Claude Code: the source-linked launcher appends canonical context without
- * replacing Claude's native prompt. Native SessionStart and SubagentStart hooks
- * cover direct-binary launches, lifecycle refreshes, and spawned agents. */
-async function claudeSessionStart(): Promise<ContextStatus> {
+/** Claude Code: the source-linked launcher exposes exact canonical context as
+ * one immutable additional-directory CLAUDE.md without replacing Claude's
+ * native prompt. Claude preloads it for parent and spawned agents. Native
+ * SessionStart/SubagentStart hooks bind that artifact to real IDs and block
+ * direct-binary bypass; they do not inject a second, size-spilled copy. */
+async function claudeSessionStart(spec: TuiSpec): Promise<ContextStatus> {
   const settings = join(homedir(), '.claude', 'settings.json')
   const client = join(homedir(), '.local', 'bin', 'agent-hub-context-client')
   const repo = process.env.AGENT_HUB_REPO || '/srv/workspaces/projects/agent-hub'
@@ -59,28 +64,32 @@ async function claudeSessionStart(): Promise<ContextStatus> {
       detail: `${settings} or ${client} absent — canonical context cannot deliver`,
     }
   }
-  const launcher = await resolveLauncher('claude')
+  const launcher = await resolveLauncher('claude', spec)
   if (!launcher) {
     return {
       state: 'missing',
-      detail: 'claude not on the login-shell PATH — mandates will not inject',
+      detail: 'claude not on the managed pane PATH — mandates will not inject',
     }
   }
   try {
     const parsed = JSON.parse(readFileSync(settings, 'utf8')) as {
       hooks?: Record<string, Array<{ hooks?: Array<{ command?: string }> }>>
     }
-    const expectedCommand = `${client} hook --surface claude_code`
+    const expectedCommand = `${client} bind --surface claude_code`
     const hasHook = (event: string): boolean =>
       parsed.hooks?.[event]?.some((group) =>
         group.hooks?.some((hook) => hook.command === expectedCommand),
       ) ?? false
     const canonicalLauncher = realpathSync(launcher) === expectedLauncher
-    const additive = readFileSync(launcher, 'utf8').includes('--append-system-prompt-file')
+    const launcherBody = readFileSync(launcher, 'utf8')
+    const additive =
+      launcherBody.includes('CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD') &&
+      launcherBody.includes('"--add-dir"') &&
+      launcherBody.includes('CLAUDE.md')
     if (canonicalLauncher && additive && hasHook('SessionStart') && hasHook('SubagentStart')) {
       return {
         state: 'ok',
-        detail: `${launcher} and native SessionStart + SubagentStart hooks use canonical Agent Hub context`,
+        detail: `${launcher} injects lossless context and native hooks bind its session IDs`,
       }
     }
   } catch {
@@ -92,18 +101,17 @@ async function claudeSessionStart(): Promise<ContextStatus> {
   }
 }
 
-/** Codex: canonical context rides native SessionStart and SubagentStart hooks.
- * Ask Codex's own app-server for the EFFECTIVE hook registry instead of reading
- * a launcher or grepping config text: this proves both hooks are enabled,
- * trusted, and point directly at the canonical Agent Hub client. Native
- * additionalContext is additive developer context, unlike
- * model_instructions_file, which replaces Codex's built-in base instructions. */
-async function codexHooks(): Promise<ContextStatus> {
-  const launcher = await resolveLauncher('codex')
+/** Codex: the source-linked launcher places exact canonical bytes in additive
+ * developer_instructions; native hook output is not used because Codex spills
+ * larger hook context to a truncated preview. Session/Subagent hooks only bind
+ * the immutable delivery to real native IDs. Ask Codex's own app-server for the
+ * effective registry so those audit hooks must also be enabled and trusted. */
+async function codexHooks(spec: TuiSpec): Promise<ContextStatus> {
+  const launcher = await resolveLauncher('codex', spec)
   if (!launcher) {
     return {
       state: 'missing',
-      detail: 'codex not on the login-shell PATH — mandates will not inject',
+      detail: 'codex not on the managed pane PATH — mandates will not inject',
     }
   }
 
@@ -121,15 +129,16 @@ async function codexHooks(): Promise<ContextStatus> {
       .filter((line) => !line.trimStart().startsWith('#'))
       .join('\n')
     const canonicalLauncher = realpathSync(launcher) === expectedLauncher
-    const thin =
+    const additive =
       executableBody.includes('CODEX_REAL') &&
-      executableBody.includes('"$@"') &&
+      executableBody.includes('developer_instructions=') &&
+      executableBody.includes('AGENT_HUB_CONTEXT_CLIENT') &&
       !executableBody.includes('model_instructions_file') &&
       !executableBody.includes('runtime-context-startup')
-    if (!canonicalLauncher || !thin) {
+    if (!canonicalLauncher || !additive) {
       return {
         state: 'missing',
-        detail: `${launcher} is not the canonical thin Codex launcher`,
+        detail: `${launcher} is not the canonical lossless additive Codex launcher`,
       }
     }
   } catch {
@@ -166,7 +175,7 @@ async function codexHooks(): Promise<ContextStatus> {
         }
         if (response.id !== 1) continue
         const hooks = response.result?.data?.[0]?.hooks ?? []
-        const expectedCommand = `${client} hook --surface codex`
+        const expectedCommand = `${client} bind --surface codex`
         const unhealthy = ['sessionStart', 'subagentStart'].filter(
           (eventName) =>
             !hooks.some(
@@ -181,7 +190,7 @@ async function codexHooks(): Promise<ContextStatus> {
           unhealthy.length === 0
             ? {
                 state: 'ok',
-                detail: `${launcher} has trusted native SessionStart + SubagentStart Agent Hub hooks`,
+                detail: `${launcher} injects lossless context and has trusted native session bindings`,
               }
             : {
                 state: 'missing',
@@ -232,8 +241,8 @@ async function codexHooks(): Promise<ContextStatus> {
   })
 }
 
-/** Gemini CLI: canonical context rides BeforeAgent so the current prompt is
- * available and a failed delivery can block the turn. Verify Gemini's nested
+/** Gemini CLI: canonical context rides BeforeModel so exact bytes are appended
+ * to the stable request without angle-bracket escaping. Verify Gemini's nested
  * native hook schema and the direct canonical-client command; legacy Aico
  * SessionStart shims are explicitly unhealthy because they can reinstall drift. */
 function geminiHooks(): ContextStatus {
@@ -245,19 +254,19 @@ function geminiHooks(): ContextStatus {
   try {
     const parsed = JSON.parse(readFileSync(config, 'utf8')) as {
       hooks?: {
-        BeforeAgent?: Array<{ hooks?: Array<{ type?: string; command?: string }> }>
+        BeforeModel?: Array<{ hooks?: Array<{ type?: string; command?: string }> }>
       }
     }
     const expected = `${join(homedir(), '.local', 'bin', 'agent-hub-context-client')} hook --surface gemini`
-    const declared = parsed.hooks?.BeforeAgent?.some((group) =>
+    const declared = parsed.hooks?.BeforeModel?.some((group) =>
       group.hooks?.some((hook) => hook.type === 'command' && hook.command === expected),
     )
     const legacy = JSON.stringify(parsed).includes('aico-mandates-gemini.sh')
     return declared && !legacy
-      ? { state: 'ok', detail: `${config} declares the canonical Gemini BeforeAgent hook` }
+      ? { state: 'ok', detail: `${config} declares the canonical Gemini BeforeModel hook` }
       : {
           state: 'missing',
-          detail: `${config} lacks the canonical BeforeAgent hook or still contains the legacy Aico shim`,
+          detail: `${config} lacks the canonical BeforeModel hook or still contains the legacy Aico shim`,
         }
   } catch {
     return { state: 'missing', detail: `${config} is not readable JSON — mandates will not inject` }
@@ -279,9 +288,12 @@ function piExtension(): ContextStatus {
     const body = readFileSync(extension, 'utf8')
     const canonical = realpathSync(extension) === expected
     const additive =
+      body.includes('pi.on("input"') &&
+      body.includes('action: "continue"') &&
       body.includes('before_agent_start') &&
       body.includes('event.systemPrompt') &&
-      body.includes('contract.rendered')
+      body.includes('contract.rendered') &&
+      body.includes('AH: DEGRADED')
     return canonical && additive
       ? { state: 'ok', detail: `${extension} is the canonical additive Agent Hub extension` }
       : {

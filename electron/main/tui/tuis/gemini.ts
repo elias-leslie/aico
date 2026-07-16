@@ -1,7 +1,7 @@
 import type { TuiSpec } from '../spec'
 
 /** Gemini CLI — Google's terminal coding agent (a-term parity). Context injects
- * via a native BeforeAgent hook installed by Agent Hub's canonical installer.
+ * via a lossless BeforeModel hook installed by Agent Hub's canonical installer.
  * Keep Aico's established no-prompt execution default explicit in the argv. */
 export const geminiTui: TuiSpec = {
   slug: 'gemini',

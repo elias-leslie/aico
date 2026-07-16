@@ -1,7 +1,7 @@
 // Public surface of the TUI layer. Import from here.
 
 export { ensureContext } from './context'
-export { launchLine, paneCommand } from './launch'
+export { effectiveTuiPath, launchLine, paneCommand, paneGatePath } from './launch'
 export {
   defaultTui,
   getTui,

@@ -148,6 +148,7 @@ import {
   launchLine,
   listTuis,
   paneCommand,
+  paneGatePath,
   registerBuiltinTuis,
 } from './tui'
 import { detectTuiFromProcessNames, parseProcessTable, processTreeNames } from './tui/detect'
@@ -916,6 +917,10 @@ function managedEnvironment(
     projectId: projectId === undefined ? (row?.projectId ?? null) : projectId,
     tool: toolSlug,
   })
+  // The launch gate and supervisor never source shell profiles. Pin the exact
+  // service PATH onto every new/respawned pane so context verification and the
+  // command that actually runs cannot resolve different launcher binaries.
+  environment.PATH = paneGatePath()
   if (row?.tmuxServerId) environment.AICO_TMUX_SERVER_ID = row.tmuxServerId
   return environment
 }
@@ -2384,7 +2389,8 @@ async function ensureOwnedInternalSession(widgetId: string, size: PtySize): Prom
     console.error(`[aico] failed to create tmux session for ${widgetId}:`, e)
     return false
   }
-  // Verify-only; never blocks launch (a missing hook just means no mandates).
+  // Best-effort observability only: context failure is visible but never
+  // prevents the native TUI from launching.
   if (tool && line) reportContext(widgetId, tool)
   return true
 }
@@ -2430,28 +2436,40 @@ function ensureSessionSerialized(widgetId: string, size: PtySize): Promise<boole
   return started
 }
 
+// Surface the latest best-effort TUI context state to its widget. Missing state
+// is visible degradation, never authority to block the native model launch.
+function publishContextStatus(
+  widgetId: string,
+  tool: NonNullable<ReturnType<typeof getTui>>,
+  status: Awaited<ReturnType<typeof ensureContext>>,
+): void {
+  console.log(`[aico] ${tool.slug} context ${status.state}: ${status.detail}`)
+  windowForWidget(widgetId)?.webContents.send('context:mandate', {
+    slug: tool.slug,
+    state: status.state,
+    detail: status.detail,
+    applicable: tool.context !== undefined,
+  })
+}
+
 // Verify a TUI's mandate-injection hook and surface the result to its widget
 // window: a persistent titlebar status badge (green tick when mandates inject,
 // red warning when they won't) plus a warning toast on a `missing` launch. (The
 // core product guarantee is that agents launch with their mandates; a silent
 // console.log the packaged-app user never sees let a genuinely-missing hook
 // launch an unguarded agent unnoticed.) Always emits — the badge reflects the
-// latest verified state. Verify-only; never blocks.
+// latest verified state. This is observability only and never gates launch.
 function reportContext(widgetId: string, tool: NonNullable<ReturnType<typeof getTui>>): void {
   ensureContext(tool)
-    .then((s) => {
-      console.log(`[aico] ${tool.slug} context ${s.state}: ${s.detail}`)
-      windowForWidget(widgetId)?.webContents.send('context:mandate', {
-        slug: tool.slug,
-        state: s.state,
-        detail: s.detail,
-        // Whether this TUI even carries mandates. A bare shell / opencode / pi has
-        // no hook, so the badge stays hidden for it (an "injecting" tick there
-        // would be a lie); claude/codex/gemini/hermes do, so the badge shows.
-        applicable: tool.context !== undefined,
-      })
-    })
-    .catch(() => {})
+    .then((status) => publishContextStatus(widgetId, tool, status))
+    .catch((error) =>
+      publishContextStatus(widgetId, tool, {
+        state: 'missing',
+        detail: `post-launch context verification failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      }),
+    )
 }
 
 // Respawn a live widget's pane (kills the current foreground program, fresh

@@ -5,6 +5,16 @@ const BASE_TUI_ENV = {
   CLICOLOR: '1',
 } as const
 
+/** PATH inherited by the no-profile/no-RC launch gate. */
+export function paneGatePath(base: NodeJS.ProcessEnv = process.env): string {
+  return base.PATH ?? ''
+}
+
+/** PATH used to resolve a TUI command after its declarative env is applied. */
+export function effectiveTuiPath(spec: TuiSpec, base: NodeJS.ProcessEnv = process.env): string {
+  return spec.env?.PATH ?? paneGatePath(base)
+}
+
 function shellQuote(value: string): string {
   return /^[A-Za-z0-9_@%+=:,./-]+$/.test(value) ? value : `'${value.replace(/'/g, "'\\''")}'`
 }
@@ -16,7 +26,7 @@ export function launchLine(spec: TuiSpec): string | null {
   if (spec.command.length === 0) return null
   const env = { ...BASE_TUI_ENV, ...(spec.env ?? {}) }
   const prefix = [
-    'env',
+    '/usr/bin/env',
     '-u',
     'NO_COLOR',
     ...Object.entries(env).map(([k, v]) => `${k}=${shellQuote(v)}`),

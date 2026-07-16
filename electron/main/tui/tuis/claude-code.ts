@@ -1,9 +1,11 @@
 import type { TuiSpec } from '../spec'
 
-/** Claude Code — the default widget TUI. Mandates inject via the existing
- * `~/.claude/hooks/SessionStart.sh` hook (verified, not installed, by Aico).
- * Aico is an operator-owned autonomous workspace, so new widgets retain the
- * established no-prompt execution default explicitly in their launch argv. */
+/** Claude Code — the default widget TUI. The canonical launcher preflights an
+ * Agent Hub delivery and exposes its immutable bytes through a unique
+ * additional-directory CLAUDE.md; native lifecycle hooks bind real session and
+ * subagent IDs without injecting another copy. Aico is an operator-owned
+ * autonomous workspace, so new widgets retain the established no-prompt
+ * execution default explicitly in their launch argv. */
 export const claudeCodeTui: TuiSpec = {
   slug: 'claude-code',
   displayName: 'Claude Code',

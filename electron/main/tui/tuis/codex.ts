@@ -1,10 +1,9 @@
 import type { TuiSpec } from '../spec'
 
-/** Codex CLI — proves the non-Claude path. Canonical context is delivered by
- * trusted native SessionStart/SubagentStart hooks, verified through Codex's
- * effective hook registry. Aico retains the established no-prompt execution
- * default but does not bypass hook trust, so changed hook code cannot run before
- * its source-controlled trust hash is updated. */
+/** Codex CLI — proves the non-Claude path. The canonical launcher uses additive
+ * developer_instructions for lossless context; trusted native
+ * SessionStart/SubagentStart hooks bind that delivery to real IDs. Aico retains
+ * the established no-prompt execution default and never bypasses hook trust. */
 export const codexTui: TuiSpec = {
   slug: 'codex',
   displayName: 'Codex',
