@@ -35,10 +35,11 @@ export interface AicoApi {
     onToast(cb: (sel: { kind: string; snippet: string }) => void): () => void
   }
   context: {
-    /** Subscribe to this widget's TUI mandate-injection status (pushed by main at
-     * each launch and on window load); drives the persistent titlebar status badge
-     * + launch toast. `applicable` is false for TUIs with no mandate hook (the
-     * badge hides for those). Returns unsubscribe. */
+    /** Subscribe to this widget's supplemental-context availability status
+     * (pushed by main after launch and on window load); drives the persistent
+     * titlebar status badge + warning toast. `applicable` is false for TUIs with
+     * no supplemental-context mechanism. This independent probe does not claim
+     * what an already-running session received. Returns unsubscribe. */
     onMandate(
       cb: (s: { slug: string; state: string; detail: string; applicable: boolean }) => void,
     ): () => void

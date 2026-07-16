@@ -35,11 +35,12 @@ contextBridge.exposeInMainWorld('aico', {
     },
   },
   context: {
-    /** Mandate-injection status for this widget's TUI, pushed by main at each
-     * launch/relaunch and on window load. Drives the persistent titlebar status
-     * badge (green tick = injecting, red warning = won't) and the launch toast.
-     * `applicable` is false for TUIs with no mandate hook (bare shell etc.), so
-     * the badge hides for them. Returns an unsubscribe function. */
+    /** Supplemental-context availability for this widget's TUI, pushed by main
+     * after launch/relaunch and on window load. Green means the source chain and
+     * live delivery availability were independently verified; red means delivery
+     * is unavailable or unconfirmed. It does not claim what an already-running
+     * session received. `applicable` is false for TUIs with no mechanism, so the
+     * badge hides for them. Returns an unsubscribe function. */
     onMandate: (
       cb: (s: { slug: string; state: string; detail: string; applicable: boolean }) => void,
     ) => {

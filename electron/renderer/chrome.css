@@ -425,8 +425,8 @@ body.thinking .halo {
   }
 }
 
-/* Supplemental-context warning: Agent Hub delivery is unavailable, while the
-   native TUI/model continues normally. Surface the degraded state two ways
+/* Supplemental-context warning: Agent Hub delivery is unavailable or
+   unconfirmed, while the native TUI/model continues normally. Surface the state two ways
    (fed by context:mandate): a persistent titlebar badge and a transient launch
    toast. Ember marks visible degradation, not a blocked native launch. */
 .mandate-warn {
@@ -442,10 +442,10 @@ body.thinking .halo {
      hover. Every other interactive titlebar element does this too. */
   -webkit-app-region: no-drag;
 }
-/* Two status states (set by wireMandate). Green tick = adapter and live delivery
-   verified; ember warning = supplemental context unavailable. Color lives on
-   the state classes, never the base, so an unclassed badge is never
-   miscoloured. */
+/* Two status states (set by wireMandate). Green tick = source chain and live
+   delivery availability verified; ember warning = delivery unavailable or
+   unconfirmed. Color lives on the state classes, never the base, so an
+   unclassed badge is never miscoloured. */
 .mandate-warn.ctx-ok {
   color: var(--jade);
 }

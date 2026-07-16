@@ -240,12 +240,14 @@ describe('ensureContext', () => {
     }) as never)
     const s = await ensureContext(
       spec({
+        command: ['claude', '--dangerously-skip-permissions'],
         context: { kind: 'claude-session-start' },
         env: { PATH: '/canonical/managed-pane-path' },
       }),
     )
     expect(s.state).toBe('ok')
-    expect(s.detail).toContain('lossless context')
+    expect(s.detail).toContain('canonical additive Claude launcher')
+    expect(s.detail).toContain('live delivery available')
     expect(execFile).toHaveBeenCalledWith(
       '/bin/sh',
       ['-c', 'command -v -- "$1"', 'aico-resolve-launcher', 'claude'],
@@ -409,7 +411,7 @@ describe('ensureContext', () => {
     const s = await ensureContext(spec({ context: { kind: 'gemini-hooks' } }))
     expect(s.state).toBe('ok')
     expect(s.detail).toContain('BeforeModel')
-    expect(s.detail).toContain('live delivery aaaaaaaa')
+    expect(s.detail).toContain('live delivery available aaaaaaaa')
   })
 
   it('shows degraded status when the adapter is installed but live delivery fails', async () => {
@@ -437,7 +439,9 @@ describe('ensureContext', () => {
     const status = await ensureContext(spec({ context: { kind: 'gemini-hooks' } }))
 
     expect(status.state).toBe('missing')
-    expect(status.detail).toContain('native model continues without supplemental context')
+    expect(status.detail).toContain(
+      'Agent Hub live delivery unavailable or unconfirmed; native model continues',
+    )
     expect(status.detail).toContain('delivery unavailable')
   })
 

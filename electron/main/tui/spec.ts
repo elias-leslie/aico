@@ -8,9 +8,11 @@
 /** Declarative reference to a SHARED supplemental-context mechanism. Each
  * `kind` is implemented exactly once in context.ts and reused by every TUI that
  * declares it — so a new Claude-family TUI reuses `claude-session-start` rather
- * than reimplementing delivery. Aico verifies best-effort Agent Hub delivery
- * through each TUI's own hook surface; failure stays visible but never blocks
- * the native TUI/model. The surface differs per family, so `kind` selects it. */
+ * than reimplementing delivery. Aico independently verifies the source chain
+ * and live Agent Hub delivery availability through each TUI's hook surface; it
+ * does not claim what an already-running session received. Failure stays visible
+ * but never blocks the native TUI/model. The surface differs per family, so
+ * `kind` selects it. */
 export type ContextHook =
   | { kind: 'claude-session-start' }
   | { kind: 'codex-hooks' }
@@ -54,6 +56,6 @@ export interface TuiSpec {
   processName: string
   /** Extra env exported before the command (most TUIs need none). */
   env?: Record<string, string>
-  /** Declarative mandate-injection hook; omitted for a bare shell. */
+  /** Declarative supplemental-context path; omitted for a bare shell. */
   context?: ContextHook
 }

@@ -2452,14 +2452,13 @@ function publishContextStatus(
   })
 }
 
-// Verify a TUI's mandate-injection hook and surface the result to its widget
-// window: a persistent titlebar status badge (green when the adapter + live
-// delivery verify, red when supplemental context is unavailable) plus a warning
-// toast on a `missing` launch. (The
-// native model always continues; supplemental Agent Hub context is best effort,
-// and unavailable delivery must be visible rather than hidden in a packaged-app
-// console.) Always emits — the badge reflects the latest verified state. This
-// is observability only and never gates launch.
+// Independently probe a TUI's source chain and live delivery availability, then
+// surface the result to its widget: a persistent titlebar status badge (green
+// when available, red when unavailable or unconfirmed) plus a warning toast.
+// This does not claim what an already-running native session received. The
+// native model always continues; degraded supplemental-context availability
+// must be visible rather than hidden in a packaged-app console. Always emits —
+// the badge reflects the latest probe state. It never gates launch.
 function reportContext(widgetId: string, tool: NonNullable<ReturnType<typeof getTui>>): void {
   ensureContext(tool, {
     cwd: cwdForWidget(widgetId),
@@ -2885,12 +2884,12 @@ function openWidget(row: WidgetRow): void {
     win.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
-  // Make the mandate badge authoritative for THIS window the instant it loads,
-  // not only when a TUI is freshly launched. On an aico restart we reattach to a
-  // live tmux session WITHOUT relaunching (ensureSession returns early), so the
-  // launch-time context:mandate never fires for a reattached pane — the badge
-  // would otherwise be frozen at its hidden default and could never warn. The
-  // fresh-launch path re-reports the same state moments later; this is idempotent.
+  // Make the supplemental-context status badge authoritative for THIS window
+  // the instant it loads, not only when a TUI is freshly launched. On an Aico
+  // restart we reattach to a live tmux session WITHOUT relaunching
+  // (ensureSession returns early), so the legacy-named `context:mandate` IPC
+  // never fires for a reattached pane. The fresh-launch path re-reports the
+  // same independent availability probe moments later; this is idempotent.
   win.webContents.once('did-finish-load', () => {
     const tool = getTui(getWidget(widgetId)?.tool ?? 'shell')
     if (tool) reportContext(widgetId, tool)

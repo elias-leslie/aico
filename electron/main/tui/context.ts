@@ -1,7 +1,7 @@
-// Universal context-injection engine. `ensureContext` dispatches on the
+// Universal supplemental-context verifier. `ensureContext` dispatches on the
 // declarative hook `kind` to a handler implemented ONCE here and shared by every
 // TUI that declares that kind. New TUIs reuse a kind; only a genuinely new
-// injection mechanism adds a handler. No per-tool injection code lives outside.
+// delivery mechanism adds a handler. No per-tool verification code lives outside.
 
 import { execFile, spawn } from 'node:child_process'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
@@ -15,7 +15,8 @@ interface ContextProbe {
   session?: string
 }
 
-/** Verify (not install) a TUI's mandate-injection hook before launch. */
+/** Verify (not install) a TUI's supplemental-context path after native launch.
+ * The result drives visible status only; it never gates pane dispatch. */
 export async function ensureContext(
   spec: TuiSpec,
   probe: ContextProbe = {},
@@ -50,9 +51,10 @@ export async function ensureContext(
   return verifyLiveDelivery(surface, installed.detail, probe)
 }
 
-/** A green badge means both the source-owned chain and one real canonical
- * delivery succeeded. This probe is observability only and runs after native
- * pane dispatch; failure returns degraded status but never stops the model. */
+/** A green badge means the source-owned chain and live delivery availability
+ * were verified by an independent probe. It does not prove what an already-
+ * running native session received. This observability probe runs after pane
+ * dispatch; failure returns degraded status but never stops the model. */
 function verifyLiveDelivery(
   surface: string,
   installedDetail: string,
@@ -83,7 +85,7 @@ function verifyLiveDelivery(
         ) {
           resolve({
             state: 'ok',
-            detail: `${installedDetail}; live delivery ${descriptor.payload_hash.slice(0, 8)}`,
+            detail: `${installedDetail}; live delivery available ${descriptor.payload_hash.slice(0, 8)}`,
           })
           return
         }
@@ -93,7 +95,7 @@ function verifyLiveDelivery(
       const detail = stderr.trim() || error?.message || 'invalid delivery descriptor'
       resolve({
         state: 'missing',
-        detail: `Agent Hub live delivery failed; native model continues without supplemental context (${detail})`,
+        detail: `Agent Hub live delivery unavailable or unconfirmed; native model continues (${detail})`,
       })
     })
   })
@@ -145,7 +147,7 @@ async function claudeSessionStart(spec: TuiSpec): Promise<ContextStatus> {
   if (!launcher) {
     return {
       state: 'missing',
-      detail: `${command || 'Claude command'} not on the managed pane PATH — supplemental context will be unavailable`,
+      detail: `${command || 'Claude command'} not on the managed pane PATH — Agent Hub context delivery is unavailable or unconfirmed; native Claude continues`,
     }
   }
   try {
@@ -197,18 +199,19 @@ async function claudeSessionStart(spec: TuiSpec): Promise<ContextStatus> {
   }
 }
 
-/** Codex: the source-linked launcher places exact canonical bytes in additive
- * developer_instructions; native hook output is not used because Codex spills
- * larger hook context to a truncated preview. Session/Subagent hooks only bind
- * the immutable delivery to real native IDs. Ask Codex's own app-server for the
- * effective registry so those audit hooks must also be enabled and trusted. */
+/** Codex: on fresh threads the source-linked launcher places exact canonical
+ * bytes in additive developer_instructions; native hook output is not used
+ * because Codex spills larger hook context to a truncated preview. Native hooks
+ * bind that fresh immutable delivery to real IDs. Resume/fork deliberately make
+ * no fresh delivery or binding claim because Codex restores saved thread
+ * context. Ask Codex's app-server for the effective hook registry too. */
 async function codexHooks(spec: TuiSpec): Promise<ContextStatus> {
   const launcher = await resolveLauncher('codex', spec)
   if (!launcher) {
     return {
       state: 'missing',
       detail:
-        'codex not on the managed pane PATH — native Codex will continue without supplemental Agent Hub context',
+        'codex not on the managed pane PATH — Agent Hub context delivery is unavailable or unconfirmed; native Codex continues',
     }
   }
 
@@ -287,7 +290,7 @@ async function codexHooks(spec: TuiSpec): Promise<ContextStatus> {
           unhealthy.length === 0
             ? {
                 state: 'ok',
-                detail: `${launcher} injects lossless context and has trusted native session bindings`,
+                detail: `${launcher} injects lossless context on fresh threads and has trusted native session bindings; resume/fork preserve saved native context without a fresh delivery`,
               }
             : {
                 state: 'missing',
@@ -348,7 +351,7 @@ function geminiHooks(): ContextStatus {
   if (!existsSync(config)) {
     return {
       state: 'missing',
-      detail: `${config} absent — native Gemini will continue without supplemental Agent Hub context`,
+      detail: `${config} absent — Agent Hub context delivery is unavailable or unconfirmed; native Gemini continues`,
     }
   }
   try {
@@ -371,7 +374,7 @@ function geminiHooks(): ContextStatus {
   } catch {
     return {
       state: 'missing',
-      detail: `${config} is not readable JSON — native Gemini will continue without supplemental Agent Hub context`,
+      detail: `${config} is not readable JSON — Agent Hub context delivery is unavailable or unconfirmed; native Gemini continues`,
     }
   }
 }

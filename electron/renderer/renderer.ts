@@ -305,37 +305,38 @@ wireSelectionToast()
 // Supplemental Agent Hub context status: main pushes `context:mandate` for this
 // widget's TUI on load and at each launch/relaunch. Surface it two ways so
 // degraded delivery stays visible without blocking the native model: a
-// PERSISTENT titlebar badge — calm green when the adapter and live delivery are
-// verified, red when supplemental context is unavailable — plus a transient
-// warning toast on a `missing` launch. TUIs with no applicable hook hide it.
+// PERSISTENT titlebar badge — calm green when the source chain and live delivery
+// availability are verified, red when delivery is unavailable or unconfirmed —
+// plus a transient warning toast. This independent probe does not claim what an
+// already-running session received. TUIs with no applicable hook hide it.
 function wireMandate(): void {
   const badge = document.querySelector<HTMLElement>('#mandate-warn')
   const toast = document.querySelector<HTMLElement>('.mandate-toast')
   if (!badge || !toast) return
   let hideTimer: number | undefined
   window.aico.context.onMandate(({ slug, state, detail, applicable }) => {
-    // No mandate mechanism for this TUI (bare shell etc.) → no badge to show.
+    // No supplemental-context mechanism for this TUI (bare shell etc.) → no badge to show.
     if (!applicable) {
       badge.hidden = true
       toast.classList.remove('show')
       return
     }
     const missing = state === 'missing'
-    // Persistent status badge: green tick = adapter verified, red warning =
-    // native model running without supplemental Agent Hub context. The tooltip
+    // Persistent status badge: green tick = source chain + live availability
+    // verified, red warning = delivery unavailable or unconfirmed. The tooltip
     // carries full status + detail in both states.
     badge.hidden = false
     badge.classList.toggle('ctx-missing', missing)
     badge.classList.toggle('ctx-ok', !missing)
     badge.textContent = missing ? '⚠' : '✓' // ⚠ / ✓
     badge.title = missing
-      ? `${slug}: supplemental Agent Hub context unavailable; native model continues — ${detail}`
-      : `${slug}: Agent Hub context adapter verified — ${detail}`
+      ? `${slug}: Agent Hub context delivery unavailable or unconfirmed; native model continues — ${detail}`
+      : `${slug}: Agent Hub source chain and live delivery availability verified — ${detail}`
     badge.setAttribute(
       'aria-label',
       missing
-        ? `${slug}: native model active without supplemental Agent Hub context`
-        : `${slug}: Agent Hub context adapter verified`,
+        ? `${slug}: Agent Hub context delivery unavailable or unconfirmed; native model continues`
+        : `${slug}: Agent Hub source chain and live delivery availability verified`,
     )
     if (!missing) {
       toast.classList.remove('show')
@@ -343,7 +344,7 @@ function wireMandate(): void {
     }
     // Transient launch toast. textContent (never innerHTML) — detail is built by
     // main but kept plain-text to match the untrusted-toast discipline above.
-    toast.textContent = `⚠ ${slug}: native model started without supplemental Agent Hub context`
+    toast.textContent = `⚠ ${slug}: Agent Hub context delivery unavailable or unconfirmed; native model continues`
     toast.hidden = false
     void toast.offsetWidth // reflow so .show replays on a back-to-back relaunch
     toast.classList.add('show')
