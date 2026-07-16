@@ -1,5 +1,7 @@
 import { execFile } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ensureContext } from './context'
 import { launchLine, paneCommand } from './launch'
@@ -31,6 +33,40 @@ function mockLoginResolve(path: string | null): void {
       '',
     )
     return undefined as never
+  }) as never)
+}
+
+function mockCodexHooks(
+  path: string,
+  events: Array<{ eventName: string; trusted?: boolean }>,
+): void {
+  vi.mocked(execFile).mockImplementation(((
+    command: string,
+    _args: string[],
+    _opts: unknown,
+    cb: unknown,
+  ) => {
+    const callback = cb as (e: Error | null, out: string, err: string) => void
+    if (command === 'bash') {
+      callback(null, `${path}\n`, '')
+    } else {
+      const client = join(homedir(), '.local', 'bin', 'agent-hub-context-client')
+      const hooks = events.map(({ eventName, trusted = true }) => ({
+        eventName,
+        command: `${client} hook --surface codex`,
+        enabled: true,
+        trustStatus: trusted ? 'trusted' : 'untrusted',
+      }))
+      callback(
+        null,
+        `${JSON.stringify({ id: 0, result: {} })}\n${JSON.stringify({
+          id: 1,
+          result: { data: [{ hooks }] },
+        })}\n`,
+        '',
+      )
+    }
+    return { stdin: { end: vi.fn() } } as never
   }) as never)
 }
 
@@ -81,7 +117,7 @@ describe('registry', () => {
       'env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 claude --dangerously-skip-permissions',
     )
     expect(codex && launchLine(codex)).toBe(
-      'env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 codex --yolo --dangerously-bypass-hook-trust',
+      'env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 codex --yolo',
     )
     expect(gemini && launchLine(gemini)).toBe(
       'env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 gemini --yolo --skip-trust',
@@ -174,19 +210,29 @@ describe('ensureContext', () => {
     )
   })
 
-  it('reports ok when the login-shell codex launcher wires model_instructions_file', async () => {
+  it('reports ok for trusted native Codex startup and subagent hooks', async () => {
     vi.mocked(existsSync).mockReturnValue(true)
-    mockLoginResolve('/home/demo/.codex/bin/codex')
-    vi.mocked(readFileSync).mockReturnValue('exec codex --config model_instructions_file=/x\n')
+    mockCodexHooks('/home/demo/.local/bin/codex', [
+      { eventName: 'sessionStart' },
+      { eventName: 'subagentStart' },
+    ])
     const s = await ensureContext(spec({ context: { kind: 'codex-hooks' } }))
     expect(s.state).toBe('ok')
-    expect(s.detail).toContain('model_instructions_file')
+    expect(s.detail).toContain('trusted native SessionStart + SubagentStart')
   })
 
-  it('reports missing when the login-shell codex is a stock shim', async () => {
+  it('reports missing when a required native Codex hook is untrusted', async () => {
     vi.mocked(existsSync).mockReturnValue(true)
-    mockLoginResolve('/home/demo/.local/bin/codex')
-    vi.mocked(readFileSync).mockReturnValue('// stock OpenAI codex shim\nspawn(binary)\n')
+    mockCodexHooks('/home/demo/.local/bin/codex', [
+      { eventName: 'sessionStart' },
+      { eventName: 'subagentStart', trusted: false },
+    ])
+    expect((await ensureContext(spec({ context: { kind: 'codex-hooks' } }))).state).toBe('missing')
+  })
+
+  it('reports missing when the native Codex subagent hook is absent', async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    mockCodexHooks('/home/demo/.local/bin/codex', [{ eventName: 'sessionStart' }])
     expect((await ensureContext(spec({ context: { kind: 'codex-hooks' } }))).state).toBe('missing')
   })
 
@@ -195,19 +241,28 @@ describe('ensureContext', () => {
     expect((await ensureContext(spec({ context: { kind: 'codex-hooks' } }))).state).toBe('missing')
   })
 
-  it('reports ok when Gemini settings declare the Aico SessionStart hook', async () => {
+  it('reports ok when Gemini settings declare the canonical BeforeAgent hook', async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    const client = join(homedir(), '.local', 'bin', 'agent-hub-context-client')
+    vi.mocked(readFileSync).mockReturnValue(
+      JSON.stringify({
+        hooks: {
+          BeforeAgent: [
+            { hooks: [{ type: 'command', command: `${client} hook --surface gemini` }] },
+          ],
+        },
+      }),
+    )
+    const s = await ensureContext(spec({ context: { kind: 'gemini-hooks' } }))
+    expect(s.state).toBe('ok')
+    expect(s.detail).toContain('BeforeAgent')
+  })
+
+  it('reports missing when Gemini settings retain the legacy Aico shim', async () => {
     vi.mocked(existsSync).mockReturnValue(true)
     vi.mocked(readFileSync).mockReturnValue(
       JSON.stringify({ hooks: { SessionStart: [{ command: '/x/aico-mandates-gemini.sh' }] } }),
     )
-    const s = await ensureContext(spec({ context: { kind: 'gemini-hooks' } }))
-    expect(s.state).toBe('ok')
-    expect(s.detail).toContain('settings.json')
-  })
-
-  it('reports missing when Gemini settings lack the Aico hook', async () => {
-    vi.mocked(existsSync).mockReturnValue(true)
-    vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ hooks: { SessionStart: [] } }))
     expect((await ensureContext(spec({ context: { kind: 'gemini-hooks' } }))).state).toBe('missing')
   })
 

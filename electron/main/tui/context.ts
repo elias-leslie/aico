@@ -81,15 +81,12 @@ async function claudeSessionStart(): Promise<ContextStatus> {
       }
 }
 
-/** Codex: mandates do NOT ride a native SessionStart hook — `~/.codex/config.toml`
- * documents that deliberately ("Do not use SessionStart.additionalContext… Codex
- * records/renders that payload as a large developer item"). They ride the codex
- * launcher, which passes `model_instructions_file`, delegating to the shared
- * local runtime-context renderer (the same mechanism Claude Code can use).
- * So the canonical check is whether the launcher that will run actually wires
- * `model_instructions_file` — not a config key codex never reads for this. A
- * stock OpenAI shim (no wiring) correctly reports missing: mandates truly won't
- * inject through it. */
+/** Codex: canonical context rides native SessionStart and SubagentStart hooks.
+ * Ask Codex's own app-server for the EFFECTIVE hook registry instead of reading
+ * a launcher or grepping config text: this proves both hooks are enabled,
+ * trusted, and point directly at the canonical Agent Hub client. Native
+ * additionalContext is additive developer context, unlike
+ * model_instructions_file, which replaces Codex's built-in base instructions. */
 async function codexHooks(): Promise<ContextStatus> {
   const launcher = await resolveLauncher('codex')
   if (!launcher) {
@@ -98,24 +95,85 @@ async function codexHooks(): Promise<ContextStatus> {
       detail: 'codex not on the login-shell PATH — mandates will not inject',
     }
   }
-  let body: string
-  try {
-    body = readFileSync(launcher, 'utf8')
-  } catch {
-    return { state: 'missing', detail: `${launcher} unreadable — cannot verify mandate injection` }
+
+  const client = join(homedir(), '.local', 'bin', 'agent-hub-context-client')
+  if (!existsSync(client)) {
+    return { state: 'missing', detail: `${client} absent — canonical context cannot deliver` }
   }
-  return body.includes('model_instructions_file')
-    ? { state: 'ok', detail: `${launcher} injects mandates via model_instructions_file` }
-    : {
-        state: 'missing',
-        detail: `${launcher} does not wire model_instructions_file — mandates will not inject`,
-      }
+
+  return new Promise((resolve) => {
+    const child = execFile(
+      launcher,
+      ['app-server'],
+      { timeout: 5000, maxBuffer: 1024 * 1024 },
+      (error, stdout, stderr) => {
+        if (error) {
+          resolve({
+            state: 'missing',
+            detail: `codex app-server hook check failed: ${stderr.trim() || error.message}`,
+          })
+          return
+        }
+
+        try {
+          const messages = stdout
+            .split('\n')
+            .filter(Boolean)
+            .map((line) => JSON.parse(line) as Record<string, unknown>)
+          const response = messages.find((message) => message.id === 1) as
+            | { result?: { data?: Array<{ hooks?: Array<Record<string, unknown>> }> } }
+            | undefined
+          const hooks = response?.result?.data?.[0]?.hooks ?? []
+          const expectedCommand = `${client} hook --surface codex`
+          const required = ['sessionStart', 'subagentStart']
+          const unhealthy = required.filter(
+            (eventName) =>
+              !hooks.some(
+                (hook) =>
+                  hook.eventName === eventName &&
+                  hook.command === expectedCommand &&
+                  hook.enabled === true &&
+                  hook.trustStatus === 'trusted',
+              ),
+          )
+          resolve(
+            unhealthy.length === 0
+              ? {
+                  state: 'ok',
+                  detail: `${launcher} has trusted native SessionStart + SubagentStart Agent Hub hooks`,
+                }
+              : {
+                  state: 'missing',
+                  detail: `Codex canonical hooks missing/untrusted: ${unhealthy.join(', ')}`,
+                },
+          )
+        } catch (parseError) {
+          resolve({
+            state: 'missing',
+            detail: `codex app-server returned unreadable hook state: ${String(parseError)}`,
+          })
+        }
+      },
+    )
+    child.stdin?.end(
+      [
+        JSON.stringify({
+          method: 'initialize',
+          id: 0,
+          params: { clientInfo: { name: 'aico', title: 'Aico', version: '0.1.1' } },
+        }),
+        JSON.stringify({ method: 'initialized', params: {} }),
+        JSON.stringify({ method: 'hooks/list', id: 1, params: { cwds: [process.cwd()] } }),
+        '',
+      ].join('\n'),
+    )
+  })
 }
 
-/** Gemini CLI: mandates ride a native SessionStart hook declared in
- * ~/.gemini/settings.json. The hook returns `hookSpecificOutput.additionalContext`,
- * which Gemini injects into interactive history at startup. Aico verifies that the
- * installed hook is the Aico mandate hook, not merely any SessionStart hook. */
+/** Gemini CLI: canonical context rides BeforeAgent so the current prompt is
+ * available and a failed delivery can block the turn. Verify Gemini's nested
+ * native hook schema and the direct canonical-client command; legacy Aico
+ * SessionStart shims are explicitly unhealthy because they can reinstall drift. */
 function geminiHooks(): ContextStatus {
   const base = process.env.GEMINI_CLI_HOME || join(homedir(), '.gemini')
   const config = join(base, 'settings.json')
@@ -124,16 +182,20 @@ function geminiHooks(): ContextStatus {
   }
   try {
     const parsed = JSON.parse(readFileSync(config, 'utf8')) as {
-      hooks?: { SessionStart?: Array<{ command?: string }> }
+      hooks?: {
+        BeforeAgent?: Array<{ hooks?: Array<{ type?: string; command?: string }> }>
+      }
     }
-    const declared = parsed.hooks?.SessionStart?.some((h) =>
-      h.command?.includes('aico-mandates-gemini.sh'),
+    const expected = `${join(homedir(), '.local', 'bin', 'agent-hub-context-client')} hook --surface gemini`
+    const declared = parsed.hooks?.BeforeAgent?.some((group) =>
+      group.hooks?.some((hook) => hook.type === 'command' && hook.command === expected),
     )
-    return declared
-      ? { state: 'ok', detail: `${config} declares the Aico SessionStart hook` }
+    const legacy = JSON.stringify(parsed).includes('aico-mandates-gemini.sh')
+    return declared && !legacy
+      ? { state: 'ok', detail: `${config} declares the canonical Gemini BeforeAgent hook` }
       : {
           state: 'missing',
-          detail: `${config} has no Aico SessionStart hook — mandates will not inject`,
+          detail: `${config} lacks the canonical BeforeAgent hook or still contains the legacy Aico shim`,
         }
   } catch {
     return { state: 'missing', detail: `${config} is not readable JSON — mandates will not inject` }

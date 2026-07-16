@@ -1,11 +1,10 @@
 import type { TuiSpec } from '../spec'
 
-/** Codex CLI — proves the non-Claude path. `processName` is kept because Codex
- * leaves the pane's current command as the shell, so pane-metadata detection
- * (when added) must fall back to the TTY process list. Mandates inject via the
- * codex launcher's `model_instructions_file` (verified by context.ts `codex-hooks`).
- * Aico is an operator-owned autonomous workspace, so new widgets retain the
- * established no-prompt execution default explicitly in their launch argv. */
+/** Codex CLI — proves the non-Claude path. Canonical context is delivered by
+ * trusted native SessionStart/SubagentStart hooks, verified through Codex's
+ * effective hook registry. Aico retains the established no-prompt execution
+ * default but does not bypass hook trust, so changed hook code cannot run before
+ * its source-controlled trust hash is updated. */
 export const codexTui: TuiSpec = {
   slug: 'codex',
   displayName: 'Codex',
@@ -14,7 +13,7 @@ export const codexTui: TuiSpec = {
   accent: '#10A37F', // teal
   order: 1,
   enabled: true,
-  command: ['codex', '--yolo', '--dangerously-bypass-hook-trust'],
+  command: ['codex', '--yolo'],
   processName: 'codex',
   context: { kind: 'codex-hooks' },
 }
