@@ -5,7 +5,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=__PROJECT_ROOT__
-Environment="PATH=%h/bin:%h/.local/bin:__PROJECT_ROOT__/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PATH=%h/.claude/bin:%h/.codex/bin:%h/bin:%h/.local/bin:__PROJECT_ROOT__/.venv/bin:/usr/local/bin:/usr/bin:/bin"
 Environment="HOME=%h"
 EnvironmentFile=-__PROJECT_ROOT__/.env.local
 EnvironmentFile=-__PROJECT_ROOT__/.env

@@ -45,6 +45,14 @@ def test_a_term_backend_unit_has_no_forced_summitflow_dependency() -> None:
     assert "SUMMITFLOW_API_BASE=" not in backend
 
 
+def test_a_term_backend_prefers_canonical_agent_launchers() -> None:
+    backend = (SYSTEMD_DIR / "a-term-backend.service").read_text()
+
+    path = next(line for line in backend.splitlines() if line.startswith('Environment="PATH='))
+    assert path.index("%h/.claude/bin") < path.index("%h/.local/bin")
+    assert path.index("%h/.codex/bin") < path.index("%h/.local/bin")
+
+
 def test_a_term_frontend_unit_uses_direct_standalone_shutdown_path() -> None:
     frontend = (SYSTEMD_DIR / "a-term-frontend.service").read_text()
 
