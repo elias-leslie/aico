@@ -4,7 +4,7 @@
 // injection mechanism adds a handler. No per-tool injection code lives outside.
 
 import { execFile } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { ContextStatus, TuiSpec } from './spec'
@@ -19,6 +19,8 @@ export async function ensureContext(spec: TuiSpec): Promise<ContextStatus> {
       return codexHooks()
     case 'gemini-hooks':
       return geminiHooks()
+    case 'pi-extension':
+      return piExtension()
     case 'hermes-shell-hooks':
       return hermesShellHooks()
   }
@@ -199,6 +201,35 @@ function geminiHooks(): ContextStatus {
         }
   } catch {
     return { state: 'missing', detail: `${config} is not readable JSON — mandates will not inject` }
+  }
+}
+
+/** Pi loads source-controlled extensions from ~/.pi/agent/extensions. Verify
+ * that the active entry resolves to Agent Hub's canonical adapter source and
+ * that the adapter preserves Pi's native system prompt before appending the
+ * delivered contract. */
+function piExtension(): ContextStatus {
+  const extension = join(homedir(), '.pi', 'agent', 'extensions', 'agent-hub.ts')
+  const repo = process.env.AGENT_HUB_REPO || '/srv/workspaces/projects/agent-hub'
+  const expected = join(repo, 'integrations', 'context-delivery', 'pi', 'agent-hub.ts')
+  if (!existsSync(extension)) {
+    return { state: 'missing', detail: `${extension} absent — canonical context cannot deliver` }
+  }
+  try {
+    const body = readFileSync(extension, 'utf8')
+    const canonical = realpathSync(extension) === expected
+    const additive =
+      body.includes('before_agent_start') &&
+      body.includes('event.systemPrompt') &&
+      body.includes('contract.rendered')
+    return canonical && additive
+      ? { state: 'ok', detail: `${extension} is the canonical additive Agent Hub extension` }
+      : {
+          state: 'missing',
+          detail: `${extension} is drifted or does not preserve Pi's native system prompt`,
+        }
+  } catch {
+    return { state: 'missing', detail: `${extension} is unreadable — cannot verify context` }
   }
 }
 

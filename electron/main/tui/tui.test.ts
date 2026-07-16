@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -15,7 +15,11 @@ import {
 } from './registry'
 import type { TuiSpec } from './spec'
 
-vi.mock('node:fs', () => ({ existsSync: vi.fn(), readFileSync: vi.fn() }))
+vi.mock('node:fs', () => ({
+  existsSync: vi.fn(),
+  readFileSync: vi.fn(),
+  realpathSync: vi.fn(),
+}))
 vi.mock('node:child_process', () => ({ execFile: vi.fn() }))
 
 // Drive resolveLauncher's `bash -lc 'command -v <name>'` probe: a non-null path
@@ -264,6 +268,26 @@ describe('ensureContext', () => {
       JSON.stringify({ hooks: { SessionStart: [{ command: '/x/aico-mandates-gemini.sh' }] } }),
     )
     expect((await ensureContext(spec({ context: { kind: 'gemini-hooks' } }))).state).toBe('missing')
+  })
+
+  it('reports ok when Pi uses the source-linked additive Agent Hub extension', async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(realpathSync).mockReturnValue(
+      '/srv/workspaces/projects/agent-hub/integrations/context-delivery/pi/agent-hub.ts',
+    )
+    vi.mocked(readFileSync).mockReturnValue(
+      'pi.on("before_agent_start", () => event.systemPrompt + contract.rendered)',
+    )
+    const s = await ensureContext(spec({ context: { kind: 'pi-extension' } }))
+    expect(s.state).toBe('ok')
+    expect(s.detail).toContain('canonical additive')
+  })
+
+  it('reports missing when the Pi extension is copied or drifted', async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(realpathSync).mockReturnValue('/home/demo/.pi/agent/extensions/agent-hub.ts')
+    vi.mocked(readFileSync).mockReturnValue('pi.on("before_agent_start", () => {})')
+    expect((await ensureContext(spec({ context: { kind: 'pi-extension' } }))).state).toBe('missing')
   })
 
   it('reports ok when Hermes config declares the Aico pre_llm_call hook', async () => {
