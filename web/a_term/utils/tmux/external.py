@@ -17,7 +17,16 @@ from .core import TMUX_COMMAND_TIMEOUT, validate_socket_name
 
 logger = get_logger(__name__)
 
-_EXTERNAL_AGENT_TOKENS = ("claude", "codex", "opencode", "aider", "gemini", "hermes", "pi")
+_EXTERNAL_AGENT_TOKENS = (
+    "claude",
+    "codex",
+    "opencode",
+    "aider",
+    "gemini",
+    "agy",
+    "hermes",
+    "pi",
+)
 _AICO_SERVER_ID_PATTERN = re.compile(r"^[0-9a-f]{8,64}$")
 _AICO_DB_FILENAME = "aico.db"
 _AICO_MANAGED_SOCKET_DIR = "tmux"

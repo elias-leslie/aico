@@ -132,6 +132,7 @@ def test_list_external_agent_tmux_sessions_discovers_non_a_term_agent_sessions()
                         "codex-agent-hub\t%3\t/home/testuser/agent-hub\tcodex",
                         "hermes-research\t%4\t/home/testuser/research\thermes",
                         "pi-a-term\t%5\t/home/testuser/a-term\tpi",
+                        "agy-antigravity\t%6\t/home/testuser/antigravity\tagy",
                     ]
                 ),
             ),
@@ -144,23 +145,28 @@ def test_list_external_agent_tmux_sessions_discovers_non_a_term_agent_sessions()
             MagicMock(stdout="/home/testuser/agent-hub\n"),
             MagicMock(stdout="/home/testuser/research\n"),
             MagicMock(stdout="/home/testuser/a-term\n"),
+            MagicMock(stdout="/home/testuser/antigravity\n"),
         ]
         sessions = list_external_agent_tmux_sessions()
 
     assert [session["id"] for session in sessions] == [
+        "agy-antigravity",
         "claude-summitflow",
         "codex-agent-hub",
         "hermes-research",
         "pi-a-term",
     ]
-    assert sessions[0]["project_id"] == "summitflow"
-    assert sessions[0]["mode"] == "claude"
-    assert sessions[1]["project_id"] == "agent-hub"
-    assert sessions[1]["mode"] == "codex"
-    assert sessions[2]["project_id"] == "research"
-    assert sessions[2]["mode"] == "hermes"
-    assert sessions[3]["project_id"] == "a-term"
-    assert sessions[3]["mode"] == "pi"
+    by_id = {str(session["id"]): session for session in sessions}
+    assert by_id["claude-summitflow"]["project_id"] == "summitflow"
+    assert by_id["claude-summitflow"]["mode"] == "claude"
+    assert by_id["codex-agent-hub"]["project_id"] == "agent-hub"
+    assert by_id["codex-agent-hub"]["mode"] == "codex"
+    assert by_id["hermes-research"]["project_id"] == "research"
+    assert by_id["hermes-research"]["mode"] == "hermes"
+    assert by_id["pi-a-term"]["project_id"] == "a-term"
+    assert by_id["pi-a-term"]["mode"] == "pi"
+    assert by_id["agy-antigravity"]["project_id"] == "antigravity"
+    assert by_id["agy-antigravity"]["mode"] == "agy"
 
 
 def test_list_external_agent_tmux_sessions_discovers_aico_socket_sessions() -> None:
@@ -206,6 +212,7 @@ def test_list_external_agent_tmux_sessions_discovers_aico_socket_sessions() -> N
 
 def test_external_mode_inference_requires_token_boundaries() -> None:
     assert tmux._infer_external_mode("pi-a-term", "node") == ("pi", "running")
+    assert tmux._infer_external_mode("antigravity", "agy") == ("agy", "running")
     assert tmux._infer_external_mode("api-service", "python") == ("shell", "not_started")
 
 
