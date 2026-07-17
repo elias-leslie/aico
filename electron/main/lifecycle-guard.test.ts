@@ -4,6 +4,7 @@ import {
   classifyPersistedScopePair,
   decideManagedGateRecovery,
   hasPersistedScopeCleanupEvidence,
+  isNeverAllocatedWidget,
   isReconciledSessionOwnershipAbsent,
   LifecycleOwnerLock,
   type LifecycleOwnerToken,
@@ -143,6 +144,31 @@ describe('isReconciledSessionOwnershipAbsent', () => {
     expect(
       isReconciledSessionOwnershipAbsent({ ...reconciled, launchNonce: 'stale-launch-nonce' }),
     ).toBe(false)
+  })
+})
+
+describe('isNeverAllocatedWidget', () => {
+  const fresh = {
+    tmuxAllocationState: 'unallocated',
+    tmuxServerId: null,
+    tmuxSessionId: null,
+    paneId: null,
+    scopeUnit: null,
+    scopeInvocationId: null,
+    pendingScopeUnit: null,
+    pendingScopeInvocationId: null,
+    launchState: 'none' as const,
+    launchNonce: null,
+  }
+
+  it('allows only a pristine current-schema row to be discarded before launch', () => {
+    expect(isNeverAllocatedWidget(fresh)).toBe(true)
+    expect(isNeverAllocatedWidget({ ...fresh, tmuxAllocationState: 'legacy-unclassified' })).toBe(
+      false,
+    )
+    expect(isNeverAllocatedWidget({ ...fresh, tmuxServerId: 'owned-server' })).toBe(false)
+    expect(isNeverAllocatedWidget({ ...fresh, scopeUnit: 'tmux-spawn-owned.scope' })).toBe(false)
+    expect(isNeverAllocatedWidget({ ...fresh, tmuxSessionId: '$1' })).toBe(false)
   })
 })
 

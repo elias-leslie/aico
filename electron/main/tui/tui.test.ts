@@ -121,6 +121,7 @@ describe('registry', () => {
       'codex',
       'opencode',
       'gemini',
+      'agy',
       'pi',
       'hermes',
       'shell',
@@ -138,6 +139,7 @@ describe('registry', () => {
     const claudeGpt = getTui('claude-gpt')
     const codex = getTui('codex')
     const gemini = getTui('gemini')
+    const antigravity = getTui('agy')
     const pi = getTui('pi')
     expect(claude && launchLine(claude)).toBe(
       '/usr/bin/env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 claude --dangerously-skip-permissions',
@@ -150,6 +152,9 @@ describe('registry', () => {
     )
     expect(gemini && launchLine(gemini)).toBe(
       '/usr/bin/env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 gemini --yolo --skip-trust',
+    )
+    expect(antigravity && launchLine(antigravity)).toBe(
+      '/usr/bin/env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 agy --dangerously-skip-permissions',
     )
     expect(pi && launchLine(pi)).toBe(
       '/usr/bin/env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 pi --approve',

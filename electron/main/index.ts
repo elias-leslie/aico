@@ -31,6 +31,7 @@ import {
   classifyPersistedScopePair,
   decideManagedGateRecovery,
   hasPersistedScopeCleanupEvidence,
+  isNeverAllocatedWidget,
   isReconciledSessionOwnershipAbsent,
   LifecycleOwnerLock,
   type LifecycleOwnerToken,
@@ -113,6 +114,7 @@ import {
   listDefaultPanesArgs,
   listSessionPaneDetailsTargetArgs,
   listSessionPanesTargetArgs,
+  matchesServerIdentityEnvironment,
   newDetachedTargetArgs,
   paneExitedEventPath,
   paneExitedHookCommand,
@@ -124,6 +126,7 @@ import {
   runInPaneTargetArgs,
   scrollbackPageBounds,
   sendTextTargetArgs,
+  serverIdentityEnvironmentTargetArgs,
   serverRosterArgs,
   sessionIdTargetArgs,
   sessionName,
@@ -1109,7 +1112,10 @@ interface TmuxRosterRead {
   detail: string
 }
 
-function readTmuxServerRoster(socketPath: string): TmuxRosterRead {
+function readTmuxServerRoster(
+  socketPath: string,
+  expected?: { serverId: string; serverPid: number },
+): TmuxRosterRead {
   try {
     const stdout = execFileSync(TMUX_BIN, serverRosterArgs(socketPath), {
       encoding: 'utf8',
@@ -1139,9 +1145,32 @@ function readTmuxServerRoster(socketPath: string): TmuxRosterRead {
         createdAt: createdSeconds * 1000,
       })
     }
+    if (entries.length === 0) {
+      if (!expected) {
+        return { evidence: { status: 'unavailable' }, entries: [], detail: 'empty roster' }
+      }
+      const identity = execFileSync(TMUX_BIN, serverIdentityEnvironmentTargetArgs(socketPath), {
+        encoding: 'utf8',
+        env: terminalClientEnv(),
+        timeout: TMUX_QUERY_TIMEOUT_MS,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+      if (!matchesServerIdentityEnvironment(identity, expected.serverId)) {
+        return {
+          evidence: { status: 'unavailable' },
+          entries: [],
+          detail: 'empty roster identity mismatch',
+        }
+      }
+      return {
+        evidence: { status: 'reachable', serverPid: expected.serverPid },
+        entries: [],
+        detail: '',
+      }
+    }
     const serverPids = new Set(entries.map((entry) => entry.serverPid))
-    if (entries.length === 0 || serverPids.size !== 1) {
-      return { evidence: { status: 'unavailable' }, entries: [], detail: 'empty/mixed roster' }
+    if (serverPids.size !== 1) {
+      return { evidence: { status: 'unavailable' }, entries: [], detail: 'mixed roster' }
     }
     return {
       evidence: { status: 'reachable', serverPid: entries[0].serverPid },
@@ -1212,7 +1241,10 @@ async function observeTmuxServer(server: TmuxServerRow): Promise<TmuxServerRunti
     tmuxServerRuntimeStates.set(server.id, 'ambiguous')
     return 'ambiguous'
   }
-  const roster = readTmuxServerRoster(server.socketPath)
+  const roster = readTmuxServerRoster(
+    server.socketPath,
+    server.serverPid ? { serverId: server.id, serverPid: server.serverPid } : undefined,
+  )
   const state = classifyTmuxServerState(server, {
     process: tmuxServerProcessEvidence(server),
     unit: await tmuxServerUnitEvidence(server),
@@ -3093,6 +3125,11 @@ async function discardWidgetOwned(id: string, lifecycleOwner: LifecycleOwnerToke
     if (!row) return
     knownServerId = row.tmuxServerId
     if (!row.externalTmuxSession && row.lifecycleVersion < MANAGED_LIFECYCLE_VERSION) {
+      if (isNeverAllocatedWidget(row)) {
+        removeWidget(id)
+        windowForWidget(id)?.destroy()
+        return
+      }
       // Killing a legacy tmux pane can leave unattributable descendants in the
       // historical broad app scope. Preserve the session and require an explicit
       // managed replacement first; never destroy work and then discover cleanup

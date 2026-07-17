@@ -113,6 +113,32 @@ export function isReconciledSessionOwnershipAbsent(state: ManagedSessionOwnershi
   )
 }
 
+export interface NeverAllocatedWidgetState extends ManagedSessionOwnershipState {
+  readonly tmuxAllocationState: string
+  readonly tmuxServerId: string | null
+  readonly scopeUnit: string | null
+  readonly scopeInvocationId: string | null
+  readonly pendingScopeUnit: string | null
+  readonly pendingScopeInvocationId: string | null
+}
+
+/**
+ * A newly inserted catalog row may be retired before its first tmux allocation.
+ * This exact all-null state is durable proof that no session or scope ever
+ * existed; legacy-unclassified rows and partial ownership tuples still fail
+ * closed.
+ */
+export function isNeverAllocatedWidget(state: NeverAllocatedWidgetState): boolean {
+  return (
+    state.tmuxAllocationState === 'unallocated' &&
+    state.tmuxServerId === null &&
+    classifyPersistedScopePair(state.scopeUnit, state.scopeInvocationId).state === 'absent' &&
+    classifyPersistedScopePair(state.pendingScopeUnit, state.pendingScopeInvocationId).state ===
+      'absent' &&
+    isReconciledSessionOwnershipAbsent(state)
+  )
+}
+
 export interface PersistedScopeState {
   readonly scopeUnit: string | null | undefined
   readonly pendingScopeUnit: string | null | undefined

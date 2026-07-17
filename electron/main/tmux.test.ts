@@ -20,6 +20,7 @@ import {
   listDefaultPanesArgs,
   listSessionPanesArgs,
   listSessionPanesTargetArgs,
+  matchesServerIdentityEnvironment,
   newDetachedArgs,
   PANE_GATE_COMMAND,
   paneExitedEventPath,
@@ -37,6 +38,7 @@ import {
   scrollbackPageBounds,
   sendTextArgs,
   sendTextTargetArgs,
+  serverIdentityEnvironmentTargetArgs,
   sessionIdArgs,
   sessionIdTargetArgs,
   sessionName,
@@ -99,6 +101,35 @@ describe('tmux model', () => {
 
   it('names sessions per widget', () => {
     expect(sessionName('7')).toBe('aico-7')
+  })
+
+  it('authenticates an empty managed server through bounded global markers', () => {
+    const socket = '/tmp/aico-test/server.sock'
+    expect(serverIdentityEnvironmentTargetArgs(socket)).toEqual([
+      '-S',
+      socket,
+      'show-environment',
+      '-g',
+      'AICO_OWNER',
+      ';',
+      'show-environment',
+      '-g',
+      'AICO_WORKLOAD_CLASS',
+      ';',
+      'show-environment',
+      '-g',
+      'AICO_TMUX_SERVER_ID',
+    ])
+    const identity =
+      'AICO_OWNER=aico\n' +
+      'AICO_WORKLOAD_CLASS=durable-tmux-server\n' +
+      'AICO_TMUX_SERVER_ID=11111111111111111111111111111111\n'
+    expect(matchesServerIdentityEnvironment(identity, '11111111111111111111111111111111')).toBe(
+      true,
+    )
+    expect(matchesServerIdentityEnvironment(identity, '22222222222222222222222222222222')).toBe(
+      false,
+    )
   })
 
   it('creates the session detached with conf, size, cwd, and a no-RC gate shell', () => {

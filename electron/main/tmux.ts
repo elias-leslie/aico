@@ -336,6 +336,37 @@ export function serverRosterArgs(socket: string): string[] {
   ]
 }
 
+/**
+ * Read only the three immutable global markers stamped on a managed Aico tmux
+ * server. A successful empty `list-sessions` response has no format row from
+ * which to recover `#{pid}`; these markers authenticate that zero-session
+ * server generation without dumping unrelated global environment values.
+ */
+export function serverIdentityEnvironmentTargetArgs(socket: string): string[] {
+  return [
+    ...socketArgs(socket),
+    'show-environment',
+    '-g',
+    'AICO_OWNER',
+    ';',
+    'show-environment',
+    '-g',
+    'AICO_WORKLOAD_CLASS',
+    ';',
+    'show-environment',
+    '-g',
+    'AICO_TMUX_SERVER_ID',
+  ]
+}
+
+/** Exact parser for the bounded marker query above. */
+export function matchesServerIdentityEnvironment(output: string, serverId: string): boolean {
+  return (
+    output.trim() ===
+    `AICO_OWNER=aico\nAICO_WORKLOAD_CLASS=durable-tmux-server\nAICO_TMUX_SERVER_ID=${serverId}`
+  )
+}
+
 /** `tmux` argv that kills a widget's session (used by an explicit Discard). */
 export function killArgs(widgetId: string): string[] {
   return killTargetArgs(internalTarget(widgetId))

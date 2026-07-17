@@ -3,6 +3,7 @@
 // by adding its spec to the builtin list below — no other edits.
 
 import type { TuiSpec } from './spec'
+import { antigravityTui } from './tuis/antigravity'
 import { claudeCodeTui } from './tuis/claude-code'
 import { claudeGptTui } from './tuis/claude-gpt'
 import { codexTui } from './tuis/codex'
@@ -45,6 +46,7 @@ export function registerBuiltinTuis(): void {
     codexTui,
     opencodeTui,
     geminiTui,
+    antigravityTui,
     piTui,
     hermesTui,
     shellTui,
