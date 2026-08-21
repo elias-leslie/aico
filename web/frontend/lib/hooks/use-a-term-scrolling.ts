@@ -1,16 +1,16 @@
 'use client'
 
-import { useCallback, useEffect, useRef } from 'react'
-import { COPY_MODE_TIMEOUT_MS } from '../constants/a-term'
+import { useCallback } from 'react'
 import { prefersLocalViewportScrollForMode } from '../utils/session-mode'
 import {
   ARROW_DOWN,
   ARROW_UP,
-  COPY_MODE_ENTER,
-  COPY_MODE_SCROLL_DOWN,
-  COPY_MODE_SCROLL_UP,
+  buildMouseWheelSequence,
   computeWheelLineDelta,
+  getWheelMouseTickCount,
   isAlternateScreen,
+  isMouseTrackingActive,
+  pointToCell,
   refreshATermViewport,
   setupTouchHandlers,
 } from './a-term-scrolling-utils'
@@ -24,11 +24,6 @@ export {
   initializeTouchTracking,
   refreshATermViewport,
 } from './a-term-scrolling-utils'
-
-interface CopyModeState {
-  inCopyMode: boolean
-  timeout: ReturnType<typeof setTimeout> | null
-}
 
 interface UseATermScrollingOptions {
   wsRef: React.RefObject<WebSocket | null>
@@ -46,7 +41,6 @@ interface ScrollingSetupResult {
 
 interface UseATermScrollingReturn {
   setupScrolling: (container: HTMLElement) => ScrollingSetupResult
-  resetCopyMode: () => void
 }
 
 export function useATermScrolling({
@@ -57,11 +51,6 @@ export function useATermScrolling({
   onRequestScrollbackOverlay,
   isScrollbackOverlayActive = false,
 }: UseATermScrollingOptions): UseATermScrollingReturn {
-  const copyModeStateRef = useRef<CopyModeState>({
-    inCopyMode: false,
-    timeout: null,
-  })
-
   const sendArrowKey = useCallback(
     (direction: 'up' | 'down') => {
       if (wsRef.current?.readyState !== WebSocket.OPEN) return
@@ -70,44 +59,53 @@ export function useATermScrolling({
     [wsRef],
   )
 
-  const enterCopyMode = useCallback(() => {
-    if (wsRef.current?.readyState !== WebSocket.OPEN) return
-    const state = copyModeStateRef.current
-    if (state.timeout) clearTimeout(state.timeout)
-    if (!state.inCopyMode) {
-      wsRef.current.send(COPY_MODE_ENTER)
-      state.inCopyMode = true
-    }
-    state.timeout = setTimeout(() => {
-      state.inCopyMode = false
-      state.timeout = null
-    }, COPY_MODE_TIMEOUT_MS)
-  }, [wsRef])
-
-  const sendCopyModeScroll = useCallback(
-    (direction: 'up' | 'down') => {
+  const sendMouseWheel = useCallback(
+    (direction: 'up' | 'down', column: number, row: number) => {
       if (wsRef.current?.readyState !== WebSocket.OPEN) return
-      wsRef.current.send(
-        direction === 'up' ? COPY_MODE_SCROLL_UP : COPY_MODE_SCROLL_DOWN,
-      )
+      wsRef.current.send(buildMouseWheelSequence(direction, column, row))
     },
     [wsRef],
   )
-
-  const resetCopyMode = useCallback(() => {
-    const state = copyModeStateRef.current
-    state.inCopyMode = false
-    if (state.timeout) {
-      clearTimeout(state.timeout)
-      state.timeout = null
-    }
-  }, [])
 
   const setupScrolling = useCallback(
     (container: HTMLElement): ScrollingSetupResult => {
       const handleWheel = (e: WheelEvent) => {
         const aTerm = aTermRef.current
         if (!aTerm || e.deltaY === 0) return
+
+        // The application asked for mouse reporting, so it scrolls itself:
+        // an alternate-screen TUI has no tmux history to page through, and
+        // wheel reports are its only scrollback. xterm.js drops the wheel
+        // unless its render service has published device cell metrics, which
+        // these panes never get, so send the reports here instead.
+        if (isMouseTrackingActive(aTerm)) {
+          e.preventDefault()
+          e.stopPropagation()
+          e.stopImmediatePropagation()
+          const screen = container.querySelector<HTMLElement>('.xterm-screen')
+          const cellHeight = screen
+            ? screen.clientHeight / Math.max(aTerm.rows, 1)
+            : 0
+          const ticks = getWheelMouseTickCount(
+            e.deltaY,
+            e.deltaMode,
+            cellHeight,
+            aTerm.rows,
+          )
+          if (ticks === 0) return
+          const { column, row } = pointToCell(
+            screen,
+            aTerm,
+            e.clientX,
+            e.clientY,
+          )
+          const direction = e.deltaY > 0 ? 'down' : 'up'
+          for (let tick = 0; tick < ticks; tick += 1) {
+            sendMouseWheel(direction, column, row)
+          }
+          return
+        }
+
         const prefersLocalViewportScroll =
           prefersLocalViewportScrollForMode(sessionMode)
         const isAltScreen = isAlternateScreen(aTerm)
@@ -151,10 +149,8 @@ export function useATermScrolling({
       if (isMobile) {
         touchCleanup = setupTouchHandlers(container, {
           aTermRef,
-          enterCopyMode,
           sendArrowKey,
-          sendCopyModeScroll,
-          resetCopyMode,
+          sendMouseWheel,
           sessionMode,
           onRequestScrollbackOverlay,
           isScrollbackOverlayActive,
@@ -169,14 +165,10 @@ export function useATermScrolling({
       isScrollbackOverlayActive,
       onRequestScrollbackOverlay,
       sessionMode,
-      enterCopyMode,
-      resetCopyMode,
       sendArrowKey,
-      sendCopyModeScroll,
+      sendMouseWheel,
     ],
   )
 
-  useEffect(() => resetCopyMode, [resetCopyMode])
-
-  return { setupScrolling, resetCopyMode }
+  return { setupScrolling }
 }

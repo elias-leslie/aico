@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { APP_THEME_OPTIONS, type AppThemePreference } from '@/lib/app-theme'
 import {
   A_TERM_CURSOR_STYLES,
@@ -16,6 +16,12 @@ import {
 } from '@/lib/hooks/use-a-term-settings'
 import { useAppTheme } from '@/lib/hooks/use-app-theme'
 import { useClickOutside } from '@/lib/hooks/use-click-outside'
+import {
+  A_TERM_RENDERER_OPTIONS,
+  type ATermRendererPreference,
+  getRendererPreference,
+  setRendererPreference,
+} from '@/lib/utils/renderer-preference'
 import type {
   KeyboardSizePreset,
   KeyboardSpacingPreset,
@@ -78,6 +84,16 @@ export function SettingsDropdown({
   renderTrigger = true,
 }: SettingsDropdownProps) {
   const { themePreference, setThemePreference } = useAppTheme()
+  const [renderer, setRenderer] = useState<ATermRendererPreference>('auto')
+  useEffect(() => setRenderer(getRendererPreference()), [])
+  // Switching renderers means rebuilding every xterm instance, so reload once
+  // instead of trying to swap addons underneath live panes. tmux keeps the
+  // sessions, so a reload costs nothing but the repaint.
+  const changeRenderer = useCallback((value: ATermRendererPreference) => {
+    setRenderer(value)
+    setRendererPreference(value)
+    window.location.reload()
+  }, [])
   const buttonRef = useRef<HTMLButtonElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
@@ -185,7 +201,7 @@ export function SettingsDropdown({
           onChange={setCursorBlink}
         />
 
-        <div className={showKeyboardSettings ? 'mb-4' : ''}>
+        <div className="mb-4">
           <SettingSelect
             label="Scrollback Buffer"
             value={scrollback}
@@ -193,6 +209,13 @@ export function SettingsDropdown({
             options={scrollbackOptions}
           />
         </div>
+
+        <SettingButtonGroup
+          label="Renderer"
+          value={renderer}
+          options={A_TERM_RENDERER_OPTIONS}
+          onChange={changeRenderer}
+        />
 
         {showKeyboardSettings && (
           <>

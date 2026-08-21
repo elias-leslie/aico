@@ -24,6 +24,7 @@ from ...services.metrics import get_metrics
 from ...services.pty_manager import read_pty_output, spawn_pty_for_tmux
 from ...services.recording import SessionRecorder
 from ...services.scrollback_pager import (
+    get_scrollback_line_count,
     get_viewport_lines,
 )
 from ...services.scrollback_sync import (
@@ -270,12 +271,20 @@ async def _send_tui_prefetch_scrollback(
         sb_lines.pop()
     if not sb_lines:
         return
+    # total_lines must be tmux's history_size, matching what a scroll_request
+    # returns. A pane drawing in the alternate screen has none, and the client
+    # relies on that 0 to know there is no history worth an overlay.
+    history_size = await asyncio.to_thread(
+        get_scrollback_line_count,
+        tmux_session_name,
+        tmux_socket_name,
+    )
     page_payload: dict = {
         "__ctrl": True,
         "scrollback_page": {
             "from_line": 0,
             "lines": sb_lines,
-            "total_lines": len(sb_lines),
+            "total_lines": history_size if history_size is not None else len(sb_lines),
         },
     }
     await websocket.send_text(json.dumps(page_payload))
@@ -283,6 +292,7 @@ async def _send_tui_prefetch_scrollback(
         "tui_scrollback_prefetch_sent",
         session_id=session_id,
         lines_sent=len(sb_lines),
+        history_size=history_size,
     )
 
 

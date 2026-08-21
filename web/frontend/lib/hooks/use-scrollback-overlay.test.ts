@@ -145,4 +145,56 @@ describe('useScrollbackOverlay', () => {
     ])
     expect(result.current.totalLines).toBe(4)
   })
+  it('closes the overlay when tmux reports no history for the pane', () => {
+    const wsRef = createMockWsRef()
+
+    const { result } = renderHook(() =>
+      useScrollbackOverlay({
+        wsRef,
+        sessionMode: 'claude',
+      }),
+    )
+
+    act(() => {
+      result.current.activate()
+    })
+    expect(result.current.isActive).toBe(true)
+
+    // An alternate-screen TUI has no tmux history: capture-pane still returns
+    // the live screen, but history_size is 0 and there is nothing to page back
+    // through, so the overlay must not sit on top of the live pane.
+    act(() => {
+      result.current.handleScrollbackPage({
+        from_line: 0,
+        lines: ['live-1', 'live-2'],
+        total_lines: 0,
+      })
+    })
+
+    expect(result.current.isActive).toBe(false)
+  })
+
+  it('stops re-opening the overlay for a pane already known to have no history', () => {
+    const wsRef = createMockWsRef()
+
+    const { result } = renderHook(() =>
+      useScrollbackOverlay({
+        wsRef,
+        sessionMode: 'claude',
+      }),
+    )
+
+    act(() => {
+      result.current.handleScrollbackPage({
+        from_line: 0,
+        lines: ['live-1'],
+        total_lines: 0,
+      })
+    })
+    act(() => {
+      result.current.activate()
+    })
+
+    expect(result.current.isActive).toBe(false)
+  })
 })

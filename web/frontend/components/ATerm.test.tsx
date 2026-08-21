@@ -42,7 +42,6 @@ let aTermInstanceOptions:
   | null = null
 let aTermInstanceReady = true
 const resizeHandle = vi.fn()
-const resetCopyMode = vi.fn()
 let resizeHookOptions:
   | Parameters<
       typeof import('../lib/hooks/use-a-term-resize')['useATermResize']
@@ -130,7 +129,6 @@ vi.mock('../lib/hooks/use-a-term-scrolling', () => ({
       wheelCleanup: vi.fn(),
       touchCleanup: vi.fn(),
     }),
-    resetCopyMode,
   }),
 }))
 
@@ -166,7 +164,6 @@ describe('ATermComponent', () => {
     aTermInstanceOptions = null
     aTermInstanceReady = true
     resizeHandle.mockClear()
-    resetCopyMode.mockClear()
     resizeHookOptions = null
     fakeFitAddon.proposeDimensions.mockClear()
     fakeATerm.reset.mockClear()
@@ -415,7 +412,7 @@ describe('ATermComponent', () => {
     expect(websocketState.sendInput).not.toHaveBeenCalled()
   })
 
-  it('resets copy mode before forwarding focused a-term input', () => {
+  it('forwards focused a-term input to the session', () => {
     websocketState.wsRefCurrent = {
       readyState: WebSocket.OPEN,
       send: vi.fn(),
@@ -427,7 +424,6 @@ describe('ATermComponent', () => {
       aTermInstanceOptions?.onData('pwd')
     })
 
-    expect(resetCopyMode).toHaveBeenCalledTimes(1)
     expect(websocketState.sendInput).toHaveBeenCalledWith('pwd')
   })
 

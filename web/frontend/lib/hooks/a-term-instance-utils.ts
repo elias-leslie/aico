@@ -2,6 +2,7 @@ import type { FitAddon } from '@xterm/addon-fit'
 import type { WebglAddon } from '@xterm/addon-webgl'
 import { isMobileDevice } from '../utils/device'
 import { applyMobileATermTouchStyles } from '../utils/mobile-a-term-touch'
+import { shouldUseWebglRenderer } from '../utils/renderer-preference'
 
 type XtermATermConstructor = typeof import('@xterm/xterm').Terminal
 type XtermATerm = InstanceType<XtermATermConstructor>
@@ -48,14 +49,15 @@ export async function loadXtermModules(): Promise<XtermModules> {
 
 /**
  * Load the WebGL renderer after term.open(). Must be called after the canvas
- * is mounted. Returns a cleanup function on success, or null if WebGL is
- * unavailable (caller stays on the DOM renderer). The addon also self-disposes
- * on context loss so xterm transparently falls back.
+ * is mounted. Returns a cleanup function on success, or null when the renderer
+ * is disabled or unavailable (caller stays on the DOM renderer). The addon also
+ * self-disposes on context loss so xterm transparently falls back.
  */
 export function loadWebglRenderer(
   term: XtermATerm,
   modules: Pick<XtermModules, 'WebglAddon'>,
 ): (() => void) | null {
+  if (!shouldUseWebglRenderer()) return null
   try {
     const addon = new modules.WebglAddon()
     addon.onContextLoss(() => addon.dispose())

@@ -4,6 +4,10 @@ type XtermATerm = InstanceType<typeof import('@xterm/xterm').Terminal>
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  getMouseWheelTickCount,
+  getWheelMouseTickCount,
+} from './a-term-scrolling-utils'
+import {
   getTouchScrollEffectiveCellHeight,
   getTouchScrollLineDelta,
   initializeTouchTracking,
@@ -18,7 +22,7 @@ function createTouchEvent(type: string, clientY: number): Event {
   })
 
   Object.defineProperty(event, 'touches', {
-    value: [{ clientY }],
+    value: [{ clientX: 0, clientY }],
     configurable: true,
   })
 
@@ -41,6 +45,25 @@ describe('getTouchScrollLineDelta', () => {
   it('returns zero when there is not enough information to compute a scroll', () => {
     expect(getTouchScrollLineDelta(0, 18)).toBe(0)
     expect(getTouchScrollLineDelta(20, 0)).toBe(0)
+  })
+})
+
+describe('getMouseWheelTickCount', () => {
+  it('sends one wheel tick per text row of drag', () => {
+    expect(getMouseWheelTickCount(54, 18)).toBe(3)
+    expect(getMouseWheelTickCount(-54, 18)).toBe(3)
+  })
+
+  it('holds a sub-row drag until it is worth a tick', () => {
+    expect(getMouseWheelTickCount(10, 18)).toBe(0)
+  })
+
+  it('caps a fling so one event cannot flood the session', () => {
+    expect(getMouseWheelTickCount(10_000, 18)).toBe(12)
+  })
+
+  it('falls back to the pixel threshold when the cell height is unknown', () => {
+    expect(getMouseWheelTickCount(120, 0)).toBe(2)
   })
 })
 
@@ -73,6 +96,28 @@ describe('initializeTouchTracking', () => {
       touchStartY: 144,
       lastSentY: 144,
     })
+  })
+})
+
+describe('getWheelMouseTickCount', () => {
+  it('converts a pixel wheel notch into rows of scroll', () => {
+    expect(getWheelMouseTickCount(120, 0, 20, 30)).toBe(6)
+    expect(getWheelMouseTickCount(-120, 0, 20, 30)).toBe(6)
+  })
+
+  it('falls back to a nominal row height when the pane has not been measured', () => {
+    expect(getWheelMouseTickCount(120, 0, 0, 30)).toBe(9)
+  })
+
+  it('takes line and page deltas at face value', () => {
+    expect(getWheelMouseTickCount(3, 1, 20, 30)).toBe(3)
+    expect(getWheelMouseTickCount(1, 2, 20, 8)).toBe(8)
+  })
+
+  it('always moves at least one row and never floods the session', () => {
+    expect(getWheelMouseTickCount(2, 0, 20, 30)).toBe(1)
+    expect(getWheelMouseTickCount(10_000, 0, 20, 30)).toBe(12)
+    expect(getWheelMouseTickCount(0, 0, 20, 30)).toBe(0)
   })
 })
 
@@ -330,28 +375,98 @@ describe('useATermScrolling', () => {
     wheelCleanup()
   })
 
-  it('exposes resetCopyMode for clearing tmux copy-mode state', () => {
+  it('sends wheel reports instead of tmux copy-mode keys when the app tracks the mouse', () => {
     const aTerm = {
-      buffer: { active: { type: 'normal' } },
-      modes: { mouseTrackingMode: 'none' },
+      buffer: { active: { type: 'alternate' } },
+      modes: { mouseTrackingMode: 'any' },
+      cols: 80,
       refresh: vi.fn(),
       rows: 18,
       scrollLines: vi.fn(),
     }
-    const wsRef = {
-      current: { readyState: WebSocket.OPEN, send: vi.fn() },
-    }
+    const send = vi.fn()
+    const wsRef = { current: { readyState: WebSocket.OPEN, send } }
     const aTermRef = { current: aTerm }
+    const requestOverlay = vi.fn()
+    const container = document.createElement('div')
+
+    const { result } = renderHook(() =>
+      useATermScrolling({
+        wsRef: wsRef as never,
+        aTermRef: aTermRef as unknown as { current: XtermATerm | null },
+        isMobile: true,
+        sessionMode: 'claude',
+        onRequestScrollbackOverlay: requestOverlay,
+      }),
+    )
+
+    const { wheelCleanup, touchCleanup } =
+      result.current.setupScrolling(container)
+
+    container.dispatchEvent(createTouchEvent('touchstart', 260))
+    container.dispatchEvent(createTouchEvent('touchmove', 320))
+
+    // Never the tmux copy-mode prefix: that used to strand the pane in
+    // copy-mode, where tmux swallows every later keystroke.
+    const copyModePrefix = `${String.fromCharCode(2)}[`
+    for (const [payload] of send.mock.calls) {
+      expect(payload).not.toContain(copyModePrefix)
+    }
+    const wheelUpPrefix = `${String.fromCharCode(27)}[<64;`
+    expect(
+      send.mock.calls.some(
+        ([payload]) =>
+          typeof payload === 'string' &&
+          payload.startsWith(wheelUpPrefix) &&
+          payload.endsWith('M'),
+      ),
+    ).toBe(true)
+    expect(requestOverlay).not.toHaveBeenCalled()
+
+    touchCleanup()
+    wheelCleanup()
+  })
+
+  it('sends wheel reports to the pane when the app tracks the mouse', () => {
+    const aTerm = {
+      buffer: { active: { type: 'alternate' } },
+      cols: 80,
+      modes: { mouseTrackingMode: 'any' },
+      refresh: vi.fn(),
+      rows: 30,
+      scrollLines: vi.fn(),
+    }
+    const send = vi.fn()
+    const wsRef = { current: { readyState: WebSocket.OPEN, send } }
+    const aTermRef = { current: aTerm }
+    const container = document.createElement('div')
 
     const { result } = renderHook(() =>
       useATermScrolling({
         wsRef: wsRef as never,
         aTermRef: aTermRef as unknown as { current: XtermATerm | null },
         isMobile: false,
-        sessionMode: 'shell',
+        sessionMode: 'claude',
       }),
     )
 
-    expect(() => result.current.resetCopyMode()).not.toThrow()
+    const { wheelCleanup } = result.current.setupScrolling(container)
+    const event = new WheelEvent('wheel', {
+      deltaY: -120,
+      bubbles: true,
+      cancelable: true,
+    })
+
+    container.dispatchEvent(event)
+
+    const wheelUpPrefix = `${String.fromCharCode(27)}[<64;`
+    expect(send).toHaveBeenCalledTimes(9)
+    expect(
+      send.mock.calls.every(([payload]) => payload.startsWith(wheelUpPrefix)),
+    ).toBe(true)
+    expect(aTerm.scrollLines).not.toHaveBeenCalled()
+    expect(event.defaultPrevented).toBe(true)
+
+    wheelCleanup()
   })
 })

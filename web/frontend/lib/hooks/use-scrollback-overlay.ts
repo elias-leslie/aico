@@ -68,6 +68,9 @@ export function useScrollbackOverlay({
   // Cached lines from server prefetch or periodic syncs.
   const cachedLinesRef = useRef<string[]>([])
   const cachedTotalLinesRef = useRef(0)
+  // tmux history_size from the most recent server page, or null before the
+  // first page arrives. 0 means the pane has no scrollable history at all.
+  const knownHistorySizeRef = useRef<number | null>(null)
 
   const requestFreshData = useCallback(() => {
     const ws = wsRef.current
@@ -86,6 +89,13 @@ export function useScrollbackOverlay({
   const activate = useCallback(
     (nextInitialScrollLineDelta = 0) => {
       if (!isTui || activeRef.current) return
+      // A pane with no tmux history has nothing to page through — opening the
+      // overlay would only cover the live pane with a copy of itself. Refresh
+      // the cache so a later gesture opens as soon as history does exist.
+      if (knownHistorySizeRef.current === 0) {
+        requestFreshData()
+        return
+      }
       activeRef.current = true
       setInitialScrollLineDelta(nextInitialScrollLineDelta)
       setIsActive(true)
@@ -120,6 +130,7 @@ export function useScrollbackOverlay({
   const handleScrollbackPage = useCallback(
     (data: ScrollbackPage) => {
       const latestTailPage = isLatestTailPage(data)
+      knownHistorySizeRef.current = data.total_lines
 
       if (data.lines.length > 0) {
         bumpSearchVersionIfNeeded()
@@ -137,7 +148,12 @@ export function useScrollbackOverlay({
       }
 
       if (!activeRef.current) return
-      if (data.lines.length === 0) {
+      // total_lines is tmux's history_size. It is 0 for a pane drawing in the
+      // alternate screen (Claude Code and other full-screen TUIs), where tmux
+      // keeps no history and capture-pane returns only the live screen. Showing
+      // an overlay there just hides the live pane behind a copy of itself, so
+      // close it and leave the application's own scrollback in charge.
+      if (data.lines.length === 0 || data.total_lines <= 0) {
         activeRef.current = false
         setIsActive(false)
         setIsLoading(false)

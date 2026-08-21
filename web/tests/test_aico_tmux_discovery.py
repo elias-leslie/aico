@@ -114,7 +114,7 @@ def test_catalogued_source_identity_distinguishes_same_session_on_two_sockets(
         if args[:2] != ["list-panes", "-a"]:
             return False, "unexpected"
         if socket_name in {first_socket, second_socket}:
-            return True, "aico-shared\t%1\t/home/testuser/aico\tbash"
+            return True, "aico-shared\t%1\t/home/testuser/aico\tbash\t0"
         return False, "no server"
 
     with (

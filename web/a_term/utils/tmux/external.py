@@ -27,6 +27,15 @@ _EXTERNAL_AGENT_TOKENS = (
     "hermes",
     "pi",
 )
+_EXTERNAL_SHELL_COMMANDS = frozenset(
+    {"bash", "sh", "zsh", "fish", "dash", "ksh", "tcsh", "csh", "login", "su"}
+)
+# Aico launches its agent as a child of a non-job-control bash, so the agent
+# shares the shell's process group and tmux reports the shell as
+# ``pane_current_command``. Walk a bounded slice of the pane's process tree to
+# recover the real agent command.
+_PANE_PROCESS_SCAN_DEPTH = 3
+_PANE_PROCESS_SCAN_LIMIT = 24
 _AICO_SERVER_ID_PATTERN = re.compile(r"^[0-9a-f]{8,64}$")
 _AICO_DB_FILENAME = "aico.db"
 _AICO_MANAGED_SOCKET_DIR = "tmux"
@@ -188,11 +197,77 @@ def _pkg() -> object:
     return sys.modules["a_term.utils.tmux"]
 
 
-def _infer_external_mode(session_name: str, current_command: str) -> tuple[str, str]:
-    label = f"{session_name} {current_command}".lower()
+def _match_agent_token(label: str) -> str | None:
+    """Return the agent token named by ``label``, or None."""
+    lowered = label.lower()
     for token in _EXTERNAL_AGENT_TOKENS:
-        if re.search(rf"(^|[^a-z0-9]){re.escape(token)}([^a-z0-9]|$)", label):
-            return token, "running"
+        if re.search(rf"(^|[^a-z0-9]){re.escape(token)}([^a-z0-9]|$)", lowered):
+            return token
+    return None
+
+
+def _read_proc_text(path: Path) -> str:
+    try:
+        return path.read_text(errors="replace")
+    except OSError:
+        return ""
+
+
+def _pane_descendant_labels(pane_pid: int) -> list[str]:
+    """Return command labels for a bounded slice of a pane's process tree.
+
+    Reads ``/proc`` only. A missing or racing process yields no label instead of
+    raising, so discovery never fails because a child exited mid-scan.
+    """
+    labels: list[str] = []
+    frontier = [pane_pid]
+    seen = {pane_pid}
+    for _ in range(_PANE_PROCESS_SCAN_DEPTH):
+        if not frontier or len(labels) >= _PANE_PROCESS_SCAN_LIMIT:
+            break
+        next_frontier: list[int] = []
+        for pid in frontier:
+            children = _read_proc_text(Path(f"/proc/{pid}/task/{pid}/children"))
+            for raw_child in children.split():
+                if not raw_child.isdigit():
+                    continue
+                child_pid = int(raw_child)
+                if child_pid in seen:
+                    continue
+                seen.add(child_pid)
+                next_frontier.append(child_pid)
+                comm = _read_proc_text(Path(f"/proc/{child_pid}/comm")).strip()
+                cmdline = _read_proc_text(Path(f"/proc/{child_pid}/cmdline"))
+                argv0 = Path(cmdline.split("\x00", maxsplit=1)[0]).name if cmdline else ""
+                label = f"{comm} {argv0}".strip()
+                if label:
+                    labels.append(label)
+                if len(labels) >= _PANE_PROCESS_SCAN_LIMIT:
+                    break
+            if len(labels) >= _PANE_PROCESS_SCAN_LIMIT:
+                break
+        frontier = next_frontier
+    return labels
+
+
+def _infer_external_mode(
+    session_name: str,
+    current_command: str,
+    pane_pid: str | None = None,
+) -> tuple[str, str]:
+    """Classify an external pane as an agent mode or a plain shell."""
+    token = _match_agent_token(f"{session_name} {current_command}")
+    if token:
+        return token, "running"
+
+    # tmux reports the shell when the agent shares its process group, so look
+    # for the agent among the pane's descendants before calling it a shell.
+    if current_command.lower() in _EXTERNAL_SHELL_COMMANDS and pane_pid and pane_pid.isdigit():
+        for label in _pane_descendant_labels(int(pane_pid)):
+            token = _match_agent_token(label)
+            if token:
+                return token, "running"
+
     return "shell", "not_started"
 
 
@@ -235,7 +310,8 @@ def list_external_tmux_sessions() -> list[dict[str, object]]:
             "list-panes",
             "-a",
             "-F",
-            "#{session_name}\t#{pane_id}\t#{pane_current_path}\t#{pane_current_command}",
+            "#{session_name}\t#{pane_id}\t#{pane_current_path}\t#{pane_current_command}"
+            "\t#{pane_pid}",
         ]
         if source.socket_name:
             success, output = pkg.run_tmux_command(  # type: ignore[union-attr]
@@ -249,12 +325,12 @@ def list_external_tmux_sessions() -> list[dict[str, object]]:
 
         for line in output.splitlines():
             parts = line.split("\t")
-            if len(parts) != 4:
+            if len(parts) != 5:
                 continue
-            session_name, pane_id, working_dir, current_command = parts
+            session_name, pane_id, working_dir, current_command, pane_pid = parts
             if not session_name or not _session_matches_source(source, session_name):
                 continue
-            mode, agent_state = _infer_external_mode(session_name, current_command)
+            mode, agent_state = _infer_external_mode(session_name, current_command, pane_pid)
             if mode == "shell" and not source.include_shell:
                 continue
             external_id = source.external_id(session_name)

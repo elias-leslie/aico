@@ -293,7 +293,28 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
       overlay.updateCacheFromSync,
     ])
 
-    const pasteInput = useBracketedPaste(sendInput)
+    // Any user input returns the pane to the live view. The scrollback overlay
+    // covers the live terminal, so without this a keystroke typed while the
+    // overlay is open lands in the session with nothing on screen to show for
+    // it — the pane looks like it stopped accepting input.
+    const overlayActiveRef = useRef(false)
+    const deactivateOverlay = overlay.deactivate
+    useEffect(() => {
+      overlayActiveRef.current = overlay.isActive
+    }, [overlay.isActive])
+
+    const sendUserInput = useCallback(
+      (data: string) => {
+        if (overlayActiveRef.current) {
+          overlayActiveRef.current = false
+          deactivateOverlay()
+        }
+        sendInput(data)
+      },
+      [deactivateOverlay, sendInput],
+    )
+
+    const pasteInput = useBracketedPaste(sendUserInput)
     const pasteFile = useCallback(
       (file: File) => {
         void onFilePaste?.(file, sessionId)
@@ -303,7 +324,7 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
 
     const isMobile = useMemo(() => isMobileDevice(), [])
 
-    const { setupScrolling, resetCopyMode } = useATermScrolling({
+    const { setupScrolling } = useATermScrolling({
       wsRef,
       aTermRef,
       isMobile,
@@ -317,11 +338,10 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
       (data: string) => {
         if (!isFocusedRef.current) return
         if (wsRef.current?.readyState === WebSocket.OPEN) {
-          resetCopyMode()
-          sendInput(data)
+          sendUserInput(data)
         }
       },
-      [resetCopyMode, sendInput],
+      [sendUserInput],
     )
 
     // TUI/agent sessions: scrollback overlay handles all history via tmux.
@@ -356,7 +376,7 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
 
     useATermHandle(ref, {
       reconnect,
-      sendInput,
+      sendInput: sendUserInput,
       status,
       aTermRef,
       search,

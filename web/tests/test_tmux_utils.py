@@ -24,6 +24,7 @@ from a_term.utils.tmux import (
     validate_session_name,
     validate_socket_name,
 )
+from a_term.utils.tmux import external as external_tmux
 from a_term.utils.tmux.sessions import (
     _build_tmux_scope_env,
     _recreate_initial_window_with_session_history_limit,
@@ -127,12 +128,12 @@ def test_list_external_agent_tmux_sessions_discovers_non_a_term_agent_sessions()
                 True,
                 "\n".join(
                     [
-                        "claude-summitflow\t%1\t/home/testuser/summitflow\tclaude",
-                        "summitflow-123e4567-e89b-12d3-a456-426614174000\t%2\t/home/testuser/summitflow\tbash",
-                        "codex-agent-hub\t%3\t/home/testuser/agent-hub\tcodex",
-                        "hermes-research\t%4\t/home/testuser/research\thermes",
-                        "pi-a-term\t%5\t/home/testuser/a-term\tpi",
-                        "agy-antigravity\t%6\t/home/testuser/antigravity\tagy",
+                        "claude-summitflow\t%1\t/home/testuser/summitflow\tclaude\t0",
+                        "summitflow-123e4567-e89b-12d3-a456-426614174000\t%2\t/home/testuser/summitflow\tbash\t0",
+                        "codex-agent-hub\t%3\t/home/testuser/agent-hub\tcodex\t0",
+                        "hermes-research\t%4\t/home/testuser/research\thermes\t0",
+                        "pi-a-term\t%5\t/home/testuser/a-term\tpi\t0",
+                        "agy-antigravity\t%6\t/home/testuser/antigravity\tagy\t0",
                     ]
                 ),
             ),
@@ -178,13 +179,13 @@ def test_list_external_agent_tmux_sessions_discovers_aico_socket_sessions() -> N
                 True,
                 "\n".join(
                     [
-                        "aico-7\t%1\t/home/testuser/aico\tbash",
-                        "aico-8\t%2\t/home/testuser/agent-hub\tcodex",
-                        "other\t%3\t/home/testuser/other\tcodex",
+                        "aico-7\t%1\t/home/testuser/aico\tbash\t0",
+                        "aico-8\t%2\t/home/testuser/agent-hub\tcodex\t0",
+                        "other\t%3\t/home/testuser/other\tcodex\t0",
                     ]
                 ),
             )
-        return True, "codex-default\t%4\t/home/testuser/default\tcodex"
+        return True, "codex-default\t%4\t/home/testuser/default\tcodex\t0"
 
     with (
         patch("a_term.utils.tmux.run_tmux_command", side_effect=fake_run_tmux_command),
@@ -503,3 +504,41 @@ def test_apply_external_attach_options_targets_named_socket() -> None:
         call(["set-option", "-t", "aico-7", "status", "off"], socket_name="aico"),
         call(["set-option", "-t", "aico-7", "status", "on"], socket_name="aico"),
     ]
+
+
+def test_infer_external_mode_finds_agent_below_a_shell_pane() -> None:
+    """Aico runs its agent inside the pane's shell process group.
+
+    tmux then reports the shell as ``pane_current_command``, so the pane has to
+    be classified from its process tree or every Aico agent looks like a shell.
+    """
+    with patch(
+        "a_term.utils.tmux.external._pane_descendant_labels",
+        return_value=["claude-real claude-real"],
+    ):
+        assert external_tmux._infer_external_mode("aico-e03c60b0", "bash", "4242") == (
+            "claude",
+            "running",
+        )
+
+
+def test_infer_external_mode_keeps_plain_shell_panes_as_shells() -> None:
+    with patch(
+        "a_term.utils.tmux.external._pane_descendant_labels",
+        return_value=["git git", "less less"],
+    ):
+        assert external_tmux._infer_external_mode("aico-bfa0cfb0", "bash", "4242") == (
+            "shell",
+            "not_started",
+        )
+
+
+def test_infer_external_mode_skips_process_scan_for_non_shell_panes() -> None:
+    with patch(
+        "a_term.utils.tmux.external._pane_descendant_labels",
+        side_effect=AssertionError("must not scan"),
+    ):
+        assert external_tmux._infer_external_mode("scratch", "vim", "4242") == (
+            "shell",
+            "not_started",
+        )
