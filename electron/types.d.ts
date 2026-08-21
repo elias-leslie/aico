@@ -28,6 +28,8 @@ export interface AicoApi {
     capture(): Promise<string>
     /** Bounded tmux history page (with color escapes), newest tail by default. */
     page(request?: { fromLine?: number; count?: number }): Promise<ScrollbackPage>
+    /** Who owns the pane's scrollback, straight from tmux. */
+    paneMode(): Promise<{ alternateScreen: boolean; mouseReporting: boolean }>
   }
   selection: {
     /** Subscribe to indicated-selection deliveries (drives the capture toast);

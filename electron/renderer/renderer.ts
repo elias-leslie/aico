@@ -533,14 +533,48 @@ window.aico.settings.onTerminalFontChanged((settings) => {
   void applyTerminalFontSettings(settings)
 })
 
+// tmux is the authority on who owns the pane's scrollback. This window's xterm
+// is not: an attached tmux client sits in the alternate screen for the whole
+// session, and the mouse mode it observes comes and goes as tmux redraws, so
+// asking it flipped the wheel between the overlay and the program mid-session.
+// tmux reports the pane's own state and holds it steady, so cache that and
+// refresh it in the background — a wheel event has to decide synchronously.
+const PANE_MODE_MAX_AGE_MS = 1500
+let paneMode: { alternateScreen: boolean; mouseReporting: boolean } | null = null
+let paneModeFetchedAt = 0
+let paneModeInFlight = false
+
+function refreshPaneMode(): void {
+  if (paneModeInFlight) return
+  if (paneMode && performance.now() - paneModeFetchedAt < PANE_MODE_MAX_AGE_MS) return
+  paneModeInFlight = true
+  void window.aico.scrollback
+    .paneMode()
+    .then((mode) => {
+      paneMode = mode
+      paneModeFetchedAt = performance.now()
+    })
+    .catch(() => {
+      // tmux unreachable — keep using the xterm fallback below.
+    })
+    .finally(() => {
+      paneModeInFlight = false
+    })
+}
+
+refreshPaneMode()
+
 host.addEventListener(
   'wheel',
   (e) => {
+    refreshPaneMode()
     const action = scrollbackWheelAction({
       deltaY: e.deltaY,
       overlayActive: overlay.active,
-      mouseReportingActive: mouseReportingActive(term),
-      alternateScreen: term.buffer.active.type === 'alternate',
+      mouseReportingActive: paneMode ? paneMode.mouseReporting : mouseReportingActive(term),
+      alternateScreen: paneMode
+        ? paneMode.alternateScreen
+        : term.buffer.active.type === 'alternate',
       tuiSlug,
     })
     if (action === 'ignore') {

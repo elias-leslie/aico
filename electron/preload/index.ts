@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('aico', {
     capture: (): Promise<string> => ipcRenderer.invoke('tmux:capture'),
     page: (request?: { fromLine?: number; count?: number }) =>
       ipcRenderer.invoke('tmux:scrollback-page', request),
+    paneMode: () => ipcRenderer.invoke('tmux:pane-mode'),
   },
   selection: {
     /** Fired when an indicated selection is delivered to this widget; drives the

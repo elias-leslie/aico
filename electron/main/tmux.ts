@@ -262,6 +262,11 @@ export function captureTargetArgs(target: TmuxTarget): string[] {
   ])
 }
 
+export interface PaneMode {
+  alternateScreen: boolean
+  mouseReporting: boolean
+}
+
 export function paneScrollbackInfoTargetArgs(target: TmuxTarget): string[] {
   return targetArgs(target, [
     'display-message',
@@ -270,6 +275,31 @@ export function paneScrollbackInfoTargetArgs(target: TmuxTarget): string[] {
     target.session,
     '#{history_size} #{pane_height}',
   ])
+}
+
+/**
+ * `tmux` argv reporting who owns the pane's scrollback.
+ *
+ * The renderer cannot trust its own xterm for this. An attached tmux client
+ * sits in the alternate screen for the whole session, and the mouse-mode the
+ * client sees comes and goes as tmux redraws, so the answer flapped between
+ * wheel events. tmux itself tracks the pane's real state and is stable.
+ */
+export function paneModeTargetArgs(target: TmuxTarget): string[] {
+  return targetArgs(target, [
+    'display-message',
+    '-p',
+    '-t',
+    target.session,
+    '#{?alternate_on,1,0} #{?mouse_any_flag,1,0}',
+  ])
+}
+
+/** A program owns its scrollback when it draws in the alternate screen (so tmux
+ * keeps no history for it) and grabs the mouse (so it acts on wheel reports). */
+export function parsePaneMode(stdout: string): PaneMode {
+  const [alternate, mouse] = stdout.trim().split(/\s+/)
+  return { alternateScreen: alternate === '1', mouseReporting: mouse === '1' }
 }
 
 export function scrollbackPageBounds(

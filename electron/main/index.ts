@@ -119,8 +119,10 @@ import {
   paneExitedEventPath,
   paneExitedHookCommand,
   paneExitedHookTargetArgs,
+  paneModeTargetArgs,
   panePidTargetArgs,
   paneScrollbackInfoTargetArgs,
+  parsePaneMode,
   refreshClientArgs,
   respawnTargetArgs,
   runInPaneTargetArgs,
@@ -3860,6 +3862,19 @@ app.whenReady().then(async () => {
       },
     )
     return stdout
+  })
+
+  ipcMain.handle('tmux:pane-mode', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const widgetId = win ? widgetOf.get(win.id) : undefined
+    if (!widgetId) return { alternateScreen: false, mouseReporting: false }
+
+    const { stdout } = await execFileAsync(
+      TMUX_BIN,
+      paneModeTargetArgs(tmuxPaneTargetForWidget(widgetId)),
+      { maxBuffer: 1024 },
+    )
+    return parsePaneMode(stdout)
   })
 
   ipcMain.handle('tmux:scrollback-page', async (event, request?: unknown) => {
