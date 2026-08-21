@@ -8,6 +8,7 @@ describe('scrollback wheel policy', () => {
         deltaY: -100,
         overlayActive: false,
         mouseReportingActive: false,
+        alternateScreen: false,
         tuiSlug: 'shell',
       }),
     ).toBe('open')
@@ -16,6 +17,7 @@ describe('scrollback wheel policy', () => {
         deltaY: -100,
         overlayActive: false,
         mouseReportingActive: false,
+        alternateScreen: false,
         tuiSlug: 'shell',
       }),
     ).toBe(true)
@@ -27,17 +29,19 @@ describe('scrollback wheel policy', () => {
         deltaY: -100,
         overlayActive: false,
         mouseReportingActive: true,
+        alternateScreen: false,
         tuiSlug: 'shell',
       }),
     ).toBe('ignore')
   })
 
-  it('opens known TUI scrollback even when the TUI has mouse reporting active', () => {
+  it('opens known TUI scrollback for a normal-screen TUI that reports the mouse', () => {
     expect(
       scrollbackWheelAction({
         deltaY: -100,
         overlayActive: false,
         mouseReportingActive: true,
+        alternateScreen: false,
         tuiSlug: 'claude-code',
       }),
     ).toBe('open')
@@ -49,6 +53,7 @@ describe('scrollback wheel policy', () => {
         deltaY: 100,
         overlayActive: false,
         mouseReportingActive: true,
+        alternateScreen: false,
         tuiSlug: 'claude-code',
       }),
     ).toBe('consume')
@@ -60,6 +65,7 @@ describe('scrollback wheel policy', () => {
         deltaY: 100,
         overlayActive: false,
         mouseReportingActive: false,
+        alternateScreen: false,
         tuiSlug: 'shell',
       }),
     ).toBe('ignore')
@@ -68,7 +74,48 @@ describe('scrollback wheel policy', () => {
         deltaY: -100,
         overlayActive: true,
         mouseReportingActive: false,
+        alternateScreen: false,
         tuiSlug: 'claude-code',
+      }),
+    ).toBe('ignore')
+  })
+
+  it('forwards the wheel to a TUI that owns the alternate screen and the mouse', () => {
+    // Claude Code: tmux holds no history worth showing, the program does.
+    for (const deltaY of [-100, 100]) {
+      expect(
+        scrollbackWheelAction({
+          deltaY,
+          overlayActive: false,
+          mouseReportingActive: true,
+          alternateScreen: true,
+          tuiSlug: 'claude-code',
+        }),
+      ).toBe('forward')
+    }
+  })
+
+  it('keeps the overlay for alternate-screen TUIs that do not grab the mouse', () => {
+    // Antigravity and Codex keep their output in tmux history.
+    expect(
+      scrollbackWheelAction({
+        deltaY: -100,
+        overlayActive: false,
+        mouseReportingActive: false,
+        alternateScreen: true,
+        tuiSlug: 'antigravity',
+      }),
+    ).toBe('open')
+  })
+
+  it('never forwards for a plain shell, whatever the program is doing', () => {
+    expect(
+      scrollbackWheelAction({
+        deltaY: -100,
+        overlayActive: false,
+        mouseReportingActive: true,
+        alternateScreen: true,
+        tuiSlug: 'shell',
       }),
     ).toBe('ignore')
   })

@@ -15,6 +15,7 @@ import {
 import { AICO_TOAST_EVENT, type AicoToastDetail } from './actions'
 import { initControlSurface } from './control-surface'
 import { mouseReportingActive, setupMouseShim } from './mouse-shim'
+import { pointToCell, sgrWheelSequence, wheelMouseTicks } from './mouse-wheel'
 import { ScrollbackOverlay } from './scrollback-overlay'
 import { scrollbackWheelAction } from './scrollback-policy'
 import { wireVoice } from './voice'
@@ -539,6 +540,7 @@ host.addEventListener(
       deltaY: e.deltaY,
       overlayActive: overlay.active,
       mouseReportingActive: mouseReportingActive(term),
+      alternateScreen: term.buffer.active.type === 'alternate',
       tuiSlug,
     })
     if (action === 'ignore') {
@@ -549,6 +551,18 @@ host.addEventListener(
     e.stopPropagation()
     e.stopImmediatePropagation()
     if (action === 'consume') return
+
+    // The TUI holds its own transcript (Claude Code): give it the wheel.
+    if (action === 'forward') {
+      const screen = host.querySelector<HTMLElement>('.xterm-screen')
+      const cellHeight = screen ? screen.clientHeight / Math.max(term.rows, 1) : 0
+      const ticks = wheelMouseTicks(e.deltaY, e.deltaMode, cellHeight, term.rows)
+      if (ticks === 0) return
+      const { column, row } = pointToCell(screen, term.cols, term.rows, e.clientX, e.clientY)
+      const sequence = sgrWheelSequence(e.deltaY > 0 ? 'down' : 'up', column, row)
+      for (let tick = 0; tick < ticks; tick += 1) window.aico.pty.input(sequence)
+      return
+    }
 
     void overlay.enter(wheelLineDelta(e.deltaY))
   },
