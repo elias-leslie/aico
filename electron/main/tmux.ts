@@ -158,6 +158,11 @@ function tmuxProfileLines(): string[] {
   return [
     `set -g history-limit ${HISTORY_LIMIT}`,
     'set -g mouse off',
+    // Claude Code asks for this and warns when it is missing: it lets tmux
+    // forward focus in/out to the pane, so a TUI knows when it is the widget
+    // the operator is actually looking at. (Claude Code also suggests
+    // `mouse on`; Aico deliberately does not -- see the comment above.)
+    'set -g focus-events on',
     'set -g status off',
     'set -g default-terminal "tmux-256color"',
     'set -g terminal-overrides ",xterm-256color:Tc"',
@@ -180,6 +185,7 @@ export function tmuxProfileTargetArgs(socket: string): string[] {
   const commands = [
     ['set-option', '-g', 'history-limit', String(HISTORY_LIMIT)],
     ['set-option', '-g', 'mouse', 'off'],
+    ['set-option', '-g', 'focus-events', 'on'],
     ['set-option', '-g', 'status', 'off'],
     ['set-option', '-g', 'default-terminal', 'tmux-256color'],
     ['set-option', '-g', 'terminal-overrides', ',xterm-256color:Tc'],

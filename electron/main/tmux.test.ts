@@ -347,6 +347,8 @@ describe('tmux model', () => {
 
   it('sets a high history limit in the conf read at server start', () => {
     expect(tmuxConf()).toContain(`set -g history-limit ${HISTORY_LIMIT}`)
+    // Claude Code warns when focus tracking is off.
+    expect(tmuxConf()).toContain('set -g focus-events on')
   })
 
   it('turns the tmux status bar off (Aico draws its own chrome)', () => {
@@ -366,8 +368,9 @@ describe('tmux model', () => {
     expect(args.slice(0, 2)).toEqual(INTERNAL_SOCKET_ARGS)
     expect(args.join(' ')).toContain('set-environment -gu NO_COLOR')
     expect(args.join(' ')).toContain('set-option -g terminal-overrides ,xterm-256color:Tc')
+    expect(args.join(' ')).toContain('set-option -g focus-events on')
     // tmux's `;` separator chains the per-option commands into a single spawn.
-    expect(args.filter((a) => a === ';')).toHaveLength(8)
+    expect(args.filter((a) => a === ';')).toHaveLength(9)
   })
 
   it('builds a generation-specific durable pane-exited event hook on one exact socket', () => {
