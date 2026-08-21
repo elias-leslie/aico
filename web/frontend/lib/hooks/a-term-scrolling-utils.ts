@@ -54,10 +54,7 @@ export function buildMouseWheelSequence(
 
 function clampCell(value: number, max = Number.POSITIVE_INFINITY): number {
   if (!Number.isFinite(value)) return 1
-  return Math.min(
-    Math.max(Math.trunc(value), 1),
-    Number.isFinite(max) ? max : value,
-  )
+  return Math.min(Math.max(Math.trunc(value), 1), Math.max(max, 1))
 }
 
 /** Translate a client point inside the a-term screen to 1-based cell coords. */
