@@ -17,7 +17,7 @@ import { initControlSurface } from './control-surface'
 import { mouseReportingActive, setupMouseShim } from './mouse-shim'
 import { pointToCell, sgrWheelSequence, wheelMouseTicks } from './mouse-wheel'
 import { ScrollbackOverlay } from './scrollback-overlay'
-import { scrollbackWheelAction } from './scrollback-policy'
+import { claimsWheelForPane, scrollbackWheelAction } from './scrollback-policy'
 import { wireVoice } from './voice'
 import { wheelLineDelta } from './wheel'
 
@@ -636,6 +636,18 @@ host.addEventListener(
       void overlay.enter(wheelLineDelta(e.deltaY)).finally(() => {
         overlayOpening = false
       })
+      return
+    }
+
+    // While the overlay is up it owns the wheel: claiming the event here left
+    // it draggable by its scrollbar and nothing else.
+    if (
+      !claimsWheelForPane({
+        deltaY: e.deltaY,
+        overlayActive: overlay.active || overlayOpening,
+        tuiSlug,
+      })
+    ) {
       return
     }
 

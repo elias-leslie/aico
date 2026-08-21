@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { scrollbackWheelAction, shouldOpenScrollbackOnWheel } from './scrollback-policy'
+import {
+  claimsWheelForPane,
+  scrollbackWheelAction,
+  shouldOpenScrollbackOnWheel,
+} from './scrollback-policy'
 
 describe('scrollback wheel policy', () => {
   it('opens on upward wheel when no TUI owns the mouse', () => {
@@ -118,5 +122,28 @@ describe('scrollback wheel policy', () => {
         tuiSlug: 'shell',
       }),
     ).toBe('ignore')
+  })
+})
+
+describe('claiming the wheel for the live pane', () => {
+  it('leaves the wheel to the overlay while it is up', () => {
+    // The overlay pages older history and dismisses on a downward wheel at the
+    // bottom; claiming the event here left only its scrollbar working.
+    expect(claimsWheelForPane({ deltaY: -100, overlayActive: true, tuiSlug: 'antigravity' })).toBe(
+      false,
+    )
+  })
+
+  it('claims an agent TUI wheel when the overlay is closed', () => {
+    expect(claimsWheelForPane({ deltaY: -100, overlayActive: false, tuiSlug: 'antigravity' })).toBe(
+      true,
+    )
+  })
+
+  it('never claims for a plain shell or an empty delta', () => {
+    expect(claimsWheelForPane({ deltaY: -100, overlayActive: false, tuiSlug: 'shell' })).toBe(false)
+    expect(claimsWheelForPane({ deltaY: 0, overlayActive: false, tuiSlug: 'antigravity' })).toBe(
+      false,
+    )
   })
 })

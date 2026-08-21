@@ -37,3 +37,25 @@ export function scrollbackWheelAction({
 export function shouldOpenScrollbackOnWheel(policy: ScrollbackWheelPolicy): boolean {
   return scrollbackWheelAction(policy) === 'open'
 }
+
+/**
+ * Whether a wheel event belongs to the live pane at all.
+ *
+ * This is the synchronous half of the decision, taken before tmux has been
+ * asked which way to route the wheel. The scrollback overlay is a scrollable
+ * xterm of its own -- it pages older history at the top and dismisses on a
+ * downward wheel at the bottom -- so whenever it is up, the wheel is its own
+ * and the pane must not claim it.
+ */
+export function claimsWheelForPane({
+  deltaY,
+  overlayActive,
+  tuiSlug,
+}: {
+  deltaY: number
+  overlayActive: boolean
+  tuiSlug: string
+}): boolean {
+  if (deltaY === 0 || overlayActive) return false
+  return tuiSlug !== 'shell'
+}
