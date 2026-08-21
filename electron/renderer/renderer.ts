@@ -539,66 +539,123 @@ window.aico.settings.onTerminalFontChanged((settings) => {
 // asking it flipped the wheel between the overlay and the program mid-session.
 // tmux reports the pane's own state and holds it steady, so cache that and
 // refresh it in the background — a wheel event has to decide synchronously.
-const PANE_MODE_MAX_AGE_MS = 1500
-let paneMode: { alternateScreen: boolean; mouseReporting: boolean } | null = null
-let paneModeFetchedAt = 0
-let paneModeInFlight = false
+// tmux is the authority on who owns the pane's scrollback. This window's xterm
+// is not: an attached tmux client sits in the alternate screen for the whole
+// session, and the mouse mode it observes comes and goes as tmux redraws, so
+// asking it flipped the wheel between the overlay and the program mid-session.
+type PaneMode = { alternateScreen: boolean; mouseReporting: boolean }
 
-function refreshPaneMode(): void {
-  if (paneModeInFlight) return
-  if (paneMode && performance.now() - paneModeFetchedAt < PANE_MODE_MAX_AGE_MS) return
-  paneModeInFlight = true
-  void window.aico.scrollback
+const PANE_MODE_MAX_AGE_MS = 1500
+let paneMode: PaneMode | null = null
+let paneModeFetchedAt = 0
+let paneModeInFlight: Promise<PaneMode> | null = null
+
+/** The pane's state, from cache when it is fresh and from tmux when it is not.
+ * The very first wheel of a session has no cache to read, and answering it from
+ * the xterm fallback opened the overlay on the three lines of tmux history that
+ * a Claude Code pane has — so that event waits for tmux rather than guessing. */
+function readPaneMode(): PaneMode | Promise<PaneMode> {
+  if (paneMode && performance.now() - paneModeFetchedAt < PANE_MODE_MAX_AGE_MS) return paneMode
+  if (paneModeInFlight) return paneModeInFlight
+  const fallback: PaneMode = {
+    alternateScreen: term.buffer.active.type === 'alternate',
+    mouseReporting: mouseReportingActive(term),
+  }
+  paneModeInFlight = window.aico.scrollback
     .paneMode()
     .then((mode) => {
       paneMode = mode
       paneModeFetchedAt = performance.now()
+      return mode
     })
-    .catch(() => {
-      // tmux unreachable — keep using the xterm fallback below.
-    })
+    .catch(() => paneMode ?? fallback) // tmux unreachable — keep the last answer
     .finally(() => {
-      paneModeInFlight = false
+      paneModeInFlight = null
     })
+  return paneModeInFlight
 }
 
-refreshPaneMode()
+void readPaneMode()
+
+/** True while `overlay.enter` is in flight, so a second wheel of the same flick
+ * does not open it again before `overlay.active` has flipped. */
+let overlayOpening = false
+
+function applyWheel(
+  wheel: { deltaY: number; deltaMode: number; clientX: number; clientY: number },
+  mode: PaneMode,
+): void {
+  const action = scrollbackWheelAction({
+    deltaY: wheel.deltaY,
+    overlayActive: overlay.active || overlayOpening,
+    mouseReportingActive: mode.mouseReporting,
+    alternateScreen: mode.alternateScreen,
+    tuiSlug,
+  })
+  if (action === 'ignore' || action === 'consume') return
+
+  // The TUI holds its own transcript (Claude Code): give it the wheel.
+  if (action === 'forward') {
+    const screen = terminalHost.querySelector<HTMLElement>('.xterm-screen')
+    const cellHeight = screen ? screen.clientHeight / Math.max(term.rows, 1) : 0
+    const ticks = wheelMouseTicks(wheel.deltaY, wheel.deltaMode, cellHeight, term.rows)
+    if (ticks === 0) return
+    const { column, row } = pointToCell(screen, term.cols, term.rows, wheel.clientX, wheel.clientY)
+    const sequence = sgrWheelSequence(wheel.deltaY > 0 ? 'down' : 'up', column, row)
+    for (let tick = 0; tick < ticks; tick += 1) window.aico.pty.input(sequence)
+    return
+  }
+
+  overlayOpening = true
+  void overlay.enter(wheelLineDelta(wheel.deltaY)).finally(() => {
+    overlayOpening = false
+  })
+}
 
 host.addEventListener(
   'wheel',
   (e) => {
-    refreshPaneMode()
-    const action = scrollbackWheelAction({
-      deltaY: e.deltaY,
-      overlayActive: overlay.active,
-      mouseReportingActive: paneMode ? paneMode.mouseReporting : mouseReportingActive(term),
-      alternateScreen: paneMode
-        ? paneMode.alternateScreen
-        : term.buffer.active.type === 'alternate',
-      tuiSlug,
-    })
-    if (action === 'ignore') {
+    if (e.deltaY === 0) return
+
+    // A plain shell keeps its output in tmux history whatever the program on
+    // top is doing, so it needs no tmux round-trip and no wheel forwarding.
+    if (tuiSlug === 'shell') {
+      const action = scrollbackWheelAction({
+        deltaY: e.deltaY,
+        overlayActive: overlay.active || overlayOpening,
+        mouseReportingActive: mouseReportingActive(term),
+        alternateScreen: term.buffer.active.type === 'alternate',
+        tuiSlug,
+      })
+      if (action === 'ignore') return
+      e.preventDefault()
+      e.stopPropagation()
+      e.stopImmediatePropagation()
+      if (action === 'consume') return
+      overlayOpening = true
+      void overlay.enter(wheelLineDelta(e.deltaY)).finally(() => {
+        overlayOpening = false
+      })
       return
     }
 
+    // An agent TUI's route depends on the pane, so claim the event either way
+    // and act once the answer is in hand.
     e.preventDefault()
     e.stopPropagation()
     e.stopImmediatePropagation()
-    if (action === 'consume') return
-
-    // The TUI holds its own transcript (Claude Code): give it the wheel.
-    if (action === 'forward') {
-      const screen = host.querySelector<HTMLElement>('.xterm-screen')
-      const cellHeight = screen ? screen.clientHeight / Math.max(term.rows, 1) : 0
-      const ticks = wheelMouseTicks(e.deltaY, e.deltaMode, cellHeight, term.rows)
-      if (ticks === 0) return
-      const { column, row } = pointToCell(screen, term.cols, term.rows, e.clientX, e.clientY)
-      const sequence = sgrWheelSequence(e.deltaY > 0 ? 'down' : 'up', column, row)
-      for (let tick = 0; tick < ticks; tick += 1) window.aico.pty.input(sequence)
+    const wheel = {
+      deltaY: e.deltaY,
+      deltaMode: e.deltaMode,
+      clientX: e.clientX,
+      clientY: e.clientY,
+    }
+    const mode = readPaneMode()
+    if (mode instanceof Promise) {
+      void mode.then((resolved) => applyWheel(wheel, resolved))
       return
     }
-
-    void overlay.enter(wheelLineDelta(e.deltaY))
+    applyWheel(wheel, mode)
   },
   { passive: false, capture: true },
 )
