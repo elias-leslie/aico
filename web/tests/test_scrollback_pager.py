@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from a_term.services.scrollback_pager import (
     MAX_PAGE_SIZE,
+    get_pane_mode,
     get_scrollback_line_count,
     get_scrollback_range,
     get_viewport_lines,
@@ -28,6 +29,38 @@ class TestGetScrollbackLineCount:
     @patch("a_term.services.scrollback_pager.validate_session_name", return_value=False)
     def test_rejects_invalid_session(self, _validate):
         assert get_scrollback_line_count("invalid;session") is None
+
+
+class TestGetPaneMode:
+    @patch("a_term.services.scrollback_pager.run_tmux_command")
+    @patch("a_term.services.scrollback_pager.validate_session_name", return_value=True)
+    def test_reads_a_program_that_owns_its_scrollback(self, _validate, mock_tmux):
+        # Claude Code: alternate screen plus a mouse grab, so tmux keeps no history.
+        mock_tmux.return_value = (True, "1 1\n")
+        assert get_pane_mode("test-session") == (True, True)
+
+    @patch("a_term.services.scrollback_pager.run_tmux_command")
+    @patch("a_term.services.scrollback_pager.validate_session_name", return_value=True)
+    def test_reads_a_program_whose_output_lives_in_tmux(self, _validate, mock_tmux):
+        # Antigravity: normal screen, no mouse grab.
+        mock_tmux.return_value = (True, "0 0\n")
+        assert get_pane_mode("test-session") == (False, False)
+
+    @patch("a_term.services.scrollback_pager.run_tmux_command")
+    @patch("a_term.services.scrollback_pager.validate_session_name", return_value=True)
+    def test_returns_none_on_a_truncated_answer(self, _validate, mock_tmux):
+        mock_tmux.return_value = (True, "1")
+        assert get_pane_mode("test-session") is None
+
+    @patch("a_term.services.scrollback_pager.run_tmux_command")
+    @patch("a_term.services.scrollback_pager.validate_session_name", return_value=True)
+    def test_returns_none_on_failure(self, _validate, mock_tmux):
+        mock_tmux.return_value = (False, "")
+        assert get_pane_mode("test-session") is None
+
+    @patch("a_term.services.scrollback_pager.validate_session_name", return_value=False)
+    def test_rejects_invalid_session(self, _validate):
+        assert get_pane_mode("invalid;session") is None
 
 
 class TestGetScrollbackRange:

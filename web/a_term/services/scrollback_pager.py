@@ -34,6 +34,40 @@ def get_scrollback_line_count(
     return int(m.group(1)) if m else None
 
 
+def get_pane_mode(
+    session_name: str,
+    socket_name: str | None = None,
+) -> tuple[bool, bool] | None:
+    """Return ``(alternate_screen, mouse_reporting)`` for the session's pane.
+
+    The browser cannot answer this from its own xterm: an attached tmux client
+    sits in the alternate screen for the whole session, and the mouse mode it
+    observes comes and goes as tmux redraws. tmux tracks the pane's own state.
+
+    Both fields go through ``#{?...,1,0}`` because a bare ``#{alternate_on}``
+    prints empty rather than 0, which collapses the two fields into one.
+    """
+    if not validate_session_name(session_name) or not validate_socket_name(socket_name):
+        return None
+    args = [
+        "display-message",
+        "-t",
+        session_name,
+        "-p",
+        "#{?alternate_on,1,0} #{?mouse_any_flag,1,0}",
+    ]
+    if socket_name:
+        ok, output = run_tmux_command(args, socket_name=socket_name)
+    else:
+        ok, output = run_tmux_command(args)
+    if not ok or not output:
+        return None
+    fields = output.split()
+    if len(fields) < 2:
+        return None
+    return fields[0] == "1", fields[1] == "1"
+
+
 def get_scrollback_range(
     session_name: str,
     from_line: int,

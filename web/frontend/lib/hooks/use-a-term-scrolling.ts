@@ -9,9 +9,9 @@ import {
   computeWheelLineDelta,
   getWheelMouseTickCount,
   isAlternateScreen,
-  isMouseTrackingActive,
   pointToCell,
   refreshATermViewport,
+  resolvesToAppOwnedScrollback,
   setupTouchHandlers,
 } from './a-term-scrolling-utils'
 
@@ -32,6 +32,8 @@ interface UseATermScrollingOptions {
   sessionMode?: string
   onRequestScrollbackOverlay?: (initialScrollLineDelta?: number) => void
   isScrollbackOverlayActive?: boolean
+  paneOwnsScrollback?: () => boolean | null
+  requestPaneMode?: () => void
 }
 
 interface ScrollingSetupResult {
@@ -50,6 +52,8 @@ export function useATermScrolling({
   sessionMode,
   onRequestScrollbackOverlay,
   isScrollbackOverlayActive = false,
+  paneOwnsScrollback,
+  requestPaneMode,
 }: UseATermScrollingOptions): UseATermScrollingReturn {
   const sendArrowKey = useCallback(
     (direction: 'up' | 'down') => {
@@ -78,7 +82,8 @@ export function useATermScrolling({
         // wheel reports are its only scrollback. xterm.js drops the wheel
         // unless its render service has published device cell metrics, which
         // these panes never get, so send the reports here instead.
-        if (isMouseTrackingActive(aTerm)) {
+        requestPaneMode?.()
+        if (resolvesToAppOwnedScrollback(aTerm, paneOwnsScrollback)) {
           e.preventDefault()
           e.stopPropagation()
           e.stopImmediatePropagation()
@@ -154,6 +159,8 @@ export function useATermScrolling({
           sessionMode,
           onRequestScrollbackOverlay,
           isScrollbackOverlayActive,
+          paneOwnsScrollback,
+          requestPaneMode,
         })
       }
 
@@ -167,6 +174,8 @@ export function useATermScrolling({
       sessionMode,
       sendArrowKey,
       sendMouseWheel,
+      paneOwnsScrollback,
+      requestPaneMode,
     ],
   )
 

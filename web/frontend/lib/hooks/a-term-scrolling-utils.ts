@@ -183,6 +183,20 @@ export function computeWheelLineDelta(deltaY: number): number {
 // Touch event handler setup
 // ---------------------------------------------------------------------------
 
+/**
+ * Whether the program in the pane owns its own scrollback.
+ *
+ * tmux is the authority (see `usePaneMode`); until it has answered, fall back
+ * to what this xterm has observed, which is what a-term always used.
+ */
+export function resolvesToAppOwnedScrollback(
+  aTerm: XtermATerm,
+  paneOwnsScrollback?: () => boolean | null,
+): boolean {
+  const owned = paneOwnsScrollback?.() ?? null
+  return owned === null ? isMouseTrackingActive(aTerm) : owned
+}
+
 export interface TouchScrollDeps {
   aTermRef: React.RefObject<XtermATerm | null>
   sendArrowKey: (direction: 'up' | 'down') => void
@@ -194,6 +208,8 @@ export interface TouchScrollDeps {
   sessionMode?: string
   onRequestScrollbackOverlay?: () => void
   isScrollbackOverlayActive?: boolean
+  paneOwnsScrollback?: () => boolean | null
+  requestPaneMode?: () => void
 }
 
 export function setupTouchHandlers(
@@ -212,6 +228,9 @@ export function setupTouchHandlers(
     touchStartY = e.touches[0].clientY
     lastSentY = touchStartY
     pendingNormalScrollDeltaY = 0
+    // Ask tmux who owns the scrollback now, so the answer is in hand by the
+    // time the finger has moved far enough to scroll anything.
+    deps.requestPaneMode?.()
   }
 
   const handleTouchMove = (e: TouchEvent) => {
@@ -227,7 +246,7 @@ export function setupTouchHandlers(
     // draws in the alternate screen, where tmux stores no history at all), so
     // hand the drag to the application as wheel reports. That is what a wheel
     // does on a desktop terminal, and it is the only history these panes have.
-    if (isMouseTrackingActive(aTerm)) {
+    if (resolvesToAppOwnedScrollback(aTerm, deps.paneOwnsScrollback)) {
       e.preventDefault()
       e.stopPropagation()
       const screen = container.querySelector<HTMLElement>('.xterm-screen')

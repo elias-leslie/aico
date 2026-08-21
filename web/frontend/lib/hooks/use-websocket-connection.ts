@@ -41,6 +41,10 @@ export interface WebSocketConnectionCallbacks {
     lines: string[]
     total_lines: number
   }) => void
+  onPaneMode?: (data: {
+    alternate_screen: boolean
+    mouse_reporting: boolean
+  }) => void
   onBeforeReconnectData?: () => void
   onDisconnect?: () => void
   getDimensions?: () => { cols: number; rows: number } | null
@@ -386,6 +390,17 @@ export function dispatchControlMessage(
           from_line: number
           lines: string[]
           total_lines: number
+        },
+      )
+      return true
+    }
+
+    // Who owns the pane's scrollback, straight from tmux.
+    if (control.pane_mode) {
+      callbacks.onPaneMode?.(
+        control.pane_mode as {
+          alternate_screen: boolean
+          mouse_reporting: boolean
         },
       )
       return true

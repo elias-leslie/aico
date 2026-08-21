@@ -125,6 +125,37 @@ async def _handle_scroll_request(
     await websocket.send_text(json.dumps(payload))
 
 
+async def _handle_pane_mode_request(
+    websocket: WebSocket,
+    tmux_session_name: str | None,
+    tmux_socket_name: str | None,
+) -> None:
+    """Answer a pane_mode_request — who owns this pane's scrollback.
+
+    A full-screen TUI that grabs the mouse (Claude Code) keeps its transcript
+    itself and tmux stores no history for it, so the client hands it the wheel
+    instead of opening the scrollback overlay on an empty history.
+    """
+    if not tmux_session_name or websocket is None:
+        return
+
+    from ...services.scrollback_pager import get_pane_mode
+
+    mode = await asyncio.to_thread(get_pane_mode, tmux_session_name, tmux_socket_name)
+    if mode is None:
+        return
+
+    alternate_screen, mouse_reporting = mode
+    payload = {
+        "__ctrl": True,
+        "pane_mode": {
+            "alternate_screen": alternate_screen,
+            "mouse_reporting": mouse_reporting,
+        },
+    }
+    await websocket.send_text(json.dumps(payload))
+
+
 async def _handle_ctrl_message(
     data: dict[str, Any],
     master_fd: int,
@@ -182,6 +213,10 @@ async def _handle_ctrl_message(
     # Phase 3: Scroll request
     if "scroll_request" in data and websocket is not None:
         await _handle_scroll_request(data, websocket, tmux_session_name, tmux_socket_name)
+        return None
+
+    if data.get("pane_mode_request") and websocket is not None:
+        await _handle_pane_mode_request(websocket, tmux_session_name, tmux_socket_name)
         return None
 
     return None

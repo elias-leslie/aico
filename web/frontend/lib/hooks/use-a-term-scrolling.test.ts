@@ -469,4 +469,91 @@ describe('useATermScrolling', () => {
 
     wheelCleanup()
   })
+
+  it('trusts tmux over xterm about who owns the scrollback', () => {
+    // xterm has not seen mouse tracking, but tmux says the program owns it.
+    const aTerm = {
+      buffer: { active: { type: 'alternate' } },
+      cols: 80,
+      modes: { mouseTrackingMode: 'none' },
+      refresh: vi.fn(),
+      rows: 30,
+      scrollLines: vi.fn(),
+    }
+    const send = vi.fn()
+    const wsRef = { current: { readyState: WebSocket.OPEN, send } }
+    const container = document.createElement('div')
+    const requestPaneMode = vi.fn()
+
+    const { result } = renderHook(() =>
+      useATermScrolling({
+        wsRef: wsRef as never,
+        aTermRef: { current: aTerm } as unknown as {
+          current: XtermATerm | null
+        },
+        isMobile: false,
+        sessionMode: 'claude',
+        paneOwnsScrollback: () => true,
+        requestPaneMode,
+      }),
+    )
+
+    const { wheelCleanup } = result.current.setupScrolling(container)
+    container.dispatchEvent(
+      new WheelEvent('wheel', {
+        deltaY: -120,
+        bubbles: true,
+        cancelable: true,
+      }),
+    )
+
+    expect(requestPaneMode).toHaveBeenCalled()
+    expect(send).toHaveBeenCalledTimes(9)
+    expect(aTerm.scrollLines).not.toHaveBeenCalled()
+
+    wheelCleanup()
+  })
+
+  it('keeps the overlay when tmux says tmux holds the history', () => {
+    // xterm still reports mouse tracking, but the pane's output is in tmux.
+    const aTerm = {
+      buffer: { active: { type: 'alternate' } },
+      cols: 80,
+      modes: { mouseTrackingMode: 'any' },
+      refresh: vi.fn(),
+      rows: 30,
+      scrollLines: vi.fn(),
+    }
+    const send = vi.fn()
+    const wsRef = { current: { readyState: WebSocket.OPEN, send } }
+    const container = document.createElement('div')
+    const onRequestScrollbackOverlay = vi.fn()
+
+    const { result } = renderHook(() =>
+      useATermScrolling({
+        wsRef: wsRef as never,
+        aTermRef: { current: aTerm } as unknown as {
+          current: XtermATerm | null
+        },
+        isMobile: false,
+        sessionMode: 'agy',
+        paneOwnsScrollback: () => false,
+        onRequestScrollbackOverlay,
+      }),
+    )
+
+    const { wheelCleanup } = result.current.setupScrolling(container)
+    container.dispatchEvent(
+      new WheelEvent('wheel', {
+        deltaY: -120,
+        bubbles: true,
+        cancelable: true,
+      }),
+    )
+
+    expect(send).not.toHaveBeenCalled()
+    expect(onRequestScrollbackOverlay).toHaveBeenCalled()
+
+    wheelCleanup()
+  })
 })

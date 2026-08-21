@@ -37,6 +37,11 @@ interface UseATermWebSocketOptions {
     lines: string[]
     total_lines: number
   }) => void
+  /** Called when the backend reports who owns the pane's scrollback */
+  onPaneMode?: (data: {
+    alternate_screen: boolean
+    mouse_reporting: boolean
+  }) => void
   /** Called before reconnect data arrives — clear aTerm buffer to prevent duplicates */
   onBeforeReconnectData?: () => void
   /** Get current aTerm dimensions for resize message */
@@ -80,6 +85,7 @@ export function useATermWebSocket({
   onScrollbackDelta,
   onViewportInit,
   onScrollbackPage,
+  onPaneMode,
   onBeforeReconnectData,
   getDimensions,
 }: UseATermWebSocketOptions): UseATermWebSocketReturn {
@@ -103,6 +109,7 @@ export function useATermWebSocket({
   const onScrollbackDeltaRef = useRef(onScrollbackDelta)
   const onViewportInitRef = useRef(onViewportInit)
   const onScrollbackPageRef = useRef(onScrollbackPage)
+  const onPaneModeRef = useRef(onPaneMode)
   const onBeforeReconnectDataRef = useRef(onBeforeReconnectData)
   const getDimensionsRef = useRef(getDimensions)
 
@@ -116,6 +123,7 @@ export function useATermWebSocket({
     onScrollbackDeltaRef.current = onScrollbackDelta
     onViewportInitRef.current = onViewportInit
     onScrollbackPageRef.current = onScrollbackPage
+    onPaneModeRef.current = onPaneMode
     onBeforeReconnectDataRef.current = onBeforeReconnectData
     getDimensionsRef.current = getDimensions
   }, [
@@ -127,6 +135,7 @@ export function useATermWebSocket({
     onScrollbackDelta,
     onViewportInit,
     onScrollbackPage,
+    onPaneMode,
     onBeforeReconnectData,
     getDimensions,
   ])
@@ -170,6 +179,7 @@ export function useATermWebSocket({
         onScrollbackDelta: (delta) => onScrollbackDeltaRef.current?.(delta),
         onViewportInit: (data) => onViewportInitRef.current?.(data),
         onScrollbackPage: (data) => onScrollbackPageRef.current?.(data),
+        onPaneMode: (data) => onPaneModeRef.current?.(data),
         onBeforeReconnectData: () => onBeforeReconnectDataRef.current?.(),
         onDisconnect: () => onDisconnectRef.current?.(),
         getDimensions: () => getDimensionsRef.current?.() ?? null,

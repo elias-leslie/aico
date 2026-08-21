@@ -19,6 +19,7 @@ import { useATermSearch } from '../lib/hooks/use-a-term-search'
 import { useATermWebSocket } from '../lib/hooks/use-a-term-websocket'
 import { useATermWriteQueue } from '../lib/hooks/use-a-term-write-queue'
 import { useBracketedPaste } from '../lib/hooks/use-bracketed-paste'
+import { usePaneMode } from '../lib/hooks/use-pane-mode'
 import { useScrollbackOverlay } from '../lib/hooks/use-scrollback-overlay'
 import { useScrollbackPager } from '../lib/hooks/use-scrollback-pager'
 import { profileAnsiColors } from '../lib/utils/ansi-color-profile'
@@ -172,6 +173,14 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
     const overlayCacheUpdateRef = useRef<((scrollback: string) => void) | null>(
       null,
     )
+    const paneModeRef = useRef<
+      | ((
+          data: Parameters<
+            NonNullable<Parameters<typeof useATermWebSocket>[0]['onPaneMode']>
+          >[0],
+        ) => void)
+      | null
+    >(null)
 
     const { status, wsRef, reconnect, sendInput, connect, disconnect } =
       useATermWebSocket({
@@ -234,6 +243,7 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
           overlayPageRef.current?.(data)
           scrollbackPageRef.current?.(data)
         },
+        onPaneMode: (data) => paneModeRef.current?.(data),
         onATermMessage: (message) => {
           enqueueWrite(`${message}\r\n`)
         },
@@ -324,6 +334,13 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
 
     const isMobile = useMemo(() => isMobileDevice(), [])
 
+    const { handlePaneMode, requestPaneMode, paneOwnsScrollback } =
+      usePaneMode(wsRef)
+
+    useEffect(() => {
+      paneModeRef.current = handlePaneMode
+    }, [handlePaneMode])
+
     const { setupScrolling } = useATermScrolling({
       wsRef,
       aTermRef,
@@ -331,6 +348,8 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
       sessionMode,
       onRequestScrollbackOverlay: overlay.activate,
       isScrollbackOverlayActive: overlay.isActive,
+      paneOwnsScrollback,
+      requestPaneMode,
     })
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally empty deps — reads refs at call time
