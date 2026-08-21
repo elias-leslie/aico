@@ -21,6 +21,8 @@ import {
   KEYBOARD_SPACING_METRICS,
   type KeyboardSizePreset,
   type KeyboardSpacingPreset,
+  keepKeyboardOpen,
+  remSize,
 } from './types'
 
 interface ControlBarProps {
@@ -153,11 +155,16 @@ export function ControlBar({
     border: '1px solid var(--term-border)',
   }
   const spacing = KEYBOARD_SPACING_METRICS[keyboardSpacing]
-  const controlButtonSize = CONTROL_BAR_BUTTON_SIZES[keyboardSize]
-  const arrowButtonSize = CONTROL_BAR_ARROW_SIZES[keyboardSize]
-  const smallKeySize = Math.max(36, controlButtonSize - 4)
-  const iconSize =
-    keyboardSize === 'small' ? 18 : keyboardSize === 'large' ? 22 : 20
+  // Sized in rem so the phone's text-scaling setting scales the bar with the
+  // keyboard it sits against.
+  const controlButtonSize = remSize(CONTROL_BAR_BUTTON_SIZES[keyboardSize])
+  const arrowButtonSize = remSize(CONTROL_BAR_ARROW_SIZES[keyboardSize])
+  const smallKeySize = remSize(
+    Math.max(36, CONTROL_BAR_BUTTON_SIZES[keyboardSize] - 4),
+  )
+  const iconSize = remSize(
+    keyboardSize === 'small' ? 18 : keyboardSize === 'large' ? 22 : 20,
+  )
   const topRowButtonStyle = {
     height: controlButtonSize,
     minWidth: controlButtonSize,
@@ -218,6 +225,7 @@ export function ControlBar({
         {onToggleMinimize && (
           <button
             type="button"
+            onPointerDown={keepKeyboardOpen}
             onClick={onToggleMinimize}
             className="flex items-center justify-center transition-all duration-150"
             style={{
@@ -251,6 +259,7 @@ export function ControlBar({
 
         <button
           type="button"
+          onPointerDown={keepKeyboardOpen}
           onClick={() => {
             onSend('\t')
             clearModifiers()
@@ -268,6 +277,7 @@ export function ControlBar({
         {/* Shift+Tab */}
         <button
           type="button"
+          onPointerDown={keepKeyboardOpen}
           onClick={handleShiftTab}
           className="px-3 text-xs font-medium transition-all duration-150 active:scale-95"
           style={{
@@ -287,6 +297,7 @@ export function ControlBar({
           <div className="relative" ref={pickerRef}>
             <button
               type="button"
+              onPointerDown={keepKeyboardOpen}
               onClick={() => setShowModelPicker((p) => !p)}
               className="flex items-center gap-1.5 px-3 text-xs font-medium transition-all duration-150 active:scale-95"
               style={
@@ -307,8 +318,8 @@ export function ControlBar({
               <Sparkles
                 className="shrink-0"
                 style={{
-                  width: keyboardSize === 'small' ? 14 : 16,
-                  height: keyboardSize === 'small' ? 14 : 16,
+                  width: remSize(keyboardSize === 'small' ? 14 : 16),
+                  height: remSize(keyboardSize === 'small' ? 14 : 16),
                 }}
               />
               MODEL
@@ -330,6 +341,7 @@ export function ControlBar({
                   <button
                     key={opt.id}
                     type="button"
+                    onPointerDown={keepKeyboardOpen}
                     onClick={() => handleModelSelect(opt.command)}
                     className="w-full text-left px-4 py-3 text-sm font-medium transition-colors duration-100"
                     style={{
@@ -358,6 +370,7 @@ export function ControlBar({
         {onVoice && (
           <button
             type="button"
+            onPointerDown={keepKeyboardOpen}
             onClick={() => {
               navigator.vibrate?.(10)
               onVoice()
@@ -442,6 +455,7 @@ export function ControlBar({
 
         <button
           type="button"
+          onPointerDown={keepKeyboardOpen}
           onClick={onCtrlToggle}
           className="rounded-md text-[10px] font-medium transition-all duration-150 active:scale-95"
           style={{
@@ -496,6 +510,7 @@ export function ControlBar({
           {bannerState.actionLabel && onReconnect && (
             <button
               type="button"
+              onPointerDown={keepKeyboardOpen}
               onClick={onReconnect}
               className="shrink-0 rounded-md border px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] transition-all duration-150 active:scale-95"
               style={{

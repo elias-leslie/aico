@@ -7,6 +7,7 @@ import {
   type KeyboardSizePreset,
   type KeyboardSpacingPreset,
   NATIVE_INPUT_HEIGHTS,
+  remSize,
 } from './types'
 
 const BACKSPACE_SEQUENCE = '\x7f'
@@ -84,7 +85,8 @@ export function NativeKeyboardInput({
   const bufferRef = useRef('')
   const inputId = useId()
   const spacing = KEYBOARD_SPACING_METRICS[keyboardSpacing]
-  const inputHeight = NATIVE_INPUT_HEIGHTS[keyboardSize]
+  // rem so the phone's text-scaling setting scales it with the accessory bar.
+  const inputHeight = remSize(NATIVE_INPUT_HEIGHTS[keyboardSize])
 
   const commitValue = useCallback(
     (nextValue: string) => {

@@ -83,17 +83,9 @@ export function MobileKeyboard({
   const focusNativeInput = useCallback(() => {
     nativeInputRef.current?.focus({ preventScroll: true })
   }, [])
-  const handleRibbonSend = useCallback(
-    (sequence: string) => {
-      onSend(sequence)
-      if (isNativeMode) {
-        requestAnimationFrame(() => {
-          focusNativeInput()
-        })
-      }
-    },
-    [focusNativeInput, isNativeMode, onSend],
-  )
+  // The bar's keys no longer take focus (see `keepKeyboardOpen`), so the phone's
+  // keyboard stays up on its own and there is nothing to re-focus afterwards.
+  const handleRibbonSend = onSend
 
   useEffect(() => {
     if (!isNativeMode || voiceActive || ribbonCollapsed) {

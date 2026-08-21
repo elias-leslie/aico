@@ -137,4 +137,23 @@ describe('ControlBar', () => {
     })
     expect(consoleError).toHaveBeenCalledTimes(1)
   })
+
+  it('keeps the phone keyboard open when a bar key is pressed', () => {
+    // A plain button takes focus on pointerdown, and losing focus on the input
+    // dismisses the on-screen keyboard.
+    renderControlBar({ onCtrlToggle: vi.fn(), onVoice: vi.fn() })
+
+    for (const name of ['TAB', '⇧TAB', 'CTRL']) {
+      // fireEvent returns false when the handler called preventDefault.
+      expect(fireEvent.pointerDown(screen.getByText(name))).toBe(false)
+    }
+  })
+
+  it('still fires the key after refusing focus', () => {
+    const { onSend } = renderControlBar()
+
+    fireEvent.click(screen.getByText('TAB'))
+
+    expect(onSend).toHaveBeenCalledWith('\t')
+  })
 })
