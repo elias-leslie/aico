@@ -17,9 +17,9 @@
     "predev": "pnpm prepare:branding"
   },
   "dependencies": {
-    "@radix-ui/react-dialog": "^1.1.16",
+    "@radix-ui/react-dialog": "^1.1.23",
     "@summitflow/notes-ui": "file:../packages/notes-ui",
-    "@tanstack/react-query": "5.101.0",
+    "@tanstack/react-query": "5.102.8",
     "@xterm/addon-clipboard": "0.2.0",
     "@xterm/addon-fit": "0.11.0",
     "@xterm/addon-web-links": "0.12.0",
@@ -27,26 +27,26 @@
     "@xterm/xterm": "6.0.0",
     "clsx": "2.1.1",
     "lucide-react": "0.577.0",
-    "motion": "^12.40.0",
-    "next": "16.2.7",
-    "react": "19.2.7",
-    "react-dom": "19.2.7",
-    "react-resizable-panels": "4.11.2",
-    "simple-keyboard": "3.8.151"
+    "motion": "^12.43.0",
+    "next": "16.3.3",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-resizable-panels": "4.12.3",
+    "simple-keyboard": "3.8.177"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.16",
+    "@biomejs/biome": "2.5.11",
     "@tailwindcss/postcss": "4",
     "@testing-library/jest-dom": "^6.9.1",
-    "@testing-library/react": "^16.3.1",
-    "@types/node": "22.19.20",
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "22.20.1",
     "@types/react": "19",
     "@types/react-dom": "19",
     "@vitejs/plugin-react": "^4.7.0",
     "jsdom": "^26.1.0",
     "tailwindcss": "4",
     "typescript": "5",
-    "vite": "7.3.5",
-    "vitest": "^4.1.8"
+    "vite": "7.3.6",
+    "vitest": "^4.1.11"
   }
 }
