@@ -115,14 +115,7 @@ describe('registry', () => {
   it('registers the built-in TUIs once, idempotently', () => {
     registerBuiltinTuis()
     registerBuiltinTuis() // second call is a no-op, not a duplicate-slug throw
-    expect(listTuis().map((t) => t.slug)).toEqual([
-      'claude-code',
-      'codex',
-      'gemini',
-      'agy',
-      'pi',
-      'shell',
-    ])
+    expect(listTuis().map((t) => t.slug)).toEqual(['claude-code', 'codex', 'agy', 'pi', 'shell'])
   })
 
   it('defaults to the lowest-order enabled TUI (Claude Code)', () => {
@@ -134,7 +127,6 @@ describe('registry', () => {
     registerBuiltinTuis()
     const claude = getTui('claude-code')
     const codex = getTui('codex')
-    const gemini = getTui('gemini')
     const antigravity = getTui('agy')
     const pi = getTui('pi')
     expect(claude && launchLine(claude)).toBe(
@@ -142,9 +134,6 @@ describe('registry', () => {
     )
     expect(codex && launchLine(codex)).toBe(
       '/usr/bin/env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 codex --yolo',
-    )
-    expect(gemini && launchLine(gemini)).toBe(
-      '/usr/bin/env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 gemini --yolo --skip-trust',
     )
     expect(antigravity && launchLine(antigravity)).toBe(
       '/usr/bin/env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 agy --dangerously-skip-permissions',
@@ -346,43 +335,13 @@ describe('ensureContext', () => {
     expect((await ensureContext(spec({ context: { kind: 'codex-hooks' } }))).state).toBe('missing')
   })
 
-  it('reports ok when Gemini settings declare the canonical BeforeModel hook', async () => {
-    vi.mocked(existsSync).mockReturnValue(true)
-    const client = join(homedir(), '.local', 'bin', 'agent-hub-context-client')
-    vi.mocked(readFileSync).mockReturnValue(
-      JSON.stringify({
-        hooks: {
-          BeforeModel: [
-            {
-              hooks: [
-                { type: 'command', command: `${client} hook --surface gemini --capability bash` },
-              ],
-            },
-          ],
-        },
-      }),
-    )
-    const s = await ensureContext(spec({ context: { kind: 'gemini-hooks' } }))
-    expect(s.state).toBe('available')
-    expect(s.detail).toContain('BeforeModel')
-    expect(s.detail).toContain('canonical context available aaaaaaaa')
-  })
-
   it('shows degraded status when the adapter is installed but live delivery fails', async () => {
     vi.mocked(existsSync).mockReturnValue(true)
-    const client = join(homedir(), '.local', 'bin', 'agent-hub-context-client')
+    vi.mocked(realpathSync).mockReturnValue(
+      '/srv/workspaces/projects/agent-hub/integrations/context-delivery/pi/agent-hub.ts',
+    )
     vi.mocked(readFileSync).mockReturnValue(
-      JSON.stringify({
-        hooks: {
-          BeforeModel: [
-            {
-              hooks: [
-                { type: 'command', command: `${client} hook --surface gemini --capability bash` },
-              ],
-            },
-          ],
-        },
-      }),
+      'pi.on("input", () => ({ action: "continue" })); pi.on("before_agent_start", () => event.systemPrompt + contract.rendered); "AH: DEGRADED"',
     )
     vi.mocked(execFile).mockImplementation(((
       _cmd: string,
@@ -394,21 +353,13 @@ describe('ensureContext', () => {
       return undefined as never
     }) as never)
 
-    const status = await ensureContext(spec({ context: { kind: 'gemini-hooks' } }))
+    const status = await ensureContext(spec({ context: { kind: 'pi-extension' } }))
 
     expect(status.state).toBe('missing')
     expect(status.detail).toContain(
       'Agent Hub live delivery unavailable or unconfirmed; native model continues',
     )
     expect(status.detail).toContain('delivery unavailable')
-  })
-
-  it('reports missing when Gemini settings retain the legacy Aico shim', async () => {
-    vi.mocked(existsSync).mockReturnValue(true)
-    vi.mocked(readFileSync).mockReturnValue(
-      JSON.stringify({ hooks: { SessionStart: [{ command: '/x/aico-mandates-gemini.sh' }] } }),
-    )
-    expect((await ensureContext(spec({ context: { kind: 'gemini-hooks' } }))).state).toBe('missing')
   })
 
   it('reports ok when Pi uses the source-linked additive Agent Hub extension', async () => {

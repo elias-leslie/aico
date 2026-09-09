@@ -37,9 +37,6 @@ export async function ensureContext(
     case 'codex-hooks':
       installed = await codexHooks(spec)
       break
-    case 'gemini-hooks':
-      installed = geminiHooks()
-      break
     case 'pi-extension':
       installed = piExtension()
       break
@@ -53,11 +50,9 @@ export async function ensureContext(
       ? 'claude_code'
       : spec.context.kind === 'codex-hooks'
         ? 'codex'
-        : spec.context.kind === 'gemini-hooks'
-          ? 'gemini'
-          : spec.context.kind === 'canonical-retrieval'
-            ? spec.context.surface
-            : 'pi'
+        : spec.context.kind === 'canonical-retrieval'
+          ? spec.context.surface
+          : 'pi'
   return verifyLiveDelivery(surface, installed.detail, probe)
 }
 
@@ -361,44 +356,6 @@ async function codexHooks(spec: TuiSpec): Promise<ContextStatus> {
       ].join('\n'),
     )
   })
-}
-
-/** Gemini CLI: canonical context rides BeforeModel so exact bytes are appended
- * to the stable request without angle-bracket escaping. Verify Gemini's nested
- * native hook schema and the direct canonical-client command; legacy Aico
- * SessionStart shims are explicitly unhealthy because they can reinstall drift. */
-function geminiHooks(): ContextStatus {
-  const base = process.env.GEMINI_CLI_HOME || join(homedir(), '.gemini')
-  const config = join(base, 'settings.json')
-  if (!existsSync(config)) {
-    return {
-      state: 'missing',
-      detail: `${config} absent — Agent Hub context delivery is unavailable or unconfirmed; native Gemini continues`,
-    }
-  }
-  try {
-    const parsed = JSON.parse(readFileSync(config, 'utf8')) as {
-      hooks?: {
-        BeforeModel?: Array<{ hooks?: Array<{ type?: string; command?: string }> }>
-      }
-    }
-    const expected = `${join(homedir(), '.local', 'bin', 'agent-hub-context-client')} hook --surface gemini --capability bash`
-    const declared = parsed.hooks?.BeforeModel?.some((group) =>
-      group.hooks?.some((hook) => hook.type === 'command' && hook.command === expected),
-    )
-    const legacy = JSON.stringify(parsed).includes('aico-mandates-gemini.sh')
-    return declared && !legacy
-      ? { state: 'available', detail: `${config} declares the canonical Gemini BeforeModel hook` }
-      : {
-          state: 'missing',
-          detail: `${config} lacks the canonical BeforeModel hook or still contains the legacy Aico shim`,
-        }
-  } catch {
-    return {
-      state: 'missing',
-      detail: `${config} is not readable JSON — Agent Hub context delivery is unavailable or unconfirmed; native Gemini continues`,
-    }
-  }
 }
 
 /** Pi loads source-controlled extensions from ~/.pi/agent/extensions. Verify

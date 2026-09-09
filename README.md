@@ -67,7 +67,7 @@ Recommended for the full desktop experience:
 
 - X11/Xorg. The app can run under Wayland, but global shortcuts and desktop capture are more limited there.
 - Chrome/Chromium if you want to load the optional browser extension.
-- Any terminal AI CLIs you want to launch (`claude`, `codex`, `gemini`, `pi`). Aico does not provide accounts or API keys for those tools.
+- Any terminal AI CLIs you want to launch (`claude`, `codex`, `agy`, `pi`). Aico does not provide accounts or API keys for those tools.
 
 ## Quickstart
 

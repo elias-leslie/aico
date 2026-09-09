@@ -6,7 +6,6 @@ import type { TuiSpec } from './spec'
 import { antigravityTui } from './tuis/antigravity'
 import { claudeCodeTui } from './tuis/claude-code'
 import { codexTui } from './tuis/codex'
-import { geminiTui } from './tuis/gemini'
 import { piTui } from './tuis/pi'
 import { shellTui } from './tuis/shell'
 
@@ -37,8 +36,7 @@ export function defaultTui(): TuiSpec {
 /** Idempotent: registers the built-in TUIs exactly once. Add new tools here. */
 export function registerBuiltinTuis(): void {
   if (registry.size > 0) return
-  for (const spec of [claudeCodeTui, codexTui, geminiTui, antigravityTui, piTui, shellTui])
-    registerTui(spec)
+  for (const spec of [claudeCodeTui, codexTui, antigravityTui, piTui, shellTui]) registerTui(spec)
 }
 
 /** Test-only: reset the registry between cases. */

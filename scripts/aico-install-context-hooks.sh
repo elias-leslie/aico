@@ -4,4 +4,4 @@ set -euo pipefail
 
 exec python3 \
   /srv/workspaces/projects/agent-hub/integrations/context-delivery/install.py \
-  --surface gemini
+  --surface antigravity

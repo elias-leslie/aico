@@ -16,7 +16,6 @@
 export type ContextHook =
   | { kind: 'claude-session-start' }
   | { kind: 'codex-hooks' }
-  | { kind: 'gemini-hooks' }
   | { kind: 'pi-extension' }
   | { kind: 'canonical-retrieval'; surface: 'antigravity' }
 

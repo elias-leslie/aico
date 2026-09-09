@@ -7,7 +7,7 @@
 //
 //   npm run check:context            # every supported canonical adapter
 //   npm run check:context -- codex   # just one
-//   npm run check:context -- gemini pi shell
+//   npm run check:context -- agy pi shell
 //
 // `available`   → canonical adapter installation and launcher chain verified.
 // `MISS` → native TUI still launches, but supplemental Agent Hub context is unavailable.
@@ -18,13 +18,13 @@ import { getTui, registerBuiltinTuis } from '../electron/main/tui/registry'
 async function main(): Promise<void> {
   registerBuiltinTuis()
   const args = process.argv.slice(2)
-  const targets = args.length ? args : ['claude-code', 'codex', 'gemini', 'agy', 'pi']
+  const targets = args.length ? args : ['claude-code', 'codex', 'agy', 'pi']
 
   let bad = 0
   for (const slug of targets) {
     const tui = getTui(slug)
     if (!tui) {
-      console.log(`??   ${slug.padEnd(12)} unknown TUI (try: claude-code codex gemini pi)`)
+      console.log(`??   ${slug.padEnd(12)} unknown TUI (try: claude-code codex agy pi)`)
       bad++
       continue
     }
