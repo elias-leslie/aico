@@ -2,11 +2,11 @@
 
 **A persistent browser workspace for AI coding agents, shells, files, notes, and reusable prompts.**
 
-Run Claude Code, Codex, Gemini CLI, Hermes, OpenCode, Pi, shells, files, and prompt notes side by side in one browser workspace. Sessions stay alive when the browser closes, so you can reconnect instead of rebuilding your working context.
+Run Claude Code, Codex, Gemini CLI, Pi, shells, files, and prompt notes side by side in one browser workspace. Sessions stay alive when the browser closes, so you can reconnect instead of rebuilding your working context.
 
 Assemble your agent crew in one place: a planner, builder, reviewer, release shell, files browser, and prompt library that keep working as one durable workspace.
 
-Built for [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex CLI](https://github.com/openai/codex), [Gemini CLI](https://github.com/google-gemini/gemini-cli), Google Antigravity CLI (`agy`), [Hermes Agent](https://github.com/NousResearch/hermes-agent), [OpenCode](https://github.com/opencode-ai/opencode), Pi, and every TUI agent that follows.
+Built for [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex CLI](https://github.com/openai/codex), [Gemini CLI](https://github.com/google-gemini/gemini-cli), Google Antigravity CLI (`agy`), Pi, and every TUI agent that follows.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![CI](https://github.com/elias-leslie/a-term/actions/workflows/ci.yml/badge.svg)](https://github.com/elias-leslie/a-term/actions/workflows/ci.yml)
@@ -31,7 +31,7 @@ If you use AI coding agents, you already know the mess: one terminal for Claude 
 Use it when you want to:
 
 - keep multiple agent sessions alive across reconnects
-- compare or hand off work between Claude Code, Codex, Gemini CLI, Hermes, OpenCode, Pi, and shell panes
+- compare or hand off work between Claude Code, Codex, Gemini CLI, Pi, and shell panes
 - browse files beside the terminal instead of switching tools
 - keep reusable prompts, scratch notes, and project context next to the work they belong to
 - inject saved prompts into the active pane when it is time to run them
@@ -106,11 +106,11 @@ With Agent Hub connected, A-Term can clean a draft prompt, show an original-vs-c
 
 **`project deep links`** — Open `/?project=myapp&dir=/path` to jump straight into a project workspace. Bookmark your setups.
 
-**`same-pane project switching`** — Swap a pane to another project from the header instead of closing and reopening work by hand. A-Term keeps the current tool mode when possible, so moving from one project to another in `codex`, `claude`, `hermes`, `opencode`, or shell does not drop you back to a generic terminal first.
+**`same-pane project switching`** — Swap a pane to another project from the header instead of closing and reopening work by hand. A-Term keeps the current tool mode when possible, so moving from one project to another in `codex`, `claude`, or shell does not drop you back to a generic terminal first.
 
-**`dual mode`** — Switch any pane between raw shell and your configured AI agent with one click. Supports Claude Code, Codex, Gemini CLI, Antigravity CLI, Hermes, OpenCode, and Pi out of the box.
+**`dual mode`** — Switch any pane between raw shell and your configured AI agent with one click. Supports Claude Code, Codex, Gemini CLI, Antigravity CLI, and Pi out of the box.
 
-**`agent presets and custom tools`** — Built-in profiles for Claude Code, Codex, Gemini CLI, Antigravity CLI, Hermes, OpenCode, and Pi appear in Settings by default. Antigravity launches as `agy --dangerously-skip-permissions`, its explicit auto-approval mode. Pick a default tool, tune the launch command or process name, color-code panes, and add your own TUI agent commands when your workflow expands. A-Term also discovers externally created tmux sessions (`claude`, `codex`, `opencode`, `aider`, `gemini`, `agy`, `hermes`, `pi`, and Aico widget sessions) and lists them alongside your own panes. For Aico, the historical `tmux:aico:<session>` identity remains compatible; newer immutable server generations are discovered by reading Aico's SQLite catalog in read-only mode and then querying each generation's absolute tmux socket. A stale catalog row is never treated as a live session without a successful tmux reply. Set `A_TERM_AICO_STATE_DIR` only when Aico uses a non-default state directory.
+**`agent presets and custom tools`** — Built-in profiles for Claude Code, Codex, Gemini CLI, Antigravity CLI, and Pi appear in Settings by default. Antigravity launches as `agy --dangerously-skip-permissions`, its explicit auto-approval mode. Pick a default tool, tune the launch command or process name, color-code panes, and add your own TUI agent commands when your workflow expands. A-Term also discovers externally created tmux sessions (`claude`, `codex`, `aider`, `gemini`, `agy`, `pi`, and Aico widget sessions) and lists them alongside your own panes. For Aico, the historical `tmux:aico:<session>` identity remains compatible; newer immutable server generations are discovered by reading Aico's SQLite catalog in read-only mode and then querying each generation's absolute tmux socket. A stale catalog row is never treated as a live session without a successful tmux reply. Set `A_TERM_AICO_STATE_DIR` only when Aico uses a non-default state directory.
 
 ![Mode switching dropdown showing Shell, Claude Code, OpenCode, Gemini CLI, and Codex](docs/images/a-term-mode-switch.png)
 *Switch between agents and shell per pane*

@@ -1,6 +1,6 @@
 """Agent tools storage - CRUD operations for CLI agent tools.
 
-Agent tools define CLI tools (Claude Code, OpenCode, etc.) that can be
+Agent tools define CLI tools (Claude Code, Codex, Pi, etc.) that can be
 launched in a_term sessions. Each tool has a slug used as the session mode.
 """
 

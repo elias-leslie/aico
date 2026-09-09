@@ -20,11 +20,9 @@ logger = get_logger(__name__)
 _EXTERNAL_AGENT_TOKENS = (
     "claude",
     "codex",
-    "opencode",
     "aider",
     "gemini",
     "agy",
-    "hermes",
     "pi",
 )
 _EXTERNAL_SHELL_COMMANDS = frozenset(

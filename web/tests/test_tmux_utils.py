@@ -131,7 +131,7 @@ def test_list_external_agent_tmux_sessions_discovers_non_a_term_agent_sessions()
                         "claude-summitflow\t%1\t/home/testuser/summitflow\tclaude\t0",
                         "summitflow-123e4567-e89b-12d3-a456-426614174000\t%2\t/home/testuser/summitflow\tbash\t0",
                         "codex-agent-hub\t%3\t/home/testuser/agent-hub\tcodex\t0",
-                        "hermes-research\t%4\t/home/testuser/research\thermes\t0",
+                        "pi-research\t%4\t/home/testuser/research\tpi\t0",
                         "pi-a-term\t%5\t/home/testuser/a-term\tpi\t0",
                         "agy-antigravity\t%6\t/home/testuser/antigravity\tagy\t0",
                     ]
@@ -154,16 +154,16 @@ def test_list_external_agent_tmux_sessions_discovers_non_a_term_agent_sessions()
         "agy-antigravity",
         "claude-summitflow",
         "codex-agent-hub",
-        "hermes-research",
         "pi-a-term",
+        "pi-research",
     ]
     by_id = {str(session["id"]): session for session in sessions}
     assert by_id["claude-summitflow"]["project_id"] == "summitflow"
     assert by_id["claude-summitflow"]["mode"] == "claude"
     assert by_id["codex-agent-hub"]["project_id"] == "agent-hub"
     assert by_id["codex-agent-hub"]["mode"] == "codex"
-    assert by_id["hermes-research"]["project_id"] == "research"
-    assert by_id["hermes-research"]["mode"] == "hermes"
+    assert by_id["pi-research"]["project_id"] == "research"
+    assert by_id["pi-research"]["mode"] == "pi"
     assert by_id["pi-a-term"]["project_id"] == "a-term"
     assert by_id["pi-a-term"]["mode"] == "pi"
     assert by_id["agy-antigravity"]["project_id"] == "antigravity"
