@@ -21,7 +21,6 @@ _EXTERNAL_AGENT_TOKENS = (
     "claude",
     "codex",
     "aider",
-    "gemini",
     "agy",
     "pi",
 )
