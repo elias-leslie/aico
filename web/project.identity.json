@@ -11,7 +11,8 @@
     "repo_aliases": [
       "aterm",
       "terminal"
-    ]
+    ],
+    "lifecycle": "retired"
   },
   "branding": {
     "short_name": "A-Term",
