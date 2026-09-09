@@ -21,7 +21,14 @@ export async function ensureContext(
   spec: TuiSpec,
   probe: ContextProbe = {},
 ): Promise<ContextStatus> {
-  if (!spec.context) return { state: 'ok', detail: 'no context hook' }
+  if (!spec.context) {
+    return spec.command.length
+      ? {
+          state: 'unsupported',
+          detail: 'No canonical context adapter is registered; native agent continues.',
+        }
+      : { state: 'not_applicable', detail: 'A bare shell has no model context.' }
+  }
   let installed: ContextStatus
   switch (spec.context.kind) {
     case 'claude-session-start':
@@ -36,10 +43,11 @@ export async function ensureContext(
     case 'pi-extension':
       installed = piExtension()
       break
-    case 'hermes-shell-hooks':
-      return hermesShellHooks()
+    case 'canonical-retrieval':
+      installed = await canonicalRetrieval(spec.context.surface)
+      break
   }
-  if (installed.state !== 'ok') return installed
+  if (installed.state !== 'available') return installed
   const surface =
     spec.context.kind === 'claude-session-start'
       ? 'claude_code'
@@ -47,7 +55,9 @@ export async function ensureContext(
         ? 'codex'
         : spec.context.kind === 'gemini-hooks'
           ? 'gemini'
-          : 'pi'
+          : spec.context.kind === 'canonical-retrieval'
+            ? spec.context.surface
+            : 'pi'
   return verifyLiveDelivery(surface, installed.detail, probe)
 }
 
@@ -65,6 +75,8 @@ function verifyLiveDelivery(
     'deliver',
     '--surface',
     surface,
+    '--capability',
+    'bash',
     '--cwd',
     probe.cwd ?? process.cwd(),
     '--phase',
@@ -84,8 +96,8 @@ function verifyLiveDelivery(
           /^[0-9a-f]{64}$/.test(descriptor.payload_hash)
         ) {
           resolve({
-            state: 'ok',
-            detail: `${installedDetail}; live delivery available ${descriptor.payload_hash.slice(0, 8)}`,
+            state: 'available',
+            detail: `${installedDetail}; canonical context available ${descriptor.payload_hash.slice(0, 8)}. Independent probe only; receipt by the running model is unverified.`,
           })
           return
         }
@@ -98,6 +110,38 @@ function verifyLiveDelivery(
         detail: `Agent Hub live delivery unavailable or unconfirmed; native model continues (${detail})`,
       })
     })
+  })
+}
+
+/** Reuse the canonical installer's registration/link checks for retrieval clients. */
+function canonicalRetrieval(surface: 'antigravity'): Promise<ContextStatus> {
+  const repo = process.env.AGENT_HUB_REPO || '/srv/workspaces/projects/agent-hub'
+  return new Promise((resolve) => {
+    execFile(
+      'python3',
+      [join(repo, 'integrations/context-delivery/install.py'), '--surface', surface, '--check'],
+      { timeout: 20000 },
+      (error, stdout) => {
+        try {
+          const result = JSON.parse(stdout) as { passed?: unknown }
+          if (!error && result.passed === true) {
+            resolve({
+              state: 'available',
+              detail:
+                'Canonical retrieval rule installed; context requires agent retrieval, not automatic injection',
+            })
+            return
+          }
+        } catch {
+          // Failed installation checks remain visible and never block launch.
+        }
+        resolve({
+          state: 'missing',
+          detail:
+            'Canonical retrieval rule installation is unavailable or unconfirmed; native agent continues',
+        })
+      },
+    )
   })
 }
 
@@ -132,10 +176,6 @@ async function claudeSessionStart(spec: TuiSpec): Promise<ContextStatus> {
   const client = join(homedir(), '.local', 'bin', 'agent-hub-context-client')
   const repo = process.env.AGENT_HUB_REPO || '/srv/workspaces/projects/agent-hub'
   const expectedLauncher = join(repo, 'integrations', 'context-delivery', 'claude', 'launcher')
-  const claudeConfigRepo =
-    process.env.CLAUDE_CONFIG_REPO || '/srv/workspaces/projects/claude-config'
-  const expectedGptLauncher = join(claudeConfigRepo, 'bin', 'claude-gpt')
-  const expectedGptSettings = join(claudeConfigRepo, 'claude-gpt-settings.json')
   if (!existsSync(settings) || !existsSync(client)) {
     return {
       state: 'missing',
@@ -161,32 +201,14 @@ async function claudeSessionStart(spec: TuiSpec): Promise<ContextStatus> {
       ) ?? false
     const resolved = realpathSync(launcher)
     const canonicalLauncher = resolved === expectedLauncher
-    const gptTransport = resolved === expectedGptLauncher
-    const canonicalEntry = join(homedir(), '.claude', 'bin', 'claude')
-    const launcherBody = readFileSync(canonicalLauncher ? launcher : canonicalEntry, 'utf8')
+    const launcherBody = readFileSync(launcher, 'utf8')
     const additive =
-      realpathSync(canonicalLauncher ? launcher : canonicalEntry) === expectedLauncher &&
       launcherBody.includes('CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD') &&
       launcherBody.includes('"--add-dir"') &&
       launcherBody.includes('CLAUDE.md')
-    let transportValid = canonicalLauncher
-    if (gptTransport) {
-      const transportBody = readFileSync(launcher, 'utf8')
-      const gptSettings = join(homedir(), '.claude', 'claude-gpt-settings.json')
-      const additionalSettings = JSON.parse(readFileSync(gptSettings, 'utf8')) as {
-        hooks?: unknown
-      }
-      transportValid =
-        realpathSync(gptSettings) === expectedGptSettings &&
-        transportBody.includes('$' + '{HOME}/.claude/bin/claude') &&
-        transportBody.includes('AGENT_HUB_CONTEXT_PROVIDER=openai') &&
-        transportBody.includes('AGENT_HUB_CONTEXT_TRANSPORT_VARIANT=claude-gpt') &&
-        !transportBody.includes('agent-hub-context-client') &&
-        additionalSettings.hooks === undefined
-    }
-    if (transportValid && additive && hasHook('SessionStart') && hasHook('SubagentStart')) {
+    if (canonicalLauncher && additive && hasHook('SessionStart') && hasHook('SubagentStart')) {
       return {
-        state: 'ok',
+        state: 'available',
         detail: `${launcher} reaches the canonical additive Claude launcher and native hooks bind its session IDs`,
       }
     }
@@ -289,7 +311,7 @@ async function codexHooks(spec: TuiSpec): Promise<ContextStatus> {
         finish(
           unhealthy.length === 0
             ? {
-                state: 'ok',
+                state: 'available',
                 detail: `${launcher} injects lossless context on fresh threads and has trusted native session bindings; resume/fork preserve saved native context without a fresh delivery`,
               }
             : {
@@ -360,13 +382,13 @@ function geminiHooks(): ContextStatus {
         BeforeModel?: Array<{ hooks?: Array<{ type?: string; command?: string }> }>
       }
     }
-    const expected = `${join(homedir(), '.local', 'bin', 'agent-hub-context-client')} hook --surface gemini`
+    const expected = `${join(homedir(), '.local', 'bin', 'agent-hub-context-client')} hook --surface gemini --capability bash`
     const declared = parsed.hooks?.BeforeModel?.some((group) =>
       group.hooks?.some((hook) => hook.type === 'command' && hook.command === expected),
     )
     const legacy = JSON.stringify(parsed).includes('aico-mandates-gemini.sh')
     return declared && !legacy
-      ? { state: 'ok', detail: `${config} declares the canonical Gemini BeforeModel hook` }
+      ? { state: 'available', detail: `${config} declares the canonical Gemini BeforeModel hook` }
       : {
           state: 'missing',
           detail: `${config} lacks the canonical BeforeModel hook or still contains the legacy Aico shim`,
@@ -401,7 +423,7 @@ function piExtension(): ContextStatus {
       body.includes('contract.rendered') &&
       body.includes('AH: DEGRADED')
     return canonical && additive
-      ? { state: 'ok', detail: `${extension} is the canonical additive Agent Hub extension` }
+      ? { state: 'available', detail: `${extension} is the canonical additive Agent Hub extension` }
       : {
           state: 'missing',
           detail: `${extension} is drifted or does not preserve Pi's native system prompt`,
@@ -409,23 +431,4 @@ function piExtension(): ContextStatus {
   } catch {
     return { state: 'missing', detail: `${extension} is unreadable — cannot verify context` }
   }
-}
-
-/** Hermes: mandates ride a native shell hook on `pre_llm_call`, declared in
- * ~/.hermes/config.yaml. Hermes expects `{"context": "..."}` from the script. */
-function hermesShellHooks(): ContextStatus {
-  const config = join(homedir(), '.hermes', 'config.yaml')
-  if (!existsSync(config)) {
-    return { state: 'missing', detail: `${config} absent — mandates will not inject` }
-  }
-  const body = readFileSync(config, 'utf8')
-  const declared = /^[ \t]*hooks:[\s\S]*^[ \t]*pre_llm_call:[\s\S]*aico-mandates-hermes\.sh/m.test(
-    body,
-  )
-  return declared
-    ? { state: 'ok', detail: `${config} declares the Aico pre_llm_call hook` }
-    : {
-        state: 'missing',
-        detail: `${config} has no Aico pre_llm_call hook — mandates will not inject`,
-      }
 }

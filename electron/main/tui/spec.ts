@@ -18,10 +18,10 @@ export type ContextHook =
   | { kind: 'codex-hooks' }
   | { kind: 'gemini-hooks' }
   | { kind: 'pi-extension' }
-  | { kind: 'hermes-shell-hooks' }
+  | { kind: 'canonical-retrieval'; surface: 'antigravity' }
 
 /** Outcome of verifying/ensuring a TUI's context hook. */
-export type ContextState = 'ok' | 'missing'
+export type ContextState = 'available' | 'missing' | 'unsupported' | 'not_applicable'
 
 export interface ContextStatus {
   state: ContextState

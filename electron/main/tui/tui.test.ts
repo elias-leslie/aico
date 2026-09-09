@@ -117,13 +117,10 @@ describe('registry', () => {
     registerBuiltinTuis() // second call is a no-op, not a duplicate-slug throw
     expect(listTuis().map((t) => t.slug)).toEqual([
       'claude-code',
-      'claude-gpt',
       'codex',
-      'opencode',
       'gemini',
       'agy',
       'pi',
-      'hermes',
       'shell',
     ])
   })
@@ -136,16 +133,12 @@ describe('registry', () => {
   it('launches supported agent TUIs with explicit no-prompt execution defaults', () => {
     registerBuiltinTuis()
     const claude = getTui('claude-code')
-    const claudeGpt = getTui('claude-gpt')
     const codex = getTui('codex')
     const gemini = getTui('gemini')
     const antigravity = getTui('agy')
     const pi = getTui('pi')
     expect(claude && launchLine(claude)).toBe(
       '/usr/bin/env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 claude --dangerously-skip-permissions',
-    )
-    expect(claudeGpt && launchLine(claudeGpt)).toBe(
-      '/usr/bin/env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 claude-gpt --dangerously-skip-permissions',
     )
     expect(codex && launchLine(codex)).toBe(
       '/usr/bin/env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 codex --yolo',
@@ -218,11 +211,18 @@ describe('managed pane launcher PATH', () => {
 })
 
 describe('ensureContext', () => {
-  it('passes through when a TUI declares no hook', async () => {
+  it('reports unsupported for an agent with no canonical context adapter', async () => {
     expect(await ensureContext(spec({ context: undefined }))).toEqual({
-      state: 'ok',
-      detail: 'no context hook',
+      state: 'unsupported',
+      detail: 'No canonical context adapter is registered; native agent continues.',
     })
+  })
+
+  it('treats a bare shell as not applicable', async () => {
+    expect((await ensureContext(spec({ command: [], context: undefined }))).state).toBe(
+      'not_applicable',
+    )
+    expect(execFile).not.toHaveBeenCalled()
   })
 
   it('reports ok when Claude launcher and lifecycle hooks are canonical', async () => {
@@ -250,70 +250,15 @@ describe('ensureContext', () => {
         env: { PATH: '/canonical/managed-pane-path' },
       }),
     )
-    expect(s.state).toBe('ok')
+    expect(s.state).toBe('available')
     expect(s.detail).toContain('canonical additive Claude launcher')
-    expect(s.detail).toContain('live delivery available')
+    expect(s.detail).toContain('canonical context available')
     expect(execFile).toHaveBeenCalledWith(
       '/bin/sh',
       ['-c', 'command -v -- "$1"', 'aico-resolve-launcher', 'claude'],
       expect.objectContaining({
         env: expect.objectContaining({ PATH: '/canonical/managed-pane-path' }),
       }),
-      expect.any(Function),
-    )
-  })
-
-  it('verifies the source-owned Claude GPT transport through the canonical Claude launcher', async () => {
-    vi.mocked(existsSync).mockReturnValue(true)
-    mockPaneResolve('/home/demo/.local/bin/claude-gpt')
-    vi.mocked(realpathSync).mockImplementation(((path: string) => {
-      if (path.endsWith('/.local/bin/claude-gpt')) {
-        return '/srv/workspaces/projects/claude-config/bin/claude-gpt'
-      }
-      if (path.endsWith('/claude-gpt-settings.json')) {
-        return '/srv/workspaces/projects/claude-config/claude-gpt-settings.json'
-      }
-      if (path.endsWith('/.claude/bin/claude')) {
-        return '/srv/workspaces/projects/agent-hub/integrations/context-delivery/claude/launcher'
-      }
-      return path
-    }) as never)
-    vi.mocked(readFileSync).mockImplementation(((path: string) => {
-      if (path.endsWith('/.claude/settings.json')) {
-        const command = `${join(homedir(), '.local', 'bin', 'agent-hub-context-client')} bind --surface claude_code`
-        return JSON.stringify({
-          hooks: {
-            SessionStart: [{ hooks: [{ command }] }],
-            SubagentStart: [{ hooks: [{ command }] }],
-          },
-        })
-      }
-      if (path.endsWith('/claude-gpt-settings.json')) {
-        return JSON.stringify({ model: 'gpt-5.6-sol[1m]', env: { ANTHROPIC_AUTH_TOKEN: 'unused' } })
-      }
-      if (path.endsWith('/.local/bin/claude-gpt')) {
-        return (
-          '$' +
-          '{HOME}/.claude/bin/claude AGENT_HUB_CONTEXT_PROVIDER=openai AGENT_HUB_CONTEXT_TRANSPORT_VARIANT=claude-gpt'
-        )
-      }
-      return 'CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1 "--add-dir" CLAUDE.md'
-    }) as never)
-
-    const status = await ensureContext(
-      spec({
-        slug: 'claude-gpt',
-        command: ['claude-gpt', '--dangerously-skip-permissions'],
-        context: { kind: 'claude-session-start' },
-      }),
-    )
-
-    expect(status.state).toBe('ok')
-    expect(status.detail).toContain('canonical additive Claude launcher')
-    expect(execFile).toHaveBeenCalledWith(
-      '/bin/sh',
-      ['-c', 'command -v -- "$1"', 'aico-resolve-launcher', 'claude-gpt'],
-      expect.any(Object),
       expect.any(Function),
     )
   })
@@ -354,7 +299,7 @@ describe('ensureContext', () => {
       'CODEX_REAL AGENT_HUB_CONTEXT_CLIENT developer_instructions=\n',
     )
     const s = await ensureContext(spec({ context: { kind: 'codex-hooks' } }))
-    expect(s.state).toBe('ok')
+    expect(s.state).toBe('available')
     expect(s.detail).toContain('lossless context')
   })
 
@@ -408,15 +353,19 @@ describe('ensureContext', () => {
       JSON.stringify({
         hooks: {
           BeforeModel: [
-            { hooks: [{ type: 'command', command: `${client} hook --surface gemini` }] },
+            {
+              hooks: [
+                { type: 'command', command: `${client} hook --surface gemini --capability bash` },
+              ],
+            },
           ],
         },
       }),
     )
     const s = await ensureContext(spec({ context: { kind: 'gemini-hooks' } }))
-    expect(s.state).toBe('ok')
+    expect(s.state).toBe('available')
     expect(s.detail).toContain('BeforeModel')
-    expect(s.detail).toContain('live delivery available aaaaaaaa')
+    expect(s.detail).toContain('canonical context available aaaaaaaa')
   })
 
   it('shows degraded status when the adapter is installed but live delivery fails', async () => {
@@ -426,7 +375,11 @@ describe('ensureContext', () => {
       JSON.stringify({
         hooks: {
           BeforeModel: [
-            { hooks: [{ type: 'command', command: `${client} hook --surface gemini` }] },
+            {
+              hooks: [
+                { type: 'command', command: `${client} hook --surface gemini --capability bash` },
+              ],
+            },
           ],
         },
       }),
@@ -467,7 +420,7 @@ describe('ensureContext', () => {
       'pi.on("input", () => ({ action: "continue" })); pi.on("before_agent_start", () => event.systemPrompt + contract.rendered); "AH: DEGRADED"',
     )
     const s = await ensureContext(spec({ context: { kind: 'pi-extension' } }))
-    expect(s.state).toBe('ok')
+    expect(s.state).toBe('available')
     expect(s.detail).toContain('canonical additive')
   })
 
@@ -476,23 +429,5 @@ describe('ensureContext', () => {
     vi.mocked(realpathSync).mockReturnValue('/home/demo/.pi/agent/extensions/agent-hub.ts')
     vi.mocked(readFileSync).mockReturnValue('pi.on("before_agent_start", () => {})')
     expect((await ensureContext(spec({ context: { kind: 'pi-extension' } }))).state).toBe('missing')
-  })
-
-  it('reports ok when Hermes config declares the Aico pre_llm_call hook', async () => {
-    vi.mocked(existsSync).mockReturnValue(true)
-    vi.mocked(readFileSync).mockReturnValue(
-      'hooks:\n  pre_llm_call:\n    - command: "/x/aico-mandates-hermes.sh"\n',
-    )
-    const s = await ensureContext(spec({ context: { kind: 'hermes-shell-hooks' } }))
-    expect(s.state).toBe('ok')
-    expect(s.detail).toContain('config.yaml')
-  })
-
-  it('reports missing when Hermes config lacks the Aico hook', async () => {
-    vi.mocked(existsSync).mockReturnValue(true)
-    vi.mocked(readFileSync).mockReturnValue('hooks:\n  post_tool_call: []\n')
-    expect((await ensureContext(spec({ context: { kind: 'hermes-shell-hooks' } }))).state).toBe(
-      'missing',
-    )
   })
 })

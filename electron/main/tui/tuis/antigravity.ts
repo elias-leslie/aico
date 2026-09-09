@@ -13,4 +13,5 @@ export const antigravityTui: TuiSpec = {
   enabled: true,
   command: ['agy', '--dangerously-skip-permissions'],
   processName: 'agy',
+  context: { kind: 'canonical-retrieval', surface: 'antigravity' },
 }

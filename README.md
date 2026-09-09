@@ -2,7 +2,7 @@
 
 **Floating desktop widgets for terminal AI agents, shells, and click-to-context capture.**
 
-Aico is a Linux desktop companion for people who work with terminal AI tools. It wraps Claude Code, Codex CLI, opencode, Gemini CLI, Pi, Hermes, and plain shells in small Electron widgets backed by persistent tmux sessions. Widgets can be reopened, moved between workspaces, fed selected browser/page/screen context, and left running while you work elsewhere.
+Aico is a Linux desktop companion for people who work with terminal AI tools. It wraps Claude Code, Codex CLI, Gemini CLI, Pi, and plain shells in small Electron widgets backed by persistent tmux sessions. Widgets can be reopened, moved between workspaces, fed selected browser/page/screen context, and left running while you work elsewhere.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![CI](https://github.com/elias-leslie/aico/actions/workflows/ci.yml/badge.svg)](https://github.com/elias-leslie/aico/actions/workflows/ci.yml)
@@ -17,7 +17,7 @@ Aico is a Linux desktop companion for people who work with terminal AI tools. It
 - **Floating terminal widgets** — one or more compact Electron windows, each running a tmux-backed terminal with a WebGL renderer (DOM fallback), configurable font, animated "eyes" that track your cursor, and a "thinking" halo while the agent is working.
 - **Persistent, owned sessions** — each widget owns stable server-generation, session, and pane IDs. Closing a widget only detaches, so work reattaches across close/reopen/restart; Aico never retires durable work merely because it is old or unattached. New panes carry widget/project/agent ownership metadata and run in a narrow per-pane scope. Historical sessions remain on the canonical `aico` socket and are preserved read-only from lifecycle mutation.
 - **Lifecycle diagnostics** — “Copy session diagnostics” reports the owning widget/project/session, tmux target, command, scope, age, CPU time, memory, swap, process/task counts, and containment warnings without broad process-name scans.
-- **Agent launcher menu** — start Claude Code, Codex, opencode, Gemini CLI, Pi, Hermes, or a plain shell from the same lantern menu, choosing the TUI and the workspace to launch it into; "Replace TUI" swaps the tool in the focused widget.
+- **Agent launcher menu** — start Claude Code, Codex, Gemini CLI, Pi, or a plain shell from the same lantern menu, choosing the TUI and the workspace to launch it into; "Replace TUI" swaps the tool in the focused widget.
 - **Command palette & pinned controls** — a searchable command palette (`Ctrl+Shift+P`) and a pinned, drag-reorderable titlebar cluster, both driven by one action registry. Rename widgets inline.
 - **Context-mandate verification** — before launch, Aico checks that each agent family (Claude, Codex, Gemini, Hermes) is wired to its configured system-prompt/hooks and surfaces a green ✓ / red ⚠ badge. It verifies only — it never installs hooks for you.
 - **Read-only scrollback overlay** — wheel up to browse tmux history (paged from the session) without disturbing the live view.
@@ -67,7 +67,7 @@ Recommended for the full desktop experience:
 
 - X11/Xorg. The app can run under Wayland, but global shortcuts and desktop capture are more limited there.
 - Chrome/Chromium if you want to load the optional browser extension.
-- Any terminal AI CLIs you want to launch (`claude`, `codex`, `opencode`, `gemini`, `pi`, `hermes`). Aico does not provide accounts or API keys for those tools.
+- Any terminal AI CLIs you want to launch (`claude`, `codex`, `gemini`, `pi`). Aico does not provide accounts or API keys for those tools.
 
 ## Quickstart
 

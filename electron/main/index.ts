@@ -2482,7 +2482,7 @@ function publishContextStatus(
     slug: tool.slug,
     state: status.state,
     detail: status.detail,
-    applicable: tool.context !== undefined,
+    applicable: tool.command.length > 0,
   })
 }
 

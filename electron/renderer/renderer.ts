@@ -322,7 +322,7 @@ function wireMandate(): void {
       toast.classList.remove('show')
       return
     }
-    const missing = state === 'missing'
+    const missing = state !== 'available'
     // Persistent status badge: green tick = source chain + live availability
     // verified, red warning = delivery unavailable or unconfirmed. The tooltip
     // carries full status + detail in both states.
