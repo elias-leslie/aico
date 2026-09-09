@@ -3,7 +3,8 @@
   "project": {
     "id": "aico",
     "repo_name": "aico",
-    "display_name": "Aico"
+    "display_name": "Aico",
+    "lifecycle": "retired"
   },
   "branding": {
     "short_name": "Aico",
