@@ -10,6 +10,7 @@ import pytest
 from a_term.services.agent_service import (
     _is_agent_running_in_session_sync,
     ensure_agent_running_sync,
+    send_agent_command_sync,
 )
 
 
@@ -94,6 +95,26 @@ def test_ensure_agent_running_sync_returns_false_for_shell_session() -> None:
         return_value={"id": "shell-id", "mode": "shell", "claude_state": "not_started"},
     ):
         assert ensure_agent_running_sync("shell-id") is False
+
+
+def test_agent_launch_exports_stable_a_term_session_identity() -> None:
+    completed = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+    with patch("a_term.services.agent_service.subprocess.run", return_value=completed) as run_mock:
+        assert send_agent_command_sync("session-1", "summitflow-session-1", "codex --yolo") is None
+
+    run_mock.assert_called_once_with(
+        [
+            "tmux",
+            "send-keys",
+            "-t",
+            "summitflow-session-1",
+            "A_TERM_SESSION_ID=session-1 codex --yolo",
+            "Enter",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
 
 
 def test_ensure_agent_running_sync_marks_existing_process_running() -> None:

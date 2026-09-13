@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import shlex
 import subprocess
 import time
 from typing import cast
@@ -119,7 +120,14 @@ async def send_agent_command(session_id: str, tmux_session: str, command: str) -
     try:
         result = await asyncio.to_thread(
             subprocess.run,
-            ["tmux", "send-keys", "-t", tmux_session, command, "Enter"],
+            [
+                "tmux",
+                "send-keys",
+                "-t",
+                tmux_session,
+                f"A_TERM_SESSION_ID={shlex.quote(session_id)} {command}",
+                "Enter",
+            ],
             capture_output=True,
             text=True,
             timeout=10,
@@ -142,7 +150,14 @@ def send_agent_command_sync(session_id: str, tmux_session: str, command: str) ->
     """Send an agent start command via tmux send-keys (sync)."""
     try:
         result = subprocess.run(
-            ["tmux", "send-keys", "-t", tmux_session, command, "Enter"],
+            [
+                "tmux",
+                "send-keys",
+                "-t",
+                tmux_session,
+                f"A_TERM_SESSION_ID={shlex.quote(session_id)} {command}",
+                "Enter",
+            ],
             capture_output=True,
             text=True,
             timeout=10,
