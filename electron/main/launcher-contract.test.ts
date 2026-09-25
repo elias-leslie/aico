@@ -11,9 +11,13 @@ function projectFile(path: string): string {
 describe('desktop launcher ownership contract', () => {
   it('execs the real Electron binary so systemd tracks the window owner', () => {
     const runner = projectFile('scripts/aico-run-foreground.sh')
+    const packageManifest = JSON.parse(projectFile('package.json')) as {
+      scripts: { postinstall?: string }
+    }
 
     expect(runner).toContain('exec ./node_modules/electron/dist/electron .')
     expect(runner).not.toContain('exec ./node_modules/.bin/electron .')
+    expect(packageManifest.scripts.postinstall).toBe('install-electron')
   })
 
   it('routes desktop activation through the canonical managed service', () => {

@@ -6,6 +6,7 @@
   "type": "module",
   "main": "out/main/index.js",
   "scripts": {
+    "postinstall": "install-electron",
     "start": "npm run build && electron-vite preview",
     "build": "electron-vite build",
     "dev": "electron-vite dev",
