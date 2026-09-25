@@ -9,7 +9,7 @@ const PASTE_CHUNK_DELAY_MS = 8
 
 export function useBracketedPaste(
   sendInput: (data: string) => void,
-): (data: string) => void {
+): (data: string) => Promise<void> {
   const pasteQueueRef = useRef(Promise.resolve())
 
   return useCallback(
@@ -39,6 +39,7 @@ export function useBracketedPaste(
 
           sendInput(BRACKETED_PASTE_END)
         })
+      return pasteQueueRef.current
     },
     [sendInput],
   )

@@ -28,6 +28,10 @@ vi.mock('./NativeKeyboardInput', () => ({
 }))
 
 describe('MobileKeyboard', () => {
+  const composeProps = {
+    sessionId: 'one',
+    onCompose: vi.fn().mockResolvedValue(true),
+  }
   beforeEach(() => {
     window.localStorage.clear()
   })
@@ -35,14 +39,14 @@ describe('MobileKeyboard', () => {
   it('hydrates legacy minimized state from storage', () => {
     window.localStorage.setItem('a-term-keyboard-minimized', 'true')
 
-    render(<MobileKeyboard onSend={vi.fn()} />)
+    render(<MobileKeyboard onSend={vi.fn()} {...composeProps} />)
 
     expect(screen.getByText('minimized')).toBeInTheDocument()
     expect(screen.queryByTestId('full-keyboard')).not.toBeInTheDocument()
   })
 
   it('persists minimize toggles through the shared storage hook', () => {
-    render(<MobileKeyboard onSend={vi.fn()} />)
+    render(<MobileKeyboard onSend={vi.fn()} {...composeProps} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'toggle minimize' }))
 
@@ -53,7 +57,13 @@ describe('MobileKeyboard', () => {
   })
 
   it('renders native ribbon input instead of the custom keyboard in native mode', () => {
-    render(<MobileKeyboard onSend={vi.fn()} keyboardMode="native" />)
+    render(
+      <MobileKeyboard
+        onSend={vi.fn()}
+        keyboardMode="native"
+        {...composeProps}
+      />,
+    )
 
     expect(screen.getByTestId('native-keyboard-input')).toBeInTheDocument()
     expect(screen.queryByTestId('full-keyboard')).not.toBeInTheDocument()
@@ -61,7 +71,7 @@ describe('MobileKeyboard', () => {
 
   it('lets the voice panel own bottom safe-area padding while voice is active', () => {
     const { container } = render(
-      <MobileKeyboard onSend={vi.fn()} voiceActive={true} />,
+      <MobileKeyboard onSend={vi.fn()} voiceActive={true} {...composeProps} />,
     )
 
     expect((container.firstChild as HTMLElement).style.paddingBottom).toBe(

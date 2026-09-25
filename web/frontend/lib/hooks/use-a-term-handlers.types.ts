@@ -45,6 +45,11 @@ export interface UseATermHandlersReturn {
   handleKeyboardSpacingChange: (spacing: KeyboardSpacingPreset) => void
   handleStatusChange: (sessionId: string, status: ConnectionStatus) => void
   handleKeyboardInput: (data: string) => void
+  handleComposeInput: (
+    sessionId: string,
+    text: string,
+    action: 'insert' | 'send',
+  ) => Promise<boolean>
   handleReconnect: () => void
   handleLayoutModeChange: (mode: LayoutMode) => Promise<void>
   handleAddTab: () => Promise<void>

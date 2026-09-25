@@ -65,6 +65,7 @@ export function ATermTabs({
     availableLayouts,
     storageScopeId,
     handleKeyboardInput,
+    handleComposeInput,
     handleReconnect,
     panes,
     handleAddTab,
@@ -209,6 +210,7 @@ export function ATermTabs({
         activeMode={activeMode}
         activeStatus={activeStatus}
         handleKeyboardInput={handleKeyboardInput}
+        handleComposeInput={handleComposeInput}
         handleReconnect={handleReconnect}
         showVoice={showVoice}
         isVoiceSupported={isVoiceSupported}

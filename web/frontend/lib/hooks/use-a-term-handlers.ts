@@ -20,6 +20,7 @@ import {
   addProjectPaneAction,
   closeAllPanesAction,
 } from './a-term-handler-actions'
+import { commitComposeInput } from './compose-input'
 import type {
   UseATermHandlersProps,
   UseATermHandlersReturn,
@@ -114,6 +115,11 @@ export function useATermHandlers({
     },
     [activeSessionId, aTermRefs],
   )
+  const handleComposeInput = useCallback(
+    (sessionId: string, text: string, action: 'insert' | 'send') =>
+      commitComposeInput(aTermRefs.current, sessionId, text, action),
+    [aTermRefs],
+  )
   const handleReconnect = useCallback(() => {
     const handle = activeSessionId
       ? aTermRefs.current.get(activeSessionId)
@@ -203,6 +209,7 @@ export function useATermHandlers({
     handleKeyboardSpacingChange,
     handleStatusChange,
     handleKeyboardInput,
+    handleComposeInput,
     handleReconnect,
     handleLayoutModeChange,
     handleAddTab,

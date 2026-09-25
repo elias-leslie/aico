@@ -10,9 +10,16 @@ import type { TranscriptionError, TranscriptionStatus } from '@/lib/voice/types'
 
 interface ATermMobileSectionProps {
   sessions: Array<{ id: string }>
+  activeSessionId?: string | null
+  storageScopeId?: string | null
   activeStatus?: ConnectionStatus
   activeMode?: string
   handleKeyboardInput: (input: string) => void
+  handleComposeInput: (
+    sessionId: string,
+    text: string,
+    action: 'insert' | 'send',
+  ) => Promise<boolean>
   handleReconnect: () => void
   keyboardMode?: MobileKeyboardMode
   keyboardSize?: KeyboardSizePreset
@@ -34,9 +41,12 @@ interface ATermMobileSectionProps {
 
 export function ATermMobileSection({
   sessions,
+  activeSessionId,
+  storageScopeId,
   activeStatus,
   activeMode,
   handleKeyboardInput,
+  handleComposeInput,
   handleReconnect,
   keyboardMode,
   keyboardSize,
@@ -61,6 +71,9 @@ export function ATermMobileSection({
     <div className="order-3 shrink-0">
       <MobileKeyboard
         onSend={handleKeyboardInput}
+        sessionId={activeSessionId}
+        storageScopeId={storageScopeId}
+        onCompose={handleComposeInput}
         connectionStatus={activeStatus}
         onReconnect={handleReconnect}
         keyboardMode={keyboardMode}

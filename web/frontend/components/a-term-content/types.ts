@@ -101,6 +101,11 @@ export interface ATermContentProps {
   activeMode?: string
   activeStatus?: ConnectionStatus
   handleKeyboardInput: (input: string) => void
+  handleComposeInput: (
+    sessionId: string,
+    text: string,
+    action: 'insert' | 'send',
+  ) => Promise<boolean>
   handleReconnect: () => void
 
   // Voice input

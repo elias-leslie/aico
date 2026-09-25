@@ -19,6 +19,13 @@ const RIBBON_COLLAPSED_STORAGE_KEY = 'a-term-native-ribbon-collapsed'
 
 interface MobileKeyboardProps {
   onSend: ATermInputHandler
+  sessionId: string | null | undefined
+  storageScopeId?: string | null
+  onCompose: (
+    sessionId: string,
+    text: string,
+    action: 'insert' | 'send',
+  ) => Promise<boolean>
   connectionStatus?: ConnectionStatus
   onReconnect?: () => void
   keyboardSize?: KeyboardSizePreset
@@ -31,6 +38,9 @@ interface MobileKeyboardProps {
 
 export function MobileKeyboard({
   onSend,
+  sessionId,
+  storageScopeId,
+  onCompose,
   connectionStatus,
   onReconnect,
   keyboardSize = 'medium',
@@ -41,6 +51,7 @@ export function MobileKeyboard({
   activeMode,
 }: MobileKeyboardProps) {
   const [ctrlActive, setCtrlActive] = useState(false)
+  const [composeFocused, setComposeFocused] = useState(false)
   const [minimized, setMinimized] = useLocalStorageState(
     MINIMIZED_STORAGE_KEY,
     false,
@@ -107,6 +118,19 @@ export function MobileKeyboard({
           paddingBottom: voiceActive ? 0 : 'env(safe-area-inset-bottom, 0px)',
         }}
       >
+        {sessionId && !voiceActive && (
+          <NativeKeyboardInput
+            key={`${storageScopeId ?? ''}:${sessionId}`}
+            sessionId={sessionId}
+            storageScopeId={storageScopeId}
+            connected={connectionStatus === 'connected'}
+            onCommit={onCompose}
+            onFocusChange={setComposeFocused}
+            keyboardSize={keyboardSize}
+            keyboardSpacing={keyboardSpacing}
+            inputRef={nativeInputRef}
+          />
+        )}
         {isNativeMode && ribbonCollapsed ? (
           <div
             className="flex items-center justify-between gap-3 border-t px-3 py-2"
@@ -143,37 +167,27 @@ export function MobileKeyboard({
             )}
           </div>
         ) : (
-          <>
-            {isNativeMode && !voiceActive && (
-              <NativeKeyboardInput
-                onSend={handleSend}
-                keyboardSize={keyboardSize}
-                keyboardSpacing={keyboardSpacing}
-                inputRef={nativeInputRef}
-              />
-            )}
-            <ControlBar
-              onSend={handleRibbonSend}
-              ctrlActive={ctrlActive}
-              onCtrlToggle={handleCtrlToggle}
-              minimized={isNativeMode ? ribbonCollapsed : minimized}
-              onToggleMinimize={
-                isNativeMode ? handleToggleRibbon : handleToggleMinimize
-              }
-              onVoice={onVoice}
-              voiceActive={voiceActive}
-              activeMode={activeMode}
-              connectionStatus={connectionStatus}
-              onReconnect={onReconnect}
-              keyboardSize={keyboardSize}
-              keyboardSpacing={keyboardSpacing}
-              collapseTarget={isNativeMode ? 'ribbon' : 'keyboard'}
-            />
-          </>
+          <ControlBar
+            onSend={handleRibbonSend}
+            ctrlActive={ctrlActive}
+            onCtrlToggle={handleCtrlToggle}
+            minimized={isNativeMode ? ribbonCollapsed : minimized}
+            onToggleMinimize={
+              isNativeMode ? handleToggleRibbon : handleToggleMinimize
+            }
+            onVoice={onVoice}
+            voiceActive={voiceActive}
+            activeMode={activeMode}
+            connectionStatus={connectionStatus}
+            onReconnect={onReconnect}
+            keyboardSize={keyboardSize}
+            keyboardSpacing={keyboardSpacing}
+            collapseTarget={isNativeMode ? 'ribbon' : 'keyboard'}
+          />
         )}
 
         {/* Full keyboard - hidden when minimized or voice is active */}
-        {!isNativeMode && !minimized && !voiceActive && (
+        {!isNativeMode && !minimized && !voiceActive && !composeFocused && (
           <FullKeyboard
             onSend={handleSend}
             keyboardSize={keyboardSize}

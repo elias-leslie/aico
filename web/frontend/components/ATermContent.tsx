@@ -2,6 +2,7 @@ import { clsx } from 'clsx'
 import { ATermFileSection } from './a-term-content/ATermFileSection'
 import { ATermMobileSection } from './a-term-content/ATermMobileSection'
 import type { ATermContentProps } from './a-term-content/types'
+import { NativeKeyboardInput } from './keyboard/NativeKeyboardInput'
 import { PromptCleaner } from './PromptCleaner'
 import { SettingsDropdown } from './SettingsDropdown'
 import { VoiceTranscriptPanel } from './VoiceTranscriptPanel'
@@ -80,6 +81,7 @@ export function ATermContent({
   activeMode,
   activeStatus,
   handleKeyboardInput,
+  handleComposeInput,
   handleReconnect,
   showVoice,
   isVoiceSupported,
@@ -176,9 +178,12 @@ export function ATermContent({
       {/* Mobile keyboard + voice panel */}
       <ATermMobileSection
         sessions={sessions}
+        activeSessionId={activeSessionId}
+        storageScopeId={storageScopeId}
         activeStatus={activeStatus}
         activeMode={activeMode}
         handleKeyboardInput={handleKeyboardInput}
+        handleComposeInput={handleComposeInput}
         handleReconnect={handleReconnect}
         keyboardMode={keyboardMode}
         keyboardSize={keyboardSize}
@@ -197,6 +202,16 @@ export function ATermContent({
         handleVoiceReset={handleVoiceReset}
         isMobile={isMobile}
       />
+
+      {!isMobile && activeSessionId && sessions.length > 0 && (
+        <NativeKeyboardInput
+          key={`${storageScopeId ?? ''}:${activeSessionId}`}
+          sessionId={activeSessionId}
+          storageScopeId={storageScopeId}
+          connected={activeStatus === 'connected'}
+          onCommit={handleComposeInput}
+        />
+      )}
 
       {/* Prompt Cleaner Panel */}
       {showCleaner && (

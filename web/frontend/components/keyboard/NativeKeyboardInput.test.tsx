@@ -1,53 +1,124 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import {
-  getNativeKeyboardDelta,
-  NativeKeyboardInput,
-} from './NativeKeyboardInput'
-
-describe('getNativeKeyboardDelta', () => {
-  it('detects appended text', () => {
-    expect(getNativeKeyboardDelta('hel', 'hello')).toEqual({
-      backspaces: 0,
-      insertedText: 'lo',
-    })
-  })
-
-  it('detects replacements from autocomplete corrections', () => {
-    expect(getNativeKeyboardDelta('hte ', 'the ')).toEqual({
-      backspaces: 2,
-      insertedText: 'th',
-    })
-  })
-})
+import { NativeKeyboardInput } from './NativeKeyboardInput'
 
 describe('NativeKeyboardInput', () => {
-  it('sends inserted text and backspaces from native input edits', () => {
-    const onSend = vi.fn()
+  it('keeps autocorrect and middle edits local until Insert', async () => {
+    const onCommit = vi.fn().mockResolvedValue(true)
+    render(
+      <NativeKeyboardInput
+        sessionId="correction"
+        connected
+        onCommit={onCommit}
+      />,
+    )
+    const input = screen.getByLabelText('Compose') as HTMLInputElement
 
-    render(<NativeKeyboardInput onSend={onSend} />)
+    fireEvent.change(input, { target: { value: 'hte ' } })
+    fireEvent.change(input, { target: { value: 'the ' } })
+    fireEvent.change(input, { target: { value: 'the wrold' } })
+    // Selecting the middle of a line and replacing it changes only the draft.
+    fireEvent.change(input, { target: { value: 'the world' } })
+    expect(onCommit).not.toHaveBeenCalled()
 
-    const input = screen.getByLabelText('Native Keyboard')
-    fireEvent.change(input, { target: { value: 'hel' } })
-    fireEvent.change(input, { target: { value: 'hello' } })
-    fireEvent.change(input, { target: { value: 'hell' } })
-
-    expect(onSend).toHaveBeenNthCalledWith(1, 'hel')
-    expect(onSend).toHaveBeenNthCalledWith(2, 'lo')
-    expect(onSend).toHaveBeenNthCalledWith(3, '\x7f')
+    fireEvent.click(screen.getByRole('button', { name: 'Insert' }))
+    await waitFor(() =>
+      expect(onCommit).toHaveBeenCalledExactlyOnceWith(
+        'correction',
+        'the world',
+        'insert',
+      ),
+    )
+    expect(input.value).toBe('')
   })
 
-  it('maps Enter to carriage return and clears the compose field', () => {
-    const onSend = vi.fn()
+  it('sends final text once only through explicit Send', async () => {
+    const onCommit = vi.fn().mockResolvedValue(true)
+    render(
+      <NativeKeyboardInput
+        sessionId="send-once"
+        connected
+        onCommit={onCommit}
+      />,
+    )
+    const input = screen.getByLabelText('Compose') as HTMLInputElement
+    fireEvent.change(input, { target: { value: 'hte ' } })
+    fireEvent.change(input, { target: { value: 'the ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
 
-    render(<NativeKeyboardInput onSend={onSend} />)
-
-    const input = screen.getByLabelText('Native Keyboard') as HTMLInputElement
-    fireEvent.change(input, { target: { value: 'ls -la' } })
-    fireEvent.keyDown(input, { key: 'Enter' })
-
-    expect(onSend).toHaveBeenNthCalledWith(1, 'ls -la')
-    expect(onSend).toHaveBeenNthCalledWith(2, '\r')
+    await waitFor(() =>
+      expect(onCommit).toHaveBeenCalledExactlyOnceWith(
+        'send-once',
+        'the ',
+        'send',
+      ),
+    )
     expect(input.value).toBe('')
+  })
+
+  it('preserves a draft across disconnect and session switches', async () => {
+    const onCommit = vi.fn().mockResolvedValue(true)
+    const { rerender } = render(
+      <NativeKeyboardInput
+        key="one"
+        sessionId="one"
+        connected
+        onCommit={onCommit}
+      />,
+    )
+    fireEvent.change(screen.getByLabelText('Compose'), {
+      target: { value: 'my draft' },
+    })
+    rerender(
+      <NativeKeyboardInput
+        key="one"
+        sessionId="one"
+        connected={false}
+        onCommit={onCommit}
+      />,
+    )
+    expect(screen.getByRole('button', { name: 'Insert' })).toBeDisabled()
+    rerender(
+      <NativeKeyboardInput
+        key="two"
+        sessionId="two"
+        connected
+        onCommit={onCommit}
+      />,
+    )
+    expect((screen.getByLabelText('Compose') as HTMLInputElement).value).toBe(
+      '',
+    )
+    rerender(
+      <NativeKeyboardInput
+        key="one"
+        sessionId="one"
+        connected
+        onCommit={onCommit}
+      />,
+    )
+    expect((screen.getByLabelText('Compose') as HTMLInputElement).value).toBe(
+      'my draft',
+    )
+  })
+
+  it('does not commit during IME composition and keeps failed drafts', async () => {
+    const onCommit = vi.fn().mockResolvedValue(false)
+    render(
+      <NativeKeyboardInput sessionId="ime" connected onCommit={onCommit} />,
+    )
+    const input = screen.getByLabelText('Compose') as HTMLInputElement
+    fireEvent.compositionStart(input)
+    fireEvent.change(input, { target: { value: 'typed' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onCommit).not.toHaveBeenCalled()
+    fireEvent.compositionEnd(input)
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await waitFor(() => expect(onCommit).toHaveBeenCalledTimes(1))
+    expect(input.value).toBe('typed')
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Your draft is still here',
+    )
   })
 })
