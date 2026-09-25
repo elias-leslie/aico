@@ -13,8 +13,8 @@
   "runtime": {
     "backend_port": 8005,
     "frontend_port": 0,
-    "backend_dir": "sidecar",
-    "frontend_dir": "electron",
+    "backend_dir": ".",
+    "frontend_dir": ".",
     "health_endpoint": "/health"
   },
   "services": {
