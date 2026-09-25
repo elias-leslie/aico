@@ -2881,6 +2881,18 @@ function openWidget(row: WidgetRow): void {
   // to arbitrary content.
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   win.webContents.on('will-navigate', (e) => e.preventDefault())
+  // The native textarea offers Chromium's spelling marks. Show its dictionary
+  // suggestions on right-click; the terminal's separate right-click paste path
+  // still runs because its xterm helper has spellcheck disabled.
+  win.webContents.on('context-menu', (_event, params) => {
+    if (!params.isEditable || !params.misspelledWord) return
+    const suggestions = params.dictionarySuggestions.map((suggestion) => ({
+      label: suggestion,
+      click: () => win.webContents.replaceMisspelling(suggestion),
+    }))
+    if (suggestions.length === 0) return
+    Menu.buildFromTemplate(suggestions).popup({ window: win })
+  })
   win.webContents.on('console-message', (details) => {
     if (details.level !== 'warning' && details.level !== 'error') return
     const log = details.level === 'error' ? console.error : console.warn
@@ -3318,6 +3330,7 @@ function pushTitles(): void {
       accent: tui?.accent ?? '',
       tuiName: tui?.displayName ?? '',
       tuiSlug: tui?.slug ?? 'shell',
+      sessionId: row.tmuxSessionId,
     })
   }
 }

@@ -140,6 +140,7 @@ contextBridge.exposeInMainWorld('aico', {
         accent: string
         tuiName: string
         tuiSlug: string
+        sessionId: string | null
       }) => void,
     ) => {
       const listener = (
@@ -151,6 +152,7 @@ contextBridge.exposeInMainWorld('aico', {
           accent: string
           tuiName: string
           tuiSlug: string
+          sessionId: string | null
         },
       ) => cb(info)
       ipcRenderer.on('win:title', listener)

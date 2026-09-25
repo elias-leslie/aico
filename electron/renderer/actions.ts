@@ -206,6 +206,15 @@ export const ACTIONS: Action[] = [
     icon: '⧉',
   },
   {
+    id: 'compose',
+    section: 'Edit',
+    label: 'Compose text',
+    shortcut: '',
+    icon: '✎',
+    note: 'Correct a draft before inserting it into this widget.',
+    run: () => window.dispatchEvent(new CustomEvent('aico:compose-open')),
+  },
+  {
     id: 'paste',
     section: 'Edit',
     label: 'Paste',

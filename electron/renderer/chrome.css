@@ -243,6 +243,78 @@ body.thinking {
   -webkit-app-region: no-drag;
 }
 
+.compose-toggle {
+  -webkit-app-region: no-drag;
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: var(--lantern);
+  font: 18px var(--font-ui);
+  cursor: pointer;
+}
+.compose-toggle:hover,
+.compose-toggle[aria-expanded="true"] {
+  color: var(--bone);
+}
+.draft-composer {
+  -webkit-app-region: no-drag;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  margin: 0 12px 8px;
+  padding: 8px;
+  border: 1px solid var(--paper-veil);
+  border-radius: 8px;
+  background: var(--ink);
+}
+.draft-composer[hidden] {
+  display: none;
+}
+.draft-composer textarea {
+  width: 100%;
+  min-width: 0;
+  height: clamp(48px, 12vh, 100px);
+  resize: vertical;
+  box-sizing: border-box;
+  padding: 6px;
+  border: 1px solid var(--paper-veil);
+  border-radius: 4px;
+  outline-color: var(--lantern);
+  background: var(--rim);
+  color: var(--bone);
+  font: 13px / 1.4 var(--font-ui);
+}
+.draft-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.draft-actions span {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--mist);
+  font: 11px var(--font-ui);
+}
+.draft-actions button {
+  flex: 0 0 auto;
+  border: 1px solid var(--paper-veil);
+  border-radius: 4px;
+  background: var(--rim);
+  color: var(--bone);
+  font: 12px var(--font-ui);
+  cursor: pointer;
+}
+.draft-actions button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.draft-actions button[hidden] {
+  display: none;
+}
+
 #terminal.tui-scrollback-rail {
   --terminal-content-right: 22px; /* normal 8px padding + A-Term's 14px rail */
 }

@@ -112,6 +112,7 @@ export interface AicoApi {
         accent: string
         tuiName: string
         tuiSlug: string
+        sessionId: string | null
       }) => void,
     ): () => void
     /** Subscribe to focus/blur; returns an unsubscribe function. */

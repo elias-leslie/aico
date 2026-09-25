@@ -21,6 +21,7 @@
         </span>
         <span class="mandate-warn" id="mandate-warn" role="img" aria-label="Context injection status" hidden></span>
         <div class="pinned" id="pinned"></div>
+        <button class="compose-toggle" id="compose-toggle" type="button" title="Compose text" aria-label="Compose text" aria-controls="draft-composer" aria-expanded="false">✎</button>
         <button class="lantern-glyph" id="lantern-menu-btn" type="button" title="Aico menu" aria-label="Aico menu">&#9671;</button>
         <div class="controls">
           <button class="ctl min" type="button" title="Minimize" aria-label="Minimize">&minus;</button>
@@ -28,6 +29,15 @@
           <button class="ctl close" type="button" title="Close" aria-label="Close">&times;</button>
         </div>
       </header>
+      <section class="draft-composer" id="draft-composer" aria-label="Corrected text draft" hidden>
+        <textarea id="draft-text" aria-label="Text to insert" placeholder="Type and correct text here…" rows="3" spellcheck="true" autocomplete="on" autocorrect="on" autocapitalize="sentences"></textarea>
+        <div class="draft-actions">
+          <span id="draft-status" role="status" aria-live="polite">Draft stays here until you insert it.</span>
+          <button id="draft-insert" type="button">Insert</button>
+          <button id="draft-send" type="button" title="Send one line to this TUI">Send</button>
+          <button id="draft-close" type="button" aria-label="Close draft">×</button>
+        </div>
+      </section>
       <div id="terminal"></div>
       <nav class="aico-menu" id="aico-menu" aria-label="Aico actions" hidden></nav>
       <div class="aico-palette" id="aico-palette" hidden></div>

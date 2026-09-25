@@ -14,6 +14,7 @@ import {
 } from '../shared/font-settings'
 import { AICO_TOAST_EVENT, type AicoToastDetail } from './actions'
 import { initControlSurface } from './control-surface'
+import { wireDraftInput } from './draft-input'
 import { mouseReportingActive, setupMouseShim } from './mouse-shim'
 import { pointToCell, sgrWheelSequence, wheelMouseTicks } from './mouse-wheel'
 import { ScrollbackOverlay } from './scrollback-overlay'
@@ -393,6 +394,7 @@ try {
   webgl = undefined
 }
 fit.fit()
+wireDraftInput(term, () => tuiSlug, scheduleTerminalLayoutFit)
 
 // Scroll-back overlay: wheel-up on the live terminal opens a read-only xterm
 // view of tmux history. It stays on the same xterm/WebGL renderer path as the
