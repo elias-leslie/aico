@@ -5,7 +5,6 @@ import {
   KEYBOARD_SPACING_METRICS,
   type KeyboardSizePreset,
   type KeyboardSpacingPreset,
-  keepKeyboardOpen,
   NATIVE_INPUT_HEIGHTS,
   remSize,
 } from './types'
@@ -163,7 +162,6 @@ export function NativeKeyboardInput({
         />
         <button
           type="button"
-          onPointerDown={keepKeyboardOpen}
           onClick={() => void commit('insert')}
           disabled={!connected || !value || busy}
           className="rounded-md border px-2 text-xs font-semibold disabled:opacity-50 focus-visible:ring-2"
@@ -177,7 +175,6 @@ export function NativeKeyboardInput({
         </button>
         <button
           type="button"
-          onPointerDown={keepKeyboardOpen}
           onClick={() => void commit('send')}
           disabled={!connected || !value || /[\r\n]/.test(value) || busy}
           className="rounded-md border px-2 text-xs font-semibold disabled:opacity-50 focus-visible:ring-2"
