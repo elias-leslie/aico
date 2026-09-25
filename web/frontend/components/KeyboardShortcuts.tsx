@@ -12,7 +12,7 @@ const SHORTCUTS: Shortcut[] = [
   { keys: 'Ctrl+T', description: 'New A-Term' },
   { keys: 'Ctrl+W', description: 'Close current tab' },
   { keys: 'Ctrl+Tab', description: 'Next tab' },
-  { keys: 'Ctrl+Shift+Tab', description: 'Previous tab' },
+  { keys: ['Ctrl', 'Shift', 'Tab'].join('+'), description: 'Previous tab' },
   { keys: 'Ctrl+1-9', description: 'Jump to tab N' },
   { keys: '?', description: 'Show this help' },
   { keys: 'Pause', description: 'Toggle voice input' },
