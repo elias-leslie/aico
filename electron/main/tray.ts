@@ -41,6 +41,8 @@ export interface TrayHandlers {
   onNewWidget: (tool: string, projectId: string) => void
   /** Attach an externally-owned tmux session as a widget. */
   onAttachTmuxSession: (id: string) => void
+  /** Rebuild the native menu from the current tmux catalog. */
+  onRefreshTmuxSessions: () => void
   onHubView: () => void
 }
 
@@ -92,6 +94,10 @@ function buildMenu(widgets: TrayWidget[]): Menu {
             click: () => h.onAttachTmuxSession(s.id),
           }))
         : [{ label: 'No attachable sessions', enabled: false }],
+    },
+    {
+      label: 'Refresh tmux sessions',
+      click: () => h.onRefreshTmuxSessions(),
     },
     // Phase 1 replaces this with the dimmed cascade grid; for now, surface all.
     { label: 'Hub view', click: () => h.onHubView() },

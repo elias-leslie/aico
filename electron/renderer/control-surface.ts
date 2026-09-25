@@ -60,7 +60,30 @@ let tuis: TuiInfo[] = []
 // Workspaces for the "Open workspace" flyout (fetched once at init), same pattern.
 let projects: ProjectInfo[] = []
 let tmuxSessions: TmuxSessionInfo[] = []
+let tmuxSessionStatus: 'ready' | 'empty' | 'unavailable' = 'empty'
+let tmuxRefreshId = 0
 let submenuEl: HTMLElement
+let submenuKind: FlyoutKind | null = null
+
+/** Requery the live default-tmux catalog whenever an attach surface opens. */
+export async function refreshTmuxSessions(): Promise<{ status: typeof tmuxSessionStatus }> {
+  const requestId = ++tmuxRefreshId
+  try {
+    const sessions = await window.aico.actions.listTmuxSessions()
+    if (requestId === tmuxRefreshId) {
+      tmuxSessions = sessions
+      tmuxSessionStatus = sessions.length ? 'ready' : 'empty'
+      setTmuxSessionActions(sessions)
+    }
+  } catch {
+    if (requestId === tmuxRefreshId) {
+      tmuxSessions = []
+      tmuxSessionStatus = 'unavailable'
+      setTmuxSessionActions([])
+    }
+  }
+  return { status: tmuxSessionStatus }
+}
 
 function required<T extends HTMLElement>(selector: string): T {
   const el = document.querySelector<T>(selector)
@@ -384,6 +407,7 @@ function emptySubmenuRow(label: string): HTMLElement {
 // `replace:<slug>`). 'project': workspace rows that rebind the focused widget
 // (`project:<id>`). 'replace'/'project' rows carry a pin button.
 function populateSubmenu(kind: FlyoutKind): void {
+  submenuKind = kind
   submenuEl.innerHTML = ''
   if (kind === 'new') {
     if (tuis.length) {
@@ -414,7 +438,11 @@ function populateSubmenu(kind: FlyoutKind): void {
         )
       }
     } else {
-      submenuEl.append(emptySubmenuRow('No tmux sessions'))
+      submenuEl.append(
+        emptySubmenuRow(
+          tmuxSessionStatus === 'unavailable' ? 'Tmux sessions unavailable' : 'No tmux sessions',
+        ),
+      )
     }
   } else {
     if (tuis.length) {
@@ -460,6 +488,13 @@ function showSubmenu(row: HTMLElement, kind: FlyoutKind): void {
   populateSubmenu(kind)
   submenuEl.hidden = false // unhide before measuring
   placeSubmenu(row, 'left')
+  if (kind === 'tmux') {
+    void refreshTmuxSessions().then(() => {
+      if (submenuEl.hidden || submenuKind !== kind) return
+      populateSubmenu(kind)
+      placeSubmenu(row, 'left')
+    })
+  }
 }
 
 // Pop any top-level flyout on its own (a pinned titlebar dropdown or a palette
@@ -475,6 +510,13 @@ function showStandaloneSubmenu(
   submenuEl.hidden = false
   submenuStandalone = true
   placeSubmenu(anchor, place)
+  if (kind === 'tmux') {
+    void refreshTmuxSessions().then(() => {
+      if (submenuEl.hidden || submenuKind !== kind) return
+      populateSubmenu(kind)
+      placeSubmenu(anchor, place)
+    })
+  }
 }
 
 // Pop the workspace picker for `slug` on its own (a pinned "New <TUI>" icon or a
@@ -490,6 +532,7 @@ function showProjectPicker(slug: string, anchor: HTMLElement, place: 'left' | 'b
 
 function hideSubmenu(): void {
   if (submenuEl) submenuEl.hidden = true
+  submenuKind = null
   submenuStandalone = false
 }
 
@@ -756,6 +799,9 @@ function openPalette(): void {
   renderPaletteList()
   paletteEl.hidden = false
   paletteInput.focus()
+  void refreshTmuxSessions().then(() => {
+    if (paletteShowing()) renderPaletteList()
+  })
 }
 function closePalette(): void {
   if (paletteEl.hidden) return
@@ -844,12 +890,7 @@ export async function initControlSurface(): Promise<void> {
     projects = [] // no workspace catalog; the "Open workspace" row simply stays inert
   }
   setProjectActions(projects)
-  try {
-    tmuxSessions = await window.aico.actions.listTmuxSessions()
-  } catch {
-    tmuxSessions = []
-  }
-  setTmuxSessionActions(tmuxSessions)
+  await refreshTmuxSessions()
   submenuEl = make('div', 'aico-submenu')
   submenuEl.hidden = true
   submenuEl.addEventListener('mouseleave', (e) => {

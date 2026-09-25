@@ -4064,12 +4064,17 @@ app.whenReady().then(async () => {
       onDiscard: (id) => void confirmTrayDiscard(id),
       onNewWidget: newWidget,
       onAttachTmuxSession: attachExternalTmuxSession,
+      onRefreshTmuxSessions: syncTray,
       onHubView: showHub,
     },
     listTuis().map((t) => ({ slug: t.slug, label: t.displayName })),
     listProjects(),
     listAttachableTmuxSessions(),
   )
+  // Returning to any Aico window refreshes the native tray catalog as well.
+  // Linux does not provide a reliable async hook before its cached tray menu opens.
+  app.on('browser-window-focus', syncTray)
+  app.on('activate', syncTray)
 
   // System-wide indicate hotkey (X11). Logs whether the grab actually took, so
   // a silent Wayland no-op is visible in the launcher log.
