@@ -30,7 +30,7 @@ jobs:
           python-version: '3.13'
       - uses: astral-sh/setup-uv@v8.2.0
       - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y tmux build-essential
+        run: sudo apt-get update && sudo apt-get install -y tmux build-essential xvfb xauth x11-utils dbus-x11
       - name: Install Node dependencies
         run: npm ci
       - name: Install sidecar build dependencies
@@ -40,6 +40,8 @@ jobs:
         env:
           APPIMAGE_EXTRACT_AND_RUN: '1'
         run: npm run dist
+      - name: Smoke built AppImage on isolated Xvfb display
+        run: bash scripts/aico-packaged-smoke.sh dist/electron/Aico-*.AppImage
       - name: Generate checksums
         working-directory: dist/electron
         run: |

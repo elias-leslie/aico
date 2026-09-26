@@ -26,6 +26,7 @@ import {
 } from 'electron'
 import { type IPty, spawn } from 'node-pty'
 import { parseTerminalFontSettings } from '../shared/font-settings'
+import { coalesceAsync, refreshAttachedTmuxClients } from './interactive-tmux'
 import {
   CoalescedLifecycleIntent,
   classifyPersistedScopePair,
@@ -110,7 +111,6 @@ import {
   isATermSessionName,
   isTmuxTransportUnavailable,
   killTargetArgs,
-  listClientsTargetArgs,
   listDefaultPanesArgs,
   listSessionPaneDetailsTargetArgs,
   listSessionPanesTargetArgs,
@@ -123,7 +123,6 @@ import {
   panePidTargetArgs,
   paneScrollbackInfoTargetArgs,
   parsePaneMode,
-  refreshClientArgs,
   respawnTargetArgs,
   runInPaneTargetArgs,
   scrollbackPageBounds,
@@ -185,6 +184,10 @@ function scrollbackPageFromLine(input: unknown): number | undefined {
 // detaches the client, so the tmux session (and its shell) survives reload/close.
 const ptys = new Map<number, IPty>()
 const ptyStartGenerations = new Map<number, number>()
+const ptyRefreshes = new Map<
+  number,
+  { pty: IPty | undefined; generation: number | undefined; request: Promise<void> }
+>()
 const sessionStartPromises = new Map<string, Promise<boolean>>()
 // BrowserWindow.id -> stable widget id. The widget id (not the volatile window
 // id) names the tmux session, so a widget reattaches the same session across
@@ -3015,15 +3018,14 @@ interface AttachableTmuxSession {
   tool: string
 }
 
-function listAttachableTmuxSessions(): AttachableTmuxSession[] {
+async function listAttachableTmuxSessions(): Promise<AttachableTmuxSession[]> {
   let out = ''
   try {
-    out = execFileSync(TMUX_BIN, listDefaultPanesArgs(), {
-      encoding: 'utf8',
+    const result = await execFileAsync(TMUX_BIN, listDefaultPanesArgs(), {
       env: terminalClientEnv(),
       timeout: TMUX_QUERY_TIMEOUT_MS,
-      stdio: ['ignore', 'pipe', 'ignore'],
     })
+    out = result.stdout
   } catch {
     return []
   }
@@ -3049,6 +3051,9 @@ function listAttachableTmuxSessions(): AttachableTmuxSession[] {
   return [...bySession.values()].sort((a, b) => a.label.localeCompare(b.label))
 }
 
+const refreshAttachableTmuxSessions = coalesceAsync(listAttachableTmuxSessions)
+let trayAttachableTmuxSessions: AttachableTmuxSession[] = []
+
 function findWidgetByTmuxTarget(target: TmuxTarget): WidgetRow | undefined {
   return listWidgets().find(
     (row) =>
@@ -3057,9 +3062,11 @@ function findWidgetByTmuxTarget(target: TmuxTarget): WidgetRow | undefined {
   )
 }
 
-function attachExternalTmuxSession(attachableId: string): void {
-  const session = listAttachableTmuxSessions().find((item) => item.id === attachableId)
-  if (!session) return
+async function attachExternalTmuxSession(attachableId: string): Promise<void> {
+  // Tray rows can outlive a session. Re-read the default server before using
+  // its exact name; never turn a cached row into a persisted widget.
+  const session = (await listAttachableTmuxSessions()).find((item) => item.id === attachableId)
+  if (!session || quitting) return
   const target = { socket: session.socket, session: session.session }
   const existing = findWidgetByTmuxTarget(target)
   if (existing) {
@@ -3290,14 +3297,25 @@ function showHub(): void {
 }
 
 function syncTray(): void {
+  renderTray()
+  void refreshAttachableTmuxSessions().then(
+    (attachables) => {
+      if (quitting) return
+      trayAttachableTmuxSessions = attachables
+      renderTray()
+    },
+    (error) => console.warn('[aico] tmux session catalog refresh failed:', error),
+  )
+}
+
+function renderTray(): void {
   const projects = listProjects() // titlebar name fallback + the New-widget submenu
-  const attachables = listAttachableTmuxSessions()
   const widgets: TrayWidget[] = listWidgets().map((w) => ({
     id: w.id,
     label: w.name || widgetProjectName(w, projects) || `Widget ${w.seq}`,
     open: windowForWidget(w.id) !== undefined,
   }))
-  refreshTray(widgets, projects, attachables)
+  refreshTray(widgets, projects, trayAttachableTmuxSessions)
 }
 
 // The workspace an unnamed widget reads as: the one it's bound to (pinned at
@@ -3843,7 +3861,7 @@ app.whenReady().then(async () => {
   ipcMain.on('pty:refresh', (event, size?: PtySize) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     const widgetId = win ? widgetOf.get(win.id) : undefined
-    if (!widgetId) return
+    if (!win || !widgetId || quitting || lifecycleOwners.isHeld(widgetId)) return
     // Re-pair a drifted pty before the repaint: if the pty's size disagrees
     // with the renderer's live grid, tmux paints for the wrong geometry and
     // every repaint wrap-garbles — the one corruption refresh-client can't
@@ -3863,18 +3881,31 @@ app.whenReady().then(async () => {
         }
       }
     }
+    const generation = ptyStartGenerations.get(win.id)
+    const pending = ptyRefreshes.get(win.id)
+    if (pending && pending.pty === pty && pending.generation === generation) return
     const target = tmuxTargetForWidget(widgetId)
-    try {
-      const out = execFileSync(TMUX_BIN, listClientsTargetArgs(target), { encoding: 'utf8' })
-      for (const client of out
-        .split('\n')
-        .map((l) => l.trim())
-        .filter(Boolean)) {
-        execFileSync(TMUX_BIN, refreshClientArgs(client, target.socket), { stdio: 'ignore' })
-      }
-    } catch (err) {
-      console.warn('[aico] pty refresh failed:', err)
+    const isCurrent = () =>
+      !quitting &&
+      !win.isDestroyed() &&
+      widgetOf.get(win.id) === widgetId &&
+      ptys.get(win.id) === pty &&
+      ptyStartGenerations.get(win.id) === generation &&
+      !lifecycleOwners.isHeld(widgetId)
+    const run = async (args: string[]): Promise<string> => {
+      const { stdout } = await execFileAsync(TMUX_BIN, args, {
+        env: terminalClientEnv(),
+        timeout: TMUX_QUERY_TIMEOUT_MS,
+      })
+      return stdout
     }
+    const request = refreshAttachedTmuxClients(target, run, isCurrent)
+    ptyRefreshes.set(win.id, { pty, generation, request })
+    void request
+      .catch((err) => console.warn('[aico] pty refresh failed:', err))
+      .finally(() => {
+        if (ptyRefreshes.get(win.id)?.request === request) ptyRefreshes.delete(win.id)
+      })
   })
 
   // Full scrollback for the renderer's read-only overlay. tmux history is the
@@ -4040,15 +4071,19 @@ app.whenReady().then(async () => {
   // every real workspace while the background `st projects list` is landing.
   ipcMain.handle('project:list', () => listProjectsFresh())
 
-  ipcMain.handle('tmux:list-attachable', () =>
-    listAttachableTmuxSessions().map((s) => ({
+  ipcMain.handle('tmux:list-attachable', async () =>
+    (await listAttachableTmuxSessions()).map((s) => ({
       id: s.id,
       label: s.label,
       source: s.source,
     })),
   )
   ipcMain.on('tmux:attach', (_event, id?: unknown) => {
-    if (typeof id === 'string' && id) attachExternalTmuxSession(id)
+    if (typeof id === 'string' && id) {
+      void attachExternalTmuxSession(id).catch((error) =>
+        console.warn('[aico] tmux attach failed:', error),
+      )
+    }
   })
 
   // Global pinned-action set (one row in aico.db, shared across widgets). A
@@ -4092,13 +4127,17 @@ app.whenReady().then(async () => {
       onSelect: focusOrReopen,
       onDiscard: (id) => void confirmTrayDiscard(id),
       onNewWidget: newWidget,
-      onAttachTmuxSession: attachExternalTmuxSession,
+      onAttachTmuxSession: (id) => {
+        void attachExternalTmuxSession(id).catch((error) =>
+          console.warn('[aico] tmux attach failed:', error),
+        )
+      },
       onRefreshTmuxSessions: syncTray,
       onHubView: showHub,
     },
     listTuis().map((t) => ({ slug: t.slug, label: t.displayName })),
     listProjects(),
-    listAttachableTmuxSessions(),
+    trayAttachableTmuxSessions,
   )
   // Returning to any Aico window refreshes the native tray catalog as well.
   // Linux does not provide a reliable async hook before its cached tray menu opens.

@@ -27,19 +27,13 @@ import {
   sanitizePins,
   sections,
   setPaletteOpener,
-  setProjectActions,
-  setTmuxSessionActions,
-  setTuiActions,
   togglePin,
 } from './actions'
+import { createCatalogState, type ProjectInfo, type TuiInfo } from './catalog-state'
 
 // Filled thumbtack; color + opacity (via CSS) distinguish pinned from unpinned.
 const PIN_SVG =
   '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="8" r="4.2"/><rect x="11" y="11" width="2" height="9" rx="1"/></svg>'
-
-type TuiInfo = { slug: string; displayName: string; accent: string }
-type ProjectInfo = { id: string; name: string; current: boolean }
-type TmuxSessionInfo = { id: string; label: string; source: string }
 
 let pins: string[] = []
 let glyphEl: HTMLElement
@@ -53,36 +47,18 @@ let paletteSel = 0
 let terminalFontSettings = DEFAULT_TERMINAL_FONT_SETTINGS
 let fontFamilySelect: HTMLSelectElement | null = null
 let fontSizeSelect: HTMLSelectElement | null = null
-// TUIs for the "New widget" flyout (fetched once at init). The flyout is one
-// shared element appended to the shell — like the tooltip — because the menu
-// itself clips horizontally (overflow-y:auto), so a child popover would be cut off.
-let tuis: TuiInfo[] = []
-// Workspaces for the "Open workspace" flyout (fetched once at init), same pattern.
-let projects: ProjectInfo[] = []
-let tmuxSessions: TmuxSessionInfo[] = []
-let tmuxSessionStatus: 'ready' | 'empty' | 'unavailable' = 'empty'
-let tmuxRefreshId = 0
+// The flyout is shared and appended to the shell because the menu clips horizontally.
+const catalogs = createCatalogState({
+  listTuis: () => window.aico.actions.listTuis(),
+  listProjects: () => window.aico.actions.listProjects(),
+  listTmuxSessions: () => window.aico.actions.listTmuxSessions(),
+})
 let submenuEl: HTMLElement
 let submenuKind: FlyoutKind | null = null
 
 /** Requery the live default-tmux catalog whenever an attach surface opens. */
-export async function refreshTmuxSessions(): Promise<{ status: typeof tmuxSessionStatus }> {
-  const requestId = ++tmuxRefreshId
-  try {
-    const sessions = await window.aico.actions.listTmuxSessions()
-    if (requestId === tmuxRefreshId) {
-      tmuxSessions = sessions
-      tmuxSessionStatus = sessions.length ? 'ready' : 'empty'
-      setTmuxSessionActions(sessions)
-    }
-  } catch {
-    if (requestId === tmuxRefreshId) {
-      tmuxSessions = []
-      tmuxSessionStatus = 'unavailable'
-      setTmuxSessionActions([])
-    }
-  }
-  return { status: tmuxSessionStatus }
+export function refreshTmuxSessions(): Promise<{ status: 'ready' | 'empty' | 'unavailable' }> {
+  return catalogs.refreshTmuxSessions()
 }
 
 function required<T extends HTMLElement>(selector: string): T {
@@ -387,8 +363,8 @@ function populateNewProjects(slug: string, withBack: boolean): void {
     })
     submenuEl.append(back)
   }
-  if (projects.length) {
-    for (const p of projects) submenuEl.append(newProjectRow(slug, p))
+  if (catalogs.projects.length) {
+    for (const p of catalogs.projects) submenuEl.append(newProjectRow(slug, p))
   } else {
     const empty = make('div', 'aico-sub-row empty')
     empty.textContent = 'No workspaces'
@@ -410,14 +386,14 @@ function populateSubmenu(kind: FlyoutKind): void {
   submenuKind = kind
   submenuEl.innerHTML = ''
   if (kind === 'new') {
-    if (tuis.length) {
-      for (const t of tuis) submenuEl.append(newTuiRow(t))
+    if (catalogs.tuis.length) {
+      for (const t of catalogs.tuis) submenuEl.append(newTuiRow(t))
     } else {
       submenuEl.append(emptySubmenuRow('No TUIs'))
     }
   } else if (kind === 'project') {
-    if (projects.length) {
-      for (const p of projects) {
+    if (catalogs.projects.length) {
+      for (const p of catalogs.projects) {
         submenuEl.append(
           submenuRow(`project:${p.id}`, p.name, (dot) => {
             dot.classList.add('project') // neutral ring; .current fills it (see CSS)
@@ -429,8 +405,8 @@ function populateSubmenu(kind: FlyoutKind): void {
       submenuEl.append(emptySubmenuRow('No workspaces'))
     }
   } else if (kind === 'tmux') {
-    if (tmuxSessions.length) {
-      for (const session of tmuxSessions) {
+    if (catalogs.tmuxSessions.length) {
+      for (const session of catalogs.tmuxSessions) {
         submenuEl.append(
           submenuRow(`tmux:${session.id}`, session.label, (dot) => {
             dot.classList.add('project')
@@ -440,13 +416,15 @@ function populateSubmenu(kind: FlyoutKind): void {
     } else {
       submenuEl.append(
         emptySubmenuRow(
-          tmuxSessionStatus === 'unavailable' ? 'Tmux sessions unavailable' : 'No tmux sessions',
+          catalogs.tmuxSessionStatus === 'unavailable'
+            ? 'Tmux sessions unavailable'
+            : 'No tmux sessions',
         ),
       )
     }
   } else {
-    if (tuis.length) {
-      for (const t of tuis) {
+    if (catalogs.tuis.length) {
+      for (const t of catalogs.tuis) {
         submenuEl.append(
           submenuRow(`replace:${t.slug}`, t.displayName, (dot) => {
             dot.style.background = t.accent
@@ -871,26 +849,9 @@ export async function initControlSurface(): Promise<void> {
   tipEl.hidden = true
   required('.shell').append(tipEl)
 
-  // TUI picker flyout: fetch the registry list and register the per-TUI actions
-  // before pins load (so pinned new:/replace: ids survive sanitization) and
-  // before buildMenu(), which reads `tuis.length` to decide whether to wire the
-  // picker rows. The flyout is populated per-kind on hover (showSubmenu).
-  try {
-    tuis = await window.aico.actions.listTuis()
-  } catch {
-    tuis = [] // no picker; the "New widget" row then has nothing to launch
-  }
-  setTuiActions(tuis)
-  // Workspaces for the "Open workspace" flyout, same lifecycle as the TUI list:
-  // registered before pins load (so pinned project:<id> survive sanitization) and
-  // before buildMenu() (which wires rows against this catalog).
-  try {
-    projects = await window.aico.actions.listProjects()
-  } catch {
-    projects = [] // no workspace catalog; the "Open workspace" row simply stays inert
-  }
-  setProjectActions(projects)
-  await refreshTmuxSessions()
+  // Independent catalogs load together. Their actions must all be registered
+  // before pin sanitization or persisted dynamic pins would disappear.
+  await catalogs.loadInitial()
   submenuEl = make('div', 'aico-submenu')
   submenuEl.hidden = true
   submenuEl.addEventListener('mouseleave', (e) => {
