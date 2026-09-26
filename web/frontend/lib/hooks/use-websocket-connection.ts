@@ -208,17 +208,15 @@ export function openWebSocketConnection(
       }
     }, WS_CLIENT_PING_INTERVAL)
 
-    // Send initial resize with client capabilities (feature negotiation)
+    // Negotiate capabilities even when this view must not claim tmux geometry.
     const dims = sendInitialResize ? getDimensions?.() : null
-    if (dims) {
-      ws.send(
-        JSON.stringify({
-          __ctrl: true,
-          resize: { cols: dims.cols, rows: dims.rows },
-          capabilities: CLIENT_CAPABILITIES,
-        }),
-      )
-    }
+    ws.send(
+      JSON.stringify({
+        __ctrl: true,
+        ...(dims ? { resize: { cols: dims.cols, rows: dims.rows } } : {}),
+        capabilities: CLIENT_CAPABILITIES,
+      }),
+    )
   }
 
   ws.onmessage = (event) => {

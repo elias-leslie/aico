@@ -3,12 +3,40 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import ANY, AsyncMock, MagicMock, call, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
-from a_term.api.handlers.websocket_connection import _run_session, _setup_connection
+from a_term.api.handlers.websocket_connection import (
+    _poll_for_resize,
+    _run_session,
+    _setup_connection,
+)
 from a_term.constants import SHELL_MODE
+
+
+@pytest.mark.asyncio
+async def test_initial_capabilities_complete_without_background_resize() -> None:
+    websocket = AsyncMock()
+    websocket.receive = AsyncMock(return_value={
+        "type": "websocket.receive",
+        "text": '{"__ctrl": true, "capabilities": ["binary_protocol", "demand_paging"]}',
+    })
+    capabilities: list[str] = []
+
+    with (
+        patch("a_term.api.handlers.websocket_messages.resize_pty") as mock_pty,
+        patch("a_term.api.handlers.websocket_messages.resize_tmux_window") as mock_tmux,
+    ):
+        received = await _poll_for_resize(
+            websocket, 7, "session-passive", "summitflow-session-passive",
+            None, True, capabilities,
+        )
+
+    assert received is True
+    assert capabilities == ["binary_protocol", "demand_paging"]
+    mock_pty.assert_not_called()
+    mock_tmux.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -25,10 +53,6 @@ async def test_setup_connection_applies_external_attach_options() -> None:
             "a_term.api.handlers.websocket_connection.validate_and_prepare_session",
             return_value=(session, "codex-agent-hub"),
         ),
-        patch(
-            "a_term.api.handlers.websocket_connection.reset_tmux_window_size_policy",
-            return_value=True,
-        ) as mock_reset,
         patch(
             "a_term.api.handlers.websocket_connection.apply_external_attach_options",
             return_value=True,
@@ -49,9 +73,10 @@ async def test_setup_connection_applies_external_attach_options() -> None:
         result = await _setup_connection(websocket, "codex-agent-hub", [])
 
     assert result == (session, "codex-agent-hub", 17, 23, False)
-    mock_reset.assert_called_once_with("codex-agent-hub")
     mock_apply.assert_called_once_with("codex-agent-hub")
     mock_wait.assert_awaited_once()
+    assert mock_wait.await_args is not None
+    assert mock_wait.await_args.kwargs["resize_tmux"] is False
 
 
 @pytest.mark.asyncio
@@ -65,6 +90,9 @@ async def test_setup_connection_uses_external_tmux_socket(tmux_socket: str) -> N
         "mode": "codex",
         "last_claude_session": None,
         "tmux_socket": tmux_socket,
+        "tmux_source": "aico" if tmux_socket == "aico" else "aico-abc12345",
+        "tmux_session_id": "$2",
+        "id": "tmux:aico:aico-7" if tmux_socket == "aico" else "tmux:aico-abc12345:aico-7",
     }
     websocket = AsyncMock()
 
@@ -73,10 +101,6 @@ async def test_setup_connection_uses_external_tmux_socket(tmux_socket: str) -> N
             "a_term.api.handlers.websocket_connection.validate_and_prepare_session",
             return_value=(session, "aico-7"),
         ),
-        patch(
-            "a_term.api.handlers.websocket_connection.reset_tmux_window_size_policy",
-            return_value=True,
-        ) as mock_reset,
         patch(
             "a_term.api.handlers.websocket_connection.apply_external_attach_options",
             return_value=True,
@@ -96,13 +120,14 @@ async def test_setup_connection_uses_external_tmux_socket(tmux_socket: str) -> N
     ):
         result = await _setup_connection(websocket, "tmux:aico:aico-7", [])
 
-    assert result == (session, "aico-7", 17, 23, False)
-    mock_reset.assert_called_once_with("aico-7", tmux_socket)
+    assert result == (session, "aico-7", 17, 23, True)
     mock_apply.assert_called_once_with("aico-7", tmux_socket)
     mock_spawn.assert_called_once_with("aico-7", None, tmux_socket)
     wait_args = mock_wait.await_args
     assert wait_args is not None
     assert wait_args.kwargs["tmux_socket_name"] == tmux_socket
+    assert wait_args.kwargs["resize_tmux"] is True
+    assert wait_args.kwargs["external_tmux_session_id"] == "$2"
 
 
 @pytest.mark.asyncio
@@ -119,10 +144,6 @@ async def test_setup_connection_restores_external_attach_options_after_setup_fai
             "a_term.api.handlers.websocket_connection.validate_and_prepare_session",
             return_value=(session, "codex-agent-hub"),
         ),
-        patch(
-            "a_term.api.handlers.websocket_connection.reset_tmux_window_size_policy",
-            return_value=True,
-        ) as mock_reset,
         patch(
             "a_term.api.handlers.websocket_connection.apply_external_attach_options",
             return_value=True,
@@ -143,10 +164,6 @@ async def test_setup_connection_restores_external_attach_options_after_setup_fai
         await _setup_connection(websocket, "codex-agent-hub", [])
 
     mock_restore.assert_called_once_with("codex-agent-hub")
-    assert mock_reset.call_args_list == [
-        call("codex-agent-hub"),
-        call("codex-agent-hub"),
-    ]
 
 
 @pytest.mark.asyncio
@@ -257,16 +274,11 @@ async def test_run_session_restores_external_attach_options_on_disconnect() -> N
             "a_term.api.handlers.websocket_connection.restore_external_attach_options",
             return_value=True,
         ) as mock_restore,
-        patch(
-            "a_term.api.handlers.websocket_connection.reset_tmux_window_size_policy",
-            return_value=True,
-        ) as mock_reset,
     ):
         result = await _run_session(websocket, "codex-agent-hub")
 
     assert result == (23, 17)
     mock_restore.assert_called_once_with("codex-agent-hub")
-    mock_reset.assert_called_once_with("codex-agent-hub")
 
 
 # Scrollback sync MUST be enabled for ALL session modes. Agent/TUI sessions
@@ -327,10 +339,6 @@ async def test_run_session_enables_scrollback_sync_for_all_modes(
             "a_term.api.handlers.websocket_connection.restore_external_attach_options",
             return_value=True,
         ) as mock_restore,
-        patch(
-            "a_term.api.handlers.websocket_connection.reset_tmux_window_size_policy",
-            return_value=True,
-        ) as mock_reset,
     ):
         result = await _run_session(websocket, tmux_name)
 
@@ -346,7 +354,5 @@ async def test_run_session_enables_scrollback_sync_for_all_modes(
     scheduler.close.assert_awaited_once()
     if is_external:
         mock_restore.assert_called_once_with(tmux_name)
-        mock_reset.assert_called_once_with(tmux_name)
     else:
         mock_restore.assert_not_called()
-        mock_reset.assert_not_called()

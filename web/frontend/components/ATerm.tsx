@@ -1,7 +1,14 @@
 'use client'
 
 import { clsx } from 'clsx'
-import { forwardRef, useCallback, useEffect, useMemo, useRef } from 'react'
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import '@xterm/xterm/css/xterm.css'
 import { LineCache } from '../lib/a-term/line-cache'
 import {
@@ -103,6 +110,31 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
         isObserverModeEnabled(window.location.search),
       [],
     )
+    const [isWindowFocused, setIsWindowFocused] = useState(
+      () => typeof document === 'undefined' || document.hasFocus(),
+    )
+    const [isPageVisible, setIsPageVisible] = useState(
+      () =>
+        typeof document === 'undefined' ||
+        document.visibilityState !== 'hidden',
+    )
+    const ownsResize =
+      !suppressSharedResize && isVisible && isWindowFocused && isPageVisible
+
+    useEffect(() => {
+      const handleFocus = () => setIsWindowFocused(true)
+      const handleBlur = () => setIsWindowFocused(false)
+      const handleVisibilityChange = () =>
+        setIsPageVisible(document.visibilityState !== 'hidden')
+      window.addEventListener('focus', handleFocus)
+      window.addEventListener('blur', handleBlur)
+      document.addEventListener('visibilitychange', handleVisibilityChange)
+      return () => {
+        window.removeEventListener('focus', handleFocus)
+        window.removeEventListener('blur', handleBlur)
+        document.removeEventListener('visibilitychange', handleVisibilityChange)
+      }
+    }, [])
 
     useEffect(() => {
       isVisibleRef.current = isVisible
@@ -247,7 +279,10 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
         onATermMessage: (message) => {
           enqueueWrite(`${message}\r\n`)
         },
-        getDimensions: () => fitAddonRef.current?.proposeDimensions() ?? null,
+        getDimensions: () =>
+          ownsResize
+            ? (fitAddonRef.current?.proposeDimensions() ?? null)
+            : null,
       })
 
     const sendRendererStatus = useCallback(
@@ -390,7 +425,7 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
       fitAddonRef,
       containerRef,
       wsRef,
-      sendBackendResize: !suppressSharedResize,
+      sendBackendResize: ownsResize,
     })
 
     useATermHandle(ref, {
@@ -411,9 +446,9 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
     }, [connect, disconnect, isReady, isVisible])
 
     useEffect(() => {
-      if (!isVisible || !isReady || status !== 'connected') return
+      if (!ownsResize || !isReady || status !== 'connected') return
       handleResize()
-    }, [handleResize, isReady, isVisible, status])
+    }, [handleResize, isReady, ownsResize, status])
 
     return (
       <div

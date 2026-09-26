@@ -1,6 +1,6 @@
 import { act, render, waitFor } from '@testing-library/react'
 import { createRef } from 'react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ATermHandle } from './ATerm'
 import { ATermComponent } from './ATerm'
 
@@ -152,7 +152,12 @@ vi.mock('./ScrollbackOverlay', () => ({
 }))
 
 describe('ATermComponent', () => {
+  beforeEach(() => {
+    vi.spyOn(document, 'hasFocus').mockReturnValue(true)
+  })
+
   afterEach(() => {
+    vi.restoreAllMocks()
     websocketState.options = null
     websocketState.connect.mockClear()
     websocketState.disconnect.mockClear()
@@ -195,6 +200,54 @@ describe('ATermComponent', () => {
 
     expect(websocketState.options?.sendInitialResize).toBe(true)
     expect(resizeHookOptions?.sendBackendResize).toBe(true)
+  })
+
+  it('reclaims resize ownership when the browser view regains focus', () => {
+    render(<ATermComponent sessionId="session-shared" isVisible />)
+    const initialResizes = resizeHandle.mock.calls.length
+
+    act(() => window.dispatchEvent(new Event('blur')))
+    expect(resizeHookOptions?.sendBackendResize).toBe(false)
+    expect(websocketState.options?.getDimensions?.()).toBeNull()
+    expect(resizeHandle).toHaveBeenCalledTimes(initialResizes)
+
+    act(() => window.dispatchEvent(new Event('focus')))
+    expect(resizeHookOptions?.sendBackendResize).toBe(true)
+    expect(websocketState.options?.getDimensions?.()).toEqual({
+      cols: 80,
+      rows: 24,
+    })
+    expect(resizeHandle).toHaveBeenCalledTimes(initialResizes + 1)
+  })
+
+  it('does not send shared resizes while the page is hidden', () => {
+    const visibility = vi.spyOn(document, 'visibilityState', 'get')
+    render(<ATermComponent sessionId="session-hidden" isVisible />)
+    const initialResizes = resizeHandle.mock.calls.length
+
+    visibility.mockReturnValue('hidden')
+    act(() => document.dispatchEvent(new Event('visibilitychange')))
+    expect(resizeHookOptions?.sendBackendResize).toBe(false)
+    expect(websocketState.options?.getDimensions?.()).toBeNull()
+
+    visibility.mockReturnValue('visible')
+    act(() => document.dispatchEvent(new Event('visibilitychange')))
+    expect(resizeHookOptions?.sendBackendResize).toBe(true)
+    expect(resizeHandle).toHaveBeenCalledTimes(initialResizes + 1)
+    visibility.mockRestore()
+  })
+
+  it('keeps observer views passive after they regain focus', () => {
+    window.history.replaceState({}, '', '/?observer=1')
+    render(<ATermComponent sessionId="session-observer" isVisible />)
+    resizeHandle.mockClear()
+
+    act(() => window.dispatchEvent(new Event('blur')))
+    act(() => window.dispatchEvent(new Event('focus')))
+
+    expect(resizeHookOptions?.sendBackendResize).toBe(false)
+    expect(websocketState.options?.getDimensions?.()).toBeNull()
+    expect(resizeHandle).not.toHaveBeenCalled()
   })
 
   it('reserves a permanent scrollbar rail for TUI sessions so overlay activation does not steal columns', () => {

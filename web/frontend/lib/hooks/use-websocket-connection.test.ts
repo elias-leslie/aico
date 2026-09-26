@@ -123,6 +123,52 @@ describe('dispatchControlMessage', () => {
 })
 
 describe('openWebSocketConnection', () => {
+  it('negotiates capabilities without resizing when dimensions are suppressed', () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('WebSocket', MockWebSocket)
+    const refs = buildRefs()
+    const callbacks = buildCallbacks()
+
+    connect(refs, callbacks)
+    sockets[0].emitOpen()
+
+    expect(callbacks.getDimensions).toHaveBeenCalledOnce()
+    expect(sockets[0].sent).toHaveLength(1)
+    expect(JSON.parse(sockets[0].sent[0] as string)).toEqual({
+      __ctrl: true,
+      capabilities: [
+        'backpressure',
+        'diff_sync',
+        'binary_protocol',
+        'demand_paging',
+      ],
+    })
+  })
+
+  it('negotiates observer capabilities without reading terminal dimensions', () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('WebSocket', MockWebSocket)
+    const refs = buildRefs()
+    const callbacks = buildCallbacks()
+
+    openWebSocketConnection('session-observer', undefined, refs, {
+      ...callbacks,
+      sendInitialResize: false,
+    })
+    sockets[0].emitOpen()
+
+    expect(callbacks.getDimensions).not.toHaveBeenCalled()
+    expect(JSON.parse(sockets[0].sent[0] as string)).toEqual({
+      __ctrl: true,
+      capabilities: [
+        'backpressure',
+        'diff_sync',
+        'binary_protocol',
+        'demand_paging',
+      ],
+    })
+  })
+
   it('ignores stale close events from a replaced WebSocket', () => {
     vi.useFakeTimers()
     vi.stubGlobal('WebSocket', MockWebSocket)

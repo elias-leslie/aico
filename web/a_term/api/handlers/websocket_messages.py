@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 from typing import TYPE_CHECKING, Any
 
 from ...config import (
@@ -17,7 +18,11 @@ from ...config import (
 )
 from ...logging_config import get_logger
 from ...services.pty_manager import resize_pty
-from ...utils.tmux import resize_tmux_window
+from ...utils.tmux import (
+    is_managed_tmux_session_name,
+    resize_tmux_window,
+    run_tmux_command,
+)
 
 if TYPE_CHECKING:
     from fastapi import WebSocket
@@ -28,6 +33,8 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 MAX_SCROLL_PAGE_SIZE = 5000
+_TMUX_SESSION_ID = re.compile(r"^\$[0-9]+$")
+_TMUX_WINDOW_ID = re.compile(r"^@[0-9]+$")
 
 
 def _clamp_dimension(value: int, min_val: int, max_val: int) -> int:
@@ -45,6 +52,56 @@ def _extract_capabilities(data: dict[str, Any], capabilities: list[str] | None) 
         capabilities.extend(caps)
 
 
+def _resize_verified_external_window(
+    session_name: str,
+    socket_name: str,
+    expected_session_id: str,
+    cols: int,
+    rows: int,
+) -> bool:
+    """Resize only the original unlinked Aico window, after a live recheck."""
+    if not _TMUX_SESSION_ID.fullmatch(expected_session_id):
+        return False
+
+    identity_args = [
+        "display-message", "-p", "-t", session_name,
+        "#{session_id}\t#{window_id}\t#{session_name}",
+    ]
+    success, identity = run_tmux_command(identity_args, socket_name=socket_name)
+    if not success:
+        return False
+    parts = identity.split("\t")
+    if len(parts) != 3:
+        return False
+    session_id, window_id, live_name = parts
+    if (
+        session_id != expected_session_id
+        or live_name != session_name
+        or not _TMUX_WINDOW_ID.fullmatch(window_id)
+    ):
+        return False
+
+    success, windows = run_tmux_command(
+        ["list-windows", "-a", "-F", "#{window_id}"], socket_name=socket_name,
+    )
+    if not success or windows.splitlines().count(window_id) != 1:
+        return False
+    success, status = run_tmux_command(
+        ["show-options", "-t", session_name, "-v", "status"], socket_name=socket_name,
+    )
+    if not success or status.strip() != "off":
+        return False
+    success, latest_identity = run_tmux_command(identity_args, socket_name=socket_name)
+    if not success or latest_identity != identity:
+        return False
+
+    success, _ = run_tmux_command(
+        ["resize-window", "-t", window_id, "-x", str(cols), "-y", str(rows)],
+        socket_name=socket_name,
+    )
+    return success
+
+
 async def _handle_resize_command(
     data: dict[str, Any],
     master_fd: int,
@@ -53,24 +110,33 @@ async def _handle_resize_command(
     tmux_socket_name: str | None,
     last_resize: list[int] | None,
     resize_tmux: bool,
+    external_tmux_session_id: str | None,
 ) -> tuple[int, int]:
     """Handle a resize JSON command."""
     resize = data.get("resize", {})
     cols = _clamp_dimension(int(resize.get("cols", TMUX_DEFAULT_COLS)), TMUX_MIN_COLS, TMUX_MAX_COLS)
     rows = _clamp_dimension(int(resize.get("rows", TMUX_DEFAULT_ROWS)), TMUX_MIN_ROWS, TMUX_MAX_ROWS)
 
-    # Skip PTY/tmux resize if dimensions unchanged (dedup)
+    # Only the local PTY can be deduplicated: another app may have resized the
+    # shared tmux window since this view last sent the same dimensions.
     if not last_resize or cols != last_resize[0] or rows != last_resize[1]:
         resize_pty(master_fd, cols, rows)
-        if resize_tmux and tmux_session_name:
-            resize_args = [tmux_session_name, cols, rows]
-            if tmux_socket_name:
-                resize_args.append(tmux_socket_name)
-            await asyncio.to_thread(resize_tmux_window, *resize_args)
         if last_resize is not None:
             last_resize[0] = cols
             last_resize[1] = rows
         logger.info("a_term_resized", session_id=session_id, cols=cols, rows=rows)
+
+    if resize_tmux and tmux_session_name:
+        if external_tmux_session_id and tmux_socket_name:
+            await asyncio.to_thread(
+                _resize_verified_external_window,
+                tmux_session_name, tmux_socket_name, external_tmux_session_id, cols, rows,
+            )
+        elif external_tmux_session_id is None and is_managed_tmux_session_name(tmux_session_name):
+            resize_args = [tmux_session_name, cols, rows]
+            if tmux_socket_name:
+                resize_args.append(tmux_socket_name)
+            await asyncio.to_thread(resize_tmux_window, *resize_args)
 
     return (cols, rows)
 
@@ -167,6 +233,7 @@ async def _handle_ctrl_message(
     backpressure: BackpressureController | None,
     websocket: WebSocket | None,
     capabilities: list[str] | None,
+    external_tmux_session_id: str | None,
 ) -> tuple[int, int] | None:
     """Dispatch a validated __ctrl message to the appropriate handler."""
     if "resize" in data:
@@ -179,7 +246,12 @@ async def _handle_ctrl_message(
             tmux_socket_name,
             last_resize,
             resize_tmux,
+            external_tmux_session_id,
         )
+
+    if "capabilities" in data:
+        _extract_capabilities(data, capabilities)
+        return None
 
     if data.get("ping"):
         return None
@@ -234,6 +306,7 @@ async def _handle_text_message(
     websocket: WebSocket | None = None,
     capabilities: list[str] | None = None,
     recorder: SessionRecorder | None = None,
+    external_tmux_session_id: str | None = None,
 ) -> tuple[int, int] | None:
     """Handle a text WebSocket message, dispatching JSON control or raw input.
 
@@ -250,7 +323,8 @@ async def _handle_text_message(
         if data.get("__ctrl"):
             return await _handle_ctrl_message(
                 data, master_fd, session_id, tmux_session_name,
-                tmux_socket_name, last_resize, resize_tmux, backpressure, websocket, capabilities,
+                tmux_socket_name, last_resize, resize_tmux, backpressure, websocket,
+                capabilities, external_tmux_session_id,
             )
 
     input_bytes = text.encode("utf-8")
@@ -272,6 +346,7 @@ async def _handle_binary_message(
     websocket: WebSocket | None,
     capabilities: list[str] | None,
     recorder: SessionRecorder | None,
+    external_tmux_session_id: str | None,
 ) -> tuple[int, int] | None:
     """Handle a binary WebSocket message via the framed binary protocol."""
     # Phase 5: Binary protocol — decode framed messages
@@ -289,7 +364,8 @@ async def _handle_binary_message(
                 text = payload.decode("utf-8")
                 return await _handle_text_message(
                     text, master_fd, session_id, tmux_session_name,
-                    tmux_socket_name, last_resize, resize_tmux, backpressure, websocket, capabilities, recorder,
+                    tmux_socket_name, last_resize, resize_tmux, backpressure, websocket,
+                    capabilities, recorder, external_tmux_session_id,
                 )
             except (json.JSONDecodeError, UnicodeDecodeError):
                 pass
@@ -311,6 +387,7 @@ async def handle_websocket_message(
     websocket: WebSocket | None = None,
     capabilities: list[str] | None = None,
     recorder: SessionRecorder | None = None,
+    external_tmux_session_id: str | None = None,
 ) -> tuple[int, int] | None:
     """Handle a single WebSocket message.
 
@@ -339,6 +416,7 @@ async def handle_websocket_message(
             websocket,
             capabilities,
             recorder,
+            external_tmux_session_id,
         )
 
     if "bytes" in message:
@@ -351,6 +429,7 @@ async def handle_websocket_message(
             websocket,
             capabilities,
             recorder,
+            external_tmux_session_id,
         )
 
     return None
