@@ -27,6 +27,10 @@ import {
 import { type IPty, spawn } from 'node-pty'
 import { parseTerminalFontSettings } from '../shared/font-settings'
 import {
+  type ExternalViewPresence,
+  reconcileClosedExternalViews,
+} from './external-view-reconciliation'
+import {
   activateTmuxViewSize,
   coalesceAsync,
   coalesceTrailingAsync,
@@ -120,6 +124,7 @@ import {
   hasTargetArgs,
   internalTarget,
   isATermSessionName,
+  isDefinitiveTmuxAbsence,
   isTmuxTransportUnavailable,
   listDefaultPanesArgs,
   listSessionPaneDetailsTargetArgs,
@@ -2836,6 +2841,18 @@ async function listAttachableTmuxSessions(): Promise<AttachableTmuxSession[]> {
 const refreshAttachableTmuxSessions = coalesceAsync(listAttachableTmuxSessions)
 let trayAttachableTmuxSessions: AttachableTmuxSession[] = []
 
+async function externalTmuxSessionPresence(target: TmuxTarget): Promise<ExternalViewPresence> {
+  try {
+    await execFileAsync(TMUX_BIN, hasTargetArgs(target), {
+      env: terminalClientEnv(),
+      timeout: TMUX_QUERY_TIMEOUT_MS,
+    })
+    return 'present'
+  } catch (error) {
+    return isDefinitiveTmuxAbsence(tmuxErrorText(error)) ? 'absent' : 'unknown'
+  }
+}
+
 function findWidgetByTmuxTarget(target: TmuxTarget): WidgetRow | undefined {
   return listWidgets().find(
     (row) =>
@@ -3039,14 +3056,32 @@ function showHub(): void {
 
 function syncTray(): void {
   renderTray()
-  void refreshAttachableTmuxSessions().then(
-    (attachables) => {
+  void refreshAttachableTmuxSessions()
+    .then(async (attachables) => {
       if (quitting) return
       trayAttachableTmuxSessions = attachables
       renderTray()
-    },
-    (error) => console.warn('[aico] tmux session catalog refresh failed:', error),
-  )
+      await reconcileClosedExternalViews(
+        attachables.map((session) => session.session),
+        {
+          list: listWidgets,
+          isOpen: (id) => Boolean(windowForWidget(id)),
+          acquire: (id) => lifecycleOwners.acquire(id),
+          release: releaseLifecycleOwner,
+          probe: externalTmuxSessionPresence,
+          forget: (row) =>
+            row.externalTmuxSession !== null &&
+            removeExternalWidgetIfIdentity(
+              row.id,
+              row.sessionId,
+              row.externalTmuxSocket,
+              row.externalTmuxSession,
+            ),
+        },
+      )
+      if (!quitting) renderTray()
+    })
+    .catch((error) => console.warn('[aico] tmux session catalog refresh failed:', error))
 }
 
 function renderTray(): void {

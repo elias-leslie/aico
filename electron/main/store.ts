@@ -1084,8 +1084,8 @@ export function removeWidget(id: string): void {
   db.prepare('DELETE FROM widgets WHERE id = ?').run(id)
 }
 
-/** Forget an external attachment only after its owner confirmed End and the
- * attached session identity still matches the row observed before delegation. */
+/** Forget an external view only after owner-confirmed End or proven session
+ * absence, when its persisted identity still matches the observed row. */
 export function removeExternalWidgetIfIdentity(
   id: string,
   sessionId: string,
