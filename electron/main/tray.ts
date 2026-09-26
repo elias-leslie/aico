@@ -62,58 +62,58 @@ function buildMenu(widgets: TrayWidget[]): Menu {
   const template: Electron.MenuItemConstructorOptions[] = [
     ...(open.length
       ? open.map((w) => ({ label: `● ${w.label}`, click: () => h.onSelect(w.id) }))
-      : [{ label: 'No widgets open', enabled: false }]),
+      : [{ label: 'No session windows open', enabled: false }]),
     { type: 'separator' },
   ]
-
-  if (closed.length) {
-    template.push({
-      label: 'Reopen',
-      submenu: closed.map((w) => ({ label: w.label, click: () => h.onSelect(w.id) })),
-    })
-  }
 
   template.push(
     // Two-level submenu: TUI (from the registry) ▸ workspace (Aico Personal
     // Workspace + `st` projects). A launch is always an explicit pair. A new tool
     // appears here by adding its spec, with no tray edits.
     {
-      label: 'New widget',
+      label: 'New session',
       submenu: tools.map((t) => ({
         label: t.label,
         submenu: projects.length
           ? projects.map((p) => ({ label: p.name, click: () => h.onNewWidget(t.slug, p.id) }))
-          : [{ label: 'No workspaces', enabled: false }],
+          : [{ label: 'No projects', enabled: false }],
       })),
     },
     {
-      label: 'Attach tmux session',
-      submenu: attachables.length
-        ? attachables.map((s) => ({
-            label: `${s.source}: ${s.label}`,
-            click: () => h.onAttachTmuxSession(s.id),
-          }))
-        : [{ label: 'No attachable sessions', enabled: false }],
+      label: 'Open session',
+      submenu:
+        closed.length || attachables.length
+          ? [
+              ...closed.map((w) => ({ label: w.label, click: () => h.onSelect(w.id) })),
+              ...attachables.map((s) => ({
+                label: s.label,
+                click: () => h.onAttachTmuxSession(s.id),
+              })),
+            ]
+          : [{ label: 'No sessions to open', enabled: false }],
     },
     {
-      label: 'Refresh tmux sessions',
+      label: 'Refresh sessions',
       click: () => h.onRefreshTmuxSessions(),
     },
     // Phase 1 replaces this with the dimmed cascade grid; for now, surface all.
-    { label: 'Hub view', click: () => h.onHubView() },
+    { label: 'Show windows', click: () => h.onHubView() },
   )
 
   if (widgets.length) {
     template.push(
       { type: 'separator' },
       {
-        label: 'Discard',
+        label: 'End session',
         submenu: widgets.map((w) => ({ label: w.label, click: () => h.onDiscard(w.id) })),
       },
     )
   }
 
-  template.push({ type: 'separator' }, { label: 'Quit', click: () => app.quit() })
+  template.push(
+    { type: 'separator' },
+    { label: 'Quit Aico (sessions continue)', click: () => app.quit() },
+  )
   return Menu.buildFromTemplate(template)
 }
 

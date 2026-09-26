@@ -20,7 +20,7 @@
   "services": {
     "backend": "aico-shell.service",
     "frontend": "",
-    "default_workers": [],
+    "default_workers": ["aico-owner.service"],
     "optional_workers": []
   },
   "hosts": {},

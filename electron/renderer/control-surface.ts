@@ -26,6 +26,7 @@ import {
   runAction,
   sanitizePins,
   sections,
+  sessionActionId,
   setPaletteOpener,
   togglePin,
 } from './actions'
@@ -51,14 +52,14 @@ let fontSizeSelect: HTMLSelectElement | null = null
 const catalogs = createCatalogState({
   listTuis: () => window.aico.actions.listTuis(),
   listProjects: () => window.aico.actions.listProjects(),
-  listTmuxSessions: () => window.aico.actions.listTmuxSessions(),
+  listOpenableSessions: () => window.aico.actions.listOpenableSessions(),
 })
 let submenuEl: HTMLElement
 let submenuKind: FlyoutKind | null = null
 
-/** Requery the live default-tmux catalog whenever an attach surface opens. */
-export function refreshTmuxSessions(): Promise<{ status: 'ready' | 'empty' | 'unavailable' }> {
-  return catalogs.refreshTmuxSessions()
+/** Requery both session owners whenever an Open surface appears. */
+export function refreshSessions(): Promise<{ status: 'ready' | 'empty' | 'unavailable' }> {
+  return catalogs.refreshSessions()
 }
 
 function required<T extends HTMLElement>(selector: string): T {
@@ -355,7 +356,7 @@ function populateNewProjects(slug: string, withBack: boolean): void {
   if (withBack) {
     const back = make('div', 'aico-sub-row aico-sub-back runnable')
     const lbl = make('span', 'aico-lbl')
-    lbl.textContent = '‹ New widget'
+    lbl.textContent = '‹ New session'
     back.append(lbl)
     back.addEventListener('click', (e) => {
       e.stopPropagation() // same as newTuiRow: repopulating wipes this row, so don't let the bubble close the menu
@@ -367,7 +368,7 @@ function populateNewProjects(slug: string, withBack: boolean): void {
     for (const p of catalogs.projects) submenuEl.append(newProjectRow(slug, p))
   } else {
     const empty = make('div', 'aico-sub-row empty')
-    empty.textContent = 'No workspaces'
+    empty.textContent = 'No projects'
     submenuEl.append(empty)
   }
 }
@@ -402,13 +403,13 @@ function populateSubmenu(kind: FlyoutKind): void {
         )
       }
     } else {
-      submenuEl.append(emptySubmenuRow('No workspaces'))
+      submenuEl.append(emptySubmenuRow('No projects'))
     }
   } else if (kind === 'tmux') {
-    if (catalogs.tmuxSessions.length) {
-      for (const session of catalogs.tmuxSessions) {
+    if (catalogs.sessions.length) {
+      for (const session of catalogs.sessions) {
         submenuEl.append(
-          submenuRow(`tmux:${session.id}`, session.label, (dot) => {
+          submenuRow(sessionActionId(session), session.label, (dot) => {
             dot.classList.add('project')
           }),
         )
@@ -416,9 +417,7 @@ function populateSubmenu(kind: FlyoutKind): void {
     } else {
       submenuEl.append(
         emptySubmenuRow(
-          catalogs.tmuxSessionStatus === 'unavailable'
-            ? 'Tmux sessions unavailable'
-            : 'No tmux sessions',
+          catalogs.sessionStatus === 'unavailable' ? 'Sessions unavailable' : 'No sessions to open',
         ),
       )
     }
@@ -467,7 +466,7 @@ function showSubmenu(row: HTMLElement, kind: FlyoutKind): void {
   submenuEl.hidden = false // unhide before measuring
   placeSubmenu(row, 'left')
   if (kind === 'tmux') {
-    void refreshTmuxSessions().then(() => {
+    void refreshSessions().then(() => {
       if (submenuEl.hidden || submenuKind !== kind) return
       populateSubmenu(kind)
       placeSubmenu(row, 'left')
@@ -489,7 +488,7 @@ function showStandaloneSubmenu(
   submenuStandalone = true
   placeSubmenu(anchor, place)
   if (kind === 'tmux') {
-    void refreshTmuxSessions().then(() => {
+    void refreshSessions().then(() => {
       if (submenuEl.hidden || submenuKind !== kind) return
       populateSubmenu(kind)
       placeSubmenu(anchor, place)
@@ -777,7 +776,7 @@ function openPalette(): void {
   renderPaletteList()
   paletteEl.hidden = false
   paletteInput.focus()
-  void refreshTmuxSessions().then(() => {
+  void refreshSessions().then(() => {
     if (paletteShowing()) renderPaletteList()
   })
 }

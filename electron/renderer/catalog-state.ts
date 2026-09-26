@@ -1,14 +1,14 @@
-import { setProjectActions, setTmuxSessionActions, setTuiActions } from './actions'
+import type { OpenableSession } from '../types'
+import { setProjectActions, setSessionActions, setTuiActions } from './actions'
 
 export type TuiInfo = { slug: string; displayName: string; accent: string }
 export type ProjectInfo = { id: string; name: string; current: boolean }
-export type TmuxSessionInfo = { id: string; label: string; source: string }
-export type TmuxSessionStatus = 'ready' | 'empty' | 'unavailable'
+export type SessionCatalogStatus = 'ready' | 'empty' | 'unavailable'
 
 type CatalogLoaders = {
   listTuis: () => Promise<TuiInfo[]>
   listProjects: () => Promise<ProjectInfo[]>
-  listTmuxSessions: () => Promise<TmuxSessionInfo[]>
+  listOpenableSessions: () => Promise<OpenableSession[]>
 }
 
 /** Owns the picker catalogs and their dynamic actions. Initial loading finishes
@@ -17,27 +17,27 @@ type CatalogLoaders = {
 export function createCatalogState(loaders: CatalogLoaders) {
   let tuis: TuiInfo[] = []
   let projects: ProjectInfo[] = []
-  let tmuxSessions: TmuxSessionInfo[] = []
-  let tmuxSessionStatus: TmuxSessionStatus = 'empty'
-  let tmuxRefreshId = 0
+  let sessions: OpenableSession[] = []
+  let sessionStatus: SessionCatalogStatus = 'empty'
+  let sessionRefreshId = 0
 
-  async function refreshTmuxSessions(): Promise<{ status: TmuxSessionStatus }> {
-    const requestId = ++tmuxRefreshId
+  async function refreshSessions(): Promise<{ status: SessionCatalogStatus }> {
+    const requestId = ++sessionRefreshId
     try {
-      const sessions = await loaders.listTmuxSessions()
-      if (requestId === tmuxRefreshId) {
-        tmuxSessions = sessions
-        tmuxSessionStatus = sessions.length ? 'ready' : 'empty'
-        setTmuxSessionActions(sessions)
+      const latest = await loaders.listOpenableSessions()
+      if (requestId === sessionRefreshId) {
+        sessions = latest
+        sessionStatus = latest.length ? 'ready' : 'empty'
+        setSessionActions(latest)
       }
     } catch {
-      if (requestId === tmuxRefreshId) {
-        tmuxSessions = []
-        tmuxSessionStatus = 'unavailable'
-        setTmuxSessionActions([])
+      if (requestId === sessionRefreshId) {
+        sessions = []
+        sessionStatus = 'unavailable'
+        setSessionActions([])
       }
     }
-    return { status: tmuxSessionStatus }
+    return { status: sessionStatus }
   }
 
   async function loadInitial(): Promise<void> {
@@ -58,24 +58,24 @@ export function createCatalogState(loaders: CatalogLoaders) {
         }
         setProjectActions(projects)
       })(),
-      refreshTmuxSessions(),
+      refreshSessions(),
     ])
   }
 
   return {
     loadInitial,
-    refreshTmuxSessions,
+    refreshSessions,
     get tuis() {
       return tuis
     },
     get projects() {
       return projects
     },
-    get tmuxSessions() {
-      return tmuxSessions
+    get sessions() {
+      return sessions
     },
-    get tmuxSessionStatus() {
-      return tmuxSessionStatus
+    get sessionStatus() {
+      return sessionStatus
     },
   }
 }

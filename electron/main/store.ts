@@ -1083,3 +1083,21 @@ export function removeWidgetIfOwnership(id: string, expected: WidgetOwnershipGen
 export function removeWidget(id: string): void {
   db.prepare('DELETE FROM widgets WHERE id = ?').run(id)
 }
+
+/** Forget an external attachment only after its owner confirmed End and the
+ * attached session identity still matches the row observed before delegation. */
+export function removeExternalWidgetIfIdentity(
+  id: string,
+  sessionId: string,
+  socket: string | null,
+  session: string,
+): boolean {
+  const result = db
+    .prepare(
+      `DELETE FROM widgets WHERE id = ? AND session_id = ?
+       AND external_tmux_socket IS ? AND external_tmux_session = ?
+       AND tmux_allocation_state = 'external'`,
+    )
+    .run(id, sessionId, socket, session)
+  return result.changes === 1
+}

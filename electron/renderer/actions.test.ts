@@ -9,7 +9,7 @@ import {
   pinnedActions,
   reorderPins,
   sanitizePins,
-  setTmuxSessionActions,
+  setSessionActions,
   setTuiActions,
   togglePin,
 } from './actions'
@@ -71,8 +71,9 @@ describe('action registry', () => {
     }
   })
 
-  it('keeps "New widget" as a flyout host with no default launch', () => {
+  it('keeps "New session" as a flyout host with no default launch', () => {
     const a = findAction('new-widget')
+    expect(a?.label).toBe('New session')
     expect(a?.shortcut).toBe('')
     expect(a?.run).toBeUndefined()
   })
@@ -87,9 +88,20 @@ describe('action registry', () => {
     expect(typeof findAction('replace:claude')?.run).toBe('function')
   })
 
-  it('treats discovered tmux sessions as pinnable attach actions', () => {
-    setTmuxSessionActions([{ id: 'default:a-term-demo', label: 'A-Term demo', source: 'A-Term' }])
+  it('treats discovered sessions as pinnable open actions', () => {
+    setSessionActions([
+      {
+        owner: 'a-term',
+        id: 'default:a-term-demo',
+        label: 'A-Term demo',
+        project: null,
+        tool: null,
+        status: 'running',
+        locallyOpen: false,
+      },
+    ])
     const a = findAction('tmux:default:a-term-demo')
+    expect(a?.label).toBe('Open A-Term demo')
     expect(typeof a?.run).toBe('function')
     expect(a && isPinnable(a)).toBe(true)
   })
@@ -138,6 +150,27 @@ describe('copySessionDiagnostics', () => {
     const event = dispatchEvent.mock.calls[0]?.[0] as CustomEvent
     expect(event.type).toBe(AICO_TOAST_EVENT)
     expect(event.detail).toEqual({ kind: 'Error', snippet: 'Could not copy session diagnostics' })
+  })
+})
+
+describe('End session', () => {
+  it('shows a failure without claiming the session ended', async () => {
+    const dispatchEvent = vi.fn()
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.stubGlobal('window', {
+      aico: { actions: { endSession: vi.fn().mockRejectedValue(new Error('owner unavailable')) } },
+      dispatchEvent,
+    })
+
+    findAction('retire-widget')?.run?.()
+    await vi.waitFor(() => expect(dispatchEvent).toHaveBeenCalledOnce())
+
+    const event = dispatchEvent.mock.calls[0]?.[0] as CustomEvent
+    expect(event.type).toBe(AICO_TOAST_EVENT)
+    expect(event.detail).toEqual({
+      kind: 'Error',
+      snippet: 'Could not confirm End; check the session list',
+    })
   })
 })
 

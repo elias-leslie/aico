@@ -8,7 +8,8 @@
   "scripts": {
     "postinstall": "install-electron",
     "start": "npm run build && electron-vite preview",
-    "build": "electron-vite build",
+    "build": "electron-vite build && npm run build:owner",
+    "build:owner": "esbuild electron/main/owner-service.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/main/owner-service.mjs",
     "dev": "electron-vite dev",
     "rebuild": "electron-rebuild -f -w node-pty",
     "dist:sidecar": ".venv/bin/pyinstaller --noconfirm --clean --log-level WARN --name aico-sidecar --distpath dist/sidecar --workpath dist/.pyi-build --specpath dist/.pyi-build --paths sidecar --collect-submodules uvicorn --collect-submodules aico_sidecar --hidden-import aico_sidecar.app sidecar/aico_sidecar/__main__.py",
@@ -28,6 +29,7 @@
     "electron": "^42.2.0",
     "electron-builder": "^26.15.2",
     "electron-vite": "^5.0.0",
+    "esbuild": "^0.25.12",
     "typescript": "^5.7.0",
     "vite": "^7.3.3",
     "vitest": "^4.1.6"

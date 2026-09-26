@@ -8,6 +8,16 @@ export interface ScrollbackPage {
   text: string
 }
 
+export interface OpenableSession {
+  owner: 'aico' | 'a-term'
+  id: string
+  label: string
+  project: string | null
+  tool: string | null
+  status: 'running'
+  locallyOpen: boolean
+}
+
 export interface AicoApi {
   pty: {
     start(size: { cols: number; rows: number }): void
@@ -61,10 +71,9 @@ export interface AicoApi {
     loadTui(tool: string): void
     /** Aico workspace catalog for the "Open workspace" picker. */
     listProjects(): Promise<{ id: string; name: string; root: string; current: boolean }[]>
-    /** Externally-owned tmux sessions Aico can attach without taking ownership. */
-    listTmuxSessions(): Promise<{ id: string; label: string; source: string }[]>
-    /** Attach an externally-owned tmux session as a widget. */
-    attachTmuxSession(id: string): void
+    /** Running sessions from both owners. Opening one reuses its live process. */
+    listOpenableSessions(): Promise<OpenableSession[]>
+    openSession(owner: OpenableSession['owner'], id: string): Promise<void>
     /** Snapshot ownership, tmux, and resource diagnostics for this session. */
     sessionDiagnostics(): Promise<Record<string, unknown>>
     /** Move the focused widget to workspace `id` (respawns its pane there, same tool). */
@@ -76,7 +85,7 @@ export interface AicoApi {
     /** Fire a desktop grab from a click (aico-grab.sh flags: `-p` `-r` `-t`). */
     grab(args: string[]): void
     /** Retire this widget: close the window AND end its tmux session. */
-    retire(): void
+    endSession(): Promise<void>
   }
   settings: {
     /** Global pinned-action ids, or null if never set (first run). */

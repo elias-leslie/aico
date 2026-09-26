@@ -42,15 +42,15 @@ describe('tray tmux discovery', () => {
       [],
     )
     const before = menus.at(-1) ?? []
-    expect(item(before, 'Attach tmux session').submenu).toEqual([
-      { label: 'No attachable sessions', enabled: false },
+    expect(item(before, 'Open session').submenu).toEqual([
+      { label: 'No sessions to open', enabled: false },
     ])
 
-    ;(item(before, 'Refresh tmux sessions').click as () => void)()
+    ;(item(before, 'Refresh sessions').click as () => void)()
     expect(onRefreshTmuxSessions).toHaveBeenCalledOnce()
     const after = menus.at(-1) ?? []
-    const attach = (item(after, 'Attach tmux session').submenu as Record<string, unknown>[])[0]
-    expect(attach.label).toBe('A-Term: A-Term new')
+    const attach = (item(after, 'Open session').submenu as Record<string, unknown>[])[0]
+    expect(attach.label).toBe('A-Term new')
     ;(attach.click as () => void)()
     expect(onAttachTmuxSession).toHaveBeenCalledWith('default:a-term-new')
   })

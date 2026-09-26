@@ -1,12 +1,23 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { OpenableSession } from '../types'
 import {
   allActions,
   sanitizePins,
   setProjectActions,
-  setTmuxSessionActions,
+  setSessionActions,
   setTuiActions,
 } from './actions'
-import { createCatalogState, type TmuxSessionInfo } from './catalog-state'
+import { createCatalogState } from './catalog-state'
+
+const aTermSession = (id: string): OpenableSession => ({
+  owner: 'a-term',
+  id,
+  label: `A-Term ${id}`,
+  project: 'Aico',
+  tool: 'Codex',
+  status: 'running',
+  locallyOpen: false,
+})
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -21,18 +32,18 @@ function deferred<T>() {
 afterEach(() => {
   setTuiActions([])
   setProjectActions([])
-  setTmuxSessionActions([])
+  setSessionActions([])
 })
 
 describe('picker catalog state', () => {
   it('starts independent requests together and registers all dynamic pins before initialization ends', async () => {
     const tuis = deferred<{ slug: string; displayName: string; accent: string }[]>()
     const projects = deferred<{ id: string; name: string; current: boolean }[]>()
-    const tmux = deferred<TmuxSessionInfo[]>()
+    const sessions = deferred<OpenableSession[]>()
     const listTuis = vi.fn(() => tuis.promise)
     const listProjects = vi.fn(() => projects.promise)
-    const listTmuxSessions = vi.fn(() => tmux.promise)
-    const catalogs = createCatalogState({ listTuis, listProjects, listTmuxSessions })
+    const listOpenableSessions = vi.fn(() => sessions.promise)
+    const catalogs = createCatalogState({ listTuis, listProjects, listOpenableSessions })
 
     let finished = false
     const loading = catalogs.loadInitial().then(() => {
@@ -40,10 +51,10 @@ describe('picker catalog state', () => {
     })
     expect(listTuis).toHaveBeenCalledOnce()
     expect(listProjects).toHaveBeenCalledOnce()
-    expect(listTmuxSessions).toHaveBeenCalledOnce()
+    expect(listOpenableSessions).toHaveBeenCalledOnce()
 
     projects.resolve([{ id: 'workspace-1', name: 'Workspace', current: true }])
-    tmux.resolve([{ id: 'default:a-term-1', label: 'A-Term', source: 'A-Term' }])
+    sessions.resolve([aTermSession('default:a-term-1')])
     await Promise.resolve()
     expect(finished).toBe(false)
 
@@ -59,29 +70,29 @@ describe('picker catalog state', () => {
     ).toEqual(['new:claude', 'replace:claude', 'project:workspace-1', 'tmux:default:a-term-1'])
     expect(catalogs.tuis).toHaveLength(1)
     expect(catalogs.projects).toHaveLength(1)
-    expect(catalogs.tmuxSessionStatus).toBe('ready')
+    expect(catalogs.sessionStatus).toBe('ready')
   })
 
-  it('keeps a newer tmux result when an older request completes afterward', async () => {
-    const first = deferred<TmuxSessionInfo[]>()
-    const second = deferred<TmuxSessionInfo[]>()
-    const listTmuxSessions = vi
+  it('keeps a newer session result when an older request completes afterward', async () => {
+    const first = deferred<OpenableSession[]>()
+    const second = deferred<OpenableSession[]>()
+    const listOpenableSessions = vi
       .fn()
       .mockReturnValueOnce(first.promise)
       .mockReturnValueOnce(second.promise)
     const catalogs = createCatalogState({
       listTuis: async () => [],
       listProjects: async () => [],
-      listTmuxSessions,
+      listOpenableSessions,
     })
-    const oldRefresh = catalogs.refreshTmuxSessions()
-    const newRefresh = catalogs.refreshTmuxSessions()
-    second.resolve([{ id: 'new', label: 'New', source: 'A-Term' }])
+    const oldRefresh = catalogs.refreshSessions()
+    const newRefresh = catalogs.refreshSessions()
+    second.resolve([aTermSession('new')])
     await newRefresh
-    first.resolve([{ id: 'old', label: 'Old', source: 'A-Term' }])
+    first.resolve([aTermSession('old')])
     await oldRefresh
 
-    expect(catalogs.tmuxSessions.map((session) => session.id)).toEqual(['new'])
+    expect(catalogs.sessions.map((session) => session.id)).toEqual(['new'])
     expect(allActions().some((action) => action.id === 'tmux:new')).toBe(true)
     expect(allActions().some((action) => action.id === 'tmux:old')).toBe(false)
   })
@@ -92,12 +103,39 @@ describe('picker catalog state', () => {
       listProjects: async () => {
         throw new Error('projects unavailable')
       },
-      listTmuxSessions: async () => [],
+      listOpenableSessions: async () => [],
     })
     await catalogs.loadInitial()
 
     expect(catalogs.projects).toEqual([])
     expect(sanitizePins(['new:claude', 'project:missing'])).toEqual(['new:claude'])
-    expect(catalogs.tmuxSessionStatus).toBe('empty')
+    expect(catalogs.sessionStatus).toBe('empty')
+  })
+
+  it('keeps sessions from both owners available to Open session', async () => {
+    const catalogs = createCatalogState({
+      listTuis: async () => [],
+      listProjects: async () => [],
+      listOpenableSessions: async () => [
+        {
+          owner: 'aico',
+          id: 'widget-1',
+          label: 'Aico Codex',
+          project: 'Aico',
+          tool: 'Codex',
+          status: 'running',
+          locallyOpen: false,
+        },
+        aTermSession('default:a-term-2'),
+      ],
+    })
+
+    await catalogs.loadInitial()
+
+    expect(catalogs.sessions.map((session) => session.owner)).toEqual(['aico', 'a-term'])
+    expect(sanitizePins(['session:aico:widget-1', 'tmux:default:a-term-2'])).toEqual([
+      'session:aico:widget-1',
+      'tmux:default:a-term-2',
+    ])
   })
 })

@@ -23,6 +23,7 @@ import {
   insertWidget,
   listTmuxServers,
   markTmuxServerDead,
+  removeExternalWidgetIfIdentity,
   removeWidgetIfOwnership,
   setWidgetOwnership,
   setWidgetPendingScope,
@@ -415,6 +416,24 @@ describe('tmux server generation persistence', () => {
     )
     expect(external.tmuxAllocationState).toBe('external')
     expect(bindWidgetTmuxServer(external.id, null, managedB, '$8', '%13')).toBe(false)
+    expect(
+      removeExternalWidgetIfIdentity(
+        external.id,
+        external.sessionId,
+        '/tmp/external.sock',
+        'wrong',
+      ),
+    ).toBe(false)
+    expect(getWidget(external.id)).toBeDefined()
+    expect(
+      removeExternalWidgetIfIdentity(
+        external.id,
+        external.sessionId,
+        external.externalTmuxSocket,
+        'external-session',
+      ),
+    ).toBe(true)
+    expect(getWidget(external.id)).toBeUndefined()
 
     expect(markTmuxServerDead(legacyA, 400)).toBe(true)
     const unbound = insertWidget('managed4', true, 'shell')

@@ -34,17 +34,18 @@ import {
 } from './interactive-tmux'
 import {
   CoalescedLifecycleIntent,
-  classifyPersistedScopePair,
   decideManagedGateRecovery,
   hasPersistedScopeCleanupEvidence,
   isNeverAllocatedWidget,
-  isReconciledSessionOwnershipAbsent,
   LifecycleOwnerLock,
   type LifecycleOwnerToken,
   type ManagedGateState,
   mayClearMatchingPendingScope,
 } from './lifecycle-guard'
 import { allowTrustedAudioMedia } from './media-permission'
+import { ownershipGeneration, type RetirementResult, retireOwnedSession } from './owner-retirement'
+import { headlessRetirementOperations } from './owner-runtime'
+import { readCgroupPopulated, scopeIdentity, stopOwnedPaneScope } from './owner-scope'
 import {
   durableTmuxServerArgs,
   durableTmuxServerUnit,
@@ -98,8 +99,7 @@ import {
   listTmuxServers,
   listWidgets,
   markTmuxServerDead,
-  removeWidget,
-  removeWidgetIfOwnership,
+  removeExternalWidgetIfIdentity,
   saveBounds,
   setOpen,
   setSetting,
@@ -121,7 +121,6 @@ import {
   internalTarget,
   isATermSessionName,
   isTmuxTransportUnavailable,
-  killTargetArgs,
   listDefaultPanesArgs,
   listSessionPaneDetailsTargetArgs,
   listSessionPanesTargetArgs,
@@ -979,22 +978,6 @@ interface ManagedPaneProcess {
   paneId: string
 }
 
-function ownershipGeneration(row: WidgetRow): WidgetOwnershipGeneration {
-  return {
-    scopeUnit: row.scopeUnit,
-    scopeInvocationId: row.scopeInvocationId,
-    pendingScopeUnit: row.pendingScopeUnit,
-    pendingScopeInvocationId: row.pendingScopeInvocationId,
-    lifecycleVersion: row.lifecycleVersion,
-    tmuxSessionId: row.tmuxSessionId,
-    paneId: row.paneId,
-    tmuxServerId: row.tmuxServerId,
-    tmuxAllocationState: row.tmuxAllocationState,
-    launchState: row.launchState,
-    launchNonce: row.launchNonce,
-  }
-}
-
 /** Observe one exact server-side session/pane generation. Aico's managed-widget
  * contract is deliberately one pane; split sessions are preserved but no
  * lifecycle operation is authorized until the user resolves the ambiguity. */
@@ -1086,48 +1069,6 @@ async function waitForCurrentPaneScope(widgetId: string): Promise<ManagedPanePro
     await new Promise((resolve) => setTimeout(resolve, PANE_SCOPE_POLL_MS))
   } while (Date.now() < deadline)
   return null
-}
-
-interface ScopeIdentity {
-  loadState: string
-  activeState: string
-  controlGroup: string
-  invocationId: string
-  job: string
-}
-
-async function scopeIdentity(unit: string): Promise<ScopeIdentity | null> {
-  try {
-    const { stdout } = await execFileAsync(
-      SYSTEMCTL_BIN,
-      [
-        '--user',
-        'show',
-        unit,
-        '--no-pager',
-        '--property=LoadState',
-        '--property=ActiveState',
-        '--property=ControlGroup',
-        '--property=InvocationID',
-        '--property=Job',
-      ],
-      { timeout: SYSTEMD_QUERY_TIMEOUT_MS },
-    )
-    const properties = new Map<string, string>()
-    for (const line of stdout.split('\n')) {
-      const separator = line.indexOf('=')
-      if (separator > 0) properties.set(line.slice(0, separator), line.slice(separator + 1))
-    }
-    return {
-      loadState: properties.get('LoadState') ?? 'unknown',
-      activeState: properties.get('ActiveState') ?? 'unknown',
-      controlGroup: properties.get('ControlGroup') ?? '',
-      invocationId: properties.get('InvocationID') ?? '',
-      job: properties.get('Job') ?? '',
-    }
-  } catch {
-    return null
-  }
 }
 
 interface TmuxRosterRead {
@@ -1855,131 +1796,6 @@ async function recoverInterruptedManagedPane(
   return 'recovered'
 }
 
-function readCgroupPopulated(controlGroup: string): boolean | null {
-  try {
-    const events = readFileSync(`/sys/fs/cgroup${controlGroup}/cgroup.events`, 'utf8')
-    if (/^populated 0$/m.test(events)) return false
-    if (/^populated 1$/m.test(events)) return true
-    return null
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false
-    return null
-  }
-}
-
-interface CgroupIdentity {
-  dev: bigint
-  ino: bigint
-}
-
-function cgroupIdentity(controlGroup: string): CgroupIdentity | null {
-  try {
-    const stat = statSync(`/sys/fs/cgroup${controlGroup}`, { bigint: true })
-    return { dev: stat.dev, ino: stat.ino }
-  } catch {
-    return null
-  }
-}
-
-function sameCgroupIdentity(left: CgroupIdentity, right: CgroupIdentity | null): boolean {
-  return Boolean(right && left.dev === right.dev && left.ino === right.ino)
-}
-
-async function emptyOwnedCgroup(
-  unit: string,
-  controlGroup: string,
-  expectedIdentity: CgroupIdentity,
-  reason: string,
-): Promise<boolean> {
-  const uid = process.getuid?.() ?? -1
-  if (!isOwnedPaneControlGroup(unit, controlGroup, uid)) return false
-  const populated = readCgroupPopulated(controlGroup)
-  if (populated === false) return true
-  if (populated === null) return false
-
-  // A user systemd manager cannot signal a sudo-created root descendant. The
-  // delegated cgroup.kill file is kernel-enforced whole-cgroup cleanup and was
-  // verified against a synthetic root setsid child; write only after exact unit,
-  // InvocationID, full ControlGroup path, and the cgroup directory's device/inode
-  // identity matched. The inode check prevents a removed/recreated unit from
-  // inheriting cleanup authority between `systemctl stop` and this write.
-  console.warn(`[aico:lifecycle] forcing still-populated owned cgroup ${unit} after ${reason}`)
-  if (!sameCgroupIdentity(expectedIdentity, cgroupIdentity(controlGroup))) {
-    console.error(`[aico:lifecycle] refusing cgroup.kill for replaced cgroup ${unit}`)
-    return false
-  }
-  try {
-    writeFileSync(`/sys/fs/cgroup${controlGroup}/cgroup.kill`, '1')
-  } catch (error) {
-    console.error(`[aico:lifecycle] cgroup.kill failed for ${unit}:`, error)
-    return false
-  }
-  const deadline = Date.now() + SYSTEMD_QUERY_TIMEOUT_MS
-  do {
-    const state = readCgroupPopulated(controlGroup)
-    if (state === false) return true
-    if (state === null) return false
-    await new Promise((resolve) => setTimeout(resolve, 25))
-  } while (Date.now() < deadline)
-  return false
-}
-
-async function stopOwnedPaneScope(
-  unit: string | null,
-  expectedInvocationId: string | null,
-  reason: string,
-): Promise<boolean> {
-  if (!isOwnedPaneScope(unit) || !isSystemdInvocationId(expectedInvocationId)) return false
-  const before = await scopeIdentity(unit)
-  if (!before) return false
-  const uid = process.getuid?.() ?? -1
-  if (before.loadState === 'not-found' && !before.controlGroup) {
-    const expectedControlGroup = `/user.slice/user-${uid}.slice/user@${uid}.service/app.slice/${unit}`
-    const residue = readCgroupPopulated(expectedControlGroup)
-    if (residue === false) return true
-    console.error(
-      `[aico:lifecycle] refusing to treat missing unit ${unit} as clean: cgroup residue is ${
-        residue === true ? 'populated' : 'unverifiable'
-      }`,
-    )
-    return false
-  }
-  if (
-    before.invocationId !== expectedInvocationId ||
-    !isOwnedPaneControlGroup(unit, before.controlGroup, uid)
-  ) {
-    console.error(`[aico:lifecycle] refusing ${unit}: invocation identity changed before ${reason}`)
-    return false
-  }
-  const beforeCgroupIdentity = cgroupIdentity(before.controlGroup)
-  if (!beforeCgroupIdentity) {
-    console.error(
-      `[aico:lifecycle] refusing ${unit}: cgroup identity is unavailable before ${reason}`,
-    )
-    return false
-  }
-  try {
-    await execFileAsync(SYSTEMCTL_BIN, ['--user', 'stop', unit], {
-      timeout: SYSTEMD_STOP_TIMEOUT_MS,
-    })
-  } catch (error) {
-    // A scope can disappear between discovery and stop. Verify state below
-    // rather than treating that benign race as a cleanup failure.
-    console.warn(`[aico:lifecycle] stop ${unit} (${reason}) returned an error:`, error)
-  }
-  try {
-    if (await emptyOwnedCgroup(unit, before.controlGroup, beforeCgroupIdentity, reason)) {
-      console.log(`[aico:lifecycle] scope ${unit} empty after ${reason}`)
-      return true
-    }
-    console.error(`[aico:lifecycle] scope ${unit} remains populated after ${reason}`)
-    return false
-  } catch (error) {
-    console.error(`[aico:lifecycle] could not verify scope ${unit} after ${reason}:`, error)
-    return false
-  }
-}
-
 const SCOPE_RESOURCE_PROPERTIES = [
   'ActiveState',
   'ActiveEnterTimestampMonotonic',
@@ -2239,78 +2055,6 @@ async function reconcileWidgetTool(widgetId: string): Promise<boolean> {
   return true
 }
 
-/** Reconcile a managed row whose exact server generation proves its session is
- * absent. This is callable while ensureSession already holds the lifecycle
- * token, so a closed widget can self-heal without waiting for an app restart. */
-async function reconcileAbsentWidgetOwned(row: WidgetRow): Promise<WidgetRow | null> {
-  if (row.externalTmuxSession || row.lifecycleVersion < MANAGED_LIFECYCLE_VERSION) return null
-  if ((await internalSessionState(row.id)) !== 'absent') return null
-
-  let current = getWidget(row.id)
-  if (!current) return null
-  if (current.pendingScopeUnit) {
-    const clean = await stopOwnedPaneScope(
-      current.pendingScopeUnit,
-      current.pendingScopeInvocationId,
-      `reopen pending reconciliation ${current.sessionId}`,
-    )
-    if (
-      !clean ||
-      !clearWidgetPendingScope(
-        current.id,
-        current.pendingScopeUnit,
-        current.pendingScopeInvocationId,
-      )
-    ) {
-      return null
-    }
-    current = getWidget(current.id)
-    if (!current) return null
-  }
-
-  if (current.scopeUnit) {
-    const clean = await stopOwnedPaneScope(
-      current.scopeUnit,
-      current.scopeInvocationId,
-      `reopen reconciliation ${current.sessionId}`,
-    )
-    if (!clean) return null
-  }
-  if ((await internalSessionState(current.id)) !== 'absent') return null
-
-  const latest = getWidget(current.id)
-  if (!latest) return null
-  const cleared = compareAndSetWidgetOwnership(latest.id, ownershipGeneration(latest), {
-    ...ownershipGeneration(latest),
-    scopeUnit: null,
-    scopeInvocationId: null,
-    tmuxSessionId: null,
-    paneId: null,
-    launchState: 'none',
-    launchNonce: null,
-  })
-  if (!cleared) return null
-
-  let reconciled = getWidget(latest.id)
-  if (!reconciled) return null
-  const server = reconciled.tmuxServerId ? getTmuxServer(reconciled.tmuxServerId) : undefined
-  if (server?.phase === 'dead' && reconciled.tmuxServerId) {
-    if (!clearReconciledDeadTmuxServerBinding(reconciled.id, reconciled.tmuxServerId)) return null
-    reconciled = getWidget(reconciled.id)
-  } else if (
-    server?.kind === 'managed' &&
-    server.phase === 'active' &&
-    server.scopeUnit.endsWith('.scope') &&
-    reconciled.tmuxServerId
-  ) {
-    if (!clearReconciledHistoricalTmuxServerBinding(reconciled.id, reconciled.tmuxServerId)) {
-      return null
-    }
-    reconciled = getWidget(reconciled.id)
-  }
-  return reconciled ?? null
-}
-
 // Ensure the widget's tmux session exists, launching its TUI exactly once on
 // first create. Reattaching a window finds the session already running and
 // sends nothing — so a live agent is never relaunched. cwd is the widget's
@@ -2318,7 +2062,7 @@ async function reconcileAbsentWidgetOwned(row: WidgetRow): Promise<WidgetRow | n
 // captured when the session is first created; reattaching keeps wherever the
 // agent already is.
 async function ensureOwnedInternalSession(widgetId: string, size: PtySize): Promise<boolean> {
-  let rowBeforeCreate = getWidget(widgetId)
+  const rowBeforeCreate = getWidget(widgetId)
   if (!rowBeforeCreate) return false
   retryUnresolvedPaneExitReconciliation(rowBeforeCreate.tmuxServerId)
   const state = await internalSessionState(widgetId)
@@ -2342,28 +2086,9 @@ async function ensureOwnedInternalSession(widgetId: string, size: PtySize): Prom
     console.error(`[aico:lifecycle] tmux state unknown for ${widgetId}; refusing duplicate launch`)
     return false
   }
-  if (
-    rowBeforeCreate.lifecycleVersion >= MANAGED_LIFECYCLE_VERSION &&
-    rowBeforeCreate.tmuxAllocationState === 'bound'
-  ) {
-    const reconciled = await reconcileAbsentWidgetOwned(rowBeforeCreate)
-    if (!reconciled) {
-      console.error(
-        `[aico:lifecycle] absent ${rowBeforeCreate.sessionId} could not be reconciled safely`,
-      )
-      return false
-    }
-    rowBeforeCreate = reconciled
-  }
-  if (
-    rowBeforeCreate.lifecycleVersion < MANAGED_LIFECYCLE_VERSION &&
-    (rowBeforeCreate.tmuxAllocationState !== 'unallocated' ||
-      rowBeforeCreate.tmuxSessionId ||
-      rowBeforeCreate.paneId)
-  ) {
+  if (!isNeverAllocatedWidget(rowBeforeCreate)) {
     console.error(
-      `[aico:lifecycle] refusing to recreate missing legacy ${rowBeforeCreate.sessionId}; ` +
-        'its former broad-scope descendants are not attributable',
+      `[aico:lifecycle] ${rowBeforeCreate.sessionId} was previously allocated but its tmux session is absent; refusing implicit relaunch on Open`,
     )
     return false
   }
@@ -3197,165 +2922,114 @@ async function confirmTrayDiscard(id: string): Promise<void> {
   const external = Boolean(row.externalTmuxSession)
   const response = await dialog.showMessageBox({
     type: 'warning',
-    buttons: ['Cancel', external ? 'Forget attachment' : 'Retire session'],
+    buttons: ['Cancel', 'End session'],
     defaultId: 0,
     cancelId: 0,
     noLink: true,
-    title: external ? 'Forget tmux attachment?' : 'Retire durable session?',
+    title: 'End session?',
     message: external
-      ? `Forget Aico's attachment to ${row.name || row.externalTmuxSession}?`
-      : `Retire ${row.name || row.sessionId}?`,
+      ? `End ${row.name || row.externalTmuxSession}?`
+      : `End ${row.name || row.sessionId}?`,
     detail: external
-      ? 'The externally owned tmux session will keep running.'
+      ? 'A-Term will stop its session. Aico will keep this view if A-Term is unavailable.'
       : 'This stops only this session’s verified workload scope. This cannot be undone.',
   })
   if (response.response === 1) discardWidget(id)
 }
 
-async function discardWidgetOwned(id: string, lifecycleOwner: LifecycleOwnerToken): Promise<void> {
-  let knownServerId: string | null | undefined
+async function endExternalSession(row: WidgetRow): Promise<RetirementResult> {
+  const session = row.externalTmuxSession
+  const match = session ? /^summitflow-([0-9a-f-]{36})$/i.exec(session) : null
+  if (!session || !match)
+    return { status: 'blocked', reason: 'A-Term owner identity is unavailable' }
+  let paneId: string
   try {
-    let row = getWidget(id)
-    if (!row) return
-    knownServerId = row.tmuxServerId
-    if (!row.externalTmuxSession && row.lifecycleVersion < MANAGED_LIFECYCLE_VERSION) {
-      if (isNeverAllocatedWidget(row)) {
-        removeWidget(id)
-        windowForWidget(id)?.destroy()
-        return
-      }
-      // Killing a legacy tmux pane can leave unattributable descendants in the
-      // historical broad app scope. Preserve the session and require an explicit
-      // managed replacement first; never destroy work and then discover cleanup
-      // authority is unavailable.
-      surfaceLifecycleBlock(
-        id,
-        `legacy ${row.sessionId} is preserved read-only; create a new managed widget and move work deliberately because historical descendants cannot be attributed safely`,
-      )
-      return
-    }
-    if (row.externalTmuxSession) {
-      // Aico only owns the attachment/catalog row, never the external session.
-      removeWidget(id)
-      windowForWidget(id)?.destroy()
-      return
-    }
-
-    const before = await internalSessionState(id)
-    if (before === 'unknown') {
-      surfaceLifecycleBlock(id, `retaining ${row.sessionId}: tmux state is unknown`)
-      return
-    }
-    if (before === 'present') {
-      if (!(await verifiedCurrentManagedPane(row))) {
-        surfaceLifecycleBlock(
-          id,
-          `retaining ${row.sessionId}: current session/pane/scope identity is not exact`,
-        )
-        return
-      }
-      try {
-        await execFileAsync(TMUX_BIN, killTargetArgs(tmuxTargetForWidget(id)), {
-          env: terminalClientEnv(),
-          timeout: TMUX_QUERY_TIMEOUT_MS,
-        })
-      } catch (error) {
-        console.warn(`[aico:lifecycle] tmux stop failed for session=${row.sessionId}:`, error)
-      }
-      await settleServerAfterSessionStop(row)
-    }
-    const afterTmux = await internalSessionState(id)
-    if (afterTmux !== 'absent') {
-      // Unknown is as protective as present: neither authorizes scope cleanup.
-      surfaceLifecycleBlock(id, `retaining ${row.sessionId}: tmux state after stop is ${afterTmux}`)
-      return
-    }
-
-    const afterSession = getWidget(id)
-    if (!afterSession) return
-    row = afterSession
-    const pendingScope = classifyPersistedScopePair(
-      row.pendingScopeUnit,
-      row.pendingScopeInvocationId,
+    const { stdout } = await execFileAsync(
+      TMUX_BIN,
+      listSessionPanesTargetArgs({ socket: row.externalTmuxSocket, session }),
+      { env: terminalClientEnv(), timeout: TMUX_QUERY_TIMEOUT_MS },
     )
-    if (pendingScope.state === 'malformed') {
-      surfaceLifecycleBlock(id, `retaining ${row.sessionId}: pending scope identity is malformed`)
-      return
+    const lines = stdout.split('\n').filter(Boolean)
+    if (lines.length !== 1) {
+      return { status: 'blocked', reason: 'A-Term session pane identity is ambiguous' }
     }
-    if (pendingScope.state === 'paired') {
-      const pendingClean = await stopOwnedPaneScope(
-        pendingScope.scopeUnit,
-        pendingScope.scopeInvocationId,
-        `retire pending generation ${row.sessionId}`,
-      )
-      if (!pendingClean) {
-        surfaceLifecycleBlock(id, `retaining ${row.sessionId}: pending scope cleanup failed`)
-        return
-      }
-      if (!clearWidgetPendingScope(id, pendingScope.scopeUnit, pendingScope.scopeInvocationId)) {
-        surfaceLifecycleBlock(id, `retaining ${row.sessionId}: pending ownership changed`)
-        return
-      }
-      const afterPending = getWidget(id)
-      if (!afterPending) return
-      row = afterPending
+    paneId = lines[0].split('\t')[0]
+    if (!/^%\d+$/.test(paneId)) {
+      return { status: 'blocked', reason: 'A-Term pane identity is invalid' }
     }
+  } catch {
+    return { status: 'blocked', reason: 'A-Term session is unavailable' }
+  }
+  const current = getWidget(row.id)
+  if (
+    !current ||
+    current.sessionId !== row.sessionId ||
+    current.externalTmuxSession !== session ||
+    current.externalTmuxSocket !== row.externalTmuxSocket
+  )
+    return { status: 'stale' }
 
-    const currentScope = classifyPersistedScopePair(row.scopeUnit, row.scopeInvocationId)
-    if (currentScope.state === 'malformed') {
-      surfaceLifecycleBlock(id, `retaining ${row.sessionId}: owned scope identity is malformed`)
-      return
+  const tokenPath =
+    process.env.AICO_A_TERM_HOOK_TOKEN_FILE ?? join(homedir(), '.cache', 'a-term', 'hook-token')
+  let token: string
+  try {
+    const tokenStat = statSync(tokenPath)
+    if (!tokenStat.isFile() || tokenStat.uid !== process.getuid?.() || tokenStat.mode & 0o077) {
+      return { status: 'blocked', reason: 'A-Term owner token permissions are unsafe' }
     }
-    if (currentScope.state === 'absent' && !isReconciledSessionOwnershipAbsent(row)) {
-      surfaceLifecycleBlock(
-        id,
-        `retaining ${row.sessionId}: scope is absent before session ownership was reconciled`,
-      )
-      return
+    token = readFileSync(tokenPath, 'utf8').trim()
+    if (!token) return { status: 'blocked', reason: 'A-Term owner token is empty' }
+  } catch {
+    return { status: 'blocked', reason: 'A-Term owner token is unavailable' }
+  }
+  try {
+    const response = await fetch(
+      `http://127.0.0.1:${Number(process.env.AICO_A_TERM_PORT ?? 8002)}/api/internal/sessions/${match[1]}/end`,
+      {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ expected_tmux_session: session, expected_pane_id: paneId }),
+        signal: AbortSignal.timeout(5_000),
+      },
+    )
+    if (!response.ok) {
+      return { status: 'blocked', reason: `A-Term owner refused End (${response.status})` }
     }
-    if (currentScope.state === 'paired') {
-      const clean = await stopOwnedPaneScope(
-        currentScope.scopeUnit,
-        currentScope.scopeInvocationId,
-        `retire session ${row.sessionId}`,
-      )
-      if (!clean) {
-        surfaceLifecycleBlock(id, `retaining ${row.sessionId}: owned scope cleanup failed`)
-        return
-      }
-    }
-    if ((await internalSessionState(id)) !== 'absent') {
-      surfaceLifecycleBlock(id, `retaining ${row.sessionId}: session reappeared during cleanup`)
-      return
-    }
-    const latest = getWidget(id)
-    if (!latest) return
-    if (latest.scopeUnit !== row.scopeUnit || latest.scopeInvocationId !== row.scopeInvocationId) {
-      surfaceLifecycleBlock(id, `retaining ${row.sessionId}: owned scope identity changed`)
-      return
-    }
-    if (
-      classifyPersistedScopePair(latest.pendingScopeUnit, latest.pendingScopeInvocationId).state !==
-      'absent'
-    ) {
-      surfaceLifecycleBlock(id, `retaining ${row.sessionId}: pending cleanup evidence reappeared`)
-      return
-    }
-    const removed = removeWidgetIfOwnership(id, ownershipGeneration(row))
-    if (!removed) {
+    const result: unknown = await response.json()
+    if (!result || typeof result !== 'object' || !('deleted' in result) || result.deleted !== true)
+      return { status: 'blocked', reason: 'A-Term End response was unverified' }
+  } catch {
+    return { status: 'blocked', reason: 'A-Term owner is unavailable' }
+  }
+  return removeExternalWidgetIfIdentity(row.id, row.sessionId, row.externalTmuxSocket, session)
+    ? { status: 'ended' }
+    : { status: 'stale' }
+}
+
+async function discardWidgetOwned(
+  id: string,
+  lifecycleOwner: LifecycleOwnerToken,
+): Promise<RetirementResult> {
+  const knownServerId = getWidget(id)?.tmuxServerId
+  try {
+    const row = getWidget(id)
+    if (!row) return { status: 'absent' }
+    const result = row.externalTmuxSession
+      ? await endExternalSession(row)
+      : await retireOwnedSession(id, headlessRetirementOperations)
+    if (result.status === 'ended') {
+      windowForWidget(id)?.destroy()
+      logWidgetEvent(id, 'lifecycle_retired', {
+        session_id: row.sessionId,
+        scope_unit: row.scopeUnit,
+        scope_invocation_id: row.scopeInvocationId,
+      })
+    } else if (result.status === 'blocked') {
+      surfaceLifecycleBlock(id, `retaining ${row.sessionId}: ${result.reason}`)
+    } else if (result.status === 'stale') {
       surfaceLifecycleBlock(id, `retaining ${row.sessionId}: ownership generation changed`)
-      return
     }
-    // Keep the recovery surface alive until both exact cgroups are proven empty
-    // and the guarded catalog delete commits. A failed retirement must never
-    // disappear into the tray and invite recreation over unresolved evidence.
-    windowForWidget(id)?.destroy()
-    console.log(`[aico:lifecycle] retired session=${row.sessionId} scope=${row.scopeUnit}`)
-    logWidgetEvent(id, 'lifecycle_retired', {
-      session_id: row.sessionId,
-      scope_unit: row.scopeUnit,
-      scope_invocation_id: row.scopeInvocationId,
-    })
+    return result
   } finally {
     widgetRetireIntents.complete(id)
     releaseLifecycleOwner(id, lifecycleOwner, knownServerId)
@@ -3383,12 +3057,21 @@ function syncTray(): void {
 
 function renderTray(): void {
   const projects = listProjects() // titlebar name fallback + the New-widget submenu
-  const widgets: TrayWidget[] = listWidgets().map((w) => ({
+  const widgetRows = listWidgets()
+  const widgets: TrayWidget[] = widgetRows.map((w) => ({
     id: w.id,
-    label: w.name || widgetProjectName(w, projects) || `Widget ${w.seq}`,
+    label: w.name || widgetProjectName(w, projects) || `Session ${w.seq}`,
     open: windowForWidget(w.id) !== undefined,
   }))
-  refreshTray(widgets, projects, trayAttachableTmuxSessions)
+  const unattached = trayAttachableTmuxSessions.filter(
+    (session) =>
+      !widgetRows.some(
+        (row) =>
+          row.externalTmuxSession === session.session &&
+          (row.externalTmuxSocket ?? null) === session.socket,
+      ),
+  )
+  refreshTray(widgets, projects, unattached)
 }
 
 // The workspace an unnamed widget reads as: the one it's bound to (pinned at
@@ -4168,6 +3851,19 @@ app.whenReady().then(async () => {
     const id = win ? widgetOf.get(win.id) : undefined
     if (id) discardWidget(id)
   })
+  ipcMain.handle('session:end-self', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const id = win ? widgetOf.get(win.id) : undefined
+    if (!id) throw new Error('Session view is unavailable')
+    const owner = lifecycleOwners.acquire(id)
+    if (!owner) throw new Error('Session is changing; try End again')
+    const result = await discardWidgetOwned(id, owner)
+    if (result.status === 'ended') return
+    if (result.status === 'blocked') throw new Error(`End failed: ${result.reason}`)
+    throw new Error(
+      result.status === 'stale' ? 'Session changed; try End again' : 'Session ended elsewhere',
+    )
+  })
 
   // Replace the focused widget's running TUI with another (no new window).
   ipcMain.on('widget:load-tui', (event, slug?: string) => {
@@ -4221,6 +3917,65 @@ app.whenReady().then(async () => {
       source: s.source,
     })),
   )
+  ipcMain.handle('session:list-openable', async () => {
+    const aicoRows = await Promise.all(
+      listWidgets().map(async (row) => {
+        if (
+          row.externalTmuxSession ||
+          (await internalSessionState(row.id)) !== 'present' ||
+          !(await verifiedCurrentManagedPane(row))
+        )
+          return null
+        return {
+          owner: 'aico' as const,
+          id: row.id,
+          label: row.name || `Session ${row.seq}`,
+          project: row.projectId,
+          tool: row.tool,
+          status: 'running' as const,
+          locallyOpen: Boolean(windowForWidget(row.id)),
+        }
+      }),
+    )
+    const externalRows = (await listAttachableTmuxSessions()).map((session) => {
+      const attached = findWidgetByTmuxTarget(session)
+      return {
+        owner: 'a-term' as const,
+        id: session.id,
+        label: attached?.name || session.label,
+        project: session.cwd,
+        tool: attached?.tool ?? session.tool,
+        status: 'running' as const,
+        locallyOpen: Boolean(attached && windowForWidget(attached.id)),
+      }
+    })
+    return [...aicoRows.filter((row) => row !== null), ...externalRows]
+  })
+  ipcMain.handle('session:open', async (_event, descriptor: unknown) => {
+    if (!descriptor || typeof descriptor !== 'object') throw new Error('Invalid session')
+    const { owner, id } = descriptor as { owner?: unknown; id?: unknown }
+    if (typeof id !== 'string') throw new Error('Invalid session')
+    if (owner === 'aico') {
+      const row = getWidget(id)
+      if (
+        !row ||
+        (await internalSessionState(id)) !== 'present' ||
+        !(await verifiedCurrentManagedPane(row))
+      ) {
+        throw new Error('Session is unavailable')
+      }
+      focusOrReopen(id)
+      return
+    }
+    if (owner === 'a-term') {
+      if (!(await listAttachableTmuxSessions()).some((session) => session.id === id)) {
+        throw new Error('A-Term session is unavailable')
+      }
+      await attachExternalTmuxSession(id)
+      return
+    }
+    throw new Error('Unknown session owner')
+  })
   ipcMain.on('tmux:attach', (_event, id?: unknown) => {
     if (typeof id === 'string' && id) {
       void attachExternalTmuxSession(id).catch((error) =>

@@ -1,0 +1,21 @@
+# TEMPLATE — st service rebuild aico renders __PROJECT_ROOT__ for the user unit.
+[Unit]
+Description=Aico durable session owner
+After=aico-shell.service
+
+[Service]
+Type=simple
+Slice=app.slice
+WorkingDirectory=__PROJECT_ROOT__
+Environment=AICO_OWNER=aico
+Environment=AICO_WORKLOAD_CLASS=session-owner
+Environment=ELECTRON_RUN_AS_NODE=1
+ExecStart=__PROJECT_ROOT__/node_modules/electron/dist/electron __PROJECT_ROOT__/out/main/owner-service.mjs
+Restart=on-failure
+RestartSec=2
+CPUAccounting=yes
+MemoryAccounting=yes
+TasksAccounting=yes
+
+[Install]
+WantedBy=default.target

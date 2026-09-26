@@ -31,6 +31,15 @@ function showToast(detail: AicoToastDetail): void {
   window.dispatchEvent(new CustomEvent<AicoToastDetail>(AICO_TOAST_EVENT, { detail }))
 }
 
+async function openExistingSession(owner: 'aico' | 'a-term', id: string): Promise<void> {
+  try {
+    await window.aico.actions.openSession(owner, id)
+  } catch (error) {
+    console.warn('[aico] failed to open session:', error)
+    showToast({ kind: 'Error', snippet: 'Could not open session' })
+  }
+}
+
 /** Copy a stable, human-readable snapshot rather than leaking an unhandled IPC
  * rejection into the renderer. Both outcomes use the existing safe text toast. */
 export async function copySessionDiagnostics(): Promise<void> {
@@ -41,6 +50,15 @@ export async function copySessionDiagnostics(): Promise<void> {
   } catch (error) {
     console.warn('[aico] failed to copy session diagnostics:', error)
     showToast({ kind: 'Error', snippet: 'Could not copy session diagnostics' })
+  }
+}
+
+async function endCurrentSession(): Promise<void> {
+  try {
+    await window.aico.actions.endSession()
+  } catch (error) {
+    console.warn('[aico] failed to end session:', error)
+    showToast({ kind: 'Error', snippet: 'Could not confirm End; check the session list' })
   }
 }
 
@@ -73,7 +91,7 @@ export const ACTIONS: Action[] = [
   {
     id: 'voice',
     section: 'Voice',
-    label: 'Dictate into widget',
+    label: 'Dictate into session',
     shortcut: 'Ctrl+Shift+M',
     icon: '🎙',
     run: () => window.dispatchEvent(new CustomEvent('aico:voice-toggle')),
@@ -84,7 +102,7 @@ export const ACTIONS: Action[] = [
     label: 'Indicate selection',
     shortcut: 'Ctrl+Shift+Space',
     icon: '⊹',
-    note: 'Pull the latest text/image the selection bus captured into this widget.',
+    note: 'Pull the latest captured text or image into this session.',
     run: () => window.aico.actions.indicate(),
   },
   {
@@ -119,8 +137,8 @@ export const ACTIONS: Action[] = [
     // list, each TUI drilling into a workspace to launch in. A launch always
     // names both, so there's no default fast path.
     id: 'new-widget',
-    section: 'Widget',
-    label: 'New widget',
+    section: 'Session',
+    label: 'New session',
     shortcut: '',
     icon: '＋',
     opensFlyout: true,
@@ -130,23 +148,23 @@ export const ACTIONS: Action[] = [
     // which runs in the focused widget. No default action — replacing is
     // destructive, so the user must pick a specific TUI.
     id: 'replace-tui',
-    section: 'Widget',
-    label: 'Replace TUI',
+    section: 'Session',
+    label: 'Restart with another tool',
     shortcut: '',
     icon: '⟳',
     opensFlyout: true,
   },
   {
     id: 'hub',
-    section: 'Widget',
-    label: 'Hub view',
+    section: 'Session',
+    label: 'Show windows',
     shortcut: 'Ctrl+Shift+H',
     icon: '⊞',
     run: () => window.aico.actions.hub(),
   },
   {
     id: 'palette',
-    section: 'Widget',
+    section: 'Session',
     label: 'Command palette',
     shortcut: 'Ctrl+Shift+P',
     icon: '⌕',
@@ -154,7 +172,7 @@ export const ACTIONS: Action[] = [
   },
   {
     id: 'refresh',
-    section: 'Widget',
+    section: 'Session',
     label: 'Refresh terminal',
     shortcut: 'Ctrl+Shift+R',
     icon: '↻',
@@ -167,36 +185,36 @@ export const ACTIONS: Action[] = [
     // move the global `st` pointer. Destructive (restarts the agent), so no
     // default action — the user picks a specific workspace.
     id: 'switch-project',
-    section: 'Widget',
-    label: 'Open workspace',
+    section: 'Session',
+    label: 'Restart in project',
     shortcut: '',
     icon: '⇄',
     opensFlyout: true,
   },
   {
     id: 'attach-tmux',
-    section: 'Widget',
-    label: 'Attach tmux session',
+    section: 'Session',
+    label: 'Open session',
     shortcut: '',
     icon: '⇱',
     opensFlyout: true,
   },
   {
     id: 'copy-session-diagnostics',
-    section: 'Widget',
+    section: 'Session',
     label: 'Copy session diagnostics',
     shortcut: '',
     icon: '⧉',
-    note: "Copy this widget's ownership, tmux, resource, and warning snapshot as formatted JSON.",
+    note: "Copy this session's ownership, tmux, resource, and warning snapshot as formatted JSON.",
     run: () => void copySessionDiagnostics(),
   },
   {
     id: 'retire-widget',
-    section: 'Widget',
-    label: 'Retire widget',
+    section: 'Session',
+    label: 'End session',
     shortcut: '', // destructive (ends the tmux session) — no chord, to avoid accidents
     icon: '⏏',
-    run: () => window.aico.actions.retire(),
+    run: () => void endCurrentSession(),
   },
   {
     id: 'copy',
@@ -211,7 +229,7 @@ export const ACTIONS: Action[] = [
     label: 'Compose text',
     shortcut: '',
     icon: '✎',
-    note: 'Correct a draft before inserting it into this widget.',
+    note: 'Correct a draft before inserting it into this session.',
     run: () => window.dispatchEvent(new CustomEvent('aico:compose-open')),
   },
   {
@@ -237,8 +255,8 @@ export function setTuiActions(tuis: { slug: string; displayName: string; accent:
   tuiActions = tuis.flatMap((t) => [
     {
       id: `new:${t.slug}`,
-      section: 'Widget',
-      label: `New ${t.displayName}`,
+      section: 'Session',
+      label: `New ${t.displayName} session`,
       shortcut: '', // launched from the flyout / a pinned icon — no chord
       icon: '＋',
       accent: t.accent,
@@ -248,8 +266,8 @@ export function setTuiActions(tuis: { slug: string; displayName: string; accent:
     },
     {
       id: `replace:${t.slug}`,
-      section: 'Widget',
-      label: `Replace with ${t.displayName}`,
+      section: 'Session',
+      label: `Restart with ${t.displayName}`,
       shortcut: '', // destructive (ends the current pane) — no chord
       icon: '⟳',
       accent: t.accent,
@@ -258,7 +276,7 @@ export function setTuiActions(tuis: { slug: string; displayName: string; accent:
   ])
 }
 
-// Per-workspace launch actions, built from the Aico workspace catalog at init
+// Per-project launch actions, built from the Aico project catalog at init
 // (fetched over IPC). Each rebinds the focused widget and respawns its pane
 // there. Runnable ⇒ pinnable + palette-searchable. Like tuiActions, they are NOT
 // in ACTIONS, so they appear only inside the "Open workspace" flyout, never as rows.
@@ -271,34 +289,47 @@ export function setProjectActions(
 ): void {
   projectActions = projects.map((p) => ({
     id: `project:${p.id}`,
-    section: 'Widget',
-    label: `Open ${p.name}`,
+    section: 'Session',
+    label: `Restart in ${p.name}`,
     shortcut: '', // launched from the flyout / a pinned icon — no chord
     icon: '⇄',
     run: () => window.aico.actions.switchProject(p.id),
   }))
 }
 
-let tmuxSessionActions: Action[] = []
+let sessionActions: Action[] = []
 
-export function setTmuxSessionActions(
-  sessions: { id: string; label: string; source: string }[],
+export function sessionActionId(session: { owner: 'aico' | 'a-term'; id: string }): string {
+  // Preserve pins created for A-Term sessions before the catalog included Aico.
+  return session.owner === 'a-term' ? `tmux:${session.id}` : `session:aico:${session.id}`
+}
+
+export function setSessionActions(
+  sessions: {
+    owner: 'aico' | 'a-term'
+    id: string
+    label: string
+    project: string | null
+    tool: string | null
+    status: 'running'
+    locallyOpen: boolean
+  }[],
 ): void {
-  tmuxSessionActions = sessions.map((s) => ({
-    id: `tmux:${s.id}`,
-    section: 'Widget',
-    label: `Attach ${s.label}`,
+  sessionActions = sessions.map((s) => ({
+    id: sessionActionId(s),
+    section: 'Session',
+    label: `Open ${s.label}`,
     shortcut: '',
     icon: '⇱',
-    note: s.source,
-    run: () => window.aico.actions.attachTmuxSession(s.id),
+    note: [s.project, s.tool, s.owner === 'aico' ? 'Aico' : 'A-Term'].filter(Boolean).join(' · '),
+    run: () => void openExistingSession(s.owner, s.id),
   }))
 }
 
 /** The static registry plus the dynamic per-TUI and per-project launchers — what
  * findAction, the palette, and the pin set resolve over (the menu uses ACTIONS). */
 export function allActions(): Action[] {
-  return [...ACTIONS, ...tuiActions, ...projectActions, ...tmuxSessionActions]
+  return [...ACTIONS, ...tuiActions, ...projectActions, ...sessionActions]
 }
 
 /** A capability is pinnable when a click does something: it runs directly, pops

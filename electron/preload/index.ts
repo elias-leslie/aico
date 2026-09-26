@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { OpenableSession } from '../types'
 
 // Minimal, explicit bridge — no nodeIntegration in the renderer. The renderer
 // talks to the tmux-backed PTY only through these channels.
@@ -75,11 +76,11 @@ contextBridge.exposeInMainWorld('aico', {
     /** Aico workspace catalog for the "Open workspace" picker. */
     listProjects: (): Promise<{ id: string; name: string; root: string; current: boolean }[]> =>
       ipcRenderer.invoke('project:list'),
-    /** Externally-owned tmux sessions Aico can attach without taking ownership. */
-    listTmuxSessions: (): Promise<{ id: string; label: string; source: string }[]> =>
-      ipcRenderer.invoke('tmux:list-attachable'),
-    /** Attach an externally-owned tmux session as a widget. */
-    attachTmuxSession: (id: string) => ipcRenderer.send('tmux:attach', id),
+    /** Running sessions from both owners. */
+    listOpenableSessions: (): Promise<OpenableSession[]> =>
+      ipcRenderer.invoke('session:list-openable'),
+    openSession: (owner: OpenableSession['owner'], id: string): Promise<void> =>
+      ipcRenderer.invoke('session:open', { owner, id }),
     /** Snapshot ownership, tmux, and resource diagnostics for the focused session. */
     sessionDiagnostics: (): Promise<Record<string, unknown>> =>
       ipcRenderer.invoke('session:diagnostics'),
@@ -93,8 +94,8 @@ contextBridge.exposeInMainWorld('aico', {
      * `-r` drag a region, `-t` OCR to text). The hotkeys grab the focused window;
      * a click picks/drags because Aico holds focus when you click the menu. */
     grab: (args: string[]) => ipcRenderer.send('grab:run', args),
-    /** Retire this widget: close the window AND end its tmux session. */
-    retire: () => ipcRenderer.send('widget:discard-self'),
+    /** End the current session through its lifecycle owner. */
+    endSession: (): Promise<void> => ipcRenderer.invoke('session:end-self'),
   },
   settings: {
     /** Global pinned-action ids, or null if never set (first run). */

@@ -1,35 +1,55 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { allActions, setTmuxSessionActions } from './actions'
-import { refreshTmuxSessions } from './control-surface'
+import { allActions, setSessionActions } from './actions'
+import { refreshSessions } from './control-surface'
 
 afterEach(() => {
-  setTmuxSessionActions([])
+  setSessionActions([])
   vi.unstubAllGlobals()
 })
 
-describe('attachable tmux session discovery', () => {
+describe('openable session discovery', () => {
   it('finds an A-Term session created after Aico first loaded', async () => {
-    let sessions: { id: string; label: string; source: string }[] = []
-    const listTmuxSessions = vi.fn(async () => sessions)
-    vi.stubGlobal('window', { aico: { actions: { listTmuxSessions } } })
+    let sessions: {
+      owner: 'a-term'
+      id: string
+      label: string
+      project: string | null
+      tool: string | null
+      status: 'running'
+      locallyOpen: boolean
+    }[] = []
+    const listOpenableSessions = vi.fn(async () => sessions)
+    vi.stubGlobal('window', { aico: { actions: { listOpenableSessions } } })
 
-    expect(await refreshTmuxSessions()).toEqual({ status: 'empty' })
+    expect(await refreshSessions()).toEqual({ status: 'empty' })
     expect(allActions().some((action) => action.id === 'tmux:default:a-term-new')).toBe(false)
 
-    sessions = [{ id: 'default:a-term-new', label: 'A-Term new', source: 'A-Term' }]
-    expect(await refreshTmuxSessions()).toEqual({ status: 'ready' })
+    sessions = [
+      {
+        owner: 'a-term',
+        id: 'default:a-term-new',
+        label: 'A-Term new',
+        project: null,
+        tool: null,
+        status: 'running',
+        locallyOpen: false,
+      },
+    ]
+    expect(await refreshSessions()).toEqual({ status: 'ready' })
     expect(allActions().some((action) => action.id === 'tmux:default:a-term-new')).toBe(true)
-    expect(listTmuxSessions).toHaveBeenCalledTimes(2)
+    expect(listOpenableSessions).toHaveBeenCalledTimes(2)
   })
 
   it('distinguishes a failed query from a successful empty catalog', async () => {
     vi.stubGlobal('window', {
       aico: {
-        actions: { listTmuxSessions: vi.fn().mockRejectedValue(new Error('tmux unavailable')) },
+        actions: {
+          listOpenableSessions: vi.fn().mockRejectedValue(new Error('sessions unavailable')),
+        },
       },
     })
 
-    expect(await refreshTmuxSessions()).toEqual({ status: 'unavailable' })
+    expect(await refreshSessions()).toEqual({ status: 'unavailable' })
     expect(allActions().some((action) => action.id.startsWith('tmux:'))).toBe(false)
   })
 })
