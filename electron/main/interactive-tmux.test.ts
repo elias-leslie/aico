@@ -1,17 +1,17 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  activateTmuxViewSize,
   coalesceAsync,
   coalesceTrailingAsync,
-  fitSoleExternalTmuxWindow,
   refreshAttachedTmuxClients,
 } from './interactive-tmux'
 import {
-  fitWindowToSessionArgs,
   listClientsTargetArgs,
   listWindowIdsArgs,
   refreshClientArgs,
+  resizeWindowArgs,
+  sessionStatusArgs,
   type TmuxTarget,
-  windowSizePolicyArgs,
 } from './tmux'
 
 const target: TmuxTarget = { socket: '/tmp/tmux-1000/aico', session: 'aico-widget' }
@@ -39,51 +39,38 @@ describe('interactive tmux work', () => {
     expect(work).toHaveBeenCalledTimes(3)
   })
 
-  it('fits a sole Aico client in an unlinked manual-size external window', async () => {
+  it('sizes the active client with another client on the same window', async () => {
     const clientArgs = listClientsTargetArgs(target, '#{client_pid}\t#{window_id}')
     const run = vi.fn(async (args: string[]) => {
-      if (JSON.stringify(args) === JSON.stringify(clientArgs)) return '432\t@7\n'
+      if (JSON.stringify(args) === JSON.stringify(clientArgs)) return '432\t@7\n999\t@7\n'
       if (JSON.stringify(args) === JSON.stringify(listWindowIdsArgs(target.socket)))
         return '@7\n@8\n'
-      if (JSON.stringify(args) === JSON.stringify(windowSizePolicyArgs('@7', target.socket)))
-        return 'manual\n'
+      if (JSON.stringify(args) === JSON.stringify(sessionStatusArgs(target))) return 'off\n'
       return ''
     })
-    await expect(fitSoleExternalTmuxWindow(target, 432, run, () => true)).resolves.toBe(true)
-    expect(run.mock.calls.map(([args]) => args)).toEqual([
-      clientArgs,
-      listWindowIdsArgs(target.socket),
-      windowSizePolicyArgs('@7', target.socket),
-      clientArgs,
-      fitWindowToSessionArgs('@7', target.socket),
-    ])
+    expect(await activateTmuxViewSize(target, 432, 101, 79, run, () => true)).toBe(true)
+    expect(run.mock.calls.at(-1)?.[0]).toEqual(resizeWindowArgs('@7', target.socket, 101, 79))
   })
 
-  it('preserves a manual window shared with another client or linked session', async () => {
-    const clientArgs = listClientsTargetArgs(target, '#{client_pid}\t#{window_id}')
-    const run = vi.fn().mockResolvedValueOnce('432\t@7\n999\t@7\n')
-    expect(await fitSoleExternalTmuxWindow(target, 432, run, () => true)).toBe(false)
-    expect(run).toHaveBeenCalledTimes(1)
-    run.mockReset().mockResolvedValueOnce('432\t@7\n').mockResolvedValueOnce('@7\n@7\n')
-    expect(await fitSoleExternalTmuxWindow(target, 432, run, () => true)).toBe(false)
-    expect(run.mock.calls.map(([args]) => args)).toEqual([
-      clientArgs,
-      listWindowIdsArgs(target.socket),
-    ])
-  })
-
-  it('preserves automatic size policies and stale client generations', async () => {
-    const run = vi
-      .fn()
+  it('does not size a linked window or stale attachment', async () => {
+    const run = vi.fn().mockResolvedValueOnce('432\t@7\n').mockResolvedValueOnce('@7\n@7\n')
+    expect(await activateTmuxViewSize(target, 432, 101, 79, run, () => true)).toBe(false)
+    expect(run).toHaveBeenCalledTimes(2)
+    run
+      .mockReset()
       .mockResolvedValueOnce('432\t@7\n')
       .mockResolvedValueOnce('@7\n')
-      .mockResolvedValueOnce('latest\n')
-    expect(await fitSoleExternalTmuxWindow(target, 432, run, () => true)).toBe(false)
+      .mockResolvedValueOnce('off\n')
+      .mockResolvedValueOnce('999\t@7\n')
+    expect(await activateTmuxViewSize(target, 432, 101, 79, run, () => true)).toBe(false)
+    expect(run).toHaveBeenCalledTimes(4)
+    run
+      .mockReset()
+      .mockResolvedValueOnce('432\t@7\n')
+      .mockResolvedValueOnce('@7\n')
+      .mockResolvedValueOnce('on\n')
+    expect(await activateTmuxViewSize(target, 432, 101, 79, run, () => true)).toBe(false)
     expect(run).toHaveBeenCalledTimes(3)
-    run.mockReset().mockResolvedValueOnce('432\t@7\n')
-    let checks = 0
-    expect(await fitSoleExternalTmuxWindow(target, 432, run, () => ++checks === 1)).toBe(false)
-    expect(run).toHaveBeenCalledTimes(1)
   })
 
   it('coalesces overlapping catalog queries and retries after completion', async () => {

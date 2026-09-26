@@ -27,9 +27,9 @@ import {
 import { type IPty, spawn } from 'node-pty'
 import { parseTerminalFontSettings } from '../shared/font-settings'
 import {
+  activateTmuxViewSize,
   coalesceAsync,
   coalesceTrailingAsync,
-  fitSoleExternalTmuxWindow,
   refreshAttachedTmuxClients,
 } from './interactive-tmux'
 import {
@@ -192,10 +192,7 @@ function scrollbackPageFromLine(input: unknown): number | undefined {
 // One node-pty per open window. The PTY runs `tmux attach`; killing it only
 // detaches the client, so the tmux session (and its shell) survives reload/close.
 const ptys = new Map<number, IPty>()
-const externalWindowFits = new WeakMap<
-  IPty,
-  { request: () => Promise<void>; afterNextOutput: () => void }
->()
+const tmuxViewSizes = new WeakMap<IPty, () => Promise<void>>()
 const ptyStartGenerations = new Map<number, number>()
 const ptyRefreshes = new Map<
   number,
@@ -2544,7 +2541,6 @@ async function startPty(win: BrowserWindow, size: PtySize): Promise<void> {
     if (changed) pushTitles()
   })
   const target = tmuxTargetForWidget(widgetId)
-  const external = isExternalTmuxWidget(widgetId)
   const pty = spawn(TMUX_BIN, attachTargetArgs(target), {
     name: 'xterm-256color',
     cols: size.cols,
@@ -2556,33 +2552,28 @@ async function startPty(win: BrowserWindow, size: PtySize): Promise<void> {
     pty.kill()
     return
   }
-  let fitAfterOutput = external
-  if (external) {
-    const isCurrent = () =>
-      !quitting &&
-      !win.isDestroyed() &&
-      widgetOf.get(win.id) === widgetId &&
-      ptys.get(win.id) === pty &&
-      ptyStartGenerations.get(win.id) === generation &&
-      !lifecycleOwners.isHeld(widgetId)
-    const request = coalesceTrailingAsync(async () => {
-      try {
-        await fitSoleExternalTmuxWindow(target, pty.pid, runInteractiveTmux, isCurrent)
-      } catch (error) {
-        console.warn(`[aico] external tmux window fit failed widget=${widgetId}:`, error)
-      }
-    })
-    externalWindowFits.set(pty, {
-      request,
-      afterNextOutput: () => {
-        fitAfterOutput = true
-      },
-    })
-  }
+  const isCurrent = () =>
+    !quitting &&
+    !win.isDestroyed() &&
+    win.isFocused() &&
+    widgetOf.get(win.id) === widgetId &&
+    ptys.get(win.id) === pty &&
+    ptyStartGenerations.get(win.id) === generation &&
+    !lifecycleOwners.isHeld(widgetId)
+  const requestSize = coalesceTrailingAsync(async () => {
+    if (!isCurrent()) return
+    try {
+      await activateTmuxViewSize(target, pty.pid, pty.cols, pty.rows, runInteractiveTmux, isCurrent)
+    } catch (error) {
+      console.warn(`[aico] tmux view resize failed widget=${widgetId}:`, error)
+    }
+  })
+  tmuxViewSizes.set(pty, requestSize)
+  let activateAfterAttach = true
   pty.onData((data) => {
-    if (fitAfterOutput) {
-      fitAfterOutput = false
-      void externalWindowFits.get(pty)?.request()
+    if (activateAfterAttach && isCurrent()) {
+      activateAfterAttach = false
+      void requestSize()
     }
     if (!win.isDestroyed()) {
       win.webContents.send('pty:data', data)
@@ -2601,6 +2592,7 @@ async function startPty(win: BrowserWindow, size: PtySize): Promise<void> {
     }
   })
   ptys.set(win.id, pty)
+  if (win.isFocused()) void requestSize()
 }
 
 function ptyFor(sender: Electron.WebContents): IPty | undefined {
@@ -2738,6 +2730,8 @@ function openWidget(row: WidgetRow): void {
     const widgetId = widgetOf.get(win.id)
     lastFocusedAico = widgetId ?? lastFocusedAico
     if (widgetId) {
+      const pty = ptys.get(win.id)
+      if (pty) void tmuxViewSizes.get(pty)?.()
       void reconcileWidgetTool(widgetId).then((changed) => {
         if (changed) pushTitles()
       })
@@ -3666,17 +3660,13 @@ app.whenReady().then(async () => {
   })
 
   ipcMain.on('pty:resize', (event, size: PtySize) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
     const pty = ptyFor(event.sender)
     if (pty) {
       const { cols, rows } = clampSize(size)
-      const changed = pty.cols !== cols || pty.rows !== rows
       try {
         pty.resize(cols, rows)
-        if (changed) {
-          const fit = externalWindowFits.get(pty)
-          fit?.afterNextOutput()
-          void fit?.request()
-        }
+        if (win?.isFocused()) void tmuxViewSizes.get(pty)?.()
       } catch (err) {
         console.warn('[aico] pty resize failed:', err)
       }
@@ -3705,7 +3695,6 @@ app.whenReady().then(async () => {
         )
         try {
           pty.resize(cols, rows)
-          externalWindowFits.get(pty)?.afterNextOutput()
         } catch (err) {
           console.warn('[aico] pty resize failed:', err)
         }
@@ -3723,7 +3712,7 @@ app.whenReady().then(async () => {
       ptyStartGenerations.get(win.id) === generation &&
       !lifecycleOwners.isHeld(widgetId)
     const request = (async () => {
-      if (pty) await externalWindowFits.get(pty)?.request()
+      if (pty) await tmuxViewSizes.get(pty)?.()
       if (isCurrent()) await refreshAttachedTmuxClients(target, runInteractiveTmux, isCurrent)
     })()
     ptyRefreshes.set(win.id, { pty, generation, request })

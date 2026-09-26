@@ -1,10 +1,10 @@
 import {
-  fitWindowToSessionArgs,
   listClientsTargetArgs,
   listWindowIdsArgs,
   refreshClientArgs,
+  resizeWindowArgs,
+  sessionStatusArgs,
   type TmuxTarget,
-  windowSizePolicyArgs,
 } from './tmux'
 
 /** Share one pending interactive query without retaining a stale result. */
@@ -47,33 +47,40 @@ export function coalesceTrailingAsync(work: () => Promise<void>): () => Promise<
   }
 }
 
-/** Fit an externally owned manual-size window only while this PTY is its sole
- * client and the window is not linked into another session. */
-export async function fitSoleExternalTmuxWindow(
+/** The shared tmux window follows the foreground client's grid. Never size an
+ * unknown client, linked window, or session with a tmux status row. */
+export async function activateTmuxViewSize(
   target: TmuxTarget,
   clientPid: number,
+  cols: number,
+  rows: number,
   run: (args: string[]) => Promise<string>,
   isCurrent: () => boolean,
 ): Promise<boolean> {
-  if (!isCurrent() || !Number.isSafeInteger(clientPid) || clientPid <= 0) return false
+  if (
+    !isCurrent() ||
+    !Number.isSafeInteger(clientPid) ||
+    clientPid <= 0 ||
+    !Number.isSafeInteger(cols) ||
+    cols <= 0 ||
+    !Number.isSafeInteger(rows) ||
+    rows <= 0
+  )
+    return false
   const clientArgs = listClientsTargetArgs(target, '#{client_pid}\t#{window_id}')
-  const clients = (await run(clientArgs))
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-  if (!isCurrent() || clients.length !== 1) return false
-  const [pid, windowId] = clients[0].split('\t')
-  if (pid !== String(clientPid) || !/^@[0-9]+$/.test(windowId ?? '')) return false
-
-  const windows = (await run(listWindowIdsArgs(target.socket)))
-    .split('\n')
-    .map((line) => line.trim())
+  const clients = (await run(clientArgs)).trim().split('\n')
+  if (!isCurrent()) return false
+  const ours = clients.filter((line) => line.startsWith(`${clientPid}\t`))
+  if (ours.length !== 1) return false
+  const [, windowId] = ours[0].split('\t')
+  if (!/^@[0-9]+$/.test(windowId ?? '')) return false
+  const windows = (await run(listWindowIdsArgs(target.socket))).trim().split('\n')
   if (!isCurrent() || windows.filter((id) => id === windowId).length !== 1) return false
-  const policy = (await run(windowSizePolicyArgs(windowId, target.socket))).trim()
-  if (!isCurrent() || policy !== 'manual') return false
-  // Recheck the client immediately before changing a shared tmux window.
-  if ((await run(clientArgs)).trim() !== clients[0] || !isCurrent()) return false
-  await run(fitWindowToSessionArgs(windowId, target.socket))
+  if ((await run(sessionStatusArgs(target))).trim() !== 'off' || !isCurrent()) return false
+  // A detach or window switch can happen while the async queries are running.
+  const latest = (await run(clientArgs)).trim().split('\n')
+  if (!isCurrent() || latest.filter((line) => line === ours[0]).length !== 1) return false
+  await run(resizeWindowArgs(windowId, target.socket, cols, rows))
   return true
 }
 

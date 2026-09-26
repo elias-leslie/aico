@@ -577,13 +577,28 @@ export function listWindowIdsArgs(socket: string | null): string[] {
   return [...socketArgs(socket), 'list-windows', '-a', '-F', '#{window_id}']
 }
 
-export function windowSizePolicyArgs(windowId: string, socket: string | null): string[] {
-  return [...socketArgs(socket), 'show-window-options', '-t', windowId, '-v', 'window-size']
+/** Aico and A-Term sessions disable the tmux status bar, so client rows are usable rows. */
+export function sessionStatusArgs(target: TmuxTarget): string[] {
+  return targetArgs(target, ['show-options', '-t', target.session, '-v', 'status'])
 }
 
-/** Ask tmux to fit the window to its session, accounting for status rows. */
-export function fitWindowToSessionArgs(windowId: string, socket: string | null): string[] {
-  return [...socketArgs(socket), 'resize-window', '-a', '-t', windowId]
+/** Give the active view's dimensions to its current tmux window. */
+export function resizeWindowArgs(
+  windowId: string,
+  socket: string | null,
+  cols: number,
+  rows: number,
+): string[] {
+  return [
+    ...socketArgs(socket),
+    'resize-window',
+    '-t',
+    windowId,
+    '-x',
+    String(cols),
+    '-y',
+    String(rows),
+  ]
 }
 
 /** Stable server-assigned identity of an internal durable tmux session. */
