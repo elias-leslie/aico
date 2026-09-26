@@ -64,7 +64,7 @@ artifact_log=$run_dir/app.log
 
 owned_primary() {
   [[ -n $primary_pid && -r /proc/$primary_pid/environ ]] || return 1
-  tr '\0' '\n' <"/proc/$primary_pid/environ" | grep -Fxq "AICO_REAL_SMOKE_RUN_ID=$run_id"
+  tr '\0' '\n' 2>/dev/null <"/proc/$primary_pid/environ" | grep -Fxq "AICO_REAL_SMOKE_RUN_ID=$run_id"
 }
 stop_app() {
   if owned_primary; then
@@ -214,9 +214,9 @@ verify_identity() {
   printf 'PANE_CWD='; readlink -f "/proc/$pane_pid/cwd"
 }
 db_open_is() {
-  [[ $(sqlite3 "$db" 'SELECT open FROM widgets LIMIT 1;') == "$1" ]]
+  [[ $(sqlite3 -cmd '.timeout 1000' "$db" 'SELECT open FROM widgets LIMIT 1;' 2>/dev/null) == "$1" ]]
 }
-db_retired() { [[ $(sqlite3 "$db" 'SELECT count(*) FROM widgets;') == 0 ]]; }
+db_retired() { [[ $(sqlite3 -cmd '.timeout 1000' "$db" 'SELECT count(*) FROM widgets;' 2>/dev/null) == 0 ]]; }
 session_alive() { /usr/bin/tmux -S "$(identity_field socket_path)" has-session -t "$(identity_field tmux_session_id)" 2>/dev/null; }
 sample_processes() {
   local label=$1
@@ -224,16 +224,18 @@ sample_processes() {
     '$2 == pg || $1 == pane || $1 == server {print label,$1,$3,$4,$5}' >>"$run_dir/process-metrics.tsv"
 }
 clear_pane_history() {
-  local socket pane
+  local socket pane prior_count observed_count
   socket=$(identity_field socket_path)
   pane=$(identity_field pane_id)
+  prior_count=$(/usr/bin/tmux -S "$socket" capture-pane -p -t "$pane" -S - | grep -Fxc 'AICO_HIST_CLEARED' || true)
   # The shell variables must expand inside the verified private pane.
   # shellcheck disable=SC2016
   /usr/bin/tmux -S "$socket" send-keys -t "$pane" -l \
     'export HISTFILE=/dev/null; history -c; [[ $HISTFILE == /dev/null ]] && [[ $(history | wc -l) -eq 0 ]] && printf "AICO_HIST_CLEARED\n"'
   /usr/bin/tmux -S "$socket" send-keys -t "$pane" Enter
   for ((i=0; i<40; i++)); do
-    if /usr/bin/tmux -S "$socket" capture-pane -p -t "$pane" -S - | grep -Fxq 'AICO_HIST_CLEARED'; then
+    observed_count=$(/usr/bin/tmux -S "$socket" capture-pane -p -t "$pane" -S - | grep -Fxc 'AICO_HIST_CLEARED' || true)
+    if (( observed_count > prior_count )); then
       echo 'PANE_HISTORY cleared and redirected to /dev/null'
       return 0
     fi
@@ -260,6 +262,7 @@ awk '{if ($3 > cpu) cpu=$3; if ($4 > rss) rss=$4} END {printf "PROCESS_PROFILE p
   "$run_dir/process-metrics.tsv"
 clear_pane_history
 cdp scrollback | tee "$run_dir/scrollback-profile.json"
+clear_pane_history
 cdp context-send "$sidecar_port" | tee "$run_dir/context-profile.json"
 cdp close
 wait_for closed "$((SECONDS+10))" db_open_is 0

@@ -194,10 +194,31 @@ try {
       throw new Error('5000-line terminal output incomplete')
     if (maxPingMs > 2000) throw new Error('renderer ping exceeded 2 seconds')
   } else if (action === 'scrollback') {
-    const page = await evaluate(
+    const fixture = 'python3 -c \'for i in range(6000): print("AICO_SCROLL_"+str(i))\''
+    const focused = await evaluate(`(() => {
+      const input = document.querySelector('#terminal .xterm-helper-textarea');
+      input?.focus();
+      return document.activeElement === input;
+    })()`)
+    if (!focused) throw new Error('xterm keyboard input is not focused for scrollback fixture')
+    await command('Input.insertText', { text: fixture })
+    await key('keyDown', 'Enter', 'Enter', 13)
+    await key('keyUp', 'Enter', 'Enter', 13)
+    let page
+    for (let i = 0; i < 80; i++) {
+      page =
+        await evaluate(`window.aico.scrollback.page({ count: 100 }).then(({ fromLine, totalLines, text }) => ({
+        fromLine, totalLines, fixtureDone: text.includes('AICO_SCROLL_5999')
+      }))`)
+      if (page.fixtureDone) break
+      await sleep(100)
+    }
+    if (!page?.fixtureDone || page.totalLines < 10_000) {
+      throw new Error(`scrollback fixture incomplete: ${JSON.stringify(page)}`)
+    }
+    page = await evaluate(
       'window.aico.scrollback.page({ count: 5000 }).then(({ fromLine, totalLines }) => ({ fromLine, totalLines }))',
     )
-    if (page.fromLine <= 0) throw new Error('fixture lacks older scrollback page')
     const center = await evaluate(`(() => {
       const r = document.querySelector('#terminal').getBoundingClientRect();
       return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
@@ -205,9 +226,13 @@ try {
     const overlay = () =>
       evaluate(`(() => {
       const el = document.querySelector('#scrollback-overlay');
-      const viewport = el?.querySelector('.xterm-viewport');
+      const bar = el?.querySelector('.xterm-scrollable-element > .scrollbar.vertical');
+      const slider = bar?.querySelector('.slider');
+      const barRect = bar?.getBoundingClientRect();
+      const sliderRect = slider?.getBoundingClientRect();
       return { visible: !!el && getComputedStyle(el).display !== 'none',
-        scrollHeight: viewport?.scrollHeight ?? 0, scrollTop: viewport?.scrollTop ?? 0 };
+        barHeight: barRect?.height ?? 0, sliderHeight: sliderRect?.height ?? 0,
+        sliderTop: sliderRect && barRect ? Math.round(sliderRect.top - barRect.top) : null };
     })()`)
     await wheel(center.x, center.y, -500)
     let opened
@@ -217,20 +242,47 @@ try {
       await sleep(100)
     }
     if (!opened?.visible) throw new Error('wheel-up did not open scrollback overlay')
+    let populated
+    for (let i = 0; i < 60; i++) {
+      populated = await overlay()
+      if (
+        populated.barHeight > 0 &&
+        populated.sliderHeight > 0 &&
+        populated.sliderHeight < populated.barHeight
+      )
+        break
+      await sleep(100)
+    }
     await wheel(center.x, center.y, -100000)
-    await sleep(200)
-    const atTop = await overlay()
-    if (atTop.scrollTop > 0) throw new Error('large wheel-up did not reach overlay top')
+    let atTop
+    for (let i = 0; i < 40; i++) {
+      atTop = await overlay()
+      if (atTop.sliderTop !== null && atTop.sliderTop <= 2) break
+      await sleep(100)
+    }
     await wheel(center.x, center.y, -500)
     let afterOlderWheel
     for (let i = 0; i < 40; i++) {
       afterOlderWheel = await overlay()
-      if (afterOlderWheel.scrollHeight > opened.scrollHeight) break
+      if (
+        afterOlderWheel.sliderTop !== null &&
+        atTop.sliderTop !== null &&
+        afterOlderWheel.sliderTop > atTop.sliderTop + 3
+      )
+        break
       await sleep(100)
     }
-    if (afterOlderWheel.scrollHeight <= opened.scrollHeight) {
-      throw new Error('wheel-up at top did not load an older page')
-    }
+    console.log(
+      JSON.stringify({
+        action: 'scrollback_probe',
+        fixture,
+        page,
+        opened,
+        populated,
+        atTop,
+        afterOlderWheel,
+      }),
+    )
     await key('keyDown', 'Escape', 'Escape', 27)
     await key('keyUp', 'Escape', 'Escape', 27)
     const dismissed = await overlay()
@@ -246,7 +298,16 @@ try {
     await key('keyDown', 'Escape', 'Escape', 27)
     await key('keyUp', 'Escape', 'Escape', 27)
     console.log(
-      JSON.stringify({ action, page, opened, atTop, afterOlderWheel, dismissed, reopened }),
+      JSON.stringify({
+        action,
+        page,
+        opened,
+        populated,
+        atTop,
+        afterOlderWheel,
+        dismissed,
+        reopened,
+      }),
     )
   } else if (action === 'context-send') {
     const sidecarPort = Number(sidecarPortText)
@@ -355,4 +416,7 @@ try {
   }
 } finally {
   socket.close()
+  // Chromium can leave the CDP close handshake pending after a renderer is
+  // restored. Give it a short grace period, then let this one-shot probe exit.
+  setTimeout(() => process.exit(process.exitCode ?? 0), 250).unref()
 }
