@@ -2968,7 +2968,12 @@ async function endExternalSession(row: WidgetRow): Promise<RetirementResult> {
     if (!/^%\d+$/.test(paneId)) {
       return { status: 'blocked', reason: 'A-Term pane identity is invalid' }
     }
-  } catch {
+  } catch (error) {
+    if (isDefinitiveTmuxAbsence(tmuxErrorText(error))) {
+      return removeExternalWidgetIfIdentity(row.id, row.sessionId, row.externalTmuxSocket, session)
+        ? { status: 'ended' }
+        : { status: 'stale' }
+    }
     return { status: 'blocked', reason: 'A-Term session is unavailable' }
   }
   const current = getWidget(row.id)
