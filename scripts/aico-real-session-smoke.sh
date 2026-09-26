@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # Isolated packaged Aico profile against the real user manager and a private X display.
 # Usage: scripts/aico-real-session-smoke.sh dist/electron/Aico-*.AppImage
+# On failure this harness stops only its marked AppImage process group and keeps
+# the DB, identity snapshot, and logs. Durable units require manual cleanup:
+# compare the DB socket path with this run directory and both unit InvocationIDs
+# with `systemctl --user show` immediately before stopping those exact units.
+# If a scope stays deactivating, inspect its cgroup/PIDs before an exact-unit kill.
 set -Eeuo pipefail
 
 [[ $# == 1 && -f $1 ]] || { echo "usage: $0 Aico.AppImage" >&2; exit 2; }
@@ -79,6 +84,16 @@ cleanup() {
   stop_app
   if (( status != 0 )); then
     echo "FAIL: preserved isolated evidence at $run_dir" >&2
+    if [[ -f $run_dir/identity.json ]]; then
+      echo 'Manual cleanup required only if these DB-verified private units remain active:' >&2
+      python3 - "$run_dir/identity.json" <<'PY' >&2
+import json,sys
+d=json.load(open(sys.argv[1]))
+print('  socket:', d['socket_path'])
+print('  pane:', d['pane_scope'], 'InvocationID=', d['pane_inv'])
+print('  server:', d['server_scope'], 'InvocationID=', d['server_inv'])
+PY
+    fi
     tail -n 100 "$artifact_log" >&2 || true
   else
     echo "PASS: evidence at $run_dir (remove after review)"
@@ -262,8 +277,14 @@ wait_for restart_sidecar "$((SECONDS+90))" health_ok
 cdp ready
 verify_identity
 echo 'RESTART preserved exact pane'
-cdp retire
+cdp retire | tee "$run_dir/retire-profile.json"
 wait_for retired "$((SECONDS+30))" db_retired
+retire_click_ms=$(python3 - "$run_dir/retire-profile.json" <<'PY'
+import json,sys
+print(json.load(open(sys.argv[1]))['confirmedAtMs'])
+PY
+)
+echo "LATENCY retire_click_to_db_removal_ms=$(($(date +%s%3N)-retire_click_ms))"
 if session_alive; then echo 'Retired tmux session is still alive' >&2; exit 1; fi
 [[ $(unit_field "$(identity_field pane_scope)" ActiveState) != active ]]
 [[ $(unit_field "$(identity_field server_scope)" ActiveState) != active ]]

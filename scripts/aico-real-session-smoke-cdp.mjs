@@ -349,7 +349,7 @@ try {
       return !!row && !row.classList.contains('armed');
     })()`)
     if (!second) throw new Error('second retire click did not confirm')
-    console.log(JSON.stringify({ action, first, second }))
+    console.log(JSON.stringify({ action, first, second, confirmedAtMs: Date.now() }))
   } else {
     throw new Error(`unknown CDP action: ${action}`)
   }
