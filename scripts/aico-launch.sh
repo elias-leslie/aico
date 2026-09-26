@@ -30,21 +30,9 @@ REPO="${AICO_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/aico"
 PIDFILE="$LOG_DIR/aico.pid"
 RUNTIME_UNIT="aico-shell.service"
+RUNTIME_ROOT="$(systemctl --user show "$RUNTIME_UNIT" --property=WorkingDirectory --value 2>/dev/null || true)"
 mkdir -p "$LOG_DIR"
 cd "$REPO"
-
-# Serialize concurrent launches. A double-click / .desktop StartupNotify can fire
-# this twice in quick succession; without a lock both invocations pass the
-# "already running" guard below before either child writes the pidfile, so both
-# spawn full app trees and the 2nd `echo $$` orphans the 1st process group. Hold
-# an flock across the guard, then hand startup to aico-run-foreground.sh, which
-# takes the same lock before writing the pidfile. A fixed transient unit name is
-# the second arbitration boundary in the small handoff window between the two.
-exec 9>"$LOG_DIR/aico.lock"
-if ! flock -n 9; then
-  echo "aico-launch: another launch is already in progress; aborting" >&2
-  exit 1
-fi
 
 is_aico_process() {
   local pid="$1"
@@ -57,12 +45,43 @@ is_aico_process() {
     *"$REPO"*) return 0 ;;
   esac
 
-  if [ "$cwd" = "$REPO" ]; then
+  if [ "$cwd" = "$REPO" ] || { [ -n "$RUNTIME_ROOT" ] && [ "$cwd" = "$RUNTIME_ROOT" ]; }; then
     case "$cmd" in
       *electron*|*node*|*npm*|*bash*) return 0 ;;
     esac
   fi
 
+  return 1
+}
+
+# The running Electron process owns the single-instance lock. A second Electron
+# invocation delivers the desktop click to that process; it exits without
+# starting another sidecar or replacing the managed service.
+activate_runtime() {
+  local pid expected_exe actual_exe actual_cwd unit_group process_group state
+  pid="$(systemctl --user show "$RUNTIME_UNIT" --property=MainPID --value 2>/dev/null || true)"
+  state="$(systemctl --user show "$RUNTIME_UNIT" --property=ActiveState --value 2>/dev/null || true)"
+  unit_group="$(systemctl --user show "$RUNTIME_UNIT" --property=ControlGroup --value 2>/dev/null || true)"
+  expected_exe="$RUNTIME_ROOT/node_modules/electron/dist/electron"
+  [ "$state" = active ] && [[ "$pid" =~ ^[1-9][0-9]*$ ]] && [ -n "$RUNTIME_ROOT" ] || return 1
+  [ "$unit_group" = "/user.slice/user-${UID}.slice/user@${UID}.service/app.slice/$RUNTIME_UNIT" ] || return 1
+  process_group="$(awk -F: '$1 == "0" && $2 == "" { print $3; exit }' "/proc/$pid/cgroup" 2>/dev/null || true)"
+  if [ "$process_group" != "$unit_group" ]; then
+    process_is_tracked_aico_application_scope "$pid" "$process_group" || return 1
+  fi
+  # systemd marks Type=simple active while the foreground runner is still
+  # building. Wait for that exact MainPID to exec the installed Electron binary.
+  for _ in $(seq 1 50); do
+    actual_exe="$(readlink -f "/proc/$pid/exe" 2>/dev/null || true)"
+    actual_cwd="$(readlink -f "/proc/$pid/cwd" 2>/dev/null || true)"
+    if [ "$actual_exe" = "$expected_exe" ] && [ "$actual_cwd" = "$RUNTIME_ROOT" ]; then
+      ( cd "$RUNTIME_ROOT" && "$expected_exe" . --aico-activate )
+      echo "aico-launch: activated managed runtime (pid $pid)" >&2
+      return 0
+    fi
+    kill -0 "$pid" 2>/dev/null || return 1
+    sleep 0.1
+  done
   return 1
 }
 
@@ -93,6 +112,15 @@ process_is_tracked_aico_application_scope() {
   grep -Fxq "$pid" "/sys/fs/cgroup$expected/cgroup.procs" 2>/dev/null
 }
 
+# Serialize startup, while allowing clicks to reach an already-running app.
+# The foreground runner intentionally holds this lock for Electron's lifetime.
+exec 9>"$LOG_DIR/aico.lock"
+if ! flock -n 9; then
+  if activate_runtime; then exit 0; fi
+  echo "aico-launch: another launch is in progress but activation failed" >&2
+  exit 1
+fi
+
 # One instance at a time: bail if a recorded pid is still alive.
 if [ -f "$PIDFILE" ]; then
   PID="$(cat "$PIDFILE" 2>/dev/null || true)"
@@ -101,7 +129,10 @@ if [ -f "$PIDFILE" ]; then
     rm -f "$PIDFILE"
   elif kill -0 "$PID" 2>/dev/null; then
     if is_aico_process "$PID"; then
-      echo "aico-launch: already running (pid $PID); run scripts/aico-stop.sh first" >&2
+      flock -u 9
+      exec 9>&-
+      if activate_runtime; then exit 0; fi
+      echo "aico-launch: running pid $PID could not be activated" >&2
       exit 1
     fi
 
@@ -180,3 +211,4 @@ if [ "$UNIT_MAIN_PID" != "$PID" ] || [ "$UNIT_CONTROL_GROUP" != "$EXPECTED_CONTR
   exit 1
 fi
 echo "aico-launch: started; pidfile $PIDFILE, log $LOG_DIR/launcher.log" >&2
+activate_runtime

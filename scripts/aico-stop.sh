@@ -13,7 +13,7 @@ readonly RUNTIME_UNITS=(aico-shell-runtime.service aico-shell.service)
 
 is_aico_process() {
   local pid="$1"
-  local cmd cwd
+  local cmd cwd unit runtime_root
 
   cmd="$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null || true)"
   cwd="$(readlink -f "/proc/$pid/cwd" 2>/dev/null || true)"
@@ -27,6 +27,17 @@ is_aico_process() {
       *electron*|*node*|*npm*|*bash*) return 0 ;;
     esac
   fi
+
+  # Managed rebuilds run an immutable release rather than the source checkout.
+  # The exact service unit and cgroup are corroborated below before any stop.
+  for unit in "${RUNTIME_UNITS[@]}"; do
+    runtime_root="$(systemctl --user show "$unit" --property=WorkingDirectory --value 2>/dev/null || true)"
+    if [ -n "$runtime_root" ] && [ "$cwd" = "$runtime_root" ]; then
+      case "$cmd" in
+        *electron*|*node*|*npm*|*bash*) return 0 ;;
+      esac
+    fi
+  done
 
   return 1
 }

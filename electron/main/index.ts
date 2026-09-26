@@ -3753,14 +3753,30 @@ app.on('before-quit', () => {
 
 // Single-instance lock: a second launch must not spawn a duplicate (it would
 // fight over the sidecar port :8005 and re-adopt the same widget catalog). The
-// secondary quits immediately; the primary surfaces its widgets instead.
+// secondary quits immediately; the primary handles the desktop activation.
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
 if (!gotSingleInstanceLock) app.quit()
 
-app.on('second-instance', () => {
-  for (const win of BrowserWindow.getAllWindows()) win.show()
-  BrowserWindow.getAllWindows()[0]?.focus()
-})
+let activationReady = false
+let activationPending = false
+function activateAico(): void {
+  if (!activationReady) {
+    activationPending = true
+    return
+  }
+  const windows = BrowserWindow.getAllWindows()
+  if (windows.length > 0) {
+    for (const win of windows) win.show()
+    windows[0].focus()
+    return
+  }
+  const oldest = listWidgets()[0]
+  if (oldest) focusOrReopen(oldest.id)
+  else newWidget('shell', PERSONAL_WORKSPACE_ID)
+}
+
+app.on('second-instance', activateAico)
+app.on('activate', activateAico)
 
 app.whenReady().then(async () => {
   if (!gotSingleInstanceLock) return // secondary instance: app.quit() is pending
@@ -4142,15 +4158,11 @@ app.whenReady().then(async () => {
 
   await restoreOnLaunch()
   syncTray()
-
-  app.on('activate', () => {
-    // No windows: reopen the oldest catalogued widget (as on launch). With an
-    // empty catalog there's nothing to auto-spawn — a launch needs an explicit
-    // TUI + project — so the tray stays the entry point.
-    if (BrowserWindow.getAllWindows().length > 0) return
-    const oldest = listWidgets()[0]
-    if (oldest) focusOrReopen(oldest.id)
-  })
+  activationReady = true
+  if (activationPending) {
+    activationPending = false
+    activateAico()
+  }
 })
 
 app.on('window-all-closed', () => {
