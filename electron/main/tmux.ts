@@ -568,8 +568,22 @@ export function listClientsArgs(widgetId: string): string[] {
   return listClientsTargetArgs(internalTarget(widgetId))
 }
 
-export function listClientsTargetArgs(target: TmuxTarget): string[] {
-  return targetArgs(target, ['list-clients', '-t', target.session, '-F', '#{client_name}'])
+export function listClientsTargetArgs(target: TmuxTarget, format = '#{client_name}'): string[] {
+  return targetArgs(target, ['list-clients', '-t', target.session, '-F', format])
+}
+
+/** Window IDs are repeated when a window is linked into more than one session. */
+export function listWindowIdsArgs(socket: string | null): string[] {
+  return [...socketArgs(socket), 'list-windows', '-a', '-F', '#{window_id}']
+}
+
+export function windowSizePolicyArgs(windowId: string, socket: string | null): string[] {
+  return [...socketArgs(socket), 'show-window-options', '-t', windowId, '-v', 'window-size']
+}
+
+/** Ask tmux to fit the window to its session, accounting for status rows. */
+export function fitWindowToSessionArgs(windowId: string, socket: string | null): string[] {
+  return [...socketArgs(socket), 'resize-window', '-a', '-t', windowId]
 }
 
 /** Stable server-assigned identity of an internal durable tmux session. */

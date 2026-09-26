@@ -450,20 +450,18 @@ observer.observe(host)
 
 // Manual Refresh (lantern menu / palette / Ctrl+Shift+R): repair a desynced
 // view without disturbing the running program. Clear the WebGL glyph atlas (a
-// glitched atlas is a common corruption source), erase the visible grid without
-// resetting terminal modes (mouse reporting, bracketed paste), then have tmux
-// re-send its grid and repaint every row from it. xterm's clear() preserves the
-// cursor line and is a no-op when the cursor is on the first row, so it can
-// leave stale content below a TUI's prompt. The refresh carries the live size
-// so main can re-pair a drifted pty: when the pty believes a different size than the
+// glitched atlas is a common corruption source), wipe the buffer CONTENT
+// (term.clear keeps terminal modes — mouse reporting, bracketed paste — that a
+// reset would strip from the running TUI), then have tmux re-send its grid and
+// repaint every row from it. The refresh carries the live grid size so main
+// can re-pair a drifted pty: when the pty believes a different size than the
 // renderer, every tmux repaint wrap-garbles, and refresh-client alone can
 // never fix that class of corruption.
 function refreshTerminal(): void {
   webgl?.clearTextureAtlas()
-  term.write('\x1b[2J', () => {
-    term.refresh(0, term.rows - 1)
-    window.aico.pty.refresh({ cols: term.cols, rows: term.rows })
-  })
+  term.clear()
+  window.aico.pty.refresh({ cols: term.cols, rows: term.rows })
+  term.refresh(0, term.rows - 1)
 }
 window.addEventListener('aico:refresh', refreshTerminal)
 

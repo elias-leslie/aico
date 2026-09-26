@@ -26,7 +26,12 @@ import {
 } from 'electron'
 import { type IPty, spawn } from 'node-pty'
 import { parseTerminalFontSettings } from '../shared/font-settings'
-import { coalesceAsync, refreshAttachedTmuxClients } from './interactive-tmux'
+import {
+  coalesceAsync,
+  coalesceTrailingAsync,
+  fitSoleExternalTmuxWindow,
+  refreshAttachedTmuxClients,
+} from './interactive-tmux'
 import {
   CoalescedLifecycleIntent,
   classifyPersistedScopePair,
@@ -188,6 +193,10 @@ function scrollbackPageFromLine(input: unknown): number | undefined {
 // One node-pty per open window. The PTY runs `tmux attach`; killing it only
 // detaches the client, so the tmux session (and its shell) survives reload/close.
 const ptys = new Map<number, IPty>()
+const externalWindowFits = new WeakMap<
+  IPty,
+  { request: () => Promise<void>; afterNextOutput: () => void }
+>()
 const ptyStartGenerations = new Map<number, number>()
 const ptyRefreshes = new Map<
   number,
@@ -2771,6 +2780,14 @@ function switchProject(widgetId: string, projectId: string): void {
   })
 }
 
+async function runInteractiveTmux(args: string[]): Promise<string> {
+  const { stdout } = await execFileAsync(TMUX_BIN, args, {
+    env: terminalClientEnv(),
+    timeout: TMUX_QUERY_TIMEOUT_MS,
+  })
+  return stdout
+}
+
 async function startPty(win: BrowserWindow, size: PtySize): Promise<void> {
   const widgetId = widgetOf.get(win.id)
   if (!widgetId) return
@@ -2801,7 +2818,9 @@ async function startPty(win: BrowserWindow, size: PtySize): Promise<void> {
   void reconcileWidgetTool(widgetId).then((changed) => {
     if (changed) pushTitles()
   })
-  const pty = spawn(TMUX_BIN, attachTargetArgs(tmuxTargetForWidget(widgetId)), {
+  const target = tmuxTargetForWidget(widgetId)
+  const external = isExternalTmuxWidget(widgetId)
+  const pty = spawn(TMUX_BIN, attachTargetArgs(target), {
     name: 'xterm-256color',
     cols: size.cols,
     rows: size.rows,
@@ -2812,7 +2831,34 @@ async function startPty(win: BrowserWindow, size: PtySize): Promise<void> {
     pty.kill()
     return
   }
+  let fitAfterOutput = external
+  if (external) {
+    const isCurrent = () =>
+      !quitting &&
+      !win.isDestroyed() &&
+      widgetOf.get(win.id) === widgetId &&
+      ptys.get(win.id) === pty &&
+      ptyStartGenerations.get(win.id) === generation &&
+      !lifecycleOwners.isHeld(widgetId)
+    const request = coalesceTrailingAsync(async () => {
+      try {
+        await fitSoleExternalTmuxWindow(target, pty.pid, runInteractiveTmux, isCurrent)
+      } catch (error) {
+        console.warn(`[aico] external tmux window fit failed widget=${widgetId}:`, error)
+      }
+    })
+    externalWindowFits.set(pty, {
+      request,
+      afterNextOutput: () => {
+        fitAfterOutput = true
+      },
+    })
+  }
   pty.onData((data) => {
+    if (fitAfterOutput) {
+      fitAfterOutput = false
+      void externalWindowFits.get(pty)?.request()
+    }
     if (!win.isDestroyed()) {
       win.webContents.send('pty:data', data)
     }
@@ -3940,8 +3986,14 @@ app.whenReady().then(async () => {
     const pty = ptyFor(event.sender)
     if (pty) {
       const { cols, rows } = clampSize(size)
+      const changed = pty.cols !== cols || pty.rows !== rows
       try {
         pty.resize(cols, rows)
+        if (changed) {
+          const fit = externalWindowFits.get(pty)
+          fit?.afterNextOutput()
+          void fit?.request()
+        }
       } catch (err) {
         console.warn('[aico] pty resize failed:', err)
       }
@@ -3970,6 +4022,7 @@ app.whenReady().then(async () => {
         )
         try {
           pty.resize(cols, rows)
+          externalWindowFits.get(pty)?.afterNextOutput()
         } catch (err) {
           console.warn('[aico] pty resize failed:', err)
         }
@@ -3986,14 +4039,10 @@ app.whenReady().then(async () => {
       ptys.get(win.id) === pty &&
       ptyStartGenerations.get(win.id) === generation &&
       !lifecycleOwners.isHeld(widgetId)
-    const run = async (args: string[]): Promise<string> => {
-      const { stdout } = await execFileAsync(TMUX_BIN, args, {
-        env: terminalClientEnv(),
-        timeout: TMUX_QUERY_TIMEOUT_MS,
-      })
-      return stdout
-    }
-    const request = refreshAttachedTmuxClients(target, run, isCurrent)
+    const request = (async () => {
+      if (pty) await externalWindowFits.get(pty)?.request()
+      if (isCurrent()) await refreshAttachedTmuxClients(target, runInteractiveTmux, isCurrent)
+    })()
     ptyRefreshes.set(win.id, { pty, generation, request })
     void request
       .catch((err) => console.warn('[aico] pty refresh failed:', err))

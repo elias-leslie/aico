@@ -1,10 +1,91 @@
 import { describe, expect, it, vi } from 'vitest'
-import { coalesceAsync, refreshAttachedTmuxClients } from './interactive-tmux'
-import { listClientsTargetArgs, refreshClientArgs, type TmuxTarget } from './tmux'
+import {
+  coalesceAsync,
+  coalesceTrailingAsync,
+  fitSoleExternalTmuxWindow,
+  refreshAttachedTmuxClients,
+} from './interactive-tmux'
+import {
+  fitWindowToSessionArgs,
+  listClientsTargetArgs,
+  listWindowIdsArgs,
+  refreshClientArgs,
+  type TmuxTarget,
+  windowSizePolicyArgs,
+} from './tmux'
 
 const target: TmuxTarget = { socket: '/tmp/tmux-1000/aico', session: 'aico-widget' }
 
 describe('interactive tmux work', () => {
+  it('replays a resize requested while a previous fit is running', async () => {
+    let releaseFirst: () => void = () => {}
+    const work = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            releaseFirst = resolve
+          }),
+      )
+      .mockResolvedValue(undefined)
+    const request = coalesceTrailingAsync(work)
+    const first = request()
+    expect(request()).toBe(first)
+    expect(work).toHaveBeenCalledTimes(1)
+    releaseFirst()
+    await first
+    expect(work).toHaveBeenCalledTimes(2)
+    await request()
+    expect(work).toHaveBeenCalledTimes(3)
+  })
+
+  it('fits a sole Aico client in an unlinked manual-size external window', async () => {
+    const clientArgs = listClientsTargetArgs(target, '#{client_pid}\t#{window_id}')
+    const run = vi.fn(async (args: string[]) => {
+      if (JSON.stringify(args) === JSON.stringify(clientArgs)) return '432\t@7\n'
+      if (JSON.stringify(args) === JSON.stringify(listWindowIdsArgs(target.socket)))
+        return '@7\n@8\n'
+      if (JSON.stringify(args) === JSON.stringify(windowSizePolicyArgs('@7', target.socket)))
+        return 'manual\n'
+      return ''
+    })
+    await expect(fitSoleExternalTmuxWindow(target, 432, run, () => true)).resolves.toBe(true)
+    expect(run.mock.calls.map(([args]) => args)).toEqual([
+      clientArgs,
+      listWindowIdsArgs(target.socket),
+      windowSizePolicyArgs('@7', target.socket),
+      clientArgs,
+      fitWindowToSessionArgs('@7', target.socket),
+    ])
+  })
+
+  it('preserves a manual window shared with another client or linked session', async () => {
+    const clientArgs = listClientsTargetArgs(target, '#{client_pid}\t#{window_id}')
+    const run = vi.fn().mockResolvedValueOnce('432\t@7\n999\t@7\n')
+    expect(await fitSoleExternalTmuxWindow(target, 432, run, () => true)).toBe(false)
+    expect(run).toHaveBeenCalledTimes(1)
+    run.mockReset().mockResolvedValueOnce('432\t@7\n').mockResolvedValueOnce('@7\n@7\n')
+    expect(await fitSoleExternalTmuxWindow(target, 432, run, () => true)).toBe(false)
+    expect(run.mock.calls.map(([args]) => args)).toEqual([
+      clientArgs,
+      listWindowIdsArgs(target.socket),
+    ])
+  })
+
+  it('preserves automatic size policies and stale client generations', async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce('432\t@7\n')
+      .mockResolvedValueOnce('@7\n')
+      .mockResolvedValueOnce('latest\n')
+    expect(await fitSoleExternalTmuxWindow(target, 432, run, () => true)).toBe(false)
+    expect(run).toHaveBeenCalledTimes(3)
+    run.mockReset().mockResolvedValueOnce('432\t@7\n')
+    let checks = 0
+    expect(await fitSoleExternalTmuxWindow(target, 432, run, () => ++checks === 1)).toBe(false)
+    expect(run).toHaveBeenCalledTimes(1)
+  })
+
   it('coalesces overlapping catalog queries and retries after completion', async () => {
     let resolveFirst: (value: string[]) => void = () => {}
     const load = vi
