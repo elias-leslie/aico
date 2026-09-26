@@ -4007,13 +4007,6 @@ app.whenReady().then(async () => {
   ipcMain.on('pty:refresh', (event, size?: PtySize) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     const widgetId = win ? widgetOf.get(win.id) : undefined
-    console.info('[aico] refresh diagnostic', {
-      win: win?.id,
-      widgetId,
-      quitting,
-      held: widgetId ? lifecycleOwners.isHeld(widgetId) : null,
-      size,
-    })
     if (!win || !widgetId || quitting || lifecycleOwners.isHeld(widgetId)) return
     // Re-pair a drifted pty before the repaint: if the pty's size disagrees
     // with the renderer's live grid, tmux paints for the wrong geometry and
@@ -4047,11 +4040,6 @@ app.whenReady().then(async () => {
       ptyStartGenerations.get(win.id) === generation &&
       !lifecycleOwners.isHeld(widgetId)
     const request = (async () => {
-      console.info('[aico] refresh fit diagnostic', {
-        ptyPid: pty?.pid,
-        hasFit: pty ? externalWindowFits.has(pty) : false,
-        current: isCurrent(),
-      })
       if (pty) await externalWindowFits.get(pty)?.request()
       if (isCurrent()) await refreshAttachedTmuxClients(target, runInteractiveTmux, isCurrent)
     })()
