@@ -143,7 +143,7 @@ describe('ControlBar', () => {
     // dismisses the on-screen keyboard.
     renderControlBar({ onCtrlToggle: vi.fn(), onVoice: vi.fn() })
 
-    for (const name of ['TAB', '⇧TAB', 'CTRL']) {
+    for (const name of ['TAB', '⇧TAB', 'SHIFT', '←', '↑', '↓', '→', 'CTRL']) {
       // fireEvent returns false when the handler called preventDefault.
       expect(fireEvent.pointerDown(screen.getByText(name))).toBe(false)
     }
@@ -152,8 +152,40 @@ describe('ControlBar', () => {
   it('still fires the key after refusing focus', () => {
     const { onSend } = renderControlBar()
 
+    expect(fireEvent.pointerDown(screen.getByText('TAB'))).toBe(false)
     fireEvent.click(screen.getByText('TAB'))
 
     expect(onSend).toHaveBeenCalledWith('\t')
+  })
+
+  it('sends Shift+Left once, then an unmodified Left', () => {
+    const { onSend } = renderControlBar()
+
+    fireEvent.click(screen.getByRole('button', { name: 'SHIFT' }))
+    const left = screen.getByRole('button', { name: '←' })
+    expect(fireEvent.pointerDown(left)).toBe(false)
+    fireEvent.click(left)
+    fireEvent.click(left)
+
+    expect(onSend.mock.calls).toEqual([['\x1b[1;2D'], ['\x1b[D']])
+    expect(screen.getByRole('button', { name: 'SHIFT' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+  })
+
+  it('lets the compose input handle shifted arrows', () => {
+    const onArrow = vi.fn().mockReturnValue(true)
+    const { onSend } = renderControlBar({ onArrow })
+
+    fireEvent.click(screen.getByRole('button', { name: 'SHIFT' }))
+    fireEvent.click(screen.getByRole('button', { name: '←' }))
+
+    expect(onArrow).toHaveBeenCalledWith('left', {
+      shift: true,
+      ctrl: false,
+      alt: false,
+    })
+    expect(onSend).not.toHaveBeenCalled()
   })
 })

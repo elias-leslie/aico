@@ -12,7 +12,11 @@ import {
   isReconnectableStatus,
 } from '@/lib/utils/mobile-a-term-status'
 import { KeyboardKey } from './KeyboardKey'
-import { KEY_SEQUENCES } from './keyMappings'
+import {
+  type ArrowDirection,
+  arrowSequence,
+  KEY_SEQUENCES,
+} from './keyMappings'
 import { useModifiers } from './ModifierContext'
 import {
   type ATermInputHandler,
@@ -27,6 +31,10 @@ import {
 
 interface ControlBarProps {
   onSend: ATermInputHandler
+  onArrow?: (
+    direction: ArrowDirection,
+    modifiers: { shift: boolean; ctrl: boolean; alt: boolean },
+  ) => boolean
   // Modifiers
   ctrlActive?: boolean
   onCtrlToggle?: () => void
@@ -47,6 +55,7 @@ interface ControlBarProps {
 
 export function ControlBar({
   onSend,
+  onArrow,
   ctrlActive = false,
   onCtrlToggle,
   minimized = false,
@@ -60,7 +69,7 @@ export function ControlBar({
   keyboardSpacing = 'normal',
   collapseTarget = 'keyboard',
 }: ControlBarProps) {
-  const { resetModifiers } = useModifiers()
+  const { modifiers, resetModifiers, toggleModifier } = useModifiers()
   const [showModelPicker, setShowModelPicker] = useState(false)
   const [modelOptions, setModelOptions] = useState<ClaudeModelOption[]>([])
   const pickerRef = useRef<HTMLDivElement>(null)
@@ -111,22 +120,18 @@ export function ControlBar({
     resetModifiers()
   }, [ctrlActive, onCtrlToggle, resetModifiers])
 
-  // Arrow key handlers
-  const handleArrowLeft = useCallback(
-    () => onSend(KEY_SEQUENCES.ARROW_LEFT),
-    [onSend],
-  )
-  const handleArrowUp = useCallback(
-    () => onSend(KEY_SEQUENCES.ARROW_UP),
-    [onSend],
-  )
-  const handleArrowDown = useCallback(
-    () => onSend(KEY_SEQUENCES.ARROW_DOWN),
-    [onSend],
-  )
-  const handleArrowRight = useCallback(
-    () => onSend(KEY_SEQUENCES.ARROW_RIGHT),
-    [onSend],
+  const handleArrow = useCallback(
+    (direction: ArrowDirection) => {
+      const active = {
+        shift: modifiers.shift !== 'off',
+        ctrl: ctrlActive || modifiers.ctrl !== 'off',
+        alt: modifiers.alt !== 'off',
+      }
+      if (!onArrow?.(direction, active))
+        onSend(arrowSequence(direction, active))
+      clearModifiers()
+    },
+    [clearModifiers, ctrlActive, modifiers, onArrow, onSend],
   )
 
   // Special key handlers
@@ -289,6 +294,29 @@ export function ControlBar({
           ⇧TAB
         </button>
 
+        <button
+          type="button"
+          onPointerDown={keepKeyboardOpen}
+          onClick={() => toggleModifier('shift')}
+          aria-pressed={modifiers.shift !== 'off'}
+          className="px-2 text-xs font-medium transition-all duration-150 active:scale-95"
+          style={{
+            ...topRowButtonStyle,
+            backgroundColor:
+              modifiers.shift !== 'off'
+                ? 'var(--term-accent)'
+                : 'var(--term-bg-elevated)',
+            color:
+              modifiers.shift !== 'off'
+                ? 'var(--term-accent-foreground)'
+                : 'var(--term-text-muted)',
+            border: `1px solid ${modifiers.shift !== 'off' ? 'var(--term-accent)' : 'var(--term-border)'}`,
+          }}
+          title="Shift for next key; double tap to lock"
+        >
+          SHIFT
+        </button>
+
         {/* Spacer */}
         <div className="flex-1" />
 
@@ -413,7 +441,7 @@ export function ControlBar({
         >
           <KeyboardKey
             label="←"
-            onPress={handleArrowLeft}
+            onPress={() => handleArrow('left')}
             className="text-xl"
             style={{
               width: arrowButtonSize,
@@ -423,7 +451,7 @@ export function ControlBar({
           />
           <KeyboardKey
             label="↑"
-            onPress={handleArrowUp}
+            onPress={() => handleArrow('up')}
             className="text-xl"
             style={{
               width: arrowButtonSize,
@@ -433,7 +461,7 @@ export function ControlBar({
           />
           <KeyboardKey
             label="↓"
-            onPress={handleArrowDown}
+            onPress={() => handleArrow('down')}
             className="text-xl"
             style={{
               width: arrowButtonSize,
@@ -443,7 +471,7 @@ export function ControlBar({
           />
           <KeyboardKey
             label="→"
-            onPress={handleArrowRight}
+            onPress={() => handleArrow('right')}
             className="text-xl"
             style={{
               width: arrowButtonSize,

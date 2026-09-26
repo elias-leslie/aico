@@ -4,7 +4,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocalStorageState } from '@/lib/hooks/use-local-storage-state'
 import type { ConnectionStatus } from '../ATerm'
 import { ControlBar } from './ControlBar'
+import { moveComposeCaret } from './composeNavigation'
 import { FullKeyboard } from './FullKeyboard'
+import type { ArrowDirection } from './keyMappings'
 import { ModifierProvider } from './ModifierContext'
 import { NativeKeyboardInput } from './NativeKeyboardInput'
 import type {
@@ -97,6 +99,18 @@ export function MobileKeyboard({
   // The bar's keys no longer take focus (see `keepKeyboardOpen`), so the phone's
   // keyboard stays up on its own and there is nothing to re-focus afterwards.
   const handleRibbonSend = onSend
+  const handleArrow = useCallback(
+    (
+      direction: ArrowDirection,
+      modifiers: { shift: boolean; ctrl: boolean; alt: boolean },
+    ) => {
+      const input = nativeInputRef.current
+      if (!composeFocused || !input || modifiers.ctrl || modifiers.alt)
+        return false
+      return moveComposeCaret(input, direction, modifiers.shift)
+    },
+    [composeFocused],
+  )
 
   useEffect(() => {
     if (!isNativeMode || voiceActive || ribbonCollapsed) {
@@ -169,6 +183,7 @@ export function MobileKeyboard({
         ) : (
           <ControlBar
             onSend={handleRibbonSend}
+            onArrow={handleArrow}
             ctrlActive={ctrlActive}
             onCtrlToggle={handleCtrlToggle}
             minimized={isNativeMode ? ribbonCollapsed : minimized}

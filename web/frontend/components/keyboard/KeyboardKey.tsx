@@ -1,8 +1,8 @@
 'use client'
 
 import { clsx } from 'clsx'
-import { useCallback, useRef } from 'react'
-import type { ModifierState } from './types'
+import { useCallback } from 'react'
+import { keepKeyboardOpen, type ModifierState } from './types'
 
 interface KeyboardKeyProps {
   label: string
@@ -28,27 +28,9 @@ export function KeyboardKey({
   className,
   style,
 }: KeyboardKeyProps) {
-  // Track if touch event was used to prevent duplicate onClick
-  const touchedRef = useRef(false)
-
-  const handleTouchStart = useCallback(
-    (e: React.TouchEvent) => {
-      e.preventDefault() // Prevent click from firing
-      touchedRef.current = true
-      vibrate()
-      onPress()
-    },
-    [onPress],
-  )
-
   const handleClick = useCallback(() => {
-    // Only fire if this wasn't a touch event (for mouse/keyboard fallback)
-    if (!touchedRef.current) {
-      vibrate()
-      onPress()
-    }
-    // Reset for next interaction
-    touchedRef.current = false
+    vibrate()
+    onPress()
   }, [onPress])
 
   // Get styles based on state using CSS variables
@@ -79,7 +61,7 @@ export function KeyboardKey({
   return (
     <button
       type="button"
-      onTouchStart={handleTouchStart}
+      onPointerDown={keepKeyboardOpen}
       onClick={handleClick}
       className={clsx(
         // Base styles

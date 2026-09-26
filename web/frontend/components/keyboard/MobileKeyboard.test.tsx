@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
+import type { RefObject } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { MobileKeyboard } from './MobileKeyboard'
 
@@ -6,13 +7,25 @@ vi.mock('./ControlBar', () => ({
   ControlBar: ({
     minimized,
     onToggleMinimize,
+    onArrow,
   }: {
     minimized: boolean
     onToggleMinimize: () => void
+    onArrow?: (
+      direction: 'left',
+      modifiers: { shift: boolean; ctrl: boolean; alt: boolean },
+    ) => boolean
   }) => (
     <div>
       <span>{minimized ? 'minimized' : 'expanded'}</span>
       <button onClick={onToggleMinimize}>toggle minimize</button>
+      <button
+        onClick={() =>
+          onArrow?.('left', { shift: true, ctrl: false, alt: false })
+        }
+      >
+        shift left
+      </button>
     </div>
   ),
 }))
@@ -22,8 +35,19 @@ vi.mock('./FullKeyboard', () => ({
 }))
 
 vi.mock('./NativeKeyboardInput', () => ({
-  NativeKeyboardInput: () => (
-    <div data-testid="native-keyboard-input">native</div>
+  NativeKeyboardInput: ({
+    inputRef,
+    onFocusChange,
+  }: {
+    inputRef: RefObject<HTMLInputElement | null>
+    onFocusChange: (focused: boolean) => void
+  }) => (
+    <input
+      data-testid="native-keyboard-input"
+      ref={inputRef}
+      onFocus={() => onFocusChange(true)}
+      onBlur={() => onFocusChange(false)}
+    />
   ),
 }))
 
@@ -67,6 +91,28 @@ describe('MobileKeyboard', () => {
 
     expect(screen.getByTestId('native-keyboard-input')).toBeInTheDocument()
     expect(screen.queryByTestId('full-keyboard')).not.toBeInTheDocument()
+  })
+
+  it('moves the compose selection when Shift+Left is tapped', () => {
+    const onSend = vi.fn()
+    render(
+      <MobileKeyboard
+        onSend={onSend}
+        keyboardMode="native"
+        {...composeProps}
+      />,
+    )
+    const input = screen.getByTestId(
+      'native-keyboard-input',
+    ) as HTMLInputElement
+    fireEvent.focus(input)
+    fireEvent.change(input, { target: { value: 'answer' } })
+    input.setSelectionRange(6, 6)
+
+    fireEvent.click(screen.getByRole('button', { name: 'shift left' }))
+
+    expect([input.selectionStart, input.selectionEnd]).toEqual([5, 6])
+    expect(onSend).not.toHaveBeenCalled()
   })
 
   it('lets the voice panel own bottom safe-area padding while voice is active', () => {

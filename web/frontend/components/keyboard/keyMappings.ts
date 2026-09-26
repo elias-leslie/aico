@@ -35,6 +35,22 @@ export const KEY_SEQUENCES = {
   F12: '\x1b[24~',
 } as const
 
+export type ArrowDirection = 'left' | 'up' | 'down' | 'right'
+
+/** Xterm CSI modifier encoding for terminal arrow keys. */
+export function arrowSequence(
+  direction: ArrowDirection,
+  modifiers: { shift?: boolean; ctrl?: boolean; alt?: boolean } = {},
+): string {
+  const suffix = { up: 'A', down: 'B', right: 'C', left: 'D' }[direction]
+  const parameter =
+    1 +
+    (modifiers.shift ? 1 : 0) +
+    (modifiers.alt ? 2 : 0) +
+    (modifiers.ctrl ? 4 : 0)
+  return parameter === 1 ? `\x1b[${suffix}` : `\x1b[1;${parameter}${suffix}`
+}
+
 // Generate Ctrl+key sequence (Ctrl+A = 0x01, Ctrl+B = 0x02, etc.)
 export function withCtrl(char: string): string {
   const code = char.toLowerCase().charCodeAt(0)

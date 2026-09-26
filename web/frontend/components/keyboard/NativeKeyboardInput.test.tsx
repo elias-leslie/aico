@@ -3,6 +3,26 @@ import { describe, expect, it, vi } from 'vitest'
 import { NativeKeyboardInput } from './NativeKeyboardInput'
 
 describe('NativeKeyboardInput', () => {
+  it('keeps the compose field focused when Insert or Send is tapped', () => {
+    render(
+      <NativeKeyboardInput
+        sessionId="focus"
+        connected
+        onCommit={vi.fn().mockResolvedValue(true)}
+      />,
+    )
+    const input = screen.getByLabelText('Compose') as HTMLInputElement
+    fireEvent.change(input, { target: { value: 'draft' } })
+    input.focus()
+
+    for (const name of ['Insert', 'Send']) {
+      expect(fireEvent.pointerDown(screen.getByRole('button', { name }))).toBe(
+        false,
+      )
+      expect(document.activeElement).toBe(input)
+    }
+  })
+
   it('keeps autocorrect and middle edits local until Insert', async () => {
     const onCommit = vi.fn().mockResolvedValue(true)
     render(
