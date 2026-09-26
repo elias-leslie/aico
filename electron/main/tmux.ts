@@ -581,6 +581,11 @@ export function sessionIdTargetArgs(target: TmuxTarget): string[] {
   return targetArgs(target, ['display-message', '-p', '-t', target.session, '#{session_id}'])
 }
 
+/** Resolve the pane currently active in a session before an external insert. */
+export function activePaneIdTargetArgs(target: TmuxTarget): string[] {
+  return targetArgs(target, ['display-message', '-p', '-t', target.session, '#{pane_id}'])
+}
+
 /**
  * Every pane currently belonging to a session, with server-stable pane ID and
  * root PID. Lifecycle code must fail closed unless exactly one row is present;

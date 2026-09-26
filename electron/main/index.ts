@@ -63,7 +63,13 @@ import {
   refreshProjects,
   widgetCwd,
 } from './project'
-import { compactRef, parseSse, type SelectionRecord } from './selection'
+import { parseSse, type SelectionRecord } from './selection'
+import {
+  createSelectionDeliveryLease,
+  deliverSelectionToPane,
+  resolveActiveSelectionPane,
+  type SelectionDeliveryLease,
+} from './selection-delivery'
 import { bundledSidecar, Sidecar } from './sidecar'
 import {
   activateTmuxServer,
@@ -126,7 +132,6 @@ import {
   respawnTargetArgs,
   runInPaneTargetArgs,
   scrollbackPageBounds,
-  sendTextTargetArgs,
   serverIdentityEnvironmentTargetArgs,
   serverRosterArgs,
   sessionIdTargetArgs,
@@ -189,6 +194,7 @@ const ptyRefreshes = new Map<
   { pty: IPty | undefined; generation: number | undefined; request: Promise<void> }
 >()
 const sessionStartPromises = new Map<string, Promise<boolean>>()
+const selectionDeliveries = new Map<string, Promise<void>>()
 // BrowserWindow.id -> stable widget id. The widget id (not the volatile window
 // id) names the tmux session, so a widget reattaches the same session across
 // close/reopen and app restarts.
@@ -929,6 +935,10 @@ function managedEnvironment(
   // service PATH onto every new/respawned pane so context verification and the
   // command that actually runs cannot resolve different launcher binaries.
   environment.PATH = paneGatePath()
+  // The durable tmux server starts under the user manager, whose HOME may
+  // differ from this Aico process (for example in an isolated desktop run).
+  // Keep the pane's home aligned with the widget profile and its chosen cwd.
+  environment.HOME = process.env.HOME ?? homedir()
   if (row?.tmuxServerId) environment.AICO_TMUX_SERVER_ID = row.tmuxServerId
   return environment
 }
@@ -2450,6 +2460,8 @@ async function ensureSession(widgetId: string, size: PtySize): Promise<boolean> 
   // Presence checks can recover and launch an interrupted gate, so even an
   // apparent reattach is a lifecycle mutation. Hold the same per-widget token
   // used by replace/retire for the entire decision and recovery sequence.
+  const pendingSelection = selectionDeliveries.get(widgetId)
+  if (pendingSelection) await pendingSelection
   const lifecycleOwner = lifecycleOwners.acquire(widgetId)
   if (!lifecycleOwner) return false
   const knownServerId = getWidget(widgetId)?.tmuxServerId
@@ -2532,6 +2544,11 @@ async function respawnAndRelaunch(
     console.warn(`[aico] refusing to respawn externally-owned tmux session ${widgetId}`)
     return
   }
+  // A bounded selection send owns the current pane until tmux completes. Wait
+  // before acquiring the replacement token so a user-requested replace is not
+  // lost while an insert is in flight.
+  const pendingSelection = selectionDeliveries.get(widgetId)
+  if (pendingSelection) await pendingSelection
   const lifecycleOwner = lifecycleOwners.acquire(widgetId)
   if (!lifecycleOwner) {
     console.warn(`[aico:lifecycle] ${widgetId} already has a lifecycle operation in progress`)
@@ -3107,7 +3124,17 @@ function discardWidget(id: string): void {
 function drainWidgetRetire(id: string): void {
   const lifecycleOwner = widgetRetireIntents.take(id, lifecycleOwners)
   if (!lifecycleOwner) return
-  void discardWidgetOwned(id, lifecycleOwner)
+  void discardWidgetOwned(id, lifecycleOwner).catch((error: unknown) => {
+    // The owned path releases its token in finally, but an unexpected tmux,
+    // systemd, or store exception must still be observed. Keep the widget as
+    // the recovery surface and leave the exact failure in the application log.
+    console.error(`[aico:lifecycle] retirement failed widget=${id}:`, error)
+    try {
+      surfaceLifecycleBlock(id, 'retirement failed unexpectedly; copy session diagnostics')
+    } catch (notifyError) {
+      console.error(`[aico:lifecycle] retirement failure notice failed widget=${id}:`, notifyError)
+    }
+  })
 }
 
 function surfaceLifecycleBlock(widgetId: string, message: string): void {
@@ -3574,37 +3601,104 @@ function selectionTarget(): string | undefined {
 // adds their ask and submits), then flash a toast. Best-effort: empty payload or
 // no open widget no-ops silently.
 function deliverSelection(records: SelectionRecord[]): void {
-  const usable = records.filter((r) => r?.kind && r.kind !== 'empty')
-  if (!usable.length) return
+  if (!records.some((record) => record?.kind && record.kind !== 'empty')) return
   const targetId = selectionTarget()
   if (!targetId) return
-  if (lifecycleOwners.isHeld(targetId)) {
-    console.warn(`[aico:lifecycle] selection insert dropped while ${targetId} changes generation`)
-    windowForWidget(targetId)?.webContents.send('selection:toast', {
-      kind: 'Session changing',
-      snippet: 'Selection was not inserted while the terminal was being replaced.',
-    })
-    return
-  }
-  try {
-    execFileSync(
-      TMUX_BIN,
-      sendTextTargetArgs(tmuxPaneTargetForWidget(targetId), compactRef(usable)),
+  if (selectionDeliveries.has(targetId)) {
+    console.warn(
+      `[aico] selection insert dropped while ${targetId} already has an insert in flight`,
     )
-  } catch (err) {
-    console.warn('[aico] selection insert failed:', err)
+    windowForWidget(targetId)?.webContents.send('selection:toast', {
+      kind: 'Selection not inserted',
+      snippet: 'Another selection is still being inserted. Try again.',
+    })
     return
   }
-  const win = windowForWidget(targetId)
-  if (win) {
-    win.show()
-    win.focus()
-    const head = usable[0]
-    win.webContents.send('selection:toast', {
-      kind: usable.length > 1 ? `${usable.length} items` : head.kind,
-      snippet: usable.length > 1 ? usable.map((r) => r.snippet ?? '').join(' · ') : head.snippet,
-    })
+  const acquire = (): SelectionDeliveryLease | null => {
+    const win = windowForWidget(targetId)
+    const owner = lifecycleOwners.acquire(targetId)
+    if (!owner) {
+      console.warn(`[aico:lifecycle] selection insert dropped while ${targetId} changes generation`)
+      win?.webContents.send('selection:toast', {
+        kind: 'Session changing',
+        snippet: 'Selection was not inserted while the terminal was being replaced.',
+      })
+      return null
+    }
+    return createSelectionDeliveryLease(
+      () => {
+        const row = getWidget(targetId)
+        if (!win || !row || quitting) return null
+        const generation = ownershipGeneration(row)
+        const isCurrent = (): boolean => {
+          const latest = getWidget(targetId)
+          if (quitting || win.isDestroyed() || windowForWidget(targetId) !== win || !latest)
+            return false
+          if (
+            latest.sessionId !== row.sessionId ||
+            latest.externalTmuxSession !== row.externalTmuxSession ||
+            latest.externalTmuxSocket !== row.externalTmuxSocket
+          )
+            return false
+          const current = ownershipGeneration(latest)
+          return (
+            Object.entries(generation).every(
+              ([key, value]) => current[key as keyof WidgetOwnershipGeneration] === value,
+            ) && !widgetRetireIntents.isPending(targetId)
+          )
+        }
+        let target: TmuxTarget | Promise<TmuxTarget>
+        if (row.externalTmuxSession) {
+          // External sessions have no persisted pane id. Pin their active pane
+          // once so a delayed send cannot follow a different active pane.
+          const session = tmuxTargetForWidget(targetId)
+          target = resolveActiveSelectionPane(session, async (args) => {
+            const { stdout } = await execFileAsync(TMUX_BIN, args, {
+              env: terminalClientEnv(),
+              timeout: TMUX_QUERY_TIMEOUT_MS,
+            })
+            return stdout
+          })
+        } else if (row.paneId && row.tmuxSessionId && row.tmuxServerId) {
+          target = tmuxPaneTargetForWidget(targetId)
+        } else {
+          console.warn(`[aico:lifecycle] selection insert dropped for unbound pane ${targetId}`)
+          return null
+        }
+        return {
+          target,
+          isCurrent,
+          delivered: (usable) => {
+            win.show()
+            win.focus()
+            const head = usable[0]
+            win.webContents.send('selection:toast', {
+              kind: usable.length > 1 ? `${usable.length} items` : head.kind,
+              snippet:
+                usable.length > 1 ? usable.map((r) => r.snippet ?? '').join(' · ') : head.snippet,
+            })
+          },
+          release: () => releaseLifecycleOwner(targetId, owner, row.tmuxServerId),
+        }
+      },
+      () => releaseLifecycleOwner(targetId, owner),
+    )
   }
+  const request = deliverSelectionToPane(
+    records,
+    acquire,
+    async (args) => {
+      await execFileAsync(TMUX_BIN, args, {
+        env: terminalClientEnv(),
+        timeout: TMUX_QUERY_TIMEOUT_MS,
+      })
+    },
+    (error) => console.warn('[aico] selection insert failed:', error),
+  ).catch((error) => console.warn('[aico] selection delivery cleanup failed:', error))
+  selectionDeliveries.set(targetId, request)
+  void request.then(() => {
+    if (selectionDeliveries.get(targetId) === request) selectionDeliveries.delete(targetId)
+  })
 }
 
 // Push-to-talk: route the toggle to the widget the user is talking to — the

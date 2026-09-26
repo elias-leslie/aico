@@ -75,10 +75,15 @@ export class ScrollbackOverlay {
   private fit: FitAddon | null = null
   private entering = false
   private loadingOlder = false
+  private generation = 0
   private lines: string[] = []
   private fromLine = 0
   private totalLines = 0
   active = false
+
+  get opening(): boolean {
+    return this.entering
+  }
 
   constructor(
     private readonly deps: OverlayDeps,
@@ -154,12 +159,8 @@ export class ScrollbackOverlay {
     return true
   }
 
-  private async captureTailPage(): Promise<boolean> {
-    const page = await this.deps.capturePage({ count: PAGE_LINES })
-    return this.applyTailPage(page)
-  }
-
   private writeOverlay(initialWheelDeltaLines: number, restoreLine?: number): void {
+    const generation = this.generation
     const term = this.ensureTerm()
     this.active = true
     this.host.style.display = 'block'
@@ -167,7 +168,7 @@ export class ScrollbackOverlay {
 
     term.reset()
     term.write(writeText(this.lines), () => {
-      if (!this.active) return
+      if (!this.active || generation !== this.generation) return
       if (restoreLine !== undefined) {
         term.scrollToLine(restoreLine)
       } else {
@@ -180,13 +181,15 @@ export class ScrollbackOverlay {
 
   private async loadOlder(): Promise<void> {
     const term = this.term
-    if (!term || this.loadingOlder || this.fromLine <= 0) return
+    if (!this.active || !term || this.loadingOlder || this.fromLine <= 0) return
+    const generation = this.generation
     this.loadingOlder = true
     try {
       const count = Math.min(PAGE_LINES, this.fromLine)
       const nextFromLine = this.fromLine - count
       const beforeViewportY = term.buffer.active.viewportY
       const page = await this.deps.capturePage({ fromLine: nextFromLine, count })
+      if (!this.active || generation !== this.generation) return
       const older = olderPageLines(page)
       if (!older.length) return
 
@@ -195,9 +198,9 @@ export class ScrollbackOverlay {
       this.totalLines = Math.max(this.totalLines, page.totalLines)
       this.writeOverlay(0, beforeViewportY + older.length)
     } catch (err) {
-      console.warn('[aico] scrollback older page failed:', err)
+      if (generation === this.generation) console.warn('[aico] scrollback older page failed:', err)
     } finally {
-      this.loadingOlder = false
+      if (generation === this.generation) this.loadingOlder = false
     }
   }
 
@@ -238,26 +241,37 @@ export class ScrollbackOverlay {
    */
   async enter(initialWheelDeltaLines: number): Promise<void> {
     if (this.active || this.entering) return
+    const generation = ++this.generation
     this.entering = true
+    // Let Escape cancel the capture itself, not only an overlay that finished
+    // rendering. A slow tmux page can otherwise leave the user waiting with no
+    // way to dismiss the pending entry.
+    window.addEventListener('keydown', this.onKeydown, true)
     try {
-      await this.captureTailPage()
-      if (!this.lines.length) return
+      const page = await this.deps.capturePage({ count: PAGE_LINES })
+      if (generation !== this.generation || !this.applyTailPage(page)) return
 
       this.writeOverlay(initialWheelDeltaLines)
-      window.addEventListener('keydown', this.onKeydown, true)
     } catch (err) {
-      console.warn('[aico] scrollback overlay failed to open:', err)
+      if (generation === this.generation)
+        console.warn('[aico] scrollback overlay failed to open:', err)
     } finally {
-      this.entering = false
+      if (generation === this.generation) {
+        this.entering = false
+        if (!this.active) window.removeEventListener('keydown', this.onKeydown, true)
+      }
     }
   }
 
   dismiss(): void {
+    ++this.generation
+    this.entering = false
+    this.loadingOlder = false
+    window.removeEventListener('keydown', this.onKeydown, true)
     if (!this.active) return
     this.active = false
     this.host.style.display = 'none'
     this.term?.clearSelection()
-    window.removeEventListener('keydown', this.onKeydown, true)
     this.deps.onDismiss()
   }
 

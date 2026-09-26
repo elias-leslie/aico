@@ -579,17 +579,13 @@ function readPaneMode(): PaneMode | Promise<PaneMode> {
 
 void readPaneMode()
 
-/** True while `overlay.enter` is in flight, so a second wheel of the same flick
- * does not open it again before `overlay.active` has flipped. */
-let overlayOpening = false
-
 function applyWheel(
   wheel: { deltaY: number; deltaMode: number; clientX: number; clientY: number },
   mode: PaneMode,
 ): void {
   const action = scrollbackWheelAction({
     deltaY: wheel.deltaY,
-    overlayActive: overlay.active || overlayOpening,
+    overlayActive: overlay.active || overlay.opening,
     mouseReportingActive: mode.mouseReporting,
     alternateScreen: mode.alternateScreen,
     tuiSlug,
@@ -608,10 +604,7 @@ function applyWheel(
     return
   }
 
-  overlayOpening = true
-  void overlay.enter(wheelLineDelta(wheel.deltaY)).finally(() => {
-    overlayOpening = false
-  })
+  void overlay.enter(wheelLineDelta(wheel.deltaY))
 }
 
 host.addEventListener(
@@ -624,7 +617,7 @@ host.addEventListener(
     if (tuiSlug === 'shell') {
       const action = scrollbackWheelAction({
         deltaY: e.deltaY,
-        overlayActive: overlay.active || overlayOpening,
+        overlayActive: overlay.active || overlay.opening,
         mouseReportingActive: mouseReportingActive(term),
         alternateScreen: term.buffer.active.type === 'alternate',
         tuiSlug,
@@ -634,10 +627,7 @@ host.addEventListener(
       e.stopPropagation()
       e.stopImmediatePropagation()
       if (action === 'consume') return
-      overlayOpening = true
-      void overlay.enter(wheelLineDelta(e.deltaY)).finally(() => {
-        overlayOpening = false
-      })
+      void overlay.enter(wheelLineDelta(e.deltaY))
       return
     }
 
@@ -646,7 +636,7 @@ host.addEventListener(
     if (
       !claimsWheelForPane({
         deltaY: e.deltaY,
-        overlayActive: overlay.active || overlayOpening,
+        overlayActive: overlay.active || overlay.opening,
         tuiSlug,
       })
     ) {
