@@ -26,7 +26,7 @@ import { PaneStatusBadge, shouldShowPaneStatus } from './PaneStatusBadge'
 import type { UnifiedATermHeaderProps } from './types'
 
 function formatActionLabel(label: string) {
-  return label.replace(/\b\w/g, (character) => character.toUpperCase())
+  return label.charAt(0).toUpperCase() + label.slice(1)
 }
 
 export const UnifiedATermHeaderContent = memo(

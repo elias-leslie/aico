@@ -263,15 +263,15 @@ export function ATermManagerModal({
               onCreateProjectATerm={handleCreateProjectATerm}
             />
             <SessionSection
-              title="Other Attachables"
-              countLabel={`${visibleOtherSessions.length} attachable${visibleOtherSessions.length === 1 ? '' : 's'}`}
+              title="Other sessions"
+              countLabel={`${visibleOtherSessions.length} session${visibleOtherSessions.length === 1 ? '' : 's'}`}
               total={
                 unmatchedExternalSessions.length + unmatchedDetachedPanes.length
               }
               visible={visibleOtherSessions}
               searchQuery={trimmedSearch}
-              emptyLabel="other attachables"
-              actionLabel="Attach"
+              emptyLabel="other sessions"
+              actionLabel="Open"
               onAction={handleAttachOption}
             />
             {noMatches && <NoMatchesBanner trimmedSearch={trimmedSearch} />}

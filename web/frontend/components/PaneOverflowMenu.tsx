@@ -45,7 +45,7 @@ export interface PaneOverflowMenuProps {
  */
 export function PaneOverflowMenu({
   onDetach,
-  detachTooltip = 'Detach pane: open this pane in its own window.',
+  detachTooltip = 'Open this view in a separate window. The session keeps running.',
   onClosePane,
   closePaneLabel = 'Close view',
   closePaneTooltip = 'Close this view. The session keeps running and can be opened again.',
@@ -211,7 +211,7 @@ export function PaneOverflowMenu({
           {onDetach && (
             <MenuItemButton
               icon={<LogOut className="w-3.5 h-3.5" />}
-              label="Detach Pane"
+              label="Open in new window"
               onClick={handleDetach}
               isMobile={isMobile}
               title={detachTooltip}

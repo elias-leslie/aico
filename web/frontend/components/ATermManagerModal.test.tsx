@@ -116,7 +116,7 @@ describe('ATermManagerModal', () => {
 
     renderModal({ onCreateGenericATerm })
 
-    fireEvent.click(screen.getByText('New Ad-Hoc A-Term'))
+    fireEvent.click(screen.getByText('New session outside a project'))
 
     expect(onCreateGenericATerm).toHaveBeenCalledTimes(1)
   })
@@ -146,7 +146,7 @@ describe('ATermManagerModal', () => {
       ],
     })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Attach' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }))
 
     expect(onAttachExternalSession).toHaveBeenCalledWith('codex-a-term')
     expect(onClose).not.toHaveBeenCalled()
@@ -195,7 +195,7 @@ describe('ATermManagerModal', () => {
         target: { value: 'codex-agent-hub' },
       },
     )
-    fireEvent.click(screen.getByRole('button', { name: 'Attach' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }))
 
     expect(onAttachExternalSession).toHaveBeenCalledWith('codex-agent-hub')
   })
@@ -252,7 +252,7 @@ describe('ATermManagerModal', () => {
       ],
     })
 
-    expect(screen.getByText('Other Attachables')).toBeInTheDocument()
+    expect(screen.getByText('Other sessions')).toBeInTheDocument()
     expect(
       screen.getByRole('button', { name: /codex-unknown/i }),
     ).toBeInTheDocument()
@@ -301,7 +301,7 @@ describe('ATermManagerModal', () => {
       ],
     })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Attach' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }))
 
     expect(onAttachDetachedPane).toHaveBeenCalledWith('pane-a-term')
   })
@@ -314,7 +314,7 @@ describe('ATermManagerModal', () => {
     })
 
     expect(
-      screen.getByText(/No A-Terms match "missing-workspace"/),
+      screen.getByText(/No sessions match "missing-workspace"/),
     ).toBeInTheDocument()
   })
 

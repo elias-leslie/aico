@@ -40,8 +40,8 @@ function formatProjectDescription(
   }
   const suffix =
     attachableCount === 1
-      ? '1 attachable session'
-      : `${attachableCount} attachable sessions`
+      ? '1 running session'
+      : `${attachableCount} running sessions`
   return `${path} · ${suffix}`
 }
 
@@ -294,7 +294,7 @@ export function ProjectSessionRow({
       )}
       {attachTarget && (
         <ActionButton
-          label="Attach"
+          label="Open"
           onClick={() => onAttachSession(attachTarget)}
         />
       )}
@@ -371,13 +371,13 @@ export function ModalHeader() {
             fontFamily: 'var(--font-ui)',
           }}
         >
-          A-Term Manager
+          Sessions
         </Dialog.Title>
         <Dialog.Description
           className="mt-0.5 text-xs"
           style={{ color: 'var(--term-text-muted)' }}
         >
-          Create, attach, or manage A-Term sessions across projects.
+          Start a session or open one that is already running.
         </Dialog.Description>
       </div>
       <Dialog.Close asChild>
@@ -387,7 +387,7 @@ export function ModalHeader() {
           onMouseEnter={closeButtonHover.onMouseEnter}
           onMouseLeave={closeButtonHover.onMouseLeave}
           style={closeButtonHover.style}
-          aria-label="Close A-Term manager"
+          aria-label="Close sessions"
         >
           <X size={16} />
         </button>
@@ -460,7 +460,7 @@ export function QuickStartSection({
         <PanelsTopLeft size={16} style={iconStyle} />
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-medium truncate">
-            New Ad-Hoc A-Term
+            New session outside a project
           </span>
           <span
             className="block text-[11px] truncate"
@@ -499,13 +499,13 @@ export function NoMatchesBanner({ trimmedSearch }: { trimmedSearch: string }) {
       }}
     >
       <p className="text-sm" style={{ color: 'var(--term-text-muted)' }}>
-        No A-Terms match &quot;{trimmedSearch}&quot;
+        No sessions match &quot;{trimmedSearch}&quot;
       </p>
       <p
         className="text-xs mt-1"
         style={{ color: 'var(--term-text-muted)', opacity: 0.6 }}
       >
-        Try a different search term or create a new A-Term.
+        Try a different search term or start a new session.
       </p>
     </div>
   )

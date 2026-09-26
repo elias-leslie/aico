@@ -15,7 +15,7 @@ export function AddATermButton({
   isMobile,
 }: AddATermButtonProps) {
   const title = canAddPane
-    ? 'Open A-Term'
+    ? 'New or open session'
     : 'Pane limit reached for the current viewport. Close one or widen the window.'
 
   return (

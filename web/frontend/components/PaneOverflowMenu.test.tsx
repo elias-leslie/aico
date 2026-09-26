@@ -22,12 +22,14 @@ describe('PaneOverflowMenu', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Pane actions' }))
 
-    const detachItem = screen.getByRole('menuitem', { name: 'Detach Pane' })
+    const detachItem = screen.getByRole('menuitem', {
+      name: 'Open in new window',
+    })
     const closePaneItem = screen.getByRole('menuitem', { name: 'Close view' })
     const closeItem = screen.getByRole('menuitem', { name: 'End session' })
 
     expect(detachItem.getAttribute('title')).toBe(
-      'Detach pane: open this pane in its own window.',
+      'Open this view in a separate window. The session keeps running.',
     )
     expect(closePaneItem.getAttribute('title')).toBe(
       'Close this view. The session keeps running and can be opened again.',
@@ -80,7 +82,9 @@ describe('PaneOverflowMenu', () => {
     render(<PaneOverflowMenu onDetach={onDetach} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Pane actions' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Detach Pane' }))
+    fireEvent.click(
+      screen.getByRole('menuitem', { name: 'Open in new window' }),
+    )
 
     expect(onDetach).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
