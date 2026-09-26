@@ -69,3 +69,17 @@ def test_get_project_identity_for_root_rejects_path_outside_allowed_roots(
     (outside / "project.identity.json").write_text('{"project": {"id": "outside"}}')
 
     assert branding.get_project_identity_for_root(outside) is None
+
+
+def test_workspace_discovery_ignores_managed_release_manifest(monkeypatch, tmp_path) -> None:
+    release = tmp_path / "services" / "projects" / "a-term" / "releases" / "build" / "source"
+    release.mkdir(parents=True)
+    manifest = release / "project.identity.json"
+    manifest.write_text('{"project": {"id": "a-term", "display_name": "A-Term"}}')
+    monkeypatch.setattr(branding, "REPO_ROOT", release)
+    monkeypatch.setattr(branding, "_MANIFEST_PATH", manifest)
+    branding.list_workspace_project_identities.cache_clear()
+    try:
+        assert branding.list_workspace_project_identities() == ()
+    finally:
+        branding.list_workspace_project_identities.cache_clear()

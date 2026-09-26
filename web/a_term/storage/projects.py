@@ -28,11 +28,26 @@ def _normalize_row(row: dict[str, Any] | None) -> dict[str, Any] | None:
     }
 
 
+def _owner_catalog_available(cur: Any) -> bool:
+    cur.execute(
+        "SELECT to_regclass('public.project_retirement_decisions') AS retirement_table"
+    )
+    row = cur.fetchone()
+    return bool(row and row["retirement_table"])
+
+
 def list_projects() -> list[dict[str, Any]]:
-    """List locally registered projects."""
+    """List discoverable projects without changing the shared registry."""
     with get_connection() as conn, conn.cursor(row_factory=dict_row) as cur:
+        retirement_decisions_exist = _owner_catalog_available(cur)
+        active_filter = (
+            " AND NOT EXISTS (SELECT 1 FROM project_retirement_decisions d WHERE d.project_id = projects.id)"
+            if retirement_decisions_exist
+            else ""
+        )
         cur.execute(
-            f"SELECT {_PROJECT_FIELDS} FROM projects ORDER BY lower(name), lower(id)"
+            f"SELECT {_PROJECT_FIELDS} FROM projects WHERE category <> 'testing'"
+            f"{active_filter} ORDER BY lower(name), lower(id)"
         )
         rows = cur.fetchall()
     projects: list[dict[str, Any]] = []
@@ -142,13 +157,16 @@ def create_project(*, name: str | None, root_path: str) -> dict[str, Any]:
 
 
 def sync_workspace_projects() -> int:
-    """Upsert sibling manifest-backed projects into the local registry."""
+    """Add missing checkout projects without overwriting an owner's records."""
     manifests = list_workspace_project_identities()
     if not manifests:
         return 0
 
     now = datetime.now(tz=UTC)
-    with get_connection() as conn, conn.cursor() as cur:
+    inserted = 0
+    with get_connection() as conn, conn.cursor(row_factory=dict_row) as cur:
+        if _owner_catalog_available(cur):
+            return 0
         for manifest in manifests:
             project_id = str(manifest["id"])
             display_name = str(manifest["display_name"])
@@ -171,17 +189,7 @@ def sync_workspace_projects() -> int:
                     created_at
                 )
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (id) DO UPDATE SET
-                    name = EXCLUDED.name,
-                    base_url = CASE
-                        WHEN EXCLUDED.base_url = '' THEN projects.base_url
-                        ELSE EXCLUDED.base_url
-                    END,
-                    health_endpoint = EXCLUDED.health_endpoint,
-                    frontend_port = COALESCE(EXCLUDED.frontend_port, projects.frontend_port),
-                    backend_port = COALESCE(EXCLUDED.backend_port, projects.backend_port),
-                    root_path = EXCLUDED.root_path,
-                    category = EXCLUDED.category
+                ON CONFLICT (id) DO NOTHING
                 """,
                 (
                     project_id,
@@ -195,5 +203,6 @@ def sync_workspace_projects() -> int:
                     now,
                 ),
             )
+            inserted += cur.rowcount
         conn.commit()
-    return len(manifests)
+    return inserted

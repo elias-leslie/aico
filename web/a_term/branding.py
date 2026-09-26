@@ -137,11 +137,13 @@ def get_project_identity_for_root(root_path: str | Path) -> dict[str, Any] | Non
 
 @lru_cache
 def list_workspace_project_identities() -> tuple[dict[str, Any], ...]:
-    """Return manifest-backed workspace project identities, including this repo."""
-    manifest_paths: list[Path] = [_MANIFEST_PATH]
+    """Return checkout manifests, excluding copied managed-release sources."""
+    manifest_paths: list[Path] = []
     projects_root = _workspace_projects_root()
     if projects_root is not None:
         manifest_paths.extend(sorted(projects_root.glob("*/project.identity.json")))
+    elif (REPO_ROOT / ".git").exists():
+        manifest_paths.append(_MANIFEST_PATH)
 
     entries: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
