@@ -19,9 +19,15 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from ..logging_config import get_logger
 from ..rate_limit import limiter
 from ..services import lifecycle
-from ..services.session_close import close_session
+from ..services.session_close import SessionOwnerError, close_session
 from ..storage import sessions as a_term_store
-from ..utils.tmux import get_external_agent_tmux_session, list_external_tmux_sessions
+from ..utils.tmux import (
+    get_external_agent_tmux_session,
+    get_tmux_session_name,
+    list_external_tmux_sessions,
+    run_tmux_command,
+)
+from .handlers.internal_auth import require_internal_token
 from .validators import validate_uuid
 
 logger = get_logger(__name__)
@@ -53,6 +59,7 @@ class ATermSessionResponse(BaseModel):
     agent_state: str | None = None  # canonical agent state field
     claude_state: str | None = None  # not_started, starting, running, stopped, error
     tmux_session_name: str | None = None
+    tmux_session_id: str | None = None
     tmux_pane_id: str | None = None
     tmux_socket: str | None = None
     tmux_source: str | None = None
@@ -85,6 +92,13 @@ class UpdateSessionRequest(BaseModel):
 
     name: str | None = Field(default=None, max_length=255)
     display_order: int | None = None
+
+
+class InternalEndSessionRequest(BaseModel):
+    """The tmux generation Aico observed when it attached an A-Term session."""
+
+    expected_tmux_session: str
+    expected_pane_id: str
 
 
 # ============================================================================
@@ -173,7 +187,42 @@ async def delete_session(request: Request, session_id: str) -> dict[str, Any]:
     if not get_external_agent_tmux_session(session_id):
         validate_uuid(session_id)
 
-    return close_session(session_id)
+    try:
+        return close_session(session_id)
+    except SessionOwnerError as error:
+        raise HTTPException(status_code=error.status_code, detail=error.detail) from error
+
+
+@router.post("/api/internal/sessions/{session_id}/end")
+async def end_owned_session(
+    request: Request,
+    session_id: str,
+    body: InternalEndSessionRequest,
+) -> dict[str, Any]:
+    """End a native A-Term session only when its live pane matches Aico's observation."""
+    require_internal_token(request)
+    validate_uuid(session_id)
+    session = a_term_store.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="A-Term session not found") from None
+
+    expected_name = get_tmux_session_name(session_id)
+    if body.expected_tmux_session != expected_name:
+        raise HTTPException(status_code=409, detail="A-Term session generation changed") from None
+    success, output = run_tmux_command(
+        ["list-panes", "-t", expected_name, "-F", "#{session_name}\t#{session_id}\t#{pane_id}"]
+    )
+    panes = [line.split("\t") for line in output.splitlines()] if success else []
+    if (
+        len(panes) != 1
+        or len(panes[0]) != 3
+        or panes[0][0] != expected_name
+        or not panes[0][1].startswith("$")
+        or panes[0][2] != body.expected_pane_id
+    ):
+        raise HTTPException(status_code=409, detail="A-Term session pane changed or is unavailable") from None
+
+    return close_session(session_id, expected_tmux_session_id=panes[0][1])
 
 
 @router.post("/api/a-term/sessions/{session_id}/reset", response_model=ATermSessionResponse)

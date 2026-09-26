@@ -189,6 +189,53 @@ def _external_tmux_sources() -> tuple[ExternalTmuxSource, ...]:
     return (*_EXTERNAL_TMUX_SOURCES, *_catalogued_aico_tmux_sources())
 
 
+def _catalogued_aico_widgets() -> dict[tuple[str, str], dict[str, str | None]]:
+    """Read Aico's display metadata without making its database an ownership authority."""
+    state_dir = _aico_state_dir()
+    if state_dir is None:
+        return {}
+    database_path = state_dir / _AICO_DB_FILENAME
+    if not database_path.is_file():
+        return {}
+    connection: sqlite3.Connection | None = None
+    try:
+        connection = sqlite3.connect(
+            f"{database_path.as_uri()}?mode=ro",
+            uri=True,
+            timeout=0.0,
+            isolation_level=None,
+        )
+        connection.execute("PRAGMA query_only = ON")
+        rows = connection.execute(
+            """
+            SELECT id, tmux_server_id, name, project_id, project_root, tool
+            FROM widgets
+            WHERE tmux_allocation_state = 'bound'
+              AND external_tmux_session IS NULL
+              AND tmux_server_id IS NOT NULL
+            """
+        ).fetchall()
+    except (OSError, sqlite3.Error, ValueError) as error:
+        logger.debug("aico_widget_catalog_unavailable", path=str(database_path), error=str(error))
+        return {}
+    finally:
+        if connection is not None:
+            connection.close()
+    return {
+        (f"aico-{server_id}", f"aico-{widget_id}"): {
+            "name": name,
+            "project_id": project_id,
+            "working_dir": project_root,
+            "mode": tool,
+        }
+        for widget_id, server_id, name, project_id, project_root, tool in rows
+        if isinstance(widget_id, str)
+        and re.fullmatch(r"[0-9a-f]{8}", widget_id)
+        and isinstance(server_id, str)
+        and _AICO_SERVER_ID_PATTERN.fullmatch(server_id)
+    }
+
+
 def _pkg() -> object:
     """Return the a_term.utils.tmux package module (avoids circular import)."""
     return sys.modules["a_term.utils.tmux"]
@@ -302,13 +349,14 @@ def list_external_tmux_sessions() -> list[dict[str, object]]:
     """List externally created tmux sessions that A-Term can attach to."""
     pkg = _pkg()
     sessions: dict[str, dict[str, object]] = {}
+    aico_widgets = _catalogued_aico_widgets()
     for source in _external_tmux_sources():
         list_args = [
             "list-panes",
             "-a",
             "-F",
-            "#{session_name}\t#{pane_id}\t#{pane_current_path}\t#{pane_current_command}"
-            "\t#{pane_pid}",
+            "#{session_name}\t#{session_id}\t#{pane_id}\t#{pane_current_path}"
+            "\t#{pane_current_command}\t#{pane_pid}",
         ]
         if source.socket_name:
             success, output = pkg.run_tmux_command(  # type: ignore[union-attr]
@@ -322,26 +370,32 @@ def list_external_tmux_sessions() -> list[dict[str, object]]:
 
         for line in output.splitlines():
             parts = line.split("\t")
-            if len(parts) != 5:
+            if len(parts) == 6:
+                session_name, tmux_session_id, pane_id, working_dir, current_command, pane_pid = parts
+            elif len(parts) == 5:
+                # Support older mocked tmux output and retain read-only discovery.
+                session_name, pane_id, working_dir, current_command, pane_pid = parts
+                tmux_session_id = ""
+            else:
                 continue
-            session_name, pane_id, working_dir, current_command, pane_pid = parts
             if not session_name or not _session_matches_source(source, session_name):
                 continue
             mode, agent_state = _infer_external_mode(session_name, current_command, pane_pid)
             if mode == "shell" and not source.include_shell:
                 continue
+            metadata = aico_widgets.get((source.id, session_name), {})
             external_id = source.external_id(session_name)
             existing = sessions.get(external_id)
             if existing and existing.get("working_dir"):
                 continue
             sessions[external_id] = {
                 "id": external_id,
-                "name": session_name,
+                "name": metadata.get("name") or session_name,
                 "user_id": None,
-                "project_id": _infer_project_id(working_dir or None),
-                "working_dir": working_dir or None,
+                "project_id": metadata.get("project_id") or _infer_project_id(working_dir or None),
+                "working_dir": metadata.get("working_dir") or working_dir or None,
                 "display_order": 0,
-                "mode": mode,
+                "mode": metadata.get("mode") or mode,
                 "session_number": 0,
                 "is_alive": True,
                 "created_at": None,
@@ -349,6 +403,7 @@ def list_external_tmux_sessions() -> list[dict[str, object]]:
                 "agent_state": agent_state,
                 "claude_state": agent_state,
                 "tmux_session_name": session_name,
+                "tmux_session_id": tmux_session_id or None,
                 "tmux_pane_id": pane_id or None,
                 "tmux_socket": source.socket_name,
                 "tmux_source": source.id,

@@ -250,7 +250,7 @@ describe('usePaneRenderer', () => {
     ])
     expect(headerProps[0]?.showCleanButton).toBe(true)
     expect(headerProps[0]?.onReset).toBeUndefined()
-    expect(headerProps[0]?.closeTooltip).toBe('Detach a-term')
+    expect(headerProps[0]?.closeTooltip).toBe('Close view')
   })
 
   it('routes pane upload actions to the pane session', () => {

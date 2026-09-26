@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import pytest
+
 from a_term.services import lifecycle
+from a_term.utils.tmux import TmuxError
 
 
 def test_create_session_reassigns_resurrected_session_to_requested_pane() -> None:
@@ -38,3 +41,25 @@ def test_create_session_reassigns_resurrected_session_to_requested_pane() -> Non
         "dead-session",
         "/srv/workspaces/projects/agent-hub",
     )
+
+
+def test_delete_preserves_record_when_tmux_kill_fails() -> None:
+    with (
+        patch("a_term.services.lifecycle.run_tmux_command", return_value=(False, "no server running")),
+        patch("a_term.services.lifecycle.a_term_store.delete_session") as delete_record,
+        pytest.raises(TmuxError),
+    ):
+        lifecycle.delete_session("session-1")
+
+    delete_record.assert_not_called()
+
+
+def test_strict_delete_targets_observed_tmux_generation() -> None:
+    with (
+        patch("a_term.services.lifecycle.run_tmux_command", return_value=(True, "")) as tmux,
+        patch("a_term.services.lifecycle.a_term_store.delete_session", return_value=True) as delete_record,
+    ):
+        lifecycle.delete_session("session-1", expected_tmux_session_id="$4")
+
+    tmux.assert_called_once_with(["kill-session", "-t", "$4"])
+    delete_record.assert_called_once_with("session-1")

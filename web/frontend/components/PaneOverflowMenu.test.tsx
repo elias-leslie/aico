@@ -23,17 +23,17 @@ describe('PaneOverflowMenu', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Pane actions' }))
 
     const detachItem = screen.getByRole('menuitem', { name: 'Detach Pane' })
-    const closePaneItem = screen.getByRole('menuitem', { name: 'Close Pane' })
-    const closeItem = screen.getByRole('menuitem', { name: 'Close Session' })
+    const closePaneItem = screen.getByRole('menuitem', { name: 'Close view' })
+    const closeItem = screen.getByRole('menuitem', { name: 'End session' })
 
     expect(detachItem.getAttribute('title')).toBe(
       'Detach pane: open this pane in its own window.',
     )
     expect(closePaneItem.getAttribute('title')).toBe(
-      'Close pane: remove it from this layout but keep the session running.',
+      'Close this view. The session keeps running and can be opened again.',
     )
     expect(closeItem.getAttribute('title')).toBe(
-      'Close session: terminate the underlying tmux session.',
+      'End session: stop its process in every view.',
     )
 
     expect(
@@ -92,7 +92,7 @@ describe('PaneOverflowMenu', () => {
     render(<PaneOverflowMenu onClosePane={onClosePane} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Pane actions' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Close Pane' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Close view' }))
 
     expect(onClosePane).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()

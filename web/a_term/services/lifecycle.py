@@ -30,18 +30,24 @@ logger = get_logger(__name__)
 # ---------------------------------------------------------------------------
 # Low-level helpers
 # ---------------------------------------------------------------------------
-def kill_tmux_session(session_id: str, ignore_missing: bool = True) -> bool:
+def kill_tmux_session(
+    session_id: str,
+    ignore_missing: bool = True,
+    *,
+    expected_tmux_session_id: str | None = None,
+) -> bool:
     """Kill a tmux session. Returns True if killed, False if not found."""
     session_name = get_tmux_session_name(session_id)
-    success, error = run_tmux_command(["kill-session", "-t", session_name])
+    target = expected_tmux_session_id or session_name
+    success, error = run_tmux_command(["kill-session", "-t", target])
 
     if not success:
-        if ignore_missing and "session not found" in error.lower():
+        if ignore_missing and (
+            "session not found" in error.lower() or "can't find session" in error.lower()
+        ):
             logger.info("tmux_session_not_found", session=session_name)
             return False
-        if not ignore_missing:
-            raise TmuxError(f"Failed to kill tmux session: {error}")
-        return False
+        raise TmuxError(f"Failed to kill tmux session: {error}")
 
     logger.info("tmux_session_killed", session=session_name)
     return True
@@ -138,9 +144,13 @@ def create_session(
     return session_id
 
 
-def delete_session(session_id: str) -> bool:
+def delete_session(session_id: str, *, expected_tmux_session_id: str | None = None) -> bool:
     """Delete a a_term session atomically. Idempotent."""
-    kill_tmux_session(session_id, ignore_missing=True)
+    kill_tmux_session(
+        session_id,
+        ignore_missing=expected_tmux_session_id is None,
+        expected_tmux_session_id=expected_tmux_session_id,
+    )
     deleted = a_term_store.delete_session(session_id)
     if deleted:
         logger.info("session_deleted", session_id=session_id)

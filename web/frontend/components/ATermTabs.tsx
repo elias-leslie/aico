@@ -1,11 +1,19 @@
 'use client'
 
 import { clsx } from 'clsx'
+import { useState } from 'react'
 import { useATermOrchestration } from '@/lib/hooks/use-a-term-orchestration'
 import { useVisualViewportHeight } from '@/lib/hooks/use-visual-viewport-height'
+import {
+  type ATermSlot,
+  getSlotName,
+  getSlotSessionId,
+  type PaneSlot,
+} from '@/lib/utils/slot'
 import { ATermContent } from './ATermContent'
 import { ATermManagerModal } from './ATermManagerModal'
 import { ATermSkeleton } from './ATermSkeleton'
+import { ConfirmationDialog } from './ConfirmationDialog'
 import { KeyboardShortcuts } from './KeyboardShortcuts'
 
 interface ATermTabsProps {
@@ -22,6 +30,11 @@ export function ATermTabs({
   className,
 }: ATermTabsProps) {
   useVisualViewportHeight()
+  const [sessionToEnd, setSessionToEnd] = useState<ATermSlot | PaneSlot | null>(
+    null,
+  )
+  const [endSessionPending, setEndSessionPending] = useState(false)
+  const [endSessionError, setEndSessionError] = useState<string | null>(null)
 
   const {
     // Core state
@@ -132,6 +145,29 @@ export function ATermTabs({
     handleVoiceReset,
   } = useATermOrchestration({ projectId, projectPath, detachedPaneId })
 
+  const confirmEndSession = async () => {
+    if (!sessionToEnd || endSessionPending) return
+    setEndSessionPending(true)
+    setEndSessionError(null)
+    try {
+      await handleSlotCloseSession(sessionToEnd)
+      setSessionToEnd(null)
+    } catch (error) {
+      setEndSessionError(
+        error instanceof Error
+          ? error.message
+          : 'Could not end the session. Try again.',
+      )
+    } finally {
+      setEndSessionPending(false)
+    }
+  }
+  const pendingSessionId = sessionToEnd ? getSlotSessionId(sessionToEnd) : null
+  const pendingSessionName = sessionToEnd
+    ? (sessions.find((session) => session.id === pendingSessionId)?.name ??
+      getSlotName(sessionToEnd))
+    : ''
+
   // Loading state - show skeleton
   if (isLoading) {
     return (
@@ -175,7 +211,10 @@ export function ATermTabs({
         onSlotReset={handleSlotReset}
         onSlotDetach={handleSlotDetach}
         onSlotClose={handleSlotClose}
-        onSlotCloseSession={handleSlotCloseSession}
+        onSlotCloseSession={(slot) => {
+          setEndSessionError(null)
+          setSessionToEnd(slot)
+        }}
         onSlotClean={handleSlotClean}
         canAddPane={canAddPane()}
         handleOpenSettings={() => setShowSettings(true)}
@@ -225,6 +264,22 @@ export function ATermTabs({
         handleVoiceToggle={handleVoiceToggle}
         handleVoiceReset={handleVoiceReset}
         className={className}
+      />
+
+      <ConfirmationDialog
+        isOpen={sessionToEnd !== null}
+        title="End session?"
+        message={`End “${pendingSessionName}”? This stops its process in every view.`}
+        confirmText="End session"
+        isPending={endSessionPending}
+        error={endSessionError}
+        onConfirm={() => {
+          void confirmEndSession()
+        }}
+        onCancel={() => {
+          setSessionToEnd(null)
+          setEndSessionError(null)
+        }}
       />
 
       {/* A-Term Manager Modal */}

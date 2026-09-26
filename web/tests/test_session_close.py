@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from a_term.services.session_close import close_session
+import httpx
+import pytest
+
+from a_term.services.session_close import SessionOwnerError, close_session
 
 
 def _make_session(
@@ -132,24 +135,100 @@ def test_close_shell_session_keeps_pane_with_agent() -> None:
     delete_pane_mock.assert_not_called()
 
 
-def test_close_session_kills_external_tmux_session() -> None:
+def test_close_aico_session_delegates_to_verified_owner() -> None:
     external = {
-        "id": "codex-summitflow",
-        "tmux_session_name": "codex-summitflow",
+        "id": "tmux:aico-abcd1234:aico-deadbeef",
+        "tmux_session_name": "aico-deadbeef",
+        "tmux_session_id": "$4",
+        "tmux_pane_id": "%8",
+        "tmux_source": "aico-abcd1234",
     }
+    requests: list[httpx.Request] = []
+
+    def owner_response(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.method == "GET":
+            return httpx.Response(200, json={
+                "owner": "aico", "widgetId": "deadbeef", "sessionId": "aico-widget-deadbeef",
+                "generation": "generation-1", "tmuxSessionId": "$4", "paneId": "%8",
+            })
+        return httpx.Response(200, json={"status": "ended"})
 
     with (
         patch("a_term.services.session_close.get_external_agent_tmux_session", return_value=external),
-        patch("a_term.services.session_close.run_tmux_command", return_value=(True, "")) as run_mock,
+        patch("a_term.services.session_close.httpx.HTTPTransport", return_value=httpx.MockTransport(owner_response)),
     ):
-        result = close_session("codex-summitflow")
+        result = close_session(external["id"])
 
     assert result == {
         "deleted": True,
-        "id": "codex-summitflow",
+        "id": external["id"],
         "next_session_id": None,
         "pane_id": None,
         "pane_deleted": False,
         "is_external": True,
     }
-    run_mock.assert_called_once_with(["kill-session", "-t", "codex-summitflow"])
+    assert [request.method for request in requests] == ["GET", "POST"]
+    assert requests[1].content == b'{"generation":"generation-1"}'
+
+
+def test_close_aico_session_preserves_session_on_stale_generation() -> None:
+    external = {
+        "tmux_session_name": "aico-deadbeef", "tmux_session_id": "$4",
+        "tmux_pane_id": "%8", "tmux_source": "aico-abcd1234",
+    }
+    requests: list[httpx.Request] = []
+
+    def stale_response(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json={
+            "owner": "aico", "widgetId": "deadbeef", "generation": "stale",
+            "tmuxSessionId": "$5", "paneId": "%8",
+        })
+
+    with (
+        patch("a_term.services.session_close.get_external_agent_tmux_session", return_value=external),
+        patch("a_term.services.session_close.httpx.HTTPTransport", return_value=httpx.MockTransport(stale_response)),
+        pytest.raises(SessionOwnerError) as error,
+    ):
+        close_session("external")
+
+    assert error.value.status_code == 409
+    assert [request.method for request in requests] == ["GET"]
+
+
+def test_close_unknown_external_owner_fails_closed() -> None:
+    with (
+        patch("a_term.services.session_close.get_external_agent_tmux_session", return_value={
+            "tmux_session_name": "codex-historical", "tmux_source": "default",
+        }),
+        pytest.raises(SessionOwnerError) as error,
+    ):
+        close_session("codex-historical")
+
+    assert error.value.status_code == 409
+
+
+def test_close_aico_session_reports_unconfirmed_end_without_success() -> None:
+    external = {
+        "tmux_session_name": "aico-deadbeef", "tmux_session_id": "$4",
+        "tmux_pane_id": "%8", "tmux_source": "aico-abcd1234",
+    }
+
+    def failed_post(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            raise httpx.ConnectError("owner disconnected", request=request)
+        return httpx.Response(200, json={
+            "owner": "aico", "widgetId": "deadbeef", "generation": "generation-1",
+            "tmuxSessionId": "$4", "paneId": "%8",
+        })
+
+    with (
+        patch("a_term.services.session_close.get_external_agent_tmux_session", return_value=external),
+        patch("a_term.services.session_close.httpx.HTTPTransport", return_value=httpx.MockTransport(failed_post)),
+        pytest.raises(SessionOwnerError) as error,
+    ):
+        close_session("external")
+
+    assert error.value.status_code == 503
+    assert "did not confirm" in error.value.detail

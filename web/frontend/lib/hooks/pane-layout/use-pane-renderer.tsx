@@ -200,7 +200,7 @@ export function usePaneRenderer({
             onRefresh={
               onRefresh ? () => onRefresh(slot) : () => refreshPane(panelId)
             }
-            closeTooltip={isExternalSlot ? 'Detach a-term' : 'Close pane'}
+            closeTooltip="Close view"
             onFiles={
               paneId && sessionId
                 ? () => setFilesTarget({ paneId, sessionId })

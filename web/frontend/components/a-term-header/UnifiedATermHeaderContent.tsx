@@ -87,8 +87,8 @@ export const UnifiedATermHeaderContent = memo(
       !isMobile && slot.type === 'project' && !!onProjectSwitch
     const showHeaderName = isMobile || !showProjectSwitcher
     const showStatusBadge = shouldShowPaneStatus(connectionStatus)
-    const closePaneLabel = formatActionLabel(closeTooltip ?? 'Close pane')
-    const closePaneTooltip = `${closePaneLabel}: remove it from this layout but keep the session running.`
+    const closePaneLabel = formatActionLabel(closeTooltip ?? 'Close view')
+    const closePaneTooltip = `${closePaneLabel}. The session keeps running and can be opened again.`
     const swapTargets = useMemo(
       () =>
         !isMobile && onSwapWith && allSlots

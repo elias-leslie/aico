@@ -189,3 +189,42 @@ def test_missing_or_old_aico_catalog_is_harmless(aico_state_dir: Path) -> None:
 def test_relative_aico_state_override_fails_closed() -> None:
     with patch.dict(os.environ, {"A_TERM_AICO_STATE_DIR": "relative/aico"}):
         assert external_tmux._catalogued_aico_tmux_sources() == ()
+
+
+def test_catalogued_widget_enriches_live_generation_descriptor(aico_state_dir: Path) -> None:
+    server_id = "a" * 32
+    connection = _create_catalog(aico_state_dir)
+    _insert_server(connection, aico_state_dir, server_id)
+    connection.execute(
+        """CREATE TABLE widgets (
+          id TEXT, tmux_server_id TEXT, name TEXT, project_id TEXT,
+          project_root TEXT, tool TEXT, tmux_allocation_state TEXT,
+          external_tmux_session TEXT
+        )"""
+    )
+    connection.execute(
+        "INSERT INTO widgets VALUES (?, ?, ?, ?, ?, ?, ?, NULL)",
+        ("deadbeef", server_id, "Aico task", "aico", "/projects/aico", "codex", "bound"),
+    )
+    connection.commit()
+    connection.close()
+
+    def fake_tmux(args, check=False, socket_name=None):
+        del args, check
+        if socket_name == _managed_socket(aico_state_dir, server_id):
+            return True, "aico-deadbeef\t$4\t%8\t/projects/aico\tbash\t0"
+        return False, "no server"
+
+    with (
+        patch.dict(os.environ, {"A_TERM_AICO_STATE_DIR": str(aico_state_dir)}),
+        patch("a_term.utils.tmux.run_tmux_command", side_effect=fake_tmux),
+    ):
+        sessions = external_tmux.list_external_tmux_sessions()
+
+    assert len(sessions) == 1
+    assert sessions[0]["name"] == "Aico task"
+    assert sessions[0]["project_id"] == "aico"
+    assert sessions[0]["working_dir"] == "/projects/aico"
+    assert sessions[0]["mode"] == "codex"
+    assert sessions[0]["tmux_session_id"] == "$4"
+    assert sessions[0]["tmux_pane_id"] == "%8"

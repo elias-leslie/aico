@@ -12,10 +12,13 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 from unittest.mock import patch
 
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
+
+from a_term.services.session_close import SessionOwnerError
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -392,3 +395,61 @@ def test_delete_session_returns_next_session_id_for_visible_pane_transition(test
     assert response.json()["next_session_id"] == next_sid
     assert response.json()["pane_id"] == pane_id
     assert response.json()["pane_deleted"] is False
+
+
+def test_delete_external_owner_failure_does_not_report_success(test_app: TestClient) -> None:
+    external_id = "tmux:aico-abcd1234:aico-deadbeef"
+    with (
+        patch("a_term.api.sessions.get_external_agent_tmux_session", return_value={"id": external_id}),
+        patch(
+            "a_term.api.sessions.close_session",
+            side_effect=SessionOwnerError(503, "Aico owner service is unavailable; session was preserved"),
+        ),
+    ):
+        response = test_app.delete(f"/api/a-term/sessions/{external_id}")
+
+    assert response.status_code == 503
+    assert "preserved" in response.json()["detail"]
+
+
+def test_internal_end_requires_bearer_and_matching_pane(test_app: TestClient) -> None:
+    sid = str(uuid.uuid4())
+    body = {"expected_tmux_session": f"summitflow-{sid}", "expected_pane_id": "%9"}
+    cast(FastAPI, test_app.app).state.internal_token = "secret"
+    with patch("a_term.api.sessions.close_session") as close_mock:
+        unauthorized = test_app.post(f"/api/internal/sessions/{sid}/end", json=body)
+    assert unauthorized.status_code == 403
+    close_mock.assert_not_called()
+
+    with (
+        patch("a_term.api.sessions.a_term_store.get_session", return_value=_make_session(sid)),
+        patch("a_term.api.sessions.run_tmux_command", return_value=(True, f"summitflow-{sid}\t$4\t%10")),
+        patch("a_term.api.sessions.close_session") as close_mock,
+    ):
+        stale = test_app.post(
+            f"/api/internal/sessions/{sid}/end",
+            json=body,
+            headers={"Authorization": "Bearer secret"},
+        )
+    assert stale.status_code == 409
+    close_mock.assert_not_called()
+
+
+def test_internal_end_uses_native_close_after_generation_check(test_app: TestClient) -> None:
+    sid = str(uuid.uuid4())
+    body = {"expected_tmux_session": f"summitflow-{sid}", "expected_pane_id": "%9"}
+    cast(FastAPI, test_app.app).state.internal_token = "secret"
+    result = {"deleted": True, "id": sid, "is_external": False}
+    with (
+        patch("a_term.api.sessions.a_term_store.get_session", return_value=_make_session(sid)),
+        patch("a_term.api.sessions.run_tmux_command", return_value=(True, f"summitflow-{sid}\t$4\t%9")),
+        patch("a_term.api.sessions.close_session", return_value=result) as close_mock,
+    ):
+        response = test_app.post(
+            f"/api/internal/sessions/{sid}/end",
+            json=body,
+            headers={"Authorization": "Bearer secret"},
+        )
+    assert response.status_code == 200
+    assert response.json()["deleted"] is True
+    close_mock.assert_called_once_with(sid, expected_tmux_session_id="$4")

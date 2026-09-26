@@ -11,6 +11,8 @@ interface ConfirmationDialogProps {
   confirmText?: string
   cancelText?: string
   variant?: 'danger' | 'warning'
+  isPending?: boolean
+  error?: string | null
   onConfirm: () => void
   onCancel: () => void
 }
@@ -26,6 +28,8 @@ export function ConfirmationDialog({
   confirmText = 'Confirm',
   cancelText = 'Cancel',
   variant = 'danger',
+  isPending = false,
+  error = null,
   onConfirm,
   onCancel,
 }: ConfirmationDialogProps) {
@@ -39,7 +43,7 @@ export function ConfirmationDialog({
     <Dialog.Root
       open={isOpen}
       onOpenChange={(open) => {
-        if (!open) onCancel()
+        if (!open && !isPending) onCancel()
       }}
     >
       <Dialog.Portal>
@@ -109,6 +113,15 @@ export function ConfirmationDialog({
               >
                 {message}
               </Dialog.Description>
+              {error && (
+                <p
+                  role="alert"
+                  className="mt-3 text-sm"
+                  style={{ color: 'var(--term-error)' }}
+                >
+                  {error}
+                </p>
+              )}
             </div>
 
             <div
@@ -122,6 +135,7 @@ export function ConfirmationDialog({
                 type="button"
                 data-testid="confirm-dialog-cancel"
                 onClick={onCancel}
+                disabled={isPending}
                 className="rounded-md px-4 py-2 text-xs transition-colors"
                 style={{
                   backgroundColor: 'transparent',
@@ -146,6 +160,8 @@ export function ConfirmationDialog({
                 ref={confirmButtonRef}
                 data-testid="confirm-dialog-confirm"
                 onClick={onConfirm}
+                disabled={isPending}
+                aria-busy={isPending}
                 className="rounded-md px-4 py-2 text-xs font-medium transition-colors"
                 style={{
                   backgroundColor: accentColor,
@@ -160,7 +176,7 @@ export function ConfirmationDialog({
                   e.currentTarget.style.filter = 'brightness(1)'
                 }}
               >
-                {confirmText}
+                {isPending ? 'Ending session…' : confirmText}
               </button>
             </div>
           </div>

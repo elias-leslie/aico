@@ -47,10 +47,10 @@ export function PaneOverflowMenu({
   onDetach,
   detachTooltip = 'Detach pane: open this pane in its own window.',
   onClosePane,
-  closePaneLabel = 'Close Pane',
-  closePaneTooltip = 'Close pane: remove it from this layout but keep the session running.',
+  closePaneLabel = 'Close view',
+  closePaneTooltip = 'Close this view. The session keeps running and can be opened again.',
   onCloseSession,
-  closeSessionTooltip = 'Close session: terminate the underlying tmux session.',
+  closeSessionTooltip = 'End session: stop its process in every view.',
   onRefresh,
   onReset,
   onSettings,
@@ -229,7 +229,7 @@ export function PaneOverflowMenu({
           {onCloseSession && (
             <MenuItemButton
               icon={<Trash2 className="w-3.5 h-3.5" />}
-              label="Close Session"
+              label="End session"
               onClick={handleCloseSession}
               isMobile={isMobile}
               variant="danger"
