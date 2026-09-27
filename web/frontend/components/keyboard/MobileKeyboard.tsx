@@ -198,6 +198,7 @@ export function MobileKeyboard({
             keyboardSize={keyboardSize}
             keyboardSpacing={keyboardSpacing}
             collapseTarget={isNativeMode ? 'ribbon' : 'keyboard'}
+            showShiftControl={isNativeMode}
           />
         )}
 

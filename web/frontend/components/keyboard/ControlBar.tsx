@@ -51,6 +51,7 @@ interface ControlBarProps {
   keyboardSize?: KeyboardSizePreset
   keyboardSpacing?: KeyboardSpacingPreset
   collapseTarget?: 'keyboard' | 'ribbon'
+  showShiftControl?: boolean
 }
 
 export function ControlBar({
@@ -68,8 +69,9 @@ export function ControlBar({
   keyboardSize = 'medium',
   keyboardSpacing = 'normal',
   collapseTarget = 'keyboard',
+  showShiftControl = false,
 }: ControlBarProps) {
-  const { modifiers, resetModifiers } = useModifiers()
+  const { modifiers, resetModifiers, toggleModifier } = useModifiers()
   const [showToolbox, setShowToolbox] = useState(false)
   const [showModelPicker, setShowModelPicker] = useState(false)
   const [modelOptions, setModelOptions] = useState<ClaudeModelOption[]>([])
@@ -171,7 +173,7 @@ export function ControlBar({
   )
   const topRowButtonStyle = {
     height: controlButtonSize,
-    minWidth: remSize(36),
+    minWidth: remSize(showShiftControl ? 32 : 36),
     borderRadius: spacing.keyRadius,
   }
 
@@ -327,6 +329,32 @@ export function ControlBar({
         >
           TAB
         </button>
+
+        {showShiftControl && (
+          <button
+            type="button"
+            onPointerDown={keepKeyboardOpen}
+            onClick={() => toggleModifier('shift')}
+            aria-label="Shift"
+            aria-pressed={modifiers.shift !== 'off'}
+            title="Shift for next key; double tap to lock"
+            className="min-w-0 flex-1 text-lg font-medium transition-all duration-150 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+            style={{
+              ...topRowButtonStyle,
+              backgroundColor:
+                modifiers.shift !== 'off'
+                  ? 'var(--term-accent)'
+                  : 'var(--term-bg-elevated)',
+              color:
+                modifiers.shift !== 'off'
+                  ? 'var(--term-accent-foreground)'
+                  : 'var(--term-text-muted)',
+              border: `1px solid ${modifiers.shift !== 'off' ? 'var(--term-accent)' : 'var(--term-border)'}`,
+            }}
+          >
+            ⇧
+          </button>
+        )}
 
         <button
           type="button"

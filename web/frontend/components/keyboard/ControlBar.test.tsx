@@ -3,7 +3,7 @@ import type { ComponentProps } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getClaudeModelOptions } from '@/lib/utils/agent-hub-models'
 import { ControlBar } from './ControlBar'
-import { ModifierProvider, useModifiers } from './ModifierContext'
+import { ModifierProvider } from './ModifierContext'
 
 vi.mock('@/lib/utils/agent-hub-models', () => ({
   getClaudeModelOptions: vi.fn().mockResolvedValue([]),
@@ -39,28 +39,15 @@ function renderControlBar(
   return { onSend, onReconnect }
 }
 
-function ShiftControl() {
-  const { modifiers, toggleModifier } = useModifiers()
-  return (
-    <button
-      type="button"
-      onClick={() => toggleModifier('shift')}
-      aria-pressed={modifiers.shift !== 'off'}
-    >
-      Shift
-    </button>
-  )
-}
-
-function renderWithSharedShift() {
+function renderNativeControlBar() {
   const onSend = vi.fn()
   render(
     <ModifierProvider>
-      <ShiftControl />
       <ControlBar
         onSend={onSend}
         onVoice={vi.fn()}
         onToggleMinimize={vi.fn()}
+        showShiftControl
       />
     </ModifierProvider>,
   )
@@ -276,10 +263,11 @@ describe('ControlBar', () => {
   })
 
   it('sends Shift+Tab from shared one-shot Shift, then plain Tab', () => {
-    const { onSend } = renderWithSharedShift()
+    const { onSend } = renderNativeControlBar()
     const shift = screen.getByRole('button', { name: 'Shift' })
     const tab = screen.getByRole('button', { name: 'Tab' })
 
+    expect(fireEvent.pointerDown(shift)).toBe(false)
     fireEvent.click(shift)
     expect(shift).toHaveAttribute('aria-pressed', 'true')
     fireEvent.click(tab)
@@ -290,7 +278,7 @@ describe('ControlBar', () => {
   })
 
   it('sends Shift+Left once, then an unmodified Left', () => {
-    const { onSend } = renderWithSharedShift()
+    const { onSend } = renderNativeControlBar()
 
     fireEvent.click(screen.getByRole('button', { name: 'Shift' }))
     fireEvent.click(screen.getByRole('button', { name: 'Show arrow keys' }))
@@ -311,8 +299,7 @@ describe('ControlBar', () => {
     const onSend = vi.fn()
     render(
       <ModifierProvider>
-        <ShiftControl />
-        <ControlBar onSend={onSend} onArrow={onArrow} />
+        <ControlBar onSend={onSend} onArrow={onArrow} showShiftControl />
       </ModifierProvider>,
     )
 
