@@ -158,7 +158,7 @@ describe('NativeKeyboardInput', () => {
     resolveCommit(false)
     await waitFor(() =>
       expect(screen.getByRole('alert')).toHaveTextContent(
-        'Your draft is still here',
+        'your draft is saved',
       ),
     )
     expect(field).toHaveValue('keep me')

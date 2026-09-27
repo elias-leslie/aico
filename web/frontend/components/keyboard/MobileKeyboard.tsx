@@ -9,7 +9,7 @@ import { moveComposeCaret } from './composeNavigation'
 import { FullKeyboard } from './FullKeyboard'
 import type { ArrowDirection } from './keyMappings'
 import { ModifierProvider } from './ModifierContext'
-import { NativeKeyboardInput } from './NativeKeyboardInput'
+import { isComposePending, NativeKeyboardInput } from './NativeKeyboardInput'
 import type {
   ATermInputHandler,
   KeyboardSizePreset,
@@ -61,7 +61,6 @@ export function MobileKeyboard({
     false,
   )
   const nativeInputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null)
-  const composeBusyRef = useRef(false)
   const lastSessionIdentityRef = useRef<string | null>(null)
   const viewportBeforeFocusRef = useRef<number | null>(null)
   const keyboardSeenRef = useRef(false)
@@ -72,12 +71,12 @@ export function MobileKeyboard({
     setMinimized(!minimized)
   }, [minimized, setMinimized])
   const revealTerminal = useCallback(() => {
-    if (composeBusyRef.current) return false
+    if (isComposePending(storageScopeId, sessionId)) return false
     if (!nativeEditingOpen) return true
     nativeInputRef.current?.blur()
     flushSync(() => setNativeEditingOpen(false))
     return true
-  }, [nativeEditingOpen])
+  }, [nativeEditingOpen, sessionId, storageScopeId])
 
   const handleToggleNativeEditing = useCallback(() => {
     if (nativeEditingOpen) {
@@ -95,6 +94,7 @@ export function MobileKeyboard({
   // Wrapped onSend that handles CTRL modifier
   const handleSend = useCallback(
     (key: string) => {
+      if (isComposePending(storageScopeId, sessionId)) return
       if (ctrlActive && key.length === 1) {
         // Send Ctrl+key sequence (ASCII control codes)
         const char = key.toLowerCase()
@@ -107,7 +107,7 @@ export function MobileKeyboard({
       }
       onSend(key)
     },
-    [ctrlActive, onSend],
+    [ctrlActive, onSend, sessionId, storageScopeId],
   )
 
   const handleCtrlToggle = useCallback(() => {
@@ -115,21 +115,21 @@ export function MobileKeyboard({
   }, [])
   const handleNativeCtrlLetter = useCallback(
     (letter: string) => {
-      if (!ctrlActive || composeBusyRef.current) return
+      if (!ctrlActive || isComposePending(storageScopeId, sessionId)) return
       onSend(String.fromCharCode(letter.toLowerCase().charCodeAt(0) - 96))
       setCtrlActive(false)
     },
-    [ctrlActive, onSend],
+    [ctrlActive, onSend, sessionId, storageScopeId],
   )
   const handleRibbonSend = useCallback(
     (key: string) => {
-      if (!composeBusyRef.current) onSend(key)
+      if (!isComposePending(storageScopeId, sessionId)) onSend(key)
     },
-    [onSend],
+    [onSend, sessionId, storageScopeId],
   )
-  const handleComposeBusyChange = useCallback((busy: boolean) => {
-    composeBusyRef.current = busy
-  }, [])
+  const handleVoice = useCallback(() => {
+    if (!isComposePending(storageScopeId, sessionId)) onVoice?.()
+  }, [onVoice, sessionId, storageScopeId])
   const handleArrow = useCallback(
     (
       direction: ArrowDirection,
@@ -204,7 +204,6 @@ export function MobileKeyboard({
             ctrlActive={ctrlActive}
             onCtrlLetter={handleNativeCtrlLetter}
             onCtrlCancel={() => setCtrlActive(false)}
-            onBusyChange={handleComposeBusyChange}
           />
         )}
         <ControlBar
@@ -217,7 +216,7 @@ export function MobileKeyboard({
           onToggleMinimize={
             isNativeMode ? handleToggleNativeEditing : handleToggleMinimize
           }
-          onVoice={onVoice}
+          onVoice={onVoice ? handleVoice : undefined}
           voiceActive={voiceActive}
           activeMode={activeMode}
           connectionStatus={connectionStatus}

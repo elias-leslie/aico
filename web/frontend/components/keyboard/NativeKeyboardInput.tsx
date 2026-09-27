@@ -7,6 +7,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  useSyncExternalStore,
 } from 'react'
 import {
   KEYBOARD_SPACING_METRICS,
@@ -19,6 +20,18 @@ import {
 
 type ComposeAction = 'insert' | 'send'
 const drafts = new Map<string, string>()
+const draftRevisions = new Map<string, number>()
+const pendingCommits = new Map<string, symbol>()
+const pendingListeners = new Set<() => void>()
+
+function subscribePending(listener: () => void) {
+  pendingListeners.add(listener)
+  return () => pendingListeners.delete(listener)
+}
+
+function notifyPending() {
+  for (const listener of pendingListeners) listener()
+}
 
 interface NativeKeyboardInputProps {
   sessionId: string
@@ -39,7 +52,6 @@ interface NativeKeyboardInputProps {
   ctrlActive?: boolean
   onCtrlLetter?: (letter: string) => void
   onCtrlCancel?: () => void
-  onBusyChange?: (busy: boolean) => void
 }
 
 function draftStorageKey(scope: string | null | undefined, sessionId: string) {
@@ -53,6 +65,18 @@ function readDraft(key: string): string {
 function saveDraft(key: string, value: string) {
   if (value) drafts.set(key, value)
   else drafts.delete(key)
+  const revision = (draftRevisions.get(key) ?? 0) + 1
+  draftRevisions.set(key, revision)
+  return revision
+}
+
+export function isComposePending(
+  scope: string | null | undefined,
+  sessionId: string | null | undefined,
+) {
+  return Boolean(
+    sessionId && pendingCommits.has(draftStorageKey(scope, sessionId)),
+  )
 }
 
 export function NativeKeyboardInput({
@@ -70,7 +94,6 @@ export function NativeKeyboardInput({
   ctrlActive = false,
   onCtrlLetter,
   onCtrlCancel,
-  onBusyChange,
 }: NativeKeyboardInputProps) {
   const fallbackRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null)
   const resolvedRef = inputRef ?? fallbackRef
@@ -83,6 +106,11 @@ export function NativeKeyboardInput({
   const storageKey = draftStorageKey(storageScopeId, sessionId)
   const [value, setValue] = useState(() => readDraft(storageKey))
   const [busy, setBusy] = useState(false)
+  const pendingForSession = useSyncExternalStore(
+    subscribePending,
+    () => pendingCommits.has(storageKey),
+    () => false,
+  )
   const [error, setError] = useState(false)
   const composingRef = useRef(false)
   const busyRef = useRef(false)
@@ -91,8 +119,8 @@ export function NativeKeyboardInput({
   const inputHeight = remSize(NATIVE_INPUT_HEIGHTS[keyboardSize])
 
   useEffect(() => {
-    setValue(readDraft(storageKey))
-  }, [storageKey])
+    if (!pendingForSession) setValue(readDraft(storageKey))
+  }, [storageKey, pendingForSession])
 
   useEffect(() => {
     onDraftPresenceChange?.(value.length > 0)
@@ -117,23 +145,33 @@ export function NativeKeyboardInput({
 
   const commit = useCallback(
     async (action: ComposeAction) => {
-      if (busyRef.current || composingRef.current || !connected) return
+      if (
+        busyRef.current ||
+        pendingCommits.has(storageKey) ||
+        composingRef.current ||
+        !connected
+      )
+        return
       // Read the DOM value so a phone's last autocorrect replacement is used.
       const text = resolvedRef.current?.value ?? value
       if (!text || (action === 'send' && /[\r\n]/.test(text))) return
 
       // The phone may commit autocorrect into the DOM just before Enter,
       // before React has dispatched change. Retain that exact text on failure.
-      saveDraft(storageKey, text)
+      const submittedRevision = saveDraft(storageKey, text)
       setValue(text)
+      const operation = Symbol(storageKey)
+      pendingCommits.set(storageKey, operation)
+      notifyPending()
       busyRef.current = true
-      onBusyChange?.(true)
       setBusy(true)
       setError(false)
       try {
         if (await onCommit(sessionId, text, action)) {
-          saveDraft(storageKey, '')
-          setValue('')
+          if (draftRevisions.get(storageKey) === submittedRevision) {
+            saveDraft(storageKey, '')
+            setValue('')
+          }
         } else {
           setError(true)
         }
@@ -141,19 +179,14 @@ export function NativeKeyboardInput({
         setError(true)
       } finally {
         busyRef.current = false
-        onBusyChange?.(false)
+        if (pendingCommits.get(storageKey) === operation) {
+          pendingCommits.delete(storageKey)
+          notifyPending()
+        }
         setBusy(false)
       }
     },
-    [
-      connected,
-      onBusyChange,
-      onCommit,
-      resolvedRef,
-      sessionId,
-      storageKey,
-      value,
-    ],
+    [connected, onCommit, resolvedRef, sessionId, storageKey, value],
   )
 
   const handleChange = useCallback(
@@ -198,7 +231,7 @@ export function NativeKeyboardInput({
             rows={1}
             aria-label="Compose"
             value={value}
-            readOnly={busy}
+            readOnly={busy || pendingForSession}
             onChange={handleChange}
             onCompositionStart={() => {
               composingRef.current = true
@@ -249,7 +282,13 @@ export function NativeKeyboardInput({
             type="button"
             onPointerDown={keepKeyboardOpen}
             onClick={() => void commit('send')}
-            disabled={!connected || !value || /[\r\n]/.test(value) || busy}
+            disabled={
+              !connected ||
+              !value ||
+              /[\r\n]/.test(value) ||
+              busy ||
+              pendingForSession
+            }
             className="rounded-md border px-2 text-xs font-semibold disabled:opacity-50 focus-visible:ring-2"
             style={{
               minHeight: inputHeight,
@@ -267,7 +306,8 @@ export function NativeKeyboardInput({
             className="text-xs"
             style={{ color: 'var(--term-error)' }}
           >
-            Could not send. Your draft is still here.
+            Send was interrupted. Check the terminal before retrying; your draft
+            is saved.
           </span>
         )}
         {/\r|\n/.test(value) && (
