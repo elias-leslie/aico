@@ -181,7 +181,7 @@ export function useATermTabsState({
   } = useATermSettings(activeSessionProjectId)
   const [showSettings, setShowSettings] = useState(false)
   const [keyboardMode, setKeyboardMode] =
-    useLocalStorageState<MobileKeyboardMode>('a-term-keyboard-mode', 'custom')
+    useLocalStorageState<MobileKeyboardMode>('a-term-keyboard-mode', 'native')
   const [keyboardSize, setKeyboardSize] =
     useLocalStorageState<KeyboardSizePreset>('a-term-keyboard-size', 'medium')
   const [keyboardSpacing, setKeyboardSpacing] =

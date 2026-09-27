@@ -38,4 +38,16 @@ describe('moveComposeCaret', () => {
     input.value = 'answer'
     expect(moveComposeCaret(input, 'up', false)).toBe(false)
   })
+
+  it('moves and extends a textarea selection without changing its draft', () => {
+    const input = document.createElement('textarea')
+    input.value = 'one two'
+    input.setSelectionRange(7, 7)
+
+    expect(moveComposeCaret(input, 'left', true)).toBe(true)
+    expect([input.selectionStart, input.selectionEnd]).toEqual([6, 7])
+    expect(moveComposeCaret(input, 'right', false)).toBe(true)
+    expect([input.selectionStart, input.selectionEnd]).toEqual([7, 7])
+    expect(input.value).toBe('one two')
+  })
 })

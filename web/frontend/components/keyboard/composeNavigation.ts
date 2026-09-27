@@ -2,7 +2,7 @@ import type { ArrowDirection } from './keyMappings'
 
 /** Move or extend the caret in a focused mobile compose draft. */
 export function moveComposeCaret(
-  input: HTMLInputElement,
+  input: HTMLInputElement | HTMLTextAreaElement,
   direction: ArrowDirection,
   shift: boolean,
 ): boolean {

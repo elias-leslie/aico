@@ -1,6 +1,13 @@
 'use client'
 
-import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react'
 import {
   KEYBOARD_SPACING_METRICS,
   type KeyboardSizePreset,
@@ -25,7 +32,14 @@ interface NativeKeyboardInputProps {
   onFocusChange?: (focused: boolean) => void
   keyboardSize?: KeyboardSizePreset
   keyboardSpacing?: KeyboardSpacingPreset
-  inputRef?: React.RefObject<HTMLInputElement | null>
+  inputRef?: React.RefObject<HTMLInputElement | HTMLTextAreaElement | null>
+  mobileOverlay?: boolean
+  visible?: boolean
+  onDraftPresenceChange?: (hasDraft: boolean) => void
+  ctrlActive?: boolean
+  onCtrlLetter?: (letter: string) => void
+  onCtrlCancel?: () => void
+  onBusyChange?: (busy: boolean) => void
 }
 
 function draftStorageKey(scope: string | null | undefined, sessionId: string) {
@@ -50,9 +64,22 @@ export function NativeKeyboardInput({
   keyboardSize = 'medium',
   keyboardSpacing = 'normal',
   inputRef,
+  mobileOverlay = false,
+  visible = true,
+  onDraftPresenceChange,
+  ctrlActive = false,
+  onCtrlLetter,
+  onCtrlCancel,
+  onBusyChange,
 }: NativeKeyboardInputProps) {
-  const fallbackRef = useRef<HTMLInputElement>(null)
+  const fallbackRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null)
   const resolvedRef = inputRef ?? fallbackRef
+  const assignInputRef = useCallback(
+    (element: HTMLInputElement | HTMLTextAreaElement | null) => {
+      resolvedRef.current = element
+    },
+    [resolvedRef],
+  )
   const storageKey = draftStorageKey(storageScopeId, sessionId)
   const [value, setValue] = useState(() => readDraft(storageKey))
   const [busy, setBusy] = useState(false)
@@ -67,6 +94,27 @@ export function NativeKeyboardInput({
     setValue(readDraft(storageKey))
   }, [storageKey])
 
+  useEffect(() => {
+    onDraftPresenceChange?.(value.length > 0)
+  }, [onDraftPresenceChange, value])
+
+  useLayoutEffect(() => {
+    if (!mobileOverlay || !visible) return
+    const field = resolvedRef.current
+    if (!(field instanceof HTMLTextAreaElement)) return
+
+    field.style.height = 'auto'
+    if (!value) {
+      field.style.overflowY = 'hidden'
+      return
+    }
+    const maxHeight = 120
+    if (field.scrollHeight > 0) {
+      field.style.height = `${Math.min(field.scrollHeight, maxHeight)}px`
+    }
+    field.style.overflowY = field.scrollHeight > maxHeight ? 'auto' : 'hidden'
+  }, [mobileOverlay, resolvedRef, value, visible])
+
   const commit = useCallback(
     async (action: ComposeAction) => {
       if (busyRef.current || composingRef.current || !connected) return
@@ -74,7 +122,12 @@ export function NativeKeyboardInput({
       const text = resolvedRef.current?.value ?? value
       if (!text || (action === 'send' && /[\r\n]/.test(text))) return
 
+      // The phone may commit autocorrect into the DOM just before Enter,
+      // before React has dispatched change. Retain that exact text on failure.
+      saveDraft(storageKey, text)
+      setValue(text)
       busyRef.current = true
+      onBusyChange?.(true)
       setBusy(true)
       setError(false)
       try {
@@ -88,21 +141,143 @@ export function NativeKeyboardInput({
         setError(true)
       } finally {
         busyRef.current = false
+        onBusyChange?.(false)
         setBusy(false)
       }
     },
-    [connected, onCommit, resolvedRef, sessionId, storageKey, value],
+    [
+      connected,
+      onBusyChange,
+      onCommit,
+      resolvedRef,
+      sessionId,
+      storageKey,
+      value,
+    ],
   )
 
   const handleChange = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
+    (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       const next = event.target.value
+      if (mobileOverlay && ctrlActive && !composingRef.current) {
+        let inserted: string | undefined
+        if (next.length === value.length + 1) {
+          let index = 0
+          while (index < value.length && value[index] === next[index]) index++
+          if (next.slice(index + 1) === value.slice(index))
+            inserted = next[index]
+        }
+        if (inserted && /^[a-z]$/i.test(inserted)) {
+          onCtrlLetter?.(inserted)
+          event.target.value = value
+          return
+        }
+        onCtrlCancel?.()
+      }
       setValue(next)
       saveDraft(storageKey, next)
       setError(false)
     },
-    [storageKey],
+    [ctrlActive, mobileOverlay, onCtrlCancel, onCtrlLetter, storageKey, value],
   )
+
+  if (mobileOverlay) {
+    return (
+      <div
+        hidden={!visible}
+        className="absolute bottom-full left-0 right-0 z-20 flex flex-col gap-1 border-t p-2"
+        style={{
+          display: visible ? undefined : 'none',
+          backgroundColor: 'var(--term-bg-surface)',
+          borderColor: 'var(--term-border)',
+        }}
+      >
+        <div className="flex items-end gap-2">
+          <textarea
+            ref={assignInputRef}
+            rows={1}
+            aria-label="Compose"
+            value={value}
+            readOnly={busy}
+            onChange={handleChange}
+            onCompositionStart={() => {
+              composingRef.current = true
+              if (ctrlActive) onCtrlCancel?.()
+            }}
+            onCompositionEnd={() => {
+              composingRef.current = false
+            }}
+            onFocus={() => onFocusChange?.(true)}
+            onBlur={() => onFocusChange?.(false)}
+            onKeyDown={(event) => {
+              if (
+                ctrlActive &&
+                !composingRef.current &&
+                /^[a-z]$/i.test(event.key)
+              ) {
+                event.preventDefault()
+                onCtrlLetter?.(event.key)
+                return
+              }
+              if (
+                event.key !== 'Enter' ||
+                event.nativeEvent.isComposing ||
+                composingRef.current ||
+                event.keyCode === 229
+              )
+                return
+              event.preventDefault()
+              void commit('send')
+            }}
+            placeholder="Type, correct, then send"
+            autoComplete="on"
+            autoCorrect="on"
+            autoCapitalize="none"
+            spellCheck={true}
+            enterKeyHint="send"
+            className="term-input min-w-0 flex-1 resize-none rounded-md px-3 py-2 text-sm leading-5 focus:outline-none focus-visible:ring-2"
+            style={{
+              minHeight: inputHeight,
+              maxHeight: 120,
+              backgroundColor: 'var(--term-bg-elevated)',
+              border: '1px solid var(--term-border)',
+              color: 'var(--term-text-primary)',
+              borderRadius: spacing.keyRadius,
+            }}
+          />
+          <button
+            type="button"
+            onPointerDown={keepKeyboardOpen}
+            onClick={() => void commit('send')}
+            disabled={!connected || !value || /[\r\n]/.test(value) || busy}
+            className="rounded-md border px-2 text-xs font-semibold disabled:opacity-50 focus-visible:ring-2"
+            style={{
+              minHeight: inputHeight,
+              borderColor: 'var(--term-border)',
+              backgroundColor: 'var(--term-accent)',
+              color: 'var(--term-accent-foreground)',
+            }}
+          >
+            Send
+          </button>
+        </div>
+        {error && (
+          <span
+            role="alert"
+            className="text-xs"
+            style={{ color: 'var(--term-error)' }}
+          >
+            Could not send. Your draft is still here.
+          </span>
+        )}
+        {/\r|\n/.test(value) && (
+          <span className="text-xs" style={{ color: 'var(--term-text-muted)' }}>
+            Remove line breaks to send this draft.
+          </span>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div
@@ -123,7 +298,7 @@ export function NativeKeyboardInput({
       <div className="flex items-center gap-2">
         <input
           id={inputId}
-          ref={resolvedRef}
+          ref={assignInputRef}
           type="text"
           value={value}
           readOnly={busy}

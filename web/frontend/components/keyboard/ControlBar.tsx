@@ -52,6 +52,9 @@ interface ControlBarProps {
   keyboardSpacing?: KeyboardSpacingPreset
   collapseTarget?: 'keyboard' | 'ribbon'
   showShiftControl?: boolean
+  hasUnsentDraft?: boolean
+  closeToolboxWhenMinimized?: boolean
+  onBeforeTerminalAction?: () => boolean
 }
 
 export function ControlBar({
@@ -70,6 +73,9 @@ export function ControlBar({
   keyboardSpacing = 'normal',
   collapseTarget = 'keyboard',
   showShiftControl = false,
+  hasUnsentDraft = false,
+  closeToolboxWhenMinimized = false,
+  onBeforeTerminalAction,
 }: ControlBarProps) {
   const { modifiers, resetModifiers, toggleModifier } = useModifiers()
   const [showToolbox, setShowToolbox] = useState(false)
@@ -77,6 +83,10 @@ export function ControlBar({
   const [modelOptions, setModelOptions] = useState<ClaudeModelOption[]>([])
   const pickerRef = useRef<HTMLDivElement>(null)
   const isClaudeMode = activeMode === 'claude'
+
+  useEffect(() => {
+    if (minimized && closeToolboxWhenMinimized) setShowToolbox(false)
+  }, [closeToolboxWhenMinimized, minimized])
 
   useEffect(() => {
     if (!isClaudeMode) {
@@ -129,33 +139,45 @@ export function ControlBar({
         ctrl: ctrlActive || modifiers.ctrl !== 'off',
         alt: modifiers.alt !== 'off',
       }
-      if (!onArrow?.(direction, active))
+      if (!onArrow?.(direction, active)) {
+        if (onBeforeTerminalAction?.() === false) return
         onSend(arrowSequence(direction, active))
+      }
       clearModifiers()
     },
-    [clearModifiers, ctrlActive, modifiers, onArrow, onSend],
+    [
+      clearModifiers,
+      ctrlActive,
+      modifiers,
+      onArrow,
+      onBeforeTerminalAction,
+      onSend,
+    ],
   )
 
   // Special key handlers
   const handleEsc = useCallback(() => {
+    if (onBeforeTerminalAction?.() === false) return
     onSend(KEY_SEQUENCES.ESC)
     clearModifiers()
-  }, [onSend, clearModifiers])
+  }, [onBeforeTerminalAction, onSend, clearModifiers])
 
   const handleTab = useCallback(() => {
+    if (onBeforeTerminalAction?.() === false) return
     onSend(
       modifiers.shift !== 'off' ? KEY_SEQUENCES.SHIFT_TAB : KEY_SEQUENCES.TAB,
     )
     clearModifiers()
-  }, [onSend, modifiers.shift, clearModifiers])
+  }, [onBeforeTerminalAction, onSend, modifiers.shift, clearModifiers])
 
   const handleModelSelect = useCallback(
     (command: string) => {
       navigator.vibrate?.(10)
+      if (onBeforeTerminalAction?.() === false) return
       onSend(command)
       setShowModelPicker(false)
     },
-    [onSend],
+    [onBeforeTerminalAction, onSend],
   )
 
   const btnStyle = {
@@ -286,7 +308,7 @@ export function ControlBar({
             type="button"
             onPointerDown={keepKeyboardOpen}
             onClick={onToggleMinimize}
-            className="flex shrink-0 items-center justify-center transition-all duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+            className="relative flex shrink-0 items-center justify-center transition-all duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
             style={{
               ...topRowButtonStyle,
               backgroundColor: minimized
@@ -298,9 +320,7 @@ export function ControlBar({
               border: `1px solid ${minimized ? 'var(--term-accent)' : 'var(--term-border)'}`,
               boxShadow: minimized ? '0 0 8px var(--term-accent-glow)' : 'none',
             }}
-            aria-label={
-              minimized ? `Show ${collapseTarget}` : `Hide ${collapseTarget}`
-            }
+            aria-label={`${minimized ? 'Show' : 'Hide'} ${collapseTarget}${hasUnsentDraft ? ', unsent draft' : ''}`}
           >
             {minimized ? (
               <ChevronUp
@@ -311,6 +331,13 @@ export function ControlBar({
               <ChevronDown
                 className="shrink-0"
                 style={{ width: iconSize, height: iconSize }}
+              />
+            )}
+            {hasUnsentDraft && (
+              <span
+                aria-hidden="true"
+                className="absolute right-1 top-1 size-1.5 rounded-full"
+                style={{ backgroundColor: 'var(--term-accent)' }}
               />
             )}
           </button>
