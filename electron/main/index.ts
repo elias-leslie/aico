@@ -80,6 +80,13 @@ import {
   resolveActiveSelectionPane,
   type SelectionDeliveryLease,
 } from './selection-delivery'
+import {
+  attachedATermLabel,
+  defaultATermLabel,
+  enrichATermSessions,
+  openableWidgetLabel,
+  openableWidgetProject,
+} from './session-catalog'
 import { bundledSidecar, Sidecar } from './sidecar'
 import {
   activateTmuxServer,
@@ -117,7 +124,6 @@ import {
 } from './store'
 import { terminalClientEnv } from './terminal-env'
 import {
-  A_TERM_SESSION_PREFIX,
   attachTargetArgs,
   capturePageTargetArgs,
   captureTargetArgs,
@@ -2801,6 +2807,7 @@ interface AttachableTmuxSession {
   socket: string | null
   session: string
   cwd: string | null
+  project: string | null
   command: string
   tool: string
 }
@@ -2826,16 +2833,21 @@ async function listAttachableTmuxSessions(): Promise<AttachableTmuxSession[]> {
     const liveTui = detectTuiFromProcessNames(listTuis(), [command || ''])
     bySession.set(sessionName, {
       id: `default:${sessionName}`,
-      label: `A-Term ${sessionName.slice(A_TERM_SESSION_PREFIX.length, A_TERM_SESSION_PREFIX.length + 8)}`,
+      label: defaultATermLabel(sessionName),
       source: 'A-Term',
       socket: null,
       session: sessionName,
       cwd: cwd || null,
+      project: cwd || null,
       command: command || 'shell',
       tool: liveTui?.slug ?? 'shell',
     })
   }
-  return [...bySession.values()].sort((a, b) => a.label.localeCompare(b.label))
+  const verified = [...bySession.values()].sort((a, b) => a.label.localeCompare(b.label))
+  return enrichATermSessions(verified, listProjects(), {
+    port: Number(process.env.AICO_A_TERM_PORT ?? 8002),
+    timeoutMs: TMUX_QUERY_TIMEOUT_MS,
+  })
 }
 
 const refreshAttachableTmuxSessions = coalesceAsync(listAttachableTmuxSessions)
@@ -2877,7 +2889,7 @@ async function attachExternalTmuxSession(attachableId: string): Promise<void> {
     true,
     session.socket,
     session.session,
-    session.label,
+    null,
     session.tool,
   )
   openWidget(row)
@@ -3069,6 +3081,7 @@ function syncTray(): void {
     .then(async (attachables) => {
       if (quitting) return
       trayAttachableTmuxSessions = attachables
+      pushTitles()
       renderTray()
       await reconcileClosedExternalViews(
         attachables.map((session) => session.session),
@@ -3098,7 +3111,9 @@ function renderTray(): void {
   const widgetRows = listWidgets()
   const widgets: TrayWidget[] = widgetRows.map((w) => ({
     id: w.id,
-    label: w.name || widgetProjectName(w, projects) || `Session ${w.seq}`,
+    label: w.externalTmuxSession
+      ? externalWidgetLabel(w, `Session ${w.seq}`)
+      : w.name || widgetProjectName(w, projects) || `Session ${w.seq}`,
     open: windowForWidget(w.id) !== undefined,
   }))
   const unattached = trayAttachableTmuxSessions.filter(
@@ -3110,6 +3125,20 @@ function renderTray(): void {
       ),
   )
   refreshTray(widgets, projects, unattached)
+}
+
+function externalWidgetLabel(row: WidgetRow, fallback: string): string {
+  const session = trayAttachableTmuxSessions.find(
+    (item) =>
+      item.session === row.externalTmuxSession && item.socket === (row.externalTmuxSocket ?? null),
+  )
+  if (session) return attachedATermLabel(row.name, session)
+  return (
+    row.name ||
+    (row.externalTmuxSession && isATermSessionName(row.externalTmuxSession)
+      ? defaultATermLabel(row.externalTmuxSession)
+      : fallback)
+  )
 }
 
 // The workspace an unnamed widget reads as: the one it's bound to (pinned at
@@ -3136,8 +3165,13 @@ function pushTitles(): void {
     win.webContents.send('win:title', {
       // Custom name wins (a prior edit is never overwritten); otherwise track
       // the live project so the bar follows whatever's loaded.
-      label: row.name || widgetProjectName(row, projects) || `Widget ${row.seq}`,
-      name: row.name, // custom name (or null) — prefills the rename input
+      label: row.externalTmuxSession
+        ? externalWidgetLabel(row, `Widget ${row.seq}`)
+        : row.name || widgetProjectName(row, projects) || `Widget ${row.seq}`,
+      name:
+        row.externalTmuxSession && row.name === defaultATermLabel(row.externalTmuxSession)
+          ? null
+          : row.name, // custom name (or null) — prefills the rename input
       icon: tui?.icon ?? '',
       accent: tui?.accent ?? '',
       tuiName: tui?.displayName ?? '',
@@ -3951,6 +3985,7 @@ app.whenReady().then(async () => {
     })),
   )
   ipcMain.handle('session:list-openable', async () => {
+    const projects = listProjects()
     const aicoRows = await Promise.all(
       listWidgets().map(async (row) => {
         if (
@@ -3962,8 +3997,8 @@ app.whenReady().then(async () => {
         return {
           owner: 'aico' as const,
           id: row.id,
-          label: row.name || `Session ${row.seq}`,
-          project: row.projectId,
+          label: openableWidgetLabel(row, projects),
+          project: openableWidgetProject(row, projects),
           tool: row.tool,
           status: 'running' as const,
           locallyOpen: Boolean(windowForWidget(row.id)),
@@ -3975,8 +4010,8 @@ app.whenReady().then(async () => {
       return {
         owner: 'a-term' as const,
         id: session.id,
-        label: attached?.name || session.label,
-        project: session.cwd,
+        label: attachedATermLabel(attached?.name, session),
+        project: session.project,
         tool: attached?.tool ?? session.tool,
         status: 'running' as const,
         locallyOpen: Boolean(attached && windowForWidget(attached.id)),

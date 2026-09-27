@@ -14,6 +14,7 @@ import {
   DEFAULT_TERMINAL_FONT_SETTINGS,
   parseTerminalFontSettings,
 } from '../shared/font-settings'
+import type { OpenableSession } from '../types'
 import {
   ACTIONS,
   type Action,
@@ -379,6 +380,23 @@ function emptySubmenuRow(label: string): HTMLElement {
   return empty
 }
 
+export function sessionSubmenuLabel(
+  session: Pick<OpenableSession, 'label' | 'project'> & { tool?: string | null },
+): string {
+  const project = session.project?.trim()
+  const parts = [session.label]
+  if (project && project !== session.label) parts.push(project)
+  const tool = session.tool?.trim()
+  if (
+    tool &&
+    tool.toLowerCase() !== 'shell' &&
+    !parts.some((part) => part.toLowerCase() === tool.toLowerCase())
+  ) {
+    parts.push(`${tool[0].toUpperCase()}${tool.slice(1)}`)
+  }
+  return parts.join(' · ')
+}
+
 // Fill the shared flyout for `kind`. 'new': TUI rows that drill into a workspace
 // picker. 'replace': TUI rows that replace the focused pane (launcher
 // `replace:<slug>`). 'project': workspace rows that rebind the focused widget
@@ -409,7 +427,7 @@ function populateSubmenu(kind: FlyoutKind): void {
     if (catalogs.sessions.length) {
       for (const session of catalogs.sessions) {
         submenuEl.append(
-          submenuRow(sessionActionId(session), session.label, (dot) => {
+          submenuRow(sessionActionId(session), sessionSubmenuLabel(session), (dot) => {
             dot.classList.add('project')
           }),
         )

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { allActions, setSessionActions } from './actions'
-import { refreshSessions } from './control-surface'
+import { refreshSessions, sessionSubmenuLabel } from './control-surface'
 
 afterEach(() => {
   setSessionActions([])
@@ -8,6 +8,19 @@ afterEach(() => {
 })
 
 describe('openable session discovery', () => {
+  it('shows the project or ad hoc identity alongside a custom Open label', () => {
+    expect(sessionSubmenuLabel({ label: 'My work', project: 'Agent Hub' })).toBe(
+      'My work · Agent Hub',
+    )
+    expect(sessionSubmenuLabel({ label: 'Scratchpad', project: 'Ad-Hoc Shell' })).toBe(
+      'Scratchpad · Ad-Hoc Shell',
+    )
+    expect(sessionSubmenuLabel({ label: 'Agent Hub', project: 'Agent Hub' })).toBe('Agent Hub')
+    expect(sessionSubmenuLabel({ label: 'Agent Hub', project: 'Agent Hub', tool: 'codex' })).toBe(
+      'Agent Hub · Codex',
+    )
+  })
+
   it('finds an A-Term session created after Aico first loaded', async () => {
     let sessions: {
       owner: 'a-term'
