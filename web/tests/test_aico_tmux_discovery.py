@@ -228,3 +228,91 @@ def test_catalogued_widget_enriches_live_generation_descriptor(aico_state_dir: P
     assert sessions[0]["mode"] == "codex"
     assert sessions[0]["tmux_session_id"] == "$4"
     assert sessions[0]["tmux_pane_id"] == "%8"
+
+
+@pytest.mark.parametrize(
+    ("catalog_name", "catalog_project_id", "tool", "expected_name"),
+    [
+        ("Custom task", "project-one", "codex", "Custom task"),
+        (None, "project-one", "codex", "project-one"),
+        (None, "__aico_personal_workspace__", "codex", "Personal Workspace"),
+        (None, None, "codex", "Ad-Hoc Codex"),
+        (None, None, "claude", "Ad-Hoc Claude"),
+        (None, None, "shell", "Ad-Hoc Shell"),
+    ],
+)
+def test_catalogued_widget_project_and_name_are_authoritative(
+    aico_state_dir: Path,
+    catalog_name: str | None,
+    catalog_project_id: str | None,
+    tool: str,
+    expected_name: str,
+) -> None:
+    server_id = "a" * 32
+    connection = _create_catalog(aico_state_dir)
+    _insert_server(connection, aico_state_dir, server_id)
+    connection.execute(
+        """CREATE TABLE widgets (
+          id TEXT, tmux_server_id TEXT, name TEXT, project_id TEXT,
+          project_root TEXT, tool TEXT, tmux_allocation_state TEXT,
+          external_tmux_session TEXT
+        )"""
+    )
+    connection.execute(
+        "INSERT INTO widgets VALUES (?, ?, ?, ?, ?, ?, ?, NULL)",
+        ("deadbeef", server_id, catalog_name, catalog_project_id, None, tool, "bound"),
+    )
+    connection.commit()
+    connection.close()
+
+    def fake_tmux(args, check=False, socket_name=None):
+        del args, check
+        if socket_name == _managed_socket(aico_state_dir, server_id):
+            return True, "aico-deadbeef\t$4\t%8\t/projects/inferred\tbash\t0"
+        return False, "no server"
+
+    with (
+        patch.dict(os.environ, {"A_TERM_AICO_STATE_DIR": str(aico_state_dir)}),
+        patch("a_term.utils.tmux.run_tmux_command", side_effect=fake_tmux),
+        patch("a_term.utils.tmux.external._infer_project_id", return_value="inferred") as infer,
+    ):
+        sessions = external_tmux.list_external_tmux_sessions()
+
+    assert len(sessions) == 1
+    assert sessions[0]["project_id"] == (
+        None if catalog_project_id == "__aico_personal_workspace__" else catalog_project_id
+    )
+    assert sessions[0]["name"] == expected_name
+    assert sessions[0]["working_dir"] == "/projects/inferred"
+    assert sessions[0]["mode"] == tool
+    assert sessions[0]["tmux_session_id"] == "$4"
+    assert sessions[0]["tmux_pane_id"] == "%8"
+    infer.assert_not_called()
+
+
+def test_uncatalogued_aico_session_does_not_guess_project_from_live_path(
+    aico_state_dir: Path,
+) -> None:
+    server_id = "a" * 32
+    connection = _create_catalog(aico_state_dir)
+    _insert_server(connection, aico_state_dir, server_id)
+    connection.commit()
+    connection.close()
+
+    def fake_tmux(args, check=False, socket_name=None):
+        del args, check
+        if socket_name == _managed_socket(aico_state_dir, server_id):
+            return True, "aico-unknown\t$4\t%8\t/projects/inferred\tbash\t0"
+        return False, "no server"
+
+    with (
+        patch.dict(os.environ, {"A_TERM_AICO_STATE_DIR": str(aico_state_dir)}),
+        patch("a_term.utils.tmux.run_tmux_command", side_effect=fake_tmux),
+        patch("a_term.utils.tmux.external._infer_project_id", return_value="inferred") as infer,
+    ):
+        sessions = external_tmux.list_external_tmux_sessions()
+
+    assert len(sessions) == 1
+    assert sessions[0]["name"] == "aico-unknown"
+    assert sessions[0]["project_id"] is None
+    infer.assert_not_called()

@@ -116,7 +116,9 @@ export function ATermManagerModal({
     () =>
       filterAndSortSessions(
         [
-          ...unmatchedExternalSessions.map(makeExternalAttachableOption),
+          ...unmatchedExternalSessions.map((session) =>
+            makeExternalAttachableOption(session),
+          ),
           ...unmatchedDetachedPanes.map(makeDetachedPaneAttachableOption),
         ],
         normalizedSearch,

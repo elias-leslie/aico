@@ -384,18 +384,36 @@ def list_external_tmux_sessions() -> list[dict[str, object]]:
             if mode == "shell" and not source.include_shell:
                 continue
             metadata = aico_widgets.get((source.id, session_name), {})
+            if metadata:
+                project_id = metadata.get("project_id")
+                mode = metadata.get("mode") or mode
+                if project_id == "__aico_personal_workspace__":
+                    # Aico's Personal Workspace is a cwd target, not a registered project.
+                    project_id = None
+                    name = metadata.get("name") or "Personal Workspace"
+                else:
+                    name = metadata.get("name") or project_id or f"Ad-Hoc {mode.title()}"
+            else:
+                # A missing Aico catalog cannot establish project identity: a git
+                # directory basename may match an unrelated registered project.
+                project_id = (
+                    None
+                    if source.id == "aico" or source.id.startswith("aico-")
+                    else _infer_project_id(working_dir or None)
+                )
+                name = session_name
             external_id = source.external_id(session_name)
             existing = sessions.get(external_id)
             if existing and existing.get("working_dir"):
                 continue
             sessions[external_id] = {
                 "id": external_id,
-                "name": metadata.get("name") or session_name,
+                "name": name,
                 "user_id": None,
-                "project_id": metadata.get("project_id") or _infer_project_id(working_dir or None),
+                "project_id": project_id,
                 "working_dir": metadata.get("working_dir") or working_dir or None,
                 "display_order": 0,
-                "mode": metadata.get("mode") or mode,
+                "mode": mode,
                 "session_number": 0,
                 "is_alive": True,
                 "created_at": None,

@@ -30,8 +30,10 @@ import {
 } from '@/lib/hooks/use-available-layouts'
 import { useLocalStorageState } from '@/lib/hooks/use-local-storage-state'
 import { useMediaQuery } from '@/lib/hooks/use-media-query'
+import { useProjectSettings } from '@/lib/hooks/use-project-settings'
 import { useTabEditing } from '@/lib/hooks/use-tab-editing'
 import { getScopedATermStorageKey } from '@/lib/utils/detached-pane-window'
+import { getExternalSessionDisplayName } from '@/lib/utils/external-session-name'
 import { getSlotPanelId, getSlotSessionId, isPaneSlot } from '@/lib/utils/slot'
 import {
   useConnectionStatus,
@@ -106,6 +108,11 @@ export function useATermTabsState({
       effectiveStorageScopeId,
     ),
   })
+  const { projects } = useProjectSettings()
+  const projectNames = useMemo(
+    () => new Map(projects.map((project) => [project.id, project.name])),
+    [projects],
+  )
 
   const {
     panes,
@@ -293,21 +300,20 @@ export function useATermTabsState({
     const paneSessionIds = new Set(
       mobilePanes.flatMap((pane) => pane.sessions.map((session) => session.id)),
     )
-    const projectNames = new Map(
-      projectATerms.map((project) => [project.projectId, project.projectName]),
-    )
-
     const fallbackSessionSlots = sessions
       .filter((session) => !paneSessionIds.has(session.id))
       .map((session) => {
         const slotId = `session-${session.id}`
 
         if (session.project_id) {
+          const projectName = projectNames.get(session.project_id)
           return {
             slotId,
             type: 'project' as const,
             projectId: session.project_id,
-            projectName: projectNames.get(session.project_id) ?? session.name,
+            projectName: session.is_external
+              ? getExternalSessionDisplayName(session, projectName)
+              : (projectName ?? session.name),
             rootPath: session.working_dir,
             activeMode: session.mode,
             activeSessionId: session.id,
@@ -320,7 +326,7 @@ export function useATermTabsState({
           slotId,
           type: 'adhoc' as const,
           sessionId: session.id,
-          name: session.name,
+          name: getExternalSessionDisplayName(session),
           workingDir: session.working_dir,
           sessionMode: session.mode,
           isExternal: session.is_external,
@@ -328,14 +334,7 @@ export function useATermTabsState({
       })
 
     return [...paneSlots, ...fallbackSessionSlots]
-  }, [
-    detachedPanes,
-    isDetachedWindow,
-    isMobile,
-    panes,
-    projectATerms,
-    sessions,
-  ])
+  }, [detachedPanes, isDetachedWindow, isMobile, panes, projectNames, sessions])
   const visiblePaneCount = visiblePanes.length + attachedExternalSessions.length
   const visibleManagedPaneCount = visiblePanes.length
   const paneCountLimit = Math.min(maxPanes, viewportPaneCapacity)
@@ -431,13 +430,16 @@ export function useATermTabsState({
     const externalSlots = attachedExternalSessions.map((session) => ({
       type: 'adhoc' as const,
       sessionId: session.id,
-      name: session.name,
+      name: getExternalSessionDisplayName(
+        session,
+        session.project_id ? projectNames.get(session.project_id) : undefined,
+      ),
       workingDir: session.working_dir,
       sessionMode: session.mode,
       isExternal: true,
     }))
     return [...paneSlots, ...externalSlots]
-  }, [attachedExternalSessions, visiblePanes])
+  }, [attachedExternalSessions, projectNames, visiblePanes])
   const slotSource = useMemo(
     () => (isMobile && !isDetachedWindow ? mobileGlobalSlots : visibleSlots),
     [isDetachedWindow, isMobile, mobileGlobalSlots, visibleSlots],

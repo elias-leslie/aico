@@ -8,6 +8,7 @@ import type { ATermPane } from '@/lib/hooks/use-a-term-panes'
 import type { ATermSession } from '@/lib/hooks/use-a-term-sessions'
 import { useHoverStyle } from '@/lib/hooks/use-hover-style'
 import type { ProjectSetting } from '@/lib/hooks/use-project-settings'
+import { getExternalSessionDisplayName } from '@/lib/utils/external-session-name'
 
 export interface AttachableATermOption {
   id: string
@@ -61,10 +62,11 @@ export function formatDetachedPaneDescription(pane: ATermPane): string {
 
 export function makeExternalAttachableOption(
   session: ATermSession,
+  projectName?: string,
 ): AttachableATermOption {
   return {
     id: session.id,
-    label: `${session.name} (${session.mode})`,
+    label: `${getExternalSessionDisplayName(session, projectName)} (${session.mode})`,
     description: formatSessionDescription(session),
     projectId: session.project_id,
     kind: 'external-session',
@@ -88,9 +90,12 @@ export function makeDetachedPaneAttachableOption(
 export function makeProjectSessionOptions(
   externalSessions: ATermSession[],
   detachedPanes: ATermPane[],
+  projectName: string,
 ): AttachableATermOption[] {
   return [
-    ...externalSessions.map(makeExternalAttachableOption),
+    ...externalSessions.map((session) =>
+      makeExternalAttachableOption(session, projectName),
+    ),
     ...detachedPanes.map(makeDetachedPaneAttachableOption),
   ].sort((a, b) => a.label.localeCompare(b.label))
 }
@@ -347,6 +352,7 @@ export function buildProjectRows(
     attachableOptions: makeProjectSessionOptions(
       externalSessionMap.get(project.id) ?? [],
       detachedPaneMap.get(project.id) ?? [],
+      project.name,
     ),
   }))
 }

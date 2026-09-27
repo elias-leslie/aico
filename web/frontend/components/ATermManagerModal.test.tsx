@@ -200,6 +200,43 @@ describe('ATermManagerModal', () => {
     expect(onAttachExternalSession).toHaveBeenCalledWith('codex-agent-hub')
   })
 
+  it('shows registered project names for unnamed Aico sessions while retaining custom names', () => {
+    const aicoSession = {
+      id: 'tmux:aico-server:aico-12345678',
+      user_id: null,
+      project_id: 'proj-a-term',
+      working_dir: '/workspace/a-term',
+      mode: 'codex',
+      display_order: 0,
+      is_alive: true,
+      created_at: null,
+      last_accessed_at: null,
+      is_external: true,
+      source: 'tmux_external',
+      tmux_session_name: 'aico-12345678',
+      tmux_source: 'aico-server',
+    }
+    renderModal({
+      externalSessions: [
+        { ...aicoSession, name: 'proj-a-term' },
+        {
+          ...aicoSession,
+          id: 'tmux:aico-server:aico-87654321',
+          name: 'Incident review',
+          tmux_session_name: 'aico-87654321',
+        },
+      ],
+    })
+
+    expect(
+      screen.getByRole('option', { name: 'A-Term (codex)' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('option', { name: 'A-Term · Incident review (codex)' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('proj-a-term (codex)')).not.toBeInTheDocument()
+  })
+
   it('starts a fresh project A-Term even when attachable sessions exist', () => {
     const onCreateProjectATerm = vi.fn()
 

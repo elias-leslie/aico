@@ -13,6 +13,7 @@ const mockUseAvailableLayouts = vi.fn()
 const mockUsePaneCapacity = vi.fn()
 const mockUseMediaQuery = vi.fn()
 const mockUseAutoCreatePane = vi.fn()
+const mockUseProjectSettings = vi.fn()
 const TEST_WINDOW_SCOPE = 'test-window'
 
 vi.mock('@/lib/hooks/use-active-session', () => ({
@@ -52,6 +53,10 @@ vi.mock('@/lib/hooks/use-media-query', () => ({
 
 vi.mock('@/lib/hooks/use-auto-create-pane', () => ({
   useAutoCreatePane: (params: unknown) => mockUseAutoCreatePane(params),
+}))
+
+vi.mock('@/lib/hooks/use-project-settings', () => ({
+  useProjectSettings: () => mockUseProjectSettings(),
 }))
 
 function buildActiveSessionState(
@@ -113,6 +118,12 @@ function buildActiveSessionState(
 describe('useATermTabsState', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockUseProjectSettings.mockReturnValue({
+      projects: [
+        { id: 'project-a', name: 'Project A' },
+        { id: 'project-b', name: 'Project B' },
+      ],
+    })
     window.localStorage.clear()
     window.sessionStorage.clear()
     window.sessionStorage.setItem('a-term-window-id', TEST_WINDOW_SCOPE)
@@ -732,6 +743,42 @@ describe('useATermTabsState', () => {
     )
   })
 
+  it('shows the project and custom Aico session name together in the mobile switcher', () => {
+    mockUseMediaQuery.mockReturnValue(true)
+    const externalSession = {
+      id: 'external-codex',
+      name: 'Incident review',
+      user_id: null,
+      project_id: 'project-a',
+      working_dir: '/workspace/project-a',
+      mode: 'codex',
+      display_order: 0,
+      is_alive: true,
+      created_at: null,
+      last_accessed_at: null,
+      is_external: true,
+      source: 'tmux_external',
+    }
+    mockUseActiveSession.mockReturnValue(
+      buildActiveSessionState({
+        activeSessionId: externalSession.id,
+        activeSession: externalSession,
+        sessions: [externalSession],
+        externalSessions: [externalSession],
+      }),
+    )
+
+    const { result } = renderHook(() =>
+      useATermTabsState({ projectId: undefined, projectPath: undefined }),
+    )
+
+    expect(result.current.aTermSlots).toHaveLength(1)
+    expect(result.current.aTermSlots[0]).toMatchObject({
+      type: 'project',
+      projectName: 'Project A · Incident review',
+    })
+  })
+
   it('recomputes scoped settings when the resolved active session falls back to a different context', () => {
     let activeSessionState = buildActiveSessionState()
     mockUseActiveSession.mockImplementation(() => activeSessionState)
@@ -1292,7 +1339,7 @@ describe('useATermTabsState', () => {
         externalSessions: [
           {
             id: 'external-codex',
-            name: 'codex-a-term',
+            name: 'project-a',
             user_id: null,
             project_id: 'project-a',
             working_dir: '/workspace/project-a',
@@ -1303,6 +1350,8 @@ describe('useATermTabsState', () => {
             last_accessed_at: '2026-03-06T00:00:00Z',
             is_external: true,
             source: 'tmux_external',
+            tmux_session_name: 'aico-deadbeef',
+            tmux_source: 'aico-server',
           },
         ],
       }),
@@ -1351,7 +1400,7 @@ describe('useATermTabsState', () => {
       maxPanes: 6,
     })
 
-    const { result } = renderHook(() =>
+    const { result, rerender } = renderHook(() =>
       useATermTabsState({ projectId: undefined, projectPath: undefined }),
     )
 
@@ -1361,10 +1410,38 @@ describe('useATermTabsState', () => {
       result.current.attachExternalSession('external-codex')
     })
     expect(result.current.aTermSlots).toHaveLength(2)
+    expect(result.current.aTermSlots[1]).toMatchObject({
+      name: 'Project A',
+    })
     expect(result.current.orderedIds).toEqual([
       'pane-pane-project-a',
       'adhoc-external-codex',
     ])
+
+    mockUseActiveSession.mockReturnValue(
+      buildActiveSessionState({
+        externalSessions: [
+          {
+            id: 'external-codex',
+            name: 'Incident review',
+            user_id: null,
+            project_id: 'project-a',
+            working_dir: '/workspace/project-a',
+            mode: 'codex',
+            display_order: 3,
+            is_alive: true,
+            created_at: null,
+            last_accessed_at: null,
+            is_external: true,
+            source: 'tmux_external',
+          },
+        ],
+      }),
+    )
+    rerender()
+    expect(result.current.aTermSlots[1]).toMatchObject({
+      name: 'Project A · Incident review',
+    })
 
     act(() => {
       result.current.detachExternalSession('external-codex')
