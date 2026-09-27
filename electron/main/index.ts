@@ -6,7 +6,9 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  renameSync,
   statSync,
+  unlinkSync,
   watch,
   writeFileSync,
 } from 'node:fs'
@@ -3668,7 +3670,12 @@ app.on('before-quit', () => {
 // fight over the sidecar port :8005 and re-adopt the same widget catalog). The
 // secondary quits immediately; the primary handles the desktop activation.
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
-if (!gotSingleInstanceLock) app.quit()
+const activationOnly = process.argv.includes('--aico-activate')
+if (gotSingleInstanceLock && activationOnly) {
+  // An activation helper must never become the desktop runtime if the managed
+  // process exits between launcher verification and this lock request.
+  app.exit(1)
+} else if (!gotSingleInstanceLock) app.quit()
 
 let activationReady = false
 let activationPending = false
@@ -3691,8 +3698,35 @@ function activateAico(): void {
 app.on('second-instance', activateAico)
 app.on('activate', activateAico)
 
+const activationReadyFile = process.env.AICO_ACTIVATION_READY_FILE
+let activationIdentity: string | null = null
+if (gotSingleInstanceLock && !activationOnly && activationReadyFile) {
+  try {
+    // Linux stat field 22 is process starttime. It disambiguates a reused PID
+    // without exposing an application or agent environment variable.
+    const stat = readFileSync('/proc/self/stat', 'utf8').replace(/^.*\) /, '')
+    const starttime = stat.trim().split(/\s+/)[19]
+    if (!/^\d+$/.test(starttime)) throw new Error('missing process starttime')
+    activationIdentity = `${process.pid} ${starttime}\n`
+    const temporary = `${activationReadyFile}.tmp.${process.pid}`
+    writeFileSync(temporary, activationIdentity, { mode: 0o600 })
+    renameSync(temporary, activationReadyFile)
+  } catch (error) {
+    console.warn('[aico] could not publish activation readiness:', error)
+  }
+}
+app.on('before-quit', () => {
+  if (!activationReadyFile || !activationIdentity) return
+  try {
+    if (readFileSync(activationReadyFile, 'utf8') === activationIdentity)
+      unlinkSync(activationReadyFile)
+  } catch {
+    // Startup may have failed before publication, or a restart replaced us.
+  }
+})
+
 app.whenReady().then(async () => {
-  if (!gotSingleInstanceLock) return // secondary instance: app.quit() is pending
+  if (!gotSingleInstanceLock || activationOnly) return // no runtime initialization
   registerBuiltinTuis()
   ensureTmuxConf()
   initStore(dbPath)

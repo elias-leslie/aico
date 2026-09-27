@@ -29,6 +29,7 @@ export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 REPO="${AICO_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/aico"
 PIDFILE="$LOG_DIR/aico.pid"
+READYFILE="$LOG_DIR/activation.ready"
 RUNTIME_UNIT="aico-shell.service"
 RUNTIME_ROOT="$(systemctl --user show "$RUNTIME_UNIT" --property=WorkingDirectory --value 2>/dev/null || true)"
 mkdir -p "$LOG_DIR"
@@ -59,6 +60,7 @@ is_aico_process() {
 # starting another sidecar or replacing the managed service.
 activate_runtime() {
   local pid expected_exe actual_exe actual_cwd unit_group process_group state
+  local ready_pid ready_starttime current_starttime current_pid current_state
   pid="$(systemctl --user show "$RUNTIME_UNIT" --property=MainPID --value 2>/dev/null || true)"
   state="$(systemctl --user show "$RUNTIME_UNIT" --property=ActiveState --value 2>/dev/null || true)"
   unit_group="$(systemctl --user show "$RUNTIME_UNIT" --property=ControlGroup --value 2>/dev/null || true)"
@@ -70,14 +72,33 @@ activate_runtime() {
     process_is_tracked_aico_application_scope "$pid" "$process_group" || return 1
   fi
   # systemd marks Type=simple active while the foreground runner is still
-  # building. Wait for that exact MainPID to exec the installed Electron binary.
+  # building. The binary alone is not ready: a second Electron could win its
+  # single-instance lock before the managed process requests it. Electron
+  # publishes the exact PID/starttime only after installing its activation
+  # handler; a stale marker from a previous process cannot authorize a click.
   for _ in $(seq 1 50); do
     actual_exe="$(readlink -f "/proc/$pid/exe" 2>/dev/null || true)"
     actual_cwd="$(readlink -f "/proc/$pid/cwd" 2>/dev/null || true)"
     if [ "$actual_exe" = "$expected_exe" ] && [ "$actual_cwd" = "$RUNTIME_ROOT" ]; then
-      ( cd "$RUNTIME_ROOT" && "$expected_exe" . --aico-activate )
-      echo "aico-launch: activated managed runtime (pid $pid)" >&2
-      return 0
+      ready_pid=""
+      ready_starttime=""
+      if [ -r "$READYFILE" ]; then
+        read -r ready_pid ready_starttime <"$READYFILE" || true
+      fi
+      current_starttime="$(awk '{ sub(/^.*\) /, ""); print $20 }' "/proc/$pid/stat" 2>/dev/null || true)"
+      if [ "$ready_pid" = "$pid" ] && [[ "$ready_starttime" =~ ^[0-9]+$ ]] &&
+        [ "$ready_starttime" = "$current_starttime" ]; then
+        current_pid="$(systemctl --user show "$RUNTIME_UNIT" --property=MainPID --value 2>/dev/null || true)"
+        current_state="$(systemctl --user show "$RUNTIME_UNIT" --property=ActiveState --value 2>/dev/null || true)"
+        [ "$current_pid" = "$pid" ] && [ "$current_state" = active ] || return 1
+        # A wedged secondary must not leave the desktop launcher waiting forever.
+        if ( cd "$RUNTIME_ROOT" && timeout --foreground --kill-after=2s 10s "$expected_exe" . --aico-activate ); then
+          echo "aico-launch: activated managed runtime (pid $pid)" >&2
+          return 0
+        fi
+        echo "aico-launch: activation helper failed for managed runtime (pid $pid)" >&2
+        return 1
+      fi
     fi
     kill -0 "$pid" 2>/dev/null || return 1
     sleep 0.1

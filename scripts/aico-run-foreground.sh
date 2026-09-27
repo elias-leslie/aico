@@ -13,6 +13,7 @@ export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 REPO="${AICO_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/aico"
 PIDFILE="$LOG_DIR/aico.pid"
+READYFILE="$LOG_DIR/activation.ready"
 LOCKFILE="$LOG_DIR/aico.lock"
 RUNTIME_UNIT="${AICO_RUNTIME_UNIT:-aico-shell.service}"
 mkdir -p "$LOG_DIR"
@@ -82,6 +83,7 @@ if [ -f "$PIDFILE" ]; then
   echo "aico-run-foreground: clearing stale pidfile (pid '$PID' is not a live Aico)" >&2
 fi
 rm -f "$PIDFILE"
+rm -f "$READYFILE"
 
 # Atomic registration prevents the stopper from observing a partially-written
 # PID. Remove only our own registration if build/exec fails before Electron
@@ -107,4 +109,5 @@ trap cleanup_failed_start EXIT
 # the whole-runtime boundary and fd 9 keeps the launch lock until Electron exits.
 npm run build
 export PATH="$RUNTIME_PATH"
+export AICO_ACTIVATION_READY_FILE="$READYFILE"
 exec ./node_modules/electron/dist/electron .
