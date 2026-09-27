@@ -59,7 +59,7 @@ function FullKeyboardInner({
     return () => keyboard.destroy()
   }, [handleKeyPress])
 
-  // Update modifier button styles
+  // Keep the displayed letters in sync when a control-bar key consumes Shift.
   useEffect(() => {
     if (!keyboardRef.current) return
 
@@ -70,7 +70,11 @@ function FullKeyboardInner({
           ? 'modifier-locked'
           : ''
 
+    const layoutName = keyboardRef.current.options.layoutName
     keyboardRef.current.setOptions({
+      ...(layoutName === 'symbols'
+        ? {}
+        : { layoutName: modifiers.shift === 'off' ? 'default' : 'shift' }),
       buttonTheme: [
         ...(shiftClass ? [{ class: shiftClass, buttons: '{shift}' }] : []),
         { class: 'accent-key', buttons: '{shift} {bksp} {enter}' },

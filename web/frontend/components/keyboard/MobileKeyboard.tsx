@@ -132,7 +132,7 @@ export function MobileKeyboard({
           paddingBottom: voiceActive ? 0 : 'env(safe-area-inset-bottom, 0px)',
         }}
       >
-        {sessionId && !voiceActive && (
+        {isNativeMode && sessionId && !voiceActive && (
           <NativeKeyboardInput
             key={`${storageScopeId ?? ''}:${sessionId}`}
             sessionId={sessionId}
@@ -202,7 +202,7 @@ export function MobileKeyboard({
         )}
 
         {/* Full keyboard - hidden when minimized or voice is active */}
-        {!isNativeMode && !minimized && !voiceActive && !composeFocused && (
+        {!isNativeMode && !minimized && !voiceActive && (
           <FullKeyboard
             onSend={handleSend}
             keyboardSize={keyboardSize}

@@ -93,6 +93,40 @@ describe('MobileKeyboard', () => {
     expect(screen.queryByTestId('full-keyboard')).not.toBeInTheDocument()
   })
 
+  it('keeps custom typing at the terminal without a separate compose input', () => {
+    render(<MobileKeyboard onSend={vi.fn()} {...composeProps} />)
+
+    expect(screen.getByTestId('full-keyboard')).toBeInTheDocument()
+    expect(
+      screen.queryByTestId('native-keyboard-input'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('shows custom keys after leaving a focused native input', () => {
+    const onSend = vi.fn()
+    const { rerender } = render(
+      <MobileKeyboard
+        onSend={onSend}
+        keyboardMode="native"
+        {...composeProps}
+      />,
+    )
+    fireEvent.focus(screen.getByTestId('native-keyboard-input'))
+
+    rerender(
+      <MobileKeyboard
+        onSend={onSend}
+        keyboardMode="custom"
+        {...composeProps}
+      />,
+    )
+
+    expect(screen.getByTestId('full-keyboard')).toBeInTheDocument()
+    expect(
+      screen.queryByTestId('native-keyboard-input'),
+    ).not.toBeInTheDocument()
+  })
+
   it('moves the compose selection when Shift+Left is tapped', () => {
     const onSend = vi.fn()
     render(

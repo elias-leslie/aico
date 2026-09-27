@@ -69,7 +69,8 @@ export function ControlBar({
   keyboardSpacing = 'normal',
   collapseTarget = 'keyboard',
 }: ControlBarProps) {
-  const { modifiers, resetModifiers, toggleModifier } = useModifiers()
+  const { modifiers, resetModifiers } = useModifiers()
+  const [showToolbox, setShowToolbox] = useState(false)
   const [showModelPicker, setShowModelPicker] = useState(false)
   const [modelOptions, setModelOptions] = useState<ClaudeModelOption[]>([])
   const pickerRef = useRef<HTMLDivElement>(null)
@@ -83,7 +84,6 @@ export function ControlBar({
     }
 
     let mounted = true
-
     void getClaudeModelOptions()
       .then((options) => {
         if (mounted) setModelOptions(options)
@@ -140,10 +140,12 @@ export function ControlBar({
     clearModifiers()
   }, [onSend, clearModifiers])
 
-  const handleShiftTab = useCallback(() => {
-    onSend('\x1b[Z') // Shift+Tab (backtab)
+  const handleTab = useCallback(() => {
+    onSend(
+      modifiers.shift !== 'off' ? KEY_SEQUENCES.SHIFT_TAB : KEY_SEQUENCES.TAB,
+    )
     clearModifiers()
-  }, [onSend, clearModifiers])
+  }, [onSend, modifiers.shift, clearModifiers])
 
   const handleModelSelect = useCallback(
     (command: string) => {
@@ -164,15 +166,12 @@ export function ControlBar({
   // keyboard it sits against.
   const controlButtonSize = remSize(CONTROL_BAR_BUTTON_SIZES[keyboardSize])
   const arrowButtonSize = remSize(CONTROL_BAR_ARROW_SIZES[keyboardSize])
-  const smallKeySize = remSize(
-    Math.max(36, CONTROL_BAR_BUTTON_SIZES[keyboardSize] - 4),
-  )
   const iconSize = remSize(
     keyboardSize === 'small' ? 18 : keyboardSize === 'large' ? 22 : 20,
   )
   const topRowButtonStyle = {
     height: controlButtonSize,
-    minWidth: controlButtonSize,
+    minWidth: remSize(36),
     borderRadius: spacing.keyRadius,
   }
 
@@ -224,15 +223,68 @@ export function ControlBar({
         padding: `${spacing.controlPaddingY}px ${spacing.controlPaddingX}px`,
       }}
     >
-      {/* Row 1: [▲/▼] [TAB] [⇧TAB]  ·····  [MODEL?] [MIC] */}
-      <div className="flex items-center" style={{ gap: spacing.keyGap + 2 }}>
+      {showToolbox && (
+        <div
+          id="control-bar-arrows"
+          aria-label="Arrow keys"
+          className="flex items-center justify-center"
+          style={{ gap: spacing.arrowGroupGap }}
+        >
+          <KeyboardKey
+            label="←"
+            onPress={() => handleArrow('left')}
+            className="text-xl"
+            style={{
+              flex: '1 1 0',
+              height: arrowButtonSize,
+              minWidth: 0,
+            }}
+          />
+          <KeyboardKey
+            label="↑"
+            onPress={() => handleArrow('up')}
+            className="text-xl"
+            style={{
+              flex: '1 1 0',
+              height: arrowButtonSize,
+              minWidth: 0,
+            }}
+          />
+          <KeyboardKey
+            label="↓"
+            onPress={() => handleArrow('down')}
+            className="text-xl"
+            style={{
+              flex: '1 1 0',
+              height: arrowButtonSize,
+              minWidth: 0,
+            }}
+          />
+          <KeyboardKey
+            label="→"
+            onPress={() => handleArrow('right')}
+            className="text-xl"
+            style={{
+              flex: '1 1 0',
+              height: arrowButtonSize,
+              minWidth: 0,
+            }}
+          />
+        </div>
+      )}
+
+      {/* Persistent utility row */}
+      <div
+        className="flex min-w-0 items-center justify-between"
+        style={{ gap: spacing.keyGap }}
+      >
         {/* Keyboard toggle — far left */}
         {onToggleMinimize && (
           <button
             type="button"
             onPointerDown={keepKeyboardOpen}
             onClick={onToggleMinimize}
-            className="flex items-center justify-center transition-all duration-150"
+            className="flex shrink-0 items-center justify-center transition-all duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
             style={{
               ...topRowButtonStyle,
               backgroundColor: minimized
@@ -244,7 +296,7 @@ export function ControlBar({
               border: `1px solid ${minimized ? 'var(--term-accent)' : 'var(--term-border)'}`,
               boxShadow: minimized ? '0 0 8px var(--term-accent-glow)' : 'none',
             }}
-            title={
+            aria-label={
               minimized ? `Show ${collapseTarget}` : `Hide ${collapseTarget}`
             }
           >
@@ -265,69 +317,76 @@ export function ControlBar({
         <button
           type="button"
           onPointerDown={keepKeyboardOpen}
-          onClick={() => {
-            onSend('\t')
-            clearModifiers()
-          }}
-          className="px-3 text-xs font-medium transition-all duration-150 active:scale-95"
+          onClick={handleTab}
+          className="min-w-0 flex-1 text-xs font-medium transition-all duration-150 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
           style={{
             ...btnStyle,
             ...topRowButtonStyle,
           }}
-          title="Tab"
+          aria-label="Tab"
         >
           TAB
         </button>
 
-        {/* Shift+Tab */}
         <button
           type="button"
           onPointerDown={keepKeyboardOpen}
-          onClick={handleShiftTab}
-          className="px-3 text-xs font-medium transition-all duration-150 active:scale-95"
-          style={{
-            ...btnStyle,
-            ...topRowButtonStyle,
+          onClick={() => {
+            navigator.vibrate?.(10)
+            onVoice?.()
           }}
-          title="Shift+Tab (backtab)"
+          disabled={!onVoice}
+          className="flex min-w-0 flex-1 items-center justify-center transition-all duration-150 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
+          style={{ ...btnStyle, ...topRowButtonStyle }}
+          aria-label={onVoice ? 'Voice input' : 'Voice input unavailable'}
+          aria-pressed={voiceActive}
+          title={onVoice ? 'Voice input' : 'Voice input unavailable'}
         >
-          ⇧TAB
+          <Mic
+            className="shrink-0"
+            style={{ width: iconSize, height: iconSize }}
+          />
         </button>
 
         <button
           type="button"
           onPointerDown={keepKeyboardOpen}
-          onClick={() => toggleModifier('shift')}
-          aria-pressed={modifiers.shift !== 'off'}
-          className="px-2 text-xs font-medium transition-all duration-150 active:scale-95"
-          style={{
-            ...topRowButtonStyle,
-            backgroundColor:
-              modifiers.shift !== 'off'
-                ? 'var(--term-accent)'
-                : 'var(--term-bg-elevated)',
-            color:
-              modifiers.shift !== 'off'
-                ? 'var(--term-accent-foreground)'
-                : 'var(--term-text-muted)',
-            border: `1px solid ${modifiers.shift !== 'off' ? 'var(--term-accent)' : 'var(--term-border)'}`,
-          }}
-          title="Shift for next key; double tap to lock"
+          onClick={handleEsc}
+          className="min-w-0 flex-1 text-xs font-medium transition-all duration-150 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+          style={{ ...btnStyle, ...topRowButtonStyle }}
         >
-          SHIFT
+          ESC
         </button>
 
-        {/* Spacer */}
-        <div className="flex-1" />
+        <button
+          type="button"
+          onPointerDown={keepKeyboardOpen}
+          onClick={onCtrlToggle}
+          aria-pressed={ctrlActive}
+          className="min-w-0 flex-1 text-xs font-medium transition-all duration-150 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+          style={{
+            ...topRowButtonStyle,
+            backgroundColor: ctrlActive
+              ? 'var(--term-accent)'
+              : 'var(--term-bg-elevated)',
+            color: ctrlActive
+              ? 'var(--term-accent-foreground)'
+              : 'var(--term-text-muted)',
+            border: `1px solid ${ctrlActive ? 'var(--term-accent)' : 'var(--term-border)'}`,
+            boxShadow: ctrlActive ? '0 0 8px var(--term-accent-glow)' : 'none',
+          }}
+        >
+          CTRL
+        </button>
 
         {/* Model picker — only relevant for Claude sessions */}
         {isClaudeMode && (
-          <div className="relative" ref={pickerRef}>
+          <div className="relative min-w-0 flex-1" ref={pickerRef}>
             <button
               type="button"
               onPointerDown={keepKeyboardOpen}
               onClick={() => setShowModelPicker((p) => !p)}
-              className="flex items-center gap-1.5 px-3 text-xs font-medium transition-all duration-150 active:scale-95"
+              className="flex w-full items-center justify-center transition-all duration-150 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
               style={
                 showModelPicker
                   ? {
@@ -341,7 +400,8 @@ export function ControlBar({
                       ...topRowButtonStyle,
                     }
               }
-              title="Switch Claude model"
+              aria-label="Switch Claude model"
+              aria-expanded={showModelPicker}
             >
               <Sparkles
                 className="shrink-0"
@@ -350,7 +410,6 @@ export function ControlBar({
                   height: remSize(keyboardSize === 'small' ? 14 : 16),
                 }}
               />
-              MODEL
             </button>
 
             {/* Dropdown */}
@@ -394,112 +453,30 @@ export function ControlBar({
           </div>
         )}
 
-        {/* Mic button — far right */}
-        {onVoice && (
-          <button
-            type="button"
-            onPointerDown={keepKeyboardOpen}
-            onClick={() => {
-              navigator.vibrate?.(10)
-              onVoice()
-            }}
-            className="flex items-center justify-center transition-all duration-150 active:scale-95"
-            style={{
-              ...btnStyle,
-              ...topRowButtonStyle,
-            }}
-            title="Voice input"
-          >
-            <Mic
-              className="shrink-0"
-              style={{ width: iconSize, height: iconSize }}
-            />
-          </button>
-        )}
-      </div>
-
-      {/* Row 2: [ESC]  ·  [← ↑ ↓ →]  ·  [CTRL] */}
-      <div
-        className="flex items-center justify-center"
-        style={{ gap: spacing.arrowGroupGap }}
-      >
-        <KeyboardKey
-          label="ESC"
-          onPress={handleEsc}
-          className="text-[10px]"
-          style={{
-            width: smallKeySize,
-            height: smallKeySize,
-            minWidth: smallKeySize,
-          }}
-        />
-
-        {/* Arrow keys — large targets with wide spacing */}
-        <div
-          className="flex items-center"
-          style={{ gap: spacing.arrowGroupGap }}
-        >
-          <KeyboardKey
-            label="←"
-            onPress={() => handleArrow('left')}
-            className="text-xl"
-            style={{
-              width: arrowButtonSize,
-              height: arrowButtonSize,
-              minWidth: arrowButtonSize,
-            }}
-          />
-          <KeyboardKey
-            label="↑"
-            onPress={() => handleArrow('up')}
-            className="text-xl"
-            style={{
-              width: arrowButtonSize,
-              height: arrowButtonSize,
-              minWidth: arrowButtonSize,
-            }}
-          />
-          <KeyboardKey
-            label="↓"
-            onPress={() => handleArrow('down')}
-            className="text-xl"
-            style={{
-              width: arrowButtonSize,
-              height: arrowButtonSize,
-              minWidth: arrowButtonSize,
-            }}
-          />
-          <KeyboardKey
-            label="→"
-            onPress={() => handleArrow('right')}
-            className="text-xl"
-            style={{
-              width: arrowButtonSize,
-              height: arrowButtonSize,
-              minWidth: arrowButtonSize,
-            }}
-          />
-        </div>
-
         <button
           type="button"
           onPointerDown={keepKeyboardOpen}
-          onClick={onCtrlToggle}
-          className="rounded-md text-[10px] font-medium transition-all duration-150 active:scale-95"
+          onClick={() => setShowToolbox((open) => !open)}
+          aria-label={showToolbox ? 'Hide arrow keys' : 'Show arrow keys'}
+          aria-expanded={showToolbox}
+          aria-controls="control-bar-arrows"
+          className="flex shrink-0 items-center justify-center transition-all duration-150 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
           style={{
-            width: smallKeySize,
-            height: smallKeySize,
-            backgroundColor: ctrlActive
-              ? 'var(--term-accent)'
+            ...topRowButtonStyle,
+            backgroundColor: showToolbox
+              ? 'var(--term-accent-soft)'
               : 'var(--term-bg-elevated)',
-            color: ctrlActive
-              ? 'var(--term-accent-foreground)'
+            color: showToolbox
+              ? 'var(--term-accent)'
               : 'var(--term-text-muted)',
-            border: `1px solid ${ctrlActive ? 'var(--term-accent)' : 'var(--term-border)'}`,
-            boxShadow: ctrlActive ? '0 0 8px var(--term-accent-glow)' : 'none',
+            border: `1px solid ${showToolbox ? 'var(--term-accent)' : 'var(--term-border)'}`,
           }}
         >
-          CTRL
+          {showToolbox ? (
+            <ChevronDown style={{ width: iconSize, height: iconSize }} />
+          ) : (
+            <ChevronUp style={{ width: iconSize, height: iconSize }} />
+          )}
         </button>
       </div>
 

@@ -3,7 +3,7 @@ import type { ComponentProps } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getClaudeModelOptions } from '@/lib/utils/agent-hub-models'
 import { ControlBar } from './ControlBar'
-import { ModifierProvider } from './ModifierContext'
+import { ModifierProvider, useModifiers } from './ModifierContext'
 
 vi.mock('@/lib/utils/agent-hub-models', () => ({
   getClaudeModelOptions: vi.fn().mockResolvedValue([]),
@@ -39,6 +39,34 @@ function renderControlBar(
   return { onSend, onReconnect }
 }
 
+function ShiftControl() {
+  const { modifiers, toggleModifier } = useModifiers()
+  return (
+    <button
+      type="button"
+      onClick={() => toggleModifier('shift')}
+      aria-pressed={modifiers.shift !== 'off'}
+    >
+      Shift
+    </button>
+  )
+}
+
+function renderWithSharedShift() {
+  const onSend = vi.fn()
+  render(
+    <ModifierProvider>
+      <ShiftControl />
+      <ControlBar
+        onSend={onSend}
+        onVoice={vi.fn()}
+        onToggleMinimize={vi.fn()}
+      />
+    </ModifierProvider>,
+  )
+  return { onSend }
+}
+
 describe('ControlBar', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -59,8 +87,57 @@ describe('ControlBar', () => {
 
     expect(getClaudeModelOptions).not.toHaveBeenCalled()
     expect(
+      screen.getByRole('button', { name: 'Voice input unavailable' }),
+    ).toBeDisabled()
+    expect(
       screen.queryByRole('button', { name: /model/i }),
     ).not.toBeInTheDocument()
+  })
+
+  it('shows the persistent utility controls and only reveals four arrows in the toolbox', () => {
+    const onToggleMinimize = vi.fn()
+    renderControlBar({
+      onToggleMinimize,
+      onVoice: vi.fn(),
+      onCtrlToggle: vi.fn(),
+      activeMode: 'codex',
+    })
+
+    expect(
+      screen.getByRole('button', { name: 'Hide keyboard' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Tab' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Voice input' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'ESC' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'CTRL' })).toBeInTheDocument()
+    const toolbox = screen.getByRole('button', { name: 'Show arrow keys' })
+    expect(toolbox).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('button', { name: '←' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /shift/i }),
+    ).not.toBeInTheDocument()
+
+    fireEvent.click(toolbox)
+    expect(
+      screen.getByRole('button', { name: 'Hide arrow keys' }),
+    ).toHaveAttribute('aria-expanded', 'true')
+    for (const arrow of ['←', '↑', '↓', '→']) {
+      expect(screen.getByRole('button', { name: arrow })).toBeInTheDocument()
+    }
+    const arrowPanel = screen.getByLabelText('Arrow keys')
+    const utilityRow = screen.getByRole('button', { name: 'Tab' }).parentElement
+    expect(arrowPanel.nextElementSibling).toBe(utilityRow)
+    expect(arrowPanel.querySelectorAll('button')).toHaveLength(4)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide keyboard' }))
+    expect(onToggleMinimize).toHaveBeenCalledTimes(1)
+    expect(
+      screen.getByRole('button', { name: 'Hide arrow keys' }),
+    ).toHaveAttribute('aria-expanded', 'true')
+    fireEvent.click(screen.getByRole('button', { name: 'Hide arrow keys' }))
+    expect(screen.queryByRole('button', { name: '←' })).not.toBeInTheDocument()
   })
 
   it('hides status banner for voice active sessions', async () => {
@@ -107,6 +184,25 @@ describe('ControlBar', () => {
 
     expect(getClaudeModelOptions).toHaveBeenCalledTimes(1)
     expect(screen.getByRole('button', { name: /model/i })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Switch Claude model' }))
+    expect(
+      screen.getByRole('button', { name: 'Switch Claude model' }),
+    ).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('keeps Claude model selection available from the compact row', async () => {
+    vi.mocked(getClaudeModelOptions).mockResolvedValueOnce([
+      { id: 'sonnet', label: 'Sonnet', command: '/model sonnet\r' },
+    ])
+    const { onSend } = renderControlBar({ activeMode: 'claude' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Switch Claude model' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Sonnet' }))
+
+    expect(onSend).toHaveBeenCalledWith('/model sonnet\r')
+    expect(
+      screen.getByRole('button', { name: 'Switch Claude model' }),
+    ).toHaveAttribute('aria-expanded', 'false')
   })
 
   it('does not update picker state after unmount when model loading fails', async () => {
@@ -141,34 +237,70 @@ describe('ControlBar', () => {
   it('keeps the phone keyboard open when a bar key is pressed', () => {
     // A plain button takes focus on pointerdown, and losing focus on the input
     // dismisses the on-screen keyboard.
-    renderControlBar({ onCtrlToggle: vi.fn(), onVoice: vi.fn() })
+    renderControlBar({
+      onCtrlToggle: vi.fn(),
+      onVoice: vi.fn(),
+      onToggleMinimize: vi.fn(),
+    })
 
-    for (const name of ['TAB', '⇧TAB', 'SHIFT', '←', '↑', '↓', '→', 'CTRL']) {
+    for (const name of [
+      'Hide keyboard',
+      'Tab',
+      'Voice input',
+      'ESC',
+      'CTRL',
+      'Show arrow keys',
+    ]) {
       // fireEvent returns false when the handler called preventDefault.
-      expect(fireEvent.pointerDown(screen.getByText(name))).toBe(false)
+      expect(fireEvent.pointerDown(screen.getByRole('button', { name }))).toBe(
+        false,
+      )
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Show arrow keys' }))
+    for (const arrow of ['←', '↑', '↓', '→']) {
+      expect(
+        fireEvent.pointerDown(screen.getByRole('button', { name: arrow })),
+      ).toBe(false)
     }
   })
 
   it('still fires the key after refusing focus', () => {
     const { onSend } = renderControlBar()
 
-    expect(fireEvent.pointerDown(screen.getByText('TAB'))).toBe(false)
-    fireEvent.click(screen.getByText('TAB'))
+    expect(
+      fireEvent.pointerDown(screen.getByRole('button', { name: 'Tab' })),
+    ).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: 'Tab' }))
 
     expect(onSend).toHaveBeenCalledWith('\t')
   })
 
-  it('sends Shift+Left once, then an unmodified Left', () => {
-    const { onSend } = renderControlBar()
+  it('sends Shift+Tab from shared one-shot Shift, then plain Tab', () => {
+    const { onSend } = renderWithSharedShift()
+    const shift = screen.getByRole('button', { name: 'Shift' })
+    const tab = screen.getByRole('button', { name: 'Tab' })
 
-    fireEvent.click(screen.getByRole('button', { name: 'SHIFT' }))
+    fireEvent.click(shift)
+    expect(shift).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(tab)
+    fireEvent.click(tab)
+
+    expect(onSend.mock.calls).toEqual([['\x1b[Z'], ['\t']])
+    expect(shift).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('sends Shift+Left once, then an unmodified Left', () => {
+    const { onSend } = renderWithSharedShift()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Shift' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Show arrow keys' }))
     const left = screen.getByRole('button', { name: '←' })
     expect(fireEvent.pointerDown(left)).toBe(false)
     fireEvent.click(left)
     fireEvent.click(left)
 
     expect(onSend.mock.calls).toEqual([['\x1b[1;2D'], ['\x1b[D']])
-    expect(screen.getByRole('button', { name: 'SHIFT' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Shift' })).toHaveAttribute(
       'aria-pressed',
       'false',
     )
@@ -176,9 +308,16 @@ describe('ControlBar', () => {
 
   it('lets the compose input handle shifted arrows', () => {
     const onArrow = vi.fn().mockReturnValue(true)
-    const { onSend } = renderControlBar({ onArrow })
+    const onSend = vi.fn()
+    render(
+      <ModifierProvider>
+        <ShiftControl />
+        <ControlBar onSend={onSend} onArrow={onArrow} />
+      </ModifierProvider>,
+    )
 
-    fireEvent.click(screen.getByRole('button', { name: 'SHIFT' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Shift' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Show arrow keys' }))
     fireEvent.click(screen.getByRole('button', { name: '←' }))
 
     expect(onArrow).toHaveBeenCalledWith('left', {
