@@ -164,46 +164,53 @@ describe('useATermScrolling', () => {
     wheelCleanup()
   })
 
-  it('does not intercept alternate-screen wheel events for shell sessions', () => {
-    const aTerm = {
-      buffer: { active: { type: 'alternate' } },
-      modes: { mouseTrackingMode: 'none' },
-      refresh: vi.fn(),
-      rows: 18,
-      scrollLines: vi.fn(),
-    }
-    const wsRef = {
-      current: { readyState: WebSocket.OPEN, send: vi.fn() },
-    }
-    const aTermRef = { current: aTerm }
-    const container = document.createElement('div')
-    const downstreamListener = vi.fn()
-    container.addEventListener('wheel', downstreamListener)
+  it.each([-80, 80])(
+    'keeps shell-hosted TUI wheel %s out of prompt history',
+    (deltaY) => {
+      const aTerm = {
+        buffer: { active: { type: 'alternate' } },
+        modes: { mouseTrackingMode: 'none' },
+        refresh: vi.fn(),
+        rows: 18,
+        scrollLines: vi.fn(),
+      }
+      const wsRef = {
+        current: { readyState: WebSocket.OPEN, send: vi.fn() },
+      }
+      const aTermRef = { current: aTerm }
+      const container = document.createElement('div')
+      const downstreamListener = vi.fn()
+      container.addEventListener('wheel', downstreamListener)
+      const requestOverlay = vi.fn()
 
-    const { result } = renderHook(() =>
-      useATermScrolling({
-        wsRef: wsRef as never,
-        aTermRef: aTermRef as unknown as { current: XtermATerm | null },
-        isMobile: false,
-        sessionMode: 'shell',
-      }),
-    )
+      const { result } = renderHook(() =>
+        useATermScrolling({
+          wsRef: wsRef as never,
+          aTermRef: aTermRef as unknown as { current: XtermATerm | null },
+          isMobile: false,
+          sessionMode: 'shell',
+          onRequestScrollbackOverlay: requestOverlay,
+        }),
+      )
 
-    const { wheelCleanup } = result.current.setupScrolling(container)
-    const event = new WheelEvent('wheel', {
-      deltaY: 80,
-      bubbles: true,
-      cancelable: true,
-    })
+      const { wheelCleanup } = result.current.setupScrolling(container)
+      const event = new WheelEvent('wheel', {
+        deltaY,
+        bubbles: true,
+        cancelable: true,
+      })
 
-    container.dispatchEvent(event)
+      container.dispatchEvent(event)
 
-    expect(event.defaultPrevented).toBe(false)
-    expect(aTerm.scrollLines).not.toHaveBeenCalled()
-    expect(downstreamListener).toHaveBeenCalledTimes(1)
+      expect(event.defaultPrevented).toBe(true)
+      expect(aTerm.scrollLines).not.toHaveBeenCalled()
+      expect(downstreamListener).not.toHaveBeenCalled()
+      expect(wsRef.current.send).not.toHaveBeenCalled()
+      expect(requestOverlay).toHaveBeenCalledTimes(deltaY < 0 ? 1 : 0)
 
-    wheelCleanup()
-  })
+      wheelCleanup()
+    },
+  )
 
   it('opens scrollback overlay at the live bottom page for non-shell alternate-screen upward wheel events', () => {
     const aTerm = {

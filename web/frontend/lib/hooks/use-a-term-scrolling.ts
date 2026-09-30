@@ -114,7 +114,6 @@ export function useATermScrolling({
         const prefersLocalViewportScroll =
           prefersLocalViewportScrollForMode(sessionMode)
         const isAltScreen = isAlternateScreen(aTerm)
-        if (isAltScreen && !prefersLocalViewportScroll) return
 
         // TUI sessions: first upward wheel tick should open the overlay
         // anchored at the live bottom page. Do not also consume that tick
@@ -123,7 +122,10 @@ export function useATermScrolling({
         // after a page refresh xterm.js hasn't received the alt-screen-enter
         // escape sequence yet, so isAltScreen is false even though the
         // session is a TUI.
-        if (prefersLocalViewportScroll) {
+        // Shell sessions can host agents too. The alternate screen has no
+        // local history, so letting xterm handle its wheel produces arrow keys
+        // and recalls prompts once the scrollback overlay has closed.
+        if (prefersLocalViewportScroll || isAltScreen) {
           e.preventDefault()
           e.stopPropagation()
           e.stopImmediatePropagation()
