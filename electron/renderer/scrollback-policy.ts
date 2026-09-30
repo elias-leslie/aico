@@ -30,7 +30,9 @@ export function scrollbackWheelAction({
     return deltaY < 0 ? 'open' : 'consume'
   }
 
-  if (deltaY < 0 && !mouseReportingActive) return 'open'
+  // A shell session may now be running an agent launched from its prompt.
+  // Never let xterm synthesize history-navigation keys at the live bottom.
+  if (!mouseReportingActive) return deltaY < 0 ? 'open' : 'consume'
   return 'ignore'
 }
 

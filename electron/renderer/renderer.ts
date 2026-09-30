@@ -51,6 +51,12 @@ const term = new Terminal({
   allowProposedApi: true,
 })
 
+// Wheel scrolling is routed by the capture handler below. The live tmux view
+// has no local history: xterm's fallback would synthesize Up/Down input instead,
+// including before session identity arrives or while scrollback is closing.
+// Mouse-reporting applications use xterm's separate mouse-event path.
+term.attachCustomWheelEventHandler(() => false)
+
 const fit = new FitAddon()
 term.loadAddon(fit)
 

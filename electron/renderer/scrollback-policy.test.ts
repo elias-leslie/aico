@@ -63,7 +63,21 @@ describe('scrollback wheel policy', () => {
     ).toBe('consume')
   })
 
-  it('ignores shell downward wheel and active overlay cases', () => {
+  it('consumes downward wheel at the live bottom of a shell-hosted TUI', () => {
+    // Sessions keep their shell identity when an agent is started manually.
+    // With no mouse reporting, xterm turns an unclaimed wheel into arrow keys.
+    expect(
+      scrollbackWheelAction({
+        deltaY: 100,
+        overlayActive: false,
+        mouseReportingActive: false,
+        alternateScreen: true,
+        tuiSlug: 'shell',
+      }),
+    ).toBe('consume')
+  })
+
+  it('consumes shell downward wheel and ignores active overlay cases', () => {
     expect(
       scrollbackWheelAction({
         deltaY: 100,
@@ -72,7 +86,7 @@ describe('scrollback wheel policy', () => {
         alternateScreen: false,
         tuiSlug: 'shell',
       }),
-    ).toBe('ignore')
+    ).toBe('consume')
     expect(
       scrollbackWheelAction({
         deltaY: -100,
