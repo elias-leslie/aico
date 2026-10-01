@@ -30,7 +30,9 @@ import { type IPty, spawn } from 'node-pty'
 import { parseTerminalFontSettings } from '../shared/font-settings'
 import {
   type ExternalViewPresence,
-  reconcileClosedExternalViews,
+  reconcileRetiredViews,
+  reconcileSessionViews,
+  watchSessionCatalog,
 } from './external-view-reconciliation'
 import {
   activateTmuxViewSize,
@@ -423,6 +425,7 @@ const paneExitDirtyServers = new Set<string>()
 const paneExitDeferredServers = new Set<string>()
 const paneExitUnresolvedServers = new Set<string>()
 let paneExitFsWatcher: FSWatcher | null = null
+let sessionCatalogWatcher: FSWatcher | null = null
 let paneExitWatcherRecoveryAttempted = false
 let tmuxServerAllocationTail: Promise<void> = Promise.resolve()
 
@@ -2601,6 +2604,7 @@ async function startPty(win: BrowserWindow, size: PtySize): Promise<void> {
       if (!quitting) {
         const row = getWidget(widgetId)
         if (row) void reconcileManagedWidget(row)
+        syncTray()
       }
     }
   })
@@ -3078,6 +3082,8 @@ function showHub(): void {
 }
 
 function syncTray(): void {
+  if (quitting) return
+  closeRetiredViews()
   renderTray()
   void refreshAttachableTmuxSessions()
     .then(async (attachables) => {
@@ -3085,11 +3091,12 @@ function syncTray(): void {
       trayAttachableTmuxSessions = attachables
       pushTitles()
       renderTray()
-      await reconcileClosedExternalViews(
+      await reconcileSessionViews(
         attachables.map((session) => session.session),
         {
           list: listWidgets,
-          isOpen: (id) => Boolean(windowForWidget(id)),
+          openViews: () => [...widgetOf.values()],
+          close: (id) => windowForWidget(id)?.destroy(),
           acquire: (id) => lifecycleOwners.acquire(id),
           release: releaseLifecycleOwner,
           probe: externalTmuxSessionPresence,
@@ -3106,6 +3113,15 @@ function syncTray(): void {
       if (!quitting) renderTray()
     })
     .catch((error) => console.warn('[aico] tmux session catalog refresh failed:', error))
+}
+
+function closeRetiredViews(): void {
+  if (quitting) return
+  reconcileRetiredViews({
+    list: listWidgets,
+    openViews: () => [...widgetOf.values()],
+    close: (id) => windowForWidget(id)?.destroy(),
+  })
 }
 
 function renderTray(): void {
@@ -3661,6 +3677,8 @@ app.on('before-quit', () => {
   if (app.isReady()) globalShortcut.unregisterAll()
   selectionEvents?.abort()
   paneExitFsWatcher?.close()
+  sessionCatalogWatcher?.close()
+  sessionCatalogWatcher = null
   paneExitFsWatcher = null
   paneExitEventReady.clear()
   sidecar?.stop()
@@ -3730,6 +3748,9 @@ app.whenReady().then(async () => {
   registerBuiltinTuis()
   ensureTmuxConf()
   initStore(dbPath)
+  sessionCatalogWatcher = watchSessionCatalog(dbPath, closeRetiredViews, (error) => {
+    console.error('[aico:lifecycle] session catalog watcher failed:', error)
+  })
   await reconcileTmuxServers()
   durableUserManager = detectDurableUserManager()
   console.log(
@@ -3959,7 +3980,7 @@ app.whenReady().then(async () => {
     const owner = lifecycleOwners.acquire(id)
     if (!owner) throw new Error('Session is changing; try End again')
     const result = await discardWidgetOwned(id, owner)
-    if (result.status === 'ended') return
+    if (result.status === 'ended' || result.status === 'absent') return
     if (result.status === 'blocked') throw new Error(`End failed: ${result.reason}`)
     throw new Error(
       result.status === 'stale' ? 'Session changed; try End again' : 'Session ended elsewhere',

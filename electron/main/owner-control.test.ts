@@ -3,10 +3,16 @@ import { request } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import {
+  reconcileRetiredViews,
+  reconcileSessionViews,
+  watchSessionCatalog,
+} from './external-view-reconciliation'
+import { LifecycleOwnerLock } from './lifecycle-guard'
 import { createOwnerServer, listenOwnerServer, ownerSocketPath } from './owner-control'
 import { sessionGeneration } from './owner-retirement'
-import { getWidget, initStore, insertWidget } from './store'
+import { getWidget, initStore, insertWidget, listWidgets } from './store'
 
 describe('headless owner control', () => {
   const root = mkdtempSync(join(tmpdir(), 'aico-owner-test-'))
@@ -60,6 +66,65 @@ describe('headless owner control', () => {
       '/run/user/1000/aico/control.sock',
     )
     expect(() => ownerSocketPath('/tmp/../other.sock')).toThrow()
+  })
+
+  it('closes the desktop view after the headless owner confirms End', async () => {
+    const row = insertWidget('1234dcba', true, 'shell')
+    const open = new Set([row.id])
+    const locks = new LifecycleOwnerLock()
+    const close = vi.fn((id: string) => open.delete(id))
+    expect(
+      await call(`/v1/sessions/${row.id}/end`, 'POST', {
+        generation: sessionGeneration(row),
+      }),
+    ).toEqual({ status: 200, body: { status: 'ended' } })
+
+    await reconcileSessionViews([], {
+      list: listWidgets,
+      openViews: () => [...open],
+      close,
+      acquire: (id) => locks.acquire(id),
+      release: (_id, owner) => {
+        locks.release(owner)
+      },
+      probe: async () => 'unknown',
+      forget: () => false,
+    })
+
+    expect(close).toHaveBeenCalledExactlyOnceWith(row.id)
+    expect(open.size).toBe(0)
+  })
+
+  it('observes retirement committed after the terminal client has exited', async () => {
+    const row = insertWidget('1234fedc', true, 'shell')
+    const open = new Set([row.id])
+    const close = vi.fn((id: string) => open.delete(id))
+    const operations = { list: listWidgets, openViews: () => [...open], close }
+    const onError = vi.fn()
+    const watcher = watchSessionCatalog(
+      join(root, 'aico.db'),
+      () => {
+        reconcileRetiredViews(operations)
+      },
+      onError,
+    )
+    try {
+      // The exited/detached client still has a catalog row. Keep its view until
+      // the owner's later transaction confirms complete retirement.
+      expect(reconcileRetiredViews(operations)).toBe(0)
+      expect(close).not.toHaveBeenCalled()
+      expect(
+        await call(`/v1/sessions/${row.id}/end`, 'POST', {
+          generation: sessionGeneration(row),
+        }),
+      ).toEqual({ status: 200, body: { status: 'ended' } })
+
+      await vi.waitFor(() => expect(open.size).toBe(0))
+      expect(close).toHaveBeenCalledExactlyOnceWith(row.id)
+      expect(onError).not.toHaveBeenCalled()
+    } finally {
+      watcher.close()
+    }
   })
 
   it('rejects unauthoritative and stale End requests, then confirms guarded retirement', async () => {
