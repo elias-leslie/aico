@@ -2209,8 +2209,7 @@ async function ensureSession(widgetId: string, size: PtySize): Promise<boolean> 
   // used by replace/retire for the entire decision and recovery sequence.
   const pendingSelection = selectionDeliveries.get(widgetId)
   if (pendingSelection) await pendingSelection
-  const lifecycleOwner = lifecycleOwners.acquire(widgetId)
-  if (!lifecycleOwner) return false
+  const lifecycleOwner = await lifecycleOwners.acquireWhenAvailable(widgetId)
   const knownServerId = getWidget(widgetId)?.tmuxServerId
   try {
     return await ensureOwnedInternalSession(widgetId, size)
@@ -3977,8 +3976,7 @@ app.whenReady().then(async () => {
     const win = BrowserWindow.fromWebContents(event.sender)
     const id = win ? widgetOf.get(win.id) : undefined
     if (!id) throw new Error('Session view is unavailable')
-    const owner = lifecycleOwners.acquire(id)
-    if (!owner) throw new Error('Session is changing; try End again')
+    const owner = await lifecycleOwners.acquireWhenAvailable(id)
     const result = await discardWidgetOwned(id, owner)
     if (result.status === 'ended' || result.status === 'absent') return
     if (result.status === 'blocked') throw new Error(`End failed: ${result.reason}`)

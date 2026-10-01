@@ -13,6 +13,7 @@ export interface LifecycleOwnerToken {
 export class LifecycleOwnerLock {
   private readonly owners = new Map<string, LifecycleOwnerToken>()
   private readonly widgetByToken = new WeakMap<LifecycleOwnerToken, string>()
+  private readonly waiters = new Map<string, Set<() => void>>()
 
   acquire(widgetId: string): LifecycleOwnerToken | null {
     if (this.owners.has(widgetId)) return null
@@ -21,6 +22,20 @@ export class LifecycleOwnerLock {
     this.owners.set(widgetId, token)
     this.widgetByToken.set(token, widgetId)
     return token
+  }
+
+  /** Attach can arrive during startup reconciliation. Wait for its release,
+   * then acquire a fresh token; a synchronous retirement still has priority. */
+  async acquireWhenAvailable(widgetId: string): Promise<LifecycleOwnerToken> {
+    for (;;) {
+      const owner = this.acquire(widgetId)
+      if (owner) return owner
+      await new Promise<void>((resolve) => {
+        const waiters = this.waiters.get(widgetId) ?? new Set<() => void>()
+        waiters.add(resolve)
+        this.waiters.set(widgetId, waiters)
+      })
+    }
   }
 
   isHeld(widgetId: string): boolean {
@@ -33,6 +48,9 @@ export class LifecycleOwnerLock {
 
     this.owners.delete(widgetId)
     this.widgetByToken.delete(token)
+    const waiters = this.waiters.get(widgetId)
+    this.waiters.delete(widgetId)
+    for (const resolve of waiters ?? []) resolve()
     return true
   }
 }

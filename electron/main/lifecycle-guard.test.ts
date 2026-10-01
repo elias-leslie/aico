@@ -18,6 +18,31 @@ function acquire(lock: LifecycleOwnerLock, widgetId: string): LifecycleOwnerToke
 }
 
 describe('LifecycleOwnerLock', () => {
+  it('waits to attach while reconciliation owns the session', async () => {
+    const lock = new LifecycleOwnerLock()
+    const reconciliation = acquire(lock, 'widget')
+    const attaching = lock.acquireWhenAvailable('widget')
+    lock.release(reconciliation)
+    const attachOwner = await attaching
+    expect(attachOwner).not.toBeNull()
+    expect(lock.isHeld('widget')).toBe(true)
+    if (attachOwner) lock.release(attachOwner)
+  })
+
+  it('keeps explicit retirement ahead of an attach waiting for reconciliation', async () => {
+    const lock = new LifecycleOwnerLock()
+    const reconciliation = acquire(lock, 'widget')
+    const attaching = lock.acquireWhenAvailable('widget')
+    lock.release(reconciliation)
+    const retiring = acquire(lock, 'widget')
+    await Promise.resolve()
+    expect(lock.isHeld('widget')).toBe(true)
+    lock.release(retiring)
+    const attachOwner = await attaching
+    expect(attachOwner).not.toBeNull()
+    if (attachOwner) lock.release(attachOwner)
+  })
+
   it('serializes lifecycle work independently per widget', () => {
     const lock = new LifecycleOwnerLock()
     const first = acquire(lock, 'first-widget')
