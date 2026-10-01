@@ -29,6 +29,7 @@ import {
 import { type IPty, spawn } from 'node-pty'
 import { parseTerminalFontSettings } from '../shared/font-settings'
 import {
+  confirmATermSessionAbsence,
   type ExternalViewPresence,
   reconcileRetiredViews,
   reconcileSessionViews,
@@ -2547,6 +2548,7 @@ async function startPty(win: BrowserWindow, size: PtySize): Promise<void> {
         '\r\n\u001b[31mAico safety stop: tmux ownership could not be verified. ' +
           'No agent was launched; copy diagnostics or inspect the lifecycle log.\u001b[0m\r\n',
       )
+      syncTray()
     }
     return
   }
@@ -2866,7 +2868,16 @@ async function externalTmuxSessionPresence(target: TmuxTarget): Promise<External
     })
     return 'present'
   } catch (error) {
-    return isDefinitiveTmuxAbsence(tmuxErrorText(error)) ? 'absent' : 'unknown'
+    if (isDefinitiveTmuxAbsence(tmuxErrorText(error))) return 'absent'
+    // Ending the final A-Term session also removes its tmux server. A missing
+    // socket alone is inconclusive; the owner's exact missing-record reply is
+    // the additional receipt needed to retire this view.
+    return (await confirmATermSessionAbsence(target, {
+      port: Number(process.env.AICO_A_TERM_PORT ?? 8002),
+      timeoutMs: TMUX_QUERY_TIMEOUT_MS,
+    }))
+      ? 'absent'
+      : 'unknown'
   }
 }
 

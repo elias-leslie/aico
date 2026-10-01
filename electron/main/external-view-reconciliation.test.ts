@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  confirmATermSessionAbsence,
   type ExternalView,
   type ExternalViewOperations,
   reconcileClosedExternalViews,
@@ -41,6 +42,46 @@ function fixture(initial: ExternalView[]) {
 describe('closed external view reconciliation', () => {
   const ended = 'summitflow-dbbd960a-90a0-47cc-972b-33632f08b4e9'
   const running = 'summitflow-3b52af2a-986a-431c-9ecc-670eb81d3374'
+
+  it('uses the owning catalog to confirm End when the last tmux session has stopped its server', async () => {
+    const sessionId = ended.slice('summitflow-'.length)
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ detail: `Session ${sessionId} not found` }), { status: 404 }),
+      )
+    expect(
+      await confirmATermSessionAbsence(
+        { socket: null, session: ended },
+        {
+          port: 8002,
+          timeoutMs: 2000,
+          fetchFn,
+        },
+      ),
+    ).toBe(true)
+    expect(fetchFn.mock.calls[0][0]).toBe(`http://127.0.0.1:8002/api/a-term/sessions/${sessionId}`)
+  })
+
+  it.each([
+    [404, { detail: 'Not Found' }],
+    [503, { detail: 'owner unavailable' }],
+    [200, { id: ended.slice('summitflow-'.length), is_alive: false }],
+  ])('does not treat an unverified owner reply %s as retirement', async (status, payload) => {
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(JSON.stringify(payload), { status }))
+    expect(
+      await confirmATermSessionAbsence(
+        { socket: null, session: ended },
+        {
+          port: 8002,
+          timeoutMs: 2000,
+          fetchFn,
+        },
+      ),
+    ).toBe(false)
+  })
 
   it('closes an open A-Term view when End elsewhere proves its target absent', async () => {
     const state = fixture([view('stale', ended)])

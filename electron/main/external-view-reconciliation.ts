@@ -12,6 +12,37 @@ export interface ExternalView {
 
 export type ExternalViewPresence = 'present' | 'absent' | 'unknown'
 
+export async function confirmATermSessionAbsence(
+  target: TmuxTarget,
+  options: { port: number; timeoutMs: number; fetchFn?: typeof fetch },
+): Promise<boolean> {
+  if (
+    target.socket !== null ||
+    !isATermSessionName(target.session) ||
+    !Number.isInteger(options.port) ||
+    options.port < 1 ||
+    options.port > 65535
+  )
+    return false
+  const sessionId = target.session.slice('summitflow-'.length)
+  try {
+    const response = await (options.fetchFn ?? fetch)(
+      `http://127.0.0.1:${options.port}/api/a-term/sessions/${sessionId}`,
+      { signal: AbortSignal.timeout(options.timeoutMs) },
+    )
+    if (response.status !== 404) return false
+    const body: unknown = await response.json()
+    return Boolean(
+      body &&
+        typeof body === 'object' &&
+        'detail' in body &&
+        body.detail === `Session ${sessionId} not found`,
+    )
+  } catch {
+    return false
+  }
+}
+
 export interface ExternalViewOperations {
   list: () => ExternalView[]
   acquire: (id: string) => LifecycleOwnerToken | null

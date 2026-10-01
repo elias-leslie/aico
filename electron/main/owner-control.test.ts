@@ -68,6 +68,19 @@ describe('headless owner control', () => {
     expect(() => ownerSocketPath('/tmp/../other.sock')).toThrow()
   })
 
+  it('reads committed ownership while the desktop connection is writing', () => {
+    const row = insertWidget('1234ba98', true, 'shell')
+    const desktop = new DatabaseSync(join(root, 'aico.db'))
+    try {
+      desktop.exec('BEGIN EXCLUSIVE')
+      desktop.prepare('UPDATE widgets SET open = 0 WHERE id = ?').run(row.id)
+      expect(getWidget(row.id)?.open).toBe(true)
+    } finally {
+      desktop.exec('ROLLBACK')
+      desktop.close()
+    }
+  })
+
   it('closes the desktop view after the headless owner confirms End', async () => {
     const row = insertWidget('1234dcba', true, 'shell')
     const open = new Set([row.id])

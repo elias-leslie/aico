@@ -223,6 +223,10 @@ function toRow(r: Raw): WidgetRow {
 
 export function initStore(dbPath: string): void {
   db = new DatabaseSync(dbPath)
+  // Electron and the headless owner use independent connections. Keep reads
+  // available during the other's transaction, and let short competing writes
+  // settle within the owner's existing two-second query budget.
+  db.exec('PRAGMA busy_timeout = 2000; PRAGMA journal_mode = WAL')
   db.exec(`
     CREATE TABLE IF NOT EXISTS widgets (
       id         TEXT PRIMARY KEY,
