@@ -1,92 +1,33 @@
 # Aico
 
-**Floating desktop widgets for terminal AI agents, shells, and click-to-context capture.**
+Aico is a Linux desktop companion for people working with terminal AI tools. Floating Electron widgets wrap persistent tmux sessions and let users send selected browser or desktop context into a running agent without leaving their work.
 
-Aico is a Linux desktop companion for people who work with terminal AI tools. It wraps Claude Code, Codex CLI, Gemini CLI, Pi, and plain shells in small Electron widgets backed by persistent tmux sessions. Widgets can be reopened, moved between workspaces, fed selected browser/page/screen context, and left running while you work elsewhere.
-
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![CI](https://github.com/elias-leslie/aico/actions/workflows/ci.yml/badge.svg)](https://github.com/elias-leslie/aico/actions/workflows/ci.yml)
-[![Linux](https://img.shields.io/badge/platform-Linux-2ea043.svg)](#requirements)
-[![Electron](https://img.shields.io/badge/Electron-42-47848f.svg)](https://www.electronjs.org/)
-[![xterm.js](https://img.shields.io/badge/xterm.js-6-green.svg)](https://xtermjs.org/)
-
-![Aico — summon the command palette in a floating desktop lantern and launch a Claude Code agent into any workspace on Linux](docs/images/aico-demo.gif)
+![Aico floating widget](docs/images/aico-demo.gif)
 
 ## What it does
 
-- **Floating terminal widgets** — one or more compact Electron windows, each running a tmux-backed terminal with a WebGL renderer (DOM fallback), configurable font, animated "eyes" that track your cursor, and a "thinking" halo while the agent is working.
-- **Persistent, owned sessions** — each widget owns stable server-generation, session, and pane IDs. Closing a widget only detaches, so work reattaches across close/reopen/restart; Aico never retires durable work merely because it is old or unattached. New panes carry widget/project/agent ownership metadata and run in a narrow per-pane scope. Historical sessions remain on the canonical `aico` socket and are preserved read-only from lifecycle mutation.
-- **Lifecycle diagnostics** — “Copy session diagnostics” reports the owning widget/project/session, tmux target, command, scope, age, CPU time, memory, swap, process/task counts, and containment warnings without broad process-name scans.
-- **Agent launcher menu** — start Claude Code, Codex, Gemini CLI, Pi, or a plain shell from the same lantern menu, choosing the TUI and the workspace to launch it into; "Replace TUI" swaps the tool in the focused widget.
-- **Command palette & pinned controls** — a searchable command palette (`Ctrl+Shift+P`) and a pinned, drag-reorderable titlebar cluster, both driven by one action registry. Rename widgets inline.
-- **Context-mandate verification** — before launch, Aico checks that each agent family (Claude, Codex, Gemini, Hermes) is wired to its configured system-prompt/hooks and surfaces a green ✓ / red ⚠ badge. It verifies only — it never installs hooks for you.
-- **Read-only scrollback overlay** — wheel up to browse tmux history (paged from the session) without disturbing the live view.
-- **Workspace picker** — always includes a local Personal Workspace; optionally reads an `st projects` catalog when that tool is installed.
-- **Click-to-context capture** — the loopback sidecar accepts local browser/extension and desktop captures and inserts a compact reference into the focused widget's prompt (single, batch, or an image+OCR "package").
-- **Attach external tmux sessions** — detects A-Term/SummitFlow tmux sessions and offers to attach them as widgets from the tray or palette.
-- **Optional desktop capture hotkeys** — when local `st ui` capture tooling is available, GNOME shortcuts (or in-app grab actions) can package a focused window, a picked window, a drag-selected region, or text-only OCR into Aico.
-- **Optional voice dictation** — when `AICO_VOICE_WS` points at a compatible local Whisper websocket, push-to-talk streams microphone audio and inserts the transcript.
+- Hosts Claude Code, Codex, Gemini/Antigravity, Pi, and shells in movable terminal widgets.
+- Preserves owned server-generation, session, and pane identities across detach/reopen and reports targeted lifecycle diagnostics.
+- Offers a command palette, workspace picker, scrollback, browser selection capture, and optional desktop capture or voice dictation.
+- Verifies configured agent context hooks before launch and can attach compatible external tmux sessions.
 
-## How it compares
+## Current scope
 
-Aico's distinctive move is **context, on demand**: right-click a page or selection
-in your browser, or tag any desktop window, and it lands directly in your *running
-terminal agent's* session. Everything else either records your whole screen and
-makes you search it, routes capture into its own chat, or only runs on macOS.
+Aico targets a single-user Linux desktop. X11 is the best-supported path for global shortcuts and desktop capture; Wayland has limitations. The optional MV3 extension is loaded unpacked for development. macOS, Windows, and `.deb` packaging are not implemented.
 
-| | Aico | Raycast "Send to AI" | Warp | Screenpipe |
-|---|:---:|:---:|:---:|:---:|
-| Tag a browser page/selection → into the agent | ✅ | — | — | history search |
-| Tag any desktop window/region → into the agent | ✅ | macOS only | paste image yourself | always-on recording |
-| Target is your own terminal CLI agent (Claude Code, Codex…) | ✅ | its own chat | built-in agent | MCP query |
-| Persistent tmux-backed sessions | ✅ | — | — | — |
-| Runs on Linux | ✅ | — | ✅ | ✅ |
+## Getting started
 
-Deliberate, on-demand tagging into a persistent terminal agent on Linux is the
-combination no other tool ships.
-
-## Requirements
-
-Aico currently targets a **single-user Linux desktop**.
-
-Required:
-
-- Node.js 22+ and npm
-- Python 3.13+
-- [uv](https://docs.astral.sh/uv/) for the Python sidecar environment
-- `tmux`
-- a systemd 254+ user manager with cgroup v2 and a tmux build that assigns each pane
-  a `tmux-spawn-<uuid>.scope`
-- user lingering (`loginctl show-user "$UID" -p Linger`) so the durable tmux
-  service and pane scopes survive a normal graphical logout; the source
-  installer enables and verifies it
-- common native build tools for `node-pty` (`python3`, `make`, `g++` on Debian/Ubuntu)
-- Electron runtime libraries (`libgtk-3-0`, `libnss3`, `libatk1.0-0`, `libatk-bridge2.0-0`, `libcups2`, `libgbm1`, `libasound2t64`, and related X11/desktop libraries on Debian/Ubuntu)
-
-Recommended for the full desktop experience:
-
-- X11/Xorg. The app can run under Wayland, but global shortcuts and desktop capture are more limited there.
-- Chrome/Chromium if you want to load the optional browser extension.
-- Any terminal AI CLIs you want to launch (`claude`, `codex`, `agy`, `pi`). Aico does not provide accounts or API keys for those tools.
-
-## Quickstart
-
-### Download and run
-
-Download the latest self-contained `Aico-*.AppImage` from the
-[Releases](https://github.com/elias-leslie/aico/releases/latest) page — it bundles
-the FastAPI sidecar, so it needs no Python, `uv`, or `.venv` at runtime:
+Download an AppImage and `SHA256SUMS.txt` from [Releases](https://github.com/elias-leslie/aico/releases/latest):
 
 ```bash
+sha256sum -c SHA256SUMS.txt
 chmod +x Aico-*.AppImage
 ./Aico-*.AppImage
 ```
 
-Each release also ships `SHA256SUMS.txt`; verify with `sha256sum -c SHA256SUMS.txt`.
-`tmux` and whichever terminal AI CLIs you launch (`claude`, `codex`, …) remain
-runtime prerequisites — Aico hosts them.
+The AppImage bundles Electron and the sidecar and does not require Node.js, Python, `uv`, or a virtualenv at runtime. It still requires tmux, the AI CLIs you launch, Electron's Linux system libraries, and the durable-session prerequisites below.
 
-### Build from source
+For a source install:
 
 ```bash
 git clone https://github.com/elias-leslie/aico.git
@@ -95,170 +36,27 @@ scripts/aico-install.sh
 scripts/aico-launch.sh
 ```
 
-The installer performs a source install in the current checkout:
+Source builds additionally need Node.js 22+, npm, Python 3.13+, uv, and native `node-pty` build tools. The [project guide](docs/project-guide.md) retains packaging and installation details.
 
-- `npm ci`
-- `uv sync --frozen --python 3.13 --extra dev`
-- installs a desktop launcher at `~/.local/share/applications/aico.desktop`
-- optionally installs GNOME capture hotkeys when `gsettings` is available
-- configures Electron's Linux `chrome-sandbox` helper when passwordless `sudo` is available, or prints the manual commands
-- optionally loads an AppArmor profile for Electron's sandbox on Ubuntu 24.04+
+## Runtime, data, and integrations
 
-Stop Aico with:
+New durable sessions require a systemd 254+ user manager, cgroup v2, tmux per-pane scopes, and user lingering. They fail closed when containment cannot be verified; existing work is preserved. Historical sessions remain lifecycle-read-only. The source installer enables and verifies lingering.
 
-```bash
-scripts/aico-stop.sh
-```
+The sidecar binds to `127.0.0.1:8005`, rejects non-local browser origins, and stores selection history in SQLite and widget events in JSONL under `~/.local/state/aico` by default. AI provider credentials belong to each CLI. Missing ST catalog/capture tooling leaves core widgets and Personal Workspace working; missing voice service affects dictation only. A-Term can expose attached terminals through its separately authenticated browser workspace.
 
-For a one-off foreground run during development:
+## Development and verification
 
 ```bash
-npm start
-```
-
-## Standalone AppImage (no Python at runtime)
-
-The source install above runs the sidecar from a `uv` virtualenv. To produce a
-**self-contained AppImage** that bundles the sidecar — so the packaged app needs
-no Python, `uv`, or `.venv` at runtime — build a distributable from a dev checkout:
-
-```bash
-uv sync --frozen --python 3.13 --extra dev --extra release
-npm run dist
-```
-
-This bundles the FastAPI sidecar into a standalone executable (PyInstaller),
-builds the Electron app, and emits `dist/electron/Aico-<version>.AppImage`. Run it
-directly:
-
-```bash
-chmod +x dist/electron/Aico-*.AppImage
-./dist/electron/Aico-*.AppImage
-```
-
-`tmux` and whichever terminal AI CLIs you launch (`claude`, `codex`, …) remain
-runtime prerequisites — Aico hosts them. The browser-driven context capture works
-through the bundled sidecar with no extra setup; the desktop window/region *grab*
-gesture additionally uses the `st` capture CLI when it is installed.
-
-## Configuration
-
-Copy `.env.example` only if you want to override defaults:
-
-```bash
-cp .env.example .env
-```
-
-Important variables:
-
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `AICO_SIDECAR_HOST` | `127.0.0.1` | FastAPI sidecar bind host. Keep loopback unless you know why remote access is safe. |
-| `AICO_SIDECAR_PORT` | `8005` | Sidecar HTTP port for health, selection, and widget event APIs. |
-| `AICO_STATE_DIR` | `~/.local/state/aico` | Local logs, SQLite state, pidfile, and launcher logs. |
-| `AICO_CONFIG_DIR` | `~/.config/aico` | Reserved for user config. |
-| `AICO_VOICE_WS` | `ws://127.0.0.1:8003/api/voice/ws?user_id=aico&app=aico` | Optional compatible speech-to-text websocket. If absent/unreachable, voice dictation fails without crashing the app. |
-| `AICO_SELECTION_HOTKEY` | `CommandOrControl+Shift+Space` | Electron global shortcut for selection indication. |
-| `AICO_VOICE_HOTKEY` | `CommandOrControl+Shift+M` | Electron global shortcut for push-to-talk toggle. |
-
-Aico intentionally does not store third-party AI provider secrets. Authenticate each AI CLI with its own documented login/config flow.
-
-New durable sessions fail closed if user linger or narrow tmux pane containment
-cannot be verified. Existing sessions are preserved. To enable linger manually:
-
-```bash
-sudo loginctl enable-linger "$USER"
-```
-
-## Test, lint, typecheck, build
-
-After `scripts/aico-install.sh`:
-
-```bash
-npm run lint
-npm run typecheck
-npm test
-npm run test:sidecar
-npm run build
-```
-
-Or run the combined public gate:
-
-```bash
+st pulse --gate
+st check --quick --changed-only
 npm run check
 ```
 
-## Sidecar API
+The npm gate runs lint, type checks, renderer tests, sidecar tests, and build. Lifecycle and packaged-app verification use the documented targeted harnesses; avoid broad process-name cleanup. No runtime rebuild is needed for documentation changes.
 
-The Python sidecar starts on `127.0.0.1:8005` by default.
+## Documentation
 
-```bash
-.venv/bin/python -m aico_sidecar
-curl http://127.0.0.1:8005/health
-```
-
-Main endpoints:
-
-- `GET /health` — liveness check.
-- `POST /widgets/{widget_id}/events` — append bounded JSONL widget events under the local state directory.
-- `POST /selection` and `POST /selection/send` — local selection/capture bus used by the web helper and browser extension.
-- `GET /selection/current`, `GET /selection/history` — read recent captures.
-- `GET /selection/events` — Server-Sent Events stream of delivery events (the Wayland-safe path for routing captures into a widget).
-
-The sidecar is loopback-only by default and rejects non-local browser origins.
-
-## Optional browser extension
-
-The `extension/` directory contains a development MV3 extension that can send selected text, links, images, or page context to the local sidecar.
-
-1. Start Aico so the sidecar is listening on `127.0.0.1:8005`.
-2. Open Chrome/Chromium `chrome://extensions`.
-3. Enable **Developer mode**.
-4. **Load unpacked** and select this repo's `extension/` directory.
-
-See [`extension/README.md`](extension/README.md) for details.
-
-## Mobile access
-
-Every Aico widget is a plain `aico-<id>` tmux session on a catalogued absolute socket, so any tmux-capable client on the same machine can attach — no Aico-side server, auth, or port exposure is needed. [A-term](../a-term) reads Aico's server catalog in SQLite read-only mode, preserves the historical `aico` source, and exposes managed generations with generation-qualified identities over its authenticated WebSocket. Opening the A-term PWA on a phone therefore gives live, two-way access to both historical and newly managed widgets.
-
-What you get on mobile is the terminal itself; Aico's desktop chrome (eyes, lantern menu, capture gestures) stays on the desktop. Without A-term, copy **Session diagnostics** and use its exact `tmux.socket` and stable session target with `tmux -S <absolute-socket> attach -t <session>`. Historical lifecycle-v0 sessions still use `/tmp/tmux-$(id -u)/aico`. The absolute path is deliberate: it cannot be redirected by an inherited `TMUX_TMPDIR`.
-
-## Architecture
-
-```text
-Electron main process
-  ├─ owns widget windows, global shortcuts, tray, tmux lifecycle, and sidecar lifecycle
-  ├─ adopts `/tmp/tmux-<uid>/aico` read-only and provisions managed generations on private absolute sockets
-  ├─ asks the user manager to spawn each tmux server in a clean-FD durable service; each pane gets its own scope
-  ├─ watches generation-specific `pane-exited` events so detached failures reconcile while Aico stays open
-  └─ starts Python sidecar and health-checks it
-
-Electron renderer
-  ├─ xterm.js terminal UI
-  ├─ lantern action menu and workspace picker
-  └─ optional voice dictation client
-
-Python sidecar
-  ├─ FastAPI loopback service
-  ├─ SQLite ring buffer for recent selection captures
-  └─ per-widget JSONL event logs under local state
-```
-
-Aico degrades when optional tools are missing: unavailable agent CLIs simply fail in their pane, missing `st` project/capture tooling leaves Personal Workspace and core widgets working, and missing voice websocket disables dictation only.
-
-For the process-containment design, regression harness, and targeted recovery
-procedure, see [the July 2026 incident report](docs/INCIDENT-2026-07-PROCESS-ESCAPES.md)
-and [lifecycle harness guide](docs/LIFECYCLE_HARNESS.md).
-
-## Current limitations
-
-- Linux desktop is the supported path. macOS and Windows packaging are not implemented.
-- X11 is the best-supported session for global shortcuts and screen capture.
-- Pre-built `Aico-*.AppImage` downloads are available on the [Releases](https://github.com/elias-leslie/aico/releases/latest) page (built in CI with a SHA256 checksum and a build-provenance attestation); `npm run dist` reproduces one locally. `.deb` packaging is not implemented yet.
-- Voice dictation requires a separately running compatible speech-to-text websocket.
-- The browser extension is loaded unpacked for development; it is not published in a browser store.
-
-## License
-
-Aico is licensed under the [Apache License 2.0](LICENSE). See [NOTICE](NOTICE) for copyright notice and [assets/fonts/README.md](assets/fonts/README.md) for vendored font license notes.
+- [Project guide](docs/project-guide.md) for features, configuration, APIs, packaging, and limitations.
+- [Source installation](docs/INSTALL.md) and [browser extension](extension/README.md).
+- [Lifecycle harness](docs/LIFECYCLE_HARNESS.md) and [process incident/recovery report](docs/INCIDENT-2026-07-PROCESS-ESCAPES.md).
+- [Security](SECURITY.md), [Apache 2.0 license](LICENSE), [notice](NOTICE), and [font licenses](assets/fonts/README.md).
