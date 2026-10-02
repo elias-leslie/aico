@@ -1,62 +1,21 @@
 # A-Term
 
-**A persistent browser workspace for AI coding agents, shells, files, notes, and reusable prompts.**
+A-Term is a persistent browser workspace for people using AI coding CLIs and shells. It puts tmux-backed terminals, files, notes, and reusable prompts side by side, keeping sessions alive when the browser closes so work can resume on reconnect.
 
-Run Claude Code, Codex, Gemini CLI, Pi, shells, files, and prompt notes side by side in one browser workspace. Sessions stay alive when the browser closes, so you can reconnect instead of rebuilding your working context.
+![A-Term browser workspace](docs/images/a-term-demo.gif)
 
-Assemble your agent crew in one place: a planner, builder, reviewer, release shell, files browser, and prompt library that keep working as one durable workspace.
+## What it does
 
-Built for [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex CLI](https://github.com/openai/codex), Google Antigravity CLI (`agy`), Pi, and every TUI agent that follows.
+- Runs Claude Code, Codex, Antigravity, Pi, shells, and configurable TUI tools in up to six resizable panes.
+- Provides file browsing and validated uploads, prompt injection, note history, terminal search, scrollback, and mobile controls.
+- Supports pane pop-outs, project switching/deep links, themes, optional recording, and PWA installation.
+- Discovers compatible external tmux sessions, including Aico's historical and catalogued server generations.
 
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![CI](https://github.com/elias-leslie/a-term/actions/workflows/ci.yml/badge.svg)](https://github.com/elias-leslie/a-term/actions/workflows/ci.yml)
-[![Latest release](https://img.shields.io/github/v/release/elias-leslie/a-term?label=release&color=2ea043)](https://github.com/elias-leslie/a-term/releases/latest)
-[![Sponsor](https://img.shields.io/badge/sponsor-GitHub%20Sponsors-db61a2?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/elias-leslie)
-[![Python](https://img.shields.io/badge/python-3.13+-3776ab.svg)](https://python.org)
-[![Next.js](https://img.shields.io/badge/Next.js-16-000.svg)](https://nextjs.org)
-[![xterm.js](https://img.shields.io/badge/xterm.js-6-green.svg)](https://xtermjs.org)
+## Current scope
 
-![A-Term — agents, shells, files, and notes in one persistent browser workspace](docs/images/a-term-demo.gif)
+The supported install targets Linux with systemd. A-Term runs standalone, including local notes and prompts. Agent Hub prompt cleaning and shared SummitFlow project/notes metadata are optional companion integrations; the wider public companion path is planned for a later release.
 
-*One workspace: agents and shells side by side, a built-in file browser and prompt library, and tmux-backed sessions that survive closing the browser.*
-
-![A-Term — multi-pane workspace with Claude Code, shell, and project files](docs/images/a-term-home-dark.png)
-
-## Why A-Term
-
-If you use AI coding agents, you already know the mess: one terminal for Claude Code, another for Codex, another for git, another for logs, plus prompts and notes scattered somewhere else.
-
-**A-Term keeps the whole coding loop in one durable browser workspace: agents, shells, files, notes, and prompts.**
-
-Use it when you want to:
-
-- keep multiple agent sessions alive across reconnects
-- compare or hand off work between Claude Code, Codex, Gemini CLI, Pi, and shell panes
-- browse files beside the terminal instead of switching tools
-- keep reusable prompts, scratch notes, and project context next to the work they belong to
-- inject saved prompts into the active pane when it is time to run them
-
-## How it compares
-
-Browser terminals, modern desktop terminals, and tmux each solve part of this.
-A-Term's niche is the **combination**: a browser-accessible workspace that runs
-*several* AI coding agents side by side, keeps them alive with tmux, and bundles
-a file browser and reusable prompt library — self-hosted on your own machine.
-
-| | A-Term | Warp | ttyd · Wetty | tmux |
-|---|:---:|:---:|:---:|:---:|
-| Runs in the browser, reconnect from any device | ✅ | ❌ desktop app | ✅ | ❌ |
-| Multiple AI CLI agents side by side (Claude Code, Codex, Gemini, …) | ✅ | its own agent | ❌ single shell | DIY |
-| Sessions survive browser and server restarts | ✅ tmux-backed | local only | ❌ | ✅ |
-| Built-in file browser + reusable prompt library | ✅ | ❌ | ❌ | ❌ |
-| Self-hosted, no account or cloud service | ✅ | ❌ | ✅ | ✅ |
-
-A-Term isn't trying to replace your terminal emulator — it wraps the agents,
-shells, files, and prompts of the whole coding loop into one durable workspace.
-
-> ⭐ If A-Term fits how you work with AI agents, a star helps others find it.
-
-## Quickstart
+## Getting started
 
 ```bash
 git clone https://github.com/elias-leslie/a-term.git
@@ -64,219 +23,26 @@ cd a-term
 bash scripts/install.sh
 ```
 
-Then open **http://localhost:3002** and start working.
+Open <http://localhost:3002>. The installer sets up dependencies, PostgreSQL, migrations, frontend output, and user services, and creates local configuration. Source requirements include Python 3.13+, Node.js, pnpm, uv, and tmux. Install smoke tests without a user systemd session can use `bash scripts/install.sh --skip-systemd`.
 
-A-Term currently targets **Linux with systemd**. The installer is built to do the heavy lifting for you: it can set up `.env.local`, Node.js, corepack, Python, uv, tmux, PostgreSQL, dependencies, migrations, frontend build output, and user services.
-The first install can take a few minutes because it downloads the pieces it needs for you.
+## Runtime, data, and integrations
 
-A-Term can also connect to an optional companion service for shared notes and project metadata. That broader public path is coming later with SummitFlow; for now, the standard public install runs fully standalone.
+FastAPI uses port 8002 and Next.js uses port 3002 by default. PostgreSQL stores application data; tmux owns persistent terminals. Local notes and prompts remain available without companion services.
 
-If the default ports are already taken, the installer should guide you to another open port instead of forcing you to debug it by hand.
+Default authentication is loopback-only `none`. Before exposing A-Term beyond localhost, use built-in password authentication or `proxy` mode behind an identity-aware gateway. Agent Hub adds optional model catalog and prompt refinement; browser speech input can work independently. Aico catalog rows are read-only and count as live only after a successful tmux query.
 
-Most people can stop here. The advanced setup options are lower on the page.
-
-Want the latest shipped changes? See [Releases](https://github.com/elias-leslie/a-term/releases) and the [Changelog](CHANGELOG.md).
-
-## Features
-
-**`persistent sessions`** — tmux-backed terminals survive browser closes, server restarts, and network drops. Reconnect exactly where you left off.
-
-**`stable scrollback rendering`** — Live TUI panes and scrollback overlays share the same xterm.js WebGL renderer with DOM fallback, so opening history keeps font metrics, wrap points, and columns aligned.
-
-**`multi-pane layouts`** — Up to 6 resizable panes. Put planning, implementation, review, release checks, files, and notes on the same screen, detach any pane into its own browser window when you want to spread work across monitors, and use the pane menu's Refresh Layout action to remount a pane cleanly without restarting its tmux session.
-
-![Four-pane grid layout with multiple active agents](docs/images/a-term-grid-2x2.png)
-*Four-pane grid: run multiple agents and shells simultaneously*
-
-**`files browser`** — Browse the active pane's working directory. Preview files, copy paths, insert paths into prompts — without leaving the terminal.
-
-![Files browser showing directory tree and README preview](docs/images/a-term-files-browser.png)
-*Browse and preview files from the active pane's working directory*
-
-**`prompt-ready notes`** — Keep scratch notes, project context, and reusable prompts beside your live terminal output. Save prompts, search them, tag them, scope them to a project, refine them when companion services are available, and inject them into the active pane when it is time to run.
-
-In standalone installs, notes and prompts are stored inside A-Term itself. A shared cross-project library and companion metadata path already exists behind the optional companion API and is planned to open up more broadly once SummitFlow is released publicly.
-
-With Agent Hub connected, A-Term can clean a draft prompt, show an original-vs-cleaned diff, take follow-up refinement instructions, let you edit the result before sending, and fall back to the original prompt if the cleaner is unavailable.
-
-![Pop-out Notes workspace with a reusable release review prompt](docs/images/a-term-notes-workspace.png)
-*Pop out the prompt library when you want notes and reusable prompts on a second screen*
-
-**`voice input`** — Dictate commands and prompts via browser speech-to-text when your browser and microphone permissions support it. A-Term merges cumulative browser speech chunks so dictated phrases do not repeat as interim text becomes final.
-
-**`project deep links`** — Open `/?project=myapp&dir=/path` to jump straight into a project workspace. Bookmark your setups.
-
-**`same-pane project switching`** — Swap a pane to another project from the header instead of closing and reopening work by hand. A-Term keeps the current tool mode when possible, so moving from one project to another in `codex`, `claude`, or shell does not drop you back to a generic terminal first.
-
-**`dual mode`** — Switch any pane between raw shell and your configured AI agent with one click. Supports Claude Code, Codex, Antigravity CLI, and Pi out of the box.
-
-**`agent presets and custom tools`** — Built-in profiles for Claude Code, Codex, Antigravity CLI, and Pi appear in Settings by default. Antigravity launches as `agy --dangerously-skip-permissions`, its explicit auto-approval mode. Pick a default tool, tune the launch command or process name, color-code panes, and add your own TUI agent commands when your workflow expands. A-Term also discovers externally created tmux sessions (`claude`, `codex`, `aider`, `agy`, `pi`, and Aico widget sessions) and lists them alongside your own panes. For Aico, the historical `tmux:aico:<session>` identity remains compatible; newer immutable server generations are discovered by reading Aico's SQLite catalog in read-only mode and then querying each generation's absolute tmux socket. A stale catalog row is never treated as a live session without a successful tmux reply. Set `A_TERM_AICO_STATE_DIR` only when Aico uses a non-default state directory.
-
-![Mode switching dropdown showing Shell, Claude Code, OpenCode, Gemini CLI, and Codex](docs/images/a-term-mode-switch.png)
-*Switch between agents and shell per pane*
-
-**`agent scrollback overlay`** — Scroll tmux-backed history for agent and TUI sessions without losing the live bottom page. First wheel-up or touch entry opens history at the current output, then normal scrolling carries you back through prior work.
-
-**`mobile workspace controls`** — On-screen keyboard with arrow keys, Ctrl, Esc, and modifier support for touch devices, visible-bottom-row viewport handling, plus a touch-friendly session switcher that can jump into any attached or detached session from your phone.
-
-**`terminal themes and tuning`** — Five built-in xterm color palettes (Phosphor, Dracula, Monokai, Solarized Dark, Tokyo Night) plus a system/light/dark app theme that respects `prefers-color-scheme`. Settings also configure font family, font size, cursor style, cursor blink, and scrollback buffer size — all persisted across sessions.
-
-**`in-terminal search`** — Search the live buffer and scrollback for a string and step through matches, without leaving the pane.
-
-**`clickable links and clipboard`** — URLs in terminal output are clickable (web-links addon) and copy/paste flows use the xterm clipboard addon, including bracketed-paste support.
-
-**`file upload`** — Drag and drop images and docs (PNG/JPG/GIF/WebP/Markdown/text/JSON/PDF, up to 10 MB) into a pane; A-Term validates the file by magic bytes and returns a `~`-relative path you can drop straight into a command.
-
-**`note history and prompt cleaning`** — Notes and prompts keep a version history with automatic edit checkpoints and one-click revert. With Agent Hub connected, A-Term can clean a draft prompt, show an original-vs-cleaned diff, take a follow-up refinement instruction, let you edit the result, and fall back to the original if the cleaner is unavailable.
-
-**`session recording and diagnostics`** — Optional, off by default: record a session to JSONL (output/input/resize) for later replay, and capture per-session render/diagnostic events to debug terminal behavior.
-
-**`install as a PWA`** — A-Term ships a web-app manifest, so you can install it to your phone or desktop and run it standalone.
-
-**`auth modes for remote access`** — Ships loopback-only (`none`) by default, with built-in password auth (signed-cookie sessions) or `proxy` mode for an identity-aware reverse proxy. Security headers, a CSP with per-request nonces, CORS allowlisting, and per-route rate limiting are on by default.
-
-**`self-maintaining`** — A background maintenance loop reconciles and purges stale sessions, cleans up old uploads, and prunes orphaned project settings; `/health` and `/metrics` expose runtime status.
-
-## Advanced Setup
-
-For install smoke or CI validation on Linux hosts without a user systemd session, run `bash scripts/install.sh --skip-systemd`.
-
-For any deployment beyond localhost, turn on browser auth first. `A_TERM_AUTH_MODE=password` is the built-in path. `A_TERM_AUTH_MODE=proxy` is for running behind an identity-aware reverse proxy.
-
-<details>
-<summary><strong>Use your own PostgreSQL instead of the installer-managed one</strong></summary>
+## Development and verification
 
 ```bash
-docker run -d \
-  --name a-term-postgres \
-  -e POSTGRES_DB=a-term \
-  -e POSTGRES_USER=a-term \
-  -e POSTGRES_PASSWORD=a-term \
-  -p 5432:5432 \
-  postgres:16
+st pulse --gate
+st check --quick --changed-only
 ```
 
-Set in `.env.local`:
+For public source development, [CONTRIBUTING.md](CONTRIBUTING.md) lists pytest, Ruff, Ty, frontend lint, TypeScript, and Vitest checks. The [project guide](docs/project-guide.md) retains advanced configuration, daily commands, and feature details. Session survival and rendering behavior need runtime verification in addition to those checks.
 
-```bash
-DATABASE_URL=postgresql://a-term:a-term@localhost:5432/a-term
-```
+## Documentation
 
-</details>
-
-<details>
-<summary><strong>Environment variables</strong></summary>
-
-Copy `.env.example` to `.env.local` only if you want to review or override settings first. For the default one-shot install, `bash scripts/install.sh` will create `.env.local` and replace the placeholder `DATABASE_URL` with managed PostgreSQL automatically. That path prefers Docker when it is already installed and otherwise bootstraps a local PostgreSQL cluster for you.
-
-If you want to use your own PostgreSQL instead, set `DATABASE_URL` yourself. Everything else is optional:
-
-```bash
-# Required
-DATABASE_URL=postgresql://user:pass@localhost/a-term
-
-# Service tuning
-A_TERM_PORT=8002
-A_TERM_BIND_HOST=127.0.0.1
-A_TERM_FRONTEND_PORT=3002
-LOG_LEVEL=INFO
-
-# Public auth
-A_TERM_AUTH_MODE=password
-A_TERM_AUTH_PASSWORD=change-me
-A_TERM_AUTH_SECRET=replace-with-a-long-random-string
-A_TERM_AUTH_COOKIE_SECURE=true
-
-# Maintenance
-MAINTENANCE_INTERVAL_SECONDS=900
-MAINTENANCE_SESSION_PURGE_DAYS=7
-
-# Optional companion services (A-Term works without these)
-SUMMITFLOW_API_BASE=http://localhost:8001/api
-NEXT_PUBLIC_AGENT_HUB_URL=http://localhost:8003
-AGENT_HUB_URL=http://localhost:8003
-```
-
-</details>
-
-<details>
-<summary><strong>Daily commands</strong></summary>
-
-```bash
-bash scripts/start.sh
-bash scripts/shutdown.sh
-journalctl --user -u a-term-backend.service -f
-journalctl --user -u a-term-frontend.service -f
-```
-
-</details>
-
-## Remote Access
-
-A-Term listens on `localhost` by default. To access it from your phone, another machine, or anywhere on the internet, see the [Remote Access guide](docs/remote-access.md) — covers Tailscale, Cloudflare Tunnel, and Caddy reverse proxy. Public deployments should use either built-in password auth or `proxy` mode behind an identity-aware gateway.
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Backend | FastAPI, Python 3.13+, Uvicorn |
-| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 4 |
-| Terminal | xterm.js 6 with WebGL renderer (DOM fallback), tmux (session persistence) |
-| Database | PostgreSQL |
-| Quality | Ruff, Ty, pytest, Vitest, Biome |
-
-<details>
-<summary><strong>Architecture</strong></summary>
-
-- `a_term/api/` — REST and WebSocket endpoints
-- `a_term/services/` — tmux lifecycle, maintenance, agent orchestration
-- `a_term/storage/` — database access
-- `frontend/app/`, `frontend/components/`, `frontend/lib/` — Next.js UI
-- `scripts/` — install, start, stop, systemd templates
-
-Full API schema available at `/openapi.json` when running.
-
-</details>
-
-<details>
-<summary><strong>Optional companion integrations</strong></summary>
-
-A-Term is a standalone product. All core features work without any external service.
-
-**Optional external project and notes API** (`SUMMITFLOW_API_BASE`) — Integration hook for A-Term's shared project metadata and notes mode. Today it is mainly useful for private/internal deployments. Once SummitFlow is released publicly, this becomes the public companion path; until then, A-Term keeps notes, prompts, and project scopes local by default.
-
-**Agent Hub** (`NEXT_PUBLIC_AGENT_HUB_URL`, `AGENT_HUB_URL`) — Adds model catalog and prompt cleaning/refinement proxies. Browser-native voice input works standalone; Agent Hub provides an optional enhanced path.
-
-</details>
-
-## Sponsors
-
-A-Term is free and open source. If it saves you time, sponsor ongoing development here:
-
-[![Sponsor A-Term on GitHub Sponsors](https://img.shields.io/badge/Sponsor-A--Term%20on%20GitHub%20Sponsors-db61a2?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/elias-leslie)
-
-Sponsorship helps fund:
-
-- install and onboarding polish
-- CI, security, and release maintenance
-- continued product and UX improvements
-
-<!-- sponsors -->
-<!-- /sponsors -->
-
-## Contributors
-
-- [Elias Leslie](https://github.com/elias-leslie) — creator and maintainer
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — implementation and review support
-- [Codex CLI](https://github.com/openai/codex) — implementation and verification support
-- Jenny / Agent Hub — orchestration, automation, and workflow support
-
-## License
-
-Apache License 2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
-
-Commercial use is permitted. For commercial support, custom work, or partnership discussions, start a thread in [GitHub Discussions](https://github.com/elias-leslie/a-term/discussions).
-
-## Security
-
-Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
+- [Project guide](docs/project-guide.md) and [remote access](docs/remote-access.md).
+- [Contributing](CONTRIBUTING.md), [releasing](RELEASING.md), and [changelog](CHANGELOG.md).
+- [Security reporting](SECURITY.md), [Apache 2.0 license](LICENSE), and [notice](NOTICE).
+- [Releases](https://github.com/elias-leslie/a-term/releases) and [sponsorship](https://github.com/sponsors/elias-leslie).
