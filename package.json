@@ -40,6 +40,11 @@
     "@xterm/xterm": "^6.0.0",
     "node-pty": "^1.1.0"
   },
+  "overrides": {
+    "app-builder-lib": {
+      "@electron/get": "5.1.0"
+    }
+  },
   "build": {
     "appId": "dev.eliasleslie.aico",
     "productName": "Aico",
