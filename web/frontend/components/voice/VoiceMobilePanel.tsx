@@ -8,27 +8,32 @@ import { SHORT_ERROR_MESSAGES } from './voiceErrorMessages'
 
 interface VoiceMobilePanelProps {
   editedText: string
+  setEditedText: (text: string) => void
   interimTranscript: string
   status: TranscriptionStatus
   error: TranscriptionError
   hasText: boolean
+  textareaRef: React.RefObject<HTMLTextAreaElement | null>
   onMicTap: () => void
+  onSend: () => void
   onClose: () => void
 }
 
 export function VoiceMobilePanel({
   editedText,
+  setEditedText,
   interimTranscript,
   status,
   error,
   hasText,
+  textareaRef,
   onMicTap,
+  onSend,
   onClose,
 }: VoiceMobilePanelProps) {
   const isListening = status === 'listening'
   const isProcessing = status === 'processing'
-  const showSendIcon = hasText
-  const showPulse = isListening && !hasText
+  const showPulse = isListening
 
   const displayText = interimTranscript
     ? `${editedText}${editedText ? ' ' : ''}${interimTranscript}`
@@ -41,7 +46,9 @@ export function VoiceMobilePanel({
         ? 'Listening...'
         : isProcessing
           ? 'Processing...'
-          : 'Tap to speak'
+          : hasText
+            ? 'Paused'
+            : 'Tap to speak'
 
   return (
     <div
@@ -50,32 +57,30 @@ export function VoiceMobilePanel({
         borderTop: '1px solid var(--term-border)',
       }}
     >
-      {/* Transcript bubble — only when there's text */}
-      {displayText.trim() && (
-        <div
-          style={{
-            maxHeight: 128,
-            overflowY: 'auto',
-            padding: '8px 12px',
-            margin: '8px 12px 0',
-            borderRadius: 8,
-            background: 'var(--term-bg-elevated)',
-            border: '1px solid var(--term-border-active)',
-            fontFamily: 'var(--font-mono)',
-            fontSize: 13,
-            lineHeight: 1.5,
-            color: 'var(--term-text-primary)',
-          }}
-        >
-          {editedText}
-          {interimTranscript && (
-            <span style={{ color: 'var(--term-accent)', opacity: 0.7 }}>
-              {editedText ? ' ' : ''}
-              {interimTranscript}
-            </span>
-          )}
-        </div>
-      )}
+      <textarea
+        ref={textareaRef}
+        className={styles.editTextarea}
+        value={displayText}
+        onChange={(event) => setEditedText(event.target.value)}
+        readOnly={isListening || isProcessing}
+        aria-label="Voice transcript"
+        placeholder="Voice transcript"
+        rows={3}
+        style={{
+          display: 'block',
+          width: 'calc(100% - 24px)',
+          maxHeight: 128,
+          overflowY: 'auto',
+          padding: '8px 12px',
+          margin: '8px 12px 0',
+          borderRadius: 8,
+          background: 'var(--term-bg-elevated)',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 16,
+          lineHeight: 1.5,
+          color: 'var(--term-text-primary)',
+        }}
+      />
 
       {/* Status line */}
       <div
@@ -95,7 +100,7 @@ export function VoiceMobilePanel({
         {statusMessage}
       </div>
 
-      {/* Action row: [X] [MIC] [keyboard] */}
+      {/* Action row: cancel, microphone, send, keyboard */}
       <div
         style={{
           display: 'flex',
@@ -126,18 +131,18 @@ export function VoiceMobilePanel({
           <X className="w-5 h-5" />
         </button>
 
-        {/* Main mic / send button — 64x64 */}
+        {/* Microphone control stays available while there is text to send. */}
         <button
           type="button"
           className={clsx(showPulse && styles.mobileMicPulse)}
           onClick={onMicTap}
           disabled={isProcessing}
           aria-label={
-            showSendIcon
-              ? 'Send transcript'
-              : isListening
-                ? 'Stop listening'
-                : 'Start listening'
+            isListening
+              ? 'Pause dictation'
+              : hasText
+                ? 'Resume dictation'
+                : 'Talk'
           }
           style={{
             width: 64,
@@ -146,6 +151,8 @@ export function VoiceMobilePanel({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
+            flexDirection: 'column',
+            gap: 2,
             cursor: isProcessing ? 'not-allowed' : 'pointer',
             transition: 'all 0.2s',
             border: `2px solid ${
@@ -153,21 +160,48 @@ export function VoiceMobilePanel({
             }`,
             background: showPulse
               ? 'color-mix(in srgb, var(--term-error) 15%, transparent)'
-              : showSendIcon
-                ? 'color-mix(in srgb, var(--term-accent) 15%, transparent)'
-                : 'color-mix(in srgb, var(--term-accent) 8%, transparent)',
+              : 'color-mix(in srgb, var(--term-accent) 8%, transparent)',
             color: showPulse ? 'var(--term-error)' : 'var(--term-accent)',
             opacity: isProcessing ? 0.5 : 1,
           }}
         >
-          {showSendIcon ? (
-            <Send className="w-6 h-6" />
-          ) : isListening ? (
+          {isListening ? (
             <MicOff className="w-6 h-6" />
           ) : (
             <Mic className="w-6 h-6" />
           )}
+          <span style={{ fontSize: 10 }}>
+            {isListening ? 'Pause' : hasText ? 'Resume' : 'Talk'}
+          </span>
         </button>
+
+        {hasText && (
+          <button
+            type="button"
+            onClick={onSend}
+            disabled={isProcessing}
+            aria-label="Send transcript"
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: '50%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexDirection: 'column',
+              gap: 2,
+              background:
+                'color-mix(in srgb, var(--term-accent) 15%, transparent)',
+              border: '1px solid var(--term-accent)',
+              color: 'var(--term-accent)',
+              cursor: isProcessing ? 'not-allowed' : 'pointer',
+              opacity: isProcessing ? 0.5 : 1,
+            }}
+          >
+            <Send className="w-5 h-5" />
+            <span style={{ fontSize: 10 }}>Send</span>
+          </button>
+        )}
 
         {/* Keyboard button — dismiss voice, return to keyboard */}
         <button

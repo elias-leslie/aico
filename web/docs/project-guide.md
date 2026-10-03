@@ -50,6 +50,8 @@ With Agent Hub connected, A-Term can clean a draft prompt, show an original-vs-c
 
 **`voice input`** — Dictate commands and prompts via browser speech-to-text when your browser and microphone permissions support it. A-Term merges cumulative browser speech chunks so dictated phrases do not repeat as interim text becomes final.
 
+On a phone, tap Talk to start dictating. Words appear while you speak, and pauses in speech keep it listening. Tap the same button to pause, then review or edit the transcript. Resume continues the same draft; Send submits it to the terminal. The Talk button only controls listening. Browser permission, microphone, or network failures still stop recording and show an error.
+
 **`project deep links`** — Open `/?project=myapp&dir=/path` to jump straight into a project workspace. Bookmark your setups.
 
 **`same-pane project switching`** — Swap a pane to another project from the header instead of closing and reopening work by hand. A-Term keeps the current tool mode when possible, so moving from one project to another in `codex`, `claude`, or shell does not drop you back to a generic terminal first.
@@ -64,6 +66,8 @@ With Agent Hub connected, A-Term can clean a draft prompt, show an original-vs-c
 **`agent scrollback overlay`** — Scroll tmux-backed history for agent and TUI sessions without losing the live bottom page. First wheel-up or touch entry opens history at the current output, then normal scrolling carries you back through prior work.
 
 **`mobile workspace controls`** — On-screen keyboard with arrow keys, Ctrl, Esc, and modifier support for touch devices, visible-bottom-row viewport handling, plus a touch-friendly session switcher that can jump into any attached or detached session from your phone.
+
+Expand the arrow controls to find Enter, which activates a TUI selection without typing a draft. Terminal keys keep the phone keyboard and arrow controls open. With a draft focused, Left and Right move its caret; Up and Down navigate the terminal. Send submits the draft, while the toolbox's Enter sends only the Enter key and leaves the draft intact.
 
 **`terminal themes and tuning`** — Five built-in xterm color palettes (Phosphor, Dracula, Monokai, Solarized Dark, Tokyo Night) plus a system/light/dark app theme that respects `prefers-color-scheme`. Settings also configure font family, font size, cursor style, cursor blink, and scrollback buffer size — all persisted across sessions.
 

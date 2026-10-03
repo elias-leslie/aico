@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
+  getTranscriptAppendSuffix,
   mergeTranscriptSegments,
   normalizeTranscript,
 } from './transcript-merge'
@@ -91,6 +92,22 @@ function getDefaultLanguage(preferredLanguage?: string): string {
   return 'en-US'
 }
 
+function detachRecognition(recognition: SpeechRecognitionLike) {
+  recognition.onstart = null
+  recognition.onresult = null
+  recognition.onerror = null
+  recognition.onend = null
+}
+
+function abortRecognition(recognition: SpeechRecognitionLike) {
+  detachRecognition(recognition)
+  try {
+    recognition.abort()
+  } catch {
+    // Ignore cleanup failures from already-stopped recognizers.
+  }
+}
+
 export function useBrowserTranscription(
   options?: UseTranscriptionOptions,
 ): UseTranscriptionReturn {
@@ -99,54 +116,28 @@ export function useBrowserTranscription(
   const [interimTranscript, setInterimTranscript] = useState('')
   const [finalTranscript, setFinalTranscript] = useState('')
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null)
-  const stopRequestedRef = useRef(false)
+  const listeningRequestedRef = useRef(false)
   const finalTranscriptRef = useRef('')
-  const finalTranscriptSegmentsRef = useRef<string[]>([])
+  const interimTranscriptRef = useRef('')
   const errorRef = useRef<TranscriptionError>(null)
   const isSupported = getRecognitionConstructor() !== null
 
   useEffect(() => {
-    finalTranscriptRef.current = finalTranscript
-  }, [finalTranscript])
-
-  useEffect(() => {
-    errorRef.current = error
-  }, [error])
-
-  useEffect(() => {
     return () => {
+      listeningRequestedRef.current = false
       const recognition = recognitionRef.current
-      if (!recognition) return
-      recognition.onstart = null
-      recognition.onresult = null
-      recognition.onerror = null
-      recognition.onend = null
-      try {
-        recognition.abort()
-      } catch {
-        // Ignore cleanup failures from already-stopped recognizers.
-      }
       recognitionRef.current = null
+      if (recognition) abortRecognition(recognition)
     }
   }, [])
 
   const resetTranscript = useCallback(() => {
+    listeningRequestedRef.current = false
     const recognition = recognitionRef.current
-    if (recognition) {
-      recognition.onstart = null
-      recognition.onresult = null
-      recognition.onerror = null
-      recognition.onend = null
-      try {
-        recognition.abort()
-      } catch {
-        // Ignore reset failures from already-stopped recognizers.
-      }
-      recognitionRef.current = null
-    }
-    stopRequestedRef.current = false
+    recognitionRef.current = null
+    if (recognition) abortRecognition(recognition)
     finalTranscriptRef.current = ''
-    finalTranscriptSegmentsRef.current = []
+    interimTranscriptRef.current = ''
     errorRef.current = null
     setFinalTranscript('')
     setInterimTranscript('')
@@ -155,9 +146,9 @@ export function useBrowserTranscription(
   }, [])
 
   const stopListening = useCallback(() => {
+    listeningRequestedRef.current = false
     const recognition = recognitionRef.current
     if (!recognition) return
-    stopRequestedRef.current = true
     setStatus((currentStatus) =>
       currentStatus === 'listening' ? 'processing' : currentStatus,
     )
@@ -165,11 +156,13 @@ export function useBrowserTranscription(
       recognition.stop()
     } catch {
       recognitionRef.current = null
+      abortRecognition(recognition)
       setStatus(errorRef.current ? 'error' : 'idle')
     }
   }, [])
 
   const startListening = useCallback(() => {
+    if (listeningRequestedRef.current) return
     const Recognition = getRecognitionConstructor()
     if (!Recognition) {
       setError('not-supported')
@@ -177,100 +170,137 @@ export function useBrowserTranscription(
       return
     }
 
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.abort()
-      } catch {
-        // Ignore abort failures while replacing a stale recognizer.
-      }
-      recognitionRef.current = null
-    }
+    const previousRecognition = recognitionRef.current
+    recognitionRef.current = null
+    if (previousRecognition) abortRecognition(previousRecognition)
 
-    stopRequestedRef.current = false
-    finalTranscriptSegmentsRef.current = []
-    finalTranscriptRef.current = ''
+    listeningRequestedRef.current = true
     errorRef.current = null
     setError(null)
-    setInterimTranscript('')
-    setFinalTranscript('')
 
-    const recognition = new Recognition()
-    recognition.continuous = true
-    recognition.interimResults = true
-    recognition.lang = getDefaultLanguage(options?.lang)
+    const startRecognition = () => {
+      if (!listeningRequestedRef.current) return
+      const recognition = new Recognition()
+      recognition.continuous = true
+      recognition.interimResults = true
+      recognition.lang = getDefaultLanguage(options?.lang)
+      // Browser result indexes start over after every native recognition cycle.
+      const previousFinalTranscript = finalTranscriptRef.current
+      let previousInterimTranscript = interimTranscriptRef.current
+      let finalTranscriptSegments: string[] = []
 
-    recognition.onstart = () => {
-      setStatus('listening')
-      setError(null)
-    }
+      recognition.onstart = () => {
+        if (
+          recognitionRef.current !== recognition ||
+          !listeningRequestedRef.current
+        ) {
+          return
+        }
+        setStatus('listening')
+        setError(null)
+      }
 
-    recognition.onresult = (event) => {
-      const nextFinalTranscriptSegments = [
-        ...finalTranscriptSegmentsRef.current,
-      ]
-      const nextInterimTranscriptSegments: string[] = []
+      recognition.onresult = (event) => {
+        if (recognitionRef.current !== recognition) return
+        const nextFinalTranscriptSegments = [...finalTranscriptSegments]
+        const nextInterimTranscriptSegments: string[] = []
 
-      for (
-        let index = event.resultIndex;
-        index < event.results.length;
-        index += 1
-      ) {
-        const result = event.results[index]
-        const transcript = normalizeTranscript(result[0]?.transcript)
+        for (
+          let index = event.resultIndex;
+          index < event.results.length;
+          index += 1
+        ) {
+          const result = event.results[index]
+          const transcript = normalizeTranscript(result[0]?.transcript)
 
-        if (result.isFinal) {
-          if (transcript) {
-            nextFinalTranscriptSegments[index] = transcript
-          } else {
-            delete nextFinalTranscriptSegments[index]
+          if (result.isFinal) {
+            if (transcript) {
+              nextFinalTranscriptSegments[index] = transcript
+            } else {
+              delete nextFinalTranscriptSegments[index]
+            }
+          } else if (transcript) {
+            nextInterimTranscriptSegments.push(transcript)
           }
-        } else if (transcript) {
-          nextInterimTranscriptSegments.push(transcript)
+        }
+
+        const cycleFinalTranscript = mergeTranscriptSegments(
+          nextFinalTranscriptSegments,
+        )
+        if (
+          previousInterimTranscript &&
+          (cycleFinalTranscript === previousInterimTranscript ||
+            cycleFinalTranscript.startsWith(`${previousInterimTranscript} `))
+        ) {
+          previousInterimTranscript = ''
+        }
+        // An unfinished prior cycle must remain provisional and before later
+        // words until the browser confirms it, or the user sends the text.
+        const nextFinalTranscript = previousInterimTranscript
+          ? previousFinalTranscript
+          : mergeTranscriptSegments([
+              previousFinalTranscript,
+              cycleFinalTranscript,
+            ])
+        const nextInterimTranscript = mergeTranscriptSegments([
+          previousInterimTranscript,
+          previousInterimTranscript ? cycleFinalTranscript : '',
+          ...nextInterimTranscriptSegments,
+        ])
+
+        finalTranscriptSegments = nextFinalTranscriptSegments
+        finalTranscriptRef.current = nextFinalTranscript
+        interimTranscriptRef.current = getTranscriptAppendSuffix(
+          nextFinalTranscript,
+          nextInterimTranscript,
+        )
+        setFinalTranscript(nextFinalTranscript)
+        setInterimTranscript(nextInterimTranscript)
+        if (nextFinalTranscript || nextInterimTranscript) {
+          errorRef.current = null
+          setError(null)
         }
       }
 
-      const nextFinalTranscript = mergeTranscriptSegments(
-        nextFinalTranscriptSegments,
-      )
-      const nextInterimTranscript = mergeTranscriptSegments(
-        nextInterimTranscriptSegments,
-      )
+      recognition.onerror = (event) => {
+        if (recognitionRef.current !== recognition) return
+        // Silence ends some mobile browser cycles even with continuous enabled.
+        if (event.error === 'no-speech') return
+        const normalizedError = normalizeError(event.error)
+        listeningRequestedRef.current = false
+        recognitionRef.current = null
+        abortRecognition(recognition)
+        errorRef.current = normalizedError
+        setError(normalizedError)
+        setStatus('error')
+      }
 
-      finalTranscriptSegmentsRef.current = nextFinalTranscriptSegments
-      finalTranscriptRef.current = nextFinalTranscript
-      setFinalTranscript(nextFinalTranscript)
-      setInterimTranscript(nextInterimTranscript)
-      if (nextFinalTranscript || nextInterimTranscript) {
-        errorRef.current = null
-        setError(null)
+      recognition.onend = () => {
+        if (recognitionRef.current !== recognition) return
+        recognitionRef.current = null
+        detachRecognition(recognition)
+        if (listeningRequestedRef.current) {
+          startRecognition()
+        } else {
+          setStatus(errorRef.current ? 'error' : 'idle')
+        }
+      }
+
+      recognitionRef.current = recognition
+      setStatus('listening')
+
+      try {
+        recognition.start()
+      } catch {
+        listeningRequestedRef.current = false
+        recognitionRef.current = null
+        abortRecognition(recognition)
+        errorRef.current = 'not-allowed'
+        setError('not-allowed')
+        setStatus('error')
       }
     }
-
-    recognition.onerror = (event) => {
-      const normalizedError = normalizeError(event.error)
-      errorRef.current = normalizedError
-      setError(normalizedError)
-      setInterimTranscript('')
-      setStatus('error')
-    }
-
-    recognition.onend = () => {
-      recognitionRef.current = null
-      setInterimTranscript('')
-      stopRequestedRef.current = false
-      setStatus(errorRef.current ? 'error' : 'idle')
-    }
-
-    recognitionRef.current = recognition
-
-    try {
-      recognition.start()
-    } catch {
-      recognitionRef.current = null
-      errorRef.current = 'not-allowed'
-      setError('not-allowed')
-      setStatus('error')
-    }
+    startRecognition()
   }, [options?.lang])
 
   return {

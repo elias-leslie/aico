@@ -70,7 +70,7 @@ export function MobileKeyboard({
   const handleToggleMinimize = useCallback(() => {
     setMinimized(!minimized)
   }, [minimized, setMinimized])
-  const revealTerminal = useCallback(() => {
+  const dismissNativeEditing = useCallback(() => {
     if (isComposePending(storageScopeId, sessionId)) return false
     if (!nativeEditingOpen) return true
     nativeInputRef.current?.blur()
@@ -80,7 +80,7 @@ export function MobileKeyboard({
 
   const handleToggleNativeEditing = useCallback(() => {
     if (nativeEditingOpen) {
-      revealTerminal()
+      dismissNativeEditing()
       return
     }
     viewportBeforeFocusRef.current =
@@ -89,7 +89,7 @@ export function MobileKeyboard({
     // iOS requires focus to remain in the same user gesture as the tap.
     flushSync(() => setNativeEditingOpen(true))
     nativeInputRef.current?.focus({ preventScroll: true })
-  }, [nativeEditingOpen, revealTerminal])
+  }, [nativeEditingOpen, dismissNativeEditing])
 
   // Wrapped onSend that handles CTRL modifier
   const handleSend = useCallback(
@@ -209,7 +209,9 @@ export function MobileKeyboard({
         <ControlBar
           onSend={handleRibbonSend}
           onArrow={handleArrow}
-          onBeforeTerminalAction={isNativeMode ? revealTerminal : undefined}
+          onBeforeTerminalAction={() =>
+            !isComposePending(storageScopeId, sessionId)
+          }
           ctrlActive={ctrlActive}
           onCtrlToggle={handleCtrlToggle}
           minimized={isNativeMode ? !nativeEditingOpen : minimized}

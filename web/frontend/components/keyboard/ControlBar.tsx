@@ -170,6 +170,12 @@ export function ControlBar({
     clearModifiers()
   }, [onBeforeTerminalAction, onSend, modifiers.shift, clearModifiers])
 
+  const handleEnter = useCallback(() => {
+    if (onBeforeTerminalAction?.() === false) return
+    onSend(KEY_SEQUENCES.ENTER)
+    clearModifiers()
+  }, [onBeforeTerminalAction, onSend, clearModifiers])
+
   const handleModelSelect = useCallback(
     (command: string) => {
       navigator.vibrate?.(10)
@@ -288,6 +294,16 @@ export function ControlBar({
             label="→"
             onPress={() => handleArrow('right')}
             className="text-xl"
+            style={{
+              flex: '1 1 0',
+              height: arrowButtonSize,
+              minWidth: 0,
+            }}
+          />
+          <KeyboardKey
+            label="Enter"
+            onPress={handleEnter}
+            className="text-sm"
             style={{
               flex: '1 1 0',
               height: arrowButtonSize,

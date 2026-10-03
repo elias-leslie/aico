@@ -35,6 +35,9 @@ export function VoiceTranscriptPanel({
   isMobile,
 }: VoiceTranscriptPanelProps) {
   const [editedText, setEditedText] = useState(transcript)
+  const [editBaseline, setEditBaseline] = useState<string | null>(null)
+  const editBaselineRef = useRef<string | null>(null)
+  const previousRecognizedTextRef = useRef('')
   const [visible, setVisible] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const closeTimerRef = useRef<ReturnType<typeof setTimeout>>(null)
@@ -45,10 +48,19 @@ export function VoiceTranscriptPanel({
     return () => cancelAnimationFrame(raf)
   }, [])
 
-  // Sync transcript updates into edited text
+  // Keep manual corrections as the draft base when dictation resumes.
   useEffect(() => {
-    setEditedText(transcript)
-  }, [transcript])
+    const recognizedText = mergeTranscriptSegments([
+      transcript,
+      interimTranscript,
+    ])
+    if (!recognizedText && previousRecognizedTextRef.current) {
+      editBaselineRef.current = null
+      setEditBaseline(null)
+    }
+    previousRecognizedTextRef.current = recognizedText
+    if (editBaselineRef.current === null) setEditedText(transcript)
+  }, [transcript, interimTranscript])
 
   // Auto-focus textarea (desktop only)
   useEffect(() => {
@@ -57,11 +69,25 @@ export function VoiceTranscriptPanel({
     }
   }, [visible, isMobile])
 
-  const interimSuffix = getTranscriptAppendSuffix(editedText, interimTranscript)
-  const combinedTranscript = mergeTranscriptSegments([
-    editedText,
-    interimTranscript,
-  ])
+  const pendingText =
+    editBaseline === null
+      ? interimTranscript
+      : getTranscriptAppendSuffix(
+          editBaseline,
+          mergeTranscriptSegments([transcript, interimTranscript]),
+        )
+  const interimSuffix = getTranscriptAppendSuffix(editedText, pendingText)
+  const combinedTranscript = mergeTranscriptSegments([editedText, pendingText])
+
+  const handleEdit = useCallback(
+    (text: string) => {
+      const baseline = mergeTranscriptSegments([transcript, interimTranscript])
+      editBaselineRef.current = baseline
+      setEditBaseline(baseline)
+      setEditedText(text)
+    },
+    [transcript, interimTranscript],
+  )
 
   const handleSend = useCallback(() => {
     const text = combinedTranscript.trim()
@@ -105,24 +131,18 @@ export function VoiceTranscriptPanel({
 
   const hasText = combinedTranscript.trim().length > 0
 
-  const handleMicTap = useCallback(() => {
-    if (status === 'error') onReset()
-    if (hasText) {
-      handleSend()
-      return
-    }
-    onToggleListening()
-  }, [status, hasText, onReset, handleSend, onToggleListening])
-
   if (isMobile) {
     return (
       <VoiceMobilePanel
         editedText={editedText}
+        setEditedText={handleEdit}
         interimTranscript={interimSuffix}
         status={status}
         error={error}
         hasText={hasText}
-        onMicTap={handleMicTap}
+        textareaRef={textareaRef}
+        onMicTap={onToggleListening}
+        onSend={handleSend}
         onClose={handleClose}
       />
     )
@@ -131,7 +151,7 @@ export function VoiceTranscriptPanel({
   return (
     <VoiceDesktopPanel
       editedText={editedText}
-      setEditedText={setEditedText}
+      setEditedText={handleEdit}
       interimTranscript={interimSuffix}
       status={status}
       error={error}

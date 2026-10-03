@@ -84,7 +84,7 @@ describe('MobileKeyboard native utility controls', () => {
     })
   })
 
-  it('hides the overlay before a terminal control acts', () => {
+  it('keeps the overlay focused while a terminal control acts', () => {
     const onSend = vi.fn()
     render(
       <MobileKeyboard
@@ -101,9 +101,108 @@ describe('MobileKeyboard native utility controls', () => {
     fireEvent.change(field, { target: { value: 'draft' } })
     fireEvent.click(screen.getByRole('button', { name: 'Tab' }))
 
-    expect(field.closest('[hidden]')).toHaveStyle({ display: 'none' })
+    expect(field).toBeVisible()
+    expect(field).toHaveFocus()
     expect(onSend).toHaveBeenCalledWith('\t')
     expect(field).toHaveValue('draft')
+  })
+
+  it('keeps the keyboard and toolbox open across repeated TUI arrows and Enter', () => {
+    const onSend = vi.fn()
+    const onCompose = vi.fn().mockResolvedValue(true)
+    render(
+      <MobileKeyboard
+        onSend={onSend}
+        sessionId="native-tui-navigation"
+        onCompose={onCompose}
+        keyboardMode="native"
+        connectionStatus="connected"
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Show keyboard' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Show arrow keys' }))
+    const field = screen.getByLabelText('Compose')
+    for (const name of ['↓', '↓', '↑', '←', '→', 'Enter']) {
+      const button = screen.getByRole('button', { name })
+      expect(fireEvent.pointerDown(button)).toBe(false)
+      fireEvent.click(button)
+      expect(field).toBeVisible()
+      expect(field).toHaveFocus()
+      expect(
+        screen.getByRole('button', { name: 'Hide arrow keys' }),
+      ).toHaveAttribute('aria-expanded', 'true')
+    }
+    expect(onSend.mock.calls).toEqual([
+      ['\x1b[B'],
+      ['\x1b[B'],
+      ['\x1b[A'],
+      ['\x1b[D'],
+      ['\x1b[C'],
+      ['\r'],
+    ])
+    expect(onCompose).not.toHaveBeenCalled()
+  })
+
+  it('allows Enter with the keyboard hidden and preserves an unsent draft', () => {
+    const onSend = vi.fn()
+    const onCompose = vi.fn().mockResolvedValue(true)
+    render(
+      <MobileKeyboard
+        onSend={onSend}
+        sessionId="native-tui-enter"
+        onCompose={onCompose}
+        keyboardMode="native"
+        connectionStatus="connected"
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Show keyboard' }))
+    const field = screen.getByLabelText('Compose')
+    fireEvent.change(field, { target: { value: 'unsent' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Show arrow keys' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Enter' }))
+    expect(onSend).toHaveBeenCalledExactlyOnceWith('\r')
+    expect(field).toHaveValue('unsent')
+    expect(field).toHaveFocus()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Hide keyboard, unsent draft' }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Show arrow keys' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Enter' }))
+    expect(onSend).toHaveBeenCalledTimes(2)
+    expect(field).not.toBeVisible()
+    expect(onCompose).not.toHaveBeenCalled()
+  })
+
+  it('keeps draft caret edits and TUI navigation open together', () => {
+    const onSend = vi.fn()
+    render(
+      <MobileKeyboard
+        onSend={onSend}
+        sessionId="native-draft-navigation"
+        onCompose={vi.fn().mockResolvedValue(true)}
+        keyboardMode="native"
+        connectionStatus="connected"
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Show keyboard' }))
+    const field = screen.getByLabelText('Compose') as HTMLTextAreaElement
+    fireEvent.change(field, { target: { value: 'draft' } })
+    field.setSelectionRange(5, 5)
+    fireEvent.click(screen.getByRole('button', { name: 'Show arrow keys' }))
+    fireEvent.click(screen.getByRole('button', { name: '←' }))
+    expect(field.selectionStart).toBe(4)
+    fireEvent.click(screen.getByRole('button', { name: '→' }))
+    expect(field.selectionStart).toBe(5)
+    expect(onSend).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '↓' }))
+    fireEvent.click(screen.getByRole('button', { name: '↑' }))
+    expect(onSend.mock.calls).toEqual([['\x1b[B'], ['\x1b[A']])
+    expect(field).toHaveFocus()
+    expect(field).toBeVisible()
+    expect(field).toHaveValue('draft')
+    expect(
+      screen.getByRole('button', { name: 'Hide arrow keys' }),
+    ).toHaveAttribute('aria-expanded', 'true')
   })
 
   it('restores the unsent badge after switching away from and back to a session', () => {
@@ -183,6 +282,9 @@ describe('MobileKeyboard native utility controls', () => {
     fireEvent.change(field, { target: { value: 'draft' } })
     fireEvent.keyDown(field, { key: 'Enter' })
     fireEvent.click(screen.getByRole('button', { name: 'Tab' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Show arrow keys' }))
+    fireEvent.click(screen.getByRole('button', { name: '↓' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Enter' }))
     fireEvent.click(screen.getByRole('button', { name: 'Voice input' }))
     expect(onSend).not.toHaveBeenCalled()
     expect(onVoice).not.toHaveBeenCalled()

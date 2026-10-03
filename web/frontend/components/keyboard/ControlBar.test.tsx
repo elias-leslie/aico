@@ -81,7 +81,7 @@ describe('ControlBar', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('shows the persistent utility controls and only reveals four arrows in the toolbox', () => {
+  it('shows the persistent utility controls and reveals arrows and Enter in the toolbox', () => {
     const onToggleMinimize = vi.fn()
     renderControlBar({
       onToggleMinimize,
@@ -116,7 +116,8 @@ describe('ControlBar', () => {
     const arrowPanel = screen.getByLabelText('Arrow keys')
     const utilityRow = screen.getByRole('button', { name: 'Tab' }).parentElement
     expect(arrowPanel.nextElementSibling).toBe(utilityRow)
-    expect(arrowPanel.querySelectorAll('button')).toHaveLength(4)
+    expect(screen.getByRole('button', { name: 'Enter' })).toBeInTheDocument()
+    expect(arrowPanel.querySelectorAll('button')).toHaveLength(5)
 
     fireEvent.click(screen.getByRole('button', { name: 'Hide keyboard' }))
     expect(onToggleMinimize).toHaveBeenCalledTimes(1)
