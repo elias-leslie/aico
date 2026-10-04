@@ -215,6 +215,9 @@ def ensure_agent_running_sync(session_id: str) -> bool:
     if not session:
         raise ValueError(f"Session {session_id} not found")
 
+    if session.get("is_root"):
+        return False  # Initial root launch belongs exclusively to its retained request.
+
     mode = str(session.get("mode") or "shell")
     if mode == "shell":
         return False

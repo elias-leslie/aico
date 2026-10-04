@@ -36,7 +36,9 @@ def _to_str(session_id: SessionId) -> str:
 # ---------------------------------------------------------------------------
 A_TERM_SESSION_FIELDS = """id, name, user_id, project_id, working_dir, display_order,
                mode, session_number, is_alive, created_at, last_accessed_at,
-               last_claude_session, claude_state, pane_id"""
+               last_claude_session, claude_state, pane_id,
+               EXISTS (SELECT 1 FROM a_term_root_requests r
+                       WHERE r.session_id = a_term_sessions.id) AS is_root"""
 
 _QUALIFIED_FIELDS = """a_term_sessions.id, a_term_sessions.name,
                a_term_sessions.user_id, a_term_sessions.project_id,
@@ -44,7 +46,9 @@ _QUALIFIED_FIELDS = """a_term_sessions.id, a_term_sessions.name,
                a_term_sessions.mode, a_term_sessions.session_number,
                a_term_sessions.is_alive, a_term_sessions.created_at,
                a_term_sessions.last_accessed_at, a_term_sessions.last_claude_session,
-               a_term_sessions.claude_state, a_term_sessions.pane_id"""
+               a_term_sessions.claude_state, a_term_sessions.pane_id,
+               EXISTS (SELECT 1 FROM a_term_root_requests r
+                       WHERE r.session_id = a_term_sessions.id) AS is_root"""
 
 
 def normalize_session_row(row: dict[str, Any]) -> dict[str, Any]:
@@ -284,6 +288,8 @@ def claim_dead_session_by_project(project_id: str, mode: str) -> dict[str, Any] 
             WHERE id = (
                 SELECT id FROM a_term_sessions
                 WHERE project_id = %s AND mode = %s AND is_alive = false
+                  AND NOT EXISTS (SELECT 1 FROM a_term_root_requests r
+                                  WHERE r.session_id = a_term_sessions.id)
                 ORDER BY last_accessed_at DESC
                 LIMIT 1
                 FOR UPDATE SKIP LOCKED

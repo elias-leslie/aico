@@ -166,6 +166,13 @@ def ensure_session_alive(session_id: str) -> bool:
         logger.warning("ensure_alive_no_db_record", session_id=session_id)
         return False
 
+    if session.get("is_root"):
+        from ..storage import root_requests
+        from .root_workloads import describe
+
+        root = root_requests.for_session(session_id)
+        return bool(root and describe(root)["status"] == "running")
+
     if tmux_session_exists(session_id):
         if not session["is_alive"]:
             a_term_store.update_session(session_id, is_alive=True)
@@ -183,6 +190,10 @@ def reset_session(session_id: str) -> str | None:
     session = a_term_store.get_session(session_id)
     if not session:
         logger.warning("reset_session_not_found", session_id=session_id)
+        return None
+
+    if session.get("is_root"):
+        # An adapter request is one immutable workload, including after it ends.
         return None
 
     delete_session(session_id)

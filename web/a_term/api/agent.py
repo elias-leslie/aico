@@ -168,6 +168,13 @@ async def start_agent(session_id: str, background_tasks: BackgroundTasks) -> Sta
     if not session:
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found") from None
 
+    if session.get("is_root"):
+        return _early_return(
+            session_id,
+            _normalize_agent_state(session.get("claude_state")),
+            "Root launch is owned by its retained request",
+        )
+
     command, process_name = _get_agent_tool_for_session(session)
     current_state: AgentState = _normalize_agent_state(
         session.get("agent_state") or session.get("claude_state", "not_started")

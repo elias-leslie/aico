@@ -29,6 +29,7 @@ from .api import (
     pane_files,
     panes,
     projects,
+    root_control,
     sessions,
 )
 from .auth import require_request_auth
@@ -204,6 +205,7 @@ app.include_router(notes.router)
 app.include_router(files.router)
 app.include_router(pane_files.router)
 app.include_router(diagnostics.router)
+app.include_router(root_control.router)
 
 
 @app.get("/metrics", response_model=None)
