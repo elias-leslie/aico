@@ -353,6 +353,20 @@ export function initStore(dbPath: string): void {
   // reconciled. Legacy observations are inserted directly as active and are
   // never systemd cleanup authority.
   ensureTmuxServerUnitSchema()
+  // Request identities survive End. They are tombstones, never a licence to
+  // recreate retired work. Prompts remain transient and are not stored here.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS root_requests (
+      request_id TEXT PRIMARY KEY,
+      digest TEXT NOT NULL,
+      widget_id TEXT NOT NULL UNIQUE,
+      logical_session_id TEXT NOT NULL UNIQUE,
+      role TEXT NOT NULL,
+      lead_root_reference TEXT,
+      facet_capsule_ref TEXT,
+      created_at INTEGER NOT NULL
+    )
+  `)
   db.exec(`
     DROP INDEX IF EXISTS tmux_servers_one_live_managed;
     DROP INDEX IF EXISTS tmux_servers_one_live_managed_service;
@@ -795,6 +809,83 @@ export function insertWidget(
   createdAt = Date.now(),
 ): WidgetRow {
   return insertInternalWidget(id, open, tool, createdAt, 'unallocated')
+}
+
+export interface RootRequestRow {
+  requestId: string
+  digest: string
+  widgetId: string
+  logicalSessionId: string
+  role: string
+  leadRootReference: string | null
+  facetCapsuleRef: string | null
+  createdAt: number
+}
+
+function rootRequestRow(row: Record<string, unknown>): RootRequestRow {
+  return {
+    requestId: row.request_id as string,
+    digest: row.digest as string,
+    widgetId: row.widget_id as string,
+    logicalSessionId: row.logical_session_id as string,
+    role: row.role as string,
+    leadRootReference: row.lead_root_reference as string | null,
+    facetCapsuleRef: row.facet_capsule_ref as string | null,
+    createdAt: row.created_at as number,
+  }
+}
+
+export function getRootRequest(requestId: string): RootRequestRow | undefined {
+  const row = db.prepare('SELECT * FROM root_requests WHERE request_id = ?').get(requestId)
+  return row ? rootRequestRow(row) : undefined
+}
+
+export function rootRequestForWidget(widgetId: string): RootRequestRow | undefined {
+  const row = db.prepare('SELECT * FROM root_requests WHERE widget_id = ?').get(widgetId)
+  return row ? rootRequestRow(row) : undefined
+}
+
+export function listRootRequests(): RootRequestRow[] {
+  return db
+    .prepare('SELECT * FROM root_requests ORDER BY created_at, request_id')
+    .all()
+    .map(rootRequestRow)
+}
+
+/** One transaction reserves the key and its never-allocated widget. */
+export function reserveRootRequest(
+  request: RootRequestRow,
+  tool: string,
+  projectId: string,
+  projectRoot: string,
+): RootRequestRow {
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    const existing = getRootRequest(request.requestId)
+    if (existing) {
+      db.exec('COMMIT')
+      return existing
+    }
+    insertWidget(request.widgetId, false, tool, request.createdAt)
+    setWidgetProject(request.widgetId, projectId, projectRoot)
+    db.prepare(`INSERT INTO root_requests
+      (request_id, digest, widget_id, logical_session_id, role, lead_root_reference, facet_capsule_ref, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(
+      request.requestId,
+      request.digest,
+      request.widgetId,
+      request.logicalSessionId,
+      request.role,
+      request.leadRootReference,
+      request.facetCapsuleRef,
+      request.createdAt,
+    )
+    db.exec('COMMIT')
+    return request
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
 }
 
 /** Insert a row observed in a pre-catalog tmux roster. A crash before the

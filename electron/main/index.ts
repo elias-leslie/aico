@@ -52,7 +52,13 @@ import {
   mayClearMatchingPendingScope,
 } from './lifecycle-guard'
 import { allowTrustedAudioMedia } from './media-permission'
-import { ownershipGeneration, type RetirementResult, retireOwnedSession } from './owner-retirement'
+import { listenOwnerServer } from './owner-control'
+import {
+  ownershipGeneration,
+  type RetirementResult,
+  retireOwnedSession,
+  sessionGeneration,
+} from './owner-retirement'
 import { headlessRetirementOperations } from './owner-runtime'
 import { readCgroupPopulated, scopeIdentity, stopOwnedPaneScope } from './owner-scope'
 import {
@@ -78,6 +84,13 @@ import {
   refreshProjects,
   widgetCwd,
 } from './project'
+import { createRootServer, guiSocketPath } from './root-control'
+import {
+  initialLaunchLine,
+  rootLaunchEnvironment,
+  rootPromptReady,
+  withRootPrompt,
+} from './root-launch'
 import { parseSse, type SelectionRecord } from './selection'
 import {
   createSelectionDeliveryLease,
@@ -216,6 +229,7 @@ const ptyRefreshes = new Map<
 >()
 const sessionStartPromises = new Map<string, Promise<boolean>>()
 const selectionDeliveries = new Map<string, Promise<void>>()
+let rootControlServer: ReturnType<typeof createRootServer> | undefined
 // BrowserWindow.id -> stable widget id. The widget id (not the volatile window
 // id) names the tmux session, so a widget reattaches the same session across
 // close/reopen and app restarts.
@@ -961,6 +975,7 @@ function managedEnvironment(
   // differ from this Aico process (for example in an isolated desktop run).
   // Keep the pane's home aligned with the widget profile and its chosen cwd.
   environment.HOME = process.env.HOME ?? homedir()
+  Object.assign(environment, rootLaunchEnvironment(widgetId))
   if (row?.tmuxServerId) environment.AICO_TMUX_SERVER_ID = row.tmuxServerId
   return environment
 }
@@ -1775,7 +1790,7 @@ async function recoverInterruptedManagedPane(
     if (!dispatchedRow) return 'blocked'
     current = dispatchedRow
     const tool = getTui(current.tool ?? 'shell')
-    const line = tool ? launchLine(tool) : null
+    const line = tool ? initialLaunchLine(current.id, tool) : null
     // Re-observe immediately before the one-time transition out of the gate.
     const immediatelyCurrent = await verifiedCurrentManagedPane(current)
     if (
@@ -2106,6 +2121,7 @@ async function ensureOwnedInternalSession(widgetId: string, size: PtySize): Prom
     )
     return false
   }
+  if (!rootPromptReady(widgetId)) return false
   if (!durableUserManager) {
     console.error(
       '[aico:lifecycle] user linger is not enabled; refusing a session that would die on logout',
@@ -2118,7 +2134,7 @@ async function ensureOwnedInternalSession(widgetId: string, size: PtySize): Prom
   // Embedding the TUI in new-session lets it fork before tmux's asynchronous
   // cgroup move and was the path that put every tool in app-aico-9189.scope.
   const tool = getTui(rowBeforeCreate.tool ?? 'shell')
-  const line = tool ? launchLine(tool) : null
+  const line = tool ? initialLaunchLine(widgetId, tool) : null
   if (hasPersistedScopeCleanupEvidence(rowBeforeCreate)) {
     console.error(
       `[aico:lifecycle] refusing to recreate absent ${widgetId}: persisted scope cleanup is unresolved`,
@@ -2926,6 +2942,26 @@ function focusOrReopen(id: string): void {
   if (row) openWidget(row)
 }
 
+async function rootViewOperation(
+  widgetId: string,
+  generation: string,
+  operation: (row: WidgetRow) => void,
+): Promise<boolean> {
+  const owner = lifecycleOwners.acquire(widgetId)
+  if (!owner) return false
+  try {
+    const row = getWidget(widgetId)
+    if (!row || sessionGeneration(row) !== generation || !(await verifiedCurrentManagedPane(row)))
+      return false
+    const latest = getWidget(widgetId)
+    if (!latest || sessionGeneration(latest) !== generation) return false
+    operation(latest)
+    return true
+  } finally {
+    releaseLifecycleOwner(widgetId, owner)
+  }
+}
+
 function discardWidget(id: string): void {
   widgetRetireIntents.request(id)
   drainWidgetRetire(id)
@@ -3682,6 +3718,7 @@ process.on('SIGINT', () => requestGracefulSignalQuit('SIGINT'))
 
 app.on('before-quit', () => {
   quitting = true
+  rootControlServer?.close()
   // A secondary instance (single-instance lock denied) quits before the app is
   // ready, where globalShortcut would throw; it never registered any anyway.
   if (app.isReady()) globalShortcut.unregisterAll()
@@ -4227,6 +4264,57 @@ app.whenReady().then(async () => {
 
   await restoreOnLaunch()
   syncTray()
+  rootControlServer = createRootServer({
+    available: () => !quitting && activationReady,
+    validate: (request) => Boolean(getTui(request.tool)?.enabled && isDir(request.projectRoot)),
+    ensure: async (widgetId, prompt) => {
+      const row = getWidget(widgetId)
+      // Root cwd is exact. Never inherit the center's project or fall back to
+      // the global active project after its requested directory disappears.
+      if (!row?.projectRoot || !isDir(row.projectRoot)) return
+      await withRootPrompt(widgetId, prompt, async () => {
+        await ensureSessionSerialized(widgetId, { cols: 100, rows: 30 })
+      })
+      const latest = getWidget(widgetId)
+      if (latest?.launchState === 'dispatched' && (await verifiedCurrentManagedPane(latest))) {
+        focusOrReopen(widgetId)
+      }
+    },
+    status: async (row) => {
+      if ((await internalSessionState(row.id)) === 'present' && row.launchState === 'dispatched') {
+        const pane = await verifiedCurrentManagedPane(row)
+        const identity = row.scopeUnit ? await scopeIdentity(row.scopeUnit) : null
+        if (pane && identity && managedGateState(pane, identity.controlGroup) === 'active-workload')
+          return 'running'
+      }
+      return isNeverAllocatedWidget(row) ? 'pending' : 'uncertain'
+    },
+    show: (widgetId, generation) =>
+      rootViewOperation(widgetId, generation, (row) => {
+        const win = windowForWidget(widgetId)
+        if (win) {
+          win.show()
+          win.focus()
+        } else openWidget(row)
+      }),
+    position: (widgetId, generation, bounds) =>
+      rootViewOperation(widgetId, generation, () => {
+        const win = windowForWidget(widgetId)
+        if (win) {
+          win.setBounds(bounds)
+          persistBounds(win)
+        } else {
+          saveBounds(widgetId, bounds, String(screen.getDisplayMatching(bounds).id))
+        }
+      }),
+  })
+  try {
+    await listenOwnerServer(rootControlServer, guiSocketPath())
+  } catch (error) {
+    rootControlServer.close()
+    rootControlServer = undefined
+    console.error('[aico:owner] GUI control unavailable:', error)
+  }
   activationReady = true
   if (activationPending) {
     activationPending = false

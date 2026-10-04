@@ -49,6 +49,10 @@ async function readJson(request: IncomingMessage): Promise<unknown> {
 export function createOwnerServer(operations: RetirementOperations): Server {
   return createServer(async (request, response) => {
     const path = request.url?.split('?')[0] ?? ''
+    if (path === '/v1/roots' || path.startsWith('/v1/roots/')) {
+      json(response, 503, { error: 'gui_unavailable' })
+      return
+    }
     const match = /^\/v1\/sessions\/([0-9a-f]{8})(\/end)?$/.exec(path)
     if (!match || !WIDGET_ID_RE.test(match[1])) {
       json(response, 404, { error: 'not_found' })

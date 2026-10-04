@@ -81,6 +81,14 @@ describe('headless owner control', () => {
     }
   })
 
+  it('reports that root GUI controls require Electron main', async () => {
+    expect(await call('/v1/roots')).toEqual({ status: 503, body: { error: 'gui_unavailable' } })
+    expect(await call('/v1/roots/request/show', 'POST', {})).toEqual({
+      status: 503,
+      body: { error: 'gui_unavailable' },
+    })
+  })
+
   it('closes the desktop view after the headless owner confirms End', async () => {
     const row = insertWidget('1234dcba', true, 'shell')
     const open = new Set([row.id])
