@@ -17,6 +17,7 @@ import {
   serverIdentityEnvironmentTargetArgs,
   serverRosterArgs,
   sessionIdTargetArgs,
+  sessionName,
 } from './tmux'
 import {
   classifyTmuxServerState,
@@ -81,7 +82,7 @@ async function unitEvidence(server: TmuxServerRow): Promise<TmuxServerUnitEviden
 
 interface Roster {
   evidence: TmuxServerRosterEvidence
-  sessionIds: string[]
+  sessions: { sessionId: string; sessionName: string }[]
 }
 
 function serverRoster(server: TmuxServerRow): Roster {
@@ -105,11 +106,11 @@ function serverRoster(server: TmuxServerRow): Roster {
         },
       )
       return matchesServerIdentityEnvironment(identity, server.id) && server.serverPid
-        ? { evidence: { status: 'reachable', serverPid: server.serverPid }, sessionIds: [] }
-        : { evidence: { status: 'unavailable' }, sessionIds: [] }
+        ? { evidence: { status: 'reachable', serverPid: server.serverPid }, sessions: [] }
+        : { evidence: { status: 'unavailable' }, sessions: [] }
     }
     const pids = new Set<number>()
-    const sessionIds: string[] = []
+    const sessions: Roster['sessions'] = []
     for (const line of lines) {
       const [pidText, sessionId, sessionName, createdText] = line.split('\t')
       const pid = Number(pidText)
@@ -121,12 +122,12 @@ function serverRoster(server: TmuxServerRow): Roster {
         !Number.isFinite(Number(createdText)) ||
         Number(createdText) < 0
       )
-        return { evidence: { status: 'unavailable' }, sessionIds: [] }
+        return { evidence: { status: 'unavailable' }, sessions: [] }
       pids.add(pid)
-      sessionIds.push(sessionId)
+      sessions.push({ sessionId, sessionName })
     }
-    if (pids.size !== 1) return { evidence: { status: 'unavailable' }, sessionIds: [] }
-    return { evidence: { status: 'reachable', serverPid: [...pids][0] }, sessionIds }
+    if (pids.size !== 1) return { evidence: { status: 'unavailable' }, sessions: [] }
+    return { evidence: { status: 'reachable', serverPid: [...pids][0] }, sessions }
   } catch (error) {
     const stderr = (error as { stderr?: string | Buffer }).stderr
     const detail = Buffer.isBuffer(stderr) ? stderr.toString('utf8') : (stderr ?? '')
@@ -134,7 +135,7 @@ function serverRoster(server: TmuxServerRow): Roster {
       /error connecting to .+\(No such file or directory\)|no server running on /i.test(detail)
     return {
       evidence: { status: unavailable ? 'transport-failure' : 'unavailable' },
-      sessionIds: [],
+      sessions: [],
     }
   }
 }
@@ -149,7 +150,6 @@ export async function headlessSessionState(widgetId: string): Promise<SessionSta
   if (!server) return 'unknown'
   if (server.phase === 'dead') return 'absent'
   if (server.phase !== 'active') return 'unknown'
-  if (!row.tmuxSessionId) return 'unknown'
   const roster = serverRoster(server)
   const state = classifyTmuxServerState(server, {
     process: processEvidence(server),
@@ -158,7 +158,10 @@ export async function headlessSessionState(widgetId: string): Promise<SessionSta
   })
   if (state === 'dead') return 'absent'
   if (state !== 'reachable') return 'unknown'
-  return roster.sessionIds.includes(row.tmuxSessionId) ? 'present' : 'absent'
+  const present = row.tmuxSessionId
+    ? roster.sessions.some((entry) => entry.sessionId === row.tmuxSessionId)
+    : roster.sessions.some((entry) => entry.sessionName === sessionName(row.id))
+  return present ? 'present' : 'absent'
 }
 
 function paneEnvironmentMatches(row: WidgetRow, pid: number): boolean {
