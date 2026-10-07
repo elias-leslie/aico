@@ -116,6 +116,7 @@ describe('private root workload control', () => {
     expect(ensure.mock.calls).toHaveLength(before)
     expect(results[0].body).toMatchObject({
       owner: 'aico',
+      tool: 'codex',
       role: 'neri-target-root',
       leadRootReference: 'portfolio-center',
       status: 'running',

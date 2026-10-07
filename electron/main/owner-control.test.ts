@@ -12,14 +12,25 @@ import {
 import { LifecycleOwnerLock } from './lifecycle-guard'
 import { createOwnerServer, listenOwnerServer, ownerSocketPath } from './owner-control'
 import { sessionGeneration } from './owner-retirement'
-import { getWidget, initStore, insertWidget, listWidgets } from './store'
+import {
+  activateTmuxServer,
+  getWidget,
+  initStore,
+  insertProvisioningTmuxServer,
+  insertWidget,
+  listWidgets,
+} from './store'
 
 describe('headless owner control', () => {
   const root = mkdtempSync(join(tmpdir(), 'aico-owner-test-'))
   const socket = join(root, 'aico', 'control.sock')
+  let verificationMutation: (() => void) | undefined
   const server = createOwnerServer({
     sessionState: async (id) => (id === 'abcddcba' ? 'unknown' : 'absent'),
-    verifiedCurrentPane: async (row) => row.id === 'abcddcba',
+    verifiedCurrentPane: async (row) => {
+      verificationMutation?.()
+      return row.id === 'abcddcba'
+    },
     stopTmuxSession: async () => {
       throw new Error('must not stop tmux')
     },
@@ -165,6 +176,17 @@ describe('headless owner control', () => {
 
   it('returns an owner-qualified managed descriptor and preserves blocked work', async () => {
     insertWidget('abcddcba', false, 'shell')
+    insertProvisioningTmuxServer({
+      id: 'abcdef12',
+      socketPath: join(root, 'server.sock'),
+      scopeUnit: 'aico-tmux-server-abcdef12.service',
+    })
+    activateTmuxServer('abcdef12', {
+      controlGroup: '/aico-tmux-server-abcdef12.service',
+      invocationId: 'a'.repeat(32),
+      serverPid: 123,
+      procStartTime: '456',
+    })
     const db = new DatabaseSync(join(root, 'aico.db'))
     try {
       db.prepare(
@@ -182,9 +204,31 @@ describe('headless owner control', () => {
       widgetId: 'abcddcba',
       tmuxSessionId: '$5',
       paneId: '%8',
+      tmuxServerId: 'abcdef12',
+      tmuxSocket: join(root, 'server.sock'),
+      tool: 'shell',
     })
     const generation = (descriptor.body as { generation: string }).generation
     expect((await call('/v1/sessions/abcddcba/end', 'POST', { generation })).status).toBe(409)
     expect(getWidget('abcddcba')).toBeDefined()
+  })
+
+  it('rejects a catalog generation changed during asynchronous pane verification', async () => {
+    verificationMutation = () => {
+      const db = new DatabaseSync(join(root, 'aico.db'))
+      try {
+        db.prepare("UPDATE widgets SET session_id = 'changed-fixture' WHERE id = 'abcddcba'").run()
+      } finally {
+        db.close()
+      }
+    }
+    try {
+      expect(await call('/v1/sessions/abcddcba')).toEqual({
+        status: 409,
+        body: { error: 'identity_changed' },
+      })
+    } finally {
+      verificationMutation = undefined
+    }
   })
 })

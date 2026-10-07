@@ -9,7 +9,7 @@ import {
   sessionGeneration,
 } from './owner-retirement'
 import { MANAGED_LIFECYCLE_VERSION } from './ownership'
-import { getWidget } from './store'
+import { getTmuxServer, getWidget } from './store'
 
 const WIDGET_ID_RE = /^[0-9a-f]{8}$/
 const MAX_BODY_BYTES = 1024
@@ -74,6 +74,19 @@ export function createOwnerServer(operations: RetirementOperations): Server {
           json(response, 404, { error: 'not_found' })
           return
         }
+        // The async pane verification must still describe this exact catalog
+        // generation. Never publish a stale row as a discovery receipt.
+        const current = getWidget(widgetId)
+        const server = getTmuxServer(row.tmuxServerId)
+        if (
+          !current ||
+          sessionGeneration(current) !== sessionGeneration(row) ||
+          !server ||
+          server.phase !== 'active'
+        ) {
+          json(response, 409, { error: 'identity_changed' })
+          return
+        }
         json(response, 200, {
           owner: 'aico',
           widgetId,
@@ -81,6 +94,9 @@ export function createOwnerServer(operations: RetirementOperations): Server {
           generation: sessionGeneration(row),
           tmuxSessionId: row.tmuxSessionId,
           paneId: row.paneId,
+          tmuxServerId: server.id,
+          tmuxSocket: server.socketPath,
+          tool: row.tool,
         })
         return
       }

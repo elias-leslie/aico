@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
 """Foreground, read-only root observation. Emits metadata, never terminal text.
 
-Invoke with explicit absolute --root-socket, --owner-socket, --tmux-socket,
+Use `st aico roots [REQUEST_ID] [--watch SECONDS]` for compact snapshots or
+bounded change-only JSONL. Discovery reads existing private catalog/owner receipts
+and verifies exact tmux server/pane identity once; a watch never re-pins.
+Unknown TUI profiles are unavailable. Output contains no terminal or draft text.
+
+Explicit-pin compatibility: invoke with --root-socket, --owner-socket, --tmux-socket,
 --duration SECONDS and one or more --root JSON objects containing all Pin fields.
 Pins come from existing owner receipts and the exact managed tmux server identity;
-this tool never discovers, creates, submits to, or re-pins a root. JSONL on stdout
+this tool never creates, submits to, or re-pins a root. JSONL on stdout
 contains initial baselines and changes only. Terminal states describe visible TUI
 chrome, not whether the assigned objective is complete. No files are written.
 """
@@ -30,6 +35,8 @@ from urllib.parse import quote
 
 CAPTURE_LIMIT = 32 * 1024
 RECEIPT_LIMIT = 16 * 1024
+CATALOG_LIMIT = 256 * 1024
+ROOT_LIMIT = 128
 CONTROL = re.compile(
     r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|"
     r"\x1b[P^_].*?\x1b\\|\x1b\[[0-?]*[ -/]*[@-~]|\x1b[@-_]|"
@@ -125,7 +132,7 @@ class Pin:
 
 
 def socket_path(value: str) -> str:
-    if (not value.startswith("/") or len(value.encode()) > 107
+    if (not isinstance(value, str) or not value.startswith("/") or len(value.encode()) > 107
             or any(p in ("", ".", "..") for p in value[1:].split("/"))
             or any(ord(c) < 32 or ord(c) == 127 for c in value)):
         raise argparse.ArgumentTypeError("socket must be an exact normalized absolute path")
@@ -205,13 +212,15 @@ def classify(raw: bytes) -> tuple[dict, str]:
 
 class Collector:
     def __init__(self, root_socket: str, owner_socket: str, tmux_socket: str,
-                 deadline: float, cancel: threading.Event, tmux: str = "tmux"):
+                 deadline: float, cancel: threading.Event, tmux: str = "tmux",
+                 discovered: bool = False):
         self.root_socket = root_socket
         self.owner_socket = owner_socket
         self.tmux_socket = tmux_socket
         self.deadline = deadline
         self.cancel = cancel
         self.tmux = tmux
+        self.discovered = discovered
 
     def remaining(self) -> float:
         remaining = self.deadline - time.monotonic()
@@ -220,6 +229,7 @@ class Collector:
         return remaining
 
     def receipt(self, path: str, route: str) -> tuple[int, dict]:
+        limit = CATALOG_LIMIT if route == "/v1/roots" else RECEIPT_LIMIT
         connection = http.client.HTTPConnection("localhost", timeout=min(.25, self.remaining()))
         client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         connection.sock = client
@@ -231,9 +241,9 @@ class Collector:
             parts = bytearray()
             while True:
                 self.remaining()
-                part = response.read1(min(4096, RECEIPT_LIMIT + 1 - len(parts)))
+                part = response.read1(min(4096, limit + 1 - len(parts)))
                 parts.extend(part)
-                if len(parts) > RECEIPT_LIMIT:
+                if len(parts) > limit:
                     raise Unavailable("receipt_limit")
                 if not part or response.isclosed():
                     break
@@ -262,14 +272,83 @@ class Collector:
             raise IdentityChanged()
         if root.get("status") != "running":
             raise Unavailable("root_not_running")
+        if self.discovered and root.get("tool") != "codex":
+            raise IdentityChanged()
         status, owner = self.receipt(self.owner_socket, f"/v1/sessions/{pin.widgetId}")
         if status != 200:
             raise Unavailable("pane_unavailable")
         expected = {"owner": "aico", "widgetId": pin.widgetId, "generation": pin.generation,
                     "sessionId": pin.sessionId, "tmuxSessionId": pin.tmuxSessionId,
                     "paneId": pin.paneId}
+        if self.discovered:
+            expected.update(tmuxServerId=pin.tmuxServerId, tmuxSocket=self.tmux_socket,
+                            tool="codex")
         if any(owner.get(k) != v for k, v in expected.items()):
             raise IdentityChanged()
+
+    def discover(self, request_id: str | None) -> tuple[list[tuple[Pin, Collector]], list[dict]]:
+        status, catalog = self.receipt(self.root_socket, "/v1/roots")
+        roots = catalog.get("roots")
+        if status != 200 or catalog.get("owner") != "aico" or not isinstance(roots, list):
+            raise Unavailable("catalog_unavailable")
+        if len(roots) > ROOT_LIMIT:
+            raise Unavailable("root_limit")
+        resolved = []
+        unavailable = []
+        seen = set()
+        for root in roots:
+            if not isinstance(root, dict):
+                raise Unavailable("catalog_invalid")
+            key = root.get("requestId")
+            if not isinstance(key, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", key):
+                raise Unavailable("catalog_invalid")
+            if key in seen:
+                raise Unavailable("catalog_invalid")
+            seen.add(key)
+            if request_id and key != request_id:
+                continue
+            # General discovery selects running roots only; exact selection can
+            # report the retained ended/pending identity without capturing it.
+            if not request_id and root.get("status") != "running":
+                continue
+            record = {"requestId": key, "observation": "unavailable", "identity": "unresolved"}
+            if root.get("status") != "running":
+                unavailable.append({**record, "reason": "root_not_running"})
+                continue
+            if root.get("tool") != "codex":
+                unavailable.append({**record, "terminal": "ambiguous", "reason": "unsupported_profile"})
+                continue
+            try:
+                widget = root.get("hostIdentity")
+                if not isinstance(widget, str) or not re.fullmatch(r"[0-9a-f]{8}", widget):
+                    raise Unavailable("receipt_invalid")
+                status, owner = self.receipt(self.owner_socket, f"/v1/sessions/{widget}")
+                if status != 200:
+                    raise Unavailable("pane_unavailable")
+                pin = Pin.parse(json.dumps({
+                    "requestId": key, "widgetId": root.get("hostIdentity"),
+                    "logicalSessionId": root.get("logicalSessionId"),
+                    "generation": root.get("generation"),
+                    **{k: owner.get(k) for k in ("sessionId", "tmuxSessionId", "paneId", "tmuxServerId")},
+                }))
+                child = Collector(self.root_socket, self.owner_socket,
+                                  socket_path(owner.get("tmuxSocket", "")),
+                                  self.deadline, self.cancel, self.tmux, discovered=True)
+                child.owners(pin)
+                child.pane(pin)
+                resolved.append((pin, child))
+            except IdentityChanged:
+                unavailable.append({**record, "identity": "changed"})
+            except Ended:
+                unavailable.append({**record, "identity": "ended"})
+            except (ValueError, TypeError, argparse.ArgumentTypeError):
+                unavailable.append({**record, "reason": "receipt_invalid"})
+            except Unavailable as error:
+                unavailable.append({**record, "reason": str(error)})
+        if request_id and request_id not in seen:
+            unavailable.append({"requestId": request_id, "observation": "unavailable",
+                                "identity": "unresolved", "reason": "root_not_found"})
+        return resolved, unavailable
 
     def command(self, args: list[str], limit: int) -> bytes:
         self.remaining()
@@ -355,14 +434,16 @@ def watch(collector: Collector, pins: list[Pin], interval: float, failures: int,
     previous: dict[Pin, dict] = {}
     pending: dict[Pin, tuple[dict, int]] = {}
     failed = {pin: 0 for pin in pins}
+    identities = {pin: dataclasses.asdict(pin) if collector.discovered else {
+        "requestId": pin.requestId, "widgetId": pin.widgetId, "generation": pin.generation,
+    } for pin in pins}
     try:
         while True:
             for pin in pins:
                 collector.remaining()
                 state = collector.sample(pin)
                 if pin not in previous:
-                    emit({"requestId": pin.requestId, "widgetId": pin.widgetId,
-                          "generation": pin.generation, "event": "baseline", **state})
+                    emit({**identities[pin], "event": "baseline", **state})
                     previous[pin] = state
                 elif previous[pin] == state:
                     pending.pop(pin, None)
@@ -376,8 +457,7 @@ def watch(collector: Collector, pins: list[Pin], interval: float, failures: int,
                     candidate, count = pending.get(pin, ({}, 0))
                     count = count + 1 if candidate == state else 1
                     if immediate or count >= 2:
-                        emit({"requestId": pin.requestId, "widgetId": pin.widgetId,
-                              "generation": pin.generation, "event": "transition", **state})
+                        emit({**identities[pin], "event": "transition", **state})
                         previous[pin] = state
                         pending.pop(pin, None)
                     else:
@@ -410,7 +490,75 @@ def emit_json(collector: Collector, record: dict, fd: int = 1) -> None:
         os.set_blocking(fd, blocking)
 
 
+class ResolvedCollector(Collector):
+    """Dispatch only to immutable, already verified per-root server locators."""
+
+    def __init__(self, discovery: Collector, resolved: list[tuple[Pin, Collector]]):
+        super().__init__(discovery.root_socket, discovery.owner_socket, "",
+                         discovery.deadline, discovery.cancel, discovered=True)
+        self.resolved = dict(resolved)
+
+    def sample(self, pin: Pin) -> dict:
+        return self.resolved[pin].sample(pin)
+
+
+def roots_main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="st aico roots", description=__doc__)
+    parser.add_argument("request_id", nargs="?", help="exact retained Aico catalog request ID")
+    parser.add_argument("--watch", type=float, help="change-only JSONL seconds, >0 and <=3600")
+    parser.add_argument("--interval", type=float, default=2, help="poll seconds, >=0.1")
+    runtime = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
+    parser.add_argument("--root-socket", type=socket_path,
+                        default=os.environ.get("AICO_GUI_CONTROL_SOCKET", f"{runtime}/aico/gui-control.sock"))
+    parser.add_argument("--owner-socket", type=socket_path,
+                        default=os.environ.get("AICO_CONTROL_SOCKET", f"{runtime}/aico/control.sock"))
+    args = parser.parse_args(argv)
+    if args.request_id and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", args.request_id):
+        parser.error("invalid request ID")
+    if (args.watch is not None and (not math.isfinite(args.watch) or not 0 < args.watch <= 3600)
+            or not math.isfinite(args.interval) or args.interval < .1):
+        parser.error("invalid watch or interval bound")
+    cancel = threading.Event()
+    handlers = {s: signal.signal(s, lambda *_: cancel.set()) for s in (signal.SIGINT, signal.SIGTERM)}
+    discovery = Collector(args.root_socket, args.owner_socket, "",
+                          time.monotonic() + (args.watch if args.watch is not None else 10), cancel)
+    try:
+        resolved, unavailable = discovery.discover(args.request_id)
+        collector = ResolvedCollector(discovery, resolved)
+        if args.watch is None:
+            records = [{**dataclasses.asdict(pin), **collector.sample(pin)} for pin, _ in resolved]
+            emit_json(collector, {"owner": "aico", "roots": records + unavailable})
+            return int(any(row["observation"] == "unavailable" for row in records + unavailable))
+        for record in unavailable:
+            emit_json(collector, {"event": "baseline", **record})
+        if not resolved or any(row["identity"] == "changed" for row in unavailable):
+            return int(bool(unavailable))
+        outcome = watch(collector, [pin for pin, _ in resolved], args.interval, 3,
+                        lambda record: emit_json(collector, record))
+        return int(bool(unavailable) or outcome in ("identity_changed", "observation_failures"))
+    except Unavailable as error:
+        try:
+            emit_json(discovery, {"owner": "aico", "observation": "unavailable", "reason": str(error)})
+        except Stopped:
+            pass
+        return 1
+    except Stopped:
+        # No capture or partial identity is emitted when discovery hits its bound.
+        return 0 if cancel.is_set() or args.watch is not None else 1
+    except BrokenPipeError:
+        cancel.set()
+        return 0
+    finally:
+        for s, handler in handlers.items():
+            signal.signal(s, handler)
+
+
 def main(argv: list[str] | None = None) -> int:
+    import sys
+
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "roots":
+        return roots_main(argv[1:])
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("root", "owner", "tmux"):
         parser.add_argument(f"--{name}-socket", required=True, type=socket_path)

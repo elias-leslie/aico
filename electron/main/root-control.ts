@@ -207,6 +207,7 @@ export function createRootServer(operations: RootControlOperations) {
       leadRootReference: root.leadRootReference,
       facetCapsuleRef: root.facetCapsuleRef,
       status: row ? await operations.status(row) : 'ended',
+      tool: row?.tool ?? null,
       bounds: row?.bounds ?? null,
       directedDelivery,
     }

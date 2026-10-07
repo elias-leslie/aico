@@ -228,6 +228,110 @@ def pane_receipt():
                                 ("widgetId", "generation", "sessionId", "tmuxSessionId", "paneId")}}
 
 
+def discovery_receipts(monkeypatch, instance, roots=None, mutate=None):
+    root = {**root_receipt(), "tool": "codex"}
+    owner = {**pane_receipt(), "tmuxServerId": PIN.tmuxServerId,
+             "tmuxSocket": "/fixture/tmux", "tool": "codex"}
+    calls = []
+
+    def receipt(self, path, route):
+        calls.append((path, route))
+        if route == "/v1/roots":
+            return 200, {"owner": "aico", "roots": [root] if roots is None else roots}
+        data = dict(root if "/roots/" in route else owner)
+        if mutate:
+            mutate(route, data)
+        return 200, data
+
+    monkeypatch.setattr(watcher.Collector, "receipt", receipt)
+    monkeypatch.setattr(watcher.Collector, "pane", lambda self, pin: None)
+    return calls
+
+
+def test_discovery_resolves_verified_identity_without_manual_pin(monkeypatch):
+    instance = collector()
+    calls = discovery_receipts(monkeypatch, instance)
+    resolved, unavailable = instance.discover(None)
+    assert unavailable == []
+    assert resolved[0][0] == PIN
+    assert resolved[0][1].tmux_socket == "/fixture/tmux"
+    assert resolved[0][1].discovered is True
+    assert calls == [("/fixture/root", "/v1/roots"),
+                     ("/fixture/owner", "/v1/sessions/deadbeef"),
+                     ("/fixture/root", "/v1/roots/fixture-root"),
+                     ("/fixture/owner", "/v1/sessions/deadbeef")]
+
+
+@pytest.mark.parametrize("tool", [None, "shell", "claude-code", "future-cli"])
+def test_discovery_unsupported_profile_never_captures(monkeypatch, tool):
+    instance = collector()
+    calls = discovery_receipts(monkeypatch, instance, [{**root_receipt(), "tool": tool}])
+    resolved, unavailable = instance.discover(None)
+    assert resolved == []
+    assert unavailable[0]["terminal"] == "ambiguous"
+    assert unavailable[0]["reason"] == "unsupported_profile"
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("field,value", [("generation", "c" * 64),
+                                         ("tmuxServerId", "c" * 32),
+                                         ("tmuxSocket", "/other/tmux"),
+                                         ("tool", "shell")])
+def test_discovery_identity_race_fails_closed(monkeypatch, field, value):
+    instance = collector()
+    count = 0
+
+    def mutate(route, data):
+        nonlocal count
+        if "/sessions/" in route:
+            count += 1
+            if count == 2:
+                data[field] = value
+
+    discovery_receipts(monkeypatch, instance, mutate=mutate)
+    resolved, unavailable = instance.discover(None)
+    assert resolved == []
+    assert unavailable[0]["identity"] == "changed"
+
+
+def test_discovery_catalog_bound_and_exact_missing_root(monkeypatch):
+    instance = collector()
+    discovery_receipts(monkeypatch, instance)
+    assert instance.discover("missing")[1][0]["reason"] == "root_not_found"
+    discovery_receipts(monkeypatch, instance, [{}] * (watcher.ROOT_LIMIT + 1))
+    with pytest.raises(watcher.Unavailable, match="root_limit"):
+        instance.discover(None)
+
+
+def test_dynamic_snapshot_contains_identity_status_only(monkeypatch):
+    instance = collector()
+    discovery_receipts(monkeypatch, instance)
+    monkeypatch.setattr(watcher.Collector, "command",
+                        lambda *_: "Worked for 15s\n› secret draft\n".encode())
+    output = []
+    monkeypatch.setattr(watcher, "emit_json", lambda _, record: output.append(record))
+    assert watcher.main(["roots", "--root-socket", "/fixture/root",
+                         "--owner-socket", "/fixture/owner"]) == 0
+    record = output[0]["roots"][0]
+    assert record["paneId"] == PIN.paneId
+    assert record["terminal"] == "turn_finished"
+    assert record["draft_present"] is True
+    assert "secret draft" not in json.dumps(output)
+
+
+def test_dynamic_watch_never_rediscovers_or_repins(monkeypatch):
+    instance = collector()
+    calls = discovery_receipts(monkeypatch, instance)
+    resolved, _ = instance.discover(None)
+    frozen = watcher.ResolvedCollector(instance, resolved)
+    monkeypatch.setattr(resolved[0][1], "sample", lambda _: {
+        "identity": "changed", "observation": "unavailable"})
+    output = []
+    assert watcher.watch(frozen, [PIN], .1, 3, output.append) == "identity_changed"
+    assert output[0]["identity"] == "changed"
+    assert sum(route == "/v1/roots" for _, route in calls) == 1
+
+
 def fake_commands(monkeypatch, instance, screen=b"Worked for 15s\n\xe2\x80\xba \n"):
     calls = []
 
