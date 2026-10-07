@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process'
+import { execFile, execFileSync } from 'node:child_process'
 import { mkdtempSync, rmSync, statSync } from 'node:fs'
 import { request } from 'node:http'
 import { tmpdir } from 'node:os'
@@ -189,6 +189,122 @@ describe('private root workload control', () => {
         .status,
     ).toBe(422)
     expect(getRootRequest('bad-launch')).toBeUndefined()
+  })
+
+  it('exposes one fail-closed clear/submit contract and never claims native acceptance', async () => {
+    const root = present(getRootRequest('target-1'))
+    const generation = sessionGeneration(present(getWidget(root.widgetId)))
+    const path = '/v1/roots/target-1/admin'
+    const capabilities = await call(path)
+    expect(capabilities.status).toBe(200)
+    expect(capabilities.body.terminalAdmin).toMatchObject({
+      available: false,
+      reason: 'native_tui_atomic_compare_and_apply_unavailable',
+      operations: ['clear', 'submit'],
+      framing: 'bracketed_paste',
+    })
+    const pin = {
+      requestKey: 'scope-seam-1',
+      generation,
+      expectedThreadId: '00000000-0000-4000-8000-000000000001',
+    }
+    for (const operation of [
+      { ...pin, kind: 'clear' },
+      { ...pin, kind: 'submit', text: 'private text' },
+    ]) {
+      const first = await call(path, 'POST', operation)
+      expect(first.status).toBe(503)
+      expect(first.body).toMatchObject({
+        error: 'native_tui_atomic_admin_unavailable',
+        applied: false,
+        requestKey: pin.requestKey,
+        generation,
+        expectedThreadId: pin.expectedThreadId,
+      })
+      expect(JSON.stringify(first.body)).not.toContain('private text')
+      expect(await call(path, 'POST', operation)).toEqual(first)
+    }
+    expect(
+      (await call(path, 'POST', { ...pin, kind: 'clear', generation: '0'.repeat(64) })).status,
+    ).toBe(409)
+    expect((await call(path, 'POST', { ...pin, kind: 'clear', text: 'unexpected' })).status).toBe(
+      400,
+    )
+    expect((await call(path, 'POST', { ...pin, kind: 'submit', text: '\x1b[201~' })).status).toBe(
+      400,
+    )
+    expect(
+      (await call(path, 'POST', { ...pin, kind: 'clear', expectedThreadId: 'invalid' })).status,
+    ).toBe(400)
+    expect(
+      (await call(path, 'POST', { ...pin, kind: 'submit', text: 'x'.repeat(4096) })).status,
+    ).toBe(400)
+    expect(
+      (await call('/v1/roots/support-1/admin', 'POST', { ...pin, kind: 'clear' })).status,
+    ).toBe(410)
+    const unsupported = await call('/v1/roots', 'POST', {
+      ...create('unsupported-admin'),
+      tool: 'claude-code',
+    })
+    expect(
+      (
+        await call('/v1/roots/unsupported-admin/admin', 'POST', {
+          ...pin,
+          kind: 'clear',
+          generation: unsupported.body.generation,
+        })
+      ).status,
+    ).toBe(422)
+  })
+
+  it('cannot use the Aico workload generation as a native-thread fence', () => {
+    const root = present(getRootRequest('target-1'))
+    const row = present(getWidget(root.widgetId))
+    const before = { ...row, nativeThreadId: '00000000-0000-4000-8000-000000000001' }
+    const after = { ...row, nativeThreadId: '00000000-0000-4000-8000-000000000002' }
+    expect(sessionGeneration(before)).toBe(sessionGeneration(after))
+  })
+
+  it('serves the actual ST owner executable through the isolated private socket', async () => {
+    const root = present(getRootRequest('target-1'))
+    const generation = sessionGeneration(present(getWidget(root.widgetId)))
+    const run = (args: string[]) =>
+      new Promise<{ code: string | number; body: Record<string, unknown> }>((resolve, reject) => {
+        execFile(
+          '/usr/bin/python3',
+          [
+            join(process.cwd(), 'scripts/aico-root-watch.py'),
+            'admin',
+            'target-1',
+            ...args,
+            '--root-socket',
+            socket,
+          ],
+          { encoding: 'utf8' },
+          (error, stdout) => {
+            try {
+              resolve({ code: error?.code ?? 0, body: JSON.parse(stdout) })
+            } catch (failure) {
+              reject(failure)
+            }
+          },
+        )
+      })
+    expect((await run([])).body.terminalAdmin).toMatchObject({ available: false })
+    const denied = await run([
+      'clear',
+      '--generation',
+      generation,
+      '--thread',
+      '00000000-0000-4000-8000-000000000001',
+      '--request-key',
+      'scope-seam-1',
+    ])
+    expect(denied.code).toBe(1)
+    expect(denied.body).toMatchObject({
+      applied: false,
+      reason: 'native_tui_atomic_admin_unavailable',
+    })
   })
 
   it('rejects arbitrary command injection and canonicalizes exact launch content', () => {

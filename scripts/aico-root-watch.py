@@ -228,7 +228,7 @@ class Collector:
             raise Stopped()
         return remaining
 
-    def receipt(self, path: str, route: str) -> tuple[int, dict]:
+    def receipt(self, path: str, route: str, payload: dict | None = None) -> tuple[int, dict]:
         limit = CATALOG_LIMIT if route == "/v1/roots" else RECEIPT_LIMIT
         connection = http.client.HTTPConnection("localhost", timeout=min(.25, self.remaining()))
         client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -236,7 +236,9 @@ class Collector:
         try:
             client.settimeout(min(.25, self.remaining()))
             client.connect(path)
-            connection.request("GET", route, headers={"Connection": "close"})
+            connection.request("GET" if payload is None else "POST", route,
+                               body=None if payload is None else json.dumps(payload),
+                               headers={"Connection": "close", "Content-Type": "application/json"})
             response = connection.getresponse()
             parts = bytearray()
             while True:
@@ -502,6 +504,105 @@ class ResolvedCollector(Collector):
         return self.resolved[pin].sample(pin)
 
 
+TERMINAL_ADMIN = {
+    "available": False, "reason": "native_tui_atomic_compare_and_apply_unavailable",
+    "operations": ["clear", "submit"], "framing": "bracketed_paste",
+    "missing": ["current_thread_fence", "idle_empty_draft_input_fence", "idempotent_native_receipt"],
+}
+
+
+def admin_stdin(collector: Collector) -> str:
+    import sys
+
+    parts = bytearray()
+    while True:
+        if not select.select([sys.stdin.fileno()], [], [], min(.05, collector.remaining()))[0]:
+            continue
+        part = os.read(sys.stdin.fileno(), min(4096, 2001 - len(parts)))
+        parts.extend(part)
+        if len(parts) > 2000:
+            raise ValueError("text_limit")
+        if not part:
+            break
+    text = parts.decode("utf-8")
+    if not text.strip() or re.search(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]", text):
+        raise ValueError("invalid_text")
+    return text
+
+
+def admin_main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="st aico admin", description=(
+        "Inspect native admin availability, or request a pinned clear/submit. "
+        "Currently fails closed: the native atomic thread/idle/draft operation is unavailable. "
+        "No terminal input, capture, or retry. Text is read only from bounded UTF-8 stdin."))
+    parser.add_argument("request_id", help="retained Aico root request ID")
+    parser.add_argument("operation", nargs="?", choices=("clear", "submit"), help="omit to inspect capability")
+    parser.add_argument("--generation", help="exact Aico SHA-256 generation")
+    parser.add_argument("--thread", help="expected current native thread UUID")
+    parser.add_argument("--request-key", help="stable operation identity; reuse after uncertain response")
+    parser.add_argument("--stdin", action="store_true", help="required for submit; <=2000 UTF-8 bytes, no framing controls")
+    runtime = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
+    parser.add_argument("--root-socket", type=socket_path,
+                        default=os.environ.get("AICO_GUI_CONTROL_SOCKET", f"{runtime}/aico/gui-control.sock"))
+    args = parser.parse_args(argv)
+    key = r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}"
+    if not re.fullmatch(key, args.request_id):
+        parser.error("invalid root request ID")
+    if args.operation:
+        if (not args.generation or not re.fullmatch(r"[0-9a-f]{64}", args.generation)
+                or not args.thread or not re.fullmatch(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", args.thread)
+                or not args.request_key or not re.fullmatch(key, args.request_key)
+                or args.stdin != (args.operation == "submit")):
+            parser.error("operation requires generation, thread, request-key, and stdin only for submit")
+    elif args.generation or args.thread or args.request_key or args.stdin:
+        parser.error("pins and stdin require an operation")
+    collector = Collector(args.root_socket, "", "", time.monotonic() + 10, threading.Event())
+    output = {"owner": "aico", "requestId": args.request_id}
+    payload = None
+    if args.operation:
+        payload = {"kind": args.operation, "requestKey": args.request_key,
+                   "generation": args.generation, "expectedThreadId": args.thread}
+        output.update(payload)
+    sent = False
+    try:
+        if args.operation == "submit":
+            assert payload is not None
+            try:
+                payload["text"] = admin_stdin(collector)
+            except ValueError:
+                parser.error("invalid submission text; expected <=2000 UTF-8 bytes without framing controls")
+        sent = payload is not None
+        status, data = collector.receipt(args.root_socket, f"/v1/roots/{args.request_id}/admin", payload)
+        if args.operation:
+            denied = {"native_tui_atomic_admin_unavailable", "invalid_body", "stale_generation",
+                      "ended", "not_found", "gui_unavailable", "unsupported_tool"}
+            if (status not in (400, 404, 409, 410, 422, 503) or data.get("error") not in denied
+                    or data.get("applied", False) is not False):
+                raise Unavailable("admin_receipt_unqualified")
+            output.update(applied=False, reason=data["error"])
+            if data.get("terminalAdmin") == TERMINAL_ADMIN:
+                output["terminalAdmin"] = TERMINAL_ADMIN
+        else:
+            generation = data.get("generation")
+            if (status != 200 or data.get("owner") != "aico" or data.get("requestId") != args.request_id
+                    or data.get("terminalAdmin") != TERMINAL_ADMIN
+                    or generation is not None and not re.fullmatch(r"[0-9a-f]{64}", str(generation))):
+                raise Unavailable("admin_capability_unavailable")
+            output.update(generation=generation, currentThreadId=None, terminalAdmin=TERMINAL_ADMIN)
+        emit_json(collector, output)
+        return int(bool(args.operation))
+    except (Unavailable, Stopped) as error:
+        output.update(applied=None if sent else False,
+                      reason=str(error) if isinstance(error, Unavailable) else "deadline")
+        try:
+            emit_json(collector, output)
+        except Stopped:
+            pass
+        return 1
+    except BrokenPipeError:
+        return 0
+
+
 def roots_main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="st aico roots", description=__doc__)
     parser.add_argument("request_id", nargs="?", help="exact retained Aico catalog request ID")
@@ -559,6 +660,8 @@ def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] == "roots":
         return roots_main(argv[1:])
+    if argv and argv[0] == "admin":
+        return admin_main(argv[1:])
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("root", "owner", "tmux"):
         parser.add_argument(f"--{name}-socket", required=True, type=socket_path)

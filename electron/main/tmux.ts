@@ -550,6 +550,46 @@ export function sendTextTargetArgs(target: TmuxTarget, text: string): string[] {
   return targetArgs(target, ['send-keys', '-t', target.session, '-l', text])
 }
 
+/** One bracketed-paste event followed by one Enter, qualified against Codex
+ * 0.160.1. This is framing only: tmux success is not native acceptance and does
+ * not exclude an existing or concurrent human draft. Callers need a native
+ * atomic idle/draft/thread guard; never use this as an unguarded admin route.
+ * The fixed exact pane and private socket avoid mutable/ambient targeting. */
+export function bracketedSubmitTextTargetArgs(target: TmuxTarget, text: string): string[] {
+  if (
+    !target.socket?.startsWith('/') ||
+    !/^%\d+$/.test(target.session) ||
+    !isBoundedTerminalText(text)
+  )
+    throw new Error('invalid bracketed submission')
+  return targetArgs(target, [
+    'send-keys',
+    '-t',
+    target.session,
+    '-l',
+    `\x1b[200~${text}\x1b[201~`,
+    ';',
+    'send-keys',
+    '-t',
+    target.session,
+    'Enter',
+  ])
+}
+
+export function isBoundedTerminalText(text: unknown): text is string {
+  if (typeof text !== 'string' || !text.trim() || Buffer.byteLength(text) > 2000) return false
+  for (const character of text) {
+    const code = character.codePointAt(0) ?? 0
+    if (
+      (code < 32 && code !== 9 && code !== 10) ||
+      (code >= 127 && code <= 159) ||
+      (code >= 0xd800 && code <= 0xdfff)
+    )
+      return false
+  }
+  return true
+}
+
 /** `tmux` argv that attaches the node-pty client to an existing session. */
 export function attachArgs(widgetId: string): string[] {
   return attachTargetArgs(internalTarget(widgetId))

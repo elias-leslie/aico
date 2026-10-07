@@ -3,6 +3,7 @@ import {
   A_TERM_SESSION_PREFIX,
   attachArgs,
   attachTargetArgs,
+  bracketedSubmitTextTargetArgs,
   captureArgs,
   capturePageTargetArgs,
   captureTargetArgs,
@@ -55,6 +56,35 @@ const EXTERNAL_A_TERM_SESSION = `${A_TERM_SESSION_PREFIX}123e4567-e89b-12d3-a456
 const INTERNAL_SOCKET_ARGS = ['-S', TMUX_SOCKET]
 
 describe('tmux model', () => {
+  it('frames text and exactly one Enter in one command queue on an exact pane', () => {
+    const text = 'Exact café; $(literal)\nsecond line'
+    expect(
+      bracketedSubmitTextTargetArgs({ socket: '/tmp/fixture.sock', session: '%7' }, text),
+    ).toEqual([
+      '-S',
+      '/tmp/fixture.sock',
+      'send-keys',
+      '-t',
+      '%7',
+      '-l',
+      `\x1b[200~${text}\x1b[201~`,
+      ';',
+      'send-keys',
+      '-t',
+      '%7',
+      'Enter',
+    ])
+  })
+
+  it('rejects ambient servers, mutable targets, and paste-frame escape controls', () => {
+    const target = { socket: '/tmp/fixture.sock', session: '%7' }
+    for (const text of ['', 'a\x1b[201~b', 'a\0b', 'a\rb', 'a\x7fb', 'a'.repeat(2001)]) {
+      expect(() => bracketedSubmitTextTargetArgs(target, text)).toThrow()
+    }
+    expect(() => bracketedSubmitTextTargetArgs({ ...target, socket: null }, 'text')).toThrow()
+    expect(() => bracketedSubmitTextTargetArgs({ ...target, session: 'name' }, 'text')).toThrow()
+  })
+
   it('distinguishes definitive absence from unsafe unknown client failures', () => {
     expect(isDefinitiveTmuxAbsence("can't find session: aico-dead")).toBe(true)
     expect(isDefinitiveTmuxAbsence("prefix: can't find session: aico-dead")).toBe(false)

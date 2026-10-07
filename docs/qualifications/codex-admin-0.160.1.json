@@ -1,0 +1,297 @@
+{
+  "schema_version": 1,
+  "checked_at": "2026-10-07 17:41:57 UTC",
+  "task": "task-6f76eb1fabd048a5",
+  "runtime": "codex-cli 0.160.1",
+  "isolation": "fresh user/network namespace; loopback-only synthetic provider; fresh Codex state; private tmux socket; no daemon; no credentials",
+  "source_sha256": {
+    "scripts/qualify-codex-admin.py": "95cef1700855c2eb4e4ce95e63ab567779cc0cc3cf2b6848c4943d2f0b4e730d",
+    "electron/main/tmux.ts": "ae1857070f7a20c586e8a384cbdff665b44d065c7525e29e217472543425deb8",
+    "installed_ClientRequest.json": "4a6fc883c2e84c4721bfabd6756ca5bb6e99675a8938768d8bc9cc67ff984700"
+  },
+  "limits": "Fixture permission receipt covers read-only/never only. Tmux injection is not an atomic human-input/thread fence. No deployed Aico validation or production action.",
+  "runs": [
+    {
+      "command": "unshare -Urn python3 scripts/qualify-codex-admin.py",
+      "exit_code": 0,
+      "wall_time_seconds": 1.4023947780000001,
+      "output": [
+        {
+          "version": "codex-cli 0.160.1",
+          "fixture": "network_namespace_private_tmux",
+          "ready": true
+        },
+        {
+          "submission": "bracketed",
+          "accepted": 1,
+          "exact_text": true
+        },
+        {
+          "clear": "fresh_thread",
+          "old_thread": "01a11774-ccc7-7802-866e-801eb3008a31",
+          "new_thread": "01a11774-cd74-75d0-9182-5fb8b3793d6f",
+          "new_thread_persisted_before_first_turn": false,
+          "active_thread_receipt": "native_status_before_first_turn",
+          "tmux_identity_preserved": true,
+          "permissions_preserved": true,
+          "sandbox_policy": {
+            "type": "managed",
+            "file_system": {
+              "type": "restricted",
+              "entries": [
+                {
+                  "path": {
+                    "type": "special",
+                    "value": {
+                      "kind": "root"
+                    }
+                  },
+                  "access": "read"
+                }
+              ]
+            },
+            "network": "restricted"
+          },
+          "approval_policy": "never",
+          "provider_calls": 2
+        }
+      ]
+    },
+    {
+      "command": "unshare -Urn python3 scripts/qualify-codex-admin.py",
+      "exit_code": 0,
+      "wall_time_seconds": 1.404119441,
+      "output": [
+        {
+          "version": "codex-cli 0.160.1",
+          "fixture": "network_namespace_private_tmux",
+          "ready": true
+        },
+        {
+          "submission": "bracketed",
+          "accepted": 1,
+          "exact_text": true
+        },
+        {
+          "clear": "fresh_thread",
+          "old_thread": "01a11774-d3c2-71d2-9d35-0c00b5d6c6de",
+          "new_thread": "01a11774-d481-7d33-afb8-13902c8651de",
+          "new_thread_persisted_before_first_turn": false,
+          "active_thread_receipt": "native_status_before_first_turn",
+          "tmux_identity_preserved": true,
+          "permissions_preserved": true,
+          "sandbox_policy": {
+            "type": "managed",
+            "file_system": {
+              "type": "restricted",
+              "entries": [
+                {
+                  "path": {
+                    "type": "special",
+                    "value": {
+                      "kind": "root"
+                    }
+                  },
+                  "access": "read"
+                }
+              ]
+            },
+            "network": "restricted"
+          },
+          "approval_policy": "never",
+          "provider_calls": 2
+        }
+      ]
+    },
+    {
+      "command": "unshare -Urn python3 scripts/qualify-codex-admin.py",
+      "exit_code": 0,
+      "wall_time_seconds": 1.40369198,
+      "output": [
+        {
+          "version": "codex-cli 0.160.1",
+          "fixture": "network_namespace_private_tmux",
+          "ready": true
+        },
+        {
+          "submission": "bracketed",
+          "accepted": 1,
+          "exact_text": true
+        },
+        {
+          "clear": "fresh_thread",
+          "old_thread": "01a11774-daa1-7203-8ede-f01b4b580d73",
+          "new_thread": "01a11774-db7e-7941-b727-51b48ddd8b55",
+          "new_thread_persisted_before_first_turn": false,
+          "active_thread_receipt": "native_status_before_first_turn",
+          "tmux_identity_preserved": true,
+          "permissions_preserved": true,
+          "sandbox_policy": {
+            "type": "managed",
+            "file_system": {
+              "type": "restricted",
+              "entries": [
+                {
+                  "path": {
+                    "type": "special",
+                    "value": {
+                      "kind": "root"
+                    }
+                  },
+                  "access": "read"
+                }
+              ]
+            },
+            "network": "restricted"
+          },
+          "approval_policy": "never",
+          "provider_calls": 2
+        }
+      ]
+    },
+    {
+      "command": "unshare -Urn python3 scripts/qualify-codex-admin.py --raw",
+      "exit_code": 1,
+      "wall_time_seconds": 2.901760779,
+      "output": [
+        {
+          "version": "codex-cli 0.160.1",
+          "fixture": "network_namespace_private_tmux",
+          "ready": true
+        },
+        {
+          "qualified": false,
+          "reason": "text + immediate Enter was not accepted"
+        }
+      ]
+    },
+    {
+      "command": "unshare -Urn python3 scripts/qualify-codex-admin.py --raw",
+      "exit_code": 1,
+      "wall_time_seconds": 2.903079857,
+      "output": [
+        {
+          "version": "codex-cli 0.160.1",
+          "fixture": "network_namespace_private_tmux",
+          "ready": true
+        },
+        {
+          "qualified": false,
+          "reason": "text + immediate Enter was not accepted"
+        }
+      ]
+    },
+    {
+      "command": "unshare -Urn python3 scripts/qualify-codex-admin.py --raw",
+      "exit_code": 1,
+      "wall_time_seconds": 2.901975117,
+      "output": [
+        {
+          "version": "codex-cli 0.160.1",
+          "fixture": "network_namespace_private_tmux",
+          "ready": true
+        },
+        {
+          "qualified": false,
+          "reason": "text + immediate Enter was not accepted"
+        }
+      ]
+    },
+    {
+      "command": "unshare -Urn python3 scripts/qualify-codex-admin.py --human-draft",
+      "exit_code": 1,
+      "wall_time_seconds": 1.355294522,
+      "output": [
+        {
+          "version": "codex-cli 0.160.1",
+          "fixture": "network_namespace_private_tmux",
+          "ready": true
+        },
+        {
+          "qualified": false,
+          "reason": "existing human draft merged into accepted text"
+        }
+      ]
+    },
+    {
+      "command": "unshare -Urn python3 scripts/qualify-codex-admin.py --human-draft",
+      "exit_code": 1,
+      "wall_time_seconds": 1.3674180950000001,
+      "output": [
+        {
+          "version": "codex-cli 0.160.1",
+          "fixture": "network_namespace_private_tmux",
+          "ready": true
+        },
+        {
+          "qualified": false,
+          "reason": "existing human draft merged into accepted text"
+        }
+      ]
+    },
+    {
+      "command": "unshare -Urn python3 scripts/qualify-codex-admin.py --human-draft",
+      "exit_code": 1,
+      "wall_time_seconds": 1.358456675,
+      "output": [
+        {
+          "version": "codex-cli 0.160.1",
+          "fixture": "network_namespace_private_tmux",
+          "ready": true
+        },
+        {
+          "qualified": false,
+          "reason": "existing human draft merged into accepted text"
+        }
+      ]
+    },
+    {
+      "command": "unshare -Urn python3 scripts/qualify-codex-admin.py --human-input",
+      "exit_code": 1,
+      "wall_time_seconds": 1.180887159,
+      "output": [
+        {
+          "version": "codex-cli 0.160.1",
+          "fixture": "network_namespace_private_tmux",
+          "ready": true
+        },
+        {
+          "qualified": false,
+          "reason": "human paste between framing and Enter merged into accepted text"
+        }
+      ]
+    },
+    {
+      "command": "unshare -Urn python3 scripts/qualify-codex-admin.py --human-input",
+      "exit_code": 1,
+      "wall_time_seconds": 1.149765584,
+      "output": [
+        {
+          "version": "codex-cli 0.160.1",
+          "fixture": "network_namespace_private_tmux",
+          "ready": true
+        },
+        {
+          "qualified": false,
+          "reason": "human paste between framing and Enter merged into accepted text"
+        }
+      ]
+    },
+    {
+      "command": "unshare -Urn python3 scripts/qualify-codex-admin.py --human-input",
+      "exit_code": 1,
+      "wall_time_seconds": 1.199907787,
+      "output": [
+        {
+          "version": "codex-cli 0.160.1",
+          "fixture": "network_namespace_private_tmux",
+          "ready": true
+        },
+        {
+          "qualified": false,
+          "reason": "human paste between framing and Enter merged into accepted text"
+        }
+      ]
+    }
+  ]
+}

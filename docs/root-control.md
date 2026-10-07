@@ -16,6 +16,8 @@ routes. Root control never starts the desktop runtime.
 | `POST /v1/roots/<requestId>/show` | `{generation}` | shows the existing view or reopens it |
 | `POST /v1/roots/<requestId>/position` | `{generation,bounds:{x,y,width,height}}` | positions the view or stores its next placement |
 | `POST /v1/roots/<requestId>/send` | none supported | 503 `directed_delivery_unavailable` |
+| `GET /v1/roots/<requestId>/admin` | none | current catalog generation and unavailable native terminal capability |
+| `POST /v1/roots/<requestId>/admin` | strict `kind:clear|submit`, generation, expected native thread and stable request key | generation-checked, fail-closed 503; no terminal input |
 
 Create accepts exactly `requestId`, `tool` (`codex` or `claude-code`),
 `projectId`, absolute normalized `projectRoot`, nonempty `initialPrompt`, `role`,
@@ -58,3 +60,10 @@ This source change does not deploy or restart the production desktop. Unit and
 private-socket integration fixtures exercise the contract; live Electron
 placement and authenticated native TUI behavior require a separately authorized
 runtime validation.
+
+The installed Codex 0.160.1 fixture now qualifies bracketed-paste submission and
+the TUI `/clear` transition. It also proves draft contamination and lazy native
+thread persistence, so neither tmux capture nor rollout lookup supplies an
+atomic native thread/idle/draft fence. The `admin` route and `st aico admin`
+expose that boundary with bounded, content-free receipts; execution stays
+unavailable. See [qualification evidence and exact native patch contract](codex-terminal-admin.md).

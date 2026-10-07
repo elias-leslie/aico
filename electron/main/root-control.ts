@@ -12,6 +12,7 @@ import {
   reserveRootRequest,
   type WidgetRow,
 } from './store'
+import { isBoundedTerminalText } from './tmux'
 
 const KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/
 const MAX_BODY_BYTES = 128 * 1024
@@ -34,6 +35,45 @@ export interface RootControlOperations {
   status(row: WidgetRow): Promise<'running' | 'pending' | 'uncertain'>
   show(widgetId: string, generation: string): Promise<boolean>
   position(widgetId: string, generation: string, bounds: Bounds): Promise<boolean>
+}
+
+type RootAdminRequest = {
+  requestKey: string
+  generation: string
+  expectedThreadId: string
+} & ({ kind: 'clear' } | { kind: 'submit'; text: string })
+
+function parseAdmin(value: unknown): RootAdminRequest | null {
+  if (
+    !object(value) ||
+    (value.kind !== 'clear' && value.kind !== 'submit') ||
+    Object.keys(value).some(
+      (key) =>
+        ![
+          'kind',
+          'requestKey',
+          'generation',
+          'expectedThreadId',
+          ...(value.kind === 'submit' ? ['text'] : []),
+        ].includes(key),
+    ) ||
+    typeof value.requestKey !== 'string' ||
+    !KEY.test(value.requestKey) ||
+    typeof value.generation !== 'string' ||
+    !/^[0-9a-f]{64}$/.test(value.generation) ||
+    typeof value.expectedThreadId !== 'string' ||
+    !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(value.expectedThreadId) ||
+    (value.kind === 'submit' && !isBoundedTerminalText(value.text))
+  )
+    return null
+  const pin = {
+    requestKey: value.requestKey,
+    generation: value.generation,
+    expectedThreadId: value.expectedThreadId,
+  }
+  return value.kind === 'clear'
+    ? { ...pin, kind: 'clear' }
+    : { ...pin, kind: 'submit', text: value.text as string }
 }
 
 export function guiSocketPath(
@@ -162,13 +202,13 @@ function json(response: ServerResponse, status: number, value: unknown): void {
   response.end(JSON.stringify(value))
 }
 
-async function body(request: IncomingMessage): Promise<unknown> {
+async function body(request: IncomingMessage, limit = MAX_BODY_BYTES): Promise<unknown> {
   const parts: Buffer[] = []
   let bytes = 0
   for await (const part of request) {
     const buffer = Buffer.from(part)
     bytes += buffer.length
-    if (bytes > MAX_BODY_BYTES) throw new Error('body limit')
+    if (bytes > limit) throw new Error('body limit')
     parts.push(buffer)
   }
   return JSON.parse(Buffer.concat(parts).toString('utf8'))
@@ -177,6 +217,14 @@ async function body(request: IncomingMessage): Promise<unknown> {
 const directedDelivery = {
   available: false,
   reason: 'exact_thread_generation_receipt_unqualified',
+} as const
+
+const terminalAdmin = {
+  available: false,
+  reason: 'native_tui_atomic_compare_and_apply_unavailable',
+  operations: ['clear', 'submit'],
+  framing: 'bracketed_paste',
+  missing: ['current_thread_fence', 'idle_empty_draft_input_fence', 'idempotent_native_receipt'],
 } as const
 
 export function createRootServer(operations: RootControlOperations) {
@@ -224,6 +272,7 @@ export function createRootServer(operations: RootControlOperations) {
           owner: 'aico',
           available: true,
           directedDelivery,
+          terminalAdmin,
           roots: await Promise.all(listRootRequests().map(describe)),
         })
         return
@@ -291,7 +340,9 @@ export function createRootServer(operations: RootControlOperations) {
         return
       }
       const match =
-        /^\/v1\/roots\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})(?:\/(show|position|send))?$/.exec(path)
+        /^\/v1\/roots\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})(?:\/(show|position|send|admin))?$/.exec(
+          path,
+        )
       if (!match) {
         json(response, 404, { error: 'not_found' })
         return
@@ -305,12 +356,64 @@ export function createRootServer(operations: RootControlOperations) {
         json(response, 200, await describe(root))
         return
       }
+      if (match[2] === 'admin' && request.method === 'GET') {
+        const row = getWidget(root.widgetId)
+        json(response, 200, {
+          owner: 'aico',
+          requestId: root.requestId,
+          generation: row ? sessionGeneration(row) : null,
+          currentThreadId: null,
+          terminalAdmin,
+        })
+        return
+      }
       if (request.method !== 'POST') {
         json(response, 405, { error: 'method_not_allowed' })
         return
       }
       if (match[2] === 'send') {
         json(response, 503, { error: 'directed_delivery_unavailable', directedDelivery })
+        return
+      }
+      if (match[2] === 'admin') {
+        let input: RootAdminRequest | null
+        try {
+          input = parseAdmin(await body(request, 4096))
+        } catch {
+          input = null
+        }
+        if (!input) {
+          json(response, 400, { error: 'invalid_body' })
+          return
+        }
+        const admin = input
+        await serialize(root.requestId, async () => {
+          const row = getWidget(root.widgetId)
+          if (!row) {
+            json(response, 410, { error: 'ended' })
+            return
+          }
+          if (sessionGeneration(row) !== admin.generation) {
+            json(response, 409, { error: 'stale_generation' })
+            return
+          }
+          if (row.tool !== 'codex') {
+            json(response, 422, { error: 'unsupported_tool' })
+            return
+          }
+          // No capture/SQL read, sleep, or tmux send can atomically compare the
+          // native thread, active turn, draft and concurrent input. Until that
+          // native operation exists, even a matching Aico pin must fail closed.
+          json(response, 503, {
+            error: 'native_tui_atomic_admin_unavailable',
+            applied: false,
+            kind: admin.kind,
+            requestKey: admin.requestKey,
+            generation: admin.generation,
+            expectedThreadId: admin.expectedThreadId,
+            terminalAdmin,
+          })
+        })
         return
       }
       if (match[2] !== 'show' && match[2] !== 'position') {
