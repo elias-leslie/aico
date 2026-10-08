@@ -64,6 +64,7 @@ function buildProjectSessionsFromPane(pane: ATermPane): ATermSession[] {
     mode: session.mode,
     display_order: index,
     is_alive: session.is_alive,
+    is_root: session.is_root,
     created_at: pane.created_at,
     last_accessed_at: pane.created_at,
     agent_state: session.agent_state,
@@ -296,7 +297,7 @@ export function useATermTabsState({
     }
 
     const mobilePanes = [...panes, ...detachedPanes]
-    const paneSlots = getPanesToSlots(mobilePanes)
+    const paneSlots = getPanesToSlots(mobilePanes, projectNames)
     const paneSessionIds = new Set(
       mobilePanes.flatMap((pane) => pane.sessions.map((session) => session.id)),
     )
@@ -311,13 +312,15 @@ export function useATermTabsState({
             slotId,
             type: 'project' as const,
             projectId: session.project_id,
-            projectName: session.is_external
-              ? getExternalSessionDisplayName(session, projectName)
-              : (projectName ?? session.name),
+            projectName:
+              session.is_external || session.is_root
+                ? getExternalSessionDisplayName(session, projectName)
+                : (projectName ?? session.name),
             rootPath: session.working_dir,
             activeMode: session.mode,
             activeSessionId: session.id,
             sessionBadge: null,
+            isRoot: session.is_root,
             claudeState: session.claude_state,
           }
         }
@@ -426,7 +429,7 @@ export function useATermTabsState({
   const previousPaneCountRef = useRef<number | null>(null)
 
   const visibleSlots = useMemo(() => {
-    const paneSlots = getPanesToSlots(visiblePanes)
+    const paneSlots = getPanesToSlots(visiblePanes, projectNames)
     const externalSlots = attachedExternalSessions.map((session) => ({
       type: 'adhoc' as const,
       sessionId: session.id,

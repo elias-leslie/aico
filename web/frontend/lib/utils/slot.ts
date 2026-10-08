@@ -7,6 +7,7 @@
 
 import type { ATermPane } from '@/lib/hooks/use-a-term-panes'
 import { getAgentState } from './agent-state'
+import { getExternalSessionDisplayName } from './external-session-name'
 
 // Slot types for split-pane A-Term sessions
 export interface ProjectSlot {
@@ -20,6 +21,7 @@ export interface ProjectSlot {
   activeSessionId: string | null
   // Session badge (1-indexed position among project sessions)
   sessionBadge: number | null
+  isRoot?: boolean
   // Claude state for the active session
   claudeState?: 'not_started' | 'starting' | 'running' | 'stopped' | 'error'
 }
@@ -122,7 +124,7 @@ export type PaneSlot = PaneBasedSlot | AdHocPaneSlot
  * Convert a ATermPane to a ATermSlot for UI rendering.
  * This bridges the new pane API with existing slot-based components.
  */
-export function paneToSlot(pane: ATermPane): PaneSlot {
+export function paneToSlot(pane: ATermPane, projectName?: string): PaneSlot {
   if (pane.pane_type === 'project') {
     const activeSession =
       pane.sessions.find((s) => s.mode === pane.active_mode) ??
@@ -133,11 +135,17 @@ export function paneToSlot(pane: ATermPane): PaneSlot {
       type: 'project',
       paneId: pane.id,
       projectId: pane.project_id!,
-      projectName: pane.pane_name,
+      projectName: activeSession?.is_root
+        ? getExternalSessionDisplayName(
+            { ...activeSession, project_id: pane.project_id },
+            projectName ?? pane.project_id ?? undefined,
+          )
+        : pane.pane_name,
       rootPath: activeSession?.working_dir ?? null,
       activeMode: activeSession?.mode ?? pane.active_mode,
       activeSessionId: activeSession?.id ?? null,
       sessionBadge: null, // Badge is now part of pane_name
+      isRoot: activeSession?.is_root,
       claudeState: getAgentState(agentSession),
     }
   }
@@ -158,8 +166,16 @@ export function paneToSlot(pane: ATermPane): PaneSlot {
  * Convert array of ATermPanes to PaneSlots.
  * Panes are already ordered by pane_order from the API.
  */
-export function panesToSlots(panes: ATermPane[]): PaneSlot[] {
-  return panes.map(paneToSlot)
+export function panesToSlots(
+  panes: ATermPane[],
+  projectNames?: ReadonlyMap<string, string>,
+): PaneSlot[] {
+  return panes.map((pane) =>
+    paneToSlot(
+      pane,
+      pane.project_id ? projectNames?.get(pane.project_id) : undefined,
+    ),
+  )
 }
 
 /**

@@ -10,6 +10,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import cast
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
@@ -64,6 +65,14 @@ def owner(monkeypatch, request_body):
     monkeypatch.setattr(root_requests, "list_all", lambda: list(rows.values()))
     monkeypatch.setattr(roots.sessions, "get_session", session_rows.get)
     monkeypatch.setattr(roots.sessions, "update_claude_state", MagicMock())
+    def rename(key, session_id, generation, name):
+        root = rows[key]
+        if (root["session_id"] != session_id or root["generation"] != generation
+                or root["launch_state"] != "observed" or session_id not in session_rows):
+            return False
+        session_rows[session_id]["name"] = name
+        return True
+    monkeypatch.setattr(roots.sessions, "update_root_name", MagicMock(side_effect=rename))
     monkeypatch.setattr(roots, "launch_argv", lambda _: ("codex", ["codex"]))
     launcher = MagicMock()
     monkeypatch.setattr(roots, "launch", launcher)
@@ -187,6 +196,77 @@ def test_http_contract_and_body_limits(owner, request_body):
                            headers={"origin": "https://untrusted.invalid"}).status_code == 403
     with TestClient(app, client=("192.0.2.1", 1234)) as client:
         assert client.post("/v1/roots", json=request_body).status_code == 403
+
+
+def test_title_updates_only_exact_session_name_with_content_free_receipt(owner, request_body):
+    descriptor = roots.create(request_body)
+    other = roots.create({**request_body, "requestId": "other-root"})
+    label = "Project · Focus 🐾"
+    result = roots.mutate("request-1", "title", {"generation": descriptor["generation"], "label": f"  {label}  "})
+    assert result == descriptor
+    assert owner[1][descriptor["hostIdentity"]]["name"] == label
+    assert "name" not in owner[1][other["hostIdentity"]]
+    assert label not in json.dumps(owner[0]) and label not in json.dumps(result)
+    cast(MagicMock, roots.sessions.update_root_name).assert_called_once_with("request-1", descriptor["hostIdentity"], descriptor["generation"], label)
+    assert roots.create(request_body) == descriptor
+
+
+@pytest.mark.parametrize("label", [None, [], "", " ", "x" * 161, "🐾" * 41,
+    "\ud800", "Focus\nNext", "Focus\rNext", "Focus\tNext", "Focus\x1b[31m",
+    "Focus\x00", "Focus\x7f", "Focus\u2028Next", "Focus\u2029Next"])
+def test_title_rejects_unbounded_or_control_label_before_mutation(owner, request_body, label):
+    first = roots.create(request_body)
+    with pytest.raises(roots.RootError, match="invalid_body") as error:
+        roots.mutate("request-1", "title", {"generation": first["generation"], "label": label})
+    assert error.value.status == 400
+    cast(MagicMock, roots.sessions.update_root_name).assert_not_called()
+
+
+def test_title_generation_ended_and_storage_race_fail_closed(owner, request_body, monkeypatch):
+    first = roots.create(request_body)
+    value = {"generation": first["generation"], "label": "Focus"}
+    with pytest.raises(roots.RootError, match="stale_generation"):
+        roots.mutate("request-1", "title", {**value, "generation": "b" * 64})
+    cast(MagicMock, roots.sessions.update_root_name).assert_not_called()
+    monkeypatch.setattr(roots.sessions, "update_root_name", lambda *_: False)
+    with pytest.raises(roots.RootError, match="workload_unavailable"):
+        roots.mutate("request-1", "title", value)
+    root_requests.retire(owner[0]["request-1"])
+    with pytest.raises(roots.RootError, match="ended") as error:
+        roots.mutate("request-1", "title", value)
+    assert error.value.status == 410
+
+
+@pytest.mark.parametrize("label,expected", [("\nFocus\r", "Focus"), ("Project\u00a0Focus", "Project\u00a0Focus"),
+    ("Focus\u202eNext", "Focus\u202eNext"), ("🐾" * 40, "🐾" * 40)])
+def test_title_unicode_contract_matches_aico(label, expected):
+    assert roots.parse_label(label) == expected
+
+
+def test_title_http_contract_and_root_marker(owner, request_body):
+    from a_term.api.models.pane_responses import SessionInPaneResponse
+    from a_term.api.sessions import ATermSessionResponse
+
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as client:
+        first = client.post("/v1/roots", json=request_body).json()
+        body = {"generation": first["generation"], "label": "é" * 80}
+        success = client.post("/v1/roots/request-1/title", json=body)
+        assert success.status_code == 200 and success.json() == first
+        assert body["label"] not in success.text
+        for invalid in [{**body, "extra": "field"}, {"generation": body["generation"]},
+                        {**body, "generation": "wrong"}, {**body, "label": "é" * 81}]:
+            response = client.post("/v1/roots/request-1/title", json=invalid)
+            assert response.status_code == 400 and response.json() == {"error": "invalid_body"}
+        assert client.post("/v1/roots/missing/title", json=body).status_code == 404
+        assert client.post("/v1/roots/request-1/title", json=body, headers={"origin": "https://untrusted.invalid"}).status_code == 403
+    session = {"id": first["hostIdentity"], "name": "Focus", "is_root": True,
+               "mode": "codex", "session_number": 1, "is_alive": True, "working_dir": "/fixture",
+               "user_id": None, "project_id": "fixture", "display_order": 0,
+               "created_at": None, "last_accessed_at": None}
+    assert SessionInPaneResponse.model_validate(session).is_root is True
+    assert ATermSessionResponse.model_validate(session).is_root is True
 
 
 @pytest.mark.parametrize("field,value", [("initialPrompt", "\0"), ("initialPrompt", " "),

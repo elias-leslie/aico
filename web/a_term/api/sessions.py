@@ -65,6 +65,7 @@ class ATermSessionResponse(BaseModel):
     tmux_source: str | None = None
     tmux_source_label: str | None = None
     is_external: bool = False
+    is_root: bool = False
     source: str | None = None
 
     @model_validator(mode="before")

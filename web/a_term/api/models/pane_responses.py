@@ -17,6 +17,7 @@ class SessionInPaneResponse(BaseModel):
     mode: str
     session_number: int
     is_alive: bool
+    is_root: bool = False
     working_dir: str | None
     agent_state: str = "not_started"
     claude_state: str = "not_started"

@@ -83,6 +83,19 @@ process disappearance retires the
 owned session and its empty pane, leaving a terminal root tombstone. Repeated end
 returns the same ended descriptor. Stale generations never authorize termination.
 
+`POST /v1/roots/<requestId>/title` accepts exactly `{generation, label}` for a
+running retained root. After trimming surrounding whitespace, labels require
+1-160 UTF-8 bytes of control-free single-line Unicode. Code points below 32,
+127-159, surrogates and U+2028/U+2029 are rejected with 400 `invalid_body`.
+The live generation and retained root/session
+association fence the update. Ended roots return 410 and stale generations 409.
+The existing `a_term_sessions.name` is the only label store; the root receipt and
+success descriptor contain no label. Existing project tabs and session selectors
+read that name on their normal refresh, and manual editing uses the same field
+for root sessions. Ordinary pane names retain their existing behavior.
+`st sessions title REQUEST_ID "Project · Focus" --surface a-term` forwards this
+owner contract without retaining title content in SummitFlow.
+
 Exact resume adds no schema migration; loading its service change requires a
 managed backend rebuild. The original root-control deployment requires applying
 Alembic revision `e92a6d4b8c10` from verified head `d71b3e920c64`.

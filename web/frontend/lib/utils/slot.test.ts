@@ -145,6 +145,49 @@ describe('getPaneId', () => {
 })
 
 describe('paneToSlot', () => {
+  it.each(['Focus', 'Project X · Focus'])(
+    'composes root labels without duplicate project prefixes: %s',
+    (name) => {
+      const pane = {
+        id: 'root-pane',
+        pane_type: 'project' as const,
+        project_id: 'project-x',
+        pane_order: 0,
+        pane_name: 'Root: exact-request',
+        active_mode: 'codex',
+        is_detached: false,
+        created_at: null,
+        width_percent: 100,
+        height_percent: 100,
+        grid_row: 0,
+        grid_col: 0,
+        sessions: [
+          {
+            id: 'root-session',
+            name,
+            mode: 'codex',
+            session_number: 1,
+            is_alive: true,
+            is_root: true,
+            working_dir: '/workspace/project-x',
+            claude_state: 'running' as const,
+          },
+        ],
+      }
+      expect(paneToSlot(pane, 'Project X')).toMatchObject({
+        projectName: 'Project X · Focus',
+        activeSessionId: 'root-session',
+        isRoot: true,
+      })
+      expect(
+        paneToSlot(
+          { ...pane, sessions: [{ ...pane.sessions[0], is_root: false }] },
+          'Project X',
+        ),
+      ).toMatchObject({ projectName: 'Root: exact-request', isRoot: false })
+    },
+  )
+
   it('converts a project pane to a PaneBasedSlot with agent state', () => {
     const slot = paneToSlot({
       id: 'pane-1',

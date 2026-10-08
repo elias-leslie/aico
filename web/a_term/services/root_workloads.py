@@ -30,6 +30,21 @@ KEY = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
 GENERATION = re.compile(r"[0-9a-f]{64}\Z")
 DIRECTED_DELIVERY = {"available": False, "reason": "exact_thread_generation_receipt_unqualified"}
 POSITION = {"available": False, "reason": "browser_grid_has_no_pixel_window_bounds"}
+LABEL_MAX_BYTES = 160
+
+
+def parse_label(value: Any) -> str:
+    """Accept bounded control-free single-line owner metadata, matching Aico."""
+    if not isinstance(value, str):
+        raise RootError(400, "invalid_body")
+    label = value.strip()
+    if not label or any(ord(char) < 32 or 127 <= ord(char) <= 159
+                        or 0xD800 <= ord(char) <= 0xDFFF or char in "\u2028\u2029"
+                        for char in label):
+        raise RootError(400, "invalid_body")
+    if len(label.encode("utf-8")) > LABEL_MAX_BYTES:
+        raise RootError(400, "invalid_body")
+    return label
 
 
 class RootError(Exception):
@@ -322,8 +337,10 @@ def mutate(request_id: str, action: str, value: Any) -> dict[str, Any]:
         raise RootError(503, "directed_delivery_unavailable")
     if (not isinstance(value, dict) or not isinstance(value.get("generation"), str)
             or not GENERATION.fullmatch(value["generation"])
-            or (action in {"show", "end"} and value.keys() != {"generation"})):
+            or (action in {"show", "end"} and value.keys() != {"generation"})
+            or (action == "title" and value.keys() != {"generation", "label"})):
         raise RootError(400, "invalid_body")
+    label = parse_label(value["label"]) if action == "title" else None
     descriptor = describe(root)
     if descriptor["status"] == "ended":
         if action == "end":
@@ -335,6 +352,11 @@ def mutate(request_id: str, action: str, value: Any) -> dict[str, Any]:
         raise RootError(503, "position_unavailable")
     if descriptor["status"] != "running":
         raise RootError(409, "workload_unavailable")
+    if action == "title":
+        if not sessions.update_root_name(request_id, root["session_id"], value["generation"], label):
+            raise RootError(409, "workload_unavailable")
+        # No label content enters receipts or descriptors. Session.name is canonical.
+        return descriptor
     if action == "end":
         try:
             if not end_exact(root["session_id"], value["generation"]):

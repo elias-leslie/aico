@@ -6,6 +6,7 @@ import { FolderOpen, GripVertical } from 'lucide-react'
 import { type DragEvent, memo, useCallback, useMemo, useState } from 'react'
 import { LayoutModeButtons } from '@/components/LayoutModeButton'
 import { useATermPanes } from '@/lib/hooks/use-a-term-panes'
+import { useATermSessions } from '@/lib/hooks/use-a-term-sessions'
 import { useAgentTools } from '@/lib/hooks/use-agent-tools'
 import { DEFAULT_NOTES_PROJECT_SCOPE } from '@/lib/notes-config'
 import {
@@ -67,15 +68,19 @@ export const UnifiedATermHeaderContent = memo(
   }: UnifiedATermHeaderProps) {
     const { enabledTools } = useAgentTools()
     const { renamePane } = useATermPanes()
+    const { update: updateSession } = useATermSessions()
     const [isDragTarget, setIsDragTarget] = useState(false)
     const [isRenaming, setIsRenaming] = useState(false)
     const paneId = isPaneSlot(slot) ? slot.paneId : null
+    const rootSessionId =
+      slot.type === 'project' && slot.isRoot ? slot.activeSessionId : null
 
     const handleRename = useCallback(
       (newName: string) => {
-        if (paneId) renamePane(paneId, newName)
+        if (rootSessionId) updateSession(rootSessionId, { name: newName })
+        else if (paneId) renamePane(paneId, newName)
       },
-      [paneId, renamePane],
+      [paneId, renamePane, rootSessionId, updateSession],
     )
     const isAgentMode =
       (slot.type === 'project' && slot.activeMode !== 'shell') ||
@@ -85,7 +90,7 @@ export const UnifiedATermHeaderContent = memo(
     const slotName = getSlotName(slot)
     const showProjectSwitcher =
       !isMobile && slot.type === 'project' && !!onProjectSwitch
-    const showHeaderName = isMobile || !showProjectSwitcher
+    const showHeaderName = isMobile || !showProjectSwitcher || !!rootSessionId
     const showStatusBadge = shouldShowPaneStatus(connectionStatus)
     const closePaneLabel = formatActionLabel(closeTooltip ?? 'Close view')
     const closePaneTooltip = `${closePaneLabel}. The session keeps running and can be opened again.`
@@ -238,7 +243,7 @@ export const UnifiedATermHeaderContent = memo(
             onSwapWith={onSwapWith}
             onSwitchTo={onSwitchTo}
             onSwitch={onSwitch}
-            onRename={paneId ? handleRename : undefined}
+            onRename={paneId || rootSessionId ? handleRename : undefined}
             isEditing={isRenaming}
             onEditingChange={setIsRenaming}
           />
@@ -304,7 +309,9 @@ export const UnifiedATermHeaderContent = memo(
 
           {hasPaneActions && (
             <PaneOverflowMenu
-              onRename={paneId ? () => setIsRenaming(true) : undefined}
+              onRename={
+                paneId || rootSessionId ? () => setIsRenaming(true) : undefined
+              }
               onDetach={onDetach}
               onClosePane={onClose}
               closePaneLabel={closePaneLabel}

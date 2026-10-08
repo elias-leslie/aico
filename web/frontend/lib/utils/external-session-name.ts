@@ -2,7 +2,15 @@ import type { ATermSession } from '@/lib/hooks/use-a-term-sessions'
 
 /** Resolve generated Aico names without changing a deliberately named session. */
 export function getExternalSessionDisplayName(
-  session: ATermSession,
+  session: Pick<
+    ATermSession,
+    | 'name'
+    | 'project_id'
+    | 'mode'
+    | 'is_external'
+    | 'tmux_source'
+    | 'tmux_session_name'
+  >,
   projectName?: string,
 ): string {
   const generatedAicoName =
@@ -15,7 +23,9 @@ export function getExternalSessionDisplayName(
     if (session.name === session.project_id || generatedAicoName) {
       return projectName ?? session.project_id
     }
-    return projectName && session.name !== projectName
+    return projectName &&
+      session.name !== projectName &&
+      !session.name.startsWith(`${projectName} · `)
       ? `${projectName} · ${session.name}`
       : session.name
   }

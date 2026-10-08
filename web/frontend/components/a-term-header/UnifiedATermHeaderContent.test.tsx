@@ -1,14 +1,23 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PaneSlot } from '@/lib/utils/slot'
 import { UnifiedATermHeaderContent } from './UnifiedATermHeaderContent'
+
+const { renamePane, updateSession } = vi.hoisted(() => ({
+  renamePane: vi.fn(),
+  updateSession: vi.fn(),
+}))
 
 vi.mock('@/lib/hooks/use-agent-tools', () => ({
   useAgentTools: () => ({ enabledTools: [] }),
 }))
 
 vi.mock('@/lib/hooks/use-a-term-panes', () => ({
-  useATermPanes: () => ({ renamePane: vi.fn() }),
+  useATermPanes: () => ({ renamePane }),
+}))
+
+vi.mock('@/lib/hooks/use-a-term-sessions', () => ({
+  useATermSessions: () => ({ update: updateSession }),
 }))
 
 vi.mock('@/components/LayoutModeButton', () => ({
@@ -20,7 +29,13 @@ vi.mock('../ModeToggle', () => ({
 }))
 
 vi.mock('../PaneOverflowMenu', () => ({
-  PaneOverflowMenu: () => <div data-testid="pane-overflow-menu" />,
+  PaneOverflowMenu: ({ onRename }: { onRename?: () => void }) => (
+    <div data-testid="pane-overflow-menu">
+      <button type="button" onClick={onRename}>
+        Rename
+      </button>
+    </div>
+  ),
 }))
 
 vi.mock('./AddATermButton', () => ({
@@ -54,7 +69,10 @@ vi.mock('./PaneSearchControl', () => ({
   PaneSearchControl: () => <div data-testid="pane-search-control" />,
 }))
 
-function makeProjectSlot(id: string, name: string): PaneSlot {
+function makeProjectSlot(
+  id: string,
+  name: string,
+): Extract<PaneSlot, { type: 'project' }> {
   return {
     type: 'project',
     paneId: id,
@@ -81,6 +99,40 @@ function createDataTransfer() {
 }
 
 describe('UnifiedATermHeaderContent', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it.each([false, true])(
+    'keeps manual editing canonical for root=%s',
+    (isRoot) => {
+      const slot = { ...makeProjectSlot('a', 'Alpha · Focus'), isRoot }
+      render(<UnifiedATermHeaderContent slot={slot} onCloseSession={vi.fn()} />)
+      fireEvent.click(screen.getByRole('button', { name: 'Rename' }))
+      const input = screen.getByRole('textbox')
+      fireEvent.change(input, { target: { value: 'Alpha · Next focus' } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+      if (isRoot) {
+        expect(updateSession).toHaveBeenCalledWith('a-session', {
+          name: 'Alpha · Next focus',
+        })
+        expect(renamePane).not.toHaveBeenCalled()
+      } else {
+        expect(renamePane).toHaveBeenCalledWith('a', 'Alpha · Next focus')
+        expect(updateSession).not.toHaveBeenCalled()
+      }
+    },
+  )
+
+  it('shows the root focus label alongside the project switcher', () => {
+    render(
+      <UnifiedATermHeaderContent
+        slot={{ ...makeProjectSlot('a', 'Alpha · Focus'), isRoot: true }}
+        onProjectSwitch={vi.fn()}
+      />,
+    )
+    expect(screen.getByText('Alpha · Focus')).toBeInTheDocument()
+    expect(screen.getByTestId('pane-project-switcher')).toBeInTheDocument()
+  })
+
   it('swaps panes when one header is dropped onto another header', () => {
     const slotA = makeProjectSlot('a', 'Alpha')
     const slotB = makeProjectSlot('b', 'Beta')

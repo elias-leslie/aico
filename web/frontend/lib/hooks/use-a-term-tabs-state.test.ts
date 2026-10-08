@@ -779,6 +779,65 @@ describe('useATermTabsState', () => {
     })
   })
 
+  it.each([false, true])(
+    'refreshes root focus labels on desktop/mobile=%s',
+    (isMobile) => {
+      mockUseMediaQuery.mockReturnValue(isMobile)
+      const rootSession = {
+        ...buildActiveSessionState().sessions[0],
+        id: 'root-session',
+        name: 'Focus',
+        mode: 'codex',
+        is_root: true,
+        session_number: 1,
+        claude_state: 'running',
+      }
+      const pane = {
+        id: 'root-pane',
+        pane_type: 'project',
+        project_id: 'project-a',
+        pane_order: 0,
+        pane_name: 'Root: exact-request',
+        active_mode: 'codex',
+        is_detached: false,
+        created_at: null,
+        sessions: [rootSession],
+        width_percent: 100,
+        height_percent: 100,
+        grid_row: 0,
+        grid_col: 0,
+      }
+      const paneState = { ...mockUseATermPanes(), panes: [pane] }
+      mockUseATermPanes.mockReturnValue(paneState)
+      mockUseActiveSession.mockReturnValue(
+        buildActiveSessionState({
+          activeSessionId: rootSession.id,
+          activeSession: rootSession,
+          sessions: [rootSession],
+        }),
+      )
+      const { result, rerender } = renderHook(() => useATermTabsState({}))
+      expect(result.current.aTermSlots[0]).toMatchObject({
+        projectName: 'Project A · Focus',
+        isRoot: true,
+      })
+      mockUseATermPanes.mockReturnValue({
+        ...paneState,
+        panes: [
+          {
+            ...pane,
+            sessions: [{ ...rootSession, name: 'Project A · Next focus' }],
+          },
+        ],
+      })
+      rerender()
+      expect(result.current.aTermSlots[0]).toMatchObject({
+        projectName: 'Project A · Next focus',
+        isRoot: true,
+      })
+    },
+  )
+
   it('recomputes scoped settings when the resolved active session falls back to a different context', () => {
     let activeSessionState = buildActiveSessionState()
     mockUseActiveSession.mockImplementation(() => activeSessionState)

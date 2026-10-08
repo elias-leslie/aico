@@ -23,6 +23,7 @@ export interface ATermSession {
   tmux_source?: string | null
   tmux_source_label?: string | null
   is_external?: boolean
+  is_root?: boolean
   source?: string | null
 }
 
@@ -87,6 +88,7 @@ const invalidatePanesAndSessions = (
   queryClient: ReturnType<typeof useQueryClient>,
 ) => {
   queryClient.invalidateQueries({ queryKey: ['a-term-panes'] })
+  queryClient.invalidateQueries({ queryKey: ['a-term-detached-panes'] })
   queryClient.invalidateQueries({ queryKey: ['a-term-sessions'] })
 }
 
@@ -113,7 +115,7 @@ export function useATermSessions(options: UseATermSessionsOptions = {}) {
       ...request
     }: UpdateSessionRequest & { sessionId: string }) =>
       updateSession(sessionId, request),
-    onSuccess: invalidate,
+    onSuccess: () => invalidatePanesAndSessions(queryClient),
   })
 
   const deleteMutation = useMutation({

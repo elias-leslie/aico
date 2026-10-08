@@ -104,6 +104,7 @@ const buildSessionsFromPane = (pane: ATermPane): ATermSession[] =>
     mode: session.mode,
     display_order: index,
     is_alive: session.is_alive,
+    is_root: session.is_root,
     created_at: pane.created_at,
     last_accessed_at: pane.created_at,
     agent_state: session.agent_state,

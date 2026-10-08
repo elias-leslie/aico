@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { createElement } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useATermSessions } from './use-a-term-sessions'
@@ -131,5 +131,43 @@ describe('useATermSessions', () => {
       'http://localhost:8002/api/a-term/sessions?include_detached=true',
       undefined,
     )
+  })
+
+  it('invalidates attached and detached pane session names after a manual rename', async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+    })
+    queryClient.setQueryData(['a-term-sessions', false], mockSessions)
+    queryClient.setQueryData(['a-term-panes'], { items: [] })
+    queryClient.setQueryData(['a-term-detached-panes'], { items: [] })
+    const renamed = {
+      ...mockSessions[0],
+      name: 'Project · Focus',
+      is_root: true,
+    }
+    mockFetch.mockImplementation(async (_url, options) => ({
+      ok: true,
+      text: async () =>
+        JSON.stringify(
+          options?.method === 'PATCH'
+            ? renamed
+            : { items: [renamed], total: 1 },
+        ),
+    }))
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      createElement(QueryClientProvider, { client: queryClient }, children)
+    const { result } = renderHook(() => useATermSessions(), { wrapper })
+    await act(async () => {
+      await result.current.update('session-1', { name: renamed.name })
+    })
+    await waitFor(() =>
+      expect(result.current.sessions[0].name).toBe(renamed.name),
+    )
+    expect(queryClient.getQueryState(['a-term-panes'])?.isInvalidated).toBe(
+      true,
+    )
+    expect(
+      queryClient.getQueryState(['a-term-detached-panes'])?.isInvalidated,
+    ).toBe(true)
   })
 })

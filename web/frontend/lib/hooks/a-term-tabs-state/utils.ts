@@ -22,8 +22,11 @@ export function getActiveSessionProjectId(
 /**
  * Convert panes to a-term slots
  */
-export function getPanesToSlots(panes: ATermPane[]): PaneSlot[] {
-  return panesToSlots(panes)
+export function getPanesToSlots(
+  panes: ATermPane[],
+  projectNames?: ReadonlyMap<string, string>,
+): PaneSlot[] {
+  return panesToSlots(panes, projectNames)
 }
 
 /**

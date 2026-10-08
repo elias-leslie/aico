@@ -212,6 +212,23 @@ def delete_session(session_id: SessionId) -> bool:
     return result is not None
 
 
+def update_root_name(request_id: str, session_id: str, generation: str, name: str) -> bool:
+    """Rename only the session belonging to this exact observed root receipt."""
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            """UPDATE a_term_sessions SET name = %s
+               FROM a_term_root_requests AS root
+               WHERE root.request_id = %s AND root.session_id = %s
+                 AND root.session_id = a_term_sessions.id
+                 AND root.generation = %s AND root.launch_state = 'observed'
+               RETURNING a_term_sessions.id""",
+            (name, request_id, session_id, generation),
+        )
+        updated = cur.fetchone() is not None
+        conn.commit()
+        return updated
+
+
 # ---------------------------------------------------------------------------
 # Lifecycle
 # ---------------------------------------------------------------------------

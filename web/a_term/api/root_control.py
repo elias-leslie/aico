@@ -88,7 +88,7 @@ def get_root(request: Request, request_id: str):
 async def mutate_root(request: Request, request_id: str, action: str):
     try:
         _local(request)
-        if action not in {"show", "position", "send", "end"}:
+        if action not in {"show", "position", "send", "end", "title"}:
             raise roots.RootError(404, "not_found")
         value = None if action == "send" else await _body(request)
         return await run_in_threadpool(roots.mutate, request_id, action, value)
