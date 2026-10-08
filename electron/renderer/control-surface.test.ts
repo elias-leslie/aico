@@ -1,10 +1,24 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { allActions, setSessionActions } from './actions'
-import { refreshSessions, sessionSubmenuLabel } from './control-surface'
+import { refreshSessions, secondaryActionsFit, sessionSubmenuLabel } from './control-surface'
 
 afterEach(() => {
   setSessionActions([])
   vi.unstubAllGlobals()
+})
+
+describe('responsive titlebar space', () => {
+  it('returns secondary actions inline exactly when the full title and fixed controls fit', () => {
+    expect(secondaryActionsFit(499, 180, 220, 92, 8)).toBe(false)
+    expect(secondaryActionsFit(500, 180, 220, 92, 8)).toBe(true)
+    expect(secondaryActionsFit(501, 180, 220, 92, 8)).toBe(true)
+  })
+
+  it('recalculates for a longer stored label or a larger pinned cluster', () => {
+    expect(secondaryActionsFit(700, 180, 220, 92, 8)).toBe(true)
+    expect(secondaryActionsFit(700, 180, 450, 92, 8)).toBe(false)
+    expect(secondaryActionsFit(700, 180, 220, 300, 8)).toBe(false)
+  })
 })
 
 describe('openable session discovery', () => {

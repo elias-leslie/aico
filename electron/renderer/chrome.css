@@ -71,8 +71,7 @@ body.thinking {
    status glow) means several open widgets stay equally readable and comparable.
    The eyes in the titlebar are what tell you which window has focus. */
 
-/* Titlebar — no OS title bar. The TUI icon sits beside the eyes; the widget
-   name is centered (absolutely, so the side clusters don't pull it off-center). */
+/* The title owns the remaining lane between identity and fixed controls. */
 .titlebar {
   position: relative;
   flex: 0 0 auto;
@@ -97,16 +96,14 @@ body.thinking {
   width: 100%;
   height: 100%;
 }
-/* Widget name, centered in the bar; capped so it never reaches the clusters. */
+/* Flexing the title lane keeps long names clear of the action clusters. */
 .tag {
-  position: absolute;
-  left: 50%;
-  top: 0;
-  transform: translateX(-50%);
+  flex: 1 1 auto;
+  min-width: 0;
   height: 100%;
   display: flex;
   align-items: center;
-  max-width: 40%;
+  justify-content: center;
   font-family: var(--font-display);
   font-weight: 450;
   font-size: 12px;
@@ -134,8 +131,18 @@ body.thinking {
 .wname:hover {
   background: rgba(255, 255, 255, 0.08);
 }
+.wname:focus-visible {
+  outline: 1px solid var(--lantern);
+  outline-offset: 2px;
+}
+.wname[hidden],
+.wname-input[hidden] {
+  display: none;
+}
 .wname-input {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
   -webkit-app-region: no-drag;
   width: 11ch;
   margin: 0;
@@ -192,12 +199,9 @@ body.thinking {
     transition: none;
   }
 }
-.spacer {
-  flex: 1;
-}
-
 /* Window-control dots — clearly visible; glyph fills in on hover. No traffic lights. */
 .controls {
+  flex: 0 0 auto;
   display: flex;
   gap: 8px;
   -webkit-app-region: no-drag;
@@ -225,6 +229,12 @@ body.thinking {
   color: var(--bone);
   background: var(--paper-veil);
 }
+.ctl:focus-visible {
+  outline: 1px solid var(--lantern);
+  outline-offset: 3px;
+  color: var(--bone);
+  background: var(--paper-veil);
+}
 .ctl.close:hover {
   background: var(--ember);
   color: var(--bone);
@@ -246,6 +256,9 @@ body.thinking {
 .compose-toggle {
   -webkit-app-region: no-drag;
   flex: 0 0 auto;
+  width: 26px;
+  height: 22px;
+  padding: 0;
   border: 0;
   background: transparent;
   color: var(--lantern);

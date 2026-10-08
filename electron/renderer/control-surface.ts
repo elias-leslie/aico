@@ -41,6 +41,7 @@ let pins: string[] = []
 let glyphEl: HTMLElement
 let menuEl: HTMLElement
 let clusterEl: HTMLElement
+let essentialEl: HTMLElement
 let paletteEl: HTMLElement
 let paletteInput: HTMLInputElement
 let paletteList: HTMLElement
@@ -641,13 +642,20 @@ function toggleMenu(): void {
 
 // ---- pinned cluster --------------------------------------------------------
 
-function clusterIcon(a: Action, index: number): HTMLElement {
+function clusterIcon(a: Action, index?: number): HTMLElement {
   const b = make('button', 'aico-pin-icon')
   b.type = 'button'
   b.textContent = a.icon
+  b.setAttribute('aria-label', a.label)
+  b.dataset.actionId = a.id
   if (a.accent) b.style.color = a.accent // per-TUI launchers read as their accent
-  b.draggable = true
+  b.draggable = index !== undefined
   attachTip(b, a, 'below') // styled tooltip instead of the native title
+  b.addEventListener('focus', () => showTip(b, a, 'below'))
+  b.addEventListener('blur', () => {
+    hideTip()
+    if (armedEl === b) disarm()
+  })
   const flyoutKind = FLYOUTS[a.id]
   b.addEventListener('click', () => {
     if (flyoutKind) {
@@ -667,6 +675,7 @@ function clusterIcon(a: Action, index: number): HTMLElement {
   b.addEventListener('mouseleave', () => {
     if (armedEl === b) disarm()
   })
+  if (index === undefined) return b
   b.addEventListener('dragstart', (e) => {
     e.dataTransfer?.setData('text/plain', String(index))
     b.classList.add('dragging')
@@ -681,11 +690,167 @@ function clusterIcon(a: Action, index: number): HTMLElement {
   return b
 }
 
+const ESSENTIAL_ACTIONS = ['refresh', 'retire-widget']
+
 function renderCluster(): void {
   clusterEl.innerHTML = ''
   pinnedActions(pins).forEach((a, i) => {
-    clusterEl.append(clusterIcon(a, i))
+    if (!ESSENTIAL_ACTIONS.includes(a.id)) clusterEl.append(clusterIcon(a, i))
   })
+}
+
+/** Include every fixed control and gap before deciding whether actions fit. */
+export function secondaryActionsFit(
+  availableWidth: number,
+  fixedWidth: number,
+  labelWidth: number,
+  secondaryWidth: number,
+  gap: number,
+): boolean {
+  return availableWidth >= fixedWidth + labelWidth + secondaryWidth + gap
+}
+
+/** Move the existing controls between an inline row and a keyboard disclosure. */
+export function wireResponsiveTitlebar(): void {
+  const bar = required('.titlebar')
+  const tag = required('#tag')
+  const name = required('#wname')
+  const secondary = required('#titlebar-secondary')
+  const cluster = required('#pinned')
+  const more = required<HTMLButtonElement>('#titlebar-more')
+  let open = false
+  let frame = 0
+  let labelWidth = 0
+
+  const gapOf = (element: HTMLElement): number =>
+    Number.parseFloat(getComputedStyle(element).columnGap) || 0
+  const widthOf = (element: HTMLElement): number => {
+    const style = getComputedStyle(element)
+    return (
+      element.getBoundingClientRect().width +
+      (Number.parseFloat(style.marginLeft) || 0) +
+      (Number.parseFloat(style.marginRight) || 0)
+    )
+  }
+  const naturalRowWidth = (element: HTMLElement): number => {
+    const children = [...element.children].filter(
+      (child): child is HTMLElement => child instanceof HTMLElement && !child.hidden,
+    )
+    return (
+      children.reduce((width, child) => width + widthOf(child), 0) +
+      Math.max(0, children.length - 1) * gapOf(element)
+    )
+  }
+  const updateDisclosure = (): void => {
+    const hidden = secondary.classList.contains('is-collapsed') && !open
+    secondary.classList.toggle('is-open', open)
+    secondary.inert = hidden
+    secondary.setAttribute('aria-hidden', String(hidden))
+    more.setAttribute('aria-expanded', String(open))
+  }
+  const close = (returnFocus = false): void => {
+    if (!open) return
+    open = false
+    disarm()
+    hideTip()
+    if (returnFocus || secondary.contains(document.activeElement)) more.focus()
+    updateDisclosure()
+    schedule()
+  }
+  const layout = (): void => {
+    frame = 0
+    const style = getComputedStyle(bar)
+    const availableWidth =
+      bar.clientWidth -
+      (Number.parseFloat(style.paddingLeft) || 0) -
+      (Number.parseFloat(style.paddingRight) || 0)
+    const fixed = [...bar.children].filter(
+      (child): child is HTMLElement =>
+        child instanceof HTMLElement && child !== tag && child !== secondary && !child.hidden,
+    )
+    const gap = gapOf(bar)
+    // There is one gap for each fixed child when the flexible title is included.
+    const fixedWidth =
+      fixed.reduce((width, child) => width + widthOf(child), 0) + fixed.length * gap
+    if (!name.hidden) labelWidth = name.scrollWidth
+    const compose = required('#compose-toggle')
+    const secondaryWidth = naturalRowWidth(cluster) + widthOf(compose) + gapOf(secondary)
+    const fits = secondaryActionsFit(availableWidth, fixedWidth, labelWidth, secondaryWidth, gap)
+    if (fits && secondary.classList.contains('is-collapsed')) close()
+    if (!fits && !open && secondary.contains(document.activeElement)) more.focus()
+    secondary.classList.toggle('is-collapsed', !fits)
+    updateDisclosure()
+  }
+  function schedule(): void {
+    if (!frame) frame = requestAnimationFrame(layout)
+  }
+
+  more.addEventListener('click', () => {
+    if (open) {
+      close(true)
+      return
+    }
+    open = true
+    updateDisclosure()
+    secondary.querySelector<HTMLButtonElement>('button')?.focus()
+    schedule()
+  })
+  more.addEventListener('keydown', (event) => {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
+    event.preventDefault()
+    open = true
+    updateDisclosure()
+    const buttons = secondary.querySelectorAll<HTMLButtonElement>('button')
+    buttons[event.key === 'ArrowUp' ? buttons.length - 1 : 0]?.focus()
+    schedule()
+  })
+  document.addEventListener(
+    'keydown',
+    (event) => {
+      if (open && event.key === 'Escape') {
+        event.preventDefault()
+        event.stopPropagation()
+        close(true)
+      }
+    },
+    true,
+  )
+  document.addEventListener('pointerdown', (event) => {
+    if (
+      event.target instanceof Node &&
+      !secondary.contains(event.target) &&
+      !more.contains(event.target)
+    )
+      close()
+  })
+  document.addEventListener('focusin', (event) => {
+    if (
+      event.target instanceof Node &&
+      !secondary.contains(event.target) &&
+      !more.contains(event.target)
+    )
+      close()
+  })
+  secondary.addEventListener('click', (event) => {
+    // Keep destructive first-click arming visible for its confirming click.
+    const button = event.target instanceof Element ? event.target.closest('button') : null
+    if (button && !button.classList.contains('armed')) close()
+  })
+  const resize = new ResizeObserver(schedule)
+  resize.observe(bar)
+  resize.observe(required('#titlebar-essential'))
+  const mutations = new MutationObserver(schedule)
+  mutations.observe(cluster, { childList: true })
+  mutations.observe(tag, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['hidden'],
+  })
+  mutations.observe(required('#mandate-warn'), { attributes: true, attributeFilter: ['hidden'] })
+  void document.fonts.ready.then(schedule)
+  document.fonts.addEventListener('loadingdone', schedule)
+  layout()
 }
 
 // ---- command palette -------------------------------------------------------
@@ -858,6 +1023,7 @@ export function controlSurfaceChord(e: KeyboardEvent): boolean {
 export async function initControlSurface(): Promise<void> {
   glyphEl = required('#lantern-menu-btn')
   clusterEl = required('#pinned')
+  essentialEl = required('#titlebar-essential')
   menuEl = required('#aico-menu')
   paletteEl = required('#aico-palette')
 
@@ -865,6 +1031,11 @@ export async function initControlSurface(): Promise<void> {
   tipEl = make('div', 'aico-tip')
   tipEl.hidden = true
   required('.shell').append(tipEl)
+  for (const id of ESSENTIAL_ACTIONS) {
+    const action = findAction(id)
+    if (action) essentialEl.append(clusterIcon(action))
+  }
+  wireResponsiveTitlebar()
 
   // Independent catalogs load together. Their actions must all be registered
   // before pin sanitization or persisted dynamic pins would disappear.

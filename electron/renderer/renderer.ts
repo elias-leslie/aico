@@ -147,7 +147,7 @@ wireChrome()
 
 // Titlebar identity (so several open widgets are distinguishable at a glance):
 // the TUI's SVG mark (in its accent) set between the eyes, and a click-to-rename
-// widget name centered in the bar. Fed by main over win:title; the OS window
+// widget name in the available title lane. Fed by main over win:title; the OS window
 // title is kept in sync too (for the taskbar / alt-tab list).
 function wireTitle(): void {
   const nameBtn = document.querySelector<HTMLButtonElement>('#wname')
@@ -159,6 +159,8 @@ function wireTitle(): void {
 
   window.aico.win.onTitle((info) => {
     nameBtn.textContent = info.label
+    nameBtn.title = info.label
+    nameBtn.setAttribute('aria-label', `Rename session: ${info.label}`)
     customName = info.name ?? ''
 
     // Static, developer-authored SVG from the TUI spec (never user input), so
@@ -197,9 +199,11 @@ function wireTitle(): void {
     if (e.key === 'Enter') {
       e.preventDefault()
       endRename(true)
+      nameBtn.focus()
     } else if (e.key === 'Escape') {
       e.preventDefault()
       endRename(false)
+      nameBtn.focus()
     }
   })
   nameInput.addEventListener('blur', () => endRename(true))
