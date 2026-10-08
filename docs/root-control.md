@@ -98,16 +98,19 @@ st aico root end recovery-root-1
 ```
 
 Each command accepts `--surface aico|a-term` (default Aico), `--root-socket` for
-Aico and `--root-url` for A-Term. Mutations read `GET /v1/roots/<requestId>`,
-require a qualified `running` descriptor and pin its generation, then send one
-request and require the same identity, generation and `running` status in the
-receipt. A-Term supports status, show, title and end; its position returns
-unavailable, so the facade rejects it locally. `end` on Aico uses the existing
-headless `/v1/sessions/<widgetId>/end` containment contract on `--owner-socket`
-(default `AICO_CONTROL_SOCKET`) with the pinned generation and accepts only the
-exact `{status: "ended"}` receipt; on A-Term it uses `/v1/roots/<requestId>/end`.
+Aico and `--root-url` for A-Term. Show, title and position read
+`GET /v1/roots/<requestId>`, require a qualified `running` descriptor, pin its
+generation, then send one request and require the same identity, generation and
+`running` status in the receipt. A-Term supports status, show, title and end;
+its position returns unavailable, so the facade rejects it locally. End reads
+the exact descriptor and pins its generation, but does not require a running
+workload: it can contain a pending or uncertain root with a generation. On Aico,
+it uses the existing headless `/v1/sessions/<widgetId>/end` containment contract
+on `--owner-socket` (default `AICO_CONTROL_SOCKET`) and accepts only the exact
+`{status: "ended"}` receipt; on A-Term it uses `/v1/roots/<requestId>/end`.
 An already ended tombstone returns `applied: false` with exit 0 and sends
-nothing. These commands work for direct and fleet-started roots; for fleet roots,
+nothing. A root without a generation cannot authorize End. These commands work
+for direct and fleet-started roots; for fleet roots,
 prefer `st sessions close` so the fleet ledger records the outcome.
 `st sessions title` remains a compatibility alias of `st aico root title`.
 

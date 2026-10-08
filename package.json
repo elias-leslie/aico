@@ -16,7 +16,7 @@
     "dist": "npm run dist:sidecar && npm run build && electron-builder --linux AppImage --publish never",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:sidecar": ".venv/bin/python -m pytest sidecar/tests",
+    "test:sidecar": ".venv/bin/python -m pytest sidecar/tests scripts/tests",
     "check": "npm run lint && npm run typecheck && npm test && npm run test:sidecar && npm run build",
     "lint": "biome check .",
     "check:context": "esbuild scripts/check-context.ts --bundle --platform=node --format=esm --outfile=.dev-tools/check-context.mjs && node .dev-tools/check-context.mjs"
