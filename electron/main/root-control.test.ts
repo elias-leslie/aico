@@ -14,8 +14,7 @@ import {
   guiSocketPath,
   parseRootCreate,
   rootRequestDigest,
-  rootTitleOperation,
-  widgetViewOperation,
+  widgetMutationOperation,
 } from './root-control'
 import {
   initialLaunchLine,
@@ -56,9 +55,9 @@ describe('private root workload control', () => {
     if (uncertain) throw new Error('lost response')
     running.add(widgetId)
   })
-  const show = vi.fn(async () => true)
-  const position = vi.fn(async () => true)
-  const title = vi.fn(async () => true)
+  const show = vi.fn(async (_widgetId: string, _generation: string) => true)
+  const position = vi.fn(async (_widgetId: string, _generation: string, _bounds: unknown) => true)
+  const title = vi.fn(async (_widgetId: string, _generation: string, _label: string) => true)
   const status = vi.fn(async (row: WidgetRow) =>
     running.has(row.id) ? ('running' as const) : ('uncertain' as const),
   )
@@ -67,9 +66,12 @@ describe('private root workload control', () => {
     validate: (input) => input.projectRoot !== '/missing',
     ensure,
     status,
-    show,
-    position,
-    title,
+    mutate: (widgetId, generation, mutation) =>
+      mutation.kind === 'show'
+        ? show(widgetId, generation)
+        : mutation.kind === 'position'
+          ? position(widgetId, generation, mutation.bounds)
+          : title(widgetId, generation, mutation.label),
   })
   beforeAll(async () => {
     registerBuiltinTuis()
@@ -218,6 +220,59 @@ describe('private root workload control', () => {
     expect((await call(path, 'POST', { generation, label: 'Neri', extra: true })).status).toBe(400)
   })
 
+  it('refuses every view mutation for a non-running or ended workload without applying', async () => {
+    const root = present(getRootRequest('target-1'))
+    const generation = sessionGeneration(present(getWidget(root.widgetId)))
+    const bounds = { x: 0, y: 0, width: 900, height: 560 }
+    const counts = () => [show, position, title].map((mock) => mock.mock.calls.length)
+    const before = counts()
+    const refused = { status: 409, body: { error: 'workload_unavailable' } }
+    running.delete(root.widgetId)
+    try {
+      expect(await call('/v1/roots/target-1/show', 'POST', { generation })).toEqual(refused)
+      expect(await call('/v1/roots/target-1/position', 'POST', { generation, bounds })).toEqual(
+        refused,
+      )
+      expect(
+        await call('/v1/roots/target-1/title', 'POST', { generation, label: 'Focus' }),
+      ).toEqual(refused)
+      expect(
+        await call(`/v1/widgets/${root.widgetId}/position`, 'POST', { generation, bounds }),
+      ).toEqual(refused)
+    } finally {
+      running.add(root.widgetId)
+    }
+    expect(await call('/v1/roots/support-1/show', 'POST', { generation: '0'.repeat(64) })).toEqual({
+      status: 410,
+      body: { error: 'ended' },
+    })
+    expect(counts()).toEqual(before)
+  })
+
+  it('serializes root and widget routes for one workload on the widget identity', async () => {
+    const root = present(getRootRequest('target-1'))
+    const generation = sessionGeneration(present(getWidget(root.widgetId)))
+    const bounds = { x: 0, y: 0, width: 900, height: 560 }
+    const [titles, positions] = [title.mock.calls.length, position.mock.calls.length]
+    let release = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    title.mockImplementationOnce(async () => {
+      await gate
+      return true
+    })
+    const first = call('/v1/roots/target-1/title', 'POST', { generation, label: 'Focus' })
+    await vi.waitFor(() => expect(title).toHaveBeenCalledTimes(titles + 1))
+    const second = call(`/v1/widgets/${root.widgetId}/position`, 'POST', { generation, bounds })
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(position).toHaveBeenCalledTimes(positions)
+    release()
+    expect((await first).status).toBe(200)
+    expect((await second).status).toBe(200)
+    expect(position).toHaveBeenCalledTimes(positions + 1)
+  })
+
   it('writes root metadata only for an actively dispatched workload under lifecycle ownership', async () => {
     const root = present(getRootRequest('target-1'))
     const row = { ...present(getWidget(root.widgetId)), launchState: 'dispatched' as const }
@@ -237,11 +292,13 @@ describe('private root workload control', () => {
       },
       getWidget: () => current,
       gateState: verify,
-      rename,
+      apply: rename,
     }
     for (const launchState of ['none', 'gated'] as const) {
       current = { ...row, launchState }
-      expect(await rootTitleOperation(row.id, sessionGeneration(current), operations)).toBe(false)
+      expect(await widgetMutationOperation(row.id, sessionGeneration(current), operations)).toBe(
+        false,
+      )
       expect(verify).not.toHaveBeenCalled()
       expect(rename).not.toHaveBeenCalled()
       expect(owners.isHeld(row.id)).toBe(false)
@@ -249,12 +306,12 @@ describe('private root workload control', () => {
     current = row
     for (const state of ['inert', 'ambiguous', null] as const) {
       gateState = state
-      expect(await rootTitleOperation(row.id, generation, operations)).toBe(false)
+      expect(await widgetMutationOperation(row.id, generation, operations)).toBe(false)
       expect(rename).not.toHaveBeenCalled()
       expect(owners.isHeld(row.id)).toBe(false)
     }
     gateState = 'active-workload'
-    expect(await rootTitleOperation(row.id, generation, operations)).toBe(true)
+    expect(await widgetMutationOperation(row.id, generation, operations)).toBe(true)
     expect(rename).toHaveBeenCalledExactlyOnceWith(row)
     expect(owners.isHeld(row.id)).toBe(false)
   })
@@ -274,13 +331,13 @@ describe('private root workload control', () => {
       },
       getWidget: () => current,
       gateState: verify,
-      rename,
+      apply: rename,
     }
     const competingOwner = present(owners.acquire(row.id))
-    expect(await rootTitleOperation(row.id, generation, operations)).toBe(false)
+    expect(await widgetMutationOperation(row.id, generation, operations)).toBe(false)
     expect(verify).not.toHaveBeenCalled()
     owners.release(competingOwner)
-    expect(await rootTitleOperation(row.id, '0'.repeat(64), operations)).toBe(false)
+    expect(await widgetMutationOperation(row.id, '0'.repeat(64), operations)).toBe(false)
     expect(verify).not.toHaveBeenCalled()
     for (const replacement of [
       undefined,
@@ -292,13 +349,13 @@ describe('private root workload control', () => {
         current = replacement
         return 'active-workload'
       })
-      expect(await rootTitleOperation(row.id, generation, operations)).toBe(false)
+      expect(await widgetMutationOperation(row.id, generation, operations)).toBe(false)
       expect(rename).not.toHaveBeenCalled()
       expect(owners.isHeld(row.id)).toBe(false)
     }
     current = row
     verify.mockRejectedValueOnce(new Error('verification failed'))
-    await expect(rootTitleOperation(row.id, generation, operations)).rejects.toThrow(
+    await expect(widgetMutationOperation(row.id, generation, operations)).rejects.toThrow(
       'verification failed',
     )
     expect(rename).not.toHaveBeenCalled()
@@ -439,6 +496,21 @@ describe('private root workload control', () => {
     expect([title.mock.calls.length, position.mock.calls.length]).toEqual(before)
   })
 
+  it('reports an applied widget mutation whose identity cannot be requalified as uncertain', async () => {
+    const row = insertWidget('aabbcc08', true, 'codex')
+    running.add(row.id)
+    title.mockImplementationOnce(async (widgetId: string) => {
+      removeWidget(widgetId)
+      return true
+    })
+    expect(
+      await call(`/v1/widgets/${row.id}/title`, 'POST', {
+        generation: sessionGeneration(row),
+        label: 'Applied',
+      }),
+    ).toEqual({ status: 409, body: { error: 'outcome_uncertain' } })
+  })
+
   it('rejects identity changes during widget inspection or before mutation', async () => {
     const row = insertWidget('aabbcc05', true, 'codex')
     running.add(row.id)
@@ -468,25 +540,25 @@ describe('private root workload control', () => {
     expect(title.mock.calls).toHaveLength(before)
   })
 
-  it('keeps view and title writes on one identity while holding lifecycle ownership', async () => {
+  it('keeps every view mutation on one identity while holding lifecycle ownership', async () => {
     const row = { ...present(getWidget('aabbcc01')), launchState: 'dispatched' as const }
     const generation = sessionGeneration(row)
     const owners = new LifecycleOwnerLock()
     let current: WidgetRow | undefined = row
     const apply = vi.fn(() => expect(owners.isHeld(row.id)).toBe(true))
-    const verify = vi.fn(async () => {
+    const verify = vi.fn(async (): Promise<ManagedGateState> => {
       expect(owners.isHeld(row.id)).toBe(true)
-      return true
+      return 'active-workload'
     })
     const operations = {
       acquire: (id: string) => owners.acquire(id),
       release: (_id: string, owner: NonNullable<ReturnType<typeof owners.acquire>>) =>
         owners.release(owner),
       getWidget: () => current,
-      verify,
+      gateState: verify,
       apply,
     }
-    expect(await widgetViewOperation(row.id, generation, operations)).toBe(true)
+    expect(await widgetMutationOperation(row.id, generation, operations)).toBe(true)
     expect(apply).toHaveBeenCalledExactlyOnceWith(row)
     apply.mockClear()
     for (const replacement of [
@@ -497,27 +569,15 @@ describe('private root workload control', () => {
       current = row
       verify.mockImplementationOnce(async () => {
         current = replacement
-        return true
+        return 'active-workload'
       })
-      expect(await widgetViewOperation(row.id, generation, operations)).toBe(false)
-      expect(apply).not.toHaveBeenCalled()
-      current = row
-      expect(
-        await rootTitleOperation(row.id, generation, {
-          ...operations,
-          gateState: async () => {
-            current = replacement
-            return 'active-workload'
-          },
-          rename: apply,
-        }),
-      ).toBe(false)
+      expect(await widgetMutationOperation(row.id, generation, operations)).toBe(false)
       expect(apply).not.toHaveBeenCalled()
       expect(owners.isHeld(row.id)).toBe(false)
     }
     current = row
     verify.mockRejectedValueOnce(new Error('pane check failed'))
-    await expect(widgetViewOperation(row.id, generation, operations)).rejects.toThrow(
+    await expect(widgetMutationOperation(row.id, generation, operations)).rejects.toThrow(
       'pane check failed',
     )
     expect(owners.isHeld(row.id)).toBe(false)

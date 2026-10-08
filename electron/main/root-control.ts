@@ -35,50 +35,28 @@ export interface RootCreateRequest {
   resumeSessionId: string | null
 }
 
+/** One canonical view mutation, shared by retained-root and ordinary-widget routes. */
+export type WidgetMutation =
+  | { kind: 'show' }
+  | { kind: 'position'; bounds: Bounds }
+  | { kind: 'title'; label: string }
+
 export interface RootControlOperations {
   available(): boolean
   validate(request: RootCreateRequest): boolean
   ensure(widgetId: string, initialPrompt: string, resumeSessionId: string | null): Promise<void>
   status(row: WidgetRow): Promise<'running' | 'pending' | 'uncertain'>
-  show(widgetId: string, generation: string): Promise<boolean>
-  position(widgetId: string, generation: string, bounds: Bounds): Promise<boolean>
-  title(widgetId: string, generation: string, label: string): Promise<boolean>
+  mutate(widgetId: string, generation: string, mutation: WidgetMutation): Promise<boolean>
 }
 
-/** Keep view writes on the exact widget across asynchronous pane verification. */
-export async function widgetViewOperation(
-  widgetId: string,
-  generation: string,
-  operations: {
-    acquire(widgetId: string): LifecycleOwnerToken | null
-    release(widgetId: string, owner: LifecycleOwnerToken): void
-    getWidget(widgetId: string): WidgetRow | undefined
-    verify(row: WidgetRow): Promise<boolean>
-    apply(row: WidgetRow): void
-  },
-): Promise<boolean> {
-  const owner = operations.acquire(widgetId)
-  if (!owner) return false
-  try {
-    const row = operations.getWidget(widgetId)
-    if (
-      !row ||
-      row.id !== widgetId ||
-      sessionGeneration(row) !== generation ||
-      !(await operations.verify(row))
-    )
-      return false
-    const latest = operations.getWidget(widgetId)
-    if (!latest || latest.id !== widgetId || sessionGeneration(latest) !== generation) return false
-    operations.apply(latest)
-    return true
-  } finally {
-    operations.release(widgetId, owner)
-  }
-}
-
-/** Verify running evidence under lifecycle ownership before writing root metadata. */
-export async function rootTitleOperation(
+/**
+ * Apply one view mutation only to the exact running widget generation.
+ *
+ * Every kind requires a dispatched launch and an active managed workload,
+ * verified while holding lifecycle ownership, then rereads the catalog before
+ * applying. A non-running widget is never shown, positioned or renamed.
+ */
+export async function widgetMutationOperation(
   widgetId: string,
   generation: string,
   operations: {
@@ -86,30 +64,24 @@ export async function rootTitleOperation(
     release(widgetId: string, owner: LifecycleOwnerToken): void
     getWidget(widgetId: string): WidgetRow | undefined
     gateState(row: WidgetRow): Promise<ManagedGateState | null>
-    rename(row: WidgetRow): void
+    apply(row: WidgetRow): void
   },
 ): Promise<boolean> {
   const owner = operations.acquire(widgetId)
   if (!owner) return false
   try {
+    const exact = (row: WidgetRow | undefined): row is WidgetRow =>
+      Boolean(
+        row &&
+          row.id === widgetId &&
+          sessionGeneration(row) === generation &&
+          row.launchState === 'dispatched',
+      )
     const row = operations.getWidget(widgetId)
-    if (
-      !row ||
-      row.id !== widgetId ||
-      sessionGeneration(row) !== generation ||
-      row.launchState !== 'dispatched' ||
-      (await operations.gateState(row)) !== 'active-workload'
-    )
-      return false
+    if (!exact(row) || (await operations.gateState(row)) !== 'active-workload') return false
     const latest = operations.getWidget(widgetId)
-    if (
-      !latest ||
-      latest.id !== widgetId ||
-      sessionGeneration(latest) !== generation ||
-      latest.launchState !== 'dispatched'
-    )
-      return false
-    operations.rename(latest)
+    if (!exact(latest)) return false
+    operations.apply(latest)
     return true
   } finally {
     operations.release(widgetId, owner)
@@ -259,41 +231,28 @@ export function rootRequestDigest(request: RootCreateRequest): string {
     .digest('hex')
 }
 
-function parsePosition(value: unknown): { generation: string; bounds: Bounds } | null {
+/** Owner-side validation; contracts/view-mutation-vectors.json pins every client copy. */
+export function parseBounds(value: unknown): Bounds | null {
   if (
     !object(value) ||
-    Object.keys(value).some((key) => !['generation', 'bounds'].includes(key)) ||
-    typeof value.generation !== 'string' ||
-    !/^[0-9a-f]{64}$/.test(value.generation) ||
-    !object(value.bounds)
-  )
-    return null
-  const bounds = value.bounds
-  if (
-    Object.keys(bounds).length !== 4 ||
+    Object.keys(value).length !== 4 ||
     ['x', 'y', 'width', 'height'].some(
       (key) =>
-        typeof bounds[key] !== 'number' ||
-        !Number.isSafeInteger(bounds[key]) ||
-        Math.abs(bounds[key] as number) > 100_000,
+        typeof value[key] !== 'number' ||
+        !Number.isSafeInteger(value[key]) ||
+        Math.abs(value[key] as number) > 100_000,
     ) ||
-    (bounds.width as number) < 360 ||
-    (bounds.height as number) < 240
+    (value.width as number) < 360 ||
+    (value.height as number) < 240
   )
     return null
-  return { generation: value.generation, bounds: bounds as unknown as Bounds }
+  return { x: value.x, y: value.y, width: value.width, height: value.height } as Bounds
 }
 
-function parseTitle(value: unknown): { generation: string; label: string } | null {
-  if (
-    !object(value) ||
-    Object.keys(value).some((key) => !['generation', 'label'].includes(key)) ||
-    typeof value.generation !== 'string' ||
-    !/^[0-9a-f]{64}$/.test(value.generation) ||
-    typeof value.label !== 'string'
-  )
-    return null
-  const label = value.label.trim()
+/** Trim (ECMAScript TrimString), then require 1-160 UTF-8 bytes of single-line text. */
+export function parseLabel(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const label = value.trim()
   if (!label || Buffer.byteLength(label) > 160) return null
   for (const character of label) {
     const code = character.codePointAt(0) ?? 0
@@ -306,7 +265,31 @@ function parseTitle(value: unknown): { generation: string; label: string } | nul
     )
       return null
   }
-  return { generation: value.generation, label }
+  return label
+}
+
+/** Strict mutation body: exactly the generation plus the kind's one field. */
+export function parseWidgetMutation(
+  kind: WidgetMutation['kind'],
+  value: unknown,
+): { generation: string; mutation: WidgetMutation } | null {
+  const field = kind === 'position' ? 'bounds' : kind === 'title' ? 'label' : null
+  if (
+    !object(value) ||
+    Object.keys(value).some((key) => key !== 'generation' && key !== field) ||
+    (field !== null && !(field in value)) ||
+    typeof value.generation !== 'string' ||
+    !/^[0-9a-f]{64}$/.test(value.generation)
+  )
+    return null
+  const generation = value.generation
+  if (kind === 'show') return { generation, mutation: { kind } }
+  if (kind === 'position') {
+    const bounds = parseBounds(value.bounds)
+    return bounds ? { generation, mutation: { kind, bounds } } : null
+  }
+  const label = parseLabel(value.label)
+  return label ? { generation, mutation: { kind, label } } : null
 }
 
 function json(response: ServerResponse, status: number, value: unknown): void {
@@ -386,6 +369,34 @@ export function createRootServer(operations: RootControlOperations) {
       available: status === 'running',
     }
   }
+  // The one canonical view mutation path for both route families. It
+  // serializes on the widget identity, so a root alias and its widget ID can
+  // never interleave writes. Rejections here are definitive: nothing applied.
+  const mutateWidget = async (
+    widgetId: string,
+    generation: string,
+    mutation: WidgetMutation,
+  ): Promise<{ status: number; error: string } | null> => {
+    const current = getWidget(widgetId)
+    if (!current || current.id !== widgetId) return { status: 410, error: 'ended' }
+    if (sessionGeneration(current) !== generation) return { status: 409, error: 'stale_generation' }
+    const ready = await describeWidget(current)
+    if (!ready) return { status: 409, error: 'stale_generation' }
+    if (!ready.available) return { status: 409, error: 'workload_unavailable' }
+    if (!(await operations.mutate(widgetId, generation, mutation)))
+      return { status: 409, error: 'workload_unavailable' }
+    return null
+  }
+  const readMutation = async (
+    request: IncomingMessage,
+    kind: WidgetMutation['kind'],
+  ): Promise<{ generation: string; mutation: WidgetMutation } | null> => {
+    try {
+      return parseWidgetMutation(kind, await body(request))
+    } catch {
+      return null
+    }
+  }
   return createServer(async (request, response) => {
     const path = request.url?.split('?')[0] ?? ''
     if (!operations.available()) {
@@ -410,46 +421,24 @@ export function createRootServer(operations: RootControlOperations) {
           json(response, 405, { error: 'method_not_allowed' })
           return
         }
-        let payload: unknown
-        try {
-          payload = await body(request)
-        } catch {
-          json(response, 400, { error: 'invalid_body' })
-          return
-        }
-        const title = widgetMatch[2] === 'title' ? parseTitle(payload) : null
-        const position = widgetMatch[2] === 'position' ? parsePosition(payload) : null
-        const generation = title?.generation ?? position?.generation
-        if (!generation) {
+        const input = await readMutation(request, widgetMatch[2] as 'title' | 'position')
+        if (!input) {
           json(response, 400, { error: 'invalid_body' })
           return
         }
         await serialize(`widget:${widgetId}`, async () => {
-          const current = getWidget(widgetId)
-          if (!current) {
-            json(response, 410, { error: 'ended' })
+          const rejected = await mutateWidget(widgetId, input.generation, input.mutation)
+          if (rejected) {
+            json(response, rejected.status, { error: rejected.error })
             return
           }
-          if (current.id !== widgetId || sessionGeneration(current) !== generation) {
-            json(response, 409, { error: 'stale_generation' })
-            return
-          }
-          const ready = await describeWidget(current)
-          if (!ready || !ready.available) {
-            json(response, 409, { error: 'workload_unavailable' })
-            return
-          }
-          const success = title
-            ? await operations.title(widgetId, generation, title.label)
-            : position
-              ? await operations.position(widgetId, generation, position.bounds)
-              : false
           const latest = getWidget(widgetId)
           const descriptor =
-            success && latest && sessionGeneration(latest) === generation
+            latest && sessionGeneration(latest) === input.generation
               ? await describeWidget(latest)
               : null
-          json(response, descriptor ? 200 : 409, descriptor ?? { error: 'workload_unavailable' })
+          // Applied, but the exact identity cannot be re-qualified afterwards.
+          json(response, descriptor ? 200 : 409, descriptor ?? { error: 'outcome_uncertain' })
         })
         return
       }
@@ -606,46 +595,17 @@ export function createRootServer(operations: RootControlOperations) {
         json(response, 405, { error: 'method_not_allowed' })
         return
       }
-      let payload: unknown
-      try {
-        payload = await body(request)
-      } catch {
+      const input = await readMutation(request, match[2])
+      if (!input) {
         json(response, 400, { error: 'invalid_body' })
         return
       }
-      const position = match[2] === 'position' ? parsePosition(payload) : null
-      const title = match[2] === 'title' ? parseTitle(payload) : null
-      const generation =
-        position?.generation ?? title?.generation ?? (object(payload) ? payload.generation : null)
-      if (
-        typeof generation !== 'string' ||
-        !/^[0-9a-f]{64}$/.test(generation) ||
-        (match[2] === 'position' && !position) ||
-        (match[2] === 'title' && !title) ||
-        (match[2] === 'show' && (!object(payload) || Object.keys(payload).length !== 1))
-      ) {
-        json(response, 400, { error: 'invalid_body' })
-        return
-      }
-      await serialize(root.requestId, async () => {
-        const row = getWidget(root.widgetId)
-        if (!row) {
-          json(response, 410, { error: 'ended' })
-          return
-        }
-        if (sessionGeneration(row) !== generation) {
-          json(response, 409, { error: 'stale_generation' })
-          return
-        }
-        const success = position
-          ? await operations.position(row.id, generation, position.bounds)
-          : title
-            ? await operations.title(row.id, generation, title.label)
-            : await operations.show(row.id, generation)
+      await serialize(`widget:${root.widgetId}`, async () => {
+        const rejected = await mutateWidget(root.widgetId, input.generation, input.mutation)
         json(
           response,
-          success ? 200 : 409,
-          success ? await describe(root) : { error: 'workload_unavailable' },
+          rejected?.status ?? 200,
+          rejected ? { error: rejected.error } : await describe(root),
         )
       })
     } catch {

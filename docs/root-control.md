@@ -37,15 +37,30 @@ identity during mutation, or an unavailable workload returns 409
 The GET rechecks the same generation after observing status; identity changes
 during inspection return 409 `stale_generation`.
 
-Title and position bodies are strict: no additional fields. Titles are trimmed,
+Show, title and position bodies are strict: exactly `generation` plus the one
+field for that kind. Titles are trimmed with ECMAScript whitespace rules,
 nonempty, at most 160 UTF-8 bytes, and exclude control characters, lone
 surrogates and Unicode line/paragraph separators. Bounds contain exactly integer
 `x`, `y`, `width`, and `height`, each with absolute value at most 100000; minimum
-size is 360 by 240. Invalid bodies return 400 `invalid_body`. Writes acquire the
-existing widget lifecycle owner, verify exact managed pane ownership, and reread
-the catalog generation before applying. Title writes additionally require a
-dispatched active workload. Existing views use `BrowserWindow.setBounds` and
-persist the resulting geometry; detached views save their next placement.
+size is 360 by 240. Invalid bodies return 400 `invalid_body`.
+[`contracts/view-mutation-vectors.json`](../contracts/view-mutation-vectors.json)
+pins these rules; the owner's Vitest suite and the Python client's pytest suite
+both run every vector.
+
+Root and widget routes use one canonical mutation handler, serialized on the
+widget identity, so a root request ID and its widget ID cannot interleave
+writes. Every kind requires the exact current generation and a `running`
+workload. Pending, uncertain or otherwise non-running workloads return 409
+`workload_unavailable`; Aico does not show them, store a future placement for
+them or rename them. Writes acquire the existing widget lifecycle owner, verify
+a dispatched launch and an active managed workload, then reread the catalog
+generation before applying. Existing views use `BrowserWindow.setBounds` and
+persist the resulting geometry; a running workload with no open view saves its
+next placement.
+
+Every 4xx/503 rejection above is definitive: nothing was applied. A widget
+mutation that applied but whose exact identity cannot be requalified afterwards
+returns 409 `outcome_uncertain`.
 
 The direct facade uses `AICO_WIDGET_ID` for the current widget, with an explicit
 `--widget-id` override. It never selects a focused or recent widget:
@@ -61,9 +76,40 @@ All three commands accept `--widget-id` and `--root-socket`. Mutations fetch the
 descriptor once, pin its widget, session and generation, then send one mutation
 and qualify the success receipt against that pin. Their output adds `operation`
 and `applied: true` to the compact descriptor, without echoing title or bounds.
-An uncertain mutation has `applied: null`; failure before a mutation is sent has
-`applied: false`. No failed request is automatically retried. Exit codes are 0
-for a qualified receipt, 1 for owner/identity failure, and 2 for invalid input.
+`applied: false` means nothing was applied: either no mutation was sent, or the
+owner returned a qualified refusal (`invalid_body`, `not_found`,
+`stale_generation`, `workload_unavailable`, `busy`, `ended`, `gui_unavailable`,
+`position_unavailable`). `applied: null` means the outcome is unknown: transport
+loss or deadline after sending, `outcome_uncertain`, blocked End cleanup,
+`close_uncertain`, or any unqualified reply. A failure receipt reports
+`status: "uncertain"` because it does not vouch for the workload's current state,
+plus a content-free `reason`. No failed request is automatically retried. Exit
+codes are 0 for a qualified receipt, 1 for owner/identity failure, and 2 for
+invalid input.
+
+Retained roots have the same owner facade by exact request ID:
+
+```sh
+st aico root status recovery-root-1
+st aico root show recovery-root-1
+st aico root title recovery-root-1 'Investigation'
+st aico root position recovery-root-1 -10 20 900 560
+st aico root end recovery-root-1
+```
+
+Each command accepts `--surface aico|a-term` (default Aico), `--root-socket` for
+Aico and `--root-url` for A-Term. Mutations read `GET /v1/roots/<requestId>`,
+require a qualified `running` descriptor and pin its generation, then send one
+request and require the same identity, generation and `running` status in the
+receipt. A-Term supports status, show, title and end; its position returns
+unavailable, so the facade rejects it locally. `end` on Aico uses the existing
+headless `/v1/sessions/<widgetId>/end` containment contract on `--owner-socket`
+(default `AICO_CONTROL_SOCKET`) with the pinned generation and accepts only the
+exact `{status: "ended"}` receipt; on A-Term it uses `/v1/roots/<requestId>/end`.
+An already ended tombstone returns `applied: false` with exit 0 and sends
+nothing. These commands work for direct and fleet-started roots; for fleet roots,
+prefer `st sessions close` so the fleet ledger records the outcome.
+`st sessions title` remains a compatibility alias of `st aico root title`.
 
 Roots created by direct `st aico create` are owner roots without SummitFlow fleet
 event streams; title, position and widget controls do not create an event stream,

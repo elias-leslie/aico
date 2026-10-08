@@ -79,12 +79,7 @@ import {
   refreshProjects,
   widgetCwd,
 } from './project'
-import {
-  createRootServer,
-  guiSocketPath,
-  rootTitleOperation,
-  widgetViewOperation,
-} from './root-control'
+import { createRootServer, guiSocketPath, widgetMutationOperation } from './root-control'
 import {
   initialLaunchLine,
   rootLaunchEnvironment,
@@ -2942,20 +2937,6 @@ function focusOrReopen(id: string): void {
   if (row) openWidget(row)
 }
 
-async function rootViewOperation(
-  widgetId: string,
-  generation: string,
-  operation: (row: WidgetRow) => void,
-): Promise<boolean> {
-  return widgetViewOperation(widgetId, generation, {
-    acquire: (id) => lifecycleOwners.acquire(id),
-    release: releaseLifecycleOwner,
-    getWidget,
-    verify: async (row) => Boolean(await verifiedCurrentManagedPane(row)),
-    apply: operation,
-  })
-}
-
 async function rootManagedGateState(row: WidgetRow): Promise<ManagedGateState | null> {
   if ((await internalSessionState(row.id)) !== 'present') return null
   const pane = await verifiedCurrentManagedPane(row)
@@ -4294,34 +4275,35 @@ app.whenReady().then(async () => {
         return 'running'
       return isNeverAllocatedWidget(row) ? 'pending' : 'uncertain'
     },
-    show: (widgetId, generation) =>
-      rootViewOperation(widgetId, generation, (row) => {
-        const win = windowForWidget(widgetId)
-        if (win) {
-          win.show()
-          win.focus()
-        } else openWidget(row)
-      }),
-    position: (widgetId, generation, bounds) =>
-      rootViewOperation(widgetId, generation, () => {
-        const win = windowForWidget(widgetId)
-        if (win) {
-          win.setBounds(bounds)
-          persistBounds(win)
-        } else {
-          saveBounds(widgetId, bounds, String(screen.getDisplayMatching(bounds).id))
-        }
-      }),
-    title: (widgetId, generation, label) =>
-      rootTitleOperation(widgetId, generation, {
+    mutate: (widgetId, generation, mutation) =>
+      widgetMutationOperation(widgetId, generation, {
         acquire: (id) => lifecycleOwners.acquire(id),
         release: releaseLifecycleOwner,
         getWidget,
         gateState: rootManagedGateState,
-        rename: (row) => {
-          setWidgetName(row.id, label)
-          pushTitles()
-          syncTray()
+        apply: (row) => {
+          const win = windowForWidget(row.id)
+          if (mutation.kind === 'show') {
+            if (win) {
+              win.show()
+              win.focus()
+            } else openWidget(row)
+          } else if (mutation.kind === 'position') {
+            if (win) {
+              win.setBounds(mutation.bounds)
+              persistBounds(win)
+            } else {
+              saveBounds(
+                row.id,
+                mutation.bounds,
+                String(screen.getDisplayMatching(mutation.bounds).id),
+              )
+            }
+          } else {
+            setWidgetName(row.id, mutation.label)
+            pushTitles()
+            syncTray()
+          }
         },
       }),
   })

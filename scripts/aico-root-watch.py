@@ -31,6 +31,7 @@ import socket
 import subprocess
 import threading
 import time
+import typing
 from collections.abc import Callable
 from urllib.parse import quote, urlsplit
 
@@ -100,6 +101,57 @@ class Ended(Exception):
 
 class Stopped(Exception):
     pass
+
+
+class Refused(Unavailable):
+    """A qualified owner rejection: the owner reports that nothing was applied."""
+
+
+# ECMAScript TrimString whitespace and line terminators, matching the owner.
+LABEL_TRIM = ("\t\n\x0b\x0c\r \xa0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006"
+              "\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff")
+LABEL_INVALID = re.compile(r"[\x00-\x1f\x7f-\x9f\ud800-\udfff\u2028\u2029]")
+BOUNDS = ("x", "y", "width", "height")
+KEY = r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}"
+THREAD = r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}"
+# Owner rejections that are definitive before any view or lifecycle effect.
+OWNER_REFUSALS = {400: {"invalid_body", "invalid_generation"}, 404: {"not_found"},
+                  409: {"stale_generation", "workload_unavailable", "busy"}, 410: {"ended"},
+                  503: {"gui_unavailable", "position_unavailable"}}
+
+
+def view_label(value: object) -> str | None:
+    """Owner label contract; contracts/view-mutation-vectors.json pins it."""
+    if not isinstance(value, str):
+        return None
+    label = value.strip(LABEL_TRIM)
+    if not label or LABEL_INVALID.search(label) or len(label.encode("utf-8")) > 160:
+        return None
+    return label
+
+
+def view_bounds(value: object) -> dict | None:
+    """Owner integer bounds contract; contracts/view-mutation-vectors.json pins it."""
+    if not isinstance(value, dict) or set(value) != set(BOUNDS):
+        return None
+    bounds: dict[str, int] = {}
+    for key in BOUNDS:
+        item = typing.cast(dict[str, object], value)[key]
+        if isinstance(item, bool) or not isinstance(item, int) or abs(item) > 100_000:
+            return None
+        bounds[key] = item
+    return bounds if bounds["width"] >= 360 and bounds["height"] >= 240 else None
+
+
+def owner_reply(status: int, data: dict, unqualified: str) -> None:
+    """Raise for any non-200 reply; only exact known rejections are definitive."""
+    if status == 200:
+        return
+    reason = data.get("error")
+    if isinstance(reason, str) and reason in OWNER_REFUSALS.get(status, ()):
+        raise Refused(reason)
+    raise Unavailable(reason if reason in ("outcome_uncertain", "blocked", "close_uncertain")
+                      else unqualified)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -768,18 +820,7 @@ def widget_main(argv: list[str]) -> int:
     args = parser.parse_args(argv)
     if not isinstance(args.widget_id, str) or not re.fullmatch(r"[0-9a-f]{8}", args.widget_id):
         parser.error("expected --widget-id or AICO_WIDGET_ID with exactly eight lowercase hex characters")
-    payload = {}
-    if args.operation == "title":
-        label = args.label.strip()
-        if (not label or re.search(r"[\x00-\x1f\x7f-\x9f\ud800-\udfff\u2028\u2029]", label)
-                or len(label.encode("utf-8")) > 160):
-            parser.error("expected a nonempty title of at most 160 UTF-8 bytes without controls")
-        payload["label"] = label
-    elif args.operation == "position":
-        bounds = {key: getattr(args, key) for key in ("x", "y", "width", "height")}
-        if any(abs(value) > 100_000 for value in bounds.values()) or args.width < 360 or args.height < 240:
-            parser.error("expected integer bounds within 100000; minimum size is 360 by 240")
-        payload["bounds"] = bounds
+    payload = view_payload(parser, args)
     runtime = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
     try:
         endpoint = args.root_socket or socket_path(os.environ.get("AICO_GUI_CONTROL_SOCKET", f"{runtime}/aico/gui-control.sock"))
@@ -788,17 +829,9 @@ def widget_main(argv: list[str]) -> int:
     collector = Collector(endpoint, "", "", time.monotonic() + 10, threading.Event())
     output: dict = {"owner": "aico", "widgetId": args.widget_id}
     mutation_sent = False
-    errors = {400: "invalid_body", 404: "not_found", 409: {"stale_generation", "workload_unavailable"},
-              410: "ended", 503: "gui_unavailable"}
 
     def qualify(status: int, data: dict) -> dict:
-        if status != 200:
-            expected = errors.get(status)
-            reason = data.get("error")
-            if (isinstance(expected, set) and isinstance(reason, str) and reason in expected
-                    or isinstance(expected, str) and reason == expected):
-                raise Unavailable(reason)
-            raise Unavailable("widget_receipt_unqualified")
+        owner_reply(status, data, "widget_receipt_unqualified")
         return widget_descriptor(data, args.widget_id)
 
     try:
@@ -811,7 +844,8 @@ def widget_main(argv: list[str]) -> int:
                 raise Unavailable("workload_unavailable")
             payload["generation"] = descriptor["generation"]
             mutation_sent = True
-            status, data = collector.receipt(endpoint, f"{route}/{args.operation}", payload)
+            # Verified owner writes include tmux checks; allow them to finish.
+            status, data = collector.receipt(endpoint, f"{route}/{args.operation}", payload, timeout=5)
             changed = qualify(status, data)
             if any(changed[key] != descriptor[key] for key in ("widgetId", "sessionId", "generation")):
                 raise Unavailable("widget_receipt_unqualified")
@@ -822,7 +856,146 @@ def widget_main(argv: list[str]) -> int:
         output.update(status="uncertain", available=False,
                       reason=str(error) if isinstance(error, Unavailable) else "deadline")
         if args.operation != "status":
-            output.update(operation=args.operation, applied=None if mutation_sent else False)
+            output.update(operation=args.operation, applied=applied(mutation_sent, error))
+        try:
+            emit_json(collector, output)
+        except Stopped:
+            pass
+        return 1
+    except BrokenPipeError:
+        return 0
+
+
+ROOT_IDENTITY = ("owner", "requestId", "hostIdentity", "logicalSessionId", "surfaceLocator")
+
+
+def applied(sent: bool, error: Exception) -> bool | None:
+    """False unless a mutation was sent; then only a qualified refusal is False."""
+    return None if sent and not isinstance(error, Refused) else False
+
+
+def view_payload(parser: argparse.ArgumentParser, args: argparse.Namespace) -> dict:
+    """Validate title/position input before any owner contact; never echo a label."""
+    if args.operation == "title":
+        label = view_label(args.label)
+        if label is None:
+            parser.error("expected a nonempty title of at most 160 UTF-8 bytes without controls")
+        return {"label": label}
+    if args.operation == "position":
+        bounds = view_bounds({key: getattr(args, key) for key in BOUNDS})
+        if bounds is None:
+            parser.error("expected integer bounds within 100000; minimum size is 360 by 240")
+        return {"bounds": bounds}
+    return {}
+
+
+def root_descriptor(data: dict, surface: str, request_id: str) -> dict:
+    """Project only a qualified exact retained-root identity and status."""
+    host = data.get("hostIdentity")
+    locator = data.get("surfaceLocator")
+    generation = data.get("generation")
+    state = data.get("status")
+    if (data.get("owner") != surface or data.get("requestId") != request_id
+            or not isinstance(host, str)
+            or not re.fullmatch(r"[0-9a-f]{8}" if surface == "aico" else THREAD, host)
+            or not isinstance(data.get("logicalSessionId"), str)
+            or not re.fullmatch(KEY, data["logicalSessionId"])
+            or not isinstance(locator, str)
+            or not (locator == f"aico://widget/{host}" if surface == "aico"
+                    else re.fullmatch("a-term://pane/" + THREAD, locator))
+            or state not in ("running", "pending", "uncertain", "ended")
+            or generation is not None and (not isinstance(generation, str)
+                                           or not re.fullmatch(r"[0-9a-f]{64}", generation))
+            or state == "running" and generation is None
+            or state == "ended" and generation is not None):
+        raise Unavailable("root_receipt_unqualified")
+    return {key: data[key] for key in (*ROOT_IDENTITY, "generation", "status")}
+
+
+def root_main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="st aico root", description=(
+        "Inspect or control one exact retained owner root by request ID. Mutations pin its "
+        "current generation, send one request and qualify the receipt. No retry or owner startup."))
+    commands = parser.add_subparsers(dest="operation", required=True)
+    runtime = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
+    for operation in ("status", "show", "title", "position", "end"):
+        command = commands.add_parser(operation)
+        command.add_argument("request_id")
+        if operation == "title":
+            command.add_argument("label")
+        elif operation == "position":
+            for dimension in BOUNDS:
+                command.add_argument(dimension, type=int)
+        command.add_argument("--surface", choices=("aico", "a-term"), default="aico")
+        command.add_argument("--root-socket", type=socket_path)
+        command.add_argument("--root-url", type=local_root_url)
+        if operation == "end":
+            command.add_argument("--owner-socket", type=socket_path)
+    args = parser.parse_args(argv)
+    if not re.fullmatch(KEY, args.request_id):
+        parser.error("invalid root request ID")
+    aico = args.surface == "aico"
+    if (aico and args.root_url or not aico and (args.root_socket or getattr(args, "owner_socket", None))):
+        parser.error("conflicting owner transport options")
+    if not aico and args.operation == "position":
+        parser.error("A-Term root positioning is unavailable")
+    payload = view_payload(parser, args)
+    try:
+        endpoint = (args.root_socket or socket_path(os.environ.get("AICO_GUI_CONTROL_SOCKET", f"{runtime}/aico/gui-control.sock"))
+                    if aico else args.root_url or local_root_url(
+                        os.environ.get("A_TERM_ROOT_CONTROL_URL", "http://127.0.0.1:8002")))
+        control = (getattr(args, "owner_socket", None) or socket_path(
+            os.environ.get("AICO_CONTROL_SOCKET", f"{runtime}/aico/control.sock"))) if aico else endpoint
+    except argparse.ArgumentTypeError:
+        parser.error("invalid owner transport configuration")
+    collector = Collector(endpoint, control, "", time.monotonic() + 10, threading.Event())
+    output: dict = {"owner": args.surface, "requestId": args.request_id}
+    route = f"/v1/roots/{args.request_id}"
+    sent = False
+    try:
+        status, data = collector.receipt(endpoint, route)
+        owner_reply(status, data, "root_receipt_unqualified")
+        pinned = root_descriptor(data, args.surface, args.request_id)
+        output.update(pinned)
+        if args.operation == "status":
+            emit_json(collector, output)
+            return 0
+        output["operation"] = args.operation
+        if args.operation == "end" and pinned["status"] == "ended":
+            # An exact tombstone is the idempotent end receipt; nothing is sent.
+            output["applied"] = False
+            emit_json(collector, output)
+            return 0
+        if (args.operation != "end" and pinned["status"] != "running") or pinned["generation"] is None:
+            raise Refused("workload_unavailable")
+        payload["generation"] = pinned["generation"]
+        sent = True
+        if args.operation == "end" and aico:
+            # Exact containment retirement remains the headless owner's contract.
+            status, data = collector.receipt(control, f"/v1/sessions/{pinned['hostIdentity']}/end", payload,
+                                             timeout=10)
+            owner_reply(status, data, "end_receipt_unqualified")
+            if data != {"status": "ended"}:
+                raise Unavailable("end_receipt_unqualified")
+            output.update(status="ended", generation=None)
+        else:
+            status, data = collector.receipt(endpoint, f"{route}/{args.operation}", payload,
+                                             timeout=10 if args.operation == "end" else 5)
+            owner_reply(status, data, "root_receipt_unqualified")
+            changed = root_descriptor(data, args.surface, args.request_id)
+            expected = "ended" if args.operation == "end" else "running"
+            if (changed["status"] != expected
+                    or any(changed[key] != pinned[key] for key in ROOT_IDENTITY)
+                    or args.operation != "end" and changed["generation"] != pinned["generation"]):
+                raise Unavailable("root_receipt_unqualified")
+            output.update(changed)
+        output["applied"] = True
+        emit_json(collector, output)
+        return 0
+    except (Unavailable, Stopped) as error:
+        output.update(status="uncertain", reason=str(error) if isinstance(error, Unavailable) else "deadline")
+        if args.operation != "status":
+            output.update(operation=args.operation, applied=applied(sent, error))
         try:
             emit_json(collector, output)
         except Stopped:
@@ -895,6 +1068,8 @@ def main(argv: list[str] | None = None) -> int:
         return create_main(argv[1:])
     if argv and argv[0] == "widget":
         return widget_main(argv[1:])
+    if argv and argv[0] == "root":
+        return root_main(argv[1:])
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("root", "owner", "tmux"):
         parser.add_argument(f"--{name}-socket", required=True, type=socket_path)

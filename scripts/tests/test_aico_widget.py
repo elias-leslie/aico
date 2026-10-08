@@ -19,7 +19,7 @@ DESCRIPTOR = {"owner": "aico", "widgetId": WIDGET, "sessionId": "aico-widget-" +
 def invoke(monkeypatch, args, responses):
     calls, output = [], []
 
-    def receipt(_, endpoint, route, payload=None):
+    def receipt(_, endpoint, route, payload=None, **_options):
         calls.append((endpoint, route, payload))
         return responses[len(calls) - 1]
 
@@ -111,15 +111,28 @@ def test_success_requires_same_widget_session_and_generation_without_retry(monke
     assert output[0]["applied"] is None
 
 
-@pytest.mark.parametrize("status,error", [(404, "not_found"), (410, "ended"),
-                                        (409, "stale_generation"), (503, "gui_unavailable")])
-def test_missing_ended_or_stale_owner_replies_are_closed_without_retry(monkeypatch, status, error):
+@pytest.mark.parametrize("status,error", [(404, "not_found"), (410, "ended"), (400, "invalid_body"),
+                                        (409, "stale_generation"), (409, "workload_unavailable"),
+                                        (503, "gui_unavailable")])
+def test_qualified_owner_refusals_after_send_report_not_applied(monkeypatch, status, error):
     code, calls, output = invoke(monkeypatch, ["title", "Rejected"],
                                 [(200, DESCRIPTOR), (status, {"error": error, "text": "private"})])
     assert code == 1 and len(calls) == 2
     assert output[0]["reason"] == error
-    assert output[0]["applied"] is None
+    assert output[0]["applied"] is False
     assert "private" not in json.dumps(output)
+
+
+@pytest.mark.parametrize("status,error,reason", [
+    (409, "outcome_uncertain", "outcome_uncertain"), (500, "owner_failure", "widget_receipt_unqualified"),
+    (409, "unknown", "widget_receipt_unqualified"), (503, "stale_generation", "widget_receipt_unqualified"),
+])
+def test_unqualified_or_post_apply_replies_remain_uncertain_without_retry(monkeypatch, status, error, reason):
+    code, calls, output = invoke(monkeypatch, ["title", "Rejected"],
+                                [(200, DESCRIPTOR), (status, {"error": error})])
+    assert code == 1 and len(calls) == 2
+    assert output[0]["reason"] == reason
+    assert output[0]["applied"] is None
 
 
 def test_actual_private_owner_transport_pins_then_positions(tmp_path, monkeypatch):

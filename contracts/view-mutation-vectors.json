@@ -1,0 +1,336 @@
+{
+  "description": "Aico owner view-mutation validation. The owner (electron/main/root-control.ts) is authoritative; every client validator must agree with these vectors.",
+  "version": 1,
+  "labels": [
+    {
+      "input": "Focus",
+      "label": "Focus"
+    },
+    {
+      "input": "  Neri \u00b7 Mattermost Hunt  ",
+      "label": "Neri \u00b7 Mattermost Hunt"
+    },
+    {
+      "input": "\nFocus\r",
+      "label": "Focus"
+    },
+    {
+      "input": "\t\u000b\fFocus",
+      "label": "Focus"
+    },
+    {
+      "input": "\ufeffFocus\ufeff",
+      "label": "Focus"
+    },
+    {
+      "input": "\u00a0Focus\u3000",
+      "label": "Focus"
+    },
+    {
+      "input": "\u1680\u2000Focus\u200a\u202f\u205f",
+      "label": "Focus"
+    },
+    {
+      "input": "Focus\u2028",
+      "label": "Focus"
+    },
+    {
+      "input": "\u2029Focus",
+      "label": "Focus"
+    },
+    {
+      "input": "Project\u00a0Focus",
+      "label": "Project\u00a0Focus"
+    },
+    {
+      "input": "Focus\u202eNext",
+      "label": "Focus\u202eNext"
+    },
+    {
+      "input": "Focus\ufeffNext",
+      "label": "Focus\ufeffNext"
+    },
+    {
+      "input": "e\u0301",
+      "label": "e\u0301"
+    },
+    {
+      "input": "\u200bFocus",
+      "label": "\u200bFocus"
+    },
+    {
+      "input": "\u180eFocus",
+      "label": "\u180eFocus"
+    },
+    {
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "label": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "input": "\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9",
+      "label": "\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9"
+    },
+    {
+      "input": "\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e",
+      "label": "\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e"
+    },
+    {
+      "input": "\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c",
+      "label": "\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c"
+    },
+    {
+      "input": "Project \u00b7 Focus \ud83d\udc3e",
+      "label": "Project \u00b7 Focus \ud83d\udc3e"
+    },
+    {
+      "input": "",
+      "label": null
+    },
+    {
+      "input": " ",
+      "label": null
+    },
+    {
+      "input": "\ufeff",
+      "label": null
+    },
+    {
+      "input": "\ufeff \ufeff",
+      "label": null
+    },
+    {
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "label": null
+    },
+    {
+      "input": "\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9x",
+      "label": null
+    },
+    {
+      "input": "\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e\ud83d\udc3e",
+      "label": null
+    },
+    {
+      "input": "\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c\u754c",
+      "label": null
+    },
+    {
+      "input": "\ud800",
+      "label": null
+    },
+    {
+      "input": "Focus\udbff",
+      "label": null
+    },
+    {
+      "input": "Focus\nNext",
+      "label": null
+    },
+    {
+      "input": "Focus\rNext",
+      "label": null
+    },
+    {
+      "input": "Focus\tNext",
+      "label": null
+    },
+    {
+      "input": "Focus\u001b[31m",
+      "label": null
+    },
+    {
+      "input": "\u001bcontrol",
+      "label": null
+    },
+    {
+      "input": "Focus\u0000",
+      "label": null
+    },
+    {
+      "input": "\u007f",
+      "label": null
+    },
+    {
+      "input": "Focus\u007f",
+      "label": null
+    },
+    {
+      "input": "\u0085",
+      "label": null
+    },
+    {
+      "input": "\u0085Focus",
+      "label": null
+    },
+    {
+      "input": "Focus\u009f",
+      "label": null
+    },
+    {
+      "input": "\u001cFocus",
+      "label": null
+    },
+    {
+      "input": "Focus\u001f",
+      "label": null
+    },
+    {
+      "input": "line\u2028break",
+      "label": null
+    },
+    {
+      "input": "line\u2029break",
+      "label": null
+    }
+  ],
+  "bounds": [
+    {
+      "input": {
+        "x": -10,
+        "y": 20,
+        "width": 900,
+        "height": 560
+      },
+      "valid": true
+    },
+    {
+      "input": {
+        "x": 0,
+        "y": 0,
+        "width": 360,
+        "height": 240
+      },
+      "valid": true
+    },
+    {
+      "input": {
+        "x": 100000,
+        "y": -100000,
+        "width": 100000,
+        "height": 100000
+      },
+      "valid": true
+    },
+    {
+      "input": {
+        "x": 0,
+        "y": 0,
+        "width": 359,
+        "height": 240
+      },
+      "valid": false
+    },
+    {
+      "input": {
+        "x": 0,
+        "y": 0,
+        "width": 360,
+        "height": 239
+      },
+      "valid": false
+    },
+    {
+      "input": {
+        "x": 100001,
+        "y": 0,
+        "width": 360,
+        "height": 240
+      },
+      "valid": false
+    },
+    {
+      "input": {
+        "x": 0,
+        "y": -100001,
+        "width": 360,
+        "height": 240
+      },
+      "valid": false
+    },
+    {
+      "input": {
+        "x": 0,
+        "y": 0,
+        "width": 100001,
+        "height": 240
+      },
+      "valid": false
+    },
+    {
+      "input": {
+        "x": 0,
+        "y": 0,
+        "width": -360,
+        "height": 240
+      },
+      "valid": false
+    },
+    {
+      "input": {
+        "x": 0.5,
+        "y": 0,
+        "width": 360,
+        "height": 240
+      },
+      "valid": false
+    },
+    {
+      "input": {
+        "x": "0",
+        "y": 0,
+        "width": 360,
+        "height": 240
+      },
+      "valid": false
+    },
+    {
+      "input": {
+        "x": true,
+        "y": 0,
+        "width": 360,
+        "height": 240
+      },
+      "valid": false
+    },
+    {
+      "input": {
+        "x": null,
+        "y": 0,
+        "width": 360,
+        "height": 240
+      },
+      "valid": false
+    },
+    {
+      "input": {
+        "x": 0,
+        "y": 0,
+        "width": 360,
+        "height": 240,
+        "extra": 1
+      },
+      "valid": false
+    },
+    {
+      "input": {
+        "x": 0,
+        "y": 0,
+        "width": 360
+      },
+      "valid": false
+    },
+    {
+      "input": [
+        0,
+        0,
+        360,
+        240
+      ],
+      "valid": false
+    },
+    {
+      "input": null,
+      "valid": false
+    }
+  ]
+}
