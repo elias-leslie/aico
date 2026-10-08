@@ -28,6 +28,7 @@ from ..utils.tmux.sessions import (
 
 KEY = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
 GENERATION = re.compile(r"[0-9a-f]{64}\Z")
+CODEX_THREAD_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z")
 DIRECTED_DELIVERY = {"available": False, "reason": "exact_thread_generation_receipt_unqualified"}
 POSITION = {"available": False, "reason": "browser_grid_has_no_pixel_window_bounds"}
 
@@ -40,7 +41,7 @@ class RootError(Exception):
 
 def parse_create(value: Any) -> dict[str, Any]:
     fields = {"requestId", "tool", "projectId", "projectRoot", "initialPrompt", "role",
-              "leadRootReference", "facetCapsuleRef"}
+              "leadRootReference", "facetCapsuleRef", "resumeThreadId"}
     if not isinstance(value, dict) or value.keys() - fields:
         raise RootError(400, "invalid_body")
     for key in ("requestId", "projectId", "role"):
@@ -49,6 +50,10 @@ def parse_create(value: Any) -> dict[str, Any]:
     # Existing A-Term project columns are VARCHAR(64).
     if (len(value["projectId"]) > 64 or not isinstance(value.get("tool"), str)
             or value["tool"] not in {"codex", "claude-code"}):
+        raise RootError(400, "invalid_body")
+    thread_id = value.get("resumeThreadId")
+    if thread_id is not None and (value["tool"] != "codex" or not isinstance(thread_id, str)
+                                 or not CODEX_THREAD_ID.fullmatch(thread_id)):
         raise RootError(400, "invalid_body")
     for key in ("leadRootReference", "facetCapsuleRef"):
         ref = value.get(key)
@@ -65,12 +70,15 @@ def parse_create(value: Any) -> dict[str, Any]:
     except UnicodeEncodeError:
         raise RootError(400, "invalid_body") from None
     return {**value, "leadRootReference": value.get("leadRootReference"),
-            "facetCapsuleRef": value.get("facetCapsuleRef")}
+            "facetCapsuleRef": value.get("facetCapsuleRef"), "resumeThreadId": thread_id}
 
 
 def request_digest(request: dict[str, Any]) -> str:
     fields = ("tool", "projectId", "projectRoot", "initialPrompt", "role",
               "leadRootReference", "facetCapsuleRef")
+    # Preserve fresh-launch receipts, including old retained request tombstones.
+    if request.get("resumeThreadId") is not None:
+        fields += ("resumeThreadId",)
     # Same canonical array and UTF-8 JSON representation as Aico.
     content = json.dumps([request[key] for key in fields], ensure_ascii=False, separators=(",", ":"))
     return hashlib.sha256(content.encode()).hexdigest()
@@ -92,11 +100,13 @@ def launch_argv(request: dict[str, Any]) -> tuple[str, list[str]]:
     # Only the configured native CLI itself qualifies, never a shell/wrapper/fallback.
     if not argv or Path(argv[0]).name != mode or not shutil.which(argv[0]):
         raise RootError(422, "launch_unavailable")
-    # Qualify only established fresh-launch forms. Resume/fork/subcommands or custom
-    # argument grammars must not silently attach a different logical workload.
+    # Qualify only established native configurations. Caller-supplied exact Codex
+    # resume is appended below; configured subcommands/custom grammars stay invalid.
     allowed_tail = ([], ["--dangerously-skip-permissions"]) if mode == "claude" else ([],)
     if argv[1:] not in allowed_tail:
         raise RootError(422, "launch_unavailable")
+    if request.get("resumeThreadId") is not None:
+        argv.extend(["resume", request["resumeThreadId"]])
     return mode, argv
 
 

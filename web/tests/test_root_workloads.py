@@ -23,6 +23,8 @@ from a_term.services import agent_service, lifecycle
 from a_term.services import root_workloads as roots
 from a_term.storage import root_requests
 
+THREAD_ID = "019a63b8-1234-789a-bcde-0123456789ab"
+
 
 @pytest.fixture
 def request_body(tmp_path):
@@ -204,6 +206,90 @@ def test_digest_matches_aico_canonical_array(request_body):
     assert roots.request_digest({**parsed, "requestId": "different"}) == roots.request_digest(parsed)
 
 
+def test_resume_digest_is_canonical_and_preserves_fresh_receipts(request_body):
+    fresh = roots.parse_create(request_body)
+    resumed = roots.parse_create({**request_body, "resumeThreadId": THREAD_ID})
+    content = json.dumps([resumed[k] for k in ("tool", "projectId", "projectRoot", "initialPrompt", "role",
+                            "leadRootReference", "facetCapsuleRef", "resumeThreadId")], separators=(",", ":"))
+    assert roots.request_digest(resumed) == hashlib.sha256(content.encode()).hexdigest()
+    assert roots.request_digest(resumed) != roots.request_digest(fresh)
+    assert roots.request_digest(roots.parse_create({**request_body, "resumeThreadId": None})) == roots.request_digest(fresh)
+
+
+def test_resume_http_replay_and_conflict_are_content_free(owner, request_body):
+    request = {**request_body, "resumeThreadId": THREAD_ID}
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as client:
+        first = client.post("/v1/roots", json=request)
+        assert first.status_code == 200
+        assert client.post("/v1/roots", json=request).json() == first.json()
+        for changed in [{**request, "resumeThreadId": "019a63b8-1234-789a-bcde-0123456789ac"}, request_body]:
+            response = client.post("/v1/roots", json=changed)
+            assert response.status_code == 409
+            assert response.json() == {"error": "request_conflict"}
+        assert THREAD_ID not in first.text
+        assert request["initialPrompt"] not in first.text
+    assert THREAD_ID not in json.dumps(owner[0])
+    owner[2].assert_called_once()
+
+
+@pytest.mark.parametrize("resume_thread", ["", "latest", "--last", "thread-name", THREAD_ID.upper(),
+    THREAD_ID.replace("-", ""), " " + THREAD_ID, THREAD_ID + "\n", THREAD_ID + ";", 123, [], {}])
+def test_resume_rejects_malformed_before_allocation(owner, request_body, resume_thread):
+    with pytest.raises(roots.RootError, match="invalid_body") as error:
+        roots.create({**request_body, "resumeThreadId": resume_thread})
+    assert error.value.status == 400
+    assert not owner[0] and not owner[1]
+    owner[2].assert_not_called()
+
+
+def test_resume_rejects_claude_and_requires_prompt_before_allocation(owner, request_body):
+    request = {**request_body, "resumeThreadId": THREAD_ID}
+    for invalid in [{**request, "tool": "claude-code"}, {**request, "initialPrompt": ""},
+                    {key: value for key, value in request.items() if key != "initialPrompt"}]:
+        with pytest.raises(roots.RootError, match="invalid_body"):
+            roots.create(invalid)
+    assert not owner[0] and not owner[1]
+    owner[2].assert_not_called()
+
+
+def test_resume_reserved_recovery_and_tombstone_never_relaunch(owner, request_body):
+    request = roots.parse_create({**request_body, "resumeThreadId": THREAD_ID})
+    root_requests.reserve(request, roots.request_digest(request), "codex")
+    first = roots.create(request)
+    assert first["status"] == "running"
+    assert roots.create(request) == first
+    root_requests.retire(owner[0][request["requestId"]])
+    assert roots.create(request)["status"] == "ended"
+    owner[2].assert_called_once()
+
+
+def test_resume_ambiguous_launch_never_retries(owner, request_body, monkeypatch):
+    request = {**request_body, "resumeThreadId": THREAD_ID}
+    owner[2].side_effect = subprocess.TimeoutExpired("redacted", 10)
+    monkeypatch.setattr(roots, "_identity", lambda _: ("absent", None, []))
+    first = roots.create(request)
+    assert first["status"] == "uncertain"
+    assert roots.create(request) == first
+    owner[2].assert_called_once()
+
+
+def test_resume_launch_argv_uses_exact_thread_and_configured_native_binary(request_body, monkeypatch):
+    monkeypatch.setattr(roots.shutil, "which", lambda _: "/fixture/codex")
+    monkeypatch.setattr(roots.agent_tools, "get_by_slug", lambda _: {"enabled": True, "command": "/fixture/codex"})
+    request = roots.parse_create({**request_body, "resumeThreadId": THREAD_ID})
+    assert roots.launch_argv(request) == ("codex", ["/fixture/codex", "resume", THREAD_ID])
+
+
+@pytest.mark.parametrize("command", ["claude", "claude --dangerously-skip-permissions"])
+def test_null_resume_keeps_fresh_claude_launch(request_body, monkeypatch, command):
+    monkeypatch.setattr(roots.shutil, "which", lambda _: "/fixture/claude")
+    monkeypatch.setattr(roots.agent_tools, "get_by_slug", lambda _: {"enabled": True, "command": command})
+    request = roots.parse_create({**request_body, "tool": "claude-code", "resumeThreadId": None})
+    assert roots.launch_argv(request) == ("claude", command.split())
+
+
 def test_root_guards_never_resurrect_reset_or_send_keys(monkeypatch):
     monkeypatch.setattr(lifecycle.a_term_store, "get_session", lambda _: {"is_root": True})
     monkeypatch.setattr(root_requests, "for_session", lambda _: {"request_id": "fixture"})
@@ -215,7 +301,9 @@ def test_root_guards_never_resurrect_reset_or_send_keys(monkeypatch):
     create_tmux.assert_not_called()
 
 
-def test_launch_configuration_rejects_disabled_missing_and_shell_wrappers(request_body, monkeypatch):
+@pytest.mark.parametrize("resume_thread", [None, THREAD_ID])
+def test_launch_configuration_rejects_disabled_missing_and_shell_wrappers(request_body, monkeypatch, resume_thread):
+    request_body = roots.parse_create({**request_body, "resumeThreadId": resume_thread})
     monkeypatch.setattr(roots.shutil, "which", lambda _: "/fixture/codex")
     for tool in [None, {"enabled": False}, {"enabled": True, "command": "bash -c codex"},
                  {"enabled": True, "command": "codex ; echo unsafe"},
@@ -224,10 +312,13 @@ def test_launch_configuration_rejects_disabled_missing_and_shell_wrappers(reques
         with pytest.raises(roots.RootError, match="launch_unavailable"):
             roots.launch_argv(request_body)
     monkeypatch.setattr(roots.agent_tools, "get_by_slug", lambda _: {"enabled": True, "command": "codex"})
-    assert roots.launch_argv(request_body) == ("codex", ["codex"])
+    tail = ["resume", resume_thread] if resume_thread else []
+    assert roots.launch_argv(request_body) == ("codex", ["codex", *tail])
 
 
-def test_reservation_sql_never_receives_prompt(request_body):
+@pytest.mark.parametrize("resume_thread", [None, THREAD_ID])
+def test_reservation_sql_never_receives_prompt_or_resume_uuid(request_body, resume_thread):
+    request_body = roots.parse_create({**request_body, "resumeThreadId": resume_thread})
     row = {"request_id": "request-1", "session_id": uuid4(), "pane_id": uuid4()}
     conn = MagicMock()
     cur = conn.cursor.return_value.__enter__.return_value
@@ -236,6 +327,7 @@ def test_reservation_sql_never_receives_prompt(request_body):
         connection.return_value.__enter__.return_value = conn
         root_requests.reserve(request_body, roots.request_digest(request_body), "codex")
     assert request_body["initialPrompt"] not in repr(cur.execute.call_args_list)
+    assert THREAD_ID not in repr(cur.execute.call_args_list)
     assert "ON CONFLICT (request_id) DO NOTHING" in cur.execute.call_args_list[0].args[0]
     conn.commit.assert_called_once()
 
@@ -256,7 +348,8 @@ def test_migration_receipts_survive_deletion_and_follow_verified_head():
 
 @pytest.mark.parametrize("prompt", ["line one\nline two", "quotes ' and \"", "--leading-option",
     "$(touch SHOULD_NOT_EXIST) `touch SHOULD_NOT_EXIST`", "ESC\x1b\tTAB", ";", "unicode é 🐾"])
-def test_initial_launch_exact_argv_in_private_tmux(tmp_path, monkeypatch, prompt):
+@pytest.mark.parametrize("resume_thread", [None, THREAD_ID])
+def test_initial_launch_exact_argv_in_private_tmux(tmp_path, monkeypatch, prompt, resume_thread):
     if shutil.which("tmux") is None:
         pytest.skip("tmux is unavailable")
     socket = f"a-term-root-test-{uuid4().hex}"
@@ -279,13 +372,14 @@ def test_initial_launch_exact_argv_in_private_tmux(tmp_path, monkeypatch, prompt
     monkeypatch.setenv("DATABASE_URL", "fixture-secret")
     root = {"session_id": str(uuid4()), "logical_session_id": "isolated-logical"}
     request = {"projectRoot": str(tmp_path), "initialPrompt": prompt}
+    tail = ["resume", resume_thread] if resume_thread else []
     try:
-        roots.launch(root, request, [sys.executable, str(fixture)])
+        roots.launch(root, request, [sys.executable, str(fixture), *tail])
         deadline = time.monotonic() + 5
         while not output.exists() and time.monotonic() < deadline:
             time.sleep(0.02)
         receipt = json.loads(output.read_text())
-        assert receipt == {"argv": ["--", prompt], "logical": "isolated-logical", "prompt_env": None, "secret": None}
+        assert receipt == {"argv": [*tail, "--", prompt], "logical": "isolated-logical", "prompt_env": None, "secret": None}
         assert not (tmp_path / "SHOULD_NOT_EXIST").exists()
         assert roots.probe(root["session_id"])[0] == "running"
         env = private_run(["tmux", "show-environment", "-t", roots.get_tmux_session_name(root["session_id"])],
