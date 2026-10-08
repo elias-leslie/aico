@@ -142,6 +142,9 @@ describe('registry', () => {
     expect(codex && launchLine(codex)).toBe(
       '/usr/bin/env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 codex --yolo',
     )
+    expect(codex && resumeLaunchLine(codex)).toBe(
+      '/usr/bin/env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 codex --yolo resume --no-daemon',
+    )
     expect(antigravity && launchLine(antigravity)).toBe(
       '/usr/bin/env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 agy --dangerously-skip-permissions',
     )

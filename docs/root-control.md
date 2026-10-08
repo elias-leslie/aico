@@ -28,7 +28,9 @@ Codex is the only implemented adapter: it requires a canonical lowercase UUID;
 Claude and other unsupported resume adapters fail closed. Resume requires a
 sanitized nonempty `initialPrompt` of at most 2000 UTF-8 bytes, allowing only
 tab/newline controls. It launches the configured Codex command followed by
-`resume <UUID> -- <initialPrompt>` in the newly allocated root. The installed
+`resume --no-daemon <UUID> -- <initialPrompt>` in the newly allocated root.
+Codex resume uses standalone mode to avoid the incompatible shared-server menu;
+fresh launches keep their configured daemon behavior. The installed
 `codex resume --help` verifies the UUID and optional prompt positional syntax.
 Claude and ordinary fresh launches keep their existing command forms. Identifiers use
 1–128 characters from letters, numbers, `.`, `_`, `:`, and `-`, beginning with a

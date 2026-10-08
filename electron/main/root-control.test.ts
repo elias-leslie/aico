@@ -497,7 +497,7 @@ describe('private root workload control', () => {
           encoding: 'utf8',
         })
         expect(JSON.parse(result)).toEqual({
-          args: ['--yolo', 'resume', thread, '--', prompt],
+          args: ['--yolo', 'resume', '--no-daemon', thread, '--', prompt],
           prompt: null,
           thread: null,
         })
