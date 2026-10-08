@@ -7,7 +7,7 @@
   "vendorImported": false,
   "unqualifiedRaiiAndClearRemoved": true,
   "reader": {
-    "upstream": "https://github.com/nornagon/crossterm",
+    "upstream": "https://github.com/openai-oss-forks/crossterm",
     "revision": "efa177859fd9623d57b9fe7ae9bf491ae1ac6ec4",
     "artifact": "codex-rs/tui/terminal-admin/crossterm-reader.patch",
     "testsPassed": 6,
