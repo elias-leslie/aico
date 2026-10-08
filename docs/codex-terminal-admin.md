@@ -15,6 +15,7 @@ unshare -Urn python3 scripts/qualify-codex-admin.py --raw
 unshare -Urn python3 scripts/qualify-codex-admin.py
 unshare -Urn python3 scripts/qualify-codex-admin.py --human-draft
 unshare -Urn python3 scripts/qualify-codex-admin.py --human-input
+unshare -Urn python3 scripts/qualify-codex-admin.py --leading-escape
 ```
 
 The fixture has a fresh network namespace with loopback only, fresh Codex state,
@@ -33,6 +34,11 @@ record three repetitions of each case:
 | Bracketed text + one Enter | 0 | `accepted:1`, `exact_text:true` |
 | Bracketed text with a human draft | 1 | `existing human draft merged into accepted text` |
 | Human paste interleaved before Enter | 1 | `human paste between framing and Enter merged into accepted text` |
+
+The additional `--leading-escape` regression succeeds only when it reproduces
+literal `[200~` framing in the synthetic composer without a provider call. It
+reports `qualified:false`, `literal_frame:true` and exits 0 on that assertion.
+The retained qualification receipt above predates this additional case.
 
 The green case includes Unicode, shell punctuation, a newline, and a tab. The
 source burst guard is 120 ms (`codex-rs/tui/src/bottom_pane/paste_burst.rs`,
@@ -79,6 +85,14 @@ worst-case `\uXXXX` encoding of schema-valid 2000-byte text plus bounded pins.
 The tmux helper requires an absolute private socket and exact `%pane` target;
 it frames one paste and one Enter in one command queue. It is a transport
 primitive, not an acceptance receipt or permission to operate a shared pane.
+
+For an owner-authorized, initialized, known-idle pane with an empty draft, send
+the qualified paste and Enter without a leading `Escape`. Adjacent ESC bytes
+can be consumed as one Esc event, leaving `[200~` as literal draft text.
+`C-u` deletes to the current line's start; at an empty line's start it removes
+only the preceding newline. It does not clear the whole draft. Recover a known
+malformed draft with exact backspaces only when its full contents and cursor
+position are known, or have the owner empty the composer before submitting.
 
 ## Disabled native source checkpoint
 

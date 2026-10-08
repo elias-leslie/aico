@@ -39,6 +39,7 @@ def main():
     parser.add_argument("--raw", action="store_true", help="assert raw text + immediate Enter delivery (expected red)")
     parser.add_argument("--human-draft", action="store_true", help="stage a concurrent draft (expected exact-text red)")
     parser.add_argument("--human-input", action="store_true", help="inject human input between paste and Enter (expected red)")
+    parser.add_argument("--leading-escape", action="store_true", help="assert a leading Escape leaks literal paste framing")
     args = parser.parse_args()
     # Refuse to run where external traffic or a shared daemon could be reached.
     routes = json.loads(subprocess.run(["ip", "-json", "route", "show"], check=True,
@@ -110,7 +111,7 @@ trust_level = "trusted"
                 return subprocess.run(["tmux", "-S", tmux_socket, *command],
                                       capture_output=True, check=True, timeout=3).stdout.decode()
 
-            def submit(text, human_input=False):
+            def submit(text, human_input=False, leading_escape=False):
                 # Exercise the owning production framing helper, not a fixture copy.
                 module = (Path(__file__).resolve().parents[1] / "electron/main/tmux.ts").as_uri()
                 source = (f"import {{bracketedSubmitTextTargetArgs}} from {json.dumps(module)};"
@@ -118,6 +119,8 @@ trust_level = "trusted"
                           "{socket:process.argv[1],session:process.argv[2]},process.argv[3])))")
                 argv = json.loads(subprocess.run(["node", "--experimental-strip-types", "--input-type=module", "-e", source,
                                                   tmux_socket, "%0", text], check=True, capture_output=True).stdout)
+                if leading_escape:
+                    argv[2:2] = ["send-keys", "-t", "%0", "Escape", ";"]
                 if human_input:
                     argv[-4:-4] = ["send-keys", "-t", "%0", "-l", "\x1b[200~H\x1b[201~", ";"]
                 subprocess.run(["tmux", *argv], capture_output=True, check=True, timeout=3)
@@ -137,6 +140,14 @@ trust_level = "trusted"
                 time.sleep(0.3)
                 version = subprocess.run([args.codex, "--version"], check=True, capture_output=True).stdout.decode().strip()
                 print(json.dumps({"version": version, "fixture": "network_namespace_private_tmux", "ready": True}), flush=True)
+                if args.leading_escape:
+                    submit("Synthetic framing probe.", leading_escape=True)
+                    wait_for(lambda: "[200~Synthetic framing probe." in screen(),
+                             "leading Escape did not reproduce literal paste framing", timeout=2)
+                    assert not receipts, "malformed framing unexpectedly delivered a message"
+                    print(json.dumps({"qualified": False, "reason": "leading_escape_consumed_paste_opener",
+                                      "literal_frame": True, "provider_calls": 0}), flush=True)
+                    return
                 payload = "Synthetic fixture submission with punctuation ; $() and Unicode café.\nSecond line\twith tabs."
                 expected = hashlib.sha256(payload.encode()).hexdigest()
                 if args.human_draft:
