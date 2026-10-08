@@ -104,6 +104,8 @@ def test_terminal_states(screen, expected):
 
 
 @pytest.mark.parametrize("suffix", [
+    "1 background terminal running · /ps to view · /stop to close",
+    "2 background terminals running · /ps to view · /stop to close",
     "1 background terminal running",
     "1 background terminal running...",
     "1 background terminal running…",
@@ -123,6 +125,7 @@ def test_working_with_background_terminal_status_is_busy(suffix):
     "Worked for 15s\nWorking toward a summary · 1 background terminal running...\n› ",
     "Worked for 15s\n• Working (2m 25s • esc to interrupt) · unrelated prose\n› ",
     "Worked for 15s\n• Working (2m 25s • esc to interrupt) · 1 background terminal running soon\n› ",
+    "Worked for 15s\n• Working (2m 25s • esc to interrupt) · 1 background terminal running · /ps to view · unrelated prose\n› ",
     "Worked for 15s\n> • Working (2m 25s • esc to interrupt) · 1 background terminal running...\n› ",
     "Worked for 15s\n```text\n• Working (2m 25s • esc to interrupt) · 1 background terminal running...\n```\n› ",
     "• Working (2m 25s • esc to interrupt) · 1 background terminal running...\nWorked for 15s\n› ",
