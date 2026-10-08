@@ -255,22 +255,6 @@ body.thinking {
   -webkit-app-region: no-drag;
 }
 
-.compose-toggle {
-  -webkit-app-region: no-drag;
-  flex: 0 0 auto;
-  width: 26px;
-  height: 22px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--lantern);
-  font: 18px var(--font-ui);
-  cursor: pointer;
-}
-.compose-toggle:hover,
-.compose-toggle[aria-expanded="true"] {
-  color: var(--bone);
-}
 .draft-composer {
   -webkit-app-region: no-drag;
   flex: 0 0 auto;

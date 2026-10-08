@@ -20,13 +20,12 @@ export function wireDraftInput(
   layoutChanged: () => void,
 ): void {
   const section = document.querySelector<HTMLElement>('#draft-composer')
-  const toggle = document.querySelector<HTMLButtonElement>('#compose-toggle')
   const editor = document.querySelector<HTMLTextAreaElement>('#draft-text')
   const insert = document.querySelector<HTMLButtonElement>('#draft-insert')
   const send = document.querySelector<HTMLButtonElement>('#draft-send')
   const close = document.querySelector<HTMLButtonElement>('#draft-close')
   const status = document.querySelector<HTMLElement>('#draft-status')
-  if (!section || !toggle || !editor || !insert || !send || !close || !status) {
+  if (!section || !editor || !insert || !send || !close || !status) {
     throw new Error('draft composer controls missing')
   }
 
@@ -43,18 +42,15 @@ export function wireDraftInput(
   }
   const show = (): void => {
     section.hidden = false
-    toggle.setAttribute('aria-expanded', 'true')
     update()
     layoutChanged()
     editor.focus()
   }
   const hide = (): void => {
     section.hidden = true
-    toggle.setAttribute('aria-expanded', 'false')
     layoutChanged()
     term.focus()
   }
-  toggle.addEventListener('click', () => (section.hidden ? show() : hide()))
   close.addEventListener('click', hide)
   window.addEventListener('aico:compose-open', show)
   editor.addEventListener('input', () => {

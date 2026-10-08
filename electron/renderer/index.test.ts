@@ -11,17 +11,18 @@ describe('renderer status confirmation', () => {
     expect(toast).toContain('aria-atomic="true"')
   })
 
-  it('keeps pinned actions and compose directly in the titlebar', () => {
+  it('keeps actions in the pin-controlled titlebar cluster', () => {
     const html = readFileSync(new URL('./index.html', import.meta.url), 'utf8')
     const titlebar = html.slice(html.indexOf('<header'), html.indexOf('</header>'))
 
-    for (const id of ['pinned', 'compose-toggle', 'lantern-menu-btn']) {
+    for (const id of ['pinned', 'lantern-menu-btn']) {
       expect(titlebar).toContain(`id="${id}"`)
     }
     expect(titlebar).not.toContain('titlebar-secondary')
     expect(titlebar).not.toContain('titlebar-more')
     expect(titlebar).not.toContain('titlebar-essential')
     expect(titlebar).not.toContain('inert')
+    expect(titlebar).not.toContain('compose-toggle')
     expect(html).toContain('aria-label="Session name"')
   })
 })

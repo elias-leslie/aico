@@ -9,7 +9,6 @@
   gap: 2px;
   -webkit-app-region: no-drag;
 }
-.compose-toggle:focus-visible,
 .aico-pin-icon:focus-visible,
 .lantern-glyph:focus-visible {
   outline: 1px solid var(--lantern);
