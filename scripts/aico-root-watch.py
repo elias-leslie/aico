@@ -49,7 +49,8 @@ EMPTY_PROMPTS = {"", "Ask Codex to do anything"}
 WORKED = re.compile(r"^[─━\s]*(?:[•●]\s*)?Worked for\s+\S.+$", re.I)
 ACTIVE = re.compile(
     r"^[\s•●◦✻✽✶✳⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]*"
-    r"(?:(?:Working|Compacting context)(?:…|\.\.\.)?(?:\s*\([^)]*\))?|"
+    r"(?:(?:Working|Compacting context)(?:…|\.\.\.)?(?:\s*\([^)]*\))?"
+    r"(?:\s*·\s*\d+\s+background terminals? running(?:…|\.\.\.)?)?|"
     r"(?:Running|Calling|Executing|Thinking|Searching|Reading|Editing|Testing)\b.*"
     r"(?:esc to interrupt|\btool\b|\([^)]*\)))\s*$", re.I,
 )

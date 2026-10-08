@@ -94,12 +94,42 @@ def test_closed_connection_body_checks_stop_before_each_chunk(monkeypatch, stop)
     ("Compacting context (45s • esc to interrupt)\nMaking room to continue.\n› ", "busy"),
     ("• Running tool (5s • esc to interrupt)\n› ", "busy"),
     ("• Working\n› ", "busy"),
+    ("• Working (43s • esc to interrupt)\n\n› Ask Codex to do anything", "busy"),
     ("› ", "awaiting_input"),
     ("Cropped answer without current chrome", "ambiguous"),
     ("Worked for 5s\nThe answer is still redrawing", "ambiguous"),
 ])
 def test_terminal_states(screen, expected):
     assert classify(screen)["terminal"] == expected
+
+
+@pytest.mark.parametrize("suffix", [
+    "1 background terminal running",
+    "1 background terminal running...",
+    "1 background terminal running…",
+    "2 background terminals running",
+    "2 background terminals running...",
+    "2 background terminals running…",
+])
+def test_working_with_background_terminal_status_is_busy(suffix):
+    state = classify(
+        "Worked for 15s\n› earlier submission\n"
+        f"• Working (2m 25s • esc to interrupt) · {suffix}\n› "
+    )
+    assert state["terminal"] == "busy"
+
+
+@pytest.mark.parametrize("screen", [
+    "Worked for 15s\nWorking toward a summary · 1 background terminal running...\n› ",
+    "Worked for 15s\n• Working (2m 25s • esc to interrupt) · unrelated prose\n› ",
+    "Worked for 15s\n• Working (2m 25s • esc to interrupt) · 1 background terminal running soon\n› ",
+    "Worked for 15s\n> • Working (2m 25s • esc to interrupt) · 1 background terminal running...\n› ",
+    "Worked for 15s\n```text\n• Working (2m 25s • esc to interrupt) · 1 background terminal running...\n```\n› ",
+    "• Working (2m 25s • esc to interrupt) · 1 background terminal running...\nWorked for 15s\n› ",
+    "Worked for 15s\n› staged draft\n• Working (2m 25s • esc to interrupt) · 1 background terminal running...\nContext 80% left",
+])
+def test_background_terminal_status_outside_current_chrome_is_not_busy(screen):
+    assert classify(screen)["terminal"] == "turn_finished"
 
 
 def test_low_context_is_advisory_and_not_incomplete():
