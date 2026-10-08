@@ -14,7 +14,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from ..cli.root_launch import PROMPT_ENV
 from ..config import TMUX_DEFAULT_COLS, TMUX_DEFAULT_ROWS
@@ -28,7 +28,6 @@ from ..utils.tmux.sessions import (
 
 KEY = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
 GENERATION = re.compile(r"[0-9a-f]{64}\Z")
-CODEX_THREAD_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z")
 DIRECTED_DELIVERY = {"available": False, "reason": "exact_thread_generation_receipt_unqualified"}
 POSITION = {"available": False, "reason": "browser_grid_has_no_pixel_window_bounds"}
 
@@ -39,9 +38,40 @@ class RootError(Exception):
         super().__init__(error)
 
 
+class _ResumeAdapter(Protocol):
+    def valid_id(self, value: Any) -> bool: ...
+
+    def launch_argv(self, configured_argv: list[str], session_id: str) -> list[str]: ...
+
+
+class _CodexResumeAdapter:
+    """Codex owns its exact session identity grammar and native resume command."""
+
+    _session_id = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z")
+
+    def valid_id(self, value: Any) -> bool:
+        return isinstance(value, str) and self._session_id.fullmatch(value) is not None
+
+    def launch_argv(self, configured_argv: list[str], session_id: str) -> list[str]:
+        return [*configured_argv, "resume", session_id]
+
+
+_RESUME_ADAPTERS: dict[str, _ResumeAdapter] = {"codex": _CodexResumeAdapter()}
+
+
+def _resume_adapter(request: dict[str, Any]) -> _ResumeAdapter | None:
+    session_id = request.get("resumeSessionId")
+    if session_id is None:
+        return None
+    adapter = _RESUME_ADAPTERS.get(request["tool"])
+    if adapter is None or not adapter.valid_id(session_id):
+        raise RootError(400, "invalid_body")
+    return adapter
+
+
 def parse_create(value: Any) -> dict[str, Any]:
     fields = {"requestId", "tool", "projectId", "projectRoot", "initialPrompt", "role",
-              "leadRootReference", "facetCapsuleRef", "resumeThreadId"}
+              "leadRootReference", "facetCapsuleRef", "resumeSessionId"}
     if not isinstance(value, dict) or value.keys() - fields:
         raise RootError(400, "invalid_body")
     for key in ("requestId", "projectId", "role"):
@@ -51,10 +81,7 @@ def parse_create(value: Any) -> dict[str, Any]:
     if (len(value["projectId"]) > 64 or not isinstance(value.get("tool"), str)
             or value["tool"] not in {"codex", "claude-code"}):
         raise RootError(400, "invalid_body")
-    thread_id = value.get("resumeThreadId")
-    if thread_id is not None and (value["tool"] != "codex" or not isinstance(thread_id, str)
-                                 or not CODEX_THREAD_ID.fullmatch(thread_id)):
-        raise RootError(400, "invalid_body")
+    _resume_adapter(value)
     for key in ("leadRootReference", "facetCapsuleRef"):
         ref = value.get(key)
         if ref is not None and (not isinstance(ref, str) or not KEY.fullmatch(ref)):
@@ -70,21 +97,22 @@ def parse_create(value: Any) -> dict[str, Any]:
     except UnicodeEncodeError:
         raise RootError(400, "invalid_body") from None
     return {**value, "leadRootReference": value.get("leadRootReference"),
-            "facetCapsuleRef": value.get("facetCapsuleRef"), "resumeThreadId": thread_id}
+            "facetCapsuleRef": value.get("facetCapsuleRef"), "resumeSessionId": value.get("resumeSessionId")}
 
 
 def request_digest(request: dict[str, Any]) -> str:
     fields = ("tool", "projectId", "projectRoot", "initialPrompt", "role",
               "leadRootReference", "facetCapsuleRef")
     # Preserve fresh-launch receipts, including old retained request tombstones.
-    if request.get("resumeThreadId") is not None:
-        fields += ("resumeThreadId",)
+    if request.get("resumeSessionId") is not None:
+        fields += ("resumeSessionId",)
     # Same canonical array and UTF-8 JSON representation as Aico.
     content = json.dumps([request[key] for key in fields], ensure_ascii=False, separators=(",", ":"))
     return hashlib.sha256(content.encode()).hexdigest()
 
 
 def launch_argv(request: dict[str, Any]) -> tuple[str, list[str]]:
+    resume = _resume_adapter(request)
     mode = "claude" if request["tool"] == "claude-code" else "codex"
     tool = agent_tools.get_by_slug(mode)
     if not tool or not tool.get("enabled") or not Path(request["projectRoot"]).is_dir():
@@ -100,13 +128,13 @@ def launch_argv(request: dict[str, Any]) -> tuple[str, list[str]]:
     # Only the configured native CLI itself qualifies, never a shell/wrapper/fallback.
     if not argv or Path(argv[0]).name != mode or not shutil.which(argv[0]):
         raise RootError(422, "launch_unavailable")
-    # Qualify only established native configurations. Caller-supplied exact Codex
-    # resume is appended below; configured subcommands/custom grammars stay invalid.
+    # Qualify only established native configurations. The tool's resume adapter
+    # constructs exact resume argv; configured subcommands/custom grammars stay invalid.
     allowed_tail = ([], ["--dangerously-skip-permissions"]) if mode == "claude" else ([],)
     if argv[1:] not in allowed_tail:
         raise RootError(422, "launch_unavailable")
-    if request.get("resumeThreadId") is not None:
-        argv.extend(["resume", request["resumeThreadId"]])
+    if resume is not None:
+        argv = resume.launch_argv(argv, request["resumeSessionId"])
     return mode, argv
 
 
