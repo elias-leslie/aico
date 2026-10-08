@@ -84,7 +84,7 @@ import {
   refreshProjects,
   widgetCwd,
 } from './project'
-import { createRootServer, guiSocketPath } from './root-control'
+import { createRootServer, guiSocketPath, rootTitleOperation } from './root-control'
 import {
   initialLaunchLine,
   rootLaunchEnvironment,
@@ -2962,6 +2962,13 @@ async function rootViewOperation(
   }
 }
 
+async function rootManagedGateState(row: WidgetRow): Promise<ManagedGateState | null> {
+  if ((await internalSessionState(row.id)) !== 'present') return null
+  const pane = await verifiedCurrentManagedPane(row)
+  const identity = row.scopeUnit ? await scopeIdentity(row.scopeUnit) : null
+  return pane && identity ? managedGateState(pane, identity.controlGroup) : null
+}
+
 function discardWidget(id: string): void {
   widgetRetireIntents.request(id)
   drainWidgetRetire(id)
@@ -4286,12 +4293,11 @@ app.whenReady().then(async () => {
       }
     },
     status: async (row) => {
-      if ((await internalSessionState(row.id)) === 'present' && row.launchState === 'dispatched') {
-        const pane = await verifiedCurrentManagedPane(row)
-        const identity = row.scopeUnit ? await scopeIdentity(row.scopeUnit) : null
-        if (pane && identity && managedGateState(pane, identity.controlGroup) === 'active-workload')
-          return 'running'
-      }
+      if (
+        row.launchState === 'dispatched' &&
+        (await rootManagedGateState(row)) === 'active-workload'
+      )
+        return 'running'
       return isNeverAllocatedWidget(row) ? 'pending' : 'uncertain'
     },
     show: (widgetId, generation) =>
@@ -4313,10 +4319,16 @@ app.whenReady().then(async () => {
         }
       }),
     title: (widgetId, generation, label) =>
-      rootViewOperation(widgetId, generation, (row) => {
-        setWidgetName(row.id, label)
-        pushTitles()
-        syncTray()
+      rootTitleOperation(widgetId, generation, {
+        acquire: (id) => lifecycleOwners.acquire(id),
+        release: releaseLifecycleOwner,
+        getWidget,
+        gateState: rootManagedGateState,
+        rename: (row) => {
+          setWidgetName(row.id, label)
+          pushTitles()
+          syncTray()
+        },
       }),
   })
   try {

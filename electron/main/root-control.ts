@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { isAbsolute, normalize } from 'node:path'
+import type { LifecycleOwnerToken, ManagedGateState } from './lifecycle-guard'
 import { ownerSocketPath } from './owner-control'
 import { sessionGeneration } from './owner-retirement'
 import {
@@ -42,6 +43,39 @@ export interface RootControlOperations {
   show(widgetId: string, generation: string): Promise<boolean>
   position(widgetId: string, generation: string, bounds: Bounds): Promise<boolean>
   title(widgetId: string, generation: string, label: string): Promise<boolean>
+}
+
+/** Verify running evidence under lifecycle ownership before writing root metadata. */
+export async function rootTitleOperation(
+  widgetId: string,
+  generation: string,
+  operations: {
+    acquire(widgetId: string): LifecycleOwnerToken | null
+    release(widgetId: string, owner: LifecycleOwnerToken): void
+    getWidget(widgetId: string): WidgetRow | undefined
+    gateState(row: WidgetRow): Promise<ManagedGateState | null>
+    rename(row: WidgetRow): void
+  },
+): Promise<boolean> {
+  const owner = operations.acquire(widgetId)
+  if (!owner) return false
+  try {
+    const row = operations.getWidget(widgetId)
+    if (
+      !row ||
+      sessionGeneration(row) !== generation ||
+      row.launchState !== 'dispatched' ||
+      (await operations.gateState(row)) !== 'active-workload'
+    )
+      return false
+    const latest = operations.getWidget(widgetId)
+    if (!latest || sessionGeneration(latest) !== generation || latest.launchState !== 'dispatched')
+      return false
+    operations.rename(latest)
+    return true
+  } finally {
+    operations.release(widgetId, owner)
+  }
 }
 
 type RootAdminRequest = {

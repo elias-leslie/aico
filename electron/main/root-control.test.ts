@@ -6,9 +6,16 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { LifecycleOwnerLock, type ManagedGateState } from './lifecycle-guard'
 import { listenOwnerServer } from './owner-control'
 import { sessionGeneration } from './owner-retirement'
-import { createRootServer, guiSocketPath, parseRootCreate, rootRequestDigest } from './root-control'
+import {
+  createRootServer,
+  guiSocketPath,
+  parseRootCreate,
+  rootRequestDigest,
+  rootTitleOperation,
+} from './root-control'
 import {
   initialLaunchLine,
   rootLaunchEnvironment,
@@ -23,6 +30,7 @@ import {
   removeWidget,
   reserveRootRequest,
   rootRequestForWidget,
+  type WidgetRow,
 } from './store'
 import { registerBuiltinTuis } from './tui/registry'
 import { codexTui } from './tui/tuis/codex'
@@ -202,6 +210,93 @@ describe('private root workload control', () => {
       expect((await call(path, 'POST', { generation, label })).status).toBe(400)
     }
     expect((await call(path, 'POST', { generation, label: 'Neri', extra: true })).status).toBe(400)
+  })
+
+  it('writes root metadata only for an actively dispatched workload under lifecycle ownership', async () => {
+    const root = present(getRootRequest('target-1'))
+    const row = { ...present(getWidget(root.widgetId)), launchState: 'dispatched' as const }
+    const generation = sessionGeneration(row)
+    const owners = new LifecycleOwnerLock()
+    const rename = vi.fn(() => expect(owners.isHeld(row.id)).toBe(true))
+    let gateState: ManagedGateState | null = 'active-workload'
+    let current: WidgetRow = row
+    const verify = vi.fn(async () => {
+      expect(owners.isHeld(row.id)).toBe(true)
+      return gateState
+    })
+    const operations = {
+      acquire: (id: string) => owners.acquire(id),
+      release: (_id: string, owner: NonNullable<ReturnType<typeof owners.acquire>>) => {
+        owners.release(owner)
+      },
+      getWidget: () => current,
+      gateState: verify,
+      rename,
+    }
+    for (const launchState of ['none', 'gated'] as const) {
+      current = { ...row, launchState }
+      expect(await rootTitleOperation(row.id, sessionGeneration(current), operations)).toBe(false)
+      expect(verify).not.toHaveBeenCalled()
+      expect(rename).not.toHaveBeenCalled()
+      expect(owners.isHeld(row.id)).toBe(false)
+    }
+    current = row
+    for (const state of ['inert', 'ambiguous', null] as const) {
+      gateState = state
+      expect(await rootTitleOperation(row.id, generation, operations)).toBe(false)
+      expect(rename).not.toHaveBeenCalled()
+      expect(owners.isHeld(row.id)).toBe(false)
+    }
+    gateState = 'active-workload'
+    expect(await rootTitleOperation(row.id, generation, operations)).toBe(true)
+    expect(rename).toHaveBeenCalledExactlyOnceWith(row)
+    expect(owners.isHeld(row.id)).toBe(false)
+  })
+
+  it('keeps title writes fenced after running verification and releases ownership on failure', async () => {
+    const root = present(getRootRequest('target-1'))
+    const row = { ...present(getWidget(root.widgetId)), launchState: 'dispatched' as const }
+    const generation = sessionGeneration(row)
+    const owners = new LifecycleOwnerLock()
+    let current: WidgetRow | undefined = row
+    const rename = vi.fn()
+    const verify = vi.fn(async (): Promise<ManagedGateState> => 'active-workload')
+    const operations = {
+      acquire: (id: string) => owners.acquire(id),
+      release: (_id: string, owner: NonNullable<ReturnType<typeof owners.acquire>>) => {
+        owners.release(owner)
+      },
+      getWidget: () => current,
+      gateState: verify,
+      rename,
+    }
+    const competingOwner = present(owners.acquire(row.id))
+    expect(await rootTitleOperation(row.id, generation, operations)).toBe(false)
+    expect(verify).not.toHaveBeenCalled()
+    owners.release(competingOwner)
+    expect(await rootTitleOperation(row.id, '0'.repeat(64), operations)).toBe(false)
+    expect(verify).not.toHaveBeenCalled()
+    for (const replacement of [
+      undefined,
+      { ...row, scopeInvocationId: 'replacement' },
+      { ...row, launchState: 'gated' as const },
+    ]) {
+      current = row
+      verify.mockImplementationOnce(async () => {
+        current = replacement
+        return 'active-workload'
+      })
+      expect(await rootTitleOperation(row.id, generation, operations)).toBe(false)
+      expect(rename).not.toHaveBeenCalled()
+      expect(owners.isHeld(row.id)).toBe(false)
+    }
+    current = row
+    verify.mockRejectedValueOnce(new Error('verification failed'))
+    await expect(rootTitleOperation(row.id, generation, operations)).rejects.toThrow(
+      'verification failed',
+    )
+    expect(rename).not.toHaveBeenCalled()
+    expect(owners.isHeld(row.id)).toBe(false)
   })
 
   it('explicitly reports GUI and directed-delivery unavailability without steering', async () => {
