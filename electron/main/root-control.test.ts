@@ -1,4 +1,5 @@
 import { execFile, execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { mkdtempSync, rmSync, statSync } from 'node:fs'
 import { request } from 'node:http'
 import { tmpdir } from 'node:os'
@@ -23,6 +24,8 @@ import {
   reserveRootRequest,
   rootRequestForWidget,
 } from './store'
+import { registerBuiltinTuis } from './tui/registry'
+import { codexTui } from './tui/tuis/codex'
 
 function present<T>(value: T | null | undefined): T {
   if (value === undefined || value === null) throw new Error('fixture value missing')
@@ -53,6 +56,7 @@ describe('private root workload control', () => {
     position,
   })
   beforeAll(async () => {
+    registerBuiltinTuis()
     initStore(database)
     await listenOwnerServer(server, socket)
   })
@@ -74,6 +78,7 @@ describe('private root workload control', () => {
     path: string,
     method = 'GET',
     payload?: unknown,
+    encode: (value: unknown) => string = JSON.stringify,
   ): Promise<{ status: number; body: Record<string, unknown> }> =>
     new Promise((resolve, reject) => {
       const client = request({ socketPath: socket, path, method }, (response) => {
@@ -86,7 +91,7 @@ describe('private root workload control', () => {
         )
       })
       client.once('error', reject)
-      client.end(payload === undefined ? undefined : JSON.stringify(payload))
+      client.end(payload === undefined ? undefined : encode(payload))
     })
 
   it('uses owner-only socket permissions and a separate GUI locator', () => {
@@ -265,6 +270,34 @@ describe('private root workload control', () => {
     expect(sessionGeneration(before)).toBe(sessionGeneration(after))
   })
 
+  it('accepts every bounded UTF-8 admin text with JSON escaping at the body boundary', async () => {
+    const root = present(getRootRequest('target-1'))
+    const pin = {
+      kind: 'submit',
+      requestKey: 'x'.repeat(128),
+      generation: sessionGeneration(present(getWidget(root.widgetId))),
+      expectedThreadId: '00000000-0000-4000-8000-000000000001',
+    }
+    const ascii = (value: unknown) =>
+      JSON.stringify(value)
+        .replace(
+          /[\u007f-\uffff]/g,
+          (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`,
+        )
+        .replace(/\\n/g, '\\u000a')
+        .replace(/\\t/g, '\\u0009')
+    for (const text of ['界'.repeat(666) + 'ab', 'x' + '\n\t'.repeat(999) + '\n']) {
+      expect(Buffer.byteLength(text)).toBe(2000)
+      const result = await call('/v1/roots/target-1/admin', 'POST', { ...pin, text }, ascii)
+      expect(result.status).toBe(503)
+      expect(result.body.applied).toBe(false)
+      expect(JSON.stringify(result.body)).not.toContain(text)
+    }
+    expect(
+      (await call('/v1/roots/target-1/admin', 'POST', { ...pin, text: '界'.repeat(667) })).status,
+    ).toBe(400)
+  })
+
   it('serves the actual ST owner executable through the isolated private socket', async () => {
     const root = present(getRootRequest('target-1'))
     const generation = sessionGeneration(present(getWidget(root.widgetId)))
@@ -317,6 +350,21 @@ describe('private root workload control', () => {
     expect(rootRequestDigest(parsed)).toBe(
       rootRequestDigest(present(parseRootCreate({ ...input }))),
     )
+    expect(rootRequestDigest(parsed)).toBe(
+      createHash('sha256')
+        .update(
+          JSON.stringify([
+            input.tool,
+            input.projectId,
+            input.projectRoot,
+            input.initialPrompt,
+            input.role,
+            input.leadRootReference,
+            null,
+          ]),
+        )
+        .digest('hex'),
+    )
     expect(rootRequestDigest(parsed)).not.toBe(rootRequestDigest({ ...parsed, role: 'support' }))
     expect(rootRequestDigest(parsed)).not.toBe(
       rootRequestDigest({ ...parsed, leadRootReference: null }),
@@ -360,6 +408,7 @@ describe('private root workload control', () => {
       ST_SESSION_ID: root.logicalSessionId,
       AICO_ROOT_INITIAL_LAUNCH: '0',
       AICO_ROOT_INITIAL_PROMPT: '',
+      AICO_ROOT_RESUME_SESSION_ID: '',
     })
     const replacementResult = execFileSync(
       '/bin/bash',
@@ -380,6 +429,123 @@ describe('private root workload control', () => {
     } finally {
       reader.close()
     }
+  })
+
+  it('validates exact Codex resume and retains idempotency across resume conflicts', async () => {
+    const thread = '00000000-0000-4000-8000-000000000001'
+    const input = { ...create('resume-exact'), resumeSessionId: thread }
+    for (const invalid of [
+      '',
+      'last',
+      thread.toUpperCase().replace('00000001', '0000000A'),
+      `${thread};echo x`,
+    ]) {
+      expect(parseRootCreate({ ...input, resumeSessionId: invalid })).toBeNull()
+    }
+    expect(parseRootCreate({ ...input, tool: 'claude-code' })).toBeNull()
+    expect(parseRootCreate({ ...input, initialPrompt: 'x\runsafe' })).toBeNull()
+    expect(parseRootCreate({ ...input, initialPrompt: 'x'.repeat(2001) })).toBeNull()
+    expect(rootRequestDigest(present(parseRootCreate({ ...input, resumeSessionId: null })))).toBe(
+      rootRequestDigest(present(parseRootCreate(create('resume-exact')))),
+    )
+    const first = await call('/v1/roots', 'POST', input)
+    const retry = await call('/v1/roots', 'POST', input)
+    expect(first.status).toBe(200)
+    expect(retry).toEqual(first)
+    expect(ensure).toHaveBeenLastCalledWith(first.body.hostIdentity, input.initialPrompt, thread)
+    for (const changed of [
+      { ...input, resumeSessionId: '00000000-0000-4000-8000-000000000002' },
+      create('resume-exact'),
+      { ...input, initialPrompt: 'changed recovery instruction' },
+    ]) {
+      expect((await call('/v1/roots', 'POST', changed)).status).toBe(409)
+    }
+  })
+
+  it('launches exact resume argv once through the fresh gate and clears transient variables', async () => {
+    const root = present(getRootRequest('resume-exact'))
+    const thread = '00000000-0000-4000-8000-000000000001'
+    const prompt = "-option\n$(printf injected) 'quoted' 界"
+    const tool = {
+      slug: 'codex',
+      resume: codexTui.resume,
+      displayName: 'fixture',
+      icon: '',
+      accent: '',
+      enabled: true,
+      order: 0,
+      command: [
+        '/usr/bin/python3',
+        '-c',
+        'import json,os,sys; print(json.dumps({"args":sys.argv[1:],"prompt":os.getenv("AICO_ROOT_INITIAL_PROMPT"),"thread":os.getenv("AICO_ROOT_RESUME_SESSION_ID")}))',
+        '--yolo',
+      ],
+      processName: 'python3',
+    }
+    await withRootPrompt(
+      root.widgetId,
+      prompt,
+      async () => {
+        const environment = rootLaunchEnvironment(root.widgetId)
+        expect(environment.AICO_ROOT_RESUME_SESSION_ID).toBe(thread)
+        const line = present(initialLaunchLine(root.widgetId, tool))
+        expect(line).not.toContain(prompt)
+        expect(line).not.toContain(thread)
+        const result = execFileSync('/bin/bash', ['--noprofile', '--norc', '-c', line], {
+          env: { PATH: '/usr/bin:/bin', ...environment },
+          encoding: 'utf8',
+        })
+        expect(JSON.parse(result)).toEqual({
+          args: ['--yolo', 'resume', thread, '--', prompt],
+          prompt: null,
+          thread: null,
+        })
+      },
+      thread,
+    )
+    expect(rootLaunchEnvironment(root.widgetId).AICO_ROOT_RESUME_SESSION_ID).toBe('')
+    expect(rootPromptReady(root.widgetId)).toBe(false)
+  })
+
+  it('serves exact-create retries and conflicts through the real owner CLI and private socket', async () => {
+    const invoke = (prompt: string) =>
+      new Promise<{ code: string | number; body: Record<string, unknown> }>((resolve, reject) => {
+        execFile(
+          '/usr/bin/python3',
+          [
+            join(process.cwd(), 'scripts/aico-root-watch.py'),
+            'create',
+            'cli-recovery',
+            prompt,
+            '--project',
+            'neri',
+            '--project-root',
+            fixture,
+            '--resume-session',
+            '00000000-0000-4000-8000-000000000001',
+            '--root-socket',
+            socket,
+          ],
+          { encoding: 'utf8' },
+          (error, stdout) => {
+            try {
+              resolve({ code: error?.code ?? 0, body: JSON.parse(stdout) })
+            } catch (failure) {
+              reject(failure)
+            }
+          },
+        )
+      })
+    const first = await invoke('Reconcile fixture state after crash.')
+    expect(first.code).toBe(0)
+    expect(first.body).toMatchObject({
+      owner: 'aico',
+      requestId: 'cli-recovery',
+      status: 'running',
+    })
+    expect(JSON.stringify(first.body)).not.toContain('Reconcile fixture')
+    expect(await invoke('Reconcile fixture state after crash.')).toEqual(first)
+    expect((await invoke('Changed fixture recovery prompt.')).body.reason).toBe('request_conflict')
   })
 
   it('rolls back a widget and reservation together on catalog conflict', () => {

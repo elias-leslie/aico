@@ -21,12 +21,23 @@ routes. Root control never starts the desktop runtime.
 
 Create accepts exactly `requestId`, `tool` (`codex` or `claude-code`),
 `projectId`, absolute normalized `projectRoot`, nonempty `initialPrompt`, `role`,
-and optional opaque `leadRootReference` and `facetCapsuleRef`. Identifiers use
+and optional opaque `leadRootReference`, `facetCapsuleRef`, and `resumeSessionId`.
+`resumeSessionId` is either absent/null (the existing fresh launch) or an exact
+native session ID validated by the selected TUI's declarative resume capability.
+Codex is the only implemented adapter: it requires a canonical lowercase UUID;
+Claude and other unsupported resume adapters fail closed. Resume requires a
+sanitized nonempty `initialPrompt` of at most 2000 UTF-8 bytes, allowing only
+tab/newline controls. It launches the configured Codex command followed by
+`resume <UUID> -- <initialPrompt>` in the newly allocated root. The installed
+`codex resume --help` verifies the UUID and optional prompt positional syntax.
+Claude and ordinary fresh launches keep their existing command forms. Identifiers use
 1–128 characters from letters, numbers, `.`, `_`, `:`, and `-`, beginning with a
 letter or number. Roles and references are generic metadata; Aico interprets no
 campaign, focus, scheduling, or orchestration semantics.
 
-The canonical digest covers every create field except the request key. A
+The canonical digest covers every create field except the request key. Fresh
+launches preserve the original seven-field digest; a non-null resume UUID is
+appended as the eighth field. A
 transaction reserves the key, widget, and unique logical `ST_SESSION_ID` before
 launch. Matching retries reconcile the same widget; changed content returns
 409 `request_conflict`. Retirement keeps the request tombstone, so retries
@@ -46,6 +57,30 @@ uncertain create results use HTTP 202. Ended descriptors have null generation.
 View mutations require the current generation and reject stale requests.
 The existing headless `/v1/sessions/<hostIdentity>/end` owns exact containment
 retirement and keeps its existing contract.
+
+The direct ST facade creates one root without a fleet ledger or prompt retention:
+
+```sh
+st aico create recovery-root-1 'Reconcile current state after the crash before continuing.' --project neri --project-root /srv/workspaces/projects/neri --resume-session 00000000-0000-4000-8000-000000000001
+```
+
+Use the exact saved UUID, a new stable request ID, and the same complete body on
+retry. Omit the prompt for the fixed recovery prompt, or use `--stdin` for bounded
+UTF-8 input. The facade rejects secrets/framing controls and caps all prompts at
+2000 UTF-8 bytes. `--role`, `--lead-root` and `--facet` carry generic metadata.
+`--surface a-term` uses A-Term's established loopback owner endpoint, configured
+by `A_TERM_ROOT_CONTROL_URL` or `--root-url`; owner authentication remains enforced.
+A-Term allocates a detached pane; Aico shows its root through the existing launch
+path. The owner must already be running; the command does not start it.
+
+Create remains explicit recovery, not automatic reboot recovery. The catalog
+stores the request digest rather than a native thread binding or prompt, and
+ended requests remain tombstones. The same request cannot revive ended work.
+After a second crash, an operator still supplies the exact saved thread UUID and
+a new request ID. A running descriptor proves owned workload presence, not native
+thread loading, authentication, model readiness, or prompt completion. Failure
+receipts are content-free; uncertain responses never authorize an automatic retry
+with a different identity.
 
 Directed delivery is deliberately unqualified. An isolated private fixture
 inspection of installed `codex-cli 0.160.0` found `codex queue --thread <THREAD>

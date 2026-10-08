@@ -5,7 +5,14 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ensureContext } from './context'
-import { effectiveTuiPath, launchLine, paneCommand, paneGatePath } from './launch'
+import {
+  effectiveTuiPath,
+  isResumeSessionId,
+  launchLine,
+  paneCommand,
+  paneGatePath,
+  resumeLaunchLine,
+} from './launch'
 import {
   clearRegistry,
   defaultTui,
@@ -156,6 +163,24 @@ describe('registry', () => {
 })
 
 describe('launchLine', () => {
+  it('uses declarative native resume capability independently of the tool slug', () => {
+    const tool = spec({
+      command: ['fixture', '--configured'],
+      resume: { sessionIdPattern: /^native:[a-z]+$/, arguments: ['--resume'] },
+    })
+    expect(isResumeSessionId(tool, 'native:saved')).toBe(true)
+    expect(isResumeSessionId(tool, 'native:saved;echo unsafe')).toBe(false)
+    expect(isResumeSessionId(spec(), 'native:saved')).toBe(false)
+    expect(resumeLaunchLine(tool)).toBe(
+      '/usr/bin/env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 fixture --configured --resume',
+    )
+    expect(resumeLaunchLine(spec())).toBeNull()
+    registerBuiltinTuis()
+    expect(isResumeSessionId(getTui('codex'), '00000000-0000-4000-8000-000000000001')).toBe(true)
+    expect(isResumeSessionId(getTui('codex'), 'last')).toBe(false)
+    expect(isResumeSessionId(getTui('claude-code'), 'native:saved')).toBe(false)
+    expect(isResumeSessionId(getTui('antigravity'), 'native:saved')).toBe(false)
+  })
   it('joins argv into the command typed at the session', () => {
     expect(launchLine(spec({ command: ['codex', '--yolo'] }))).toBe(
       '/usr/bin/env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 codex --yolo',

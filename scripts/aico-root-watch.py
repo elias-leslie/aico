@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Foreground, read-only root observation. Emits metadata, never terminal text.
+"""Bounded owner root control and observation. Emits metadata, never terminal text.
 
 Use `st aico roots [REQUEST_ID] [--watch SECONDS]` for compact snapshots or
 bounded change-only JSONL. Discovery reads existing private catalog/owner receipts
@@ -9,7 +9,7 @@ Unknown TUI profiles are unavailable. Output contains no terminal or draft text.
 Explicit-pin compatibility: invoke with --root-socket, --owner-socket, --tmux-socket,
 --duration SECONDS and one or more --root JSON objects containing all Pin fields.
 Pins come from existing owner receipts and the exact managed tmux server identity;
-this tool never creates, submits to, or re-pins a root. JSONL on stdout
+this observation mode never creates, submits to, or re-pins a root. JSONL on stdout
 contains initial baselines and changes only. Terminal states describe visible TUI
 chrome, not whether the assigned objective is complete. No files are written.
 """
@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import http.client
+import hashlib
 import json
 import math
 import os
@@ -31,7 +32,7 @@ import subprocess
 import threading
 import time
 from collections.abc import Callable
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 CAPTURE_LIMIT = 32 * 1024
 RECEIPT_LIMIT = 16 * 1024
@@ -139,6 +140,20 @@ def socket_path(value: str) -> str:
     return value
 
 
+def local_root_url(value: str) -> str:
+    """Use the established loopback A-Term owner route without proxy/auth bypass."""
+    try:
+        parsed = urlsplit(value)
+        valid = (parsed.scheme == "http" and parsed.hostname in {"127.0.0.1", "localhost", "::1"}
+                 and not parsed.username and not parsed.password and not parsed.query
+                 and not parsed.fragment and parsed.port is not None)
+    except ValueError:
+        valid = False
+    if not valid:
+        raise argparse.ArgumentTypeError("A-Term root control requires an exact loopback HTTP URL")
+    return value.rstrip("/")
+
+
 def classify(raw: bytes) -> tuple[dict, str]:
     """Returns closed metadata and one sanitized sample; neither draft nor prose is emitted."""
     if len(raw) > CAPTURE_LIMIT:
@@ -228,21 +243,33 @@ class Collector:
             raise Stopped()
         return remaining
 
-    def receipt(self, path: str, route: str, payload: dict | None = None) -> tuple[int, dict]:
+    def receipt(self, path: str, route: str, payload: dict | None = None,
+                *, timeout: float = .25) -> tuple[int, dict]:
         limit = CATALOG_LIMIT if route == "/v1/roots" else RECEIPT_LIMIT
-        connection = http.client.HTTPConnection("localhost", timeout=min(.25, self.remaining()))
-        client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        connection.sock = client
+        client = None
+        if path.startswith("http:"):
+            parsed = urlsplit(local_root_url(path))
+            assert parsed.hostname is not None
+            connection = http.client.HTTPConnection(parsed.hostname, parsed.port,
+                                                    timeout=min(timeout, self.remaining()))
+            route = parsed.path.rstrip("/") + route
+        else:
+            connection = http.client.HTTPConnection("localhost", timeout=min(timeout, self.remaining()))
+            client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            connection.sock = client
         try:
-            client.settimeout(min(.25, self.remaining()))
-            client.connect(path)
+            if client is not None:
+                client.settimeout(min(timeout, self.remaining()))
+                client.connect(path)
             connection.request("GET" if payload is None else "POST", route,
-                               body=None if payload is None else json.dumps(payload),
+                               body=None if payload is None else json.dumps(
+                                   payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
                                headers={"Connection": "close", "Content-Type": "application/json"})
             response = connection.getresponse()
             parts = bytearray()
             while True:
-                self.remaining()
+                if connection.sock is not None:
+                    connection.sock.settimeout(min(timeout, self.remaining()))
                 part = response.read1(min(4096, limit + 1 - len(parts)))
                 parts.extend(part)
                 if len(parts) > limit:
@@ -257,7 +284,8 @@ class Collector:
             raise Unavailable("owner_unavailable") from None
         finally:
             connection.close()
-            client.close()
+            if client is not None:
+                client.close()
 
     def owners(self, pin: Pin) -> None:
         status, root = self.receipt(self.root_socket, f"/v1/roots/{quote(pin.requestId)}")
@@ -574,10 +602,15 @@ def admin_main(argv: list[str]) -> int:
         sent = payload is not None
         status, data = collector.receipt(args.root_socket, f"/v1/roots/{args.request_id}/admin", payload)
         if args.operation:
-            denied = {"native_tui_atomic_admin_unavailable", "invalid_body", "stale_generation",
-                      "ended", "not_found", "gui_unavailable", "unsupported_tool"}
-            if (status not in (400, 404, 409, 410, 422, 503) or data.get("error") not in denied
-                    or data.get("applied", False) is not False):
+            assert payload is not None
+            denied = {"native_tui_atomic_admin_unavailable": 503, "invalid_body": 400,
+                      "stale_generation": 409, "ended": 410, "not_found": 404,
+                      "gui_unavailable": 503, "unsupported_tool": 422}
+            pins = ("kind", "requestKey", "generation", "expectedThreadId")
+            native = data.get("error") == "native_tui_atomic_admin_unavailable"
+            if (not isinstance(data.get("error"), str) or denied.get(data["error"]) != status
+                    or data.get("applied", None if native else False) is not False
+                    or any((native or key in data) and data.get(key) != payload[key] for key in pins)):
                 raise Unavailable("admin_receipt_unqualified")
             output.update(applied=False, reason=data["error"])
             if data.get("terminalAdmin") == TERMINAL_ADMIN:
@@ -601,6 +634,102 @@ def admin_main(argv: list[str]) -> int:
         return 1
     except BrokenPipeError:
         return 0
+
+
+def create_main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="st aico create", description=(
+        "Create one exact owner root; native resume uses an adapter-validated session ID in a new root. "
+        "Reuse the same request ID and complete body on retry. No prompt is retained."))
+    parser.add_argument("request_id")
+    parser.add_argument("prompt", nargs="?", help="short sanitized initial/recovery prompt (<=2000 UTF-8 bytes)")
+    parser.add_argument("--stdin", action="store_true", help="read prompt from bounded stdin instead")
+    parser.add_argument("--project", required=True)
+    parser.add_argument("--project-root", required=True)
+    parser.add_argument("--tool", choices=("codex", "claude-code"), default="codex")
+    parser.add_argument("--surface", choices=("aico", "a-term"), default="aico")
+    parser.add_argument("--role", default="portfolio-root")
+    parser.add_argument("--lead-root")
+    parser.add_argument("--facet")
+    parser.add_argument("--resume-session", help="exact native session ID; owner adapter validates format/support, never a picker")
+    runtime = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
+    parser.add_argument("--root-socket", type=socket_path)
+    parser.add_argument("--root-url", type=local_root_url)
+    args = parser.parse_args(argv)
+    key = r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}"
+    thread_pattern = r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}"
+    if any(not re.fullmatch(key, value) for value in
+           (args.request_id, args.project, args.role, *(v for v in (args.lead_root, args.facet) if v is not None))):
+        parser.error("invalid root metadata")
+    if (not os.path.isabs(args.project_root) or os.path.normpath(args.project_root) != args.project_root
+            or "\0" in args.project_root):
+        parser.error("project root must be an exact normalized absolute path")
+    if args.resume_session is not None and not re.fullmatch(key, args.resume_session):
+        parser.error("resume requires a bounded exact native session ID")
+    if (args.stdin and args.prompt is not None or args.surface == "aico" and args.root_url
+            or args.surface == "a-term" and args.root_socket):
+        parser.error("conflicting prompt or owner transport options")
+    try:
+        endpoint = (args.root_socket or socket_path(os.environ.get("AICO_GUI_CONTROL_SOCKET", f"{runtime}/aico/gui-control.sock"))
+                    if args.surface == "aico" else args.root_url or local_root_url(
+                        os.environ.get("A_TERM_ROOT_CONTROL_URL", "http://127.0.0.1:8002")))
+    except argparse.ArgumentTypeError:
+        parser.error("invalid owner transport configuration")
+    collector = Collector(endpoint, "", "", time.monotonic() + 10, threading.Event())
+    output = {"owner": args.surface, "requestId": args.request_id}
+    try:
+        prompt = admin_stdin(collector) if args.stdin else args.prompt
+        if prompt is None and args.resume_session:
+            prompt = "Resume this exact saved session. Reconcile current state after the crash before continuing."
+        if (not isinstance(prompt, str) or not prompt.strip() or len(prompt.encode("utf-8")) > 2000
+                or re.search(r"[\x00-\x08\x0b-\x1f\x7f-\x9f\ud800-\udfff]", prompt) or SECRET.search(prompt)):
+            parser.error("expected a short sanitized prompt or --stdin; no secrets or framing controls")
+        payload = {"requestId": args.request_id, "tool": args.tool, "projectId": args.project,
+                   "projectRoot": args.project_root, "initialPrompt": prompt, "role": args.role,
+                   "leadRootReference": args.lead_root, "facetCapsuleRef": args.facet}
+        fields = [args.tool, args.project, args.project_root, prompt, args.role, args.lead_root, args.facet]
+        if args.resume_session:
+            payload["resumeSessionId"] = args.resume_session
+            fields.append(args.resume_session)
+        digest = hashlib.sha256(json.dumps(fields, ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()
+        status, data = collector.receipt(endpoint, "/v1/roots", payload, timeout=10)
+        errors = {400: "invalid_body", 409: "request_conflict", 422: "launch_unavailable", 503: "gui_unavailable"}
+        if status not in (200, 202):
+            reason = errors.get(status)
+            raise Unavailable(reason if reason and data.get("error") == reason else "create_receipt_unqualified")
+        host = data.get("hostIdentity")
+        host_pattern = r"[0-9a-f]{8}" if args.surface == "aico" else thread_pattern
+        generation = data.get("generation")
+        state = data.get("status")
+        if (data.get("owner") != args.surface or data.get("requestId") != args.request_id
+                or data.get("digest") != digest or data.get("role") != args.role
+                or data.get("leadRootReference") != args.lead_root or data.get("facetCapsuleRef") != args.facet
+                or not isinstance(host, str) or not re.fullmatch(host_pattern, host)
+                or not isinstance(data.get("logicalSessionId"), str)
+                or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", data["logicalSessionId"])
+                or not isinstance(data.get("surfaceLocator"), str)
+                or (data["surfaceLocator"] != f"aico://widget/{host}" if args.surface == "aico"
+                    else not re.fullmatch("a-term://pane/" + thread_pattern, data["surfaceLocator"]))
+                or state not in ("running", "pending", "uncertain", "ended")
+                or status != (202 if state in ("pending", "uncertain") else 200)
+                or state == "running" and generation is None
+                or generation is not None and (not isinstance(generation, str) or not re.fullmatch(r"[0-9a-f]{64}", generation))
+                or state == "ended" and generation is not None):
+            raise Unavailable("create_receipt_unqualified")
+        output.update({key: data[key] for key in ("digest", "hostIdentity", "logicalSessionId", "generation", "surfaceLocator", "status")})
+        emit_json(collector, output)
+        return 0
+    except (ValueError, UnicodeError):
+        parser.error("invalid prompt or UTF-8 input")
+    except (Unavailable, Stopped) as error:
+        output.update(status="uncertain", reason=str(error) if isinstance(error, Unavailable) else "deadline")
+        try:
+            emit_json(collector, output)
+        except Stopped:
+            pass
+        return 1
+    except BrokenPipeError:
+        return 0
+    return 1
 
 
 def roots_main(argv: list[str]) -> int:
@@ -662,6 +791,8 @@ def main(argv: list[str] | None = None) -> int:
         return roots_main(argv[1:])
     if argv and argv[0] == "admin":
         return admin_main(argv[1:])
+    if argv and argv[0] == "create":
+        return create_main(argv[1:])
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("root", "owner", "tmux"):
         parser.add_argument(f"--{name}-socket", required=True, type=socket_path)

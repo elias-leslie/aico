@@ -54,7 +54,8 @@ def test_inspection_projects_capability_without_untrusted_text(monkeypatch):
 @pytest.mark.parametrize("operation", ["clear", "submit"])
 def test_exact_pin_denial_is_one_request_no_capture_no_retry(monkeypatch, operation):
     body = {"error": "native_tui_atomic_admin_unavailable", "applied": False,
-            "terminalAdmin": CAPABILITY}
+            "terminalAdmin": CAPABILITY, "kind": operation, "requestKey": "scope-1",
+            "generation": GENERATION, "expectedThreadId": THREAD}
     args = [operation, "--generation", GENERATION, "--thread", THREAD, "--request-key", "scope-1"]
     if operation == "submit":
         args.append("--stdin")
@@ -75,6 +76,31 @@ def test_unknown_receipt_never_claims_nonapplication_or_native_success(monkeypat
     assert output[0]["applied"] is None
     assert output[0]["reason"] == "admin_receipt_unqualified"
     assert "private-secret" not in json.dumps(output)
+
+
+@pytest.mark.parametrize("field", ["kind", "requestKey", "generation", "expectedThreadId"])
+@pytest.mark.parametrize("missing", [False, True])
+def test_denial_requires_exact_echoed_pins(monkeypatch, field, missing):
+    body = {"error": "native_tui_atomic_admin_unavailable", "applied": False,
+            "kind": "clear", "requestKey": "scope-1", "generation": GENERATION,
+            "expectedThreadId": THREAD}
+    if missing:
+        body.pop(field)
+    else:
+        body[field] = "contradiction"
+    code, calls, output = invoke(monkeypatch,
+        ["clear", "--generation", GENERATION, "--thread", THREAD, "--request-key", "scope-1"],
+        (503, body))
+    assert code == 1 and len(calls) == 1
+    assert output[0]["applied"] is None
+    assert output[0]["reason"] == "admin_receipt_unqualified"
+
+
+def test_contradictory_error_status_is_unknown(monkeypatch):
+    _, _, output = invoke(monkeypatch,
+        ["clear", "--generation", GENERATION, "--thread", THREAD, "--request-key", "scope-1"],
+        (503, {"error": "stale_generation", "applied": False}))
+    assert output[0]["applied"] is None
 
 
 @pytest.mark.parametrize("argv", [
@@ -119,6 +145,7 @@ def test_actual_private_http_request_is_once_and_projection_is_content_free(tmp_
             requests.append((self.path, body))
             response = json.dumps({"error": "native_tui_atomic_admin_unavailable",
                                    "applied": False, "terminalAdmin": CAPABILITY,
+                                   **{key: body[key] for key in ("kind", "requestKey", "generation", "expectedThreadId")},
                                    "text": "must not leave owner"}).encode()
             self.send_response(503)
             self.send_header("Content-Length", str(len(response)))

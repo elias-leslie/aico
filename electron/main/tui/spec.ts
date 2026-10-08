@@ -57,4 +57,8 @@ export interface TuiSpec {
   env?: Record<string, string>
   /** Declarative supplemental-context path; omitted for a bare shell. */
   context?: ContextHook
+  /** Native resume capability. The owner validates the opaque session ID with
+   * this adapter's pattern and appends only these fixed arguments before the
+   * session ID, then `--` and the transient recovery prompt. No caller argv. */
+  resume?: { sessionIdPattern: RegExp; arguments: string[] }
 }

@@ -4267,14 +4267,19 @@ app.whenReady().then(async () => {
   rootControlServer = createRootServer({
     available: () => !quitting && activationReady,
     validate: (request) => Boolean(getTui(request.tool)?.enabled && isDir(request.projectRoot)),
-    ensure: async (widgetId, prompt) => {
+    ensure: async (widgetId, prompt, resumeSessionId) => {
       const row = getWidget(widgetId)
       // Root cwd is exact. Never inherit the center's project or fall back to
       // the global active project after its requested directory disappears.
       if (!row?.projectRoot || !isDir(row.projectRoot)) return
-      await withRootPrompt(widgetId, prompt, async () => {
-        await ensureSessionSerialized(widgetId, { cols: 100, rows: 30 })
-      })
+      await withRootPrompt(
+        widgetId,
+        prompt,
+        async () => {
+          await ensureSessionSerialized(widgetId, { cols: 100, rows: 30 })
+        },
+        resumeSessionId,
+      )
       const latest = getWidget(widgetId)
       if (latest?.launchState === 'dispatched' && (await verifiedCurrentManagedPane(latest))) {
         focusOrReopen(widgetId)

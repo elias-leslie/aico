@@ -13,9 +13,14 @@ import {
   type WidgetRow,
 } from './store'
 import { isBoundedTerminalText } from './tmux'
+import { isResumeSessionId } from './tui/launch'
+import { getTui } from './tui/registry'
 
 const KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/
 const MAX_BODY_BYTES = 128 * 1024
+// 2000 UTF-8 bytes can occupy 12000 bytes with JSON \uXXXX escaping,
+// plus the fixed fields and bounded request key. Accept either JSON encoding.
+const MAX_ADMIN_BODY_BYTES = 16 * 1024
 
 export interface RootCreateRequest {
   requestId: string
@@ -26,12 +31,13 @@ export interface RootCreateRequest {
   role: string
   leadRootReference: string | null
   facetCapsuleRef: string | null
+  resumeSessionId: string | null
 }
 
 export interface RootControlOperations {
   available(): boolean
   validate(request: RootCreateRequest): boolean
-  ensure(widgetId: string, initialPrompt: string): Promise<void>
+  ensure(widgetId: string, initialPrompt: string, resumeSessionId: string | null): Promise<void>
   status(row: WidgetRow): Promise<'running' | 'pending' | 'uncertain'>
   show(widgetId: string, generation: string): Promise<boolean>
   position(widgetId: string, generation: string, bounds: Bounds): Promise<boolean>
@@ -106,6 +112,7 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
           'role',
           'leadRootReference',
           'facetCapsuleRef',
+          'resumeSessionId',
         ].includes(key),
     )
   )
@@ -119,6 +126,7 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     role,
     leadRootReference,
     facetCapsuleRef,
+    resumeSessionId,
   } = value
   if (
     typeof requestId !== 'string' ||
@@ -134,6 +142,10 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     !initialPrompt.trim() ||
     initialPrompt.includes('\0') ||
     Buffer.byteLength(initialPrompt) > 64 * 1024 ||
+    (resumeSessionId !== undefined &&
+      resumeSessionId !== null &&
+      (!isResumeSessionId(getTui(tool), resumeSessionId) ||
+        !isBoundedTerminalText(initialPrompt))) ||
     typeof role !== 'string' ||
     !KEY.test(role) ||
     (leadRootReference !== undefined &&
@@ -153,6 +165,7 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     role,
     leadRootReference: leadRootReference ?? null,
     facetCapsuleRef: facetCapsuleRef ?? null,
+    resumeSessionId: resumeSessionId ?? null,
   }
 }
 
@@ -167,6 +180,7 @@ export function rootRequestDigest(request: RootCreateRequest): string {
         request.role,
         request.leadRootReference,
         request.facetCapsuleRef,
+        ...(request.resumeSessionId ? [request.resumeSessionId] : []),
       ]),
     )
     .digest('hex')
@@ -325,7 +339,7 @@ export function createRootServer(operations: RootControlOperations) {
             // Do not disclose the launch error or prompt; identity/state is the
             // reconciliation receipt, including an ambiguous launch outcome.
             try {
-              await operations.ensure(root.widgetId, input.initialPrompt)
+              await operations.ensure(root.widgetId, input.initialPrompt, input.resumeSessionId)
             } catch {
               /* reconcile below */
             }
@@ -378,7 +392,7 @@ export function createRootServer(operations: RootControlOperations) {
       if (match[2] === 'admin') {
         let input: RootAdminRequest | null
         try {
-          input = parseAdmin(await body(request, 4096))
+          input = parseAdmin(await body(request, MAX_ADMIN_BODY_BYTES))
         } catch {
           input = null
         }

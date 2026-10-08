@@ -13,6 +13,10 @@ export const codexTui: TuiSpec = {
   order: 1,
   enabled: true,
   command: ['codex', '--yolo'],
+  resume: {
+    sessionIdPattern: /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/,
+    arguments: ['resume'],
+  },
   processName: 'codex',
   context: { kind: 'codex-hooks' },
 }

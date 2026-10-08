@@ -34,6 +34,17 @@ export function launchLine(spec: TuiSpec): string | null {
   return [...prefix, ...spec.command.map(shellQuote)].join(' ')
 }
 
+/** Native ID semantics belong to the selected TUI adapter, never the caller. */
+export function isResumeSessionId(spec: TuiSpec | undefined, value: unknown): value is string {
+  return typeof value === 'string' && Boolean(spec?.resume?.sessionIdPattern.test(value))
+}
+
+/** Fixed adapter argv prefix; the launch gate supplies one quoted session ID. */
+export function resumeLaunchLine(spec: TuiSpec): string | null {
+  if (!spec.resume) return null
+  return launchLine({ ...spec, command: [...spec.command, ...spec.resume.arguments] })
+}
+
 /**
  * Build the command Aico sends only after the pane's containment identity is
  * verified. `null` replaces the no-RC gate with the user's real interactive
