@@ -31,13 +31,19 @@ GENERATION = re.compile(r"[0-9a-f]{64}\Z")
 DIRECTED_DELIVERY = {"available": False, "reason": "exact_thread_generation_receipt_unqualified"}
 POSITION = {"available": False, "reason": "browser_grid_has_no_pixel_window_bounds"}
 LABEL_MAX_BYTES = 160
+# ECMAScript TrimString whitespace and line terminators, matching Aico.
+_LABEL_TRIM_CHARS = (
+    "\u0009\u000a\u000b\u000c\u000d\u0020\u00a0\u1680"
+    "\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a"
+    "\u2028\u2029\u202f\u205f\u3000\ufeff"
+)
 
 
 def parse_label(value: Any) -> str:
     """Accept bounded control-free single-line owner metadata, matching Aico."""
     if not isinstance(value, str):
         raise RootError(400, "invalid_body")
-    label = value.strip()
+    label = value.strip(_LABEL_TRIM_CHARS)
     if not label or any(ord(char) < 32 or 127 <= ord(char) <= 159
                         or 0xD800 <= ord(char) <= 0xDFFF or char in "\u2028\u2029"
                         for char in label):

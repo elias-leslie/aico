@@ -211,7 +211,8 @@ def test_title_updates_only_exact_session_name_with_content_free_receipt(owner, 
     assert roots.create(request_body) == descriptor
 
 
-@pytest.mark.parametrize("label", [None, [], "", " ", "x" * 161, "🐾" * 41,
+@pytest.mark.parametrize("label", [None, [], "", " ", "\ufeff", "\ufeff \ufeff", "x" * 161,
+    "é" * 80 + "x", "🐾" * 40 + "x", "🐾" * 41,
     "\ud800", "Focus\nNext", "Focus\rNext", "Focus\tNext", "Focus\x1b[31m",
     "Focus\x00", "Focus\x7f", "Focus\u2028Next", "Focus\u2029Next"])
 def test_title_rejects_unbounded_or_control_label_before_mutation(owner, request_body, label):
@@ -238,9 +239,31 @@ def test_title_generation_ended_and_storage_race_fail_closed(owner, request_body
 
 
 @pytest.mark.parametrize("label,expected", [("\nFocus\r", "Focus"), ("Project\u00a0Focus", "Project\u00a0Focus"),
-    ("Focus\u202eNext", "Focus\u202eNext"), ("🐾" * 40, "🐾" * 40)])
+    ("Focus\u202eNext", "Focus\u202eNext"), ("Focus\ufeffNext", "Focus\ufeffNext"),
+    ("e\u0301", "e\u0301"), ("x" * 160, "x" * 160), ("é" * 80, "é" * 80), ("🐾" * 40, "🐾" * 40)])
 def test_title_unicode_contract_matches_aico(label, expected):
     assert roots.parse_label(label) == expected
+
+
+@pytest.mark.parametrize("codepoint", [*range(0x0009, 0x000E), 0x0020, 0x00A0, 0x1680,
+    *range(0x2000, 0x200B), 0x2028, 0x2029, 0x202F, 0x205F, 0x3000, 0xFEFF],
+    ids=lambda codepoint: f"U+{codepoint:04X}")
+def test_title_trims_every_ecmascript_trim_character(codepoint):
+    char = chr(codepoint)
+    assert roots.parse_label(f"{char}Focus{char}") == "Focus"
+
+
+@pytest.mark.parametrize("codepoint", [*range(0x001C, 0x0020), 0x0085],
+    ids=lambda codepoint: f"U+{codepoint:04X}")
+@pytest.mark.parametrize("position", ["leading", "trailing", "interior"])
+def test_title_rejects_python_only_trim_controls_before_mutation(owner, request_body, codepoint, position):
+    char = chr(codepoint)
+    label = {"leading": f"{char}Focus", "trailing": f"Focus{char}", "interior": f"Focus{char}Next"}[position]
+    first = roots.create(request_body)
+    with pytest.raises(roots.RootError, match="invalid_body") as error:
+        roots.mutate("request-1", "title", {"generation": first["generation"], "label": label})
+    assert error.value.status == 400
+    cast(MagicMock, roots.sessions.update_root_name).assert_not_called()
 
 
 def test_title_http_contract_and_root_marker(owner, request_body):
