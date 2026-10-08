@@ -243,6 +243,8 @@ body.thinking {
 /* Terminal: solid --ink, inner radius, framed by the frosted padding. */
 #terminal {
   --terminal-content-right: 8px;
+  /* Keep the rail and scrollback layers below the shell menus and palette. */
+  isolation: isolate;
   flex: 1;
   position: relative;
   margin: 0 12px 12px 12px;

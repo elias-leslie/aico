@@ -11,20 +11,17 @@ describe('renderer status confirmation', () => {
     expect(toast).toContain('aria-atomic="true"')
   })
 
-  it('keeps the always-visible controls outside the secondary disclosure', () => {
+  it('keeps pinned actions and compose directly in the titlebar', () => {
     const html = readFileSync(new URL('./index.html', import.meta.url), 'utf8')
-    const secondary = html.slice(
-      html.indexOf('<div class="titlebar-secondary'),
-      html.indexOf('<div class="pinned titlebar-essential'),
-    )
+    const titlebar = html.slice(html.indexOf('<header'), html.indexOf('</header>'))
 
-    expect(secondary).toContain('id="pinned"')
-    expect(secondary).toContain('id="compose-toggle"')
-    for (const id of ['titlebar-essential', 'titlebar-more', 'lantern-menu-btn']) {
-      expect(html).toContain(`id="${id}"`)
-      expect(secondary).not.toContain(`id="${id}"`)
+    for (const id of ['pinned', 'compose-toggle', 'lantern-menu-btn']) {
+      expect(titlebar).toContain(`id="${id}"`)
     }
-    expect(html).toContain('aria-controls="titlebar-secondary" aria-expanded="false"')
+    expect(titlebar).not.toContain('titlebar-secondary')
+    expect(titlebar).not.toContain('titlebar-more')
+    expect(titlebar).not.toContain('titlebar-essential')
+    expect(titlebar).not.toContain('inert')
     expect(html).toContain('aria-label="Session name"')
   })
 })
