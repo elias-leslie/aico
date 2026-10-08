@@ -3,15 +3,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PaneSlot } from '@/lib/utils/slot'
 import { ResizablePaneLayout } from './ResizablePaneLayout'
 
+const { mockUsePaneRenderer, mockSinglePaneLayout } = vi.hoisted(() => ({
+  mockUsePaneRenderer: vi.fn(),
+  mockSinglePaneLayout: vi.fn(),
+}))
+
 vi.mock('@/lib/hooks/pane-layout', () => ({
   useMinSizeCalculator: () => () => 20,
-  usePaneRenderer: () => () => <div data-testid="pane-body" />,
+  usePaneRenderer: mockUsePaneRenderer,
   useLayoutChangeHandler: () => vi.fn(),
 }))
 
 vi.mock('./pane-layouts', () => ({
   EmptyPaneState: () => <div data-testid="empty-pane-state" />,
-  SinglePaneLayout: () => <div data-testid="single-pane-layout" />,
+  SinglePaneLayout: mockSinglePaneLayout,
   LinearPaneLayout: ({
     orientation,
   }: {
@@ -54,6 +59,52 @@ function makeProjectSlot(id: string): PaneSlot {
 describe('ResizablePaneLayout', () => {
   beforeEach(() => {
     window.localStorage.clear()
+    mockUsePaneRenderer
+      .mockReset()
+      .mockReturnValue(() => <div data-testid="pane-body" />)
+    mockSinglePaneLayout
+      .mockReset()
+      .mockReturnValue(<div data-testid="single-pane-layout" />)
+  })
+
+  it('offers every mobile session and renders an active session beyond the sixth', () => {
+    const slots = Array.from({ length: 14 }, (_, index) =>
+      makeProjectSlot(String(index + 1)),
+    )
+    render(
+      <ResizablePaneLayout
+        slots={slots}
+        isMobile={true}
+        activeSessionId="session-14"
+        fontFamily="monospace"
+        fontSize={14}
+      />,
+    )
+
+    expect(mockUsePaneRenderer).toHaveBeenLastCalledWith(
+      expect.objectContaining({ displaySlots: slots }),
+    )
+    expect(mockSinglePaneLayout.mock.calls.at(-1)?.[0].slot).toBe(slots[13])
+  })
+
+  it('keeps the desktop split layout limited to six panes', () => {
+    const slots = Array.from({ length: 14 }, (_, index) =>
+      makeProjectSlot(String(index + 1)),
+    )
+    render(
+      <ResizablePaneLayout
+        slots={slots}
+        fontFamily="monospace"
+        fontSize={14}
+      />,
+    )
+
+    expect(mockUsePaneRenderer).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        displaySlots: slots.slice(0, 6),
+        paneCount: 6,
+      }),
+    )
   })
 
   it('uses the vertical split for stacked two-pane mode', () => {

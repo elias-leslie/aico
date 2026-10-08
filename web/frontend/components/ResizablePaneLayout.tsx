@@ -42,7 +42,12 @@ export function ResizablePaneLayout(props: ResizablePaneLayoutProps) {
     storageScopeId,
   } = props
 
-  const displaySlots = useMemo(() => slots.slice(0, MAX_PANES), [slots])
+  // Mobile navigates one session at a time; the desktop grid limit must not
+  // truncate its switcher or prevent a later session from becoming active.
+  const displaySlots = useMemo(
+    () => (isMobile ? slots : slots.slice(0, MAX_PANES)),
+    [slots, isMobile],
+  )
   const paneCount = displaySlots.length
   const containerRef = useRef<HTMLDivElement>(null)
   const layoutStorageKey = getScopedATermStorageKey(

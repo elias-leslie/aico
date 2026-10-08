@@ -25,7 +25,8 @@ export function getExternalSessionDisplayName(
     }
     return projectName &&
       session.name !== projectName &&
-      !session.name.startsWith(`${projectName} · `)
+      !session.name.startsWith(`${projectName} · `) &&
+      !session.name.startsWith(`${projectName} - `)
       ? `${projectName} · ${session.name}`
       : session.name
   }
