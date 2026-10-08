@@ -47,6 +47,7 @@ describe('private root workload control', () => {
   })
   const show = vi.fn(async () => true)
   const position = vi.fn(async () => true)
+  const title = vi.fn(async () => true)
   const server = createRootServer({
     available: () => available,
     validate: (input) => input.projectRoot !== '/missing',
@@ -54,6 +55,7 @@ describe('private root workload control', () => {
     status: async (row) => (running.has(row.id) ? 'running' : 'uncertain'),
     show,
     position,
+    title,
   })
   beforeAll(async () => {
     registerBuiltinTuis()
@@ -175,6 +177,31 @@ describe('private root workload control', () => {
         .status,
     ).toBe(400)
     expect((await call(`${path}/show`, 'POST', { generation, extra: true })).status).toBe(400)
+  })
+
+  it('renames one exact root through a bounded generation-fenced owner mutation', async () => {
+    const root = present(getRootRequest('target-1'))
+    const generation = sessionGeneration(present(getWidget(root.widgetId)))
+    const path = '/v1/roots/target-1/title'
+    expect(
+      (await call(path, 'POST', { generation: '0'.repeat(64), label: 'Neri · Hunt' })).status,
+    ).toBe(409)
+    expect(title).not.toHaveBeenCalled()
+    const renamed = await call(path, 'POST', { generation, label: '  Neri · Mattermost Hunt  ' })
+    expect(renamed.status).toBe(200)
+    expect(title).toHaveBeenCalledWith(root.widgetId, generation, 'Neri · Mattermost Hunt')
+    expect(JSON.stringify(renamed.body)).not.toContain('Mattermost Hunt')
+    for (const label of [
+      '',
+      'line\nbreak',
+      'line\u2028break',
+      '\u001bcontrol',
+      'x'.repeat(161),
+      '界'.repeat(54),
+    ]) {
+      expect((await call(path, 'POST', { generation, label })).status).toBe(400)
+    }
+    expect((await call(path, 'POST', { generation, label: 'Neri', extra: true })).status).toBe(400)
   })
 
   it('explicitly reports GUI and directed-delivery unavailability without steering', async () => {

@@ -4312,6 +4312,12 @@ app.whenReady().then(async () => {
           saveBounds(widgetId, bounds, String(screen.getDisplayMatching(bounds).id))
         }
       }),
+    title: (widgetId, generation, label) =>
+      rootViewOperation(widgetId, generation, (row) => {
+        setWidgetName(row.id, label)
+        pushTitles()
+        syncTray()
+      }),
   })
   try {
     await listenOwnerServer(rootControlServer, guiSocketPath())

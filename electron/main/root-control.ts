@@ -41,6 +41,7 @@ export interface RootControlOperations {
   status(row: WidgetRow): Promise<'running' | 'pending' | 'uncertain'>
   show(widgetId: string, generation: string): Promise<boolean>
   position(widgetId: string, generation: string, bounds: Bounds): Promise<boolean>
+  title(widgetId: string, generation: string, label: string): Promise<boolean>
 }
 
 type RootAdminRequest = {
@@ -211,6 +212,31 @@ function parsePosition(value: unknown): { generation: string; bounds: Bounds } |
   return { generation: value.generation, bounds: bounds as unknown as Bounds }
 }
 
+function parseTitle(value: unknown): { generation: string; label: string } | null {
+  if (
+    !object(value) ||
+    Object.keys(value).some((key) => !['generation', 'label'].includes(key)) ||
+    typeof value.generation !== 'string' ||
+    !/^[0-9a-f]{64}$/.test(value.generation) ||
+    typeof value.label !== 'string'
+  )
+    return null
+  const label = value.label.trim()
+  if (!label || Buffer.byteLength(label) > 160) return null
+  for (const character of label) {
+    const code = character.codePointAt(0) ?? 0
+    if (
+      code < 32 ||
+      (code >= 127 && code <= 159) ||
+      (code >= 0xd800 && code <= 0xdfff) ||
+      code === 0x2028 ||
+      code === 0x2029
+    )
+      return null
+  }
+  return { generation: value.generation, label }
+}
+
 function json(response: ServerResponse, status: number, value: unknown): void {
   response.writeHead(status, { 'content-type': 'application/json; charset=utf-8' })
   response.end(JSON.stringify(value))
@@ -354,7 +380,7 @@ export function createRootServer(operations: RootControlOperations) {
         return
       }
       const match =
-        /^\/v1\/roots\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})(?:\/(show|position|send|admin))?$/.exec(
+        /^\/v1\/roots\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})(?:\/(show|position|title|send|admin))?$/.exec(
           path,
         )
       if (!match) {
@@ -430,7 +456,7 @@ export function createRootServer(operations: RootControlOperations) {
         })
         return
       }
-      if (match[2] !== 'show' && match[2] !== 'position') {
+      if (match[2] !== 'show' && match[2] !== 'position' && match[2] !== 'title') {
         json(response, 405, { error: 'method_not_allowed' })
         return
       }
@@ -442,11 +468,14 @@ export function createRootServer(operations: RootControlOperations) {
         return
       }
       const position = match[2] === 'position' ? parsePosition(payload) : null
-      const generation = object(payload) ? payload.generation : null
+      const title = match[2] === 'title' ? parseTitle(payload) : null
+      const generation =
+        position?.generation ?? title?.generation ?? (object(payload) ? payload.generation : null)
       if (
         typeof generation !== 'string' ||
         !/^[0-9a-f]{64}$/.test(generation) ||
         (match[2] === 'position' && !position) ||
+        (match[2] === 'title' && !title) ||
         (match[2] === 'show' && (!object(payload) || Object.keys(payload).length !== 1))
       ) {
         json(response, 400, { error: 'invalid_body' })
@@ -464,7 +493,9 @@ export function createRootServer(operations: RootControlOperations) {
         }
         const success = position
           ? await operations.position(row.id, generation, position.bounds)
-          : await operations.show(row.id, generation)
+          : title
+            ? await operations.title(row.id, generation, title.label)
+            : await operations.show(row.id, generation)
         json(
           response,
           success ? 200 : 409,
