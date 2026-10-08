@@ -178,6 +178,11 @@ describe('launchLine', () => {
     registerBuiltinTuis()
     expect(isResumeSessionId(getTui('codex'), '00000000-0000-4000-8000-000000000001')).toBe(true)
     expect(isResumeSessionId(getTui('codex'), 'last')).toBe(false)
+    for (const suffix of ['\n', '\r', '\r\n', '\u2028', '\u2029']) {
+      expect(
+        isResumeSessionId(getTui('codex'), '00000000-0000-4000-8000-000000000001' + suffix),
+      ).toBe(false)
+    }
     expect(isResumeSessionId(getTui('claude-code'), 'native:saved')).toBe(false)
     expect(isResumeSessionId(getTui('antigravity'), 'native:saved')).toBe(false)
   })

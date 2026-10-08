@@ -80,8 +80,13 @@ def test_unknown_receipt_never_claims_nonapplication_or_native_success(monkeypat
 
 @pytest.mark.parametrize("field", ["kind", "requestKey", "generation", "expectedThreadId"])
 @pytest.mark.parametrize("missing", [False, True])
-def test_denial_requires_exact_echoed_pins(monkeypatch, field, missing):
-    body = {"error": "native_tui_atomic_admin_unavailable", "applied": False,
+@pytest.mark.parametrize("status,error", [
+    (503, "native_tui_atomic_admin_unavailable"), (400, "invalid_body"),
+    (409, "stale_generation"), (410, "ended"), (404, "not_found"),
+    (503, "gui_unavailable"), (422, "unsupported_tool"),
+])
+def test_denial_requires_exact_echoed_pins(monkeypatch, field, missing, status, error):
+    body = {"error": error, "applied": False,
             "kind": "clear", "requestKey": "scope-1", "generation": GENERATION,
             "expectedThreadId": THREAD}
     if missing:
@@ -90,10 +95,36 @@ def test_denial_requires_exact_echoed_pins(monkeypatch, field, missing):
         body[field] = "contradiction"
     code, calls, output = invoke(monkeypatch,
         ["clear", "--generation", GENERATION, "--thread", THREAD, "--request-key", "scope-1"],
-        (503, body))
+        (status, body))
     assert code == 1 and len(calls) == 1
     assert output[0]["applied"] is None
     assert output[0]["reason"] == "admin_receipt_unqualified"
+
+
+@pytest.mark.parametrize("status,error", [
+    (400, "invalid_body"), (409, "stale_generation"), (410, "ended"),
+    (404, "not_found"), (503, "gui_unavailable"), (422, "unsupported_tool"),
+])
+def test_uncorrelated_errors_are_unknown(monkeypatch, status, error):
+    _, _, output = invoke(monkeypatch,
+        ["clear", "--generation", GENERATION, "--thread", THREAD, "--request-key", "scope-1"],
+        (status, {"error": error}))
+    assert output[0]["applied"] is None
+    assert output[0]["reason"] == "admin_receipt_unqualified"
+
+
+@pytest.mark.parametrize("status,error", [
+    (400, "invalid_body"), (409, "stale_generation"), (410, "ended"),
+    (404, "not_found"), (503, "gui_unavailable"), (422, "unsupported_tool"),
+])
+def test_correlated_error_denials_can_prove_nonapplication(monkeypatch, status, error):
+    _, calls, output = invoke(monkeypatch,
+        ["clear", "--generation", GENERATION, "--thread", THREAD, "--request-key", "scope-1"],
+        (status, {"error": error, "applied": False, "kind": "clear", "requestKey": "scope-1",
+                  "generation": GENERATION, "expectedThreadId": THREAD}))
+    assert len(calls) == 1
+    assert output[0]["applied"] is False
+    assert output[0]["reason"] == error
 
 
 def test_contradictory_error_status_is_unknown(monkeypatch):

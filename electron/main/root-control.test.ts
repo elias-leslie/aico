@@ -439,6 +439,7 @@ describe('private root workload control', () => {
       'last',
       thread.toUpperCase().replace('00000001', '0000000A'),
       `${thread};echo x`,
+      ...['\n', '\r', '\r\n', '\u2028', '\u2029'].map((suffix) => thread + suffix),
     ]) {
       expect(parseRootCreate({ ...input, resumeSessionId: invalid })).toBeNull()
     }

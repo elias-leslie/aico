@@ -68,9 +68,11 @@ ended roots return 410; unsupported tools return 422. No request text is stored
 or returned. Rejected operations have no effects, so repeating their key is safe.
 Unknown/contradictory receipts or transport failures report `applied:null` with
 the same key and never retry. Old runtimes without this route stay unavailable.
-Native-unavailable denial receipts must echo the exact kind, request key,
-generation and expected thread; missing or mismatched echoes stay unknown.
-Other denials must match their HTTP status and cannot carry contradictory pins.
+All denial/error receipts used to conclude `applied:false` must echo the exact
+kind, request key, generation and expected thread; missing or mismatched echoes
+stay unknown.
+Denials must also match their HTTP status. Current owner errors without these
+echoes are projected as `applied:null` rather than inferred nonapplication.
 Requests use compact UTF-8 JSON. The 16 KiB admin body bound also accepts the
 worst-case `\uXXXX` encoding of schema-valid 2000-byte text plus bounded pins.
 

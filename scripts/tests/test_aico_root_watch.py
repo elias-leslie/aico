@@ -41,6 +41,49 @@ def classify(screen: str) -> dict:
     return watcher.classify(screen.encode())[0]
 
 
+@pytest.mark.parametrize("stop", ["cancel", "deadline"])
+def test_closed_connection_body_checks_stop_before_each_chunk(monkeypatch, stop):
+    instance = watcher.Collector("", "", "", time.monotonic() + 10, threading.Event())
+    reads = []
+
+    class Response:
+        status = 200
+
+        def read1(self, limit):
+            reads.append(limit)
+            if len(reads) == 1:
+                if stop == "cancel":
+                    instance.cancel.set()
+                else:
+                    instance.deadline = 0
+                return b'{"owner":'
+            return b'"aico"}'
+
+        def isclosed(self):
+            return len(reads) == 2
+
+    class Connection:
+        def __init__(self, *_args, **_kwargs):
+            self.sock = None
+
+        def request(self, *_args, **_kwargs):
+            pass
+
+        def getresponse(self):
+            # HTTP/1.0/Connection: close can detach the body socket from the
+            # connection while the response still owns a readable body.
+            self.sock = None
+            return Response()
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(watcher.http.client, "HTTPConnection", Connection)
+    with pytest.raises(watcher.Stopped):
+        instance.receipt("http://127.0.0.1:8002", "/v1/roots")
+    assert len(reads) == 1
+
+
 @pytest.mark.parametrize("screen,expected", [
     ("Worked for 3m 42s\nTask complete.\n› \n80% context left", "turn_finished"),
     ("─ Worked for 15s ──\n› ", "turn_finished"),

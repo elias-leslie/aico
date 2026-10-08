@@ -268,8 +268,9 @@ class Collector:
             response = connection.getresponse()
             parts = bytearray()
             while True:
+                remaining = self.remaining()
                 if connection.sock is not None:
-                    connection.sock.settimeout(min(timeout, self.remaining()))
+                    connection.sock.settimeout(min(timeout, remaining))
                 part = response.read1(min(4096, limit + 1 - len(parts)))
                 parts.extend(part)
                 if len(parts) > limit:
@@ -610,7 +611,7 @@ def admin_main(argv: list[str]) -> int:
             native = data.get("error") == "native_tui_atomic_admin_unavailable"
             if (not isinstance(data.get("error"), str) or denied.get(data["error"]) != status
                     or data.get("applied", None if native else False) is not False
-                    or any((native or key in data) and data.get(key) != payload[key] for key in pins)):
+                    or any(data.get(key) != payload[key] for key in pins)):
                 raise Unavailable("admin_receipt_unqualified")
             output.update(applied=False, reason=data["error"])
             if data.get("terminalAdmin") == TERMINAL_ADMIN:
