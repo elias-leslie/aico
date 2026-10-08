@@ -80,34 +80,55 @@ The tmux helper requires an absolute private socket and exact `%pane` target;
 it frames one paste and one Enter in one command queue. It is a transport
 primitive, not an acceptance receipt or permission to operate a shared pane.
 
-## Exact next patch: native TUI compare-and-apply
+## Disabled native source checkpoint
 
-The missing authority belongs inside the Codex TUI input event loop. An
-app-server thread read cannot inspect a local draft or exclude queued human
-input. Implement one native operation, then connect the existing Aico route:
+The local pinned-source checkout `codex-terminal-admin-0.160.1` now retains a
+private submit/control prototype behind the off-by-default
+`terminal-admin-private` Cargo feature. Normal builds do not bind that endpoint.
+The reader patch is retained with its exact upstream revision and MIT notice,
+not vendored or selected by the normal Cargo manifest. The unwired Aico
+`native-admin.ts` adapter validates correlated submit receipts; it rejects clear
+locally without contacting the native endpoint. No Aico launch, owner HTTP
+route or ST facade has been enabled. Every public mutation still fails closed.
+The [private source qualification receipt](qualifications/codex-native-private-0.160.1.json)
+records the isolated submit fixture, native/managed checks and baseline failures;
+it explicitly lists the unqualified invariants.
 
-| Owner/file | Minimal change |
-| --- | --- |
-| Codex `codex-rs/tui/src/admin_control.rs` (new), `lib.rs` | Bind one private local endpoint in the running TUI; no extra process. Return a native process epoch, displayed thread ID and monotonic input revision, never draft text. Require an Aico launch-bound endpoint/identity, never an ambient daemon. |
-| Codex `app_event.rs`, `app.rs`, `app/input.rs` | Enqueue `AdminCompareAndApply` into the same event loop as key/paste input. Increment input revision for all user input and thread switches. A pending input/partial paste/editor/modal, busy turn, nonempty draft/attachments/queue, or mismatched epoch/thread/revision rejects with zero effects. Do not discard human input. |
-| Codex `app/terminal_admin.rs` (new), `app/session_lifecycle.rs` | At one linearization point reserve the request key and input seam. `clear` reuses `load_new_session_config` and `start_fresh_session_with_summary_hint`; return old/new native UUID and the returned effective permission receipt. `submit` uses the existing native user-message submission path, bypassing paste-burst timing, and correlates the accepted turn/item with the key and content digest. Input arriving after reservation is retained for the next draft, never mixed into the submitted text. |
-| Codex `tui/schema/terminal-admin.schema.json` (new) | Strict snapshot and compare-and-apply schemas: `requestKey`, `expectedEpoch`, `expectedThreadId`, `expectedInputRevision`, `kind:clear|submit`, bounded `text` only for submit. Receipt: key, state `rejected|pending|applied|uncertain`, old/new thread, input revision, accepted item/turn identity or effective permissions. No text. |
-| Aico `electron/main/index.ts`, `root-control.ts`, `store.ts` | Hold the existing widget lifecycle owner lock while verifying current pane/generation and the launch-bound native endpoint; forward native pins once. Add the input-revision pin to the route. Persist a request-key/digest reservation and content-free receipt in the existing SQLite catalog. Same key/content reconciles; changed content conflicts. Never infer native thread from rollouts. |
-| Aico `scripts/aico-root-watch.py`, ST manifest | Recognize only the new fully validated native receipt; advertise available only when that exact capability is observed. Keep unknown outcomes unknown. |
+The remaining invariant is concrete: a Core submission may be buffered or
+already dequeued before acquiring `active_turn`; mailbox/automatic work may
+wait below the idle gates. Holding then dropping those gates merely lets old
+work run after a clear handoff. TUI unsubscribe does not retire the old session,
+and existing shutdown queues behind pending Ops. A private RAII experiment
+therefore did not qualify atomic clear and was removed, rather than changing
+the scheduler/session lifecycle. Input comparison must also be atomic with
+Core's submission admission before public submit is enabled.
 
-Persist the reservation before asynchronous thread start/submission. A crash
-after reservation without a sealed receipt is `uncertain` and must never replay
-the action. Matching retries query the same identity. This supplies safe
-idempotency without claiming exactly-once success after an unknowable crash.
+Ordinary `/clear` has also been observed to reload model defaults. A future
+native clear must preserve effective model, reasoning effort and permissions
+explicitly and test persisted-default drift; preserving permissions alone is
+insufficient. No live-safe-clear claim follows from the private TUI fixture.
 
-Required red/green tests at `codex-rs/tui/src/app/tests/terminal_admin.rs`: stale
-thread/epoch/revision; active turn; draft including attachments/partial paste;
-human input queued at the seam; exact Unicode/multiline accepted item; clear
-permission carryover; concurrent duplicate keys; conflicting key digest;
-disconnect/crash after reservation. Extend Aico's existing private-socket tests
-for pane-generation changes during native RPC and mismatched native receipts.
+## Remaining native compare-and-apply work
 
-Only after these native tests and an installed isolated fixture pass should the
-capability be enabled. Aico's new HTTP metadata/control requires the normal
-managed rebuild at the next clean paused seam. This change does not restart or
-rearrange the deployed desktop.
+Keep the next authorized change narrow, but qualify the complete contract:
+
+- Atomically compare displayed native thread, truly idle Core admission, empty
+  draft/attachments and reader/input revision. Cover buffered Ops, already
+  dequeued work, queued mail and automatic-start races without recording or
+  queueing rejected input. Preserve ordinary submit/turn behavior.
+- Clear must prevent any old-thread work from executing after handoff, release
+  reservations on every success/error/cancel path, and preserve the runtime
+  effective model/effort/permissions even when persisted defaults differ.
+- Aico must hold its existing lifecycle owner lock, verify dispatched workload
+  and exact pane/generation plus launch-bound native endpoint, forward once,
+  and accept only a completely correlated content-free native receipt. ST
+  remains a compact facade; raw tmux framing is never acceptance.
+
+Reserve the key/digest durably before effects. A crash with no sealed receipt
+is uncertain and must never replay. Matching retries reconcile the same key;
+changed content conflicts. Required tests include stale pins, drafts, partial
+paste, Core queues/races, busy/active-goal rejection, exact literal Unicode input,
+duplicate/conflicting keys, crash ambiguity, clear settings drift and Aico
+generation changes during RPC. Private reader/TUI positives alone cannot
+enable public routing. Any rollout still requires a separate owner-authorized
+safe seam; this checkpoint does not rebuild or restart the deployed desktop.

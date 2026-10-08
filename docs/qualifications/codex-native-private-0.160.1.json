@@ -1,0 +1,54 @@
+{
+  "scope": "disabled private source checkpoint; not installed or deployed",
+  "codexSourceBase": "d27764b",
+  "codexVersion": "0.160.1",
+  "publicMutationsEnabled": false,
+  "nativeClear": "fail_closed_before_action",
+  "vendorImported": false,
+  "unqualifiedRaiiAndClearRemoved": true,
+  "reader": {
+    "upstream": "https://github.com/nornagon/crossterm",
+    "revision": "efa177859fd9623d57b9fe7ae9bf491ae1ac6ec4",
+    "artifact": "codex-rs/tui/terminal-admin/crossterm-reader.patch",
+    "testsPassed": 6,
+    "nextestRun": "7369ab80-5414-4b69-8293-64bfcac39dd7"
+  },
+  "privateFixture": {
+    "command": "unshare -Urn python3 tui/tests/terminal_admin_qualification.py --codex target/debug/codex-tui",
+    "binarySha256": "c9163d24db70b0b9145317d3c05aa261b692c350b67cb43c5cb46eaa66f493e8",
+    "exit": 0,
+    "providerCalls": 2,
+    "submit": "literal Unicode/multiline input; correlated native turn/digest; matching key did not redeliver",
+    "preserved": ["human_draft", "partial_paste"],
+    "rejected": ["stale_epoch", "stale_thread", "stale_revision", "busy", "key_conflict", "clear"],
+    "runtimeSettingsUnchangedByDisabledClear": true,
+    "freshStatePrivateTmuxLoopbackOnlyNoDaemon": true,
+    "testedBeforeFinalMechanicalFormatting": true
+  },
+  "nativeChecks": [
+    {"crate": "codex-app-server-client", "passed": 29, "nextestRun": "58f1280b-cb8d-4d90-84e0-9e0e3dc991fe", "nativeCases": ["idle_accept", "busy_no_record_no_queue", "active_goal_reject"]},
+    {"crate": "codex-tui", "feature": "terminal-admin-private", "passed": 7, "nextestRun": "15b83e6a-7986-4413-b2fe-44884279f252", "nativeCases": ["strict_schema", "private_launch_binding", "crash_uncertain_no_replay", "key_conflict", "sticky_rejection", "draft_queue_permission_goal_guards", "literal_preparation_without_optimistic_effects"]}
+  ],
+  "managedChecks": [
+    {"project": "aico", "check": "focused native-admin/root-control/tmux Vitest", "passed": 87, "receipt": ".dev-tools/vitest-18dc6c74a234c026-882983-0744d217-details.txt"},
+    {"project": "aico", "check": "admin/watch Python regression", "passed": 26, "receipt": ".dev-tools/pytest-18dc6cd1fbcb1455-934451-84755a9e-details.txt"},
+    {"project": "summitflow", "check": "unchanged admin extension", "passed": 3, "receipt": ".dev-tools/pytest-18dc6c555e9e644f-850290-bd9a3b59-details.txt"}
+  ],
+  "baselineFailure": {
+    "nextestRun": "b574eb18-8a71-4c06-b612-ea088a3f3302",
+    "crate": "codex-tui",
+    "passed": 5556,
+    "failed": 48,
+    "timedOut": 1,
+    "skipped": 8,
+    "notes": "Supplied source/lock had 159 workspace version mismatches (0.0.0 vs 0.160.1); baseline snapshot/provider/cursor/IDE failures were not repaired or accepted. Own generated snap.new artifacts were moved to a recoverable temporary archive."
+  },
+  "notQualified": [
+    "atomic current-thread/input revision comparison with Core buffered or already-dequeued submissions",
+    "clear retirement preventing old-thread queued/mailbox/automatic work after handoff",
+    "Aico lifecycle/generation-fenced public forwarding",
+    "installed native capability or live-safe clear"
+  ],
+  "remainingClearRegression": "Preserve runtime effective model, effort and permissions explicitly despite changed persisted defaults; ordinary /clear can reload model defaults.",
+  "noDeploymentRestartPublicationOrLivePaneAction": true
+}
