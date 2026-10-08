@@ -53,12 +53,7 @@ import {
 } from './lifecycle-guard'
 import { allowTrustedAudioMedia } from './media-permission'
 import { listenOwnerServer } from './owner-control'
-import {
-  ownershipGeneration,
-  type RetirementResult,
-  retireOwnedSession,
-  sessionGeneration,
-} from './owner-retirement'
+import { ownershipGeneration, type RetirementResult, retireOwnedSession } from './owner-retirement'
 import { headlessRetirementOperations } from './owner-runtime'
 import { readCgroupPopulated, scopeIdentity, stopOwnedPaneScope } from './owner-scope'
 import {
@@ -84,7 +79,12 @@ import {
   refreshProjects,
   widgetCwd,
 } from './project'
-import { createRootServer, guiSocketPath, rootTitleOperation } from './root-control'
+import {
+  createRootServer,
+  guiSocketPath,
+  rootTitleOperation,
+  widgetViewOperation,
+} from './root-control'
 import {
   initialLaunchLine,
   rootLaunchEnvironment,
@@ -2947,19 +2947,13 @@ async function rootViewOperation(
   generation: string,
   operation: (row: WidgetRow) => void,
 ): Promise<boolean> {
-  const owner = lifecycleOwners.acquire(widgetId)
-  if (!owner) return false
-  try {
-    const row = getWidget(widgetId)
-    if (!row || sessionGeneration(row) !== generation || !(await verifiedCurrentManagedPane(row)))
-      return false
-    const latest = getWidget(widgetId)
-    if (!latest || sessionGeneration(latest) !== generation) return false
-    operation(latest)
-    return true
-  } finally {
-    releaseLifecycleOwner(widgetId, owner)
-  }
+  return widgetViewOperation(widgetId, generation, {
+    acquire: (id) => lifecycleOwners.acquire(id),
+    release: releaseLifecycleOwner,
+    getWidget,
+    verify: async (row) => Boolean(await verifiedCurrentManagedPane(row)),
+    apply: operation,
+  })
 }
 
 async function rootManagedGateState(row: WidgetRow): Promise<ManagedGateState | null> {

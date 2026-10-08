@@ -45,6 +45,38 @@ export interface RootControlOperations {
   title(widgetId: string, generation: string, label: string): Promise<boolean>
 }
 
+/** Keep view writes on the exact widget across asynchronous pane verification. */
+export async function widgetViewOperation(
+  widgetId: string,
+  generation: string,
+  operations: {
+    acquire(widgetId: string): LifecycleOwnerToken | null
+    release(widgetId: string, owner: LifecycleOwnerToken): void
+    getWidget(widgetId: string): WidgetRow | undefined
+    verify(row: WidgetRow): Promise<boolean>
+    apply(row: WidgetRow): void
+  },
+): Promise<boolean> {
+  const owner = operations.acquire(widgetId)
+  if (!owner) return false
+  try {
+    const row = operations.getWidget(widgetId)
+    if (
+      !row ||
+      row.id !== widgetId ||
+      sessionGeneration(row) !== generation ||
+      !(await operations.verify(row))
+    )
+      return false
+    const latest = operations.getWidget(widgetId)
+    if (!latest || latest.id !== widgetId || sessionGeneration(latest) !== generation) return false
+    operations.apply(latest)
+    return true
+  } finally {
+    operations.release(widgetId, owner)
+  }
+}
+
 /** Verify running evidence under lifecycle ownership before writing root metadata. */
 export async function rootTitleOperation(
   widgetId: string,
@@ -63,13 +95,19 @@ export async function rootTitleOperation(
     const row = operations.getWidget(widgetId)
     if (
       !row ||
+      row.id !== widgetId ||
       sessionGeneration(row) !== generation ||
       row.launchState !== 'dispatched' ||
       (await operations.gateState(row)) !== 'active-workload'
     )
       return false
     const latest = operations.getWidget(widgetId)
-    if (!latest || sessionGeneration(latest) !== generation || latest.launchState !== 'dispatched')
+    if (
+      !latest ||
+      latest.id !== widgetId ||
+      sessionGeneration(latest) !== generation ||
+      latest.launchState !== 'dispatched'
+    )
       return false
     operations.rename(latest)
     return true
@@ -334,6 +372,20 @@ export function createRootServer(operations: RootControlOperations) {
       directedDelivery,
     }
   }
+  const describeWidget = async (row: WidgetRow) => {
+    const generation = sessionGeneration(row)
+    const status = await operations.status(row)
+    const latest = getWidget(row.id)
+    if (!latest || latest.id !== row.id || sessionGeneration(latest) !== generation) return null
+    return {
+      owner: 'aico',
+      widgetId: row.id,
+      sessionId: row.sessionId,
+      generation,
+      status,
+      available: status === 'running',
+    }
+  }
   return createServer(async (request, response) => {
     const path = request.url?.split('?')[0] ?? ''
     if (!operations.available()) {
@@ -341,6 +393,66 @@ export function createRootServer(operations: RootControlOperations) {
       return
     }
     try {
+      const widgetMatch = /^\/v1\/widgets\/([0-9a-f]{8})(?:\/(title|position))?$/.exec(path)
+      if (widgetMatch) {
+        const widgetId = widgetMatch[1]
+        const row = getWidget(widgetId)
+        if (!row || row.id !== widgetId) {
+          json(response, 404, { error: 'not_found' })
+          return
+        }
+        if (!widgetMatch[2] && request.method === 'GET') {
+          const descriptor = await describeWidget(row)
+          json(response, descriptor ? 200 : 409, descriptor ?? { error: 'stale_generation' })
+          return
+        }
+        if (!widgetMatch[2] || request.method !== 'POST') {
+          json(response, 405, { error: 'method_not_allowed' })
+          return
+        }
+        let payload: unknown
+        try {
+          payload = await body(request)
+        } catch {
+          json(response, 400, { error: 'invalid_body' })
+          return
+        }
+        const title = widgetMatch[2] === 'title' ? parseTitle(payload) : null
+        const position = widgetMatch[2] === 'position' ? parsePosition(payload) : null
+        const generation = title?.generation ?? position?.generation
+        if (!generation) {
+          json(response, 400, { error: 'invalid_body' })
+          return
+        }
+        await serialize(`widget:${widgetId}`, async () => {
+          const current = getWidget(widgetId)
+          if (!current) {
+            json(response, 410, { error: 'ended' })
+            return
+          }
+          if (current.id !== widgetId || sessionGeneration(current) !== generation) {
+            json(response, 409, { error: 'stale_generation' })
+            return
+          }
+          const ready = await describeWidget(current)
+          if (!ready || !ready.available) {
+            json(response, 409, { error: 'workload_unavailable' })
+            return
+          }
+          const success = title
+            ? await operations.title(widgetId, generation, title.label)
+            : position
+              ? await operations.position(widgetId, generation, position.bounds)
+              : false
+          const latest = getWidget(widgetId)
+          const descriptor =
+            success && latest && sessionGeneration(latest) === generation
+              ? await describeWidget(latest)
+              : null
+          json(response, descriptor ? 200 : 409, descriptor ?? { error: 'workload_unavailable' })
+        })
+        return
+      }
       if (path === '/v1/roots' && request.method === 'GET') {
         json(response, 200, {
           owner: 'aico',

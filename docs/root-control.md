@@ -15,9 +15,59 @@ routes. Root control never starts the desktop runtime.
 | `GET /v1/roots/<requestId>` | none | current descriptor, including ended tombstones |
 | `POST /v1/roots/<requestId>/show` | `{generation}` | shows the existing view or reopens it |
 | `POST /v1/roots/<requestId>/position` | `{generation,bounds:{x,y,width,height}}` | positions the view or stores its next placement |
+| `POST /v1/roots/<requestId>/title` | `{generation,label}` | renames the exact running root |
 | `POST /v1/roots/<requestId>/send` | none supported | 503 `directed_delivery_unavailable` |
 | `GET /v1/roots/<requestId>/admin` | none | current catalog generation and unavailable native terminal capability |
 | `POST /v1/roots/<requestId>/admin` | strict `kind:clear|submit`, generation, expected native thread and stable request key | generation-checked, fail-closed 503; no terminal input |
+| `GET /v1/widgets/<widgetId>` | none | compact exact widget descriptor below |
+| `POST /v1/widgets/<widgetId>/title` | `{generation,label}` | renames the exact running widget |
+| `POST /v1/widgets/<widgetId>/position` | `{generation,bounds:{x,y,width,height}}` | positions its view or stores its next placement |
+
+Widget routes also address ordinary managed widgets with no `root_requests`
+record. The widget ID is exactly eight lowercase hexadecimal characters. A
+successful GET or mutation returns exactly `owner: "aico"`, `widgetId`,
+`sessionId`, the opaque 64-character lowercase hexadecimal `generation`,
+`status` (`running`, `pending`, or `uncertain`), and `available` (true only for
+`running`). It contains no title, bounds, project details, prompt, transcript,
+or terminal contents. A missing or retired widget returns 404 `not_found`;
+retirement while waiting to mutate returns 410 `ended`. A stale generation
+returns 409 `stale_generation`; unverifiable workload ownership, a changed
+identity during mutation, or an unavailable workload returns 409
+`workload_unavailable`. GUI unavailability returns 503 `gui_unavailable`.
+The GET rechecks the same generation after observing status; identity changes
+during inspection return 409 `stale_generation`.
+
+Title and position bodies are strict: no additional fields. Titles are trimmed,
+nonempty, at most 160 UTF-8 bytes, and exclude control characters, lone
+surrogates and Unicode line/paragraph separators. Bounds contain exactly integer
+`x`, `y`, `width`, and `height`, each with absolute value at most 100000; minimum
+size is 360 by 240. Invalid bodies return 400 `invalid_body`. Writes acquire the
+existing widget lifecycle owner, verify exact managed pane ownership, and reread
+the catalog generation before applying. Title writes additionally require a
+dispatched active workload. Existing views use `BrowserWindow.setBounds` and
+persist the resulting geometry; detached views save their next placement.
+
+The direct facade uses `AICO_WIDGET_ID` for the current widget, with an explicit
+`--widget-id` override. It never selects a focused or recent widget:
+
+```sh
+st aico widget status
+st aico widget title 'Investigation'
+st aico widget position -10 20 900 560
+st aico widget status --widget-id aabbcc01 --root-socket /run/user/1000/aico/gui-control.sock
+```
+
+All three commands accept `--widget-id` and `--root-socket`. Mutations fetch the
+descriptor once, pin its widget, session and generation, then send one mutation
+and qualify the success receipt against that pin. Their output adds `operation`
+and `applied: true` to the compact descriptor, without echoing title or bounds.
+An uncertain mutation has `applied: null`; failure before a mutation is sent has
+`applied: false`. No failed request is automatically retried. Exit codes are 0
+for a qualified receipt, 1 for owner/identity failure, and 2 for invalid input.
+
+Roots created by direct `st aico create` are owner roots without SummitFlow fleet
+event streams; title, position and widget controls do not create an event stream,
+and operators must not use `sessions emit` or `sessions wait` against those roots.
 
 Create accepts exactly `requestId`, `tool` (`codex` or `claude-code`),
 `projectId`, absolute normalized `projectRoot`, nonempty `initialPrompt`, `role`,

@@ -15,6 +15,7 @@ import {
   parseRootCreate,
   rootRequestDigest,
   rootTitleOperation,
+  widgetViewOperation,
 } from './root-control'
 import {
   initialLaunchLine,
@@ -26,10 +27,12 @@ import {
   getRootRequest,
   getWidget,
   initStore,
+  insertWidget,
   listWidgets,
   removeWidget,
   reserveRootRequest,
   rootRequestForWidget,
+  setWidgetName,
   type WidgetRow,
 } from './store'
 import { registerBuiltinTuis } from './tui/registry'
@@ -56,11 +59,14 @@ describe('private root workload control', () => {
   const show = vi.fn(async () => true)
   const position = vi.fn(async () => true)
   const title = vi.fn(async () => true)
+  const status = vi.fn(async (row: WidgetRow) =>
+    running.has(row.id) ? ('running' as const) : ('uncertain' as const),
+  )
   const server = createRootServer({
     available: () => available,
     validate: (input) => input.projectRoot !== '/missing',
     ensure,
-    status: async (row) => (running.has(row.id) ? 'running' : 'uncertain'),
+    status,
     show,
     position,
     title,
@@ -296,6 +302,224 @@ describe('private root workload control', () => {
       'verification failed',
     )
     expect(rename).not.toHaveBeenCalled()
+    expect(owners.isHeld(row.id)).toBe(false)
+  })
+
+  it('controls one ordinary widget without a root request and returns only exact identity', async () => {
+    const row = insertWidget('aabbcc01', true, 'codex')
+    insertWidget('aabbcc02', true, 'codex')
+    setWidgetName(row.id, 'Private widget title')
+    running.add(row.id)
+    expect(rootRequestForWidget(row.id)).toBeUndefined()
+    const generation = sessionGeneration(row)
+    const path = `/v1/widgets/${row.id}`
+    const descriptor = {
+      owner: 'aico',
+      widgetId: row.id,
+      sessionId: row.sessionId,
+      generation,
+      status: 'running',
+      available: true,
+    }
+    expect(await call(path)).toEqual({ status: 200, body: descriptor })
+    const bounds = { x: -10, y: 20, width: 900, height: 560 }
+    expect(await call(`${path}/title`, 'POST', { generation, label: '  Exact widget  ' })).toEqual({
+      status: 200,
+      body: descriptor,
+    })
+    expect(title).toHaveBeenLastCalledWith(row.id, generation, 'Exact widget')
+    expect(await call(`${path}/position`, 'POST', { generation, bounds })).toEqual({
+      status: 200,
+      body: descriptor,
+    })
+    expect(position).toHaveBeenLastCalledWith(row.id, generation, bounds)
+    expect(getWidget('aabbcc02')?.name).toBeNull()
+    expect(JSON.stringify(descriptor)).not.toMatch(
+      /Private|label|bounds|prompt|transcript|terminal/,
+    )
+    const receipt = await new Promise<Record<string, unknown>>((resolve, reject) => {
+      execFile(
+        '/usr/bin/python3',
+        [
+          join(process.cwd(), 'scripts/aico-root-watch.py'),
+          'widget',
+          'title',
+          'CLI private label',
+          '--root-socket',
+          socket,
+        ],
+        { encoding: 'utf8', env: { ...process.env, AICO_WIDGET_ID: row.id } },
+        (error, stdout) => {
+          if (error) reject(error)
+          else {
+            try {
+              resolve(JSON.parse(stdout))
+            } catch (failure) {
+              reject(failure)
+            }
+          }
+        },
+      )
+    })
+    expect(receipt).toEqual({ ...descriptor, operation: 'title', applied: true })
+    expect(title).toHaveBeenLastCalledWith(row.id, generation, 'CLI private label')
+  })
+
+  it('rejects stale, other-widget, missing, ended and unavailable widget mutations', async () => {
+    const row = present(getWidget('aabbcc01'))
+    const generation = sessionGeneration(row)
+    const path = `/v1/widgets/${row.id}`
+    const before = [title.mock.calls.length, position.mock.calls.length]
+    for (const wrong of ['0'.repeat(64), sessionGeneration(present(getWidget('aabbcc02')))]) {
+      expect(
+        (await call(`${path}/title`, 'POST', { generation: wrong, label: 'Rejected' })).status,
+      ).toBe(409)
+      expect(
+        (
+          await call(`${path}/position`, 'POST', {
+            generation: wrong,
+            bounds: { x: 0, y: 0, width: 900, height: 560 },
+          })
+        ).status,
+      ).toBe(409)
+    }
+    const ended = insertWidget('aabbcc03', true, 'codex')
+    removeWidget(ended.id)
+    for (const id of ['aabbcc03', 'aabbcc04']) {
+      expect((await call(`/v1/widgets/${id}`)).status).toBe(404)
+      expect(
+        (await call(`/v1/widgets/${id}/title`, 'POST', { generation, label: 'Rejected' })).status,
+      ).toBe(404)
+    }
+    const unavailable = await call('/v1/widgets/aabbcc02')
+    expect(unavailable.body).toMatchObject({ status: 'uncertain', available: false })
+    expect(
+      (
+        await call('/v1/widgets/aabbcc02/title', 'POST', {
+          generation: unavailable.body.generation,
+          label: 'Rejected',
+        })
+      ).status,
+    ).toBe(409)
+    expect([title.mock.calls.length, position.mock.calls.length]).toEqual(before)
+    expect((await call('/v1/widgets/AABBCC01')).status).toBe(404)
+  })
+
+  it('reuses bounded label and integer bounds validation for ordinary widgets', async () => {
+    const row = present(getWidget('aabbcc01'))
+    const generation = sessionGeneration(row)
+    const path = `/v1/widgets/${row.id}`
+    const before = [title.mock.calls.length, position.mock.calls.length]
+    for (const label of [
+      '',
+      '\u001bcontrol',
+      'line\nbreak',
+      '\u007f',
+      '\u0085',
+      '\u2028',
+      '\u2029',
+      '\ud800',
+      '界'.repeat(54),
+    ]) {
+      expect((await call(`${path}/title`, 'POST', { generation, label })).status).toBe(400)
+    }
+    expect(
+      (await call(`${path}/title`, 'POST', { generation, label: 'Valid', extra: true })).status,
+    ).toBe(400)
+    for (const bounds of [
+      { x: 0, y: 0, width: 359, height: 240 },
+      { x: 0, y: 0, width: 360, height: 239 },
+      { x: 100001, y: 0, width: 360, height: 240 },
+      { x: 0.5, y: 0, width: 360, height: 240 },
+      { x: '0', y: 0, width: 360, height: 240 },
+      { x: 0, y: 0, width: 360, height: 240, extra: 1 },
+    ]) {
+      expect((await call(`${path}/position`, 'POST', { generation, bounds })).status).toBe(400)
+    }
+    expect([title.mock.calls.length, position.mock.calls.length]).toEqual(before)
+  })
+
+  it('rejects identity changes during widget inspection or before mutation', async () => {
+    const row = insertWidget('aabbcc05', true, 'codex')
+    running.add(row.id)
+    status.mockImplementationOnce(async () => {
+      removeWidget(row.id)
+      return 'running'
+    })
+    expect(await call(`/v1/widgets/${row.id}`)).toEqual({
+      status: 409,
+      body: { error: 'stale_generation' },
+    })
+    const replacement = insertWidget('aabbcc06', true, 'codex')
+    running.add(replacement.id)
+    const before = title.mock.calls.length
+    status.mockImplementationOnce(async () => {
+      removeWidget(replacement.id)
+      return 'running'
+    })
+    expect(
+      (
+        await call(`/v1/widgets/${replacement.id}/title`, 'POST', {
+          generation: sessionGeneration(replacement),
+          label: 'Rejected',
+        })
+      ).status,
+    ).toBe(409)
+    expect(title.mock.calls).toHaveLength(before)
+  })
+
+  it('keeps view and title writes on one identity while holding lifecycle ownership', async () => {
+    const row = { ...present(getWidget('aabbcc01')), launchState: 'dispatched' as const }
+    const generation = sessionGeneration(row)
+    const owners = new LifecycleOwnerLock()
+    let current: WidgetRow | undefined = row
+    const apply = vi.fn(() => expect(owners.isHeld(row.id)).toBe(true))
+    const verify = vi.fn(async () => {
+      expect(owners.isHeld(row.id)).toBe(true)
+      return true
+    })
+    const operations = {
+      acquire: (id: string) => owners.acquire(id),
+      release: (_id: string, owner: NonNullable<ReturnType<typeof owners.acquire>>) =>
+        owners.release(owner),
+      getWidget: () => current,
+      verify,
+      apply,
+    }
+    expect(await widgetViewOperation(row.id, generation, operations)).toBe(true)
+    expect(apply).toHaveBeenCalledExactlyOnceWith(row)
+    apply.mockClear()
+    for (const replacement of [
+      undefined,
+      { ...row, scopeInvocationId: 'changed' },
+      { ...row, id: 'aabbcc02' },
+    ]) {
+      current = row
+      verify.mockImplementationOnce(async () => {
+        current = replacement
+        return true
+      })
+      expect(await widgetViewOperation(row.id, generation, operations)).toBe(false)
+      expect(apply).not.toHaveBeenCalled()
+      current = row
+      expect(
+        await rootTitleOperation(row.id, generation, {
+          ...operations,
+          gateState: async () => {
+            current = replacement
+            return 'active-workload'
+          },
+          rename: apply,
+        }),
+      ).toBe(false)
+      expect(apply).not.toHaveBeenCalled()
+      expect(owners.isHeld(row.id)).toBe(false)
+    }
+    current = row
+    verify.mockRejectedValueOnce(new Error('pane check failed'))
+    await expect(widgetViewOperation(row.id, generation, operations)).rejects.toThrow(
+      'pane check failed',
+    )
     expect(owners.isHeld(row.id)).toBe(false)
   })
 

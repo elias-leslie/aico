@@ -735,6 +735,103 @@ def create_main(argv: list[str]) -> int:
     return 1
 
 
+def widget_descriptor(data: dict, widget_id: str) -> dict:
+    """Project only a qualified exact widget identity and workload availability."""
+    session = data.get("sessionId")
+    generation = data.get("generation")
+    state = data.get("status")
+    if (data.get("owner") != "aico" or data.get("widgetId") != widget_id
+            or not isinstance(session, str)
+            or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", session)
+            or not isinstance(generation, str) or not re.fullmatch(r"[0-9a-f]{64}", generation)
+            or state not in ("running", "pending", "uncertain")
+            or type(data.get("available")) is not bool
+            or data["available"] != (state == "running")):
+        raise Unavailable("widget_receipt_unqualified")
+    return {key: data[key] for key in ("owner", "widgetId", "sessionId", "generation", "status", "available")}
+
+
+def widget_main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="st aico widget", description=(
+        "Inspect or change one exact Aico widget. Defaults to AICO_WIDGET_ID; "
+        "title and position pin its owner generation before one mutation."))
+    commands = parser.add_subparsers(dest="operation", required=True)
+    for operation in ("status", "title", "position"):
+        command = commands.add_parser(operation)
+        command.add_argument("--widget-id", default=os.environ.get("AICO_WIDGET_ID"))
+        command.add_argument("--root-socket", type=socket_path)
+        if operation == "title":
+            command.add_argument("label")
+        elif operation == "position":
+            for dimension in ("x", "y", "width", "height"):
+                command.add_argument(dimension, type=int)
+    args = parser.parse_args(argv)
+    if not isinstance(args.widget_id, str) or not re.fullmatch(r"[0-9a-f]{8}", args.widget_id):
+        parser.error("expected --widget-id or AICO_WIDGET_ID with exactly eight lowercase hex characters")
+    payload = {}
+    if args.operation == "title":
+        label = args.label.strip()
+        if (not label or re.search(r"[\x00-\x1f\x7f-\x9f\ud800-\udfff\u2028\u2029]", label)
+                or len(label.encode("utf-8")) > 160):
+            parser.error("expected a nonempty title of at most 160 UTF-8 bytes without controls")
+        payload["label"] = label
+    elif args.operation == "position":
+        bounds = {key: getattr(args, key) for key in ("x", "y", "width", "height")}
+        if any(abs(value) > 100_000 for value in bounds.values()) or args.width < 360 or args.height < 240:
+            parser.error("expected integer bounds within 100000; minimum size is 360 by 240")
+        payload["bounds"] = bounds
+    runtime = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
+    try:
+        endpoint = args.root_socket or socket_path(os.environ.get("AICO_GUI_CONTROL_SOCKET", f"{runtime}/aico/gui-control.sock"))
+    except argparse.ArgumentTypeError:
+        parser.error("invalid owner transport configuration")
+    collector = Collector(endpoint, "", "", time.monotonic() + 10, threading.Event())
+    output: dict = {"owner": "aico", "widgetId": args.widget_id}
+    mutation_sent = False
+    errors = {400: "invalid_body", 404: "not_found", 409: {"stale_generation", "workload_unavailable"},
+              410: "ended", 503: "gui_unavailable"}
+
+    def qualify(status: int, data: dict) -> dict:
+        if status != 200:
+            expected = errors.get(status)
+            reason = data.get("error")
+            if (isinstance(expected, set) and isinstance(reason, str) and reason in expected
+                    or isinstance(expected, str) and reason == expected):
+                raise Unavailable(reason)
+            raise Unavailable("widget_receipt_unqualified")
+        return widget_descriptor(data, args.widget_id)
+
+    try:
+        route = f"/v1/widgets/{args.widget_id}"
+        status, data = collector.receipt(endpoint, route)
+        descriptor = qualify(status, data)
+        output.update(descriptor)
+        if args.operation != "status":
+            if not descriptor["available"]:
+                raise Unavailable("workload_unavailable")
+            payload["generation"] = descriptor["generation"]
+            mutation_sent = True
+            status, data = collector.receipt(endpoint, f"{route}/{args.operation}", payload)
+            changed = qualify(status, data)
+            if any(changed[key] != descriptor[key] for key in ("widgetId", "sessionId", "generation")):
+                raise Unavailable("widget_receipt_unqualified")
+            output.update(changed, operation=args.operation, applied=True)
+        emit_json(collector, output)
+        return 0
+    except (Unavailable, Stopped) as error:
+        output.update(status="uncertain", available=False,
+                      reason=str(error) if isinstance(error, Unavailable) else "deadline")
+        if args.operation != "status":
+            output.update(operation=args.operation, applied=None if mutation_sent else False)
+        try:
+            emit_json(collector, output)
+        except Stopped:
+            pass
+        return 1
+    except BrokenPipeError:
+        return 0
+
+
 def roots_main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="st aico roots", description=__doc__)
     parser.add_argument("request_id", nargs="?", help="exact retained Aico catalog request ID")
@@ -796,6 +893,8 @@ def main(argv: list[str] | None = None) -> int:
         return admin_main(argv[1:])
     if argv and argv[0] == "create":
         return create_main(argv[1:])
+    if argv and argv[0] == "widget":
+        return widget_main(argv[1:])
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("root", "owner", "tmux"):
         parser.add_argument(f"--{name}-socket", required=True, type=socket_path)
