@@ -43,9 +43,22 @@ scripts/aico-install.sh
 ```
 
 The installer runs `npm ci`, rebuilds native Electron modules, syncs the locked
-Python 3.13 sidecar environment with `uv`, and writes a desktop entry under
-`~/.local/share/applications`.
-On Linux it also configures Electron's `chrome-sandbox` helper with root ownership when passwordless `sudo` is available; otherwise it prints the manual `sudo chown`/`chmod` commands needed before launching the sandboxed app.
+Python 3.13 sidecar environment with `uv`, writes a desktop entry under
+`~/.local/share/applications`, and installs the `aico-shell.service` and
+`aico-owner.service` user units into `${XDG_CONFIG_HOME:-~/.config}/systemd/user/`
+(rendered for this checkout, followed by `systemctl --user daemon-reload`). It
+is safe to rerun; rerun it after moving the checkout.
+
+On Linux it also offers to give Electron's `chrome-sandbox` helper root
+ownership and the setuid bit. Privileged steps never reuse cached `sudo` credentials. The installer prints each command first and runs it only when you answer yes in an interactive shell or set `AICO_INSTALL_PRIVILEGED=1`; otherwise you run the printed commands yourself.
+
+```bash
+AICO_INSTALL_PRIVILEGED=1 scripts/aico-install.sh
+```
+
+The optional TUI context hooks (`AICO_INSTALL_CONTEXT_HOOKS=1`) need an Agent Hub
+checkout; set `AICO_AGENT_HUB_ROOT` if it is not at
+`/srv/workspaces/projects/agent-hub`.
 
 Launch and stop:
 
@@ -54,7 +67,10 @@ scripts/aico-launch.sh
 scripts/aico-stop.sh
 ```
 
-The launcher writes state under `${XDG_STATE_HOME:-~/.local/state}/aico`.
+The launcher writes its pidfile, lock, and `launcher.log` under
+`${XDG_STATE_HOME:-~/.local/state}/aico`. Configuration is read from environment
+variables only; see [Configuration](project-guide.md#configuration) for how to
+set them for the managed unit.
 
 Use **Copy session diagnostics** inside a widget to inspect its stable ownership
 ID, tmux server generation/socket, session and pane IDs, gate-dispatch state,
@@ -107,9 +123,9 @@ npm run dist
 
 - Agent CLIs: install and authenticate `claude`, `codex`, `opencode`, `gemini`, `pi`, or `hermes` separately.
 - Project catalog and screen/OCR capture: if an `st` CLI is installed, Aico can use `st projects` and `st ui` surfaces; otherwise it falls back to Personal Workspace and core widgets.
-- Voice dictation: set `AICO_VOICE_WS` to a compatible local speech-to-text websocket. If it is unavailable, only voice dictation is disabled.
+- Voice dictation: Aico connects to `ws://127.0.0.1:8003/api/voice/ws?user_id=aico&app=aico` unless `AICO_VOICE_WS` names another compatible speech-to-text websocket. If nothing answers, only voice dictation fails.
 - Browser extension: load `extension/` unpacked in Chrome/Chromium.
 
 ## Ubuntu AppArmor note
 
-Ubuntu 24.04+ can block Electron's sandbox from creating an unprivileged user namespace. `scripts/aico-install.sh` detects the checkout's Electron binary and, when `sudo` is available in an interactive shell, loads a path-correct `aico-electron` AppArmor profile. If it cannot do that automatically, it prints the exact manual commands to run.
+Ubuntu 24.04+ can set `kernel.apparmor_restrict_unprivileged_userns=1`, which blocks Electron's sandbox from creating an unprivileged user namespace. Only when that sysctl is `1`, `scripts/aico-install.sh` generates the minimal Ubuntu-style profile (`userns` for this checkout's Electron binary) named `aico-electron-<hash of the binary path>`, so separate checkouts get separate profiles. It prints the profile path and the `install`/`apparmor_parser` commands, and runs them only on opt-in as described above. The binary is in your user-writable checkout, so anything that replaces it also gets the permission. A profile named plain `aico-electron` from older installers can be removed with `sudo apparmor_parser -R /etc/apparmor.d/aico-electron && sudo rm /etc/apparmor.d/aico-electron`.

@@ -1,4 +1,5 @@
-# TEMPLATE — st service rebuild aico renders __PROJECT_ROOT__ for the user unit.
+# TEMPLATE — scripts/aico-install.sh and `st service rebuild aico` render
+# __PROJECT_ROOT__ for the user unit.
 [Unit]
 Description=Aico durable session owner
 After=aico-shell.service

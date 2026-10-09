@@ -72,9 +72,12 @@ The installer performs a source install in the current checkout:
 - `npm ci`
 - `uv sync --frozen --python 3.13 --extra dev`
 - installs a desktop launcher at `~/.local/share/applications/aico.desktop`
+- renders `scripts/systemd/aico-shell.service` and `aico-owner.service` into `${XDG_CONFIG_HOME:-~/.config}/systemd/user/` (substituting the checkout path, as `st service rebuild aico` does) and runs `systemctl --user daemon-reload`; the units are not enabled, and `scripts/aico-launch.sh` starts `aico-shell.service`
 - optionally installs GNOME capture hotkeys when `gsettings` is available
-- configures Electron's Linux `chrome-sandbox` helper when passwordless `sudo` is available, or prints the manual commands
-- optionally loads an AppArmor profile for Electron's sandbox on Ubuntu 24.04+
+- configures Electron's Linux `chrome-sandbox` helper (root-owned, setuid) when you opt in
+- on kernels with `kernel.apparmor_restrict_unprivileged_userns=1`, installs an AppArmor profile for Electron's sandbox when you opt in
+
+Privileged steps never reuse cached `sudo` credentials. The installer prints each command first and runs it only when you answer yes in an interactive shell or set `AICO_INSTALL_PRIVILEGED=1`; otherwise you run the printed commands yourself. Rerun the installer after moving the checkout so the units and desktop entry point at the new path.
 
 Stop Aico with:
 
@@ -115,11 +118,23 @@ gesture additionally uses the `st` capture CLI when it is installed.
 
 ## Configuration
 
-Copy `.env.example` only if you want to override defaults:
+Aico reads configuration from process environment variables only. Nothing
+loads a `.env` file: `.env.example` is a reference list of the variables and
+their defaults, not a file the app reads.
+
+The desktop runtime runs as the `aico-shell.service` user unit, so it sees the
+systemd user manager's environment, not your interactive shell's
+(`scripts/aico-launch.sh` imports only display variables). Set overrides with a
+drop-in, then restart Aico:
 
 ```bash
-cp .env.example .env
+systemctl --user edit aico-shell.service
+# [Service]
+# Environment=AICO_VOICE_WS=ws://127.0.0.1:9000/ws
 ```
+
+Give `aico-owner.service` the same `AICO_STATE_DIR` if you change it. For a
+directly-run AppImage or `npm start`, export the variables in the launching shell.
 
 Important variables:
 
@@ -127,9 +142,10 @@ Important variables:
 | --- | --- | --- |
 | `AICO_SIDECAR_HOST` | `127.0.0.1` | FastAPI sidecar bind host. Keep loopback unless you know why remote access is safe. |
 | `AICO_SIDECAR_PORT` | `8005` | Sidecar HTTP port for health, selection, and widget event APIs. |
-| `AICO_STATE_DIR` | `~/.local/state/aico` | Local logs, SQLite state, pidfile, and launcher logs. |
-| `AICO_CONFIG_DIR` | `~/.config/aico` | Reserved for user config. |
-| `AICO_VOICE_WS` | `ws://127.0.0.1:8003/api/voice/ws?user_id=aico&app=aico` | Optional compatible speech-to-text websocket. If absent/unreachable, voice dictation fails without crashing the app. |
+| `AICO_STATE_DIR` | `~/.local/state/aico` | App and sidecar state: selection SQLite, widget event JSONL, and widget/session state. The launcher pidfile, lock, and `launcher.log` always live in `${XDG_STATE_HOME:-~/.local/state}/aico` and do not follow this variable. |
+| `AICO_VOICE_WS` | `ws://127.0.0.1:8003/api/voice/ws?user_id=aico&app=aico` | Speech-to-text websocket for push-to-talk dictation. Unset uses this local default; there is no off switch. If nothing answers at the URL, only dictation fails and the rest of the app keeps working. |
+| `AICO_SIDECAR_ALLOW_REMOTE` | unset | Set to `1` to allow a non-loopback `AICO_SIDECAR_HOST` and to accept any `Host` header. The sidecar is unauthenticated, so leave this unset. |
+| `AICO_EXTENSION_IDS` | `oejadbpdecaenbbihglcnchnkmlilmjf` | Comma-separated Chrome extension IDs the sidecar trusts as browser origins. The default is the stable ID derived from the `key` in `extension/manifest.json`; set this only for a fork or re-keyed extension. |
 | `AICO_SELECTION_HOTKEY` | `CommandOrControl+Shift+Space` | Electron global shortcut for selection indication. |
 | `AICO_VOICE_HOTKEY` | `CommandOrControl+Shift+M` | Electron global shortcut for push-to-talk toggle. |
 | `AICO_AGENT_MIN_AVAILABLE_GIB` | `6` | Defer a new agent launch while `/proc/meminfo` MemAvailable is below this many GiB. |
@@ -195,7 +211,7 @@ Main endpoints:
 - `GET /selection/current`, `GET /selection/history` — read recent captures.
 - `GET /selection/events` — Server-Sent Events stream of delivery events (the Wayland-safe path for routing captures into a widget).
 
-The sidecar is loopback-only by default and rejects non-local browser origins.
+The sidecar is loopback-only by default. It rejects browser origins other than local pages and the trusted extension IDs (`AICO_EXTENSION_IDS`), and rejects requests whose `Host` header is not `127.0.0.1`, `localhost`, or `[::1]`, which blocks DNS-rebinding pages. `AICO_SIDECAR_ALLOW_REMOTE=1` lifts the bind and `Host` restrictions.
 
 ## Optional browser extension
 

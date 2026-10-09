@@ -1,7 +1,7 @@
 # TEMPLATE — do not `cp` this into systemd directly: `__PROJECT_ROOT__` is a
-# placeholder. `st service rebuild aico` renders it (substituting the repo path)
-# and installs the unit to ~/.config/systemd/user/. That is the supported path;
-# see docs/INSTALL.md ("managed-service path").
+# placeholder. scripts/aico-install.sh (source installs) and
+# `st service rebuild aico` (managed hosts) render it with the repo path and
+# install the unit to ~/.config/systemd/user/; see docs/INSTALL.md.
 [Unit]
 Description=Aico desktop shell
 After=graphical-session.target

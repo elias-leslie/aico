@@ -36,6 +36,8 @@ scripts/aico-install.sh
 scripts/aico-launch.sh
 ```
 
+The installer also installs the `aico-shell.service` and `aico-owner.service` user units for this checkout. It prints any `sudo` step (Electron's `chrome-sandbox` helper, and an AppArmor profile on kernels that restrict user namespaces) and runs it only after an interactive yes or with `AICO_INSTALL_PRIVILEGED=1`. Configuration comes from environment variables, not a `.env` file.
+
 Source builds additionally need Node.js 22+, npm, Python 3.13+, uv, and native `node-pty` build tools. The [project guide](docs/project-guide.md) retains packaging and installation details.
 
 ## Runtime, data, and integrations
