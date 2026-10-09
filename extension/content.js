@@ -12,6 +12,11 @@
 //
 // Every record keeps the frozen shape ({kind,snippet,meta}); web captures are
 // kind:"dom" with the sub-type in meta.type.
+//
+// Page-script isolation: the shadow root is closed (the page can't reach our
+// buttons through host.shadowRoot) and every UI handler requires
+// event.isTrusted, so only a real user gesture — never a synthetic .click() or
+// dispatchEvent from page script — can send or stash a capture.
 ;(() => {
   // biome-ignore lint/suspicious/noRedundantUseStrict: classic content script, not an ES module — strict mode is load-bearing
   'use strict'
@@ -91,7 +96,8 @@
   host.id = '__aico_host'
   host.style.cssText =
     'all: initial; position: fixed; z-index: 2147483647; inset: 0; pointer-events: none;'
-  const root = host.attachShadow({ mode: 'open' })
+  // Closed: `host.shadowRoot` is null to page script; `root` is our only handle.
+  const root = host.attachShadow({ mode: 'closed' })
   root.innerHTML = `
     <style>
       :host { all: initial; }
@@ -213,7 +219,8 @@
         rm.className = 'rm'
         rm.textContent = '✕'
         rm.title = 'Remove'
-        rm.addEventListener('click', () => {
+        rm.addEventListener('click', (e) => {
+          if (!e.isTrusted) return
           tray.splice(i, 1)
           renderTray()
         })
@@ -230,15 +237,16 @@
     renderTray()
   }
 
-  sendAllEl.addEventListener('click', () => {
-    if (!tray.length) return
+  sendAllEl.addEventListener('click', (e) => {
+    if (!e.isTrusted || !tray.length) return
     const n = tray.length
     send(tray.splice(0))
     renderTray()
     flashToast('Sent ', { b: String(n) }, ` item${n > 1 ? 's' : ''} to Aico`)
   })
 
-  root.querySelector('.x').addEventListener('click', () => {
+  root.querySelector('.x').addEventListener('click', (e) => {
+    if (!e.isTrusted) return
     tray.length = 0
     renderTray()
   })
@@ -265,7 +273,8 @@
     pillEl.style.left = `${left}px`
   }
 
-  root.querySelector('.send').addEventListener('click', () => {
+  root.querySelector('.send').addEventListener('click', (e) => {
+    if (!e.isTrusted) return
     const rec = selectionRecord()
     if (rec) {
       send([rec])
@@ -275,7 +284,8 @@
     window.getSelection()?.removeAllRanges()
   })
 
-  root.querySelector('.add').addEventListener('click', () => {
+  root.querySelector('.add').addEventListener('click', (e) => {
+    if (!e.isTrusted) return
     const rec = selectionRecord()
     if (rec) {
       addToTray(rec)
@@ -292,6 +302,7 @@
   }
   document.addEventListener('mouseup', refreshPill)
   document.addEventListener('keyup', (e) => {
+    if (!e.isTrusted) return
     if (e.shiftKey || e.key === 'Shift') refreshPill()
   })
   // Hide when the selection is cleared by an outside click (not on our UI).
@@ -311,6 +322,7 @@
   }
 
   function onPickMove(e) {
+    if (!e.isTrusted) return
     const el = elementUnder(e.clientX, e.clientY)
     if (!el) return
     const r = el.getBoundingClientRect()
@@ -322,6 +334,8 @@
   }
 
   function onPickClick(e) {
+    // A page-dispatched click must not stash elements while the picker is on.
+    if (!e.isTrusted) return
     const el = elementUnder(e.clientX, e.clientY)
     if (!el) return
     e.preventDefault()
@@ -331,7 +345,7 @@
   }
 
   function onPickKey(e) {
-    if (e.key === 'Escape') stopPicker()
+    if (e.isTrusted && e.key === 'Escape') stopPicker()
   }
 
   function startPicker() {
@@ -352,7 +366,9 @@
     if (tray.length) flashToast(`${tray.length} in batch — "Send" when ready`)
   }
 
-  chrome.runtime.onMessage.addListener((msg) => {
+  chrome.runtime.onMessage.addListener((msg, sender) => {
+    // Only our own background worker (context-menu click) may start the picker.
+    if (sender?.id !== chrome.runtime.id || sender.tab) return
     if (msg?.type === 'aico:start-picker') startPicker()
   })
 })()

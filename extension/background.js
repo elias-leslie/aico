@@ -93,11 +93,30 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (record) void sendToBus([record])
 })
 
+// Mirrors the sidecar's batch cap (selection ring size).
+const MAX_ITEMS = 50
+
+function isPlainObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+// Rebuild a relayed record from known fields only; anything off-shape is dropped
+// rather than forwarded. Content scripts only ever produce kind:"dom".
+function sanitizeRecord(rec) {
+  if (!isPlainObject(rec) || rec.kind !== 'dom' || typeof rec.snippet !== 'string') return null
+  if (rec.meta !== undefined && !isPlainObject(rec.meta)) return null
+  return { kind: 'dom', snippet: rec.snippet.slice(0, SNIPPET_CAP), meta: rec.meta || {} }
+}
+
 // Content-script relay: pill / picker / tray sends arrive here to clear CORS.
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (msg?.type === 'aico:send' && Array.isArray(msg.items) && msg.items.length) {
-    sendToBus(msg.items).then((ok) => sendResponse({ ok }))
-    return true // keep the channel open for the async response
-  }
-  return false
+// Accept only messages from this extension's own content scripts (a tab-hosted
+// sender with our runtime ID) carrying a well-formed batch.
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (sender?.id !== chrome.runtime.id || !sender.tab) return false
+  if (msg?.type !== 'aico:send' || !Array.isArray(msg.items)) return false
+  if (!msg.items.length || msg.items.length > MAX_ITEMS) return false
+  const items = msg.items.map(sanitizeRecord)
+  if (items.some((rec) => rec === null)) return false
+  sendToBus(items).then((ok) => sendResponse({ ok }))
+  return true // keep the channel open for the async response
 })

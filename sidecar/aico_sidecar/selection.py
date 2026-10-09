@@ -12,12 +12,14 @@ import sqlite3
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, get_args
+
+SelectionKind = Literal["dom", "a11y", "region"]
 
 RING_SIZE = 50
 SNIPPET_CAP = 2000  # defensive server-side cap; sources should send far less
 META_CAP = 4000  # serialized-JSON cap on meta, so it can't dwarf the snippet cap
-VALID_KINDS = frozenset({"dom", "a11y", "region"})
+VALID_KINDS = frozenset(get_args(SelectionKind))
 
 
 def _now_iso() -> str:
@@ -74,28 +76,50 @@ class SelectionBus:
         project: str | None = None,
     ) -> dict[str, Any]:
         """Append a capture and return the stored record (with `captured_at`)."""
-        if kind not in VALID_KINDS:
-            raise ValueError(f"invalid kind: {kind!r} (expected one of {sorted(VALID_KINDS)})")
-        snippet = (snippet or "").strip()[:SNIPPET_CAP]
-        meta_json = json.dumps(meta or {}, separators=(",", ":"))
-        if len(meta_json) > META_CAP:
-            raise ValueError(f"meta too large: {len(meta_json)} bytes (cap {META_CAP})")
+        return self.push_many([(kind, snippet, meta, widget, project)])[0]
+
+    def push_many(
+        self,
+        items: list[tuple[str, str, dict[str, Any] | None, str | None, str | None]],
+    ) -> list[dict[str, Any]]:
+        """Append captures atomically: every item is validated before any row is
+        written, and all rows land in one transaction, so a bad item never leaves
+        a partial batch behind. Returns the stored records in input order."""
+        if len(items) > RING_SIZE:
+            # More than the ring holds would prune part of its own batch.
+            raise ValueError(f"too many items: {len(items)} (cap {RING_SIZE})")
+        rows: list[tuple[str, str, str | None, str | None, str]] = []
+        for kind, snippet, meta, widget, project in items:
+            if kind not in VALID_KINDS:
+                raise ValueError(f"invalid kind: {kind!r} (expected one of {sorted(VALID_KINDS)})")
+            meta_json = json.dumps(meta or {}, separators=(",", ":"))
+            if len(meta_json) > META_CAP:
+                raise ValueError(f"meta too large: {len(meta_json)} bytes (cap {META_CAP})")
+            rows.append((kind, (snippet or "").strip()[:SNIPPET_CAP], widget, project, meta_json))
         with self._lock:
-            cur = self._conn.execute(
-                "INSERT INTO selections (kind, snippet, captured_at, widget, project, meta_json)"
-                " VALUES (?, ?, ?, ?, ?, ?)",
-                (kind, snippet, _now_iso(), widget, project, meta_json),
-            )
-            # Keep only the most recent RING_SIZE rows (ids are monotonic).
-            self._conn.execute(
-                "DELETE FROM selections WHERE id <= (SELECT MAX(id) FROM selections) - ?",
-                (RING_SIZE,),
-            )
-            self._conn.commit()
-            row = self._conn.execute(
-                "SELECT * FROM selections WHERE id = ?", (cur.lastrowid,)
-            ).fetchone()
-        return _row_to_record(row)
+            ids: list[int] = []
+            try:
+                for kind, snippet, widget, project, meta_json in rows:
+                    cur = self._conn.execute(
+                        "INSERT INTO selections (kind, snippet, captured_at, widget, project, meta_json)"
+                        " VALUES (?, ?, ?, ?, ?, ?)",
+                        (kind, snippet, _now_iso(), widget, project, meta_json),
+                    )
+                    ids.append(cur.lastrowid or 0)
+                # Keep only the most recent RING_SIZE rows (ids are monotonic).
+                self._conn.execute(
+                    "DELETE FROM selections WHERE id <= (SELECT MAX(id) FROM selections) - ?",
+                    (RING_SIZE,),
+                )
+                self._conn.commit()
+            except sqlite3.Error:
+                self._conn.rollback()
+                raise
+            fetched = [
+                self._conn.execute("SELECT * FROM selections WHERE id = ?", (row_id,)).fetchone()
+                for row_id in ids
+            ]
+        return [_row_to_record(row) for row in fetched]
 
     def current(self) -> dict[str, Any] | None:
         """The newest capture, or None when the bus is empty."""

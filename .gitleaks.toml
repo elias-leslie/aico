@@ -1,0 +1,10 @@
+# Gitleaks config: the default ruleset plus one narrow allowlist entry.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Public RSA key that pins the MV3 extension ID (not a secret; the private key was discarded)"
+condition = "AND"
+paths = ['''^(.*/)?extension/manifest\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"key":\s*"MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAmz9DV0AQw\+\+G/6XDm3p0DWTGqN9YCXVmgnBJx1GDv0PddoHnshtqeXj/IxN6ndvSn4rcMhrRXB3imWnNNabd6BFtt5Q41Irvb0QC5p''']

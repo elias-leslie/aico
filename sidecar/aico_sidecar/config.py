@@ -8,11 +8,20 @@ from __future__ import annotations
 
 import ipaddress
 import os
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, field
 from pathlib import Path
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8005
+
+# Stable ID of the bundled MV3 extension, derived from the public `key` in
+# extension/manifest.json (sha256 of the DER SubjectPublicKeyInfo, first 32 hex
+# chars mapped 0-f -> a-p). Only this extension's origin is trusted by default;
+# `$AICO_EXTENSION_IDS` (comma-separated) overrides it, e.g. for a fork that
+# ships its own key.
+DEFAULT_EXTENSION_ID = "oejadbpdecaenbbihglcnchnkmlilmjf"
+_EXTENSION_ID_RE = re.compile(r"[a-p]{32}")
 
 
 def _is_loopback(host: str) -> bool:
@@ -40,6 +49,22 @@ def _resolve_port() -> int:
     return port
 
 
+def _resolve_extension_ids() -> frozenset[str]:
+    """`$AICO_EXTENSION_IDS` as a set of Chrome extension IDs, else the bundled
+    extension's ID. A malformed ID fails loudly rather than silently widening or
+    emptying the trusted-origin set."""
+    raw = os.environ.get("AICO_EXTENSION_IDS")
+    if raw is None or not raw.strip():
+        return frozenset({DEFAULT_EXTENSION_ID})
+    ids = [part.strip() for part in raw.split(",") if part.strip()]
+    for ext_id in ids:
+        if not _EXTENSION_ID_RE.fullmatch(ext_id):
+            raise ValueError(
+                f"invalid extension id {ext_id!r} in AICO_EXTENSION_IDS: expected 32 chars a-p"
+            )
+    return frozenset(ids)
+
+
 def _default_state_dir() -> Path:
     """`$AICO_STATE_DIR`, else `$XDG_STATE_HOME/aico`, else `~/.local/state/aico`."""
     override = os.environ.get("AICO_STATE_DIR")
@@ -55,6 +80,11 @@ class Settings:
     host: str = DEFAULT_HOST
     port: int = DEFAULT_PORT
     state_dir: Path = None  # type: ignore[assignment]  # filled in __post_init__
+    # Chrome extension IDs whose chrome-extension:// origin may reach the bus.
+    extension_ids: frozenset[str] = field(default_factory=lambda: frozenset({DEFAULT_EXTENSION_ID}))
+    # Operator opt-in to a non-loopback bind; also lifts the loopback-only Host
+    # header check (remote clients address the sidecar by a LAN name/IP).
+    allow_remote: bool = False
 
     def __post_init__(self) -> None:
         if self.state_dir is None:
@@ -86,4 +116,6 @@ class Settings:
             host=host,
             port=_resolve_port(),
             state_dir=_default_state_dir(),
+            extension_ids=_resolve_extension_ids(),
+            allow_remote=allow_remote,
         )

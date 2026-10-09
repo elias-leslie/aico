@@ -16,7 +16,7 @@ from typing import Any
 
 # tmux widget ids are randomBytes(4) hex; allow the broader id-safe charset but
 # nothing that could traverse paths (no dots, slashes, etc.).
-_WIDGET_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+_WIDGET_ID_RE = re.compile(r"[A-Za-z0-9_-]{1,64}")
 
 # Size-based rotation: when a widget's log passes this, roll it to `.1` (one
 # backup, overwriting any prior). Keeps an append-only-feeling log from growing
@@ -25,7 +25,8 @@ MAX_LOG_BYTES = 5 * 1024 * 1024
 
 
 def is_valid_widget_id(widget_id: str) -> bool:
-    return bool(_WIDGET_ID_RE.match(widget_id))
+    # fullmatch, not match + `$`: `$` also matches before a trailing newline.
+    return bool(_WIDGET_ID_RE.fullmatch(widget_id))
 
 
 def _now_iso() -> str:

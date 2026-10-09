@@ -15,7 +15,7 @@ The extension posts to `POST /selection/send` on the local sidecar. Aico stores 
 
 ## Architecture
 
-- `manifest.json` — MV3 manifest with host permission for `http://127.0.0.1:8005/*`.
+- `manifest.json` — MV3 manifest with host permission for `http://127.0.0.1:8005/*` and a public `key` that pins the extension ID.
 - `background.js` — owns context menus and all sidecar network calls.
 - `content.js` — page UI in a Shadow DOM; sends selected records to the background worker.
 
@@ -27,5 +27,11 @@ Capture records use `kind: "dom"` and put the DOM subtype (`text`, `element`, `l
 2. Chrome/Chromium → `chrome://extensions` → enable **Developer mode**.
 3. **Load unpacked** → select this `extension/` directory.
 4. Select text on a page and send it with the pill or context menu.
+
+## Extension ID
+
+The manifest's `key` field holds only a public key, so every unpacked load gets the same extension ID: `oejadbpdecaenbbihglcnchnkmlilmjf`. The sidecar accepts `chrome-extension://` requests and CORS only from that ID. The private key was discarded, so this ID can't be used to sign a packed `.crx`.
+
+To trust a different build (a fork with its own `key`, or a store-published ID), set `AICO_EXTENSION_IDS` for the sidecar to a comma-separated list of IDs. The list replaces the default, so include `oejadbpdecaenbbihglcnchnkmlilmjf` if you still load this extension.
 
 If the sidecar is not running, sends are best-effort and do not affect the page.

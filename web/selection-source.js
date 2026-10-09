@@ -14,10 +14,30 @@
   // biome-ignore lint/suspicious/noRedundantUseStrict: classic <script> (not an ES module) — strict mode is load-bearing
   'use strict'
 
-  var SIDECAR = window.AICO_SIDECAR || 'http://127.0.0.1:8005'
+  var DEFAULT_SIDECAR = 'http://127.0.0.1:8005'
+  var SIDECAR = resolveSidecar(window.AICO_SIDECAR)
   var DEBOUNCE_MS = 200
   var SNIPPET_CAP = 200
   var timer = null
+
+  // `window.AICO_SIDECAR` is DOM-clobberable (an element with id/name
+  // "AICO_SIDECAR" shadows it), so accept only a string naming a loopback http
+  // origin; anything else falls back to the default.
+  function resolveSidecar(value) {
+    if (typeof value !== 'string') return DEFAULT_SIDECAR
+    var url
+    try {
+      url = new URL(value)
+    } catch {
+      return DEFAULT_SIDECAR
+    }
+    var loopback =
+      url.hostname === '127.0.0.1' || url.hostname === 'localhost' || url.hostname === '[::1]'
+    if (url.protocol !== 'http:' || !loopback || url.username || url.password) {
+      return DEFAULT_SIDECAR
+    }
+    return url.origin
+  }
 
   // Short, human-legible CSS path of the selection's anchor (≤4 levels). Enough
   // for an agent to know *where* on the page the selection came from, cheaply.

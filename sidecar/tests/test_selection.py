@@ -9,6 +9,9 @@ from aico_sidecar.app import create_app
 from aico_sidecar.config import Settings
 from aico_sidecar.selection import META_CAP, RING_SIZE, SelectionBus
 
+# The sidecar only answers loopback Host headers (DNS-rebinding guard).
+LOOPBACK_URL = "http://127.0.0.1:8005"
+
 
 @pytest.fixture
 def bus(tmp_path) -> SelectionBus:
@@ -17,7 +20,7 @@ def bus(tmp_path) -> SelectionBus:
 
 @pytest.fixture
 def client(tmp_path) -> TestClient:
-    return TestClient(create_app(Settings(state_dir=tmp_path)))
+    return TestClient(create_app(Settings(state_dir=tmp_path)), base_url=LOOPBACK_URL)
 
 
 class TestSelectionBus:
@@ -59,6 +62,15 @@ class TestSelectionBus:
     def test_oversized_meta_rejected(self, bus: SelectionBus) -> None:
         with pytest.raises(ValueError, match="meta too large"):
             bus.push("dom", "x", {"blob": "y" * (META_CAP + 1)})
+
+    def test_push_many_is_atomic(self, bus: SelectionBus) -> None:
+        with pytest.raises(ValueError):
+            bus.push_many([("dom", "a", None, None, None), ("bogus", "b", None, None, None)])
+        assert bus.history(10) == []
+
+    def test_push_many_over_ring_size_rejected(self, bus: SelectionBus) -> None:
+        with pytest.raises(ValueError, match="too many items"):
+            bus.push_many([("dom", str(i), None, None, None) for i in range(RING_SIZE + 1)])
 
     def test_close_releases_connection(self, bus: SelectionBus) -> None:
         bus.close()
@@ -127,6 +139,26 @@ class TestSelectionSend:
     def test_send_invalid_kind_is_422(self, client: TestClient) -> None:
         resp = client.post("/selection/send", json={"items": [{"kind": "bogus", "snippet": "x"}]})
         assert resp.status_code == 422
+
+    def test_send_bad_item_rejects_whole_batch(self, client: TestClient) -> None:
+        # Validation is atomic: a bad item at index k must not commit items 0..k-1.
+        items = [{"kind": "dom", "snippet": "a"}, {"kind": "dom", "snippet": "b"}]
+        items.append({"kind": "bogus", "snippet": "c"})
+        assert client.post("/selection/send", json={"items": items}).status_code == 422
+        bad_meta = [{"kind": "dom", "snippet": "a"}, {"kind": "dom", "meta": {"b": "y" * META_CAP}}]
+        assert client.post("/selection/send", json={"items": bad_meta}).status_code == 422
+        assert client.get("/selection/history").json()["count"] == 0
+
+    def test_send_batch_capped_at_ring_size(self, client: TestClient) -> None:
+        items = [{"kind": "dom", "snippet": str(i)} for i in range(RING_SIZE)]
+        assert client.post("/selection/send", json={"items": items}).status_code == 200
+        items.append({"kind": "dom", "snippet": "overflow"})
+        assert client.post("/selection/send", json={"items": items}).status_code == 422
+
+    @pytest.mark.parametrize("field", ["widget", "project"])
+    def test_oversized_label_is_422(self, client: TestClient, field: str) -> None:
+        body = {"kind": "dom", "snippet": "x", field: "w" * 201}
+        assert client.post("/selection", json=body).status_code == 422
 
     def test_events_route_registered(self, tmp_path) -> None:
         # Streaming SSE can't be drained by the sync TestClient without blocking on

@@ -9,9 +9,12 @@ from aico_sidecar.app import create_app
 from aico_sidecar.config import Settings
 from aico_sidecar.widget_log import WidgetLog, is_valid_widget_id
 
+# The sidecar only answers loopback Host headers (DNS-rebinding guard).
+LOOPBACK_URL = "http://127.0.0.1:8005"
+
 
 def test_widget_event_appends_jsonl_line(tmp_path) -> None:
-    client = TestClient(create_app(Settings(state_dir=tmp_path)))
+    client = TestClient(create_app(Settings(state_dir=tmp_path)), base_url=LOOPBACK_URL)
 
     resp = client.post("/widgets/a1b2c3d4/events", json={"event": "open", "data": {"cols": 80}})
     assert resp.status_code == 200
@@ -36,7 +39,7 @@ def test_appends_accumulate(tmp_path) -> None:
 
 
 def test_invalid_widget_id_rejected_by_api(tmp_path) -> None:
-    client = TestClient(create_app(Settings(state_dir=tmp_path)))
+    client = TestClient(create_app(Settings(state_dir=tmp_path)), base_url=LOOPBACK_URL)
     resp = client.post("/widgets/..%2Fetc/events", json={"event": "open"})
     assert resp.status_code in (404, 422)
 
@@ -44,7 +47,7 @@ def test_invalid_widget_id_rejected_by_api(tmp_path) -> None:
 def test_oversized_event_data_rejected(tmp_path) -> None:
     from aico_sidecar.app import WIDGET_EVENT_DATA_CAP
 
-    client = TestClient(create_app(Settings(state_dir=tmp_path)))
+    client = TestClient(create_app(Settings(state_dir=tmp_path)), base_url=LOOPBACK_URL)
     huge = {"blob": "x" * (WIDGET_EVENT_DATA_CAP + 1)}
     resp = client.post("/widgets/a1b2c3d4/events", json={"event": "open", "data": huge})
     assert resp.status_code == 422
@@ -52,7 +55,15 @@ def test_oversized_event_data_rejected(tmp_path) -> None:
 
 @pytest.mark.parametrize(
     ("widget_id", "ok"),
-    [("a1b2c3d4", True), ("aico-1", True), ("", False), ("../etc", False), ("a/b", False)],
+    [
+        ("a1b2c3d4", True),
+        ("aico-1", True),
+        ("", False),
+        ("../etc", False),
+        ("a/b", False),
+        ("a1b2c3d4\n", False),  # `$` would accept a trailing newline
+        ("a" * 65, False),
+    ],
 )
 def test_widget_id_validation(widget_id: str, ok: bool) -> None:
     assert is_valid_widget_id(widget_id) is ok

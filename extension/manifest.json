@@ -2,6 +2,7 @@
   "manifest_version": 3,
   "name": "Aico — Send to Aico",
   "version": "0.1.0",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAmz9DV0AQw++G/6XDm3p0DWTGqN9YCXVmgnBJx1GDv0PddoHnshtqeXj/IxN6ndvSn4rcMhrRXB3imWnNNabd6BFtt5Q41Irvb0QC5p/nU1Mg8SUoIN5dXlvYyvpLUq2nppNs6eA5pXru5Gr7/Ja2hKYI4K7mrAs9nand8BX4gZf/L7sGVbM8oL0WE3fdmr/e36cSh1hblPhzAqX9ZvvQF7tCLnirBv3blMTuOk5XHkESAtJnikXk/xGr5nutgzXXK89yk4m9NqgoMxcDs62O3EQZmwSH4JLrzPTui4JP8LdaoRF2QOqA6gkET6iNAc8hBImIQfyWQYHJNTkhYp1YvwIDAQAB",
   "description": "Grab any web page's text, element, link, or image and send it to your active Aico widget.",
   "permissions": ["contextMenus"],
   "host_permissions": ["http://127.0.0.1:8005/*"],
