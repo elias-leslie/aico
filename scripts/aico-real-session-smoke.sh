@@ -262,6 +262,7 @@ awk '{if ($3 > cpu) cpu=$3; if ($4 > rss) rss=$4} END {printf "PROCESS_PROFILE p
   "$run_dir/process-metrics.tsv"
 clear_pane_history
 cdp scrollback | tee "$run_dir/scrollback-profile.json"
+cdp mouse-program "$run_dir" | tee "$run_dir/mouse-program-profile.json"
 clear_pane_history
 cdp context-send "$sidecar_port" | tee "$run_dir/context-profile.json"
 cdp close
