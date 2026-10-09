@@ -4,7 +4,7 @@ const { menus } = vi.hoisted(() => ({ menus: [] as Record<string, unknown>[][] }
 vi.mock('electron', () => ({
   app: { quit: vi.fn() },
   Menu: { buildFromTemplate: (template: Record<string, unknown>[]) => template },
-  nativeImage: { createFromPath: () => ({}) },
+  nativeImage: { createFromPath: () => ({ isEmpty: () => false }) },
   Tray: class {
     setToolTip() {}
     setContextMenu(menu: Record<string, unknown>[]) {
