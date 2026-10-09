@@ -306,22 +306,31 @@ export class ScrollbackOverlay {
     if (this.selecting) this.extendToPointer()
   }
 
+  /** Keep a key the overlay handled away from the live terminal, which still
+   * holds focus: a leaked Escape interrupts Claude Code or Codex, and in a
+   * shell it turns the next keystroke into a readline meta command. */
+  private claimKey(e: KeyboardEvent): void {
+    e.preventDefault()
+    e.stopPropagation()
+    e.stopImmediatePropagation()
+  }
+
   private onKeydown = (e: KeyboardEvent) => {
     if (e.key === 'Escape') {
-      e.preventDefault()
+      this.claimKey(e)
       this.dismiss()
       return
     }
     if (!this.active || !this.term) return
     const page = Math.max(1, this.term.rows - 1)
     if (e.key === 'PageUp' || e.key === 'PageDown') {
-      e.preventDefault()
+      this.claimKey(e)
       this.scrollBy(e.key === 'PageUp' ? -page : page)
     } else if (e.key === 'Home' && e.ctrlKey) {
-      e.preventDefault()
+      this.claimKey(e)
       this.seek(0)
     } else if (e.key === 'End' && e.ctrlKey) {
-      e.preventDefault()
+      this.claimKey(e)
       this.dismiss()
     }
   }

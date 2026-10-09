@@ -33,7 +33,10 @@ export function scrollbackWheelAction({
   // A shell session may now be running an agent launched from its prompt.
   // Never let xterm synthesize history-navigation keys at the live bottom.
   if (!mouseReportingActive) return deltaY < 0 ? 'open' : 'consume'
-  return 'ignore'
+  // A program that grabbed the mouse (vim, htop, an agent) scrolls itself.
+  // xterm's own wheel reporting is switched off for the whole terminal, so
+  // the wheel has to be sent explicitly; tmux re-encodes it for the pane.
+  return 'forward'
 }
 
 export function shouldOpenScrollbackOnWheel(policy: ScrollbackWheelPolicy): boolean {

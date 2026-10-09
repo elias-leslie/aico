@@ -93,7 +93,12 @@ function fixture(
     listeners.get('wheel')?.(wheel as unknown as Event)
   }
   const pressEscape = () => {
-    const event = { key: 'Escape', preventDefault: vi.fn() }
+    const event = {
+      key: 'Escape',
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+      stopImmediatePropagation: vi.fn(),
+    }
     windowListeners.get('keydown')?.(event as unknown as Event)
     return event
   }
@@ -129,7 +134,10 @@ describe('scrollback overlay pending captures', () => {
     const pendingEntry = overlay.enter(-1)
     expect(overlay.opening).toBe(true)
     expect(windowListeners.has('keydown')).toBe(true)
-    expect(pressEscape().preventDefault).toHaveBeenCalledOnce()
+    const escapeKey = pressEscape()
+    expect(escapeKey.preventDefault).toHaveBeenCalledOnce()
+    // The live terminal keeps focus; a leaked Escape would interrupt the agent.
+    expect(escapeKey.stopImmediatePropagation).toHaveBeenCalledOnce()
     expect(overlay.opening).toBe(false)
     expect(windowListeners.has('keydown')).toBe(false)
     await overlay.enter(-1)

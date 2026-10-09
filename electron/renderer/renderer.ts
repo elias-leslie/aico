@@ -447,7 +447,15 @@ function setThinking(on: boolean): void {
 function pokeThinking(): void {
   setThinking(true)
   if (thinkTimer) clearTimeout(thinkTimer)
-  thinkTimer = window.setTimeout(() => setThinking(false), 500)
+  thinkTimer = window.setTimeout(() => {
+    setThinking(false)
+    // Output grows the history above the live view and can switch the pane
+    // into or out of a full-screen program (which decides who owns drags).
+    // The pointer may never leave the terminal meanwhile, so re-ask tmux once
+    // per settled burst, past the cache: a shell's echo can settle and be
+    // cached just before the program it launched takes the alternate screen.
+    void refreshLiveRail(true)
+  }, 500)
 }
 
 term.onData((data) => window.aico.pty.input(data))
@@ -580,9 +588,14 @@ let paneModeInFlight: Promise<PaneMode> | null = null
  * The very first wheel of a session has no cache to read, and answering it from
  * the xterm fallback opened the overlay on the three lines of tmux history that
  * a Claude Code pane has — so that event waits for tmux rather than guessing. */
-function readPaneMode(): PaneMode | Promise<PaneMode> {
-  if (paneMode && performance.now() - paneModeFetchedAt < PANE_MODE_MAX_AGE_MS) return paneMode
-  if (paneModeInFlight) return paneModeInFlight
+function readPaneMode(fresh = false): PaneMode | Promise<PaneMode> {
+  const cached = paneMode && performance.now() - paneModeFetchedAt < PANE_MODE_MAX_AGE_MS
+  if (cached && !fresh && paneMode) return paneMode
+  // A fresh read must not take an answer requested before the change it is
+  // looking for, so it queues behind one already in flight.
+  if (paneModeInFlight) {
+    return fresh ? paneModeInFlight.then(() => readPaneMode(true)) : paneModeInFlight
+  }
   const fallback: PaneMode = {
     alternateScreen: term.buffer.active.type === 'alternate',
     mouseReporting: mouseReportingActive(term),
@@ -626,9 +639,9 @@ function showLiveRail(mode: PaneMode): void {
   rail.update({ topLine: mode.historySize, rows: term.rows, totalLines: liveTotalLines })
 }
 
-async function refreshLiveRail(): Promise<void> {
+async function refreshLiveRail(fresh = false): Promise<void> {
   try {
-    showLiveRail(await readPaneMode())
+    showLiveRail(await readPaneMode(fresh))
   } catch {
     // tmux unreachable: leave the rail as it was.
   }
@@ -727,14 +740,20 @@ host.addEventListener(
       return
     }
 
-    // A plain shell keeps its output in tmux history whatever the program on
-    // top is doing, so it needs no tmux round-trip and no wheel forwarding.
+    // A plain shell keeps its output in tmux history, and xterm already knows
+    // whether a program on top grabbed the mouse, so it needs no tmux
+    // round-trip: open history, or forward the wheel to that program.
     if (tuiSlug === 'shell') {
+      const mode: PaneMode = {
+        alternateScreen: term.buffer.active.type === 'alternate',
+        mouseReporting: mouseReportingActive(term),
+        historySize: 0,
+      }
       const action = scrollbackWheelAction({
         deltaY: e.deltaY,
         overlayActive: overlay.active || overlay.opening,
-        mouseReportingActive: mouseReportingActive(term),
-        alternateScreen: term.buffer.active.type === 'alternate',
+        mouseReportingActive: mode.mouseReporting,
+        alternateScreen: mode.alternateScreen,
         tuiSlug,
       })
       if (action === 'ignore') return
@@ -742,7 +761,7 @@ host.addEventListener(
       e.stopPropagation()
       e.stopImmediatePropagation()
       if (action === 'consume') return
-      void overlay.enter(wheelLineDelta(e.deltaY))
+      applyWheel(e, mode)
       return
     }
 
