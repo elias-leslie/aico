@@ -817,6 +817,85 @@ def test_stalled_output_pipe_stops_at_deadline_and_restores_flags():
         os.close(writer)
 
 
+def test_reaped_child_process_group_is_never_signalled(monkeypatch):
+    instance = collector()
+    original = watcher.subprocess.Popen
+    processes = []
+    signalled = []
+
+    def launch(_argv, **kwargs):
+        process = original([sys.executable, "-c", "import sys; sys.stdout.write('ok')"], **kwargs)
+        processes.append(process)
+        return process
+
+    monkeypatch.setattr(watcher.subprocess, "Popen", launch)
+    monkeypatch.setattr(watcher.os, "killpg", lambda *args: signalled.append(args))
+    assert instance.command(["display-message", "-p", "x"], 10) == b"ok"
+    assert processes[0].returncode == 0
+    assert processes[0].stdout.closed
+    assert signalled == []
+
+
+def test_failed_child_process_group_is_never_signalled_after_reap(monkeypatch):
+    instance = collector()
+    original = watcher.subprocess.Popen
+    signalled = []
+
+    def launch(_argv, **kwargs):
+        return original([sys.executable, "-c", "import sys; sys.exit(3)"], **kwargs)
+
+    monkeypatch.setattr(watcher.subprocess, "Popen", launch)
+    monkeypatch.setattr(watcher.os, "killpg", lambda *args: signalled.append(args))
+    with pytest.raises(watcher.Unavailable, match="tmux_unavailable"):
+        instance.command(["display-message", "-p", "x"], 10)
+    assert signalled == []
+
+
+def test_emit_json_writes_nothing_once_stopped():
+    instance = collector()
+    instance.cancel.set()
+    reader, writer = os.pipe()
+    try:
+        with pytest.raises(watcher.Stopped):
+            watcher.emit_json(instance, {"event": "baseline"}, writer)
+        assert os.get_blocking(writer)
+        os.set_blocking(reader, False)
+        with pytest.raises(BlockingIOError):
+            os.read(reader, 1)
+    finally:
+        os.close(reader)
+        os.close(writer)
+
+
+def test_emit_json_finishes_a_started_line_after_deadline():
+    instance = collector()
+    reader, writer = os.pipe()
+    record = {"event": "transition", "screen": "x" * 200000}
+    expected = (json.dumps(record, separators=(",", ":")) + "\n").encode()
+    received = bytearray()
+
+    def drain():
+        time.sleep(.15)
+        while len(received) < len(expected):
+            chunk = os.read(reader, 65536)
+            if not chunk:
+                break
+            received.extend(chunk)
+
+    thread = threading.Thread(target=drain)
+    try:
+        instance.deadline = time.monotonic() + .05
+        thread.start()
+        watcher.emit_json(instance, record, writer)
+        thread.join(2)
+        assert bytes(received) == expected
+        assert os.get_blocking(writer)
+    finally:
+        thread.join(2)
+        os.close(reader)
+        os.close(writer)
+
+
 def test_pin_and_socket_validation():
     assert watcher.Pin.parse(json.dumps(PIN_DATA)) == PIN
     for field in ("paneId", "generation", "tmuxServerId"):

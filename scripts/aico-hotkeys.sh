@@ -32,10 +32,21 @@ ENTRIES=(
   "$BASE/aico-grab-region/|Aico grab (region)|<Super><Shift>r|-r"
 )
 
+single_quote() { # string -> one shell single-quoted word ('\'' for embedded quotes)
+  local escaped="${1//\'/\'\\\'\'}"
+  printf "'%s'" "$escaped"
+}
+
 cmd_for() { # args -> the command string GNOME will run
-  local args="$1"
-  printf 'bash -c '\''PATH="$HOME/bin:$HOME/.local/bin:/usr/local/bin:$PATH" DISPLAY=%s exec %s%s'\''' \
-    "$AICO_DISPLAY" "$GRAB" "${args:+ $args}"
+  # The display and grab path are quoted for the inner bash with %q, and the
+  # whole script is then quoted as one word for GNOME's shell-style parser, so
+  # a checkout path with spaces or quotes cannot break out of either layer.
+  # args are the fixed option strings from ENTRIES.
+  local args="$1" inner
+  # shellcheck disable=SC2016 # $HOME/$PATH expand when GNOME's bash runs it
+  inner='PATH="$HOME/bin:$HOME/.local/bin:/usr/local/bin:$PATH"'
+  inner+=" DISPLAY=$(printf '%q' "$AICO_DISPLAY") exec $(printf '%q' "$GRAB")${args:+ $args}"
+  printf 'bash -c %s' "$(single_quote "$inner")"
 }
 
 # Rewrite the custom-keybindings list = existing ∪/∖ our paths.

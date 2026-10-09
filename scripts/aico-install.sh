@@ -5,6 +5,41 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
+# The checkout path is substituted into systemd units and the desktop entry.
+# systemd treats whitespace, quotes, backslashes and `%` specially, so refuse
+# paths that cannot be rendered literally rather than install a broken unit.
+case "$REPO" in
+  *[[:space:]%\\\"\']*)
+    echo "Aico: the checkout path '$REPO' contains whitespace, quotes, a backslash or '%'." >&2
+    echo "Move the checkout to a plain path and rerun the installer." >&2
+    exit 1
+    ;;
+esac
+
+# Privileged steps never reuse cached sudo credentials silently. They run only
+# with AICO_INSTALL_PRIVILEGED=1 or after an explicit interactive yes; otherwise
+# the exact commands are printed for the operator to run.
+confirm_privileged() { # description -> 0 when the operator opted in
+  local description="$1"
+  command -v sudo >/dev/null 2>&1 || return 1
+  if [ "${AICO_INSTALL_PRIVILEGED:-0}" = "1" ]; then
+    echo "$description (AICO_INSTALL_PRIVILEGED=1; sudo may prompt)"
+    return 0
+  fi
+  if [ -t 0 ] && [ -t 1 ]; then
+    local answer=""
+    read -r -p "$description Run these commands with sudo now? [y/N] " answer || true
+    case "$answer" in y | Y | yes | YES) return 0 ;; esac
+  fi
+  return 1
+}
+
+# Escape the sed replacement metacharacters (backslash, &, and the # delimiter)
+# so the checkout path is substituted literally.
+sed_replacement() {
+  printf '%s' "$1" | sed -e 's/[\\&#]/\\&/g'
+}
+
 require_durable_user_manager() {
   if ! command -v systemd-run >/dev/null 2>&1 ||
     ! command -v systemctl >/dev/null 2>&1 ||
@@ -112,14 +147,17 @@ configure_electron_suid_sandbox() {
   if [ "$(stat -c '%u:%a' "$sandbox" 2>/dev/null || true)" = "0:4755" ]; then
     return 0
   fi
-  if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
-    echo "Electron: configuring chrome-sandbox helper..."
-    sudo chown root:root "$sandbox"
-    sudo chmod 4755 "$sandbox"
+  echo "Electron: the chrome-sandbox helper needs root ownership and the setuid bit:"
+  echo "  sudo chown root:root $sandbox"
+  echo "  sudo chmod 4755 $sandbox"
+  if confirm_privileged "Electron: configuring chrome-sandbox."; then
+    if sudo chown root:root "$sandbox" && sudo chmod 4755 "$sandbox"; then
+      echo "Electron: chrome-sandbox configured."
+    else
+      echo "Electron: chrome-sandbox configuration failed; run the commands above manually."
+    fi
   else
-    echo "Electron: chrome-sandbox helper needs root ownership for sandboxed launches:"
-    echo "  sudo chown root:root $sandbox"
-    echo "  sudo chmod 4755 $sandbox"
+    echo "Electron: skipped. Run the commands above, or rerun with AICO_INSTALL_PRIVILEGED=1."
   fi
 }
 
@@ -127,7 +165,34 @@ configure_electron_suid_sandbox
 uv sync --frozen --python 3.13 --extra dev
 
 mkdir -p "$HOME/.local/share/applications"
-sed "s#__PROJECT_ROOT__#$REPO#g" scripts/aico.desktop >"$HOME/.local/share/applications/aico.desktop"
+sed "s#__PROJECT_ROOT__#$(sed_replacement "$REPO")#g" scripts/aico.desktop >"$HOME/.local/share/applications/aico.desktop"
+
+# Render the managed user units exactly as `st service rebuild aico` does
+# (substitute __PROJECT_ROOT__, write to the user unit directory, reload the
+# user manager). Units are rewritten only when their content changed. They are
+# not enabled or started here: scripts/aico-launch.sh starts aico-shell.service.
+install_user_units() {
+  local unit_dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+  local replacement changed=0 unit rendered
+  replacement="$(sed_replacement "$REPO")"
+  mkdir -p "$unit_dir"
+  for unit in aico-shell.service aico-owner.service; do
+    rendered="$(sed "s#__PROJECT_ROOT__#${replacement}#g" "scripts/systemd/$unit")"
+    if [ -f "$unit_dir/$unit" ] && [ "$(cat "$unit_dir/$unit")" = "$rendered" ]; then
+      echo "systemd: $unit is up to date."
+      continue
+    fi
+    printf '%s\n' "$rendered" >"$unit_dir/$unit.tmp"
+    mv -f "$unit_dir/$unit.tmp" "$unit_dir/$unit"
+    echo "systemd: installed $unit_dir/$unit"
+    changed=1
+  done
+  if [ "$changed" = 1 ]; then
+    systemctl --user daemon-reload
+  fi
+}
+
+install_user_units
 
 if [ "${AICO_INSTALL_CONTEXT_HOOKS:-0}" = "1" ]; then
   scripts/aico-install-context-hooks.sh
@@ -139,48 +204,65 @@ if command -v gsettings >/dev/null 2>&1; then
   scripts/aico-hotkeys.sh install || true
 fi
 
-# Electron now runs with the OS sandbox enabled (webPreferences.sandbox: true).
-# On kernels with apparmor_restrict_unprivileged_userns=1 (Ubuntu 24.04+) that
-# sandbox can't create its user namespace unless this checkout's Electron binary
-# is granted `userns` via an AppArmor profile. Generate a path-correct profile
-# (the committed one hard-codes a path) and load it. Never aborts the install.
+# Electron runs with the OS sandbox enabled (webPreferences.sandbox: true). On
+# kernels with kernel.apparmor_restrict_unprivileged_userns=1 (Ubuntu 24.04+)
+# the sandbox cannot create its user namespace unless this checkout's Electron
+# binary is granted `userns` by an AppArmor profile. The profile below is the
+# minimal form Ubuntu documents for such applications. Its name is derived from
+# a hash of the binary path, so separate checkouts never overwrite each other.
+# Nothing is installed when the kernel restriction is off. Never aborts.
 install_apparmor() {
+  local restrict_file=/proc/sys/kernel/apparmor_restrict_unprivileged_userns
+  if [ "$(cat "$restrict_file" 2>/dev/null || true)" != "1" ]; then
+    echo "AppArmor: unprivileged user namespaces are not restricted; no profile needed."
+    return 0
+  fi
   command -v apparmor_parser >/dev/null 2>&1 || return 0
   local electron_bin="$REPO/node_modules/electron/dist/electron"
   [ -x "$electron_bin" ] || return 0
-  if aa-status 2>/dev/null | grep -q "$electron_bin"; then
-    echo "AppArmor: aico-electron profile already loaded."
-    return 0
-  fi
-  local profile
+  local name profile target
+  name="aico-electron-$(printf '%s' "$electron_bin" | sha256sum | cut -c1-12)"
+  target="/etc/apparmor.d/$name"
   profile="$(mktemp)"
-  cat >"$profile" <<EOF
+  cat >"$profile" <<PROFILE
 # Grants unprivileged user-namespace creation so Electron's sandbox initializes
-# on kernels with apparmor_restrict_unprivileged_userns=1. Path-matched to this
-# checkout's Electron binary; regenerated by aico-install.sh.
+# on kernels with apparmor_restrict_unprivileged_userns=1. Path-matched to one
+# checkout's Electron binary; generated by scripts/aico-install.sh.
 abi <abi/4.0>,
 include <tunables/global>
 
-profile aico-electron $electron_bin flags=(unconfined) {
+profile $name $electron_bin flags=(unconfined) {
   userns,
-  include if exists <local/aico-electron>
+  include if exists <local/$name>
 }
-EOF
-  if [ -t 0 ] && command -v sudo >/dev/null 2>&1; then
-    echo "AppArmor: installing the Electron sandbox profile (needs sudo)..."
-    if sudo cp "$profile" /etc/apparmor.d/aico-electron &&
-      sudo apparmor_parser -r /etc/apparmor.d/aico-electron; then
-      echo "AppArmor: profile loaded."
-    else
-      echo "AppArmor: install failed; load it manually (see below)."
-    fi
-  else
-    echo "AppArmor: non-interactive shell; install the generated profile manually:"
-    echo "  sudo cp $profile /etc/apparmor.d/aico-electron"
-    echo "  sudo apparmor_parser -r /etc/apparmor.d/aico-electron"
+PROFILE
+  if [ -f "$target" ] && cmp -s "$profile" "$target"; then
+    echo "AppArmor: $target is already installed."
+    rm -f "$profile"
     return 0
   fi
-  rm -f "$profile"
+  cat <<MESSAGE
+AppArmor: this kernel restricts unprivileged user namespaces, so Electron's
+sandbox needs a profile that allows 'userns' for:
+  $electron_bin
+That binary lives in your user-writable checkout: anything that replaces the
+file also receives the permission. The generated profile is $profile.
+Install it with:
+  sudo install -m 0644 $profile $target
+  sudo apparmor_parser -r $target
+Remove it later with:
+  sudo apparmor_parser -R $target && sudo rm $target
+MESSAGE
+  if confirm_privileged "AppArmor: installing profile $name."; then
+    if sudo install -m 0644 "$profile" "$target" && sudo apparmor_parser -r "$target"; then
+      echo "AppArmor: profile $name loaded."
+      rm -f "$profile"
+    else
+      echo "AppArmor: install failed; run the commands above manually."
+    fi
+  else
+    echo "AppArmor: skipped. Run the commands above, or rerun with AICO_INSTALL_PRIVILEGED=1."
+  fi
 }
 install_apparmor || true
 

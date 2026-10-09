@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import fcntl
 import http.client
 import hashlib
 import json
@@ -521,12 +522,15 @@ class Collector:
             return bytes(output)
         finally:
             selector.close()
-            # Kill only this read-only client's process group, never the server.
-            try:
-                os.killpg(process.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-            process.wait()
+            # Kill only this read-only client's process group, never the server,
+            # and only while the leader is unreaped: once poll()/wait() has
+            # reaped it, its pid (and so the pgid) may already be recycled.
+            if process.returncode is None:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                process.wait()
             process.stdout.close()
 
     def pane(self, pin: Pin) -> None:
@@ -607,22 +611,48 @@ def watch(collector: Collector, pins: list[Pin], interval: float, failures: int,
         return "cancelled" if collector.cancel.is_set() else "deadline"
 
 
+# Once part of a line is on the pipe, allow this long past cancellation or the
+# deadline to finish it, so consumers do not receive a torn JSON record.
+EMIT_LINE_GRACE = .25
+
+
 def emit_json(collector: Collector, record: dict, fd: int = 1) -> None:
-    """A stalled output pipe must not outlive cancellation or the deadline."""
+    """Write one JSON line; a stalled output pipe must not outlive cancellation or the deadline.
+
+    Nothing is written once the collector is stopped. A line that has started is
+    finished within EMIT_LINE_GRACE; if the pipe is still stalled after that, the
+    unterminated fragment (never newline-terminated) is the only residue.
+    """
     output = memoryview((json.dumps(record, separators=(",", ":")) + "\n").encode())
-    blocking = os.get_blocking(fd)
-    os.set_blocking(fd, False)
+    collector.remaining()
+    flags = fcntl.fcntl(fd, fcntl.F_GETFL)
     try:
+        if not flags & os.O_NONBLOCK:
+            fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+        started = False
+        grace_end: float | None = None
         while output:
-            remaining = collector.remaining()
+            try:
+                remaining = collector.remaining()
+            except Stopped:
+                if not started:
+                    raise
+                if grace_end is None:
+                    grace_end = time.monotonic() + EMIT_LINE_GRACE
+                remaining = grace_end - time.monotonic()
+                if remaining <= 0:
+                    raise
             if not select.select([], [fd], [], min(.05, remaining))[1]:
                 continue
             try:
-                output = output[os.write(fd, output):]
+                written = os.write(fd, output)
             except BlockingIOError:
                 continue
+            started = started or written > 0
+            output = output[written:]
     finally:
-        os.set_blocking(fd, blocking)
+        if fcntl.fcntl(fd, fcntl.F_GETFL) != flags:
+            fcntl.fcntl(fd, fcntl.F_SETFL, flags)
 
 
 class ResolvedCollector(Collector):
