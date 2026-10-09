@@ -36,6 +36,7 @@ import {
   AgentAdmissionDenied,
   observeAgentScopes,
 } from './agent-admission'
+import { contentSecurityPolicy, voiceConnectSource } from './csp'
 import {
   confirmATermSessionAbsence,
   type ExternalViewPresence,
@@ -77,6 +78,15 @@ import {
   paneScopeFromCgroup,
   parseScopeResources,
 } from './ownership'
+import {
+  cgroupProcessIds,
+  isExactLaunchGateProcess,
+  processControlGroup,
+  processEnvironment,
+  processInControlGroup,
+  processStartTime,
+  processStartTimeFromStat,
+} from './procfs'
 import {
   isDir,
   listProjects,
@@ -727,24 +737,6 @@ function observedInternalSessionState(row: WidgetRow): InternalSessionState {
 const TMUX_SERVER_SETTLE_MS = 5_000
 const TMUX_SERVER_POLL_MS = 50
 
-function processEnvironment(pid: number): ReadonlyMap<string, string> | null {
-  try {
-    return new Map(
-      readFileSync(`/proc/${pid}/environ`, 'utf8')
-        .split('\0')
-        .filter(Boolean)
-        .map((entry) => {
-          const separator = entry.indexOf('=')
-          return separator < 0
-            ? ([entry, ''] as const)
-            : ([entry.slice(0, separator), entry.slice(separator + 1)] as const)
-        }),
-    )
-  } catch {
-    return null
-  }
-}
-
 function tmuxServerEnvironmentMatches(pid: number, serverId: string): boolean {
   const values = processEnvironment(pid)
   return (
@@ -1038,25 +1030,6 @@ function managedEnvironment(
   return environment
 }
 
-/** Resolve only the narrow cgroup assigned to this exact tmux pane. Broad app,
- * GNOME, user, and session scopes are intentionally rejected by the parser. */
-function processStartTime(pid: number): string | null {
-  try {
-    return processStartTimeFromStat(readFileSync(`/proc/${pid}/stat`, 'utf8'))
-  } catch {
-    return null
-  }
-}
-
-function processStartTimeFromStat(stat: string): string | null {
-  const fields = stat
-    .slice(stat.lastIndexOf(') ') + 2)
-    .trim()
-    .split(/\s+/)
-  // The slice starts at proc field 3 (state); field 22 is process starttime.
-  return fields[19] ?? null
-}
-
 interface ManagedPaneProcess {
   pid: number
   startTime: string
@@ -1116,6 +1089,8 @@ function currentPaneProcess(widgetId: string): ManagedPaneProcess | null {
   }
 }
 
+/** Resolve only the narrow cgroup assigned to this exact tmux pane. Broad app,
+ * GNOME, user, and session scopes are intentionally rejected by the parser. */
 function currentPaneScope(widgetId: string): string | null {
   return currentPaneProcess(widgetId)?.scopeUnit ?? null
 }
@@ -1239,15 +1214,6 @@ function readTmuxServerRoster(
       detail,
     }
   }
-}
-
-function processControlGroup(pid: number): string | null {
-  const cgroup = readFileSync(`/proc/${pid}/cgroup`, 'utf8')
-  for (const line of cgroup.split('\n')) {
-    const separator = line.indexOf('::')
-    if (separator >= 0) return line.slice(separator + 2)
-  }
-  return null
 }
 
 function tmuxServerProcessEvidence(server: TmuxServerRow): TmuxServerProcessEvidence {
@@ -1560,16 +1526,6 @@ function isPaneExitBridgeReady(row: WidgetRow): boolean {
   return false
 }
 
-function processInControlGroup(pid: number, controlGroup: string): boolean {
-  try {
-    return readFileSync(`/proc/${pid}/cgroup`, 'utf8')
-      .split('\n')
-      .some((line) => line.endsWith(`:${controlGroup}`))
-  } catch {
-    return false
-  }
-}
-
 /** Persist the exact pane scope only after successful gated-pane creation. The
  * caller supplies its pre-launch ownership snapshot so a stale completion can
  * never overwrite a newer cleanup generation. */
@@ -1702,52 +1658,6 @@ async function reconcileSupersededPendingScope(row: WidgetRow): Promise<boolean>
         current.pendingScopeInvocationId,
       ),
   )
-}
-
-function cgroupProcessIds(controlGroup: string): number[] | null {
-  try {
-    const root = `/sys/fs/cgroup${controlGroup}`
-    const pending = [root]
-    const processIds: number[] = []
-    while (pending.length > 0) {
-      const directory = pending.pop() as string
-      processIds.push(
-        ...readFileSync(join(directory, 'cgroup.procs'), 'utf8')
-          .split('\n')
-          .filter(Boolean)
-          .map(Number)
-          .filter((pid) => Number.isInteger(pid) && pid > 0),
-      )
-      for (const entry of readdirSync(directory, { withFileTypes: true })) {
-        if (entry.isDirectory()) pending.push(join(directory, entry.name))
-      }
-    }
-    return processIds
-  } catch {
-    return null
-  }
-}
-
-/** The fixed gate is safe to advance only while it is the sole process in the
- * exact owned cgroup, including every descendant cgroup. If a prior send
- * already started or delegated anything, ambiguity preserves it and never
- * replays a launcher. `runInPaneTargetArgs` also clears a partially typed line
- * before its literal send, making restart recovery idempotent before Enter. */
-function isExactLaunchGateProcess(pid: number): boolean | null {
-  try {
-    const command = readFileSync(`/proc/${pid}/cmdline`)
-      .toString('utf8')
-      .split('\0')
-      .filter(Boolean)
-    return (
-      command.length === 3 &&
-      command[0] === '/bin/bash' &&
-      command[1] === '--noprofile' &&
-      command[2] === '--norc'
-    )
-  } catch {
-    return null
-  }
 }
 
 function managedGateState(pane: ManagedPaneProcess, controlGroup: string): ManagedGateState {
@@ -3798,29 +3708,8 @@ function subscribeSelectionEvents(): void {
 // 'self'. Defense-in-depth so a renderer XSS can't reach arbitrary origins.
 function installContentSecurityPolicy(): void {
   if (process.env.ELECTRON_RENDERER_URL) return // dev server: leave Vite's needs alone
-  let wsOrigin = ''
-  try {
-    const u = new URL(VOICE_WS_URL)
-    // Chromium's CSP host grammar has no IPv6 literals: `ws://[::1]:port` makes
-    // the whole directive invalid, so leave a [::1] voice service out, matching
-    // the renderer meta CSP (electron.vite.config.ts).
-    if (!u.hostname.startsWith('[')) wsOrigin = `${u.protocol}//${u.host}`
-  } catch {
-    // malformed override — connect-src stays 'self' only
-  }
-  const csp = [
-    "default-src 'self'",
-    "script-src 'self' blob:",
-    "style-src 'self' 'unsafe-inline'", // xterm.js injects a <style> for theming
-    "img-src 'self' data:", // inline SVG marks + the chrome noise data: URI
-    "font-src 'self'",
-    `connect-src 'self'${wsOrigin ? ` ${wsOrigin}` : ''}`, // voice WS only
-    "worker-src 'self' blob:", // voice audio worklet
-    "media-src 'self' blob:",
-    "object-src 'none'",
-    "base-uri 'none'",
-    "frame-src 'none'",
-  ].join('; ')
+  const voice = voiceConnectSource(VOICE_WS_URL)
+  const csp = contentSecurityPolicy(voice ? [voice] : [])
   session.defaultSession.webRequest.onHeadersReceived((details, cb) => {
     cb({
       responseHeaders: {

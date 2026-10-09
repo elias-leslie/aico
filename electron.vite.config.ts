@@ -1,6 +1,7 @@
 import { resolve } from 'node:path'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import type { Plugin } from 'vite'
+import { contentSecurityPolicy } from './electron/main/csp'
 
 // The packaged renderer loads from file://, where Electron never applies a
 // response-header CSP, so production builds carry the policy as a <meta> tag.
@@ -9,19 +10,7 @@ import type { Plugin } from 'vite'
 // the only remote connection and its service is loopback-only. Chromium's CSP
 // host grammar has no IPv6 literals: `ws://[::1]:*` is rejected as invalid and
 // logged as a renderer error, so a voice service on [::1] is not allowed here.
-const RENDERER_CSP = [
-  "default-src 'self'",
-  "script-src 'self' blob:",
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data:",
-  "font-src 'self'",
-  "connect-src 'self' ws://127.0.0.1:* ws://localhost:*",
-  "worker-src 'self' blob:",
-  "media-src 'self' blob:",
-  "object-src 'none'",
-  "base-uri 'none'",
-  "frame-src 'none'",
-].join('; ')
+const RENDERER_CSP = contentSecurityPolicy(['ws://127.0.0.1:*', 'ws://localhost:*'])
 
 function rendererCspMeta(): Plugin {
   return {
