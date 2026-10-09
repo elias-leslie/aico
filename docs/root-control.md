@@ -183,6 +183,19 @@ thread loading, authentication, model readiness, or prompt completion. Failure
 receipts are content-free; uncertain responses never authorize an automatic retry
 with a different identity.
 
+`st aico root status <requestId>` reports owner workload lifecycle: `running`
+means the exact managed process is present. For bounded advisory terminal
+activity, use `st aico roots [requestId]` or its `--watch` mode. The watcher
+verifies root, owner, tmux server, and pane identity before and after each
+visible-screen capture. It emits compact state codes, never pane text. Its
+Codex profile retains the existing busy, turn-finished, and warning
+classifications. Its `claude-code` profile reports `input_required` only for a
+current session-paused safeguard choice, `retrying` for a current API retry
+countdown, and `input_required` when both appear together. Ordinary Claude
+active, idle, cost, or transcript screens remain `ambiguous`; the watcher cannot
+infer a native turn decision from them. Activity observations do not change the
+owner's `running` lifecycle status or authorize terminal input.
+
 Directed delivery is deliberately unqualified. An isolated private fixture
 inspection of installed `codex-cli 0.160.0` found `codex queue --thread <THREAD>
 --message <TEXT>`; `queue send` and `queue list` are unsupported. The exposed

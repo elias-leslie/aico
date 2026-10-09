@@ -41,6 +41,43 @@ def classify(screen: str) -> dict:
     return watcher.classify(screen.encode())[0]
 
 
+CLAUDE_CHOICE = ("Session paused\nSafeguard flagged this session\n"
+                 "1. Review and continue\n2. Stop")
+CLAUDE_RETRY = "Waiting for API response; will retry in 8 seconds"
+
+
+@pytest.mark.parametrize("screen,terminal", [
+    (CLAUDE_CHOICE, "input_required"),
+    (CLAUDE_RETRY, "retrying"),
+    (CLAUDE_CHOICE + "\n" + CLAUDE_RETRY, "input_required"),
+    ("Claude is working", "ambiguous"),
+    ("❯ ", "ambiguous"),
+    ("Cost: $0.02", "ambiguous"),
+    ("❯ previous user request\nLast prompt: previous user request\nCost: $0.02", "ambiguous"),
+])
+def test_claude_advisory_states(screen, terminal):
+    state, sample = watcher.classify(screen.encode(), "claude-code")
+    assert state["terminal"] == terminal
+    assert sample == ""
+    assert "previous user request" not in json.dumps(state)
+
+
+@pytest.mark.parametrize("screen", [
+    CLAUDE_CHOICE + "\n❯ ",
+    "> " + CLAUDE_CHOICE.replace("\n", "\n> "),
+    '"Session paused"\n"Safeguard flagged this session"\n"1. Review and continue"',
+    "```text\n" + CLAUDE_CHOICE + "\n```",
+    "❯ draft request\n" + CLAUDE_CHOICE,
+    "Earlier response\n" + CLAUDE_CHOICE + "\nCost: $0.02",
+    "Waiting for API response; will retry later",
+    "```text\n" + CLAUDE_RETRY + "\n```",
+    "> " + CLAUDE_RETRY,
+    "❯ draft request\n" + CLAUDE_RETRY,
+])
+def test_claude_copies_and_unresolved_screens_do_not_trigger(screen):
+    assert watcher.classify(screen.encode(), "claude-code")[0]["terminal"] == "ambiguous"
+
+
 @pytest.mark.parametrize("stop", ["cancel", "deadline"])
 def test_closed_connection_body_checks_stop_before_each_chunk(monkeypatch, stop):
     instance = watcher.Collector("", "", "", time.monotonic() + 10, threading.Event())
@@ -306,8 +343,10 @@ def pane_receipt():
 
 def discovery_receipts(monkeypatch, instance, roots=None, mutate=None):
     root = {**root_receipt(), "tool": "codex"}
+    if roots and len(roots) == 1 and roots[0].get("tool") == "claude-code":
+        root = roots[0]
     owner = {**pane_receipt(), "tmuxServerId": PIN.tmuxServerId,
-             "tmuxSocket": "/fixture/tmux", "tool": "codex"}
+             "tmuxSocket": "/fixture/tmux", "tool": root["tool"]}
     calls = []
 
     def receipt(self, path, route):
@@ -338,7 +377,7 @@ def test_discovery_resolves_verified_identity_without_manual_pin(monkeypatch):
                      ("/fixture/owner", "/v1/sessions/deadbeef")]
 
 
-@pytest.mark.parametrize("tool", [None, "shell", "claude-code", "future-cli"])
+@pytest.mark.parametrize("tool", [None, "shell", "future-cli"])
 def test_discovery_unsupported_profile_never_captures(monkeypatch, tool):
     instance = collector()
     calls = discovery_receipts(monkeypatch, instance, [{**root_receipt(), "tool": tool}])
@@ -347,6 +386,35 @@ def test_discovery_unsupported_profile_never_captures(monkeypatch, tool):
     assert unavailable[0]["terminal"] == "ambiguous"
     assert unavailable[0]["reason"] == "unsupported_profile"
     assert len(calls) == 1
+
+
+def test_discovery_claude_uses_verified_profile_and_content_free_sample(monkeypatch):
+    instance = collector()
+    discovery_receipts(monkeypatch, instance, [{**root_receipt(), "tool": "claude-code"}])
+    resolved, unavailable = instance.discover(None)
+    assert unavailable == []
+    assert len(resolved) == 1
+    pin, child = resolved[0]
+    assert child.profile == "claude-code"
+    fake_commands(monkeypatch, child, (CLAUDE_CHOICE + "\n" + CLAUDE_RETRY).encode())
+    state = child.sample(pin)
+    assert state["terminal"] == "input_required"
+    assert state["observation"] == "available"
+    assert "Safeguard" not in json.dumps(state)
+
+
+def test_discovery_claude_owner_tool_mismatch_fails_closed(monkeypatch):
+    instance = collector()
+
+    def mismatch(route, data):
+        if "/sessions/" in route:
+            data["tool"] = "codex"
+
+    discovery_receipts(monkeypatch, instance,
+                       [{**root_receipt(), "tool": "claude-code"}], mismatch)
+    resolved, unavailable = instance.discover(None)
+    assert resolved == []
+    assert unavailable[0]["identity"] == "changed"
 
 
 @pytest.mark.parametrize("field,value", [("generation", "c" * 64),

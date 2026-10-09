@@ -76,6 +76,14 @@ BANNERS = (
         r"API Error:\s*(?:401|403|5\d\d)\b.*|"
         r"Reconnecting\.\.\.\s*\d+/\d+.*)$", re.I)),
 )
+CLAUDE_PAUSED = re.compile(r"Session paused[.!]?", re.I)
+CLAUDE_SAFEGUARD = re.compile(r"Safeguard\b.*\bflagged\b.*", re.I)
+CLAUDE_CHOICE = re.compile(r"[1-9]\.\s+\S.*")
+CLAUDE_RETRY = re.compile(
+    r"Waiting for API response\b.*\bwill retry\s+in\s+\d+\s*"
+    r"(?:s|sec(?:ond)?s?)\b[.!]?", re.I,
+)
+CLAUDE_PROMPT = re.compile(r"\s*[❯›]\s?.*")
 SECRET = re.compile(
     r"(?is)(?:-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----.*?"
     r"(?:-----END (?:[A-Z]+ )?PRIVATE KEY-----|$)|"
@@ -208,8 +216,48 @@ def local_root_url(value: str) -> str:
     return value.rstrip("/")
 
 
-def classify(raw: bytes) -> tuple[dict, str]:
+def classify_claude(raw: bytes) -> tuple[dict, str]:
+    """Recognize only current modal/retry chrome; never retain Claude pane text."""
+    if len(raw) > CAPTURE_LIMIT:
+        raise Unavailable("capture_limit")
+    lines = CONTROL.sub("", raw.decode("utf-8", errors="replace")).splitlines()
+    visible = []
+    fenced = False
+    for line in lines:
+        fence = line.strip().startswith(("```", "~~~"))
+        visible.append(not fenced and not fence)
+        if fence:
+            fenced = not fenced
+    tail = [(i, line.strip()) for i, line in enumerate(lines)
+            if line.strip() and i >= len(lines) - 12]
+    # A prompt in this region can be an editable draft, and a modal above a
+    # later prompt is history. Neither is current decision chrome.
+    current = bool(tail) and all(visible[i] for i, _ in tail) and not any(
+        CLAUDE_PROMPT.fullmatch(line) for _, line in tail)
+    terminal = "ambiguous"
+    if current:
+        body = [line for _, line in tail]
+        retry = bool(CLAUDE_RETRY.fullmatch(body[-1]))
+        choice = body[:-1] if retry else body
+        # The complete modal must end at the visible bottom (or immediately
+        # before the retry countdown). Prefix prose is allowed as context.
+        paused = next((i for i, line in enumerate(choice) if CLAUDE_PAUSED.fullmatch(line)), None)
+        if (paused is not None and paused + 2 < len(choice)
+                and CLAUDE_SAFEGUARD.fullmatch(choice[paused + 1])
+                and all(CLAUDE_CHOICE.fullmatch(line) for line in choice[paused + 2:])):
+            terminal = "input_required"
+        elif retry:
+            terminal = "retrying"
+    return {"terminal": terminal, "draft_present": False, "low_context": False,
+            "banners": [], "markers": []}, ""
+
+
+def classify(raw: bytes, profile: str = "codex") -> tuple[dict, str]:
     """Returns closed metadata and one sanitized sample; neither draft nor prose is emitted."""
+    if profile == "claude-code":
+        return classify_claude(raw)
+    if profile != "codex":
+        raise Unavailable("unsupported_profile")
     if len(raw) > CAPTURE_LIMIT:
         raise Unavailable("capture_limit")
     text = CONTROL.sub("", raw.decode("utf-8", errors="replace"))
@@ -282,7 +330,7 @@ def classify(raw: bytes) -> tuple[dict, str]:
 class Collector:
     def __init__(self, root_socket: str, owner_socket: str, tmux_socket: str,
                  deadline: float, cancel: threading.Event, tmux: str = "tmux",
-                 discovered: bool = False):
+                 discovered: bool = False, profile: str = "codex"):
         self.root_socket = root_socket
         self.owner_socket = owner_socket
         self.tmux_socket = tmux_socket
@@ -290,6 +338,7 @@ class Collector:
         self.cancel = cancel
         self.tmux = tmux
         self.discovered = discovered
+        self.profile = profile
 
     def remaining(self) -> float:
         remaining = self.deadline - time.monotonic()
@@ -357,7 +406,7 @@ class Collector:
             raise IdentityChanged()
         if root.get("status") != "running":
             raise Unavailable("root_not_running")
-        if self.discovered and root.get("tool") != "codex":
+        if self.discovered and root.get("tool") != self.profile:
             raise IdentityChanged()
         status, owner = self.receipt(self.owner_socket, f"/v1/sessions/{pin.widgetId}")
         if status != 200:
@@ -367,7 +416,7 @@ class Collector:
                     "paneId": pin.paneId}
         if self.discovered:
             expected.update(tmuxServerId=pin.tmuxServerId, tmuxSocket=self.tmux_socket,
-                            tool="codex")
+                            tool=self.profile)
         if any(owner.get(k) != v for k, v in expected.items()):
             raise IdentityChanged()
 
@@ -400,7 +449,7 @@ class Collector:
             if root.get("status") != "running":
                 unavailable.append({**record, "reason": "root_not_running"})
                 continue
-            if root.get("tool") != "codex":
+            if root.get("tool") not in ("codex", "claude-code"):
                 unavailable.append({**record, "terminal": "ambiguous", "reason": "unsupported_profile"})
                 continue
             try:
@@ -418,7 +467,8 @@ class Collector:
                 }))
                 child = Collector(self.root_socket, self.owner_socket,
                                   socket_path(owner.get("tmuxSocket", "")),
-                                  self.deadline, self.cancel, self.tmux, discovered=True)
+                                  self.deadline, self.cancel, self.tmux, discovered=True,
+                                  profile=root["tool"])
                 child.owners(pin)
                 child.pane(pin)
                 resolved.append((pin, child))
@@ -504,7 +554,7 @@ class Collector:
             self.owners(pin)
             self.pane(pin)
             self.remaining()
-            state, _ = classify(raw)
+            state, _ = classify(raw, self.profile)
             return {"observation": "available", "identity": "pinned", **state}
         except IdentityChanged:
             return {"observation": "unavailable", "identity": "changed"}
