@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { OpenableSession } from '../types'
+import type { OpenableSession, ScrollbackPageRequest } from '../types'
 
 // Minimal, explicit bridge — no nodeIntegration in the renderer. The renderer
 // talks to the tmux-backed PTY only through these channels.
@@ -23,8 +23,7 @@ contextBridge.exposeInMainWorld('aico', {
   },
   scrollback: {
     capture: (): Promise<string> => ipcRenderer.invoke('tmux:capture'),
-    page: (request?: { fromLine?: number; count?: number }) =>
-      ipcRenderer.invoke('tmux:scrollback-page', request),
+    page: (request?: ScrollbackPageRequest) => ipcRenderer.invoke('tmux:scrollback-page', request),
     paneMode: () => ipcRenderer.invoke('tmux:pane-mode'),
   },
   selection: {

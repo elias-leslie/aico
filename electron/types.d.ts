@@ -5,7 +5,23 @@ import type { AicoTerminalFontSettings } from './shared/font-settings'
 export interface ScrollbackPage {
   fromLine: number
   totalLines: number
+  /** History lines above the visible pane when the page was captured; line
+   * `historySize + r` is the pane's visible row r. */
+  historySize: number
   text: string
+}
+
+export interface ScrollbackPageRequest {
+  fromLine?: number
+  count?: number
+  /** Bare text without colour escapes, for copying a selection. */
+  plain?: boolean
+}
+
+export interface PaneMode {
+  alternateScreen: boolean
+  mouseReporting: boolean
+  historySize: number
 }
 
 export interface OpenableSession {
@@ -37,9 +53,9 @@ export interface AicoApi {
     /** Full tmux history (with color escapes) for the read-only overlay. */
     capture(): Promise<string>
     /** Bounded tmux history page (with color escapes), newest tail by default. */
-    page(request?: { fromLine?: number; count?: number }): Promise<ScrollbackPage>
+    page(request?: ScrollbackPageRequest): Promise<ScrollbackPage>
     /** Who owns the pane's scrollback, straight from tmux. */
-    paneMode(): Promise<{ alternateScreen: boolean; mouseReporting: boolean }>
+    paneMode(): Promise<PaneMode>
   }
   selection: {
     /** Subscribe to indicated-selection deliveries (drives the capture toast);

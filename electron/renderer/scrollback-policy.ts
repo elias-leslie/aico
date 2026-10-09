@@ -61,3 +61,27 @@ export function claimsWheelForPane({
   if (deltaY === 0 || overlayActive) return false
   return tuiSlug !== 'shell'
 }
+
+/**
+ * Whether the program in the pane runs its own text selection, so mouse drags
+ * should reach it untouched.
+ *
+ * Claude Code's fullscreen renderer draws in the alternate screen, grabs the
+ * mouse, and selects across its whole transcript itself: dragging to an edge
+ * auto-scrolls the conversation and release copies to the clipboard. Forcing
+ * xterm's local selection there limits a copy to the visible rows. A plain
+ * shell hands the mouse to whatever full-screen program enabled it. Other
+ * agents keep the local selection, which Shift-drag also gives anywhere.
+ */
+export function programOwnsSelection({
+  tuiSlug,
+  alternateScreen,
+  mouseReporting,
+}: {
+  tuiSlug: string
+  alternateScreen: boolean
+  mouseReporting: boolean
+}): boolean {
+  if (!alternateScreen || !mouseReporting) return false
+  return tuiSlug === 'claude-code' || tuiSlug === 'shell'
+}

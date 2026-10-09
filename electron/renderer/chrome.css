@@ -242,13 +242,12 @@ body.thinking {
 
 /* Terminal: solid --ink, inner radius, framed by the frosted padding. */
 #terminal {
-  --terminal-content-right: 8px;
   /* Keep the rail and scrollback layers below the shell menus and palette. */
   isolation: isolate;
   flex: 1;
   position: relative;
   margin: 0 4px 4px 4px;
-  padding: 6px var(--terminal-content-right) 6px 8px;
+  padding: 6px 8px;
   border-radius: 4px;
   background: var(--ink);
   overflow: hidden;
@@ -314,21 +313,42 @@ body.thinking {
   display: none;
 }
 
-#terminal.tui-scrollback-rail {
-  --terminal-content-right: 22px; /* normal 8px padding + A-Term's 14px rail */
-}
-
-#terminal.tui-scrollback-rail::after {
-  content: "";
+/* History scrollbar: drawn in #terminal's right padding, so it never takes a
+   text column. Quiet at rest; amber while hovered or dragged. */
+.scroll-rail {
   position: absolute;
   top: 6px;
-  right: 8px;
+  right: 1px;
   bottom: 6px;
-  width: 14px;
-  background: var(--ink);
-  border-left: 1px solid rgba(231, 226, 214, 0.14);
-  pointer-events: none;
-  z-index: 9;
+  width: 6px;
+  z-index: 11; /* above the scrollback overlay */
+  cursor: default;
+}
+.scroll-rail[hidden] {
+  display: none;
+}
+.scroll-rail-thumb {
+  position: absolute;
+  top: 0;
+  right: 1px;
+  width: 3px;
+  min-height: 18px;
+  border-radius: 999px;
+  background: rgba(231, 226, 214, 0.22);
+  transition:
+    width 120ms var(--ease-arrival),
+    background-color 120ms var(--ease-arrival);
+}
+.scroll-rail:hover .scroll-rail-thumb,
+.scroll-rail.dragging .scroll-rail-thumb {
+  width: 5px;
+  background: rgba(229, 166, 71, 0.6);
+}
+
+/* The overlay sizes its xterm to the live grid and draws the rail above, so
+   xterm's own scrollbar would only cover text. */
+#scrollback-overlay .xterm-scrollable-element > .scrollbar {
+  display: none;
 }
 
 #terminal .xterm-viewport {

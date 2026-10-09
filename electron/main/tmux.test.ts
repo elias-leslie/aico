@@ -593,21 +593,33 @@ describe('tmux model', () => {
 describe('pane mode', () => {
   it('asks tmux for the pane state that decides who owns scrollback', () => {
     expect(paneModeTargetArgs({ socket: '/tmp/s.sock', session: 'aico-1' })).toContain(
-      '#{?alternate_on,1,0} #{?mouse_any_flag,1,0}',
+      '#{?alternate_on,1,0} #{?mouse_any_flag,1,0} #{history_size}',
     )
   })
 
   it('reads a program that owns its own scrollback', () => {
     // Claude Code: alternate screen, mouse grabbed, so tmux keeps no history.
-    expect(parsePaneMode('1 1\n')).toEqual({ alternateScreen: true, mouseReporting: true })
+    expect(parsePaneMode('1 1 3\n')).toEqual({
+      alternateScreen: true,
+      mouseReporting: true,
+      historySize: 3,
+    })
   })
 
   it('treats a missing flag as not owning scrollback', () => {
-    expect(parsePaneMode('')).toEqual({ alternateScreen: false, mouseReporting: false })
+    expect(parsePaneMode('')).toEqual({
+      alternateScreen: false,
+      mouseReporting: false,
+      historySize: 0,
+    })
   })
 
   it('reads a program whose output lives in tmux history', () => {
     // Antigravity: normal screen, no mouse grab, so the overlay is correct.
-    expect(parsePaneMode('0 0\n')).toEqual({ alternateScreen: false, mouseReporting: false })
+    expect(parsePaneMode('0 0 2389\n')).toEqual({
+      alternateScreen: false,
+      mouseReporting: false,
+      historySize: 2389,
+    })
   })
 })

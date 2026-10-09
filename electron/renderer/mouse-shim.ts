@@ -40,10 +40,17 @@ export function mouseReportingActive(term: Terminal): boolean {
  * xterm always treats as "select locally," restoring copy inside TUIs without
  * affecting the program's own clicks. Returns a cleanup function.
  */
-export function setupMouseShim(term: Terminal, container: HTMLElement): () => void {
+export function setupMouseShim(
+  term: Terminal,
+  container: HTMLElement,
+  /** False leaves this event to the program (it runs its own selection) or
+   * to another surface layered over the terminal. */
+  shouldForce: (e: MouseEvent) => boolean = () => true,
+): () => void {
   const forceLocalSelection = (e: MouseEvent) => {
     if (e.shiftKey || !e.isTrusted) return // already shifted, or our own synthetic event
     if (!mouseReportingActive(term)) return // no TUI grabbing the mouse — let it through
+    if (!shouldForce(e)) return
 
     e.stopPropagation()
     e.preventDefault()

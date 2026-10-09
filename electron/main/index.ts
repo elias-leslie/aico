@@ -4014,7 +4014,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('tmux:pane-mode', async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     const widgetId = win ? widgetOf.get(win.id) : undefined
-    if (!widgetId) return { alternateScreen: false, mouseReporting: false }
+    if (!widgetId) return { alternateScreen: false, mouseReporting: false, historySize: 0 }
 
     const { stdout } = await execFileAsync(
       TMUX_BIN,
@@ -4027,12 +4027,12 @@ app.whenReady().then(async () => {
   ipcMain.handle('tmux:scrollback-page', async (event, request?: unknown) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     const widgetId = win ? widgetOf.get(win.id) : undefined
-    if (!widgetId) return { fromLine: 0, totalLines: 0, text: '' }
+    if (!widgetId) return { fromLine: 0, totalLines: 0, historySize: 0, text: '' }
 
     const target = tmuxPaneTargetForWidget(widgetId)
     const req =
       request && typeof request === 'object'
-        ? (request as { fromLine?: unknown; count?: unknown })
+        ? (request as { fromLine?: unknown; count?: unknown; plain?: unknown })
         : {}
     const count = scrollbackPageCount(req.count)
     const requestedFromLine = scrollbackPageFromLine(req.fromLine)
@@ -4044,12 +4044,20 @@ app.whenReady().then(async () => {
     const historySize = Number(historyRaw)
     const paneHeight = Number(heightRaw)
     const bounds = scrollbackPageBounds(historySize, paneHeight, count, requestedFromLine)
-    if (!bounds) return { fromLine: 0, totalLines: 0, text: '' }
+    if (!bounds) return { fromLine: 0, totalLines: 0, historySize: 0, text: '' }
 
-    const { stdout } = await execFileAsync(TMUX_BIN, capturePageTargetArgs(target, bounds), {
-      maxBuffer: 16 * 1024 * 1024,
-    })
-    return { fromLine: bounds.fromLine, totalLines: bounds.totalLines, text: stdout }
+    const plain = req.plain === true
+    const { stdout } = await execFileAsync(
+      TMUX_BIN,
+      capturePageTargetArgs(target, bounds, { plain }),
+      { maxBuffer: 16 * 1024 * 1024 },
+    )
+    return {
+      fromLine: bounds.fromLine,
+      totalLines: bounds.totalLines,
+      historySize: Math.max(0, Math.floor(historySize) || 0),
+      text: stdout,
+    }
   })
 
   ipcMain.handle('clipboard:read', () => clipboard.readText())

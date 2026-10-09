@@ -123,9 +123,11 @@ function targetArgs(target: TmuxTarget, args: string[]): string[] {
   return [...socketArgs(target.socket), ...args]
 }
 
-// High history so scrollback survives long sessions. The scrollback-gate
-// subtask stresses this (10k+ lines); 100k gives generous headroom.
-export const HISTORY_LIMIT = 100_000
+// Deep history so scrollback survives long sessions. tmux allocates history
+// only as output arrives (an ASCII line costs on the order of its width in
+// bytes), so an idle or quiet pane pays nothing for the ceiling; the renderer
+// pages it through a bounded window and never holds the whole history.
+export const HISTORY_LIMIT = 200_000
 
 /** Stable per-window session name. Reload re-attaches the same session. */
 export function sessionName(widgetId: string): string {
@@ -271,6 +273,8 @@ export function captureTargetArgs(target: TmuxTarget): string[] {
 export interface PaneMode {
   alternateScreen: boolean
   mouseReporting: boolean
+  /** Lines of tmux history above the visible pane (0 when unknown). */
+  historySize: number
 }
 
 export function paneScrollbackInfoTargetArgs(target: TmuxTarget): string[] {
@@ -297,15 +301,20 @@ export function paneModeTargetArgs(target: TmuxTarget): string[] {
     '-p',
     '-t',
     target.session,
-    '#{?alternate_on,1,0} #{?mouse_any_flag,1,0}',
+    '#{?alternate_on,1,0} #{?mouse_any_flag,1,0} #{history_size}',
   ])
 }
 
 /** A program owns its scrollback when it draws in the alternate screen (so tmux
  * keeps no history for it) and grabs the mouse (so it acts on wheel reports). */
 export function parsePaneMode(stdout: string): PaneMode {
-  const [alternate, mouse] = stdout.trim().split(/\s+/)
-  return { alternateScreen: alternate === '1', mouseReporting: mouse === '1' }
+  const [alternate, mouse, history] = stdout.trim().split(/\s+/)
+  const historySize = Number(history)
+  return {
+    alternateScreen: alternate === '1',
+    mouseReporting: mouse === '1',
+    historySize: Number.isSafeInteger(historySize) && historySize > 0 ? historySize : 0,
+  }
 }
 
 export function scrollbackPageBounds(
@@ -335,13 +344,18 @@ export function scrollbackPageBounds(
   }
 }
 
-export function capturePageTargetArgs(target: TmuxTarget, bounds: ScrollbackPageBounds): string[] {
+export function capturePageTargetArgs(
+  target: TmuxTarget,
+  bounds: ScrollbackPageBounds,
+  { plain = false }: { plain?: boolean } = {},
+): string[] {
   return targetArgs(target, [
     'capture-pane',
     '-t',
     target.session,
     '-p',
-    '-e',
+    // Escapes keep colour for display; a copy wants the bare text.
+    ...(plain ? [] : ['-e']),
     '-S',
     String(bounds.startCoord),
     '-E',

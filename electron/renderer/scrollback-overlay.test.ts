@@ -6,11 +6,15 @@ const writes = vi.hoisted(() => [] as string[])
 
 vi.mock('@xterm/xterm', () => ({
   Terminal: class {
+    cols = 80
     rows = 24
-    buffer = { active: { viewportY: 0, baseY: 0 } }
+    buffer = { active: { viewportY: 0, baseY: 0, getLine: () => undefined } }
     options = { fontFamily: '', fontSize: 0 }
     loadAddon() {}
     open() {}
+    onScroll() {}
+    resize() {}
+    select() {}
     reset() {}
     write(text: string, done: () => void) {
       writes.push(text)
@@ -18,17 +22,13 @@ vi.mock('@xterm/xterm', () => ({
     }
     scrollToLine() {}
     scrollToBottom() {}
+    scrollToTop() {}
     scrollLines() {}
     refresh() {}
     clearSelection() {}
     getSelection() {
       return ''
     }
-  },
-}))
-vi.mock('@xterm/addon-fit', () => ({
-  FitAddon: class {
-    fit() {}
   },
 }))
 vi.mock('@xterm/addon-webgl', () => ({
@@ -56,6 +56,7 @@ function fixture(
   const host = {
     id: '',
     style: { display: '' },
+    querySelector: () => null,
     addEventListener: vi.fn((name: string, listener: EventListener) =>
       listeners.set(name, listener),
     ),
@@ -75,6 +76,7 @@ function fixture(
       theme: { background: '#000', foreground: '#fff' },
       fontFamily: 'monospace',
       fontSize: 12,
+      size: () => ({ cols: 80, rows: 24 }),
       capturePage,
       writeClipboard: vi.fn(),
       onDismiss,
@@ -121,7 +123,7 @@ describe('scrollback overlay pending captures', () => {
     const capturePage = vi
       .fn()
       .mockReturnValueOnce(pendingPage.promise)
-      .mockResolvedValueOnce({ fromLine: 0, totalLines: 1, text: 'fresh\n' })
+      .mockResolvedValueOnce({ fromLine: 0, totalLines: 1, historySize: 0, text: 'fresh\n' })
     const { overlay, pressEscape, windowListeners } = fixture(capturePage)
 
     const pendingEntry = overlay.enter(-1)
@@ -131,7 +133,7 @@ describe('scrollback overlay pending captures', () => {
     expect(overlay.opening).toBe(false)
     expect(windowListeners.has('keydown')).toBe(false)
     await overlay.enter(-1)
-    pendingPage.resolve({ fromLine: 0, totalLines: 1, text: 'stale\n' })
+    pendingPage.resolve({ fromLine: 0, totalLines: 1, historySize: 0, text: 'stale\n' })
     await pendingEntry
 
     expect(capturePage).toHaveBeenCalledTimes(2)
@@ -143,9 +145,9 @@ describe('scrollback overlay pending captures', () => {
     const older = deferred<ScrollbackPage>()
     const capturePage = vi
       .fn()
-      .mockResolvedValueOnce({ fromLine: 2, totalLines: 3, text: 'tail\n' })
+      .mockResolvedValueOnce({ fromLine: 2, totalLines: 3, historySize: 0, text: 'tail\n' })
       .mockReturnValueOnce(older.promise)
-      .mockResolvedValueOnce({ fromLine: 0, totalLines: 1, text: 'fresh\n' })
+      .mockResolvedValueOnce({ fromLine: 0, totalLines: 1, historySize: 0, text: 'fresh\n' })
     const { overlay, host, onDismiss, wheelUp } = fixture(capturePage)
 
     await overlay.enter(-1)
@@ -155,7 +157,7 @@ describe('scrollback overlay pending captures', () => {
     expect(overlay.active).toBe(false)
     expect(host.style.display).toBe('none')
     await overlay.enter(-1)
-    older.resolve({ fromLine: 0, totalLines: 3, text: 'stale\nolder\n' })
+    older.resolve({ fromLine: 0, totalLines: 3, historySize: 0, text: 'stale\nolder\n' })
     await older.promise
     await Promise.resolve()
 
@@ -170,13 +172,13 @@ describe('scrollback overlay pending captures', () => {
     const capturePage = vi
       .fn()
       .mockReturnValueOnce(first.promise)
-      .mockResolvedValueOnce({ fromLine: 0, totalLines: 1, text: 'fresh\n' })
+      .mockResolvedValueOnce({ fromLine: 0, totalLines: 1, historySize: 0, text: 'fresh\n' })
     const { overlay, host, onDismiss } = fixture(capturePage)
 
     const pending = overlay.enter(-1)
     overlay.dismiss()
     await overlay.enter(-1)
-    first.resolve({ fromLine: 0, totalLines: 1, text: 'stale\n' })
+    first.resolve({ fromLine: 0, totalLines: 1, historySize: 0, text: 'stale\n' })
     await pending
 
     expect(capturePage).toHaveBeenCalledTimes(2)
@@ -190,7 +192,7 @@ describe('scrollback overlay pending captures', () => {
     const older = deferred<ScrollbackPage>()
     const capturePage = vi
       .fn()
-      .mockResolvedValueOnce({ fromLine: 1, totalLines: 2, text: 'tail\n' })
+      .mockResolvedValueOnce({ fromLine: 1, totalLines: 2, historySize: 0, text: 'tail\n' })
       .mockReturnValueOnce(older.promise)
     const { overlay, wheelUp } = fixture(capturePage)
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})

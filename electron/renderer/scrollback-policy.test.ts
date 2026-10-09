@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   claimsWheelForPane,
+  programOwnsSelection,
   scrollbackWheelAction,
   shouldOpenScrollbackOnWheel,
 } from './scrollback-policy'
@@ -159,5 +160,26 @@ describe('claiming the wheel for the live pane', () => {
     expect(claimsWheelForPane({ deltaY: 0, overlayActive: false, tuiSlug: 'antigravity' })).toBe(
       false,
     )
+  })
+})
+
+describe('program-owned selection', () => {
+  it('leaves drags to Claude Code fullscreen and to full-screen shell programs', () => {
+    const fullscreen = { alternateScreen: true, mouseReporting: true }
+    expect(programOwnsSelection({ tuiSlug: 'claude-code', ...fullscreen })).toBe(true)
+    expect(programOwnsSelection({ tuiSlug: 'shell', ...fullscreen })).toBe(true)
+  })
+
+  it('keeps local selection for other agents and for history in tmux', () => {
+    expect(
+      programOwnsSelection({ tuiSlug: 'codex', alternateScreen: true, mouseReporting: true }),
+    ).toBe(false)
+    expect(
+      programOwnsSelection({
+        tuiSlug: 'claude-code',
+        alternateScreen: false,
+        mouseReporting: true,
+      }),
+    ).toBe(false)
   })
 })
