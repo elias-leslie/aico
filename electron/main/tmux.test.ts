@@ -493,6 +493,8 @@ describe('tmux model', () => {
       '39',
     ])
 
+    expect(scrollbackPageBounds(Number.NaN, 40, 100)).toBeNull()
+    expect(scrollbackPageBounds(1000, Number.NaN, 100)).toBeNull()
     expect(scrollbackPageBounds(1000, 40, 100, 200)).toMatchObject({
       fromLine: 200,
       toLineExclusive: 300,

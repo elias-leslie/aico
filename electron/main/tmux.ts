@@ -323,6 +323,8 @@ export function scrollbackPageBounds(
   count: number,
   requestedFromLine?: number,
 ): ScrollbackPageBounds | null {
+  // Malformed tmux output parses to NaN; never turn it into a NaN line range.
+  if (!Number.isFinite(historySize) || !Number.isFinite(paneHeight)) return null
   const history = Math.max(0, Math.floor(historySize))
   const height = Math.max(0, Math.floor(paneHeight))
   const totalLines = history + height

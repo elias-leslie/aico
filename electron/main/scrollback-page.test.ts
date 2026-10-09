@@ -90,6 +90,19 @@ describe('readScrollbackPage', () => {
     expect(calls).toHaveLength(1)
   })
 
+  it('returns an empty page without capturing when tmux info is malformed', async () => {
+    for (const info of ['', 'x y', '1000']) {
+      const { tmux, calls } = fakeTmux(info)
+      expect(await readScrollbackPage(tmux, target, undefined)).toEqual({
+        fromLine: 0,
+        totalLines: 0,
+        historySize: 0,
+        text: '',
+      })
+      expect(calls).toHaveLength(1)
+    }
+  })
+
   it('propagates a tmux failure to the caller', async () => {
     const failure = new Error('no server running')
     const tmux: TmuxStdout = async () => {
