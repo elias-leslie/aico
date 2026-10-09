@@ -29,8 +29,8 @@ body.thinking {
   inset: var(--frame-inset);
   border-radius: 14px;
   box-shadow:
-    0 0 0 3px var(--status-glow),
-    0 0 18px 5px var(--status-glow);
+    0 0 0 2px var(--status-glow),
+    0 0 4px 1px var(--status-glow);
   /* Always lit, focused or not, so the status color (green idle / amber busy) is
      comparable across every open widget at a glance. Focus is shown by the eyes,
      not by hiding the glow. (Busy adds the breathe pulse below.) */

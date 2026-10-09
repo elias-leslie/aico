@@ -19,8 +19,8 @@
   --jade: #7ad68a; /* solid calm green — "good" status (context-injecting badge) */
 
   /* Frame: transparent window margin that holds the shell's soft shadow + glow.
-     Small, so the shell claims the real estate; just enough for the halo to read. */
-  --frame-inset: 8px;
+     Kept slim so tiled widgets sit nearly edge to edge; the halo is sized to fit it. */
+  --frame-inset: 3px;
 
   /* Type */
   --mist: #8b8f94; /* secondary text */
