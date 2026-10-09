@@ -1,5 +1,5 @@
 /* Lantern widget chrome: a frameless opaque native window containing the
-   --rim shell and solid --ink terminal. Keeping the 8px frame margin opaque
+   --rim shell and solid --ink terminal. Keeping the slim frame margin opaque
    lets the compositor use an opaque region instead of alpha-compositing every
    large terminal repaint merely to preserve cosmetic rounded outer corners. */
 
@@ -27,7 +27,7 @@ body.thinking {
 .halo {
   position: absolute;
   inset: var(--frame-inset);
-  border-radius: 14px;
+  border-radius: 10px;
   box-shadow:
     0 0 0 2px var(--status-glow),
     0 0 4px 1px var(--status-glow);
@@ -47,7 +47,7 @@ body.thinking {
   z-index: 1;
   display: flex;
   flex-direction: column;
-  border-radius: 14px;
+  border-radius: 10px;
   background: var(--rim);
   /* Inner rim reads the status color too, always — reinforces the edge glow. */
   box-shadow:
@@ -247,7 +247,7 @@ body.thinking {
   isolation: isolate;
   flex: 1;
   position: relative;
-  margin: 0 12px 12px 12px;
+  margin: 0 4px 4px 4px;
   padding: 6px var(--terminal-content-right) 6px 8px;
   border-radius: 8px;
   background: var(--ink);
@@ -262,7 +262,7 @@ body.thinking {
   flex-direction: column;
   gap: 6px;
   min-width: 0;
-  margin: 0 12px 8px;
+  margin: 0 4px 8px;
   padding: 8px;
   border: 1px solid var(--paper-veil);
   border-radius: 8px;
