@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import pytest
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 from aico_sidecar.app import MAX_BODY_BYTES, create_app
 from aico_sidecar.config import DEFAULT_EXTENSION_ID, Settings
@@ -195,6 +196,13 @@ class TestHostGuard:
         assert r.status_code == 403
         assert client.get("/selection/current").json() == {"kind": "empty"}
 
+    def test_websocket_rejected_by_close(self, client: TestClient) -> None:
+        # A websocket scope gets a close (refused handshake), not an HTTP response.
+        with pytest.raises(WebSocketDisconnect) as exc:
+            with client.websocket_connect("/ws", headers={"host": "evil.example"}):
+                pass
+        assert exc.value.code == 1008
+
     def test_allow_remote_lifts_host_check(self, tmp_path) -> None:
         app = create_app(Settings(state_dir=tmp_path, allow_remote=True))
         c = TestClient(app, base_url="http://aico-box.lan:8005")
@@ -217,3 +225,14 @@ class TestBodyLimit:
 
         r = client.post("/selection", content=chunks(), headers={"content-type": "application/json"})
         assert r.status_code == 413
+
+    def test_413_carries_cors_headers(self, client: TestClient) -> None:
+        origin = f"chrome-extension://{DEFAULT_EXTENSION_ID}"
+        body = b'{"kind":"dom","snippet":"' + b"x" * MAX_BODY_BYTES + b'"}'
+        r = client.post(
+            "/selection",
+            content=body,
+            headers={"content-type": "application/json", "origin": origin},
+        )
+        assert r.status_code == 413
+        assert r.headers.get("access-control-allow-origin") == origin

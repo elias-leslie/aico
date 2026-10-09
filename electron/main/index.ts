@@ -3801,7 +3801,10 @@ function installContentSecurityPolicy(): void {
   let wsOrigin = ''
   try {
     const u = new URL(VOICE_WS_URL)
-    wsOrigin = `${u.protocol}//${u.host}`
+    // Chromium's CSP host grammar has no IPv6 literals: `ws://[::1]:port` makes
+    // the whole directive invalid, so leave a [::1] voice service out, matching
+    // the renderer meta CSP (electron.vite.config.ts).
+    if (!u.hostname.startsWith('[')) wsOrigin = `${u.protocol}//${u.host}`
   } catch {
     // malformed override — connect-src stays 'self' only
   }

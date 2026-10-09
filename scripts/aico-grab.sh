@@ -36,28 +36,28 @@ while [[ "${1:-}" == -* ]]; do
 done
 
 # Capture artifacts (screenshots, OCR) hold potentially sensitive screen content,
-# so keep them in a private per-user dir under XDG_RUNTIME_DIR (already 0700).
+# so keep them in a private per-user dir: under XDG_RUNTIME_DIR (already 0700),
+# else a per-uid dir under TMPDIR that must be ours and not a symlink. A stable
+# name (not a fresh mktemp dir) means pruning reaches earlier runs' captures.
 # The package path must outlive this script (the widget reads its index
 # afterwards), so we can't trap-clean it — instead prune anything older than 6h
-# on each run, by which point it's long been consumed. Without XDG_RUNTIME_DIR,
-# use a fresh unpredictable mktemp directory rather than a fixed /tmp name.
+# on each run, by which point it's long been consumed.
 if [[ -n "${XDG_RUNTIME_DIR:-}" ]]; then
   GRAB_BASE="$XDG_RUNTIME_DIR/aico-grab"
-  if [[ -L "$GRAB_BASE" ]]; then
-    echo "aico-grab: refusing symlinked capture directory $GRAB_BASE" >&2
-    exit 1
-  fi
-  [[ -e "$GRAB_BASE" ]] || mkdir -m 700 "$GRAB_BASE"
-  if [[ -L "$GRAB_BASE" || ! -d "$GRAB_BASE" || ! -O "$GRAB_BASE" ]]; then
-    echo "aico-grab: capture directory $GRAB_BASE is not a directory owned by you" >&2
-    exit 1
-  fi
-  chmod 700 "$GRAB_BASE"
-  find "$GRAB_BASE" -mindepth 1 -maxdepth 1 -mmin +360 -exec rm -rf {} + 2>/dev/null || true
 else
-  GRAB_BASE="$(mktemp -d "${TMPDIR:-/tmp}/aico-grab.XXXXXXXXXX")"
-  echo "aico-grab: XDG_RUNTIME_DIR is unset; using private directory $GRAB_BASE" >&2
+  GRAB_BASE="${TMPDIR:-/tmp}/aico-grab-$(id -u)"
 fi
+if [[ -L "$GRAB_BASE" ]]; then
+  echo "aico-grab: refusing symlinked capture directory $GRAB_BASE" >&2
+  exit 1
+fi
+[[ -e "$GRAB_BASE" ]] || mkdir -m 700 "$GRAB_BASE"
+if [[ -L "$GRAB_BASE" || ! -d "$GRAB_BASE" || ! -O "$GRAB_BASE" ]]; then
+  echo "aico-grab: capture directory $GRAB_BASE is not a directory owned by you" >&2
+  exit 1
+fi
+chmod 700 "$GRAB_BASE"
+find "$GRAB_BASE" -mindepth 1 -maxdepth 1 -mmin +360 -exec rm -rf {} + 2>/dev/null || true
 
 if [[ $text -eq 1 ]]; then
   # Text-only: capture a throwaway shot, OCR it, send the text. The png is just

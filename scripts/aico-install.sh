@@ -5,12 +5,13 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
-# The checkout path is substituted into systemd units and the desktop entry.
-# systemd treats whitespace, quotes, backslashes and `%` specially, so refuse
-# paths that cannot be rendered literally rather than install a broken unit.
+# The checkout path is substituted into systemd units, the desktop entry and the
+# AppArmor profile. systemd treats whitespace, quotes, backslashes and `%`
+# specially, and AppArmor treats `*?[]{}` as globs, so refuse paths that cannot
+# be rendered literally rather than install a broken unit or a widened profile.
 case "$REPO" in
-  *[[:space:]%\\\"\']*)
-    echo "Aico: the checkout path '$REPO' contains whitespace, quotes, a backslash or '%'." >&2
+  *[[:space:]%\\\"\']* | *[*?{}]* | *'['* | *']'*)
+    echo "Aico: the checkout path '$REPO' contains whitespace, quotes, a backslash, '%' or a glob character (*?[]{})." >&2
     echo "Move the checkout to a plain path and rerun the installer." >&2
     exit 1
     ;;
@@ -187,8 +188,10 @@ install_user_units() {
     echo "systemd: installed $unit_dir/$unit"
     changed=1
   done
-  if [ "$changed" = 1 ]; then
-    systemctl --user daemon-reload
+  if [ "$changed" = 1 ] && ! systemctl --user daemon-reload; then
+    # No user bus (e.g. a non-login shell): the files are in place and the user
+    # manager picks them up on its next reload or login.
+    echo "systemd: could not reach the user manager; run 'systemctl --user daemon-reload' later." >&2
   fi
 }
 

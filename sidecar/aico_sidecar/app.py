@@ -21,7 +21,9 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field, field_validator
+from starlette import status
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
+from starlette.websockets import WebSocketClose
 
 from aico_sidecar import __version__
 from aico_sidecar.config import Settings
@@ -99,8 +101,13 @@ class HostGuardMiddleware:
         if scope["type"] in ("http", "websocket") and not self.allow_remote:
             host = dict(scope.get("headers") or []).get(b"host")
             if not _is_allowed_host(host.decode("latin-1") if host else None, self.port):
-                response = JSONResponse({"detail": "host not allowed"}, status_code=403)
-                await response(scope, receive, send)
+                if scope["type"] == "websocket":
+                    # Closing before accept makes the server refuse the handshake (403).
+                    await WebSocketClose(code=status.WS_1008_POLICY_VIOLATION)(scope, receive, send)
+                else:
+                    await JSONResponse({"detail": "host not allowed"}, status_code=403)(
+                        scope, receive, send
+                    )
                 return
         await self.app(scope, receive, send)
 
@@ -359,13 +366,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # extension posts from chrome-extension://. Restrict CORS to those (no bare "*")
     # so a public website can't read selection state cross-origin; state-changing
     # POSTs get the stricter server-side Origin check (require_trusted_origin).
+    # Added before CORS so CORS wraps it: a 413 still carries CORS headers and the
+    # extension sees the real status instead of an opaque network error.
+    app.add_middleware(BodyLimitMiddleware, max_bytes=MAX_BODY_BYTES)  # type: ignore[invalid-argument-type]
     app.add_middleware(
         CORSMiddleware,  # type: ignore[invalid-argument-type]  # Starlette factory typing
         allow_origin_regex=_trusted_origin_regex(settings.extension_ids),
         allow_methods=["GET", "POST"],
         allow_headers=["*"],
     )
-    app.add_middleware(BodyLimitMiddleware, max_bytes=MAX_BODY_BYTES)  # type: ignore[invalid-argument-type]
     # Added last so it runs first: a rebinding request is refused before CORS or
     # any route sees it.
     app.add_middleware(
