@@ -793,7 +793,7 @@ describe('private root workload control', () => {
       enabled: true,
       order: 0,
       command: [
-        '/usr/bin/node',
+        process.execPath,
         '-e',
         'process.stdout.write(JSON.stringify({args:process.argv.slice(1),prompt:process.env.AICO_ROOT_INITIAL_PROMPT}))',
       ],
