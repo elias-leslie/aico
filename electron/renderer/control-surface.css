@@ -89,7 +89,7 @@
 /* ---- lantern menu popover ---- */
 .aico-menu {
   position: absolute;
-  top: 34px;
+  top: 28px;
   right: 8px;
   z-index: 5;
   width: 360px;
