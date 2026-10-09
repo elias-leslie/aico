@@ -49,6 +49,7 @@ import {
   coalesceTrailingAsync,
   refreshAttachedTmuxClients,
 } from './interactive-tmux'
+import { parseBoundsRequest, parsePins } from './ipc-validation'
 import {
   CoalescedLifecycleIntent,
   decideManagedGateRecovery,
@@ -112,6 +113,7 @@ import { bundledSidecar, Sidecar } from './sidecar'
 import {
   activateTmuxServer,
   adoptActiveLegacyTmuxServer,
+  allocateWidgetId,
   bindWidgetTmuxServer,
   clearReconciledDeadTmuxServerBinding,
   clearReconciledHistoricalTmuxServerBinding,
@@ -404,7 +406,7 @@ function logWidgetEvent(widgetId: string, event: string, data: Record<string, un
 }
 
 function newWidgetId(): string {
-  return randomBytes(4).toString('hex')
+  return allocateWidgetId()
 }
 
 function ensureTmuxConf(): void {
@@ -1760,7 +1762,9 @@ function managedGateState(pane: ManagedPaneProcess, controlGroup: string): Manag
   }
 }
 
-type ManagedPaneRecovery = 'recovered' | 'legacy' | 'blocked' | 'blocked-replay'
+/** `deferred`: host admission refused the agent for now; the pane stays at its
+ * inert gate and a later open retries. Not an ownership problem. */
+type ManagedPaneRecovery = 'recovered' | 'legacy' | 'blocked' | 'blocked-replay' | 'deferred'
 
 /** Recover a crash between gated pane creation, DB promotion, and the one-time
  * launcher send. Exact AICO markers distinguish a managed gate from historical
@@ -1846,7 +1850,7 @@ async function recoverInterruptedManagedPane(
       try {
         admission = await reserveAgentLaunch({ widgetId: current.id, kind: 'recovery' })
       } catch {
-        return 'blocked'
+        return 'deferred'
       }
     }
     try {
@@ -2167,7 +2171,11 @@ async function ensureOwnedInternalSession(widgetId: string, size: PtySize): Prom
   const state = await internalSessionState(widgetId)
   if (state === 'present') {
     const recovery = await recoverInterruptedManagedPane(rowBeforeCreate)
-    if (recovery === 'blocked' || recovery === 'blocked-replay') {
+    if (recovery === 'deferred') {
+      console.warn(
+        `[aico:lifecycle] ${widgetId} agent launch deferred by host admission; attaching its inert gate`,
+      )
+    } else if (recovery === 'blocked' || recovery === 'blocked-replay') {
       console.warn(
         `[aico:lifecycle] attaching ${widgetId} read/write without lifecycle authority: ` +
           (recovery === 'blocked-replay'
@@ -2416,7 +2424,8 @@ async function respawnAndRelaunch(
     const recovery = await recoverInterruptedManagedPane(previous, { dispatchGate: false })
     previous = getWidget(widgetId)
     if (!previous) return
-    if (recovery === 'blocked') {
+    // `deferred` cannot arise without dispatch; treat it as blocked regardless.
+    if (recovery === 'blocked' || recovery === 'deferred') {
       if (previous.pendingScopeUnit) await reconcileSupersededPendingScope(previous)
       console.error(
         `[aico:lifecycle] replacement blocked: interrupted launch state for ${previous.sessionId} is ambiguous`,
@@ -2708,10 +2717,22 @@ async function startPty(win: BrowserWindow, size: PtySize): Promise<void> {
   })
   tmuxViewSizes.set(pty, requestSize)
   let activateAfterAttach = true
+  // A deferred agent launch leaves the pane at its idle gate. Anything written
+  // before the attach is painted over by tmux, so the reason follows the first
+  // frame instead.
+  let deferredNotice = agentAdmissionReasons.get(widgetId)
   pty.onData((data) => {
     if (activateAfterAttach && isCurrent()) {
       activateAfterAttach = false
       void requestSize()
+    }
+    if (deferredNotice) {
+      const notice = deferredNotice
+      deferredNotice = undefined
+      setTimeout(() => {
+        if (!win.isDestroyed() && ptys.get(win.id) === pty)
+          win.webContents.send('pty:data', `\r\n\u001b[33m${notice}\u001b[0m\r\n`)
+      }, 300)
     }
     if (!win.isDestroyed()) {
       win.webContents.send('pty:data', data)
@@ -3386,6 +3407,12 @@ async function reconcileManagedWidget(row: WidgetRow, useServerSnapshot = false)
 
     if (state === 'present') {
       const recovery = await recoverInterruptedManagedPane(current)
+      if (recovery === 'deferred') {
+        console.warn(
+          `[aico:lifecycle] preserving ${current.sessionId}: agent launch deferred by host admission`,
+        )
+        return
+      }
       if (recovery === 'blocked' || recovery === 'blocked-replay') {
         const latest = getWidget(current.id)
         if (latest?.pendingScopeUnit) await reconcileSupersededPendingScope(latest)
@@ -3671,6 +3698,7 @@ function toggleVoice(): void {
 // "Indicate" hotkey (X11 fallback for non-web sources): harvest the freshest
 // capture from the bus and deliver it. Browser sends arrive via SSE instead.
 async function selectionGrab(): Promise<void> {
+  if (!sidecar?.ready) return // never take text from a process we did not start
   try {
     const res = await fetch(`http://${sidecarHost}:${sidecarPort}/selection/current`)
     if (!res.ok) return
@@ -3710,13 +3738,29 @@ function runDesktopGrab(args: string[]): void {
 // (extension pill / right-click / picker) reaches the same insert path as the
 // hotkey. Reconnects with backoff across sidecar restarts; cancelled on quit.
 // This is also the Wayland-safe trigger (a CLI POST to /selection/send fires it).
+// Only our own healthy sidecar is subscribed: if something else holds the port,
+// its events must never be typed into an agent prompt. The sidecar pings every
+// 15s, so a stream silent for SELECTION_EVENTS_IDLE_MS is half-open and is
+// reconnected rather than silently dropping every later send.
+const SELECTION_EVENTS_IDLE_MS = 45_000
+
 function subscribeSelectionEvents(): void {
   selectionEvents = new AbortController()
   const url = `http://${sidecarHost}:${sidecarPort}/selection/events`
   void (async () => {
     while (!quitting) {
+      const connection = new AbortController()
+      const stopConnection = () => connection.abort()
+      selectionEvents?.signal.addEventListener('abort', stopConnection)
+      let idle: NodeJS.Timeout | undefined
+      const armIdle = () => {
+        clearTimeout(idle)
+        idle = setTimeout(stopConnection, SELECTION_EVENTS_IDLE_MS)
+      }
       try {
-        const res = await fetch(url, { signal: selectionEvents?.signal })
+        if (!sidecar?.ready) throw new Error('sidecar not ready')
+        armIdle()
+        const res = await fetch(url, { signal: connection.signal })
         if (!res.ok || !res.body) throw new Error(`events ${res.status}`)
         const reader = res.body.getReader()
         const decoder = new TextDecoder()
@@ -3724,6 +3768,7 @@ function subscribeSelectionEvents(): void {
         for (;;) {
           const { value, done } = await reader.read()
           if (done) break
+          armIdle()
           buf += decoder.decode(value, { stream: true })
           const { events, rest } = parseSse(buf)
           buf = rest
@@ -3738,6 +3783,9 @@ function subscribeSelectionEvents(): void {
         }
       } catch {
         if (quitting || selectionEvents?.signal.aborted) return
+      } finally {
+        clearTimeout(idle)
+        selectionEvents?.signal.removeEventListener('abort', stopConnection)
       }
       await new Promise((r) => setTimeout(r, 1000)) // backoff before reconnect
     }
@@ -3882,7 +3930,7 @@ app.on('before-quit', () => {
   }
 })
 
-app.whenReady().then(async () => {
+const startup = app.whenReady().then(async () => {
   if (!gotSingleInstanceLock || activationOnly) return // no runtime initialization
   registerBuiltinTuis()
   ensureTmuxConf()
@@ -3921,7 +3969,8 @@ app.whenReady().then(async () => {
     }
   })
 
-  ipcMain.on('pty:input', (event, data: string) => {
+  ipcMain.on('pty:input', (event, data: unknown) => {
+    if (typeof data !== 'string' || data.length === 0) return
     const win = BrowserWindow.fromWebContents(event.sender)
     const widgetId = win ? widgetOf.get(win.id) : undefined
     // Replacement temporarily exposes the no-RC containment gate through the
@@ -4061,7 +4110,9 @@ app.whenReady().then(async () => {
   })
 
   ipcMain.handle('clipboard:read', () => clipboard.readText())
-  ipcMain.on('clipboard:write', (_event, text: string) => clipboard.writeText(text))
+  ipcMain.on('clipboard:write', (_event, text: unknown) => {
+    if (typeof text === 'string') clipboard.writeText(text)
+  })
 
   ipcMain.handle('session:diagnostics', async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
@@ -4082,13 +4133,9 @@ app.whenReady().then(async () => {
     }
   })
   ipcMain.on('win:close', (event) => BrowserWindow.fromWebContents(event.sender)?.close())
-  ipcMain.on('win:set-bounds', (event, b: { x: number; y: number; w: number; h: number }) => {
-    BrowserWindow.fromWebContents(event.sender)?.setBounds({
-      x: Math.round(b.x),
-      y: Math.round(b.y),
-      width: Math.round(b.w),
-      height: Math.round(b.h),
-    })
+  ipcMain.on('win:set-bounds', (event, b: unknown) => {
+    const bounds = parseBoundsRequest(b)
+    if (bounds) BrowserWindow.fromWebContents(event.sender)?.setBounds(bounds)
   })
   ipcMain.on('win:thinking', (event, on: boolean) => {
     const win = BrowserWindow.fromWebContents(event.sender)
@@ -4259,13 +4306,14 @@ app.whenReady().then(async () => {
     const raw = getSetting('pins')
     if (raw == null) return null
     try {
-      const parsed = JSON.parse(raw)
-      return Array.isArray(parsed) ? (parsed as string[]) : null
+      return parsePins(JSON.parse(raw))
     } catch {
       return null
     }
   })
-  ipcMain.on('settings:set-pins', (_event, ids: string[]) => {
+  ipcMain.on('settings:set-pins', (_event, input: unknown) => {
+    const ids = parsePins(input)
+    if (!ids) return
     setSetting('pins', JSON.stringify(ids))
     for (const win of BrowserWindow.getAllWindows()) {
       win.webContents.send('settings:pins-changed', ids)
@@ -4438,6 +4486,25 @@ app.whenReady().then(async () => {
     activateAico()
   }
 })
+startup.catch(failStartup)
+
+/**
+ * Startup that throws part-way leaves no tray, IPC or control socket while the
+ * process still holds the single-instance lock, so every later launch would be
+ * swallowed by `second-instance`. Say why and exit so the next launch starts
+ * clean; durable tmux sessions are untouched.
+ */
+function failStartup(error: unknown): void {
+  console.error('[aico] startup failed:', error)
+  try {
+    dialog.showErrorBox(
+      'Aico could not start',
+      `${error instanceof Error ? error.message : String(error)}\n\nYour sessions are still running. Fix the cause and open Aico again.`,
+    )
+  } finally {
+    app.exit(1)
+  }
+}
 
 app.on('window-all-closed', () => {
   // Aico lives in the tray after the last widget closes; Quit (tray) exits.

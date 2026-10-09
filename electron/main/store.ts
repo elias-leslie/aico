@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
 import { durableTmuxServerUnit, MANAGED_LIFECYCLE_VERSION } from './ownership'
 
@@ -774,6 +775,24 @@ export function listWidgets(): WidgetRow[] {
 export function getWidget(id: string): WidgetRow | undefined {
   const r = db.prepare('SELECT * FROM widgets WHERE id = ?').get(id) as Raw | undefined
   return r ? toRow(r) : undefined
+}
+
+/**
+ * A fresh eight-hex widget ID that no widget and no root request (including an
+ * ended root's tombstone) has used. Reusing a tombstone's ID would make the new
+ * widget answer for the ended root.
+ */
+export function allocateWidgetId(
+  random: () => string = () => randomBytes(4).toString('hex'),
+): string {
+  const taken = db.prepare(
+    'SELECT 1 FROM widgets WHERE id = ? UNION ALL SELECT 1 FROM root_requests WHERE widget_id = ?',
+  )
+  for (let attempt = 0; attempt < 16; attempt += 1) {
+    const id = random()
+    if (taken.get(id, id) === undefined) return id
+  }
+  throw new Error('could not allocate an unused widget ID')
 }
 
 export function hasWidget(id: string): boolean {

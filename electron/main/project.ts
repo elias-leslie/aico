@@ -78,7 +78,15 @@ function personalWorkspaceProject(): ProjectInfo {
 
 // Injectable so the catalog calls unit-test without a real `st` on PATH.
 type Exec = (cmd: string, args: string[]) => string
-const runSt: Exec = (cmd, args) => execFileSync(cmd, args, { encoding: 'utf8' })
+// Synchronous reads block the main process, so they are bounded: a hung `st`
+// costs one stalled open, never a frozen app.
+const ST_SYNC_TIMEOUT_MS = 3_000
+const runSt: Exec = (cmd, args) =>
+  execFileSync(cmd, args, { encoding: 'utf8', timeout: ST_SYNC_TIMEOUT_MS, killSignal: 'SIGKILL' })
+
+/** Project slugs as `st` issues them; anything else (e.g. a leading `-` that
+ * `st` would read as an option) is not a project. */
+const PROJECT_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 
 /** Parse `st projects list` JSON into the picker list (Personal Workspace first). */
 function parseProjectList(out: string): ProjectInfo[] {
@@ -122,6 +130,7 @@ export function fetchProjects(exec: Exec = runSt): ProjectInfo[] {
  */
 export function fetchProjectRoot(id: string, exec: Exec = runSt): string | null {
   if (id === PERSONAL_WORKSPACE_ID) return ensurePersonalWorkspaceRoot()
+  if (!PROJECT_ID.test(id)) return null
   try {
     const root = exec('st', ['projects', 'root', id]).trim()
     return root && isDir(root) ? root : null

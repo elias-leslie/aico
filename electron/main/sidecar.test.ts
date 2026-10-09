@@ -178,9 +178,23 @@ describe('Sidecar', () => {
       spawn: vi.fn(() => child) as never,
       waitForHealth: async () => true,
     })
+    expect(sc.ready).toBe(false)
     await expect(sc.start()).resolves.toBe(true)
     expect(status).toHaveBeenCalledWith('ready', healthUrl('127.0.0.1', 8005))
     expect(child.kill).not.toHaveBeenCalled()
+    expect(sc.ready).toBe(true)
+    sc.stop()
+    expect(sc.ready).toBe(false)
+  })
+
+  it('is not ready when its own child failed, whatever answers the port', async () => {
+    const child = fakeChild()
+    const sc = new Sidecar(OPTS, vi.fn(), {
+      spawn: vi.fn(() => child) as never,
+      waitForHealth: async () => false,
+    })
+    await sc.start()
+    expect(sc.ready).toBe(false)
   })
 
   it('kills a hung child when the health gate times out (no port leak)', async () => {

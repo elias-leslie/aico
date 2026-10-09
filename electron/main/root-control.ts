@@ -1,10 +1,11 @@
-import { createHash, randomBytes, randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { isAbsolute, normalize } from 'node:path'
 import type { LifecycleOwnerToken, ManagedGateState } from './lifecycle-guard'
 import { ownerSocketPath } from './owner-control'
 import { sessionGeneration } from './owner-retirement'
 import {
+  allocateWidgetId,
   type Bounds,
   getRootRequest,
   getWidget,
@@ -480,7 +481,7 @@ export function createRootServer(operations: RootControlOperations) {
               {
                 requestId: input.requestId,
                 digest,
-                widgetId: randomBytes(4).toString('hex'),
+                widgetId: allocateWidgetId(),
                 logicalSessionId: `aico-root-${randomUUID()}`,
                 role: input.role,
                 leadRootReference: input.leadRootReference,

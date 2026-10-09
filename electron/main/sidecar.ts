@@ -196,6 +196,13 @@ export interface SidecarDeps {
 export class Sidecar {
   private child: ChildProcess | null = null
   private abort: AbortController | null = null
+  private readyChild: ChildProcess | null = null
+
+  /** True only while the sidecar this instance started passed its health gate
+   * and is still running. Anything else answering on the port is not ours. */
+  get ready(): boolean {
+    return this.readyChild !== null && this.readyChild === this.child
+  }
   private readonly spawn: typeof nodeSpawn
   private readonly waitForHealth: typeof waitForHealth
 
@@ -273,6 +280,7 @@ export class Sidecar {
       return false
     }
     if (healthy && this.child === child) {
+      this.readyChild = child
       this.onStatus('ready', healthUrl(host, port))
       return true
     }

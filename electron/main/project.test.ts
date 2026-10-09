@@ -135,6 +135,13 @@ describe('project catalog', () => {
     expect(fetchProjectRoot('aico', () => '/gone/missing')).toBeNull()
   })
 
+  it('fetchProjectRoot never passes an option-like id to st', () => {
+    const exec = vi.fn(() => `${dir}\n`)
+    expect(fetchProjectRoot('--help', exec)).toBeNull()
+    expect(fetchProjectRoot('', exec)).toBeNull()
+    expect(exec).not.toHaveBeenCalled()
+  })
+
   it('fetchProjectRoot returns null when st fails (unknown slug)', () => {
     expect(
       fetchProjectRoot('nope', () => {

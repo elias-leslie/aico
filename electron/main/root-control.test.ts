@@ -23,6 +23,7 @@ import {
   withRootPrompt,
 } from './root-launch'
 import {
+  allocateWidgetId,
   getRootRequest,
   getWidget,
   initStore,
@@ -969,5 +970,11 @@ describe('private root workload control', () => {
     expect(getWidget('ffaabbcc')).toBeUndefined()
     expect(getRootRequest('rollback')).toBeUndefined()
     expect(listWidgets()).toHaveLength(count)
+  })
+
+  it('never hands out a widget ID that a root request already holds', () => {
+    const root = present(getRootRequest('target-1'))
+    const ids = [root.widgetId, 'deadbeef']
+    expect(allocateWidgetId(() => ids.shift() ?? 'unused00')).toBe('deadbeef')
   })
 })
