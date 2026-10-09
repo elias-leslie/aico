@@ -49,8 +49,8 @@
     "appId": "dev.eliasleslie.aico",
     "productName": "Aico",
     "directories": { "output": "dist/electron" },
-    "files": ["out/**/*", "package.json", "assets/**/*", "scripts/**/*"],
-    "asarUnpack": ["**/node_modules/node-pty/**", "scripts/**", "assets/**"],
+    "files": ["out/**/*", "package.json", "assets/icon.png", "assets/tray/*.png", "scripts/aico-grab.sh"],
+    "asarUnpack": ["**/node_modules/node-pty/**", "scripts/aico-grab.sh"],
     "extraResources": [{ "from": "dist/sidecar/aico-sidecar", "to": "sidecar/aico-sidecar" }],
     "linux": {
       "target": ["AppImage"],
