@@ -41,10 +41,11 @@ MAX_BODY_BYTES = 1024 * 1024
 # Cap on the free-form widget/project labels a capture can carry.
 LABEL_CAP = 200
 
-# Host header values the loopback sidecar answers to. Checking Host defeats DNS
-# rebinding: a public site that re-points its own name at 127.0.0.1 still sends
-# `Host: evil.example`, so it can't read selection state same-origin.
-_LOOPBACK_HOSTNAMES = frozenset({"127.0.0.1", "localhost", "::1"})
+# Host header names the loopback sidecar answers to, besides loopback IP
+# literals. Checking Host defeats DNS rebinding: a public site that re-points
+# its own name at 127.0.0.1 still sends `Host: evil.example`, so it can't read
+# selection state same-origin.
+_LOOPBACK_HOSTNAMES = frozenset({"localhost"})
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -63,8 +64,10 @@ def _trusted_origin_regex(extension_ids: Iterable[str]) -> str:
 
 
 def _is_allowed_host(host_header: str | None, port: int) -> bool:
-    """True if a Host header names the loopback sidecar: 127.0.0.1, localhost or
-    [::1], bare or with the configured port."""
+    """True if a Host header names the loopback sidecar: localhost or a loopback
+    IP literal (127.0.0.0/8, [::1]), bare or with the configured port. Any
+    loopback bind host the config accepts is reachable; an IP literal needs no
+    DNS, so it cannot be rebound."""
     if not host_header:
         return False
     try:
@@ -73,7 +76,11 @@ def _is_allowed_host(host_header: str | None, port: int) -> bool:
     except ValueError:
         return False
     if parts.hostname not in _LOOPBACK_HOSTNAMES:
-        return False
+        try:
+            if not ipaddress.ip_address(parts.hostname or "").is_loopback:
+                return False
+        except ValueError:
+            return False
     return host_port is None or host_port == port
 
 

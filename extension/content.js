@@ -231,8 +231,16 @@
     sendAllEl.textContent = `Send ${tray.length} to Aico`
   }
 
+  // The relay and the sidecar both refuse a batch over 50 (the selection ring
+  // size), so the tray stops there rather than lose a larger send silently.
+  const TRAY_MAX = 50
+
   function addToTray(rec) {
     if (!rec) return
+    if (tray.length >= TRAY_MAX) {
+      flashToast('Tray is full at ', { b: String(TRAY_MAX) }, '. Send it to Aico to add more.')
+      return
+    }
     tray.push(rec)
     renderTray()
   }

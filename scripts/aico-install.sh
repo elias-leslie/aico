@@ -236,7 +236,13 @@ profile $name $electron_bin flags=(unconfined) {
   include if exists <local/$name>
 }
 PROFILE
-  if [ -f "$target" ] && cmp -s "$profile" "$target"; then
+  # Older installers wrote a fixed-name profile. Two profiles attached to the
+  # same binary conflict, and the kernel then applies neither, so replace it.
+  local legacy=/etc/apparmor.d/aico-electron legacy_steps=""
+  if [ -f "$legacy" ] && grep -Fq "profile aico-electron $electron_bin " "$legacy"; then
+    legacy_steps="  sudo apparmor_parser -R $legacy; sudo rm $legacy"
+  fi
+  if [ -z "$legacy_steps" ] && [ -f "$target" ] && cmp -s "$profile" "$target"; then
     echo "AppArmor: $target is already installed."
     rm -f "$profile"
     return 0
@@ -248,12 +254,18 @@ sandbox needs a profile that allows 'userns' for:
 That binary lives in your user-writable checkout: anything that replaces the
 file also receives the permission. The generated profile is $profile.
 Install it with:
-  sudo install -m 0644 $profile $target
+${legacy_steps:+$legacy_steps
+}  sudo install -m 0644 $profile $target
   sudo apparmor_parser -r $target
 Remove it later with:
   sudo apparmor_parser -R $target && sudo rm $target
 MESSAGE
   if confirm_privileged "AppArmor: installing profile $name."; then
+    if [ -n "$legacy_steps" ] &&
+      ! { sudo apparmor_parser -R "$legacy" 2>/dev/null; sudo rm "$legacy"; }; then
+      echo "AppArmor: could not remove $legacy; run the commands above manually."
+      return 0
+    fi
     if sudo install -m 0644 "$profile" "$target" && sudo apparmor_parser -r "$target"; then
       echo "AppArmor: profile $name loaded."
       rm -f "$profile"

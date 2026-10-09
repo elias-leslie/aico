@@ -144,7 +144,7 @@ Important variables:
 | `AICO_SIDECAR_PORT` | `8005` | Sidecar HTTP port for health, selection, and widget event APIs. |
 | `AICO_STATE_DIR` | `~/.local/state/aico` | App and sidecar state: selection SQLite, widget event JSONL, and widget/session state. The launcher pidfile, lock, and `launcher.log` always live in `${XDG_STATE_HOME:-~/.local/state}/aico` and do not follow this variable. |
 | `AICO_VOICE_WS` | `ws://127.0.0.1:8003/api/voice/ws?user_id=aico&app=aico` | Speech-to-text websocket for push-to-talk dictation. Unset uses this local default; there is no off switch. If nothing answers at the URL, only dictation fails and the rest of the app keeps working. |
-| `AICO_SIDECAR_ALLOW_REMOTE` | unset | Set to `1` to allow a non-loopback `AICO_SIDECAR_HOST` and to accept any `Host` header. The sidecar is unauthenticated, so leave this unset. |
+| `AICO_SIDECAR_ALLOW_REMOTE` | unset | Set to `1` to allow a non-loopback `AICO_SIDECAR_HOST` and to accept any `Host` header. Applies only to a standalone sidecar (`python -m aico_sidecar`); Aico never passes it to the sidecar it starts, which stays loopback-only. The sidecar is unauthenticated, so leave this unset. |
 | `AICO_EXTENSION_IDS` | `oejadbpdecaenbbihglcnchnkmlilmjf` | Comma-separated Chrome extension IDs the sidecar trusts as browser origins. The default is the stable ID derived from the `key` in `extension/manifest.json`; set this only for a fork or re-keyed extension. |
 | `AICO_SELECTION_HOTKEY` | `CommandOrControl+Shift+Space` | Electron global shortcut for selection indication. |
 | `AICO_VOICE_HOTKEY` | `CommandOrControl+Shift+M` | Electron global shortcut for push-to-talk toggle. |
@@ -211,7 +211,7 @@ Main endpoints:
 - `GET /selection/current`, `GET /selection/history` — read recent captures.
 - `GET /selection/events` — Server-Sent Events stream of delivery events (the Wayland-safe path for routing captures into a widget).
 
-The sidecar is loopback-only by default. It rejects browser origins other than local pages and the trusted extension IDs (`AICO_EXTENSION_IDS`), and rejects requests whose `Host` header is not `127.0.0.1`, `localhost`, or `[::1]`, which blocks DNS-rebinding pages. `AICO_SIDECAR_ALLOW_REMOTE=1` lifts the bind and `Host` restrictions.
+The sidecar is loopback-only by default. It rejects browser origins other than local pages and the trusted extension IDs (`AICO_EXTENSION_IDS`), and rejects requests whose `Host` header is not `localhost` or a loopback IP such as `127.0.0.1` or `[::1]`, which blocks DNS-rebinding pages. `AICO_SIDECAR_ALLOW_REMOTE=1` lifts the bind and `Host` restrictions for a standalone sidecar; Aico does not pass it to the sidecar it starts.
 
 ## Optional browser extension
 

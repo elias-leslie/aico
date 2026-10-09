@@ -77,6 +77,10 @@ const SIDECAR_ENV_PASSTHROUGH = [
   'PYTHONUNBUFFERED',
   'PYTHONDONTWRITEBYTECODE',
   'VIRTUAL_ENV',
+  // Trust configuration, not a secret: a fork's extension ID must reach the
+  // sidecar or its requests are refused. AICO_SIDECAR_ALLOW_REMOTE is
+  // deliberately absent, so the Electron-managed sidecar stays loopback-only.
+  'AICO_EXTENSION_IDS',
 ] as const
 
 /**

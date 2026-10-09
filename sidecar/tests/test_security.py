@@ -158,14 +158,30 @@ class TestExtensionIdConfig:
 class TestHostGuard:
     @pytest.mark.parametrize(
         "host",
-        ["127.0.0.1:8005", "127.0.0.1", "localhost:8005", "localhost", "[::1]:8005", "[::1]"],
+        [
+            "127.0.0.1:8005",
+            "127.0.0.1",
+            "127.0.0.2:8005",
+            "localhost:8005",
+            "localhost",
+            "[::1]:8005",
+            "[::1]",
+        ],
     )
     def test_loopback_hosts_allowed(self, client: TestClient, host: str) -> None:
         assert client.get("/health", headers={"host": host}).status_code == 200
 
     @pytest.mark.parametrize(
         "host",
-        ["evil.example", "evil.example:8005", "127.0.0.1:9999", "localhost.evil.example", "[::1"],
+        [
+            "evil.example",
+            "evil.example:8005",
+            "127.0.0.1:9999",
+            "localhost.evil.example",
+            "[::1",
+            "10.0.0.1:8005",
+            "127.0.0.1.evil.example",
+        ],
     )
     def test_other_hosts_rejected(self, client: TestClient, host: str) -> None:
         # DNS rebinding: an attacker's name resolved to 127.0.0.1 still sends its own Host.
