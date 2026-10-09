@@ -89,6 +89,9 @@ export async function retireOwnedSession(
 
   const before = await operations.sessionState(widgetId)
   if (before === 'unknown') return { status: 'blocked', reason: 'tmux state is unknown' }
+  // Set once this End has stopped the session: from then on a concurrent
+  // reconcile of the same session may move the row toward absent ownership.
+  let stopped = false
   if (before === 'present') {
     if (!(await operations.verifiedCurrentPane(row))) {
       return { status: 'blocked', reason: 'session, pane, or scope identity is not exact' }
@@ -103,6 +106,7 @@ export async function retireOwnedSession(
     } catch (error) {
       console.warn(`[aico:lifecycle] tmux stop failed for session=${row.sessionId}:`, error)
     }
+    stopped = true
     await operations.settleServer(row)
   }
   const afterTmux = await operations.sessionState(widgetId)
@@ -111,10 +115,51 @@ export async function retireOwnedSession(
   }
 
   const afterSession = getWidget(widgetId)
-  if (!afterSession || sessionGeneration(afterSession) !== initialGeneration) {
-    return { status: 'stale' }
+  if (!afterSession) return stopped ? { status: 'ended' } : { status: 'stale' }
+  if (sessionGeneration(afterSession) === initialGeneration) {
+    row = afterSession
+  } else {
+    const converged = stopped ? convergedAfterStop(row, afterSession) : null
+    if (!converged) return { status: 'stale' }
+    row = converged
   }
-  row = afterSession
+
+  // Another process (the desktop app reconciling a view whose tmux client just
+  // exited) can clear the same session's ownership while this End cleans up.
+  // Each such step is adopted and the cleanup re-run from the reconciled row.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const result = await finishRetirement(widgetId, operations, row)
+    if (result.status !== 'stale' || !stopped) return result
+    const latest = getWidget(widgetId)
+    if (!latest) return { status: 'ended' }
+    const converged = convergedAfterStop(row, latest)
+    if (!converged || sessionGeneration(converged) === sessionGeneration(row)) return result
+    row = converged
+  }
+  return { status: 'stale' }
+}
+
+/**
+ * The row a concurrent reconcile of this same session leaves once the session
+ * is gone: same session name, same or released server, no session, pane or
+ * launch. That is the state End is driving toward, not another workload; a row
+ * that gained a new session or pane never qualifies.
+ */
+function convergedAfterStop(previous: WidgetRow, latest: WidgetRow): WidgetRow | null {
+  if (latest.sessionId !== previous.sessionId) return null
+  if (latest.externalTmuxSession || latest.externalTmuxSocket) return null
+  if (latest.lifecycleVersion !== previous.lifecycleVersion) return null
+  if (latest.tmuxServerId !== previous.tmuxServerId && latest.tmuxServerId !== null) return null
+  return isReconciledSessionOwnershipAbsent(latest) ? latest : null
+}
+
+/** Scope cleanup and the final catalog CAS for a session tmux no longer has. */
+async function finishRetirement(
+  widgetId: string,
+  operations: RetirementOperations,
+  initialRow: WidgetRow,
+): Promise<RetirementResult> {
+  let row = initialRow
   const pendingScope = classifyPersistedScopePair(
     row.pendingScopeUnit,
     row.pendingScopeInvocationId,
@@ -124,7 +169,7 @@ export async function retireOwnedSession(
   }
   if (pendingScope.state === 'paired') {
     const beforePending = getWidget(widgetId)
-    if (!beforePending || sessionGeneration(beforePending) !== initialGeneration) {
+    if (!beforePending || sessionGeneration(beforePending) !== sessionGeneration(row)) {
       return { status: 'stale' }
     }
     const pendingClean = await stopOwnedPaneScope(
