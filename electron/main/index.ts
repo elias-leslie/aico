@@ -78,6 +78,7 @@ import {
   paneScopeFromCgroup,
   parseScopeResources,
 } from './ownership'
+import { PaneExitReconciliationQueue } from './pane-exit-queue'
 import {
   cgroupProcessIds,
   isExactLaunchGateProcess,
@@ -503,10 +504,15 @@ interface TmuxServerRosterEntry {
 
 const tmuxServerRosters = new Map<string, readonly TmuxServerRosterEntry[]>()
 const paneExitEventReady = new Set<string>()
-const paneExitReconciliations = new Map<string, Promise<void>>()
-const paneExitDirtyServers = new Set<string>()
-const paneExitDeferredServers = new Set<string>()
-const paneExitUnresolvedServers = new Set<string>()
+const paneExitQueue = new PaneExitReconciliationQueue({
+  reconcile: (serverId) => handlePaneExitWatcherCompletion(serverId),
+  isQuitting: () => quitting,
+  onError: (serverId, error) =>
+    console.error(
+      `[aico:lifecycle] pane-exit reconciliation failed for server=${serverId}:`,
+      error,
+    ),
+})
 let paneExitFsWatcher: FSWatcher | null = null
 let sessionCatalogWatcher: FSWatcher | null = null
 let paneExitWatcherRecoveryAttempted = false
@@ -544,42 +550,7 @@ function observePaneExitEvent(serverId: string): void {
   // Unlinking before a successful pass allowed a transient tmux/systemd query
   // failure to acknowledge the event and strand a tree until app restart. A
   // later `touch` still emits a watcher event, while startup sees the marker.
-  paneExitUnresolvedServers.add(serverId)
-  queuePaneExitReconciliation(serverId)
-}
-
-function queuePaneExitReconciliation(serverId: string): void {
-  if (quitting) return
-  if (paneExitReconciliations.has(serverId)) {
-    // One pass observes every widget on the generation. Coalesce any number of
-    // exits during it to one dirty follow-up instead of retaining an unbounded
-    // promise/backlog under rapid pane churn.
-    paneExitDirtyServers.add(serverId)
-    return
-  }
-  let next: Promise<void>
-  let resolved = false
-  next = handlePaneExitWatcherCompletion(serverId)
-    .then((value) => {
-      resolved = value
-    })
-    .catch((error) =>
-      console.error(
-        `[aico:lifecycle] pane-exit reconciliation failed for server=${serverId}:`,
-        error,
-      ),
-    )
-    .finally(() => {
-      if (paneExitReconciliations.get(serverId) === next) paneExitReconciliations.delete(serverId)
-      const dirty = paneExitDirtyServers.delete(serverId)
-      if (resolved && !dirty && !paneExitDeferredServers.has(serverId)) {
-        paneExitUnresolvedServers.delete(serverId)
-      } else {
-        paneExitUnresolvedServers.add(serverId)
-      }
-      if (dirty) queuePaneExitReconciliation(serverId)
-    })
-  paneExitReconciliations.set(serverId, next)
+  paneExitQueue.observe(serverId)
 }
 
 function observePersistedPaneExitEvents(directory: string): void {
@@ -644,7 +615,7 @@ async function handlePaneExitWatcherCompletion(serverId: string): Promise<boolea
       // Respawn/retire can itself emit pane-exited. Its explicit path owns the
       // exact cleanup; queue one follow-up pass after that ownership token is
       // released instead of spinning or dropping the detached-exit signal.
-      paneExitDeferredServers.add(serverId)
+      paneExitQueue.defer(serverId)
       continue
     }
     await settleServerAfterSessionStop(row)
@@ -662,7 +633,7 @@ async function handlePaneExitWatcherCompletion(serverId: string): Promise<boolea
     if (state === 'absent' && current.scopeUnit) return false
     if (state === 'present' && !(await verifiedCurrentManagedPane(current))) return false
   }
-  return !paneExitDeferredServers.has(serverId)
+  return !paneExitQueue.isDeferred(serverId)
 }
 
 function retryUnresolvedPaneExitReconciliation(serverId: string | null): void {
@@ -670,8 +641,8 @@ function retryUnresolvedPaneExitReconciliation(serverId: string | null): void {
   if (!paneExitFsWatcher) ensurePaneExitFsWatcher()
   if (paneExitEventMarkerExists(serverId)) {
     observePaneExitEvent(serverId)
-  } else if (paneExitUnresolvedServers.has(serverId)) {
-    queuePaneExitReconciliation(serverId)
+  } else {
+    paneExitQueue.retryUnresolved(serverId)
   }
 }
 
@@ -686,9 +657,7 @@ function releaseLifecycleOwner(
   // the held token and defers instead of repeatedly winning the race.
   if (widgetRetireIntents.isPending(widgetId)) drainWidgetRetire(widgetId)
   const serverId = knownServerId ?? getWidget(widgetId)?.tmuxServerId
-  if (serverId && paneExitDeferredServers.delete(serverId)) {
-    queuePaneExitReconciliation(serverId)
-  }
+  if (serverId) paneExitQueue.releaseDeferred(serverId)
 }
 
 function tmuxErrorText(error: unknown): string {
@@ -3287,7 +3256,7 @@ async function reconcileManagedWidget(row: WidgetRow, useServerSnapshot = false)
   if (row.externalTmuxSession) return
   const lifecycleOwner = lifecycleOwners.acquire(row.id)
   if (!lifecycleOwner) {
-    if (row.tmuxServerId) paneExitDeferredServers.add(row.tmuxServerId)
+    if (row.tmuxServerId) paneExitQueue.defer(row.tmuxServerId)
     console.warn(`[aico:lifecycle] deferring reconciliation for busy widget ${row.id}`)
     return
   }
