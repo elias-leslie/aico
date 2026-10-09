@@ -25,7 +25,7 @@ if [[ ${AICO_REAL_SMOKE_IN_XVFB:-} != 1 ]]; then
   chmod 700 "$run_dir"
   # Keep the real bus/runtime while xvfb-run supplies only an isolated display.
   AICO_REAL_SMOKE_IN_XVFB=1 AICO_REAL_SMOKE_DIR="$run_dir" \
-    timeout --signal=TERM --kill-after=10s 240s \
+    timeout --signal=TERM --kill-after=10s 360s \
     xvfb-run -a -s '-screen 0 1280x800x24 -nolisten tcp' bash "$0" "$artifact"
   exit $?
 fi
@@ -265,6 +265,18 @@ cdp scrollback | tee "$run_dir/scrollback-profile.json"
 cdp mouse-program "$run_dir" | tee "$run_dir/mouse-program-profile.json"
 clear_pane_history
 cdp context-send "$sidecar_port" | tee "$run_dir/context-profile.json"
+# Agent TUI wheel routing on fixtures named like the agents. Runs after the
+# shell steps: once an agent is detected the widget keeps its slug.
+for agent in claude codex agy; do
+  cdp agent-routing "$run_dir" "$agent" start
+  # Reattaching reconciles the widget's TUI from the pane's live processes.
+  cdp close
+  wait_for "close-$agent" "$((SECONDS+10))" db_open_is 0
+  second_launch "reopen-$agent"
+  wait_for "reopen-$agent" "$((SECONDS+30))" db_open_is 1
+  cdp ready
+  cdp agent-routing "$run_dir" "$agent" check | tee "$run_dir/agent-$agent-profile.json"
+done
 cdp close
 wait_for closed "$((SECONDS+10))" db_open_is 0
 session_alive

@@ -608,6 +608,179 @@ try {
         `fullscreen mouse program did not get the expected mouse routing: ${JSON.stringify(await diag())}`,
       )
     }
+  } else if (action === 'agent-routing') {
+    // Stand-ins for agent TUIs, so the non-shell wheel route (tmux pane mode
+    // -> forward/open/consume) runs without agent credentials. One fixture is
+    // linked as `claude`, `codex` and `agy`; the process name is what the
+    // widget's live TUI detection keys on, and the name picks the screen mode
+    // each agent was observed in. `start` launches it; the caller then closes
+    // and reopens the widget, whose attach reconciles the TUI; `check` routes.
+    const runDir = sidecarPortText
+    const [name, phase] = process.argv.slice(5)
+    if (!runDir?.startsWith('/tmp/ar.')) throw new Error('agent-routing needs the smoke run dir')
+    const agents = {
+      claude: { tuiName: 'Claude Code', alternateScreen: true, mouseReporting: true },
+      codex: { tuiName: 'Codex', alternateScreen: false, mouseReporting: false },
+      agy: { tuiName: 'Antigravity', alternateScreen: true, mouseReporting: false },
+    }
+    const agent = agents[name]
+    if (!agent || !['start', 'check'].includes(phase))
+      throw new Error('usage: agent-routing <run-dir> <agent> start|check')
+    const { writeFileSync, readFileSync, existsSync, mkdirSync, symlinkSync, chmodSync } =
+      await import('node:fs')
+    const bin = `${runDir}/agent-bin`
+    const fixture = `${bin}/agent-fixture.py`
+    const log = `${runDir}/agent-${name}.log`
+    const logText = () => (existsSync(log) ? readFileSync(log, 'latin1') : '')
+    const overlayOpen = () =>
+      evaluate(`(() => {
+      const el = document.querySelector('#scrollback-overlay');
+      return !!el && getComputedStyle(el).display !== 'none';
+    })()`)
+    if (phase === 'start') {
+      if (!existsSync(fixture)) {
+        mkdirSync(bin, { recursive: true })
+        writeFileSync(
+          fixture,
+          [
+            '#!/usr/bin/python3', // not `env`: a second exec would rename the process python3
+            'import os, sys, termios, tty',
+            'name = os.path.basename(sys.argv[0])',
+            "log = open(sys.argv[1], 'ab')",
+            'fd = 0',
+            'old = termios.tcgetattr(fd)',
+            'tty.setraw(fd)',
+            'out = sys.stdout',
+            "if name == 'codex':",
+            "    out.write(''.join('AGENTFIX_%d\\r\\n' % i for i in range(300)))",
+            "elif name == 'claude':",
+            "    out.write('\\x1b[?1049h\\x1b[?1000h\\x1b[?1002h\\x1b[?1006h\\x1b[2J\\x1b[HFAKE CLAUDE\\r\\n')",
+            'else:',
+            "    out.write('\\x1b[?1049h\\x1b[2J\\x1b[HTrust this folder?\\r\\n')",
+            'out.flush()',
+            'while True:',
+            '    data = os.read(fd, 1024)',
+            "    if b'q' in data:",
+            '        break',
+            '    log.write(data)',
+            '    log.flush()',
+            "out.write('\\x1b[?1006l\\x1b[?1002l\\x1b[?1000l\\x1b[?1049l')",
+            'out.flush()',
+            'termios.tcsetattr(fd, termios.TCSADRAIN, old)',
+            '',
+          ].join('\n'),
+        )
+        chmodSync(fixture, 0o755)
+        for (const link of Object.keys(agents)) symlinkSync(fixture, `${bin}/${link}`)
+      }
+      writeFileSync(log, '')
+      // Ctrl-U first: the context-send step leaves its refs on the prompt line.
+      await evaluate(
+        `(window.aico.pty.input(${JSON.stringify(`\u0015${bin}/${name} ${log}\r`)}), true)`,
+      )
+      let mode
+      for (let i = 0; i < 50; i++) {
+        mode = await evaluate('window.aico.scrollback.paneMode()')
+        if (
+          mode?.alternateScreen === agent.alternateScreen &&
+          mode.mouseReporting === agent.mouseReporting &&
+          (agent.alternateScreen || mode.historySize >= 300)
+        )
+          break
+        await sleep(100)
+      }
+      console.log(JSON.stringify({ action, name, phase, mode }))
+      if (
+        mode?.alternateScreen !== agent.alternateScreen ||
+        mode.mouseReporting !== agent.mouseReporting
+      )
+        throw new Error(`${name} fixture is not in its pane mode: ${JSON.stringify(mode)}`)
+    } else {
+      let title = ''
+      for (let i = 0; i < 50 && !title.includes(agent.tuiName); i++) {
+        title = await evaluate('document.title')
+        if (!title.includes(agent.tuiName)) await sleep(100)
+      }
+      if (!title.includes(agent.tuiName))
+        throw new Error(`widget was not reconciled to ${agent.tuiName}: ${JSON.stringify(title)}`)
+      await sleep(1600) // let the renderer's cached pane mode refresh
+      const g = await evaluate(`(() => {
+        const overlay = document.querySelector('#scrollback-overlay');
+        const screen = [...document.querySelectorAll('#terminal .xterm-screen')]
+          .find((el) => !overlay?.contains(el));
+        const r = screen.getBoundingClientRect();
+        return { x: Math.round((r.left + r.right) / 2), y: Math.round((r.top + r.bottom) / 2) };
+      })()`)
+      await command('Input.dispatchMouseEvent', {
+        type: 'mouseMoved',
+        x: g.x,
+        y: g.y,
+        button: 'none',
+      })
+      await sleep(400)
+      const rail = await evaluate(`(() => {
+        const rail = document.querySelector('.scroll-rail');
+        return !!rail && !rail.hidden;
+      })()`)
+      await wheel(g.x, g.y, -120)
+      let openedByWheelUp = false
+      for (let i = 0; i < 20 && !openedByWheelUp; i++) {
+        openedByWheelUp = await overlayOpen()
+        if (!openedByWheelUp) await sleep(100)
+      }
+      if (openedByWheelUp) {
+        await key('keyDown', 'Escape', 'Escape', 27)
+        await key('keyUp', 'Escape', 'Escape', 27)
+        for (let i = 0; i < 20 && (await overlayOpen()); i++) await sleep(100)
+      }
+      const afterUp = logText()
+      await wheel(g.x, g.y, 120)
+      await sleep(400)
+      const openedByWheelDown = await overlayOpen()
+      const afterDown = logText()
+      const sgrWheel = (button) => new RegExp(`\u001b\\[<${button};\\d+;\\d+M`)
+      const result = {
+        action,
+        name,
+        title,
+        rail,
+        openedByWheelUp,
+        openedByWheelDown,
+        overlayClosed: !(await overlayOpen()),
+        programGotWheelUp: sgrWheel(64).test(afterUp),
+        programGotWheelDown: sgrWheel(65).test(afterDown),
+        programInput: JSON.stringify(afterDown),
+      }
+      await evaluate("(window.aico.pty.input('q'), true)")
+      for (let i = 0; i < 30; i++) {
+        const mode = await evaluate('window.aico.scrollback.paneMode()')
+        if (!mode?.alternateScreen) break
+        await sleep(100)
+      }
+      console.log(JSON.stringify(result))
+      // Claude Code fullscreen owns its transcript: both wheel directions are
+      // forwarded and the overlay stays shut. Codex keeps history in tmux: the
+      // rail shows, wheel-up opens the overlay, nothing reaches the program
+      // (not the wheel-down, not the Escape that closed the overlay). agy's
+      // folder-trust prompt has neither, so the wheel goes nowhere.
+      const expected =
+        name === 'claude'
+          ? {
+              rail: false,
+              openedByWheelUp: false,
+              programGotWheelUp: true,
+              programGotWheelDown: true,
+            }
+          : name === 'codex'
+            ? { rail: true, openedByWheelUp: true, programInput: '""' }
+            : { rail: false, openedByWheelUp: false, programInput: '""' }
+      const wrong = Object.entries({
+        openedByWheelDown: false,
+        overlayClosed: true,
+        ...expected,
+      }).filter(([k, v]) => result[k] !== v)
+      if (wrong.length) throw new Error(`${name} wheel routing is wrong: ${JSON.stringify(wrong)}`)
+    }
   } else if (action === 'context-send') {
     const sidecarPort = Number(sidecarPortText)
     if (!Number.isInteger(sidecarPort) || sidecarPort < 1 || sidecarPort > 65535) {
