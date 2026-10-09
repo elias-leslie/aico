@@ -31,7 +31,9 @@ import {
   setPaletteOpener,
   togglePin,
 } from './actions'
+import { createArmGuard } from './arm-guard'
 import { createCatalogState, type ProjectInfo, type TuiInfo } from './catalog-state'
+import { paletteKeyIntent, paletteMatches } from './palette'
 
 // Filled thumbtack; color + opacity (via CSS) distinguish pinned from unpinned.
 const PIN_SVG =
@@ -146,46 +148,18 @@ function placeTip(target: HTMLElement, placement: 'left' | 'below'): void {
 }
 
 // ---- destructive-action arming ("click again to confirm") ------------------
-// Replace-with-<TUI> actions kill whatever's running in the focused pane, and the
-// launchers can be pinned to the titlebar where a stray click is easy. So they
-// arm on the first click (the icon/row shows an "armed" pulse + a "click again"
-// tip) and only run on a deliberate second click within ARM_MS. Any timeout,
-// mouse-leave, or other click disarms.
-const ARM_MS = 3000
-let armedEl: HTMLElement | null = null
-let armTimer: number | undefined
-
-function needsConfirm(id: string): boolean {
-  // All destructive to the focused pane's session, so all arm before they fire:
-  // replace = different TUI, project = same TUI in a new dir, retire = end the pane.
-  return id.startsWith('replace:') || id.startsWith('project:') || id === 'retire-widget'
-}
-
-function disarm(): void {
-  if (armedEl) {
-    armedEl.classList.remove('armed')
-    armedEl = null
-  }
-  if (armTimer) {
-    clearTimeout(armTimer)
-    armTimer = undefined
-  }
-}
+// The armed icon/row shows an "armed" pulse + a "click again" tip.
+const arming = createArmGuard<HTMLElement>({
+  onArm: (el) => el.classList.add('armed'),
+  onDisarm: (el) => el.classList.remove('armed'),
+})
 
 // Returns true if this click only ARMED the action (caller must not run it yet);
 // false means run now (either a non-guarded action or the confirming 2nd click).
 function armGuard(id: string, el: HTMLElement, placement: 'left' | 'below'): boolean {
-  if (!needsConfirm(id)) return false
-  if (armedEl === el) {
-    disarm() // second click on the same target → confirm
-    return false
-  }
-  disarm() // clear any other armed target first
-  armedEl = el
-  el.classList.add('armed')
+  if (!arming.guard(id, el)) return false
   const a = findAction(id)
   if (a) showArmTip(el, a, placement)
-  armTimer = window.setTimeout(disarm, ARM_MS)
   return true
 }
 
@@ -249,7 +223,7 @@ function menuRow(a: Action): HTMLElement {
       runAction(a.id)
     })
     row.addEventListener('mouseleave', () => {
-      if (armedEl === row) disarm()
+      arming.release(row)
     })
   }
 
@@ -300,7 +274,7 @@ function submenuRow(id: string, label: string, decorate: (dot: HTMLElement) => v
     runAction(id)
   })
   item.addEventListener('mouseleave', () => {
-    if (armedEl === item) disarm()
+    arming.release(item)
   })
   return item
 }
@@ -632,7 +606,7 @@ function closeMenu(): void {
   glyphEl.classList.remove('active')
   hideTip()
   hideSubmenu()
-  disarm()
+  arming.disarm()
 }
 function toggleMenu(): void {
   if (menuOpen()) closeMenu()
@@ -653,7 +627,7 @@ function clusterIcon(a: Action, index: number): HTMLElement {
   b.addEventListener('focus', () => showTip(b, a, 'below'))
   b.addEventListener('blur', () => {
     hideTip()
-    if (armedEl === b) disarm()
+    arming.release(b)
   })
   const flyoutKind = FLYOUTS[a.id]
   b.addEventListener('click', () => {
@@ -672,7 +646,7 @@ function clusterIcon(a: Action, index: number): HTMLElement {
     runAction(a.id)
   })
   b.addEventListener('mouseleave', () => {
-    if (armedEl === b) disarm()
+    arming.release(b)
   })
   b.addEventListener('dragstart', (e) => {
     e.dataTransfer?.setData('text/plain', String(index))
@@ -697,15 +671,6 @@ function renderCluster(): void {
 
 // ---- command palette -------------------------------------------------------
 
-function runnableMatches(query: string): Action[] {
-  const q = query.trim().toLowerCase()
-  const runnable = allActions().filter(isPinnable)
-  if (!q) return runnable
-  return runnable.filter(
-    (a) => a.label.toLowerCase().includes(q) || a.section.toLowerCase().includes(q),
-  )
-}
-
 function setPaletteSel(i: number): void {
   paletteSel = i
   ;[...paletteList.children].forEach((c, idx) => {
@@ -714,7 +679,7 @@ function setPaletteSel(i: number): void {
 }
 
 function renderPaletteList(): void {
-  paletteItems = runnableMatches(paletteInput.value)
+  paletteItems = paletteMatches(allActions().filter(isPinnable), paletteInput.value)
   paletteList.innerHTML = ''
   paletteItems.forEach((a, i) => {
     const row = make('div', 'aico-palette-item')
@@ -736,14 +701,12 @@ function renderPaletteList(): void {
 }
 
 function onPaletteKey(e: KeyboardEvent): void {
-  if (e.key === 'ArrowDown') {
-    e.preventDefault()
-    setPaletteSel(Math.min(paletteSel + 1, paletteItems.length - 1))
-  } else if (e.key === 'ArrowUp') {
-    e.preventDefault()
-    setPaletteSel(Math.max(paletteSel - 1, 0))
-  } else if (e.key === 'Enter') {
-    e.preventDefault()
+  const intent = paletteKeyIntent(e.key, paletteSel, paletteItems.length)
+  if (!intent) return
+  e.preventDefault()
+  if (intent.kind === 'select') {
+    setPaletteSel(intent.index)
+  } else if (intent.kind === 'activate') {
     const a = paletteItems[paletteSel]
     if (!a) return
     const row = paletteList.children[paletteSel] as HTMLElement | undefined
@@ -753,8 +716,7 @@ function onPaletteKey(e: KeyboardEvent): void {
     // single keystroke.
     if (row && armGuard(a.id, row, 'below')) return
     paletteActivate(a)
-  } else if (e.key === 'Escape') {
-    e.preventDefault()
+  } else {
     closePalette()
   }
 }
@@ -808,7 +770,7 @@ function openPalette(): void {
 function closePalette(): void {
   if (paletteEl.hidden) return
   paletteEl.hidden = true
-  disarm()
+  arming.disarm()
   window.dispatchEvent(new CustomEvent('aico:refocus')) // hand focus back to the terminal
 }
 
