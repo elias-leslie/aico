@@ -106,6 +106,7 @@ import {
   rootPromptReady,
   withRootPrompt,
 } from './root-launch'
+import { EMPTY_SCROLLBACK_PAGE, readScrollbackPage } from './scrollback-page'
 import { parseSse, type SelectionRecord } from './selection'
 import {
   createSelectionDeliveryLease,
@@ -159,7 +160,6 @@ import {
 import { terminalClientEnv } from './terminal-env'
 import {
   attachTargetArgs,
-  capturePageTargetArgs,
   captureTargetArgs,
   hasTargetArgs,
   internalTarget,
@@ -176,11 +176,9 @@ import {
   paneExitedHookTargetArgs,
   paneModeTargetArgs,
   panePidTargetArgs,
-  paneScrollbackInfoTargetArgs,
   parsePaneMode,
   respawnTargetArgs,
   runInPaneTargetArgs,
-  scrollbackPageBounds,
   serverIdentityEnvironmentTargetArgs,
   serverRosterArgs,
   sessionIdTargetArgs,
@@ -270,22 +268,8 @@ async function reserveAgentLaunch(request: AdmissionRequest): Promise<AdmissionT
 }
 const SYSTEMD_RUN_BIN = '/usr/bin/systemd-run'
 const TMUX_BIN = '/usr/bin/tmux'
-const SCROLLBACK_PAGE_DEFAULT_LINES = 5000
-const SCROLLBACK_PAGE_MAX_LINES = 5000
 const SYSTEMD_QUERY_TIMEOUT_MS = 2_000
 const SYSTEMD_STOP_TIMEOUT_MS = 5_000
-
-function scrollbackPageCount(input: unknown): number {
-  const n = typeof input === 'number' ? input : SCROLLBACK_PAGE_DEFAULT_LINES
-  if (!Number.isFinite(n)) return SCROLLBACK_PAGE_DEFAULT_LINES
-  return Math.min(SCROLLBACK_PAGE_MAX_LINES, Math.max(1, Math.floor(n)))
-}
-
-function scrollbackPageFromLine(input: unknown): number | undefined {
-  if (input === undefined || input === null) return undefined
-  if (typeof input !== 'number' || !Number.isFinite(input)) return undefined
-  return Math.max(0, Math.floor(input))
-}
 
 // One node-pty per open window. The PTY runs `tmux attach`; killing it only
 // detaches the client, so the tmux session (and its shell) survives reload/close.
@@ -2639,6 +2623,12 @@ function ptyFor(sender: Electron.WebContents): IPty | undefined {
   return win ? ptys.get(win.id) : undefined
 }
 
+/** The widget a renderer's window shows, if any (untrusted IPC sender). */
+function widgetIdFor(sender: Electron.WebContents): string | undefined {
+  const win = BrowserWindow.fromWebContents(sender)
+  return win ? widgetOf.get(win.id) : undefined
+}
+
 // Persist a window's bounds (and which monitor it's on) so it restores in place.
 function persistBounds(win: BrowserWindow): void {
   const widgetId = widgetOf.get(win.id)
@@ -3832,8 +3822,7 @@ const startup = app.whenReady().then(async () => {
 
   ipcMain.on('pty:input', (event, data: unknown) => {
     if (typeof data !== 'string' || data.length === 0) return
-    const win = BrowserWindow.fromWebContents(event.sender)
-    const widgetId = win ? widgetOf.get(win.id) : undefined
+    const widgetId = widgetIdFor(event.sender)
     // Replacement temporarily exposes the no-RC containment gate through the
     // existing tmux attachment. Never let renderer bytes corrupt or execute a
     // partially staged launcher; stale user input is dropped rather than queued.
@@ -3908,8 +3897,7 @@ const startup = app.whenReady().then(async () => {
   // Full scrollback for the renderer's read-only overlay. tmux history is the
   // source of truth (an attached tmux client has no xterm-side scrollback).
   ipcMain.handle('tmux:capture', async (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
-    const widgetId = win ? widgetOf.get(win.id) : undefined
+    const widgetId = widgetIdFor(event.sender)
     if (!widgetId) return ''
     const { stdout } = await execFileAsync(
       TMUX_BIN,
@@ -3922,8 +3910,7 @@ const startup = app.whenReady().then(async () => {
   })
 
   ipcMain.handle('tmux:pane-mode', async (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
-    const widgetId = win ? widgetOf.get(win.id) : undefined
+    const widgetId = widgetIdFor(event.sender)
     if (!widgetId) return { alternateScreen: false, mouseReporting: false, historySize: 0 }
 
     const { stdout } = await execFileAsync(
@@ -3935,39 +3922,13 @@ const startup = app.whenReady().then(async () => {
   })
 
   ipcMain.handle('tmux:scrollback-page', async (event, request?: unknown) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
-    const widgetId = win ? widgetOf.get(win.id) : undefined
-    if (!widgetId) return { fromLine: 0, totalLines: 0, historySize: 0, text: '' }
-
-    const target = tmuxPaneTargetForWidget(widgetId)
-    const req =
-      request && typeof request === 'object'
-        ? (request as { fromLine?: unknown; count?: unknown; plain?: unknown })
-        : {}
-    const count = scrollbackPageCount(req.count)
-    const requestedFromLine = scrollbackPageFromLine(req.fromLine)
-
-    const { stdout: info } = await execFileAsync(TMUX_BIN, paneScrollbackInfoTargetArgs(target), {
-      maxBuffer: 1024,
-    })
-    const [historyRaw, heightRaw] = info.trim().split(/\s+/)
-    const historySize = Number(historyRaw)
-    const paneHeight = Number(heightRaw)
-    const bounds = scrollbackPageBounds(historySize, paneHeight, count, requestedFromLine)
-    if (!bounds) return { fromLine: 0, totalLines: 0, historySize: 0, text: '' }
-
-    const plain = req.plain === true
-    const { stdout } = await execFileAsync(
-      TMUX_BIN,
-      capturePageTargetArgs(target, bounds, { plain }),
-      { maxBuffer: 16 * 1024 * 1024 },
+    const widgetId = widgetIdFor(event.sender)
+    if (!widgetId) return { ...EMPTY_SCROLLBACK_PAGE }
+    return readScrollbackPage(
+      async (args, maxBuffer) => (await execFileAsync(TMUX_BIN, args, { maxBuffer })).stdout,
+      tmuxPaneTargetForWidget(widgetId),
+      request,
     )
-    return {
-      fromLine: bounds.fromLine,
-      totalLines: bounds.totalLines,
-      historySize: Math.max(0, Math.floor(historySize) || 0),
-      text: stdout,
-    }
   })
 
   ipcMain.handle('clipboard:read', () => clipboard.readText())
@@ -3976,8 +3937,7 @@ const startup = app.whenReady().then(async () => {
   })
 
   ipcMain.handle('session:diagnostics', async (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
-    const widgetId = win ? widgetOf.get(win.id) : undefined
+    const widgetId = widgetIdFor(event.sender)
     return widgetId
       ? sessionDiagnostics(widgetId)
       : { capturedAt: new Date().toISOString(), error: 'no widget ownership' }
@@ -4024,13 +3984,11 @@ const startup = app.whenReady().then(async () => {
   // session (same teardown as the tray's "Discard"), so the user need not go to
   // the tray. Resolves the widget id from the sender's window.
   ipcMain.on('widget:discard-self', (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
-    const id = win ? widgetOf.get(win.id) : undefined
+    const id = widgetIdFor(event.sender)
     if (id) discardWidget(id)
   })
   ipcMain.handle('session:end-self', async (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
-    const id = win ? widgetOf.get(win.id) : undefined
+    const id = widgetIdFor(event.sender)
     if (!id) throw new Error('Session view is unavailable')
     const owner = await lifecycleOwners.acquireWhenAvailable(id)
     const result = await discardWidgetOwned(id, owner)
@@ -4043,8 +4001,7 @@ const startup = app.whenReady().then(async () => {
 
   // Replace the focused widget's running TUI with another (no new window).
   ipcMain.on('widget:load-tui', (event, slug?: unknown) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
-    const id = win ? widgetOf.get(win.id) : undefined
+    const id = widgetIdFor(event.sender)
     if (id && typeof slug === 'string' && slug) {
       loadTui(id, slug)
     }
@@ -4054,8 +4011,7 @@ const startup = app.whenReady().then(async () => {
   // flyout): respawn its pane there, same tool. Resolves the widget from the
   // sender's window, exactly like widget:load-tui.
   ipcMain.on('widget:switch-project', (event, projectId?: unknown) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
-    const id = win ? widgetOf.get(win.id) : undefined
+    const id = widgetIdFor(event.sender)
     if (id && typeof projectId === 'string' && projectId) {
       switchProject(id, projectId)
     }
@@ -4064,8 +4020,7 @@ const startup = app.whenReady().then(async () => {
   // Rename a widget from its titlebar (click the name). Empty/whitespace clears
   // it back to `Widget ${seq}`. Persisted, then reflected in the title and tray.
   ipcMain.on('widget:set-name', (event, name: unknown) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
-    const id = win ? widgetOf.get(win.id) : undefined
+    const id = widgetIdFor(event.sender)
     if (!id) return
     setWidgetName(id, typeof name === 'string' ? name : null)
     pushTitles()
