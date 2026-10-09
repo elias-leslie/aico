@@ -12,6 +12,7 @@ import {
   watch,
   writeFileSync,
 } from 'node:fs'
+import { readdir, readFile } from 'node:fs/promises'
 import { homedir, uptime } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -28,6 +29,13 @@ import {
 } from 'electron'
 import { type IPty, spawn } from 'node-pty'
 import { parseTerminalFontSettings } from '../shared/font-settings'
+import {
+  type AdmissionRequest,
+  type AdmissionTicket,
+  AgentAdmission,
+  AgentAdmissionDenied,
+  observeAgentScopes,
+} from './agent-admission'
 import {
   confirmATermSessionAbsence,
   type ExternalViewPresence,
@@ -194,6 +202,59 @@ const execFileAsync = promisify(execFile)
 const LOGINCTL_BIN = '/usr/bin/loginctl'
 const PS_BIN = '/usr/bin/ps'
 const SYSTEMCTL_BIN = '/usr/bin/systemctl'
+/** Latest deferral shown to the widget's terminal; cleared on each new start attempt. */
+const agentAdmissionReasons = new Map<string, string>()
+const agentAdmission = new AgentAdmission(
+  {
+    meminfo: () => readFile('/proc/meminfo', 'utf8'),
+    memoryPressure: () => readFile('/proc/pressure/memory', 'utf8'),
+    activeAgentScopes: () => {
+      const uid = process.getuid?.()
+      if (uid === undefined) throw new Error('uid unavailable')
+      return observeAgentScopes({
+        fs: {
+          listDirectories: async (path) =>
+            (await readdir(path, { withFileTypes: true }))
+              .filter((entry) => entry.isDirectory())
+              .map((entry) => entry.name),
+          readFile: (path) => readFile(path, 'utf8'),
+        },
+        appSliceDir: `/sys/fs/cgroup/user.slice/user-${uid}.slice/user@${uid}.service/app.slice`,
+        isPaneScope: isOwnedPaneScope,
+        agentProcessNames: new Set(
+          listTuis()
+            .filter((tui) => tui.slug !== 'shell' && tui.processName)
+            .map((tui) => tui.processName),
+        ),
+      })
+    },
+  },
+  {
+    // Numbers and identifiers only: never prompt, session or terminal content.
+    record: (observation) => console.log(`[aico:admission] ${JSON.stringify(observation)}`),
+  },
+)
+
+/** Reserve host capacity for a new agent TUI. Shells and live reconnects never call this. */
+async function reserveAgentLaunch(request: AdmissionRequest): Promise<AdmissionTicket> {
+  try {
+    const ticket = await agentAdmission.reserve(request)
+    agentAdmissionReasons.delete(request.widgetId)
+    return ticket
+  } catch (error) {
+    const message =
+      error instanceof AgentAdmissionDenied
+        ? error.message
+        : 'Aico deferred this agent launch: host admission failed unexpectedly. Nothing was started; retry shortly.'
+    agentAdmissionReasons.set(request.widgetId, message)
+    const win = windowForWidget(request.widgetId)
+    if (request.kind !== 'launch' && win && !win.isDestroyed())
+      win.webContents.send('pty:data', `\r\n\u001b[33m${message}\u001b[0m\r\n`)
+    throw error instanceof AgentAdmissionDenied
+      ? error
+      : new AgentAdmissionDenied('host admission failed unexpectedly.')
+  }
+}
 const SYSTEMD_RUN_BIN = '/usr/bin/systemd-run'
 const TMUX_BIN = '/usr/bin/tmux'
 const SCROLLBACK_PAGE_DEFAULT_LINES = 5000
@@ -1779,33 +1840,47 @@ async function recoverInterruptedManagedPane(
       })
       if (decision !== 'dispatch') return decision
     }
-    const intentRow = persistManagedGateLaunchIntent(current, verified.pid)
-    if (!intentRow) return 'blocked'
-    const dispatchedRow = markManagedGateDispatched(intentRow)
-    if (!dispatchedRow) return 'blocked'
-    current = dispatchedRow
-    const tool = getTui(current.tool ?? 'shell')
-    const line = tool ? initialLaunchLine(current.id, tool) : null
-    // Re-observe immediately before the one-time transition out of the gate.
-    const immediatelyCurrent = await verifiedCurrentManagedPane(current)
-    if (
-      !immediatelyCurrent ||
-      immediatelyCurrent.pid !== verified.pid ||
-      managedGateState(immediatelyCurrent, identity.controlGroup) !== 'inert' ||
-      !isPaneExitBridgeReady(current)
-    ) {
-      return 'blocked'
+    // Admission precedes dispatch only; a recovery that reattaches never reaches here.
+    let admission: AdmissionTicket | undefined
+    if ((getTui(current.tool ?? 'shell')?.slug ?? 'shell') !== 'shell') {
+      try {
+        admission = await reserveAgentLaunch({ widgetId: current.id, kind: 'recovery' })
+      } catch {
+        return 'blocked'
+      }
     }
-    execFileSync(
-      TMUX_BIN,
-      runInPaneTargetArgs(tmuxPaneTargetForWidget(row.id), paneCommand(line)),
-      {
-        env: terminalClientEnv(),
-        timeout: TMUX_QUERY_TIMEOUT_MS,
-      },
-    )
-    console.log(`[aico:lifecycle] resumed verified launch gate for session=${current.sessionId}`)
-    if (tool && line) reportContext(row.id, tool)
+    try {
+      const intentRow = persistManagedGateLaunchIntent(current, verified.pid)
+      if (!intentRow) return 'blocked'
+      const dispatchedRow = markManagedGateDispatched(intentRow)
+      if (!dispatchedRow) return 'blocked'
+      current = dispatchedRow
+      const tool = getTui(current.tool ?? 'shell')
+      const line = tool ? initialLaunchLine(current.id, tool) : null
+      // Re-observe immediately before the one-time transition out of the gate.
+      const immediatelyCurrent = await verifiedCurrentManagedPane(current)
+      if (
+        !immediatelyCurrent ||
+        immediatelyCurrent.pid !== verified.pid ||
+        managedGateState(immediatelyCurrent, identity.controlGroup) !== 'inert' ||
+        !isPaneExitBridgeReady(current)
+      ) {
+        return 'blocked'
+      }
+      execFileSync(
+        TMUX_BIN,
+        runInPaneTargetArgs(tmuxPaneTargetForWidget(row.id), paneCommand(line)),
+        {
+          env: terminalClientEnv(),
+          timeout: TMUX_QUERY_TIMEOUT_MS,
+        },
+      )
+      admission?.commit(current.scopeUnit)
+      console.log(`[aico:lifecycle] resumed verified launch gate for session=${current.sessionId}`)
+      if (tool && line) reportContext(row.id, tool)
+    } finally {
+      admission?.release()
+    }
   }
   if (decision === 'recovered' && current.pendingScopeUnit) {
     // Reattach is a concrete recovery trigger for a former generation whose
@@ -2136,6 +2211,15 @@ async function ensureOwnedInternalSession(widgetId: string, size: PtySize): Prom
     )
     return false
   }
+  // Admission precedes tmux allocation, so a deferred agent leaves nothing behind.
+  let admission: AdmissionTicket | undefined
+  if ((tool?.slug ?? 'shell') !== 'shell') {
+    try {
+      admission = await reserveAgentLaunch({ widgetId, kind: 'launch' })
+    } catch {
+      return false
+    }
+  }
   try {
     await createInternalSession(
       widgetId,
@@ -2189,11 +2273,14 @@ async function ensureOwnedInternalSession(widgetId: string, size: PtySize): Prom
         timeout: TMUX_QUERY_TIMEOUT_MS,
       },
     )
+    admission?.commit(pane.scopeUnit)
   } catch (e) {
     // No session to attach to; surface why rather than letting startPty's attach
     // fail into a blank terminal with no explanation.
     console.error(`[aico] failed to create tmux session for ${widgetId}:`, e)
     return false
+  } finally {
+    admission?.release()
   }
   // Best-effort observability only: context failure is visible but never
   // prevents the native TUI from launching.
@@ -2387,109 +2474,129 @@ async function respawnAndRelaunch(
     const previousScopeInvocationId = previous.scopeInvocationId
     if (!previousScope || !previousScopeInvocationId) return
 
-    if (
-      !setWidgetPendingScope(
-        widgetId,
-        ownershipGeneration(previous),
-        previousScope,
-        previousScopeInvocationId,
-      )
-    ) {
-      console.error(
-        `[aico:lifecycle] replacement blocked: ownership changed before pending scope persistence`,
-      )
-      return
+    // Admission precedes the destructive respawn. The scope being replaced is
+    // excluded from the count, so a replacement never waits on itself.
+    let admission: AdmissionTicket | undefined
+    if ((tool?.slug ?? 'shell') !== 'shell') {
+      try {
+        admission = await reserveAgentLaunch({
+          widgetId,
+          kind: 'replacement',
+          replacingScope: previousScope,
+        })
+      } catch {
+        return
+      }
     }
-    const expected = getWidget(widgetId)
-    if (!expected?.pendingScopeUnit) return
 
-    const line = tool ? launchLine(tool) : null
-    let promoted: ManagedPaneProcess | null = null
-    let sameScopeReplacementProven = false
     try {
-      // The target is the persisted pane id, not the mutable active pane. The
-      // replacement starts in the inert gate and cannot fork before promotion.
-      execFileSync(
-        TMUX_BIN,
-        respawnTargetArgs(
-          tmuxPaneTargetForWidget(widgetId),
-          options.cwd ?? cwdForWidget(widgetId),
-          managedEnvironment(widgetId, tool?.slug ?? 'shell', options.projectId),
-        ),
-        { env: terminalClientEnv(), timeout: TMUX_QUERY_TIMEOUT_MS },
-      )
-      promoted = await recordManagedPane(widgetId, ownershipGeneration(expected))
-      if (!promoted?.scopeUnit) {
-        throw new Error(
-          'replacement gate could not be promoted; it is preserved for startup recovery',
+      if (
+        !setWidgetPendingScope(
+          widgetId,
+          ownershipGeneration(previous),
+          previousScope,
+          previousScopeInvocationId,
         )
-      }
-      if (promoted.scopeUnit === previousScope && !previousWasInertGate) {
-        throw new Error(`tmux reused pane scope ${promoted.scopeUnit}; replacement remains gated`)
-      }
-
-      const promotedRow = getWidget(widgetId)
-      const promotedIdentity = promoted.scopeUnit ? await scopeIdentity(promoted.scopeUnit) : null
-      const verifiedGate = promotedRow ? await verifiedCurrentManagedPane(promotedRow) : null
-      if (
-        !promotedRow ||
-        !promotedIdentity ||
-        !verifiedGate ||
-        verifiedGate.pid !== promoted.pid ||
-        managedGateState(verifiedGate, promotedIdentity.controlGroup) !== 'inert'
       ) {
-        throw new Error('replacement gate received input or descendants before launch')
+        console.error(
+          `[aico:lifecycle] replacement blocked: ownership changed before pending scope persistence`,
+        )
+        return
       }
-      sameScopeReplacementProven = Boolean(
-        promoted.scopeUnit === previousScope && previousWasInertGate,
-      )
-      const intentRow = persistManagedGateLaunchIntent(promotedRow, promoted.pid)
-      if (!intentRow) {
-        throw new Error('replacement gate launch intent could not be persisted before send')
-      }
-      const dispatchedRow = markManagedGateDispatched(intentRow)
-      if (!dispatchedRow) {
-        throw new Error('replacement gate dispatch generation changed before send')
+      const expected = getWidget(widgetId)
+      if (!expected?.pendingScopeUnit) return
+
+      const line = tool ? launchLine(tool) : null
+      let promoted: ManagedPaneProcess | null = null
+      let sameScopeReplacementProven = false
+      try {
+        // The target is the persisted pane id, not the mutable active pane. The
+        // replacement starts in the inert gate and cannot fork before promotion.
+        execFileSync(
+          TMUX_BIN,
+          respawnTargetArgs(
+            tmuxPaneTargetForWidget(widgetId),
+            options.cwd ?? cwdForWidget(widgetId),
+            managedEnvironment(widgetId, tool?.slug ?? 'shell', options.projectId),
+          ),
+          { env: terminalClientEnv(), timeout: TMUX_QUERY_TIMEOUT_MS },
+        )
+        promoted = await recordManagedPane(widgetId, ownershipGeneration(expected))
+        if (!promoted?.scopeUnit) {
+          throw new Error(
+            'replacement gate could not be promoted; it is preserved for startup recovery',
+          )
+        }
+        if (promoted.scopeUnit === previousScope && !previousWasInertGate) {
+          throw new Error(`tmux reused pane scope ${promoted.scopeUnit}; replacement remains gated`)
+        }
+
+        const promotedRow = getWidget(widgetId)
+        const promotedIdentity = promoted.scopeUnit ? await scopeIdentity(promoted.scopeUnit) : null
+        const verifiedGate = promotedRow ? await verifiedCurrentManagedPane(promotedRow) : null
+        if (
+          !promotedRow ||
+          !promotedIdentity ||
+          !verifiedGate ||
+          verifiedGate.pid !== promoted.pid ||
+          managedGateState(verifiedGate, promotedIdentity.controlGroup) !== 'inert'
+        ) {
+          throw new Error('replacement gate received input or descendants before launch')
+        }
+        sameScopeReplacementProven = Boolean(
+          promoted.scopeUnit === previousScope && previousWasInertGate,
+        )
+        const intentRow = persistManagedGateLaunchIntent(promotedRow, promoted.pid)
+        if (!intentRow) {
+          throw new Error('replacement gate launch intent could not be persisted before send')
+        }
+        const dispatchedRow = markManagedGateDispatched(intentRow)
+        if (!dispatchedRow) {
+          throw new Error('replacement gate dispatch generation changed before send')
+        }
+
+        const immediatelyCurrent = await verifiedCurrentManagedPane(dispatchedRow)
+        if (
+          !immediatelyCurrent ||
+          immediatelyCurrent.pid !== promoted.pid ||
+          managedGateState(immediatelyCurrent, promotedIdentity.controlGroup) !== 'inert' ||
+          !isPaneExitBridgeReady(dispatchedRow)
+        ) {
+          throw new Error('replacement gate changed after launch intent persistence')
+        }
+
+        execFileSync(
+          TMUX_BIN,
+          runInPaneTargetArgs(tmuxPaneTargetForWidget(widgetId), paneCommand(line)),
+          { env: terminalClientEnv(), timeout: TMUX_QUERY_TIMEOUT_MS },
+        )
+        admission?.commit(promoted?.scopeUnit ?? null)
+        options.commitMetadata?.()
+        if (tool && line) reportContext(widgetId, tool)
+      } catch (error) {
+        // Never kill an unrecorded gate: its markers + tmux identity are the
+        // recovery handle. The old exact scope remains pending until promotion.
+        console.error(`[aico] failed to respawn pane for ${widgetId}:`, error)
       }
 
-      const immediatelyCurrent = await verifiedCurrentManagedPane(dispatchedRow)
-      if (
-        !immediatelyCurrent ||
-        immediatelyCurrent.pid !== promoted.pid ||
-        managedGateState(immediatelyCurrent, promotedIdentity.controlGroup) !== 'inert' ||
-        !isPaneExitBridgeReady(dispatchedRow)
-      ) {
-        throw new Error('replacement gate changed after launch intent persistence')
+      // Once the new exact scope is durable, the former scope is no longer the
+      // live pane and can be emptied even if the TUI send itself failed.
+      if (promoted?.scopeUnit && promoted.scopeUnit !== previousScope) {
+        const clean = await stopOwnedPaneScope(
+          previousScope,
+          previousScopeInvocationId,
+          `replace session ${previous.sessionId}`,
+        )
+        if (clean) clearWidgetPendingScope(widgetId, previousScope, previousScopeInvocationId)
+      } else if (promoted?.scopeUnit === previousScope && sameScopeReplacementProven) {
+        // The old generation was recursively proven to be a singleton gate, so
+        // tmux's same-scope reuse could not retain a detached descendant. Clear
+        // once the replacement gate is also proven singleton. Launch failure is
+        // retained in launchState, but must not make explicit repair impossible.
+        clearWidgetPendingScope(widgetId, previousScope, previousScopeInvocationId)
       }
-
-      execFileSync(
-        TMUX_BIN,
-        runInPaneTargetArgs(tmuxPaneTargetForWidget(widgetId), paneCommand(line)),
-        { env: terminalClientEnv(), timeout: TMUX_QUERY_TIMEOUT_MS },
-      )
-      options.commitMetadata?.()
-      if (tool && line) reportContext(widgetId, tool)
-    } catch (error) {
-      // Never kill an unrecorded gate: its markers + tmux identity are the
-      // recovery handle. The old exact scope remains pending until promotion.
-      console.error(`[aico] failed to respawn pane for ${widgetId}:`, error)
-    }
-
-    // Once the new exact scope is durable, the former scope is no longer the
-    // live pane and can be emptied even if the TUI send itself failed.
-    if (promoted?.scopeUnit && promoted.scopeUnit !== previousScope) {
-      const clean = await stopOwnedPaneScope(
-        previousScope,
-        previousScopeInvocationId,
-        `replace session ${previous.sessionId}`,
-      )
-      if (clean) clearWidgetPendingScope(widgetId, previousScope, previousScopeInvocationId)
-    } else if (promoted?.scopeUnit === previousScope && sameScopeReplacementProven) {
-      // The old generation was recursively proven to be a singleton gate, so
-      // tmux's same-scope reuse could not retain a detached descendant. Clear
-      // once the replacement gate is also proven singleton. Launch failure is
-      // retained in launchState, but must not make explicit repair impossible.
-      clearWidgetPendingScope(widgetId, previousScope, previousScopeInvocationId)
+    } finally {
+      admission?.release()
     }
   } finally {
     releaseLifecycleOwner(widgetId, lifecycleOwner)
@@ -2547,6 +2654,7 @@ async function startPty(win: BrowserWindow, size: PtySize): Promise<void> {
     existing.kill() // detaches the client; tmux session persists
     ptys.delete(win.id)
   }
+  agentAdmissionReasons.delete(widgetId)
   const ready = await ensureSessionSerialized(widgetId, size)
   const stillCurrent =
     !win.isDestroyed() &&
@@ -2556,8 +2664,10 @@ async function startPty(win: BrowserWindow, size: PtySize): Promise<void> {
     if (!ready && stillCurrent) {
       win.webContents.send(
         'pty:data',
-        '\r\n\u001b[31mAico safety stop: tmux ownership could not be verified. ' +
-          'No agent was launched; copy diagnostics or inspect the lifecycle log.\u001b[0m\r\n',
+        `\r\n\u001b[31m${
+          agentAdmissionReasons.get(widgetId) ??
+          'Aico safety stop: tmux ownership could not be verified. No agent was launched; copy diagnostics or inspect the lifecycle log.'
+        }\u001b[0m\r\n`,
       )
       syncTray()
     }

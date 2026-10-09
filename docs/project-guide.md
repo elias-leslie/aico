@@ -132,8 +132,26 @@ Important variables:
 | `AICO_VOICE_WS` | `ws://127.0.0.1:8003/api/voice/ws?user_id=aico&app=aico` | Optional compatible speech-to-text websocket. If absent/unreachable, voice dictation fails without crashing the app. |
 | `AICO_SELECTION_HOTKEY` | `CommandOrControl+Shift+Space` | Electron global shortcut for selection indication. |
 | `AICO_VOICE_HOTKEY` | `CommandOrControl+Shift+M` | Electron global shortcut for push-to-talk toggle. |
+| `AICO_AGENT_MIN_AVAILABLE_GIB` | `6` | Defer a new agent launch while `/proc/meminfo` MemAvailable is below this many GiB. |
+| `AICO_AGENT_MAX_PSI_SOME_AVG60` | `10` | Defer while memory PSI `some avg60` is at or above this percentage. |
+| `AICO_AGENT_MAX_PSI_FULL_AVG60` | `2` | Defer while memory PSI `full avg60` is at or above this percentage. |
+| `AICO_AGENT_MAX_PSI_FULL_AVG10` | `5` | Defer while memory PSI `full avg10` is at or above this percentage. |
+| `AICO_AGENT_MAX_ACTIVE` | unset | Optional emergency ceiling on concurrently active agent panes. Unset means no ceiling. |
+| `AICO_AGENT_ADMISSION_OVERRIDE` | unset | Set to `1` to bypass admission only. Ownership and scope validation still apply. |
 
 Aico intentionally does not store third-party AI provider secrets. Authenticate each AI CLI with its own documented login/config flow.
+
+### Agent launch admission
+
+Aico checks host memory before it allocates a new agent pane, dispatches a
+recovered launch gate, or replaces a running agent. It defers the launch, and
+shows the reason in the widget, only while MemAvailable or memory PSI crosses
+the thresholds above. Admission never limits healthy concurrency by default,
+never kills existing work, and is skipped for bare shells and reconnects to a
+live session. A replacement is never counted against itself. Malformed or
+unreadable host data defers the launch with a retryable reason. Each decision
+logs one `[aico:admission]` JSON line with MemAvailable, PSI, the active agent
+count and the outcome, for tuning; it never contains prompt or session content.
 
 New durable sessions fail closed if user linger or narrow tmux pane containment
 cannot be verified. Existing sessions are preserved. To enable linger manually:
