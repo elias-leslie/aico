@@ -117,17 +117,20 @@ describe('scrollback wheel policy', () => {
     }
   })
 
-  it('keeps the overlay for alternate-screen TUIs that do not grab the mouse', () => {
-    // e.g. Antigravity's (agy) folder-trust prompt: the overlay, not the program.
-    expect(
-      scrollbackWheelAction({
-        deltaY: -100,
-        overlayActive: false,
-        mouseReportingActive: false,
-        alternateScreen: true,
-        tuiSlug: 'agy',
-      }),
-    ).toBe('open')
+  it('consumes the wheel for alternate-screen TUIs that do not grab the mouse', () => {
+    // e.g. Antigravity's (agy) folder-trust prompt: tmux holds only the lines
+    // from before it started, so neither the overlay nor the program gets it.
+    for (const deltaY of [-100, 100]) {
+      expect(
+        scrollbackWheelAction({
+          deltaY,
+          overlayActive: false,
+          mouseReportingActive: false,
+          alternateScreen: true,
+          tuiSlug: 'agy',
+        }),
+      ).toBe('consume')
+    }
   })
 })
 

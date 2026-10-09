@@ -21,12 +21,14 @@ export function scrollbackWheelAction({
   // while wheel-down must still be consumed locally so xterm does not translate
   // the wheel into arrow keys for Claude/Codex.
   if (tuiSlug !== 'shell') {
-    // Except when the TUI both draws in the alternate screen and grabs the
-    // mouse (Claude Code): tmux then holds no history worth showing — a live
-    // session sits at three lines — and the program owns the transcript, so
-    // the wheel belongs to it. Antigravity and Codex stay on the overlay
-    // because they keep their output in tmux history on the normal screen.
-    if (mouseReportingActive && alternateScreen) return 'forward'
+    // Except while the TUI draws in the alternate screen: tmux then holds only
+    // what ran before it started — a live session sits at three lines — so the
+    // overlay would open near-empty. A program that grabs the mouse (Claude
+    // Code) owns its transcript and gets the wheel; one that doesn't (agy's
+    // folder-trust prompt) has nothing to scroll, so the wheel is consumed.
+    // Antigravity and Codex otherwise stay on the overlay because they keep
+    // their output in tmux history on the normal screen.
+    if (alternateScreen) return mouseReportingActive ? 'forward' : 'consume'
     return deltaY < 0 ? 'open' : 'consume'
   }
 
