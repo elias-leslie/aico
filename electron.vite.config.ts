@@ -6,14 +6,16 @@ import type { Plugin } from 'vite'
 // response-header CSP, so production builds carry the policy as a <meta> tag.
 // main/index.ts still sets the matching header for any non-file load. Dev is
 // left alone: Vite's HMR needs inline scripts and its own websocket. Voice is
-// the only remote connection and its service is loopback-only.
+// the only remote connection and its service is loopback-only. Chromium's CSP
+// host grammar has no IPv6 literals: `ws://[::1]:*` is rejected as invalid and
+// logged as a renderer error, so a voice service on [::1] is not allowed here.
 const RENDERER_CSP = [
   "default-src 'self'",
   "script-src 'self' blob:",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data:",
   "font-src 'self'",
-  "connect-src 'self' ws://127.0.0.1:* ws://localhost:* ws://[::1]:*",
+  "connect-src 'self' ws://127.0.0.1:* ws://localhost:*",
   "worker-src 'self' blob:",
   "media-src 'self' blob:",
   "object-src 'none'",

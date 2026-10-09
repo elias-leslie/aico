@@ -123,9 +123,12 @@ done
 echo 'Bundled sidecar returned the expected health identity and Electron reported ready.'
 
 # A fresh Aico profile starts in the tray. The second launch activates the
-# first instance and creates a shell widget.
+# first instance and creates a shell widget. It gets its own TMPDIR: with
+# APPIMAGE_EXTRACT_AND_RUN the runtime deletes its extraction directory on exit,
+# and a shared one would vanish under the primary's running sidecar.
+mkdir -p "$tmp/temp-second"
 timeout --signal=TERM --kill-after=5s 30s \
-  "${app_env[@]}" "$artifact" --no-sandbox --disable-gpu --disable-dev-shm-usage \
+  "${app_env[@]}" TMPDIR="$tmp/temp-second" "$artifact" --no-sandbox --disable-gpu --disable-dev-shm-usage \
   >"$tmp/activation.log" 2>&1 || {
     echo 'Second AppImage launch failed to activate the first instance' >&2
     cat "$tmp/activation.log" >&2
@@ -173,6 +176,22 @@ if ! kill -0 "$primary_pid" 2>/dev/null || ! widget_window_ok; then
   exit 1
 fi
 health_ok || { echo 'Bundled sidecar became unhealthy after widget activation' >&2; exit 1; }
+# Icons load from inside app.asar; a bad path yields an empty image, not an error.
+widget_icon_ok() {
+  local id icon
+  for id in $(xwininfo -root -tree 2>/dev/null | awk 'tolower($0) ~ /\("aico" "aico"\)/ {print $1}'); do
+    # Read the raw CARDINALs (width, height, pixels...); xprop's default icon
+    # rendering prints nothing off a terminal.
+    icon=$(xprop -id "$id" -f _NET_WM_ICON 32c -len 64 _NET_WM_ICON 2>/dev/null || true)
+    [[ $icon =~ =\ [1-9][0-9]*,\ [1-9][0-9]* ]] && return 0
+  done
+  return 1
+}
+widget_icon_ok || { echo 'Packaged widget window has no _NET_WM_ICON' >&2; exit 1; }
+if grep -q '\[aico\] tray icon failed to load' "$tmp/app.log"; then
+  echo 'Packaged tray icon failed to load' >&2
+  exit 1
+fi
 if grep -Eq '\[aico:renderer\].*( error |load failed|process gone)' "$tmp/app.log"; then
   echo 'Packaged renderer logged an error, load failure, or crash' >&2
   exit 1

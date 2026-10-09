@@ -127,6 +127,11 @@ export function createTray(
   tools = newWidgetTools
   projects = newWidgetProjects
   attachables = attachableTmuxSessions
+  // createFromPath returns an empty image instead of throwing, which would
+  // leave a blank tray slot. Say so; the packaged smoke fails on this line.
+  if (idleImage.isEmpty() || activeImage.isEmpty()) {
+    console.error(`[aico] tray icon failed to load from ${iconsDir}`)
+  }
   tray = new Tray(idleImage)
   tray.setToolTip('Aico')
   tray.setContextMenu(buildMenu([]))
