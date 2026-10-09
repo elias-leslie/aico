@@ -4073,10 +4073,10 @@ const startup = app.whenReady().then(async () => {
   })
 
   // Replace the focused widget's running TUI with another (no new window).
-  ipcMain.on('widget:load-tui', (event, slug?: string) => {
+  ipcMain.on('widget:load-tui', (event, slug?: unknown) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     const id = win ? widgetOf.get(win.id) : undefined
-    if (id && slug) {
+    if (id && typeof slug === 'string' && slug) {
       loadTui(id, slug)
     }
   })
@@ -4084,10 +4084,10 @@ const startup = app.whenReady().then(async () => {
   // Move the focused widget to another workspace (lantern-menu "Open workspace ▸"
   // flyout): respawn its pane there, same tool. Resolves the widget from the
   // sender's window, exactly like widget:load-tui.
-  ipcMain.on('widget:switch-project', (event, projectId?: string) => {
+  ipcMain.on('widget:switch-project', (event, projectId?: unknown) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     const id = win ? widgetOf.get(win.id) : undefined
-    if (id && projectId) {
+    if (id && typeof projectId === 'string' && projectId) {
       switchProject(id, projectId)
     }
   })
