@@ -14,30 +14,6 @@ body {
   font-family: var(--font-ui);
   color: var(--bone);
   -webkit-font-smoothing: antialiased;
-  /* The frame glow tracks activity: green = idle/ready, yellow = busy. Set on
-     body so both the halo and the shell rim read the same status color. */
-  --status-glow: var(--glow-idle);
-}
-body.thinking {
-  --status-glow: var(--glow-busy);
-}
-
-/* Breathing status halo — a ring hugging the chrome plus a soft glow. Sits behind
-   the shell. Steady green when idle (ready for you); pulses yellow when busy. */
-.halo {
-  position: absolute;
-  inset: var(--frame-inset);
-  border-radius: 6px;
-  box-shadow:
-    0 0 0 2px var(--status-glow),
-    0 0 4px 1px var(--status-glow);
-  /* Always lit, focused or not, so the status color (green idle / amber busy) is
-     comparable across every open widget at a glance. Focus is shown by the eyes,
-     not by hiding the glow. (Busy adds the breathe pulse below.) */
-  opacity: 0.34;
-  pointer-events: none;
-  z-index: 0;
-  transition: opacity 0.4s var(--ease-arrival);
 }
 
 /* Opaque shell. Whole shell is the drag region; children opt out with no-drag. */
@@ -49,10 +25,11 @@ body.thinking {
   flex-direction: column;
   border-radius: 6px;
   background: var(--rim);
-  /* Inner rim reads the status color too, always — reinforces the edge glow. */
+  /* One steady edge. Status lives on the eyes, never the frame: a frame that
+     changed color with every burst of output read as flicker. */
   box-shadow:
     var(--shadow-soft),
-    inset 0 0 0 1px var(--status-glow);
+    inset 0 0 0 1px var(--frame-edge);
   -webkit-app-region: drag;
   transition: filter 0.24s var(--ease-arrival);
 }
@@ -67,9 +44,8 @@ body.thinking {
   background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
-/* Unfocused windows are NOT dimmed — keeping them at full brightness (and full
-   status glow) means several open widgets stay equally readable and comparable.
-   The eyes in the titlebar are what tell you which window has focus. */
+/* Unfocused windows are NOT dimmed — several open widgets stay equally
+   readable. The eyes in the titlebar tell you which window has focus. */
 
 /* The title owns the remaining lane between identity and fixed controls. */
 .titlebar {
@@ -149,53 +125,195 @@ body.thinking {
   padding: 0 2px;
   border: none;
   border-radius: 3px;
-  outline: 1px solid var(--status-glow, rgba(229, 166, 71, 0.6));
+  outline: 1px solid rgba(229, 166, 71, 0.6);
   background: rgba(255, 255, 255, 0.06);
   font: inherit;
   letter-spacing: inherit;
   color: var(--bone);
 }
-/* Aico's eyes — the focus cue (and a bit of personality). Focused: they look
-   forward and blink at you. Unfocused: the pupils follow the mouse cursor (driven
-   from the main process; see wireEyes in renderer.ts). Status lives on the frame
-   glow, so the eyes stay neutral and are purely about *focus*. */
+/* Aico's eyes — the widget's face (driven by eyes.ts). Oval sclera with an
+   iris in the TUI's accent and a catchlight; real upper and lower lids in the
+   chrome color slide over them, so every expression is lid position + gaze:
+     idle      relaxed lids, the odd glance and blink
+     busy      lids lowered in concentration, pupils reading output line by line
+     happy     lower lids rise into ^‿^ smile-eyes (a burst of work just finished)
+     surprised wide open, pupils tight (focus gained, woken up)
+     sleepy    heavy lids after a quiet while; asleep: closed, a "z" drifts up
+   All motion is short transitions fired by timers; nothing animates at rest. */
 .eyes {
+  --lid-top: 0.08;
+  --lid-bot: 0;
+  --pupil-scale: 1;
+  --eye-scale: 1;
+  --iris: var(--mist);
+  position: relative;
   flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 4px;
   margin-left: 2px;
   -webkit-app-region: no-drag;
+  cursor: default;
+}
+.eyes[data-mood="busy"] {
+  --lid-top: 0.34;
+  --lid-bot: 0.1;
+  --pupil-scale: 0.88;
+}
+.eyes[data-mood="happy"] {
+  --lid-top: 0;
+  --lid-bot: 0.58;
+  --eye-scale: 1.05;
+}
+.eyes[data-mood="surprised"] {
+  --lid-top: 0;
+  --lid-bot: 0;
+  --pupil-scale: 0.72;
+  --eye-scale: 1.14;
+}
+.eyes[data-mood="sleepy"] {
+  --lid-top: 0.6;
+  --lid-bot: 0.06;
+}
+.eyes[data-mood="asleep"] {
+  --lid-top: 0.56;
+  --lid-bot: 0.5;
+}
+.eyes[data-mood="asleep"],
+.eyes.blink,
+.eye.wink {
+  --lid-top: 1.3; /* past 1 so the curved lid edge clears the eye's corners */
+  --lid-bot: 0;
+  --lash: rgba(231, 226, 214, 0.6);
 }
 .eye {
   position: relative;
-  width: 13px;
-  height: 13px;
+  box-sizing: border-box;
+  width: 12px;
+  height: 14px;
+  border: 1.5px solid transparent;
+  /* A closed eye keeps only this bottom arc, the curved lash line. */
+  border-bottom-color: var(--lash, transparent);
   border-radius: 50%;
-  background: var(--bone);
-  box-shadow: inset 0 -1px 2px rgba(0, 0, 0, 0.22);
+  background: radial-gradient(ellipse at 50% 35%, #f4f0e6 0 55%, #d4cdbd 100%) padding-box;
   overflow: hidden;
-  transition: transform 90ms var(--ease-arrival); /* eyelid for the blink */
+  transform: scale(var(--eye-scale));
+  transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1); /* a little overshoot */
 }
-.eye.blink {
-  transform: scaleY(0.12);
+/* Lids: chrome-colored, curved where they meet the eye, twice its height so a
+   lid never runs out while it slides. --lid-top / --lid-bot are the fraction
+   of the eye each one covers. */
+.eye::before,
+.eye::after {
+  content: "";
+  position: absolute;
+  left: -3px;
+  right: -3px;
+  height: 200%;
+  z-index: 2;
+  background: var(--rim);
+  transition: transform 0.2s var(--ease-arrival);
+}
+.eye::before {
+  bottom: 100%;
+  border-radius: 0 0 50% 50% / 0 0 5px 5px;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.45);
+  transform: translateY(calc(var(--lid-top) * 50%));
+}
+.eye::after {
+  top: 100%;
+  border-radius: 50% 50% 0 0 / 8px 8px 0 0;
+  transform: translateY(calc(var(--lid-bot) * -50%));
+}
+.eyes.blink .eye::before,
+.eye.wink::before {
+  transition-duration: 70ms;
+}
+/* Closed: drop the sclera too, so no antialiased rim survives under the lid. */
+.eyes[data-mood="asleep"] .eye,
+.eyes.blink .eye,
+.eye.wink {
+  background: transparent;
 }
 .pupil {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 6px;
-  height: 6px;
-  margin: -3px 0 0 -3px;
+  width: 7px;
+  height: 7px;
+  margin: -3.5px 0 0 -3.5px;
   border-radius: 50%;
-  background: var(--ink);
-  /* --px/--py (px) are set by wireEyes to aim the gaze. */
-  transform: translate(var(--px, 0px), var(--py, 0px));
-  transition: transform 0.14s var(--ease-arrival);
+  background: radial-gradient(
+    circle,
+    var(--ink) 0 40%,
+    var(--iris) 46% 88%,
+    rgba(0, 0, 0, 0.5) 100%
+  );
+  /* --px/--py are set by eyes.ts to aim the gaze. */
+  transform: translate(var(--px, 0px), var(--py, 0px)) scale(var(--pupil-scale));
+  transition: transform 0.16s var(--ease-arrival);
+}
+/* Catchlight: a fixed glint that makes them read as alive. */
+.pupil::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 1.5px;
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+}
+/* The TUI mark sits between the eyes like a nose: it tilts with the gaze,
+   hops when they smile and droops when they sleep. */
+.eyes .tui-icon {
+  transform: rotate(var(--tilt, 0deg));
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.eyes[data-mood="happy"] .tui-icon {
+  transform: translateY(-2px) rotate(calc(var(--tilt, 0deg) - 10deg)) scale(1.12);
+}
+.eyes[data-mood="surprised"] .tui-icon {
+  transform: translateY(-1px) scale(1.1);
+}
+.eyes[data-mood="asleep"] .tui-icon {
+  transform: translateY(1px) rotate(8deg);
+  opacity: 0.7;
+}
+.zz {
+  position: absolute;
+  right: -7px;
+  top: -2px;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 9px;
+  line-height: 1;
+  color: var(--mist);
+  opacity: 0;
+  pointer-events: none;
+}
+.eyes.snore .zz {
+  animation: aico-snore 2.6s var(--ease-arrival) 1 both;
+}
+@keyframes aico-snore {
+  0% {
+    opacity: 0;
+    transform: translate(0, 3px) scale(0.6);
+  }
+  30% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(5px, -7px) scale(1.15);
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .eye,
-  .pupil {
+  .eye::before,
+  .eye::after,
+  .pupil,
+  .eyes .tui-icon {
     transition: none;
   }
 }
@@ -452,14 +570,6 @@ body.thinking {
 }
 .rz.se:hover::after {
   opacity: 0.8;
-}
-
-/* Keep active status static. Animating opacity on this full-window transparent
-   surface forced Chromium to composite every large widget continuously; three
-   visible 4K-scale widgets held the shared GPU process near half a core. Color
-   still distinguishes active (amber) from ready (green) without a render loop. */
-body.thinking .halo {
-  opacity: 0.42;
 }
 
 /* Click-to-context selection toast: a frosted pill docked low-center on the

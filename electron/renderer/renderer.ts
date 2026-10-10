@@ -15,6 +15,7 @@ import {
 import { AICO_TOAST_EVENT, type AicoToastDetail } from './actions'
 import { initControlSurface } from './control-surface'
 import { wireDraftInput } from './draft-input'
+import { Eyes } from './eyes'
 import { mouseReportingActive, setupMouseShim } from './mouse-shim'
 import { pointToCell, sgrWheelSequence, wheelMouseTicks } from './mouse-wheel'
 import { ScrollRail } from './scroll-rail'
@@ -150,6 +151,22 @@ function wireChrome(): void {
 
 wireChrome()
 
+// Aico's eyes — the widget's face (see eyes.ts). Unfocused or hovered, they
+// follow the cursor (fed from main over win:cursor); terminal output and typing
+// reach them below.
+function wireEyes(): Eyes | null {
+  const root = document.querySelector<HTMLElement>('#eyes')
+  if (!root) return null
+  const face = new Eyes(root, document.querySelector<HTMLElement>('#tui-icon'))
+  window.aico.win.onCursor((pt) => face.cursor(pt.x, pt.y))
+  window.aico.win.onFocusChange((focused) => face.setFocused(focused))
+  const titlebar = document.querySelector<HTMLElement>('.titlebar')
+  titlebar?.addEventListener('mousemove', (e) => face.hover(e))
+  titlebar?.addEventListener('mouseleave', () => face.hover(null))
+  return face
+}
+const eyes = wireEyes()
+
 // Titlebar identity (so several open widgets are distinguishable at a glance):
 // the TUI's SVG mark (in its accent) set between the eyes, and a click-to-rename
 // widget name in the available title lane. Fed by main over win:title; the OS window
@@ -172,6 +189,7 @@ function wireTitle(): void {
     // innerHTML is safe here — unlike the selection toast, which is untrusted.
     iconEl.innerHTML = info.icon
     iconEl.style.color = info.accent || ''
+    eyes?.setAccent(info.accent)
     iconEl.title = info.tuiName
     tuiSlug = info.tuiSlug || 'shell'
 
@@ -208,77 +226,6 @@ function wireTitle(): void {
   nameInput.addEventListener('blur', () => endRename(true))
 }
 wireTitle()
-
-// Aico's eyes (focus cue + personality). Focused: pupils rest forward with random
-// blinks and the occasional small glance. Unfocused: pupils track the global mouse
-// cursor (fed from main over win:cursor). Purely cosmetic — status stays on the glow.
-function wireEyes(): void {
-  const eyes = [...document.querySelectorAll<HTMLElement>('.eye')]
-  const pupils = eyes.map((e) => e.querySelector<HTMLElement>('.pupil'))
-  if (!eyes.length) return
-  const MAX = 3 // px a pupil can travel from center before it would leave the socket
-  let focused = !document.body.classList.contains('unfocused')
-
-  function look(px: number, py: number): void {
-    for (const p of pupils) {
-      if (!p) continue
-      p.style.setProperty('--px', `${px.toFixed(1)}px`)
-      p.style.setProperty('--py', `${py.toFixed(1)}px`)
-    }
-  }
-  // Aim each pupil toward a screen-space point (the cursor), clamped in-socket.
-  function aimAt(screenX: number, screenY: number): void {
-    eyes.forEach((eye, i) => {
-      const p = pupils[i]
-      if (!p) return
-      const r = eye.getBoundingClientRect()
-      const dx = screenX - (window.screenX + r.left + r.width / 2)
-      const dy = screenY - (window.screenY + r.top + r.height / 2)
-      const d = Math.hypot(dx, dy) || 1
-      const k = Math.min(MAX, d) / d
-      p.style.setProperty('--px', `${(dx * k).toFixed(1)}px`)
-      p.style.setProperty('--py', `${(dy * k).toFixed(1)}px`)
-    })
-  }
-
-  window.aico.win.onCursor((pt) => {
-    if (!focused) aimAt(pt.x, pt.y)
-  })
-  window.aico.win.onFocusChange((isFocused) => {
-    focused = isFocused
-    if (focused) look(0, 0) // settle back to a forward stare
-  })
-
-  // Random blinks (both eyes together).
-  function blink(): void {
-    for (const eye of eyes) eye.classList.add('blink')
-    setTimeout(() => {
-      for (const eye of eyes) eye.classList.remove('blink')
-    }, 120)
-    setTimeout(blink, 2400 + Math.random() * 4200)
-  }
-  setTimeout(blink, 1500 + Math.random() * 2500)
-
-  // Idle saccades: while focused, occasionally glance off-center, then return.
-  function saccade(): void {
-    if (focused && Math.random() < 0.5) {
-      const a = Math.random() * Math.PI * 2
-      const r = Math.random() * (MAX - 1)
-      look(Math.cos(a) * r, Math.sin(a) * r)
-      setTimeout(
-        () => {
-          if (focused) look(0, 0)
-        },
-        550 + Math.random() * 750,
-      )
-    }
-    setTimeout(saccade, 1900 + Math.random() * 2700)
-  }
-  setTimeout(saccade, 2200)
-
-  look(0, 0)
-}
-wireEyes()
 
 // Shared text-only status toast: selection delivery and local action confirmation
 // both use this frosted pill. Content is always assigned with textContent.
@@ -433,14 +380,15 @@ const overlay = new ScrollbackOverlay(
 const rail = new ScrollRail(host, (topLine) => overlay.seek(topLine, liveTotalLines))
 
 // Renderer -> PTY keystrokes; PTY -> renderer output. PTY output also drives the
-// "thinking" halo heuristic: pulse while output flows, settle ~0.5s after it
-// stops. Phase 1's adapter detectIdle() replaces this with real agent state.
+// "thinking" heuristic: active while output flows, settled ~0.5s after it
+// stops. The eyes read along and the tray icon goes amber; the window frame
+// stays still, since a frame that changed color with every burst flickered.
 let thinking = false
 let thinkTimer: number | undefined
 function setThinking(on: boolean): void {
   if (on !== thinking) {
     thinking = on
-    document.body.classList.toggle('thinking', on) // breathing halo
+    eyes?.setBusy(on)
     window.aico.win.setThinking(on) // amber tray icon while active
   }
 }
@@ -458,7 +406,10 @@ function pokeThinking(): void {
   }, 500)
 }
 
-term.onData((data) => window.aico.pty.input(data))
+term.onData((data) => {
+  window.aico.pty.input(data)
+  eyes?.noticeInput()
+})
 window.aico.pty.onData((data) => {
   term.write(data)
   pokeThinking()
