@@ -283,7 +283,6 @@ function GenericAgentIcon({ size, color }: { size: number; color: string }) {
 
 const ICON_MAP: Record<string, (props: MarkProps) => JSX.Element> = {
   agy: AntigravityIcon,
-  antigravity: AntigravityIcon,
   claude: ClaudeIcon,
   codex: CodexIcon,
   gemini: GeminiIcon,
@@ -297,7 +296,6 @@ const ICON_MAP: Record<string, (props: MarkProps) => JSX.Element> = {
  *  Spectrally distinct on a dark a-term canvas. */
 export const AGENT_DEFAULT_COLORS: Record<string, string> = {
   agy: '#3186FF', // Antigravity blue
-  antigravity: '#3186FF',
   claude: '#D97757', // Claude terracotta
   codex: '#9B8CFF', // Codex lavender
   gemini: '#A78BFA', // Soft violet — dual/twin energy
@@ -307,11 +305,24 @@ export const AGENT_DEFAULT_COLORS: Record<string, string> = {
   shell: '#8A8F98', // Neutral gray — plain terminal
 }
 
+/** Other spellings of a tool id (e.g. Aico widget tool ids) → A-Term slug. */
+const SLUG_ALIASES: Record<string, string> = {
+  antigravity: 'agy',
+  'claude-code': 'claude',
+}
+
+/** Map a mode or tool id onto the A-Term agent tool slug it refers to. */
+export function canonicalAgentSlug(slug: string): string {
+  return SLUG_ALIASES[slug] ?? slug
+}
+
 /** Resolve display color for an agent tool.
  *  Treats the generic phosphor green (#00FF9F) as "no custom color set". */
 export function getAgentColor(slug: string, toolColor?: string | null): string {
   if (!toolColor || toolColor.toUpperCase() === '#00FF9F') {
-    return AGENT_DEFAULT_COLORS[slug] || 'var(--term-accent)'
+    return (
+      AGENT_DEFAULT_COLORS[canonicalAgentSlug(slug)] || 'var(--term-accent)'
+    )
   }
   return toolColor
 }
@@ -322,7 +333,7 @@ export const AgentIcon = memo(function AgentIcon({
   color = 'currentColor',
   className,
 }: AgentIconProps) {
-  const IconComponent = ICON_MAP[slug] ?? GenericAgentIcon
+  const IconComponent = ICON_MAP[canonicalAgentSlug(slug)] ?? GenericAgentIcon
   return (
     <span
       aria-hidden="true"

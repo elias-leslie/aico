@@ -453,4 +453,29 @@ describe('ATermManagerModal', () => {
 
     expect(refetch).toHaveBeenCalledTimes(1)
   })
+
+  it('shows the Claude mark for Aico sessions reported as claude-code', () => {
+    renderModal({
+      externalSessions: [
+        {
+          id: 'aico-claude',
+          name: 'aico-claude',
+          user_id: null,
+          project_id: 'proj-missing',
+          working_dir: '/workspace/missing',
+          mode: 'claude-code',
+          display_order: 0,
+          is_alive: true,
+          created_at: null,
+          last_accessed_at: null,
+          is_external: true,
+          source: 'tmux_external',
+        },
+      ],
+    })
+
+    const row = screen.getByRole('button', { name: /aico-claude/i })
+    const svg = row.querySelector('[data-agent-icon="claude-code"] svg')
+    expect(svg).toHaveAttribute('fill', '#D97757')
+  })
 })

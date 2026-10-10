@@ -6,7 +6,7 @@ import type { ATermPane } from '@/lib/hooks/use-a-term-panes'
 import type { ATermSession } from '@/lib/hooks/use-a-term-sessions'
 import { useAgentTools } from '@/lib/hooks/use-agent-tools'
 import { useProjectSettings } from '@/lib/hooks/use-project-settings'
-import { getAgentColor } from './AgentIcon'
+import { canonicalAgentSlug, getAgentColor } from './AgentIcon'
 import {
   type AttachableATermOption,
   buildProjectRows,
@@ -62,7 +62,10 @@ export function ATermManagerModal({
     const toolColors = new Map(
       agentTools.map((tool) => [tool.slug, tool.color] as const),
     )
-    return (mode) => getAgentColor(mode, toolColors.get(mode))
+    return (mode) => {
+      const slug = canonicalAgentSlug(mode)
+      return getAgentColor(slug, toolColors.get(slug))
+    }
   }, [agentTools])
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedSessionsByProject, setSelectedSessionsByProject] = useState<
