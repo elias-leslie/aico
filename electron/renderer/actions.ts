@@ -242,6 +242,15 @@ export const ACTIONS: Action[] = [
     shortcut: 'Ctrl+Shift+V',
     icon: '⎘',
   },
+  {
+    id: 'arcade-next',
+    section: 'Titlebar',
+    label: 'Next game',
+    shortcut: '',
+    icon: '🕹',
+    note: 'Swap the titlebar game for one this window hasn’t shown yet.',
+    run: () => window.dispatchEvent(new CustomEvent('aico:arcade-next')),
+  },
 ]
 
 // Per-TUI launch actions, built from the registry at init (the TUI list lives in

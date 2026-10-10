@@ -54,7 +54,8 @@
             "noUnusedFunctionParameters": "off"
           },
           "complexity": {
-            "useOptionalChain": "off"
+            "useOptionalChain": "off",
+            "noUselessLoneBlockStatements": "off"
           },
           "style": {
             "useConst": "off",

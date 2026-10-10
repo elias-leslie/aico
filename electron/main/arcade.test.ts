@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cursorNearTitlebar, parseArcadeKeys, pickArcade } from './arcade'
+import { cursorNearTitlebar, nextArcade, parseArcadeKeys, pickArcade } from './arcade'
 
 describe('parseArcadeKeys', () => {
   it('accepts short lowercase ids and drops repeats', () => {
@@ -33,6 +33,35 @@ describe('pickArcade', () => {
   })
   it('returns null with nothing to pick', () => {
     expect(pickArcade([], [])).toBeNull()
+  })
+})
+
+describe('nextArcade', () => {
+  const keys = ['a', 'b', 'c', 'd']
+  it('shows every game once before repeating one', () => {
+    let current = 'a'
+    let shown = new Set(['a'])
+    const seen = [current]
+    for (let i = 0; i < 3; i++) {
+      const r = nextArcade(keys, current, [], shown, () => 0.5)
+      current = r.key as string
+      shown = r.shown
+      seen.push(current)
+    }
+    expect(new Set(seen).size).toBe(4)
+    // all shown: the history starts over, never staying on the current game
+    const r = nextArcade(keys, current, [], shown, () => 0)
+    expect(r.key).not.toBe(current)
+    expect([...r.shown].sort()).toEqual([current, r.key].sort())
+  })
+  it('skips games other windows are showing while a free one exists', () => {
+    const r = nextArcade(keys, 'a', ['b', 'c'], new Set(['a']), () => 0)
+    expect(r.key).toBe('d')
+    // d already shown here, but b and c are taken: d again rather than a duplicate
+    expect(nextArcade(keys, 'a', ['b', 'c'], new Set(['a', 'd']), () => 0).key).toBe('d')
+  })
+  it('stays put with a single game', () => {
+    expect(nextArcade(['a'], 'a', [], new Set(['a'])).key).toBe('a')
   })
 })
 

@@ -26,6 +26,29 @@ export function pickArcade(
   return pool[Math.min(pool.length - 1, Math.floor(rand() * pool.length))] ?? null
 }
 
+/** Cycle a window to another game. Games open in other windows stay off
+ * limits while a free one exists; among those, the window gets one it hasn't
+ * shown yet, and once it has shown them all its history starts over. Returns
+ * the new game and the window's updated history. */
+export function nextArcade(
+  keys: readonly string[],
+  current: string | undefined,
+  others: Iterable<string>,
+  shown: ReadonlySet<string>,
+  rand: () => number = Math.random,
+): { key: string | null; shown: Set<string> } {
+  const choices = keys.length > 1 ? keys.filter((k) => k !== current) : [...keys]
+  const count = new Map(choices.map((k) => [k, 0]))
+  for (const k of others) if (count.has(k)) count.set(k, (count.get(k) ?? 0) + 1)
+  const least = Math.min(...count.values())
+  const free = choices.filter((k) => count.get(k) === least)
+  const fresh = free.filter((k) => !shown.has(k))
+  const history = fresh.length ? new Set(shown) : new Set(current ? [current] : [])
+  const key = pickArcade(fresh.length ? fresh : free, [], rand)
+  if (key) history.add(key)
+  return { key, shown: history }
+}
+
 /** How far around a window the cursor still counts as "near the titlebar". */
 export const ARCADE_BAND = { side: 16, above: 40, below: 120 }
 

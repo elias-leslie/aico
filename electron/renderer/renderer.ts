@@ -169,7 +169,7 @@ function wireEyes(): Eyes | null {
 const eyes = wireEyes()
 
 // The titlebar arcade: a game vignette main assigns this window for its
-// lifetime (see arcade/). Loads after first paint; never blocks the terminal.
+// lifetime, until "Next game" swaps it (see arcade/). Loads after first paint; never blocks the terminal.
 let arcade: Arcade | null = null
 {
   const bar = document.querySelector<HTMLElement>('.titlebar')
@@ -179,6 +179,9 @@ let arcade: Arcade | null = null
         arcade = a
       })
       .catch((err: unknown) => console.error('[arcade]', err))
+    window.addEventListener('aico:arcade-next', () => {
+      arcade?.next().catch((err: unknown) => console.error('[arcade]', err))
+    })
   }
 }
 

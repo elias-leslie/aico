@@ -36,7 +36,7 @@ import {
   AgentAdmissionDenied,
   observeAgentScopes,
 } from './agent-admission'
-import { cursorNearTitlebar, parseArcadeKeys, pickArcade } from './arcade'
+import { cursorNearTitlebar, nextArcade, parseArcadeKeys, pickArcade } from './arcade'
 import { contentSecurityPolicy, voiceConnectSource } from './csp'
 import {
   confirmATermSessionAbsence,
@@ -306,8 +306,10 @@ let quitting = false
 // it is near their titlebar: the titlebar is the OS drag region, so the page
 // itself never sees the pointer there. Runs only while someone needs it.
 const blurredWins = new Set<number>()
-// Window id -> titlebar arcade game, kept for the window's lifetime.
+// Window id -> titlebar arcade game, kept for the window's lifetime (or until
+// the user cycles it), and the games that window has shown this cycle.
 const arcadeOf = new Map<number, string>()
+const arcadeShown = new Map<number, Set<string>>()
 const arcadeNear = new Set<number>()
 let cursorTimer: NodeJS.Timeout | undefined
 let cursorPeriod = 0
@@ -2810,6 +2812,7 @@ function openWidget(row: WidgetRow): void {
     ptyStartGenerations.delete(winId)
     blurredWins.delete(winId)
     arcadeOf.delete(winId)
+    arcadeShown.delete(winId)
     arcadeNear.delete(winId)
     syncCursorPump()
     // On quit, leave `open` as-is so live widgets restore next launch; on an
@@ -3985,9 +3988,28 @@ const startup = app.whenReady().then(async () => {
     if (current && known.includes(current)) return current
     arcadeOf.delete(win.id)
     const key = pickArcade(known, arcadeOf.values())
-    if (key) arcadeOf.set(win.id, key)
+    if (key) {
+      arcadeOf.set(win.id, key)
+      arcadeShown.set(win.id, new Set([key]))
+    }
     syncCursorPump()
     return key
+  })
+  // "Next game" from the lantern menu: another game this window hasn't shown
+  // yet and no other window is showing (while one is free).
+  ipcMain.handle('arcade:next', (event, keys: unknown) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const known = parseArcadeKeys(keys)
+    if (!win || !known) return null
+    const current = arcadeOf.get(win.id)
+    const others = [...arcadeOf].filter(([id]) => id !== win.id).map(([, k]) => k)
+    const shown = arcadeShown.get(win.id) ?? new Set(current ? [current] : [])
+    const next = nextArcade(known, current, others, shown)
+    if (!next.key) return null
+    arcadeOf.set(win.id, next.key)
+    arcadeShown.set(win.id, next.shown)
+    syncCursorPump()
+    return next.key
   })
   ipcMain.on('win:thinking', (event, on: boolean) => {
     const win = BrowserWindow.fromWebContents(event.sender)

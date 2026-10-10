@@ -174,6 +174,7 @@ contextBridge.exposeInMainWorld('aico', {
   },
   arcade: {
     assign: (keys: string[]) => ipcRenderer.invoke('arcade:assign', keys),
+    next: (keys: string[]) => ipcRenderer.invoke('arcade:next', keys),
     onCursor: (cb: (pt: { x: number; y: number } | null) => void) => {
       const listener = (_event: unknown, pt: { x: number; y: number } | null) => cb(pt)
       ipcRenderer.on('arcade:cursor', listener)

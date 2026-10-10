@@ -306,6 +306,9 @@ export class Strip {
   private timer: number | undefined
   private down: (Point & { actor: Actor; dragging: boolean }) | null = null
   private lastGaze: Point | null = null
+  // everything the strip hooks into, undone by destroy()
+  private readonly life = new AbortController()
+  private readonly observers: ResizeObserver[] = []
 
   constructor(
     readonly def: ConceptDef,
@@ -325,15 +328,39 @@ export class Strip {
     this.layout()
     def.setup(this)
     this.bindPointer()
-    new ResizeObserver(() => this.relayout()).observe(bar)
-    window.addEventListener('resize', () => this.relayout())
+    const signal = this.life.signal
+    const watch = (el: Element) => {
+      const ro = new ResizeObserver(() => this.relayout())
+      ro.observe(el)
+      this.observers.push(ro)
+    }
+    watch(bar)
     const title = bar.querySelector('.tag')
-    if (title) new ResizeObserver(() => this.relayout()).observe(title)
-    document.addEventListener('visibilitychange', () => {
-      this.visible = !document.hidden
-      if (this.visible) this.poke()
-    })
+    if (title) watch(title)
+    window.addEventListener('resize', () => this.relayout(), { signal })
+    document.addEventListener(
+      'visibilitychange',
+      () => {
+        this.visible = !document.hidden
+        if (this.visible) this.poke()
+      },
+      { signal },
+    )
     this.poke()
+  }
+
+  /** Stop for good: the loop, every listener, and the canvas and pad. */
+  destroy(): void {
+    if (this.timer !== undefined) window.clearTimeout(this.timer)
+    this.timer = undefined
+    this.visible = false
+    this.life.abort()
+    for (const ro of this.observers) ro.disconnect()
+    this.canvas.remove()
+    this.pad.remove()
+    this.hooks.gaze?.(null)
+    if (current === this) current = null
+    this.mode = 'destroyed'
   }
 
   private rel(el: Element): Rect {
@@ -536,9 +563,14 @@ export class Strip {
       const r = this.bar.getBoundingClientRect()
       return { x: e.clientX - r.left, y: e.clientY - r.top }
     }
-    this.bar.addEventListener('mousemove', (e) => {
-      if (!this.down) this.setCursor(local(e))
-    })
+    const signal = this.life.signal
+    this.bar.addEventListener(
+      'mousemove',
+      (e) => {
+        if (!this.down) this.setCursor(local(e))
+      },
+      { signal },
+    )
     this.pad.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return
       const p = local(e)
@@ -584,7 +616,7 @@ export class Strip {
       ['close', '.ctl.close'],
     ] as const) {
       const el = this.bar.querySelector<HTMLElement>(sel)
-      el?.addEventListener('pointerdown', () => this.bonk(el, kind))
+      el?.addEventListener('pointerdown', () => this.bonk(el, kind), { signal })
     }
   }
 
