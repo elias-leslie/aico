@@ -274,7 +274,7 @@ export function ProjectSessionRow({
           {formatProjectDescription(row.project, row.attachableOptions.length)}
         </span>
       </span>
-      <div className="ml-auto flex shrink-0 items-center gap-3">
+      <div className="ml-auto flex min-w-0 max-w-full items-center gap-3">
         {row.paneCount > 0 && (
           <span
             className="text-[10px] font-medium px-2 py-0.5 rounded-full"
@@ -303,7 +303,7 @@ export function ProjectSessionRow({
             onChange={(event) =>
               onSelectSession(row.project.id, event.target.value)
             }
-            className="max-w-[220px] rounded-md px-2.5 py-1.5 text-xs outline-none"
+            className="min-w-0 max-w-[220px] rounded-md px-2.5 py-1.5 text-xs outline-none"
             style={{
               backgroundColor: 'var(--term-bg-deep)',
               border: '1px solid var(--term-border)',
