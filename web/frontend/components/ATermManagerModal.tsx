@@ -4,12 +4,15 @@ import * as Dialog from '@radix-ui/react-dialog'
 import { useDeferredValue, useMemo, useRef, useState } from 'react'
 import type { ATermPane } from '@/lib/hooks/use-a-term-panes'
 import type { ATermSession } from '@/lib/hooks/use-a-term-sessions'
+import { useAgentTools } from '@/lib/hooks/use-agent-tools'
 import { useProjectSettings } from '@/lib/hooks/use-project-settings'
+import { getAgentColor } from './AgentIcon'
 import {
   type AttachableATermOption,
   buildProjectRows,
   filterAndSortSessions,
   ModalHeader,
+  type ModeColorResolver,
   makeDetachedPaneAttachableOption,
   makeExternalAttachableOption,
   matchesProjectRow,
@@ -54,6 +57,13 @@ export function ATermManagerModal({
     registerProject,
     isUpdating,
   } = useProjectSettings()
+  const { agentTools } = useAgentTools()
+  const resolveModeColor = useMemo<ModeColorResolver>(() => {
+    const toolColors = new Map(
+      agentTools.map((tool) => [tool.slug, tool.color] as const),
+    )
+    return (mode) => getAgentColor(mode, toolColors.get(mode))
+  }, [agentTools])
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedSessionsByProject, setSelectedSessionsByProject] = useState<
     Record<string, string>
@@ -235,6 +245,7 @@ export function ATermManagerModal({
             <QuickStartSection
               paneCount={paneCounts.__adhoc || 0}
               onCreateGeneric={handleCreateGeneric}
+              resolveModeColor={resolveModeColor}
             />
             <ProjectsSection
               isLoading={isLoading}
@@ -263,6 +274,7 @@ export function ATermManagerModal({
               onSelectSession={handleProjectSessionSelect}
               onAttachSession={handleAttachOption}
               onCreateProjectATerm={handleCreateProjectATerm}
+              resolveModeColor={resolveModeColor}
             />
             <SessionSection
               title="Other sessions"
@@ -275,6 +287,7 @@ export function ATermManagerModal({
               emptyLabel="other sessions"
               actionLabel="Open"
               onAction={handleAttachOption}
+              resolveModeColor={resolveModeColor}
             />
             {noMatches && <NoMatchesBanner trimmedSearch={trimmedSearch} />}
           </div>

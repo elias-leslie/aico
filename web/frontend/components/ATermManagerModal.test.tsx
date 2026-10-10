@@ -9,6 +9,12 @@ vi.mock('@/lib/hooks/use-project-settings', () => ({
   useProjectSettings: () => mockUseProjectSettings(),
 }))
 
+vi.mock('@/lib/hooks/use-agent-tools', () => ({
+  useAgentTools: () => ({
+    agentTools: [{ slug: 'codex', name: 'Codex', color: '#123456' }],
+  }),
+}))
+
 function buildProject(id: string, name: string, rootPath: string) {
   return {
     id,
@@ -116,6 +122,12 @@ describe('ATermManagerModal', () => {
 
     renderModal({ onCreateGenericATerm })
 
+    const quickStart = screen.getByRole('button', {
+      name: /New session outside a project/,
+    })
+    const shellMark = quickStart.querySelector('[data-agent-icon="shell"]')
+    expect(shellMark).toHaveAttribute('aria-hidden', 'true')
+
     fireEvent.click(screen.getByText('New session outside a project'))
 
     expect(onCreateGenericATerm).toHaveBeenCalledTimes(1)
@@ -146,7 +158,11 @@ describe('ATermManagerModal', () => {
       ],
     })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open' }))
+    const openButton = screen.getByRole('button', { name: 'Open' })
+    expect(
+      openButton.parentElement?.querySelector('[data-agent-icon="codex"]'),
+    ).toBeInTheDocument()
+    fireEvent.click(openButton)
 
     expect(onAttachExternalSession).toHaveBeenCalledWith('codex-a-term')
     expect(onClose).not.toHaveBeenCalled()
@@ -290,9 +306,11 @@ describe('ATermManagerModal', () => {
     })
 
     expect(screen.getByText('Other sessions')).toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: /codex-unknown/i }),
-    ).toBeInTheDocument()
+    const row = screen.getByRole('button', { name: /codex-unknown/i })
+    const mark = row.querySelector('[data-agent-icon="codex"]')
+    expect(mark).toHaveAttribute('aria-hidden', 'true')
+    // The tool's configured color wins over the built-in default.
+    expect(mark?.querySelector('svg')).toHaveAttribute('fill', '#123456')
   })
 
   it('reattaches a detached managed pane from the matching project row', () => {

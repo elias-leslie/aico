@@ -1,6 +1,5 @@
 'use client'
 
-import { PanelsTopLeft } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { AgentTool } from '@/lib/hooks/use-agent-tools'
 import { AgentIcon, getAgentColor } from './AgentIcon'
@@ -63,7 +62,7 @@ export function ModeTogglePopover({
                 : 'var(--term-text-muted)',
           }}
         >
-          <PanelsTopLeft size={14} />
+          <AgentIcon slug="shell" size={14} color={getAgentColor('shell')} />
           <span style={{ fontWeight: 500 }}>Shell</span>
           {value === 'shell' && <span className="ml-auto text-[10px]">●</span>}
         </button>
@@ -83,11 +82,7 @@ export function ModeTogglePopover({
             <AgentIcon
               slug={tool.slug}
               size={14}
-              color={
-                value === tool.slug
-                  ? getAgentColor(tool.slug, tool.color)
-                  : 'var(--term-text-muted)'
-              }
+              color={getAgentColor(tool.slug, tool.color)}
             />
             <span style={{ fontWeight: 500 }}>{tool.name}</span>
             {value === tool.slug && (

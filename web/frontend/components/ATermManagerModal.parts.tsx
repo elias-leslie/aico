@@ -2,13 +2,14 @@
  * Sub-components and helpers for ATermManagerModal.
  */
 import * as Dialog from '@radix-ui/react-dialog'
-import { Folder, PanelsTopLeft, Search, X } from 'lucide-react'
+import { Folder, Search, X } from 'lucide-react'
 import type { RefObject } from 'react'
 import type { ATermPane } from '@/lib/hooks/use-a-term-panes'
 import type { ATermSession } from '@/lib/hooks/use-a-term-sessions'
 import { useHoverStyle } from '@/lib/hooks/use-hover-style'
 import type { ProjectSetting } from '@/lib/hooks/use-project-settings'
 import { getExternalSessionDisplayName } from '@/lib/utils/external-session-name'
+import { AgentIcon } from './AgentIcon'
 
 export interface AttachableATermOption {
   id: string
@@ -17,6 +18,21 @@ export interface AttachableATermOption {
   projectId: string | null
   kind: 'external-session' | 'detached-pane'
   actionId: string
+  /** Running mode: 'shell' or an agent tool slug. */
+  mode: string
+}
+
+/** Resolves the tint for a session mode ('shell' or an agent tool slug). */
+export type ModeColorResolver = (mode: string) => string
+
+export function SessionModeIcon({
+  mode,
+  resolveModeColor,
+}: {
+  mode: string
+  resolveModeColor: ModeColorResolver
+}) {
+  return <AgentIcon slug={mode} size={16} color={resolveModeColor(mode)} />
 }
 
 export interface ProjectRowData {
@@ -71,6 +87,7 @@ export function makeExternalAttachableOption(
     projectId: session.project_id,
     kind: 'external-session',
     actionId: session.id,
+    mode: session.mode,
   }
 }
 
@@ -84,6 +101,7 @@ export function makeDetachedPaneAttachableOption(
     projectId: pane.project_id,
     kind: 'detached-pane',
     actionId: pane.id,
+    mode: pane.active_mode,
   }
 }
 
@@ -203,6 +221,7 @@ interface ProjectSessionRowProps {
   onSelectSession: (projectId: string, sessionId: string) => void
   onAttachSession: (option: AttachableATermOption) => void
   onCreateProjectATerm: (projectId: string, rootPath: string | null) => void
+  resolveModeColor: ModeColorResolver
 }
 
 export function ProjectSessionRow({
@@ -211,6 +230,7 @@ export function ProjectSessionRow({
   onSelectSession,
   onAttachSession,
   onCreateProjectATerm,
+  resolveModeColor,
 }: ProjectSessionRowProps) {
   const hoverStyle = useHoverStyle({
     hoverBg: 'var(--term-bg-elevated)',
@@ -298,6 +318,12 @@ export function ProjectSessionRow({
         </select>
       )}
       {attachTarget && (
+        <SessionModeIcon
+          mode={attachTarget.mode}
+          resolveModeColor={resolveModeColor}
+        />
+      )}
+      {attachTarget && (
         <ActionButton
           label="Open"
           onClick={() => onAttachSession(attachTarget)}
@@ -324,6 +350,7 @@ interface SessionSectionProps {
   emptyLabel: string
   actionLabel: string
   onAction: (session: AttachableATermOption) => void
+  resolveModeColor: ModeColorResolver
 }
 
 export function buildProjectRows(
@@ -446,9 +473,11 @@ export function SearchBar({
 export function QuickStartSection({
   paneCount,
   onCreateGeneric,
+  resolveModeColor,
 }: {
   paneCount: number
   onCreateGeneric: () => void
+  resolveModeColor: ModeColorResolver
 }) {
   return (
     <>
@@ -463,7 +492,7 @@ export function QuickStartSection({
           border: '1px solid var(--term-border)',
         }}
       >
-        <PanelsTopLeft size={16} style={iconStyle} />
+        <SessionModeIcon mode="shell" resolveModeColor={resolveModeColor} />
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-medium truncate">
             New session outside a project
@@ -526,6 +555,7 @@ export function SessionSection({
   emptyLabel,
   actionLabel,
   onAction,
+  resolveModeColor,
 }: SessionSectionProps) {
   if (total === 0) return null
   return (
@@ -544,7 +574,10 @@ export function SessionSection({
               border: '1px solid var(--term-border)',
             }}
           >
-            <PanelsTopLeft size={16} style={iconStyle} />
+            <SessionModeIcon
+              mode={session.mode}
+              resolveModeColor={resolveModeColor}
+            />
             <span className="min-w-0 flex-1">
               <span className="block text-sm font-medium truncate">
                 {session.label}

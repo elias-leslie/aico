@@ -38,6 +38,34 @@ describe('ModeToggle', () => {
     )
   })
 
+  it('shows each option with its tinted mark next to the label', () => {
+    render(
+      <ModeToggle
+        value="shell"
+        onChange={vi.fn()}
+        agentTools={[
+          mockTool({}),
+          mockTool({ id: 'agy', name: 'Antigravity', slug: 'agy' }),
+        ]}
+      />,
+    )
+
+    fireEvent.click(screen.getByTestId('mode-toggle'))
+
+    for (const [label, slug, fill] of [
+      ['Shell', 'shell', '#8A8F98'],
+      ['Claude', 'claude', '#D97757'],
+      ['Antigravity', 'agy', '#3186FF'],
+    ]) {
+      const item = screen.getByRole('menuitem', {
+        name: new RegExp(`^${label}`),
+      })
+      const mark = item.querySelector(`[data-agent-icon="${slug}"]`)
+      expect(mark).toHaveAttribute('aria-hidden', 'true')
+      expect(mark?.querySelector('svg')).toHaveAttribute('fill', fill)
+    }
+  })
+
   it('renders in agent mode with tool name in aria-label', () => {
     const onChange = vi.fn()
     render(

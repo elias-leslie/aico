@@ -3,6 +3,7 @@
 import type { ProjectSetting } from '@/lib/hooks/use-project-settings'
 import {
   type AttachableATermOption,
+  type ModeColorResolver,
   type ProjectRowData,
   ProjectSessionRow,
   SectionHeader,
@@ -30,6 +31,7 @@ interface ProjectsSectionProps {
   onSelectSession: (projectId: string, sessionId: string) => void
   onAttachSession: (option: AttachableATermOption) => void
   onCreateProjectATerm: (projectId: string, rootPath: string | null) => void
+  resolveModeColor: ModeColorResolver
 }
 
 export function ProjectsSection({
@@ -53,6 +55,7 @@ export function ProjectsSection({
   onSelectSession,
   onAttachSession,
   onCreateProjectATerm,
+  resolveModeColor,
 }: ProjectsSectionProps) {
   const countLabel = isLoading
     ? 'Loading'
@@ -86,6 +89,7 @@ export function ProjectsSection({
                 onSelectSession={onSelectSession}
                 onAttachSession={onAttachSession}
                 onCreateProjectATerm={onCreateProjectATerm}
+                resolveModeColor={resolveModeColor}
               />
             ))}
           </div>
