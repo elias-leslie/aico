@@ -55,11 +55,13 @@
           },
           "complexity": {
             "useOptionalChain": "off",
-            "noUselessLoneBlockStatements": "off"
+            "noUselessLoneBlockStatements": "off",
+            "noCommaOperator": "off"
           },
           "style": {
             "useConst": "off",
-            "useTemplate": "off"
+            "useTemplate": "off",
+            "useExponentiationOperator": "off"
           }
         }
       }

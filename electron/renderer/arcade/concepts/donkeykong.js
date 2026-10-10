@@ -1,352 +1,708 @@
 ;(() => {
-  // Donkey Kong: an ape by the window dots rolls barrels left along the floor,
-  // under the title (where the damsel waits) and into the oil drum by the eyes.
-  // Jumpman hops them with a fixed arc, grabs the hammer, and gets flattened now and then.
+  // Donkey Kong (Nintendo, 1981), big version. Kong stands on a red girder stub
+  // just left of the window buttons with Pauline beside him and rolls barrels
+  // down the floor toward the oil drum by Aico's eyes. Jumpman marches up from
+  // the drum, hops barrels (100), grabs the hammer and smashes them, dodges the
+  // drum's fireballs and gets flattened now and then. When he reaches Kong the
+  // ape grabs Pauline and climbs off the top of the bar, comes back, and every
+  // third round (or when the agent finishes) the rivets pop, the girder drops
+  // and Kong lands on his head under a heart.
+
+  // ---- palette ----------------------------------------------------------------
   const P = {
     ...PAL,
-    k: '#7a3f18', K: '#d08a4a', h: '#c4462a', p: '#ff7fb0', P: '#c9467a', n: '#8a5a2a',
-    b: '#2f6fd8', D: '#1d3f86', R: '#e0322c', B: '#3a5ee8',
+    // Kong
+    F: '#5a2408', f: '#a4521c', T: '#f4b878', t: '#c8844c', E: '#141414', w: '#ffffff', r: '#c8302a',
+    // Jumpman
+    R: '#e8322a', q: '#981c16', B: '#3c5ee8', S: '#fcb890', s: '#d08860', H: '#4a2410', y: '#ffd93d', k: '#6a3410',
+    // Pauline
+    P: '#ff7fb6', p: '#c4407a', O: '#e0602a', o: '#8a3010',
+    // barrels, drum, girder, ladder, fire
+    K: '#d68a46', j: '#8a4e1c', L: '#f6cc78', C: '#4ab4f0', c: '#2462c0',
+    D: '#1a3c8c', b: '#3a6ef0', G: '#e83860', g: '#8c1838', Y: '#ffd640', l: '#58e0f0',
+    Z: '#ffe060', z: '#f08a2c', x: '#e83820', n: '#9a6a3a', N: '#e2b070', h: '#ff5a7a', '#': '#7a7a80',
   }
-  const sp = (rows) => pair(rows, P)
+  const SP = (rows) => pairOutlined(rows, P)
+  const SPR = (rows) => sprite(rows, P)
+  const OUT = (rows) => outline(sprite(rows, P))
+
+  // ---- grid helpers -----------------------------------------------------------
+  const grid = (w, h) => Array.from({ length: h }, () => Array(w).fill('.'))
+  function stamp(g, rows, x, y) {
+    rows.forEach((r, j) => {
+      const yy = y + j
+      if (yy < 0 || yy >= g.length) return
+      for (let i = 0; i < r.length; i++) {
+        const ch = r[i]
+        const xx = x + i
+        if (ch !== '.' && ch !== ' ' && xx >= 0 && xx < g[0].length) g[yy][xx] = ch
+      }
+    })
+    return g
+  }
+  const rowsOf = (g) => g.map((r) => r.join(''))
+  const pad = (rows, w = Math.max(...rows.map((r) => r.length))) => rows.map((r) => r.padEnd(w, '.'))
+  const flipH = (rows) => pad(rows).map((r) => [...r].reverse().join(''))
   const flipV = (rows) => rows.slice().reverse()
-  const rot = (rows) => {
-    // 90° clockwise
-    const h = rows.length
-    const w = Math.max(...rows.map((r) => r.length))
+  const rot90 = (rows) => {
+    const pr = pad(rows)
     const out = []
-    for (let c = 0; c < w; c++) {
+    for (let c = 0; c < pr[0].length; c++) {
       let line = ''
-      for (let r = h - 1; r >= 0; r--) line += rows[r][c] || '.'
+      for (let r = pr.length - 1; r >= 0; r--) line += pr[r][c]
       out.push(line)
     }
     return out
   }
+  const blit = (c, sp, dir, x, y) => c.drawImage(sp[dir], Math.round(x) - 1, Math.round(y) - 1)
 
-  // ---- art -----------------------------------------------------------------
-  // Kong, 14×13: big shoulders, light chest and face, knuckles down
-  const DK_LEGS = ['....kkkkkk....', '...kkk..kkk...', '..KKKK..KKKK..']
-  const DK_IDLE = ['....kkkkkk....', '...kkkkkkkk...', '...kKEKKEKk...', '..kkKKKKKKkk..', '..kKKKkkKKKk..', '.kkkKKKKKKkkk.', 'kkkkkkKKkkkkkk', 'kkk.kKKKKk.kkk', 'kK..kKKKKk..Kk', 'KK..kKKKKk..KK', ...DK_LEGS]
-  const DK_GRIN = DK_IDLE.map((r, i) => (i === 5 ? '.kkkwwwwwwkkk.' : r))
-  // upside down, head on the floor, legs kicking the air
-  const KICK = ['.KK........KK.', '..kk......kk..', '...kkk..kkk...']
-  const DK = {
-    idle: sp(DK_IDLE),
-    grin: sp(DK_GRIN),
-    up: sp(['kk..kkkkkk..kk', 'kk.kkkkkkkk.kk', '.kkkKEKKEKkkk.', '..kkKKKKKKkk..', '..kKKKkkKKKk..', '..kkKKKKKKkk..', '...kkkKKkkk...', '...kKKKKKKk...', '...kKKKKKKk...', '....kKKKKk....', ...DK_LEGS]),
-    beat: sp(['....kkkkkk....', '...kkkkkkkk...', '...kKEKKEKk...', '..kkKKKKKKkk..', '..kKKwwwwKKk..', '.kkkKwEEwKkkk.', 'kkkkkkkkKkkkkk', 'kK.kkkkKKk.kkk', 'KK..kKKKKk..Kk', '....kKKKKk..KK', ...DK_LEGS]),
-    // faces left: shoving a barrel along the floor
-    roll: sp(['...kkkkkk.....', '..kkkkkkkk....', '..kEKKEKKk....', '.kkKKKKKKkk...', '.kKKkkKKKKk...', 'kkkKKKKKKkkk..', 'kkkkkKKkkkkkk.', 'KKk.kKKKKk.kkk', 'KK..kKKKKk..Kk', '....kKKKKk..KK', ...DK_LEGS]),
-    sit: sp(['..............', '..............', '..............', '....kkkkkk....', '...kkkkkkkk...', '...kKkKKkKk...', '..kkKKKKKKkk..', '.kkkKKkkKKkkk.', 'kkkkkKKKKkkkkk', 'kK.kKKKKKKk.Kk', 'KK.kKKKKKKk.KK', '.kkkkkkkkkkkk.', 'KKKK......KKKK']),
-    tumble: sp(flipV(['....kkkkkk....', '...kkkkkkkk...', '...kKEKKEKk...', '..kkKKKKKKkk..', '..kKKwwwwKKk..', '.kkkKwwwwKkkk.', 'kkkkkkKKkkkkkk', 'kkk.kKKKKk.kkk', 'kK..kKKKKk..Kk', 'KK..kKKKKk..KK', ...DK_LEGS])),
-    head: [sp(flipV(DK_IDLE)), sp([...KICK, ...flipV(DK_IDLE).slice(3)])],
-  }
-  const BARREL = [
-    sprite(['.KKK.', 'KKKKK', 'kkkkk', 'KKKKK', '.KKK.'], P),
-    sprite(['.KkK.', 'KKkKK', 'KKkKK', 'KKkKK', '.KkK.'], P),
-    sprite(['.KKK.', 'KLKKK', 'kkkkk', 'KKKLK', '.KKK.'], P),
-    sprite(['.KkK.', 'KKkLK', 'KKkKK', 'KLkKK', '.KkK.'], P),
+  // ---- Donkey Kong: 44 × 30, body on a 36 grid offset by 4 -------------------
+  const HEAD = [
+    '....FFFFFFFF....',
+    '..FFffffffffFF..',
+    '.FffffffffffffF.',
+    'FfffFFFffFFFfffF',
+    'FffTwETffTwETffF',
+    'FfTTTTTTTTTTTTfF',
+    'FfTTTTtTTtTTTTfF',
+    '.FTTTTTTTTTTTTF.',
+    '.FTTEEEEEEEETTF.',
+    '.FfTTTTTTTTTTfF.',
+    '..FFTTTTTTTTFF..',
+    '....FFFFFFFF....',
   ]
-  const UPRIGHT = sprite(['kKKk', 'KKKK', 'kkkk', 'KKKK', 'kKKk'], P)
-  const DRUM = sprite(['DbbbbbD', 'DbbbbbD', 'wwwwwww', 'DbwbwbD', 'DbbbbbD', 'wwwwwww', 'DbbbbbD', 'DbbbbbD'], P)
-  const FLAME = [sprite(['..y..', '.yOy.', 'yOrOy', '.OrO.'], P), sprite(['.y...', '..Oy.', '.yrOy', 'yOrO.'], P)]
-  const FIRE = [sprite(['..y..', '.yOy.', 'yOrOy', 'rEOEr', '.rrr.'], P), sprite(['.y...', '..Oy.', '.yrOy', 'rEOEr', '.rrr.'], P)]
-  const PAUL = {
-    idle: sp(['.hhh..', 'hhSS..', 'hhSE..', '.pSp..', '.ppp..', 'ppppp.', 'pPpPp.', '.S.S..']),
-    wave: sp(['.hhh.S', 'hhSSS.', 'hhSE..', '.pSp..', '.ppp..', 'ppppp.', 'pPpPp.', '.S.S..']),
+  const headVar = (rep) => HEAD.map((r, i) => rep[i] ?? r)
+  const HEADS = {
+    n: HEAD,
+    blink: headVar({ 4: 'FffTEETffTEETffF' }),
+    grin: headVar({ 7: '.FTEwwwwwwwwETF.', 8: '.FTEwEwEwEwEETF.', 9: '.FfTEwwwwwwETfF.', 10: '..FFTTEEEETTFF..' }),
+    roar: headVar({ 3: 'FffFFFFffFFFFffF', 7: '.FTTTEEEEEETTTF.', 8: '.FTTEwrrrrwETTF.', 9: '.FfTErrrrrrETfF.', 10: '..FFTEwwwwETFF..' }),
+    sleep: headVar({ 4: 'FffTTTTffTTTTffF', 5: 'FfTEEETTTTEEETfF', 8: '.FTTTTEEEETTTTF.' }),
+    daze: headVar({ 4: 'FffTEwTffTwETffF', 8: '.FTTTTEEEETTTTF.', 9: '.FfTTTEwwETTTfF.' }),
+    back: HEAD.map((r) => r.replace(/[TtwEr]/g, 'f')),
   }
-  const JM_TOP = ['..RRR..', '.RRRRRR', '.kSSkS.', '..SSkkk']
+  const TORSO = [
+    '......FFFFF..............FFFFF......',
+    '....FFfffffFF..........FFfffffFF....',
+    '...FffffffffFFF......FFFffffffffF...',
+    '...FffffffffffFFFFFFFFffffffffffF...',
+    '....FffffffffTTTTTTTTTTfffffffF.....',
+    '......FffffTTTTTTTTTTTTTTffffF......',
+    '........FfTTTTTtTTTTtTTTTTfF........',
+    '........FfTTTTTTTTTTTTTTTTfF........',
+    '........FfTTTTTtTTTTtTTTTTfF........',
+    '........FffTTTTTTTTTTTTTTffF........',
+    '.........FfffTTTTTTTTTTfffF.........',
+    '.........FffffffffffffffffF.........',
+    '..........FffffffffffffffF..........',
+    '..........FfffFFFFFFFFfffF..........',
+    '.........FffffF......FffffF.........',
+    '........FfffffF......FfffffF........',
+    '........FffffF........FffffF........',
+    '.......FfffffF........FfffffF.......',
+    '......FTTTTTF..........FTTTTTF......',
+    '......FFFFFFF..........FFFFFFF......',
+  ]
+  const ARM_DOWN = ['..Fffff', '.Ffffff', '.Fffff.', 'Ffffff.', 'FffffF.', 'FffffF.', 'FffffF.', 'FffffF.', 'FffffF.', 'FfffF..', 'FTTTTF.', 'FTTTTTF', '.FFFFF.']
+  const ARM_CHEST = ['...Ffff.........', '..Ffffff........', '.Ffffffff.......', '.FffffffFF......', 'FfffF.FffFFF....', 'FfffF..FfffTTF..', 'FfffF...FfTTTTF.', '.FfffF..FTTTTTF.', '..FfffFFfFTTTF..', '...FffffffFFF...', '....FFFFFF......']
+  const ARM_PUSH = ['.......Fffff', '......Ffffff', '.....Fffff..', '....Fffff...', '...Fffff....', '..Fffff.....', '.Fffff......', 'FTTTF.......', 'FTTTTF......', '.FFFF.......']
+  const ARM_UP = ['...FTTF', '..FTTTF', '..FfffF', '..FfffF', '..FfffF', '.FffffF', '.FffffF', '.FfffF.', 'FffffF.', 'FffffF.', 'FfffffF', 'FffffffF', '.Fffffff', '..Ffffff']
+  const ROLL_ROWS = (a) => {
+    // an end-on barrel, 10 × 10, with its staves turned to angle a
+    const out = []
+    for (let y = 0; y < 10; y++) {
+      let r = ''
+      for (let x = 0; x < 10; x++) {
+        const dx = x - 4.5
+        const dy = y - 4.5
+        const d = Math.hypot(dx, dy)
+        if (d > 5.1) r += '.'
+        else if (d > 4.1) r += 'j'
+        else {
+          const along = Math.abs(dx * Math.sin(a) - dy * Math.cos(a))
+          const across = Math.abs(dx * Math.cos(a) + dy * Math.sin(a))
+          r += along < 0.8 ? 'L' : across < 0.6 ? 'j' : 'K'
+        }
+      }
+      out.push(r)
+    }
+    return out
+  }
+  const ROLL = [0, 1, 2, 3].map((i) => ROLL_ROWS((i * Math.PI) / 4))
+  const blueRows = (rows) => recolor(rows, { K: 'C', j: 'c', L: 'w' })
+  function kong(o) {
+    const g = grid(44, 30)
+    stamp(g, o.back ? TORSO.map((r) => r.replace(/[Tt]/g, 'f')) : TORSO, 4, 10)
+    if (o.barrel) stamp(g, o.barrel, 17, 15)
+    const arm = (k, side) => {
+      if (k === 'down') side < 0 ? stamp(g, ARM_DOWN, 4, 13) : stamp(g, flipH(ARM_DOWN), 33, 13)
+      if (k === 'chest') side < 0 ? stamp(g, ARM_CHEST, 4, 12) : stamp(g, flipH(ARM_CHEST), 24, 12)
+      if (k === 'push') side < 0 ? stamp(g, ARM_PUSH, 0, 13) : stamp(g, flipH(ARM_PUSH), 32, 13)
+      if (k === 'up') side < 0 ? stamp(g, ARM_UP, 8, 0) : stamp(g, flipH(ARM_UP), 29, 0)
+    }
+    arm(o.l, -1)
+    arm(o.r, 1)
+    stamp(g, HEADS[o.head || 'n'], 14, o.headY ?? 0)
+    return rowsOf(g)
+  }
+  const sitRows = (() => {
+    const r = kong({ l: 'chest', r: 'chest', head: 'sleep' }).slice(0, 24)
+    return [...r, '....FTTTTTTFfffffffffffffffFTTTTTTF....', '....FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF....']
+  })()
+  const KR = {
+    stand: kong({ l: 'down', r: 'down' }),
+    blink: kong({ l: 'down', r: 'down', head: 'blink' }),
+    beatA: kong({ l: 'chest', r: 'down', head: 'roar' }),
+    beatB: kong({ l: 'down', r: 'chest', head: 'roar' }),
+    grin: kong({ l: 'down', r: 'down', head: 'grin' }),
+    reach: kong({ l: 'down', r: 'push' }),
+    hold: kong({ l: 'chest', r: 'chest', barrel: ROLL[0] }),
+    holdBlue: kong({ l: 'chest', r: 'chest', barrel: blueRows(ROLL[0]) }),
+    push: kong({ l: 'push', r: 'down', head: 'roar' }),
+    climbA: kong({ l: 'up', r: 'down', head: 'back', back: true }),
+    climbB: kong({ l: 'down', r: 'up', head: 'back', back: true }),
+    daze: kong({ l: 'down', r: 'down', head: 'daze' }),
+  }
+  const KONG = {}
+  for (const [k, rows] of Object.entries(KR)) KONG[k] = OUT(rows)
+  KONG.roar = KONG.beatA
+  KONG.sit = OUT(sitRows)
+  KONG.fall = OUT(flipV(kong({ l: 'up', r: 'up', head: 'roar' })))
+  KONG.head = [OUT(flipV(kong({ l: 'push', r: 'push', head: 'daze' }))), OUT(flipV(kong({ l: 'up', r: 'up', head: 'daze' })))]
+  const KW = 44
+  const KH = 30
+
+  // ---- Jumpman, 16 × 21, faces right ------------------------------------------
+  const JHEAD = [
+    '....RRRRRR......',
+    '...RRRRRRRRRR...',
+    '..qRRRRRRRRRRRR.',
+    '..HHHHSSSESS....',
+    '.HSSHSSSSESSSS..',
+    '.HSSHHSSSSSSSSS.',
+    '.HHSSSSSSHHHHHH.',
+    '..HHSSSSHHHHHH..',
+    '...SSSSSSSSSs...',
+  ]
+  const JB = {
+    stand: ['...BBRBBBRB.....', '..BBBRBBBBRBB...', '.BBBBRRRRRRBBB..', 'SSBBRyRRRRyRBBSS', 'SSSRRRRRRRRRRSSS', 'SSRRRRRRRRRRRRSS', '..RRRRRRRRRRRR..'],
+    runA: ['...BBRBBBRB.....', '..BBBRBBBBRBSS..', '.SBBBRRRRRRBSS..', 'SSBBRyRRRRyR....', 'SSRRRRRRRRRRR...', '..RRRRRRRRRRRR..', '.RRRRRRRRRRRRR..'],
+    runB: ['...BBRBBBRB.....', '..BBBRBBBBRB....', '..BBBRRRRRRB....', '..BBRyRRRRSS....', '...RRRRRRRSS....', '...RRRRRRRRR....', '...RRRRRRRRR....'],
+    jump: ['...BBRBBBRBBSS..', '..BBBRBBBBRBSS..', '.BBBBRRRRRRBB...', 'SSBBRyRRRRyR....', 'SSRRRRRRRRRRR...', '..RRRRRRRRRRRR..', '.RRRRRRRRRRRRRR.'],
+    hamUp: ['...BBRBBBRB.....', '..BBBRBBBBRB....', '.BBBBRRRRRRB....', '..BBRyRRRRyR....', '...RRRRRRRRR....', '..RRRRRRRRRRR...', '..RRRRRRRRRRR...'],
+    hamDn: ['...BBRBBBRB.....', '..BBBRBBBBRBB...', '.BBBBRRRRRRBBBB.', '..BBRyRRRRyRBSSS', '...RRRRRRRRRRSSS', '..RRRRRRRRRRR...', '..RRRRRRRRRRR...'],
+  }
+  const JL = {
+    stand: ['..RRRRR..RRRRR..', '..RRRR....RRRR..', '..RRR......RRR..', '..kkkk.....kkkk.', '.kkkkkk...kkkkkk'],
+    runA: ['RRRRRR...RRRRR..', 'RRRR......RRRRR.', 'kkk.........RRR.', 'kkkk........kkkk', '.k.........kkkkk'],
+    runB: ['....RRRRRRR.....', '....RRRRRRR.....', '.....RRRkkk.....', '....kkkkkkk.....', '....kkkkk.......'],
+    runC: ['..RRRRR.RRRRR...', '.RRRR.....RRRR..', 'kRRR.......RRRk.', 'kkkk.......kkkk.', 'kkk.........kkk.'],
+    jump: ['RRRRR....RRRRRR.', 'RRRR.......RRRRR', 'kkk.........kkkk', 'kkkk.........kkk', '................'],
+  }
+  const jm = (b, l, head = JHEAD) => [...head, ...JB[b], ...JL[l]]
+  const JUP_HEAD = JHEAD.map((r, i) => (i === 0 ? '....RRRRRR..SS..' : i === 1 ? '...RRRRRRRRRSS..' : r))
   const JM = {
-    stand: sp([...JM_TOP, '.RRBRR.', 'SRBBBRS', '.BB.BB.', 'kk...kk']),
-    run: [sp([...JM_TOP, '.RRBRR.', '.RBBBS.', '.BB.BB.', 'kk...kk']), sp([...JM_TOP, '.RRBRR.', '.SBBBR.', '..BBB..', '..kkk..'])],
-    jump: sp(['..RRR.S', '.RRRRRR', '.kSSkS.', '..SSkkk', 'SRRBRR.', '.RBBBR.', 'BB...BB', 'k.....k']),
-    hammer: sp([...JM_TOP, '.RRBRS.', '.RBBBR.', '.BB.BB.', 'kk...kk']),
+    stand: SP(jm('stand', 'stand')),
+    run: [SP(jm('runA', 'runA')), SP(jm('runB', 'runB')), SP(jm('runA', 'runC')), SP(jm('runB', 'runB'))],
+    jump: SP(jm('jump', 'jump', JUP_HEAD)),
+    hamUp: SP(jm('hamUp', 'stand', JHEAD.map((r, i) => (i < 2 ? r.slice(0, 8) + 'SS' + r.slice(10) : r)))),
+    hamDn: SP(jm('hamDn', 'stand')),
+    sit: SP([...JHEAD, ...JB.stand.slice(0, 6), '..RRRRRRRRRRRRk.', '..RRRRRRRRRRRkkk', '...........kkkkk']),
+    dead: SP(rot90(jm('stand', 'stand')).reverse()),
+    back: SP([...JHEAD.map((r) => r.replace(/[SE]/g, 'H').replace('q', 'R')), ...JB.stand, ...JL.stand]),
   }
-  const JM_DEAD = sp(rot([...JM_TOP, '.RRBRR.', 'SRBBBRS', '.BB.BB.', 'kk...kk']).reverse())
-  const HALO = sprite(['.yyy.', 'y...y', '.yyy.'], P)
-  const HAM_UP = sp(['KKKK', 'KKKK', '.n..', '.n..'])
-  const HAM_DN = sp(['....KK', 'nnnnKK', '....KK'])
-  const HEART = sprite(['.rr.rr.', 'rrrrrrr', 'rrrrrrr', '.rrrrr.', '..rrr..', '...r...'])
+  const JW = 16
+  const JH = 21
+  const JUMP_H = 15
+  const JUMP_G = 200
+  const JUMP_V = Math.sqrt(2 * JUMP_G * JUMP_H)
 
-  const JW = 7
-  const JH = 8
-  const JUMP_V = 55
-  const JUMP_G = 180
+  // ---- Pauline, 14 × 23, faces right -------------------------------------------
+  const PAUL_ROWS = [
+    '....OOOOO.....',
+    '...OOOOOOOO...',
+    '..OOOOOOSSO...',
+    '..OOOOOSSSS...',
+    '.OOOOOSSESS...',
+    '.OOoOOSSSSSS..',
+    '.OOoOOSSSrS...',
+    '.OOoOOOSSS....',
+    '.OOOOOOwSw....',
+    '.OOOOPPPPPP...',
+    '..OoPPPPPPPS..',
+    '...PPPPPPPSS..',
+    '...PPPPPPP....',
+    '...PpPPPPP....',
+    '..PPPPpPPPP...',
+    '..PPPPPPPPP...',
+    '.PPPpPPPPpPP..',
+    '.PPPPPPPPPPP..',
+    'PPpPPPPPPPpPP.',
+    'PPPPPPPPPPPPP.',
+    '...SS...SS....',
+    '...SS...SS....',
+    '..www..www....',
+  ]
+  const PAUL_WAVE = PAUL_ROWS.map((r, i) => {
+    const arm = { 4: '..SS', 5: '.SS.', 6: 'SS..', 7: 'S...', 8: 'S...', 9: 'P...' }[i]
+    if (i === 10) return '..OoPPPPPPP...'
+    if (i === 11) return '...PPPPPPPP...'
+    return arm ? r.slice(0, 10) + arm : r
+  })
+  const PAUL = {
+    stand: SP(PAUL_ROWS),
+    wave: SP(PAUL_WAVE),
+    flutter: SP(PAUL_ROWS.map((r, i) => (i === 18 ? '.PpPPPPPPPpPPP' : i === 19 ? 'PPPPPPPPPPPPPP' : r))),
+    kick: SP([...PAUL_ROWS.slice(0, 20), '..SS....SS....', '.SS......SS...', 'ww........ww..']),
+  }
+  const PW = 14
+  const PH = 23
 
-  // ---- the stage layout (recomputed every tick: cheap, and survives zoom) ---
+  // ---- props -------------------------------------------------------------------
+  const BARREL = ROLL.map((r) => SPR(r))
+  const BLUE = ROLL.map((r) => SPR(blueRows(r)))
+  const BW = 10
+  const UPRIGHT = SPR(['.jjjjjj.', 'jKKKKKKj', 'LLLLLLLL', 'jKKjKKKj', 'jKKjKKKj', 'jKKjKKKj', 'jKKjKKKj', 'LLLLLLLL', 'jKKKKKKj', '.jjjjjj.'])
+  const DRUM = SPR([
+    'DDDDDDDDDDDDDD',
+    'DbbbbbbbbbbbbD',
+    'wwwwwwwwwwwwww',
+    'DbbbbbbbbbbbbD',
+    'DbwwwbwbwbbbbD',
+    'DbwbwbwbwbbbbD',
+    'DbwbwbwbwbbbbD',
+    'DbwbwbwbwbbbbD',
+    'DbwwwbwbwwwbbD',
+    'DbbbbbbbbbbbbD',
+    'wwwwwwwwwwwwww',
+    'DbbbbbbbbbbbbD',
+    'DbbbbbbbbbbbbD',
+    'DDDDDDDDDDDDDD',
+  ])
+  const DW = 14
+  const DH = 14
+  const FLAME = [
+    SPR(['....Z.......', '...ZZ...Z...', '..ZzZ..ZZ...', '..zxzZZzZ.Z.', '.ZzxxzzxzZZ.', 'ZzxxxxxxxzZ.']),
+    SPR(['.......Z....', '...Z...ZZ...', '..ZZ..ZzZ...', '.Z.zZZzxzZ..', '.ZZzxxzzxzZ.', 'ZzxxxxxxxxzZ']),
+  ]
+  const FIRE_ROWS = ['....Z.....', '...ZZ..Z..', '..ZzZ.ZZ..', '.ZzzzZzZ..', '.ZzxzzzzZ.', 'ZzwEzzwEzZ', 'ZzwEzzwEzZ', 'Zzzzzzzzz.', '.ZzzzzzzZ.', '..ZZZZZZ..']
+  const FIRE = [SP(FIRE_ROWS), SP(FIRE_ROWS.map((r, i) => (i < 3 ? r.split('').reverse().join('') : r)))]
+  const HAM_V = SPR(['.nnnnnn.', 'NNNNNNNN', 'NnnnnnnN', '.nnnnnn.', '...kk...', '...kk...', '...kk...', '...kk...', '...kk...'])
+  const HAM_H = { 1: SPR(['......nNn', '......NNn', 'kkkkkkNNn', 'kkkkkkNNn', '......NNn', '......nNn']), '-1': SPR(['nNn......', 'nNN......', 'nNNkkkkkk', 'nNNkkkkkk', 'nNN......', 'nNn......']) }
+  const HAM_ITEM = outline(HAM_V)
+  const HEART = OUT(['.hhh...hhh.', 'hhwhh.hhhhh', 'hwhhhhhhhhh', 'hhhhhhhhhhh', '.hhhhhhhhh.', '..hhhhhhh..', '...hhhhh...', '....hhh....', '.....h.....'])
+  const BROKEN = [OUT(['.hhh.', 'hhwhh', 'hwhhh', 'hhhh.', '.hhh.', '..hh.', '...h.', '....h']), OUT(['..hhh.', '.hhhhh', 'hhhhhh', '.hhhhh', 'hhhhh.', 'hhhh..', 'hhh...', 'h.....'])]
+  const RIVET = SPR(['YY', 'YY', 'YY'])
+  const GIRDER = SPR(['GGGGGGGG', 'g.gGG.g.', '.g.GGg.g', 'GGGGGGGG'])
+  const LADDER_RUNG = SPR(['llllllllll'])
+
+  const STUB_H = 4
+
+  // ---- layout (cheap; recomputed each tick so it follows the title) ------------
   function layout(s) {
     const d = s.data
     const title = s.fixture('title')
     const eyes = s.fixture('eyes')
-    // Kong and his stack stand just left of whatever sits right of the title
-    // (menu glyph, pinned buttons, window dots)
     const tc = title.x + title.w / 2
-    const right = s.fix.filter((f) => f !== title && f.x > tc).map((f) => f.x)
-    const edge = Math.min(s.W - 2, ...right)
-    d.stackX = edge - 11
-    d.dkX = d.stackX - 15
-    d.drumX = Math.max(1, eyes.x - 10)
-    const lo = eyes.x + eyes.w + 3
-    const hi = Math.max(lo + 12, d.dkX - JW - 6)
-    // open floor (nothing overhead) inside [lo, hi]; Jumpman prefers the widest stretch
-    const gaps = []
-    let x = lo
-    const over = s.fix.filter((f) => f.x + f.w > lo && f.x < hi).sort((a, b) => a.x - b.x)
-    for (const f of [...over, { x: hi + JW + 2, w: 0 }]) {
-      gaps.push([x, Math.min(hi, f.x - JW - 2)])
-      x = Math.max(x, f.x + f.w + 2)
-    }
-    // the stretch nearest Kong that is roomy enough, else the widest; on a wide
-    // window keep only the part close to him so the barrels arrive in good time
-    let best = gaps.filter((g) => g[1] - g[0] >= 40).pop() || gaps.reduce((a, g) => (g[1] - g[0] > a[1] - a[0] ? g : a))
-    if (best[1] - best[0] > 200) best = [best[1] - 200, best[1]]
-    d.open = best
-    // too cramped (long session name, narrow window)? use the whole run, low jumps under the title
-    d.zone = best[1] - best[0] >= 30 ? best : [lo, hi]
+    const rights = s.fix.filter((f) => f !== title && f.kind !== 'eyes' && f.x > Math.min(tc, eyes.x + eyes.w + 40)).map((f) => f.x)
+    const R = Math.min(s.W - 2, ...rights) - 4
+    const eyesR = eyes.x + eyes.w
+    d.stack = R - eyesR > 300
+    const stubW = 2 + 36 + 2 + (d.stack ? 18 : 0) + PW + 2
+    d.stubR = R
+    d.stubL = R - stubW
+    d.kongX = d.stubL + 2
+    d.stackX = d.kongX + 38
+    d.paulHome = d.stubR - PW - 2
+    d.stubTop = FLOOR - STUB_H
+    d.drumX = Math.max(eyesR + 4, d.stubL - 640)
+    d.startX = d.drumX + DW + 4
+    d.endX = Math.max(d.startX + 20, d.stubL - JW + 1)
+    d.len = d.endX - d.startX
     d.title = title
   }
-  /** Lowest furniture bottom over [x0, x1], or 0 if open sky. */
-  function ceilAt(s, x0, x1) {
-    let c = 0
-    for (const f of s.fix) if (x1 > f.x && x0 < f.x + f.w) c = Math.max(c, f.y + f.h)
-    return c
+  const hazards = (s) => s.actors.filter((a) => a.hazard && !a.dead)
+  const onFloor = (h) => h.y + h.h >= FLOOR - 1.5
+  /** Someone has been clicking or steering in the last few seconds. */
+  const engaged = (s, now) => now < s.data.engagedUntil || (s.cursor && s.cursor.y < H + 4 && now - s.cursor.t < 1200 && s.cursor.speed > 12)
+  const handsOn = (s, now) => now < s.data.manualUntil
+  function engage(s, manual = false) {
+    const now = performance.now()
+    s.data.engagedUntil = now + 9000
+    if (manual) s.data.manualUntil = now + 9000
+  }
+  /** Clear spot on the floor (not in front of the title or the eyes). */
+  function openSpot(s, x, w) {
+    const bad = (xx) => s.fix.some((f) => f.kind !== 'controls' && f.kind !== 'glyph' && xx + w > f.x - 4 && xx < f.x + f.w + 4)
+    const d = s.data
+    const lo = d.startX
+    const hi = d.endX - 8
+    for (let r = 0; r < s.W; r += 4)
+      for (const xx of [x - r, x + r]) if (xx >= lo && xx <= hi && !bad(xx)) return xx
+    return clamp(x, lo, hi)
   }
 
-  const hazards = (s) => s.actors.filter((a) => a.hazard && !a.dead)
-
-  // ---- Donkey Kong -----------------------------------------------------------
+  // ---- Kong ----------------------------------------------------------------
   class Kong {
     constructor(s) {
       this.s = s
-      this.state = 'idle'
+      this.seq = []
+      this.pose = 'stand'
       this.t = 0
-      this.next = performance.now() + 1200
-      this.beatCd = 0
+      this.dy = 0 // lift above the girder (climbing, falling)
+      this.blinkAt = performance.now() + 3000
+      this.blink = 0
+      this.rageCd = 0
+      this.clicks = []
       this.z = 1
     }
     get x() {
-      return this.s.data.dkX
+      return this.s.data.kongX
     }
     get y() {
-      return FLOOR - 13 - (this.jy || 0)
+      return this.s.data.stubTop - KH - this.dy
     }
-    get asleep() {
-      return this.state === 'sit'
+    get busyPose() {
+      return this.seq.length > 0
     }
     get moving() {
-      return this.state !== 'idle' && this.state !== 'sit' && this.state !== 'dazed'
+      return this.seq.length > 0 && this.pose !== 'sit'
+    }
+    get asleep() {
+      return this.pose === 'sit'
     }
     hit(px, py) {
-      return px >= this.x && px <= this.x + 14 && py >= this.y
+      if (this.pose === 'gone') return false
+      return px >= this.x + 2 && px <= this.x + 34 && py >= this.y - 1 && py <= this.y + KH + 1
     }
     onClick() {
-      this.rage(true)
-      this.next = 0
-    }
-    rage(force = false) {
+      const s = this.s
+      const d = s.data
       const now = performance.now()
-      if (!force && now < this.beatCd) return
-      if (['sit', 'leap', 'tumble', 'head', 'dazed'].includes(this.state)) return
-      this.beatCd = now + 4500
-      this.state = 'beat'
-      this.t = 1.3
+      engage(s)
+      this.clicks = this.clicks.filter((t) => now - t < 3000)
+      this.clicks.push(now)
+      if (d.phase === 'rest') {
+        // poke a sleeping ape: he grumbles awake
+        this.go([['blink', 0.4], ['stand', 0.3], ['beatA', 0.18], ['beatB', 0.18], ['beatA', 0.18], ['beatB', 0.18], ['stand', 0.2]])
+        return
+      }
+      if (d.phase !== 'play' || this.seq.length) return
+      if (this.clicks.length >= 5) {
+        // the tantrum: five pokes and he hurls everything he has
+        this.clicks = []
+        s.say('GRRR!', this.x + 18, 0, { color: '#f4b878', life: 1.2, size: 7 })
+        this.beat(4, () => this.throwBarrel({ lob: true }), () => this.throwBarrel({ kind: 'blue' }), () => this.throwBarrel({}))
+        return
+      }
+      this.beat(2, () => this.throwBarrel({ lob: Math.random() < 0.6 }))
+    }
+    go(list) {
+      this.seq = list.map(([pose, dur, fn]) => ({ pose, dur, fn }))
+      this.pose = this.seq[0].pose
+      this.t = this.seq[0].dur
+      this.s.poke()
+    }
+    then(list) {
+      if (!this.seq.length) return this.go(list)
+      for (const [pose, dur, fn] of list) this.seq.push({ pose, dur, fn })
+    }
+    beat(n = 3, ...after) {
+      const l = []
+      for (let i = 0; i < n; i++) l.push(['beatA', 0.16], ['beatB', 0.16])
+      l.push(['stand', 0.2])
+      this.go(l)
+      for (const f of after) f()
+    }
+    rage() {
+      const now = performance.now()
+      if (now < this.rageCd || this.seq.length || this.s.data.phase !== 'play') return
+      this.rageCd = now + 5000
+      this.beat(3)
     }
     laugh() {
-      if (this.state === 'idle') {
-        this.state = 'laugh'
-        this.t = 1.4
-      }
+      if (this.seq.length) return
+      this.go([['grin', 0.25], ['stand', 0.12], ['grin', 0.25], ['stand', 0.12], ['grin', 0.6], ['stand', 0.1]])
+    }
+    throwBarrel(o) {
+      const kind = o.kind || (Math.random() < (this.s.busy ? 0.3 : 0.18) ? 'blue' : 'n')
+      const steps = [
+        ['reach', 0.35],
+        [kind === 'blue' ? 'holdBlue' : 'hold', 0.5],
+      ]
+      if (o.lob) steps.push(['beatA', 0.3, () => this.s.spawn(new Barrel(this.s, kind, true))])
+      else steps.push(['push', 0.4, () => this.s.spawn(new Barrel(this.s, kind, false))])
+      steps.push(['stand', 0.15])
+      this.then(steps)
     }
     update(dt, now, s) {
       const d = s.data
-      const lively = s.lively(now)
-      if (!lively && !['sit', 'grab', 'hold', 'roll', 'leap', 'tumble', 'head'].includes(this.state)) {
-        this.state = 'sit'
-        return Infinity
-      }
-      if (this.state === 'sit') {
-        if (!lively || now < d.endUntil) return Infinity
-        this.state = 'idle'
-        this.next = now + 1500
-      }
-      if (this.state === 'dazed') {
-        if (now < d.endUntil) return Math.max(FAST, d.endUntil - now)
-        this.state = 'idle'
-        this.next = now + 1500
-      }
-      // cursor right on top of him annoys him
-      const c = s.cursor
-      if (c && this.state === 'idle' && Math.abs(c.x - this.x - 7) < 14 && c.y > FLOOR - 20) this.rage()
-      // the ending: a great leap, and down he comes, head first
-      if (this.state === 'leap' || this.state === 'tumble') {
-        this.jt += dt
-        this.jy = this.jv * this.jt - 100 * this.jt * this.jt
-        if (this.state === 'leap' && this.jt > this.jv / 200) this.state = 'tumble'
-        if (this.jy <= 0 && this.jt > 0.1) {
-          this.jy = 0
-          this.state = 'head'
-          this.t = 2.4
-          s.burst(this.x + 7, FLOOR - 1, 12, ['N', 'n', 'w'])
-          for (let i = 0; i < 3; i++) s.particle({ img: STAR, x: this.x + 2 + i * 4, y: FLOOR - 16, vx: rand(-12, 12), vy: -rand(14, 24), g: 30, life: 1.4, fade: true })
-          d.heartAt = now + 500
+      if (this.seq.length) {
+        this.t -= dt
+        while (this.seq.length && this.t <= 0) {
+          const cur = this.seq.shift()
+          cur.fn?.()
+          if (this.seq.length) {
+            this.pose = this.seq[0].pose
+            this.t += this.seq[0].dur
+          } else {
+            this.t = 0
+          }
         }
+        // climbing / falling drive dy from the director
         return FAST
       }
-      if (this.state !== 'idle') {
-        this.t -= dt
-        if (this.t > 0) return FAST
-        switch (this.state) {
-          case 'grab':
-            this.state = 'hold'
-            this.t = 0.4
-            return FAST
-          case 'hold':
-            this.state = 'roll'
-            this.t = 0.35
-            s.spawn(new Barrel(this.x - 4, s.busy ? 46 : 34))
-            return FAST
-          case 'head':
-            this.state = 'dazed'
-            return FAST
-          case 'beat':
-            if (d.ending && !this.fell) {
-              this.fell = true
-              this.state = 'leap'
-              this.jt = 0
-              // as high as the headroom over him allows
-              const room = FLOOR - 13 - ceilAt(s, this.x, this.x + 14) - 1
-              this.jv = Math.sqrt(2 * 100 * clamp(room, 3, 16))
-              return FAST
-            }
-          // falls through
-          default:
-            this.state = 'idle'
-            this.next = Math.max(this.next, now + 600)
-        }
+      if (this.pose === 'gone' || this.pose === 'climb' || this.pose === 'fall' || this.pose === 'head' || this.pose === 'daze') return d.kongTick ?? FAST
+      if (d.phase === 'rest') {
+        this.pose = 'sit'
+        return Infinity
       }
-      const jm = d.jm
-      if (now >= this.next && !d.ending) {
-        if (jm.state !== 'dead' && hazards(s).length < 5) {
-          this.state = 'grab'
-          this.t = 0.35
-          this.next = now + (s.busy ? rand(1300, 2300) : rand(3200, 6000))
-          return FAST
-        }
-        this.next = now + 800
+      // the finale and the climbs are paced by the director
+      if (d.phase !== 'play') return Infinity
+      if (this.pose === 'sit') this.pose = 'stand'
+      if (this.pose !== 'stand' && this.pose !== 'blink') this.pose = 'stand'
+      // blink now and then
+      if (now >= this.blinkAt) {
+        this.pose = this.pose === 'blink' ? 'stand' : 'blink'
+        this.blinkAt = now + (this.pose === 'blink' ? 140 : rand(2500, 6000))
       }
-      return Math.max(FAST, this.next - now)
+      // the cursor hovering over him: he grins down at it
+      const c = s.cursor
+      if (c && c.y < H + 4 && Math.abs(c.x - this.x - 18) < 22 && now - c.t < 800 && this.pose === 'stand' && now > (this.grinCd || 0)) {
+        this.grinCd = now + 6000
+        this.go([['grin', 0.8], ['stand', 0.1]])
+        return FAST
+      }
+      return Math.max(FAST, this.blinkAt - now)
     }
     draw(c, s) {
-      const x = Math.round(this.x)
-      let img = DK.idle[1]
-      let dy = 0
-      if (this.state === 'grab') img = DK.roll['-1'] // reaching back to the stack
-      else if (this.state === 'hold') img = DK.up[1]
-      else if (this.state === 'roll') img = DK.roll[1]
-      else if (this.state === 'beat') img = DK.beat[Math.floor(this.t * 8) % 2 ? 1 : -1]
-      else if (this.state === 'laugh') {
-        img = DK.grin[1]
-        dy = Math.floor(this.t * 8) % 2
-      } else if (this.state === 'sit' || this.state === 'dazed') img = DK.sit[1]
-      else if (this.state === 'leap') img = DK.up[1]
-      else if (this.state === 'tumble') img = DK.tumble[1]
-      else if (this.state === 'head') img = DK.head[Math.floor(this.t * 6) & 1][1]
-      c.drawImage(img, x, Math.round(this.y) + dy)
-      if (this.state === 'hold') c.drawImage(BARREL[0], x + 5, this.y - 5)
-      if (this.state === 'dazed' && s.lively()) c.drawImage(STAR, x + 11, this.y + 3)
-      if (this.state === 'sit' && !s.lively()) c.drawImage(ZZ, x + 12, this.y + 1)
-      // the barrel stack
-      const sx = Math.round(s.data.stackX)
-      c.drawImage(UPRIGHT, sx, FLOOR - 5)
-      c.drawImage(UPRIGHT, sx + 5, FLOOR - 5)
-      c.drawImage(UPRIGHT, sx + 2, FLOOR - 10)
+      const d = s.data
+      if (this.pose === 'gone') return
+      const x = Math.round(this.x) - 4
+      let y = Math.round(this.y)
+      const p = this.pose
+      let img = KONG[p] || KONG.stand
+      if (p === 'climb') img = Math.floor(this.dy / 4) & 1 ? KONG.climbA : KONG.climbB
+      else if (p === 'sit') {
+        img = KONG.sit
+        y = d.stubTop - 26
+      } else if (p === 'fall') img = KONG.fall
+      else if (p === 'head') img = KONG.head[Math.floor(performance.now() / 160) & 1]
+      else if (p === 'daze') img = KONG.head[0]
+      if (p === 'grin') y -= Math.floor(this.t * 8) & 1
+      if (p === 'fall' || p === 'head' || p === 'daze') y = Math.round(FLOOR - KH - this.dy)
+      c.drawImage(img, x - 1, y - 1)
+      // Pauline under his arm on the way up and down
+      if (d.carried && (p === 'climb' || p === 'gone')) {
+        const kick = Math.floor(this.dy / 3) & 1
+        c.drawImage((kick ? PAUL.kick : PAUL.flutter)['-1'], x + 32, y + 6)
+      }
+      if (p === 'sit') c.drawImage(ZZ, x + 36, y - 2)
+      if (p === 'daze' || p === 'head') {
+        const a = performance.now() / 200
+        for (let i = 0; i < 3; i++) c.drawImage(STAR, Math.round(x + 20 + Math.cos(a + i * 2.1) * 10), Math.round(FLOOR - 6 + Math.sin(a + i * 2.1) * 2))
+      }
     }
   }
 
-  // ---- barrels and fireballs -------------------------------------------------
+  // ---- barrels -------------------------------------------------------------------
   class Barrel {
-    constructor(x, speed) {
+    constructor(s, kind, lob) {
+      const d = s.data
+      this.s = s
       this.hazard = true
-      this.x = x
-      this.y = FLOOR - 5
-      this.vx = -speed
-      this.w = 5
-      this.jumped = false
-      this.miss = Math.random() < 0.05 // Jumpman will mistime this one
-      this.z = 2
+      this.barrel = true
+      this.kind = kind
+      this.w = BW
+      this.h = BW
+      this.z = 3
       this.moving = true
+      this.speed = (s.busy ? rand(31, 36) : rand(25, 29)) * (kind === 'blue' ? 1.08 : 1)
+      this.miss = Math.random() < (s.busy ? 0.04 : 0.035) // he will misjudge this one
+      this.jumped = false
+      this.spin = 0
+      if (lob) {
+        // tossed from his hands toward a spot well ahead of Jumpman
+        this.x = d.kongX + 13
+        this.y = d.stubTop - 21
+        const target = Math.max(d.startX + 10, Math.min(d.endX - 30, d.jm.x + rand(50, 110)))
+        const tAir = 0.85
+        this.vx = (target - this.x) / tAir
+        this.vy = -60
+        this.air = true
+      } else {
+        this.x = d.kongX - 6
+        this.y = d.stubTop - BW
+        this.vx = -this.speed
+        this.vy = 0
+        this.air = false
+      }
     }
     hit(px, py) {
-      return Math.abs(px - this.x - 2.5) < 5 && py > this.y - 4
+      return px > this.x - 4 && px < this.x + BW + 4 && py > this.y - 5 && py < this.y + BW + 3
     }
     onClick() {
-      smash(this.s, this, '300')
+      const s = this.s
+      engage(s, true)
+      // Jumpman deals with the one you point at: hammer it, or hop it
+      const jm = s.data.jm
+      if (jm.hammer > 0 && Math.abs(this.x - jm.x - 6) < 50) {
+        jm.dir = this.x > jm.x ? 1 : -1
+        smash(s, this, '800')
+      } else if (Math.abs(this.x - jm.x) < 40) jm.jump()
+      else smash(s, this, '300')
+    }
+    get grabbable() {
+      return true
+    }
+    grab() {
+      engage(this.s, true)
+      this.held = true
+      this.hazard = false
+    }
+    drag(p) {
+      this.x = clamp(p.x - BW / 2, 0, this.s.W - BW)
+      this.y = clamp(p.y - BW / 2, 0, FLOOR - BW)
+      this.px = this.lx ?? p.x
+      this.lx = p.x
+    }
+    drop(p) {
+      const s = this.s
+      const d = s.data
+      this.held = false
+      this.hazard = true
+      this.air = true
+      this.vy = -30
+      // flung at Kong? it bounces off his head and he sees stars
+      if (p.x > d.kongX - 30) {
+        this.toKong = true
+        this.vx = 120
+      } else this.vx = clamp((p.x - (this.px ?? p.x)) * 8, -80, 80)
     }
     update(dt, now, s) {
-      this.s = s
-      // once the bar goes quiet, the last barrels pick up speed and clear out
-      if (!s.lively(now)) this.vx = Math.max(-120, this.vx - 30 * dt)
+      const d = s.data
+      if (this.held) return FAST
+      if (!s.lively(now) && d.phase !== 'rivets') this.speed = Math.min(120, this.speed + 60 * dt)
+      if (this.air) {
+        this.vy += 240 * dt
+        this.x += this.vx * dt
+        this.y += this.vy * dt
+        if (this.toKong && this.x + BW > d.kongX + 8 && this.y < d.stubTop - 8 && d.kong.pose !== 'gone') {
+          this.dead = true
+          s.burst(this.x + 5, this.y + 5, 12, ['K', 'j', 'L'])
+          s.particle({ digits: '800', x: this.x, y: Math.max(0, this.y - 6), vy: -8, life: 1 })
+          s.say('OOF', d.kongX + 18, 0, { color: '#f4b878', life: 1.2 })
+          d.kong.go([['daze', 0.9], ['blink', 0.3], ['beatA', 0.18], ['beatB', 0.18], ['beatA', 0.18], ['stand', 0.2]])
+          d.paul.react('cheer', true)
+          return FAST
+        }
+        const ground = this.x + BW / 2 > d.stubL && this.x + BW / 2 < d.stubR && !d.dropped ? d.stubTop : FLOOR
+        if (this.y + BW >= ground) {
+          this.y = ground - BW
+          if (this.vy > 50) {
+            this.vy = -this.vy * 0.35
+            s.burst(this.x + 5, ground - 1, 3, ['N', 'n'])
+          } else {
+            this.vy = 0
+            this.air = false
+            this.toKong = false
+            this.vx = -this.speed
+          }
+        }
+        if (this.x < -BW || this.x > s.W) this.dead = true
+        this.spin += Math.abs(this.vx) * dt
+        return FAST
+      }
+      this.vx = -this.speed
       this.x += this.vx * dt
-      const drumX = s.data.drumX
-      if (this.x < drumX + 4) {
+      this.spin += this.speed * dt
+      // off the end of the girder: drop to the floor
+      const ground = this.x + BW / 2 > d.stubL && !d.dropped ? d.stubTop : FLOOR
+      if (this.y + BW < ground - 0.5) {
+        this.air = true
+        this.vy = 0
+      }
+      if (this.x < d.drumX + DW - 6) {
         this.dead = true
-        s.data.drum.flare(s, true)
+        d.drum.flare(s, this.kind === 'blue')
       }
       return FAST
     }
     draw(c) {
-      c.drawImage(BARREL[Math.floor(-this.x / 2) & 3], Math.round(this.x), this.y)
+      const f = Math.floor(this.spin / 3) & 3
+      c.drawImage((this.kind === 'blue' ? BLUE : BARREL)[f], Math.round(this.x), Math.round(this.y))
     }
   }
+
   class Fireball {
-    constructor(x) {
+    constructor(s) {
+      const d = s.data
+      this.s = s
       this.hazard = true
       this.fire = true
-      this.x = x
-      this.y = FLOOR - 5
-      this.vx = 12
-      this.w = 5
-      this.life = rand(10, 14)
+      this.w = 10
+      this.h = 10
+      this.x = d.drumX + 2
+      this.y = FLOOR - DH - 10
+      this.vy = -40
+      this.vx = 22
+      this.air = true
+      this.life = rand(14, 22)
       this.turnCd = 0
-      this.miss = false
-      this.z = 2
+      this.phase = 0
+      this.z = 3
       this.moving = true
+      this.miss = false
     }
     hit(px, py) {
-      return Math.abs(px - this.x - 2.5) < 5 && py > this.y - 4
+      return px > this.x - 4 && px < this.x + 14 && py > this.y - 4 && py < FLOOR
     }
     onClick() {
+      engage(this.s, true)
       smash(this.s, this, '500')
     }
     update(dt, now, s) {
-      this.s = s
+      const d = s.data
+      this.phase += dt * 8
       this.life -= dt
-      if (this.life <= 0 || !s.lively(now)) {
+      if (this.life <= 0 || (!s.lively(now) && d.phase !== 'rivets') || d.phase === 'grab' || d.phase === 'climb') {
         this.dead = true
-        s.burst(this.x + 2, this.y + 2, 6, ['O', 'y', 'r'])
+        s.burst(this.x + 5, this.y + 5, 8, ['Z', 'z', 'x'])
         return FAST
       }
-      // creep after Jumpman, slowly, without dithering
-      const jm = s.data.jm
-      this.turnCd -= dt
-      const want = jm.state === 'dead' ? -1 : Math.sign(jm.x - this.x) || 1
-      if (want !== Math.sign(this.vx) && this.turnCd <= 0 && Math.abs(jm.x - this.x) > 10) {
-        this.vx = -this.vx
-        this.turnCd = 1.6
+      if (this.air) {
+        this.vy += 200 * dt
+        this.x += this.vx * dt
+        this.y += this.vy * dt
+        if (this.y + this.h >= FLOOR) {
+          this.y = FLOOR - this.h
+          this.air = false
+          this.vx = 13
+        }
+        return FAST
       }
-      this.x = clamp(this.x + this.vx * dt, s.data.drumX + 7, s.data.dkX - 8)
-      if (this.x <= s.data.drumX + 7 && jm.state === 'dead') this.life = 0
+      // creep after Jumpman; turn only with a cooldown and some distance
+      const jm = d.jm
+      this.turnCd -= dt
+      const want = jm.state === 'dead' ? -1 : Math.sign(jm.x + 3 - this.x) || 1
+      if (want !== Math.sign(this.vx) && this.turnCd <= 0 && Math.abs(jm.x + 3 - this.x) > 18) {
+        this.vx = want * (s.busy ? 16 : 13)
+        this.turnCd = 2
+      }
+      this.x = clamp(this.x + this.vx * dt, d.drumX + DW, d.endX + 8)
       return FAST
     }
     draw(c) {
-      c.drawImage(FIRE[Math.floor(this.x / 3) & 1], Math.round(this.x), this.y - (Math.floor(this.x / 2) & 1))
+      blit(c, FIRE[Math.floor(this.phase / 2) & 1], this.vx < 0 ? -1 : 1, this.x, this.y - (Math.floor(this.phase) & 1))
     }
   }
+
   function smash(s, h, pts) {
     if (!h || h.dead) return
     h.dead = true
-    s.burst(h.x + 2, h.y + 2, 10, h.fire ? ['O', 'y', 'r'] : ['K', 'k', 'y', 'w'])
-    s.particle({ digits: pts, x: h.x - 2, y: h.y - 8, vy: -8, life: 1 })
-    s.data.dk.rage()
+    s.burst(h.x + 5, h.y + 5, 12, h.fire ? ['Z', 'z', 'x'] : h.kind === 'blue' ? ['C', 'c', 'w'] : ['K', 'j', 'L', 'w'])
+    s.particle({ digits: pts, x: h.x, y: Math.max(0, h.y - 7), vy: -8, life: 1 })
+    s.data.kong.rage()
     s.data.paul.react('cheer')
   }
 
@@ -355,14 +711,24 @@
       this.s = s
       this.prop = true
       this.flame = 0
-      this.z = 3
+      this.z = 2
     }
     get x() {
       return this.s.data.drumX
     }
-    flare(s, barrel) {
-      this.flame = 1.4
-      if (barrel && s.lively() && Math.random() < (s.busy ? 0.35 : 0.15) && !hazards(s).some((h) => h.fire)) s.spawn(new Fireball(this.x + 8))
+    hit(px, py) {
+      return px > this.x - 2 && px < this.x + DW + 2 && py > FLOOR - DH - 6
+    }
+    onClick() {
+      engage(this.s)
+      this.flare(this.s, true)
+    }
+    flare(s, spawn) {
+      this.flame = 1.6
+      const fires = hazards(s).filter((h) => h.fire).length
+      const max = s.busy ? 2 : 1
+      if (s.lively() && fires < max && (spawn || Math.random() < (s.busy ? 0.25 : 0.12)) && s.data.phase === 'play') s.spawn(new Fireball(s))
+      s.poke()
     }
     update(dt) {
       if (this.flame <= 0) return Infinity
@@ -371,110 +737,159 @@
     }
     draw(c) {
       const x = Math.round(this.x)
-      c.drawImage(DRUM, x, FLOOR - 8)
-      if (this.flame > 0) c.drawImage(FLAME[Math.floor(this.flame * 8) & 1], x + 1, FLOOR - 12)
+      c.drawImage(DRUM, x, FLOOR - DH)
+      if (this.flame > 0) c.drawImage(FLAME[Math.floor(this.flame * 8) & 1], x + 1, FLOOR - DH - 6)
     }
   }
 
-  class Hammer {
-    constructor(x) {
+  class HammerItem {
+    constructor(s, x) {
+      this.s = s
       this.x = x
-      this.y = FLOOR - JH - 8
-      this.prop = true
+      this.y = FLOOR - JH - 13
       this.pickup = true
+      this.z = 2
+      this.t = 0
     }
-    update() {
-      return Infinity
+    hit(px, py) {
+      return px > this.x - 4 && px < this.x + 12 && py < this.y + 14
+    }
+    onClick() {
+      // point at it and he goes for it
+      engage(this.s)
+      this.s.data.jm.wantHammer = this
+    }
+    update(dt, now, s) {
+      if (!s.lively(now) || s.data.phase !== 'play') this.dead = true
+      this.t += dt
+      return Math.floor(this.t * 3) !== Math.floor((this.t - dt) * 3) ? FAST : SLOW
     }
     draw(c) {
-      c.drawImage(HAM_UP[1], Math.round(this.x), this.y)
+      c.drawImage(HAM_ITEM, Math.round(this.x) - 1, Math.round(this.y) - 1 + (Math.floor(this.t * 3) & 1))
     }
   }
 
-  // ---- Pauline ---------------------------------------------------------------
+  class Pop {
+    // a heart (or a broken one) rising over the couple, a short-lived prop
+    constructor(x, y, kind, life) {
+      this.x = x
+      this.y = y
+      this.kind = kind
+      this.life = life
+      this.age = 0
+      this.prop = true
+      this.z = 6
+    }
+    update(dt) {
+      this.age += dt
+      if (this.age >= this.life) this.dead = true
+      return this.age < 1.2 ? FAST : SLOW
+    }
+    draw(c) {
+      const k = Math.min(1, this.age / 1.2)
+      const y = Math.round(this.y - k * 3)
+      if (this.kind === 'heart') c.drawImage(HEART, Math.round(this.x), y)
+      else {
+        const sp = Math.round(k * 3)
+        c.drawImage(BROKEN[0], Math.round(this.x) - sp, y + sp)
+        c.drawImage(BROKEN[1], Math.round(this.x) + 6 + sp, y + sp)
+      }
+    }
+  }
+
+  // ---- Pauline ------------------------------------------------------------------
   class Pauline {
     constructor(s) {
       this.s = s
-      this.wave = 0
-      this.next = performance.now() + rand(3000, 6000)
+      this.anim = null
+      this.t = 0
+      this.next = performance.now() + rand(2500, 5000)
       this.cd = 0
       this.hop = 0
       this.z = 1
+      this.dx = 0
     }
     get x() {
-      const t = this.s.data.title
-      return t.x + t.w / 2 - 3
+      return this.s.data.paulHome + this.dx
     }
     get y() {
-      return this.s.data.title.y - 8
+      return this.s.data.stubTop - PH
     }
-    get dir() {
-      return this.s.data.jm.x + 3 < this.x ? -1 : 1
+    get hidden() {
+      return this.s.data.carried
     }
     hit(px, py) {
-      return Math.abs(px - this.x - 3) < 6 && py < this.y + 10
+      return !this.hidden && px > this.x - 2 && px < this.x + PW + 2 && py > this.y - 2 && py < this.y + PH
     }
     onClick() {
-      this.react('love', true)
-      this.s.data.jm.glance(this.x)
-    }
-    side() {
-      // speech goes on the side away from the edge
-      return this.x + 3 + this.dir * 16
+      engage(this.s)
+      const d = this.s.data
+      if (d.phase === 'rest') {
+        this.s.particle({ img: BUBBLE['♥'], x: this.x - 8, y: this.y - 8, life: 1.4 })
+        return
+      }
+      this.react(Math.random() < 0.5 ? 'help' : 'love', true)
+      d.jm.glance(this.x)
     }
     react(kind, force = false) {
       const s = this.s
       const now = performance.now()
-      if (!force && now < this.cd) return
-      this.cd = now + 5000
+      if (this.hidden || (!force && now < this.cd)) return
+      this.cd = now + 4000
       if (kind === 'help') {
-        this.wave = 1.6
-        s.say('HELP!', this.side(), 1, { color: '#ff8fb3', life: 1.4, size: 6 })
-      } else if (kind === 'love') s.particle({ img: BUBBLE['♥'], x: this.x + (this.dir > 0 ? 6 : -8), y: this.y - 1, life: 1.2 })
-      else if (kind === 'gasp') s.particle({ img: BUBBLE['!'], x: this.x + (this.dir > 0 ? 7 : -6), y: this.y, life: 1.2 })
+        this.anim = 'wave'
+        this.t = 1.6
+        s.say(pick(['HELP!', 'HELP!', 'HELP!', 'HELP ME!']), this.x + PW / 2, 0, { color: '#ff9fc8', life: 1.6, size: 7 })
+      } else if (kind === 'love') s.particle({ img: BUBBLE['♥'], x: this.x - 8, y: this.y - 8, vy: -2, life: 1.3 })
+      else if (kind === 'gasp') s.particle({ img: BUBBLE['!'], x: this.x - 6, y: this.y - 8, life: 1.2 })
       else if (kind === 'cheer') {
-        this.hop = 0.6
-        this.wave = 0.6
+        this.hop = 0.7
+        this.anim = 'wave'
+        this.t = 0.7
       }
+      s.poke()
     }
     update(dt, now, s) {
-      if (this.wave > 0 || this.hop > 0) {
-        this.wave -= dt
+      const d = s.data
+      if (this.t > 0 || this.hop > 0) {
+        this.t -= dt
         this.hop -= dt
+        if (this.t <= 0) this.anim = null
         return FAST
       }
-      if (!s.lively(now) || s.data.ending) return Infinity
+      if (!s.lively(now) || d.phase !== 'play') return Infinity
       const c = s.cursor
-      if (c && Math.abs(c.x - this.x - 3) < 14 && c.y < 14) this.react('help')
+      if (c && c.y < H + 4 && Math.abs(c.x - this.x - PW / 2) < 20 && now - c.t < 800) this.react('help')
       if (now >= this.next) {
-        this.react('help')
-        this.next = now + (s.busy ? rand(6000, 10000) : rand(11000, 18000))
+        this.react(d.jm.x > d.startX + d.len * 0.6 ? pick(['help', 'love']) : 'help')
+        this.next = now + (s.busy ? rand(7000, 11000) : rand(10000, 16000))
       }
       return Math.max(FAST, this.next - now)
     }
     draw(c) {
-      const img = (this.wave > 0 && Math.floor(this.wave * 6) % 2 ? PAUL.wave : PAUL.idle)[this.dir]
-      c.drawImage(img, Math.round(this.x), Math.round(this.y - (this.hop > 0 && Math.floor(this.hop * 8) % 2 ? 1 : 0)))
+      if (this.hidden) return
+      let img = PAUL.stand
+      if (this.anim === 'wave') img = Math.floor(this.t * 6) & 1 ? PAUL.wave : PAUL.flutter
+      const y = this.y - (this.hop > 0 && Math.floor(this.hop * 8) & 1 ? 2 : 0)
+      blit(c, img, -1, this.x, y)
     }
   }
 
-  // ---- Jumpman ---------------------------------------------------------------
+  // ---- Jumpman ------------------------------------------------------------------
   class Jumpman {
     constructor(s) {
       this.s = s
-      this.x = s.data.zone[0] + 4
-      this.jy = 0 // height above the floor
-      this.vy = 0
+      this.x = s.data.startX
+      this.jy = 0
       this.vx = 0
       this.dir = 1
       this.state = 'stand'
       this.t = 0
-      this.tx = null
-      this.turnCd = 0
-      this.pause = 0
-      this.hammer = 0
-      this.flee = null
       this.leg = 0
+      this.hammer = 0
+      this.swing = 0
+      this.turnCd = 0
+      this.blink = 0
       this.z = 4
     }
     get y() {
@@ -484,218 +899,288 @@
       return this.state === 'run' || this.state === 'jump'
     }
     get asleep() {
-      return this.state === 'stand' && !this.s.lively()
+      return this.state === 'sit'
     }
     hit(px, py) {
-      return Math.abs(px - this.x - 3.5) < 6 && py > this.y - 3
+      return px > this.x - 1 && px < this.x + JW + 1 && py > this.y - 2 && py < this.y + JH + 1
     }
     onClick() {
+      engage(this.s, true)
+      if (this.state === 'sit') {
+        this.state = 'stand'
+        this.s.particle({ img: BUBBLE['?'], x: this.x + 10, y: this.y - 8, life: 1 })
+        return
+      }
       this.jump()
     }
-    glance(x) {
-      this.dir = x > this.x ? 1 : -1
-      this.turnCd = 1
+    onDblClick() {
+      // a little easter egg: a double-click summons the hammer right over him
+      const s = this.s
+      if (s.data.phase !== 'play' || this.hammer > 0 || s.actors.some((a) => a.pickup)) return
+      s.spawn(new HammerItem(s, clamp(this.x + 3, s.data.startX, s.data.endX)))
     }
-    jump(toward = 0) {
-      if (this.state === 'dead' || this.jy > 0 || this.hammer > 0) return
+    glance(x) {
+      if (this.state === 'stand') {
+        this.dir = x > this.x ? 1 : -1
+        this.turnCd = 1
+      }
+    }
+    jump(vx = null) {
+      if (this.state === 'dead' || this.state === 'jump' || this.hammer > 0) return
+      if (this.state === 'sit') this.state = 'stand'
       this.state = 'jump'
       this.jt = 0
-      // over a hazard: always leap at it, so the arc carries him clear
-      if (toward) this.dir = toward
-      this.jv = this.jumpV(toward || (this.tx !== null && Math.abs(this.tx - this.x) > 2 ? this.dir : 0))
-      this.vx = toward ? toward * this.speed() : this.tx !== null && Math.abs(this.tx - this.x) > 2 ? this.dir * this.speed() : 0
+      this.vx = vx ?? (this.walking ? this.dir * this.speed() : 0)
+      this.s.poke()
     }
     speed() {
-      return this.s.busy ? 26 : 22
-    }
-    /** Take-off speed: full arc in the open, a shorter hop under the furniture. */
-    jumpV(dir) {
-      const x0 = Math.min(this.x, this.x + dir * 14)
-      const room = FLOOR - JH - ceilAt(this.s, x0, x0 + JW + Math.abs(dir) * 14) - 0.5
-      return Math.min(JUMP_V, Math.sqrt(2 * JUMP_G * Math.max(1, room)))
+      return this.s.busy ? 24 : 21
     }
     die() {
       const s = this.s
+      const d = s.data
       this.state = 'dead'
-      this.t = 2.6
+      this.t = 3.2
       this.hammer = 0
       this.jy = 0
-      s.data.dk.laugh()
-      s.data.paul.react('gasp', true)
+      d.kong.laugh()
+      d.paul.react('gasp', true)
+      d.prog = Math.max(0, d.prog - d.len * 0.3)
+    }
+    /** Feet box. */
+    get fx0() {
+      return this.x + 4
+    }
+    get fx1() {
+      return this.x + 12
     }
     update(dt, now, s) {
       const d = s.data
-      const [zL, zR] = d.zone
+      const lively = s.lively(now)
       this.turnCd -= dt
       if (this.state === 'dead') {
         this.t -= dt
         if (this.t > 0) return FAST
-        // come back in only when the doorway is clear
-        if (hazards(s).some((h) => !h.fire && h.x < zL + 30 && h.x + h.w > zL - 6)) return FAST
+        if (hazards(s).some((h) => !h.fire && onFloor(h) && h.x < d.startX + 40)) return FAST
         this.state = 'stand'
-        this.x = zL + 2
+        this.x = d.startX
         this.dir = 1
-        this.blink = 0.8
+        this.blink = 1.6
         return FAST
       }
       if (this.blink > 0) this.blink -= dt
-      // actual ground speed last tick, for judging when to jump
-      const mine = dt > 0 && this.px !== undefined ? (this.x - this.px) / dt : 0
-      this.px = this.x
       if (this.hammer > 0) {
         this.hammer -= dt
-        for (const h of hazards(s)) if (h.x + h.w > this.x - 7 && h.x < this.x + JW + 7) smash(s, h, h.fire ? '500' : '300')
+        this.swing += dt
+        const down = Math.floor(this.swing * 5) & 1
+        for (const h of hazards(s)) {
+          if (!onFloor(h)) continue
+          const reach = this.dir > 0 ? [this.x + 8, this.x + JW + 10] : [this.x - 10, this.x + 8]
+          if (down && h.x + h.w > reach[0] && h.x < reach[1]) smash(s, h, h.fire ? '500' : pick(['300', '300', '500', '800']))
+        }
+        if (Math.floor(this.hammer * 2) !== Math.floor((this.hammer + dt) * 2) && Math.random() < 0.4) s.particle({ img: BUBBLE['♪'], x: this.x + 8, y: Math.max(0, this.y - 16), vy: -6, life: 1 })
       }
-      // airborne
+      // airborne: an exact arc, the same at any frame rate
       if (this.state === 'jump') {
-        // exact arc, so the jump is the same at any frame rate
         this.jt += dt
-        this.jy = this.jv * this.jt - (JUMP_G * this.jt * this.jt) / 2
-        this.x = clamp(this.x + this.vx * dt, zL, zR)
-        this.grab(s)
-        if (this.jy <= 0) {
+        this.jy = Math.max(0, JUMP_V * this.jt - (JUMP_G * this.jt * this.jt) / 2)
+        this.x = clamp(this.x + this.vx * dt, d.startX - 8, d.endX)
+        const ham = s.actors.find((a) => a.pickup && !a.dead)
+        if (ham && this.x + JW > ham.x + 1 && this.x < ham.x + 7 && this.y < ham.y + 9) {
+          ham.dead = true
+          this.hammer = s.busy ? 10 : 8
+          this.swing = 0
+          this.wantHammer = null
+          s.particle({ img: BUBBLE['♪'], x: this.x + 12, y: Math.max(0, this.y - 8), vy: -6, life: 1.2 })
+        }
+        if (this.jy <= 0 && this.jt > 0.05) {
           this.jy = 0
           this.state = 'stand'
         }
       }
-      // what's coming at me?
-      for (const h of hazards(s)) {
-        const right = h.x > this.x
-        const gap = right ? h.x - (this.x + JW) : this.x - (h.x + h.w)
-        const closing = right ? mine - h.vx : h.vx - mine
-        if (gap < -1 && gap > -(JW + h.w - 2)) {
-          if (this.jy < 3.5) {
+      // what is on the floor around me?
+      const hz = hazards(s).filter(onFloor)
+      for (const h of hz) {
+        const hx0 = h.x + 1
+        const hx1 = h.x + h.w - 1
+        if (hx1 > this.fx0 && hx0 < this.fx1) {
+          const top = h.fire ? h.y + 3 : h.y + 2
+          if (FLOOR - this.jy > top + 0.5) {
             if (this.hammer > 0 || this.blink > 0) continue
             this.die()
             return FAST
           }
           if (!h.jumped) {
             h.jumped = true
-            s.particle({ digits: '100', x: h.x - 1, y: this.y - 6, vy: -8, life: 0.9 })
-            if (Math.random() < 0.4) d.paul.react('love')
+            s.particle({ digits: '100', x: h.x, y: Math.max(0, this.y - 7), vy: -8, life: 0.9 })
+            d.prog = Math.min(d.len, d.prog + d.len / (s.busy ? 7 : 8))
+            if (Math.random() < 0.3) d.paul.react('love')
           }
-        } else if (this.state !== 'jump' && this.hammer <= 0 && closing > 5 && gap > -1 && !h.miss) {
-          // he leaps at it; if the zone edge stops him, the arc has only the hazard's speed to work with
-          const free = (right ? zR - this.x : this.x - zL) > 4 ? this.speed() : 0
-          const cj = Math.abs(h.vx) + free
-          // when is the arc above the barrel's top, and does the pass fit inside that window?
-          const v = this.jumpV(right ? 1 : -1)
-          const disc = v * v - 2 * JUMP_G * 3.5
-          const t1 = (v - Math.sqrt(Math.max(0, disc))) / JUMP_G
-          const t2 = (v + Math.sqrt(Math.max(0, disc))) / JUMP_G
-          const late = t2 - 9 / cj - 0.02
-          if (cj < 30 || disc <= 0 || late < t1 + 0.01) {
-            // can't clear it from here: back off toward open floor
-            if (!this.flee) this.flee = { x: right ? zL : zR, until: now + 2500 }
-          } else if ((gap - 1) / cj <= Math.min(late, t1 + 0.1)) this.jump(right ? 1 : -1)
+        }
+      }
+      const manual = handsOn(s, now)
+      // plan a hop over whatever is coming (unless you are doing the jumping)
+      this.hold = false
+      if (this.state !== 'jump' && this.hammer <= 0 && !manual) {
+        const disc = (cl) => Math.sqrt(Math.max(0, JUMP_V * JUMP_V - 2 * JUMP_G * cl))
+        for (const h of hz) {
+          if (h.miss || h.jumped) continue
+          const right = h.x + h.w / 2 > this.x + JW / 2
+          const gap = right ? h.x + 1 - this.fx1 : this.fx0 - (h.x + h.w - 1)
+          if (gap < -1 || gap > 60) continue
+          const hv = right ? -h.vx : h.vx // its speed toward me
+          const mine = this.state === 'run' && this.dir === (right ? 1 : -1) ? this.speed() : 0
+          const cl = h.fire ? 7 : 8
+          const t1 = (JUMP_V - disc(cl)) / JUMP_G
+          const t2 = (JUMP_V + disc(cl)) / JUMP_G
+          const over = 8 + h.w - 2
+          for (const vm of [mine, 0]) {
+            const cv = hv + vm
+            if (cv < 4) break
+            if ((gap + over) / cv > t2 - 0.03) {
+              // can't clear it at this speed: stand still and try again
+              if (vm > 0) {
+                this.hold = true
+                continue
+              }
+              break
+            }
+            if (gap / cv <= t1 + 0.04) this.jump(vm ? this.dir * vm : 0)
+            break
+          }
+          if (this.state === 'jump') break
         }
       }
       if (this.state === 'jump') return FAST
       // where to go
-      const lively = s.lively(now)
       const c = s.cursor
       let goal = null
-      if (this.flee && now > this.flee.until) this.flee = null
-      if (this.flee && !d.ending) goal = this.flee.x
-      else if (d.ending) goal = d.paul.x + 3 < zL ? zL : d.paul.x + 3 > zR + JW ? zR : clamp(d.paul.x - JW - 2, zL, zR)
-      else if (!lively) goal = null
-      else if (c && c.y < H + 6) goal = clamp(c.x - JW / 2, zL, zR)
+      const ham = s.actors.find((a) => a.pickup && !a.dead)
+      if (!lively && d.phase !== 'rivets' && d.phase !== 'fallen') goal = this.restX ?? (this.restX = openSpot(s, this.x, JW))
       else {
-        const ham = s.actors.find((a) => a.pickup)
-        if (ham && this.hammer <= 0) goal = clamp(ham.x - 1, zL, zR)
-        else if (this.pause > 0) this.pause -= dt
-        else if (this.tx === null || Math.abs(this.tx - this.x) < 1.5) {
-          // patrol: march up toward Kong, then back off and try again
-          const toKong = d.zone === undefined || zR > zL ? (this.x < (zL + zR) / 2 ? zR : zL) : zL
-          goal = toKong
-          this.pause = rand(0.4, 1.4)
-        } else goal = this.tx
+        this.restX = null
+        if (this.state === 'sit') this.state = 'stand'
+        if (d.phase === 'play') {
+          if (engaged(s, now) && c && c.y < H + 6) goal = clamp(c.x - JW / 2, d.startX, d.endX)
+          else if (ham && this.hammer <= 0 && (this.wantHammer === ham || ham.x > this.x - 30)) goal = clamp(ham.x - 4, d.startX, d.endX)
+          else goal = d.startX + d.prog
+        } else if (d.phase === 'reset') goal = d.startX
+        else if (d.phase === 'rivets' || d.phase === 'fallen') goal = d.endX
       }
-      // hysteresis: a new goal must differ meaningfully from the old one
-      if (goal === null) this.tx = lively && this.tx !== null ? this.tx : null
-      else if (this.tx === null || Math.abs(goal - this.tx) > 5) this.tx = goal
-      if (this.tx !== null) this.tx = clamp(this.tx, zL, zR)
-      const ham = s.actors.find((a) => a.pickup)
-      if (ham && this.hammer <= 0 && Math.abs(this.x - (ham.x - 1)) < 2 && this.jy === 0) this.jump()
-      if (this.state === 'jump') return FAST
-      if (this.tx !== null && Math.abs(this.tx - this.x) > 1.5 && (this.pause <= 0 || c || d.ending)) {
-        const want = Math.sign(this.tx - this.x)
+      if (goal !== null) goal = clamp(goal, d.startX - 8, d.endX)
+      // under the hammer: hop up and take it
+      if (ham && this.hammer <= 0 && Math.abs(this.x - (ham.x - 4)) < 2.5 && d.phase === 'play' && !this.hold) {
+        this.jump(0)
+        return FAST
+      }
+      this.walking = false
+      if (goal !== null && Math.abs(goal - this.x) > 1.5 && !this.hold) {
+        const want = Math.sign(goal - this.x)
         if (want !== this.dir && this.turnCd > 0) {
           this.state = 'stand'
           return FAST
         }
-        if (want !== this.dir) this.turnCd = 0.5
+        if (want !== this.dir) this.turnCd = 0.6
         this.dir = want
         this.state = 'run'
-        this.x = clamp(this.x + want * this.speed() * dt, zL, zR)
-        this.leg += dt * 8
+        this.walking = true
+        const sp = d.phase === 'rivets' || d.phase === 'fallen' ? 44 : d.phase === 'reset' ? 32 : this.speed()
+        this.x = clamp(this.x + want * sp * dt, d.startX - 8, d.endX)
+        this.leg += dt * 9
         return FAST
       }
-      this.state = 'stand'
-      if (d.ending) {
-        this.dir = d.paul.x > this.x ? 1 : -1
-        return this.hammer > 0 ? FAST : Infinity
+      if (this.state === 'run') this.state = 'stand'
+      // face the action
+      if (this.turnCd <= 0 && (d.phase !== 'play' || !hz.length)) this.dir = 1
+      if (!lively && d.phase !== 'rivets' && d.phase !== 'fallen' && this.restX !== null && Math.abs(this.x - this.restX) <= 1.5 && this.hammer <= 0) {
+        this.state = 'sit'
+        return Infinity
       }
-      if (this.hammer > 0 || this.blink > 0) return FAST
-      if (this.pause > 0 && lively) return FAST
-      return Infinity
-    }
-    grab(s) {
-      const ham = s.actors.find((a) => a.pickup)
-      if (!ham) return
-      if (this.x + JW > ham.x && this.x < ham.x + 4 && this.y < ham.y + 4) {
-        ham.dead = true
-        this.hammer = 6
-        s.particle({ img: BUBBLE['♪'], x: this.x + 8, y: Math.max(0, this.y - 2), vy: -6, life: 1.2 })
+      if (this.hammer > 0 || this.blink > 0 || hz.length || this.hold) return FAST
+      if (c && engaged(s, now)) {
+        this.dir = c.x > this.x + JW / 2 ? 1 : -1
+        return FAST
       }
+      return d.phase === 'play' && lively ? SLOW : Infinity
     }
     draw(c, s) {
-      if (this.blink > 0 && Math.floor(this.blink * 10) % 2) return
-      const x = Math.round(this.x)
-      const y = Math.round(this.y)
+      if (this.blink > 0 && Math.floor(this.blink * 10) & 1) return
+      const x = this.x
+      const y = this.y
       if (this.state === 'dead') {
-        if (this.t > 1.8) {
-          const spin = Math.floor(this.t * 10) % 4
-          c.drawImage(spin < 2 ? JM.stand[spin ? 1 : -1] : JM_DEAD[1], x, spin < 2 ? y : FLOOR - JW)
+        if (this.t > 2.3) {
+          const k = Math.floor(this.t * 12) & 3
+          blit(c, k === 0 ? JM.stand : k === 2 ? JM.back : JM.stand, k === 1 ? -1 : 1, x, y)
         } else {
-          c.drawImage(JM_DEAD[1], x - 1, FLOOR - JW)
-          c.drawImage(HALO, x + 1, FLOOR - JW - 4)
+          blit(c, JM.dead, 1, x - 2, FLOOR - JW)
+          if (this.t < 1.8) c.drawImage(STAR, Math.round(x + 8), FLOOR - JW - 6 + (Math.floor(this.t * 4) & 1))
         }
         return
       }
-      let img = JM.stand[this.dir]
-      if (this.state === 'jump') img = JM.jump[this.dir]
-      else if (this.hammer > 0) img = JM.hammer[this.dir]
-      else if (this.state === 'run') img = JM.run[Math.floor(this.leg) & 1][this.dir]
-      c.drawImage(img, x, y)
+      if (this.state === 'sit') return blit(c, JM.sit, this.dir, x, FLOOR - 18)
       if (this.hammer > 0) {
-        const up = Math.floor(this.hammer * 6) % 2
-        const flash = this.hammer < 1.5 && Math.floor(this.hammer * 10) % 2
+        const flash = this.hammer < 1.5 && Math.floor(this.hammer * 10) & 1
+        const down = Math.floor(this.swing * 5) & 1
+        if (this.state === 'jump') blit(c, JM.jump, this.dir, x, y)
+        else blit(c, down ? JM.hamDn : JM.hamUp, this.dir, x, y)
         if (!flash) {
-          if (up) c.drawImage(HAM_UP[this.dir], this.dir > 0 ? x + 4 : x - 1, y - 4)
-          else c.drawImage(HAM_DN[this.dir], this.dir > 0 ? x + 6 : x - 5, y + 3)
+          if (down) c.drawImage(HAM_H[this.dir], Math.round(this.dir > 0 ? x + 14 : x - 7), Math.round(y + 9))
+          else c.drawImage(HAM_V, Math.round(x + 5), Math.round(y - 8))
         }
+        return
       }
+      if (this.state === 'jump') blit(c, JM.jump, this.dir, x, y)
+      else if (this.state === 'run') blit(c, JM.run[Math.floor(this.leg) & 3], this.dir, x, y)
+      else blit(c, JM.stand, this.dir, x, y)
     }
   }
 
-  // ---- director --------------------------------------------------------------
-  function finale(s) {
+  // ---- director ------------------------------------------------------------------
+  // phases: play → (grab → climb → away → reset → descend) → play
+  //         play → rivets → fallen → recover → play;   rest when the bar is quiet
+  function setPhase(s, p, ms = 0) {
     const d = s.data
-    const now = performance.now()
-    d.ending = true
-    d.endUntil = now + 9000
+    d.phase = p
+    d.phaseAt = performance.now()
+    d.phaseEnd = d.phaseAt + ms
+    s.poke()
+  }
+  function startRivets(s) {
+    const d = s.data
+    d.pendingDone = false
     for (const h of hazards(s)) {
       h.dead = true
-      s.burst(h.x + 2, h.y + 2, 6, ['K', 'k', 'y'])
+      s.burst(h.x + 5, h.y + 5, 6, ['K', 'j', 'L'])
     }
     for (const a of s.actors) if (a.pickup) a.dead = true
-    const dk = d.dk
-    dk.state = 'beat'
-    dk.t = 1.2
-    dk.beatCd = 0
-    dk.fell = false // after the chest-thump he leaps, and falls on his head
-    d.heartAt = 0
+    d.kong.seq = []
+    d.kong.pose = 'stand'
+    d.kong.beat(3)
+    d.rivetsLeft = 3
+    d.nextRivet = 0
+    setPhase(s, 'rivets')
+  }
+  function endRound(s) {
+    const d = s.data
+    d.round++
+    if (d.pendingDone || d.round % 3 === 0) return startRivets(s)
+    // he snatches her and climbs off the top of the bar
+    for (const h of hazards(s)) {
+      h.dead = true
+      s.burst(h.x + 5, h.y + 5, 6, ['K', 'j', 'L'])
+    }
+    d.kong.go([
+      ['roar', 0],
+      ['beatA', 0.2],
+      ['beatB', 0.2],
+      ['reach', 0.4, () => {
+        d.carried = true
+        d.paul.anim = null
+      }],
+      ['climb', 0.01],
+    ])
+    d.kong.pose = 'beatA'
+    setPhase(s, 'grab')
   }
 
   registerConcept({
@@ -703,70 +1188,238 @@
     title: 'Donkey Kong',
     sub: 'Nintendo, 1981',
     blurb:
-      'Kong rolls barrels from his stack by the window dots, under the title where the damsel waits, and into the oil drum by the eyes, which sometimes coughs up a fireball. Jumpman hops them with a fixed arc and grabs the floating hammer to smash them. Kong thumps his chest when a barrel gets smashed and laughs when Jumpman gets flattened; she gasps, cheers and calls for help. <b>Click a barrel</b> to smash it, the bar or Jumpman to jump, Kong to make him throw; Jumpman runs after your cursor. Work speeds the barrels up, Done topples Kong and a heart pops between the two, and when it is quiet Kong sits down for a nap.',
+      'Kong stands on his girder by the window buttons with Pauline and rolls barrels down the bar toward the oil drum, where blue ones light fireballs. Jumpman marches up from the drum, hops barrels for 100, grabs the hammer to smash them, and gets flattened now and then while Kong grins. Reach Kong and he climbs off the top with Pauline; every third round the rivets pop and he lands on his head under a heart. <b>Click</b> Jumpman to jump, a barrel to have him hop or hammer it, Kong to make him throw (five quick pokes for a tantrum), Pauline, the drum or the hammer; drag a barrel and fling it back at Kong. Move over the bar and Jumpman follows you. Work speeds it all up, Done brings the rivet finale, and when it is quiet everyone sits down.',
     setup(s) {
-      s.data = { ending: false, endUntil: 0, hammerAt: performance.now() + rand(9000, 15000) }
+      s.data = { phase: 'play', round: 0, prog: 0, engagedUntil: 0, manualUntil: 0, carried: false, dropped: 0, rivetsLeft: 3, kongTick: FAST }
       layout(s)
       const d = s.data
       d.drum = new Drum(s)
-      d.dk = new Kong(s)
+      d.kong = new Kong(s)
       d.paul = new Pauline(s)
       d.jm = new Jumpman(s)
-      s.actors.push(d.drum, d.dk, d.paul, d.jm)
+      d.nextThrow = performance.now() + 1500
+      d.hammerAt = performance.now() + rand(12000, 20000)
+      setPhase(s, 'play')
+      s.actors.push(d.drum, d.kong, d.paul, d.jm)
     },
     relayout(s) {
       layout(s)
       const d = s.data
-      d.jm.x = clamp(d.jm.x, d.zone[0], d.zone[1])
-      for (const a of s.actors) if (a.pickup) a.x = clamp(a.x, d.open[0] + 2, Math.max(d.open[0] + 2, d.open[1] - 2))
+      d.jm.x = clamp(d.jm.x, d.startX - 8, d.endX)
+      d.prog = clamp(d.prog, 0, d.len)
+      d.jm.restX = null
+      for (const a of s.actors) if (a.pickup) a.x = clamp(a.x, d.startX + 4, d.endX - 4)
+      for (const h of hazards(s)) h.x = clamp(h.x, 0, s.W - 10)
     },
     onBarClick(s) {
+      engage(s, true)
       s.data.jm.jump()
     },
     onBusy(s) {
-      s.data.dk.next = Math.min(s.data.dk.next, performance.now() + 400)
-      s.data.ending = false
+      const d = s.data
+      d.nextThrow = Math.min(d.nextThrow, performance.now() + 500)
+      if (d.phase === 'play' && !d.kong.seq.length) d.kong.beat(3)
     },
     onDone(s) {
-      finale(s)
+      const d = s.data
+      d.pendingDone = true
+      if (d.phase === 'play' || d.phase === 'rest') startRivets(s)
     },
     onNap(s) {
       for (const a of s.actors) if (a.pickup || a.fire) a.dead = true
       s.data.jm.hammer = 0
     },
     onBonk(s) {
-      // knocking on his window: he takes it personally
-      s.data.dk.rage(true)
+      s.data.kong.rage()
+    },
+    drawBehind(s, c) {
+      const d = s.data
+      // girder stub: Kong's half drops away at the rivet finale
+      const drop = d.dropped || 0
+      for (let x = d.stubL; x < d.stubR; x += 8) {
+        const kongSide = x < d.stackX - 1
+        const yy = d.stubTop + (kongSide ? drop : 0)
+        if (yy < FLOOR) c.drawImage(GIRDER, Math.round(x), Math.round(yy), Math.min(8, d.stubR - x), STUB_H)
+      }
+      if (!drop) for (let i = 0; i < d.rivetsLeft; i++) c.drawImage(RIVET, Math.round(d.kongX + [0, 17, 34][i]), d.stubTop)
+      // the barrel stack
+      if (d.stack) {
+        const sx = Math.round(d.stackX)
+        c.drawImage(UPRIGHT, sx, d.stubTop - 10)
+        c.drawImage(UPRIGHT, sx + 8, d.stubTop - 10)
+        c.drawImage(UPRIGHT, sx + 4, d.stubTop - 20)
+      }
+      // the ladder he climbs off the top on
+      if (['grab', 'climb', 'away', 'descend', 'reset'].includes(d.phase) || d.kong.pose === 'climb') {
+        const lx = Math.round(d.kongX + 13)
+        c.fillStyle = P.l
+        c.fillRect(lx, 0, 1, d.stubTop)
+        c.fillRect(lx + 9, 0, 1, d.stubTop)
+        for (let y = d.stubTop - 3; y > 0; y -= 4) c.drawImage(LADDER_RUNG, lx, y)
+      }
     },
     update(s, dt, now) {
       layout(s)
       const d = s.data
-      if (d.heartAt && now >= d.heartAt) {
-        d.heartAt = 0
-        // between the two of them, clear of the title text
-        const t = d.title
-        const mid = d.jm.x < t.x ? Math.min((d.jm.x + d.paul.x) / 2, t.x - 9) : Math.max((d.jm.x + d.paul.x) / 2, t.x + t.w + 2)
-        s.particle({ img: HEART, x: mid, y: 5, vy: -1.5, life: 2.6 })
-        d.paul.react('love', true)
-      }
-      if (d.ending && now >= d.endUntil) d.ending = false
-      if (!s.lively(now)) {
-        for (const a of s.actors) if (a.pickup) a.dead = true
-        return d.heartAt ? FAST : Infinity
-      }
-      // a hammer now and then (not during the ending)
-      if (d.ending) d.hammerAt = Math.max(d.hammerAt, d.endUntil + 2000)
-      if (!d.ending && now >= d.hammerAt) {
-        d.hammerAt = now + (s.busy ? rand(12000, 18000) : rand(18000, 30000))
-        if (!s.actors.some((a) => a.pickup) && d.jm.hammer <= 0) {
-          // it hangs over open floor, where a jump can reach it
-          const [oL, oR] = d.open
-          if (oR - oL >= 12) s.spawn(new Hammer(oL + (oR - oL) * rand(0.3, 0.7)))
+      const lively = s.lively(now)
+      const k = d.kong
+      d.kongTick = FAST
+      switch (d.phase) {
+        case 'rest':
+          if (lively || d.pendingDone) {
+            if (d.pendingDone) startRivets(s)
+            else {
+              setPhase(s, 'play')
+              k.pose = 'stand'
+              k.beat(2)
+              d.nextThrow = now + 2000
+            }
+          }
+          return Infinity
+        case 'play': {
+          if (d.pendingDone) {
+            startRivets(s)
+            return FAST
+          }
+          if (!lively) {
+            // let the last barrels roll home, then sit down
+            if (!hazards(s).length && !k.seq.length && d.jm.state !== 'dead') setPhase(s, 'rest')
+            return SLOW
+          }
+          const jm = d.jm
+          // Jumpman creeps forward on his own too
+          if (jm.state !== 'dead' && !engaged(s, now)) d.prog = Math.min(d.len, d.prog + dt * 1.6)
+          if (jm.state !== 'dead' && jm.x >= d.endX - 3 && d.prog >= d.len - 2 && !k.seq.length && !engaged(s, now)) {
+            endRound(s)
+            return FAST
+          }
+          // close to Kong: he gets nervous
+          if (jm.x > d.endX - 60 && Math.random() < dt * 0.25) k.rage()
+          // throw schedule
+          const barrels = hazards(s).filter((h) => h.barrel).length
+          if (now >= d.nextThrow && !k.seq.length) {
+            if (jm.state !== 'dead' && barrels < (s.busy ? 4 : 2) && jm.x < d.endX - 30) {
+              const lob = jm.x < d.endX - 140 && Math.random() < (s.busy ? 0.2 : 0.12)
+              k.throwBarrel({ lob })
+              d.nextThrow = now + (s.busy ? rand(1500, 2600) : rand(3200, 5600))
+            } else d.nextThrow = now + 700
+          }
+          if (now >= d.hammerAt) {
+            d.hammerAt = now + (s.busy ? rand(11000, 17000) : rand(18000, 28000))
+            if (!s.actors.some((a) => a.pickup) && jm.hammer <= 0 && jm.state !== 'dead') {
+              const hx = clamp(jm.x + rand(50, 110), d.startX + 20, d.endX - 20)
+              if (hx > jm.x + 20) s.spawn(new HammerItem(s, hx))
+            }
+          }
+          return Math.max(FAST, Math.min(d.nextThrow, d.hammerAt) - now)
+        }
+        case 'grab':
+          if (!k.seq.length) {
+            k.pose = 'climb'
+            setPhase(s, 'climb')
+            s.spawn(new Pop(d.paulHome - 1, d.stubTop - PH - 2, 'broken', 2.4))
+          }
+          return FAST
+        case 'climb':
+          k.dy += dt * 16
+          if (d.stubTop - KH - k.dy < -KH - 4) {
+            k.pose = 'gone'
+            setPhase(s, 'away', 2500)
+          }
+          return FAST
+        case 'away':
+          if (now >= d.phaseEnd) setPhase(s, 'reset')
+          return Math.max(FAST, d.phaseEnd - now)
+        case 'reset':
+          if (Math.abs(d.jm.x - d.startX) < 2 || !lively) {
+            d.prog = 0
+            if (d.skipDescend || k.pose !== 'gone') {
+              d.skipDescend = false
+              d.carried = false
+              k.dy = 0
+              if (k.pose === 'gone') k.pose = 'stand'
+              setPhase(s, 'play')
+              d.nextThrow = now + 2200
+              return FAST
+            }
+            k.pose = 'climb'
+            setPhase(s, 'descend')
+          }
+          return FAST
+        case 'descend':
+          k.dy = Math.max(0, k.dy - dt * 20)
+          if (k.dy <= 0) {
+            d.carried = false
+            k.pose = 'stand'
+            k.beat(3)
+            s.burst(d.kongX + 18, d.stubTop, 8, ['N', 'n'])
+            setPhase(s, 'play')
+            d.nextThrow = now + 2200
+            d.paul.react('help', true)
+          }
+          return FAST
+        case 'rivets': {
+          // the rivets pop one by one while Jumpman races up to Kong
+          if (now < d.nextRivet) return Math.max(FAST, d.nextRivet - now)
+          if (d.rivetsLeft > 0) {
+            d.rivetsLeft--
+            const rx = d.kongX + [0, 17, 34][d.rivetsLeft]
+            s.particle({ img: RIVET, x: rx, y: d.stubTop, vx: rand(-20, 20), vy: -60, g: 160, life: 1.2 })
+            s.particle({ digits: '100', x: rx - 4, y: d.stubTop - 10, vy: -8, life: 0.9 })
+            k.seq = []
+            k.go([['beatA', 0.15], ['beatB', 0.15], ['beatA', 0.15], ['stand', 0.05]])
+            d.nextRivet = now + 700
+            return FAST
+          }
+          // the girder drops away, he jumps, flips and lands on his head
+          setPhase(s, 'fallen')
+          d.dropped = 0.01
+          k.seq = []
+          k.pose = 'fall'
+          k.dy = FLOOR - d.stubTop + 2
+          k.vy = 40
+          d.heartAt = 0
+          d.heartBy = now + 5000
+          return FAST
+        }
+        case 'fallen': {
+          d.dropped = Math.min(STUB_H + 2, d.dropped + dt * 20)
+          if (k.pose === 'fall') {
+            k.vy -= 160 * dt
+            k.dy += k.vy * dt
+            if (k.dy <= 0) {
+              k.dy = 0
+              k.pose = 'head'
+              s.burst(d.kongX + 18, FLOOR - 2, 14, ['N', 'n', 'w'])
+              d.heartAt = 1
+            }
+            return FAST
+          }
+          // the heart once Jumpman gets there (or soon anyway)
+          if (d.heartAt && (Math.abs(d.jm.x - d.endX) < 3 || now >= d.heartBy)) {
+            d.heartAt = 0
+            d.phaseEnd = now + 6500
+            s.spawn(new Pop(d.kongX + 12, 1, 'heart', 5))
+            d.paul.react('love', true)
+            k.pose = 'daze'
+          }
+          if (!d.heartAt && k.pose === 'daze' && now >= d.phaseEnd) {
+            // he shakes it off; a new girder slides up and he hops back on
+            k.pose = 'stand'
+            k.dy = 0
+            d.dropped = 0
+            d.rivetsLeft = 3
+            d.round = 0
+            setPhase(s, 'reset')
+            k.go([['blink', 0.3], ['beatA', 0.18], ['beatB', 0.18], ['beatA', 0.18], ['stand', 0.3]])
+            d.carried = false
+            // after the reset walk, he does not need to climb down
+            d.skipDescend = true
+          }
+          return k.pose === 'head' || d.heartAt ? FAST : Math.max(FAST, Math.min(d.phaseEnd - now, 160))
         }
       }
-      if (d.heartAt) return FAST
-      const wake = Math.min(d.hammerAt, d.ending ? d.endUntil : Infinity) - now
-      return Math.max(FAST, Math.min(wake, 30000 - (now - s.lastTouch) + 50))
+      return Infinity
     },
   })
 })()
