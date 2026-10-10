@@ -245,7 +245,7 @@ export function ProjectSessionRow({
 
   return (
     <div
-      className="flex items-center gap-3 rounded-lg px-3.5 py-3 transition-all duration-150"
+      className="flex flex-wrap items-center gap-3 rounded-lg px-3.5 py-3 transition-all duration-150"
       style={{
         ...hoverStyle.style,
         border: '1px solid var(--term-border)',
@@ -257,7 +257,7 @@ export function ProjectSessionRow({
       onMouseLeave={hoverStyle.onMouseLeave}
     >
       <Folder size={16} style={iconStyle} />
-      <span className="min-w-0 flex-1">
+      <span className="min-w-[10rem] flex-1">
         <span
           className="block text-sm font-medium truncate"
           style={{ fontFamily: 'var(--font-ui)' }}
@@ -274,69 +274,71 @@ export function ProjectSessionRow({
           {formatProjectDescription(row.project, row.attachableOptions.length)}
         </span>
       </span>
-      {row.paneCount > 0 && (
-        <span
-          className="text-[10px] font-medium px-2 py-0.5 rounded-full"
-          style={{
-            backgroundColor:
-              'color-mix(in srgb, var(--term-accent) 12%, transparent)',
-            color: 'var(--term-accent)',
-            fontFamily: 'var(--font-ui)',
-          }}
-        >
-          {row.paneCount} open
-        </span>
-      )}
-      {row.attachableOptions.length > 1 && (
-        <label
-          className="sr-only"
-          htmlFor={`project-session-select-${row.project.id}`}
-        >
-          Select existing session for {row.project.name}
-        </label>
-      )}
-      {row.attachableOptions.length > 1 && (
-        <select
-          id={`project-session-select-${row.project.id}`}
-          value={attachTarget?.id ?? ''}
-          onChange={(event) =>
-            onSelectSession(row.project.id, event.target.value)
-          }
-          className="max-w-[220px] rounded-md px-2.5 py-1.5 text-xs outline-none"
-          style={{
-            backgroundColor: 'var(--term-bg-deep)',
-            border: '1px solid var(--term-border)',
-            color: 'var(--term-text-primary)',
-            fontFamily: 'var(--font-mono)',
-          }}
-        >
-          {row.attachableOptions.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      )}
-      {attachTarget && (
-        <SessionModeIcon
-          mode={attachTarget.mode}
-          resolveModeColor={resolveModeColor}
-        />
-      )}
-      {attachTarget && (
+      <div className="ml-auto flex shrink-0 items-center gap-3">
+        {row.paneCount > 0 && (
+          <span
+            className="text-[10px] font-medium px-2 py-0.5 rounded-full"
+            style={{
+              backgroundColor:
+                'color-mix(in srgb, var(--term-accent) 12%, transparent)',
+              color: 'var(--term-accent)',
+              fontFamily: 'var(--font-ui)',
+            }}
+          >
+            {row.paneCount} open
+          </span>
+        )}
+        {row.attachableOptions.length > 1 && (
+          <label
+            className="sr-only"
+            htmlFor={`project-session-select-${row.project.id}`}
+          >
+            Select existing session for {row.project.name}
+          </label>
+        )}
+        {row.attachableOptions.length > 1 && (
+          <select
+            id={`project-session-select-${row.project.id}`}
+            value={attachTarget?.id ?? ''}
+            onChange={(event) =>
+              onSelectSession(row.project.id, event.target.value)
+            }
+            className="max-w-[220px] rounded-md px-2.5 py-1.5 text-xs outline-none"
+            style={{
+              backgroundColor: 'var(--term-bg-deep)',
+              border: '1px solid var(--term-border)',
+              color: 'var(--term-text-primary)',
+              fontFamily: 'var(--font-mono)',
+            }}
+          >
+            {row.attachableOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        )}
+        {attachTarget && (
+          <SessionModeIcon
+            mode={attachTarget.mode}
+            resolveModeColor={resolveModeColor}
+          />
+        )}
+        {attachTarget && (
+          <ActionButton
+            label="Open"
+            onClick={() => onAttachSession(attachTarget)}
+          />
+        )}
         <ActionButton
-          label="Open"
-          onClick={() => onAttachSession(attachTarget)}
+          label="New"
+          accent={!attachTarget}
+          muted={Boolean(attachTarget)}
+          onClick={() =>
+            onCreateProjectATerm(row.project.id, row.project.root_path)
+          }
         />
-      )}
-      <ActionButton
-        label="New"
-        accent={!attachTarget}
-        muted={Boolean(attachTarget)}
-        onClick={() =>
-          onCreateProjectATerm(row.project.id, row.project.root_path)
-        }
-      />
+      </div>
     </div>
   )
 }
