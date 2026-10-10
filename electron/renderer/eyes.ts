@@ -129,6 +129,14 @@ export class Eyes {
     this.aimAt(screenX, screenY)
   }
 
+  /** A titlebar character to follow (client px), or null when none moves.
+   * Only while focused and otherwise idle: unfocused eyes keep the cursor. */
+  watch(pt: { x: number; y: number } | null): void {
+    if (!this.focused || this.hovering || this.reading || this.lookingDown) return
+    if (pt) this.aimAt(window.screenX + pt.x, window.screenY + pt.y)
+    else this.look(0, 0)
+  }
+
   /** Pointer moving over the titlebar: they watch it even when focused. */
   hover(e: MouseEvent | null): void {
     this.hovering = e !== null

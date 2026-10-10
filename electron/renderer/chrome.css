@@ -54,8 +54,34 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 28px;
+  /* Room for the titlebar arcade's characters plus a line of their dialogue.
+     Keep in step with H in arcade/engine.ts. */
+  height: 36px;
   padding: 0 10px 0 14px;
+}
+/* Titlebar arcade (arcade/): the game is drawn over the bar's furniture and
+   never takes the pointer; a small pad follows the cursor while it is over a
+   character so clicks there reach the game instead of moving the window. */
+.arcade-stage {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 4;
+  pointer-events: none;
+  image-rendering: pixelated;
+}
+.arcade-pad {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 4;
+  width: 20px;
+  height: 20px;
+  -webkit-app-region: no-drag;
+  cursor: pointer;
+}
+.arcade-pad[hidden] {
+  display: none;
 }
 /* TUI mark — a small SVG in the tool's accent (color set from JS), nestled
    between the eyes. Fixed box, so it never morphs with the terminal font. */

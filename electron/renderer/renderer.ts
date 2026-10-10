@@ -13,6 +13,7 @@ import {
   parseTerminalFontSettings,
 } from '../shared/font-settings'
 import { AICO_TOAST_EVENT, type AicoToastDetail } from './actions'
+import { type Arcade, startArcade } from './arcade'
 import { initControlSurface } from './control-surface'
 import { wireDraftInput } from './draft-input'
 import { Eyes } from './eyes'
@@ -166,6 +167,20 @@ function wireEyes(): Eyes | null {
   return face
 }
 const eyes = wireEyes()
+
+// The titlebar arcade: a game vignette main assigns this window for its
+// lifetime (see arcade/). Loads after first paint; never blocks the terminal.
+let arcade: Arcade | null = null
+{
+  const bar = document.querySelector<HTMLElement>('.titlebar')
+  if (bar) {
+    void startArcade(bar, { gaze: (pt) => eyes?.watch(pt) })
+      .then((a) => {
+        arcade = a
+      })
+      .catch((err: unknown) => console.error('[arcade]', err))
+  }
+}
 
 // Titlebar identity (so several open widgets are distinguishable at a glance):
 // the TUI's SVG mark (in its accent) set between the eyes, and a click-to-rename
@@ -389,6 +404,7 @@ function setThinking(on: boolean): void {
   if (on !== thinking) {
     thinking = on
     eyes?.setBusy(on)
+    arcade?.output(on)
     window.aico.win.setThinking(on) // amber tray icon while active
   }
 }
@@ -409,6 +425,7 @@ function pokeThinking(): void {
 term.onData((data) => {
   window.aico.pty.input(data)
   eyes?.noticeInput()
+  arcade?.input()
 })
 window.aico.pty.onData((data) => {
   term.write(data)

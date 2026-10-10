@@ -146,6 +146,14 @@ export interface AicoApi {
      * an unsubscribe function. */
     onCursor(cb: (pt: { x: number; y: number }) => void): () => void
   }
+  /** Titlebar arcade (see renderer/arcade). */
+  arcade: {
+    /** Ask main which of these games this window shows; null if none. */
+    assign(keys: string[]): Promise<string | null>
+    /** The cursor in window coordinates while it is near the titlebar, then one
+     * null when it leaves; returns an unsubscribe function. */
+    onCursor(cb: (pt: { x: number; y: number } | null) => void): () => void
+  }
 }
 
 declare global {

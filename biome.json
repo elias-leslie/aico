@@ -34,5 +34,34 @@
       "quoteStyle": "single",
       "semicolons": "asNeeded"
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["electron/renderer/arcade/concepts/**"],
+      "formatter": {
+        "enabled": false
+      },
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noAssignInExpressions": "off",
+            "noThenProperty": "off",
+            "useIterableCallbackReturn": "off",
+            "noFallthroughSwitchClause": "off"
+          },
+          "correctness": {
+            "noUnusedVariables": "off",
+            "noUnusedFunctionParameters": "off"
+          },
+          "complexity": {
+            "useOptionalChain": "off"
+          },
+          "style": {
+            "useConst": "off",
+            "useTemplate": "off"
+          }
+        }
+      }
+    }
+  ]
 }

@@ -36,6 +36,7 @@ import {
   AgentAdmissionDenied,
   observeAgentScopes,
 } from './agent-admission'
+import { cursorNearTitlebar, parseArcadeKeys, pickArcade } from './arcade'
 import { contentSecurityPolicy, voiceConnectSource } from './csp'
 import {
   confirmATermSessionAbsence,
@@ -300,27 +301,41 @@ let quitting = false
 
 // Eyes-follow-cursor: while any widget is unfocused, broadcast the global cursor
 // position so those widgets' eyes can track it. One shared interval feeds every
-// window; the focused window ignores it and stares ahead. Runs only when at least
-// one window is unfocused, so an all-focused desktop pays nothing.
+// window; the focused window ignores it and stares ahead. Windows running the
+// titlebar arcade also get the cursor (window coordinates, focused or not) while
+// it is near their titlebar: the titlebar is the OS drag region, so the page
+// itself never sees the pointer there. Runs only while someone needs it.
 const blurredWins = new Set<number>()
+// Window id -> titlebar arcade game, kept for the window's lifetime.
+const arcadeOf = new Map<number, string>()
+const arcadeNear = new Set<number>()
 let cursorTimer: NodeJS.Timeout | undefined
+let cursorPeriod = 0
 let lastCursorPt: { x: number; y: number } | null = null
+function pumpCursor(): void {
+  const pt = screen.getCursorScreenPoint()
+  if (lastCursorPt && pt.x === lastCursorPt.x && pt.y === lastCursorPt.y) return
+  lastCursorPt = pt
+  for (const id of blurredWins) {
+    const win = BrowserWindow.fromId(id)
+    if (win && !win.isDestroyed()) win.webContents.send('win:cursor', pt)
+  }
+  for (const id of arcadeOf.keys()) {
+    const win = BrowserWindow.fromId(id)
+    if (!win || win.isDestroyed() || !win.isVisible()) continue
+    const near = cursorNearTitlebar(pt, win.getContentBounds())
+    if (near) arcadeNear.add(id)
+    else if (!arcadeNear.delete(id)) continue // already told it the cursor left
+    win.webContents.send('arcade:cursor', near)
+  }
+}
 function syncCursorPump(): void {
   lastCursorPt = null // a focus change always gets one fresh send
-  if (blurredWins.size > 0 && !cursorTimer) {
-    cursorTimer = setInterval(() => {
-      const pt = screen.getCursorScreenPoint()
-      if (lastCursorPt && pt.x === lastCursorPt.x && pt.y === lastCursorPt.y) return
-      lastCursorPt = pt
-      for (const id of blurredWins) {
-        const win = BrowserWindow.fromId(id)
-        if (win && !win.isDestroyed()) win.webContents.send('win:cursor', pt)
-      }
-    }, 250)
-  } else if (blurredWins.size === 0 && cursorTimer) {
-    clearInterval(cursorTimer)
-    cursorTimer = undefined
-  }
+  const period = arcadeOf.size > 0 ? 100 : blurredWins.size > 0 ? 250 : 0
+  if (period === cursorPeriod) return
+  if (cursorTimer) clearInterval(cursorTimer)
+  cursorTimer = period ? setInterval(pumpCursor, period) : undefined
+  cursorPeriod = period
 }
 // The widget that should receive an indicated selection: the last Aico widget
 // the user focused. (During an indicate gesture the *browser* holds OS focus,
@@ -2794,6 +2809,8 @@ function openWidget(row: WidgetRow): void {
     widgetOf.delete(winId)
     ptyStartGenerations.delete(winId)
     blurredWins.delete(winId)
+    arcadeOf.delete(winId)
+    arcadeNear.delete(winId)
     syncCursorPump()
     // On quit, leave `open` as-is so live widgets restore next launch; on an
     // explicit close, mark it closed (it moves to the tray's reopen list).
@@ -3957,6 +3974,20 @@ const startup = app.whenReady().then(async () => {
   ipcMain.on('win:set-bounds', (event, b: unknown) => {
     const bounds = parseBoundsRequest(b)
     if (bounds) BrowserWindow.fromWebContents(event.sender)?.setBounds(bounds)
+  })
+  // Titlebar arcade: the renderer lists the games it ships; main picks one this
+  // window keeps (reloads included) until it closes.
+  ipcMain.handle('arcade:assign', (event, keys: unknown) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const known = parseArcadeKeys(keys)
+    if (!win || !known) return null
+    const current = arcadeOf.get(win.id)
+    if (current && known.includes(current)) return current
+    arcadeOf.delete(win.id)
+    const key = pickArcade(known, arcadeOf.values())
+    if (key) arcadeOf.set(win.id, key)
+    syncCursorPump()
+    return key
   })
   ipcMain.on('win:thinking', (event, on: boolean) => {
     const win = BrowserWindow.fromWebContents(event.sender)
