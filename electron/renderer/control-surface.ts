@@ -198,13 +198,37 @@ function pinButton(id: string): HTMLButtonElement {
   return b
 }
 
+// Fill an icon slot: a per-TUI launcher shows its tool's mark (a Restart one
+// with a small ⟳ badge), anything else its glyph. The SVG is static,
+// developer-authored markup from the TUI spec, never user input.
+function setActionIcon(el: HTMLElement, a: Action): void {
+  if (!a.svg) {
+    el.textContent = a.icon
+    return
+  }
+  el.textContent = ''
+  el.append(tuiMark(a.svg, a.accent ?? ''))
+  if (a.id.startsWith('replace:')) {
+    const badge = make('span', 'aico-mark-badge')
+    badge.textContent = '⟳'
+    el.append(badge)
+  }
+}
+
+function tuiMark(svg: string, accent: string): HTMLElement {
+  const mark = make('span', 'aico-mark')
+  mark.innerHTML = svg
+  mark.style.color = accent
+  return mark
+}
+
 function menuRow(a: Action): HTMLElement {
   const row = make('div', 'aico-row')
   row.dataset.id = a.id
   const flyoutKind = FLYOUTS[a.id]
 
   const ic = make('span', 'aico-ic')
-  ic.textContent = a.icon
+  setActionIcon(ic, a)
   const lbl = make('span', 'aico-lbl')
   lbl.textContent = a.label
   // Shortcut + note live in the hover tooltip, not inline — keeps the menu uncluttered.
@@ -286,8 +310,7 @@ function newTuiRow(t: TuiInfo): HTMLElement {
   const id = `new:${t.slug}`
   const item = make('div', 'aico-sub-row runnable has-flyout')
   item.dataset.id = id
-  const dot = make('span', 'aico-sub-dot')
-  dot.style.background = t.accent
+  const dot = tuiMark(t.icon, t.accent)
   const lbl = make('span', 'aico-lbl')
   lbl.textContent = t.displayName
   const caret = make('span', 'aico-caret')
@@ -418,7 +441,9 @@ function populateSubmenu(kind: FlyoutKind): void {
       for (const t of catalogs.tuis) {
         submenuEl.append(
           submenuRow(`replace:${t.slug}`, t.displayName, (dot) => {
-            dot.style.background = t.accent
+            dot.className = 'aico-mark'
+            dot.innerHTML = t.icon // static SVG from the TUI spec
+            dot.style.color = t.accent
           }),
         )
       }
@@ -618,7 +643,7 @@ function toggleMenu(): void {
 function clusterIcon(a: Action, index: number): HTMLElement {
   const b = make('button', 'aico-pin-icon')
   b.type = 'button'
-  b.textContent = a.icon
+  setActionIcon(b, a)
   b.setAttribute('aria-label', a.label)
   b.dataset.actionId = a.id
   if (a.accent) b.style.color = a.accent // per-TUI launchers read as their accent
@@ -685,7 +710,7 @@ function renderPaletteList(): void {
     const row = make('div', 'aico-palette-item')
     if (i === 0) row.classList.add('sel')
     const ic = make('span', 'aico-ic')
-    ic.textContent = a.icon
+    setActionIcon(ic, a)
     const lbl = make('span', 'aico-lbl')
     lbl.textContent = a.label
     row.append(ic, lbl)

@@ -1,7 +1,7 @@
 import type { OpenableSession } from '../types'
 import { setProjectActions, setSessionActions, setTuiActions } from './actions'
 
-export type TuiInfo = { slug: string; displayName: string; accent: string }
+export type TuiInfo = { slug: string; displayName: string; accent: string; icon: string }
 export type ProjectInfo = { id: string; name: string; current: boolean }
 export type SessionCatalogStatus = 'ready' | 'empty' | 'unavailable'
 

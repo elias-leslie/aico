@@ -81,8 +81,8 @@ export interface AicoApi {
   actions: {
     /** Create a new widget running `tool` (TUI slug) in workspace `projectId`. */
     newWidget(tool: string, projectId: string): void
-    /** Enabled TUIs (slug + label + accent), in registry order, for the picker. */
-    listTuis(): Promise<{ slug: string; displayName: string; accent: string }[]>
+    /** Enabled TUIs (slug + label + accent + SVG mark), in registry order, for the picker. */
+    listTuis(): Promise<{ slug: string; displayName: string; accent: string; icon: string }[]>
     /** Replace the focused widget's running TUI with `tool` (respawns the pane). */
     loadTui(tool: string): void
     /** Aico workspace catalog for the "Open workspace" picker. */

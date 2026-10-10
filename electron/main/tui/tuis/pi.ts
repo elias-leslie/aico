@@ -9,9 +9,9 @@ import type { TuiSpec } from '../spec'
 export const piTui: TuiSpec = {
   slug: 'pi',
   displayName: 'Pi',
-  // Blocky "Pi" monogram — pi's own pi-mono logo.
-  icon: '<svg viewBox="0 0 800 800" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path fill-rule="evenodd" d="M165.29 165.29H517.36V400H400V517.36H282.65V634.72H165.29ZM282.65 282.65V400H400V282.65Z"/><path d="M517.36 400H634.72V634.72H517.36Z"/></svg>',
-  accent: '#C16A8A', // dusty rose
+  // Blocky pi mark, geometry from pi.dev/favicon.svg on a tight canvas.
+  icon: '<svg viewBox="-28 -28 616 616" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M420 280H280V140H0V0H420ZM560 560H420V280H560ZM140 560H0V140H140V280H280V420H140Z"/></svg>',
+  accent: '#C16A8A', // dusty rose — distinct from Claude's terracotta
   order: 4,
   enabled: true,
   command: ['pi', '--approve'],

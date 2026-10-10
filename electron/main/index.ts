@@ -4030,7 +4030,12 @@ const startup = app.whenReady().then(async () => {
   // The enabled TUIs (registry order) so the lantern menu can offer a picker —
   // same source the tray's "New widget" submenu reads.
   ipcMain.handle('tui:list', () =>
-    listTuis().map((t) => ({ slug: t.slug, displayName: t.displayName, accent: t.accent })),
+    listTuis().map((t) => ({
+      slug: t.slug,
+      displayName: t.displayName,
+      accent: t.accent,
+      icon: t.icon,
+    })),
   )
 
   // Aico workspace catalog for the lantern menu's "Open workspace ▸" flyout

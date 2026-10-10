@@ -5,10 +5,9 @@ import type { TuiSpec } from '../spec'
 export const antigravityTui: TuiSpec = {
   slug: 'agy',
   displayName: 'Antigravity',
-  // Angular A with an orbiting point: compact at titlebar size and distinct
-  // from Gemini's four-point mark.
-  icon: '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19 L12 4 L19 19 M8 14 H16"/><path d="M3 10 C6 6 15 5 21 8"/><circle cx="20.5" cy="8" r="1.3" fill="currentColor" stroke="none"/></svg>',
-  accent: '#4F8DF7',
+  // Antigravity's arch, path from antigravity.google/favicon.svg.
+  icon: '<svg viewBox="12 13 88 88" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M89.6992 93.695C94.3659 97.195 101.366 94.8617 94.9492 88.445C75.6992 69.7783 79.7825 18.445 55.8659 18.445C31.9492 18.445 36.0325 69.7783 16.7825 88.445C9.78251 95.445 17.3658 97.195 22.0325 93.695C40.1159 81.445 38.9492 59.8617 55.8659 59.8617C72.7825 59.8617 71.6159 81.445 89.6992 93.695Z"/></svg>',
+  accent: '#3186FF', // Antigravity blue
   order: 4,
   enabled: true,
   command: ['agy', '--dangerously-skip-permissions'],

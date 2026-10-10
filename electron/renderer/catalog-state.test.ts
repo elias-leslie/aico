@@ -7,7 +7,7 @@ import {
   setSessionActions,
   setTuiActions,
 } from './actions'
-import { createCatalogState } from './catalog-state'
+import { createCatalogState, type TuiInfo } from './catalog-state'
 
 const aTermSession = (id: string): OpenableSession => ({
   owner: 'a-term',
@@ -37,7 +37,7 @@ afterEach(() => {
 
 describe('picker catalog state', () => {
   it('starts independent requests together and registers all dynamic pins before initialization ends', async () => {
-    const tuis = deferred<{ slug: string; displayName: string; accent: string }[]>()
+    const tuis = deferred<TuiInfo[]>()
     const projects = deferred<{ id: string; name: string; current: boolean }[]>()
     const sessions = deferred<OpenableSession[]>()
     const listTuis = vi.fn(() => tuis.promise)
@@ -58,7 +58,7 @@ describe('picker catalog state', () => {
     await Promise.resolve()
     expect(finished).toBe(false)
 
-    tuis.resolve([{ slug: 'claude', displayName: 'Claude', accent: '#fff' }])
+    tuis.resolve([{ slug: 'claude', displayName: 'Claude', accent: '#fff', icon: '' }])
     await loading
     expect(
       sanitizePins([
@@ -99,7 +99,7 @@ describe('picker catalog state', () => {
 
   it('degrades a failed catalog independently of the others', async () => {
     const catalogs = createCatalogState({
-      listTuis: async () => [{ slug: 'claude', displayName: 'Claude', accent: '#fff' }],
+      listTuis: async () => [{ slug: 'claude', displayName: 'Claude', accent: '#fff', icon: '' }],
       listProjects: async () => {
         throw new Error('projects unavailable')
       },

@@ -67,8 +67,8 @@ contextBridge.exposeInMainWorld('aico', {
     /** Create a new widget running `tool` (TUI slug) in workspace `projectId`.
      * Both are explicit — a launch always names its tool and workspace. */
     newWidget: (tool: string, projectId: string) => ipcRenderer.send('widget:new', tool, projectId),
-    /** Enabled TUIs (slug + label + accent), in registry order, for the picker. */
-    listTuis: (): Promise<{ slug: string; displayName: string; accent: string }[]> =>
+    /** Enabled TUIs (slug + label + accent + SVG mark), in registry order, for the picker. */
+    listTuis: (): Promise<{ slug: string; displayName: string; accent: string; icon: string }[]> =>
       ipcRenderer.invoke('tui:list'),
     /** Replace the focused widget's running TUI with `tool` (respawns the pane). */
     loadTui: (tool: string) => ipcRenderer.send('widget:load-tui', tool),

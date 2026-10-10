@@ -73,6 +73,9 @@ export interface Action {
   icon: string
   /** Optional accent (Lantern palette); tints the icon — used by per-TUI launchers. */
   accent?: string
+  /** Optional static SVG mark from the TUI spec, shown in place of `icon` so
+   * each per-TUI launcher reads as its tool at a glance. */
+  svg?: string
   /** Optional one-line explainer shown in the hover tooltip (e.g. how a click
    * differs from the hotkey for a grab). */
   note?: string
@@ -251,7 +254,9 @@ let tuiActions: Action[] = []
  * a "New <TUI>" launcher (picks a workspace, then opens a new widget) and a
  * "Replace with <TUI>" launcher (runs in the focused widget, replacing whatever's there).
  * Both are pinnable. */
-export function setTuiActions(tuis: { slug: string; displayName: string; accent: string }[]): void {
+export function setTuiActions(
+  tuis: { slug: string; displayName: string; accent: string; icon?: string }[],
+): void {
   tuiActions = tuis.flatMap((t) => [
     {
       id: `new:${t.slug}`,
@@ -260,6 +265,7 @@ export function setTuiActions(tuis: { slug: string; displayName: string; accent:
       shortcut: '', // launched from the flyout / a pinned icon — no chord
       icon: '＋',
       accent: t.accent,
+      svg: t.icon,
       // No run: clicking pops the workspace picker (the menu drill-down / pinned
       // icon), which calls newWidget(slug, projectId) once a project is chosen.
       picksProject: true,
@@ -271,6 +277,7 @@ export function setTuiActions(tuis: { slug: string; displayName: string; accent:
       shortcut: '', // destructive (ends the current pane) — no chord
       icon: '⟳',
       accent: t.accent,
+      svg: t.icon,
       run: () => window.aico.actions.loadTui(t.slug),
     },
   ])

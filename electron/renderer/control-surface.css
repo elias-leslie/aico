@@ -449,3 +449,38 @@
     transition: none;
   }
 }
+
+/* Per-TUI mark (the tool's own logo in its accent) wherever a launcher names a
+   TUI: flyout rows, palette, menu and pinned icons. */
+.aico-mark {
+  flex: 0 0 14px;
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  vertical-align: middle;
+}
+.aico-mark svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.aico-ic:has(.aico-mark),
+.aico-pin-icon:has(.aico-mark) {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+/* A Restart-with launcher wears a small ⟳ on its mark, telling it apart from
+   the New-session one for the same TUI. */
+.aico-mark-badge {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  font-size: 8px;
+  line-height: 1;
+  color: var(--bone);
+  text-shadow:
+    0 0 2px var(--rim),
+    0 0 2px var(--rim);
+}
