@@ -87,6 +87,23 @@ def test_list_shows_only_a_term_roots(test_app: TestClient) -> None:
     assert single.json()["hostIdentity"] == root["hostIdentity"]
 
 
+def test_list_passes_ended_through_and_keeps_origin_a_term(test_app: TestClient) -> None:
+    live = _create(test_app)
+    ended = _create(test_app, {**CREATE, "requestId": "root-2"})
+    assert test_app.post("/v1/roots/root-2/end", json={"generation": ended["generation"]}).status_code == 200
+    get_client().call("POST", "/v1/roots", {**CREATE, "requestId": "aico-root"})
+
+    everything = test_app.get("/v1/roots").json()
+    assert sorted(item["requestId"] for item in everything["roots"]) == ["root-1", "root-2"]
+    running = test_app.get("/v1/roots", params={"ended": "0", "origin": "aico", "other": "x"})
+    assert running.status_code == 200
+    assert [item["requestId"] for item in running.json()["roots"]] == [live["requestId"]]
+    assert running.json()["owner"] == "a-term"
+
+    bad = test_app.get("/v1/roots", params={"ended": "maybe"})
+    assert bad.status_code == 400 and bad.json() == {"error": "invalid_query"}
+
+
 def test_unknown_root_passes_through_404(test_app: TestClient) -> None:
     response = test_app.get("/v1/roots/nope")
     assert response.status_code == 404

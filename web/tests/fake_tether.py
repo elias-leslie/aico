@@ -66,6 +66,8 @@ class FakeTetherState:
         self.resize_results: list[dict[str, Any]] = []
         self.next_create_status = "running"
         self.fail_next: dict[str, tuple[int, str]] = {}
+        # Post-cutover Tether carries the descriptor in session.created/updated.
+        self.event_snapshots = True
         self._counter = 0
         now = int(time.time() * 1000)
         for tool in SEED_TOOLS:
@@ -76,6 +78,15 @@ class FakeTetherState:
             }
 
     # -- helpers ---------------------------------------------------------
+    def session_event(self, event_type: str, session_id: str) -> None:
+        data: dict[str, Any] = {"id": session_id}
+        session = self.sessions.get(session_id)
+        if session is not None:
+            data["generation"] = session["generation"]
+            if self.event_snapshots:
+                data["session"] = json.loads(json.dumps(session))
+        self.events.append({"type": event_type, "data": data})
+
     def _generation(self, session_id: str) -> str:
         self._counter += 1
         return hashlib.sha256(f"{session_id}:{self._counter}".encode()).hexdigest()
@@ -135,7 +146,7 @@ class FakeTetherState:
             "createdAt": int(time.time() * 1000),
         }
         self.sessions[session_id] = descriptor
-        self.events.append({"type": "session.created", "data": {"id": session_id}})
+        self.session_event("session.created", session_id)
         return descriptor
 
     def end(self, session_id: str) -> None:
@@ -255,7 +266,7 @@ def _sessions(state: FakeTetherState, method: str, rest: list[str], query: dict[
             if failure or session is None:
                 return failure or _error(404, "not_found")
             session["name"] = body.get("name")
-            state.events.append({"type": "session.updated", "data": {"id": session_id}})
+            state.session_event("session.updated", session_id)
             return 200, session
     if action == "attach" and method == "GET":
         session = state.sessions.get(session_id)
@@ -293,6 +304,7 @@ def _sessions(state: FakeTetherState, method: str, rest: list[str], query: dict[
             session["projectId"], session["projectRoot"] = project["id"], project["root"]
         session["generation"] = state._generation(session_id)
         session["status"], session["available"] = "running", True
+        state.session_event("session.updated", session_id)
         return 200, session
     if action == "resize-claim":
         state.resize_claims.append({"id": session_id, **body})
@@ -415,9 +427,13 @@ def _roots(state: FakeTetherState, method: str, rest: list[str], query: dict[str
     if not rest:
         if method == "GET":
             origin = query.get("origin")
-            if origin is not None and origin not in ROOT_ORIGINS:
+            ended = query.get("ended")
+            if (origin is not None and origin not in ROOT_ORIGINS) or ended not in {None, "0", "1"}:
                 return _error(400, "invalid_query")
-            roots = [root for root in state.roots.values() if origin is None or root["origin"] == origin]
+            roots = [
+                root for root in state.roots.values()
+                if (origin is None or root["origin"] == origin) and not (ended == "0" and root["status"] == "ended")
+            ]
             return 200, {"owner": origin or "aico", "available": True, "directedDelivery": {"available": False},
                          "roots": roots}
         if method == "POST":
@@ -469,7 +485,7 @@ def _roots(state: FakeTetherState, method: str, rest: list[str], query: dict[str
         if set(body) != {"generation", "label"} or label is None:
             return _error(400, "invalid_body")
         state.sessions[root["hostIdentity"]]["name"] = label
-        state.events.append({"type": "session.updated", "data": {"id": root["hostIdentity"]}})
+        state.session_event("session.updated", root["hostIdentity"])
         return 200, root
     return _error(503, "gui_unavailable")
 
@@ -570,6 +586,16 @@ class FakeTether:
     def end(self, session_id: str) -> None:
         with self.state.lock:
             self.state.end(session_id)
+
+    def update(self, session_id: str, **fields: Any) -> None:
+        """Change a session as another client would; publishes ``session.updated``."""
+        with self.state.lock:
+            self.state.sessions[session_id].update(fields)
+            self.state.session_event("session.updated", session_id)
+
+    def legacy_changed(self, names: list[str]) -> None:
+        with self.state.lock:
+            self.state.events.append({"type": "legacy.changed", "data": {"names": names}})
 
     @property
     def calls(self) -> list[tuple[str, str, Any]]:

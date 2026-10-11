@@ -3,7 +3,7 @@
 SummitFlow fleet calls ``http://127.0.0.1:8002/v1/roots`` with surface
 ``a-term``. Tether owns the roots. These routes forward to Tether with
 ``origin: "a-term"`` so Tether stores the requesting app, lists only A-Term's
-roots (``GET /v1/roots?origin=a-term``) and reports ``owner: "a-term"`` on
+roots (``GET /v1/roots?origin=a-term``, passing ``ended`` through) and reports ``owner: "a-term"`` on
 them itself. ``title`` is Tether's (it renames without a GUI). The view-only
 actions stay here because views belong to A-Term:
 
@@ -22,6 +22,7 @@ import json
 import re
 import uuid
 from typing import Any
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -43,6 +44,7 @@ GENERATION = re.compile(r"[0-9a-f]{64}\Z")
 DIRECTED_DELIVERY = {"available": False, "reason": "exact_thread_generation_receipt_unqualified"}
 POSITION = {"available": False, "reason": "browser_grid_has_no_pixel_window_bounds"}
 _MAX_BODY_BYTES = 128 * 1024
+_LIST_QUERY = {"ended"}
 
 
 class RootError(Exception):
@@ -227,7 +229,10 @@ async def list_roots(request: Request):
         _local(request)
     except RootError as error:
         return _error(error)
-    return await run_in_threadpool(_guarded, _forward, "GET", f"/v1/roots?origin={OWNER}")
+    # Forward the filters Tether defines (``ended``); ``origin`` is always A-Term's.
+    query = {key: value for key, value in request.query_params.items() if key in _LIST_QUERY}
+    path = "/v1/roots?" + urlencode({**query, "origin": OWNER})
+    return await run_in_threadpool(_guarded, _forward, "GET", path)
 
 
 @router.post("/v1/roots")
