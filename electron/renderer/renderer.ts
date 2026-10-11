@@ -12,8 +12,8 @@ import {
   fontLoadFaceFor,
   parseTerminalFontSettings,
 } from '../shared/font-settings'
-import { AICO_TOAST_EVENT, type AicoToastDetail } from './actions'
-import { type Arcade, startArcade } from './arcade'
+import { AICO_TOAST_EVENT, type AicoToastDetail, setGameActions } from './actions'
+import { type Arcade, GAMES, startArcade } from './arcade'
 import { initControlSurface } from './control-surface'
 import { wireDraftInput } from './draft-input'
 import { Eyes } from './eyes'
@@ -170,15 +170,55 @@ const eyes = wireEyes()
 
 // The titlebar arcade: a game vignette main assigns this window for its
 // lifetime, until "Next game" swaps it (see arcade/). Loads after first paint; never blocks the terminal.
+// The games can be turned off for every window; off, none of this runs.
 let arcade: Arcade | null = null
 {
   const bar = document.querySelector<HTMLElement>('.titlebar')
   if (bar) {
-    void startArcade(bar, { gaze: (pt) => eyes?.watch(pt) })
-      .then((a) => {
-        arcade = a
+    let wanted = false
+    let starting = false
+    const start = (): void => {
+      wanted = true
+      if (arcade || starting) return
+      starting = true
+      startArcade(bar, { gaze: (pt) => eyes?.watch(pt) })
+        .then((a) => {
+          if (wanted) arcade = a
+          else a?.stop() // turned off while it was loading
+        })
+        .catch((err: unknown) => console.error('[arcade]', err))
+        .finally(() => {
+          starting = false
+        })
+    }
+    const stop = (): void => {
+      wanted = false
+      arcade?.stop()
+      arcade = null
+      eyes?.watch(null)
+    }
+    window.aico.arcade
+      .enabled()
+      .then((on) => {
+        if (on) start()
       })
       .catch((err: unknown) => console.error('[arcade]', err))
+    window.aico.arcade.onEnabled((on) => (on ? start() : stop()))
+    setGameActions(GAMES)
+    window.addEventListener('aico:arcade-pick', (e) => {
+      const key = (e as CustomEvent<string>).detail
+      if (arcade) {
+        arcade.pick(key).catch((err: unknown) => console.error('[arcade]', err))
+        return
+      }
+      // games are off (or still loading): main turns them on with this one assigned
+      window.aico.arcade
+        .pick(
+          key,
+          GAMES.map((g) => g.key),
+        )
+        .catch((err: unknown) => console.error('[arcade]', err))
+    })
     window.addEventListener('aico:arcade-next', () => {
       arcade?.next().catch((err: unknown) => console.error('[arcade]', err))
     })

@@ -251,6 +251,25 @@ export const ACTIONS: Action[] = [
     note: 'Swap the titlebar game for one this window hasn’t shown yet.',
     run: () => window.dispatchEvent(new CustomEvent('aico:arcade-next')),
   },
+  {
+    // Flyout-only host (no run): hovering opens the game list; a choice swaps
+    // this window's titlebar game.
+    id: 'arcade-pick',
+    section: 'Titlebar',
+    label: 'Choose game',
+    shortcut: '',
+    icon: '🎮',
+    opensFlyout: true,
+  },
+  {
+    id: 'arcade-toggle',
+    section: 'Titlebar',
+    label: 'Turn games on or off',
+    shortcut: '',
+    icon: '⏻',
+    note: 'Stops the titlebar games in every window to save CPU and memory. Run again to bring them back.',
+    run: () => window.aico.arcade.toggle(),
+  },
 ]
 
 // Per-TUI launch actions, built from the registry at init (the TUI list lives in
@@ -313,6 +332,26 @@ export function setProjectActions(
   }))
 }
 
+// Per-game actions ("Play <Game>"), one for each titlebar game this build
+// ships. Like the launchers above, they appear only inside their flyout.
+let gameActions: Action[] = []
+let gameList: { key: string; name: string }[] = []
+
+/** The titlebar games, by name, for the "Choose game" flyout. */
+export const listGames = (): { key: string; name: string }[] => gameList
+
+export function setGameActions(games: { key: string; name: string }[]): void {
+  gameList = games
+  gameActions = games.map((g) => ({
+    id: `game:${g.key}`,
+    section: 'Titlebar',
+    label: `Play ${g.name}`,
+    shortcut: '',
+    icon: '🕹',
+    run: () => window.dispatchEvent(new CustomEvent('aico:arcade-pick', { detail: g.key })),
+  }))
+}
+
 let sessionActions: Action[] = []
 
 export function sessionActionId(session: { owner: 'aico' | 'a-term'; id: string }): string {
@@ -345,7 +384,7 @@ export function setSessionActions(
 /** The static registry plus the dynamic per-TUI and per-project launchers — what
  * findAction, the palette, and the pin set resolve over (the menu uses ACTIONS). */
 export function allActions(): Action[] {
-  return [...ACTIONS, ...tuiActions, ...projectActions, ...sessionActions]
+  return [...ACTIONS, ...tuiActions, ...projectActions, ...sessionActions, ...gameActions]
 }
 
 /** A capability is pinnable when a click does something: it runs directly, pops

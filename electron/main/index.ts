@@ -3978,12 +3978,27 @@ const startup = app.whenReady().then(async () => {
     const bounds = parseBoundsRequest(b)
     if (bounds) BrowserWindow.fromWebContents(event.sender)?.setBounds(bounds)
   })
+  // Titlebar arcade on or off, for every window (one row in aico.db). Off, no
+  // window runs a game and the cursor pump stops for them.
+  const arcadeOn = (): boolean => getSetting('arcade') !== 'off'
+  ipcMain.handle('arcade:enabled', () => arcadeOn())
+  ipcMain.on('arcade:toggle', () => {
+    const on = !arcadeOn()
+    setSetting('arcade', on ? 'on' : 'off')
+    if (!on) {
+      arcadeOf.clear()
+      arcadeShown.clear()
+      arcadeNear.clear()
+      syncCursorPump()
+    }
+    for (const win of BrowserWindow.getAllWindows()) win.webContents.send('arcade:enabled', on)
+  })
   // Titlebar arcade: the renderer lists the games it ships; main picks one this
   // window keeps (reloads included) until it closes.
   ipcMain.handle('arcade:assign', (event, keys: unknown) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     const known = parseArcadeKeys(keys)
-    if (!win || !known) return null
+    if (!win || !known || !arcadeOn()) return null
     const current = arcadeOf.get(win.id)
     if (current && known.includes(current)) return current
     arcadeOf.delete(win.id)
@@ -3995,12 +4010,27 @@ const startup = app.whenReady().then(async () => {
     syncCursorPump()
     return key
   })
+  // "Choose game" from the lantern menu: this game, in this window. Picking one
+  // while the games are off turns them back on.
+  ipcMain.handle('arcade:pick', (event, pick: unknown, keys: unknown) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const known = parseArcadeKeys(keys)
+    if (!win || !known || typeof pick !== 'string' || !known.includes(pick)) return null
+    arcadeOf.set(win.id, pick)
+    arcadeShown.set(win.id, new Set([...(arcadeShown.get(win.id) ?? []), pick]))
+    syncCursorPump()
+    if (!arcadeOn()) {
+      setSetting('arcade', 'on')
+      for (const w of BrowserWindow.getAllWindows()) w.webContents.send('arcade:enabled', true)
+    }
+    return pick
+  })
   // "Next game" from the lantern menu: another game this window hasn't shown
   // yet and no other window is showing (while one is free).
   ipcMain.handle('arcade:next', (event, keys: unknown) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     const known = parseArcadeKeys(keys)
-    if (!win || !known) return null
+    if (!win || !known || !arcadeOn()) return null
     const current = arcadeOf.get(win.id)
     const others = [...arcadeOf].filter(([id]) => id !== win.id).map(([, k]) => k)
     const shown = arcadeShown.get(win.id) ?? new Set(current ? [current] : [])

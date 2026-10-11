@@ -175,6 +175,14 @@ contextBridge.exposeInMainWorld('aico', {
   arcade: {
     assign: (keys: string[]) => ipcRenderer.invoke('arcade:assign', keys),
     next: (keys: string[]) => ipcRenderer.invoke('arcade:next', keys),
+    pick: (key: string, keys: string[]) => ipcRenderer.invoke('arcade:pick', key, keys),
+    enabled: () => ipcRenderer.invoke('arcade:enabled'),
+    toggle: () => ipcRenderer.send('arcade:toggle'),
+    onEnabled: (cb: (on: boolean) => void) => {
+      const listener = (_event: unknown, on: boolean) => cb(on)
+      ipcRenderer.on('arcade:enabled', listener)
+      return () => ipcRenderer.removeListener('arcade:enabled', listener)
+    },
     onCursor: (cb: (pt: { x: number; y: number } | null) => void) => {
       const listener = (_event: unknown, pt: { x: number; y: number } | null) => cb(pt)
       ipcRenderer.on('arcade:cursor', listener)

@@ -152,6 +152,15 @@ export interface AicoApi {
     assign(keys: string[]): Promise<string | null>
     /** Swap this window's game for another one; null if none. */
     next(keys: string[]): Promise<string | null>
+    /** Show this game in this window (turning the games on if they're off);
+     * null if it isn't one of `keys`. */
+    pick(key: string, keys: string[]): Promise<string | null>
+    /** Whether the titlebar games are on (a setting shared by every window). */
+    enabled(): Promise<boolean>
+    /** Turn the titlebar games off, or back on, in every window. */
+    toggle(): void
+    /** Called when the games are turned on or off; returns an unsubscribe function. */
+    onEnabled(cb: (on: boolean) => void): () => void
     /** The cursor in window coordinates while it is near the titlebar, then one
      * null when it leaves; returns an unsubscribe function. */
     onCursor(cb: (pt: { x: number; y: number } | null) => void): () => void

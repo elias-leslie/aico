@@ -8,6 +8,33 @@ import { conceptFor, installGlobals, type Point, Strip, type StripHooks } from '
 const games = import.meta.glob('./concepts/*.js')
 const keyOf = (path: string): string => path.replace(/^.*\/([a-z0-9]+)\.js$/, '$1')
 
+const NAMES: Record<string, string> = {
+  anotherworld: 'Another World',
+  barbarian: 'Barbarian',
+  birds: 'Birds',
+  castlevania: 'Castlevania',
+  contra: 'Contra',
+  darkcastle: 'Dark Castle',
+  donkeykong: 'Donkey Kong',
+  duckhunt: 'Duck Hunt',
+  joust: 'Joust',
+  larry: 'Leisure Suit Larry',
+  lemmings: 'Lemmings',
+  megaman: 'Mega Man',
+  metalslug: 'Metal Slug',
+  metroid: 'Metroid',
+  monkeyisland: 'Monkey Island',
+  pacman: 'Pac-Man',
+  spacequest: 'Space Quest',
+  strider: 'Strider',
+  syndicate: 'Syndicate',
+}
+/** Every game this build ships, for the "Choose game" picker, by name. */
+export const GAMES: { key: string; name: string }[] = Object.keys(games)
+  .map(keyOf)
+  .map((key) => ({ key, name: NAMES[key] ?? key }))
+  .sort((a, b) => a.name.localeCompare(b.name))
+
 export interface Arcade {
   /** Terminal output started (true) or settled (false). */
   output(on: boolean): void
@@ -15,6 +42,10 @@ export interface Arcade {
   input(): void
   /** Swap to another game (one this window hasn't shown yet). */
   next(): Promise<void>
+  /** Swap to this game. */
+  pick(key: string): Promise<void>
+  /** Stop for good: the game, its canvas and every listener. */
+  stop(): void
 }
 
 export async function startArcade(
@@ -42,13 +73,14 @@ export async function startArcade(
   }
 
   if (!(await show(await window.aico.arcade.assign(keys)))) return null
-  window.aico.arcade.onCursor((pt) => {
+  const unCursor = window.aico.arcade.onCursor((pt) => {
     if (!pt) return strip?.setCursor(null)
     // main sends window coordinates; the bar starts at the top of the window
     const b = bar.getBoundingClientRect()
     strip?.setCursor({ x: pt.x - b.left, y: pt.y - b.top } satisfies Point)
   })
-  bar.addEventListener('mouseleave', () => strip?.setCursor(null))
+  const life = new AbortController()
+  bar.addEventListener('mouseleave', () => strip?.setCursor(null), { signal: life.signal })
   const gate = new ActivityGate((busy, ran) => strip?.setBusy(busy, ran))
   let swapping = false
   return {
@@ -65,6 +97,22 @@ export async function startArcade(
       } finally {
         swapping = false
       }
+    },
+    pick: async (key) => {
+      if (swapping || key === bar.dataset.arcade) return
+      swapping = true
+      try {
+        await show(await window.aico.arcade.pick(key, keys))
+      } finally {
+        swapping = false
+      }
+    },
+    stop: () => {
+      unCursor()
+      life.abort()
+      strip?.destroy()
+      strip = null
+      delete bar.dataset.arcade
     },
   }
 }

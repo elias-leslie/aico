@@ -22,6 +22,7 @@ import {
   DEFAULT_PINS,
   findAction,
   isPinnable,
+  listGames,
   pinnedActions,
   reorderPins,
   runAction,
@@ -273,8 +274,9 @@ function menuRow(a: Action): HTMLElement {
 
 // The flyout-bearing menu rows and the launcher action-id prefix each uses
 // (`<kind>:<slug>` for TUIs, `project:<id>` for workspaces).
-type FlyoutKind = 'new' | 'replace' | 'project' | 'tmux'
+type FlyoutKind = 'new' | 'replace' | 'project' | 'tmux' | 'game'
 const FLYOUTS: Partial<Record<string, FlyoutKind>> = {
+  'arcade-pick': 'game',
   'new-widget': 'new',
   'replace-tui': 'replace',
   'switch-project': 'project',
@@ -419,6 +421,16 @@ function populateSubmenu(kind: FlyoutKind): void {
       }
     } else {
       submenuEl.append(emptySubmenuRow('No projects'))
+    }
+  } else if (kind === 'game') {
+    const current = document.querySelector<HTMLElement>('.titlebar')?.dataset.arcade
+    for (const g of listGames()) {
+      submenuEl.append(
+        submenuRow(`game:${g.key}`, g.name, (dot) => {
+          dot.classList.add('project') // neutral ring; .current fills it (see CSS)
+          dot.classList.toggle('current', g.key === current)
+        }),
+      )
     }
   } else if (kind === 'tmux') {
     if (catalogs.sessions.length) {
