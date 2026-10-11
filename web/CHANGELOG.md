@@ -4,6 +4,8 @@
 
 ### Breaking: A-Term now requires Tether
 
+Requires Tether API v1. Install and start Tether (`tether@default`) before A-Term.
+
 - Sessions are owned by [Tether](https://github.com/elias-leslie/tether), the local session daemon (API version 1 or newer, `tether@default.service`). A-Term creates sessions through Tether with `origin: a-term`, attaches with Tether's exact `tmux -S <socket> attach-session` target, and ends, renames, respawns and switches tools through Tether. The same sessions appear in Aico, and Aico's sessions appear here.
 - Postgres is gone from the runtime. A-Term keeps only view state (panes, layout, which session each pane shows, project display settings) in `~/.local/state/a-term/a-term.db`. `DATABASE_URL`, the `DB_POOL_*` settings, Alembic, `managed-postgres.sh` and the installer's database steps are removed. The installer now checks for Tether instead.
 - New `a-term migrate-from-postgres` (dry run by default, `--apply` to write) copies panes, layouts, project settings and links to still-running pre-Tether sessions from the old tables, reading Postgres only. It needs the new `migrate` extra. `a-term import-tools` adds the old agent tools to Tether's registry in one transaction (Tether's `POST /v1/tools/import`, dry run unless `--apply`). See `docs/cutover-a-term.md`.
