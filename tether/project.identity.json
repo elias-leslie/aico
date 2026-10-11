@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "project": {
+    "id": "tether",
+    "repo_name": "tether",
+    "display_name": "Tether",
+    "lifecycle": "active"
+  },
+  "branding": {
+    "short_name": "Tether",
+    "description": "Per-user session daemon that owns tmux session lifecycle for Aico and A-Term over a private Unix socket."
+  },
+  "runtime": {
+    "backend_port": 0,
+    "frontend_port": 0,
+    "backend_dir": ".",
+    "frontend_dir": ".",
+    "health_endpoint": "/v1/health",
+    "transport": "unix-socket",
+    "socket": "$XDG_RUNTIME_DIR/tether/default/control.sock"
+  },
+  "services": {
+    "backend": "tether@default.service",
+    "frontend": "",
+    "default_workers": [],
+    "optional_workers": []
+  },
+  "hosts": {},
+  "repository": {
+    "owner": "elias-leslie",
+    "name": "tether",
+    "ssh_url": "git@github.com:elias-leslie/tether.git",
+    "https_url": "https://github.com/elias-leslie/tether"
+  }
+}

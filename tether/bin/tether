@@ -1,0 +1,43 @@
+#!/bin/sh
+# Tether launcher: find a Node.js >= 22.13 and run the bundled daemon/CLI.
+# Node resolution order: $TETHER_NODE, /usr/local/bin/node, /usr/bin/node, PATH.
+# The installed copy lives at ~/.local/lib/tether/bin/tether, a path that stays
+# stable across releases (see docs/adr/0002-runtime-and-packaging.md).
+set -eu
+
+self=$(readlink -f -- "$0")
+root=$(dirname -- "$(dirname -- "$self")")
+bundle="$root/dist/tether.mjs"
+if [ ! -r "$bundle" ]; then
+  echo "tether: missing $bundle (run npm run build, then scripts/install.sh)" >&2
+  exit 127
+fi
+
+node="${TETHER_NODE:-}"
+if [ -z "$node" ]; then
+  for candidate in /usr/local/bin/node /usr/bin/node; do
+    if [ -x "$candidate" ]; then
+      node=$candidate
+      break
+    fi
+  done
+fi
+if [ -z "$node" ]; then
+  node=$(command -v node 2>/dev/null || true)
+fi
+if [ -z "$node" ] || [ ! -x "$node" ]; then
+  echo "tether: Node.js >= 22.13 not found; set TETHER_NODE" >&2
+  exit 127
+fi
+
+version=$("$node" --version 2>/dev/null || echo v0.0.0)
+version=${version#v}
+major=${version%%.*}
+rest=${version#*.}
+minor=${rest%%.*}
+if [ "$major" -lt 22 ] || { [ "$major" -eq 22 ] && [ "$minor" -lt 13 ]; }; then
+  echo "tether: $node is v$version; Node.js >= 22.13 is required (set TETHER_NODE)" >&2
+  exit 127
+fi
+
+exec "$node" --disable-warning=ExperimentalWarning "$bundle" "$@"

@@ -1,0 +1,28 @@
+{
+  "name": "tether",
+  "version": "0.0.1",
+  "description": "Per-user session daemon that owns tmux session lifecycle for Aico and A-Term.",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "bin": {
+    "tether": "bin/tether"
+  },
+  "scripts": {
+    "build": "esbuild src/cli.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/tether.mjs --banner:js=\"// Tether daemon and CLI bundle. Built by npm run build; do not edit.\"",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "biome check .",
+    "check": "npm run lint && npm run typecheck && npm test && npm run build"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.3.11",
+    "@types/node": "^22.19.7",
+    "esbuild": "^0.25.12",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.6"
+  }
+}

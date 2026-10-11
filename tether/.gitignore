@@ -1,0 +1,30 @@
+# Node
+node_modules/
+*.tsbuildinfo
+dist/
+coverage/
+
+# Environment
+.env
+.env.local
+.env*.local
+
+# SQLite local state
+*.db
+*.db-wal
+*.db-shm
+
+# Dev tooling
+.dev-tools/
+.st/
+.index.yaml
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Local AI tooling config
+.claude/
+AGENT_AUDIT.md
