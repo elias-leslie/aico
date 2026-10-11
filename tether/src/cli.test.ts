@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { main, parseArgs } from './cli'
+import { attachPlan, main, parseArgs } from './cli'
 import { resolvePaths } from './config'
 import { type RunningDaemon, startDaemon } from './daemon'
 
@@ -25,6 +25,43 @@ describe('parseArgs', () => {
       json: true,
       instance: 'dev',
     })
+  })
+})
+
+describe('attachPlan', () => {
+  const response = {
+    argv: ['/usr/bin/tmux', '-S', '/s/server.sock', 'attach-session', '-t', '$1'],
+    env: { TERM: 'xterm-256color' },
+    unset: ['TMUX', 'TMUX_PANE', 'NO_COLOR'],
+  }
+
+  it('applies env overrides and removes the unset keys', () => {
+    const plan = attachPlan(response, { PATH: '/bin', TERM: 'dumb', NO_COLOR: '1' })
+    expect(plan.env).toEqual({ PATH: '/bin', TERM: 'xterm-256color' })
+    expect(plan.argv).toEqual(response.argv)
+    expect(plan.notice).toBeUndefined()
+  })
+
+  it('nests inside a different tmux server with TMUX unset and a notice', () => {
+    const plan = attachPlan(response, { TMUX: '/tmp/tmux-1/default,99,0', TMUX_PANE: '%1' })
+    expect(plan.env.TMUX).toBeUndefined()
+    expect(plan.env.TMUX_PANE).toBeUndefined()
+    expect(plan.argv[3]).toBe('attach-session')
+    expect(plan.notice).toContain('/tmp/tmux-1/default')
+  })
+
+  it('switches the current client inside the same server', () => {
+    const plan = attachPlan(response, { TMUX: '/s/server.sock,99,0' })
+    expect(plan.argv).toEqual([
+      '/usr/bin/tmux',
+      '-S',
+      '/s/server.sock',
+      'switch-client',
+      '-t',
+      '$1',
+    ])
+    expect(plan.env.TMUX).toBe('/s/server.sock,99,0')
+    expect(plan.notice).toBeUndefined()
   })
 })
 

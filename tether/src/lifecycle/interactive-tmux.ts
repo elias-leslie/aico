@@ -47,6 +47,15 @@ export function coalesceTrailingAsync(work: () => Promise<void>): () => Promise<
   }
 }
 
+/** Why a resize claim was not applied (docs/api-v1.md). `client_not_attached`
+ * and `stale` are retryable; `window_linked` and `status_row` are permanent. */
+export type ResizeRefusal =
+  | 'invalid'
+  | 'stale'
+  | 'client_not_attached'
+  | 'window_linked'
+  | 'status_row'
+
 /** The shared tmux window follows the foreground client's grid. Never size an
  * unknown client, linked window, or session with a tmux status row. */
 export async function activateTmuxViewSize(
@@ -57,8 +66,19 @@ export async function activateTmuxViewSize(
   run: (args: string[]) => Promise<string>,
   isCurrent: () => boolean,
 ): Promise<boolean> {
+  return (await claimTmuxViewSize(target, clientPid, cols, rows, run, isCurrent)) === null
+}
+
+/** Tether: `activateTmuxViewSize` with the refusal reason; null when applied. */
+export async function claimTmuxViewSize(
+  target: TmuxTarget,
+  clientPid: number,
+  cols: number,
+  rows: number,
+  run: (args: string[]) => Promise<string>,
+  isCurrent: () => boolean,
+): Promise<ResizeRefusal | null> {
   if (
-    !isCurrent() ||
     !Number.isSafeInteger(clientPid) ||
     clientPid <= 0 ||
     !Number.isSafeInteger(cols) ||
@@ -66,22 +86,26 @@ export async function activateTmuxViewSize(
     !Number.isSafeInteger(rows) ||
     rows <= 0
   )
-    return false
+    return 'invalid'
+  if (!isCurrent()) return 'stale'
   const clientArgs = listClientsTargetArgs(target, '#{client_pid}\t#{window_id}')
   const clients = (await run(clientArgs)).trim().split('\n')
-  if (!isCurrent()) return false
+  if (!isCurrent()) return 'stale'
   const ours = clients.filter((line) => line.startsWith(`${clientPid}\t`))
-  if (ours.length !== 1) return false
+  if (ours.length !== 1) return 'client_not_attached'
   const [, windowId] = ours[0].split('\t')
-  if (!/^@[0-9]+$/.test(windowId ?? '')) return false
+  if (!/^@[0-9]+$/.test(windowId ?? '')) return 'client_not_attached'
   const windows = (await run(listWindowIdsArgs(target.socket))).trim().split('\n')
-  if (!isCurrent() || windows.filter((id) => id === windowId).length !== 1) return false
-  if ((await run(sessionStatusArgs(target))).trim() !== 'off' || !isCurrent()) return false
+  if (!isCurrent()) return 'stale'
+  if (windows.filter((id) => id === windowId).length !== 1) return 'window_linked'
+  if ((await run(sessionStatusArgs(target))).trim() !== 'off') return 'status_row'
+  if (!isCurrent()) return 'stale'
   // A detach or window switch can happen while the async queries are running.
   const latest = (await run(clientArgs)).trim().split('\n')
-  if (!isCurrent() || latest.filter((line) => line === ours[0]).length !== 1) return false
+  if (!isCurrent()) return 'stale'
+  if (latest.filter((line) => line === ours[0]).length !== 1) return 'client_not_attached'
   await run(resizeWindowArgs(windowId, target.socket, cols, rows))
-  return true
+  return null
 }
 
 /** Repaint only clients from this session, stopping when the initiating PTY is stale. */

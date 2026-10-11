@@ -43,6 +43,10 @@ export interface RootCreateRequest {
   leadRootReference: string | null
   facetCapsuleRef: string | null
   resumeSessionId: string | null
+  /** Tether: which app requested the root. Not part of the digest. */
+  origin: 'aico' | 'a-term'
+  /** Tether: A-Term's session UUID (pane `A_TERM_SESSION_ID`); a-term only. */
+  aTermSessionId: string | null
 }
 
 /** One canonical view mutation, shared by retained-root and ordinary-widget routes. */
@@ -179,6 +183,8 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
           'leadRootReference',
           'facetCapsuleRef',
           'resumeSessionId',
+          'origin',
+          'aTermSessionId',
         ].includes(key),
     )
   )
@@ -193,8 +199,15 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     leadRootReference,
     facetCapsuleRef,
     resumeSessionId,
+    origin = 'aico',
+    aTermSessionId = null,
   } = value
   if (
+    (origin !== 'aico' && origin !== 'a-term') ||
+    (aTermSessionId !== null &&
+      (origin !== 'a-term' ||
+        typeof aTermSessionId !== 'string' ||
+        !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(aTermSessionId))) ||
     typeof requestId !== 'string' ||
     !KEY.test(requestId) ||
     (tool !== 'codex' && tool !== 'claude-code') ||
@@ -232,6 +245,8 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     leadRootReference: leadRootReference ?? null,
     facetCapsuleRef: facetCapsuleRef ?? null,
     resumeSessionId: resumeSessionId ?? null,
+    origin,
+    aTermSessionId: (aTermSessionId as string | null) ?? null,
   }
 }
 
@@ -343,7 +358,16 @@ const terminalAdmin = {
   missing: ['current_thread_fence', 'idle_empty_draft_input_fence', 'idempotent_native_receipt'],
 } as const
 
-export function createRootHandler(operations: RootControlOperations) {
+export interface RootHandlerOptions {
+  /** v1 API: root `owner` follows the requesting app and `?origin=` filters
+   * the list. The legacy gui-control.sock keeps Aico's wire format (`aico`). */
+  ownerFromOrigin?: boolean
+}
+
+export function createRootHandler(
+  operations: RootControlOperations,
+  options: RootHandlerOptions = {},
+) {
   // A failed or disconnected request retains its reservation. Subsequent calls
   // reconcile that exact widget through Aico's existing launch gate.
   const pending = new Map<string, Promise<void>>()
@@ -360,7 +384,8 @@ export function createRootHandler(operations: RootControlOperations) {
   const describe = async (root: RootRequestRow) => {
     const row = getWidget(root.widgetId)
     return {
-      owner: 'aico',
+      owner: options.ownerFromOrigin ? root.origin : 'aico',
+      ...(options.ownerFromOrigin ? { origin: root.origin } : {}),
       requestId: root.requestId,
       digest: root.digest,
       hostIdentity: root.widgetId,
@@ -466,12 +491,22 @@ export function createRootHandler(operations: RootControlOperations) {
         return
       }
       if (path === '/v1/roots' && request.method === 'GET') {
+        const query = new URLSearchParams(request.url?.split('?')[1] ?? '')
+        const origin = options.ownerFromOrigin ? query.get('origin') : null
+        if (origin !== null && origin !== 'aico' && origin !== 'a-term') {
+          json(response, 400, { error: 'invalid_query' })
+          return
+        }
         json(response, 200, {
-          owner: 'aico',
+          owner: origin ?? 'aico',
           available: true,
           directedDelivery,
           terminalAdmin,
-          roots: await Promise.all(listRootRequests().map(describe)),
+          roots: await Promise.all(
+            listRootRequests()
+              .filter((root) => origin === null || root.origin === origin)
+              .map(describe),
+          ),
         })
         return
       }
@@ -509,10 +544,12 @@ export function createRootHandler(operations: RootControlOperations) {
                 leadRootReference: input.leadRootReference,
                 facetCapsuleRef: input.facetCapsuleRef,
                 createdAt: Date.now(),
+                origin: input.origin,
               },
               input.tool,
               input.projectId,
               input.projectRoot,
+              input.aTermSessionId,
             )
             if (root.digest !== digest) {
               json(response, 409, { error: 'request_conflict' })
@@ -673,7 +710,7 @@ export function createRootHandler(operations: RootControlOperations) {
 
 /** Aico's GUI control socket server around the shared handler. */
 export function createRootServer(operations: RootControlOperations) {
-  const handle = createRootHandler(operations)
+  const handle = createRootHandler(operations, { ownerFromOrigin: false })
   return createServer((request, response) => {
     void handle(request, response)
   })

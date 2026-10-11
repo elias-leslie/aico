@@ -406,6 +406,7 @@ describe('INV-13 pane markers follow the compatibility contract', () => {
           leadRootReference: null,
           facetCapsuleRef: null,
           createdAt: 1,
+          origin: 'aico',
         },
         'codex',
         'p',

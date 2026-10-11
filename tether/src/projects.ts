@@ -2,8 +2,8 @@
 // otherwise a local list. A cached SummitFlow answer is preferred over the
 // local list while SummitFlow is briefly unreachable.
 
-import { readFileSync, statSync } from 'node:fs'
-import { isAbsolute, normalize } from 'node:path'
+import { mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { dirname, isAbsolute, normalize } from 'node:path'
 
 export interface Project {
   id: string
@@ -159,4 +159,50 @@ export function summitflowUrlFromEnv(env: NodeJS.ProcessEnv = process.env): stri
   const value = env.TETHER_SUMMITFLOW_URL
   if (value === 'off' || value === '') return null
   return value ?? DEFAULT_SUMMITFLOW_PROJECTS_URL
+}
+
+export class ProjectRegistrationError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: string,
+  ) {
+    super(code)
+  }
+}
+
+/**
+ * Add one project to the local list (`POST /v1/projects`). Only the local
+ * source accepts registrations: with SummitFlow configured, SummitFlow owns
+ * projects. The file is rewritten atomically (temp file + rename, 0600).
+ */
+export async function registerLocalProject(
+  provider: ProjectProvider,
+  localFile: string,
+  input: { id: string; name?: string | null; root: string },
+  isDir: (p: string) => boolean = defaultIsDir,
+): Promise<Project> {
+  const current = await provider.list({ refresh: true })
+  if (current.source !== 'local')
+    throw new ProjectRegistrationError(409, 'projects_managed_by_summitflow')
+  const root = cleanRoot(input.root)
+  if (!PROJECT_ID_RE.test(input.id)) throw new ProjectRegistrationError(400, 'invalid_project_id')
+  if (!root || !isDir(root)) throw new ProjectRegistrationError(400, 'invalid_project_root')
+  let rows: unknown[] = []
+  try {
+    const parsed = JSON.parse(readFileSync(localFile, 'utf8'))
+    if (Array.isArray(parsed)) rows = parsed
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT')
+      throw new ProjectRegistrationError(409, 'local_projects_unreadable')
+  }
+  if (rows.some((row) => (row as { id?: unknown } | null)?.id === input.id))
+    throw new ProjectRegistrationError(409, 'project_exists')
+  const name = input.name?.trim() || input.id
+  rows.push({ id: input.id, name, root })
+  mkdirSync(dirname(localFile), { recursive: true, mode: 0o700 })
+  const temporary = `${localFile}.${process.pid}.tmp`
+  writeFileSync(temporary, `${JSON.stringify(rows, null, 2)}\n`, { mode: 0o600 })
+  renameSync(temporary, localFile)
+  await provider.list({ refresh: true })
+  return { id: input.id, name, root, lifecycle: null }
 }

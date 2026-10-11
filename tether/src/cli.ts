@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { callSocket } from './client'
@@ -15,9 +16,13 @@ Commands:
   doctor                        check host prerequisites and the running daemon
   version                       print the CLI and daemon versions
   sessions [list | get <id>]    session catalog
-  sessions new [--tool T] [--project P] [--name N]
+  sessions create [--tool T] [--project P] [--name N]   (alias: new)
   sessions end <id>             retire one session (reads its generation first)
-  sessions attach <id>          print the exact tmux attach argv
+  sessions attach <id> [--print]
+                                attach this terminal (exec tmux); --print shows
+                                the argv. Inside another tmux server the client
+                                nests with TMUX unset; inside the same server
+                                it switches the current client.
   sessions diagnostics <id>
   legacy [list | end <name>]    A-Term summitflow-<uuid> sessions (attach/end only)
   roots [list | show <requestId>]
@@ -145,6 +150,44 @@ function flags(args: string[], names: string[]): Record<string, string> {
   return out
 }
 
+export interface AttachPlan {
+  argv: string[]
+  env: Record<string, string>
+  notice?: string
+}
+
+/** How to attach this terminal: the daemon's argv with its env overrides
+ * applied over ours and its unset list removed. Inside a client of the same
+ * tmux server, switch that client instead of nesting a second one; inside a
+ * different server, nest with TMUX unset and say so. */
+export function attachPlan(
+  response: { argv: string[]; env?: Record<string, string>; unset?: string[] },
+  current: NodeJS.ProcessEnv,
+): AttachPlan {
+  const env: Record<string, string> = {}
+  for (const [key, value] of Object.entries(current)) if (value !== undefined) env[key] = value
+  Object.assign(env, response.env ?? {})
+  for (const key of response.unset ?? []) delete env[key]
+  const argv = [...response.argv]
+  const outer = current.TMUX?.split(',')[0]
+  if (!outer) return { argv, env }
+  const socketIndex = argv.indexOf('-S')
+  const socket = socketIndex >= 0 ? argv[socketIndex + 1] : undefined
+  if (socket && socket === outer) {
+    const command = argv.indexOf('attach-session')
+    if (command >= 0) {
+      argv[command] = 'switch-client'
+      env.TMUX = current.TMUX as string
+      return { argv, env }
+    }
+  }
+  return {
+    argv,
+    env,
+    notice: `tether: nesting inside the current tmux (${outer}); detach with the inner prefix`,
+  }
+}
+
 function slugPath(slug: string | undefined): string {
   if (!slug) throw new Error('a tool slug is required')
   return `/v1/tools/${encodeURIComponent(slug)}`
@@ -196,9 +239,24 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
         if (!sub || sub === 'list') return api(io, paths, json, 'GET', '/v1/sessions')
         if (sub === 'get' && rest[0])
           return api(io, paths, json, 'GET', `/v1/sessions/${encodeURIComponent(rest[0])}`)
-        if ((sub === 'attach' || sub === 'diagnostics') && rest[0])
+        if (sub === 'diagnostics' && rest[0])
           return api(io, paths, json, 'GET', `/v1/sessions/${encodeURIComponent(rest[0])}/${sub}`)
-        if (sub === 'new') {
+        if (sub === 'attach' && rest[0]) {
+          const path = `/v1/sessions/${encodeURIComponent(rest[0])}/attach`
+          if (json || rest.includes('--print')) return api(io, paths, json, 'GET', path)
+          const response = await callSocket(paths.socket, 'GET', path, undefined, 15_000)
+          if (response.status !== 200) return render(io, json, response.status, response.body)
+          const plan = attachPlan(response.body as Parameters<typeof attachPlan>[0], process.env)
+          if (plan.notice) io.err(plan.notice)
+          const [file, ...args] = plan.argv as [string, ...string[]]
+          const child = spawnSync(file, args, { stdio: 'inherit', env: plan.env })
+          if (child.error) {
+            io.err(`tether: ${child.error.message}`)
+            return 2
+          }
+          return child.status ?? 1
+        }
+        if (sub === 'new' || sub === 'create') {
           const options = flags(rest, ['--tool', '--project', '--name'])
           const body: Record<string, unknown> = {
             origin: 'cli',

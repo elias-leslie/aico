@@ -46,7 +46,7 @@ import {
   verifySessionStatus,
   whenReady,
 } from './lifecycle/engine'
-import { activateTmuxViewSize } from './lifecycle/interactive-tmux'
+import { claimTmuxViewSize, type ResizeRefusal } from './lifecycle/interactive-tmux'
 import { isNeverAllocatedWidget } from './lifecycle/lifecycle-guard'
 import { sessionGeneration } from './lifecycle/owner-retirement'
 import {
@@ -248,7 +248,17 @@ export function forwardViewMutation(
   mutation: WidgetMutation,
 ) => Promise<boolean | MutationRejection> {
   return async (widgetId, generation, mutation) => {
-    if (!gui.connected()) return { status: 503, error: 'gui_unavailable' }
+    if (!gui.connected()) {
+      if (mutation.kind !== 'title') return { status: 503, error: 'gui_unavailable' }
+      // No GUI to hold a view: the title is the session name. Rename the exact
+      // running generation under the lifecycle lock.
+      const renamed = await withRunningSession(widgetId, generation, async (row) => {
+        setWidgetName(row.id, mutation.label)
+        events.publish('session.updated', { id: row.id, generation })
+        return true as const
+      })
+      return renamed
+    }
     const result = await withRunningSession(widgetId, generation, async (row) => {
       const command: GuiCommand = { kind: mutation.kind, sessionId: row.id, generation }
       if (mutation.kind === 'position') command.bounds = mutation.bounds as Bounds
@@ -332,7 +342,7 @@ async function resolveProject(
 
 export function registerLifecycleRoutes(router: Router, context: LifecycleApiContext): void {
   const { store, events, gui, legacy } = context
-  const rootHandler = createRootHandler(rootOperations(context))
+  const rootHandler = createRootHandler(rootOperations(context), { ownerFromOrigin: true })
   const root = (req: IncomingMessage, res: ServerResponse) => rootHandler(req, res)
 
   router
@@ -609,9 +619,9 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
         const latest = getWidget(row.id)
         return Boolean(latest && generationOf(latest) === generation)
       }
-      let applied = false
+      let refusal: ResizeRefusal | 'tmux_unavailable' | null
       try {
-        applied = await activateTmuxViewSize(
+        refusal = await claimTmuxViewSize(
           tmuxTargetForWidget(row.id),
           body.clientPid as number,
           body.cols as number,
@@ -620,13 +630,13 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
           isCurrent,
         )
       } catch {
-        applied = false
+        refusal = 'tmux_unavailable'
       }
-      if (applied) {
+      if (refusal === null) {
         events.publish('session.resized', { id: row.id, generation })
         sendJson(res, 200, { applied: true })
       } else {
-        sendJson(res, 200, { applied: false, reason: 'client_not_eligible' })
+        sendJson(res, 200, { applied: false, reason: refusal })
       }
     })
     // Roots and the compact widget routes share Aico's one handler.

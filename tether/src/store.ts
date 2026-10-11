@@ -6,6 +6,7 @@ import {
   AGENT_TOOLS_TABLE_SQL,
   INDEXES_SQL,
   RETIRED_SESSION_IDS_SQL,
+  ROOT_ORIGIN_SQL,
   ROOT_REQUESTS_TABLE_SQL,
   SCHEMA_VERSION,
   SESSIONS_TABLE_SQL,
@@ -75,6 +76,14 @@ export type ToolPatch = Partial<
     | 'contextHook'
   >
 >
+
+export interface ToolImportResult {
+  created: string[]
+  updated: string[]
+  unchanged: string[]
+  /** Existing tools whose fields differ and were left unchanged. */
+  differs: { slug: string; fields: string[] }[]
+}
 
 export interface SessionSummary {
   id: string
@@ -148,6 +157,13 @@ export class Store {
         this.db
           .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
           .run(2, now)
+      }
+      if (current < 3) {
+        // v3: the requesting app of each root (tombstones keep it).
+        this.db.exec(ROOT_ORIGIN_SQL)
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(3, now)
       }
     })
   }
@@ -249,35 +265,100 @@ export class Store {
       const existing = this.getTool(idOrSlug)
       if (!existing) return undefined
       if (patch.aliases) this.assertNamesFree(existing.slug, patch.aliases, existing.id)
-      if (patch.isDefault === true) {
-        this.db
-          .prepare('UPDATE agent_tools SET is_default = 0 WHERE is_default = 1 AND id <> ?')
-          .run(existing.id)
-      }
-      const next = { ...existing, ...patch }
-      this.db
-        .prepare(
-          `UPDATE agent_tools SET name = ?, argv = ?, process_name = ?, description = ?, color = ?,
-             display_order = ?, is_default = ?, enabled = ?, aliases = ?, context_hook = ?,
-             updated_at = max(?, created_at)
-           WHERE id = ?`,
-        )
-        .run(
-          next.name,
-          JSON.stringify(next.argv),
-          next.processName,
-          next.description,
-          next.color,
-          next.displayOrder,
-          next.isDefault ? 1 : 0,
-          next.enabled ? 1 : 0,
-          JSON.stringify(next.aliases),
-          next.contextHook,
-          now,
-          existing.id,
-        )
+      this.applyToolPatch(existing, patch, now)
       return this.getTool(existing.id)
     })
+  }
+
+  /**
+   * Bulk import (`POST /v1/tools/import`): one transaction for every row.
+   * Missing slugs are created; an existing slug is changed only with
+   * `updateExisting` and otherwise reported with the fields that differ. Any
+   * invalid row or name conflict rolls back the whole import. `dryRun` plans
+   * the same changes and rolls back.
+   */
+  importTools(
+    seeds: readonly (ToolPatch & { slug: string; name: string; argv: string[] })[],
+    options: { updateExisting?: boolean; dryRun?: boolean } = {},
+    now = Date.now(),
+  ): ToolImportResult {
+    const result: ToolImportResult = { created: [], updated: [], unchanged: [], differs: [] }
+    const DRY_RUN = Symbol('dry-run')
+    try {
+      this.transaction(() => {
+        for (const seed of seeds) {
+          if (!SLUG_RE.test(seed.slug)) throw new ToolValidationError('invalid_slug')
+          validateToolFields(seed)
+          const existing = this.getTool(seed.slug)
+          if (!existing) {
+            const full: ToolSeed = {
+              slug: seed.slug,
+              name: seed.name,
+              argv: seed.argv,
+              processName: seed.processName ?? seed.argv[0] ?? '',
+              description: seed.description ?? null,
+              color: seed.color ?? null,
+              displayOrder: seed.displayOrder ?? 0,
+              isDefault: seed.isDefault ?? false,
+              enabled: seed.enabled ?? true,
+              aliases: seed.aliases ?? [],
+              contextHook: seed.contextHook ?? null,
+            }
+            this.assertNamesFree(full.slug, full.aliases, null)
+            if (full.isDefault)
+              this.db.exec('UPDATE agent_tools SET is_default = 0 WHERE is_default = 1')
+            this.insertTool(full, now)
+            result.created.push(seed.slug)
+            continue
+          }
+          const { slug: _slug, ...patch } = seed
+          const fields = (Object.keys(patch) as (keyof ToolPatch)[]).filter(
+            (key) => JSON.stringify(existing[key]) !== JSON.stringify(patch[key]),
+          )
+          if (fields.length === 0) result.unchanged.push(seed.slug)
+          else if (!options.updateExisting) result.differs.push({ slug: seed.slug, fields })
+          else {
+            if (patch.aliases) this.assertNamesFree(existing.slug, patch.aliases, existing.id)
+            this.applyToolPatch(existing, patch, now)
+            result.updated.push(seed.slug)
+          }
+        }
+        if (options.dryRun) throw DRY_RUN
+      })
+    } catch (error) {
+      if (error !== DRY_RUN) throw error
+    }
+    return result
+  }
+
+  private applyToolPatch(existing: AgentTool, patch: ToolPatch, now: number): void {
+    if (patch.isDefault === true) {
+      this.db
+        .prepare('UPDATE agent_tools SET is_default = 0 WHERE is_default = 1 AND id <> ?')
+        .run(existing.id)
+    }
+    const next = { ...existing, ...patch }
+    this.db
+      .prepare(
+        `UPDATE agent_tools SET name = ?, argv = ?, process_name = ?, description = ?, color = ?,
+         display_order = ?, is_default = ?, enabled = ?, aliases = ?, context_hook = ?,
+         updated_at = max(?, created_at)
+         WHERE id = ?`,
+      )
+      .run(
+        next.name,
+        JSON.stringify(next.argv),
+        next.processName,
+        next.description,
+        next.color,
+        next.displayOrder,
+        next.isDefault ? 1 : 0,
+        next.enabled ? 1 : 0,
+        JSON.stringify(next.aliases),
+        next.contextHook,
+        now,
+        existing.id,
+      )
   }
 
   /** Refuses the default tool and any tool a catalogued session still runs. */

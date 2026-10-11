@@ -592,6 +592,8 @@ export interface RootRequestRow {
   leadRootReference: string | null
   facetCapsuleRef: string | null
   createdAt: number
+  /** Tether: requesting app (schema v3). Imported Aico rows are `aico`. */
+  origin: 'aico' | 'a-term'
 }
 
 function rootRequestRow(row: Record<string, unknown>): RootRequestRow {
@@ -604,6 +606,7 @@ function rootRequestRow(row: Record<string, unknown>): RootRequestRow {
     leadRootReference: row.lead_root_reference as string | null,
     facetCapsuleRef: row.facet_capsule_ref as string | null,
     createdAt: row.created_at as number,
+    origin: row.origin === 'a-term' ? 'a-term' : 'aico',
   }
 }
 
@@ -630,6 +633,7 @@ export function reserveRootRequest(
   tool: string,
   projectId: string,
   projectRoot: string,
+  aTermSessionId: string | null = null,
 ): RootRequestRow {
   db.exec('BEGIN IMMEDIATE')
   try {
@@ -638,11 +642,14 @@ export function reserveRootRequest(
       db.exec('COMMIT')
       return existing
     }
-    insertWidget(request.widgetId, tool, request.createdAt, { origin: 'root' })
+    insertWidget(request.widgetId, tool, request.createdAt, {
+      origin: request.origin === 'a-term' ? 'a-term' : 'root',
+      aTermSessionId: request.origin === 'a-term' ? aTermSessionId : null,
+    })
     setWidgetProject(request.widgetId, projectId, projectRoot)
     db.prepare(`INSERT INTO root_requests
-      (request_id, digest, widget_id, logical_session_id, role, lead_root_reference, facet_capsule_ref, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(
+      (request_id, digest, widget_id, logical_session_id, role, lead_root_reference, facet_capsule_ref, created_at, origin)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
       request.requestId,
       request.digest,
       request.widgetId,
@@ -651,6 +658,7 @@ export function reserveRootRequest(
       request.leadRootReference,
       request.facetCapsuleRef,
       request.createdAt,
+      request.origin ?? 'aico',
     )
     db.exec('COMMIT')
     return request

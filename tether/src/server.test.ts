@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, statSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { request } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -58,7 +58,7 @@ describe('control socket', () => {
       status: 'ok',
       instance: 'test',
       apiVersion: 1,
-      schemaVersion: 2,
+      schemaVersion: 3,
       lifecycle: 'disabled',
       gui: { connected: false },
     })
@@ -74,6 +74,29 @@ describe('control socket', () => {
   it('serves the local project list when SummitFlow is off', async () => {
     const projects = await call('GET', '/v1/projects')
     expect(projects.body).toMatchObject({ source: 'local', projects: [] })
+  })
+})
+
+describe('projects API', () => {
+  it('registers a local project and re-reads the local file on refresh', async () => {
+    const root = join(dir, 'proj')
+    mkdirSync(root)
+    const created = await call('POST', '/v1/projects', { id: 'proj', root })
+    expect(created).toMatchObject({ status: 201, body: { id: 'proj', name: 'proj', root } })
+    expect(statSync(paths.localProjectsFile).mode & 0o777).toBe(0o600)
+    expect((await call('POST', '/v1/projects', { id: 'proj', root })).body).toEqual({
+      error: 'project_exists',
+    })
+    expect((await call('POST', '/v1/projects', { id: 'Bad Id', root })).status).toBe(400)
+    expect(
+      (await call('POST', '/v1/projects', { id: 'gone', root: join(dir, 'absent') })).body,
+    ).toEqual({ error: 'invalid_project_root' })
+    expect((await call('GET', '/v1/projects')).body).toMatchObject({
+      source: 'local',
+      projects: [{ id: 'proj', root }],
+    })
+    writeFileSync(paths.localProjectsFile, '[]\n')
+    expect((await call('GET', '/v1/projects?refresh=1')).body).toMatchObject({ projects: [] })
   })
 })
 
@@ -152,6 +175,35 @@ describe('agent tools API', () => {
     await call('PATCH', '/v1/tools/codex', { isDefault: true })
     expect((await call('DELETE', '/v1/tools/aider')).body).toEqual({ deleted: true })
     expect((await call('GET', '/v1/tools/aider')).status).toBe(404)
+  })
+
+  it('imports tools in one transaction, with a dry run', async () => {
+    const tools = [
+      { slug: 'aider', name: 'Aider', command: 'aider --yes' },
+      { slug: 'codex', name: 'Codex', argv: ['codex'] },
+    ]
+    const dry = await call('POST', '/v1/tools/import', { tools, dryRun: true })
+    expect(dry.body).toMatchObject({ applied: false, created: ['aider'] })
+    expect((dry.body as { differs: { slug: string }[] }).differs.map((d) => d.slug)).toEqual([
+      'codex',
+    ])
+    expect((await call('GET', '/v1/tools/aider')).status).toBe(404)
+
+    const real = await call('POST', '/v1/tools/import', { tools })
+    expect(real.body).toMatchObject({ applied: true, created: ['aider'], updated: [] })
+    expect((await call('GET', '/v1/tools/codex')).body).toMatchObject({ argv: ['codex', '--yolo'] })
+    const again = await call('POST', '/v1/tools/import', { tools: [tools[0]] })
+    expect(again.body).toMatchObject({ created: [], unchanged: ['aider'] })
+
+    // One invalid entry rejects the whole batch before anything is written.
+    const bad = await call('POST', '/v1/tools/import', {
+      tools: [
+        { slug: 'ok-tool', name: 'Ok', command: 'ok' },
+        { slug: 'x', name: 'X', command: 'a; b' },
+      ],
+    })
+    expect(bad.status).toBe(400)
+    expect((await call('GET', '/v1/tools/ok-tool')).status).toBe(404)
   })
 
   it('requires a JSON content type', async () => {

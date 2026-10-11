@@ -101,6 +101,8 @@ describe('Store schema', () => {
       'lead_root_reference',
       'facet_capsule_ref',
       'created_at',
+      // Tether v3: appended after Aico's columns, so the import stays positional.
+      'origin',
     ])
     expect(columns('sessions').slice(0, 19)).toEqual([
       'id',

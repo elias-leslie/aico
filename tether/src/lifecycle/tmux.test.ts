@@ -45,6 +45,7 @@ import {
   sessionIdArgs,
   sessionIdTargetArgs,
   sessionName,
+  sessionStatusArgs,
   showPaneExitedHookTargetArgs,
   TMUX_SOCKET,
   tmuxConf,
@@ -623,5 +624,20 @@ describe('pane mode', () => {
       mouseReporting: false,
       historySize: 2389,
     })
+  })
+})
+
+describe('session status query (Tether fix)', () => {
+  it('reads the inherited status option, which the profile sets globally', () => {
+    expect(sessionStatusArgs({ socket: '/tmp/x/s.sock', session: '$1' })).toEqual([
+      '-S',
+      '/tmp/x/s.sock',
+      'show-options',
+      '-A',
+      '-t',
+      '$1',
+      '-v',
+      'status',
+    ])
   })
 })

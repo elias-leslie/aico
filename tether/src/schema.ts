@@ -3,7 +3,7 @@
 // copies rows byte for byte. The only widening is the tmux_servers unit CHECK,
 // which additionally admits non-default instance unit names.
 
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3
 
 /** Aico's tmux_servers table (electron/main/store.ts TMUX_SERVERS_TABLE_SQL),
  * plus `tether-<instance>-tmux-server-<id>.service` for non-default instances. */
@@ -160,4 +160,10 @@ export const RETIRED_SESSION_IDS_SQL = `
     INSERT OR IGNORE INTO retired_session_ids (id, retired_at)
       VALUES (old.id, CAST(strftime('%s', 'now') AS INTEGER) * 1000);
   END;
+`
+
+/** v3: which app requested a root (A-Term or Aico). The tombstone keeps it. */
+export const ROOT_ORIGIN_SQL = `
+  ALTER TABLE root_requests ADD COLUMN origin TEXT NOT NULL DEFAULT 'aico'
+    CHECK(origin IN ('aico', 'a-term'));
 `

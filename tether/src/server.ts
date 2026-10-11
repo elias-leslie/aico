@@ -6,7 +6,7 @@ import { HttpError, Router, readJsonObject, sendError, sendJson } from './http'
 import type { LegacyATermSessions } from './legacy-aterm'
 import { lifecycleStatus } from './lifecycle/engine'
 import { registerLifecycleRoutes } from './lifecycle-api'
-import type { ProjectProvider } from './projects'
+import { type ProjectProvider, ProjectRegistrationError, registerLocalProject } from './projects'
 import type { Store, ToolPatch } from './store'
 import { type AgentTool, parseCommand, type ToolSeed, ToolValidationError } from './tools'
 import { VERSION } from './version'
@@ -180,6 +180,60 @@ export function buildRouter(context: ServerContext): Router {
       const list = await projects.list({ refresh: query.get('refresh') === '1' })
       for (const project of list.projects) context.projectRoots.set(project.id, project.root)
       sendJson(res, 200, list)
+    })
+    .add('POST', '/v1/projects', async (req, res) => {
+      const body = await readJsonObject(req)
+      const unknown = Object.keys(body).filter((key) => !['id', 'name', 'root'].includes(key))
+      if (unknown.length) throw new HttpError(400, 'invalid_body', { fields: unknown })
+      const id = str(body, 'id')
+      const root = str(body, 'root')
+      const name = nullableStr(body, 'name')
+      if (!id || !root) throw new HttpError(400, 'invalid_body', { detail: 'id and root required' })
+      try {
+        const project = await registerLocalProject(projects, paths.localProjectsFile, {
+          id,
+          root,
+          name,
+        })
+        context.projectRoots.set(project.id, project.root)
+        events.publish('projects.changed', { id: project.id, change: 'registered' })
+        sendJson(res, 201, project)
+      } catch (error) {
+        if (error instanceof ProjectRegistrationError) throw new HttpError(error.status, error.code)
+        throw error
+      }
+    })
+    .add('POST', '/v1/tools/import', async (req, res) => {
+      const body = await readJsonObject(req)
+      const unknown = Object.keys(body).filter(
+        (key) => !['tools', 'dryRun', 'updateExisting'].includes(key),
+      )
+      if (unknown.length) throw new HttpError(400, 'invalid_body', { fields: unknown })
+      if (!Array.isArray(body.tools) || body.tools.length > 200)
+        throw new HttpError(400, 'invalid_body', { field: 'tools' })
+      const seeds = body.tools.map((item, index) => {
+        if (!item || typeof item !== 'object' || Array.isArray(item))
+          throw new HttpError(400, 'invalid_body', { index })
+        const fields = toolFields(item as Record<string, unknown>)
+        if (!fields.slug || !fields.name || fields.argv === undefined)
+          throw new HttpError(400, 'invalid_body', {
+            index,
+            detail: 'slug, name and argv|command required',
+          })
+        return { ...fields, slug: fields.slug, name: fields.name, argv: fields.argv }
+      })
+      const dryRun = bool(body, 'dryRun') ?? false
+      const result = store.importTools(
+        seeds,
+        {
+          dryRun,
+          updateExisting: bool(body, 'updateExisting') ?? false,
+        },
+        now(),
+      )
+      if (!dryRun && (result.created.length || result.updated.length))
+        events.publish('tools.changed', { change: 'imported' })
+      sendJson(res, 200, { applied: !dryRun, ...result })
     })
     .add('GET', '/v1/tools', (_req, res, _params, query) => {
       const enabledOnly = query.get('enabled') === '1' || query.get('enabled') === 'true'
