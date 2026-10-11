@@ -4,6 +4,7 @@
 // End is `tmux kill-session` against one exact session name, nothing broader.
 
 import { execFile } from 'node:child_process'
+import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { terminalClientEnv } from './lifecycle/terminal-env'
 import { isATermSessionName } from './lifecycle/tmux'
@@ -23,6 +24,21 @@ export interface LegacySession {
 
 export function defaultATermSocket(uid = process.getuid?.() ?? -1): string {
   return `/tmp/tmux-${uid}/default`
+}
+
+/**
+ * The tmux server whose `summitflow-*` sessions this instance lists, attaches
+ * and ends. Only the default instance reaches the user's real default server;
+ * another instance (a test `dev`) gets a path that is never created, so it
+ * can never end a live A-Term session. `TETHER_ATERM_LEGACY_SOCKET` overrides.
+ */
+export function legacyATermSocket(
+  paths: { legacy: boolean; runtimeDir: string },
+  env: NodeJS.ProcessEnv,
+  uid?: number,
+): string {
+  if (env.TETHER_ATERM_LEGACY_SOCKET) return env.TETHER_ATERM_LEGACY_SOCKET
+  return paths.legacy ? defaultATermSocket(uid) : join(paths.runtimeDir, 'no-legacy-aterm-tmux')
 }
 
 function tmuxError(error: unknown): string {

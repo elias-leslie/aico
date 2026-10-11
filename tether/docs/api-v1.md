@@ -295,6 +295,8 @@ SSE was rejected. NDJSON is simpler to consume from both Node and Python (`httpx
 
 A-Term's pre-Tether sessions (`summitflow-<uuid>` on `/tmp/tmux-<uid>/default`) are listed for attach and end only. Tether never adopts that server, never respawns them, and never touches any other session on it.
 
+Only the `default` instance reads that server *(post-cutover)*. Another instance (a test `dev`) lists none and cannot attach or end them, unless `TETHER_ATERM_LEGACY_SOCKET` names a server explicitly.
+
 | Method and route | Body | Result |
 | --- | --- | --- |
 | `GET /v1/legacy-sessions` | none | `{items: [{kind: "legacy-attach-only", name, aTermSessionId, createdAt, attachedClients}]}`; empty when the server is not running |

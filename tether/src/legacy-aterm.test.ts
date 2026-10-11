@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { LegacyATermSessions } from './legacy-aterm'
+import { LegacyATermSessions, legacyATermSocket } from './legacy-aterm'
 
 const A = 'summitflow-70b339cd-93a0-4898-8c4b-3d694ce8e8dc'
 const B = 'summitflow-0b1c2d3e-4f50-4a6b-8c7d-9e0f1a2b3c4d'
@@ -51,5 +51,23 @@ describe('legacy A-Term sessions', () => {
     expect(calls.at(-1)?.slice(0, 4)).toEqual(['display-message', '-p', '-t', `=${A}`])
     expect(await legacy.paneMode(B)).toBeNull()
     expect(await legacy.paneMode('summitflow-x; kill-server')).toBeNull()
+  })
+})
+
+describe('legacy A-Term socket per instance', () => {
+  it('reaches the default tmux server only from the default instance', () => {
+    expect(legacyATermSocket({ legacy: true, runtimeDir: '/run/t/default' }, {}, 1000)).toBe(
+      '/tmp/tmux-1000/default',
+    )
+    expect(legacyATermSocket({ legacy: false, runtimeDir: '/run/t/dev' }, {}, 1000)).toBe(
+      '/run/t/dev/no-legacy-aterm-tmux',
+    )
+  })
+
+  it('honours an explicit socket on any instance', () => {
+    const env = { TETHER_ATERM_LEGACY_SOCKET: '/fixture/default' }
+    expect(legacyATermSocket({ legacy: false, runtimeDir: '/run/t/dev' }, env)).toBe(
+      '/fixture/default',
+    )
   })
 })

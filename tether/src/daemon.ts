@@ -6,7 +6,7 @@ import type { TetherPaths } from './config'
 import { EventBus } from './events'
 import { GuiChannel } from './gui-channel'
 import { listenPrivateSocket } from './http'
-import { defaultATermSocket, LegacyATermSessions } from './legacy-aterm'
+import { LegacyATermSessions, legacyATermSocket } from './legacy-aterm'
 import { bindCatalog } from './lifecycle/catalog'
 import {
   configureEngine,
@@ -67,9 +67,8 @@ export async function startDaemon(
     localFile: paths.localProjectsFile,
   })
   const gui = new GuiChannel(events)
-  const legacy = new LegacyATermSessions(
-    env.TETHER_ATERM_LEGACY_SOCKET || defaultATermSocket(),
-    (names) => events.publish('legacy.changed', { names }),
+  const legacy = new LegacyATermSessions(legacyATermSocket(paths, env), (names) =>
+    events.publish('legacy.changed', { names }),
   )
   const projectRoots = new Map<string, string>()
 
