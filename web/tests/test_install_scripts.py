@@ -1,53 +1,208 @@
 from __future__ import annotations
 
-import os
+import json
+import shutil
+import socketserver
 import subprocess
+import tempfile
+import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
+from http.server import BaseHTTPRequestHandler
 from pathlib import Path
+
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
-def _write_executable(path: Path, contents: str) -> None:
-    path.write_text(contents)
-    path.chmod(0o755)
+def _extract_functions(script: str, *names: str) -> str:
+    """Return the named top-level bash function definitions from a script."""
+    chunks = []
+    for name in names:
+        start = script.index(f"\n{name}() {{\n") + 1
+        end = script.index("\n}\n", start) + 3
+        chunks.append(script[start:end])
+    return "\n".join(chunks)
 
 
-def test_install_script_bootstraps_managed_postgres_instead_of_failing_after_env_copy() -> None:
+class _VersionHandler(BaseHTTPRequestHandler):
+    api_version: object = 1
+
+    def do_GET(self) -> None:
+        body = json.dumps({"name": "tether", "version": "0.0.1", "apiVersion": self.api_version})
+        if self.path != "/v1/version":
+            self.send_response(404)
+            self.end_headers()
+            return
+        self.send_response(200)
+        self.send_header("content-type", "application/json")
+        self.send_header("content-length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body.encode())
+
+    def log_message(self, *_args: object) -> None:
+        return
+
+
+class _UnixHTTPServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
+    daemon_threads = True
+
+    def get_request(self):  # type: ignore[override]
+        request, _ = super().get_request()
+        return request, ("tether", 0)
+
+
+@contextmanager
+def _fake_tether(socket_path: Path, api_version: object) -> Iterator[None]:
+    handler = type("Handler", (_VersionHandler,), {"api_version": api_version})
+    server = _UnixHTTPServer(str(socket_path), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+@pytest.fixture()
+def short_dir() -> Iterator[Path]:
+    """Unix socket paths are capped near 107 bytes; pytest's tmp_path can exceed that."""
+    path = Path(tempfile.mkdtemp(prefix="at-", dir="/tmp"))
+    try:
+        yield path
+    finally:
+        shutil.rmtree(path, ignore_errors=True)
+
+
+def _run_tether_check(tmp_path: Path, extra_env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+    script = (REPO_ROOT / "scripts" / "install.sh").read_text()
+    functions = _extract_functions(
+        script,
+        "command_exists",
+        "step",
+        "fail",
+        "tether_socket_path",
+        "tether_api_version",
+        "ensure_tether_available",
+    )
+    harness = tmp_path / "harness.sh"
+    harness.write_text(
+        "set -euo pipefail\nA_TERM_MIN_TETHER_API=1\n" + functions + "\nensure_tether_available\n"
+    )
+    env = {
+        "PATH": f"{tmp_path / 'bin'}:/usr/bin:/bin",
+        "HOME": str(tmp_path),
+        "XDG_RUNTIME_DIR": str(tmp_path / "runtime"),
+        **extra_env,
+    }
+    (tmp_path / "bin").mkdir(exist_ok=True)
+    return subprocess.run(["bash", str(harness)], capture_output=True, env=env, text=True)
+
+
+def test_install_script_has_no_database_steps() -> None:
     text = (REPO_ROOT / "scripts" / "install.sh").read_text()
 
-    assert "bootstrap_managed_postgres" in text
-    assert 'bootstrap_output="$(' in text
-    assert 'fail "Managed PostgreSQL bootstrap failed."' in text
-    assert 'fail "Managed PostgreSQL bootstrap did not produce DATABASE_URL."' in text
-    assert 'value = os.environ.get(key, values.get(key, ""))' not in text
-    assert "Created .env.local from .env.example. Set DATABASE_URL" not in text
-    assert "A_TERM_MANAGED_POSTGRES_MODE" in text
-    assert "A_TERM_POSTGRES_CONTAINER_NAME" in text
-    assert "A_TERM_POSTGRES_DATA_DIR" in text
+    for needle in ("DATABASE_URL", "managed-postgres", "alembic", "PostgreSQL", "postgres"):
+        assert needle not in text
+    assert not (REPO_ROOT / "scripts" / "managed-postgres.sh").exists()
+    assert not (REPO_ROOT / "alembic").exists()
+    assert not (REPO_ROOT / "alembic.ini").exists()
 
 
-def test_managed_postgres_runtime_uses_single_helper() -> None:
+def test_start_and_shutdown_scripts_manage_only_a_term_services() -> None:
     start_text = (REPO_ROOT / "scripts" / "start.sh").read_text()
     stop_text = (REPO_ROOT / "scripts" / "shutdown.sh").read_text()
 
-    assert 'bash "$REPO_ROOT/scripts/managed-postgres.sh" start' in start_text
-    assert 'bash "$REPO_ROOT/scripts/managed-postgres.sh" stop' in stop_text
+    for text in (start_text, stop_text):
+        assert "postgres" not in text.lower()
     assert 'source "$REPO_ROOT/.env.local"' not in start_text
     assert "FRONTEND_ENV=" in start_text
 
 
-def test_env_example_documents_installer_managed_database_path() -> None:
+def test_env_example_has_no_database_settings() -> None:
     text = (REPO_ROOT / ".env.example").read_text()
 
-    assert "Leave the placeholder DATABASE_URL below" in text
-    assert "bootstrap managed PostgreSQL automatically" in text
-    assert "prefers Docker" in text
+    assert "DATABASE_URL" not in text
+    assert "DB_POOL_" not in text
+    assert "A_TERM_AICO_STATE_DIR" not in text
+    assert "# TETHER_SOCKET=" in text
     assert "\nNEXT_PUBLIC_AGENT_HUB_URL=\n" not in text
     assert "\nAGENT_HUB_URL=\n" not in text
-    assert "\nSUMMITFLOW_API_BASE=\n" not in text
+    assert "SUMMITFLOW_API_BASE" not in text
     assert "# NEXT_PUBLIC_AGENT_HUB_URL=http://127.0.0.1:8003" in text
     assert "# AGENT_HUB_URL=http://127.0.0.1:8003" in text
-    assert "# SUMMITFLOW_API_BASE=http://127.0.0.1:8001/api" in text
+
+
+def test_project_identity_has_no_database_section() -> None:
+    identity = json.loads((REPO_ROOT / "project.identity.json").read_text())
+
+    assert "database" not in identity
+
+
+def test_ci_has_no_postgres_service_or_migrations() -> None:
+    text = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
+
+    assert "postgres" not in text.lower()
+    assert "DATABASE_URL" not in text
+    assert "alembic" not in text
+
+
+def test_install_script_checks_tether_before_installing() -> None:
+    text = (REPO_ROOT / "scripts" / "install.sh").read_text()
+
+    assert "A_TERM_MIN_TETHER_API=1" in text
+    assert text.index("ensure_tether_available\n") < text.index('step "Installing Python dependencies"')
+
+
+def test_tether_check_accepts_a_compatible_daemon(short_dir: Path) -> None:
+    tmp_path = short_dir
+    socket_path = tmp_path / "t.sock"
+    with _fake_tether(socket_path, 1):
+        result = _run_tether_check(tmp_path, {"TETHER_SOCKET": str(socket_path)})
+
+    assert result.returncode == 0, result.stderr
+    assert f"Tether API v1 at {socket_path}" in result.stdout
+
+
+def test_tether_check_uses_the_instance_socket_under_xdg_runtime_dir(short_dir: Path) -> None:
+    tmp_path = short_dir
+    socket_dir = tmp_path / "runtime" / "tether" / "dev"
+    socket_dir.mkdir(parents=True)
+    with _fake_tether(socket_dir / "control.sock", 3):
+        result = _run_tether_check(tmp_path, {"TETHER_INSTANCE": "dev"})
+
+    assert result.returncode == 0, result.stderr
+    assert "Tether API v3" in result.stdout
+
+
+def test_tether_check_rejects_an_old_api(short_dir: Path) -> None:
+    tmp_path = short_dir
+    socket_path = tmp_path / "t.sock"
+    with _fake_tether(socket_path, 0):
+        result = _run_tether_check(tmp_path, {"TETHER_SOCKET": str(socket_path)})
+
+    assert result.returncode != 0
+    assert "serves API v0; A-Term needs v1 or later" in result.stderr
+
+
+def test_tether_check_explains_how_to_install_when_missing(tmp_path: Path) -> None:
+    result = _run_tether_check(tmp_path, {"TETHER_SOCKET": str(tmp_path / "missing.sock")})
+
+    assert result.returncode != 0
+    assert "github.com/elias-leslie/tether" in result.stderr
+    assert "systemctl --user enable --now tether@default.service" in result.stderr
+
+
+def test_tether_check_skips_only_when_explicitly_asked(tmp_path: Path) -> None:
+    result = _run_tether_check(
+        tmp_path,
+        {"TETHER_SOCKET": str(tmp_path / "missing.sock"), "A_TERM_SKIP_TETHER_CHECK": "1"},
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Skipping the Tether check" in result.stdout
 
 
 def test_install_script_supports_non_systemd_smoke_runs() -> None:
@@ -60,7 +215,7 @@ def test_install_script_supports_non_systemd_smoke_runs() -> None:
     assert "--skip-systemd" in readme
 
 
-def test_install_script_guides_ports_companion_and_database_choices() -> None:
+def test_install_script_guides_ports_and_agent_hub_choice() -> None:
     text = (REPO_ROOT / "scripts" / "install.sh").read_text()
     frontend_package = (REPO_ROOT / "frontend" / "package.json").read_text()
 
@@ -69,16 +224,14 @@ def test_install_script_guides_ports_companion_and_database_choices() -> None:
     assert 'systemctl --user stop "$service"' in text
     assert "resolve_service_port" in text
     assert 'prompt_with_default "Choose a different ${label,,} port"' in text
-    assert "configure_companion_api" in text
-    assert "Enable companion API mode?" in text
+    # Projects come from Tether now; the old SummitFlow catalog mode is gone.
+    assert "configure_companion_api" not in text
+    assert "SUMMITFLOW_API_BASE" not in text
     assert "configure_agent_hub_companion" in text
     assert "Enable Agent Hub companion mode?" in text
     assert "remove_blank_env_keys" in text
-    assert '"SUMMITFLOW_API_BASE",' in text
     assert '"NEXT_PUBLIC_AGENT_HUB_URL",' in text
     assert '"AGENT_HUB_URL",' in text
-    assert "configure_database_choice" in text
-    assert "Use A-Term-managed PostgreSQL?" in text
     assert "For secure remote access, see docs/remote-access.md" in text
     assert '"build": "node scripts/build-with-runtime.mjs"' in frontend_package
 
@@ -94,130 +247,3 @@ def test_frontend_service_path_includes_local_bin_for_bootstrapped_node() -> Non
     text = (REPO_ROOT / "scripts" / "systemd" / "a-term-frontend.service").read_text()
 
     assert '%h/.local/bin' in text
-
-
-def test_managed_postgres_helper_can_bootstrap_local_mode_with_fake_binaries(tmp_path: Path) -> None:
-    fake_bin = tmp_path / "bin"
-    fake_bin.mkdir()
-    data_dir = tmp_path / "postgres"
-
-    _write_executable(
-        fake_bin / "initdb",
-        """#!/usr/bin/env bash
-set -euo pipefail
-data_dir=""
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    -D)
-      data_dir="$2"
-      shift 2
-      ;;
-    *)
-      shift
-      ;;
-  esac
-done
-mkdir -p "$data_dir"
-printf '16\\n' > "$data_dir/PG_VERSION"
-""",
-    )
-    _write_executable(
-        fake_bin / "pg_ctl",
-        """#!/usr/bin/env bash
-set -euo pipefail
-data_dir=""
-command_name=""
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    -D)
-      data_dir="$2"
-      shift 2
-      ;;
-    -l|-o|-m)
-      shift 2
-      ;;
-    start|stop|status)
-      command_name="$1"
-      shift
-      ;;
-    *)
-      shift
-      ;;
-  esac
-done
-pid_file="$data_dir/postmaster.pid"
-case "$command_name" in
-  start)
-    mkdir -p "$data_dir"
-    printf '%s\\n' "$$" > "$pid_file"
-    ;;
-  stop)
-    rm -f "$pid_file"
-    ;;
-  status)
-    [[ -f "$pid_file" ]] || exit 1
-    ;;
-  *)
-    exit 1
-    ;;
-esac
-""",
-    )
-    _write_executable(
-        fake_bin / "createdb",
-        """#!/usr/bin/env bash
-exit 0
-""",
-    )
-    _write_executable(
-        fake_bin / "pg_isready",
-        """#!/usr/bin/env bash
-exit 0
-""",
-    )
-
-    env = os.environ.copy()
-    env["PATH"] = f"{fake_bin}:{env['PATH']}"
-    env["HOME"] = str(tmp_path)
-    env["A_TERM_POSTGRES_DATA_DIR"] = str(data_dir)
-    env["A_TERM_POSTGRES_PORT"] = "55432"
-
-    result = subprocess.run(
-        ["bash", str(REPO_ROOT / "scripts" / "managed-postgres.sh"), "bootstrap", "local"],
-        capture_output=True,
-        check=True,
-        env=env,
-        text=True,
-    )
-
-    assert "A_TERM_MANAGED_POSTGRES_MODE=local" in result.stdout
-    assert f"A_TERM_POSTGRES_DATA_DIR={data_dir}" in result.stdout
-    assert "A_TERM_POSTGRES_PORT=55432" in result.stdout
-    assert (data_dir / "PG_VERSION").exists()
-    assert (data_dir / "postmaster.pid").exists()
-
-
-def test_managed_postgres_helper_uses_structured_docker_port_resolution() -> None:
-    text = (REPO_ROOT / "scripts" / "managed-postgres.sh").read_text()
-
-    assert "docker_container_host_port()" in text
-    assert 'inspect_json="$(docker inspect "$container_name")"' in text
-    assert 'INSPECT_JSON="$inspect_json" python3 - "$container_name" "$container_port"' in text
-    assert "returned empty inspect data" in text
-    assert 'value = os.environ.get(key, values.get(key, ""))' not in text
-    assert "if len(host_ports) > 1:" in text
-    assert '{{range (index .NetworkSettings.Ports "5432/tcp")}}{{.HostPort}}{{end}}' not in text
-
-
-def test_standalone_projects_registry_migration_exists() -> None:
-    text = (
-        REPO_ROOT
-        / "alembic"
-        / "versions"
-        / "0eb6530a7ab7_add_local_projects_registry_table.py"
-    ).read_text()
-
-    assert "CREATE TABLE IF NOT EXISTS projects" in text
-    assert "health_endpoint TEXT DEFAULT '/health'" in text
-    assert "frontend_port   INTEGER DEFAULT 3002" in text
-    assert "backend_port    INTEGER DEFAULT 8002" in text

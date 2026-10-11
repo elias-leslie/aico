@@ -11,7 +11,6 @@ if [ ! -x "$PYTHON_BIN" ]; then
 fi
 
 exec env \
-  -u DATABASE_URL \
   -u REDIS_URL \
   -u AGENT_HUB_DB_URL \
   -u AGENT_HUB_REDIS_URL \

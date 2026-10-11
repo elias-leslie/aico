@@ -61,3 +61,12 @@ def test_a_term_frontend_unit_uses_direct_standalone_shutdown_path() -> None:
     assert "SuccessExitStatus=SIGKILL" in frontend
     assert "corepack pnpm start" not in frontend
     assert 'exec /usr/bin/node .next/standalone/server.js' in frontend
+
+
+def test_a_term_backend_orders_after_tether_without_hard_dependency() -> None:
+    backend = (SYSTEMD_DIR / "a-term-backend.service").read_text()
+    lines = backend.splitlines()
+
+    assert "Wants=tether@default.service" in lines
+    assert "After=network.target tether@default.service" in lines
+    assert not any(line.startswith(("Requires=", "BindsTo=", "PartOf=")) for line in lines)

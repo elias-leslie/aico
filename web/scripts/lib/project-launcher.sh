@@ -12,6 +12,8 @@ if [ "$(basename "$(dirname "$A_TERM_REPO_ROOT")")" = "projects" ]; then
 fi
 
 WORKSPACES_ROOT="${ST_WORKSPACES_ROOT:-$DEFAULT_WORKSPACES_ROOT}"
+# Tests point this at a stub; normally it is the tsession next to this library.
+A_TERM_TSESSION="${A_TERM_TSESSION:-$A_TERM_SCRIPTS_DIR/tsession}"
 
 project_has_a_term_indicators() {
   local dir="$1"
@@ -24,38 +26,29 @@ project_has_a_term_indicators() {
   [ -f "$dir/Makefile" ] || [ -f "$dir/CMakeLists.txt" ]
 }
 
-project_root_from_st() {
-  local project="$1"
-  command -v st >/dev/null 2>&1 || return 1
-
-  local root
-  root="$(ST_PROGRESS_ONLY=1 st projects root "$project" 2>/dev/null | head -n 1 | tr -d '\r')"
-  [ -n "$root" ] || return 1
-  printf '%s\n' "$root"
+# Tether's project list (SummitFlow when installed, else Tether's local list),
+# as "id<TAB>root" lines. Prints nothing when Tether is unreachable.
+discover_registered_projects() {
+  "$A_TERM_TSESSION" projects --format tsv 2>/dev/null || true
 }
 
-discover_registered_projects() {
-  command -v st >/dev/null 2>&1 || return 0
-
-  ST_PROGRESS_ONLY=1 st projects list 2>/dev/null | python3 -c '
-import json, sys
-try:
-    projects = json.load(sys.stdin)
-except Exception:
-    raise SystemExit(0)
-for project in projects:
-    project_id = project.get("id") or ""
-    root_path = project.get("root_path") or ""
-    if project_id and root_path:
-        print(f"{project_id}\t{root_path}")
-'
+project_root_from_tether() {
+  local project="$1"
+  local id root
+  while IFS=$'\t' read -r id root; do
+    if [ "$id" = "$project" ] && [ -n "$root" ]; then
+      printf '%s\n' "$root"
+      return 0
+    fi
+  done < <(discover_registered_projects)
+  return 1
 }
 
 resolve_a_term_project_dir() {
   local project="$1"
   local candidate
 
-  candidate="$(project_root_from_st "$project" || true)"
+  candidate="$(project_root_from_tether "$project" || true)"
   if [ -n "$candidate" ] && [ -d "$candidate" ]; then
     printf '%s\n' "$candidate"
     return 0
@@ -109,7 +102,7 @@ discover_a_term_projects() {
 select_a_term_project() {
   local tool="$1"
   local active_output
-  active_output="$("$A_TERM_SCRIPTS_DIR/tsession" list --tool "$tool" --format project-id 2>/dev/null || true)"
+  active_output="$("$A_TERM_TSESSION" list --tool "$tool" --format project-id 2>/dev/null || true)"
 
   local -A active_projects=()
   local project
@@ -151,7 +144,7 @@ launch_a_term_project_tool() {
   local selected="${2:-}"
 
   if [ "$selected" = "-l" ]; then
-    "$A_TERM_SCRIPTS_DIR/tsession" list --tool "$tool"
+    "$A_TERM_TSESSION" list --tool "$tool"
     return 0
   fi
 
@@ -166,7 +159,9 @@ launch_a_term_project_tool() {
     return 1
   fi
 
-  exec "$A_TERM_SCRIPTS_DIR/tsession" open \
+  # Inside tmux, tsession decides how to reach the target: switch-client only
+  # works within one tmux server, and Tether gives each session its own.
+  exec "$A_TERM_TSESSION" open \
     --tool "$tool" \
     --project "$selected" \
     --cwd "$project_dir" \

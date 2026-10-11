@@ -1,6 +1,9 @@
 [Unit]
 Description=A-Term Backend (FastAPI)
-After=network.target
+# Sessions live in Tether. Wants (not Requires): A-Term still starts and reports
+# Tether as down on /health, and restarting Tether never restarts A-Term.
+Wants=tether@default.service
+After=network.target tether@default.service
 
 [Service]
 Type=simple

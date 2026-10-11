@@ -39,9 +39,6 @@ systemctl --user stop "$FRONTEND_SERVICE" || true
 echo "Stopping ${PRODUCT_NAME} backend..."
 systemctl --user stop "$BACKEND_SERVICE" || true
 
-echo "Stopping managed PostgreSQL (if configured)..."
-bash "$REPO_ROOT/scripts/managed-postgres.sh" stop || true
-
 echo ""
 echo "${PRODUCT_NAME} stopped."
 echo ""

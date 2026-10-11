@@ -46,19 +46,6 @@
       "aterm"
     ]
   },
-  "database": {
-    "shared_with": "summitflow",
-    "table_prefix": "a_term_",
-    "legacy_table_prefixes": [
-      "aterm_",
-      "terminal_"
-    ],
-    "version_table": "a_term_alembic_version",
-    "legacy_version_tables": [
-      "aterm_alembic_version",
-      "terminal_alembic_version"
-    ]
-  },
   "repository": {
     "owner": "elias-leslie",
     "name": "a-term",

@@ -87,9 +87,6 @@ echo "Starting ${PRODUCT_NAME}"
 echo "================================"
 echo ""
 
-echo "Starting managed PostgreSQL (if configured)..."
-bash "$REPO_ROOT/scripts/managed-postgres.sh" start
-
 echo "Starting ${PRODUCT_NAME} backend..."
 systemctl --user start "$BACKEND_SERVICE"
 

@@ -15,9 +15,8 @@ Bootstraps A-Term for a native Linux install:
   - prepares .env.local when missing
   - bootstraps Node.js 22, corepack, uv, and Python 3.13 when needed
   - installs tmux automatically when it is missing
-  - bootstraps managed PostgreSQL automatically when DATABASE_URL is unset
+  - checks that a compatible Tether session daemon is running
   - installs Python and frontend dependencies
-  - runs database migrations
   - builds the production frontend
   - installs user-level systemd units
   - optionally starts the services and verifies health
@@ -53,10 +52,6 @@ done
 
 command_exists() {
   command -v "$1" >/dev/null 2>&1
-}
-
-docker_available() {
-  command_exists docker && docker info >/dev/null 2>&1
 }
 
 require_command() {
@@ -214,21 +209,6 @@ probe_url() {
   curl --silent --show-error --fail --max-time 2 "$url" >/dev/null 2>&1
 }
 
-local_postgres_ready() {
-  if command_exists pg_isready; then
-    pg_isready -h 127.0.0.1 -p 5432 >/dev/null 2>&1
-    return
-  fi
-
-  python3 - <<'PY' >/dev/null 2>&1
-import socket
-
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-    sock.settimeout(1.0)
-    sock.connect(("127.0.0.1", 5432))
-PY
-}
-
 port_is_available() {
   local host="$1"
   local port="$2"
@@ -325,15 +305,6 @@ resolve_service_port() {
   printf '%s\n' "$suggested_port"
 }
 
-looks_like_postgres_url() {
-  case "$1" in
-    postgresql://*|postgres://*)
-      return 0
-      ;;
-  esac
-  return 1
-}
-
 sync_default_cors_origin() {
   local file_path="$1"
   local frontend_host="$2"
@@ -388,75 +359,6 @@ if not updated:
 
 path.write_text("\n".join(next_lines) + "\n")
 PY
-}
-
-configure_database_choice() {
-  if [[ -n "${DATABASE_URL:-}" && "${DATABASE_URL}" != "$DATABASE_URL_PLACEHOLDER" ]]; then
-    return
-  fi
-  if ! install_is_interactive; then
-    return
-  fi
-
-  step "Database setup"
-  echo "A-Term can manage PostgreSQL for you, or connect to an existing PostgreSQL database you already run."
-  if local_postgres_ready; then
-    echo "Found a PostgreSQL listener on 127.0.0.1:5432."
-  fi
-
-  if prompt_yes_no "Use A-Term-managed PostgreSQL?" "Y"; then
-    return
-  fi
-
-  local existing_url=""
-  while true; do
-    existing_url="$(prompt_with_default "Enter your PostgreSQL connection URL" "")"
-    if [[ -z "$existing_url" ]]; then
-      echo "A PostgreSQL URL is required when you choose an existing database." >&2
-      continue
-    fi
-    if ! looks_like_postgres_url "$existing_url"; then
-      echo "That does not look like a PostgreSQL URL. Expected postgres:// or postgresql://." >&2
-      continue
-    fi
-    break
-  done
-
-  DATABASE_URL="$existing_url"
-  A_TERM_MANAGED_POSTGRES_MODE=""
-  A_TERM_POSTGRES_CONTAINER_NAME=""
-  A_TERM_POSTGRES_DATA_DIR=""
-  A_TERM_POSTGRES_PORT=""
-  update_env_value "$ENV_FILE" "DATABASE_URL" "$DATABASE_URL"
-  update_env_value "$ENV_FILE" "A_TERM_MANAGED_POSTGRES_MODE" ""
-  update_env_value "$ENV_FILE" "A_TERM_POSTGRES_CONTAINER_NAME" ""
-  update_env_value "$ENV_FILE" "A_TERM_POSTGRES_DATA_DIR" ""
-  update_env_value "$ENV_FILE" "A_TERM_POSTGRES_PORT" ""
-}
-
-configure_companion_api() {
-  local summitflow_health="http://127.0.0.1:8001/health"
-  local summitflow_api="http://127.0.0.1:8001/api"
-
-  if [[ -n "${SUMMITFLOW_API_BASE:-}" ]]; then
-    return
-  fi
-  if ! probe_url "$summitflow_health"; then
-    return
-  fi
-
-  if ! install_is_interactive; then
-    echo "Detected an optional companion API locally at ${summitflow_health}. Set SUMMITFLOW_API_BASE=${summitflow_api} in .env.local if you want its project catalog." >&2
-    return
-  fi
-
-  step "Companion mode"
-  echo "Found an optional companion API running locally."
-  echo "Companion mode lets A-Term read its project list from that catalog."
-  if prompt_yes_no "Enable companion API mode?" "Y"; then
-    SUMMITFLOW_API_BASE="$summitflow_api"
-    update_env_value "$ENV_FILE" "SUMMITFLOW_API_BASE" "$SUMMITFLOW_API_BASE"
-  fi
 }
 
 configure_agent_hub_companion() {
@@ -520,11 +422,7 @@ print_next_steps() {
   echo "  Frontend: http://${display_frontend_host}:${frontend_port}"
   echo "  Backend:  http://${display_backend_host}:${backend_port}/health"
   echo
-  if [[ -n "${SUMMITFLOW_API_BASE:-}" ]]; then
-    echo "Mode: companion API (${SUMMITFLOW_API_BASE})"
-  else
-    echo "Mode: standalone local storage"
-  fi
+  echo "Sessions and projects come from Tether (SummitFlow's projects when it is installed)."
   echo "For secure remote access, see docs/remote-access.md:"
   echo "  - Tailscale"
   echo "  - Cloudflare Tunnel"
@@ -591,20 +489,11 @@ install_system_role() {
     apt-get:tmux)
       packages=(tmux)
       ;;
-    apt-get:postgresql_server)
-      packages=(postgresql)
-      ;;
     dnf:tmux)
       packages=(tmux)
       ;;
-    dnf:postgresql_server)
-      packages=(postgresql-server)
-      ;;
     pacman:tmux)
       packages=(tmux)
-      ;;
-    pacman:postgresql_server)
-      packages=(postgresql)
       ;;
     *)
       fail "Unsupported package role: ${role}"
@@ -694,35 +583,58 @@ ensure_tmux_available() {
   command_exists tmux || fail "tmux installation completed, but tmux is still not on PATH."
 }
 
-bootstrap_managed_postgres() {
-  local bootstrap_mode="auto"
-  local bootstrap_output=""
+A_TERM_MIN_TETHER_API=1
 
-  if ! docker_available; then
-    if ! bash "$REPO_ROOT/scripts/managed-postgres.sh" local-tools-ready; then
-      install_system_role postgresql_server
-    fi
-    bootstrap_mode="local"
+tether_socket_path() {
+  printf '%s\n' "${TETHER_SOCKET:-${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/tether/${TETHER_INSTANCE:-default}/control.sock}"
+}
+
+tether_api_version() {
+  local socket_path="$1"
+  local version_json=""
+
+  if [[ -S "$socket_path" ]]; then
+    version_json="$(curl --unix-socket "$socket_path" -fsS --max-time 3 http://tether/v1/version 2>/dev/null || true)"
+  fi
+  if [[ -z "$version_json" ]] && command_exists tether; then
+    version_json="$(tether --instance "${TETHER_INSTANCE:-default}" --json version 2>/dev/null | sed -n '/^{/,$p' || true)"
+  fi
+  [[ -n "$version_json" ]] || return 1
+
+  printf '%s' "$version_json" | python3 -c '
+import json, sys
+try:
+    value = json.load(sys.stdin).get("apiVersion")
+except Exception:
+    raise SystemExit(1)
+if not isinstance(value, int):
+    raise SystemExit(1)
+print(value)
+'
+}
+
+ensure_tether_available() {
+  if [[ "${A_TERM_SKIP_TETHER_CHECK:-0}" == "1" ]]; then
+    echo "Skipping the Tether check (A_TERM_SKIP_TETHER_CHECK=1)."
+    return
   fi
 
-  step "Bootstrapping managed PostgreSQL (${bootstrap_mode})"
-  bootstrap_output="$(
-    bash "$REPO_ROOT/scripts/managed-postgres.sh" bootstrap "$bootstrap_mode"
-  )" || fail "Managed PostgreSQL bootstrap failed."
-  [[ -n "$bootstrap_output" ]] || fail "Managed PostgreSQL bootstrap returned no configuration."
-  eval "$bootstrap_output"
-  [[ -n "${DATABASE_URL:-}" ]] || fail "Managed PostgreSQL bootstrap did not produce DATABASE_URL."
-  [[ "${DATABASE_URL}" != "$DATABASE_URL_PLACEHOLDER" ]] || fail "Managed PostgreSQL bootstrap left the placeholder DATABASE_URL in place."
-  [[ -n "${A_TERM_MANAGED_POSTGRES_MODE:-}" ]] || fail "Managed PostgreSQL bootstrap did not report its runtime mode."
-
-  update_env_value "$ENV_FILE" "DATABASE_URL" "$DATABASE_URL"
-  update_env_value "$ENV_FILE" "A_TERM_MANAGED_POSTGRES_MODE" "$A_TERM_MANAGED_POSTGRES_MODE"
-  update_env_value "$ENV_FILE" "A_TERM_POSTGRES_CONTAINER_NAME" "${A_TERM_POSTGRES_CONTAINER_NAME:-}"
-  update_env_value "$ENV_FILE" "A_TERM_POSTGRES_DATA_DIR" "${A_TERM_POSTGRES_DATA_DIR:-}"
-  update_env_value "$ENV_FILE" "A_TERM_POSTGRES_PORT" "${A_TERM_POSTGRES_PORT:-}"
-  export DATABASE_URL
-
-  echo "Configured managed PostgreSQL at ${DATABASE_URL} (${A_TERM_MANAGED_POSTGRES_MODE})"
+  local socket_path=""
+  local api_version=""
+  socket_path="$(tether_socket_path)"
+  step "Checking Tether"
+  if ! api_version="$(tether_api_version "$socket_path")"; then
+    fail "A-Term needs the Tether session daemon (API v${A_TERM_MIN_TETHER_API}+), but nothing answered at ${socket_path}.
+Install it, then re-run this installer:
+  git clone https://github.com/elias-leslie/tether
+  bash tether/scripts/install.sh
+  systemctl --user enable --now tether@default.service
+Set TETHER_SOCKET or TETHER_INSTANCE if Tether runs elsewhere."
+  fi
+  if (( api_version < A_TERM_MIN_TETHER_API )); then
+    fail "Tether at ${socket_path} serves API v${api_version}; A-Term needs v${A_TERM_MIN_TETHER_API} or later. Upgrade Tether (git pull, then bash scripts/install.sh in its checkout) and restart tether@${TETHER_INSTANCE:-default}.service."
+  fi
+  echo "Tether API v${api_version} at ${socket_path}"
 }
 
 require_command python3
@@ -733,6 +645,7 @@ fi
 ensure_node_runtime
 ensure_uv
 ensure_tmux_available
+ensure_tether_available
 
 eval "$(
   python3 - <<'PY'
@@ -754,7 +667,6 @@ PY
 
 cd "$REPO_ROOT"
 ENV_FILE="$REPO_ROOT/.env.local"
-DATABASE_URL_PLACEHOLDER="postgresql://USER:PASSWORD@localhost:5432/a-term"
 
 if [[ ! -f "$ENV_FILE" ]]; then
   step "Creating .env.local"
@@ -762,11 +674,9 @@ if [[ ! -f "$ENV_FILE" ]]; then
 fi
 
 remove_blank_env_keys "$REPO_ROOT/.env.local" \
-  "SUMMITFLOW_API_BASE" \
   "NEXT_PUBLIC_AGENT_HUB_URL" \
   "AGENT_HUB_URL"
 remove_blank_env_keys "$REPO_ROOT/.env" \
-  "SUMMITFLOW_API_BASE" \
   "NEXT_PUBLIC_AGENT_HUB_URL" \
   "AGENT_HUB_URL"
 
@@ -778,19 +688,12 @@ from pathlib import Path
 
 repo_root = Path(os.environ["REPO_ROOT"])
 keys = [
-    "DATABASE_URL",
     "A_TERM_PORT",
     "A_TERM_BIND_HOST",
     "A_TERM_FRONTEND_PORT",
     "A_TERM_FRONTEND_HOST",
-    "SUMMITFLOW_API_BASE",
     "NEXT_PUBLIC_AGENT_HUB_URL",
     "AGENT_HUB_URL",
-    "A_TERM_MANAGED_POSTGRES_MODE",
-    "A_TERM_POSTGRES_DATA_DIR",
-    "A_TERM_POSTGRES_PORT",
-    "A_TERM_INSTALL_MANAGED_POSTGRES",
-    "A_TERM_POSTGRES_CONTAINER_NAME",
 ]
 values: dict[str, str] = {}
 
@@ -816,17 +719,7 @@ for key in keys:
 PY
 )"
 
-configure_companion_api
 configure_agent_hub_companion
-configure_database_choice
-
-if [[ -z "${DATABASE_URL:-}" || "${DATABASE_URL}" == "$DATABASE_URL_PLACEHOLDER" ]]; then
-  bootstrap_managed_postgres
-fi
-
-if [[ -z "${DATABASE_URL:-}" ]]; then
-  fail "DATABASE_URL is required. Leave the placeholder to let the installer bootstrap managed PostgreSQL automatically, or set your own PostgreSQL URL in .env.local."
-fi
 
 BACKEND_PORT="${A_TERM_PORT:-$BACKEND_PORT_DEFAULT}"
 BACKEND_HOST="${A_TERM_BIND_HOST:-127.0.0.1}"
@@ -854,9 +747,6 @@ uv python install "$PYTHON_VERSION"
 step "Installing Python dependencies"
 uv sync --extra dev --managed-python --python "$PYTHON_VERSION"
 
-step "Running database migrations"
-uv run --managed-python --python "$PYTHON_VERSION" alembic upgrade head
-
 step "Installing frontend dependencies"
 corepack pnpm --dir "$REPO_ROOT/frontend" install --frozen-lockfile
 
@@ -871,11 +761,7 @@ if [[ "$SKIP_SYSTEMD" -eq 1 ]]; then
   echo "  Frontend: http://$(display_host_for_url "$FRONTEND_HOST"):${FRONTEND_PORT}"
   echo "  Backend:  http://$(display_host_for_url "$BACKEND_HOST"):${BACKEND_PORT}/health"
   echo
-  if [[ -n "${SUMMITFLOW_API_BASE:-}" ]]; then
-    echo "Mode: companion API (${SUMMITFLOW_API_BASE})"
-  else
-    echo "Mode: standalone local storage"
-  fi
+  echo "Sessions and projects come from Tether (SummitFlow's projects when it is installed)."
   echo "For secure remote access, see docs/remote-access.md:"
   echo "  - Tailscale"
   echo "  - Cloudflare Tunnel"
