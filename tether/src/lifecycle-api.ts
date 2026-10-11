@@ -24,14 +24,19 @@ import {
 } from './lifecycle/catalog'
 import {
   cachedSessionStatus,
+  contextStatus,
   discardNeverAllocated,
   endSession,
   ensureSessionSerialized,
+  hasVerifiedStatus,
   isDir,
   lastEnsureFailure,
   lifecycleOwners,
+  lifecycleStatus,
   lingerEnabled,
   loadTui,
+  notifySessionChanged,
+  probeContext,
   type RespawnResult,
   reconcileWidgetTool,
   releaseLifecycleOwner,
@@ -69,7 +74,9 @@ import {
   sessionName,
   type TmuxTarget,
 } from './lifecycle/tmux'
+import { staticContextStatus } from './lifecycle/tui/context'
 import { getTui } from './lifecycle/tui/registry'
+import { paneModeArgs, parsePaneMode } from './pane-mode'
 import type { ProjectProvider } from './projects'
 import type { Store } from './store'
 
@@ -98,6 +105,33 @@ export function generationOf(row: WidgetRow): string {
   return sessionGeneration(row)
 }
 
+/**
+ * The session's context-hook verification state (docs/api-v1.md). Tether
+ * probes the hook after each launch and after its own restart; `unknown` means
+ * no probe for the session's current tool has finished yet.
+ */
+export function contextHookOf(row: WidgetRow): Record<string, unknown> {
+  const status = contextStatus(row.id)
+  if (status && status.slug === row.tool) {
+    return {
+      state: status.state,
+      detail: status.detail,
+      tool: status.slug,
+      applicable: status.applicable,
+      checkedAt: status.checkedAt,
+    }
+  }
+  const spec = getTui(row.tool)
+  const fixed = spec ? staticContextStatus(spec) : null
+  return {
+    state: fixed?.state ?? 'unknown',
+    detail: fixed?.detail ?? 'Context delivery has not been checked yet.',
+    tool: row.tool,
+    applicable: Boolean(spec && spec.command.length > 0),
+    checkedAt: null,
+  }
+}
+
 export function descriptor(row: WidgetRow, status: SessionStatus): Record<string, unknown> {
   const server = row.tmuxServerId ? getTmuxServer(row.tmuxServerId) : undefined
   const target = tmuxTargetForWidget(row.id)
@@ -124,8 +158,14 @@ export function descriptor(row: WidgetRow, status: SessionStatus): Record<string
       paneId: row.paneId,
       sessionName: sessionName(row.id),
     },
+    contextHook: contextHookOf(row),
     createdAt: row.createdAt,
   }
+}
+
+/** The event snapshot: the descriptor with the last verified status. */
+export function sessionSnapshot(row: WidgetRow): Record<string, unknown> {
+  return descriptor(row, cachedSessionStatus(row))
 }
 
 function only(body: Record<string, unknown>, allowed: readonly string[]): void {
@@ -241,7 +281,6 @@ async function withRunningSession<T>(
 
 export function forwardViewMutation(
   gui: GuiChannel,
-  events: EventBus,
 ): (
   widgetId: string,
   generation: string,
@@ -254,7 +293,7 @@ export function forwardViewMutation(
       // running generation under the lifecycle lock.
       const renamed = await withRunningSession(widgetId, generation, async (row) => {
         setWidgetName(row.id, mutation.label)
-        events.publish('session.updated', { id: row.id, generation })
+        notifySessionChanged(row.id, { force: true })
         return true as const
       })
       return renamed
@@ -270,7 +309,7 @@ export function forwardViewMutation(
       if (mutation.kind === 'title') {
         // The catalog name changes only when the GUI applied the title.
         setWidgetName(row.id, mutation.label)
-        events.publish('session.updated', { id: row.id, generation })
+        notifySessionChanged(row.id, { force: true })
       }
       return true as const
     })
@@ -279,7 +318,7 @@ export function forwardViewMutation(
 }
 
 export function rootOperations(context: LifecycleApiContext): RootControlOperations {
-  const mutate = forwardViewMutation(context.gui, context.events)
+  const mutate = forwardViewMutation(context.gui)
   return {
     available: () => true,
     validate: (request) => Boolean(getTui(request.tool)?.enabled && isDir(request.projectRoot)),
@@ -298,6 +337,8 @@ export function rootOperations(context: LifecycleApiContext): RootControlOperati
         resumeSessionId,
       )
       const latest = getWidget(widgetId)
+      // Verify now so `GET /v1/sessions` agrees with `GET /v1/sessions/:id`.
+      if (latest) await verifySessionStatus(latest).catch(() => undefined)
       if (
         latest?.launchState === 'dispatched' &&
         context.gui.connected() &&
@@ -346,18 +387,26 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
   const root = (req: IncomingMessage, res: ServerResponse) => rootHandler(req, res)
 
   router
-    .add('GET', '/v1/sessions', (_req, res, _params, query) => {
+    .add('GET', '/v1/sessions', async (_req, res, _params, query) => {
       const project = query.get('project')
       const origin = query.get('origin')
       const tool = query.get('tool')
-      const items = listWidgets()
-        .filter(
-          (row) =>
-            (project === null || row.projectId === project) &&
-            (origin === null || row.origin === origin) &&
-            (tool === null || row.tool === tool),
-        )
-        .map((row) => descriptor(row, cachedSessionStatus(row)))
+      const rows = listWidgets().filter(
+        (row) =>
+          (project === null || row.projectId === project) &&
+          (origin === null || row.origin === origin) &&
+          (tool === null || row.tool === tool),
+      )
+      // A session whose current generation was never verified (a fresh root
+      // or replacement) is verified here, so the list agrees with a GET.
+      const items = await Promise.all(
+        rows.map(async (row) => {
+          if (hasVerifiedStatus(row) || lifecycleStatus() === 'disabled')
+            return descriptor(row, cachedSessionStatus(row))
+          const status = await verifySessionStatus(row).catch(() => cachedSessionStatus(row))
+          return descriptor(getWidget(row.id) ?? row, status)
+        }),
+      )
       sendJson(res, 200, { items })
     })
     .add('POST', '/v1/sessions', async (req, res) => {
@@ -417,7 +466,7 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
         const failure = lastEnsureFailure(id)
         if (failure?.code === 'admission_denied' || failure?.code === 'linger_required') {
           // Refused before allocation: nothing exists, so nothing is kept.
-          if (discardNeverAllocated(id)) events.publish('session.ended', { id })
+          if (discardNeverAllocated(id)) notifySessionChanged(id, { ended: true })
           throw new HttpError(failure.code === 'linger_required' ? 503 : 409, failure.code, {
             reason: failure.reason,
           })
@@ -451,7 +500,7 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
       const row = requireSession(params.id)
       fence(row, generation)
       setWidgetName(row.id, name)
-      events.publish('session.updated', { id: row.id, generation })
+      notifySessionChanged(row.id, { force: true })
       const latest = requireSession(row.id)
       sendJson(res, 200, descriptor(latest, cachedSessionStatus(latest)))
     })
@@ -500,19 +549,30 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
     })
     .add('POST', '/v1/sessions/:id/switch-project', async (req, res, params) => {
       const body = await readJsonObject(req)
-      only(body, ['generation', 'projectId'])
+      only(body, ['generation', 'projectId', 'projectRoot'])
       const generation = requireGeneration(body)
-      if (typeof body.projectId !== 'string' || !body.projectId)
+      // Exactly one of projectId (resolved once) or projectRoot (an absolute
+      // directory with no project, as on create).
+      const byId = body.projectId !== undefined && body.projectId !== null
+      const byRoot = body.projectRoot !== undefined && body.projectRoot !== null
+      if (byId === byRoot)
+        throw new HttpError(400, 'invalid_body', { detail: 'send projectId or projectRoot' })
+      if (byId && (typeof body.projectId !== 'string' || !body.projectId))
         throw new HttpError(400, 'invalid_body', { field: 'projectId' })
+      if (byRoot && (typeof body.projectRoot !== 'string' || !body.projectRoot.startsWith('/')))
+        throw new HttpError(400, 'invalid_body', { field: 'projectRoot' })
       const row = requireSession(params.id)
       fence(row, generation)
-      const projectRoot = await resolveProject(context, body.projectId)
+      const projectId = byId ? (body.projectId as string) : null
+      let projectRoot: string | null
+      if (projectId) projectRoot = await resolveProject(context, projectId)
+      else projectRoot = isDir(body.projectRoot as string) ? (body.projectRoot as string) : null
       if (!projectRoot) throw new HttpError(400, 'unknown_project')
       await whenReady()
       await answerReplacement(
         res,
         row.id,
-        await switchProject(row.id, body.projectId, projectRoot, {
+        await switchProject(row.id, projectId, projectRoot, {
           expectedGeneration: generation,
           generationOf,
         }),
@@ -521,6 +581,26 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
     .add('GET', '/v1/sessions/:id/diagnostics', async (_req, res, params) => {
       const row = requireSession(params.id)
       sendJson(res, 200, await sessionDiagnostics(row.id))
+    })
+    .add('POST', '/v1/sessions/:id/context-check', async (_req, res, params) => {
+      const row = requireSession(params.id)
+      const spec = getTui(row.tool)
+      if (spec) await probeContext(row.id, spec)
+      const latest = requireSession(row.id)
+      sendJson(res, 200, { generation: generationOf(latest), contextHook: contextHookOf(latest) })
+    })
+    .add('GET', '/v1/sessions/:id/pane-mode', async (_req, res, params) => {
+      const row = requireSession(params.id)
+      if (isNeverAllocatedWidget(row)) throw new HttpError(409, 'workload_unavailable')
+      const target = tmuxPaneTargetForWidget(row.id)
+      if (!target.socket) throw new HttpError(409, 'workload_unavailable')
+      let stdout: string
+      try {
+        stdout = await runTmux(paneModeArgs(target.socket, target.session), 4096)
+      } catch {
+        throw new HttpError(409, 'workload_unavailable')
+      }
+      sendJson(res, 200, { generation: generationOf(row), ...parsePaneMode(stdout) })
     })
     .add('GET', '/v1/sessions/:id/attach', async (_req, res, params) => {
       const row = requireSession(params.id)
@@ -675,6 +755,11 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
         env: ATTACH_ENV,
         unset: ATTACH_UNSET,
       })
+    })
+    .add('GET', '/v1/legacy-sessions/:name/pane-mode', async (_req, res, params) => {
+      const mode = await legacy.paneMode(params.name ?? '')
+      if (!mode) throw new HttpError(404, 'not_found')
+      sendJson(res, 200, mode)
     })
     .add('POST', '/v1/legacy-sessions/:name/end', async (_req, res, params) => {
       if (!(await legacy.end(params.name ?? ''))) throw new HttpError(404, 'not_found')

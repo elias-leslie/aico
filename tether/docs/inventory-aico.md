@@ -42,7 +42,7 @@ This classifies Aico at `dfe73a3` (`electron/main/*`, `scripts/*`).
 | --- | --- |
 | `scripts/aico-lifecycle-harness.sh`, `docs/LIFECYCLE_HARNESS.md` | Move; it must run against a test instance (`tether@dev`) |
 | `scripts/aico-install-context-hooks.sh`, `scripts/tui-hooks/` | Move (context-hook verification is Tether's) |
-| `scripts/aico-root-watch.py`, `scripts/tests/test_aico_root*.py`, `test_aico_widget.py`, `test_view_mutation_contract.py` | Keep as clients; point them at the Tether socket |
+| `scripts/aico-root-watch.py`, `scripts/tests/test_aico_root*.py`, `test_aico_create.py`, `test_aico_widget.py`, `test_aico_admin.py`, `test_view_mutation_contract.py` | Moved to Tether, which owns the root contract (post-cutover). `install.sh` installs the script to `~/.local/lib/tether/scripts/`; Aico's `scripts/aico-root-watch.py` stays as the `st aico` entry and execs that copy. |
 | `contracts/view-mutation-vectors.json` | Copy into Tether; both suites run every vector |
 | `scripts/systemd/aico-owner.service` | Remove in Phase 6, after `tether@default` replaces it |
 | `scripts/aico-real-session-smoke.sh`, `scripts/scrollback-gate.sh` | Move or adapt as Tether smoke tests |

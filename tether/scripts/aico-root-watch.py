@@ -349,7 +349,7 @@ class Collector:
 
     def receipt(self, path: str, route: str, payload: dict | None = None,
                 *, timeout: float = .25) -> tuple[int, dict]:
-        limit = CATALOG_LIMIT if route == "/v1/roots" else RECEIPT_LIMIT
+        limit = CATALOG_LIMIT if route.split("?")[0] == "/v1/roots" else RECEIPT_LIMIT
         client = None
         if path.startswith("http:"):
             parsed = urlsplit(local_root_url(path))
@@ -422,9 +422,23 @@ class Collector:
             raise IdentityChanged()
 
     def discover(self, request_id: str | None) -> tuple[list[tuple[Pin, Collector]], list[dict]]:
-        status, catalog = self.receipt(self.root_socket, "/v1/roots")
-        roots = catalog.get("roots")
-        if status != 200 or catalog.get("owner") != "aico" or not isinstance(roots, list):
+        if request_id:
+            # Exact selection reads one root, so a retained tombstone still
+            # reports its ended identity without listing every tombstone.
+            status, root = self.receipt(self.root_socket, f"/v1/roots/{quote(request_id)}")
+            if status == 404:
+                roots: object = []
+            elif status == 200 and root.get("owner") == "aico":
+                roots = [root]
+            else:
+                raise Unavailable("catalog_unavailable")
+        else:
+            # Tombstones are kept forever; general discovery only wants live roots.
+            status, catalog = self.receipt(self.root_socket, "/v1/roots?ended=0")
+            roots = catalog.get("roots")
+            if status != 200 or catalog.get("owner") != "aico":
+                raise Unavailable("catalog_unavailable")
+        if not isinstance(roots, list):
             raise Unavailable("catalog_unavailable")
         if len(roots) > ROOT_LIMIT:
             raise Unavailable("root_limit")
@@ -791,7 +805,6 @@ def create_main(argv: list[str]) -> int:
     parser.add_argument("--root-url", type=local_root_url)
     args = parser.parse_args(argv)
     key = r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}"
-    thread_pattern = r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}"
     if any(not re.fullmatch(key, value) for value in
            (args.request_id, args.project, args.role, *(v for v in (args.lead_root, args.facet) if v is not None))):
         parser.error("invalid root metadata")
@@ -832,18 +845,14 @@ def create_main(argv: list[str]) -> int:
             reason = errors.get(status)
             raise Unavailable(reason if reason and data.get("error") == reason else "create_receipt_unqualified")
         host = data.get("hostIdentity")
-        host_pattern = r"[0-9a-f]{8}" if args.surface == "aico" else thread_pattern
         generation = data.get("generation")
         state = data.get("status")
         if (data.get("owner") != args.surface or data.get("requestId") != args.request_id
                 or data.get("digest") != digest or data.get("role") != args.role
                 or data.get("leadRootReference") != args.lead_root or data.get("facetCapsuleRef") != args.facet
-                or not isinstance(host, str) or not re.fullmatch(host_pattern, host)
+                or not surface_identity(args.surface, host, data.get("surfaceLocator"))
                 or not isinstance(data.get("logicalSessionId"), str)
                 or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", data["logicalSessionId"])
-                or not isinstance(data.get("surfaceLocator"), str)
-                or (data["surfaceLocator"] != f"aico://widget/{host}" if args.surface == "aico"
-                    else not re.fullmatch("a-term://pane/" + thread_pattern, data["surfaceLocator"]))
                 or state not in ("running", "pending", "uncertain", "ended")
                 or status != (202 if state in ("pending", "uncertain") else 200)
                 or state == "running" and generation is None
@@ -946,6 +955,22 @@ def widget_main(argv: list[str]) -> int:
         return 0
 
 
+def surface_identity(surface: str, host: object, locator: object) -> bool:
+    """Exact host/locator pairing for a root surface.
+
+    Aico roots are 8-hex widget ids at ``aico://widget/<id>``. A-Term roots are
+    accepted in both shapes: the pre-Tether pane UUID at ``a-term://pane/<uuid>``
+    and, since A-Term's /v1/roots proxies Tether, a Tether session id at
+    ``aico://widget/<id>`` (owner/origin stays ``a-term``)."""
+    if not isinstance(host, str) or not isinstance(locator, str):
+        return False
+    tether = bool(re.fullmatch(r"[0-9a-f]{8}", host)) and locator == f"aico://widget/{host}"
+    if surface == "aico":
+        return tether
+    legacy = bool(re.fullmatch(THREAD, host)) and bool(re.fullmatch("a-term://pane/" + THREAD, locator))
+    return tether or legacy
+
+
 ROOT_IDENTITY = ("owner", "requestId", "hostIdentity", "logicalSessionId", "surfaceLocator")
 
 
@@ -976,13 +1001,9 @@ def root_descriptor(data: dict, surface: str, request_id: str) -> dict:
     generation = data.get("generation")
     state = data.get("status")
     if (data.get("owner") != surface or data.get("requestId") != request_id
-            or not isinstance(host, str)
-            or not re.fullmatch(r"[0-9a-f]{8}" if surface == "aico" else THREAD, host)
+            or not surface_identity(surface, host, locator)
             or not isinstance(data.get("logicalSessionId"), str)
             or not re.fullmatch(KEY, data["logicalSessionId"])
-            or not isinstance(locator, str)
-            or not (locator == f"aico://widget/{host}" if surface == "aico"
-                    else re.fullmatch("a-term://pane/" + THREAD, locator))
             or state not in ("running", "pending", "uncertain", "ended")
             or generation is not None and (not isinstance(generation, str)
                                            or not re.fullmatch(r"[0-9a-f]{64}", generation))

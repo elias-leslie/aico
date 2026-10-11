@@ -3,7 +3,7 @@ import { createServer, request, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { getWidget } from './catalog'
+import { getWidget, removeWidget } from './catalog'
 import { listenOwnerServer } from './owner-control'
 import { createRootHandler, parseRootCreate, type RootControlOperations } from './root-control'
 import { initStore, registerBuiltinTuis } from './testing'
@@ -106,5 +106,22 @@ describe('root origin (v1 roots API)', () => {
     const root = await call(legacySocket, '/v1/roots/from-aterm')
     expect(root.body.owner).toBe('aico')
     expect(root.body).not.toHaveProperty('origin')
+  })
+
+  it('lists without tombstones on ended=0 on both sockets, keeping them by id', async () => {
+    const ended = await call(v1Socket, '/v1/roots', 'POST', create('ended-root'))
+    removeWidget(ended.body.hostIdentity as string)
+    const ids = (body: Record<string, unknown>) =>
+      (body.roots as { requestId: string }[]).map((r) => r.requestId)
+    for (const socket of [v1Socket, legacySocket]) {
+      expect(ids((await call(socket, '/v1/roots')).body)).toContain('ended-root')
+      expect(ids((await call(socket, '/v1/roots?ended=0')).body)).not.toContain('ended-root')
+      expect(ids((await call(socket, '/v1/roots?ended=0')).body)).toContain('from-aico')
+      expect((await call(socket, '/v1/roots?ended=no')).status).toBe(400)
+      expect((await call(socket, '/v1/roots/ended-root')).body).toMatchObject({
+        status: 'ended',
+        generation: null,
+      })
+    }
   })
 })

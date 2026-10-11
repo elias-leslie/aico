@@ -15,20 +15,25 @@ interface ContextProbe {
   session?: string
 }
 
+/** The answer for a TUI with no context hook, known without probing. */
+export function staticContextStatus(spec: TuiSpec): ContextStatus | null {
+  if (spec.context) return null
+  return spec.command.length
+    ? {
+        state: 'unsupported',
+        detail: 'No canonical context adapter is registered; native agent continues.',
+      }
+    : { state: 'not_applicable', detail: 'A bare shell has no model context.' }
+}
+
 /** Verify (not install) a TUI's supplemental-context path after native launch.
  * The result drives visible status only; it never gates pane dispatch. */
 export async function ensureContext(
   spec: TuiSpec,
   probe: ContextProbe = {},
 ): Promise<ContextStatus> {
-  if (!spec.context) {
-    return spec.command.length
-      ? {
-          state: 'unsupported',
-          detail: 'No canonical context adapter is registered; native agent continues.',
-        }
-      : { state: 'not_applicable', detail: 'A bare shell has no model context.' }
-  }
+  const fixed = staticContextStatus(spec)
+  if (fixed || !spec.context) return fixed as ContextStatus
   let installed: ContextStatus
   switch (spec.context.kind) {
     case 'claude-session-start':

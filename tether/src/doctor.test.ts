@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   checkCgroup,
+  checkEnabledInstances,
   checkLinger,
   checkMemoryGuard,
   checkNode,
@@ -10,6 +11,14 @@ import {
 } from './doctor'
 
 describe('doctor checks', () => {
+  it('warns when an instance besides default starts at boot', () => {
+    expect(checkEnabledInstances(['default'])).toMatchObject({ status: 'ok' })
+    expect(checkEnabledInstances([])).toMatchObject({ status: 'ok' })
+    const extra = checkEnabledInstances(['dev', 'default'])
+    expect(extra.status).toBe('warn')
+    expect(extra.detail).toContain('systemctl --user disable tether@dev.service')
+  })
+
   it('requires linger, systemd 254+, cgroup v2 and node 22.13+', () => {
     expect(checkLinger('yes').status).toBe('ok')
     expect(checkLinger('no').status).toBe('fail')

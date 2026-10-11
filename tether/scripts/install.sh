@@ -2,7 +2,8 @@
 # Idempotent Tether installer.
 #
 #   scripts/install.sh                 build, install files and the unit template
-#   scripts/install.sh --start dev     ...then enable and (re)start tether@dev
+#   scripts/install.sh --start default ...then enable and (re)start tether@default
+#   scripts/install.sh --start dev     ...then (re)start tether@dev for this boot only
 #   scripts/install.sh --check         only verify host prerequisites
 #
 # Installs:
@@ -10,8 +11,11 @@
 #   ~/.local/bin/tether -> ~/.local/lib/tether/bin/tether
 #   ~/.config/systemd/user/tether@.service
 #   ~/.config/systemd/user/tmux-spawn-.scope.d/50-memory-guard.conf (only if absent)
+#   ~/.local/lib/tether/scripts/aico-root-watch.py   the `st aico` client
 #
-# It never enables or starts an instance unless --start is given.
+# It never enables or starts an instance unless --start is given, and only the
+# default instance is ever enabled at boot. A test instance such as tether@dev
+# runs until it is stopped and does not come back after a reboot.
 set -euo pipefail
 
 repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
@@ -32,7 +36,7 @@ while [ $# -gt 0 ]; do
       shift
       ;;
     -h | --help)
-      sed -n '2,15p' "$0"
+      sed -n '2,18p' "$0"
       exit 0
       ;;
     *)
@@ -90,6 +94,7 @@ fi
 changed=0
 install_file "$repo/dist/tether.mjs" "$lib_dir/dist/tether.mjs" 0644 && changed=1 || true
 install_file "$repo/bin/tether" "$lib_dir/bin/tether" 0755 && changed=1 || true
+install_file "$repo/scripts/aico-root-watch.py" "$lib_dir/scripts/aico-root-watch.py" 0755 || true
 
 mkdir -p "$bin_dir"
 if [ "$(readlink "$bin_dir/tether" 2>/dev/null || true)" != "$lib_dir/bin/tether" ]; then
@@ -115,13 +120,22 @@ fi
 
 if [ -n "$start_instance" ]; then
   [[ "$start_instance" =~ ^[a-z0-9][a-z0-9-]{0,31}$ ]] || fail "invalid instance name: $start_instance"
-  systemctl --user enable "tether@$start_instance.service"
+  if [ "$start_instance" = default ]; then
+    systemctl --user enable "tether@$start_instance.service"
+  elif systemctl --user is-enabled --quiet "tether@$start_instance.service" 2>/dev/null; then
+    echo "note: tether@$start_instance is enabled at boot; only tether@default should be." >&2
+    echo "      systemctl --user disable tether@$start_instance.service" >&2
+  fi
   if [ "$changed" = 1 ] || ! systemctl --user is-active --quiet "tether@$start_instance.service"; then
     systemctl --user restart "tether@$start_instance.service"
   fi
   systemctl --user is-active --quiet "tether@$start_instance.service" ||
     fail "tether@$start_instance failed to start; see journalctl --user -u tether@$start_instance"
-  echo "tether@$start_instance is active"
+  if [ "$start_instance" = default ]; then
+    echo "tether@$start_instance is active"
+  else
+    echo "tether@$start_instance is active (not enabled at boot; stop it with: systemctl --user stop tether@$start_instance)"
+  fi
 fi
 
 echo "Tether installed. Instances are not started unless --start is given."

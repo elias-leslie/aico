@@ -94,6 +94,50 @@ export function checkMemoryGuard(confs: string[]): Check {
       }
 }
 
+/** Only `tether@default` should start at boot. A test instance enabled at
+ * boot comes back after every reboot with its own catalog and sockets. */
+export function checkEnabledInstances(enabled: string[]): Check {
+  const extra = enabled.filter((instance) => instance !== 'default').sort()
+  if (extra.length === 0) {
+    return {
+      name: 'instances',
+      status: 'ok',
+      detail: enabled.includes('default')
+        ? 'only tether@default is enabled at boot'
+        : 'no instance is enabled at boot',
+    }
+  }
+  const units = extra.map((instance) => `tether@${instance}.service`).join(' ')
+  return {
+    name: 'instances',
+    status: 'warn',
+    detail: `enabled at boot besides default: ${extra.join(', ')}. Run: systemctl --user disable ${units}`,
+  }
+}
+
+/** Instances enabled in the user unit directory's `*.wants` links. */
+function readEnabledInstances(): string[] {
+  const unitDir = join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'systemd', 'user')
+  const instances = new Set<string>()
+  let wants: string[] = []
+  try {
+    wants = readdirSync(unitDir).filter((name) => name.endsWith('.wants'))
+  } catch {
+    return []
+  }
+  for (const dir of wants) {
+    try {
+      for (const name of readdirSync(join(unitDir, dir))) {
+        const match = /^tether@([a-z0-9][a-z0-9-]{0,31})\.service$/.exec(name)
+        if (match?.[1]) instances.add(match[1])
+      }
+    } catch {
+      // unreadable wants directory: nothing enabled through it
+    }
+  }
+  return [...instances]
+}
+
 function stat(path: string): PathMode {
   try {
     const s = lstatSync(path)
@@ -157,6 +201,7 @@ export async function runDoctor(paths: TetherPaths): Promise<Check[]> {
       ? { name: 'tmux', status: 'ok', detail: (run('/usr/bin/tmux', ['-V']) ?? '').trim() }
       : { name: 'tmux', status: 'fail', detail: '/usr/bin/tmux not found' },
     checkMemoryGuard(readMemoryGuardConfs()),
+    checkEnabledInstances(readEnabledInstances()),
     checkSocket(stat(paths.socketDir), stat(paths.socket), uid),
   ]
   const socketCheck = checks.at(-1)

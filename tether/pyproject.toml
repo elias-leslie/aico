@@ -1,4 +1,5 @@
-# Python here is only the operator scripts copied from Aico (scripts/*.py) and
+# Python here is only the operator scripts (scripts/*.py: the `st aico` root client
+# and the Codex admin qualification, both owned here since the cutover) and
 # their fixture tests. Tether itself is TypeScript (package.json).
 [project]
 name = "tether-scripts"

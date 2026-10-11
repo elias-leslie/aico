@@ -6,7 +6,12 @@ import { HttpError, Router, readJsonObject, sendError, sendJson } from './http'
 import type { LegacyATermSessions } from './legacy-aterm'
 import { lifecycleStatus } from './lifecycle/engine'
 import { registerLifecycleRoutes } from './lifecycle-api'
-import { type ProjectProvider, ProjectRegistrationError, registerLocalProject } from './projects'
+import {
+  type ProjectProvider,
+  ProjectRegistrationError,
+  registerLocalProject,
+  withActiveProject,
+} from './projects'
 import type { Store, ToolPatch } from './store'
 import { type AgentTool, parseCommand, type ToolSeed, ToolValidationError } from './tools'
 import { VERSION } from './version'
@@ -20,6 +25,8 @@ export interface ServerContext {
   legacy: LegacyATermSessions
   /** Project-root cache shared with the lifecycle engine. */
   projectRoots: Map<string, string>
+  /** SummitFlow's active-project pointer file, or null to ignore it. */
+  activeProjectFile?: string | null
   startedAt: number
   heartbeatMs?: number
   now?: () => number
@@ -179,7 +186,7 @@ export function buildRouter(context: ServerContext): Router {
     .add('GET', '/v1/projects', async (_req, res, _params, query) => {
       const list = await projects.list({ refresh: query.get('refresh') === '1' })
       for (const project of list.projects) context.projectRoots.set(project.id, project.root)
-      sendJson(res, 200, list)
+      sendJson(res, 200, withActiveProject(list, context.activeProjectFile ?? null))
     })
     .add('POST', '/v1/projects', async (req, res) => {
       const body = await readJsonObject(req)

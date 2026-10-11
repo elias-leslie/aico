@@ -47,11 +47,14 @@ It exits `3` with `SKIP` when host agent admission defers the start (memory pres
 ## Run
 
 ```bash
-scripts/install.sh --start dev           # build, install and (re)start tether@dev
+scripts/install.sh --start dev           # build, install and (re)start tether@dev (never enabled at boot)
 scripts/tether-lifecycle-harness.sh dev
 scripts/tether-real-session-smoke.sh dev codex
 scripts/tether-real-session-smoke.sh dev claude-code
+systemctl --user stop tether@dev         # when done
 ```
+
+`tether doctor` warns when any instance other than `default` is enabled at boot.
 
 `TETHER_HARNESS_WAIT_SECONDS` (default 15) and `TETHER_SMOKE_WAIT_SECONDS` (default 30) bound each wait so a wedged step cannot hang. `TETHER_HARNESS_RESTART=0` skips the daemon restart step.
 

@@ -493,7 +493,13 @@ export function createRootHandler(
       if (path === '/v1/roots' && request.method === 'GET') {
         const query = new URLSearchParams(request.url?.split('?')[1] ?? '')
         const origin = options.ownerFromOrigin ? query.get('origin') : null
-        if (origin !== null && origin !== 'aico' && origin !== 'a-term') {
+        // `ended=0` leaves out ended tombstones (they stay readable by
+        // request ID). Served on both sockets: the list grows with every root.
+        const ended = query.get('ended')
+        if (
+          (origin !== null && origin !== 'aico' && origin !== 'a-term') ||
+          (ended !== null && ended !== '0' && ended !== '1')
+        ) {
           json(response, 400, { error: 'invalid_query' })
           return
         }
@@ -505,6 +511,7 @@ export function createRootHandler(
           roots: await Promise.all(
             listRootRequests()
               .filter((root) => origin === null || root.origin === origin)
+              .filter((root) => ended !== '0' || getWidget(root.widgetId) !== undefined)
               .map(describe),
           ),
         })

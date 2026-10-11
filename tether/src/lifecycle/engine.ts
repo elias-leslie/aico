@@ -2122,28 +2122,42 @@ export function ensureSessionSerialized(widgetId: string, size: PtySize): Promis
 
 // Latest best-effort TUI context state per session. Missing state is visible
 // degradation, never authority to block the native model launch.
-const contextStatuses = new Map<string, ContextStatus & { slug: string; applicable: boolean }>()
+export type ContextHookStatus = ContextStatus & {
+  slug: string
+  applicable: boolean
+  checkedAt: number
+}
 
-export function contextStatus(widgetId: string) {
+const contextStatuses = new Map<string, ContextHookStatus>()
+
+export function contextStatus(widgetId: string): ContextHookStatus | null {
   return contextStatuses.get(widgetId) ?? null
 }
 
 function publishContextStatus(widgetId: string, tool: TuiSpec, status: ContextStatus): void {
   console.log(`[tether] ${tool.slug} context ${status.state}: ${status.detail}`)
+  const previous = contextStatuses.get(widgetId)
   contextStatuses.set(widgetId, {
     slug: tool.slug,
     state: status.state,
     detail: status.detail,
     applicable: tool.command.length > 0,
+    checkedAt: Date.now(),
   })
-  publishSession(widgetId)
+  // The generation does not change, so announce the new status explicitly.
+  const changed =
+    !previous ||
+    previous.slug !== tool.slug ||
+    previous.state !== status.state ||
+    previous.detail !== status.detail
+  publishSession(widgetId, { force: changed })
 }
 
 // Independently probe a TUI's source chain and live delivery availability. This
 // does not claim what an already-running native session received. The native
 // model always continues. It never gates launch.
-function reportContext(widgetId: string, tool: TuiSpec): void {
-  ensureContext(tool, {
+export function probeContext(widgetId: string, tool: TuiSpec): Promise<void> {
+  return ensureContext(tool, {
     cwd: cwdForWidget(widgetId),
     session: getWidget(widgetId)?.sessionId,
   })
@@ -2156,6 +2170,21 @@ function reportContext(widgetId: string, tool: TuiSpec): void {
         }`,
       }),
     )
+}
+
+function reportContext(widgetId: string, tool: TuiSpec): void {
+  void probeContext(widgetId, tool)
+}
+
+/** Re-probe every running session's context hook, one at a time, so a daemon
+ * restart reports the same badge Aico used to compute on window load. */
+async function probeRunningContexts(): Promise<void> {
+  for (const row of listWidgets()) {
+    if (quitting) return
+    if (cachedSessionStatus(row) !== 'running') continue
+    const tool = getTui(row.tool)
+    if (tool) await probeContext(row.id, tool)
+  }
 }
 
 /** Result of an explicit replacement (respawn, load-tui, switch-project). */
@@ -2440,11 +2469,12 @@ export function loadTui(
 /** Move a live session to another project: respawn there with the SAME tool. */
 export function switchProject(
   widgetId: string,
-  projectId: string,
+  projectId: string | null,
   root: string | null,
   fence: { expectedGeneration: string; generationOf: (row: WidgetRow) => string },
 ): Promise<RespawnResult> {
-  if (!root) console.warn(`[tether] project ${projectId} root unresolved; using default cwd`)
+  if (!root)
+    console.warn(`[tether] project ${projectId ?? '(none)'} root unresolved; using default cwd`)
   const cwd = root && isDir(root) ? root : (cfg().env.HOME ?? homedir())
   return respawnAndRelaunch(widgetId, getTui(getWidget(widgetId)?.tool ?? 'shell'), {
     ...fence,
@@ -2561,7 +2591,7 @@ async function discardWidgetOwned(
       statusCache.delete(id)
       contextStatuses.delete(id)
       ensureFailures.delete(id)
-      cfg().events?.publish('session.ended', { id })
+      publishSession(id, { ended: true })
     } else if (result.status === 'blocked') {
       console.error(`[tether:lifecycle] retaining ${row.sessionId}: ${result.reason}`)
     } else if (result.status === 'stale') {
@@ -2819,22 +2849,79 @@ export function cachedSessionStatus(row: WidgetRow): SessionStatus {
   return 'uncertain'
 }
 
-const publishedGenerations = new Map<string, string>()
+/** True when the status cache holds an answer for the row's current generation. */
+export function hasVerifiedStatus(row: WidgetRow): boolean {
+  return statusCache.get(row.id)?.generation === generationOf(row)
+}
 
-/** Announce a changed generation (ids and generations only). */
-function publishSession(widgetId: string): void {
+/** Builds the session snapshot carried by session events (the API descriptor).
+ * Set by the daemon; without it events carry ids and generations only. */
+let snapshotOf: ((row: WidgetRow) => Record<string, unknown>) | null = null
+
+export function setSessionSnapshotFunction(
+  fn: ((row: WidgetRow) => Record<string, unknown>) | null,
+): void {
+  snapshotOf = fn
+}
+
+const publishedGenerations = new Map<string, string>()
+let sessionEventChain: Promise<void> = Promise.resolve()
+
+interface PublishOptions {
+  /** Publish `session.updated` even when the generation is unchanged. */
+  force?: boolean
+  /** Publish `session.ended` for an absent row even if never announced. */
+  ended?: boolean
+}
+
+/**
+ * Announce a session change. Session events go through one ordered queue so a
+ * status check that has to touch tmux can never reorder them. The event carries
+ * the session's descriptor (`session`) with a status verified for the exact
+ * generation it announces.
+ */
+function publishSession(widgetId: string, options: PublishOptions = {}): void {
+  sessionEventChain = sessionEventChain
+    .then(() => publishSessionNow(widgetId, options))
+    .catch((error) => console.error(`[tether] session event for ${widgetId} failed:`, error))
+}
+
+async function publishSessionNow(widgetId: string, options: PublishOptions): Promise<void> {
   const events = config?.events
   if (!events) return
-  const row = getWidget(widgetId)
+  let row = getWidget(widgetId)
   if (!row) {
-    if (publishedGenerations.delete(widgetId)) events.publish('session.ended', { id: widgetId })
+    if (publishedGenerations.delete(widgetId) || options.ended)
+      events.publish('session.ended', { id: widgetId })
     return
   }
   const generation = generationOf(row)
-  if (publishedGenerations.get(widgetId) === generation) return
+  if (publishedGenerations.get(widgetId) === generation && !options.force) return
+  if (snapshotOf && !hasVerifiedStatus(row) && lifecycleState !== 'disabled') {
+    try {
+      await verifySessionStatus(row)
+    } catch {
+      // The snapshot reports the cached (uncertain) status.
+    }
+    row = getWidget(widgetId)
+    if (!row) {
+      if (publishedGenerations.delete(widgetId) || options.ended)
+        events.publish('session.ended', { id: widgetId })
+      return
+    }
+  }
+  const current = generationOf(row)
+  if (publishedGenerations.get(widgetId) === current && !options.force) return
   const created = !publishedGenerations.has(widgetId)
-  publishedGenerations.set(widgetId, generation)
-  events.publish(created ? 'session.created' : 'session.updated', { id: widgetId, generation })
+  publishedGenerations.set(widgetId, current)
+  const data: Record<string, unknown> = { id: widgetId, generation: current }
+  if (snapshotOf) data.session = snapshotOf(row)
+  events.publish(created ? 'session.created' : 'session.updated', data)
+}
+
+/** Resolves once every queued session event has been published (tests, shutdown). */
+export function flushSessionEvents(): Promise<void> {
+  return sessionEventChain
 }
 
 function publishCatalogChanges(): void {
@@ -2846,8 +2933,9 @@ function publishCatalogChanges(): void {
   for (const id of [...publishedGenerations.keys()]) if (!live.has(id)) publishSession(id)
 }
 
-export function notifySessionChanged(widgetId: string): void {
-  publishSession(widgetId)
+/** Announce a session change made outside the engine (rename, view title). */
+export function notifySessionChanged(widgetId: string, options: PublishOptions = {}): void {
+  publishSession(widgetId, options)
 }
 
 // --- startup (Aico app.whenReady lifecycle half) ------------------------------
@@ -2911,6 +2999,10 @@ export function startLifecycle(options: { reconcile: boolean }): Promise<void> {
     } finally {
       lifecycleState = 'ready'
     }
+    // Best effort and in the background: readiness never waits for it.
+    void probeRunningContexts().catch((error) =>
+      console.error('[tether:lifecycle] context probe failed:', error),
+    )
   })()
   return readyPromise
 }

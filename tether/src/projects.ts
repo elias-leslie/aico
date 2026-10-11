@@ -3,7 +3,7 @@
 // local list while SummitFlow is briefly unreachable.
 
 import { mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
-import { dirname, isAbsolute, normalize } from 'node:path'
+import { dirname, isAbsolute, join, normalize } from 'node:path'
 
 export interface Project {
   id: string
@@ -16,6 +16,45 @@ export interface ProjectList {
   source: 'summitflow' | 'summitflow-cache' | 'local'
   fetchedAt: number
   projects: Project[]
+}
+
+/** The list as served: each project says whether it is the active one. */
+export interface ServedProjectList extends Omit<ProjectList, 'projects'> {
+  /** SummitFlow's persisted active project (`st projects active`) when it is listed. */
+  activeProjectId: string | null
+  projects: (Project & { current: boolean })[]
+}
+
+/** SummitFlow's active-project pointer, written by `st projects use`. */
+export function defaultActiveProjectFile(home: string): string {
+  return join(home, '.local', 'share', 'st', 'active-project.json')
+}
+
+/** The pointer's project id, or null when absent, unreadable or malformed. */
+export function readActiveProjectId(path: string | null): string | null {
+  if (!path) return null
+  try {
+    const parsed = JSON.parse(readFileSync(path, 'utf8')) as { project_id?: unknown } | null
+    const id = parsed?.project_id
+    return typeof id === 'string' && PROJECT_ID_RE.test(id) ? id : null
+  } catch {
+    return null
+  }
+}
+
+/** Mark the active project. It is read on every call: the file is tiny and
+ * SummitFlow rewrites it without telling anyone. */
+export function withActiveProject(list: ProjectList, activeFile: string | null): ServedProjectList {
+  const listed = readActiveProjectId(activeFile)
+  const activeProjectId = list.projects.some((project) => project.id === listed) ? listed : null
+  return {
+    ...list,
+    activeProjectId,
+    projects: list.projects.map((project) => ({
+      ...project,
+      current: project.id === activeProjectId,
+    })),
+  }
 }
 
 export type FetchJson = (url: string, timeoutMs: number) => Promise<unknown>
@@ -152,6 +191,13 @@ export class ProjectProvider {
       projects: readLocalProjects(this.options.localFile, this.options.isDir),
     }
   }
+}
+
+/** `TETHER_ACTIVE_PROJECT_FILE` overrides the pointer path; `off` disables it. */
+export function activeProjectFileFromEnv(env: NodeJS.ProcessEnv, home: string): string | null {
+  const value = env.TETHER_ACTIVE_PROJECT_FILE
+  if (value === 'off' || value === '') return null
+  return value ?? defaultActiveProjectFile(home)
 }
 
 /** `TETHER_SUMMITFLOW_URL=off` disables the SummitFlow provider. */

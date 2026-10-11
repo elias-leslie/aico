@@ -7,6 +7,8 @@ import { callSocket } from './client'
 import { resolvePaths, type TetherPaths } from './config'
 import { type RunningDaemon, startDaemon } from './daemon'
 import type { TetherEvent } from './events'
+import { insertWidget } from './lifecycle/catalog'
+import { flushSessionEvents } from './lifecycle/engine'
 
 let dir: string
 let paths: TetherPaths
@@ -98,6 +100,29 @@ describe('projects API', () => {
     writeFileSync(paths.localProjectsFile, '[]\n')
     expect((await call('GET', '/v1/projects?refresh=1')).body).toMatchObject({ projects: [] })
   })
+
+  it("marks SummitFlow's active project when it is listed", async () => {
+    await daemon.close()
+    const pointer = join(dir, 'active-project.json')
+    daemon = await startDaemon(paths, { ...TEST_ENV, TETHER_ACTIVE_PROJECT_FILE: pointer })
+    await daemon.ready
+    const root = join(dir, 'proj')
+    mkdirSync(root)
+    await call('POST', '/v1/projects', { id: 'proj', root })
+    expect((await call('GET', '/v1/projects')).body).toMatchObject({
+      activeProjectId: null,
+      projects: [{ id: 'proj', current: false }],
+    })
+    writeFileSync(pointer, JSON.stringify({ project_id: 'proj', project_root: root }))
+    expect((await call('GET', '/v1/projects')).body).toMatchObject({
+      activeProjectId: 'proj',
+      projects: [{ id: 'proj', current: true }],
+    })
+    writeFileSync(pointer, JSON.stringify({ project_id: 'elsewhere', project_root: '/x' }))
+    expect((await call('GET', '/v1/projects')).body).toMatchObject({ activeProjectId: null })
+    writeFileSync(pointer, '{not json')
+    expect((await call('GET', '/v1/projects')).body).toMatchObject({ activeProjectId: null })
+  })
 })
 
 describe('lifecycle API (no tmux started)', () => {
@@ -140,6 +165,50 @@ describe('lifecycle API (no tmux started)', () => {
       body: { items: [] },
     })
     expect((await call('POST', '/v1/legacy-sessions/summitflow-x/end', {})).status).toBe(404)
+    expect((await call('GET', '/v1/legacy-sessions/summitflow-x/pane-mode')).status).toBe(404)
+  })
+
+  it('validates switch-project, pane-mode and context-check', async () => {
+    const generation = 'a'.repeat(64)
+    expect((await call('GET', '/v1/sessions/ffffffff/pane-mode')).status).toBe(404)
+    expect((await call('POST', '/v1/sessions/ffffffff/context-check')).status).toBe(404)
+    const switchTo = (body: Record<string, unknown>) =>
+      call('POST', '/v1/sessions/ffffffff/switch-project', { generation, ...body })
+    expect((await switchTo({})).status).toBe(400)
+    expect((await switchTo({ projectId: 'p', projectRoot: dir })).status).toBe(400)
+    expect((await switchTo({ projectRoot: 'relative/dir' })).body).toEqual({
+      error: 'invalid_body',
+      field: 'projectRoot',
+    })
+    expect((await switchTo({ projectRoot: dir })).status).toBe(404)
+    expect((await switchTo({ projectId: 'p' })).status).toBe(404)
+  })
+
+  it('describes sessions with their context hook and sends the snapshot in events', async () => {
+    insertWidget('0a1b2c3d', 'codex', 1_000, { origin: 'cli' })
+    const listed = await call('GET', '/v1/sessions')
+    const [item] = (listed.body as { items: Record<string, unknown>[] }).items
+    expect(item).toMatchObject({
+      id: '0a1b2c3d',
+      status: 'pending',
+      contextHook: { state: 'unknown', tool: 'codex', applicable: true, checkedAt: null },
+    })
+    const seen: TetherEvent[] = []
+    const stop = daemon.events.subscribe((event) => seen.push(event))
+    const renamed = await call('PATCH', '/v1/sessions/0a1b2c3d', {
+      generation: item?.generation,
+      name: 'Renamed',
+    })
+    expect(renamed.status).toBe(200)
+    await flushSessionEvents()
+    stop()
+    // First announcement of a row inserted behind the engine's back: created.
+    const updated = seen.find((event) => event.type.startsWith('session.'))
+    expect(updated?.data).toMatchObject({
+      id: '0a1b2c3d',
+      generation: item?.generation,
+      session: { id: '0a1b2c3d', name: 'Renamed', label: 'Renamed', status: 'pending' },
+    })
   })
 })
 

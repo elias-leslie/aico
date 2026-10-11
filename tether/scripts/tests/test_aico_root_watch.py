@@ -351,7 +351,7 @@ def discovery_receipts(monkeypatch, instance, roots=None, mutate=None):
 
     def receipt(self, path, route):
         calls.append((path, route))
-        if route == "/v1/roots":
+        if route == "/v1/roots?ended=0":
             return 200, {"owner": "aico", "roots": [root] if roots is None else roots}
         data = dict(root if "/roots/" in route else owner)
         if mutate:
@@ -371,7 +371,7 @@ def test_discovery_resolves_verified_identity_without_manual_pin(monkeypatch):
     assert resolved[0][0] == PIN
     assert resolved[0][1].tmux_socket == "/fixture/tmux"
     assert resolved[0][1].discovered is True
-    assert calls == [("/fixture/root", "/v1/roots"),
+    assert calls == [("/fixture/root", "/v1/roots?ended=0"),
                      ("/fixture/owner", "/v1/sessions/deadbeef"),
                      ("/fixture/root", "/v1/roots/fixture-root"),
                      ("/fixture/owner", "/v1/sessions/deadbeef")]
@@ -440,11 +440,36 @@ def test_discovery_identity_race_fails_closed(monkeypatch, field, value):
 
 def test_discovery_catalog_bound_and_exact_missing_root(monkeypatch):
     instance = collector()
-    discovery_receipts(monkeypatch, instance)
+    calls = discovery_receipts(monkeypatch, instance)
     assert instance.discover("missing")[1][0]["reason"] == "root_not_found"
+    # Exact selection reads one root and never lists the tombstone catalog.
+    assert calls == [("/fixture/root", "/v1/roots/missing")]
     discovery_receipts(monkeypatch, instance, [{}] * (watcher.ROOT_LIMIT + 1))
     with pytest.raises(watcher.Unavailable, match="root_limit"):
         instance.discover(None)
+
+
+def test_exact_selection_reports_an_ended_tombstone(monkeypatch):
+    instance = collector()
+    ended = {**root_receipt(), "status": "ended", "generation": None, "tool": "codex"}
+
+    def receipt(self, path, route):
+        assert route == "/v1/roots/fixture-root"
+        return 200, ended
+
+    monkeypatch.setattr(watcher.Collector, "receipt", receipt)
+    resolved, unavailable = instance.discover("fixture-root")
+    assert resolved == []
+    assert unavailable == [{"requestId": "fixture-root", "observation": "unavailable",
+                            "identity": "unresolved", "reason": "root_not_running"}]
+
+
+def test_exact_selection_of_an_unknown_root_is_not_found(monkeypatch):
+    instance = collector()
+    monkeypatch.setattr(watcher.Collector, "receipt",
+                        lambda self, path, route: (404, {"error": "not_found"}))
+    assert instance.discover("gone")[1] == [{"requestId": "gone", "observation": "unavailable",
+                                             "identity": "unresolved", "reason": "root_not_found"}]
 
 
 def test_dynamic_snapshot_contains_identity_status_only(monkeypatch):
@@ -473,7 +498,7 @@ def test_dynamic_watch_never_rediscovers_or_repins(monkeypatch):
     output = []
     assert watcher.watch(frozen, [PIN], .1, 3, output.append) == "identity_changed"
     assert output[0]["identity"] == "changed"
-    assert sum(route == "/v1/roots" for _, route in calls) == 1
+    assert sum(route == "/v1/roots?ended=0" for _, route in calls) == 1
 
 
 def fake_commands(monkeypatch, instance, screen=b"Worked for 15s\n\xe2\x80\xba \n"):
