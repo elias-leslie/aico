@@ -2177,7 +2177,7 @@
       else showLine(s, null, pick(RAID.N), now, false)
       A.talkAt = now + rand(6000, 9000)
     }
-    return 200
+    return FAST // the raid is the busy show: keep it at full rate
   }
   // done during the raid: the mop finally pays off, then on to the next scene
   function finishRaid(s) {

@@ -6,9 +6,11 @@ import {
   DEFAULT_PINS,
   findAction,
   isPinnable,
+  listGames,
   pinnedActions,
   reorderPins,
   sanitizePins,
+  setGameActions,
   setSessionActions,
   setTuiActions,
   togglePin,
@@ -86,6 +88,21 @@ describe('action registry', () => {
     expect(a && isPinnable(a)).toBe(true) // still pinnable + palette-searchable
     // The matching "Replace with <TUI>" launcher keeps its direct run.
     expect(typeof findAction('replace:claude')?.run).toBe('function')
+  })
+
+  it('lists the titlebar games as pinnable Play actions that ask for that game', () => {
+    const games = [{ key: 'contra', name: 'Contra' }]
+    setGameActions(games)
+    expect(listGames()).toEqual(games)
+    const a = findAction('game:contra')
+    expect(a?.label).toBe('Play Contra')
+    expect(a && isPinnable(a)).toBe(true)
+    const picked = vi.fn()
+    vi.stubGlobal('window', { dispatchEvent: (e: CustomEvent<string>) => picked(e.type, e.detail) })
+    a?.run?.()
+    expect(picked).toHaveBeenCalledWith('aico:arcade-pick', 'contra')
+    expect(findAction('arcade-pick')?.opensFlyout).toBe(true)
+    expect(typeof findAction('arcade-toggle')?.run).toBe('function')
   })
 
   it('treats discovered sessions as pinnable open actions', () => {

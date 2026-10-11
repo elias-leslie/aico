@@ -266,7 +266,7 @@ export const ACTIONS: Action[] = [
     section: 'Titlebar',
     label: 'Turn games on or off',
     shortcut: '',
-    icon: '⏻',
+    icon: '⊘',
     note: 'Stops the titlebar games in every window to save CPU and memory. Run again to bring them back.',
     run: () => window.aico.arcade.toggle(),
   },

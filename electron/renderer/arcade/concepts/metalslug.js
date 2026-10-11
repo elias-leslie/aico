@@ -1388,7 +1388,7 @@
     }
     jump(vx = 0) {
       this.state = 'jump'
-      this.vy = this.fat ? -120 : -165
+      this.vy = this.fat ? -100 : -125
       this.vx = vx
       this.t = 0
     }
@@ -1597,7 +1597,8 @@
           return FAST
         case 'jump':
         case 'drop': {
-          this.vy += (this.state === 'drop' ? 360 : 520) * dt
+          // a floaty jump, as in the arcade, that peaks inside the headroom above the bar
+          this.vy += (this.state === 'drop' ? 360 : 420) * dt
           this.x = edgeX(s, this.x + this.vx * dt)
           this.y += this.vy * dt
           if (this.y >= FLOOR && this.vy > 0) {
