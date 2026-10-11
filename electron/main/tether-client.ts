@@ -1,5 +1,5 @@
 // Aico's client for Tether, the per-user session daemon that owns every tmux
-// session, tmux server and agent launch (docs/tether.md; Tether docs/api-v1.md).
+// session, tmux server and agent launch (Tether docs/api-v1.md; gaps in docs/tether-api-gaps.md).
 // Aico keeps only views and settings. Everything here speaks HTTP/1.1 over
 // Tether's private 0600 Unix socket; nothing is network-exposed.
 //

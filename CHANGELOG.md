@@ -15,7 +15,8 @@
   override per session ID) and `settings`. On first start the views are
   migrated from the old `widgets` table, which is left untouched as a backup.
 - The session list shows every Tether session (Aico, A-Term, CLI and root
-  origins). The separate A-Term federation is gone.
+  origins), plus A-Term's pre-Tether `summitflow-<uuid>` sessions, which open
+  attach-only. The separate A-Term federation is gone.
 - Window focus claims the tmux window size through Tether's resize claim;
   desktop auto-resize is unchanged.
 - `scripts/aico-install.sh` requires Tether API v1 or later and no longer
