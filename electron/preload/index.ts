@@ -22,7 +22,6 @@ contextBridge.exposeInMainWorld('aico', {
     write: (text: string) => ipcRenderer.send('clipboard:write', text),
   },
   scrollback: {
-    capture: (): Promise<string> => ipcRenderer.invoke('tmux:capture'),
     page: (request?: ScrollbackPageRequest) => ipcRenderer.invoke('tmux:scrollback-page', request),
     paneMode: () => ipcRenderer.invoke('tmux:pane-mode'),
   },
@@ -75,11 +74,10 @@ contextBridge.exposeInMainWorld('aico', {
     /** Aico workspace catalog for the "Open workspace" picker. */
     listProjects: (): Promise<{ id: string; name: string; root: string; current: boolean }[]> =>
       ipcRenderer.invoke('project:list'),
-    /** Running sessions from both owners. */
+    /** Every running Tether session, whichever app started it. */
     listOpenableSessions: (): Promise<OpenableSession[]> =>
       ipcRenderer.invoke('session:list-openable'),
-    openSession: (owner: OpenableSession['owner'], id: string): Promise<void> =>
-      ipcRenderer.invoke('session:open', { owner, id }),
+    openSession: (id: string): Promise<void> => ipcRenderer.invoke('session:open', id),
     /** Snapshot ownership, tmux, and resource diagnostics for the focused session. */
     sessionDiagnostics: (): Promise<Record<string, unknown>> =>
       ipcRenderer.invoke('session:diagnostics'),
@@ -93,7 +91,7 @@ contextBridge.exposeInMainWorld('aico', {
      * `-r` drag a region, `-t` OCR to text). The hotkeys grab the focused window;
      * a click picks/drags because Aico holds focus when you click the menu. */
     grab: (args: string[]) => ipcRenderer.send('grab:run', args),
-    /** End the current session through its lifecycle owner. */
+    /** End the current session through Tether. */
     endSession: (): Promise<void> => ipcRenderer.invoke('session:end-self'),
   },
   settings: {

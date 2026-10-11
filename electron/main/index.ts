@@ -1,19 +1,6 @@
-import { execFile, execFileSync } from 'node:child_process'
-import { randomBytes } from 'node:crypto'
-import {
-  chmodSync,
-  type FSWatcher,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  renameSync,
-  statSync,
-  unlinkSync,
-  watch,
-  writeFileSync,
-} from 'node:fs'
-import { readdir, readFile } from 'node:fs/promises'
-import { homedir, uptime } from 'node:os'
+import { execFile } from 'node:child_process'
+import { readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import {
@@ -29,275 +16,95 @@ import {
 } from 'electron'
 import { type IPty, spawn } from 'node-pty'
 import { parseTerminalFontSettings } from '../shared/font-settings'
-import {
-  type AdmissionRequest,
-  type AdmissionTicket,
-  AgentAdmission,
-  AgentAdmissionDenied,
-  observeAgentScopes,
-} from './agent-admission'
 import { cursorNearTitlebar, nextArcade, parseArcadeKeys, pickArcade } from './arcade'
 import { contentSecurityPolicy, voiceConnectSource } from './csp'
-import {
-  confirmATermSessionAbsence,
-  type ExternalViewPresence,
-  reconcileRetiredViews,
-  reconcileSessionViews,
-  watchSessionCatalog,
-} from './external-view-reconciliation'
-import {
-  activateTmuxViewSize,
-  coalesceAsync,
-  coalesceTrailingAsync,
-  refreshAttachedTmuxClients,
-} from './interactive-tmux'
 import { parseBoundsRequest, parsePins } from './ipc-validation'
-import {
-  CoalescedLifecycleIntent,
-  decideManagedGateRecovery,
-  hasPersistedScopeCleanupEvidence,
-  isNeverAllocatedWidget,
-  LifecycleOwnerLock,
-  type LifecycleOwnerToken,
-  type ManagedGateState,
-  mayClearMatchingPendingScope,
-} from './lifecycle-guard'
 import { allowTrustedAudioMedia } from './media-permission'
-import { listenOwnerServer } from './owner-control'
-import { ownershipGeneration, type RetirementResult, retireOwnedSession } from './owner-retirement'
-import { headlessRetirementOperations } from './owner-runtime'
-import { readCgroupPopulated, scopeIdentity, stopOwnedPaneScope } from './owner-scope'
-import {
-  durableTmuxServerArgs,
-  durableTmuxServerUnit,
-  isOwnedPaneControlGroup,
-  isOwnedPaneScope,
-  isOwnedTmuxServerControlGroup,
-  isSystemdInvocationId,
-  MANAGED_LIFECYCLE_VERSION,
-  ownershipEnvironment,
-  paneScopeFromCgroup,
-  parseScopeResources,
-} from './ownership'
-import { PaneExitReconciliationQueue } from './pane-exit-queue'
-import {
-  cgroupProcessIds,
-  isExactLaunchGateProcess,
-  processControlGroup,
-  processEnvironment,
-  processInControlGroup,
-  processStartTime,
-  processStartTimeFromStat,
-} from './procfs'
-import {
-  isDir,
-  listProjects,
-  listProjectsFresh,
-  onProjectsRefreshed,
-  PERSONAL_WORKSPACE_ID,
-  type ProjectInfo,
-  projectRoot,
-  refreshProjects,
-  widgetCwd,
-} from './project'
-import { createRootServer, guiSocketPath, widgetMutationOperation } from './root-control'
-import {
-  initialLaunchLine,
-  rootLaunchEnvironment,
-  rootPromptReady,
-  withRootPrompt,
-} from './root-launch'
-import { EMPTY_SCROLLBACK_PAGE, readScrollbackPage } from './scrollback-page'
+import { ensurePersonalWorkspaceRoot, PERSONAL_WORKSPACE_ID, ProjectCatalog } from './project'
 import { parseSse, type SelectionRecord } from './selection'
-import {
-  createSelectionDeliveryLease,
-  deliverSelectionToPane,
-  resolveActiveSelectionPane,
-  type SelectionDeliveryLease,
-} from './selection-delivery'
-import {
-  attachedATermLabel,
-  defaultATermLabel,
-  enrichATermSessions,
-  openableWidgetLabel,
-  openableWidgetProject,
-} from './session-catalog'
+import { deliverSelectionToSession } from './selection-delivery'
+import { createSessionCatalog, type SessionCatalog, sessionLabel } from './session-catalog'
 import { bundledSidecar, Sidecar } from './sidecar'
 import {
-  activateTmuxServer,
-  adoptActiveLegacyTmuxServer,
-  allocateWidgetId,
-  bindWidgetTmuxServer,
-  clearReconciledDeadTmuxServerBinding,
-  clearReconciledHistoricalTmuxServerBinding,
-  clearWidgetPendingScope,
-  compareAndSetWidgetLaunchMetadata,
-  compareAndSetWidgetOwnership,
-  getCurrentManagedTmuxServer,
+  type AttachTarget,
+  attachEnvironment,
+  attachSocketTarget,
+  compatibleVersion,
+  followEvents,
+  type GuiCommand,
+  type GuiVerdict,
+  holdGuiChannel,
+  type SessionDescriptor,
+  TetherClient,
+  TetherError,
+  type TetherEvent,
+  type TetherTool,
+  TetherUnavailable,
+  tetherSocketPath,
+} from './tether-client'
+import {
+  coalesceAsync,
+  coalesceTrailingAsync,
+  paneModeArgs,
+  parsePaneMode,
+  refreshAttachedClients,
+} from './tmux-view'
+import { toolMark } from './tool-marks'
+import { createTray, refreshTray, setWidgetActivity, type TrayWidget } from './tray'
+import {
+  type Bounds,
+  ensureView,
   getSetting,
-  getTmuxServer,
-  getWidget,
-  hasWidget,
-  initStore,
-  insertExternalWidget,
-  insertLegacyUnclassifiedWidget,
-  insertProvisioningTmuxServer,
-  insertWidget,
-  listTmuxServers,
-  listWidgets,
-  markTmuxServerDead,
-  removeExternalWidgetIfIdentity,
+  getView,
+  initViews,
+  listViews,
+  removeView,
   saveBounds,
   setOpen,
   setSetting,
-  setWidgetName,
-  setWidgetPendingScope,
-  setWidgetProject,
-  setWidgetTool,
-  type TmuxServerRow,
-  type WidgetOwnershipGeneration,
-  type WidgetRow,
-} from './store'
-import { terminalClientEnv } from './terminal-env'
-import {
-  attachTargetArgs,
-  captureTargetArgs,
-  hasTargetArgs,
-  internalTarget,
-  isATermSessionName,
-  isDefinitiveTmuxAbsence,
-  isTmuxTransportUnavailable,
-  listDefaultPanesArgs,
-  listSessionPaneDetailsTargetArgs,
-  listSessionPanesTargetArgs,
-  matchesServerIdentityEnvironment,
-  newDetachedTargetArgs,
-  paneExitedEventPath,
-  paneExitedHookCommand,
-  paneExitedHookTargetArgs,
-  paneModeTargetArgs,
-  panePidTargetArgs,
-  parsePaneMode,
-  respawnTargetArgs,
-  runInPaneTargetArgs,
-  serverIdentityEnvironmentTargetArgs,
-  serverRosterArgs,
-  sessionIdTargetArgs,
-  sessionName,
-  showPaneExitedHookTargetArgs,
-  TMUX_SOCKET,
-  type TmuxTarget,
-  tmuxConf,
-  tmuxProfileTargetArgs,
-  widgetIdFromSession,
-} from './tmux'
-import {
-  classifyTmuxServerState,
-  type TmuxServerProcessEvidence,
-  type TmuxServerRosterEvidence,
-  type TmuxServerRuntimeState,
-  type TmuxServerUnitEvidence,
-} from './tmux-server-state'
-import { createTray, refreshTray, setWidgetActivity, type TrayWidget } from './tray'
-import {
-  ensureContext,
-  getTui,
-  launchLine,
-  listTuis,
-  paneCommand,
-  paneGatePath,
-  registerBuiltinTuis,
-} from './tui'
-import { detectTuiFromProcessNames, parseProcessTable, processTreeNames } from './tui/detect'
+  type ViewRow,
+} from './views'
 
 const execFileAsync = promisify(execFile)
-const LOGINCTL_BIN = '/usr/bin/loginctl'
-const PS_BIN = '/usr/bin/ps'
-const SYSTEMCTL_BIN = '/usr/bin/systemctl'
-/** Latest deferral shown to the widget's terminal; cleared on each new start attempt. */
-const agentAdmissionReasons = new Map<string, string>()
-const agentAdmission = new AgentAdmission(
-  {
-    meminfo: () => readFile('/proc/meminfo', 'utf8'),
-    memoryPressure: () => readFile('/proc/pressure/memory', 'utf8'),
-    activeAgentScopes: () => {
-      const uid = process.getuid?.()
-      if (uid === undefined) throw new Error('uid unavailable')
-      return observeAgentScopes({
-        fs: {
-          listDirectories: async (path) =>
-            (await readdir(path, { withFileTypes: true }))
-              .filter((entry) => entry.isDirectory())
-              .map((entry) => entry.name),
-          readFile: (path) => readFile(path, 'utf8'),
-        },
-        appSliceDir: `/sys/fs/cgroup/user.slice/user-${uid}.slice/user@${uid}.service/app.slice`,
-        isPaneScope: isOwnedPaneScope,
-        agentProcessNames: new Set(
-          listTuis()
-            .filter((tui) => tui.slug !== 'shell' && tui.processName)
-            .map((tui) => tui.processName),
-        ),
-      })
-    },
-  },
-  {
-    // Numbers and identifiers only: never prompt, session or terminal content.
-    record: (observation) => console.log(`[aico:admission] ${JSON.stringify(observation)}`),
-  },
-)
+const TMUX_QUERY_TIMEOUT_MS = 2_000
 
-/** Reserve host capacity for a new agent TUI. Shells and live reconnects never call this. */
-async function reserveAgentLaunch(request: AdmissionRequest): Promise<AdmissionTicket> {
-  try {
-    const ticket = await agentAdmission.reserve(request)
-    agentAdmissionReasons.delete(request.widgetId)
-    return ticket
-  } catch (error) {
-    const message =
-      error instanceof AgentAdmissionDenied
-        ? error.message
-        : 'Aico deferred this agent launch: host admission failed unexpectedly. Nothing was started; retry shortly.'
-    agentAdmissionReasons.set(request.widgetId, message)
-    const win = windowForWidget(request.widgetId)
-    if (request.kind !== 'launch' && win && !win.isDestroyed())
-      win.webContents.send('pty:data', `\r\n\u001b[33m${message}\u001b[0m\r\n`)
-    throw error instanceof AgentAdmissionDenied
-      ? error
-      : new AgentAdmissionDenied('host admission failed unexpectedly.')
-  }
-}
-const SYSTEMD_RUN_BIN = '/usr/bin/systemd-run'
-const TMUX_BIN = '/usr/bin/tmux'
-const SYSTEMD_QUERY_TIMEOUT_MS = 2_000
-const SYSTEMD_STOP_TIMEOUT_MS = 5_000
+// Tether owns every session: tmux servers, panes, agent launch, End and the
+// root contract. Aico shows sessions in windows (views) and keeps their
+// geometry and its settings. A window's PTY runs the exact `tmux attach` argv
+// Tether hands out; killing that PTY only detaches, so the session survives
+// close, reload and Aico restarts.
+const tether = new TetherClient(tetherSocketPath())
+const catalog: SessionCatalog = createSessionCatalog()
+let tetherConnected = false
+let tetherIncompatible: string | null = null
+let tools: TetherTool[] = []
+let restored = false
 
-// One node-pty per open window. The PTY runs `tmux attach`; killing it only
-// detaches the client, so the tmux session (and its shell) survives reload/close.
+// One node-pty per open window, and the attach target it was started from.
 const ptys = new Map<number, IPty>()
-const tmuxViewSizes = new WeakMap<IPty, () => Promise<void>>()
+const attachTargets = new Map<number, AttachTarget>()
+const sizeClaims = new WeakMap<IPty, () => Promise<void>>()
 const ptyStartGenerations = new Map<number, number>()
 const ptyRefreshes = new Map<
   number,
   { pty: IPty | undefined; generation: number | undefined; request: Promise<void> }
 >()
-const sessionStartPromises = new Map<string, Promise<boolean>>()
-const selectionDeliveries = new Map<string, Promise<void>>()
-let rootControlServer: ReturnType<typeof createRootServer> | undefined
-// BrowserWindow.id -> stable widget id. The widget id (not the volatile window
-// id) names the tmux session, so a widget reattaches the same session across
-// close/reopen and app restarts.
+// BrowserWindow.id -> Tether session id. A window opened for a new session has
+// no id until Tether creates it at the window's first grid size.
 const widgetOf = new Map<number, string>()
+const pendingCreates = new Map<number, { tool: string; projectId: string }>()
+// Windows whose attach waits for Tether to come back, with their last grid.
+const awaitingTether = new Map<number, PtySize>()
 const boundsTimers = new Map<number, NodeJS.Timeout>()
-// Serialize destructive operations per durable widget. A window may request a
-// replace/reopen while discard cleanup is awaiting systemd; overlap would let a
-// new generation inherit a row the old generation later deletes.
-const lifecycleOwners = new LifecycleOwnerLock()
-// A confirmed retirement is an explicit user intent, not a best-effort probe.
-// Coalesce repeat clicks while another lifecycle operation owns the widget, and
-// consume the intent only after retirement acquires that exact widget's token.
-const widgetRetireIntents = new CoalescedLifecycleIntent()
+// Sessions whose pane is being replaced (load-TUI, switch-project). Renderer
+// input is dropped meanwhile, as before: the pane briefly shows Tether's
+// containment gate and stale keystrokes must never reach it.
+const replacing = new Set<string>()
+const endsInFlight = new Map<string, Promise<void>>()
+const selectionDeliveries = new Map<string, Promise<void>>()
 let quitting = false
+let stopEvents: (() => void) | null = null
+let stopGuiChannel: (() => void) | null = null
 
 // Eyes-follow-cursor: while any widget is unfocused, broadcast the global cursor
 // position so those widgets' eyes can track it. One shared interval feeds every
@@ -378,28 +185,19 @@ function clampSize(size: PtySize): PtySize {
 }
 
 const stateDir = process.env.AICO_STATE_DIR ?? join(homedir(), '.local', 'state', 'aico')
-const tmuxConfPath = join(stateDir, 'tmux.conf')
 const dbPath = join(stateDir, 'aico.db')
 
 const sidecarHost = process.env.AICO_SIDECAR_HOST ?? '127.0.0.1'
 const sidecarPort = Number(process.env.AICO_SIDECAR_PORT ?? 8005)
 let sidecar: Sidecar | null = null
-let durableUserManager = false
 
-function detectDurableUserManager(): boolean {
-  const uid = process.getuid?.()
-  if (uid === undefined) return false
-  try {
-    return (
-      execFileSync(LOGINCTL_BIN, ['show-user', String(uid), '--property=Linger', '--value'], {
-        encoding: 'utf8',
-        timeout: SYSTEMD_QUERY_TIMEOUT_MS,
-      }).trim() === 'yes'
-    )
-  } catch {
-    return false
-  }
-}
+const projects = new ProjectCatalog(
+  () => tether.projects(),
+  () => {
+    pushTitles()
+    syncTray()
+  },
+)
 
 function logWidgetEvent(widgetId: string, event: string, data: Record<string, unknown>): void {
   // Reuse the sidecar's bounded, rotated per-widget JSONL implementation. The
@@ -417,41 +215,6 @@ function logWidgetEvent(widgetId: string, event: string, data: Record<string, un
   ).catch(() => {})
 }
 
-function newWidgetId(): string {
-  return allocateWidgetId()
-}
-
-function ensureTmuxConf(): void {
-  mkdirSync(stateDir, { recursive: true })
-  writeFileSync(tmuxConfPath, tmuxConf())
-}
-
-function syncManagedTmuxProfile(server: TmuxServerRow): boolean {
-  try {
-    if (!ensurePaneExitFsWatcher()) return false
-    execFileSync(TMUX_BIN, tmuxProfileTargetArgs(server.socketPath), {
-      env: terminalClientEnv(),
-      timeout: TMUX_QUERY_TIMEOUT_MS,
-      stdio: 'ignore',
-    })
-    execFileSync(TMUX_BIN, paneExitedHookTargetArgs(server.socketPath, server.id), {
-      env: terminalClientEnv(),
-      timeout: TMUX_QUERY_TIMEOUT_MS,
-      stdio: 'ignore',
-    })
-    paneExitEventReady.add(server.id)
-    if (paneExitEventMarkerExists(server.id)) observePaneExitEvent(server.id)
-    return true
-  } catch (error) {
-    paneExitEventReady.delete(server.id)
-    console.error(
-      `[aico:lifecycle] managed tmux profile/event bridge failed for server=${server.id}:`,
-      error,
-    )
-    return false
-  }
-}
-
 function windowForWidget(id: string): BrowserWindow | undefined {
   for (const [winId, wid] of widgetOf) {
     if (wid === id) {
@@ -462,2177 +225,354 @@ function windowForWidget(id: string): BrowserWindow | undefined {
   return undefined
 }
 
-function tmuxTargetForWidget(widgetId: string): TmuxTarget {
-  const row = getWidget(widgetId)
-  if (row?.externalTmuxSession) {
-    return {
-      socket: row.externalTmuxSocket,
-      session: row.externalTmuxSession,
+function writeNotice(win: BrowserWindow | undefined, message: string, color = 31): void {
+  if (win && !win.isDestroyed())
+    win.webContents.send('pty:data', `\r\n\u001b[${color}m${message}\u001b[0m\r\n`)
+}
+
+/** Plain words for a Tether refusal, shown in the session's own terminal. */
+function describeFailure(action: string, error: unknown): string {
+  if (error instanceof TetherUnavailable)
+    return `${action}: Tether is not reachable. Your sessions keep running; Aico reconnects on its own.`
+  if (error instanceof TetherError) {
+    switch (error.code) {
+      case 'admission_denied':
+        return `${action}: deferred by host admission (${error.reason ?? 'not enough memory or too many agents'}). Nothing was started.`
+      case 'linger_required':
+        return `${action}: user linger is off, so a session would die on logout. Run: loginctl enable-linger`
+      case 'stale_generation':
+      case 'identity_changed':
+        return `${action}: the session changed meanwhile. Nothing was applied; try again.`
+      case 'busy':
+        return `${action}: another change to this session is in progress. Try again shortly.`
+      case 'workload_unavailable':
+        return `${action}: the session is not running${error.reason ? ` (${error.reason})` : ''}.`
+      case 'legacy_session':
+        return `${action}: this session predates managed lifecycle and is kept read-only.`
+      case 'outcome_uncertain':
+        return `${action}: the outcome is unknown. Check the session before trying again.`
+      default:
+        return `${action}: ${error.reason ?? error.code}.`
     }
   }
-  const server = row?.tmuxServerId ? getTmuxServer(row.tmuxServerId) : undefined
-  const target = internalTarget(widgetId)
-  return {
-    socket: server?.socketPath ?? target.socket,
-    session: row?.tmuxSessionId ?? target.session,
+  return `${action}: ${error instanceof Error ? error.message : String(error)}`
+}
+
+// ---------------------------------------------------------------------------
+// Session catalog: mirrored from Tether, refreshed on events.
+
+const refreshSessions = coalesceAsync(async () => {
+  const mark = catalog.mark()
+  const list = await tether.listSessions()
+  const { gone } = catalog.replace(list, mark)
+  // A view whose session is absent from a complete list is closed but its row
+  // is kept: only an explicit `session.ended` forgets a view. A wrong or empty
+  // instance must never erase every saved window position.
+  for (const id of gone) windowForWidget(id)?.destroy()
+  if (!restored) {
+    restored = true
+    restoreOnLaunch()
   }
-}
-
-/** Commands that operate on a pane (rather than the whole session) use the
- * server-stable pane id after ownership promotion. This prevents a manually
- * selected/active pane from redirecting replacement or launch work. */
-function tmuxPaneTargetForWidget(widgetId: string): TmuxTarget {
-  const target = tmuxTargetForWidget(widgetId)
-  const paneId = getWidget(widgetId)?.paneId
-  return paneId ? { ...target, session: paneId } : target
-}
-
-function isExternalTmuxWidget(widgetId: string): boolean {
-  return Boolean(getWidget(widgetId)?.externalTmuxSession)
-}
-
-type InternalSessionState = 'present' | 'absent' | 'unknown'
-
-const TMUX_QUERY_TIMEOUT_MS = 2_000
-const tmuxServerRuntimeStates = new Map<string, TmuxServerRuntimeState>()
-
-interface TmuxServerRosterEntry {
-  serverPid: number
-  sessionId: string
-  sessionName: string
-  createdAt: number
-}
-
-const tmuxServerRosters = new Map<string, readonly TmuxServerRosterEntry[]>()
-const paneExitEventReady = new Set<string>()
-const paneExitQueue = new PaneExitReconciliationQueue({
-  reconcile: (serverId) => handlePaneExitWatcherCompletion(serverId),
-  isQuitting: () => quitting,
-  onError: (serverId, error) =>
-    console.error(
-      `[aico:lifecycle] pane-exit reconciliation failed for server=${serverId}:`,
-      error,
-    ),
+  pushTitles()
+  syncTray()
 })
-let paneExitFsWatcher: FSWatcher | null = null
-let sessionCatalogWatcher: FSWatcher | null = null
-let paneExitWatcherRecoveryAttempted = false
-let tmuxServerAllocationTail: Promise<void> = Promise.resolve()
 
-async function serializeTmuxServerAllocation<T>(operation: () => Promise<T>): Promise<T> {
-  const predecessor = tmuxServerAllocationTail
-  let release = (): void => {}
-  tmuxServerAllocationTail = new Promise<void>((resolve) => {
-    release = resolve
-  })
-  await predecessor
-  try {
-    return await operation()
-  } finally {
-    release()
-  }
-}
-
-function paneExitEventDirectory(): string | null {
-  const uid = process.getuid?.()
-  return Number.isSafeInteger(uid) && (uid as number) >= 0 ? `/run/user/${uid}/aico` : null
-}
-
-function paneExitEventMarkerExists(serverId: string): boolean {
-  try {
-    return statSync(paneExitedEventPath(serverId)).isFile()
-  } catch {
-    return false
-  }
-}
-
-function observePaneExitEvent(serverId: string): void {
-  // The marker is level-triggered evidence and deliberately remains on disk.
-  // Unlinking before a successful pass allowed a transient tmux/systemd query
-  // failure to acknowledge the event and strand a tree until app restart. A
-  // later `touch` still emits a watcher event, while startup sees the marker.
-  paneExitQueue.observe(serverId)
-}
-
-function observePersistedPaneExitEvents(directory: string): void {
-  for (const name of readdirSync(directory)) {
-    const match = /^pane-exited-([0-9a-f]{8,64})$/.exec(name)
-    if (match) observePaneExitEvent(match[1])
-  }
-}
-
-function ensurePaneExitFsWatcher(): boolean {
-  if (paneExitFsWatcher) return true
-  const directory = paneExitEventDirectory()
-  if (!directory) return false
-  try {
-    mkdirSync(directory, { recursive: true, mode: 0o700 })
-    chmodSync(directory, 0o700)
-    const watcher = watch(directory, (_event, filename) => {
-      if (filename === null) {
-        // Linux normally supplies a name, but Node documents it as optional.
-        // Rescan the private directory so an overflow/backend omission cannot
-        // strand a durable marker until the next Electron restart.
-        try {
-          observePersistedPaneExitEvents(directory)
-        } catch (error) {
-          console.error('[aico:lifecycle] pane-exit event rescan failed:', error)
-        }
-        return
-      }
-      const name = filename.toString()
-      const match = /^pane-exited-([0-9a-f]{8,64})$/.exec(name)
-      if (match) observePaneExitEvent(match[1])
-    })
-    watcher.once('error', (error) => {
-      if (paneExitFsWatcher === watcher) paneExitFsWatcher = null
-      paneExitEventReady.clear()
-      console.error(
-        '[aico:lifecycle] pane-exit event watcher failed; new launches are blocked:',
-        error,
-      )
-      // One backend recreation is justified by this observed watcher failure;
-      // a guard prevents a persistent inotify/runtime-directory fault from
-      // becoming a retry loop. Attach/diagnostics remain concrete later retry
-      // triggers and startup always rescans the retained markers.
-      if (!quitting && !paneExitWatcherRecoveryAttempted) {
-        paneExitWatcherRecoveryAttempted = true
-        setTimeout(() => ensurePaneExitFsWatcher(), 0)
-      }
-    })
-    paneExitFsWatcher = watcher
-    observePersistedPaneExitEvents(directory)
-    return true
-  } catch (error) {
-    console.error('[aico:lifecycle] could not start pane-exit event watcher:', error)
-    return false
-  }
-}
-
-async function handlePaneExitWatcherCompletion(serverId: string): Promise<boolean> {
-  const rows = listWidgets().filter((row) => row.tmuxServerId === serverId)
-  for (const row of rows) {
-    if (lifecycleOwners.isHeld(row.id)) {
-      // Respawn/retire can itself emit pane-exited. Its explicit path owns the
-      // exact cleanup; queue one follow-up pass after that ownership token is
-      // released instead of spinning or dropping the detached-exit signal.
-      paneExitQueue.defer(serverId)
-      continue
-    }
-    await settleServerAfterSessionStop(row)
-    await reconcileManagedWidget(row)
-  }
-  for (const row of listWidgets().filter((candidate) => candidate.tmuxServerId === serverId)) {
-    if (lifecycleOwners.isHeld(row.id)) return false
-    // Lifecycle-v0 work is deliberately observation-only and cannot have been
-    // launched by this managed generation's hook.
-    if (row.lifecycleVersion < MANAGED_LIFECYCLE_VERSION) continue
-    const state = await internalSessionState(row.id)
-    const current = getWidget(row.id)
-    if (!current) continue
-    if (state === 'unknown' || current.pendingScopeUnit) return false
-    if (state === 'absent' && current.scopeUnit) return false
-    if (state === 'present' && !(await verifiedCurrentManagedPane(current))) return false
-  }
-  return !paneExitQueue.isDeferred(serverId)
-}
-
-function retryUnresolvedPaneExitReconciliation(serverId: string | null): void {
-  if (!serverId) return
-  if (!paneExitFsWatcher) ensurePaneExitFsWatcher()
-  if (paneExitEventMarkerExists(serverId)) {
-    observePaneExitEvent(serverId)
-  } else {
-    paneExitQueue.retryUnresolved(serverId)
-  }
-}
-
-function releaseLifecycleOwner(
-  widgetId: string,
-  owner: Parameters<LifecycleOwnerLock['release']>[0],
-  knownServerId?: string | null,
-): void {
-  if (!lifecycleOwners.release(owner)) return
-  // A confirmed retire has priority over watcher reconciliation for the same
-  // widget. Acquire it synchronously after release; the watcher then observes
-  // the held token and defers instead of repeatedly winning the race.
-  if (widgetRetireIntents.isPending(widgetId)) drainWidgetRetire(widgetId)
-  const serverId = knownServerId ?? getWidget(widgetId)?.tmuxServerId
-  if (serverId) paneExitQueue.releaseDeferred(serverId)
-}
-
-function tmuxErrorText(error: unknown): string {
-  if (!error || typeof error !== 'object') return ''
-  const value = (error as { stderr?: string | Buffer }).stderr
-  return Buffer.isBuffer(value) ? value.toString('utf8') : (value ?? '')
-}
-
-/** Resolve session presence only through a freshly revalidated server
- * generation. A cached successful probe or a bare `has-session` response is
- * not cleanup authority: a socket path can be unlinked and rebound to another
- * tmux server while the persisted generation remains alive elsewhere. */
-async function internalSessionState(widgetId: string): Promise<InternalSessionState> {
-  const row = getWidget(widgetId)
-  if (!row) return 'unknown'
-  if (row.tmuxServerId) {
-    const server = getTmuxServer(row.tmuxServerId)
-    if (server?.phase === 'dead') return 'absent'
-    if (!server || server.phase !== 'active') return 'unknown'
-    await observeTmuxServer(server)
-  }
-  return observedInternalSessionState(row)
-}
-
-/** Interpret only a roster snapshot that was already proven against its exact
- * server tuple. Startup uses this for present sessions; an absent result is
- * always freshly re-probed before it can authorize cleanup. */
-function observedInternalSessionState(row: WidgetRow): InternalSessionState {
-  if (row.tmuxServerId) {
-    const server = getTmuxServer(row.tmuxServerId)
-    if (server?.phase === 'dead') return 'absent'
-    if (!server || tmuxServerRuntimeStates.get(server.id) !== 'reachable') return 'unknown'
-    const roster = tmuxServerRosters.get(server.id)
-    if (!roster) return 'unknown'
-    const present = row.tmuxSessionId
-      ? roster.some((entry) => entry.sessionId === row.tmuxSessionId)
-      : roster.some((entry) => entry.sessionName === sessionName(row.id))
-    return present ? 'present' : 'absent'
-  }
-  // Only a row created by the current schema and never allocated is known not
-  // to have durable tmux work. Migrated legacy rows remain unclassified until a
-  // verified historical roster binds them; name lookup failure is not absence.
-  return row.tmuxAllocationState === 'unallocated' ? 'absent' : 'unknown'
-}
-
-const TMUX_SERVER_SETTLE_MS = 5_000
-const TMUX_SERVER_POLL_MS = 50
-
-function tmuxServerEnvironmentMatches(pid: number, serverId: string): boolean {
-  const values = processEnvironment(pid)
-  return (
-    values?.get('AICO_OWNER') === 'aico' &&
-    values.get('AICO_WORKLOAD_CLASS') === 'durable-tmux-server' &&
-    values.get('AICO_TMUX_SERVER_ID') === serverId
-  )
-}
-
-async function recoverProvisioningTmuxServer(
-  server: TmuxServerRow,
-  allowDeadTransition: boolean,
-): Promise<TmuxServerRow | null> {
-  if (server.kind !== 'managed' || server.phase !== 'provisioning') return null
-  const roster = readTmuxServerRoster(server.socketPath)
-  if (roster.evidence.status === 'reachable') {
-    const pid = roster.evidence.serverPid
-    try {
-      const startTime = processStartTimeFromStat(readFileSync(`/proc/${pid}/stat`, 'utf8'))
-      const processCgroup = processControlGroup(pid)
-      const identity = await scopeIdentity(server.scopeUnit)
-      const uid = process.getuid?.() ?? -1
-      if (
-        !startTime ||
-        !processCgroup ||
-        !identity ||
-        identity.activeState !== 'active' ||
-        !isSystemdInvocationId(identity.invocationId) ||
-        !isOwnedTmuxServerControlGroup(server.scopeUnit, identity.controlGroup, uid) ||
-        processCgroup !== identity.controlGroup ||
-        !tmuxServerEnvironmentMatches(pid, server.id)
-      ) {
-        return null
-      }
-      if (
-        !activateTmuxServer(server.id, {
-          controlGroup: identity.controlGroup,
-          invocationId: identity.invocationId,
-          serverPid: pid,
-          procStartTime: startTime,
-        })
-      ) {
-        return null
-      }
-      const active = getTmuxServer(server.id)
-      if (!active || (await observeTmuxServer(active)) !== 'reachable') return null
-      if (!syncManagedTmuxProfile(active)) return null
-      return active
-    } catch {
-      return null
-    }
-  }
-
-  if (allowDeadTransition && roster.evidence.status === 'transport-failure') {
-    const identity = await scopeIdentity(server.scopeUnit)
-    const uid = process.getuid?.() ?? -1
-    const expectedControlGroup = `/user.slice/user-${uid}.slice/user@${uid}.service/app.slice/${server.scopeUnit}`
-    if (
-      identity?.loadState === 'not-found' &&
-      identity.job === '' &&
-      readCgroupPopulated(expectedControlGroup) === false
-    ) {
-      markTmuxServerDead(server.id)
-      tmuxServerRuntimeStates.set(server.id, 'dead')
-    }
-  }
-  return null
-}
-
-async function provisioningTmuxServerProvablyAbsent(server: TmuxServerRow): Promise<boolean> {
-  const roster = readTmuxServerRoster(server.socketPath)
-  if (roster.evidence.status !== 'transport-failure') return false
-  const identity = await scopeIdentity(server.scopeUnit)
-  const uid = process.getuid?.() ?? -1
-  const controlGroup = `/user.slice/user-${uid}.slice/user@${uid}.service/app.slice/${server.scopeUnit}`
-  return Boolean(
-    identity?.loadState === 'not-found' &&
-      identity.job === '' &&
-      readCgroupPopulated(controlGroup) === false,
-  )
-}
-
-/** Only startup reconciliation may tombstone an incomplete generation, after
- * the socket, exact unit/job, and exact cgroup have all remained absent for the
- * same intrinsic server-placement settle window used by creation. Runtime
- * allocators preserve an unresolved provisioning record and never race it with
- * a competing generation. */
-async function reconcileProvisioningTmuxServer(
-  server: TmuxServerRow,
-): Promise<TmuxServerRow | null> {
-  const deadline = Date.now() + TMUX_SERVER_SETTLE_MS
-  do {
-    const recovered = await recoverProvisioningTmuxServer(server, false)
-    if (recovered) return recovered
-    if (!(await provisioningTmuxServerProvablyAbsent(server))) return null
-    await new Promise((resolve) => setTimeout(resolve, TMUX_SERVER_POLL_MS))
-  } while (Date.now() < deadline)
-  await recoverProvisioningTmuxServer(server, true)
-  return null
-}
-
-function createManagedServerDirectory(serverId: string): string {
-  const parent = join(stateDir, 'tmux')
-  mkdirSync(parent, { recursive: true, mode: 0o700 })
-  chmodSync(parent, 0o700)
-  const directory = join(parent, serverId)
-  mkdirSync(directory, { mode: 0o700 })
-  return directory
-}
-
-async function provisionManagedServerWithSession(
-  widgetId: string,
-  expectedServerId: string | null,
-  size: PtySize,
-  cwd: string,
-  environment: Record<string, string>,
-): Promise<TmuxServerRow> {
-  const serverId = randomBytes(16).toString('hex')
-  const directory = createManagedServerDirectory(serverId)
-  const socketPath = join(directory, 'server.sock')
-  const scopeUnit = durableTmuxServerUnit(serverId)
-  const provisioning = insertProvisioningTmuxServer({ id: serverId, socketPath, scopeUnit })
-  if (!bindWidgetTmuxServer(widgetId, expectedServerId, serverId)) {
-    markTmuxServerDead(serverId)
-    throw new Error(`could not bind ${widgetId} to new tmux server generation`)
-  }
-
-  const target: TmuxTarget = { socket: socketPath, session: sessionName(widgetId) }
-  const tmuxArgs = newDetachedTargetArgs(target, size.cols, size.rows, tmuxConfPath, cwd, {
-    ...environment,
-    AICO_TMUX_SERVER_ID: serverId,
-  })
-  let launchError: unknown = null
-  try {
-    execFileSync(SYSTEMD_RUN_BIN, durableTmuxServerArgs(serverId, tmuxArgs), {
-      env: terminalClientEnv(),
-      timeout: SYSTEMD_STOP_TIMEOUT_MS,
-    })
-  } catch (error) {
-    launchError = error
-  }
-
-  const deadline = Date.now() + TMUX_SERVER_SETTLE_MS
-  do {
-    const active = await recoverProvisioningTmuxServer(provisioning, false)
-    if (active) {
-      console.log(
-        `[aico:lifecycle] tmux server=${active.id} pid=${active.serverPid} ` +
-          `unit=${active.scopeUnit} invocation=${active.invocationId} class=durable-tmux-server`,
-      )
-      logWidgetEvent(widgetId, 'lifecycle_tmux_server_owned', {
-        tmux_server_id: active.id,
-        pid: active.serverPid,
-        scope_unit: active.scopeUnit,
-        scope_invocation_id: active.invocationId,
-        workload_class: 'durable-tmux-server',
-      })
-      return active
-    }
-    await new Promise((resolve) => setTimeout(resolve, TMUX_SERVER_POLL_MS))
-  } while (Date.now() < deadline)
-
-  // Preserve the provisioning generation on runtime failure. Only a future
-  // single-instance startup reconciliation may prove it stayed wholly absent.
-  throw new Error('Aico could not prove durable tmux-server ownership; launch remains gated', {
-    cause: launchError,
+function requestSessionRefresh(): void {
+  void refreshSessions().catch((error) => {
+    if (!(error instanceof TetherUnavailable)) console.warn('[aico] session refresh failed:', error)
   })
 }
 
-async function createInternalSessionOwned(
-  widgetId: string,
-  size: PtySize,
-  cwd: string,
-  environment: Record<string, string>,
-): Promise<void> {
-  let row = getWidget(widgetId)
-  if (!row) throw new Error(`widget ${widgetId} disappeared before tmux allocation`)
+const refreshTools = coalesceAsync(async () => {
+  tools = (await tether.tools()).items
+    .filter((tool) => tool.enabled)
+    .sort((a, b) => a.displayOrder - b.displayOrder)
+  pushTitles()
+  syncTray()
+})
 
-  if (row.tmuxServerId) {
-    const bound = getTmuxServer(row.tmuxServerId)
-    if (bound?.phase === 'provisioning') {
-      const recovered = await recoverProvisioningTmuxServer(bound, false)
-      if (recovered && (await internalSessionState(widgetId)) === 'present') return
-      throw new Error(`bound tmux server ${row.tmuxServerId} is still provisioning`)
-    } else if (bound?.phase === 'active' && (await observeTmuxServer(bound)) === 'reachable') {
-      if (bound.scopeUnit.endsWith('.scope')) {
-        // Caller-spawned v1 server scopes may have inherited Electron file
-        // descriptors. Preserve and reconnect their existing sessions, but do
-        // not allocate more work into them; unbound widgets use the clean-FD
-        // manager-spawned service generation selected below.
-        if (observedInternalSessionState(row) === 'present') return
-        throw new Error(`historical tmux server ${bound.id} is observation-only`)
-      }
-      execFileSync(
-        TMUX_BIN,
-        newDetachedTargetArgs(
-          { socket: bound.socketPath, session: sessionName(widgetId) },
-          size.cols,
-          size.rows,
-          tmuxConfPath,
-          cwd,
-          { ...environment, AICO_TMUX_SERVER_ID: bound.id },
-        ),
-        { env: terminalClientEnv(), timeout: TMUX_QUERY_TIMEOUT_MS },
-      )
+function sessionEnded(id: string, reason: string): void {
+  const known = catalog.get(id)
+  catalog.remove(id)
+  windowForWidget(id)?.destroy()
+  removeView(id)
+  if (known) logWidgetEvent(id, 'lifecycle_retired', { session_id: known.ownershipId, reason })
+  syncTray()
+}
+
+function onTetherEvent(event: TetherEvent): void {
+  const id = typeof event.data.id === 'string' ? event.data.id : null
+  switch (event.type) {
+    case 'session.ended':
+      if (id) sessionEnded(id, 'tether_event')
+      requestSessionRefresh()
+      break
+    case 'session.created':
+    case 'session.updated':
+    case 'root.updated':
+      requestSessionRefresh()
+      break
+    case 'tools.changed':
+      void refreshTools().catch(() => {})
+      break
+    case 'projects.changed':
+      projects.invalidate()
+      void projects.refresh()
+      break
+  }
+}
+
+async function checkTetherVersion(): Promise<void> {
+  try {
+    const version = await tether.version()
+    if (compatibleVersion(version)) {
+      tetherIncompatible = null
       return
-    } else if (bound?.phase !== 'dead') {
-      throw new Error(`bound tmux server ${row.tmuxServerId} is not safely reachable`)
     }
-  }
-
-  let current = getCurrentManagedTmuxServer()
-  if (current?.phase === 'provisioning') {
-    const recovered = await recoverProvisioningTmuxServer(current, false)
-    if (!recovered) {
-      throw new Error(
-        `tmux server ${current.id} is still provisioning; refusing another generation`,
-      )
-    }
-    current = recovered
-  }
-  if (current?.phase === 'active') {
-    const state = await observeTmuxServer(current)
-    if (state !== 'reachable') {
-      throw new Error(`current tmux server ${current.id} is ${state}; refusing a competing server`)
-    }
-    if (!bindWidgetTmuxServer(widgetId, row.tmuxServerId, current.id)) {
-      throw new Error(`could not bind ${widgetId} to current tmux server ${current.id}`)
-    }
-    execFileSync(
-      TMUX_BIN,
-      newDetachedTargetArgs(
-        { socket: current.socketPath, session: sessionName(widgetId) },
-        size.cols,
-        size.rows,
-        tmuxConfPath,
-        cwd,
-        { ...environment, AICO_TMUX_SERVER_ID: current.id },
-      ),
-      { env: terminalClientEnv(), timeout: TMUX_QUERY_TIMEOUT_MS },
-    )
-    return
-  }
-  if (current) {
-    throw new Error(`tmux server ${current.id} is unresolved; refusing another generation`)
-  }
-
-  row = getWidget(widgetId)
-  await provisionManagedServerWithSession(
-    widgetId,
-    row?.tmuxServerId ?? null,
-    size,
-    cwd,
-    environment,
-  )
-}
-
-function createInternalSession(
-  widgetId: string,
-  size: PtySize,
-  cwd: string,
-  environment: Record<string, string>,
-): Promise<void> {
-  return serializeTmuxServerAllocation(() =>
-    createInternalSessionOwned(widgetId, size, cwd, environment),
-  )
-}
-
-function managedEnvironment(
-  widgetId: string,
-  toolSlug: string,
-  projectId?: string | null,
-): Record<string, string> {
-  const row = getWidget(widgetId)
-  const environment = ownershipEnvironment({
-    widgetId,
-    sessionId: row?.sessionId ?? `aico-widget-${widgetId}`,
-    projectId: projectId === undefined ? (row?.projectId ?? null) : projectId,
-    tool: toolSlug,
-  })
-  // The launch gate and supervisor never source shell profiles. Pin the exact
-  // service PATH onto every new/respawned pane so context verification and the
-  // command that actually runs cannot resolve different launcher binaries.
-  environment.PATH = paneGatePath()
-  // The durable tmux server starts under the user manager, whose HOME may
-  // differ from this Aico process (for example in an isolated desktop run).
-  // Keep the pane's home aligned with the widget profile and its chosen cwd.
-  environment.HOME = process.env.HOME ?? homedir()
-  Object.assign(environment, rootLaunchEnvironment(widgetId))
-  if (row?.tmuxServerId) environment.AICO_TMUX_SERVER_ID = row.tmuxServerId
-  return environment
-}
-
-interface ManagedPaneProcess {
-  pid: number
-  startTime: string
-  scopeUnit: string | null
-  tmuxSessionId: string
-  paneId: string
-}
-
-/** Observe one exact server-side session/pane generation. Aico's managed-widget
- * contract is deliberately one pane; split sessions are preserved but no
- * lifecycle operation is authorized until the user resolves the ambiguity. */
-function currentPaneProcess(widgetId: string): ManagedPaneProcess | null {
-  try {
-    const row = getWidget(widgetId)
-    const target = tmuxTargetForWidget(widgetId)
-    const paneLines = execFileSync(TMUX_BIN, listSessionPanesTargetArgs(target), {
-      encoding: 'utf8',
-      env: terminalClientEnv(),
-      timeout: TMUX_QUERY_TIMEOUT_MS,
-    })
-      .split('\n')
-      .filter(Boolean)
-    if (paneLines.length !== 1) {
-      console.warn(
-        `[aico:lifecycle] preserving ${widgetId}: expected one pane, observed ${paneLines.length}`,
-      )
-      return null
-    }
-    const [paneId, pidText] = paneLines[0].split('\t')
-    const pid = Number(pidText)
-    const tmuxSessionId = execFileSync(TMUX_BIN, sessionIdTargetArgs(target), {
-      encoding: 'utf8',
-      env: terminalClientEnv(),
-      timeout: TMUX_QUERY_TIMEOUT_MS,
-    }).trim()
-    if (!/^%\d+$/.test(paneId) || !/^\$\d+$/.test(tmuxSessionId)) return null
-    if (!Number.isInteger(pid) || pid <= 0) return null
-    if (row?.tmuxSessionId && row.tmuxSessionId !== tmuxSessionId) {
-      console.warn(`[aico:lifecycle] preserving ${widgetId}: tmux session identity changed`)
-      return null
-    }
-    if (row?.paneId && row.paneId !== paneId) {
-      console.warn(`[aico:lifecycle] preserving ${widgetId}: tmux pane identity changed`)
-      return null
-    }
-    const startTime = processStartTime(pid)
-    if (!startTime) return null
-    return {
-      pid,
-      startTime,
-      scopeUnit: paneScopeFromCgroup(readFileSync(`/proc/${pid}/cgroup`, 'utf8')),
-      tmuxSessionId,
-      paneId,
-    }
-  } catch {
-    return null
-  }
-}
-
-/** Resolve only the narrow cgroup assigned to this exact tmux pane. Broad app,
- * GNOME, user, and session scopes are intentionally rejected by the parser. */
-function currentPaneScope(widgetId: string): string | null {
-  return currentPaneProcess(widgetId)?.scopeUnit ?? null
-}
-
-// Ubuntu tmux creates a systemd pane scope asynchronously. That ordering is the
-// demonstrated escape path: an eagerly-started agent can fork before the move.
-// Poll only this local /proc transition, and fail closed after a bounded wait
-// rather than launching any workload in the broad desktop scope.
-const PANE_SCOPE_SETTLE_MS = 5_000
-const PANE_SCOPE_POLL_MS = 25
-
-async function waitForCurrentPaneScope(widgetId: string): Promise<ManagedPaneProcess | null> {
-  const deadline = Date.now() + PANE_SCOPE_SETTLE_MS
-  const pane = currentPaneProcess(widgetId)
-  if (!pane) return null
-  if (pane.scopeUnit) return pane
-  do {
-    if (processStartTime(pane.pid) !== pane.startTime) return null
-    try {
-      const scopeUnit = paneScopeFromCgroup(readFileSync(`/proc/${pane.pid}/cgroup`, 'utf8'))
-      if (scopeUnit) {
-        const current = currentPaneProcess(widgetId)
-        if (
-          !current ||
-          current.pid !== pane.pid ||
-          current.startTime !== pane.startTime ||
-          current.tmuxSessionId !== pane.tmuxSessionId ||
-          current.paneId !== pane.paneId ||
-          current.scopeUnit !== scopeUnit
-        ) {
-          return null
-        }
-        return current
-      }
-    } catch {
-      return null
-    }
-    await new Promise((resolve) => setTimeout(resolve, PANE_SCOPE_POLL_MS))
-  } while (Date.now() < deadline)
-  return null
-}
-
-interface TmuxRosterRead {
-  evidence: TmuxServerRosterEvidence
-  entries: readonly TmuxServerRosterEntry[]
-  detail: string
-}
-
-function readTmuxServerRoster(
-  socketPath: string,
-  expected?: { serverId: string; serverPid: number },
-): TmuxRosterRead {
-  try {
-    const stdout = execFileSync(TMUX_BIN, serverRosterArgs(socketPath), {
-      encoding: 'utf8',
-      env: terminalClientEnv(),
-      timeout: TMUX_QUERY_TIMEOUT_MS,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    })
-    const entries: TmuxServerRosterEntry[] = []
-    for (const line of stdout.split('\n').filter(Boolean)) {
-      const [pidText, sessionId, sessionName, createdText] = line.split('\t')
-      const serverPid = Number(pidText)
-      const createdSeconds = Number(createdText)
-      if (
-        !Number.isInteger(serverPid) ||
-        serverPid <= 0 ||
-        !/^\$\d+$/.test(sessionId) ||
-        !sessionName ||
-        !Number.isFinite(createdSeconds) ||
-        createdSeconds < 0
-      ) {
-        return { evidence: { status: 'unavailable' }, entries: [], detail: 'malformed roster' }
-      }
-      entries.push({
-        serverPid,
-        sessionId,
-        sessionName,
-        createdAt: createdSeconds * 1000,
-      })
-    }
-    if (entries.length === 0) {
-      if (!expected) {
-        return { evidence: { status: 'unavailable' }, entries: [], detail: 'empty roster' }
-      }
-      const identity = execFileSync(TMUX_BIN, serverIdentityEnvironmentTargetArgs(socketPath), {
-        encoding: 'utf8',
-        env: terminalClientEnv(),
-        timeout: TMUX_QUERY_TIMEOUT_MS,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      })
-      if (!matchesServerIdentityEnvironment(identity, expected.serverId)) {
-        return {
-          evidence: { status: 'unavailable' },
-          entries: [],
-          detail: 'empty roster identity mismatch',
-        }
-      }
-      return {
-        evidence: { status: 'reachable', serverPid: expected.serverPid },
-        entries: [],
-        detail: '',
-      }
-    }
-    const serverPids = new Set(entries.map((entry) => entry.serverPid))
-    if (serverPids.size !== 1) {
-      return { evidence: { status: 'unavailable' }, entries: [], detail: 'mixed roster' }
-    }
-    return {
-      evidence: { status: 'reachable', serverPid: entries[0].serverPid },
-      entries,
-      detail: '',
-    }
+    tetherIncompatible = `Tether ${version.version} (API ${version.apiVersion}) is not compatible with this Aico`
   } catch (error) {
-    const detail = tmuxErrorText(error)
-    return {
-      evidence: {
-        status: isTmuxTransportUnavailable(detail) ? 'transport-failure' : 'unavailable',
-      },
-      entries: [],
-      detail,
-    }
+    if (error instanceof TetherUnavailable) return
+    tetherIncompatible = 'Tether did not report a usable version'
   }
-}
-
-function tmuxServerProcessEvidence(server: TmuxServerRow): TmuxServerProcessEvidence {
-  const pid = server.serverPid ?? -1
-  if (pid <= 0) return { status: 'unavailable', pid }
-  try {
-    const startTime = processStartTimeFromStat(readFileSync(`/proc/${pid}/stat`, 'utf8'))
-    if (!startTime) return { status: 'unavailable', pid }
-    const controlGroup = processControlGroup(pid)
-    if (!controlGroup) return { status: 'unavailable', pid }
-    return { status: 'present', pid, procStartTime: startTime, controlGroup }
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === 'ENOENT'
-      ? { status: 'missing', pid }
-      : { status: 'unavailable', pid }
-  }
-}
-
-async function tmuxServerUnitEvidence(server: TmuxServerRow): Promise<TmuxServerUnitEvidence> {
-  const identity = await scopeIdentity(server.scopeUnit)
-  if (!identity) return { status: 'unavailable', scopeUnit: server.scopeUnit }
-  if (identity.loadState === 'not-found') {
-    return { status: 'missing', scopeUnit: server.scopeUnit }
-  }
-  if (identity.activeState !== 'active') {
-    return { status: 'inactive', scopeUnit: server.scopeUnit }
-  }
-  return {
-    status: 'active',
-    scopeUnit: server.scopeUnit,
-    controlGroup: identity.controlGroup,
-    invocationId: identity.invocationId,
-  }
-}
-
-async function observeTmuxServer(server: TmuxServerRow): Promise<TmuxServerRuntimeState> {
-  if (server.phase === 'dead') {
-    tmuxServerRuntimeStates.set(server.id, 'dead')
-    tmuxServerRosters.delete(server.id)
-    return 'dead'
-  }
-  if (server.phase !== 'active') {
-    tmuxServerRuntimeStates.set(server.id, 'ambiguous')
-    return 'ambiguous'
-  }
-  const roster = readTmuxServerRoster(
-    server.socketPath,
-    server.serverPid ? { serverId: server.id, serverPid: server.serverPid } : undefined,
-  )
-  const state = classifyTmuxServerState(server, {
-    process: tmuxServerProcessEvidence(server),
-    unit: await tmuxServerUnitEvidence(server),
-    roster: roster.evidence,
-  })
-  tmuxServerRuntimeStates.set(server.id, state)
-  if (state === 'reachable') {
-    tmuxServerRosters.set(server.id, roster.entries)
-  } else {
-    tmuxServerRosters.delete(server.id)
-  }
-  if (state === 'dead') markTmuxServerDead(server.id)
-  if (state !== 'reachable') {
-    console.warn(
-      `[aico:lifecycle] tmux server=${server.id} kind=${server.kind} state=${state}` +
-        (roster.detail ? ` detail=${roster.detail.trim()}` : ''),
-    )
-  }
-  return state
-}
-
-async function settleServerAfterSessionStop(row: WidgetRow): Promise<void> {
-  if (!row.tmuxServerId) return
-  const deadline = Date.now() + SYSTEMD_QUERY_TIMEOUT_MS
-  do {
-    const server = getTmuxServer(row.tmuxServerId)
-    if (!server || server.phase === 'dead') return
-    const state = await observeTmuxServer(server)
-    if (state === 'reachable' || state === 'dead') return
-    if (state !== 'live-unreachable') return
-    await new Promise((resolve) => setTimeout(resolve, PANE_SCOPE_POLL_MS))
-  } while (Date.now() < deadline)
-}
-
-function solePaneId(socketPath: string, stableSessionId: string): string | null {
-  try {
-    const rows = execFileSync(
-      TMUX_BIN,
-      listSessionPanesTargetArgs({ socket: socketPath, session: stableSessionId }),
-      {
-        encoding: 'utf8',
-        env: terminalClientEnv(),
-        timeout: TMUX_QUERY_TIMEOUT_MS,
-      },
-    )
-      .split('\n')
-      .filter(Boolean)
-    if (rows.length !== 1) return null
-    const [paneId, pidText] = rows[0].split('\t')
-    return /^%\d+$/.test(paneId) && Number(pidText) > 0 ? paneId : null
-  } catch {
-    return null
-  }
-}
-
-function bindVerifiedServerRoster(
-  server: TmuxServerRow,
-  entries: readonly TmuxServerRosterEntry[],
-): void {
-  for (const entry of entries) {
-    const widgetId = widgetIdFromSession(entry.sessionName)
-    if (!widgetId || !/^[a-f0-9]{8}$/.test(widgetId)) continue
-    let row = getWidget(widgetId)
-    if (!row) row = insertLegacyUnclassifiedWidget(widgetId, false, 'shell', entry.createdAt)
-    if (row.externalTmuxSession) continue
-    if (row.tmuxServerId && row.tmuxServerId !== server.id) {
-      console.warn(
-        `[aico:lifecycle] preserving ${entry.sessionName}: widget is already bound to server=${row.tmuxServerId}, refusing roster collision with server=${server.id}`,
-      )
-      continue
-    }
-    const paneId = solePaneId(server.socketPath, entry.sessionId)
-    if (!paneId) {
-      console.warn(
-        `[aico:lifecycle] preserving ${entry.sessionName}: expected one pane while adopting server=${server.id}`,
-      )
-      continue
-    }
-    if (!bindWidgetTmuxServer(row.id, row.tmuxServerId, server.id, entry.sessionId, paneId)) {
-      console.warn(
-        `[aico:lifecycle] could not bind ${entry.sessionName} to observed server=${server.id}`,
-      )
-    }
-  }
-}
-
-async function adoptHistoricalTmuxServer(): Promise<TmuxServerRow | null> {
-  const existing = listTmuxServers().find((server) => server.socketPath === TMUX_SOCKET)
-  if (existing) return existing.phase === 'active' ? existing : null
-
-  // Double-read the legacy roster before recording identity. No profile update,
-  // key send, respawn, or scope mutation occurs on this observation path.
-  const first = readTmuxServerRoster(TMUX_SOCKET)
-  const second = readTmuxServerRoster(TMUX_SOCKET)
-  if (
-    first.evidence.status !== 'reachable' ||
-    second.evidence.status !== 'reachable' ||
-    first.evidence.serverPid !== second.evidence.serverPid ||
-    JSON.stringify(first.entries) !== JSON.stringify(second.entries)
-  ) {
-    return null
-  }
-  const pid = first.evidence.serverPid
-  try {
-    const procStartTime = processStartTimeFromStat(readFileSync(`/proc/${pid}/stat`, 'utf8'))
-    const controlGroup = processControlGroup(pid)
-    const scopeUnit = controlGroup?.split('/').filter(Boolean).at(-1) ?? null
-    if (!procStartTime || !controlGroup || !scopeUnit?.endsWith('.scope')) return null
-    const identity = await scopeIdentity(scopeUnit)
-    if (
-      !identity ||
-      identity.activeState !== 'active' ||
-      identity.controlGroup !== controlGroup ||
-      !isSystemdInvocationId(identity.invocationId)
-    ) {
-      return null
-    }
-    const adopted = adoptActiveLegacyTmuxServer({
-      id: randomBytes(16).toString('hex'),
-      socketPath: TMUX_SOCKET,
-      scopeUnit,
-      controlGroup,
-      invocationId: identity.invocationId,
-      serverPid: pid,
-      procStartTime,
-    })
-    tmuxServerRuntimeStates.set(adopted.id, 'reachable')
-    tmuxServerRosters.set(adopted.id, first.entries)
-    bindVerifiedServerRoster(adopted, first.entries)
-    console.log(
-      `[aico:lifecycle] adopted legacy tmux server=${adopted.id} pid=${pid} ` +
-        `scope=${scopeUnit} sessions=${first.entries.length} observation_only=true`,
-    )
-    return adopted
-  } catch (error) {
-    console.warn('[aico:lifecycle] legacy tmux server adoption failed closed:', error)
-    return null
-  }
-}
-
-async function reconcileTmuxServers(): Promise<void> {
-  for (const server of listTmuxServers()) {
-    if (server.phase === 'provisioning') {
-      await reconcileProvisioningTmuxServer(server)
-      continue
-    }
-    if (server.phase === 'active') await observeTmuxServer(server)
-  }
-
-  const legacy = await adoptHistoricalTmuxServer()
-  if (legacy && (await observeTmuxServer(legacy)) === 'reachable') {
-    bindVerifiedServerRoster(legacy, tmuxServerRosters.get(legacy.id) ?? [])
-  }
-  const managed = getCurrentManagedTmuxServer()
-  if (managed?.phase === 'active' && (await observeTmuxServer(managed)) === 'reachable') {
-    syncManagedTmuxProfile(managed)
-    bindVerifiedServerRoster(managed, tmuxServerRosters.get(managed.id) ?? [])
-  }
-}
-
-function managedPaneMarkersMatch(row: WidgetRow, pid: number): boolean {
-  const environment = processEnvironment(pid)
-  return (
-    environment?.get('AICO_OWNER') === 'aico' &&
-    environment.get('AICO_WORKLOAD_CLASS') === 'durable-session' &&
-    environment.get('AICO_WIDGET_ID') === row.id &&
-    environment.get('AICO_SESSION_ID') === row.sessionId &&
-    (!row.tmuxServerId || environment.get('AICO_TMUX_SERVER_ID') === row.tmuxServerId) &&
-    environment.get('AICO_LIFECYCLE_VERSION') === String(MANAGED_LIFECYCLE_VERSION)
+  console.error(`[aico:tether] ${tetherIncompatible}; session control is disabled`)
+  stopEvents?.()
+  stopGuiChannel?.()
+  tetherConnected = false
+  syncTray()
+  dialog.showErrorBox(
+    'Update Tether',
+    `${tetherIncompatible}. Your sessions keep running. Install a current Tether (scripts/install.sh in the Tether repo) and restart Aico.`,
   )
 }
 
-interface ManagedGateLaunchIntent {
-  tool: NonNullable<ReturnType<typeof getTui>>
-  projectId: string | null
-}
-
-function managedGateLaunchIntent(pid: number): ManagedGateLaunchIntent | null {
-  const environment = processEnvironment(pid)
-  const toolSlug = environment?.get('AICO_AGENT_SLUG')
-  const projectMarker = environment?.get('AICO_PROJECT_ID')
-  const tool = toolSlug ? getTui(toolSlug) : undefined
-  if (!tool || projectMarker === undefined || projectMarker.includes('\0')) return null
-  return { tool, projectId: projectMarker || null }
-}
-
-/** Commit launch intent from the verified gate process before sending Enter.
- * A crash after respawn can therefore recover the requested tool/project from
- * the immutable parent environment instead of replaying stale catalog data. */
-function persistManagedGateLaunchIntent(row: WidgetRow, pid: number): WidgetRow | null {
-  const intent = managedGateLaunchIntent(pid)
-  if (!intent) return null
-  const root =
-    intent.projectId === row.projectId
-      ? row.projectRoot
-      : intent.projectId
-        ? projectRoot(intent.projectId)
-        : null
-  if (
-    !compareAndSetWidgetLaunchMetadata(
-      row.id,
-      ownershipGeneration(row),
-      intent.tool.slug,
-      intent.projectId,
-      root,
-    )
-  ) {
-    return null
-  }
-  return getWidget(row.id) ?? null
-}
-
-function markManagedGateDispatched(row: WidgetRow): WidgetRow | null {
-  if (row.launchState !== 'gated' || !/^[0-9a-f]{32}$/.test(row.launchNonce ?? '')) return null
-  if (!isPaneExitBridgeReady(row)) {
-    console.error(
-      `[aico:lifecycle] refusing gate dispatch for ${row.sessionId}: ` +
-        'detached pane-exit reconciliation is unavailable',
-    )
-    return null
-  }
-  if (
-    !compareAndSetWidgetOwnership(row.id, ownershipGeneration(row), {
-      ...ownershipGeneration(row),
-      launchState: 'dispatched',
-    })
-  ) {
-    return null
-  }
-  return getWidget(row.id) ?? null
-}
-
-function isPaneExitBridgeReady(row: WidgetRow): boolean {
-  if (
-    quitting ||
-    !paneExitFsWatcher ||
-    !row.tmuxServerId ||
-    !paneExitEventReady.has(row.tmuxServerId)
-  ) {
-    return false
-  }
-  const server = getTmuxServer(row.tmuxServerId)
-  if (!server || server.kind !== 'managed' || server.phase !== 'active') return false
-  try {
-    const installed = execFileSync(TMUX_BIN, showPaneExitedHookTargetArgs(server.socketPath), {
-      encoding: 'utf8',
-      env: terminalClientEnv(),
-      timeout: TMUX_QUERY_TIMEOUT_MS,
-    }).trim()
-    if (installed === paneExitedHookCommand(server.id)) return true
-  } catch (error) {
-    console.error(
-      `[aico:lifecycle] could not verify pane-exit hook for server=${server.id}:`,
-      error,
-    )
-  }
-  paneExitEventReady.delete(server.id)
-  console.error(
-    `[aico:lifecycle] pane-exit hook changed for server=${server.id}; new launches are blocked`,
-  )
-  return false
-}
-
-/** Persist the exact pane scope only after successful gated-pane creation. The
- * caller supplies its pre-launch ownership snapshot so a stale completion can
- * never overwrite a newer cleanup generation. */
-async function recordManagedPane(
-  widgetId: string,
-  expected: WidgetOwnershipGeneration,
-): Promise<ManagedPaneProcess | null> {
-  const row = getWidget(widgetId)
-  if (!row) return null
-  const pane = await waitForCurrentPaneScope(widgetId)
-  const scopeUnit = pane?.scopeUnit ?? null
-  const identity = scopeUnit ? await scopeIdentity(scopeUnit) : null
-  const launchIntent = pane ? managedGateLaunchIntent(pane.pid) : null
-  const uid = process.getuid?.() ?? -1
-  const owned = Boolean(
-    pane &&
-      scopeUnit &&
-      identity?.activeState === 'active' &&
-      isOwnedPaneControlGroup(scopeUnit, identity.controlGroup, uid) &&
-      isSystemdInvocationId(identity.invocationId) &&
-      processInControlGroup(pane.pid, identity.controlGroup) &&
-      managedPaneMarkersMatch(row, pane.pid) &&
-      launchIntent,
-  )
-  if (!owned || !pane || !scopeUnit || !identity || !launchIntent) return null
-  const launchNonce = randomBytes(16).toString('hex')
-  const promoted = compareAndSetWidgetOwnership(widgetId, expected, {
-    ...expected,
-    scopeUnit,
-    scopeInvocationId: identity.invocationId,
-    lifecycleVersion: MANAGED_LIFECYCLE_VERSION,
-    tmuxSessionId: pane.tmuxSessionId,
-    paneId: pane.paneId,
-    launchState: 'gated',
-    launchNonce,
-  })
-  if (!promoted) {
-    console.error(`[aico:lifecycle] refusing stale ownership promotion for ${widgetId}`)
-    return null
-  }
-  console.log(
-    `[aico:lifecycle] session=${row.sessionId} widget=${widgetId} ` +
-      `project=${launchIntent.projectId ?? 'unbound'} tool=${launchIntent.tool.slug} ` +
-      `tmux_session=${pane.tmuxSessionId} pane=${pane.paneId} ` +
-      `scope=${scopeUnit} invocation=${identity.invocationId} ` +
-      `lifecycle=${MANAGED_LIFECYCLE_VERSION}`,
-  )
-  logWidgetEvent(widgetId, 'lifecycle_scope_owned', {
-    session_id: row.sessionId,
-    project_id: launchIntent.projectId,
-    agent_slug: launchIntent.tool.slug,
-    tmux_session_id: pane.tmuxSessionId,
-    pane_id: pane.paneId,
-    scope_unit: scopeUnit,
-    scope_invocation_id: identity.invocationId,
-    lifecycle_version: MANAGED_LIFECYCLE_VERSION,
-    launch_nonce: launchNonce,
-  })
-  return pane
-}
-
-async function verifiedCurrentManagedPane(row: WidgetRow): Promise<ManagedPaneProcess | null> {
-  if (
-    row.lifecycleVersion < MANAGED_LIFECYCLE_VERSION ||
-    !row.scopeUnit ||
-    !row.scopeInvocationId ||
-    !row.tmuxSessionId ||
-    !row.paneId
-  ) {
-    return null
-  }
-  const pane = currentPaneProcess(row.id)
-  if (
-    !pane ||
-    pane.scopeUnit !== row.scopeUnit ||
-    pane.tmuxSessionId !== row.tmuxSessionId ||
-    pane.paneId !== row.paneId ||
-    !managedPaneMarkersMatch(row, pane.pid)
-  ) {
-    return null
-  }
-  const identity = await scopeIdentity(row.scopeUnit)
-  const uid = process.getuid?.() ?? -1
-  if (
-    !identity ||
-    identity.activeState !== 'active' ||
-    identity.invocationId !== row.scopeInvocationId ||
-    !isOwnedPaneControlGroup(row.scopeUnit, identity.controlGroup, uid) ||
-    !processInControlGroup(pane.pid, identity.controlGroup)
-  ) {
-    return null
-  }
-  return pane
-}
-
-/** Drain only a former scope after proving the catalog's current pane/scope is
- * exact and distinct. An identical current/pending tuple is cleared only when
- * the pre-respawn workload is still active. A gate in that tuple could instead
- * be a same-cgroup respawn with surviving descendants, so it fails closed. */
-async function reconcileSupersededPendingScope(row: WidgetRow): Promise<boolean> {
-  if (!row.pendingScopeUnit) return true
-  const current = getWidget(row.id)
-  if (!current?.pendingScopeUnit) return true
-  const live = await verifiedCurrentManagedPane(current)
-  if (!live || !current.scopeUnit || !current.scopeInvocationId) return false
-
-  if (current.pendingScopeUnit === current.scopeUnit) {
-    if (current.pendingScopeInvocationId !== current.scopeInvocationId) return false
-    const identity = await scopeIdentity(current.scopeUnit)
-    if (!identity || !mayClearMatchingPendingScope(managedGateState(live, identity.controlGroup))) {
-      return false
-    }
-    return clearWidgetPendingScope(
-      current.id,
-      current.pendingScopeUnit,
-      current.pendingScopeInvocationId,
-    )
-  }
-
-  const clean = await stopOwnedPaneScope(
-    current.pendingScopeUnit,
-    current.pendingScopeInvocationId,
-    `superseded generation ${current.sessionId}`,
-  )
-  return Boolean(
-    clean &&
-      clearWidgetPendingScope(
-        current.id,
-        current.pendingScopeUnit,
-        current.pendingScopeInvocationId,
-      ),
-  )
-}
-
-function managedGateState(pane: ManagedPaneProcess, controlGroup: string): ManagedGateState {
-  try {
-    const isGate = isExactLaunchGateProcess(pane.pid)
-    if (isGate === null) return 'ambiguous'
-    if (!isGate) return 'active-workload'
-    const processIds = cgroupProcessIds(controlGroup)
-    return processIds?.length === 1 && processIds[0] === pane.pid ? 'inert' : 'ambiguous'
-  } catch {
-    return 'ambiguous'
-  }
-}
-
-/** `deferred`: host admission refused the agent for now; the pane stays at its
- * inert gate and a later open retries. Not an ownership problem. */
-type ManagedPaneRecovery = 'recovered' | 'legacy' | 'blocked' | 'blocked-replay' | 'deferred'
-
-/** Recover a crash between gated pane creation, DB promotion, and the one-time
- * launcher send. Exact AICO markers distinguish a managed gate from historical
- * user work; cgroup singleton state prevents replaying a launcher that may have
- * already run. */
-async function recoverInterruptedManagedPane(
-  row: WidgetRow,
-  options: { dispatchGate?: boolean } = {},
-): Promise<ManagedPaneRecovery> {
-  const observed = currentPaneProcess(row.id)
-  if (!observed) return row.lifecycleVersion === 0 ? 'legacy' : 'blocked'
-  if (!managedPaneMarkersMatch(row, observed.pid)) {
-    return row.lifecycleVersion === 0 ? 'legacy' : 'blocked'
-  }
-
-  let current = row
-  let pane = observed
-  if (
-    current.lifecycleVersion < MANAGED_LIFECYCLE_VERSION ||
-    current.scopeUnit !== pane.scopeUnit ||
-    current.tmuxSessionId !== pane.tmuxSessionId ||
-    current.paneId !== pane.paneId
-  ) {
-    const promoted = await recordManagedPane(row.id, ownershipGeneration(current))
-    if (!promoted) return 'blocked'
-    pane = promoted
-    const latest = getWidget(row.id)
-    if (!latest) return 'blocked'
-    current = latest
-  }
-
-  let verified = await verifiedCurrentManagedPane(current)
-  if (!verified || !current.scopeUnit) return 'blocked'
-  let identity = await scopeIdentity(current.scopeUnit)
-  if (!identity) return 'blocked'
-
-  let gateState = managedGateState(verified, identity.controlGroup)
-  let decision = decideManagedGateRecovery({
-    gateState,
-    launchState: current.launchState,
-    pendingMatchesCurrent: Boolean(
-      current.pendingScopeUnit &&
-        current.pendingScopeUnit === current.scopeUnit &&
-        current.pendingScopeInvocationId === current.scopeInvocationId,
-    ),
-    dispatchGate: options.dispatchGate !== false,
-  })
-  if (decision === 'blocked' || decision === 'blocked-replay') {
-    if (decision === 'blocked-replay' && options.dispatchGate !== false) {
-      console.error(
-        `[aico:lifecycle] preserving non-replayable gate for ${current.sessionId}; ` +
-          'the prior launcher outcome or cgroup generation is unknowable',
-      )
-    }
-    return decision
-  }
-  if (decision === 'dispatch') {
-    // A distinct former generation must be drained before advancing the new
-    // gate, otherwise restart recovery could briefly run two workloads.
-    if (current.pendingScopeUnit) {
-      if (!(await reconcileSupersededPendingScope(current))) return 'blocked'
-      const latest = getWidget(current.id)
-      if (!latest) return 'blocked'
-      current = latest
-      const reverified = await verifiedCurrentManagedPane(current)
-      if (!reverified || !current.scopeUnit) return 'blocked'
-      const reverifiedIdentity = await scopeIdentity(current.scopeUnit)
-      if (!reverifiedIdentity || reverified.pid !== verified.pid) return 'blocked'
-      verified = reverified
-      identity = reverifiedIdentity
-      gateState = managedGateState(verified, identity.controlGroup)
-      decision = decideManagedGateRecovery({
-        gateState,
-        launchState: current.launchState,
-        pendingMatchesCurrent: false,
-        dispatchGate: options.dispatchGate !== false,
-      })
-      if (decision !== 'dispatch') return decision
-    }
-    // Admission precedes dispatch only; a recovery that reattaches never reaches here.
-    let admission: AdmissionTicket | undefined
-    if ((getTui(current.tool ?? 'shell')?.slug ?? 'shell') !== 'shell') {
-      try {
-        admission = await reserveAgentLaunch({ widgetId: current.id, kind: 'recovery' })
-      } catch {
-        return 'deferred'
+function connectTether(): void {
+  stopEvents = followEvents(tether, {
+    onConnected: () => {
+      const reconnected = !tetherConnected
+      tetherConnected = true
+      if (reconnected) {
+        console.log(`[aico:tether] connected at ${tether.socketPath}`)
+        void checkTetherVersion()
+        void refreshTools().catch(() => {})
+        void projects.refresh()
+        resumeAwaitingAttaches()
       }
-    }
-    try {
-      const intentRow = persistManagedGateLaunchIntent(current, verified.pid)
-      if (!intentRow) return 'blocked'
-      const dispatchedRow = markManagedGateDispatched(intentRow)
-      if (!dispatchedRow) return 'blocked'
-      current = dispatchedRow
-      const tool = getTui(current.tool ?? 'shell')
-      const line = tool ? initialLaunchLine(current.id, tool) : null
-      // Re-observe immediately before the one-time transition out of the gate.
-      const immediatelyCurrent = await verifiedCurrentManagedPane(current)
-      if (
-        !immediatelyCurrent ||
-        immediatelyCurrent.pid !== verified.pid ||
-        managedGateState(immediatelyCurrent, identity.controlGroup) !== 'inert' ||
-        !isPaneExitBridgeReady(current)
-      ) {
-        return 'blocked'
-      }
-      execFileSync(
-        TMUX_BIN,
-        runInPaneTargetArgs(tmuxPaneTargetForWidget(row.id), paneCommand(line)),
-        {
-          env: terminalClientEnv(),
-          timeout: TMUX_QUERY_TIMEOUT_MS,
-        },
-      )
-      admission?.commit(current.scopeUnit)
-      console.log(`[aico:lifecycle] resumed verified launch gate for session=${current.sessionId}`)
-      if (tool && line) reportContext(row.id, tool)
-    } finally {
-      admission?.release()
-    }
-  }
-  if (decision === 'recovered' && current.pendingScopeUnit) {
-    // Reattach is a concrete recovery trigger for a former generation whose
-    // post-replacement cleanup was interrupted. Preserve attachment even if
-    // cleanup remains unprovable, but do not leave the old tree unnoticed.
-    if (!(await reconcileSupersededPendingScope(current))) {
-      console.warn(
-        `[aico:lifecycle] attachment preserved with unresolved former scope ${current.pendingScopeUnit}`,
-      )
-    }
-  }
-  return 'recovered'
-}
-
-const SCOPE_RESOURCE_PROPERTIES = [
-  'ActiveState',
-  'ActiveEnterTimestampMonotonic',
-  'ControlGroup',
-  'CPUUsageNSec',
-  'MemoryCurrent',
-  'MemoryPeak',
-  'MemorySwapCurrent',
-  'MemorySwapPeak',
-  'TasksCurrent',
-] as const
-
-async function accountedScopeResources(
-  scopeUnit: string,
-): Promise<(ReturnType<typeof parseScopeResources> & { processCount: number | null }) | null> {
-  try {
-    const { stdout } = await execFileAsync(
-      SYSTEMCTL_BIN,
-      [
-        '--user',
-        'show',
-        scopeUnit,
-        '--no-pager',
-        ...SCOPE_RESOURCE_PROPERTIES.map((property) => `--property=${property}`),
-      ],
-      { timeout: SYSTEMD_QUERY_TIMEOUT_MS },
-    )
-    const resources = parseScopeResources(stdout, uptime())
-    const processIds = resources.controlGroup ? cgroupProcessIds(resources.controlGroup) : null
-    return { ...resources, processCount: processIds?.length ?? null }
-  } catch {
-    return null
-  }
-}
-
-async function sessionDiagnostics(widgetId: string): Promise<Record<string, unknown>> {
-  const row = getWidget(widgetId)
-  if (!row) return { capturedAt: new Date().toISOString(), error: 'widget not found' }
-  retryUnresolvedPaneExitReconciliation(row.tmuxServerId)
-  const target = tmuxTargetForWidget(widgetId)
-  let sessionState: InternalSessionState = 'unknown'
-  if (row.externalTmuxSession) {
-    sessionState = await execFileAsync(TMUX_BIN, hasTargetArgs(target), {
-      timeout: TMUX_QUERY_TIMEOUT_MS,
-      env: terminalClientEnv(),
-    })
-      .then(() => 'present' as const)
-      .catch(() => 'unknown' as const)
-  } else {
-    sessionState = await internalSessionState(widgetId)
-  }
-  const exists = sessionState === 'present'
-  let pane: { pid: number | null; command: string; cwd: string; paneCount: number } = {
-    pid: null,
-    command: '',
-    cwd: '',
-    paneCount: 0,
-  }
-  if (exists) {
-    try {
-      const { stdout } = await execFileAsync(TMUX_BIN, listSessionPaneDetailsTargetArgs(target), {
-        env: terminalClientEnv(),
-        timeout: TMUX_QUERY_TIMEOUT_MS,
-      })
-      const rows = stdout.split('\n').filter(Boolean)
-      const [_paneId, pid, command, cwd] = rows[0]?.split('\t') ?? []
-      pane = {
-        pid: Number(pid) || null,
-        command: command ?? '',
-        cwd: cwd ?? '',
-        paneCount: rows.length,
-      }
-    } catch {
-      // The session can disappear between the existence check and inspection.
-    }
-  }
-
-  const resources = isOwnedPaneScope(row.scopeUnit)
-    ? await accountedScopeResources(row.scopeUnit)
-    : null
-  const pendingResources = isOwnedPaneScope(row.pendingScopeUnit)
-    ? await accountedScopeResources(row.pendingScopeUnit)
-    : null
-
-  const warnings: string[] = []
-  if (!durableUserManager) {
-    warnings.push(
-      'User linger is disabled or unverified; new durable sessions are blocked because logout could destroy them.',
-    )
-  }
-  if (sessionState === 'unknown') {
-    warnings.push('tmux state is unknown; Aico will preserve the workload and refuse cleanup.')
-  }
-  const server = row.tmuxServerId ? getTmuxServer(row.tmuxServerId) : undefined
-  const serverRuntimeState = server
-    ? (tmuxServerRuntimeStates.get(server.id) ?? (server.phase === 'dead' ? 'dead' : 'ambiguous'))
-    : null
-  const serverResources = server ? await accountedScopeResources(server.scopeUnit) : null
-  if (serverRuntimeState === 'live-unreachable') {
-    warnings.push(
-      'The exact tmux server process is alive but its socket is unreachable; no replacement or cleanup is allowed.',
-    )
-  } else if (serverRuntimeState === 'socket-collision') {
-    warnings.push(
-      'The persisted tmux socket answered as a different server; all mutations are blocked.',
-    )
-  } else if (serverRuntimeState === 'ambiguous' && server) {
-    warnings.push('The tmux server generation identity is ambiguous; all mutations are blocked.')
-  }
-  if (
-    server?.kind === 'managed' &&
-    server.phase === 'active' &&
-    serverRuntimeState === 'reachable' &&
-    !paneExitEventReady.has(server.id)
-  ) {
-    warnings.push(
-      'Detached pane-exit monitoring is unavailable for this server; restart Aico before leaving work unattended.',
-    )
-  }
-  if (!row.externalTmuxSession && row.lifecycleVersion < MANAGED_LIFECYCLE_VERSION) {
-    warnings.push(
-      'Legacy containment is preserved read-only. Create a new managed widget and move work deliberately; retirement stays blocked because historical descendants are unattributable.',
-    )
-  } else if (!row.externalTmuxSession && !row.scopeUnit) {
-    warnings.push('Managed session has no narrow pane scope; whole-tree cleanup is unavailable.')
-  }
-  if (row.pendingScopeUnit) {
-    warnings.push(`Former scope ${row.pendingScopeUnit} is still pending verified cleanup.`)
-  }
-  if (row.launchState === 'dispatched' && pane.pid !== null && isExactLaunchGateProcess(pane.pid)) {
-    warnings.push(
-      'A launch was dispatched but the pane still resembles its gate; Aico will not auto-replay it. Inspect before retrying manually.',
-    )
-  }
-  if (pane.paneCount > 1) {
-    warnings.push(
-      `This managed session has ${pane.paneCount} panes; destructive lifecycle actions are blocked.`,
-    )
-  }
-  if (!exists && resources?.activeState === 'active') {
-    warnings.push(
-      'Owned scope is active without its tmux session; startup reconciliation is pending.',
-    )
-  }
-  if (resources?.swapCurrent && resources.swapCurrent > 0) {
-    warnings.push(
-      'This session is consuming swap; inspect its processes before host pressure grows.',
-    )
-  }
-  const averageCores =
-    resources?.cpuUsageNSec != null && resources.ageSeconds && resources.ageSeconds >= 300
-      ? resources.cpuUsageNSec / 1_000_000_000 / resources.ageSeconds
-      : null
-  if (averageCores !== null && averageCores >= 0.9) {
-    warnings.push('Lifetime CPU use averages at least 90% of one core; check for a stuck workload.')
-  }
-
-  return {
-    capturedAt: new Date().toISOString(),
-    ownership: {
-      owner: row.externalTmuxSession ? 'external' : 'aico',
-      workloadClass: row.externalTmuxSession ? 'external-durable-session' : 'durable-session',
-      widgetId: row.id,
-      sessionId: row.sessionId,
-      agentSlug: row.tool,
-      agentSessionId: null,
-      projectId: row.projectId,
-      projectRoot: row.projectRoot,
-      lifecycleVersion: row.lifecycleVersion,
-      scopeUnit: row.scopeUnit,
-      scopeInvocationId: row.scopeInvocationId,
-      pendingScopeUnit: row.pendingScopeUnit,
-      pendingScopeInvocationId: row.pendingScopeInvocationId,
-      tmuxAllocationState: row.tmuxAllocationState,
-      tmuxServerId: row.tmuxServerId,
-      tmuxSessionId: row.tmuxSessionId,
-      paneId: row.paneId,
-      launchState: row.launchState,
-      launchNonce: row.launchNonce,
     },
-    tmux: {
-      socket: target.socket,
-      session: target.session,
-      state: sessionState,
-      exists,
-      server: server
-        ? {
-            id: server.id,
-            kind: server.kind,
-            phase: server.phase,
-            runtimeState: serverRuntimeState,
-            pid: server.serverPid,
-            scopeUnit: server.scopeUnit,
-            invocationId: server.invocationId,
-          }
-        : null,
-      ...pane,
-    },
-    resources: resources ? { ...resources, averageCores } : null,
-    pendingResources,
-    serverResources,
-    warnings,
-  }
-}
-
-// The directory a widget's pane should spawn in. A widget bound to a workspace
-// uses the root cached on its row — a plain column read, resolved once at
-// switch time, so no `st` subprocess runs on the session-create/respawn path.
-// Personal Workspace is resolved locally and never falls through to the active
-// repo; unbound/legacy widgets still fall back to the global `st` active project,
-// then $HOME. A vanished project root falls through so a stale binding never
-// strands the pane.
-function cwdForWidget(widgetId: string): string {
-  const row = getWidget(widgetId)
-  if (row?.projectId === PERSONAL_WORKSPACE_ID) {
-    return projectRoot(PERSONAL_WORKSPACE_ID) ?? process.env.HOME ?? homedir()
-  }
-  const root = row?.projectRoot
-  if (root && isDir(root)) return root
-  return widgetCwd()
-}
-
-// Detect the TUI actually running in a widget's pane from its live process tree.
-// Async (off the main thread): reconcileWidgetTool runs this on every focus, and
-// reading the full `ps` table synchronously there would stall the UI thread on
-// each window switch. Best-effort — any failure resolves to undefined.
-async function liveTuiForWidget(widgetId: string): Promise<ReturnType<typeof getTui>> {
-  try {
-    const { stdout: pidOut } = await execFileAsync(
-      TMUX_BIN,
-      panePidTargetArgs(tmuxPaneTargetForWidget(widgetId)),
-      { env: terminalClientEnv(), timeout: TMUX_QUERY_TIMEOUT_MS },
-    )
-    const rootPid = Number(pidOut.trim())
-    if (!Number.isFinite(rootPid) || rootPid <= 0) return undefined
-    const { stdout: psOut } = await execFileAsync(PS_BIN, ['-eo', 'pid=,ppid=,comm='], {
-      timeout: TMUX_QUERY_TIMEOUT_MS,
-    })
-    const names = processTreeNames(parseProcessTable(psOut), rootPid)
-    return detectTuiFromProcessNames(listTuis(), names)
-  } catch {
-    return undefined
-  }
-}
-
-// If the user exits one TUI manually and starts another inside the shell, tmux
-// keeps the same widget session but Aico's stored `tool` slug can go stale. Use
-// the live process tree to repair the titlebar/tray metadata on attach/focus.
-// Resolves true when the stored slug changed, so callers can refresh the title.
-async function reconcileWidgetTool(widgetId: string): Promise<boolean> {
-  const row = getWidget(widgetId)
-  if (!row) return false
-  const live = await liveTuiForWidget(widgetId)
-  if (!live || live.slug === row.tool) return false
-  setWidgetTool(widgetId, live.slug)
-  console.log(`[aico] reconciled ${widgetId} TUI metadata: ${row.tool} -> ${live.slug}`)
-  return true
-}
-
-// Ensure the widget's tmux session exists, launching its TUI exactly once on
-// first create. Reattaching a window finds the session already running and
-// sends nothing — so a live agent is never relaunched. cwd is the widget's
-// project root (per-widget binding, else the global `st` active project),
-// captured when the session is first created; reattaching keeps wherever the
-// agent already is.
-async function ensureOwnedInternalSession(widgetId: string, size: PtySize): Promise<boolean> {
-  const rowBeforeCreate = getWidget(widgetId)
-  if (!rowBeforeCreate) return false
-  retryUnresolvedPaneExitReconciliation(rowBeforeCreate.tmuxServerId)
-  const state = await internalSessionState(widgetId)
-  if (state === 'present') {
-    const recovery = await recoverInterruptedManagedPane(rowBeforeCreate)
-    if (recovery === 'deferred') {
-      console.warn(
-        `[aico:lifecycle] ${widgetId} agent launch deferred by host admission; attaching its inert gate`,
-      )
-    } else if (recovery === 'blocked' || recovery === 'blocked-replay') {
-      console.warn(
-        `[aico:lifecycle] attaching ${widgetId} read/write without lifecycle authority: ` +
-          (recovery === 'blocked-replay'
-            ? 'an interrupted gate is preserved without replay; explicitly replace it to continue'
-            : 'managed pane identity is ambiguous; replace/retire/replay remain blocked'),
-      )
-      const latest = getWidget(widgetId)
-      if (latest?.pendingScopeUnit && !(await reconcileSupersededPendingScope(latest))) {
-        console.warn(`[aico:lifecycle] pending cleanup remains blocked for ${latest.sessionId}`)
-      }
-    }
-    return true // legacy reattach or exact managed recovery; never replay live work
-  }
-  if (state === 'unknown') {
-    console.error(`[aico:lifecycle] tmux state unknown for ${widgetId}; refusing duplicate launch`)
-    return false
-  }
-  if (!isNeverAllocatedWidget(rowBeforeCreate)) {
-    console.error(
-      `[aico:lifecycle] ${rowBeforeCreate.sessionId} was previously allocated but its tmux session is absent; refusing implicit relaunch on Open`,
-    )
-    return false
-  }
-  if (!rootPromptReady(widgetId)) return false
-  if (!durableUserManager) {
-    console.error(
-      '[aico:lifecycle] user linger is not enabled; refusing a session that would die on logout',
-    )
-    return false
-  }
-  const cwd = cwdForWidget(widgetId)
-  // Lifecycle ordering is deliberate: create a bare pane first, let tmux move it
-  // into its dedicated cgroup, then launch the TUI through that contained shell.
-  // Embedding the TUI in new-session lets it fork before tmux's asynchronous
-  // cgroup move and was the path that put every tool in app-aico-9189.scope.
-  const tool = getTui(rowBeforeCreate.tool ?? 'shell')
-  const line = tool ? initialLaunchLine(widgetId, tool) : null
-  if (hasPersistedScopeCleanupEvidence(rowBeforeCreate)) {
-    console.error(
-      `[aico:lifecycle] refusing to recreate absent ${widgetId}: persisted scope cleanup is unresolved`,
-    )
-    return false
-  }
-  // Admission precedes tmux allocation, so a deferred agent leaves nothing behind.
-  let admission: AdmissionTicket | undefined
-  if ((tool?.slug ?? 'shell') !== 'shell') {
-    try {
-      admission = await reserveAgentLaunch({ widgetId, kind: 'launch' })
-    } catch {
-      return false
-    }
-  }
-  try {
-    await createInternalSession(
-      widgetId,
-      size,
-      cwd,
-      managedEnvironment(widgetId, tool?.slug ?? 'shell'),
-    )
-    const allocatedRow = getWidget(widgetId)
-    if (!allocatedRow?.tmuxServerId || allocatedRow.tmuxAllocationState !== 'bound') {
-      throw new Error('tmux server generation was not durably bound before pane promotion')
-    }
-    const pane = await recordManagedPane(widgetId, ownershipGeneration(allocatedRow))
-    if (!pane) {
-      // Preserve the inert gate session. A timeout or crash can occur after
-      // tmux has created a valid scope; killing before its identity is durable
-      // would erase the only route to its descendants. Startup recovery can
-      // promote a gate carrying this widget's exact ownership markers.
-      throw new Error(
-        'tmux did not place the new pane in a narrow systemd scope; workload launch refused',
-      )
-    }
-    const gateRow = getWidget(widgetId)
-    const gateIdentity = pane.scopeUnit ? await scopeIdentity(pane.scopeUnit) : null
-    const verifiedGate = gateRow ? await verifiedCurrentManagedPane(gateRow) : null
-    if (
-      !gateRow ||
-      !gateIdentity ||
-      !verifiedGate ||
-      verifiedGate.pid !== pane.pid ||
-      managedGateState(verifiedGate, gateIdentity.controlGroup) !== 'inert'
-    ) {
-      throw new Error('new session gate changed before launch')
-    }
-    const intentRow = persistManagedGateLaunchIntent(gateRow, pane.pid)
-    const dispatchedRow = intentRow ? markManagedGateDispatched(intentRow) : null
-    if (!dispatchedRow) throw new Error('new session gate dispatch could not be persisted')
-    const immediatelyCurrent = await verifiedCurrentManagedPane(dispatchedRow)
-    if (
-      !immediatelyCurrent ||
-      immediatelyCurrent.pid !== pane.pid ||
-      managedGateState(immediatelyCurrent, gateIdentity.controlGroup) !== 'inert' ||
-      !isPaneExitBridgeReady(dispatchedRow)
-    ) {
-      throw new Error('new session gate changed after dispatch persistence')
-    }
-    execFileSync(
-      TMUX_BIN,
-      runInPaneTargetArgs(tmuxPaneTargetForWidget(widgetId), paneCommand(line)),
-      {
-        env: terminalClientEnv(),
-        timeout: TMUX_QUERY_TIMEOUT_MS,
-      },
-    )
-    admission?.commit(pane.scopeUnit)
-  } catch (e) {
-    // No session to attach to; surface why rather than letting startPty's attach
-    // fail into a blank terminal with no explanation.
-    console.error(`[aico] failed to create tmux session for ${widgetId}:`, e)
-    return false
-  } finally {
-    admission?.release()
-  }
-  // Best-effort observability only: context failure is visible but never
-  // prevents the native TUI from launching.
-  if (tool && line) reportContext(widgetId, tool)
-  return true
-}
-
-async function ensureSession(widgetId: string, size: PtySize): Promise<boolean> {
-  if (isExternalTmuxWidget(widgetId)) {
-    try {
-      execFileSync(TMUX_BIN, hasTargetArgs(tmuxTargetForWidget(widgetId)), {
-        env: terminalClientEnv(),
-        timeout: TMUX_QUERY_TIMEOUT_MS,
-        stdio: 'ignore',
-      })
-      return true
-    } catch (e) {
-      console.error(`[aico] external tmux session for ${widgetId} is unavailable:`, e)
-      return false
-    }
-  }
-
-  // Presence checks can recover and launch an interrupted gate, so even an
-  // apparent reattach is a lifecycle mutation. Hold the same per-widget token
-  // used by replace/retire for the entire decision and recovery sequence.
-  const pendingSelection = selectionDeliveries.get(widgetId)
-  if (pendingSelection) await pendingSelection
-  const lifecycleOwner = await lifecycleOwners.acquireWhenAvailable(widgetId)
-  const knownServerId = getWidget(widgetId)?.tmuxServerId
-  try {
-    return await ensureOwnedInternalSession(widgetId, size)
-  } finally {
-    // Reconciliation may deliberately clear a dead/historical server binding.
-    // Retain the acquired generation so a pane-exit event deferred behind this
-    // owner is queued after release rather than stranded by the successful CAS.
-    releaseLifecycleOwner(widgetId, lifecycleOwner, knownServerId)
-  }
-}
-
-function ensureSessionSerialized(widgetId: string, size: PtySize): Promise<boolean> {
-  const current = sessionStartPromises.get(widgetId)
-  if (current) return current
-  const started = ensureSession(widgetId, size).finally(() => {
-    if (sessionStartPromises.get(widgetId) === started) sessionStartPromises.delete(widgetId)
-  })
-  sessionStartPromises.set(widgetId, started)
-  return started
-}
-
-// Surface the latest best-effort TUI context state to its widget. Missing state
-// is visible degradation, never authority to block the native model launch.
-function publishContextStatus(
-  widgetId: string,
-  tool: NonNullable<ReturnType<typeof getTui>>,
-  status: Awaited<ReturnType<typeof ensureContext>>,
-): void {
-  console.log(`[aico] ${tool.slug} context ${status.state}: ${status.detail}`)
-  windowForWidget(widgetId)?.webContents.send('context:mandate', {
-    slug: tool.slug,
-    state: status.state,
-    detail: status.detail,
-    applicable: tool.command.length > 0,
-  })
-}
-
-// Independently probe a TUI's source chain and live delivery availability, then
-// surface the result to its widget: a persistent titlebar status badge (green
-// when available, red when unavailable or unconfirmed) plus a warning toast.
-// This does not claim what an already-running native session received. The
-// native model always continues; degraded supplemental-context availability
-// must be visible rather than hidden in a packaged-app console. Always emits —
-// the badge reflects the latest probe state. It never gates launch.
-function reportContext(widgetId: string, tool: NonNullable<ReturnType<typeof getTui>>): void {
-  ensureContext(tool, {
-    cwd: cwdForWidget(widgetId),
-    session: getWidget(widgetId)?.sessionId,
-  })
-    .then((status) => publishContextStatus(widgetId, tool, status))
-    .catch((error) =>
-      publishContextStatus(widgetId, tool, {
-        state: 'missing',
-        detail: `post-launch context verification failed: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      }),
-    )
-}
-
-// Respawn a live widget's pane (kills the current foreground program, fresh
-// shell in the widget's current cwd) and relaunch `tool` in it. One pane = one
-// foreground program, so both "Replace with <TUI>" and "Open workspace" go through
-// here — mirroring ensureSession's launch, but for an already-running widget.
-// The cwd is resolved now. Metadata changes are committed only after the new
-// contained pane and its TUI launch both succeed, so UI/catalog state never
-// claims a replacement that failed partway through.
-async function respawnAndRelaunch(
-  widgetId: string,
-  tool: ReturnType<typeof getTui>,
-  options: {
-    cwd?: string
-    projectId?: string | null
-    commitMetadata?: () => void
-  } = {},
-): Promise<void> {
-  if (isExternalTmuxWidget(widgetId)) {
-    console.warn(`[aico] refusing to respawn externally-owned tmux session ${widgetId}`)
-    return
-  }
-  // A bounded selection send owns the current pane until tmux completes. Wait
-  // before acquiring the replacement token so a user-requested replace is not
-  // lost while an insert is in flight.
-  const pendingSelection = selectionDeliveries.get(widgetId)
-  if (pendingSelection) await pendingSelection
-  const lifecycleOwner = lifecycleOwners.acquire(widgetId)
-  if (!lifecycleOwner) {
-    console.warn(`[aico:lifecycle] ${widgetId} already has a lifecycle operation in progress`)
-    return
-  }
-  try {
-    let previous = getWidget(widgetId)
-    if (!previous) return
-    const initialState = await internalSessionState(widgetId)
-    if (initialState !== 'present') {
-      console.error(
-        `[aico:lifecycle] replacement blocked: tmux session state is ${initialState}; ` +
-          'no persisted generation will be overwritten',
-      )
-      return
-    }
-
-    // An explicit replacement supersedes an interrupted gate; it must inspect
-    // that gate but never replay the previously requested launcher first.
-    const recovery = await recoverInterruptedManagedPane(previous, { dispatchGate: false })
-    previous = getWidget(widgetId)
-    if (!previous) return
-    // `deferred` cannot arise without dispatch; treat it as blocked regardless.
-    if (recovery === 'blocked' || recovery === 'deferred') {
-      if (previous.pendingScopeUnit) await reconcileSupersededPendingScope(previous)
-      console.error(
-        `[aico:lifecycle] replacement blocked: interrupted launch state for ${previous.sessionId} is ambiguous`,
-      )
-      return
-    }
-
-    let previousWasInertGate = false
-    if (recovery === 'blocked-replay') {
-      if (
-        previous.pendingScopeUnit === previous.scopeUnit &&
-        previous.pendingScopeInvocationId === previous.scopeInvocationId
-      ) {
-        console.error(
-          `[aico:lifecycle] replacement blocked: ${previous.sessionId} has an inert gate in an ` +
-            'unresolved same-scope respawn generation; create a new managed widget instead',
-        )
-        return
-      }
-      const exactGate = await verifiedCurrentManagedPane(previous)
-      const exactIdentity = previous.scopeUnit ? await scopeIdentity(previous.scopeUnit) : null
-      previousWasInertGate = Boolean(
-        exactGate &&
-          exactIdentity &&
-          managedGateState(exactGate, exactIdentity.controlGroup) === 'inert',
-      )
-      if (!previousWasInertGate) {
-        console.error(
-          `[aico:lifecycle] replacement blocked: interrupted gate for ${previous.sessionId} changed during verification`,
-        )
-        return
-      }
-    }
-
-    // A prior crash can leave the former generation pending. Drain it only
-    // after recovery proved which exact scope is current; never create a third tree.
-    if (previous.pendingScopeUnit) {
-      if (!(await reconcileSupersededPendingScope(previous))) {
-        console.error(
-          `[aico:lifecycle] replacement blocked by unresolved pending scope ${previous.pendingScopeUnit}`,
-        )
-        return
-      }
-      previous = getWidget(widgetId)
-      if (!previous) return
-    }
-
-    if (!(await verifiedCurrentManagedPane(previous))) {
-      console.error(
-        `[aico:lifecycle] replacement blocked: current pane ownership is not exact for ${previous.sessionId}`,
-      )
-      return
-    }
-    const previousScope = previous.scopeUnit
-    const previousScopeInvocationId = previous.scopeInvocationId
-    if (!previousScope || !previousScopeInvocationId) return
-
-    // Admission precedes the destructive respawn. The scope being replaced is
-    // excluded from the count, so a replacement never waits on itself.
-    let admission: AdmissionTicket | undefined
-    if ((tool?.slug ?? 'shell') !== 'shell') {
-      try {
-        admission = await reserveAgentLaunch({
-          widgetId,
-          kind: 'replacement',
-          replacingScope: previousScope,
-        })
-      } catch {
-        return
-      }
-    }
-
-    try {
-      if (
-        !setWidgetPendingScope(
-          widgetId,
-          ownershipGeneration(previous),
-          previousScope,
-          previousScopeInvocationId,
-        )
-      ) {
-        console.error(
-          `[aico:lifecycle] replacement blocked: ownership changed before pending scope persistence`,
-        )
-        return
-      }
-      const expected = getWidget(widgetId)
-      if (!expected?.pendingScopeUnit) return
-
-      const line = tool ? launchLine(tool) : null
-      let promoted: ManagedPaneProcess | null = null
-      let sameScopeReplacementProven = false
-      try {
-        // The target is the persisted pane id, not the mutable active pane. The
-        // replacement starts in the inert gate and cannot fork before promotion.
-        execFileSync(
-          TMUX_BIN,
-          respawnTargetArgs(
-            tmuxPaneTargetForWidget(widgetId),
-            options.cwd ?? cwdForWidget(widgetId),
-            managedEnvironment(widgetId, tool?.slug ?? 'shell', options.projectId),
-          ),
-          { env: terminalClientEnv(), timeout: TMUX_QUERY_TIMEOUT_MS },
-        )
-        promoted = await recordManagedPane(widgetId, ownershipGeneration(expected))
-        if (!promoted?.scopeUnit) {
-          throw new Error(
-            'replacement gate could not be promoted; it is preserved for startup recovery',
-          )
-        }
-        if (promoted.scopeUnit === previousScope && !previousWasInertGate) {
-          throw new Error(`tmux reused pane scope ${promoted.scopeUnit}; replacement remains gated`)
-        }
-
-        const promotedRow = getWidget(widgetId)
-        const promotedIdentity = promoted.scopeUnit ? await scopeIdentity(promoted.scopeUnit) : null
-        const verifiedGate = promotedRow ? await verifiedCurrentManagedPane(promotedRow) : null
-        if (
-          !promotedRow ||
-          !promotedIdentity ||
-          !verifiedGate ||
-          verifiedGate.pid !== promoted.pid ||
-          managedGateState(verifiedGate, promotedIdentity.controlGroup) !== 'inert'
-        ) {
-          throw new Error('replacement gate received input or descendants before launch')
-        }
-        sameScopeReplacementProven = Boolean(
-          promoted.scopeUnit === previousScope && previousWasInertGate,
-        )
-        const intentRow = persistManagedGateLaunchIntent(promotedRow, promoted.pid)
-        if (!intentRow) {
-          throw new Error('replacement gate launch intent could not be persisted before send')
-        }
-        const dispatchedRow = markManagedGateDispatched(intentRow)
-        if (!dispatchedRow) {
-          throw new Error('replacement gate dispatch generation changed before send')
-        }
-
-        const immediatelyCurrent = await verifiedCurrentManagedPane(dispatchedRow)
-        if (
-          !immediatelyCurrent ||
-          immediatelyCurrent.pid !== promoted.pid ||
-          managedGateState(immediatelyCurrent, promotedIdentity.controlGroup) !== 'inert' ||
-          !isPaneExitBridgeReady(dispatchedRow)
-        ) {
-          throw new Error('replacement gate changed after launch intent persistence')
-        }
-
-        execFileSync(
-          TMUX_BIN,
-          runInPaneTargetArgs(tmuxPaneTargetForWidget(widgetId), paneCommand(line)),
-          { env: terminalClientEnv(), timeout: TMUX_QUERY_TIMEOUT_MS },
-        )
-        admission?.commit(promoted?.scopeUnit ?? null)
-        options.commitMetadata?.()
-        if (tool && line) reportContext(widgetId, tool)
-      } catch (error) {
-        // Never kill an unrecorded gate: its markers + tmux identity are the
-        // recovery handle. The old exact scope remains pending until promotion.
-        console.error(`[aico] failed to respawn pane for ${widgetId}:`, error)
-      }
-
-      // Once the new exact scope is durable, the former scope is no longer the
-      // live pane and can be emptied even if the TUI send itself failed.
-      if (promoted?.scopeUnit && promoted.scopeUnit !== previousScope) {
-        const clean = await stopOwnedPaneScope(
-          previousScope,
-          previousScopeInvocationId,
-          `replace session ${previous.sessionId}`,
-        )
-        if (clean) clearWidgetPendingScope(widgetId, previousScope, previousScopeInvocationId)
-      } else if (promoted?.scopeUnit === previousScope && sameScopeReplacementProven) {
-        // The old generation was recursively proven to be a singleton gate, so
-        // tmux's same-scope reuse could not retain a detached descendant. Clear
-        // once the replacement gate is also proven singleton. Launch failure is
-        // retained in launchState, but must not make explicit repair impossible.
-        clearWidgetPendingScope(widgetId, previousScope, previousScopeInvocationId)
-      }
-    } finally {
-      admission?.release()
-    }
-  } finally {
-    releaseLifecycleOwner(widgetId, lifecycleOwner)
-  }
-}
-
-// Replace whatever runs in a live widget's pane with `slug`'s TUI ("Replace
-// with <TUI>"). The stored tool is updated so a later kill+recreate relaunches it.
-function loadTui(widgetId: string, slug: string): void {
-  const tool = getTui(slug)
-  if (!tool) return
-  void respawnAndRelaunch(widgetId, tool, {
-    commitMetadata: () => {
-      setWidgetTool(widgetId, slug)
-      pushTitles()
+    onDisconnected: (error) => {
+      if (tetherConnected) console.warn('[aico:tether] event stream lost:', error)
+      tetherConnected = false
       syncTray()
     },
+    onResync: requestSessionRefresh,
+    onEvent: onTetherEvent,
   })
+  stopGuiChannel = holdGuiChannel(tether, applyGuiCommand, (message, error) =>
+    error === undefined
+      ? console.log(`[aico:gui] ${message}`)
+      : console.warn(`[aico:gui] ${message}:`, error instanceof Error ? error.message : error),
+  )
 }
 
-// Move a live widget to another workspace ("Open workspace ▸"): resolve the
-// project/workspace root once, cache it on the row, then respawn the pane there
-// and relaunch the SAME tool it's already running. This does NOT touch the global
-// `st` pointer — other widgets and brand-new ones are unaffected.
-function switchProject(widgetId: string, projectId: string): void {
-  const root = projectRoot(projectId)
-  if (!root) console.warn(`[aico] workspace ${projectId} root unresolved; using default cwd`)
-  const cwd = root && isDir(root) ? root : widgetCwd()
-  void respawnAndRelaunch(widgetId, getTui(getWidget(widgetId)?.tool ?? 'shell'), {
-    cwd,
-    projectId,
-    commitMetadata: () => {
-      setWidgetProject(widgetId, projectId, root)
-      pushTitles()
-      syncTray()
-    },
-  })
+// ---------------------------------------------------------------------------
+// GUI channel: Tether forwards show/position/title for views to this GUI after
+// fencing the exact running generation under its lifecycle lock.
+
+async function applyGuiCommand(command: GuiCommand): Promise<GuiVerdict> {
+  if (quitting) return { applied: false, error: 'gui_unavailable' }
+  let descriptor = catalog.get(command.sessionId)
+  if (!descriptor || descriptor.generation !== command.generation) {
+    await refreshSessions().catch(() => {})
+    descriptor = catalog.get(command.sessionId)
+  }
+  if (!descriptor) return { applied: false, error: 'not_found' }
+  if (descriptor.generation !== command.generation)
+    return { applied: false, error: 'stale_generation' }
+  const id = command.sessionId
+  if (command.kind === 'show') {
+    focusOrReopen(id)
+  } else if (command.kind === 'position' && command.bounds) {
+    const win = windowForWidget(id)
+    if (win) {
+      win.setBounds(command.bounds)
+      persistBounds(win)
+    } else {
+      saveBounds(id, command.bounds, String(screen.getDisplayMatching(command.bounds).id))
+    }
+  } else if (command.kind === 'title' && command.label !== undefined) {
+    // Tether renames the session once this view applied the title.
+    catalog.upsert({ ...descriptor, name: command.label, label: command.label })
+    pushTitles()
+    syncTray()
+  } else {
+    return { applied: false, error: 'invalid_body' }
+  }
+  return { applied: true }
 }
 
-async function runInteractiveTmux(args: string[]): Promise<string> {
-  const { stdout } = await execFileAsync(TMUX_BIN, args, {
-    env: terminalClientEnv(),
+// ---------------------------------------------------------------------------
+// Terminal byte path: one `tmux attach` PTY per window.
+
+async function runTmux(
+  target: AttachTarget,
+  args: string[],
+  maxBuffer = 1024 * 1024,
+): Promise<string> {
+  const { stdout } = await execFileAsync(target.argv[0], args, {
+    env: attachEnvironment(process.env, target),
     timeout: TMUX_QUERY_TIMEOUT_MS,
+    maxBuffer,
   })
   return stdout
 }
 
-async function startPty(win: BrowserWindow, size: PtySize): Promise<void> {
-  const widgetId = widgetOf.get(win.id)
-  if (!widgetId) return
-  const generation = (ptyStartGenerations.get(win.id) ?? 0) + 1
-  ptyStartGenerations.set(win.id, generation)
-  const existing = ptys.get(win.id)
-  if (existing) {
-    existing.kill() // detaches the client; tmux session persists
-    ptys.delete(win.id)
+function createRequest(pending: { tool: string; projectId: string }, size: PtySize) {
+  if (pending.projectId === PERSONAL_WORKSPACE_ID) {
+    const root = ensurePersonalWorkspaceRoot()
+    return { tool: pending.tool, ...(root ? { projectRoot: root } : {}), size }
   }
-  agentAdmissionReasons.delete(widgetId)
-  const ready = await ensureSessionSerialized(widgetId, size)
-  const stillCurrent =
-    !win.isDestroyed() &&
-    widgetOf.get(win.id) === widgetId &&
-    ptyStartGenerations.get(win.id) === generation
-  if (!ready || !stillCurrent) {
-    if (!ready && stillCurrent) {
-      win.webContents.send(
-        'pty:data',
-        `\r\n\u001b[31m${
-          agentAdmissionReasons.get(widgetId) ??
-          'Aico safety stop: tmux ownership could not be verified. No agent was launched; copy diagnostics or inspect the lifecycle log.'
-        }\u001b[0m\r\n`,
-      )
-      syncTray()
+  return { tool: pending.tool, projectId: pending.projectId, size }
+}
+
+function bindWindow(win: BrowserWindow, descriptor: SessionDescriptor): void {
+  catalog.upsert(descriptor)
+  widgetOf.set(win.id, descriptor.id)
+  pendingCreates.delete(win.id)
+  ensureView(descriptor.id, true)
+  setOpen(descriptor.id, true)
+  persistBounds(win)
+}
+
+async function startPty(win: BrowserWindow, size: PtySize): Promise<void> {
+  const winId = win.id
+  const generation = (ptyStartGenerations.get(winId) ?? 0) + 1
+  ptyStartGenerations.set(winId, generation)
+  const stillCurrent = () => !win.isDestroyed() && ptyStartGenerations.get(winId) === generation
+  const existing = ptys.get(winId)
+  if (existing) {
+    existing.kill() // detaches the client; the tmux session persists
+    ptys.delete(winId)
+  }
+  awaitingTether.delete(winId)
+
+  let widgetId = widgetOf.get(winId)
+  if (!widgetId) {
+    const pending = pendingCreates.get(winId)
+    if (!pending) return
+    let created: SessionDescriptor
+    try {
+      created = await tether.createSession(createRequest(pending, size))
+    } catch (error) {
+      if (error instanceof TetherUnavailable) awaitingTether.set(winId, size)
+      if (stillCurrent()) writeNotice(win, describeFailure('Could not start the session', error))
+      return
     }
+    if (win.isDestroyed()) {
+      // The window closed during the create: the session keeps running and is
+      // reopenable from the tray, exactly like a closed view.
+      catalog.upsert(created)
+      ensureView(created.id, false)
+      syncTray()
+      return
+    }
+    bindWindow(win, created)
+    widgetId = created.id
+    if (created.status !== 'running' && created.failure) {
+      writeNotice(
+        win,
+        `Tether could not confirm the launch (${created.failure.reason ?? created.failure.code}).`,
+        33,
+      )
+    }
+    syncTray()
+  }
+  if (!stillCurrent()) return
+
+  let target: AttachTarget
+  try {
+    target = await tether.attach(widgetId)
+  } catch (error) {
+    if (error instanceof TetherUnavailable) awaitingTether.set(winId, size)
+    if (stillCurrent()) writeNotice(win, describeFailure('Could not attach', error))
+    syncTray()
     return
   }
-  // Non-blocking: repair stale TUI metadata from the live process tree, then
-  // refresh the titlebar if it changed. The attach below proceeds immediately.
-  void reconcileWidgetTool(widgetId).then((changed) => {
-    if (changed) pushTitles()
-  })
-  const target = tmuxTargetForWidget(widgetId)
-  const pty = spawn(TMUX_BIN, attachTargetArgs(target), {
+  if (!stillCurrent() || widgetOf.get(winId) !== widgetId) return
+  const id = widgetId
+  const pty = spawn(target.argv[0], target.argv.slice(1), {
     name: 'xterm-256color',
     cols: size.cols,
     rows: size.rows,
     cwd: process.env.HOME,
-    env: terminalClientEnv(),
+    env: attachEnvironment(process.env, target),
   })
-  if (ptyStartGenerations.get(win.id) !== generation || win.isDestroyed()) {
+  if (!stillCurrent()) {
     pty.kill()
     return
   }
-  const isCurrent = () =>
+  const isFocusedCurrent = () =>
     !quitting &&
     !win.isDestroyed() &&
     win.isFocused() &&
-    widgetOf.get(win.id) === widgetId &&
-    ptys.get(win.id) === pty &&
-    ptyStartGenerations.get(win.id) === generation &&
-    !lifecycleOwners.isHeld(widgetId)
-  const requestSize = coalesceTrailingAsync(async () => {
-    if (!isCurrent()) return
-    try {
-      await activateTmuxViewSize(target, pty.pid, pty.cols, pty.rows, runInteractiveTmux, isCurrent)
-    } catch (error) {
-      console.warn(`[aico] tmux view resize failed widget=${widgetId}:`, error)
+    widgetOf.get(winId) === id &&
+    ptys.get(winId) === pty &&
+    ptyStartGenerations.get(winId) === generation &&
+    !replacing.has(id)
+  // Desktop auto-resize: the focused window claims the shared tmux window size
+  // for its own attached client (Tether's active-client resize claim).
+  const claimSize = coalesceTrailingAsync(async () => {
+    for (let attempt = 0; attempt < 4 && isFocusedCurrent(); attempt += 1) {
+      const sessionGeneration = catalog.get(id)?.generation ?? target.generation
+      try {
+        const result = await tether.resizeClaim(id, sessionGeneration, pty.pid, pty.cols, pty.rows)
+        if (result.applied) return
+        if (result.reason === 'stale') await refreshSessions().catch(() => {})
+        else if (result.reason !== 'client_not_attached' && result.reason !== 'tmux_unavailable')
+          return
+      } catch (error) {
+        if (error instanceof TetherError && error.code === 'stale_generation') {
+          await refreshSessions().catch(() => {})
+          continue
+        }
+        if (!(error instanceof TetherUnavailable))
+          console.warn(`[aico] resize claim failed widget=${id}:`, error)
+        return
+      }
+      await new Promise((resolve) => setTimeout(resolve, 200))
     }
   })
-  tmuxViewSizes.set(pty, requestSize)
-  let activateAfterAttach = true
-  // A deferred agent launch leaves the pane at its idle gate. Anything written
-  // before the attach is painted over by tmux, so the reason follows the first
-  // frame instead.
-  let deferredNotice = agentAdmissionReasons.get(widgetId)
+  sizeClaims.set(pty, claimSize)
+  let claimAfterAttach = true
   pty.onData((data) => {
-    if (activateAfterAttach && isCurrent()) {
-      activateAfterAttach = false
-      void requestSize()
+    if (claimAfterAttach && isFocusedCurrent()) {
+      claimAfterAttach = false
+      void claimSize()
     }
-    if (deferredNotice) {
-      const notice = deferredNotice
-      deferredNotice = undefined
-      setTimeout(() => {
-        if (!win.isDestroyed() && ptys.get(win.id) === pty)
-          win.webContents.send('pty:data', `\r\n\u001b[33m${notice}\u001b[0m\r\n`)
-      }, 300)
-    }
-    if (!win.isDestroyed()) {
-      win.webContents.send('pty:data', data)
-    }
+    if (!win.isDestroyed()) win.webContents.send('pty:data', data)
   })
   pty.onExit(() => {
-    // Only clear the map if this is still the current pty: a prior pty we killed
-    // on re-attach can fire its exit after the replacement is stored, and an
-    // unconditional delete would drop the live entry (orphaning it).
-    if (ptys.get(win.id) === pty) {
-      ptys.delete(win.id)
-      if (!quitting) {
-        const row = getWidget(widgetId)
-        if (row) void reconcileManagedWidget(row)
-        syncTray()
-      }
+    // Only clear the map if this is still the current pty: a prior pty killed on
+    // re-attach can fire its exit after the replacement is stored.
+    if (ptys.get(winId) === pty) {
+      ptys.delete(winId)
+      attachTargets.delete(winId)
+      if (!quitting) requestSessionRefresh()
     }
   })
-  ptys.set(win.id, pty)
-  if (win.isFocused()) void requestSize()
+  ptys.set(winId, pty)
+  attachTargets.set(winId, target)
+  if (win.isFocused()) void claimSize()
+}
+
+function resumeAwaitingAttaches(): void {
+  for (const [winId, size] of awaitingTether) {
+    const win = BrowserWindow.fromId(winId)
+    awaitingTether.delete(winId)
+    if (win && !win.isDestroyed()) {
+      void startPty(win, size)
+        .then(() => pushTitles())
+        .catch((error) => console.error('[aico] PTY restart failed:', error))
+    }
+  }
 }
 
 function ptyFor(sender: Electron.WebContents): IPty | undefined {
@@ -2640,16 +580,19 @@ function ptyFor(sender: Electron.WebContents): IPty | undefined {
   return win ? ptys.get(win.id) : undefined
 }
 
-/** The widget a renderer's window shows, if any (untrusted IPC sender). */
+/** The session a renderer's window shows, if any (untrusted IPC sender). */
 function widgetIdFor(sender: Electron.WebContents): string | undefined {
   const win = BrowserWindow.fromWebContents(sender)
   return win ? widgetOf.get(win.id) : undefined
 }
 
+// ---------------------------------------------------------------------------
+// Views: windows, bounds and restore.
+
 // Persist a window's bounds (and which monitor it's on) so it restores in place.
 function persistBounds(win: BrowserWindow): void {
   const widgetId = widgetOf.get(win.id)
-  if (!widgetId || win.isDestroyed() || !hasWidget(widgetId)) return
+  if (!widgetId || win.isDestroyed()) return
   const bounds = win.getBounds()
   saveBounds(widgetId, bounds, String(screen.getDisplayMatching(bounds).id))
 }
@@ -2665,8 +608,7 @@ function scheduleBoundsSave(win: BrowserWindow): void {
 
 // Restore a saved rect only if it still lands on a connected display; otherwise
 // keep just the size and let the OS place it (avoids off-screen windows).
-function placement(row: WidgetRow): Electron.BrowserWindowConstructorOptions {
-  const b = row.bounds
+function placement(b: Bounds | null): Electron.BrowserWindowConstructorOptions {
   if (!b) return { width: 900, height: 560 }
   const onScreen = screen.getAllDisplays().some(({ workArea: w }) => {
     return (
@@ -2678,9 +620,15 @@ function placement(row: WidgetRow): Electron.BrowserWindowConstructorOptions {
     : { width: b.width, height: b.height }
 }
 
-function openWidget(row: WidgetRow): void {
+/** One frameless widget window, bound to a session now (`view`) or once
+ * Tether creates it (`pending`). */
+function createWidgetWindow(
+  view: ViewRow | null,
+  pending: { tool: string; projectId: string } | null,
+): BrowserWindow {
+  const row = { id: view?.id ?? 'new' }
   const win = new BrowserWindow({
-    ...placement(row),
+    ...placement(view?.bounds ?? null),
     minWidth: 360,
     minHeight: 240,
     // Keep the frameless Lantern chrome, but make the native surface opaque.
@@ -2749,9 +697,12 @@ function openWidget(row: WidgetRow): void {
   })
 
   const winId = win.id
-  const widgetId = row.id
-  widgetOf.set(winId, widgetId)
-  setOpen(widgetId, true)
+  if (view) {
+    widgetOf.set(winId, view.id)
+    setOpen(view.id, true)
+  } else if (pending) {
+    pendingCreates.set(winId, pending)
+  }
 
   if (process.env.ELECTRON_RENDERER_URL) {
     win.loadURL(process.env.ELECTRON_RENDERER_URL)
@@ -2759,29 +710,14 @@ function openWidget(row: WidgetRow): void {
     win.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
-  // Make the supplemental-context status badge authoritative for THIS window
-  // the instant it loads, not only when a TUI is freshly launched. On an Aico
-  // restart we reattach to a live tmux session WITHOUT relaunching
-  // (ensureSession returns early), so the legacy-named `context:mandate` IPC
-  // never fires for a reattached pane. The fresh-launch path re-reports the
-  // same independent availability probe moments later; this is idempotent.
-  win.webContents.once('did-finish-load', () => {
-    const tool = getTui(getWidget(widgetId)?.tool ?? 'shell')
-    if (tool) reportContext(widgetId, tool)
-  })
-
   // Renderer toggles the focused/unfocused chrome state off these. Focus also
-  // records this widget as the selection-grab target ("last-focused widget").
+  // records this widget as the selection-grab target ("last-focused widget")
+  // and claims the shared tmux window size for this view.
   win.on('focus', () => {
     const widgetId = widgetOf.get(win.id)
     lastFocusedAico = widgetId ?? lastFocusedAico
-    if (widgetId) {
-      const pty = ptys.get(win.id)
-      if (pty) void tmuxViewSizes.get(pty)?.()
-      void reconcileWidgetTool(widgetId).then((changed) => {
-        if (changed) pushTitles()
-      })
-    }
+    const pty = ptys.get(win.id)
+    if (pty) void sizeClaims.get(pty)?.()
     win.webContents.send('win:focus', true)
     blurredWins.delete(win.id)
     syncCursorPump()
@@ -2797,9 +733,10 @@ function openWidget(row: WidgetRow): void {
   win.on('close', () => persistBounds(win)) // final flush while bounds are still valid
 
   win.on('closed', () => {
+    const widgetId = widgetOf.get(winId)
     const pty = ptys.get(winId)
     if (pty) {
-      pty.kill() // detach; tmux session persists (close = keep, reopenable)
+      pty.kill() // detach; the session persists (close = keep, reopenable)
       ptys.delete(winId)
     }
     const timer = boundsTimers.get(winId)
@@ -2809,194 +746,99 @@ function openWidget(row: WidgetRow): void {
     }
     setWidgetActivity(winId, false)
     widgetOf.delete(winId)
+    pendingCreates.delete(winId)
+    awaitingTether.delete(winId)
+    attachTargets.delete(winId)
     ptyStartGenerations.delete(winId)
     blurredWins.delete(winId)
     arcadeOf.delete(winId)
     arcadeShown.delete(winId)
     arcadeNear.delete(winId)
     syncCursorPump()
-    // On quit, leave `open` as-is so live widgets restore next launch; on an
+    // On quit, leave `open` as-is so live views restore next launch; on an
     // explicit close, mark it closed (it moves to the tray's reopen list).
-    if (!quitting && hasWidget(widgetId)) setOpen(widgetId, false)
+    if (!quitting && widgetId && getView(widgetId)) setOpen(widgetId, false)
     syncTray()
   })
 
   syncTray()
+  return win
 }
 
-// Create a widget running `tool`, bound to `projectId` from the moment it's
-// born: the project's root is resolved once here (the same deliberate `st` call
-// switchProject makes) and cached on the row, so the pane spawns in that dir and
-// the titlebar reads that project — neither follows the global pointer later. A
-// root that won't resolve still binds the id (cwd then falls back, never strands).
+function openWidget(id: string): void {
+  createWidgetWindow(ensureView(id), null)
+}
+
+// A new session is always an explicit (tool, workspace) pair. Its window opens
+// at once; Tether creates the session at that window's first grid size.
 function newWidget(tool: string, projectId: string): void {
-  const id = newWidgetId()
-  const row = insertWidget(id, true, tool)
-  const root = projectRoot(projectId)
-  if (!root) console.warn(`[aico] workspace ${projectId} root unresolved; using default cwd`)
-  setWidgetProject(id, projectId, root)
-  openWidget(row)
-}
-
-interface AttachableTmuxSession {
-  id: string
-  label: string
-  source: string
-  socket: string | null
-  session: string
-  cwd: string | null
-  project: string | null
-  command: string
-  tool: string
-}
-
-async function listAttachableTmuxSessions(): Promise<AttachableTmuxSession[]> {
-  let out = ''
-  try {
-    const result = await execFileAsync(TMUX_BIN, listDefaultPanesArgs(), {
-      env: terminalClientEnv(),
-      timeout: TMUX_QUERY_TIMEOUT_MS,
-    })
-    out = result.stdout
-  } catch {
-    return []
-  }
-
-  const bySession = new Map<string, AttachableTmuxSession>()
-  for (const line of out.split('\n')) {
-    const [sessionName, _paneId, cwd, command] = line.split('\t')
-    if (!sessionName || !isATermSessionName(sessionName)) continue
-    const existing = bySession.get(sessionName)
-    if (existing?.cwd) continue
-    const liveTui = detectTuiFromProcessNames(listTuis(), [command || ''])
-    bySession.set(sessionName, {
-      id: `default:${sessionName}`,
-      label: defaultATermLabel(sessionName),
-      source: 'A-Term',
-      socket: null,
-      session: sessionName,
-      cwd: cwd || null,
-      project: cwd || null,
-      command: command || 'shell',
-      tool: liveTui?.slug ?? 'shell',
-    })
-  }
-  const verified = [...bySession.values()].sort((a, b) => a.label.localeCompare(b.label))
-  return enrichATermSessions(verified, listProjects(), {
-    port: Number(process.env.AICO_A_TERM_PORT ?? 8002),
-    timeoutMs: TMUX_QUERY_TIMEOUT_MS,
-  })
-}
-
-const refreshAttachableTmuxSessions = coalesceAsync(listAttachableTmuxSessions)
-let trayAttachableTmuxSessions: AttachableTmuxSession[] = []
-
-async function externalTmuxSessionPresence(target: TmuxTarget): Promise<ExternalViewPresence> {
-  try {
-    await execFileAsync(TMUX_BIN, hasTargetArgs(target), {
-      env: terminalClientEnv(),
-      timeout: TMUX_QUERY_TIMEOUT_MS,
-    })
-    return 'present'
-  } catch (error) {
-    if (isDefinitiveTmuxAbsence(tmuxErrorText(error))) return 'absent'
-    // Ending the final A-Term session also removes its tmux server. A missing
-    // socket alone is inconclusive; the owner's exact missing-record reply is
-    // the additional receipt needed to retire this view.
-    return (await confirmATermSessionAbsence(target, {
-      port: Number(process.env.AICO_A_TERM_PORT ?? 8002),
-      timeoutMs: TMUX_QUERY_TIMEOUT_MS,
-    }))
-      ? 'absent'
-      : 'unknown'
-  }
-}
-
-function findWidgetByTmuxTarget(target: TmuxTarget): WidgetRow | undefined {
-  return listWidgets().find(
-    (row) =>
-      row.externalTmuxSession === target.session &&
-      (row.externalTmuxSocket ?? null) === target.socket,
-  )
-}
-
-async function attachExternalTmuxSession(attachableId: string): Promise<void> {
-  // Tray rows can outlive a session. Re-read the default server before using
-  // its exact name; never turn a cached row into a persisted widget.
-  const session = (await listAttachableTmuxSessions()).find((item) => item.id === attachableId)
-  if (!session || quitting) return
-  const target = { socket: session.socket, session: session.session }
-  const existing = findWidgetByTmuxTarget(target)
-  if (existing) {
-    focusOrReopen(existing.id)
-    return
-  }
-  const row = insertExternalWidget(
-    newWidgetId(),
-    true,
-    session.socket,
-    session.session,
-    null,
-    session.tool,
-  )
-  openWidget(row)
+  createWidgetWindow(null, { tool, projectId })
 }
 
 function focusOrReopen(id: string): void {
-  if (lifecycleOwners.isHeld(id)) {
-    console.warn(`[aico:lifecycle] refusing reopen while ${id} cleanup is in progress`)
-    return
-  }
   const win = windowForWidget(id)
   if (win) {
     win.show()
     win.focus()
     return
   }
-  const row = getWidget(id)
-  if (row) openWidget(row)
+  openWidget(id)
 }
 
-async function rootManagedGateState(row: WidgetRow): Promise<ManagedGateState | null> {
-  if ((await internalSessionState(row.id)) !== 'present') return null
-  const pane = await verifiedCurrentManagedPane(row)
-  const identity = row.scopeUnit ? await scopeIdentity(row.scopeUnit) : null
-  return pane && identity ? managedGateState(pane, identity.controlGroup) : null
+function restoreOnLaunch(): void {
+  const live = listViews().filter((view) => catalog.get(view.id))
+  const open = live.filter((view) => view.open)
+  if (open.length) {
+    for (const view of open) if (!windowForWidget(view.id)) openWidget(view.id)
+  } else if (live.length && BrowserWindow.getAllWindows().length === 0) {
+    openWidget(live[0].id) // nothing was open: bring back the oldest view
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Session actions, all through Tether.
+
+/** End a session: re-read its exact generation, then ask Tether to End it.
+ * Repeat requests for the same session share one attempt. */
+function endSession(id: string): Promise<void> {
+  const current = endsInFlight.get(id)
+  if (current) return current
+  const attempt = (async () => {
+    let descriptor: SessionDescriptor
+    try {
+      descriptor = await tether.getSession(id)
+    } catch (error) {
+      if (error instanceof TetherError && error.code === 'not_found') {
+        sessionEnded(id, 'absent')
+        return
+      }
+      throw error
+    }
+    try {
+      await tether.end(id, descriptor.generation)
+    } catch (error) {
+      if (error instanceof TetherError && error.code === 'not_found') {
+        sessionEnded(id, 'absent')
+        return
+      }
+      throw error
+    }
+    sessionEnded(id, 'ended')
+  })().finally(() => endsInFlight.delete(id))
+  endsInFlight.set(id, attempt)
+  return attempt
 }
 
 function discardWidget(id: string): void {
-  widgetRetireIntents.request(id)
-  drainWidgetRetire(id)
-}
-
-function drainWidgetRetire(id: string): void {
-  const lifecycleOwner = widgetRetireIntents.take(id, lifecycleOwners)
-  if (!lifecycleOwner) return
-  void discardWidgetOwned(id, lifecycleOwner).catch((error: unknown) => {
-    // The owned path releases its token in finally, but an unexpected tmux,
-    // systemd, or store exception must still be observed. Keep the widget as
-    // the recovery surface and leave the exact failure in the application log.
-    console.error(`[aico:lifecycle] retirement failed widget=${id}:`, error)
-    try {
-      surfaceLifecycleBlock(id, 'retirement failed unexpectedly; copy session diagnostics')
-    } catch (notifyError) {
-      console.error(`[aico:lifecycle] retirement failure notice failed widget=${id}:`, notifyError)
-    }
+  void endSession(id).catch((error) => {
+    console.error(`[aico] End failed widget=${id}:`, error)
+    writeNotice(windowForWidget(id), describeFailure('End failed', error))
   })
 }
 
-function surfaceLifecycleBlock(widgetId: string, message: string): void {
-  console.error(`[aico:lifecycle] ${message}`)
-  windowForWidget(widgetId)?.webContents.send(
-    'pty:data',
-    `\r\n\u001b[31mAico safety stop: ${message}\u001b[0m\r\n`,
-  )
-}
-
 async function confirmTrayDiscard(id: string): Promise<void> {
-  const row = getWidget(id)
-  if (!row) return
-  const external = Boolean(row.externalTmuxSession)
+  const descriptor = catalog.get(id)
+  if (!descriptor) return
   const response = await dialog.showMessageBox({
     type: 'warning',
     buttons: ['Cancel', 'End session'],
@@ -3004,572 +846,185 @@ async function confirmTrayDiscard(id: string): Promise<void> {
     cancelId: 0,
     noLink: true,
     title: 'End session?',
-    message: external
-      ? `End ${row.name || row.externalTmuxSession}?`
-      : `End ${row.name || row.sessionId}?`,
-    detail: external
-      ? 'A-Term will stop its session. Aico will keep this view if A-Term is unavailable.'
-      : 'This stops only this session’s verified workload scope. This cannot be undone.',
+    message: `End ${sessionLabel(descriptor, getView(id), projects)}?`,
+    detail: 'Tether stops only this session’s verified workload. This cannot be undone.',
   })
   if (response.response === 1) discardWidget(id)
 }
 
-async function endExternalSession(row: WidgetRow): Promise<RetirementResult> {
-  const session = row.externalTmuxSession
-  const match = session ? /^summitflow-([0-9a-f-]{36})$/i.exec(session) : null
-  if (!session || !match)
-    return { status: 'blocked', reason: 'A-Term owner identity is unavailable' }
-  let paneId: string
-  try {
-    const { stdout } = await execFileAsync(
-      TMUX_BIN,
-      listSessionPanesTargetArgs({ socket: row.externalTmuxSocket, session }),
-      { env: terminalClientEnv(), timeout: TMUX_QUERY_TIMEOUT_MS },
-    )
-    const lines = stdout.split('\n').filter(Boolean)
-    if (lines.length !== 1) {
-      return { status: 'blocked', reason: 'A-Term session pane identity is ambiguous' }
-    }
-    paneId = lines[0].split('\t')[0]
-    if (!/^%\d+$/.test(paneId)) {
-      return { status: 'blocked', reason: 'A-Term pane identity is invalid' }
-    }
-  } catch {
-    const presence = await externalTmuxSessionPresence({
-      socket: row.externalTmuxSocket,
-      session,
-    })
-    if (presence === 'absent') {
-      return removeExternalWidgetIfIdentity(row.id, row.sessionId, row.externalTmuxSocket, session)
-        ? { status: 'ended' }
-        : { status: 'stale' }
-    }
-    return { status: 'blocked', reason: 'A-Term session is unavailable' }
-  }
-  const current = getWidget(row.id)
-  if (
-    !current ||
-    current.sessionId !== row.sessionId ||
-    current.externalTmuxSession !== session ||
-    current.externalTmuxSocket !== row.externalTmuxSocket
-  )
-    return { status: 'stale' }
-
-  const tokenPath =
-    process.env.AICO_A_TERM_HOOK_TOKEN_FILE ?? join(homedir(), '.cache', 'a-term', 'hook-token')
-  let token: string
-  try {
-    const tokenStat = statSync(tokenPath)
-    if (!tokenStat.isFile() || tokenStat.uid !== process.getuid?.() || tokenStat.mode & 0o077) {
-      return { status: 'blocked', reason: 'A-Term owner token permissions are unsafe' }
-    }
-    token = readFileSync(tokenPath, 'utf8').trim()
-    if (!token) return { status: 'blocked', reason: 'A-Term owner token is empty' }
-  } catch {
-    return { status: 'blocked', reason: 'A-Term owner token is unavailable' }
-  }
-  try {
-    const response = await fetch(
-      `http://127.0.0.1:${Number(process.env.AICO_A_TERM_PORT ?? 8002)}/api/internal/sessions/${match[1]}/end`,
-      {
-        method: 'POST',
-        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-        body: JSON.stringify({ expected_tmux_session: session, expected_pane_id: paneId }),
-        signal: AbortSignal.timeout(5_000),
-      },
-    )
-    if (!response.ok) {
-      return { status: 'blocked', reason: `A-Term owner refused End (${response.status})` }
-    }
-    const result: unknown = await response.json()
-    if (!result || typeof result !== 'object' || !('deleted' in result) || result.deleted !== true)
-      return { status: 'blocked', reason: 'A-Term End response was unverified' }
-  } catch {
-    return { status: 'blocked', reason: 'A-Term owner is unavailable' }
-  }
-  return removeExternalWidgetIfIdentity(row.id, row.sessionId, row.externalTmuxSocket, session)
-    ? { status: 'ended' }
-    : { status: 'stale' }
-}
-
-async function discardWidgetOwned(
+/** Run a pane replacement with the generation Aico last read. Input is held
+ * back until it settles; failures are shown in the session's terminal. */
+function replacePane(
   id: string,
-  lifecycleOwner: LifecycleOwnerToken,
-): Promise<RetirementResult> {
-  const knownServerId = getWidget(id)?.tmuxServerId
-  try {
-    const row = getWidget(id)
-    if (!row) return { status: 'absent' }
-    const result = row.externalTmuxSession
-      ? await endExternalSession(row)
-      : await retireOwnedSession(id, headlessRetirementOperations)
-    if (result.status === 'ended') {
-      windowForWidget(id)?.destroy()
-      logWidgetEvent(id, 'lifecycle_retired', {
-        session_id: row.sessionId,
-        scope_unit: row.scopeUnit,
-        scope_invocation_id: row.scopeInvocationId,
-      })
-    } else if (result.status === 'blocked') {
-      surfaceLifecycleBlock(id, `retaining ${row.sessionId}: ${result.reason}`)
-    } else if (result.status === 'stale') {
-      surfaceLifecycleBlock(id, `retaining ${row.sessionId}: ownership generation changed`)
-    }
-    return result
-  } finally {
-    widgetRetireIntents.complete(id)
-    releaseLifecycleOwner(id, lifecycleOwner, knownServerId)
-    syncTray()
-  }
+  action: string,
+  run: (generation: string) => Promise<SessionDescriptor>,
+): void {
+  const descriptor = catalog.get(id)
+  if (!descriptor || replacing.has(id)) return
+  replacing.add(id)
+  void run(descriptor.generation)
+    .then((next) => catalog.upsert(next))
+    .catch((error) => {
+      console.warn(`[aico] ${action} failed widget=${id}:`, error)
+      writeNotice(windowForWidget(id), describeFailure(action, error))
+      requestSessionRefresh()
+    })
+    .finally(() => {
+      replacing.delete(id)
+      pushTitles()
+      syncTray()
+    })
 }
 
-// Hub view: surface every widget. Shared by the tray and the in-widget control
-// surface so both stay one behavior. (Phase 1 replaces this with the cascade grid.)
+function loadTui(id: string, slug: string): void {
+  replacePane(id, 'Could not switch the tool', (generation) => tether.loadTui(id, generation, slug))
+}
+
+function switchProject(id: string, projectId: string): void {
+  if (projectId === PERSONAL_WORKSPACE_ID) {
+    writeNotice(
+      windowForWidget(id),
+      'The Personal Workspace opens in new sessions only. Start a new session there instead.',
+      33,
+    )
+    return
+  }
+  replacePane(id, 'Could not switch the workspace', (generation) =>
+    tether.switchProject(id, generation, projectId),
+  )
+}
+
+async function renameSession(id: string, name: unknown): Promise<void> {
+  const descriptor = catalog.get(id)
+  if (!descriptor) return
+  const trimmed = typeof name === 'string' ? name.trim() : ''
+  try {
+    catalog.upsert(await tether.rename(id, descriptor.generation, trimmed || null))
+  } catch (error) {
+    writeNotice(windowForWidget(id), describeFailure('Could not rename', error), 33)
+  }
+  pushTitles()
+  syncTray()
+}
+
+// ---------------------------------------------------------------------------
+// Tray and titlebars.
+
 function showHub(): void {
   for (const win of BrowserWindow.getAllWindows()) win.show()
 }
 
+function tetherNotice(): string | null {
+  if (tetherIncompatible) return `${tetherIncompatible}. Sessions keep running.`
+  return tetherConnected ? null : 'Tether is not reachable. Sessions keep running.'
+}
+
+function trayTools(): { slug: string; label: string }[] {
+  return tools.map((tool) => ({ slug: tool.slug, label: tool.name }))
+}
+
 function syncTray(): void {
   if (quitting) return
-  closeRetiredViews()
-  renderTray()
-  void refreshAttachableTmuxSessions()
-    .then(async (attachables) => {
-      if (quitting) return
-      trayAttachableTmuxSessions = attachables
-      pushTitles()
-      renderTray()
-      await reconcileSessionViews(
-        attachables.map((session) => session.session),
-        {
-          list: listWidgets,
-          openViews: () => [...widgetOf.values()],
-          close: (id) => windowForWidget(id)?.destroy(),
-          acquire: (id) => lifecycleOwners.acquire(id),
-          release: releaseLifecycleOwner,
-          probe: externalTmuxSessionPresence,
-          forget: (row) =>
-            row.externalTmuxSession !== null &&
-            removeExternalWidgetIfIdentity(
-              row.id,
-              row.sessionId,
-              row.externalTmuxSocket,
-              row.externalTmuxSession,
-            ),
-        },
-      )
-      if (!quitting) renderTray()
-    })
-    .catch((error) => console.warn('[aico] tmux session catalog refresh failed:', error))
-}
-
-function closeRetiredViews(): void {
-  if (quitting) return
-  reconcileRetiredViews({
-    list: listWidgets,
-    openViews: () => [...widgetOf.values()],
-    close: (id) => windowForWidget(id)?.destroy(),
-  })
-}
-
-function renderTray(): void {
-  const projects = listProjects() // titlebar name fallback + the New-widget submenu
-  const widgetRows = listWidgets()
-  const widgets: TrayWidget[] = widgetRows.map((w) => ({
-    id: w.id,
-    label: w.externalTmuxSession
-      ? externalWidgetLabel(w, `Session ${w.seq}`)
-      : w.name || widgetProjectName(w, projects) || `Session ${w.seq}`,
-    open: windowForWidget(w.id) !== undefined,
+  const widgets: TrayWidget[] = catalog.list().map((descriptor) => ({
+    id: descriptor.id,
+    label: sessionLabel(descriptor, getView(descriptor.id), projects),
+    open: windowForWidget(descriptor.id) !== undefined,
   }))
-  const unattached = trayAttachableTmuxSessions.filter(
-    (session) =>
-      !widgetRows.some(
-        (row) =>
-          row.externalTmuxSession === session.session &&
-          (row.externalTmuxSocket ?? null) === session.socket,
-      ),
-  )
-  refreshTray(widgets, projects, unattached)
+  refreshTray(widgets, trayTools(), projects.list(), tetherNotice())
 }
 
-function externalWidgetLabel(row: WidgetRow, fallback: string): string {
-  const session = trayAttachableTmuxSessions.find(
-    (item) =>
-      item.session === row.externalTmuxSession && item.socket === (row.externalTmuxSocket ?? null),
-  )
-  if (session) return attachedATermLabel(row.name, session)
-  return (
-    row.name ||
-    (row.externalTmuxSession && isATermSessionName(row.externalTmuxSession)
-      ? defaultATermLabel(row.externalTmuxSession)
-      : fallback)
-  )
-}
-
-// The workspace an unnamed widget reads as: the one it's bound to (pinned at
-// creation, or last "Open workspace"). Used only as the title fallback, so a
-// widget shows its actual workspace instead of a bare ordinal — and never drifts
-// with the global pointer. null for an unbound/legacy row (⇒ `Widget ${seq}`).
-function widgetProjectName(row: WidgetRow, projects: ProjectInfo[]): string | null {
-  if (!row.projectId) return null
-  return projects.find((p) => p.id === row.projectId)?.name ?? null
-}
-
-// Push titlebar info to every open window: the widget's name (custom, else its
-// workspace, else `Widget ${seq}`) shown centered, plus its TUI's SVG mark + accent
-// (drawn between the eyes). All of it changes only on Aico events — attach, rename,
-// "Replace with <TUI>", "Open workspace" — so this is event-driven, not polled.
+// Push titlebar info to every open window: the session's name (else its
+// workspace, else Tether's label), plus its tool's mark and accent. Changes
+// only on Tether events and Aico actions, so this is event-driven, not polled.
 function pushTitles(): void {
-  const projects = listProjects() // cached; never blocks this event path
   for (const win of BrowserWindow.getAllWindows()) {
     if (win.isDestroyed()) continue
     const widgetId = widgetOf.get(win.id)
-    const row = widgetId ? getWidget(widgetId) : undefined
-    if (!row) continue
-    const tui = getTui(row.tool) ?? getTui('shell')
+    const descriptor = widgetId ? catalog.get(widgetId) : undefined
+    if (!descriptor) continue
+    const tool = tools.find((candidate) => candidate.slug === descriptor.tool)
+    const mark = toolMark(descriptor.tool, tool?.color)
     win.webContents.send('win:title', {
-      // Custom name wins (a prior edit is never overwritten); otherwise track
-      // the live project so the bar follows whatever's loaded.
-      label: row.externalTmuxSession
-        ? externalWidgetLabel(row, `Widget ${row.seq}`)
-        : row.name || widgetProjectName(row, projects) || `Widget ${row.seq}`,
-      name:
-        row.externalTmuxSession && row.name === defaultATermLabel(row.externalTmuxSession)
-          ? null
-          : row.name, // custom name (or null) — prefills the rename input
-      icon: tui?.icon ?? '',
-      accent: tui?.accent ?? '',
-      tuiName: tui?.displayName ?? '',
-      tuiSlug: tui?.slug ?? 'shell',
-      sessionId: row.tmuxSessionId,
+      label: sessionLabel(descriptor, getView(descriptor.id), projects),
+      name: descriptor.name, // prefills the rename input
+      icon: mark.icon,
+      accent: mark.accent,
+      tuiName: tool?.name ?? descriptor.tool,
+      tuiSlug: descriptor.tool,
+      sessionId: descriptor.tmux.sessionId,
     })
   }
 }
 
-// Adopt any live `aico-*` tmux sessions not yet in the catalog as closed
-// widgets, preserving their creation time — so sessions from before this
-// catalog existed (and any external strays) stay reachable via the tray.
-function adoptOrphans(): void {
-  for (const server of listTmuxServers()) {
-    if (tmuxServerRuntimeStates.get(server.id) !== 'reachable') continue
-    bindVerifiedServerRoster(server, tmuxServerRosters.get(server.id) ?? [])
-  }
-}
-
-// Clean only a persisted, narrow scope whose managed tmux session is provably
-// gone. Age, process name, CPU use, and detachment are never cleanup authority:
-// durable user sessions remain valid indefinitely. Existing lifecycle-v0 rows
-// are observed but never targeted because their descendants may live in a broad
-// legacy scope shared with unrelated work.
-async function reconcileManagedWidget(row: WidgetRow, useServerSnapshot = false): Promise<void> {
-  if (row.externalTmuxSession) return
-  const lifecycleOwner = lifecycleOwners.acquire(row.id)
-  if (!lifecycleOwner) {
-    if (row.tmuxServerId) paneExitQueue.defer(row.tmuxServerId)
-    console.warn(`[aico:lifecycle] deferring reconciliation for busy widget ${row.id}`)
-    return
-  }
-  const knownServerId = getWidget(row.id)?.tmuxServerId ?? row.tmuxServerId
-  try {
-    let current = getWidget(row.id)
-    if (!current) return
-    if (current.tmuxServerId) {
-      const server = getTmuxServer(current.tmuxServerId)
-      if (server?.phase === 'provisioning') {
-        await recoverProvisioningTmuxServer(server, false)
-      }
-      current = getWidget(row.id) ?? current
-    }
-    let state = useServerSnapshot
-      ? observedInternalSessionState(current)
-      : await internalSessionState(current.id)
-    // Snapshot absence is never destructive authority. Revalidate the exact
-    // server tuple/socket immediately before any cleanup path.
-    if (useServerSnapshot && state === 'absent') {
-      state = await internalSessionState(current.id)
-    }
-    if (state === 'unknown') {
-      console.warn(`[aico:lifecycle] preserving ${current.sessionId}: tmux state is unknown`)
-      return
-    }
-
-    if (state === 'present') {
-      const recovery = await recoverInterruptedManagedPane(current)
-      if (recovery === 'deferred') {
-        console.warn(
-          `[aico:lifecycle] preserving ${current.sessionId}: agent launch deferred by host admission`,
-        )
-        return
-      }
-      if (recovery === 'blocked' || recovery === 'blocked-replay') {
-        const latest = getWidget(current.id)
-        if (latest?.pendingScopeUnit) await reconcileSupersededPendingScope(latest)
-        console.warn(
-          `[aico:lifecycle] preserving ${current.sessionId}: ` +
-            (recovery === 'blocked-replay'
-              ? 'interrupted launch gate will not be replayed'
-              : 'live pane ownership is ambiguous'),
-        )
-        return
-      }
-      current = getWidget(current.id) ?? current
-      if (recovery === 'legacy' && !current.pendingScopeUnit) return
-    }
-
-    if (current.lifecycleVersion < MANAGED_LIFECYCLE_VERSION) {
-      const pending = current.pendingScopeUnit
-      if (!pending) {
-        const server = current.tmuxServerId ? getTmuxServer(current.tmuxServerId) : undefined
-        if (
-          state === 'absent' &&
-          server?.phase === 'dead' &&
-          !current.scopeUnit &&
-          current.tmuxServerId
-        ) {
-          const cleared = compareAndSetWidgetOwnership(current.id, ownershipGeneration(current), {
-            ...ownershipGeneration(current),
-            tmuxSessionId: null,
-            paneId: null,
-          })
-          if (cleared) clearReconciledDeadTmuxServerBinding(current.id, current.tmuxServerId)
-        }
-        return
-      }
-      if (state === 'present') {
-        const observed = currentPaneScope(current.id)
-        if (!observed) {
-          console.warn(
-            `[aico:lifecycle] preserving legacy pending ${pending}: live pane scope is unknown`,
-          )
-          return
-        }
-        if (observed === pending) {
-          // Respawn failed before replacing the old pane; it is still current.
-          clearWidgetPendingScope(current.id, pending, current.pendingScopeInvocationId)
-          return
-        }
-      }
-      const clean = await stopOwnedPaneScope(
-        pending,
-        current.pendingScopeInvocationId,
-        `startup legacy pending cleanup ${current.sessionId}`,
-      )
-      if (clean) clearWidgetPendingScope(current.id, pending, current.pendingScopeInvocationId)
-      return
-    }
-
-    if (state === 'present') {
-      if (!(await verifiedCurrentManagedPane(current))) {
-        console.warn(
-          `[aico:lifecycle] preserving ${current.sessionId}: live pane scope is unverified`,
-        )
-        return
-      }
-
-      if (current.pendingScopeUnit && !(await reconcileSupersededPendingScope(current))) {
-        console.warn(
-          `[aico:lifecycle] preserving unresolved pending generation for ${current.sessionId}`,
-        )
-      }
-      return
-    }
-
-    // Definitively absent tmux session: drain every persisted generation. No
-    // age/name/CPU heuristic participates in this decision.
-    if (current.pendingScopeUnit) {
-      const clean = await stopOwnedPaneScope(
-        current.pendingScopeUnit,
-        current.pendingScopeInvocationId,
-        `startup pending cleanup ${current.sessionId}`,
-      )
-      if (!clean) return
-      clearWidgetPendingScope(
-        current.id,
-        current.pendingScopeUnit,
-        current.pendingScopeInvocationId,
-      )
-      current = getWidget(current.id) ?? current
-    }
-    if (current.scopeUnit) {
-      console.warn(
-        `[aico:lifecycle] reconciling abandoned scope=${current.scopeUnit} session=${current.sessionId}`,
-      )
-      logWidgetEvent(current.id, 'lifecycle_reconcile_abandoned', {
-        session_id: current.sessionId,
-        scope_unit: current.scopeUnit,
-        scope_invocation_id: current.scopeInvocationId,
-      })
-      const clean = await stopOwnedPaneScope(
-        current.scopeUnit,
-        current.scopeInvocationId,
-        `startup reconciliation ${current.sessionId}`,
-      )
-      if (!clean) return
-    }
-    const latest = getWidget(current.id)
-    if (
-      latest?.scopeUnit === current.scopeUnit &&
-      latest.scopeInvocationId === current.scopeInvocationId &&
-      !latest.pendingScopeUnit &&
-      (await internalSessionState(current.id)) === 'absent'
-    ) {
-      const cleared = compareAndSetWidgetOwnership(current.id, ownershipGeneration(latest), {
-        ...ownershipGeneration(latest),
-        scopeUnit: null,
-        scopeInvocationId: null,
-        tmuxSessionId: null,
-        paneId: null,
-        launchState: 'none',
-        launchNonce: null,
-      })
-      if (cleared && latest.tmuxServerId) {
-        const server = getTmuxServer(latest.tmuxServerId)
-        if (server?.phase === 'dead') {
-          clearReconciledDeadTmuxServerBinding(current.id, latest.tmuxServerId)
-        } else if (
-          server?.kind === 'managed' &&
-          server.phase === 'active' &&
-          server.scopeUnit.endsWith('.scope')
-        ) {
-          clearReconciledHistoricalTmuxServerBinding(current.id, latest.tmuxServerId)
-        }
-      }
-    }
-  } finally {
-    releaseLifecycleOwner(row.id, lifecycleOwner, knownServerId)
-  }
-}
-
-async function reconcileAbandonedScopes(): Promise<void> {
-  // Sequential startup keeps tmux/systemd load bounded and makes each row's
-  // ownership transition independently observable in logs.
-  for (const row of listWidgets()) await reconcileManagedWidget(row, true)
-}
-
-async function restoreOnLaunch(): Promise<void> {
-  await reconcileAbandonedScopes()
-  adoptOrphans()
-  const all = listWidgets() // oldest first
-  const open = all.filter((w) => w.open)
-  if (open.length) {
-    open.forEach(openWidget)
-  } else if (all.length) {
-    openWidget(all[0]) // nothing was open: bring back the oldest (the historical primary)
-  }
-  // Empty catalog: no widget to auto-launch (a launch now needs an explicit
-  // TUI + project). The tray's "New widget ▸ TUI ▸ project" menu starts the first.
-}
+// ---------------------------------------------------------------------------
+// Selection bus.
 
 // The widget that should receive an indicated selection: the last-focused one
-// if it's still open, else the most recently created open widget.
+// if it's still open, else the most recently opened view.
 function selectionTarget(): string | undefined {
   if (lastFocusedAico && windowForWidget(lastFocusedAico)) return lastFocusedAico
-  const open = listWidgets().filter((w) => windowForWidget(w.id))
+  const open = listViews().filter((view) => windowForWidget(view.id))
   return open.length ? open[open.length - 1].id : undefined
 }
 
 // Shared deliver path for every trigger (X11 hotkey + browser-driven SSE):
-// insert a compact reference at the target widget's prompt (no Enter — the user
-// adds their ask and submits), then flash a toast. Best-effort: empty payload or
-// no open widget no-ops silently.
+// type a compact reference at the target session's prompt through Tether (no
+// Enter — the user adds their ask and submits), then flash a toast.
 function deliverSelection(records: SelectionRecord[]): void {
   if (!records.some((record) => record?.kind && record.kind !== 'empty')) return
   const targetId = selectionTarget()
   if (!targetId) return
+  const win = windowForWidget(targetId)
   if (selectionDeliveries.has(targetId)) {
-    console.warn(
-      `[aico] selection insert dropped while ${targetId} already has an insert in flight`,
-    )
-    windowForWidget(targetId)?.webContents.send('selection:toast', {
+    win?.webContents.send('selection:toast', {
       kind: 'Selection not inserted',
       snippet: 'Another selection is still being inserted. Try again.',
     })
     return
   }
-  const acquire = (): SelectionDeliveryLease | null => {
-    const win = windowForWidget(targetId)
-    const owner = lifecycleOwners.acquire(targetId)
-    if (!owner) {
-      console.warn(`[aico:lifecycle] selection insert dropped while ${targetId} changes generation`)
-      win?.webContents.send('selection:toast', {
-        kind: 'Session changing',
-        snippet: 'Selection was not inserted while the terminal was being replaced.',
-      })
-      return null
-    }
-    return createSelectionDeliveryLease(
-      () => {
-        const row = getWidget(targetId)
-        if (!win || !row || quitting) return null
-        const generation = ownershipGeneration(row)
-        const isCurrent = (): boolean => {
-          const latest = getWidget(targetId)
-          if (quitting || win.isDestroyed() || windowForWidget(targetId) !== win || !latest)
-            return false
-          if (
-            latest.sessionId !== row.sessionId ||
-            latest.externalTmuxSession !== row.externalTmuxSession ||
-            latest.externalTmuxSocket !== row.externalTmuxSocket
-          )
-            return false
-          const current = ownershipGeneration(latest)
-          return (
-            Object.entries(generation).every(
-              ([key, value]) => current[key as keyof WidgetOwnershipGeneration] === value,
-            ) && !widgetRetireIntents.isPending(targetId)
-          )
-        }
-        let target: TmuxTarget | Promise<TmuxTarget>
-        if (row.externalTmuxSession) {
-          // External sessions have no persisted pane id. Pin their active pane
-          // once so a delayed send cannot follow a different active pane.
-          const session = tmuxTargetForWidget(targetId)
-          target = resolveActiveSelectionPane(session, async (args) => {
-            const { stdout } = await execFileAsync(TMUX_BIN, args, {
-              env: terminalClientEnv(),
-              timeout: TMUX_QUERY_TIMEOUT_MS,
-            })
-            return stdout
-          })
-        } else if (row.paneId && row.tmuxSessionId && row.tmuxServerId) {
-          target = tmuxPaneTargetForWidget(targetId)
-        } else {
-          console.warn(`[aico:lifecycle] selection insert dropped for unbound pane ${targetId}`)
-          return null
-        }
-        return {
-          target,
-          isCurrent,
-          delivered: (usable) => {
-            win.show()
-            win.focus()
-            const head = usable[0]
-            win.webContents.send('selection:toast', {
-              kind: usable.length > 1 ? `${usable.length} items` : head.kind,
-              snippet:
-                usable.length > 1 ? usable.map((r) => r.snippet ?? '').join(' · ') : head.snippet,
-            })
-          },
-          release: () => releaseLifecycleOwner(targetId, owner, row.tmuxServerId),
-        }
-      },
-      () => releaseLifecycleOwner(targetId, owner),
-    )
+  const descriptor = catalog.get(targetId)
+  if (!win || !descriptor || replacing.has(targetId)) {
+    win?.webContents.send('selection:toast', {
+      kind: 'Session changing',
+      snippet: 'Selection was not inserted while the terminal was being replaced.',
+    })
+    return
   }
-  const request = deliverSelectionToPane(
+  const request = deliverSelectionToSession(
     records,
-    acquire,
-    async (args) => {
-      await execFileAsync(TMUX_BIN, args, {
-        env: terminalClientEnv(),
-        timeout: TMUX_QUERY_TIMEOUT_MS,
+    {
+      isCurrent: () =>
+        !quitting &&
+        !win.isDestroyed() &&
+        windowForWidget(targetId) === win &&
+        catalog.get(targetId)?.generation === descriptor.generation,
+      inject: async (text) => {
+        await tether.inject(targetId, descriptor.generation, text, 'type')
+      },
+      delivered: (usable) => {
+        win.show()
+        win.focus()
+        const head = usable[0]
+        win.webContents.send('selection:toast', {
+          kind: usable.length > 1 ? `${usable.length} items` : head.kind,
+          snippet:
+            usable.length > 1 ? usable.map((r) => r.snippet ?? '').join(' · ') : head.snippet,
+        })
+      },
+    },
+    (error) => {
+      console.warn('[aico] selection insert failed:', error)
+      win.webContents.send('selection:toast', {
+        kind: 'Selection not inserted',
+        snippet:
+          error instanceof TetherError && error.code === 'stale_generation'
+            ? 'The session changed. Try again.'
+            : 'Tether could not insert the selection.',
       })
     },
-    (error) => console.warn('[aico] selection insert failed:', error),
-  ).catch((error) => console.warn('[aico] selection delivery cleanup failed:', error))
+  )
   selectionDeliveries.set(targetId, request)
-  void request.then(() => {
+  void request.finally(() => {
     if (selectionDeliveries.get(targetId) === request) selectionDeliveries.delete(targetId)
   })
 }
@@ -3729,16 +1184,12 @@ process.on('SIGINT', () => requestGracefulSignalQuit('SIGINT'))
 
 app.on('before-quit', () => {
   quitting = true
-  rootControlServer?.close()
+  stopEvents?.()
+  stopGuiChannel?.()
   // A secondary instance (single-instance lock denied) quits before the app is
   // ready, where globalShortcut would throw; it never registered any anyway.
   if (app.isReady()) globalShortcut.unregisterAll()
   selectionEvents?.abort()
-  paneExitFsWatcher?.close()
-  sessionCatalogWatcher?.close()
-  sessionCatalogWatcher = null
-  paneExitFsWatcher = null
-  paneExitEventReady.clear()
   sidecar?.stop()
 })
 
@@ -3766,7 +1217,7 @@ function activateAico(): void {
     windows[0].focus()
     return
   }
-  const oldest = listWidgets()[0]
+  const oldest = listViews().find((view) => catalog.get(view.id)) ?? catalog.list()[0]
   if (oldest) focusOrReopen(oldest.id)
   else newWidget('shell', PERSONAL_WORKSPACE_ID)
 }
@@ -3801,31 +1252,14 @@ app.on('before-quit', () => {
   }
 })
 
+const SESSION_ID = /^[0-9a-f]{8}$/
+
 const startup = app.whenReady().then(async () => {
   if (!gotSingleInstanceLock || activationOnly) return // no runtime initialization
-  registerBuiltinTuis()
-  ensureTmuxConf()
-  initStore(dbPath)
-  sessionCatalogWatcher = watchSessionCatalog(dbPath, closeRetiredViews, (error) => {
-    console.error('[aico:lifecycle] session catalog watcher failed:', error)
-  })
-  await reconcileTmuxServers()
-  durableUserManager = detectDurableUserManager()
-  console.log(
-    `[aico:lifecycle] durable user manager: ${
-      durableUserManager ? 'linger enabled' : 'unavailable; new sessions blocked'
-    }`,
-  )
+  const { migrated } = initViews(dbPath)
+  if (migrated) console.log(`[aico] copied ${migrated} window views from the pre-Tether catalog`)
   installContentSecurityPolicy()
   startSidecar()
-
-  // Project names render from the cache; repaint whenever a background `st`
-  // read lands (including the startup prime below).
-  onProjectsRefreshed(() => {
-    pushTitles()
-    syncTray()
-  })
-  void refreshProjects()
 
   // No application menu — the Lantern chrome owns window controls, and the
   // default Edit menu's paste role mangled bracketed paste (handled in renderer).
@@ -3836,17 +1270,14 @@ const startup = app.whenReady().then(async () => {
     if (win) {
       void startPty(win, clampSize(size))
         .then(() => pushTitles()) // fill the titlebar once the session is attached
-        .catch((error) => console.error('[aico:lifecycle] PTY start failed:', error))
+        .catch((error) => console.error('[aico] PTY start failed:', error))
     }
   })
 
   ipcMain.on('pty:input', (event, data: unknown) => {
     if (typeof data !== 'string' || data.length === 0) return
     const widgetId = widgetIdFor(event.sender)
-    // Replacement temporarily exposes the no-RC containment gate through the
-    // existing tmux attachment. Never let renderer bytes corrupt or execute a
-    // partially staged launcher; stale user input is dropped rather than queued.
-    if (!widgetId || lifecycleOwners.isHeld(widgetId)) return
+    if (!widgetId || replacing.has(widgetId)) return
     ptyFor(event.sender)?.write(data)
   })
 
@@ -3857,7 +1288,7 @@ const startup = app.whenReady().then(async () => {
       const { cols, rows } = clampSize(size)
       try {
         pty.resize(cols, rows)
-        if (win?.isFocused()) void tmuxViewSizes.get(pty)?.()
+        if (win?.isFocused()) void sizeClaims.get(pty)?.()
       } catch (err) {
         console.warn('[aico] pty resize failed:', err)
       }
@@ -3865,18 +1296,15 @@ const startup = app.whenReady().then(async () => {
   })
 
   // Manual Refresh: tmux holds the authoritative grid, so force every client
-  // attached to this widget's session to repaint from it — recovering an xterm
-  // view that desynced (resize-reflow race, WebGL glitch, dropped/duped bytes).
+  // attached to this session to repaint from it — recovering an xterm view that
+  // desynced (resize-reflow race, WebGL glitch, dropped/duped bytes).
   // Best-effort: a missing session or no clients is a no-op, never a crash.
   ipcMain.on('pty:refresh', (event, size?: PtySize) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     const widgetId = win ? widgetOf.get(win.id) : undefined
-    if (!win || !widgetId || quitting || lifecycleOwners.isHeld(widgetId)) return
-    // Re-pair a drifted pty before the repaint: if the pty's size disagrees
-    // with the renderer's live grid, tmux paints for the wrong geometry and
-    // every repaint wrap-garbles — the one corruption refresh-client can't
-    // repair (reopening the window used to be the only fix). Logged so a
-    // recurrence pins down which path let the sizes diverge.
+    if (!win || !widgetId || quitting || replacing.has(widgetId)) return
+    // Re-pair a drifted pty before the repaint: if the pty's size disagrees with
+    // the renderer's live grid, tmux paints for the wrong geometry.
     const pty = ptyFor(event.sender)
     if (pty && size) {
       const { cols, rows } = clampSize(size)
@@ -3894,17 +1322,19 @@ const startup = app.whenReady().then(async () => {
     const generation = ptyStartGenerations.get(win.id)
     const pending = ptyRefreshes.get(win.id)
     if (pending && pending.pty === pty && pending.generation === generation) return
-    const target = tmuxTargetForWidget(widgetId)
+    const target = attachTargets.get(win.id)
+    const attached = target ? attachSocketTarget(target.argv) : null
     const isCurrent = () =>
       !quitting &&
       !win.isDestroyed() &&
       widgetOf.get(win.id) === widgetId &&
       ptys.get(win.id) === pty &&
       ptyStartGenerations.get(win.id) === generation &&
-      !lifecycleOwners.isHeld(widgetId)
+      !replacing.has(widgetId)
     const request = (async () => {
-      if (pty) await tmuxViewSizes.get(pty)?.()
-      if (isCurrent()) await refreshAttachedTmuxClients(target, runInteractiveTmux, isCurrent)
+      if (pty) await sizeClaims.get(pty)?.()
+      if (target && attached && isCurrent())
+        await refreshAttachedClients(attached, (args) => runTmux(target, args), isCurrent)
     })()
     ptyRefreshes.set(win.id, { pty, generation, request })
     void request
@@ -3914,41 +1344,44 @@ const startup = app.whenReady().then(async () => {
       })
   })
 
-  // Full scrollback for the renderer's read-only overlay. tmux history is the
-  // source of truth (an attached tmux client has no xterm-side scrollback).
-  ipcMain.handle('tmux:capture', async (event) => {
-    const widgetId = widgetIdFor(event.sender)
-    if (!widgetId) return ''
-    const { stdout } = await execFileAsync(
-      TMUX_BIN,
-      captureTargetArgs(tmuxPaneTargetForWidget(widgetId)),
-      {
-        maxBuffer: 64 * 1024 * 1024, // 100k lines of history can be large
-      },
-    )
-    return stdout
-  })
-
+  // Who owns the pane's scrollback, asked of the exact tmux target this window
+  // attached to (read-only; Tether has no pane-mode route yet).
   ipcMain.handle('tmux:pane-mode', async (event) => {
-    const widgetId = widgetIdFor(event.sender)
-    if (!widgetId) return { alternateScreen: false, mouseReporting: false, historySize: 0 }
-
-    const { stdout } = await execFileAsync(
-      TMUX_BIN,
-      paneModeTargetArgs(tmuxPaneTargetForWidget(widgetId)),
-      { maxBuffer: 1024 },
-    )
-    return parsePaneMode(stdout)
+    const none = { alternateScreen: false, mouseReporting: false, historySize: 0 }
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const target = win ? attachTargets.get(win.id) : undefined
+    const attached = target ? attachSocketTarget(target.argv) : null
+    if (!target || !attached) return none
+    try {
+      return parsePaneMode(await runTmux(target, paneModeArgs(attached), 1024))
+    } catch {
+      return none
+    }
   })
 
+  // One bounded page of pane history for the renderer's read-only overlay.
   ipcMain.handle('tmux:scrollback-page', async (event, request?: unknown) => {
+    const empty = { fromLine: 0, totalLines: 0, historySize: 0, text: '' }
     const widgetId = widgetIdFor(event.sender)
-    if (!widgetId) return { ...EMPTY_SCROLLBACK_PAGE }
-    return readScrollbackPage(
-      async (args, maxBuffer) => (await execFileAsync(TMUX_BIN, args, { maxBuffer })).stdout,
-      tmuxPaneTargetForWidget(widgetId),
-      request,
-    )
+    if (!widgetId) return empty
+    const input = (request && typeof request === 'object' ? request : {}) as Record<string, unknown>
+    const whole = (n: unknown, max: number) =>
+      typeof n === 'number' && Number.isSafeInteger(n) && n >= 0 ? Math.min(n, max) : undefined
+    try {
+      const page = await tether.scrollback(widgetId, {
+        fromLine: whole(input.fromLine, Number.MAX_SAFE_INTEGER),
+        count: whole(input.count, 5000) || undefined,
+        escapes: input.plain !== true,
+      })
+      return {
+        fromLine: page.fromLine,
+        totalLines: page.totalLines,
+        historySize: page.historySize,
+        text: page.text,
+      }
+    } catch {
+      return empty
+    }
   })
 
   ipcMain.handle('clipboard:read', () => clipboard.readText())
@@ -3958,9 +1391,16 @@ const startup = app.whenReady().then(async () => {
 
   ipcMain.handle('session:diagnostics', async (event) => {
     const widgetId = widgetIdFor(event.sender)
-    return widgetId
-      ? sessionDiagnostics(widgetId)
-      : { capturedAt: new Date().toISOString(), error: 'no widget ownership' }
+    if (!widgetId) return { capturedAt: new Date().toISOString(), error: 'no session' }
+    try {
+      return await tether.diagnostics(widgetId)
+    } catch (error) {
+      return {
+        capturedAt: new Date().toISOString(),
+        sessionId: widgetId,
+        error: describeFailure('Diagnostics unavailable', error),
+      }
+    }
   })
 
   ipcMain.on('win:minimize', (event) => BrowserWindow.fromWebContents(event.sender)?.minimize())
@@ -4046,9 +1486,9 @@ const startup = app.whenReady().then(async () => {
     if (win) setWidgetActivity(win.id, on)
   })
 
-  // Control-surface actions: same handlers the tray uses. A new widget is always
-  // an explicit (TUI, project) pair from the picker — both required, both checked
-  // (untrusted renderer input), so a malformed call is ignored, not defaulted.
+  // Control-surface actions: same handlers the tray uses. A new session is
+  // always an explicit (tool, workspace) pair from the picker — both required,
+  // both checked (untrusted renderer input), so a malformed call is ignored.
   ipcMain.on('widget:new', (_event, tool?: unknown, projectId?: unknown) => {
     if (typeof tool === 'string' && tool && typeof projectId === 'string' && projectId) {
       newWidget(tool, projectId)
@@ -4063,9 +1503,8 @@ const startup = app.whenReady().then(async () => {
     if (Array.isArray(args) && args.every((a) => allowed.has(a))) runDesktopGrab(args)
   })
 
-  // Retire this widget from the widget itself: close the window AND end its tmux
-  // session (same teardown as the tray's "Discard"), so the user need not go to
-  // the tray. Resolves the widget id from the sender's window.
+  // End this session from the widget itself: Tether ends the workload and the
+  // window closes once it has.
   ipcMain.on('widget:discard-self', (event) => {
     const id = widgetIdFor(event.sender)
     if (id) discardWidget(id)
@@ -4073,135 +1512,68 @@ const startup = app.whenReady().then(async () => {
   ipcMain.handle('session:end-self', async (event) => {
     const id = widgetIdFor(event.sender)
     if (!id) throw new Error('Session view is unavailable')
-    const owner = await lifecycleOwners.acquireWhenAvailable(id)
-    const result = await discardWidgetOwned(id, owner)
-    if (result.status === 'ended' || result.status === 'absent') return
-    if (result.status === 'blocked') throw new Error(`End failed: ${result.reason}`)
-    throw new Error(
-      result.status === 'stale' ? 'Session changed; try End again' : 'Session ended elsewhere',
-    )
+    try {
+      await endSession(id)
+    } catch (error) {
+      throw new Error(describeFailure('End failed', error))
+    }
   })
 
-  // Replace the focused widget's running TUI with another (no new window).
+  // Replace the focused session's running tool with another (no new window).
   ipcMain.on('widget:load-tui', (event, slug?: unknown) => {
     const id = widgetIdFor(event.sender)
-    if (id && typeof slug === 'string' && slug) {
-      loadTui(id, slug)
-    }
+    if (id && typeof slug === 'string' && slug) loadTui(id, slug)
   })
 
-  // Move the focused widget to another workspace (lantern-menu "Open workspace ▸"
-  // flyout): respawn its pane there, same tool. Resolves the widget from the
-  // sender's window, exactly like widget:load-tui.
+  // Move the focused session to another workspace: Tether respawns its pane
+  // there with the same tool.
   ipcMain.on('widget:switch-project', (event, projectId?: unknown) => {
     const id = widgetIdFor(event.sender)
-    if (id && typeof projectId === 'string' && projectId) {
-      switchProject(id, projectId)
-    }
+    if (id && typeof projectId === 'string' && projectId) switchProject(id, projectId)
   })
 
-  // Rename a widget from its titlebar (click the name). Empty/whitespace clears
-  // it back to `Widget ${seq}`. Persisted, then reflected in the title and tray.
+  // Rename from the titlebar. Empty clears it back to Tether's default label.
   ipcMain.on('widget:set-name', (event, name: unknown) => {
     const id = widgetIdFor(event.sender)
-    if (!id) return
-    setWidgetName(id, typeof name === 'string' ? name : null)
-    pushTitles()
-    syncTray()
+    if (id) void renameSession(id, name)
   })
 
-  // The enabled TUIs (registry order) so the lantern menu can offer a picker —
-  // same source the tray's "New widget" submenu reads.
-  ipcMain.handle('tui:list', () =>
-    listTuis().map((t) => ({
-      slug: t.slug,
-      displayName: t.displayName,
-      accent: t.accent,
-      icon: t.icon,
-    })),
-  )
-
-  // Aico workspace catalog for the lantern menu's "Open workspace ▸" flyout
-  // (Personal Workspace + optional st projects). Personal Workspace remains even
-  // if `st` is unavailable.
-  // Renderer chrome snapshots this catalog once during initialization. Await a
-  // stale/in-flight startup refresh so the first menu cannot permanently miss
-  // every real workspace while the background `st projects list` is landing.
-  ipcMain.handle('project:list', () => listProjectsFresh())
-
-  ipcMain.handle('tmux:list-attachable', async () =>
-    (await listAttachableTmuxSessions()).map((s) => ({
-      id: s.id,
-      label: s.label,
-      source: s.source,
-    })),
-  )
-  ipcMain.handle('session:list-openable', async () => {
-    const projects = listProjects()
-    const aicoRows = await Promise.all(
-      listWidgets().map(async (row) => {
-        if (
-          row.externalTmuxSession ||
-          (await internalSessionState(row.id)) !== 'present' ||
-          !(await verifiedCurrentManagedPane(row))
-        )
-          return null
-        return {
-          owner: 'aico' as const,
-          id: row.id,
-          label: openableWidgetLabel(row, projects),
-          project: openableWidgetProject(row, projects),
-          tool: row.tool,
-          status: 'running' as const,
-          locallyOpen: Boolean(windowForWidget(row.id)),
-        }
-      }),
-    )
-    const externalRows = (await listAttachableTmuxSessions()).map((session) => {
-      const attached = findWidgetByTmuxTarget(session)
-      return {
-        owner: 'a-term' as const,
-        id: session.id,
-        label: attachedATermLabel(attached?.name, session),
-        project: session.project,
-        tool: attached?.tool ?? session.tool,
-        status: 'running' as const,
-        locallyOpen: Boolean(attached && windowForWidget(attached.id)),
-      }
+  // Enabled tools from Tether's registry, in its order, with Aico's marks.
+  ipcMain.handle('tui:list', async () => {
+    if (!tools.length) await refreshTools().catch(() => {})
+    return tools.map((tool) => {
+      const mark = toolMark(tool.slug, tool.color)
+      return { slug: tool.slug, displayName: tool.name, accent: mark.accent, icon: mark.icon }
     })
-    return [...aicoRows.filter((row) => row !== null), ...externalRows]
   })
-  ipcMain.handle('session:open', async (_event, descriptor: unknown) => {
-    if (!descriptor || typeof descriptor !== 'object') throw new Error('Invalid session')
-    const { owner, id } = descriptor as { owner?: unknown; id?: unknown }
-    if (typeof id !== 'string') throw new Error('Invalid session')
-    if (owner === 'aico') {
-      const row = getWidget(id)
-      if (
-        !row ||
-        (await internalSessionState(id)) !== 'present' ||
-        !(await verifiedCurrentManagedPane(row))
-      ) {
-        throw new Error('Session is unavailable')
-      }
-      focusOrReopen(id)
-      return
-    }
-    if (owner === 'a-term') {
-      if (!(await listAttachableTmuxSessions()).some((session) => session.id === id)) {
-        throw new Error('A-Term session is unavailable')
-      }
-      await attachExternalTmuxSession(id)
-      return
-    }
-    throw new Error('Unknown session owner')
+
+  // Workspace catalog for "Open workspace ▸": Personal Workspace plus Tether's
+  // projects. Awaits a stale refresh so the first menu is complete.
+  ipcMain.handle('project:list', () => projects.listFresh())
+
+  // Every running Tether session, whichever app created it.
+  ipcMain.handle('session:list-openable', async () => {
+    await refreshSessions()
+    return catalog
+      .list()
+      .filter((descriptor) => descriptor.status === 'running' || descriptor.status === 'legacy')
+      .map((descriptor) => ({
+        id: descriptor.id,
+        origin: descriptor.origin,
+        label: sessionLabel(descriptor, getView(descriptor.id), projects),
+        project: projects.nameFor(descriptor.projectId, descriptor.projectRoot),
+        tool: descriptor.tool,
+        status: 'running' as const,
+        locallyOpen: Boolean(windowForWidget(descriptor.id)),
+      }))
   })
-  ipcMain.on('tmux:attach', (_event, id?: unknown) => {
-    if (typeof id === 'string' && id) {
-      void attachExternalTmuxSession(id).catch((error) =>
-        console.warn('[aico] tmux attach failed:', error),
-      )
-    }
+  ipcMain.handle('session:open', async (_event, id: unknown) => {
+    if (typeof id !== 'string' || !SESSION_ID.test(id)) throw new Error('Invalid session')
+    const descriptor = await tether.getSession(id)
+    if (descriptor.status !== 'running' && descriptor.status !== 'legacy')
+      throw new Error('Session is unavailable')
+    catalog.upsert(descriptor)
+    focusOrReopen(id)
   })
 
   // Global pinned-action set (one row in aico.db, shared across widgets). A
@@ -4246,17 +1618,15 @@ const startup = app.whenReady().then(async () => {
       onSelect: focusOrReopen,
       onDiscard: (id) => void confirmTrayDiscard(id),
       onNewWidget: newWidget,
-      onAttachTmuxSession: (id) => {
-        void attachExternalTmuxSession(id).catch((error) =>
-          console.warn('[aico] tmux attach failed:', error),
-        )
+      onRefreshSessions: () => {
+        projects.invalidate()
+        requestSessionRefresh()
+        void refreshTools().catch(() => {})
       },
-      onRefreshTmuxSessions: syncTray,
       onHubView: showHub,
     },
-    listTuis().map((t) => ({ slug: t.slug, label: t.displayName })),
-    listProjects(),
-    trayAttachableTmuxSessions,
+    trayTools(),
+    projects.list(),
   )
   // Returning to any Aico window refreshes the native tray catalog as well.
   // Linux does not provide a reliable async hook before its cached tray menu opens.
@@ -4314,76 +1684,8 @@ const startup = app.whenReady().then(async () => {
   // Browser-driven sends (and any CLI POST to /selection/send) arrive here.
   subscribeSelectionEvents()
 
-  await restoreOnLaunch()
+  connectTether()
   syncTray()
-  rootControlServer = createRootServer({
-    available: () => !quitting && activationReady,
-    validate: (request) => Boolean(getTui(request.tool)?.enabled && isDir(request.projectRoot)),
-    ensure: async (widgetId, prompt, resumeSessionId) => {
-      const row = getWidget(widgetId)
-      // Root cwd is exact. Never inherit the center's project or fall back to
-      // the global active project after its requested directory disappears.
-      if (!row?.projectRoot || !isDir(row.projectRoot)) return
-      await withRootPrompt(
-        widgetId,
-        prompt,
-        async () => {
-          await ensureSessionSerialized(widgetId, { cols: 100, rows: 30 })
-        },
-        resumeSessionId,
-      )
-      const latest = getWidget(widgetId)
-      if (latest?.launchState === 'dispatched' && (await verifiedCurrentManagedPane(latest))) {
-        focusOrReopen(widgetId)
-      }
-    },
-    status: async (row) => {
-      if (
-        row.launchState === 'dispatched' &&
-        (await rootManagedGateState(row)) === 'active-workload'
-      )
-        return 'running'
-      return isNeverAllocatedWidget(row) ? 'pending' : 'uncertain'
-    },
-    mutate: (widgetId, generation, mutation) =>
-      widgetMutationOperation(widgetId, generation, {
-        acquire: (id) => lifecycleOwners.acquire(id),
-        release: releaseLifecycleOwner,
-        getWidget,
-        gateState: rootManagedGateState,
-        apply: (row) => {
-          const win = windowForWidget(row.id)
-          if (mutation.kind === 'show') {
-            if (win) {
-              win.show()
-              win.focus()
-            } else openWidget(row)
-          } else if (mutation.kind === 'position') {
-            if (win) {
-              win.setBounds(mutation.bounds)
-              persistBounds(win)
-            } else {
-              saveBounds(
-                row.id,
-                mutation.bounds,
-                String(screen.getDisplayMatching(mutation.bounds).id),
-              )
-            }
-          } else {
-            setWidgetName(row.id, mutation.label)
-            pushTitles()
-            syncTray()
-          }
-        },
-      }),
-  })
-  try {
-    await listenOwnerServer(rootControlServer, guiSocketPath())
-  } catch (error) {
-    rootControlServer.close()
-    rootControlServer = undefined
-    console.error('[aico:owner] GUI control unavailable:', error)
-  }
   activationReady = true
   if (activationPending) {
     activationPending = false

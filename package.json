@@ -1,7 +1,7 @@
 {
   "name": "aico",
   "version": "0.1.1",
-  "description": "Floating-widget desktop AI companion (Electron + tmux + xterm.js).",
+  "description": "Floating-widget desktop AI companion (Electron + xterm.js), a client of the Tether session daemon.",
   "license": "Apache-2.0",
   "type": "module",
   "main": "out/main/index.js",
@@ -9,8 +9,7 @@
   "scripts": {
     "postinstall": "install-electron",
     "start": "npm run build && electron-vite preview",
-    "build": "electron-vite build && npm run build:owner",
-    "build:owner": "esbuild electron/main/owner-service.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/main/owner-service.mjs",
+    "build": "electron-vite build",
     "dev": "electron-vite dev",
     "rebuild": "electron-rebuild -f -w node-pty",
     "dist:sidecar": ".venv/bin/pyinstaller --noconfirm --clean --log-level WARN --name aico-sidecar --distpath dist/sidecar --workpath dist/.pyi-build --specpath dist/.pyi-build --paths sidecar --collect-submodules uvicorn --collect-submodules aico_sidecar --hidden-import aico_sidecar.app sidecar/aico_sidecar/__main__.py",

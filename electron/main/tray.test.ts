@@ -21,23 +21,21 @@ function item(menu: Record<string, unknown>[], label: string): Record<string, un
   return found
 }
 
-describe('tray tmux discovery', () => {
-  it('refreshes a cached native menu and exposes an A-Term session created later', () => {
+describe('tray session catalog', () => {
+  it('refreshes a cached native menu and exposes a session created elsewhere', () => {
     menus.length = 0
-    const onRefreshTmuxSessions = vi.fn(() => {
-      refreshTray([], [], [{ id: 'default:a-term-new', label: 'A-Term new', source: 'A-Term' }])
+    const onSelect = vi.fn()
+    const onRefreshSessions = vi.fn(() => {
+      refreshTray([{ id: '0a1b2c3d', label: 'A-Term session', open: false }], [], [])
     })
-    const onAttachTmuxSession = vi.fn()
     createTray(
       {
-        onSelect: vi.fn(),
+        onSelect,
         onDiscard: vi.fn(),
         onNewWidget: vi.fn(),
-        onAttachTmuxSession,
-        onRefreshTmuxSessions,
+        onRefreshSessions,
         onHubView: vi.fn(),
       },
-      [],
       [],
       [],
     )
@@ -47,11 +45,18 @@ describe('tray tmux discovery', () => {
     ])
 
     ;(item(before, 'Refresh sessions').click as () => void)()
-    expect(onRefreshTmuxSessions).toHaveBeenCalledOnce()
+    expect(onRefreshSessions).toHaveBeenCalledOnce()
     const after = menus.at(-1) ?? []
-    const attach = (item(after, 'Open session').submenu as Record<string, unknown>[])[0]
-    expect(attach.label).toBe('A-Term new')
-    ;(attach.click as () => void)()
-    expect(onAttachTmuxSession).toHaveBeenCalledWith('default:a-term-new')
+    const open = (item(after, 'Open session').submenu as Record<string, unknown>[])[0]
+    expect(open.label).toBe('A-Term session')
+    ;(open.click as () => void)()
+    expect(onSelect).toHaveBeenCalledWith('0a1b2c3d')
+  })
+
+  it('names an unreachable Tether at the top of the menu', () => {
+    menus.length = 0
+    refreshTray([], [], [], 'Tether unavailable: sessions keep running')
+    const menu = menus.at(-1) ?? []
+    expect(menu[0]).toEqual({ label: 'Tether unavailable: sessions keep running', enabled: false })
   })
 })

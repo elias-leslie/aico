@@ -26,23 +26,15 @@ export interface NewWidgetProject {
   name: string
 }
 
-export interface AttachableTmuxSession {
-  id: string
-  label: string
-  source: string
-}
-
 export interface TrayHandlers {
   /** Focus the widget if open, otherwise reopen it (reattach + restore bounds). */
   onSelect: (id: string) => void
-  /** Kill the widget's tmux session and forget it. */
+  /** End the session through Tether (after confirmation). */
   onDiscard: (id: string) => void
   /** Create a new widget running the chosen TUI in the chosen workspace. */
   onNewWidget: (tool: string, projectId: string) => void
-  /** Attach an externally-owned tmux session as a widget. */
-  onAttachTmuxSession: (id: string) => void
-  /** Rebuild the native menu from the current tmux catalog. */
-  onRefreshTmuxSessions: () => void
+  /** Re-list sessions from Tether and rebuild the menu. */
+  onRefreshSessions: () => void
   onHubView: () => void
 }
 
@@ -50,7 +42,7 @@ let tray: Tray | null = null
 let handlers: TrayHandlers | null = null
 let tools: NewWidgetTool[] = []
 let projects: NewWidgetProject[] = []
-let attachables: AttachableTmuxSession[] = []
+let unavailable: string | null = null
 const thinking = new Set<number>()
 
 function buildMenu(widgets: TrayWidget[]): Menu {
@@ -60,6 +52,9 @@ function buildMenu(widgets: TrayWidget[]): Menu {
   const closed = widgets.filter((w) => !w.open)
 
   const template: Electron.MenuItemConstructorOptions[] = [
+    ...(unavailable
+      ? [{ label: unavailable, enabled: false }, { type: 'separator' as const }]
+      : []),
     ...(open.length
       ? open.map((w) => ({ label: `● ${w.label}`, click: () => h.onSelect(w.id) }))
       : [{ label: 'No session windows open', enabled: false }]),
@@ -81,20 +76,13 @@ function buildMenu(widgets: TrayWidget[]): Menu {
     },
     {
       label: 'Open session',
-      submenu:
-        closed.length || attachables.length
-          ? [
-              ...closed.map((w) => ({ label: w.label, click: () => h.onSelect(w.id) })),
-              ...attachables.map((s) => ({
-                label: s.label,
-                click: () => h.onAttachTmuxSession(s.id),
-              })),
-            ]
-          : [{ label: 'No sessions to open', enabled: false }],
+      submenu: closed.length
+        ? closed.map((w) => ({ label: w.label, click: () => h.onSelect(w.id) }))
+        : [{ label: 'No sessions to open', enabled: false }],
     },
     {
       label: 'Refresh sessions',
-      click: () => h.onRefreshTmuxSessions(),
+      click: () => h.onRefreshSessions(),
     },
     // Phase 1 replaces this with the dimmed cascade grid; for now, surface all.
     { label: 'Show windows', click: () => h.onHubView() },
@@ -121,12 +109,10 @@ export function createTray(
   h: TrayHandlers,
   newWidgetTools: NewWidgetTool[],
   newWidgetProjects: NewWidgetProject[],
-  attachableTmuxSessions: AttachableTmuxSession[],
 ): void {
   handlers = h
   tools = newWidgetTools
   projects = newWidgetProjects
-  attachables = attachableTmuxSessions
   // createFromPath returns an empty image instead of throwing, which would
   // leave a blank tray slot. Say so; the packaged smoke fails on this line.
   if (idleImage.isEmpty() || activeImage.isEmpty()) {
@@ -137,15 +123,18 @@ export function createTray(
   tray.setContextMenu(buildMenu([]))
 }
 
-/** Rebuild the menu from the current widget catalog (open + closed) and the
- * current workspace catalog (the New-widget submenu's second level). */
+/** Rebuild the menu from Tether's session catalog (open + closed views), the
+ * tool registry and the workspace catalog. `notice` explains an unreachable
+ * Tether at the top of the menu; sessions keep running meanwhile. */
 export function refreshTray(
   widgets: TrayWidget[],
+  newWidgetTools: NewWidgetTool[],
   newWidgetProjects: NewWidgetProject[],
-  attachableTmuxSessions: AttachableTmuxSession[],
+  notice: string | null = null,
 ): void {
+  tools = newWidgetTools
   projects = newWidgetProjects
-  attachables = attachableTmuxSessions
+  unavailable = notice
   tray?.setContextMenu(buildMenu(widgets))
 }
 

@@ -21,9 +21,9 @@ describe('openable session discovery', () => {
     )
   })
 
-  it('finds an A-Term session created after Aico first loaded', async () => {
+  it('finds a session another app started after Aico first loaded', async () => {
     let sessions: {
-      owner: 'a-term'
+      origin: 'a-term'
       id: string
       label: string
       project: string | null
@@ -35,12 +35,12 @@ describe('openable session discovery', () => {
     vi.stubGlobal('window', { aico: { actions: { listOpenableSessions } } })
 
     expect(await refreshSessions()).toEqual({ status: 'empty' })
-    expect(allActions().some((action) => action.id === 'tmux:default:a-term-new')).toBe(false)
+    expect(allActions().some((action) => action.id === 'session:aico:0a1b2c3d')).toBe(false)
 
     sessions = [
       {
-        owner: 'a-term',
-        id: 'default:a-term-new',
+        origin: 'a-term',
+        id: '0a1b2c3d',
         label: 'A-Term new',
         project: null,
         tool: null,
@@ -49,7 +49,7 @@ describe('openable session discovery', () => {
       },
     ]
     expect(await refreshSessions()).toEqual({ status: 'ready' })
-    expect(allActions().some((action) => action.id === 'tmux:default:a-term-new')).toBe(true)
+    expect(allActions().some((action) => action.id === 'session:aico:0a1b2c3d')).toBe(true)
     expect(listOpenableSessions).toHaveBeenCalledTimes(2)
   })
 

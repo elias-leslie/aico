@@ -25,8 +25,10 @@ export interface PaneMode {
 }
 
 export interface OpenableSession {
-  owner: 'aico' | 'a-term'
+  /** Tether session id (8 lowercase hex). */
   id: string
+  /** The app or contract that started it; display only. */
+  origin: 'aico' | 'a-term' | 'cli' | 'root'
   label: string
   project: string | null
   tool: string | null
@@ -50,8 +52,6 @@ export interface AicoApi {
     write(text: string): void
   }
   scrollback: {
-    /** Full tmux history (with color escapes) for the read-only overlay. */
-    capture(): Promise<string>
     /** Bounded tmux history page (with color escapes), newest tail by default. */
     page(request?: ScrollbackPageRequest): Promise<ScrollbackPage>
     /** Who owns the pane's scrollback, straight from tmux. */
@@ -87,9 +87,10 @@ export interface AicoApi {
     loadTui(tool: string): void
     /** Aico workspace catalog for the "Open workspace" picker. */
     listProjects(): Promise<{ id: string; name: string; root: string; current: boolean }[]>
-    /** Running sessions from both owners. Opening one reuses its live process. */
+    /** Every running Tether session, whichever app started it. Opening one
+     * reuses its live process. */
     listOpenableSessions(): Promise<OpenableSession[]>
-    openSession(owner: OpenableSession['owner'], id: string): Promise<void>
+    openSession(id: string): Promise<void>
     /** Snapshot ownership, tmux, and resource diagnostics for this session. */
     sessionDiagnostics(): Promise<Record<string, unknown>>
     /** Move the focused widget to workspace `id` (respawns its pane there, same tool). */

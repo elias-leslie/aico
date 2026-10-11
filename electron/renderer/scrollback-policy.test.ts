@@ -183,15 +183,11 @@ const OBSERVED_TUI_PANES = [
   { tuiSlug: 'shell', alternateScreen: false, mouseReporting: false, owner: 'overlay' },
 ] as const
 
-describe('every registered TUI', () => {
+describe('every tool Aico has a mark for', () => {
   it('has an observed pane mode', async () => {
-    const { clearRegistry, listTuis, registerBuiltinTuis } = await import('../main/tui/registry')
-    clearRegistry()
-    registerBuiltinTuis()
-    const registered = listTuis()
-      .map((tui) => tui.slug)
-      .sort()
-    expect(OBSERVED_TUI_PANES.map((pane) => pane.tuiSlug).sort()).toEqual(registered)
+    const { TOOL_MARKS } = await import('../main/tool-marks')
+    const marked = Object.keys(TOOL_MARKS).sort()
+    expect(OBSERVED_TUI_PANES.map((pane) => pane.tuiSlug).sort()).toEqual(marked)
   })
 
   for (const pane of OBSERVED_TUI_PANES) {

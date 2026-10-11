@@ -10,7 +10,7 @@ import {
 import { createCatalogState, type TuiInfo } from './catalog-state'
 
 const aTermSession = (id: string): OpenableSession => ({
-  owner: 'a-term',
+  origin: 'a-term',
   id,
   label: `A-Term ${id}`,
   project: 'Aico',
@@ -54,7 +54,7 @@ describe('picker catalog state', () => {
     expect(listOpenableSessions).toHaveBeenCalledOnce()
 
     projects.resolve([{ id: 'workspace-1', name: 'Workspace', current: true }])
-    sessions.resolve([aTermSession('default:a-term-1')])
+    sessions.resolve([aTermSession('0a1b2c01')])
     await Promise.resolve()
     expect(finished).toBe(false)
 
@@ -65,9 +65,9 @@ describe('picker catalog state', () => {
         'new:claude',
         'replace:claude',
         'project:workspace-1',
-        'tmux:default:a-term-1',
+        'session:aico:0a1b2c01',
       ]),
-    ).toEqual(['new:claude', 'replace:claude', 'project:workspace-1', 'tmux:default:a-term-1'])
+    ).toEqual(['new:claude', 'replace:claude', 'project:workspace-1', 'session:aico:0a1b2c01'])
     expect(catalogs.tuis).toHaveLength(1)
     expect(catalogs.projects).toHaveLength(1)
     expect(catalogs.sessionStatus).toBe('ready')
@@ -93,8 +93,8 @@ describe('picker catalog state', () => {
     await oldRefresh
 
     expect(catalogs.sessions.map((session) => session.id)).toEqual(['new'])
-    expect(allActions().some((action) => action.id === 'tmux:new')).toBe(true)
-    expect(allActions().some((action) => action.id === 'tmux:old')).toBe(false)
+    expect(allActions().some((action) => action.id === 'session:aico:new')).toBe(true)
+    expect(allActions().some((action) => action.id === 'session:aico:old')).toBe(false)
   })
 
   it('degrades a failed catalog independently of the others', async () => {
@@ -112,30 +112,30 @@ describe('picker catalog state', () => {
     expect(catalogs.sessionStatus).toBe('empty')
   })
 
-  it('keeps sessions from both owners available to Open session', async () => {
+  it('keeps sessions from every origin available to Open session', async () => {
     const catalogs = createCatalogState({
       listTuis: async () => [],
       listProjects: async () => [],
       listOpenableSessions: async () => [
         {
-          owner: 'aico',
-          id: 'widget-1',
+          origin: 'aico',
+          id: '0a1b2c00',
           label: 'Aico Codex',
           project: 'Aico',
           tool: 'Codex',
           status: 'running',
           locallyOpen: false,
         },
-        aTermSession('default:a-term-2'),
+        aTermSession('0a1b2c02'),
       ],
     })
 
     await catalogs.loadInitial()
 
-    expect(catalogs.sessions.map((session) => session.owner)).toEqual(['aico', 'a-term'])
-    expect(sanitizePins(['session:aico:widget-1', 'tmux:default:a-term-2'])).toEqual([
-      'session:aico:widget-1',
-      'tmux:default:a-term-2',
+    expect(catalogs.sessions.map((session) => session.origin)).toEqual(['aico', 'a-term'])
+    expect(sanitizePins(['session:aico:0a1b2c00', 'session:aico:0a1b2c02'])).toEqual([
+      'session:aico:0a1b2c00',
+      'session:aico:0a1b2c02',
     ])
   })
 })

@@ -31,9 +31,9 @@ function showToast(detail: AicoToastDetail): void {
   window.dispatchEvent(new CustomEvent<AicoToastDetail>(AICO_TOAST_EVENT, { detail }))
 }
 
-async function openExistingSession(owner: 'aico' | 'a-term', id: string): Promise<void> {
+async function openExistingSession(id: string): Promise<void> {
   try {
-    await window.aico.actions.openSession(owner, id)
+    await window.aico.actions.openSession(id)
   } catch (error) {
     console.warn('[aico] failed to open session:', error)
     showToast({ kind: 'Error', snippet: 'Could not open session' })
@@ -354,14 +354,22 @@ export function setGameActions(games: { key: string; name: string }[]): void {
 
 let sessionActions: Action[] = []
 
-export function sessionActionId(session: { owner: 'aico' | 'a-term'; id: string }): string {
-  // Preserve pins created for A-Term sessions before the catalog included Aico.
-  return session.owner === 'a-term' ? `tmux:${session.id}` : `session:aico:${session.id}`
+/** Pins keep the id format Aico sessions always had; Tether ids are the old
+ * widget ids, so existing session pins still resolve. */
+export function sessionActionId(session: { id: string }): string {
+  return `session:aico:${session.id}`
+}
+
+const ORIGIN_NAMES: Record<string, string> = {
+  aico: 'Aico',
+  'a-term': 'A-Term',
+  cli: 'CLI',
+  root: 'Root',
 }
 
 export function setSessionActions(
   sessions: {
-    owner: 'aico' | 'a-term'
+    origin: string
     id: string
     label: string
     project: string | null
@@ -376,8 +384,8 @@ export function setSessionActions(
     label: `Open ${s.label}`,
     shortcut: '',
     icon: '⇱',
-    note: [s.project, s.tool, s.owner === 'aico' ? 'Aico' : 'A-Term'].filter(Boolean).join(' · '),
-    run: () => void openExistingSession(s.owner, s.id),
+    note: [s.project, s.tool, ORIGIN_NAMES[s.origin] ?? s.origin].filter(Boolean).join(' · '),
+    run: () => void openExistingSession(s.id),
   }))
 }
 

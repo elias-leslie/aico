@@ -108,8 +108,8 @@ describe('action registry', () => {
   it('treats discovered sessions as pinnable open actions', () => {
     setSessionActions([
       {
-        owner: 'a-term',
-        id: 'default:a-term-demo',
+        origin: 'a-term',
+        id: '0a1b2c3d',
         label: 'A-Term demo',
         project: null,
         tool: null,
@@ -117,8 +117,9 @@ describe('action registry', () => {
         locallyOpen: false,
       },
     ])
-    const a = findAction('tmux:default:a-term-demo')
+    const a = findAction('session:aico:0a1b2c3d')
     expect(a?.label).toBe('Open A-Term demo')
+    expect(a?.note).toBe('A-Term')
     expect(typeof a?.run).toBe('function')
     expect(a && isPinnable(a)).toBe(true)
   })

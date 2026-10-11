@@ -61,7 +61,7 @@ const catalogs = createCatalogState({
 let submenuEl: HTMLElement
 let submenuKind: FlyoutKind | null = null
 
-/** Requery both session owners whenever an Open surface appears. */
+/** Requery Tether's sessions whenever an Open surface appears. */
 export function refreshSessions(): Promise<{ status: 'ready' | 'empty' | 'unavailable' }> {
   return catalogs.refreshSessions()
 }
