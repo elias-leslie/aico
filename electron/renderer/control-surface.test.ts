@@ -19,6 +19,9 @@ describe('openable session discovery', () => {
     expect(sessionSubmenuLabel({ label: 'Agent Hub', project: 'Agent Hub', tool: 'codex' })).toBe(
       'Agent Hub · Codex',
     )
+    expect(
+      sessionSubmenuLabel({ label: 'Agent Hub', project: 'Agent Hub', tool: 'Claude Code' }),
+    ).toBe('Agent Hub · Claude Code')
   })
 
   it('finds a session another app started after Aico first loaded', async () => {

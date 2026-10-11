@@ -26,6 +26,7 @@ import {
   programOwnsSelection,
   scrollbackWheelAction,
 } from './scrollback-policy'
+import { terminalShouldTakeFocus } from './terminal-focus'
 import { wireVoice } from './voice'
 import { wheelLineDelta } from './wheel'
 
@@ -480,6 +481,13 @@ window.aico.pty.onData((data) => {
 window.aico.pty.start({ cols: term.cols, rows: term.rows })
 terminalLayoutReady = true
 scheduleTerminalLayoutFit()
+
+// A window that comes forward (new, restored, reopened, raised by the window
+// manager) types into its terminal without a click first.
+if (document.hasFocus() && terminalShouldTakeFocus(document)) term.focus()
+window.aico.win.onFocusChange((focused) => {
+  if (focused && terminalShouldTakeFocus(document)) term.focus()
+})
 
 // Debounce resizes: a burst of observer callbacks (drag-resize, maximize) each
 // reflows tmux, and racing reflows are a prime cause of duplicated/garbled

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { createSessionCatalog, sessionLabel } from './session-catalog'
+import {
+  createSessionCatalog,
+  sessionLabel,
+  toolDisplayName,
+  traySessionLabel,
+} from './session-catalog'
 import type { SessionDescriptor } from './tether-client'
 
 function descriptor(id: string, createdAt: number, extra: Partial<SessionDescriptor> = {}) {
@@ -74,5 +79,25 @@ describe('session labels', () => {
     expect(sessionLabel({ ...plain, name: 'Review' }, { nameOverride: 'Local' }, projects)).toBe(
       'Local',
     )
+  })
+})
+
+describe('tray labels', () => {
+  const tools = [
+    { slug: 'claude-code', name: 'Claude Code' },
+    { slug: 'shell', name: 'Shell' },
+  ]
+
+  it('names the tool from the registry, else by slug', () => {
+    expect(toolDisplayName('claude-code', tools)).toBe('Claude Code')
+    expect(toolDisplayName('pi', tools)).toBe('pi')
+  })
+
+  it('tells apart sessions that share a workspace label', () => {
+    const a = traySessionLabel('Personal Workspace', toolDisplayName('claude-code', tools))
+    const b = traySessionLabel('Personal Workspace', toolDisplayName('shell', tools))
+    expect(a).toBe('Personal Workspace · Claude Code')
+    expect(b).toBe('Personal Workspace · Shell')
+    expect(traySessionLabel('Shell', 'Shell')).toBe('Shell')
   })
 })

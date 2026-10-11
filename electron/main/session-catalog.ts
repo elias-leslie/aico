@@ -74,3 +74,18 @@ export function sessionLabel(
     descriptor.label
   )
 }
+
+/** A tool's registry name (`Claude Code`), else its slug. */
+export function toolDisplayName(
+  slug: string,
+  tools: readonly { slug: string; name: string }[],
+): string {
+  return tools.find((tool) => tool.slug === slug)?.name ?? slug
+}
+
+/** The tray's label for a session: its display label and tool, as the window
+ * title shows them. Several sessions in one workspace otherwise share a label,
+ * and the tray's End list could not tell them apart. */
+export function traySessionLabel(label: string, tool: string): string {
+  return tool && tool !== label ? `${label} · ${tool}` : label
+}

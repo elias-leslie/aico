@@ -28,7 +28,13 @@ import {
 } from './project'
 import { parseSse, type SelectionRecord } from './selection'
 import { deliverSelectionToSession } from './selection-delivery'
-import { createSessionCatalog, type SessionCatalog, sessionLabel } from './session-catalog'
+import {
+  createSessionCatalog,
+  type SessionCatalog,
+  sessionLabel,
+  toolDisplayName,
+  traySessionLabel,
+} from './session-catalog'
 import { bundledSidecar, Sidecar } from './sidecar'
 import {
   type AttachTarget,
@@ -945,7 +951,7 @@ async function confirmTrayDiscard(id: string): Promise<void> {
     cancelId: 0,
     noLink: true,
     title: 'End session?',
-    message: `End ${sessionLabel(descriptor, getView(id), projects)}?`,
+    message: `End ${traySessionLabel(sessionLabel(descriptor, getView(id), projects), toolDisplayName(descriptor.tool, tools))}?`,
     detail: 'Tether stops only this session’s verified workload. This cannot be undone.',
   })
   if (response.response === 1) discardWidget(id)
@@ -1034,7 +1040,10 @@ function syncTray(): void {
   if (quitting) return
   const widgets: TrayWidget[] = catalog.list().map((descriptor) => ({
     id: descriptor.id,
-    label: sessionLabel(descriptor, getView(descriptor.id), projects),
+    label: traySessionLabel(
+      sessionLabel(descriptor, getView(descriptor.id), projects),
+      toolDisplayName(descriptor.tool, tools),
+    ),
     open: windowForWidget(descriptor.id) !== undefined,
   }))
   refreshTray(widgets, trayTools(), projects.list(), tetherNotice())
@@ -1746,7 +1755,7 @@ const startup = app.whenReady().then(async () => {
         origin: descriptor.origin,
         label: sessionLabel(descriptor, getView(descriptor.id), projects),
         project: projects.nameFor(descriptor.projectId, descriptor.projectRoot),
-        tool: descriptor.tool,
+        tool: toolDisplayName(descriptor.tool, tools),
         status: 'running' as const,
         locallyOpen: Boolean(windowForWidget(descriptor.id)),
       }))
