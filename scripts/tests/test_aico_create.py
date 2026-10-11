@@ -16,15 +16,16 @@ BASE = ["create", "recovery-1", "Reconcile after crash.", "--project", "neri",
         "--project-root", "/fixture/project", "--resume-session", THREAD]
 
 
-def descriptor(payload, surface="aico"):
+def descriptor(payload, surface="aico", tether=False):
     fields = [payload[k] for k in ("tool", "projectId", "projectRoot", "initialPrompt", "role", "leadRootReference", "facetCapsuleRef")]
     if payload.get("resumeSessionId"):
         fields.append(payload["resumeSessionId"])
     return {"owner": surface, "requestId": payload["requestId"],
             "digest": hashlib.sha256(json.dumps(fields, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest(),
-            "hostIdentity": "12345678" if surface == "aico" else THREAD,
+            "hostIdentity": "12345678" if surface == "aico" or tether else THREAD,
             "logicalSessionId": "aico-root-" + THREAD, "generation": "a" * 64,
-            "surfaceLocator": f"{surface}://" + ("widget/12345678" if surface == "aico" else "pane/" + THREAD),
+            "surfaceLocator": "aico://widget/12345678" if surface == "aico" or tether
+                              else "a-term://pane/" + THREAD,
             "status": "running", "role": payload["role"],
             "leadRootReference": payload["leadRootReference"], "facetCapsuleRef": payload["facetCapsuleRef"]}
 
@@ -124,3 +125,14 @@ def test_actual_owner_transport_uses_compact_utf8_and_exact_resume(tmp_path, mon
 def test_aterm_transport_rejects_external_credentials_and_proxy_routes(url):
     with pytest.raises(admin.argparse.ArgumentTypeError):
         admin.local_root_url(url)
+
+
+def test_aterm_create_accepts_tether_shaped_receipt(monkeypatch):
+    """A-Term's /v1/roots now proxies Tether: 8-hex id, aico://widget locator, owner a-term."""
+    output = []
+    monkeypatch.setattr(admin.Collector, "receipt",
+                        lambda _self, _endpoint, _route, payload=None, **_kw: (200, descriptor(payload, "a-term", tether=True)))
+    monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
+    assert admin.main([*BASE, "--surface", "a-term"]) == 0
+    assert output[0]["owner"] == "a-term" and output[0]["hostIdentity"] == "12345678"
+    assert output[0]["surfaceLocator"] == "aico://widget/12345678"

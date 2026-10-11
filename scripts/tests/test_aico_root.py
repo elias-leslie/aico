@@ -119,3 +119,34 @@ def test_aterm_title_and_end_use_owner_root_routes(monkeypatch):
     code, _, output = invoke(monkeypatch, ["end", ROOT, "--surface", "a-term"],
                              [(200, ATERM), (503, {"error": "close_uncertain"})])
     assert code == 1 and output[0]["applied"] is None and output[0]["reason"] == "close_uncertain"
+
+
+# A-Term's /v1/roots proxies Tether since the cutover: 8-hex session ids at
+# aico://widget/<id>, with owner (origin) "a-term".
+TETHER_ATERM = {**DESCRIPTOR, "owner": "a-term"}
+
+
+def test_aterm_surface_accepts_tether_shaped_roots(monkeypatch):
+    code, _, output = invoke(monkeypatch, ["status", ROOT, "--surface", "a-term"], [(200, TETHER_ATERM)])
+    assert code == 0 and output[0]["hostIdentity"] == "aabbcc01"
+    assert output[0]["surfaceLocator"] == "aico://widget/aabbcc01"
+    ended = {**TETHER_ATERM, "generation": None, "status": "ended"}
+    code, calls, output = invoke(monkeypatch, ["end", ROOT, "--surface", "a-term"],
+                                 [(200, TETHER_ATERM), (200, ended)])
+    assert code == 0 and calls[1] == ("http://127.0.0.1:8002", f"/v1/roots/{ROOT}/end", {"generation": GENERATION})
+    assert output[0]["applied"] is True
+
+
+@pytest.mark.parametrize("descriptor", [
+    # Shapes may not mix: a Tether id with an A-Term locator, or the reverse.
+    {**TETHER_ATERM, "surfaceLocator": "a-term://pane/00000000-0000-4000-8000-000000000002"},
+    {**ATERM, "surfaceLocator": "aico://widget/aabbcc01"},
+    {**TETHER_ATERM, "surfaceLocator": "aico://widget/ffffffff"},
+    # The aico surface never accepts an A-Term owner or a pane UUID.
+    {**ATERM, "owner": "aico"},
+])
+def test_surface_identity_refuses_mixed_shapes(monkeypatch, descriptor):
+    surface = descriptor["owner"]
+    args = ["status", ROOT] + (["--surface", "a-term"] if surface == "a-term" else [])
+    code, _, output = invoke(monkeypatch, args, [(200, descriptor)])
+    assert code == 1 and output[0]["reason"] == "root_receipt_unqualified"
