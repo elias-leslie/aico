@@ -123,7 +123,9 @@ done
 echo 'Bundled sidecar returned the expected health identity and Electron reported ready.'
 
 # A fresh Aico profile starts in the tray. The second launch activates the
-# first instance and creates a shell widget. It gets its own TMPDIR: with
+# first instance and opens a shell widget. No Tether daemon runs here, so the
+# widget shows its "could not start" notice; the window and renderer are what
+# this gate checks. The second launch gets its own TMPDIR: with
 # APPIMAGE_EXTRACT_AND_RUN the runtime deletes its extraction directory on exit,
 # and a shared one would vanish under the primary's running sidecar.
 mkdir -p "$tmp/temp-second"

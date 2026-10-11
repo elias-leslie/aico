@@ -8,7 +8,9 @@ input. No live panes were operated on or rebuilt for this qualification.
 
 ## Feedback loop and evidence
 
-Run from the Aico checkout:
+The qualification script moved to Tether with the rest of the session
+lifecycle. Run it from the Tether checkout (the recorded evidence in
+`qualifications/` names the original Aico path):
 
 ```sh
 unshare -Urn python3 scripts/qualify-codex-admin.py --raw

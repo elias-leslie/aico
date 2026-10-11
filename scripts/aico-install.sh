@@ -41,36 +41,55 @@ sed_replacement() {
   printf '%s' "$1" | sed -e 's/[\\&#]/\\&/g'
 }
 
-require_durable_user_manager() {
-  if ! command -v systemd-run >/dev/null 2>&1 ||
-    ! command -v systemctl >/dev/null 2>&1 ||
-    ! command -v loginctl >/dev/null 2>&1; then
-    echo "Aico requires a systemd user manager (systemd-run, systemctl, loginctl)." >&2
-    exit 1
-  fi
-  if [ ! -f /sys/fs/cgroup/cgroup.controllers ]; then
-    echo "Aico requires cgroup v2 for exact per-session process cleanup." >&2
-    exit 1
-  fi
-
-  local linger
-  linger="$(loginctl show-user "${UID}" --property=Linger --value 2>/dev/null || true)"
-  if [ "$linger" != yes ]; then
-    echo "Aico: enabling user linger so durable tmux sessions survive graphical logout..."
-    if ! loginctl enable-linger "${USER}"; then
-      echo "Enable it, then rerun the installer: sudo loginctl enable-linger ${USER}" >&2
-      exit 1
-    fi
-    linger="$(loginctl show-user "${UID}" --property=Linger --value 2>/dev/null || true)"
-  fi
-  if [ "$linger" != yes ]; then
-    echo "Aico cannot guarantee logout durability because user linger is disabled." >&2
-    echo "Enable it, then rerun the installer: sudo loginctl enable-linger ${USER}" >&2
+require_user_manager() {
+  if ! command -v systemctl >/dev/null 2>&1; then
+    echo "Aico requires a systemd user manager (systemctl) for aico-shell.service." >&2
     exit 1
   fi
 }
 
-require_durable_user_manager
+# Tether owns every session (tmux servers, agent launch, End, roots); Aico is a
+# view client of its API. Require an installed CLI whose daemon speaks API v1+.
+# `tether --json version` prints a plain banner line before the JSON object.
+TETHER_REPO="${TETHER_REPO:-/srv/workspaces/projects/tether}"
+tether_instructions() {
+  cat >&2 <<MESSAGE
+Install and start Tether first:
+  cd $TETHER_REPO && scripts/install.sh --start default
+Then rerun scripts/aico-install.sh. Aico talks to \$TETHER_SOCKET, or the
+instance's socket at \$XDG_RUNTIME_DIR/tether/\${TETHER_INSTANCE:-default}/control.sock.
+MESSAGE
+}
+
+require_tether() {
+  if ! command -v tether >/dev/null 2>&1; then
+    echo "Aico requires Tether, and 'tether' is not on PATH." >&2
+    tether_instructions
+    exit 1
+  fi
+  local output api
+  output="$(tether --json version 2>&1 || true)"
+  api="$(printf '%s\n' "$output" | sed -n '/^{/,$p' | python3 -c 'import json, sys
+try:
+    print(int(json.load(sys.stdin).get("apiVersion", 0)))
+except Exception:
+    print(0)' 2>/dev/null || echo 0)"
+  if [ "$api" -ge 1 ] 2>/dev/null; then
+    echo "Tether: daemon reachable, API v$api."
+    return 0
+  fi
+  if printf '%s' "$output" | grep -q 'not reachable'; then
+    echo "Aico: the Tether CLI is installed but its daemon is not running." >&2
+  else
+    echo "Aico: Tether did not report a compatible API version (need apiVersion >= 1):" >&2
+    printf '%s\n' "$output" >&2
+  fi
+  tether_instructions
+  exit 1
+}
+
+require_user_manager
+require_tether
 
 npm ci
 # Some clean hosts have npm configured to skip lifecycle scripts. Make the
@@ -168,16 +187,16 @@ uv sync --frozen --python 3.13 --extra dev
 mkdir -p "$HOME/.local/share/applications"
 sed "s#__PROJECT_ROOT__#$(sed_replacement "$REPO")#g" scripts/aico.desktop >"$HOME/.local/share/applications/aico.desktop"
 
-# Render the managed user units exactly as `st service rebuild aico` does
+# Render the managed user unit exactly as `st service rebuild aico` does
 # (substitute __PROJECT_ROOT__, write to the user unit directory, reload the
-# user manager). Units are rewritten only when their content changed. They are
+# user manager). It is rewritten only when its content changed. It is
 # not enabled or started here: scripts/aico-launch.sh starts aico-shell.service.
 install_user_units() {
   local unit_dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
   local replacement changed=0 unit rendered
   replacement="$(sed_replacement "$REPO")"
   mkdir -p "$unit_dir"
-  for unit in aico-shell.service aico-owner.service; do
+  for unit in aico-shell.service; do
     rendered="$(sed "s#__PROJECT_ROOT__#${replacement}#g" "scripts/systemd/$unit")"
     if [ -f "$unit_dir/$unit" ] && [ "$(cat "$unit_dir/$unit")" = "$rendered" ]; then
       echo "systemd: $unit is up to date."
@@ -196,12 +215,6 @@ install_user_units() {
 }
 
 install_user_units
-
-if [ "${AICO_INSTALL_CONTEXT_HOOKS:-0}" = "1" ]; then
-  scripts/aico-install-context-hooks.sh
-else
-  echo "Skipping optional TUI context hooks. Set AICO_INSTALL_CONTEXT_HOOKS=1 to install them."
-fi
 
 if command -v gsettings >/dev/null 2>&1; then
   scripts/aico-hotkeys.sh install || true

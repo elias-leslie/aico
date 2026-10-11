@@ -1,5 +1,12 @@
 # July 2026 process-containment incident
 
+> **Lifecycle moved to Tether.** Aico's session lifecycle (tmux server and pane
+> scopes, launch gate, End, admission, root control) moved to Tether at Tether
+> `bcbf73e` and was removed from Aico at `05ede7e` (branch `tether-client`). The
+> invariants below are pinned in Tether's `src/lifecycle/invariants.test.ts`;
+> the harness is Tether's `scripts/tether-lifecycle-harness.sh`. Paths and module
+> names below are historical.
+
 Status: confirmed. The Aico-owned session/pane repairs are deployed. An
 experimental local Codex modification demonstrated a finer per-execution cleanup
 boundary during the recurrence, but modifying and installing an OpenAI-owned
@@ -244,11 +251,12 @@ they naturally exit; every fresh start uses the official binary.
 
 ## Regression evidence
 
-`scripts/aico-lifecycle-harness.sh` uses a collision-checked private tmux socket
+`scripts/aico-lifecycle-harness.sh` (now Tether's
+`scripts/tether-lifecycle-harness.sh`) uses a collision-checked private tmux socket
 and synthetic `sleep` trees. It covers bare-pane placement, detached `setsid`
 children, attachment crash/reconnect, pane replacement, parent crash, exact
 scope cleanup, peer isolation, server durability, and zero residue. See
-[`LIFECYCLE_HARNESS.md`](LIFECYCLE_HARNESS.md).
+Tether's `docs/LIFECYCLE_HARNESS.md`.
 
 The shared Codex regressions separately cover the temporary unified-exec
 boundary described above: five lifecycle cases plus the scope-manager test.

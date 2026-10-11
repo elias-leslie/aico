@@ -34,6 +34,7 @@ import {
   type GuiCommand,
   type GuiVerdict,
   holdGuiChannel,
+  LEGACY_SESSION_NAME,
   type SessionDescriptor,
   TetherClient,
   TetherError,
@@ -93,6 +94,10 @@ const ptyRefreshes = new Map<
 // no id until Tether creates it at the window's first grid size.
 const widgetOf = new Map<number, string>()
 const pendingCreates = new Map<number, { tool: string; projectId: string }>()
+// Windows showing a pre-Tether A-Term session (`summitflow-<uuid>` on the
+// default tmux server): attach-only, no generation, no view row, no actions.
+const legacyOf = new Map<number, string>()
+const LEGACY_ID_PREFIX = 'legacy:'
 // Windows whose attach waits for Tether to come back, with their last grid.
 const awaitingTether = new Map<number, PtySize>()
 const boundsTimers = new Map<number, NodeJS.Timeout>()
@@ -454,6 +459,12 @@ async function startPty(win: BrowserWindow, size: PtySize): Promise<void> {
   }
   awaitingTether.delete(winId)
 
+  const legacyName = legacyOf.get(winId)
+  if (legacyName) {
+    await startLegacyPty(win, legacyName, size, stillCurrent)
+    return
+  }
+
   let widgetId = widgetOf.get(winId)
   if (!widgetId) {
     const pending = pendingCreates.get(winId)
@@ -561,6 +572,64 @@ async function startPty(win: BrowserWindow, size: PtySize): Promise<void> {
   ptys.set(winId, pty)
   attachTargets.set(winId, target)
   if (win.isFocused()) void claimSize()
+}
+
+/** Attach a legacy A-Term session. Tether gives no generation for it, so there
+ * is no resize claim; the attach client sizes the window as tmux decides. */
+async function startLegacyPty(
+  win: BrowserWindow,
+  name: string,
+  size: PtySize,
+  stillCurrent: () => boolean,
+): Promise<void> {
+  const winId = win.id
+  let target: AttachTarget
+  try {
+    target = await tether.legacyAttach(name)
+  } catch (error) {
+    if (error instanceof TetherUnavailable) awaitingTether.set(winId, size)
+    if (stillCurrent()) writeNotice(win, describeFailure('Could not attach', error))
+    return
+  }
+  if (!stillCurrent()) return
+  const pty = spawn(target.argv[0], target.argv.slice(1), {
+    name: 'xterm-256color',
+    cols: size.cols,
+    rows: size.rows,
+    cwd: process.env.HOME,
+    env: attachEnvironment(process.env, target),
+  })
+  pty.onData((data) => {
+    if (!win.isDestroyed()) win.webContents.send('pty:data', data)
+  })
+  pty.onExit(() => {
+    if (ptys.get(winId) === pty) {
+      ptys.delete(winId)
+      attachTargets.delete(winId)
+    }
+  })
+  ptys.set(winId, pty)
+  attachTargets.set(winId, target)
+}
+
+function windowForLegacy(name: string): BrowserWindow | undefined {
+  for (const [winId, legacy] of legacyOf) {
+    if (legacy !== name) continue
+    const win = BrowserWindow.fromId(winId)
+    if (win && !win.isDestroyed()) return win
+  }
+  return undefined
+}
+
+function openLegacySession(name: string): void {
+  const existing = windowForLegacy(name)
+  if (existing) {
+    existing.show()
+    existing.focus()
+    return
+  }
+  const win = createWidgetWindow(null, null)
+  legacyOf.set(win.id, name)
 }
 
 function resumeAwaitingAttaches(): void {
@@ -746,6 +815,7 @@ function createWidgetWindow(
     }
     setWidgetActivity(winId, false)
     widgetOf.delete(winId)
+    legacyOf.delete(winId)
     pendingCreates.delete(winId)
     awaitingTether.delete(winId)
     attachTargets.delete(winId)
@@ -939,6 +1009,20 @@ function syncTray(): void {
 function pushTitles(): void {
   for (const win of BrowserWindow.getAllWindows()) {
     if (win.isDestroyed()) continue
+    const legacyName = legacyOf.get(win.id)
+    if (legacyName) {
+      const mark = toolMark('shell')
+      win.webContents.send('win:title', {
+        label: `A-Term ${legacyName.slice('summitflow-'.length, 'summitflow-'.length + 8)}`,
+        name: null,
+        icon: mark.icon,
+        accent: mark.accent,
+        tuiName: 'A-Term session',
+        tuiSlug: 'shell',
+        sessionId: legacyName,
+      })
+      continue
+    }
     const widgetId = widgetOf.get(win.id)
     const descriptor = widgetId ? catalog.get(widgetId) : undefined
     if (!descriptor) continue
@@ -1551,10 +1635,12 @@ const startup = app.whenReady().then(async () => {
   // projects. Awaits a stale refresh so the first menu is complete.
   ipcMain.handle('project:list', () => projects.listFresh())
 
-  // Every running Tether session, whichever app created it.
+  // Every running Tether session, whichever app created it, plus A-Term's
+  // pre-Tether sessions, which Tether lists for attach only.
   ipcMain.handle('session:list-openable', async () => {
     await refreshSessions()
-    return catalog
+    const legacy = await tether.legacySessions().catch(() => [])
+    const sessions = catalog
       .list()
       .filter((descriptor) => descriptor.status === 'running' || descriptor.status === 'legacy')
       .map((descriptor) => ({
@@ -1566,8 +1652,28 @@ const startup = app.whenReady().then(async () => {
         status: 'running' as const,
         locallyOpen: Boolean(windowForWidget(descriptor.id)),
       }))
+    return [
+      ...sessions,
+      ...legacy.map((item) => ({
+        id: `${LEGACY_ID_PREFIX}${item.name}`,
+        origin: 'a-term' as const,
+        label: `A-Term ${item.name.slice('summitflow-'.length, 'summitflow-'.length + 8)}`,
+        project: null,
+        tool: 'legacy session',
+        status: 'running' as const,
+        locallyOpen: Boolean(windowForLegacy(item.name)),
+      })),
+    ]
   })
   ipcMain.handle('session:open', async (_event, id: unknown) => {
+    if (typeof id === 'string' && id.startsWith(LEGACY_ID_PREFIX)) {
+      const name = id.slice(LEGACY_ID_PREFIX.length)
+      if (!LEGACY_SESSION_NAME.test(name)) throw new Error('Invalid session')
+      const listed = await tether.legacySessions()
+      if (!listed.some((item) => item.name === name)) throw new Error('Session is unavailable')
+      openLegacySession(name)
+      return
+    }
     if (typeof id !== 'string' || !SESSION_ID.test(id)) throw new Error('Invalid session')
     const descriptor = await tether.getSession(id)
     if (descriptor.status !== 'running' && descriptor.status !== 'legacy')

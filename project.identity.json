@@ -8,7 +8,7 @@
   },
   "branding": {
     "short_name": "Aico",
-    "description": "Floating-widget desktop AI companion. Wraps terminal AI agents and shell CLIs in Electron widgets with tmux-backed continuity and click-to-context capture."
+    "description": "Floating-widget desktop AI companion. Wraps terminal AI agents and shell CLIs in Electron widgets as views of Tether-owned tmux sessions, with click-to-context capture."
   },
   "runtime": {
     "backend_port": 8005,
@@ -20,7 +20,7 @@
   "services": {
     "backend": "aico-shell.service",
     "frontend": "",
-    "default_workers": ["aico-owner.service"],
+    "default_workers": [],
     "optional_workers": []
   },
   "hosts": {},

@@ -19,9 +19,9 @@ Conflicts=aico-shell-runtime.service
 Type=simple
 Slice=app.slice
 WorkingDirectory=__PROJECT_ROOT__
-# Keep the desktop/runtime tree in one bounded cgroup. Durable tmux servers and
-# pane workloads are created in separate scopes by Electron and survive this
-# unit stopping; Chromium helpers and the optional sidecar must not.
+# Keep the desktop/runtime tree in one bounded cgroup. Tether owns the durable
+# tmux servers and pane workloads in its own units, so they survive this unit
+# stopping; Chromium helpers, tmux attach clients and the sidecar must not.
 # SIGTERM only the Electron main process so app.quit can detach PTYs and close
 # renderers cleanly; systemd still SIGKILLs any remaining helper in this exact
 # cgroup after the main process exits/TimeoutStopSec.

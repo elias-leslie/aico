@@ -1,6 +1,6 @@
 # Aico session context
 
-Aico presents durable terminal sessions as desktop windows. A session can be opened from Aico or A-Term without starting another agent process.
+Aico presents durable terminal sessions as desktop windows. Tether, the per-user session daemon, owns every session; Aico and A-Term are clients that show views of them. A session can be opened from Aico or A-Term without starting another agent process.
 
 ## Language
 
@@ -9,26 +9,26 @@ The working directory and project identity selected when starting a session.
 _Avoid_: Workspace, when naming the choice in the user interface
 
 **Session**:
-One running terminal workload and its durable tmux state, created in Aico or A-Term. Closing a view does not end it.
+One running terminal workload and its durable tmux state, owned by Tether and created from Aico, A-Term, the `tether` CLI or a root request. Closing a view does not end it.
 _Avoid_: Widget, attachment, pane, when naming the workload in the user interface
 
 **View**:
-A local Aico window or A-Term tab that shows an existing session. Several views may show the same session.
+A local Aico window or A-Term tab that shows an existing session. Several views may show the same session. Aico stores one view row per session ID (geometry, open state, local name override) in `aico.db`.
 _Avoid_: Session, when only the local display is being closed
 
 **Owner**:
-The app that created a session and can verify and end its underlying workload. The other app asks that owner to end it.
+Tether. It verifies and ends every session's workload; Aico and A-Term ask it to. A session's `origin` (`aico`, `a-term`, `cli`, `root`) records which client started it, not who may end it.
 _Avoid_: Attachment, when describing authority to end a session
 
 **Widget**:
-Aico's catalog record for one managed session, addressed by an exact eight-character lowercase hexadecimal widget ID (`AICO_WIDGET_ID` inside its pane). A widget may have zero or more views.
+A session as Aico shows it, addressed by Tether's exact eight-character lowercase hexadecimal session ID, which is also the widget ID (`AICO_WIDGET_ID` inside its pane). A widget may have zero or more views.
 _Avoid_: Window, when a view may be closed while the session keeps running
 
 **Generation**:
-The opaque SHA-256 fence over a widget's exact session identity. Every owner mutation names the generation it read; a changed generation means a different workload, never a retry target.
+The opaque SHA-256 fence over a widget's exact session identity. Tether computes it; every mutation names the generation it read; a changed generation means a different workload, never a retry target.
 
 **Root**:
-A widget created through the root contract with a stable caller request ID. The retained request is a tombstone after the session ends, so the same request ID cannot start new work.
+A session created through the root contract with a stable caller request ID. The retained request is a tombstone after the session ends, so the same request ID cannot start new work.
 _Avoid_: Fleet root, unless SummitFlow registered it
 
 **Fleet root**:
@@ -36,13 +36,14 @@ A root that SummitFlow registered (`root-<32 hex>`) in its event ledger before a
 
 ## Owner and fleet state
 
-Aico is the authority for workload state; SummitFlow's fleet state records only what it requested and observed.
+Tether is the authority for workload state; Aico mirrors it from `GET /v1/sessions` and the `/v1/events` stream, and SummitFlow's fleet state records only what it requested and observed.
 
-| Aico widget `status` | Root descriptor `status` | Meaning | View mutations |
+| Tether session `status` | Root descriptor `status` | Meaning | View mutations |
 | --- | --- | --- | --- |
 | `running` | `running` | Launch dispatched and an active managed workload verified | Allowed with the current generation |
 | `pending` | `pending` | Reserved; never allocated | 409 `workload_unavailable` |
 | `uncertain` | `uncertain` | Allocated, but an active workload is not verified | 409 `workload_unavailable` |
+| `legacy` | — | A pre-Tether A-Term session on the default tmux server; attach and End only | Not addressable as a root |
 | (404) | `ended` | Retired; the root keeps a tombstone with null generation | 410 `ended` (root), 404 (widget) |
 
 | Fleet `status` | `capabilities.launch` | Owner relationship |
@@ -53,4 +54,4 @@ Aico is the authority for workload state; SummitFlow's fleet state records only 
 | `close-uncertain` | any | End was not confirmed; capacity stays allocated and the root is never relaunched |
 | `closed` | any | Owner acknowledged End for the stored generation, or returned the exact ended tombstone |
 
-Show, position and title use one owner handler for both `/v1/roots/<requestId>/…` and `/v1/widgets/<widgetId>/…`. Both serialize on the widget identity and share validation.
+Show, position and title use one Tether handler for both `/v1/roots/<requestId>/…` and `/v1/widgets/<widgetId>/…` on the legacy `/run/user/<uid>/aico/control.sock`. Tether checks the generation, then forwards the view part to Aico over its GUI channel (`GET /v1/gui/channel`); Aico applies it to its window and view row and posts the result.

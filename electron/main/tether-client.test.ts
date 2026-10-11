@@ -203,6 +203,53 @@ describe('Tether requests', () => {
   })
 })
 
+describe('legacy A-Term sessions', () => {
+  it('lists only exact summitflow names and attaches without a generation', async () => {
+    const name = 'summitflow-70b339cd-93a0-4898-8c4b-3d694ce8e8dc'
+    const { client } = await fakeTether((req, res) => {
+      if (req.url === '/v1/legacy-sessions') {
+        json(res, 200, {
+          items: [
+            {
+              kind: 'legacy-attach-only',
+              name,
+              aTermSessionId: name.slice(11),
+              createdAt: 1,
+              attachedClients: 0,
+            },
+            {
+              kind: 'legacy-attach-only',
+              name: 'summitflow-; rm -rf',
+              createdAt: 1,
+              attachedClients: 0,
+            },
+          ],
+        })
+      } else if (req.url === `/v1/legacy-sessions/${name}/attach`) {
+        json(res, 200, {
+          argv: [
+            '/usr/bin/tmux',
+            '-S',
+            '/tmp/tmux-1000/default',
+            'attach-session',
+            '-t',
+            `=${name}`,
+          ],
+          env: {},
+          unset: ['TMUX'],
+        })
+      } else json(res, 404, { error: 'not_found' })
+    })
+    expect((await client.legacySessions()).map((item) => item.name)).toEqual([name])
+    const target = await client.legacyAttach(name)
+    expect(target.generation).toBe('')
+    expect(attachSocketTarget(target.argv)).toEqual({
+      socket: '/tmp/tmux-1000/default',
+      target: `=${name}`,
+    })
+  })
+})
+
 describe('event stream', () => {
   it('reconnects with since/bootId and re-lists on a gap', async () => {
     const urls: string[] = []

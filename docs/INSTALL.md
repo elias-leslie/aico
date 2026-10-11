@@ -17,22 +17,23 @@ sudo apt-get install -y \
 
 Install Node.js 22+ and `uv` using the methods you trust for your system. The Python sidecar requires Python 3.13+; `uv venv --python 3.13` can use an existing Python 3.13 interpreter or a uv-managed one.
 
-Aico's durable-session contract also requires:
-
-- a running systemd user manager and cgroup v2 (`/sys/fs/cgroup/cgroup.controllers`),
-- tmux per-pane systemd scopes (`tmux-spawn-<uuid>.scope`), and
-- `Linger=yes` for the desktop user so graphical logout does not stop the user
-  manager and intended tmux sessions.
-
-The installer enables and verifies linger. If policy prevents that, run:
+Aico requires [Tether](https://github.com/elias-leslie/tether) (API v1 or
+later), the per-user session daemon that owns every tmux server, agent launch,
+End, root request and context hook. Install and start it from its checkout
+first:
 
 ```bash
-sudo loginctl enable-linger "$USER"
+cd /srv/workspaces/projects/tether   # or wherever Tether is checked out
+scripts/install.sh --start default
+tether --json version                # prints a banner line, then {"apiVersion": 1, ...}
 ```
 
-New sessions are blocked rather than launched without these guarantees. Aico
-never terminates existing sessions merely because a prerequisite becomes
-temporarily unavailable.
+Tether's installer checks the durable-session prerequisites (systemd user
+manager, cgroup v2, lingering). Aico itself only needs a systemd user manager
+for `aico-shell.service`. Aico connects to `$TETHER_SOCKET`, else
+`$XDG_RUNTIME_DIR/tether/${TETHER_INSTANCE:-default}/control.sock`. If Tether is
+down, open windows keep their terminals; new sessions, End and other session
+actions report that session control is unavailable until it is back.
 
 ## Source install
 
@@ -42,10 +43,11 @@ cd aico
 scripts/aico-install.sh
 ```
 
-The installer runs `npm ci`, rebuilds native Electron modules, syncs the locked
+The installer first requires `tether --json version` to report API v1 or later
+(otherwise it prints the Tether install steps and exits). It then runs `npm ci`, rebuilds native Electron modules, syncs the locked
 Python 3.13 sidecar environment with `uv`, writes a desktop entry under
-`~/.local/share/applications`, and installs the `aico-shell.service` and
-`aico-owner.service` user units into `${XDG_CONFIG_HOME:-~/.config}/systemd/user/`
+`~/.local/share/applications`, and installs the `aico-shell.service` user unit
+into `${XDG_CONFIG_HOME:-~/.config}/systemd/user/`
 (rendered for this checkout, followed by `systemctl --user daemon-reload`). It
 is safe to rerun; rerun it after moving the checkout.
 
@@ -55,10 +57,6 @@ ownership and the setuid bit. Privileged steps never reuse cached `sudo` credent
 ```bash
 AICO_INSTALL_PRIVILEGED=1 scripts/aico-install.sh
 ```
-
-The optional TUI context hooks (`AICO_INSTALL_CONTEXT_HOOKS=1`) need an Agent Hub
-checkout; set `AICO_AGENT_HUB_ROOT` if it is not at
-`/srv/workspaces/projects/agent-hub`.
 
 Launch and stop:
 
@@ -72,16 +70,12 @@ The launcher writes its pidfile, lock, and `launcher.log` under
 variables only; see [Configuration](project-guide.md#configuration) for how to
 set them for the managed unit.
 
-Use **Copy session diagnostics** inside a widget to inspect its stable ownership
-ID, tmux server generation/socket, session and pane IDs, gate-dispatch state,
-exact pane scope, systemd InvocationID, CPU, memory, swap, task count, age, and
-lifecycle warnings. Targeted incident recovery is documented in
-[`INCIDENT-2026-07-PROCESS-ESCAPES.md`](INCIDENT-2026-07-PROCESS-ESCAPES.md).
-
-Historical lifecycle-v0 sessions stay on `/tmp/tmux-$(id -u)/aico` and remain
-attachable but lifecycle-read-only. Do not broad-kill them to migrate. Create a
-new managed widget and move work deliberately; A-Term lists both historical and
-catalogued managed-generation sockets.
+Use **Copy session diagnostics** inside a widget to copy Tether's diagnostics
+for that session (ownership ID, tmux server generation and socket, session and
+pane IDs, pane scope, resource use and lifecycle warnings). Session lifecycle,
+historical `/tmp/tmux-$(id -u)/aico` sessions and incident recovery are Tether's;
+see its `docs/LIFECYCLE_HARNESS.md`. The 2026-07 incident report stays here as
+history: [`INCIDENT-2026-07-PROCESS-ESCAPES.md`](INCIDENT-2026-07-PROCESS-ESCAPES.md).
 
 ## Development loop
 
@@ -122,7 +116,8 @@ npm run dist
 ## Optional integrations
 
 - Agent CLIs: install and authenticate `claude`, `codex`, `opencode`, `gemini`, `pi`, or `hermes` separately.
-- Project catalog and screen/OCR capture: if an `st` CLI is installed, Aico can use `st projects` and `st ui` surfaces; otherwise it falls back to Personal Workspace and core widgets.
+- Project catalog: Aico lists the projects Tether serves (SummitFlow's when installed, else Tether's local list) plus its own Personal Workspace.
+- Screen/OCR capture: if an `st` CLI is installed, Aico can use `st ui` surfaces; otherwise core widgets still work.
 - Voice dictation: Aico connects to `ws://127.0.0.1:8003/api/voice/ws?user_id=aico&app=aico` unless `AICO_VOICE_WS` names another compatible speech-to-text websocket. If nothing answers, only voice dictation fails.
 - Browser extension: load `extension/` unpacked in Chrome/Chromium.
 

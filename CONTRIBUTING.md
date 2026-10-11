@@ -11,6 +11,12 @@ npm run check
 
 Use focused changes and keep the public install path working from a fresh clone.
 
+Running Aico needs a Tether daemon (the installer checks `tether --json version`);
+`npm run check` does not, because its tests use a fake Tether socket. Session
+lifecycle changes (tmux servers, launch, End, roots) belong in the Tether repo;
+Aico keeps windows, view state, the renderer, the sidecar and the `st aico`
+client (`scripts/aico-root-watch.py`).
+
 ## Pull request expectations
 
 - Explain the user-visible change.

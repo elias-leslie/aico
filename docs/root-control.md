@@ -1,12 +1,21 @@
 # Private root control
 
-Electron main owns a separate user-private HTTP Unix socket:
-`$XDG_RUNTIME_DIR/aico/gui-control.sock`, falling back to
-`/run/user/<uid>/aico/gui-control.sock`. `AICO_GUI_CONTROL_SOCKET` may override
-the absolute path. The directory is mode 0700 and the socket is mode 0600,
-using the established owner-socket safety checks. Connection absence means
-`gui_unavailable`; the headless owner also returns that explicit error for root
-routes. Root control never starts the desktop runtime.
+Tether owns root control. Its `default` instance serves this contract on the
+legacy user-private HTTP Unix sockets `$XDG_RUNTIME_DIR/aico/gui-control.sock`
+(roots and widgets) and `$XDG_RUNTIME_DIR/aico/control.sock` (session End),
+falling back to `/run/user/<uid>/aico/`. `AICO_GUI_CONTROL_SOCKET` and
+`AICO_CONTROL_SOCKET` override the paths for the `st aico` client. The
+directory is mode 0700 and the sockets mode 0600. Other Tether instances (for
+example `tether@dev`) do not serve the legacy sockets. Tether's own API docs
+(`docs/api-v1.md`, `docs/compat-contract.md` in the Tether repo) are the
+reference for the server side; this page documents the contract as the `st aico`
+client (`scripts/aico-root-watch.py`, kept in this repo) relies on it.
+
+Show, position and title reach the Aico window through Tether's GUI channel:
+Tether validates the generation and workload, then sends the command to the
+connected Aico (`GET /v1/gui/channel`), which applies it and posts the result.
+With no Aico connected, those routes return 503 `gui_unavailable`; Tether never
+starts the desktop runtime. Status, create and End work without Aico.
 
 | Method and route | Request | Result |
 | --- | --- | --- |
@@ -44,19 +53,19 @@ surrogates and Unicode line/paragraph separators. Bounds contain exactly integer
 `x`, `y`, `width`, and `height`, each with absolute value at most 100000; minimum
 size is 360 by 240. Invalid bodies return 400 `invalid_body`.
 [`contracts/view-mutation-vectors.json`](../contracts/view-mutation-vectors.json)
-pins these rules; the owner's Vitest suite and the Python client's pytest suite
-both run every vector.
+pins these rules; Tether's suite and the Python client's pytest suite both run
+every vector.
 
-Root and widget routes use one canonical mutation handler, serialized on the
-widget identity, so a root request ID and its widget ID cannot interleave
+Root and widget routes use one canonical mutation handler in Tether, serialized
+on the widget identity, so a root request ID and its widget ID cannot interleave
 writes. Every kind requires the exact current generation and a `running`
 workload. Pending, uncertain or otherwise non-running workloads return 409
 `workload_unavailable`; Aico does not show them, store a future placement for
-them or rename them. Writes acquire the existing widget lifecycle owner, verify
-a dispatched launch and an active managed workload, then reread the catalog
-generation before applying. Existing views use `BrowserWindow.setBounds` and
-persist the resulting geometry; a running workload with no open view saves its
-next placement.
+them or rename them. Tether verifies a dispatched launch and an active managed workload, then
+rereads the generation before forwarding the command. Aico rechecks the
+generation against its own session mirror; existing views use
+`BrowserWindow.setBounds` and persist the resulting geometry in Aico's `views`
+table, and a running session with no open view saves its next placement there.
 
 Every 4xx/503 rejection above is definitive: nothing was applied. A widget
 mutation that applied but whose exact identity cannot be requalified afterwards
@@ -98,7 +107,10 @@ st aico root end recovery-root-1
 ```
 
 Each command accepts `--surface aico|a-term` (default Aico), `--root-socket` for
-Aico and `--root-url` for A-Term. Show, title and position read
+Aico and `--root-url` for A-Term. A-Term's `/v1/roots` now proxies Tether, so its
+descriptors carry Tether's 8-hex host identity and an `aico://widget/<id>`
+locator with `owner: "a-term"`; the client accepts that shape, and the older
+UUID host with an `a-term://pane/<UUID>` locator, but never a mix of the two. Show, title and position read
 `GET /v1/roots/<requestId>`, require a qualified `running` descriptor, pin its
 generation, then send one request and require the same identity, generation and
 `running` status in the receipt. A-Term supports status, show, title and end;
@@ -169,10 +181,10 @@ Use the exact saved UUID, a new stable request ID, and the same complete body on
 retry. Omit the prompt for the fixed recovery prompt, or use `--stdin` for bounded
 UTF-8 input. The facade rejects secrets/framing controls and caps all prompts at
 2000 UTF-8 bytes. `--role`, `--lead-root` and `--facet` carry generic metadata.
-`--surface a-term` uses A-Term's established loopback owner endpoint, configured
-by `A_TERM_ROOT_CONTROL_URL` or `--root-url`; owner authentication remains enforced.
-A-Term allocates a detached pane; Aico shows its root through the existing launch
-path. The owner must already be running; the command does not start it.
+`--surface a-term` uses A-Term's loopback endpoint, configured by
+`A_TERM_ROOT_CONTROL_URL` or `--root-url`; A-Term's authentication remains
+enforced, and A-Term forwards the request to Tether. Tether must already be
+running; the command does not start it.
 
 Create remains explicit recovery, not automatic reboot recovery. The catalog
 stores the request digest rather than a native thread binding or prompt, and
@@ -204,11 +216,6 @@ delivery receipt. No authenticated session was launched, and no message was
 sent to an existing session. The adapter advertises
 `available: false, reason: exact_thread_generation_receipt_unqualified` and
 contains no queue invocation or PTY steering path.
-
-This source change does not deploy or restart the production desktop. Unit and
-private-socket integration fixtures exercise the contract; live Electron
-placement and authenticated native TUI behavior require a separately authorized
-runtime validation.
 
 The installed Codex 0.160.1 fixture now qualifies bracketed-paste submission and
 the TUI `/clear` transition. It also proves draft contamination and lazy native
