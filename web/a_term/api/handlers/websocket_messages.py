@@ -1,11 +1,12 @@
-"""WebSocket message handling logic."""
+"""WebSocket message handling for one attached view."""
 
 from __future__ import annotations
 
 import asyncio
 import json
 import os
-import re
+import time
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from ...config import (
@@ -18,11 +19,7 @@ from ...config import (
 )
 from ...logging_config import get_logger
 from ...services.pty_manager import resize_pty
-from ...utils.tmux import (
-    is_managed_tmux_session_name,
-    resize_tmux_window,
-    run_tmux_command,
-)
+from ...utils.tmux import is_managed_tmux_session_name, resize_tmux_window
 
 if TYPE_CHECKING:
     from fastapi import WebSocket
@@ -32,8 +29,25 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 MAX_SCROLL_PAGE_SIZE = 5000
-_TMUX_SESSION_ID = re.compile(r"^\$[0-9]+$")
-_TMUX_WINDOW_ID = re.compile(r"^@[0-9]+$")
+_CLAIM_ATTEMPTS = 5
+_CLAIM_RETRY_SECONDS = 0.1
+
+
+@dataclass
+class ViewContext:
+    """One WebSocket view of a session: its PTY, tmux target and claim identity."""
+
+    session_id: str
+    master_fd: int
+    tmux_session_name: str
+    tmux_socket: str | None = None
+    kind: str = "external"  # "tether" | "legacy" | "external"
+    generation: str | None = None
+    client_pid: int | None = None
+    last_resize: list[int] = field(default_factory=lambda: [0, 0])
+    capabilities: list[str] = field(default_factory=list)
+    backpressure: BackpressureController | None = None
+    websocket: WebSocket | None = None
 
 
 def _clamp_dimension(value: int, min_val: int, max_val: int) -> int:
@@ -41,101 +55,83 @@ def _clamp_dimension(value: int, min_val: int, max_val: int) -> int:
     return min(max(value, min_val), max_val)
 
 
-def _extract_capabilities(data: dict[str, Any], capabilities: list[str] | None) -> None:
+def _extract_capabilities(data: dict[str, Any], capabilities: list[str]) -> None:
     """Populate capabilities list from control message, if present."""
-    if capabilities is None:
-        return
     caps = data.get("capabilities")
     if isinstance(caps, list):
         capabilities.clear()
-        capabilities.extend(caps)
+        capabilities.extend(str(cap) for cap in caps)
 
 
-def _resize_verified_external_window(
-    session_name: str,
-    socket_name: str,
-    expected_session_id: str,
-    cols: int,
-    rows: int,
-) -> bool:
-    """Resize only the original unlinked Aico window, after a live recheck."""
-    if not _TMUX_SESSION_ID.fullmatch(expected_session_id):
-        return False
+def _claim_tether_size(view: ViewContext, cols: int, rows: int) -> bool:
+    """Ask Tether to size the shared window to this view's tmux client.
 
-    identity_args = [
-        "display-message", "-p", "-t", session_name,
-        "#{session_id}\t#{window_id}\t#{session_name}",
-    ]
-    success, identity = run_tmux_command(identity_args, socket_name=socket_name)
-    if not success:
-        return False
-    parts = identity.split("\t")
-    if len(parts) != 3:
-        return False
-    session_id, window_id, live_name = parts
-    if (
-        session_id != expected_session_id
-        or live_name != session_name
-        or not _TMUX_WINDOW_ID.fullmatch(window_id)
-    ):
-        return False
+    The PTY's child is the tmux client, so its pid is the ``clientPid``. The
+    client may not be attached yet right after connect, so a refused claim is
+    retried briefly. A stale generation is re-read once; a claim is never
+    forced.
+    """
+    from ...tether import TetherError, TetherUnavailable, get_client
 
-    success, windows = run_tmux_command(
-        ["list-windows", "-a", "-F", "#{window_id}"], socket_name=socket_name,
-    )
-    if not success or windows.splitlines().count(window_id) != 1:
+    if not view.generation or view.client_pid is None:
         return False
-    success, status = run_tmux_command(
-        ["show-options", "-t", session_name, "-v", "status"], socket_name=socket_name,
-    )
-    if not success or status.strip() != "off":
-        return False
-    success, latest_identity = run_tmux_command(identity_args, socket_name=socket_name)
-    if not success or latest_identity != identity:
-        return False
-
-    success, _ = run_tmux_command(
-        ["resize-window", "-t", window_id, "-x", str(cols), "-y", str(rows)],
-        socket_name=socket_name,
-    )
-    return success
+    client = get_client()
+    refreshed = False
+    for attempt in range(_CLAIM_ATTEMPTS):
+        try:
+            result = client.resize_claim(view.session_id, view.generation, view.client_pid, cols, rows)
+        except TetherError as error:
+            if error.code == "stale_generation" and not refreshed:
+                refreshed = True
+                try:
+                    generation = client.get_session(view.session_id).get("generation")
+                except (TetherError, TetherUnavailable):
+                    return False
+                if not isinstance(generation, str):
+                    return False
+                view.generation = generation
+                continue
+            logger.info("a_term_resize_claim_refused", session_id=view.session_id, code=error.code)
+            return False
+        except TetherUnavailable:
+            logger.info("a_term_resize_claim_unavailable", session_id=view.session_id)
+            return False
+        if result.get("applied"):
+            return True
+        if attempt + 1 < _CLAIM_ATTEMPTS:
+            time.sleep(_CLAIM_RETRY_SECONDS)
+        else:
+            logger.info("a_term_resize_claim_not_applied", session_id=view.session_id, reason=result.get("reason"))
+    return False
 
 
-async def _handle_resize_command(
-    data: dict[str, Any],
-    master_fd: int,
-    session_id: str,
-    tmux_session_name: str | None,
-    tmux_socket_name: str | None,
-    last_resize: list[int] | None,
-    resize_tmux: bool,
-    external_tmux_session_id: str | None,
-) -> tuple[int, int]:
-    """Handle a resize JSON command."""
+def _claim_window_size(view: ViewContext, cols: int, rows: int) -> bool:
+    if view.kind == "tether":
+        return _claim_tether_size(view, cols, rows)
+    if view.kind == "legacy" and is_managed_tmux_session_name(view.tmux_session_name):
+        return resize_tmux_window(view.tmux_session_name, cols, rows)
+    # The user's own sessions: only this view's PTY follows the browser.
+    return False
+
+
+async def _handle_resize_command(data: dict[str, Any], view: ViewContext) -> tuple[int, int]:
+    """Resize this view's PTY; claim the shared window only when asked.
+
+    The frontend sends ``claim: true`` when the view becomes active (visible,
+    focused, connected). Other resizes only change this view's own client.
+    """
     resize = data.get("resize", {})
     cols = _clamp_dimension(int(resize.get("cols", TMUX_DEFAULT_COLS)), TMUX_MIN_COLS, TMUX_MAX_COLS)
     rows = _clamp_dimension(int(resize.get("rows", TMUX_DEFAULT_ROWS)), TMUX_MIN_ROWS, TMUX_MAX_ROWS)
 
-    # Only the local PTY can be deduplicated: another app may have resized the
-    # shared tmux window since this view last sent the same dimensions.
-    if not last_resize or cols != last_resize[0] or rows != last_resize[1]:
-        resize_pty(master_fd, cols, rows)
-        if last_resize is not None:
-            last_resize[0] = cols
-            last_resize[1] = rows
-        logger.info("a_term_resized", session_id=session_id, cols=cols, rows=rows)
+    if cols != view.last_resize[0] or rows != view.last_resize[1]:
+        resize_pty(view.master_fd, cols, rows)
+        view.last_resize[0] = cols
+        view.last_resize[1] = rows
+        logger.info("a_term_resized", session_id=view.session_id, cols=cols, rows=rows)
 
-    if resize_tmux and tmux_session_name:
-        if external_tmux_session_id and tmux_socket_name:
-            await asyncio.to_thread(
-                _resize_verified_external_window,
-                tmux_session_name, tmux_socket_name, external_tmux_session_id, cols, rows,
-            )
-        elif external_tmux_session_id is None and is_managed_tmux_session_name(tmux_session_name):
-            resize_args = [tmux_session_name, cols, rows]
-            if tmux_socket_name:
-                resize_args.append(tmux_socket_name)
-            await asyncio.to_thread(resize_tmux_window, *resize_args)
+    if data.get("claim") is True:
+        await asyncio.to_thread(_claim_window_size, view, cols, rows)
 
     return (cols, rows)
 
@@ -221,35 +217,14 @@ async def _handle_pane_mode_request(
     await websocket.send_text(json.dumps(payload))
 
 
-async def _handle_ctrl_message(
-    data: dict[str, Any],
-    master_fd: int,
-    session_id: str,
-    tmux_session_name: str | None,
-    tmux_socket_name: str | None,
-    last_resize: list[int] | None,
-    resize_tmux: bool,
-    backpressure: BackpressureController | None,
-    websocket: WebSocket | None,
-    capabilities: list[str] | None,
-    external_tmux_session_id: str | None,
-) -> tuple[int, int] | None:
+async def _handle_ctrl_message(data: dict[str, Any], view: ViewContext) -> tuple[int, int] | None:
     """Dispatch a validated __ctrl message to the appropriate handler."""
     if "resize" in data:
-        _extract_capabilities(data, capabilities)
-        return await _handle_resize_command(
-            data,
-            master_fd,
-            session_id,
-            tmux_session_name,
-            tmux_socket_name,
-            last_resize,
-            resize_tmux,
-            external_tmux_session_id,
-        )
+        _extract_capabilities(data, view.capabilities)
+        return await _handle_resize_command(data, view)
 
     if "capabilities" in data:
-        _extract_capabilities(data, capabilities)
+        _extract_capabilities(data, view.capabilities)
         return None
 
     if data.get("ping"):
@@ -260,7 +235,7 @@ async def _handle_ctrl_message(
         if isinstance(status, dict):
             logger.info(
                 "a_term_renderer_status",
-                session_id=session_id,
+                session_id=view.session_id,
                 renderer=status.get("renderer"),
                 webgl_context_available=status.get("webglContextAvailable"),
                 webgl2_context_available=status.get("webgl2ContextAvailable"),
@@ -272,41 +247,27 @@ async def _handle_ctrl_message(
         return None
 
     if data.get("refresh"):
-        await asyncio.to_thread(os.write, master_fd, b"\x0c")
-        logger.debug("a_term_refreshed", session_id=session_id)
+        await asyncio.to_thread(os.write, view.master_fd, b"\x0c")
+        logger.debug("a_term_refreshed", session_id=view.session_id)
         return None
 
-    # Phase 1: Backpressure commit
-    if "commit" in data and backpressure is not None:
-        backpressure.record_commit(int(data["commit"]))
+    if "commit" in data and view.backpressure is not None:
+        view.backpressure.record_commit(int(data["commit"]))
         return None
 
-    # Phase 3: Scroll request
-    if "scroll_request" in data and websocket is not None:
-        await _handle_scroll_request(data, websocket, tmux_session_name, tmux_socket_name)
+    if "scroll_request" in data and view.websocket is not None:
+        await _handle_scroll_request(data, view.websocket, view.tmux_session_name, view.tmux_socket)
         return None
 
-    if data.get("pane_mode_request") and websocket is not None:
-        await _handle_pane_mode_request(websocket, tmux_session_name, tmux_socket_name)
+    if data.get("pane_mode_request") and view.websocket is not None:
+        await _handle_pane_mode_request(view.websocket, view.tmux_session_name, view.tmux_socket)
         return None
 
     return None
 
 
-async def _handle_text_message(
-    text: str,
-    master_fd: int,
-    session_id: str,
-    tmux_session_name: str | None,
-    tmux_socket_name: str | None,
-    last_resize: list[int] | None,
-    resize_tmux: bool,
-    backpressure: BackpressureController | None = None,
-    websocket: WebSocket | None = None,
-    capabilities: list[str] | None = None,
-    external_tmux_session_id: str | None = None,
-) -> tuple[int, int] | None:
-    """Handle a text WebSocket message, dispatching JSON control or raw input.
+async def _handle_text_message(text: str, view: ViewContext) -> tuple[int, int] | None:
+    """Handle a text message: a JSON control message or raw input.
 
     Control messages must include '__ctrl': true to distinguish them from
     user-typed JSON that happens to match control message structure.
@@ -315,111 +276,39 @@ async def _handle_text_message(
         try:
             data = json.loads(text)
         except json.JSONDecodeError:
-            await asyncio.to_thread(os.write, master_fd, text.encode("utf-8"))
+            await asyncio.to_thread(os.write, view.master_fd, text.encode("utf-8"))
             return None
+        if isinstance(data, dict) and data.get("__ctrl"):
+            return await _handle_ctrl_message(data, view)
 
-        if data.get("__ctrl"):
-            return await _handle_ctrl_message(
-                data, master_fd, session_id, tmux_session_name,
-                tmux_socket_name, last_resize, resize_tmux, backpressure, websocket,
-                capabilities, external_tmux_session_id,
-            )
-
-    input_bytes = text.encode("utf-8")
-    await asyncio.to_thread(os.write, master_fd, input_bytes)
+    await asyncio.to_thread(os.write, view.master_fd, text.encode("utf-8"))
     return None
 
 
-async def _handle_binary_message(
-    raw: bytes,
-    master_fd: int,
-    session_id: str,
-    tmux_session_name: str | None,
-    tmux_socket_name: str | None,
-    last_resize: list[int] | None,
-    resize_tmux: bool,
-    backpressure: BackpressureController | None,
-    websocket: WebSocket | None,
-    capabilities: list[str] | None,
-    external_tmux_session_id: str | None,
-) -> tuple[int, int] | None:
-    """Handle a binary WebSocket message via the framed binary protocol."""
-    # Phase 5: Binary protocol — decode framed messages
+async def _handle_binary_message(raw: bytes, view: ViewContext) -> tuple[int, int] | None:
+    """Handle a binary message via the framed binary protocol."""
     if len(raw) > 1:
         from ...services.binary_protocol import MSG_CONTROL, MSG_INPUT, decode_client_message
 
         msg_type, payload = decode_client_message(raw)
         if msg_type == MSG_INPUT:
-            await asyncio.to_thread(os.write, master_fd, payload)
+            await asyncio.to_thread(os.write, view.master_fd, payload)
             return None
         if msg_type == MSG_CONTROL:
             try:
-                text = payload.decode("utf-8")
-                return await _handle_text_message(
-                    text, master_fd, session_id, tmux_session_name,
-                    tmux_socket_name, last_resize, resize_tmux, backpressure, websocket,
-                    capabilities, external_tmux_session_id,
-                )
+                return await _handle_text_message(payload.decode("utf-8"), view)
             except (json.JSONDecodeError, UnicodeDecodeError):
                 pass
 
-    # Legacy binary — forward raw bytes to PTY
-    await asyncio.to_thread(os.write, master_fd, raw)
+    # Legacy binary: forward raw bytes to the PTY
+    await asyncio.to_thread(os.write, view.master_fd, raw)
     return None
 
 
-async def handle_websocket_message(
-    message: Any,
-    master_fd: int,
-    session_id: str,
-    tmux_session_name: str | None = None,
-    last_resize: list[int] | None = None,
-    tmux_socket_name: str | None = None,
-    resize_tmux: bool = True,
-    backpressure: BackpressureController | None = None,
-    websocket: WebSocket | None = None,
-    capabilities: list[str] | None = None,
-    external_tmux_session_id: str | None = None,
-) -> tuple[int, int] | None:
-    """Handle a single WebSocket message.
-
-    Args:
-        message: WebSocket message dict
-        master_fd: Master file descriptor to write to
-        session_id: A-Term session ID (for logging)
-        tmux_session_name: tmux session name for resize operations
-        tmux_socket_name: optional tmux socket name for non-default servers.
-        last_resize: Mutable [cols, rows] tracker for deduplication.
-        resize_tmux: Whether to resize the tmux window.
-        backpressure: Optional controller for flow control.
-        websocket: WebSocket for sending responses (scroll pages).
-        capabilities: Mutable list populated from client's initial resize.
-
-    Returns:
-        (cols, rows) tuple if this was a resize event, None otherwise
-    """
-    if "text" in message:
-        return await _handle_text_message(
-            message["text"], master_fd, session_id, tmux_session_name,
-            tmux_socket_name,
-            last_resize,
-            resize_tmux,
-            backpressure,
-            websocket,
-            capabilities,
-            external_tmux_session_id,
-        )
-
-    if "bytes" in message:
-        return await _handle_binary_message(
-            message["bytes"], master_fd, session_id, tmux_session_name,
-            tmux_socket_name,
-            last_resize,
-            resize_tmux,
-            backpressure,
-            websocket,
-            capabilities,
-            external_tmux_session_id,
-        )
-
+async def handle_websocket_message(message: Any, view: ViewContext) -> tuple[int, int] | None:
+    """Handle one WebSocket message. Returns (cols, rows) for a resize event."""
+    if message.get("text") is not None:
+        return await _handle_text_message(message["text"], view)
+    if message.get("bytes") is not None:
+        return await _handle_binary_message(message["bytes"], view)
     return None

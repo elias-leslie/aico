@@ -1,57 +1,38 @@
-"""A-Term project settings storage layer.
+"""Per-project display settings (local view state).
 
-This module provides data access for per-project a_term settings.
-Each project can be enabled/disabled for a_term access and tracks
-the active mode (shell or claude) which syncs across devices.
+Each project can be enabled for A-Term tabs and remembers its display order
+and the mode (shell or an agent tool slug) its tab shows.
 """
 
 from __future__ import annotations
 
+import sqlite3
 from typing import Any
 
-import psycopg.sql
-from psycopg.rows import dict_row
+from .local_db import connect, now_iso, transaction
 
-from .connection import get_connection
+_COLUMNS = "project_id, enabled, active_mode, display_order, created_at, updated_at"
+
+
+def _row(row: sqlite3.Row | None) -> dict[str, Any] | None:
+    if row is None:
+        return None
+    settings = dict(row)
+    settings["enabled"] = bool(settings["enabled"])
+    return settings
 
 
 def get_all_settings() -> dict[str, dict[str, Any]]:
-    """Get all project settings, keyed by project_id."""
-    with get_connection() as conn, conn.cursor(row_factory=dict_row) as cur:
-        cur.execute(
-            """
-            SELECT project_id, enabled, active_mode, display_order,
-                   created_at, updated_at
-            FROM a_term_project_settings
-            ORDER BY display_order, project_id
-            """
-        )
-        return {row["project_id"]: row for row in cur.fetchall()}
+    with connect() as db:
+        rows = db.execute(
+            f"SELECT {_COLUMNS} FROM project_settings ORDER BY display_order, project_id"
+        ).fetchall()
+    return {row["project_id"]: settings for row in rows if (settings := _row(row)) is not None}
 
 
-def _build_upsert_query(
-    enabled: bool | None,
-    active_mode: str | None,
-    display_order: int | None,
-) -> psycopg.sql.Composed:
-    """Build the upsert query with dynamic SET clause."""
-    update_parts = [psycopg.sql.SQL("updated_at = NOW()")]
-    if enabled is not None:
-        update_parts.append(psycopg.sql.SQL("enabled = EXCLUDED.enabled"))
-    if active_mode is not None:
-        update_parts.append(psycopg.sql.SQL("active_mode = EXCLUDED.active_mode"))
-    if display_order is not None:
-        update_parts.append(psycopg.sql.SQL("display_order = EXCLUDED.display_order"))
-
-    return psycopg.sql.SQL("""
-        INSERT INTO a_term_project_settings
-            (project_id, enabled, active_mode, display_order)
-        VALUES (%s, %s, %s, %s)
-        ON CONFLICT (project_id) DO UPDATE SET
-            {}
-        RETURNING project_id, enabled, active_mode, display_order,
-                  created_at, updated_at
-    """).format(psycopg.sql.SQL(", ").join(update_parts))
+def get_settings(project_id: str) -> dict[str, Any] | None:
+    with connect() as db:
+        return _row(db.execute(f"SELECT {_COLUMNS} FROM project_settings WHERE project_id = ?", (project_id,)).fetchone())
 
 
 def upsert_settings(
@@ -60,77 +41,70 @@ def upsert_settings(
     active_mode: str | None = None,
     display_order: int | None = None,
 ) -> dict[str, Any]:
-    """Create or update project settings (INSERT ... ON CONFLICT)."""
-    query = _build_upsert_query(enabled, active_mode, display_order)
-    insert_enabled = enabled if enabled is not None else False
-    insert_mode = active_mode if active_mode is not None else "shell"
-    insert_order = display_order if display_order is not None else 0
-
-    with get_connection() as conn, conn.cursor(row_factory=dict_row) as cur:
-        cur.execute(query, (project_id, insert_enabled, insert_mode, insert_order))
-        row = cur.fetchone()
-        conn.commit()
-
-    if not row:
+    """Create or update; only the given fields change on an existing row."""
+    now = now_iso()
+    with transaction() as db:
+        existing = db.execute("SELECT 1 FROM project_settings WHERE project_id = ?", (project_id,)).fetchone()
+        if existing is None:
+            db.execute(
+                f"INSERT INTO project_settings ({_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    project_id,
+                    int(bool(enabled)) if enabled is not None else 0,
+                    active_mode if active_mode is not None else "shell",
+                    display_order if display_order is not None else 0,
+                    now,
+                    now,
+                ),
+            )
+        else:
+            updates: dict[str, Any] = {"updated_at": now}
+            if enabled is not None:
+                updates["enabled"] = int(bool(enabled))
+            if active_mode is not None:
+                updates["active_mode"] = active_mode
+            if display_order is not None:
+                updates["display_order"] = display_order
+            assignments = ", ".join(f"{key} = ?" for key in updates)
+            db.execute(
+                f"UPDATE project_settings SET {assignments} WHERE project_id = ?",
+                (*updates.values(), project_id),
+            )
+    settings = get_settings(project_id)
+    if settings is None:
         raise ValueError(f"Failed to upsert settings for {project_id}")
-    return row
+    return settings
 
 
 def bulk_update_order(project_ids: list[str]) -> None:
-    """Update display_order for projects; index in list becomes display_order."""
+    """The index in ``project_ids`` becomes each project's display order."""
     if not project_ids:
         return
-
-    with get_connection() as conn, conn.cursor() as cur:
-        case_parts = [
-            psycopg.sql.SQL("WHEN project_id = %s THEN {}").format(psycopg.sql.Literal(i))
-            for i in range(len(project_ids))
-        ]
-        placeholders = psycopg.sql.SQL(", ").join([psycopg.sql.SQL("%s")] * len(project_ids))
-        query = psycopg.sql.SQL("""
-            UPDATE a_term_project_settings
-            SET display_order = CASE {} END,
-                updated_at = NOW()
-            WHERE project_id IN ({})
-        """).format(psycopg.sql.SQL(" ").join(case_parts), placeholders)
-
-        cur.execute(query, (*project_ids, *project_ids))
-        conn.commit()
+    now = now_iso()
+    with transaction() as db:
+        db.executemany(
+            "UPDATE project_settings SET display_order = ?, updated_at = ? WHERE project_id = ?",
+            [(index, now, project_id) for index, project_id in enumerate(project_ids)],
+        )
 
 
 def set_active_mode(project_id: str, mode: str) -> dict[str, Any] | None:
-    """Set the active mode for a project; returns None if not found."""
-    with get_connection() as conn, conn.cursor(row_factory=dict_row) as cur:
-        cur.execute(
-            """
-            UPDATE a_term_project_settings
-            SET active_mode = %s, updated_at = NOW()
-            WHERE project_id = %s
-            RETURNING project_id, enabled, active_mode, display_order,
-                      created_at, updated_at
-            """,
-            (mode, project_id),
+    with connect() as db:
+        cursor = db.execute(
+            "UPDATE project_settings SET active_mode = ?, updated_at = ? WHERE project_id = ?",
+            (mode, now_iso(), project_id),
         )
-        row = cur.fetchone()
-        conn.commit()
-
-    return row
+    return get_settings(project_id) if cursor.rowcount else None
 
 
 def prune_missing_projects(valid_project_ids: set[str]) -> int:
-    """Delete settings rows for projects no longer present in the active registry."""
+    """Delete settings for projects the active catalog no longer lists."""
     if not valid_project_ids:
         return 0
-
-    with get_connection() as conn, conn.cursor() as cur:
-        cur.execute(
-            """
-            DELETE FROM a_term_project_settings
-            WHERE NOT (project_id = ANY(%s))
-            """,
-            (sorted(valid_project_ids),),
+    placeholders = ", ".join("?" for _ in valid_project_ids)
+    with connect() as db:
+        cursor = db.execute(
+            f"DELETE FROM project_settings WHERE project_id NOT IN ({placeholders})",
+            tuple(sorted(valid_project_ids)),
         )
-        deleted_count = cur.rowcount
-        conn.commit()
-    return deleted_count
-
+    return cursor.rowcount

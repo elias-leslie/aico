@@ -18,6 +18,9 @@ class SessionInPaneResponse(BaseModel):
     session_number: int
     is_alive: bool
     is_root: bool = False
+    is_legacy: bool = False
+    origin: str | None = None
+    status: str | None = None
     working_dir: str | None
     agent_state: str = "not_started"
     claude_state: str = "not_started"

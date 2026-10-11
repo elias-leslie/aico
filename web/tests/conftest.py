@@ -1,109 +1,96 @@
-"""Shared test fixtures for a_term backend tests.
+"""Shared fixtures: a fake Tether on a real Unix socket and a throwaway SQLite file.
 
-Provides mock fixtures for database, tmux, and lifecycle operations
-so that tests never hit production infrastructure.
+No test talks to the real Tether, the real tmux server or a real database.
 """
 
 from __future__ import annotations
 
-from collections.abc import Generator
-from contextlib import contextmanager
+import shutil
+import tempfile
+from collections.abc import Generator, Iterator
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
-# ---------------------------------------------------------------------------
-# Database connection mock
-# ---------------------------------------------------------------------------
+from a_term.storage import local_db
+from a_term.tether import TetherClient, set_client
 
-@contextmanager
-def _mock_get_connection() -> Generator[MagicMock]:
-    """Fake database connection context manager.
+from .fake_tether import FakeTether
 
-    Returns a MagicMock that supports ``with get_connection() as conn``.
-    """
-    conn = MagicMock()
-    yield conn
+
+@pytest.fixture(autouse=True)
+def local_state(monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
+    """Every test gets its own SQLite view-state file."""
+    # Unix socket paths are length-limited, so keep these under /tmp.
+    directory = Path(tempfile.mkdtemp(prefix="at-state-", dir="/tmp"))
+    monkeypatch.setenv("A_TERM_DB_PATH", str(directory / "a-term.db"))
+    monkeypatch.setenv("TETHER_PROJECTS_FILE", str(directory / "projects.json"))
+    local_db.reset_initialized_cache()
+    try:
+        yield directory
+    finally:
+        local_db.reset_initialized_cache()
+        shutil.rmtree(directory, ignore_errors=True)
+
+
+@pytest.fixture(autouse=True)
+def reset_rate_limits() -> Iterator[None]:
+    """The in-memory rate limiter is process-wide; start every test fresh."""
+    from a_term.rate_limit import limiter
+
+    limiter.reset()
+    yield
+
+
+@pytest.fixture()
+def fake_tether(monkeypatch: pytest.MonkeyPatch) -> Iterator[FakeTether]:
+    """A running fake Tether that A-Term's client points at."""
+    directory = Path(tempfile.mkdtemp(prefix="at-tether-", dir="/tmp"))
+    fake = FakeTether(directory).start()
+    monkeypatch.setenv("TETHER_SOCKET", fake.socket_path)
+    set_client(TetherClient(fake.socket_path, timeout=5.0))
+    try:
+        yield fake
+    finally:
+        set_client(None)
+        fake.stop()
+        shutil.rmtree(directory, ignore_errors=True)
 
 
 @pytest.fixture()
-def mock_db_connection() -> Generator[MagicMock]:
-    """Patch ``a_term.storage.connection.get_connection`` globally.
+def tether_down(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
+    """Tether is not running: its socket does not exist."""
+    directory = Path(tempfile.mkdtemp(prefix="at-tether-", dir="/tmp"))
+    socket_path = str(directory / "control.sock")
+    monkeypatch.setenv("TETHER_SOCKET", socket_path)
+    set_client(TetherClient(socket_path, timeout=1.0))
+    try:
+        yield socket_path
+    finally:
+        set_client(None)
+        shutil.rmtree(directory, ignore_errors=True)
 
-    Every storage function that opens a DB connection will receive a mock
-    instead of a real psycopg connection.
-    """
-    with patch(
-        "a_term.storage.connection.get_connection",
-        side_effect=_mock_get_connection,
-    ) as mock_conn:
-        yield mock_conn
-
-
-# ---------------------------------------------------------------------------
-# Tmux operation mocks
-# ---------------------------------------------------------------------------
 
 @pytest.fixture()
-def mock_tmux() -> Generator[dict[str, MagicMock]]:
-    """Patch common tmux utility functions.
+def no_default_tmux() -> Iterator[MagicMock]:
+    """The default tmux server has no sessions (no legacy or external sessions)."""
+    with patch("a_term.utils.tmux.run_tmux_command", return_value=(False, "no server running")) as run:
+        yield run
 
-    Returns a dict keyed by function name so tests can configure
-    return values per-function.
-    """
+
+@pytest.fixture()
+def test_app(fake_tether: FakeTether, no_default_tmux: MagicMock) -> Generator[TestClient]:
+    """The FastAPI app against the fake Tether, without the background workers."""
     with (
-        patch("a_term.utils.tmux.create_tmux_session") as mock_create,
-        patch("a_term.utils.tmux.tmux_session_exists", return_value=True) as mock_exists,
-        patch("a_term.utils.tmux.run_tmux_command", return_value=(True, "")) as mock_run,
-        patch("a_term.utils.tmux.get_tmux_session_name", side_effect=lambda sid: f"summitflow-{sid}") as mock_name,
-    ):
-        yield {
-            "create_tmux_session": mock_create,
-            "tmux_session_exists": mock_exists,
-            "run_tmux_command": mock_run,
-            "get_tmux_session_name": mock_name,
-        }
-
-
-# ---------------------------------------------------------------------------
-# Lifecycle mock
-# ---------------------------------------------------------------------------
-
-@pytest.fixture()
-def mock_lifecycle() -> Generator[dict[str, MagicMock]]:
-    """Patch lifecycle operations used by API endpoints."""
-    with (
-        patch("a_term.services.lifecycle.delete_session") as mock_delete,
-        patch("a_term.services.lifecycle.reset_session") as mock_reset,
-        patch("a_term.services.lifecycle.reset_all_sessions", return_value=0) as mock_reset_all,
-        patch("a_term.services.lifecycle.reconcile_sessions", return_value={"reconciled": 0}) as mock_reconcile,
-    ):
-        yield {
-            "delete_session": mock_delete,
-            "reset_session": mock_reset,
-            "reset_all_sessions": mock_reset_all,
-            "reconcile_sessions": mock_reconcile,
-        }
-
-
-# ---------------------------------------------------------------------------
-# FastAPI TestClient
-# ---------------------------------------------------------------------------
-
-@pytest.fixture()
-def test_app(mock_lifecycle: dict[str, MagicMock]) -> Generator[TestClient]:
-    """Create a FastAPI ``TestClient`` with mocked lifespan dependencies.
-
-    The ``mock_lifecycle`` fixture is pulled in automatically so that the
-    app startup reconciliation and tmux setup do not run against real
-    infrastructure.
-    """
-    with (
-        patch("a_term.main._setup_tmux_options"),
-        patch("a_term.main.close_pool"),
         patch("a_term.main.start_scheduler"),
         patch("a_term.main.stop_scheduler"),
+        patch("a_term.main.start_watcher"),
+        patch("a_term.main.stop_watcher"),
+        patch("a_term.main._write_internal_token"),
+        # Never touch the host's default tmux server from tests.
+        patch("a_term.main._remove_legacy_session_switch_hook"),
     ):
         from a_term.main import app
 

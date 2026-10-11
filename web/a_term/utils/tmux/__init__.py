@@ -1,23 +1,20 @@
-"""tmux session management utilities.
+"""tmux helpers for attaching to sessions A-Term shows.
 
-Provides core tmux operations: session naming, existence checks, creation,
-listing, scrollback capture, and window resizing.
+Tether creates and ends sessions on private servers; A-Term only attaches,
+captures and toggles view options, always against the session's own socket.
+Legacy ``summitflow-*`` sessions on the user's default server and the user's
+own default-server sessions are reached with ``socket_name=None``.
 
-Public API is intentionally flat — all names are importable from
-``a_term.utils.tmux`` exactly as before the package split.
+Public API is intentionally flat: import names from ``a_term.utils.tmux``.
 """
 
 from __future__ import annotations
 
-# Re-export subprocess and uuid so tests can patch a_term.utils.tmux.subprocess
-# and a_term.utils.tmux._uuid_mod without changes.
+# Re-export subprocess so tests can patch a_term.utils.tmux.subprocess.
 import subprocess  # noqa: F401
-import uuid as _uuid_mod  # noqa: F401
 
-from ...config import TMUX_DEFAULT_COLS, TMUX_DEFAULT_ROWS  # noqa: F401
 from .core import (
     _SESSION_NAME_PATTERN,  # noqa: F401
-    FILTERED_ENV_VARS,
     TMUX_COMMAND_TIMEOUT,
     TMUX_SESSION_PREFIX,
     TmuxError,
@@ -51,13 +48,10 @@ from .scrollback import (
     get_scrollback_with_cursor,
 )
 from .sessions import (
-    _apply_session_options,  # noqa: F401
-    _can_spawn_tmux_scope,  # noqa: F401
     _is_valid_uuid,  # noqa: F401
-    _run_tmux_new_session,  # noqa: F401
-    create_tmux_session,
     get_tmux_session_name,
     is_managed_tmux_session_name,
+    kill_legacy_session,
     list_tmux_sessions,
     tmux_session_exists,
     tmux_session_exists_by_name,
@@ -65,14 +59,12 @@ from .sessions import (
 from .window import reset_tmux_window_size_policy, resize_tmux_window
 
 __all__ = [
-    "FILTERED_ENV_VARS",
     "TMUX_COMMAND_TIMEOUT",
     "TMUX_SESSION_PREFIX",
     "ExternalTmuxSource",
     "TmuxError",
     "apply_external_attach_options",
     "build_tmux_command",
-    "create_tmux_session",
     "get_cursor_position",
     "get_external_agent_tmux_session",
     "get_scrollback",
@@ -80,6 +72,7 @@ __all__ = [
     "get_tmux_session_name",
     "get_tmux_session_option",
     "is_managed_tmux_session_name",
+    "kill_legacy_session",
     "list_external_agent_tmux_sessions",
     "list_external_tmux_sessions",
     "list_tmux_sessions",

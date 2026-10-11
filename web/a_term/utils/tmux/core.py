@@ -10,30 +10,11 @@ from ...logging_config import get_logger
 logger = get_logger(__name__)
 
 TMUX_COMMAND_TIMEOUT = 10  # seconds for tmux subprocess calls
+#: Pre-Tether A-Term sessions on the user's default tmux server (attach-only).
 TMUX_SESSION_PREFIX = "summitflow-"
 _SESSION_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_\-]+$")
-_SOCKET_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_\-]+$")
 _SOCKET_PATH_SEGMENT_PATTERN = re.compile(r"^[a-zA-Z0-9_.\-]+$")
 _MAX_UNIX_SOCKET_PATH_BYTES = 107
-
-# Secrets filtered from tmux session environments
-FILTERED_ENV_VARS = {
-    "DATABASE_URL",
-    "CF_ACCESS_CLIENT_ID",
-    "CF_ACCESS_CLIENT_SECRET",
-    "ANTHROPIC_API_KEY",
-    "OPENAI_API_KEY",
-    "GOOGLE_API_KEY",
-    "GEMINI_API_KEY",
-    "SECRET_KEY",
-    "JWT_SECRET",
-    "AWS_ACCESS_KEY_ID",
-    "AWS_SECRET_ACCESS_KEY",
-    "GITHUB_TOKEN",
-    "GITLAB_TOKEN",
-    "SLACK_TOKEN",
-    "DISCORD_TOKEN",
-}
 
 
 class TmuxError(Exception):
@@ -46,36 +27,35 @@ def validate_session_name(name: str) -> bool:
 
 
 def validate_socket_name(name: str | None) -> bool:
-    """Validate a tmux socket selector used with ``tmux -L`` or ``tmux -S``.
+    """Validate a tmux server socket used with ``tmux -S``.
 
-    Named sockets retain the original public behavior. Absolute paths support
-    catalogued Aico server generations, but only the conservative path syntax
-    accepted by Aico itself is allowed.
+    ``None`` means the user's default server. Anything else must be an
+    absolute path (Tether's private server sockets), with conservative segment
+    syntax and the Unix socket path length limit.
     """
     if name is None:
         return True
-    if name.startswith("/"):
-        try:
-            if len(name.encode()) > _MAX_UNIX_SOCKET_PATH_BYTES:
-                return False
-        except UnicodeEncodeError:
+    if not name.startswith("/"):
+        return False
+    try:
+        if len(name.encode()) > _MAX_UNIX_SOCKET_PATH_BYTES:
             return False
-        segments = name[1:].split("/")
-        return bool(segments) and all(
-            segment not in {"", ".", ".."}
-            and bool(_SOCKET_PATH_SEGMENT_PATTERN.fullmatch(segment))
-            for segment in segments
-        )
-    return bool(_SOCKET_NAME_PATTERN.fullmatch(name)) and len(name) < 128
+    except UnicodeEncodeError:
+        return False
+    segments = name[1:].split("/")
+    return bool(segments) and all(
+        segment not in {"", ".", ".."} and bool(_SOCKET_PATH_SEGMENT_PATTERN.fullmatch(segment))
+        for segment in segments
+    )
 
 
 def build_tmux_command(args: list[str], socket_name: str | None = None) -> list[str]:
-    """Build a tmux command for the default, named, or absolute-path socket."""
+    """Build a tmux command for the default server or an absolute socket path."""
     if not validate_socket_name(socket_name):
         raise TmuxError(f"Invalid tmux socket name: {str(socket_name)[:50]}")
     cmd = ["tmux"]
     if socket_name:
-        cmd.extend(["-S" if socket_name.startswith("/") else "-L", socket_name])
+        cmd.extend(["-S", socket_name])
     cmd.extend(args)
     return cmd
 

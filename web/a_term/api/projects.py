@@ -8,6 +8,7 @@ This module provides:
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Request
@@ -15,8 +16,9 @@ from pydantic import BaseModel, Field
 
 from ..rate_limit import limiter
 from ..services import lifecycle, project_catalog
+from ..services.tether_errors import to_http_error
 from ..storage import project_settings as settings_store
-from ..storage import projects as local_projects_store
+from ..tether import TetherError, TetherUnavailable
 
 router = APIRouter(tags=["A-Term Projects"])
 
@@ -73,8 +75,11 @@ class ProjectRegistryContextResponse(BaseModel):
 
 
 async def _get_project_lookup() -> dict[str, dict[str, Any]]:
-    """Fetch projects from the active catalog and return keyed by ID."""
-    projects = await project_catalog.list_projects()
+    """Fetch projects from Tether and return them keyed by ID."""
+    try:
+        projects = await project_catalog.list_projects()
+    except (TetherError, TetherUnavailable) as error:
+        raise to_http_error(error) from None
     return {project.get("id", ""): project for project in projects if project.get("id")}
 
 
@@ -126,29 +131,29 @@ async def list_projects() -> list[ProjectResponse]:
 
 @router.get("/api/a-term/projects/context", response_model=ProjectRegistryContextResponse)
 async def get_project_registry_context() -> ProjectRegistryContextResponse:
-    """Describe whether the local or companion project catalog is active."""
-    return ProjectRegistryContextResponse(
-        source=project_catalog.get_catalog_source(),
-        can_register=project_catalog.can_register_projects(),
-    )
+    """Describe whether Tether serves SummitFlow's projects or its local list."""
+    try:
+        source = await asyncio.to_thread(project_catalog.get_catalog_source)
+    except (TetherError, TetherUnavailable) as error:
+        raise to_http_error(error) from None
+    return ProjectRegistryContextResponse(source=source, can_register=source == "local")
 
 
 @router.post("/api/a-term/projects", response_model=ProjectResponse)
 async def create_project(request: CreateProjectRequest) -> ProjectResponse:
-    """Register a local project in standalone mode."""
-    if not project_catalog.can_register_projects():
-        raise HTTPException(
-            status_code=409,
-            detail="Projects are managed by SummitFlow while the companion API is configured",
-        ) from None
-
+    """Register a project in Tether's local list (only when SummitFlow is not the source)."""
     try:
-        project = local_projects_store.create_project(
-            name=request.name,
+        project = await asyncio.to_thread(
+            project_catalog.register_local_project,
             root_path=request.root_path,
+            name=request.name,
         )
+    except PermissionError:
+        raise HTTPException(status_code=409, detail="Projects are managed by SummitFlow") from None
     except ValueError as err:
         raise HTTPException(status_code=400, detail=str(err)) from None
+    except (TetherError, TetherUnavailable) as error:
+        raise to_http_error(error) from None
     settings = settings_store.get_all_settings().get(project["id"])
     project_lookup = {project["id"]: project}
     return _build_project_response(project["id"], settings, project_lookup)
@@ -190,19 +195,22 @@ async def bulk_update_order(update: BulkOrderUpdate) -> list[ProjectResponse]:
 @router.post("/api/a-term/projects/{project_id}/reset")
 @limiter.limit("5/minute")
 async def reset_project(request: Request, project_id: str) -> dict[str, Any]:
-    """Reset all a_term sessions for a project.
+    """Respawn the project's shell and default-agent sessions (creating missing ones).
 
-    Resets the shell session and the current default agent session if they exist.
-    Uses the current project root_path from the active project catalog.
-    Also resets mode back to shell.
-    Returns new session IDs for each mode.
+    Uses the project root from Tether's catalog and resets the tab to shell mode.
     """
     project_lookup = await _get_project_lookup()
     project_info = project_lookup.get(project_id)
     working_dir = project_info.get("root_path") if project_info else None
 
-    # Reset sessions
-    result = lifecycle.reset_project_sessions(project_id, working_dir=working_dir)
+    try:
+        result = await asyncio.to_thread(
+            lifecycle.reset_project_sessions, project_id, working_dir=working_dir
+        )
+    except lifecycle.LifecycleError as error:
+        raise HTTPException(status_code=error.status_code, detail=error.detail) from None
+    except (TetherError, TetherUnavailable) as error:
+        raise to_http_error(error) from None
 
     # Reset mode back to shell
     settings_store.upsert_settings(project_id=project_id, active_mode="shell")
@@ -221,11 +229,11 @@ async def reset_project(request: Request, project_id: str) -> dict[str, Any]:
 
 @router.post("/api/a-term/projects/{project_id}/disable", response_model=ProjectResponse)
 async def disable_project(project_id: str) -> ProjectResponse:
-    """Disable a_term for a project.
-
-    Deletes all sessions and sets enabled=false in settings.
-    """
-    lifecycle.disable_project_a_term(project_id)
+    """Disable the project's tab: End its sessions in Tether and delete its panes."""
+    try:
+        await asyncio.to_thread(lifecycle.disable_project_a_term, project_id)
+    except (TetherError, TetherUnavailable) as error:
+        raise to_http_error(error) from None
     project_lookup = await _get_project_lookup()
     settings = settings_store.get_all_settings().get(project_id)
     return _build_project_response(project_id, settings, project_lookup)

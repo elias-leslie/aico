@@ -53,20 +53,26 @@ def test_internal_maintenance_run_triggers_cycle(test_app: TestClient) -> None:
     mock_run.assert_awaited_once()
 
 
-def test_internal_maintenance_runs_returns_history(test_app: TestClient) -> None:
-    """Recent maintenance runs are exposed through the internal API."""
+def test_internal_maintenance_runs_come_from_memory(test_app: TestClient) -> None:
+    """A real cycle against the fake Tether shows up in the in-memory run history."""
     _app(test_app).state.internal_token = "secret"
-    runs = [
-        {"id": "run-1", "status": "success", "reason": "startup"},
-        {"id": "run-2", "status": "failed", "reason": "interval"},
-    ]
-    with patch("a_term.api.a_term.list_recent_maintenance_runs", return_value=runs) as mock_list:
-        response = test_app.get(
-            "/api/internal/maintenance/runs?limit=2",
-            headers={"Authorization": "Bearer secret"},
-        )
+    headers = {"Authorization": "Bearer secret"}
+    assert test_app.get("/api/internal/maintenance/runs").status_code == 403
 
+    ran = test_app.post("/api/internal/maintenance/run", headers=headers)
+    assert ran.status_code == 200, ran.text
+    assert ran.json()["skipped"] is False
+    assert ran.json()["reconciliation"]["links_dropped"] == 0
+
+    response = test_app.get("/api/internal/maintenance/runs?limit=2", headers=headers)
     assert response.status_code == 200
-    assert response.json()["items"] == runs
-    assert response.json()["total"] == 2
-    mock_list.assert_called_once_with(limit=2)
+    items = response.json()["items"]
+    assert items[0]["status"] == "success"
+    assert items[0]["reason"] == "manual"
+    assert response.json()["total"] == len(items)
+
+
+def test_internal_maintenance_rejects_wrong_token(test_app: TestClient) -> None:
+    _app(test_app).state.internal_token = "secret"
+    response = test_app.get("/api/internal/maintenance", headers={"Authorization": "Bearer nope"})
+    assert response.status_code == 403

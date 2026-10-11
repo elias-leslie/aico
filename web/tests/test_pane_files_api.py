@@ -45,7 +45,7 @@ def _pane_with_sessions(
 def test_get_pane_file_tree_uses_shell_working_dir(test_app: TestClient) -> None:
     pane = _pane_with_sessions()
     with (
-        patch("a_term.api.pane_files.pane_store.get_pane_with_sessions", return_value=pane),
+        patch("a_term.api.pane_files.session_catalog.get_pane_with_sessions", return_value=pane),
         patch("a_term.api.pane_files.Path.exists", return_value=True),
         patch("a_term.api.pane_files.Path.is_dir", return_value=True),
         patch(
@@ -66,7 +66,7 @@ def test_get_pane_file_tree_uses_shell_working_dir(test_app: TestClient) -> None
 
 def test_get_pane_file_tree_requires_working_dir(test_app: TestClient) -> None:
     pane = _pane_with_sessions(working_dir=None, active_working_dir=None)
-    with patch("a_term.api.pane_files.pane_store.get_pane_with_sessions", return_value=pane):
+    with patch("a_term.api.pane_files.session_catalog.get_pane_with_sessions", return_value=pane):
         response = test_app.get(f"/api/a-term/panes/{pane['id']}/files/tree")
 
     assert response.status_code == 400
@@ -76,7 +76,7 @@ def test_get_pane_file_tree_requires_working_dir(test_app: TestClient) -> None:
 def test_get_pane_file_tree_falls_back_to_active_session_working_dir(test_app: TestClient) -> None:
     pane = _pane_with_sessions(working_dir=None)
     with (
-        patch("a_term.api.pane_files.pane_store.get_pane_with_sessions", return_value=pane),
+        patch("a_term.api.pane_files.session_catalog.get_pane_with_sessions", return_value=pane),
         patch("a_term.api.pane_files.Path.exists", return_value=True),
         patch("a_term.api.pane_files.Path.is_dir", return_value=True),
         patch(
@@ -98,7 +98,7 @@ def test_get_pane_file_tree_falls_back_to_active_session_working_dir(test_app: T
 def test_get_pane_file_content_returns_payload(test_app: TestClient) -> None:
     pane = _pane_with_sessions()
     with (
-        patch("a_term.api.pane_files.pane_store.get_pane_with_sessions", return_value=pane),
+        patch("a_term.api.pane_files.session_catalog.get_pane_with_sessions", return_value=pane),
         patch("a_term.api.pane_files.Path.exists", return_value=True),
         patch("a_term.api.pane_files.Path.is_dir", return_value=True),
         patch(
@@ -129,7 +129,7 @@ def test_get_pane_file_content_returns_payload(test_app: TestClient) -> None:
 def test_get_pane_file_tree_translates_permission_errors(test_app: TestClient) -> None:
     pane = _pane_with_sessions()
     with (
-        patch("a_term.api.pane_files.pane_store.get_pane_with_sessions", return_value=pane),
+        patch("a_term.api.pane_files.session_catalog.get_pane_with_sessions", return_value=pane),
         patch("a_term.api.pane_files.Path.exists", return_value=True),
         patch("a_term.api.pane_files.Path.is_dir", return_value=True),
         patch(

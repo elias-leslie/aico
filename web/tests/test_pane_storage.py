@@ -1,159 +1,101 @@
-"""Regression tests for pane storage session creation."""
+"""Pane view state in SQLite: panes, layout and session links."""
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-from unittest.mock import MagicMock, call, patch
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from a_term.storage import panes as pane_store
-from a_term.utils.tmux import TmuxError
+from a_term.constants import MAX_PANES
+from a_term.storage import local_db
+from a_term.storage import panes as store
 
 
-def _mock_connection(cursor: MagicMock) -> MagicMock:
-    """Build a connection context manager that yields the provided cursor."""
-    conn = MagicMock()
-    conn.cursor.return_value.__enter__.return_value = cursor
-    manager = MagicMock()
-    manager.__enter__.return_value = conn
-    manager.__exit__.return_value = False
-    return manager
+def _project(name: str = "P", **kwargs: object) -> dict:
+    return store.create_pane(pane_type="project", pane_name=name, project_id="proj", **kwargs)
 
 
-def test_create_project_pane_creates_tmux_backed_sessions() -> None:
-    cursor = MagicMock()
-    cursor.fetchone.side_effect = [
-        {"cnt": 0},
-        {
-            "id": "pane-1",
-            "pane_type": "project",
-            "project_id": "monkey-fight",
-            "pane_order": 0,
-            "pane_name": "Monkey Fight",
-            "active_mode": "claude",
-            "is_detached": False,
-            "created_at": datetime.now(UTC),
-            "width_percent": 100.0,
-            "height_percent": 100.0,
-            "grid_row": 0,
-            "grid_col": 0,
-        },
-    ]
-
-    shell_session = {
-        "id": "shell-id",
-        "name": "Project: monkey-fight",
-        "mode": "shell",
-        "session_number": 1,
-        "is_alive": True,
-        "working_dir": "/workspace/monkey-fight",
-        "claude_state": "not_started",
-        "pane_id": "pane-1",
-    }
-    agent_session = {
-        "id": "claude-id",
-        "name": "Project: monkey-fight",
-        "mode": "claude",
-        "session_number": 1,
-        "is_alive": True,
-        "working_dir": "/workspace/monkey-fight",
-        "claude_state": "not_started",
-        "pane_id": "pane-1",
-    }
-
-    with (
-        patch("a_term.storage.panes.get_connection", return_value=_mock_connection(cursor)),
-        patch("a_term.storage.panes._get_default_agent_slug", return_value="claude"),
-        patch("a_term.storage.panes.create_a_term_session", side_effect=["shell-id", "claude-id"]) as create_session_mock,
-        patch("a_term.storage.panes.create_tmux_session") as create_tmux_mock,
-        patch("a_term.storage.panes.get_a_term_session", side_effect=[shell_session, agent_session]),
-    ):
-        pane = pane_store.create_pane_with_sessions(
-            pane_type="project",
-            pane_name="Monkey Fight",
-            project_id="monkey-fight",
-            working_dir="/workspace/monkey-fight",
-            pane_order=0,
-        )
-
-    assert pane["active_mode"] == "claude"
-    assert [session["mode"] for session in pane["sessions"]] == ["shell", "claude"]
-    assert create_session_mock.call_args_list == [
-        call(
-            name="Project: monkey-fight",
-            project_id="monkey-fight",
-            working_dir="/workspace/monkey-fight",
-            mode="shell",
-            pane_id="pane-1",
-        ),
-        call(
-            name="Project: monkey-fight",
-            project_id="monkey-fight",
-            working_dir="/workspace/monkey-fight",
-            mode="claude",
-            pane_id="pane-1",
-        ),
-    ]
-    assert create_tmux_mock.call_args_list == [
-        call("shell-id", "/workspace/monkey-fight"),
-        call("claude-id", "/workspace/monkey-fight"),
-    ]
+def test_create_validates_type_and_project() -> None:
+    with pytest.raises(ValueError):
+        store.create_pane(pane_type="project", pane_name="x")
+    with pytest.raises(ValueError):
+        store.create_pane(pane_type="adhoc", pane_name="x", project_id="p")
 
 
-def test_create_project_pane_rolls_back_on_agent_tmux_failure() -> None:
-    cursor = MagicMock()
-    cursor.fetchone.side_effect = [
-        {"cnt": 0},
-        {
-            "id": "pane-1",
-            "pane_type": "project",
-            "project_id": "monkey-fight",
-            "pane_order": 0,
-            "pane_name": "Monkey Fight",
-            "active_mode": "claude",
-            "is_detached": False,
-            "created_at": datetime.now(UTC),
-            "width_percent": 100.0,
-            "height_percent": 100.0,
-            "grid_row": 0,
-            "grid_col": 0,
-        },
-    ]
+def test_crud_roundtrip_and_ordering() -> None:
+    first = _project("A")
+    second = store.create_pane(pane_type="adhoc", pane_name="B")
+    assert (first["pane_order"], second["pane_order"]) == (0, 1)
+    assert first["is_detached"] is False
 
-    shell_session = {
-        "id": "shell-id",
-        "name": "Project: monkey-fight",
-        "mode": "shell",
-        "session_number": 1,
-        "is_alive": True,
-        "working_dir": "/workspace/monkey-fight",
-        "claude_state": "not_started",
-        "pane_id": "pane-1",
-    }
+    updated = store.update_pane(first["id"], pane_name="A2", width_percent=50.0, bogus="ignored")
+    assert updated is not None and updated["pane_name"] == "A2" and updated["width_percent"] == 50.0
 
-    with (
-        patch("a_term.storage.panes.get_connection", return_value=_mock_connection(cursor)),
-        patch("a_term.storage.panes._get_default_agent_slug", return_value="claude"),
-        patch("a_term.storage.panes.create_a_term_session", side_effect=["shell-id", "claude-id"]),
-        patch(
-            "a_term.storage.panes.create_tmux_session",
-            side_effect=[None, TmuxError("boom")],
-        ),
-        patch("a_term.storage.panes.get_a_term_session", return_value=shell_session),
-        patch("a_term.storage.panes.delete_a_term_session") as delete_session_mock,
-        patch("a_term.storage.panes.run_tmux_command") as run_tmux_command_mock,
-        patch("a_term.storage.panes.delete_pane") as delete_pane_mock,
-        pytest.raises(TmuxError, match="boom"),
-    ):
-        pane_store.create_pane_with_sessions(
-                pane_type="project",
-                pane_name="Monkey Fight",
-                project_id="monkey-fight",
-                working_dir="/workspace/monkey-fight",
-                pane_order=0,
-            )
+    assert store.swap_pane_positions(first["id"], second["id"])
+    assert store.get_pane(first["id"])["pane_order"] == 1  # type: ignore[index]
 
-    assert delete_session_mock.call_args_list == [call("claude-id"), call("shell-id")]
-    run_tmux_command_mock.assert_called_once_with(["kill-session", "-t", "summitflow-shell-id"])
-    delete_pane_mock.assert_called_once_with("pane-1")
+    store.detach_pane(first["id"])
+    assert [pane["id"] for pane in store.list_panes()] == [second["id"]]
+    assert len(store.list_panes(include_detached=True)) == 2
+    attached = store.attach_pane(first["id"])
+    assert attached is not None and attached["is_detached"] is False
+
+    assert store.delete_pane(first["id"])
+    assert store.get_pane(first["id"]) is None
+    assert not store.delete_pane(first["id"])
+
+
+def test_layouts_update_only_given_fields() -> None:
+    pane = _project()
+    result = store.update_pane_layouts([{"pane_id": pane["id"], "grid_row": 1}, {"grid_row": 9}])
+    assert len(result) == 1
+    assert result[0]["grid_row"] == 1 and result[0]["width_percent"] == 100.0
+
+
+def test_links_belong_to_one_pane_and_cascade() -> None:
+    a, b = _project("A"), _project("B")
+    store.link_session("aaaaaaaa", a["id"], "shell")
+    store.link_session("aaaaaaaa", b["id"], "codex")
+    link = store.get_link("aaaaaaaa")
+    assert link is not None and link["pane_id"] == b["id"] and link["mode"] == "codex" and link["kind"] == "tether"
+    store.link_session("bbbbbbbb", b["id"], "shell", kind="legacy")
+    assert [row["session_id"] for row in store.links_for_pane(b["id"])] == ["aaaaaaaa", "bbbbbbbb"]
+
+    store.update_link("aaaaaaaa", mode="claude-code", display_order=3, pane_id="ignored")
+    store.touch_link("aaaaaaaa")
+    link = store.get_link("aaaaaaaa")
+    assert link["mode"] == "claude-code" and link["display_order"] == 3  # type: ignore[index]
+
+    assert store.unlink_session("bbbbbbbb")
+    assert not store.unlink_session("bbbbbbbb")
+    store.delete_pane(b["id"])
+    assert store.list_links() == []
+
+
+def test_max_panes_counts_only_visible_linked_panes() -> None:
+    for index in range(MAX_PANES):
+        pane = _project(f"P{index}")
+        store.link_session(f"{index:08x}", pane["id"], "shell")
+    # Empty and detached panes do not count.
+    store.create_pane(pane_type="adhoc", pane_name="detached", is_detached=True)
+    with pytest.raises(ValueError, match="Maximum"):
+        _project("one too many")
+    detached = store.list_panes(include_detached=True)[-1]
+    store.link_session("ffffffff", detached["id"], "shell")
+    with pytest.raises(ValueError, match="Maximum"):
+        store.attach_pane(detached["id"])
+    assert store.count_panes() == MAX_PANES
+    assert store.count_panes(include_detached=True) == MAX_PANES + 1
+
+
+def test_delete_empty_panes_only_old_and_unlinked() -> None:
+    old_empty = _project("old empty")
+    old_linked = _project("old linked")
+    _project("new empty")
+    store.link_session("aaaaaaaa", old_linked["id"], "shell")
+    past = (datetime.now(UTC) - timedelta(days=30)).isoformat()
+    with local_db.connect() as db:
+        db.execute("UPDATE panes SET created_at = ? WHERE id IN (?, ?)", (past, old_empty["id"], old_linked["id"]))
+    assert store.delete_empty_panes(7) == 1
+    assert store.get_pane(old_empty["id"]) is None
+    assert store.get_pane(old_linked["id"]) is not None

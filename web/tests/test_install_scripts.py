@@ -41,14 +41,14 @@ class _VersionHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body.encode())
 
-    def log_message(self, *_args: object) -> None:
+    def log_message(self, format: str, *args: object) -> None:
         return
 
 
 class _UnixHTTPServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
     daemon_threads = True
 
-    def get_request(self):  # type: ignore[override]
+    def get_request(self):
         request, _ = super().get_request()
         return request, ("tether", 0)
 

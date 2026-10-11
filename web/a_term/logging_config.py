@@ -146,3 +146,13 @@ def configure_logging(
 def get_logger(name: str) -> structlog.stdlib.BoundLogger:
     """Get a structured logger by name (typically __name__)."""
     return structlog.get_logger(name)
+
+
+def configure_cli_logging(level: int = logging.WARNING) -> None:
+    """Command-line tools: keep stdout for their output; warnings go to stderr."""
+    structlog.configure(
+        processors=[structlog.processors.add_log_level, structlog.dev.ConsoleRenderer(colors=False)],
+        wrapper_class=structlog.make_filtering_bound_logger(level),
+        logger_factory=lambda *_args: structlog.PrintLogger(file=sys.stderr),  # stderr looked up per logger
+        cache_logger_on_first_use=False,
+    )

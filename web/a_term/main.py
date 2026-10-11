@@ -1,12 +1,13 @@
 """A-Term Service - FastAPI Application.
 
-Independent microservice for web a_term functionality.
-Runs on port 8002, separate from main SummitFlow backend.
+The web terminal app. Tether owns the sessions; A-Term attaches views to
+them, keeps its pane layout in a local SQLite file and serves the browser UI's
+API on port 8002.
 """
 
+import asyncio
 import os
 import secrets
-import subprocess
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from importlib.metadata import PackageNotFoundError, version
@@ -38,8 +39,9 @@ from .logging_config import SyslogPrefixFormatter, configure_logging, get_logger
 from .rate_limit import limiter
 from .services.maintenance import get_status as get_maintenance_status
 from .services.maintenance import start_scheduler, stop_scheduler
-from .services.summitflow_client import close_client
-from .storage.connection import close_pool, get_connection
+from .services.tether_events import start_watcher, stop_watcher
+from .storage import local_db
+from .tether import MIN_API_VERSION, TetherError, TetherUnavailable, TetherVersionError, get_client
 from .utils.tmux import run_tmux_command
 
 # Configure structured logging (skip in test mode - tests configure their own logging)
@@ -72,45 +74,24 @@ def _app_version() -> str:
         return "0.0.0"
 
 
-def _setup_tmux_options(token: str) -> None:
-    """Set up tmux options and hooks for a_term service.
-
-    Configures:
-    - client-session-changed hook: Notify backend when sessions switch
-
-    NOTE: We intentionally do NOT set global tmux options like detach-on-destroy
-    to avoid affecting non-web-a_term sessions (e.g., MobaXterm, other clients).
-    Each summitflow-* session manages its own options in create_tmux_session().
-
-    Security: Token is written to a file (mode 0600) instead of embedded in the
-    hook command, so it is not visible via `tmux show-hooks -g` or `ps`.
-    """
-    # Write token to a file readable only by the service user
-
-    token_file = get_cache_root() / "hook-token"
-    token_file.parent.mkdir(parents=True, exist_ok=True)
-    token_file.write_text(token)
+def _write_internal_token(token: str) -> None:
+    """Store the internal token (mode 0600) for local maintenance callers."""
+    cache_root = get_cache_root()
+    cache_root.mkdir(parents=True, exist_ok=True)
+    token_file = cache_root / "internal-token"
+    token_file.touch(mode=0o600, exist_ok=True)
     token_file.chmod(0o600)
+    token_file.write_text(token)
+    # The old tmux session-switch hook read this file; nothing does any more.
+    (cache_root / "hook-token").unlink(missing_ok=True)
 
-    hook_cmd = (
-        f'run-shell "curl -s -H \'Authorization: Bearer \'$(cat {token_file})'
-        f" 'http://localhost:{A_TERM_PORT}/api/internal/session-switch"
-        f"?from=#{{client_last_session}}&to=#{{client_session}}' >/dev/null 2>&1 &\""
-    )
 
-    # Set global hook (applies to all sessions)
-    result = subprocess.run(
-        ["tmux", "set-hook", "-g", "client-session-changed", hook_cmd],
-        capture_output=True,
-        text=True,
-        timeout=10,
-    )
-
-    if result.returncode == 0:
-        logger.info("tmux_options_configured")
-    else:
-        # tmux server may not be running at startup; hooks will apply once it starts
-        logger.warning("tmux_setup_failed", error=result.stderr.strip())
+def _remove_legacy_session_switch_hook() -> None:
+    """Drop the global tmux hook older A-Term versions set on the default server."""
+    ok, hooks = run_tmux_command(["show-hooks", "-g", "client-session-changed"])
+    if ok and "/api/internal/session-switch" in hooks:
+        removed, _ = run_tmux_command(["set-hook", "-gu", "client-session-changed"])
+        logger.info("legacy_session_switch_hook_removed", removed=removed)
 
 
 @asynccontextmanager
@@ -119,18 +100,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("a_term_service_starting", port=A_TERM_PORT)
     app.state.maintenance_status = {}
 
-    # Set up tmux options and hooks
+    local_db.initialize()
     app.state.internal_token = secrets.token_urlsafe(32)
-    _setup_tmux_options(app.state.internal_token)
+    _write_internal_token(app.state.internal_token)
+    await asyncio.to_thread(_remove_legacy_session_switch_hook)
+    start_watcher()
     await start_scheduler(app)
 
     yield
 
     # Shutdown
     logger.info("a_term_service_stopping")
+    stop_watcher()
     await stop_scheduler(app)
-    await close_client()
-    close_pool()
     logger.info("a_term_service_shutdown_complete")
 
 
@@ -214,28 +196,41 @@ async def metrics() -> dict:
     return get_metrics().to_dict()
 
 
+def _tether_health() -> dict[str, object]:
+    client = get_client()
+    try:
+        version_info = client.require_api_version(MIN_API_VERSION)
+        health_info = client.health()
+    except TetherVersionError as error:
+        return {"status": "incompatible", "error": str(error), "socket": client.socket_path}
+    except TetherUnavailable:
+        return {"status": "down", "socket": client.socket_path}
+    except TetherError as error:
+        return {"status": "error", "code": error.code, "socket": client.socket_path}
+    return {
+        "status": "ok",
+        "apiVersion": version_info.get("apiVersion"),
+        "version": version_info.get("version"),
+        "health": health_info.get("status") if isinstance(health_info, dict) else None,
+    }
+
+
 @app.get("/health", response_model=None)
 async def health() -> dict[str, object] | JSONResponse:
-    """Health check endpoint."""
+    """Healthy when Tether answers with a compatible API and tmux responds."""
     checks: dict[str, object] = {"service": "a-term"}
+    tether = await asyncio.to_thread(_tether_health)
+    checks["tether"] = tether
 
-    # Check database
-    try:
-        with get_connection() as conn, conn.cursor() as cur:
-            cur.execute("SELECT 1")
-        checks["db"] = "ok"
-    except Exception as e:
-        logger.error("health_check_db_failed", error=str(e))
-        checks["db"] = "down"
-        return JSONResponse(status_code=503, content={**checks, "status": "unhealthy"})
-
-    # Check tmux server
-    tmux_ok, _ = run_tmux_command(["list-sessions"])
-    # tmux returns failure when there are no sessions, which is fine
-    # We just need the server to respond (not hang or crash)
+    # Legacy and the user's own sessions live on the default tmux server. A
+    # failure here only means it has no sessions, which is fine.
+    tmux_ok, _ = await asyncio.to_thread(run_tmux_command, ["list-sessions"])
     checks["tmux"] = "ok" if tmux_ok else "no_sessions"
     checks["maintenance"] = get_maintenance_status(app)
 
+    if tether.get("status") != "ok":
+        logger.error("health_check_tether_failed", **{k: v for k, v in tether.items() if k != "socket"})
+        return JSONResponse(status_code=503, content={**checks, "status": "unhealthy"})
     checks["status"] = "healthy"
     return checks
 

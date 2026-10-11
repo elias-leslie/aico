@@ -1,10 +1,7 @@
-"""Storage layer for A-Term Service.
+"""A-Term's local view state (SQLite). Sessions live in Tether.
 
 Modules:
-- sessions: A-Term session CRUD, lifecycle, project queries, agent state
-- panes: A-Term pane CRUD, ordering, layout, session association
-- agent_tools: Agent tool CRUD
-- project_settings: Per-project a_term settings
-- maintenance_runs: Maintenance run history
-- connection: Database connection pool
+- local_db: database file, schema and connections
+- panes: panes, layout and the sessions each pane shows
+- project_settings: per-project display settings
 """

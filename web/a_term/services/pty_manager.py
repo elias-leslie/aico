@@ -1,10 +1,9 @@
-"""PTY management service for a_term sessions.
+"""PTY management for WebSocket views.
 
-Handles low-level PTY operations:
-- Spawning PTY attached to tmux sessions
-- Resizing PTY a_term sessions
-- Reading PTY output with UTF-8 handling
-- Session name validation
+A view is a PTY running a tmux client attached to the session: Tether's exact
+``tmux -S <socket> attach-session -t <target>`` argv for Tether sessions, or a
+default-server attach for legacy and external sessions. Tether never proxies
+terminal bytes; A-Term keeps its own byte path.
 """
 
 from __future__ import annotations
@@ -19,12 +18,6 @@ from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
 from ..logging_config import get_logger
-from ..utils.tmux import (
-    build_tmux_command,
-    run_tmux_command,
-    validate_session_name,
-    validate_socket_name,
-)
 from ._pty_reader import _make_on_readable, _run_batch_loop
 
 if TYPE_CHECKING:
@@ -35,103 +28,43 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-# Re-export batching constants so callers can reference them if needed
+__all__ = ["attach_environment", "read_pty_output", "resize_pty", "spawn_pty"]
 
-__all__ = ["read_pty_output", "resize_pty", "spawn_pty_for_tmux"]
+# Never let the client inherit a parent tmux or a colour veto.
+_DROPPED_ENV = ("TMUX", "TMUX_PANE", "NO_COLOR")
 
 
-def _resolve_target_session(
-    stored_target_session: str | None,
-    tmux_socket_name: str | None = None,
-) -> str | None:
-    """Validate and check if the stored target session still exists.
+def attach_environment(overrides: dict[str, str] | None = None) -> dict[str, str]:
+    """Client environment: ours minus tmux markers, plus Tether's overrides."""
+    env = {key: value for key, value in os.environ.items() if key not in _DROPPED_ENV}
+    env.update(overrides or {})
+    for key in _DROPPED_ENV:
+        env.pop(key, None)
+    env.setdefault("TERM", "xterm-256color")
+    return env
 
-    Returns the session name if it is valid and alive, else None.
+
+def spawn_pty(argv: list[str], env: dict[str, str] | None = None) -> tuple[int, int]:
+    """Fork a PTY whose child execs ``argv`` (a tmux attach). Returns (master_fd, pid).
+
+    The child pid is the tmux client's pid, which Tether's resize claim needs.
     """
-    if not stored_target_session:
-        return None
-    if not validate_session_name(stored_target_session):
-        logger.warning("invalid_target_session_name", session=stored_target_session[:50])
-        return None
-    success, _ = run_tmux_command(
-        ["has-session", "-t", stored_target_session],
-        socket_name=tmux_socket_name,
-    )
-    if not success:
-        return None
-    logger.info("using_stored_target_session", session=stored_target_session)
-    return stored_target_session
-
-
-def _exec_tmux_attach(
-    tmux_session: str,
-    target_session: str | None,
-    tmux_socket_name: str | None = None,
-) -> None:
-    """Replace the child process image with tmux attach (never returns)."""
-    os.environ["TERM"] = "xterm-256color"
-    if target_session:
-        os.execvp(
-            "tmux",
-            build_tmux_command(
-                ["attach-session", "-t", tmux_session, ";", "switch-client", "-t", target_session],
-                tmux_socket_name,
-            ),
-        )
-    else:
-        os.execvp(
-            "tmux",
-            build_tmux_command(["attach-session", "-t", tmux_session], tmux_socket_name),
-        )
-
-
-def spawn_pty_for_tmux(
-    tmux_session: str,
-    stored_target_session: str | None = None,
-    tmux_socket_name: str | None = None,
-) -> tuple[int, int]:
-    """Spawn a PTY attached to a tmux session.
-
-    Args:
-        tmux_session: Base tmux session name to attach to
-        stored_target_session: Previously stored target session to auto-switch to
-
-    Returns:
-        Tuple of (master_fd, pid)
-
-    Raises:
-        ValueError: If tmux session name is invalid
-
-    Security:
-        Session and socket names are validated before tmux is exec'd directly.
-    """
-    if not validate_session_name(tmux_session):
-        raise ValueError(f"Invalid tmux session name: {tmux_session[:50]}")
-    if not validate_socket_name(tmux_socket_name):
-        raise ValueError(f"Invalid tmux socket name: {str(tmux_socket_name)[:50]}")
-
-    target_session = _resolve_target_session(stored_target_session, tmux_socket_name)
+    if not argv or not isinstance(argv[0], str):
+        raise ValueError("Empty attach argv")
+    child_env = attach_environment(env)
     pid, master_fd = pty.fork()
-
-    if pid == 0:
-        # Child process — replace with tmux attach (never returns)
-        _exec_tmux_attach(tmux_session, target_session, tmux_socket_name)
-        raise RuntimeError("PTY fork failed")  # unreachable
-
-    # Parent: make fd non-blocking and return
+    if pid == 0:  # pragma: no cover - child process
+        try:
+            os.execvpe(argv[0], argv, child_env)
+        finally:
+            os._exit(127)
     flags = fcntl.fcntl(master_fd, fcntl.F_GETFL)
     fcntl.fcntl(master_fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
     return master_fd, pid
 
 
 def resize_pty(master_fd: int, cols: int, rows: int) -> None:
-    """Resize a PTY.
-
-    Args:
-        master_fd: Master file descriptor
-        cols: Number of columns
-        rows: Number of rows
-    """
+    """Resize the view's own PTY (and so its tmux client)."""
     winsize = struct.pack("HHHH", rows, cols, 0, 0)
     fcntl.ioctl(master_fd, termios.TIOCSWINSZ, winsize)
 
@@ -145,35 +78,11 @@ async def read_pty_output(
     use_binary: bool = False,
     diag: SessionDiagnostics | None = None,
 ) -> None:
-    """Read output from PTY and send to WebSocket with batching.
-
-    Uses asyncio native FD watching with loop.add_reader() for true zero CPU
-    when idle.  Implements 16ms/4KB batching to prevent browser freeze on
-    heavy output.  Handles UTF-8 decoding with buffering for incomplete
-    multi-byte sequences.
-
-    Args:
-        websocket: WebSocket connection to send output to
-        master_fd: Master file descriptor to read from
-        session_id: A-Term session ID for logging context
-        on_flush: Optional callback invoked after each batch flush
-        backpressure: Optional controller that pauses/resumes FD reading
-        use_binary: Use binary protocol framing for output
-    """
+    """Read PTY output and send it to the WebSocket in 16 ms / 4 KB batches."""
     loop = asyncio.get_running_loop()
-    # Bounded queue prevents unbounded memory growth when WS is slower than PTY
     queue: asyncio.Queue[bytes | None] = asyncio.Queue(maxsize=256)
-
     on_readable = _make_on_readable(master_fd, queue, session_id=session_id)
     loop.add_reader(master_fd, on_readable)
-
-    # Let backpressure controller know the on_readable callback so it can
-    # re-register the reader after resuming.
-    if backpressure is not None:
-        # Store for controller's resume path — it calls loop.add_reader
-        # with this callback.
-        pass  # Controller already has on_readable from its constructor
-
     try:
         await _run_batch_loop(websocket, queue, loop, on_flush, backpressure, use_binary, diag)
     finally:

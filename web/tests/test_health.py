@@ -1,90 +1,54 @@
-"""Tests for the /health endpoint.
-
-Verifies that the health check reports healthy when the database
-is reachable and unhealthy when it is not.
-"""
+"""/health: healthy when Tether answers with a compatible API; tmux is reported."""
 
 from __future__ import annotations
 
-from typing import cast
+from collections.abc import Iterator
 from unittest.mock import MagicMock, patch
 
-from fastapi import FastAPI
+import pytest
 from fastapi.testclient import TestClient
 
-
-def _app(client: TestClient) -> FastAPI:
-    """Return the underlying FastAPI app from a TestClient."""
-    return cast(FastAPI, client.app)
+from .fake_tether import FakeTether
 
 
-def test_health_healthy_returns_status(test_app: TestClient) -> None:
-    """GET /health -- database reachable returns ``{"status": "healthy"}``."""
-    # Arrange
-    mock_conn = MagicMock()
-    mock_cursor = MagicMock()
-    mock_conn.__enter__ = MagicMock(return_value=mock_conn)
-    mock_conn.__exit__ = MagicMock(return_value=False)
-    mock_conn.cursor.return_value = mock_cursor
-    mock_cursor.__enter__ = MagicMock(return_value=mock_cursor)
-    mock_cursor.__exit__ = MagicMock(return_value=False)
+@pytest.fixture(autouse=True)
+def health_tmux() -> Iterator[MagicMock]:
+    """main.py holds its own reference to run_tmux_command."""
+    with patch("a_term.main.run_tmux_command", return_value=(False, "no server running")) as run:
+        yield run
 
-    with patch("a_term.main.get_connection") as mock_get_conn:
-        mock_get_conn.return_value = mock_conn
 
-        # Act
-        response = test_app.get("/health")
-
-    # Assert
+def test_health_ok_with_tether(test_app: TestClient, fake_tether: FakeTether) -> None:
+    response = test_app.get("/health")
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "healthy"
-    assert body["service"] == "a-term"
+    assert body["tether"]["status"] == "ok"
+    assert body["tether"]["apiVersion"] == 1
+    assert body["tmux"] == "no_sessions"
     assert "maintenance" in body
 
 
-def test_health_unhealthy_when_db_down(test_app: TestClient) -> None:
-    """GET /health -- database unreachable returns 503 with unhealthy status."""
-    # Arrange
-    with patch("a_term.main.get_connection", side_effect=RuntimeError("connection refused")):
-        # Act
-        response = test_app.get("/health")
+def test_health_reports_tmux_ok(test_app: TestClient, health_tmux: MagicMock) -> None:
+    health_tmux.return_value = (True, "main: 1 windows")
+    assert test_app.get("/health").json()["tmux"] == "ok"
 
-    # Assert
+
+def test_health_unhealthy_when_tether_down(test_app: TestClient, fake_tether: FakeTether) -> None:
+    fake_tether.stop()
+    response = test_app.get("/health")
     assert response.status_code == 503
     body = response.json()
     assert body["status"] == "unhealthy"
-    assert body["service"] == "a-term"
-    assert body["db"] == "down"
+    assert body["tether"]["status"] == "down"
 
 
-def test_health_response_contains_service_field(test_app: TestClient) -> None:
-    """GET /health -- response always includes the ``service`` field."""
-    # Arrange
-    with patch("a_term.main.get_connection", side_effect=Exception("any error")):
-        # Act
-        response = test_app.get("/health")
-
-    # Assert
-    body = response.json()
-    assert "service" in body
-    assert body["service"] == "a-term"
+def test_health_unhealthy_when_tether_too_old(test_app: TestClient, fake_tether: FakeTether) -> None:
+    fake_tether.state.api_version = 0
+    response = test_app.get("/health")
+    assert response.status_code == 503
+    assert response.json()["tether"]["status"] == "incompatible"
 
 
-def test_health_response_includes_maintenance_status(test_app: TestClient) -> None:
-    """GET /health -- response includes maintenance observability payload."""
-    mock_conn = MagicMock()
-    mock_cursor = MagicMock()
-    mock_conn.__enter__ = MagicMock(return_value=mock_conn)
-    mock_conn.__exit__ = MagicMock(return_value=False)
-    mock_conn.cursor.return_value = mock_cursor
-    mock_cursor.__enter__ = MagicMock(return_value=mock_cursor)
-    mock_cursor.__exit__ = MagicMock(return_value=False)
-    _app(test_app).state.maintenance_status = {"state": "idle", "runs": 5}
-
-    with patch("a_term.main.get_connection") as mock_get_conn:
-        mock_get_conn.return_value = mock_conn
-        response = test_app.get("/health")
-
-    assert response.status_code == 200
-    assert response.json()["maintenance"]["runs"] == 5
+def test_health_needs_no_auth(test_app: TestClient) -> None:
+    assert "detail" not in test_app.get("/health").json()

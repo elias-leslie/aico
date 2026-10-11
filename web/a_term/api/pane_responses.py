@@ -32,7 +32,7 @@ def build_pane_response(pane: dict[str, Any]) -> PaneResponse:
         pane_name=pane["pane_name"],
         active_mode=active_mode,
         is_detached=bool(pane.get("is_detached", False)),
-        created_at=pane["created_at"].isoformat() if pane.get("created_at") else None,
+        created_at=str(pane["created_at"]) if pane.get("created_at") else None,
         sessions=[SessionInPaneResponse.model_validate(s) for s in sessions],
         width_percent=pane.get("width_percent", 100.0),
         height_percent=pane.get("height_percent", 100.0),

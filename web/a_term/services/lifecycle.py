@@ -1,347 +1,316 @@
-"""A-Term session lifecycle management.
+"""Session lifecycle, delegated to Tether.
 
-All lifecycle operations in one module:
-- Core: atomic create/delete, resurrection, ensure-alive
-- Batch: reset single/project/all, disable project
-- Reconciliation: startup DB↔tmux sync
+A-Term never creates or kills tmux sessions itself. It asks Tether to create
+a session (``origin=a-term``), to End it, or to respawn its workload, and it
+records which pane shows the session. Ending is always explicit: a dead
+session is never silently re-created, and closing a view never ends a session.
+
+Legacy ``summitflow-*`` sessions on the default tmux server are attach-only:
+they can be ended (A-Term created them) but never respawned or reset.
 """
 
 from __future__ import annotations
 
+import uuid
 from typing import Any
 
-from ..constants import SHELL_MODE
+from ..config import TMUX_DEFAULT_COLS, TMUX_DEFAULT_ROWS
 from ..logging_config import get_logger
-from ..storage import agent_tools as agent_tools_store
+from ..storage import panes as pane_store
 from ..storage import project_settings as settings_store
-from ..storage import sessions as a_term_store
-from ..utils.tmux import (
-    TmuxError,
-    create_tmux_session,
-    get_tmux_session_name,
-    list_tmux_sessions,
-    run_tmux_command,
-    tmux_session_exists,
-)
+from ..tether import TetherError, get_client
+from ..utils import tmux
+from . import agent_tools, session_catalog
 
 logger = get_logger(__name__)
 
-
-# ---------------------------------------------------------------------------
-# Low-level helpers
-# ---------------------------------------------------------------------------
-def kill_tmux_session(
-    session_id: str,
-    ignore_missing: bool = True,
-    *,
-    expected_tmux_session_id: str | None = None,
-) -> bool:
-    """Kill a tmux session. Returns True if killed, False if not found."""
-    session_name = get_tmux_session_name(session_id)
-    target = expected_tmux_session_id or session_name
-    success, error = run_tmux_command(["kill-session", "-t", target])
-
-    if not success:
-        if ignore_missing and (
-            "session not found" in error.lower() or "can't find session" in error.lower()
-        ):
-            logger.info("tmux_session_not_found", session=session_name)
-            return False
-        raise TmuxError(f"Failed to kill tmux session: {error}")
-
-    logger.info("tmux_session_killed", session=session_name)
-    return True
+ORIGIN = "a-term"
+SHELL_MODE = "shell"
 
 
-def _resurrect_session_record(
-    session_id: str,
-    project_id: str | None,
-    name: str,
-    working_dir: str | None,
-    mode: str,
-    pane_id: str | None,
-) -> None:
-    """Update DB record and create tmux session for resurrection."""
-    logger.info("resurrecting_dead_session", session_id=session_id, project_id=project_id, mode=mode)
-    a_term_store.update_session(
-        session_id,
-        name=name,
-        working_dir=working_dir,
-        is_alive=True,
-        pane_id=pane_id,
-    )
-    try:
-        create_tmux_session(session_id, working_dir)
-    except TmuxError as e:
-        logger.error("tmux_create_failed_rolling_back_resurrection", session_id=session_id, error=str(e))
-        a_term_store.mark_dead(session_id)
-        raise
-    logger.info("session_resurrected", session_id=session_id, name=name, project_id=project_id, mode=mode)
+class LifecycleError(Exception):
+    """A lifecycle request A-Term refuses before reaching Tether."""
 
-
-def _claim_and_resurrect(
-    project_id: str,
-    mode: str,
-    name: str,
-    working_dir: str | None,
-    pane_id: str | None,
-) -> str | None:
-    """Atomically claim a dead session and resurrect it. Returns session ID or None."""
-    claimed = a_term_store.claim_dead_session_by_project(project_id, mode)
-    if not claimed:
-        return None
-    session_id: str = claimed["id"]
-    _resurrect_session_record(session_id, project_id, name, working_dir, mode, pane_id)
-    return session_id
-
-
-def _try_resurrect_tmux(session_id: str, working_dir: str | None) -> bool:
-    """Attempt to recreate a dead tmux session. Returns True on success."""
-    logger.info("session_resurrection_attempt", session_id=session_id)
-    try:
-        create_tmux_session(session_id, working_dir)
-        a_term_store.update_session(session_id, is_alive=True)
-        logger.info("session_resurrected", session_id=session_id)
-        return True
-    except TmuxError as e:
-        logger.error("tmux_create_failed_rolling_back_ensure_alive", session_id=session_id, error=str(e))
-        a_term_store.mark_dead(session_id)
-        return False
+    def __init__(self, status_code: int, detail: str) -> None:
+        self.status_code = status_code
+        self.detail = detail
+        super().__init__(detail)
 
 
 # ---------------------------------------------------------------------------
-# Core single-session operations
+# Create
 # ---------------------------------------------------------------------------
 def create_session(
-    name: str,
+    *,
+    pane_id: str,
+    mode: str,
     project_id: str | None = None,
     working_dir: str | None = None,
-    user_id: str | None = None,
-    mode: str = "shell",
-    pane_id: str | None = None,
-) -> str:
-    """Create a new a_term session atomically (DB + tmux, rollback on failure).
+    name: str | None = None,
+    cols: int = TMUX_DEFAULT_COLS,
+    rows: int = TMUX_DEFAULT_ROWS,
+) -> dict[str, Any]:
+    """Ask Tether for a new session and show it in ``pane_id``.
 
-    If a dead session exists for the same project_id+mode, resurrects it instead.
+    ``mode`` is ``shell`` or an agent tool slug or alias. Tether resolves the
+    alias, launches the tool, and stores the canonical slug.
     """
-    if project_id:
-        resurrected = _claim_and_resurrect(project_id, mode, name, working_dir, pane_id)
-        if resurrected:
-            return resurrected
-
-    session_id = a_term_store.create_session(
-        name=name, project_id=project_id, working_dir=working_dir,
-        user_id=user_id, mode=mode, pane_id=pane_id,
+    descriptor = get_client().create_session(
+        origin=ORIGIN,
+        cols=cols,
+        rows=rows,
+        tool=mode,
+        project_id=project_id,
+        project_root=working_dir,
+        name=name,
+        a_term_session_id=str(uuid.uuid4()),
     )
+    session_id = str(descriptor["id"])
+    canonical_mode = str(descriptor.get("tool") or mode)
+    link = pane_store.link_session(session_id, pane_id, canonical_mode)
+    logger.info(
+        "session_created",
+        session_id=session_id,
+        pane_id=pane_id,
+        mode=canonical_mode,
+        project_id=project_id,
+        status=descriptor.get("status"),
+    )
+    return session_catalog.from_tether(descriptor, link)
+
+
+def create_pane_with_sessions(
+    *,
+    pane_type: str,
+    pane_name: str,
+    project_id: str | None = None,
+    working_dir: str | None = None,
+    agent_tool_slug: str | None = None,
+    is_detached: bool = False,
+    pane_order: int | None = None,
+    width_percent: float | None = None,
+    height_percent: float | None = None,
+    grid_row: int | None = None,
+    grid_col: int | None = None,
+    include_shell: bool = True,
+) -> dict[str, Any]:
+    """Create a pane and its sessions: shell plus agent (project), or shell (ad hoc).
+
+    If Tether refuses any session, the sessions already created are ended and
+    the pane is removed, so a failed create leaves nothing behind.
+    """
+    agent_mode = (
+        agent_tools.canonical_slug(agent_tool_slug) if agent_tool_slug else agent_tools.default_agent_slug()
+    )
+    active_mode = agent_mode if pane_type == "project" else SHELL_MODE
+    pane = pane_store.create_pane(
+        pane_type=pane_type,
+        pane_name=pane_name,
+        project_id=project_id,
+        active_mode=active_mode,
+        is_detached=is_detached,
+        pane_order=pane_order,
+        width_percent=width_percent,
+        height_percent=height_percent,
+        grid_row=grid_row,
+        grid_col=grid_col,
+    )
+    modes: list[str] = []
+    if include_shell or pane_type == "adhoc":
+        modes.append(SHELL_MODE)
+    if pane_type == "project" and agent_mode != SHELL_MODE:
+        modes.append(agent_mode)
+    created: list[dict[str, Any]] = []
     try:
-        create_tmux_session(session_id, working_dir)
-    except TmuxError as e:
-        logger.error("tmux_create_failed_rolling_back_new_session", session_id=session_id, error=str(e))
-        a_term_store.delete_session(session_id)
+        for mode in modes:
+            created.append(
+                create_session(
+                    pane_id=pane["id"],
+                    mode=mode,
+                    project_id=project_id,
+                    working_dir=working_dir,
+                    name=None if project_id else pane_name,
+                )
+            )
+    except Exception:
+        for session in reversed(created):
+            try:
+                end_session(str(session["id"]))
+            except Exception as error:  # pragma: no cover - best effort rollback
+                logger.warning("pane_rollback_end_failed", session_id=session["id"], error=str(error))
+        pane_store.delete_pane(pane["id"])
         raise
+    if created and pane_type == "project":
+        pane = pane_store.update_pane(pane["id"], active_mode=str(created[-1]["mode"])) or pane
+    return {**pane, "sessions": created}
 
-    logger.info("session_created", session_id=session_id, name=name, project_id=project_id, mode=mode)
-    return session_id
 
+# ---------------------------------------------------------------------------
+# End
+# ---------------------------------------------------------------------------
+def end_session(session_id: str) -> bool:
+    """End a session (Tether or legacy) and drop its pane link.
 
-def delete_session(session_id: str, *, expected_tmux_session_id: str | None = None) -> bool:
-    """Delete a a_term session atomically. Idempotent."""
-    kill_tmux_session(
-        session_id,
-        ignore_missing=expected_tmux_session_id is None,
-        expected_tmux_session_id=expected_tmux_session_id,
-    )
-    deleted = a_term_store.delete_session(session_id)
-    if deleted:
-        logger.info("session_deleted", session_id=session_id)
-    else:
-        logger.info("session_not_found_for_delete", session_id=session_id)
+    Returns False when the session was already gone. Tether's End is fenced by
+    the generation read just before it; a changed generation is reported, not
+    retried.
+    """
+    if session_catalog.is_legacy_id(session_id):
+        ended = tmux.kill_legacy_session(session_id)
+        pane_store.unlink_session(session_id)
+        return ended
+    if not session_catalog.is_tether_id(session_id):
+        raise LifecycleError(400, "Only Tether and legacy A-Term sessions can be ended here")
+    client = get_client()
+    try:
+        descriptor = client.get_session(session_id)
+    except TetherError as error:
+        if error.status == 404:
+            pane_store.unlink_session(session_id)
+            return False
+        raise
+    generation = descriptor.get("generation")
+    if not isinstance(generation, str):
+        raise LifecycleError(409, "The session has no generation yet; refresh and try again")
+    try:
+        client.end_session(session_id, generation)
+    except TetherError as error:
+        if error.status == 404:
+            pane_store.unlink_session(session_id)
+            return False
+        raise
+    pane_store.unlink_session(session_id)
+    logger.info("session_ended", session_id=session_id)
     return True
 
 
-def ensure_session_alive(session_id: str) -> bool:
-    """Ensure a session is alive, recreating tmux if necessary. Called on WS connect."""
-    session = a_term_store.get_session(session_id)
-    if not session:
-        logger.warning("ensure_alive_no_db_record", session_id=session_id)
-        return False
-
-    if session.get("is_root"):
-        from ..storage import root_requests
-        from .root_workloads import describe
-
-        root = root_requests.for_session(session_id)
-        return bool(root and describe(root)["status"] == "running")
-
-    if tmux_session_exists(session_id):
-        if not session["is_alive"]:
-            a_term_store.update_session(session_id, is_alive=True)
-            logger.info("session_marked_alive", session_id=session_id)
-        return True
-
-    return _try_resurrect_tmux(session_id, session.get("working_dir"))
+def end_pane(pane_id: str) -> int:
+    """End every session a pane shows, then delete the pane."""
+    ended = 0
+    for link in pane_store.links_for_pane(pane_id):
+        if end_session(link["session_id"]):
+            ended += 1
+    pane_store.delete_pane(pane_id)
+    return ended
 
 
 # ---------------------------------------------------------------------------
-# Batch operations
+# Respawn (explicit reset)
 # ---------------------------------------------------------------------------
-def reset_session(session_id: str) -> str | None:
-    """Delete and recreate a session with the same parameters. Returns new ID or None."""
-    session = a_term_store.get_session(session_id)
-    if not session:
-        logger.warning("reset_session_not_found", session_id=session_id)
-        return None
-
+def _require_respawnable(session: dict[str, Any] | None, session_id: str) -> dict[str, Any]:
+    if session is None:
+        raise LifecycleError(404, f"Session {session_id} not found")
+    if session.get("is_legacy"):
+        raise LifecycleError(409, "This session predates Tether and is attach-only")
     if session.get("is_root"):
-        # An adapter request is one immutable workload, including after it ends.
-        return None
-
-    delete_session(session_id)
-    new_session_id = create_session(
-        name=session["name"],
-        project_id=session.get("project_id"),
-        working_dir=session.get("working_dir"),
-        user_id=session.get("user_id"),
-        mode=session.get("mode", "shell"),
-        pane_id=session.get("pane_id"),
-    )
-    logger.info(
-        "session_reset", old_session_id=session_id, new_session_id=new_session_id,
-        project_id=session.get("project_id"), mode=session.get("mode", "shell"),
-        pane_id=session.get("pane_id"),
-    )
-    return new_session_id
+        raise LifecycleError(409, "A root session runs one launch; start a new root instead")
+    if session.get("source") != "tether":
+        raise LifecycleError(400, "External tmux sessions are read-only")
+    return session
 
 
-def reset_project_sessions(
-    project_id: str, working_dir: str | None = None
-) -> dict[str, str | None]:
-    """Reset all sessions for a project, deleting orphans and recreating fresh ones."""
-    all_sessions = a_term_store.get_all_project_sessions(project_id)
+def reset_session(session_id: str) -> dict[str, Any]:
+    """Replace the session's workload with a fresh one of the same tool."""
+    session = _require_respawnable(session_catalog.get_session(session_id), session_id)
+    descriptor = get_client().respawn_session(session_id, str(session.get("generation")))
+    logger.info("session_respawned", session_id=session_id)
+    return session_catalog.from_tether(descriptor, pane_store.get_link(session_id))
 
-    # Collect per-mode metadata before deleting
-    session_info: dict[str, dict[str, Any]] = {}
-    for session in all_sessions:
-        mode = session.get("mode", "shell")
-        if mode not in session_info:
-            session_info[mode] = {
-                "working_dir": session.get("working_dir"),
-                "name": session.get("name"),
-                "user_id": session.get("user_id"),
-            }
 
-    # Delete all
-    for session in all_sessions:
-        delete_session(session["id"])
-    if len(all_sessions) > 2:
-        logger.warning("excess_sessions_cleaned", project_id=project_id, deleted_count=len(all_sessions))
-
-    # Recreate
-    default_tool = agent_tools_store.get_default()
-    agent_slug = default_tool["slug"] if default_tool else "claude"
-    modes = [SHELL_MODE, agent_slug]
-
-    result: dict[str, str | None] = {SHELL_MODE: None, agent_slug: None}
-    for mode in modes:
-        info = session_info.get(mode, {})
-        new_id = create_session(
-            name=info.get("name") or f"Project: {project_id} ({mode.title()})",
-            project_id=project_id,
-            working_dir=working_dir or info.get("working_dir"),
-            user_id=info.get("user_id"),
-            mode=mode,
-        )
-        logger.info("session_reset", new_session_id=new_id, project_id=project_id, mode=mode)
-        result[mode] = new_id
-
-    agent_session = next((v for k, v in result.items() if k != SHELL_MODE), None)
-    logger.info(
-        "project_sessions_reset", project_id=project_id,
-        shell_session=result.get(SHELL_MODE), agent_session=agent_session,
-        cleaned_orphans=max(0, len(all_sessions) - 2),
-    )
-    return result
+def load_tool(session_id: str, tool: str) -> dict[str, Any]:
+    """Respawn the session with another tool and remember it on the link."""
+    session = _require_respawnable(session_catalog.get_session(session_id), session_id)
+    descriptor = get_client().load_tui(session_id, str(session.get("generation")), tool)
+    canonical = str(descriptor.get("tool") or tool)
+    pane_store.update_link(session_id, mode=canonical)
+    return session_catalog.from_tether(descriptor, pane_store.get_link(session_id))
 
 
 def reset_all_sessions() -> int:
-    """Reset all a_term sessions globally. Returns count reset."""
-    sessions = a_term_store.list_sessions()
-    count = sum(1 for session in sessions if reset_session(session["id"]))
+    """Respawn every Tether session A-Term panes show (legacy and roots skipped)."""
+    count = 0
+    for link in pane_store.list_links():
+        if link["kind"] != "tether":
+            continue
+        try:
+            reset_session(link["session_id"])
+            count += 1
+        except (LifecycleError, TetherError) as error:
+            logger.warning("reset_all_skipped", session_id=link["session_id"], error=str(error))
     logger.info("all_sessions_reset", count=count)
     return count
 
 
-def disable_project_a_term(project_id: str) -> bool:
-    """Delete all project sessions and mark the project a_term as disabled."""
-    all_sessions = a_term_store.get_all_project_sessions(project_id)
-    for session in all_sessions:
-        delete_session(session["id"])
+def project_links(project_id: str) -> list[dict[str, Any]]:
+    """Links of every pane that belongs to ``project_id``."""
+    links: list[dict[str, Any]] = []
+    for pane in pane_store.list_panes(include_detached=True):
+        if pane.get("project_id") == project_id:
+            links.extend(pane_store.links_for_pane(pane["id"]))
+    return links
+
+
+def reset_project_sessions(project_id: str, working_dir: str | None = None) -> dict[str, str | None]:
+    """Respawn the project's shell and agent sessions; create any that are missing."""
+    agent_slug = agent_tools.default_agent_slug()
+    result: dict[str, str | None] = {SHELL_MODE: None, agent_slug: None}
+    known = session_catalog.sessions_by_id()
+    pane_id: str | None = None
+    for link in project_links(project_id):
+        pane_id = pane_id or link["pane_id"]
+        session = known.get(link["session_id"])
+        mode = str((session or {}).get("mode") or link["mode"])
+        if session is None or session.get("is_legacy") or session.get("is_root"):
+            continue
+        if mode in result and result[mode] is None:
+            result[mode] = str(reset_session(link["session_id"])["id"])
+    if pane_id is None:
+        pane = create_pane_with_sessions(
+            pane_type="project",
+            pane_name=project_id,
+            project_id=project_id,
+            working_dir=working_dir,
+            agent_tool_slug=agent_slug,
+        )
+        for session in pane["sessions"]:
+            result[str(session["mode"])] = str(session["id"])
+        return result
+    for mode in (SHELL_MODE, agent_slug):
+        if result.get(mode) is None:
+            created = create_session(pane_id=pane_id, mode=mode, project_id=project_id, working_dir=working_dir)
+            result[mode] = str(created["id"])
+    return result
+
+
+def disable_project_a_term(project_id: str) -> int:
+    """End every session the project's panes show, delete the panes, disable the tab."""
+    ended = 0
+    for pane in pane_store.list_panes(include_detached=True):
+        if pane.get("project_id") == project_id:
+            ended += end_pane(pane["id"])
     settings_store.upsert_settings(project_id, enabled=False)
-    logger.info("project_a_term_disabled", project_id=project_id, deleted_sessions=len(all_sessions))
-    return True
+    logger.info("project_a_term_disabled", project_id=project_id, ended_sessions=ended)
+    return ended
 
 
 # ---------------------------------------------------------------------------
-# Startup reconciliation
+# View-state reconciliation
 # ---------------------------------------------------------------------------
-def _kill_orphan_tmux_sessions(db_session_ids: set[str]) -> int:
-    """Kill tmux sessions that have no matching DB record."""
-    tmux_sessions = list_tmux_sessions()
-    orphans = tmux_sessions - db_session_ids
-    killed = 0
-    for session_id in orphans:
-        session_name = get_tmux_session_name(session_id)
-        success, error = run_tmux_command(["kill-session", "-t", session_name])
-        if success:
-            killed += 1
-            logger.info("orphan_tmux_killed", session_id=session_id)
-        else:
-            logger.warning("orphan_tmux_kill_failed", session_id=session_id, error=error)
-    return killed
+def reconcile_links(empty_pane_days: int = 7) -> dict[str, int]:
+    """Drop pane links to sessions that ended; prune long-empty panes.
 
-
-def reconcile_sessions(purge_after_days: int = 7) -> dict[str, int]:
-    """Reconcile DB with tmux state on server startup."""
-    logger.info("reconciliation_starting")
-
-    db_sessions = a_term_store.list_sessions(include_dead=True)
-    tmux_sessions = list_tmux_sessions()
-
-    stats: dict[str, int] = {
-        "total_db_sessions": len(db_sessions),
-        "total_tmux_sessions": len(tmux_sessions),
-        "marked_alive": 0,
-        "marked_dead": 0,
-    }
-
-    # Sync DB sessions against live tmux
-    for session in db_sessions:
-        session_id = session["id"]
-        if session_id in tmux_sessions:
-            if not session["is_alive"]:
-                a_term_store.update_session(session_id, is_alive=True)
-                stats["marked_alive"] += 1
-                logger.info("reconcile_marked_alive", session_id=session_id)
-        else:
-            if session["is_alive"]:
-                a_term_store.mark_dead(session_id)
-                stats["marked_dead"] += 1
-                logger.info("reconcile_marked_dead", session_id=session_id)
-
-    # Purge old dead sessions
-    purged = a_term_store.purge_dead_sessions(
-        older_than_days=purge_after_days, exclude_session_ids=tmux_sessions,
-    )
-    if purged > 0:
-        logger.info("reconcile_purged_dead_sessions", count=purged)
-
-    # Kill orphan tmux sessions
-    remaining_ids = {s["id"] for s in a_term_store.list_sessions(include_dead=True)}
-    orphans_killed = _kill_orphan_tmux_sessions(remaining_ids)
-    if orphans_killed > 0:
-        logger.info("reconcile_orphans_killed", count=orphans_killed)
-
-    stats["purged"] = purged
-    stats["orphans_killed"] = orphans_killed
-    logger.info("reconciliation_complete", **stats)
+    Raises :class:`~a_term.tether.TetherUnavailable` when Tether is down: an
+    unreachable Tether never counts as "every session ended".
+    """
+    tether_ids = {str(item["id"]) for item in session_catalog.list_tether_sessions() if item.get("id")}
+    legacy_ids = tmux.list_tmux_sessions()
+    stats = {"links": 0, "links_dropped": 0, "panes_pruned": 0}
+    for link in pane_store.list_links():
+        stats["links"] += 1
+        alive = tether_ids if link["kind"] == "tether" else legacy_ids
+        if link["session_id"] not in alive:
+            pane_store.unlink_session(link["session_id"])
+            stats["links_dropped"] += 1
+            logger.info("view_link_dropped", session_id=link["session_id"], kind=link["kind"])
+    stats["panes_pruned"] = pane_store.delete_empty_panes(empty_pane_days)
     return stats

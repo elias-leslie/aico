@@ -7,9 +7,11 @@ This module provides:
 - Delete pane (cascades to sessions)
 - Swap pane positions
 
-Panes are containers for 1-2 sessions:
+Panes are A-Term views of 1-2 Tether sessions:
 - Project panes: shell + default agent sessions (toggled via active_mode)
 - Ad-hoc panes: shell session only
+
+Creating a pane asks Tether for its sessions; deleting a pane Ends them.
 """
 
 from __future__ import annotations
@@ -20,10 +22,12 @@ from fastapi import APIRouter, HTTPException, Request
 
 from ..constants import MAX_PANES
 from ..rate_limit import limiter
-from ..services.lifecycle import create_session, delete_session, kill_tmux_session
-from ..storage import agent_tools as agent_tools_store
+from ..services import agent_tools as agent_tools_service
+from ..services import lifecycle, session_catalog
+from ..services.tether_errors import to_http_error
 from ..storage import panes as pane_store
 from ..storage import project_settings as project_settings_store
+from ..tether import TetherError, TetherUnavailable
 from .models.pane_layout import BulkLayoutUpdateRequest, UpdatePaneLayoutRequest
 from .models.pane_requests import (
     AttachPaneRequest,
@@ -56,9 +60,9 @@ def _require_live_pane(pane: dict[str, Any], pane_id: str) -> dict[str, Any]:
 
 
 @router.get("/api/a-term/panes", response_model=PaneListResponse)
-async def list_panes() -> PaneListResponse:
+def list_panes() -> PaneListResponse:
     """List all a_term panes with their sessions."""
-    panes = [p for p in pane_store.list_panes_with_sessions() if _has_live_sessions(p)]
+    panes = [p for p in session_catalog.list_panes_with_sessions() if _has_live_sessions(p)]
     return PaneListResponse(
         items=[build_pane_response(p) for p in panes],
         total=len(panes),
@@ -67,11 +71,11 @@ async def list_panes() -> PaneListResponse:
 
 
 @router.get("/api/a-term/panes/detached", response_model=PaneListResponse)
-async def list_detached_panes() -> PaneListResponse:
+def list_detached_panes() -> PaneListResponse:
     """List detached panes that can be reattached."""
     panes = [
         p
-        for p in pane_store.list_panes_with_sessions(include_detached=True)
+        for p in session_catalog.list_panes_with_sessions(include_detached=True)
         if p.get("is_detached") and _has_live_sessions(p)
     ]
     return PaneListResponse(
@@ -82,7 +86,7 @@ async def list_detached_panes() -> PaneListResponse:
 
 
 @router.get("/api/a-term/panes/count")
-async def get_pane_count() -> dict[str, Any]:
+def get_pane_count() -> dict[str, Any]:
     """Get current pane count and max limit."""
     count = pane_store.count_panes()
     return {
@@ -94,7 +98,7 @@ async def get_pane_count() -> dict[str, Any]:
 
 @router.post("/api/a-term/panes", response_model=PaneResponse)
 @limiter.limit("20/minute")
-async def create_pane(request: Request, body: CreatePaneRequest) -> PaneResponse:
+def create_pane(request: Request, body: CreatePaneRequest) -> PaneResponse:
     """Create a new a_term pane with sessions.
 
     For project panes: creates shell + default agent sessions.
@@ -125,11 +129,11 @@ async def create_pane(request: Request, body: CreatePaneRequest) -> PaneResponse
         if body.grid_col is not None:
             create_kwargs["grid_col"] = body.grid_col
 
-        pane = pane_store.create_pane_with_sessions(
-            **create_kwargs,
-        )
+        pane = lifecycle.create_pane_with_sessions(**create_kwargs)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from None
+    except (TetherError, TetherUnavailable) as error:
+        raise to_http_error(error) from None
 
     if body.pane_type == "project" and body.project_id:
         project_settings_store.upsert_settings(
@@ -142,21 +146,21 @@ async def create_pane(request: Request, body: CreatePaneRequest) -> PaneResponse
 
 
 @router.get("/api/a-term/panes/{pane_id}", response_model=PaneResponse)
-async def get_pane(pane_id: str) -> PaneResponse:
+def get_pane(pane_id: str) -> PaneResponse:
     """Get a single a_term pane with its sessions."""
     validate_uuid(pane_id)
 
-    pane = require_pane_exists(pane_store.get_pane_with_sessions(pane_id), pane_id)
+    pane = require_pane_exists(session_catalog.get_pane_with_sessions(pane_id), pane_id)
     _require_live_pane(pane, pane_id)
     return build_pane_response(pane)
 
 
 @router.patch("/api/a-term/panes/{pane_id}", response_model=PaneResponse)
-async def update_pane(pane_id: str, request: UpdatePaneRequest) -> PaneResponse:
+def update_pane(pane_id: str, request: UpdatePaneRequest) -> PaneResponse:
     """Update a_term pane metadata (pane_name, active_mode)."""
     validate_uuid(pane_id)
 
-    existing = require_pane_exists(pane_store.get_pane_with_sessions(pane_id), pane_id)
+    existing = require_pane_exists(session_catalog.get_pane_with_sessions(pane_id), pane_id)
     _require_live_pane(existing, pane_id)
 
     if request.active_mode is not None:
@@ -173,36 +177,31 @@ async def update_pane(pane_id: str, request: UpdatePaneRequest) -> PaneResponse:
     if not pane:
         raise HTTPException(status_code=500, detail="Failed to update pane") from None
 
-    pane_with_sessions = pane_store.get_pane_with_sessions(pane_id)
+    pane_with_sessions = session_catalog.get_pane_with_sessions(pane_id)
     return build_pane_response(pane_with_sessions or existing)
 
 
 @router.delete("/api/a-term/panes/{pane_id}")
-async def delete_pane(pane_id: str) -> dict[str, Any]:
-    """Delete a a_term pane and all its sessions.
-
-    Kills tmux sessions first to prevent orphaned processes,
-    then deletes DB records (pane + sessions).
-    """
+def delete_pane(pane_id: str) -> dict[str, Any]:
+    """Delete a pane: End its sessions in Tether, then remove the view."""
     validate_uuid(pane_id)
-
-    # Kill tmux sessions before deleting DB records to prevent orphans
-    sessions = pane_store.fetch_sessions_for_pane(pane_id)
-    for session in sessions:
-        kill_tmux_session(session["id"], ignore_missing=True)
-
-    deleted = pane_store.delete_pane(pane_id)
-    if not deleted:
+    if pane_store.get_pane(pane_id) is None:
         raise HTTPException(status_code=404, detail=f"Pane {pane_id} not found") from None
+    try:
+        lifecycle.end_pane(pane_id)
+    except lifecycle.LifecycleError as error:
+        raise HTTPException(status_code=error.status_code, detail=error.detail) from None
+    except (TetherError, TetherUnavailable) as error:
+        raise to_http_error(error) from None
     return {"deleted": True, "id": pane_id}
 
 
 @router.post("/api/a-term/panes/{pane_id}/detach", response_model=PaneResponse)
-async def detach_pane(pane_id: str) -> PaneResponse:
+def detach_pane(pane_id: str) -> PaneResponse:
     """Detach a pane from the visible layout while preserving its sessions."""
     validate_uuid(pane_id)
 
-    pane = require_pane_exists(pane_store.get_pane_with_sessions(pane_id), pane_id)
+    pane = require_pane_exists(session_catalog.get_pane_with_sessions(pane_id), pane_id)
     _require_live_pane(pane, pane_id)
     if pane.get("is_detached"):
         return build_pane_response(pane)
@@ -214,14 +213,14 @@ async def detach_pane(pane_id: str) -> PaneResponse:
 
 
 @router.post("/api/a-term/panes/{pane_id}/attach", response_model=PaneResponse)
-async def attach_pane(
+def attach_pane(
     pane_id: str,
     request: AttachPaneRequest | None = None,
 ) -> PaneResponse:
     """Attach a detached pane back into the visible layout."""
     validate_uuid(pane_id)
 
-    pane = require_pane_exists(pane_store.get_pane_with_sessions(pane_id), pane_id)
+    pane = require_pane_exists(session_catalog.get_pane_with_sessions(pane_id), pane_id)
     _require_live_pane(pane, pane_id)
     if not pane.get("is_detached"):
         return build_pane_response(pane)
@@ -250,7 +249,7 @@ async def attach_pane(
 
 
 @router.post("/api/a-term/panes/swap")
-async def swap_panes(request: SwapPanesRequest) -> dict[str, Any]:
+def swap_panes(request: SwapPanesRequest) -> dict[str, Any]:
     """Swap positions of two panes."""
     success = pane_store.swap_pane_positions(request.pane_id_a, request.pane_id_b)
     if not success:
@@ -263,14 +262,14 @@ async def swap_panes(request: SwapPanesRequest) -> dict[str, Any]:
 
 
 @router.put("/api/a-term/panes/order")
-async def update_pane_order(request: UpdatePaneOrderRequest) -> dict[str, Any]:
+def update_pane_order(request: UpdatePaneOrderRequest) -> dict[str, Any]:
     """Batch update pane ordering."""
     pane_store.update_pane_order(request.pane_orders)
     return {"updated": True, "count": len(request.pane_orders)}
 
 
 @router.patch("/api/a-term/panes/{pane_id}/layout", response_model=PaneResponse)
-async def update_pane_layout(pane_id: str, request: UpdatePaneLayoutRequest) -> PaneResponse:
+def update_pane_layout(pane_id: str, request: UpdatePaneLayoutRequest) -> PaneResponse:
     """Update a single pane's layout (position and size)."""
     validate_uuid(pane_id)
 
@@ -281,19 +280,19 @@ async def update_pane_layout(pane_id: str, request: UpdatePaneLayoutRequest) -> 
         "grid_row": request.grid_row, "grid_col": request.grid_col,
     }.items() if v is not None}
     if not update_fields:
-        pane = pane_store.get_pane_with_sessions(pane_id)
+        pane = session_catalog.get_pane_with_sessions(pane_id)
         return build_pane_response(pane or existing)
 
     pane = pane_store.update_pane(pane_id, **update_fields)
     if not pane:
         raise HTTPException(status_code=500, detail="Failed to update pane layout") from None
 
-    pane_with_sessions = pane_store.get_pane_with_sessions(pane_id)
+    pane_with_sessions = session_catalog.get_pane_with_sessions(pane_id)
     return build_pane_response(pane_with_sessions or pane)
 
 
 @router.put("/api/a-term/layout", response_model=list[PaneResponse])
-async def update_all_pane_layouts(
+def update_all_pane_layouts(
     request: BulkLayoutUpdateRequest,
 ) -> list[PaneResponse]:
     """Bulk update layout for all panes at once."""
@@ -306,13 +305,16 @@ async def update_all_pane_layouts(
     ]
     pane_store.update_pane_layouts(layouts_data)
 
-    all_panes = pane_store.list_panes_with_sessions()
+    all_panes = session_catalog.list_panes_with_sessions()
     return [build_pane_response(p) for p in all_panes]
 
 
 def _validate_agent_tool(slug: str) -> None:
     """Validate agent tool exists and is enabled. Raises HTTPException otherwise."""
-    tool = agent_tools_store.get_by_slug(slug)
+    try:
+        tool = agent_tools_service.find_tool(slug)
+    except (TetherError, TetherUnavailable) as error:
+        raise to_http_error(error) from None
     if not tool:
         raise HTTPException(status_code=404, detail=f"Agent tool '{slug}' not found") from None
     if not tool["enabled"]:
@@ -320,63 +322,49 @@ def _validate_agent_tool(slug: str) -> None:
 
 
 def _ensure_project_shell_session(pane_id: str, pane: dict[str, Any]) -> dict[str, Any]:
-    """Restore a missing shell session on a project pane and return a fresh snapshot."""
+    """Create a missing shell session on a project pane and return a fresh snapshot."""
     if pane.get("pane_type") != "project" or not pane.get("project_id"):
         return pane
-
     sessions = pane.get("sessions", [])
     if any(session.get("mode") == "shell" for session in sessions):
         return pane
-
-    seed_session = sessions[0] if sessions else None
-    project_id = pane["project_id"]
-    session_name = (
-        seed_session.get("name")
-        if seed_session and seed_session.get("name")
-        else f"Project: {project_id}"
-    )
-    working_dir = seed_session.get("working_dir") if seed_session else None
-    create_session(
-        name=session_name,
-        project_id=project_id,
-        working_dir=working_dir,
-        mode="shell",
-        pane_id=pane_id,
-    )
-    return require_pane_exists(pane_store.get_pane_with_sessions(pane_id), pane_id)
+    seed = sessions[0] if sessions else {}
+    try:
+        lifecycle.create_session(
+            pane_id=pane_id,
+            mode="shell",
+            project_id=pane["project_id"],
+            working_dir=seed.get("working_dir"),
+        )
+    except (TetherError, TetherUnavailable) as error:
+        raise to_http_error(error) from None
+    return require_pane_exists(session_catalog.get_pane_with_sessions(pane_id), pane_id)
 
 
 def _replace_agent_session(pane: dict[str, Any], pane_id: str, agent_tool_slug: str) -> None:
-    """Replace an existing agent session with a new one using the given tool slug.
+    """Switch the pane's agent session to another tool.
 
-    Prefers shell session's working_dir as it's more likely to be accurate.
+    A running Tether session is respawned with the new tool (load-tui), so it
+    keeps its id. Without one, a new agent session is created.
     """
-    agent_session = next(
-        (s for s in pane.get("sessions", []) if s.get("mode") != "shell"),
-        None,
-    )
+    agent_session = next((s for s in pane.get("sessions", []) if s.get("mode") != "shell"), None)
+    if agent_session and agent_session.get("source") == "tether" and not agent_session.get("is_legacy") and not agent_session.get("is_root"):
+        lifecycle.load_tool(str(agent_session["id"]), agent_tool_slug)
+        return
     if agent_session:
-        delete_session(agent_session["id"])
-
-    shell_session = next(
-        (s for s in pane.get("sessions", []) if s.get("mode") == "shell"),
-        None,
-    )
-    working_dir = shell_session.get("working_dir") if shell_session else None
-    project_id = pane.get("project_id")
-    session_name = f"Project: {project_id}" if project_id else pane.get("pane_name", "A-Term")
-    create_session(
-        name=session_name,
-        project_id=project_id,
-        working_dir=working_dir,
-        mode=agent_tool_slug,
+        lifecycle.end_session(str(agent_session["id"]))
+    shell_session = next((s for s in pane.get("sessions", []) if s.get("mode") == "shell"), None)
+    lifecycle.create_session(
         pane_id=pane_id,
+        mode=agent_tool_slug,
+        project_id=pane.get("project_id"),
+        working_dir=shell_session.get("working_dir") if shell_session else None,
     )
 
 
 @router.put("/api/a-term/panes/{pane_id}/agent-tool", response_model=PaneResponse)
 @limiter.limit("20/minute")
-async def switch_agent_tool(request: Request, pane_id: str, body: SwitchAgentToolRequest) -> PaneResponse:
+def switch_agent_tool(request: Request, pane_id: str, body: SwitchAgentToolRequest) -> PaneResponse:
     """Switch the agent tool on a pane.
 
     Finds the agent session on the pane, kills its tmux session,
@@ -384,13 +372,19 @@ async def switch_agent_tool(request: Request, pane_id: str, body: SwitchAgentToo
     """
     validate_uuid(pane_id)
 
-    pane = require_pane_exists(pane_store.get_pane_with_sessions(pane_id), pane_id)
+    pane = require_pane_exists(session_catalog.get_pane_with_sessions(pane_id), pane_id)
     if pane["pane_type"] != "project":
         raise HTTPException(status_code=400, detail="Only project panes support agent tools") from None
 
     _validate_agent_tool(body.agent_tool_slug)
-    _replace_agent_session(pane, pane_id, body.agent_tool_slug)
-    pane_store.update_pane(pane_id, active_mode=body.agent_tool_slug)
+    try:
+        slug = agent_tools_service.canonical_slug(body.agent_tool_slug)
+        _replace_agent_session(pane, pane_id, slug)
+    except lifecycle.LifecycleError as error:
+        raise HTTPException(status_code=error.status_code, detail=error.detail) from None
+    except (TetherError, TetherUnavailable) as error:
+        raise to_http_error(error) from None
+    pane_store.update_pane(pane_id, active_mode=slug)
 
-    pane_with_sessions = pane_store.get_pane_with_sessions(pane_id)
+    pane_with_sessions = session_catalog.get_pane_with_sessions(pane_id)
     return build_pane_response(pane_with_sessions or pane)

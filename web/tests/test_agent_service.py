@@ -1,226 +1,70 @@
-"""Tests for synchronous agent startup helpers."""
+"""Starting an agent is an explicit Tether respawn, never automatic."""
 
 from __future__ import annotations
 
-import subprocess
-from unittest.mock import call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from a_term.services.agent_service import (
-    _is_agent_running_in_session_sync,
-    ensure_agent_running_sync,
-    send_agent_command_sync,
-)
+from a_term.services import agent_service, lifecycle
+from a_term.storage import panes as pane_store
+
+from .fake_tether import FakeTether
 
 
-def test_is_agent_running_in_session_sync_matches_tmux_command_metadata() -> None:
-    with patch(
-        "a_term.services.agent_service.subprocess.run",
-        return_value=subprocess.CompletedProcess(
-            args=[],
-            returncode=0,
-            stdout="/dev/pts/1 codex bash\n",
-            stderr="",
-        ),
-    ) as run_mock:
-        assert _is_agent_running_in_session_sync("summitflow-codex-id", "codex") is True
-
-    run_mock.assert_called_once_with(
-        [
-            "tmux",
-            "list-panes",
-            "-t",
-            "summitflow-codex-id",
-            "-F",
-            "#{pane_tty} #{pane_current_command} #{pane_start_command}",
-        ],
-        capture_output=True,
-        text=True,
-        timeout=10,
-    )
+@pytest.fixture()
+def tether(fake_tether: FakeTether, no_default_tmux: MagicMock) -> FakeTether:
+    return fake_tether
 
 
-def test_is_agent_running_in_session_sync_checks_pane_tty_processes_when_tmux_reports_shell() -> None:
-    with patch(
-        "a_term.services.agent_service.subprocess.run",
-        side_effect=[
-            subprocess.CompletedProcess(
-                args=[],
-                returncode=0,
-                stdout="/dev/pts/4 bash bash\n",
-                stderr="",
-            ),
-            subprocess.CompletedProcess(
-                args=[],
-                returncode=0,
-                stdout=(
-                    "768288 bash bash\n"
-                    "768297 bash bash /home/tester/bin/codex --yolo\n"
-                    "768369 MainThread node /usr/bin/codex --yolo\n"
-                    "768376 codex /path/to/codex --yolo\n"
-                ),
-                stderr="",
-            ),
-        ],
-    ) as run_mock:
-        assert _is_agent_running_in_session_sync("summitflow-codex-id", "codex") is True
-
-    assert run_mock.call_args_list == [
-        call(
-            [
-                "tmux",
-                "list-panes",
-                "-t",
-                "summitflow-codex-id",
-                "-F",
-                "#{pane_tty} #{pane_current_command} #{pane_start_command}",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        ),
-        call(
-            ["ps", "-t", "pts/4", "-o", "comm=,args="],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        ),
-    ]
+def _session(tether: FakeTether, mode: str = "codex", status: str = "running") -> dict:
+    tether.state.next_create_status = status
+    pane = pane_store.create_pane(pane_type="project", pane_name="P", project_id="proj")
+    return lifecycle.create_session(pane_id=pane["id"], mode=mode)
 
 
-def test_ensure_agent_running_sync_returns_false_for_shell_session() -> None:
-    with patch(
-        "a_term.services.agent_service.a_term_store.get_session",
-        return_value={"id": "shell-id", "mode": "shell", "claude_state": "not_started"},
-    ):
-        assert ensure_agent_running_sync("shell-id") is False
+def test_running_agent_is_left_alone(tether: FakeTether) -> None:
+    session = _session(tether)
+    result = agent_service.start_agent(session["id"])
+    assert result == agent_service.StartResult(False, "running", "Agent is already running")
+    assert not any(path.endswith("/respawn") for _, path, _ in tether.calls)
 
 
-def test_agent_launch_exports_stable_a_term_session_identity() -> None:
-    completed = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
-    with patch("a_term.services.agent_service.subprocess.run", return_value=completed) as run_mock:
-        assert send_agent_command_sync("session-1", "summitflow-session-1", "codex --yolo") is None
-
-    run_mock.assert_called_once_with(
-        [
-            "tmux",
-            "send-keys",
-            "-t",
-            "summitflow-session-1",
-            "A_TERM_SESSION_ID=session-1 codex --yolo",
-            "Enter",
-        ],
-        capture_output=True,
-        text=True,
-        timeout=10,
-    )
+def test_pending_agent_is_reported_starting(tether: FakeTether) -> None:
+    session = _session(tether, status="pending")
+    assert agent_service.start_agent(session["id"]).state == "starting"
 
 
-def test_ensure_agent_running_sync_marks_existing_process_running() -> None:
+def test_uncertain_agent_is_respawned(tether: FakeTether) -> None:
+    session = _session(tether, status="uncertain")
+    result = agent_service.start_agent(session["id"])
+    assert result.started is True and result.state == "running"
+    assert any(path.endswith("/respawn") for _, path, _ in tether.calls)
+
+
+def test_shell_unknown_and_legacy_are_refused(tether: FakeTether) -> None:
+    shell = _session(tether, mode="shell")
+    with pytest.raises(lifecycle.LifecycleError) as caught:
+        agent_service.start_agent(shell["id"])
+    assert caught.value.status_code == 400
+    with pytest.raises(lifecycle.LifecycleError) as caught:
+        agent_service.start_agent("bbbbbbbb")
+    assert caught.value.status_code == 404
+    legacy = {"mode": "codex", "is_legacy": True, "agent_state": "running", "source": "legacy"}
     with (
-        patch(
-            "a_term.services.agent_service.a_term_store.get_session",
-            return_value={"id": "codex-id", "mode": "codex", "claude_state": "not_started"},
-        ),
-        patch(
-            "a_term.services.agent_service.agent_tools_store.get_by_slug",
-            return_value={"command": "codex --yolo", "process_name": "codex"},
-        ),
-        patch("a_term.services.agent_service.lifecycle.ensure_session_alive", return_value=True),
-        patch("a_term.services.agent_service._is_agent_running_in_session_sync", return_value=True),
-        patch("a_term.services.agent_service.a_term_store.update_claude_state") as update_mock,
+        patch("a_term.services.agent_service.session_catalog.get_session", return_value=legacy),
+        pytest.raises(lifecycle.LifecycleError) as caught,
     ):
-        assert ensure_agent_running_sync("codex-id") is False
-
-    update_mock.assert_called_once_with("codex-id", "running")
-
-
-def test_ensure_agent_running_sync_sends_command_and_verifies_startup() -> None:
-    with (
-        patch(
-            "a_term.services.agent_service.a_term_store.get_session",
-            return_value={"id": "claude-id", "mode": "claude", "claude_state": "not_started"},
-        ),
-        patch(
-            "a_term.services.agent_service.agent_tools_store.get_by_slug",
-            return_value={
-                "command": "claude --dangerously-skip-permissions",
-                "process_name": "claude",
-            },
-        ),
-        patch("a_term.services.agent_service.lifecycle.ensure_session_alive", return_value=True),
-        patch(
-            "a_term.services.agent_service._is_agent_running_in_session_sync",
-            side_effect=[False, True],
-        ),
-        patch("a_term.services.agent_service.atomically_set_starting", return_value=None),
-        patch("a_term.services.agent_service.send_agent_command_sync", return_value=None) as send_mock,
-        patch("a_term.services.agent_service.time.sleep"),
-        patch("a_term.services.agent_service.a_term_store.update_claude_state") as update_mock,
-    ):
-        assert ensure_agent_running_sync("claude-id") is True
-
-    send_mock.assert_called_once_with(
-        "claude-id",
-        "summitflow-claude-id",
-        "claude --dangerously-skip-permissions",
-    )
-    assert update_mock.call_args_list == [call("claude-id", "running", expected_state="starting")]
+        agent_service.start_agent("70b339cd-93a0-4898-8c4b-3d694ce8e8dc")
+    assert caught.value.status_code == 409
 
 
-def test_ensure_agent_running_sync_returns_false_when_tmux_cannot_be_restored() -> None:
-    with (
-        patch(
-            "a_term.services.agent_service.a_term_store.get_session",
-            return_value={"id": "codex-id", "mode": "codex", "claude_state": "not_started"},
-        ),
-        patch(
-            "a_term.services.agent_service.agent_tools_store.get_by_slug",
-            return_value={"command": "codex --yolo", "process_name": "codex"},
-        ),
-        patch("a_term.services.agent_service.lifecycle.ensure_session_alive", return_value=False) as ensure_mock,
-        patch("a_term.services.agent_service._is_agent_running_in_session_sync") as running_mock,
-        patch("a_term.services.agent_service.send_agent_command_sync") as send_mock,
-        patch("a_term.services.agent_service.a_term_store.update_claude_state") as update_mock,
-    ):
-        assert ensure_agent_running_sync("codex-id") is False
-
-    ensure_mock.assert_called_once_with("codex-id")
-    running_mock.assert_not_called()
-    send_mock.assert_not_called()
-    update_mock.assert_called_once_with("codex-id", "error")
+def test_root_and_external_sessions_are_not_started(tether: FakeTether) -> None:
+    for session in ({"source": "tmux_external", "agent_state": "running"}, {"is_root": True, "source": "tether"}):
+        with patch("a_term.services.agent_service.session_catalog.get_session", return_value=session):
+            assert agent_service.start_agent("x").started is False
 
 
-def test_ensure_agent_running_sync_returns_false_when_startup_verification_fails() -> None:
-    with (
-        patch(
-            "a_term.services.agent_service.a_term_store.get_session",
-            return_value={"id": "codex-id", "mode": "codex", "claude_state": "not_started"},
-        ),
-        patch(
-            "a_term.services.agent_service.agent_tools_store.get_by_slug",
-            return_value={"command": "codex --yolo", "process_name": "codex"},
-        ),
-        patch("a_term.services.agent_service.lifecycle.ensure_session_alive", return_value=True),
-        patch(
-            "a_term.services.agent_service._is_agent_running_in_session_sync",
-            side_effect=[False, False],
-        ),
-        patch("a_term.services.agent_service.atomically_set_starting", return_value=None),
-        patch("a_term.services.agent_service.send_agent_command_sync", return_value=None) as send_mock,
-        patch("a_term.services.agent_service.time.sleep"),
-        patch("a_term.services.agent_service.a_term_store.update_claude_state") as update_mock,
-    ):
-        assert ensure_agent_running_sync("codex-id") is False
-
-    send_mock.assert_called_once_with("codex-id", "summitflow-codex-id", "codex --yolo")
-    update_mock.assert_called_once_with("codex-id", "error", expected_state="starting")
-
-
-def test_ensure_agent_running_sync_raises_for_missing_session() -> None:
-    with (
-        patch("a_term.services.agent_service.a_term_store.get_session", return_value=None),
-        pytest.raises(ValueError, match="Session missing-id not found"),
-    ):
-        ensure_agent_running_sync("missing-id")
+def test_normalize_state() -> None:
+    assert agent_service.normalize_state("running") == "running"
+    assert agent_service.normalize_state("weird") == "not_started"

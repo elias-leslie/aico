@@ -7,8 +7,9 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from ..services import file_browser
-from ..storage import panes as pane_store
+from ..services import file_browser, session_catalog
+from ..services.tether_errors import to_http_error
+from ..tether import TetherError, TetherUnavailable
 from .validators import require_pane_exists, validate_uuid
 
 router = APIRouter(tags=["A-Term Files"])
@@ -42,7 +43,10 @@ class FileContentResponse(BaseModel):
 
 
 def _resolve_pane_root(pane_id: str) -> str:
-    pane = require_pane_exists(pane_store.get_pane_with_sessions(pane_id), pane_id)
+    try:
+        pane = require_pane_exists(session_catalog.get_pane_with_sessions(pane_id), pane_id)
+    except (TetherError, TetherUnavailable) as error:
+        raise to_http_error(error) from None
 
     shell_session = next(
         (
@@ -91,7 +95,7 @@ def _translate_file_error(err: Exception) -> HTTPException:
 
 
 @router.get("/api/a-term/panes/{pane_id}/files/tree", response_model=FileTreeResponse)
-async def get_pane_file_tree(
+def get_pane_file_tree(
     pane_id: str,
     path: str = "",
 ) -> FileTreeResponse:
@@ -105,7 +109,7 @@ async def get_pane_file_tree(
 
 
 @router.get("/api/a-term/panes/{pane_id}/files/content", response_model=FileContentResponse)
-async def get_pane_file_content(
+def get_pane_file_content(
     pane_id: str,
     path: str,
 ) -> FileContentResponse:

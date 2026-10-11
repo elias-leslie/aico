@@ -1,12 +1,9 @@
-"""A-Term Sessions API - REST endpoints for session management.
+"""A-Term Sessions API.
 
-This module provides:
-- List a_term sessions
-- Update session metadata (name, order)
-- Delete session (also kills tmux)
-
-Sessions are global (not project-scoped) but may have a project_id
-for context-aware working directory.
+Lists every session A-Term can show (Tether's catalog, legacy default-server
+A-Term sessions, and the user's own default-server agent sessions), renames
+Tether sessions, ends sessions and respawns their workloads. Tether owns the
+sessions; A-Term only keeps which pane shows each one.
 """
 
 from __future__ import annotations
@@ -18,26 +15,15 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..logging_config import get_logger
 from ..rate_limit import limiter
-from ..services import lifecycle
-from ..services.session_close import SessionOwnerError, close_session
-from ..storage import sessions as a_term_store
-from ..utils.tmux import (
-    get_external_agent_tmux_session,
-    get_tmux_session_name,
-    list_external_tmux_sessions,
-    run_tmux_command,
-)
-from .handlers.internal_auth import require_internal_token
-from .validators import validate_uuid
+from ..services import lifecycle, session_catalog
+from ..services.session_close import close_session
+from ..services.tether_errors import to_http_error
+from ..storage import panes as pane_store
+from ..tether import TetherError, TetherUnavailable, get_client
 
 logger = get_logger(__name__)
 
 router = APIRouter(tags=["A-Term Sessions"])
-
-
-# ============================================================================
-# Request/Response Models
-# ============================================================================
 
 
 class ATermSessionResponse(BaseModel):
@@ -47,17 +33,17 @@ class ATermSessionResponse(BaseModel):
 
     id: str
     name: str
-    user_id: str | None
-    project_id: str | None
-    working_dir: str | None
-    display_order: int
+    user_id: str | None = None
+    project_id: str | None = None
+    working_dir: str | None = None
+    display_order: int = 0
     mode: str
-    session_number: int
-    is_alive: bool
-    created_at: str | None
-    last_accessed_at: str | None
-    agent_state: str | None = None  # canonical agent state field
-    claude_state: str | None = None  # not_started, starting, running, stopped, error
+    session_number: int = 1
+    is_alive: bool = True
+    created_at: str | None = None
+    last_accessed_at: str | None = None
+    agent_state: str | None = None
+    claude_state: str | None = None
     tmux_session_name: str | None = None
     tmux_session_id: str | None = None
     tmux_pane_id: str | None = None
@@ -66,7 +52,12 @@ class ATermSessionResponse(BaseModel):
     tmux_source_label: str | None = None
     is_external: bool = False
     is_root: bool = False
+    is_legacy: bool = False
     source: str | None = None
+    origin: str | None = None
+    status: str | None = None
+    generation: str | None = None
+    pane_id: str | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -74,185 +65,93 @@ class ATermSessionResponse(BaseModel):
         if not isinstance(values, dict):
             return values
         agent_state = values.get("agent_state") or values.get("claude_state") or "not_started"
-        return {
-            **values,
-            "agent_state": agent_state,
-            "claude_state": values.get("claude_state") or agent_state,
-        }
+        return {**values, "agent_state": agent_state, "claude_state": values.get("claude_state") or agent_state}
 
 
 class ATermSessionListResponse(BaseModel):
-    """Response for listing a_term sessions."""
-
     items: list[ATermSessionResponse]
     total: int
 
 
 class UpdateSessionRequest(BaseModel):
-    """Request to update a a_term session."""
-
-    name: str | None = Field(default=None, max_length=255)
+    name: str | None = Field(default=None, max_length=160)
     display_order: int | None = None
 
 
-class InternalEndSessionRequest(BaseModel):
-    """The tmux generation Aico observed when it attached an A-Term session."""
-
-    expected_tmux_session: str
-    expected_pane_id: str
-
-
-# ============================================================================
-# Endpoints
-# ============================================================================
+def _get_or_404(session_id: str) -> dict[str, Any]:
+    try:
+        session = session_catalog.get_session(session_id)
+    except (TetherError, TetherUnavailable) as error:
+        raise to_http_error(error) from None
+    if not session:
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+    return session
 
 
 @router.get("/api/a-term/sessions", response_model=ATermSessionListResponse)
-async def list_sessions(include_detached: bool = False) -> ATermSessionListResponse:
-    """List all alive a_term sessions.
-
-    Returns only sessions where is_alive=True.
-    Sessions are ordered by display_order, then created_at.
-    """
-    sessions = a_term_store.list_sessions(
-        include_dead=False,
-        include_detached=include_detached,
-    )
-    external_sessions = list_external_tmux_sessions()
-    all_sessions = [*sessions, *external_sessions]
-
+def list_sessions(include_detached: bool = False) -> ATermSessionListResponse:
+    """List live sessions. Sessions shown by a detached pane are hidden unless asked for."""
+    sessions = session_catalog.list_sessions()
+    if not include_detached:
+        detached = {pane["id"] for pane in pane_store.list_panes(include_detached=True) if pane["is_detached"]}
+        sessions = [session for session in sessions if session.get("pane_id") not in detached]
     return ATermSessionListResponse(
-        items=[ATermSessionResponse.model_validate(s) for s in all_sessions],
-        total=len(all_sessions),
+        items=[ATermSessionResponse.model_validate(session) for session in sessions],
+        total=len(sessions),
     )
 
 
 @router.get("/api/a-term/sessions/{session_id}", response_model=ATermSessionResponse)
-async def get_session(session_id: str) -> ATermSessionResponse:
-    """Get a single a_term session by ID."""
-    external_session = get_external_agent_tmux_session(session_id)
-    if external_session:
-        return ATermSessionResponse.model_validate(external_session)
-
-    validate_uuid(session_id)
-    session = a_term_store.get_session(session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail=f"Session {session_id} not found") from None
-
-    return ATermSessionResponse.model_validate(session)
+def get_session(session_id: str) -> ATermSessionResponse:
+    return ATermSessionResponse.model_validate(_get_or_404(session_id))
 
 
 @router.patch("/api/a-term/sessions/{session_id}", response_model=ATermSessionResponse)
-async def update_session(session_id: str, request: UpdateSessionRequest) -> ATermSessionResponse:
-    """Update a_term session metadata.
-
-    Can update: name, display_order
-    """
-    external_session = get_external_agent_tmux_session(session_id)
-    if external_session:
-        raise HTTPException(status_code=400, detail="External tmux sessions are read-only") from None
-
-    validate_uuid(session_id)
-
-    # Verify session exists
-    existing = a_term_store.get_session(session_id)
-    if not existing:
-        raise HTTPException(status_code=404, detail=f"Session {session_id} not found") from None
-
-    # Build update fields
-    update_fields: dict[str, Any] = {}
+def update_session(session_id: str, request: UpdateSessionRequest) -> ATermSessionResponse:
+    """Rename a Tether session (in Tether, visible in Aico too) or reorder its view."""
+    session = _get_or_404(session_id)
+    if session.get("source") != "tether":
+        raise HTTPException(status_code=400, detail="Only Tether sessions can be renamed")
+    if request.display_order is not None and session.get("pane_id"):
+        pane_store.update_link(session_id, display_order=request.display_order)
     if request.name is not None:
-        update_fields["name"] = request.name
-    if request.display_order is not None:
-        update_fields["display_order"] = request.display_order
-
-    if not update_fields:
-        return ATermSessionResponse.model_validate(existing)
-
-    session = a_term_store.update_session(session_id, **update_fields)
-    if not session:
-        logger.error("session_update_failed", session_id=session_id, fields=list(update_fields.keys()))
-        raise HTTPException(status_code=500, detail="Failed to update session") from None
-
-    return ATermSessionResponse.model_validate(session)
+        name = request.name.strip() or None
+        try:
+            get_client().rename_session(session_id, str(session.get("generation")), name)
+        except (TetherError, TetherUnavailable) as error:
+            raise to_http_error(error, not_found=f"Session {session_id} not found") from None
+    return ATermSessionResponse.model_validate(_get_or_404(session_id))
 
 
 @router.delete("/api/a-term/sessions/{session_id}")
 @limiter.limit("10/minute")
-async def delete_session(request: Request, session_id: str) -> dict[str, Any]:
-    """Delete a a_term session.
-
-    Kills the tmux session and deletes the database record.
-    Idempotent - returns success even if session didn't exist.
-    """
-    if not get_external_agent_tmux_session(session_id):
-        validate_uuid(session_id)
-
+def delete_session(request: Request, session_id: str) -> dict[str, Any]:
+    """End a session in Tether. Idempotent: an already-ended session reports success."""
     try:
         return close_session(session_id)
-    except SessionOwnerError as error:
-        raise HTTPException(status_code=error.status_code, detail=error.detail) from error
-
-
-@router.post("/api/internal/sessions/{session_id}/end")
-async def end_owned_session(
-    request: Request,
-    session_id: str,
-    body: InternalEndSessionRequest,
-) -> dict[str, Any]:
-    """End a native A-Term session only when its live pane matches Aico's observation."""
-    require_internal_token(request)
-    validate_uuid(session_id)
-    session = a_term_store.get_session(session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="A-Term session not found") from None
-
-    expected_name = get_tmux_session_name(session_id)
-    if body.expected_tmux_session != expected_name:
-        raise HTTPException(status_code=409, detail="A-Term session generation changed") from None
-    success, output = run_tmux_command(
-        ["list-panes", "-t", expected_name, "-F", "#{session_name}\t#{session_id}\t#{pane_id}"]
-    )
-    panes = [line.split("\t") for line in output.splitlines()] if success else []
-    if (
-        len(panes) != 1
-        or len(panes[0]) != 3
-        or panes[0][0] != expected_name
-        or not panes[0][1].startswith("$")
-        or panes[0][2] != body.expected_pane_id
-    ):
-        raise HTTPException(status_code=409, detail="A-Term session pane changed or is unavailable") from None
-
-    return close_session(session_id, expected_tmux_session_id=panes[0][1])
+    except lifecycle.LifecycleError as error:
+        raise HTTPException(status_code=error.status_code, detail=error.detail) from None
+    except (TetherError, TetherUnavailable) as error:
+        raise to_http_error(error) from None
 
 
 @router.post("/api/a-term/sessions/{session_id}/reset", response_model=ATermSessionResponse)
 @limiter.limit("10/minute")
-async def reset_session(request: Request, session_id: str) -> ATermSessionResponse:
-    """Reset a a_term session.
-
-    Deletes the session and creates a new one with the same parameters.
-    Returns the new session data.
-    """
-    validate_uuid(session_id)
-
-    new_session_id = lifecycle.reset_session(session_id)
-    if not new_session_id:
-        raise HTTPException(status_code=404, detail=f"Session {session_id} not found") from None
-
-    session = a_term_store.get_session(new_session_id)
-    if not session:
-        raise HTTPException(status_code=500, detail="Session reset but not found") from None
-
-    return ATermSessionResponse.model_validate(session)
+def reset_session(request: Request, session_id: str) -> ATermSessionResponse:
+    """Respawn the session's workload: same session and tool, new generation."""
+    try:
+        return ATermSessionResponse.model_validate(lifecycle.reset_session(session_id))
+    except lifecycle.LifecycleError as error:
+        raise HTTPException(status_code=error.status_code, detail=error.detail) from None
+    except (TetherError, TetherUnavailable) as error:
+        raise to_http_error(error, not_found=f"Session {session_id} not found") from None
 
 
 @router.post("/api/a-term/reset-all")
 @limiter.limit("5/minute")
-async def reset_all_sessions(request: Request) -> dict[str, Any]:
-    """Reset all a_term sessions.
-
-    Resets every active session. Returns count of sessions reset.
-    """
-    count = lifecycle.reset_all_sessions()
-    return {"reset_count": count}
+def reset_all_sessions(request: Request) -> dict[str, Any]:
+    """Respawn every Tether session A-Term panes show."""
+    try:
+        return {"reset_count": lifecycle.reset_all_sessions()}
+    except (TetherError, TetherUnavailable) as error:
+        raise to_http_error(error) from None

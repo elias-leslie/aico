@@ -1,4 +1,4 @@
-"""Tests for WebSocket connection lifecycle helpers."""
+"""WebSocket view setup: attach plan -> PTY -> initial size -> initial scrollback."""
 
 from __future__ import annotations
 
@@ -7,196 +7,156 @@ from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
+from a_term.api.handlers.session_validation import AttachPlan
 from a_term.api.handlers.websocket_connection import (
     _poll_for_resize,
     _run_session,
     _setup_connection,
 )
+from a_term.api.handlers.websocket_messages import ViewContext
 from a_term.constants import SHELL_MODE
+
+MODULE = "a_term.api.handlers.websocket_connection"
+SOCKET = "/tmp/tether-test/tmux-a0000001.sock"
+
+
+def _plan(kind: str = "tether", mode: str = "codex", name: str = "tether-a0000001") -> AttachPlan:
+    socket_path = SOCKET if kind == "tether" else None
+    argv = (
+        ["/usr/bin/tmux", "-S", SOCKET, "attach-session", "-t", "$1"]
+        if kind == "tether"
+        else ["tmux", "attach-session", "-t", name]
+    )
+    return AttachPlan(
+        session={"id": "a0000001" if kind == "tether" else name, "mode": mode},
+        kind=kind,
+        tmux_session_name=name,
+        tmux_socket=socket_path,
+        argv=argv,
+        env={"COLORTERM": "truecolor"} if kind == "tether" else {},
+        generation="g" * 64 if kind == "tether" else None,
+    )
 
 
 @pytest.mark.asyncio
-async def test_initial_capabilities_complete_without_background_resize() -> None:
+async def test_initial_capabilities_complete_without_a_resize() -> None:
     websocket = AsyncMock()
     websocket.receive = AsyncMock(return_value={
         "type": "websocket.receive",
         "text": '{"__ctrl": true, "capabilities": ["binary_protocol", "demand_paging"]}',
     })
-    capabilities: list[str] = []
-
-    with (
-        patch("a_term.api.handlers.websocket_messages.resize_pty") as mock_pty,
-        patch("a_term.api.handlers.websocket_messages.resize_tmux_window") as mock_tmux,
-    ):
-        received = await _poll_for_resize(
-            websocket, 7, "session-passive", "summitflow-session-passive",
-            None, True, capabilities,
-        )
-
-    assert received is True
-    assert capabilities == ["binary_protocol", "demand_paging"]
+    view = ViewContext(session_id="s", master_fd=7, tmux_session_name="t")
+    with patch("a_term.api.handlers.websocket_messages.resize_pty") as mock_pty:
+        assert await _poll_for_resize(websocket, view) is True
+    assert view.capabilities == ["binary_protocol", "demand_paging"]
     mock_pty.assert_not_called()
-    mock_tmux.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_setup_connection_applies_external_attach_options() -> None:
-    session = {
-        "is_external": True,
-        "mode": "codex",
-        "last_claude_session": None,
-    }
+async def test_disconnect_before_resize_ends_the_wait() -> None:
     websocket = AsyncMock()
-
-    with (
-        patch(
-            "a_term.api.handlers.websocket_connection.validate_and_prepare_session",
-            return_value=(session, "codex-agent-hub"),
-        ),
-        patch(
-            "a_term.api.handlers.websocket_connection.apply_external_attach_options",
-            return_value=True,
-        ) as mock_apply,
-        patch(
-            "a_term.api.handlers.websocket_connection.spawn_pty_for_tmux",
-            return_value=(17, 23),
-        ),
-        patch(
-            "a_term.api.handlers.websocket_connection._wait_for_initial_resize",
-            new=AsyncMock(),
-        ) as mock_wait,
-        patch(
-            "a_term.api.handlers.websocket_connection.get_scrollback",
-            return_value=None,
-        ),
-    ):
-        result = await _setup_connection(websocket, "codex-agent-hub", [])
-
-    assert result == (session, "codex-agent-hub", 17, 23, False)
-    mock_apply.assert_called_once_with("codex-agent-hub")
-    mock_wait.assert_awaited_once()
-    assert mock_wait.await_args is not None
-    assert mock_wait.await_args.kwargs["resize_tmux"] is False
+    websocket.receive = AsyncMock(return_value={"type": "websocket.disconnect"})
+    view = ViewContext(session_id="s", master_fd=7, tmux_session_name="t")
+    assert await _poll_for_resize(websocket, view) is False
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "tmux_socket",
-    ["aico", "/home/testuser/.local/state/aico/tmux/abc12345/server.sock"],
-)
-async def test_setup_connection_uses_external_tmux_socket(tmux_socket: str) -> None:
-    session = {
-        "is_external": True,
-        "mode": "codex",
-        "last_claude_session": None,
-        "tmux_socket": tmux_socket,
-        "tmux_source": "aico" if tmux_socket == "aico" else "aico-abc12345",
-        "tmux_session_id": "$2",
-        "id": "tmux:aico:aico-7" if tmux_socket == "aico" else "tmux:aico-abc12345:aico-7",
-    }
+async def test_setup_spawns_tethers_argv_and_builds_the_claim_identity() -> None:
+    plan = _plan()
     websocket = AsyncMock()
-
     with (
-        patch(
-            "a_term.api.handlers.websocket_connection.validate_and_prepare_session",
-            return_value=(session, "aico-7"),
-        ),
-        patch(
-            "a_term.api.handlers.websocket_connection.apply_external_attach_options",
-            return_value=True,
-        ) as mock_apply,
-        patch(
-            "a_term.api.handlers.websocket_connection.spawn_pty_for_tmux",
-            return_value=(17, 23),
-        ) as mock_spawn,
-        patch(
-            "a_term.api.handlers.websocket_connection._wait_for_initial_resize",
-            new=AsyncMock(),
-        ) as mock_wait,
-        patch(
-            "a_term.api.handlers.websocket_connection.get_scrollback",
-            return_value=None,
-        ),
+        patch(f"{MODULE}.validate_and_prepare_session", return_value=plan),
+        patch(f"{MODULE}.spawn_pty", return_value=(17, 23)) as spawn,
+        patch(f"{MODULE}._wait_for_initial_resize", new=AsyncMock()) as wait,
+        patch(f"{MODULE}.apply_external_attach_options") as apply_options,
+        patch(f"{MODULE}.get_scrollback", return_value=None),
     ):
-        result = await _setup_connection(websocket, "tmux:aico:aico-7", [])
+        result_plan, view, pid = await _setup_connection(websocket, "a0000001")
 
-    assert result == (session, "aico-7", 17, 23, True)
-    mock_apply.assert_called_once_with("aico-7", tmux_socket)
-    mock_spawn.assert_called_once_with("aico-7", None, tmux_socket)
-    wait_args = mock_wait.await_args
-    assert wait_args is not None
-    assert wait_args.kwargs["tmux_socket_name"] == tmux_socket
-    assert wait_args.kwargs["resize_tmux"] is True
-    assert wait_args.kwargs["external_tmux_session_id"] == "$2"
+    spawn.assert_called_once_with(plan.argv, plan.env)
+    apply_options.assert_not_called()
+    wait.assert_awaited_once()
+    assert result_plan is plan
+    assert pid == 23
+    assert (view.master_fd, view.client_pid, view.kind) == (17, 23, "tether")
+    assert view.generation == plan.generation
+    assert view.tmux_socket == SOCKET
 
 
 @pytest.mark.asyncio
-async def test_setup_connection_restores_external_attach_options_after_setup_failure() -> None:
-    session = {
-        "is_external": True,
-        "mode": "codex",
-        "last_claude_session": None,
-    }
-    websocket = AsyncMock()
-
+async def test_external_session_toggles_attach_options_on_its_server() -> None:
+    plan = _plan(kind="external", name="codex-agent-hub")
     with (
-        patch(
-            "a_term.api.handlers.websocket_connection.validate_and_prepare_session",
-            return_value=(session, "codex-agent-hub"),
-        ),
-        patch(
-            "a_term.api.handlers.websocket_connection.apply_external_attach_options",
-            return_value=True,
-        ),
-        patch(
-            "a_term.api.handlers.websocket_connection.restore_external_attach_options",
-            return_value=True,
-        ) as mock_restore,
-        patch(
-            "a_term.api.handlers.websocket_connection.spawn_pty_for_tmux",
-            return_value=(17, 23),
-        ),
-        patch(
-            "a_term.api.handlers.websocket_connection._wait_for_initial_resize",
-            new=AsyncMock(side_effect=RuntimeError("resize failed")),
-        ),pytest.raises(RuntimeError, match="resize failed")
+        patch(f"{MODULE}.validate_and_prepare_session", return_value=plan),
+        patch(f"{MODULE}.apply_external_attach_options", return_value=True) as apply_options,
+        patch(f"{MODULE}.spawn_pty", return_value=(17, 23)),
+        patch(f"{MODULE}._wait_for_initial_resize", new=AsyncMock()),
+        patch(f"{MODULE}.get_scrollback", return_value=None),
     ):
-        await _setup_connection(websocket, "codex-agent-hub", [])
-
-    mock_restore.assert_called_once_with("codex-agent-hub")
+        await _setup_connection(AsyncMock(), "codex-agent-hub")
+    apply_options.assert_called_once_with("codex-agent-hub")
 
 
 @pytest.mark.asyncio
-async def test_setup_connection_sends_initial_shell_scrollback_as_control_snapshot() -> None:
-    session = {
-        "is_external": False,
-        "mode": SHELL_MODE,
-        "last_claude_session": None,
-    }
-    websocket = AsyncMock()
-
+async def test_legacy_session_does_not_toggle_attach_options() -> None:
+    plan = _plan(kind="legacy", name="summitflow-123e4567-e89b-12d3-a456-426614174000")
     with (
-        patch(
-            "a_term.api.handlers.websocket_connection.validate_and_prepare_session",
-            return_value=(session, "summitflow-shell"),
-        ),
-        patch(
-            "a_term.api.handlers.websocket_connection.spawn_pty_for_tmux",
-            return_value=(17, 23),
-        ),
-        patch(
-            "a_term.api.handlers.websocket_connection._wait_for_initial_resize",
-            new=AsyncMock(),
-        ),
-        patch(
-            "a_term.api.handlers.websocket_connection.get_scrollback_with_cursor",
-            return_value=("line 1\nline 2\n", (4, 9)),
-        ),
+        patch(f"{MODULE}.validate_and_prepare_session", return_value=plan),
+        patch(f"{MODULE}.apply_external_attach_options") as apply_options,
+        patch(f"{MODULE}.spawn_pty", return_value=(17, 23)),
+        patch(f"{MODULE}._wait_for_initial_resize", new=AsyncMock()),
+        patch(f"{MODULE}.get_scrollback", return_value=None),
     ):
-        result = await _setup_connection(websocket, "session-1", [])
+        await _setup_connection(AsyncMock(), "x")
+    apply_options.assert_not_called()
 
-    assert result == (session, "summitflow-shell", 17, 23, True)
-    websocket.send_text.assert_awaited_once()
+
+@pytest.mark.asyncio
+async def test_failed_setup_cleans_up_the_pty_and_restores_options() -> None:
+    plan = _plan(kind="external", name="codex-agent-hub")
+    with (
+        patch(f"{MODULE}.validate_and_prepare_session", return_value=plan),
+        patch(f"{MODULE}.apply_external_attach_options", return_value=True),
+        patch(f"{MODULE}.restore_external_attach_options", return_value=True) as restore,
+        patch(f"{MODULE}.spawn_pty", return_value=(17, 23)),
+        patch(f"{MODULE}._wait_for_initial_resize", new=AsyncMock(side_effect=RuntimeError("boom"))),
+        patch(f"{MODULE}._cleanup_pty_process", new=AsyncMock()) as cleanup,
+        pytest.raises(RuntimeError, match="boom"),
+    ):
+        await _setup_connection(AsyncMock(), "codex-agent-hub")
+    cleanup.assert_awaited_once_with(23, 17)
+    restore.assert_called_once_with("codex-agent-hub")
+
+
+@pytest.mark.asyncio
+async def test_spawn_failure_restores_options_without_a_pty() -> None:
+    plan = _plan(kind="external", name="codex-agent-hub")
+    with (
+        patch(f"{MODULE}.validate_and_prepare_session", return_value=plan),
+        patch(f"{MODULE}.apply_external_attach_options", return_value=True),
+        patch(f"{MODULE}.restore_external_attach_options", return_value=True) as restore,
+        patch(f"{MODULE}.spawn_pty", side_effect=OSError("no pty")),
+        patch(f"{MODULE}._cleanup_pty_process", new=AsyncMock()) as cleanup,
+        pytest.raises(OSError),
+    ):
+        await _setup_connection(AsyncMock(), "codex-agent-hub")
+    cleanup.assert_not_awaited()
+    restore.assert_called_once_with("codex-agent-hub")
+
+
+@pytest.mark.asyncio
+async def test_shell_scrollback_snapshot_reads_the_sessions_socket() -> None:
+    plan = _plan(mode=SHELL_MODE)
+    websocket = AsyncMock()
+    with (
+        patch(f"{MODULE}.validate_and_prepare_session", return_value=plan),
+        patch(f"{MODULE}.spawn_pty", return_value=(17, 23)),
+        patch(f"{MODULE}._wait_for_initial_resize", new=AsyncMock()),
+        patch(f"{MODULE}.get_scrollback_with_cursor", return_value=("line 1\nline 2\n", (4, 9))) as capture,
+    ):
+        await _setup_connection(websocket, "a0000001")
+
+    capture.assert_called_once_with("tether-a0000001", 5000, SOCKET)
     payload = json.loads(websocket.send_text.await_args.args[0])
     assert payload == {
         "__ctrl": True,
@@ -207,152 +167,120 @@ async def test_setup_connection_sends_initial_shell_scrollback_as_control_snapsh
 
 
 @pytest.mark.asyncio
-async def test_setup_connection_sends_initial_scrollback_page_for_agent_sessions() -> None:
-    session = {
-        "is_external": False,
-        "mode": "claude",
-        "last_claude_session": None,
-    }
+async def test_agent_sessions_get_a_prefetched_scrollback_page() -> None:
+    plan = _plan(mode="claude-code")
     websocket = AsyncMock()
-
     with (
-        patch(
-            "a_term.api.handlers.websocket_connection.validate_and_prepare_session",
-            return_value=(session, "summitflow-agent"),
-        ),
-        patch(
-            "a_term.api.handlers.websocket_connection.spawn_pty_for_tmux",
-            return_value=(17, 23),
-        ),
-        patch(
-            "a_term.api.handlers.websocket_connection._wait_for_initial_resize",
-            new=AsyncMock(),
-        ),
-        patch(
-            "a_term.api.handlers.websocket_connection.get_scrollback",
-            return_value="line 1\nline 2\n",
-        ),
+        patch(f"{MODULE}.validate_and_prepare_session", return_value=plan),
+        patch(f"{MODULE}.spawn_pty", return_value=(17, 23)),
+        patch(f"{MODULE}._wait_for_initial_resize", new=AsyncMock()),
+        patch(f"{MODULE}.get_scrollback", return_value="line 1\nline 2\n") as capture,
+        patch(f"{MODULE}.get_scrollback_line_count", return_value=0) as history,
     ):
-        result = await _setup_connection(websocket, "session-1", [])
+        await _setup_connection(websocket, "a0000001")
 
-    assert result == (session, "summitflow-agent", 17, 23, True)
-    websocket.send_text.assert_awaited_once()
+    capture.assert_called_once_with("tether-a0000001", 5000, SOCKET)
+    history.assert_called_once_with("tether-a0000001", SOCKET)
     payload = json.loads(websocket.send_text.await_args.args[0])
-    assert payload == {
-        "__ctrl": True,
-        "scrollback_page": {
-            "from_line": 0,
-            "lines": ["line 1", "line 2"],
-            "total_lines": 2,
-        },
-    }
+    assert payload["scrollback_page"] == {"from_line": 0, "lines": ["line 1", "line 2"], "total_lines": 0}
 
 
 @pytest.mark.asyncio
-async def test_run_session_restores_external_attach_options_on_disconnect() -> None:
+async def test_demand_paging_shell_gets_viewport_init_from_its_socket() -> None:
+    plan = _plan(mode=SHELL_MODE)
     websocket = AsyncMock()
-    session = {"is_external": True, "mode": "codex"}
+
+    async def fake_wait(_websocket, view, timeout=5.0):
+        view.capabilities.extend(["demand_paging"])
+        return True
 
     with (
-        patch(
-            "a_term.api.handlers.websocket_connection._setup_connection",
-            new=AsyncMock(return_value=(session, "codex-agent-hub", 17, 23, False)),
-        ),
-        patch(
-            "a_term.api.handlers.websocket_connection._run_message_loop",
-            new=AsyncMock(),
-        ),
-        patch(
-            "a_term.api.handlers.websocket_connection.read_pty_output",
-            new=AsyncMock(),
-        ),
-        patch(
-            "a_term.api.handlers.websocket_connection._heartbeat_loop",
-            new=AsyncMock(),
-        ),
-        patch(
-            "a_term.api.handlers.websocket_connection.restore_external_attach_options",
-            return_value=True,
-        ) as mock_restore,
+        patch(f"{MODULE}.validate_and_prepare_session", return_value=plan),
+        patch(f"{MODULE}.spawn_pty", return_value=(17, 23)),
+        patch(f"{MODULE}._wait_for_initial_resize", new=fake_wait),
+        patch(f"{MODULE}.get_viewport_lines", return_value=("a\nb", 2, 0)) as viewport,
+        patch(f"{MODULE}.get_cursor_position", return_value=(1, 1)),
     ):
-        result = await _run_session(websocket, "codex-agent-hub")
+        await _setup_connection(websocket, "a0000001")
 
-    assert result == (23, 17)
-    mock_restore.assert_called_once_with("codex-agent-hub")
-
-
-# Scrollback sync MUST be enabled for ALL session modes. Agent/TUI sessions
-# use the alternate screen buffer — xterm.js doesn't accumulate scrollback
-# from alternate-buffer output. The periodic tmux capture-pane snapshots are
-# the ONLY source of scrollable history. Disabling sync for non-shell sessions
-# was tried and immediately broke scrolling (2026-03-18).
+    viewport.assert_called_once_with("tether-a0000001", 50, SOCKET)
+    assert json.loads(websocket.send_text.await_args.args[0])["viewport_init"]["total_lines"] == 2
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "mode,tmux_name,is_external",
-    [
-        ("shell", "summitflow-shell", False),
-        ("claude", "summitflow-agent", True),
-        ("codex", "summitflow-codex", True),
-    ],
-    ids=["shell", "agent-claude", "agent-codex"],
-)
-async def test_run_session_enables_scrollback_sync_for_all_modes(
-    mode: str,
-    tmux_name: str,
-    is_external: bool,
-) -> None:
-    """Scrollback sync is created for shell and TUI sessions alike."""
+async def test_dead_session_closes_with_session_dead() -> None:
     websocket = AsyncMock()
-    session = {"is_external": is_external, "mode": mode}
+    with patch(f"{MODULE}.validate_and_prepare_session", side_effect=ValueError("Session not found: x")):
+        assert await _run_session(websocket, "x") == (None, None)
+    websocket.close.assert_awaited_once()
+    reason = json.loads(websocket.close.await_args.kwargs["reason"])
+    assert reason == {"error": "session_dead", "message": "Session not found: x"}
+    assert websocket.close.await_args.kwargs["code"] == 4000
+
+
+def _view(plan: AttachPlan) -> ViewContext:
+    return ViewContext(
+        session_id=plan.session_id, master_fd=17, tmux_session_name=plan.tmux_session_name,
+        tmux_socket=plan.tmux_socket, kind=plan.kind, generation=plan.generation, client_pid=23,
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["tether", "legacy", "external"])
+async def test_run_session_syncs_scrollback_and_restores_only_external_options(kind: str) -> None:
+    plan = _plan(kind=kind, name="tether-a0000001" if kind == "tether" else "codex-agent-hub")
+    websocket = AsyncMock()
     scheduler = MagicMock()
     scheduler.close = AsyncMock()
     tracker = MagicMock()
+    with (
+        patch(f"{MODULE}._setup_connection", new=AsyncMock(return_value=(plan, _view(plan), 23))),
+        patch(f"{MODULE}._run_message_loop", new=AsyncMock()),
+        patch(f"{MODULE}.read_pty_output", new=AsyncMock()),
+        patch(f"{MODULE}._heartbeat_loop", new=AsyncMock()),
+        patch(f"{MODULE}.ScrollbackSyncScheduler", return_value=scheduler) as scheduler_cls,
+        patch(f"{MODULE}.ScrollbackSyncOutputTracker", return_value=tracker),
+        patch(f"{MODULE}.restore_external_attach_options", return_value=True) as restore,
+    ):
+        assert await _run_session(websocket, plan.session_id) == (23, 17)
+
+    if kind == "tether":
+        scheduler_cls.assert_called_once_with(
+            websocket, "tether-a0000001", use_binary=False, diff_tracker=None, diag=ANY,
+            get_scrollback_with_cursor_fn=ANY,
+        )
+    else:
+        scheduler_cls.assert_called_once_with(
+            websocket, plan.tmux_session_name, use_binary=False, diff_tracker=None, diag=ANY,
+        )
+    scheduler.close.assert_awaited_once()
+    if kind == "external":
+        restore.assert_called_once_with("codex-agent-hub")
+    else:
+        restore.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_tether_scrollback_sync_captures_from_the_sessions_socket() -> None:
+    plan = _plan()
+    captured: dict = {}
+
+    def fake_scheduler(websocket, name, **kwargs):
+        captured.update(kwargs)
+        scheduler = MagicMock()
+        scheduler.close = AsyncMock()
+        return scheduler
 
     with (
-        patch(
-            "a_term.api.handlers.websocket_connection._setup_connection",
-            new=AsyncMock(return_value=(session, tmux_name, 17, 23, not is_external)),
-        ),
-        patch(
-            "a_term.api.handlers.websocket_connection._run_message_loop",
-            new=AsyncMock(),
-        ),
-        patch(
-            "a_term.api.handlers.websocket_connection.read_pty_output",
-            new=AsyncMock(),
-        ),
-        patch(
-            "a_term.api.handlers.websocket_connection._heartbeat_loop",
-            new=AsyncMock(),
-        ),
-        patch(
-            "a_term.api.handlers.websocket_connection.ScrollbackSyncScheduler",
-            return_value=scheduler,
-        ) as mock_scheduler_cls,
-        patch(
-            "a_term.api.handlers.websocket_connection.ScrollbackSyncOutputTracker",
-            return_value=tracker,
-        ) as mock_tracker_cls,
-        patch(
-            "a_term.api.handlers.websocket_connection.restore_external_attach_options",
-            return_value=True,
-        ) as mock_restore,
+        patch(f"{MODULE}._setup_connection", new=AsyncMock(return_value=(plan, _view(plan), 23))),
+        patch(f"{MODULE}._run_message_loop", new=AsyncMock()),
+        patch(f"{MODULE}.read_pty_output", new=AsyncMock()),
+        patch(f"{MODULE}._heartbeat_loop", new=AsyncMock()),
+        patch(f"{MODULE}.ScrollbackSyncScheduler", side_effect=fake_scheduler),
+        patch(f"{MODULE}.ScrollbackSyncOutputTracker", return_value=MagicMock()),
+        patch(f"{MODULE}.get_scrollback_with_cursor", return_value=("x", None)) as capture,
     ):
-        result = await _run_session(websocket, tmux_name)
+        await _run_session(AsyncMock(), plan.session_id)
+        captured["get_scrollback_with_cursor_fn"]("tether-a0000001")
 
-    assert result == (23, 17)
-    mock_scheduler_cls.assert_called_once_with(
-        websocket, tmux_name, use_binary=False, diff_tracker=None, diag=ANY,
-    )
-    mock_tracker_cls.assert_called_once_with(
-        scheduler,
-        min_lines=40,
-    )
-    scheduler.set_output_tracker.assert_called_once_with(tracker)
-    scheduler.close.assert_awaited_once()
-    if is_external:
-        mock_restore.assert_called_once_with(tmux_name)
-    else:
-        mock_restore.assert_not_called()
+    capture.assert_called_once_with("tether-a0000001", socket_name=SOCKET)

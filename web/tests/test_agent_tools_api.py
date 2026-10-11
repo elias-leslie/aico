@@ -1,162 +1,98 @@
-"""Tests for agent tools CRUD API endpoints."""
+"""Agent tools API: A-Term's view of Tether's tool registry."""
 
 from __future__ import annotations
 
-from unittest.mock import patch
-
 from fastapi.testclient import TestClient
 
-TOOL_FIXTURE = {
-    "id": "tool-1",
-    "name": "Claude",
-    "slug": "claude",
-    "command": "claude",
-    "process_name": "claude",
-    "description": "Claude CLI",
-    "color": "#7c3aed",
-    "display_order": 0,
-    "is_default": True,
-    "enabled": True,
-    "created_at": "2026-01-01T00:00:00",
-    "updated_at": "2026-01-01T00:00:00",
-}
+from .fake_tether import FakeTether
 
 
-def test_list_agent_tools(test_app: TestClient) -> None:
-    with patch("a_term.api.agent_tools.agent_tools_store.list_all", return_value=[TOOL_FIXTURE]):
-        response = test_app.get("/api/a-term/agent-tools")
+def test_list_tools_in_a_term_shape(test_app: TestClient, fake_tether: FakeTether) -> None:
+    tools = test_app.get("/api/a-term/agent-tools").json()
+    slugs = [tool["slug"] for tool in tools]
+    assert slugs[:2] == ["claude-code", "codex"]
+    claude = tools[0]
+    assert claude["aliases"] == ["claude"]
+    assert claude["argv"] == ["claude", "--dangerously-skip-permissions"]
+    assert claude["command"] == "claude --dangerously-skip-permissions"
+    assert claude["process_name"] == "claude"
+    assert claude["context_hook"] == "claude-session-start"
+    assert next(tool for tool in tools if tool["slug"] == "codex")["is_default"] is True
+
+
+def test_list_enabled_only(test_app: TestClient, fake_tether: FakeTether) -> None:
+    fake_tether.state.tools["agy"]["enabled"] = False
+    slugs = {tool["slug"] for tool in test_app.get("/api/a-term/agent-tools?enabled_only=true").json()}
+    assert "agy" not in slugs
+    assert ("GET", "/v1/tools") in [(m, p) for m, p, _ in fake_tether.calls]
+
+
+def test_get_by_alias(test_app: TestClient, fake_tether: FakeTether) -> None:
+    response = test_app.get("/api/a-term/agent-tools/claude")
     assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 1
-    assert data[0]["slug"] == "claude"
+    assert response.json()["slug"] == "claude-code"
+    assert test_app.get("/api/a-term/agent-tools/missing").status_code == 404
 
 
-def test_list_agent_tools_enabled_only(test_app: TestClient) -> None:
-    with patch("a_term.api.agent_tools.agent_tools_store.list_enabled", return_value=[TOOL_FIXTURE]):
-        response = test_app.get("/api/a-term/agent-tools?enabled_only=true")
-    assert response.status_code == 200
-    assert len(response.json()) == 1
-
-
-def test_create_agent_tool(test_app: TestClient) -> None:
-    with (
-        patch("a_term.api.agent_tools.agent_tools_store.get_by_slug", return_value=None),
-        patch("a_term.api.agent_tools.agent_tools_store.create", return_value=TOOL_FIXTURE),
-    ):
-        response = test_app.post(
-            "/api/a-term/agent-tools",
-            json={
-                "name": "Claude",
-                "slug": "claude",
-                "command": "claude",
-                "process_name": "claude",
-            },
-        )
-    assert response.status_code == 201
-    assert response.json()["slug"] == "claude"
-
-
-def test_create_agent_tool_duplicate_slug(test_app: TestClient) -> None:
-    with patch("a_term.api.agent_tools.agent_tools_store.get_by_slug", return_value=TOOL_FIXTURE):
-        response = test_app.post(
-            "/api/a-term/agent-tools",
-            json={
-                "name": "Claude",
-                "slug": "claude",
-                "command": "claude",
-                "process_name": "claude",
-            },
-        )
-    assert response.status_code == 409
-    assert "already exists" in response.json()["detail"]
-
-
-def test_create_agent_tool_invalid_slug(test_app: TestClient) -> None:
+def test_create_tool(test_app: TestClient, fake_tether: FakeTether) -> None:
     response = test_app.post(
         "/api/a-term/agent-tools",
-        json={
-            "name": "Claude",
-            "slug": "INVALID SLUG!",
-            "command": "claude",
-            "process_name": "claude",
-        },
+        json={"slug": "aider", "name": "Aider", "command": "aider --yes", "process_name": "aider",
+              "display_order": 7, "aliases": ["ai"]},
     )
-    assert response.status_code == 422  # Pydantic validation
+    assert response.status_code == 201, response.text
+    assert response.json()["argv"] == ["aider", "--yes"]
+    sent = next(body for method, path, body in fake_tether.calls if (method, path) == ("POST", "/v1/tools"))
+    assert sent == {"slug": "aider", "name": "Aider", "command": "aider --yes", "processName": "aider",
+                    "displayOrder": 7, "aliases": ["ai"]}
 
 
-def test_create_agent_tool_internal_error_hides_exception_text(test_app: TestClient) -> None:
-    with (
-        patch("a_term.api.agent_tools.agent_tools_store.get_by_slug", return_value=None),
-        patch("a_term.api.agent_tools.agent_tools_store.create", side_effect=RuntimeError("boom: secret path")),
-    ):
-        response = test_app.post(
-            "/api/a-term/agent-tools",
-            json={
-                "name": "Claude",
-                "slug": "claude",
-                "command": "claude",
-                "process_name": "claude",
-            },
-        )
-    assert response.status_code == 500
-    assert response.json()["detail"] == "Failed to create agent tool"
+def test_create_rejects_bad_alias_and_conflicts(test_app: TestClient, fake_tether: FakeTether) -> None:
+    bad = test_app.post("/api/a-term/agent-tools", json={"slug": "x", "name": "X", "aliases": ["Bad Alias"]})
+    assert bad.status_code == 400
+    conflict = test_app.post("/api/a-term/agent-tools", json={"slug": "claude", "name": "Dup"})
+    assert conflict.status_code == 409
 
 
-def test_update_agent_tool(test_app: TestClient) -> None:
-    updated = {**TOOL_FIXTURE, "name": "Claude v2"}
-    with (
-        patch("a_term.api.agent_tools.agent_tools_store.get_by_id", return_value=TOOL_FIXTURE),
-        patch("a_term.api.agent_tools.agent_tools_store.update", return_value=updated),
-    ):
-        response = test_app.patch(
-            "/api/a-term/agent-tools/tool-1",
-            json={"name": "Claude v2"},
-        )
+def test_update_tool_and_slug_is_immutable(test_app: TestClient, fake_tether: FakeTether) -> None:
+    response = test_app.patch(
+        "/api/a-term/agent-tools/pi",
+        json={"slug": "renamed", "command": "pi", "color": None, "enabled": False},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["slug"] == "pi"
+    assert body["argv"] == ["pi"]
+    assert body["enabled"] is False
+    sent = next(b for m, _, b in fake_tether.calls if m == "PATCH")
+    assert "slug" not in sent
+    assert sent == {"command": "pi", "color": None, "enabled": False}
+
+
+def test_update_unknown_is_404(test_app: TestClient, fake_tether: FakeTether) -> None:
+    assert test_app.patch("/api/a-term/agent-tools/missing", json={"name": "x"}).status_code == 404
+
+
+def test_delete_tool(test_app: TestClient, fake_tether: FakeTether) -> None:
+    response = test_app.delete("/api/a-term/agent-tools/agy")
     assert response.status_code == 200
-    assert response.json()["name"] == "Claude v2"
+    assert response.json() == {"deleted": True, "id": "tool-agy", "slug": "agy"}
+    assert "agy" not in fake_tether.state.tools
 
 
-def test_update_agent_tool_not_found(test_app: TestClient) -> None:
-    with patch("a_term.api.agent_tools.agent_tools_store.get_by_id", return_value=None):
-        response = test_app.patch(
-            "/api/a-term/agent-tools/missing",
-            json={"name": "New Name"},
-        )
-    assert response.status_code == 404
-
-
-def test_update_agent_tool_empty_body(test_app: TestClient) -> None:
-    with patch("a_term.api.agent_tools.agent_tools_store.get_by_id", return_value=TOOL_FIXTURE):
-        response = test_app.patch(
-            "/api/a-term/agent-tools/tool-1",
-            json={},
-        )
-    assert response.status_code == 200
-    assert response.json()["name"] == "Claude"  # unchanged
-
-
-def test_delete_agent_tool(test_app: TestClient) -> None:
-    with (
-        patch("a_term.api.agent_tools.agent_tools_store.get_by_id", return_value=TOOL_FIXTURE),
-        patch("a_term.api.agent_tools.agent_tools_store.has_active_sessions", return_value=False),
-        patch("a_term.api.agent_tools.agent_tools_store.delete", return_value=True),
-    ):
-        response = test_app.delete("/api/a-term/agent-tools/tool-1")
-    assert response.status_code == 200
-    assert response.json()["deleted"] is True
-
-
-def test_delete_agent_tool_with_active_sessions(test_app: TestClient) -> None:
-    with (
-        patch("a_term.api.agent_tools.agent_tools_store.get_by_id", return_value=TOOL_FIXTURE),
-        patch("a_term.api.agent_tools.agent_tools_store.has_active_sessions", return_value=True),
-    ):
-        response = test_app.delete("/api/a-term/agent-tools/tool-1")
+def test_delete_default_tool_refused(test_app: TestClient, fake_tether: FakeTether) -> None:
+    response = test_app.delete("/api/a-term/agent-tools/codex")
     assert response.status_code == 409
-    assert "active sessions" in response.json()["detail"]
+    assert "codex" in fake_tether.state.tools
 
 
-def test_delete_agent_tool_not_found(test_app: TestClient) -> None:
-    with patch("a_term.api.agent_tools.agent_tools_store.get_by_id", return_value=None):
-        response = test_app.delete("/api/a-term/agent-tools/missing")
-    assert response.status_code == 404
+def test_delete_tool_in_use_refused(test_app: TestClient, fake_tether: FakeTether) -> None:
+    fake_tether.add_session(tool="pi")
+    assert test_app.delete("/api/a-term/agent-tools/pi").status_code == 409
+
+
+def test_tools_when_tether_down(test_app: TestClient, fake_tether: FakeTether) -> None:
+    fake_tether.stop()
+    response = test_app.get("/api/a-term/agent-tools")
+    assert response.status_code == 503
+    assert "Tether" in response.json()["detail"]

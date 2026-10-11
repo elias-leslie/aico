@@ -12,9 +12,6 @@ requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.109.0",
     "uvicorn[standard]>=0.27.0",
-    "alembic>=1.13.0",
-    "sqlalchemy>=2.0.0",
-    "psycopg[binary,pool]>=3.1.0",
     "pydantic>=2.0.0",
     "pydantic-settings>=2.6.0",
     "python-multipart>=0.0.27",
@@ -26,6 +23,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# One-shot `a-term migrate-from-postgres` only; the runtime never imports psycopg.
+migrate = [
+    "psycopg[binary]>=3.1.0",
+]
 dev = [
     "pytest>=9.0.3",
     "pytest-asyncio>=0.25.0",
@@ -33,6 +34,9 @@ dev = [
     "ruff>=0.8.0",
     "ty>=0.0.17",
 ]
+
+[project.scripts]
+a-term = "a_term.cli.main:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["a_term"]

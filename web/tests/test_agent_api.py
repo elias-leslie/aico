@@ -1,110 +1,67 @@
-"""Tests for agent state/start endpoints with external tmux sessions."""
+"""Agent state and explicit agent restart for Tether sessions."""
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from collections.abc import Iterator
+from unittest.mock import MagicMock
 
+import pytest
 from fastapi.testclient import TestClient
 
+from .fake_tether import FakeTether
 
-def test_get_agent_state_returns_external_tmux_state(test_app: TestClient) -> None:
-    external = {
-        "id": "claude-summitflow",
-        "mode": "claude",
-        "claude_state": "running",
+LEGACY_ID = "70b339cd-93a0-4898-8c4b-3d694ce8e8dc"
+
+
+@pytest.fixture()
+def legacy_tmux(no_default_tmux: MagicMock) -> Iterator[MagicMock]:
+    no_default_tmux.side_effect = lambda args, **_: (
+        (True, f"summitflow-{LEGACY_ID}\t$1\t%1\t/tmp\tcodex\t999999") if args[0] == "list-panes" else (False, "")
+    )
+    yield no_default_tmux
+
+
+@pytest.mark.parametrize("route", ["agent-state", "claude-state"])
+def test_agent_state_from_tether_status(test_app: TestClient, fake_tether: FakeTether, route: str) -> None:
+    running = fake_tether.add_session(tool="codex")
+    pending = fake_tether.add_session(tool="codex", status="pending")
+    shell = fake_tether.add_session(tool="shell")
+    states = {
+        sid: test_app.get(f"/api/a-term/sessions/{sid}/{route}").json()["agent_state"]
+        for sid in (running["id"], pending["id"], shell["id"])
     }
-    with (
-        patch("a_term.api.agent.a_term_store.get_session", return_value=None),
-        patch("a_term.api.agent.get_external_agent_tmux_session", return_value=external),
-    ):
-        response = test_app.get("/api/a-term/sessions/claude-summitflow/agent-state")
+    assert states == {running["id"]: "running", pending["id"]: "starting", shell["id"]: "not_started"}
 
+
+def test_agent_state_unknown_is_404(test_app: TestClient, fake_tether: FakeTether) -> None:
+    assert test_app.get("/api/a-term/sessions/deadbeef/agent-state").status_code == 404
+
+
+def test_start_agent_running_is_noop(test_app: TestClient, fake_tether: FakeTether) -> None:
+    session = fake_tether.add_session(tool="codex")
+    body = test_app.post(f"/api/a-term/sessions/{session['id']}/start-agent").json()
+    assert body["started"] is False
+    assert body["agent_state"] == "running"
+    assert not any(path.endswith("/respawn") for _, path, _ in fake_tether.calls)
+
+
+def test_start_agent_respawns_uncertain(test_app: TestClient, fake_tether: FakeTether) -> None:
+    session = fake_tether.add_session(tool="codex", status="uncertain")
+    response = test_app.post(f"/api/a-term/sessions/{session['id']}/start-claude")
     assert response.status_code == 200
-    assert response.json() == {
-        "session_id": "claude-summitflow",
-        "agent_state": "running",
-        "claude_state": "running",
-    }
+    assert response.json()["started"] is True
+    assert any(path.endswith(f"{session['id']}/respawn") for _, path, _ in fake_tether.calls)
 
 
-def test_get_agent_state_session_not_found(test_app: TestClient) -> None:
-    with (
-        patch("a_term.api.agent.get_external_agent_tmux_session", return_value=None),
-        patch("a_term.api.agent.a_term_store.get_session", return_value=None),
-    ):
-        response = test_app.get("/api/a-term/sessions/nonexistent/agent-state")
-
-    assert response.status_code == 404
-    assert "not found" in response.json()["detail"]
+def test_start_agent_refuses_shell(test_app: TestClient, fake_tether: FakeTether) -> None:
+    session = fake_tether.add_session(tool="shell", status="uncertain")
+    assert test_app.post(f"/api/a-term/sessions/{session['id']}/start-agent").status_code == 400
 
 
-def test_get_agent_state_normalizes_unknown_state(test_app: TestClient) -> None:
-    session = {"id": "s1", "claude_state": "bogus_state"}
-    with (
-        patch("a_term.api.agent.get_external_agent_tmux_session", return_value=None),
-        patch("a_term.api.agent.a_term_store.get_session", return_value=session),
-    ):
-        response = test_app.get("/api/a-term/sessions/s1/agent-state")
-
-    assert response.status_code == 200
-    assert response.json()["agent_state"] == "not_started"
-    assert response.json()["claude_state"] == "not_started"
+def test_start_agent_refuses_legacy(test_app: TestClient, fake_tether: FakeTether, legacy_tmux: MagicMock) -> None:
+    response = test_app.post(f"/api/a-term/sessions/{LEGACY_ID}/start-agent")
+    assert response.status_code == 409
 
 
-def test_legacy_claude_state_alias(test_app: TestClient) -> None:
-    session = {"id": "s1", "claude_state": "running"}
-    with (
-        patch("a_term.api.agent.get_external_agent_tmux_session", return_value=None),
-        patch("a_term.api.agent.a_term_store.get_session", return_value=session),
-    ):
-        response = test_app.get("/api/a-term/sessions/s1/claude-state")
-
-    assert response.status_code == 200
-    assert response.json()["agent_state"] == "running"
-    assert response.json()["claude_state"] == "running"
-
-
-def test_start_agent_returns_noop_for_external_tmux_session(test_app: TestClient) -> None:
-    external = {
-        "id": "codex-summitflow",
-        "mode": "codex",
-        "claude_state": "running",
-    }
-    with (
-        patch("a_term.api.agent.a_term_store.get_session", return_value=None),
-        patch("a_term.api.agent.get_external_agent_tmux_session", return_value=external),
-    ):
-        response = test_app.post("/api/a-term/sessions/codex-summitflow/start-agent")
-
-    assert response.status_code == 200
-    assert response.json() == {
-        "session_id": "codex-summitflow",
-        "started": False,
-        "message": "External tmux agent session is already running",
-        "agent_state": "running",
-        "claude_state": "running",
-    }
-
-
-def test_start_agent_ensures_tmux_session_before_launch(test_app: TestClient) -> None:
-    session = {
-        "id": "session-1",
-        "mode": "claude",
-        "claude_state": "not_started",
-    }
-    tool = {"command": "claude", "process_name": "claude"}
-    with (
-        patch("a_term.api.agent.get_external_agent_tmux_session", return_value=None),
-        patch("a_term.api.agent.a_term_store.get_session", return_value=session),
-        patch("a_term.api.agent.agent_tools_store.get_by_slug", return_value=tool),
-        patch("a_term.api.agent.lifecycle.ensure_session_alive", return_value=True) as ensure_mock,
-        patch("a_term.api.agent.is_agent_running", return_value=False),
-        patch("a_term.api.agent.atomically_set_starting", return_value=None),
-        patch("a_term.api.agent.send_agent_command", return_value=None) as send_mock,
-        patch("a_term.api.agent.background_verify_agent_start"),
-    ):
-        response = test_app.post("/api/a-term/sessions/session-1/start-agent")
-
-    assert response.status_code == 200
-    ensure_mock.assert_called_once_with("session-1")
-    send_mock.assert_called_once_with("session-1", "summitflow-session-1", "claude")
+def test_start_agent_unknown_is_404(test_app: TestClient, fake_tether: FakeTether) -> None:
+    assert test_app.post("/api/a-term/sessions/deadbeef/start-agent").status_code == 404

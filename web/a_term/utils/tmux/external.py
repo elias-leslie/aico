@@ -2,18 +2,15 @@
 
 from __future__ import annotations
 
-import os
 import re
-import sqlite3
 import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Lock
 
-from ...config import get_settings
 from ...logging_config import get_logger
-from .core import TMUX_COMMAND_TIMEOUT, validate_socket_name
+from .core import TMUX_COMMAND_TIMEOUT
 
 logger = get_logger(__name__)
 
@@ -27,16 +24,11 @@ _EXTERNAL_AGENT_TOKENS = (
 _EXTERNAL_SHELL_COMMANDS = frozenset(
     {"bash", "sh", "zsh", "fish", "dash", "ksh", "tcsh", "csh", "login", "su"}
 )
-# Aico launches its agent as a child of a non-job-control bash, so the agent
-# shares the shell's process group and tmux reports the shell as
-# ``pane_current_command``. Walk a bounded slice of the pane's process tree to
-# recover the real agent command.
+# An agent started from a non-job-control shell shares the shell's process
+# group, so tmux reports the shell as ``pane_current_command``. Walk a bounded
+# slice of the pane's process tree to recover the real agent command.
 _PANE_PROCESS_SCAN_DEPTH = 3
 _PANE_PROCESS_SCAN_LIMIT = 24
-_AICO_SERVER_ID_PATTERN = re.compile(r"^[0-9a-f]{8,64}$")
-_AICO_DB_FILENAME = "aico.db"
-_AICO_MANAGED_SOCKET_DIR = "tmux"
-_AICO_MANAGED_SOCKET_FILENAME = "server.sock"
 
 _EXTERNAL_ATTACH_LOCK = Lock()
 _EXTERNAL_ATTACH_STATES: dict[str, _ExternalAttachState] = {}
@@ -44,7 +36,11 @@ _EXTERNAL_ATTACH_STATES: dict[str, _ExternalAttachState] = {}
 
 @dataclass(frozen=True)
 class ExternalTmuxSource:
-    """A tmux server that can contribute attachable external sessions."""
+    """The user's default tmux server, whose own sessions A-Term can attach to.
+
+    Sessions Tether created (from A-Term or Aico) come from Tether's catalog,
+    not from discovery.
+    """
 
     id: str
     label: str
@@ -66,174 +62,11 @@ class _ExternalAttachState:
     socket_name: str | None = None
 
 
-_EXTERNAL_TMUX_SOURCES = (
-    ExternalTmuxSource(id="default", label="tmux"),
-    ExternalTmuxSource(
-        id="aico",
-        label="Aico",
-        socket_name="aico",
-        session_prefix="aico-",
-        include_shell=True,
-    ),
-)
-
-
-def _aico_state_dir() -> Path | None:
-    """Return Aico's configured state directory, or fail closed.
-
-    Aico itself accepts ``AICO_STATE_DIR`` and otherwise uses
-    ``~/.local/state/aico``. ``A_TERM_AICO_STATE_DIR`` lets the A-Term service
-    point at a non-default Aico instance without changing Aico's environment.
-    """
-    configured = (
-        os.environ.get("A_TERM_AICO_STATE_DIR")
-        or os.environ.get("AICO_STATE_DIR")
-        or get_settings().a_term_aico_state_dir
-    )
-    state_dir = (
-        Path(configured).expanduser()
-        if configured
-        else Path.home() / ".local" / "state" / "aico"
-    )
-    if not state_dir.is_absolute():
-        logger.debug("aico_tmux_catalog_state_dir_rejected", path=str(state_dir))
-        return None
-    return state_dir
-
-
-def _catalogued_aico_tmux_sources() -> tuple[ExternalTmuxSource, ...]:
-    """Read active Aico managed-server generations without taking write locks.
-
-    Catalog rows identify candidate sockets; a successful tmux ``list-panes``
-    response remains the liveness authority. Rows are accepted only when their
-    id and socket path match Aico's generation-owned directory layout.
-    """
-    state_dir = _aico_state_dir()
-    if state_dir is None:
-        return ()
-    database_path = state_dir / _AICO_DB_FILENAME
-    if not database_path.is_file():
-        return ()
-
-    connection: sqlite3.Connection | None = None
-    try:
-        connection = sqlite3.connect(
-            f"{database_path.as_uri()}?mode=ro",
-            uri=True,
-            timeout=0.0,
-            isolation_level=None,
-        )
-        connection.execute("PRAGMA query_only = ON")
-        if connection.execute(
-            "SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'tmux_servers'"
-        ).fetchone() is None:
-            return ()
-        rows = connection.execute(
-            """
-            SELECT id, socket_path
-            FROM tmux_servers
-            WHERE kind = 'managed' AND phase = 'active'
-            ORDER BY created_at ASC, id ASC
-            """
-        ).fetchall()
-    except (OSError, sqlite3.Error, ValueError) as error:
-        # A missing old schema, a concurrent exclusive schema migration, or an
-        # unavailable state directory must not break external-session listing.
-        logger.debug("aico_tmux_catalog_unavailable", path=str(database_path), error=str(error))
-        return ()
-    finally:
-        if connection is not None:
-            connection.close()
-
-    sources: list[ExternalTmuxSource] = []
-    for raw_server_id, raw_socket_path in rows:
-        if not isinstance(raw_server_id, str) or not _AICO_SERVER_ID_PATTERN.fullmatch(
-            raw_server_id
-        ):
-            logger.debug("aico_tmux_catalog_row_rejected", reason="server_id")
-            continue
-        if not isinstance(raw_socket_path, str):
-            logger.debug(
-                "aico_tmux_catalog_row_rejected",
-                server=raw_server_id,
-                reason="socket_type",
-            )
-            continue
-        expected_socket_path = str(
-            state_dir
-            / _AICO_MANAGED_SOCKET_DIR
-            / raw_server_id
-            / _AICO_MANAGED_SOCKET_FILENAME
-        )
-        if raw_socket_path != expected_socket_path or not validate_socket_name(raw_socket_path):
-            logger.debug(
-                "aico_tmux_catalog_row_rejected",
-                server=raw_server_id,
-                reason="socket_path",
-            )
-            continue
-        sources.append(
-            ExternalTmuxSource(
-                id=f"aico-{raw_server_id}",
-                label=f"Aico ({raw_server_id[:8]})",
-                socket_name=raw_socket_path,
-                session_prefix="aico-",
-                include_shell=True,
-            )
-        )
-    return tuple(sources)
+_EXTERNAL_TMUX_SOURCES = (ExternalTmuxSource(id="default", label="tmux"),)
 
 
 def _external_tmux_sources() -> tuple[ExternalTmuxSource, ...]:
-    """Return stable legacy sources plus current Aico server generations."""
-    return (*_EXTERNAL_TMUX_SOURCES, *_catalogued_aico_tmux_sources())
-
-
-def _catalogued_aico_widgets() -> dict[tuple[str, str], dict[str, str | None]]:
-    """Read Aico's display metadata without making its database an ownership authority."""
-    state_dir = _aico_state_dir()
-    if state_dir is None:
-        return {}
-    database_path = state_dir / _AICO_DB_FILENAME
-    if not database_path.is_file():
-        return {}
-    connection: sqlite3.Connection | None = None
-    try:
-        connection = sqlite3.connect(
-            f"{database_path.as_uri()}?mode=ro",
-            uri=True,
-            timeout=0.0,
-            isolation_level=None,
-        )
-        connection.execute("PRAGMA query_only = ON")
-        rows = connection.execute(
-            """
-            SELECT id, tmux_server_id, name, project_id, project_root, tool
-            FROM widgets
-            WHERE tmux_allocation_state = 'bound'
-              AND external_tmux_session IS NULL
-              AND tmux_server_id IS NOT NULL
-            """
-        ).fetchall()
-    except (OSError, sqlite3.Error, ValueError) as error:
-        logger.debug("aico_widget_catalog_unavailable", path=str(database_path), error=str(error))
-        return {}
-    finally:
-        if connection is not None:
-            connection.close()
-    return {
-        (f"aico-{server_id}", f"aico-{widget_id}"): {
-            "name": name,
-            "project_id": project_id,
-            "working_dir": project_root,
-            "mode": tool,
-        }
-        for widget_id, server_id, name, project_id, project_root, tool in rows
-        if isinstance(widget_id, str)
-        and re.fullmatch(r"[0-9a-f]{8}", widget_id)
-        and isinstance(server_id, str)
-        and _AICO_SERVER_ID_PATTERN.fullmatch(server_id)
-    }
+    return _EXTERNAL_TMUX_SOURCES
 
 
 def _pkg() -> object:
@@ -349,7 +182,6 @@ def list_external_tmux_sessions() -> list[dict[str, object]]:
     """List externally created tmux sessions that A-Term can attach to."""
     pkg = _pkg()
     sessions: dict[str, dict[str, object]] = {}
-    aico_widgets = _catalogued_aico_widgets()
     for source in _external_tmux_sources():
         list_args = [
             "list-panes",
@@ -383,25 +215,8 @@ def list_external_tmux_sessions() -> list[dict[str, object]]:
             mode, agent_state = _infer_external_mode(session_name, current_command, pane_pid)
             if mode == "shell" and not source.include_shell:
                 continue
-            metadata = aico_widgets.get((source.id, session_name), {})
-            if metadata:
-                project_id = metadata.get("project_id")
-                mode = metadata.get("mode") or mode
-                if project_id == "__aico_personal_workspace__":
-                    # Aico's Personal Workspace is a cwd target, not a registered project.
-                    project_id = None
-                    name = metadata.get("name") or "Personal Workspace"
-                else:
-                    name = metadata.get("name") or project_id or f"Ad-Hoc {mode.title()}"
-            else:
-                # A missing Aico catalog cannot establish project identity: a git
-                # directory basename may match an unrelated registered project.
-                project_id = (
-                    None
-                    if source.id == "aico" or source.id.startswith("aico-")
-                    else _infer_project_id(working_dir or None)
-                )
-                name = session_name
+            project_id = _infer_project_id(working_dir or None)
+            name = session_name
             external_id = source.external_id(session_name)
             existing = sessions.get(external_id)
             if existing and existing.get("working_dir"):
@@ -411,7 +226,7 @@ def list_external_tmux_sessions() -> list[dict[str, object]]:
                 "name": name,
                 "user_id": None,
                 "project_id": project_id,
-                "working_dir": metadata.get("working_dir") or working_dir or None,
+                "working_dir": working_dir or None,
                 "display_order": 0,
                 "mode": mode,
                 "session_number": 0,

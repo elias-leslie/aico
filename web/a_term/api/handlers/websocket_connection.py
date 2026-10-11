@@ -10,7 +10,6 @@ import asyncio
 import contextlib
 import json
 import os
-import re
 import signal
 from collections.abc import Callable
 
@@ -22,7 +21,7 @@ from ...services._pty_reader import _make_on_readable
 from ...services.backpressure import BackpressureController
 from ...services.diagnostics import get_registry as get_diagnostics_registry
 from ...services.metrics import get_metrics
-from ...services.pty_manager import read_pty_output, spawn_pty_for_tmux
+from ...services.pty_manager import read_pty_output, spawn_pty
 from ...services.scrollback_pager import (
     get_scrollback_line_count,
     get_viewport_lines,
@@ -40,41 +39,12 @@ from ...utils.tmux import (
     get_scrollback,
     get_scrollback_with_cursor,
     restore_external_attach_options,
-    validate_session_name,
-    validate_socket_name,
 )
-from .session_validation import validate_and_prepare_session
-from .websocket_messages import handle_websocket_message
+from .session_validation import AttachPlan, validate_and_prepare_session
+from .websocket_messages import ViewContext, handle_websocket_message
 
 logger = get_logger(__name__)
 SCROLLBACK_SYNC_MIN_LINES = 40
-_AICO_SOURCE_ID = re.compile(r"^aico(?:-[0-9a-f]{8,64})?$")
-_TMUX_SESSION_ID = re.compile(r"^\$[0-9]+$")
-
-
-def _verified_aico_resize_identity(
-    session: dict, tmux_session_name: str, tmux_socket_name: str | None,
-) -> str | None:
-    """Accept only an Aico discovery record tied to its supported socket."""
-    source = session.get("tmux_source")
-    expected_id = session.get("tmux_session_id")
-    if (
-        not isinstance(source, str)
-        or not _AICO_SOURCE_ID.fullmatch(source)
-        or not isinstance(expected_id, str)
-        or not _TMUX_SESSION_ID.fullmatch(expected_id)
-        or not isinstance(tmux_socket_name, str)
-        or not validate_socket_name(tmux_socket_name)
-        or not validate_session_name(tmux_session_name)
-        or not tmux_session_name.startswith("aico-")
-        or session.get("id") != f"tmux:{source}:{tmux_session_name}"
-    ):
-        return None
-    if source == "aico" and tmux_socket_name != "aico":
-        return None
-    if source != "aico" and not tmux_socket_name.startswith("/"):
-        return None
-    return expected_id
 
 
 # ---------------------------------------------------------------------------
@@ -95,75 +65,31 @@ async def _heartbeat_loop(websocket: WebSocket) -> None:
 # Resize negotiation
 # ---------------------------------------------------------------------------
 
-async def _poll_for_resize(
-    websocket: WebSocket,
-    master_fd: int,
-    session_id: str,
-    tmux_session_name: str,
-    tmux_socket_name: str | None,
-    resize_tmux: bool,
-    capabilities: list[str] | None = None,
-    external_tmux_session_id: str | None = None,
-) -> bool:
+async def _poll_for_resize(websocket: WebSocket, view: ViewContext) -> bool:
     """Poll WebSocket messages until a resize event is received or disconnected."""
     while True:
         message = await websocket.receive()
         if message["type"] == "websocket.disconnect":
             return False
-        resize_result = await handle_websocket_message(
-            message,
-            master_fd,
-            session_id,
-            tmux_session_name,
-            tmux_socket_name=tmux_socket_name,
-            resize_tmux=resize_tmux,
-            capabilities=capabilities,
-            external_tmux_session_id=external_tmux_session_id,
-        )
+        resize_result = await handle_websocket_message(message, view)
         if resize_result is not None:
             logger.info(
                 "initial_resize_received",
-                session_id=session_id,
+                session_id=view.session_id,
                 cols=resize_result[0],
                 rows=resize_result[1],
             )
             return True
-        if capabilities:
+        if view.capabilities:
             return True
 
 
-async def _wait_for_initial_resize(
-    websocket: WebSocket,
-    master_fd: int,
-    session_id: str,
-    tmux_session_name: str,
-    tmux_socket_name: str | None = None,
-    resize_tmux: bool = True,
-    timeout: float = 5.0,
-    capabilities: list[str] | None = None,
-    external_tmux_session_id: str | None = None,
-) -> bool:
-    """Wait for initial resize event from frontend (syncs a_term dimensions)."""
+async def _wait_for_initial_resize(websocket: WebSocket, view: ViewContext, timeout: float = 5.0) -> bool:
+    """Wait for the frontend's first resize so the PTY matches the browser."""
     try:
-        return await asyncio.wait_for(
-            _poll_for_resize(
-                websocket,
-                master_fd,
-                session_id,
-                tmux_session_name,
-                tmux_socket_name,
-                resize_tmux,
-                capabilities,
-                external_tmux_session_id,
-            ),
-            timeout=timeout,
-        )
+        return await asyncio.wait_for(_poll_for_resize(websocket, view), timeout=timeout)
     except TimeoutError:
-        logger.warning(
-            "initial_resize_timeout",
-            session_id=session_id,
-            timeout=timeout,
-        )
+        logger.warning("initial_resize_timeout", session_id=view.session_id, timeout=timeout)
         return False
 
 
@@ -395,9 +321,7 @@ def _make_output_flush_callback(
 
 
 async def _teardown_session_resources(
-    session: dict,
-    tmux_session_name: str,
-    tmux_socket_name: str | None,
+    plan: AttachPlan,
     session_id: str,
     backpressure: BackpressureController | None,
     scrollback_sync: ScrollbackSyncScheduler | None,
@@ -412,11 +336,11 @@ async def _teardown_session_resources(
     diag_registry.remove(session_id)  # type: ignore[union-attr]
     a_term_metrics.dec("active_connections")  # type: ignore[union-attr]
     a_term_metrics.dec("active_sessions")  # type: ignore[union-attr]
-    if session.get("is_external"):
+    if plan.kind == "external":
         await _call_tmux_session_fn(
             restore_external_attach_options,
-            tmux_session_name,
-            tmux_socket_name,
+            plan.tmux_session_name,
+            plan.tmux_socket,
         )
 
 
@@ -424,141 +348,79 @@ async def _teardown_session_resources(
 # Connection lifecycle
 # ---------------------------------------------------------------------------
 
-async def _setup_connection(
-    websocket: WebSocket,
-    session_id: str,
-    capabilities: list[str],
-) -> tuple[dict, str, int, int, bool]:
-    """Validate session, spawn PTY, sync dimensions and send scrollback.
-
-    Returns:
-        (session, tmux_session_name, master_fd, pid, resize_tmux)
-
-    Raises:
-        ValueError: if the session is invalid/dead (caller closes websocket)
-    """
-    session, tmux_session_name = await asyncio.to_thread(
-        validate_and_prepare_session, session_id
-    )
-    tmux_socket_name = (
-        str(session.get("tmux_socket")) if session.get("tmux_socket") else None
-    )
-    external_tmux_session_id = (
-        _verified_aico_resize_identity(session, tmux_session_name, tmux_socket_name)
-        if session.get("is_external") else None
-    )
-    resize_tmux = not session.get("is_external") or external_tmux_session_id is not None
-    external_attach_applied = False
-    try:
-        if session.get("is_external"):
-            external_attach_applied = bool(
-                await _call_tmux_session_fn(
-                    apply_external_attach_options,
-                    tmux_session_name,
-                    tmux_socket_name,
-                )
-            )
-
-        stored_target_session = session.get("last_claude_session")
-        master_fd, pid = spawn_pty_for_tmux(
-            tmux_session_name,
-            stored_target_session,
-            tmux_socket_name,
-        )
-        await _wait_for_initial_resize(
-            websocket, master_fd, session_id, tmux_session_name,
-            tmux_socket_name=tmux_socket_name,
-            resize_tmux=resize_tmux,
-            capabilities=capabilities,
-            external_tmux_session_id=external_tmux_session_id,
-        )
-
-        is_shell = session.get("mode") == SHELL_MODE
-        if is_shell:
-            if "demand_paging" in capabilities:
-                await _send_viewport_init(
-                    websocket,
-                    session_id,
-                    tmux_session_name,
-                    tmux_socket_name,
-                )
-            else:
-                await _send_shell_legacy_scrollback(
-                    websocket,
-                    session_id,
-                    tmux_session_name,
-                    tmux_socket_name,
-                )
+async def _send_initial_scrollback(websocket: WebSocket, plan: AttachPlan, capabilities: list[str]) -> None:
+    name, socket = plan.tmux_session_name, plan.tmux_socket
+    if plan.session.get("mode") == SHELL_MODE:
+        if "demand_paging" in capabilities:
+            await _send_viewport_init(websocket, plan.session_id, name, socket)
         else:
-            await _send_tui_prefetch_scrollback(
-                websocket,
-                session_id,
-                tmux_session_name,
-                tmux_socket_name,
-            )
+            await _send_shell_legacy_scrollback(websocket, plan.session_id, name, socket)
+    else:
+        await _send_tui_prefetch_scrollback(websocket, plan.session_id, name, socket)
 
-        return session, tmux_session_name, master_fd, pid, resize_tmux
-    except Exception:
-        if external_attach_applied:
-            await _call_tmux_session_fn(
-                restore_external_attach_options,
-                tmux_session_name,
-                tmux_socket_name,
+
+async def _setup_connection(websocket: WebSocket, session_id: str) -> tuple[AttachPlan, ViewContext, int]:
+    """Resolve the session, spawn the attach PTY, sync size and send scrollback.
+
+    Returns (plan, view, pid). Raises ValueError if the session is gone or
+    cannot be attached (the caller closes the WebSocket).
+    """
+    plan = await asyncio.to_thread(validate_and_prepare_session, session_id)
+    external_attach_applied = False
+    master_fd: int | None = None
+    pid: int | None = None
+    try:
+        if plan.kind == "external":
+            external_attach_applied = bool(
+                await _call_tmux_session_fn(apply_external_attach_options, plan.tmux_session_name, plan.tmux_socket)
             )
+        master_fd, pid = spawn_pty(plan.argv, plan.env)
+        view = ViewContext(
+            session_id=plan.session_id,
+            master_fd=master_fd,
+            tmux_session_name=plan.tmux_session_name,
+            tmux_socket=plan.tmux_socket,
+            kind=plan.kind,
+            generation=plan.generation,
+            client_pid=pid,
+            websocket=websocket,
+        )
+        await _wait_for_initial_resize(websocket, view)
+        await _send_initial_scrollback(websocket, plan, view.capabilities)
+        return plan, view, pid
+    except Exception:
+        if pid is not None and master_fd is not None:
+            await _cleanup_pty_process(pid, master_fd)
+        if external_attach_applied:
+            await _call_tmux_session_fn(restore_external_attach_options, plan.tmux_session_name, plan.tmux_socket)
         raise
 
 
 async def _run_message_loop(
     websocket: WebSocket,
-    master_fd: int,
-    session_id: str,
-    tmux_session_name: str,
-    resize_tmux: bool,
+    view: ViewContext,
     output_task: asyncio.Task,
     heartbeat_task: asyncio.Task,
-    tmux_socket_name: str | None = None,
-    backpressure: BackpressureController | None = None,
-    capabilities: list[str] | None = None,
-    external_tmux_session_id: str | None = None,
 ) -> None:
     """Process incoming WebSocket messages until disconnect."""
     metrics = get_metrics()
-    last_resize = [0, 0]
     try:
         while True:
             message = await websocket.receive()
             if message["type"] == "websocket.disconnect":
                 break
             metrics.inc("messages_received")
-            await handle_websocket_message(
-                message,
-                master_fd,
-                session_id,
-                tmux_session_name,
-                last_resize,
-                tmux_socket_name=tmux_socket_name,
-                resize_tmux=resize_tmux,
-                backpressure=backpressure,
-                websocket=websocket,
-                capabilities=capabilities,
-                external_tmux_session_id=external_tmux_session_id,
-            )
+            await handle_websocket_message(message, view)
     except WebSocketDisconnect:
-        logger.info("a_term_disconnected", session_id=session_id)
+        logger.info("a_term_disconnected", session_id=view.session_id)
     finally:
         await _cleanup_tasks(heartbeat_task, output_task)
 
 
-async def _run_session(
-    websocket: WebSocket,
-    session_id: str,
-) -> tuple[int | None, int | None]:
-    """Set up and run the full a_term session. Returns (pid, master_fd) for cleanup."""
-    capabilities: list[str] = []
+async def _run_session(websocket: WebSocket, session_id: str) -> tuple[int | None, int | None]:
+    """Set up and run the full view. Returns (pid, master_fd) for cleanup."""
     try:
-        session, tmux_session_name, master_fd, pid, resize_tmux = await _setup_connection(
-            websocket, session_id, capabilities
-        )
+        plan, view, pid = await _setup_connection(websocket, session_id)
     except ValueError as e:
         await websocket.close(
             code=4000,
@@ -566,21 +428,19 @@ async def _run_session(
         )
         return None, None
 
+    capabilities = view.capabilities
+    master_fd = view.master_fd
     use_binary = "binary_protocol" in capabilities
     backpressure = _create_backpressure_controller(master_fd, session_id, capabilities)
+    view.backpressure = backpressure
     diag_registry = get_diagnostics_registry()
     diag = diag_registry.get_or_create(session_id)
     a_term_metrics = get_metrics()
     a_term_metrics.inc("active_connections")
     a_term_metrics.inc("active_sessions")
     a_term_metrics.inc("total_sessions_created")
-    tmux_socket_name = str(session.get("tmux_socket")) if session.get("tmux_socket") else None
-    external_tmux_session_id = (
-        _verified_aico_resize_identity(session, tmux_session_name, tmux_socket_name)
-        if session.get("is_external") else None
-    )
     scrollback_sync, scrollback_tracker = _create_scrollback_sync(
-        websocket, tmux_session_name, tmux_socket_name, capabilities, diag
+        websocket, plan.tmux_session_name, plan.tmux_socket, capabilities, diag
     )
     on_flush = _make_output_flush_callback(a_term_metrics, scrollback_tracker)
     output_task = asyncio.create_task(
@@ -592,21 +452,10 @@ async def _run_session(
     )
     heartbeat_task = asyncio.create_task(_heartbeat_loop(websocket))
     try:
-        await _run_message_loop(
-            websocket, master_fd, session_id, tmux_session_name, resize_tmux,
-            output_task, heartbeat_task,
-            tmux_socket_name,
-            backpressure=backpressure, capabilities=capabilities,
-            external_tmux_session_id=external_tmux_session_id,
-        )
+        await _run_message_loop(websocket, view, output_task, heartbeat_task)
     finally:
         await _teardown_session_resources(
-            session,
-            tmux_session_name,
-            tmux_socket_name,
-            session_id,
-            backpressure,
-            scrollback_sync, diag_registry, a_term_metrics,
+            plan, session_id, backpressure, scrollback_sync, diag_registry, a_term_metrics,
         )
     return pid, master_fd
 

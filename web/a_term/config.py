@@ -9,7 +9,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import field_validator, model_validator
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .branding import BACKEND_PORT, FRONTEND_PORT, REPO_ROOT, get_upload_dir
@@ -19,7 +19,6 @@ from .branding import BACKEND_PORT, FRONTEND_PORT, REPO_ROOT, get_upload_dir
 # ---------------------------------------------------------------------------
 A_TERM_BACKEND_PORT = BACKEND_PORT
 A_TERM_FRONTEND_PORT = FRONTEND_PORT
-SUMMITFLOW_BACKEND_PORT = 8001
 
 
 class Settings(BaseSettings):
@@ -38,24 +37,6 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
-
-    # Database
-    database_url: str = ""
-    db_pool_min_size: int = 2
-    db_pool_max_size: int = 10
-    db_pool_timeout_seconds: float = 10.0
-    db_pool_max_waiting: int = 20
-    db_pool_max_lifetime_seconds: float = 1800.0
-    db_pool_max_idle_seconds: float = 300.0
-    db_pool_reconnect_timeout_seconds: float = 30.0
-
-    @field_validator("database_url")
-    @classmethod
-    def validate_database_url(cls, v: str) -> str:
-        """Ensure database_url is provided."""
-        if not v:
-            raise ValueError("DATABASE_URL environment variable is required")
-        return v
 
     # A-Term service
     a_term_port: int = A_TERM_BACKEND_PORT
@@ -87,10 +68,6 @@ class Settings(BaseSettings):
     max_file_size_mb: int = 10
     upload_dir: Path = get_upload_dir()
     upload_max_age_seconds: int = 24 * 60 * 60
-
-    # Optional integrations
-    summitflow_api_base: str = ""
-    a_term_aico_state_dir: Path | None = None
 
     # Diagnostics
     diagnostics_enabled: bool = False
@@ -141,14 +118,6 @@ def get_settings() -> Settings:
 # Pre-loaded for modules that need them at import time
 # These provide backward compatibility with existing code
 settings = get_settings()
-DATABASE_URL = settings.database_url
-DB_POOL_MIN_SIZE = settings.db_pool_min_size
-DB_POOL_MAX_SIZE = settings.db_pool_max_size
-DB_POOL_TIMEOUT_SECONDS = settings.db_pool_timeout_seconds
-DB_POOL_MAX_WAITING = settings.db_pool_max_waiting
-DB_POOL_MAX_LIFETIME_SECONDS = settings.db_pool_max_lifetime_seconds
-DB_POOL_MAX_IDLE_SECONDS = settings.db_pool_max_idle_seconds
-DB_POOL_RECONNECT_TIMEOUT_SECONDS = settings.db_pool_reconnect_timeout_seconds
 A_TERM_PORT = settings.a_term_port
 A_TERM_BIND_HOST = settings.a_term_bind_host
 CORS_ORIGINS = settings.cors_origins
@@ -169,7 +138,6 @@ MAX_FILE_SIZE_MB = settings.max_file_size_mb
 MAX_FILE_SIZE = settings.max_file_size
 UPLOAD_DIR = settings.upload_dir
 UPLOAD_MAX_AGE_SECONDS = settings.upload_max_age_seconds
-SUMMITFLOW_API_BASE = settings.summitflow_api_base
 MAINTENANCE_ENABLED = settings.maintenance_enabled
 MAINTENANCE_INTERVAL_SECONDS = settings.maintenance_interval_seconds
 MAINTENANCE_SESSION_PURGE_DAYS = settings.maintenance_session_purge_days

@@ -1,254 +1,314 @@
-"""A-Term panes storage layer — CRUD and session-creation.
+"""Pane view state: panes, their layout, and which sessions each pane shows.
 
-Ordering/layout: pane_layout.py. Session-fetch helpers: pane_sessions.py.
-Re-exports everything so callers importing this module are unaffected.
+Pure local storage. Session lifecycle lives in Tether (see
+``services/lifecycle.py``); this module never starts or ends anything.
 """
 
 from __future__ import annotations
 
-from typing import Any, Literal, cast
+import sqlite3
+from datetime import UTC, datetime, timedelta
+from typing import Any, Literal
 
-import psycopg.sql
-from psycopg.rows import dict_row
+from ..constants import MAX_PANES
+from .local_db import connect, new_id, now_iso, transaction
 
-from ..logging_config import get_logger
-from ..utils.tmux import TmuxError, create_tmux_session, get_tmux_session_name, run_tmux_command
-from . import agent_tools
-from .connection import get_connection
-from .pane_core import (
-    PANE_FIELDS,
-    PaneId,
-    _execute_query,
-    _execute_write,
-    _normalize_pane_row,
-    _prepare_pane_slot,
+PaneType = Literal["project", "adhoc"]
+LinkKind = Literal["tether", "legacy"]
+
+_PANE_COLUMNS = (
+    "id, pane_type, project_id, pane_order, pane_name, active_mode, is_detached, created_at, "
+    "width_percent, height_percent, grid_row, grid_col"
 )
-from .pane_layout import count_panes, swap_pane_positions, update_pane_layouts, update_pane_order
-from .pane_sessions import fetch_sessions_for_pane, list_panes_with_sessions_data
-from .sessions import create_session as create_a_term_session
-from .sessions import delete_session as delete_a_term_session
-from .sessions import get_session as get_a_term_session
-
-logger = get_logger(__name__)
-__all__ = [
-    "PANE_FIELDS", "PaneId",
-    "attach_pane", "count_panes", "create_pane_with_sessions", "delete_pane", "detach_pane",
-    "fetch_sessions_for_pane", "get_pane", "get_pane_with_sessions", "list_panes",
-    "list_panes_with_sessions", "swap_pane_positions", "update_pane", "update_pane_layouts",
-    "update_pane_order",
-]
+_UPDATABLE = {
+    "pane_name",
+    "pane_order",
+    "active_mode",
+    "is_detached",
+    "width_percent",
+    "height_percent",
+    "grid_row",
+    "grid_col",
+}
 
 
-def _get_default_agent_slug() -> str:
-    """Get the default agent tool slug, falling back to 'claude'."""
-    default = agent_tools.get_default()
-    return default["slug"] if default else "claude"
-
-
-def _create_tmux_backed_session(
-    name: str,
-    project_id: str | None,
-    working_dir: str | None,
-    mode: str,
-    pane_id: str,
-) -> dict[str, Any]:
-    """Create a pane session and its tmux backing, rolling back DB on failure."""
-    session_id = create_a_term_session(
-        name=name, project_id=project_id, working_dir=working_dir, mode=mode, pane_id=pane_id,
-    )
-    try:
-        create_tmux_session(session_id, working_dir)
-    except TmuxError as err:
-        logger.error("pane_session_tmux_create_failed", pane_id=pane_id, session_id=session_id, mode=mode, error=str(err))
-        delete_a_term_session(session_id)
-        raise
-    session = get_a_term_session(session_id)
-    if not session:
-        raise ValueError(f"Created session {session_id} was not found")
-    return session
-
-
-def list_panes(include_detached: bool = False) -> list[dict[str, Any]]:
-    """List panes ordered by pane_order."""
-    query = (
-        f"SELECT {PANE_FIELDS} FROM a_term_panes ORDER BY is_detached, pane_order, created_at"
-        if include_detached
-        else f"SELECT {PANE_FIELDS} FROM a_term_panes WHERE is_detached = false ORDER BY pane_order, created_at"
-    )
-    return cast(list[dict[str, Any]], _execute_query(query, (), fetch_mode="all"))
-
-
-def get_pane(pane_id: PaneId) -> dict[str, Any] | None:
-    """Get a pane by ID."""
-    return cast(dict[str, Any] | None, _execute_query(f"SELECT {PANE_FIELDS} FROM a_term_panes WHERE id = %s", (str(pane_id),)))
-
-
-def get_pane_with_sessions(pane_id: PaneId) -> dict[str, Any] | None:
-    """Get a pane with its sessions."""
-    pane = get_pane(pane_id)
-    if not pane:
+def _pane(row: sqlite3.Row | None) -> dict[str, Any] | None:
+    if row is None:
         return None
-    pane["sessions"] = fetch_sessions_for_pane(pane_id)
+    pane = dict(row)
+    pane["is_detached"] = bool(pane["is_detached"])
     return pane
 
 
-def list_panes_with_sessions(include_detached: bool = False) -> list[dict[str, Any]]:
-    """List panes with live sessions."""
-    panes = list_panes(include_detached=include_detached)
-    if not panes:
-        return []
-    sessions_by_pane = list_panes_with_sessions_data([p["id"] for p in panes])
-    for pane in panes:
-        pane["sessions"] = sessions_by_pane.get(pane["id"], [])
-    return panes
+def _link(row: sqlite3.Row) -> dict[str, Any]:
+    return dict(row)
 
 
-def create_pane_with_sessions(
-    pane_type: Literal["project", "adhoc"],
+# ---------------------------------------------------------------------------
+# Panes
+# ---------------------------------------------------------------------------
+def list_panes(include_detached: bool = False) -> list[dict[str, Any]]:
+    where = "" if include_detached else "WHERE is_detached = 0"
+    with connect() as db:
+        rows = db.execute(
+            f"SELECT {_PANE_COLUMNS} FROM panes {where} ORDER BY is_detached, pane_order, created_at"
+        ).fetchall()
+    return [pane for row in rows if (pane := _pane(row)) is not None]
+
+
+def get_pane(pane_id: str) -> dict[str, Any] | None:
+    with connect() as db:
+        return _pane(db.execute(f"SELECT {_PANE_COLUMNS} FROM panes WHERE id = ?", (str(pane_id),)).fetchone())
+
+
+def _visible_linked_count(db: sqlite3.Connection) -> int:
+    row = db.execute(
+        """SELECT COUNT(*) FROM panes p WHERE p.is_detached = 0
+           AND EXISTS (SELECT 1 FROM pane_sessions s WHERE s.pane_id = p.id)"""
+    ).fetchone()
+    return int(row[0]) if row else 0
+
+
+def _next_order(db: sqlite3.Connection, *, detached_too: bool) -> int:
+    where = "" if detached_too else "WHERE is_detached = 0"
+    row = db.execute(f"SELECT COALESCE(MAX(pane_order), -1) + 1 FROM panes {where}").fetchone()
+    return int(row[0]) if row else 0
+
+
+def create_pane(
+    *,
+    pane_type: PaneType,
     pane_name: str,
     project_id: str | None = None,
-    working_dir: str | None = None,
-    pane_order: int | None = None,
-    agent_tool_slug: str | None = None,
+    active_mode: str = "shell",
     is_detached: bool = False,
+    pane_order: int | None = None,
     width_percent: float | None = None,
     height_percent: float | None = None,
     grid_row: int | None = None,
     grid_col: int | None = None,
 ) -> dict[str, Any]:
-    """Create a pane and its tmux-backed sessions with rollback on failure."""
+    """Insert a pane. A visible pane counts against :data:`MAX_PANES`."""
     if pane_type == "project" and not project_id:
         raise ValueError("project_id required for project panes")
     if pane_type == "adhoc" and project_id:
         raise ValueError("project_id must be None for adhoc panes")
-    tool_slug = agent_tool_slug or _get_default_agent_slug()
-    default_mode = tool_slug if pane_type == "project" else "shell"
-    with get_connection() as conn, conn.cursor(row_factory=dict_row) as cur:
-        if is_detached:
-            cur.execute("LOCK TABLE a_term_panes IN SHARE ROW EXCLUSIVE MODE")
-            if pane_order is None:
-                cur.execute(
-                    "SELECT COALESCE(MAX(pane_order), -1) + 1 AS next_order FROM a_term_panes"
-                )
-                row = cur.fetchone()
-                order = row["next_order"] if row else 0
-            else:
-                order = pane_order
-        else:
-            order = _prepare_pane_slot(cur, pane_order)
-        cur.execute(
-            f"""INSERT INTO a_term_panes (
-                    pane_type,
-                    project_id,
-                    pane_order,
-                    pane_name,
-                    active_mode,
-                    is_detached,
-                    width_percent,
-                    height_percent,
-                    grid_row,
-                    grid_col
-                )
-                VALUES (%s, %s, %s, %s, %s, %s, COALESCE(%s, 100.0), COALESCE(%s, 100.0), COALESCE(%s, 0), COALESCE(%s, 0))
-                RETURNING {PANE_FIELDS}""",
+    pane_id = new_id()
+    with transaction() as db:
+        if not is_detached and _visible_linked_count(db) >= MAX_PANES:
+            raise ValueError(f"Maximum {MAX_PANES} panes allowed. Close one to add more.")
+        order = pane_order if pane_order is not None else _next_order(db, detached_too=is_detached)
+        db.execute(
+            """INSERT INTO panes (id, pane_type, project_id, pane_order, pane_name, active_mode,
+                   is_detached, created_at, width_percent, height_percent, grid_row, grid_col)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
+                pane_id,
                 pane_type,
                 project_id,
                 order,
                 pane_name,
-                default_mode,
-                is_detached,
-                width_percent,
-                height_percent,
-                grid_row,
-                grid_col,
+                active_mode,
+                int(is_detached),
+                now_iso(),
+                100.0 if width_percent is None else width_percent,
+                100.0 if height_percent is None else height_percent,
+                0 if grid_row is None else grid_row,
+                0 if grid_col is None else grid_col,
             ),
         )
-        pane_row = cur.fetchone()
-        if not pane_row:
-            raise ValueError("Failed to create pane")
-        pane = _normalize_pane_row(pane_row)
-        conn.commit()
-
-    session_name = f"Project: {project_id}" if project_id else pane_name
-    created_session_ids: list[str] = []
-    sessions: list[dict[str, Any]] = []
-    try:
-        shell_session = _create_tmux_backed_session(
-            session_name, project_id, working_dir, "shell", pane["id"],
-        )
-        created_session_ids.append(shell_session["id"])
-        sessions.append(shell_session)
-        if pane_type == "project":
-            agent_session = _create_tmux_backed_session(
-                session_name, project_id, working_dir, tool_slug, pane["id"],
-            )
-            created_session_ids.append(agent_session["id"])
-            sessions.append(agent_session)
-    except (TmuxError, ValueError):
-        for sid in reversed(created_session_ids):
-            run_tmux_command(["kill-session", "-t", get_tmux_session_name(sid)])
-            delete_a_term_session(sid)
-        delete_pane(pane["id"])
-        raise
-
-    pane["sessions"] = sessions
+    pane = get_pane(pane_id)
+    if pane is None:
+        raise ValueError("Failed to create pane")
     return pane
 
 
-def update_pane(pane_id: PaneId, **fields: Any) -> dict[str, Any] | None:
-    """Update pane metadata."""
-    allowed = {"pane_name", "pane_order", "active_mode", "is_detached", "width_percent", "height_percent", "grid_row", "grid_col"}
-    updates = {k: v for k, v in fields.items() if k in allowed}
-    if not updates:
-        return get_pane(pane_id)
-    set_clauses = [psycopg.sql.SQL("{} = %s").format(psycopg.sql.Identifier(f)) for f in updates]
-    query = psycopg.sql.SQL(
-        f"UPDATE a_term_panes SET {{}} WHERE id = %s RETURNING {PANE_FIELDS}"
-    ).format(psycopg.sql.SQL(", ").join(set_clauses))
-    return _execute_write(query, [*updates.values(), str(pane_id)])
+def update_pane(pane_id: str, **fields: Any) -> dict[str, Any] | None:
+    updates = {key: value for key, value in fields.items() if key in _UPDATABLE}
+    if "is_detached" in updates:
+        updates["is_detached"] = int(bool(updates["is_detached"]))
+    if updates:
+        assignments = ", ".join(f"{key} = ?" for key in updates)
+        with connect() as db:
+            db.execute(f"UPDATE panes SET {assignments} WHERE id = ?", (*updates.values(), str(pane_id)))
+    return get_pane(pane_id)
 
 
-def delete_pane(pane_id: PaneId) -> bool:
-    """Delete a pane and all its sessions (cascading)."""
-    nid = str(pane_id)
-    with get_connection() as conn, conn.cursor() as cur:
-        cur.execute("DELETE FROM a_term_sessions WHERE pane_id = %s", (nid,))
-        cur.execute("DELETE FROM a_term_panes WHERE id = %s RETURNING id", (nid,))
-        result = cur.fetchone()
-        conn.commit()
-    return result is not None
+def delete_pane(pane_id: str) -> bool:
+    """Delete a pane and its session links (never the sessions themselves)."""
+    with connect() as db:
+        cursor = db.execute("DELETE FROM panes WHERE id = ?", (str(pane_id),))
+    return cursor.rowcount > 0
 
 
-def detach_pane(pane_id: PaneId) -> dict[str, Any] | None:
-    """Hide a pane from the active layout while preserving sessions."""
+def detach_pane(pane_id: str) -> dict[str, Any] | None:
     return update_pane(pane_id, is_detached=True)
 
 
 def attach_pane(
-    pane_id: PaneId,
+    pane_id: str,
     pane_order: int | None = None,
     width_percent: float | None = None,
     height_percent: float | None = None,
     grid_row: int | None = None,
     grid_col: int | None = None,
 ) -> dict[str, Any] | None:
-    """Reattach a detached pane to the active layout."""
-    nid = str(pane_id)
-    with get_connection() as conn, conn.cursor(row_factory=dict_row) as cur:
-        order = _prepare_pane_slot(cur, pane_order)
-        cur.execute(
-            f"""UPDATE a_term_panes
-                SET is_detached = false,
-                    pane_order = %s,
-                    width_percent = COALESCE(%s, width_percent),
-                    height_percent = COALESCE(%s, height_percent),
-                    grid_row = COALESCE(%s, grid_row),
-                    grid_col = COALESCE(%s, grid_col)
-                WHERE id = %s
-                RETURNING {PANE_FIELDS}""",
-            (order, width_percent, height_percent, grid_row, grid_col, nid),
+    """Return a detached pane to the visible layout, respecting :data:`MAX_PANES`."""
+    with transaction() as db:
+        if _visible_linked_count(db) >= MAX_PANES:
+            raise ValueError(f"Maximum {MAX_PANES} panes allowed. Close one to add more.")
+        order = pane_order if pane_order is not None else _next_order(db, detached_too=False)
+        db.execute(
+            """UPDATE panes SET is_detached = 0, pane_order = ?,
+                   width_percent = COALESCE(?, width_percent),
+                   height_percent = COALESCE(?, height_percent),
+                   grid_row = COALESCE(?, grid_row),
+                   grid_col = COALESCE(?, grid_col)
+               WHERE id = ?""",
+            (order, width_percent, height_percent, grid_row, grid_col, str(pane_id)),
         )
-        row = cur.fetchone()
-        conn.commit()
-    return _normalize_pane_row(row) if row else None
+    return get_pane(pane_id)
+
+
+def update_pane_order(pane_orders: list[tuple[str, int]]) -> None:
+    if not pane_orders:
+        return
+    with transaction() as db:
+        db.executemany("UPDATE panes SET pane_order = ? WHERE id = ?", [(order, str(pid)) for pid, order in pane_orders])
+
+
+def swap_pane_positions(pane_id_a: str, pane_id_b: str) -> bool:
+    a, b = str(pane_id_a), str(pane_id_b)
+    if a == b:
+        return True
+    with transaction() as db:
+        rows = db.execute("SELECT id, pane_order FROM panes WHERE id IN (?, ?)", (a, b)).fetchall()
+        if len(rows) != 2:
+            return False
+        orders = {row["id"]: row["pane_order"] for row in rows}
+        db.execute("UPDATE panes SET pane_order = ? WHERE id = ?", (orders[b], a))
+        db.execute("UPDATE panes SET pane_order = ? WHERE id = ?", (orders[a], b))
+    return True
+
+
+def count_panes(include_detached: bool = False) -> int:
+    detached = "" if include_detached else "AND p.is_detached = 0"
+    with connect() as db:
+        row = db.execute(
+            f"""SELECT COUNT(*) FROM panes p
+                WHERE EXISTS (SELECT 1 FROM pane_sessions s WHERE s.pane_id = p.id) {detached}"""
+        ).fetchone()
+    return int(row[0]) if row else 0
+
+
+def update_pane_layouts(layouts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    updated: list[dict[str, Any]] = []
+    with transaction() as db:
+        for layout in layouts:
+            pane_id = layout.get("pane_id")
+            if not pane_id:
+                continue
+            db.execute(
+                """UPDATE panes SET width_percent = COALESCE(?, width_percent),
+                       height_percent = COALESCE(?, height_percent),
+                       grid_row = COALESCE(?, grid_row),
+                       grid_col = COALESCE(?, grid_col)
+                   WHERE id = ?""",
+                (
+                    layout.get("width_percent"),
+                    layout.get("height_percent"),
+                    layout.get("grid_row"),
+                    layout.get("grid_col"),
+                    str(pane_id),
+                ),
+            )
+            row = db.execute(f"SELECT {_PANE_COLUMNS} FROM panes WHERE id = ?", (str(pane_id),)).fetchone()
+            pane = _pane(row)
+            if pane:
+                updated.append(pane)
+    return updated
+
+
+def delete_empty_panes(older_than_days: int) -> int:
+    """Delete panes that show no session and are older than the cutoff."""
+    cutoff = (datetime.now(UTC) - timedelta(days=older_than_days)).isoformat()
+    with connect() as db:
+        cursor = db.execute(
+            """DELETE FROM panes WHERE created_at < ?
+               AND NOT EXISTS (SELECT 1 FROM pane_sessions s WHERE s.pane_id = panes.id)""",
+            (cutoff,),
+        )
+    return cursor.rowcount
+
+
+# ---------------------------------------------------------------------------
+# Session links
+# ---------------------------------------------------------------------------
+def link_session(
+    session_id: str,
+    pane_id: str,
+    mode: str,
+    *,
+    kind: LinkKind = "tether",
+    display_order: int = 0,
+) -> dict[str, Any]:
+    """Show ``session_id`` in ``pane_id``. A session belongs to at most one pane."""
+    now = now_iso()
+    with connect() as db:
+        db.execute(
+            """INSERT INTO pane_sessions (session_id, pane_id, mode, kind, display_order, created_at, last_accessed_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT (session_id) DO UPDATE SET pane_id = excluded.pane_id, mode = excluded.mode""",
+            (str(session_id), str(pane_id), mode, kind, display_order, now, now),
+        )
+    link = get_link(session_id)
+    if link is None:
+        raise ValueError("Failed to link session")
+    return link
+
+
+def unlink_session(session_id: str) -> bool:
+    with connect() as db:
+        cursor = db.execute("DELETE FROM pane_sessions WHERE session_id = ?", (str(session_id),))
+    return cursor.rowcount > 0
+
+
+def get_link(session_id: str) -> dict[str, Any] | None:
+    with connect() as db:
+        row = db.execute("SELECT * FROM pane_sessions WHERE session_id = ?", (str(session_id),)).fetchone()
+    return _link(row) if row else None
+
+
+def list_links() -> list[dict[str, Any]]:
+    with connect() as db:
+        rows = db.execute("SELECT * FROM pane_sessions ORDER BY pane_id, mode").fetchall()
+    return [_link(row) for row in rows]
+
+
+def links_for_pane(pane_id: str) -> list[dict[str, Any]]:
+    with connect() as db:
+        rows = db.execute(
+            "SELECT * FROM pane_sessions WHERE pane_id = ? ORDER BY mode", (str(pane_id),)
+        ).fetchall()
+    return [_link(row) for row in rows]
+
+
+def update_link(session_id: str, **fields: Any) -> None:
+    allowed = {"mode", "display_order"}
+    updates = {key: value for key, value in fields.items() if key in allowed}
+    if not updates:
+        return
+    assignments = ", ".join(f"{key} = ?" for key in updates)
+    with connect() as db:
+        db.execute(
+            f"UPDATE pane_sessions SET {assignments} WHERE session_id = ?",
+            (*updates.values(), str(session_id)),
+        )
+
+
+def touch_link(session_id: str) -> None:
+    with connect() as db:
+        db.execute(
+            "UPDATE pane_sessions SET last_accessed_at = ? WHERE session_id = ?",
+            (now_iso(), str(session_id)),
+        )

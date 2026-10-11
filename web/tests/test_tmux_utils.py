@@ -11,12 +11,12 @@ from a_term.utils.tmux import (
     TMUX_SESSION_PREFIX,
     apply_external_attach_options,
     build_tmux_command,
-    create_tmux_session,
     get_cursor_position,
     get_external_agent_tmux_session,
     get_scrollback_with_cursor,
     get_tmux_session_name,
     is_managed_tmux_session_name,
+    kill_legacy_session,
     list_external_agent_tmux_sessions,
     list_tmux_sessions,
     reset_tmux_window_size_policy,
@@ -25,11 +25,6 @@ from a_term.utils.tmux import (
     validate_socket_name,
 )
 from a_term.utils.tmux import external as external_tmux
-from a_term.utils.tmux.sessions import (
-    _build_tmux_scope_env,
-    _recreate_initial_window_with_session_history_limit,
-    _run_tmux_new_session,
-)
 
 
 @pytest.fixture(autouse=True)
@@ -37,6 +32,9 @@ def clear_external_attach_state():
     tmux._EXTERNAL_ATTACH_STATES.clear()
     yield
     tmux._EXTERNAL_ATTACH_STATES.clear()
+
+
+SOCKET = "/home/testuser/.local/state/tether/tmux/abc12345/server.sock"
 
 
 class TestValidateSessionName:
@@ -53,9 +51,14 @@ class TestValidateSessionName:
 
 
 class TestValidateSocketName:
-    def test_accepts_named_and_safe_absolute_sockets(self) -> None:
-        assert validate_socket_name("aico") is True
-        assert validate_socket_name("/home/testuser/.local/state/aico/tmux/abc12345/server.sock")
+    def test_accepts_default_server_and_safe_absolute_sockets(self) -> None:
+        assert validate_socket_name(None) is True
+        assert validate_socket_name("/home/testuser/.local/state/tether/tmux/abc12345/server.sock")
+
+    def test_rejects_named_sockets(self) -> None:
+        # ``tmux -L name`` selectors belonged to the Aico federation and are gone.
+        assert validate_socket_name("aico") is False
+        assert validate_socket_name("default") is False
 
     @pytest.mark.parametrize(
         "socket_name",
@@ -72,16 +75,15 @@ class TestValidateSocketName:
     def test_rejects_unsafe_socket_selectors(self, socket_name: str) -> None:
         assert validate_socket_name(socket_name) is False
 
-    def test_build_tmux_command_preserves_named_socket_compatibility(self) -> None:
-        assert build_tmux_command(["list-sessions"], "aico") == [
-            "tmux",
-            "-L",
-            "aico",
-            "list-sessions",
-        ]
+    def test_build_tmux_command_default_server_has_no_socket_flag(self) -> None:
+        assert build_tmux_command(["list-sessions"]) == ["tmux", "list-sessions"]
+
+    def test_build_tmux_command_rejects_named_socket(self) -> None:
+        with pytest.raises(tmux.TmuxError):
+            build_tmux_command(["list-sessions"], "aico")
 
     def test_build_tmux_command_uses_absolute_socket_path(self) -> None:
-        socket_path = "/home/testuser/.local/state/aico/tmux/abc12345/server.sock"
+        socket_path = "/home/testuser/.local/state/tether/tmux/abc12345/server.sock"
         assert build_tmux_command(["list-sessions"], socket_path) == [
             "tmux",
             "-S",
@@ -138,7 +140,6 @@ def test_list_external_agent_tmux_sessions_discovers_non_a_term_agent_sessions()
                 ),
             ),
         ),
-        patch("a_term.utils.tmux.external._catalogued_aico_tmux_sources", return_value=()),
         patch("a_term.utils.tmux.subprocess.run") as mock_subprocess,
     ):
         mock_subprocess.side_effect = [
@@ -170,45 +171,25 @@ def test_list_external_agent_tmux_sessions_discovers_non_a_term_agent_sessions()
     assert by_id["agy-antigravity"]["mode"] == "agy"
 
 
-def test_list_external_agent_tmux_sessions_discovers_aico_socket_sessions() -> None:
+def test_external_discovery_reads_only_the_default_server() -> None:
+    seen_sockets: list[str | None] = []
+
     def fake_run_tmux_command(args, check=False, socket_name=None):
-        if args[:2] != ["list-panes", "-a"]:
-            return False, "unexpected"
-        if socket_name == "aico":
-            return (
-                True,
-                "\n".join(
-                    [
-                        "aico-7\t%1\t/home/testuser/aico\tbash\t0",
-                        "aico-8\t%2\t/home/testuser/agent-hub\tcodex\t0",
-                        "other\t%3\t/home/testuser/other\tcodex\t0",
-                    ]
-                ),
-            )
+        seen_sockets.append(socket_name)
         return True, "codex-default\t%4\t/home/testuser/default\tcodex\t0"
 
     with (
         patch("a_term.utils.tmux.run_tmux_command", side_effect=fake_run_tmux_command),
-        patch("a_term.utils.tmux.external._catalogued_aico_tmux_sources", return_value=()),
-        patch("a_term.utils.tmux.subprocess.run") as mock_subprocess,
+        patch("a_term.utils.tmux.subprocess.run", return_value=MagicMock(stdout="/home/testuser/default\n")),
     ):
-        mock_subprocess.side_effect = [
-            MagicMock(stdout="/home/testuser/default\n"),
-            MagicMock(stdout="/home/testuser/aico\n"),
-            MagicMock(stdout="/home/testuser/agent-hub\n"),
-        ]
         sessions = list_external_agent_tmux_sessions()
 
-    assert [session["id"] for session in sessions] == [
-        "tmux:aico:aico-7",
-        "tmux:aico:aico-8",
-        "codex-default",
-    ]
-    assert sessions[0]["mode"] == "shell"
-    assert sessions[0]["tmux_socket"] == "aico"
-    assert sessions[0]["tmux_source"] == "aico"
-    assert sessions[1]["mode"] == "codex"
-    assert sessions[2]["tmux_socket"] is None
+    assert seen_sockets == [None]
+    assert [session["id"] for session in sessions] == ["codex-default"]
+    assert sessions[0]["tmux_socket"] is None
+    assert sessions[0]["tmux_source"] == "default"
+    assert not hasattr(external_tmux, "_catalogued_aico_tmux_sources")
+    assert [source.id for source in external_tmux._external_tmux_sources()] == ["default"]
 
 
 def test_external_mode_inference_requires_token_boundaries() -> None:
@@ -217,150 +198,23 @@ def test_external_mode_inference_requires_token_boundaries() -> None:
     assert tmux._infer_external_mode("api-service", "python") == ("shell", "not_started")
 
 
-def test_create_tmux_session_uses_systemd_scope_when_available() -> None:
-    scope_id = "123e4567-e89b-12d3-a456-426614174000"
-    with (
-        patch("a_term.utils.tmux.tmux_session_exists", return_value=False),
-        patch("a_term.utils.tmux._apply_session_options") as mock_apply,
-        patch(
-            "a_term.utils.tmux.sessions._recreate_initial_window_with_session_history_limit"
-        ) as mock_recreate,
-        patch("a_term.utils.tmux._can_spawn_tmux_scope", return_value=True),
-        patch(
-            "a_term.utils.tmux.subprocess.run",
-            return_value=MagicMock(returncode=0, stdout="", stderr=""),
-        ) as mock_run,
-        patch("a_term.utils.tmux._uuid_mod.uuid4", return_value=scope_id),
-    ):
-        session_name = create_tmux_session("abc123", working_dir="/tmp/project")
+class TestKillLegacySession:
+    def test_uses_exact_session_target(self) -> None:
+        session_id = "123e4567-e89b-12d3-a456-426614174000"
+        with patch("a_term.utils.tmux.run_tmux_command", return_value=(True, "")) as mock_run:
+            assert kill_legacy_session(session_id) is True
+        mock_run.assert_called_once_with(["kill-session", "-t", f"=summitflow-{session_id}"])
 
-    assert session_name == "summitflow-abc123"
-    command = mock_run.call_args.args[0]
-    assert command[:4] == ["systemd-run", "--user", "--scope", "--quiet"]
-    assert f"--unit=tmux-spawn-{scope_id}" in command
-    assert command[-11:] == [
-        "tmux",
-        "new-session",
-        "-d",
-        "-s",
-        "summitflow-abc123",
-        "-x",
-        str(tmux.TMUX_DEFAULT_COLS),
-        "-y",
-        str(tmux.TMUX_DEFAULT_ROWS),
-        "-c",
-        "/tmp/project",
-    ]
-    mock_apply.assert_called_once_with("summitflow-abc123", True)
-    mock_recreate.assert_called_once_with("summitflow-abc123", "/tmp/project")
+    def test_already_gone_is_not_an_error(self) -> None:
+        with patch("a_term.utils.tmux.run_tmux_command", return_value=(False, "can't find session: x")):
+            assert kill_legacy_session("123e4567-e89b-12d3-a456-426614174000") is False
 
-
-def test_create_tmux_session_falls_back_without_user_scope_support() -> None:
-    with (
-        patch("a_term.utils.tmux.tmux_session_exists", return_value=False),
-        patch("a_term.utils.tmux._apply_session_options") as mock_apply,
-        patch(
-            "a_term.utils.tmux.sessions._recreate_initial_window_with_session_history_limit"
-        ) as mock_recreate,
-        patch("a_term.utils.tmux._can_spawn_tmux_scope", return_value=False),
-        patch("a_term.utils.tmux.run_tmux_command", return_value=(True, "")) as mock_run,
-    ):
-        session_name = create_tmux_session("abc123", working_dir="/tmp/project")
-
-    assert session_name == "summitflow-abc123"
-    mock_run.assert_called_once_with(
-        [
-            "new-session",
-            "-d",
-            "-s",
-            "summitflow-abc123",
-            "-x",
-            str(tmux.TMUX_DEFAULT_COLS),
-            "-y",
-            str(tmux.TMUX_DEFAULT_ROWS),
-            "-c",
-            "/tmp/project",
-        ]
-    )
-    mock_apply.assert_called_once_with("summitflow-abc123", True)
-    mock_recreate.assert_called_once_with("summitflow-abc123", "/tmp/project")
-
-
-def test_build_tmux_scope_env_drops_blank_companion_vars(monkeypatch) -> None:
-    monkeypatch.setenv("AGENT_HUB_URL", "   ")
-    monkeypatch.setenv("NEXT_PUBLIC_AGENT_HUB_URL", "")
-    monkeypatch.setenv("SUMMITFLOW_API_BASE", " http://127.0.0.1:8001/api ")
-    monkeypatch.setenv("UNCHANGED_ENV", "keep-me")
-
-    env = _build_tmux_scope_env()
-
-    assert "AGENT_HUB_URL" not in env
-    assert "NEXT_PUBLIC_AGENT_HUB_URL" not in env
-    assert env["SUMMITFLOW_API_BASE"] == "http://127.0.0.1:8001/api"
-    assert env["UNCHANGED_ENV"] == "keep-me"
-
-
-def test_run_tmux_new_session_uses_sanitized_scope_env(monkeypatch) -> None:
-    monkeypatch.setenv("AGENT_HUB_URL", "")
-    monkeypatch.setenv("NEXT_PUBLIC_AGENT_HUB_URL", "")
-    monkeypatch.setenv("SUMMITFLOW_API_BASE", " http://127.0.0.1:8001/api ")
-    monkeypatch.setenv("UNCHANGED_ENV", "keep-me")
-
-    with (
-        patch("a_term.utils.tmux._can_spawn_tmux_scope", return_value=True),
-        patch(
-            "a_term.utils.tmux.subprocess.run",
-            return_value=MagicMock(returncode=0, stdout="", stderr=""),
-        ) as mock_run,
-        patch("a_term.utils.tmux._uuid_mod.uuid4", return_value="123e4567-e89b-12d3-a456-426614174000"),
-    ):
-        success, output = _run_tmux_new_session(["new-session", "-d"], "summitflow-abc123")
-
-    assert success is True
-    assert output == ""
-    env = mock_run.call_args.kwargs["env"]
-    assert "AGENT_HUB_URL" not in env
-    assert "NEXT_PUBLIC_AGENT_HUB_URL" not in env
-    assert env["SUMMITFLOW_API_BASE"] == "http://127.0.0.1:8001/api"
-    assert env["UNCHANGED_ENV"] == "keep-me"
-
-
-def test_recreate_initial_window_with_session_history_limit_replaces_bootstrap_window() -> None:
-    with patch(
-        "a_term.utils.tmux.run_tmux_command",
-        side_effect=[
-            (True, "0"),
-            (True, "1"),
-            (True, ""),
-            (True, ""),
-        ],
-    ) as mock_run:
-        _recreate_initial_window_with_session_history_limit(
-            "summitflow-abc123",
-            "/tmp/project",
-        )
-
-    assert mock_run.call_args_list == [
-        call(
-            ["display-message", "-p", "-t", "summitflow-abc123", "#{window_index}"],
-            check=True,
-        ),
-        call(
-            [
-                "new-window",
-                "-dP",
-                "-F",
-                "#{window_index}",
-                "-t",
-                "summitflow-abc123",
-                "-c",
-                "/tmp/project",
-            ],
-            check=True,
-        ),
-        call(["select-window", "-t", "summitflow-abc123:1"], check=True),
-        call(["kill-window", "-t", "summitflow-abc123:0"], check=True),
-    ]
+    def test_other_failures_raise(self) -> None:
+        with (
+            patch("a_term.utils.tmux.run_tmux_command", return_value=(False, "permission denied")),
+            pytest.raises(tmux.TmuxError),
+        ):
+            kill_legacy_session("123e4567-e89b-12d3-a456-426614174000")
 
 
 def test_get_external_agent_tmux_session_matches_by_name() -> None:
@@ -485,7 +339,7 @@ def test_apply_external_attach_options_rolls_back_partial_changes() -> None:
     ]
 
 
-def test_apply_external_attach_options_targets_named_socket() -> None:
+def test_apply_external_attach_options_targets_the_given_socket() -> None:
     with patch(
         "a_term.utils.tmux.run_tmux_command",
         side_effect=[
@@ -495,28 +349,28 @@ def test_apply_external_attach_options_targets_named_socket() -> None:
             (True, ""),
         ],
     ) as mock_run:
-        assert apply_external_attach_options("aico-7", "aico") is True
-        assert restore_external_attach_options("aico-7", "aico") is True
+        assert apply_external_attach_options("tether-7", SOCKET) is True
+        assert restore_external_attach_options("tether-7", SOCKET) is True
 
     assert mock_run.call_args_list == [
-        call(["show-options", "-qv", "-t", "aico-7", "status"], socket_name="aico"),
-        call(["show-options", "-qv", "-t", "aico-7", "mouse"], socket_name="aico"),
-        call(["set-option", "-t", "aico-7", "status", "off"], socket_name="aico"),
-        call(["set-option", "-t", "aico-7", "status", "on"], socket_name="aico"),
+        call(["show-options", "-qv", "-t", "tether-7", "status"], socket_name=SOCKET),
+        call(["show-options", "-qv", "-t", "tether-7", "mouse"], socket_name=SOCKET),
+        call(["set-option", "-t", "tether-7", "status", "off"], socket_name=SOCKET),
+        call(["set-option", "-t", "tether-7", "status", "on"], socket_name=SOCKET),
     ]
 
 
 def test_infer_external_mode_finds_agent_below_a_shell_pane() -> None:
-    """Aico runs its agent inside the pane's shell process group.
+    """An agent started from a shell shares its process group.
 
     tmux then reports the shell as ``pane_current_command``, so the pane has to
-    be classified from its process tree or every Aico agent looks like a shell.
+    be classified from its process tree or the agent looks like a shell.
     """
     with patch(
         "a_term.utils.tmux.external._pane_descendant_labels",
         return_value=["claude-real claude-real"],
     ):
-        assert external_tmux._infer_external_mode("aico-e03c60b0", "bash", "4242") == (
+        assert external_tmux._infer_external_mode("agent-e03c60b0", "bash", "4242") == (
             "claude",
             "running",
         )
@@ -527,7 +381,7 @@ def test_infer_external_mode_keeps_plain_shell_panes_as_shells() -> None:
         "a_term.utils.tmux.external._pane_descendant_labels",
         return_value=["git git", "less less"],
     ):
-        assert external_tmux._infer_external_mode("aico-bfa0cfb0", "bash", "4242") == (
+        assert external_tmux._infer_external_mode("scratch-bfa0cfb0", "bash", "4242") == (
             "shell",
             "not_started",
         )
