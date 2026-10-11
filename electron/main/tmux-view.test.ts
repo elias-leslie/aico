@@ -1,11 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import {
-  coalesceAsync,
-  coalesceTrailingAsync,
-  paneModeArgs,
-  parsePaneMode,
-  refreshAttachedClients,
-} from './tmux-view'
+import { coalesceAsync, coalesceTrailingAsync, refreshAttachedClients } from './tmux-view'
 
 const attached = { socket: '/s/server.sock', target: '$3' }
 
@@ -39,29 +33,7 @@ describe('coalescing', () => {
   })
 })
 
-describe('read-only view queries', () => {
-  it('asks the attached target for its pane mode', () => {
-    expect(paneModeArgs(attached)).toEqual([
-      '-S',
-      '/s/server.sock',
-      'display-message',
-      '-p',
-      '-t',
-      '$3',
-      '#{?alternate_on,1,0} #{?mouse_any_flag,1,0} #{history_size}',
-    ])
-    expect(parsePaneMode('1 0 4200\n')).toEqual({
-      alternateScreen: true,
-      mouseReporting: false,
-      historySize: 4200,
-    })
-    expect(parsePaneMode('')).toEqual({
-      alternateScreen: false,
-      mouseReporting: false,
-      historySize: 0,
-    })
-  })
-
+describe('client repaint', () => {
   it('repaints only this session’s clients and stops once stale', async () => {
     const calls: string[][] = []
     let current = true

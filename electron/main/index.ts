@@ -20,7 +20,12 @@ import { cursorNearTitlebar, nextArcade, parseArcadeKeys, pickArcade } from './a
 import { contentSecurityPolicy, voiceConnectSource } from './csp'
 import { parseBoundsRequest, parsePins } from './ipc-validation'
 import { allowTrustedAudioMedia } from './media-permission'
-import { ensurePersonalWorkspaceRoot, PERSONAL_WORKSPACE_ID, ProjectCatalog } from './project'
+import {
+  ensurePersonalWorkspaceRoot,
+  PERSONAL_WORKSPACE_ID,
+  ProjectCatalog,
+  personalWorkspaceRoot,
+} from './project'
 import { parseSse, type SelectionRecord } from './selection'
 import { deliverSelectionToSession } from './selection-delivery'
 import { createSessionCatalog, type SessionCatalog, sessionLabel } from './session-catalog'
@@ -30,6 +35,7 @@ import {
   attachEnvironment,
   attachSocketTarget,
   compatibleVersion,
+  eventSession,
   followEvents,
   type GuiCommand,
   type GuiVerdict,
@@ -43,13 +49,7 @@ import {
   TetherUnavailable,
   tetherSocketPath,
 } from './tether-client'
-import {
-  coalesceAsync,
-  coalesceTrailingAsync,
-  paneModeArgs,
-  parsePaneMode,
-  refreshAttachedClients,
-} from './tmux-view'
+import { coalesceAsync, coalesceTrailingAsync, refreshAttachedClients } from './tmux-view'
 import { toolMark } from './tool-marks'
 import { createTray, refreshTray, setWidgetActivity, type TrayWidget } from './tray'
 import {
@@ -313,9 +313,24 @@ function onTetherEvent(event: TetherEvent): void {
       requestSessionRefresh()
       break
     case 'session.created':
-    case 'session.updated':
+    case 'session.updated': {
+      // Tether sends the descriptor with the event; an older Tether does not,
+      // so fall back to re-listing.
+      const snapshot = eventSession(event)
+      if (!snapshot) {
+        requestSessionRefresh()
+        break
+      }
+      catalog.upsert(snapshot)
+      pushTitles()
+      syncTray()
+      break
+    }
     case 'root.updated':
       requestSessionRefresh()
+      break
+    case 'legacy.changed':
+      if (Array.isArray(event.data.names)) closeEndedLegacyWindows(event.data.names)
       break
     case 'tools.changed':
       void refreshTools().catch(() => {})
@@ -621,6 +636,17 @@ function windowForLegacy(name: string): BrowserWindow | undefined {
   return undefined
 }
 
+/** Tether announced the legacy list; close windows whose session is gone,
+ * as an ended Tether session closes its window. */
+function closeEndedLegacyWindows(names: unknown[]): void {
+  const live = new Set(names.filter((name): name is string => typeof name === 'string'))
+  for (const [winId, name] of [...legacyOf]) {
+    if (live.has(name)) continue
+    const win = BrowserWindow.fromId(winId)
+    if (win && !win.isDestroyed()) win.destroy()
+  }
+}
+
 function openLegacySession(name: string): void {
   const existing = windowForLegacy(name)
   if (existing) {
@@ -773,6 +799,8 @@ function createWidgetWindow(
     pendingCreates.set(winId, pending)
   }
 
+  win.webContents.on('did-finish-load', () => refreshContextBadge(win))
+
   if (process.env.ELECTRON_RENDERER_URL) {
     win.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
@@ -824,6 +852,7 @@ function createWidgetWindow(
     arcadeOf.delete(winId)
     arcadeShown.delete(winId)
     arcadeNear.delete(winId)
+    contextBadges.delete(winId)
     syncCursorPump()
     // On quit, leave `open` as-is so live views restore next launch; on an
     // explicit close, mark it closed (it moves to the tray's reopen list).
@@ -952,15 +981,23 @@ function loadTui(id: string, slug: string): void {
 
 function switchProject(id: string, projectId: string): void {
   if (projectId === PERSONAL_WORKSPACE_ID) {
-    writeNotice(
-      windowForWidget(id),
-      'The Personal Workspace opens in new sessions only. Start a new session there instead.',
-      33,
+    // A directory, not a project: Tether switches to it by root.
+    const root = ensurePersonalWorkspaceRoot()
+    if (!root) {
+      writeNotice(
+        windowForWidget(id),
+        `Could not switch the workspace: ${personalWorkspaceRoot()} could not be created.`,
+        33,
+      )
+      return
+    }
+    replacePane(id, 'Could not switch the workspace', (generation) =>
+      tether.switchProject(id, generation, { projectRoot: root }),
     )
     return
   }
   replacePane(id, 'Could not switch the workspace', (generation) =>
-    tether.switchProject(id, generation, projectId),
+    tether.switchProject(id, generation, { projectId }),
   )
 }
 
@@ -1006,6 +1043,56 @@ function syncTray(): void {
 // Push titlebar info to every open window: the session's name (else its
 // workspace, else Tether's label), plus its tool's mark and accent. Changes
 // only on Tether events and Aico actions, so this is event-driven, not polled.
+/** What each window's context badge last showed (`tool|state|detail`). */
+const contextBadges = new Map<number, string>()
+
+/** Show Tether's context-hook check as the titlebar badge, once per change. */
+function pushContextBadge(win: BrowserWindow, descriptor: SessionDescriptor): void {
+  const hook = descriptor.contextHook
+  if (!hook) return
+  const shown = contextBadges.get(win.id)
+  // Not checked yet: keep a badge for the same tool, hide one for another tool.
+  if (hook.state === 'unknown') {
+    if (shown === undefined || shown.startsWith(`${hook.tool}|`)) return
+    contextBadges.set(win.id, `${hook.tool}|unknown|`)
+    win.webContents.send('context:mandate', {
+      slug: hook.tool,
+      state: hook.state,
+      detail: hook.detail,
+      applicable: false,
+    })
+    return
+  }
+  const key = `${hook.tool}|${hook.state}|${hook.detail}`
+  if (shown === key) return
+  contextBadges.set(win.id, key)
+  win.webContents.send('context:mandate', {
+    slug: hook.tool,
+    state: hook.state,
+    detail: hook.detail,
+    applicable: hook.applicable,
+  })
+}
+
+/** On window load, show the known badge and ask Tether to check again, as
+ * Aico did before Tether owned launches. */
+function refreshContextBadge(win: BrowserWindow): void {
+  contextBadges.delete(win.id)
+  const id = widgetOf.get(win.id)
+  if (!id) return
+  const known = catalog.get(id)
+  if (known) pushContextBadge(win, known)
+  tether
+    .contextCheck(id)
+    .then((hook) => {
+      const latest = catalog.get(id)
+      if (!hook || !latest || win.isDestroyed()) return
+      catalog.upsert({ ...latest, contextHook: hook })
+      pushContextBadge(win, catalog.get(id) ?? latest)
+    })
+    .catch(() => {})
+}
+
 function pushTitles(): void {
   for (const win of BrowserWindow.getAllWindows()) {
     if (win.isDestroyed()) continue
@@ -1028,6 +1115,7 @@ function pushTitles(): void {
     if (!descriptor) continue
     const tool = tools.find((candidate) => candidate.slug === descriptor.tool)
     const mark = toolMark(descriptor.tool, tool?.color)
+    pushContextBadge(win, descriptor)
     win.webContents.send('win:title', {
       label: sessionLabel(descriptor, getView(descriptor.id), projects),
       name: descriptor.name, // prefills the rename input
@@ -1428,16 +1516,26 @@ const startup = app.whenReady().then(async () => {
       })
   })
 
-  // Who owns the pane's scrollback, asked of the exact tmux target this window
-  // attached to (read-only; Tether has no pane-mode route yet).
+  // Who owns the pane's scrollback, asked of Tether for the session this
+  // window is attached to.
   ipcMain.handle('tmux:pane-mode', async (event) => {
     const none = { alternateScreen: false, mouseReporting: false, historySize: 0 }
     const win = BrowserWindow.fromWebContents(event.sender)
-    const target = win ? attachTargets.get(win.id) : undefined
-    const attached = target ? attachSocketTarget(target.argv) : null
-    if (!target || !attached) return none
+    if (!win || !attachTargets.has(win.id)) return none
+    const legacyName = legacyOf.get(win.id)
+    const widgetId = widgetOf.get(win.id)
     try {
-      return parsePaneMode(await runTmux(target, paneModeArgs(attached), 1024))
+      const mode = legacyName
+        ? await tether.legacyPaneMode(legacyName)
+        : widgetId
+          ? await tether.paneMode(widgetId)
+          : null
+      if (!mode) return none
+      return {
+        alternateScreen: mode.alternateScreen,
+        mouseReporting: mode.mouseReporting,
+        historySize: mode.historySize,
+      }
     } catch {
       return none
     }

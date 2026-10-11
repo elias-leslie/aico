@@ -242,7 +242,7 @@ Python sidecar
 
 Aico degrades when optional tools are missing: unavailable agent CLIs simply fail in their pane, missing `st` capture tooling leaves core widgets working, and missing voice websocket disables dictation only. When Tether is unreachable, open windows keep their terminals and the tray says session control is unavailable; Aico reconnects on its own.
 
-The `st aico` extension's client (`scripts/aico-root-watch.py`) stays in this repo and talks to Tether's legacy sockets; see [root control](root-control.md). For the process-containment design and recovery, see Tether's `docs/LIFECYCLE_HARNESS.md` and [the July 2026 incident report](INCIDENT-2026-07-PROCESS-ESCAPES.md). The cutover from the old in-process owner is in [cutover-aico.md](cutover-aico.md); known Tether API gaps are in [tether-api-gaps.md](tether-api-gaps.md).
+The `st aico` extension's client lives in Tether; `scripts/aico-root-watch.py` here is the entry SummitFlow runs and execs Tether's installed copy. See [root control](root-control.md). For the process-containment design and recovery, see Tether's `docs/LIFECYCLE_HARNESS.md` and [the July 2026 incident report](INCIDENT-2026-07-PROCESS-ESCAPES.md). The cutover from the old in-process owner is in [cutover-aico.md](cutover-aico.md); known Tether API gaps are in [tether-api-gaps.md](tether-api-gaps.md).
 
 ## Current limitations
 

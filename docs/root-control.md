@@ -9,7 +9,13 @@ directory is mode 0700 and the sockets mode 0600. Other Tether instances (for
 example `tether@dev`) do not serve the legacy sockets. Tether's own API docs
 (`docs/api-v1.md`, `docs/compat-contract.md` in the Tether repo) are the
 reference for the server side; this page documents the contract as the `st aico`
-client (`scripts/aico-root-watch.py`, kept in this repo) relies on it.
+client relies on it. That client and its tests live in Tether
+(`scripts/aico-root-watch.py` there, installed to
+`~/.local/lib/tether/scripts/`). This repo's `scripts/aico-root-watch.py` is the
+entry SummitFlow runs; it hands over to Tether's installed copy
+(`TETHER_ROOT_WATCH` overrides the path). `st aico roots` lists with
+`GET /v1/roots?ended=0`, so retained tombstones no longer push the list past the
+client's root limit.
 
 Show, position and title reach the Aico window through Tether's GUI channel:
 Tether validates the generation and workload, then sends the command to the
@@ -52,9 +58,8 @@ nonempty, at most 160 UTF-8 bytes, and exclude control characters, lone
 surrogates and Unicode line/paragraph separators. Bounds contain exactly integer
 `x`, `y`, `width`, and `height`, each with absolute value at most 100000; minimum
 size is 360 by 240. Invalid bodies return 400 `invalid_body`.
-[`contracts/view-mutation-vectors.json`](../contracts/view-mutation-vectors.json)
-pins these rules; Tether's suite and the Python client's pytest suite both run
-every vector.
+Tether's `contracts/view-mutation-vectors.json` pins these rules; Tether's suite
+and the Python client's pytest suite both run every vector.
 
 Root and widget routes use one canonical mutation handler in Tether, serialized
 on the widget identity, so a root request ID and its widget ID cannot interleave

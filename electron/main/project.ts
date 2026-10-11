@@ -38,7 +38,7 @@ export interface ProjectInfo {
   id: string
   name: string
   root: string
-  /** Kept for the renderer contract; Tether has no global active project. */
+  /** SummitFlow's active project (`st projects active`), as Tether reports it. */
   current: boolean
 }
 
@@ -51,7 +51,9 @@ function personalWorkspaceProject(): ProjectInfo {
   }
 }
 
-export type ProjectLoader = () => Promise<{ id: string; name: string; root: string }[]>
+export type ProjectLoader = () => Promise<
+  { id: string; name: string; root: string; current?: boolean }[]
+>
 
 const PROJECT_CACHE_TTL_MS = 15_000
 
@@ -77,7 +79,12 @@ export class ProjectCatalog {
           personalWorkspaceProject(),
           ...projects
             .filter((p) => p.id !== PERSONAL_WORKSPACE_ID)
-            .map((p) => ({ id: p.id, name: p.name || p.id, root: p.root, current: false })),
+            .map((p) => ({
+              id: p.id,
+              name: p.name || p.id,
+              root: p.root,
+              current: p.current === true,
+            })),
         ]
       } catch {
         // keep the stale list: an unreachable Tether must not blank the picker

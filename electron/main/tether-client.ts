@@ -34,6 +34,26 @@ export function tetherSocketPath(
 export type SessionStatus = 'running' | 'pending' | 'uncertain' | 'legacy'
 export type SessionOrigin = 'aico' | 'a-term' | 'cli' | 'root'
 
+/** Tether's check of a session's Agent Hub context hook (docs/api-v1.md). */
+export interface ContextHook {
+  /** `available`, `missing`, `unsupported`, `not_applicable` or `unknown`. */
+  state: string
+  detail: string
+  tool: string
+  /** False for a tool with no context mechanism (a bare shell). */
+  applicable: boolean
+  checkedAt: number | null
+}
+
+/** Who owns the pane's scroll: the program, tmux's copy mode, or history. */
+export interface PaneMode {
+  alternateScreen: boolean
+  mouseReporting: boolean
+  historySize: number
+  inMode: boolean
+  mode: string | null
+}
+
 export interface SessionDescriptor {
   id: string
   ownershipId: string
@@ -56,6 +76,8 @@ export interface SessionDescriptor {
     sessionName: string
   }
   createdAt: number
+  /** Absent from a Tether older than the context-hook field. */
+  contextHook?: ContextHook
   /** Present on a 202 create: why the session is not running yet. */
   failure?: { code: string; reason?: string } | null
 }
@@ -103,6 +125,8 @@ export interface TetherProject {
   id: string
   name: string
   root: string
+  /** SummitFlow's active project (`st projects active`); absent from older Tether. */
+  current?: boolean
 }
 
 export interface TetherVersion {
@@ -143,6 +167,63 @@ export class TetherUnavailable extends Error {
     super(message)
     this.name = 'TetherUnavailable'
   }
+}
+
+const PANE_MODE_TIMEOUT_MS = 2_000
+
+/** A pane-mode answer with every field checked; anything odd reads as a plain
+ * pane with no history, which keeps wheel and keys on the terminal. */
+export function parsePaneMode(body: unknown): PaneMode {
+  const value = (body ?? {}) as Record<string, unknown>
+  const history = value.historySize
+  return {
+    alternateScreen: value.alternateScreen === true,
+    mouseReporting: value.mouseReporting === true,
+    historySize:
+      typeof history === 'number' && Number.isSafeInteger(history) && history > 0 ? history : 0,
+    inMode: value.inMode === true,
+    mode: typeof value.mode === 'string' ? value.mode : null,
+  }
+}
+
+export function parseContextHook(value: unknown): ContextHook | null {
+  const hook = value as Record<string, unknown> | null
+  if (
+    !hook ||
+    typeof hook !== 'object' ||
+    typeof hook.state !== 'string' ||
+    typeof hook.detail !== 'string' ||
+    typeof hook.tool !== 'string' ||
+    typeof hook.applicable !== 'boolean'
+  )
+    return null
+  return {
+    state: hook.state,
+    detail: hook.detail,
+    tool: hook.tool,
+    applicable: hook.applicable,
+    checkedAt: typeof hook.checkedAt === 'number' ? hook.checkedAt : null,
+  }
+}
+
+/** The descriptor a session event carries (`data.session`), or null when the
+ * event has none (an older Tether) or it does not match the event's id. */
+export function eventSession(event: TetherEvent): SessionDescriptor | null {
+  const session = event.data.session as Partial<SessionDescriptor> | undefined
+  if (
+    !session ||
+    typeof session !== 'object' ||
+    typeof session.id !== 'string' ||
+    session.id !== event.data.id ||
+    typeof session.generation !== 'string' ||
+    typeof session.status !== 'string' ||
+    typeof session.tool !== 'string' ||
+    typeof session.createdAt !== 'number' ||
+    !session.tmux ||
+    typeof session.tmux !== 'object'
+  )
+    return null
+  return session as SessionDescriptor
 }
 
 /** True when Tether accepts this Aico and offers what it needs. */
@@ -325,12 +406,50 @@ export class TetherClient {
     )
   }
 
-  switchProject(id: string, generation: string, projectId: string): Promise<SessionDescriptor> {
+  /** Respawn in another project (`projectId`) or a plain directory
+   * (`projectRoot`, as the Personal Workspace). */
+  switchProject(
+    id: string,
+    generation: string,
+    target: { projectId: string } | { projectRoot: string },
+  ): Promise<SessionDescriptor> {
     return this.json(
       'POST',
       `/v1/sessions/${encodeURIComponent(id)}/switch-project`,
-      { generation, projectId },
+      { generation, ...target },
       { timeoutMs: 60_000 },
+    )
+  }
+
+  /** Re-check the session's context hook now (what Aico did on window load). */
+  async contextCheck(id: string): Promise<ContextHook | null> {
+    const body = await this.json<{ contextHook?: ContextHook }>(
+      'POST',
+      `/v1/sessions/${encodeURIComponent(id)}/context-check`,
+      undefined,
+      { timeoutMs: 30_000 },
+    )
+    return parseContextHook(body.contextHook)
+  }
+
+  async paneMode(id: string): Promise<PaneMode> {
+    return parsePaneMode(
+      await this.json('GET', `/v1/sessions/${encodeURIComponent(id)}/pane-mode`, undefined, {
+        timeoutMs: PANE_MODE_TIMEOUT_MS,
+      }),
+    )
+  }
+
+  async legacyPaneMode(name: string): Promise<PaneMode> {
+    return parsePaneMode(
+      await this.json(
+        'GET',
+        `/v1/legacy-sessions/${encodeURIComponent(name)}/pane-mode`,
+        undefined,
+        {
+          timeoutMs: PANE_MODE_TIMEOUT_MS,
+        },
+      ),
     )
   }
 

@@ -40,4 +40,17 @@ describe('workspace catalog from Tether', () => {
       current: false,
     })
   })
+
+  it('marks the project Tether reports as the active SummitFlow project', async () => {
+    const catalog = new ProjectCatalog(async () => [
+      { id: 'aico', name: 'Aico', root: '/srv/aico', current: true },
+      { id: 'tether', name: 'Tether', root: '/srv/tether' },
+    ])
+    await catalog.refresh()
+    expect(catalog.list().map((p) => [p.id, p.current])).toEqual([
+      [PERSONAL_WORKSPACE_ID, false],
+      ['aico', true],
+      ['tether', false],
+    ])
+  })
 })

@@ -1,17 +1,12 @@
-// View-side tmux helpers. Tether owns every tmux server, session and pane;
-// Aico only runs `tmux attach` for its windows (the byte path) and, against the
-// exact socket and target Tether handed out for that attach, two read-only view
-// queries: the pane's scroll mode and repainting its own attached clients.
+// View-side tmux helpers. Tether owns every tmux server, session and pane, and
+// answers the pane-mode question itself (GET /v1/sessions/:id/pane-mode). Aico
+// only runs `tmux attach` for its windows (the byte path) and, against the exact
+// socket and target Tether handed out for that attach, repaints its own
+// attached clients.
 
 export interface AttachedTarget {
   socket: string
   target: string
-}
-
-export interface PaneMode {
-  alternateScreen: boolean
-  mouseReporting: boolean
-  historySize: number
 }
 
 /** Share one pending query without retaining a stale result. */
@@ -47,28 +42,6 @@ export function coalesceTrailingAsync(work: () => Promise<void>): () => Promise<
       }
     })()
     return running
-  }
-}
-
-export function paneModeArgs({ socket, target }: AttachedTarget): string[] {
-  return [
-    '-S',
-    socket,
-    'display-message',
-    '-p',
-    '-t',
-    target,
-    '#{?alternate_on,1,0} #{?mouse_any_flag,1,0} #{history_size}',
-  ]
-}
-
-export function parsePaneMode(stdout: string): PaneMode {
-  const [alternate, mouse, history] = stdout.trim().split(/\s+/)
-  const historySize = Number(history)
-  return {
-    alternateScreen: alternate === '1',
-    mouseReporting: mouse === '1',
-    historySize: Number.isSafeInteger(historySize) && historySize > 0 ? historySize : 0,
   }
 }
 
