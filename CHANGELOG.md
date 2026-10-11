@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+Requires Tether API v1. Install and start Tether (`tether@default`) before Aico.
+
 ### Changed
 
 - Aico is now a client of Tether, the per-user session daemon. Tether owns
