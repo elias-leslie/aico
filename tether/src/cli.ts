@@ -131,6 +131,29 @@ async function api(
   }
 }
 
+/**
+ * `--json version`: one JSON object on stdout and nothing else. The daemon's
+ * `/v1/version` fields stay at the top level (`apiVersion`, ...) next to `cli`;
+ * with no daemon, `daemon` is null and the reason goes to stderr (exit 2).
+ */
+async function jsonVersion(io: Io, paths: TetherPaths): Promise<number> {
+  try {
+    const response = await callSocket(paths.socket, 'GET', '/v1/version')
+    const body =
+      typeof response.body === 'object' && response.body !== null
+        ? (response.body as Record<string, unknown>)
+        : { daemon: response.body }
+    io.out(JSON.stringify({ cli: VERSION, ...body }, null, 2))
+    return response.status >= 200 && response.status < 300 ? 0 : 1
+  } catch (error) {
+    io.out(JSON.stringify({ cli: VERSION, daemon: null, error: 'not_reachable' }, null, 2))
+    io.err(
+      `tether (${paths.instance}) is not reachable at ${paths.socket}: ${(error as Error).message}`,
+    )
+    return 2
+  }
+}
+
 /** `--name value` / `--name=value` pairs; unknown flags are rejected. */
 function flags(args: string[], names: string[]): Record<string, string> {
   const out: Record<string, string> = {}
@@ -233,6 +256,7 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
         return checks.some((check) => check.status === 'fail') ? 1 : 0
       }
       case 'version':
+        if (json) return jsonVersion(io, paths)
         io.out(`tether ${VERSION}`)
         return api(io, paths, json, 'GET', '/v1/version')
       case 'sessions':

@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { attachPlan, main, parseArgs } from './cli'
 import { resolvePaths } from './config'
 import { type RunningDaemon, startDaemon } from './daemon'
+import { VERSION } from './version'
 
 function capture() {
   const out: string[] = []
@@ -123,6 +124,29 @@ describe('main', () => {
       await main(['-i', 'clitest', 'import-aico', '--from', join(dir, 'absent.db')], missing.io),
     ).toBe(2)
     expect(missing.err.join('\n')).toContain('not found')
+  })
+
+  it('prints only JSON for --json version, with or without a daemon', async () => {
+    const up = capture()
+    expect(await main(['-i', 'clitest', '--json', 'version'], up.io)).toBe(0)
+    const body = JSON.parse(up.out.join('\n'))
+    expect(body.cli).toBe(VERSION)
+    expect(body.apiVersion).toBeGreaterThanOrEqual(1)
+    const down = capture()
+    const runtime = process.env.TETHER_RUNTIME_DIR
+    const xdg = process.env.XDG_RUNTIME_DIR
+    delete process.env.TETHER_RUNTIME_DIR
+    process.env.XDG_RUNTIME_DIR = join(dir, 'other-runtime')
+    const code = await main(['-i', 'nobody', '--json', 'version'], down.io)
+    process.env.TETHER_RUNTIME_DIR = runtime
+    process.env.XDG_RUNTIME_DIR = xdg
+    expect(code).toBe(2)
+    expect(JSON.parse(down.out.join('\n'))).toEqual({
+      cli: VERSION,
+      daemon: null,
+      error: 'not_reachable',
+    })
+    expect(down.err.join('\n')).toContain('not reachable')
   })
 
   it('exits 2 when the daemon is unreachable', async () => {
