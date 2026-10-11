@@ -118,7 +118,7 @@ Tether is a standalone per-user session daemon. It owns tmux session lifecycle f
   - `aico_session_observation`
   - the `st aico` extension and tool registry
   - docs, service constants, `logs_config`, `smoke_test`, `db_workbench_targets`
-  - `tmux-agent-session-sync`: feed it from Tether or retire it in the same step
+  - `tmux-agent-session-sync`: retired (cutover log section 5)
 - Agent Hub: `db.sh`.
 - Host:
   - add `tether@default`
