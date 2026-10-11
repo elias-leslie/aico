@@ -567,11 +567,12 @@ export function followEvents(client: TetherClient, subscriber: EventSubscriber):
           },
           controller.signal,
         )
+        if (controller.signal.aborted) return // stopped on purpose (quit)
         if (connected) subscriber.onDisconnected?.(new Error('event stream ended'))
       } catch (error) {
+        if (controller.signal.aborted) return
         subscriber.onDisconnected?.(error)
       }
-      if (controller.signal.aborted) return
       await new Promise((resolve) => setTimeout(resolve, reconnectDelay(attempt++)))
     }
   })()

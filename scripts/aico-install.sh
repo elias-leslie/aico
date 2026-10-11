@@ -191,30 +191,33 @@ sed "s#__PROJECT_ROOT__#$(sed_replacement "$REPO")#g" scripts/aico.desktop >"$HO
 # (substitute __PROJECT_ROOT__, write to the user unit directory, reload the
 # user manager). It is rewritten only when its content changed. It is
 # not enabled or started here: scripts/aico-launch.sh starts aico-shell.service.
-install_user_units() {
+install_user_unit() {
   local unit_dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
-  local replacement changed=0 unit rendered
+  local unit=aico-shell.service replacement rendered
   replacement="$(sed_replacement "$REPO")"
   mkdir -p "$unit_dir"
-  for unit in aico-shell.service; do
-    rendered="$(sed "s#__PROJECT_ROOT__#${replacement}#g" "scripts/systemd/$unit")"
-    if [ -f "$unit_dir/$unit" ] && [ "$(cat "$unit_dir/$unit")" = "$rendered" ]; then
-      echo "systemd: $unit is up to date."
-      continue
-    fi
+  rendered="$(sed "s#__PROJECT_ROOT__#${replacement}#g" "scripts/systemd/$unit")"
+  if [ -f "$unit_dir/$unit" ] && [ "$(cat "$unit_dir/$unit")" = "$rendered" ]; then
+    echo "systemd: $unit is up to date."
+  else
     printf '%s\n' "$rendered" >"$unit_dir/$unit.tmp"
     mv -f "$unit_dir/$unit.tmp" "$unit_dir/$unit"
     echo "systemd: installed $unit_dir/$unit"
-    changed=1
-  done
-  if [ "$changed" = 1 ] && ! systemctl --user daemon-reload; then
-    # No user bus (e.g. a non-login shell): the files are in place and the user
-    # manager picks them up on its next reload or login.
-    echo "systemd: could not reach the user manager; run 'systemctl --user daemon-reload' later." >&2
+    if ! systemctl --user daemon-reload; then
+      # No user bus (e.g. a non-login shell): the file is in place and the user
+      # manager picks it up on its next reload or login.
+      echo "systemd: could not reach the user manager; run 'systemctl --user daemon-reload' later." >&2
+    fi
+  fi
+  # The pre-Tether lifecycle owner is retired. It is never stopped here: that is
+  # a cutover step (docs/cutover-aico.md), done once Tether serves the sessions.
+  if [ -f "$unit_dir/aico-owner.service" ]; then
+    echo "systemd: aico-owner.service is retired (Tether owns sessions). After the cutover:"
+    echo "  systemctl --user disable --now aico-owner.service && rm $unit_dir/aico-owner.service"
   fi
 }
 
-install_user_units
+install_user_unit
 
 if command -v gsettings >/dev/null 2>&1; then
   scripts/aico-hotkeys.sh install || true

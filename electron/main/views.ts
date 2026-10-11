@@ -1,3 +1,5 @@
+import { mkdirSync } from 'node:fs'
+import { dirname } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
 // Aico's own state (~/.local/state/aico/aico.db): one view row per session
@@ -62,6 +64,8 @@ function toRow(r: Raw): ViewRow {
 }
 
 export function initViews(dbPath: string): { migrated: number } {
+  // A fresh profile (or AICO_STATE_DIR) may not exist yet.
+  mkdirSync(dirname(dbPath), { recursive: true, mode: 0o700 })
   db = new DatabaseSync(dbPath)
   db.exec('PRAGMA busy_timeout = 2000; PRAGMA journal_mode = WAL')
   db.exec(`

@@ -1,6 +1,6 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
@@ -98,6 +98,12 @@ describe('view store migration', () => {
   it('starts empty without a pre-Tether catalog', () => {
     expect(initViews(scratchDb())).toEqual({ migrated: 0 })
     expect(listViews()).toEqual([])
+  })
+
+  it('creates a missing state directory (fresh profile or AICO_STATE_DIR)', () => {
+    const path = join(dirname(scratchDb()), 'state', 'aico', 'aico.db')
+    expect(initViews(path)).toEqual({ migrated: 0 })
+    expect(existsSync(path)).toBe(true)
   })
 })
 
