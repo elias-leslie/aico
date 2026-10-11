@@ -155,7 +155,11 @@
     }
     return best ?? s.W * 0.3
   }
-  const engaged = (s, now) => now - (s.data.lastClick || -1e9) < 9000 || (s.cursor && now - s.cursor.t < 1200 && s.cursor.y < H + 2)
+  // keyboard: A/D send him left or right (he keeps going, as in the arcade), S holds him still,
+  // W or Space gulps a power pellet
+  const keying = (s, now) => now - (s.keyAt ?? -1e9) < 9000
+  const keyDir = (s) => (s.keys && s.keys.has('left') !== s.keys.has('right') ? (s.keys.has('left') ? -1 : 1) : 0)
+  const engaged = (s, now) => keying(s, now) || now - (s.data.lastClick || -1e9) < 9000 || (s.cursor && now - s.cursor.t < 1200 && s.cursor.y < H + 2)
 
   function clip(c, s) {
     const t = s.fixture('title')
@@ -205,6 +209,16 @@
       this.held = false
       this.liftY = 0
       this.s.data.lastClick = performance.now()
+    }
+    gulp(now) {
+      const s = this.s
+      if (this.power <= 0 && now - (this.lastGulp || 0) > 7000 && s.data.ghosts.some((g) => g.mode === 'out')) {
+        this.lastGulp = now
+        this.givePower(6)
+        s.say('50', this.x, CY - 24, { color: '#ffb8ae', life: 0.9, vy: -8 })
+        return true
+      }
+      return false
     }
     onClick() {
       const s = this.s
@@ -260,6 +274,21 @@
       }
       const ghosts = d.ghosts
       const lively = s.lively(now)
+      if (keying(s, now) && lively) {
+        // the player drives: no autopilot, no flinching from ghosts
+        const kd = keyDir(s)
+        if (kd) this.dir = kd
+        this.sleeping = false
+        this.sleptAt = 0
+        this.target = null
+        this.flee = null
+        if (!s.keys.has('down')) this.x += this.dir * (this.power > 0 ? 48 : 44) * dt
+        const before = this.x
+        this.x = wrapX(s, this.x)
+        if (this.x !== before) this.wrapped = true
+        this.eat(s, now)
+        return FAST
+      }
 
       // ---- choose where to go -------------------------------------------------
       let tx = null
@@ -859,6 +888,20 @@
         d.pac.power = 0
       }
       return Infinity
+    },
+    onKey(s, key, down) {
+      const p = s.data.pac
+      if (!down || !p || p.held || p.dying || s.data.show) return
+      const now = performance.now()
+      p.sleeping = false
+      if (key === 'left' || key === 'right') {
+        p.dir = key === 'left' ? -1 : 1
+        p.turnCool = 0
+        p.x = wrapX(s, p.x + p.dir * 2) // the turn happens now
+      } else if (key === 'up' || key === 'fire') {
+        if (!p.gulp(now)) s.say(pick(['wakka', 'wakka wakka']), p.x, CY - 22, { color: '#ffff00', life: 0.7, size: 6, vy: -6 })
+      }
+      s.poke()
     },
     onBusy(s) {
       const now = performance.now()

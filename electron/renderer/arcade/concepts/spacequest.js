@@ -14,9 +14,16 @@
   const WALK = 30
   const RUN = 64
   const SNEAK = 16
+  const CHARGE = 112 // an angry Sarien at full tilt
   const FONT = 'bold 7px "DejaVu Sans Mono", Menlo, monospace'
   const BOXED = H >= 36 // room for the white Sierra boxes above the heads
+  const SPILL = typeof SPILL_UP === 'number' ? SPILL_UP : 0 // the stage reaches a little above the bar
   const dur = (t) => clamp(1300 + t.length * 65, 2500, 4500)
+  // the user is playing: a click or drag in the last 9 s, or the cursor moving over the bar
+  const engaged = (s, now) => now - (s.data.clickAt || -1e9) < 9000 || now - (s.data.grabAt || -1e9) < 9000 || (!!s.cursor && now - s.cursor.since < 2500) || keyed(s, now)
+  // the keyboard is the game's (armed by a click on a character), or a game key went down lately
+  const keyed = (s, now) => now - (s.keyAt ?? -1e9) < 9000
+  const keyDir = (s) => (s.keys?.has('right') ? 1 : 0) - (s.keys?.has('left') ? 1 : 0)
 
   // ---- sprite helpers ----------------------------------------------------------
   const G = (w, h) => Array.from({ length: h }, () => '.'.repeat(w))
@@ -245,6 +252,12 @@
     skull: sprite(['ddd', 'kdk', 'ddd', 'd.d'], P),
   }
   const REEL_ORDER = ['seven', 'cherry', 'bar', 'skull', 'cherry', 'seven', 'bar']
+  // Astro Chicken (the arcade game inside Space Quest III), flapping through as a cameo
+  const CHICK_DOWN = ['........rr....', '.......rwwr...', '.......wwkwYY.', '.......wwwwYYY', '..ww...wwwwr..', '.wwwwwwwwww...', 'wwaawwwwwww...', '.waaawwwwww...', '..waaawwww....', '....Y...Y.....', '...YY..YY.....']
+  const CHICK_UP = ['........rr....', '..aa...rwwr...', '..aaa..wwkwYY.', '...aaa.wwwwYYY', '..wwaa.wwwwr..', '.wwwwwwwwww...', 'wwwwwwwwwww...', '.wwwwwwwwww...', '..wwwwwwww....', '....Y...Y.....', '...YY..YY.....']
+  const CHICK = [spr(CHICK_DOWN, 7), spr(CHICK_UP, 7)]
+  const EGG = sprite(['.w.', 'www', 'www', '.w.'], P)
+  const SOCK = sprite(['RR.', 'aa.', 'aa.', 'aaa', '.aa'], P)
 
   // ---- actors -------------------------------------------------------------------------
   class Char {
@@ -273,7 +286,10 @@
       this.outfit = 'normal'
     }
     get moving() {
-      return this.tx !== null || !!this.fly || !!this.fall
+      return this.tx !== null || !!this.fly || !!this.fall || !!this.held
+    }
+    get grabbable() {
+      return this.type === 'roger' && canGrab(this.s)
     }
     setOutfit(o) {
       this.outfit = o
@@ -295,9 +311,14 @@
       this.anim = null
       this.fly = null
       this.fall = null
+      if (this.type === 'roger') {
+        this.held = false
+        this.s.data.grabbed = false
+      }
     }
     cur() {
       const set = this.set
+      if (this.held && set.walk) return set.walk[Math.floor(this.ft * 9) % set.walk.length]
       if (this.anim) return this.anim.frames[Math.floor(this.anim.t * this.anim.fps) % this.anim.frames.length]
       if (this.tx !== null && set.walk) return set.walk[Math.floor(this.ft * (this.speed > 40 ? 11 : this.speed < 20 ? 4.5 : 7)) % set.walk.length]
       if (this.fid && set[this.fid]) return set[this.fid]
@@ -307,6 +328,10 @@
     }
     update(dt, now, s) {
       let want = Infinity
+      if (this.held) {
+        this.ft += dt // legs kicking in the air
+        return FAST
+      }
       if (this.anim) {
         this.anim.t += dt
         if (this.anim.t >= this.anim.dur) {
@@ -392,14 +417,67 @@
     hit(px, py) {
       if (this.hidden) return false
       const sp = this.cur()
-      const half = sp.h - 2 < 14 ? (sp.w - 2) / 2 : this.type === 'sarien' || this.type === 'bartender' ? 6 : 4
-      return Math.abs(px - this.x) <= half && py >= FLOOR - (sp.h - 2) + this.yOff && py <= FLOOR + this.yOff
+      const h = sp.h - 2
+      const half = h < 14 ? (sp.w - 2) / 2 + 3 : this.type === 'roger' ? 8 : 9
+      return Math.abs(px - this.x) <= half && py >= FLOOR - h + this.yOff - 3 && py <= FLOOR + this.yOff + 2
     }
     verb() {
       return VERBS[this.type] ? VERBS[this.type](this) : 'look'
     }
-    onClick() {
-      charClick(this.s, this)
+    onClick(p) {
+      charClick(this.s, this, p)
+    }
+    // Roger can be picked up by the collar (the plot waits until he lands)
+    grab(p) {
+      const s = this.s
+      const d = s.data
+      d.grabAt = performance.now()
+      if (this.type !== 'roger' || !canGrab(s)) return
+      if (d.mode === 'story' && d.run && d.pending && d.pendWho === 'R') {
+        d.run.ip = d.run.cur
+        d.pending = null
+      }
+      const pose = this.pose
+      this.stop()
+      this.heldPose = pose === 'doze' || pose === 'hide' ? pose : 'stand'
+      this.pose = this.heldPose === 'hide' ? 'hide' : 'stand'
+      this.held = true
+      this.ft = 0
+      d.grabbed = true
+      this.spotKey = null
+      this.drag(p)
+      if (d.mode === 'story') aside(s, null, pick(GRAB_N))
+    }
+    drag(p) {
+      const s = this.s
+      s.data.grabAt = performance.now()
+      if (!this.held) return
+      const nx = clamp(p.x, 6, s.W - 7)
+      if (Math.abs(nx - this.x) > 1.5) this.dir = nx > this.x ? 1 : -1
+      this.x = nx
+      this.yOff = clamp(p.y - (FLOOR - 24), -10 - SPILL, 0)
+    }
+    drop() {
+      const s = this.s
+      const d = s.data
+      d.grabAt = performance.now()
+      if (!this.held) return
+      this.held = false
+      this.pose = 'stand'
+      const was = this.heldPose
+      this.fall = {
+        vy: 0,
+        then: () => {
+          d.grabbed = false
+          s.burst(this.x, FLOOR - 1, 5, ['a', 'w'])
+          if (d.mode === 'action' && d.act) d.act.userUntil = performance.now() + 4000
+          // a sleeping janitor sleeps through it
+          if (was === 'doze' && d.mode === 'story') {
+            this.pose = 'doze'
+            s.say('He sleeps through it. A gift.', this.x, 11, { life: 2.4 })
+          } else s.say(pick(LAND_R), this.x, 11, { color: SAY_COL.R, life: 2.2 })
+        },
+      }
     }
   }
   const VERBS = {
@@ -426,12 +504,17 @@
     update(dt, now, s) {
       const R = s.data.cast.R
       const nx = this.x + this.dir * 250 * dt
-      if (!this.passed && R && !R.hidden && R.pose !== 'ash' && (R.x - this.x) * (R.x - nx) <= 0) {
+      if (!this.passed && R && !R.hidden && R.pose !== 'ash' && !R.held && (R.x - this.x) * (R.x - nx) <= 0) {
         this.passed = true
         if (this.lethal && R.pose !== 'hide') {
           this.dead = true
           this.onHit(s)
           return FAST
+        }
+        if (this.lethal && s.data.mode === 'action' && s.data.act && !s.data.act.dying) {
+          // the killing shot, ducked: the user saw it coming
+          points(s, 3)
+          showLine(s, null, pick(DODGE), now, false)
         }
       }
       this.x = nx
@@ -447,6 +530,59 @@
     }
     draw(c) {
       c.drawImage(BOLT[this.dir], Math.round(this.x) - 3, this.y)
+    }
+  }
+
+  // Astro Chicken flaps across the top of the bar. Click it for an egg (and a point).
+  class Chicken {
+    constructor(s) {
+      this.s = s
+      this.dir = Math.random() < 0.5 ? 1 : -1
+      this.x = this.dir > 0 ? -12 : s.W + 12
+      this.y0 = rand(14, 20)
+      this.y = this.y0
+      this.t = rand(0, 6)
+      this.vy = 0
+      this.z = 5
+      this.moving = true
+      this.spooked = false
+    }
+    hit(px, py) {
+      return Math.abs(px - this.x) < 11 && Math.abs(py - (this.y - 5)) < 9
+    }
+    onClick() {
+      const s = this.s
+      s.data.clickAt = performance.now()
+      if (this.spooked) return
+      this.spooked = true
+      s.say('BAWK!', this.x, Math.max(0, this.y - 18), { color: '#ffff55', life: 1.2 })
+      s.particle({ img: EGG, x: this.x - 1, y: this.y - 2, vy: 10, g: 160, life: 0.8 })
+      s.burst(this.x, this.y - 5, 6, ['w', 'w', 'y'])
+      points(s, 1)
+    }
+    update(dt, now, s) {
+      this.t += dt
+      const spd = this.spooked ? 120 : 62
+      this.x += this.dir * spd * dt
+      if (this.spooked) this.y -= 14 * dt
+      else this.y = this.y0 + Math.sin(this.t * 2.2) * 4
+      // Roger notices it fly over
+      const R = s.data.cast.R
+      if (!this.seen && R && !R.hidden && !R.moving && !R.anim && R.pose === 'stand' && Math.abs(R.x - this.x) < 30) {
+        this.seen = true
+        R.dir = this.x > R.x ? 1 : -1
+        s.particle({ img: BUBBLE['!'], x: R.x - 2, y: FLOOR - 33, life: 1, vy: -3, fade: true })
+        if (Math.random() < 0.5) s.say(pick(CHICK_R), R.x, 11, { color: SAY_COL.R, life: 2.6 })
+      }
+      if (this.x < -20 || this.x > s.W + 20 || this.y < -4) {
+        this.dead = true
+        if (s.data.chicken === this) s.data.chicken = null
+      }
+      return FAST
+    }
+    draw(c) {
+      const sp = CHICK[Math.floor(this.t * (this.spooked ? 12 : 7)) % 2]
+      c.drawImage(sp[this.dir], Math.round(this.x) - sp.cx - 1, Math.round(this.y) - sp.h + 1)
     }
   }
 
@@ -493,9 +629,15 @@
       fr(c, 'd', x0 + 2, FLOOR - 4, 10, 1)
       fr(c, 'd', x0 + 1, FLOOR - 19, 12, 9)
       fr(c, 'k', x0 + 2, FLOOR - 18, 10, 7)
-      fr(c, 'G', x0 + 3, FLOOR - 17, 6, 1)
-      fr(c, 'G', x0 + 3, FLOOR - 15, 4, 1)
-      fr(c, 'G', x0 + 3, FLOOR - 13, 7, 1)
+      if ((p.fxUntil || 0) > performance.now()) {
+        // poked: it scrolls a screenful of panic
+        const t = Math.floor(performance.now() / 90)
+        for (let i = 0; i < 3; i++) fr(c, (t + i) % 3 ? 'C' : 'R', x0 + 3, FLOOR - 17 + i * 2, 2 + ((t * 5 + i * 3) % 7), 1)
+      } else {
+        fr(c, 'G', x0 + 3, FLOOR - 17, 6, 1)
+        fr(c, 'G', x0 + 3, FLOOR - 15, 4, 1)
+        fr(c, 'G', x0 + 3, FLOOR - 13, 7, 1)
+      }
       fr(c, 'R', x0 + 2, FLOOR - 9, 1, 1)
       fr(c, 'G', x0 + 4, FLOOR - 9, 1, 1)
       fr(c, 'k', x0 + 8, FLOOR - 9, 4, 1)
@@ -642,8 +784,14 @@
       if (!p.spin) return Infinity
       if (now >= p.spin.until) {
         p.show = p.spin.result
+        const user = p.spin.user
         p.spin = null
         if (p.show === 'win') s.burst(p.x, FLOOR - 7, 12, ['y', 'Y', 'w'])
+        if (user) {
+          if (p.show === 'win') points(s, 1)
+          else s.burst(p.x, FLOOR - 14, 8, ['r', 'w'])
+          s.say(p.show === 'win' ? 'Three sevens! One whole point.' : 'Three skulls. Good thing nobody sat down.', p.x, 11, { life: 2.6 })
+        }
         return FAST
       }
       return FAST
@@ -662,14 +810,24 @@
       this.hidden = false
     }
     update(dt, now, s) {
-      return PROP_UPD[this.kind] ? PROP_UPD[this.kind](this, dt, now, s) : Infinity
+      const own = PROP_UPD[this.kind] ? PROP_UPD[this.kind](this, dt, now, s) : Infinity
+      return (this.fxUntil || 0) > now ? FAST : own
     }
     draw(c, s) {
-      if (!this.hidden) PROP_DRAW[this.kind](c, s, this)
+      if (this.hidden) return
+      const now = performance.now()
+      const jig = (this.fxUntil || 0) > now && this.kind === 'crate' ? (Math.floor(now / 60) % 2 ? 1 : -1) : 0
+      if (jig) c.translate(jig, 0)
+      PROP_DRAW[this.kind](c, s, this)
+      if (jig) c.translate(-jig, 0)
     }
     hit(x, y) {
       const b = PROP_BOX[this.kind]
-      return !this.hidden && Math.abs(x - this.x) <= b[0] && y >= FLOOR + this.yOff - b[1] && y <= FLOOR + this.yOff + 1
+      if (this.hidden || !(Math.abs(x - this.x) <= b[0] + 3 && y >= FLOOR + this.yOff - b[1] - 3 && y <= FLOOR + this.yOff + 2)) return false
+      // a character standing in front wins the click
+      const cast = this.s.data.cast
+      for (const k in cast) if (cast[k].hit(x, y)) return false
+      return true
     }
     verb() {
       return PROP_VERB[this.kind](this.s.data)
@@ -883,7 +1041,7 @@
         ['fly', 'R', 'R.4', 0],
         ['n', 'Mostly by screaming, it turns out.'],
         ['say', 'R', 'Look out, Sariens! Here comes Roger Wil-'],
-        ['fly', 'R', '>', -12],
+        ['fly', 'R', '>', -16],
         ['pts', 5],
         ['n', 'To be continued in Episode Two.'],
       ],
@@ -983,7 +1141,7 @@
         ['n', 'The Deltaur explodes. Spectacularly.'],
         ['n', ['You saved the galaxy. With a mop.', 'The galaxy is saved. Mostly by accident.']],
         ['pts', 25],
-        ['fly', 'R', '>', -10],
+        ['fly', 'R', '>', -15],
       ],
     },
     { // 6. home again (loops into the closet nap of episode one)
@@ -1185,6 +1343,20 @@
     ['You tried to reason with a blaster.', 'The blaster won the argument.'],
     ['Vaporized. Sariens 1, janitors 0.', 'Only your mop remains.'],
   ]
+  const GRAB_N = ["You can't pick up Roger. ...Oh. You can.", 'You lift Roger by the collar. He is used to it.', 'Roger dangles. Sierra did not test this.', 'You take Roger. He was not nailed down.']
+  const LAND_R = ['Ow. My everything.', 'I meant to do that.', 'Put me down gentl- ow.', 'Was that a puzzle? Did I solve it?']
+  const DODGE = ['You duck just in time. Character growth!', 'The bolt parts your hair. Nice duck.', 'You duck. It is your best skill.']
+  const TRAP = { S: ['Get him!', 'You and your MOP!', 'Charge!', 'Not the wet floor again...'], N: ['You mop the floor. Wet floors are a trap.', 'Janitorial tactics: mop, step back, wait.'], UP: ['Ow. My dignity.', 'Who mops during a raid?!', 'I am filing a complaint.'] }
+  const DOZE_TALK = ['Zzz... the mop... my precious mop...', '*snore* ...not the red button...', 'Mmf. Five more minutes, Captain.', 'Zzz... I am awake. I am totally awake.']
+  const DANCE = ['You found the secret janitor dance.', 'Roger dances. Nobody asked. 0 points.']
+  const CHICK_R = ['Astro Chicken? Wrong game, pal.', 'Was that... a chicken? In space?', 'Is that chicken wearing a helmet?']
+  const SET_TALK = {
+    arcada: ['This deck is spotless. Thanks to me.', 'I should really check in with the captain.'],
+    desert: ["I'd kill for a glass of water. Not acid.", 'Sand. In places sand should not be.'],
+    deltaur: ['Act evil, Roger. Act evil.', 'Grr. Evil. Look at me being evil.'],
+    bar: ['Nice place. Sticky, but nice.', 'Do they have a janitor? Asking for me.'],
+    space: ['Space! It is very... big.', 'Note to self: never look down.'],
+  }
   const QUIPS = ['You did something right. Shocking.', 'A puzzle, solved. Sierra is stunned.', 'Well done, Roger. Write that down.']
 
   // ---- layout ------------------------------------------------------------------
@@ -1336,6 +1508,8 @@
     }
     for (const [key, type, at, dir] of sc.cast || []) addCast(s, key, type, spot(s, at), dir).spotKey = at
     d.run = { steps: sc.steps, ip: 0, cur: 0 }
+    // now and then Astro Chicken wanders in from the wrong game
+    if (['space', 'desert', 'deltaur'].includes(sc.set) && Math.random() < 0.3) d.chickenAt = performance.now() + rand(5000, 16000)
     s.poke()
   }
   function nextScene(s) {
@@ -1583,7 +1757,7 @@
         const side = ch.x > R.x ? 1 : -1
         // a second Sarien from the same side trips a little further out
         const reach = 30 + 18 * Object.values(d.cast).filter((o) => o.down && Math.sign(o.x - R.x) === side).length
-        ch.goto(R.x + side * 12, RUN)
+        ch.goto(R.x + side * 12, CHARGE)
         d.pending = () => {
           if (!ch.down && Math.abs(ch.x - R.x) <= reach) slip(s, ch)
           return ch.down && !ch.fall
@@ -1652,6 +1826,7 @@
   }
   function runTick(s, now) {
     const d = s.data
+    if (d.grabbed || d.keyWalk) return FAST // the plot waits while Roger is in your hand, or walking under your keys
     for (let guard = 0; guard < 40; guard++) {
       if (d.hold) {
         const w = holdTick(s, now)
@@ -1743,7 +1918,8 @@
     const pod = findProp(d, 'pod')
     if (pod) pod.inside = false
     d.bolts = []
-    d.act = { keys: ['A1', 'A2'], talkAt: now + 4500, moveAt: now + 1500, upAt: 0, duckAt: 0, deathAt: now + rand(12000, 20000), safe: [R.x], trailAt: now + 1000, dying: false, who: 0, userUntil: 0 }
+    d.act = { keys: ['A1', 'A2'], talkAt: now + 4500, moveAt: now + 1500, upAt: 0, duckAt: 0, deathAt: now + rand(12000, 20000), safe: [R.x], trailAt: now + 1000, dying: false, who: 0, userUntil: 0, trapAt: now + rand(9000, 16000) }
+    if (Math.random() < 0.35) d.chickenAt = now + rand(6000, 20000)
     removeCast(d, 'A1')
     removeCast(d, 'A2')
     addCast(s, 'A1', 'sarien', s.W + 16, -1).ai = { st: 'enter', t: now, fireAt: now + 2500 }
@@ -1787,7 +1963,28 @@
   function sarienAI(s, S, now) {
     const d = s.data
     const ai = S.ai
-    if (S.down) return
+    if (S.down) {
+      // slipped on the mopped floor: up again after a moment, sore and cross
+      if (ai.st === 'down' && now >= ai.t && !S.fall) {
+        S.down = false
+        S.yOff = 0
+        S.pose = 'stand'
+        ai.st = 'look'
+        ai.t = now + 900
+        ai.fireAt = now + 2600
+        if (!d.line || now > d.line.until) showLine(s, S.key, pick(TRAP.UP), now, false)
+      }
+      return
+    }
+    if (ai.st === 'charge') {
+      if (S.tx === null || now > ai.t) {
+        S.tx = null
+        ai.st = 'look'
+        ai.t = now + 900
+        ai.fireAt = now + 1500
+      }
+      return
+    }
     if (ai.st === 'enter') {
       if (now >= ai.t) {
         S.goto(patrolSpot(s, S))
@@ -1839,6 +2036,17 @@
     const A = d.act
     const R = d.cast.R
     if (A.dying || R.pose === 'ash' || R.anim) return
+    if (R.held || R.fall) return
+    const user = engaged(s, now)
+    if (user) {
+      // the user steers: Roger tiptoes after the cursor and the autopilot stands back
+      A.userUntil = Math.max(A.userUntil, now + 800)
+      const c = s.cursor
+      if (c && c.y >= 0 && c.y <= H && R.pose === 'stand' && !keyed(s, now)) {
+        const tx = clamp(c.x, 6, s.W - 7)
+        if (Math.abs(tx - R.x) > 10) R.goto(tx, SNEAK + 14)
+      }
+    }
     const threat = sars.find((S) => S.ai.st === 'aim' && Math.sign(R.x - S.x) === S.dir)
     if (threat) {
       if (!threat.ai.lethal && R.pose !== 'hide') {
@@ -1857,6 +2065,12 @@
       R.pose = 'stand'
       A.moveAt = Math.max(A.moveAt, now + 500)
     }
+    // autopilot trap: a Sarien heading his way gets a freshly mopped floor
+    if (!user && now >= A.trapAt && now >= A.userUntil && R.tx === null && R.pose === 'stand') {
+      A.trapAt = now + rand(14000, 24000)
+      const S = sars.find((o) => !o.down && o.ai.st === 'walk' && o.tx !== null && Math.abs(o.x - R.x) < 140 && Math.sign(o.tx - o.x) === Math.sign(R.x - o.x))
+      if (S && mopTrap(s, S)) return
+    }
     if (R.tx === null && R.pose === 'stand' && now >= A.moveAt && now >= A.userUntil) {
       let near = sars[0]
       for (const S of sars) if (!near || Math.abs(S.x - R.x) < Math.abs(near.x - R.x)) near = S
@@ -1872,6 +2086,30 @@
         A.upAt = now + rand(1800, 3200)
       }
     }
+  }
+  /** Roger mops the floor toward a Sarien, who charges across it and slips. */
+  function mopTrap(s, S) {
+    const d = s.data
+    const R = d.cast.R
+    const now = performance.now()
+    if (!d.act || d.act.dying || d.run || R.pose === 'ash' || R.held || R.fall || R.anim || S.down || !S.ai || S.ai.st === 'charge') return false
+    if (S.x < 4 || S.x > s.W - 4) return false
+    R.tx = null
+    R.cb = null
+    R.pose = 'stand'
+    R.dir = S.x > R.x ? 1 : -1
+    R.play(R.set.mop, 900, 5)
+    const a = R.x + R.dir * 8
+    const b = R.x + R.dir * 64
+    d.puddle = { x0: Math.min(a, b), x1: Math.max(a, b), until: now + 9000 }
+    S.ai.st = 'charge'
+    S.ai.t = now + 1500 + (Math.abs(S.x - R.x) / CHARGE) * 1000
+    S.pose = 'stand'
+    S.dir = -R.dir
+    S.goto(clamp(R.x + R.dir * 14, 6, s.W - 7), CHARGE)
+    d.act.userUntil = Math.max(d.act.userUntil, now + 1500)
+    showLine(s, S.key, pick(TRAP.S), now, false)
+    return true
   }
   function killRoger(s) {
     const d = s.data
@@ -1919,6 +2157,16 @@
     }
     d.bolts = d.bolts.filter((b) => !b.dead)
     const sars = A.keys.map((k) => d.cast[k]).filter(Boolean)
+    if (d.puddle && d.puddle.until && now > d.puddle.until) d.puddle = null
+    for (const S of sars) {
+      if (!S.down && d.puddle && S.tx !== null && S.x >= d.puddle.x0 && S.x <= d.puddle.x1) {
+        slip(s, S)
+        S.ai.st = 'down'
+        S.ai.t = now + 3200
+        points(s, 2)
+        if (Math.random() < 0.5) showLine(s, null, pick(TRAP.N), now, false)
+      }
+    }
     for (const S of sars) sarienAI(s, S, now)
     rogerAI(s, now, sars)
     if (now > A.talkAt && (!d.line || now > d.line.until)) {
@@ -1937,9 +2185,12 @@
     const R = d.cast.R
     for (const b of d.bolts) b.dead = true
     const sars = d.act.keys.filter((k) => d.cast[k])
+    d.puddle = null
     for (const k of sars) {
       const S = d.cast[k]
       S.stop()
+      S.down = false
+      S.yOff = 0
       if (S.ai.st === 'enter') S.x = k === 'A1' ? s.W - 10 : 10
       S.pose = 'stand'
       S.ai.st = 'frozen'
@@ -1987,13 +2238,25 @@
   function aside(s, who, text) {
     const d = s.data
     const now = performance.now()
-    if (d.box) return
-    if (d.mode === 'story' && d.run && d.waitUntil > now) {
-      d.run.ip = d.run.cur
-      d.waitUntil = 0
+    if (Array.isArray(text)) text = pick(text)
+    const top = d.box || (d.status && now < d.status.until) || (d.line && now < d.line.until && !d.line.aside)
+    if (top) {
+      // the plot is talking: the aside floats just under it and the plot carries on
+      const x = who ? speakerX(s, who) : s.W / 2
+      s.say(text, x, 11, { color: who ? SAY_COL[who] || SARIEN_COL : '#ffffff', life: dur(text) / 1000 })
+      return
     }
     showLine(s, who, text, now, false)
-    if (d.mode === 'story') d.asideUntil = d.line.until
+    d.line.aside = true
+    // a short pause so the line can be read, at most once every 10 s: never a stall
+    if (d.mode === 'story' && d.run && now > (d.asideOkAt || 0)) {
+      if (d.waitUntil > now) {
+        d.run.ip = d.run.cur
+        d.waitUntil = 0
+      }
+      d.asideUntil = d.line.until
+      d.asideOkAt = now + 10000
+    }
     s.poke()
   }
   function canWalk(s) {
@@ -2018,17 +2281,96 @@
     else d.act.userUntil = performance.now() + 5000
     return true
   }
-  function charClick(s, ch) {
+  function canGrab(s) {
     const d = s.data
+    const R = d.cast.R
+    if (!R || R.hidden || R.boarded || R.fly || R.fall || R.held || R.pose === 'ash' || d.resting) return false
+    if (d.mode === 'action') return !d.run
+    return !d.locked && !d.box
+  }
+  function charClick(s, ch, p) {
+    const d = s.data
+    const now = performance.now()
+    d.clickAt = now
     if (ch.type === 'roger') {
-      const pool = d.set === 'desert' ? ["I'd kill for a glass of water. Not acid."] : d.set === 'deltaur' ? ['Act evil, Roger. Act evil.'] : []
-      return aside(s, 'R', nextLine(d, 'roger', [...TALK.roger, ...pool]))
+      d.rogerClicks = (d.rogerClicks || []).filter((t) => now - t < 2500)
+      d.rogerClicks.push(now)
+      if (ch.pose === 'doze') return aside(s, 'R', nextLine(d, 'doze', DOZE_TALK))
+      if (d.rogerClicks.length >= 5 && !ch.moving && !ch.anim && canGrab(s)) {
+        // easter egg: poke him enough and he breaks into the secret janitor dance
+        d.rogerClicks.length = 0
+        if (ch.pose !== 'stand' && ch.pose !== 'hide') return
+        ch.pose = 'stand'
+        ch.play([ch.set.walk[0], ch.set.cheer, ch.set.walk[2], ch.set.cheer, ch.set.reach, ch.set.cheer], 2200, 6)
+        for (let i = 0; i < 3; i++) s.particle({ img: BUBBLE['♪'], x: ch.x - 6 + i * 6, y: FLOOR - 28, vx: (i - 1) * 6, vy: -8, life: 1.6, fade: true })
+        return aside(s, null, pick(DANCE))
+      }
+      if (d.mode === 'action' && d.act && !d.act.dying && !d.run && !ch.held && !ch.fall && ch.pose !== 'ash') {
+        // in the raid a click on Roger ducks him (just in time, if you watched the aim)
+        ch.tx = null
+        ch.cb = null
+        ch.anim = null
+        ch.pose = 'hide'
+        d.act.upAt = now + 1600
+        d.act.userUntil = now + 3000
+        return
+      }
+      return aside(s, 'R', nextLine(d, 'roger', [...TALK.roger, ...(SET_TALK[d.set] || [])]))
     }
-    if (ch.type === 'crew' && ch.pose === 'dead') return aside(s, null, "He's still dead. You're very thorough.")
+    if (ch.type === 'crew' && ch.pose === 'dead') {
+      d.crewPokes = (d.crewPokes || 0) + 1
+      if (d.crewPokes % 3 === 0) return aside(s, null, "A note on him: 'Roger owes me 5 buckazoids.'")
+      return aside(s, null, "He's still dead. You're very thorough.")
+    }
+    if (ch.type === 'sarien' && d.mode === 'action' && ch.ai && mopTrap(s, ch)) return
     if (ch.down) return aside(s, ch.key, 'Ow. The floor is SO clean.')
+    if (ch.type === 'bartender') {
+      // a drink slides down the counter toward Roger
+      const R = d.cast.R
+      const dir = R && R.x < ch.x ? -1 : 1
+      s.particle({ img: pix('Y'), x: ch.x, y: FLOOR - 13, vx: dir * 45, life: 0.9 })
+      s.particle({ img: pix('w'), x: ch.x, y: FLOOR - 14, vx: dir * 45, life: 0.9 })
+    }
+    if ((ch.type === 'guy1' || ch.type === 'guy2') && !ch.moving) {
+      ch.fid = 'sip'
+      ch.fidEnd = now + 1400
+    }
+    if (ch.type === 'sarien') s.particle({ img: BUBBLE['!'], x: ch.x - 2, y: Math.max(0, FLOOR - 33), life: 1, vy: -3, fade: true })
     aside(s, ch.key, nextLine(d, ch.type, TALK[ch.type]))
   }
   function propClick(s, p) {
+    const d = s.data
+    const now = performance.now()
+    d.clickAt = now
+    switch (p.kind) {
+      case 'slot':
+        if (!p.spin && !d.locked) {
+          p.spin = { until: now + 1300, result: Math.random() < 0.35 ? 'win' : 'skull', user: true }
+          p.show = null
+          return
+        }
+        break
+      case 'acid':
+        s.burst(p.x - 1, FLOOR - 3, 8, ['G', 'g', 'w'])
+        break
+      case 'console':
+      case 'crate':
+        p.fxUntil = now + (p.kind === 'crate' ? 400 : 1200)
+        break
+      case 'gen':
+        s.burst(p.x, FLOOR - 14, 8, ['m', 'p', 'w'])
+        d.shakeUntil = now + 250
+        break
+      case 'hamper':
+        s.particle({ img: SOCK, x: p.x, y: FLOOR - 12, vx: rand(-25, 25), vy: -55, g: 150, life: 1.3 })
+        break
+      case 'pod':
+        s.burst(p.x - 13, FLOOR - 6, 6, ['y', 'r', 'O'])
+        break
+      case 'ship':
+        s.burst(p.x + rand(-12, 12), FLOOR - 17, 6, ['r', 'y', 'O'])
+        break
+    }
     aside(s, null, PROP_SAY[p.kind])
   }
   function fixAt(s, p) {
@@ -2047,6 +2389,122 @@
     return f ? FIX[f.kind][0] : 'walk here'
   }
 
+  // ---- the keyboard: A/D walk Roger, W uses or talks to whatever's nearest, S mops
+  // (ducks in the raid), Space skips the current line (mop trap in the raid) ----------
+  function keyTick(s, now) {
+    const d = s.data
+    const R = d.cast.R
+    const kx = keyDir(s)
+    const raid = d.mode === 'action'
+    if (raid && d.act && s.keys?.has('down') && canWalk(s)) {
+      // S held: he stays down
+      R.tx = null
+      R.pose = 'hide'
+      d.act.upAt = now + 300
+      d.act.userUntil = now + 3000
+      d.keyWalk = false
+      return
+    }
+    if (kx && canWalk(s)) {
+      if (!raid && d.pending && d.pendWho === 'R') {
+        d.run.ip = d.run.cur
+        d.pending = null
+      }
+      if (['doze', 'hide', 'reach'].includes(R.pose)) R.pose = 'stand'
+      const tx = clamp(R.x + kx * 16, 6, s.W - 7)
+      if (Math.abs(tx - R.x) > 0.5) R.goto(tx, raid ? SNEAK + 14 : WALK)
+      else {
+        R.tx = null
+        R.dir = kx
+      }
+      R.spotKey = null
+      d.keyWalk = !raid
+      if (raid && d.act) d.act.userUntil = now + 3000
+    } else if (d.keyWalk || (kx === 0 && d.keyWalked)) {
+      // released: he stops where he is and the plot picks up from there
+      if (R.tx !== null && !R.cb) R.tx = null
+      d.keyWalk = false
+    }
+    d.keyWalked = !!kx
+  }
+  function nearestThing(s) {
+    const d = s.data
+    const R = d.cast.R
+    let best = null
+    let bd = 40
+    for (const k in d.cast) {
+      const c = d.cast[k]
+      if (c === R || c.hidden) continue
+      const dd = Math.abs(c.x - R.x)
+      if (dd < bd) {
+        bd = dd
+        best = c
+      }
+    }
+    for (const p of d.props) {
+      if (p.hidden || p.dead) continue
+      const dd = Math.abs(p.x - R.x) - 4
+      if (dd < bd) {
+        bd = dd
+        best = p
+      }
+    }
+    return best
+  }
+  function onKey(s, key, down) {
+    const d = s.data
+    if (!down || !d.started) return
+    const now = performance.now()
+    const R = d.cast.R
+    if (d.resting) leaveRest(s)
+    if (d.mode === 'action') {
+      if (!d.act || d.act.dying || d.run) return
+      if (key === 'fire') {
+        // the mop trap, at the nearest Sarien
+        let best = null
+        for (const k of d.act.keys) {
+          const S = d.cast[k]
+          if (S && !S.down && S.x > 4 && S.x < s.W - 4 && (!best || Math.abs(S.x - R.x) < Math.abs(best.x - R.x))) best = S
+        }
+        if (!best || !mopTrap(s, best)) s.say('*squeak*', R.x, 11, { color: SAY_COL.R, life: 1 })
+      } else if (key === 'up' && R.pose !== 'ash') showLine(s, 'R', pick(RAID.R), now, false)
+      else if (key === 'down' && R.pose !== 'ash' && canWalk(s)) {
+        R.tx = null
+        R.pose = 'hide'
+        d.act.upAt = now + 1600
+      }
+      return
+    }
+    if (key === 'fire') {
+      // skip the line being said (Sierra's Enter)
+      if (d.box && now < d.box.until) {
+        d.box.until = now
+        d.waitUntil = Math.min(d.waitUntil, now)
+        return
+      }
+      if (d.line && now < d.line.until) {
+        d.line.until = now
+        if (d.waitUntil > now) d.waitUntil = now
+        if (d.asideUntil > now) d.asideUntil = now
+        return
+      }
+      key = 'up' // nothing to skip: use whatever's nearest
+    }
+    if (key === 'up') {
+      const t = nearestThing(s)
+      if (t && t.kind) return propClick(s, t)
+      if (t) {
+        if (R.tx === null && !R.anim) R.dir = t.x > R.x ? 1 : -1
+        return charClick(s, t)
+      }
+      return aside(s, 'R', nextLine(d, 'roger', [...TALK.roger, ...(SET_TALK[d.set] || [])]))
+    }
+    if (key === 'down' && canWalk(s) && R.tx === null && R.pose !== 'doze') {
+      R.pose = 'stand'
+      R.play(R.set.mop, 1000, 5)
+    }
+  }
+
   // ---- concept hooks ---------------------------------------------------------------
   function setup(s) {
     const d = s.data
@@ -2063,6 +2521,10 @@
     d.mode = 'story'
     d.shakeUntil = 0
     d.flashUntil = 0
+    d.clickAt = -1e9
+    d.grabAt = -1e9
+    d.chicken = null
+    d.chickenAt = 0
     zones(s)
     makeStars(s)
     const R = new Char(s, 'R', 'roger', 0, 1)
@@ -2081,17 +2543,36 @@
       return Infinity
     }
     if (d.resting) leaveRest(s)
+    keyTick(s, now)
     let wait = d.mode === 'action' && !d.run ? actionTick(s, dt, now) : runTick(s, now)
-    // glance at the cursor now and then
+    if (s.keys?.size) wait = FAST
     const R = d.cast.R
     const c = s.cursor
-    if (c && c.y >= 0 && c.y <= H && !R.moving && !R.anim && R.pose === 'stand' && Math.abs(c.x - R.x) > 14 && now > (d.glanceAt || 0)) {
-      const want = c.x > R.x ? 1 : -1
-      if (want !== R.dir) {
-        R.dir = want
-        d.glanceAt = now + 1500
+    if (c && c.y >= 0 && c.y <= H && now > (d.glanceAt || 0)) {
+      // the cast glance at the cursor now and then (the raiders keep their eyes on Roger)
+      let turned = false
+      for (const k in d.cast) {
+        const ch = d.cast[k]
+        if (ch.hidden || ch.moving || ch.anim || ch.down || (ch.type === 'sarien' && d.mode === 'action')) continue
+        if (ch.pose !== 'stand' || ch.type === 'crew' || Math.abs(c.x - ch.x) <= 14) continue
+        if (ch !== R && !engaged(s, now)) continue
+        const want = c.x > ch.x ? 1 : -1
+        if (want !== ch.dir) {
+          ch.dir = want
+          turned = true
+        }
+      }
+      if (turned) d.glanceAt = now + 1500
+      // hover right over Roger and he notices you
+      if (Math.abs(c.x - R.x) < 9 && c.y > FLOOR - 28 && !R.hidden && !R.held && now > (d.noticeAt || 0) && engaged(s, now)) {
+        d.noticeAt = now + 8000
+        s.particle({ img: BUBBLE['?'], x: R.x - 2, y: Math.max(0, FLOOR - 35 + R.yOff), life: 1.1, vy: -3, fade: true })
       }
     }
+    if (d.chickenAt && now >= d.chickenAt) {
+      d.chickenAt = 0
+      if (!d.chicken) d.chicken = s.spawn(new Chicken(s))
+    } else if (d.chickenAt) wait = Math.min(wait, d.chickenAt - now)
     for (const t of [d.line?.until, d.status?.until, d.box?.until, d.flashUntil, d.beam?.until]) if (t && t > now) wait = Math.min(wait, t - now)
     if (d.shakeUntil > now) wait = FAST
     if (d.box && d.box.lines[2] === '#restore' && now < d.box.t0 + 1500) wait = Math.min(wait, d.box.t0 + 1500 - now)
@@ -2245,7 +2726,7 @@
     title: 'Space Quest',
     sub: 'Sierra On-Line, 1986',
     blurb:
-      'Roger Wilco, janitor, plays out three looping episodes scene by scene: the Arcada and Kerona, the Deltaur, and a bar kidnapping of the Two Guys from Andromeda. A narrator box, a score line and silly deaths that restore a moment earlier; lines and death gags vary on repeat. Hover for the parser line, and click Roger, the cast or the props for a response. While the agent works, Sariens patrol and shoot while Roger ducks; Done ends the raid with a mopped floor and points. When idle he falls asleep on his mop and the story waits.',
+      'Roger Wilco, janitor, plays out three looping episodes scene by scene: the Arcada and Kerona, the Deltaur, and a bar kidnapping of the Two Guys from Andromeda. A narrator box, a score line and silly deaths that restore a moment earlier; lines and death gags vary on repeat, and Astro Chicken sometimes flaps through from the wrong game. The plot runs by itself: hover for the parser line, click Roger, the cast or the props for a line or a little nudge (spin the slots, poke the console, sock from the hamper, a drink down the bar), pick Roger up by the collar and drop him somewhere else, poke him five times for the secret dance, click the chicken for an egg. While the agent works, Sariens patrol and shoot while Roger ducks and lays mop traps; engaged, Roger tiptoes after your cursor, a click on him ducks (in time for the killing shot, if you watch the aim) and a click on a Sarien mops the floor so he charges and slips. Done ends the raid with a mopped floor and points. When idle he falls asleep on his mop and the story waits.',
     setup,
     update,
     drawBehind,
@@ -2265,6 +2746,7 @@
         d.restartScene = true
       }
     },
+    onKey,
     onBonk(s, rect, kind) {
       if (DOT_SAY[kind]) aside(s, null, DOT_SAY[kind])
     },

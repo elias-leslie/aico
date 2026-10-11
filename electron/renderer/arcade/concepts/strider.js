@@ -468,7 +468,11 @@
   const MEIO_LOSE = ['Impossible... Pon!', 'This is not over, Strider.', 'Curse you, Hiryu!']
   const meio = (s, list) => s.say(pick(list), s.W / 2, 1, { color: '#d39bff', life: 3.4 })
 
-  const engaged = (s, now) => now - (s.data.clickAt || -1e9) < 9000 || now - (s.data.grabAt || -1e9) < 9000 || (s.cursor && now - s.cursor.since < 2500)
+  const engaged = (s, now) => now - (s.data.clickAt || -1e9) < 9000 || now - (s.data.grabAt || -1e9) < 9000 || (s.cursor && now - s.cursor.since < 2500) || keyed(s, now)
+  // the keyboard is the game's (armed by a click on a character), or a game key went down lately
+  const keyed = (s, now) => now - (s.keyAt ?? -1e9) < 9000
+  const keyDir = (s) => (s.keys?.has('right') ? 1 : 0) - (s.keys?.has('left') ? 1 : 0)
+  const SPILL = typeof SPILL_UP === 'number' ? SPILL_UP : 0 // big leaps may rise a little above the bar
 
   // ---- Hiryu ---------------------------------------------------------------------------------
   const RUN = 108
@@ -554,7 +558,7 @@
       this.fx0 = this.x
       this.fx1 = to
       this.fy0 = y0
-      this.fh = Math.min(h, FLOOR - 18)
+      this.fh = Math.min(h, FLOOR - 18 + SPILL)
       this.fT = clamp(Math.abs(dx) / 120, 0.45, 0.95)
       this.state = 'flip'
       this.t = 0
@@ -685,7 +689,7 @@
       if (this.clicks.length >= 5) {
         // easter egg: the triple somersault
         this.clicks.length = 0
-        this.plan = [{ k: 'flip', x: openSpot(s, this.x + this.dir * 70, 10), h: 18 }, { k: 'flip', x: openSpot(s, this.x - this.dir * 10, 10), h: 18 }, { k: 'win' }]
+        this.plan = [{ k: 'flip', x: openSpot(s, this.x + this.dir * 70, 10), h: 26 }, { k: 'flip', x: openSpot(s, this.x - this.dir * 10, 10), h: 24 }, { k: 'win' }]
         this.state = 'stand'
         this.next()
         s.say('Strider Hiryu!', this.x, 1, { color: '#9ab4ff', life: 2.4 })
@@ -709,7 +713,7 @@
     onDblClick() {
       if (this.state !== 'stand' && this.state !== 'run' && this.state !== 'slash') return
       this.plan = []
-      this.flip(openSpot(this.s, this.x + this.dir * 60, 10), 20)
+      this.flip(openSpot(this.s, this.x + this.dir * 60, 10), 26)
     }
     grab(p) {
       this.s.data.grabAt = performance.now()
@@ -725,7 +729,7 @@
       const nx = clamp(p.x, 8, this.s.W - 8)
       if (Math.abs(nx - this.x) > 1.5) this.dir = nx > this.x ? 1 : -1
       this.x = nx
-      this.y = clamp(p.y + 27, 26, FLOOR)
+      this.y = clamp(p.y + 27, 26 - SPILL, FLOOR)
     }
     drop() {
       if (this.state !== 'held') return
@@ -744,6 +748,21 @@
       this.slashCd -= dt
       if (this.inv > 0) this.inv -= dt
       this.moving = !['stand', 'crouch', 'win'].includes(this.state)
+      // A/D held: he runs that way at once; let go and he stops where he is
+      const kx = keyDir(s)
+      if (kx && ['stand', 'run', 'crouch', 'win'].includes(this.state)) {
+        this.plan = []
+        this.target = null
+        this.asleep = false
+        this.dir = kx
+        this.tx = edgeX(s, this.x + kx * 24)
+        if (this.state !== 'run') this.t = 0
+        this.state = Math.abs(this.tx - this.x) > 0.5 ? 'run' : 'stand'
+        this.keyRun = true
+      } else if (this.keyRun) {
+        this.keyRun = false
+        if (this.state === 'run') this.tx = this.x
+      }
       switch (this.state) {
         case 'run': {
           const dx = this.tx - this.x
@@ -818,7 +837,7 @@
           this.y = FLOOR - Math.min(1, this.t / 0.16) * 9
           if (this.t > 0.45) {
             this.dir = -side
-            this.flip(openSpot(s, this.x - side * rand(90, 150), 10), 14, this.y)
+            this.flip(openSpot(s, this.x - side * rand(90, 150), 10), 22, this.y)
           }
           return FAST
         }
@@ -1850,6 +1869,30 @@
       for (const a of s.actors) if (a !== h && a.x !== undefined && !(a instanceof Bullet)) a.x = clamp(a.x, -20, s.W + 20)
       if (d.orb && !d.orb.dead) d.orb.x = openSpot(s, clamp(d.orb.x, 10, s.W - 10), 6)
     },
+    // keyboard: A/D run, W somersaults (forward if running), S drops into the slide,
+    // Space slashes; the autopilot waits while you play
+    onKey(s, key, down) {
+      const h = s.data.hiryu
+      if (!down || !h) return
+      const ok = ['stand', 'run', 'crouch', 'win'].includes(h.state)
+      if (ok) {
+        h.plan = []
+        h.target = null
+        h.asleep = false
+        h.resting = false
+      }
+      if (key === 'fire' && (ok || h.state === 'slash') && h.slashCd <= 0) {
+        if (h.state !== 'slash') h.state = 'stand'
+        h.slash()
+      } else if (key === 'up' && ok) {
+        const kx = keyDir(s)
+        h.state = 'stand'
+        h.flip(edgeX(s, h.x + kx * 70), 26)
+      } else if (key === 'down' && ok) {
+        h.state = 'stand'
+        h.slide(h.x + h.dir * 90)
+      }
+    },
     onBarClick(s, p) {
       // mockup only (Aico has no empty-bar clicks): run there
       s.data.clickAt = performance.now()
@@ -1889,6 +1932,10 @@
       d.winAt = 0
     },
     update(s, dt, now) {
+      // held game keys keep it at full rate
+      return Math.min(this.step(s, dt, now) ?? Infinity, s.keys?.size ? FAST : Infinity)
+    },
+    step(s, dt, now) {
       const d = s.data
       const h = d.hiryu
       let wait = Infinity

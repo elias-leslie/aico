@@ -56,7 +56,23 @@ export interface ConceptDef {
   onDone?(s: Strip, ranMs: number): void
   onNap?(s: Strip): void
   onBonk?(s: Strip, r: Rect, kind?: string): void
+  /** A game key went down (edge, not auto-repeat) or up; held keys are in s.keys. */
+  onKey?(s: Strip, key: GameKey, down: boolean): void
 }
+/** Keyboard play: WASD or the arrows steer, Space is the action button. */
+export type GameKey = 'left' | 'right' | 'up' | 'down' | 'fire'
+const GAME_KEYS: Record<string, GameKey> = {
+  KeyA: 'left',
+  ArrowLeft: 'left',
+  KeyD: 'right',
+  ArrowRight: 'right',
+  KeyW: 'up',
+  ArrowUp: 'up',
+  KeyS: 'down',
+  ArrowDown: 'down',
+  Space: 'fire',
+}
+const MODIFIERS = new Set(['Shift', 'Control', 'Alt', 'Meta', 'CapsLock'])
 interface Particle {
   age: number
   life: number
@@ -83,6 +99,10 @@ export interface Cursor extends Point {
 // ---- constants & sprite helpers ------------------------------------------------
 export const H = 36 // titlebar height (CSS px); keep in step with .titlebar
 export const FLOOR = H // feet line: the top edge of the terminal
+// The stage reaches up into the window's top margin (keep in step with
+// --frame-top), so jumps and flights may leave the bar's top edge: drawing
+// may use y down to -SPILL_UP. The floor stays the floor.
+export const SPILL_UP = 8
 export const FAST = 1000 / 12
 export const SLOW = 250
 export const REST_AFTER = 30_000 // quiet ms before a vignette settles
@@ -228,6 +248,7 @@ export function installGlobals(): void {
   Object.assign(g, {
     H,
     FLOOR,
+    SPILL_UP,
     FAST,
     SLOW,
     REST_AFTER,
@@ -293,6 +314,13 @@ export class Strip {
   W = 0
   scale = 1
   cursor: Cursor | null = null
+  /** Clicking a character arms the keyboard for the game; Escape, a click
+   * anywhere outside the bar, any other key, leaving the window or half a
+   * minute without game keys hands it back to the terminal. */
+  armed = false
+  keys = new Set<GameKey>()
+  /** When a game key last went down, or the keyboard was armed (performance.now ms). */
+  keyAt = -1e9
   busy = false
   busySince = 0
   lastActive = performance.now()
@@ -328,6 +356,7 @@ export class Strip {
     this.layout()
     def.setup(this)
     this.bindPointer()
+    this.bindKeys()
     const signal = this.life.signal
     const watch = (el: Element) => {
       const ro = new ResizeObserver(() => this.relayout())
@@ -390,9 +419,10 @@ export class Strip {
       .map((el) => this.rel(el))
     const dpr = window.devicePixelRatio || 1
     this.canvas.style.width = `${this.W}px`
-    this.canvas.style.height = `${H}px`
+    this.canvas.style.height = `${SPILL_UP + H}px`
+    this.canvas.style.top = `${-SPILL_UP}px`
     this.canvas.width = Math.round(this.W * dpr)
-    this.canvas.height = Math.round(H * dpr)
+    this.canvas.height = Math.round((SPILL_UP + H) * dpr)
     this.scale = dpr
     this.nextAt = 0 // resizing cleared the canvas
   }
@@ -577,6 +607,7 @@ export class Strip {
       const actor = this.actorAt(p)
       this.lastTouch = performance.now()
       if (!actor) return
+      this.arm(true, p)
       e.preventDefault()
       this.pad.setPointerCapture(e.pointerId)
       this.down = { ...p, actor, dragging: false }
@@ -620,6 +651,79 @@ export class Strip {
     }
   }
 
+  // ---- keyboard: armed by clicking a character ------------------------------------
+  arm(on: boolean, at?: Point): void {
+    const now = performance.now()
+    if (on) this.keyAt = now
+    if (on === this.armed) return
+    this.armed = on
+    if (on && at)
+      this.say('WASD · Space · Esc', at.x, Math.max(1, at.y - 22), {
+        color: '#e5a647',
+        life: 2.2,
+      })
+    if (!on) for (const k of [...this.keys]) this.keyUp(k)
+    this.poke()
+  }
+  private keyUp(k: GameKey): void {
+    if (!this.keys.delete(k)) return
+    this.def.onKey?.(this, k, false)
+  }
+  private bindKeys(): void {
+    const signal = this.life.signal
+    // Window capture phase: ahead of xterm and the chrome's own key handling.
+    window.addEventListener(
+      'keydown',
+      (e) => {
+        if (!this.armed) return
+        const k = GAME_KEYS[e.code]
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          e.stopImmediatePropagation()
+          this.arm(false)
+          return
+        }
+        if (!k || e.ctrlKey || e.altKey || e.metaKey) {
+          // anything else is for the terminal: hand the keyboard back
+          if (!MODIFIERS.has(e.key)) this.arm(false)
+          return
+        }
+        e.preventDefault()
+        e.stopImmediatePropagation()
+        const now = performance.now()
+        this.keyAt = now
+        this.lastTouch = now
+        this.napping = false
+        if (!this.keys.has(k)) {
+          this.keys.add(k)
+          this.def.onKey?.(this, k, true)
+        }
+        this.poke()
+      },
+      { capture: true, signal },
+    )
+    window.addEventListener(
+      'keyup',
+      (e) => {
+        const k = GAME_KEYS[e.code]
+        if (!k || !this.keys.has(k)) return
+        e.preventDefault()
+        e.stopImmediatePropagation()
+        this.keyUp(k)
+        this.poke()
+      },
+      { capture: true, signal },
+    )
+    document.addEventListener(
+      'pointerdown',
+      (e) => {
+        if (this.armed && !this.bar.contains(e.target as Node)) this.arm(false)
+      },
+      { capture: true, signal },
+    )
+    window.addEventListener('blur', () => this.arm(false), { signal })
+  }
+
   // ---- the loop ------------------------------------------------------------------
   poke(): void {
     this.nextAt = 0
@@ -638,6 +742,7 @@ export class Strip {
   }
   private tick(now: number): number {
     if (now < this.nextAt) return this.nextAt - now
+    if (this.armed && now - this.keyAt > REST_AFTER) this.arm(false)
     const dt = Math.min(0.25, (now - this.lastStep) / 1000)
     this.lastStep = now
     let want = Infinity
@@ -705,9 +810,9 @@ export class Strip {
   }
   private draw(): void {
     const c = this.ctx
-    c.setTransform(this.scale, 0, 0, this.scale, 0, 0)
+    c.setTransform(this.scale, 0, 0, this.scale, 0, this.scale * SPILL_UP)
     c.imageSmoothingEnabled = false
-    c.clearRect(0, 0, this.W, H)
+    c.clearRect(0, -SPILL_UP, this.W, SPILL_UP + H)
     this.def.drawBehind?.(this, c)
     const sorted = this.actors.slice().sort((a, b) => (a.z ?? 0) - (b.z ?? 0))
     for (const a of sorted) a.draw(c, this)
@@ -732,5 +837,10 @@ export class Strip {
     }
     c.globalAlpha = 1
     this.def.drawFront?.(this, c)
+    if (this.armed) {
+      // the keyboard is the game's: a thin amber rule along the floor says so
+      c.fillStyle = 'rgba(229, 166, 71, 0.55)'
+      c.fillRect(0, H - 1, this.W, 1)
+    }
   }
 }

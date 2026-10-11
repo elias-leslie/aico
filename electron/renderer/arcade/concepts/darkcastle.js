@@ -17,7 +17,8 @@
   })()
   const live = (s, now) => s.lively(now) || (KEEP_AWAKE && !s.napping)
   const NOW = () => performance.now()
-  const engaged = (s, now) => now < (s.data.userUntil || 0) || (s.cursor && now - s.cursor.t < 1600)
+  const engaged = (s, now) => now - s.keyAt < 9000 || now < (s.data.userUntil || 0) || (s.cursor && now - s.cursor.t < 1600)
+  const keyDir = (s) => (s.keys.has('right') ? 1 : 0) - (s.keys.has('left') ? 1 : 0)
   const touched = (s) => {
     s.data.userUntil = NOW() + 9000
   }
@@ -601,7 +602,26 @@
     jump(now) {
       if (this.busyState() || this.y < FLOOR) return
       this.set('jump', now)
-      this.vy = -150
+      // peaks with his hat just past the top of the bar
+      this.vy = -112
+      this.jvx = keyDir(this.s) * 40
+    }
+    // ---- keyboard: A/D walk, W jumps, S ducks, Space throws (W+Space lobs high) ----
+    key(k, now) {
+      const s = this.s
+      if (this.state === 'rest') this.set('stand', now)
+      if (k === 'up') this.jump(now)
+      else if (k === 'down') {
+        if (this.busyState() || this.y < FLOOR) return
+        this.goal = null
+        this.keyDuck = true
+        this.set('duck', now)
+      } else if (k === 'fire') {
+        if (s.keys.has('up')) return this.throwAtPoint(this.x + this.dir * 45, FLOOR - 34, now, true)
+        const t = nearestFoe(s, this.x, this.dir, 260)
+        if (t) this.throwAt(t, now, true)
+        else this.throwAtPoint(this.x + this.dir * 70, FLOOR - 20, now, true)
+      }
     }
     throwAt(t, now, user = false) {
       // aim with a little lead
@@ -677,7 +697,9 @@
         case 'jump':
           this.vy += 300 * dt
           this.y += this.vy * dt
+          if (this.jvx) this.x = clamp(this.x + this.jvx * dt, 8, s.W - 8)
           if (this.y >= FLOOR) {
+            this.jvx = 0
             this.y = FLOOR
             this.vy = 0
             this.set('stand', now)
@@ -704,7 +726,10 @@
           if (t > 2400) this.set('stand', now)
           return FAST
         case 'duck':
-          if (t > 650) this.set('stand', now)
+          if (t > 650 && !(this.keyDuck && s.keys.has('down'))) {
+            this.keyDuck = false
+            this.set('stand', now)
+          }
           return FAST
         case 'pull':
           if (t > 900) {
@@ -727,6 +752,16 @@
         return FAST
       }
       // stand / walk
+      const kd = live(s, now) ? keyDir(s) : 0
+      if (kd) {
+        // A/D: you walk him
+        this.goal = null
+        this.dir = kd
+        this.x = clamp(this.x + kd * 40 * dt, 8, s.W - 8)
+        this.ft += dt * 1.2
+        this.state = 'walk'
+        return FAST
+      }
       const user = engaged(s, now)
       if (!live(s, now)) {
         if (this.restX === undefined) this.restX = openSpot(s, this.x, 10)
@@ -1670,6 +1705,9 @@
       s.poke()
     },
     // mockup extra (Aico never delivers empty-bar clicks): throw there
+    onKey(s, k, down) {
+      if (down && s.data.duncan) s.data.duncan.key(k, NOW())
+    },
     onBarClick(s, p) {
       touched(s)
       const dn = s.data.duncan

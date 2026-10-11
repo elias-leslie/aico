@@ -390,6 +390,7 @@
     // ---- input ----
     grab() {
       this.s.data.touchAt = performance.now()
+      this.s.data.sel = this
       if (['ohno', 'exit', 'splat'].includes(this.state)) return
       this.set('held')
       this.bubble('!')
@@ -428,6 +429,7 @@
       const s = this.s
       const now = performance.now()
       s.data.touchAt = now
+      s.data.sel = this
       if (this.asleep) {
         this.set('walk')
         this.bubble('!')
@@ -607,13 +609,15 @@
         return FAST
       }
       const cur = s.cursor
-      if (cur && this.waveCool <= 0 && cur.speed < 80 && Math.abs(cur.x - this.fx) < 14 && Math.abs(cur.y - (this.y - 7)) < 14) {
+      if (cur && this.waveCool <= 0 && !(s.armed && s.data.sel === this) && cur.speed < 80 && Math.abs(cur.x - this.fx) < 14 && Math.abs(cur.y - (this.y - 7)) < 14) {
         this.waveCool = rand(8, 14)
         this.dir = cur.x > this.fx ? 1 : -1
         this.set('wave', 1.2)
         return FAST
       }
-      const sp = (s.busy ? 14 : 11) * (this.fuse > 0 && this.fuse < 2 ? 1.3 : 1)
+      // the lemming on the keys hurries while its way is held
+      const hurry = s.data.sel === this && s.keys && s.keys.has(this.dir > 0 ? 'right' : 'left') ? 1.6 : 1
+      const sp = (s.busy ? 14 : 11) * (this.fuse > 0 && this.fuse < 2 ? 1.3 : 1) * hurry
       this.acc += sp * dt
       while (this.acc >= 1 && this.state === 'walk') {
         this.acc -= 1
@@ -927,8 +931,94 @@
   /** The user is playing: the unseen player keeps its hands off. */
   function engaged(s, now) {
     const c = s.cursor
-    return now - (s.data.touchAt || -1e9) < 9000 || (!!c && now - c.since < 2500 && now - (c.t ?? now) < 1500)
+    return now - (s.keyAt ?? -1e9) < 9000 || now - (s.data.touchAt || -1e9) < 9000 || (!!c && now - c.since < 2500 && now - (c.t ?? now) < 1500)
   }
+  // ---- the keys: steer the selected lemming and hand it skills ----
+  const steerable = (a) => a && !a.dead && !['exit', 'splat', 'ohno'].includes(a.state)
+  /** The lemming on the keys: the last one clicked, else the walker nearest the hatch's way out. */
+  function selected(s) {
+    const D = s.data
+    if (steerable(D.sel)) return D.sel
+    const all = lems(s).filter((a) => steerable(a) && a.state !== 'held')
+    const from = D.selX ?? (D.lay ? D.lay.hatch.x + 8 : s.W / 2)
+    let best = null
+    for (const a of all) {
+      const k = Math.abs(a.fx - from) + (a.state === 'walk' ? 0 : 40)
+      if (!best || k < best.k) best = { a, k }
+    }
+    D.sel = best ? best.a : null
+    return D.sel
+  }
+  /** The next lemming along in direction d (a double tap of A or D). */
+  function selectNext(s, d) {
+    const D = s.data
+    const cur = selected(s)
+    if (!cur) return null
+    let best = null
+    for (const a of lems(s)) if (a !== cur && steerable(a) && a.state !== 'held' && (a.fx - cur.fx) * d > 0 && (!best || Math.abs(a.fx - cur.fx) < Math.abs(best.fx - cur.fx))) best = a
+    if (best) {
+      D.sel = best
+      best.bubble('!')
+    }
+    return D.sel
+  }
+  function onKey(s, key, down) {
+    const D = s.data
+    const now = performance.now()
+    if (!down || D.phase === 'gap') return
+    if (key === 'left' || key === 'right') {
+      const d = key === 'right' ? 1 : -1
+      if (D.tapKey === key && now - D.tapAt < 320) {
+        D.tapKey = null
+        selectNext(s, d)
+        return
+      }
+      D.tapKey = key
+      D.tapAt = now
+    }
+    const a = selected(s)
+    if (!a) return
+    D.selX = a.fx
+    if (key === 'left' || key === 'right') {
+      const d = key === 'right' ? 1 : -1
+      if (a.asleep) a.set('walk')
+      else if (['build', 'bash', 'dig', 'shrug', 'wave', 'five', 'cheer'].includes(a.state)) a.set('walk')
+      if (a.state !== 'block') a.dir = d
+      return
+    }
+    if (a.asleep) {
+      a.set('walk')
+      a.bubble('!')
+      return
+    }
+    if (a.state === 'fall' || a.state === 'climb') {
+      // anything in the air: the umbrella
+      if (!a.floater) {
+        a.floater = true
+        a.label('Floater')
+      }
+      return
+    }
+    if (a.state === 'block') {
+      // only one way out for a Blocker
+      if (key === 'fire') {
+        a.label('Oh no!')
+        a.arm()
+      }
+      return
+    }
+    if (!['walk', 'wave', 'five', 'cheer', 'build', 'bash', 'dig', 'shrug'].includes(a.state)) return
+    const k = key === 'up' ? 'build' : key === 'down' ? 'dig' : a.skills()[0]
+    a.label({ build: 'Builder', bash: 'Basher', dig: 'Digger', block: 'Blocker', climb: 'Climber', float: 'Floater', bomb: 'Bomber' }[k])
+    if (k === 'float') a.floater = true
+    else if (k === 'climb') a.climber = true
+    else if (k === 'bomb') a.arm()
+    else {
+      a.set('walk')
+      a.job(k)
+    }
+  }
+
   function direct(s, now) {
     const D = s.data
     if (engaged(s, now)) return
@@ -1076,6 +1166,7 @@
           D.released++
           D.nextRelease = now + (s.busy ? rand(1300, 2100) : rand(2300, 3600))
         }
+        if (s.keys && s.keys.size) D.touchAt = now
         direct(s, now)
         // a fuse lit by mistake
         if (D.playMs > D.accident && !engaged(s, now)) {
@@ -1140,9 +1231,23 @@
       c.drawImage(FLAME[f % 3], ex.x - 7, ex.y - 13)
       c.drawImage(FLAME[(f + 1) % 3], ex.x + 5, ex.y - 13)
     },
+    onKey,
     drawFront(s, c) {
       const lay = s.data.lay
       if (!lay) return
+      // the Lemmings cursor: a square around the lemming on the keys
+      if (s.armed) {
+        const a = selected(s)
+        if (a) {
+          const x = Math.round(a.fx) - 6
+          const y = Math.round(a.y) - TALL - 3
+          const w = 12
+          const h = TALL + 5
+          c.fillStyle = '#ffffff'
+          for (const [px, py] of [[x, y], [x + w - 3, y], [x, y + h - 1], [x + w - 3, y + h - 1]]) c.fillRect(px, py, 3, 1)
+          for (const [px, py] of [[x, y], [x + w - 1, y], [x, y + h - 3], [x + w - 1, y + h - 3]]) c.fillRect(px, py, 1, 3)
+        }
+      }
       // the save counter beside the exit
       const ex = lay.exit
       const n = String(s.data.levelSaved)

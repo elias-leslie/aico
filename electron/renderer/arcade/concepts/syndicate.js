@@ -19,7 +19,10 @@
   const live = (s, now) => s.lively(now) || (KEEP_AWAKE && !s.napping)
   const NOW = () => performance.now()
   // the user is driving: a click in the last 9 s, or the cursor moving over the bar
-  const engaged = (s, now) => now < (s.data.userUntil || 0) || (s.cursor && now - s.cursor.t < 1600)
+  const engaged = (s, now) => now - (s.keyAt ?? -1e9) < 9000 || now < (s.data.userUntil || 0) || (s.cursor && now - s.cursor.t < 1600)
+  // the keys are driving: held now, or pressed in the last 9 s
+  const keyMode = (s, now) => (s.keys && s.keys.size > 0) || now - (s.keyAt ?? -1e9) < 9000
+  const keyDir = (s) => (s.keys.has('right') ? 1 : 0) - (s.keys.has('left') ? 1 : 0)
   const touched = (s) => {
     s.data.userUntil = NOW() + 9000
   }
@@ -428,6 +431,7 @@
       const s = this.s
       const now = NOW()
       touched(s)
+      s.data.sel = this.i
       if (s.data.mode === 'done') return
       this.wpn = WEAPONS[(WEAPONS.indexOf(this.wpn) + 1) % 3]
       this.boostUntil = now + 6000
@@ -459,6 +463,7 @@
     // drag an agent: the whole squad moves out to where he is dropped
     grab() {
       touched(this.s)
+      this.s.data.sel = this.i
     }
     drag(p) {
       touched(this.s)
@@ -564,7 +569,9 @@
         this.ft = 0
       }
       // standing: face the cursor while the user is around, else the squad's way
-      if (s.cursor && engaged(s, now) && now > (this.holdUntil || 0)) {
+      if (keyMode(s, now) && now > (this.holdUntil || 0)) {
+        if (s.data.face) this.dir = s.data.face
+      } else if (s.cursor && engaged(s, now) && now > (this.holdUntil || 0)) {
         const want = s.cursor.x > this.x + 4 ? 1 : s.cursor.x < this.x - 4 ? -1 : this.dir
         this.dir = want
       } else if (now > (this.holdUntil || 0) && s.data.face && !nearestHostile(s, this.x, 220)) this.dir = s.data.face
@@ -1153,8 +1160,9 @@
   /** Squad AI: who shoots what (skipped while the user is driving). */
   function squadThink(s, now) {
     const d = s.data
+    const mine = keyMode(s, now) ? selected(s) : null
     for (const a of d.agents) {
-      if (a.mode !== 'idle' || now < a.nextThink) continue
+      if (a === mine || a.mode !== 'idle' || now < a.nextThink) continue
       a.nextThink = now + (s.busy ? rand(500, 1300) : rand(900, 2000))
       const t = d.focus?.alive ? d.focus : nearestHostile(s, a.x, s.busy ? 320 : 240)
       if (t) {
@@ -1173,6 +1181,68 @@
         a.attack(car, 'gauss', now)
       }
     }
+  }
+
+  // ---- the keys: A/D walk the squad, Space fires, W switches weapon, S persuades ----
+  /** The agent on the keys: the last one clicked, else the one at the front. */
+  function selected(s) {
+    const d = s.data
+    if (d.sel == null) d.sel = (d.face || 1) > 0 ? 3 : 0
+    return d.agents[d.sel]
+  }
+  function keyTick(s, dt, now) {
+    const d = s.data
+    if (d.mode === 'done' || d.dragX != null) return SLOW
+    const mx = keyDir(s)
+    if (mx) {
+      // walk the squad: the selected agent leads, the others keep their slots
+      const a = selected(s)
+      const m = 1.5 * SP + 8
+      const sp = a.boosted(now) ? 50 : 32
+      d.face = mx
+      d.sx = clamp(d.sx + mx * sp * dt, m, s.W - m)
+      for (const g of d.agents) {
+        if (g.mode !== 'idle') continue
+        g.tx = Math.round(clamp(d.sx + (g.i - 1.5) * SP, 6, s.W - 6))
+        g.goAt = now - 1
+      }
+    }
+    if (s.keys.has('fire') && now >= (d.keyFireAt || 0)) keyFire(s, now)
+    return s.keys.size ? FAST : SLOW
+  }
+  function keyFire(s, now) {
+    const d = s.data
+    const a = selected(s)
+    if (d.mode === 'done' || a.mode !== 'idle') return
+    d.keyFireAt = now + 250
+    a.boostUntil = Math.max(a.boostUntil, now + 1500)
+    const dir = d.face || a.dir
+    let t = null
+    for (const p of s.actors) {
+      if (!(p instanceof Person) || !p.alive || !p.hostile || p.state === 'leave' || p.x < -4 || p.x > s.W + 4) continue
+      if ((p.x - a.x) * dir < 0 || Math.abs(p.x - a.x) > 260) continue
+      if (!t || Math.abs(p.x - a.x) < Math.abs(t.x - a.x)) t = p
+    }
+    if (!t && d.focus?.alive && (d.focus.x - a.x) * dir > 0) t = d.focus
+    a.attack(t || { x: a.x + dir * 120, alive: true, damage() {}, dummy: true }, a.wpn, now)
+  }
+  function onKey(s, key, down) {
+    const d = s.data
+    if (!down || d.mode === 'done' || !d.agents) return
+    const now = NOW()
+    const a = selected(s)
+    if (key === 'fire') return keyFire(s, now)
+    if (key === 'up') {
+      // W: next weapon
+      a.wpn = WEAPONS[(WEAPONS.indexOf(a.wpn) + 1) % 3]
+      s.say(a.wpn.toUpperCase(), clamp(a.x, 20, s.W - 20), 2, { color: '#9fe8ff', life: 0.8, size: 6 })
+    } else if (key === 'down') {
+      // S: the Persuadertron on the nearest passer-by
+      const civ = nearestFree(s, a.x, 90)
+      if (civ) a.persuade(civ, now)
+      else s.say('?', a.x, FLOOR - 32, { color: '#40ff80', life: 0.6, size: 6 })
+    }
+    s.poke()
   }
 
   function update(s, dt, now) {
@@ -1285,6 +1355,7 @@
       cop.dir = -car.dir
       s.spawn(cop)
     }
+    if (keyMode(s, now)) wait = Math.min(wait, keyTick(s, dt, now))
     if (!user || s.busy) squadThink(s, now)
     return wait
   }
@@ -1380,6 +1451,7 @@
       'Four cyborg agents in long trenchcoats work the street on their own: the Persuadertron turns passers-by into a line of followers, police pull up and tell them to drop their weapons (they get talked round or gunned down, and the car goes up with a Gauss round), rival agents walk in for a minigun-and-laser firefight with the IPA bars glowing, and a target in a white suit gets hit for MISSION COMPLETE. <b>Click a cop, a rival or the target</b> and the whole squad opens fire on it; <b>click a passer-by</b> to persuade them; <b>click an agent</b> to switch his weapon, give him the boost and fire; <b>click a car</b> for the Gauss gun; <b>drag an agent</b> to move the squad, or <b>drag a passer-by</b> somewhere else. While you play the cursor becomes the squad\'s crosshair: the agents face it and wait for orders, and bystanders put their hands up when it passes over them; stop and the squad carries on alone. Double-click an agent for a surprise. While the agent works it is open war; on done the street is cleared for MISSION COMPLETE; at rest the squad stands in a quiet stretch with its converts lined up.',
     setup,
     update,
+    onKey,
     onBusy(s) {
       const d = s.data
       d.waveAt = NOW() + 1200
@@ -1497,7 +1569,16 @@
       }
       // the cursor is the agents' crosshair while you play
       const cur = s.cursor
-      if (cur && engaged(s, now) && cur.y >= 0 && cur.y <= H) {
+      // the agent on the keys: a green caret over his head
+      if (s.armed && d.agents) {
+        const a = selected(s)
+        const x = Math.round(a.x)
+        c.fillStyle = '#40ff80'
+        c.fillRect(x - 2, FLOOR - 33, 5, 1)
+        c.fillRect(x - 1, FLOOR - 32, 3, 1)
+        c.fillRect(x, FLOOR - 31, 1, 1)
+      }
+      if (cur && engaged(s, now) && !keyMode(s, now) && cur.y >= 0 && cur.y <= H) {
         const x = Math.round(cur.x)
         const y = Math.round(cur.y)
         c.fillStyle = '#ffe060'

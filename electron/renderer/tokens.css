@@ -20,6 +20,10 @@
   /* Frame: slim opaque window margin around the shell, so tiled widgets sit
      nearly edge to edge. */
   --frame-inset: 3px;
+  /* A taller top margin gives the titlebar arcade headroom: jumps and flights
+     leave the bar and rise into it. Keep in step with SPILL_UP in
+     arcade/engine.ts. */
+  --frame-top: 8px;
 
   /* Type */
   --mist: #8b8f94; /* secondary text */

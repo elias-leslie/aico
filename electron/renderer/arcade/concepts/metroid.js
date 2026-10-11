@@ -304,7 +304,9 @@
   // ---- shared helpers -------------------------------------------------------------
   const enemies = (s) => s.actors.filter((a) => a.enemy && !a.dead)
   const overlap = (a, b) => a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0
-  const engaged = (s, now) => now < s.data.engagedUntil || (s.cursor && s.cursor.y < H + 4 && now - s.cursor.t < 1500 && s.cursor.speed > 10)
+  const keyed = (s, now) => now - s.keyAt < 9000
+  const keyDir = (s) => (s.keys.has('right') ? 1 : 0) - (s.keys.has('left') ? 1 : 0)
+  const engaged = (s, now) => keyed(s, now) || now < s.data.engagedUntil || (s.cursor && s.cursor.y < H + 4 && now - s.cursor.t < 1500 && s.cursor.speed > 10)
   function engage(s) {
     s.data.engagedUntil = performance.now() + 9000
   }
@@ -559,7 +561,8 @@
       this.latchT = 0
       if (this.state === 'spin') {
         this.jt += dt
-        this.jy = Math.max(0, 70 * this.jt - 75 * this.jt * this.jt)
+        // the screw attack arcs up out of the top of the bar
+        this.jy = Math.max(0, 90 * this.jt - 75 * this.jt * this.jt)
         this.x = clamp(this.x + this.vx * dt, 1, s.W - SW - 1)
         // the screw attack tears through anything it touches
         const b = this.box
@@ -598,6 +601,23 @@
       }
       this.restX = null
       if (this.state === 'kneel') this.state = 'stand'
+      const kd = keyDir(s)
+      if (kd && (this.canAct() || this.state === 'ball')) {
+        // A/D: run (or roll), turning on the spot
+        this.task = null
+        this.dir = kd
+        if (this.state === 'ball') this.rolling = true
+        else if (this.state !== 'shoot') this.state = 'run'
+        this.x = clamp(this.x + kd * (this.state === 'ball' ? 40 : this.speed() * 1.2) * dt, 1, s.W - SW - 1)
+        this.leg += dt * (this.state === 'ball' ? 12 : 10)
+        return FAST
+      }
+      if (s.keys.size) {
+        this.task = null
+        if (this.state === 'run') this.state = 'stand'
+        this.rolling = false
+        return FAST
+      }
       this.think(now, s)
       return this.act(dt, now, s)
     }
@@ -610,8 +630,8 @@
       if (this.task) return
       const c = s.cursor
       if (engaged(s, now)) {
-        // the user drives: walk toward the pointer, aim at it
-        if (c && c.y < H + 6) this.task = { kind: 'follow', until: now + 400 }
+        // the user drives: walk toward the pointer, aim at it (not while the keyboard has her)
+        if (c && c.y < H + 6 && !keyed(s, now)) this.task = { kind: 'follow', until: now + 400 }
         return
       }
       // running low: go for the energy drops
@@ -1509,6 +1529,27 @@
     onBarClick(s, p) {
       engage(s)
       s.data.samus.fire(p.x, p.y)
+    },
+    // keyboard: A/D run, W screw attack, S morph ball, Space fires (a bomb in the ball); W in the ball stands up
+    onKey(s, k, down) {
+      const sm = s.data.samus
+      if (!down || !sm) return
+      if (sm.state === 'kneel') sm.state = 'stand'
+      sm.task = null
+      if (k === 'fire') {
+        if (sm.state === 'ball') return sm.bomb()
+        const ahead = enemies(s).find((e) => e.frozen && (e.x + e.w / 2 - sm.cx) * sm.dir > 0 && Math.abs(e.x + e.w / 2 - sm.cx) < 140)
+        if (ahead) sm.fire(ahead.x + ahead.w / 2, ahead.y + ahead.h / 2, 'missile')
+        else sm.fire(sm.cx + sm.dir * 100, sm.y + 11)
+      } else if (k === 'up') {
+        if (sm.state === 'ball') return sm.unmorph()
+        const kd = keyDir(s)
+        if (kd) sm.dir = kd
+        sm.screw(!!kd)
+      } else if (k === 'down') {
+        if (sm.state === 'ball') sm.bomb()
+        else sm.morph()
+      }
     },
     onBusy(s) {
       const d = s.data

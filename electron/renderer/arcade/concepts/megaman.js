@@ -15,6 +15,16 @@
     }
   })()
 
+  // capture-only: always run this watch-mode episode (?t=…&mmep=joe)
+  const FORCE_EP = (() => {
+    try {
+      const q = new URLSearchParams(location.search)
+      return q.has('t') ? q.get('mmep') : null
+    } catch {
+      return null
+    }
+  })()
+
   // ---- palette (NES-ish) ----------------------------------------------------
   const MP = {
     b: '#0070ec', c: '#3cbcfc', S: '#fcd8a8', s: '#e0a070', w: '#fcfcfc', E: '#101010',
@@ -28,6 +38,15 @@
     P: '#2c8cf8', p: '#0048b0', I: '#dcf4fc',
     // E-tank / meters
     e: '#f8f8b0', n: '#202024',
+    // Sniper Joe
+    j: '#58d854', J: '#005800',
+  }
+  /** overlay: write str into rows[r] at column c ('_' keeps what is there) */
+  function ov(rows, r, c, str) {
+    const out = rows.slice()
+    const row = (out[r] || '').padEnd(c + str.length, '.')
+    out[r] = row.slice(0, c) + [...str].map((ch, i) => (ch === '_' ? row[c + i] : ch)).join('') + row.slice(c + str.length)
+    return out
   }
 
   // ---- Mega Man frames: head + body rows, facing right ---------------------
@@ -191,6 +210,7 @@
     white: { b: 'w', c: 'w', S: 'w', s: 'C', E: 'C' },
     cut: { b: 'x', c: 'W' },
     ice: { b: 'B', c: 'W' },
+    proto: { b: 'r', c: 'R' },
   }
   const MMS = {}
   for (const [pk, map] of Object.entries(PALS)) {
@@ -203,6 +223,7 @@
     MMS[pk] = set
   }
   const BEAM_SP = sprite(BEAM, MP)
+  const BEAM_RED = sprite(recolor(BEAM, { b: 'r', c: 'R' }), MP)
   const RUN = ['run0', 'run1', 'run2', 'run1']
 
   // ---- shots, effects -------------------------------------------------------
@@ -247,6 +268,83 @@
       '....mmmm....', '..mmMMMMmm..', '.mMMhhMMMMm.', '.mMhhMMMMMm.', 'mMMMMMMMMMMm', 'mmmmmmmmmmmm',
       '.kkkkkkkkkk.', '.kkwwkkkwwk.', '.kkEEkkkEEk.', '.kKkkkkkkKk.', 'oo........oo', 'o..........o',
     ], MP),
+  }
+
+  // ---- Sniper Joe: green, one red eye, a big shield ----------------------------------
+  const JOE_BASE = [
+    '.....jjjjjj.......',
+    '....jjGGjjjj......',
+    '...jjGjjjjjjj.....',
+    '...jjjjjjjjjj.....',
+    '...jjEEEEEEEE.....',
+    '...jjEEEEERwE.....',
+    '...jjjjjjjjjj.....',
+    '....JJJJJJJJ......',
+    '...jjjjjjjjjj.....',
+    '..jjjGjjjjjjjj....',
+    '..jjGjjjjjjjjj....',
+    '..jjjjjjjjjjjj....',
+    '..JjjjjjjjjjjJ....',
+    '...JJJJJJJJJJ.....',
+    '...jjjj..jjjj.....',
+    '...jjjj..jjjj.....',
+    '...jjjj..jjjj.....',
+    '..jjjjj..jjjjj....',
+    '..JJJJJ..JJJJJ....',
+  ]
+  const SHIELD = ['_XXXX_', 'XXwXXx', 'XwXXXx', 'XwXXXx', 'XXXXXx', 'XXXXXx', 'XXXjXx', 'XXjjXx', 'XXXjXx', 'XXXXXx', 'XXXXXx', 'XXXXXx', 'XXXXxx', '_xxxx_']
+  const joeGuard = SHIELD.reduce((r, line, i) => ov(r, 3 + i, 11, line), JOE_BASE)
+  const joeFire = [['jjjjEE', 9], ['JJJJEE', 10]].reduce((r, [str, row]) => ov(r, row, 12, str), [5, 6, 7, 8, 9, 10, 11, 12, 13].reduce((r, row) => ov(r, row, 0, row === 5 || row === 13 ? '_x' : 'Xx'), JOE_BASE))
+  const joeJump = joeGuard.slice(0, 14).concat(['..jjjjjjjjjj......', '.jjjj....jjjj.....', '.JJJJ....JJJJ.....'])
+  const JOE = { guard: pairOutlined(joeGuard, MP), fire: pairOutlined(joeFire, MP), jump: pairOutlined(joeJump, MP) }
+
+  // ---- Blader: a flying helmet with a propeller (Cut Man's stage) ------------------
+  const BLADER_BODY = ['......xx......', '....oooooo....', '...oOOooooo...', '..oOooooooooo.', '..ooooooooooo.', '..oEEEEEEEEEo.', '..oEwwEEEwwEo.', '..ooooooooooo.', '...ooo...ooo..']
+  const BLADER = [pairOutlined(['xXXXXXXXXXXXXx', ...BLADER_BODY], MP), pairOutlined(['....xXXXXx....', ...BLADER_BODY], MP)]
+
+  // ---- Dr. Wily's saucer and Wily himself ---------------------------------------------
+  const saucerRows = (lit, wily) => [
+    '..........CCCCCC..........',
+    wily ? '........CCXXSSXXCC........' : '........CCCCCCCCCC........',
+    wily ? '.......CCXSSSSSSXCC.......' : '.......CCCCCCCCCCCC.......',
+    wily ? '.......CCSwESSwESCC.......' : '.......CCCCCCCCCCCC.......',
+    wily ? '.......CCSSXXXXSSCC.......' : '.......CCCCCCCCCCCC.......',
+    '...' + 'x'.repeat(20) + '...',
+    '.xx' + 'X'.repeat(20) + 'xx.',
+    'x' + [...Array(24)].map((_, i) => (i % 4 === 2 ? lit : 'X')).join('') + 'x',
+    '.' + 'x'.repeat(24) + '.',
+    '....xxx' + 'X'.repeat(12) + 'xxx....',
+    '.......' + 'x'.repeat(12) + '.......',
+  ]
+  const SAUCER = [pairOutlined(saucerRows('y', true), MP), pairOutlined(saucerRows('O', true), MP)]
+  const SAUCER_EMPTY = pairOutlined(saucerRows('o', false), MP)
+  const WILY = {
+    kneel: pairOutlined(['..XX....XX..', '.XXXSSSSXXX.', '.XXSSSSSSXX.', '..SwESSwES..', '..SSXXXXSS..', '...SSSSSS...', '..WWWWWWWW..', '.WWWWXXWWWW.', '.WWWSSSSWWW.', '.WWWWWWWWWW.', '.WWWWWWWWWW.', '..nnnnnnnnn.', '.nnnnnnnnnn.', '.kk.....kkk.'], MP),
+    bow: pairOutlined(['............', '............', '..XX....XX..', '.XXXSSSSXXX.', '.XXSSSSSSXX.', '..SSSSSSSS..', '.WWWWWWWWWW.', 'WWWWWWWWWWWW', 'SWWWWWWWWWWS', '.WWWWWWWWWW.', '.WWWWWWWWWW.', '..nnnnnnnnn.', '.nnnnnnnnnn.', '.kk.....kkk.'], MP),
+  }
+
+  // ---- Rush, the robot dog -----------------------------------------------------------------
+  const RUSH_ROWS = [
+    '..............rR....',
+    '.............rRR....',
+    '............RRRRRR..',
+    '............RRwERRR.',
+    '............RRRRRRRE',
+    'R...........RRRRRRR.',
+    'RR..........RRRWWW..',
+    '.RRRRRRRRRRRRRRR....',
+    '..RRRRRRRRRRRRRR....',
+    '..RRRRRRRRRRRRR.....',
+    '..RRWRRRRRRRRRR.....',
+    '...RR.RR...RR.RR....',
+    '...RR.RR...RR.RR....',
+    '..xxx.xxx.xxx.xxx...',
+  ]
+  const rushWag = ov(ov(ov(RUSH_ROWS, 4, 0, 'R'), 5, 0, '.R'), 6, 0, '.R')
+  const RUSH = {
+    sit: pairOutlined(RUSH_ROWS, MP),
+    wag: pairOutlined(rushWag, MP),
+    coil: pairOutlined(RUSH_ROWS.slice(0, 11).concat(['......XxX...........', '.....xXxXx..........', '......XxX...........', '.....xXxXx..........', '....xxxxxxx.........']), MP),
   }
 
   // ---- Robot Masters -----------------------------------------------------------
@@ -314,9 +412,17 @@
     },
   }
   const MAX_HP = 28
-  // jumps stay inside the bar: his head may touch the top edge, no more
-  const JV = -Math.sqrt(1000 * Math.max(8, H - 25))
-  const BJV = -Math.sqrt(840 * Math.max(8, H - 23))
+  // jumps may leave the top of the bar a little (the stage reaches SPILL_UP px into the frame)
+  const SPILL = typeof SPILL_UP === 'number' ? SPILL_UP : 0
+  const JV = -Math.sqrt(1000 * Math.max(8, H - 25 + Math.min(6, SPILL)))
+  const BJV = -Math.sqrt(840 * Math.max(8, H - 23 + Math.min(4, SPILL)))
+  // Rush Coil: the big one, his head clears the bar's top edge
+  const COILV = -Math.sqrt(1000 * Math.max(10, H - 24 + SPILL))
+  const keying = (s, now) => now - (s.keyAt ?? -1e9) < 9000
+  const engaged = (s, now) => keying(s, now) || now - (s.data.clickAt || -1e9) < 9000 || now - (s.data.grabAt || -1e9) < 9000 || (s.cursor && now - s.cursor.since < 2500)
+  const keyDir = (s) => (s.keys && s.keys.has('left') !== s.keys.has('right') ? (s.keys.has('left') ? -1 : 1) : 0)
+  const KRUN = 52
+  const touched = (s) => (s.data.clickAt = performance.now())
 
   // ---- helpers -------------------------------------------------------------------
   const live = (s, now) => s.lively(now) || KEEP_AWAKE
@@ -407,6 +513,18 @@
         }
         return
       }
+      for (const f of s.data.foes) {
+        if (f.dead || !f.contains(cx, cy)) continue
+        const r = f.onShot(this)
+        if (r === 'pass') continue
+        if (r === 'tink') {
+          this.kind = 'd'
+          this.vx = -this.vx * 0.7
+          this.vy = -120
+          s.particle({ img: pix('w'), x: cx, y: cy - 1, life: 0.15 })
+        } else if (this.kind !== 'c' && this.kind !== 'cut') this.dead = true
+        return
+      }
       const boss = s.data.boss
       if (boss && boss.contains(cx, cy)) {
         if (boss.inv <= 0) boss.damage(this.dmg)
@@ -445,9 +563,10 @@
       this.born = now0()
     }
     hit(x, y) {
-      return x >= this.x - 1 && x <= this.x + 10 && y >= this.y - 1 && y <= this.y + 10
+      return x >= this.x - 4 && x <= this.x + 13 && y >= this.y - 4 && y <= this.y + 10
     }
     onClick() {
+      touched(this.s)
       this.s.data.mm.goGet(this)
     }
     update(dt, now, s) {
@@ -489,10 +608,36 @@
       return x >= this.cx - 6 && x <= this.cx + 6 && y >= top - 1 && y <= this.y
     }
     hit(x, y) {
-      return x >= this.cx - 7 && x <= this.cx + 7 && y >= this.y - 13 && y <= this.y + 1
+      return x >= this.cx - 10 && x <= this.cx + 10 && y >= this.y - 16 && y <= this.y + 1
     }
     onClick() {
+      touched(this.s)
       this.s.data.mm.attack(this)
+    }
+    // pick a Met up by the hard hat: its little feet kick; let go and it lands angry
+    get grabbable() {
+      return !this.dead && !this.falling
+    }
+    grab(p) {
+      this.s.data.grabAt = performance.now()
+      this.held = true
+      this.state = 'hop'
+      this.t = 0.25
+      this.drag(p)
+    }
+    drag(p) {
+      this.s.data.grabAt = performance.now()
+      if (!this.held) return
+      this.cx = clamp(p.x, 10, this.s.W - 10)
+      this.y = clamp(p.y + 8, 8, FLOOR)
+    }
+    drop() {
+      this.s.data.grabAt = performance.now()
+      if (!this.held) return
+      this.held = false
+      this.falling = true
+      this.vy = 0
+      this.mad = true
     }
     destroy() {
       const s = this.s
@@ -522,6 +667,7 @@
       return 0
     }
     update(dt, now, s) {
+      if (this.held) return FAST
       if (this.falling) {
         this.vy += 300 * dt
         this.y += this.vy * dt
@@ -530,6 +676,15 @@
           this.falling = false
           this.vy = 0
           s.burst(this.cx, FLOOR - 1, 4, ['x', 'X'])
+          if (this.mad) {
+            // dropped: it comes up shooting, no ducking for a moment
+            this.mad = false
+            this.state = 'peek'
+            this.t = 0.2
+            this.fired = false
+            this.madUntil = now + 1200
+            s.say('!', this.cx, Math.max(0, this.y - 22), { life: 0.6, color: '#f8b800' })
+          }
         }
         return FAST
       }
@@ -561,7 +716,7 @@
         this.state = 'hide'
         return live(s, now) ? SLOW : Infinity
       }
-      const d = this.danger(s)
+      const d = now < (this.madUntil || 0) ? 0 : this.danger(s)
       if (d === 2 || now < this.alarm) {
         this.state = 'hide'
         this.safe = 0
@@ -589,8 +744,8 @@
       return FAST
     }
     draw(c) {
-      const img = MET[this.state === 'hide' || this.falling ? 'hide' : this.state === 'hop' ? 'hop' : 'peek'][this.dir]
-      const lift = this.state === 'hop' ? Math.round(Math.sin(Math.min(1, this.t / 0.5) * Math.PI) * 5) : 0
+      const img = MET[this.held ? 'hop' : this.state === 'hide' || this.falling ? 'hide' : this.state === 'hop' ? 'hop' : 'peek'][this.dir]
+      const lift = this.state === 'hop' && !this.held && !this.falling ? Math.round(Math.sin(Math.min(1, this.t / 0.5) * Math.PI) * 5) : 0
       c.drawImage(img, Math.round(this.cx - 7), Math.round(this.y - img.height + 1 - lift))
     }
   }
@@ -621,9 +776,10 @@
       return this.state !== 'die' && this.state !== 'enter' && Math.abs(x - this.cx) <= 8 && y >= this.y - 20 && y <= this.y
     }
     hit(x, y) {
-      return this.state !== 'die' && Math.abs(x - this.cx) <= 9 && y >= this.y - 22 && y <= this.y + 1
+      return this.state !== 'die' && Math.abs(x - this.cx) <= 12 && y >= this.y - 25 && y <= this.y + 1
     }
     onClick() {
+      touched(this.s)
       this.s.data.mm.attack(this)
     }
     caught() {
@@ -773,12 +929,14 @@
       this.shownHp = 0
       this.tanks = 1
       this.z = 3
+      this.clicks = []
+      this.restSince = 0
     }
     get visible() {
       return !['warpin', 'warpout', 'away', 'dead'].includes(this.state)
     }
     get moving() {
-      return ['run', 'jump', 'slide', 'warpin', 'warpout', 'hurt'].includes(this.state)
+      return ['run', 'jump', 'slide', 'warpin', 'warpout', 'hurt', 'held'].includes(this.state)
     }
     get asleep() {
       return this.state === 'rest'
@@ -790,11 +948,22 @@
       return this.visible && this.inv <= 0 && this.state !== 'getweapon' && Math.abs(x - this.cx) <= 7 && y >= this.top + 1 && y <= this.y
     }
     hit(x, y) {
-      return this.visible && Math.abs(x - this.cx) <= 8 && y >= this.top && y <= this.y + 1
+      return this.visible && Math.abs(x - this.cx) <= 11 && y >= this.top - 3 && y <= this.y + 1
     }
     onClick() {
+      const s = this.s
+      const now = performance.now()
+      touched(s)
+      this.clicks = this.clicks.filter((t) => now - t < 2500)
+      this.clicks.push(now)
+      // easter egg: five quick clicks and his brother whistles in
+      if (this.clicks.length >= 5 && !s.data.proto) {
+        this.clicks.length = 0
+        const x = openSpot(s, this.cx + (this.cx < s.W / 2 ? 70 : -70), 12)
+        s.data.proto = s.spawn(new Proto(s, x))
+      }
       // a click charges the buster; a click while charged lets it go
-      if (!this.visible || this.state === 'hurt' || this.state === 'getweapon') return
+      if (!this.visible || this.state === 'hurt' || this.state === 'getweapon' || this.state === 'held') return
       if (this.state === 'rest') this.state = 'stand'
       if (this.charge > 0.5) this.release()
       else if (this.charge < 0) {
@@ -803,7 +972,36 @@
       }
     }
     onDblClick() {
+      touched(this.s)
       if (this.state === 'stand' || this.state === 'run' || this.state === 'rest') this.slide(this.dir)
+    }
+    // pick him up and put him down somewhere else; he lands on his feet
+    get grabbable() {
+      return ['stand', 'run', 'rest', 'jump', 'slide', 'etank'].includes(this.state)
+    }
+    grab(p) {
+      this.s.data.grabAt = performance.now()
+      this.state = 'held'
+      this.charge = -1
+      this.vx = 0
+      this.vy = 0
+      this.restX = undefined
+      this.drag(p)
+    }
+    drag(p) {
+      this.s.data.grabAt = performance.now()
+      if (this.state !== 'held') return
+      const nx = clamp(p.x, 20, this.s.W - 12)
+      if (Math.abs(nx - this.cx) > 1.5) this.dir = nx > this.cx ? 1 : -1
+      this.cx = nx
+      this.y = clamp(p.y + 18, 24 - SPILL, FLOOR)
+    }
+    drop() {
+      this.s.data.grabAt = performance.now()
+      if (this.state !== 'held') return
+      this.state = 'jump'
+      this.vx = 0
+      this.vy = 0
     }
     weapon() {
       const w = this.s.data.weapon
@@ -883,10 +1081,18 @@
       this.fire(c > 1.3 ? 'c' : c > 0.5 ? 'h' : 'p')
     }
     attack(m) {
-      if (!this.visible || this.state === 'hurt' || this.state === 'getweapon') return
+      if (!this.visible || this.state === 'hurt' || this.state === 'getweapon' || this.state === 'held') return
       if (this.state === 'rest') this.state = 'stand'
       this.dir = m.cx > this.cx ? 1 : -1
       this.turnAt = now0() + 1500
+      // something up high: jump and shoot at the top of the jump
+      if (m.fy !== undefined && m.fy < FLOOR - 18) {
+        if (this.state === 'stand' || this.state === 'run') {
+          this.jump(0)
+          this.shootJ = true
+        }
+        return
+      }
       if (this.charge > 0.5) this.release()
       else this.fire()
     }
@@ -993,11 +1199,18 @@
           if (this.t > 0.5) this.state = 'stand'
           return FAST
         case 'jump': {
-          if (this.shootJ && this.cool <= 0) {
+          if (this.shootJ && this.vy > -25) {
             this.shootJ = false
             this.fire()
           }
+          const kd = keyDir(s)
+          if (kd) {
+            // steer in the air
+            this.dir = kd
+            this.vx = kd * KRUN
+          } else if (this.kjump) this.vx = 0
           if (this.physics(dt, s)) {
+            this.kjump = false
             this.state = 'stand'
             this.vx = 0
           }
@@ -1023,6 +1236,9 @@
         case 'etank':
           if (this.hp >= MAX_HP && !ticking) this.state = 'stand'
           return FAST
+        case 'held':
+          this.doBlink(now)
+          return FAST
       }
       if (this.byeAt && now > this.byeAt) {
         this.byeAt = 0
@@ -1032,6 +1248,8 @@
 
       if (!lively && this.charge < 0) return this.rest(now, s)
       if (this.state === 'rest') this.state = 'stand'
+      this.restSince = 0
+      const user = engaged(s, now)
 
       // use an E-tank when the meter runs low and it's calm enough
       if (this.hp <= 8 && this.tanks > 0 && !this.dangerNear(s)) {
@@ -1041,10 +1259,11 @@
         s.particle({ img: ETANK, x: this.cx - 4, y: Math.max(0, this.y - 36), vy: -6, life: 1.2, fade: true })
         return FAST
       }
-      if (this.dodge(s)) return FAST
+      const keys = keying(s, now)
+      if (!keys && this.dodge(s)) return FAST
 
-      // walk over and pick up a dropped E-tank
-      const item = this.item && !this.item.dead ? this.item : s.actors.find((a) => a instanceof Item && a.landed && !s.data.boss)
+      // walk over and pick up a dropped E-tank (on his own only when nobody is playing)
+      const item = this.item && !this.item.dead ? this.item : user ? null : s.actors.find((a) => a instanceof Item && a.landed && !s.data.boss)
       if (item && item.landed) {
         if (this.runToward(item.x + 4, dt)) {
           item.dead = true
@@ -1056,12 +1275,156 @@
         return FAST
       }
 
-      const boss = s.data.boss
+      const d = s.data
+      // the keyboard: A/D run, W jump, S slide, Space shoots (hold to charge)
+      if (keys) return this.keyMode(dt, now, s)
+      if (d.rush && !d.rush.dead && (this.goRush || !user)) return this.rushPlay(d.rush, dt, now, s)
+      // the user is playing: he faces the cursor, follows it along the floor, shoots what they click
+      if (user) return this.userMode(dt, now, s)
+      const boss = d.boss
       if (boss && boss.state !== 'die') return this.fightBoss(boss, dt, now, s)
-
+      const foe = this.nearFoe(s)
+      if (foe) return this.fightFoe(foe, dt, now, s)
       const tgt = this.target(s)
       if (s.busy && tgt) return this.runAndGun(tgt, dt, now, s)
       return this.metGame(tgt, dt, now, s)
+    }
+    keyMode(dt, now, s) {
+      this.doBlink(now)
+      const kd = keyDir(s)
+      if (kd) {
+        this.dir = kd
+        this.state = 'run'
+        this.cx = clamp(this.cx + kd * KRUN * dt, 20, s.W - 12)
+      } else this.state = 'stand'
+      return FAST
+    }
+    onKey(key, down) {
+      const s = this.s
+      if (!this.visible || ['hurt', 'getweapon', 'held', 'materialize', 'dematerialize'].includes(this.state)) {
+        if (key === 'fire' && !down) this.charge = -1
+        return
+      }
+      if (this.state === 'rest') this.state = 'stand'
+      const ground = this.state === 'stand' || this.state === 'run' || this.state === 'etank'
+      if (key === 'fire') {
+        if (down) {
+          this.fire()
+          this.charge = 0
+          this.autoRelease = false
+        } else if (this.charge > 0.5) this.release()
+        else this.charge = -1
+        return
+      }
+      if (!down) return
+      if (key === 'left' || key === 'right') {
+        const kd = key === 'left' ? -1 : 1
+        this.dir = kd
+        if (ground) {
+          // the first step happens now
+          this.state = 'run'
+          this.cx = clamp(this.cx + kd * 4, 20, s.W - 12)
+        } else if (this.state === 'jump') this.vx = kd * KRUN
+      } else if (key === 'up' && ground) {
+        this.jump(keyDir(s) * KRUN, JV)
+        this.kjump = true
+      } else if (key === 'down' && ground) this.slide(this.dir)
+    }
+    userMode(dt, now, s) {
+      const c = s.cursor
+      this.doBlink(now)
+      if (c && c.y <= H) {
+        const dx = c.x - this.cx
+        // the cursor down along the floor and moving: he runs after it
+        if (c.y >= 20 && Math.abs(dx) > 44 && now - c.since < 2500) {
+          this.runToward(clamp(c.x - Math.sign(dx) * 34, 20, s.W - 12), dt, 50)
+          return FAST
+        }
+        if (Math.abs(dx) > 6 && now > this.turnAt) this.dir = Math.sign(dx)
+      }
+      this.state = 'stand'
+      return FAST
+    }
+    nearFoe(s) {
+      let best = null
+      for (const f of s.data.foes) if (!f.dead && f.target && (!best || Math.abs(f.cx - this.cx) < Math.abs(best.cx - this.cx))) best = f
+      return best
+    }
+    fightFoe(f, dt, now, s) {
+      const want = f.cx > this.cx ? 1 : -1
+      const gap = Math.abs(f.cx - this.cx)
+      this.doBlink(now)
+      if (f.kind === 'joe') {
+        // keep a firing distance; wait out the shield, then shoot when it drops
+        if ((gap < 50 || gap > 120) && now > this.next) {
+          const goal = clamp(f.cx - want * 80, 20, s.W - 12)
+          if (Math.abs(goal - this.cx) > 3) {
+            this.runToward(goal, dt, 46)
+            return FAST
+          }
+          this.next = now + 800
+        }
+        this.state = 'stand'
+        this.dir = want
+        if (f.state === 'guard' || f.air) {
+          if (this.charge < 0 && !this.weapon() && Math.random() < 0.03) this.charge = 0
+          if (this.charge > 1.4) this.release()
+        } else if (this.cool <= 0) {
+          if (this.charge > 0.5) this.release()
+          else this.fire()
+          this.cool = 0.3
+        }
+        return FAST
+      }
+      if (f.kind === 'blader') {
+        if (gap > 90) {
+          this.runToward(f.cx - want * 60, dt, 46)
+          return FAST
+        }
+        this.state = 'stand'
+        this.dir = want
+        if (this.cool <= 0) {
+          if (f.fy > FLOOR - 20) {
+            this.fire()
+            this.cool = 0.3
+          } else if (gap < 60 && Math.random() < 0.25) {
+            this.jump(0)
+            this.shootJ = true
+            this.cool = 0.5
+          }
+        }
+        return FAST
+      }
+      // Wily's saucer: stand off a little and jump-shoot
+      if (f.state === 'fly' && (gap < 25 || gap > 70)) {
+        if (!this.runToward(clamp(f.cx - want * 42, 20, s.W - 12), dt, 50)) return FAST
+      }
+      this.state = 'stand'
+      this.dir = want
+      if (f.state === 'fly' && this.cool <= 0 && Math.random() < 0.3) {
+        this.jump(0)
+        this.shootJ = true
+        this.cool = 0.9
+      }
+      return FAST
+    }
+    rushPlay(r, dt, now, s) {
+      this.doBlink(now)
+      if (r.state === 'sit' || r.state === 'wait') {
+        const side = this.cx < r.cx ? -1 : 1
+        if (!this.runToward(clamp(r.cx + side * 12, 20, s.W - 12), dt, 46)) return FAST
+        this.state = 'stand'
+        this.dir = r.cx > this.cx ? 1 : -1
+        if (r.state === 'wait' && !r.ready) {
+          // a pat on the head
+          r.ready = true
+          s.particle({ img: BUBBLE['♥'], x: r.cx - 3, y: FLOOR - 26, vy: -6, life: 1.1, fade: true })
+        }
+        return FAST
+      }
+      this.goRush = false
+      if (this.state !== 'jump') this.state = 'stand'
+      return FAST
     }
     dangerNear(s) {
       return s.actors.some((a) => a instanceof Shot && a.owner === 'enemy' && Math.abs(a.x - this.cx) < 70)
@@ -1186,10 +1549,16 @@
       }
       this.state = 'rest'
       this.shootT = 0
-      this.doBlink(now)
+      if (!this.restSince) this.restSince = now
       if (this.shownHp < this.hp) return FAST
+      // a few blinks, then he holds still and the bar can park
+      if (now - this.restSince > 6000) {
+        this.blink = 0
+        return Infinity
+      }
+      this.doBlink(now)
       if (this.blink > now) return this.blink - now + 5
-      return this.blinkAt - now
+      return Math.min(this.blinkAt - now, this.restSince + 6001 - now)
     }
     warpIn(s) {
       this.state = 'warpin'
@@ -1242,7 +1611,7 @@
       const sh = this.shootT > 0
       if (this.state === 'materialize' || this.state === 'dematerialize') k = this.t < 2 ? 'warp0' : 'warp1'
       else if (this.state === 'run') k = sh ? `rshoot${[0, 1, 2, 1][(this.f >> 1) & 3]}` : RUN[(this.f >> 1) & 3]
-      else if (this.state === 'jump') k = sh ? 'jshoot' : 'jump'
+      else if (this.state === 'jump' || this.state === 'held') k = sh ? 'jshoot' : 'jump'
       else if (this.state === 'slide') k = 'slide'
       else if (this.state === 'hurt') k = 'hurt'
       else if (sh) k = 'shoot'
@@ -1261,6 +1630,591 @@
     }
   }
 
+  // ---- watch-mode visitors: Sniper Joe, Bladers, Dr. Wily, Rush, Proto Man ------------------
+  const pop = (s, x, y, pts, cols = ['y', 'w', 'O', 'g']) => {
+    s.burst(x, y, 14, cols)
+    if (pts) s.particle({ digits: pts, x: x - 8, y: Math.max(0, y - 14), vy: -10, life: 0.9, fade: true })
+  }
+  const enemyShot = (s, x, y, vx, vy = 0) => {
+    if (s.actors.length < 60) s.spawn(new Shot(s, x, y, vx, vy, 'm', 'enemy'))
+  }
+
+  class Joe {
+    constructor(s, cx) {
+      this.s = s
+      this.kind = 'joe'
+      this.target = true
+      this.cx = cx
+      this.y = FLOOR - 30 - SPILL
+      this.vy = 0
+      this.air = true
+      this.state = 'guard'
+      this.t = 0
+      this.hp = 6
+      this.inv = 0
+      this.dir = -1
+      this.z = 2
+      this.f = 0
+      this.next = now0() + rand(1400, 2200)
+      this.shots = 0
+      this.moving = true
+    }
+    get fy() {
+      return this.y - 10
+    }
+    contains(x, y) {
+      return Math.abs(x - this.cx) <= 8 && y >= this.y - 19 && y <= this.y
+    }
+    hit(x, y) {
+      return Math.abs(x - this.cx) <= 12 && y >= this.y - 23 && y <= this.y + 1
+    }
+    onClick() {
+      touched(this.s)
+      // knock on the shield: he turns to face you
+      if (this.state === 'guard') this.s.say('tink', this.cx, Math.max(0, this.y - 26), { life: 0.5, size: 6, color: '#bcbcbc' })
+      this.s.data.mm.attack(this)
+    }
+    onShot(sh) {
+      if (this.inv > 0) return sh.kind === 'c' || sh.kind === 'cut' ? 'pass' : 'hit'
+      const front = Math.sign(sh.vx) === -this.dir
+      if (this.state === 'guard' && front && !this.air) {
+        if (sh.kind !== 'c') return 'tink'
+        // a charged shot knocks the shield aside
+        this.state = 'stun'
+        this.t = 0
+        this.damage(2)
+        return 'hit'
+      }
+      this.damage(sh.dmg)
+      return 'hit'
+    }
+    damage(n) {
+      this.hp -= n
+      this.inv = 0.35
+      if (this.hp <= 0) {
+        this.dead = true
+        pop(this.s, this.cx, this.y - 10, '1000', ['j', 'G', 'w', 'y'])
+      }
+    }
+    leave() {
+      if (this.dead) return
+      this.dead = true
+      this.s.burst(this.cx, this.y - 10, 8, ['X', 'x', 'w'])
+    }
+    update(dt, now, s) {
+      this.f++
+      if (this.inv > 0) this.inv -= dt
+      const mm = s.data.mm
+      const c = s.cursor
+      // the cursor coming close: shield up, facing it
+      const threat = c && c.y <= H && Math.abs(c.x - this.cx) < 30 && now - c.since < 2500
+      if (threat && !this.air) {
+        this.dir = c.x > this.cx ? 1 : -1
+        if (this.state === 'fire') this.state = 'guard'
+        this.next = Math.max(this.next, now + 700)
+      } else if (mm.visible && Math.abs(mm.cx - this.cx) > 4 && this.state !== 'fire') this.dir = mm.cx < this.cx ? -1 : 1
+      if (this.air) {
+        this.vy += 420 * dt
+        this.y += this.vy * dt
+        if (this.y >= FLOOR) {
+          this.y = FLOOR
+          this.vy = 0
+          this.air = false
+          s.burst(this.cx, FLOOR - 1, 4, ['x', 'X'])
+        }
+        return FAST
+      }
+      this.t += dt
+      if (this.state === 'stun') {
+        if (this.t > 0.7) {
+          this.state = 'guard'
+          this.next = now + 600
+        }
+      } else if (this.state === 'guard') {
+        if (now > this.next && mm.visible) {
+          this.state = 'fire'
+          this.t = 0
+          this.shots = 0
+        }
+      } else if (this.state === 'fire') {
+        if ((this.t > 0.35 && this.shots < 1) || (this.t > 0.8 && this.shots < 2)) {
+          this.shots++
+          enemyShot(s, this.cx + this.dir * 10 - 2, this.y - 12, this.dir * 95)
+        }
+        if (this.t > 1.25) {
+          this.state = 'guard'
+          this.next = now + rand(1500, 2600)
+          if (Math.random() < 0.35) {
+            // a hop on the spot, shield up
+            this.air = true
+            this.vy = -115
+          }
+        }
+      }
+      return FAST
+    }
+    draw(c) {
+      if (this.inv > 0 && this.f & 1) return
+      const k = this.air ? 'jump' : this.state === 'fire' ? 'fire' : 'guard'
+      const sp = JOE[k][this.dir]
+      const sx = this.state === 'stun' && this.f & 2 ? -this.dir : 0
+      c.drawImage(sp, Math.round(this.cx - sp.width / 2 + sx), Math.round(this.y - sp.height + 1))
+    }
+  }
+
+  class Blader {
+    constructor(s, side, delay = 0) {
+      this.s = s
+      this.kind = 'blader'
+      this.target = true
+      this.dir = -side
+      this.cx = side > 0 ? s.W + 12 : -12
+      this.base = rand(9, 20)
+      this.y = this.base
+      this.ph = rand(0, 6)
+      this.vx = 0
+      this.vy = 0
+      this.state = 'fly'
+      this.t = -delay
+      this.f = 0
+      this.passes = 0
+      this.z = 5
+      this.moving = true
+    }
+    get fy() {
+      return this.y
+    }
+    contains(x, y) {
+      return Math.abs(x - this.cx) <= 7 && Math.abs(y - this.y) <= 6
+    }
+    hit(x, y) {
+      return Math.abs(x - this.cx) <= 11 && Math.abs(y - this.y) <= 10
+    }
+    onClick() {
+      touched(this.s)
+      this.s.data.mm.attack(this)
+    }
+    onShot() {
+      this.dead = true
+      pop(this.s, this.cx, this.y, '500', ['o', 'O', 'w', 'y'])
+      return 'hit'
+    }
+    leave() {
+      this.state = 'away'
+    }
+    update(dt, now, s) {
+      this.f++
+      this.t += dt
+      if (this.t < 0) return FAST
+      const mm = s.data.mm
+      const W = s.W
+      if (this.t > 25) this.state = 'away'
+      if (this.state === 'away') {
+        this.y -= 60 * dt
+        this.cx += this.dir * 30 * dt
+        if (this.y < -14 - SPILL) this.dead = true
+        return FAST
+      }
+      if (this.state === 'fly') {
+        this.cx += this.dir * 42 * dt
+        // startled by the cursor: it swerves away from it
+        const c = s.cursor
+        if (c && c.y <= H && Math.abs(c.x - this.cx) < 18 && Math.abs(c.y - this.y) < 14) this.base = clamp(this.base + (c.y > this.y ? -40 : 40) * dt, 4 - SPILL, 24)
+        this.y = this.base + Math.sin(this.t * 4 + this.ph) * 4
+        if (mm.visible && Math.abs(mm.cx - this.cx) < 46 && Math.sign(mm.cx - this.cx) === this.dir && Math.random() < 0.04) {
+          // dive at him
+          this.state = 'dive'
+          this.t2 = 0
+          const dx = mm.cx - this.cx
+          const dy = FLOOR - 14 - this.y
+          const d = Math.hypot(dx, dy) || 1
+          this.vx = (dx / d) * 95
+          this.vy = (dy / d) * 95
+        }
+        if ((this.dir > 0 && this.cx > W - 14) || (this.dir < 0 && this.cx < 14)) {
+          if (++this.passes < 3) this.dir = -this.dir
+        }
+        if (this.cx < -20 || this.cx > W + 20) this.dead = true
+      } else if (this.state === 'dive') {
+        this.t2 += dt
+        this.cx += this.vx * dt
+        this.y += this.vy * dt
+        if (this.y >= FLOOR - 12 || this.t2 > 1) {
+          this.state = 'climb'
+          this.vy = -55
+        }
+      } else if (this.state === 'climb') {
+        this.cx += this.dir * 36 * dt
+        this.y += this.vy * dt
+        if (this.y <= this.base) this.state = 'fly'
+      }
+      if (mm.contains(this.cx, this.y)) mm.hurt(3, this.cx < mm.cx ? 1 : -1)
+      return FAST
+    }
+    draw(c) {
+      if (this.t < 0) return
+      const sp = BLADER[(this.f >> 1) & 1][this.dir]
+      c.drawImage(sp, Math.round(this.cx - sp.width / 2), Math.round(this.y - 6))
+    }
+  }
+
+  const WILY_TAUNT = ['Mwahahaha! Get him, my Mets!', 'You cannot stop me, Mega Man!', 'The world will be MINE!', 'Behold my genius!']
+  const WILY_BEG = ['Please forgive me, Mega Man!', 'I am so sorry! Truly!', "It was all Bass's idea!", 'I will never do it again! Probably!']
+  const WILY_FLEE = ["I'll be back, Mega Man!", 'Next time! NEXT TIME!', 'You have not seen the last of me!']
+  const wilySays = (s, t, x) => s.say(t, x, 1, { color: '#fcfcfc', life: 2.6 })
+  class Saucer {
+    constructor(s, side, beg = false) {
+      this.s = s
+      this.kind = 'saucer'
+      this.target = !beg
+      this.dir = -side
+      this.cx = side > 0 ? s.W + 16 : -16
+      this.y = 3
+      this.tx = clamp(s.W / 2 + rand(-80, 80), 40, s.W - 40)
+      this.state = beg ? 'land' : 'fly'
+      this.hp = 4
+      this.inv = 0
+      this.t = 0
+      this.f = 0
+      this.drops = 0
+      this.until = now0() + 15000
+      this.z = 5
+      this.moving = true
+      wilySays(s, beg ? 'Wait! Wait, Mega Man!' : pick(WILY_TAUNT), clamp(this.cx, 40, s.W - 40))
+    }
+    get fy() {
+      return this.y + 6
+    }
+    get wx() {
+      return clamp(this.cx + 18, 8, this.s.W - 8)
+    }
+    contains(x, y) {
+      return this.state === 'fly' && Math.abs(x - this.cx) <= 13 && y >= this.y && y <= this.y + 11
+    }
+    hit(x, y) {
+      if (this.state === 'beg') return (Math.abs(x - this.wx) <= 9 && y >= FLOOR - 16) || (Math.abs(x - this.cx) <= 14 && y >= this.y - 2)
+      return Math.abs(x - this.cx) <= 15 && y >= this.y - 3 && y <= this.y + 14
+    }
+    onClick() {
+      const s = this.s
+      touched(s)
+      if (this.state === 'beg') {
+        // poke the begging doctor and he bolts
+        wilySays(s, 'Eek! Not the face!', this.wx)
+        this.state = 'flee'
+        return
+      }
+      if (this.state === 'fly') s.data.mm.attack(this)
+    }
+    onShot(sh) {
+      if (this.state !== 'fly') return 'pass'
+      if (this.inv > 0) return sh.kind === 'c' || sh.kind === 'cut' ? 'pass' : 'hit'
+      this.hp -= sh.dmg
+      this.inv = 0.4
+      this.s.burst(this.cx, this.y + 6, 5, ['w', 'y'])
+      if (this.hp <= 0) {
+        this.state = 'crash'
+        this.target = false
+        pop(this.s, this.cx, this.y + 6, '5000', ['y', 'O', 'x', 'w'])
+        wilySays(this.s, 'Nooo! My beautiful saucer!', this.cx)
+      }
+      return 'hit'
+    }
+    leave() {
+      if (this.state === 'fly' || this.state === 'land') this.state = 'flee'
+    }
+    update(dt, now, s) {
+      this.f++
+      this.t += dt
+      if (this.inv > 0) this.inv -= dt
+      const W = s.W
+      switch (this.state) {
+        case 'fly': {
+          const c = s.cursor
+          if (c && c.y < 18 && Math.abs(c.x - this.cx) < 22 && now - c.since < 2500) this.tx = clamp(this.cx + (c.x > this.cx ? -70 : 70), 30, W - 30)
+          const dx = this.tx - this.cx
+          if (Math.abs(dx) < 3) this.tx = clamp(rand(40, W - 40), 30, W - 30)
+          else {
+            this.dir = Math.sign(dx)
+            this.cx += this.dir * Math.min(Math.abs(dx), 46 * dt)
+          }
+          this.y = 3 + Math.sin(this.t * 3) * 2
+          // drops a Met now and then
+          if (this.t > 2 && this.drops < 2 && s.data.mets.length < 4 && Math.random() < 0.012 && this.cx > 30 && this.cx < W - 20) {
+            this.drops++
+            dropMet(s, this.cx)
+          }
+          if (now > this.until) {
+            wilySays(s, pick(WILY_FLEE), this.cx)
+            this.state = 'flee'
+          }
+          return FAST
+        }
+        case 'land':
+        case 'crash':
+          if (this.state === 'land') {
+            const dx = this.tx - this.cx
+            if (Math.abs(dx) > 3) {
+              this.dir = Math.sign(dx)
+              this.cx += this.dir * Math.min(Math.abs(dx), 70 * dt)
+              return FAST
+            }
+          } else if (this.f % 3 === 0) s.particle({ img: pix(this.f & 4 ? 'x' : 'X'), x: this.cx + rand(-8, 8), y: this.y + 4, vx: rand(-6, 6), vy: -18, life: 0.7, fade: true })
+          this.y += 22 * dt
+          if (this.y >= FLOOR - 11) {
+            this.y = FLOOR - 11
+            this.state = 'beg'
+            this.t = 0
+            s.burst(this.cx, FLOOR - 1, 6, ['x', 'X'])
+            wilySays(s, pick(WILY_BEG), this.wx)
+          }
+          return FAST
+        case 'beg':
+          if (this.t > 3.4) {
+            wilySays(s, pick(WILY_FLEE), this.cx)
+            this.state = 'flee'
+          }
+          return FAST
+        case 'flee':
+          this.y -= 30 * dt
+          this.cx += this.dir * 110 * dt
+          if (this.cx < -30 || this.cx > W + 30 || this.y < -20 - SPILL) this.dead = true
+          return FAST
+      }
+      return FAST
+    }
+    draw(c) {
+      if (this.inv > 0 && this.f & 1) return
+      const beg = this.state === 'beg'
+      const sp = (beg ? SAUCER_EMPTY : SAUCER[(this.f >> 2) & 1])[this.dir]
+      c.drawImage(sp, Math.round(this.cx - sp.width / 2), Math.round(this.y))
+      if (beg) {
+        const w = WILY[Math.floor(this.t / 0.4) % 2 ? 'bow' : 'kneel'][this.cx > this.wx ? 1 : -1]
+        c.drawImage(w, Math.round(this.wx - w.width / 2), FLOOR - w.height + 1)
+      }
+    }
+  }
+
+  class Rush {
+    constructor(s, cx) {
+      this.s = s
+      this.cx = cx
+      this.beamY = -12 - SPILL
+      this.state = 'beam'
+      this.t = 0
+      this.f = 0
+      this.dir = s.data.mm.cx > cx ? 1 : -1
+      this.z = 2
+      this.ready = false
+      this.barkAt = 0
+      this.moving = true
+    }
+    hit(x, y) {
+      return this.state !== 'beam' && this.state !== 'leave' && Math.abs(x - this.cx) <= 13 && y >= FLOOR - 18
+    }
+    onClick() {
+      const s = this.s
+      touched(s)
+      this.bark(s, true)
+      const mm = s.data.mm
+      if (this.state === 'sit' || this.state === 'wait') {
+        this.state = 'wait'
+        if (Math.abs(mm.cx - this.cx) < 30 && mm.state === 'stand') this.ready = true
+        else mm.goRush = true
+      } else if (this.state === 'dig') this.t = Math.max(this.t, 1)
+    }
+    bark(s, force = false) {
+      const now = now0()
+      if (!force && now < this.barkAt) return
+      this.barkAt = now + 5000
+      s.say(pick(['ARF!', 'Arf arf!', 'Woof!']), this.cx + this.dir * 8, FLOOR - 24, { life: 0.9, size: 6, color: '#fc7460', vy: -4 })
+    }
+    leave() {
+      if (this.state !== 'leave') {
+        this.state = 'leave'
+        this.beamY = FLOOR - 14
+      }
+    }
+    update(dt, now, s) {
+      this.f++
+      this.t += dt
+      const mm = s.data.mm
+      const c = s.cursor
+      if (this.state !== 'beam' && this.state !== 'leave') {
+        // he watches the cursor, or his master
+        if (c && c.y <= H && Math.abs(c.x - this.cx) < 50) {
+          if (Math.abs(c.x - this.cx) > 4) this.dir = c.x > this.cx ? 1 : -1
+          if (now - c.since < 1500) this.bark(s)
+        } else if (mm.visible && Math.abs(mm.cx - this.cx) > 4) this.dir = mm.cx > this.cx ? 1 : -1
+      }
+      switch (this.state) {
+        case 'beam':
+          this.beamY += 300 * dt
+          if (this.beamY >= FLOOR - 14) {
+            this.state = 'sit'
+            this.t = 0
+            this.bark(s, true)
+          }
+          break
+        case 'sit':
+          if (this.t > 1) {
+            this.state = 'wait'
+            this.t = 0
+          }
+          break
+        case 'wait':
+          if (this.ready || this.t > 8) {
+            this.state = this.ready ? 'coil' : 'dig'
+            this.t = 0
+            if (this.ready && mm.visible && ['stand', 'run'].includes(mm.state)) {
+              // Rush Coil: the spring fires and up he goes, past the top of the bar
+              const away = mm.cx < this.cx ? 1 : -1
+              mm.jump(clamp(away * 75, -75, 75), COILV)
+              mm.goRush = false
+              s.say('BOING', this.cx, FLOOR - 20, { life: 0.7, size: 6, color: '#bcbcbc', vy: -6 })
+            }
+          }
+          break
+        case 'coil':
+          if (this.t > 0.7) {
+            this.state = 'dig'
+            this.t = 0
+          }
+          break
+        case 'dig':
+          if (this.f % 2 === 0) s.particle({ img: pix(this.f & 2 ? 'm' : 'x'), x: this.cx - this.dir * 8, y: FLOOR - 3, vx: -this.dir * rand(10, 30), vy: rand(-30, -10), g: 120, life: 0.6 })
+          if (this.t > 1.4) {
+            // he digs something up
+            if (mm.tanks < 4 && !s.actors.some((a) => a instanceof Item && !a.dead)) s.spawn(new Item(s, this.cx + this.dir * 10 - 4))
+            else s.particle({ digits: '1000', x: this.cx - 8, y: FLOOR - 22, vy: -8, life: 0.9, fade: true })
+            this.bark(s, true)
+            this.leave()
+          }
+          break
+        case 'leave':
+          this.beamY -= 320 * dt
+          if (this.beamY < -14 - SPILL) this.dead = true
+          break
+      }
+      return FAST
+    }
+    draw(c) {
+      const x = Math.round(this.cx)
+      if (this.state === 'beam' || this.state === 'leave') {
+        const by = Math.round(this.beamY)
+        for (let yy = by - 16; yy < by; yy += 8) c.drawImage(BEAM_RED, x - 3, yy)
+        return
+      }
+      const wag = (this.f >> 1) & 1
+      const sp = (this.state === 'coil' ? RUSH.coil : wag ? RUSH.wag : RUSH.sit)[this.dir]
+      c.drawImage(sp, x - Math.round(sp.width / 2), FLOOR - sp.height + 1)
+    }
+  }
+
+  // Proto Man: whistles in, stands with his scarf blowing, whistles out (an easter egg)
+  class Proto {
+    constructor(s, cx) {
+      this.s = s
+      this.cx = cx
+      this.y = FLOOR
+      this.beamY = -12 - SPILL
+      this.state = 'beam'
+      this.t = 0
+      this.f = 0
+      this.dir = s.data.mm.cx > cx ? 1 : -1
+      this.z = 2
+      this.moving = true
+    }
+    hit(x, y) {
+      return this.state === 'stand' && Math.abs(x - this.cx) <= 10 && y >= FLOOR - 26
+    }
+    onClick() {
+      const s = this.s
+      touched(s)
+      // he answers with a shot of his own at whatever is nearest
+      const m = s.data.mets[0]
+      if (m) this.dir = m.cx > this.cx ? 1 : -1
+      s.spawn(new Shot(s, this.cx + this.dir * 14 - 3, this.y - 15, this.dir * 165, 0, 'p', 'mm'))
+      this.shootT = 0.3
+    }
+    leave() {
+      if (this.state !== 'leave') {
+        this.state = 'leave'
+        this.beamY = this.y - 8
+      }
+    }
+    update(dt, now, s) {
+      this.f++
+      this.t += dt
+      if (this.shootT > 0) this.shootT -= dt
+      if (this.state === 'beam') {
+        this.beamY += 300 * dt
+        if (this.beamY >= this.y - 8) {
+          this.state = 'stand'
+          this.t = 0
+        }
+      } else if (this.state === 'stand') {
+        if (this.f % 6 === 0 && this.t < 3) s.particle({ img: BUBBLE['♪'], x: this.cx + rand(-10, 6), y: this.y - 30, vx: rand(-4, 4), vy: -8, life: 1, fade: true })
+        if (this.t > 1.2 && !this.said) {
+          this.said = true
+          s.say('...', this.cx, Math.max(0, this.y - 32), { life: 1.4, color: '#fc7460' })
+        }
+        if (this.t > 4.5 || !live(s, now)) this.leave()
+      } else {
+        this.beamY -= 320 * dt
+        if (this.beamY < -14 - SPILL) {
+          this.dead = true
+          s.data.proto = null
+        }
+      }
+      return FAST
+    }
+    draw(c) {
+      const x = Math.round(this.cx)
+      if (this.state !== 'stand') {
+        const by = Math.round(this.beamY)
+        for (let yy = by - 16; yy < by; yy += 8) c.drawImage(BEAM_RED, x - 3, yy)
+        return
+      }
+      const fr = MMS.proto[this.shootT > 0 ? 'shoot' : 'stand']
+      const sp = fr.sp[this.dir]
+      const ax = this.dir === 1 ? fr.ax : sp.width - 2 - fr.ax - 1
+      c.drawImage(sp, x - ax - 1, this.y - sp.height + 1)
+      // the yellow scarf, flapping behind him
+      const fl = (this.f >> 1) & 1
+      for (let i = 0; i < 4; i++) c.drawImage(pix('y'), x - this.dir * (5 + i), this.y - 13 + (i > 1 ? fl : 0) - (i === 3 ? fl : 0))
+    }
+  }
+
+  function dropMet(s, x) {
+    const m = new Met(s, openSpot(s, clamp(Math.round(x), 26, s.W - 12), 7), true)
+    m.y = Math.min(m.y, 6)
+    s.data.mets.push(m)
+    s.spawn(m)
+  }
+  const farX = (s, mm) => openSpot(s, mm.cx < s.W / 2 ? Math.min(s.W - 30, mm.cx + 150) : Math.max(30, mm.cx - 150), 12)
+  const EPISODES = ['joe', 'bladers', 'wily', 'rush', 'ambush']
+  function runEpisode(s, now, k) {
+    const d = s.data
+    const mm = d.mm
+    if (!k && FORCE_EP) k = FORCE_EP
+    if (!k) {
+      if (!d.epBag.length) d.epBag = EPISODES.slice().sort(() => Math.random() - 0.5)
+      k = d.epBag.pop()
+    }
+    const side = mm.cx < s.W / 2 ? 1 : -1
+    if (k === 'joe') d.foes.push(s.spawn(new Joe(s, farX(s, mm))))
+    else if (k === 'bladers') {
+      const n = s.W < 500 ? 2 : 3
+      for (let i = 0; i < n; i++) d.foes.push(s.spawn(new Blader(s, side, i * 0.7)))
+    } else if (k === 'wily') d.foes.push(s.spawn(new Saucer(s, side)))
+    else if (k === 'rush') d.rush = s.spawn(new Rush(s, openSpot(s, clamp(mm.cx + side * 60, 30, s.W - 20), 12)))
+    else if (k === 'ambush') {
+      // a Met ambush: three drop in around him, one after another
+      for (let i = 0; i < 3; i++) d.q.push({ at: now + 300 + i * 650, fn: () => d.mets.length < 5 && dropMet(s, mm.cx + (i % 2 ? -1 : 1) * rand(55, 110)) })
+    }
+  }
+
   // ---- HUD: health meters and E-tanks --------------------------------------------------
   function meter(c, x, hp, color) {
     const n = Math.max(8, Math.floor((H - 9) / 2))
@@ -1276,7 +2230,10 @@
   }
 
   function setup(s) {
-    s.data = { W: s.W, mets: [], respawnAt: 0, boss: null, bossAt: 0, beaten: null, nextBoss: pick(['cut', 'ice']), party: false, weapon: null }
+    s.data = {
+      W: s.W, mets: [], respawnAt: 0, boss: null, bossAt: 0, beaten: null, nextBoss: pick(['cut', 'ice']), party: false, weapon: null,
+      foes: [], q: [], rush: null, proto: null, epAt: 0, epBag: [], waveAt: 0, clickAt: -1e9, grabAt: -1e9, wasLive: true,
+    }
     s.data.mm = new MegaMan(s)
     for (const fx of [0.55, 0.8]) s.data.mets.push(new Met(s, openSpot(s, Math.round(s.W * fx), 7, [[s.data.mm.cx - 60, s.data.mm.cx + 60]])))
     s.actors.push(...s.data.mets, s.data.mm)
@@ -1311,7 +2268,7 @@
     title: 'Mega Man',
     sub: 'Capcom, 1987',
     blurb:
-      'Mega Man beams in and plays the Met game: the Mets duck under their hard hats when he or your cursor gets close, peek out when it feels safe and fire a 3-way shot, and pellets bounce off a closed helmet. He charges his buster on his own while one hides and lets go when it peeks; when one is hit the others duck. Click him to charge, click again to fire; double-click to slide. While the agent works a Robot Master drops in, Cut Man or Ice Man, and they fight it out with health meters; he jumps and slides under shots and drinks an E-tank when low. On done the boss goes down and it is weapon get, then he beams out while the Mets hop. Left alone he stands and blinks.',
+      'Mega Man beams in and plays the Met game: the Mets duck under their hard hats when he or your cursor gets close, peek out when it feels safe and fire a 3-way shot, and pellets bounce off a closed helmet. Between rounds visitors drop by: Sniper Joe hides behind his shield and only drops it to shoot (a charged shot knocks it aside), a squadron of Bladers swoops in and dives, Dr. Wily flies over in his saucer dropping Mets until he is shot down and begs for forgiveness, three Mets ambush him at once, or Rush beams in for a pat, a Rush Coil leap off the top of the bar and a dig for an E-tank. Mega Man faces your <b>cursor</b>; sweep it along the floor and he runs after it. Click him to charge, click again to fire, double-click to slide, drag him and let go; click any enemy and he turns and shoots (jump-shoots at flyers). Pick a Met up by its hard hat and drop it: it comes up shooting. Click Rush for a bark and a Coil jump, poke Wily while he begs and he bolts, and click Mega Man five times fast for a whistle from his brother. While you play he waits on you; leave him and he carries on. While the agent works a Robot Master drops in, Cut Man or Ice Man, between waves of Bladers and Joes; he jumps and slides under shots and drinks an E-tank when low. On done the boss goes down and it is weapon get (or Wily crash-lands to grovel), then he beams out while the Mets hop. Left alone he stands, blinks and holds still.',
     setup,
     update(s, dt, now) {
       const d = s.data
@@ -1325,13 +2282,49 @@
         }
       }
       if (mm.weaponAt) return Math.max(FAST, mm.weaponAt - now)
-      if (!live(s, now)) return Infinity
+      d.foes = d.foes.filter((f) => !f.dead)
+      if (d.rush && d.rush.dead) d.rush = null
+      if (d.proto && d.proto.dead) d.proto = null
+      if (!live(s, now)) {
+        // everyone goes home; the bar settles
+        if (d.wasLive) {
+          d.wasLive = false
+          d.q.length = 0
+          for (const f of d.foes) f.leave()
+          d.rush?.leave()
+          d.proto?.leave()
+          mm.goRush = false
+        }
+        return Infinity
+      }
+      d.wasLive = true
+      while (d.q.length && d.q[0].at <= now) d.q.shift().fn()
+      let soon = d.q.length ? d.q[0].at - now : Infinity
+      const user = engaged(s, now)
+      if (s.busy) {
+        // between Robot Masters, waves of Bladers and Sniper Joes
+        if (!d.boss && d.foes.length < 2 && mm.visible && now > d.waveAt) {
+          runEpisode(s, now, Math.random() < 0.6 ? 'bladers' : 'joe')
+          d.waveAt = now + rand(7000, 11000)
+        }
+        if (!d.boss) soon = Math.min(soon, Math.max(SLOW, d.waveAt - now))
+      } else {
+        // watch mode: one visitor at a time, a breather between them
+        const quiet = !d.boss && !d.foes.length && !d.rush && !d.q.length && mm.visible && mm.state !== 'getweapon' && !mm.byeAt
+        if (quiet && !user) {
+          if (!d.epAt) d.epAt = now + rand(3500, 7000)
+          if (now > d.epAt) {
+            d.epAt = 0
+            runEpisode(s, now)
+          } else soon = Math.min(soon, d.epAt - now)
+        } else if (!quiet) d.epAt = 0
+      }
       // the Robot Master arrives a few seconds into the work, then again later
       if (s.busy && !d.boss && mm.visible && mm.state !== 'getweapon' && now > d.bossAt) {
         spawnBoss(s)
         d.bossAt = Infinity
       }
-      const want = d.boss ? 0 : s.busy ? 4 : 3
+      const want = d.boss ? 0 : s.busy ? 4 : d.foes.length ? 1 : 3
       if (d.mets.length < want && now > d.respawnAt && mm.visible) {
         spawnMet(s)
         d.respawnAt = now + (s.busy ? rand(1500, 2800) : rand(8000, 14000))
@@ -1339,7 +2332,7 @@
       if (s.busy && !d.boss && d.bossAt === Infinity) d.bossAt = now + rand(15000, 25000)
       let wait = d.mets.length < want ? Math.max(SLOW, d.respawnAt - now) : Infinity
       if (s.busy && !d.boss) wait = Math.min(wait, Math.max(SLOW, d.bossAt - now))
-      return wait
+      return Math.min(wait, soon, user ? SLOW : Infinity)
     },
     drawFront(s, c) {
       const mm = s.data.mm
@@ -1350,6 +2343,7 @@
     },
     // mockup extra (Aico never delivers empty-bar clicks): shoot that way
     onBarClick(s, p) {
+      touched(s)
       const mm = s.data.mm
       if (!mm.visible || mm.state === 'hurt' || mm.state === 'getweapon') return
       mm.dir = p.x > mm.cx ? 1 : -1
@@ -1358,7 +2352,13 @@
       if (mm.charge > 0.5) mm.release()
       else mm.fire()
     },
+    onKey(s, key, down) {
+      s.data.mm?.onKey(key, down)
+      s.poke()
+    },
     onBusy(s) {
+      s.data.waveAt = now0() + rand(6000, 9000)
+      s.data.epAt = 0
       s.data.bossAt = now0() + rand(2500, 4500)
       s.data.respawnAt = now0() + 800
       s.data.beaten = null
@@ -1384,7 +2384,16 @@
         b.die()
         mm.weaponAt = now0() + 1700
       } else if (d.beaten) won()
-      else mm.beamOut(s)
+      else {
+        // no Robot Master to finish: Dr. Wily crash-lands and grovels, then he beams out
+        for (const f of d.foes)
+          if (f.kind !== 'saucer') {
+            f.dead = true
+            pop(s, f.cx, f.fy, '1000')
+          }
+        if (!d.foes.some((f) => f.kind === 'saucer' && !f.dead)) d.foes.push(s.spawn(new Saucer(s, mm.cx < s.W / 2 ? 1 : -1, true)))
+        mm.byeAt = now0() + 7500
+      }
       d.bossAt = Infinity
     },
     onNap(s) {
@@ -1397,6 +2406,12 @@
         d.boss = null
       }
       for (const a of s.actors) if (a instanceof Shot) a.dead = true
+      for (const f of d.foes) f.dead = true
+      d.foes = []
+      d.q.length = 0
+      if (d.rush) d.rush.dead = true
+      if (d.proto) d.proto.dead = true
+      d.rush = d.proto = null
       if (['away', 'warpout', 'dematerialize', 'dead'].includes(mm.state)) mm.t = 0
       if (mm.state === 'getweapon') mm.t = 0
       d.party = false
@@ -1411,6 +2426,11 @@
       for (const m of d.mets) m.cx = openSpot(s, clamp(Math.round(m.cx * k), 26, s.W - 12), 7)
       if (d.boss) d.boss.cx = clamp(Math.round(d.boss.cx * k), 22, s.W - 10)
       for (const a of s.actors) if (a instanceof Item) a.x = clamp(a.x, 20, s.W - 12)
+      for (const f of d.foes) {
+        f.cx = clamp(Math.round(f.cx * k), 14, s.W - 14)
+        if (f.tx !== undefined) f.tx = clamp(f.tx, 30, Math.max(30, s.W - 30))
+      }
+      for (const a of [d.rush, d.proto]) if (a) a.cx = clamp(Math.round(a.cx * k), 20, s.W - 20)
     },
   })
 

@@ -16,6 +16,9 @@
     }
   })()
   const live = (s, now) => s.lively(now) || (KEEP_AWAKE && !s.napping)
+  // someone is playing: a click or drag in the last 9 s, or the cursor moving over the bar
+  const engaged = (s, now) => now - s.keyAt < 9000 || now - (s.data.clickAt || -1e9) < 9000 || now - (s.data.grabAt || -1e9) < 9000 || (s.cursor && now - s.cursor.since < 2500)
+  const clicked = (s) => (s.data.clickAt = performance.now())
 
   // ---- pixel painter ---------------------------------------------------------
   const grid = (w, h) => Array.from({ length: h }, () => Array(w).fill('.'))
@@ -315,7 +318,7 @@
 
   const PI = {
     r: '#e8203c', R: '#ff9aa8', A: '#e0e4ec', a: '#8890a0', n: '#9a6a32', N: '#5a3a14', Y: '#f8c838',
-    b: '#3a78e8', B: '#a8d0ff', w: '#ffffff', c: '#9aa4b4', W: '#e8e8f0',
+    b: '#3a78e8', B: '#a8d0ff', w: '#ffffff', c: '#9aa4b4', W: '#e8e8f0', o: '#a8481c', O: '#d8783a',
   }
   const ITEM = {
     heart: ['rr.rr', 'rRrrr', '.rrr.', '..r..'],
@@ -325,6 +328,8 @@
     axe: ['....aAa.', '...aAAAa', '..naAAAA', '..n.aAAa', '.n...aa.', '.n......', 'n.......'],
     holy: ['.aa.', '.bw.', 'bbbb', 'bBbb', 'bBbb', '.bb.'],
     bag: ['..Y.Y..', '...Y...', '.rrrrr.', 'rrRrrrr', 'rRrWrrr', 'rrrrrrr', '.rrrrr.'],
+    // the pot roast hidden in the castle wall
+    roast: ['...w....', '..oOOo..', '.oOYOOo.', 'oOOOOOOo', 'WWWWWWWW', '.aAAAAa.'],
   }
   const ITEMS = {}
   for (const k in ITEM) ITEMS[k] = pairOutlined(ITEM[k], PI)
@@ -400,6 +405,78 @@
     put(g, fr[0] + 2, 21 - fr[1], 'z')
     put(g, fr[0] + 3, 21 - fr[1], 'z')
     return pairOutlined(rowsOf(g), PE)
+  })
+
+  // the white skeleton: bony, jittery, lobs bones in an arc (frames: walk0, walk1, throw, heap)
+  const PSK = { X: '#ece8d8', x: '#a49c88', E: '#140c10', r: '#ff3a3a' }
+  const SKULL = ['.XXXXX.', 'XXXXXXX', 'XXXXEEX', 'XxXXErX', '.XXXXXX', '..XxXxX', '..xXXX.']
+  function skelFig(f) {
+    const g = grid(13, 23)
+    if (f === 3) {
+      stamp(g, 0, 16, ['.......', '....XXXXX', '...XXXXXXX', '...XXXXEEX', '..XXXXXErXX', 'XXxXXXxXXxX.', 'xXXxXXXxXXXx'])
+      return rowsOf(g)
+    }
+    stamp(g, 3, 0, SKULL)
+    line(g, 5, 7, 5, 15, 'x')
+    for (const y of [8, 10, 12]) line(g, y === 12 ? 4 : 3, y, y === 12 ? 7 : 8, y, 'X')
+    for (const y of [9, 11]) {
+      put(g, 3, y, 'X')
+      put(g, 8, y, 'X')
+    }
+    stamp(g, 3, 14, ['.XXXX.', 'XX..XX'])
+    // back arm
+    line(g, 3, 8, 2, 12, 'x')
+    line(g, 2, 12, 3, 15, 'x')
+    // front arm: swinging, or raised with a bone
+    if (f === 2) {
+      line(g, 8, 8, 10, 5, 'X')
+      line(g, 10, 5, 10, 2, 'X')
+      stamp(g, 9, 0, ['X.X', '.X.', 'X.X'])
+    } else {
+      line(g, 8, 8, 9, 11, 'X')
+      line(g, 9, 11, 10, 14, 'X')
+    }
+    const L = f === 1 ? [[4, 5, 4], [7, 7, 7]] : [[4, 3, 2], [7, 8, 9]]
+    for (const [hx, kx, fx] of L) {
+      line(g, hx, 16, kx, 19, 'X')
+      line(g, kx, 19, fx, 22, 'X')
+      put(g, fx + 1, 22, 'X')
+    }
+    return rowsOf(g)
+  }
+  const SKEL = [0, 1, 2, 3].map((f) => pairOutlined(skelFig(f), PSK))
+  const BONE = (() => {
+    const c = sprite(['.....', 'X...X', '.XXX.', 'X...X', '.....'], PSK)
+    return [0, 1, 2, 3].map((q) => outline(rot(c, q)))
+  })()
+  // the fishman (merman): leaps out of the floor in a spray, spits fire
+  const PFM = { G: '#3a9a58', g: '#1e5a32', F: '#9ad8a8', f: '#5aa070', E: '#101010', Y: '#f0d040', r: '#e03030', c: '#bfe8ff', b: '#3a78e8' }
+  const FISH = [0, 1, 2].map((f) => {
+    const g = grid(14, 24)
+    stamp(g, 0, 0, [
+      '....g.g.g.....',
+      '...gGgGgGg....',
+      '..gGGGGGGGG...',
+      '.g.GGGGGGYEG..',
+      'g..GGGGGGGGGG.',
+      '...gGGGG' + (f === 2 ? 'rrrrr' : 'GrrrG') + '.',
+      '....gGGGGGGG..',
+      '.....GGGGGG...',
+      '...gGGFFFFGGg.',
+      '..gGGFFFFFFGGg',
+      '..G.GFfFFfFG.G',
+      '..G.GFFFFFFG.G',
+      '..g.GFfFFfFG.g',
+      '.gg.GGFFFFGG.gg',
+      '....gGGGGGGg..',
+      '....gGGGGGGg..',
+    ])
+    const [b, fr] = f === 1 ? [[6, 0], [8, 0]] : f === 2 ? [[4, 0], [10, 0]] : [[4, 0], [9, 0]]
+    line(g, 6, 16, b[0], 22, 'g', 2)
+    line(g, 8, 16, fr[0], 22, 'G', 2)
+    stamp(g, b[0] - 1, 23, ['gg.'])
+    stamp(g, fr[0], 23, ['GGg'])
+    return pairOutlined(rowsOf(g), PFM)
   })
 
   // ---- bosses ----------------------------------------------------------------
@@ -598,10 +675,15 @@
       return { x0: this.x - 2, x1: this.x + 3, y0: this.top + 3, y1: this.top + 9 }
     }
     hit(x, y) {
-      return this.lit && Math.abs(x - this.x) <= 3 && y >= this.top - 1 && y <= this.top + 10
+      return Math.abs(x - this.x) <= 6 && y >= this.top - 3 && y <= this.top + 13
     }
     onClick() {
-      this.s.data.bel.order({ candle: this })
+      const s = this.s
+      clicked(s)
+      if (this.lit) return s.data.bel.order({ candle: this })
+      // poke a snuffed candle and it catches again
+      this.lit = true
+      s.burst(this.x, this.top + 2, 6, ['y', 'w', 'O'])
     }
     snuff(s, now) {
       this.lit = false
@@ -626,6 +708,7 @@
   function dropFor(s) {
     const d = s.data
     const r = Math.random()
+    if (d.hp < 12 && r < 0.14) return 'roast'
     if (d.whip === 'leather' && r < 0.3) return 'chain'
     if (r < 0.55) return 'heart'
     if (r < 0.72) return 'bigheart'
@@ -647,15 +730,48 @@
       this.z = 1
       this.prop = true
       this.blink = false
+      this.grabbable = true
+      this.held = false
     }
     hit(x, y) {
-      return Math.abs(x - this.x) <= 5 && y >= this.y - 8 && y <= this.y + 1
+      return Math.abs(x - this.x) <= 7 && y >= this.y - 10 && y <= this.y + 2
     }
     onClick() {
+      clicked(this.s)
       this.s.data.bel.order({ item: this })
+    }
+    // carry a drop over to Simon (or anywhere: it falls where you let go)
+    grab(p) {
+      this.s.data.grabAt = performance.now()
+      this.held = true
+      this.blink = false
+      this.drag(p)
+    }
+    drag(p) {
+      this.s.data.grabAt = performance.now()
+      this.x = clamp(p.x, 4, this.s.W - 4)
+      this.y = clamp(p.y + 4, 8, FLOOR)
+    }
+    drop() {
+      const s = this.s
+      const bel = s.data.bel
+      s.data.grabAt = performance.now()
+      this.held = false
+      if (Math.abs(this.x - bel.x) < 14 && this.y > bel.y - 30 && bel.state !== 'rest') {
+        bel.collect(s, this)
+        return
+      }
+      const st = s.data.stair
+      const ledge = st && this.y <= FLOOR - STAIR_H && (st.dir === 1 ? this.x >= st.top && this.x <= st.x0 + STAIR_W : this.x <= st.top && this.x >= st.x0)
+      this.floorY = ledge ? FLOOR - STAIR_H : FLOOR
+      this.landed = false
+      this.vy = this.kind === 'heart' ? 16 : 0
+      this.x0 = this.x
+      this.t = 0
     }
     update(dt, now, s) {
       this.t += dt
+      if (this.held) return FAST
       if (!this.landed) {
         if (this.kind === 'heart') this.x = this.x0 + Math.sin(this.t * 5) * 3 // the little heart flutters down
         else this.vy += 300 * dt
@@ -762,9 +878,10 @@
       return { x0: this.x - 5, x1: this.x + 5, y0: this.y - 5, y1: this.y + 5 }
     }
     hit(x, y) {
-      return Math.abs(x - this.x) <= 6 && Math.abs(y - this.y) <= 6
+      return Math.abs(x - this.x) <= 9 && Math.abs(y - this.y) <= 8
     }
     onClick() {
+      clicked(this.s)
       this.s.data.bel.order({ foe: this })
     }
     struck(s) {
@@ -804,28 +921,75 @@
       this.walked = 0
       this.z = 2
       this.moving = true
+      this.y = FLOOR
+      this.vy = 0
+      this.turnAt = 0
     }
     get box() {
       if (this.state !== 'walk') return null
       return { x0: this.x - 4, x1: this.x + 5, y0: FLOOR - 21, y1: FLOOR }
     }
+    get grabbable() {
+      return this.state === 'walk'
+    }
     hit(x, y) {
-      return Math.abs(x - this.x) <= 5 && y >= FLOOR - 22 && y <= FLOOR
+      return (this.state === 'walk' || this.state === 'held' || this.state === 'rise') && Math.abs(x - this.x) <= 8 && y >= this.y - 23 && y <= this.y + 1
     }
     onClick() {
+      clicked(this.s)
       this.s.data.bel.order({ foe: this })
+    }
+    // pull one out of the floor by the scruff; let go and it comes apart on landing
+    grab(p) {
+      this.s.data.grabAt = performance.now()
+      this.state = 'held'
+      this.drag(p)
+    }
+    drag(p) {
+      this.s.data.grabAt = performance.now()
+      if (this.state !== 'held') return
+      const nx = clamp(p.x, 6, this.s.W - 6)
+      if (Math.abs(nx - this.x) > 1) this.dir = nx > this.x ? 1 : -1
+      this.x = nx
+      this.y = clamp(p.y + 21, 22, FLOOR)
+    }
+    drop() {
+      this.s.data.grabAt = performance.now()
+      if (this.state !== 'held') return
+      this.state = 'drop'
+      this.vy = 0
     }
     struck(s) {
       this.dead = true
-      s.spawn(new Flame(this.x, FLOOR - 6))
-      s.spawn(new Flame(this.x + 1, FLOOR - 14))
-      s.particle({ digits: '100', x: this.x - 6, y: FLOOR - 28, vy: -10, life: 0.9, fade: true })
+      s.spawn(new Flame(this.x, this.y - 6))
+      s.spawn(new Flame(this.x + 1, this.y - 14))
+      s.particle({ digits: '100', x: this.x - 6, y: this.y - 28, vy: -10, life: 0.9, fade: true })
     }
     update(dt, now, s) {
       this.t += dt
+      if (this.state === 'held') return FAST
+      if (this.state === 'drop') {
+        this.vy += GRAV * dt
+        this.y += this.vy * dt
+        if (this.y >= FLOOR) {
+          this.y = FLOOR
+          s.burst(this.x, FLOOR - 2, 6, ['n', 'z'])
+          this.struck(s)
+        }
+        return FAST
+      }
       if (!live(s, now) && this.state !== 'sink') {
         this.state = 'sink'
         this.t = 0
+      }
+      // they lurch toward a cursor that comes close: the living smell good
+      const cur = s.cursor
+      if (this.state === 'walk' && cur && Math.abs(cur.x - this.x) < 36 && now > this.turnAt) {
+        const want = cur.x > this.x ? 1 : -1
+        if (want !== this.dir) {
+          this.dir = want
+          this.turnAt = now + 1200
+        }
       }
       if (this.state === 'rise') {
         if (Math.random() < 0.3) s.particle({ img: pix('n'), x: this.x + rand(-5, 5), y: FLOOR - 1, vy: -rand(10, 30), g: 90, life: 0.5 })
@@ -848,8 +1012,225 @@
       const vis = this.state === 'rise' ? Math.min(1, this.t / 0.9) : this.state === 'sink' ? Math.max(0, 1 - this.t / 0.7) : 1
       const h = Math.round(sp.h * vis)
       if (h <= 0) return
+      if (this.state === 'held' || this.state === 'drop') {
+        // dangling: the legs kick
+        c.drawImage(ZOMBIE[Math.floor(this.t * 6) & 1][this.dir], Math.round(this.x - 6), Math.round(this.y - sp.h + 1))
+        return
+      }
       c.drawImage(sp[this.dir], 0, 0, sp.w, h, Math.round(this.x - 6), FLOOR - h + 1, sp.w, h)
     }
+  }
+
+  // A white skeleton walks in, keeps its distance with that jittery back-and-forth
+  // step and lobs bones at Simon; one crack of the whip and it collapses.
+  class Skeleton {
+    constructor(s, side) {
+      this.s = s
+      this.foe = true
+      this.x = side === 1 ? s.W + 8 : -8
+      this.dir = side === 1 ? -1 : 1
+      this.state = 'enter'
+      this.t = 0
+      this.f = 0
+      this.z = 2
+      this.moving = true
+      this.throws = 0
+      this.throwAt = performance.now() + rand(1600, 2600)
+      this.jig = 0
+      this.life = 0
+    }
+    get box() {
+      if (this.state === 'heap') return null
+      return { x0: this.x - 4, x1: this.x + 4, y0: FLOOR - 21, y1: FLOOR }
+    }
+    hit(x, y) {
+      return this.state !== 'heap' && Math.abs(x - this.x) <= 8 && y >= FLOOR - 24 && y <= FLOOR
+    }
+    onClick() {
+      clicked(this.s)
+      this.s.data.bel.order({ foe: this })
+    }
+    struck(s) {
+      if (this.state === 'heap') return
+      this.state = 'heap'
+      this.t = 0
+      this.foe = false
+      s.burst(this.x, FLOOR - 12, 8, ['w', 'A'])
+      s.particle({ digits: '300', x: this.x - 6, y: FLOOR - 28, vy: -10, life: 0.9, fade: true })
+    }
+    update(dt, now, s) {
+      this.t += dt
+      this.life += dt
+      if (this.state === 'heap') {
+        if (this.t > 1.1) this.dead = true
+        return FAST
+      }
+      const bel = s.data.bel
+      const toward = bel.x > this.x ? 1 : -1
+      if (!live(s, now) || (this.state !== 'leave' && (this.throws >= 4 || this.life > 16))) this.state = 'leave'
+      if (this.state === 'leave') {
+        this.dir = this.x < s.W / 2 ? -1 : 1
+        this.x += this.dir * 30 * dt
+        this.f++
+        if (this.x < -10 || this.x > s.W + 10) this.dead = true
+        return FAST
+      }
+      const gap = Math.abs(bel.x - this.x)
+      if (this.state === 'enter') {
+        this.dir = toward
+        this.x += this.dir * 24 * dt
+        this.f++
+        if (gap < rand(60, 85) || (this.x > 12 && this.x < s.W - 12 && this.life > 6)) this.state = 'jig'
+        return FAST
+      }
+      // the jig: a couple of steps back and forth, always facing him
+      this.dir = toward
+      this.jig += dt
+      const back = gap < 46 ? -1 : gap > 90 ? 1 : Math.sin(this.jig * 2.2) > 0 ? 1 : -1
+      this.x = clamp(this.x + toward * back * 14 * dt, 8, s.W - 8)
+      if (Math.floor(this.jig * 6) !== Math.floor((this.jig - dt) * 6)) this.f++
+      if (this.state === 'jig' && now > this.throwAt) {
+        this.state = 'throw'
+        this.t = 0
+      }
+      if (this.state === 'throw' && this.t > 0.3) {
+        this.state = 'jig'
+        this.throws++
+        this.throwAt = now + rand(1400, 2600)
+        const v = clamp(gap * 1.15, 40, 95)
+        s.spawn(new Bone(this.x + this.dir * 4, FLOOR - 22, this.dir * v, -rand(85, 110)))
+      }
+      return FAST
+    }
+    draw(c) {
+      const sp = this.state === 'heap' ? SKEL[3] : this.state === 'throw' ? SKEL[2] : SKEL[(this.f >> 2) & 1]
+      if (this.state === 'heap' && this.t > 0.8 && Math.floor(this.t * 12) & 1) return
+      c.drawImage(sp[this.dir], Math.round(this.x - 6) - 1, FLOOR - 24)
+    }
+  }
+  class Bone {
+    constructor(x, y, vx, vy) {
+      this.x = x
+      this.y = y
+      this.vx = vx
+      this.vy = vy
+      this.t = 0
+      this.z = 6
+      this.foe = true
+      this.hazard = true
+      this.moving = true
+    }
+    get box() {
+      return { x0: this.x - 3, x1: this.x + 3, y0: this.y - 3, y1: this.y + 3 }
+    }
+    struck(s) {
+      this.dead = true
+      s.burst(this.x, this.y, 4, ['w', 'A'])
+    }
+    update(dt, now, s) {
+      this.t += dt
+      this.vy += 200 * dt
+      this.x += this.vx * dt
+      this.y += this.vy * dt
+      if (this.y > FLOOR - 2) {
+        s.burst(this.x, FLOOR - 2, 3, ['w', 'A'])
+        this.dead = true
+      }
+      if (this.x < -8 || this.x > s.W + 8 || !live(s, now)) this.dead = true
+      return FAST
+    }
+    draw(c) {
+      c.drawImage(BONE[Math.floor(this.t * 12) & 3], Math.round(this.x - 3), Math.round(this.y - 3))
+    }
+  }
+
+  // The fishman bursts up out of the floor in a spray of water, plods at Simon,
+  // spits a fireball (duck it) and dives back down.
+  class Fishman {
+    constructor(s, x) {
+      this.s = s
+      this.foe = true
+      this.x = x
+      this.y = FLOOR + 24
+      this.vy = -158 // big enough to break the top of the bar
+      this.dir = s.data.bel.x > x ? 1 : -1
+      this.state = 'leap'
+      this.t = 0
+      this.f = 0
+      this.z = 2
+      this.moving = true
+      this.spits = 0
+      this.spitAt = performance.now() + rand(1800, 2800)
+      splash(s, x)
+    }
+    get box() {
+      if (this.y > FLOOR + 4) return null
+      return { x0: this.x - 5, x1: this.x + 5, y0: this.y - 22, y1: this.y }
+    }
+    hit(x, y) {
+      return this.y < FLOOR + 10 && Math.abs(x - this.x) <= 9 && y >= this.y - 25 && y <= this.y + 1
+    }
+    onClick() {
+      clicked(this.s)
+      this.s.data.bel.order({ foe: this })
+    }
+    struck(s) {
+      this.dead = true
+      s.spawn(new Flame(this.x, this.y - 6))
+      s.spawn(new Flame(this.x, this.y - 16))
+      s.particle({ digits: '300', x: this.x - 6, y: Math.max(2, this.y - 30), vy: -10, life: 0.9, fade: true })
+    }
+    update(dt, now, s) {
+      this.t += dt
+      this.f++
+      const bel = s.data.bel
+      if (this.state === 'leap' || this.state === 'dive') {
+        this.vy += 320 * dt
+        this.y += this.vy * dt
+        if (this.state === 'leap' && this.vy > 0 && this.y >= FLOOR) {
+          this.y = FLOOR
+          this.state = 'walk'
+          this.t = 0
+        }
+        if (this.state === 'dive' && this.y > FLOOR + 26) this.dead = true
+        return FAST
+      }
+      if (!live(s, now) || this.spits >= 2 || this.t > 11) {
+        if (this.state !== 'dive') {
+          this.state = 'dive'
+          this.vy = -60
+          splash(s, this.x)
+        }
+        return FAST
+      }
+      this.dir = bel.x > this.x ? 1 : -1
+      if (this.state === 'walk') {
+        if (Math.abs(bel.x - this.x) > 26) this.x = clamp(this.x + this.dir * 12 * dt, 8, s.W - 8)
+        if (now > this.spitAt) {
+          this.state = 'spit'
+          this.st = 0
+        }
+      } else if (this.state === 'spit') {
+        this.st += dt
+        if (this.st > 0.45) {
+          this.state = 'walk'
+          this.spits++
+          this.spitAt = now + rand(2200, 3400)
+          s.spawn(new Fireball(this.x + this.dir * 7, FLOOR - 19, this.dir * 66, 0))
+        }
+      }
+      return FAST
+    }
+    draw(c) {
+      const fr = this.state === 'spit' ? 2 : this.state === 'walk' ? (this.f >> 2) & 1 : 0
+      const sp = FISH[fr][this.dir]
+      const top = Math.round(this.y) - 25
+      const h = Math.min(sp.height, FLOOR + 1 - top)
+      if (h > 0) c.drawImage(sp, 0, 0, sp.width, h, Math.round(this.x - 7) - 1, top, sp.width, h)
+    }
+  }
+  function splash(s, x) {
+    for (let i = 0; i < 12; i++) s.particle({ img: pix(pick(['c', 'b', 'w'])), x: x + rand(-6, 6), y: FLOOR - 1, vx: rand(-25, 25), vy: -rand(40, 95), g: 220, life: rand(0.5, 0.9), fade: true })
   }
 
   // The bat roosts upside down under the title. It flutters around the cursor
@@ -879,20 +1260,54 @@
       return this.state === 'hang'
     }
     get moving() {
-      return this.state !== 'hang'
+      return this.state !== 'hang' && this.state !== 'cameo'
     }
     get box() {
       return { x0: this.x - 6, x1: this.x + 6, y0: this.y - 3, y1: this.y + 3 }
     }
+    get grabbable() {
+      return this.state !== 'cameo'
+    }
     hit(x, y) {
-      return this.state === 'hang' ? Math.abs(x - this.x) <= 4 && y >= this.y - 1 && y <= this.y + 9 : Math.abs(x - this.x) <= 8 && Math.abs(y - this.y) <= 5
+      if (this.state === 'cameo') return false
+      return this.state === 'hang' ? Math.abs(x - this.x) <= 6 && y >= this.y - 2 && y <= this.y + 11 : Math.abs(x - this.x) <= 10 && Math.abs(y - this.y) <= 7
     }
     onClick() {
+      clicked(this.s)
+      if (this.state === 'held') return
       if (this.state === 'hang') {
         this.state = 'fly'
         this.s.say('!', this.x, this.y - 8, { life: 0.7, color: '#ff7a7a' })
       }
       this.s.data.bel.order({ foe: this })
+    }
+    // double-click the sleeping bat: it was never just a bat
+    onDblClick() {
+      const s = this.s
+      const d = s.data
+      clicked(s)
+      if (d.boss || d.orb || s.busy || this.state === 'held') return
+      this.state = 'cameo'
+      s.burst(this.x, this.y + 2, 10, ['v', 'r', 'w'])
+      d.boss = s.spawn(new Boss(s, 'dracula', { x: this.x }))
+    }
+    grab(p) {
+      this.s.data.grabAt = performance.now()
+      this.state = 'held'
+      this.s.say('!', this.x, Math.max(0, this.y - 10), { life: 0.6, color: '#ff7a7a' })
+      this.drag(p)
+    }
+    drag(p) {
+      this.s.data.grabAt = performance.now()
+      if (this.state !== 'held') return
+      this.x = clamp(p.x, 8, this.s.W - 8)
+      this.y = clamp(p.y, 4, FLOOR - 4)
+    }
+    drop() {
+      this.s.data.grabAt = performance.now()
+      if (this.state !== 'held') return
+      this.s.burst(this.x, this.y, 5, ['v', 'w'])
+      this.scare(performance.now())
     }
     struck(s) {
       s.burst(this.x, this.y, 6, ['v', 'w'])
@@ -908,6 +1323,14 @@
       const cur = s.cursor
       const bel = s.data.bel
       const lv = live(s, now)
+      if (this.state === 'held') return FAST
+      if (this.state === 'cameo') {
+        // Dracula is using the bat's body; it comes back when he leaves
+        const b = s.data.boss
+        if (b && b.cameo && !b.dead) return lv ? SLOW : Infinity
+        this.state = 'home'
+        this.x = clamp(this.x, 8, s.W - 8)
+      }
       if (this.state === 'hang') {
         if (!lv) return Infinity
         if (now < this.calmUntil) return this.calmUntil - now + 50
@@ -959,6 +1382,7 @@
       return FAST
     }
     draw(c) {
+      if (this.state === 'cameo') return
       if (this.state === 'hang') c.drawImage(BAT_HANG, Math.round(this.x - 4), Math.round(this.y - 1))
       else c.drawImage(BAT[[0, 1, 2, 1][(this.f >> 1) & 3]], Math.round(this.x - 8), Math.round(this.y - 4))
     }
@@ -1067,9 +1491,10 @@
   // Dracula teleports in, fires his three fireballs and vanishes again; Death
   // drifts above the floor and sends sickles. Only the head can be hurt.
   class Boss {
-    constructor(s, kind) {
+    constructor(s, kind, cameo = null) {
       this.s = s
       this.kind = kind
+      this.cameo = !!cameo
       this.hp = 16
       this.z = 2
       this.dir = -1
@@ -1080,6 +1505,12 @@
       this.go(kind === 'dracula' ? 'gone' : 'appear', 0.3)
       if (kind === 'death') this.pickSpot()
       this.spoke = false
+      if (cameo) {
+        // straight out of the bat, on the floor below the roost
+        this.x = clamp(cameo.x, 20, s.W - 20)
+        this.dir = s.data.bel.x < this.x ? -1 : 1
+        this.go('appear')
+      }
     }
     go(state, wait = 0) {
       this.state = state
@@ -1169,14 +1600,18 @@
           if (this.t > 0.45) {
             this.f0 = this.f
             this.go('stand')
-            if (!this.spoke && Math.random() < 0.6) {
+            if (this.cameo && !this.spoke) {
+              this.spoke = true
+              this.wait = 2.6 // he has a speech to make first
+              s.say(pick(['What is a man? A miserable little pile of secrets!', 'Die monster! You don’t belong in this world!', 'Have at you!']), this.x, 0, { color: '#ff7a7a', life: 3.2 })
+            } else if (!this.spoke && Math.random() < 0.6) {
               this.spoke = true
               s.say(pick(['What is a man?', 'Welcome to my castle.', 'Fool!']), this.x, 0, { color: '#ff7a7a', life: 2.6 })
             }
           }
           return FAST
         case 'stand':
-          if (this.t > 1.3) this.go('open')
+          if (this.t > 1.3 + (this.cameo ? this.wait : 0)) this.go('open')
           return FAST
         case 'open':
           if (!this.fired && this.t > 0.18) {
@@ -1194,7 +1629,19 @@
           if (this.t > 0.6) this.go('vanish')
           return FAST
         case 'vanish':
-          if (this.t > 0.4) this.go('gone', rand(0.6, 1.4))
+          if (this.t > 0.4) {
+            if (this.cameo) {
+              // back into the bat, and back to sleep
+              this.dead = true
+              s.data.boss = null
+              const bat = s.data.bat
+              bat.x = this.x
+              bat.y = this.y - 20
+              s.burst(this.x, this.y - 20, 8, ['v', 'r'])
+              return FAST
+            }
+            this.go('gone', rand(0.6, 1.4))
+          }
           return FAST
       }
       return FAST
@@ -1296,7 +1743,61 @@
       return this.state === 'rest'
     }
     get free() {
-      return (this.state === 'idle' || this.state === 'walk') && this.floorY === FLOOR
+      return (this.state === 'idle' || this.state === 'walk' || this.state === 'kwalk') && this.floorY === FLOOR
+    }
+    // ---- keyboard: A/D walk, W jumps (or takes the stairs), S crouches, Space whips, W+Space throws ----
+    keyDir() {
+      const k = this.s.keys
+      return (k.has('right') ? 1 : 0) - (k.has('left') ? 1 : 0)
+    }
+    key(k) {
+      const s = this.s
+      const d = s.data
+      const st = d.stair
+      const ground = this.state === 'idle' || this.state === 'walk' || this.state === 'kwalk' || this.state === 'crouch' || this.state === 'land' || this.state === 'rest'
+      if (this.state === 'rest') this.go('idle')
+      if (k === 'fire') {
+        if (this.state === 'jump') {
+          // a whip crack at the top of the jump, arc unchanged
+          this.go('whip')
+          this.stance = 'jump'
+          this.struck = false
+          return
+        }
+        if (!ground) return
+        this.task = null
+        if (s.keys.has('up') && this.throwSub(true)) return
+        const crouch = s.keys.has('down')
+        this.startWhip(crouch ? 'crouch' : 'stand')
+        return
+      }
+      if (k === 'up') {
+        if (!ground) return
+        this.task = null
+        // at the foot of the stairs (or on the ledge by the top) W climbs
+        if (st && this.floorY === FLOOR && Math.abs(this.x - st.foot) < 7) {
+          this.x = st.foot
+          this.go('stairs')
+          this.task = { dir: 'up' }
+          return
+        }
+        if (st && this.floorY < FLOOR) {
+          this.walkTo(st.top, { stairs: 'down' })
+          return
+        }
+        // the committed Castlevania jump, high enough to leave the top of the bar
+        this.go('jump')
+        this.vy = -94
+        this.vx = this.keyDir() * WALK * 1.4
+        return
+      }
+      if (k === 'down') {
+        if (st && this.floorY < FLOOR) return this.walkTo(st.top, { stairs: 'down' })
+        if (!ground) return
+        this.task = null
+        this.go('crouch')
+        this.hold = Infinity
+      }
     }
     get onStairs() {
       return this.state === 'stairs' || this.floorY < FLOOR
@@ -1315,10 +1816,30 @@
     }
     // a click: the jumping whip crack the owner liked
     onClick() {
+      const s = this.s
+      const now = clicked(s)
+      this.clicks = (this.clicks || []).filter((t) => now - t < 2600)
+      this.clicks.push(now)
+      if (this.clicks.length >= 6 && !s.data.triple) {
+        // easter egg: the Konami code. Thirty hearts and the triple shot.
+        this.clicks.length = 0
+        const d = s.data
+        d.hearts = Math.min(99, d.hearts + 30)
+        d.triple = 3
+        if (!d.sub) d.sub = 'dagger'
+        s.say('↑↑↓↓←→←→BA', this.x, 0, { color: '#f8c838', life: 2.6 })
+        s.burst(this.x, this.y - 30, 14, ['r', 'y', 'w'])
+        if (this.state === 'rest') this.go('idle')
+        if (this.free) this.go('cheer')
+        return
+      }
       if (this.state === 'rest') return this.wake()
       if (this.free) this.startWhip('jump')
     }
     onDblClick() {
+      const s = this.s
+      clicked(s)
+      if (s.cursor && Math.abs(s.cursor.x - this.x) > 4) this.dir = s.cursor.x > this.x ? 1 : -1
       if (this.free) {
         if (!this.throwSub(true)) this.startWhip('crouch')
       }
@@ -1329,6 +1850,7 @@
     }
     // an order from a click on something: go and whip it (or pick it up)
     order(o) {
+      clicked(this.s)
       if (!this.free && this.state !== 'rest') return
       if (this.state === 'rest') this.go('idle')
       if (o.candle) return this.planCandle(o.candle)
@@ -1476,27 +1998,35 @@
         d.whip = 'chain'
         s.burst(this.x, this.y - 14, 12, ['w', 'A', 'y'])
       } else if (it.kind === 'bag') s.particle({ digits: '1000', x: this.x - 8, y: this.y - 32, vy: -10, life: 1.1, fade: true })
+      else if (it.kind === 'roast') {
+        // wall meat: full health
+        d.hp = 16
+        d.hpShow = performance.now() + 4000
+        s.burst(this.x, this.y - 20, 10, ['r', 'O', 'y'])
+      }
       else d.sub = it.kind
     }
     think(now, s) {
       const d = s.data
       // up on the ledge: pick up what fell there, then take the stairs down
       if (this.floorY < FLOOR) {
-        for (const a of s.actors) if (a instanceof Item && a.landed && a.floorY < FLOOR) return this.walkTo(a.x, { item: a })
+        for (const a of s.actors) if (a instanceof Item && a.landed && !a.held && a.floorY < FLOOR) return this.walkTo(a.x, { item: a })
         return this.walkTo(d.stair.top, { stairs: 'down' })
       }
       if (d.orb && d.orb.landed) return this.walkTo(d.orb.x, { orb: d.orb })
+      const user = engaged(s, now)
       const th = this.threat(s)
       if (th) {
         const r = this.engage(th)
         if (r) return r
+        if (user) return FAST // you call the shots: he only cracks what comes into reach
         // out of reach: a sub-weapon, or wait for it to come
         if (Math.abs(th.x - this.x) > this.reach + 10 && Math.random() < (d.hearts > 20 ? 0.6 : 0.3) && this.throwSub()) return FAST
         if (th.a instanceof Zombie && Math.abs(th.x - this.x) > this.reach) return this.walkTo(th.x - Math.sign(th.x - this.x) * (this.reach - 4), {})
         return FAST
       }
       const b = d.boss
-      if (b && b.kind === 'dracula' && (b.state === 'open' || (b.state === 'stand' && b.t > 1.05))) {
+      if (b && b.kind === 'dracula' && (b.state === 'open' || (b.state === 'stand' && b.t > 1.05 + (b.cameo ? b.wait : 0)))) {
         // he knows the cape is about to open: duck the volley (usually)
         if (b.volley !== b.f0) {
           b.volley = b.f0
@@ -1510,6 +2040,7 @@
         return FAST
       }
       for (const a of s.actors) if (a instanceof Fireball && !a.dead && Math.abs(a.x - this.x) < 60) return FAST
+      if (user) return this.watchCursor(now, s, 350)
       if (b && b.vulnerable) {
         const h = b.headBox
         const hx = (h.x0 + h.x1) / 2
@@ -1521,7 +2052,7 @@
       let best = null
       let bd = 1e9
       for (const a of s.actors) {
-        if (!(a instanceof Item) || !a.landed || a.floorY < FLOOR) continue
+        if (!(a instanceof Item) || !a.landed || a.held || a.floorY < FLOOR) continue
         const dd = Math.abs(a.x - this.x)
         if (dd < bd) {
           bd = dd
@@ -1547,7 +2078,10 @@
         }
         if (cb && now > this.next) return this.planCandle(cb)
       }
-      // nothing to do: face the cursor (with a cooldown); whip it if it lingers
+      return this.watchCursor(now, s, 900)
+    }
+    // nothing to do: face the cursor (with a cooldown); whip it if it lingers
+    watchCursor(now, s, cool) {
       const cur = s.cursor
       if (cur) {
         const cx = cur.x - this.x
@@ -1555,7 +2089,7 @@
           const want = cx > 0 ? 1 : -1
           if (want !== this.dir) {
             this.dir = want
-            this.turnAt = now + 900
+            this.turnAt = now + cool
           }
         }
         const inReach = Math.abs(cx) <= this.reach && Math.abs(cx) > 6 && Math.sign(cx) === this.dir && cur.y > 2 && cur.y < FLOOR
@@ -1602,6 +2136,12 @@
             return Infinity
           }
           if (lv) d.restX = undefined
+          if (this.keyDir()) {
+            this.task = null
+            this.go('kwalk')
+            return FAST
+          }
+          if (s.keys.size) return FAST
           if (this.dodge(s)) return FAST
           if (now < this.next && !this.threat(s) && !d.boss && !(d.orb && d.orb.landed)) return Math.min(this.next - now, s.cursor ? SLOW : 1e9)
           return this.think(now, s)
@@ -1694,22 +2234,50 @@
           return FAST
         }
         case 'whip': {
-          if (this.stance === 'jump') this.fall(dt)
+          if (this.stance === 'jump') {
+            if (this.vx) this.x = clamp(this.x + this.vx * dt, 6, s.W - 6)
+            this.fall(dt)
+          }
           if (!this.struck && this.t >= WHIP_T.swing) {
             this.struck = true
             this.strike(s)
           }
           if (this.t > WHIP_T.end && this.y >= this.floorY) {
+            this.vx = 0
             this.go(this.stance === 'jump' ? 'land' : 'idle')
             this.next = now + (s.busy || d.boss ? rand(150, 400) : rand(900, 2200))
           }
           return FAST
         }
         case 'jump':
-          if (this.fall(dt)) this.go('land')
+          if (this.vx) this.x = clamp(this.x + this.vx * dt, 6, s.W - 6)
+          if (this.fall(dt)) {
+            this.vx = 0
+            this.go('land')
+          }
           return FAST
+        case 'kwalk': {
+          const dir = this.keyDir()
+          if (!dir || !lv) {
+            this.go('idle')
+            this.next = now + 600
+            return FAST
+          }
+          if (s.keys.has('down')) {
+            this.go('crouch')
+            this.hold = Infinity
+            return FAST
+          }
+          this.dir = dir
+          const step = WALK * 1.3 * dt
+          this.x = clamp(this.x + dir * step, 6, s.W - 6)
+          this.stride += step
+          // walking over a drop picks it up
+          for (const a of s.actors) if (a instanceof Item && a.landed && !a.held && a.floorY === this.floorY && Math.abs(a.x - this.x) < 5) this.collect(s, a)
+          return FAST
+        }
         case 'crouch':
-          if (this.t > this.hold) this.go('idle')
+          if (this.hold === Infinity ? !s.keys.has('down') : this.t > this.hold) this.go('idle')
           return FAST
         case 'land':
           if (this.t > 0.18) this.go('idle')
@@ -1725,12 +2293,26 @@
           if (!this.thrown && this.t > 0.1) {
             this.thrown = true
             const h = SIM.throw.hand
-            s.spawn(new Shot(s, d.sub, this.x + (h[0] - CX) * this.dir, this.y - 28 + h[1], this.dir))
+            const hx = this.x + (h[0] - CX) * this.dir
+            const hy = this.y - 28 + h[1]
+            s.spawn(new Shot(s, d.sub, hx, hy, this.dir))
+            if (d.triple > 0) {
+              // the III: two more in a fan
+              d.triple--
+              for (const k of [-1, 1]) {
+                const sh = s.spawn(new Shot(s, d.sub, hx, hy + k * 4, this.dir))
+                if (d.sub === 'dagger') sh.vy = k * 14
+                else sh.vx *= 1 + k * 0.3
+              }
+            }
           }
           if (this.t > 0.35) {
             this.go('idle')
             this.next = now + 300
           }
+          return FAST
+        case 'cheer':
+          if (this.t > 0.9) this.go('idle')
           return FAST
         case 'orb':
           if (this.t > 1.8) {
@@ -1755,6 +2337,7 @@
     frame() {
       switch (this.state) {
         case 'walk':
+        case 'kwalk':
         case 'stairs':
           return 'walk' + (Math.floor(this.stride / 4) & 3)
         case 'whip': {
@@ -1773,6 +2356,7 @@
         case 'throw':
           return this.t < 0.1 ? 'wind' : 'throw'
         case 'orb':
+        case 'cheer':
           return 'raise'
       }
       return 'stand'
@@ -1821,21 +2405,76 @@
     for (let i = cands.length; i < old.length; i++) old[i].dead = true
   }
 
-  function spawnFoe(s, now) {
+  const FOES = [Medusa, Zombie, Skeleton, Fishman]
+  const foeCount = (s) => s.actors.filter((a) => !a.dead && FOES.some((K) => a instanceof K)).length
+  // a spot on the floor some way off from Simon, inside the bar
+  function nearSpot(s, lo, hi) {
+    const bel = s.data.bel
+    const side = Math.random() < 0.5 ? 1 : -1
+    let x = bel.x + side * rand(lo, hi)
+    if (x < 14 || x > s.W - 14) x = bel.x - side * rand(lo, hi)
+    return clamp(x, 14, s.W - 14)
+  }
+  function spawnFoe(s, now, kind) {
     const d = s.data
     const bel = d.bel
-    const foes = s.actors.filter((a) => (a instanceof Medusa || a instanceof Zombie) && !a.dead).length
-    if (foes >= 2 || bel.onStairs) return
-    if (Math.random() < 0.5) {
-      // from the edge he has room to face
-      const side = bel.x < s.W / 2 ? 1 : -1
-      s.spawn(new Medusa(s, Math.random() < 0.75 ? side : -side))
-    } else {
-      const side = Math.random() < 0.5 ? 1 : -1
-      let x = bel.x + side * rand(55, 110)
-      if (x < 14 || x > s.W - 14) x = bel.x - side * rand(55, 110)
-      x = clamp(x, 14, s.W - 14)
+    if (foeCount(s) >= (s.busy ? 3 : 4) || bel.onStairs) return
+    kind ??= pick(['medusa', 'medusa', 'zombie', 'zombie', 'skeleton', 'fishman'])
+    // from the edge he has room to face
+    const side = bel.x < s.W / 2 ? 1 : -1
+    if (kind === 'medusa') s.spawn(new Medusa(s, Math.random() < 0.75 ? side : -side))
+    else if (kind === 'skeleton') s.spawn(new Skeleton(s, Math.random() < 0.75 ? side : -side))
+    else if (kind === 'fishman') s.spawn(new Fishman(s, nearSpot(s, 50, 95)))
+    else {
+      const x = nearSpot(s, 55, 110)
       s.spawn(new Zombie(s, x, x < bel.x ? 1 : -1))
+    }
+  }
+
+  // Watch mode: one little episode at a time, shuffled so a day of it doesn't repeat.
+  const EPISODES = ['zombies', 'medusas', 'skeleton', 'fishman', 'bat', 'secret', 'candles', 'mixed']
+  function runEpisode(s, now, only) {
+    const d = s.data
+    if (!d.bag.length) d.bag = EPISODES.slice().sort(() => Math.random() - 0.5)
+    const ep = only || d.bag.pop()
+    const later = (ms, fn) => d.queue.length < 8 && d.queue.push({ at: now + ms, fn })
+    switch (ep) {
+      case 'zombies': {
+        // the graveyard stirs: three of them, one after another
+        const n = s.W < 500 ? 2 : 3
+        for (let i = 0; i < n; i++) later(i * 1700, () => spawnFoe(s, performance.now(), 'zombie'))
+        break
+      }
+      case 'medusas': {
+        const side = d.bel.x < s.W / 2 ? 1 : -1
+        for (let i = 0; i < 3; i++) later(i * 1500, () => foeCount(s) < 4 && s.spawn(new Medusa(s, side)))
+        break
+      }
+      case 'skeleton':
+        spawnFoe(s, now, 'skeleton')
+        break
+      case 'fishman':
+        spawnFoe(s, now, 'fishman')
+        if (s.W > 600) later(3500, () => spawnFoe(s, performance.now(), 'fishman'))
+        break
+      case 'bat':
+        if (d.bat.state === 'hang') {
+          d.bat.state = 'dive'
+          d.bat.t = 0
+        } else spawnFoe(s, now, 'medusa')
+        break
+      case 'secret': {
+        // a hidden money bag rises out of the floor in a sparkle
+        const x = openSpot(s, nearSpot(s, 30, 70), 5)
+        s.burst(x, FLOOR - 3, 8, ['y', 'w'])
+        s.spawn(new Item(s, Math.random() < 0.3 ? 'roast' : 'bag', x, FLOOR, FLOOR)).vy = -85
+        break
+      }
+      case 'mixed':
+        spawnFoe(s, now, 'zombie')
+        later(2200, () => spawnFoe(s, performance.now(), 'medusa'))
+        break
+      // 'candles': a breather; he goes about the candles
     }
   }
 
@@ -1855,11 +2494,12 @@
     title: 'Castlevania',
     sub: 'Konami, 1986',
     blurb:
-      'Simon Belmont plods along the bar with the stiff walk and the three-frame whip: standing, crouched or in a committed jump, depending on how high the candle stands. One candle sits on a stone ledge, so he takes the stairs up and back down. Candles drop hearts, the chain whip, and a dagger, axe or holy water he throws for a heart each. Medusa heads wave in, zombies claw up from the floor, and the bat under the title circles your cursor or dives at him; contact knocks him back. Click Simon to jump and whip, double-click for the sub-weapon, click a candle or enemy to send him after it; leave the cursor in reach and he whips at it. Busy: Dracula teleports in and out firing three fireballs (or Death sends sickles) and only head hits count. Done: the boss burns away and Simon lifts the orb. When it is quiet he kneels in an open stretch and the candles burn still.',
+      'Simon Belmont plods along the bar with the stiff walk and the three-frame whip: standing, crouched or in a committed jump, depending on how high the candle stands. One candle sits on a stone ledge, so he takes the stairs up and back down. Candles drop hearts, the chain whip, a dagger, axe or holy water, and now and then the pot roast. Left alone the castle plays itself in shuffled episodes: zombies claw up from the floor in threes, a stream of Medusa heads, a white skeleton that jigs and lobs bones, fishmen bursting from the floor to spit fire, the bat diving from its roost under the title, a secret money bag rising from the floor. While you play he waits on you and faces your <b>cursor</b>: click him to jump and whip, double-click for the sub-weapon, click a candle, item or enemy to send him at it, poke a snuffed candle to relight it, and leave the cursor in reach for a crack of the whip. Drag hearts and weapons to him, pull a zombie out of the floor and drop it, or grab the bat. Zombies lurch toward a cursor that comes near. Easter eggs: click Simon six times fast for the Konami code (thirty hearts and the triple shot), and double-click the sleeping bat. Busy: Dracula teleports in and out firing three fireballs (or Death sends sickles) while the castle throws everything at him; only head hits count. Done: the boss burns away and Simon lifts the orb. When it is quiet he kneels in an open stretch and the candles burn still.',
     setup(s) {
       s.data = {
         W: s.W, hearts: 5, sub: null, whip: 'leather', hp: 16, hpShow: 0, flick: 0,
         boss: null, bossN: 0, bossAt: 0, orb: null, nextFoe: performance.now() + rand(6000, 12000),
+        queue: [], bag: [], epAt: performance.now() + rand(5000, 9000), triple: 0, clickAt: -1e9, grabAt: -1e9,
       }
       layout(s)
       s.data.bel = new Belmont(s)
@@ -1890,21 +2530,35 @@
       }
       if (d.boss) d.boss.x = clamp(d.boss.x, 20, s.W - 20)
       if (d.orb) d.orb.x = clamp(d.orb.x, 8, s.W - 8)
-      for (const a of s.actors) if (a instanceof Item || a instanceof Zombie) a.x = clamp(a.x, 6, s.W - 6)
+      for (const a of s.actors) if (a instanceof Item || a instanceof Zombie || a instanceof Skeleton || a instanceof Fishman) a.x = clamp(a.x, 6, s.W - 6)
     },
     update(s, dt, now) {
       const d = s.data
       const lv = live(s, now)
-      if (!lv) return Infinity
+      if (!lv) {
+        d.queue.length = 0
+        return Infinity
+      }
       d.flick++
-      if (s.busy && !d.boss && !d.orb && now > d.bossAt) {
-        d.boss = s.spawn(new Boss(s, d.bossN++ % 2 ? 'death' : 'dracula'))
+      let wait = SLOW
+      while (d.queue.length && d.queue[0].at <= now) d.queue.shift().fn()
+      d.queue.sort((a, b) => a.at - b.at)
+      if (s.busy) {
+        // the agent is working: the boss holds court and the castle throws everything at him
+        if (!d.boss && !d.orb && now > d.bossAt) d.boss = s.spawn(new Boss(s, d.bossN++ % 2 ? 'death' : 'dracula'))
+        if (now > d.nextFoe) {
+          if (!d.boss || Math.random() < 0.45) spawnFoe(s, now)
+          d.nextFoe = now + (d.boss ? rand(7000, 12000) : rand(3500, 7000))
+        }
+        return wait
       }
-      if (now > d.nextFoe) {
-        if (!d.boss || Math.random() < 0.3) spawnFoe(s, now)
-        d.nextFoe = now + rand(9000, 17000)
-      }
-      return SLOW
+      const quiet = !foeCount(s) && !d.queue.length && !d.boss && !d.orb && d.bat.state === 'hang'
+      if (engaged(s, now)) d.epAt = Math.max(d.epAt, now + 3000) // you are playing: no new episodes
+      else if (quiet && now > d.epAt) {
+        runEpisode(s, now)
+        d.epAt = now + rand(7000, 13000)
+      } else if (!quiet) d.epAt = Math.max(d.epAt, now + 2500)
+      return wait
     },
     onBusy(s) {
       const d = s.data
@@ -1925,6 +2579,7 @@
     },
     onNap(s) {
       const d = s.data
+      d.queue.length = 0
       bossEnd(s, false)
       if (d.orb) {
         d.orb.dead = true
@@ -1944,6 +2599,9 @@
     },
     onBarClick(s, p) {
       s.data.bel.order({ x: p.x, y: p.y })
+    },
+    onKey(s, k, down) {
+      if (down && s.data.bel) s.data.bel.key(k)
     },
     drawFront(s, c) {
       const d = s.data

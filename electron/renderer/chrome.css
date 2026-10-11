@@ -19,7 +19,7 @@ body {
 /* Opaque shell. Whole shell is the drag region; children opt out with no-drag. */
 .shell {
   position: absolute;
-  inset: var(--frame-inset);
+  inset: var(--frame-top) var(--frame-inset) var(--frame-inset);
   z-index: 1;
   display: flex;
   flex-direction: column;

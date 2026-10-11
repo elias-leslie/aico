@@ -1007,7 +1007,11 @@
     const nx = sl.x + side * (hw + 24)
     return nx > hw && nx < s.W - hw ? nx : sl.x - side * (hw + 24)
   }
-  const engaged = (s, now) => now - s.data.clickAt < 9000 || now - s.data.grabAt < 9000 || (s.cursor && now - s.cursor.since < 2500)
+  const engaged = (s, now) => now - s.data.clickAt < 9000 || now - s.data.grabAt < 9000 || (s.cursor && now - s.cursor.since < 2500) || keyed(s, now)
+  // the keyboard is the game's (armed by a click on a character), or a game key went down lately
+  const keyed = (s, now) => now - (s.keyAt ?? -1e9) < 9000
+  const keyDir = (s) => (s.keys?.has('right') ? 1 : 0) - (s.keys?.has('left') ? 1 : 0)
+  const SPILL = typeof SPILL_UP === 'number' ? SPILL_UP : 0 // the stage reaches a little above the bar
   const later = (s, ms, fn) => s.data.queue.push({ at: performance.now() + ms, fn })
   function nearest(list, x) {
     let best = null
@@ -1519,7 +1523,7 @@
       const nx = clamp(p.x, 8, this.s.W - 8)
       if (Math.abs(nx - this.x) > 1.5) this.dir = nx > this.x ? 1 : -1
       this.x = nx
-      this.y = clamp(p.y + 26, 24, FLOOR)
+      this.y = clamp(p.y + 26, 24 - SPILL, FLOOR)
     }
     drop() {
       if (this.state !== 'held') return
@@ -1543,6 +1547,7 @@
       this.flashT -= dt
       if (this.inv > 0) this.inv -= dt
       this.moving = !['stand', 'sit', 'tank'].includes(this.state)
+      if (this === s.data.marco) this.keySteer(dt, s)
       switch (this.state) {
         case 'run': {
           const dx = this.tx - this.x
@@ -1693,6 +1698,30 @@
       return this.think(now, s, awake)
     }
 
+    /** A/D held: run that way at once (and keep moving while firing, or steer a jump). */
+    keySteer(dt, s) {
+      const kx = keyDir(s)
+      if (kx && ['stand', 'run', 'win', 'sit'].includes(this.state)) {
+        if (this.state === 'sit') this.standUp()
+        this.steps = []
+        this.dir = kx
+        this.tx = edgeX(s, this.x + kx * 24)
+        if (this.state !== 'run') this.t = 0
+        this.state = Math.abs(this.tx - this.x) > 0.5 ? 'run' : 'stand'
+        this.keyRun = true
+      } else if (kx && ['fire', 'knife', 'throw'].includes(this.state)) {
+        // run and gun
+        this.dir = kx
+        this.x = edgeX(s, this.x + kx * (this.fat ? 40 : SPEED) * dt)
+        this.rt += dt
+        this.keyRun = true
+      } else if (kx && this.state === 'jump') {
+        this.vx = kx * 50
+      } else if (this.keyRun && !kx) {
+        this.keyRun = false
+        if (this.state === 'run') this.tx = this.x
+      }
+    }
     think(now, s, awake) {
       if (!awake) return this.restThink(now, s)
       this.resting = false
@@ -2077,7 +2106,7 @@
       this.vx = (nx - this.x) * 8
       if (Math.abs(nx - this.x) > 1) this.dir = nx > this.x ? -1 : 1
       this.x = nx
-      this.y = clamp(p.y + 24, 24, FLOOR)
+      this.y = clamp(p.y + 24, 24 - SPILL, FLOOR)
     }
     drop() {
       if (this.state !== 'held') return
@@ -2978,6 +3007,24 @@
         this.queued = false
         this.fireCannon(s)
       }
+      if (keyed(s, now)) {
+        // A/D drive (reversing; a held key the other way turns her round), W hops, Space fires
+        const kx = keyDir(s)
+        this.moving = false
+        if (kx) {
+          if (kx !== this.dir && now > this.turnAt && this.keyHeldT > 0.5) {
+            this.dir = kx
+            this.turnAt = now + 600
+          }
+          this.keyHeldT = (this.keyHeldT || 0) + dt
+          this.x = clamp(this.x + kx * 46 * dt, 22, s.W - 22)
+          this.tp += dt * kx * this.dir
+          this.moving = true
+        } else this.keyHeldT = 0
+        if (!this.queued) this.angT = 0
+        ease()
+        return FAST
+      }
       if (engaged(s, now)) {
         const c = s.cursor
         this.moving = false
@@ -3587,6 +3634,49 @@
         if (h.state === 'sit') h.restT = Math.min(h.restT, 2)
       }
     },
+    // keyboard: on foot A/D run, W jumps, S throws a grenade (or climbs into the Slug
+    // when next to it), Space fires (knife up close). In the Slug: A/D drive, W hops,
+    // S hops out, Space fires the cannon (the Vulcan while it reloads).
+    onKey(s, key, down) {
+      const d = s.data
+      const m = d.marco
+      if (!down || !m) return
+      const sl = m.slug
+      if (m.state === 'tank' && sl && sl.pilot === m) {
+        if (key === 'up') sl.hop()
+        else if (key === 'down') sl.onClick()
+        else if (key === 'fire') {
+          if (sl.cd <= 0) {
+            sl.angT = sl.ang
+            sl.fireCannon(s)
+          } else if (sl.burstN <= 0) {
+            sl.burstN = 5
+            sl.burstT = 0
+          }
+        }
+        return
+      }
+      if (m.state === 'sit') m.standUp()
+      const ready = ['stand', 'run', 'win'].includes(m.state)
+      if (!ready && !(key === 'fire' && m.state === 'jump')) return
+      m.steps = []
+      const kx = keyDir(s)
+      if (key === 'up' && ready) m.jump(kx * 50)
+      else if (key === 'down' && ready) {
+        const slug = d.slug
+        if (m.who === 'marco' && slug && !slug.dead && slug.state === 'parked' && !slug.pilot && Math.abs(slug.x - m.x) < 30) m.board(slug)
+        else if (!m.throwG()) shout(s, 'No bombs!', m.x, m.y - 36, '#ffe9a0', 1)
+      } else if (key === 'fire') {
+        if (m.state === 'jump') {
+          m.shoot(s)
+          return
+        }
+        let near = null
+        for (const r of d.rebels) if (r.alive && Math.sign(r.x - m.x) !== -m.dir && Math.abs(r.x - m.x) < 18) near = r
+        if (near) m.knife()
+        else m.fire()
+      }
+    },
     onBarClick(s, p) {
       // mockup only (Aico has no empty-bar clicks): Marco runs there
       s.data.clickAt = performance.now()
@@ -3638,6 +3728,10 @@
       s.data.queue.length = 0
     },
     update(s, dt, now) {
+      // held game keys keep it at full rate
+      return Math.min(this.step(s, dt, now) ?? Infinity, s.keys?.size ? FAST : Infinity)
+    },
+    step(s, dt, now) {
       const d = s.data
       let wait = Infinity
       d.rebels = d.rebels.filter((r) => !r.dead)

@@ -995,7 +995,40 @@
   // ---- the auto-hunter ----------------------------------------------------------------------
   function engaged(s, now) {
     const u = s.data.user
-    return now - u.lastShot < 9000 || now - u.lastPoke < 6000 || (s.cursor && now - (s.cursor.t ?? now) < 2500)
+    return now - (s.keyAt ?? -1e9) < 9000 || now - u.lastShot < 9000 || now - u.lastPoke < 6000 || (s.cursor && now - (s.cursor.t ?? now) < 2500)
+  }
+  // ---- keyboard: WASD moves the crosshair, Space pulls the trigger --------------------------
+  const SPILL = typeof SPILL_UP === 'number' ? SPILL_UP : 0
+  function keyAim(s, dt, now) {
+    const u = s.data.user
+    const k = s.keys
+    if (!k || !k.size) return false
+    if (!u.on) {
+      u.on = true
+      u.x = clamp(s.data.hudX ?? s.W / 2, 8, s.W - 8)
+      u.y = FLOOR - 16
+    }
+    u.kb = now
+    u.since = now
+    const dx = (k.has('right') ? 1 : 0) - (k.has('left') ? 1 : 0)
+    const dy = (k.has('down') ? 1 : 0) - (k.has('up') ? 1 : 0)
+    u.x = clamp(u.x + dx * 150 * dt, 0, s.W)
+    u.y = clamp(u.y + dy * 80 * dt, -SPILL, H)
+    return dx !== 0 || dy !== 0
+  }
+  function keyFire(s) {
+    const g = s.data
+    const u = g.user
+    if (!u.on) keyAim(s, 0, performance.now())
+    let target = null
+    for (let i = s.actors.length - 1; i >= 0 && !target; i--) {
+      const a = s.actors[i]
+      if (!a.dead && a.onClick && a.hit?.(u.x, u.y)) target = a
+    }
+    if (target) return target.onClick({ x: u.x, y: u.y })
+    // a miss: the flash, a spent shell
+    g.user.lastShot = performance.now()
+    if (g.phase !== 'rest') fire(s, performance.now(), null, false)
   }
   function hunter(s, dt, now, targets) {
     const g = s.data
@@ -1272,7 +1305,14 @@
       // the player's crosshair follows the (coarse) cursor smoothly
       const u = g.user
       let want = Infinity
-      if (s.cursor && s.cursor.y > -6 && s.cursor.y < H + 6) {
+      const keyed = keyAim(s, dt, now)
+      if (keyed || (s.keys && s.keys.size)) want = FAST
+      // the keyboard owns the crosshair until the mouse moves again
+      const kbOwns = u.kb && (!s.cursor || s.cursor.t <= u.kb)
+      if (kbOwns && (now - u.kb < 9000)) {
+        // keep it where the keys left it
+      } else if (s.cursor && s.cursor.y > -6 && s.cursor.y < H + 6) {
+        u.kb = 0
         if (!u.on) {
           u.on = true
           u.x = s.cursor.x
@@ -1295,6 +1335,12 @@
     },
     onBusy(s) {
       s.data.double = true
+    },
+    onKey(s, key, down) {
+      if (!down) return
+      if (key === 'fire') keyFire(s)
+      else keyAim(s, 1 / 30, performance.now()) // the first nudge happens now
+      s.poke()
     },
     onDone(s) {
       s.data.perfect = true

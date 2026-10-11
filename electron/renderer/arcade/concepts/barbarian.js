@@ -718,8 +718,15 @@
   const NEAR = 16 // closer than this: back off (or butt/kick)
   const FAR = 27 // further than this: close in
   // states where a fighter can't be hit or asked to do anything else
-  const AWAY = new Set(['down', 'fall', 'headless', 'sag', 'held', 'drop', 'kneel', 'sit', 'toSit', 'enter', 'goto', 'champ'])
+  const AWAY = new Set(['down', 'fall', 'headless', 'sag', 'held', 'drop', 'kneel', 'sit', 'toSit', 'enter', 'goto', 'champ', 'yield'])
+  const SPILL = typeof SPILL_UP === 'number' ? SPILL_UP : 0 // the stage reaches a little above the bar
   const lerp = (a, b, u) => a + (b - a) * u
+  // the user is playing: a click or drag in the last 9 s, or the cursor moving over the bar
+  const engaged = (s, now) => now - (s.data.clickAt || -1e9) < 9000 || now - (s.data.grabAt || -1e9) < 9000 || (!!s.cursor && now - s.cursor.since < 2500) || keyed(s, now)
+  // the keyboard is the game's (armed by a click on a character), or a game key went down lately
+  const keyed = (s, now) => now - (s.keyAt ?? -1e9) < 9000
+  const keyDir = (s) => (s.keys?.has('right') ? 1 : 0) - (s.keys?.has('left') ? 1 : 0)
+  const bubble = (s, k, x, y) => s.particle({ img: BUBBLE[k], x: x - 2, y: Math.max(0, y), life: 1, vy: -3, fade: true })
 
   // nearest x whose span [x-hw, x+hw] stays clear of the furniture; if the bar is
   // too crowded, at least keep off the title and the window dots
@@ -787,29 +794,76 @@
     hit(px, py) {
       if (this.ko) return false
       const y = this.y + this.yOff
-      const tall = this.state === 'sit' ? 17 : ['kneel', 'sag', 'fall'].includes(this.state) ? 19 : this.state === 'roll' ? 13 : 24
-      return Math.abs(px - this.cx) < 6 && py > y - tall && py < y + 1
+      const tall = this.state === 'sit' ? 17 : ['kneel', 'sag', 'fall', 'yield'].includes(this.state) ? 19 : this.state === 'roll' ? 13 : 24
+      return Math.abs(px - this.cx) < 10 && py > y - tall - 3 && py < y + 2
     }
     grab() {
+      this.s.data.grabAt = performance.now()
+      this.order = null
       this.go('held')
     }
     drag(p) {
+      this.s.data.grabAt = performance.now()
+      if (this.state !== 'held') return
       this.cx = clamp(p.x, 8, this.s.W - 8)
-      this.y = clamp(p.y + 12, 24, FLOOR)
+      this.y = clamp(p.y + 12, 24 - SPILL, FLOOR)
     }
     drop() {
+      this.s.data.grabAt = performance.now()
+      if (this.state !== 'held') return
       this.vy = 0
+      // dropped from a height right over the other one: he lands on him
+      this.squash = this.y < FLOOR - 5
       this.go('drop')
     }
-    onClick() {
-      // a click sends him into the forward roll; a roll into the other one knocks him down
+    /** Your barbarian is the blond one (player one); the dark one is the challenger. */
+    get mine() {
+      const me = this.s.data.fighters[0]
+      return this === me || me.ko || AWAY.has(me.state)
+    }
+    onClick(p) {
+      const s = this.s
+      const now = performance.now()
+      s.data.clickAt = now
       if (this.state === 'sit') return this.wake()
-      if (!this.free) return
-      this.dir = Math.sign(this.foe.cx - this.cx) || this.dir
-      this.go('roll')
+      const f = this.foe
+      if (this.mine) {
+        this.clicks = (this.clicks || []).filter((t) => now - t < 2500)
+        this.clicks.push(now)
+        if (this.clicks.length >= 5 && this.free) {
+          // easter egg: the full web of death and the war cry
+          this.clicks.length = 0
+          this.attack('web')
+          s.say('AAAAAARGH!', this.cx, 1, { color: '#f2cc4e', life: 1.8 })
+          return
+        }
+        // a click while the other one winds up: a timed parry (or a hop over the sweep)
+        if (this.free && f.state === 'attack' && f.move.hit >= 0 && !f.landed && !f.atCursor && Math.abs(f.cx - this.cx) < 40) {
+          this.dir = Math.sign(f.cx - this.cx) || this.dir
+          this.guardFor = Math.max(0.25, f.move.wind - f.t + 0.3)
+          this.go(f.type === 'low' ? 'jump' : 'block')
+          this.parried = f
+          return
+        }
+        // otherwise the forward roll; a roll into the other one knocks him down
+        if (!this.free) return
+        this.dir = Math.sign(f.cx - this.cx) || this.dir
+        this.go('roll')
+        return
+      }
+      // the challenger: yours attacks him, high, mid or low by where you clicked
+      const me = f
+      const y = p ? p.y : FLOOR - 14
+      me.order = y < FLOOR - 18 ? 'high' : y > FLOOR - 9 ? 'low' : 'mid'
+      me.orderAt = now
+      bubble(s, '!', this.cx, FLOOR - 33)
     }
     onDblClick() {
-      if (this.free || this.state === 'roll') this.attack('neck')
+      this.s.data.clickAt = performance.now()
+      if (!this.mine) {
+        this.foe.order = 'neck'
+        this.foe.orderAt = performance.now()
+      } else if (this.free || this.state === 'roll') this.attack('neck')
     }
     wake() {
       this.go('guard')
@@ -829,17 +883,20 @@
       this.thinkAt = Math.max(this.thinkAt, this.lookUntil)
       this.s.particle({ img: BUBBLE[bubble], x: this.cx - 2, y: Math.max(0, FLOOR - 33), life: 1, vy: -2 })
     }
-    attack(type, atCursor = false) {
+    attack(type, atCursor = false, byUser = false) {
       this.type = type
       this.move = MOVES[type]
       this.atCursor = atCursor
+      this.byUser = byUser
       this.landed = false
       this.go('attack')
       if (!atCursor && this.move.hit >= 0) this.foe.react(this, type)
     }
     react(att, type) {
       if (!this.free) return
-      if (Math.random() > (this.s.busy ? 0.45 : 0.9)) return
+      // your blows get through more often; yours only blocks on instinct now and then
+      const p = att.byUser ? 0.3 : this.id === 0 && engaged(this.s, performance.now()) ? 0.4 : this.s.busy ? 0.45 : 0.9
+      if (Math.random() > p) return
       this.dir = Math.sign(att.cx - this.cx) || this.dir
       this.guardFor = MOVES[type].wind + 0.35
       // jump the low sweep, raise the sword against the rest (butts and kicks get through)
@@ -850,10 +907,21 @@
       const f = this.foe
       const s = this.s
       const m = this.move
-      if (this.atCursor) return
+      if (this.atCursor) {
+        // a swing at the cursor (or at a fleeing goblin) can still catch the prankster
+        const g = s.data.prank
+        if (g && !g.dead && g.state !== 'tumble' && Math.sign(g.cx - this.cx) === this.dir && Math.abs(g.cx - this.cx) < m.reach) g.whack(this.dir)
+        return
+      }
       const gap = f.cx - this.cx
       if (Math.abs(gap) > m.reach || Math.sign(gap) !== this.dir || f.ko || AWAY.has(f.state) || f.state === 'roll') return
       if (f.state === 'block' && this.type !== 'low' && this.type !== 'butt' && this.type !== 'kick') {
+        if (f.parried === this) {
+          // your parry: the clang throws him off balance
+          f.parried = null
+          s.say(pick(['Parry!', 'Blocked!', 'Clang!']), f.cx, 1, { color: '#fff3a0', life: 1.2 })
+          this.go('hit')
+        }
         // clang
         const px = this.cx + this.dir * Math.min(Math.abs(gap) - 6, 14)
         const py = FLOOR - (this.type === 'high' ? 24 : 18)
@@ -869,9 +937,16 @@
     wound(att) {
       const s = this.s
       this.dir = -att.dir
-      if (!s.busy) {
-        // sparring: a touch, no damage
-        this.go('hit')
+      if (!s.busy && !(att.byUser && att.type === 'neck')) {
+        // sparring: a touch costs two pips; the third touch ends the bout
+        this.hp = Math.max(0, this.hp - 2)
+        this.hpUntil = performance.now() + 2600
+        s.particle({ img: STAR, x: this.cx - 1, y: FLOOR - (att.type === 'low' ? 7 : 18), life: 0.3 })
+        if (this.hp <= 0) {
+          this.go('yield')
+          att.won()
+          bubble(s, '…', this.cx, FLOOR - 30)
+        } else this.go('hit')
         return
       }
       this.hpUntil = performance.now() + 2600
@@ -930,6 +1005,11 @@
             this.y = FLOOR
             s.burst(this.cx, FLOOR - 1, 4, ['n', 'N'])
             this.wake()
+            if (this.squash && !f.ko && !AWAY.has(f.state) && Math.abs(f.cx - this.cx) < 14) {
+              f.knock()
+              s.particle({ img: STAR, x: f.cx - 1, y: FLOOR - 22, life: 0.5 })
+            }
+            this.squash = false
           }
           return FAST
         case 'attack': {
@@ -950,10 +1030,14 @@
           return FAST
         }
         case 'block':
-          if (this.t >= this.guardFor) this.go('guard')
+          if (this.t >= this.guardFor) {
+            this.parried = null
+            this.go('guard')
+          }
           return FAST
         case 'jump':
-          this.yOff = -Math.sin(Math.PI * Math.min(1, this.t / this.guardFor)) * 7
+          // the leap over a low sweep clears the bar's top edge a little
+          this.yOff = -Math.sin(Math.PI * Math.min(1, this.t / this.guardFor)) * (7 + SPILL / 2)
           if (this.t >= this.guardFor) {
             this.yOff = 0
             this.go('guard')
@@ -996,6 +1080,14 @@
           if (this.t >= 1.4) {
             this.go('guard')
             this.thinkAt = now + rand(300, 900)
+          }
+          return FAST
+        case 'yield':
+          // the bout is lost: a knee, a breath, and both start over
+          if (this.t >= 2) {
+            this.hp = this.shownHp = HP
+            f.hp = f.shownHp = HP
+            this.wake()
           }
           return FAST
         case 'kneel':
@@ -1064,6 +1156,18 @@
         this.side = this.cx < f.cx || (this.cx === f.cx && this.id === 0) ? -1 : 1
         this.go('toSit')
         return FAST
+      }
+      if (this.id === 0 && engaged(s, now) && !d.ceremony) return this.userStep(dt, now, s)
+      if (this.order) this.order = null
+      if (this.revenge) {
+        // kicked in the shin: he whirls round and swings at the goblin
+        const g = this.revenge
+        this.revenge = null
+        if (!g.dead && Math.abs(g.cx - this.cx) < 60) {
+          this.dir = Math.sign(g.cx - this.cx) || this.dir
+          this.attack(pick(['high', 'mid']), true)
+          return FAST
+        }
       }
       const cur = s.cursor
       const near = cur && cur.y > FLOOR - 26 && cur.y < H && Math.abs(cur.x - this.cx) < 28 && Math.abs(cur.x - this.cx) <= Math.abs(cur.x - f.cx)
@@ -1164,6 +1268,69 @@
       } else this.thinkAt = now + rand(1200, 2800)
       return FAST
     }
+    /** Engaged: your barbarian follows the cursor and carries out your clicked orders. */
+    userStep(dt, now, s) {
+      const f = this.foe
+      const cur = s.cursor
+      const foeOk = !f.ko && !AWAY.has(f.state)
+      this.walkTo = undefined
+      if (keyed(s, now)) {
+        // WASD: A/D walk (backing off still facing him when he's close)
+        this.order = null
+        const mv = keyDir(s)
+        if (!mv) {
+          if (this.state === 'walk') this.go('guard')
+          if (foeOk && Math.abs(f.cx - this.cx) < 80) this.dir = Math.sign(f.cx - this.cx) || this.dir
+          return s.keys?.size ? FAST : SLOW
+        }
+        this.dir = foeOk && Math.abs(f.cx - this.cx) < 60 ? Math.sign(f.cx - this.cx) || this.dir : mv
+        this.walkDir = mv
+        const step = mv * 30 * dt
+        if (foeOk && Math.sign(f.cx - this.cx) === mv && Math.abs(f.cx - this.cx - step) < 11) {
+          if (this.state === 'walk') this.go('guard')
+          return FAST
+        }
+        if (this.state !== 'walk') this.go('walk')
+        this.cx = clamp(this.cx + step, 8, s.W - 8)
+        return FAST
+      }
+      if (this.order && (now - this.orderAt > 4000 || !foeOk)) this.order = null
+      if (this.order) {
+        const m = MOVES[this.order]
+        const gap = f.cx - this.cx
+        const want = Math.sign(gap) || this.dir
+        this.dir = want
+        if (Math.abs(gap) <= m.reach - 4 && Math.abs(gap) >= 9) {
+          const type = this.order
+          this.order = null
+          this.attack(type, false, true)
+          return FAST
+        }
+        // close in, or give a step if hugging him
+        this.walkDir = Math.abs(gap) < 9 ? -want : want
+        if (this.state !== 'walk') this.go('walk')
+        this.cx += this.walkDir * 30 * dt
+        return FAST
+      }
+      if (cur && cur.y >= 0 && cur.y <= H && Math.abs(cur.x - this.cx) > 10) {
+        const mv = Math.sign(cur.x - this.cx)
+        // facing the challenger when he is close (backing off, as in the game), else where he goes
+        this.dir = foeOk && Math.abs(f.cx - this.cx) < 60 ? Math.sign(f.cx - this.cx) || this.dir : mv
+        this.walkDir = mv
+        const step = mv * Math.min(Math.abs(cur.x - this.cx), 28 * dt)
+        // he won't walk through the other one: toe to toe, he holds his guard
+        if (foeOk && Math.sign(f.cx - this.cx) === mv && Math.abs(f.cx - this.cx - step) < 11) {
+          if (this.state === 'walk') this.go('guard')
+          return FAST
+        }
+        if (this.state !== 'walk') this.go('walk')
+        this.cx += step
+        return FAST
+      }
+      if (this.state === 'walk') this.go('guard')
+      if (foeOk && Math.abs(f.cx - this.cx) < 80) this.dir = Math.sign(f.cx - this.cx) || this.dir
+      return FAST
+    }
     pose() {
       const st = this.state
       const walk = () => `walk${Math.floor(this.anim * 9) % 4}`
@@ -1190,6 +1357,8 @@
           return st
         case 'champ':
           return 'victory'
+        case 'yield':
+          return 'kneel'
         case 'drop':
           return 'held'
         case 'fall':
@@ -1232,7 +1401,49 @@
       this.prop = true
       this.z = 2
     }
+    hit(px, py) {
+      return Math.abs(px - (this.x + 3)) < 9 && Math.abs(py - (this.y + 3)) < 9
+    }
+    get grabbable() {
+      return true
+    }
+    onClick(p) {
+      // a poke: it rolls away from the click (the goblin still wants it)
+      this.s.data.clickAt = performance.now()
+      if (this.held) return
+      this.rest = false
+      this.vx = (p && p.x > this.x + 3 ? -1 : 1) * 50
+      this.vy = -45
+    }
+    grab(p) {
+      this.s.data.grabAt = performance.now()
+      this.held = true
+      this.rest = false
+      this.track = { x: p.x, y: p.y, t: performance.now(), vx: 0, vy: 0 }
+    }
+    drag(p) {
+      this.s.data.grabAt = performance.now()
+      if (!this.held) return
+      const now = performance.now()
+      const k = this.track
+      const dt = Math.max(0.016, (now - k.t) / 1000)
+      k.vx = k.vx * 0.4 + ((p.x - k.x) / dt) * 0.6
+      k.vy = k.vy * 0.4 + ((p.y - k.y) / dt) * 0.6
+      Object.assign(k, { x: p.x, y: p.y, t: now })
+      this.x = clamp(p.x - 3, -4, this.s.W - 4)
+      this.y = clamp(p.y - 3, -SPILL, FLOOR - 8)
+    }
+    drop() {
+      this.s.data.grabAt = performance.now()
+      if (!this.held) return
+      // thrown: whoever it hits gets bonked
+      this.held = false
+      this.thrown = true
+      this.vx = clamp(this.track.vx, -140, 140)
+      this.vy = clamp(this.track.vy, -120, 60)
+    }
     kick(dir) {
+      if (this.held) return
       this.kicked = true
       this.rest = false
       this.vx = dir * 85
@@ -1240,7 +1451,29 @@
       this.s.particle({ img: STAR, x: this.x + 2, y: this.y - 2, life: 0.25 })
     }
     update(dt, now, s) {
+      if (this.held) return SLOW
       if (this.rest) return Infinity
+      if (this.thrown && Math.abs(this.vx) > 25) {
+        const hx = this.x + 3
+        const d = s.data
+        for (const g of [d.goblin, d.prank]) {
+          if (g && !g.dead && Math.abs(g.cx - hx) < 8 && this.y > FLOOR - 20 && g.state !== 'tumble') {
+            g.whack(Math.sign(this.vx))
+            this.vx = -this.vx * 0.4
+            this.thrown = false
+            break
+          }
+        }
+        for (const f of d.fighters) {
+          if (this.thrown && f.free && Math.abs(f.cx - hx) < 7 && this.y > FLOOR - 26) {
+            f.dir = -Math.sign(this.vx) || f.dir
+            f.go('hit')
+            s.particle({ img: STAR, x: f.cx - 1, y: FLOOR - 25, life: 0.4 })
+            this.vx = -this.vx * 0.4
+            this.thrown = false
+          }
+        }
+      }
       this.vy += 200 * dt
       this.x += this.vx * dt
       this.y += this.vy * dt
@@ -1254,12 +1487,18 @@
           this.vy = 0
           if (!this.kicked) {
             this.vx *= 0.85 ** (dt * 12)
-            if (Math.abs(this.vx) < 2) this.rest = true
+            if (Math.abs(this.vx) < 2) {
+              this.rest = true
+              this.thrown = false
+            }
           }
         }
       }
       this.spin += this.vx * dt * 0.35
-      if (this.x < -10 || this.x > s.W + 4) this.dead = true
+      if (this.x < -10 || this.x > s.W + 4) {
+        this.dead = true
+        if (s.data.head === this) s.data.head = null
+      }
       return FAST
     }
     draw(c) {
@@ -1281,13 +1520,40 @@
       this.anim = 0
       this.y = FLOOR
       this.z = 1
+      this.yOff = 0
+      this.hopV = 0
+      this.push = 0
       this.moving = true
     }
     get x() {
       return this.cx - 6
     }
+    hit(px, py) {
+      return Math.abs(px - this.cx) < 9 && py > FLOOR - 18 + this.yOff && py < FLOOR + 2
+    }
+    onClick() {
+      // startled: he hops, shakes it off and gets back to work
+      this.s.data.clickAt = performance.now()
+      this.whack(0)
+    }
+    whack(dir) {
+      const now = performance.now()
+      if (now < (this.stunUntil || 0)) return
+      this.stunUntil = now + (dir ? 1100 : 700)
+      this.hopV = dir ? -70 : -50
+      this.yOff = 0
+      this.push = dir * 40
+      this.s.particle({ img: STAR, x: this.cx - 1, y: FLOOR - 20, life: 0.5 })
+      bubble(this.s, '!', this.cx, FLOOR - 26)
+    }
     update(dt, now, s) {
       this.anim += dt
+      if (now < (this.stunUntil || 0) || this.yOff < 0) {
+        this.hopV += 260 * dt
+        this.yOff = Math.min(0, this.yOff + this.hopV * dt)
+        this.cx += this.push * dt
+        return FAST
+      }
       const head = s.data.head
       const b = this.body
       const kickHead = head && !head.kicked && !head.dead
@@ -1307,7 +1573,8 @@
           return FAST
         }
         this.dir = target > this.cx ? 1 : -1
-        this.cx += this.dir * 24 * dt
+        // a long way to go (a thrown head): he scurries
+        this.cx += this.dir * (Math.abs(target - this.cx) > 80 ? 46 : 24) * dt
       } else if (this.state === 'kick') {
         this.t += dt
         if (this.t > 0.12 && head && !head.kicked) head.kick(this.dir)
@@ -1335,9 +1602,123 @@
     }
     draw(c) {
       const step = Math.floor(this.anim * 7) % 2
-      const sp = this.state === 'out' ? GOB[step ? 'pull1' : 'pull0'] : this.state === 'kick' ? GOB.kick : this.state === 'in' ? GOB[step ? 'walk1' : 'walk0'] : GOB.walk0
+      const sp = this.yOff < 0 ? GOB.kick : this.state === 'out' ? GOB[step ? 'pull1' : 'pull0'] : this.state === 'kick' ? GOB.kick : this.state === 'in' ? GOB[step ? 'walk1' : 'walk0'] : GOB.walk0
       const w = sp.w - 2
-      c.drawImage(sp[this.dir], Math.round(this.cx) - (this.dir === 1 ? 6 : w - 6) - 1, FLOOR - sp.h + 1)
+      c.drawImage(sp[this.dir], Math.round(this.cx) - (this.dir === 1 ? 6 : w - 6) - 1, FLOOR - sp.h + 1 + Math.round(this.yOff))
+    }
+  }
+
+  // The goblin's prank while they spar: he sneaks up behind one of them, kicks him in
+  // the shin and legs it; the barbarian whirls round and swings (usually too late).
+  class Prankster {
+    constructor(s, victim) {
+      this.s = s
+      this.victim = victim
+      this.fromLeft = victim.dir > 0 // behind him
+      // from the edge behind him, or out from behind the furniture on a wide bar
+      this.cx = this.fromLeft ? Math.max(-10, victim.cx - 200) : Math.min(s.W + 10, victim.cx + 200)
+      this.home = this.cx
+      this.dir = this.fromLeft ? 1 : -1
+      this.state = 'sneak'
+      this.anim = 0
+      this.t = 0
+      this.yOff = 0
+      this.vy = 0
+      this.vx = 0
+      this.z = 3
+      this.moving = true
+    }
+    get x() {
+      return this.cx - 6
+    }
+    hit(px, py) {
+      return Math.abs(px - this.cx) < 9 && py > FLOOR - 18 + this.yOff && py < FLOOR + 2
+    }
+    onClick() {
+      // caught in the act
+      this.s.data.clickAt = performance.now()
+      if (this.state === 'sneak' || this.state === 'kick') {
+        bubble(this.s, '!', this.cx, FLOOR - 26)
+        this.flee()
+      } else if (this.state === 'flee') this.whack(this.dir)
+    }
+    flee() {
+      this.state = 'flee'
+      this.dir = this.fromLeft ? -1 : 1
+    }
+    whack(dir) {
+      this.state = 'tumble'
+      this.vx = (dir || this.dir) * 55
+      this.vy = -75
+      this.s.particle({ img: STAR, x: this.cx - 1, y: FLOOR - 20, life: 0.5 })
+      this.s.burst(this.cx, FLOOR - 10, 5, ['G', 'g', 'w'])
+    }
+    update(dt, now, s) {
+      this.anim += dt
+      const v = this.victim
+      if (this.state === 'sneak') {
+        if (v.ko || AWAY.has(v.state) || s.data.mode !== 'spar') {
+          this.flee()
+          return FAST
+        }
+        if (!v.free) return FAST // mid-swing: he freezes and waits
+        const target = v.cx - v.dir * 13
+        // he turned round: the goblin freezes, grins and bolts
+        if (Math.sign(this.cx - v.cx) === v.dir && Math.abs(this.cx - v.cx) < 40) {
+          bubble(s, '!', this.cx, FLOOR - 26)
+          this.flee()
+          return FAST
+        }
+        const gd = target - this.cx
+        if (Math.abs(gd) < 2) {
+          this.state = 'kick'
+          this.t = 0
+          this.dir = Math.sign(v.cx - this.cx) || this.dir
+          return FAST
+        }
+        this.dir = Math.sign(gd)
+        // a quick scurry, then the last stretch on tiptoe
+        this.cx += this.dir * Math.min(Math.abs(gd), (Math.abs(gd) > 60 ? 42 : 18) * dt)
+      } else if (this.state === 'kick') {
+        this.t += dt
+        if (this.t > 0.12 && !this.kicked) {
+          this.kicked = true
+          if (v.free) {
+            v.dir = Math.sign(this.cx - v.cx) || v.dir
+            v.go('hit')
+            v.revenge = this
+            s.particle({ img: STAR, x: v.cx - 1, y: FLOOR - 7, life: 0.35 })
+            bubble(s, '!', v.cx, FLOOR - 33)
+          }
+        }
+        if (this.t > 0.35) this.flee()
+      } else if (this.state === 'tumble') {
+        this.vy += 260 * dt
+        this.cx += this.vx * dt
+        this.yOff = Math.min(0, this.yOff + this.vy * dt)
+        if (this.yOff >= 0 && this.vy > 0) {
+          this.yOff = 0
+          s.burst(this.cx, FLOOR - 1, 4, ['n', 'N'])
+          this.flee()
+        }
+      } else {
+        this.cx += this.dir * 46 * dt
+      }
+      const gone = this.state === 'flee' && (this.fromLeft ? this.cx <= this.home : this.cx >= this.home)
+      if (gone || this.cx < -24 || this.cx > s.W + 24) {
+        // off the bar, or back where he came from
+        if (gone && this.home > 0 && this.home < s.W) s.burst(this.cx, FLOOR - 3, 4, ['n', 'N'])
+        this.dead = true
+        if (s.data.prank === this) s.data.prank = null
+      }
+      return FAST
+    }
+    draw(c) {
+      const step = Math.floor(this.anim * (this.state === 'flee' ? 11 : 5)) % 2
+      const sp = this.state === 'kick' || this.state === 'tumble' ? GOB.kick : GOB[step ? 'walk1' : 'walk0']
+      const w = sp.w - 2
+      const dir = this.state === 'tumble' ? (Math.floor(this.anim * 8) % 2 ? 1 : -1) : this.dir
+      c.drawImage(sp[dir], Math.round(this.cx) - (dir === 1 ? 6 : w - 6) - 1, FLOOR - sp.h + 1 + Math.round(this.yOff))
     }
   }
 
@@ -1357,6 +1738,15 @@
     }
     get x() {
       return this.cx - 4
+    }
+    hit(px, py) {
+      return Math.abs(px - this.cx) < 8 && py > FLOOR - 23 && py < FLOOR + 2
+    }
+    onClick() {
+      // she blows the cursor a kiss
+      const s = this.s
+      s.data.clickAt = performance.now()
+      for (let i = 0; i < 3; i++) s.particle({ img: BUBBLE['♥'], x: this.cx - 3 + (i - 1) * 6, y: Math.max(0, FLOOR - 26), vx: (i - 1) * 8, vy: -8 - i * 2, life: 1.3, fade: true })
     }
     update(dt, now, s) {
       this.anim += dt
@@ -1414,14 +1804,14 @@
     title: 'Barbarian (Death Sword) — big',
     sub: 'Palace Software, 1987',
     blurb:
-      "Two barbarians spar along the bar and fight properly while the agent works: mid swings, overhead chops, low sweeps the other one jumps, blocks that clang, head-butts and kicks, and the spinning neck chop that takes the head off. The goblin kicks the head away and drags the body out by the feet, and a new challenger walks in. Hits show the health pips and the snake. Your <b>cursor</b> gets a swing if it lingers near one of them. Click a barbarian to roll him into the other, double-click for the neck chop, or drag one. Done: the winner stands victorious, the loser kneels and Princess Mariana comes to the winner's feet. When it's quiet they sit back to back and doze.",
+      "Two barbarians spar along the bar in bouts (three touches drain the pips; the loser takes a knee, the winner raises his sword) and fight properly while the agent works: mid swings, overhead chops, low sweeps the other one jumps, blocks that clang, head-butts, kicks and the spinning neck chop that takes the head off. The goblin kicks the head away and drags the body out, and a new challenger walks in; while they spar he sometimes sneaks up to kick one in the shin. Done: the winner stands victorious and Princess Mariana comes to his feet. Play: the blond one is yours while you are engaged. He follows your <b>cursor</b>; click the challenger high, middle or low to attack there (double-click: neck chop); click yours to roll, or as the other winds up to parry. Drag either one (drop him on the other), poke or throw the head (at the goblin), click the goblin or the princess. The dark one swings at a lingering cursor. When it's quiet they sit back to back and doze.",
     setup(s) {
       const mid = homeX(s)
       const a = new Fighter(s, 0, mid - 12, 1)
       const b = new Fighter(s, 1, mid + 12, -1)
       a.foe = b
       b.foe = a
-      s.data = { W: s.W, fighters: [a, b], mode: 'spar', goblin: null, head: null, ceremony: false }
+      s.data = { W: s.W, fighters: [a, b], mode: 'spar', goblin: null, head: null, prank: null, ceremony: false, clickAt: -1e9, grabAt: -1e9, prankAt: 0 }
       s.actors.push(a, b)
     },
     update(s, dt, now) {
@@ -1437,10 +1827,23 @@
         if (now >= d.ceremonyEnd) endCeremony(s)
         else return Math.max(FAST, d.ceremonyEnd - now)
       }
+      // now and then, while they spar, the goblin tries his prank
+      if (d.mode === 'spar' && !d.goblin && !d.prank) {
+        if (!d.prankAt) d.prankAt = now + rand(12000, 25000)
+        else if (now > d.prankAt) {
+          d.prankAt = now + rand(25000, 45000)
+          const v = d.fighters.filter((f) => f.free && !f.ko && f.cx > 30 && f.cx < s.W - 30)
+          if (v.length) d.prank = s.spawn(new Prankster(s, pick(v)))
+          else d.prankAt = now + 2000 // both busy swinging: try again shortly
+        }
+      }
       return Infinity
     },
     onBusy(s) {
       endCeremony(s)
+      // the real fight starts fresh: spar touches are forgiven, the prankster runs
+      for (const f of s.data.fighters) if (!f.ko && f.state !== 'yield') f.hp = f.shownHp = HP
+      if (s.data.prank && s.data.prank.state !== 'tumble') s.data.prank.flee()
     },
     onNap(s) {
       endCeremony(s)
@@ -1473,6 +1876,31 @@
     },
     onBarClick(s, p) {
       for (const f of s.data.fighters) f.look(p.x, '?')
+    },
+    // keyboard: the blond barbarian, as on the original joystick. A/D walk, W jumps,
+    // S rolls forward; Space swings: alone mid, with W overhead, with S a low sweep,
+    // toward him the spinning neck chop, away from him a head-butt.
+    onKey(s, key, down) {
+      const d = s.data
+      const me = d.fighters[0]
+      if (!down || !me || me.ko) return
+      if (me.state === 'sit') return me.wake()
+      if (d.mode === 'rest' || d.ceremony) return
+      const f = me.foe
+      const toward = Math.sign(f.cx - me.cx) || me.dir
+      if (key === 'up' && me.free) {
+        me.guardFor = 0.55
+        me.go('jump')
+      } else if (key === 'down' && me.free) {
+        me.go('roll')
+      } else if (key === 'fire' && (me.free || me.state === 'jump')) {
+        const k = s.keys
+        const h = keyDir(s)
+        const type = k.has('up') ? 'high' : k.has('down') ? 'low' : h === toward ? 'neck' : h === -toward ? 'butt' : 'mid'
+        if (me.state === 'jump') me.yOff = 0
+        if (!f.ko && Math.abs(f.cx - me.cx) < 70) me.dir = toward
+        me.attack(type, false, true)
+      }
     },
     onBonk(s, r) {
       for (const f of s.data.fighters) f.look(r.x + r.w / 2, '!')

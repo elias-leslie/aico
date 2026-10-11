@@ -131,9 +131,21 @@
     for (const sf of s.data.surfs) if (x >= sf.x0 && x <= sf.x1 && sf.y >= y && sf.y < best) best = sf.y
     return best
   }
+  const SPILL = typeof SPILL_UP === 'number' ? SPILL_UP : 0
+  const keyDir = (s) => (s.keys.has('right') ? 1 : 0) - (s.keys.has('left') ? 1 : 0)
+  /** The bird the keys steer: the last one touched, else the one nearest the middle. */
+  function lead(s) {
+    const D = s.data
+    const ok = (b) => b && !b.dead && !['gone', 'held', 'spar'].includes(b.state) && !b.away
+    if (ok(D.lead)) return D.lead
+    let best = null
+    for (const b of birds(s)) if (ok(b) && (!best || Math.abs(b.x - s.W / 2) < Math.abs(best.x - s.W / 2))) best = b
+    D.lead = best
+    return best
+  }
   function engaged(s, now) {
     const c = s.cursor
-    return now - (s.data.touchAt || -1e9) < 9000 || (!!c && now - c.since < 2500 && now - (c.t ?? now) < 1500)
+    return now - (s.keyAt ?? -1e9) < 9000 || now - (s.data.touchAt || -1e9) < 9000 || (!!c && now - c.since < 2500 && now - (c.t ?? now) < 1500)
   }
 
   // ---- a bird ----------------------------------------------------------------
@@ -160,7 +172,7 @@
       }
     }
     get moving() {
-      return this.state === 'fly' || this.state === 'walk' || this.state === 'hop'
+      return this.state === 'fly' || this.state === 'walk' || this.state === 'hop' || this.state === 'kfly'
     }
     get asleep() {
       return this.state === 'sleep'
@@ -214,7 +226,7 @@
       } else this.flyTo({ x, y }, fast)
     }
     startle(from, far = true) {
-      if (['fly', 'held', 'gone'].includes(this.state)) return
+      if (['fly', 'held', 'gone', 'kfly'].includes(this.state)) return
       this.say('!')
       for (let i = 0; i < 2; i++) this.s.particle({ img: FEATHER[this.kind], x: this.x + rand(-3, 3), y: this.y - this.st.h / 2, vx: rand(-8, 8), vy: rand(-6, 2), g: 10, life: 1.4, fade: true })
       if (this.carry) this.dropCarry()
@@ -231,10 +243,105 @@
       f.landed = false
       this.s.data.food.push(f)
     }
+    // ---- the keys: free flight for the lead bird ----
+    /** Take the controls (from perched, walking, hopping or a flight). */
+    takeKeys() {
+      if (['held', 'gone', 'spar'].includes(this.state) || this.away) return false
+      if (this.state !== 'kfly') {
+        const flying = this.state === 'fly'
+        this.state = 'kfly'
+        this.vx = 0
+        this.vy = flying ? 0 : 0
+        this.path = this.dest = this.hunt = this.goal = null
+        this.food = null
+        this.pose = 'stand'
+      }
+      this.kAt = performance.now()
+      this.s.poke()
+      return true
+    }
+    flap() {
+      if (!this.takeKeys()) return
+      // each flap lifts it; it can rise a little past the top of the bar
+      this.vy = -78
+      this.flapAt = this.anim
+      if (Math.random() < 0.3) this.s.particle({ img: FEATHER[this.kind], x: this.x + rand(-3, 3), y: this.y - this.st.h / 2, vx: rand(-8, 8), vy: rand(-4, 4), g: 10, life: 1, fade: true })
+    }
+    dive() {
+      if (!this.takeKeys()) return
+      if (!this.grounded()) this.vy = Math.max(this.vy, 150)
+    }
+    grounded() {
+      return this.vy >= 0 && this.y >= landingY(this.s, this.x, Math.ceil(this.y - 0.01)) - 0.01
+    }
+    keyFly(dt, now, s) {
+      const K = s.keys
+      const mx = keyDir(s)
+      if (K.size) this.kAt = now
+      // holding flap keeps it beating its wings
+      if ((K.has('fire') || K.has('up')) && this.anim - (this.flapAt ?? -9) > 0.34) this.flap()
+      let ground = this.grounded()
+      if (mx) {
+        this.dir = mx
+        this.vx = mx * (ground ? (this.st.walk || 12) * 1.8 : this.st.fly * 0.75)
+      } else this.vx = ground ? 0 : this.vx * Math.pow(0.15, dt)
+      this.x = clamp(this.x + this.vx * dt, 4, s.W - 4)
+      // walked off the end of a perch: it drops (and glides)
+      if (ground && this.y < FLOOR && !onSurface(s, this.x, this.y)) {
+        ground = false
+        this.vy = 1
+      }
+      if (!ground) {
+        const diving = K.has('down')
+        this.vy += (diving ? 300 : 120) * dt
+        if (!diving) this.vy = Math.min(this.vy, 42) // wings out: a glide
+        const top = this.st.h - SPILL
+        let ny = this.y + this.vy * dt
+        if (ny < top) {
+          ny = top
+          this.vy = Math.max(this.vy, 0)
+        }
+        const land = this.vy > 0 ? landingY(s, this.x, Math.ceil(this.y)) : FLOOR + 1
+        if (ny >= land) {
+          this.y = land
+          const hard = this.vy > 120
+          this.vy = 0
+          this.landed(s, now, hard)
+        } else this.y = ny
+      }
+      if (!K.size && this.grounded() && now - this.kAt > 1200) {
+        // hands off: back to being a bird
+        this.state = 'idle'
+        this.pose = 'stand'
+        this.next = now + rand(400, 1200)
+      }
+      return FAST
+    }
+    landed(s, now, hard) {
+      const D = s.data
+      // bread under its feet: eaten
+      const f = D.food.find((g) => g.landed && !g.carried && Math.abs(g.x - this.x) < 6 && Math.abs(g.y - this.y) < 2)
+      if (f) {
+        f.dead = true
+        D.food = D.food.filter((g) => g !== f)
+        this.say('♪')
+      }
+      // a dive into the others scatters them
+      if (hard) {
+        for (let i = 0; i < 3; i++) s.particle({ img: FEATHER[this.kind], x: this.x + rand(-3, 3), y: this.y - 3, vx: rand(-12, 12), vy: rand(-12, -2), g: 14, life: 1, fade: true })
+        for (const o of birds(s)) if (o !== this && o.state === 'idle' && Math.abs(o.x - this.x) < 18 && Math.abs(o.y - this.y) < 10) o.alarmAt = now + rand(60, 250)
+      }
+    }
     // ---- input ----
     onClick() {
       const s = this.s
       s.data.touchAt = performance.now()
+      if (this.state === 'kfly') {
+        // the steered bird just sings when clicked
+        s.data.lead = this
+        return this.show()
+      }
+      s.data.lead = this
       if (this.state === 'sleep') this.wake()
       if (this.kind === 'crow') s.say('Caw!', this.x, Math.max(0, this.y - this.st.h - 9), { life: 1, color: '#c9d2ea', size: 6 })
       this.startle(this.x, true)
@@ -334,6 +441,8 @@
           return this.backAt - now
         case 'fly':
           return this.fly(dt, now, s)
+        case 'kfly':
+          return this.keyFly(dt, now, s)
         case 'hop': {
           const h = this.hop
           h.t += dt
@@ -674,6 +783,25 @@
       let sp
       let dy = 0
       if (this.state === 'gone') return
+      if (this.state === 'kfly') {
+        const g = this.grounded()
+        if (g) sp = Math.abs(this.vx) > 1 ? (Math.floor(this.anim * 5) % 2 ? S.step || S.bob || S.stand : S.stand) : S.stand
+        else sp = this.vy > 90 ? S.fly[1] : this.vy < 0 || Math.floor(this.anim * 6) % 3 === 0 ? S.fly[Math.floor(this.anim * 10) % 2] : S.fly[1]
+        // a sparrow on the ground hops rather than walks
+        const dy = g && !this.st.walk && Math.abs(this.vx) > 1 ? -Math.round(Math.abs(Math.sin(this.anim * 11)) * 2) : 0
+        if (dy) sp = S.stand
+        put(c, sp, this.x, this.y, this.dir, dy)
+        if (this.carry) c.drawImage(CRUST, Math.round(this.x + this.dir * (this.st.hw + 1)) - 3, Math.round(this.y - this.st.h + 1))
+        if (this.s.armed) {
+          // a little caret marks the bird on the keys
+          c.fillStyle = '#ffd25a'
+          const x = Math.round(this.x)
+          const y = Math.round(this.y - this.st.h - 4)
+          c.fillRect(x - 1, y, 3, 1)
+          c.fillRect(x, y + 1, 1, 1)
+        }
+        return
+      }
       if (this.state === 'fly' || this.state === 'held') {
         const k = this.state === 'fly' ? this.ft / this.dur : 0
         sp = this.state === 'fly' && k > 0.7 && this.dest && this.dest.y >= this.y ? S.fly[1] : S.fly[Math.floor(this.anim * 10) % 2]
@@ -912,6 +1040,11 @@
         if (a instanceof Bag) a.place()
         if (!(a instanceof Bird)) continue
         if (a.state === 'gone' || a.state === 'held') continue
+        if (a.state === 'kfly') {
+          a.x = clamp(a.x, 4, s.W - 4)
+          a.vy = Math.max(a.vy, 1)
+          continue
+        }
         if (a.state === 'fly') {
           if (!a.away) {
             a.dest.x = clamp(a.dest.x, 3, s.W - 3)
@@ -994,8 +1127,17 @@
         }
         moving = true
       }
+      if (s.keys && s.keys.size) moving = true
       if (moving || D.court) return FAST
       return lively ? Math.max(FAST, D.nextEvent - now) : Infinity
+    },
+    onKey(s, key, down) {
+      if (!down) return
+      const b = lead(s)
+      if (!b) return
+      if (key === 'fire' || key === 'up') b.flap()
+      else if (key === 'down') b.dive()
+      else b.takeKeys()
     },
     drawBehind(s, c) {
       for (const f of s.data.food) c.drawImage(f.big ? CRUST : CRUMB[(Math.round(f.x) % 2) | 0], Math.round(f.x) - (f.big ? 3 : 0), Math.round(f.y) - (f.big ? 3 : 1))

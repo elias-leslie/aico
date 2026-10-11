@@ -181,7 +181,16 @@
     slip2: lester({ t: -0.85, nl: [1.75, 1.5], fl: [1.45, 1.2], na: [-0.9, -0.5], fa: [-0.6, -0.4], hy: LH - 3.6 }),
     down: lester({ t: -1.45, nl: [1.75, 1.55], fl: [1.3, 1.6], na: [-2.7, -2.5], fa: [-1.2, -1.7], hy: LH - 2.4 }),
     downAim: lester({ t: -1.2, nl: [1.75, 1.0], fl: [1.3, 1.6], na: [2.0, 2.0], fa: [-1.2, -1.7], gun: true, hy: LH - 2.6 }),
+    // the leech kick: weight back, the near leg snapping out low
+    kick: lester({ t: -0.22, nl: [1.2, 1.45], fl: [-0.08, -0.06], na: [-0.6, -0.2], fa: [0.5, 0.9] }),
+    kick2: lester({ t: -0.1, nl: [0.75, 0.2], fl: [-0.05, -0.05], na: [-0.3, 0.1], fa: [0.3, 0.7], lift: 0.6 }),
   }
+  // the black leeches that drop from the cave roof (inching: stretched, then humped)
+  const LP = { o: '#9c8cc0', O: '#5c4c78', D: '#34283f', r: '#ff5a2a' }
+  const LEECH = [
+    pairOutlined(['.....ooooo...', '..ooOOOOOOOo.', '.oOOOOOOOOOOr', 'DDDDDDDDDDDD.'], LP),
+    pairOutlined(['.....ooo.....', '....oOOOo....', '...oOODOOo...', '..oOD...DOo..', '.DDD.....DDDr'], LP),
+  ]
 
   // ---- Buddy and the guards -------------------------------------------------
   const BW = 32
@@ -483,6 +492,12 @@
     const p = period(s)
     return (((a - b) % p) + p) % p
   }
+  /** Someone is playing: a click or drag in the last 9 s, or the cursor moving over the bar. */
+  const SPILL = typeof SPILL_UP === 'number' ? SPILL_UP : 0
+  const engaged = (s, now) => now - (s.keyAt ?? -1e9) < 9000 || now - (s.data.clickAt ?? -1e9) < 9000 || now - (s.data.grabAt ?? -1e9) < 9000 || (!!s.cursor && now - s.cursor.since < 2500)
+  const keyMode = (s, now) => (s.keys && s.keys.size > 0) || now - (s.keyAt ?? -1e9) < 9000
+  const keyDir = (s) => (s.keys.has('right') ? 1 : 0) - (s.keys.has('left') ? 1 : 0)
+  const BUDDY_SAYS = ['Monal ti?', 'Ash! Ash!', 'Huu-ma.', 'Eh-leh?', 'Pista, pista!', 'Na kara.']
   const bubble = (s, k, x) => s.particle({ img: BUBBLE[k], x: x - 2, y: Math.max(1, FLOOR - 34), life: 0.9, vy: -2 })
 
   // ---- figures ------------------------------------------------------------------
@@ -501,7 +516,7 @@
       this.turnAt = 0
     }
     get moving() {
-      return this.tx !== null || this.running
+      return this.tx !== null || this.running || !!this.kmove
     }
     goto(x, speed, cb = null) {
       this.tx = Math.round(x)
@@ -554,11 +569,15 @@
     get asleep() {
       return this.sitting
     }
+    get grabbable() {
+      const m = this.s.data.mode
+      return !this.hidden && (m === 'idle' || m === 'rest' || m === 'fight')
+    }
     low() {
       return this.kneel || this.sitting || !!this.anim
     }
     hit(x, y) {
-      return Math.abs(x - this.x) <= 5 && y >= FLOOR - (this.low() ? 14 : 25)
+      return !this.hidden && Math.abs(x - this.x) <= 9 && y >= FLOOR - (this.low() ? 17 : 28) && y <= FLOOR + 1
     }
     /** Play poses in turn: play(['slip', 180], ['slip2', 200], ['down', 1e9]). */
     play(...seq) {
@@ -569,7 +588,7 @@
     }
     sprite(now) {
       if (this.anim) return LES[this.anim]
-      if (this.running) return LES.run[Math.floor(this.dist / 5.5) % 8]
+      if (this.running || this.kmove) return LES.run[Math.floor(this.dist / 5.5) % 8]
       if (this.tx !== null) return this.speed > 40 ? LES.run[Math.floor(this.dist / 5.5) % 8] : LES.walk[Math.floor(this.dist / 3) % 8]
       const aim = now < this.aimUntil || this.s.data.press
       if (this.sitting) return LES.sit
@@ -582,10 +601,83 @@
       return { x: this.x + this.dir * sp.gun[0], y: FLOOR + sp.gun[1] }
     }
     onClick() {
-      const d = this.s.data
-      if (d.mode !== 'idle') return
+      const s = this.s
+      const d = s.data
+      const now = performance.now()
+      d.clickAt = now
+      if (this.hidden) return
+      this.clicks = (this.clicks || []).filter((t) => now - t < 2500)
+      this.clicks.push(now)
+      if (d.mode === 'chase') return chaseStand(s)
+      if (d.mode === 'fight') {
+        if (!d.shields.some((sh) => sh.owner === 'L')) {
+          this.kneel = true
+          raiseShield(s, d.guard && d.guard.x < this.x ? -1 : 1, undefined, 'L', 1e9)
+        } else if (d.guard) fireAt(s, d.guard.x, FLOOR - 15)
+        return
+      }
+      if (d.mode !== 'idle' && d.mode !== 'rest') return
+      this.sitting = false
+      if (this.clicks.length >= 5) {
+        // easter egg: the experiment goes wrong again
+        this.clicks.length = 0
+        return teleport(s)
+      }
       const b = d.beast
-      raiseShield(this.s, b.present ? (b.x > this.x ? 1 : -1) : this.dir)
+      const lc = d.leeches.find((l) => l.alive && Math.abs(l.x - this.x) < 26)
+      if (lc && lc.state === 'crawl' && !this.anim) return kick(s, lc)
+      const c = s.cursor
+      raiseShield(s, b.present ? (b.x > this.x ? 1 : -1) : c && Math.abs(c.x - this.x) > 12 ? (c.x > this.x ? 1 : -1) : this.dir)
+    }
+    onDblClick() {
+      this.s.data.clickAt = performance.now()
+      if (!this.hidden) bigShot(this.s)
+    }
+    // the pistol the way the game played it: press, hold to charge, let go.
+    // Drag from Lester toward the target; a short pull fires, a longer one
+    // throws the shield, a long one lets go the big blast.
+    grab(p) {
+      const d = this.s.data
+      const now = performance.now()
+      d.grabAt = now
+      this.sling = this.grabbable
+      if (!this.sling) return
+      this.sitting = false
+      this.tx = this.cb = null
+      d.press = { t: now, x: p.x, y: p.y }
+      this.aimUntil = now + 4000
+    }
+    drag(p) {
+      const d = this.s.data
+      d.grabAt = performance.now()
+      if (!this.sling || !d.press) return
+      d.press.x = p.x
+      d.press.y = p.y
+      if (Math.abs(p.x - this.x) > 4 && !this.running && !this.anim) this.dir = p.x > this.x ? 1 : -1
+    }
+    drop(p) {
+      const s = this.s
+      const d = s.data
+      const now = performance.now()
+      d.grabAt = now
+      const pr = d.press
+      d.press = null
+      if (!this.sling || !pr) return
+      this.sling = false
+      const held = now - pr.t
+      this.aimUntil = now + 700
+      let tx = p.x
+      let ty = p.y
+      if (Math.abs(p.x - this.x) < 14) {
+        tx = this.x + this.dir * 140
+        ty = FLOOR - 15
+      }
+      if (d.mode === 'fight') return fireAt(s, tx, ty, held >= CH_HOLD[3])
+      if (d.mode !== 'idle' && d.mode !== 'rest') return
+      d.lastShot = 0
+      if (held >= CH_HOLD[3]) fireAt(s, tx, FLOOR - 15, true)
+      else if (held >= CH_HOLD[2]) raiseShield(s, tx >= this.x ? 1 : -1)
+      else fireAt(s, tx, ty)
     }
     update(dt, now) {
       if (this.anim && now >= this.animUntil) {
@@ -599,6 +691,7 @@
       return Infinity
     }
     draw(c) {
+      if (this.hidden) return
       blit(c, this.sprite(performance.now()), this.x, this.dir)
     }
   }
@@ -617,17 +710,32 @@
       return this.sitting
     }
     hit(x, y) {
-      return Math.abs(x - this.x) <= 5 && y >= FLOOR - (this.sitting ? 14 : 28)
+      return Math.abs(x - this.x) <= 10 && y >= FLOOR - (this.sitting ? 17 : 31) && y <= FLOOR + 1
     }
     strike(pose, ms) {
       this.pose = pose
       this.poseUntil = performance.now() + ms
     }
     onClick() {
+      const s = this.s
+      const d = s.data
       const now = performance.now()
-      if (now < this.poseUntil + 1200 || this.moving) return
-      this.strike('point', 900)
-      this.s.particle({ img: BUBBLE['…'], x: this.x - 2, y: Math.max(1, FLOOR - 36), life: 1.2, vy: -2 })
+      d.clickAt = now
+      if (now < this.poseUntil + 400 || this.moving) return
+      const b = d.beast
+      if (d.mode === 'idle' && b.present && ['prowl', 'blocked', 'startle', 'stunned'].includes(b.state)) return buddySwat(s, true)
+      this.sitting = false
+      // he points somewhere and says something in his own tongue; Lester looks
+      const c = s.cursor
+      this.face(c && Math.abs(c.x - this.x) > 8 ? c.x : d.les.x)
+      this.strike('point', 1100)
+      s.say(pick(BUDDY_SAYS), this.x, 1, { color: '#bcd8b4', life: 2.2 })
+      const L = d.les
+      if ((d.mode === 'idle' || d.mode === 'rest') && !L.moving && !L.anim && !L.hidden) {
+        L.sitting = false
+        L.face(this.x + this.dir * 60)
+        bubble(s, '?', L.x)
+      }
     }
     update(dt, now) {
       if (this.step(dt)) return FAST
@@ -667,10 +775,15 @@
       return this.state === 'enter' || this.state === 'flee'
     }
     hit(x, y) {
-      return this.state !== 'fall' && this.state !== 'dead' && Math.abs(x - this.x) <= 6 && y >= FLOOR - 28
+      return this.state !== 'fall' && this.state !== 'dead' && Math.abs(x - this.x) <= 10 && y >= FLOOR - 31 && y <= FLOOR + 1
     }
     onClick() {
+      this.s.data.clickAt = performance.now()
       fireAt(this.s, this.x, FLOOR - 15)
+    }
+    onDblClick() {
+      this.s.data.clickAt = performance.now()
+      bigShot(this.s)
     }
     gun() {
       const sp = GUARD.aim
@@ -753,10 +866,15 @@
       return this.present && (this.walking || this.state === 'leap' || this.state === 'chase' || this.state === 'flee')
     }
     hit(x, y) {
-      return this.present && this.state !== 'hit' && Math.abs(x - this.x) <= 14 && y >= FLOOR - 17 + this.yOff && y <= FLOOR + this.yOff
+      return this.present && this.state !== 'hit' && Math.abs(x - this.x) <= 17 && y >= FLOOR - 21 + this.yOff && y <= FLOOR + 1 + this.yOff
     }
     onClick() {
+      this.s.data.clickAt = performance.now()
       fireAt(this.s, this.x + this.dir * 6, FLOOR - 9 + this.yOff)
+    }
+    onDblClick() {
+      this.s.data.clickAt = performance.now()
+      bigShot(this.s)
     }
     enter(x, state) {
       this.present = true
@@ -783,6 +901,7 @@
       if (this.yOff < 0) this.vy = Math.min(this.vy, -30)
       this.walking = false
       this.after = after
+      this.atCursor = false
       this.s.data.duskWant = 0
       this.go('hit', 320)
       this.s.burst(this.x + this.dir * 8, FLOOR - 9 + this.yOff, 8, ['w', 'y', 'c'])
@@ -792,7 +911,9 @@
       this.state = 'away'
       this.walking = false
       this.fleeEdge = null
-      this.nextAt = now + rand(8000, 15000)
+      this.atCursor = false
+      // the director calls it back as one of its episodes
+      this.nextAt = Infinity
     }
     pounce(target) {
       this.target = target
@@ -842,7 +963,10 @@
       if (!this.present) {
         if (d.mode === 'idle' && s.lively(now) && !s.busy) {
           if (now >= this.nextAt) {
-            this.enter(L.x > s.W / 2 ? -16 : s.W + 16, 'prowl')
+            // in from the nearer edge, unless that would put it right on top of him
+            const nearLeft = L.x < s.W / 2
+            const left = nearLeft ? L.x > 110 : s.W - L.x < 110
+            this.enter(left ? -16 : s.W + 16, 'prowl')
             return FAST
           }
           return this.nextAt - now
@@ -883,9 +1007,10 @@
           // the leap: a long low arc at its prey
           this.go('leap', 1200)
           this.dir = this.target > this.x ? 1 : -1
-          this.vy = -78
+          // at the cursor it springs high, up off the top of the bar
+          this.vy = this.atCursor ? -112 : -78
           this.yOff = -0.1
-          this.leapVx = clamp((this.target - this.x) * 1.9, -160, 160)
+          this.leapVx = clamp((this.target - this.x) * (this.atCursor ? 1.35 : 1.9), -160, 160)
         }
         return FAST
       }
@@ -899,8 +1024,22 @@
             return FAST
           }
         if (this.yOff === 0 && now - this.since > 150) {
-          this.go(d.mode === 'chase' ? 'chase' : 'blocked', 1400)
           d.duskWant = 0
+          if (this.atCursor) {
+            // it lands where the pointer was, snarling
+            this.atCursor = false
+            this.go('startle', 900)
+            return FAST
+          }
+          if (d.mode === 'idle' && Math.abs(this.x - L.x) < 20 && !L.anim && !L.hidden) {
+            // nobody shot it: it bowls Lester over and he scrambles back up
+            L.tx = L.cb = null
+            L.kneel = false
+            L.play(['slip', 170], ['slip2', 190], ['down', 1300], ['kneel', 350])
+            s.burst(L.x, FLOOR - 8, 8, ['w', 'H', 'x'])
+            this.x = clamp(this.x + this.dir * 16, -16, s.W + 16)
+          }
+          this.go(d.mode === 'chase' ? 'chase' : 'blocked', 1400)
         }
         return FAST
       }
@@ -935,9 +1074,26 @@
         this.go('leave')
         return FAST
       }
+      const far = Math.abs(L.x - this.x) > 150
       if (now >= this.until) {
-        this.walking = !this.walking
+        // far off it trots in without stopping; close up it creeps and freezes
+        this.walking = far || !this.walking
         this.until = now + (this.walking ? rand(1200, 2000) : rand(700, 1300))
+      }
+      const cu = s.cursor
+      // a quick swipe of the pointer across it: it rears and snarls
+      if (cu && cu.speed > 450 && Math.abs(cu.x - this.x) < 24 && now > (this.startleCd || 0)) {
+        this.startleCd = now + 4000
+        this.walking = false
+        this.go('startle', 800)
+        return FAST
+      }
+      // tease it with the pointer and it springs at it
+      if (cu && engaged(s, now) && d.mode === 'idle' && !d.shields.length && Math.abs(cu.x - this.x) > 26 && Math.abs(cu.x - this.x) < 80 && now > (this.cursorLeapAt || 0)) {
+        this.cursorLeapAt = now + rand(5000, 8000)
+        this.atCursor = true
+        this.pounce(clamp(cu.x, 10, s.W - 10))
+        return FAST
       }
       const gap = Math.abs(L.x - this.x)
       if (gap > 32 && gap < 80 && now > d.leapCool && !L.moving && !d.shields.length && d.mode === 'idle') {
@@ -951,7 +1107,7 @@
         let goal
         if (c && c.y >= 0 && c.y <= H + 4) goal = c.x + (c.x > this.x ? -14 : 14)
         else goal = L.x + (this.x > L.x ? 46 : -46)
-        if (this.advance(clamp(goal, -10, s.W + 10), 22, dt)) {
+        if (this.advance(clamp(goal, -10, s.W + 10), far ? 64 : 22, dt)) {
           this.go('blocked', 2000)
           bubble(s, '!', L.x)
         }
@@ -991,6 +1147,159 @@
         c.fillRect(Math.round(this.x + this.dir * 4), FLOOR - 18, 1, 1)
       }
     }
+  }
+
+  // ---- the leeches ---------------------------------------------------------------
+  class Leech {
+    constructor(s, x) {
+      this.s = s
+      this.x = x
+      this.y = -2
+      this.vx = 0
+      this.vy = 0
+      this.state = 'drop'
+      this.dir = 1
+      this.ph = Math.random()
+      this.z = 4
+      this.moving = true
+      this.grabbable = true
+      this.kicked = false
+      this.turnAt = 0
+    }
+    get alive() {
+      return this.state === 'drop' || this.state === 'crawl'
+    }
+    hit(x, y) {
+      return this.state !== 'fly' && Math.abs(x - this.x) <= 10 && y >= this.y - 11 && y <= this.y + 2
+    }
+    onClick() {
+      const s = this.s
+      const d = s.data
+      d.clickAt = performance.now()
+      const L = d.les
+      if (!this.alive || L.hidden) return
+      if (this.state === 'crawl' && d.mode === 'idle' && Math.abs(this.x - L.x) < 26 && !L.anim) kick(s, this)
+      else fireAt(s, this.x, FLOOR - 2)
+    }
+    grab(p) {
+      this.s.data.grabAt = performance.now()
+      if (!this.alive) return
+      this.state = 'held'
+      this.hvx = 0
+      this.drag(p)
+    }
+    drag(p) {
+      if (this.state !== 'held') return
+      this.s.data.grabAt = performance.now()
+      const nx = clamp(p.x, 3, this.s.W - 3)
+      this.hvx = this.hvx * 0.5 + (nx - this.x) * 6
+      if (Math.abs(nx - this.x) > 1) this.dir = nx > this.x ? 1 : -1
+      this.x = nx
+      this.y = clamp(p.y + 3, 4, FLOOR)
+    }
+    drop() {
+      if (this.state !== 'held') return
+      this.s.data.grabAt = performance.now()
+      this.state = 'fly'
+      this.vx = clamp(this.hvx, -150, 150)
+      this.vy = -25
+      this.kicked = false
+    }
+    kickOff(dir) {
+      this.state = 'fly'
+      this.dir = dir
+      this.vx = dir * rand(95, 135)
+      this.vy = -rand(95, 120) // up off the top of the bar
+      this.kicked = true
+    }
+    zap() {
+      this.dead = true
+      this.s.burst(this.x, FLOOR - 2, 6, ['w', 'y', 'm'])
+    }
+    update(dt, now, s) {
+      const d = s.data
+      const L = d.les
+      if (this.state === 'held') return FAST
+      if (!s.lively(now) && this.state !== 'fly') {
+        // they slither off into the cracks when nothing is going on
+        this.dead = true
+        s.burst(this.x, FLOOR - 1, 3, ['a', 'n'])
+        return Infinity
+      }
+      if (this.state === 'drop') {
+        this.vy += 260 * dt
+        this.y += this.vy * dt
+        if (this.y >= FLOOR) {
+          this.y = FLOOR
+          this.state = 'crawl'
+          this.dir = L.x > this.x ? 1 : -1
+          s.burst(this.x, FLOOR - 1, 3, ['a', 'n'])
+        }
+        return FAST
+      }
+      if (this.state === 'fly') {
+        this.vy += 300 * dt
+        this.x += this.vx * dt
+        this.y += this.vy * dt
+        if (this.x < -14 || this.x > s.W + 14) {
+          this.dead = true
+          return Infinity
+        }
+        if (this.y >= FLOOR) {
+          this.y = FLOOR
+          const b = d.beast
+          if (b.present && b.state === 'prowl' && Math.abs(b.x - this.x) < 18) b.go('startle', 900)
+          if (this.kicked || this.vy > 150) {
+            this.dead = true
+            s.burst(this.x, FLOOR - 1, 5, ['x', 'a', 'm'])
+            return Infinity
+          }
+          this.state = 'crawl'
+          this.vx = 0
+        }
+        return FAST
+      }
+      // crawl: inch toward Lester, moving only on the stretch
+      this.ph += dt * 3
+      const want = L.x > this.x ? 1 : -1
+      if (want !== this.dir && now > this.turnAt) {
+        this.dir = want
+        this.turnAt = now + 1200
+      }
+      if (Math.floor(this.ph) % 2 === 0) this.x += this.dir * 16 * dt
+      if (!L.hidden && d.mode === 'idle' && Math.abs(L.x - this.x) < 4 && !L.anim) kick(s, this, true)
+      return FAST
+    }
+    draw(c) {
+      const sp = LEECH[this.state === 'crawl' ? Math.floor(this.ph) % 2 : this.state === 'fly' ? 1 : 0]
+      c.drawImage(sp[this.dir], Math.round(this.x - sp.w / 2), Math.round(this.y - sp.h + 1))
+    }
+  }
+  function spawnLeech(s) {
+    const d = s.data
+    if (d.leeches.length >= 4) return
+    const L = d.les
+    const side = Math.random() < 0.5 ? -1 : 1
+    let x = L.x + side * rand(45, 110)
+    if (x < 10 || x > s.W - 10) x = L.x - side * rand(45, 110)
+    const lc = new Leech(s, clamp(x, 10, s.W - 10))
+    d.leeches.push(lc)
+    s.spawn(lc)
+  }
+  /** Lester boots a leech away (a frantic shake if it has already latched on). */
+  function kick(s, lc, bitten = false) {
+    const d = s.data
+    const L = d.les
+    L.tx = L.cb = null
+    L.kneel = false
+    L.sitting = false
+    if (Math.abs(lc.x - L.x) > 1) L.dir = lc.x > L.x ? 1 : -1
+    if (bitten) {
+      bubble(s, '!', L.x)
+      L.play(['kick2', 140], ['kick', 200], ['kick2', 140], ['kick', 220])
+    } else L.play(['kick', 300])
+    lc.kickOff(L.dir)
+    d.kickCool = performance.now() + 500
   }
 
   // ---- weapons ----------------------------------------------------------------
@@ -1056,7 +1365,11 @@
     }
     const b = d.beast
     const gd = d.guard
-    if (b.present && b.state !== 'hit' && Math.abs(x - b.x) <= 15 && y >= FLOOR - 18 + b.yOff) {
+    const lc = y >= FLOOR - 7 && d.leeches.find((l) => l.alive && Math.abs(x - l.x) <= 9)
+    if (lc) {
+      beam(s, g.x, g.y, lc.x, FLOOR - 2, big)
+      lc.zap()
+    } else if (b.present && b.state !== 'hit' && Math.abs(x - b.x) <= 15 && y >= FLOOR - 18 + b.yOff) {
       beam(s, g.x, g.y, b.x - Math.sign(b.x - g.x) * 4, FLOOR - 9 + b.yOff, big)
       b.struck(L.x, big || d.mode !== 'chase' ? 'flee' : 'stunned')
     } else if (gd && !gd.dead && gd.hit(x, y)) {
@@ -1084,6 +1397,217 @@
     }
   }
 
+  /** What Lester would shoot at straight ahead: the nearest threat on his side, or empty air. */
+  function aheadTarget(s) {
+    const d = s.data
+    const L = d.les
+    const b = d.beast
+    const gd = d.guard
+    const opts = []
+    if (gd && gd.state === 'stand') opts.push({ x: gd.x, y: FLOOR - 15 })
+    if (b.present && b.state !== 'hit') opts.push({ x: b.x, y: FLOOR - 9 + b.yOff })
+    for (const lc of d.leeches) if (lc.alive) opts.push({ x: lc.x, y: FLOOR - 2 })
+    let best = null
+    for (const o of opts) if ((o.x - L.x) * L.dir > 0 && (!best || Math.abs(o.x - L.x) < Math.abs(best.x - L.x))) best = o
+    return best || { x: L.x + L.dir * 150, y: FLOOR - 15 }
+  }
+  /** Keys held this frame: A/D run, S kneels. */
+  function keyTick(s, dt, now) {
+    const d = s.data
+    const L = d.les
+    L.kmove = false
+    if (!s.keys || !s.keys.size || L.hidden) return false
+    if (d.mode === 'idle' || d.mode === 'rest') {
+      const mx = keyDir(s)
+      if (mx && !L.anim) {
+        L.sitting = false
+        L.kneel = false
+        L.tx = L.cb = null
+        L.breath = false
+        L.dir = mx
+        const st = 58 * dt
+        L.x = clamp(L.x + mx * st, 6, s.W - 6)
+        L.dist += st
+        L.kmove = true
+      } else if (s.keys.has('down') && !L.anim) {
+        L.tx = L.cb = null
+        L.sitting = false
+        L.kneel = true
+        L.aimUntil = Math.max(L.aimUntil, now + 300)
+      }
+    }
+    return true
+  }
+  function keyPress(s, key, down) {
+    const d = s.data
+    const L = d.les
+    const now = performance.now()
+    if (L.hidden) return
+    if (key === 'fire') {
+      if (down) {
+        if (d.mode === 'chase') {
+          const b = d.beast
+          if (b.present) fireAt(s, b.x, FLOOR - 9 + b.yOff)
+          return
+        }
+        if (d.mode !== 'idle' && d.mode !== 'rest' && d.mode !== 'fight') return
+        L.sitting = false
+        // a leech at his feet gets the boot instead
+        const lc = d.mode !== 'fight' && d.leeches.find((l) => l.state === 'crawl' && Math.abs(l.x - L.x) < 22 && (l.x - L.x) * L.dir >= -4)
+        if (lc && !L.anim) return kick(s, lc)
+        // press and hold to charge, the way the pistol worked
+        d.press = { t: now, key: true }
+        L.aimUntil = now + 4000
+        return
+      }
+      const pr = d.press
+      if (!pr || !pr.key) return
+      d.press = null
+      if (!s.armed) return // disarmed mid-charge: let it go quietly
+      const held = now - pr.t
+      L.aimUntil = now + 700
+      const t = aheadTarget(s)
+      d.lastShot = 0
+      if (d.mode === 'fight') return fireAt(s, t.x, t.y, held >= CH_HOLD[3])
+      if (d.mode !== 'idle' && d.mode !== 'rest') return
+      if (held >= CH_HOLD[3]) fireAt(s, t.x, t.y, true)
+      else if (held >= CH_HOLD[2]) raiseShield(s, L.dir)
+      else fireAt(s, t.x, t.y)
+      return
+    }
+    if (!down) return
+    if (key === 'up') {
+      if (d.mode === 'chase') return chaseStand(s)
+      if (d.mode === 'fight') {
+        if (!d.shields.some((sh) => sh.owner === 'L')) {
+          L.kneel = true
+          raiseShield(s, d.guard && d.guard.x < L.x ? -1 : 1, undefined, 'L', 1e9)
+        }
+        return
+      }
+      if (d.mode === 'idle' || d.mode === 'rest') {
+        L.sitting = false
+        raiseShield(s, L.dir)
+      }
+    }
+  }
+
+  /** The double-click: a quick charge and the big blast at whatever is the threat. */
+  function bigShot(s) {
+    const d = s.data
+    const L = d.les
+    if (d.mode === 'done' || d.mode === 'rest' || L.hidden || d.charge) return
+    const now = performance.now()
+    const T = d.chaseToken
+    d.charge = { t0: now - CH_HOLD[2], scripted: true }
+    L.aimUntil = now + 1200
+    at(d, 450, () => {
+      d.charge = null
+      if (d.chaseToken !== T) return
+      const b = d.beast
+      const gd = d.guard
+      d.lastShot = 0
+      if (gd && gd.state === 'stand') fireAt(s, gd.x, FLOOR - 15, true)
+      else if (b.present && b.state !== 'hit') fireAt(s, b.x, FLOOR - 9 + b.yOff, true)
+      else fireAt(s, L.x + L.dir * 150, FLOOR - 15, true)
+    })
+  }
+  /** Easter egg: lightning, and he is thrown somewhere else, as on the night of the experiment. */
+  function teleport(s) {
+    const d = s.data
+    const L = d.les
+    if (d.mode !== 'idle' || L.hidden) return
+    const now = performance.now()
+    L.tx = L.cb = null
+    L.anim = null
+    L.kneel = false
+    d.bolt = { x: Math.round(L.x), until: now + 380 }
+    d.flashUntil = now + 140
+    s.burst(L.x, FLOOR - 14, 14, ['w', 'c', 'm', 'y'])
+    L.hidden = true
+    if (d.bud) bubble(s, '!', d.bud.x)
+    const b = d.beast
+    if (b.present && b.state === 'prowl') b.go('leave')
+    at(d, 1300, () => {
+      L.hidden = false
+      const t = performance.now()
+      L.x = openSpot(s, L.x < s.W / 2 ? s.W * 0.75 : s.W * 0.25)
+      d.bolt = { x: Math.round(L.x), until: t + 250 }
+      d.flashUntil = t + 100
+      // he lands in a splash, the way he arrived
+      s.burst(L.x, FLOOR - 3, 12, ['c', 'b', 'w'])
+      L.play(['down', 600], ['slip2', 220], ['kneel', 450])
+    })
+  }
+  /** The friend steps in and swats the beast away. */
+  function buddySwat(s, sent = false) {
+    const d = s.data
+    const u = d.bud
+    const b = d.beast
+    const now = performance.now()
+    if (!u || u.moving || (!sent && now < d.helpCool)) return
+    d.helpCool = now + 9000
+    u.sitting = false
+    u.face(b.x)
+    if (sent) s.say(pick(BUDDY_SAYS), u.x, 1, { color: '#bcd8b4', life: 1.8 })
+    u.goto(clamp(b.x - (b.x > u.x ? 18 : -18), 8, s.W - 8), sent ? 64 : 56, () => {
+      u.face(b.x)
+      u.strike('wind', 240)
+      at(d, 240, () => {
+        u.strike('punch', 450)
+        if (b.present && ['prowl', 'blocked', 'startle', 'stunned'].includes(b.state)) b.struck(u.x, 'flee')
+      })
+    })
+  }
+  const shuffle = (a) => {
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[a[i], a[j]] = [a[j], a[i]]
+    }
+    return a
+  }
+  /** Watch mode: one little episode at a time, in a shuffled order. */
+  function runEpisode(s, now) {
+    const d = s.data
+    const L = d.les
+    const u = d.bud
+    if (!d.bag.length) d.bag = shuffle(['beast', 'beast', 'leech', 'patrol', 'explore', 'stroll', ...(u ? ['buddy'] : [])])
+    const ep = d.bag.pop()
+    const far = () => {
+      let x = openSpot(s, rand(10, s.W - 10))
+      if (Math.abs(x - L.x) < 50) x = openSpot(s, L.x + (L.x < s.W / 2 ? 100 : -100))
+      return x
+    }
+    if (ep === 'beast') d.beast.nextAt = now
+    else if (ep === 'leech') {
+      // they drop from the cave roof, one after another
+      const n = s.W < 500 ? 2 : 3
+      for (let i = 0; i < n; i++) at(d, i * rand(700, 1500), () => d.mode === 'idle' && s.lively() && spawnLeech(s))
+    } else if (ep === 'patrol') startFight(s)
+    else if (ep === 'explore') {
+      L.breath = false
+      L.goto(far(), 24, () => {
+        if (d.mode !== 'idle') return
+        L.play(['kneel', 1900])
+        bubble(s, '?', L.x)
+      })
+    } else if (ep === 'buddy' && u) {
+      u.sitting = false
+      L.face(u.x)
+      u.face(L.x)
+      at(d, 300, () => {
+        if (d.mode !== 'idle' || u.moving) return
+        u.strike('point', 1200)
+        s.say(pick(BUDDY_SAYS), u.x, 1, { color: '#bcd8b4', life: 2.2 })
+      })
+      at(d, 1700, () => d.mode === 'idle' && bubble(s, '…', L.x))
+      at(d, 2600, () => d.mode === 'idle' && !L.moving && L.goto(far(), 24))
+    } else {
+      L.breath = false
+      L.goto(far(), 24)
+    }
+  }
+
   // ---- director -----------------------------------------------------------------
   function at(d, ms, fn) {
     d.q.push({ t: performance.now() + ms, fn })
@@ -1100,7 +1624,11 @@
     d.turnCool = now + 2500
     d.chaseSince = now
     d.press = null
+    d.fight = null
+    d.bolt = null
+    for (const lc of d.leeches) if (!lc.dead) lc.kickOff(Math.random() < 0.5 ? -1 : 1)
     const L = d.les
+    L.hidden = false
     L.tx = null
     L.kneel = L.sitting = false
     L.anim = null
@@ -1167,11 +1695,14 @@
       b.enter(wrapX(s, L.x - 120), 'chase')
       b.go('chase')
     }
-    // Lester fires at the beast mid-leap
-    if (b.state === 'leap' && !d.leapShot && Math.abs(b.x - L.x) < 46) {
+    const user = engaged(s, now)
+    // Lester fires at the beast mid-leap (unless you are doing the shooting)
+    if (!user && b.state === 'leap' && !d.leapShot && Math.abs(b.x - L.x) < 46) {
       d.leapShot = true
       fireAt(s, b.x, FLOOR - 10 + b.yOff)
     }
+    // while you play, the turns are yours: click Lester to stand and fight
+    if (user) return
     if (!L.running || b.state !== 'chase' || now < d.turnCool) return
     const gap = ahead(s, L.x, b.x)
     if (gap > (u && !u.lead ? 46 : 34)) return
@@ -1224,27 +1755,37 @@
       })
       return
     }
-    L.running = false
     const helper = u && r === 2 && !u.lead
-    if (helper) {
-      // the friend turns and floors it with one swing
+    if (!helper) return chaseStand(s)
+    // the friend turns and floors it with one swing
+    L.running = false
+    L.dir = -1
+    u.running = false
+    u.dir = -1
+    u.strike('wind', 260)
+    at(d, 260, () => {
+      u.strike('punch', 450)
+      if (b.present && b.state === 'chase') b.struck(u.x, 'stunned')
+    })
+    at(d, 1100, () => d.mode === 'chase' && d.chaseToken === T && resumeRun(s))
+  }
+  /** Mid-chase: he skids, kneels behind a shield and fires back, then runs on. */
+  function chaseStand(s) {
+    const d = s.data
+    const L = d.les
+    const u = d.bud
+    const b = d.beast
+    if (d.mode !== 'chase' || !L.running) return
+    const T = d.chaseToken
+    L.running = false
+    if (u) {
       u.running = false
       u.dir = -1
-      u.strike('wind', 260)
-      at(d, 260, () => {
-        u.strike('punch', 450)
-        if (b.present && b.state === 'chase') b.struck(u.x, 'stunned')
-      })
-      L.dir = -1
-    } else {
-      if (u) {
-        u.running = false
-        u.dir = -1
-      }
-      L.kneel = true
-      raiseShield(s, -1, Math.min(L.x, u ? u.x : L.x) - 10, 'L', 2400)
-      at(d, 300, () => b.present && b.state === 'chase' && fireAt(s, b.x, FLOOR - 9))
     }
+    L.dir = -1
+    L.kneel = true
+    raiseShield(s, -1, Math.min(L.x, u ? u.x : L.x) - 10, 'L', 2400)
+    at(d, 300, () => d.chaseToken === T && b.present && b.state === 'chase' && fireAt(s, b.x, FLOOR - 9))
     at(d, 1100, () => d.mode === 'chase' && d.chaseToken === T && resumeRun(s))
   }
   const covered = (s, x) => !!s.fixtureOver(x - 6, x + 6)
@@ -1261,9 +1802,12 @@
     L.running = false
     L.anim = null
     L.kneel = false
+    L.hidden = false
+    L.sitting = false
     if (u) {
       u.running = false
       u.tx = null
+      u.sitting = false
     }
     const side = L.x < s.W * 0.55 ? 1 : -1
     const range = Math.min(150, s.W * 0.38)
@@ -1274,6 +1818,8 @@
     if (u) u.goto(clamp(L.x - side * 16, 8, s.W - 8), 60, () => (u.dir = side))
     bubble(s, '!', L.x)
     d.duskWant = 1
+    d.fights = (d.fights ?? 0) + 1
+    d.fight = { T, gd, side, step: 0, next: 0, gNext: 0, armed: false, since: now }
     const ok = () => d.mode === 'fight' && d.chaseToken === T && d.guard === gd && gd.state === 'stand'
     const arrive = (Math.abs(gx - gd.x) / 58) * 1000
     // a beat of stillness, then both shields go up
@@ -1286,54 +1832,76 @@
       if (!ok()) return
       L.kneel = true
       raiseShield(s, side, undefined, 'L', 1e9)
+      const t = performance.now()
+      d.fight.armed = true
+      d.fight.next = t + 600
+      d.fight.gNext = t + 250
     })
-    let t = arrive + 1250
-    for (let k = 0; k < 5; k++) {
-      const who = k % 2
-      at(d, t, () => {
-        if (!ok()) return
-        if (who === 0) guardFire(s, gd)
-        else fireAt(s, gd.x, FLOOR - 15)
-      })
-      t += rand(550, 850)
+  }
+
+  /** The gunfight across shields, a step at a time. The guard keeps firing; Lester's
+   *  side is the autopilot's only while nobody is playing (then the shots are yours). */
+  function fightTick(s, now) {
+    const d = s.data
+    const f = d.fight
+    if (!f || !f.armed) return
+    const gd = f.gd
+    const L = d.les
+    const u = d.bud
+    if (d.guard !== gd || gd.state !== 'stand') return
+    if (now > f.gNext) {
+      guardFire(s, gd)
+      f.gNext = now + rand(1100, 1700)
     }
-    // charge up the big one and break his shield
-    at(d, t, () => {
-      if (!ok()) return
-      d.charge = { t0: performance.now(), scripted: true }
-      L.aimUntil = performance.now() + 2000
-    })
-    at(d, t + 500, () => ok() && guardFire(s, gd))
-    t += 1250
-    at(d, t, () => {
-      if (!ok()) return
+    if (now - f.since > 40000) {
+      // a stand-off nobody finishes: he backs off
+      gd.state = 'flee'
+      gd.dir = gd.x > s.W / 2 ? 1 : -1
+      return fightWon(s)
+    }
+    if (engaged(s, now)) {
+      f.next = Math.max(f.next, now + 800)
+      return
+    }
+    if (now < f.next) return
+    const gShield = d.shields.some((sh) => sh.owner === 'G')
+    const step = f.step++
+    if (step < 3 && gShield) {
+      fireAt(s, gd.x, FLOOR - 15)
+      f.next = now + rand(700, 1100)
+    } else if (step === 3 && gShield) {
+      // charge up the big one to break his shield
+      d.charge = { t0: now, scripted: true }
+      L.aimUntil = now + 2000
+      f.next = now + 1250
+    } else if (step === 4 && gShield) {
       d.charge = null
       d.lastShot = 0
       fireAt(s, gd.x, FLOOR - 15, true)
-    })
-    d.fights = (d.fights ?? 0) + 1
-    if (u && d.fights % 2 === 0) {
+      f.next = now + 300
+    } else if (u && d.fights % 2 === 0 && !f.buddy) {
       // Buddy's turn: he charges through the gap and floors the guard
-      at(d, t + 250, () => {
+      f.buddy = true
+      f.next = now + 6000
+      const T = f.T
+      const ok = () => d.mode === 'fight' && d.chaseToken === T && d.guard === gd && gd.state === 'stand'
+      u.goto(gd.x - f.side * 12, 72, () => {
         if (!ok()) return
-        u.goto(gd.x - side * 12, 72, () => {
+        u.dir = f.side
+        u.strike('wind', 220)
+        at(d, 220, () => {
           if (!ok()) return
-          u.dir = side
-          u.strike('wind', 220)
-          at(d, 220, () => {
-            if (!ok()) return
-            u.strike('punch', 500)
-            gd.shot()
-            fightWon(s)
-          })
+          u.strike('punch', 500)
+          gd.shot()
+          fightWon(s)
         })
       })
-    } else
-      at(d, t + 300, () => {
-        if (!ok()) return
-        d.lastShot = 0
-        fireAt(s, gd.x, FLOOR - 15)
-      })
+    } else {
+      d.charge = null
+      d.lastShot = 0
+      fireAt(s, gd.x, FLOOR - 15)
+      f.next = now + 900
+    }
   }
 
   function fightWon(s) {
@@ -1346,6 +1914,7 @@
     d.charge = null
     d.duskWant = 0
     d.shields = []
+    d.fight = null
     at(d, 700, () => {
       if (d.mode !== 'fight' || d.chaseToken !== T) return
       L.kneel = false
@@ -1353,7 +1922,13 @@
     })
     at(d, 1700, () => {
       if (d.mode !== 'fight' || d.chaseToken !== T) return
-      if (!s.busy) return
+      if (!s.busy) {
+        // a patrol seen off: back to the quiet
+        d.mode = 'idle'
+        L.kneel = false
+        d.epAt = 0
+        return
+      }
       d.mode = 'chase'
       d.cycles = (d.cycles ?? 0) + 1
       d.chaseSince = performance.now()
@@ -1375,6 +1950,7 @@
     d.shields = []
     d.charge = null
     d.duskWant = 0
+    d.fight = null
   }
 
   function finale(s) {
@@ -1388,6 +1964,8 @@
     L.tx = null
     L.kneel = false
     L.anim = null
+    L.hidden = false
+    d.bolt = null
     if (d.bud) d.bud.running = false
     const b = d.beast
     if (b.present && b.state !== 'hit') {
@@ -1425,7 +2003,7 @@
                   u.face(L.x)
                   d.mode = 'idle'
                   d.beast.nextAt = performance.now() + rand(8000, 14000)
-                  d.nextWander = performance.now() + rand(9000, 15000)
+                  d.epAt = 0
                 })
               })
             }),
@@ -1458,7 +2036,15 @@
     d.actN = 0
     d.les = new Lester(s, openSpot(s, s.W * 0.3))
     d.beast = new Beast(s)
-    d.nextWander = performance.now() + rand(8000, 14000)
+    d.leeches = []
+    d.bag = []
+    d.epAt = 0
+    d.fight = null
+    d.bolt = null
+    d.flashUntil = 0
+    d.kickCool = 0
+    d.clickAt = -1e9
+    d.grabAt = -1e9
     d.breathAt = performance.now() + 1800
     d.shieldCool = 0
     d.helpCool = 0
@@ -1507,7 +2093,12 @@
         L.kneel = false
         L.anim = null
         L.breath = false
+        L.hidden = false
+        L.sling = false
         L.tx = L.cb = null
+        d.bolt = null
+        d.epAt = 0
+        for (const lc of d.leeches) if (lc.state === 'held') lc.state = 'crawl'
         if (u) u.tx = u.cb = null
         const [spot, spot2] = u ? pairSpot(s, L.x) : [openSpot(s, L.x), 0]
         const sitL = () => {
@@ -1536,35 +2127,54 @@
       d.mode = 'idle'
       L.sitting = false
       if (u) u.sitting = false
-      d.nextWander = now + rand(4000, 8000)
+      d.epAt = 0
     }
+    if (d.leeches.length) d.leeches = d.leeches.filter((l) => !l.dead)
+    if ((d.bolt && now < d.bolt.until) || now < d.flashUntil) wait = FAST
+    if (keyTick(s, dt, now)) wait = FAST
     if (d.mode === 'chase') {
       chaseTick(s, now)
       return wait
     }
-    if (d.mode === 'fight' || d.mode === 'done') return wait
+    if (d.mode === 'fight') {
+      fightTick(s, now)
+      return Math.min(wait, FAST)
+    }
+    if (d.mode === 'done') return wait
+    if (L.hidden) return Math.min(wait, FAST)
 
-    // idle: watch the beast or the cursor, defend, wander between open spots
-    if (b.state === 'leap' && !d.leapShot && Math.abs(b.x - L.x) < 46) {
+    // idle: the autopilot watches the beast, defends, deals with leeches and
+    // runs little episodes; while someone is playing it holds back and Lester
+    // just keeps an eye on the cursor.
+    const user = engaged(s, now)
+    const c = s.cursor
+    const cOn = c && c.y >= -SPILL && c.y <= H
+    if (!user && b.state === 'leap' && !d.leapShot && Math.abs(b.x - L.x) < 46) {
       d.leapShot = true
       fireAt(s, b.x, FLOOR - 10 + b.yOff)
     }
     if (b.present && ['prowl', 'blocked', 'crouch', 'leap', 'startle'].includes(b.state)) {
       if (b.state === 'crouch') {
-        L.tx = null
-        L.kneel = true
         d.leapShot = false
-      } else if (b.state !== 'leap' && !d.charge) L.kneel = false
-      if (!L.moving) L.face(b.x, now, 600)
-      L.aimUntil = now + 400
+        if (!user && !L.anim) {
+          L.tx = null
+          L.kneel = true
+        }
+      } else if (b.state !== 'leap' && !d.charge && !L.anim && now > L.aimUntil - 300) L.kneel = false
+      const keys = keyMode(s, now)
+      if (!L.moving && !L.anim && !keys) {
+        if (user && cOn && Math.abs(c.x - L.x) > 10) L.face(c.x, now, 500)
+        else if (!user) L.face(b.x, now, 600)
+      }
+      L.aimUntil = Math.max(L.aimUntil, now + 400)
       const dist = Math.abs(b.x - L.x)
-      if (b.state === 'prowl' && dist < 40 && !d.shields.length && now > d.shieldCool) {
+      if (!user && b.state === 'prowl' && dist < 40 && !d.shields.length && now > d.shieldCool && !L.anim) {
         d.shieldCool = now + 6000
         raiseShield(s, b.x > L.x ? 1 : -1)
       }
       // he uses the pistol's three charges on his own: a warning shot at its
       // feet, an aimed shot, or a long charge into the big blast
-      if (b.state === 'prowl' && !L.moving && !d.charge && now > d.actCool && dist >= 40 && dist < Math.min(170, s.W * 0.45)) {
+      if (!user && b.state === 'prowl' && !L.moving && !L.anim && !d.charge && now > d.actCool && dist >= 40 && dist < Math.min(170, s.W * 0.45)) {
         d.actCool = now + rand(4500, 8000)
         const act = d.actN++ % 3
         const T = d.chaseToken
@@ -1581,36 +2191,17 @@
           } else fireAt(s, b.x, FLOOR - 9, act === 1)
         })
       }
-      if (u && !u.moving && b.state === 'prowl' && Math.abs(b.x - u.x) < 44 && now > d.helpCool) {
-        // the friend steps in and swats it away
-        d.helpCool = now + 9000
-        u.face(b.x)
-        u.goto(clamp(b.x - (b.x > u.x ? 18 : -18), 8, s.W - 8), 56, () => {
-          u.face(b.x)
-          u.strike('wind', 240)
-          at(d, 240, () => {
-            u.strike('punch', 450)
-            if (b.present && b.state === 'prowl') b.struck(u.x, 'flee')
-          })
-        })
-      }
+      if (u && !u.moving && b.state === 'prowl' && Math.abs(b.x - u.x) < 44) buddySwat(s)
       wait = Math.min(wait, FAST)
     } else if (b.present && ['hit', 'stunned'].includes(b.state)) {
       // hold the pose while it recoils
       L.tx = null
-      d.nextWander = Math.max(d.nextWander, now + 4000)
       wait = Math.min(wait, FAST)
     } else if (!L.moving) {
       if (L.kneel && now > L.aimUntil) L.kneel = false
-      const c = s.cursor
-      if (c && c.y >= 0 && c.y <= H && Math.abs(c.x - L.x) > 10) L.face(c.x, now, 900)
-      else if (!c && u && Math.abs(u.x - L.x) > 5) L.face(u.x, now, 2000)
-      if (now >= d.nextWander) {
-        d.nextWander = now + rand(10000, 18000)
-        let x = openSpot(s, rand(10, s.W - 10))
-        if (Math.abs(x - L.x) < 50) x = openSpot(s, L.x + (L.x < s.W / 2 ? 100 : -100))
-        L.breath = false
-        L.goto(x, 24)
+      if (!L.anim && !keyMode(s, now)) {
+        if (cOn && Math.abs(c.x - L.x) > 10) L.face(c.x, now, user ? 500 : 900)
+        else if (!c && u && Math.abs(u.x - L.x) > 5) L.face(u.x, now, 2000)
       }
       // idle breathing, a slow two-frame rise and fall
       if (now >= d.breathAt) {
@@ -1618,13 +2209,33 @@
         L.breath = !L.breath
         if (u && !u.moving) u.breath = !L.breath
       }
-      wait = Math.min(wait, Math.max(50, Math.min(d.nextWander, d.breathAt) - now))
+      wait = Math.min(wait, Math.max(50, d.breathAt - now))
     }
+    // leeches: he keeps an eye on them and boots them away when they get close
+    for (const lc of d.leeches) {
+      if (lc.state !== 'crawl') continue
+      const gap = Math.abs(lc.x - L.x)
+      if (!L.moving && !L.anim && gap < 60 && gap > 3 && !user) L.face(lc.x, now, 700)
+      if (!user && gap < 16 && !L.anim && !L.moving && now > d.kickCool) kick(s, lc)
+    }
+    if (d.leeches.length) wait = Math.min(wait, FAST)
     // the friend tags along when Lester wanders off (with slack, no thrashing)
     if (u && !u.moving && now > u.poseUntil && Math.abs(u.x - L.x) > 44 && !L.moving) {
       u.goto(openSpot(s, L.x + (u.x > L.x ? 18 : -18), L.x, 16), 30, () => u.face(L.x))
     }
-    if (!b.present) wait = Math.min(wait, Math.max(50, b.nextAt - now))
+    // and he turns to look at the pointer when it comes near him
+    if (u && cOn && !u.moving && now > u.poseUntil && Math.abs(c.x - u.x) < 40 && Math.abs(c.x - u.x) > 4) u.face(c.x, now, 1500)
+    // watch mode: one episode at a time, a breather between them
+    const quiet = !b.present && !d.leeches.length && !d.guard && !L.moving && !L.anim && !d.q.length && !user && !(u && u.moving) && !s.busy
+    if (quiet) {
+      if (!d.epAt) d.epAt = now + rand(2500, 5000)
+      if (now >= d.epAt) {
+        d.epAt = 0
+        runEpisode(s, now)
+        wait = Math.min(wait, FAST)
+      } else wait = Math.min(wait, d.epAt - now)
+    } else d.epAt = 0
+    if (!b.present && b.nextAt < Infinity) wait = Math.min(wait, Math.max(50, b.nextAt - now))
     if (!s.busy) wait = Math.min(wait, Math.max(50, s.lastTouch + 30000 + 20 - now))
     return wait
   }
@@ -1652,10 +2263,10 @@
 
   registerConcept({
     key: 'anotherworld',
-    title: 'Another World — big',
+    title: 'Another World',
     sub: 'Éric Chahi, 1991',
     blurb:
-      "Lester, the red-haired physicist, keeps a black beast at bay. It stalks the cursor, crouches and leaps; he answers with all three charges of his laser pistol: a quick shot, the shimmering force shield it cannot pass, and the big blast. Click Lester to raise the shield, or click the beast or a guard to shoot it. While the agent works it becomes the chase: Lester slips, the beast leaps, and alien guards step in for a gunfight across shields. On done Buddy, the tall alien friend, arrives and stays; he swats the beast, takes turns with Lester, and at rest sits beside him.",
+      "Lester, the red-haired physicist, gets by on his own on an alien world. A black beast stalks him, crouches and leaps; he answers with the three charges of his laser pistol: a quick shot, the shimmering force shield it cannot pass, and the big blast. Leeches drop from the roof and he boots them away, a lone guard comes by for a gunfight across shields, and he goes off to look at things. While the agent works it becomes the chase: Lester slips, the beast leaps, and guards step in. On done Buddy, the tall alien friend, arrives and stays; he swats the beast, talks in his own tongue and at rest sits beside him. Play along and the autopilot steps back: Lester faces your <b>cursor</b> and the beast springs at it. Click Lester for the shield (in the chase, to stand and fight), double-click anything for the big blast, or drag from Lester and let go to fire the way the game did: a short pull shoots, a longer one throws the shield, a long one is the blast. Click the beast, guards or leeches to shoot, grab a leech and throw it, click Buddy to send him at the beast. Click any character and the keys are yours too: A/D run, W the shield (in the chase, stand and fight), S kneel, Space fires, and holding Space charges it into the shield and then the big blast, as in the game; Space next to a leech kicks it. Click Lester five times quickly and see what the experiment does.",
     setup,
     update,
     onBusy(s) {
@@ -1680,6 +2291,11 @@
         if (a.tx !== null && a.tx !== undefined) a.tx = clamp(a.tx, -20, s.W + 20)
       }
       for (const sh of d.shields) sh.x = clamp(sh.x, 2, s.W - 2)
+      for (const lc of d.leeches) lc.x = clamp(lc.x, 4, s.W - 4)
+      s.poke()
+    },
+    onKey(s, key, down) {
+      keyPress(s, key, down)
       s.poke()
     },
     onPress(s, p) {
@@ -1760,6 +2376,25 @@
           c.fillRect(bm.x1 - 1, bm.y1, 3, 1)
           c.fillRect(bm.x1, bm.y1 - 1, 1, 3)
         }
+      }
+      // the easter egg's lightning, and the white flash
+      if (d.bolt && now < d.bolt.until) {
+        let x = d.bolt.x
+        let y = -SPILL
+        for (let i = 0; i < 7; i++) {
+          const ny = Math.round(-SPILL + ((i + 1) * (FLOOR - 6 + SPILL)) / 7)
+          const nx = d.bolt.x + ((i * 5 + d.fr * 3) % 7) - 3
+          c.fillStyle = 'rgba(176,140,255,.6)'
+          line(c, x + 1, y, nx + 1, ny)
+          c.fillStyle = '#ffffff'
+          line(c, x, y, nx, ny)
+          x = nx
+          y = ny
+        }
+      }
+      if (now < d.flashUntil) {
+        c.fillStyle = 'rgba(255,255,255,.3)'
+        c.fillRect(0, -SPILL, s.W, H + SPILL)
       }
       // the charge gathering at the pistol's muzzle
       const ch = d.press ? { t0: d.press.t } : d.charge

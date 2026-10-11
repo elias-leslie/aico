@@ -209,7 +209,11 @@
   const wdx = (dx, W) => wrap(dx + W / 2, W) - W / 2
   const riders = (s) => s.actors.filter((a) => a.enemy && !a.dead)
   const eggs = (s) => s.actors.filter((a) => a.egg && !a.dead)
-  const engaged = (s, now) => now - (s.data.lastClick || -1e9) < 9000 || (s.cursor && now - s.cursor.t < 1200 && s.cursor.y < H + 2)
+  // keyboard: A/D fly left/right, W or Space flap, S dives
+  const keying = (s, now) => now - (s.keyAt ?? -1e9) < 9000
+  const keyDir = (s) => (s.keys && s.keys.has('left') !== s.keys.has('right') ? (s.keys.has('left') ? -1 : 1) : 0)
+  const SPILL = typeof SPILL_UP === 'number' ? SPILL_UP : 0
+  const engaged = (s, now) => keying(s, now) || now - (s.data.lastClick || -1e9) < 9000 || (s.cursor && now - s.cursor.t < 1200 && s.cursor.y < H + 2)
   const steering = (s, now) => s.cursor && now - s.cursor.t < 1500 && s.cursor.y < H + 2 && engaged(s, now)
   function openSpot(s, near) {
     const spans = s.fix.map((f) => [f.x - 20, f.x + f.w + 20]).sort((a, b) => a[0] - b[0])
@@ -298,9 +302,9 @@
         this.y = MAXY
         this.vy = 0
         this.onGround = true
-      } else if (this.y < 0) {
-        // the top of the bar is a hard ceiling: bounce off it
-        this.y = 0
+      } else if (this.y < -SPILL) {
+        // a little above the bar's top edge is a hard ceiling: bounce off it
+        this.y = -SPILL
         this.vy = 12
       }
       if (this.onGround && Math.abs(this.vx) > 2) this.leg += Math.abs(this.vx) * dt * 0.28
@@ -439,6 +443,15 @@
           this.spawn = 0.8
           return FAST
         }
+      }
+      if (keying(s, now) && lively) {
+        // the player flies him: the autopilot keeps its hands off
+        const kd = keyDir(s)
+        if (kd) this.dir = kd
+        this.physics(dt, s, kd, this.onGround ? 34 : 46)
+        this.joust(s, now)
+        this.collect(s)
+        return FAST
       }
       const t = this.target(now)
       const dx = wdx(t.x - this.x, s.W)
@@ -923,6 +936,23 @@
       s.data.lastClick = now
       k.order = { x: p.x, y: clamp(p.y - SH / 2, 0, MAXY), until: now + 2000 }
       k.flap(28)
+    },
+    onKey(s, key, down) {
+      const k = s.data.knight
+      if (!down || !k || k.out > 0 || k.held) return
+      k.sleeping = false
+      if (key === 'fire' || key === 'up') {
+        k.flapCd = 0
+        k.flap(key === 'fire' ? 26 : 22)
+      } else if (key === 'down') {
+        if (!k.onGround) k.vy = Math.max(k.vy, 40)
+      } else {
+        const kd = key === 'left' ? -1 : 1
+        if (kd !== k.dir && k.onGround && Math.abs(k.vx) > 12) k.skid = 0.2
+        k.dir = kd
+        k.vx += kd * 6 // the first push happens now
+      }
+      s.poke()
     },
     onBusy(s) {
       s.data.mode = 'busy'

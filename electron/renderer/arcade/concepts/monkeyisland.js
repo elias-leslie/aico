@@ -339,9 +339,31 @@
       return this.on && this.tx !== null
     }
     hit(x, y) {
-      if (!this.on) return false
-      const top = FLOOR + this.yOff - (this.small ? 11 : this.pose === 'sit' ? 17 : 24)
-      return Math.abs(x - this.x) <= (this.small ? 6 : 5) && y >= top && y <= FLOOR + this.yOff
+      if (!this.on || this.x < -4 || this.x > (this.s?.W ?? 1e9) + 4) return false
+      const top = FLOOR + this.yOff - (this.small ? 13 : this.pose === 'sit' ? 18 : 27)
+      return Math.abs(x - this.x) <= (this.small ? 9 : 8) && y >= top && y <= FLOOR + this.yOff + 1
+    }
+    // only Guybrush can be picked up, and only when he isn't busy on a rope or in a fight
+    get grabbable() {
+      const d = this.s?.data
+      return this.key === 'G' && !!d && this.on && !d.zip && !d.fight && !d.resting && !this.ride
+    }
+    grab(p) {
+      grabGuy(this.s, this, p)
+    }
+    drag(p) {
+      if (!this.held) return
+      this.s.data.grabAt = performance.now()
+      this.x = clamp(p.x, 6, this.s.W - 6)
+      const sp = this.set.hang
+      this.yOff = clamp(Math.round(p.y - 1 - (FLOOR - sp.h + sp.off)), -9, 0)
+      if (this.s.cursor) this.dir = this.s.cursor.x >= this.x ? 1 : -1
+    }
+    drop() {
+      dropGuy(this.s, this)
+    }
+    onDblClick() {
+      dblChar(this.s, this)
     }
     /** Walk to x. Long crossings of a wide bar get a brisker pace. */
     goto(x, cb = null, at = null, speed = 0) {
@@ -361,6 +383,24 @@
     }
     update(dt, now, s) {
       if (!this.on) return Infinity
+      if (this.held) return FAST // dangling from the cursor: no walking
+      if (this.fallV !== undefined) {
+        // let go: a short drop back to the floor
+        this.fallV += 400 * dt
+        this.yOff = Math.min(0, this.yOff + this.fallV * dt)
+        if (this.yOff >= 0) {
+          this.fallV = undefined
+          s.burst(this.x, FLOOR - 1, 4, ['n', 'w'])
+        }
+        return FAST
+      }
+      if (this.keyWalk) {
+        // A/D: you walk him (a cutscene walk resumes when you let go)
+        this.dir = this.keyWalk
+        this.x = clamp(this.x + this.keyWalk * WALK * 1.6 * dt, 6, s.W - 6)
+        this.ft += dt * 1.6
+        return FAST
+      }
       let want = Infinity
       if (this.ride) {
         // the monkey sits on LeChuck's hat
@@ -397,7 +437,7 @@
     }
     sprite(s) {
       const set = this.set
-      if (this.tx !== null && this.pose !== 'hang') return set.walk[Math.floor(this.ft * 8) % set.walk.length]
+      if ((this.tx !== null || this.keyWalk) && this.pose !== 'hang') return set.walk[Math.floor(this.ft * 8) % set.walk.length]
       const L = s.data.line
       const talking = L && L.who === this && performance.now() < L.until
       let p = this.pose
@@ -427,6 +467,45 @@
     }
     onClick() {
       clickChar(this.s, this)
+    }
+  }
+
+  // The bar's loose props: the grog puddle and the washing line. Clickable for a remark.
+  class Props {
+    constructor(s) {
+      this.s = s
+      this.prop = true
+      this.z = 1
+    }
+    update() {
+      return Infinity
+    }
+    draw() {}
+    which(x, y) {
+      const d = this.s.data
+      if (d.puddle && Math.abs(x - d.puddle.x) <= 8 && y >= FLOOR - 6) return 'puddle'
+      if (d.rope && !d.zip) {
+        const r = rope(this.s)
+        if (x >= r.x0 && x <= r.x1 && Math.abs(y - ropeY(this.s, x)) <= 4) return 'rope'
+      }
+      return null
+    }
+    hit(x, y) {
+      return !!this.which(x, y)
+    }
+    verbAt(p) {
+      const w = this.which(p.x, p.y)
+      return w ? PROP_LINES[w].verb : null
+    }
+    onClick(p) {
+      const s = this.s
+      const d = s.data
+      const w = this.which(p.x, p.y)
+      s.data.clickAt = performance.now()
+      if (!w || !d.cast.G.on || d.resting) return
+      const list = PROP_LINES[w].lines
+      d.look[w] = ((d.look[w] ?? -1) + 1) % list.length
+      aside(s, 'G', list[d.look[w]])
     }
   }
 
@@ -927,6 +1006,34 @@
     EL: ['Governor Marley. Nice to meet you.', 'Please stop staring at me.'],
     MK: ['Eek!', 'Eek! Eek! Eek!', 'Eek eek?'],
   }
+  // what Guybrush says about whatever he is holding, when you click him
+  const ITEM_LINES = {
+    mug: ["It's melting my fingerprints off.", 'Sip? No. Survive? Yes.', 'Somebody hold this. Nobody? Fine.'],
+    chicken: ['Squeak.', 'It squeaks in a meaningful way.', 'A pulley. In a chicken. Why not.'],
+    diamond: ['Shiny. Possibly stolen.', 'Definitely stolen. By me. Hi.'],
+    rootbeer: ['For ghosts only. Mostly.', 'Do NOT shake.'],
+    banana: ['Here, monkey monkey monkey...', 'Detecting... detecting...'],
+  }
+  const DUEL_POKE = ['Hey! No help from the audience!', 'Who is poking me mid-insult?', 'Not now, I am being witty!']
+  const GRAB_LINES = ['Whoa! Put me down!', 'I bruise like a peach!', 'Is this a pirate thing?', 'Higher! No, lower! No, DOWN!']
+  const DROP_LINES = ['Oof. Thank you. I think.', 'I meant to land like that.', 'Mighty pirates always land on their feet.']
+  const BREATH_END = ['Gasp! Nine minutes, fifty-nine!', 'Gasp! New record. Probably.', 'Gasp! Did anyone time that?']
+  // a character notices the cursor hovering over them
+  const NOTICE = {
+    G: ['Can I help you?', 'Are you a ghost? Blink twice.'],
+    P1: ['What are ye looking at?', 'Eyes front, swab.'],
+    P2: ['Ye want a fight, pointer?', 'Arr. A floating hand. Seen worse.'],
+    P3: ['Is that a new kind of parrot?', 'Hover any closer and ye buy the grog.'],
+    ST: ['A customer! I can feel it!', 'Interested? You look interested!'],
+    CA: ['Stop hovering. It is rude.', 'Want a lesson too?'],
+    LC: ['You dare point at LeChuck?', 'I can see you, mortal.'],
+    EL: ['Can I help you with something?', 'I see you there.'],
+    MK: ['Eek?', 'Eek eek!'],
+  }
+  const PROP_LINES = {
+    puddle: { verb: 'Look at puddle', lines: ["It's eating through the floorboards.", 'I think it just hissed at me.', 'Somewhere, a mug mourns.'] },
+    rope: { verb: 'Look at washing line', lines: ['A washing line. Chicken-compatible.', 'Taut, sturdy, slightly damp.'] },
+  }
   const SPOTS = {
     eyes: { verb: 'Look at strange eyes', lines: ["They're watching me. Probably a pirate thing.", 'Two eyes. Twice what Pirate Two has.'] },
     title: { verb: 'Read sign', lines: ["It's the name of this place. I think.", 'Sounds like a grog brand.'] },
@@ -945,7 +1052,7 @@
     const now = performance.now()
     const who = key === 'VL' ? null : d.cast[key]
     const ms = lineMs(text)
-    d.line = { who, key, text, until: now + ms, color: CAST[key].color, step: fromStep }
+    d.line = { who, key, text, until: now + ms, start: now, color: CAST[key].color, step: fromStep }
     // Stan never stops moving: his arms change with every sentence
     if (who && who.key === 'ST' && (who.pose === 'wave' || who.pose === 'wave2')) who.pose = who.pose === 'wave' ? 'wave2' : 'wave'
     return ms
@@ -985,6 +1092,7 @@
     const d = s.data
     const [k, a, b, c, e] = op
     const ch = d.cast[a]
+    if (ch && (k === 'on' || k === 'go' || k === 'off')) ch.extra = false
     switch (k) {
       case 'card':
         return card(s, a)
@@ -1194,6 +1302,49 @@
     return FAST
   }
 
+  // Between the insults of a busy bout the two keep fencing: parries, sparks and footwork.
+  function spar(s, now) {
+    const d = s.data
+    const f = d.fight
+    if (!f || !f.spar || f.after || d.clash || !d.duel) return Infinity
+    const g = d.cast.G
+    const o = d.duel.opp
+    if (!o || !o.on || !g.on || g.held || g.moving || o.moving) return Infinity
+    if (now < (d.sparAt || 0)) return d.sparAt - now
+    d.sparAt = now + rand(160, 300)
+    d.sparN = (d.sparN || 0) + 1
+    const hi = Math.random() < 0.5
+    g.pose = hi ? 'hi' : 'lo'
+    o.pose = Math.random() < 0.7 ? (hi ? 'lo' : 'hi') : g.pose
+    if (d.sparN % 3 === 0) clashBurst(s)
+    if (d.sparN % 5 === 0) {
+      // a lunge and a retreat, swapping who presses
+      const toward = o.x > g.x ? 1 : -1
+      const k = d.sparN % 10 === 0 ? 1 : -1
+      g.x = clamp(g.x + toward * 2 * k, 6, s.W - 6)
+      o.x = clamp(o.x + toward * 2 * k, 6, s.W - 6)
+      g.face(o.x)
+      o.face(g.x)
+    }
+    return FAST
+  }
+
+  // Busy: the bar is rowdy. Bystanders bounce on their heels, cheering any fight.
+  const CROWD = ['P1', 'P2', 'P3', 'ST', 'CA', 'EL']
+  function rowdy(s, now) {
+    const d = s.data
+    let any = false
+    for (const [i, k] of CROWD.entries()) {
+      const c = d.cast[k]
+      const on = s.busy && c.on && !c.moving && !c.held && !c.ride && (!d.duel || d.duel.opp !== c) && c.x > 0 && c.x < s.W
+      const b = on ? (Math.floor(now / 230 + i * 1.7) % 3 === 0 ? -1 : 0) : 0
+      if (c.yOff !== b && (on || c.bobbing)) c.yOff = b
+      c.bobbing = on
+      any ||= on
+    }
+    return any ? FAST : Infinity
+  }
+
   // Busy: a short insult-swordfight bout, then the story carries on.
   const BOUT_ROUNDS = 3
   function busyFight(s, now) {
@@ -1222,14 +1373,16 @@
     const span = Math.max(30, st[1] - st[0])
     const ox = Math.round(st[0] + span * 0.2)
     const gx = Math.round(Math.min(st[0] + span * 0.8, ox + 34))
+    // already squared up nearby (the pirates' corner): fight right there, no walking
+    const gap = Math.abs(opp.x - g.x)
+    const inPlace = !brought && g.on && !g.moving && !opp.moving && gap >= 16 && gap <= 90 && g.x > 0 && g.x < s.W && opp.x > 0 && opp.x < s.W
+    if (inPlace) d.fight.gHome = null
     const steps = [
-      ['go', 'G', gx, true],
-      key === 'LC' && brought ? ['appear', 'LC', ox] : ['on', key, ox, 'offL', true],
-      ['sync'],
+      ...(inPlace ? [] : [['go', 'G', gx, true], key === 'LC' && brought ? ['appear', 'LC', ox] : ['on', key, ox, 'offL', true], ['sync']]),
       ['face', 'G', key], ['face', key, 'G'],
       ['say', key, key === 'LC' ? ['Threepwood! Draw your sword!', 'Time to die, Threepwood!'] : key === 'CA' ? ['Again? Fine. En garde!', 'Lesson time, kid.'] : ['En garde, landlubber!', 'Fancy a fight, mighty pirate?']],
       ['pose', 'G', 'hi'], ['pose', key, 'hi'],
-      ['bout', key, BOUT_ROUNDS],
+      ['bout', key, d.bouts++ ? 2 : BOUT_ROUNDS], // later bouts in a long busy stretch are shorter
     ]
     d.frames.push({ steps, i: 0, fight: true, variant: Math.floor(Math.random() * 6) })
     d.nextAt = 0
@@ -1262,10 +1415,12 @@
     g.tx = null
   }
 
-  function rewindLine(s) {
+  /** Put an interrupted script line back to be said again (unless it was mostly heard). */
+  function rewindLine(s, heard = Infinity) {
     const d = s.data
     const L = d.line
-    if (L && performance.now() < L.until && L.step >= 0) {
+    const now = performance.now()
+    if (L && now < L.until && L.step >= 0 && now - L.start < heard) {
       const fr = d.frames[d.frames.length - 1]
       if (fr && fr.say === L.step) fr.i = L.step
     }
@@ -1277,7 +1432,7 @@
     for (let guard = 0; guard < 60; guard++) {
       if (now < d.nextAt) return d.nextAt - now
       if (d.waitWalk) {
-        if (Object.values(d.cast).some((c) => c.moving)) return Infinity // walkers tick FAST themselves
+        if (Object.values(d.cast).some((c) => c.moving && !c.extra)) return Infinity // walkers tick FAST themselves
         d.waitWalk = false
       }
       if (d.clash) return Infinity
@@ -1293,6 +1448,11 @@
       }
       const idx = fr.i++
       const op = fr.steps[idx]
+      if (idx >= (fr.hi ?? 0)) {
+        // a new step (not a replay of an interrupted line): the story is back on time
+        fr.hi = idx + 1
+        d.plotDue = 0
+      }
       if (op[0] === 'clash') {
         clash(s, op[1])
         d.nextAt = now + 900
@@ -1300,6 +1460,7 @@
       }
       if (op[0] === 'bout') {
         // a busy bout: a few rounds, then the opponent gives up
+        if (d.fight) d.fight.spar = true
         d.frames.push({ steps: [...duelSteps(s, op[1], op[2]), ['outlasted']], i: 0, duel: true, variant: 0 })
         continue
       }
@@ -1310,7 +1471,8 @@
       if (op[0] === 'endfight') {
         d.fight = null
         d.duel = null
-        d.fightCool = now + 45000
+        // while the agent keeps working, another challenger turns up soon
+        d.fightCool = now + (s.busy ? rand(14000, 22000) : 30000)
         continue
       }
       const ms = exec(s, op, fr, idx)
@@ -1327,16 +1489,204 @@
   // ---- interaction --------------------------------------------------------------------
   function aside(s, key, text) {
     const d = s.data
-    rewindLine(s)
+    const now = performance.now()
+    if (d.plotDue && now - d.plotDue > 3500) {
+      // the story has waited long enough: remarks float up without holding it back
+      const who = key === 'VL' ? null : d.cast[key]
+      s.say(text, who ? who.x : s.W / 2, 9, { color: CAST[key].color, life: 2.4, size: 8 })
+      return
+    }
+    const due = d.nextAt
+    rewindLine(s, 1400)
     const ms = speak(s, key, text)
-    d.nextAt = Math.max(d.nextAt, performance.now() + ms + 300)
+    // the story only steps aside briefly: its next line takes over after a couple of seconds
+    d.nextAt = Math.max(d.nextAt, now + Math.min(ms + 300, 2400))
+    if (d.nextAt > due && !d.plotDue) d.plotDue = Math.max(due, now)
   }
+  // someone is playing: a click or drag in the last 9 s, or the cursor moving over the bar
+  const engaged = (s, now) =>
+    now - s.keyAt < 9000 || now - (s.data.clickAt || -1e9) < 9000 || now - (s.data.grabAt || -1e9) < 9000 || (s.cursor && now - s.cursor.since < 2500)
+
+  // ---- keyboard: A/D walk Guybrush, W talks to whoever is nearest, S looks around, Space skips the line ----
+  function keyWalkDir(s) {
+    const d = s.data
+    const g = d.cast.G
+    const lr = (s.keys.has('right') ? 1 : 0) - (s.keys.has('left') ? 1 : 0)
+    if (!lr || !g.on || g.held || d.zip || g.ride || d.resting || (d.fight && d.fight.spar && !d.fight.after)) return 0
+    return lr
+  }
+  function onKey(s, k, down) {
+    const d = s.data
+    if (!down || !d.cast) return
+    const now = performance.now()
+    if (d.resting) leaveRest(s, now)
+    const g = d.cast.G
+    if (k === 'fire') {
+      const L = d.line
+      if (L && now < L.until) {
+        // the SCUMM skip-line
+        d.line = null
+        if (L.step >= 0) d.nextAt = Math.min(d.nextAt, now + 150)
+        return
+      }
+      if (!g.on || g.held || d.zip) return
+      if (d.fight && d.fight.spar && !d.fight.after) {
+        // a lunge of your own between insults
+        g.pose = g.pose === 'hi' ? 'lo' : 'hi'
+        clashBurst(s)
+        return
+      }
+      if (!d.fight && ['stand', 'hold', 'chin', 'talk'].includes(g.pose)) {
+        const prev = g.pose
+        g.pose = 'front'
+        aside(s, 'G', "I'm Guybrush Threepwood, mighty pirate!")
+        d.timers.push({ at: now + 2800, fn: () => g.pose === 'front' && (g.pose = prev) })
+      }
+      return
+    }
+    if (!g.on) return
+    if (k === 'up') {
+      let best = null
+      for (const c of Object.values(d.cast))
+        if (c !== g && c.on && c.x > 0 && c.x < s.W && Math.abs(c.x - g.x) < 90 && (!best || Math.abs(c.x - g.x) < Math.abs(best.x - g.x))) best = c
+      if (best) {
+        g.face(best.x)
+        clickChar(s, best)
+      } else aside(s, 'G', pick(['Nobody to talk to. Story of my life.', 'Hello? Anyone? Pirates?']))
+    } else if (k === 'down') {
+      const props = s.actors.find((a) => a instanceof Props)
+      if (d.puddle && Math.abs(d.puddle.x - g.x) < 24) props.onClick({ x: d.puddle.x, y: FLOOR - 1 })
+      else clickChar(s, g)
+    }
+  }
+
   function clickChar(s, ch) {
     const d = s.data
-    if (d.resting) return
-    const list = LOOKS[ch.key]
-    d.look[ch.key] = ((d.look[ch.key] ?? -1) + 1) % list.length
-    aside(s, ch.key, list[d.look[ch.key]])
+    const now = performance.now()
+    d.clickAt = now
+    if (d.resting) leaveRest(s, now)
+    if (!ch.on) return
+    // click whoever is talking and they hurry up (the SCUMM skip-line); the plot just moves on
+    const L = d.line
+    if (L && L.who === ch && now < L.until && L.step >= 0) {
+      d.line = null
+      d.nextAt = Math.min(d.nextAt, now + 150)
+      return
+    }
+    if (ch.key === 'G') {
+      d.gClicks = (d.gClicks || []).filter((t) => now - t < 2600)
+      d.gClicks.push(now)
+      if (d.gClicks.length >= 5 && !d.fight && !d.zip && !ch.held) {
+        d.gClicks.length = 0
+        return lookBehind(s)
+      }
+    }
+    let list = LOOKS[ch.key]
+    let tag = ch.key
+    if (d.duel && (ch === d.duel.opp || ch.key === 'G') && ch.pose !== 'stand') [list, tag] = [DUEL_POKE, 'duel']
+    else if (ch.key === 'G' && ch.pose === 'blue') [list, tag] = [['Mmmph!', 'Mmm-mmph mmph!'], 'blue']
+    else if (ch.key === 'G' && ch.item && ITEM_LINES[ch.item]) [list, tag] = [ITEM_LINES[ch.item], ch.item]
+    d.look[tag] = ((d.look[tag] ?? -1) + 1) % list.length
+    aside(s, ch.key, list[d.look[tag]])
+  }
+  function dblChar(s, ch) {
+    const d = s.data
+    const now = performance.now()
+    d.clickAt = now
+    const g = d.cast.G
+    if (d.resting || !ch.on) return
+    if (ch.key === 'G' && !ch.held && !d.fight && !d.zip && ['stand', 'hold', 'chin', 'front', 'talk'].includes(ch.pose)) {
+      // "I can hold my breath for ten minutes!"
+      const prev = ch.pose
+      ch.pose = 'blue'
+      aside(s, 'G', '(holds breath)')
+      d.timers.push({ at: now + 2800, fn: () => {
+        if (ch.pose !== 'blue') return
+        ch.pose = prev
+        aside(s, 'G', pick(BREATH_END))
+      } })
+      return
+    }
+    if (ch.key === 'LC' && g.on && !g.held && !d.zip && !g.ride && g.fallV === undefined) {
+      // BOO: Guybrush jumps out of his boots
+      aside(s, 'LC', 'BOO!')
+      g.yOff = -6
+      g.fallV = -30
+      d.timers.push({ at: now + 900, fn: () => aside(s, 'G', pick(['Yikes!', 'I was NOT scared.', 'My boots! Where are my... oh.'])) })
+      return
+    }
+    clickChar(s, ch)
+  }
+  // Five quick clicks on Guybrush: the oldest trick in the Caribbean, and this time it is real.
+  function lookBehind(s) {
+    const d = s.data
+    const g = d.cast.G
+    const now = performance.now()
+    const l = 'Look behind you! A three-headed monkey!'
+    aside(s, 'G', l)
+    const t0 = now + lineMs(l) + 200
+    const others = ['P1', 'P2', 'P3', 'ST', 'CA', 'EL', 'LC'].map((k) => d.cast[k]).filter((c) => c.on && c.x > 0 && c.x < s.W)
+    d.timers.push({ at: t0, fn: () => {
+      for (const c of others) if (c.on && !c.moving) c.dir = c.x > g.x ? 1 : -1
+      if (others[0] && others[0].on) aside(s, others[0].key, 'Where?!')
+    } })
+    const mk = d.cast.MK
+    const real = !mk.on && Math.random() < 0.6
+    if (real)
+      d.timers.push({ at: t0 + 700, fn: () => {
+        if (mk.on || d.resting) return
+        // it actually scampers across, behind everyone's backs
+        const fromR = g.x < s.W / 2
+        mk.on = true
+        mk.ride = null
+        mk.yOff = 0
+        mk.x = fromR ? s.W + 16 : -16
+        mk.goto(fromR ? -16 : s.W + 16, () => {
+          mk.on = false
+          mk.extra = false
+        }, null, 150)
+        mk.extra = true // a cameo: the script never waits on it
+        aside(s, 'MK', 'Eek! Eek! Eek!')
+      } })
+    d.timers.push({ at: t0 + 3000, fn: () => {
+      const o = others.find((c) => c.on)
+      if (o) {
+        o.face(g.x)
+        aside(s, o.key, real ? pick(['...Did anyone else see that?', 'Blimey. There WAS one.']) : 'Hey! There is no monkey!')
+      } else if (g.on) aside(s, 'G', real ? 'Huh. There really was one.' : 'Works every time.')
+    } })
+    if (d.timers.length > 24) d.timers.splice(0, d.timers.length - 24)
+  }
+  // pick Guybrush up by the scruff; the plot waits on him only if it needed him to walk somewhere
+  function grabGuy(s, g, p) {
+    const d = s.data
+    const now = performance.now()
+    d.grabAt = now
+    if (!g.grabbable || g.held) return
+    g.held = { pose: g.pose }
+    g.fallV = undefined
+    g.zz = false
+    g.pose = 'hang'
+    aside(s, 'G', pick(GRAB_LINES))
+    g.drag(p)
+  }
+  function dropGuy(s, g) {
+    const d = s.data
+    const now = performance.now()
+    d.grabAt = now
+    if (!g.held) return
+    if (g.pose === 'hang') g.pose = g.held.pose === 'hang' ? 'stand' : g.held.pose
+    g.held = null
+    g.fallV = 0
+    d.timers.push({ at: now + 500, fn: () => g.on && aside(s, 'G', pick(DROP_LINES)) })
+    // then wander back to his mark, if the scene has one for him
+    d.timers.push({ at: now + 3200, fn: () => {
+      if (!g.on || g.held || g.moving || d.fight || d.zip || d.resting) return
+      if (typeof g.at === 'string' && !g.at.startsWith('off') && g.at[0] !== '@') {
+        const x = spot(s, g.at)
+        if (Math.abs(x - g.x) > 4) g.goto(x, null, g.at)
+      }
+    } })
   }
   function spotAt(s, p) {
     for (const f of s.dots) if (p.x >= f.x - 2 && p.x <= f.x + f.w + 2 && p.y >= f.y - 2 && p.y <= f.y + f.h + 2) return f
@@ -1378,7 +1728,8 @@
     if (!c || c.y < 0 || c.y > H || c.x < 0 || c.x > s.W) return null
     const d = s.data
     const a = s.actorAt(c)
-    if (a && a.key) return a.key === 'G' ? 'Talk to Guybrush' : `Talk to ${CAST[a.key].name}`
+    if (a && a.verbAt) return a.verbAt(c)
+    if (a && a.key) return a.key === 'G' ? (a.held ? 'Put down Guybrush' : 'Talk to Guybrush') : `Talk to ${CAST[a.key].name}`
     const f = spotAt(s, c)
     if (f && SPOTS[f.kind]) return SPOTS[f.kind].verb
     return d.cast.G.on ? 'Walk to' : null
@@ -1465,6 +1816,7 @@
       d.cast[k] = c
       s.actors.push(c)
     }
+    s.actors.push(new Props(s))
     d.ep = 0
     startEpisode(s)
     // capture-only (inert without ?t=): open on a named scene, e.g. &scene=stan
@@ -1488,7 +1840,13 @@
     d.melt = 0
     d.duelTurn = 0
     d.fightCool = 0
+    d.bouts = 0
     d.resting = false
+    d.clickAt = -1e9
+    d.grabAt = -1e9
+    d.noticeAt = 0
+    d.monkeyAt = 0
+    d.startleAt = 0
   }
 
   function update(s, dt, now) {
@@ -1496,15 +1854,19 @@
     if (KEEP_AWAKE && !s.napping) s.lastTouch = now
     if (d.line && now >= d.line.until) d.line = null
     if (d.card && now >= d.card.until) d.card = null
+    d.cast.G.keyWalk = s.lively(now) && !d.resting ? keyWalkDir(s) : 0
     if (!s.lively(now)) {
       if (!d.resting) enterRest(s)
       return Infinity
     }
     if (d.resting) leaveRest(s, now)
+    if (d.cast.G.keyWalk && d.cast.G.pose === 'sit') d.cast.G.pose = 'stand'
     if (d.wantFight && !d.zip) {
       d.wantFight = false
       if (s.busy) busyFight(s, now)
     }
+    // busy: the bar never stays peaceful for long
+    if (s.busy && !d.fight && !d.zip && !d.card && !d.waitWalk && !d.clash && now > d.fightCool && !d.cast.G.held) busyFight(s, now)
     let wait = Infinity
     if (d.timers.length) {
       const due = d.timers.filter((t) => t.at <= now)
@@ -1513,16 +1875,55 @@
       for (const t of d.timers) wait = Math.min(wait, t.at - now)
     }
     wait = Math.min(wait, stepClash(s, now))
+    wait = Math.min(wait, spar(s, now))
+    wait = Math.min(wait, rowdy(s, now))
     wait = Math.min(wait, runScript(s, now))
     if (d.zip) hangFrom(s)
-    // Guybrush glances at a lingering cursor (coarse updates: long cooldown)
+    // Guybrush glances at a lingering cursor (coarse updates: long cooldown);
+    // while you are playing he keeps an eye on it properly
     const g = d.cast.G
     const c = s.cursor
-    if (g.on && !g.moving && !d.fight && c && c.y >= 0 && c.y <= H && Math.abs(c.x - g.x) > 30 && !(d.line && d.line.who)) g.face(c.x, now, 2500)
+    const user = engaged(s, now)
+    if (g.on && !g.moving && !g.keyWalk && !g.held && !d.fight && !d.zip && c && c.y >= 0 && c.y <= H && !(d.line && d.line.who === g)) {
+      if (user ? Math.abs(c.x - g.x) > 12 : Math.abs(c.x - g.x) > 30 && !(d.line && d.line.who)) g.face(c.x, now, user ? 700 : 2500)
+    }
+    if (c && c.y >= 0 && c.y <= H) wait = Math.min(wait, cursorReactions(s, now, c))
     if (d.line) wait = Math.min(wait, d.line.until - now)
     if (d.card) wait = Math.min(wait, d.card.until - now)
     if (!s.busy) wait = Math.min(wait, Math.max(50, s.lastTouch + 30000 + 20 - now))
+    if (s.keys.size) wait = Math.min(wait, FAST)
     return Math.max(10, wait)
+  }
+
+  // characters notice the cursor: a hover gets a remark, the monkey bolts, a fast swipe startles Guybrush
+  function cursorReactions(s, now, c) {
+    const d = s.data
+    if (d.resting || d.card) return Infinity
+    const g = d.cast.G
+    const mk = d.cast.MK
+    if (mk.on && !mk.ride && mk.tx === null && Math.abs(c.x - mk.x) < 14 && now > d.monkeyAt) {
+      d.monkeyAt = now + 1500
+      const away = mk.x > c.x ? 1 : -1
+      mk.x = clamp(mk.x + away * 12, 8, s.W - 8)
+      mk.dir = -away
+      s.burst(mk.x, FLOOR - 4, 3, ['k', 'w'])
+      if (!d.line) speak(s, 'MK', 'Eek!')
+      return FAST
+    }
+    if (g.on && !g.held && !d.zip && !g.ride && g.fallV === undefined && (c.speed || 0) > 450 && Math.abs(c.x - g.x) < 10 && now > d.startleAt) {
+      d.startleAt = now + 12000
+      g.yOff = -4
+      g.fallV = -20
+      if (!d.line) speak(s, 'G', pick(['Whoa!', 'Did a seagull just...?']))
+      return FAST
+    }
+    if (d.line || (c.speed || 0) > 40 || now < d.noticeAt || now - c.since < 1100) return Infinity
+    const who = Object.values(d.cast).find((ch) => ch.on && !ch.moving && !ch.held && ch.x > 0 && ch.x < s.W && Math.abs(c.x - ch.x) <= 8 && c.y > 6)
+    if (!who) return Infinity
+    d.noticeAt = now + 15000
+    if (who !== g || !d.fight) who.face(c.x)
+    aside(s, who.key, pick(NOTICE[who.key]))
+    return Infinity
   }
 
   function textBox(c, s, str, x) {
@@ -1565,10 +1966,11 @@
     title: 'The Secret of Monkey Island — big',
     sub: 'Lucasfilm Games, 1990',
     blurb:
-      'A three-part adventure plays out in the bar and keeps looping with shuffled scenes and new lines: Guybrush meets the three important-looking pirates, drinks mug-melting grog, dodges Stan, passes the Sword Master, zip-lines over the sign on his rubber chicken to steal the diamond and faces LeChuck’s ghost; part two ends with root beer, part three with a real three-headed monkey. Each character talks in their own colour. Hover for the sentence line and click a character to hear them. Working starts a short insult swordfight, done wins it or brings on the scene’s punchline, and when idle Guybrush sits down for a nap and the story waits.',
+      'A three-part adventure plays out in the bar by itself and keeps looping with shuffled scenes and new lines: Guybrush meets the three important-looking pirates, drinks mug-melting grog, dodges Stan, passes the Sword Master, zip-lines over the sign on his rubber chicken to steal the diamond and faces LeChuck’s ghost; part two ends with root beer, part three with a real three-headed monkey. Each character talks in their own colour. Hover for the sentence line; characters notice a lingering <b>cursor</b>, the monkey bolts from it and Guybrush keeps an eye on it. Click anyone for a remark that fits the moment (what Guybrush is holding, a poke mid-duel), click whoever is talking to hurry the line along, click the grog puddle or the washing line, pick Guybrush up and drop him somewhere, double-click him to hold his breath, double-click LeChuck for a BOO. Click Guybrush five times fast and he tries the old three-headed-monkey trick; sometimes it is real. The story never waits for you. Working turns the bar rowdy, with insult swordfights breaking out every so often; done wins the bout or brings on the scene’s punchline, and when idle Guybrush sits down for a nap and the story waits.',
     setup,
     update,
     onBusy(s) {
+      s.data.bouts = 0
       s.data.wantFight = true
     },
     onDone(s) {
@@ -1593,6 +1995,7 @@
         aside(s, 'G', QUIPS[d.quip])
       }
     },
+    onKey,
     onNap(s) {
       s.data.wantFight = false
     },

@@ -490,6 +490,9 @@
       'My chain is real gold. Mostly. Ask me how.', "I may not be tall, but I lie down great.", "I'm like a fine wine. I come in a box.",
       'Want to see my etchings? I have one.', 'Do you believe in love at first squint?', 'Hi. Larry. I have a car. Well, a bus pass.',
       'Feel this lapel. Go on. Feel it.', "I'm not drunk. I'm intoxicated by you.", 'Excuse me, is this seat taken? By me?',
+      'Is that a slot machine? Because I hit the jackpot.', "My hot tub seats two. Or one and a half if it's me.",
+      "I'm not wearing underwear. I lost a bet. Twice.", "I'd buy you a drink, but I'd rather give you the money.",
+      'They say I have the hips of a much younger man.', "Let's skip dinner. I already ate a breath mint.",
     ],
     brush: [
       'Not if you were the last man in Nevada.', 'My husband wrestles bears. For fun.', "I'd rather kiss the drunk.", 'Ew. And also: ew.',
@@ -507,10 +510,44 @@
       'Larry Laffer. Wide lapels. Wider hopes.', 'Your comb-over is holding. For now.', 'You check your fly. All systems go.',
       'A gold chain, an open shirt. Irresistible.', '38 and single. Mostly the single part.', 'Your equipment works. Probably.',
       'Chest hair: present. Dignity: pending.', 'You smell of breath spray and hope.',
+      'The suit is tight in all the wrong places.', 'Your fly is open. It always is. Optimism.',
+      'A ladies\' man. The ladies have not been told.', 'Larry Laffer: lover, fighter, mostly napper.',
     ],
     later: ['Some time later...', 'Several minutes later... okay, two.', 'Later. A little later. Not much.', 'Meanwhile, out of view...'],
     bye: ['Thank you for playing. Stay frisky.', 'Thanks for playing. Wash that suit.', 'The end. Larry will be back. He always is.', 'Game over. Larry, never.'],
-    cursor: ['Hey there, pointer. Come here often?', 'Nice arrow. Is it pointing at me?', 'You clicked? I knew you would.', 'Easy, cursor. Buy me a drink first.', 'Hover any closer and we are engaged.'],
+    cursor: [
+      'Hey there, pointer. Come here often?', 'Nice arrow. Is it pointing at me?', 'You clicked? I knew you would.', 'Easy, cursor. Buy me a drink first.',
+      'Hover any closer and we are engaged.', "Careful, pointer. I'm a live wire down here.", 'Is that a cursor or are you happy to see me?',
+      'You and me, mouse. Double-click and find out.',
+    ],
+    // clicking Larry again and again
+    poke: [
+      "Hey! Watch the polyester. It's dry-clean only.", "Poke me again. I dare you. Please.", "Ooh. Do that again, but lower.",
+      "That tickles. And I'm not that kind of guy. Usually.", 'Careful. The chain is load-bearing.', "Easy, I'm saving myself. For anyone.",
+      "You can touch the merchandise. That's what it's for.", 'I bruise like a peach. A sexy peach.',
+    ],
+    sprayL: ['Minty fresh. Ladies, form a line.', 'Kissable. Theoretically.', 'Now I taste like a candy cane. Ask me how.', 'Breath: 10. Rest of me: pending.'],
+    pants: ['Your pants fall down. Nobody notices. Worse.', 'Pants: down. Dignity: also down.', 'The boxers have hearts. The hearts are hopeful.'],
+    pantsUp: ['...Nobody saw that.', 'Air conditioning. Very refreshing.', 'That was on purpose. A preview.'],
+    drag: ["Whoa! Put me down! ...Unless you're a lady.", 'Higher! I can see down her dress from here!', "I'm flying! Like a polyester eagle!", 'Easy! I bruise! Sexily!'],
+    land: ['Stuck the landing. Ladies?', 'I meant to do that. Smooth.', 'Ow. My... everything.'],
+  }
+  // the cursor lingering on someone
+  const HOVER = {
+    B: ['Lookin\' or drinkin\', pal?', 'Hands off my bar rag.'],
+    W: ['Eyes up here, pointer.', 'Hover somewhere else, creep.', 'Is that thing yours or his?'],
+    D: ['Hic. Two arrowsh. Nishe.', 'Point at me again. I dare ya. Hic.'],
+    M: ['You pointin\' at me?', 'No hovering. House rule.'],
+    F: ['Ooh, a pointer. Is it rich?', 'Mm. Point that somewhere useful.'],
+    C: ['Touch it, you bought it.', 'Pointing is free. Looking is a dollar.'],
+    K: ['No pointing at the cards.', 'Cursors bet a dollar minimum.'],
+    P: ['Pointing in church? Ten bucks.', 'Are you here to marry him? Somebody should.'],
+    T: ["Meter's running, pointer."],
+  }
+  // what a click on someone makes them do (besides talking)
+  const REPLY = {
+    W: ['Keep your hands where I can see them, Larry.', 'Was that your elbow? It better be.', 'Try that again and lose it.'],
+    F: ['Ooh, frisky. Do you have money?', 'Later, tiger. Bring wine.', 'Was that a pinch? Pinches cost extra.'],
   }
   const BAGS = {}
   function bag(name, arg) {
@@ -953,15 +990,15 @@
     chapel: [['P', 'You may now... kiss the bride.'], ['kiss'], ['score', 20], ['N', 'Someone finally said "I do." +20']],
   }
   const TALK = {
-    B: ["We're out of everything but whiskey.", 'Tip jar is right there, pal.', 'I seen guys like you. Mostly leaving.'],
-    W: ["Don't even think about it.", 'Eyes up here, Polyester.', 'Are you lost, or just ugly?'],
-    D: ["Hic. You're my besht friend.", 'I usedta be a lounge lizard too.', 'Thish bar spins. Ish nice.'],
-    M: ['Move along, sport.', 'Ken says hi.', 'Touch the TV and you die.'],
-    F: ['Gifts first, lover boy.', "Is that a chain or a cry for help?", 'Mmm. Do you have money?'],
-    C: ['Buy something or beat it.', "Don't touch the magazines.", 'Spray is aisle two. Go. Now.'],
-    K: ['Place your bets.', 'No touching the cards.', 'Nice chain. Is it real? No.'],
-    T: ["Meter's running, mac.", 'Seatbelt. Please. For me.'],
-    P: ['Love is patient. I am not.', 'Cash or check?'],
+    B: ["We're out of everything but whiskey.", 'Tip jar is right there, pal.', 'I seen guys like you. Mostly leaving.', "The ladies' room is for ladies, Larry.", 'Last guy in that suit got lucky. In a coma.'],
+    W: ["Don't even think about it.", 'Eyes up here, Polyester.', 'Are you lost, or just ugly?', "I've seen bigger tips on a pencil.", "My last boyfriend was a Chippendale. You're a chip."],
+    D: ["Hic. You're my besht friend.", 'I usedta be a lounge lizard too.', 'Thish bar spins. Ish nice.', 'Shecret: the hooker upstairs likesh roses.', 'I got lucky once. Nineteen shixty... shomething.'],
+    M: ['Move along, sport.', 'Ken says hi.', 'Touch the TV and you die.', 'Leg warmers, man. Leg. Warmers.'],
+    F: ['Gifts first, lover boy.', "Is that a chain or a cry for help?", 'Mmm. Do you have money?', 'A girl likes a big... wallet.', "Talk dirty to me. Say 'cash'."],
+    C: ['Buy something or beat it.', "Don't touch the magazines.", 'Spray is aisle two. Go. Now.', 'The magazines are for reading, pal. READING.', "Rubbers don't come in 'hopeful'."],
+    K: ['Place your bets.', 'No touching the cards.', 'Nice chain. Is it real? No.', "Keep your pants on this time, huh?"],
+    T: ["Meter's running, mac.", 'Seatbelt. Please. For me.', "Don't do anything back there I'd have to clean."],
+    P: ['Love is patient. I am not.', 'Cash or check?', 'Till death do you part. Or till checkout.', 'The bridal suite rents by the hour.'],
   }
   const SPOTS = {
     eyes: { verb: 'talk to eyes', say: ['The eyes follow you. Finally, interest!', 'They blink first. You win.'] },
@@ -1000,7 +1037,58 @@
       return this.tx !== null
     }
     hit(x, y) {
-      return !this.hidden && Math.abs(x - this.x) <= 6 && y >= FLOOR - 24 && y <= FLOOR
+      if (this.hidden || (this.key === 'L' && this.s.data.censor)) return false
+      const top = FLOOR - 27 - (this.lift || 0)
+      return Math.abs(x - this.x) <= 9 && y >= top && y <= FLOOR + 1
+    }
+    get grabbable() {
+      const d = this.s.data
+      return this.key === 'L' && !this.hidden && !d.censor && !d.inCab && !d.paused
+    }
+    // Larry can be picked up by the collar and put down somewhere else
+    grab(p) {
+      const d = this.s.data
+      d.grabAt = performance.now()
+      this.held = true
+      this.anim = null
+      interject(this.s, 'L', bag('drag'))
+      this.drag(p)
+    }
+    drag(p) {
+      this.s.data.grabAt = performance.now()
+      if (!this.held) return
+      const nx = clamp(p.x, 8, this.s.W - 8)
+      if (Math.abs(nx - this.x) > 1.5) this.dir = nx > this.x ? 1 : -1
+      this.x = nx
+      this.lift = clamp(FLOOR - (p.y + 16), 0, 11 + (typeof SPILL_UP === 'number' ? Math.min(7, SPILL_UP) : 0)) // a little past the top
+    }
+    drop() {
+      const d = this.s.data
+      d.grabAt = performance.now()
+      if (!this.held) return
+      this.held = false
+      this.falling = true
+      if (this.tx === null) d.strayed = true
+    }
+    land() {
+      const s = this.s
+      const d = s.data
+      this.falling = false
+      this.lift = 0
+      for (let i = 0; i < 4; i++) s.particle({ img: pix('a'), x: this.x - 6 + i * 4, y: FLOOR - 2, vx: (i - 1.5) * 8, vy: -6, life: 0.4, fade: true })
+      // dropped next to a lady: she does not appreciate it
+      const w = [d.cast.W, d.cast.F].find((a) => a && !a.hidden && !a.moving && Math.abs(a.x - this.x) < 16)
+      if (w && this.tx === null) {
+        w.dir = this.x > w.x ? 1 : -1
+        flash(s, w, 'slap', 900)
+        flash(s, this, 'slapped', 900)
+        s.say('SLAP!', (w.x + this.x) / 2, FLOOR - 25, { color: '#ffe455', life: 0.8, size: 7 })
+        interject(s, w.key, pick(['Did you just fall on me?', 'Nice try, Polyester.', 'Hands. Off. Now.']))
+        return
+      }
+      const dr = d.cast.D
+      if (dr && !dr.hidden && Math.abs(dr.x - this.x) < 16) return interject(s, 'D', 'Hic. Ish raining men.')
+      interject(s, 'L', bag('land'))
     }
     goto(x, speed = WALK, cb = null) {
       this.tx = Math.round(x)
@@ -1013,6 +1101,12 @@
       }
     }
     update(dt, now) {
+      if (this.held) return FAST
+      if (this.falling) {
+        this.lift = Math.max(0, (this.lift || 0) - 80 * dt)
+        if (this.lift <= 0) this.land()
+        return FAST
+      }
       if (this.tx !== null) {
         const d = this.tx - this.x
         if (Math.abs(d) <= this.speed * dt + 0.01) {
@@ -1041,7 +1135,8 @@
     }
     sprite(now) {
       const st = this.set
-      if (this.tx !== null) return st.walk[Math.floor(this.ft * (this.speed > 30 ? 10 : 7)) % st.walk.length]
+      if (this.held || this.falling) return st.dance1 || st.stand // arms up, legs dangling
+      if (this.tx !== null || this.kwalk) return st.walk[Math.floor(this.ft * (this.speed > 30 || this.kwalk ? 10 : 7)) % st.walk.length]
       if (this.resting) return st[this.resting] || st.stand
       if (this.anim) {
         const f = Math.floor(now / this.anim.per) % 2
@@ -1059,7 +1154,9 @@
       const now = performance.now()
       const sp = this.sprite(now)
       const left = this.dir > 0 ? this.x - sp.cx : this.x - (sp.ow - 1 - sp.cx)
-      c.drawImage(sp[this.dir], Math.round(left) - 1, FLOOR - sp.h + 1)
+      const lift = Math.round(this.lift || 0)
+      c.drawImage(sp[this.dir], Math.round(left) - 1, FLOOR - sp.h + 1 - lift)
+      if (lift) return
       if (this.item && this.pose === 'hold' && !this.tx) {
         const it = ITEM[this.item]
         const hx = this.dir > 0 ? this.x + 7 : this.x - 7 - (it.w - 2)
@@ -1140,6 +1237,63 @@
     }
     draw(c) {
       drawProps(this.s, c, true)
+    }
+  }
+
+  // clickable scenery in the current room: TV, slot machine, disco ball, ...
+  function zones(s) {
+    const d = s.data
+    if (!d.loc || !d.gaps) return []
+    const X = (f) => gx(s, f)
+    const F = FLOOR
+    const z = (k, verb, x0, x1, y0, y1 = F) => ({ k, verb, x0: x0 - 2, x1: x1 + 2, y0: y0 - 2, y1 })
+    switch (d.loc) {
+      case 'street':
+        return [z('door', "open Lefty's door", X(0.12), X(0.12) + 11, F - 17), z('sign', 'read sign', X(0.02), X(0.34), F - 26, F - 17), z('lamp', 'lean on lamp', X(0.96) - 3, X(0.96) + 3, F - 26)]
+      case 'bar':
+        return [z('bottles', 'take bottle', X(0.06), X(0.06) + 34, F - 27, F - 19), z('counter', 'ring for service', X(0.03), X(0.5), F - 12)]
+      case 'backroom': {
+        const dx = X(0.2) - 6
+        const tx = X(0.88) - 6
+        return [z('kdoor', 'knock on door', dx - 1, dx + 13, F - 23), z('tv', 'change channel', tx, tx + 12, F - 19)]
+      }
+      case 'disco':
+        return [z('ball', 'spin ball', X(0.55) - 3, X(0.55) + 3, F - 28, F - 19), z('speaker', 'turn it up', X(0.99) - 3, X(0.99) + 4, F - 14)]
+      case 'store':
+        return [z('shelf', 'browse magazines', X(0.02), X(0.34), F - 21), z('till', 'ring register', X(0.44), X(0.44) + 8, F - 16, F - 9)]
+      case 'casino': {
+        const sx = X(0.94) - 5
+        return [z('slot', 'pull lever', sx, sx + 12, F - 22), z('table', 'tap table', X(0.03), X(0.52), F - 14)]
+      }
+      case 'chapel':
+        return [z('arch', 'ring the bells', X(0.3) - 11, X(0.3) + 12, F - 27)]
+    }
+    return []
+  }
+  class Hotspots {
+    constructor(s) {
+      this.s = s
+      this.prop = true
+      this.z = 0
+    }
+    at(x, y) {
+      const d = this.s.data
+      if (d.paused || d.inCab || d.censor) return null
+      return zones(this.s).find((q) => x >= q.x0 && x <= q.x1 && y >= q.y0 && y <= q.y1) || null
+    }
+    hit(x, y) {
+      return !!this.at(x, y)
+    }
+    verb(p) {
+      return this.at(p.x, p.y)?.verb ?? null
+    }
+    update() {
+      return Infinity
+    }
+    draw() {}
+    onClick(p) {
+      const q = this.at(p.x, p.y)
+      if (q) clickSpot(this.s, q.k, p)
     }
   }
 
@@ -1333,7 +1487,7 @@
           d.pc = 0
           continue
         }
-        if (d.strayed) {
+        if (d.strayed && !engaged(s, now)) {
           d.strayed = false
           const hx = markX(s, 'home')
           if (Math.abs(d.larry.x - hx) > 30) {
@@ -1596,6 +1750,7 @@
         }
         return
       case 'suit':
+        d.pants = null
         larryVariant(s, st[1])
         if (st[1] === 'b') s.burst(L.x, FLOOR - 14, 10, ['w', 'a'])
         return
@@ -1713,24 +1868,294 @@
   }
 
   // ---- interaction --------------------------------------------------------------
+  // Clicks add lines and small nudges on top of the plot; the plot never waits.
+  const engaged = (s, now) =>
+    now - (s.keyAt ?? -1e9) < 9000 || now - (s.data.clickAt || -1e9) < 9000 || now - (s.data.grabAt || -1e9) < 9000 || (s.cursor && now - s.cursor.since < 2500)
+  // ---- keyboard: A/D walk Larry, W talks to or uses whatever is nearest, S is Larry
+  // himself (look, spray, leer, pickup line), Space skips the current line.
+  const freeToWalk = (s) => {
+    const d = s.data
+    const L = d.larry
+    return !L.hidden && !L.held && !L.falling && !d.inCab && !d.censor && !d.paused && !L.cb
+  }
+  function keyWalk(s, dt) {
+    const d = s.data
+    const L = d.larry
+    const k = s.keys
+    const dir = k && k.has('left') !== k.has('right') ? (k.has('left') ? -1 : 1) : 0
+    if (!dir || !freeToWalk(s)) {
+      if (L.kwalk) {
+        L.kwalk = false
+        d.strayed = true
+      }
+      return false
+    }
+    if (L.tx !== null) {
+      // the player takes over a scripted walk; the plot carries on from wherever he ends up
+      L.tx = null
+      L.cb = null
+    }
+    L.anim = null
+    L.pose = L.pose === 'hold' ? 'hold' : 'stand'
+    L.dir = dir
+    L.kwalk = true
+    L.ft += dt
+    L.x = clamp(L.x + dir * HURRY * 1.3 * dt, 8, s.W - 8)
+    return true
+  }
+  function keyUse(s) {
+    const d = s.data
+    const L = d.larry
+    if (L.hidden) return
+    // the nearest person within reach, else the nearest bit of scenery, else Larry himself
+    let best = null
+    for (const a of Object.values(d.cast)) if (!a.hidden && Math.abs(a.x - L.x) < 40 && (!best || Math.abs(a.x - L.x) < Math.abs(best.x - L.x))) best = a
+    if (!best && d.cab && Math.abs(d.cab.cx - L.x) < 40) best = d.cab
+    if (best) {
+      if (!L.moving && Math.abs(best.x - L.x) > 2) L.dir = (best.cx ?? best.x) > L.x ? 1 : -1
+      return clickActor(s, best)
+    }
+    let spot = null
+    let sd = 1e9
+    for (const q of zones(s)) {
+      const dd = Math.abs((q.x0 + q.x1) / 2 - L.x) - (q.x1 - q.x0) / 2
+      if (dd < 40 && dd < sd) {
+        sd = dd
+        spot = q
+      }
+    }
+    if (spot) return clickSpot(s, spot.k, { x: clamp(L.x, spot.x0 + 2, spot.x1 - 2), y: Math.max(spot.y0 + 2, FLOOR - 8) })
+    clickLarry(s, performance.now())
+  }
+  function keySkip(s, now) {
+    const d = s.data
+    // Space: hurry the story along (the current line ends), or wave off an aside
+    if (d.inter) return endInter(s)
+    const st = d.prog?.[d.pc]
+    if (d.line && d.started && st && SPEAK.has(st[0])) {
+      d.waitUntil = Math.min(d.waitUntil, now + 150)
+      d.line.until = Math.min(d.line.until, now + 150)
+      return
+    }
+    if (d.started && st && st[0] === 'wait') return void (d.waitUntil = Math.min(d.waitUntil, now))
+    clickLarry(s, now)
+  }
   function interject(s, who, text, now = performance.now()) {
     const d = s.data
-    if (!d.inter) d.frozeAt = now
-    setLine(s, who, text, now, true)
+    const sp = who === 'L' ? d.larry : d.cast[who]
+    if (sp) {
+      sp.talking = true
+      if (!sp.moving && !sp.anim && !sp.held && who !== 'L' && Math.abs(d.larry.x - sp.x) < 70 && Math.abs(d.larry.x - sp.x) > 2) sp.dir = d.larry.x > sp.x ? 1 : -1
+    }
+    d.inter = { who, text, until: now + lineMs(text) }
     s.poke()
   }
-  function endInter(s, now) {
+  function endInter(s) {
     const d = s.data
-    const dt = now - d.frozeAt
+    const who = d.inter?.who
     d.inter = null
-    if (d.started && d.waitUntil) d.waitUntil += dt
-    if (d.line) d.line.until += dt
+    const sp = who === 'L' ? d.larry : who && d.cast[who]
+    if (sp && d.line?.who !== who) sp.talking = false
   }
+  /** Do something after ms (bounded; runs at once if the bar settles). */
+  function later(s, ms, fn) {
+    const d = s.data
+    if (d.timers.length >= 16) return
+    d.timers.push({ at: performance.now() + ms, fn })
+  }
+  /** Strike a pose for a moment, unless the plot changes it meanwhile. */
+  function flash(s, a, pose, ms) {
+    if (!a || a.moving || a.anim || a.hidden || a.held) return false
+    const prev = a.pose
+    a.pose = pose
+    later(s, ms, () => {
+      if (a.pose === pose) a.pose = prev
+    })
+    return true
+  }
+  const small = (s, t, x, y = FLOOR - 27, color = '#e7e2d6') => s.say(t, x, y, { color, life: 1, size: 6, vy: -4 })
   function clickActor(s, a) {
     const d = s.data
-    if (a.key === 'L') return interject(s, 'N', bag('look'))
-    const lines = TALK[a.key]
-    if (lines) interject(s, a.key, pick(lines))
+    const now = performance.now()
+    d.clickAt = now
+    if (a.key === 'L') return clickLarry(s, now)
+    if (a instanceof Cab) {
+      small(s, 'BEEP BEEP', a.cx, FLOOR - 20, '#ffe455')
+      return interject(s, 'T', pick(TALK.T), now)
+    }
+    const k = a.key
+    d.taps[k] = (d.taps[k] || 0) + 1
+    const n = d.taps[k]
+    switch (k) {
+      case 'B':
+        flash(s, a, 'pour', 900)
+        break
+      case 'D':
+        if (n % 3 === 0 && flash(s, a, 'sleep', 4000)) {
+          small(s, 'zzz', a.x, FLOOR - 16)
+          return interject(s, 'N', 'The drunk passes out. A role model.', now)
+        }
+        if (!flash(s, a, 'drink', 900)) break
+        small(s, 'hic!', a.x + a.dir * 6)
+        break
+      case 'W':
+      case 'F': {
+        const L = d.larry
+        if (Math.abs(L.x - a.x) < 22 && !L.moving && Math.random() < 0.5 && flash(s, a, 'slap', 900)) {
+          a.dir = L.x > a.x ? 1 : -1
+          flash(s, L, 'slapped', 900)
+          s.say('SLAP!', (a.x + L.x) / 2, FLOOR - 25, { color: '#ffe455', life: 0.8, size: 7 })
+          return interject(s, k, pick(REPLY[k]), now)
+        }
+        if (!a.anim && !a.moving) a.anim = { kind: 'fan', per: 180, until: now + 1400 }
+        break
+      }
+      case 'M':
+        flash(s, a, 'cheer', 1000)
+        break
+      case 'C':
+        flash(s, a, 'shout', 1000)
+        if (n % 2 === 0) return interject(s, 'C', pick(['PRICE CHECK ON RIBBED!', 'HEY! THIS GUY WANTS THE BIG ONES!', 'CLEANUP ON AISLE LARRY!']), now)
+        break
+      case 'K':
+        if (flash(s, a, 'deal', 700)) s.particle({ img: ITEM.card[a.dir], x: a.x + a.dir * 6, y: FLOOR - 16, vx: a.dir * 40, vy: -12, g: 50, life: 0.5 })
+        break
+    }
+    const lines = TALK[k]
+    if (lines) interject(s, k, pick(lines), now)
+  }
+  function clickLarry(s, now) {
+    const d = s.data
+    const L = d.larry
+    d.lc = d.lc.filter((t) => now - t < 2500)
+    d.lc.push(now)
+    // easter egg: poke him five times quickly and the pants give up
+    if (d.lc.length >= 5 && !d.pants && d.variant === 'n' && !L.hidden) {
+      d.lc.length = 0
+      d.pants = { prev: d.variant }
+      larryVariant(s, 'b')
+      s.burst(L.x, FLOOR - 8, 8, ['w', 'a'])
+      small(s, 'whoosh', L.x, FLOOR - 10)
+      interject(s, 'N', bag('pants'), now)
+      later(s, 3600, () => {
+        if (!d.pants) return
+        if (d.variant === 'b') larryVariant(s, d.pants.prev)
+        d.pants = null
+        interject(s, 'L', bag('pantsUp'))
+      })
+      return
+    }
+    const n = (d.lcN = (d.lcN || 0) + 1) % 4
+    if (n === 1) return interject(s, 'N', bag('look'), now)
+    if (n === 2) {
+      if (flash(s, L, 'spray', 800)) {
+        if (d.squirts > 0) {
+          d.squirts--
+          for (let i = 0; i < 5; i++) s.particle({ img: pix(i % 2 ? 'c' : 'w'), x: L.x + L.dir * 8, y: FLOOR - 16 + rand(-1, 1), vx: L.dir * rand(14, 26), vy: rand(-6, 2), life: rand(0.5, 0.9), fade: true })
+        } else small(s, 'pfft', L.x + L.dir * 10, FLOOR - 22, '#a6a6b2')
+      }
+      return interject(s, 'L', bag('sprayL'), now)
+    }
+    if (n === 3) {
+      if (!L.moving && !L.anim && !L.held) L.anim = { kind: 'leer', per: 200, until: now + 1200 }
+      return interject(s, 'L', bag('poke'), now)
+    }
+    // a pickup line at whoever is nearest, and her answer
+    const w = [d.cast.W, d.cast.F].filter((a) => a && !a.hidden).sort((p, q) => Math.abs(p.x - L.x) - Math.abs(q.x - L.x))[0]
+    interject(s, 'L', bag('pickup'), now)
+    if (w) {
+      later(s, 2300, () => {
+        if (d.cast[w.key] === w && !w.hidden) interject(s, w.key, bag('brush'))
+      })
+    }
+  }
+  const CHANNELS = ['Channel 2: bowling. Riveting.', 'Channel 4: Late Night Aerobics. Leotards!', 'Channel 69: scrambled. You squint anyway.', 'Channel 7: a sermon on lust. You take notes.']
+  function clickSpot(s, k, p) {
+    const d = s.data
+    const now = performance.now()
+    d.clickAt = now
+    const L = d.larry
+    const N = (t) => interject(s, 'N', t, now)
+    switch (k) {
+      case 'door':
+        return N(pick(["Lefty's. The door is sticky. Don't ask.", 'Locked? No. Just heavy with regret.', 'A sign says NO MINORS. You qualify, barely.']))
+      case 'sign':
+        d.neonOff = now + 700
+        d.fxUntil = Math.max(d.fxUntil, now + 700)
+        return N(pick(["LEFTY'S. The 'Y' flickers. So does your hope.", 'Neon. Like your suit, but tasteful.']))
+      case 'lamp':
+        if (!L.moving && !L.anim) L.anim = { kind: 'leer', per: 200, until: now + 1000 }
+        return interject(s, 'L', pick(['Leaning on a lamp post. Classic cool.', "Hey, ladies. I'm by the lamp. Lit.", 'This post is the only thing holding me up.']), now)
+      case 'bottles':
+        if (d.cast.B) return interject(s, 'B', pick(['Hands off the top shelf, pal.', 'That one costs more than your suit.', "That's for customers who tip."]), now)
+        return N('You eye the top shelf. It eyes you back.')
+      case 'counter': {
+        small(s, 'ding!', p.x, FLOOR - 18, '#ffe455')
+        const b = d.cast.B
+        if (b) {
+          flash(s, b, 'pour', 900)
+          return interject(s, 'B', pick(['Yeah, yeah. Another one?', 'Ring that again and wear it.', 'Whiskey. Neat. Like you aren\'t.']), now)
+        }
+        return
+      }
+      case 'kdoor':
+        small(s, 'knock knock', p.x, FLOOR - 22, '#d8c08a')
+        if (d.door) return N('The door is open. Upstairs, someone giggles.')
+        d.peep = 1
+        later(s, 1400, () => (d.peep = 0))
+        return interject(s, 'M', pick(['Password.', 'We gave at the office.', 'If you ain\'t Ken, beat it.']), now)
+      case 'tv':
+        d.chan = ((d.chan || 0) + 1) % CHANNELS.length
+        d.tv = [1, 2, 3, 1][d.chan]
+        d.fxUntil = Math.max(d.fxUntil, now + 1200)
+        if (d.cast.M && !d.cast.M.hidden && d.chan === 1) {
+          flash(s, d.cast.M, 'cheer', 1600)
+          return interject(s, 'M', 'Leg warmers! Nobody touch that dial!', now)
+        }
+        return N(CHANNELS[d.chan])
+      case 'ball':
+        d.beatUntil = Math.max(d.beatUntil || 0, now + 2600)
+        if (!L.moving && !L.anim && !L.held && !L.hidden) L.anim = { kind: 'dance', per: 220, until: now + 2200 }
+        for (let i = 0; i < 6; i++) s.particle({ img: pix(pick(['w', 'c', 'p', 'Y'])), x: p.x, y: FLOOR - 24, vx: rand(-40, 40), vy: rand(-10, 20), life: 0.7, fade: true })
+        return interject(s, 'L', pick(['Disco! My hips have a mind of their own.', 'Feel the beat, baby! Feel the polyester!', 'Stayin\' alive! Barely!']), now)
+      case 'speaker':
+        d.beatUntil = Math.max(d.beatUntil || 0, now + 2000)
+        for (let i = 0; i < 3; i++) s.particle({ img: BUBBLE['♪'], x: p.x - 4 + i * 4, y: FLOOR - 18, vx: rand(-6, 6), vy: -8, life: 1, fade: true })
+        return N(pick(['The speaker is louder than your suit. Barely.', 'Bass so low it reaches your love life.']))
+      case 'shelf':
+        if (d.cast.C) flash(s, d.cast.C, 'shout', 1000)
+        return interject(s, d.cast.C ? 'C' : 'N', pick(['HEY! Those magazines are for READING!', 'You touch it, you buy it, Romeo.', 'Aisle two is protection. You need it.']), now)
+      case 'till':
+        small(s, 'ka-ching', p.x, FLOOR - 20, '#5cf07a')
+        return N(pick(['No sale. Story of your life.', 'The drawer opens. It has more than you.']))
+      case 'slot':
+        if (now < (d.slot?.until || 0)) return
+        d.slot = { reels: [0, 0, 0], until: now + 1400 }
+        d.fxUntil = Math.max(d.fxUntil, now + 1450)
+        later(s, 1450, () => {
+          if (d.loc !== 'casino') return
+          const win = Math.random() < 0.18
+          const r = Math.floor(rand(0, 5))
+          d.slot.reels = win ? [r, r, r] : [r, (r + 1 + Math.floor(rand(0, 4))) % 5, Math.floor(rand(0, 5))]
+          if (win) {
+            s.burst(gx(s, 0.94), FLOOR - 16, 12, ['Y', 'y', 'O'])
+            d.score++
+            jingle(s, 1)
+            interject(s, 'L', pick(['Jackpot! Ladies, Daddy bought new pants!', 'Three in a row! Like my dates. Never.']))
+          } else interject(s, 'L', pick(['Come on, baby. Daddy needs pants.', 'Lemon. Lemon. My love life.', 'One more pull. My wrist is strong.']))
+        })
+        return
+      case 'table':
+        if (d.cast.K) {
+          flash(s, d.cast.K, 'deal', 700)
+          d.cards = Math.min(5, d.cards + 1)
+          return interject(s, 'K', pick(['No tapping the felt.', 'Hit or stand, pal. Not both.', 'You tap it like you mean it. Sad.']), now)
+        }
+        return
+      case 'arch':
+        for (let i = 0; i < 3; i++) s.particle({ img: BUBBLE['♥'], x: p.x - 8 + i * 6, y: FLOOR - 26, vx: rand(-4, 4), vy: -6, life: 1.4, fade: true })
+        return N(pick(['Wedding bells. Or is that tinnitus?', 'The arch is plastic. So is the minister.', 'Till death, or dawn, do you part.']))
+    }
   }
   function spotAt(s, p) {
     for (const f of s.dots) if (p.x >= f.x - 2 && p.x <= f.x + f.w + 2 && p.y >= f.y - 2 && p.y <= f.y + f.h + 2) return f.kind
@@ -1741,12 +2166,64 @@
     const p = s.cursor
     if (!p || p.y > H) return null
     const a = s.actorAt(p)
+    if (a && a.verb) return a.verb(p)
     if (a) return a.key === 'L' ? 'look at Larry' : a.key === 'T' ? 'talk to cabbie' : `talk to ${NAME[a.key]}`
     const sp = spotAt(s, p)
     if (sp && SPOTS[sp]) return SPOTS[sp].verb
-    return 'walk here'
+    return ''
   }
-
+  // background business between lines, so the room never freezes
+  function ambient(s, now) {
+    const d = s.data
+    const L = d.larry
+    const idle = (a) => a && !a.hidden && !a.moving && !a.anim && !a.talking && !a.held && a.pose === 'stand'
+    const who = [L, ...Object.values(d.cast)].filter(idle)
+    if (!who.length) return
+    const a = pick(who)
+    switch (a.key) {
+      case 'L':
+        if (Math.random() < 0.5) flash(s, a, 'down', 900) // checks his fly
+        else a.anim = { kind: 'leer', per: 200, until: now + 900 }
+        return
+      case 'D':
+        a.anim = { kind: 'sway', per: 260, until: now + 1600 }
+        return small(s, 'hic', a.x + a.dir * 5)
+      case 'B':
+        flash(s, a, 'pour', 800)
+        return
+      case 'W':
+        a.anim = { kind: 'fan', per: 180, until: now + 1200 }
+        return
+      case 'F':
+        flash(s, a, 'nails', 1500)
+        return
+      case 'K':
+        flash(s, a, 'deal', 600)
+        return small(s, 'shuffle', a.x, FLOOR - 27, '#9dffcf')
+      case 'C':
+        return small(s, 'yawn', a.x)
+      case 'P':
+        return small(s, 'ahem', a.x)
+      case 'M':
+        return small(s, d.tv === 2 ? 'whoa' : 'hmph', a.x)
+    }
+  }
+  // the cursor resting on someone: they notice
+  function hoverReact(s, now) {
+    const d = s.data
+    const cur = s.cursor
+    const a = cur && cur.y <= H ? s.actorAt(cur) : null
+    if (!a || a.key === undefined || a.key === 'L' || !HOVER[a.key] || !d.hov || d.hov.a !== a) {
+      d.hov = a && a.key && a.key !== 'L' && HOVER[a.key] ? { a, at: now } : null
+      return d.hov ? 1300 : Infinity
+    }
+    if (now - d.hov.at < 1200) return d.hov.at + 1200 - now
+    if (now - d.hovSaid < 12000 || d.inter) return Infinity
+    d.hovSaid = now
+    if (a.dir !== undefined && !a.moving && !a.anim) a.dir = cur.x > a.x ? 1 : -1
+    interject(s, a.key, pick(HOVER[a.key]), now)
+    return Infinity
+  }
   // ---- drawing ------------------------------------------------------------------
   const FONT = 'bold 7px "DejaVu Sans Mono", Menlo, monospace'
   const SMALL = 'bold 6px "DejaVu Sans Mono", Menlo, monospace'
@@ -1758,35 +2235,42 @@
     c.fillStyle = color
     c.fillText(text, x, y)
   }
-  function drawLine(s, c, ln) {
+  /** Draw a line in the text row; with `avoid` (the plot's line) it moves aside, or one row down. */
+  function drawLine(s, c, ln, avoid = null) {
     const d = s.data
     c.font = FONT
     c.textBaseline = 'top'
     const w = Math.ceil(c.measureText(ln.text).width)
-    const y = TEXT_Y()
-    if (ln.who === 'N' || ln.who === 'X') {
-      const cx = d.gaps ? (d.loc ? gapOf(s, d.loc).x0 + gapOf(s, d.loc).w / 2 : s.W / 2) : s.W / 2
-      const bx = Math.round(clamp(cx - w / 2 - 4, 1, s.W - w - 9))
+    const boxed = ln.who === 'N' || ln.who === 'X'
+    const bw = boxed ? w + 8 : w
+    const cx = boxed ? (d.gaps && d.loc ? gapOf(s, d.loc).x0 + gapOf(s, d.loc).w / 2 : s.W / 2) : speakerX(s, ln.who)
+    let x = Math.round(clamp(cx - bw / 2, 1, s.W - bw - 1))
+    let y = TEXT_Y()
+    if (avoid && x < avoid.x1 + 4 && x + bw > avoid.x0 - 4) {
+      const near = (v) => Math.abs(v + bw / 2 - cx)
+      const opts = [avoid.x1 + 8, avoid.x0 - 8 - bw].filter((v) => v >= 1 && v <= s.W - bw - 1 && near(v) < 150)
+      if (opts.length) x = Math.round(opts.sort((p, q) => near(p) - near(q))[0])
+      else y += 10
+    }
+    if (boxed) {
       const die = ln.who === 'X'
       c.fillStyle = '#fbfbf5'
-      c.fillRect(bx, y, w + 8, 10)
+      c.fillRect(x, y, w + 8, 10)
       c.fillStyle = die ? '#b81c1c' : '#a01818'
-      c.fillRect(bx + 1, y + 1, w + 6, 1)
-      c.fillRect(bx + 1, y + 8, w + 6, 1)
-      c.fillRect(bx + 1, y + 1, 1, 8)
-      c.fillRect(bx + w + 6, y + 1, 1, 8)
+      c.fillRect(x + 1, y + 1, w + 6, 1)
+      c.fillRect(x + 1, y + 8, w + 6, 1)
+      c.fillRect(x + 1, y + 1, 1, 8)
+      c.fillRect(x + w + 6, y + 1, 1, 8)
       if (die) {
-        c.fillRect(bx, y, w + 8, 1)
-        c.fillRect(bx, y + 9, w + 8, 1)
+        c.fillRect(x, y, w + 8, 1)
+        c.fillRect(x, y + 9, w + 8, 1)
       }
       c.fillStyle = die ? '#8a0f0f' : '#141414'
-      c.fillText(ln.text, bx + 4, y + 2)
-      return { x0: bx, x1: bx + w + 8 }
-    }
-    const x = Math.round(clamp(speakerX(s, ln.who) - w / 2, 1, s.W - w - 1))
-    textOut(c, ln.text, x, y + 1, CLR[ln.who] || '#fff')
-    return { x0: x, x1: x + w }
+      c.fillText(ln.text, x + 4, y + 2)
+    } else textOut(c, ln.text, x, y + 1, CLR[ln.who] || '#fff')
+    return y > TEXT_Y() ? null : { x0: x, x1: x + bw }
   }
+
 
   function R(c, col, x, y, w, h) {
     c.fillStyle = col
@@ -1810,7 +2294,7 @@
         R(c, '#120a06', X(0.12) + 1, F - 16, 9, 16)
         c.font = SMALL
         c.textBaseline = 'top'
-        textOut(c, "LEFTY'S", X(0.03), F - 24, '#ff55ff')
+        textOut(c, "LEFTY'S", X(0.03), F - 24, now < (d.neonOff || 0) && Math.floor(now / 90) % 2 ? '#5a2a62' : '#ff55ff')
         R(c, '#4a4a56', X(0.96), F - 24, 1, 24)
         R(c, '#ffe680', X(0.96) - 2, F - 25, 5, 2)
         R(c, '#4a4a56', X(-0.02), F - 1, X(1.02) - X(-0.02), 1)
@@ -1854,7 +2338,8 @@
         const tx = X(0.88) - 6
         R(c, '#7a3e12', tx + 1, F - 6, 10, 6)
         R(c, '#4a4a56', tx, F - 16, 12, 10)
-        R(c, d.tv === 2 ? '#ff55ff' : d.tv ? '#6680ff' : '#141414', tx + 1, F - 15, 10, 7)
+        R(c, d.tv === 3 ? '#8b8f94' : d.tv === 2 ? '#ff55ff' : d.tv ? '#6680ff' : '#141414', tx + 1, F - 15, 10, 7)
+        if (d.tv === 3) for (let i = 0; i < 8; i++) R(c, i % 2 ? '#fbfbf5' : '#4a4a56', tx + 1 + ((i * 7 + Math.floor(now / 90)) % 10), F - 15 + ((i * 3 + Math.floor(now / 70)) % 7), 1, 1)
         if (d.tv === 2) {
           R(c, '#ffe455', tx + 5, F - 14, 2, 2)
           R(c, '#ffe455', tx + 4, F - 12, 4, 3)
@@ -1867,7 +2352,7 @@
         if (front) return
         const x0 = X(0.04)
         const x1 = X(0.98)
-        const lit = now < (d.beatUntil || 0)
+        const lit = now < (d.beatUntil || 0) || s.busy
         const beat = Math.floor(now / 220)
         for (let x = x0, i = 0; x < x1; x += 6, i++) R(c, (lit ? TILE : TILE_DIM)[(i + (lit ? beat : 0)) % 4], x, F - 2, Math.min(5, x1 - x), 2)
         const bx = X(0.55)
@@ -1959,6 +2444,19 @@
     d.paused = true
     d.line = null
     d.inter = null
+    // settle any pending nudges now, so nothing wakes the bar later
+    const due = d.timers.splice(0)
+    for (const t of due) t.fn()
+    d.inter = null
+    d.hov = null
+    if (d.pants) {
+      if (d.variant === 'b') larryVariant(s, d.pants.prev)
+      d.pants = null
+    }
+    d.larry.held = false
+    d.larry.kwalk = false
+    d.larry.falling = false
+    d.larry.lift = 0
     const st = d.prog?.[d.pc]
     if (d.started) {
       if (st && (REEXEC.has(st[0]) || SPEAK.has(st[0]) || st[0] === 'travel')) d.started = false
@@ -2012,15 +2510,18 @@
     title: 'Leisure Suit Larry',
     sub: 'Sierra On-Line, 1987',
     blurb:
-      "Larry Laffer, 38, white polyester and a gold chain, works through long nights in Lost Wages, in three episodes that come back in a different order with different lines: Lefty's bar and the woman who slaps him, the drunk who trades a remote for a whiskey, the \"Ken sent me\" door, a Buick that flattens him (he restores), Fawn at the disco, a loud rubber purchase at the 24-hour store, the casino where he bets his suit, the wedding chapel, and censored hot-tub cutaways. Narration comes in Sierra message boxes with a score; hovering shows a parser line; clicking a person makes them talk, clicking Larry describes him, and resting the cursor on him gets a pickup line. Working runs the room's action (pickup-line marathons, password guessing, a disco dance-off, a blackjack streak) and pushes the plot on; Done gives the room's small win with a score jingle. When it's quiet Larry slumps where he is and the story waits.",
+      "Larry Laffer, 38, white polyester and a gold chain, works through long nights in Lost Wages, in three episodes that come back in a different order with different lines: Lefty's bar and the woman who slaps him, the drunk who trades a remote for a whiskey, the \"Ken sent me\" door, a Buick that flattens him (he restores), Fawn at the disco, a loud rubber purchase at the 24-hour store, the casino where he bets his suit, the wedding chapel, and censored hot-tub cutaways. The story runs on its own, and between lines the room keeps busy: the drunk sways and hics, the bartender polishes, Larry checks his fly. Narration comes in Sierra message boxes with a score; hovering shows a parser line and people notice your <b>cursor</b> (Larry turns to leer at it). Click anyone to make them talk or act (the drunk drinks until he passes out, the lady fans herself or slaps him), click Larry for a look, a breath-spray squirt, a leer and a pickup line, and poke him five times fast for an accident with his pants. Drag Larry by the collar and drop him somewhere (next to a lady is a bad idea). The scenery clicks too: Lefty's neon, the bar bell, the Ken door, the back-room TV's channels, the disco ball, the slot machine, the chapel bells. Working runs the room's action (pickup-line marathons, password guessing, a disco dance-off, a blackjack streak) and pushes the plot on; Done gives the room's small win with a score jingle. When it's quiet Larry slumps where he is and the story waits.",
     setup(s) {
       s.data = {
         ep: 0, si: 0, prog: [], pc: 0, started: false, mode: 'script', cast: {}, loc: null,
         score: 0, rej: 0, squirts: 9, episodes: 0, line: null, inter: null, waitUntil: 0, waitFor: null,
         paused: false, wantWin: false, strayed: false, actionN: 0, variant: 'n', hoverAt: 0, pickupAt: 0,
+        clickAt: -1e9, grabAt: -1e9, timers: [], taps: {}, lc: [], lcN: 0, fxUntil: 0, hovSaid: 0, hov: null,
+        ambAt: performance.now() + rand(6000, 9000), lookAt: 0, pants: null,
       }
       const d = s.data
       gaps(s)
+      s.actors.push(new Hotspots(s))
       d.larry = new Guy(s, 'L', -14, 1)
       s.actors.push(d.larry)
       s.actors.push(new Front(s))
@@ -2042,7 +2543,7 @@
         const a = d.cast[k]
         if (def && !a.moving && !a.dead) a.x = gx(s, LOCS[d.loc].marks[def[1]])
       }
-      if (!d.larry.moving && !d.inCab) {
+      if (!d.larry.moving && !d.inCab && !d.larry.held) {
         const hx = markX(s, d.paused ? 'rest' : 'home')
         if (hx !== null) d.larry.x = hx
       }
@@ -2064,54 +2565,88 @@
       if (d.line && now >= d.line.until) {
         d.line = null
         for (const a of allGuys(s)) a.talking = false
+        if (d.inter) {
+          const sp = d.inter.who === 'L' ? d.larry : d.cast[d.inter.who]
+          if (sp) sp.talking = true
+        }
       }
+      if (d.inter && now >= d.inter.until) endInter(s)
       const locked = d.inCab || d.cabBusy || d.carBusy || d.censor
-      if (!s.lively(now) && !locked) {
+      if (!s.lively(now) && !locked && !d.larry.held) {
         if (!d.paused) pause(s, now)
         return Infinity
       }
       if (d.paused) resume(s, now)
       let want = Infinity
-      if (d.inter) {
-        if (now >= d.inter.until) {
-          endInter(s, now)
-          want = FAST
-        } else return Math.min(d.inter.until - now, d.censor ? 160 : Infinity)
+      // nudges from clicks
+      if (d.timers.length) {
+        const due = d.timers.filter((t) => t.at <= now)
+        if (due.length) {
+          d.timers = d.timers.filter((t) => t.at > now)
+          for (const t of due) t.fn()
+        }
+        for (const t of d.timers) want = Math.min(want, t.at - now)
       }
+      if (now < d.fxUntil || now < (d.slot?.until || 0)) want = FAST
+      const L = d.larry
+      const user = engaged(s, now)
+      if (keyWalk(s, dt) || (s.keys && s.keys.size)) want = FAST
       // the cursor lingering on Larry gets a pickup line
       const cur = s.cursor
-      if (cur && !d.line && Math.abs(cur.x - d.larry.x) < 14 && cur.y > FLOOR - 28 && !d.larry.hidden) {
+      if (cur && !d.inter && Math.abs(cur.x - L.x) < 14 && cur.y > FLOOR - 28 && !L.hidden && !L.held) {
         if (!d.hoverAt) d.hoverAt = now
         if (now - d.hoverAt > 1500 && now - d.pickupAt > 25000) {
           d.pickupAt = now
-          d.larry.anim = { kind: 'leer', per: 200, until: now + 1200 }
+          if (!L.moving) L.anim = { kind: 'leer', per: 200, until: now + 1200 }
           interject(s, 'L', bag('cursor'), now)
-          return FAST
-        }
-        want = Math.min(want, Math.max(FAST, d.hoverAt + 1500 - now))
+        } else want = Math.min(want, Math.max(FAST, d.hoverAt + 1500 - now))
       } else d.hoverAt = 0
+      if (cur) want = Math.min(want, hoverReact(s, now))
+      else d.hov = null
+      // while someone plays along, Larry keeps an eye on the cursor
+      if (user && cur && !L.moving && !L.anim && !L.hidden && !L.held && !L.falling && !d.inCab && now > d.lookAt && (L.pose === 'stand' || L.pose === 'hold') && Math.abs(cur.x - L.x) > 8) {
+        const dir = cur.x > L.x ? 1 : -1
+        if (dir !== L.dir) {
+          L.dir = dir
+          d.lookAt = now + 700
+        }
+      }
+      if (user) want = Math.min(want, SLOW)
+      if (s.busy) want = FAST // busy: lights, lines and fidgets at full tilt
+      // a little background business every few seconds
+      if (!d.censor && !d.inCab) {
+        if (now >= d.ambAt) {
+          // the work keeps the whole room hopping
+          d.ambAt = now + (s.busy ? rand(2200, 4000) : rand(6000, 11000))
+          ambient(s, now)
+        }
+        want = Math.min(want, d.ambAt - now)
+      }
       want = Math.min(want, run(s, now))
-      // wake when the current line runs out, so it is erased on time
+      // wake when the current lines run out, so they are erased on time
       if (d.line) want = Math.min(want, Math.max(1, d.line.until - now))
-      return want
-    },
-    onBarClick(s, p) {
-      const d = s.data
-      const sp = spotAt(s, p)
-      if (sp && SPOTS[sp]) return interject(s, 'N', pick(SPOTS[sp].say))
-      const st = d.prog?.[d.pc]
-      const busyStep = d.started && st && ['walk', 'travel', 'cab', 'car', 'dance', 'censor', 'exit', 'slot', 'dream'].includes(st[0])
-      if (d.paused || busyStep || d.inCab || d.larry.hidden || d.censor) return
-      const x = clamp(p.x, 8, s.W - 8)
-      d.larry.anim = null
-      d.larry.pose = 'stand'
-      d.larry.goto(x, WALK)
-      d.strayed = true
-      if (!d.inter) d.frozeAt = performance.now()
-      d.inter = { who: 'N', text: '', until: performance.now() + (Math.abs(x - d.larry.x) / WALK) * 1000 + 1800, silent: true }
+      if (d.inter) want = Math.min(want, Math.max(1, d.inter.until - now))
+      return Math.max(1, want)
     },
     onBonk(s, r, kind) {
       if (SPOTS[kind]) interject(s, 'N', pick(SPOTS[kind].say))
+    },
+    onKey(s, key, down) {
+      const d = s.data
+      if (!d.larry) return
+      const now = performance.now()
+      if (!down) return
+      if (d.paused) resume(s, now)
+      if (key === 'left' || key === 'right') {
+        // the first step happens now, not next frame
+        if (freeToWalk(s)) {
+          d.larry.dir = key === 'left' ? -1 : 1
+          keyWalk(s, 1 / 12)
+        }
+      } else if (key === 'up') keyUse(s)
+      else if (key === 'down') clickLarry(s, now)
+      else if (key === 'fire') keySkip(s, now)
+      s.poke()
     },
     onBusy(s) {
       const d = s.data
@@ -2141,11 +2676,13 @@
       if (d.paused && (d.larry.resting === 'slump' || d.larry.resting === 'floor')) {
         c.drawImage(ZZ, Math.round(d.larry.x + 3), FLOOR - 26)
       }
-      const ln = d.inter && !d.inter.silent ? d.inter : d.line
-      let box = null
-      if (ln) box = drawLine(s, c, ln)
+      let box = d.line ? drawLine(s, c, d.line) : null
+      if (d.inter) {
+        const b2 = drawLine(s, c, d.inter, box)
+        if (b2) box = box ? { x0: Math.min(box.x0, b2.x0), x1: Math.max(box.x1, b2.x1) } : b2
+      }
       const v = hoverVerb(s)
-      if (v) {
+      if (v !== null) {
         c.font = FONT
         c.textBaseline = 'top'
         const t = `> ${v}_`

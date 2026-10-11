@@ -324,8 +324,10 @@
   const hazards = (s) => s.actors.filter((a) => a.hazard && !a.dead)
   const onFloor = (h) => h.y + h.h >= FLOOR - 1.5
   /** Someone has been clicking or steering in the last few seconds. */
-  const engaged = (s, now) => now < s.data.engagedUntil || (s.cursor && s.cursor.y < H + 4 && now - s.cursor.t < 1200 && s.cursor.speed > 12)
-  const handsOn = (s, now) => now < s.data.manualUntil
+  const keyed = (s, now) => now - s.keyAt < 9000
+  const keyDir = (s) => (s.keys.has('right') ? 1 : 0) - (s.keys.has('left') ? 1 : 0)
+  const engaged = (s, now) => keyed(s, now) || now < s.data.engagedUntil || (s.cursor && s.cursor.y < H + 4 && now - s.cursor.t < 1200 && s.cursor.speed > 12)
+  const handsOn = (s, now) => keyed(s, now) || now < s.data.manualUntil
   function engage(s, manual = false) {
     const now = performance.now()
     s.data.engagedUntil = now + 9000
@@ -1052,6 +1054,23 @@
         }
       }
       if (this.state === 'jump') return FAST
+      // A/D: you run him (no auto-hops while the keyboard has him: jumping is your job)
+      const kd = lively && this.state !== 'sit' && d.phase === 'play' ? keyDir(s) : 0
+      if (kd) {
+        this.dir = kd
+        this.turnCd = 0.3
+        this.state = 'run'
+        this.walking = true
+        this.x = clamp(this.x + kd * this.speed() * 1.3 * dt, d.startX - 8, d.endX)
+        this.leg += dt * 9
+        d.prog = clamp(Math.max(d.prog, this.x - d.startX), 0, d.len)
+        return FAST
+      }
+      this.walking = false
+      if (s.keys.size) {
+        if (this.state === 'run') this.state = 'stand'
+        return FAST
+      }
       // where to go
       const c = s.cursor
       let goal = null
@@ -1061,7 +1080,8 @@
         this.restX = null
         if (this.state === 'sit') this.state = 'stand'
         if (d.phase === 'play') {
-          if (engaged(s, now) && c && c.y < H + 6) goal = clamp(c.x - JW / 2, d.startX, d.endX)
+          if (keyed(s, now)) goal = null
+          else if (engaged(s, now) && c && c.y < H + 6) goal = clamp(c.x - JW / 2, d.startX, d.endX)
           else if (ham && this.hammer <= 0 && (this.wantHammer === ham || ham.x > this.x - 30)) goal = clamp(ham.x - 4, d.startX, d.endX)
           else goal = d.startX + d.prog
         } else if (d.phase === 'reset') goal = d.startX
@@ -1214,6 +1234,16 @@
     onBarClick(s) {
       engage(s, true)
       s.data.jm.jump()
+    },
+    // keyboard: A/D run, W or Space jump (carrying his run), S stands him still
+    onKey(s, k, down) {
+      const jm = s.data.jm
+      if (!down || !jm) return
+      if (jm.state === 'sit') jm.state = 'stand'
+      if (k === 'fire' || k === 'up') {
+        const kd = keyDir(s)
+        jm.jump(kd ? kd * jm.speed() * 1.3 : 0)
+      } else if (k === 'down' && jm.state === 'run') jm.state = 'stand'
     },
     onBusy(s) {
       const d = s.data

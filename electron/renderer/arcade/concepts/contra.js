@@ -530,6 +530,53 @@
   }
   const LETTER_COLOR = { S: '#ff5a4a', M: '#ffe36a', L: '#9fd8ff', F: '#ff9a2c' }
   const lively = (s, now) => s.lively(now)
+  /** Someone is playing: a click or drag in the last 9 s, or the cursor moving over the bar. */
+  const engaged = (s, now) => now - (s.keyAt ?? -1e9) < 9000 || now - (s.data.clickAt ?? -1e9) < 9000 || now - (s.data.grabAt ?? -1e9) < 9000 || (!!s.cursor && now - s.cursor.since < 2500)
+  /** Playing on the keys: one held, or one pressed in the last 9 s. */
+  const keyMode = (s, now) => (s.keys && s.keys.size > 0) || now - (s.keyAt ?? -1e9) < 9000
+  const keyDir = (s) => (s.keys.has('right') ? 1 : 0) - (s.keys.has('left') ? 1 : 0)
+
+  // the code: drag a commando up, up, down, down, left, right, left, right, then B (click), A (double-click)
+  function codeKey(s, tok, now) {
+    const d = s.data
+    if (now - (d.codeAt || 0) > 12000) d.code = ''
+    d.codeAt = now
+    d.code = ((d.code || '') + tok).slice(-12)
+    if (/UUDDLRLR[AB]{2}$/.test(d.code)) {
+      d.code = ''
+      konami(s, now)
+    }
+  }
+  function konami(s, now) {
+    const d = s.data
+    d.lives = [30, 30]
+    d.konamiAt = now
+    for (const c of d.team) {
+      c.medalsUntil = now + 5000
+      if (c.onField) {
+        c.weapon = 'S'
+        c.weaponUntil = now + 90000
+        c.inv = Math.max(c.inv, now + 1500)
+      }
+    }
+    s.say('30 LIVES', s.W / 2, 8, { color: '#ffe36a', life: 3.4, size: 9 })
+    for (let i = 0; i < 12; i++) s.particle({ img: STAR, x: rand(8, s.W - 8), y: rand(1, 22), vy: rand(-12, -4), life: rand(0.7, 1.4), fade: true })
+  }
+
+  // ---- the rotating ground cannon that pops out of the floor -------------------------------------
+  const TUR_ROWS = [
+    '......mmmmm......',
+    '...mmmMMMMMmmm...',
+    '..mMMAAMMMMMMMm..',
+    '.mMMAMMMZZZMMMMm.',
+    '.mMMMMMZXXZMMMMm.',
+    'mMMMMMMZZZZMMMMMm',
+    'mmmmmmmmmmmmmmmmm',
+    'aAaAaAaAaAaAaAaAa',
+    'mmmmmmmmmmmmmmmmm',
+  ]
+  const TURRET = outline(sprite(TUR_ROWS, P))
+  const TURRET_HIT = outline(sprite(whiteOut(TUR_ROWS), P))
 
   // ---- bullets ------------------------------------------------------------------------------
   class Bullet {
@@ -648,6 +695,8 @@
       this.flinchUntil = 0
       this.z = 3
       this.enemy = true
+      this.grabbable = true
+      this.startleAt = 0
     }
     get x() {
       return this.cx - 3
@@ -656,19 +705,50 @@
       return this.state !== 'die'
     }
     get alive() {
-      return this.state !== 'die'
+      return this.state !== 'die' && this.state !== 'held'
     }
     shootable(x, y) {
       return this.alive && Math.abs(x - this.cx) <= 5 && y >= FLOOR - 22 && y <= FLOOR
     }
     hit(x, y) {
-      return this.alive && Math.abs(x - this.cx) <= 6 && y >= FLOOR - 23 && y <= FLOOR
+      return (this.alive || this.state === 'held') && Math.abs(x - this.cx) <= 9 && y >= this.y - 26 && y <= this.y + 2
     }
     aimPoint() {
       return { x: this.cx, y: FLOOR - 14 }
     }
     onClick() {
+      this.s.data.clickAt = performance.now()
       for (const c of this.s.data.team) c.burstAt(this)
+    }
+    // pick him up by the collar, and throw him: he takes out whoever he lands on
+    grab(p) {
+      if (!this.alive) return
+      this.s.data.grabAt = performance.now()
+      this.state = 'held'
+      this.hx = p.x
+      this.hvx = 0
+      this.drag(p)
+    }
+    drag(p) {
+      if (this.state !== 'held') return
+      const now = performance.now()
+      this.s.data.grabAt = now
+      const nx = clamp(p.x, 4, this.s.W - 4)
+      this.hvx = this.hvx * 0.5 + (nx - this.cx) * 6
+      if (Math.abs(nx - this.cx) > 1) this.dir = nx > this.cx ? 1 : -1
+      this.cx = nx
+      this.y = clamp(p.y + 20, 22, FLOOR)
+    }
+    drop() {
+      if (this.state !== 'held') return
+      const now = performance.now()
+      this.s.data.grabAt = now
+      this.state = 'run'
+      const v = clamp(this.hvx, -150, 150)
+      this.die(Math.sign(v) || this.dir, now)
+      this.vx = v
+      this.vy = this.y < FLOOR - 4 ? -30 : -90
+      this.flung = true
     }
     shot(b, now) {
       this.die(b ? Math.sign(b.vx) || -this.dir : -this.dir, now)
@@ -685,16 +765,27 @@
       for (const a of s.actors) if (a instanceof Soldier && a !== this && a.alive && Math.abs(a.cx - this.cx) < 56) a.flinchUntil = now + rand(500, 800)
     }
     update(dt, now, s) {
+      if (this.state === 'held') return FAST
       if (this.state === 'die') {
         this.t += dt
         this.vy += 300 * dt
         this.cx += this.vx * dt
         this.y = Math.min(FLOOR, this.y + this.vy * dt)
-        if (this.t > 0.6) {
+        if (this.flung)
+          // thrown: he bowls over the soldiers he lands among
+          for (const a of s.actors)
+            if (a instanceof Soldier && a !== this && a.alive && Math.abs(a.cx - this.cx) < 7 && this.y > FLOOR - 24) a.die(Math.sign(this.vx) || 1, now)
+        if (this.t > 0.6 && (this.y >= FLOOR || this.t > 1.2)) {
           this.dead = true
           s.spawn(new Boom(this.cx, FLOOR - 10, false))
         }
         return FAST
+      }
+      // a quick swipe of the cursor over him makes him flinch
+      const cu = s.cursor
+      if (cu && cu.speed > 450 && now > this.startleAt && Math.abs(cu.x - this.cx) < 14 && cu.y > FLOOR - 28) {
+        this.startleAt = now + 3000
+        this.flinchUntil = now + 450
       }
       if (now < this.flinchUntil) return Math.min(FAST * 2, this.flinchUntil - now)
       const awake = lively(s, now)
@@ -707,6 +798,12 @@
         }
         if (this.t > 0.95 || !awake) this.state = 'run'
         return FAST
+      }
+      if (!awake && !this.retreat) {
+        // the bar has gone quiet: he breaks off and runs for the nearer edge
+        this.retreat = true
+        this.dir = this.cx < s.W / 2 ? -1 : 1
+        this.speed = 95
       }
       this.cx += this.dir * this.speed * dt
       this.dist += this.speed * dt
@@ -728,7 +825,7 @@
       const now = performance.now()
       let sp
       if (this.state === 'die') sp = this.t < 0.12 || (this.t > 0.3 && Math.floor(this.t * 14) & 1) ? SOLDIER.flash : SOLDIER.die
-      else if (now < this.flinchUntil) sp = SOLDIER.flinch
+      else if (this.state === 'held' || now < this.flinchUntil) sp = SOLDIER.flinch
       else if (this.state === 'aim') sp = SOLDIER.aim
       else sp = SOLDIER.run[Math.floor(this.dist / 4) % 6]
       drawAt(c, sp, this.dir, this.cx, this.y, BC)
@@ -748,6 +845,19 @@
       const mid = team.length ? (team[0].cx + team[1].cx) / 2 : s.W * 0.3
       const pref = mid < s.W / 2 ? s.W * 0.78 : s.W * 0.22
       this.cx = openSpot(s, Math.round(pref), 12)
+    }
+    hit(x, y) {
+      return Math.abs(x - this.cx) <= 13 && y >= FLOOR - 12 && y <= FLOOR + 1
+    }
+    onClick() {
+      // poke the sandbags: sand flies and whoever is behind them pops up, rattled
+      const s = this.s
+      const now = performance.now()
+      s.data.clickAt = now
+      s.burst(this.cx + rand(-6, 6), FLOOR - 9, 7, ['T', 't', 'o'])
+      const sn = s.data.sniper
+      if (sn && !sn.dead) sn.flush(now)
+      else if (lively(s, now)) s.data.sniperAt = Math.min(s.data.sniperAt, now + 500)
     }
     update() {
       return Infinity
@@ -795,13 +905,27 @@
       return this.exposed && Math.abs(x - this.cx) <= 5 && y >= FLOOR - 23 && y <= FLOOR - 9
     }
     hit(x, y) {
-      return this.exposed && Math.abs(x - this.cx) <= 6 && y >= FLOOR - 24 && y <= FLOOR - 8
+      if (!this.alive) return false
+      // up: his whole top half; hiding: just the helmet over the bags
+      if (this.exposed) return Math.abs(x - this.cx) <= 9 && y >= FLOOR - 26 && y <= FLOOR - 8
+      return Math.abs(x - this.cx) <= 8 && y >= FLOOR - 15 && y <= FLOOR - 6
     }
     aimPoint() {
       return { x: this.cx, y: FLOOR - 16 }
     }
     onClick() {
+      const now = performance.now()
+      this.s.data.clickAt = now
+      if (!this.exposed) return this.flush(now)
       for (const c of this.s.data.team) c.burstAt(this)
+    }
+    /** Startled out of cover: he jumps up without a shot lined up. */
+    flush(now) {
+      if (!this.alive || this.state === 'up' || this.state === 'rise') return
+      this.state = 'rise'
+      this.startled = true
+      this.s.particle({ img: BUBBLE['!'], x: this.cx - 2, y: FLOOR - 33, vy: -4, life: 0.8 })
+      this.next = now
     }
     shot(b, now) {
       if (!this.alive) return
@@ -847,7 +971,9 @@
           this.state = 'up'
           this.duck = null
           this.t = 0
-          this.shots = Math.random() < 0.4 ? 2 : 1
+          this.shots = this.startled ? 0 : Math.random() < 0.4 ? 2 : 1
+          this.upFor = this.startled ? 1.3 : 0.5
+          this.startled = false
         }
         return FAST
       }
@@ -870,7 +996,7 @@
             s.spawn(new Bullet(x0, y0, Math.cos(a) * 90, Math.sin(a) * 90, 'en'))
           }
         }
-        if ((this.shots <= 0 && this.t > 0.5) || !awake || !t) this.state = 'lower'
+        if ((this.shots <= 0 && this.t > (this.upFor || 0.5)) || !awake || !t) this.state = 'lower'
         return FAST
       }
       if (this.state === 'lower') {
@@ -925,6 +1051,7 @@
       return { x: this.cx, y: this.y }
     }
     onClick() {
+      this.s.data.clickAt = performance.now()
       for (const c of this.s.data.team) c.burstAt(this)
     }
     shot() {
@@ -963,16 +1090,47 @@
       if (old.length >= 2) old[0].dead = true
     }
     get prop() {
-      return this.landed
+      return this.landed && !this.held
+    }
+    get grabbable() {
+      return true
     }
     hit(x, y) {
-      return Math.abs(x - this.cx) <= 9 && y >= this.y - 6 && y <= this.y + 6
+      return Math.abs(x - this.cx) <= 11 && y >= this.y - 8 && y <= this.y + 7
     }
     onClick() {
+      this.s.data.clickAt = performance.now()
       const t = this.s.data.team.filter((c) => c.onField)
       if (t.length) t.sort((a, b) => Math.abs(a.cx - this.cx) - Math.abs(b.cx - this.cx))[0].wantItem = this
     }
+    // carry the weapon over to a commando and drop it on him
+    grab(p) {
+      this.s.data.grabAt = performance.now()
+      this.held = true
+      this.landed = false
+      this.drag(p)
+    }
+    drag(p) {
+      if (!this.held) return
+      this.s.data.grabAt = performance.now()
+      this.cx = clamp(p.x, 6, this.s.W - 6)
+      this.y = clamp(p.y, 5, FLOOR - 5)
+    }
+    drop() {
+      if (!this.held) return
+      const now = performance.now()
+      this.s.data.grabAt = now
+      this.held = false
+      const c = this.s.data.team.filter((k) => k.onField && Math.abs(k.cx - this.cx) < 16).sort((a, b) => Math.abs(a.cx - this.cx) - Math.abs(b.cx - this.cx))[0]
+      if (c) c.takeWeapon(this, now)
+      else {
+        this.vx = 0
+        this.vy = 0
+        this.bounce = 0
+      }
+    }
     update(dt, now, s) {
+      if (this.held) return FAST
       if (this.landed) return Infinity
       this.vy += 260 * dt
       this.cx = clamp(this.cx + this.vx * dt, 10, s.W - 10)
@@ -1047,6 +1205,7 @@
       return { x: (x0 + x1) / 2, y: (y0 + y1) / 2 }
     }
     onClick() {
+      this.s.data.clickAt = performance.now()
       for (const c of this.s.data.team) c.burstAt(this)
     }
     shot(b, now) {
@@ -1130,6 +1289,120 @@
     }
   }
 
+  // ---- the ground cannon: rises out of the floor, swings its barrel round and fires ----------------------------
+  class Turret {
+    constructor(s, cx) {
+      this.s = s
+      this.cx = cx
+      this.state = 'rise'
+      this.since = performance.now()
+      this.off = 10
+      this.hp = 8
+      this.ang = -Math.PI / 2
+      this.turnAt = 0
+      this.nextShot = this.since + 2200
+      this.hitUntil = 0
+      this.z = 2
+      this.enemy = true
+    }
+    get x() {
+      return this.cx - 3
+    }
+    get moving() {
+      return this.state === 'rise' || this.state === 'sink'
+    }
+    get alive() {
+      return this.state === 'fight'
+    }
+    shootable(x, y) {
+      return this.state === 'fight' && Math.abs(x - this.cx) <= 9 && y >= FLOOR - 11 && y <= FLOOR
+    }
+    hit(x, y) {
+      return this.state !== 'sink' && Math.abs(x - this.cx) <= 11 && y >= FLOOR - 16 && y <= FLOOR + 1
+    }
+    aimPoint() {
+      return { x: this.cx, y: FLOOR - 5 }
+    }
+    onClick() {
+      this.s.data.clickAt = performance.now()
+      if (this.alive) for (const c of this.s.data.team) c.burstAt(this)
+    }
+    shot(b, now) {
+      if (this.state !== 'fight') return
+      this.hp -= GUNS[b?.kind]?.dmg ?? 1
+      this.hitUntil = now + 90
+      if (this.hp > 0) return
+      const s = this.s
+      this.state = 'sink'
+      this.since = now
+      s.data.kills += 2
+      s.spawn(new Boom(this.cx, FLOOR - 6, true))
+      s.spawn(new Boom(this.cx + rand(-7, 7), FLOOR - 10, false, 180))
+      s.data.turretAt = now + rand(14000, 24000)
+    }
+    sink(now) {
+      if (this.state === 'sink') return
+      this.state = 'sink'
+      this.since = now
+    }
+    tip() {
+      return { x: this.cx + Math.cos(this.ang) * 14, y: FLOOR - 7 + this.off + Math.sin(this.ang) * 14 }
+    }
+    update(dt, now, s) {
+      if (this.state === 'rise') {
+        this.off = Math.max(0, 10 * (1 - (now - this.since) / 1100))
+        if (this.off <= 0) this.state = 'fight'
+        return FAST
+      }
+      if (this.state === 'sink') {
+        this.off = Math.min(12, (12 * (now - this.since)) / 900)
+        if (this.off >= 12) this.dead = true
+        return FAST
+      }
+      if (!lively(s, now)) {
+        this.sink(now)
+        return FAST
+      }
+      // the barrel swings one notch at a time toward the nearest commando
+      let t = null
+      for (const c of s.data.team) if (c.onField && (!t || Math.abs(c.cx - this.cx) < Math.abs(t.cx - this.cx))) t = c
+      if (t && now > this.turnAt) {
+        this.turnAt = now + 260
+        const want = Math.atan2(t.y - (t.prone ? 3 : 13) - (FLOOR - 7), t.cx - this.cx)
+        const goal = clamp(want, -Math.PI, 0)
+        const da = goal - this.ang
+        if (Math.abs(da) > 0.05) this.ang += clamp(da, -0.4, 0.4)
+      }
+      if (t && now > this.nextShot) {
+        this.nextShot = now + rand(1500, 2300)
+        const o = this.tip()
+        s.spawn(new Bullet(o.x, o.y, Math.cos(this.ang) * 85, Math.sin(this.ang) * 85, 'en'))
+        this.flash = now + 80
+      }
+      return now < this.hitUntil ? FAST : FAST * 2
+    }
+    draw(c) {
+      const now = performance.now()
+      const off = Math.round(this.off)
+      const img = now < this.hitUntil ? TURRET_HIT : TURRET
+      c.drawImage(img, Math.round(this.cx - img.width / 2), FLOOR - img.height + 2 + off)
+      // the barrel on top, a thick outlined tube swinging from the dome's crown
+      const ca = Math.cos(this.ang)
+      const sa = Math.sin(this.ang)
+      const py = FLOOR - 7 + off
+      for (const [r, k] of [[1.6, 'E'], [0.9, 'a'], [0.4, 'A']])
+        for (let i = 3; i <= 13; i++) {
+          const x = this.cx + ca * i
+          const y = py + sa * i
+          if (y > FLOOR) continue
+          c.drawImage(pix(i >= 12 && k === 'A' ? 'w' : k), Math.round(x - r + 0.5), Math.round(y - r + 0.5))
+          if (r > 1) c.drawImage(pix(k), Math.round(x + r - 0.5), Math.round(y + r - 0.5))
+          if (r > 0.5) c.drawImage(pix(k), Math.round(x), Math.round(y))
+        }
+      if (now < (this.flash || 0)) drawMid(c, SHOT.flash[0], this.cx + ca * 15, py + sa * 15)
+    }
+  }
+
   // ---- Bill and Lance --------------------------------------------------------------------------------------
   class Commando {
     constructor(s, idx) {
@@ -1160,6 +1433,12 @@
       this.wantItem = null
       this.idleLook = 0
       this.safeUntil = 0
+      this.medalsUntil = 0
+      this.grabbable = true
+      this.grabP = null
+      this.dashTo = null
+      this.dashUntil = 0
+      this.follow = false
       this.z = 5 - idx
     }
     get partner() {
@@ -1193,21 +1472,182 @@
     }
     hit(x, y) {
       if (!this.onField) return false
-      if (this.prone) return Math.abs(x - this.cx) <= 17 && y >= this.y - 8 && y <= this.y + 1
-      return Math.abs(x - this.cx) <= 6 && y >= this.y - 23 && y <= this.y + 1
+      if (this.prone) return Math.abs(x - this.cx) <= 19 && y >= this.y - 11 && y <= this.y + 1
+      if (this.state === 'jump') return Math.abs(x - this.cx) <= 10 && Math.abs(y - (this.y - 9)) <= 10
+      return Math.abs(x - this.cx) <= 9 && y >= this.y - 26 && y <= this.y + 1
     }
+    // the pad: click = B (fire), double-click = A (jump), drag = the D-pad
     onClick() {
+      const s = this.s
       const now = performance.now()
+      s.data.clickAt = now
       if (!this.onField) return
-      if (this.state === 'rest' || this.state === 'prone' || this.state === 'win') this.state = 'stand'
-      if (this.grounded) this.jump(this.dir * 40)
+      codeKey(s, 'B', now)
+      this.medalsUntil = now + 2200
+      if (this.state === 'meet') return
+      if (this.state === 'rest' || this.state === 'win') this.state = 'stand'
+      const t = this.pickTarget(s, now)
+      if (t && (t.cx - this.cx) * this.dir > -12) this.burstAt(t)
+      else {
+        this.queue = { target: null, n: 3 }
+        this.cool = Math.min(this.cool, 0.05)
+      }
       this.partner.glance(this.cx, now)
     }
     onDblClick() {
-      // hit the dirt and keep firing
-      if (!this.onField || !this.grounded) return
-      this.state = 'prone'
-      this.proneUntil = performance.now() + 2500
+      const s = this.s
+      const now = performance.now()
+      s.data.clickAt = now
+      codeKey(s, 'A', now)
+      if (!this.onField || !this.grounded || this.state === 'meet') return
+      if (this.state === 'rest' || this.state === 'win' || this.state === 'prone') this.state = 'stand'
+      this.jump(this.dir * 40)
+    }
+    grab(p) {
+      this.s.data.grabAt = performance.now()
+      this.grabP = { x: p.x, y: p.y }
+    }
+    drag() {
+      this.s.data.grabAt = performance.now()
+    }
+    drop(p) {
+      const s = this.s
+      const now = performance.now()
+      s.data.grabAt = now
+      const g = this.grabP
+      this.grabP = null
+      if (!g || !this.onField) return
+      const dx = p.x - g.x
+      const dy = p.y - g.y
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < 5) return
+      const tok = Math.abs(dy) > Math.abs(dx) ? (dy < 0 ? 'U' : 'D') : dx < 0 ? 'L' : 'R'
+      codeKey(s, tok, now)
+      if (this.state === 'meet') return
+      if (this.state === 'rest' || this.state === 'win') this.state = 'stand'
+      if (tok === 'U') {
+        // up: a somersault, drifting the way the drag leaned
+        if (this.grounded) {
+          if (this.state === 'prone') this.state = 'stand'
+          this.jump(clamp(dx * 3, -60, 60))
+        }
+      } else if (tok === 'D') {
+        if (this.grounded) {
+          this.state = 'prone'
+          this.proneUntil = now + 2600
+        }
+      } else {
+        // left / right: a dash that way, gun up
+        const k = Math.sign(dx)
+        this.dashTo = clamp(this.cx + k * clamp(Math.abs(dx) * 3, 40, 180), 8, s.W - 8)
+        this.dashUntil = now + 4000
+        if (this.state === 'prone') this.state = 'stand'
+        this.face(k, now, 600, true)
+      }
+    }
+    takeWeapon(item, now) {
+      item.dead = true
+      this.wantItem = null
+      this.weapon = item.letter
+      this.weaponUntil = now + 90000
+      this.s.say(item.letter, this.cx, this.y - 34, { life: 1.1, color: LETTER_COLOR[item.letter], vy: -6, size: 8 })
+      if (this.state !== 'jump') this.state = 'stand'
+    }
+    /** Fire the queued burst; true while it is still going. */
+    runQueue(now) {
+      const q = this.queue
+      if (q.target && (q.target.dead || !q.target.alive)) {
+        this.queue = null
+        return false
+      }
+      if (this.state !== 'prone') this.state = 'stand'
+      if (this.cool <= 0) {
+        if (q.target) {
+          const p = q.target.aimPoint()
+          const o = this.muzzle()
+          this.setAim(p.x - o.x, p.y - o.y, now, true)
+          this.fire(now, this.prone ? undefined : Math.atan2(p.y - o.y, p.x - o.x))
+        } else this.fire(now)
+        this.cool = Math.max(0.13, this.weapon === 'S' || this.weapon === 'L' ? GUNS[this.weapon].cool * 0.6 : 0.13)
+        if (--q.n <= 0) this.queue = null
+      }
+      return true
+    }
+    /** Player one on the keys: A/D run, W aims up, S goes prone (or aims low on the run), Space fires. */
+    keyDrive(dt, now, s) {
+      this.dashTo = null
+      this.follow = false
+      if (this.queue && this.runQueue(now)) return FAST
+      const mx = keyDir(s)
+      const up = s.keys.has('up')
+      const down = s.keys.has('down')
+      if (down && !mx) {
+        this.state = 'prone'
+        this.proneUntil = now + 200
+      } else if (mx) {
+        if (mx !== this.dir) this.face(mx, now, 0, true)
+        const st = 46 * dt
+        this.cx = clamp(this.cx + mx * st, 8, s.W - 8)
+        this.dist += st
+        this.state = 'run'
+      } else if (this.state === 'prone' && now < this.proneUntil) {
+        // a moment's grace after S comes up
+      } else this.state = 'stand'
+      if (this.state !== 'prone') this.aim = up ? (mx ? (this.dir === 1 ? 7 : 5) : 6) : down && mx ? (this.dir === 1 ? 1 : 3) : this.dir === 1 ? 0 : 4
+      if (s.keys.has('fire') && this.cool <= 0) this.fire(now)
+      return FAST
+    }
+    /** The live enemy nearest the cursor, if the cursor is on one. */
+    enemyAtCursor(s, c) {
+      let best = null
+      let bd = 1e9
+      for (const a of s.actors) {
+        if (!a.enemy || !a.alive || (a instanceof Sniper && !a.exposed)) continue
+        const p = a.aimPoint()
+        const dd = Math.abs(p.x - c.x) + Math.abs(p.y - c.y) * 0.5
+        if (Math.abs(p.x - c.x) < (a.boss ? 20 : 24) && dd < bd) {
+          bd = dd
+          best = a
+        }
+      }
+      return best
+    }
+    /** Player one: the cursor is his stick. He follows it with some slack, aims at it,
+     *  and opens fire while it sits on an enemy. No dodging: that is up to you. */
+    userDrive(dt, now, s) {
+      if (this.queue && this.runQueue(now)) return FAST
+      if (this.state === 'prone') {
+        const c = s.cursor
+        const t = c && this.enemyAtCursor(s, c)
+        if (t && this.cool <= 0 && (t.cx - this.cx) * this.dir > 0) this.fire(now)
+        if (now > this.proneUntil) this.state = 'stand'
+        return FAST
+      }
+      const item = this.wantItem && !this.wantItem.dead && this.wantItem.landed ? this.wantItem : null
+      if (item) {
+        if (Math.abs(item.cx - this.cx) < 3) {
+          this.takeWeapon(item, now)
+          return FAST
+        }
+        return this.runTo(item.cx, dt, now, s)
+      }
+      const c = s.cursor
+      if (!c) {
+        this.state = 'stand'
+        return SLOW
+      }
+      const dx = c.x - this.cx
+      if (!this.follow && Math.abs(dx) > 84) this.follow = true
+      else if (this.follow && Math.abs(dx) < 34) this.follow = false
+      if (this.follow) this.runTo(clamp(c.x - Math.sign(dx) * 30, 8, s.W - 8), dt, now, s, true)
+      else this.state = 'stand'
+      const o = this.muzzle()
+      this.setAim(c.x - o.x, c.y - o.y, now)
+      const t = this.enemyAtCursor(s, c)
+      if (t && this.cool <= 0) {
+        const p = t.aimPoint()
+        if ((p.x - this.cx) * this.dir >= -2) this.fire(now, Math.atan2(p.y - o.y, p.x - o.x))
+      }
+      return FAST
     }
     glance(x, now) {
       if (this.grounded && this.state !== 'rest' && this.state !== 'meet') this.face(x > this.cx ? 1 : -1, now, 800, true)
@@ -1220,7 +1660,7 @@
     }
     jump(vx) {
       this.state = 'jump'
-      this.vy = -140
+      this.vy = -158 // a high somersault, up past the top of the bar
       this.vx = vx
       this.y -= 1
     }
@@ -1279,7 +1719,11 @@
       this.queue = null
       this.weapon = 'n'
       s.data.deaths++
-      s.data.lives[this.idx] = s.data.lives[this.idx] > 1 ? s.data.lives[this.idx] - 1 : 3
+      if (s.data.lives[this.idx] > 1) s.data.lives[this.idx]--
+      else {
+        s.data.lives[this.idx] = 3
+        s.say('CONTINUE', this.cx, 8, { color: '#ffffff', life: 1.8, size: 8 })
+      }
       // his buddy covers the spot he went down at
       const p = this.partner
       p.coverUntil = now + 6000
@@ -1376,6 +1820,16 @@
         this.setAim(d.finaleX - this.cx, -6, now)
         return SLOW
       }
+      // a dash someone sent him on, run and gun
+      if (this.dashTo !== null) {
+        if (now > this.dashUntil || Math.abs(this.dashTo - this.cx) < 1.5) this.dashTo = null
+        else {
+          const t = this.pickTarget(s, now)
+          if (t && this.cool <= 0 && (t.cx - this.cx) * this.dir > 0) this.fire(now)
+          return this.runTo(this.dashTo, dt, now, s)
+        }
+      }
+      if (this.idx === 0 && d.userOn) return keyMode(s, now) ? this.keyDrive(dt, now, s) : this.userDrive(dt, now, s)
 
       // incoming fire: hit the dirt, or somersault over it
       const th = this.threat(s, now)
@@ -1412,22 +1866,7 @@
         }
       }
 
-      if (this.queue) {
-        const q = this.queue
-        if (q.target.dead || !q.target.alive) this.queue = null
-        else {
-          this.state = this.state === 'prone' ? 'prone' : 'stand'
-          const p = q.target.aimPoint()
-          const o = this.muzzle()
-          if (this.cool <= 0) {
-            this.setAim(p.x - o.x, p.y - o.y, now, true)
-            this.fire(now, this.prone ? undefined : Math.atan2(p.y - o.y, p.x - o.x))
-            this.cool = 0.13
-            if (--q.n <= 0) this.queue = null
-          }
-          return FAST
-        }
-      }
+      if (this.queue && this.runQueue(now)) return FAST
 
       const tgt = this.pickTarget(s, now)
       if (this.state === 'prone') {
@@ -1440,12 +1879,7 @@
       const item = this.wantItem && !this.wantItem.dead ? this.wantItem : s.actors.find((a) => a instanceof Pickup && a.landed && !a.dead)
       if (item && (this.wantItem === item || Math.abs(item.cx - this.cx) <= Math.abs(item.cx - this.partner.cx) || !this.partner.onField) && !(tgt && Math.abs(tgt.cx - this.cx) < 70)) {
         if (Math.abs(item.cx - this.cx) < 3 && item.landed) {
-          item.dead = true
-          this.wantItem = null
-          this.weapon = item.letter
-          this.weaponUntil = now + 90000
-          s.say(item.letter, this.cx, this.y - 34, { life: 1.1, color: LETTER_COLOR[item.letter], vy: -6, size: 8 })
-          this.state = 'stand'
+          this.takeWeapon(item, now)
           return FAST
         }
         if (item.landed) return this.runTo(item.cx, dt, now, s)
@@ -1558,6 +1992,11 @@
       return FAST
     }
     air(dt, now, s) {
+      // player one steers the somersault with A/D
+      if (this.idx === 0 && s.keys && s.keys.size && s.data.userOn) {
+        const mx = keyDir(s)
+        if (mx) this.vx = mx * 60
+      }
       this.vy += 480 * dt
       this.cx = clamp(this.cx + this.vx * dt, 8, s.W - 8)
       this.y += this.vy * dt
@@ -1671,9 +2110,14 @@
       const d = this.dir
       const cx = Math.round(this.cx)
       const fy = Math.round(this.y)
-      if (now < (this.medalsUntil || 0)) {
+      if (now < this.medalsUntil || (this.idx === 0 && this.s.data.userOn && this.state !== 'rest')) {
+        // the lives medals, the way the NES showed them (a count past five)
         const n = this.s.data.lives[this.idx]
-        for (let i = 0; i < n; i++) c.drawImage(MEDAL[this.idx], cx - n * 3 + i * 6, 1)
+        const k = Math.min(n, 5)
+        const w = k * 6 + (n > 5 ? 9 : 0)
+        const x0 = Math.round(clamp(cx - w / 2, 1, this.s.W - w - 1))
+        for (let i = 0; i < k; i++) c.drawImage(MEDAL[this.idx], x0 + i * 6, 1)
+        if (n > 5) drawDigits(c, String(n), x0 + k * 6 + 1, 1)
       }
       if (this.state === 'jump') {
         const q = ((Math.floor(this.spin) % 4) + 4) % 4
@@ -1717,8 +2161,22 @@
   // ---- the bar ---------------------------------------------------------------------------------------------
   function spawnWave(s, now, n) {
     const d = s.data
+    // now and then a pincer: they come from both ends at once
+    if (n >= 2 && Math.random() < 0.25) {
+      for (let i = 0; i < n; i++) s.spawn(new Soldier(s, i % 2 ? -d.enemySide : d.enemySide, Math.floor(i / 2) * rand(16, 24)))
+      return
+    }
     const side = Math.random() < 0.18 ? -d.enemySide : d.enemySide
     for (let i = 0; i < n; i++) s.spawn(new Soldier(s, side, i * rand(14, 22)))
+  }
+  function spawnTurret(s, now) {
+    const d = s.data
+    const b = d.bunker.cx
+    const avoid = [[b - 16, b + 16]]
+    for (const c of d.team) avoid.push([c.cx - 30, c.cx + 30])
+    const pref = d.enemySide === 1 ? s.W * 0.68 : s.W * 0.32
+    d.turret = s.spawn(new Turret(s, openSpot(s, pref, 10, avoid)))
+    s.burst(d.turret.cx, FLOOR - 2, 6, ['a', 'A', 'm'])
   }
   function bossSpot(s) {
     const d = s.data
@@ -1742,6 +2200,11 @@
       }
       if (a instanceof Sniper && a.alive) {
         d.booms.push({ at: now + t, x: a.cx, y: FLOOR - 14, big: false, kill: a })
+        t += 140
+      }
+      if (a instanceof Turret && a.alive) {
+        a.hp = 1
+        d.booms.push({ at: now + t, x: a.cx, y: FLOOR - 6, big: true, kill: a })
         t += 140
       }
     }
@@ -1775,9 +2238,9 @@
     title: 'Contra',
     sub: 'Konami, 1987',
     blurb:
-      'Bill and Lance hold the bar against the Red Falcon army: they run and gun in eight directions, hit the dirt under fire, somersault over soldiers and pick off the sniper behind the sandbags when he pops up. Each one covers the other and shoots first at whatever is closing in on his buddy; soldiers flinch when a mate goes down. Shoot the falcon capsule and one of them runs for the S, M, L or F weapon it drops. Get hit and it is the death flip and a respawn drop. They aim at your <b>cursor</b>; click a commando to make him jump, double-click to send him prone, click an enemy or the capsule for a covering burst from both. While the agent works the waves build up until the sirens bring up the Defense Wall; done blows the base up in a chain, then a high five and a victory pose. Left alone they lie prone side by side.',
+      'Bill and Lance hold the bar against the Red Falcon army on their own: they run and gun in eight directions, hit the dirt under fire, somersault over soldiers and pick off the sniper behind the sandbags. Each covers the other and shoots first at whatever is closing in on his buddy; soldiers flinch when a mate goes down. Shoot the falcon capsule and one of them runs for the S, M, L or F weapon it drops. Move your <b>cursor</b> over the bar and you are player one: Bill follows it, aims at it and opens fire while it sits on an enemy, and Lance covers you; stop and he plays on his own again. Click a commando to fire (B), double-click to jump (A), drag him up to somersault, down to go prone, sideways to dash. Click an enemy for a covering burst, poke the sandbags to flush the sniper, grab a soldier and throw him into the others, or carry a weapon letter onto a commando. Click any character and the keys work too: A/D run, W aims up (jump while running), S prone or aim low on the run, Space fires. You know the code. While the agent works the waves build, a cannon rises out of the floor, and the sirens bring up the Defense Wall; done blows the base up in a chain, then a high five and a victory pose. Left alone they lie prone side by side.',
     setup(s) {
-      s.data = { team: [], booms: [], kills: 0, deaths: 0, lives: [3, 3], enemySide: 1, boss: null, sniper: null, W: s.W }
+      s.data = { team: [], booms: [], kills: 0, deaths: 0, lives: [3, 3], enemySide: 1, boss: null, sniper: null, turret: null, turretAt: Infinity, W: s.W, clickAt: -1e9, grabAt: -1e9, userOn: false, code: '' }
       const d = s.data
       d.team = [new Commando(s, 0), new Commando(s, 1)]
       d.team[1].cx = openSpot(s, d.team[0].cx + 40, 8)
@@ -1807,8 +2270,27 @@
       }
       d.bunker.place(s)
       if (d.boss) d.boss.cx = bossSpot(s)
+      if (d.turret) d.turret.cx = clamp(d.turret.cx, 12, s.W - 12)
       for (const a of s.actors) if (a instanceof Pickup && a.landed) a.cx = openSpot(s, clamp(a.cx, 10, s.W - 10), 9)
       d.W = s.W
+    },
+    onKey(s, key, down) {
+      const d = s.data
+      const now = performance.now()
+      const c = d.team[0]
+      if (!down) return
+      d.userOn = true
+      codeKey(s, { up: 'U', down: 'D', left: 'L', right: 'R', fire: 'B' }[key] || '', now)
+      if (!c.onField) return
+      c.medalsUntil = Math.max(c.medalsUntil, now + 1500)
+      if (c.state === 'rest' || c.state === 'win') c.state = 'stand'
+      if (key === 'fire' && c.cool <= 0 && c.state !== 'meet') c.fire(now)
+      // W while running: a running somersault (standing, W only aims up)
+      if (key === 'up' && keyDir(s) && c.grounded && c.state !== 'meet') {
+        if (c.state === 'prone') c.state = 'stand'
+        c.jump(keyDir(s) * 55)
+      }
+      s.poke()
     },
     onBarClick(s, p) {
       // mockup extra (Aico has no empty-bar clicks): a burst toward the spot
@@ -1823,6 +2305,7 @@
       d.nextEnemy = now + 600
       d.nextCapsule = now + rand(6000, 10000)
       d.bossAt = now + rand(26000, 38000)
+      d.turretAt = now + rand(9000, 15000)
       d.sniperAt = Math.min(d.sniperAt, now + rand(3000, 7000))
       for (const c of d.team) {
         c.post = null
@@ -1848,6 +2331,7 @@
       const d = s.data
       for (const a of s.actors) if (a instanceof Bullet || a instanceof Capsule) a.dead = true
       if (d.boss) d.boss.sink(performance.now())
+      if (d.turret) d.turret.sink(performance.now())
       d.booms.length = 0
       d.finaleUntil = 0
       for (const c of d.team) if (c.state === 'meet' || c.state === 'win') c.state = 'stand'
@@ -1874,6 +2358,8 @@
           c.startMeet()
         }
       if (d.boss && d.boss.dead) d.boss = null
+      if (d.turret && (d.turret.dead || d.turret.state === 'sink')) d.turret = null
+      d.userOn = engaged(s, now)
       const awake = s.lively(now)
       if (!awake) {
         d.nextEnemy = Math.max(d.nextEnemy, now + 4000)
@@ -1887,18 +2373,26 @@
         if (!d.boss && now > (d.bossAt || Infinity)) {
           // sirens: the Defense Wall comes up out of the ground
           d.boss = s.spawn(new Wall(s, bossSpot(s), -d.enemySide))
+          if (d.turret) d.turret.sink(now)
           for (const c of d.team) c.postAt = 0
           d.alarmUntil = now + 2600
           d.bossAt = Infinity
         }
         if (d.boss === null && d.bossAt === Infinity) d.bossAt = now + rand(30000, 45000)
+        if (!d.turret && d.turretAt === Infinity) d.turretAt = now + rand(14000, 24000)
+        if (!d.boss && !d.turret && now > d.turretAt) {
+          spawnTurret(s, now)
+          d.turretAt = Infinity
+        }
         if (now > d.nextEnemy) {
           if (soldiers < 7) spawnWave(s, now, d.boss ? Math.floor(rand(1, 3)) : Math.floor(rand(2, 4.5)))
           d.nextEnemy = now + (d.boss ? rand(6000, 9000) : rand(3200, 5600))
         }
       } else if (now > d.nextEnemy) {
-        if (soldiers < 2) spawnWave(s, now, 1)
-        d.nextEnemy = now + rand(9000, 16000)
+        // someone playing gets a little more to shoot at
+        if (soldiers < (d.userOn ? 3 : 2)) spawnWave(s, now, d.userOn ? Math.floor(rand(1, 3)) : 1)
+        d.nextEnemy = now + (d.userOn ? rand(4000, 7000) : rand(9000, 16000))
+        if (d.userOn && !d.turret && !d.boss && Math.random() < 0.2) spawnTurret(s, now)
       }
       if (!d.sniper && now > d.sniperAt) {
         d.bunker.place(s)
@@ -1909,7 +2403,7 @@
         if (!s.actors.some((a) => a instanceof Capsule)) s.spawn(new Capsule(s))
         d.nextCapsule = now + (s.busy ? rand(14000, 22000) : rand(24000, 38000))
       }
-      return Math.min(wait, Math.max(SLOW, Math.min(d.nextEnemy, d.nextCapsule, d.sniperAt, d.bossAt ?? Infinity) - now))
+      return Math.min(wait, d.userOn ? SLOW : Infinity, Math.max(SLOW, Math.min(d.nextEnemy, d.nextCapsule, d.sniperAt, d.bossAt ?? Infinity, s.busy ? d.turretAt : Infinity) - now))
     },
     drawBehind(s, c) {
       // the siren: a pulsing red wash while the wall comes up
