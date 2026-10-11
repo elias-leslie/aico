@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { EMPTY_FORM, ToolForm } from './ToolForm'
+import { EMPTY_FORM, parseAliases, ToolForm } from './ToolForm'
 
 describe('ToolForm', () => {
   it('normalizes submitted values and derives the process name from the command', async () => {
@@ -38,6 +38,7 @@ describe('ToolForm', () => {
         process_name: 'codex',
         description: 'Local coding agent',
         color: '#00FF9F',
+        aliases: '',
       })
     })
   })
@@ -87,5 +88,59 @@ describe('ToolForm', () => {
 
     expect(screen.getByLabelText('Tool slug')).toHaveValue('hermes')
     expect(screen.getByLabelText('Tool color')).toHaveValue('#F59E0B')
+  })
+
+  it('normalizes aliases into a deduplicated slug list', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    render(
+      <ToolForm
+        initial={{
+          ...EMPTY_FORM,
+          name: 'Claude Code',
+          slug: 'claude-code',
+          command: 'claude --dangerously-skip-permissions',
+          process_name: 'claude',
+        }}
+        onSubmit={onSubmit}
+        onCancel={vi.fn()}
+        isEdit
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText('Tool aliases'), {
+      target: { value: ' Claude, cc ,claude,' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({ slug: 'claude-code', aliases: 'claude, cc' }),
+      )
+    })
+    expect(parseAliases(' Claude, cc ,claude,')).toEqual(['claude', 'cc'])
+  })
+
+  it('lets the bare shell tool keep an empty command and shows its context hook', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    render(
+      <ToolForm
+        initial={{ ...EMPTY_FORM, name: 'Shell', slug: 'shell' }}
+        onSubmit={onSubmit}
+        onCancel={vi.fn()}
+        isEdit
+        contextHook="codex-hooks"
+      />,
+    )
+
+    expect(screen.getByLabelText('Tool slug')).toHaveAttribute('readonly')
+    expect(screen.getByLabelText('Tool context hook')).toHaveValue(
+      'codex-hooks',
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({ slug: 'shell', command: '' }),
+      )
+    })
   })
 })

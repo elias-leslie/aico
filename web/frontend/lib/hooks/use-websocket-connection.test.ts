@@ -145,6 +145,23 @@ describe('openWebSocketConnection', () => {
     })
   })
 
+  it('claims the shared size on connect when the view owns resize', () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('WebSocket', MockWebSocket)
+    const refs = buildRefs()
+    const callbacks = buildCallbacks()
+    callbacks.getDimensions.mockReturnValue({ cols: 120, rows: 40 } as never)
+
+    connect(refs, callbacks)
+    sockets[0].emitOpen()
+
+    expect(JSON.parse(sockets[0].sent[0] as string)).toMatchObject({
+      __ctrl: true,
+      resize: { cols: 120, rows: 40 },
+      claim: true,
+    })
+  })
+
   it('negotiates observer capabilities without reading terminal dimensions', () => {
     vi.useFakeTimers()
     vi.stubGlobal('WebSocket', MockWebSocket)

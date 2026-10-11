@@ -64,7 +64,8 @@ export function ToolRow({
             fontFamily: 'var(--font-mono)',
           }}
         >
-          {tool.command}
+          {tool.command || 'login shell'}
+          {tool.aliases?.length ? ` · aliases: ${tool.aliases.join(', ')}` : ''}
         </div>
       </div>
       <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">

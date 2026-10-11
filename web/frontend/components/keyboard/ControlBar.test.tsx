@@ -130,7 +130,7 @@ describe('ControlBar', () => {
 
   it('hides status banner for voice active sessions', async () => {
     renderControlBar({
-      activeMode: 'claude',
+      activeMode: 'claude-code',
       voiceActive: true,
     })
 
@@ -161,7 +161,7 @@ describe('ControlBar', () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
     vi.mocked(getClaudeModelOptions).mockRejectedValueOnce(error)
 
-    renderControlBar({ activeMode: 'claude' })
+    renderControlBar({ activeMode: 'claude-code' })
 
     await waitFor(() => {
       expect(consoleError).toHaveBeenCalledWith(
@@ -182,7 +182,7 @@ describe('ControlBar', () => {
     vi.mocked(getClaudeModelOptions).mockResolvedValueOnce([
       { id: 'sonnet', label: 'Sonnet', command: '/model sonnet\r' },
     ])
-    const { onSend } = renderControlBar({ activeMode: 'claude' })
+    const { onSend } = renderControlBar({ activeMode: 'claude-code' })
 
     fireEvent.click(screen.getByRole('button', { name: 'Switch Claude model' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Sonnet' }))
@@ -204,7 +204,7 @@ describe('ControlBar', () => {
       <ModifierProvider>
         <ControlBar
           onSend={vi.fn()}
-          activeMode="claude"
+          activeMode="claude-code"
           connectionStatus="connected"
         />
       </ModifierProvider>,

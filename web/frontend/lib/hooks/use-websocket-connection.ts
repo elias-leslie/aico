@@ -209,11 +209,15 @@ export function openWebSocketConnection(
     }, WS_CLIENT_PING_INTERVAL)
 
     // Negotiate capabilities even when this view must not claim tmux geometry.
+    // getDimensions only answers while this view owns resize (active and
+    // focused), so a connect-time size is also a claim on the shared window.
     const dims = sendInitialResize ? getDimensions?.() : null
     ws.send(
       JSON.stringify({
         __ctrl: true,
-        ...(dims ? { resize: { cols: dims.cols, rows: dims.rows } } : {}),
+        ...(dims
+          ? { resize: { cols: dims.cols, rows: dims.rows }, claim: true }
+          : {}),
         capabilities: CLIENT_CAPABILITIES,
       }),
     )

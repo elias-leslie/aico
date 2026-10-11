@@ -74,8 +74,10 @@ export function useATermResize(options: ATermResizeOptions) {
     [fitAddonRef, sendBackendResize, wsRef],
   )
 
-  // Imperative resize used on visibility/status changes — fits and signals
-  // the backend immediately; not part of the drag debounce flow.
+  // Imperative resize used when the view becomes active (visible, focused and
+  // connected). It fits and claims the shared tmux window size for this view:
+  // the most recently activated client owns the size. Drag resizes below only
+  // resize this view's own PTY client and never re-claim.
   const handleResize = useCallback(() => {
     if (!fitAddonRef.current || !aTermRef.current) return
     fitAddonRef.current.fit()
@@ -86,6 +88,7 @@ export function useATermResize(options: ATermResizeOptions) {
           JSON.stringify({
             __ctrl: true,
             resize: { cols: dims.cols, rows: dims.rows },
+            claim: true,
           }),
         )
       }

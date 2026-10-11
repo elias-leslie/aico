@@ -6,14 +6,17 @@ import { ModeToggle } from './ModeToggle'
 const mockTool = (overrides: Partial<AgentTool>): AgentTool => ({
   id: 'tool-id',
   name: 'Claude',
-  slug: 'claude',
+  slug: 'claude-code',
   command: 'claude',
+  argv: ['claude'],
   process_name: 'claude',
   description: null,
   color: null,
   display_order: 0,
   is_default: true,
   enabled: true,
+  aliases: ['claude'],
+  context_hook: null,
   created_at: null,
   updated_at: null,
   ...overrides,
@@ -54,7 +57,7 @@ describe('ModeToggle', () => {
 
     for (const [label, slug, fill] of [
       ['Shell', 'shell', '#8A8F98'],
-      ['Claude', 'claude', '#D97757'],
+      ['Claude', 'claude-code', '#D97757'],
       ['Antigravity', 'agy', '#3186FF'],
     ]) {
       const item = screen.getByRole('menuitem', {
@@ -70,7 +73,7 @@ describe('ModeToggle', () => {
     const onChange = vi.fn()
     render(
       <ModeToggle
-        value="claude"
+        value="claude-code"
         onChange={onChange}
         agentTools={[mockTool({})]}
       />,
@@ -97,7 +100,7 @@ describe('ModeToggle', () => {
     fireEvent.click(button)
 
     await waitFor(() => {
-      expect(onChange).toHaveBeenCalledWith('claude')
+      expect(onChange).toHaveBeenCalledWith('claude-code')
     })
   })
 
@@ -105,7 +108,7 @@ describe('ModeToggle', () => {
     const onChange = vi.fn().mockResolvedValue(undefined)
     render(
       <ModeToggle
-        value="claude"
+        value="claude-code"
         onChange={onChange}
         agentTools={[mockTool({})]}
       />,

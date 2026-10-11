@@ -1,5 +1,9 @@
+import { renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { attachViewportResizeListeners } from './use-a-term-resize'
+import {
+  attachViewportResizeListeners,
+  useATermResize,
+} from './use-a-term-resize'
 
 describe('attachViewportResizeListeners', () => {
   const originalVisualViewport = window.visualViewport
@@ -64,5 +68,79 @@ describe('attachViewportResizeListeners', () => {
     expect(callback).toHaveBeenCalledTimes(1)
 
     cleanup()
+  })
+})
+
+describe('useATermResize shared-size claim', () => {
+  const originalResizeObserver = globalThis.ResizeObserver
+
+  afterEach(() => {
+    globalThis.ResizeObserver = originalResizeObserver
+    vi.useRealTimers()
+  })
+
+  function setup(sendBackendResize = true) {
+    let observerCallback: ResizeObserverCallback | null = null
+    globalThis.ResizeObserver = class {
+      constructor(callback: ResizeObserverCallback) {
+        observerCallback = callback
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    } as unknown as typeof ResizeObserver
+    let dims = { cols: 80, rows: 24 }
+    const send = vi.fn()
+    const options = {
+      aTermRef: { current: {} as never },
+      fitAddonRef: {
+        current: { fit: vi.fn(), proposeDimensions: () => dims } as never,
+      },
+      containerRef: { current: document.createElement('div') },
+      wsRef: { current: { readyState: WebSocket.OPEN, send } as never },
+      sendBackendResize,
+    }
+    const { result } = renderHook(() => useATermResize(options))
+    const observe = (width: number, height: number, next: typeof dims) => {
+      dims = next
+      observerCallback?.(
+        [{ contentRect: { width, height } } as ResizeObserverEntry],
+        {} as ResizeObserver,
+      )
+    }
+    const messages = () =>
+      send.mock.calls.map(([raw]) => JSON.parse(raw as string))
+    return { result, observe, messages }
+  }
+
+  it('claims the shared size only when the view becomes active', () => {
+    vi.useFakeTimers()
+    const { result, observe, messages } = setup()
+
+    result.current.handleResize()
+    expect(messages()).toEqual([
+      { __ctrl: true, resize: { cols: 80, rows: 24 }, claim: true },
+    ])
+
+    observe(800, 600, { cols: 100, rows: 30 })
+    vi.advanceTimersByTime(1000)
+    observe(900, 700, { cols: 120, rows: 40 })
+    vi.advanceTimersByTime(1000)
+
+    expect(messages().slice(1)).toEqual([
+      { __ctrl: true, resize: { cols: 100, rows: 30 } },
+      { __ctrl: true, resize: { cols: 120, rows: 40 } },
+    ])
+  })
+
+  it('sends nothing while another view owns the size', () => {
+    vi.useFakeTimers()
+    const { result, observe, messages } = setup(false)
+
+    result.current.handleResize()
+    observe(800, 600, { cols: 100, rows: 30 })
+    vi.advanceTimersByTime(1000)
+
+    expect(messages()).toEqual([])
   })
 })

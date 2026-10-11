@@ -202,7 +202,7 @@ describe('ATermComponent', () => {
     expect(resizeHookOptions?.sendBackendResize).toBe(true)
   })
 
-  it('reclaims resize ownership when the browser view regains focus', () => {
+  it('claims the shared size again (handleResize) only when the view regains focus', () => {
     render(<ATermComponent sessionId="session-shared" isVisible />)
     const initialResizes = resizeHandle.mock.calls.length
 

@@ -4,6 +4,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback } from 'react'
 import { apiFetch } from '../api-fetch'
 
+/**
+ * A session as A-Term lists it. Ids are Tether's 8-hex session ids; a legacy
+ * `summitflow-*` session on the default tmux server keeps its UUID, and an
+ * external default-server tmux session keeps its tmux session name.
+ */
 export interface ATermSession {
   id: string
   name: string
@@ -25,6 +30,13 @@ export interface ATermSession {
   is_external?: boolean
   is_root?: boolean
   source?: string | null
+  /** The app that created the session in Tether ('a-term', 'aico', ...). */
+  origin?: string | null
+  /** Tether status: running | pending | uncertain | legacy. */
+  status?: string | null
+  /** A pre-Tether session on the default tmux server: attach-only. */
+  is_legacy?: boolean
+  generation?: string | null
 }
 
 interface SessionListResponse {

@@ -216,9 +216,9 @@ describe('ATermManagerModal', () => {
     expect(onAttachExternalSession).toHaveBeenCalledWith('codex-agent-hub')
   })
 
-  it('shows registered project names for unnamed Aico sessions while retaining custom names', () => {
+  it('shows registered project names for Tether sessions named after their project while retaining custom names', () => {
     const aicoSession = {
-      id: 'tmux:aico-server:aico-12345678',
+      id: '0a1b2c3d',
       user_id: null,
       project_id: 'proj-a-term',
       working_dir: '/workspace/a-term',
@@ -228,16 +228,17 @@ describe('ATermManagerModal', () => {
       created_at: null,
       last_accessed_at: null,
       is_external: true,
-      source: 'tmux_external',
-      tmux_session_name: 'aico-12345678',
-      tmux_source: 'aico-server',
+      source: 'tether',
+      origin: 'aico',
+      tmux_session_name: 'aico-0a1b2c3d',
+      tmux_source: 'tether',
     }
     renderModal({
       externalSessions: [
         { ...aicoSession, name: 'proj-a-term' },
         {
           ...aicoSession,
-          id: 'tmux:aico-server:aico-87654321',
+          id: '87654321',
           name: 'Incident review',
           tmux_session_name: 'aico-87654321',
         },
@@ -391,6 +392,17 @@ describe('ATermManagerModal', () => {
     )
   })
 
+  it('hides project registration when SummitFlow supplies the projects', () => {
+    renderModal()
+
+    expect(screen.getByTestId('project-registry-note')).toHaveTextContent(
+      'Projects come from SummitFlow.',
+    )
+    expect(
+      screen.queryByPlaceholderText('/absolute/path/to/project'),
+    ).not.toBeInTheDocument()
+  })
+
   it('registers a local project and opens it immediately in standalone mode', async () => {
     const registerProject = vi.fn().mockResolvedValue({
       id: 'my-app',
@@ -411,6 +423,9 @@ describe('ATermManagerModal', () => {
 
     renderModal({ onCreateProjectATerm })
 
+    expect(
+      screen.queryByTestId('project-registry-note'),
+    ).not.toBeInTheDocument()
     fireEvent.change(screen.getByPlaceholderText('/absolute/path/to/project'), {
       target: { value: '/workspace/my-app' },
     })
@@ -454,7 +469,7 @@ describe('ATermManagerModal', () => {
     expect(refetch).toHaveBeenCalledTimes(1)
   })
 
-  it('shows the Claude mark for Aico sessions reported as claude-code', () => {
+  it('shows the Claude mark for claude-code sessions', () => {
     renderModal({
       externalSessions: [
         {

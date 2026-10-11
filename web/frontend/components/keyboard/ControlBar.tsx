@@ -82,7 +82,7 @@ export function ControlBar({
   const [showModelPicker, setShowModelPicker] = useState(false)
   const [modelOptions, setModelOptions] = useState<ClaudeModelOption[]>([])
   const pickerRef = useRef<HTMLDivElement>(null)
-  const isClaudeMode = activeMode === 'claude'
+  const isClaudeMode = activeMode === 'claude-code'
 
   useEffect(() => {
     if (minimized && closeToolboxWhenMinimized) setShowToolbox(false)

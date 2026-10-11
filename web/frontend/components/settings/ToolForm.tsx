@@ -11,6 +11,8 @@ export interface ToolFormData {
   process_name: string
   description: string
   color: string
+  /** Comma-separated alternate slugs (e.g. `claude` for `claude-code`). */
+  aliases: string
 }
 
 export const EMPTY_FORM: ToolFormData = {
@@ -20,6 +22,16 @@ export const EMPTY_FORM: ToolFormData = {
   process_name: '',
   description: '',
   color: '#00FF9F',
+  aliases: '',
+}
+
+export function parseAliases(value: string): string[] {
+  const seen = new Set<string>()
+  for (const raw of value.split(',')) {
+    const alias = slugify(raw)
+    if (alias) seen.add(alias)
+  }
+  return [...seen]
 }
 
 export function slugify(name: string): string {
@@ -66,12 +78,18 @@ export function ToolForm({
   onSubmit,
   onCancel,
   isEdit,
+  contextHook = null,
 }: {
   initial: ToolFormData
   onSubmit: (data: ToolFormData) => Promise<void>
   onCancel: () => void
   isEdit: boolean
+  /** Read-only: the registry's launch-time context check for this tool. */
+  contextHook?: string | null
 }) {
+  // The seeded shell tool has an empty command (a bare login shell); only
+  // a tool that already has one may keep it empty.
+  const commandRequired = !isEdit || initial.command.trim() !== ''
   const [form, setForm] = useState(initial)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -114,7 +132,7 @@ export function ToolForm({
     const normalizedDescription = form.description.trim()
     const normalizedHex = normalizeColor(form.color)
 
-    if (!trimmedName || !normalizedCommand || !normalizedProcessName) return
+    if (!trimmedName || (commandRequired && !normalizedCommand)) return
     if (!normalizedSlug) {
       setError(
         'Name must contain at least one letter or number (slug cannot be empty)',
@@ -135,6 +153,7 @@ export function ToolForm({
         process_name: normalizedProcessName,
         description: normalizedDescription,
         color: normalizedHex || EMPTY_FORM.color,
+        aliases: parseAliases(form.aliases).join(', '),
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save')
@@ -175,7 +194,7 @@ export function ToolForm({
         />
       </div>
       <div>
-        <label style={labelStyle}>Command *</label>
+        <label style={labelStyle}>Command{commandRequired ? ' *' : ''}</label>
         <input
           className="term-input"
           style={inputStyle}
@@ -186,7 +205,7 @@ export function ToolForm({
         />
       </div>
       <div>
-        <label style={labelStyle}>Process Name *</label>
+        <label style={labelStyle}>Process Name</label>
         <input
           className="term-input"
           style={inputStyle}
@@ -198,6 +217,29 @@ export function ToolForm({
           aria-label="Tool process name"
         />
       </div>
+      <div>
+        <label style={labelStyle}>Aliases</label>
+        <input
+          className="term-input"
+          style={inputStyle}
+          value={form.aliases}
+          onChange={(e) => setForm((f) => ({ ...f, aliases: e.target.value }))}
+          placeholder="claude, cc"
+          aria-label="Tool aliases"
+        />
+      </div>
+      {contextHook && (
+        <div>
+          <label style={labelStyle}>Context hook (read-only)</label>
+          <input
+            className="term-input"
+            style={{ ...inputStyle, opacity: 0.5 }}
+            value={contextHook}
+            readOnly
+            aria-label="Tool context hook"
+          />
+        </div>
+      )}
       <div>
         <label style={labelStyle}>Description</label>
         <input
@@ -256,8 +298,7 @@ export function ToolForm({
           disabled={
             submitting ||
             !form.name ||
-            !form.command ||
-            !form.process_name ||
+            (commandRequired && !form.command.trim()) ||
             !form.slug
           }
           className="flex items-center gap-1 px-2 py-1 rounded text-[10px] transition-colors"

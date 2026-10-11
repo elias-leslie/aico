@@ -743,7 +743,7 @@ describe('useATermTabsState', () => {
     )
   })
 
-  it('shows the project and custom Aico session name together in the mobile switcher', () => {
+  it('shows the project and custom session name together in the mobile switcher', () => {
     mockUseMediaQuery.mockReturnValue(true)
     const externalSession = {
       id: 'external-codex',
@@ -1410,7 +1410,8 @@ describe('useATermTabsState', () => {
             is_external: true,
             source: 'tmux_external',
             tmux_session_name: 'aico-deadbeef',
-            tmux_source: 'aico-server',
+            tmux_source: 'tether',
+            origin: 'aico',
           },
         ],
       }),

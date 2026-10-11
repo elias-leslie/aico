@@ -4,7 +4,12 @@ import { Plus } from 'lucide-react'
 import { useCallback, useState } from 'react'
 import { ConfirmationDialog } from '@/components/ConfirmationDialog'
 import { type AgentTool, useAgentTools } from '@/lib/hooks/use-agent-tools'
-import { EMPTY_FORM, ToolForm, type ToolFormData } from './ToolForm'
+import {
+  EMPTY_FORM,
+  parseAliases,
+  ToolForm,
+  type ToolFormData,
+} from './ToolForm'
 import { ToolRow } from './ToolRow'
 
 export function AgentToolsSettings() {
@@ -21,9 +26,10 @@ export function AgentToolsSettings() {
           name: data.name,
           slug: data.slug,
           command: data.command,
-          process_name: data.process_name,
+          process_name: data.process_name || undefined,
           description: data.description || undefined,
           color: data.color || undefined,
+          aliases: parseAliases(data.aliases),
         })
         setFeedback(null)
         setShowAddForm(false)
@@ -40,12 +46,13 @@ export function AgentToolsSettings() {
     async (data: ToolFormData) => {
       if (!editingTool) return
       try {
-        await update(editingTool.id, {
+        await update(editingTool.slug, {
           name: data.name,
           command: data.command,
-          process_name: data.process_name,
+          process_name: data.process_name || undefined,
           description: data.description || undefined,
           color: data.color || undefined,
+          aliases: parseAliases(data.aliases),
         })
         setFeedback(null)
         setEditingTool(null)
@@ -61,7 +68,7 @@ export function AgentToolsSettings() {
   const confirmDelete = useCallback(async () => {
     if (!deletingTool) return
     try {
-      await remove(deletingTool.id)
+      await remove(deletingTool.slug)
       setFeedback(null)
     } catch (err) {
       setFeedback(err instanceof Error ? err.message : 'Failed to delete tool')
@@ -73,7 +80,7 @@ export function AgentToolsSettings() {
   const handleSetDefault = useCallback(
     async (tool: AgentTool) => {
       try {
-        await update(tool.id, { is_default: true })
+        await update(tool.slug, { is_default: true })
         setFeedback(null)
       } catch (err) {
         setFeedback(
@@ -139,7 +146,9 @@ export function AgentToolsSettings() {
                 process_name: tool.process_name,
                 description: tool.description || '',
                 color: tool.color || '#00FF9F',
+                aliases: (tool.aliases ?? []).join(', '),
               }}
+              contextHook={tool.context_hook}
               onSubmit={handleUpdate}
               onCancel={() => setEditingTool(null)}
               isEdit

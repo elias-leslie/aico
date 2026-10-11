@@ -22,6 +22,8 @@ export interface ProjectSlot {
   // Session badge (1-indexed position among project sessions)
   sessionBadge: number | null
   isRoot?: boolean
+  /** Active session is a pre-Tether legacy session (attach-only). */
+  isLegacy?: boolean
   // Claude state for the active session
   claudeState?: 'not_started' | 'starting' | 'running' | 'stopped' | 'error'
 }
@@ -34,6 +36,8 @@ export interface AdHocSlot {
   workingDir: string | null
   sessionMode?: string
   isExternal?: boolean
+  /** Pre-Tether legacy session (attach-only). */
+  isLegacy?: boolean
 }
 
 export type ATermSlot = ProjectSlot | AdHocSlot
@@ -146,6 +150,7 @@ export function paneToSlot(pane: ATermPane, projectName?: string): PaneSlot {
       activeSessionId: activeSession?.id ?? null,
       sessionBadge: null, // Badge is now part of pane_name
       isRoot: activeSession?.is_root,
+      isLegacy: activeSession?.is_legacy,
       claudeState: getAgentState(agentSession),
     }
   }
@@ -159,6 +164,7 @@ export function paneToSlot(pane: ATermPane, projectName?: string): PaneSlot {
     name: pane.pane_name,
     workingDir: session?.working_dir ?? null,
     sessionMode: session?.mode,
+    isLegacy: session?.is_legacy,
   }
 }
 

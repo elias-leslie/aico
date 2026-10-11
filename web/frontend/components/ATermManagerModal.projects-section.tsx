@@ -66,6 +66,15 @@ export function ProjectsSection({
   return (
     <div className="pt-5">
       <SectionHeader title="Projects" countLabel={countLabel} />
+      {!canRegisterProjects && projectRegistrySource === 'companion' && (
+        <p
+          className="mb-2 px-1 text-xs"
+          style={{ color: 'var(--term-text-muted)' }}
+          data-testid="project-registry-note"
+        >
+          Projects come from SummitFlow.
+        </p>
+      )}
       <div className="space-y-1.5">
         {canRegisterProjects && (
           <RegisterProjectCard
@@ -146,7 +155,7 @@ export function ProjectsSection({
           >
             {canRegisterProjects
               ? 'No projects registered yet. Add a repo path above or open an ad-hoc shell.'
-              : 'No projects found yet. Check the external project registry or open an ad-hoc shell.'}
+              : 'No projects found in SummitFlow yet. Open an ad-hoc shell instead.'}
           </p>
         )}
         {!isLoading &&

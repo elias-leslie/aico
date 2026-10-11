@@ -5,6 +5,8 @@ export interface PaneSession {
   session_number: number
   is_alive: boolean
   is_root?: boolean
+  /** Pre-Tether default-server session: attach-only, no reset. */
+  is_legacy?: boolean
   working_dir: string | null
   agent_state?: 'not_started' | 'starting' | 'running' | 'stopped' | 'error'
   claude_state: 'not_started' | 'starting' | 'running' | 'stopped' | 'error'

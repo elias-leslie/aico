@@ -321,6 +321,7 @@ export function useATermTabsState({
             activeSessionId: session.id,
             sessionBadge: null,
             isRoot: session.is_root,
+            isLegacy: session.is_legacy,
             claudeState: session.claude_state,
           }
         }
@@ -333,6 +334,7 @@ export function useATermTabsState({
           workingDir: session.working_dir,
           sessionMode: session.mode,
           isExternal: session.is_external,
+          isLegacy: session.is_legacy,
         }
       })
 
