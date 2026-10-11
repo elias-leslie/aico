@@ -1,5 +1,6 @@
 import { renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { FIT_DEBOUNCE_MS, PTY_RESIZE_DEBOUNCE_MS } from '../constants/a-term'
 import {
   attachViewportResizeListeners,
   useATermResize,
@@ -113,7 +114,7 @@ describe('useATermResize shared-size claim', () => {
     return { result, observe, messages }
   }
 
-  it('claims the shared size only when the view becomes active', () => {
+  it('re-claims the shared size whenever the active view refits', () => {
     vi.useFakeTimers()
     const { result, observe, messages } = setup()
 
@@ -122,15 +123,57 @@ describe('useATermResize shared-size claim', () => {
       { __ctrl: true, resize: { cols: 80, rows: 24 }, claim: true },
     ])
 
+    // Accessory bar / keyboard / rotation: the container changes while the
+    // view stays active. Each settled size must claim again, or tmux keeps the
+    // older manual window size and draws its dot fill under the client.
     observe(800, 600, { cols: 100, rows: 30 })
     vi.advanceTimersByTime(1000)
     observe(900, 700, { cols: 120, rows: 40 })
     vi.advanceTimersByTime(1000)
 
     expect(messages().slice(1)).toEqual([
-      { __ctrl: true, resize: { cols: 100, rows: 30 } },
-      { __ctrl: true, resize: { cols: 120, rows: 40 } },
+      { __ctrl: true, resize: { cols: 100, rows: 30 }, claim: true },
+      { __ctrl: true, resize: { cols: 120, rows: 40 }, claim: true },
     ])
+  })
+
+  it('debounces a burst of layout changes into one claim of the settled size', () => {
+    vi.useFakeTimers()
+    const { observe, messages } = setup()
+
+    observe(400, 900, { cols: 46, rows: 44 })
+    vi.advanceTimersByTime(50)
+    observe(400, 860, { cols: 46, rows: 41 })
+    vi.advanceTimersByTime(50)
+    observe(400, 880, { cols: 46, rows: 40 })
+    vi.advanceTimersByTime(PTY_RESIZE_DEBOUNCE_MS + FIT_DEBOUNCE_MS)
+
+    expect(messages()).toEqual([
+      { __ctrl: true, resize: { cols: 46, rows: 40 }, claim: true },
+    ])
+  })
+
+  it('dedupes pixel changes that do not change the fitted grid', () => {
+    vi.useFakeTimers()
+    const { result, observe, messages } = setup()
+
+    result.current.handleResize()
+    observe(801, 600, { cols: 80, rows: 24 })
+    vi.advanceTimersByTime(1000)
+    observe(802, 603, { cols: 80, rows: 24 })
+    vi.advanceTimersByTime(1000)
+
+    expect(messages()).toHaveLength(1)
+  })
+
+  it('claims again on activation even when the size is unchanged', () => {
+    vi.useFakeTimers()
+    const { result, messages } = setup()
+
+    result.current.handleResize()
+    result.current.handleResize()
+
+    expect(messages()).toHaveLength(2)
   })
 
   it('sends nothing while another view owns the size', () => {

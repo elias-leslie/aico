@@ -136,8 +136,10 @@ def _claim_window_size(view: ViewContext, cols: int, rows: int) -> bool:
 async def _handle_resize_command(data: dict[str, Any], view: ViewContext) -> tuple[int, int]:
     """Resize this view's PTY; claim the shared window only when asked.
 
-    The frontend sends ``claim: true`` when the view becomes active (visible,
-    focused, connected). Other resizes only change this view's own client.
+    The frontend's active view (visible, focused, connected) sends ``claim:
+    true`` on activation and with every settled size change, because a claim
+    sets tmux's ``window-size`` to manual and the window then ignores later
+    client sizes. A resize without ``claim`` only changes this view's client.
     """
     resize = data.get("resize", {})
     cols = _clamp_dimension(int(resize.get("cols", TMUX_DEFAULT_COLS)), TMUX_MIN_COLS, TMUX_MAX_COLS)

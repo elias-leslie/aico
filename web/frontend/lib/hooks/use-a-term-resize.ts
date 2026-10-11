@@ -1,5 +1,5 @@
 import type { FitAddon } from '@xterm/addon-fit'
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { FIT_DEBOUNCE_MS, PTY_RESIZE_DEBOUNCE_MS } from '../constants/a-term'
 
 type XtermATerm = InstanceType<typeof import('@xterm/xterm').Terminal>
@@ -41,10 +41,18 @@ export function attachViewportResizeListeners(
  * Hook to manage aTerm resizing with ResizeObserver and WebSocket dimension updates.
  *
  * Two-stage debounce: the local xterm fit runs on a short debounce so the visual
- * keeps up with window drags, but the backend (PTY) resize message only fires
- * on the trailing edge — SIGWINCH mid-drag causes shells with fancy prompts and
- * heavy TUIs (Claude Code, Codex CLI) to redraw repeatedly, which the user
- * perceives as flicker and slow resize. The shell only cares about the final size.
+ * keeps up with window drags, but the backend message only fires on the
+ * trailing edge — SIGWINCH mid-drag causes shells with fancy prompts and heavy
+ * TUIs (Claude Code, Codex CLI) to redraw repeatedly, which the user perceives
+ * as flicker and slow resize. The shell only cares about the final size.
+ *
+ * Only the active view (visible, focused, connected: `sendBackendResize`)
+ * sends anything, and every size it sends is also a claim on the shared tmux
+ * window. The view's own container changes size without the view changing
+ * activity (phone accessory bar or keyboard, address-bar collapse, rotation,
+ * desktop drag); if those only resized this view's PTY client, tmux would keep
+ * the older claimed window size and fill the difference with its dot pattern.
+ * Identical sizes are deduped. Inactive views never claim.
  */
 export function useATermResize(options: ATermResizeOptions) {
   const {
@@ -54,20 +62,35 @@ export function useATermResize(options: ATermResizeOptions) {
     wsRef,
     sendBackendResize = true,
   } = options
+  // Last size this view claimed on the current socket. A new socket or a new
+  // activation always claims again (see handleResize).
+  const lastClaimRef = useRef<{
+    ws: WebSocket | null
+    cols: number
+    rows: number
+  }>({ ws: null, cols: 0, rows: 0 })
 
-  const sendBackendResizeIfChanged = useCallback(
-    (lastSent: { cols: number; rows: number }): void => {
+  const sendClaim = useCallback(
+    (force: boolean): void => {
       if (!sendBackendResize) return
-      if (wsRef.current?.readyState !== WebSocket.OPEN) return
+      const ws = wsRef.current
+      if (ws?.readyState !== WebSocket.OPEN) return
       const dims = fitAddonRef.current?.proposeDimensions()
       if (!dims) return
-      if (dims.cols === lastSent.cols && dims.rows === lastSent.rows) return
-      lastSent.cols = dims.cols
-      lastSent.rows = dims.rows
-      wsRef.current.send(
+      const last = lastClaimRef.current
+      if (
+        !force &&
+        last.ws === ws &&
+        dims.cols === last.cols &&
+        dims.rows === last.rows
+      )
+        return
+      lastClaimRef.current = { ws, cols: dims.cols, rows: dims.rows }
+      ws.send(
         JSON.stringify({
           __ctrl: true,
           resize: { cols: dims.cols, rows: dims.rows },
+          claim: true,
         }),
       )
     },
@@ -75,25 +98,13 @@ export function useATermResize(options: ATermResizeOptions) {
   )
 
   // Imperative resize used when the view becomes active (visible, focused and
-  // connected). It fits and claims the shared tmux window size for this view:
-  // the most recently activated client owns the size. Drag resizes below only
-  // resize this view's own PTY client and never re-claim.
+  // connected): fit and claim the shared tmux window size for this view, even
+  // if the size equals the last claim (another client may have claimed since).
   const handleResize = useCallback(() => {
     if (!fitAddonRef.current || !aTermRef.current) return
     fitAddonRef.current.fit()
-    if (sendBackendResize && wsRef.current?.readyState === WebSocket.OPEN) {
-      const dims = fitAddonRef.current.proposeDimensions()
-      if (dims) {
-        wsRef.current.send(
-          JSON.stringify({
-            __ctrl: true,
-            resize: { cols: dims.cols, rows: dims.rows },
-            claim: true,
-          }),
-        )
-      }
-    }
-  }, [aTermRef, fitAddonRef, sendBackendResize, wsRef])
+    sendClaim(true)
+  }, [aTermRef, fitAddonRef, sendClaim])
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -101,11 +112,10 @@ export function useATermResize(options: ATermResizeOptions) {
     let ptyTimer: ReturnType<typeof setTimeout> | null = null
     let lastWidth = 0
     let lastHeight = 0
-    const lastSent = { cols: 0, rows: 0 }
 
     const flushPtyResize = () => {
       ptyTimer = null
-      sendBackendResizeIfChanged(lastSent)
+      sendClaim(false)
     }
 
     const scheduleResize = () => {
@@ -139,7 +149,7 @@ export function useATermResize(options: ATermResizeOptions) {
       viewportCleanup()
       resizeObserver.disconnect()
     }
-  }, [aTermRef, containerRef, fitAddonRef, sendBackendResizeIfChanged])
+  }, [aTermRef, containerRef, fitAddonRef, sendClaim])
 
   return { handleResize }
 }
