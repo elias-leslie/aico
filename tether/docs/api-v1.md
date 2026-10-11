@@ -5,11 +5,11 @@ Tether serves one versioned HTTP/1.1 API per instance over a private Unix socket
 | Instance | Socket |
 | --- | --- |
 | any | `$XDG_RUNTIME_DIR/tether/<instance>/control.sock` (directory 0700, socket 0600) |
-| `default` only, after Phase 3 | also `/run/user/<uid>/aico/control.sock` (legacy owner contract) and `/run/user/<uid>/aico/gui-control.sock` (legacy GUI shim); see [compat-contract.md](compat-contract.md) |
+| `default` only | also `/run/user/<uid>/aico/control.sock` (legacy owner contract) and `/run/user/<uid>/aico/gui-control.sock` (legacy GUI shim); see [compat-contract.md](compat-contract.md) |
 
 The socket's file permissions are the only authentication: any process running as the same uid may call the API. Apps that put Tether behind their own HTTP surface keep their own auth in front of it. A-Term in particular must never treat loopback as authenticated, because proxied traffic arrives from loopback.
 
-Status: Phase 2 implements health, version, projects, agent tools and events. Every other route below is registered and answers `501 not_implemented` (marked `TODO(phase3)` in `src/server.ts`) until Phase 3 extracts Aico's lifecycle.
+Status: every route below is implemented (Phase 3a). Additions made for A-Term during 3a are additive v1 changes and are marked *(3a)*. Schema version 3.
 
 ## Conventions
 
@@ -64,6 +64,8 @@ Status: Phase 2 implements health, version, projects, agent tools and events. Ev
 - `uncertain`: allocated, but an active workload is not verified.
 - `legacy`: a lifecycle-v0 session, kept read-only.
 
+`origin` is `aico`, `a-term`, `cli` or `root` (created through `POST /v1/roots`).
+
 `available` is true only for `running`. An ended session is not listed; `GET` on it returns 404. A root keeps its ended tombstone under `/v1/roots`.
 
 ## Sessions
@@ -71,7 +73,7 @@ Status: Phase 2 implements health, version, projects, agent tools and events. Ev
 | Method and route | Body | Result |
 | --- | --- | --- |
 | `GET /v1/sessions` | none; query `project`, `origin`, `tool` | `{items: Descriptor[]}` from the catalog, with status from the last reconciliation |
-| `POST /v1/sessions` | `{tool?, projectId?, projectRoot?, name?, origin, aTermSessionId?, size: {cols, rows}}` | `201` running or `202` pending/uncertain descriptor |
+| `POST /v1/sessions` | `{tool?, projectId?, projectRoot?, name?, origin, aTermSessionId?, size: {cols, rows}}` | `201` running or `202` pending/uncertain descriptor. A `202` also carries `failure: {code, reason} \| null` (`workload_unavailable`, `outcome_uncertain`). `origin` is `aico`, `a-term` or `cli`; `aTermSessionId` (a UUID) is accepted only with `a-term`. |
 | `GET /v1/sessions/:id` | none | live-verified descriptor. Rechecks the generation after the async verification and returns `409 identity_changed` if it moved. |
 | `PATCH /v1/sessions/:id` | `{generation, name}` | rename. `name: null` clears to the default label. The label follows the root title rules (trimmed, 1–160 UTF-8 bytes, no control characters). |
 | `POST /v1/sessions/:id/end` | `{generation}` | `200 {status:"ended"}`. Exact containment retirement: stops only the owned pane scope and uses `cgroup.kill` fallback. |
@@ -82,7 +84,11 @@ Status: Phase 2 implements health, version, projects, agent tools and events. Ev
 
 The default tool applies when `tool` is omitted (see [Agent tools](#agent-tools)). A tool alias such as `claude` resolves to its canonical slug, which is what gets stored.
 
-`size` is required on create because Aico creates the tmux session at the first view's grid size. A created session is never silently re-created. Once a session has ended, starting work again is an explicit new `POST`.
+`size` is required on create because Aico creates the tmux session at the first view's grid size. A created session is never silently re-created. Once a session has ended, starting work again is an explicit new `POST`. A create refused before allocation (`admission_denied`, `linger_required`) leaves nothing in the catalog.
+
+Every pane carries `AICO_OWNER=aico`, `AICO_WIDGET_ID`, `AICO_SESSION_ID`, `AICO_AGENT_SLUG`, `ST_SESSION_ID` and, for `origin: "a-term"` with an id, `A_TERM_SESSION_ID`. It never carries `AICO_TMUX_SOCKET`. tmux servers start from `env -i` plus an allow-list inside `systemd-run`, so the daemon's environment never leaks into panes.
+
+Session IDs are never reused: an ended ID is kept in `retired_session_ids`.
 
 Session errors:
 
@@ -105,10 +111,12 @@ Apps keep their own byte path: a PTY that runs `tmux attach` against the session
 
 | Method and route | Body | Result |
 | --- | --- | --- |
-| `GET /v1/sessions/:id/attach` | none | `{generation, argv: ["/usr/bin/tmux","-S","<socket>","attach-session","-t","$3"], env: {TERM, COLORTERM, ...}}`. `argv` is the exact client argv. `env` is the client environment with `TMUX`/`TMUX_PANE`/`NO_COLOR` removed. |
+| `GET /v1/sessions/:id/attach` | none | `{generation, argv: ["/usr/bin/tmux","-S","<socket>","attach-session","-t","$3"], env, unset}`. `argv` is the exact client argv. |
 | `GET /v1/sessions/:id/capture` | query `escapes=1` | `{generation, text}`: the visible screen |
-| `GET /v1/sessions/:id/scrollback` | query `page`, `fromLine`, `escapes=1` | `{generation, page, pageCount, firstLine, lastLine, text}`. Bounded pages over the 200 000-line history (Aico `scrollback-page.ts`). |
+| `GET /v1/sessions/:id/scrollback` | query `fromLine`, `count` (at most 5000, default 5000), `escapes=1` | `{generation, fromLine, totalLines, historySize, text}`. One bounded page of pane history (Aico `scrollback-page.ts`); line `historySize + r` is visible row `r`. Without `fromLine`, the last page. `400 invalid_query` for a non-integer. |
 | `POST /v1/sessions/:id/inject` | `{generation, text, mode: "type" \| "paste", submit?: bool}` | `{generation, delivered: true}` |
+
+Attach `env` holds **overrides only**, not a full environment: set exactly `TERM=xterm-256color`, `COLORTERM=truecolor` and `CLICOLOR=1` over the client's own environment, then remove every key in `unset` (`TMUX`, `TMUX_PANE`, `TMUX_TMPDIR`, `NO_COLOR`). Both lists may grow additively.
 
 `mode: "type"` sends `send-keys -l`. `mode: "paste"` sends one bracketed-paste event; with `submit: true` it is followed by one Enter. Text must pass Aico's `isBoundedTerminalText` rule: nonblank, at most 2000 UTF-8 bytes, and no control characters except tab and newline. Injection is framing only. A `delivered` result does not mean the agent accepted the text, and it does not rule out a concurrent human draft. Injection is refused for non-`running` sessions.
 
@@ -118,7 +126,18 @@ When a view becomes active, it claims the shared tmux window size:
 
 `POST /v1/sessions/:id/resize-claim` with body `{generation, clientPid, cols, rows}` returns `200 {applied: true}` or `{applied: false, reason}`.
 
-Tether resizes only the window of the attached tmux client whose `client_pid` is `clientPid`. It refuses if that client is not attached exactly once, if the window is linked, or if the session has a status row (Aico `activateTmuxViewSize`). A successful claim publishes `session.resized`. Desktop auto-resize on active-client change is intended behavior. A-Term claims only when its view becomes active, not on every resize.
+Tether resizes only the window of the attached tmux client whose `client_pid` is `clientPid` (Aico `activateTmuxViewSize`). `reason` is one of *(3a)*:
+
+| Reason | Retry? | Meaning |
+| --- | --- | --- |
+| `client_not_attached` | yes | No tmux client with that pid is attached exactly once, or it detached or switched windows during the claim. Retry after the attach settles. |
+| `stale` | yes | The generation changed during the claim. Re-read the session. |
+| `tmux_unavailable` | yes | A tmux query failed (server going away). |
+| `window_linked` | no | The client's window is linked into another session. |
+| `status_row` | no | The session shows a tmux status row (`status` is not `off`, including the global value). |
+| `invalid` | no | `clientPid`, `cols` or `rows` is not a positive integer. |
+
+A stale or wrong-workload `generation` is refused before the claim with `409 stale_generation` / `409 workload_unavailable`. A successful claim publishes `session.resized`. Desktop auto-resize on active-client change is intended behavior. A-Term claims only when its view becomes active, not on every resize.
 
 ## Roots
 
@@ -126,8 +145,8 @@ A root is a session created through the root contract with a stable caller `requ
 
 | Method and route | Body | Result |
 | --- | --- | --- |
-| `GET /v1/roots` | none | `{owner:"aico", available, directedDelivery, roots: Descriptor[]}` |
-| `POST /v1/roots` | `{requestId, tool, projectId, projectRoot, initialPrompt, role, leadRootReference?, facetCapsuleRef?, resumeSessionId?}` | Existing or reserved root descriptor. `200` for running or ended, `202` for pending or uncertain. `409 request_conflict` if the same key arrives with a different digest. |
+| `GET /v1/roots` | query `origin=aico\|a-term` *(3a)* | `{owner, available, directedDelivery, roots: Descriptor[]}`. `owner` is the `origin` filter, else `"aico"`. `400 invalid_query` for another origin. |
+| `POST /v1/roots` | `{requestId, tool, projectId, projectRoot, initialPrompt, role, leadRootReference?, facetCapsuleRef?, resumeSessionId?, origin?, aTermSessionId?}` | Existing or reserved root descriptor. `200` for running or ended, `202` for pending or uncertain. `409 request_conflict` if the same key arrives with a different digest. |
 | `GET /v1/roots/:requestId` | none | Current descriptor, including ended tombstones (`status: "ended"`, `generation: null`) |
 | `POST /v1/roots/:requestId/show` | `{generation}` | Forwarded to the GUI |
 | `POST /v1/roots/:requestId/position` | `{generation, bounds: {x, y, width, height}}` | Forwarded to the GUI |
@@ -139,7 +158,11 @@ A root is a session created through the root contract with a stable caller `requ
 | `POST /v1/widgets/:id/title` | `{generation, label}` | As for roots |
 | `POST /v1/widgets/:id/position` | `{generation, bounds}` | As for roots |
 
-The root descriptor keeps Aico's fields: `owner: "aico"`, `hostIdentity`, `generation`, `logicalSessionId`, `surfaceLocator`, metadata, bounds and `status`. `owner` stays `"aico"` for compatibility with `st aico` and SummitFlow fleet.
+The root descriptor keeps Aico's fields: `owner`, `hostIdentity`, `generation`, `logicalSessionId`, `surfaceLocator`, metadata, `bounds` and `status`. `bounds` is always `null` from Tether: window geometry belongs to the GUI.
+
+Root origin *(3a)*: `origin` is `"aico"` (default) or `"a-term"`; `aTermSessionId` (a UUID) is accepted only with `"a-term"` and becomes the pane's `A_TERM_SESSION_ID`. Neither is part of the request digest. On `/v1`, a root's `owner` is its stored origin and the descriptor also carries `origin`. The legacy sockets on the default instance (`/run/user/<uid>/aico/control.sock` and `gui-control.sock`) keep Aico's wire format exactly: `owner: "aico"` and no `origin` field, so `st aico` and SummitFlow fleet are unaffected.
+
+Root-request tombstones from Aico are imported by `tether import-aico`; there is no separate tombstone import route.
 
 Generation fencing:
 
@@ -157,7 +180,7 @@ Show, position and title change views, and views belong to the app. Tether forwa
 2. For each command, the GUI verifies and applies the change (Aico `widgetMutationOperation`). It then posts `POST /v1/gui/results/:commandId` with `{applied: true}` or `{applied: false, error}`.
 3. Tether answers the original caller with the GUI's result. A command that gets no result within 5 s answers `409 outcome_uncertain`.
 
-With no GUI connected, these routes return `503 gui_unavailable` and nothing is applied. Tether never starts the desktop. `title` still renames the catalog entry only when the GUI applies it, so the result stays atomic. `GET /v1/health` reports `gui.connected`, and the events `gui.connected` / `gui.disconnected` announce changes.
+With no GUI connected, `show` and `position` return `503 gui_unavailable` and nothing is applied; Tether never starts the desktop. `title` without a GUI *(3a)* renames the session in the catalog under the lifecycle lock, fenced on the exact running generation, and publishes `session.updated`. With a GUI connected, `title` renames the catalog entry only when the GUI applies it, so the result stays atomic. `GET /v1/health` reports `gui.connected`, and the events `gui.connected` / `gui.disconnected` announce changes.
 
 ## Agent tools
 
@@ -170,6 +193,7 @@ This is the merged registry. Editing it from either app changes launches in both
 | `POST /v1/tools` | `{slug, name, argv \| command, processName?, description?, color?, displayOrder?, isDefault?, enabled?, aliases?, contextHook?}` | `201` with the tool |
 | `PATCH /v1/tools/:ref` | any field except `slug` | The updated tool. `400 slug_immutable` if `slug` is sent. |
 | `DELETE /v1/tools/:ref` | none | `{deleted: true}`. `409 default_tool` for the default tool; `409 tool_in_use` while a catalogued session runs it. |
+| `POST /v1/tools/import` *(3a)* | `{tools: ToolInput[] (≤200), dryRun?, updateExisting?}` | `{applied, created: slug[], updated: slug[], unchanged: slug[], differs: [{slug, fields}]}`. One transaction: any invalid entry rejects the whole batch with `400` and nothing is written. Existing slugs are left alone and reported in `differs` unless `updateExisting` is true. `dryRun` reports the same result and rolls back. Publishes `tools.changed` when anything changed. |
 
 ```json
 {
@@ -220,7 +244,9 @@ Seeded tools, from the Aico TUI specs reconciled with A-Term's live rows:
 - `summitflow-cache`: SummitFlow is unreachable, so the last good answer is served.
 - `local`: SummitFlow is not installed or not reachable and there is no cache. The list comes from `~/.config/tether/projects.json`, a list of `{id, name?, root}`; entries whose roots are not directories are skipped.
 
-`TETHER_SUMMITFLOW_URL` overrides the URL. Set it to `off` to disable SummitFlow.
+`TETHER_SUMMITFLOW_URL` overrides the URL. Set it to `off` to disable SummitFlow. `refresh=1` re-reads `projects.json` in local mode.
+
+`POST /v1/projects` *(3a)* with `{id, root, name?}` registers a project in local mode: it appends to `projects.json` atomically (temp file and rename, mode 0600), refreshes the list, returns `201 {id, name, root, lifecycle: null}` and publishes `projects.changed`. Errors: `400 invalid_project_id` (`[A-Za-z0-9][A-Za-z0-9._-]{0,127}`), `400 invalid_project_root` (not an absolute directory), `409 project_exists`, `409 local_projects_unreadable`, and `409 projects_managed_by_summitflow` when the source is SummitFlow (register the project there).
 
 ## Events
 
@@ -242,23 +268,33 @@ Event types:
 - `session.created`, `session.updated` (rename, respawn, tool or project change, status change), `session.ended`, `session.resized`
 - `root.updated`
 - `tools.changed` (`{slug|ref, change}`)
-- `projects.changed`
+- `projects.changed` (`{id, change: "registered"}`)
 - `gui.connected`, `gui.disconnected`
 
 Events carry IDs and generations only, never terminal contents, prompts or titles.
 
 SSE was rejected. NDJSON is simpler to consume from both Node and Python (`httpx` line streaming) over a Unix socket, and browsers never connect to Tether directly.
 
+## A-Term legacy sessions
+
+A-Term's pre-Tether sessions (`summitflow-<uuid>` on `/tmp/tmux-<uid>/default`) are listed for attach and end only. Tether never adopts that server, never respawns them, and never touches any other session on it.
+
+| Method and route | Body | Result |
+| --- | --- | --- |
+| `GET /v1/legacy-sessions` | none | `{items: [{kind: "legacy-attach-only", name, aTermSessionId, createdAt, attachedClients}]}`; empty when the server is not running |
+| `GET /v1/legacy-sessions/:name/attach` | none | `{argv: [tmux, "-S", socket, "attach-session", "-t", "=<name>"], env, unset}` |
+| `POST /v1/legacy-sessions/:name/end` | none | `{status: "ended"}` after `tmux kill-session -t =<name>` for an exactly listed name; `404 not_found` otherwise |
+
 ## Health and version
 
 `GET /v1/health` never touches tmux. It returns:
 
 ```json
-{"status":"ok","name":"tether","instance":"default","version":"0.0.1","apiVersion":1,"schemaVersion":1,
+{"status":"ok","name":"tether","instance":"default","version":"0.0.1","apiVersion":1,"schemaVersion":3,
  "uptimeMs":966,"bootId":"uuid","eventSeq":0,"catalog":{"sessions":0,"tmuxServersActive":0,"rootRequests":0},
- "gui":{"connected":false},"lifecycle":"not_implemented"}
+ "gui":{"connected":false},"lifecycle":"ready"}
 ```
 
-`lifecycle` becomes `"ready"` in Phase 3 once startup reconciliation finishes. Until then it is `"reconciling"`.
+`lifecycle` is `"reconciling"` until startup reconciliation finishes, then `"ready"`. It is `"disabled"` when the daemon runs with `TETHER_RECONCILE=off` (tests and catalog inspection): startup never observes, adopts or stops a tmux server and the pane-exit watcher is off. Use it only for tests and read-only inspection of a catalog.
 
 `GET /v1/version` returns `{name, version, apiVersion, minApiVersion, node}`.

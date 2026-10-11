@@ -1,4 +1,4 @@
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -41,6 +41,8 @@ describe('Store schema', () => {
     const dir = mkdtempSync(join(tmpdir(), 'tether-store-'))
     const store = open(join(dir, 'state', 'tether.db'))
     expect(store.schemaVersion()).toBe(SCHEMA_VERSION)
+    expect(statSync(join(dir, 'state', 'tether.db')).mode & 0o777).toBe(0o600)
+    expect(statSync(join(dir, 'state')).mode & 0o777).toBe(0o700)
     const mode = store.db.prepare('PRAGMA journal_mode').get() as { journal_mode: string }
     expect(mode.journal_mode).toBe('wal')
     const tables = (

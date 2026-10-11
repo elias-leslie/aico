@@ -112,6 +112,9 @@ export class Store {
       chmodSync(dirname(path), 0o700)
     }
     this.db = new DatabaseSync(path)
+    // Owner-only even when created outside the service's UMask (import-aico).
+    // SQLite gives the -wal and -shm files the database file's mode.
+    if (path !== ':memory:') chmodSync(path, 0o600)
     this.db.exec('PRAGMA busy_timeout = 2000; PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON')
     this.migrate(now())
   }

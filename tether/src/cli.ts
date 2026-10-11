@@ -369,7 +369,9 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
 const isEntry = process.argv[1] !== undefined && /tether(\.mjs)?$|cli\.ts$/.test(process.argv[1])
 if (isEntry) {
   main(process.argv.slice(2)).then(
-    (code) => process.exit(code),
+    // Exit only after stdout drains: a piped listing larger than the pipe
+    // buffer is otherwise truncated by process.exit.
+    (code) => process.stdout.write('', () => process.exit(code)),
     (error: unknown) => {
       console.error('[tether] fatal:', error)
       process.exit(1)

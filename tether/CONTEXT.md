@@ -42,6 +42,13 @@ _Avoid_: Fleet root, unless SummitFlow registered it
 **Tombstone**:
 The retained request record of an ended root. It stops the same request ID from starting new work.
 
+**Origin**:
+The app that asked for a session or root (`aico`, `a-term`, `cli`, or `root` for sessions created through the root contract). On Tether's own API a root's `owner` field reports its origin.
+
+**Legacy A-Term session**:
+An A-Term `summitflow-<uuid>` session on the default tmux server, created before Tether. Tether lists, attaches and ends it by exact name, and never adopts its server.
+_Avoid_: Legacy session (that is lifecycle v0)
+
 **Fleet root**:
 A root that SummitFlow registered in its own ledger before asking Tether to create it.
 
@@ -75,4 +82,4 @@ The working directory and identity a session starts in. It comes from SummitFlow
 _Avoid_: Workspace
 
 **Owner** (retired):
-The former cross-app authority to end a session. Tether is now the only authority, so this term only appears in compatibility fields such as `owner: "aico"`.
+The former cross-app authority to end a session. Tether is now the only authority, so this term only appears in compatibility fields: `owner: "aico"` on the legacy sockets, and a root's origin on Tether's API.

@@ -40,7 +40,7 @@ The `systemd-run` flags are part of the containment model and must be kept: `--u
 | Legacy GUI socket | `/run/user/<uid>/aico/gui-control.sock` shim, serving `/v1/roots*` and `/v1/widgets*` with Aico's bodies and forwarding view mutations to the GUI channel | none | `root-control.ts` `guiSocketPath`, [root-control.md](https://github.com/elias-leslie/aico/blob/main/docs/root-control.md) |
 | Tether socket | `$XDG_RUNTIME_DIR/tether/default/control.sock` | `$XDG_RUNTIME_DIR/tether/<i>/control.sock` | n/a |
 | State | `~/.local/state/tether/default/tether.db` | `~/.local/state/tether/<i>/tether.db` | n/a |
-| Aico catalog | `~/.local/state/aico/aico.db` is kept as a backup after import. A-Term `utils/tmux/external.py` reads it read-only (`A_TERM_AICO_STATE_DIR`) until Phase 3 switches it to the Tether API. | none | A-Term `external.py` |
+| Aico catalog | `~/.local/state/aico/aico.db` is kept as a backup after import. A-Term `utils/tmux/external.py` reads it read-only (`A_TERM_AICO_STATE_DIR`) until A-Term switches to the Tether API (Phase 4). | none | A-Term `external.py` |
 
 Overrides that the Aico process honours and that Tether must not break: `AICO_STATE_DIR`, `AICO_TMUX_SOCKET` (a test or recovery override of the historical socket), `AICO_CONTROL_SOCKET`, `AICO_GUI_CONTROL_SOCKET`.
 
@@ -89,15 +89,16 @@ Correction to the migration plan: `AICO_TMUX_SOCKET` is not a pane marker. Aico 
 
 ## Catalog data
 
-- `tmux_servers` and `root_requests` keep Aico's columns, types, defaults and CHECK constraints (`src/schema.ts`). The single widening: managed `scope_unit` also admits `tether-<i>-tmux-server-<id>.service`.
+- `tmux_servers` and `root_requests` keep Aico's columns, types, defaults and CHECK constraints (`src/schema.ts`). The widenings: managed `scope_unit` also admits `tether-<i>-tmux-server-<id>.service`, and schema v3 appends `root_requests.origin` (`aico` or `a-term`, default `aico`) after Aico's columns.
 - `sessions` keeps the identity columns of Aico's `widgets` table with identical names. View columns (`x`, `y`, `width`, `height`, `display_id`, `open`) stay in Aico. `external_tmux_*` rows are not imported.
 - `generation` is computed exactly as Aico's `sessionGeneration`: the JSON array `[id, sessionId, externalTmuxSocket=null, externalTmuxSession=null, {11 ownership fields in Aico's key order}]`. `src/generation.test.ts` pins a vector computed with Aico's own function. A generation read from Aico before cutover therefore stays valid against the imported row.
-- Session ids are never reused: allocation checks both `sessions.id` and `root_requests.widget_id`, as Aico does.
+- Session ids are never reused: allocation checks `sessions.id` and `root_requests.widget_id`, as Aico does, plus `retired_session_ids` (schema v2), which a trigger fills when a session row is deleted.
+- `tether import-aico` copies every `tmux_servers` row, every `root_requests` row (including tombstones) and the identity columns of every internal widget, in one transaction. It skips `external` widgets, opens `aico.db` read-only, is a dry run unless `--apply`, refuses `--apply` while the instance's daemon is listening, and is idempotent: identical rows are `same`, rows Tether has changed since are `kept`, never overwritten.
 
 ## Wire contracts
 
-- `owner: "aico"` stays in root, widget and legacy session descriptors for `st aico` and SummitFlow fleet.
-- Aico's `contracts/view-mutation-vectors.json` pins the title, bounds and body validation rules. Phase 3 copies it into Tether, and Tether's suite runs every vector.
+- `owner: "aico"` stays in every body served on the legacy sockets (`control.sock`, `gui-control.sock`) and in widget descriptors, for `st aico` and SummitFlow fleet. On Tether's own `/v1` socket a root's `owner` is its stored `origin` (`aico` or `a-term`) and the descriptor adds `origin`.
+- Aico's `contracts/view-mutation-vectors.json` pins the title, bounds and body validation rules. Tether carries it in `contracts/` and both the Vitest and pytest suites run every vector.
 - Error codes from Aico's owner and root routes are kept verbatim: `not_found`, `invalid_body`, `invalid_generation`, `stale_generation`, `busy`, `blocked`, `workload_unavailable`, `ended`, `gui_unavailable`, `request_conflict`, `outcome_uncertain`, `directed_delivery_unavailable`, `identity_changed`.
 - Agent admission env names are kept as `AICO_AGENT_MAX_ACTIVE`, `AICO_AGENT_MIN_AVAILABLE_GIB`, `AICO_AGENT_MAX_PSI_SOME_AVG60`, `AICO_AGENT_MAX_PSI_FULL_AVG60`, `AICO_AGENT_MAX_PSI_FULL_AVG10` and `AICO_AGENT_ADMISSION_OVERRIDE`.
 

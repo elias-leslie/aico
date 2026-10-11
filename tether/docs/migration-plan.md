@@ -79,6 +79,25 @@ Tether is a standalone per-user session daemon. It owns tmux session lifecycle f
 - Keep A-Term discovery working: switch A-Term's `external.py` from `aico.db` to the Tether API in the same step, or mirror the data.
 - Cutover from a non-Aico terminal context: stop the GUI and `aico-owner`, import, start Tether, start the new Aico. Re-verify live sessions.
 
+### Phase 3a: Tether is a complete session owner (done)
+- Lifecycle extracted into `src/lifecycle/`, every v1 route implemented, invariants pinned in `src/lifecycle/invariants.test.ts`, `tether import-aico` written and run against a copy of the live `aico.db`.
+- Proven on `tether@dev` with `scripts/tether-lifecycle-harness.sh` and `scripts/tether-real-session-smoke.sh` ([LIFECYCLE_HARNESS.md](LIFECYCLE_HARNESS.md)).
+
+### Phase 3b: Aico becomes a client
+- Aico's main process stops provisioning tmux servers and scopes, and stops serving `control.sock` and `gui-control.sock`; `tether@default` serves both with Aico's wire format.
+- Session create, End, respawn, load-TUI, switch-project, rename, diagnostics, capture, scrollback and inject call the v1 API. Attach uses `GET /v1/sessions/:id/attach` (`argv`, `env` overrides, `unset`).
+- The GUI opens `GET /v1/gui/channel` (`x-tether-client: aico-gui`), applies `show`/`position`/`title` through its existing `widgetMutationOperation`, and answers `POST /v1/gui/results/:commandId`.
+- Aico keeps only view state (`x`, `y`, `width`, `height`, `display_id`, `open`, pins) and settings, keyed by session ID. It follows `session.*` events.
+
+### Cutover (one step, from a terminal outside Aico's tmux servers)
+1. Stop `aico-shell` and `aico-owner`. tmux server units keep running; they are their own transient services.
+2. Back up `aico.db` with SQLite's online backup or `VACUUM INTO`, never `cp` of a live WAL database.
+3. `tether import-aico` and review the dry-run diff, then `tether import-aico --apply` (it refuses while `tether@default` is listening).
+4. `scripts/install.sh --start default`. Startup reconciliation adopts the imported `aico-tmux-server-*` units and the historical `/tmp/tmux-<uid>/aico` server; `/run/user/<uid>/aico/{control,gui-control}.sock` are served again.
+5. Verify: `tether sessions` lists every live session as `running` with the generation Aico reported; `st aico` and SummitFlow fleet answer through the legacy sockets; `GET /v1/health` reports `lifecycle: "ready"`.
+6. Start the Phase 3b Aico and confirm `gui.connected` is true.
+7. Rollback: stop `tether@default`, then start the old `aico-owner` and `aico-shell`. `aico.db` was never written, and no tmux server is stopped by stopping the daemon.
+
 ## Phase 4: A-Term becomes a client
 - Delegate lifecycle, sessions, agent tools, roots, broker and projects to Tether. Keep `/v1/roots` as a proxy until SummitFlow moves.
 - New sessions go on private servers (`-S`).

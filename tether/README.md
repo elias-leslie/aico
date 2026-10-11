@@ -12,10 +12,10 @@ Either app works alone against Tether, and both can share one instance.
 
 Tether serves a versioned HTTP API on a private Unix socket (`$XDG_RUNTIME_DIR/tether/<instance>/control.sock`, mode 0600). It is never exposed on the network. Apps keep their own terminal byte path (`tmux attach`) and their own view state.
 
-**Status: v0 skeleton (migration Phase 2).**
+**Status: session owner (migration Phase 3a).**
 
-- Implemented: health and version, projects, the agent-tool registry, the event stream, the CLI, the installer and the systemd unit.
-- Not yet implemented: session lifecycle routes answer `501 not_implemented` until Phase 3 extracts Aico's hardened lifecycle. See [docs/migration-plan.md](docs/migration-plan.md).
+- Implemented: the full v1 API in [docs/api-v1.md](docs/api-v1.md), with Aico's lifecycle extracted into `src/lifecycle/`: contained tmux servers and pane scopes, generation fencing, End, respawn, roots, the GUI forwarding channel, A-Term legacy sessions, the legacy Aico sockets on the default instance, and `tether import-aico`.
+- Not yet switched over: Aico (Phase 3b) and A-Term (Phase 4) still run their own lifecycle until they become clients. See [docs/migration-plan.md](docs/migration-plan.md).
 
 ## Requirements
 
@@ -39,8 +39,12 @@ The installer is idempotent. It never starts an instance unless you pass `--star
 ```text
 tether [--instance NAME] [--json] <command>
   serve | doctor | version
-  sessions [list | get <id>]
+  sessions [list | get <id> | create [--tool T] [--project P] [--name N] | end <id>]
+  sessions attach <id> [--print]    exec tmux attach (nests with a notice inside another tmux)
+  sessions diagnostics <id>
+  legacy [list | end <name>]        A-Term summitflow-<uuid> sessions
   roots [list | show <requestId>]
+  import-aico [--from PATH] [--apply]
   tools [list | get <slug> | add <slug> <name> -- <argv...> | default|enable|disable|rm <slug>]
   projects [--refresh]
 ```
@@ -52,12 +56,14 @@ tether [--instance NAME] [--json] <command>
 - [CONTEXT.md](CONTEXT.md): vocabulary
 - [ADR 0001: Tether owns sessions; apps own views](docs/adr/0001-tether-owns-sessions.md)
 - [ADR 0002: Runtime and packaging](docs/adr/0002-runtime-and-packaging.md)
+- [Lifecycle harness](docs/LIFECYCLE_HARNESS.md): host integration tests against a running instance
 - [Aico inventory for Phase 3](docs/inventory-aico.md)
 
 ## Development
 
 ```sh
-npm run check   # biome, tsc, vitest, esbuild
+st check --quick --changed-only     # biome, tsc, vitest, pytest, ruff, gitleaks
+scripts/tether-lifecycle-harness.sh dev
 ```
 
 ## Data and backups
