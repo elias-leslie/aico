@@ -12,10 +12,7 @@ Either app works alone against Tether, and both can share one instance.
 
 Tether serves a versioned HTTP API on a private Unix socket (`$XDG_RUNTIME_DIR/tether/<instance>/control.sock`, mode 0600). It is never exposed on the network. Apps keep their own terminal byte path (`tmux attach`) and their own view state.
 
-**Status: session owner (migration Phase 3a).**
-
-- Implemented: the full v1 API in [docs/api-v1.md](docs/api-v1.md), with Aico's lifecycle extracted into `src/lifecycle/`: contained tmux servers and pane scopes, generation fencing, End, respawn, roots, the GUI forwarding channel, A-Term legacy sessions, the legacy Aico sockets on the default instance, and `tether import-aico`.
-- Not yet switched over: Aico (Phase 3b) and A-Term (Phase 4) still run their own lifecycle until they become clients. See [docs/migration-plan.md](docs/migration-plan.md).
+**Status: v0.1.0, API v1, live.** Since the 2026-10-11 cutover `tether@default` owns every session for Aico and A-Term ([cutover log](docs/cutover-log-2026-10-11.md)). Both apps are clients: they keep only their views (Aico windows; A-Term panes, layout and project display settings) and require API v1 or later. A-Term has no Postgres, notes or recordings any more. Projects come from SummitFlow when it is installed, otherwise from Tether's local list `~/.config/tether/projects.json`. Federation removal in consumers and decommissioning (Phases 5 and 6) are tracked in [docs/migration-plan.md](docs/migration-plan.md).
 
 ## Requirements
 
@@ -28,9 +25,12 @@ Tether serves a versioned HTTP API on a private Unix socket (`$XDG_RUNTIME_DIR/t
 ```sh
 npm ci
 scripts/install.sh              # build; install ~/.local/lib/tether, ~/.local/bin/tether and the unit template
-scripts/install.sh --start dev  # also enable and start tether@dev
-tether --instance dev doctor
+scripts/install.sh --start default  # also enable and start tether@default
+scripts/install.sh --start dev      # start a test instance for this boot only (never enabled)
+tether doctor
 ```
+
+Install Tether before Aico or A-Term; both installers refuse to continue until it answers. A single `default` instance can serve both apps.
 
 The installer is idempotent. It never starts an instance unless you pass `--start`. If the tmux pane memory guard (`tmux-spawn-.scope.d/50-memory-guard.conf`) is missing, it installs it.
 
@@ -58,6 +58,7 @@ tether [--instance NAME] [--json] <command>
 - [ADR 0002: Runtime and packaging](docs/adr/0002-runtime-and-packaging.md)
 - [Lifecycle harness](docs/LIFECYCLE_HARNESS.md): host integration tests against a running instance
 - [Aico inventory for Phase 3](docs/inventory-aico.md)
+- [Migration plan](docs/migration-plan.md) and [cutover log](docs/cutover-log-2026-10-11.md)
 
 ## Development
 

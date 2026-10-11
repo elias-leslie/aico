@@ -1,6 +1,6 @@
 {
   "name": "tether",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Per-user session daemon that owns tmux session lifecycle for Aico and A-Term.",
   "license": "Apache-2.0",
   "private": true,
