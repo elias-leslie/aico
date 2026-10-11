@@ -2,10 +2,26 @@
 
 ## Unreleased
 
+### Breaking: A-Term now requires Tether
+
+- Sessions are owned by [Tether](https://github.com/elias-leslie/tether), the local session daemon (API version 1 or newer, `tether@default.service`). A-Term creates sessions through Tether with `origin: a-term`, attaches with Tether's exact `tmux -S <socket> attach-session` target, and ends, renames, respawns and switches tools through Tether. The same sessions appear in Aico, and Aico's sessions appear here.
+- Postgres is gone from the runtime. A-Term keeps only view state (panes, layout, which session each pane shows, project display settings) in `~/.local/state/a-term/a-term.db`. `DATABASE_URL`, the `DB_POOL_*` settings, Alembic, `managed-postgres.sh` and the installer's database steps are removed. The installer now checks for Tether instead.
+- New `a-term migrate-from-postgres` (dry run by default, `--apply` to write) copies panes, layouts, project settings and links to still-running pre-Tether sessions from the old tables, reading Postgres only. It needs the new `migrate` extra. `a-term import-tools` adds the old agent tools to Tether's registry. See `docs/cutover-a-term.md`.
+- Agent tools are Tether's shared registry. Claude Code's slug is `claude-code`; `claude` remains an alias. Tool edits change launches in Aico too.
+- Projects come from Tether (SummitFlow's catalog when installed, else Tether's local list). `SUMMITFLOW_API_BASE` is removed; registering projects writes Tether's local list and is off when SummitFlow supplies the projects.
+- Resizing: a view claims the shared window size through Tether only when it becomes active; dragging resizes only that view's own client.
+- `/v1/roots` stays on A-Term's service for SummitFlow's `a-term` surface but forwards to Tether's root contract, presenting descriptors with `owner: "a-term"`. `show` and `title` are applied by A-Term; `position` is unavailable as before.
+- Removed the Aico federation: Aico tmux catalog discovery, `A_TERM_AICO_STATE_DIR`, the Aico control-socket close path, `POST /api/internal/sessions/{id}/end` and the Aico resize verification. Removed the global tmux `client-session-changed` hook and `/api/internal/session-switch`; the backend removes the old hook from the default tmux server on start.
+- `tsession`, `tclaude`, `tcodex` and the project launcher go through Tether. Inside a different tmux server they attach nested (with `TMUX` unset, after a notice) instead of attempting a cross-server `switch-client`; `--print` prints the attach command. `tsession projects --format tsv` lists Tether's projects.
+- Pre-Tether A-Term sessions still running on the default tmux server stay visible and attach-only until they end.
+- `/health` reports Tether (with the API version check) and tmux instead of the database.
+- Maintenance keeps its run history in memory instead of a table.
+
+### Other changes
+
 - Removed notes and the prompt library: the Notes panel and `/notes` page, the `/api/notes` routes and SummitFlow notes proxy, note storage, and the `packages/notes-ui` workspace package. Agent Hub prompt cleaning is unchanged. Existing `a_term_notes*` tables are left in place for a later dump-and-drop.
 - Removed session recording: the JSONL recorder, the `/api/diagnostics/recordings` routes, and the `RECORDING_*` settings. Per-session diagnostics remain. Existing recording files under the cache directory are no longer read or written.
 - The root-launch tmux test now removes its private `-L` socket file after killing the server, so test runs no longer leave `a-term-root-test-*` sockets in the tmux socket directory.
-- Documentation describes `SUMMITFLOW_API_BASE` as the project-catalog companion setting only.
 
 ## 0.2.11 - 2026-05-14
 

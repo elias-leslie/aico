@@ -12,10 +12,10 @@ bash scripts/install.sh
 
 Then open **http://localhost:3002** and start working.
 
-A-Term currently targets **Linux with systemd**. The installer is built to do the heavy lifting for you: it can set up `.env.local`, Node.js, corepack, Python, uv, tmux, PostgreSQL, dependencies, migrations, frontend build output, and user services.
+A-Term currently targets **Linux with systemd** and needs **Tether**, the local session daemon that owns the terminal sessions (API version 1 or newer, normally `tether@default.service`). Install and start Tether first; the installer stops with a clear message if it cannot reach it. The installer then sets up `.env.local`, Node.js, corepack, Python, uv, tmux, dependencies, frontend build output, and user services. There is no database server to install.
 The first install can take a few minutes because it downloads the pieces it needs for you.
 
-A-Term can also read its project list from an optional companion service. That broader public path is coming later with SummitFlow; for now, the standard public install runs fully standalone.
+Projects come from Tether: SummitFlow's catalog when SummitFlow is installed, otherwise Tether's local list (`~/.config/tether/projects.json`), which A-Term's "Register project" adds to.
 
 If the default ports are already taken, the installer should guide you to another open port instead of forcing you to debug it by hand.
 
@@ -25,11 +25,11 @@ Want the latest shipped changes? See [Releases](https://github.com/elias-leslie/
 
 ## Features
 
-**`persistent sessions`** — tmux-backed terminals survive browser closes, server restarts, and network drops. Reconnect exactly where you left off.
+**`persistent sessions`** — Sessions live in Tether, not in A-Term, so they survive browser closes, A-Term restarts, and network drops. Reconnect exactly where you left off. The same sessions show up in Aico, and sessions started there show up here.
 
 **`stable scrollback rendering`** — Live TUI panes and scrollback overlays share the same xterm.js WebGL renderer with DOM fallback, so opening history keeps font metrics, wrap points, and columns aligned.
 
-**`multi-pane layouts`** — Up to 6 resizable panes. Put planning, implementation, review, release checks, and files on the same screen, detach any pane into its own browser window when you want to spread work across monitors, and use the pane menu's Refresh Layout action to remount a pane cleanly without restarting its tmux session.
+**`multi-pane layouts`** — Up to 6 resizable panes. Put planning, implementation, review, release checks, and files on the same screen, detach any pane into its own browser window when you want to spread work across monitors, and use the pane menu's Refresh Layout action to remount a pane cleanly without restarting its session. Several views can show one session; the view you activate (focus) claims the session's window size, and the others keep their own size until you activate them.
 
 ![Four-pane grid layout with multiple active agents](../docs/images/a-term-grid-2x2.png)
 *Four-pane grid: run multiple agents and shells simultaneously*
@@ -51,7 +51,7 @@ On a phone, tap Talk to start dictating. Words appear while you speak, and pause
 
 **`dual mode`** — Switch any pane between raw shell and your configured AI agent with one click. Supports Claude Code, Codex, Antigravity CLI, and Pi out of the box.
 
-**`agent presets and custom tools`** — Built-in profiles for Claude Code, Codex, Antigravity CLI, and Pi appear in Settings by default. Antigravity launches as `agy --dangerously-skip-permissions`, its explicit auto-approval mode. Pick a default tool, tune the launch command or process name, color-code panes, and add your own TUI agent commands when your workflow expands. A-Term also discovers externally created tmux sessions (`claude`, `codex`, `aider`, `agy`, `pi`, and Aico widget sessions) and lists them alongside your own panes. For Aico, the historical `tmux:aico:<session>` identity remains compatible; newer immutable server generations are discovered by reading Aico's SQLite catalog in read-only mode and then querying each generation's absolute tmux socket. A stale catalog row is never treated as a live session without a successful tmux reply. Set `A_TERM_AICO_STATE_DIR` only when Aico uses a non-default state directory.
+**`agent presets and custom tools`** — Built-in profiles for Claude Code, Codex, Antigravity CLI, and Pi appear in Settings by default. Antigravity launches as `agy --dangerously-skip-permissions`, its explicit auto-approval mode. Pick a default tool, tune the launch command or process name, color-code panes, and add your own TUI agent commands when your workflow expands. The tool list is Tether's shared registry, so a change here also applies to sessions launched from Aico; Claude Code's slug is `claude-code` (`claude` still works as an alias). A-Term also lists agent sessions you started yourself on your default tmux server (`claude`, `codex`, `aider`, `agy`, `pi`) alongside your own panes; closing one in A-Term only closes the view.
 
 ![Mode switching dropdown showing Shell, Claude Code, OpenCode, Gemini CLI, and Codex](../docs/images/a-term-mode-switch.png)
 *Switch between agents and shell per pane*
@@ -76,7 +76,7 @@ Expand the arrow controls to find Enter, which activates a TUI selection without
 
 **`auth modes for remote access`** — Ships loopback-only (`none`) by default, with built-in password auth (signed-cookie sessions) or `proxy` mode for an identity-aware reverse proxy. Security headers, a CSP with per-request nonces, CORS allowlisting, and per-route rate limiting are on by default.
 
-**`self-maintaining`** — A background maintenance loop reconciles and purges stale sessions, cleans up old uploads, and prunes orphaned project settings; `/health` and `/metrics` expose runtime status.
+**`self-maintaining`** — A background loop drops pane links to sessions that ended, prunes long-empty panes, cleans up old uploads, and prunes settings for projects that no longer exist; it also follows Tether's event stream so an ended session leaves its pane promptly. `/health` reports Tether and tmux, and `/metrics` exposes runtime status.
 
 ## Advanced Setup
 
@@ -85,36 +85,16 @@ For install smoke or CI validation on Linux hosts without a user systemd session
 For any deployment beyond localhost, turn on browser auth first. `A_TERM_AUTH_MODE=password` is the built-in path. `A_TERM_AUTH_MODE=proxy` is for running behind an identity-aware reverse proxy.
 
 <details>
-<summary><strong>Use your own PostgreSQL instead of the installer-managed one</strong></summary>
-
-```bash
-docker run -d \
-  --name a-term-postgres \
-  -e POSTGRES_DB=a-term \
-  -e POSTGRES_USER=a-term \
-  -e POSTGRES_PASSWORD=a-term \
-  -p 5432:5432 \
-  postgres:16
-```
-
-Set in `.env.local`:
-
-```bash
-DATABASE_URL=postgresql://a-term:a-term@localhost:5432/a-term
-```
-
-</details>
-
-<details>
 <summary><strong>Environment variables</strong></summary>
 
-Copy `.env.example` to `.env.local` only if you want to review or override settings first. For the default one-shot install, `bash scripts/install.sh` will create `.env.local` and replace the placeholder `DATABASE_URL` with managed PostgreSQL automatically. That path prefers Docker when it is already installed and otherwise bootstraps a local PostgreSQL cluster for you.
-
-If you want to use your own PostgreSQL instead, set `DATABASE_URL` yourself. Everything else is optional:
+Copy `.env.example` to `.env.local` only if you want to review or override settings first. `bash scripts/install.sh` creates `.env.local` for you. Everything is optional:
 
 ```bash
-# Required
-DATABASE_URL=postgresql://user:pass@localhost/a-term
+# Tether control socket (default: $XDG_RUNTIME_DIR/tether/default/control.sock)
+TETHER_SOCKET=/run/user/1000/tether/default/control.sock
+
+# Where A-Term keeps its view state (default: ~/.local/state/a-term/a-term.db)
+A_TERM_DB_PATH=/home/you/.local/state/a-term/a-term.db
 
 # Service tuning
 A_TERM_PORT=8002
@@ -133,10 +113,16 @@ MAINTENANCE_INTERVAL_SECONDS=900
 MAINTENANCE_SESSION_PURGE_DAYS=7
 
 # Optional companion services (A-Term works without these)
-SUMMITFLOW_API_BASE=http://localhost:8001/api
 NEXT_PUBLIC_AGENT_HUB_URL=http://localhost:8003
 AGENT_HUB_URL=http://localhost:8003
 ```
+
+</details>
+
+<details>
+<summary><strong>Terminal launchers</strong></summary>
+
+`scripts/tclaude`, `scripts/tcodex` and `scripts/tsession` open a project's agent session from a terminal: they reuse the most recently used Tether session for that project and tool, or create one (it also appears in A-Term), then attach. Run outside tmux, they attach directly. Inside a tmux client on the same Tether server they switch the client. Inside a different tmux server (for example your default one), tmux cannot switch across servers, so they attach nested after printing a notice; detach the inner client with its prefix key then `d`. `tsession open --tool codex --project myapp --attach --print` prints the attach command instead.
 
 </details>
 
@@ -162,16 +148,19 @@ A-Term listens on `localhost` by default. To access it from your phone, another 
 |-------|-----------|
 | Backend | FastAPI, Python 3.13+, Uvicorn |
 | Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 4 |
-| Terminal | xterm.js 6 with WebGL renderer (DOM fallback), tmux (session persistence) |
-| Database | PostgreSQL |
+| Terminal | xterm.js 6 with WebGL renderer (DOM fallback), tmux client attached to Tether's sessions |
+| Sessions | Tether (local daemon, Unix-socket HTTP API v1) |
+| View state | SQLite (`~/.local/state/a-term/a-term.db`) |
 | Quality | Ruff, Ty, pytest, Vitest, Biome |
 
 <details>
 <summary><strong>Architecture</strong></summary>
 
 - `a_term/api/` — REST and WebSocket endpoints
-- `a_term/services/` — tmux lifecycle, maintenance, agent orchestration
-- `a_term/storage/` — database access
+- `a_term/tether/` — Tether API client (Unix socket, stdlib HTTP, NDJSON events)
+- `a_term/services/` — session lifecycle through Tether, view links, maintenance
+- `a_term/storage/` — local SQLite view state (panes, layout, session links, project settings)
+- `a_term/cli/` — `tsession` and the `a-term` cutover commands
 - `frontend/app/`, `frontend/components/`, `frontend/lib/` — Next.js UI
 - `scripts/` — install, start, stop, systemd templates
 
@@ -184,7 +173,7 @@ Full API schema available at `/openapi.json` when running.
 
 A-Term is a standalone product. All core features work without any external service.
 
-**Optional external project catalog** (`SUMMITFLOW_API_BASE`) — When set (for example `http://127.0.0.1:8001/api`), A-Term reads its project list from SummitFlow and stops registering projects locally. Without it, A-Term keeps a local project list. Today it is mainly useful for private/internal deployments.
+**SummitFlow project catalog** — Tether reads SummitFlow's projects when SummitFlow is installed, and A-Term shows those. Registering projects from A-Term is then turned off; without SummitFlow, A-Term adds projects to Tether's local list.
 
 **Agent Hub** (`NEXT_PUBLIC_AGENT_HUB_URL`, `AGENT_HUB_URL`) — Adds model catalog and prompt cleaning/refinement proxies. Browser-native voice input works standalone; Agent Hub provides an optional enhanced path.
 

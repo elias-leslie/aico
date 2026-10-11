@@ -1,6 +1,6 @@
 # A-Term
 
-A-Term is a persistent browser workspace for people using AI coding CLIs and shells. It puts tmux-backed terminals and project files side by side, keeping sessions alive when the browser closes so work can resume on reconnect.
+A-Term is a persistent browser workspace for people using AI coding CLIs and shells. It puts terminals and project files side by side. The sessions themselves live in [Tether](https://github.com/elias-leslie/tether), a local session daemon, so they keep running when the browser closes and work resumes on reconnect. The same sessions can also be opened from Aico.
 
 ![A-Term browser workspace](docs/images/a-term-demo.gif)
 
@@ -9,11 +9,11 @@ A-Term is a persistent browser workspace for people using AI coding CLIs and she
 - Runs Claude Code, Codex, Antigravity, Pi, shells, and configurable TUI tools in up to six resizable panes.
 - Provides file browsing and validated uploads, terminal search, scrollback, and mobile controls.
 - Supports pane pop-outs, project switching/deep links, themes, and PWA installation.
-- Discovers compatible external tmux sessions, including Aico's historical and catalogued server generations.
+- Shows every Tether session, whichever app started it, and the agent sessions you started yourself on your default tmux server.
 
 ## Current scope
 
-The supported install targets Linux with systemd. A-Term runs standalone with a local project list. Agent Hub prompt cleaning and the SummitFlow project catalog are optional companion integrations; the wider public companion path is planned for a later release.
+The supported install targets Linux with systemd and requires Tether (API version 1 or newer) running as `tether@default.service`. Projects come from Tether: SummitFlow's catalog when SummitFlow is installed, otherwise Tether's local list `~/.config/tether/projects.json`, which A-Term can add to. Agent Hub prompt cleaning is an optional companion integration.
 
 ## Getting started
 
@@ -23,13 +23,13 @@ cd a-term
 bash scripts/install.sh
 ```
 
-Open <http://localhost:3002>. The installer sets up dependencies, PostgreSQL, migrations, frontend output, and user services, and creates local configuration. Source requirements include Python 3.13+, Node.js, pnpm, uv, and tmux. Install smoke tests without a user systemd session can use `bash scripts/install.sh --skip-systemd`.
+Install and start Tether first. Then open <http://localhost:3002>. The installer checks that Tether answers, then sets up dependencies, frontend output, user services and local configuration. Source requirements include Python 3.13+, Node.js, pnpm, uv, and tmux. Install smoke tests without a user systemd session can use `bash scripts/install.sh --skip-systemd` (add `A_TERM_SKIP_TETHER_CHECK=1` where no Tether runs).
 
 ## Runtime, data, and integrations
 
-FastAPI uses port 8002 and Next.js uses port 3002 by default. PostgreSQL stores application data; tmux owns persistent terminals. Set `SUMMITFLOW_API_BASE` to read projects from SummitFlow instead of the local list.
+FastAPI uses port 8002 and Next.js uses port 3002 by default. A-Term has no database server. Tether owns sessions, agent tools and the project list, and A-Term reaches it over its Unix socket (`TETHER_SOCKET`, default `$XDG_RUNTIME_DIR/tether/default/control.sock`). A-Term keeps only its own view state (panes, layout, which session each pane shows, project display settings) in `~/.local/state/a-term/a-term.db`. Losing that file loses layout, never a running session.
 
-Default authentication is loopback-only `none`. Before exposing A-Term beyond localhost, use built-in password authentication or `proxy` mode behind an identity-aware gateway. Agent Hub adds optional model catalog and prompt refinement; browser speech input can work independently. Aico catalog rows are read-only and count as live only after a successful tmux query.
+Default authentication is loopback-only `none`. Before exposing A-Term beyond localhost, use built-in password authentication or `proxy` mode behind an identity-aware gateway. Agent Hub adds optional model catalog and prompt refinement; browser speech input can work independently.
 
 ## Development and verification
 

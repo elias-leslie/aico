@@ -1,106 +1,58 @@
 # Local root workloads
 
-A-Term's existing owner HTTP service exposes `/v1/roots` only to loopback clients,
-with its existing configured authentication. No desktop launch or browser focus
-is implied. The adapter uses Aico's request/descriptor field names and UTF-8 JSON
-array digest. No new scheduler, queue, campaign role, or focus policy is introduced.
-Mutating request bodies require `application/json`; browser origins must match
-the existing configured CORS origins.
+Tether owns root workloads now. A-Term keeps `/v1/roots` on its existing
+service (`http://127.0.0.1:8002`) so SummitFlow fleet's `a-term` surface keeps
+working unchanged, but A-Term no longer creates, launches, fences or retires
+roots itself. Each route forwards to Tether's root contract
+(`/v1/roots` in Tether's `docs/api-v1.md`, which is Aico's contract moved
+unchanged: request IDs, digest, tombstones, the Codex resume adapter and every
+validation rule).
 
-`POST /v1/roots` accepts `requestId`, `tool` (`codex` or `claude-code`),
-`projectId`, normalized absolute `projectRoot`, `initialPrompt`, generic `role`,
-and optional opaque `leadRootReference` and `facetCapsuleRef`. Optional
-`resumeSessionId` selects an exact existing native tool session. Identity syntax
-and resume argv belong to the selected tool's internal adapter. Only Codex resume
-is currently supported: its identity must be a canonical lowercase UUID
-(`8-4-4-4-12` hexadecimal digits); UUID version is not restricted.
-Null is treated as omitted. Malformed IDs and resume requests for unsupported
-tools (including `claude-code`) return 400 `invalid_body` before allocation.
-`initialPrompt` remains required
-and transient for resume requests. Identifiers follow
-Aico's 1–128 character key format; project IDs are limited to 64 characters by the
-existing A-Term schema. Prompt size is limited to 64 KiB and request bodies to
-128 KiB. A native enabled configured tool command is required. Qualified command
-forms are `codex`, `claude`, and A-Term's established
-`claude --dangerously-skip-permissions` configuration, without adding permission
-flags. Custom configured arguments, resume/fork subcommands, shell wrappers,
-default-tool fallback, and missing project directories return `launch_unavailable`.
-Project directories ending with a semicolon also fail launch qualification because
-tmux treats that suffix as a command separator.
+## Guard
 
-A transaction reserves one detached existing-style pane, one session, and one
-request metadata receipt. The digest covers every create field except request ID.
-The canonical array retains its existing seven fields for fresh launches and
-appends `resumeSessionId` as the eighth field only when non-null. Existing fresh
-receipts and tombstones therefore retain their digest.
-Matching retries use the retained identity; changed content returns 409
-`request_conflict`. The receipt survives session/pane deletion and maintenance
-purge. The one launch attempt is committed before tmux startup. An interruption
-after that point is uncertain and never authorizes a second launch. A reservation
-interrupted before launch can recover only from the same request body.
+The routes stay where they were and keep their guard:
 
-Initial startup uses tmux's multiple-argument direct process creation and a fixed
-Python launcher. Base64 transports prompt and configuration bytes past tmux's
-command separator parser; the launcher decodes them, clears the transient prompt
-environment and passes the prompt as exactly one argv argument after `--`. Exact Codex resume executes
-`codex resume <UUID> -- <prompt>` using the configured native binary and the same
-launcher. No picker, latest-thread selection, transcript lookup, or shell is used.
-Both launcher and owner clear the temporary tmux environment. No prompt, transcript, or argv is stored in the root
-catalog; the catalog stores the content digest only. The resume identity is transient
-and is not retained in the catalog or returned in descriptors. A reservation
-retry must provide the identical resume identity and prompt; the digest fences it.
-Logical `ST_SESSION_ID` is unique per root and overrides the caller's session ID. Initial processes filter
-the existing secret environment keys. No root startup, retry, or delivery uses
-PTY input, paste, or tmux send-keys. Root sessions are excluded from ordinary dead
-session reuse, resurrection, reset, and interactive agent startup.
+- loopback clients only (`403 local_only`);
+- a browser `Origin`, if sent, must be one of the configured CORS origins
+  (`403 origin_not_allowed`);
+- the app's normal authentication middleware applies (these routes are not
+  under `/api/internal/` and are never exempt);
+- mutating bodies must be `application/json`, at most 128 KiB.
 
-`GET /v1/roots` lists retained descriptors, and `GET /v1/roots/<requestId>` reads
-one descriptor. Each returns `owner: a-term`, `hostIdentity` (session UUID),
-`logicalSessionId`, `generation`, `surfaceLocator` (`a-term://pane/<pane UUID>`),
-role references, and `status` (`pending`, `running`, `uncertain`, `ended`). Generation
-hashes exact tmux server/socket/session/pane identity and Linux process start ticks.
-The receipt retains the root process PID/start ticks for release reconciliation.
-Socket loss while that process remains alive or unreadable stays uncertain.
-Multi-window or multi-pane sessions stay uncertain rather than asserting exact
-single-root ownership. Running identifies a live
-owned terminal process, not tool readiness, authenticated model delivery, or
-prompt completion. Changed generations are uncertain and never silently adopted.
-Pending and uncertain creates return 202; ended descriptors have null generation.
+No Tether route is exposed under `/api/*`.
 
-`POST /v1/roots/<requestId>/show` accepts `{generation}` and reattaches the existing
-pane through the existing view limit and attachment API. It neither focuses a
-browser nor starts a workload. Ended mutations return 410; stale generation
-returns 409. `position` checks generation then returns 503 `position_unavailable`:
-browser grid layout does not support Aico pixel window bounds. `send` always
-returns 503 `directed_delivery_unavailable`, with reason
-`exact_thread_generation_receipt_unqualified`; no generation-fenced correlated
-delivery receipt has been proven. Existing session close APIs retain ownership
-of ordinary sessions. `POST /v1/roots/<requestId>/end` accepts `{generation}` and
-checks exact server, session, pane and process identity inside tmux's command
-queue before killing that session. A failed or ambiguous kill returns
-`close_uncertain` and retains the receipt. Only proven session and recorded root
-process disappearance retires the
-owned session and its empty pane, leaving a terminal root tombstone. Repeated end
-returns the same ended descriptor. Stale generations never authorize termination.
+## What A-Term forwards and what it answers itself
 
-`POST /v1/roots/<requestId>/title` accepts exactly `{generation, label}` for a
-running retained root. After trimming surrounding whitespace, labels require
-1-160 UTF-8 bytes of control-free single-line Unicode. Code points below 32,
-127-159, surrogates and U+2028/U+2029 are rejected with 400 `invalid_body`.
-The live generation and retained root/session
-association fence the update. Ended roots return 410 and stale generations 409.
-The existing `a_term_sessions.name` is the only label store; the root receipt and
-success descriptor contain no label. Existing project tabs and session selectors
-read that name on their normal refresh, and manual editing uses the same field
-for root sessions. Ordinary pane names retain their existing behavior.
-`st sessions title REQUEST_ID "Project · Focus" --surface a-term` forwards this
-owner contract without retaining title content in SummitFlow.
+| Route | Handling |
+| --- | --- |
+| `GET /v1/roots` | Forwarded. The list and each descriptor are presented with `owner: "a-term"` and A-Term's `position` block. |
+| `POST /v1/roots` | Forwarded as is. On `200`/`202` for a running or pending root, A-Term links the root's session (`hostIdentity`) to a new detached pane so it can be shown later. |
+| `GET /v1/roots/:requestId` | Forwarded, presented as above. |
+| `POST /v1/roots/:requestId/show` | Answered by A-Term: generation-fenced against Tether's descriptor, then the root's pane is brought into the layout (created first if missing). Browser focus is never implied. |
+| `POST /v1/roots/:requestId/position` | Generation-checked, then `503 position_unavailable`: the browser grid has no pixel window bounds. |
+| `POST /v1/roots/:requestId/title` | Generation-fenced and label-validated by A-Term (1–160 UTF-8 bytes after trimming, no control characters), then applied with Tether's session rename. Tether's own root title route needs the Aico GUI; the rename does not. |
+| `POST /v1/roots/:requestId/end` | Forwarded. Tether retires the session and keeps the tombstone. |
+| `POST /v1/roots/:requestId/send` | Forwarded. Tether answers `503 directed_delivery_unavailable`. |
+| `GET` and `POST /v1/roots/:requestId/admin` | Forwarded. |
 
-Exact resume adds no schema migration; loading its service change requires a
-managed backend rebuild. The original root-control deployment requires applying
-Alembic revision `e92a6d4b8c10` from verified head `d71b3e920c64`.
-This source change does not migrate, rebuild, restart, or deploy the live owner
-service. Managed fixtures verify exact
-argv and environment handling using an isolated tmux server and a harmless Python
-process; authenticated native TUI startup and live browser attachment remain
-separately authorized runtime validation.
+Status codes and error bodies are Tether's: `409 request_conflict`,
+`409 stale_generation`, `409 workload_unavailable`, `410 ended`, and so on.
+When Tether cannot be reached every route answers `503 {"error":"owner_failure"}`.
+
+## Why `owner` is rewritten
+
+Tether reports `owner: "aico"` on root descriptors for compatibility with
+`st aico` and SummitFlow's `aico` surface. SummitFlow's `a-term` surface
+checks `owner == "a-term"`, so A-Term presents the same descriptor under its
+own name. `hostIdentity` (the 8-hex Tether session ID), `generation`,
+`logicalSessionId` and `surfaceLocator` pass through unchanged, so the identity
+SummitFlow retains stays stable across reconciles.
+
+Tether's root list does not say which app a root was requested through
+(see `docs/tether-api-gaps.md`), so this surface lists every root Tether holds.
+
+## Migration note
+
+A-Term's own `a_term_root_requests` table was empty at cutover, so no tombstone
+moves to Tether. Roots requested through A-Term before this version have no
+receipts to carry over.
