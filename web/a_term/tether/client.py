@@ -292,11 +292,28 @@ class TetherClient:
     def delete_tool(self, ref: str) -> dict[str, Any]:
         return self.call("DELETE", _path("v1", "tools", ref))
 
+    def import_tools(
+        self, tools: list[dict[str, Any]], *, dry_run: bool = False, update_existing: bool = False
+    ) -> dict[str, Any]:
+        """``POST /v1/tools/import``: one transaction; an invalid entry rejects the whole batch."""
+        return self.call(
+            "POST",
+            "/v1/tools/import",
+            {"tools": tools, "dryRun": dry_run, "updateExisting": update_existing},
+        )
+
     # ------------------------------------------------------------------
     # Projects
     # ------------------------------------------------------------------
     def list_projects(self, *, refresh: bool = False) -> dict[str, Any]:
         return self.call("GET", _with_query("/v1/projects", {"refresh": 1 if refresh else None}))
+
+    def register_project(self, project_id: str, root: str, name: str | None = None) -> dict[str, Any]:
+        """``POST /v1/projects``: local source only (``409 projects_managed_by_summitflow`` otherwise)."""
+        body: dict[str, Any] = {"id": project_id, "root": root}
+        if name is not None:
+            body["name"] = name
+        return self.call("POST", "/v1/projects", body)
 
     # ------------------------------------------------------------------
     # Events

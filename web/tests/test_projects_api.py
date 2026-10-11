@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-import os
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -73,20 +71,28 @@ def test_context_reports_source(test_app: TestClient, fake_tether: FakeTether) -
     assert test_app.get("/api/a-term/projects/context").json() == {"source": "companion", "can_register": False}
 
 
-def test_register_project_writes_tether_local_file(
-    test_app: TestClient, fake_tether: FakeTether, local_state: Path
-) -> None:
+def test_register_project_posts_to_tether(test_app: TestClient, fake_tether: FakeTether, local_state: Path) -> None:
     root = local_state / "gamma"
     root.mkdir()
     response = test_app.post("/api/a-term/projects", json={"root_path": str(root), "name": "Gamma Project"})
     assert response.status_code == 200, response.text
     assert response.json()["id"] == "gamma-project"
-    entries = json.loads(Path(os.environ["TETHER_PROJECTS_FILE"]).read_text())
-    assert entries == [{"id": "gamma-project", "name": "Gamma Project", "root": str(root)}]
+    assert ("POST", "/v1/projects", {"id": "gamma-project", "root": str(root), "name": "Gamma Project"}) in fake_tether.calls
+    assert fake_tether.state.projects == [{"id": "gamma-project", "name": "Gamma Project", "root": str(root), "lifecycle": None}]
 
     again = test_app.post("/api/a-term/projects", json={"root_path": str(root)})
     assert again.json()["id"] == "gamma-project"
-    assert len(json.loads(Path(os.environ["TETHER_PROJECTS_FILE"]).read_text())) == 1
+    assert len(fake_tether.state.projects) == 1
+
+
+def test_register_project_suffixes_a_taken_id(
+    test_app: TestClient, projects: list[dict[str, str]], local_state: Path
+) -> None:
+    root = local_state / "other" / "alpha"
+    root.mkdir(parents=True)
+    response = test_app.post("/api/a-term/projects", json={"root_path": str(root)})
+    assert response.status_code == 200, response.text
+    assert response.json()["id"] == "alpha-2"
 
 
 def test_register_rejects_missing_path(test_app: TestClient, fake_tether: FakeTether, local_state: Path) -> None:
@@ -100,7 +106,7 @@ def test_register_refused_when_summitflow_supplies_projects(
     fake_tether.state.project_source = "summitflow"
     response = test_app.post("/api/a-term/projects", json={"root_path": str(local_state)})
     assert response.status_code == 409
-    assert not Path(os.environ["TETHER_PROJECTS_FILE"]).exists()
+    assert fake_tether.state.projects == []
 
 
 def test_reset_project_creates_missing_sessions(

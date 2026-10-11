@@ -15,7 +15,7 @@ Then open **http://localhost:3002** and start working.
 A-Term currently targets **Linux with systemd** and needs **Tether**, the local session daemon that owns the terminal sessions (API version 1 or newer, normally `tether@default.service`). Install and start Tether first; the installer stops with a clear message if it cannot reach it. The installer then sets up `.env.local`, Node.js, corepack, Python, uv, tmux, dependencies, frontend build output, and user services. There is no database server to install.
 The first install can take a few minutes because it downloads the pieces it needs for you.
 
-Projects come from Tether: SummitFlow's catalog when SummitFlow is installed, otherwise Tether's local list (`~/.config/tether/projects.json`), which A-Term's "Register project" adds to.
+Projects come from Tether: SummitFlow's catalog when SummitFlow is installed, otherwise Tether's local list (`~/.config/tether/projects.json`), which A-Term's "Register project" adds to through Tether's `POST /v1/projects`.
 
 If the default ports are already taken, the installer should guide you to another open port instead of forcing you to debug it by hand.
 
@@ -122,7 +122,7 @@ AGENT_HUB_URL=http://localhost:8003
 <details>
 <summary><strong>Terminal launchers</strong></summary>
 
-`scripts/tclaude`, `scripts/tcodex` and `scripts/tsession` open a project's agent session from a terminal: they reuse the most recently used Tether session for that project and tool, or create one (it also appears in A-Term), then attach. Run outside tmux, they attach directly. Inside a tmux client on the same Tether server they switch the client. Inside a different tmux server (for example your default one), tmux cannot switch across servers, so they attach nested after printing a notice; detach the inner client with its prefix key then `d`. `tsession open --tool codex --project myapp --attach --print` prints the attach command instead.
+`scripts/tclaude`, `scripts/tcodex` and `scripts/tsession` open a project's agent session from a terminal: they reuse the most recently used Tether session for that project and tool, or create one (it also appears in A-Term), then attach with `tether sessions attach`. Run outside tmux, it attaches directly. Inside a tmux client on the same Tether server it switches the client. Inside a different tmux server (for example your default one), tmux cannot switch across servers, so it attaches nested after printing a notice; detach the inner client with its prefix key then `d`. `tsession open --tool codex --project myapp --attach --print` prints Tether's attach target instead. The `tether` CLI must be on `PATH` (or set `TETHER_BIN`).
 
 </details>
 

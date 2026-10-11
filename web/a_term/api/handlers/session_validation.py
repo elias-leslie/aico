@@ -34,6 +34,7 @@ class AttachPlan:
     tmux_socket: str | None
     argv: list[str]
     env: dict[str, str] = field(default_factory=dict)
+    unset: list[str] = field(default_factory=list)
     generation: str | None = None
 
     @property
@@ -82,6 +83,8 @@ def _tether_plan(session_id: str) -> AttachPlan:
     env = (
         {str(key): value for key, value in raw_env.items() if isinstance(value, str)} if isinstance(raw_env, dict) else {}
     )
+    raw_unset = target.get("unset")
+    unset = [key for key in raw_unset if isinstance(key, str)] if isinstance(raw_unset, list) else []
     return AttachPlan(
         session=session,
         kind="tether",
@@ -89,6 +92,7 @@ def _tether_plan(session_id: str) -> AttachPlan:
         tmux_socket=socket_path,
         argv=argv,
         env=env,
+        unset=unset,
         generation=target.get("generation") if isinstance(target.get("generation"), str) else session.get("generation"),
     )
 

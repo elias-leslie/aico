@@ -159,8 +159,8 @@ launch_a_term_project_tool() {
     return 1
   fi
 
-  # Inside tmux, tsession decides how to reach the target: switch-client only
-  # works within one tmux server, and Tether gives each session its own.
+  # tsession hands the attach to `tether sessions attach`, which switches,
+  # nests or attaches depending on the tmux server the caller is in.
   exec "$A_TERM_TSESSION" open \
     --tool "$tool" \
     --project "$selected" \

@@ -150,21 +150,11 @@ def test_missing_psycopg_explains_the_extra(monkeypatch: pytest.MonkeyPatch) -> 
 # --- tool import ---------------------------------------------------------------
 
 
-def test_plan_tool_import_actions() -> None:
-    entries = _plan()["tools"]
-    existing = {
-        "claude-code": {"slug": "claude-code", "name": "Claude Code", "command": "claude --dangerously-skip-permissions",
-                        "processName": "claude", "displayOrder": 0, "isDefault": False, "enabled": True},
-        "pi": {"slug": "pi", "name": "Pi", "command": "pi --approve", "processName": "pi-coding-agent",
-               "displayOrder": 5, "isDefault": False, "enabled": True},
-    }
-    existing["claude"] = existing["claude-code"]
-    actions = {a["slug"]: a for a in cli.plan_tool_import(entries, existing, update_existing=False)}
-    assert actions["claude-code"]["action"] == "unchanged"
-    assert actions["pi"] == {"slug": "pi", "action": "differs", "fields": {"command": "pi"}}
-    assert actions["mine"]["action"] == "create"
-    updated = {a["slug"]: a for a in cli.plan_tool_import(entries, existing, update_existing=True)}
-    assert updated["pi"]["action"] == "update"
+def test_tool_input_leaves_out_unset_fields() -> None:
+    entries = {entry["slug"]: cli.tether_tool_input(entry) for entry in _plan()["tools"]}
+    assert "description" not in entries["pi"] and "color" not in entries["pi"]
+    assert entries["claude-code"]["aliases"] == ["claude"]
+    assert entries["mine"]["description"] == "x"
 
 
 def test_import_tools_dry_run_then_apply(
@@ -174,9 +164,14 @@ def test_import_tools_dry_run_then_apply(
     path.write_text(json.dumps({"tools": _plan()["tools"]}))
 
     assert cli.main(["import-tools", str(path)]) == 0
-    dry = {a["slug"]: a["action"] for a in json.loads(capsys.readouterr().out)["actions"]}
-    assert dry == {"claude-code": "unchanged", "pi": "differs", "mine": "create"}
+    dry = json.loads(capsys.readouterr().out)
+    assert dry["mode"] == "dry-run" and dry["applied"] is False
+    assert dry["created"] == ["mine"] and dry["unchanged"] == ["claude-code"]
+    assert dry["differs"] == [{"slug": "pi", "fields": ["argv"]}]
     assert "mine" not in fake_tether.state.tools
+    method, path_called, body = fake_tether.calls[-1]
+    assert (method, path_called) == ("POST", "/v1/tools/import")
+    assert body["dryRun"] is True and body["updateExisting"] is False
 
     assert cli.main(["import-tools", str(path), "--apply"]) == 0
     capsys.readouterr()
@@ -184,4 +179,15 @@ def test_import_tools_dry_run_then_apply(
     assert fake_tether.state.tools["pi"]["argv"] == ["pi", "--approve"]  # existing tool left alone
 
     assert cli.main(["import-tools", str(path), "--apply", "--update-existing"]) == 0
+    assert json.loads(capsys.readouterr().out)["updated"] == ["pi"]
     assert fake_tether.state.tools["pi"]["argv"] == ["pi"]
+
+
+def test_import_tools_rejected_batch_writes_nothing(
+    fake_tether: FakeTether, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "tools.json"
+    path.write_text(json.dumps([{"slug": "ok", "name": "Ok", "command": "ok"}, {"slug": "bad"}]))
+    assert cli.main(["import-tools", str(path), "--apply"]) == 1
+    assert json.loads(capsys.readouterr().out)["error"] == "invalid_body"
+    assert "ok" not in fake_tether.state.tools

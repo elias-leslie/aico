@@ -1,12 +1,12 @@
 """``tsession``: open, list and attach Tether sessions from a terminal.
 
-Attaching follows where the caller already is:
-
-- outside tmux, it runs Tether's attach argv;
-- inside the same tmux server as the session, it switches the client;
-- inside a different tmux server (the default one, for example), tmux cannot
-  switch across servers, so it attaches nested with ``TMUX`` unset after a
-  notice. ``--print`` only prints the attach command instead.
+``open`` reuses or creates the project's tool session through A-Term (so it
+also shows in an A-Term pane). Attaching is delegated to
+``tether sessions attach <id>``, which applies Tether's attach environment and
+follows where the caller already is: outside tmux it attaches, inside the same
+tmux server it switches the client, and inside a different one it nests with
+``TMUX`` unset after a notice. The ``tether`` CLI reads the same
+``TETHER_INSTANCE`` / ``TETHER_SOCKET`` as A-Term.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import shlex
+import shutil
 import subprocess
 import sys
 from collections.abc import Sequence
@@ -29,50 +29,20 @@ from ..services.session_broker import (
 )
 from ..tether import TetherError, TetherUnavailable
 
-_NESTED_NOTICE = (
-    "tsession: you are inside a different tmux server; attaching nested. "
-    "Detach the inner client with its prefix key then d.\n"
-)
 
-
-def current_tmux_socket(environ: dict[str, str] | None = None) -> str | None:
-    """Socket path of the tmux server this shell runs in (``$TMUX`` is ``socket,pid,session``)."""
-    value = (environ if environ is not None else os.environ).get("TMUX", "")
-    socket_path = value.split(",", 1)[0].strip()
-    return socket_path or None
-
-
-def attach_plan(target: BrokerSessionTarget, environ: dict[str, str] | None = None) -> tuple[str, list[str], dict[str, str]]:
-    """Return (kind, argv, env) for attaching to ``target`` from here.
-
-    ``kind`` is ``attach``, ``switch`` or ``nested``.
-    """
-    env = dict(environ if environ is not None else os.environ)
-    env.update(target.attach_env)
-    if not target.attach_argv:
-        raise ValueError(f"Tether gave no attach target for {target.session_id}")
-    inside = current_tmux_socket(env)
-    if inside is None:
-        return "attach", list(target.attach_argv), env
-    if target.tmux_socket and os.path.realpath(inside) == os.path.realpath(target.tmux_socket):
-        tmux_bin = target.attach_argv[0]
-        argv = [tmux_bin, "-S", target.tmux_socket, "switch-client", "-t", target.attach_argv[-1]]
-        return "switch", argv, env
-    env.pop("TMUX", None)
-    env.pop("TMUX_PANE", None)
-    return "nested", list(target.attach_argv), env
+def tether_attach_argv(session_id: str, *, print_only: bool = False) -> list[str]:
+    """``tether sessions attach <id>`` (``$TETHER_BIN`` overrides the binary)."""
+    binary = os.environ.get("TETHER_BIN", "").strip() or shutil.which("tether")
+    if not binary:
+        raise FileNotFoundError("the tether CLI is not on PATH")
+    argv = [binary, "sessions", "attach", session_id]
+    if print_only:
+        argv.append("--print")
+    return argv
 
 
 def _attach(target: BrokerSessionTarget, *, print_only: bool) -> int:
-    kind, argv, env = attach_plan(target)
-    if print_only:
-        prefix = "env -u TMUX -u TMUX_PANE " if kind == "nested" else ""
-        print(prefix + shlex.join(argv))
-        return 0
-    if kind == "nested":
-        sys.stderr.write(_NESTED_NOTICE)
-        sys.stderr.flush()
-    return subprocess.run(argv, env=env, check=False).returncode
+    return subprocess.run(tether_attach_argv(target.session_id, print_only=print_only), check=False).returncode
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -84,7 +54,7 @@ def _build_parser() -> argparse.ArgumentParser:
     open_parser.add_argument("--project", required=True, help="Project id")
     open_parser.add_argument("--cwd", help="Working directory to match or start in")
     open_parser.add_argument("--attach", action="store_true", help="Attach to (or switch to) the session")
-    open_parser.add_argument("--print", dest="print_only", action="store_true", help="With --attach, print the attach command instead")
+    open_parser.add_argument("--print", dest="print_only", action="store_true", help="With --attach, print Tether's attach target instead")
 
     list_parser = subparsers.add_parser("list", help="List running project tool sessions")
     list_parser.add_argument("--tool", help="Filter to one tool slug")
@@ -155,6 +125,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     except TetherError as error:
         sys.stderr.write(f"tsession: Tether refused the request ({error.code}).\n")
         return 1
+    except FileNotFoundError as error:
+        sys.stderr.write(f"tsession: {error}.\n")
+        return 69
     parser.error(f"Unknown command: {args.command}")
     return 2
 

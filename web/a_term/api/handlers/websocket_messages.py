@@ -31,6 +31,8 @@ logger = get_logger(__name__)
 MAX_SCROLL_PAGE_SIZE = 5000
 _CLAIM_ATTEMPTS = 5
 _CLAIM_RETRY_SECONDS = 0.1
+# Tether resize-claim refusals worth retrying; every other reason is permanent.
+_CLAIM_RETRYABLE = frozenset({"client_not_attached", "tmux_unavailable"})
 
 
 @dataclass
@@ -63,13 +65,28 @@ def _extract_capabilities(data: dict[str, Any], capabilities: list[str]) -> None
         capabilities.extend(str(cap) for cap in caps)
 
 
+def _reread_generation(view: ViewContext) -> bool:
+    from ...tether import TetherError, TetherUnavailable, get_client
+
+    try:
+        generation = get_client().get_session(view.session_id).get("generation")
+    except (TetherError, TetherUnavailable):
+        return False
+    if not isinstance(generation, str):
+        return False
+    view.generation = generation
+    return True
+
+
 def _claim_tether_size(view: ViewContext, cols: int, rows: int) -> bool:
     """Ask Tether to size the shared window to this view's tmux client.
 
-    The PTY's child is the tmux client, so its pid is the ``clientPid``. The
-    client may not be attached yet right after connect, so a refused claim is
-    retried briefly. A stale generation is re-read once; a claim is never
-    forced.
+    The PTY's child is the tmux client, so its pid is the ``clientPid``.
+    Right after connect the client may not be attached yet, so the retryable
+    refusals (``client_not_attached``, ``tmux_unavailable``) are retried
+    briefly. A changed generation (``409 stale_generation`` or reason
+    ``stale``) is re-read once. Permanent refusals (``window_linked``,
+    ``status_row``, ``invalid``) end the claim at once. A claim is never forced.
     """
     from ...tether import TetherError, TetherUnavailable, get_client
 
@@ -83,13 +100,8 @@ def _claim_tether_size(view: ViewContext, cols: int, rows: int) -> bool:
         except TetherError as error:
             if error.code == "stale_generation" and not refreshed:
                 refreshed = True
-                try:
-                    generation = client.get_session(view.session_id).get("generation")
-                except (TetherError, TetherUnavailable):
+                if not _reread_generation(view):
                     return False
-                if not isinstance(generation, str):
-                    return False
-                view.generation = generation
                 continue
             logger.info("a_term_resize_claim_refused", session_id=view.session_id, code=error.code)
             return False
@@ -98,10 +110,17 @@ def _claim_tether_size(view: ViewContext, cols: int, rows: int) -> bool:
             return False
         if result.get("applied"):
             return True
-        if attempt + 1 < _CLAIM_ATTEMPTS:
+        reason = result.get("reason")
+        if reason == "stale" and not refreshed:
+            refreshed = True
+            if not _reread_generation(view):
+                return False
+            continue
+        if reason in _CLAIM_RETRYABLE and attempt + 1 < _CLAIM_ATTEMPTS:
             time.sleep(_CLAIM_RETRY_SECONDS)
-        else:
-            logger.info("a_term_resize_claim_not_applied", session_id=view.session_id, reason=result.get("reason"))
+            continue
+        logger.info("a_term_resize_claim_not_applied", session_id=view.session_id, reason=reason)
+        return False
     return False
 
 

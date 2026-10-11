@@ -73,7 +73,7 @@ async def test_setup_spawns_tethers_argv_and_builds_the_claim_identity() -> None
     ):
         result_plan, view, pid = await _setup_connection(websocket, "a0000001")
 
-    spawn.assert_called_once_with(plan.argv, plan.env)
+    spawn.assert_called_once_with(plan.argv, plan.env, plan.unset)
     apply_options.assert_not_called()
     wait.assert_awaited_once()
     assert result_plan is plan

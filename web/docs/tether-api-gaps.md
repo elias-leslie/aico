@@ -1,113 +1,118 @@
 # Tether API gaps found while moving A-Term onto Tether
 
-A-Term is written against Tether's `docs/api-v1.md` as the contract. These are
-the places where the contract does not cover something A-Term needs, and how
-A-Term works around each one today. Each item names the smallest additive v1
-change that would remove the workaround. None of them blocks the cutover.
+A-Term is written against Tether's `docs/api-v1.md` as the contract. While
+moving A-Term onto Tether, ten places came up where the contract did not cover
+something A-Term needed. Tether closed them as additive v1 changes (marked
+*(3a)* in its `docs/api-v1.md`; the API version stays 1). A-Term now uses
+those routes and fields and has dropped its workarounds. Each entry below
+records the gap, what Tether added, and what A-Term does now.
 
-## 1. `POST /v1/roots` cannot say which app requested a root
+All of it was checked live against a running non-default instance
+(`tether@dev`), with the branch backend on an alternate port.
 
-The body has no `origin` (or `aTermSessionId`), and unknown fields are
-rejected. A root requested through A-Term's `/v1/roots` therefore gets the
-same origin as one requested through Aico.
+## 1. `POST /v1/roots` could not say which app requested a root (resolved)
 
-- Workaround: A-Term forwards the body unchanged and links the resulting
-  session (`hostIdentity`) to a detached A-Term pane itself.
-- Wanted: optional `origin` on `POST /v1/roots`, stored on the root's session.
+- Tether: `POST /v1/roots` accepts optional `origin` (`aico` or `a-term`) and
+  `aTermSessionId` (a UUID, only with `a-term`). Both are stored and neither is
+  part of the request digest. `aTermSessionId` becomes the pane's
+  `A_TERM_SESSION_ID`.
+- A-Term: `/v1/roots` forwards every create with `origin: "a-term"` and an
+  `aTermSessionId` (a new UUID unless the caller sent one). A body naming
+  another origin is refused with `400 invalid_body`.
 
-## 2. Root descriptors carry no origin, and the list has no filter
+## 2. Root descriptors carried no origin and the list had no filter (resolved)
 
-`GET /v1/roots` returns every root. SummitFlow's `a-term` surface therefore
-lists roots requested through Aico too.
+- Tether: descriptors carry `origin`; `GET /v1/roots?origin=aico|a-term`
+  filters (`400 invalid_query` for any other value).
+- A-Term: the `a-term` surface lists `GET /v1/roots?origin=a-term`, so
+  SummitFlow sees only roots requested through A-Term.
 
-- Workaround: none needed for correctness (SummitFlow addresses roots by
-  `requestId`), but the list is wider than before.
-- Wanted: `origin` on root descriptors and `GET /v1/roots?origin=`.
+## 3. Root `owner` was always `"aico"` (resolved)
 
-## 3. Root `owner` is always `"aico"`
+- Tether: on `/v1`, a root's `owner` is its stored origin. The legacy Aico
+  sockets on the default instance still say `owner: "aico"` and carry no
+  `origin`, so `st aico` is unaffected.
+- A-Term: no longer rewrites `owner`. It only adds its `position` block
+  (`browser_grid_has_no_pixel_window_bounds`) to descriptors.
 
-SummitFlow's `a-term` surface requires `owner == "a-term"`.
+## 4. Root `show`, `position` and `title` needed the Aico GUI (resolved for `title`)
 
-- Workaround: A-Term's proxy rewrites `owner` to `"a-term"` and adds its
-  `position` block; every identity field passes through unchanged.
-- Wanted: nothing, if A-Term keeps the proxy. Otherwise an owner that follows
-  the requesting surface.
+- Tether: `title` with no GUI connected renames the session in the catalog
+  under the lifecycle lock, fenced on the exact running generation, and
+  publishes `session.updated`. With a GUI connected it still goes through the
+  GUI and renames only if the GUI applies it. `show` and `position` still
+  answer `503 gui_unavailable` without a GUI.
+- A-Term: forwards `title` to Tether's root route and dropped its own label
+  validation and `PATCH /v1/sessions` rename. `show` (bring the root's pane
+  into the layout) and `position` (`503 position_unavailable`) stay with
+  A-Term, because A-Term's views are browser panes, not Aico windows.
 
-## 4. Root `show`, `position` and `title` need the Aico GUI
+## 5. No bulk import for agent tools (resolved)
 
-They are forwarded to the Aico GUI channel and answer `503 gui_unavailable`
-without it. A-Term's views are browser panes, not Aico windows.
+- Tether: `POST /v1/tools/import` `{tools (≤200), dryRun?, updateExisting?}`
+  applies in one transaction and returns `{applied, created, updated,
+  unchanged, differs: [{slug, fields}]}`. Any invalid entry rejects the batch
+  with `400` and writes nothing.
+- A-Term: `a-term import-tools FILE` sends the file to that route. It is a dry
+  run (`dryRun: true`) unless `--apply`; `--update-existing` maps to
+  `updateExisting`. Unset (`null`) fields are left out so they neither show as
+  differences nor clear Tether's values.
 
-- Workaround: A-Term answers `show` (bring its pane into the layout) and
-  `position` (`503 position_unavailable`) itself after checking the generation
-  against Tether's descriptor, and applies `title` with
-  `PATCH /v1/sessions/:hostIdentity {generation, name}`. That rename is not
-  atomic with any GUI view change, which is fine for A-Term because its
-  views read the name on refresh.
-- Wanted: a documented rule that `title` renames without a GUI when the root
-  was requested by a non-GUI origin, or per-app view-command routing.
+## 6. No route to register a local project (resolved)
 
-## 5. No bulk import for agent tools
+- Tether: `POST /v1/projects` `{id, root, name?}` appends to `projects.json`
+  atomically in local mode and publishes `projects.changed`. It answers
+  `409 projects_managed_by_summitflow` when SummitFlow supplies the projects,
+  `409 project_exists`, `400 invalid_project_id` or `400 invalid_project_root`.
+  `refresh=1` re-reads `projects.json` in local mode.
+- A-Term: "Register project" calls that route. A root that is already listed
+  returns that project; a taken id gets a numeric suffix (`-2`, `-3`, ...).
+  A-Term no longer writes Tether's file.
 
-There is no import route for A-Term's old `agent_tools` rows.
+## 7. `resize-claim` refusal reasons were not enumerated (resolved)
 
-- Workaround: `a-term migrate-from-postgres --apply` writes the rows as JSON;
-  `a-term import-tools FILE --apply` creates missing tools with
-  `POST /v1/tools` and, only with `--update-existing`, patches differing fields
-  with `PATCH /v1/tools/:ref`. It is not atomic across tools. At cutover all
-  four A-Term tools already exist in Tether's seed (`claude` as the alias of
-  `claude-code`), and the commands match except `pi` (A-Term ran bare `pi`;
-  Tether seeds `pi --approve`). The default run reports that and any display
-  differences and changes nothing.
-- Wanted: `POST /v1/tools/import` taking a list, applied in one transaction,
-  with a dry-run flag.
+- Tether: `reason` is one of `client_not_attached`, `stale`,
+  `tmux_unavailable` (retryable) or `window_linked`, `status_row`, `invalid`
+  (permanent).
+- A-Term: retries `client_not_attached` and `tmux_unavailable` at most 5 times,
+  100 ms apart; re-reads the generation once on reason `stale` or
+  `409 stale_generation`; stops at once on any other reason, including ones
+  added later. A refused claim never affects the view's own PTY size.
 
-## 6. No route to register a local project
+## 8. Attach `env`: complete environment or overrides? (resolved)
 
-Projects are read-only over the API. A-Term's "Register project" (only offered
-when the source is `local`) writes `~/.config/tether/projects.json`
-(`TETHER_PROJECTS_FILE` overrides it) atomically and then calls
-`GET /v1/projects?refresh=1`.
+- Tether: `env` holds overrides only (`TERM`, `COLORTERM`, `CLICOLOR`), and
+  `unset` lists keys to remove (`TMUX`, `TMUX_PANE`, `TMUX_TMPDIR`,
+  `NO_COLOR`). Both lists may grow.
+- A-Term: a view's tmux client starts from A-Term's environment, sets Tether's
+  `env`, then removes every key in `unset` plus its own baseline list (the same
+  four keys, used for legacy and external attaches that get no list).
 
-- Gaps: the contract does not say that `refresh=1` re-reads the local file, or
-  who owns that file's format beyond `{id, name?, root}`.
-- Wanted: `POST /v1/projects` for the local source (`403` when the source is
-  SummitFlow), plus a `projects.changed` event when the file changes.
+## 9. The Tether CLI could not create or attach sessions (resolved)
 
-## 7. `resize-claim` refusal reasons are not enumerated
+- Tether: `tether sessions create [--tool] [--project] [--name]` and
+  `tether sessions attach <id> [--print]`. Attach applies the env contract,
+  switches the client inside the same tmux server and nests with a notice
+  inside a different one.
+- A-Term: `tsession open --attach` (and `tclaude`, `tcodex`) still decide which
+  session to use (reuse the project's session or create one through A-Term, so
+  it shows in an A-Term pane) and then run `tether sessions attach <id>`.
+  `--print` prints Tether's attach target. `TETHER_BIN` overrides the binary.
+  `tether sessions create` is not used: it creates with `origin: "cli"` and no
+  A-Term pane.
 
-`{applied: false, reason}` has no listed reasons. A-Term claims right after its
-PTY starts `tmux attach`, so the client may not be attached yet.
-
-- Workaround: A-Term retries a refused claim at most 5 times, 100 ms apart,
-  re-reads the generation once on `409 stale_generation`, and otherwise gives
-  up quietly. A refused claim never affects the view's own PTY size.
-- Wanted: stable reason codes, at least `client_not_attached` (retryable),
-  `window_linked` and `status_row` (permanent).
-
-## 8. Attach `env`: complete environment or overrides?
-
-`GET /v1/sessions/:id/attach` returns `env` described as "the client
-environment". A-Term does not know whether to use it as the whole environment.
-
-- Workaround: A-Term starts from its own environment, applies Tether's `env`
-  on top, and removes `TMUX`, `TMUX_PANE` and `NO_COLOR` afterwards.
-- Wanted: say whether `env` is complete or a set of overrides.
-
-## 9. The Tether CLI cannot create or attach sessions
-
-`tether` has `sessions`, `roots`, `tools`, `projects`, `doctor` and `version`,
-but no way to start a session or attach a terminal to one.
-
-- Workaround: `tsession` (and `tclaude`/`tcodex`) do both through the API:
-  `POST /v1/sessions` with `origin: "a-term"`, then the attach argv, with
-  switch-client inside the same tmux server and a nested attach (with `TMUX`
-  unset, after a notice) inside a different one.
-- Wanted: `tether attach <id>` and `tether new --tool --project`, so other
-  terminals need no A-Term code.
-
-## 10. No import for root-request tombstones
+## 10. No import for root-request tombstones (no route needed)
 
 A-Term's `a_term_root_requests` table was empty at cutover, so nothing was
-lost. A future migration from another root owner would need an import route
-that keeps tombstones (`requestId` + digest, ended).
+lost. Tether keeps tombstones only through `tether import-aico`; there is no
+separate tombstone import route, and A-Term needs none.
+
+## Remaining notes
+
+- Root `title` with an Aico GUI connected is applied by the GUI, so it depends
+  on the GUI accepting a title for a root requested through A-Term. This
+  behaves as Tether's contract specifies; it was not exercised live, because
+  `tether@dev` had no GUI connected.
+- The API version did not change for these additions, so `apiVersion >= 1`
+  cannot tell an older Tether build from this one. The cutover runbook checks
+  `GET /v1/roots?origin=a-term` instead.

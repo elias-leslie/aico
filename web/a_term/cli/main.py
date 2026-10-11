@@ -9,8 +9,10 @@
     tools as JSON for ``a-term import-tools``.
 
 ``a-term import-tools FILE``
-    Adds the tools from that JSON to Tether's registry (missing slugs only,
-    unless ``--update-existing``). A dry run unless ``--apply``.
+    Sends the tools from that JSON to Tether's ``POST /v1/tools/import`` in one
+    transaction: missing slugs are created, existing ones are only reported
+    with their differing fields unless ``--update-existing``. A dry run
+    (Tether's ``dryRun``) unless ``--apply``.
 
 Needs the ``migrate`` extra (psycopg) only for ``migrate-from-postgres``.
 """
@@ -33,7 +35,6 @@ from ..utils.tmux import get_tmux_session_name, tmux_session_exists_by_name
 
 # A-Term's old slugs that Tether knows under a canonical slug.
 _SLUG_RENAMES = {"claude": "claude-code"}
-_TOOL_UPDATE_FIELDS = ("name", "command", "processName", "description", "color", "displayOrder", "enabled", "isDefault")
 
 
 def canonical_mode(mode: Any) -> str:
@@ -301,29 +302,13 @@ def run_migrate(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 
 
-def plan_tool_import(entries: list[dict[str, Any]], existing: dict[str, dict[str, Any]], update_existing: bool) -> list[dict[str, Any]]:
-    """Decide create/update/skip per tool. ``existing`` maps every slug and alias to its Tether tool."""
-    actions = []
-    for entry in entries:
-        slug = entry["slug"]
-        current = existing.get(slug) or next(
-            (existing[alias] for alias in entry.get("aliases", []) if alias in existing), None
-        )
-        if current is None:
-            actions.append({"slug": slug, "action": "create", "fields": entry})
-            continue
-        differences = {
-            key: entry[key]
-            for key in _TOOL_UPDATE_FIELDS
-            if key in entry and entry[key] is not None and entry[key] != current.get(key)
-        }
-        if not differences:
-            actions.append({"slug": current["slug"], "action": "unchanged"})
-        elif update_existing:
-            actions.append({"slug": current["slug"], "action": "update", "fields": differences})
-        else:
-            actions.append({"slug": current["slug"], "action": "differs", "fields": differences})
-    return actions
+def tether_tool_input(entry: dict[str, Any]) -> dict[str, Any]:
+    """One import entry as Tether's ``ToolInput``: unset (``None``) fields are left out.
+
+    A ``None`` would otherwise read as "clear this field" and show up as a
+    difference against every tool Tether already has.
+    """
+    return {key: value for key, value in entry.items() if value is not None}
 
 
 def run_import_tools(args: argparse.Namespace) -> int:
@@ -331,31 +316,19 @@ def run_import_tools(args: argparse.Namespace) -> int:
 
     payload = json.loads(Path(args.file).expanduser().read_text())
     entries = payload.get("tools") if isinstance(payload, dict) else payload
-    if not isinstance(entries, list):
+    if not isinstance(entries, list) or not all(isinstance(entry, dict) for entry in entries):
         raise SystemExit("a-term: tools JSON must be a list or {\"tools\": [...]}")
-    client = get_client()
-    body = client.list_tools()
-    existing: dict[str, dict[str, Any]] = {}
-    for tool in body.get("items", []) if isinstance(body, dict) else []:
-        for key in [tool.get("slug"), *(tool.get("aliases") or [])]:
-            if isinstance(key, str):
-                existing[key] = tool
-    actions = plan_tool_import(entries, existing, args.update_existing)
-    if args.apply:
-        for action in actions:
-            try:
-                if action["action"] == "create":
-                    client.create_tool(action["fields"])
-                elif action["action"] == "update":
-                    client.update_tool(action["slug"], action["fields"])
-                else:
-                    continue
-                action["applied"] = True
-            except TetherError as error:
-                action["applied"] = False
-                action["error"] = error.code
-    print(json.dumps({"mode": "apply" if args.apply else "dry-run", "actions": actions}, indent=2))
-    return 1 if any(action.get("applied") is False for action in actions) else 0
+    try:
+        result = get_client().import_tools(
+            [tether_tool_input(entry) for entry in entries],
+            dry_run=not args.apply,
+            update_existing=args.update_existing,
+        )
+    except TetherError as error:
+        print(json.dumps({"mode": "apply" if args.apply else "dry-run", "error": error.code, "detail": error.body}, indent=2))
+        return 1
+    print(json.dumps({"mode": "apply" if args.apply else "dry-run", **result}, indent=2))
+    return 0
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -372,7 +345,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     tools = subparsers.add_parser("import-tools", help="Add migrated agent tools to Tether's registry")
     tools.add_argument("file", help="Tools JSON written by migrate-from-postgres")
-    tools.add_argument("--apply", action="store_true", help="Change Tether (default: dry run)")
+    tools.add_argument("--apply", action="store_true", help="Change Tether (default: dry run, nothing written)")
     tools.add_argument("--update-existing", action="store_true", help="Also overwrite differing fields of existing tools")
     return parser
 

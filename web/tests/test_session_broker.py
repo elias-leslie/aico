@@ -23,8 +23,7 @@ def test_creates_pane_and_session_when_none_exists(tether: FakeTether, tmp_path)
     target = ensure_project_tool_session("proj", "claude", working_dir=str(tmp_path))
     assert target.created is True and target.started is False
     assert target.mode == "claude-code"  # alias canonicalized
-    assert target.attach_argv[1:4] == ["-S", target.tmux_socket, "attach-session"]
-    assert target.attach_env["TERM"] == "xterm-256color"
+    assert target.tmux_socket and target.session_id
     pane = pane_store.get_pane(target.pane_id)
     assert pane is not None and pane["project_id"] == "proj"
     modes = sorted(link["mode"] for link in pane_store.links_for_pane(pane["id"]))
@@ -75,4 +74,4 @@ def test_list_filters_shell_projectless_and_tool(tether: FakeTether) -> None:
     assert [(t.project_id, t.mode) for t in targets] == [("a", "codex"), ("b", "claude-code")]
     assert [t.project_id for t in list_project_tool_sessions("claude")] == ["b"]
     linked = list_project_tool_sessions("claude-code")[0]
-    assert linked.pane_name == "P" and linked.attach_argv == []
+    assert linked.pane_name == "P"

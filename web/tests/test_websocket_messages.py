@@ -110,6 +110,32 @@ def test_refused_claim_is_retried_a_bounded_number_of_times(
     assert no_sleep.call_count == 4
 
 
+@pytest.mark.parametrize("reason", ["window_linked", "status_row", "invalid", "something_new"])
+def test_permanent_refusal_is_not_retried(fake_tether: FakeTether, pty_resize, no_sleep, reason: str) -> None:
+    view, _ = _tether_view(fake_tether)
+    fake_tether.state.resize_results = [{"applied": False, "reason": reason}] * 5
+    _send(_resize(claim=True), view)
+    assert len(fake_tether.state.resize_claims) == 1
+    assert no_sleep.call_count == 0
+
+
+def test_tmux_unavailable_is_retried(fake_tether: FakeTether, pty_resize, no_sleep) -> None:
+    view, _ = _tether_view(fake_tether)
+    fake_tether.state.resize_results = [{"applied": False, "reason": "tmux_unavailable"}, {"applied": True}]
+    _send(_resize(claim=True), view)
+    assert len(fake_tether.state.resize_claims) == 2
+
+
+def test_stale_reason_re_reads_the_generation_once(fake_tether: FakeTether, pty_resize, no_sleep) -> None:
+    view, session = _tether_view(fake_tether)
+    fake_tether.state.resize_results = [{"applied": False, "reason": "stale"}] * 3
+    _send(_resize(claim=True), view)
+    reads = [call for call in fake_tether.calls if call[:2] == ("GET", f"/v1/sessions/{session['id']}")]
+    assert len(reads) == 1
+    assert len(fake_tether.state.resize_claims) == 2
+    assert no_sleep.call_count == 0
+
+
 def test_claim_retry_stops_once_applied(fake_tether: FakeTether, pty_resize, no_sleep) -> None:
     view, _ = _tether_view(fake_tether)
     fake_tether.state.resize_results = [{"applied": False, "reason": "client_not_attached"}, {"applied": True}]

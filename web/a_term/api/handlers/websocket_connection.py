@@ -374,7 +374,7 @@ async def _setup_connection(websocket: WebSocket, session_id: str) -> tuple[Atta
             external_attach_applied = bool(
                 await _call_tmux_session_fn(apply_external_attach_options, plan.tmux_session_name, plan.tmux_socket)
             )
-        master_fd, pid = spawn_pty(plan.argv, plan.env)
+        master_fd, pid = spawn_pty(plan.argv, plan.env, plan.unset)
         view = ViewContext(
             session_id=plan.session_id,
             master_fd=master_fd,

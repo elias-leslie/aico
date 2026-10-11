@@ -28,8 +28,6 @@ def _target(**overrides: object) -> BrokerSessionTarget:
         "working_dir": "/srv/a-term",
         "created": False,
         "started": False,
-        "attach_argv": ["/usr/bin/tmux", "-S", SOCKET, "attach-session", "-t", "$1"],
-        "attach_env": {"TERM": "xterm-256color"},
     }
     values.update(overrides)
     return BrokerSessionTarget(**values)
@@ -42,61 +40,21 @@ def _restore_logging():
     yield
     structlog.reset_defaults()
 
-# --- attach planning across tmux servers -----------------------------------
+# --- attaching is Tether's -----------------------------------------------------
 
 
-def test_outside_tmux_runs_tethers_attach_argv() -> None:
-    kind, argv, env = cli.attach_plan(_target(), environ={"HOME": "/h"})
-    assert kind == "attach"
-    assert argv == ["/usr/bin/tmux", "-S", SOCKET, "attach-session", "-t", "$1"]
-    assert env["TERM"] == "xterm-256color" and "TMUX" not in env
+def test_attach_delegates_to_tether_cli(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TETHER_BIN", "/opt/tether")
+    assert cli.tether_attach_argv("a0000001") == ["/opt/tether", "sessions", "attach", "a0000001"]
+    assert cli.tether_attach_argv("a0000001", print_only=True)[-1] == "--print"
 
 
-def test_inside_the_same_server_switches_client() -> None:
-    kind, argv, _ = cli.attach_plan(_target(), environ={"TMUX": f"{SOCKET},1234,0", "TMUX_PANE": "%1"})
-    assert kind == "switch"
-    assert argv == ["/usr/bin/tmux", "-S", SOCKET, "switch-client", "-t", "$1"]
-
-
-def test_inside_a_different_server_attaches_nested_without_tmux_env() -> None:
-    environ = {"TMUX": "/tmp/tmux-1000/default,999,3", "TMUX_PANE": "%9", "HOME": "/h"}
-    kind, argv, env = cli.attach_plan(_target(), environ=environ)
-    assert kind == "nested"
-    assert argv[3] == "attach-session"  # never a cross-server switch-client
-    assert "TMUX" not in env and "TMUX_PANE" not in env
-    assert environ["TMUX"]  # the caller's environment is untouched
-
-
-def test_missing_attach_target_is_an_error() -> None:
-    with pytest.raises(ValueError):
-        cli.attach_plan(_target(attach_argv=[]), environ={})
-
-
-def test_print_shows_nested_command(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
-    monkeypatch.setenv("TMUX", "/tmp/tmux-1000/default,999,3")
-    with patch("a_term.cli.session_broker.subprocess.run") as run:
-        assert cli._attach(_target(), print_only=True) == 0
-    run.assert_not_called()
-    out = capsys.readouterr().out.strip()
-    assert out.startswith("env -u TMUX -u TMUX_PANE /usr/bin/tmux -S ")
-    assert out.endswith("attach-session -t '$1'")
-
-
-def test_nested_attach_prints_notice_to_stderr(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
-    monkeypatch.setenv("TMUX", "/tmp/tmux-1000/default,999,3")
-    with patch("a_term.cli.session_broker.subprocess.run", return_value=MagicMock(returncode=0)) as run:
-        assert cli._attach(_target(), print_only=False) == 0
-    captured = capsys.readouterr()
-    assert "different tmux server" in captured.err and captured.out == ""
-    assert "TMUX" not in run.call_args.kwargs["env"]
-
-
-def test_same_server_attach_has_no_notice(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
-    monkeypatch.setenv("TMUX", f"{SOCKET},1,0")
-    with patch("a_term.cli.session_broker.subprocess.run", return_value=MagicMock(returncode=0)) as run:
-        cli._attach(_target(), print_only=False)
-    assert run.call_args.args[0][3] == "switch-client"
-    assert capsys.readouterr().err == ""
+def test_attach_without_tether_cli_is_an_error(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    monkeypatch.delenv("TETHER_BIN", raising=False)
+    monkeypatch.setenv("PATH", "/nonexistent")
+    with patch("a_term.cli.session_broker.ensure_project_tool_session", return_value=_target()):
+        assert cli.main(["open", "--tool", "codex", "--project", "a-term", "--attach"]) == 69
+    assert "tether CLI" in capsys.readouterr().err
 
 
 # --- commands ----------------------------------------------------------------
@@ -110,14 +68,14 @@ def test_open_prints_json_target(capsys: pytest.CaptureFixture[str]) -> None:
     ensure.assert_called_once_with(project_id="a-term", tool_slug="codex", working_dir="/srv/a-term")
 
 
-def test_open_attach_uses_attach_plan(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("TMUX", raising=False)
+def test_open_attach_runs_tether_sessions_attach(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TETHER_BIN", "/opt/tether")
     with (
         patch("a_term.cli.session_broker.ensure_project_tool_session", return_value=_target()),
         patch("a_term.cli.session_broker.subprocess.run", return_value=MagicMock(returncode=3)) as run,
     ):
-        assert cli.main(["open", "--tool", "codex", "--project", "a-term", "--attach"]) == 3
-    assert run.call_args.args[0][3] == "attach-session"
+        assert cli.main(["open", "--tool", "codex", "--project", "a-term", "--attach", "--print"]) == 3
+    assert run.call_args.args[0] == ["/opt/tether", "sessions", "attach", "a0000001", "--print"]
 
 
 def test_list_project_id_deduplicates(capsys: pytest.CaptureFixture[str]) -> None:

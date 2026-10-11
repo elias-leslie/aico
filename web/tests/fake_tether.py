@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import socketserver
 import threading
 import time
@@ -18,6 +19,19 @@ from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
 TMUX_BIN = "/usr/bin/tmux"
+# Attach env is overrides only, then the unset list (api-v1.md "Terminal I/O").
+ATTACH_ENV = {"TERM": "xterm-256color", "COLORTERM": "truecolor", "CLICOLOR": "1"}
+ATTACH_UNSET = ("TMUX", "TMUX_PANE", "TMUX_TMPDIR", "NO_COLOR")
+ORIGINS = {"aico", "a-term", "cli"}
+ROOT_ORIGINS = {"aico", "a-term"}
+ROOT_FIELDS = {
+    "requestId", "tool", "projectId", "projectRoot", "initialPrompt", "role", "leadRootReference",
+    "facetCapsuleRef", "resumeSessionId", "origin", "aTermSessionId",
+}
+TOOL_FIELDS = {
+    "slug", "name", "argv", "command", "processName", "description", "color", "displayOrder",
+    "isDefault", "enabled", "aliases", "contextHook",
+}
 
 SEED_TOOLS: list[dict[str, Any]] = [
     {"slug": "claude-code", "name": "Claude Code", "argv": ["claude", "--dangerously-skip-permissions"],
@@ -216,7 +230,9 @@ def _sessions(state: FakeTetherState, method: str, rest: list[str], query: dict[
             ]
             return 200, {"items": items}
         if method == "POST":
-            if not isinstance(body, dict) or not isinstance(body.get("origin"), str) or not isinstance(body.get("size"), dict):
+            if not isinstance(body, dict) or body.get("origin") not in ORIGINS or not isinstance(body.get("size"), dict):
+                return _error(400, "invalid_body")
+            if body.get("aTermSessionId") is not None and body["origin"] != "a-term":
                 return _error(400, "invalid_body")
             tool = state.resolve_tool(body.get("tool"))
             if tool is None:
@@ -246,7 +262,7 @@ def _sessions(state: FakeTetherState, method: str, rest: list[str], query: dict[
         if session is None:
             return _error(404, "not_found")
         argv = [TMUX_BIN, "-S", session["tmux"]["socket"], "attach-session", "-t", session["tmux"]["sessionId"]]
-        return 200, {"generation": session["generation"], "argv": argv, "env": {"TERM": "xterm-256color", "COLORTERM": "truecolor"}}
+        return 200, {"generation": session["generation"], "argv": argv, "env": dict(ATTACH_ENV), "unset": list(ATTACH_UNSET)}
     if action == "capture" and method == "GET":
         session = state.sessions.get(session_id)
         return (200, {"generation": session["generation"], "text": "$ "}) if session else _error(404, "not_found")
@@ -288,7 +304,53 @@ def _sessions(state: FakeTetherState, method: str, rest: list[str], query: dict[
     return _error(404, "not_found")
 
 
+def _tool_patch(item: Any) -> dict[str, Any] | None:
+    """Tether's ``toolFields``: ``command`` becomes ``argv``; unknown fields are invalid."""
+    if not isinstance(item, dict) or set(item) - TOOL_FIELDS or ("argv" in item and "command" in item):
+        return None
+    patch = {key: value for key, value in item.items() if key != "command"}
+    if "command" in item:
+        patch["argv"] = str(item["command"]).split()
+    return patch
+
+
+def _import_tools(state: FakeTetherState, body: Any) -> tuple[int, Any]:
+    if not isinstance(body, dict) or set(body) - {"tools", "dryRun", "updateExisting"} or not isinstance(body.get("tools"), list):
+        return _error(400, "invalid_body")
+    patches = [_tool_patch(item) for item in body["tools"]]
+    if any(p is None or not p.get("slug") or not p.get("name") or "argv" not in p for p in patches):
+        return _error(400, "invalid_body")
+    result: dict[str, Any] = {"created": [], "updated": [], "unchanged": [], "differs": []}
+    writes: list[tuple[str, dict[str, Any]]] = []
+    for patch in patches:
+        assert patch is not None
+        existing = state.resolve_tool(patch["slug"])
+        if existing is None:
+            writes.append(("create", patch))
+            result["created"].append(patch["slug"])
+            continue
+        fields = [key for key, value in patch.items() if key != "slug" and existing.get(key) != value]
+        if not fields:
+            result["unchanged"].append(patch["slug"])
+        elif body.get("updateExisting"):
+            writes.append(("update", {key: patch[key] for key in fields} | {"slug": existing["slug"]}))
+            result["updated"].append(patch["slug"])
+        else:
+            result["differs"].append({"slug": patch["slug"], "fields": fields})
+    dry_run = bool(body.get("dryRun"))
+    if not dry_run:
+        for kind, patch in writes:
+            if kind == "create":
+                _tools(state, "POST", [], {}, patch)
+            else:
+                slug = patch.pop("slug")
+                _tools(state, "PATCH", [slug], {}, patch)
+    return 200, {"applied": not dry_run, **result}
+
+
 def _tools(state: FakeTetherState, method: str, rest: list[str], query: dict[str, str], body: Any) -> tuple[int, Any]:
+    if rest == ["import"] and method == "POST":
+        return _import_tools(state, body)
     if not rest:
         if method == "GET":
             items = sorted(state.tools.values(), key=lambda t: (t["displayOrder"], t["slug"]))
@@ -349,23 +411,31 @@ def _tools(state: FakeTetherState, method: str, rest: list[str], query: dict[str
     return _error(405, "method_not_allowed")
 
 
-def _roots(state: FakeTetherState, method: str, rest: list[str], body: Any) -> tuple[int, Any]:
+def _roots(state: FakeTetherState, method: str, rest: list[str], query: dict[str, str], body: Any) -> tuple[int, Any]:
     if not rest:
         if method == "GET":
-            return 200, {"owner": "aico", "available": True, "directedDelivery": {"available": False},
-                         "roots": list(state.roots.values())}
+            origin = query.get("origin")
+            if origin is not None and origin not in ROOT_ORIGINS:
+                return _error(400, "invalid_query")
+            roots = [root for root in state.roots.values() if origin is None or root["origin"] == origin]
+            return 200, {"owner": origin or "aico", "available": True, "directedDelivery": {"available": False},
+                         "roots": roots}
         if method == "POST":
-            if not isinstance(body, dict) or not isinstance(body.get("requestId"), str):
+            if not isinstance(body, dict) or not isinstance(body.get("requestId"), str) or set(body) - ROOT_FIELDS:
+                return _error(400, "invalid_body")
+            origin = body.get("origin", "aico")
+            if origin not in ROOT_ORIGINS or (body.get("aTermSessionId") is not None and origin != "a-term"):
                 return _error(400, "invalid_body")
             existing = state.roots.get(body["requestId"])
             if existing:
                 return 200, existing
             tool = state.resolve_tool(body.get("tool"))
             session = state.add_session(tool=tool["slug"] if tool else "codex", project_id=body.get("projectId"),
-                                        project_root=body.get("projectRoot"), origin="aico",
+                                        project_root=body.get("projectRoot"), origin="root",
+                                        a_term_session_id=body.get("aTermSessionId"),
                                         root_request_id=body["requestId"])
             root = {
-                "owner": "aico", "requestId": body["requestId"], "digest": "d" * 64,
+                "owner": origin, "origin": origin, "requestId": body["requestId"], "digest": "d" * 64,
                 "hostIdentity": session["id"], "generation": session["generation"],
                 "logicalSessionId": f"logical-{session['id']}", "surfaceLocator": f"aico://widget/{session['id']}",
                 "role": body.get("role"), "leadRootReference": body.get("leadRootReference"),
@@ -381,19 +451,68 @@ def _roots(state: FakeTetherState, method: str, rest: list[str], body: Any) -> t
         return 200, root
     if action == "send":
         return _error(503, "directed_delivery_unavailable")
-    if action == "end" and method == "POST":
-        if root["status"] == "ended":
-            return 200, root
-        if not isinstance(body, dict) or body.get("generation") != root["generation"]:
-            return _error(409, "stale_generation")
+    if action == "admin":
+        return _error(503, "admin_unavailable")
+    if method != "POST" or action not in {"end", "show", "position", "title"}:
+        return _error(404, "not_found")
+    if root["status"] == "ended":
+        return (200, root) if action == "end" else _error(410, "ended")
+    if not isinstance(body, dict) or body.get("generation") != root["generation"]:
+        return _error(409, "stale_generation")
+    if action == "end":
         state.end(root["hostIdentity"])
         root.update(status="ended", generation=None)
         return 200, root
-    if action in {"show", "position", "title"}:
-        return _error(503, "gui_unavailable")
-    if action == "admin":
-        return _error(503, "admin_unavailable")
-    return _error(404, "not_found")
+    if action == "title":
+        # No GUI connected: Tether renames the session itself (3a).
+        label = _label(body.get("label"))
+        if set(body) != {"generation", "label"} or label is None:
+            return _error(400, "invalid_body")
+        state.sessions[root["hostIdentity"]]["name"] = label
+        state.events.append({"type": "session.updated", "data": {"id": root["hostIdentity"]}})
+        return 200, root
+    return _error(503, "gui_unavailable")
+
+
+# ECMAScript TrimString whitespace and line terminators, as Tether (Aico) trims labels.
+_LABEL_TRIM = (
+    "\u0009\u000a\u000b\u000c\u000d\u0020\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005"
+    "\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"
+)
+
+
+def _label(value: Any) -> str | None:
+    """Tether's title rule: trimmed, 1-160 UTF-8 bytes, no control characters."""
+    if not isinstance(value, str):
+        return None
+    label = value.strip(_LABEL_TRIM)
+    if not label or len(label.encode()) > 160:
+        return None
+    if any(ord(c) < 32 or 127 <= ord(c) <= 159 or c in "\u2028\u2029" for c in label):
+        return None
+    return label
+
+
+def _projects(state: FakeTetherState, method: str, query: dict[str, str], body: Any) -> tuple[int, Any]:
+    if method == "GET":
+        return 200, {"source": state.project_source, "fetchedAt": 0, "projects": state.projects}
+    if method != "POST":
+        return _error(405, "method_not_allowed")
+    if state.project_source != "local":
+        return _error(409, "projects_managed_by_summitflow")
+    if not isinstance(body, dict) or set(body) - {"id", "root", "name"}:
+        return _error(400, "invalid_body")
+    project_id, root = body.get("id"), body.get("root")
+    if not isinstance(project_id, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", project_id):
+        return _error(400, "invalid_project_id")
+    if not isinstance(root, str) or not Path(root).is_absolute() or not Path(root).is_dir():
+        return _error(400, "invalid_project_root")
+    if any(project["id"] == project_id for project in state.projects):
+        return _error(409, "project_exists")
+    project = {"id": project_id, "name": body.get("name") or project_id, "root": root, "lifecycle": None}
+    state.projects.append(project)
+    state.events.append({"type": "projects.changed", "data": {"id": project_id, "change": "registered"}})
+    return 201, project
 
 
 def route(state: FakeTetherState, method: str, parts: list[str], query: dict[str, str], body: Any) -> tuple[int, Any]:
@@ -410,9 +529,9 @@ def route(state: FakeTetherState, method: str, parts: list[str], query: dict[str
     if rest[:1] == ["tools"]:
         return _tools(state, method, rest[1:], query, body)
     if rest == ["projects"]:
-        return 200, {"source": state.project_source, "fetchedAt": 0, "projects": state.projects}
+        return _projects(state, method, query, body)
     if rest[:1] == ["roots"]:
-        return _roots(state, method, rest[1:], body)
+        return _roots(state, method, rest[1:], query, body)
     return _error(404, "not_found")
 
 

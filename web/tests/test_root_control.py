@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from unittest.mock import patch
 
 import pytest
@@ -9,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from a_term.auth import AuthSettings
 from a_term.storage import panes as pane_store
+from a_term.tether import get_client
 
 from .fake_tether import FakeTether
 
@@ -30,20 +32,38 @@ def _create(client: TestClient, body: dict | None = None) -> dict:
     return response.json()
 
 
-def test_create_presents_owner_a_term_and_links_a_detached_pane(test_app: TestClient, fake_tether: FakeTether) -> None:
+def test_create_sends_origin_a_term_and_links_a_detached_pane(test_app: TestClient, fake_tether: FakeTether) -> None:
     root = _create(test_app)
 
-    assert root["owner"] == "a-term"
+    assert root["owner"] == "a-term" and root["origin"] == "a-term"  # Tether's own values
     assert root["requestId"] == "root-1"
     assert root["position"] == {"available": False, "reason": "browser_grid_has_no_pixel_window_bounds"}
     assert root["surfaceLocator"] == f"aico://widget/{root['hostIdentity']}"
     _method, path, body = next(call for call in fake_tether.calls if call[0] == "POST")
-    assert (path, body) == ("/v1/roots", CREATE)
+    assert path == "/v1/roots"
+    assert {key: value for key, value in body.items() if key not in {"origin", "aTermSessionId"}} == CREATE
+    assert body["origin"] == "a-term"
+    uuid.UUID(body["aTermSessionId"])
+    assert fake_tether.state.sessions[root["hostIdentity"]]["aTermSessionId"] == body["aTermSessionId"]
 
     link = pane_store.get_link(root["hostIdentity"])
     assert link is not None and link["mode"] == "codex"
     pane = pane_store.get_pane(link["pane_id"])
     assert pane["is_detached"] and pane["project_id"] == "proj"  # type: ignore[index]
+
+
+def test_create_keeps_a_callers_a_term_session_id(test_app: TestClient, fake_tether: FakeTether) -> None:
+    session_id = str(uuid.uuid4())
+    _create(test_app, {**CREATE, "origin": "a-term", "aTermSessionId": session_id})
+    _method, _path, body = next(call for call in fake_tether.calls if call[0] == "POST")
+    assert body["aTermSessionId"] == session_id
+
+
+def test_create_refuses_another_origin(test_app: TestClient, fake_tether: FakeTether) -> None:
+    response = test_app.post("/v1/roots", json={**CREATE, "origin": "aico"})
+    assert response.status_code == 400
+    assert response.json() == {"error": "invalid_body"}
+    assert not any(call[0] == "POST" for call in fake_tether.calls)
 
 
 def test_create_is_idempotent_for_the_view(test_app: TestClient) -> None:
@@ -53,12 +73,13 @@ def test_create_is_idempotent_for_the_view(test_app: TestClient) -> None:
     assert pane_store.get_link(first["hostIdentity"]) is not None
 
 
-def test_list_and_get_rewrite_owner(test_app: TestClient) -> None:
+def test_list_shows_only_a_term_roots(test_app: TestClient) -> None:
     root = _create(test_app)
+    get_client().call("POST", "/v1/roots", {**CREATE, "requestId": "aico-root"})  # requested through Aico
     listing = test_app.get("/v1/roots").json()
     assert listing["owner"] == "a-term"
     assert listing["position"]["available"] is False
-    assert [item["owner"] for item in listing["roots"]] == ["a-term"]
+    assert [(item["requestId"], item["owner"]) for item in listing["roots"]] == [("root-1", "a-term")]
 
     single = test_app.get(f"/v1/roots/{root['requestId']}")
     assert single.status_code == 200
@@ -129,14 +150,21 @@ def test_show_after_end_is_gone(test_app: TestClient) -> None:
     assert response.json() == {"error": "ended"}
 
 
-def test_title_renames_the_session_in_tether(test_app: TestClient, fake_tether: FakeTether) -> None:
+def test_title_is_tethers_root_title(test_app: TestClient, fake_tether: FakeTether) -> None:
     root = _create(test_app)
     response = test_app.post("/v1/roots/root-1/title", json={"generation": root["generation"], "label": "  Lead  "})
     assert response.status_code == 200, response.text
     assert response.json()["owner"] == "a-term"
-    patch_call = next(call for call in fake_tether.calls if call[0] == "PATCH")
-    assert patch_call == ("PATCH", f"/v1/sessions/{root['hostIdentity']}", {"generation": root["generation"], "name": "Lead"})
+    assert ("POST", "/v1/roots/root-1/title", {"generation": root["generation"], "label": "  Lead  "}) in fake_tether.calls
+    assert not any(call[0] == "PATCH" for call in fake_tether.calls)
     assert fake_tether.state.sessions[root["hostIdentity"]]["name"] == "Lead"
+
+
+def test_title_with_stale_generation_is_refused(test_app: TestClient) -> None:
+    _create(test_app)
+    response = test_app.post("/v1/roots/root-1/title", json={"generation": "f" * 64, "label": "Lead"})
+    assert response.status_code == 409
+    assert response.json()["error"] == "stale_generation"
 
 
 @pytest.mark.parametrize("label", ["", "   ", "two\nlines", "bell\x07", "x" * 161, "sep\u2028arator", 5])

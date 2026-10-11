@@ -20,6 +20,15 @@ Postgres table, so rollback is a code rollback.
    curl -s --unix-socket "$XDG_RUNTIME_DIR/tether/default/control.sock" http://tether/v1/health
    ```
 
+   The build must include Tether's A-Term additions (marked *(3a)* in its
+   `docs/api-v1.md`; the API version is still 1). This answers
+   `"a-term"`, where an older build answers `400 invalid_query` or `"aico"`:
+
+   ```bash
+   curl -s --unix-socket "$XDG_RUNTIME_DIR/tether/default/control.sock" \
+     'http://tether/v1/roots?origin=a-term' | jq .owner
+   ```
+
 2. Aico already runs on Tether (Tether migration Phase 3/4), so both apps share
    one catalog and one tool registry.
 3. Note the current A-Term `main` commit for rollback:
@@ -70,10 +79,19 @@ nothing that is already there.
 .venv/bin/a-term import-tools ~/.local/state/a-term/tether-tools-import.json           # dry run
 ```
 
+This sends the file to Tether's `POST /v1/tools/import` with `dryRun`, so
+nothing is written. The report lists `created`, `updated`, `unchanged` and
+`differs` (each with the fields that differ). The import is one transaction:
+if any entry is invalid, Tether rejects the whole batch with `400` and writes
+nothing.
+
 All four A-Term tools already exist in Tether's seed (`claude` is the alias of
-`claude-code`), so the expected actions are `unchanged` or `differs`. The known
-difference is `pi`: A-Term ran bare `pi`, Tether seeds `pi --approve`. Keep
-Tether's value unless you want A-Term's. Only if you do:
+`claude-code`), so expect them under `unchanged` or `differs`. The known
+difference is `pi`: A-Term ran bare `pi`, Tether seeds `pi --approve` (Tether
+reports `argv`, and `displayOrder` if the orders differ). Keep Tether's values
+unless you want A-Term's. `--update-existing` overwrites every differing field
+of every existing tool in the file, so trim the file to the tools you want to
+change first. Only then:
 
 ```bash
 .venv/bin/a-term import-tools ~/.local/state/a-term/tether-tools-import.json --apply --update-existing
@@ -126,15 +144,15 @@ Terminal launchers:
 
 ```bash
 scripts/tsession projects --format tsv | head
-scripts/tcodex <project>                     # outside tmux: attaches
-# inside your default tmux: prints the nested-attach notice, then attaches nested
-scripts/tsession open --tool codex --project <project> --attach --print
+scripts/tcodex <project>                     # outside tmux: attaches (via `tether sessions attach`)
+# inside your default tmux: Tether prints the nesting notice, then attaches nested
+scripts/tsession open --tool codex --project <project> --attach --print   # Tether's attach target
 ```
 
 SummitFlow fleet (`a-term` surface, unchanged URL `http://127.0.0.1:8002/v1/roots`):
 
 ```bash
-curl -s http://127.0.0.1:8002/v1/roots | jq '.owner, (.roots | length)'   # "a-term"
+curl -s http://127.0.0.1:8002/v1/roots | jq '.owner, [.roots[].origin]'   # "a-term", only "a-term" origins
 ```
 
 Start a root with `--surface a-term` through `st` as usual and check that it

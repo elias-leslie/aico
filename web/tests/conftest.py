@@ -26,7 +26,6 @@ def local_state(monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
     # Unix socket paths are length-limited, so keep these under /tmp.
     directory = Path(tempfile.mkdtemp(prefix="at-state-", dir="/tmp"))
     monkeypatch.setenv("A_TERM_DB_PATH", str(directory / "a-term.db"))
-    monkeypatch.setenv("TETHER_PROJECTS_FILE", str(directory / "projects.json"))
     local_db.reset_initialized_cache()
     try:
         yield directory

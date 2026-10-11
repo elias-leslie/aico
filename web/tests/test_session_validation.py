@@ -36,6 +36,7 @@ def test_tether_session_attaches_with_tethers_exact_argv(fake_tether: FakeTether
     assert plan.tmux_session_name == session["tmux"]["sessionName"]
     assert plan.generation == session["generation"]
     assert plan.env["COLORTERM"] == "truecolor"
+    assert plan.unset == ["TMUX", "TMUX_PANE", "TMUX_TMPDIR", "NO_COLOR"]
     assert plan.session["pane_id"] == pane["id"]
     assert pane_store.get_link(session["id"])["last_accessed_at"]  # type: ignore[index]
 
@@ -115,6 +116,15 @@ def test_attach_environment_drops_tmux_markers_and_applies_overrides(monkeypatch
     assert "NO_COLOR" not in env
     assert env["COLORTERM"] == "truecolor"
     assert env["TERM"] == "tmux-256color"
+
+
+def test_attach_environment_removes_tethers_unset_list(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TMUX_TMPDIR", "/tmp/x")
+    monkeypatch.setenv("SOMETHING_NEW", "1")
+    monkeypatch.setenv("KEEP", "yes")
+    env = attach_environment({"CLICOLOR": "1"}, ["TMUX_TMPDIR", "SOMETHING_NEW"])
+    assert "TMUX_TMPDIR" not in env and "SOMETHING_NEW" not in env
+    assert env["CLICOLOR"] == "1" and env["KEEP"] == "yes"
 
 
 def test_attach_environment_defaults_term(monkeypatch: pytest.MonkeyPatch) -> None:

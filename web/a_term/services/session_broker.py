@@ -2,20 +2,19 @@
 
 A launcher asks for "the <tool> session of <project>". The broker reuses the
 most recently used Tether session for that project and tool, or creates one
-through A-Term (``origin: a-term``, shown in a new A-Term pane), and returns
-Tether's attach target for it.
+through A-Term (``origin: a-term``, shown in a new A-Term pane). Attaching a
+terminal is Tether's job (``tether sessions attach <id>``).
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from ..branding import get_project_display_name
 from ..storage import panes as pane_store
 from ..storage import project_settings as project_settings_store
-from ..tether import get_client
 from . import agent_service, agent_tools, lifecycle, session_catalog
 
 _REUSABLE_STATUSES = {"running", "pending", "uncertain"}
@@ -35,8 +34,6 @@ class BrokerSessionTarget:
     working_dir: str | None
     created: bool
     started: bool
-    attach_argv: list[str] = field(default_factory=list)
-    attach_env: dict[str, str] = field(default_factory=dict)
 
 
 def _normalize_working_dir(value: str | None) -> str | None:
@@ -81,19 +78,8 @@ def _candidates(project_id: str, tool_slug: str, working_dir: str | None) -> lis
     return found
 
 
-def _attach_details(session_id: str) -> tuple[list[str], dict[str, str]]:
-    target = get_client().attach_target(session_id)
-    argv = target.get("argv") if isinstance(target, dict) else None
-    env = target.get("env") if isinstance(target, dict) else None
-    return (
-        [str(arg) for arg in argv] if isinstance(argv, list) else [],
-        {str(k): str(v) for k, v in env.items()} if isinstance(env, dict) else {},
-    )
-
-
-def _build_target(session: dict[str, Any], *, created: bool, started: bool, with_attach: bool) -> BrokerSessionTarget:
+def _build_target(session: dict[str, Any], *, created: bool, started: bool) -> BrokerSessionTarget:
     pane = pane_store.get_pane(str(session["pane_id"])) if session.get("pane_id") else None
-    argv, env = _attach_details(str(session["id"])) if with_attach else ([], {})
     return BrokerSessionTarget(
         project_id=str(session.get("project_id") or ""),
         mode=str(session.get("mode") or ""),
@@ -105,8 +91,6 @@ def _build_target(session: dict[str, Any], *, created: bool, started: bool, with
         working_dir=session.get("working_dir"),
         created=created,
         started=started,
-        attach_argv=argv,
-        attach_env=env,
     )
 
 
@@ -115,7 +99,7 @@ def ensure_project_tool_session(
     tool_slug: str,
     working_dir: str | None = None,
 ) -> BrokerSessionTarget:
-    """Reuse or create the project's session for ``tool_slug`` and return its attach target."""
+    """Reuse or create the project's session for ``tool_slug``."""
     slug = agent_tools.canonical_slug(tool_slug)
     candidates = _candidates(project_id, slug, working_dir)
     created = False
@@ -150,7 +134,7 @@ def ensure_project_tool_session(
     if slug != agent_tools.SHELL_SLUG and not created and session.get("status") != "running":
         started = agent_service.start_agent(str(session["id"])).started
     refreshed = session_catalog.get_session(str(session["id"])) or session
-    return _build_target(refreshed, created=created, started=started, with_attach=True)
+    return _build_target(refreshed, created=created, started=started)
 
 
 def list_project_tool_sessions(tool_slug: str | None = None) -> list[BrokerSessionTarget]:
@@ -167,6 +151,6 @@ def list_project_tool_sessions(tool_slug: str | None = None) -> list[BrokerSessi
             continue
         if session.get("status") not in _REUSABLE_STATUSES:
             continue
-        targets.append(_build_target(session, created=False, started=False, with_attach=False))
+        targets.append(_build_target(session, created=False, started=False))
     targets.sort(key=lambda item: (item.project_id, item.mode, item.session_id))
     return targets

@@ -13,7 +13,7 @@ A-Term is a persistent browser workspace for people using AI coding CLIs and she
 
 ## Current scope
 
-The supported install targets Linux with systemd and requires Tether (API version 1 or newer) running as `tether@default.service`. Projects come from Tether: SummitFlow's catalog when SummitFlow is installed, otherwise Tether's local list `~/.config/tether/projects.json`, which A-Term can add to. Agent Hub prompt cleaning is an optional companion integration.
+The supported install targets Linux with systemd and requires Tether (API version 1 or newer) running as `tether@default.service`. Projects come from Tether: SummitFlow's catalog when SummitFlow is installed, otherwise Tether's local list `~/.config/tether/projects.json`, which A-Term can add to through Tether. Agent Hub prompt cleaning is an optional companion integration.
 
 ## Getting started
 

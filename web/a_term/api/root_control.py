@@ -1,16 +1,16 @@
 """Local-only ``/v1/roots``: SummitFlow's A-Term root surface, served by Tether.
 
 SummitFlow fleet calls ``http://127.0.0.1:8002/v1/roots`` with surface
-``a-term``. Tether owns the roots now, so these routes forward to it and
-present Tether's descriptors with ``owner: "a-term"``, the owner SummitFlow
-checks for this surface. The view-only actions stay here because views belong
-to A-Term:
+``a-term``. Tether owns the roots. These routes forward to Tether with
+``origin: "a-term"`` so Tether stores the requesting app, lists only A-Term's
+roots (``GET /v1/roots?origin=a-term``) and reports ``owner: "a-term"`` on
+them itself. ``title`` is Tether's (it renames without a GUI). The view-only
+actions stay here because views belong to A-Term:
 
 - ``show`` makes sure an A-Term pane shows the root's session and brings it
   into the layout.
 - ``position`` has no meaning in the browser grid and answers
   ``503 position_unavailable``.
-- ``title`` renames the session in Tether (which needs no GUI for that).
 
 The routes keep their old guard: loopback clients only, a matching origin if
 one is sent, and the app's normal auth middleware.
@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import re
+import uuid
 from typing import Any
 
 from fastapi import APIRouter, Request
@@ -41,35 +42,13 @@ KEY = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
 GENERATION = re.compile(r"[0-9a-f]{64}\Z")
 DIRECTED_DELIVERY = {"available": False, "reason": "exact_thread_generation_receipt_unqualified"}
 POSITION = {"available": False, "reason": "browser_grid_has_no_pixel_window_bounds"}
-LABEL_MAX_BYTES = 160
 _MAX_BODY_BYTES = 128 * 1024
-# ECMAScript TrimString whitespace and line terminators, matching Aico.
-_LABEL_TRIM_CHARS = (
-    "\u0009\u000a\u000b\u000c\u000d\u0020\u00a0\u1680"
-    "\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a"
-    "\u2028\u2029\u202f\u205f\u3000\ufeff"
-)
 
 
 class RootError(Exception):
     def __init__(self, status: int, error: str) -> None:
         self.status, self.error = status, error
         super().__init__(error)
-
-
-def parse_label(value: Any) -> str:
-    """Accept bounded control-free single-line labels, matching Aico."""
-    if not isinstance(value, str):
-        raise RootError(400, "invalid_body")
-    label = value.strip(_LABEL_TRIM_CHARS)
-    if not label or any(
-        ord(char) < 32 or 127 <= ord(char) <= 159 or 0xD800 <= ord(char) <= 0xDFFF or char in "\u2028\u2029"
-        for char in label
-    ):
-        raise RootError(400, "invalid_body")
-    if len(label.encode("utf-8")) > LABEL_MAX_BYTES:
-        raise RootError(400, "invalid_body")
-    return label
 
 
 def _local(request: Request) -> None:
@@ -103,12 +82,10 @@ def _error(error: RootError) -> JSONResponse:
 
 
 def _present(descriptor: Any) -> Any:
-    """Tether's descriptor as this surface's owner presents it."""
+    """Tether's descriptor plus this surface's view capabilities (``owner`` is Tether's)."""
     if not isinstance(descriptor, dict):
         return descriptor
     presented = dict(descriptor)
-    if "owner" in presented:
-        presented["owner"] = OWNER
     presented["position"] = POSITION
     presented.setdefault("directedDelivery", DIRECTED_DELIVERY)
     return presented
@@ -122,7 +99,7 @@ def _forward(method: str, path: str, body: Any = None) -> JSONResponse:
     except TetherError as error:
         return JSONResponse({"error": error.code}, status_code=409 if error.status == 0 else 503)
     if isinstance(response.body, dict) and isinstance(response.body.get("roots"), list):
-        content = {**response.body, "owner": OWNER, "position": POSITION,
+        content = {**response.body, "position": POSITION,
                    "roots": [_present(root) for root in response.body["roots"]]}
     elif isinstance(response.body, dict) and "error" not in response.body:
         content = _present(response.body)
@@ -196,6 +173,17 @@ def ensure_view(session_id: str, *, show: bool) -> dict[str, Any] | None:
 
 
 def _create(value: Any) -> JSONResponse:
+    """Forward a root request as A-Term's: ``origin: "a-term"`` and an A-Term session id.
+
+    Neither field is part of Tether's request digest, so a retried request
+    with a fresh ``aTermSessionId`` still finds the same root.
+    """
+    if not isinstance(value, dict):
+        raise RootError(400, "invalid_body")
+    if value.get("origin", OWNER) != OWNER:
+        raise RootError(400, "invalid_body")
+    value = {**value, "origin": OWNER}
+    value.setdefault("aTermSessionId", str(uuid.uuid4()))
     response = _forward("POST", "/v1/roots", value)
     if response.status_code in {200, 202}:
         descriptor = json.loads(bytes(response.body))
@@ -221,16 +209,6 @@ def _position(request_id: str, value: Any) -> dict[str, Any]:
     raise RootError(503, "position_unavailable")
 
 
-def _title(request_id: str, value: Any) -> dict[str, Any]:
-    descriptor = _checked(request_id, value, {"generation", "label"})
-    label = parse_label(value["label"])
-    try:
-        get_client().rename_session(str(descriptor["hostIdentity"]), value["generation"], label)
-    except TetherError as error:
-        raise RootError(error.status if error.status else 409, error.code) from None
-    return _present(descriptor)
-
-
 def _guarded(fn: Any, *args: Any) -> Any:
     try:
         return fn(*args)
@@ -249,7 +227,7 @@ async def list_roots(request: Request):
         _local(request)
     except RootError as error:
         return _error(error)
-    return await run_in_threadpool(_guarded, _forward, "GET", "/v1/roots")
+    return await run_in_threadpool(_guarded, _forward, "GET", f"/v1/roots?origin={OWNER}")
 
 
 @router.post("/v1/roots")
@@ -296,6 +274,4 @@ async def mutate_root(request: Request, request_id: str, action: str):
         return await run_in_threadpool(_guarded, _position, request_id, value)
     if action == "show":
         return await run_in_threadpool(_guarded, _show, request_id, value)
-    if action == "title":
-        return await run_in_threadpool(_guarded, _title, request_id, value)
     return await run_in_threadpool(_guarded, _forward, "POST", path, value)
