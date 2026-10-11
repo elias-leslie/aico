@@ -116,3 +116,14 @@ Residual issues:
 3. `st aico roots` answers `root_limit` (pre-existing: 349 root requests including tombstones).
 4. `tether sessions` can list a root as `uncertain` for a moment right after create, until launch verification lands (`GET /v1/sessions/:id` already said `running`).
 5. Not exercised: Aico tray/menu actions (needs the active desktop), mobile sign-in and phone gestures (Cloudflare Access), and the same-server `switch-client` path of `tclaude`/`tcodex`.
+
+## 4. Post-cutover fixes
+
+Child task `task-b0ffcc4e5ae54bf9`. Tether `92e559a`, Aico `611586a`; additive v1 changes, marked *post-cutover* in [api-v1.md](api-v1.md).
+
+- Residual 3 closed: `st aico roots` lists with `GET /v1/roots?ended=0` and answers `{"owner":"aico","roots":[]}` (349 root requests, tombstones kept).
+- Residual 4 closed: `GET /v1/sessions` verifies a generation it has not verified; on `tether@dev` a fresh codex root listed `running` immediately after create.
+- Also added: pane-mode routes, `contextHook` and `context-check`, `switch-project` by `projectRoot`, the active project on `/v1/projects`, descriptor snapshots in session events, `legacy.changed`. The `st aico` client moved to Tether (installed at `~/.local/lib/tether/scripts/aico-root-watch.py`); Aico's path is now the entry that execs it.
+- Tested first on `tether@dev` (repo build through a runtime-only drop-in, removed afterwards). `tether@dev` is now stopped and disabled; `install.sh --start <non-default>` no longer enables an instance, and `tether doctor` warns if one is enabled.
+- Deploy: `scripts/install.sh`, then `systemctl --user restart tether@default`. `lifecycle: ready` and `gui.connected: true` within 2 s; `c69ee18f` and `05e96622` running with unchanged generations (`949a3356...`, `79a77064...`); both context hooks `available` within 8 s; tmux server unit and the 5 pane scopes unchanged; A-Term `/health` healthy with `tether: ok`.
+- `st service rebuild aico --detach` (release `24b51df1...` from `611586a`): both windows reopened, `[aico:tether] connected`, and each window asked Tether for a context re-check on load.
