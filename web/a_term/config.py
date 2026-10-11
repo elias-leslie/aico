@@ -12,7 +12,7 @@ from typing import Literal
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from .branding import BACKEND_PORT, FRONTEND_PORT, REPO_ROOT, get_recordings_dir, get_upload_dir
+from .branding import BACKEND_PORT, FRONTEND_PORT, REPO_ROOT, get_upload_dir
 
 # ---------------------------------------------------------------------------
 # Port allocation — single source of truth for A-Term.
@@ -92,11 +92,8 @@ class Settings(BaseSettings):
     summitflow_api_base: str = ""
     a_term_aico_state_dir: Path | None = None
 
-    # Diagnostics & recording
+    # Diagnostics
     diagnostics_enabled: bool = False
-    recording_enabled: bool = False
-    recording_dir: Path = get_recordings_dir()
-    recording_max_size_mb: int = 100
 
     # Maintenance
     maintenance_enabled: bool = True

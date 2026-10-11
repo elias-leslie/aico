@@ -42,17 +42,3 @@ updates:
       frontend:
         patterns:
           - "*"
-
-  - package-ecosystem: npm
-    directory: /packages/notes-ui
-    schedule:
-      interval: monthly
-    open-pull-requests-limit: 3
-    ignore:
-      - dependency-name: "*"
-        update-types:
-          - version-update:semver-major
-    groups:
-      notes-ui:
-        patterns:
-          - "*"

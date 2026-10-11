@@ -54,15 +54,10 @@ for path, (pattern, replacement) in replacements.items():
         raise SystemExit(f"ERROR: could not update {path}")
     path.write_text(updated)
 
-json_files = {
-    Path("frontend/package.json"): 2,
-    Path("packages/notes-ui/package.json"): 4,
-}
-
-for path, indent in json_files.items():
-    data = json.loads(path.read_text())
-    data["version"] = version
-    path.write_text(json.dumps(data, indent=indent) + "\n")
+frontend_package = Path("frontend/package.json")
+data = json.loads(frontend_package.read_text())
+data["version"] = version
+frontend_package.write_text(json.dumps(data, indent=2) + "\n")
 PY
 
 echo "Updated A-Term release version to $VERSION"

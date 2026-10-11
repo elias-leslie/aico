@@ -26,7 +26,7 @@ async def test_list_projects_skips_fetch_when_companion_base_is_blank() -> None:
 
 @pytest.mark.asyncio
 async def test_api_request_builds_path_from_companion_base() -> None:
-    """Generic proxy requests should reuse the configured companion API base."""
+    """Companion requests should reuse the configured companion API base."""
     mock_client = AsyncMock()
     mock_client.request.return_value = object()
 
@@ -36,13 +36,13 @@ async def test_api_request_builds_path_from_companion_base() -> None:
     ):
         await summitflow_client.api_request(
             "GET",
-            "/notes/capabilities",
+            "/projects",
             params=[("limit", "1")],
         )
 
     mock_client.request.assert_awaited_once_with(
         "GET",
-        "http://localhost:8001/api/notes/capabilities",
+        "http://localhost:8001/api/projects",
         params=[("limit", "1")],
         content=None,
         headers=None,

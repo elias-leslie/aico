@@ -1,6 +1,5 @@
 'use client'
 
-import { NotesButton, NotesProvider } from '@summitflow/notes-ui'
 import { clsx } from 'clsx'
 import { FolderOpen, GripVertical } from 'lucide-react'
 import { type DragEvent, memo, useCallback, useMemo, useState } from 'react'
@@ -8,7 +7,6 @@ import { LayoutModeButtons } from '@/components/LayoutModeButton'
 import { useATermPanes } from '@/lib/hooks/use-a-term-panes'
 import { useATermSessions } from '@/lib/hooks/use-a-term-sessions'
 import { useAgentTools } from '@/lib/hooks/use-agent-tools'
-import { DEFAULT_NOTES_PROJECT_SCOPE } from '@/lib/notes-config'
 import {
   clearDraggedPaneSlotId,
   getDraggedPaneSlotId,
@@ -299,13 +297,6 @@ export const UnifiedATermHeaderContent = memo(
               isMobile={isMobile}
             />
           )}
-
-          <NotesProvider
-            apiPrefix="/api"
-            projectScope={DEFAULT_NOTES_PROJECT_SCOPE}
-          >
-            <NotesButton popOutUrl="/notes" />
-          </NotesProvider>
 
           {hasPaneActions && (
             <PaneOverflowMenu

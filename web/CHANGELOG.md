@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Removed notes and the prompt library: the Notes panel and `/notes` page, the `/api/notes` routes and SummitFlow notes proxy, note storage, and the `packages/notes-ui` workspace package. Agent Hub prompt cleaning is unchanged. Existing `a_term_notes*` tables are left in place for a later dump-and-drop.
+- Removed session recording: the JSONL recorder, the `/api/diagnostics/recordings` routes, and the `RECORDING_*` settings. Per-session diagnostics remain. Existing recording files under the cache directory are no longer read or written.
+- The root-launch tmux test now removes its private `-L` socket file after killing the server, so test runs no longer leave `a-term-root-test-*` sockets in the tmux socket directory.
+- Documentation describes `SUMMITFLOW_API_BASE` as the project-catalog companion setting only.
+
 ## 0.2.11 - 2026-05-14
 
 - Matched TUI scrollback overlays to the live xterm WebGL renderer so entering scrollback no longer changes font spacing, wrap points, or terminal columns.

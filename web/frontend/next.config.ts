@@ -13,7 +13,6 @@ function hasPassportClient(): boolean {
 
 const nextConfig: NextConfig = {
   transpilePackages: [
-    '@summitflow/notes-ui',
     ...(hasPassportClient() ? ['@agent-hub/passport-client'] : []),
   ],
   output: 'standalone',

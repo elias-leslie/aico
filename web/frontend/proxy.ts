@@ -5,7 +5,7 @@ const AUTH_COOKIE_NAME = process.env.A_TERM_AUTH_COOKIE_NAME || 'a_term_session'
 const AUTH_MODE = process.env.A_TERM_AUTH_MODE || 'none'
 
 function isProtectedPath(pathname: string): boolean {
-  return pathname === '/' || pathname === '/notes'
+  return pathname === '/'
 }
 
 function applySecurityHeaders(
@@ -79,5 +79,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/', '/notes', '/login'],
+  matcher: ['/', '/login'],
 }

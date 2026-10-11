@@ -48,10 +48,12 @@ describe('proxy', () => {
     vi.stubEnv('A_TERM_AUTH_MODE', 'password')
     const { proxy } = await importProxy()
 
-    const response = proxy(new NextRequest('http://localhost:3002/notes'))
+    const response = proxy(
+      new NextRequest('http://localhost:3002/?project=a-term'),
+    )
 
     expect(response.headers.get('location')).toBe(
-      'http://localhost:3002/login?next=%2Fnotes',
+      'http://localhost:3002/login?next=%2F%3Fproject%3Da-term',
     )
     expect(response.headers.get('content-security-policy')).toContain(
       "script-src 'self' 'nonce-",

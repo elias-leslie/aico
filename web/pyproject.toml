@@ -42,9 +42,6 @@ exclude = [
     "/frontend/.next",
     "/frontend/node_modules",
     "/frontend/out",
-    "/packages/notes-ui/.ruff_cache",
-    "/packages/notes-ui/dist",
-    "/packages/notes-ui/node_modules",
 ]
 
 [tool.ruff]

@@ -25,7 +25,6 @@ from .api import (
     auth,
     diagnostics,
     files,
-    notes,
     pane_files,
     panes,
     projects,
@@ -201,7 +200,6 @@ app.include_router(panes.router)
 app.include_router(projects.router)
 app.include_router(agent.router)
 app.include_router(agent_tools.router)
-app.include_router(notes.router)
 app.include_router(files.router)
 app.include_router(pane_files.router)
 app.include_router(diagnostics.router)

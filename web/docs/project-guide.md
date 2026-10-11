@@ -15,7 +15,7 @@ Then open **http://localhost:3002** and start working.
 A-Term currently targets **Linux with systemd**. The installer is built to do the heavy lifting for you: it can set up `.env.local`, Node.js, corepack, Python, uv, tmux, PostgreSQL, dependencies, migrations, frontend build output, and user services.
 The first install can take a few minutes because it downloads the pieces it needs for you.
 
-A-Term can also connect to an optional companion service for shared notes and project metadata. That broader public path is coming later with SummitFlow; for now, the standard public install runs fully standalone.
+A-Term can also read its project list from an optional companion service. That broader public path is coming later with SummitFlow; for now, the standard public install runs fully standalone.
 
 If the default ports are already taken, the installer should guide you to another open port instead of forcing you to debug it by hand.
 
@@ -29,7 +29,7 @@ Want the latest shipped changes? See [Releases](https://github.com/elias-leslie/
 
 **`stable scrollback rendering`** — Live TUI panes and scrollback overlays share the same xterm.js WebGL renderer with DOM fallback, so opening history keeps font metrics, wrap points, and columns aligned.
 
-**`multi-pane layouts`** — Up to 6 resizable panes. Put planning, implementation, review, release checks, files, and notes on the same screen, detach any pane into its own browser window when you want to spread work across monitors, and use the pane menu's Refresh Layout action to remount a pane cleanly without restarting its tmux session.
+**`multi-pane layouts`** — Up to 6 resizable panes. Put planning, implementation, review, release checks, and files on the same screen, detach any pane into its own browser window when you want to spread work across monitors, and use the pane menu's Refresh Layout action to remount a pane cleanly without restarting its tmux session.
 
 ![Four-pane grid layout with multiple active agents](../docs/images/a-term-grid-2x2.png)
 *Four-pane grid: run multiple agents and shells simultaneously*
@@ -39,14 +39,7 @@ Want the latest shipped changes? See [Releases](https://github.com/elias-leslie/
 ![Files browser showing directory tree and README preview](../docs/images/a-term-files-browser.png)
 *Browse and preview files from the active pane's working directory*
 
-**`prompt-ready notes`** — Keep scratch notes, project context, and reusable prompts beside your live terminal output. Save prompts, search them, tag them, scope them to a project, refine them when companion services are available, and inject them into the active pane when it is time to run.
-
-In standalone installs, notes and prompts are stored inside A-Term itself. A shared cross-project library and companion metadata path already exists behind the optional companion API and is planned to open up more broadly once SummitFlow is released publicly.
-
-With Agent Hub connected, A-Term can clean a draft prompt, show an original-vs-cleaned diff, take follow-up refinement instructions, let you edit the result before sending, and fall back to the original prompt if the cleaner is unavailable.
-
-![Pop-out Notes workspace with a reusable release review prompt](../docs/images/a-term-notes-workspace.png)
-*Pop out the prompt library when you want notes and reusable prompts on a second screen*
+**`prompt cleaning`** — With Agent Hub connected, A-Term can clean a draft prompt, show an original-vs-cleaned diff, take follow-up refinement instructions, let you edit the result before sending, and fall back to the original prompt if the cleaner is unavailable.
 
 **`voice input`** — Dictate commands and prompts via browser speech-to-text when your browser and microphone permissions support it. A-Term merges cumulative browser speech chunks so dictated phrases do not repeat as interim text becomes final.
 
@@ -77,9 +70,7 @@ Expand the arrow controls to find Enter, which activates a TUI selection without
 
 **`file upload`** — Drag and drop images and docs (PNG/JPG/GIF/WebP/Markdown/text/JSON/PDF, up to 10 MB) into a pane; A-Term validates the file by magic bytes and returns a `~`-relative path you can drop straight into a command.
 
-**`note history and prompt cleaning`** — Notes and prompts keep a version history with automatic edit checkpoints and one-click revert. With Agent Hub connected, A-Term can clean a draft prompt, show an original-vs-cleaned diff, take a follow-up refinement instruction, let you edit the result, and fall back to the original if the cleaner is unavailable.
-
-**`session recording and diagnostics`** — Optional, off by default: record a session to JSONL (output/input/resize) for later replay, and capture per-session render/diagnostic events to debug terminal behavior.
+**`diagnostics`** — Optional, off by default: capture per-session render/diagnostic events to debug terminal behavior.
 
 **`install as a PWA`** — A-Term ships a web-app manifest, so you can install it to your phone or desktop and run it standalone.
 
@@ -193,7 +184,7 @@ Full API schema available at `/openapi.json` when running.
 
 A-Term is a standalone product. All core features work without any external service.
 
-**Optional external project and notes API** (`SUMMITFLOW_API_BASE`) — Integration hook for A-Term's shared project metadata and notes mode. Today it is mainly useful for private/internal deployments. Once SummitFlow is released publicly, this becomes the public companion path; until then, A-Term keeps notes, prompts, and project scopes local by default.
+**Optional external project catalog** (`SUMMITFLOW_API_BASE`) — When set (for example `http://127.0.0.1:8001/api`), A-Term reads its project list from SummitFlow and stops registering projects locally. Without it, A-Term keeps a local project list. Today it is mainly useful for private/internal deployments.
 
 **Agent Hub** (`NEXT_PUBLIC_AGENT_HUB_URL`, `AGENT_HUB_URL`) — Adds model catalog and prompt cleaning/refinement proxies. Browser-native voice input works standalone; Agent Hub provides an optional enhanced path.
 

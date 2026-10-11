@@ -254,11 +254,6 @@ def get_cache_root() -> Path:
     return _migrate_path(legacy_paths, target)
 
 
-def get_recordings_dir() -> Path:
-    """Return the recordings directory under the canonical cache root."""
-    return get_cache_root() / "recordings"
-
-
 def get_upload_dir() -> Path:
     """Return the current upload directory, migrating the legacy path if needed."""
     target = Path.home() / UPLOAD_DIR_NAME

@@ -23,7 +23,6 @@ from ...services.backpressure import BackpressureController
 from ...services.diagnostics import get_registry as get_diagnostics_registry
 from ...services.metrics import get_metrics
 from ...services.pty_manager import read_pty_output, spawn_pty_for_tmux
-from ...services.recording import SessionRecorder
 from ...services.scrollback_pager import (
     get_scrollback_line_count,
     get_viewport_lines,
@@ -349,28 +348,12 @@ def _create_backpressure_controller(
     return BackpressureController(loop, master_fd, on_readable_cb)
 
 
-def _create_session_recorder(session_id: str) -> SessionRecorder | None:
-    """Create and start session recorder if recording is enabled in config."""
-    from ...config import get_settings as _get_settings
-    cfg = _get_settings()
-    if not cfg.recording_enabled:
-        return None
-    recorder = SessionRecorder(
-        session_id,
-        recording_dir=cfg.recording_dir,
-        max_size_bytes=cfg.recording_max_size_mb * 1024 * 1024,
-    )
-    recorder.start()
-    return recorder
-
-
 def _create_scrollback_sync(
     websocket: WebSocket,
     tmux_session_name: str,
     tmux_socket_name: str | None,
     capabilities: list[str],
     diag: object,
-    recorder: SessionRecorder | None,
 ) -> tuple[ScrollbackSyncScheduler, ScrollbackSyncOutputTracker]:
     """Create scrollback sync scheduler and tracker for the session."""
     use_binary = "binary_protocol" in capabilities
@@ -394,15 +377,12 @@ def _create_scrollback_sync(
         min_lines=SCROLLBACK_SYNC_MIN_LINES,
     )
     scrollback_sync.set_output_tracker(scrollback_tracker)
-    if recorder is not None:
-        scrollback_sync.set_recorder(recorder)
     return scrollback_sync, scrollback_tracker
 
 
 def _make_output_flush_callback(
     a_term_metrics: object,
     scrollback_tracker: ScrollbackSyncOutputTracker | None,
-    recorder: SessionRecorder | None,
 ):
     """Build the on_flush callback for PTY output processing."""
     async def on_flush(batch: str) -> None:
@@ -411,8 +391,6 @@ def _make_output_flush_callback(
         a_term_metrics.inc("messages_sent")  # type: ignore[union-attr]
         if scrollback_tracker:
             scrollback_tracker.record_output(batch)
-        if recorder is not None:
-            recorder.record_output(batch)
     return on_flush
 
 
@@ -423,7 +401,6 @@ async def _teardown_session_resources(
     session_id: str,
     backpressure: BackpressureController | None,
     scrollback_sync: ScrollbackSyncScheduler | None,
-    recorder: SessionRecorder | None,
     diag_registry: object,
     a_term_metrics: object,
 ) -> None:
@@ -432,8 +409,6 @@ async def _teardown_session_resources(
         backpressure.close()
     if scrollback_sync:
         await scrollback_sync.close()
-    if recorder is not None:
-        await recorder.stop()
     diag_registry.remove(session_id)  # type: ignore[union-attr]
     a_term_metrics.dec("active_connections")  # type: ignore[union-attr]
     a_term_metrics.dec("active_sessions")  # type: ignore[union-attr]
@@ -544,7 +519,6 @@ async def _run_message_loop(
     tmux_socket_name: str | None = None,
     backpressure: BackpressureController | None = None,
     capabilities: list[str] | None = None,
-    recorder: SessionRecorder | None = None,
     external_tmux_session_id: str | None = None,
 ) -> None:
     """Process incoming WebSocket messages until disconnect."""
@@ -556,7 +530,7 @@ async def _run_message_loop(
             if message["type"] == "websocket.disconnect":
                 break
             metrics.inc("messages_received")
-            result = await handle_websocket_message(
+            await handle_websocket_message(
                 message,
                 master_fd,
                 session_id,
@@ -567,12 +541,8 @@ async def _run_message_loop(
                 backpressure=backpressure,
                 websocket=websocket,
                 capabilities=capabilities,
-                recorder=recorder,
                 external_tmux_session_id=external_tmux_session_id,
             )
-            # Record resize events
-            if result is not None and recorder is not None:
-                recorder.record_resize(result[0], result[1])
     except WebSocketDisconnect:
         logger.info("a_term_disconnected", session_id=session_id)
     finally:
@@ -604,16 +574,15 @@ async def _run_session(
     a_term_metrics.inc("active_connections")
     a_term_metrics.inc("active_sessions")
     a_term_metrics.inc("total_sessions_created")
-    recorder = _create_session_recorder(session_id)
     tmux_socket_name = str(session.get("tmux_socket")) if session.get("tmux_socket") else None
     external_tmux_session_id = (
         _verified_aico_resize_identity(session, tmux_session_name, tmux_socket_name)
         if session.get("is_external") else None
     )
     scrollback_sync, scrollback_tracker = _create_scrollback_sync(
-        websocket, tmux_session_name, tmux_socket_name, capabilities, diag, recorder
+        websocket, tmux_session_name, tmux_socket_name, capabilities, diag
     )
-    on_flush = _make_output_flush_callback(a_term_metrics, scrollback_tracker, recorder)
+    on_flush = _make_output_flush_callback(a_term_metrics, scrollback_tracker)
     output_task = asyncio.create_task(
         read_pty_output(
             websocket, master_fd, session_id=session_id,
@@ -627,7 +596,7 @@ async def _run_session(
             websocket, master_fd, session_id, tmux_session_name, resize_tmux,
             output_task, heartbeat_task,
             tmux_socket_name,
-            backpressure=backpressure, capabilities=capabilities, recorder=recorder,
+            backpressure=backpressure, capabilities=capabilities,
             external_tmux_session_id=external_tmux_session_id,
         )
     finally:
@@ -637,7 +606,7 @@ async def _run_session(
             tmux_socket_name,
             session_id,
             backpressure,
-            scrollback_sync, recorder, diag_registry, a_term_metrics,
+            scrollback_sync, diag_registry, a_term_metrics,
         )
     return pid, master_fd
 

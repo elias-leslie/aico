@@ -10,7 +10,6 @@ from pathlib import Path
 def test_bump_version_updates_only_project_version(tmp_path) -> None:
     repo_root = Path(__file__).resolve().parents[1]
     (tmp_path / "frontend").mkdir()
-    (tmp_path / "packages" / "notes-ui").mkdir(parents=True)
     (tmp_path / "pyproject.toml").write_text(
         """[build-system]
 requires = ["hatchling"]
@@ -39,10 +38,6 @@ version = "0.2.8"
         json.dumps({"name": "frontend", "version": "0.2.8"}),
         encoding="utf-8",
     )
-    (tmp_path / "packages" / "notes-ui" / "package.json").write_text(
-        json.dumps({"name": "notes-ui", "version": "0.2.8"}),
-        encoding="utf-8",
-    )
 
     result = subprocess.run(
         ["bash", str(repo_root / "scripts" / "bump-version.sh"), "0.3.0"],
@@ -64,6 +59,3 @@ version = "0.2.8"
         encoding="utf-8"
     )
     assert json.loads((tmp_path / "frontend" / "package.json").read_text())["version"] == "0.3.0"
-    assert json.loads((tmp_path / "packages" / "notes-ui" / "package.json").read_text())[
-        "version"
-    ] == "0.3.0"

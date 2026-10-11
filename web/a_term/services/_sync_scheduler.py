@@ -21,7 +21,6 @@ from ._scrollback_payload import (
 
 if TYPE_CHECKING:
     from .diagnostics import SessionDiagnostics
-    from .recording import SessionRecorder
 
 logger = get_logger(__name__)
 
@@ -91,11 +90,7 @@ class ScrollbackSyncScheduler:
         self._use_binary = use_binary
         self._diag = diag
         self._sync_count = 0
-        self._recorder: SessionRecorder | None = None
         self._last_sync_time: float = 0.0
-
-    def set_recorder(self, recorder: SessionRecorder) -> None:
-        self._recorder = recorder
 
     def set_output_tracker(self, tracker: ScrollbackSyncOutputTracker) -> None:
         self._output_tracker = tracker
@@ -136,8 +131,6 @@ class ScrollbackSyncScheduler:
         m.inc("sync_count")
         m.inc("delta_count" if is_delta else "full_sync_count")
         m.inc("messages_sent")
-        if self._recorder is not None:
-            self._recorder.record_sync(payload_size, is_delta=is_delta)
         if self._diag is not None:
             cx = cursor_position[0] if cursor_position else None
             cy = cursor_position[1] if cursor_position else None

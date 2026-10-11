@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -521,3 +522,6 @@ def test_initial_launch_exact_argv_in_private_tmux(tmp_path, monkeypatch, prompt
         assert roots.end_exact(root["session_id"], generation) is True
     finally:
         run(["tmux", "-L", socket, "kill-server"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
+        # tmux leaves the -L socket file behind after its server exits.
+        socket_dir = Path(os.environ.get("TMUX_TMPDIR") or "/tmp") / f"tmux-{os.getuid()}"
+        (socket_dir / socket).unlink(missing_ok=True)

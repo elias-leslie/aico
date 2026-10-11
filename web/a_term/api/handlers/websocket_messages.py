@@ -28,7 +28,6 @@ if TYPE_CHECKING:
     from fastapi import WebSocket
 
     from ...services.backpressure import BackpressureController
-    from ...services.recording import SessionRecorder
 
 logger = get_logger(__name__)
 
@@ -305,7 +304,6 @@ async def _handle_text_message(
     backpressure: BackpressureController | None = None,
     websocket: WebSocket | None = None,
     capabilities: list[str] | None = None,
-    recorder: SessionRecorder | None = None,
     external_tmux_session_id: str | None = None,
 ) -> tuple[int, int] | None:
     """Handle a text WebSocket message, dispatching JSON control or raw input.
@@ -329,8 +327,6 @@ async def _handle_text_message(
 
     input_bytes = text.encode("utf-8")
     await asyncio.to_thread(os.write, master_fd, input_bytes)
-    if recorder is not None:
-        recorder.record_input(text)
     return None
 
 
@@ -345,7 +341,6 @@ async def _handle_binary_message(
     backpressure: BackpressureController | None,
     websocket: WebSocket | None,
     capabilities: list[str] | None,
-    recorder: SessionRecorder | None,
     external_tmux_session_id: str | None,
 ) -> tuple[int, int] | None:
     """Handle a binary WebSocket message via the framed binary protocol."""
@@ -356,8 +351,6 @@ async def _handle_binary_message(
         msg_type, payload = decode_client_message(raw)
         if msg_type == MSG_INPUT:
             await asyncio.to_thread(os.write, master_fd, payload)
-            if recorder is not None:
-                recorder.record_input(payload.decode("utf-8", errors="replace"))
             return None
         if msg_type == MSG_CONTROL:
             try:
@@ -365,7 +358,7 @@ async def _handle_binary_message(
                 return await _handle_text_message(
                     text, master_fd, session_id, tmux_session_name,
                     tmux_socket_name, last_resize, resize_tmux, backpressure, websocket,
-                    capabilities, recorder, external_tmux_session_id,
+                    capabilities, external_tmux_session_id,
                 )
             except (json.JSONDecodeError, UnicodeDecodeError):
                 pass
@@ -386,7 +379,6 @@ async def handle_websocket_message(
     backpressure: BackpressureController | None = None,
     websocket: WebSocket | None = None,
     capabilities: list[str] | None = None,
-    recorder: SessionRecorder | None = None,
     external_tmux_session_id: str | None = None,
 ) -> tuple[int, int] | None:
     """Handle a single WebSocket message.
@@ -415,7 +407,6 @@ async def handle_websocket_message(
             backpressure,
             websocket,
             capabilities,
-            recorder,
             external_tmux_session_id,
         )
 
@@ -428,7 +419,6 @@ async def handle_websocket_message(
             backpressure,
             websocket,
             capabilities,
-            recorder,
             external_tmux_session_id,
         )
 

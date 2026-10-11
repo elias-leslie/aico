@@ -446,13 +446,13 @@ configure_companion_api() {
   fi
 
   if ! install_is_interactive; then
-    echo "Detected an optional companion API locally at ${summitflow_health}. Set SUMMITFLOW_API_BASE=${summitflow_api} in .env.local if you want shared notes and project scopes." >&2
+    echo "Detected an optional companion API locally at ${summitflow_health}. Set SUMMITFLOW_API_BASE=${summitflow_api} in .env.local if you want its project catalog." >&2
     return
   fi
 
   step "Companion mode"
   echo "Found an optional companion API running locally."
-  echo "Companion mode lets A-Term use a shared notes library and project catalog."
+  echo "Companion mode lets A-Term read its project list from that catalog."
   if prompt_yes_no "Enable companion API mode?" "Y"; then
     SUMMITFLOW_API_BASE="$summitflow_api"
     update_env_value "$ENV_FILE" "SUMMITFLOW_API_BASE" "$SUMMITFLOW_API_BASE"

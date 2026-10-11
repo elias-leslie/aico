@@ -31,7 +31,7 @@ def _auth_settings(**overrides: object) -> AuthSettings:
 
 def test_password_auth_blocks_api_without_session(test_app: TestClient) -> None:
     with patch("a_term.auth.get_auth_settings", return_value=_auth_settings()):
-        response = test_app.get("/api/notes/capabilities")
+        response = test_app.get("/api/diagnostics/sessions")
 
     assert response.status_code == 401
     assert response.json() == {"detail": "Authentication required"}
@@ -47,10 +47,10 @@ def test_password_auth_login_sets_cookie_and_allows_api(test_app: TestClient) ->
         assert login_response.status_code == 200
         assert "a_term_session=" in login_response.headers["set-cookie"]
 
-        response = test_app.get("/api/notes/capabilities")
+        response = test_app.get("/api/diagnostics/sessions")
 
     assert response.status_code == 200
-    assert response.json()["title_generation"] is True
+    assert "sessions" in response.json()
 
 
 def test_proxy_auth_bootstraps_from_forwarded_identity(test_app: TestClient) -> None:

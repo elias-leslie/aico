@@ -13,9 +13,9 @@ describe('getNextPath', () => {
   }
 
   it('keeps same-origin return paths', () => {
-    setLocation('/login?next=%2Fnotes%3Fscope%3Da-term')
+    setLocation('/login?next=%2F%3Fproject%3Da-term')
 
-    expect(getNextPath()).toBe('/notes?scope=a-term')
+    expect(getNextPath()).toBe('/?project=a-term')
   })
 
   it('rejects protocol-relative redirects', () => {
@@ -31,7 +31,7 @@ describe('getNextPath', () => {
   })
 
   it('rejects login loops', () => {
-    setLocation('/login?next=%2Flogin%3Fnext%3D%252Fnotes')
+    setLocation('/login?next=%2Flogin%3Fnext%3D%252F')
 
     expect(getNextPath()).toBe('/')
   })
