@@ -28,3 +28,7 @@ coverage/
 # Local AI tooling config
 .claude/
 AGENT_AUDIT.md
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/

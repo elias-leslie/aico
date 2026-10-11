@@ -5,6 +5,7 @@ import { DatabaseSync } from 'node:sqlite'
 import {
   AGENT_TOOLS_TABLE_SQL,
   INDEXES_SQL,
+  RETIRED_SESSION_IDS_SQL,
   ROOT_REQUESTS_TABLE_SQL,
   SCHEMA_VERSION,
   SESSIONS_TABLE_SQL,
@@ -129,14 +130,25 @@ export class Store {
     }
     if (current === SCHEMA_VERSION) return
     this.transaction(() => {
-      // v1: the initial schema plus seeded tools.
-      this.db.exec(TMUX_SERVERS_TABLE_SQL)
-      this.db.exec(SESSIONS_TABLE_SQL)
-      this.db.exec(ROOT_REQUESTS_TABLE_SQL)
-      this.db.exec(AGENT_TOOLS_TABLE_SQL)
-      this.db.exec(INDEXES_SQL)
-      for (const seed of DEFAULT_TOOLS) this.insertTool(seed, now)
-      this.db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(1, now)
+      if (current < 1) {
+        // v1: the initial schema plus seeded tools.
+        this.db.exec(TMUX_SERVERS_TABLE_SQL)
+        this.db.exec(SESSIONS_TABLE_SQL)
+        this.db.exec(ROOT_REQUESTS_TABLE_SQL)
+        this.db.exec(AGENT_TOOLS_TABLE_SQL)
+        this.db.exec(INDEXES_SQL)
+        for (const seed of DEFAULT_TOOLS) this.insertTool(seed, now)
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(1, now)
+      }
+      if (current < 2) {
+        // v2: retired session IDs are never reallocated.
+        this.db.exec(RETIRED_SESSION_IDS_SQL)
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(2, now)
+      }
     })
   }
 

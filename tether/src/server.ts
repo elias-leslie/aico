@@ -1,7 +1,11 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { API_VERSION, type TetherPaths } from './config'
 import type { EventBus, TetherEvent } from './events'
+import type { GuiChannel } from './gui-channel'
 import { HttpError, Router, readJsonObject, sendError, sendJson } from './http'
+import type { LegacyATermSessions } from './legacy-aterm'
+import { lifecycleStatus } from './lifecycle/engine'
+import { registerLifecycleRoutes } from './lifecycle-api'
 import type { ProjectProvider } from './projects'
 import type { Store, ToolPatch } from './store'
 import { type AgentTool, parseCommand, type ToolSeed, ToolValidationError } from './tools'
@@ -12,37 +16,14 @@ export interface ServerContext {
   store: Store
   events: EventBus
   projects: ProjectProvider
+  gui: GuiChannel
+  legacy: LegacyATermSessions
+  /** Project-root cache shared with the lifecycle engine. */
+  projectRoots: Map<string, string>
   startedAt: number
   heartbeatMs?: number
   now?: () => number
 }
-
-/** Routes whose behavior Phase 3 extracts from Aico. They answer 501 until then. */
-const PHASE3_ROUTES: [string, string][] = [
-  ['GET', '/v1/sessions'],
-  ['POST', '/v1/sessions'],
-  ['GET', '/v1/sessions/:id'],
-  ['PATCH', '/v1/sessions/:id'],
-  ['POST', '/v1/sessions/:id/end'],
-  ['POST', '/v1/sessions/:id/respawn'],
-  ['POST', '/v1/sessions/:id/load-tui'],
-  ['POST', '/v1/sessions/:id/switch-project'],
-  ['GET', '/v1/sessions/:id/diagnostics'],
-  ['GET', '/v1/sessions/:id/attach'],
-  ['GET', '/v1/sessions/:id/capture'],
-  ['GET', '/v1/sessions/:id/scrollback'],
-  ['POST', '/v1/sessions/:id/inject'],
-  ['POST', '/v1/sessions/:id/resize-claim'],
-  ['GET', '/v1/roots'],
-  ['POST', '/v1/roots'],
-  ['GET', '/v1/roots/:requestId'],
-  ['POST', '/v1/roots/:requestId/:action'],
-  ['GET', '/v1/roots/:requestId/admin'],
-  ['GET', '/v1/widgets/:id'],
-  ['POST', '/v1/widgets/:id/:action'],
-  ['GET', '/v1/gui/channel'],
-  ['POST', '/v1/gui/results/:commandId'],
-]
 
 function toolJson(tool: AgentTool): Record<string, unknown> {
   return { ...tool }
@@ -182,8 +163,8 @@ export function buildRouter(context: ServerContext): Router {
         bootId: events.bootId,
         eventSeq: events.lastSeq,
         catalog: store.counts(),
-        gui: { connected: false },
-        lifecycle: 'not_implemented',
+        gui: { connected: context.gui.connected() },
+        lifecycle: lifecycleStatus(),
       })
     })
     .add('GET', '/v1/version', (_req, res) => {
@@ -196,7 +177,9 @@ export function buildRouter(context: ServerContext): Router {
       })
     })
     .add('GET', '/v1/projects', async (_req, res, _params, query) => {
-      sendJson(res, 200, await projects.list({ refresh: query.get('refresh') === '1' }))
+      const list = await projects.list({ refresh: query.get('refresh') === '1' })
+      for (const project of list.projects) context.projectRoots.set(project.id, project.root)
+      sendJson(res, 200, list)
     })
     .add('GET', '/v1/tools', (_req, res, _params, query) => {
       const enabledOnly = query.get('enabled') === '1' || query.get('enabled') === 'true'
@@ -252,14 +235,7 @@ export function buildRouter(context: ServerContext): Router {
       streamEvents(context, req, res, query)
     })
 
-  for (const [method, path] of PHASE3_ROUTES) {
-    router.add(method, path, () => {
-      // TODO(phase3): extract the Aico lifecycle (docs/inventory-aico.md) behind this route.
-      throw new HttpError(501, 'not_implemented', {
-        detail: 'TODO(phase3): session lifecycle is not yet extracted from Aico',
-      })
-    })
-  }
+  registerLifecycleRoutes(router, context)
 
   return router
 }

@@ -12,6 +12,14 @@ let dir: string
 let paths: TetherPaths
 let daemon: RunningDaemon
 
+// Never observe, adopt or stop real tmux servers from a unit test.
+const TEST_ENV = {
+  TETHER_SUMMITFLOW_URL: 'off',
+  TETHER_RECONCILE: 'off',
+  TETHER_ATERM_LEGACY_SOCKET: '/nonexistent/tether-test/default',
+  HOME: '/nonexistent',
+}
+
 beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), 'tether-srv-'))
   paths = resolvePaths({
@@ -23,7 +31,8 @@ beforeEach(async () => {
       XDG_CONFIG_HOME: join(dir, 'config'),
     },
   })
-  daemon = await startDaemon(paths, { TETHER_SUMMITFLOW_URL: 'off' })
+  daemon = await startDaemon(paths, TEST_ENV)
+  await daemon.ready
 })
 
 afterEach(async () => {
@@ -39,9 +48,7 @@ describe('control socket', () => {
     expect(statSync(paths.socket).mode & 0o777).toBe(0o600)
     expect(statSync(paths.socketDir).mode & 0o777).toBe(0o700)
     expect(statSync(paths.stateDir).mode & 0o777).toBe(0o700)
-    await expect(startDaemon(paths, { TETHER_SUMMITFLOW_URL: 'off' })).rejects.toThrow(
-      /already listening/,
-    )
+    await expect(startDaemon(paths, TEST_ENV)).rejects.toThrow(/already listening/)
   })
 
   it('answers health and version with the API version', async () => {
@@ -51,24 +58,65 @@ describe('control socket', () => {
       status: 'ok',
       instance: 'test',
       apiVersion: 1,
-      schemaVersion: 1,
+      schemaVersion: 2,
+      lifecycle: 'disabled',
+      gui: { connected: false },
     })
     const version = await call('GET', '/v1/version')
     expect(version.body).toMatchObject({ name: 'tether', apiVersion: 1, minApiVersion: 1 })
   })
 
-  it('returns 404, 405 and 501 with stable error codes', async () => {
+  it('returns 404 and 405 with stable error codes', async () => {
     expect((await call('GET', '/nope')).body).toEqual({ error: 'not_found' })
     expect((await call('DELETE', '/v1/health')).status).toBe(405)
-    const pending = await call('POST', '/v1/sessions', {})
-    expect(pending.status).toBe(501)
-    expect(pending.body).toMatchObject({ error: 'not_implemented' })
-    expect((await call('POST', '/v1/roots/r1/show', {})).status).toBe(501)
   })
 
   it('serves the local project list when SummitFlow is off', async () => {
     const projects = await call('GET', '/v1/projects')
     expect(projects.body).toMatchObject({ source: 'local', projects: [] })
+  })
+})
+
+describe('lifecycle API (no tmux started)', () => {
+  it('validates session requests before touching tmux', async () => {
+    expect(await call('GET', '/v1/sessions')).toMatchObject({ status: 200, body: { items: [] } })
+    const size = { cols: 80, rows: 24 }
+    expect(
+      (await call('POST', '/v1/sessions', { origin: 'cli', size, tool: 'nope' })).body,
+    ).toEqual({ error: 'unknown_tool' })
+    expect((await call('POST', '/v1/sessions', { origin: 'root', size })).status).toBe(400)
+    expect((await call('POST', '/v1/sessions', { origin: 'cli' })).status).toBe(400)
+    expect(
+      (await call('POST', '/v1/sessions', { origin: 'cli', size, projectId: 'missing' })).body,
+    ).toEqual({ error: 'unknown_project' })
+    expect(
+      (await call('POST', '/v1/sessions', { origin: 'cli', size, aTermSessionId: 'x' })).status,
+    ).toBe(400)
+    expect((await call('POST', '/v1/sessions', { origin: 'cli', size, extra: 1 })).status).toBe(400)
+    expect((await call('GET', '/v1/sessions/ffffffff')).status).toBe(404)
+    expect((await call('POST', '/v1/sessions/ffffffff/end', { generation: 'x' })).body).toEqual({
+      error: 'invalid_generation',
+    })
+    expect(
+      (await call('POST', '/v1/sessions/ffffffff/end', { generation: 'a'.repeat(64) })).status,
+    ).toBe(404)
+  })
+
+  it('serves roots, widgets, the GUI channel and A-Term legacy sessions', async () => {
+    expect((await call('GET', '/v1/roots')).body).toMatchObject({ owner: 'aico', roots: [] })
+    expect((await call('GET', '/v1/roots/r1')).status).toBe(404)
+    expect((await call('POST', '/v1/roots/r1/show', {})).status).toBe(404)
+    expect((await call('GET', '/v1/widgets/ffffffff')).status).toBe(404)
+    expect((await call('POST', '/v1/roots', { requestId: 'r1' })).body).toEqual({
+      error: 'invalid_body',
+    })
+    expect((await call('GET', '/v1/gui/channel')).body).toEqual({ error: 'invalid_client' })
+    expect((await call('POST', '/v1/gui/results/x', { applied: true })).status).toBe(404)
+    expect(await call('GET', '/v1/legacy-sessions')).toMatchObject({
+      status: 200,
+      body: { items: [] },
+    })
+    expect((await call('POST', '/v1/legacy-sessions/summitflow-x/end', {})).status).toBe(404)
   })
 })
 

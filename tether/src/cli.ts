@@ -1,7 +1,11 @@
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { callSocket } from './client'
 import { resolvePaths, type TetherPaths } from './config'
 import { startDaemon } from './daemon'
 import { runDoctor } from './doctor'
+import { applyImport, formatPlan, planImportForPath, summarize } from './importer'
+import { Store } from './store'
 import { VERSION } from './version'
 
 const USAGE = `Usage: tether [--instance NAME] [--json] <command>
@@ -11,7 +15,15 @@ Commands:
   doctor                        check host prerequisites and the running daemon
   version                       print the CLI and daemon versions
   sessions [list | get <id>]    session catalog
+  sessions new [--tool T] [--project P] [--name N]
+  sessions end <id>             retire one session (reads its generation first)
+  sessions attach <id>          print the exact tmux attach argv
+  sessions diagnostics <id>
+  legacy [list | end <name>]    A-Term summitflow-<uuid> sessions (attach/end only)
   roots [list | show <requestId>]
+  import-aico [--from PATH] [--apply]
+                                copy Aico's catalog (dry-run unless --apply;
+                                aico.db is opened read-only; stop the daemon first)
   tools [list]                  merged agent-tool registry
   tools get <slug>
   tools add <slug> <name> -- <argv...>
@@ -64,6 +76,19 @@ function render(io: Io, json: boolean, status: number, body: unknown): number {
     const record = body as Record<string, unknown>
     if (status >= 400) {
       io.err(`error ${status}: ${record.error}${record.detail ? ` — ${record.detail}` : ''}`)
+    } else if (
+      Array.isArray(record.items) &&
+      (record.items as Record<string, unknown>[]).some(
+        (item) => 'generation' in item || 'kind' in item,
+      )
+    ) {
+      for (const item of record.items as Record<string, unknown>[]) {
+        if (item.kind === 'legacy-attach-only') io.out(`  ${item.name}  (legacy, attach/end only)`)
+        else
+          io.out(
+            `  ${item.id}  ${String(item.status).padEnd(9)} ${String(item.tool).padEnd(12)} ${item.projectId ?? '-'}  ${item.label}`,
+          )
+      }
     } else if (Array.isArray(record.items)) {
       for (const item of record.items as Record<string, unknown>[]) {
         const marker = item.isDefault ? '*' : ' '
@@ -99,6 +124,25 @@ async function api(
     )
     return 2
   }
+}
+
+/** `--name value` / `--name=value` pairs; unknown flags are rejected. */
+function flags(args: string[], names: string[]): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index] as string
+    if (arg === '--apply') continue
+    const [name, inline] = arg.split(/=(.*)/s, 2) as [string, string | undefined]
+    if (!names.includes(name)) throw new Error(`unknown option ${name}`)
+    let value = inline
+    if (value === undefined) {
+      index += 1
+      value = args[index]
+    }
+    if (value === undefined) throw new Error(`${name} needs a value`)
+    out[name] = value
+  }
+  return out
 }
 
 function slugPath(slug: string | undefined): string {
@@ -152,7 +196,85 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
         if (!sub || sub === 'list') return api(io, paths, json, 'GET', '/v1/sessions')
         if (sub === 'get' && rest[0])
           return api(io, paths, json, 'GET', `/v1/sessions/${encodeURIComponent(rest[0])}`)
+        if ((sub === 'attach' || sub === 'diagnostics') && rest[0])
+          return api(io, paths, json, 'GET', `/v1/sessions/${encodeURIComponent(rest[0])}/${sub}`)
+        if (sub === 'new') {
+          const options = flags(rest, ['--tool', '--project', '--name'])
+          const body: Record<string, unknown> = {
+            origin: 'cli',
+            size: { cols: process.stdout.columns || 120, rows: process.stdout.rows || 40 },
+          }
+          if (options['--tool']) body.tool = options['--tool']
+          if (options['--project']) body.projectId = options['--project']
+          if (options['--name']) body.name = options['--name']
+          return api(io, paths, json, 'POST', '/v1/sessions', body)
+        }
+        if (sub === 'end' && rest[0]) {
+          const path = `/v1/sessions/${encodeURIComponent(rest[0])}`
+          const current = await callSocket(paths.socket, 'GET', path, undefined, 15_000)
+          const generation = (current.body as Record<string, unknown> | null)?.generation
+          if (current.status !== 200 || typeof generation !== 'string')
+            return render(io, json, current.status, current.body)
+          return api(io, paths, json, 'POST', `${path}/end`, { generation })
+        }
         break
+      case 'legacy':
+        if (!sub || sub === 'list') return api(io, paths, json, 'GET', '/v1/legacy-sessions')
+        if (sub === 'end' && rest[0])
+          return api(
+            io,
+            paths,
+            json,
+            'POST',
+            `/v1/legacy-sessions/${encodeURIComponent(rest[0])}/end`,
+          )
+        break
+      case 'import-aico': {
+        const options = flags(
+          [sub, ...rest].filter((arg): arg is string => arg !== undefined),
+          ['--from'],
+        )
+        const apply = [sub, ...rest].includes('--apply')
+        const from = options['--from'] || join(homedir(), '.local', 'state', 'aico', 'aico.db')
+        if (!apply) {
+          const plan = planImportForPath(from, paths.dbPath)
+          if (json)
+            io.out(
+              JSON.stringify(
+                { applied: false, summary: summarize(plan), entries: plan.entries },
+                null,
+                2,
+              ),
+            )
+          else for (const line of formatPlan(plan, false)) io.out(line)
+          return 0
+        }
+        // The daemon is the instance's only writer; never write beside it.
+        const live = await callSocket(paths.socket, 'GET', '/v1/health', undefined, 1_000).then(
+          () => true,
+          () => false,
+        )
+        if (live) {
+          io.err(`tether@${paths.instance} is running; stop it before import-aico --apply`)
+          return 1
+        }
+        const store = new Store(paths.dbPath)
+        try {
+          const plan = applyImport(from, store)
+          if (json)
+            io.out(
+              JSON.stringify(
+                { applied: true, summary: summarize(plan), entries: plan.entries },
+                null,
+                2,
+              ),
+            )
+          else for (const line of formatPlan(plan, true)) io.out(line)
+        } finally {
+          store.close()
+        }
+        return 0
+      }
       case 'roots':
         if (!sub || sub === 'list') return api(io, paths, json, 'GET', '/v1/roots')
         if (sub === 'show' && rest[0])

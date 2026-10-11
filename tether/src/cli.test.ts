@@ -42,7 +42,10 @@ describe('main', () => {
     })
     daemon = await startDaemon(resolvePaths({ instance: 'clitest' }), {
       TETHER_SUMMITFLOW_URL: 'off',
+      TETHER_RECONCILE: 'off',
+      TETHER_ATERM_LEGACY_SOCKET: join(dir, 'no-aterm', 'default'),
     })
+    await daemon.ready
   })
 
   afterAll(async () => {
@@ -73,10 +76,16 @@ describe('main', () => {
     expect(await main(['-i', 'clitest', 'tools', 'rm', 'aider'], rm.io)).toBe(0)
   })
 
-  it('reports Phase 3 routes as not implemented with exit 1', async () => {
-    const { io, err } = capture()
-    expect(await main(['-i', 'clitest', 'sessions'], io)).toBe(1)
-    expect(err.join('\n')).toContain('not_implemented')
+  it('lists an empty session catalog and dry-runs an import', async () => {
+    const list = capture()
+    expect(await main(['-i', 'clitest', 'sessions'], list.io)).toBe(0)
+    const legacy = capture()
+    expect(await main(['-i', 'clitest', 'legacy'], legacy.io)).toBe(0)
+    const missing = capture()
+    expect(
+      await main(['-i', 'clitest', 'import-aico', '--from', join(dir, 'absent.db')], missing.io),
+    ).toBe(2)
+    expect(missing.err.join('\n')).toContain('not found')
   })
 
   it('exits 2 when the daemon is unreachable', async () => {

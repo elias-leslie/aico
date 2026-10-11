@@ -52,6 +52,7 @@ describe('Store schema', () => {
     ).map((row) => row.name)
     expect(tables).toEqual([
       'agent_tools',
+      'retired_session_ids',
       'root_requests',
       'schema_version',
       'sessions',

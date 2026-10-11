@@ -3,7 +3,7 @@
 // copies rows byte for byte. The only widening is the tmux_servers unit CHECK,
 // which additionally admits non-default instance unit names.
 
-export const SCHEMA_VERSION = 1
+export const SCHEMA_VERSION = 2
 
 /** Aico's tmux_servers table (electron/main/store.ts TMUX_SERVERS_TABLE_SQL),
  * plus `tether-<instance>-tmux-server-<id>.service` for non-default instances. */
@@ -142,4 +142,22 @@ export const INDEXES_SQL = `
     WHERE kind = 'managed';
   CREATE INDEX sessions_tmux_server_id ON sessions(tmux_server_id);
   CREATE UNIQUE INDEX agent_tools_one_default ON agent_tools(is_default) WHERE is_default = 1;
+`
+
+/**
+ * v2: session IDs are never reused, even after End (docs/api-v1.md Identity).
+ * Ended rows are deleted from `sessions`; this trigger keeps their IDs in the
+ * same transaction as the delete, so no crash window can free an ID.
+ */
+export const RETIRED_SESSION_IDS_SQL = `
+  CREATE TABLE retired_session_ids (
+    id         TEXT PRIMARY KEY
+                 CHECK(length(id) = 8 AND id NOT GLOB '*[^0-9a-f]*'),
+    retired_at INTEGER NOT NULL
+  );
+  CREATE TRIGGER sessions_retire_id AFTER DELETE ON sessions
+  BEGIN
+    INSERT OR IGNORE INTO retired_session_ids (id, retired_at)
+      VALUES (old.id, CAST(strftime('%s', 'now') AS INTEGER) * 1000);
+  END;
 `
