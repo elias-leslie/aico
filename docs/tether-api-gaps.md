@@ -29,12 +29,12 @@ change that would close it.
    *Close it with:* accept `{generation, projectRoot}` (absolute directory) as
    create does.
 
-4. **`tether --json version` is not pure JSON and needs the daemon.** It prints a
-   `tether 0.0.1` banner line before the JSON object, and with no daemon it
-   prints "not reachable" and no JSON at all. `scripts/aico-install.sh` parses
-   from the first `{` and treats a missing daemon as "install and start Tether".
-   *Close it with:* JSON-only stdout under `--json`, and a `daemon: null` (or an
-   error object) when the socket is absent, so the CLI version is still reported.
+4. **`tether --json version` was not pure JSON (closed in Tether `be5d67c`).**
+   It now prints one JSON object: the daemon's `/v1/version` fields plus `cli`,
+   or `{cli, daemon: null, error: "not_reachable"}` with exit 2 and the reason
+   on stderr when the daemon is down. `scripts/aico-install.sh` still parses
+   from the first `{` and greps for "not reachable", so it works with both
+   outputs.
 
 5. **No current project.** Old Aico read `st projects list`, whose rows carry a
    `current` flag, and the picker could mark it. Tether's `/v1/projects` has no such field, so `current`
