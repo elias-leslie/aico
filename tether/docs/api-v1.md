@@ -60,6 +60,10 @@ Status: every route below is implemented (Phase 3a). Additions made for A-Term d
     "applicable": true,
     "checkedAt": 1791686791000
   },
+  "state": "blocked",
+  "stateSource": "claude-status",
+  "stateAt": 1791690000000,
+  "stateDetail": "permission prompt",
   "createdAt": 1791686790237
 }
 ```
@@ -77,6 +81,8 @@ Status: every route below is implemented (Phase 3a). Additions made for A-Term d
 
 `contextHook` *(post-cutover)* is Tether's latest check of the tool's Agent Hub context hook (see [Agent tools](#agent-tools)). `state` is `available`, `missing`, `unsupported`, `not_applicable`, or `unknown` when no check for the session's current `tool` has finished yet. `applicable` is false for a tool with no context mechanism (the bare shell). Tether checks after every launch, respawn, tool load and project switch, after its own restart (running sessions, one at a time, in the background) and on `POST /v1/sessions/:id/context-check`. A changed result publishes `session.updated`. The check is an independent probe: it never blocks the native tool, and it does not claim what an already-running session received.
 
+`state` is the agent's state: `working`, `idle`, `blocked` (waiting on the user: a permission prompt or a question) or `unknown` (no agent found, or the session is not running). `stateSource` names what said so (`claude-status`, `claude-hook`, `codex-rollout`, `none`), `stateAt` is when the state last changed (null while unknown), and `stateDetail` says why it is blocked. A change publishes `session.updated`. See [agent-state.md](agent-state.md).
+
 ## Sessions
 
 | Method and route | Body | Result |
@@ -89,8 +95,9 @@ Status: every route below is implemented (Phase 3a). Additions made for A-Term d
 | `POST /v1/sessions/:id/respawn` | `{generation}` | Replaces the pane workload with the session's stored tool. Returns the new descriptor and generation. A lifecycle-v0 session is refused with `409 legacy_session`. |
 | `POST /v1/sessions/:id/load-tui` | `{generation, tool}` | Respawns with another tool and stores it on success |
 | `POST /v1/sessions/:id/switch-project` | `{generation, projectId}` or `{generation, projectRoot}` *(post-cutover)* | With `projectId`: resolves the project root once, respawns there with the same tool, and stores `projectId`/`projectRoot`. With `projectRoot` (an absolute existing directory, as on create; Aico's Personal Workspace): respawns there and stores `projectId: null`. Exactly one of the two; a root that is not a directory is `400 unknown_project`. |
-| `GET /v1/sessions/:id/diagnostics` | none | Content-free containment diagnostics (Aico's Session diagnostics): server, scope, invocation and cgroup identities |
+| `GET /v1/sessions/:id/diagnostics` | none | Content-free containment diagnostics (Aico's Session diagnostics): server, scope, invocation and cgroup identities, plus `agent: {state, stateSource, stateAt, stateDetail}` |
 | `POST /v1/sessions/:id/context-check` *(post-cutover)* | none | Re-checks the context hook now and answers `{generation, contextHook}` |
+| `POST /v1/sessions/:id/agent-event` | `{event, agent, notificationType?, agentSessionId?}` | An agent hook's report (`event`: `Notification`, `PermissionRequest`, `UserPromptSubmit`, `Stop`; `agent`: `claude` or `codex`). Answers `{applied, state, stateSource, stateAt, stateDetail}`; a report that says nothing about state, or comes from another conversation than the session's agent, has `applied: false`. |
 
 The default tool applies when `tool` is omitted (see [Agent tools](#agent-tools)). A tool alias such as `claude` resolves to its canonical slug, which is what gets stored.
 

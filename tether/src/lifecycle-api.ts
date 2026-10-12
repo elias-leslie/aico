@@ -5,6 +5,7 @@
 import { execFile } from 'node:child_process'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { promisify } from 'node:util'
+import type { AgentStateTracker, HookReport } from './agent-state'
 import type { TetherPaths } from './config'
 import type { EventBus } from './events'
 import type { GuiChannel, GuiCommand } from './gui-channel'
@@ -119,6 +120,24 @@ export interface LifecycleApiContext {
   continuity?: Continuity
 }
 
+/** The daemon's agent-state tracker; unbound in tests and scratch instances. */
+let agentStates: AgentStateTracker | null = null
+
+export function bindAgentStates(tracker: AgentStateTracker | null): void {
+  agentStates = tracker
+}
+
+/** The session's agent state fields (docs/api-v1.md "Agent state"). */
+export function agentStateOf(id: string): Record<string, unknown> {
+  const record = agentStates?.get(id) ?? {
+    state: 'unknown',
+    stateSource: 'none',
+    stateAt: 0,
+    stateDetail: null,
+  }
+  return { ...record, stateAt: record.stateAt || null }
+}
+
 /** The session's opaque fence (Aico `sessionGeneration`). */
 export function generationOf(row: WidgetRow): string {
   return sessionGeneration(row)
@@ -178,7 +197,32 @@ export function descriptor(row: WidgetRow, status: SessionStatus): Record<string
       sessionName: sessionName(row.id),
     },
     contextHook: contextHookOf(row),
+    ...agentStateOf(row.id),
     createdAt: row.createdAt,
+  }
+}
+
+const HOOK_EVENTS = new Set(['Notification', 'PermissionRequest', 'UserPromptSubmit', 'Stop'])
+
+/** Validate an agent hook report (`POST /v1/sessions/:id/agent-event`). */
+export function parseHookReport(body: Record<string, unknown>): HookReport {
+  only(body, ['event', 'notificationType', 'agent', 'agentSessionId'])
+  const { event, notificationType, agent, agentSessionId } = body
+  if (typeof event !== 'string' || !HOOK_EVENTS.has(event))
+    throw new HttpError(400, 'invalid_body', { field: 'event' })
+  if (agent !== 'claude' && agent !== 'codex')
+    throw new HttpError(400, 'invalid_body', { field: 'agent' })
+  const optional = (value: unknown, field: string): string | null => {
+    if (value === undefined || value === null || value === '') return null
+    if (typeof value !== 'string' || value.length > 100)
+      throw new HttpError(400, 'invalid_body', { field })
+    return value
+  }
+  return {
+    event,
+    agent,
+    notificationType: optional(notificationType, 'notificationType'),
+    agentSessionId: optional(agentSessionId, 'agentSessionId'),
   }
 }
 
@@ -612,7 +656,15 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
     })
     .add('GET', '/v1/sessions/:id/diagnostics', async (_req, res, params) => {
       const row = requireSession(params.id)
-      sendJson(res, 200, await sessionDiagnostics(row.id))
+      sendJson(res, 200, { ...(await sessionDiagnostics(row.id)), agent: agentStateOf(row.id) })
+    })
+    // Agent hooks inside the pane (Claude Code Notification/UserPromptSubmit)
+    // report state changes here; see docs/agent-state.md.
+    .add('POST', '/v1/sessions/:id/agent-event', async (req, res, params) => {
+      const row = requireSession(params.id)
+      const report = parseHookReport(await readJsonObject(req))
+      const applied = agentStates?.report(row.id, report) ?? false
+      sendJson(res, 200, { applied, ...agentStateOf(row.id) })
     })
     .add('POST', '/v1/sessions/:id/context-check', async (_req, res, params) => {
       const row = requireSession(params.id)

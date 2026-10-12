@@ -3,17 +3,21 @@ import { chmodSync, mkdirSync } from 'node:fs'
 import type { Server } from 'node:http'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { AgentStatePoller, AgentStateTracker } from './agent-state'
 import type { TetherPaths } from './config'
+import { nodeProcFs } from './continuity'
 import { parseGraphicalEnvironment } from './env'
 import { EventBus } from './events'
 import { GuiChannel } from './gui-channel'
 import { listenPrivateSocket } from './http'
 import { LegacyATermSessions, legacyATermSocket } from './legacy-aterm'
-import { bindCatalog } from './lifecycle/catalog'
+import { bindCatalog, listWidgets } from './lifecycle/catalog'
 import {
+  cachedSessionStatus,
   configureEngine,
   endSession,
   flushSessionEvents,
+  notifySessionChanged,
   setGenerationFunction,
   setSessionSnapshotFunction,
   startLifecycle,
@@ -25,7 +29,7 @@ import { setLifecycleInstance } from './lifecycle/ownership'
 import { createRootServer } from './lifecycle/root-control'
 import { configureTmuxPaths } from './lifecycle/tmux'
 import { bindToolSource } from './lifecycle/tui/registry'
-import { generationOf, rootOperations, sessionSnapshot } from './lifecycle-api'
+import { bindAgentStates, generationOf, rootOperations, sessionSnapshot } from './lifecycle-api'
 import { activeProjectFileFromEnv, ProjectProvider, summitflowUrlFromEnv } from './projects'
 import { Continuity } from './reboot'
 import { createTetherServer } from './server'
@@ -137,6 +141,25 @@ export async function startDaemon(
     throw error
   }
   const ready = startLifecycle({ reconcile: reconcileEnabled(env) })
+  // Agent state: hook reports always; the poll only where Tether observes tmux.
+  const agentStates = new AgentStateTracker((id) => notifySessionChanged(id, { force: true }))
+  bindAgentStates(agentStates)
+  const agentPoller = new AgentStatePoller(
+    agentStates,
+    {
+      sessions: () =>
+        listWidgets()
+          .filter((row) => cachedSessionStatus(row) === 'running')
+          .map((row) => ({
+            id: row.id,
+            generation: generationOf(row),
+            panePid: async () => (await verifiedCurrentManagedPane(row))?.pid ?? null,
+          })),
+    },
+    nodeProcFs,
+    env.HOME ?? homedir(),
+  )
+  if (reconcileEnabled(env)) void ready.then(() => agentPoller.start()).catch(() => {})
   void context.continuity?.start()
   // Announce legacy A-Term sessions that end or exit outside Tether.
   if (reconcileEnabled(env)) legacy.watch(LEGACY_WATCH_MS)
@@ -168,6 +191,8 @@ export async function startDaemon(
     ready,
     close: async () => {
       stopLifecycle()
+      agentPoller.stop()
+      bindAgentStates(null)
       context.continuity?.stop()
       legacy.unwatch()
       gui.close()
