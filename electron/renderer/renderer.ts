@@ -18,6 +18,7 @@ import { type Arcade, GAMES, startArcade } from './arcade'
 import { initControlSurface } from './control-surface'
 import { wireDraftInput } from './draft-input'
 import { Eyes } from './eyes'
+import { urlAt } from './links'
 import { mouseReportingActive, setupMouseShim } from './mouse-shim'
 import { pointToCell, sgrWheelSequence, wheelMouseTicks } from './mouse-wheel'
 import { osc52Text } from './osc52'
@@ -59,7 +60,44 @@ const term = new Terminal({
   cursorBlink: false,
   theme,
   allowProposedApi: true,
+  // OSC 8 hyperlinks (a program's own links): Ctrl+click opens them.
+  linkHandler: {
+    activate: (event, uri) => {
+      if (event.ctrlKey) window.aico.links.open(uri)
+    },
+  },
 })
+
+// Ctrl+click a plain URL to open it, even inside mouse-grabbing TUIs: read the
+// clicked row from the buffer (wrapped rows joined) and find the URL there.
+host.addEventListener(
+  'mousedown',
+  (event) => {
+    if (event.button !== 0 || !event.ctrlKey) return
+    const screen = term.element?.querySelector('.xterm-screen')?.getBoundingClientRect()
+    if (!screen || screen.width === 0 || screen.height === 0) return
+    const col = Math.floor(((event.clientX - screen.left) / screen.width) * term.cols)
+    const row = Math.floor(((event.clientY - screen.top) / screen.height) * term.rows)
+    if (col < 0 || row < 0 || col >= term.cols || row >= term.rows) return
+    const buffer = term.buffer.active
+    let first = buffer.viewportY + row
+    while (first > 0 && buffer.getLine(first)?.isWrapped) first--
+    let text = ''
+    let offset = 0
+    for (let y = first; ; y++) {
+      const line = buffer.getLine(y)
+      if (!line || (y > first && !line.isWrapped)) break
+      if (y === buffer.viewportY + row) offset = text.length
+      text += line.translateToString(false)
+    }
+    const url = urlAt(text, offset + col)
+    if (!url) return
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    window.aico.links.open(url)
+  },
+  { capture: true },
+)
 
 // Wheel scrolling is routed by the capture handler below. The live tmux view
 // has no local history: xterm's fallback would synthesize Up/Down input instead,

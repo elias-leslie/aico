@@ -13,6 +13,7 @@ import {
   Menu,
   screen,
   session,
+  shell,
 } from 'electron'
 import { type IPty, spawn } from 'node-pty'
 import { parseTerminalFontSettings } from '../shared/font-settings'
@@ -458,7 +459,7 @@ function sessionEnded(id: string, reason: string): void {
   // destroy() skips the 'close' event, so take the space it leaves here and
   // let neighbours grow into it once the window is gone.
   const win = windowForWidget(id)
-  const freed = win && win.isVisible() && !win.isMinimized() ? win.getBounds() : null
+  const freed = win?.isVisible() && !win.isMinimized() ? win.getBounds() : null
   win?.destroy()
   if (freed && !quitting) setImmediate(() => fillAfterClose(freed))
   removeView(id)
@@ -1773,6 +1774,16 @@ const startup = app.whenReady().then(async () => {
 
   ipcMain.handle('clipboard:read', () => clipboard.readText())
   ipcMain.handle('clipboard:has-image', () => !clipboard.readImage().isEmpty())
+  ipcMain.on('link:open', (_event, url: unknown) => {
+    if (typeof url !== 'string' || url.length > 8192) return
+    try {
+      const parsed = new URL(url)
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:')
+        void shell.openExternal(parsed.toString())
+    } catch {
+      // Not a URL: ignore.
+    }
+  })
   ipcMain.on('clipboard:write', (_event, text: unknown) => {
     if (typeof text === 'string') clipboard.writeText(text)
   })

@@ -17,6 +17,10 @@ contextBridge.exposeInMainWorld('aico', {
       return () => ipcRenderer.removeListener('pty:data', listener)
     },
   },
+  links: {
+    /** Open an http(s) URL in the default browser. */
+    open: (url: string) => ipcRenderer.send('link:open', url),
+  },
   clipboard: {
     read: (): Promise<string> => ipcRenderer.invoke('clipboard:read'),
     hasImage: (): Promise<boolean> => ipcRenderer.invoke('clipboard:has-image'),

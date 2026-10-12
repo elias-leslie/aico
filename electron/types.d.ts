@@ -48,6 +48,10 @@ export interface AicoApi {
     /** Subscribe to PTY output; returns an unsubscribe function. */
     onData(cb: (data: string) => void): () => void
   }
+  links: {
+    /** Open an http(s) URL in the default browser. */
+    open(url: string): void
+  }
   clipboard: {
     read(): Promise<string>
     /** True when the clipboard holds an image (e.g. a screenshot). */
