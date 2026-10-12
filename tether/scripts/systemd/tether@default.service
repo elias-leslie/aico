@@ -1,0 +1,25 @@
+# SummitFlow-managed tether@default. `st service rebuild tether` renders this
+# with __PROJECT_ROOT__ set to the release it built and restarts the unit, so
+# ExecStartPre installs that release into the stable path before the daemon
+# starts. Otherwise identical to systemd/tether@.service (see its notes: tmux
+# servers are separate units, so a restart never stops a pane).
+[Unit]
+Description=Tether session daemon (default)
+Documentation=https://github.com/elias-leslie/tether
+
+[Service]
+Type=simple
+Slice=app.slice
+# "-": a missing release never keeps the installed daemon from starting.
+ExecStartPre=-__PROJECT_ROOT__/scripts/install-release.sh
+ExecStart=%h/.local/lib/tether/bin/tether --instance default serve
+Restart=on-failure
+RestartSec=2
+UMask=0077
+Environment=PATH=%h/.claude/bin:%h/.codex/bin:%h/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+CPUAccounting=yes
+MemoryAccounting=yes
+TasksAccounting=yes
+
+[Install]
+WantedBy=default.target

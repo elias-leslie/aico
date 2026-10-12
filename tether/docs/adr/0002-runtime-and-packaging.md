@@ -25,4 +25,4 @@
 ## Consequences
 
 - A Node upgrade on the host (`/opt/node-current`) changes Tether's runtime on the next restart. `tether doctor` reports the Node version and whether `node:sqlite` is present.
-- The installed bundle is a copy, so a repo rebuild does not affect the running daemon until `scripts/install.sh` runs again.
+- The installed bundle is a copy, so a repo rebuild does not affect the running daemon until `scripts/install.sh` runs again. On a SummitFlow host, `st service rebuild tether` renders `scripts/systemd/tether@default.service`, whose `ExecStartPre` runs `scripts/install-release.sh` from the built release, so the restart installs that release into the stable path.
