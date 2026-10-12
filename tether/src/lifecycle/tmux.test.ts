@@ -389,7 +389,7 @@ describe('tmux model', () => {
   it('advertises truecolor tmux capabilities and clears inherited no-color env', () => {
     expect(tmuxConf()).toContain('set -g default-terminal "tmux-256color"')
     expect(tmuxConf()).toContain('set -g terminal-overrides ",xterm-256color:Tc"')
-    expect(tmuxConf()).toContain('set -g terminal-features "xterm*:sync"')
+    expect(tmuxConf()).toContain('set -g terminal-features "xterm*:sync:clipboard"')
     expect(tmuxConf()).toContain('set-environment -gu NO_COLOR')
     expect(tmuxConf()).toContain('set-environment -g COLORTERM truecolor')
   })

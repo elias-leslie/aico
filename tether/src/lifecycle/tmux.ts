@@ -200,7 +200,9 @@ function tmuxProfileLines(): string[] {
     'set -g status off',
     'set -g default-terminal "tmux-256color"',
     'set -g terminal-overrides ",xterm-256color:Tc"',
-    'set -g terminal-features "xterm*:sync"',
+    // clipboard: forward OSC 52 to Aico, so a copy made inside the pane (Claude
+    // Code's own selection, `tmux load-buffer -w`) reaches the system clipboard.
+    'set -g terminal-features "xterm*:sync:clipboard"',
     'set-environment -gu NO_COLOR',
     'set-environment -g COLORTERM truecolor',
     'set-environment -g CLICOLOR 1',
@@ -223,7 +225,7 @@ export function tmuxProfileTargetArgs(socket: string): string[] {
     ['set-option', '-g', 'status', 'off'],
     ['set-option', '-g', 'default-terminal', 'tmux-256color'],
     ['set-option', '-g', 'terminal-overrides', ',xterm-256color:Tc'],
-    ['set-option', '-g', 'terminal-features', 'xterm*:sync'],
+    ['set-option', '-g', 'terminal-features', 'xterm*:sync:clipboard'],
     ['set-environment', '-gu', 'NO_COLOR'],
     ['set-environment', '-g', 'COLORTERM', 'truecolor'],
     ['set-environment', '-g', 'CLICOLOR', '1'],
