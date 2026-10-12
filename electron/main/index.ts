@@ -696,18 +696,18 @@ async function startPty(win: BrowserWindow, size: PtySize): Promise<void> {
     pty.kill()
     return
   }
-  const isFocusedCurrent = () =>
+  const isCurrent = () =>
     !quitting &&
     !win.isDestroyed() &&
-    win.isFocused() &&
     widgetOf.get(winId) === id &&
     ptys.get(winId) === pty &&
     ptyStartGenerations.get(winId) === generation &&
     !replacing.has(id)
-  // Desktop auto-resize: the focused window claims the shared tmux window size
-  // for its own attached client (Tether's active-client resize claim).
+  // Desktop auto-resize: a window claims the shared tmux window size for its
+  // own attached client (Tether's active-client resize claim) when it attaches,
+  // gains focus, or is resized by Aico's tiling. Callers pick the moment.
   const claimSize = coalesceTrailingAsync(async () => {
-    for (let attempt = 0; attempt < 4 && isFocusedCurrent(); attempt += 1) {
+    for (let attempt = 0; attempt < 4 && isCurrent(); attempt += 1) {
       const sessionGeneration = catalog.get(id)?.generation ?? target.generation
       try {
         const result = await tether.resizeClaim(id, sessionGeneration, pty.pid, pty.cols, pty.rows)
@@ -730,7 +730,7 @@ async function startPty(win: BrowserWindow, size: PtySize): Promise<void> {
   sizeClaims.set(pty, claimSize)
   let claimAfterAttach = true
   pty.onData((data) => {
-    if (claimAfterAttach && isFocusedCurrent()) {
+    if (claimAfterAttach && isCurrent()) {
       claimAfterAttach = false
       void claimSize()
     }
