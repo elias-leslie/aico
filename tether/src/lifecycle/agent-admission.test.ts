@@ -1,3 +1,6 @@
+import { mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   type AdmissionObservation,
@@ -8,9 +11,11 @@ import {
   admissionOverrideFromEnv,
   DEFAULT_AGENT_ADMISSION_LIMITS,
   LAUNCH_SETTLE_MS,
+  nightshiftAdmissionClosedPath,
   observeAgentScopes,
   parseMemAvailable,
   parseMemoryPressure,
+  readNightshiftAdmissionClosed,
   type ScopeFs,
 } from './agent-admission'
 
@@ -25,10 +30,17 @@ interface Host {
   mem: string
   pressure: string
   scopes: Set<string> | Error
+  closed: string | null | Error
 }
 
 function harness(host: Partial<Host> = {}, limits: Partial<AgentAdmissionLimits> = {}) {
-  const state: Host = { mem: meminfo(20), pressure: psi(), scopes: new Set(), ...host }
+  const state: Host = {
+    mem: meminfo(20),
+    pressure: psi(),
+    scopes: new Set(),
+    closed: null,
+    ...host,
+  }
   const records: AdmissionObservation[] = []
   let now = 1_000
   let override = false
@@ -39,6 +51,10 @@ function harness(host: Partial<Host> = {}, limits: Partial<AgentAdmissionLimits>
       activeAgentScopes: async () => {
         if (state.scopes instanceof Error) throw state.scopes
         return new Set(state.scopes)
+      },
+      hostAdmissionClosed: async () => {
+        if (state.closed instanceof Error) throw state.closed
+        return state.closed
       },
     },
     {
@@ -366,5 +382,36 @@ describe('observeAgentScopes', () => {
 
   it('fails closed when app.slice is unreadable', async () => {
     await expect(observeAgentScopes(options(fakeFs({}, {})))).rejects.toThrow()
+  })
+})
+
+describe('Nightshift admission switch', () => {
+  it('defers every launch while Nightshift has admission closed, with its reason', async () => {
+    const { admission, state, records } = harness({ closed: 'reboot pending' })
+    const denied = await denial(admission.reserve({ widgetId: 'abcd1234', kind: 'launch' }))
+    expect(denied.reason).toBe('Nightshift has closed agent admission (reboot pending).')
+    expect(records.at(-1)).toMatchObject({ decision: 'deferred' })
+    state.closed = null
+    await expect(admission.reserve({ widgetId: 'abcd1234', kind: 'launch' })).resolves.toBeTruthy()
+  })
+
+  it('fails closed when the switch cannot be read', async () => {
+    const { admission } = harness({ closed: new Error('EACCES') })
+    const denied = await denial(admission.reserve({ widgetId: 'abcd1234', kind: 'launch' }))
+    expect(denied.reason).toContain('Nightshift admission state could not be read')
+  })
+
+  it('reads the state file under XDG_RUNTIME_DIR', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tether-admission-'))
+    expect(nightshiftAdmissionClosedPath({ XDG_RUNTIME_DIR: dir })).toBe(
+      join(dir, 'nightshift', 'admission-closed'),
+    )
+    expect(nightshiftAdmissionClosedPath({})).toBeNull()
+    const file = join(dir, 'admission-closed')
+    expect(await readNightshiftAdmissionClosed(file)).toBeNull()
+    writeFileSync(file, '')
+    expect(await readNightshiftAdmissionClosed(file)).toBe('no reason given')
+    writeFileSync(file, 'memory incident\nmore detail\n')
+    expect(await readNightshiftAdmissionClosed(file)).toBe('memory incident')
   })
 })

@@ -22,7 +22,7 @@ Every other instance:
 | Server generation id | 8–64 lowercase hex; new ones are 32 hex (16 random bytes) | same | `index.ts` `provisionManagedServerWithSession` |
 | Slice | `app.slice`; the exact control group is `/user.slice/user-<uid>.slice/user@<uid>.service/app.slice/<unit>` | same | `ownership.ts` `isOwnedTmuxServerControlGroup` |
 | Pane scope | `tmux-spawn-<uuid>.scope` under `app.slice` with an exact control-group match | same | `ownership.ts` `TMUX_SCOPE_RE`, `isOwnedPaneControlGroup` |
-| Pane memory guard | `~/.config/systemd/user/tmux-spawn-.scope.d/50-memory-guard.conf` (`MemoryHigh=6G`, `MemoryMax=8G`). Previously host-only, now installed by `scripts/install.sh` when absent. | same | host drop-in |
+| Pane memory guard | `~/.config/systemd/user/tmux-spawn-.scope.d/50-memory-guard.conf` (`MemoryMax=16G`, `MemorySwapMax=3G`, no `MemoryHigh`). Installed by `scripts/install.sh` when absent or a superseded shipped default. The focused pane gets `MemoryLow=2G` at runtime (`pane-memory.ts`); memory-pressure kills belong to systemd-oomd at `app.slice` (Nightshift). | same | host drop-in |
 | Daemon unit | `tether@default.service` (replaces `aico-owner.service` in Phase 5) | `tether@<i>.service` | n/a |
 
 The `systemd-run` flags are part of the containment model and must be kept: `--user --quiet --collect --slice=app.slice --service-type=exec --expand-environment=no -p ExitType=cgroup`, null stdin, and journal stdout/stderr (`ownership.ts` `durableTmuxServerArgs`).

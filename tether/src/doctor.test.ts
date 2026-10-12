@@ -44,7 +44,19 @@ describe('doctor checks', () => {
   })
 
   it('looks for the tmux-spawn memory guard', () => {
-    expect(checkMemoryGuard(['[Scope]\nMemoryHigh=6G\nMemoryMax=8G\n']).status).toBe('ok')
+    expect(checkMemoryGuard(['[Scope]\nMemoryMax=16G\nMemorySwapMax=3G\n'])).toMatchObject({
+      status: 'ok',
+      detail: 'tmux-spawn-.scope MemoryMax=16G MemorySwapMax=3G',
+    })
     expect(checkMemoryGuard([]).status).toBe('warn')
+    const throttled = checkMemoryGuard(['[Scope]\nMemoryHigh=6G\nMemoryMax=8G\n'])
+    expect(throttled.status).toBe('warn')
+    expect(throttled.detail).toContain('fixed MemoryHigh=6G')
+    expect(throttled.detail).toContain('no MemorySwapMax')
+    // A later drop-in that lifts MemoryHigh wins.
+    expect(
+      checkMemoryGuard(['MemoryHigh=6G\nMemoryMax=8G\n', 'MemoryHigh=infinity\nMemorySwapMax=3G\n'])
+        .status,
+    ).toBe('ok')
   })
 })

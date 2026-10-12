@@ -4,9 +4,13 @@
  * Admission is pressure-based by default: a launch is deferred only while
  * MemAvailable or memory PSI shows an unhealthy host. A numeric ceiling on
  * concurrently active agents exists solely as an opt-in emergency brake and is
- * disabled unless configured. Host observations are injected so the policy is
- * testable without Electron, systemd or /proc.
+ * disabled unless configured. Nightshift can also close admission host-wide
+ * (for a reboot or a memory incident) with a state file. Host observations are
+ * injected so the policy is testable without Electron, systemd or /proc.
  */
+
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 
 export interface AgentAdmissionLimits {
   /** Optional emergency ceiling on active agents; null disables the ceiling. */
@@ -197,6 +201,32 @@ export interface AgentAdmissionObservations {
   meminfo(): Promise<string>
   memoryPressure(): Promise<string>
   activeAgentScopes(): Promise<Set<string>>
+  /** Nightshift's reason when it has closed admission host-wide, else null. */
+  hostAdmissionClosed?(): Promise<string | null>
+}
+
+/** Nightshift's host-wide switch: while this file exists, new agent launches
+ * are deferred. Its first line, when present, is the reason. */
+export function nightshiftAdmissionClosedPath(env: NodeJS.ProcessEnv = process.env): string | null {
+  const runtime = env.XDG_RUNTIME_DIR
+  return runtime ? join(runtime, 'nightshift', 'admission-closed') : null
+}
+
+export async function readNightshiftAdmissionClosed(path: string | null): Promise<string | null> {
+  if (!path) return null
+  let text: string
+  try {
+    text = await readFile(path, 'utf8')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
+    throw error
+  }
+  const reason = text
+    .split('\n', 1)[0]
+    .replace(/[^\x20-\x7e]/g, '')
+    .trim()
+    .slice(0, 200)
+  return reason || 'no reason given'
 }
 
 export type AdmissionKind = 'launch' | 'recovery' | 'replacement'
@@ -319,6 +349,12 @@ export class AgentAdmission {
     let psi: MemoryPressure | null = null
     let failure: string | null = null
     try {
+      const closed = (await this.observations.hostAdmissionClosed?.()) ?? null
+      if (closed !== null) failure = `Nightshift has closed agent admission (${closed}).`
+    } catch {
+      failure = 'the Nightshift admission state could not be read.'
+    }
+    try {
       available = parseMemAvailable(await this.observations.meminfo())
       observation.memAvailableGiB = round(available / 1024 ** 3)
       psi = parseMemoryPressure(await this.observations.memoryPressure())
@@ -326,7 +362,7 @@ export class AgentAdmission {
       observation.psiFullAvg60 = psi.fullAvg60
       observation.psiFullAvg10 = psi.fullAvg10
     } catch (error) {
-      failure =
+      failure ??=
         error instanceof AgentAdmissionDenied
           ? error.reason
           : 'host memory observations could not be read.'

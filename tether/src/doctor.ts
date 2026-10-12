@@ -83,14 +83,29 @@ export function checkSocket(dir: PathMode, socket: PathMode, uid: number): Check
     : { name: 'socket', status: 'ok', detail: 'directory 0700, socket 0600' }
 }
 
+/** The pane drop-ins in name order (later files win, as in systemd): a
+ * MemoryMax backstop and a swap cap, and no fixed MemoryHigh throttle. */
 export function checkMemoryGuard(confs: string[]): Check {
-  const guarded = confs.some((text) => /^\s*MemoryMax=/m.test(text))
-  return guarded
-    ? { name: 'memory-guard', status: 'ok', detail: 'tmux-spawn-.scope MemoryMax drop-in present' }
-    : {
+  const settings = new Map<string, string>()
+  for (const text of confs) {
+    for (const match of text.matchAll(/^\s*(MemoryHigh|MemoryMax|MemorySwapMax)=(.*?)\s*$/gm))
+      settings.set(match[1], match[2])
+  }
+  const high = settings.get('MemoryHigh')
+  const problems: string[] = []
+  if (!settings.get('MemoryMax')) problems.push('no MemoryMax backstop')
+  if (!settings.get('MemorySwapMax')) problems.push('no MemorySwapMax')
+  if (high && high !== 'infinity') problems.push(`fixed MemoryHigh=${high} throttles agent panes`)
+  return problems.length
+    ? {
         name: 'memory-guard',
         status: 'warn',
-        detail: 'no tmux-spawn-.scope MemoryMax drop-in; run scripts/install.sh',
+        detail: `tmux-spawn-.scope drop-in: ${problems.join('; ')}; run scripts/install.sh`,
+      }
+    : {
+        name: 'memory-guard',
+        status: 'ok',
+        detail: `tmux-spawn-.scope MemoryMax=${settings.get('MemoryMax')} MemorySwapMax=${settings.get('MemorySwapMax')}`,
       }
 }
 
@@ -180,6 +195,7 @@ function readMemoryGuardConfs(): string[] {
   try {
     return readdirSync(dir)
       .filter((name) => name.endsWith('.conf'))
+      .sort()
       .map((name) => readFileSync(join(dir, name), 'utf8'))
   } catch {
     return []

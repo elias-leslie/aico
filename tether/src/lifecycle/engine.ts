@@ -33,7 +33,9 @@ import {
   type AdmissionTicket,
   AgentAdmission,
   AgentAdmissionDenied,
+  nightshiftAdmissionClosedPath,
   observeAgentScopes,
+  readNightshiftAdmissionClosed,
 } from './agent-admission'
 import {
   activateTmuxServer,
@@ -215,6 +217,7 @@ const agentAdmission = new AgentAdmission(
         ),
       })
     },
+    hostAdmissionClosed: () => readNightshiftAdmissionClosed(nightshiftAdmissionClosedPath()),
   },
   {
     // Numbers and identifiers only: never prompt, session or terminal content.

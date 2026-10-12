@@ -54,6 +54,7 @@ import {
 import { claimTmuxViewSize, type ResizeRefusal } from './lifecycle/interactive-tmux'
 import { isNeverAllocatedWidget } from './lifecycle/lifecycle-guard'
 import { sessionGeneration } from './lifecycle/owner-retirement'
+import { ForegroundPaneMemory, systemdPaneMemoryHost } from './lifecycle/pane-memory'
 import {
   type Bounds,
   createRootHandler,
@@ -88,6 +89,21 @@ const RUNNING_POLL_MS = 100
 const GENERATION_RE = /^[0-9a-f]{64}$/
 const UUID_RE = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/
 const ORIGINS: readonly SessionOrigin[] = ['aico', 'a-term', 'cli']
+
+let foregroundPaneMemory: ForegroundPaneMemory | null = null
+
+function foregroundMemory(): ForegroundPaneMemory {
+  if (!foregroundPaneMemory) {
+    const uid = process.getuid?.() ?? -1
+    foregroundPaneMemory = new ForegroundPaneMemory(
+      systemdPaneMemoryHost(
+        `/sys/fs/cgroup/user.slice/user-${uid}.slice/user@${uid}.service/app.slice`,
+        () => new Set(listWidgets().flatMap((row) => (row.scopeUnit ? [row.scopeUnit] : []))),
+      ),
+    )
+  }
+  return foregroundPaneMemory
+}
 
 export interface LifecycleApiContext {
   paths: TetherPaths
@@ -713,6 +729,8 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
         refusal = 'tmux_unavailable'
       }
       if (refusal === null) {
+        // Aico claims the size when a view gains focus: that pane is foreground.
+        void foregroundMemory().focus(getWidget(row.id)?.scopeUnit ?? null)
         events.publish('session.resized', { id: row.id, generation })
         sendJson(res, 200, { applied: true })
       } else {
