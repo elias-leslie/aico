@@ -41,15 +41,13 @@ describe('tray session catalog', () => {
       [],
     )
     const before = menus.at(-1) ?? []
-    expect(item(before, 'Open session').submenu).toEqual([
-      { label: 'No sessions to open', enabled: false },
-    ])
+    item(before, 'No sessions')
 
     ;(item(before, 'Refresh sessions').click as () => void)()
     expect(onRefreshSessions).toHaveBeenCalledOnce()
     const after = menus.at(-1) ?? []
-    const open = (item(after, 'Open session').submenu as Record<string, unknown>[])[0]
-    expect(open.label).toBe('A-Term session')
+    item(after, 'Idle')
+    const open = item(after, '○ A-Term session')
     ;(open.click as () => void)()
     expect(onSelect).toHaveBeenCalledWith('0a1b2c3d')
   })
@@ -62,9 +60,35 @@ describe('tray session catalog', () => {
   })
 })
 
+describe('tray attention groups', () => {
+  it('lists groups most-urgent first with state and age', () => {
+    menus.length = 0
+    refreshTray(
+      [
+        { id: 'a', label: 'aico', open: true, group: 'needs-you', detail: 'waiting 3m' },
+        { id: 'b', label: 'tether', open: false, group: 'finished', detail: 'done 1m' },
+        { id: 'c', label: 'neri', open: true, group: 'working', detail: 'working 9m' },
+      ],
+      [],
+      [],
+    )
+    const labels = (menus.at(-1) ?? []).map((entry) => entry.label)
+    expect(labels.slice(0, 6)).toEqual([
+      'Needs you',
+      '● aico — waiting 3m',
+      'Finished',
+      '○ tether — done 1m',
+      'Working',
+      '● neri — working 9m',
+    ])
+    expect(labels).not.toContain('Idle')
+  })
+})
+
 describe('tray icon', () => {
   it('shows needs-you over active over idle', async () => {
     const { setNeedsYou, setWidgetActivity, trayIcon } = await import('./tray')
+    refreshTray([], [], [])
     expect(trayIcon()).toBe('idle')
     setWidgetActivity(1, true)
     expect(trayIcon()).toBe('active')
@@ -74,5 +98,8 @@ describe('tray icon', () => {
     expect(trayIcon()).toBe('active')
     setWidgetActivity(1, false)
     expect(trayIcon()).toBe('idle')
+    // Tether's working state counts as active too.
+    refreshTray([{ id: 'a', label: 'a', open: true, group: 'working' }], [], [])
+    expect(trayIcon()).toBe('active')
   })
 })

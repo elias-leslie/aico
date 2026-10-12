@@ -4,6 +4,8 @@ import {
   Attention,
   agentName,
   DONE_FLASH_MS,
+  formatAge,
+  groupRows,
   PUSH_AFTER_MS,
   PUSH_COOLDOWN_MS,
   pushBody,
@@ -147,5 +149,44 @@ describe('Attention', () => {
     )
     expect(agentName('codex-rollout', 'Shell')).toBe('Codex')
     expect(agentName(undefined, 'Pi')).toBe('Pi')
+  })
+})
+
+describe('attention groups', () => {
+  it('groups most-urgent first, with ages, and re-sorts after focus', () => {
+    const h = harness()
+    const now = 10 * 60_000
+    h.attention.update('idle', 'idle', now - 3_600_000)
+    h.attention.update('work', 'working', now - 60_000)
+    h.attention.update('done', 'working', now - 600_000)
+    h.attention.update('done', 'idle', now - 60_000)
+    h.attention.update('wait-new', 'blocked', now - 60_000)
+    h.attention.update('wait-old', 'blocked', now - 180_000)
+    const ids = ['idle', 'work', 'done', 'wait-new', 'wait-old'].map((id) => ({ id }))
+    const rows = groupRows(ids, h.attention, now)
+    expect(rows.map((r) => [r.item.id, r.group, r.detail])).toEqual([
+      ['wait-old', 'needs-you', 'waiting 3m'],
+      ['wait-new', 'needs-you', 'waiting 1m'],
+      ['done', 'finished', 'done 1m'],
+      ['work', 'working', 'working 1m'],
+      ['idle', 'idle', 'idle 1h'],
+    ])
+    h.attention.focused('wait-old')
+    h.attention.focused('done')
+    const after = groupRows(ids, h.attention, now)
+    expect(after.map((r) => [r.item.id, r.group, r.detail])).toEqual([
+      ['wait-new', 'needs-you', 'waiting 1m'],
+      ['work', 'working', 'working 1m'],
+      ['done', 'idle', 'idle 1m'],
+      ['wait-old', 'idle', 'waiting 3m'],
+      ['idle', 'idle', 'idle 1h'],
+    ])
+  })
+
+  it('formats ages compactly', () => {
+    expect(formatAge(30_000)).toBe('<1m')
+    expect(formatAge(3 * 60_000)).toBe('3m')
+    expect(formatAge(2 * 3_600_000)).toBe('2h')
+    expect(formatAge(50 * 3_600_000)).toBe('2d')
   })
 })

@@ -10,11 +10,24 @@ const idleImage = nativeImage.createFromPath(join(iconsDir, 'idle.png'))
 const activeImage = nativeImage.createFromPath(join(iconsDir, 'active.png'))
 const needsYouImage = nativeImage.createFromPath(join(iconsDir, 'needs-you.png'))
 
+export type TrayGroup = 'needs-you' | 'finished' | 'working' | 'idle'
+
 export interface TrayWidget {
   id: string
   label: string
   open: boolean
+  /** Attention group (attention.ts); the menu lists groups most-urgent first. */
+  group?: TrayGroup
+  /** State and age, e.g. `waiting 3m`. */
+  detail?: string | null
 }
+
+const GROUP_TITLES: readonly [TrayGroup, string][] = [
+  ['needs-you', 'Needs you'],
+  ['finished', 'Finished'],
+  ['working', 'Working'],
+  ['idle', 'Idle'],
+]
 
 /** A launchable TUI as the tray sees it (slug + menu label), from the registry. */
 export interface NewWidgetTool {
@@ -47,22 +60,32 @@ let projects: NewWidgetProject[] = []
 let unavailable: string | null = null
 const thinking = new Set<number>()
 let needsYou = false
+/** Some session's agent is working (Tether's state). */
+let agentsWorking = false
 
 function buildMenu(widgets: TrayWidget[]): Menu {
   const h = handlers
   if (!h) return Menu.buildFromTemplate([])
-  const open = widgets.filter((w) => w.open)
-  const closed = widgets.filter((w) => !w.open)
-
   const template: Electron.MenuItemConstructorOptions[] = [
     ...(unavailable
       ? [{ label: unavailable, enabled: false }, { type: 'separator' as const }]
       : []),
-    ...(open.length
-      ? open.map((w) => ({ label: `● ${w.label}`, click: () => h.onSelect(w.id) }))
-      : [{ label: 'No session windows open', enabled: false }]),
-    { type: 'separator' },
   ]
+  // Every session, grouped most-urgent first (widgets arrive sorted). A row
+  // opens or focuses its window; ● marks an open window, ○ a closed one.
+  for (const [group, title] of GROUP_TITLES) {
+    const rows = widgets.filter((w) => (w.group ?? 'idle') === group)
+    if (!rows.length) continue
+    template.push({ label: title, enabled: false })
+    for (const w of rows) {
+      template.push({
+        label: `${w.open ? '●' : '○'} ${w.label}${w.detail ? ` — ${w.detail}` : ''}`,
+        click: () => h.onSelect(w.id),
+      })
+    }
+  }
+  if (!widgets.length) template.push({ label: 'No sessions', enabled: false })
+  template.push({ type: 'separator' })
 
   template.push(
     // Two-level submenu: TUI (from the registry) ▸ workspace (Aico Personal
@@ -76,12 +99,6 @@ function buildMenu(widgets: TrayWidget[]): Menu {
           ? projects.map((p) => ({ label: p.name, click: () => h.onNewWidget(t.slug, p.id) }))
           : [{ label: 'No projects', enabled: false }],
       })),
-    },
-    {
-      label: 'Open session',
-      submenu: closed.length
-        ? closed.map((w) => ({ label: w.label, click: () => h.onSelect(w.id) }))
-        : [{ label: 'No sessions to open', enabled: false }],
     },
     {
       label: 'Refresh sessions',
@@ -138,7 +155,9 @@ export function refreshTray(
   tools = newWidgetTools
   projects = newWidgetProjects
   unavailable = notice
+  agentsWorking = widgets.some((w) => w.group === 'working')
   tray?.setContextMenu(buildMenu(widgets))
+  syncIcon()
 }
 
 /** Track per-window thinking state; the icon goes amber while any is active. */
@@ -158,7 +177,7 @@ export type TrayIcon = 'idle' | 'active' | 'needs-you'
 
 export function trayIcon(): TrayIcon {
   if (needsYou) return 'needs-you'
-  return thinking.size > 0 ? 'active' : 'idle'
+  return thinking.size > 0 || agentsWorking ? 'active' : 'idle'
 }
 
 function syncIcon(): void {

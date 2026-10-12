@@ -18,7 +18,7 @@ import {
 import { type IPty, spawn } from 'node-pty'
 import { parseTerminalFontSettings } from '../shared/font-settings'
 import { cursorNearTitlebar, nextArcade, parseArcadeKeys, pickArcade } from './arcade'
-import { Attention, agentName, pushBody } from './attention'
+import { Attention, agentName, groupRows, pushBody } from './attention'
 import { contentSecurityPolicy, voiceConnectSource } from './csp'
 import {
   arrange,
@@ -1002,7 +1002,10 @@ function createWidgetWindow(
   win.on('focus', () => {
     const widgetId = widgetOf.get(win.id)
     lastFocusedAico = widgetId ?? lastFocusedAico
-    if (widgetId) attention.focused(widgetId)
+    if (widgetId) {
+      attention.focused(widgetId)
+      syncTray()
+    }
     const pty = ptys.get(win.id)
     if (pty) void sizeClaims.get(pty)?.()
     win.webContents.send('win:focus', true)
@@ -1257,7 +1260,7 @@ const attention = new Attention({
 })
 
 function noteAgentState(descriptor: SessionDescriptor): void {
-  attention.update(descriptor.id, descriptor.state ?? 'unknown')
+  attention.update(descriptor.id, descriptor.state ?? 'unknown', descriptor.stateAt ?? null)
 }
 
 // ---------------------------------------------------------------------------
@@ -1278,16 +1281,23 @@ function trayTools(): { slug: string; label: string }[] {
 
 function syncTray(): void {
   if (quitting) return
-  const widgets: TrayWidget[] = catalog.list().map((descriptor) => ({
+  const rows = groupRows(catalog.list(), attention, Date.now())
+  const widgets: TrayWidget[] = rows.map(({ item: descriptor, group, detail }) => ({
     id: descriptor.id,
     label: traySessionLabel(
       sessionLabel(descriptor, getView(descriptor.id), projects),
       toolDisplayName(descriptor.tool, tools),
     ),
     open: windowForWidget(descriptor.id) !== undefined,
+    group,
+    detail,
   }))
   refreshTray(widgets, trayTools(), projects.list(), tetherNotice())
 }
+
+// Keep the tray's ages ("waiting 3m") current; the menu is otherwise rebuilt
+// only on events.
+setInterval(syncTray, 30_000).unref()
 
 // Push titlebar info to every open window: the session's name (else its
 // workspace, else Tether's label), plus its tool's mark and accent. Changes
