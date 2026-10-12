@@ -1,12 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  type Face,
-  fillFreedSpace,
-  layoutSnapshot,
-  neighbours,
-  pickScene,
-  placeNewWindow,
-} from './gaze'
+import { arrange, type Face, layoutSnapshot, neighbours, pickScene, tileSlots } from './gaze'
 
 // Three tiled windows in a column on the left, one big one to their right.
 const faces: Face[] = [
@@ -74,86 +67,62 @@ describe('layoutSnapshot', () => {
   })
 })
 
-describe('placeNewWindow', () => {
+describe('tileSlots', () => {
   const area = { x: 0, y: 0, width: 3277, height: 1344 }
-  const col = (id: string, x: number, y: number, width = 928, height = 448) => ({
-    id,
-    bounds: { x, y, width, height },
+  const side = Math.round(3277 * 0.2822265625)
+  const where = (n: number) =>
+    tileSlots(n, area).map((r) => `${r.x === 0 ? 'L' : r.x === side ? 'C' : 'R'}${r.height}`)
+
+  it('follows the owner layout for 1 to 7 windows', () => {
+    expect(where(1)).toEqual(['C1344'])
+    expect(where(2)).toEqual(['L1344', 'R1344'])
+    expect(where(3)).toEqual(['L1344', 'C1344', 'R1344'])
+    expect(where(4)).toEqual(['L672', 'L672', 'R672', 'R672'])
+    expect(where(5)).toEqual(['L672', 'L672', 'C1344', 'R672', 'R672'])
+    expect(where(6)).toEqual(['L448', 'L448', 'L448', 'R448', 'R448', 'R448'])
+    expect(where(7)).toEqual(['L448', 'L448', 'L448', 'C1344', 'R448', 'R448', 'R448'])
   })
 
-  it('fills the free gap when there is room', () => {
-    // Left column full; everything right of it free.
-    const p = placeNewWindow(area, [col('a', 0, 0), col('b', 0, 448), col('c', 0, 896)])
-    expect(p.resize).toBeUndefined()
-    expect(p.bounds).toEqual({ x: 928, y: 0, width: 3277 - 928, height: 1344 })
+  it('tiles the work area exactly, columns abutting', () => {
+    const slots = tileSlots(7, area)
+    const centre = slots[3]
+    expect(centre?.x).toBe(side)
+    expect((centre?.x ?? 0) + (centre?.width ?? 0)).toBe(3277 - side)
+    expect(slots.at(-1)?.y).toBe(896)
+    expect((slots[2]?.y ?? 0) + (slots[2]?.height ?? 0)).toBe(1344)
   })
 
-  it('splits the biggest window when the screen is full', () => {
-    // The owner's grid: three left, one big centre, three right.
-    const wins = [
-      col('l1', 0, 0),
-      col('l2', 0, 448),
-      col('l3', 0, 896),
-      col('mid', 924, 0, 1428, 1344),
-      col('r1', 2348, 0, 929),
-      col('r2', 2348, 448, 929),
-      col('r3', 2348, 896, 929),
-    ]
-    const p = placeNewWindow(area, wins)
-    expect(p.resize?.id).toBe('mid')
-    expect(p.resize?.bounds).toEqual({ x: 924, y: 0, width: 1428, height: 672 })
-    expect(p.bounds).toEqual({ x: 924, y: 672, width: 1428, height: 672 })
-  })
-
-  it('splits a wide window side by side', () => {
-    const p = placeNewWindow(area, [col('only', 0, 0, 3277, 1344)])
-    expect(p.resize?.bounds.width).toBe(1638)
-    expect(p.bounds).toEqual({ x: 1638, y: 0, width: 1639, height: 1344 })
-  })
-
-  it('gives the first window the whole work area', () => {
-    const p = placeNewWindow(area, [])
-    expect(p.bounds).toEqual(area)
+  it('stacks extras in the centre past four per side', () => {
+    expect(where(10).filter((s) => s.startsWith('C'))).toHaveLength(2)
   })
 })
 
-describe('fillFreedSpace', () => {
-  const w = (id: string, x: number, y: number, width: number, height: number) => ({
-    id,
-    bounds: { x, y, width, height },
-  })
-
-  it('undoes a split: the other half takes the space back', () => {
-    const out = fillFreedSpace({ x: 924, y: 672, width: 1428, height: 672 }, [
-      w('top', 924, 0, 1428, 672),
-      w('left', 0, 0, 928, 1344),
-    ])
-    expect(out).toEqual([{ id: 'top', bounds: { x: 924, y: 0, width: 1428, height: 1344 } }])
-  })
-
-  it('a column grows to fill a closed column, even with hand-tiled overlaps', () => {
-    // Middle window closes; the right column (three stacked, 4px overlap)
-    // and the left column both border it; one side needs three, so does the
-    // other — either is fine, but every window on that side grows together.
-    const out = fillFreedSpace({ x: 924, y: 0, width: 1428, height: 1344 }, [
-      w('l1', 0, 0, 928, 448),
-      w('l2', 0, 448, 928, 448),
-      w('l3', 0, 896, 928, 448),
-      w('r1', 2348, 0, 929, 448),
-      w('r2', 2348, 448, 929, 448),
-      w('r3', 2348, 896, 929, 448),
-    ])
-    expect(out).toHaveLength(3)
-    const ids = out.map((o) => o.id)
-    expect(ids.every((id) => id.startsWith('l')) || ids.every((id) => id.startsWith('r'))).toBe(
-      true,
+describe('arrange', () => {
+  const area = { x: 0, y: 0, width: 3277, height: 1344 }
+  it('keeps windows on their side and gives the new one the free slot', () => {
+    // Left and right windows; a third opens: it takes the centre.
+    const out = arrange(
+      area,
+      [
+        { id: 'r', bounds: { x: 2352, y: 0, width: 925, height: 1344 } },
+        { id: 'l', bounds: { x: 0, y: 0, width: 925, height: 1344 } },
+      ],
+      'new',
     )
+    const byId = Object.fromEntries(out.map((m) => [m.id, m.bounds.x]))
+    expect(byId.l).toBe(0)
+    expect(byId.new).toBe(925)
+    expect(byId.r).toBe(3277 - 925)
   })
 
-  it('leaves things alone when no side is fully covered', () => {
-    const out = fillFreedSpace({ x: 0, y: 0, width: 500, height: 500 }, [
-      w('half', 500, 0, 500, 250),
+  it('closing the centre of three leaves left and right', () => {
+    const out = arrange(area, [
+      { id: 'l', bounds: { x: 0, y: 0, width: 925, height: 1344 } },
+      { id: 'r', bounds: { x: 2352, y: 0, width: 925, height: 1344 } },
     ])
-    expect(out).toEqual([])
+    expect(out.map((m) => [m.id, m.bounds.x])).toEqual([
+      ['l', 0],
+      ['r', 2352],
+    ])
   })
 })

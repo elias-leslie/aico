@@ -134,185 +134,85 @@ export function layoutSnapshot(
 }
 
 // ---------------------------------------------------------------------------
-// Tiling a new window into the existing arrangement instead of dropping it in
-// the middle of the screen: take the biggest free gap if one is roomy enough;
-// otherwise split the biggest window in half along its long side and take one
-// half. Every other window stays exactly where the owner put it.
+// Tiling: a fixed arrangement per window count, on the owner's ultrawide.
+// Columns match their Tiling Shell layout (28.2% | 43.6% | 28.2%). The centre
+// stays open for browsing whenever the count is even; an odd count puts one
+// window there. Side columns stack up to SIDE_MAX windows each; beyond that
+// the extras stack in the centre.
+//   1: centre   2: left, right   3: left, centre, right   4: four corners
+//   5: corners + centre   6: three per side   7: three per side + centre
 
-/** A gap smaller than this is not worth opening a window into. */
-export const ROOMY: { width: number; height: number } = { width: 640, height: 400 }
-/** Aico's minimum window size. */
-export const MIN_SIZE: { width: number; height: number } = { width: 360, height: 240 }
+export const SIDE_FRACTION = 0.2822265625
+export const SIDE_MAX = 4
 
-export interface Placement {
-  bounds: Rect
-  /** A window to shrink so the new one fits beside it. */
-  resize?: { id: string; bounds: Rect }
-}
-
-function overlaps(a: Rect, b: Rect): boolean {
-  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
-}
-
-function clip(r: Rect, area: Rect): Rect | null {
-  const x = Math.max(r.x, area.x)
-  const y = Math.max(r.y, area.y)
-  const right = Math.min(r.x + r.width, area.x + area.width)
-  const bottom = Math.min(r.y + r.height, area.y + area.height)
-  return right > x && bottom > y ? { x, y, width: right - x, height: bottom - y } : null
-}
-
-/** The largest empty rectangle in `area` whose edges line up with window and
- * work-area edges. Small inputs (a handful of windows), so brute force. */
-export function largestGap(area: Rect, taken: Rect[]): Rect | null {
-  const inside = taken.map((r) => clip(r, area)).filter((r): r is Rect => r !== null)
-  const xs = [
-    ...new Set([area.x, area.x + area.width, ...inside.flatMap((r) => [r.x, r.x + r.width])]),
-  ].sort((a, b) => a - b)
-  const ys = [
-    ...new Set([area.y, area.y + area.height, ...inside.flatMap((r) => [r.y, r.y + r.height])]),
-  ].sort((a, b) => a - b)
-  let best: Rect | null = null
-  for (let i = 0; i < xs.length; i++)
-    for (let j = i + 1; j < xs.length; j++)
-      for (let k = 0; k < ys.length; k++)
-        for (let l = k + 1; l < ys.length; l++) {
-          const r = {
-            x: xs[i] as number,
-            y: ys[k] as number,
-            width: (xs[j] as number) - (xs[i] as number),
-            height: (ys[l] as number) - (ys[k] as number),
-          }
-          if (best && r.width * r.height <= best.width * best.height) continue
-          if (inside.some((t) => overlaps(r, t))) continue
-          best = r
-        }
-  return best
-}
-
-export function placeNewWindow(
-  area: Rect,
-  windows: { id: string; bounds: Rect }[],
-  roomy = ROOMY,
-): Placement {
-  const gap = largestGap(
-    area,
-    windows.map((w) => w.bounds),
-  )
-  if (gap && gap.width >= roomy.width && gap.height >= roomy.height) return { bounds: gap }
-  const onArea = windows
-    .map((w) => ({ id: w.id, bounds: clip(w.bounds, area) }))
-    .filter((w): w is { id: string; bounds: Rect } => w.bounds !== null)
-    .sort((a, b) => b.bounds.width * b.bounds.height - a.bounds.width * a.bounds.height)
-  const biggest = onArea[0]
-  if (biggest) {
-    const b = biggest.bounds
-    // Terminals want width: only a clearly wide window splits left/right;
-    // anything squarer splits top/bottom.
-    if (b.width >= b.height * 1.5 && b.width >= MIN_SIZE.width * 2) {
-      const left = Math.floor(b.width / 2)
-      return {
-        resize: { id: biggest.id, bounds: { ...b, width: left } },
-        bounds: { ...b, x: b.x + left, width: b.width - left },
-      }
-    }
-    if (b.height >= MIN_SIZE.height * 2) {
-      const top = Math.floor(b.height / 2)
-      return {
-        resize: { id: biggest.id, bounds: { ...b, height: top } },
-        bounds: { ...b, y: b.y + top, height: b.height - top },
-      }
-    }
+function stack(x: number, width: number, area: Rect, count: number): Rect[] {
+  const out: Rect[] = []
+  for (let i = 0; i < count; i++) {
+    const top = area.y + Math.round((area.height * i) / count)
+    const bottom = area.y + Math.round((area.height * (i + 1)) / count)
+    out.push({ x, y: top, width, height: bottom - top })
   }
-  // Nothing sensible to split (or no windows yet): a comfortable centred size.
-  const width = Math.min(area.width, 900)
-  const height = Math.min(area.height, 560)
-  if (gap && gap.width >= MIN_SIZE.width && gap.height >= MIN_SIZE.height) return { bounds: gap }
-  return {
-    bounds: {
-      x: area.x + Math.floor((area.width - width) / 2),
-      y: area.y + Math.floor((area.height - height) / 2),
-      width,
-      height,
-    },
-  }
+  return out
 }
 
-// ---------------------------------------------------------------------------
-// When a window closes, its neighbours grow into the space it leaves, the
-// reverse of a split. A side qualifies when the windows touching it sit wholly
-// within that edge and together cover it; the side needing the fewest windows
-// wins (one neighbour taking back its other half is the usual case).
-
-/** Edges this close count as touching; hand-tiled windows overlap a few px. */
-export const EDGE_SLOP = 12
-
-type Side = 'left' | 'right' | 'top' | 'bottom'
-
-function grow(r: Rect, side: Side, freed: Rect): Rect {
-  switch (side) {
-    case 'left': // neighbour on the freed rect's left grows right
-      return { ...r, width: freed.x + freed.width - r.x }
-    case 'right':
-      return { ...r, x: freed.x, width: r.x + r.width - freed.x }
-    case 'top':
-      return { ...r, height: freed.y + freed.height - r.y }
-    case 'bottom':
-      return { ...r, y: freed.y, height: r.y + r.height - freed.y }
+/** Slots for `n` windows, left column top to bottom, then centre, then right. */
+export function tileSlots(n: number, area: Rect): Rect[] {
+  if (n <= 0) return []
+  let perSide = Math.min(SIDE_MAX, Math.floor(n / 2))
+  let centre = n - perSide * 2
+  if (n === 1) {
+    perSide = 0
+    centre = 1
   }
-}
-
-export function fillFreedSpace(
-  freed: Rect,
-  windows: { id: string; bounds: Rect }[],
-  slop = EDGE_SLOP,
-): { id: string; bounds: Rect }[] {
-  const near = (a: number, b: number) => Math.abs(a - b) <= slop
-  const fRight = freed.x + freed.width
-  const fBottom = freed.y + freed.height
-  const sides: {
-    side: Side
-    touching: (r: Rect) => boolean
-    span: (r: Rect) => [number, number]
-  }[] = [
-    {
-      side: 'left',
-      touching: (r) => near(r.x + r.width, freed.x),
-      span: (r) => [r.y, r.y + r.height],
-    },
-    { side: 'right', touching: (r) => near(r.x, fRight), span: (r) => [r.y, r.y + r.height] },
-    {
-      side: 'top',
-      touching: (r) => near(r.y + r.height, freed.y),
-      span: (r) => [r.x, r.x + r.width],
-    },
-    { side: 'bottom', touching: (r) => near(r.y, fBottom), span: (r) => [r.x, r.x + r.width] },
+  const side = Math.round(area.width * SIDE_FRACTION)
+  const rightX = area.x + area.width - side
+  const centreX = area.x + side
+  return [
+    ...stack(area.x, side, area, perSide),
+    ...stack(centreX, rightX - centreX, area, centre),
+    ...stack(rightX, side, area, perSide),
   ]
-  let best: { id: string; bounds: Rect }[] | null = null
-  for (const { side, touching, span } of sides) {
-    const [lo, hi] = side === 'left' || side === 'right' ? [freed.y, fBottom] : [freed.x, fRight]
-    const group = windows
-      .filter((w) => touching(w.bounds))
-      .filter((w) => {
-        const [a, b] = span(w.bounds)
-        return a >= lo - slop && b <= hi + slop
-      })
-      .sort((p, q) => span(p.bounds)[0] - span(q.bounds)[0])
-    if (!group.length) continue
-    // The group must cover the whole edge with no gaps.
-    let reach = lo
-    let covered = true
-    for (const w of group) {
-      const [a, b] = span(w.bounds)
-      if (a > reach + slop) {
-        covered = false
-        break
-      }
-      reach = Math.max(reach, b)
-    }
-    if (!covered || reach < hi - slop) continue
-    if (!best || group.length < best.length)
-      best = group.map((w) => ({ id: w.id, bounds: grow(w.bounds, side, freed) }))
+}
+
+export interface Move {
+  id: string
+  bounds: Rect
+}
+
+function centreOf(r: Rect): Point {
+  return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
+}
+
+/**
+ * Lay out `windows` plus, optionally, one new window (id `newId`) in the slots
+ * for their count. Each existing window takes the free slot nearest to where
+ * it is now, so a column keeps its windows; the new window gets what is left.
+ */
+export function arrange(area: Rect, windows: Move[], newId?: string): Move[] {
+  const slots = tileSlots(windows.length + (newId ? 1 : 0), area)
+  const pairs: { w: number; s: number; d: number }[] = []
+  windows.forEach((win, w) => {
+    const c = centreOf(win.bounds)
+    slots.forEach((slot, s) => {
+      const t = centreOf(slot)
+      pairs.push({ w, s, d: Math.hypot(c.x - t.x, c.y - t.y) })
+    })
+  })
+  pairs.sort((a, b) => a.d - b.d)
+  const slotTaken = new Set<number>()
+  const placed = new Map<number, number>()
+  for (const { w, s } of pairs) {
+    if (placed.has(w) || slotTaken.has(s)) continue
+    placed.set(w, s)
+    slotTaken.add(s)
   }
-  return best ?? []
+  const out: Move[] = windows.map((win, w) => ({
+    id: win.id,
+    bounds: slots[placed.get(w) ?? 0] as Rect,
+  }))
+  if (newId) {
+    const free = slots.findIndex((_, s) => !slotTaken.has(s))
+    if (free >= 0) out.push({ id: newId, bounds: slots[free] as Rect })
+  }
+  return out
 }

@@ -20,14 +20,13 @@ import { parseTerminalFontSettings } from '../shared/font-settings'
 import { cursorNearTitlebar, nextArcade, parseArcadeKeys, pickArcade } from './arcade'
 import { contentSecurityPolicy, voiceConnectSource } from './csp'
 import {
+  arrange,
   DEFAULT_EYE_ANCHOR,
   type Face,
-  fillFreedSpace,
   type LayoutWindow,
   layoutSnapshot,
   type Point,
   pickScene,
-  placeNewWindow,
   SCENE_EVERY_MS,
 } from './gaze'
 import { parseBoundsRequest, parsePins } from './ipc-validation'
@@ -346,30 +345,48 @@ function writeLayout(): void {
   }
 }
 
-function tileNewWindow(): ReturnType<typeof placeNewWindow> {
-  const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
-  const area = display.workArea
-  const windows = aicoWindows()
-    .filter((w) => w.isVisible() && !w.isMinimized())
-    .filter((w) => screen.getDisplayMatching(w.getBounds()).id === display.id)
+// Windows opened or closed after startup re-tile their screen to the layout
+// for the new count (see gaze.ts tileSlots). Restoring at launch keeps each
+// window's remembered place.
+let tilingLive = false
+const NEW_WINDOW = '(new)'
+
+function tileable(displayId: number): { id: string; bounds: Bounds }[] {
+  return aicoWindows()
+    .filter((w) => w.isVisible() && !w.isMinimized() && !w.isMaximized())
+    .filter((w) => screen.getDisplayMatching(w.getBounds()).id === displayId)
     .map((w) => ({ id: widgetOf.get(w.id) ?? '', bounds: w.getBounds() }))
     .filter((w) => w.id)
-  return placeNewWindow(area, windows)
 }
 
-function fillAfterClose(freed: Bounds): void {
-  const display = screen.getDisplayMatching(freed)
-  const windows = aicoWindows()
-    .filter((w) => w.isVisible() && !w.isMinimized() && !w.isMaximized())
-    .filter((w) => screen.getDisplayMatching(w.getBounds()).id === display.id)
-    .map((w) => ({ id: widgetOf.get(w.id) ?? '', bounds: w.getBounds() }))
-    .filter((w) => w.id)
-  for (const grown of fillFreedSpace(freed, windows)) {
-    const win = windowForWidget(grown.id)
+function applyMoves(moves: { id: string; bounds: Bounds }[]): void {
+  for (const move of moves) {
+    const win = windowForWidget(move.id)
     if (!win) continue
-    setArrangedBounds(win, grown.bounds)
+    const b = win.getBounds()
+    if (
+      b.x === move.bounds.x &&
+      b.y === move.bounds.y &&
+      b.width === move.bounds.width &&
+      b.height === move.bounds.height
+    )
+      continue
+    setArrangedBounds(win, move.bounds)
     persistBounds(win)
   }
+}
+
+/** Where a window opening now goes; moves the others to make room. */
+function tileNewWindow(): Bounds {
+  const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
+  const moves = arrange(display.workArea, tileable(display.id), NEW_WINDOW)
+  applyMoves(moves.filter((m) => m.id !== NEW_WINDOW))
+  return moves.find((m) => m.id === NEW_WINDOW)?.bounds ?? display.workArea
+}
+
+function retileDisplay(displayId: number): void {
+  const display = screen.getAllDisplays().find((d) => d.id === displayId)
+  if (display) applyMoves(arrange(display.workArea, tileable(display.id)))
 }
 
 function scheduleLayout(): void {
@@ -461,7 +478,10 @@ function sessionEnded(id: string, reason: string): void {
   const win = windowForWidget(id)
   const freed = win?.isVisible() && !win.isMinimized() ? win.getBounds() : null
   win?.destroy()
-  if (freed && !quitting) setImmediate(() => fillAfterClose(freed))
+  if (freed && !quitting) {
+    const displayId = screen.getDisplayMatching(freed).id
+    setImmediate(() => retileDisplay(displayId))
+  }
   removeView(id)
   if (known) logWidgetEvent(id, 'lifecycle_retired', { session_id: known.ownershipId, reason })
   syncTray()
@@ -884,11 +904,10 @@ function createWidgetWindow(
   pending: { tool: string; projectId: string } | null,
 ): BrowserWindow {
   const row = { id: view?.id ?? 'new' }
-  // A window with no remembered place tiles into the current arrangement on
-  // the screen under the pointer, rather than landing in the middle of it.
-  const tiled = view?.bounds ? null : tileNewWindow()
+  // Opened after startup: tile in on the screen under the pointer.
+  const tiled = tilingLive ? tileNewWindow() : null
   const win = new BrowserWindow({
-    ...(tiled ? tiled.bounds : placement(view?.bounds ?? null)),
+    ...(tiled ?? placement(view?.bounds ?? null)),
     minWidth: 360,
     minHeight: 240,
     // Keep the frameless Lantern chrome, but make the native surface opaque.
@@ -955,15 +974,6 @@ function createWidgetWindow(
         `exit_code=${details.exitCode}`,
     )
   })
-
-  if (tiled?.resize) {
-    const neighbour = windowForWidget(tiled.resize.id)
-    if (neighbour) {
-      if (neighbour.isMaximized()) neighbour.unmaximize()
-      setArrangedBounds(neighbour, tiled.resize.bounds)
-      persistBounds(neighbour)
-    }
-  }
 
   const winId = win.id
   if (view) {
@@ -1047,7 +1057,7 @@ function createWidgetWindow(
     syncCursorPump()
     // Neighbours grow into the space this window leaves (not on quit: the
     // whole arrangement is coming back next launch).
-    if (!quitting && closingBounds) fillAfterClose(closingBounds)
+    if (!quitting && closingBounds) retileDisplay(screen.getDisplayMatching(closingBounds).id)
     scheduleLayout()
     // On quit, leave `open` as-is so live views restore next launch; on an
     // explicit close, mark it closed (it moves to the tray's reopen list).
@@ -2064,6 +2074,7 @@ const startup = app.whenReady().then(async () => {
   )
   scheduleGaze()
   scheduleLayout()
+  tilingLive = true
   // Returning to any Aico window refreshes the native tray catalog as well.
   // Linux does not provide a reliable async hook before its cached tray menu opens.
   app.on('browser-window-focus', syncTray)
