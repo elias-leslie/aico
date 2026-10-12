@@ -110,7 +110,19 @@ export function useMarkActiveSeen(activeSessionId: string | null): void {
 /** Prefix the tab/app title with the needs-you count: `(2) A-Term`. */
 export function useAttentionTitle(count: number): void {
   useEffect(() => {
-    const base = document.title.replace(/^\(\d+\) /, '')
-    document.title = count > 0 ? `(${count}) ${base}` : base
+    const apply = () => {
+      const base = document.title.replace(/^\(\d+\) /, '')
+      const title = count > 0 ? `(${count}) ${base}` : base
+      if (document.title !== title) document.title = title
+    }
+    apply()
+    // Next re-renders its metadata <title> and drops the prefix: re-apply it.
+    const observer = new MutationObserver(apply)
+    observer.observe(document.head, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+    })
+    return () => observer.disconnect()
   }, [count])
 }
