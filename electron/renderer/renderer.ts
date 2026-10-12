@@ -20,6 +20,7 @@ import { wireDraftInput } from './draft-input'
 import { Eyes } from './eyes'
 import { mouseReportingActive, setupMouseShim } from './mouse-shim'
 import { pointToCell, sgrWheelSequence, wheelMouseTicks } from './mouse-wheel'
+import { osc52Text } from './osc52'
 import { ScrollRail } from './scroll-rail'
 import { ScrollbackOverlay } from './scrollback-overlay'
 import {
@@ -414,6 +415,12 @@ try {
 }
 fit.fit()
 wireDraftInput(term, () => tuiSlug, scheduleTerminalLayoutFit)
+// Copies made inside the pane (Claude Code's own selection) arrive as OSC 52.
+term.parser.registerOscHandler(52, (data) => {
+  const text = osc52Text(data)
+  if (text) window.aico.clipboard.write(text)
+  return true
+})
 
 // Scroll-back overlay: wheel-up on the live terminal opens a read-only xterm
 // view of tmux history. It stays on the same xterm/WebGL renderer path as the
