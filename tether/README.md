@@ -12,7 +12,9 @@ Either app works alone against Tether, and both can share one instance.
 
 Tether serves a versioned HTTP API on a private Unix socket (`$XDG_RUNTIME_DIR/tether/<instance>/control.sock`, mode 0600). It is never exposed on the network. Apps keep their own terminal byte path (`tmux attach`) and their own view state.
 
-**Status: v0.1.0, API v1, live.** Since the 2026-10-11 cutover `tether@default` owns every session for Aico and A-Term ([cutover log](docs/cutover-log-2026-10-11.md)). Both apps are clients: they keep only their views (Aico windows; A-Term panes, layout and project display settings) and require API v1 or later. A-Term has no Postgres, notes or recordings any more. Projects come from SummitFlow when it is installed, otherwise from Tether's local list `~/.config/tether/projects.json`. Federation removal in consumers and decommissioning (Phases 5 and 6) are tracked in [docs/migration-plan.md](docs/migration-plan.md).
+**Status:** early release (v0.1.0, API v1). In daily use on the author's workstation since October 2026, where `tether@default` owns every Aico and A-Term session ([cutover retrospective](docs/cutover-log-2026-10-11.md)). Both apps are clients: they keep only their views (Aico windows; A-Term panes, layout and project display settings) and require API v1 or later.
+
+Tether's project list comes from SummitFlow, the author's workspace tool, when it answers on `http://127.0.0.1:8001/api/projects` (override with `TETHER_SUMMITFLOW_URL`, or set it to `off`). Otherwise Tether reads a local list at `~/.config/tether/projects.json`, so it works without SummitFlow. Remaining cleanup work in the two apps is tracked in [docs/migration-plan.md](docs/migration-plan.md).
 
 ## Requirements
 
@@ -57,19 +59,25 @@ tether [--instance NAME] [--json] <command>
 - [ADR 0001: Tether owns sessions; apps own views](docs/adr/0001-tether-owns-sessions.md)
 - [ADR 0002: Runtime and packaging](docs/adr/0002-runtime-and-packaging.md)
 - [Lifecycle harness](docs/LIFECYCLE_HARNESS.md): host integration tests against a running instance
-- [Aico inventory for Phase 3](docs/inventory-aico.md)
-- [Migration plan](docs/migration-plan.md) and [cutover log](docs/cutover-log-2026-10-11.md)
+- [Aico inventory](docs/inventory-aico.md): what moved from Aico into Tether
+- [Migration plan](docs/migration-plan.md) and [cutover retrospective](docs/cutover-log-2026-10-11.md)
 
 ## Development
 
 ```sh
-st check --quick --changed-only     # biome, tsc, vitest, pytest, ruff, gitleaks
-scripts/tether-lifecycle-harness.sh dev
+npm ci
+npm run check                       # biome, tsc, vitest, esbuild bundle
+uv run pytest                       # operator script tests (scripts/tests)
+scripts/tether-lifecycle-harness.sh dev   # host integration tests against a running instance
 ```
 
-## Data and backups
+The author runs the same checks through his workspace tool (`st check`), which also runs ruff and gitleaks.
 
-Each instance keeps its state in `~/.local/state/tether/<instance>/tether.db` (SQLite in WAL mode). The `/home` subvolume, which includes `~/.local/state`, is covered by the host's native btrbk snapshots sent to `/mnt/summitflow-native`. The portable T7 and Google Drive backups are project-scoped. Their coverage of `~/.local/state/tether` has not been verified, so don't assume it.
+Each instance keeps its state in `~/.local/state/tether/<instance>/tether.db` (SQLite in WAL mode). Include `~/.local/state/tether` in your backups.
+
+### Context-hook checks
+
+Tether reports whether each agent TUI's optional context hook is installed. Those checks look for sibling checkouts under `$TETHER_PROJECTS_DIR` (default `~/projects`). Set `AGENT_HUB_REPO` or `CODEX_CONFIG_REPO` to point at a checkout directly. If none is present, the status reads `missing` and the agent still launches normally.
 
 ## License
 

@@ -85,10 +85,10 @@ describe('private root workload control', () => {
   const create = (requestId: string) => ({
     requestId,
     tool: 'codex',
-    projectId: 'neri',
+    projectId: 'sample-app',
     projectRoot: fixture,
     initialPrompt: 'Only this independent root.',
-    role: 'neri-target-root',
+    role: 'sample-app-target-root',
     leadRootReference: 'portfolio-center',
   })
   const call = (
@@ -139,7 +139,7 @@ describe('private root workload control', () => {
     expect(results[0].body).toMatchObject({
       owner: 'aico',
       tool: 'codex',
-      role: 'neri-target-root',
+      role: 'sample-app-target-root',
       leadRootReference: 'portfolio-center',
       status: 'running',
     })
@@ -924,7 +924,7 @@ describe('private root workload control', () => {
             'cli-recovery',
             prompt,
             '--project',
-            'neri',
+            'sample-app',
             '--project-root',
             fixture,
             '--resume-session',
@@ -961,7 +961,7 @@ describe('private root workload control', () => {
       reserveRootRequest(
         { ...root, requestId: 'rollback', widgetId: 'ffaabbcc' },
         'codex',
-        'neri',
+        'sample-app',
         fixture,
       ),
     ).toThrow()

@@ -46,7 +46,7 @@ function seedAico(path: string): void {
       project_id, project_root, tmux_server_id, tmux_allocation_state, tmux_session_id, pane_id,
       session_id, scope_unit, scope_invocation_id, launch_state, launch_nonce, lifecycle_version)
       VALUES ('05e96622', 3, 10, 20, 800, 600, '1', 1, 1000, 'claude-code', 'Main', 'aico',
-      '/srv/workspaces/projects/aico', '${SERVER}', 'bound', '$3', '%7', 'aico-widget-05e96622',
+      '/home/demo/projects/aico', '${SERVER}', 'bound', '$3', '%7', 'aico-widget-05e96622',
       'tmux-spawn-00000000-0000-4000-8000-000000000000.scope', '${'c'.repeat(32)}', 'dispatched',
       '${'d'.repeat(32)}', 1);
     INSERT INTO widgets (id, seq, created_at, tool, external_tmux_socket, external_tmux_session,

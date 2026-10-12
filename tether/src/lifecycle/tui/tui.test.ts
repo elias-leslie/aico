@@ -53,6 +53,9 @@ function mockPaneResolve(path: string | null): void {
 
 beforeEach(() => {
   mockPaneResolve(null)
+  vi.stubEnv('TETHER_PROJECTS_DIR', '/opt/projects')
+  vi.stubEnv('AGENT_HUB_REPO', '')
+  vi.stubEnv('CODEX_CONFIG_REPO', '')
 })
 
 function mockCodexHooks(
@@ -97,6 +100,7 @@ function mockCodexHooks(
 }
 
 afterEach(() => {
+  vi.unstubAllEnvs()
   bindToolSource(null)
   vi.clearAllMocks()
 })
@@ -280,7 +284,7 @@ describe('ensureContext', () => {
     vi.mocked(existsSync).mockReturnValue(true)
     mockPaneResolve('/home/demo/.claude/bin/claude')
     vi.mocked(realpathSync).mockReturnValue(
-      '/srv/workspaces/projects/agent-hub/integrations/context-delivery/claude/launcher',
+      '/opt/projects/agent-hub/integrations/context-delivery/claude/launcher',
     )
     vi.mocked(readFileSync).mockImplementation(((path: string) => {
       if (path.endsWith('settings.json')) {
@@ -345,7 +349,7 @@ describe('ensureContext', () => {
       { eventName: 'sessionStart' },
       { eventName: 'subagentStart' },
     ])
-    vi.mocked(realpathSync).mockReturnValue('/srv/workspaces/projects/codex-config/bin/codex')
+    vi.mocked(realpathSync).mockReturnValue('/opt/projects/codex-config/bin/codex')
     vi.mocked(readFileSync).mockReturnValue(
       'CODEX_REAL AGENT_HUB_CONTEXT_CLIENT developer_instructions=\n',
     )
@@ -360,7 +364,7 @@ describe('ensureContext', () => {
       { eventName: 'sessionStart' },
       { eventName: 'subagentStart', trusted: false },
     ])
-    vi.mocked(realpathSync).mockReturnValue('/srv/workspaces/projects/codex-config/bin/codex')
+    vi.mocked(realpathSync).mockReturnValue('/opt/projects/codex-config/bin/codex')
     vi.mocked(readFileSync).mockReturnValue(
       'CODEX_REAL AGENT_HUB_CONTEXT_CLIENT developer_instructions=\n',
     )
@@ -370,7 +374,7 @@ describe('ensureContext', () => {
   it('reports missing when the native Codex subagent hook is absent', async () => {
     vi.mocked(existsSync).mockReturnValue(true)
     mockCodexHooks('/home/demo/.local/bin/codex', [{ eventName: 'sessionStart' }])
-    vi.mocked(realpathSync).mockReturnValue('/srv/workspaces/projects/codex-config/bin/codex')
+    vi.mocked(realpathSync).mockReturnValue('/opt/projects/codex-config/bin/codex')
     vi.mocked(readFileSync).mockReturnValue(
       'CODEX_REAL AGENT_HUB_CONTEXT_CLIENT developer_instructions=\n',
     )
@@ -400,7 +404,7 @@ describe('ensureContext', () => {
   it('shows degraded status when the adapter is installed but live delivery fails', async () => {
     vi.mocked(existsSync).mockReturnValue(true)
     vi.mocked(realpathSync).mockReturnValue(
-      '/srv/workspaces/projects/agent-hub/integrations/context-delivery/pi/agent-hub.ts',
+      '/opt/projects/agent-hub/integrations/context-delivery/pi/agent-hub.ts',
     )
     vi.mocked(readFileSync).mockReturnValue(
       'pi.on("input", () => ({ action: "continue" })); pi.on("before_agent_start", () => event.systemPrompt + contract.rendered); "AH: DEGRADED"',
@@ -427,7 +431,7 @@ describe('ensureContext', () => {
   it('reports ok when Pi uses the source-linked additive Agent Hub extension', async () => {
     vi.mocked(existsSync).mockReturnValue(true)
     vi.mocked(realpathSync).mockReturnValue(
-      '/srv/workspaces/projects/agent-hub/integrations/context-delivery/pi/agent-hub.ts',
+      '/opt/projects/agent-hub/integrations/context-delivery/pi/agent-hub.ts',
     )
     vi.mocked(readFileSync).mockReturnValue(
       'pi.on("input", () => ({ action: "continue" })); pi.on("before_agent_start", () => event.systemPrompt + contract.rendered); "AH: DEGRADED"',

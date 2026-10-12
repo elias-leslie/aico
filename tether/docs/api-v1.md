@@ -41,7 +41,7 @@ Status: every route below is implemented (Phase 3a). Additions made for A-Term d
   "name": null,
   "label": "Session 3",
   "projectId": "aico",
-  "projectRoot": "/srv/workspaces/projects/aico",
+  "projectRoot": "/home/demo/projects/aico",
   "origin": "aico",
   "aTermSessionId": null,
   "rootRequestId": null,

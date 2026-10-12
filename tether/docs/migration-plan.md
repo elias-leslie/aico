@@ -2,8 +2,8 @@
 
 Tether is a standalone per-user session daemon. It owns tmux session lifecycle for Aico (desktop) and A-Term (web/mobile). Either app works alone against Tether; both can share one instance (`default`) or use separate instances.
 
-## Owner decisions (2026-10-10)
-- Name: **Tether**. Repo `/srv/workspaces/projects/tether`, unit `tether@<instance>.service`, CLI `tether`.
+## Decisions (2026-10-10)
+- Name: **Tether**. Repo `elias-leslie/tether`, unit `tether@<instance>.service`, CLI `tether`.
 - Live cutover: allowed once the lifecycle harness, smoke tests and a separate test instance all pass. Back up `aico.db` first. If anything fails, roll back to the old Aico and stop.
 - Postgres: after a verified `pg_dump`, drop `a_term_*` and `agent_tools` from the summitflow DB.
 - Publishing: push commits to the existing repos; create a **public** GitHub repo `elias-leslie/tether`. Make **no** tags or releases.
@@ -54,7 +54,7 @@ Tether is a standalone per-user session daemon. It owns tmux session lifecycle f
    - A-Term routes that reach Tether keep A-Term auth. Never gate them on loopback, because proxied traffic arrives from loopback.
    - `/api/internal/*` keeps its bearer token.
 9. Write an ADR plus `CONTEXT.md` (Tether owns Sessions; apps own Views; the cross-app Owner concept is dropped).
-10. Backups: `~/.local/state` is covered by btrbk. Record whether T7/Drive coverage includes it.
+10. Backups: confirm that the host's backups cover `~/.local/state`, where Tether keeps its database.
 
 ## Phase 1: A-Term cleanup (independent)
 - Remove notes/prompts in the backend, frontend and `packages/notes-ui`, including the SummitFlow notes proxy.

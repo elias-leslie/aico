@@ -10,6 +10,16 @@ import { join } from 'node:path'
 import { effectiveTuiPath } from './launch'
 import type { ContextStatus, TuiSpec } from './spec'
 
+/** Directory holding sibling checkouts (agent-hub, codex-config). Override with
+ * TETHER_PROJECTS_DIR, or point AGENT_HUB_REPO / CODEX_CONFIG_REPO at a checkout. */
+function projectsDir(): string {
+  return process.env.TETHER_PROJECTS_DIR || join(homedir(), 'projects')
+}
+
+function agentHubRepo(): string {
+  return process.env.AGENT_HUB_REPO || join(projectsDir(), 'agent-hub')
+}
+
 interface ContextProbe {
   cwd?: string
   session?: string
@@ -115,7 +125,7 @@ function verifyLiveDelivery(
 
 /** Reuse the canonical installer's registration/link checks for retrieval clients. */
 function canonicalRetrieval(surface: 'antigravity'): Promise<ContextStatus> {
-  const repo = process.env.AGENT_HUB_REPO || '/srv/workspaces/projects/agent-hub'
+  const repo = agentHubRepo()
   return new Promise((resolve) => {
     execFile(
       'python3',
@@ -174,7 +184,7 @@ function resolveLauncher(name: string, spec: TuiSpec): Promise<string | null> {
 async function claudeSessionStart(spec: TuiSpec): Promise<ContextStatus> {
   const settings = join(homedir(), '.claude', 'settings.json')
   const client = join(homedir(), '.local', 'bin', 'agent-hub-context-client')
-  const repo = process.env.AGENT_HUB_REPO || '/srv/workspaces/projects/agent-hub'
+  const repo = agentHubRepo()
   const expectedLauncher = join(repo, 'integrations', 'context-delivery', 'claude', 'launcher')
   if (!existsSync(settings) || !existsSync(client)) {
     return {
@@ -242,7 +252,7 @@ async function codexHooks(spec: TuiSpec): Promise<ContextStatus> {
     return { state: 'missing', detail: `${client} absent — canonical context cannot deliver` }
   }
 
-  const codexConfigRepo = process.env.CODEX_CONFIG_REPO || '/srv/workspaces/projects/codex-config'
+  const codexConfigRepo = process.env.CODEX_CONFIG_REPO || join(projectsDir(), 'codex-config')
   const expectedLauncher = join(codexConfigRepo, 'bin', 'codex')
   try {
     const body = readFileSync(launcher, 'utf8')
@@ -369,7 +379,7 @@ async function codexHooks(spec: TuiSpec): Promise<ContextStatus> {
  * delivered contract. */
 function piExtension(): ContextStatus {
   const extension = join(homedir(), '.pi', 'agent', 'extensions', 'agent-hub.ts')
-  const repo = process.env.AGENT_HUB_REPO || '/srv/workspaces/projects/agent-hub'
+  const repo = agentHubRepo()
   const expected = join(repo, 'integrations', 'context-delivery', 'pi', 'agent-hub.ts')
   if (!existsSync(extension)) {
     return { state: 'missing', detail: `${extension} absent — canonical context cannot deliver` }

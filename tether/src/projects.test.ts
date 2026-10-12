@@ -10,13 +10,13 @@ import {
 } from './projects'
 
 const rows = [
-  { id: 'aico', name: 'Aico', root_path: '/srv/workspaces/projects/aico', lifecycle: 'active' },
+  { id: 'aico', name: 'Aico', root_path: '/home/demo/projects/aico', lifecycle: 'active' },
   { id: 'old', name: 'Old', root_path: '/srv/old', lifecycle: 'archived' },
   { id: 'bad', name: 'Bad', root_path: 'relative' },
   {
     id: 'a-term',
     name: 'A-Term',
-    root_path: '/srv/workspaces/projects/a-term/',
+    root_path: '/home/demo/projects/a-term/',
     lifecycle: 'active',
   },
 ]
@@ -27,10 +27,10 @@ describe('parseSummitFlowProjects', () => {
       {
         id: 'a-term',
         name: 'A-Term',
-        root: '/srv/workspaces/projects/a-term/',
+        root: '/home/demo/projects/a-term/',
         lifecycle: 'active',
       },
-      { id: 'aico', name: 'Aico', root: '/srv/workspaces/projects/aico', lifecycle: 'active' },
+      { id: 'aico', name: 'Aico', root: '/home/demo/projects/aico', lifecycle: 'active' },
     ])
     expect(() => parseSummitFlowProjects({ items: [] })).toThrow()
   })

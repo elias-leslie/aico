@@ -183,7 +183,7 @@ def test_real_aico_idle_placeholder_and_footer_are_not_a_draft():
         "Worked for 1m 5s • 10:12 AM\n"
         "Done.\n\n"
         "› Ask Codex to do anything\n\n"
-        "Daybreak Blue xhigh · Context 94% left · /srv/workspaces/projects/neri"
+        "Daybreak Blue xhigh · Context 94% left · /home/demo/projects/sample-app"
     )
     assert state["terminal"] == "turn_finished"
     assert state["draft_present"] is False
@@ -194,7 +194,7 @@ def test_real_aico_low_context_footer_is_advisory():
     state = classify(
         "Worked for 1m 5s • 10:12 AM\n"
         "› Ask Codex to do anything\n"
-        "Daybreak Blue xhigh · Context 7% left · /srv/workspaces/projects/neri"
+        "Daybreak Blue xhigh · Context 7% left · /home/demo/projects/sample-app"
     )
     assert state["terminal"] == "turn_finished"
     assert state["draft_present"] is False

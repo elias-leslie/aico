@@ -373,7 +373,7 @@ describe('tmux server generation persistence', () => {
         launchGeneration,
         'codex',
         'aico',
-        '/srv/workspaces/projects/aico',
+        '/home/demo/projects/aico',
       ),
     ).toBe(true)
     expect(
@@ -388,7 +388,7 @@ describe('tmux server generation persistence', () => {
     expect(getWidget(row.id)).toMatchObject({
       tool: 'codex',
       projectId: 'aico',
-      projectRoot: '/srv/workspaces/projects/aico',
+      projectRoot: '/home/demo/projects/aico',
     })
 
     const beforeGate = ownership(row.id)

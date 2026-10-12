@@ -63,7 +63,7 @@ describe('root origin (v1 roots API)', () => {
   const create = (requestId: string, extra: Record<string, unknown> = {}) => ({
     requestId,
     tool: 'codex',
-    projectId: 'neri',
+    projectId: 'sample-app',
     projectRoot: fixture,
     initialPrompt: 'Only this root.',
     role: 'lead',

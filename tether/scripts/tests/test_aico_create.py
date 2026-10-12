@@ -12,7 +12,7 @@ from test_aico_admin import admin
 
 
 THREAD = "00000000-0000-4000-8000-000000000001"
-BASE = ["create", "recovery-1", "Reconcile after crash.", "--project", "neri",
+BASE = ["create", "recovery-1", "Reconcile after crash.", "--project", "sample-app",
         "--project-root", "/fixture/project", "--resume-session", THREAD]
 
 
