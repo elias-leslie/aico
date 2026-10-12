@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   ASLEEP_AFTER_MS,
   aimOffset,
+  exchangeScene,
   GAZE_MAX,
   nextReadingGaze,
   restingMood,
@@ -45,5 +46,19 @@ describe('nextReadingGaze', () => {
   it('sweeps back to the start of the next line at the edge, wrapping after three', () => {
     expect(nextReadingGaze({ x: GAZE_MAX - 0.5, line: 0 }, 1)).toEqual({ x: -GAZE_MAX, line: 1 })
     expect(nextReadingGaze({ x: GAZE_MAX, line: 2 }, 1)).toEqual({ x: -GAZE_MAX, line: 0 })
+  })
+})
+
+describe('exchangeScene', () => {
+  it('has the eyes look at each other, then back at you', () => {
+    for (const pick of [0, 0.5, 0.9]) {
+      const scene = exchangeScene(pick)
+      expect(scene.some((s) => (s.left?.x ?? 0) > 0)).toBe(true)
+      expect(scene.some((s) => (s.right?.x ?? 0) < 0)).toBe(true)
+      const last = scene.at(-1)
+      expect(last?.left).toEqual({ x: 0, y: 0 })
+      expect(last?.right).toEqual({ x: 0, y: 0 })
+      expect(scene.map((s) => s.at)).toEqual([...scene.map((s) => s.at)].sort((a, b) => a - b))
+    }
   })
 })

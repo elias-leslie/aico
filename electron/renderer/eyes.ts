@@ -47,6 +47,49 @@ export function nextReadingGaze(g: ReadingGaze, hop: number, max = GAZE_MAX): Re
 
 const READING_Y = [0.4, 1.1, 1.8]
 
+/** One eye's pupil offset, or null to leave that eye where it is. */
+export type Gaze = { x: number; y: number } | null
+export interface ExchangeStep {
+  at: number
+  left: Gaze
+  right: Gaze
+}
+
+/** Every so often, while at rest, the eyes look at each other — the Brady
+ * Bunch grid, two faces long. */
+export const EXCHANGE_EVERY_MS: [number, number] = [25_000, 55_000]
+
+/** A little scene of the two eyes noticing each other, then back to you.
+ * Pupils lean in toward the partner (left eye looks right, right eye left). */
+export function exchangeScene(pick: number): ExchangeStep[] {
+  const toRight = { x: GAZE_MAX, y: 0.3 }
+  const toLeft = { x: -GAZE_MAX, y: 0.3 }
+  const centre = { x: 0, y: 0 }
+  if (pick < 0.4) {
+    // Left glances over; a beat later the right turns to meet it; both back.
+    return [
+      { at: 0, left: toRight, right: null },
+      { at: 450, left: null, right: toLeft },
+      { at: 1500, left: centre, right: centre },
+    ]
+  }
+  if (pick < 0.7) {
+    // The mirror: right starts it, left answers.
+    return [
+      { at: 0, left: null, right: toLeft },
+      { at: 450, left: toRight, right: null },
+      { at: 1500, left: centre, right: centre },
+    ]
+  }
+  // Both at once, a look back and forth, then caught — straight back to you.
+  return [
+    { at: 0, left: toRight, right: toLeft },
+    { at: 700, left: centre, right: centre },
+    { at: 1050, left: toRight, right: toLeft },
+    { at: 1700, left: centre, right: centre },
+  ]
+}
+
 export class Eyes {
   private readonly eyes: HTMLElement[]
   private readonly calm = window.matchMedia('(prefers-reduced-motion: reduce)')
@@ -61,6 +104,7 @@ export class Eyes {
   private transientTimer: number | undefined
   private inputTimer: number | undefined
   private lookingDown = false
+  private exchanging = false
 
   constructor(
     private readonly root: HTMLElement,
@@ -72,6 +116,7 @@ export class Eyes {
     window.setTimeout(() => this.glance(), 2200)
     window.setInterval(() => this.settle(), 15_000)
     window.setTimeout(() => this.snore(), 4000)
+    this.scheduleExchange()
     this.settle()
   }
 
@@ -171,12 +216,59 @@ export class Eyes {
   }
 
   private look(x: number, y: number): void {
+    this.exchanging = false
     for (const eye of this.eyes) {
       eye.style.setProperty('--px', `${x.toFixed(1)}px`)
       eye.style.setProperty('--py', `${y.toFixed(1)}px`)
     }
     // The mark between the eyes turns its head a little with the gaze.
     this.icon?.style.setProperty('--tilt', `${(x * 4).toFixed(1)}deg`)
+  }
+
+  private lookEach(left: Gaze, right: Gaze): void {
+    const set = (eye: HTMLElement | undefined, g: Gaze): void => {
+      if (!eye || !g) return
+      eye.style.setProperty('--px', `${g.x.toFixed(1)}px`)
+      eye.style.setProperty('--py', `${g.y.toFixed(1)}px`)
+    }
+    set(this.eyes[0], left)
+    set(this.eyes[1], right)
+    this.icon?.style.setProperty('--tilt', '0deg')
+  }
+
+  private atRest(): boolean {
+    return (
+      !this.hovering &&
+      !this.reading &&
+      !this.lookingDown &&
+      !this.calm.matches &&
+      this.mood() === 'idle'
+    )
+  }
+
+  private scheduleExchange(): void {
+    const [lo, hi] = EXCHANGE_EVERY_MS
+    window.setTimeout(() => this.exchange(), lo + Math.random() * (hi - lo))
+  }
+
+  /** The eyes look at each other. Any other gaze (cursor, typing, reading)
+   * calls look(), which ends the scene where it stands. */
+  private exchange(): void {
+    this.scheduleExchange()
+    if (!this.focused || !this.atRest() || this.eyes.length < 2) return
+    this.exchanging = true
+    const scene = exchangeScene(Math.random())
+    for (const step of scene) {
+      window.setTimeout(() => {
+        if (this.exchanging && this.atRest()) this.lookEach(step.left, step.right)
+      }, step.at)
+    }
+    window.setTimeout(
+      () => {
+        this.exchanging = false
+      },
+      (scene.at(-1)?.at ?? 0) + 50,
+    )
   }
 
   private aimAt(screenX: number, screenY: number): void {
@@ -236,6 +328,7 @@ export class Eyes {
   private glance(): void {
     if (
       this.focused &&
+      !this.exchanging &&
       !this.hovering &&
       !this.reading &&
       !this.lookingDown &&
