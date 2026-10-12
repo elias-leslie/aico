@@ -1576,6 +1576,7 @@ const startup = app.whenReady().then(async () => {
   })
 
   ipcMain.handle('clipboard:read', () => clipboard.readText())
+  ipcMain.handle('clipboard:has-image', () => !clipboard.readImage().isEmpty())
   ipcMain.on('clipboard:write', (_event, text: unknown) => {
     if (typeof text === 'string') clipboard.writeText(text)
   })

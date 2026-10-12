@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('aico', {
   },
   clipboard: {
     read: (): Promise<string> => ipcRenderer.invoke('clipboard:read'),
+    hasImage: (): Promise<boolean> => ipcRenderer.invoke('clipboard:has-image'),
     write: (text: string) => ipcRenderer.send('clipboard:write', text),
   },
   scrollback: {

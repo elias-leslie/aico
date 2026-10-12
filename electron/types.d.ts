@@ -50,6 +50,8 @@ export interface AicoApi {
   }
   clipboard: {
     read(): Promise<string>
+    /** True when the clipboard holds an image (e.g. a screenshot). */
+    hasImage(): Promise<boolean>
     write(text: string): void
   }
   scrollback: {

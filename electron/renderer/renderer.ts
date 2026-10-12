@@ -549,9 +549,15 @@ host.addEventListener('mouseup', (e) => {
 })
 
 // One gesture, one paste: see paste-guard.ts for the duplicate sources.
+// An image-only clipboard (a screenshot) can't go through term.paste, so Aico
+// sends Ctrl+V instead: Claude Code and Codex read the image from the clipboard
+// themselves on that key.
+const IMAGE_PASTE = '\x16'
 const pasteFromClipboard = createPasteGuard(
-  () => window.aico.clipboard.read(),
-  (text) => term.paste(text),
+  async () =>
+    (await window.aico.clipboard.read()) ||
+    ((await window.aico.clipboard.hasImage()) ? IMAGE_PASTE : ''),
+  (text) => (text === IMAGE_PASTE ? window.aico.pty.input(IMAGE_PASTE) : term.paste(text)),
 )
 
 host.addEventListener('contextmenu', (event) => {
