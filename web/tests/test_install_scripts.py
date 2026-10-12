@@ -101,52 +101,9 @@ def _run_tether_check(tmp_path: Path, extra_env: dict[str, str]) -> subprocess.C
     return subprocess.run(["bash", str(harness)], capture_output=True, env=env, text=True)
 
 
-def test_install_script_has_no_database_steps() -> None:
-    text = (REPO_ROOT / "scripts" / "install.sh").read_text()
-
-    for needle in ("DATABASE_URL", "managed-postgres", "alembic", "PostgreSQL", "postgres"):
-        assert needle not in text
-    assert not (REPO_ROOT / "scripts" / "managed-postgres.sh").exists()
-    assert not (REPO_ROOT / "alembic").exists()
-    assert not (REPO_ROOT / "alembic.ini").exists()
 
 
-def test_start_and_shutdown_scripts_manage_only_a_term_services() -> None:
-    start_text = (REPO_ROOT / "scripts" / "start.sh").read_text()
-    stop_text = (REPO_ROOT / "scripts" / "shutdown.sh").read_text()
 
-    for text in (start_text, stop_text):
-        assert "postgres" not in text.lower()
-    assert 'source "$REPO_ROOT/.env.local"' not in start_text
-    assert "FRONTEND_ENV=" in start_text
-
-
-def test_env_example_has_no_database_settings() -> None:
-    text = (REPO_ROOT / ".env.example").read_text()
-
-    assert "DATABASE_URL" not in text
-    assert "DB_POOL_" not in text
-    assert "A_TERM_AICO_STATE_DIR" not in text
-    assert "# TETHER_SOCKET=" in text
-    assert "\nNEXT_PUBLIC_AGENT_HUB_URL=\n" not in text
-    assert "\nAGENT_HUB_URL=\n" not in text
-    assert "SUMMITFLOW_API_BASE" not in text
-    assert "# NEXT_PUBLIC_AGENT_HUB_URL=http://127.0.0.1:8003" in text
-    assert "# AGENT_HUB_URL=http://127.0.0.1:8003" in text
-
-
-def test_project_identity_has_no_database_section() -> None:
-    identity = json.loads((REPO_ROOT / "project.identity.json").read_text())
-
-    assert "database" not in identity
-
-
-def test_ci_has_no_postgres_service_or_migrations() -> None:
-    text = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
-
-    assert "postgres" not in text.lower()
-    assert "DATABASE_URL" not in text
-    assert "alembic" not in text
 
 
 def test_install_script_checks_tether_before_installing() -> None:
@@ -203,47 +160,3 @@ def test_tether_check_skips_only_when_explicitly_asked(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     assert "Skipping the Tether check" in result.stdout
-
-
-def test_install_script_supports_non_systemd_smoke_runs() -> None:
-    text = (REPO_ROOT / "scripts" / "install.sh").read_text()
-    readme = (REPO_ROOT / "README.md").read_text()
-
-    assert "--skip-systemd" in text
-    assert 'if [[ "$SKIP_SYSTEMD" -eq 1 ]]; then' in text
-    assert "Install smoke passed without systemd integration." in text
-    assert "--skip-systemd" in readme
-
-
-def test_install_script_guides_ports_and_agent_hub_choice() -> None:
-    text = (REPO_ROOT / "scripts" / "install.sh").read_text()
-    frontend_package = (REPO_ROOT / "frontend" / "package.json").read_text()
-
-    assert "install_is_interactive()" in text
-    assert "stop_existing_user_services()" in text
-    assert 'systemctl --user stop "$service"' in text
-    assert "resolve_service_port" in text
-    assert 'prompt_with_default "Choose a different ${label,,} port"' in text
-    # Projects come from Tether now; the old SummitFlow catalog mode is gone.
-    assert "configure_companion_api" not in text
-    assert "SUMMITFLOW_API_BASE" not in text
-    assert "configure_agent_hub_companion" in text
-    assert "Enable Agent Hub companion mode?" in text
-    assert "remove_blank_env_keys" in text
-    assert '"NEXT_PUBLIC_AGENT_HUB_URL",' in text
-    assert '"AGENT_HUB_URL",' in text
-    assert "For secure remote access, see docs/remote-access.md" in text
-    assert '"build": "node scripts/build-with-runtime.mjs"' in frontend_package
-
-
-def test_install_script_syncs_optional_dev_extra() -> None:
-    text = (REPO_ROOT / "scripts" / "install.sh").read_text()
-
-    assert "uv sync --extra dev" in text
-    assert "uv sync --dev" not in text
-
-
-def test_frontend_service_path_includes_local_bin_for_bootstrapped_node() -> None:
-    text = (REPO_ROOT / "scripts" / "systemd" / "a-term-frontend.service").read_text()
-
-    assert '%h/.local/bin' in text

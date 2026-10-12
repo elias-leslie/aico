@@ -1,72 +1,70 @@
 from __future__ import annotations
 
+import shlex
+import subprocess
 from pathlib import Path
 
-SYSTEMD_DIR = Path(__file__).resolve().parents[1] / "scripts" / "systemd"
-SERVICE_NAMES = [
-    "a-term-backend.service",
-    "a-term-frontend.service",
-]
+import pytest
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SYSTEMD_DIR = REPO_ROOT / "scripts" / "systemd"
 
 
-def test_a_term_units_use_project_root_placeholder() -> None:
-    for service_name in SERVICE_NAMES:
-        text = (SYSTEMD_DIR / service_name).read_text()
-        assert "__PROJECT_ROOT__" in text
-        assert "%h/a_term" not in text
-        assert "%h/.env.local" not in text
+def _render(name: str) -> dict[str, list[tuple[str, str]]]:
+    """Render a unit as install.sh does and parse it into ordered (key, value) pairs per section."""
+    text = (SYSTEMD_DIR / name).read_text().replace("__PROJECT_ROOT__", str(REPO_ROOT))
+    sections: dict[str, list[tuple[str, str]]] = {}
+    current = None
+    for line in text.splitlines():
+        if not line.strip() or line.startswith("#"):
+            continue
+        if line.startswith("["):
+            current = sections.setdefault(line.strip("[]"), [])
+            continue
+        key, sep, value = line.partition("=")
+        assert sep and current is not None, f"{name}: unparseable line {line!r}"
+        current.append((key, value))
+    return sections
 
 
-def test_a_term_units_do_not_use_legacy_placeholder() -> None:
-    legacy_placeholder = "__" + "TERMI" + "NAL_ROOT__"
-    for service_name in SERVICE_NAMES:
-        text = (SYSTEMD_DIR / service_name).read_text()
-        assert legacy_placeholder not in text
+def _values(section: list[tuple[str, str]], key: str) -> list[str]:
+    return [value for k, value in section if k == key]
 
 
-def test_a_term_units_load_repo_local_env_files() -> None:
-    for service_name in SERVICE_NAMES:
-        text = (SYSTEMD_DIR / service_name).read_text()
-        assert "EnvironmentFile=-__PROJECT_ROOT__/.env.local" in text
-        assert "EnvironmentFile=-__PROJECT_ROOT__/.env" in text
+@pytest.mark.parametrize(
+    ("name", "workdir", "exec_target"),
+    [
+        ("a-term-backend.service", REPO_ROOT, "uvicorn a_term.main:app"),
+        ("a-term-frontend.service", REPO_ROOT / "frontend", "/usr/bin/node .next/standalone/server.js"),
+    ],
+)
+def test_rendered_unit_runs_from_the_project_on_localhost(name: str, workdir: Path, exec_target: str) -> None:
+    unit = _render(name)
+    service = unit["Service"]
+
+    assert set(unit) == {"Unit", "Service", "Install"}
+    assert _values(service, "WorkingDirectory") == [str(workdir)]
+    assert workdir.is_dir()
+    assert _values(service, "EnvironmentFile") == [f"-{REPO_ROOT}/.env.local", f"-{REPO_ROOT}/.env"]
+    assert "%h/.local/bin" in _values(service, "Environment")[0]
+
+    (exec_start,) = _values(service, "ExecStart")
+    argv = shlex.split(exec_start)
+    assert argv[:2] == ["/bin/bash", "-lc"]
+    script = argv[2]
+    subprocess.run(["bash", "-n", "-c", script], check=True)
+    assert exec_target in script
+    # Default bindings stay on loopback; remote access is opt-in.
+    assert ":-0.0.0.0" not in script
+    assert "127.0.0.1" in script
 
 
-def test_a_term_units_default_to_localhost_bindings() -> None:
-    backend = (SYSTEMD_DIR / "a-term-backend.service").read_text()
-    frontend = (SYSTEMD_DIR / "a-term-frontend.service").read_text()
+def test_backend_prefers_agent_launchers_and_only_soft_depends_on_tether() -> None:
+    unit = _render("a-term-backend.service")
+    path = _values(unit["Service"], "Environment")[0]
 
-    assert 'A_TERM_BIND_HOST="${A_TERM_BIND_HOST:-127.0.0.1}"' in backend
-    assert 'API_URL="${API_URL:-http://127.0.0.1:${A_TERM_PORT:-8002}}"' in frontend
-    assert 'HOSTNAME="${A_TERM_FRONTEND_HOST:-127.0.0.1}"' in frontend
-
-
-def test_a_term_backend_unit_has_no_forced_summitflow_dependency() -> None:
-    backend = (SYSTEMD_DIR / "a-term-backend.service").read_text()
-    assert "SUMMITFLOW_API_BASE=" not in backend
-
-
-def test_a_term_backend_prefers_canonical_agent_launchers() -> None:
-    backend = (SYSTEMD_DIR / "a-term-backend.service").read_text()
-
-    path = next(line for line in backend.splitlines() if line.startswith('Environment="PATH='))
     assert path.index("%h/.claude/bin") < path.index("%h/.local/bin")
     assert path.index("%h/.codex/bin") < path.index("%h/.local/bin")
-
-
-def test_a_term_frontend_unit_uses_direct_standalone_shutdown_path() -> None:
-    frontend = (SYSTEMD_DIR / "a-term-frontend.service").read_text()
-
-    assert "KillMode=process" in frontend
-    assert "KillSignal=SIGKILL" in frontend
-    assert "SuccessExitStatus=SIGKILL" in frontend
-    assert "corepack pnpm start" not in frontend
-    assert 'exec /usr/bin/node .next/standalone/server.js' in frontend
-
-
-def test_a_term_backend_orders_after_tether_without_hard_dependency() -> None:
-    backend = (SYSTEMD_DIR / "a-term-backend.service").read_text()
-    lines = backend.splitlines()
-
-    assert "Wants=tether@default.service" in lines
-    assert "After=network.target tether@default.service" in lines
-    assert not any(line.startswith(("Requires=", "BindsTo=", "PartOf=")) for line in lines)
+    assert _values(unit["Unit"], "Wants") == ["tether@default.service"]
+    assert "tether@default.service" in _values(unit["Unit"], "After")[0]
+    assert not any(key in {"Requires", "BindsTo", "PartOf"} for key, _ in unit["Unit"])

@@ -1142,79 +1142,6 @@ describe('useATermTabsState', () => {
     expect(switchToSession).not.toHaveBeenCalled()
   })
 
-  it('creates and focuses a project pane when a project deep link is provided', async () => {
-    const switchToSession = vi.fn()
-    const createProjectPane = vi.fn().mockResolvedValue({
-      id: 'pane-project-a',
-      pane_type: 'project',
-      project_id: 'project-a',
-      pane_order: 0,
-      pane_name: 'Project A',
-      active_mode: 'shell',
-      created_at: '2026-03-06T00:00:00Z',
-      sessions: [
-        {
-          id: 'session-created-shell',
-          name: 'Project A Shell',
-          mode: 'shell',
-          session_number: 1,
-          is_alive: true,
-          working_dir: '/workspace/project-a',
-          claude_state: 'not_started',
-        },
-      ],
-      width_percent: 100,
-      height_percent: 100,
-      grid_row: 0,
-      grid_col: 0,
-    })
-
-    mockUseActiveSession.mockReturnValue(
-      buildActiveSessionState({
-        activeSessionId: null,
-        activeSession: null,
-        switchToSession,
-        projectATerms: [],
-        sessions: [],
-        adHocSessions: [],
-      }),
-    )
-    mockUseATermPanes.mockReturnValue({
-      panes: [],
-      detachedPanes: [],
-      atLimit: false,
-      isLoading: false,
-      detachedLoadedOnce: true,
-      hasLoadedOnce: true,
-      swapPanePositions: vi.fn(),
-      removePane: vi.fn(),
-      detachPane: vi.fn(),
-      attachPane: vi.fn(),
-      setActiveMode: vi.fn(),
-      createAdHocPane: vi.fn(),
-      createProjectPane,
-      isCreating: false,
-      saveLayouts: vi.fn(),
-      maxPanes: 6,
-    })
-
-    renderHook(() =>
-      useATermTabsState({
-        projectId: 'project-a',
-        projectPath: '/workspace/project-a',
-      }),
-    )
-
-    await waitFor(() => {
-      expect(createProjectPane).toHaveBeenCalledWith(
-        'Project-a',
-        'project-a',
-        '/workspace/project-a',
-      )
-      expect(switchToSession).toHaveBeenCalledWith('session-created-shell')
-    })
-  })
-
   it('focuses the created shell session during startup project launch', async () => {
     const switchToSession = vi.fn()
     const createProjectPane = vi.fn().mockResolvedValue({
@@ -1595,354 +1522,112 @@ describe('useATermTabsState', () => {
     expect(swapPanePositions).not.toHaveBeenCalled()
   })
 
-  it('switches to Main + Side when the pane count transitions to three', async () => {
-    let panes = [
-      {
-        id: 'pane-project-a',
+  it.each([
+    {
+      from: 2,
+      to: 3,
+      stored: undefined,
+      before: 'split-horizontal',
+      after: 'split-main-side',
+    },
+    {
+      from: 3,
+      to: 2,
+      stored: 'split-main-side',
+      before: 'split-main-side',
+      after: 'split-horizontal',
+    },
+    {
+      from: 1,
+      to: 2,
+      stored: undefined,
+      before: 'split-horizontal',
+      after: 'split-horizontal',
+    },
+  ])(
+    'moves from $before to $after when the pane count goes from $from to $to',
+    async ({ from, to, stored, before, after }) => {
+      const projectPane = (letter: string, order: number, count: number) => ({
+        id: `pane-project-${letter}`,
         pane_type: 'project' as const,
-        project_id: 'project-a',
-        pane_order: 0,
-        pane_name: 'Project A',
+        project_id: `project-${letter}`,
+        pane_order: order,
+        pane_name: `Project ${letter.toUpperCase()}`,
         active_mode: 'shell',
         created_at: '2026-03-06T00:00:00Z',
         sessions: [
           {
-            id: 'session-project-a',
-            name: 'Project A Shell',
+            id: `session-project-${letter}`,
+            name: `Project ${letter.toUpperCase()} Shell`,
             mode: 'shell',
             session_number: 1,
             is_alive: true,
-            working_dir: '/workspace/project-a',
+            working_dir: `/workspace/project-${letter}`,
             claude_state: 'not_started',
           },
         ],
-        width_percent: 50,
+        width_percent: 100 / count,
         height_percent: 100,
         grid_row: 0,
-        grid_col: 0,
-      },
-      {
-        id: 'pane-project-b',
-        pane_type: 'project' as const,
-        project_id: 'project-b',
-        pane_order: 1,
-        pane_name: 'Project B',
-        active_mode: 'shell',
-        created_at: '2026-03-06T00:00:00Z',
-        sessions: [
-          {
-            id: 'session-project-b',
-            name: 'Project B Shell',
-            mode: 'shell',
-            session_number: 1,
-            is_alive: true,
-            working_dir: '/workspace/project-b',
-            claude_state: 'not_started',
-          },
-        ],
-        width_percent: 50,
-        height_percent: 100,
-        grid_row: 0,
-        grid_col: 1,
-      },
-    ]
+        grid_col: order,
+      })
+      const panesFor = (count: number) =>
+        ['a', 'b', 'c']
+          .slice(0, count)
+          .map((letter, order) => projectPane(letter, order, count))
+      let panes = panesFor(from)
 
-    mockUseActiveSession.mockReturnValue(buildActiveSessionState())
-    mockUseLocalStorageState.mockImplementation(
-      (_key: string, defaultValue: unknown) => useState(defaultValue),
-    )
-    mockUseAvailableLayouts.mockImplementation((paneCount: number) => {
-      if (paneCount === 3) {
-        return ['split-horizontal', 'split-vertical', 'split-main-side']
-      }
-      if (paneCount === 2) {
-        return ['split-horizontal', 'split-vertical']
-      }
-      return ['split-horizontal']
-    })
-    mockUseATermPanes.mockImplementation(() => ({
-      panes,
-      detachedPanes: [],
-      atLimit: false,
-      isLoading: false,
-      detachedLoadedOnce: true,
-      hasLoadedOnce: true,
-      swapPanePositions: vi.fn(),
-      removePane: vi.fn(),
-      detachPane: vi.fn(),
-      attachPane: vi.fn(),
-      setActiveMode: vi.fn(),
-      createAdHocPane: vi.fn(),
-      createProjectPane: vi.fn(),
-      isCreating: false,
-      saveLayouts: vi.fn(),
-      maxPanes: 6,
-    }))
+      mockUseActiveSession.mockReturnValue(buildActiveSessionState())
+      mockUseLocalStorageState.mockImplementation(
+        (key: string, defaultValue: unknown) =>
+          useState(
+            (key === `a-term-layout-mode:${TEST_WINDOW_SCOPE}` && stored
+              ? stored
+              : defaultValue) as typeof defaultValue,
+          ),
+      )
+      mockUseAvailableLayouts.mockImplementation((paneCount: number) => {
+        if (paneCount === 3) {
+          return ['split-horizontal', 'split-vertical', 'split-main-side']
+        }
+        if (paneCount === 2) {
+          return ['split-horizontal', 'split-vertical']
+        }
+        return ['split-horizontal']
+      })
+      mockUseATermPanes.mockImplementation(() => ({
+        panes,
+        detachedPanes: [],
+        atLimit: false,
+        isLoading: false,
+        detachedLoadedOnce: true,
+        hasLoadedOnce: true,
+        swapPanePositions: vi.fn(),
+        removePane: vi.fn(),
+        detachPane: vi.fn(),
+        attachPane: vi.fn(),
+        setActiveMode: vi.fn(),
+        createAdHocPane: vi.fn(),
+        createProjectPane: vi.fn(),
+        isCreating: false,
+        saveLayouts: vi.fn(),
+        maxPanes: 6,
+      }))
 
-    const { result, rerender } = renderHook(() =>
-      useATermTabsState({ projectId: undefined, projectPath: undefined }),
-    )
+      const { result, rerender } = renderHook(() =>
+        useATermTabsState({ projectId: undefined, projectPath: undefined }),
+      )
 
-    expect(result.current.layoutMode).toBe('split-horizontal')
+      expect(result.current.layoutMode).toBe(before)
 
-    panes = [
-      ...panes,
-      {
-        id: 'pane-project-c',
-        pane_type: 'project' as const,
-        project_id: 'project-c',
-        pane_order: 2,
-        pane_name: 'Project C',
-        active_mode: 'shell',
-        created_at: '2026-03-06T00:00:00Z',
-        sessions: [
-          {
-            id: 'session-project-c',
-            name: 'Project C Shell',
-            mode: 'shell',
-            session_number: 1,
-            is_alive: true,
-            working_dir: '/workspace/project-c',
-            claude_state: 'not_started',
-          },
-        ],
-        width_percent: 33.333,
-        height_percent: 100,
-        grid_row: 0,
-        grid_col: 2,
-      },
-    ]
+      panes = panesFor(to)
+      rerender()
 
-    rerender()
-
-    await waitFor(() => {
-      expect(result.current.layoutMode).toBe('split-main-side')
-    })
-  })
-
-  it('switches to side-by-side when the pane count transitions from three to two', async () => {
-    let panes = [
-      {
-        id: 'pane-project-a',
-        pane_type: 'project' as const,
-        project_id: 'project-a',
-        pane_order: 0,
-        pane_name: 'Project A',
-        active_mode: 'shell',
-        created_at: '2026-03-06T00:00:00Z',
-        sessions: [
-          {
-            id: 'session-project-a',
-            name: 'Project A Shell',
-            mode: 'shell',
-            session_number: 1,
-            is_alive: true,
-            working_dir: '/workspace/project-a',
-            claude_state: 'not_started',
-          },
-        ],
-        width_percent: 33.333,
-        height_percent: 100,
-        grid_row: 0,
-        grid_col: 0,
-      },
-      {
-        id: 'pane-project-b',
-        pane_type: 'project' as const,
-        project_id: 'project-b',
-        pane_order: 1,
-        pane_name: 'Project B',
-        active_mode: 'shell',
-        created_at: '2026-03-06T00:00:00Z',
-        sessions: [
-          {
-            id: 'session-project-b',
-            name: 'Project B Shell',
-            mode: 'shell',
-            session_number: 1,
-            is_alive: true,
-            working_dir: '/workspace/project-b',
-            claude_state: 'not_started',
-          },
-        ],
-        width_percent: 33.333,
-        height_percent: 100,
-        grid_row: 0,
-        grid_col: 1,
-      },
-      {
-        id: 'pane-project-c',
-        pane_type: 'project' as const,
-        project_id: 'project-c',
-        pane_order: 2,
-        pane_name: 'Project C',
-        active_mode: 'shell',
-        created_at: '2026-03-06T00:00:00Z',
-        sessions: [
-          {
-            id: 'session-project-c',
-            name: 'Project C Shell',
-            mode: 'shell',
-            session_number: 1,
-            is_alive: true,
-            working_dir: '/workspace/project-c',
-            claude_state: 'not_started',
-          },
-        ],
-        width_percent: 33.333,
-        height_percent: 100,
-        grid_row: 0,
-        grid_col: 2,
-      },
-    ]
-
-    mockUseActiveSession.mockReturnValue(buildActiveSessionState())
-    mockUseLocalStorageState.mockImplementation(
-      (key: string, defaultValue: unknown) =>
-        useState(
-          (key === `a-term-layout-mode:${TEST_WINDOW_SCOPE}`
-            ? 'split-main-side'
-            : defaultValue) as typeof defaultValue,
-        ),
-    )
-    mockUseAvailableLayouts.mockImplementation((paneCount: number) => {
-      if (paneCount === 3) {
-        return ['split-horizontal', 'split-vertical', 'split-main-side']
-      }
-      if (paneCount === 2) {
-        return ['split-horizontal', 'split-vertical']
-      }
-      return ['split-horizontal']
-    })
-    mockUseATermPanes.mockImplementation(() => ({
-      panes,
-      detachedPanes: [],
-      atLimit: false,
-      isLoading: false,
-      detachedLoadedOnce: true,
-      hasLoadedOnce: true,
-      swapPanePositions: vi.fn(),
-      removePane: vi.fn(),
-      detachPane: vi.fn(),
-      attachPane: vi.fn(),
-      setActiveMode: vi.fn(),
-      createAdHocPane: vi.fn(),
-      createProjectPane: vi.fn(),
-      isCreating: false,
-      saveLayouts: vi.fn(),
-      maxPanes: 6,
-    }))
-
-    const { result, rerender } = renderHook(() =>
-      useATermTabsState({ projectId: undefined, projectPath: undefined }),
-    )
-
-    expect(result.current.layoutMode).toBe('split-main-side')
-
-    panes = panes.slice(0, 2)
-
-    rerender()
-
-    await waitFor(() => {
-      expect(result.current.layoutMode).toBe('split-horizontal')
-    })
-  })
-
-  it('keeps two-pane transitions side-by-side when adding a second pane', async () => {
-    let panes = [
-      {
-        id: 'pane-project-a',
-        pane_type: 'project' as const,
-        project_id: 'project-a',
-        pane_order: 0,
-        pane_name: 'Project A',
-        active_mode: 'shell',
-        created_at: '2026-03-06T00:00:00Z',
-        sessions: [
-          {
-            id: 'session-project-a',
-            name: 'Project A Shell',
-            mode: 'shell',
-            session_number: 1,
-            is_alive: true,
-            working_dir: '/workspace/project-a',
-            claude_state: 'not_started',
-          },
-        ],
-        width_percent: 100,
-        height_percent: 100,
-        grid_row: 0,
-        grid_col: 0,
-      },
-    ]
-
-    mockUseActiveSession.mockReturnValue(buildActiveSessionState())
-    mockUseAvailableLayouts.mockImplementation((paneCount: number) => {
-      if (paneCount === 2) {
-        return ['split-horizontal', 'split-vertical']
-      }
-      return ['split-horizontal']
-    })
-    mockUseATermPanes.mockImplementation(() => ({
-      panes,
-      detachedPanes: [],
-      atLimit: false,
-      isLoading: false,
-      detachedLoadedOnce: true,
-      hasLoadedOnce: true,
-      swapPanePositions: vi.fn(),
-      removePane: vi.fn(),
-      detachPane: vi.fn(),
-      attachPane: vi.fn(),
-      setActiveMode: vi.fn(),
-      createAdHocPane: vi.fn(),
-      createProjectPane: vi.fn(),
-      isCreating: false,
-      saveLayouts: vi.fn(),
-      maxPanes: 6,
-    }))
-
-    const { result, rerender } = renderHook(() =>
-      useATermTabsState({ projectId: undefined, projectPath: undefined }),
-    )
-
-    expect(result.current.layoutMode).toBe('split-horizontal')
-
-    panes = [
-      ...panes,
-      {
-        id: 'pane-project-b',
-        pane_type: 'project' as const,
-        project_id: 'project-b',
-        pane_order: 1,
-        pane_name: 'Project B',
-        active_mode: 'shell',
-        created_at: '2026-03-06T00:00:00Z',
-        sessions: [
-          {
-            id: 'session-project-b',
-            name: 'Project B Shell',
-            mode: 'shell',
-            session_number: 1,
-            is_alive: true,
-            working_dir: '/workspace/project-b',
-            claude_state: 'not_started',
-          },
-        ],
-        width_percent: 50,
-        height_percent: 100,
-        grid_row: 0,
-        grid_col: 1,
-      },
-    ]
-
-    rerender()
-
-    await waitFor(() => {
-      expect(result.current.layoutMode).toBe('split-horizontal')
-    })
-  })
-
+      await waitFor(() => {
+        expect(result.current.layoutMode).toBe(after)
+      })
+    },
+  )
   it('restores persisted attached external panes and keeps the persisted layout after refresh', () => {
     let activeSessionState = buildActiveSessionState({
       externalSessions: [],
