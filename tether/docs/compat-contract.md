@@ -100,7 +100,7 @@ Correction to the migration plan: `AICO_TMUX_SOCKET` is not a pane marker. Aico 
 - `owner: "aico"` stays in every body served on the legacy sockets (`control.sock`, `gui-control.sock`) and in widget descriptors, for `st aico` and SummitFlow fleet. On Tether's own `/v1` socket a root's `owner` is its stored `origin` (`aico` or `a-term`) and the descriptor adds `origin`.
 - Aico's `contracts/view-mutation-vectors.json` pins the title, bounds and body validation rules. Tether carries it in `contracts/` and both the Vitest and pytest suites run every vector.
 - Error codes from Aico's owner and root routes are kept verbatim: `not_found`, `invalid_body`, `invalid_generation`, `stale_generation`, `busy`, `blocked`, `workload_unavailable`, `ended`, `gui_unavailable`, `request_conflict`, `outcome_uncertain`, `directed_delivery_unavailable`, `identity_changed`.
-- Agent admission env names are kept as `AICO_AGENT_MAX_ACTIVE`, `AICO_AGENT_MIN_AVAILABLE_GIB`, `AICO_AGENT_MAX_PSI_SOME_AVG60`, `AICO_AGENT_MAX_PSI_FULL_AVG60`, `AICO_AGENT_MAX_PSI_FULL_AVG10` and `AICO_AGENT_ADMISSION_OVERRIDE`.
+- Agent admission follows Nightshift's `$XDG_RUNTIME_DIR/nightshift/admission.json` (v1) while it is fresh: `admit: false` defers, `admit: true` replaces the thresholds below; missing, unparsable or expired state falls back to them. Agent admission env names are kept as `AICO_AGENT_MAX_ACTIVE`, `AICO_AGENT_MIN_AVAILABLE_GIB`, `AICO_AGENT_MAX_PSI_SOME_AVG60`, `AICO_AGENT_MAX_PSI_FULL_AVG60`, `AICO_AGENT_MAX_PSI_FULL_AVG10` and `AICO_AGENT_ADMISSION_OVERRIDE`.
 
 ## Host prerequisites
 

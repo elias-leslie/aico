@@ -11,11 +11,13 @@ import {
   admissionOverrideFromEnv,
   DEFAULT_AGENT_ADMISSION_LIMITS,
   LAUNCH_SETTLE_MS,
-  nightshiftAdmissionClosedPath,
+  type NightshiftVerdict,
+  nightshiftAdmissionPath,
   observeAgentScopes,
   parseMemAvailable,
   parseMemoryPressure,
-  readNightshiftAdmissionClosed,
+  parseNightshiftAdmission,
+  readNightshiftAdmission,
   type ScopeFs,
 } from './agent-admission'
 
@@ -30,7 +32,7 @@ interface Host {
   mem: string
   pressure: string
   scopes: Set<string> | Error
-  closed: string | null | Error
+  verdict: NightshiftVerdict | null | Error
 }
 
 function harness(host: Partial<Host> = {}, limits: Partial<AgentAdmissionLimits> = {}) {
@@ -38,7 +40,7 @@ function harness(host: Partial<Host> = {}, limits: Partial<AgentAdmissionLimits>
     mem: meminfo(20),
     pressure: psi(),
     scopes: new Set(),
-    closed: null,
+    verdict: null,
     ...host,
   }
   const records: AdmissionObservation[] = []
@@ -52,9 +54,9 @@ function harness(host: Partial<Host> = {}, limits: Partial<AgentAdmissionLimits>
         if (state.scopes instanceof Error) throw state.scopes
         return new Set(state.scopes)
       },
-      hostAdmissionClosed: async () => {
-        if (state.closed instanceof Error) throw state.closed
-        return state.closed
+      nightshiftVerdict: async () => {
+        if (state.verdict instanceof Error) throw state.verdict
+        return state.verdict
       },
     },
     {
@@ -385,33 +387,72 @@ describe('observeAgentScopes', () => {
   })
 })
 
-describe('Nightshift admission switch', () => {
-  it('defers every launch while Nightshift has admission closed, with its reason', async () => {
-    const { admission, state, records } = harness({ closed: 'reboot pending' })
+describe('Nightshift admission state', () => {
+  const now = 1_791_819_000_000
+  const state = (fields: Record<string, unknown>) =>
+    JSON.stringify({
+      v: 1,
+      state: 'red',
+      admit: false,
+      reason: 'swap 80%',
+      updated_at: now / 1000,
+      expires_at: now / 1000 + 30,
+      ...fields,
+    })
+
+  it('defers every launch while Nightshift denies admission, with its reason', async () => {
+    const {
+      admission,
+      state: host,
+      records,
+    } = harness({
+      verdict: { admit: false, reason: 'swap 80%' },
+    })
     const denied = await denial(admission.reserve({ widgetId: 'abcd1234', kind: 'launch' }))
-    expect(denied.reason).toBe('Nightshift has closed agent admission (reboot pending).')
+    expect(denied.reason).toBe('Nightshift has closed agent admission (swap 80%).')
     expect(records.at(-1)).toMatchObject({ decision: 'deferred' })
-    state.closed = null
+    host.verdict = null
     await expect(admission.reserve({ widgetId: 'abcd1234', kind: 'launch' })).resolves.toBeTruthy()
   })
 
-  it('fails closed when the switch cannot be read', async () => {
-    const { admission } = harness({ closed: new Error('EACCES') })
-    const denied = await denial(admission.reserve({ widgetId: 'abcd1234', kind: 'launch' }))
-    expect(denied.reason).toContain('Nightshift admission state could not be read')
+  it("lets a fresh Nightshift admit replace Tether's own thresholds", async () => {
+    const { admission } = harness({
+      mem: meminfo(2),
+      pressure: psi(50, 3, 6),
+      verdict: { admit: true, reason: 'green' },
+    })
+    await expect(admission.reserve({ widgetId: 'abcd1234', kind: 'launch' })).resolves.toBeTruthy()
   })
 
-  it('reads the state file under XDG_RUNTIME_DIR', async () => {
+  it('falls back to its own thresholds without a verdict or when the read fails', async () => {
+    for (const verdict of [null, new Error('EACCES')]) {
+      const { admission } = harness({ pressure: psi(0, 0, 5), verdict })
+      const denied = await denial(admission.reserve({ widgetId: 'abcd1234', kind: 'launch' }))
+      expect(denied.reason).toContain('full avg10')
+    }
+  })
+
+  it('parses contract v1 and ignores stale, unknown or malformed state', () => {
+    expect(parseNightshiftAdmission(state({}), now)).toEqual({ admit: false, reason: 'swap 80%' })
+    expect(parseNightshiftAdmission(state({ admit: true, reason: '' }), now)).toEqual({
+      admit: true,
+      reason: 'no reason given',
+    })
+    expect(parseNightshiftAdmission(state({ expires_at: now / 1000 - 1 }), now)).toBeNull()
+    expect(parseNightshiftAdmission(state({ v: 2 }), now)).toBeNull()
+    expect(parseNightshiftAdmission(state({ admit: 'no' }), now)).toBeNull()
+    expect(parseNightshiftAdmission('{not json', now)).toBeNull()
+  })
+
+  it('reads admission.json under XDG_RUNTIME_DIR and treats a missing file as no verdict', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'tether-admission-'))
-    expect(nightshiftAdmissionClosedPath({ XDG_RUNTIME_DIR: dir })).toBe(
-      join(dir, 'nightshift', 'admission-closed'),
+    expect(nightshiftAdmissionPath({ XDG_RUNTIME_DIR: dir })).toBe(
+      join(dir, 'nightshift', 'admission.json'),
     )
-    expect(nightshiftAdmissionClosedPath({})).toBeNull()
-    const file = join(dir, 'admission-closed')
-    expect(await readNightshiftAdmissionClosed(file)).toBeNull()
-    writeFileSync(file, '')
-    expect(await readNightshiftAdmissionClosed(file)).toBe('no reason given')
-    writeFileSync(file, 'memory incident\nmore detail\n')
-    expect(await readNightshiftAdmissionClosed(file)).toBe('memory incident')
+    expect(nightshiftAdmissionPath({})).toBeNull()
+    const file = join(dir, 'admission.json')
+    expect(await readNightshiftAdmission(file, now)).toBeNull()
+    writeFileSync(file, state({}))
+    expect(await readNightshiftAdmission(file, now)).toEqual({ admit: false, reason: 'swap 80%' })
   })
 })

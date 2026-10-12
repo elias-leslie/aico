@@ -4,9 +4,11 @@
  * Admission is pressure-based by default: a launch is deferred only while
  * MemAvailable or memory PSI shows an unhealthy host. A numeric ceiling on
  * concurrently active agents exists solely as an opt-in emergency brake and is
- * disabled unless configured. Nightshift can also close admission host-wide
- * (for a reboot or a memory incident) with a state file. Host observations are
- * injected so the policy is testable without Electron, systemd or /proc.
+ * disabled unless configured. When Nightshift's memory controller publishes a
+ * fresh verdict (admission.json), that verdict replaces Tether's own memory
+ * thresholds; a missing, unparsable or expired file falls back to them. Host
+ * observations are injected so the policy is testable without Electron,
+ * systemd or /proc.
  */
 
 import { readFile } from 'node:fs/promises'
@@ -201,32 +203,49 @@ export interface AgentAdmissionObservations {
   meminfo(): Promise<string>
   memoryPressure(): Promise<string>
   activeAgentScopes(): Promise<Set<string>>
-  /** Nightshift's reason when it has closed admission host-wide, else null. */
-  hostAdmissionClosed?(): Promise<string | null>
+  /** Nightshift's fresh host verdict, or null to use Tether's own thresholds. */
+  nightshiftVerdict?(): Promise<NightshiftVerdict | null>
 }
 
-/** Nightshift's host-wide switch: while this file exists, new agent launches
- * are deferred. Its first line, when present, is the reason. */
-export function nightshiftAdmissionClosedPath(env: NodeJS.ProcessEnv = process.env): string | null {
+export interface NightshiftVerdict {
+  admit: boolean
+  reason: string
+}
+
+/** Nightshift's admission state, rewritten atomically every ~10 s. */
+export function nightshiftAdmissionPath(env: NodeJS.ProcessEnv = process.env): string | null {
   const runtime = env.XDG_RUNTIME_DIR
-  return runtime ? join(runtime, 'nightshift', 'admission-closed') : null
+  return runtime ? join(runtime, 'nightshift', 'admission.json') : null
 }
 
-export async function readNightshiftAdmissionClosed(path: string | null): Promise<string | null> {
-  if (!path) return null
-  let text: string
+/** The verdict in Nightshift's admission.json (contract v1). Null when the
+ * file is missing, unparsable, of another version or past `expires_at`, so
+ * the caller falls back to its own thresholds. */
+export function parseNightshiftAdmission(text: string, nowMs: number): NightshiftVerdict | null {
+  let state: unknown
   try {
-    text = await readFile(path, 'utf8')
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
-    throw error
+    state = JSON.parse(text)
+  } catch {
+    return null
   }
-  const reason = text
-    .split('\n', 1)[0]
-    .replace(/[^\x20-\x7e]/g, '')
-    .trim()
-    .slice(0, 200)
-  return reason || 'no reason given'
+  if (!state || typeof state !== 'object') return null
+  const { v, admit, reason, expires_at: expiresAt } = state as Record<string, unknown>
+  if (v !== 1 || typeof admit !== 'boolean' || typeof expiresAt !== 'number') return null
+  if (expiresAt * 1000 <= nowMs) return null
+  const clean = typeof reason === 'string' ? reason.replace(/[^\x20-\x7e]/g, '').trim() : ''
+  return { admit, reason: clean.slice(0, 200) || 'no reason given' }
+}
+
+export async function readNightshiftAdmission(
+  path: string | null,
+  nowMs: number = Date.now(),
+): Promise<NightshiftVerdict | null> {
+  if (!path) return null
+  try {
+    return parseNightshiftAdmission(await readFile(path, 'utf8'), nowMs)
+  } catch {
+    return null
+  }
 }
 
 export type AdmissionKind = 'launch' | 'recovery' | 'replacement'
@@ -348,12 +367,9 @@ export class AgentAdmission {
     let available: number | null = null
     let psi: MemoryPressure | null = null
     let failure: string | null = null
-    try {
-      const closed = (await this.observations.hostAdmissionClosed?.()) ?? null
-      if (closed !== null) failure = `Nightshift has closed agent admission (${closed}).`
-    } catch {
-      failure = 'the Nightshift admission state could not be read.'
-    }
+    const verdict = (await this.observations.nightshiftVerdict?.().catch(() => null)) ?? null
+    if (verdict && !verdict.admit)
+      failure = `Nightshift has closed agent admission (${verdict.reason}).`
     try {
       available = parseMemAvailable(await this.observations.meminfo())
       observation.memAvailableGiB = round(available / 1024 ** 3)
@@ -389,19 +405,21 @@ export class AgentAdmission {
       return this.ticket()
     }
     if (failure) return defer(failure)
-    if (available !== null && available < limits.minAvailableBytes)
+    // A fresh Nightshift admit replaces Tether's own memory thresholds.
+    const ownThresholds = !verdict
+    if (ownThresholds && available !== null && available < limits.minAvailableBytes)
       return defer(
         `available memory ${round(available / 1024 ** 3)} GiB is below ${round(limits.minAvailableBytes / 1024 ** 3)} GiB.`,
       )
-    if (psi && psi.fullAvg10 >= limits.maxFullAvg10)
+    if (ownThresholds && psi && psi.fullAvg10 >= limits.maxFullAvg10)
       return defer(
         `memory pressure full avg10 ${psi.fullAvg10} is at or above ${limits.maxFullAvg10}.`,
       )
-    if (psi && psi.fullAvg60 >= limits.maxFullAvg60)
+    if (ownThresholds && psi && psi.fullAvg60 >= limits.maxFullAvg60)
       return defer(
         `memory pressure full avg60 ${psi.fullAvg60} is at or above ${limits.maxFullAvg60}.`,
       )
-    if (psi && psi.someAvg60 >= limits.maxSomeAvg60)
+    if (ownThresholds && psi && psi.someAvg60 >= limits.maxSomeAvg60)
       return defer(
         `memory pressure some avg60 ${psi.someAvg60} is at or above ${limits.maxSomeAvg60}.`,
       )
