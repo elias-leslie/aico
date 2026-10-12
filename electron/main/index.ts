@@ -21,6 +21,7 @@ import { contentSecurityPolicy, voiceConnectSource } from './csp'
 import {
   DEFAULT_EYE_ANCHOR,
   type Face,
+  fillFreedSpace,
   type LayoutWindow,
   layoutSnapshot,
   type Point,
@@ -345,6 +346,21 @@ function tileNewWindow(): ReturnType<typeof placeNewWindow> {
     .map((w) => ({ id: widgetOf.get(w.id) ?? '', bounds: w.getBounds() }))
     .filter((w) => w.id)
   return placeNewWindow(area, windows)
+}
+
+function fillAfterClose(freed: Bounds): void {
+  const display = screen.getDisplayMatching(freed)
+  const windows = aicoWindows()
+    .filter((w) => w.isVisible() && !w.isMinimized() && !w.isMaximized())
+    .filter((w) => screen.getDisplayMatching(w.getBounds()).id === display.id)
+    .map((w) => ({ id: widgetOf.get(w.id) ?? '', bounds: w.getBounds() }))
+    .filter((w) => w.id)
+  for (const grown of fillFreedSpace(freed, windows)) {
+    const win = windowForWidget(grown.id)
+    if (!win) continue
+    win.setBounds(grown.bounds)
+    persistBounds(win)
+  }
 }
 
 function scheduleLayout(): void {
@@ -982,7 +998,11 @@ function createWidgetWindow(
     'restore',
   ] as const)
     win.on(change as 'move', scheduleLayout)
-  win.on('close', () => persistBounds(win)) // final flush while bounds are still valid
+  let closingBounds: Bounds | null = null
+  win.on('close', () => {
+    persistBounds(win) // final flush while bounds are still valid
+    closingBounds = win.isVisible() && !win.isMinimized() ? win.getBounds() : null
+  })
 
   win.on('closed', () => {
     const widgetId = widgetOf.get(winId)
@@ -1010,6 +1030,9 @@ function createWidgetWindow(
     contextBadges.delete(winId)
     eyeAnchors.delete(winId)
     syncCursorPump()
+    // Neighbours grow into the space this window leaves (not on quit: the
+    // whole arrangement is coming back next launch).
+    if (!quitting && closingBounds) fillAfterClose(closingBounds)
     scheduleLayout()
     // On quit, leave `open` as-is so live views restore next launch; on an
     // explicit close, mark it closed (it moves to the tray's reopen list).

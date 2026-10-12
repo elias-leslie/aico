@@ -237,3 +237,82 @@ export function placeNewWindow(
     },
   }
 }
+
+// ---------------------------------------------------------------------------
+// When a window closes, its neighbours grow into the space it leaves, the
+// reverse of a split. A side qualifies when the windows touching it sit wholly
+// within that edge and together cover it; the side needing the fewest windows
+// wins (one neighbour taking back its other half is the usual case).
+
+/** Edges this close count as touching; hand-tiled windows overlap a few px. */
+export const EDGE_SLOP = 12
+
+type Side = 'left' | 'right' | 'top' | 'bottom'
+
+function grow(r: Rect, side: Side, freed: Rect): Rect {
+  switch (side) {
+    case 'left': // neighbour on the freed rect's left grows right
+      return { ...r, width: freed.x + freed.width - r.x }
+    case 'right':
+      return { ...r, x: freed.x, width: r.x + r.width - freed.x }
+    case 'top':
+      return { ...r, height: freed.y + freed.height - r.y }
+    case 'bottom':
+      return { ...r, y: freed.y, height: r.y + r.height - freed.y }
+  }
+}
+
+export function fillFreedSpace(
+  freed: Rect,
+  windows: { id: string; bounds: Rect }[],
+  slop = EDGE_SLOP,
+): { id: string; bounds: Rect }[] {
+  const near = (a: number, b: number) => Math.abs(a - b) <= slop
+  const fRight = freed.x + freed.width
+  const fBottom = freed.y + freed.height
+  const sides: {
+    side: Side
+    touching: (r: Rect) => boolean
+    span: (r: Rect) => [number, number]
+  }[] = [
+    {
+      side: 'left',
+      touching: (r) => near(r.x + r.width, freed.x),
+      span: (r) => [r.y, r.y + r.height],
+    },
+    { side: 'right', touching: (r) => near(r.x, fRight), span: (r) => [r.y, r.y + r.height] },
+    {
+      side: 'top',
+      touching: (r) => near(r.y + r.height, freed.y),
+      span: (r) => [r.x, r.x + r.width],
+    },
+    { side: 'bottom', touching: (r) => near(r.y, fBottom), span: (r) => [r.x, r.x + r.width] },
+  ]
+  let best: { id: string; bounds: Rect }[] | null = null
+  for (const { side, touching, span } of sides) {
+    const [lo, hi] = side === 'left' || side === 'right' ? [freed.y, fBottom] : [freed.x, fRight]
+    const group = windows
+      .filter((w) => touching(w.bounds))
+      .filter((w) => {
+        const [a, b] = span(w.bounds)
+        return a >= lo - slop && b <= hi + slop
+      })
+      .sort((p, q) => span(p.bounds)[0] - span(q.bounds)[0])
+    if (!group.length) continue
+    // The group must cover the whole edge with no gaps.
+    let reach = lo
+    let covered = true
+    for (const w of group) {
+      const [a, b] = span(w.bounds)
+      if (a > reach + slop) {
+        covered = false
+        break
+      }
+      reach = Math.max(reach, b)
+    }
+    if (!covered || reach < hi - slop) continue
+    if (!best || group.length < best.length)
+      best = group.map((w) => ({ id: w.id, bounds: grow(w.bounds, side, freed) }))
+  }
+  return best ?? []
+}

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { type Face, layoutSnapshot, neighbours, pickScene, placeNewWindow } from './gaze'
+import {
+  type Face,
+  fillFreedSpace,
+  layoutSnapshot,
+  neighbours,
+  pickScene,
+  placeNewWindow,
+} from './gaze'
 
 // Three tiled windows in a column on the left, one big one to their right.
 const faces: Face[] = [
@@ -107,5 +114,46 @@ describe('placeNewWindow', () => {
   it('gives the first window the whole work area', () => {
     const p = placeNewWindow(area, [])
     expect(p.bounds).toEqual(area)
+  })
+})
+
+describe('fillFreedSpace', () => {
+  const w = (id: string, x: number, y: number, width: number, height: number) => ({
+    id,
+    bounds: { x, y, width, height },
+  })
+
+  it('undoes a split: the other half takes the space back', () => {
+    const out = fillFreedSpace({ x: 924, y: 672, width: 1428, height: 672 }, [
+      w('top', 924, 0, 1428, 672),
+      w('left', 0, 0, 928, 1344),
+    ])
+    expect(out).toEqual([{ id: 'top', bounds: { x: 924, y: 0, width: 1428, height: 1344 } }])
+  })
+
+  it('a column grows to fill a closed column, even with hand-tiled overlaps', () => {
+    // Middle window closes; the right column (three stacked, 4px overlap)
+    // and the left column both border it; one side needs three, so does the
+    // other — either is fine, but every window on that side grows together.
+    const out = fillFreedSpace({ x: 924, y: 0, width: 1428, height: 1344 }, [
+      w('l1', 0, 0, 928, 448),
+      w('l2', 0, 448, 928, 448),
+      w('l3', 0, 896, 928, 448),
+      w('r1', 2348, 0, 929, 448),
+      w('r2', 2348, 448, 929, 448),
+      w('r3', 2348, 896, 929, 448),
+    ])
+    expect(out).toHaveLength(3)
+    const ids = out.map((o) => o.id)
+    expect(ids.every((id) => id.startsWith('l')) || ids.every((id) => id.startsWith('r'))).toBe(
+      true,
+    )
+  })
+
+  it('leaves things alone when no side is fully covered', () => {
+    const out = fillFreedSpace({ x: 0, y: 0, width: 500, height: 500 }, [
+      w('half', 500, 0, 500, 250),
+    ])
+    expect(out).toEqual([])
   })
 })
