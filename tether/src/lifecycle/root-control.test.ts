@@ -925,6 +925,8 @@ describe('private root workload control', () => {
             'create',
             'cli-recovery',
             prompt,
+            '--tool',
+            'codex',
             '--project',
             'sample-app',
             '--project-root',
