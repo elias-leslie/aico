@@ -50,6 +50,15 @@ export function setupMouseShim(
   const forceLocalSelection = (e: MouseEvent) => {
     if (e.shiftKey || !e.isTrusted) return // already shifted, or our own synthetic event
     if (!mouseReportingActive(term)) return // no TUI grabbing the mouse — let it through
+    if (e.button === 2 && e.type !== 'mousemove') {
+      // Right-click is Aico's paste gesture (contextmenu). A mouse-reporting
+      // program must never see it: Claude Code pastes the clipboard itself on
+      // a right-click, which doubled Aico's own paste. The contextmenu event
+      // still fires after the swallowed mousedown.
+      e.stopPropagation()
+      e.preventDefault()
+      return
+    }
     if (!shouldForce(e)) return
 
     e.stopPropagation()
