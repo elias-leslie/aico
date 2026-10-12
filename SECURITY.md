@@ -8,7 +8,7 @@ Do not include public exploit details until the issue is triaged.
 
 ## Supported versions
 
-Aico is early source-release software. Security fixes are made on `main` until tagged releases exist.
+Aico is early software. Security fixes are made on `main` only. The tagged AppImage releases (v0.1.0 and v0.1.1) predate the move to Tether and do not receive fixes; install from source to get them.
 
 ## Security notes
 

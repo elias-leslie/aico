@@ -1,5 +1,9 @@
 # Aico engineering and product assessment — July 2026
 
+- **Problem:** after the July 2026 process-escape incident, Aico could not explain or end temporary agent process trees without risking unrelated durable sessions.
+- **Fix:** durable tmux servers, panes, temporary agent executions and desktop runtime processes were given separate identities and lifetime rules (see the [incident report](INCIDENT-2026-07-PROCESS-ESCAPES.md)).
+- **Result:** cleanup became targeted and ambiguous cases preserve work; this page assesses what Aico should become from that baseline.
+
 ## Verdict
 
 Aico is a useful Linux desktop control surface around durable tmux sessions,
@@ -61,7 +65,7 @@ and transcript locations.
 6. No durable execution ID, cgroup identity, or startup reconciliation record
    remained with either escaped process. Broad Aico cleanup was unsafe because
    it also contained unrelated sessions.
-7. A second Aftertimes launch at 18:27 EDT used `sudo -n` to start direct Xorg
+7. A second launch from the same game project at 18:27 EDT used `sudo -n` to start direct Xorg
    `:99` with a generated AMD config. It displaced the normal Xorg's DRM master,
    caused Electron GPU context resets, and left the physical display black. The
    temporarily installed experimental Codex execution scope identified and

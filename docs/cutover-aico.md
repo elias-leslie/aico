@@ -2,10 +2,14 @@
 
 This runbook moves the live desktop from the old Aico (in-process lifecycle plus
 `aico-owner.service`) to Tether (`tether@default`) and the Aico built from branch
-`tether-client` in `/srv/workspaces/projects/aico-tether`. It is one step with a
+`tether-client` in a separate worktree (`$AICO_NEW` below). It is one step with a
 rollback. No tmux server or session is stopped at any point: tmux servers run in
 their own `aico-tmux-server-*` user units, and both the old owner and Tether
 adopt them rather than own their lifetime.
+
+`st` commands below are the author's workspace tool (SummitFlow): `st aico` is a
+client for Aico's root-control socket, and `st service rebuild` builds and
+restarts `aico-shell.service`. This runbook is kept as a record of the cutover.
 
 Run it from a terminal **outside** Aico's tmux servers (GNOME Terminal, a TTY or
 ssh). Stopping `aico-shell` closes every Aico window; sessions keep running, but
@@ -19,8 +23,8 @@ Shell variables used below:
 
 ```sh
 AICO_DB="$HOME/.local/state/aico/aico.db"
-TETHER_REPO=/srv/workspaces/projects/tether
-AICO_NEW=/srv/workspaces/projects/aico-tether
+TETHER_REPO=~/projects/tether          # your Tether checkout
+AICO_NEW=~/projects/aico-tether        # worktree with branch tether-client
 STAMP=$(date +%Y%m%d-%H%M%S)
 OUT="$HOME/.local/state/aico/cutover-$STAMP"
 mkdir -p "$OUT"
@@ -168,7 +172,7 @@ The rows should match the geometry in `$OUT/widgets-before.txt`.
    st aico roots
    st aico widget status --widget-id <an open widget id>
    st aico create cutover-check-$STAMP 'Reply with OK and stop.' \
-     --project aico --project-root /srv/workspaces/projects/aico
+     --project aico --project-root "$AICO_NEW"
    st aico root status cutover-check-$STAMP     # running
    st aico root show cutover-check-$STAMP       # its window comes forward
    st aico root end cutover-check-$STAMP        # applied: true; window closes

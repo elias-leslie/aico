@@ -1,6 +1,6 @@
 # Install and develop Aico
 
-Aico is currently distributed as a source-installed Linux desktop app.
+Install Aico from source. The AppImages on the [Releases page](https://github.com/elias-leslie/aico/releases) (latest v0.1.1, June 2026) predate the move to Tether: they manage tmux sessions themselves, without Tether. The current code on `main` requires Tether and has no AppImage release yet.
 
 ## System packages
 
@@ -23,9 +23,11 @@ End, root request and context hook. Install and start it from its checkout
 first:
 
 ```bash
-cd /srv/workspaces/projects/tether   # or wherever Tether is checked out
+git clone https://github.com/elias-leslie/tether.git ../tether
+cd ../tether                        # or wherever Tether is checked out
+npm ci
 scripts/install.sh --start default
-tether --json version                # prints a banner line, then {"apiVersion": 1, ...}
+tether --json version                # prints one JSON object with "apiVersion": 1
 ```
 
 Tether's installer checks the durable-session prerequisites (systemd user
@@ -44,7 +46,7 @@ scripts/aico-install.sh
 ```
 
 The installer first requires `tether --json version` to report API v1 or later
-(otherwise it prints the Tether install steps and exits). It then runs `npm ci`, rebuilds native Electron modules, syncs the locked
+(otherwise it prints the Tether install steps and exits; set `TETHER_REPO` if your Tether checkout is not next to this one). It then runs `npm ci`, rebuilds native Electron modules, syncs the locked
 Python 3.13 sidecar environment with `uv`, writes a desktop entry under
 `~/.local/share/applications`, and installs the `aico-shell.service` user unit
 into `${XDG_CONFIG_HOME:-~/.config}/systemd/user/`
@@ -115,8 +117,8 @@ npm run dist
 
 ## Optional integrations
 
-- Agent CLIs: install and authenticate `claude`, `codex`, `opencode`, `gemini`, `pi`, or `hermes` separately.
-- Project catalog: Aico lists the projects Tether serves (SummitFlow's when installed, else Tether's local list) plus its own Personal Workspace.
+- Agent CLIs: install and authenticate `claude`, `codex`, `agy` (Antigravity), or `pi` separately; Tether's tool registry also accepts other TUI commands.
+- Project catalog: Aico lists the projects Tether serves (Tether's local list, or the author's SummitFlow catalog when it is running) plus its own Personal Workspace.
 - Screen/OCR capture: if an `st` CLI is installed, Aico can use `st ui` surfaces; otherwise core widgets still work.
 - Voice dictation: Aico connects to `ws://127.0.0.1:8003/api/voice/ws?user_id=aico&app=aico` unless `AICO_VOICE_WS` names another compatible speech-to-text websocket. If nothing answers, only voice dictation fails.
 - Browser extension: load `extension/` unpacked in Chrome/Chromium.

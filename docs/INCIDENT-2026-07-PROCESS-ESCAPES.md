@@ -1,5 +1,9 @@
 # July 2026 process-containment incident
 
+- **Problem:** two processes started by AI coding agents escaped cleanup: a Node process spun one CPU core for two days, and a root Xorg server blocked the normal desktop login.
+- **Fix:** Aico gave each durable tmux server and pane its own systemd unit or scope and identity, so recovery can act on one exact boundary instead of a shared application scope.
+- **Result:** both processes were removed without ending any durable session, and the display was restored after a GDM recovery; the containment model now lives in Tether.
+
 > **Lifecycle moved to Tether.** Aico's session lifecycle (tmux server and pane
 > scopes, launch gate, End, admission, root control) moved to Tether at Tether
 > `bcbf73e` and was removed from Aico at `05ede7e` (branch `tether-client`). The
@@ -14,7 +18,7 @@ binary was not an acceptable production dependency; it was reverted to the
 official package-managed `codex-cli 0.144.3` binary on 2026-07-13.
 
 This document records the evidence and recovery boundary for the two processes
-that destabilized `davion-sidarli`. It is intentionally specific: process names,
+that destabilized the author's workstation. It is intentionally specific: process names,
 age, or CPU usage alone are never cleanup authority.
 
 ## Impact
@@ -26,7 +30,7 @@ age, or CPU usage alone are never cleanup authority.
 - The shared legacy Aico application scope reached about 13.3 GB peak memory,
   2.1 GB peak swap, and 605 tasks. Unrelated durable sessions shared that scope,
   so stopping it would have destroyed user work and was not an acceptable repair.
-- At 18:27 EDT on the same day, an Aftertimes performance execution launched a
+- At 18:27 EDT on the same day, a game project's performance test launched a
   new privileged Xorg `:99` against the physical AMD GPU. The normal Xorg lost
   DRM master, Electron/Chromium GPU contexts reset, and the display remained
   black after the offending tree was removed. The operator then authorized
@@ -68,7 +72,7 @@ age, or CPU usage alone are never cleanup authority.
 
 ### Stale Xorg
 
-- Aico widget: `d24ad045` (`aico-d24ad045`, project `the-aftertimes`).
+- Aico widget: `d24ad045` (`aico-d24ad045`, a private game project).
 - Originating Codex session: `019f5961…`; delegated performance session:
   `019f5bc2-0de3-7ac1-b82e-41e94f6307ad`.
 - Transcript:
@@ -91,12 +95,12 @@ age, or CPU usage alone are never cleanup authority.
 
 ### 18:27 recurrence after containment deployment
 
-An Aftertimes agent launched a second root Xorg at approximately 18:27:30 EDT:
+An agent in the same game project launched a second root Xorg at approximately 18:27:30 EDT:
 
 ```text
 sudo -n /usr/lib/xorg/Xorg :99 -noreset -nolisten tcp -ac \
-  -config /srv/workspaces/projects/the-aftertimes/.dev-tools/agent_runs/2026-07-13-overworld-redesign-performance-final-5d06cb83/xorg-amd.conf \
-  -logfile /srv/workspaces/projects/the-aftertimes/.dev-tools/agent_runs/2026-07-13-overworld-redesign-performance-final-5d06cb83/Xorg.log
+  -config <project>/.dev-tools/agent_runs/<run-id>/xorg-amd.conf \
+  -logfile <project>/.dev-tools/agent_runs/<run-id>/Xorg.log
 ```
 
 This execution was attributable to the exact temporarily installed experimental
@@ -310,7 +314,7 @@ error, fatal error, or failed lifecycle operation. Two one-time xterm idle-queue
 warnings (153–154 ms) and the host's non-fatal Mesa loader warning remained.
 
 That clean checkpoint must not be read as a zero-runtime-error claim for the
-remainder of the boot. The later Aftertimes hardware-Xorg recurrence caused
+remainder of the boot. The later hardware-Xorg recurrence caused
 documented Electron GPU context resets and a black desktop. Exact scope cleanup
 removed the new privileged execution without tmux loss, but the user-authorized
 GDM recovery was still needed to recreate the damaged graphical session. The

@@ -7,7 +7,7 @@
 - **Floating terminal widgets** — one or more compact Electron windows, each running a tmux-backed terminal with a WebGL renderer (DOM fallback), configurable font, animated "eyes" that track your cursor, and a "thinking" halo while the agent is working.
 - **Persistent sessions, owned by Tether** — every session lives in [Tether](https://github.com/elias-leslie/tether), the per-user session daemon; each widget is a view of one Tether session, keyed by its 8-hex session ID. Closing a widget only detaches its `tmux attach` client, so work reattaches across close/reopen/restart, and Aico restarts never touch sessions. Aico stores only window geometry, open state and a local name override per session.
 - **Lifecycle diagnostics** — “Copy session diagnostics” copies Tether's report for the session: ownership, tmux target, command, scope, age, CPU time, memory, swap, process/task counts, and containment warnings.
-- **Agent launcher menu** — start any tool Tether has enabled (Claude Code, Codex, Gemini CLI, Pi, a plain shell, …) from the same lantern menu, choosing the TUI and the workspace to launch it into; "Replace TUI" swaps the tool in the focused widget.
+- **Agent launcher menu** — start any tool Tether has enabled (Claude Code, Codex, Antigravity, Pi, a plain shell, …) from the same lantern menu, choosing the TUI and the workspace to launch it into; "Replace TUI" swaps the tool in the focused widget.
 - **Command palette & pinned controls** — a searchable command palette (`Ctrl+Shift+P`) and a pinned, drag-reorderable titlebar cluster, both driven by one action registry. Rename widgets inline.
 - **Read-only scrollback overlay** — wheel up to browse tmux history (paged from the session) without disturbing the live view.
 - **Workspace picker** — always includes a local Personal Workspace, plus the projects Tether serves (SummitFlow's catalog when installed, else Tether's local list).
@@ -38,20 +38,9 @@ Recommended for the full desktop experience:
 
 ## Quickstart
 
-### Download and run
+### Released AppImages
 
-Download the latest self-contained `Aico-*.AppImage` from the
-[Releases](https://github.com/elias-leslie/aico/releases/latest) page — it bundles
-the FastAPI sidecar, so it needs no Python, `uv`, or `.venv` at runtime:
-
-```bash
-chmod +x Aico-*.AppImage
-./Aico-*.AppImage
-```
-
-Each release also ships `SHA256SUMS.txt`; verify with `sha256sum -c SHA256SUMS.txt`.
-Tether, `tmux` and whichever terminal AI CLIs you launch (`claude`, `codex`, …)
-remain runtime prerequisites.
+The AppImages on the [Releases](https://github.com/elias-leslie/aico/releases) page (latest v0.1.1, June 2026) predate the move to Tether: they manage tmux sessions themselves and do not match this guide. The current code has no AppImage release yet, so install from source ([INSTALL.md](INSTALL.md)), or build an AppImage locally as described under [Standalone AppImage](#standalone-appimage-no-python-at-runtime). Tether, `tmux` and whichever terminal AI CLIs you launch remain runtime prerequisites either way.
 
 ### Build from source
 
@@ -248,7 +237,7 @@ The `st aico` extension's client lives in Tether; `scripts/aico-root-watch.py` h
 
 - Linux desktop is the supported path. macOS and Windows packaging are not implemented.
 - X11 is the best-supported session for global shortcuts and screen capture.
-- Pre-built `Aico-*.AppImage` downloads are available on the [Releases](https://github.com/elias-leslie/aico/releases/latest) page (built in CI with a SHA256 checksum and a build-provenance attestation); `npm run dist` reproduces one locally. `.deb` packaging is not implemented yet.
+- The published `Aico-*.AppImage` releases (built in CI with a SHA256 checksum and a build-provenance attestation) predate Tether; `npm run dist` builds one from current code. `.deb` packaging is not implemented yet.
 - Voice dictation requires a separately running compatible speech-to-text websocket.
 - The browser extension is loaded unpacked for development; it is not published in a browser store.
 

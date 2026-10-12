@@ -3,10 +3,13 @@ import { cursorNearTitlebar, nextArcade, parseArcadeKeys, pickArcade } from './a
 
 describe('parseArcadeKeys', () => {
   it('accepts short lowercase ids and drops repeats', () => {
-    expect(parseArcadeKeys(['pacman', 'larry', 'pacman'])).toEqual(['pacman', 'larry'])
+    expect(parseArcadeKeys(['mazechase', 'loungeadventure', 'mazechase'])).toEqual([
+      'mazechase',
+      'loungeadventure',
+    ])
   })
   it('rejects anything else', () => {
-    expect(parseArcadeKeys('pacman')).toBeNull()
+    expect(parseArcadeKeys('mazechase')).toBeNull()
     expect(parseArcadeKeys([])).toBeNull()
     expect(parseArcadeKeys(['Pac-Man'])).toBeNull()
     expect(parseArcadeKeys(['../x'])).toBeNull()

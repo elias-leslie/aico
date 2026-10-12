@@ -1017,8 +1017,7 @@
 
   registerConcept({
     key: 'birds',
-    title: 'Birds on the bar',
-    sub: 'calm, all-day',
+    title: 'Birds',
     chosen: true,
     blurb:
       'Sparrows, pigeons and now and then a crow. They perch on Aico\'s eyes, the title and the window dots, hop and waddle along the floor, peck and preen, and sing back and forth. Someone drops bread: they converge, squabble, and a crow may swoop in and steal the crust. The sparrows take off as a flock and land again one by one, two of them have a flutter-fight, and a pigeon puffs up, bows and coos at another pigeon who keeps walking off. While the agent works they dart after gnats, and a finished run gets a song. <b>Click a bird</b> to startle it (it flaps away and comes back, and the neighbours may go too; a crow drops what it\'s carrying), <b>double-click</b> one to make it sing, coo or caw, <b>drag</b> one about, click the <b>paper bag</b> to throw crumbs. A slow cursor makes them curious, a quick one scares them. When it\'s quiet they huddle up and doze.',

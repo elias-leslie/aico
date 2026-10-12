@@ -51,7 +51,8 @@ require_user_manager() {
 # Tether owns every session (tmux servers, agent launch, End, roots); Aico is a
 # view client of its API. Require an installed CLI whose daemon speaks API v1+.
 # `tether --json version` prints one JSON object (older builds: a banner line first).
-TETHER_REPO="${TETHER_REPO:-/srv/workspaces/projects/tether}"
+# TETHER_REPO only shapes the hint below; default: a sibling checkout of this one.
+TETHER_REPO="${TETHER_REPO:-$(dirname "$REPO")/tether}"
 tether_instructions() {
   cat >&2 <<MESSAGE
 Install and start Tether first:

@@ -5,3 +5,4 @@
 *.AppImage binary
 *.dmg binary
 *.exe binary
+electron/renderer/arcade/concepts/** linguist-vendored

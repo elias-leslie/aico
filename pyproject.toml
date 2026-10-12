@@ -1,6 +1,6 @@
 [project]
 name = "aico-sidecar"
-version = "0.1.0"
+version = "0.1.1"
 description = "Aico Python sidecar (FastAPI): /health + per-widget JSONL logging."
 requires-python = ">=3.13"
 dependencies = [

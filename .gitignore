@@ -55,3 +55,7 @@ Thumbs.db
 # Local AI tooling config
 .claude/
 AGENT_AUDIT.md
+
+# Local workspace tool config (backups, dead-code audit)
+.backupignore
+.fallowrc.json

@@ -1,7 +1,6 @@
 {
   "schema_version": 1,
   "checked_at": "2026-10-07 17:41:57 UTC",
-  "task": "task-6f76eb1fabd048a5",
   "runtime": "codex-cli 0.160.1",
   "isolation": "fresh user/network namespace; loopback-only synthetic provider; fresh Codex state; private tmux socket; no daemon; no credentials",
   "source_sha256": {
