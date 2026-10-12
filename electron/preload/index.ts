@@ -186,6 +186,19 @@ contextBridge.exposeInMainWorld('aico', {
       ipcRenderer.on('eyes:look', listener)
       return () => ipcRenderer.removeListener('eyes:look', listener)
     },
+    onAttention: (
+      cb: (attention: {
+        mode: 'none' | 'blocked' | 'finished'
+        stage: 'fresh' | 'rising' | 'urgent'
+      }) => void,
+    ) => {
+      const listener = (
+        _event: unknown,
+        attention: { mode: 'none' | 'blocked' | 'finished'; stage: 'fresh' | 'rising' | 'urgent' },
+      ) => cb(attention)
+      ipcRenderer.on('eyes:attention', listener)
+      return () => ipcRenderer.removeListener('eyes:attention', listener)
+    },
   },
   arcade: {
     assign: (keys: string[]) => ipcRenderer.invoke('arcade:assign', keys),

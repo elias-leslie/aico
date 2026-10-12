@@ -9,6 +9,7 @@ import {
   PUSH_AFTER_MS,
   PUSH_COOLDOWN_MS,
   pushBody,
+  RISE_AFTER_MS,
 } from './attention'
 
 function harness() {
@@ -19,6 +20,7 @@ function harness() {
   const flashes: [string, boolean][] = []
   const tray: boolean[] = []
   const pushes: string[] = []
+  const attends: string[] = []
   const attention = new Attention({
     now: () => clock,
     setTimer: (fn, ms) => {
@@ -31,6 +33,7 @@ function harness() {
     flash: (id, on) => flashes.push([id, on]),
     needsYou: (on) => tray.push(on),
     push: (id) => pushes.push(id),
+    attend: (id, mode, stage) => attends.push(`${id}:${mode}:${stage}`),
   })
   const advance = (ms: number) => {
     clock += ms
@@ -39,10 +42,46 @@ function harness() {
     }
   }
   const set = (id: string, state: AgentState) => attention.update(id, state)
-  return { attention, focused, flashes, tray, pushes, advance, set }
+  return { attention, focused, flashes, tray, pushes, attends, advance, set }
 }
 
 describe('Attention', () => {
+  it('escalates an unseen blocked window: fresh, rising at 30 s, urgent at 2 min', () => {
+    const h = harness()
+    h.set('a', 'working')
+    h.set('a', 'blocked')
+    expect(h.attends).toEqual(['a:blocked:fresh'])
+    h.advance(RISE_AFTER_MS)
+    expect(h.attends.at(-1)).toBe('a:blocked:rising')
+    expect(h.attention.urgent()).toEqual([])
+    h.advance(PUSH_AFTER_MS - RISE_AFTER_MS)
+    expect(h.attends.at(-1)).toBe('a:blocked:urgent')
+    expect(h.attention.urgent()).toEqual(['a'])
+    h.focused.add('a')
+    h.attention.focused('a')
+    expect(h.attends.at(-1)).toBe('a:none:fresh')
+    expect(h.attention.urgent()).toEqual([])
+  })
+
+  it('answering before 30 s clears the window and never rises', () => {
+    const h = harness()
+    h.set('a', 'blocked')
+    h.set('a', 'working')
+    h.advance(PUSH_AFTER_MS)
+    expect(h.attends).toEqual(['a:blocked:fresh', 'a:none:fresh'])
+  })
+
+  it('a finished window shows finished until it is focused', () => {
+    const h = harness()
+    h.set('a', 'working')
+    h.set('a', 'idle')
+    expect(h.attends).toEqual(['a:finished:fresh'])
+    h.advance(PUSH_AFTER_MS)
+    expect(h.attends).toEqual(['a:finished:fresh'])
+    h.attention.focused('a')
+    expect(h.attends.at(-1)).toBe('a:none:fresh')
+  })
+
   it('flashes, shows needs-you and pushes once for an unfocused blocked session', () => {
     const h = harness()
     h.set('a', 'working')

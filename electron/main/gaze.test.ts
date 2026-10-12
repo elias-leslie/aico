@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { arrange, type Face, layoutSnapshot, neighbours, pickScene, tileSlots } from './gaze'
+import {
+  allLookAt,
+  arrange,
+  type Face,
+  layoutSnapshot,
+  neighbours,
+  pickScene,
+  tileSlots,
+} from './gaze'
 
 // Three tiled windows in a column on the left, one big one to their right.
 const faces: Face[] = [
@@ -46,6 +54,15 @@ describe('pickScene', () => {
     const back = scene.find((g) => g.winId === 4)
     expect(back?.target).toEqual(faces[0]?.eye)
     expect(back?.delay ?? 0).toBeGreaterThan(Math.max(...lookers.map((g) => g.delay)))
+  })
+})
+
+describe('allLookAt', () => {
+  it('turns every other window to a waiting one, which keeps its own look', () => {
+    const waiting = faces[1] as Face
+    const scene = allLookAt(waiting, faces, seq(0), false)
+    expect(scene.map((g) => g.winId).sort()).toEqual([1, 3, 4])
+    for (const g of scene) expect(g.target).toEqual(waiting.eye)
   })
 })
 

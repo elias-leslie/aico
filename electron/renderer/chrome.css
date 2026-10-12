@@ -343,6 +343,238 @@ body {
     transition: none;
   }
 }
+
+/* A window waiting on the owner (eyes.ts setAttention; main attention.ts).
+   Never on the focused window, and nothing here makes a sound or takes focus.
+     blocked   "?" bubble; eye motions (pop, wiggle, nudge); from 30 s a thin
+               amber border pulsing on a 2 s cycle and a steady amber titlebar
+     finished  green "✓" bubble and content ^ ^ eyes; no border, no tint */
+.bubble {
+  position: absolute;
+  left: calc(100% + 2px);
+  top: -9px;
+  z-index: 3;
+  min-width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  padding: 0 3px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 700 10px / 1 var(--font-ui);
+  color: var(--ink);
+  background: var(--beacon);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  transform-origin: 0 100%;
+  animation: aico-bubble-in 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) 1 both;
+}
+/* The tail, toward the eyes. */
+.bubble::after {
+  content: "";
+  position: absolute;
+  left: 1px;
+  bottom: -3px;
+  border: 3px solid transparent;
+  border-top-color: inherit;
+  border-left-color: var(--beacon);
+  transform: skewX(-20deg);
+}
+.bubble[hidden] {
+  display: none;
+}
+:root[data-attention="finished"] .bubble {
+  background: var(--jade);
+}
+:root[data-attention="finished"] .bubble::after {
+  border-left-color: var(--jade);
+}
+@keyframes aico-bubble-in {
+  from {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+}
+.eyes.nudge .bubble {
+  animation: aico-nudge 1.2s cubic-bezier(0.34, 1.56, 0.64, 1) 1 both;
+}
+@keyframes aico-nudge {
+  0%,
+  100% {
+    transform: none;
+  }
+  18% {
+    transform: translateY(-4px) scale(1.4) rotate(-8deg);
+  }
+  36% {
+    transform: translateY(0) scale(1) rotate(6deg);
+  }
+  52% {
+    transform: translateY(-2px) scale(1.18) rotate(-4deg);
+  }
+  70% {
+    transform: none;
+  }
+}
+
+/* Content ^ ^: closed eyes arched upward, for a finished turn not yet seen. */
+.eyes[data-mood="content"] {
+  --lid-top: 0;
+  --lid-bot: 0;
+}
+.eyes[data-mood="content"] .eye {
+  background: transparent;
+  border-width: 2.5px;
+  border-color: transparent;
+  border-top-color: var(--bone);
+}
+.eyes[data-mood="content"] .pupil {
+  opacity: 0;
+}
+.eyes[data-mood="content"] .tui-icon {
+  transform: translateY(-1px) rotate(-6deg);
+}
+
+/* E1: pop and bounce — the face grows ~3x out over the window's corner, hops
+   with a squash and stretch, and shrinks back. */
+.eyes.pop {
+  z-index: 6;
+  transform-origin: 0 0;
+  animation: aico-pop 1.9s cubic-bezier(0.33, 0, 0.3, 1) 1 both;
+}
+@keyframes aico-pop {
+  0%,
+  100% {
+    transform: none;
+  }
+  14% {
+    transform: translate(2px, 6px) scale(3);
+  }
+  26% {
+    transform: translate(2px, -2px) scale(2.75, 3.3);
+  }
+  36% {
+    transform: translate(2px, 9px) scale(3.35, 2.6);
+  }
+  48% {
+    transform: translate(2px, 0) scale(2.8, 3.2);
+  }
+  58% {
+    transform: translate(2px, 9px) scale(3.25, 2.7);
+  }
+  68% {
+    transform: translate(2px, 4px) scale(3);
+  }
+  84% {
+    transform: translate(2px, 6px) scale(3);
+  }
+}
+
+/* E2: wiggle and dart — side to side with raised brows (eyes.ts darts the
+   pupils), then still, looking straight out. */
+.eyes::before,
+.eyes::after {
+  content: "";
+  position: absolute;
+  top: -5px;
+  width: 9px;
+  height: 4px;
+  border-top: 1.5px solid var(--bone);
+  border-radius: 50% 50% 0 0;
+  opacity: 0;
+  pointer-events: none;
+}
+.eyes::before {
+  left: 1.5px;
+}
+.eyes::after {
+  left: 35.5px;
+}
+.eyes.wiggle {
+  animation: aico-wiggle 1.9s ease-in-out 1 both;
+}
+.eyes.wiggle::before,
+.eyes.wiggle::after {
+  animation: aico-brows 1.9s ease-out 1 both;
+}
+@keyframes aico-wiggle {
+  0%,
+  62%,
+  100% {
+    transform: none;
+  }
+  8% {
+    transform: translateX(-3px) rotate(-6deg);
+  }
+  18% {
+    transform: translateX(3px) rotate(6deg);
+  }
+  28% {
+    transform: translateX(-3px) rotate(-5deg);
+  }
+  38% {
+    transform: translateX(3px) rotate(5deg);
+  }
+  50% {
+    transform: translateX(-1px) rotate(-2deg);
+  }
+}
+@keyframes aico-brows {
+  0% {
+    opacity: 0;
+    transform: none;
+  }
+  10%,
+  85% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+  100% {
+    opacity: 0;
+    transform: none;
+  }
+}
+
+/* W1 + W2, from 30 s: a thin bright amber border breathing on a 2 s cycle,
+   and a steady amber wash over the titlebar. */
+.shell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  border-radius: inherit;
+  border: 1.5px solid var(--beacon);
+  opacity: 0;
+  pointer-events: none;
+}
+:root[data-attention="blocked"]:is([data-stage="rising"], [data-stage="urgent"]) .shell::after {
+  will-change: opacity;
+  animation: aico-beacon 2s ease-in-out infinite;
+}
+:root[data-attention="blocked"]:is([data-stage="rising"], [data-stage="urgent"]) .titlebar {
+  border-radius: 6px 6px 0 0;
+  background: var(--beacon-tint);
+}
+@keyframes aico-beacon {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bubble,
+  .eyes.nudge .bubble {
+    animation: none;
+  }
+  :root[data-attention="blocked"]:is([data-stage="rising"], [data-stage="urgent"]) .shell::after {
+    animation: none;
+    opacity: 0.9;
+  }
+}
 /* Window-control dots — clearly visible; glyph fills in on hover. No traffic lights. */
 .controls {
   flex: 0 0 auto;

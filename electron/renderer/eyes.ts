@@ -3,7 +3,28 @@
 // is a short CSS transition fired from a timer; nothing runs a continuous
 // animation, so an idle widget paints nothing.
 
-export type Mood = 'idle' | 'busy' | 'happy' | 'surprised' | 'sleepy' | 'asleep'
+export type Mood = 'idle' | 'busy' | 'happy' | 'surprised' | 'sleepy' | 'asleep' | 'content'
+
+/** What the session needs from the owner, as main's attention.ts sends it. */
+export type AttentionMode = 'none' | 'blocked' | 'finished'
+export type AttentionStage = 'fresh' | 'rising' | 'urgent'
+
+/** The eye motions that call the owner to a waiting window:
+ *   pop     the eyes grow ~3x over the window's corner and hop, then shrink back
+ *   wiggle  side to side with raised brows, darting, then a look straight out
+ *   nudge   the "?" bubble bounces and the eyes glance up at it */
+export type Motion = 'pop' | 'wiggle' | 'nudge'
+const MOTIONS: readonly Motion[] = ['pop', 'wiggle', 'nudge']
+/** How long each motion plays (ms); keep in step with chrome.css. */
+export const MOTION_MS: Record<Motion, number> = { pop: 1900, wiggle: 1900, nudge: 1200 }
+/** Once rising, a motion every so often, never on a beat. */
+export const MOTION_EVERY_MS: [number, number] = [7_000, 9_000]
+
+/** A different motion from the last, picked at random. */
+export function nextMotion(last: Motion | null, rand: () => number): Motion {
+  const choices = MOTIONS.filter((m) => m !== last)
+  return choices[Math.floor(rand() * choices.length)] ?? 'nudge'
+}
 
 /** No output and no input for this long: the lids get heavy. */
 export const SLEEPY_AFTER_MS = 2 * 60_000
@@ -107,12 +128,24 @@ export class Eyes {
   private exchanging = false
   private peerTurn = 0
   private peerUntil = 0
+  /** A mood held while the window waits on the owner (finished: content). */
+  private held: Mood | null = null
+  private attention: { mode: AttentionMode; stage: AttentionStage } = {
+    mode: 'none',
+    stage: 'fresh',
+  }
+  private lastMotion: Motion | null = null
+  private motionTimer: number | undefined
+  /** A motion owns the gaze until it ends. */
+  private performing = false
+  private readonly bubble: HTMLElement | null
 
   constructor(
     private readonly root: HTMLElement,
     private readonly icon: HTMLElement | null,
   ) {
     this.eyes = [...root.querySelectorAll<HTMLElement>('.eye')]
+    this.bubble = root.querySelector<HTMLElement>('.bubble')
     root.addEventListener('click', this.boop)
     window.setTimeout(() => this.blink(), 1500 + Math.random() * 2500)
     window.setTimeout(() => this.glance(), 2200)
@@ -162,6 +195,8 @@ export class Eyes {
   setFocused(focused: boolean): void {
     const gained = focused && !this.focused
     this.focused = focused
+    // Focus is the owner looking: everything clears at once, before main says so.
+    if (gained) this.setAttention('none', 'fresh')
     if (gained) {
       this.wake()
       this.look(0, 0)
@@ -171,7 +206,7 @@ export class Eyes {
 
   /** Global cursor (screen px); followed while unfocused or hovered. */
   cursor(screenX: number, screenY: number): void {
-    if (this.reading || this.lookingDown) return
+    if (this.reading || this.lookingDown || this.performing) return
     if (this.focused && !this.hovering) return
     this.aimAt(screenX, screenY)
   }
@@ -179,7 +214,8 @@ export class Eyes {
   /** A titlebar character to follow (client px), or null when none moves.
    * Only while focused and otherwise idle: unfocused eyes keep the cursor. */
   watch(pt: { x: number; y: number } | null): void {
-    if (!this.focused || this.hovering || this.reading || this.lookingDown) return
+    if (!this.focused || this.hovering || this.reading || this.lookingDown || this.performing)
+      return
     if (pt) this.aimAt(window.screenX + pt.x, window.screenY + pt.y)
     else this.look(0, 0)
   }
@@ -191,6 +227,88 @@ export class Eyes {
     else if (this.focused && !this.reading) this.look(0, 0)
   }
 
+  /**
+   * The session needs the owner (main attention.ts). Blocked: a "?" bubble and
+   * one eye motion; from `rising` the border pulses amber, the titlebar is
+   * tinted and a motion plays every ~8 s. Finished: a "✓" bubble and content
+   * ^ ^ eyes, nothing moving. Reduced motion keeps the bubble, border and tint
+   * but no motion; the focused window shows nothing.
+   */
+  setAttention(mode: AttentionMode, stage: AttentionStage): void {
+    if (this.focused && mode !== 'none') return
+    const was = this.attention
+    this.attention = { mode, stage }
+    const doc = document.documentElement
+    if (mode === 'none') {
+      delete doc.dataset.attention
+      delete doc.dataset.stage
+    } else {
+      doc.dataset.attention = mode
+      doc.dataset.stage = stage
+    }
+    if (this.bubble) {
+      this.bubble.textContent = mode === 'blocked' ? '?' : mode === 'finished' ? '✓' : ''
+      this.bubble.hidden = mode === 'none'
+    }
+    this.held = mode === 'finished' ? 'content' : null
+    this.settle()
+    if (mode !== 'blocked') {
+      window.clearTimeout(this.motionTimer)
+      this.motionTimer = undefined
+      this.endMotion()
+      return
+    }
+    if (was.mode !== 'blocked') window.setTimeout(() => this.perform(), 400)
+    if (stage !== 'fresh' && this.motionTimer === undefined) this.scheduleMotion()
+  }
+
+  private scheduleMotion(): void {
+    const [lo, hi] = MOTION_EVERY_MS
+    this.motionTimer = window.setTimeout(
+      () => {
+        this.motionTimer = undefined
+        if (this.attention.mode !== 'blocked') return
+        this.perform()
+        this.scheduleMotion()
+      },
+      lo + Math.random() * (hi - lo),
+    )
+  }
+
+  private perform(): void {
+    if (this.attention.mode !== 'blocked' || this.focused || this.calm.matches || this.performing)
+      return
+    const motion = nextMotion(this.lastMotion, Math.random)
+    this.lastMotion = motion
+    this.performing = true
+    this.wake()
+    this.root.classList.add(motion)
+    if (motion === 'wiggle') {
+      // Dart side to side, then a beat looking straight at you, eyes wide.
+      this.transient = { mood: 'surprised', until: Date.now() + MOTION_MS.wiggle }
+      this.settle()
+      const darts = [-GAZE_MAX, GAZE_MAX, -GAZE_MAX, GAZE_MAX, -GAZE_MAX * 0.6]
+      darts.forEach((x, i) => {
+        window.setTimeout(() => this.performing && this.look(x, 0), i * 170)
+      })
+      window.setTimeout(() => this.performing && this.look(0, 0), darts.length * 170)
+    } else if (motion === 'nudge') {
+      this.look(GAZE_MAX * 0.8, -GAZE_MAX * 0.7)
+    } else {
+      this.look(0, 0)
+    }
+    window.setTimeout(() => this.endMotion(), MOTION_MS[motion])
+  }
+
+  private endMotion(): void {
+    for (const m of MOTIONS) this.root.classList.remove(m)
+    if (!this.performing) return
+    this.performing = false
+    this.transient = null
+    this.settle()
+    this.look(0, 0)
+  }
+
   private wake(): void {
     const mood = this.mood()
     this.lastActivity = Date.now()
@@ -199,6 +317,7 @@ export class Eyes {
 
   private mood(): Mood {
     if (this.transient && this.transient.until > Date.now()) return this.transient.mood
+    if (this.held) return this.held
     return restingMood(this.reading, Date.now() - this.lastActivity)
   }
 
@@ -343,7 +462,7 @@ export class Eyes {
 
   private blink(): void {
     const mood = this.mood()
-    if (mood !== 'asleep' && mood !== 'happy') {
+    if (mood !== 'asleep' && mood !== 'happy' && mood !== 'content') {
       this.root.classList.add('blink')
       window.setTimeout(() => this.root.classList.remove('blink'), 110)
       // Now and then a double blink, the way people do.

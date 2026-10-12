@@ -18,9 +18,17 @@ import {
 import { type IPty, spawn } from 'node-pty'
 import { parseTerminalFontSettings } from '../shared/font-settings'
 import { cursorNearTitlebar, nextArcade, parseArcadeKeys, pickArcade } from './arcade'
-import { Attention, agentName, groupRows, pushBody } from './attention'
+import {
+  Attention,
+  type AttentionMode,
+  type AttentionStage,
+  agentName,
+  groupRows,
+  pushBody,
+} from './attention'
 import { contentSecurityPolicy, voiceConnectSource } from './csp'
 import {
+  allLookAt,
   arrange,
   DEFAULT_EYE_ANCHOR,
   type Face,
@@ -988,7 +996,10 @@ function createWidgetWindow(
     pendingCreates.set(winId, pending)
   }
 
-  win.webContents.on('did-finish-load', () => refreshContextBadge(win))
+  win.webContents.on('did-finish-load', () => {
+    refreshContextBadge(win)
+    sendAttention(win)
+  })
 
   if (process.env.ELECTRON_RENDERER_URL) {
     win.loadURL(process.env.ELECTRON_RENDERER_URL)
@@ -1241,6 +1252,12 @@ const attention = new Attention({
   isFocused: (id) => windowForWidget(id)?.isFocused() ?? false,
   flash: (id, on) => windowForWidget(id)?.flashFrame(on),
   needsYou: (on) => setNeedsYou(on),
+  attend: (id, mode, stage) => {
+    if (mode === 'none') attending.delete(id)
+    else attending.set(id, { mode, stage })
+    const win = windowForWidget(id)
+    if (win) sendAttention(win)
+  },
   push: (id) => {
     const descriptor = catalog.get(id)
     if (!descriptor) return
@@ -1258,6 +1275,35 @@ const attention = new Attention({
     )
   },
 })
+
+/** What each waiting window shows on itself; resent when a window (re)loads. */
+const attending = new Map<string, { mode: AttentionMode; stage: AttentionStage }>()
+
+function sendAttention(win: BrowserWindow): void {
+  const id = widgetOf.get(win.id)
+  if (!id || win.isDestroyed()) return
+  win.webContents.send('eyes:attention', attending.get(id) ?? { mode: 'none', stage: 'fresh' })
+}
+
+/** Every ~20 s, the other windows' eyes turn to each window waiting 2+ minutes. */
+const URGENT_LOOK_EVERY_MS = 20_000
+function lookAtUrgent(): void {
+  const all = faces()
+  for (const id of attention.urgent()) {
+    const win = windowForWidget(id)
+    const star = win && all.find((f) => f.winId === win.id)
+    if (!star) continue
+    for (const g of allLookAt(star, all, Math.random, false)) {
+      BrowserWindow.fromId(g.winId)?.webContents.send('eyes:look', {
+        x: g.target.x,
+        y: g.target.y,
+        delay: g.delay,
+        hold: g.hold,
+      })
+    }
+  }
+}
+setInterval(lookAtUrgent, URGENT_LOOK_EVERY_MS).unref()
 
 function noteAgentState(descriptor: SessionDescriptor): void {
   attention.update(descriptor.id, descriptor.state ?? 'unknown', descriptor.stateAt ?? null)

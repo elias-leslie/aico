@@ -8,13 +8,24 @@
 //   window has stayed unfocused and idle for 30 s. No tray change.
 // - Focusing the window, or the session leaving the state, clears both.
 // No sounds.
+//
+// The window itself shows the same through its eyes (renderer eyes.ts), in
+// stages: a blocked window starts `fresh` (a "?" bubble and one eye motion),
+// is `rising` after 30 s (amber border and titlebar, a motion every ~8 s) and
+// `urgent` after 2 minutes (the other windows' eyes turn to it). A finished
+// one shows a "✓" bubble and happy eyes, nothing more.
 
 export type AgentState = 'working' | 'idle' | 'blocked' | 'unknown'
 
 export const DONE_FLASH_MS = 30_000
+/** Blocked and unseen this long: the window's border and titlebar turn amber. */
+export const RISE_AFTER_MS = 30_000
 export const PUSH_AFTER_MS = 2 * 60_000
 /** At most one push per session in this window. */
 export const PUSH_COOLDOWN_MS = 15 * 60_000
+
+export type AttentionMode = 'none' | 'blocked' | 'finished'
+export type AttentionStage = 'fresh' | 'rising' | 'urgent'
 
 export interface AttentionDeps {
   now(): number
@@ -25,6 +36,8 @@ export interface AttentionDeps {
   /** The tray's "needs you" icon. */
   needsYou(on: boolean): void
   push(id: string): void
+  /** What the session's window shows on itself (its eyes, border, titlebar). */
+  attend(id: string, mode: AttentionMode, stage: AttentionStage): void
 }
 
 interface Entry {
@@ -36,7 +49,10 @@ interface Entry {
   /** Blocked, unfocused and not yet seen: drives the tray icon. */
   needsYou: boolean
   flashing: boolean
+  mode: AttentionMode
+  stage: AttentionStage
   doneTimer: unknown
+  riseTimer: unknown
   pushTimer: unknown
 }
 
@@ -58,7 +74,10 @@ export class Attention {
         finished: false,
         needsYou: false,
         flashing: false,
+        mode: 'none',
+        stage: 'fresh',
         doneTimer: null,
+        riseTimer: null,
         pushTimer: null,
       }
       this.entries.set(id, entry)
@@ -74,14 +93,22 @@ export class Attention {
         entry.needsYou = true
         this.setFlash(id, entry, true)
         this.cancelPush(entry)
+        this.setAttend(id, entry, 'blocked', 'fresh')
+        entry.riseTimer = this.deps.setTimer(() => {
+          entry.riseTimer = null
+          if (this.entries.get(id) === entry && entry.mode === 'blocked')
+            this.setAttend(id, entry, 'blocked', 'rising')
+        }, RISE_AFTER_MS)
         entry.pushTimer = this.deps.setTimer(() => this.maybePush(id), PUSH_AFTER_MS)
       }
     } else {
       entry.needsYou = false
       this.cancelPush(entry)
       this.setFlash(id, entry, false)
+      this.setAttend(id, entry, 'none', 'fresh')
       if (previous === 'working' && state === 'idle' && !this.deps.isFocused(id)) {
         entry.finished = true
+        this.setAttend(id, entry, 'finished', 'fresh')
         entry.doneTimer = this.deps.setTimer(() => {
           entry.doneTimer = null
           if (this.entries.get(id) === entry && entry.state === 'idle' && !this.deps.isFocused(id))
@@ -101,6 +128,7 @@ export class Attention {
     this.cancelDone(entry)
     this.cancelPush(entry)
     this.setFlash(id, entry, false)
+    this.setAttend(id, entry, 'none', 'fresh')
     this.syncTray()
   }
 
@@ -111,6 +139,7 @@ export class Attention {
     this.cancelDone(entry)
     this.cancelPush(entry)
     this.setFlash(id, entry, false)
+    this.setAttend(id, entry, 'none', 'fresh')
     this.entries.delete(id)
     this.syncTray()
   }
@@ -134,11 +163,19 @@ export class Attention {
     return [...this.entries].filter(([, entry]) => entry.needsYou).map(([id]) => id)
   }
 
+  /** Blocked windows two minutes unseen: the other windows look at them. */
+  urgent(): string[] {
+    return [...this.entries]
+      .filter(([, entry]) => entry.mode === 'blocked' && entry.stage === 'urgent')
+      .map(([id]) => id)
+  }
+
   private maybePush(id: string): void {
     const entry = this.entries.get(id)
     if (!entry) return
     entry.pushTimer = null
     if (entry.state !== 'blocked' || !entry.needsYou || this.deps.isFocused(id)) return
+    this.setAttend(id, entry, 'blocked', 'urgent')
     const now = this.deps.now()
     const last = this.lastPush.get(id)
     if (last !== undefined && now - last < PUSH_COOLDOWN_MS) return
@@ -150,6 +187,17 @@ export class Attention {
     if (entry.flashing === on) return
     entry.flashing = on
     this.deps.flash(id, on)
+  }
+
+  private setAttend(id: string, entry: Entry, mode: AttentionMode, stage: AttentionStage): void {
+    if (mode !== 'blocked' && entry.riseTimer !== null) {
+      this.deps.clearTimer(entry.riseTimer)
+      entry.riseTimer = null
+    }
+    if (entry.mode === mode && entry.stage === stage) return
+    entry.mode = mode
+    entry.stage = stage
+    this.deps.attend(id, mode, stage)
   }
 
   private cancelDone(entry: Entry): void {

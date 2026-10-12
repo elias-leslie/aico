@@ -203,6 +203,7 @@ function wireEyes(): Eyes | null {
   window.aico.win.onCursor((pt) => face.cursor(pt.x, pt.y))
   window.aico.win.onFocusChange((focused) => face.setFocused(focused))
   window.aico.win.onPeerLook((look) => face.lookAtPeer(look.x, look.y, look.delay, look.hold))
+  window.aico.win.onAttention((a) => face.setAttention(a.mode, a.stage))
   const r = root.getBoundingClientRect()
   window.aico.win.setEyeAnchor({ x: r.left + r.width / 2, y: r.top + r.height / 2 })
   const titlebar = document.querySelector<HTMLElement>('.titlebar')

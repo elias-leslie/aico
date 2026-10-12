@@ -4,6 +4,8 @@ import {
   aimOffset,
   exchangeScene,
   GAZE_MAX,
+  type Motion,
+  nextMotion,
   nextReadingGaze,
   restingMood,
   SLEEPY_AFTER_MS,
@@ -60,5 +62,19 @@ describe('exchangeScene', () => {
       expect(last?.right).toEqual({ x: 0, y: 0 })
       expect(scene.map((s) => s.at)).toEqual([...scene.map((s) => s.at)].sort((a, b) => a - b))
     }
+  })
+})
+
+describe('nextMotion', () => {
+  it('never plays the same motion twice running, and uses all three', () => {
+    const seen = new Set<Motion>()
+    let last: Motion | null = null
+    for (const r of [0, 0.5, 0.99, 0, 0.7, 0.2, 0.9]) {
+      const motion = nextMotion(last, () => r)
+      expect(motion).not.toBe(last)
+      seen.add(motion)
+      last = motion
+    }
+    expect([...seen].sort()).toEqual(['nudge', 'pop', 'wiggle'])
   })
 })

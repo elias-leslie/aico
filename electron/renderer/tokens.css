@@ -15,6 +15,10 @@
      warm enough to separate tiled widgets from each other and the desktop, too
      quiet to read as a status or compete with the amber accent. */
   --frame-edge: rgba(229, 166, 71, 0.26);
+  /* A window waiting on the owner (attention, eyes.ts): a brighter amber than
+     the lantern so a thin border still reads at a glance across the desk. */
+  --beacon: #ffbd52;
+  --beacon-tint: rgba(255, 189, 82, 0.17);
   --jade: #7ad68a; /* solid calm green — "good" status (context-injecting badge) */
 
   /* Frame: slim opaque window margin around the shell, so tiled widgets sit

@@ -159,6 +159,13 @@ export interface AicoApi {
     onPeerLook(
       cb: (look: { x: number; y: number; delay: number; hold: number }) => void,
     ): () => void
+    /** Whether this session needs the owner, as the window shows it (main attention.ts). */
+    onAttention(
+      cb: (attention: {
+        mode: 'none' | 'blocked' | 'finished'
+        stage: 'fresh' | 'rising' | 'urgent'
+      }) => void,
+    ): () => void
   }
   /** Titlebar arcade (see renderer/arcade). */
   arcade: {

@@ -54,6 +54,25 @@ export function neighbours(from: Face, faces: Face[]): Face[] {
     .sort((a, b) => distance(from.eye, a.eye) - distance(from.eye, b.eye))
 }
 
+/** Everyone turns to `star`, nearest first; it looks back at the nearest.
+ * Also played on purpose at a window that has waited on the owner too long
+ * (attention.ts `urgent`), with `answer` false: that one keeps its own look. */
+export function allLookAt(star: Face, faces: Face[], rand: () => number, answer = true): Glance[] {
+  const others = neighbours(star, faces)
+  const glances: Glance[] = others.map((f, i) => ({
+    winId: f.winId,
+    target: star.eye,
+    delay: i * 140 + Math.floor(rand() * 120),
+    hold: 1700,
+  }))
+  const nearest = others[0]
+  if (answer && nearest) {
+    const last = glances.reduce((m, g) => Math.max(m, g.delay), 0)
+    glances.push({ winId: star.winId, target: nearest.eye, delay: last + 250, hold: 1100 })
+  }
+  return glances
+}
+
 /**
  * Pick one scene. `rand` is a source of [0, 1) numbers (Math.random in use).
  * - pair: a window glances at a near neighbour; a beat later it looks back.
@@ -64,20 +83,7 @@ export function pickScene(faces: Face[], rand: () => number): Glance[] {
   if (faces.length < 2) return []
   if (faces.length >= 3 && rand() < 0.3) {
     const star = faces.find((f) => f.focused) ?? faces[Math.floor(rand() * faces.length)]
-    if (!star) return []
-    const others = neighbours(star, faces)
-    const glances: Glance[] = others.map((f, i) => ({
-      winId: f.winId,
-      target: star.eye,
-      delay: i * 140 + Math.floor(rand() * 120),
-      hold: 1700,
-    }))
-    const nearest = others[0]
-    if (nearest) {
-      const last = glances.reduce((m, g) => Math.max(m, g.delay), 0)
-      glances.push({ winId: star.winId, target: nearest.eye, delay: last + 250, hold: 1100 })
-    }
-    return glances
+    return star ? allLookAt(star, faces, rand) : []
   }
   const a = faces[Math.floor(rand() * faces.length)]
   if (!a) return []
