@@ -179,7 +179,7 @@ retirement and keeps its existing contract.
 The direct ST facade (`st` is the author's workspace tool; `st aico` runs Tether's `scripts/aico-root-watch.py`) creates one root without a fleet ledger or prompt retention:
 
 ```sh
-st aico create recovery-root-1 'Reconcile current state after the crash before continuing.' --project myapp --project-root ~/projects/myapp --resume-session 00000000-0000-4000-8000-000000000001
+st aico create recovery-root-1 'Reconcile current state after the crash before continuing.' --tool codex --project myapp --project-root ~/projects/myapp --resume-session 00000000-0000-4000-8000-000000000001
 ```
 
 Use the exact saved UUID, a new stable request ID, and the same complete body on
