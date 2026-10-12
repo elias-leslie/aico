@@ -58,6 +58,13 @@ def agent_state_for(mode: str, status: str | None) -> str:
     return "running" if status in {"running", "legacy"} else "not_started"
 
 
+ACTIVITY_STATES = frozenset({"working", "idle", "blocked", "unknown"})
+
+
+def _activity(value: Any) -> str:
+    return value if isinstance(value, str) and value in ACTIVITY_STATES else "unknown"
+
+
 def from_tether(descriptor: dict[str, Any], link: dict[str, Any] | None = None) -> dict[str, Any]:
     """Tether session descriptor -> A-Term session dict."""
     raw_tmux = descriptor.get("tmux")
@@ -95,6 +102,12 @@ def from_tether(descriptor: dict[str, Any], link: dict[str, Any] | None = None) 
         "generation": descriptor.get("generation"),
         "pane_id": (link or {}).get("pane_id"),
         "root_request_id": descriptor.get("rootRequestId"),
+        # Tether's agent state (tether docs/agent-state.md), read as-is: the
+        # session list groups by it (needs you, finished, working, idle).
+        "activity": _activity(descriptor.get("state")),
+        "activity_previous": _activity(descriptor.get("statePrevious")),
+        "activity_at": descriptor.get("stateAt") if isinstance(descriptor.get("stateAt"), int) else None,
+        "activity_detail": descriptor.get("stateDetail") if isinstance(descriptor.get("stateDetail"), str) else None,
     }
 
 

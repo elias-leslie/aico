@@ -3,7 +3,9 @@
 import { clsx } from 'clsx'
 import { ChevronDown } from 'lucide-react'
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { useSessionAttention } from '@/lib/hooks/use-session-attention'
 import { type ATermSlot, getSlotName, type PaneSlot } from '@/lib/utils/slot'
+import { AttentionBadge } from '../AttentionBadge'
 import { PaneSwapDropdown } from '../PaneSwapDropdown'
 
 interface HeaderNameDisplayProps {
@@ -32,6 +34,7 @@ export const HeaderNameDisplay = memo(function HeaderNameDisplay({
   onEditingChange,
 }: HeaderNameDisplayProps) {
   const name = getSlotName(slot)
+  const attention = useSessionAttention()
   const textColor = isActive
     ? 'var(--term-text-primary)'
     : 'var(--term-text-muted)'
@@ -109,6 +112,7 @@ export const HeaderNameDisplay = memo(function HeaderNameDisplay({
         onSwapWith={onSwapWith}
         onSwitchTo={onSwitchTo}
         isMobile={isMobile}
+        attention={attention}
       />
     )
   }
@@ -132,14 +136,18 @@ export const HeaderNameDisplay = memo(function HeaderNameDisplay({
     )
   }
 
-  // Static display — still supports double-click rename
+  // Static display — still supports double-click rename. The pane's agent
+  // state (waiting 3m, done 1m, ...) sits beside its name.
   return (
-    <span
-      className="flex items-center px-1.5 py-0.5 text-xs truncate max-w-[140px]"
-      style={{ color: textColor }}
-      title={name}
-    >
-      {name}
+    <span className="flex min-w-0 items-center gap-1.5">
+      <span
+        className="flex items-center px-1.5 py-0.5 text-xs truncate max-w-[140px]"
+        style={{ color: textColor }}
+        title={name}
+      >
+        {name}
+      </span>
+      <AttentionBadge attention={attention.forSlot(slot)} />
     </span>
   )
 })

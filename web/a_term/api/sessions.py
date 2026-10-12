@@ -58,6 +58,10 @@ class ATermSessionResponse(BaseModel):
     status: str | None = None
     generation: str | None = None
     pane_id: str | None = None
+    activity: str = "unknown"
+    activity_previous: str = "unknown"
+    activity_at: int | None = None
+    activity_detail: str | None = None
 
     @model_validator(mode="before")
     @classmethod

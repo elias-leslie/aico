@@ -4,7 +4,13 @@ import { clsx } from 'clsx'
 import { ArrowLeftRight, ChevronDown } from 'lucide-react'
 import { type DragEvent, useCallback, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import {
+  ATTENTION_GROUPS,
+  type Attention,
+  compareAttention,
+} from '@/lib/attention'
 import { useClickOutside } from '@/lib/hooks/use-click-outside'
+import type { SessionAttention } from '@/lib/hooks/use-session-attention'
 import {
   clearDraggedPaneSlotId,
   getDraggedPaneSlotId,
@@ -17,6 +23,7 @@ import {
   getSlotPanelId,
   type PaneSlot,
 } from '@/lib/utils/slot'
+import { AttentionBadge, NeedsYouCount } from './AttentionBadge'
 
 function getSlotMode(slot: ATermSlot | PaneSlot): string {
   if (slot.type === 'project') {
@@ -39,6 +46,9 @@ export interface PaneSwapDropdownProps {
   /** Callback to switch to another slot (mobile: navigate to pane) */
   onSwitchTo?: (slot: ATermSlot | PaneSlot) => void
   isMobile?: boolean
+  /** Agent state per slot (needs you, finished, working, idle); without it
+   * the list is alphabetical and has no badges. */
+  attention?: SessionAttention
 }
 
 /**
@@ -52,6 +62,7 @@ export function PaneSwapDropdown({
   onSwapWith,
   onSwitchTo,
   isMobile = false,
+  attention,
 }: PaneSwapDropdownProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [isDragTarget, setIsDragTarget] = useState(false)
@@ -61,6 +72,12 @@ export function PaneSwapDropdown({
   const currentId = getSlotPanelId(currentSlot)
 
   const dropdownSlots = useMemo(() => {
+    const stateOf = (slot: ATermSlot | PaneSlot): Attention | null =>
+      attention?.forSlot(slot) ?? null
+    // Most urgent first (Aico's tray order); alphabetical within equal state.
+    const byAttention = <T extends { state: Attention | null }>(a: T, b: T) =>
+      a.state && b.state ? compareAttention(a.state, b.state) : 0
+
     if (!isMobile) {
       return allSlots
         .filter((slot) => getSlotPanelId(slot) !== currentId)
@@ -68,7 +85,9 @@ export function PaneSwapDropdown({
           id: getSlotPanelId(slot),
           label: getSlotName(slot),
           slot,
+          state: stateOf(slot),
         }))
+        .sort(byAttention)
     }
 
     const sortedSlots = [...allSlots].sort((slotA, slotB) => {
@@ -85,17 +104,21 @@ export function PaneSwapDropdown({
 
     const seenLabelCounts = new Map<string, number>()
 
-    return sortedSlots.map((slot) => {
-      const baseLabel = getMobileSlotLabel(slot)
-      const count = (seenLabelCounts.get(baseLabel) ?? 0) + 1
-      seenLabelCounts.set(baseLabel, count)
-      return {
-        id: getSlotPanelId(slot),
-        label: count > 1 ? `${baseLabel} #${count}` : baseLabel,
-        slot,
-      }
-    })
-  }, [allSlots, currentId, isMobile])
+    return sortedSlots
+      .map((slot) => {
+        const baseLabel = getMobileSlotLabel(slot)
+        const count = (seenLabelCounts.get(baseLabel) ?? 0) + 1
+        seenLabelCounts.set(baseLabel, count)
+        return {
+          id: getSlotPanelId(slot),
+          label: count > 1 ? `${baseLabel} #${count}` : baseLabel,
+          slot,
+          state: stateOf(slot),
+        }
+      })
+      .sort(byAttention)
+  }, [allSlots, currentId, isMobile, attention])
+  const needsYouCount = attention?.needsYouCount ?? 0
 
   const closeDropdown = useCallback(() => setIsOpen(false), [])
   const clickOutsideRefs = useMemo(
@@ -200,6 +223,7 @@ export function PaneSwapDropdown({
         aria-expanded={isOpen}
       >
         <span className="truncate">{currentName}</span>
+        <NeedsYouCount count={needsYouCount} />
         <ChevronDown
           className={clsx(
             'w-3 h-3 flex-shrink-0 transition-transform',
@@ -231,7 +255,7 @@ export function PaneSwapDropdown({
             Swap position with
           </div>
 
-          {dropdownSlots.map(({ id, label }) => (
+          {dropdownSlots.map(({ id, label, state }) => (
             <button
               key={id}
               onClick={() => {
@@ -248,6 +272,7 @@ export function PaneSwapDropdown({
                 style={{ color: 'var(--term-text-muted)' }}
               />
               <span className="truncate flex-1">{label}</span>
+              <AttentionBadge attention={state} />
             </button>
           ))}
         </div>
@@ -299,40 +324,63 @@ export function PaneSwapDropdown({
                   touchAction: 'pan-y',
                 }}
               >
-                {dropdownSlots.map(({ id, label, slot }) => {
+                {dropdownSlots.map(({ id, label, slot, state }, index) => {
                   const isCurrent = id === currentId
+                  const group = state?.group
+                  const header =
+                    group && group !== dropdownSlots[index - 1]?.state?.group
+                      ? ATTENTION_GROUPS.find((g) => g.group === group)?.title
+                      : null
                   return (
-                    <button
-                      key={id}
-                      type="button"
-                      onClick={() => {
-                        onSwitchTo?.(slot)
-                        setIsOpen(false)
-                      }}
-                      className={clsx(
-                        'mb-1 flex w-full items-center justify-between rounded-lg px-3 py-3 text-left text-sm transition-colors',
-                        isCurrent && 'ring-1',
-                      )}
-                      style={{
-                        color: 'var(--term-text-primary)',
-                        backgroundColor: isCurrent
-                          ? 'var(--term-bg-elevated)'
-                          : 'transparent',
-                        borderColor: isCurrent
-                          ? 'var(--term-accent-muted)'
-                          : 'transparent',
-                      }}
-                    >
-                      <span className="truncate">{label}</span>
-                      {isCurrent && (
-                        <span
-                          className="ml-3 shrink-0 text-[11px] uppercase tracking-wide"
-                          style={{ color: 'var(--term-text-muted)' }}
+                    <div key={id}>
+                      {header && (
+                        <div
+                          data-testid="pane-swap-group-header"
+                          className="px-3 pt-2 pb-1 text-[11px] uppercase tracking-wide"
+                          style={{
+                            color:
+                              group === 'needs-you'
+                                ? 'var(--term-danger)'
+                                : 'var(--term-text-muted)',
+                          }}
                         >
-                          Current
-                        </span>
+                          {header}
+                        </div>
                       )}
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onSwitchTo?.(slot)
+                          setIsOpen(false)
+                        }}
+                        className={clsx(
+                          'mb-1 flex w-full items-center justify-between rounded-lg px-3 py-3 text-left text-sm transition-colors',
+                          isCurrent && 'ring-1',
+                        )}
+                        style={{
+                          color: 'var(--term-text-primary)',
+                          backgroundColor: isCurrent
+                            ? 'var(--term-bg-elevated)'
+                            : 'transparent',
+                          borderColor: isCurrent
+                            ? 'var(--term-accent-muted)'
+                            : 'transparent',
+                        }}
+                      >
+                        <span className="min-w-0 truncate">{label}</span>
+                        <span className="ml-3 flex shrink-0 items-center gap-2">
+                          <AttentionBadge attention={state} />
+                          {isCurrent && (
+                            <span
+                              className="text-[11px] uppercase tracking-wide"
+                              style={{ color: 'var(--term-text-muted)' }}
+                            >
+                              Current
+                            </span>
+                          )}
+                        </span>
+                      </button>
+                    </div>
                   )
                 })}
               </div>

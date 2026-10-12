@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import type { Attention } from '@/lib/attention'
 import type { PaneSlot } from '@/lib/utils/slot'
 import { PaneSwapDropdown } from './PaneSwapDropdown'
 
@@ -147,5 +148,59 @@ describe('PaneSwapDropdown', () => {
 
     expect(screen.getByText('Alpha [shell]')).toBeInTheDocument()
     expect(screen.getByText('Alpha [shell] #2')).toBeInTheDocument()
+  })
+})
+
+describe('PaneSwapDropdown attention', () => {
+  it('groups the mobile switcher most-urgent first with badges and a needs-you count', () => {
+    const slots = [
+      makeProjectSlot('a', 'Alpha'),
+      makeProjectSlot('b', 'Beta'),
+      makeProjectSlot('c', 'Gamma'),
+      makeProjectSlot('d', 'Delta'),
+    ]
+    const states: Record<string, Attention> = {
+      a: { group: 'idle', activity: 'idle', at: 1, detail: 'idle 2h' },
+      b: { group: 'working', activity: 'working', at: 5, detail: 'working 4m' },
+      c: {
+        group: 'needs-you',
+        activity: 'blocked',
+        at: 9,
+        detail: 'waiting 3m',
+      },
+      d: { group: 'finished', activity: 'idle', at: 8, detail: 'done 1m' },
+    }
+    const onSwitchTo = vi.fn()
+    render(
+      <PaneSwapDropdown
+        currentSlot={slots[0] as PaneSlot}
+        allSlots={slots}
+        onSwitchTo={onSwitchTo}
+        isMobile
+        attention={{
+          forSlot: (slot) => states[(slot as PaneSlot).paneId] ?? null,
+          needsYouCount: 1,
+        }}
+      />,
+    )
+    expect(screen.getByTestId('needs-you-count').textContent).toBe('1')
+    fireEvent.click(screen.getByTestId('pane-swap-dropdown'))
+    const sheet = screen.getByTestId('pane-swap-mobile-sheet')
+    expect(
+      [...sheet.querySelectorAll('[data-testid="pane-swap-group-header"]')].map(
+        (el) => el.textContent,
+      ),
+    ).toEqual(['Needs you', 'Finished', 'Working', 'Idle'])
+    const rows = [...sheet.querySelectorAll('button[type="button"]')]
+      .map((el) => el.textContent ?? '')
+      .filter((text) => /Alpha|Beta|Gamma|Delta/.test(text))
+    expect(rows).toEqual([
+      'Gamma [shell]waiting 3m',
+      'Delta [shell]done 1m',
+      'Beta [shell]working 4m',
+      'Alpha [shell]idle 2hCurrent',
+    ])
+    fireEvent.click(screen.getByRole('button', { name: /Gamma/ }))
+    expect(onSwitchTo).toHaveBeenCalledWith(slots[2])
   })
 })

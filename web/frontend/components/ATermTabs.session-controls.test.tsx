@@ -20,6 +20,12 @@ vi.mock('@/lib/hooks/use-a-term-orchestration', () => ({
     handleSlotCloseSession: endSession,
   }),
 }))
+vi.mock('@/lib/hooks/use-session-attention', () => ({
+  useMarkActiveSeen: () => {},
+  useAttentionTitle: () => {},
+  useSessionAttention: () => ({ forSlot: () => null, needsYouCount: 0 }),
+}))
+
 vi.mock('@/lib/hooks/use-visual-viewport-height', () => ({
   useVisualViewportHeight: () => undefined,
 }))

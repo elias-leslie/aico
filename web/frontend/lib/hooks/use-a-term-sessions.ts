@@ -37,6 +37,15 @@ export interface ATermSession {
   /** A pre-Tether session on the default tmux server: attach-only. */
   is_legacy?: boolean
   generation?: string | null
+  /** The A-Term pane this session belongs to, if any. */
+  pane_id?: string | null
+  /** Tether's agent state (tether docs/agent-state.md). */
+  activity?: 'working' | 'idle' | 'blocked' | 'unknown'
+  activity_previous?: 'working' | 'idle' | 'blocked' | 'unknown'
+  /** When the activity began (ms since the epoch). */
+  activity_at?: number | null
+  /** Why blocked: `permission prompt`, `input needed`, ... */
+  activity_detail?: string | null
 }
 
 interface SessionListResponse {
@@ -61,6 +70,9 @@ export interface DeleteSessionResult {
   pane_deleted: boolean
   is_external: boolean
 }
+
+/** How often the session list (and its agent states) refreshes. */
+export const SESSION_REFRESH_MS = 5_000
 
 const jsonHeaders = { 'Content-Type': 'application/json' }
 
@@ -119,6 +131,10 @@ export function useATermSessions(options: UseATermSessionsOptions = {}) {
   } = useQuery({
     queryKey: ['a-term-sessions', includeDetached],
     queryFn: () => fetchSessions(includeDetached),
+    // Agent state (needs you, working, ...) changes without any A-Term
+    // action, so keep the list fresh while the app is open.
+    refetchInterval: SESSION_REFRESH_MS,
+    refetchOnWindowFocus: true,
   })
 
   const updateMutation = useMutation({

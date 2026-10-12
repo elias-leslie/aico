@@ -3,6 +3,11 @@
 import { clsx } from 'clsx'
 import { useState } from 'react'
 import { useATermOrchestration } from '@/lib/hooks/use-a-term-orchestration'
+import {
+  useAttentionTitle,
+  useMarkActiveSeen,
+  useSessionAttention,
+} from '@/lib/hooks/use-session-attention'
 import { useVisualViewportHeight } from '@/lib/hooks/use-visual-viewport-height'
 import {
   type ATermSlot,
@@ -144,6 +149,10 @@ export function ATermTabs({
     handleVoiceToggle,
     handleVoiceReset,
   } = useATermOrchestration({ projectId, projectPath, detachedPaneId })
+  // Opening a session clears its needs-you/finished state; the title carries
+  // the count of sessions waiting on the owner.
+  useMarkActiveSeen(activeSessionId)
+  useAttentionTitle(useSessionAttention().needsYouCount)
 
   const confirmEndSession = async () => {
     if (!sessionToEnd || endSessionPending) return

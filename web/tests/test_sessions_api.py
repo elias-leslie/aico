@@ -168,3 +168,15 @@ def test_reset_all_respawns_linked_tether_sessions(test_app: TestClient, fake_te
     fake_tether.add_session()  # not shown by A-Term: left alone
     response = test_app.post("/api/a-term/reset-all")
     assert response.json() == {"reset_count": 2}
+
+
+def test_session_carries_tether_agent_state(test_app: TestClient, fake_tether: FakeTether) -> None:
+    _pane, session = _pane_with_session(fake_tether)
+    session.update(state="blocked", statePrevious="working", stateAt=1791690000000, stateDetail="permission prompt")
+    body = test_app.get(f"/api/a-term/sessions/{session['id']}").json()
+    assert (body["activity"], body["activity_previous"], body["activity_at"], body["activity_detail"]) == (
+        "blocked", "working", 1791690000000, "permission prompt")
+    session.update(state="sideways")
+    del session["stateAt"]
+    body = test_app.get(f"/api/a-term/sessions/{session['id']}").json()
+    assert (body["activity"], body["activity_at"]) == ("unknown", None)
