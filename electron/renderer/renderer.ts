@@ -1,6 +1,7 @@
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { Terminal } from '@xterm/xterm'
+import { createPasteGuard } from './paste-guard'
 import '@xterm/xterm/css/xterm.css'
 import './tokens.css'
 import '../../assets/fonts/fonts.css'
@@ -547,13 +548,15 @@ host.addEventListener('mouseup', (e) => {
   if (selection) window.aico.clipboard.write(selection)
 })
 
-async function pasteFromClipboard(): Promise<void> {
-  const text = await window.aico.clipboard.read()
-  if (text) term.paste(text)
-}
+// One gesture, one paste: see paste-guard.ts for the duplicate sources.
+const pasteFromClipboard = createPasteGuard(
+  () => window.aico.clipboard.read(),
+  (text) => term.paste(text),
+)
 
 host.addEventListener('contextmenu', (event) => {
   event.preventDefault()
+  event.stopPropagation()
   void pasteFromClipboard()
 })
 
@@ -562,6 +565,9 @@ term.attachCustomKeyEventHandler((event) => {
     return true
   }
   if (event.code === 'KeyV') {
+    // xterm skips preventDefault when this handler returns false, so Chromium
+    // would also fire a native paste event into xterm's textarea: a second paste.
+    event.preventDefault()
     void pasteFromClipboard()
     return false
   }
