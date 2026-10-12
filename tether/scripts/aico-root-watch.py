@@ -24,6 +24,7 @@ import hashlib
 import json
 import math
 import os
+from pathlib import Path
 import re
 import select
 import selectors
@@ -1157,6 +1158,28 @@ def roots_main(argv: list[str]) -> int:
             signal.signal(s, handler)
 
 
+def layout_main(argv: list[str]) -> int:
+    """Print the running Aico GUI's window layout (displays, every window's
+    bounds) so an agent can plan an arrangement, then move windows with
+    `st aico widget position --widget-id ID X Y WIDTH HEIGHT`."""
+    parser = argparse.ArgumentParser(prog="st aico layout", description=layout_main.__doc__)
+    parser.parse_args(argv)
+    runtime = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
+    path = Path(os.environ.get("AICO_LAYOUT_FILE", f"{runtime}/aico/layout.json"))
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, ValueError):
+        print(json.dumps({"owner": "aico", "observation": "unavailable",
+                          "reason": "layout_missing", "path": str(path)}))
+        return 1
+    if not isinstance(data, dict) or data.get("v") != 1:
+        print(json.dumps({"owner": "aico", "observation": "unavailable",
+                          "reason": "layout_unqualified"}))
+        return 1
+    print(json.dumps({"owner": "aico", **data}, indent=2))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     import sys
 
@@ -1171,6 +1194,8 @@ def main(argv: list[str] | None = None) -> int:
         return widget_main(argv[1:])
     if argv and argv[0] == "root":
         return root_main(argv[1:])
+    if argv and argv[0] == "layout":
+        return layout_main(argv[1:])
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("root", "owner", "tmux"):
         parser.add_argument(f"--{name}-socket", required=True, type=socket_path)
