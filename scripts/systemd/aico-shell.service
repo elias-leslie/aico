@@ -5,10 +5,11 @@
 [Unit]
 Description=Aico desktop shell
 After=graphical-session.target
-# The default user target can start before GNOME imports DISPLAY into the user
-# manager. Skip that early attempt rather than launching Electron without X11;
-# the desktop launcher imports its explicit display variables and starts this
-# same canonical unit once the graphical session is ready.
+# Start at login with the graphical session: GNOME imports DISPLAY into the
+# user manager before graphical-session.target, but after default.target, so a
+# default.target install was always skipped and Aico never opened after a
+# reboot. The condition still guards a manual start without X11; the desktop
+# launcher imports its display variables and starts this same unit.
 ConditionEnvironment=DISPLAY
 # Historical desktop launches used a transient runtime service. Starting the
 # canonical managed unit retires only that desktop-runtime unit; durable tmux
@@ -45,4 +46,4 @@ TimeoutStartSec=60
 TimeoutStopSec=20
 
 [Install]
-WantedBy=default.target
+WantedBy=graphical-session.target
