@@ -149,6 +149,12 @@ export interface AicoApi {
     /** Subscribe to the global cursor position (screen px) for the eyes; returns
      * an unsubscribe function. */
     onCursor(cb: (pt: { x: number; y: number }) => void): () => void
+    /** Tell main where the eyes sit (client px) so other windows can look at them. */
+    setEyeAnchor(pt: { x: number; y: number }): void
+    /** Main asks the eyes to look at another window (screen px). */
+    onPeerLook(
+      cb: (look: { x: number; y: number; delay: number; hold: number }) => void,
+    ): () => void
   }
   /** Titlebar arcade (see renderer/arcade). */
   arcade: {

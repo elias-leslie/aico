@@ -170,6 +170,18 @@ contextBridge.exposeInMainWorld('aico', {
       ipcRenderer.on('win:cursor', listener)
       return () => ipcRenderer.removeListener('win:cursor', listener)
     },
+    /** Tell main where the eyes sit (client px) so other windows can look at them. */
+    setEyeAnchor: (pt: { x: number; y: number }) => ipcRenderer.send('eyes:anchor', pt),
+    /** Main asks the eyes to look at another window (screen px); returns an
+     * unsubscribe function. */
+    onPeerLook: (cb: (look: { x: number; y: number; delay: number; hold: number }) => void) => {
+      const listener = (
+        _event: unknown,
+        look: { x: number; y: number; delay: number; hold: number },
+      ) => cb(look)
+      ipcRenderer.on('eyes:look', listener)
+      return () => ipcRenderer.removeListener('eyes:look', listener)
+    },
   },
   arcade: {
     assign: (keys: string[]) => ipcRenderer.invoke('arcade:assign', keys),

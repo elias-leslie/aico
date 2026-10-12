@@ -105,6 +105,7 @@ export class Eyes {
   private inputTimer: number | undefined
   private lookingDown = false
   private exchanging = false
+  private peerTurn = 0
 
   constructor(
     private readonly root: HTMLElement,
@@ -225,6 +226,20 @@ export class Eyes {
     this.icon?.style.setProperty('--tilt', `${(x * 4).toFixed(1)}deg`)
   }
 
+  /** Another Aico window is the one to look at (screen px): turn to it after
+   * `delay`, hold, then face front. Busy, typing, hovered or asleep eyes
+   * stay on their own work. */
+  lookAtPeer(screenX: number, screenY: number, delay: number, hold: number): void {
+    const turn = ++this.peerTurn
+    window.setTimeout(() => {
+      if (turn !== this.peerTurn || !this.atRest()) return
+      this.aimAt(screenX, screenY)
+      window.setTimeout(() => {
+        if (turn === this.peerTurn && this.atRest()) this.look(0, 0)
+      }, hold)
+    }, delay)
+  }
+
   private lookEach(left: Gaze, right: Gaze): void {
     const set = (eye: HTMLElement | undefined, g: Gaze): void => {
       if (!eye || !g) return
@@ -242,7 +257,7 @@ export class Eyes {
       !this.reading &&
       !this.lookingDown &&
       !this.calm.matches &&
-      this.mood() === 'idle'
+      (this.mood() === 'idle' || this.mood() === 'sleepy')
     )
   }
 

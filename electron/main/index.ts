@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -18,6 +18,16 @@ import { type IPty, spawn } from 'node-pty'
 import { parseTerminalFontSettings } from '../shared/font-settings'
 import { cursorNearTitlebar, nextArcade, parseArcadeKeys, pickArcade } from './arcade'
 import { contentSecurityPolicy, voiceConnectSource } from './csp'
+import {
+  DEFAULT_EYE_ANCHOR,
+  type Face,
+  type LayoutWindow,
+  layoutSnapshot,
+  type Point,
+  pickScene,
+  placeNewWindow,
+  SCENE_EVERY_MS,
+} from './gaze'
 import { parseBoundsRequest, parsePins } from './ipc-validation'
 import { allowTrustedAudioMedia } from './media-permission'
 import {
@@ -224,6 +234,114 @@ function logWidgetEvent(widgetId: string, event: string, data: Record<string, un
       signal: AbortSignal.timeout(2_000),
     },
   ).catch(() => {})
+}
+
+// ---------------------------------------------------------------------------
+// Gaze and layout (see gaze.ts): eyes that look at the other windows, and the
+// window picture agents read before arranging them.
+
+const eyeAnchors = new Map<number, Point>()
+let gazeTimer: ReturnType<typeof setTimeout> | undefined
+let layoutTimer: ReturnType<typeof setTimeout> | undefined
+const LAYOUT_PATH = join(
+  process.env.XDG_RUNTIME_DIR || `/run/user/${process.getuid?.() ?? 1000}`,
+  'aico',
+  'layout.json',
+)
+
+function aicoWindows(): BrowserWindow[] {
+  return BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed() && widgetOf.has(w.id))
+}
+
+function faces(): Face[] {
+  const focused = BrowserWindow.getFocusedWindow()
+  return aicoWindows()
+    .filter((w) => w.isVisible() && !w.isMinimized())
+    .map((w) => {
+      const b = w.getContentBounds()
+      const a = eyeAnchors.get(w.id) ?? DEFAULT_EYE_ANCHOR
+      return { winId: w.id, eye: { x: b.x + a.x, y: b.y + a.y }, focused: w === focused }
+    })
+}
+
+function playGazeScene(): void {
+  for (const g of pickScene(faces(), Math.random)) {
+    const win = BrowserWindow.fromId(g.winId)
+    if (!win || win.isDestroyed()) continue
+    win.webContents.send('eyes:look', {
+      x: g.target.x,
+      y: g.target.y,
+      delay: g.delay,
+      hold: g.hold,
+    })
+  }
+}
+
+function scheduleGaze(): void {
+  const [lo, hi] = SCENE_EVERY_MS
+  gazeTimer = setTimeout(
+    () => {
+      if (quitting) return
+      playGazeScene()
+      scheduleGaze()
+    },
+    lo + Math.random() * (hi - lo),
+  )
+}
+
+function writeLayout(): void {
+  const focused = BrowserWindow.getFocusedWindow()
+  const windows: LayoutWindow[] = []
+  for (const w of aicoWindows()) {
+    const id = widgetOf.get(w.id)
+    if (!id) continue
+    const descriptor = catalog.get(id)
+    const bounds = w.getBounds()
+    windows.push({
+      id,
+      name: descriptor ? sessionLabel(descriptor, getView(id), projects) : id,
+      bounds,
+      displayId: String(screen.getDisplayMatching(bounds).id),
+      focused: w === focused,
+      visible: w.isVisible(),
+      minimized: w.isMinimized(),
+      maximized: w.isMaximized(),
+    })
+  }
+  const primary = screen.getPrimaryDisplay().id
+  const displays = screen.getAllDisplays().map((d) => ({
+    id: String(d.id),
+    primary: d.id === primary,
+    bounds: d.bounds,
+    workArea: d.workArea,
+    scaleFactor: d.scaleFactor,
+  }))
+  try {
+    mkdirSync(join(LAYOUT_PATH, '..'), { recursive: true, mode: 0o700 })
+    const tmp = `${LAYOUT_PATH}.${process.pid}.tmp`
+    writeFileSync(tmp, `${JSON.stringify(layoutSnapshot(displays, windows), null, 2)}\n`, {
+      mode: 0o600,
+    })
+    renameSync(tmp, LAYOUT_PATH)
+  } catch (error) {
+    console.warn('[aico:layout] write failed:', error instanceof Error ? error.message : error)
+  }
+}
+
+function tileNewWindow(): ReturnType<typeof placeNewWindow> {
+  const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
+  const area = display.workArea
+  const windows = aicoWindows()
+    .filter((w) => w.isVisible() && !w.isMinimized())
+    .filter((w) => screen.getDisplayMatching(w.getBounds()).id === display.id)
+    .map((w) => ({ id: widgetOf.get(w.id) ?? '', bounds: w.getBounds() }))
+    .filter((w) => w.id)
+  return placeNewWindow(area, windows)
+}
+
+function scheduleLayout(): void {
+  if (layoutTimer) clearTimeout(layoutTimer)
+  layoutTimer = setTimeout(writeLayout, 300)
 }
 
 function windowForWidget(id: string): BrowserWindow | undefined {
@@ -728,8 +846,11 @@ function createWidgetWindow(
   pending: { tool: string; projectId: string } | null,
 ): BrowserWindow {
   const row = { id: view?.id ?? 'new' }
+  // A window with no remembered place tiles into the current arrangement on
+  // the screen under the pointer, rather than landing in the middle of it.
+  const tiled = view?.bounds ? null : tileNewWindow()
   const win = new BrowserWindow({
-    ...placement(view?.bounds ?? null),
+    ...(tiled ? tiled.bounds : placement(view?.bounds ?? null)),
     minWidth: 360,
     minHeight: 240,
     // Keep the frameless Lantern chrome, but make the native surface opaque.
@@ -797,6 +918,15 @@ function createWidgetWindow(
     )
   })
 
+  if (tiled?.resize) {
+    const neighbour = windowForWidget(tiled.resize.id)
+    if (neighbour) {
+      if (neighbour.isMaximized()) neighbour.unmaximize()
+      neighbour.setBounds(tiled.resize.bounds)
+      persistBounds(neighbour)
+    }
+  }
+
   const winId = win.id
   if (view) {
     widgetOf.set(winId, view.id)
@@ -833,6 +963,17 @@ function createWidgetWindow(
 
   win.on('move', () => scheduleBoundsSave(win))
   win.on('resize', () => scheduleBoundsSave(win))
+  for (const change of [
+    'move',
+    'resize',
+    'focus',
+    'blur',
+    'show',
+    'hide',
+    'minimize',
+    'restore',
+  ] as const)
+    win.on(change as 'move', scheduleLayout)
   win.on('close', () => persistBounds(win)) // final flush while bounds are still valid
 
   win.on('closed', () => {
@@ -859,7 +1000,9 @@ function createWidgetWindow(
     arcadeShown.delete(winId)
     arcadeNear.delete(winId)
     contextBadges.delete(winId)
+    eyeAnchors.delete(winId)
     syncCursorPump()
+    scheduleLayout()
     // On quit, leave `open` as-is so live views restore next launch; on an
     // explicit close, mark it closed (it moves to the tray's reopen list).
     if (!quitting && widgetId && getView(widgetId)) setOpen(widgetId, false)
@@ -1372,6 +1515,13 @@ app.on('before-quit', () => {
   if (app.isReady()) globalShortcut.unregisterAll()
   selectionEvents?.abort()
   sidecar?.stop()
+  if (gazeTimer) clearTimeout(gazeTimer)
+  if (layoutTimer) clearTimeout(layoutTimer)
+  try {
+    unlinkSync(LAYOUT_PATH) // no Aico running: no layout to report
+  } catch {
+    // Never written, or already gone.
+  }
 })
 
 // Single-instance lock: a second launch must not spawn a duplicate (it would
@@ -1606,6 +1756,19 @@ const startup = app.whenReady().then(async () => {
     }
   })
   ipcMain.on('win:close', (event) => BrowserWindow.fromWebContents(event.sender)?.close())
+  ipcMain.on('eyes:anchor', (event, pt: unknown) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const p = pt as Partial<Point> | null
+    if (!win || typeof p?.x !== 'number' || typeof p.y !== 'number') return
+    if (
+      !Number.isFinite(p.x) ||
+      !Number.isFinite(p.y) ||
+      Math.abs(p.x) > 4000 ||
+      Math.abs(p.y) > 4000
+    )
+      return
+    eyeAnchors.set(win.id, { x: Math.round(p.x), y: Math.round(p.y) })
+  })
   ipcMain.on('win:set-bounds', (event, b: unknown) => {
     const bounds = parseBoundsRequest(b)
     if (bounds) BrowserWindow.fromWebContents(event.sender)?.setBounds(bounds)
@@ -1842,6 +2005,8 @@ const startup = app.whenReady().then(async () => {
     trayTools(),
     projects.list(),
   )
+  scheduleGaze()
+  scheduleLayout()
   // Returning to any Aico window refreshes the native tray catalog as well.
   // Linux does not provide a reliable async hook before its cached tray menu opens.
   app.on('browser-window-focus', syncTray)
