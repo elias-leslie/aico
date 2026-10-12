@@ -1244,6 +1244,11 @@ async function renameSession(id: string, name: unknown): Promise<void> {
 // (attention.ts); after 2 minutes unanswered, one Nightshift push to the phone.
 
 const NIGHTSHIFT = join(homedir(), '.local/bin/nightshift')
+/** a-term on the owner's phone; a tap on the push opens the waiting session there (Nightshift allowlists the origin). */
+const ATERM_URL = (process.env.AICO_ATERM_URL ?? 'https://terminal.summitflow.dev').replace(
+  /\/+$/,
+  '',
+)
 
 const attention = new Attention({
   now: Date.now,
@@ -1266,7 +1271,16 @@ const attention = new Attention({
     // Nightshift's own Web Push to the owner's PWA; Aico keeps the per-session cooldown.
     execFile(
       NIGHTSHIFT,
-      ['push', pushBody(agent, title), '--title', 'Aico: waiting for you', '--severity', 'warning'],
+      [
+        'push',
+        pushBody(agent, title),
+        '--title',
+        'Aico: waiting for you',
+        '--severity',
+        'warning',
+        '--open',
+        `${ATERM_URL}/?session=${encodeURIComponent(id)}`,
+      ],
       { timeout: 30_000 },
       (error, stdout) => {
         if (error) console.warn(`[aico] needs-you push for ${id} failed: ${error.message}`)
