@@ -795,7 +795,12 @@ def create_main(argv: list[str]) -> int:
     parser.add_argument("--stdin", action="store_true", help="read prompt from bounded stdin instead")
     parser.add_argument("--project", required=True)
     parser.add_argument("--project-root", required=True)
-    parser.add_argument("--tool", choices=("codex", "claude-code"), default="codex")
+    # No default: the caller picks the agent on purpose. Each tool runs the
+    # model set in its own config (~/.claude/settings.json, ~/.codex/config.toml),
+    # so this list never goes stale on model names.
+    parser.add_argument("--tool", choices=("claude-code", "codex"), required=True, help=(
+        "required. claude-code: the default choice for delegated work. codex: only where "
+        "routing assigns Codex (e.g. Neri hunt skills and report review)."))
     parser.add_argument("--surface", choices=("aico", "a-term"), default="aico")
     parser.add_argument("--role", default="portfolio-root")
     parser.add_argument("--lead-root")

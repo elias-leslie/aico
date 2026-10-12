@@ -12,7 +12,7 @@ from test_aico_admin import admin
 
 
 THREAD = "00000000-0000-4000-8000-000000000001"
-BASE = ["create", "recovery-1", "Reconcile after crash.", "--project", "sample-app",
+BASE = ["create", "recovery-1", "Reconcile after crash.", "--tool", "codex", "--project", "sample-app",
         "--project-root", "/fixture/project", "--resume-session", THREAD]
 
 
@@ -136,3 +136,9 @@ def test_aterm_create_accepts_tether_shaped_receipt(monkeypatch):
     assert admin.main([*BASE, "--surface", "a-term"]) == 0
     assert output[0]["owner"] == "a-term" and output[0]["hostIdentity"] == "12345678"
     assert output[0]["surfaceLocator"] == "aico://widget/12345678"
+
+
+def test_tool_is_required():
+    without = [arg for arg in BASE if arg not in ("--tool", "codex")]
+    with pytest.raises(SystemExit):
+        admin.main(without)
