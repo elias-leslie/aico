@@ -1,6 +1,6 @@
 # Agent state
 
-Tether keeps one agent state per session: `working`, `idle`, `blocked` or `unknown`. It is on the session descriptor (`state`, `stateSource`, `stateAt`, `stateDetail`), on every `session.updated` event, and in `tether sessions diagnostics`. Aico uses it to flash a window and show the tray's "needs you" icon; `st sessions wait --until` uses it to wait for another session.
+Tether keeps one agent state per session: `working`, `idle`, `blocked` or `unknown`. It is on the session descriptor (`state`, `stateSource`, `stateAt`, `stateDetail`, `statePrevious`), on every `session.updated` event, and in `tether sessions diagnostics`. Aico uses it to flash a window, show the tray's "needs you" icon and group its tray menu; a-term groups its session list the same way; `st sessions wait --until` uses it to wait for another session.
 
 The state lives in the daemon's memory only. After a Tether restart it is rebuilt from the agents' own files within a poll.
 

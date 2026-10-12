@@ -64,6 +64,7 @@ Status: every route below is implemented (Phase 3a). Additions made for A-Term d
   "stateSource": "claude-status",
   "stateAt": 1791690000000,
   "stateDetail": "permission prompt",
+  "statePrevious": "working",
   "createdAt": 1791686790237
 }
 ```
@@ -81,7 +82,7 @@ Status: every route below is implemented (Phase 3a). Additions made for A-Term d
 
 `contextHook` *(post-cutover)* is Tether's latest check of the tool's Agent Hub context hook (see [Agent tools](#agent-tools)). `state` is `available`, `missing`, `unsupported`, `not_applicable`, or `unknown` when no check for the session's current `tool` has finished yet. `applicable` is false for a tool with no context mechanism (the bare shell). Tether checks after every launch, respawn, tool load and project switch, after its own restart (running sessions, one at a time, in the background) and on `POST /v1/sessions/:id/context-check`. A changed result publishes `session.updated`. The check is an independent probe: it never blocks the native tool, and it does not claim what an already-running session received.
 
-`state` is the agent's state: `working`, `idle`, `blocked` (waiting on the user: a permission prompt or a question) or `unknown` (no agent found, or the session is not running). `stateSource` names what said so (`claude-status`, `claude-hook`, `codex-rollout`, `none`), `stateAt` is when the state last changed (null while unknown), and `stateDetail` says why it is blocked. A change publishes `session.updated`. See [agent-state.md](agent-state.md).
+`state` is the agent's state: `working`, `idle`, `blocked` (waiting on the user: a permission prompt or a question) or `unknown` (no agent found, or the session is not running). `stateSource` names what said so (`claude-status`, `claude-hook`, `codex-rollout`, `none`), `stateAt` is when the state last changed (null while unknown), `stateDetail` says why it is blocked, and `statePrevious` is the state before (so `working` → `idle` is a finished turn, while `unknown` → `idle` is an agent Tether only just found). A change publishes `session.updated`. See [agent-state.md](agent-state.md).
 
 ## Sessions
 

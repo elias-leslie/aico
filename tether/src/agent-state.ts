@@ -28,6 +28,9 @@ export interface AgentStateRecord {
   stateAt: number
   /** Why blocked (`permission prompt`, `input needed`, …); null otherwise. */
   stateDetail: string | null
+  /** The state before this one, so a client can tell a finished turn
+   * (working → idle) from an idle agent Tether only just found. */
+  statePrevious: AgentState
 }
 
 /** One observation of an agent's own state. `at` is when the agent last
@@ -350,6 +353,7 @@ export class AgentStateTracker {
         stateSource: 'none',
         stateAt: 0,
         stateDetail: null,
+        statePrevious: 'unknown',
       }
     )
   }
@@ -376,7 +380,13 @@ export class AgentStateTracker {
       entry.record = { ...before, stateSource: source }
       return
     }
-    entry.record = { state, stateSource: source, stateAt: this.now(), stateDetail: detail }
+    entry.record = {
+      state,
+      stateSource: source,
+      stateAt: this.now(),
+      stateDetail: detail,
+      statePrevious: before.state,
+    }
     this.onChange(id, entry.record)
   }
 

@@ -134,6 +134,7 @@ export function agentStateOf(id: string): Record<string, unknown> {
     stateSource: 'none',
     stateAt: 0,
     stateDetail: null,
+    statePrevious: 'unknown',
   }
   return { ...record, stateAt: record.stateAt || null }
 }

@@ -97,6 +97,7 @@ describe('AgentStateTracker', () => {
       stateSource: 'claude-status',
       stateAt: 1000,
       stateDetail: null,
+      statePrevious: 'unknown',
     })
     t.observe('a', null)
     expect(t.get('a').state).toBe('unknown')
