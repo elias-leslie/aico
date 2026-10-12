@@ -107,6 +107,10 @@ const CODEX_APPROVAL_EVENTS = new Set([
   'apply_patch_approval_request',
   'request_permissions',
 ])
+/** Approval policies under which an escalated sandbox request waits for the
+ * user (Codex records no event while its approval prompt is open). */
+const CODEX_ASKING_POLICIES = new Set(['on-request', 'untrusted', 'on-failure'])
+const ESCALATED = /sandbox_permissions\W+require_escalated/
 /** First read of an existing rollout: enough tail for the current turn. */
 const ROLLOUT_TAIL_BYTES = 512 * 1024
 const ROLLOUT_MAX_STEP_BYTES = 4 * 1024 * 1024
@@ -153,6 +157,10 @@ export class CodexTurn {
   private active = false
   private approval = false
   private readonly questions = new Set<string>()
+  /** Escalated tool calls the user must approve, until their output. */
+  private readonly escalations = new Set<string>()
+  /** The turn's policy routes escalation requests to the user. */
+  private asksUser = false
   /** Timestamp of the last line that changed the state. */
   at: number | null = null
 
@@ -171,16 +179,19 @@ export class CodexTurn {
     const stamp = () => {
       if (Number.isFinite(at)) this.at = at
     }
+    if (item.type === 'turn_context') {
+      this.asksUser =
+        typeof payload.approval_policy === 'string' &&
+        CODEX_ASKING_POLICIES.has(payload.approval_policy) &&
+        (payload.approvals_reviewer === undefined || payload.approvals_reviewer === 'user')
+      return
+    }
     if (item.type === 'event_msg') {
-      if (kind === 'task_started') {
-        this.active = true
+      if (kind === 'task_started' || kind === 'task_complete' || kind === 'turn_aborted') {
+        this.active = kind === 'task_started'
         this.approval = false
         this.questions.clear()
-        stamp()
-      } else if (kind === 'task_complete' || kind === 'turn_aborted') {
-        this.active = false
-        this.approval = false
-        this.questions.clear()
+        this.escalations.clear()
         stamp()
       } else if (typeof kind === 'string' && CODEX_APPROVAL_EVENTS.has(kind)) {
         this.approval = true
@@ -203,9 +214,17 @@ export class CodexTurn {
       this.questions.add(callId)
       stamp()
     } else if (
+      (kind === 'function_call' || kind === 'custom_tool_call') &&
+      callId &&
+      this.asksUser &&
+      ESCALATED.test(String(payload.arguments ?? payload.input ?? ''))
+    ) {
+      this.escalations.add(callId)
+      stamp()
+    } else if (
       (kind === 'function_call_output' || kind === 'custom_tool_call_output') &&
       callId &&
-      this.questions.delete(callId)
+      (this.questions.delete(callId) || this.escalations.delete(callId))
     ) {
       stamp()
     } else if (this.approval) {
@@ -218,7 +237,7 @@ export class CodexTurn {
     const base = { source: 'codex-rollout', at: this.at, agentSessionId: this.threadId }
     if (this.active && this.questions.size > 0)
       return { ...base, state: 'blocked', detail: 'input needed' }
-    if (this.active && this.approval)
+    if (this.active && (this.approval || this.escalations.size > 0))
       return { ...base, state: 'blocked', detail: 'permission prompt' }
     return { ...base, state: this.active ? 'working' : 'idle', detail: null }
   }

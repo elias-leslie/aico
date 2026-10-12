@@ -191,6 +191,32 @@ describe('Codex rollout', () => {
     expect(turn.signal().state).toBe('idle')
   })
 
+  it.each([
+    ['on-request', 'user', 'blocked'],
+    ['never', 'user', 'working'],
+    ['on-request', 'auto_review', 'working'],
+  ])('an escalated call under policy %s, reviewer %s, is %s until its output', (policy, reviewer, pending) => {
+    const turn = new CodexTurn(CODEX)
+    turn.apply(
+      JSON.stringify({
+        type: 'turn_context',
+        payload: { approval_policy: policy, approvals_reviewer: reviewer },
+      }),
+    )
+    turn.apply(line('event_msg', { type: 'task_started' }))
+    turn.apply(
+      line('response_item', {
+        type: 'custom_tool_call',
+        name: 'exec',
+        call_id: 'c1',
+        input: 'await tools.exec_command({cmd:"touch x",sandbox_permissions:"require_escalated"})',
+      }),
+    )
+    expect(turn.signal().state).toBe(pending)
+    turn.apply(line('response_item', { type: 'custom_tool_call_output', call_id: 'c1' }))
+    expect(turn.signal().state).toBe('working')
+  })
+
   it('reads the tail first, then only appended complete lines', () => {
     let content = ''
     const tail: FileTail = {
