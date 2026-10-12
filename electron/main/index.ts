@@ -447,7 +447,12 @@ const refreshTools = coalesceAsync(async () => {
 function sessionEnded(id: string, reason: string): void {
   const known = catalog.get(id)
   catalog.remove(id)
-  windowForWidget(id)?.destroy()
+  // destroy() skips the 'close' event, so take the space it leaves here and
+  // let neighbours grow into it once the window is gone.
+  const win = windowForWidget(id)
+  const freed = win && win.isVisible() && !win.isMinimized() ? win.getBounds() : null
+  win?.destroy()
+  if (freed && !quitting) setImmediate(() => fillAfterClose(freed))
   removeView(id)
   if (known) logWidgetEvent(id, 'lifecycle_retired', { session_id: known.ownershipId, reason })
   syncTray()
