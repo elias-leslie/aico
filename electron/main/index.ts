@@ -102,6 +102,14 @@ let restored = false
 const ptys = new Map<number, IPty>()
 const attachTargets = new Map<number, AttachTarget>()
 const sizeClaims = new WeakMap<IPty, () => Promise<void>>()
+// Windows Aico itself just resized (tiling, re-tiling, an agent's position):
+// their next terminal resize claims the tmux size even while unfocused, or the
+// grown window would show the old grid in a sea of dots until clicked.
+const arrangedUntil = new Map<number, number>()
+function setArrangedBounds(win: BrowserWindow, bounds: Electron.Rectangle): void {
+  arrangedUntil.set(win.id, Date.now() + 3000)
+  win.setBounds(bounds)
+}
 const ptyStartGenerations = new Map<number, number>()
 const ptyRefreshes = new Map<
   number,
@@ -358,7 +366,7 @@ function fillAfterClose(freed: Bounds): void {
   for (const grown of fillFreedSpace(freed, windows)) {
     const win = windowForWidget(grown.id)
     if (!win) continue
-    win.setBounds(grown.bounds)
+    setArrangedBounds(win, grown.bounds)
     persistBounds(win)
   }
 }
@@ -566,7 +574,7 @@ async function applyGuiCommand(command: GuiCommand): Promise<GuiVerdict> {
   } else if (command.kind === 'position' && command.bounds) {
     const win = windowForWidget(id)
     if (win) {
-      win.setBounds(command.bounds)
+      setArrangedBounds(win, command.bounds)
       persistBounds(win)
     } else {
       saveBounds(id, command.bounds, String(screen.getDisplayMatching(command.bounds).id))
@@ -951,7 +959,7 @@ function createWidgetWindow(
     const neighbour = windowForWidget(tiled.resize.id)
     if (neighbour) {
       if (neighbour.isMaximized()) neighbour.unmaximize()
-      neighbour.setBounds(tiled.resize.bounds)
+      setArrangedBounds(neighbour, tiled.resize.bounds)
       persistBounds(neighbour)
     }
   }
@@ -1034,6 +1042,7 @@ function createWidgetWindow(
     arcadeNear.delete(winId)
     contextBadges.delete(winId)
     eyeAnchors.delete(winId)
+    arrangedUntil.delete(winId)
     syncCursorPump()
     // Neighbours grow into the space this window leaves (not on quit: the
     // whole arrangement is coming back next launch).
@@ -1655,7 +1664,8 @@ const startup = app.whenReady().then(async () => {
       const { cols, rows } = clampSize(size)
       try {
         pty.resize(cols, rows)
-        if (win?.isFocused()) void sizeClaims.get(pty)?.()
+        const arranged = win ? (arrangedUntil.get(win.id) ?? 0) > Date.now() : false
+        if (win?.isFocused() || arranged) void sizeClaims.get(pty)?.()
       } catch (err) {
         console.warn('[aico] pty resize failed:', err)
       }
