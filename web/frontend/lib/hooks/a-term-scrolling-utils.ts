@@ -1,5 +1,6 @@
 import { SCROLL_THRESHOLD } from '../constants/a-term'
 import { prefersLocalViewportScrollForMode } from '../utils/session-mode'
+import { isNativeSelectionActive } from './mobile-native-selection'
 
 type XtermATerm = InstanceType<typeof import('@xterm/xterm').Terminal>
 
@@ -236,6 +237,8 @@ export function setupTouchHandlers(
   const handleTouchMove = (e: TouchEvent) => {
     const aTerm = deps.aTermRef.current
     if (!aTerm) return
+    // Long-press then drag extends the browser's text selection.
+    if (isNativeSelectionActive(container)) return
     const currentY = e.touches[0].clientY
 
     if (touchStartY === 0 && lastSentY === 0) {

@@ -294,49 +294,31 @@ function getClipboardImageFile(
   return null
 }
 
-// ---------------------------------------------------------------------------
-// Mobile context-menu paste
-// ---------------------------------------------------------------------------
-
 /**
- * On mobile, `touch-action: none` (required for JS-controlled scrolling)
- * suppresses the native long-press context menu that provides "Paste".
- * This handler intercepts the `contextmenu` event on the a-term container
- * and reads from the Clipboard API instead, feeding the result through the
- * same paste path used by desktop Ctrl-V.
+ * Route a clipboard paste into the session: images go to the file upload
+ * path, text goes through `onPaste` (bracketed paste). Returns whether the
+ * event was consumed; unconsumed events are left to the browser.
  */
-export function setupMobileContextMenuPaste(
-  container: HTMLElement,
+export function forwardClipboardPaste(
+  event: ClipboardEvent,
   onPaste: (data: string) => void,
-): () => void {
-  if (!isMobileDevice()) return () => {}
-
-  const handleContextMenu = (event: MouseEvent) => {
-    // Only intercept when the clipboard API is available
-    if (!navigator.clipboard?.readText) return
-
+  onFilePaste?: (file: File) => void,
+): boolean {
+  const pastedImage = getClipboardImageFile(event.clipboardData)
+  if (pastedImage) {
     event.preventDefault()
-
-    navigator.clipboard.readText().then(
-      (text) => {
-        if (text) onPaste(text)
-      },
-      () => {
-        // Permission denied or clipboard empty — nothing to do
-      },
-    )
+    event.stopImmediatePropagation()
+    onFilePaste?.(pastedImage)
+    return true
   }
 
-  container.addEventListener('contextmenu', handleContextMenu)
-
-  return () => {
-    container.removeEventListener('contextmenu', handleContextMenu)
-  }
+  const pastedText = event.clipboardData?.getData('text')
+  if (!pastedText) return false
+  event.preventDefault()
+  event.stopImmediatePropagation()
+  onPaste(pastedText)
+  return true
 }
-
-// ---------------------------------------------------------------------------
-// Focus & paste tracking setup
-// ---------------------------------------------------------------------------
 
 export function setupFocusAndPasteTracking(
   textarea: HTMLTextAreaElement,
@@ -351,19 +333,7 @@ export function setupFocusAndPasteTracking(
     isFocusedRef.current = false
   }
   const handlePaste = (event: ClipboardEvent) => {
-    const pastedImage = getClipboardImageFile(event.clipboardData)
-    if (pastedImage) {
-      event.preventDefault()
-      event.stopImmediatePropagation()
-      onFilePaste?.(pastedImage)
-      return
-    }
-
-    const pastedText = event.clipboardData?.getData('text')
-    if (!pastedText) return
-    event.preventDefault()
-    event.stopImmediatePropagation()
-    onPaste(pastedText)
+    forwardClipboardPaste(event, onPaste, onFilePaste)
   }
 
   textarea.addEventListener('focus', handleFocus)

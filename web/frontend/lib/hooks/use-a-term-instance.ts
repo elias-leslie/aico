@@ -11,9 +11,9 @@ import {
   replaceScrollingHandlers,
   setupFocusAndPasteTracking,
   setupMobileATerm,
-  setupMobileContextMenuPaste,
   setupScrollbarAutoHide,
 } from './a-term-instance-utils'
+import { setupMobileNativeSelection } from './mobile-native-selection'
 import { setupATermMouseHandling } from './use-a-term-mouse-handling'
 
 export type {
@@ -49,7 +49,7 @@ export function useATermInstance(
     touchCleanup: () => void
   } | null>(null)
   const focusPasteCleanupRef = useRef<FocusPasteCleanup | null>(null)
-  const contextMenuPasteCleanupRef = useRef<(() => void) | null>(null)
+  const nativeSelectionCleanupRef = useRef<(() => void) | null>(null)
   const scrollbarCleanupRef = useRef<(() => void) | null>(null)
   const bootstrapWheelCleanupRef = useRef<(() => void) | null>(null)
   const webglDisposeRef = useRef<(() => void) | null>(null)
@@ -112,9 +112,10 @@ export function useATermInstance(
 
       scrollbarCleanupRef.current = setupScrollbarAutoHide(containerRef.current)
       setupMobileATerm(containerRef.current)
-      contextMenuPasteCleanupRef.current = setupMobileContextMenuPaste(
+      nativeSelectionCleanupRef.current = setupMobileNativeSelection(
+        term,
         containerRef.current,
-        opts.onPaste,
+        { onPaste: opts.onPaste, onFilePaste: opts.onFilePaste },
       )
       fitAddon.fit()
       window.setTimeout(() => {
@@ -146,8 +147,8 @@ export function useATermInstance(
       focusPasteCleanupRef.current?.focusCleanup()
       focusPasteCleanupRef.current?.pasteCleanup()
       focusPasteCleanupRef.current = null
-      contextMenuPasteCleanupRef.current?.()
-      contextMenuPasteCleanupRef.current = null
+      nativeSelectionCleanupRef.current?.()
+      nativeSelectionCleanupRef.current = null
       mouseCleanupRef.current?.()
       mouseCleanupRef.current = null
       scrollbarCleanupRef.current?.()

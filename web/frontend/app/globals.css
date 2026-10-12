@@ -205,6 +205,39 @@ body {
   scrollbar-gutter: stable;
 }
 
+/* Mobile long-press selection layer (lib/hooks/mobile-native-selection.ts):
+   invisible, cell-aligned text over the canvas so the browser can select it. */
+.xterm .xterm-screen .a-term-native-selection {
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  white-space: pre;
+  line-height: var(--a-term-cell-height);
+  color: transparent;
+  caret-color: transparent;
+  background: transparent;
+  outline: none;
+  touch-action: none;
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.xterm .xterm-screen .a-term-native-selection > div {
+  height: var(--a-term-cell-height);
+  overflow: hidden;
+}
+
+/* New output under a selection: show the captured rows instead. */
+.xterm .xterm-screen .a-term-native-selection.is-frozen {
+  color: var(--a-term-fg);
+  background: var(--a-term-bg);
+}
+
 /* Auto-hiding scrollbar: fades in on scroll, fades out after idle */
 .xterm-viewport::-webkit-scrollbar {
   width: 10px;
