@@ -1,8 +1,10 @@
+import { execFileSync } from 'node:child_process'
 import { chmodSync, mkdirSync } from 'node:fs'
 import type { Server } from 'node:http'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { TetherPaths } from './config'
+import { parseGraphicalEnvironment } from './env'
 import { EventBus } from './events'
 import { GuiChannel } from './gui-channel'
 import { listenPrivateSocket } from './http'
@@ -47,6 +49,21 @@ export function reconcileEnabled(env: NodeJS.ProcessEnv): boolean {
 
 const LEGACY_WATCH_MS = 15_000
 
+/** The desktop variables the graphical session imported into the user
+ * manager; empty before login or when systemctl cannot answer. */
+function userManagerGraphicalEnvironment(): Record<string, string> {
+  try {
+    return parseGraphicalEnvironment(
+      execFileSync('systemctl', ['--user', 'show-environment'], {
+        encoding: 'utf8',
+        timeout: 2_000,
+      }),
+    )
+  } catch {
+    return {}
+  }
+}
+
 function closeServer(server: Server): Promise<void> {
   return new Promise<void>((resolve) => {
     server.close(() => resolve())
@@ -89,6 +106,7 @@ export async function startDaemon(
     events,
     env,
     projectRoot: (projectId) => projectRoots.get(projectId) ?? null,
+    graphicalEnv: reconcileEnabled(env) ? userManagerGraphicalEnvironment : undefined,
   })
 
   const context = {

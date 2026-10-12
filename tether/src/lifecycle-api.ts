@@ -705,6 +705,19 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
       if (!delivered) throw new HttpError(409, 'workload_unavailable')
       sendJson(res, 200, { generation, delivered: true })
     })
+    .add('POST', '/v1/sessions/:id/show', async (req, res, params) => {
+      // Ask the GUI to open (or focus) this session's view.
+      const body = await readJsonObject(req)
+      only(body, ['generation'])
+      const generation = requireGeneration(body)
+      const row = requireSession(params.id)
+      fence(row, generation)
+      await whenReady()
+      const result = await forwardViewMutation(context.gui)(row.id, generation, { kind: 'show' })
+      if (result === false) throw new HttpError(409, 'workload_unavailable')
+      if (result !== true) throw new HttpError(result.status, result.error)
+      sendJson(res, 200, { shown: true })
+    })
     .add('POST', '/v1/sessions/:id/resize-claim', async (req, res, params) => {
       const body = await readJsonObject(req)
       only(body, ['generation', 'clientPid', 'cols', 'rows'])

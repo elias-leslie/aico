@@ -48,6 +48,31 @@ export const SERVER_ENV_ALLOWLIST: ReadonlySet<string> = new Set([
   'GPG_AGENT_INFO',
 ])
 
+/** The desktop session's variables. The daemon can start before the graphical
+ * session imports them into the user manager (e.g. right after a reboot), so
+ * they are read from the user manager at spawn time, not from the daemon. */
+export const GRAPHICAL_ENV_VARS: readonly string[] = [
+  'DISPLAY',
+  'XAUTHORITY',
+  'WAYLAND_DISPLAY',
+  'DBUS_SESSION_BUS_ADDRESS',
+]
+
+/** The graphical variables in `systemctl --user show-environment` output.
+ * Values systemd had to quote (`$'...'`) are skipped rather than unescaped. */
+export function parseGraphicalEnvironment(text: string): Record<string, string> {
+  const env: Record<string, string> = {}
+  for (const line of text.split('\n')) {
+    const eq = line.indexOf('=')
+    if (eq <= 0) continue
+    const name = line.slice(0, eq)
+    const value = line.slice(eq + 1)
+    if (!GRAPHICAL_ENV_VARS.includes(name) || !value || value.startsWith("$'")) continue
+    env[name] = value
+  }
+  return env
+}
+
 /** Prefixes a tmux server may inherit (locale and XDG base directories). */
 export const SERVER_ENV_ALLOWED_PREFIXES: readonly string[] = ['LC_', 'XDG_']
 

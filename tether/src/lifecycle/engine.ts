@@ -167,6 +167,8 @@ interface EngineConfig {
   env: NodeJS.ProcessEnv
   /** Resolve a project id to its root (SummitFlow/local provider cache). */
   projectRoot: (projectId: string) => string | null
+  /** The desktop session's current graphical variables; they win over `env`. */
+  graphicalEnv?: () => Record<string, string>
 }
 
 let config: EngineConfig | null = null
@@ -674,7 +676,7 @@ function createManagedServerDirectory(serverId: string): string {
  * tmux global environment and so reaches every pane; the user manager's own
  * block (which systemd-run services otherwise inherit) is replaced. */
 export function serverEnvironmentPrefix(serverId: string): string[] {
-  const base = cfg().env
+  const base = { ...cfg().env, ...cfg().graphicalEnv?.() }
   return cleanEnvArgv({
     ...tmuxServerEnvironment(base, passthroughFromEnv(base)),
     AICO_OWNER: 'aico',
@@ -875,6 +877,9 @@ export function managedEnvironment(
   // differ from this process (for example in an isolated test run). Keep the
   // pane's home aligned with the daemon profile and its chosen cwd.
   environment.HOME = cfg().env.HOME ?? homedir()
+  // Clipboard image paste and desktop notifications need the live desktop
+  // session, even in panes of a server that started before it existed.
+  Object.assign(environment, cfg().graphicalEnv?.())
   Object.assign(environment, rootLaunchEnvironment(widgetId))
   if (row?.tmuxServerId) environment.AICO_TMUX_SERVER_ID = row.tmuxServerId
   // Tether: A-Term-created sessions carry A-Term's session id. AICO_TMUX_SOCKET

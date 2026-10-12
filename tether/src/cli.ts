@@ -16,7 +16,8 @@ Commands:
   doctor                        check host prerequisites and the running daemon
   version                       print the CLI and daemon versions
   sessions [list | get <id>]    session catalog
-  sessions create [--tool T] [--project P] [--name N]   (alias: new)
+  sessions create [--tool T] [--project P] [--name N] [--show]   (alias: new)
+  sessions show <id>            open or focus the session's Aico window
   sessions end <id>             retire one session (reads its generation first)
   sessions attach <id> [--print]
                                 attach this terminal (exec tmux); --print shows
@@ -211,6 +212,25 @@ export function attachPlan(
   }
 }
 
+/** Read the session's generation and ask the GUI to show it. A just-created
+ * session can take a few seconds to reach running, so a 409 is retried. */
+async function showSession(
+  paths: TetherPaths,
+  id: string,
+): Promise<{ status: number; body: unknown }> {
+  const path = `/v1/sessions/${encodeURIComponent(id)}`
+  let last: { status: number; body: unknown } = { status: 409, body: null }
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const current = await callSocket(paths.socket, 'GET', path, undefined, 15_000)
+    const generation = (current.body as Record<string, unknown> | null)?.generation
+    if (current.status !== 200 || typeof generation !== 'string') return current
+    last = await callSocket(paths.socket, 'POST', `${path}/show`, { generation }, 15_000)
+    if (last.status !== 409) return last
+    await new Promise((resolve) => setTimeout(resolve, 500))
+  }
+  return last
+}
+
 function slugPath(slug: string | undefined): string {
   if (!slug) throw new Error('a tool slug is required')
   return `/v1/tools/${encodeURIComponent(slug)}`
@@ -281,7 +301,11 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
           return child.status ?? 1
         }
         if (sub === 'new' || sub === 'create') {
-          const options = flags(rest, ['--tool', '--project', '--name'])
+          const show = rest.includes('--show')
+          const options = flags(
+            rest.filter((arg) => arg !== '--show'),
+            ['--tool', '--project', '--name'],
+          )
           const body: Record<string, unknown> = {
             origin: 'cli',
             size: { cols: process.stdout.columns || 120, rows: process.stdout.rows || 40 },
@@ -289,7 +313,18 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
           if (options['--tool']) body.tool = options['--tool']
           if (options['--project']) body.projectId = options['--project']
           if (options['--name']) body.name = options['--name']
-          return api(io, paths, json, 'POST', '/v1/sessions', body)
+          if (!show) return api(io, paths, json, 'POST', '/v1/sessions', body)
+          const created = await callSocket(paths.socket, 'POST', '/v1/sessions', body, 60_000)
+          const id = (created.body as Record<string, unknown> | null)?.id
+          if (created.status >= 300 || typeof id !== 'string')
+            return render(io, json, created.status, created.body)
+          const shown = await showSession(paths, id)
+          if (shown.status !== 200) io.err(`tether: created ${id} but could not show it`)
+          return render(io, json, created.status, created.body)
+        }
+        if (sub === 'show' && rest[0]) {
+          const shown = await showSession(paths, rest[0])
+          return render(io, json, shown.status, shown.body)
         }
         if (sub === 'end' && rest[0]) {
           const path = `/v1/sessions/${encodeURIComponent(rest[0])}`

@@ -135,7 +135,9 @@ Attach `env` holds **overrides only**, not a full environment: set exactly `TERM
 
 When a view becomes active, it claims the shared tmux window size:
 
-`POST /v1/sessions/:id/resize-claim` with body `{generation, clientPid, cols, rows}` returns `200 {applied: true}` or `{applied: false, reason}`.
+`POST /v1/sessions/:id/resize-claim` with body `{generation, clientPid, cols, rows}` returns `200 {applied: true}` or `{applied: false, reason}`. A successful claim also moves the foreground pane's `MemoryLow=2G` to this session's pane scope, since Aico claims the size when a view gains focus.
+
+`POST /v1/sessions/:id/show` with body `{generation}` asks the connected GUI to open or focus the session's view. It returns `200 {shown: true}`, `503 gui_unavailable` with no GUI connected, or `409` when the session is not running or the GUI rejected the command.
 
 Tether resizes only the window of the attached tmux client whose `client_pid` is `clientPid` (Aico `activateTmuxViewSize`). `reason` is one of *(3a)*:
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   cleanEnvArgv,
   FILTERED_ENV_VARS,
+  parseGraphicalEnvironment,
   passthroughFromEnv,
   sessionEnvironment,
   tmuxServerEnvironment,
@@ -67,5 +68,24 @@ describe('sessionEnvironment', () => {
 describe('cleanEnvArgv', () => {
   it('starts from an empty environment in a stable order', () => {
     expect(cleanEnvArgv({ B: '2', A: '1' })).toEqual(['/usr/bin/env', '-i', 'A=1', 'B=2'])
+  })
+})
+
+describe('parseGraphicalEnvironment', () => {
+  it('keeps only the desktop session variables', () => {
+    const text = [
+      'HOME=/home/u',
+      'DISPLAY=:1',
+      'XAUTHORITY=/run/user/1000/gdm/Xauthority',
+      'DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus',
+      "WAYLAND_DISPLAY=$'odd\\nvalue'",
+      'OPENAI_API_KEY=secret',
+      '',
+    ].join('\n')
+    expect(parseGraphicalEnvironment(text)).toEqual({
+      DISPLAY: ':1',
+      XAUTHORITY: '/run/user/1000/gdm/Xauthority',
+      DBUS_SESSION_BUS_ADDRESS: 'unix:path=/run/user/1000/bus',
+    })
   })
 })
