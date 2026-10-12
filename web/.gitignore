@@ -63,3 +63,6 @@ backup-index.json
 # Claude Code session state
 .claude/session-state/
 .playwright/output/
+
+# Local Playwright CLI config
+playwright-cli.json

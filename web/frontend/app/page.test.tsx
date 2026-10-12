@@ -38,7 +38,7 @@ describe('Home page', () => {
     const view = await Home({
       searchParams: Promise.resolve({
         project: 'agent-hub',
-        dir: '/srv/workspaces/projects/agent-hub',
+        dir: '/home/demo/projects/agent-hub',
       }),
     })
 
@@ -50,7 +50,7 @@ describe('Home page', () => {
     )
     expect(screen.getByTestId('a-term-tabs')).toHaveAttribute(
       'data-project-path',
-      '/srv/workspaces/projects/agent-hub',
+      '/home/demo/projects/agent-hub',
     )
     expect(screen.getByTestId('a-term-tabs')).toHaveAttribute(
       'data-class-name',
@@ -66,7 +66,7 @@ describe('Home page', () => {
     const view = await Home({
       searchParams: Promise.resolve({
         project: ['', 'portfolio-ai'],
-        dir: ['', '/srv/workspaces/projects/portfolio-ai'],
+        dir: ['', '/home/demo/projects/portfolio-ai'],
       }),
     })
 
@@ -78,7 +78,7 @@ describe('Home page', () => {
     )
     expect(screen.getByTestId('a-term-tabs')).toHaveAttribute(
       'data-project-path',
-      '/srv/workspaces/projects/portfolio-ai',
+      '/home/demo/projects/portfolio-ai',
     )
   })
 

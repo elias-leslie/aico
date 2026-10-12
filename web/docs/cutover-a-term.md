@@ -1,9 +1,14 @@
 # A-Term cutover to Tether
 
 This moves a running A-Term from its own tmux sessions and Postgres to Tether.
-It is written for the production host (`davion-sidarli`, checkout
-`/srv/workspaces/projects/a-term`, services `a-term-backend.service` and
-`a-term-frontend.service`). Run every command from the checkout root.
+It assumes A-Term runs from a source checkout as the user services
+`a-term-backend.service` and `a-term-frontend.service`. Run every command
+from the checkout root.
+
+`st service rebuild a-term --detach` below is the author's deploy command (his
+workspace tool builds the frontend and restarts both services). Without it,
+rebuild with `bash scripts/install.sh --no-start` and restart with
+`systemctl --user restart a-term-backend.service a-term-frontend.service`.
 
 The migration only reads Postgres. Nothing in it writes, alters or drops a
 Postgres table, so rollback is a code rollback.
@@ -158,7 +163,7 @@ curl -s http://127.0.0.1:8002/v1/roots | jq '.owner, [.roots[].origin]'   # "a-t
 Start a root with `--surface a-term` through `st` as usual and check that it
 appears in A-Term after `show`, and that `close` ends it.
 
-Mobile (`https://terminal.summitflow.dev` on the phone):
+Mobile (your remote A-Term URL on the phone, see [remote-access.md](remote-access.md)):
 
 1. Sign in, open the session switcher, pick a running session.
 2. Type with the on-screen keyboard and the arrow/Enter controls.
@@ -188,4 +193,4 @@ st service rebuild a-term --detach
 
 Once the cutover has run cleanly for a while, retiring the old Postgres
 tables (`a_term_*`, `agent_tools`) and removing `DATABASE_URL` from
-`.env.local` is a separate, owner-approved step. This cutover does not do it.
+`.env.local` is a separate step. This cutover does not do it.

@@ -1,8 +1,6 @@
 # A-Term
 
-A-Term is a persistent browser workspace for people using AI coding CLIs and shells. It puts terminals and project files side by side. The sessions themselves live in [Tether](https://github.com/elias-leslie/tether), a local session daemon, so they keep running when the browser closes and work resumes on reconnect. The same sessions can also be opened from Aico.
-
-![A-Term browser workspace](docs/images/a-term-demo.gif)
+A-Term is a persistent browser workspace for people using AI coding CLIs and shells. It puts terminals and project files side by side. The sessions themselves live in [Tether](https://github.com/elias-leslie/tether), a local session daemon, so they keep running when the browser closes and work resumes on reconnect. The same sessions can also be opened from [Aico](https://github.com/elias-leslie/aico), a Linux desktop app that shows each agent session as a floating window. A-Term and Aico are two views onto the same Tether sessions: you can start an agent on the desktop and pick it up from a phone browser, or the reverse.
 
 ## What it does
 
@@ -13,9 +11,11 @@ A-Term is a persistent browser workspace for people using AI coding CLIs and she
 
 ## Current scope
 
-The supported install targets Linux with systemd and requires Tether (API version 1 or newer) running as `tether@default.service`. Projects come from Tether: SummitFlow's catalog when SummitFlow is installed, otherwise Tether's local list `~/.config/tether/projects.json`, which A-Term can add to through Tether. Agent Hub prompt cleaning is an optional companion integration.
+The supported install targets Linux with systemd and requires Tether (API version 1 or newer) running as `tether@default.service`. Projects come from Tether, which reads them from a local list (`~/.config/tether/projects.json`) that A-Term can add to. On the author's workstation Tether reads them from SummitFlow, his own workspace tool, instead. Agent Hub prompt cleaning is an optional companion integration.
 
 ## Getting started
+
+Install from source. The [Releases page](https://github.com/elias-leslie/a-term/releases) currently has only v0.1.0 from June 2026, which predates the move to Tether; the current code on `main` (0.2.x) is newer and is what this README describes.
 
 ```bash
 git clone https://github.com/elias-leslie/a-term.git
@@ -34,15 +34,20 @@ Default authentication is loopback-only `none`. Before exposing A-Term beyond lo
 ## Development and verification
 
 ```bash
-st pulse --gate
-st check --quick --changed-only
+uv sync --extra dev
+corepack pnpm --dir frontend install
+uv run pytest
+uv run ruff check .
+corepack pnpm --dir frontend lint
+corepack pnpm --dir frontend exec tsc --noEmit
+corepack pnpm --dir frontend test
 ```
 
-For public source development, [CONTRIBUTING.md](CONTRIBUTING.md) lists pytest, Ruff, Ty, frontend lint, TypeScript, and Vitest checks. The [project guide](docs/project-guide.md) retains advanced configuration, daily commands, and feature details. Session survival and rendering behavior need runtime verification in addition to those checks.
+[CONTRIBUTING.md](CONTRIBUTING.md) has the full list, including `ty`. The author runs the same checks through his workspace tool (`st check`). The [project guide](docs/project-guide.md) covers advanced configuration, daily commands, and feature details. Session survival and rendering behavior need runtime verification in addition to those checks.
 
 ## Documentation
 
-- [Project guide](docs/project-guide.md) and [remote access](docs/remote-access.md).
+- [Project guide](docs/project-guide.md), [remote access](docs/remote-access.md), [mobile verification](docs/mobile-verification.md), and [glossary](docs/glossary.md).
 - [Contributing](CONTRIBUTING.md), [releasing](RELEASING.md), and [changelog](CHANGELOG.md).
 - [Security reporting](SECURITY.md), [Apache 2.0 license](LICENSE), and [notice](NOTICE).
 - [Releases](https://github.com/elias-leslie/a-term/releases) and [sponsorship](https://github.com/sponsors/elias-leslie).

@@ -15,7 +15,7 @@ Then open **http://localhost:3002** and start working.
 A-Term currently targets **Linux with systemd** and needs **Tether**, the local session daemon that owns the terminal sessions (API version 1 or newer, normally `tether@default.service`). Install and start Tether first; the installer stops with a clear message if it cannot reach it. The installer then sets up `.env.local`, Node.js, corepack, Python, uv, tmux, dependencies, frontend build output, and user services. There is no database server to install.
 The first install can take a few minutes because it downloads the pieces it needs for you.
 
-Projects come from Tether: SummitFlow's catalog when SummitFlow is installed, otherwise Tether's local list (`~/.config/tether/projects.json`), which A-Term's "Register project" adds to through Tether's `POST /v1/projects`.
+Projects come from Tether: by default its local list (`~/.config/tether/projects.json`), which A-Term's "Register project" adds to through Tether's `POST /v1/projects`.
 
 If the default ports are already taken, the installer should guide you to another open port instead of forcing you to debug it by hand.
 
@@ -31,13 +31,7 @@ Want the latest shipped changes? See [Releases](https://github.com/elias-leslie/
 
 **`multi-pane layouts`** — Up to 6 resizable panes. Put planning, implementation, review, release checks, and files on the same screen, detach any pane into its own browser window when you want to spread work across monitors, and use the pane menu's Refresh Layout action to remount a pane cleanly without restarting its session. Several views can show one session; the view you activate (focus) claims the session's window size, and the others keep their own size until you activate them.
 
-![Four-pane grid layout with multiple active agents](../docs/images/a-term-grid-2x2.png)
-*Four-pane grid: run multiple agents and shells simultaneously*
-
 **`files browser`** — Browse the active pane's working directory. Preview files, copy paths, insert paths into prompts — without leaving the terminal.
-
-![Files browser showing directory tree and README preview](../docs/images/a-term-files-browser.png)
-*Browse and preview files from the active pane's working directory*
 
 **`prompt cleaning`** — With Agent Hub connected, A-Term can clean a draft prompt, show an original-vs-cleaned diff, take follow-up refinement instructions, let you edit the result before sending, and fall back to the original prompt if the cleaner is unavailable.
 
@@ -52,9 +46,6 @@ On a phone, tap Talk to start dictating. Words appear while you speak, and pause
 **`dual mode`** — Switch any pane between raw shell and your configured AI agent with one click. Supports Claude Code, Codex, Antigravity CLI, and Pi out of the box.
 
 **`agent presets and custom tools`** — Built-in profiles for Claude Code, Codex, Antigravity CLI, and Pi appear in Settings by default. Antigravity launches as `agy --dangerously-skip-permissions`, its explicit auto-approval mode. Pick a default tool, tune the launch command or process name, color-code panes, and add your own TUI agent commands when your workflow expands. The tool list is Tether's shared registry, so a change here also applies to sessions launched from Aico; Claude Code's slug is `claude-code` (`claude` still works as an alias). A-Term also lists agent sessions you started yourself on your default tmux server (`claude`, `codex`, `aider`, `agy`, `pi`) alongside your own panes; closing one in A-Term only closes the view.
-
-![Mode switching dropdown showing Shell, Claude Code, OpenCode, Gemini CLI, and Codex](../docs/images/a-term-mode-switch.png)
-*Switch between agents and shell per pane*
 
 **`agent scrollback overlay`** — Scroll tmux-backed history for agent and TUI sessions without losing the live bottom page. First wheel-up or touch entry opens history at the current output, then normal scrolling carries you back through prior work.
 

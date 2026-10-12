@@ -84,11 +84,11 @@ describe('proxy', () => {
     vi.stubEnv('NEXT_PUBLIC_AGENT_HUB_URL', 'https://agent-hub.example.com')
     const { proxy } = await importProxy()
 
-    const response = proxy(new NextRequest('https://a-term.summitflow.dev/'))
+    const response = proxy(new NextRequest('https://a-term.example.com/'))
     const connectSrc = getDirectiveTokens(response, 'connect-src')
 
     expect(connectSrc).toContain("'self'")
-    expect(connectSrc).toContain('wss://a-term.summitflow.dev:8003')
+    expect(connectSrc).toContain('wss://a-term.example.com:8003')
     expect(connectSrc).toContain('https://agent-hub.example.com')
     expect(connectSrc).toContain('wss://agent-hub.example.com')
     expect(connectSrc).not.toContain('http:')

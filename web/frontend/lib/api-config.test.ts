@@ -42,10 +42,10 @@ describe('api-config', () => {
   })
 
   it('uses same-origin secure websocket routing in production', () => {
-    setLocation('https://a-term.summitflow.dev/')
+    setLocation('https://a-term.example.com/')
 
     expect(getWsUrl('/ws/a-term/session-1')).toBe(
-      'wss://a-term.summitflow.dev/ws/a-term/session-1',
+      'wss://a-term.example.com/ws/a-term/session-1',
     )
   })
 
@@ -70,7 +70,7 @@ describe('api-config', () => {
   })
 
   it('uses configured Agent Hub URL for voice websocket routing', () => {
-    setLocation('https://a-term.summitflow.dev/')
+    setLocation('https://a-term.example.com/')
     process.env.NEXT_PUBLIC_AGENT_HUB_URL = 'https://agent-hub.example.com'
 
     expect(getAgentHubVoiceWsUrl()).toBe(
