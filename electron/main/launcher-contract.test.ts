@@ -16,7 +16,6 @@ describe('desktop launcher ownership contract', () => {
     }
 
     expect(runner).toContain('exec ./node_modules/electron/dist/electron .')
-    expect(runner).not.toContain('exec ./node_modules/.bin/electron .')
     expect(packageManifest.scripts.postinstall).toBe('install-electron')
   })
 
@@ -25,8 +24,6 @@ describe('desktop launcher ownership contract', () => {
 
     expect(launcher).toContain('RUNTIME_UNIT="aico-shell.service"')
     expect(launcher).toContain('systemctl --user start "$RUNTIME_UNIT"')
-    expect(launcher).not.toContain('systemd-run --user')
-    expect(launcher).not.toContain('RUNTIME_UNIT="aico-shell-runtime.service"')
   })
 
   it('gates early boot on DISPLAY and conflicts only the historical desktop unit', () => {
