@@ -264,8 +264,16 @@ function faces(): Face[] {
     })
 }
 
+let gazeScenesLogged = 0
 function playGazeScene(): void {
-  for (const g of pickScene(faces(), Math.random)) {
+  const scene = pickScene(faces(), Math.random)
+  // The first few scenes after start go to the log, proof the director runs.
+  if (scene.length && gazeScenesLogged < 3) {
+    gazeScenesLogged++
+    const who = (winId: number) => widgetOf.get(winId) ?? String(winId)
+    console.log(`[aico:gaze] scene ${scene.map((g) => who(g.winId)).join(' ')}`)
+  }
+  for (const g of scene) {
     const win = BrowserWindow.fromId(g.winId)
     if (!win || win.isDestroyed()) continue
     win.webContents.send('eyes:look', {

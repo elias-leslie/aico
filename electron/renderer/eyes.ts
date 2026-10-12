@@ -106,6 +106,7 @@ export class Eyes {
   private lookingDown = false
   private exchanging = false
   private peerTurn = 0
+  private peerUntil = 0
 
   constructor(
     private readonly root: HTMLElement,
@@ -227,17 +228,31 @@ export class Eyes {
   }
 
   /** Another Aico window is the one to look at (screen px): turn to it after
-   * `delay`, hold, then face front. Busy, typing, hovered or asleep eyes
-   * stay on their own work. */
+   * `delay`, hold, then go back to what they were doing. Even reading eyes
+   * glance up from the work; typing, hovered or sleeping eyes stay put. */
   lookAtPeer(screenX: number, screenY: number, delay: number, hold: number): void {
     const turn = ++this.peerTurn
     window.setTimeout(() => {
-      if (turn !== this.peerTurn || !this.atRest()) return
+      if (turn !== this.peerTurn || !this.canGlanceAtPeer()) return
+      this.peerUntil = Date.now() + hold
       this.aimAt(screenX, screenY)
       window.setTimeout(() => {
-        if (turn === this.peerTurn && this.atRest()) this.look(0, 0)
+        if (turn !== this.peerTurn) return
+        this.peerUntil = 0
+        // Reading resumes on its own next saccade.
+        if (!this.reading && this.atRest()) this.look(0, 0)
       }, hold)
     }, delay)
+  }
+
+  private canGlanceAtPeer(): boolean {
+    const mood = this.mood()
+    return (
+      !this.hovering &&
+      !this.lookingDown &&
+      !this.calm.matches &&
+      (mood === 'idle' || mood === 'sleepy' || mood === 'busy')
+    )
   }
 
   private lookEach(left: Gaze, right: Gaze): void {
@@ -304,6 +319,10 @@ export class Eyes {
     if (this.calm.matches) return
     const step = (): void => {
       if (!this.reading) return
+      if (Date.now() < this.peerUntil) {
+        this.readTimer = window.setTimeout(step, this.peerUntil - Date.now() + 60)
+        return
+      }
       this.gaze = nextReadingGaze(this.gaze, 0.9 + Math.random() * 0.8)
       this.look(this.gaze.x, READING_Y[this.gaze.line] ?? 1)
       // A line return is a longer sweep; word hops are quick.
