@@ -18,6 +18,8 @@ Commands:
   sessions [list | get <id>]    session catalog
   sessions create [--tool T] [--project P] [--name N] [--show]   (alias: new)
   sessions show <id>            open or focus the session's Aico window
+  reboot prepare [--timeout SEC] [--no-notify]   ask agents to checkpoint; exit 0 ready, 3 not
+  reboot status                 restore results since the last boot
   sessions end <id>             retire one session (reads its generation first)
   sessions attach <id> [--print]
                                 attach this terminal (exec tmux); --print shows
@@ -334,6 +336,31 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
             return render(io, json, current.status, current.body)
           return api(io, paths, json, 'POST', `${path}/end`, { generation })
         }
+        break
+      case 'reboot':
+        if (sub === 'prepare') {
+          const options = flags(
+            rest.filter((arg) => arg !== '--no-notify'),
+            ['--timeout'],
+          )
+          const timeoutSec = options['--timeout'] === undefined ? 300 : Number(options['--timeout'])
+          if (!Number.isFinite(timeoutSec) || timeoutSec < 0 || timeoutSec > 3600) {
+            io.err('tether: --timeout must be 0-3600 seconds')
+            return 2
+          }
+          const body = { timeoutSec, notify: !rest.includes('--no-notify') }
+          const response = await callSocket(
+            paths.socket,
+            'POST',
+            '/v1/reboot/prepare',
+            body,
+            (timeoutSec + 60) * 1000,
+          )
+          const code = render(io, json, response.status, response.body)
+          if (code !== 0) return code
+          return (response.body as { ready?: boolean } | null)?.ready ? 0 : 3
+        }
+        if (sub === 'status') return api(io, paths, json, 'GET', '/v1/reboot/status')
         break
       case 'legacy':
         if (!sub || sub === 'list') return api(io, paths, json, 'GET', '/v1/legacy-sessions')

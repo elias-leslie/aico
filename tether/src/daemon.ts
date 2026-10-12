@@ -27,6 +27,7 @@ import { configureTmuxPaths } from './lifecycle/tmux'
 import { bindToolSource } from './lifecycle/tui/registry'
 import { generationOf, rootOperations, sessionSnapshot } from './lifecycle-api'
 import { activeProjectFileFromEnv, ProjectProvider, summitflowUrlFromEnv } from './projects'
+import { Continuity } from './reboot'
 import { createTetherServer } from './server'
 import { Store } from './store'
 import { VERSION } from './version'
@@ -119,6 +120,13 @@ export async function startDaemon(
     projectRoots,
     activeProjectFile: activeProjectFileFromEnv(env, env.HOME ?? homedir()),
     startedAt: Date.now(),
+    continuity: undefined as Continuity | undefined,
+  }
+  if (reconcileEnabled(env)) {
+    const graphical = () => userManagerGraphicalEnvironment()
+    context.continuity = new Continuity(context, {
+      desktopReady: () => Boolean(graphical().DISPLAY || graphical().WAYLAND_DISPLAY),
+    })
   }
   const server = createTetherServer(context)
   const legacyServers: Server[] = []
@@ -129,6 +137,7 @@ export async function startDaemon(
     throw error
   }
   const ready = startLifecycle({ reconcile: reconcileEnabled(env) })
+  void context.continuity?.start()
   // Announce legacy A-Term sessions that end or exit outside Tether.
   if (reconcileEnabled(env)) legacy.watch(LEGACY_WATCH_MS)
 
@@ -159,6 +168,7 @@ export async function startDaemon(
     ready,
     close: async () => {
       stopLifecycle()
+      context.continuity?.stop()
       legacy.unwatch()
       gui.close()
       await Promise.all([...legacyServers, server].map(closeServer))

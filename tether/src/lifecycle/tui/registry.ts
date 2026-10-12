@@ -12,6 +12,10 @@ export const RESUME_ADAPTERS: Readonly<Record<string, NonNullable<TuiSpec['resum
     sessionIdPattern: /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/,
     arguments: ['resume', '--no-daemon'],
   },
+  'claude-code': {
+    sessionIdPattern: /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/,
+    arguments: ['--resume'],
+  },
 }
 
 function contextHook(hook: ToolContextHook | null): ContextHook | undefined {

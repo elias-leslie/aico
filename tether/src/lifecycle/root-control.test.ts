@@ -836,7 +836,7 @@ describe('private root workload control', () => {
     }
   })
 
-  it('validates exact Codex resume and retains idempotency across resume conflicts', async () => {
+  it('validates exact native resume and retains idempotency across resume conflicts', async () => {
     const thread = '00000000-0000-4000-8000-000000000001'
     const input = { ...create('resume-exact'), resumeSessionId: thread }
     for (const invalid of [
@@ -848,7 +848,9 @@ describe('private root workload control', () => {
     ]) {
       expect(parseRootCreate({ ...input, resumeSessionId: invalid })).toBeNull()
     }
-    expect(parseRootCreate({ ...input, tool: 'claude-code' })).toBeNull()
+    // Claude Code resumes through its own adapter; a shell has none.
+    expect(parseRootCreate({ ...input, tool: 'claude-code' })).not.toBeNull()
+    expect(parseRootCreate({ ...input, tool: 'shell' })).toBeNull()
     expect(parseRootCreate({ ...input, initialPrompt: 'x\runsafe' })).toBeNull()
     expect(parseRootCreate({ ...input, initialPrompt: 'x'.repeat(2001) })).toBeNull()
     expect(rootRequestDigest(present(parseRootCreate({ ...input, resumeSessionId: null })))).toBe(

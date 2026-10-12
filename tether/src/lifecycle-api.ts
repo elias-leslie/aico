@@ -79,6 +79,7 @@ import { staticContextStatus } from './lifecycle/tui/context'
 import { getTui } from './lifecycle/tui/registry'
 import { paneModeArgs, parsePaneMode } from './pane-mode'
 import type { ProjectProvider } from './projects'
+import { type Continuity, registerRebootRoutes } from './reboot'
 import type { Store } from './store'
 
 const execFileAsync = promisify(execFile)
@@ -114,6 +115,8 @@ export interface LifecycleApiContext {
   legacy: LegacyATermSessions
   /** Sync project-root cache the engine reads on gate recovery. */
   projectRoots: Map<string, string>
+  /** Reboot continuity; absent when reconciliation is off (test instances). */
+  continuity?: Continuity
 }
 
 /** The session's opaque fence (Aico `sessionGeneration`). */
@@ -295,6 +298,18 @@ async function withRunningSession<T>(
   return ok ? (outcome as T) : false
 }
 
+/** Paste `text` into a running session and submit it (the inject route's
+ * paste mode). False when the session is not running. */
+export async function pasteIntoRunningSession(widgetId: string, text: string): Promise<boolean> {
+  const row = getWidget(widgetId)
+  if (!row || !isBoundedTerminalText(text)) return false
+  const delivered = await withRunningSession(row.id, generationOf(row), async (current) => {
+    await runTmux(bracketedPasteTargetArgs(tmuxPaneTargetForWidget(current.id), text, true))
+    return true
+  })
+  return delivered === true
+}
+
 export function forwardViewMutation(
   gui: GuiChannel,
 ): (
@@ -398,6 +413,7 @@ async function resolveProject(
 }
 
 export function registerLifecycleRoutes(router: Router, context: LifecycleApiContext): void {
+  if (context.continuity) registerRebootRoutes(router, context.continuity)
   const { store, events, gui, legacy } = context
   const rootHandler = createRootHandler(rootOperations(context), { ownerFromOrigin: true })
   const root = (req: IncomingMessage, res: ServerResponse) => rootHandler(req, res)
