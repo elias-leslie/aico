@@ -18,6 +18,7 @@ import {
 import { type IPty, spawn } from 'node-pty'
 import { parseTerminalFontSettings } from '../shared/font-settings'
 import { cursorNearTitlebar, nextArcade, parseArcadeKeys, pickArcade } from './arcade'
+import { Attention, agentName, pushBody } from './attention'
 import { contentSecurityPolicy, voiceConnectSource } from './csp'
 import {
   arrange,
@@ -68,7 +69,7 @@ import {
 } from './tether-client'
 import { coalesceAsync, coalesceTrailingAsync, refreshAttachedClients } from './tmux-view'
 import { toolMark } from './tool-marks'
-import { createTray, refreshTray, setWidgetActivity, type TrayWidget } from './tray'
+import { createTray, refreshTray, setNeedsYou, setWidgetActivity, type TrayWidget } from './tray'
 import {
   type Bounds,
   ensureView,
@@ -444,6 +445,8 @@ const refreshSessions = coalesceAsync(async () => {
   const mark = catalog.mark()
   const list = await tether.listSessions()
   const { gone } = catalog.replace(list, mark)
+  for (const id of gone) attention.removed(id)
+  for (const descriptor of catalog.list()) noteAgentState(descriptor)
   // A view whose session is absent from a complete list is closed but its row
   // is kept: only an explicit `session.ended` forgets a view. A wrong or empty
   // instance must never erase every saved window position.
@@ -473,6 +476,7 @@ const refreshTools = coalesceAsync(async () => {
 function sessionEnded(id: string, reason: string): void {
   const known = catalog.get(id)
   catalog.remove(id)
+  attention.removed(id)
   // destroy() skips the 'close' event, so take the space it leaves here and
   // let neighbours grow into it once the window is gone.
   const win = windowForWidget(id)
@@ -504,6 +508,7 @@ function onTetherEvent(event: TetherEvent): void {
         break
       }
       catalog.upsert(snapshot)
+      noteAgentState(snapshot)
       pushTitles()
       syncTray()
       break
@@ -997,6 +1002,7 @@ function createWidgetWindow(
   win.on('focus', () => {
     const widgetId = widgetOf.get(win.id)
     lastFocusedAico = widgetId ?? lastFocusedAico
+    if (widgetId) attention.focused(widgetId)
     const pty = ptys.get(win.id)
     if (pty) void sizeClaims.get(pty)?.()
     win.webContents.send('win:focus', true)
@@ -1217,6 +1223,41 @@ async function renameSession(id: string, name: unknown): Promise<void> {
   }
   pushTitles()
   syncTray()
+}
+
+// ---------------------------------------------------------------------------
+// Attention: flash a window and badge the tray when a session needs the owner
+// (attention.ts); after 2 minutes unanswered, one Nightshift push to the phone.
+
+const NIGHTSHIFT = join(homedir(), '.local/bin/nightshift')
+
+const attention = new Attention({
+  now: Date.now,
+  setTimer: (fn, ms) => setTimeout(fn, ms),
+  clearTimer: (handle) => clearTimeout(handle as NodeJS.Timeout),
+  isFocused: (id) => windowForWidget(id)?.isFocused() ?? false,
+  flash: (id, on) => windowForWidget(id)?.flashFrame(on),
+  needsYou: (on) => setNeedsYou(on),
+  push: (id) => {
+    const descriptor = catalog.get(id)
+    if (!descriptor) return
+    const title = sessionLabel(descriptor, getView(id), projects)
+    const agent = agentName(descriptor.stateSource, toolDisplayName(descriptor.tool, tools))
+    // Nightshift's own Web Push to the owner's PWA; Aico keeps the per-session cooldown.
+    execFile(
+      NIGHTSHIFT,
+      ['push', pushBody(agent, title), '--title', 'Aico: waiting for you', '--severity', 'warning'],
+      { timeout: 30_000 },
+      (error, stdout) => {
+        if (error) console.warn(`[aico] needs-you push for ${id} failed: ${error.message}`)
+        else logWidgetEvent(id, 'needs_you_push', { result: stdout.trim().slice(0, 80) })
+      },
+    )
+  },
+})
+
+function noteAgentState(descriptor: SessionDescriptor): void {
+  attention.update(descriptor.id, descriptor.state ?? 'unknown')
 }
 
 // ---------------------------------------------------------------------------

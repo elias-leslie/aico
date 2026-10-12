@@ -6,6 +6,8 @@
 // Output:
 //   assets/tray/idle.png    44px, muted lantern orb  (no widget active)
 //   assets/tray/active.png  44px, amber lantern orb  (a widget is thinking)
+//   assets/tray/needs-you.png 44px, amber orb with a red badge (a session is
+//                           blocked on the owner and its window is unfocused)
 //   assets/icon.png        256px, amber lantern orb  (desktop/app icon)
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -28,9 +30,19 @@ function muted(svg) {
     .replaceAll('#8A551F', '#3F4954')
 }
 
+// A notification badge in the top-right corner, ringed in the icon's ink so it
+// stays separate from the orb at 22 px.
+function badged(svg) {
+  return svg.replace(
+    '</svg>',
+    '  <circle cx="400" cy="112" r="96" fill="#F0524A" stroke="#0B0D11" stroke-width="28" />\n</svg>',
+  )
+}
+
 const icons = [
   ['tray/idle.png', 44, muted(sourceIcon)],
   ['tray/active.png', 44, sourceIcon],
+  ['tray/needs-you.png', 44, badged(sourceIcon)],
   ['icon.png', 256, sourceIcon],
 ]
 

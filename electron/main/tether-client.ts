@@ -78,6 +78,11 @@ export interface SessionDescriptor {
   createdAt: number
   /** Absent from a Tether older than the context-hook field. */
   contextHook?: ContextHook
+  /** The agent's state (tether docs/agent-state.md); absent from an older Tether. */
+  state?: 'working' | 'idle' | 'blocked' | 'unknown'
+  stateSource?: string
+  stateAt?: number | null
+  stateDetail?: string | null
   /** Present on a 202 create: why the session is not running yet. */
   failure?: { code: string; reason?: string } | null
 }

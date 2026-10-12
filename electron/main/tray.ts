@@ -1,12 +1,14 @@
 import { join } from 'node:path'
 import { app, Menu, nativeImage, Tray } from 'electron'
 
-// Lantern orb tray icon, two states: muted idle / amber active (active = at
-// least one widget is thinking). PNGs are generated from the selected SVG by
+// Lantern orb tray icon, three states: muted idle / amber active (at least one
+// widget is thinking) / amber with a red badge, "needs you" (a session is
+// blocked on the owner and its window is unfocused; it wins). PNGs are generated from the selected SVG by
 // scripts/gen-tray-icons.mjs. Resolved relative to out/main at runtime.
 const iconsDir = join(__dirname, '../../assets/tray')
 const idleImage = nativeImage.createFromPath(join(iconsDir, 'idle.png'))
 const activeImage = nativeImage.createFromPath(join(iconsDir, 'active.png'))
+const needsYouImage = nativeImage.createFromPath(join(iconsDir, 'needs-you.png'))
 
 export interface TrayWidget {
   id: string
@@ -44,6 +46,7 @@ let tools: NewWidgetTool[] = []
 let projects: NewWidgetProject[] = []
 let unavailable: string | null = null
 const thinking = new Set<number>()
+let needsYou = false
 
 function buildMenu(widgets: TrayWidget[]): Menu {
   const h = handlers
@@ -115,7 +118,7 @@ export function createTray(
   projects = newWidgetProjects
   // createFromPath returns an empty image instead of throwing, which would
   // leave a blank tray slot. Say so; the packaged smoke fails on this line.
-  if (idleImage.isEmpty() || activeImage.isEmpty()) {
+  if (idleImage.isEmpty() || activeImage.isEmpty() || needsYouImage.isEmpty()) {
     console.error(`[aico] tray icon failed to load from ${iconsDir}`)
   }
   tray = new Tray(idleImage)
@@ -142,5 +145,24 @@ export function refreshTray(
 export function setWidgetActivity(winId: number, active: boolean): void {
   if (active) thinking.add(winId)
   else thinking.delete(winId)
-  tray?.setImage(thinking.size > 0 ? activeImage : idleImage)
+  syncIcon()
+}
+
+/** Show or clear the "needs you" icon (see attention.ts). */
+export function setNeedsYou(on: boolean): void {
+  needsYou = on
+  syncIcon()
+}
+
+export type TrayIcon = 'idle' | 'active' | 'needs-you'
+
+export function trayIcon(): TrayIcon {
+  if (needsYou) return 'needs-you'
+  return thinking.size > 0 ? 'active' : 'idle'
+}
+
+function syncIcon(): void {
+  const icon = trayIcon()
+  tray?.setImage(icon === 'needs-you' ? needsYouImage : icon === 'active' ? activeImage : idleImage)
+  tray?.setToolTip(icon === 'needs-you' ? 'Aico: a session needs you' : 'Aico')
 }

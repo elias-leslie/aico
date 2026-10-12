@@ -7,6 +7,7 @@ vi.mock('electron', () => ({
   nativeImage: { createFromPath: () => ({ isEmpty: () => false }) },
   Tray: class {
     setToolTip() {}
+    setImage() {}
     setContextMenu(menu: Record<string, unknown>[]) {
       menus.push(menu)
     }
@@ -58,5 +59,20 @@ describe('tray session catalog', () => {
     refreshTray([], [], [], 'Tether unavailable: sessions keep running')
     const menu = menus.at(-1) ?? []
     expect(menu[0]).toEqual({ label: 'Tether unavailable: sessions keep running', enabled: false })
+  })
+})
+
+describe('tray icon', () => {
+  it('shows needs-you over active over idle', async () => {
+    const { setNeedsYou, setWidgetActivity, trayIcon } = await import('./tray')
+    expect(trayIcon()).toBe('idle')
+    setWidgetActivity(1, true)
+    expect(trayIcon()).toBe('active')
+    setNeedsYou(true)
+    expect(trayIcon()).toBe('needs-you')
+    setNeedsYou(false)
+    expect(trayIcon()).toBe('active')
+    setWidgetActivity(1, false)
+    expect(trayIcon()).toBe('idle')
   })
 })
