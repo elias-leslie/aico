@@ -134,7 +134,7 @@ export const HeaderNameDisplay = memo(function HeaderNameDisplay({
         style={{ color: textColor }}
         title={name}
       >
-        <CoordinatorBadge badge={slot.badge} />
+        <CoordinatorBadge badge={slot.badge} dot />
         <SessionTitle name={name} task={slot.task} />
         <ChevronDown className="w-3 h-3 flex-shrink-0" />
       </button>
@@ -145,7 +145,7 @@ export const HeaderNameDisplay = memo(function HeaderNameDisplay({
   // state (waiting 3m, done 1m, ...) sits beside its name.
   return (
     <span className="flex min-w-0 items-center gap-1.5 overflow-hidden">
-      <CoordinatorBadge badge={slot.badge} />
+      <CoordinatorBadge badge={slot.badge} dot={isMobile} />
       <span
         className="flex min-w-0 items-center overflow-hidden px-1.5 py-0.5 text-xs max-w-[320px]"
         style={{ color: textColor }}

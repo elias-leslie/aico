@@ -4,12 +4,28 @@ import type { CoordinatorBadgeInfo } from '@/lib/utils/coordinator-badge'
 export function CoordinatorBadge({
   badge,
   ownLine = false,
+  dot = false,
 }: {
   badge: CoordinatorBadgeInfo | null | undefined
   /** On a line of its own (phone lists): full width, no shrinking. */
   ownLine?: boolean
+  /** Just its colour (phone headers), so the title keeps the width; the
+   * wording stays in the tooltip, the accessible name and the pane sheet. */
+  dot?: boolean
 }) {
   if (!badge) return null
+  if (dot)
+    return (
+      <span
+        data-testid="coordinator-badge"
+        data-variant="dot"
+        role="img"
+        aria-label={badge.label}
+        title={badge.label}
+        className="inline-block h-2 w-2 shrink-0 rounded-full"
+        style={{ backgroundColor: badge.color }}
+      />
+    )
   return (
     <span
       data-testid="coordinator-badge"

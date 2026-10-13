@@ -152,6 +152,30 @@ describe('PaneSwapDropdown', () => {
 })
 
 describe('PaneSwapDropdown attention', () => {
+  it('shows a phone header badge as a colour dot so the title keeps the width', () => {
+    const lane = {
+      ...makeProjectSlot('a', 'Tether — Badge check lane'),
+      badge: { label: '↳ Badge check lead', color: '#f0a35e' },
+    } as PaneSlot
+    render(
+      <PaneSwapDropdown
+        currentSlot={lane}
+        allSlots={[lane, makeProjectSlot('b', 'Beta')]}
+        onSwitchTo={vi.fn()}
+        isMobile
+      />,
+    )
+    const trigger = screen.getByTestId('pane-swap-dropdown')
+    const dot = trigger.querySelector('[data-testid="coordinator-badge"]')
+    expect(dot?.getAttribute('data-variant')).toBe('dot')
+    expect(dot?.textContent).toBe('')
+    expect(trigger.getAttribute('aria-label')).toContain('(↳ Badge check lead)')
+    // The sheet keeps the worded chip.
+    fireEvent.click(trigger)
+    const sheet = screen.getByTestId('pane-swap-mobile-sheet')
+    expect(sheet.textContent).toContain('↳ Badge check lead')
+  })
+
   it('groups the mobile switcher most-urgent first with badges and a needs-you count', () => {
     const slots = [
       makeProjectSlot('a', 'Alpha'),

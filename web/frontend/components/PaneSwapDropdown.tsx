@@ -220,13 +220,13 @@ export function PaneSwapDropdown({
         }
         aria-label={
           isMobile
-            ? `Switch panes from ${currentName}`
+            ? `Switch panes from ${currentName}${currentSlot.badge ? ` (${currentSlot.badge.label})` : ''}`
             : `Swap ${currentName} with another pane`
         }
         aria-haspopup={isMobile ? 'dialog' : 'menu'}
         aria-expanded={isOpen}
       >
-        <CoordinatorBadge badge={currentSlot.badge} />
+        <CoordinatorBadge badge={currentSlot.badge} dot={isMobile} />
         <SessionTitle name={currentName} task={currentSlot.task} />
         <NeedsYouCount count={needsYouCount} />
         <ChevronDown
