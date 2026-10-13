@@ -2,37 +2,35 @@ import { describe, expect, it } from 'vitest'
 import { getCoordinatorBadge } from './coordinator-badge'
 
 describe('getCoordinatorBadge', () => {
-  it('labels a coordinator in its own colour', () => {
+  it('shows Tether’s badge as it is', () => {
     expect(
       getCoordinatorBadge({
-        is_coordinator: true,
-        coordinator_color: '#f0a35e',
+        badge: { kind: 'coordinator', text: 'Coordinator', color: '#f0a35e' },
       }),
     ).toEqual({ label: 'Coordinator', color: '#f0a35e' })
-  })
-
-  it('names a lane’s coordinator in that coordinator’s colour', () => {
     expect(
       getCoordinatorBadge({
-        coordinator_id: 'd2852144',
-        coordinator_name: 'Personal Workspace',
-        coordinator_color: '#6fa8ff',
+        badge: {
+          kind: 'child',
+          text: '↳ Personal Workspace',
+          color: '#6fa8ff',
+        },
       }),
     ).toEqual({ label: '↳ Personal Workspace', color: '#6fa8ff' })
   })
 
-  it('falls back when the coordinator ended or the colour is missing', () => {
-    expect(getCoordinatorBadge({ coordinator_id: 'deadbeef' })).toEqual({
-      label: '↳ Coordinator',
-      color: '#6fa8ff',
-    })
-    expect(
-      getCoordinatorBadge({ is_coordinator: true, coordinator_color: 'red' }),
-    ).toEqual({ label: 'Coordinator', color: '#6fa8ff' })
-  })
-
-  it('shows nothing for a session outside any coordinator', () => {
+  it('shows nothing without a well-formed badge', () => {
     expect(getCoordinatorBadge({})).toBeNull()
     expect(getCoordinatorBadge(null)).toBeNull()
+    expect(
+      getCoordinatorBadge({
+        badge: { kind: 'child', text: '↳ X', color: 'red' },
+      }),
+    ).toBeNull()
+    expect(
+      getCoordinatorBadge({
+        badge: { kind: 'child', text: ' ', color: '#6fa8ff' },
+      }),
+    ).toBeNull()
   })
 })

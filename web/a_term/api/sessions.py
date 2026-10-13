@@ -62,13 +62,12 @@ class ATermSessionResponse(BaseModel):
     activity_previous: str = "unknown"
     activity_at: int | None = None
     activity_detail: str | None = None
-    # Tether's name (the task title) and workspace; ``name`` is both composed.
+    # ``name`` is Tether's displayTitle; ``task`` its raw name (the rename
+    # value); ``badge`` {kind, text, color} as Tether words it.
     task: str | None = None
-    project_name: str | None = None
+    badge: dict[str, str] | None = None
     is_coordinator: bool = False
     coordinator_id: str | None = None
-    coordinator_name: str | None = None
-    coordinator_color: str | None = None
 
     @model_validator(mode="before")
     @classmethod

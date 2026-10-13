@@ -18,14 +18,12 @@ from __future__ import annotations
 
 import re
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
 
 from ..logging_config import get_logger
 from ..storage import panes as pane_store
 from ..tether import TetherError, TetherUnavailable, get_client
 from ..utils import tmux
-from . import project_catalog
 
 logger = get_logger(__name__)
 
@@ -33,6 +31,7 @@ SHELL_MODE = "shell"
 TETHER_ID = re.compile(r"^[0-9a-f]{8}$")
 LEGACY_ID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 TMUX_SESSION_ID = re.compile(r"^\$[0-9]+$")
+HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 
 def is_tether_id(session_id: str) -> bool:
@@ -68,85 +67,34 @@ def _activity(value: Any) -> str:
 
 
 # Aico's Personal Workspace (aico electron/main/project.ts personalWorkspaceRoot).
-PERSONAL_WORKSPACE_NAME = "Personal Workspace"
-
-
-def _personal_workspace_root() -> str:
-    return str(Path.home() / ".local" / "share" / "aico" / "personal-workspace")
-
-
-def _project_names() -> dict[str, str]:
-    """Tether's project catalog, id and root -> name. Empty when Tether is away."""
-    try:
-        projects = project_catalog.list_projects_sync()
-    except (TetherUnavailable, TetherError) as error:
-        logger.debug("tether_projects_unavailable", error=str(error))
-        return {}
-    names: dict[str, str] = {}
-    for project in projects:
-        names.setdefault(project["id"], project["name"])
-        if project.get("root_path"):
-            names.setdefault(project["root_path"], project["name"])
-    return names
-
-
-def _workspace_name(descriptor: dict[str, Any], project_names: dict[str, str]) -> str | None:
-    project_id = descriptor.get("projectId")
-    root = descriptor.get("projectRoot")
-    workspace = project_names.get(project_id) if isinstance(project_id, str) else None
-    if not workspace and isinstance(root, str):
-        workspace = project_names.get(root) or (PERSONAL_WORKSPACE_NAME if root == _personal_workspace_root() else None)
-    return workspace
-
-
-def _task(descriptor: dict[str, Any], project: str | None) -> str | None:
-    """Tether's ``name`` (the task title), unless it only repeats the project."""
+def _task(descriptor: dict[str, Any]) -> str | None:
+    """Tether's ``name`` (the task title): the rename value."""
     name = descriptor.get("name")
-    task = name.strip() if isinstance(name, str) else ""
-    if not task or (project and task.casefold() == project.casefold()):
+    return name.strip() or None if isinstance(name, str) else None
+
+
+def _badge(descriptor: dict[str, Any]) -> dict[str, str] | None:
+    """Tether's ``badge`` as it is, or None when it is missing or not well formed."""
+    badge = descriptor.get("badge")
+    if not isinstance(badge, dict):
         return None
-    return task
+    kind, text, color = badge.get("kind"), badge.get("text"), badge.get("color")
+    if kind not in ("coordinator", "child") or not isinstance(text, str) or not text.strip():
+        return None
+    if not isinstance(color, str) or not HEX_COLOR.match(color):
+        return None
+    return {"kind": kind, "text": text, "color": color}
 
 
-def session_title(descriptor: dict[str, Any], project_names: dict[str, str]) -> str:
-    """``Project — Task``, the title Aico shows for the same session.
-
-    Project is the workspace name from Tether's project catalog; Task is
-    Tether's ``name`` (``st aico ... title`` or a rename). Either alone when the
-    other is missing, else Tether's ``label`` (``Session <n>``).
-    """
-    project = _workspace_name(descriptor, project_names)
-    task = _task(descriptor, project)
-    parts = [part for part in (project, task) if part]
-    return " — ".join(parts) if parts else str(descriptor.get("label") or descriptor["id"])
-
-
-def coordinator_name(descriptor: dict[str, Any], project_names: dict[str, str]) -> str | None:
-    """How a lane's badge names its coordinator: its task, else its project."""
-    project = _workspace_name(descriptor, project_names)
-    return _task(descriptor, project) or project
-
-
-def _needs_project_names(descriptors: list[dict[str, Any]]) -> bool:
-    return any(d.get("projectId") or d.get("projectRoot") for d in descriptors)
-
-
-def from_tether(
-    descriptor: dict[str, Any],
-    link: dict[str, Any] | None = None,
-    project_names: dict[str, str] | None = None,
-    coordinators: dict[str, dict[str, Any]] | None = None,
-) -> dict[str, Any]:
+def from_tether(descriptor: dict[str, Any], link: dict[str, Any] | None = None) -> dict[str, Any]:
     """Tether session descriptor -> A-Term session dict.
 
-    ``coordinators`` maps session ids to descriptors, to name a lane's
-    coordinator; missing ids are read from Tether.
+    The title (``displayTitle``) and the badge come worded from Tether
+    (tether docs/api-v1.md "Display title and badge"); A-Term shows them as
+    they are.
     """
-    names = _project_names() if project_names is None else project_names
     coordinator_id = descriptor.get("coordinatorId")
-    coordinator_id = coordinator_id if isinstance(coordinator_id, str) else None
-    lead = _coordinator(coordinator_id, coordinators) if coordinator_id else None
-    color = descriptor.get("coordinatorColor")
+    title = descriptor.get("displayTitle")
     raw_tmux = descriptor.get("tmux")
     tmux_info: dict[str, Any] = raw_tmux if isinstance(raw_tmux, dict) else {}
     mode = str(descriptor.get("tool") or SHELL_MODE)
@@ -154,13 +102,11 @@ def from_tether(
     agent_state = agent_state_for(mode, status if isinstance(status, str) else None)
     return {
         "id": descriptor["id"],
-        "name": session_title(descriptor, names),
-        "task": _task(descriptor, _workspace_name(descriptor, names)),
-        "project_name": _workspace_name(descriptor, names),
+        "name": title.strip() if isinstance(title, str) and title.strip() else str(descriptor.get("label") or descriptor["id"]),
+        "task": _task(descriptor),
+        "badge": _badge(descriptor),
         "is_coordinator": descriptor.get("coordinator") is True,
-        "coordinator_id": coordinator_id,
-        "coordinator_name": coordinator_name(lead, names) if lead else None,
-        "coordinator_color": color if isinstance(color, str) else None,
+        "coordinator_id": coordinator_id if isinstance(coordinator_id, str) else None,
         "user_id": None,
         "project_id": descriptor.get("projectId"),
         "working_dir": descriptor.get("projectRoot"),
@@ -195,15 +141,6 @@ def from_tether(
         "activity_at": descriptor.get("stateAt") if isinstance(descriptor.get("stateAt"), int) else None,
         "activity_detail": descriptor.get("stateDetail") if isinstance(descriptor.get("stateDetail"), str) else None,
     }
-
-
-def _coordinator(session_id: str, known: dict[str, dict[str, Any]] | None) -> dict[str, Any] | None:
-    if known is not None and session_id in known:
-        return known[session_id]
-    try:
-        return get_client().get_session(session_id)
-    except (TetherUnavailable, TetherError):
-        return None  # ended or unreachable: the badge says "Coordinator"
 
 
 def _legacy_rows() -> dict[str, dict[str, str]]:
@@ -297,10 +234,8 @@ def list_sessions(*, include_external: bool = True) -> list[dict[str, Any]]:
     sessions: list[dict[str, Any]] = []
     try:
         descriptors = [d for d in list_tether_sessions() if isinstance(d.get("id"), str)]
-        names = _project_names() if _needs_project_names(descriptors) else {}
-        by_id = {d["id"]: d for d in descriptors}
         for descriptor in descriptors:
-            sessions.append(from_tether(descriptor, links.get(descriptor["id"]), names, by_id))
+            sessions.append(from_tether(descriptor, links.get(descriptor["id"])))
     except (TetherUnavailable, TetherError) as error:
         logger.warning("tether_sessions_unavailable", error=str(error))
     for session_uuid, row in _legacy_rows().items():

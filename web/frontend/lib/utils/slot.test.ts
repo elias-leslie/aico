@@ -330,7 +330,11 @@ describe('paneToSlot', () => {
               name: 'Coordinator',
               task: 'Coordinator',
               is_coordinator: true,
-              coordinator_color: '#f0a35e',
+              badge: {
+                kind: 'coordinator',
+                text: 'Coordinator',
+                color: '#f0a35e',
+              },
               mode: 'shell',
               session_number: 1,
               is_alive: true,

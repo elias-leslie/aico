@@ -22,10 +22,9 @@ class SessionInPaneResponse(BaseModel):
     origin: str | None = None
     source: str | None = None
     task: str | None = None
+    badge: dict[str, str] | None = None
     is_coordinator: bool = False
     coordinator_id: str | None = None
-    coordinator_name: str | None = None
-    coordinator_color: str | None = None
     status: str | None = None
     working_dir: str | None
     agent_state: str = "not_started"

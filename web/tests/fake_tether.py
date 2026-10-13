@@ -48,6 +48,11 @@ SEED_TOOLS: list[dict[str, Any]] = [
 ]
 
 
+
+def _display_title(session: dict[str, Any]) -> str:
+    """Tether's displayTitle without project names: the name, else the label."""
+    return (session.get("name") or "").strip() or str(session["label"])
+
 class FakeTetherState:
     def __init__(self, root: Path) -> None:
         self.root = root
@@ -130,6 +135,7 @@ class FakeTetherState:
             "tool": tool,
             "name": name,
             "label": f"Session {self._counter}",
+            "displayTitle": (name or "").strip() or f"Session {self._counter}",
             "projectId": project_id,
             "projectRoot": project_root,
             "origin": origin,
@@ -266,6 +272,7 @@ def _sessions(state: FakeTetherState, method: str, rest: list[str], query: dict[
             if failure or session is None:
                 return failure or _error(404, "not_found")
             session["name"] = body.get("name")
+            session["displayTitle"] = _display_title(session)
             state.session_event("session.updated", session_id)
             return 200, session
     if action == "attach" and method == "GET":
@@ -485,6 +492,7 @@ def _roots(state: FakeTetherState, method: str, rest: list[str], query: dict[str
         if set(body) != {"generation", "label"} or label is None:
             return _error(400, "invalid_body")
         state.sessions[root["hostIdentity"]]["name"] = label
+        state.sessions[root["hostIdentity"]]["displayTitle"] = _display_title(state.sessions[root["hostIdentity"]])
         state.session_event("session.updated", root["hostIdentity"])
         return 200, root
     return _error(503, "gui_unavailable")
