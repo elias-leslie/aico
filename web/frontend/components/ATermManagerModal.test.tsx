@@ -216,7 +216,7 @@ describe('ATermManagerModal', () => {
     expect(onAttachExternalSession).toHaveBeenCalledWith('codex-agent-hub')
   })
 
-  it('shows registered project names for Tether sessions named after their project while retaining custom names', () => {
+  it('shows Tether session names as Aico does, without a project prefix', () => {
     const aicoSession = {
       id: '0a1b2c3d',
       user_id: null,
@@ -235,7 +235,7 @@ describe('ATermManagerModal', () => {
     }
     renderModal({
       externalSessions: [
-        { ...aicoSession, name: 'proj-a-term' },
+        { ...aicoSession, name: 'A-Term' },
         {
           ...aicoSession,
           id: '87654321',
@@ -249,9 +249,8 @@ describe('ATermManagerModal', () => {
       screen.getByRole('option', { name: 'A-Term (codex)' }),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole('option', { name: 'A-Term · Incident review (codex)' }),
+      screen.getByRole('option', { name: 'Incident review (codex)' }),
     ).toBeInTheDocument()
-    expect(screen.queryByText('proj-a-term (codex)')).not.toBeInTheDocument()
   })
 
   it('starts a fresh project A-Term even when attachable sessions exist', () => {

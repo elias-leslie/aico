@@ -13,7 +13,12 @@ import {
   isPaneSwapDragEvent,
   setDraggedPaneSlotId,
 } from '@/lib/utils/pane-swap-dnd'
-import { getSlotName, getSlotPanelId, isPaneSlot } from '@/lib/utils/slot'
+import {
+  getSlotName,
+  getSlotPanelId,
+  getSlotSessionId,
+  isPaneSlot,
+} from '@/lib/utils/slot'
 import { ModeToggle } from '../ModeToggle'
 import { PaneOverflowMenu } from '../PaneOverflowMenu'
 import { AddATermButton } from './AddATermButton'
@@ -72,13 +77,17 @@ export const UnifiedATermHeaderContent = memo(
     const paneId = isPaneSlot(slot) ? slot.paneId : null
     const rootSessionId =
       slot.type === 'project' && slot.isRoot ? slot.activeSessionId : null
+    // A Tether session's name lives in Tether (Aico shows it too); a pane
+    // name is only for sessions Tether does not own.
+    const tetherSessionId =
+      slot.isTether || rootSessionId ? getSlotSessionId(slot) : null
 
     const handleRename = useCallback(
       (newName: string) => {
-        if (rootSessionId) updateSession(rootSessionId, { name: newName })
+        if (tetherSessionId) updateSession(tetherSessionId, { name: newName })
         else if (paneId) renamePane(paneId, newName)
       },
-      [paneId, renamePane, rootSessionId, updateSession],
+      [paneId, renamePane, tetherSessionId, updateSession],
     )
     const isAgentMode =
       (slot.type === 'project' && slot.activeMode !== 'shell') ||

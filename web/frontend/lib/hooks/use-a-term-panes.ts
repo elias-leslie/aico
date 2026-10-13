@@ -11,7 +11,7 @@ import type {
   PanePlacementOptions,
   UpdatePaneRequest,
 } from './a-term-panes-types'
-import type { ATermSession } from './use-a-term-sessions'
+import { type ATermSession, SESSION_REFRESH_MS } from './use-a-term-sessions'
 
 const ACTIVE_PANES_QUERY_KEY = ['a-term-panes']
 const DETACHED_PANES_QUERY_KEY = ['a-term-detached-panes']
@@ -177,13 +177,17 @@ const removePaneSessionsFromCaches = (
 export function useATermPanes() {
   const queryClient = useQueryClient()
 
+  // Pane sessions carry Tether's session names, which Aico can change at any
+  // time: refresh at the session list's pace.
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ACTIVE_PANES_QUERY_KEY,
     queryFn: api.fetchPanes,
+    refetchInterval: SESSION_REFRESH_MS,
   })
   const { data: detachedData } = useQuery({
     queryKey: DETACHED_PANES_QUERY_KEY,
     queryFn: api.fetchDetachedPanes,
+    refetchInterval: SESSION_REFRESH_MS,
   })
 
   const panes = data?.items ?? []

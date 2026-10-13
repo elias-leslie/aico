@@ -313,7 +313,9 @@ export function useATermTabsState({
             type: 'project' as const,
             projectId: session.project_id,
             projectName:
-              session.is_external || session.is_root
+              session.is_external ||
+              session.is_root ||
+              session.source === 'tether'
                 ? getExternalSessionDisplayName(session, projectName)
                 : (projectName ?? session.name),
             rootPath: session.working_dir,
@@ -321,6 +323,7 @@ export function useATermTabsState({
             activeSessionId: session.id,
             sessionBadge: null,
             isRoot: session.is_root,
+            isTether: session.source === 'tether',
             isLegacy: session.is_legacy,
             claudeState: session.claude_state,
           }
@@ -334,6 +337,7 @@ export function useATermTabsState({
           workingDir: session.working_dir,
           sessionMode: session.mode,
           isExternal: session.is_external,
+          isTether: session.source === 'tether',
           isLegacy: session.is_legacy,
         }
       })
@@ -442,6 +446,7 @@ export function useATermTabsState({
       workingDir: session.working_dir,
       sessionMode: session.mode,
       isExternal: true,
+      isTether: session.source === 'tether',
     }))
     return [...paneSlots, ...externalSlots]
   }, [attachedExternalSessions, projectNames, visiblePanes])

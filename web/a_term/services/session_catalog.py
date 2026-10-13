@@ -18,12 +18,14 @@ from __future__ import annotations
 
 import re
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from ..logging_config import get_logger
 from ..storage import panes as pane_store
 from ..tether import TetherError, TetherUnavailable, get_client
 from ..utils import tmux
+from . import project_catalog
 
 logger = get_logger(__name__)
 
@@ -65,7 +67,56 @@ def _activity(value: Any) -> str:
     return value if isinstance(value, str) and value in ACTIVITY_STATES else "unknown"
 
 
-def from_tether(descriptor: dict[str, Any], link: dict[str, Any] | None = None) -> dict[str, Any]:
+# Aico's Personal Workspace (aico electron/main/project.ts personalWorkspaceRoot).
+PERSONAL_WORKSPACE_NAME = "Personal Workspace"
+
+
+def _personal_workspace_root() -> str:
+    return str(Path.home() / ".local" / "share" / "aico" / "personal-workspace")
+
+
+def _project_names() -> dict[str, str]:
+    """Tether's project catalog, id and root -> name. Empty when Tether is away."""
+    try:
+        projects = project_catalog.list_projects_sync()
+    except (TetherUnavailable, TetherError) as error:
+        logger.debug("tether_projects_unavailable", error=str(error))
+        return {}
+    names: dict[str, str] = {}
+    for project in projects:
+        names.setdefault(project["id"], project["name"])
+        if project.get("root_path"):
+            names.setdefault(project["root_path"], project["name"])
+    return names
+
+
+def session_label(descriptor: dict[str, Any], project_names: dict[str, str] | None = None) -> str:
+    """A Tether session's display name, as Aico labels its window.
+
+    Tether's ``name`` (set by Aico, ``st aico ... title`` or an A-Term rename),
+    else the workspace name, else Tether's default ``label`` (``Session <n>``).
+    Same order as aico ``sessionLabel``, so both apps show one name.
+    """
+    name = descriptor.get("name")
+    if isinstance(name, str) and name:
+        return name
+    project_id = descriptor.get("projectId")
+    root = descriptor.get("projectRoot")
+    if project_id or root:
+        names = _project_names() if project_names is None else project_names
+        workspace = names.get(project_id) if isinstance(project_id, str) else None
+        if not workspace and isinstance(root, str):
+            workspace = names.get(root) or (PERSONAL_WORKSPACE_NAME if root == _personal_workspace_root() else None)
+        if workspace:
+            return workspace
+    return descriptor.get("label") or descriptor["id"]
+
+
+def from_tether(
+    descriptor: dict[str, Any],
+    link: dict[str, Any] | None = None,
+    project_names: dict[str, str] | None = None,
+) -> dict[str, Any]:
     """Tether session descriptor -> A-Term session dict."""
     raw_tmux = descriptor.get("tmux")
     tmux_info: dict[str, Any] = raw_tmux if isinstance(raw_tmux, dict) else {}
@@ -74,7 +125,7 @@ def from_tether(descriptor: dict[str, Any], link: dict[str, Any] | None = None) 
     agent_state = agent_state_for(mode, status if isinstance(status, str) else None)
     return {
         "id": descriptor["id"],
-        "name": descriptor.get("name") or descriptor.get("label") or descriptor["id"],
+        "name": session_label(descriptor, project_names),
         "user_id": None,
         "project_id": descriptor.get("projectId"),
         "working_dir": descriptor.get("projectRoot"),
@@ -201,9 +252,10 @@ def list_sessions(*, include_external: bool = True) -> list[dict[str, Any]]:
     links = {link["session_id"]: link for link in pane_store.list_links()}
     sessions: list[dict[str, Any]] = []
     try:
-        for descriptor in list_tether_sessions():
-            if isinstance(descriptor.get("id"), str):
-                sessions.append(from_tether(descriptor, links.get(descriptor["id"])))
+        descriptors = [d for d in list_tether_sessions() if isinstance(d.get("id"), str)]
+        names = _project_names() if any(not d.get("name") for d in descriptors) else {}
+        for descriptor in descriptors:
+            sessions.append(from_tether(descriptor, links.get(descriptor["id"]), names))
     except (TetherUnavailable, TetherError) as error:
         logger.warning("tether_sessions_unavailable", error=str(error))
     for session_uuid, row in _legacy_rows().items():

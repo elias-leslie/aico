@@ -67,6 +67,32 @@ def test_list_includes_tether_and_legacy(test_app: TestClient, fake_tether: Fake
     assert legacy["tmux_socket"] is None
 
 
+def test_names_match_aico(
+    test_app: TestClient, fake_tether: FakeTether, monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+) -> None:
+    """Tether's name, else the workspace name, else Tether's label: Aico's order."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    fake_tether.state.projects.append({"id": "proj", "name": "Project One", "root": "/srv/proj"})
+    named = fake_tether.add_session(project_id="proj", name="Coordinator")
+    in_project = fake_tether.add_session(project_id="proj", project_root="/srv/proj")
+    personal = fake_tether.add_session(project_root=str(tmp_path / ".local/share/aico/personal-workspace"))
+    bare = fake_tether.add_session()
+
+    def names() -> dict[str, str]:
+        return {item["id"]: item["name"] for item in test_app.get("/api/a-term/sessions").json()["items"]}
+
+    assert names() == {
+        named["id"]: "Coordinator",
+        in_project["id"]: "Project One",
+        personal["id"]: "Personal Workspace",
+        bare["id"]: bare["label"],
+    }
+    # A title set elsewhere (st aico widget title) shows on the next read.
+    fake_tether.update(personal["id"], name="Browser move: lead")
+    assert names()[personal["id"]] == "Browser move: lead"
+    assert test_app.get(f"/api/a-term/sessions/{personal['id']}").json()["name"] == "Browser move: lead"
+
+
 def test_list_hides_detached_unless_asked(test_app: TestClient, fake_tether: FakeTether) -> None:
     _, session = _pane_with_session(fake_tether, detached=True)
     assert test_app.get("/api/a-term/sessions").json()["total"] == 0

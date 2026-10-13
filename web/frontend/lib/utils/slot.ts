@@ -22,6 +22,8 @@ export interface ProjectSlot {
   // Session badge (1-indexed position among project sessions)
   sessionBadge: number | null
   isRoot?: boolean
+  /** Active session is a Tether session: its name is Tether's, renamed there. */
+  isTether?: boolean
   /** Active session is a pre-Tether legacy session (attach-only). */
   isLegacy?: boolean
   // Claude state for the active session
@@ -36,6 +38,8 @@ export interface AdHocSlot {
   workingDir: string | null
   sessionMode?: string
   isExternal?: boolean
+  /** A Tether session: its name is Tether's, renamed there. */
+  isTether?: boolean
   /** Pre-Tether legacy session (attach-only). */
   isLegacy?: boolean
 }
@@ -139,17 +143,19 @@ export function paneToSlot(pane: ATermPane, projectName?: string): PaneSlot {
       type: 'project',
       paneId: pane.id,
       projectId: pane.project_id!,
-      projectName: activeSession?.is_root
-        ? getExternalSessionDisplayName(
-            { ...activeSession, project_id: pane.project_id },
-            projectName ?? pane.project_id ?? undefined,
-          )
-        : pane.pane_name,
+      projectName:
+        activeSession?.source === 'tether' || activeSession?.is_root
+          ? getExternalSessionDisplayName(
+              { ...activeSession, project_id: pane.project_id },
+              projectName ?? pane.project_id ?? undefined,
+            )
+          : pane.pane_name,
       rootPath: activeSession?.working_dir ?? null,
       activeMode: activeSession?.mode ?? pane.active_mode,
       activeSessionId: activeSession?.id ?? null,
       sessionBadge: null, // Badge is now part of pane_name
       isRoot: activeSession?.is_root,
+      isTether: activeSession?.source === 'tether',
       isLegacy: activeSession?.is_legacy,
       claudeState: getAgentState(agentSession),
     }
@@ -161,9 +167,10 @@ export function paneToSlot(pane: ATermPane, projectName?: string): PaneSlot {
     type: 'adhoc',
     paneId: pane.id,
     sessionId: session?.id ?? '',
-    name: pane.pane_name,
+    name: session?.source === 'tether' ? session.name : pane.pane_name,
     workingDir: session?.working_dir ?? null,
     sessionMode: session?.mode,
+    isTether: session?.source === 'tether',
     isLegacy: session?.is_legacy,
   }
 }

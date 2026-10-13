@@ -7,6 +7,8 @@ export interface PaneSession {
   is_root?: boolean
   /** Pre-Tether default-server session: attach-only, no reset. */
   is_legacy?: boolean
+  /** `tether` for a Tether session: its `name` is the one Aico shows too. */
+  source?: string | null
   working_dir: string | null
   agent_state?: 'not_started' | 'starting' | 'running' | 'stopped' | 'error'
   claude_state: 'not_started' | 'starting' | 'running' | 'stopped' | 'error'

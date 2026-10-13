@@ -29,8 +29,7 @@ def test_create_session_asks_tether_with_a_term_origin_and_links(tether: FakeTet
     pane = _pane()
     session = lifecycle.create_session(pane_id=pane["id"], mode="claude", project_id="proj", working_dir="/tmp")
 
-    method, path, body = tether.calls[-1]
-    assert (method, path) == ("POST", "/v1/sessions")
+    body = next(body for method, path, body in tether.calls if (method, path) == ("POST", "/v1/sessions"))
     assert body["origin"] == "a-term"
     assert body["tool"] == "claude" and body["projectId"] == "proj" and body["projectRoot"] == "/tmp"
     uuid.UUID(body["aTermSessionId"])

@@ -20,6 +20,7 @@ class SessionInPaneResponse(BaseModel):
     is_root: bool = False
     is_legacy: bool = False
     origin: str | None = None
+    source: str | None = None
     status: str | None = None
     working_dir: str | None
     agent_state: str = "not_started"

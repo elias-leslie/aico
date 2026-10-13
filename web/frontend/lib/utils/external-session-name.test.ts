@@ -27,6 +27,12 @@ describe('getExternalSessionDisplayName', () => {
     ).toBe('Label/description')
   })
 
+  it('shows a Tether session name as is, the name Aico shows', () => {
+    expect(
+      getExternalSessionDisplayName({ ...session, source: 'tether' }, 'Neri'),
+    ).toBe('Label/description')
+  })
+
   it('preserves the name when the project display name is unavailable', () => {
     expect(getExternalSessionDisplayName(session)).toBe('Label/description')
   })

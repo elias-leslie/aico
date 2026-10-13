@@ -303,4 +303,45 @@ describe('paneToSlot', () => {
       expect(slot.sessionMode).toBe('shell')
     }
   })
+
+  it.each([
+    ['adhoc', null],
+    ['project', 'proj'],
+  ] as const)(
+    'names a %s pane after its Tether session',
+    (paneType, projectId) => {
+      const slot = paneToSlot(
+        {
+          id: 'pane-3',
+          pane_type: paneType,
+          project_id: projectId,
+          pane_order: 0,
+          pane_name: 'Old pane name',
+          active_mode: 'shell',
+          is_detached: false,
+          created_at: null,
+          width_percent: 100,
+          height_percent: 100,
+          grid_row: 0,
+          grid_col: 0,
+          sessions: [
+            {
+              id: 's4',
+              name: 'Coordinator',
+              mode: 'shell',
+              session_number: 1,
+              is_alive: true,
+              source: 'tether',
+              working_dir: '/tmp',
+              claude_state: 'not_started',
+            },
+          ],
+        },
+        'Project',
+      )
+
+      expect(getSlotName(slot)).toBe('Coordinator')
+      expect(slot.isTether).toBe(true)
+    },
+  )
 })
