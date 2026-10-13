@@ -24,6 +24,7 @@ import {
   type PaneSlot,
 } from '@/lib/utils/slot'
 import { AttentionBadge, NeedsYouCount } from './AttentionBadge'
+import { CoordinatorBadge } from './CoordinatorBadge'
 
 function getSlotMode(slot: ATermSlot | PaneSlot): string {
   if (slot.type === 'project') {
@@ -178,11 +179,12 @@ export function PaneSwapDropdown({
   if (!isMobile && dropdownSlots.length === 0) {
     return (
       <span
-        className="flex items-center px-1.5 py-0.5 text-xs truncate max-w-[140px]"
+        className="flex min-w-0 items-center gap-1.5 px-1.5 py-0.5 text-xs max-w-[320px]"
         style={{ color: 'var(--term-text-primary)' }}
         title={currentName}
       >
-        {currentName}
+        <CoordinatorBadge badge={currentSlot.badge} />
+        <span className="truncate">{currentName}</span>
       </span>
     )
   }
@@ -200,7 +202,8 @@ export function PaneSwapDropdown({
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         className={clsx(
-          'flex items-center gap-1 px-1.5 py-0.5 rounded text-xs truncate max-w-[140px] transition-all duration-150',
+          'flex min-w-0 items-center gap-1 px-1.5 py-0.5 rounded text-xs transition-all duration-150',
+          isMobile ? 'max-w-[60vw]' : 'max-w-[320px]',
           !isMobile && 'cursor-grab active:cursor-grabbing',
           'hover:bg-[var(--term-bg-elevated)]',
           isDragTarget &&
@@ -222,6 +225,7 @@ export function PaneSwapDropdown({
         aria-haspopup={isMobile ? 'dialog' : 'menu'}
         aria-expanded={isOpen}
       >
+        <CoordinatorBadge badge={currentSlot.badge} />
         <span className="truncate">{currentName}</span>
         <NeedsYouCount count={needsYouCount} />
         <ChevronDown
@@ -255,7 +259,7 @@ export function PaneSwapDropdown({
             Swap position with
           </div>
 
-          {dropdownSlots.map(({ id, label, state }) => (
+          {dropdownSlots.map(({ id, label, slot, state }) => (
             <button
               key={id}
               onClick={() => {
@@ -271,6 +275,7 @@ export function PaneSwapDropdown({
                 className="w-3 h-3 flex-shrink-0"
                 style={{ color: 'var(--term-text-muted)' }}
               />
+              <CoordinatorBadge badge={slot.badge} />
               <span className="truncate flex-1">{label}</span>
               <AttentionBadge attention={state} />
             </button>
@@ -367,7 +372,10 @@ export function PaneSwapDropdown({
                             : 'transparent',
                         }}
                       >
-                        <span className="min-w-0 truncate">{label}</span>
+                        <span className="flex min-w-0 items-center gap-2">
+                          <CoordinatorBadge badge={slot.badge} />
+                          <span className="min-w-0 truncate">{label}</span>
+                        </span>
                         <span className="ml-3 flex shrink-0 items-center gap-2">
                           <AttentionBadge attention={state} />
                           {isCurrent && (

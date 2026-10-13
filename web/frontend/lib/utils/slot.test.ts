@@ -328,6 +328,9 @@ describe('paneToSlot', () => {
             {
               id: 's4',
               name: 'Coordinator',
+              task: 'Coordinator',
+              is_coordinator: true,
+              coordinator_color: '#f0a35e',
               mode: 'shell',
               session_number: 1,
               is_alive: true,
@@ -342,6 +345,8 @@ describe('paneToSlot', () => {
 
       expect(getSlotName(slot)).toBe('Coordinator')
       expect(slot.isTether).toBe(true)
+      expect(slot.task).toBe('Coordinator')
+      expect(slot.badge).toEqual({ label: 'Coordinator', color: '#f0a35e' })
     },
   )
 })

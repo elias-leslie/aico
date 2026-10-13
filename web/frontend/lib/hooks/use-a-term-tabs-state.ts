@@ -32,6 +32,7 @@ import { useLocalStorageState } from '@/lib/hooks/use-local-storage-state'
 import { useMediaQuery } from '@/lib/hooks/use-media-query'
 import { useProjectSettings } from '@/lib/hooks/use-project-settings'
 import { useTabEditing } from '@/lib/hooks/use-tab-editing'
+import { getCoordinatorBadge } from '@/lib/utils/coordinator-badge'
 import { getScopedATermStorageKey } from '@/lib/utils/detached-pane-window'
 import { getExternalSessionDisplayName } from '@/lib/utils/external-session-name'
 import { getSlotPanelId, getSlotSessionId, isPaneSlot } from '@/lib/utils/slot'
@@ -324,6 +325,8 @@ export function useATermTabsState({
             sessionBadge: null,
             isRoot: session.is_root,
             isTether: session.source === 'tether',
+            task: session.task,
+            badge: getCoordinatorBadge(session),
             isLegacy: session.is_legacy,
             claudeState: session.claude_state,
           }
@@ -338,6 +341,8 @@ export function useATermTabsState({
           sessionMode: session.mode,
           isExternal: session.is_external,
           isTether: session.source === 'tether',
+          task: session.task,
+          badge: getCoordinatorBadge(session),
           isLegacy: session.is_legacy,
         }
       })
@@ -447,6 +452,8 @@ export function useATermTabsState({
       sessionMode: session.mode,
       isExternal: true,
       isTether: session.source === 'tether',
+      task: session.task,
+      badge: getCoordinatorBadge(session),
     }))
     return [...paneSlots, ...externalSlots]
   }, [attachedExternalSessions, projectNames, visiblePanes])

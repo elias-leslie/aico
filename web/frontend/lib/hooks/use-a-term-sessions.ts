@@ -3,14 +3,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback } from 'react'
 import { apiFetch } from '../api-fetch'
+import type { CoordinatorFields } from '../utils/coordinator-badge'
 
 /**
  * A session as A-Term lists it. Ids are Tether's 8-hex session ids; a legacy
  * `summitflow-*` session on the default tmux server keeps its UUID, and an
  * external default-server tmux session keeps its tmux session name.
  */
-export interface ATermSession {
+export interface ATermSession extends CoordinatorFields {
   id: string
+  /** `Project — Task`, the title Aico shows; `task` is Tether's name alone. */
   name: string
   user_id: string | null
   project_id: string | null

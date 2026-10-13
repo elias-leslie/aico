@@ -7,6 +7,10 @@
 
 import type { ATermPane } from '@/lib/hooks/use-a-term-panes'
 import { getAgentState } from './agent-state'
+import {
+  type CoordinatorBadgeInfo,
+  getCoordinatorBadge,
+} from './coordinator-badge'
 import { getExternalSessionDisplayName } from './external-session-name'
 
 // Slot types for split-pane A-Term sessions
@@ -24,6 +28,10 @@ export interface ProjectSlot {
   isRoot?: boolean
   /** Active session is a Tether session: its name is Tether's, renamed there. */
   isTether?: boolean
+  /** Tether's name alone (the rename input), without the project. */
+  task?: string | null
+  /** Coordinator or lane chip, as Aico shows it. */
+  badge?: CoordinatorBadgeInfo | null
   /** Active session is a pre-Tether legacy session (attach-only). */
   isLegacy?: boolean
   // Claude state for the active session
@@ -40,6 +48,10 @@ export interface AdHocSlot {
   isExternal?: boolean
   /** A Tether session: its name is Tether's, renamed there. */
   isTether?: boolean
+  /** Tether's name alone (the rename input), without the project. */
+  task?: string | null
+  /** Coordinator or lane chip, as Aico shows it. */
+  badge?: CoordinatorBadgeInfo | null
   /** Pre-Tether legacy session (attach-only). */
   isLegacy?: boolean
 }
@@ -156,6 +168,8 @@ export function paneToSlot(pane: ATermPane, projectName?: string): PaneSlot {
       sessionBadge: null, // Badge is now part of pane_name
       isRoot: activeSession?.is_root,
       isTether: activeSession?.source === 'tether',
+      task: activeSession?.task,
+      badge: getCoordinatorBadge(activeSession),
       isLegacy: activeSession?.is_legacy,
       claudeState: getAgentState(agentSession),
     }
@@ -171,6 +185,8 @@ export function paneToSlot(pane: ATermPane, projectName?: string): PaneSlot {
     workingDir: session?.working_dir ?? null,
     sessionMode: session?.mode,
     isTether: session?.source === 'tether',
+    task: session?.task,
+    badge: getCoordinatorBadge(session),
     isLegacy: session?.is_legacy,
   }
 }

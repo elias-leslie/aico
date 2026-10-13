@@ -67,30 +67,57 @@ def test_list_includes_tether_and_legacy(test_app: TestClient, fake_tether: Fake
     assert legacy["tmux_socket"] is None
 
 
-def test_names_match_aico(
+def test_titles_match_aico(
     test_app: TestClient, fake_tether: FakeTether, monkeypatch: pytest.MonkeyPatch, tmp_path: Any
 ) -> None:
-    """Tether's name, else the workspace name, else Tether's label: Aico's order."""
+    """``Project — Task``: the workspace name, then Tether's name; Aico's title."""
     monkeypatch.setenv("HOME", str(tmp_path))
     fake_tether.state.projects.append({"id": "proj", "name": "Project One", "root": "/srv/proj"})
-    named = fake_tether.add_session(project_id="proj", name="Coordinator")
+    named = fake_tether.add_session(project_id="proj", name="Browser move")
     in_project = fake_tether.add_session(project_id="proj", project_root="/srv/proj")
+    repeats = fake_tether.add_session(project_id="proj", name="project one")
     personal = fake_tether.add_session(project_root=str(tmp_path / ".local/share/aico/personal-workspace"))
+    no_project = fake_tether.add_session(name="Scratch")
     bare = fake_tether.add_session()
 
-    def names() -> dict[str, str]:
-        return {item["id"]: item["name"] for item in test_app.get("/api/a-term/sessions").json()["items"]}
+    def items() -> dict[str, dict[str, Any]]:
+        return {item["id"]: item for item in test_app.get("/api/a-term/sessions").json()["items"]}
 
-    assert names() == {
-        named["id"]: "Coordinator",
+    assert {key: item["name"] for key, item in items().items()} == {
+        named["id"]: "Project One — Browser move",
         in_project["id"]: "Project One",
+        repeats["id"]: "Project One",
         personal["id"]: "Personal Workspace",
+        no_project["id"]: "Scratch",
         bare["id"]: bare["label"],
     }
+    assert items()[named["id"]]["task"] == "Browser move"
     # A title set elsewhere (st aico widget title) shows on the next read.
-    fake_tether.update(personal["id"], name="Browser move: lead")
-    assert names()[personal["id"]] == "Browser move: lead"
-    assert test_app.get(f"/api/a-term/sessions/{personal['id']}").json()["name"] == "Browser move: lead"
+    fake_tether.update(personal["id"], name="Lead")
+    assert items()[personal["id"]]["name"] == "Personal Workspace — Lead"
+    assert test_app.get(f"/api/a-term/sessions/{personal['id']}").json()["name"] == "Personal Workspace — Lead"
+
+
+def test_coordinator_badge_fields(test_app: TestClient, fake_tether: FakeTether) -> None:
+    fake_tether.state.projects.append({"id": "proj", "name": "Project One", "root": "/srv/proj"})
+    lead = fake_tether.add_session(project_id="proj", name="Coordinator lane")
+    fake_tether.update(lead["id"], coordinator=True, coordinatorColor="#6fa8ff")
+    lane = fake_tether.add_session(project_id="proj", name="Helper")
+    fake_tether.update(lane["id"], coordinatorId=lead["id"], coordinatorColor="#6fa8ff")
+    orphan = fake_tether.add_session(name="Orphan")
+    fake_tether.update(orphan["id"], coordinatorId="deadbeef", coordinatorColor="#f0a35e")
+
+    items = {item["id"]: item for item in test_app.get("/api/a-term/sessions").json()["items"]}
+    assert items[lead["id"]]["is_coordinator"] is True
+    assert items[lead["id"]]["coordinator_color"] == "#6fa8ff"
+    assert items[lane["id"]]["coordinator_id"] == lead["id"]
+    assert items[lane["id"]]["coordinator_name"] == "Coordinator lane"
+    assert items[lane["id"]]["coordinator_color"] == "#6fa8ff"
+    # The coordinator ended: still its colour, no name.
+    assert items[orphan["id"]]["coordinator_name"] is None
+    assert items[orphan["id"]]["coordinator_color"] == "#f0a35e"
+    one = test_app.get(f"/api/a-term/sessions/{lane['id']}").json()
+    assert one["coordinator_name"] == "Coordinator lane"
 
 
 def test_list_hides_detached_unless_asked(test_app: TestClient, fake_tether: FakeTether) -> None:

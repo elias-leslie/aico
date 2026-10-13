@@ -6,6 +6,7 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { useSessionAttention } from '@/lib/hooks/use-session-attention'
 import { type ATermSlot, getSlotName, type PaneSlot } from '@/lib/utils/slot'
 import { AttentionBadge } from '../AttentionBadge'
+import { CoordinatorBadge } from '../CoordinatorBadge'
 import { PaneSwapDropdown } from '../PaneSwapDropdown'
 
 interface HeaderNameDisplayProps {
@@ -34,38 +35,40 @@ export const HeaderNameDisplay = memo(function HeaderNameDisplay({
   onEditingChange,
 }: HeaderNameDisplayProps) {
   const name = getSlotName(slot)
+  // A Tether session renames its task; the project stays the workspace's.
+  const renameValue = slot.isTether ? (slot.task ?? '') : name
   const attention = useSessionAttention()
   const textColor = isActive
     ? 'var(--term-text-primary)'
     : 'var(--term-text-muted)'
 
-  const [editValue, setEditValue] = useState(name)
+  const [editValue, setEditValue] = useState(renameValue)
   const inputRef = useRef<HTMLInputElement>(null)
 
   // Sync edit value when entering edit mode or when name changes
   useEffect(() => {
     if (isEditing) {
-      setEditValue(name)
+      setEditValue(renameValue)
       // Focus and select after render
       requestAnimationFrame(() => {
         inputRef.current?.focus()
         inputRef.current?.select()
       })
     }
-  }, [isEditing, name])
+  }, [isEditing, renameValue])
 
   const commitEdit = useCallback(() => {
     const trimmed = editValue.trim()
-    if (trimmed && trimmed !== name) {
+    if (trimmed && trimmed !== renameValue) {
       onRename?.(trimmed)
     }
     onEditingChange?.(false)
-  }, [editValue, name, onRename, onEditingChange])
+  }, [editValue, renameValue, onRename, onEditingChange])
 
   const cancelEdit = useCallback(() => {
-    setEditValue(name)
+    setEditValue(renameValue)
     onEditingChange?.(false)
-  }, [name, onEditingChange])
+  }, [renameValue, onEditingChange])
 
   // Editing mode — inline input
   if (isEditing && onRename) {
@@ -130,6 +133,7 @@ export const HeaderNameDisplay = memo(function HeaderNameDisplay({
         style={{ color: textColor }}
         title={name}
       >
+        <CoordinatorBadge badge={slot.badge} />
         <span className="truncate">{name}</span>
         <ChevronDown className="w-3 h-3 flex-shrink-0" />
       </button>
@@ -140,8 +144,9 @@ export const HeaderNameDisplay = memo(function HeaderNameDisplay({
   // state (waiting 3m, done 1m, ...) sits beside its name.
   return (
     <span className="flex min-w-0 items-center gap-1.5">
+      <CoordinatorBadge badge={slot.badge} />
       <span
-        className="flex items-center px-1.5 py-0.5 text-xs truncate max-w-[140px]"
+        className="flex items-center px-1.5 py-0.5 text-xs truncate max-w-[320px]"
         style={{ color: textColor }}
         title={name}
       >

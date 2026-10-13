@@ -1,4 +1,6 @@
-export interface PaneSession {
+import type { CoordinatorFields } from '@/lib/utils/coordinator-badge'
+
+export interface PaneSession extends CoordinatorFields {
   id: string
   name: string
   mode: string

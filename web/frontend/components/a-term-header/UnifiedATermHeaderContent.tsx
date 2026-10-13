@@ -97,7 +97,13 @@ export const UnifiedATermHeaderContent = memo(
     const slotName = getSlotName(slot)
     const showProjectSwitcher =
       !isMobile && slot.type === 'project' && !!onProjectSwitch
-    const showHeaderName = isMobile || !showProjectSwitcher || !!rootSessionId
+    // The switcher shows the project; a Tether session's task or coordinator
+    // chip still needs the title Aico shows (`Project — Task`).
+    const showHeaderName =
+      isMobile ||
+      !showProjectSwitcher ||
+      !!rootSessionId ||
+      (!!slot.isTether && (!!slot.task || !!slot.badge))
     const showStatusBadge = shouldShowPaneStatus(connectionStatus)
     const closePaneLabel = formatActionLabel(closeTooltip ?? 'Close view')
     const closePaneTooltip = `${closePaneLabel}. The session keeps running and can be opened again.`
@@ -250,7 +256,7 @@ export const UnifiedATermHeaderContent = memo(
             onSwapWith={onSwapWith}
             onSwitchTo={onSwitchTo}
             onSwitch={onSwitch}
-            onRename={paneId || rootSessionId ? handleRename : undefined}
+            onRename={paneId || tetherSessionId ? handleRename : undefined}
             isEditing={isRenaming}
             onEditingChange={setIsRenaming}
           />
