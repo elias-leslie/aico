@@ -144,10 +144,10 @@ export const HeaderNameDisplay = memo(function HeaderNameDisplay({
   // Static display — still supports double-click rename. The pane's agent
   // state (waiting 3m, done 1m, ...) sits beside its name.
   return (
-    <span className="flex min-w-0 items-center gap-1.5">
+    <span className="flex min-w-0 items-center gap-1.5 overflow-hidden">
       <CoordinatorBadge badge={slot.badge} />
       <span
-        className="flex min-w-0 items-center px-1.5 py-0.5 text-xs max-w-[320px]"
+        className="flex min-w-0 items-center overflow-hidden px-1.5 py-0.5 text-xs max-w-[320px]"
         style={{ color: textColor }}
         title={name}
       >
