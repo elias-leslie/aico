@@ -47,6 +47,10 @@ export interface RootCreateRequest {
   origin: 'aico' | 'a-term'
   /** Tether: A-Term's session UUID (pane `A_TERM_SESSION_ID`); a-term only. */
   aTermSessionId: string | null
+  /** Tether: the session that asked for this root (its `AICO_WIDGET_ID`).
+   * Sets the root's coordinator (docs/api-v1.md Coordinators). Not part of
+   * the digest. */
+  launchedBy: string | null
 }
 
 /** One canonical view mutation, shared by retained-root and ordinary-widget routes. */
@@ -71,6 +75,8 @@ export interface RootControlOperations {
     generation: string,
     mutation: WidgetMutation,
   ): Promise<boolean | MutationRejection>
+  /** Tether: record the launcher of a newly reserved root. */
+  launched?(widgetId: string, launchedBy: string): void
   /** Tether: `POST /v1/roots/:requestId/end`, the shared session End. */
   end?(widgetId: string, generation: string): Promise<RetirementResult | { status: 'busy' }>
 }
@@ -186,6 +192,7 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
           'resumeSessionId',
           'origin',
           'aTermSessionId',
+          'launchedBy',
         ].includes(key),
     )
   )
@@ -202,9 +209,12 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     resumeSessionId,
     origin = 'aico',
     aTermSessionId = null,
+    launchedBy = null,
   } = value
   if (
     (origin !== 'aico' && origin !== 'a-term') ||
+    (launchedBy !== null &&
+      (typeof launchedBy !== 'string' || !/^[0-9a-f]{8}$/.test(launchedBy))) ||
     (aTermSessionId !== null &&
       (origin !== 'a-term' ||
         typeof aTermSessionId !== 'string' ||
@@ -248,6 +258,7 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     resumeSessionId: resumeSessionId ?? null,
     origin,
     aTermSessionId: (aTermSessionId as string | null) ?? null,
+    launchedBy: (launchedBy as string | null) ?? null,
   }
 }
 
@@ -579,6 +590,7 @@ export function createRootHandler(
               json(response, 409, { error: 'request_conflict' })
               return
             }
+            if (input.launchedBy) operations.launched?.(root.widgetId, input.launchedBy)
           }
           if (getWidget(root.widgetId)) {
             // Do not disclose the launch error or prompt; identity/state is the

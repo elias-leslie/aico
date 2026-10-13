@@ -54,41 +54,23 @@ def test_exact_create_is_one_content_free_request_with_no_fleet_ledger(monkeypat
     assert "private-owner-content" not in json.dumps(output)
 
 
-def test_create_from_an_aico_widget_marks_it_coordinator(monkeypatch):
+@pytest.mark.parametrize("surface", ["aico", "a-term"])
+def test_create_from_a_session_names_its_launcher(monkeypatch, surface):
+    """Tether makes the launcher a coordinator; the CLI only names it."""
     calls, output = [], []
-    lead = {"owner": "aico", "widgetId": "abcdef01", "sessionId": "s-1", "generation": "b" * 64,
-            "status": "running", "available": True}
 
     def receipt(_, path, route, payload=None, **kwargs):
         calls.append((route, payload))
-        if route == "/v1/roots":
-            return 200, descriptor(payload)
-        return 200, lead
+        return 200, descriptor(payload, surface)
 
     monkeypatch.setenv("AICO_WIDGET_ID", "abcdef01")
     monkeypatch.setattr(admin.Collector, "receipt", receipt)
     monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
-    assert admin.main([*BASE, "--root-socket", "/fixture/gui.sock"]) == 0
-    assert [route for route, _ in calls] == [
-        "/v1/roots", "/v1/widgets/abcdef01", "/v1/widgets/abcdef01/coordinator"]
-    assert calls[2][1] == {"generation": "b" * 64, "coordinator": True}
-    assert output[0]["coordinator"] == {"widgetId": "abcdef01", "applied": True}
-
-
-def test_coordinator_mark_failure_never_fails_create(monkeypatch):
-    output = []
-
-    def receipt(_, path, route, payload=None, **kwargs):
-        if route == "/v1/roots":
-            return 200, descriptor(payload)
-        raise admin.Unavailable("owner_unavailable")
-
-    monkeypatch.setenv("AICO_WIDGET_ID", "abcdef01")
-    monkeypatch.setattr(admin.Collector, "receipt", receipt)
-    monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
-    assert admin.main([*BASE, "--root-socket", "/fixture/gui.sock"]) == 0
-    assert output[0]["status"] == "running"
-    assert output[0]["coordinator"] == {"widgetId": "abcdef01", "applied": False}
+    transport = ["--root-socket", "/fixture/gui.sock"] if surface == "aico" else ["--root-url", "http://127.0.0.1:8002"]
+    assert admin.main([*BASE, "--surface", surface, *transport]) == 0
+    assert [route for route, _ in calls] == ["/v1/roots"]
+    assert calls[0][1]["launchedBy"] == "abcdef01"
+    assert output[0]["launchedBy"] == "abcdef01"
 
 
 @pytest.mark.parametrize("extra", [

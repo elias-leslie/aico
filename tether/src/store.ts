@@ -4,6 +4,7 @@ import { dirname } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import {
   AGENT_TOOLS_TABLE_SQL,
+  COORDINATOR_SQL,
   INDEXES_SQL,
   RETIRED_SESSION_IDS_SQL,
   ROOT_ORIGIN_SQL,
@@ -167,6 +168,13 @@ export class Store {
         this.db
           .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
           .run(3, now)
+      }
+      if (current < 4) {
+        // v4: coordinators, their lanes and colours.
+        this.db.exec(COORDINATOR_SQL)
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(4, now)
       }
     })
   }

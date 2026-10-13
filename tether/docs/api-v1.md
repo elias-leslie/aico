@@ -44,6 +44,9 @@ Status: every route below is implemented (Phase 3a). Additions made for A-Term d
   "projectRoot": "/home/demo/projects/aico",
   "origin": "aico",
   "aTermSessionId": null,
+  "coordinator": false,
+  "coordinatorId": "d2852144",
+  "coordinatorColor": "#6fa8ff",
   "rootRequestId": null,
   "lifecycleVersion": 1,
   "tmux": {
@@ -77,6 +80,8 @@ Status: every route below is implemented (Phase 3a). Additions made for A-Term d
 - `legacy`: a lifecycle-v0 session, kept read-only.
 
 `origin` is `aico`, `a-term`, `cli` or `root` (created through `POST /v1/roots`).
+
+`coordinator`, `coordinatorId` and `coordinatorColor`: see [Coordinators](#coordinators).
 
 `available` is true only for `running`. An ended session is not listed; `GET` on it returns 404. A root keeps its ended tombstone under `/v1/roots`.
 
@@ -167,7 +172,7 @@ A root is a session created through the root contract with a stable caller `requ
 | Method and route | Body | Result |
 | --- | --- | --- |
 | `GET /v1/roots` | query `origin=aico\|a-term` *(3a)*, `ended=0\|1` *(post-cutover)* | `{owner, available, directedDelivery, roots: Descriptor[]}`. `owner` is the `origin` filter, else `"aico"`. `ended=0` leaves out ended tombstones (they stay readable at `GET /v1/roots/:requestId`); the legacy `gui-control.sock` accepts it too. `400 invalid_query` for another origin or `ended` value. |
-| `POST /v1/roots` | `{requestId, tool, projectId, projectRoot, initialPrompt, role, leadRootReference?, facetCapsuleRef?, resumeSessionId?, origin?, aTermSessionId?}` | Existing or reserved root descriptor. `200` for running or ended, `202` for pending or uncertain. `409 request_conflict` if the same key arrives with a different digest. |
+| `POST /v1/roots` | `{requestId, tool, projectId, projectRoot, initialPrompt, role, leadRootReference?, facetCapsuleRef?, resumeSessionId?, origin?, aTermSessionId?, launchedBy?}` | Existing or reserved root descriptor. `200` for running or ended, `202` for pending or uncertain. `409 request_conflict` if the same key arrives with a different digest. |
 | `GET /v1/roots/:requestId` | none | Current descriptor, including ended tombstones (`status: "ended"`, `generation: null`) |
 | `POST /v1/roots/:requestId/show` | `{generation}` | Forwarded to the GUI |
 | `POST /v1/roots/:requestId/position` | `{generation, bounds: {x, y, width, height}}` | Forwarded to the GUI |
@@ -178,7 +183,7 @@ A root is a session created through the root contract with a stable caller `requ
 | `GET /v1/widgets/:id` | none | Compact descriptor `{owner:"aico", widgetId, sessionId, generation, status, available}` |
 | `POST /v1/widgets/:id/title` | `{generation, label}` | As for roots |
 | `POST /v1/widgets/:id/position` | `{generation, bounds}` | As for roots |
-| `POST /v1/widgets/:id/coordinator` | `{generation, coordinator: boolean}` | Forwarded to the GUI: Aico labels a coordinator window and tiles it in the centre |
+| `POST /v1/widgets/:id/coordinator` | `{generation, coordinator: boolean}` | Marks or unmarks a coordinator in the catalog (see [Coordinators](#coordinators)) and forwards it to the GUI when one is connected |
 
 The root descriptor keeps Aico's fields: `owner`, `hostIdentity`, `generation`, `logicalSessionId`, `surfaceLocator`, metadata, `bounds` and `status`. `bounds` is always `null` from Tether: window geometry belongs to the GUI.
 
@@ -194,6 +199,15 @@ Generation fencing:
 - If the session retires while the request waits, the response is `410 ended`.
 - A root that has ended returns `410 ended`. Its tombstone means the same `requestId` can never start new work.
 
+### Coordinators
+
+A coordinator is a session that launches and steers other sessions (lanes). The catalog is the one record of who coordinates whom; Aico and A-Term both draw it from the descriptor.
+
+- `launchedBy` on `POST /v1/roots` names the session that asked for the root (`st aico create` sends its `AICO_WIDGET_ID`, from Aico or A-Term). It is not part of the digest and only counts when the root is first reserved. If the launcher belongs to a coordinator, the new root belongs to that same root coordinator, so a lane's helpers join the lane's coordinator. Otherwise the launcher becomes a coordinator and the root belongs to it. An unknown launcher records nothing.
+- `coordinator` is true for a coordinator. `coordinatorId` is the root coordinator that launched this session, or null (always null for a coordinator). It stays set after that coordinator ends.
+- `coordinatorColor` is the coordinator's colour, `#rrggbb` from a fixed palette of eight, on the coordinator and on each of its lanes. A new coordinator takes the first colour no other coordinator holds, so coordinators on screen together differ until there are more than eight. Lanes keep their colour after the coordinator ends.
+- `POST /v1/widgets/:id/coordinator` marks or unmarks one by hand (`st aico widget coordinator on|off`), with or without a GUI connected, and publishes `session.updated`. Unmarking frees the colour; lanes keep theirs.
+
 ### GUI view-mutation forwarding
 
 Show, position, title and coordinator change views, and views belong to the app. Tether forwards them to one connected Aico GUI client:
@@ -202,7 +216,7 @@ Show, position, title and coordinator change views, and views belong to the app.
 2. For each command, the GUI verifies and applies the change (Aico `widgetMutationOperation`). It then posts `POST /v1/gui/results/:commandId` with `{applied: true}` or `{applied: false, error}`.
 3. Tether answers the original caller with the GUI's result. A command that gets no result within 5 s answers `409 outcome_uncertain`.
 
-With no GUI connected, `show`, `position` and `coordinator` return `503 gui_unavailable` and nothing is applied; Tether never starts the desktop. `title` without a GUI *(3a)* renames the session in the catalog under the lifecycle lock, fenced on the exact running generation, and publishes `session.updated`. With a GUI connected, `title` renames the catalog entry only when the GUI applies it, so the result stays atomic. `GET /v1/health` reports `gui.connected`, and the events `gui.connected` / `gui.disconnected` announce changes.
+With no GUI connected, `show` and `position` return `503 gui_unavailable` and nothing is applied; Tether never starts the desktop. `coordinator` without a GUI changes only the catalog. `title` without a GUI *(3a)* renames the session in the catalog under the lifecycle lock, fenced on the exact running generation, and publishes `session.updated`. With a GUI connected, `title` renames the catalog entry only when the GUI applies it, so the result stays atomic. `GET /v1/health` reports `gui.connected`, and the events `gui.connected` / `gui.disconnected` announce changes.
 
 ## Agent tools
 

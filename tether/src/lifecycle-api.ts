@@ -17,8 +17,10 @@ import {
   getWidget,
   insertWidget,
   listWidgets,
+  recordLauncher,
   rootRequestForWidget,
   type SessionOrigin,
+  setCoordinator,
   setWidgetName,
   setWidgetProject,
   type WidgetRow,
@@ -187,6 +189,9 @@ export function descriptor(row: WidgetRow, status: SessionStatus): Record<string
     projectRoot: row.projectRoot,
     origin: row.origin,
     aTermSessionId: row.aTermSessionId,
+    coordinator: row.coordinator,
+    coordinatorId: row.coordinatorId,
+    coordinatorColor: row.coordinatorColor,
     rootRequestId: rootRequestForWidget(row.id)?.requestId ?? null,
     lifecycleVersion: row.lifecycleVersion,
     tmux: {
@@ -364,15 +369,18 @@ export function forwardViewMutation(
 ) => Promise<boolean | MutationRejection> {
   return async (widgetId, generation, mutation) => {
     if (!gui.connected()) {
-      if (mutation.kind !== 'title') return { status: 503, error: 'gui_unavailable' }
-      // No GUI to hold a view: the title is the session name. Rename the exact
-      // running generation under the lifecycle lock.
-      const renamed = await withRunningSession(widgetId, generation, async (row) => {
-        setWidgetName(row.id, mutation.label)
+      if (mutation.kind !== 'title' && mutation.kind !== 'coordinator')
+        return { status: 503, error: 'gui_unavailable' }
+      // No GUI to hold a view: the title is the session name and the
+      // coordinator mark is session metadata. Change the exact running
+      // generation under the lifecycle lock.
+      const changed = await withRunningSession(widgetId, generation, async (row) => {
+        if (mutation.kind === 'title') setWidgetName(row.id, mutation.label)
+        if (mutation.kind === 'coordinator') setCoordinator(row.id, mutation.coordinator)
         notifySessionChanged(row.id, { force: true })
         return true as const
       })
-      return renamed
+      return changed
     }
     const result = await withRunningSession(widgetId, generation, async (row) => {
       const command: GuiCommand = { kind: mutation.kind, sessionId: row.id, generation }
@@ -388,6 +396,10 @@ export function forwardViewMutation(
         setWidgetName(row.id, mutation.label)
         notifySessionChanged(row.id, { force: true })
       }
+      if (mutation.kind === 'coordinator') {
+        setCoordinator(row.id, mutation.coordinator)
+        notifySessionChanged(row.id, { force: true })
+      }
       return true as const
     })
     return result === false ? false : result
@@ -398,6 +410,10 @@ export function rootOperations(context: LifecycleApiContext): RootControlOperati
   const mutate = forwardViewMutation(context.gui)
   return {
     available: () => true,
+    launched: (widgetId, launchedBy) => {
+      for (const id of recordLauncher(widgetId, launchedBy))
+        notifySessionChanged(id, { force: true })
+    },
     validate: (request) => Boolean(getTui(request.tool)?.enabled && isDir(request.projectRoot)),
     ensure: async (widgetId, prompt, resumeSessionId) => {
       await whenReady()

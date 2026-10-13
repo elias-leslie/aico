@@ -8,6 +8,7 @@ import {
   adoptActiveLegacyTmuxServer,
   bindCatalog,
   bindWidgetTmuxServer,
+  COORDINATOR_COLORS,
   clearReconciledDeadTmuxServerBinding,
   clearReconciledHistoricalTmuxServerBinding,
   clearWidgetPendingScope,
@@ -22,7 +23,9 @@ import {
   insertWidget,
   listTmuxServers,
   markTmuxServerDead,
+  recordLauncher,
   removeWidgetIfOwnership,
+  setCoordinator,
   setWidgetOwnership,
   setWidgetPendingScope,
 } from './catalog'
@@ -576,5 +579,39 @@ describe('tmux server generation persistence', () => {
         procStartTime: '9999',
       }),
     ).toBe(false)
+  })
+})
+
+describe('coordinators', () => {
+  const lineage = (id: string) => {
+    const row = getWidget(id)
+    return [row?.coordinator, row?.coordinatorId, row?.coordinatorColor]
+  }
+
+  it('makes a launcher the coordinator and hands its root down to nested lanes', () => {
+    for (const id of ['e0000001', 'e0000002', 'e0000003', 'e0000004', 'e0000005'])
+      insertWidget(id, 'codex')
+    const [first, second] = COORDINATOR_COLORS
+    expect(recordLauncher('e0000002', 'e0000001')).toEqual(['e0000002', 'e0000001'])
+    expect(lineage('e0000001')).toEqual([true, null, first])
+    expect(lineage('e0000002')).toEqual([false, 'e0000001', first])
+    // A lane's own helper belongs to the root coordinator; the lane stays a lane.
+    expect(recordLauncher('e0000003', 'e0000002')).toEqual(['e0000003'])
+    expect(lineage('e0000003')).toEqual([false, 'e0000001', first])
+    expect(lineage('e0000002')).toEqual([false, 'e0000001', first])
+    // A second coordinator on screen takes the next free colour.
+    recordLauncher('e0000005', 'e0000004')
+    expect(lineage('e0000004')).toEqual([true, null, second])
+    expect(lineage('e0000005')).toEqual([false, 'e0000004', second])
+    // An unknown launcher records nothing.
+    expect(recordLauncher('e0000005', 'deadbeef')).toEqual([])
+  })
+
+  it('frees a colour when a coordinator is unmarked and keeps its lanes coloured', () => {
+    insertWidget('e0000006', 'codex')
+    setCoordinator('e0000001', false)
+    expect(lineage('e0000002')).toEqual([false, 'e0000001', COORDINATOR_COLORS[0]])
+    setCoordinator('e0000006', true)
+    expect(lineage('e0000006')).toEqual([true, null, COORDINATOR_COLORS[0]])
   })
 })

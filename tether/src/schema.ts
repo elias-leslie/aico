@@ -3,7 +3,7 @@
 // copies rows byte for byte. The only widening is the tmux_servers unit CHECK,
 // which additionally admits non-default instance unit names.
 
-export const SCHEMA_VERSION = 3
+export const SCHEMA_VERSION = 4
 
 /** Aico's tmux_servers table (electron/main/store.ts TMUX_SERVERS_TABLE_SQL),
  * plus `tether-<instance>-tmux-server-<id>.service` for non-default instances. */
@@ -166,4 +166,17 @@ export const RETIRED_SESSION_IDS_SQL = `
 export const ROOT_ORIGIN_SQL = `
   ALTER TABLE root_requests ADD COLUMN origin TEXT NOT NULL DEFAULT 'aico'
     CHECK(origin IN ('aico', 'a-term'));
+`
+
+/** v4: coordinators (docs/api-v1.md Coordinators). `coordinator` marks a
+ * session that coordinates lanes; `coordinator_id` names the root coordinator
+ * that launched a session; `coordinator_color` is the coordinator's palette
+ * colour, kept on both so a lane keeps its colour after the coordinator ends. */
+export const COORDINATOR_SQL = `
+  ALTER TABLE sessions ADD COLUMN coordinator INTEGER NOT NULL DEFAULT 0
+    CHECK(coordinator IN (0, 1));
+  ALTER TABLE sessions ADD COLUMN coordinator_id TEXT
+    CHECK(coordinator_id IS NULL OR (length(coordinator_id) = 8 AND coordinator_id NOT GLOB '*[^0-9a-f]*'));
+  ALTER TABLE sessions ADD COLUMN coordinator_color TEXT
+    CHECK(coordinator_color IS NULL OR coordinator_color GLOB '#[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]');
 `

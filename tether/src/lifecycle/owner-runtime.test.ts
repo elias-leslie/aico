@@ -75,6 +75,9 @@ const widget: WidgetRow = {
   lifecycleVersion: 1,
   origin: 'aico',
   aTermSessionId: null,
+  coordinator: false,
+  coordinatorId: null,
+  coordinatorColor: null,
 }
 
 describe('headless owner session state', () => {

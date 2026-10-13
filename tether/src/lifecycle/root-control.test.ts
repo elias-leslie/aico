@@ -12,6 +12,7 @@ import {
   getWidget,
   insertWidget,
   listWidgets,
+  recordLauncher,
   removeWidget,
   reserveRootRequest,
   rootRequestForWidget,
@@ -64,6 +65,9 @@ describe('private root workload control', () => {
   const server = createRootServer({
     available: () => available,
     validate: (input) => input.projectRoot !== '/missing',
+    launched: (widgetId, launchedBy) => {
+      recordLauncher(widgetId, launchedBy)
+    },
     ensure,
     status,
     mutate: (widgetId, generation, mutation) =>
@@ -945,7 +949,7 @@ describe('private root workload control', () => {
   })
 
   it('serves exact-create retries and conflicts through the real owner CLI and private socket', async () => {
-    const invoke = (prompt: string, creator?: string) =>
+    const invoke = (prompt: string, creator?: string, requestId = 'cli-recovery') =>
       new Promise<{ code: string | number; body: Record<string, unknown> }>((resolve, reject) => {
         const env = { ...process.env }
         delete env.AICO_WIDGET_ID
@@ -955,7 +959,7 @@ describe('private root workload control', () => {
           [
             join(process.cwd(), 'scripts/aico-root-watch.py'),
             'create',
-            'cli-recovery',
+            requestId,
             prompt,
             '--tool',
             'codex',
@@ -988,16 +992,18 @@ describe('private root workload control', () => {
     expect(JSON.stringify(first.body)).not.toContain('Reconcile fixture')
     expect(await invoke('Reconcile fixture state after crash.')).toEqual(first)
     expect((await invoke('Changed fixture recovery prompt.')).body.reason).toBe('request_conflict')
-    // Launched from an Aico widget: that widget becomes a coordinator.
+    // Launched from a session: Tether makes that session the coordinator.
     const lead = present(getWidget('aabbcc01'))
-    const launched = await invoke('Reconcile fixture state after crash.', lead.id)
+    const launched = await invoke('Reconcile fixture state after crash.', lead.id, 'cli-launched')
     expect(launched.code).toBe(0)
-    expect(launched.body.coordinator).toEqual({ widgetId: lead.id, applied: true })
-    expect(coordinator).toHaveBeenLastCalledWith(lead.id, sessionGeneration(lead), true)
-    // An unknown launcher never fails the create.
-    const unknown = await invoke('Reconcile fixture state after crash.', 'abcdef99')
+    expect(launched.body.launchedBy).toBe(lead.id)
+    const lane = present(getWidget(String(launched.body.hostIdentity)))
+    expect(present(getWidget(lead.id)).coordinator).toBe(true)
+    expect(lane.coordinatorId).toBe(lead.id)
+    // An unknown launcher never fails the create and names no coordinator.
+    const unknown = await invoke('Reconcile fixture state after crash.', 'abcdef99', 'cli-unknown')
     expect(unknown.code).toBe(0)
-    expect(unknown.body.coordinator).toEqual({ widgetId: 'abcdef99', applied: false })
+    expect(present(getWidget(String(unknown.body.hostIdentity))).coordinatorId).toBeNull()
   })
 
   it('rolls back a widget and reservation together on catalog conflict', () => {

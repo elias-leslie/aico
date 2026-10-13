@@ -69,6 +69,12 @@ export interface WidgetRow {
   origin: SessionOrigin
   /** Tether: A-Term's session UUID when A-Term created it (pane marker). */
   aTermSessionId: string | null
+  /** Tether: this session coordinates lanes (docs/api-v1.md Coordinators). */
+  coordinator: boolean
+  /** Tether: the root coordinator that launched this session, if any. */
+  coordinatorId: string | null
+  /** Tether: the coordinator's palette colour (its own, or its launcher's). */
+  coordinatorColor: string | null
 }
 
 export type SessionOrigin = 'aico' | 'a-term' | 'root' | 'cli'
@@ -95,6 +101,9 @@ interface Raw {
   lifecycle_version: number | null
   origin: SessionOrigin
   a_term_session_id: string | null
+  coordinator: number | null
+  coordinator_id: string | null
+  coordinator_color: string | null
 }
 
 let db: DatabaseSync
@@ -129,6 +138,9 @@ function toRow(r: Raw): WidgetRow {
     lifecycleVersion: r.lifecycle_version ?? 0,
     origin: r.origin,
     aTermSessionId: r.a_term_session_id ?? null,
+    coordinator: r.coordinator === 1,
+    coordinatorId: r.coordinator_id ?? null,
+    coordinatorColor: r.coordinator_color ?? null,
   }
 }
 
@@ -683,6 +695,80 @@ export function insertLegacyUnclassifiedWidget(
  * so a later kill+recreate launches the TUI that's actually running there now. */
 export function setWidgetTool(id: string, tool: string): void {
   db.prepare('UPDATE sessions SET tool = ? WHERE id = ?').run(tool, id)
+}
+
+/** Coordinator colours, in order of assignment. The first is Aico's original
+ * coordinator blue. Readable as text and as a 16% tint on dark chrome. */
+export const COORDINATOR_COLORS = [
+  '#6fa8ff',
+  '#f0a35e',
+  '#5ccf94',
+  '#d48cf0',
+  '#e6c55a',
+  '#5ccfd6',
+  '#f07f8f',
+  '#a9b4ff',
+] as const
+
+/** The first palette colour no live coordinator holds (wrapping when all are
+ * taken), so coordinators on screen together never share a colour. */
+function freeCoordinatorColor(): string {
+  const taken = new Set(
+    (
+      db.prepare('SELECT coordinator_color AS color FROM sessions WHERE coordinator = 1').all() as {
+        color: string | null
+      }[]
+    ).map((row) => row.color),
+  )
+  return (
+    COORDINATOR_COLORS.find((color) => !taken.has(color)) ??
+    COORDINATOR_COLORS[taken.size % COORDINATOR_COLORS.length]
+  )
+}
+
+/** Mark or unmark a coordinator. Marking keeps an existing colour, else takes
+ * a free one; lanes keep the colour they were launched with. */
+export function setCoordinator(id: string, coordinator: boolean): void {
+  const row = getWidget(id)
+  if (!row || row.coordinator === coordinator) return
+  if (!coordinator) {
+    db.prepare('UPDATE sessions SET coordinator = 0 WHERE id = ?').run(id)
+    return
+  }
+  // A lane's colour is its coordinator's; a lane promoted to coordinator
+  // takes its own.
+  const color =
+    row.coordinatorId === null && row.coordinatorColor
+      ? row.coordinatorColor
+      : freeCoordinatorColor()
+  db.prepare(
+    'UPDATE sessions SET coordinator = 1, coordinator_id = NULL, coordinator_color = ? WHERE id = ?',
+  ).run(color, id)
+}
+
+/** Record who launched a new session: its root coordinator is the launcher's
+ * coordinator, or the launcher itself, which then becomes a coordinator.
+ * Returns the ids whose descriptors changed. A launcher Tether does not know
+ * leaves the session without a coordinator. */
+export function recordLauncher(id: string, launchedBy: string): string[] {
+  const launcher = getWidget(launchedBy)
+  if (!launcher || launcher.id === id) return []
+  const changed = [id]
+  let rootId = launcher.coordinatorId
+  let color = launcher.coordinatorColor
+  // A lane hands down its root coordinator, even one that has ended.
+  if (rootId === null) {
+    if (!launcher.coordinator) changed.push(launcher.id)
+    setCoordinator(launcher.id, true)
+    rootId = launcher.id
+    color = getWidget(launcher.id)?.coordinatorColor ?? null
+  }
+  db.prepare('UPDATE sessions SET coordinator_id = ?, coordinator_color = ? WHERE id = ?').run(
+    rootId,
+    color,
+    id,
+  )
+  return changed
 }
 
 /** Set (or clear, with null/empty) a widget's user-chosen title-bar name. */
