@@ -58,7 +58,8 @@ export type WidgetMutation =
   | { kind: 'show' }
   | { kind: 'position'; bounds: Bounds }
   | { kind: 'title'; label: string }
-  | { kind: 'coordinator'; coordinator: boolean }
+  /** true/false marks or unmarks; a session id joins that coordinator. */
+  | { kind: 'coordinator'; coordinator: boolean | string }
 
 /** Tether: a view mutation is forwarded to the GUI client, which can be absent
  * (`503 gui_unavailable`) or silent (`409 outcome_uncertain`). `false` keeps
@@ -340,7 +341,8 @@ export function parseWidgetMutation(
   const generation = value.generation
   if (kind === 'show') return { generation, mutation: { kind } }
   if (kind === 'coordinator')
-    return typeof value.coordinator === 'boolean'
+    return typeof value.coordinator === 'boolean' ||
+      (typeof value.coordinator === 'string' && /^[0-9a-f]{8}$/.test(value.coordinator))
       ? { generation, mutation: { kind, coordinator: value.coordinator } }
       : null
   if (kind === 'position') {

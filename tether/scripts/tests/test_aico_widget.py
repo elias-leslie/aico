@@ -33,6 +33,8 @@ def invoke(monkeypatch, args, responses):
     (["title", "  Private new label  "], {"generation": GENERATION, "label": "Private new label"}),
     (["position", "-10", "20", "900", "560"],
      {"generation": GENERATION, "bounds": {"x": -10, "y": 20, "width": 900, "height": 560}}),
+    (["coordinator", "on"], {"generation": GENERATION, "coordinator": True}),
+    (["coordinator", "join", "d2852144"], {"generation": GENERATION, "coordinator": "d2852144"}),
 ])
 def test_pins_current_widget_before_one_mutation_and_emits_no_label(monkeypatch, args, payload):
     response = {**DESCRIPTOR, "text": "private-owner-text", "label": "Private new label"}
@@ -71,6 +73,7 @@ def test_missing_or_invalid_widget_id_has_no_active_view_fallback(monkeypatch, a
     ["title", "\u0085"], ["title", "\u2028"], ["title", "界" * 54],
     ["position", "0", "0", "359", "240"], ["position", "0", "0", "360", "239"],
     ["position", "100001", "0", "360", "240"], ["position", "0.5", "0", "360", "240"],
+    ["coordinator", "join"], ["coordinator", "join", "D2852144"], ["coordinator", "on", "d2852144"],
 ])
 def test_invalid_label_or_bounds_never_contacts_owner(monkeypatch, args):
     monkeypatch.setenv("AICO_WIDGET_ID", WIDGET)

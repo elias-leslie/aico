@@ -58,7 +58,9 @@ describe('private root workload control', () => {
   const show = vi.fn(async (_widgetId: string, _generation: string) => true)
   const position = vi.fn(async (_widgetId: string, _generation: string, _bounds: unknown) => true)
   const title = vi.fn(async (_widgetId: string, _generation: string, _label: string) => true)
-  const coordinator = vi.fn(async (_widgetId: string, _generation: string, _on: boolean) => true)
+  const coordinator = vi.fn(
+    async (_widgetId: string, _generation: string, _on: boolean | string) => true,
+  )
   const status = vi.fn(async (row: WidgetRow) =>
     running.has(row.id) ? ('running' as const) : ('uncertain' as const),
   )

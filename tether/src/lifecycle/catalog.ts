@@ -746,6 +746,28 @@ export function setCoordinator(id: string, coordinator: boolean): void {
   ).run(color, id)
 }
 
+/** Make an existing session a lane of `coordinatorId`'s root coordinator
+ * (for sessions launched before lineage was recorded). The session stops
+ * being a coordinator and its own lanes move with it. Returns the ids whose
+ * descriptors changed; empty when the coordinator is unknown or is the
+ * session itself. */
+export function joinCoordinator(id: string, coordinatorId: string): string[] {
+  const row = getWidget(id)
+  const lead = getWidget(coordinatorId)
+  if (!row || !lead) return []
+  const rootId = lead.coordinatorId ?? lead.id
+  if (rootId === id) return []
+  if (!getWidget(rootId)?.coordinator && rootId === lead.id) setCoordinator(rootId, true)
+  const color = getWidget(rootId)?.coordinatorColor ?? lead.coordinatorColor
+  const lanes = (
+    db.prepare('SELECT id FROM sessions WHERE coordinator_id = ?').all(id) as { id: string }[]
+  ).map((lane) => lane.id)
+  db.prepare(
+    'UPDATE sessions SET coordinator = 0, coordinator_id = ?, coordinator_color = ? WHERE id = ? OR coordinator_id = ?',
+  ).run(rootId, color, id, id)
+  return [id, rootId, ...lanes]
+}
+
 /** Record who launched a new session: its root coordinator is the launcher's
  * coordinator, or the launcher itself, which then becomes a coordinator.
  * Returns the ids whose descriptors changed. A launcher Tether does not know

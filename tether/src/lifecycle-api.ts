@@ -16,6 +16,7 @@ import {
   getTmuxServer,
   getWidget,
   insertWidget,
+  joinCoordinator,
   listWidgets,
   recordLauncher,
   rootRequestForWidget,
@@ -360,6 +361,14 @@ export async function pasteIntoRunningSession(widgetId: string, text: string): P
   return delivered === true
 }
 
+/** Mark, unmark, or join a coordinator, and publish every changed session. */
+function applyCoordinator(id: string, coordinator: boolean | string): void {
+  const changed = [id]
+  if (typeof coordinator === 'string') changed.push(...joinCoordinator(id, coordinator))
+  else setCoordinator(id, coordinator)
+  for (const changedId of new Set(changed)) notifySessionChanged(changedId, { force: true })
+}
+
 export function forwardViewMutation(
   gui: GuiChannel,
 ): (
@@ -376,8 +385,8 @@ export function forwardViewMutation(
       // generation under the lifecycle lock.
       const changed = await withRunningSession(widgetId, generation, async (row) => {
         if (mutation.kind === 'title') setWidgetName(row.id, mutation.label)
-        if (mutation.kind === 'coordinator') setCoordinator(row.id, mutation.coordinator)
-        notifySessionChanged(row.id, { force: true })
+        if (mutation.kind === 'coordinator') applyCoordinator(row.id, mutation.coordinator)
+        else notifySessionChanged(row.id, { force: true })
         return true as const
       })
       return changed
@@ -386,7 +395,9 @@ export function forwardViewMutation(
       const command: GuiCommand = { kind: mutation.kind, sessionId: row.id, generation }
       if (mutation.kind === 'position') command.bounds = mutation.bounds as Bounds
       if (mutation.kind === 'title') command.label = mutation.label
-      if (mutation.kind === 'coordinator') command.coordinator = mutation.coordinator
+      // The GUI hears only whether the window is a coordinator; lineage
+      // reaches it on the descriptor.
+      if (mutation.kind === 'coordinator') command.coordinator = mutation.coordinator === true
       const outcome = await gui.send(command)
       if (outcome.status === 'unavailable') return { status: 503, error: 'gui_unavailable' }
       if (outcome.status === 'timeout') return { status: 409, error: 'outcome_uncertain' }
@@ -396,10 +407,7 @@ export function forwardViewMutation(
         setWidgetName(row.id, mutation.label)
         notifySessionChanged(row.id, { force: true })
       }
-      if (mutation.kind === 'coordinator') {
-        setCoordinator(row.id, mutation.coordinator)
-        notifySessionChanged(row.id, { force: true })
-      }
+      if (mutation.kind === 'coordinator') applyCoordinator(row.id, mutation.coordinator)
       return true as const
     })
     return result === false ? false : result

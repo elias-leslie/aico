@@ -21,6 +21,7 @@ import {
   insertLegacyUnclassifiedWidget,
   insertProvisioningTmuxServer,
   insertWidget,
+  joinCoordinator,
   listTmuxServers,
   markTmuxServerDead,
   recordLauncher,
@@ -613,5 +614,22 @@ describe('coordinators', () => {
     expect(lineage('e0000002')).toEqual([false, 'e0000001', COORDINATOR_COLORS[0]])
     setCoordinator('e0000006', true)
     expect(lineage('e0000006')).toEqual([true, null, COORDINATOR_COLORS[0]])
+  })
+
+  it('joins a promoted lane, and its lanes, to the root coordinator', () => {
+    for (const id of ['e0000007', 'e0000008', 'e0000009']) insertWidget(id, 'codex')
+    // e0000008 predates lineage and was promoted when it launched e0000009.
+    setCoordinator('e0000007', true)
+    recordLauncher('e0000009', 'e0000008')
+    const root = getWidget('e0000007')?.coordinatorColor
+    expect(joinCoordinator('e0000008', 'e0000007')).toEqual(['e0000008', 'e0000007', 'e0000009'])
+    expect(lineage('e0000008')).toEqual([false, 'e0000007', root])
+    expect(lineage('e0000009')).toEqual([false, 'e0000007', root])
+    // Joining via a lane resolves to its root; self-joins and unknown ids do nothing.
+    insertWidget('e000000a', 'codex')
+    joinCoordinator('e000000a', 'e0000009')
+    expect(lineage('e000000a')).toEqual([false, 'e0000007', root])
+    expect(joinCoordinator('e0000007', 'e0000008')).toEqual([])
+    expect(joinCoordinator('e0000008', 'deadbeef')).toEqual([])
   })
 })

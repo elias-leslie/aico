@@ -183,7 +183,7 @@ A root is a session created through the root contract with a stable caller `requ
 | `GET /v1/widgets/:id` | none | Compact descriptor `{owner:"aico", widgetId, sessionId, generation, status, available}` |
 | `POST /v1/widgets/:id/title` | `{generation, label}` | As for roots |
 | `POST /v1/widgets/:id/position` | `{generation, bounds}` | As for roots |
-| `POST /v1/widgets/:id/coordinator` | `{generation, coordinator: boolean}` | Marks or unmarks a coordinator in the catalog (see [Coordinators](#coordinators)) and forwards it to the GUI when one is connected |
+| `POST /v1/widgets/:id/coordinator` | `{generation, coordinator: boolean \| widgetId}` | Marks, unmarks or joins a coordinator in the catalog (see [Coordinators](#coordinators)) and forwards it to the GUI when one is connected |
 
 The root descriptor keeps Aico's fields: `owner`, `hostIdentity`, `generation`, `logicalSessionId`, `surfaceLocator`, metadata, `bounds` and `status`. `bounds` is always `null` from Tether: window geometry belongs to the GUI.
 
@@ -207,6 +207,7 @@ A coordinator is a session that launches and steers other sessions (lanes). The 
 - `coordinator` is true for a coordinator. `coordinatorId` is the root coordinator that launched this session, or null (always null for a coordinator). It stays set after that coordinator ends.
 - `coordinatorColor` is the coordinator's colour, `#rrggbb` from a fixed palette of eight, on the coordinator and on each of its lanes. A new coordinator takes the first colour no other coordinator holds, so coordinators on screen together differ until there are more than eight. Lanes keep their colour after the coordinator ends.
 - `POST /v1/widgets/:id/coordinator` marks or unmarks one by hand (`st aico widget coordinator on|off`), with or without a GUI connected, and publishes `session.updated`. Unmarking frees the colour; lanes keep theirs.
+- `coordinator: "<widgetId>"` (`st aico widget coordinator join <widgetId>`) makes the session a lane of that session's root coordinator, marking it a coordinator if it is not one or a lane already. The session stops being a coordinator and its own lanes move with it. This repairs sessions that predate `launchedBy` and were promoted when they launched helpers. The GUI hears only `coordinator: false`; lineage reaches it on the descriptor.
 
 ### GUI view-mutation forwarding
 

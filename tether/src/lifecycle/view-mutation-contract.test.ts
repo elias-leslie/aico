@@ -51,6 +51,9 @@ describe('shared view-mutation contract vectors', () => {
     expect(
       parseWidgetMutation('coordinator', { generation, coordinator: false })?.mutation,
     ).toEqual({ kind: 'coordinator', coordinator: false })
+    expect(
+      parseWidgetMutation('coordinator', { generation, coordinator: 'd2852144' })?.mutation,
+    ).toEqual({ kind: 'coordinator', coordinator: 'd2852144' })
     for (const [kind, body] of [
       ['coordinator', { generation }],
       ['coordinator', { generation, coordinator: 'on' }],

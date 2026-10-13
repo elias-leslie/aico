@@ -920,8 +920,10 @@ def widget_main(argv: list[str]) -> int:
             for dimension in ("x", "y", "width", "height"):
                 command.add_argument(dimension, type=int)
         elif operation == "coordinator":
-            command.add_argument("state", choices=("on", "off"),
-                                 help="on: titlebar label, blue frame, centre tile; off: an ordinary window")
+            command.add_argument("state", choices=("on", "off", "join"),
+                                 help="on: mark a coordinator; off: an ordinary window; join COORDINATOR_ID: make this "
+                                      "window a lane of that coordinator (its root), moving its own lanes too")
+            command.add_argument("coordinator_id", nargs="?")
     args = parser.parse_args(argv)
     if not isinstance(args.widget_id, str) or not re.fullmatch(r"[0-9a-f]{8}", args.widget_id):
         parser.error("expected --widget-id or AICO_WIDGET_ID with exactly eight lowercase hex characters")
@@ -1008,6 +1010,12 @@ def view_payload(parser: argparse.ArgumentParser, args: argparse.Namespace) -> d
             parser.error("expected integer bounds within 100000; minimum size is 360 by 240")
         return {"bounds": bounds}
     if args.operation == "coordinator":
+        if args.state == "join":
+            if not isinstance(args.coordinator_id, str) or not re.fullmatch(r"[0-9a-f]{8}", args.coordinator_id):
+                parser.error("join expects the coordinator's eight-character widget ID")
+            return {"coordinator": args.coordinator_id}
+        if args.coordinator_id is not None:
+            parser.error("a coordinator ID goes only with join")
         return {"coordinator": args.state == "on"}
     return {}
 
