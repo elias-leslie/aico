@@ -51,6 +51,7 @@ import {
   getWidget,
   insertLegacyUnclassifiedWidget,
   insertProvisioningTmuxServer,
+  listLanes,
   listTmuxServers,
   listWidgets,
   markTmuxServerDead,
@@ -62,6 +63,7 @@ import {
   type WidgetOwnershipGeneration,
   type WidgetRow,
 } from './catalog'
+import { displayTitle } from './display'
 import {
   CoalescedLifecycleIntent,
   decideManagedGateRecovery,
@@ -2894,6 +2896,8 @@ function publishSession(widgetId: string, options: PublishOptions = {}): void {
     .catch((error) => console.error(`[tether] session event for ${widgetId} failed:`, error))
 }
 
+const publishedTitles = new Map<string, string>()
+
 async function publishSessionNow(widgetId: string, options: PublishOptions): Promise<void> {
   const events = config?.events
   if (!events) return
@@ -2925,6 +2929,12 @@ async function publishSessionNow(widgetId: string, options: PublishOptions): Pro
   const data: Record<string, unknown> = { id: widgetId, generation: current }
   if (snapshotOf) data.session = snapshotOf(row)
   events.publish(created ? 'session.created' : 'session.updated', data)
+  // A lane's badge names its coordinator: a renamed coordinator retitles them.
+  const title = displayTitle(row)
+  const before = publishedTitles.get(widgetId)
+  publishedTitles.set(widgetId, title)
+  if (row.coordinator && before !== undefined && before !== title)
+    for (const lane of listLanes(widgetId)) publishSession(lane, { force: true })
 }
 
 /** Resolves once every queued session event has been published (tests, shutdown). */

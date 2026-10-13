@@ -12,6 +12,7 @@ import { GuiChannel } from './gui-channel'
 import { listenPrivateSocket } from './http'
 import { LegacyATermSessions, legacyATermSocket } from './legacy-aterm'
 import { bindCatalog, listWidgets } from './lifecycle/catalog'
+import { setPersonalWorkspaceRoot } from './lifecycle/display'
 import {
   cachedSessionStatus,
   configureEngine,
@@ -29,7 +30,13 @@ import { setLifecycleInstance } from './lifecycle/ownership'
 import { createRootServer } from './lifecycle/root-control'
 import { configureTmuxPaths } from './lifecycle/tmux'
 import { bindToolSource } from './lifecycle/tui/registry'
-import { bindAgentStates, generationOf, rootOperations, sessionSnapshot } from './lifecycle-api'
+import {
+  bindAgentStates,
+  generationOf,
+  learnProjects,
+  rootOperations,
+  sessionSnapshot,
+} from './lifecycle-api'
 import { activeProjectFileFromEnv, ProjectProvider, summitflowUrlFromEnv } from './projects'
 import { Continuity } from './reboot'
 import { createTetherServer } from './server'
@@ -53,6 +60,7 @@ export function reconcileEnabled(env: NodeJS.ProcessEnv): boolean {
 }
 
 const LEGACY_WATCH_MS = 15_000
+const PROJECT_NAMES_MS = 300_000
 
 /** The desktop variables the graphical session imported into the user
  * manager; empty before login or when systemctl cannot answer. */
@@ -160,6 +168,19 @@ export async function startDaemon(
     env.HOME ?? homedir(),
   )
   if (reconcileEnabled(env)) void ready.then(() => agentPoller.start()).catch(() => {})
+  // Display titles name each session's project: learn names now and keep
+  // up with renames in SummitFlow.
+  setPersonalWorkspaceRoot(
+    join(env.HOME ?? homedir(), '.local', 'share', 'aico', 'personal-workspace'),
+  )
+  const learn = () =>
+    projects
+      .list()
+      .then((list) => learnProjects(context, list.projects))
+      .catch(() => {})
+  void learn()
+  const projectNames = setInterval(learn, PROJECT_NAMES_MS)
+  projectNames.unref()
   void context.continuity?.start()
   // Announce legacy A-Term sessions that end or exit outside Tether.
   if (reconcileEnabled(env)) legacy.watch(LEGACY_WATCH_MS)
@@ -191,6 +212,7 @@ export async function startDaemon(
     ready,
     close: async () => {
       stopLifecycle()
+      clearInterval(projectNames)
       agentPoller.stop()
       bindAgentStates(null)
       context.continuity?.stop()

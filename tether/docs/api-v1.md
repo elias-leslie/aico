@@ -81,7 +81,7 @@ Status: every route below is implemented (Phase 3a). Additions made for A-Term d
 
 `origin` is `aico`, `a-term`, `cli` or `root` (created through `POST /v1/roots`).
 
-`coordinator`, `coordinatorId` and `coordinatorColor`: see [Coordinators](#coordinators).
+`coordinator`, `coordinatorId` and `coordinatorColor`: see [Coordinators](#coordinators). `displayTitle` and `badge`: see [Display title and badge](#display-title-and-badge).
 
 `available` is true only for `running`. An ended session is not listed; `GET` on it returns 404. A root keeps its ended tombstone under `/v1/roots`.
 
@@ -208,6 +208,14 @@ A coordinator is a session that launches and steers other sessions (lanes). The 
 - `coordinatorColor` is the coordinator's colour, `#rrggbb` from a fixed palette of eight, on the coordinator and on each of its lanes. A new coordinator takes the first colour no other coordinator holds, so coordinators on screen together differ until there are more than eight. Lanes keep their colour after the coordinator ends.
 - `POST /v1/widgets/:id/coordinator` marks or unmarks one by hand (`st aico widget coordinator on|off`), with or without a GUI connected, and publishes `session.updated`. Unmarking frees the colour; lanes keep theirs.
 - `coordinator: "<widgetId>"` (`st aico widget coordinator join <widgetId>`) makes the session a lane of that session's root coordinator, marking it a coordinator if it is not one or a lane already. The session stops being a coordinator and its own lanes move with it. This repairs sessions that predate `launchedBy` and were promoted when they launched helpers. The GUI hears only `coordinator: false`; lineage reaches it on the descriptor.
+
+### Display title and badge
+
+Tether names every session once, and Aico, A-Term and `st` show these fields as they are, without composing their own.
+
+- `displayTitle` is `Project — Task`: the project's name from the project list (Aico's Personal Workspace root is "Personal Workspace") and the session's `name`. Either one alone when the other is missing or the task only repeats the project; `Session <n>` when both are missing.
+- `badge` is `{kind, text, color}` or null. A coordinator has `{kind: "coordinator", text: "Coordinator"}`. A session it launched has `{kind: "child", text: "↳ <coordinator>"}`, naming the root coordinator by its task, else its project, else "Coordinator" (ended). `color` is `coordinatorColor`, or `#6fa8ff` for sessions from before colours.
+- A rename, a project switch or a changed project name publishes `session.updated` for the session. A renamed coordinator also publishes its lanes, whose badge text changed. Tether rereads project names every five minutes.
 
 ### GUI view-mutation forwarding
 

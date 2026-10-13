@@ -746,6 +746,13 @@ export function setCoordinator(id: string, coordinator: boolean): void {
   ).run(color, id)
 }
 
+/** Ids of the sessions that belong to coordinator `id`. */
+export function listLanes(id: string): string[] {
+  return (
+    db.prepare('SELECT id FROM sessions WHERE coordinator_id = ?').all(id) as { id: string }[]
+  ).map((lane) => lane.id)
+}
+
 /** Make an existing session a lane of `coordinatorId`'s root coordinator
  * (for sessions launched before lineage was recorded). The session stops
  * being a coordinator and its own lanes move with it. Returns the ids whose
@@ -759,9 +766,7 @@ export function joinCoordinator(id: string, coordinatorId: string): string[] {
   if (rootId === id) return []
   if (!getWidget(rootId)?.coordinator && rootId === lead.id) setCoordinator(rootId, true)
   const color = getWidget(rootId)?.coordinatorColor ?? lead.coordinatorColor
-  const lanes = (
-    db.prepare('SELECT id FROM sessions WHERE coordinator_id = ?').all(id) as { id: string }[]
-  ).map((lane) => lane.id)
+  const lanes = listLanes(id)
   db.prepare(
     'UPDATE sessions SET coordinator = 0, coordinator_id = ?, coordinator_color = ? WHERE id = ? OR coordinator_id = ?',
   ).run(rootId, color, id, id)

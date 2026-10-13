@@ -5,7 +5,7 @@ import type { GuiChannel } from './gui-channel'
 import { HttpError, Router, readJsonObject, sendError, sendJson } from './http'
 import type { LegacyATermSessions } from './legacy-aterm'
 import { lifecycleStatus } from './lifecycle/engine'
-import { registerLifecycleRoutes } from './lifecycle-api'
+import { learnProjects, registerLifecycleRoutes } from './lifecycle-api'
 import {
   type ProjectProvider,
   ProjectRegistrationError,
@@ -185,7 +185,7 @@ export function buildRouter(context: ServerContext): Router {
     })
     .add('GET', '/v1/projects', async (_req, res, _params, query) => {
       const list = await projects.list({ refresh: query.get('refresh') === '1' })
-      for (const project of list.projects) context.projectRoots.set(project.id, project.root)
+      learnProjects(context, list.projects)
       sendJson(res, 200, withActiveProject(list, context.activeProjectFile ?? null))
     })
     .add('POST', '/v1/projects', async (req, res) => {
@@ -203,6 +203,7 @@ export function buildRouter(context: ServerContext): Router {
           name,
         })
         context.projectRoots.set(project.id, project.root)
+        learnProjects(context, (await projects.list()).projects)
         events.publish('projects.changed', { id: project.id, change: 'registered' })
         sendJson(res, 201, project)
       } catch (error) {

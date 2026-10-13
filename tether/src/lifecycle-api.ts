@@ -26,6 +26,7 @@ import {
   setWidgetProject,
   type WidgetRow,
 } from './lifecycle/catalog'
+import { badge, displayTitle, rememberProjects } from './lifecycle/display'
 import {
   cachedSessionStatus,
   contextStatus,
@@ -82,7 +83,7 @@ import {
 import { staticContextStatus } from './lifecycle/tui/context'
 import { getTui } from './lifecycle/tui/registry'
 import { paneModeArgs, parsePaneMode } from './pane-mode'
-import type { ProjectProvider } from './projects'
+import type { Project, ProjectProvider } from './projects'
 import { type Continuity, registerRebootRoutes } from './reboot'
 import type { Store } from './store'
 
@@ -193,6 +194,8 @@ export function descriptor(row: WidgetRow, status: SessionStatus): Record<string
     coordinator: row.coordinator,
     coordinatorId: row.coordinatorId,
     coordinatorColor: row.coordinatorColor,
+    displayTitle: displayTitle(row),
+    badge: badge(row),
     rootRequestId: rootRequestForWidget(row.id)?.requestId ?? null,
     lifecycleVersion: row.lifecycleVersion,
     tmux: {
@@ -477,9 +480,19 @@ async function resolveProject(
   projectId: string,
 ): Promise<string | null> {
   const list = await context.projects.list()
-  for (const project of list.projects) context.projectRoots.set(project.id, project.root)
+  learnProjects(context, list.projects)
   const match = list.projects.find((project) => project.id === projectId)
   return match ? match.root : null
+}
+
+/** Record project roots and names; names that changed retitle every session. */
+export function learnProjects(
+  context: Pick<LifecycleApiContext, 'projectRoots'>,
+  projects: Project[],
+): void {
+  for (const project of projects) context.projectRoots.set(project.id, project.root)
+  if (rememberProjects(projects))
+    for (const row of listWidgets()) notifySessionChanged(row.id, { force: true })
 }
 
 export function registerLifecycleRoutes(router: Router, context: LifecycleApiContext): void {
