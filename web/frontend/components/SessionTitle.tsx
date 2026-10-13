@@ -11,11 +11,18 @@ export function SessionTitle({
 }) {
   const separator = ' — '
   if (!task || !name.endsWith(`${separator}${task}`)) {
-    return <span className="min-w-0 truncate">{name}</span>
+    return (
+      <span className="truncate" style={{ flex: '1 1 auto', minWidth: '4ch' }}>
+        {name}
+      </span>
+    )
   }
   const project = name.slice(0, -(task.length + separator.length))
   return (
-    <span className="flex min-w-0 items-baseline">
+    <span
+      className="flex items-baseline"
+      style={{ flex: '1 1 auto', minWidth: '6ch' }}
+    >
       <span className="truncate" style={{ flexShrink: 4, minWidth: '2ch' }}>
         {project}
       </span>
