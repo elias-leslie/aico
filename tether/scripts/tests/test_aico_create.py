@@ -16,6 +16,12 @@ BASE = ["create", "recovery-1", "Reconcile after crash.", "--tool", "codex", "--
         "--project-root", "/fixture/project", "--resume-session", THREAD]
 
 
+@pytest.fixture(autouse=True)
+def outside_aico(monkeypatch):
+    """Run as if launched outside an Aico widget unless a test says otherwise."""
+    monkeypatch.delenv("AICO_WIDGET_ID", raising=False)
+
+
 def descriptor(payload, surface="aico", tether=False):
     fields = [payload[k] for k in ("tool", "projectId", "projectRoot", "initialPrompt", "role", "leadRootReference", "facetCapsuleRef")]
     if payload.get("resumeSessionId"):
@@ -46,6 +52,43 @@ def test_exact_create_is_one_content_free_request_with_no_fleet_ledger(monkeypat
     assert output[0]["requestId"] == "recovery-1"
     assert "Reconcile after crash" not in json.dumps(output)
     assert "private-owner-content" not in json.dumps(output)
+
+
+def test_create_from_an_aico_widget_marks_it_coordinator(monkeypatch):
+    calls, output = [], []
+    lead = {"owner": "aico", "widgetId": "abcdef01", "sessionId": "s-1", "generation": "b" * 64,
+            "status": "running", "available": True}
+
+    def receipt(_, path, route, payload=None, **kwargs):
+        calls.append((route, payload))
+        if route == "/v1/roots":
+            return 200, descriptor(payload)
+        return 200, lead
+
+    monkeypatch.setenv("AICO_WIDGET_ID", "abcdef01")
+    monkeypatch.setattr(admin.Collector, "receipt", receipt)
+    monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
+    assert admin.main([*BASE, "--root-socket", "/fixture/gui.sock"]) == 0
+    assert [route for route, _ in calls] == [
+        "/v1/roots", "/v1/widgets/abcdef01", "/v1/widgets/abcdef01/coordinator"]
+    assert calls[2][1] == {"generation": "b" * 64, "coordinator": True}
+    assert output[0]["coordinator"] == {"widgetId": "abcdef01", "applied": True}
+
+
+def test_coordinator_mark_failure_never_fails_create(monkeypatch):
+    output = []
+
+    def receipt(_, path, route, payload=None, **kwargs):
+        if route == "/v1/roots":
+            return 200, descriptor(payload)
+        raise admin.Unavailable("owner_unavailable")
+
+    monkeypatch.setenv("AICO_WIDGET_ID", "abcdef01")
+    monkeypatch.setattr(admin.Collector, "receipt", receipt)
+    monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
+    assert admin.main([*BASE, "--root-socket", "/fixture/gui.sock"]) == 0
+    assert output[0]["status"] == "running"
+    assert output[0]["coordinator"] == {"widgetId": "abcdef01", "applied": False}
 
 
 @pytest.mark.parametrize("extra", [

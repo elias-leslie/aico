@@ -178,6 +178,7 @@ A root is a session created through the root contract with a stable caller `requ
 | `GET /v1/widgets/:id` | none | Compact descriptor `{owner:"aico", widgetId, sessionId, generation, status, available}` |
 | `POST /v1/widgets/:id/title` | `{generation, label}` | As for roots |
 | `POST /v1/widgets/:id/position` | `{generation, bounds}` | As for roots |
+| `POST /v1/widgets/:id/coordinator` | `{generation, coordinator: boolean}` | Forwarded to the GUI: Aico labels a coordinator window and tiles it in the centre |
 
 The root descriptor keeps Aico's fields: `owner`, `hostIdentity`, `generation`, `logicalSessionId`, `surfaceLocator`, metadata, `bounds` and `status`. `bounds` is always `null` from Tether: window geometry belongs to the GUI.
 
@@ -195,13 +196,13 @@ Generation fencing:
 
 ### GUI view-mutation forwarding
 
-Show, position and title change views, and views belong to the app. Tether forwards them to one connected Aico GUI client:
+Show, position, title and coordinator change views, and views belong to the app. Tether forwards them to one connected Aico GUI client:
 
-1. The Aico GUI opens `GET /v1/gui/channel` with header `x-tether-client: aico-gui`. This is a long-lived NDJSON stream of `{commandId, kind, sessionId, generation, bounds?, label?}`. Only one GUI channel is active per instance. A second one replaces the first, which receives `{type:"superseded"}` and is closed.
+1. The Aico GUI opens `GET /v1/gui/channel` with header `x-tether-client: aico-gui`. This is a long-lived NDJSON stream of `{commandId, kind, sessionId, generation, bounds?, label?, coordinator?}`. Only one GUI channel is active per instance. A second one replaces the first, which receives `{type:"superseded"}` and is closed.
 2. For each command, the GUI verifies and applies the change (Aico `widgetMutationOperation`). It then posts `POST /v1/gui/results/:commandId` with `{applied: true}` or `{applied: false, error}`.
 3. Tether answers the original caller with the GUI's result. A command that gets no result within 5 s answers `409 outcome_uncertain`.
 
-With no GUI connected, `show` and `position` return `503 gui_unavailable` and nothing is applied; Tether never starts the desktop. `title` without a GUI *(3a)* renames the session in the catalog under the lifecycle lock, fenced on the exact running generation, and publishes `session.updated`. With a GUI connected, `title` renames the catalog entry only when the GUI applies it, so the result stays atomic. `GET /v1/health` reports `gui.connected`, and the events `gui.connected` / `gui.disconnected` announce changes.
+With no GUI connected, `show`, `position` and `coordinator` return `503 gui_unavailable` and nothing is applied; Tether never starts the desktop. `title` without a GUI *(3a)* renames the session in the catalog under the lifecycle lock, fenced on the exact running generation, and publishes `session.updated`. With a GUI connected, `title` renames the catalog entry only when the GUI applies it, so the result stays atomic. `GET /v1/health` reports `gui.connected`, and the events `gui.connected` / `gui.disconnected` announce changes.
 
 ## Agent tools
 

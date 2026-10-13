@@ -866,6 +866,10 @@ def create_main(argv: list[str]) -> int:
                 or state == "ended" and generation is not None):
             raise Unavailable("create_receipt_unqualified")
         output.update({key: data[key] for key in ("digest", "hostIdentity", "logicalSessionId", "generation", "surfaceLocator", "status")})
+        creator = os.environ.get("AICO_WIDGET_ID")
+        if (args.surface == "aico" and isinstance(creator, str) and re.fullmatch(r"[0-9a-f]{8}", creator)
+                and creator != data["hostIdentity"]):
+            output["coordinator"] = {"widgetId": creator, "applied": mark_coordinator(endpoint, creator)}
         emit_json(collector, output)
         return 0
     except (ValueError, UnicodeError):
@@ -880,6 +884,31 @@ def create_main(argv: list[str]) -> int:
     except BrokenPipeError:
         return 0
     return 1
+
+
+def mark_coordinator(endpoint: str, widget_id: str) -> bool | None:
+    """Mark the Aico widget that launched a root as a coordinator.
+
+    A session that launches lanes coordinates them: Aico labels its window and
+    tiles it in the centre. Best effort and never fails the create; True when
+    applied, False for a qualified refusal or no request, None when unknown."""
+    collector = Collector(endpoint, "", "", time.monotonic() + 5, threading.Event())
+    route = f"/v1/widgets/{widget_id}"
+    sent = False
+    try:
+        status, data = collector.receipt(endpoint, route)
+        owner_reply(status, data, "widget_receipt_unqualified")
+        descriptor = widget_descriptor(data, widget_id)
+        if not descriptor["available"]:
+            return False
+        sent = True
+        status, data = collector.receipt(endpoint, f"{route}/coordinator",
+                                         {"generation": descriptor["generation"], "coordinator": True},
+                                         timeout=5)
+        owner_reply(status, data, "widget_receipt_unqualified")
+        return True
+    except (Unavailable, Stopped) as error:
+        return applied(sent, error)
 
 
 def widget_descriptor(data: dict, widget_id: str) -> dict:
@@ -901,9 +930,9 @@ def widget_descriptor(data: dict, widget_id: str) -> dict:
 def widget_main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="st aico widget", description=(
         "Inspect or change one exact Aico widget. Defaults to AICO_WIDGET_ID; "
-        "title and position pin its owner generation before one mutation."))
+        "title, position and coordinator pin its owner generation before one mutation."))
     commands = parser.add_subparsers(dest="operation", required=True)
-    for operation in ("status", "title", "position"):
+    for operation in ("status", "title", "position", "coordinator"):
         command = commands.add_parser(operation)
         command.add_argument("--widget-id", default=os.environ.get("AICO_WIDGET_ID"))
         command.add_argument("--root-socket", type=socket_path)
@@ -912,6 +941,9 @@ def widget_main(argv: list[str]) -> int:
         elif operation == "position":
             for dimension in ("x", "y", "width", "height"):
                 command.add_argument(dimension, type=int)
+        elif operation == "coordinator":
+            command.add_argument("state", choices=("on", "off"),
+                                 help="on: titlebar label, blue frame, centre tile; off: an ordinary window")
     args = parser.parse_args(argv)
     if not isinstance(args.widget_id, str) or not re.fullmatch(r"[0-9a-f]{8}", args.widget_id):
         parser.error("expected --widget-id or AICO_WIDGET_ID with exactly eight lowercase hex characters")
@@ -997,6 +1029,8 @@ def view_payload(parser: argparse.ArgumentParser, args: argparse.Namespace) -> d
         if bounds is None:
             parser.error("expected integer bounds within 100000; minimum size is 360 by 240")
         return {"bounds": bounds}
+    if args.operation == "coordinator":
+        return {"coordinator": args.state == "on"}
     return {}
 
 

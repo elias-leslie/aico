@@ -54,6 +54,7 @@ export type WidgetMutation =
   | { kind: 'show' }
   | { kind: 'position'; bounds: Bounds }
   | { kind: 'title'; label: string }
+  | { kind: 'coordinator'; coordinator: boolean }
 
 /** Tether: a view mutation is forwarded to the GUI client, which can be absent
  * (`503 gui_unavailable`) or silent (`409 outcome_uncertain`). `false` keeps
@@ -309,7 +310,14 @@ export function parseWidgetMutation(
   kind: WidgetMutation['kind'],
   value: unknown,
 ): { generation: string; mutation: WidgetMutation } | null {
-  const field = kind === 'position' ? 'bounds' : kind === 'title' ? 'label' : null
+  const field =
+    kind === 'position'
+      ? 'bounds'
+      : kind === 'title'
+        ? 'label'
+        : kind === 'coordinator'
+          ? 'coordinator'
+          : null
   if (
     !object(value) ||
     Object.keys(value).some((key) => key !== 'generation' && key !== field) ||
@@ -320,6 +328,10 @@ export function parseWidgetMutation(
     return null
   const generation = value.generation
   if (kind === 'show') return { generation, mutation: { kind } }
+  if (kind === 'coordinator')
+    return typeof value.coordinator === 'boolean'
+      ? { generation, mutation: { kind, coordinator: value.coordinator } }
+      : null
   if (kind === 'position') {
     const bounds = parseBounds(value.bounds)
     return bounds ? { generation, mutation: { kind, bounds } } : null
@@ -452,7 +464,9 @@ export function createRootHandler(
       return
     }
     try {
-      const widgetMatch = /^\/v1\/widgets\/([0-9a-f]{8})(?:\/(title|position))?$/.exec(path)
+      const widgetMatch = /^\/v1\/widgets\/([0-9a-f]{8})(?:\/(title|position|coordinator))?$/.exec(
+        path,
+      )
       if (widgetMatch) {
         const widgetId = widgetMatch[1]
         const row = getWidget(widgetId)
@@ -469,7 +483,10 @@ export function createRootHandler(
           json(response, 405, { error: 'method_not_allowed' })
           return
         }
-        const input = await readMutation(request, widgetMatch[2] as 'title' | 'position')
+        const input = await readMutation(
+          request,
+          widgetMatch[2] as 'title' | 'position' | 'coordinator',
+        )
         if (!input) {
           json(response, 400, { error: 'invalid_body' })
           return

@@ -378,6 +378,7 @@ export function forwardViewMutation(
       const command: GuiCommand = { kind: mutation.kind, sessionId: row.id, generation }
       if (mutation.kind === 'position') command.bounds = mutation.bounds as Bounds
       if (mutation.kind === 'title') command.label = mutation.label
+      if (mutation.kind === 'coordinator') command.coordinator = mutation.coordinator
       const outcome = await gui.send(command)
       if (outcome.status === 'unavailable') return { status: 503, error: 'gui_unavailable' }
       if (outcome.status === 'timeout') return { status: 409, error: 'outcome_uncertain' }

@@ -48,7 +48,13 @@ describe('shared view-mutation contract vectors', () => {
       kind: 'title',
       label: 'Focus',
     })
+    expect(
+      parseWidgetMutation('coordinator', { generation, coordinator: false })?.mutation,
+    ).toEqual({ kind: 'coordinator', coordinator: false })
     for (const [kind, body] of [
+      ['coordinator', { generation }],
+      ['coordinator', { generation, coordinator: 'on' }],
+      ['coordinator', { generation, coordinator: true, label: 'Focus' }],
       ['show', { generation, label: 'Focus' }],
       ['show', {}],
       ['position', { generation }],

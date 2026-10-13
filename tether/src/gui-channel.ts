@@ -8,11 +8,12 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { EventBus } from './events'
 
 export interface GuiCommand {
-  kind: 'show' | 'position' | 'title'
+  kind: 'show' | 'position' | 'title' | 'coordinator'
   sessionId: string
   generation: string
   bounds?: { x: number; y: number; width: number; height: number }
   label?: string
+  coordinator?: boolean
 }
 
 export type GuiOutcome =

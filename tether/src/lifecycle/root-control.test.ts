@@ -57,6 +57,7 @@ describe('private root workload control', () => {
   const show = vi.fn(async (_widgetId: string, _generation: string) => true)
   const position = vi.fn(async (_widgetId: string, _generation: string, _bounds: unknown) => true)
   const title = vi.fn(async (_widgetId: string, _generation: string, _label: string) => true)
+  const coordinator = vi.fn(async (_widgetId: string, _generation: string, _on: boolean) => true)
   const status = vi.fn(async (row: WidgetRow) =>
     running.has(row.id) ? ('running' as const) : ('uncertain' as const),
   )
@@ -70,7 +71,9 @@ describe('private root workload control', () => {
         ? show(widgetId, generation)
         : mutation.kind === 'position'
           ? position(widgetId, generation, mutation.bounds)
-          : title(widgetId, generation, mutation.label),
+          : mutation.kind === 'coordinator'
+            ? coordinator(widgetId, generation, mutation.coordinator)
+            : title(widgetId, generation, mutation.label),
   })
   beforeAll(async () => {
     registerBuiltinTuis()
@@ -389,6 +392,14 @@ describe('private root workload control', () => {
       body: descriptor,
     })
     expect(position).toHaveBeenLastCalledWith(row.id, generation, bounds)
+    expect(await call(`${path}/coordinator`, 'POST', { generation, coordinator: true })).toEqual({
+      status: 200,
+      body: descriptor,
+    })
+    expect(coordinator).toHaveBeenLastCalledWith(row.id, generation, true)
+    expect((await call(`${path}/coordinator`, 'POST', { generation, coordinator: 1 })).status).toBe(
+      400,
+    )
     expect(getWidget('aabbcc02')?.name).toBeNull()
     expect(JSON.stringify(descriptor)).not.toMatch(
       /Private|label|bounds|prompt|transcript|terminal/,
@@ -419,6 +430,24 @@ describe('private root workload control', () => {
     })
     expect(receipt).toEqual({ ...descriptor, operation: 'title', applied: true })
     expect(title).toHaveBeenLastCalledWith(row.id, generation, 'CLI private label')
+    // Async: the owner server answers on this same event loop.
+    const marked = await new Promise<Record<string, unknown>>((resolve, reject) => {
+      execFile(
+        '/usr/bin/python3',
+        [
+          join(process.cwd(), 'scripts/aico-root-watch.py'),
+          'widget',
+          'coordinator',
+          'off',
+          '--root-socket',
+          socket,
+        ],
+        { encoding: 'utf8', env: { ...process.env, AICO_WIDGET_ID: row.id } },
+        (error, stdout) => (error ? reject(error) : resolve(JSON.parse(stdout))),
+      )
+    })
+    expect(marked).toEqual({ ...descriptor, operation: 'coordinator', applied: true })
+    expect(coordinator).toHaveBeenLastCalledWith(row.id, generation, false)
   })
 
   it('rejects stale, other-widget, missing, ended and unavailable widget mutations', async () => {
@@ -916,8 +945,11 @@ describe('private root workload control', () => {
   })
 
   it('serves exact-create retries and conflicts through the real owner CLI and private socket', async () => {
-    const invoke = (prompt: string) =>
+    const invoke = (prompt: string, creator?: string) =>
       new Promise<{ code: string | number; body: Record<string, unknown> }>((resolve, reject) => {
+        const env = { ...process.env }
+        delete env.AICO_WIDGET_ID
+        if (creator) env.AICO_WIDGET_ID = creator
         execFile(
           '/usr/bin/python3',
           [
@@ -936,7 +968,7 @@ describe('private root workload control', () => {
             '--root-socket',
             socket,
           ],
-          { encoding: 'utf8' },
+          { encoding: 'utf8', env },
           (error, stdout) => {
             try {
               resolve({ code: error?.code ?? 0, body: JSON.parse(stdout) })
@@ -956,6 +988,16 @@ describe('private root workload control', () => {
     expect(JSON.stringify(first.body)).not.toContain('Reconcile fixture')
     expect(await invoke('Reconcile fixture state after crash.')).toEqual(first)
     expect((await invoke('Changed fixture recovery prompt.')).body.reason).toBe('request_conflict')
+    // Launched from an Aico widget: that widget becomes a coordinator.
+    const lead = present(getWidget('aabbcc01'))
+    const launched = await invoke('Reconcile fixture state after crash.', lead.id)
+    expect(launched.code).toBe(0)
+    expect(launched.body.coordinator).toEqual({ widgetId: lead.id, applied: true })
+    expect(coordinator).toHaveBeenLastCalledWith(lead.id, sessionGeneration(lead), true)
+    // An unknown launcher never fails the create.
+    const unknown = await invoke('Reconcile fixture state after crash.', 'abcdef99')
+    expect(unknown.code).toBe(0)
+    expect(unknown.body.coordinator).toEqual({ widgetId: 'abcdef99', applied: false })
   })
 
   it('rolls back a widget and reservation together on catalog conflict', () => {
