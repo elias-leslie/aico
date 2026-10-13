@@ -5,7 +5,7 @@
 ## What it does
 
 - **Floating terminal widgets** — one or more compact Electron windows, each running a tmux-backed terminal with a WebGL renderer (DOM fallback), configurable font, animated "eyes" that track your cursor, and a "thinking" halo while the agent is working.
-- **Persistent sessions, owned by Tether** — every session lives in [Tether](https://github.com/elias-leslie/tether), the per-user session daemon; each widget is a view of one Tether session, keyed by its 8-hex session ID. Closing a widget only detaches its `tmux attach` client, so work reattaches across close/reopen/restart, and Aico restarts never touch sessions. Aico stores only window geometry, open state and a local name override per session.
+- **Persistent sessions, owned by Tether** — every session lives in [Tether](https://github.com/elias-leslie/tether), the per-user session daemon; each widget is a view of one Tether session, keyed by its 8-hex session ID. Closing a widget only detaches its `tmux attach` client, so work reattaches across close/reopen/restart, and Aico restarts never touch sessions. Aico stores only window geometry and open state per session; titles (`Project — Task`) and the coordinator chip come from the Tether descriptor.
 - **Lifecycle diagnostics** — “Copy session diagnostics” copies Tether's report for the session: ownership, tmux target, command, scope, age, CPU time, memory, swap, process/task counts, and containment warnings.
 - **Agent launcher menu** — start any tool Tether has enabled (Claude Code, Codex, Antigravity, Pi, a plain shell, …) from the same lantern menu, choosing the TUI and the workspace to launch it into; "Replace TUI" swaps the tool in the focused widget.
 - **Command palette & pinned controls** — a searchable command palette (`Ctrl+Shift+P`) and a pinned, drag-reorderable titlebar cluster, both driven by one action registry. Rename widgets inline.
@@ -213,9 +213,9 @@ Tether (separate daemon; owns sessions)
 Electron main process (a Tether client)
   ├─ owns widget windows, global shortcuts, tray, and sidecar lifecycle
   ├─ mirrors Tether's session list and follows /v1/events (reconnects, resyncs on gaps)
-  ├─ holds the GUI channel (/v1/gui/channel) and applies show/position/title
+  ├─ holds the GUI channel (/v1/gui/channel) and applies show/position/title/coordinator
   ├─ runs Tether's exact `tmux attach` argv in a PTY per window and claims resize on focus
-  ├─ stores views (geometry, open state, name override) and settings in aico.db
+  ├─ stores views (geometry, open state) and settings in aico.db
   └─ starts Python sidecar and health-checks it
 
 Electron renderer

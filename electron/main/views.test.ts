@@ -11,7 +11,6 @@ import {
   listViews,
   removeView,
   saveBounds,
-  setCoordinator,
   setOpen,
   setSetting,
   VIEWS_MIGRATED_SETTING,
@@ -141,10 +140,6 @@ describe('views', () => {
     expect(getView('0a1b2c3d')?.open).toBe(false)
     expect(ensureView('0a1b2c3d', true).open).toBe(false) // existing rows are not reset
     expect(() => ensureView('not-an-id')).toThrow()
-    setCoordinator('0a1b2c3d', true)
-    expect(getView('0a1b2c3d')?.coordinator).toBe(true)
-    setCoordinator('0a1b2c3d', false)
-    expect(getView('0a1b2c3d')?.coordinator).toBe(false)
     setSetting('arcade', 'off')
     expect(getSetting('arcade')).toBe('off')
   })

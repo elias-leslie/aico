@@ -83,6 +83,13 @@ export interface SessionDescriptor {
   stateSource?: string
   stateAt?: number | null
   stateDetail?: string | null
+  /** Coordinator lineage (tether docs/api-v1.md "Coordinators"); absent from
+   * an older Tether. */
+  coordinator?: boolean
+  /** The root coordinator that launched this session. */
+  coordinatorId?: string | null
+  /** `#rrggbb`, on a coordinator and its lanes. */
+  coordinatorColor?: string | null
   /** Present on a 202 create: why the session is not running yet. */
   failure?: { code: string; reason?: string } | null
 }
@@ -391,6 +398,15 @@ export class TetherClient {
 
   rename(id: string, generation: string, name: string | null): Promise<SessionDescriptor> {
     return this.json('PATCH', `/v1/sessions/${encodeURIComponent(id)}`, { generation, name })
+  }
+
+  /** Mark or unmark a coordinator in the catalog; Tether forwards it to this
+   * GUI and publishes `session.updated`. */
+  setCoordinator(id: string, generation: string, coordinator: boolean): Promise<unknown> {
+    return this.json('POST', `/v1/widgets/${encodeURIComponent(id)}/coordinator`, {
+      generation,
+      coordinator,
+    })
   }
 
   end(id: string, generation: string): Promise<{ status: 'ended' }> {

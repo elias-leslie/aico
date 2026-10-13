@@ -149,6 +149,8 @@ export interface AicoApi {
         tuiSlug: string
         sessionId: string | null
         coordinator: boolean
+        /** `Coordinator` or `↳ <coordinator>`, in the coordinator's colour. */
+        chip: { text: string; color: string } | null
       }) => void,
     ): () => void
     /** Subscribe to focus/blur; returns an unsubscribe function. */

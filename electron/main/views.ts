@@ -29,7 +29,8 @@ export interface ViewRow {
   open: boolean
   /** A local-only label. Null uses Tether's session name. */
   nameOverride: string | null
-  /** Marked as a coordinator: labelled in the titlebar and tiled in the centre. */
+  /** A mark from before Tether held it (the descriptor's `coordinator`); no
+   * longer written or read. */
   coordinator: boolean
 }
 
@@ -218,11 +219,6 @@ export function saveBounds(id: string, bounds: Bounds, displayId: string): void 
 
 export function setOpen(id: string, open: boolean): void {
   db.prepare('UPDATE views SET open = ? WHERE widget_id = ?').run(open ? 1 : 0, id)
-}
-
-export function setCoordinator(id: string, coordinator: boolean): void {
-  ensureView(id)
-  db.prepare('UPDATE views SET coordinator = ? WHERE widget_id = ?').run(coordinator ? 1 : 0, id)
 }
 
 /** Forget a view after its session ended. */

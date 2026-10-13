@@ -113,11 +113,13 @@ export class ProjectCatalog {
     return this.cached
   }
 
-  /** The display name of a session's workspace, from its project id or, for
-   * the Personal Workspace, its root. */
+  /** The display name of a session's workspace: by project id, else by root
+   * (the Personal Workspace's root names it too). */
   nameFor(projectId: string | null, projectRoot: string | null): string | null {
-    if (projectId) return this.cached.find((p) => p.id === projectId)?.name ?? null
-    if (projectRoot && projectRoot === personalWorkspaceRoot()) return PERSONAL_WORKSPACE_NAME
-    return null
+    const byId = projectId ? this.cached.find((p) => p.id === projectId) : undefined
+    if (byId) return byId.name
+    if (!projectRoot) return null
+    if (projectRoot === personalWorkspaceRoot()) return PERSONAL_WORKSPACE_NAME
+    return this.cached.find((p) => p.root === projectRoot)?.name ?? null
   }
 }

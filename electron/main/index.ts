@@ -49,9 +49,10 @@ import {
 import { parseSse, type SelectionRecord } from './selection'
 import { deliverSelectionToSession } from './selection-delivery'
 import {
+  coordinatorChip,
   createSessionCatalog,
   type SessionCatalog,
-  sessionLabel,
+  sessionTitle,
   toolDisplayName,
   traySessionLabel,
 } from './session-catalog'
@@ -87,7 +88,6 @@ import {
   listViews,
   removeView,
   saveBounds,
-  setCoordinator,
   setOpen,
   setSetting,
   type ViewRow,
@@ -326,14 +326,14 @@ function writeLayout(): void {
     const bounds = w.getBounds()
     windows.push({
       id,
-      name: descriptor ? sessionLabel(descriptor, getView(id), projects) : id,
+      name: descriptor ? sessionTitle(descriptor, projects) : id,
       bounds,
       displayId: String(screen.getDisplayMatching(bounds).id),
       focused: w === focused,
       visible: w.isVisible(),
       minimized: w.isMinimized(),
       maximized: w.isMaximized(),
-      coordinator: getView(id)?.coordinator ?? false,
+      coordinator: descriptor?.coordinator ?? false,
     })
   }
   const primary = screen.getPrimaryDisplay().id
@@ -368,7 +368,7 @@ function tileable(displayId: number): { id: string; bounds: Bounds }[] {
     .filter((w) => screen.getDisplayMatching(w.getBounds()).id === displayId)
     .map((w) => {
       const id = widgetOf.get(w.id) ?? ''
-      return { id, bounds: w.getBounds(), coordinator: Boolean(id && getView(id)?.coordinator) }
+      return { id, bounds: w.getBounds(), coordinator: Boolean(id && catalog.get(id)?.coordinator) }
     })
     .filter((w) => w.id)
 }
@@ -403,14 +403,31 @@ function retileDisplay(displayId: number): void {
   if (display) applyMoves(arrange(display.workArea, tileable(display.id)))
 }
 
-/** Mark or unmark a session as a coordinator, then re-tile its screen. */
-function markCoordinator(id: string, coordinator: boolean): void {
-  if (getView(id)?.coordinator === coordinator) return
-  setCoordinator(id, coordinator)
-  pushTitles()
-  const win = windowForWidget(id)
-  if (win && !quitting) retileDisplay(screen.getDisplayMatching(win.getBounds()).id)
+// The coordinator mark lives on the Tether descriptor. Each window's last
+// seen mark, so a change (from any app or `st aico widget coordinator`)
+// re-tiles its screen; a window seen for the first time keeps its place.
+const shownCoordinator = new Map<number, boolean>()
+
+function retileOnCoordinatorChange(win: BrowserWindow, coordinator: boolean): void {
+  const before = shownCoordinator.get(win.id)
+  shownCoordinator.set(win.id, coordinator)
+  if (before === undefined || before === coordinator || quitting) return
+  retileDisplay(screen.getDisplayMatching(win.getBounds()).id)
   scheduleLayout()
+}
+
+/** Ask Tether to mark or unmark a coordinator; the change comes back as
+ * `session.updated`. */
+function requestCoordinator(id: string, coordinator: boolean): void {
+  const descriptor = catalog.get(id)
+  if (!descriptor) return
+  tether.setCoordinator(id, descriptor.generation, coordinator).catch((error) => {
+    writeNotice(
+      windowForWidget(id),
+      describeFailure('Could not change the coordinator mark', error),
+      33,
+    )
+  })
 }
 
 function scheduleLayout(): void {
@@ -629,7 +646,10 @@ async function applyGuiCommand(command: GuiCommand): Promise<GuiVerdict> {
       saveBounds(id, command.bounds, String(screen.getDisplayMatching(command.bounds).id))
     }
   } else if (command.kind === 'coordinator' && command.coordinator !== undefined) {
-    markCoordinator(id, command.coordinator)
+    // Tether records the mark once this view applied it and then sends
+    // `session.updated`; show it now.
+    catalog.upsert({ ...descriptor, coordinator: command.coordinator })
+    pushTitles()
   } else if (command.kind === 'title' && command.label !== undefined) {
     // Tether renames the session once this view applied the title.
     catalog.upsert({ ...descriptor, name: command.label, label: command.label })
@@ -1191,7 +1211,7 @@ async function confirmTrayDiscard(id: string): Promise<void> {
     cancelId: 0,
     noLink: true,
     title: 'End session?',
-    message: `End ${traySessionLabel(sessionLabel(descriptor, getView(id), projects), toolDisplayName(descriptor.tool, tools))}?`,
+    message: `End ${traySessionLabel(sessionTitle(descriptor, projects), toolDisplayName(descriptor.tool, tools))}?`,
     detail: 'Tether stops only this session’s verified workload. This cannot be undone.',
   })
   if (response.response === 1) discardWidget(id)
@@ -1287,7 +1307,7 @@ const attention = new Attention({
   push: (id) => {
     const descriptor = catalog.get(id)
     if (!descriptor) return
-    const title = sessionLabel(descriptor, getView(id), projects)
+    const title = sessionTitle(descriptor, projects)
     const agent = agentName(descriptor.stateSource, toolDisplayName(descriptor.tool, tools))
     // Nightshift's own Web Push to the owner's PWA; Aico keeps the per-session cooldown.
     execFile(
@@ -1366,7 +1386,7 @@ function syncTray(): void {
   const widgets: TrayWidget[] = rows.map(({ item: descriptor, group, detail }) => ({
     id: descriptor.id,
     label: traySessionLabel(
-      sessionLabel(descriptor, getView(descriptor.id), projects),
+      sessionTitle(descriptor, projects),
       toolDisplayName(descriptor.tool, tools),
     ),
     open: windowForWidget(descriptor.id) !== undefined,
@@ -1448,6 +1468,7 @@ function pushTitles(): void {
         tuiSlug: 'shell',
         sessionId: legacyName,
         coordinator: false,
+        chip: null,
       })
       continue
     }
@@ -1458,15 +1479,17 @@ function pushTitles(): void {
     const mark = toolMark(descriptor.tool, tool?.color)
     pushContextBadge(win, descriptor)
     win.webContents.send('win:title', {
-      label: sessionLabel(descriptor, getView(descriptor.id), projects),
+      label: sessionTitle(descriptor, projects),
       name: descriptor.name, // prefills the rename input
       icon: mark.icon,
       accent: mark.accent,
       tuiName: tool?.name ?? descriptor.tool,
       tuiSlug: descriptor.tool,
       sessionId: descriptor.tmux.sessionId,
-      coordinator: getView(descriptor.id)?.coordinator ?? false,
+      coordinator: descriptor.coordinator ?? false,
+      chip: coordinatorChip(descriptor, (lead) => catalog.get(lead), projects),
     })
+    retileOnCoordinatorChange(win, descriptor.coordinator ?? false)
   }
 }
 
@@ -2077,7 +2100,7 @@ const startup = app.whenReady().then(async () => {
 
   ipcMain.on('widget:toggle-coordinator', (event) => {
     const id = widgetIdFor(event.sender)
-    if (id) markCoordinator(id, !getView(id)?.coordinator)
+    if (id) requestCoordinator(id, !catalog.get(id)?.coordinator)
   })
 
   // Replace the focused session's running tool with another (no new window).
@@ -2123,7 +2146,7 @@ const startup = app.whenReady().then(async () => {
       .map((descriptor) => ({
         id: descriptor.id,
         origin: descriptor.origin,
-        label: sessionLabel(descriptor, getView(descriptor.id), projects),
+        label: sessionTitle(descriptor, projects),
         project: projects.nameFor(descriptor.projectId, descriptor.projectRoot),
         tool: toolDisplayName(descriptor.tool, tools),
         status: 'running' as const,

@@ -275,14 +275,22 @@ let arcade: Arcade | null = null
   }
 }
 
-// A coordinator (a session that launched lanes) carries a titlebar label
-// (chrome.css), and its menu toggle reads Unmark.
-function showCoordinator(on: boolean): void {
-  if (on) document.documentElement.dataset.role = 'coordinator'
+// A coordinator (a session that launched lanes) and each of its lanes carry a
+// titlebar chip in the coordinator's colour (chrome.css): `Coordinator`, or
+// `↳ <coordinator>` on a lane. A coordinator's menu toggle reads Unmark.
+function showCoordinator(coordinator: boolean, chip: { text: string; color: string } | null): void {
+  if (coordinator) document.documentElement.dataset.role = 'coordinator'
+  else if (chip) document.documentElement.dataset.role = 'lane'
   else delete document.documentElement.dataset.role
-  const chip = document.querySelector<HTMLElement>('#role-chip')
-  if (chip) chip.hidden = !on
-  setCoordinatorAction(on)
+  const el = document.querySelector<HTMLElement>('#role-chip')
+  if (el) {
+    el.hidden = !chip
+    el.textContent = chip?.text ?? ''
+    el.title = chip?.text ?? ''
+    if (chip) el.style.setProperty('--chip', chip.color)
+    else el.style.removeProperty('--chip')
+  }
+  setCoordinatorAction(coordinator)
 }
 
 // Titlebar identity (so several open widgets are distinguishable at a glance):
@@ -312,7 +320,7 @@ function wireTitle(): void {
     tuiSlug = info.tuiSlug || 'shell'
 
     document.title = [info.label, info.tuiName].filter(Boolean).join(' · ')
-    showCoordinator(info.coordinator)
+    showCoordinator(info.coordinator, info.chip)
   })
 
   // Click the name to rename: swap the button for an input prefilled with the

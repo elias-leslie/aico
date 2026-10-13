@@ -24,6 +24,8 @@ describe('workspace catalog from Tether', () => {
     expect(catalog.nameFor('aico', null)).toBe('Aico')
     expect(catalog.nameFor(null, personalWorkspaceRoot())).toBe(PERSONAL_WORKSPACE_NAME)
     expect(catalog.nameFor(null, '/elsewhere')).toBeNull()
+    expect(catalog.nameFor(null, '/srv/aico')).toBe('Aico') // by root when the id is missing
+    expect(catalog.nameFor('gone', '/srv/aico')).toBe('Aico')
   })
 
   it('serves the cache without blocking and refreshes once in the background', async () => {

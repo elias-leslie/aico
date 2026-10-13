@@ -147,6 +147,8 @@ contextBridge.exposeInMainWorld('aico', {
         tuiSlug: string
         sessionId: string | null
         coordinator: boolean
+        /** `Coordinator` or `↳ <coordinator>`, in the coordinator's colour. */
+        chip: { text: string; color: string } | null
       }) => void,
     ) => {
       const listener = (
@@ -160,6 +162,8 @@ contextBridge.exposeInMainWorld('aico', {
           tuiSlug: string
           sessionId: string | null
           coordinator: boolean
+          /** `Coordinator` or `↳ <coordinator>`, in the coordinator's colour. */
+          chip: { text: string; color: string } | null
         },
       ) => cb(info)
       ipcRenderer.on('win:title', listener)
