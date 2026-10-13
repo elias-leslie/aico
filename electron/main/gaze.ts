@@ -107,6 +107,8 @@ export interface LayoutWindow {
   visible: boolean
   minimized: boolean
   maximized: boolean
+  /** Marked as a coordinator: tiles in the centre column. */
+  coordinator: boolean
 }
 
 export interface LayoutDisplay {
@@ -147,9 +149,16 @@ export function layoutSnapshot(
 // the extras stack in the centre.
 //   1: centre   2: left, right   3: left, centre, right   4: four corners
 //   5: corners + centre   6: three per side   7: three per side + centre
+//
+// Coordinator windows (sessions that launched lanes) own the centre instead:
+// up to CENTRE_MAX of them stack there top to bottom, and every other window,
+// including coordinators past CENTRE_MAX, splits between the sides, the left
+// taking the extra one. A side holding one window gives it the full height.
+// Past SIDE_MAX per side the extras stack in the centre below the coordinators.
 
 export const SIDE_FRACTION = 0.2822265625
 export const SIDE_MAX = 4
+export const CENTRE_MAX = 3
 
 function stack(x: number, width: number, area: Rect, count: number): Rect[] {
   const out: Rect[] = []
@@ -161,41 +170,63 @@ function stack(x: number, width: number, area: Rect, count: number): Rect[] {
   return out
 }
 
-/** Slots for `n` windows, left column top to bottom, then centre, then right. */
-export function tileSlots(n: number, area: Rect): Rect[] {
-  if (n <= 0) return []
-  let perSide = Math.min(SIDE_MAX, Math.floor(n / 2))
-  let centre = n - perSide * 2
-  if (n === 1) {
-    perSide = 0
-    centre = 1
-  }
+/** Slots for `n` windows, `coordinators` of them coordinators. */
+export interface TileGroups {
+  /** Centre slots for coordinators, top to bottom. */
+  coordinator: Rect[]
+  /** Slots for every other window: left top to bottom, centre overflow, right. */
+  other: Rect[]
+}
+
+export function tileGroups(n: number, area: Rect, coordinators = 0): TileGroups {
+  if (n <= 0) return { coordinator: [], other: [] }
   const side = Math.round(area.width * SIDE_FRACTION)
   const rightX = area.x + area.width - side
   const centreX = area.x + side
-  return [
-    ...stack(area.x, side, area, perSide),
-    ...stack(centreX, rightX - centreX, area, centre),
-    ...stack(rightX, side, area, perSide),
-  ]
+  const column = (left: number, centre: number, right: number) => ({
+    left: stack(area.x, side, area, left),
+    centre: stack(centreX, rightX - centreX, area, centre),
+    right: stack(rightX, side, area, right),
+  })
+  const lead = Math.min(CENTRE_MAX, Math.max(0, coordinators), n)
+  if (lead === 0) {
+    let perSide = Math.min(SIDE_MAX, Math.floor(n / 2))
+    let centre = n - perSide * 2
+    if (n === 1) {
+      perSide = 0
+      centre = 1
+    }
+    const c = column(perSide, centre, perSide)
+    return { coordinator: [], other: [...c.left, ...c.centre, ...c.right] }
+  }
+  const rest = n - lead
+  const left = Math.min(SIDE_MAX, Math.ceil(rest / 2))
+  const right = Math.min(SIDE_MAX, Math.floor(rest / 2))
+  const c = column(left, n - left - right, right)
+  return {
+    coordinator: c.centre.slice(0, lead),
+    other: [...c.left, ...c.centre.slice(lead), ...c.right],
+  }
+}
+
+/** Slots for `n` windows, left column top to bottom, then centre, then right. */
+export function tileSlots(n: number, area: Rect, coordinators = 0): Rect[] {
+  const groups = tileGroups(n, area, coordinators)
+  return [...groups.coordinator, ...groups.other].sort((p, q) => p.x - q.x || p.y - q.y)
 }
 
 export interface Move {
   id: string
   bounds: Rect
+  coordinator?: boolean
 }
 
 function centreOf(r: Rect): Point {
   return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
 }
 
-/**
- * Lay out `windows` plus, optionally, one new window (id `newId`) in the slots
- * for their count. Each existing window takes the free slot nearest to where
- * it is now, so a column keeps its windows; the new window gets what is left.
- */
-export function arrange(area: Rect, windows: Move[], newId?: string): Move[] {
-  const slots = tileSlots(windows.length + (newId ? 1 : 0), area)
+/** Nearest-first matching: each window takes the free slot closest to it. */
+function assign(windows: Move[], slots: Rect[]): Map<Move, Rect> {
   const pairs: { w: number; s: number; d: number }[] = []
   windows.forEach((win, w) => {
     const c = centreOf(win.bounds)
@@ -206,19 +237,37 @@ export function arrange(area: Rect, windows: Move[], newId?: string): Move[] {
   })
   pairs.sort((a, b) => a.d - b.d)
   const slotTaken = new Set<number>()
-  const placed = new Map<number, number>()
+  const placed = new Map<Move, Rect>()
   for (const { w, s } of pairs) {
-    if (placed.has(w) || slotTaken.has(s)) continue
-    placed.set(w, s)
+    const win = windows[w] as Move
+    if (placed.has(win) || slotTaken.has(s)) continue
+    placed.set(win, slots[s] as Rect)
     slotTaken.add(s)
   }
-  const out: Move[] = windows.map((win, w) => ({
+  return placed
+}
+
+/**
+ * Lay out `windows` plus, optionally, one new window (id `newId`) in the slots
+ * for their count. Coordinators take the centre slots first; each window then
+ * takes the free slot of its group nearest to where it is now, so a column
+ * keeps its windows; the new window gets what is left.
+ */
+export function arrange(area: Rect, windows: Move[], newId?: string): Move[] {
+  const n = windows.length + (newId ? 1 : 0)
+  const leads = windows.filter((w) => w.coordinator)
+  const groups = tileGroups(n, area, leads.length)
+  const placed = assign(leads, groups.coordinator)
+  const others = windows.filter((w) => !placed.has(w))
+  for (const [win, slot] of assign(others, groups.other)) placed.set(win, slot)
+  const out: Move[] = windows.map((win) => ({
     id: win.id,
-    bounds: slots[placed.get(w) ?? 0] as Rect,
+    bounds: placed.get(win) ?? ((groups.other[0] ?? groups.coordinator[0]) as Rect),
   }))
   if (newId) {
-    const free = slots.findIndex((_, s) => !slotTaken.has(s))
-    if (free >= 0) out.push({ id: newId, bounds: slots[free] as Rect })
+    const taken = new Set(placed.values())
+    const free = groups.other.find((slot) => !taken.has(slot))
+    if (free) out.push({ id: newId, bounds: free })
   }
   return out
 }

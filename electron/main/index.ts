@@ -87,6 +87,7 @@ import {
   listViews,
   removeView,
   saveBounds,
+  setCoordinator,
   setOpen,
   setSetting,
   type ViewRow,
@@ -332,6 +333,7 @@ function writeLayout(): void {
       visible: w.isVisible(),
       minimized: w.isMinimized(),
       maximized: w.isMaximized(),
+      coordinator: getView(id)?.coordinator ?? false,
     })
   }
   const primary = screen.getPrimaryDisplay().id
@@ -364,7 +366,10 @@ function tileable(displayId: number): { id: string; bounds: Bounds }[] {
   return aicoWindows()
     .filter((w) => w.isVisible() && !w.isMinimized() && !w.isMaximized())
     .filter((w) => screen.getDisplayMatching(w.getBounds()).id === displayId)
-    .map((w) => ({ id: widgetOf.get(w.id) ?? '', bounds: w.getBounds() }))
+    .map((w) => {
+      const id = widgetOf.get(w.id) ?? ''
+      return { id, bounds: w.getBounds(), coordinator: Boolean(id && getView(id)?.coordinator) }
+    })
     .filter((w) => w.id)
 }
 
@@ -396,6 +401,16 @@ function tileNewWindow(): Bounds {
 function retileDisplay(displayId: number): void {
   const display = screen.getAllDisplays().find((d) => d.id === displayId)
   if (display) applyMoves(arrange(display.workArea, tileable(display.id)))
+}
+
+/** Mark or unmark a session as a coordinator, then re-tile its screen. */
+function markCoordinator(id: string, coordinator: boolean): void {
+  if (getView(id)?.coordinator === coordinator) return
+  setCoordinator(id, coordinator)
+  pushTitles()
+  const win = windowForWidget(id)
+  if (win && !quitting) retileDisplay(screen.getDisplayMatching(win.getBounds()).id)
+  scheduleLayout()
 }
 
 function scheduleLayout(): void {
@@ -613,6 +628,8 @@ async function applyGuiCommand(command: GuiCommand): Promise<GuiVerdict> {
     } else {
       saveBounds(id, command.bounds, String(screen.getDisplayMatching(command.bounds).id))
     }
+  } else if (command.kind === 'coordinator' && command.coordinator !== undefined) {
+    markCoordinator(id, command.coordinator)
   } else if (command.kind === 'title' && command.label !== undefined) {
     // Tether renames the session once this view applied the title.
     catalog.upsert({ ...descriptor, name: command.label, label: command.label })
@@ -1426,6 +1443,7 @@ function pushTitles(): void {
         tuiName: 'A-Term session',
         tuiSlug: 'shell',
         sessionId: legacyName,
+        coordinator: false,
       })
       continue
     }
@@ -1443,6 +1461,7 @@ function pushTitles(): void {
       tuiName: tool?.name ?? descriptor.tool,
       tuiSlug: descriptor.tool,
       sessionId: descriptor.tmux.sessionId,
+      coordinator: getView(descriptor.id)?.coordinator ?? false,
     })
   }
 }
@@ -2050,6 +2069,11 @@ const startup = app.whenReady().then(async () => {
     } catch (error) {
       throw new Error(describeFailure('End failed', error))
     }
+  })
+
+  ipcMain.on('widget:toggle-coordinator', (event) => {
+    const id = widgetIdFor(event.sender)
+    if (id) markCoordinator(id, !getView(id)?.coordinator)
   })
 
   // Replace the focused session's running tool with another (no new window).

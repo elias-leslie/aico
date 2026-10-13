@@ -29,6 +29,8 @@ export interface ViewRow {
   open: boolean
   /** A local-only label. Null uses Tether's session name. */
   nameOverride: string | null
+  /** Marked as a coordinator: labelled in the titlebar and tiled in the centre. */
+  coordinator: boolean
 }
 
 let db: DatabaseSync
@@ -47,6 +49,7 @@ interface Raw {
   display_id: string | null
   open: number
   name_override: string | null
+  coordinator: number
 }
 
 function toRow(r: Raw): ViewRow {
@@ -60,6 +63,7 @@ function toRow(r: Raw): ViewRow {
     displayId: r.display_id,
     open: r.open === 1,
     nameOverride: r.name_override,
+    coordinator: r.coordinator === 1,
   }
 }
 
@@ -85,6 +89,11 @@ export function initViews(dbPath: string): { migrated: number } {
       value TEXT NOT NULL
     );
   `)
+  const columns = (db.prepare('PRAGMA table_info(views)').all() as { name: string }[]).map(
+    (c) => c.name,
+  )
+  if (!columns.includes('coordinator'))
+    db.exec('ALTER TABLE views ADD COLUMN coordinator INTEGER NOT NULL DEFAULT 0')
   return { migrated: migrateWidgetViews() }
 }
 
@@ -209,6 +218,11 @@ export function saveBounds(id: string, bounds: Bounds, displayId: string): void 
 
 export function setOpen(id: string, open: boolean): void {
   db.prepare('UPDATE views SET open = ? WHERE widget_id = ?').run(open ? 1 : 0, id)
+}
+
+export function setCoordinator(id: string, coordinator: boolean): void {
+  ensureView(id)
+  db.prepare('UPDATE views SET coordinator = ? WHERE widget_id = ?').run(coordinator ? 1 : 0, id)
 }
 
 /** Forget a view after its session ended. */

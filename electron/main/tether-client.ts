@@ -705,11 +705,12 @@ export function followEvents(client: TetherClient, subscriber: EventSubscriber):
 
 export interface GuiCommand {
   commandId: string
-  kind: 'show' | 'position' | 'title'
+  kind: 'show' | 'position' | 'title' | 'coordinator'
   sessionId: string
   generation: string
   bounds?: { x: number; y: number; width: number; height: number }
   label?: string
+  coordinator?: boolean
 }
 
 /** Validate one GUI channel command line. */
@@ -718,7 +719,10 @@ export function parseGuiCommand(value: unknown): GuiCommand | null {
   if (!line || line.type !== 'command') return null
   if (
     typeof line.commandId !== 'string' ||
-    (line.kind !== 'show' && line.kind !== 'position' && line.kind !== 'title') ||
+    (line.kind !== 'show' &&
+      line.kind !== 'position' &&
+      line.kind !== 'title' &&
+      line.kind !== 'coordinator') ||
     typeof line.sessionId !== 'string' ||
     !/^[0-9a-f]{8}$/.test(line.sessionId) ||
     typeof line.generation !== 'string'
@@ -744,6 +748,10 @@ export function parseGuiCommand(value: unknown): GuiCommand | null {
   if (line.kind === 'title') {
     if (typeof line.label !== 'string') return null
     command.label = line.label
+  }
+  if (line.kind === 'coordinator') {
+    if (typeof line.coordinator !== 'boolean') return null
+    command.coordinator = line.coordinator
   }
   return command
 }

@@ -13,7 +13,12 @@ import {
   fontLoadFaceFor,
   parseTerminalFontSettings,
 } from '../shared/font-settings'
-import { AICO_TOAST_EVENT, type AicoToastDetail, setGameActions } from './actions'
+import {
+  AICO_TOAST_EVENT,
+  type AicoToastDetail,
+  setCoordinatorAction,
+  setGameActions,
+} from './actions'
 import { type Arcade, GAMES, startArcade } from './arcade'
 import { initControlSurface } from './control-surface'
 import { wireDraftInput } from './draft-input'
@@ -270,6 +275,16 @@ let arcade: Arcade | null = null
   }
 }
 
+// A coordinator (a session that launched lanes) carries a titlebar label and a
+// blue frame (chrome.css), and its menu toggle reads Unmark.
+function showCoordinator(on: boolean): void {
+  if (on) document.documentElement.dataset.role = 'coordinator'
+  else delete document.documentElement.dataset.role
+  const chip = document.querySelector<HTMLElement>('#role-chip')
+  if (chip) chip.hidden = !on
+  setCoordinatorAction(on)
+}
+
 // Titlebar identity (so several open widgets are distinguishable at a glance):
 // the TUI's SVG mark (in its accent) set between the eyes, and a click-to-rename
 // widget name in the available title lane. Fed by main over win:title; the OS window
@@ -297,6 +312,7 @@ function wireTitle(): void {
     tuiSlug = info.tuiSlug || 'shell'
 
     document.title = [info.label, info.tuiName].filter(Boolean).join(' · ')
+    showCoordinator(info.coordinator)
   })
 
   // Click the name to rename: swap the button for an input prefilled with the

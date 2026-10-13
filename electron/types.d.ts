@@ -110,6 +110,8 @@ export interface AicoApi {
     grab(args: string[]): void
     /** Retire this widget: close the window AND end its tmux session. */
     endSession(): Promise<void>
+    /** Mark or unmark this session as a coordinator (titlebar label, centre tile). */
+    toggleCoordinator(): void
   }
   settings: {
     /** Global pinned-action ids, or null if never set (first run). */
@@ -146,6 +148,7 @@ export interface AicoApi {
         tuiName: string
         tuiSlug: string
         sessionId: string | null
+        coordinator: boolean
       }) => void,
     ): () => void
     /** Subscribe to focus/blur; returns an unsubscribe function. */

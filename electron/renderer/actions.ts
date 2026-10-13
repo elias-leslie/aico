@@ -62,6 +62,16 @@ async function endCurrentSession(): Promise<void> {
   }
 }
 
+const COORDINATOR_LABELS = { on: 'Unmark as coordinator', off: 'Mark as coordinator' }
+
+/** Name the coordinator toggle for this window's current state. */
+export function setCoordinatorAction(on: boolean): void {
+  const action = ACTIONS.find((a) => a.id === 'coordinator')
+  if (action) action.label = on ? COORDINATOR_LABELS.on : COORDINATOR_LABELS.off
+  const row = document.querySelector('.aico-row[data-id="coordinator"] .aico-lbl')
+  if (row && action) row.textContent = action.label
+}
+
 export interface Action {
   id: string
   /** Group header in the menu, in first-seen order. */
@@ -201,6 +211,15 @@ export const ACTIONS: Action[] = [
     shortcut: '',
     icon: '⇱',
     opensFlyout: true,
+  },
+  {
+    id: 'coordinator',
+    section: 'Session',
+    label: COORDINATOR_LABELS.off,
+    shortcut: '',
+    icon: '⚑',
+    note: 'A coordinator has a Coordinator label and a blue frame, and tiles in the centre column.',
+    run: () => window.aico.actions.toggleCoordinator(),
   },
   {
     id: 'copy-session-diagnostics',

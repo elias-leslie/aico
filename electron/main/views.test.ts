@@ -11,6 +11,7 @@ import {
   listViews,
   removeView,
   saveBounds,
+  setCoordinator,
   setOpen,
   setSetting,
   VIEWS_MIGRATED_SETTING,
@@ -69,6 +70,7 @@ describe('view store migration', () => {
         displayId: null,
         open: false,
         nameOverride: null,
+        coordinator: false,
       },
       {
         id: '05e96622',
@@ -77,6 +79,7 @@ describe('view store migration', () => {
         displayId: '1',
         open: true,
         nameOverride: null,
+        coordinator: false,
       },
     ])
     expect(getView('deadbeef')).toBeUndefined() // A-Term federation rows are not views
@@ -93,6 +96,22 @@ describe('view store migration', () => {
     expect(check.prepare('SELECT COUNT(*) AS n FROM tmux_servers').get()).toEqual({ n: 1 })
     expect(check.prepare('SELECT COUNT(*) AS n FROM root_requests').get()).toEqual({ n: 1 })
     check.close()
+  })
+
+  it('adds the coordinator column to an existing views table, keeping rows', () => {
+    const path = scratchDb()
+    const old = new DatabaseSync(path)
+    old.exec(`
+      CREATE TABLE views (widget_id TEXT PRIMARY KEY, seq INTEGER NOT NULL, x INTEGER,
+        y INTEGER, width INTEGER, height INTEGER, display_id TEXT,
+        open INTEGER NOT NULL DEFAULT 1, name_override TEXT);
+      INSERT INTO views (widget_id, seq, open) VALUES ('0a1b2c3d', 1, 1);
+    `)
+    old.close()
+    initViews(path)
+    expect(getView('0a1b2c3d')).toMatchObject({ open: true, coordinator: false })
+    initViews(path) // a second launch finds the column already there
+    expect(listViews()).toHaveLength(1)
   })
 
   it('starts empty without a pre-Tether catalog', () => {
@@ -122,6 +141,10 @@ describe('views', () => {
     expect(getView('0a1b2c3d')?.open).toBe(false)
     expect(ensureView('0a1b2c3d', true).open).toBe(false) // existing rows are not reset
     expect(() => ensureView('not-an-id')).toThrow()
+    setCoordinator('0a1b2c3d', true)
+    expect(getView('0a1b2c3d')?.coordinator).toBe(true)
+    setCoordinator('0a1b2c3d', false)
+    expect(getView('0a1b2c3d')?.coordinator).toBe(false)
     setSetting('arcade', 'off')
     expect(getSetting('arcade')).toBe('off')
   })

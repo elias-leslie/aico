@@ -98,6 +98,8 @@ contextBridge.exposeInMainWorld('aico', {
     grab: (args: string[]) => ipcRenderer.send('grab:run', args),
     /** End the current session through Tether. */
     endSession: (): Promise<void> => ipcRenderer.invoke('session:end-self'),
+    /** Mark or unmark this session as a coordinator (titlebar label, centre tile). */
+    toggleCoordinator: () => ipcRenderer.send('widget:toggle-coordinator'),
   },
   settings: {
     /** Global pinned-action ids, or null if never set (first run). */
@@ -144,6 +146,7 @@ contextBridge.exposeInMainWorld('aico', {
         tuiName: string
         tuiSlug: string
         sessionId: string | null
+        coordinator: boolean
       }) => void,
     ) => {
       const listener = (
@@ -156,6 +159,7 @@ contextBridge.exposeInMainWorld('aico', {
           tuiName: string
           tuiSlug: string
           sessionId: string | null
+          coordinator: boolean
         },
       ) => cb(info)
       ipcRenderer.on('win:title', listener)

@@ -392,6 +392,11 @@ describe('GUI channel', () => {
     ).toEqual({ x: 1, y: 2, width: 900, height: 600 })
     expect(parseGuiCommand({ ...base, kind: 'position', bounds: { x: 1.5 } })).toBeNull()
     expect(parseGuiCommand({ ...base, kind: 'title' })).toBeNull()
+    expect(parseGuiCommand({ ...base, kind: 'coordinator', coordinator: true })?.coordinator).toBe(
+      true,
+    )
+    expect(parseGuiCommand({ ...base, kind: 'coordinator', coordinator: 'yes' })).toBeNull()
+    expect(parseGuiCommand({ ...base, kind: 'coordinator' })).toBeNull()
     expect(parseGuiCommand({ ...base, kind: 'show', sessionId: '../x' })).toBeNull()
     expect(parseGuiCommand({ type: 'heartbeat' })).toBeNull()
   })

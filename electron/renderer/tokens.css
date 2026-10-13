@@ -19,6 +19,10 @@
      the lantern so a thin border still reads at a glance across the desk. */
   --beacon: #ffbd52;
   --beacon-tint: rgba(255, 189, 82, 0.17);
+  /* A coordinator window (one that launched lanes): a cool steel blue, so its
+     frame reads as a role, never as the warm attention states. */
+  --helm: #6fa8ff;
+  --helm-tint: rgba(111, 168, 255, 0.16);
   --jade: #7ad68a; /* solid calm green — "good" status (context-injecting badge) */
 
   /* Frame: slim opaque window margin around the shell, so tiled widgets sit

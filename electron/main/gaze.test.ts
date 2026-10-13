@@ -6,6 +6,7 @@ import {
   layoutSnapshot,
   neighbours,
   pickScene,
+  tileGroups,
   tileSlots,
 } from './gaze'
 
@@ -77,6 +78,7 @@ describe('layoutSnapshot', () => {
       visible: true,
       minimized: false,
       maximized: false,
+      coordinator: false,
     })
     const out = layoutSnapshot([], [w('c', 500, 0), w('b', 0, 400), w('a', 0, 0)])
     expect(out.windows.map((x) => x.id)).toEqual(['a', 'b', 'c'])
@@ -114,6 +116,71 @@ describe('tileSlots', () => {
   })
 })
 
+describe('tileGroups with coordinators', () => {
+  const area = { x: 0, y: 0, width: 3277, height: 1344 }
+  const side = Math.round(3277 * 0.2822265625)
+  const tag = (r: { x: number; height: number }) =>
+    `${r.x === 0 ? 'L' : r.x === side ? 'C' : 'R'}${r.height}`
+  const groups = (n: number, c: number) => {
+    const g = tileGroups(n, area, c)
+    return { lead: g.coordinator.map(tag), other: g.other.map(tag) }
+  }
+
+  it('leaves every layout unchanged without coordinators', () => {
+    for (let n = 1; n <= 10; n++) {
+      expect(tileGroups(n, area, 0).coordinator).toEqual([])
+      expect(tileSlots(n, area, 0)).toEqual(tileSlots(n, area))
+    }
+  })
+
+  it('stacks one to three coordinators in the centre', () => {
+    expect(groups(1, 1)).toEqual({ lead: ['C1344'], other: [] })
+    expect(groups(2, 2)).toEqual({ lead: ['C672', 'C672'], other: [] })
+    expect(groups(3, 3)).toEqual({ lead: ['C448', 'C448', 'C448'], other: [] })
+    const three = tileGroups(3, area, 3).coordinator
+    expect(three.map((r) => r.y)).toEqual([0, 448, 896])
+  })
+
+  it('splits the others between the sides, the left taking the extra', () => {
+    expect(groups(2, 1)).toEqual({ lead: ['C1344'], other: ['L1344'] })
+    expect(groups(3, 1)).toEqual({ lead: ['C1344'], other: ['L1344', 'R1344'] })
+    // One coordinator and three others: left two stacked, right one full height.
+    expect(groups(4, 1)).toEqual({ lead: ['C1344'], other: ['L672', 'L672', 'R1344'] })
+    expect(groups(5, 1)).toEqual({ lead: ['C1344'], other: ['L672', 'L672', 'R672', 'R672'] })
+    expect(groups(6, 1)).toEqual({
+      lead: ['C1344'],
+      other: ['L448', 'L448', 'L448', 'R672', 'R672'],
+    })
+    expect(groups(4, 2)).toEqual({ lead: ['C672', 'C672'], other: ['L1344', 'R1344'] })
+    expect(groups(5, 2)).toEqual({ lead: ['C672', 'C672'], other: ['L672', 'L672', 'R1344'] })
+    expect(groups(4, 3)).toEqual({ lead: ['C448', 'C448', 'C448'], other: ['L1344'] })
+    expect(groups(6, 3)).toEqual({
+      lead: ['C448', 'C448', 'C448'],
+      other: ['L672', 'L672', 'R1344'],
+    })
+  })
+
+  it('sends coordinators past three to the sides', () => {
+    expect(groups(4, 4)).toEqual({ lead: ['C448', 'C448', 'C448'], other: ['L1344'] })
+    expect(groups(6, 5)).toEqual({
+      lead: ['C448', 'C448', 'C448'],
+      other: ['L672', 'L672', 'R1344'],
+    })
+  })
+
+  it('stacks side overflow in the centre below the coordinators', () => {
+    // 1 coordinator + 10 others: four per side, two more in the centre.
+    const g = groups(11, 1)
+    expect(g.lead).toEqual(['C448'])
+    expect(g.other.filter((s) => s.startsWith('L'))).toHaveLength(4)
+    expect(g.other.filter((s) => s.startsWith('R'))).toHaveLength(4)
+    expect(g.other.filter((s) => s === 'C448')).toHaveLength(2)
+    const centre = tileGroups(11, area, 1)
+    expect(centre.coordinator[0]?.y).toBe(0)
+    expect(centre.other.filter((r) => r.x === side).map((r) => r.y)).toEqual([448, 896])
+  })
+})
+
 describe('arrange', () => {
   const area = { x: 0, y: 0, width: 3277, height: 1344 }
   it('keeps windows on their side and gives the new one the free slot', () => {
@@ -130,6 +197,46 @@ describe('arrange', () => {
     expect(byId.l).toBe(0)
     expect(byId.new).toBe(925)
     expect(byId.r).toBe(3277 - 925)
+  })
+
+  it('moves a coordinator to the centre and its neighbours to the sides', () => {
+    // Today's 2+1+2 layout; the left-bottom window becomes a coordinator.
+    const out = arrange(area, [
+      { id: 'a', bounds: { x: 0, y: 0, width: 925, height: 672 } },
+      { id: 'lead', bounds: { x: 0, y: 672, width: 925, height: 672 }, coordinator: true },
+      { id: 'c', bounds: { x: 925, y: 0, width: 1427, height: 1344 } },
+      { id: 'd', bounds: { x: 2352, y: 0, width: 925, height: 672 } },
+      { id: 'e', bounds: { x: 2352, y: 672, width: 925, height: 672 } },
+    ])
+    const byId = Object.fromEntries(out.map((m) => [m.id, m.bounds]))
+    expect(byId.lead).toEqual({ x: 925, y: 0, width: 1427, height: 1344 })
+    expect(byId.a).toEqual({ x: 0, y: 0, width: 925, height: 672 })
+    expect(byId.d).toEqual({ x: 2352, y: 0, width: 925, height: 672 })
+    expect(byId.e).toEqual({ x: 2352, y: 672, width: 925, height: 672 })
+    // c is pushed out of the centre to the free left slot.
+    expect(byId.c).toEqual({ x: 0, y: 672, width: 925, height: 672 })
+  })
+
+  it('tiles a new window on the sides, never over a coordinator', () => {
+    const out = arrange(
+      area,
+      [
+        { id: 'lead', bounds: { x: 925, y: 0, width: 1427, height: 1344 }, coordinator: true },
+        { id: 'l', bounds: { x: 0, y: 0, width: 925, height: 1344 } },
+      ],
+      'new',
+    )
+    const byId = Object.fromEntries(out.map((m) => [m.id, m.bounds.x]))
+    expect(byId).toEqual({ lead: 925, l: 0, new: 2352 })
+  })
+
+  it('keeps stacked coordinators in their order', () => {
+    const out = arrange(area, [
+      { id: 'low', bounds: { x: 925, y: 700, width: 1427, height: 644 }, coordinator: true },
+      { id: 'high', bounds: { x: 925, y: 0, width: 1427, height: 700 }, coordinator: true },
+    ])
+    const byId = Object.fromEntries(out.map((m) => [m.id, m.bounds.y]))
+    expect(byId).toEqual({ low: 672, high: 0 })
   })
 
   it('closing the centre of three leaves left and right', () => {
