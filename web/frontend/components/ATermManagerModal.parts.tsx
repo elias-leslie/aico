@@ -8,8 +8,13 @@ import type { ATermPane } from '@/lib/hooks/use-a-term-panes'
 import type { ATermSession } from '@/lib/hooks/use-a-term-sessions'
 import { useHoverStyle } from '@/lib/hooks/use-hover-style'
 import type { ProjectSetting } from '@/lib/hooks/use-project-settings'
+import {
+  type CoordinatorBadgeInfo,
+  getCoordinatorBadge,
+} from '@/lib/utils/coordinator-badge'
 import { getExternalSessionDisplayName } from '@/lib/utils/external-session-name'
 import { AgentIcon } from './AgentIcon'
+import { CoordinatorBadge } from './CoordinatorBadge'
 
 export interface AttachableATermOption {
   id: string
@@ -20,6 +25,8 @@ export interface AttachableATermOption {
   actionId: string
   /** Running mode: 'shell' or an agent tool slug. */
   mode: string
+  /** Coordinator or lane chip, as Aico shows it. */
+  badge?: CoordinatorBadgeInfo | null
 }
 
 /** Resolves the tint for a session mode ('shell' or an agent tool slug). */
@@ -88,15 +95,22 @@ export function makeExternalAttachableOption(
     kind: 'external-session',
     actionId: session.id,
     mode: session.mode,
+    badge: getCoordinatorBadge(session),
   }
 }
 
 export function makeDetachedPaneAttachableOption(
   pane: ATermPane,
 ): AttachableATermOption {
+  const session =
+    pane.sessions.find((item) => item.mode === pane.active_mode) ??
+    pane.sessions[0]
+  // A Tether session's title is the one Aico shows; the pane name is A-Term's.
+  const name = session?.source === 'tether' ? session.name : pane.pane_name
   return {
     id: pane.id,
-    label: `${pane.pane_name} (${pane.active_mode})`,
+    label: `${name} (${pane.active_mode})`,
+    badge: getCoordinatorBadge(session),
     description: formatDetachedPaneDescription(pane),
     projectId: pane.project_id,
     kind: 'detached-pane',
@@ -581,8 +595,9 @@ export function SessionSection({
               resolveModeColor={resolveModeColor}
             />
             <span className="min-w-0 flex-1">
-              <span className="block text-sm font-medium truncate">
-                {session.label}
+              <span className="flex min-w-0 items-center gap-2 text-sm font-medium">
+                <CoordinatorBadge badge={session.badge} />
+                <span className="truncate">{session.label}</span>
               </span>
               <span
                 className="block text-[11px] truncate"
