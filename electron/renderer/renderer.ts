@@ -275,8 +275,8 @@ let arcade: Arcade | null = null
   }
 }
 
-// A coordinator (a session that launched lanes) carries a titlebar label and a
-// blue frame (chrome.css), and its menu toggle reads Unmark.
+// A coordinator (a session that launched lanes) carries a titlebar label
+// (chrome.css), and its menu toggle reads Unmark.
 function showCoordinator(on: boolean): void {
   if (on) document.documentElement.dataset.role = 'coordinator'
   else delete document.documentElement.dataset.role

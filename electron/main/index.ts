@@ -932,10 +932,11 @@ function placement(b: Bounds | null): Electron.BrowserWindowConstructorOptions {
 function createWidgetWindow(
   view: ViewRow | null,
   pending: { tool: string; projectId: string } | null,
+  restore = false,
 ): BrowserWindow {
   const row = { id: view?.id ?? 'new' }
   // Opened after startup: tile in on the screen under the pointer.
-  const tiled = tilingLive ? tileNewWindow() : null
+  const tiled = tilingLive && !(restore && view?.bounds) ? tileNewWindow() : null
   const win = new BrowserWindow({
     ...(tiled ?? placement(view?.bounds ?? null)),
     minWidth: 360,
@@ -1106,8 +1107,9 @@ function createWidgetWindow(
   return win
 }
 
-function openWidget(id: string): void {
-  createWidgetWindow(ensureView(id), null)
+/** `restore`: reopen at the remembered place instead of tiling in. */
+function openWidget(id: string, restore = false): void {
+  createWidgetWindow(ensureView(id), null, restore)
 }
 
 // A new session is always an explicit (tool, workspace) pair. Its window opens
@@ -1130,7 +1132,9 @@ function restoreOnLaunch(): void {
   const live = listViews().filter((view) => catalog.get(view.id))
   const open = live.filter((view) => view.open)
   if (open.length) {
-    for (const view of open) if (!windowForWidget(view.id)) openWidget(view.id)
+    // Restore runs after the first session list, by which time tiling is
+    // live; each window still goes back to where it was.
+    for (const view of open) if (!windowForWidget(view.id)) openWidget(view.id, true)
   } else if (live.length && BrowserWindow.getAllWindows().length === 0) {
     openWidget(live[0].id) // nothing was open: bring back the oldest view
   }

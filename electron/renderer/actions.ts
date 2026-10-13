@@ -218,7 +218,7 @@ export const ACTIONS: Action[] = [
     label: COORDINATOR_LABELS.off,
     shortcut: '',
     icon: '⚑',
-    note: 'A coordinator has a Coordinator label and a blue frame, and tiles in the centre column.',
+    note: 'A coordinator has a Coordinator label in its titlebar and tiles in the centre column.',
     run: () => window.aico.actions.toggleCoordinator(),
   },
   {

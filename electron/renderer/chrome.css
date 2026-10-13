@@ -44,13 +44,8 @@ body {
   background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
-/* A coordinator: a steady blue frame and a Coordinator chip in the title.
-   The attention border (.shell::after) still pulses on top when it waits. */
-:root[data-role="coordinator"] .shell {
-  box-shadow:
-    var(--shadow-soft),
-    inset 0 0 0 2px var(--helm);
-}
+/* A coordinator: a Coordinator chip in the title. The frame stays the
+   ordinary one (owner preference: the chip is enough). */
 .role-chip {
   flex: 0 0 auto;
   margin-right: 8px;
