@@ -90,6 +90,11 @@ export interface SessionDescriptor {
   coordinatorId?: string | null
   /** `#rrggbb`, on a coordinator and its lanes. */
   coordinatorColor?: string | null
+  /** Tether's title, `Project — Task` (docs/api-v1.md "Display title and
+   * badge"); absent from an older Tether. */
+  displayTitle?: string
+  /** The titlebar chip, worded and coloured by Tether. */
+  badge?: { kind: 'coordinator' | 'child'; text: string; color: string } | null
   /** Present on a 202 create: why the session is not running yet. */
   failure?: { code: string; reason?: string } | null
 }

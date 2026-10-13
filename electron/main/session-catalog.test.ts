@@ -62,82 +62,32 @@ describe('session catalog mirror', () => {
 })
 
 describe('session titles', () => {
-  const projects = {
-    nameFor: (id: string | null, root: string | null) =>
-      id === 'aico' ? 'Aico' : root === '/personal' ? 'Personal Workspace' : null,
-  }
-
-  it('composes Project — Task, else either part, else the default label', () => {
+  it("shows Tether's display title, else the default label", () => {
     const plain = descriptor('0000000a', 1)
-    expect(sessionTitle(plain, projects)).toBe('Session 4')
-    expect(sessionTitle({ ...plain, projectId: 'aico' }, projects)).toBe('Aico')
-    expect(sessionTitle({ ...plain, projectRoot: '/personal' }, projects)).toBe(
-      'Personal Workspace',
-    )
-    expect(sessionTitle({ ...plain, projectId: 'aico', name: ' Review ' }, projects)).toBe(
-      'Aico — Review',
-    )
-    expect(sessionTitle({ ...plain, name: 'Review' }, projects)).toBe('Review')
-    expect(sessionTitle({ ...plain, projectId: 'aico', name: '   ' }, projects)).toBe('Aico')
-  })
-
-  it('drops a task that repeats the project name', () => {
-    const plain = { ...descriptor('0000000a', 1), projectRoot: '/personal' }
-    expect(sessionTitle({ ...plain, name: 'personal workspace' }, projects)).toBe(
-      'Personal Workspace',
-    )
+    expect(sessionTitle(plain)).toBe('Session 4')
+    expect(sessionTitle({ ...plain, displayTitle: 'Aico — Review' })).toBe('Aico — Review')
+    expect(sessionTitle({ ...plain, displayTitle: '  ' })).toBe('Session 4')
   })
 })
 
 describe('coordinator chips', () => {
-  const projects = {
-    nameFor: (id: string | null) => (id === 'aico' ? 'Aico' : id === 'a-term' ? 'A-Term' : null),
-  }
-  const lead = { ...descriptor('0000000a', 1), projectId: 'a-term', name: 'Session badges' }
-  const sessions = new Map<string, SessionDescriptor>([[lead.id, lead as SessionDescriptor]])
-  const lookup = (id: string) => sessions.get(id)
-
-  it('labels a coordinator and its lanes in the coordinator colour', () => {
-    expect(
-      coordinatorChip(
-        { ...lead, coordinator: true, coordinatorColor: '#f0a35e' },
-        lookup,
-        projects,
-      ),
-    ).toEqual({ text: 'Coordinator', color: '#f0a35e' })
-    const lane = {
-      ...descriptor('0000000b', 2),
-      projectId: 'aico',
-      coordinatorId: lead.id,
-      coordinatorColor: '#f0a35e',
-    }
-    expect(coordinatorChip(lane, lookup, projects)).toEqual({
-      text: '↳ Session badges',
+  it("shows Tether's badge as it is", () => {
+    const plain = descriptor('0000000c', 3)
+    expect(coordinatorChip(plain)).toBeNull()
+    const badge = { kind: 'child' as const, text: '↳ Personal Workspace', color: '#f0a35e' }
+    expect(coordinatorChip({ ...plain, badge })).toEqual({
+      text: '↳ Personal Workspace',
       color: '#f0a35e',
     })
   })
 
-  it("names the lane's coordinator by its task, else its project, else Coordinator", () => {
-    const lane = { ...descriptor('0000000b', 2), coordinatorId: lead.id }
-    sessions.set(lead.id, { ...lead, name: 'a-term' })
-    expect(coordinatorChip(lane, lookup, projects)?.text).toBe('↳ A-Term')
-    sessions.set(lead.id, { ...lead, name: null, projectId: null })
-    expect(coordinatorChip(lane, lookup, projects)?.text).toBe('↳ Coordinator')
-    expect(coordinatorChip({ ...lane, coordinatorId: 'ffffffff' }, lookup, projects)?.text).toBe(
-      '↳ Coordinator',
-    )
-  })
-
-  it('falls back to the default colour and shows nothing for other sessions', () => {
+  it('drops a badge that is not well formed', () => {
     const plain = descriptor('0000000c', 3)
-    expect(coordinatorChip(plain, lookup, projects)).toBeNull()
-    expect(coordinatorChip({ ...plain, coordinator: true }, lookup, projects)?.color).toBe(
-      '#6fa8ff',
-    )
+    const coordinator = { kind: 'coordinator' as const, text: 'Coordinator', color: 'red' }
+    expect(coordinatorChip({ ...plain, badge: coordinator })).toBeNull()
     expect(
-      coordinatorChip({ ...plain, coordinator: true, coordinatorColor: 'red' }, lookup, projects)
-        ?.color,
-    ).toBe('#6fa8ff')
+      coordinatorChip({ ...plain, badge: { ...coordinator, color: '#6fa8ff', text: ' ' } }),
+    ).toBeNull()
   })
 })
 

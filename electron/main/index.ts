@@ -326,7 +326,7 @@ function writeLayout(): void {
     const bounds = w.getBounds()
     windows.push({
       id,
-      name: descriptor ? sessionTitle(descriptor, projects) : id,
+      name: descriptor ? sessionTitle(descriptor) : id,
       bounds,
       displayId: String(screen.getDisplayMatching(bounds).id),
       focused: w === focused,
@@ -1211,7 +1211,7 @@ async function confirmTrayDiscard(id: string): Promise<void> {
     cancelId: 0,
     noLink: true,
     title: 'End session?',
-    message: `End ${traySessionLabel(sessionTitle(descriptor, projects), toolDisplayName(descriptor.tool, tools))}?`,
+    message: `End ${traySessionLabel(sessionTitle(descriptor), toolDisplayName(descriptor.tool, tools))}?`,
     detail: 'Tether stops only this session’s verified workload. This cannot be undone.',
   })
   if (response.response === 1) discardWidget(id)
@@ -1307,7 +1307,7 @@ const attention = new Attention({
   push: (id) => {
     const descriptor = catalog.get(id)
     if (!descriptor) return
-    const title = sessionTitle(descriptor, projects)
+    const title = sessionTitle(descriptor)
     const agent = agentName(descriptor.stateSource, toolDisplayName(descriptor.tool, tools))
     // Nightshift's own Web Push to the owner's PWA; Aico keeps the per-session cooldown.
     execFile(
@@ -1385,10 +1385,7 @@ function syncTray(): void {
   const rows = groupRows(catalog.list(), attention, Date.now())
   const widgets: TrayWidget[] = rows.map(({ item: descriptor, group, detail }) => ({
     id: descriptor.id,
-    label: traySessionLabel(
-      sessionTitle(descriptor, projects),
-      toolDisplayName(descriptor.tool, tools),
-    ),
+    label: traySessionLabel(sessionTitle(descriptor), toolDisplayName(descriptor.tool, tools)),
     open: windowForWidget(descriptor.id) !== undefined,
     group,
     detail,
@@ -1479,7 +1476,7 @@ function pushTitles(): void {
     const mark = toolMark(descriptor.tool, tool?.color)
     pushContextBadge(win, descriptor)
     win.webContents.send('win:title', {
-      label: sessionTitle(descriptor, projects),
+      label: sessionTitle(descriptor),
       name: descriptor.name, // prefills the rename input
       icon: mark.icon,
       accent: mark.accent,
@@ -1487,7 +1484,7 @@ function pushTitles(): void {
       tuiSlug: descriptor.tool,
       sessionId: descriptor.tmux.sessionId,
       coordinator: descriptor.coordinator ?? false,
-      chip: coordinatorChip(descriptor, (lead) => catalog.get(lead), projects),
+      chip: coordinatorChip(descriptor),
     })
     retileOnCoordinatorChange(win, descriptor.coordinator ?? false)
   }
@@ -2146,7 +2143,7 @@ const startup = app.whenReady().then(async () => {
       .map((descriptor) => ({
         id: descriptor.id,
         origin: descriptor.origin,
-        label: sessionTitle(descriptor, projects),
+        label: sessionTitle(descriptor),
         project: projects.nameFor(descriptor.projectId, descriptor.projectRoot),
         tool: toolDisplayName(descriptor.tool, tools),
         status: 'running' as const,
