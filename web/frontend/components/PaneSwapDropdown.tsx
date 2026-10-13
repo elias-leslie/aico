@@ -373,9 +373,11 @@ export function PaneSwapDropdown({
                             : 'transparent',
                         }}
                       >
-                        <span className="flex min-w-0 items-center gap-2">
-                          <CoordinatorBadge badge={slot.badge} />
-                          <span className="min-w-0 truncate">{label}</span>
+                        <span className="flex min-w-0 flex-col items-start gap-1">
+                          <span className="min-w-0 max-w-full truncate">
+                            {label}
+                          </span>
+                          <CoordinatorBadge badge={slot.badge} ownLine />
                         </span>
                         <span className="ml-3 flex shrink-0 items-center gap-2">
                           <AttentionBadge attention={state} />
