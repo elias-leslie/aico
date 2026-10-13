@@ -95,15 +95,17 @@ export const UnifiedATermHeaderContent = memo(
     const shouldShowClean = showCleanButton && isAgentMode
     const slotId = getSlotPanelId(slot)
     const slotName = getSlotName(slot)
+    // A Tether session with a task or coordinator chip shows the title Aico
+    // shows (`Project — Task`) in place of the project switcher: the title
+    // already names the project, and both do not fit a pane header.
+    const showsSessionTitle =
+      !!rootSessionId || (!!slot.isTether && (!!slot.task || !!slot.badge))
     const showProjectSwitcher =
-      !isMobile && slot.type === 'project' && !!onProjectSwitch
-    // The switcher shows the project; a Tether session's task or coordinator
-    // chip still needs the title Aico shows (`Project — Task`).
-    const showHeaderName =
-      isMobile ||
-      !showProjectSwitcher ||
-      !!rootSessionId ||
-      (!!slot.isTether && (!!slot.task || !!slot.badge))
+      !isMobile &&
+      slot.type === 'project' &&
+      !!onProjectSwitch &&
+      !showsSessionTitle
+    const showHeaderName = isMobile || !showProjectSwitcher
     const showStatusBadge = shouldShowPaneStatus(connectionStatus)
     const closePaneLabel = formatActionLabel(closeTooltip ?? 'Close view')
     const closePaneTooltip = `${closePaneLabel}. The session keeps running and can be opened again.`

@@ -8,6 +8,7 @@ import { type ATermSlot, getSlotName, type PaneSlot } from '@/lib/utils/slot'
 import { AttentionBadge } from '../AttentionBadge'
 import { CoordinatorBadge } from '../CoordinatorBadge'
 import { PaneSwapDropdown } from '../PaneSwapDropdown'
+import { SessionTitle } from '../SessionTitle'
 
 interface HeaderNameDisplayProps {
   slot: ATermSlot | PaneSlot
@@ -134,7 +135,7 @@ export const HeaderNameDisplay = memo(function HeaderNameDisplay({
         title={name}
       >
         <CoordinatorBadge badge={slot.badge} />
-        <span className="truncate">{name}</span>
+        <SessionTitle name={name} task={slot.task} />
         <ChevronDown className="w-3 h-3 flex-shrink-0" />
       </button>
     )
@@ -146,11 +147,11 @@ export const HeaderNameDisplay = memo(function HeaderNameDisplay({
     <span className="flex min-w-0 items-center gap-1.5">
       <CoordinatorBadge badge={slot.badge} />
       <span
-        className="flex items-center px-1.5 py-0.5 text-xs truncate max-w-[320px]"
+        className="flex min-w-0 items-center px-1.5 py-0.5 text-xs max-w-[320px]"
         style={{ color: textColor }}
         title={name}
       >
-        {name}
+        <SessionTitle name={name} task={slot.task} />
       </span>
       <AttentionBadge attention={attention.forSlot(slot)} />
     </span>

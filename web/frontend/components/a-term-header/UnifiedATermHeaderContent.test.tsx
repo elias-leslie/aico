@@ -122,14 +122,32 @@ describe('UnifiedATermHeaderContent', () => {
     },
   )
 
-  it('shows the root focus label alongside the project switcher', () => {
+  it('shows a lane title and chip in place of the project switcher', () => {
     render(
       <UnifiedATermHeaderContent
-        slot={{ ...makeProjectSlot('a', 'Alpha · Focus'), isRoot: true }}
+        slot={{
+          ...makeProjectSlot('a', 'Alpha — Focus'),
+          isTether: true,
+          task: 'Focus',
+          badge: { label: '↳ Lead', color: '#6fa8ff' },
+        }}
         onProjectSwitch={vi.fn()}
       />,
     )
-    expect(screen.getByText('Alpha · Focus')).toBeInTheDocument()
+    expect(screen.getByText('Focus')).toBeInTheDocument()
+    expect(screen.getByTestId('coordinator-badge')).toHaveTextContent('↳ Lead')
+    expect(
+      screen.queryByTestId('pane-project-switcher'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('keeps the project switcher for a session with no task or chip', () => {
+    render(
+      <UnifiedATermHeaderContent
+        slot={{ ...makeProjectSlot('a', 'Alpha'), isTether: true }}
+        onProjectSwitch={vi.fn()}
+      />,
+    )
     expect(screen.getByTestId('pane-project-switcher')).toBeInTheDocument()
   })
 

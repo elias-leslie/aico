@@ -25,6 +25,7 @@ import {
 } from '@/lib/utils/slot'
 import { AttentionBadge, NeedsYouCount } from './AttentionBadge'
 import { CoordinatorBadge } from './CoordinatorBadge'
+import { SessionTitle } from './SessionTitle'
 
 function getSlotMode(slot: ATermSlot | PaneSlot): string {
   if (slot.type === 'project') {
@@ -184,7 +185,7 @@ export function PaneSwapDropdown({
         title={currentName}
       >
         <CoordinatorBadge badge={currentSlot.badge} />
-        <span className="truncate">{currentName}</span>
+        <SessionTitle name={currentName} task={currentSlot.task} />
       </span>
     )
   }
@@ -226,7 +227,7 @@ export function PaneSwapDropdown({
         aria-expanded={isOpen}
       >
         <CoordinatorBadge badge={currentSlot.badge} />
-        <span className="truncate">{currentName}</span>
+        <SessionTitle name={currentName} task={currentSlot.task} />
         <NeedsYouCount count={needsYouCount} />
         <ChevronDown
           className={clsx(
