@@ -66,54 +66,6 @@ let agentsWorking = false
  * menu on setContextMenu and collapses one the owner has open, so an
  * unchanged catalog must not republish it. */
 let menuKey = ''
-/** True while the native menu is open; changes wait for it to close, since
- * republishing it collapses the open menu and its submenus. */
-let menuOpen = false
-let menuOpenTimer: NodeJS.Timeout | null = null
-let pendingWidgets: TrayWidget[] | null = null
-
-/** Publish `menu`, tracking when the owner has it open. */
-function publishMenu(menu: Menu): void {
-  if (typeof menu.on === 'function') {
-    menu.on('menu-will-show', () => {
-      console.log('[aico:tray] menu-will-show')
-      menuOpen = true
-      // A close the desktop never reports must not freeze the menu for good.
-      if (menuOpenTimer) clearTimeout(menuOpenTimer)
-      menuOpenTimer = setTimeout(menuClosed, 60_000)
-      menuOpenTimer.unref?.()
-    })
-    menu.on('menu-will-close', () => {
-      console.log('[aico:tray] menu-will-close')
-      menuClosed()
-    })
-  }
-  tray?.setContextMenu(menu)
-}
-
-function menuClosed(): void {
-  menuOpen = false
-  if (menuOpenTimer) clearTimeout(menuOpenTimer)
-  menuOpenTimer = null
-  const widgets = pendingWidgets
-  pendingWidgets = null
-  if (widgets) publishIfChanged(widgets)
-}
-
-function publishIfChanged(widgets: TrayWidget[]): void {
-  const key = JSON.stringify([widgets, tools, projects, unavailable])
-  if (key === menuKey) return
-  if (menuOpen) {
-    pendingWidgets = widgets
-    return
-  }
-  console.log(
-    '[aico:tray] republish',
-    JSON.stringify(widgets.map((w) => [w.label.slice(0, 18), w.group, w.detail, w.open])),
-  )
-  menuKey = key
-  publishMenu(buildMenu(widgets))
-}
 
 function buildMenu(widgets: TrayWidget[]): Menu {
   const h = handlers
@@ -192,7 +144,7 @@ export function createTray(
   }
   tray = new Tray(idleImage)
   tray.setToolTip('Aico')
-  publishMenu(buildMenu([]))
+  tray.setContextMenu(buildMenu([]))
   menuKey = ''
   shownIcon = 'idle'
 }
@@ -210,7 +162,11 @@ export function refreshTray(
   projects = newWidgetProjects
   unavailable = notice
   agentsWorking = widgets.some((w) => w.group === 'working')
-  publishIfChanged(widgets)
+  const key = JSON.stringify([widgets, tools, projects, unavailable])
+  if (key !== menuKey) {
+    menuKey = key
+    tray?.setContextMenu(buildMenu(widgets))
+  }
   syncIcon()
 }
 
