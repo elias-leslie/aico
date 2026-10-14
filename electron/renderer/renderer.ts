@@ -118,23 +118,23 @@ host.addEventListener(
 // live tmux view has no local history: xterm's fallback would synthesize
 // Up/Down input instead, including before session identity arrives or while
 // scrollback is closing. Mouse-reporting applications use xterm's separate
-// mouse-event path. Control mode decides here, from xterm's own state.
+// mouse-event path. Control mode routes the wheel in that same capture handler
+// (controlWheel) and leaves xterm only the mouse reports it encodes itself.
 let sgrMouse = () => false
-term.attachCustomWheelEventHandler((e) => (controlMode ? controlWheel(e) : false))
+term.attachCustomWheelEventHandler(() => controlMode)
 
+/** Control mode: act on a wheel event, or return false to leave it to xterm. */
 function controlWheel(e: WheelEvent): boolean {
-  if (e.deltaY === 0) return true
   const action = controlWheelAction({
     mouseTracking: mouseReportingActive(term),
     sgrMouse: sgrMouse(),
     alternateScreen: term.buffer.active.type === 'alternate',
   })
-  if (action === 'xterm-report') return true
-  e.preventDefault()
+  if (action === 'xterm-report') return false
   if (action === 'forward-sgr') forwardWheel(e)
-  // Same speed as the attach-mode overlay, rather than xterm's own.
+  // Same speed as the attach-mode overlay; xterm's own is ~3 lines a notch.
   else if (action === 'scroll') term.scrollLines(wheelLineDelta(e.deltaY))
-  return false
+  return true
 }
 
 /** Send a wheel event to the program as SGR reports, one per notch's worth. */
@@ -890,8 +890,15 @@ function applyWheel(
 host.addEventListener(
   'wheel',
   (e) => {
-    // Control mode: xterm's wheel handler (controlWheel) decides.
-    if (controlMode || e.deltaY === 0) return
+    if (e.deltaY === 0) return
+    // Ahead of xterm, whose viewport scrolls its history at its own speed.
+    if (controlMode) {
+      if (!controlWheel(e)) return
+      e.preventDefault()
+      e.stopPropagation()
+      e.stopImmediatePropagation()
+      return
+    }
 
     // Wheel-up mid-drag carries the selection into history.
     if (e.deltaY < 0 && liveDrag && continueDragInHistory(e)) {
