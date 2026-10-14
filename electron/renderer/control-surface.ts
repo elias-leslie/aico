@@ -326,6 +326,7 @@ function newTuiRow(t: TuiInfo): HTMLElement {
   item.addEventListener('click', (e) => {
     e.stopPropagation()
     populateNewProjects(t.slug, true)
+    replaceSubmenu() // the workspace list is longer than the TUI list
   })
   return item
 }
@@ -361,6 +362,7 @@ function populateNewProjects(slug: string, withBack: boolean): void {
     back.addEventListener('click', (e) => {
       e.stopPropagation() // same as newTuiRow: repopulating wipes this row, so don't let the bubble close the menu
       populateSubmenu('new')
+      replaceSubmenu()
     })
     submenuEl.append(back)
   }
@@ -473,10 +475,15 @@ let submenuStandalone = false
 // Position the flyout against `anchor`, clamped inside the shell. 'left' hugs the
 // row (the menu sits at the right edge), with a 2px overlap that kills the hover
 // dead-zone; 'below' centers under a titlebar control (pinned icon / glyph).
+// A list taller than the shell scrolls inside the flyout instead of running off
+// its bottom edge.
+let lastPlacement: { anchor: HTMLElement; placement: 'left' | 'below' } | null = null
 function placeSubmenu(anchor: HTMLElement, placement: 'left' | 'below'): void {
+  lastPlacement = { anchor, placement }
   const shell = submenuEl.offsetParent as HTMLElement | null
   if (!shell) return
   const s = shell.getBoundingClientRect()
+  submenuEl.style.maxHeight = `${Math.max(0, s.height - 12)}px`
   const r = anchor.getBoundingClientRect()
   const w = submenuEl.offsetWidth
   const h = submenuEl.offsetHeight
@@ -486,6 +493,12 @@ function placeSubmenu(anchor: HTMLElement, placement: 'left' | 'below'): void {
   top = Math.max(6, Math.min(top, s.height - h - 6))
   submenuEl.style.left = `${left}px`
   submenuEl.style.top = `${top}px`
+}
+
+// Re-fit the flyout after its contents changed in place (a drill-down).
+function replaceSubmenu(): void {
+  if (lastPlacement) placeSubmenu(lastPlacement.anchor, lastPlacement.placement)
+  submenuEl.scrollTop = 0
 }
 
 // Open a `kind` flyout from its menu row (part of the lantern menu).
