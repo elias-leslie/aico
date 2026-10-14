@@ -98,6 +98,14 @@ export class ScrollbackOverlay {
   /** The window reaches the live bottom of the pane. */
   private atTail = false
   private pendingSeek: number | null = null
+  /** Repaints still writing the window into xterm. A repaint rewrites the
+   * whole buffer over several frames, and the view follows the half-written
+   * bottom meanwhile, so a scroll measured against it lands pages away: a
+   * wheel-up reads as the window's top and pages in older history, a
+   * wheel-down reads as the tail and closes the overlay. Scrolls asked for
+   * mid-repaint are held and applied once it lands. */
+  private paintsInFlight = 0
+  private heldScroll = 0
   private anchor: HistoryPoint | null = null
   private focus: HistoryPoint | null = null
   private selecting = false
@@ -174,7 +182,7 @@ export class ScrollbackOverlay {
   }
 
   private reportPosition(): void {
-    if (!this.active || !this.term) return
+    if (!this.active || !this.term || this.paintsInFlight > 0) return
     this.deps.onPosition?.({
       topLine: this.topLine(),
       rows: this.term.rows,
@@ -204,15 +212,22 @@ export class ScrollbackOverlay {
     this.host.style.display = 'block'
     if (term.cols !== cols || term.rows !== rows) term.resize(cols, rows)
 
+    this.paintsInFlight += 1
     term.reset()
     term.write(writeText(this.lines), () => {
       if (!this.active || generation !== this.generation) return
+      this.paintsInFlight -= 1
+      if (this.paintsInFlight > 0) return // a newer repaint will place the view
       if (topLine === undefined) term.scrollToBottom()
       else term.scrollToLine(Math.max(0, topLine - this.fromLine))
       this.applySelection()
       refreshViewport(term)
       this.reportPosition()
       afterPaint?.()
+      const held = this.heldScroll
+      this.heldScroll = 0
+      if (held !== 0) this.scrollBy(held)
+      if (this.selecting) this.extendToPointer()
     })
   }
 
@@ -228,9 +243,10 @@ export class ScrollbackOverlay {
     this.loading = true
     try {
       const count = Math.min(PAGE_LINES, this.fromLine)
-      const keepTop = this.topLine()
       const page = await this.fetch({ fromLine: this.fromLine - count, count })
       if (!page || !this.active) return
+      // Measured on arrival so a scroll made during the fetch is kept.
+      const keepTop = this.topLine()
       const older = splitCaptureLines(page.text)
       if (!older.length) return
       const merged = prependWindow(this.lines, older, WINDOW_LINES)
@@ -251,10 +267,10 @@ export class ScrollbackOverlay {
     const generation = this.generation
     this.loading = true
     try {
-      const keepTop = this.topLine()
       const start = this.windowEnd
       const page = await this.fetch({ fromLine: start, count: PAGE_LINES })
       if (!page || !this.active) return
+      const keepTop = this.topLine()
       const reachesTail = page.fromLine + PAGE_LINES >= page.totalLines
       const newer = reachesTail ? tailPageLines(page) : splitCaptureLines(page.text)
       const merged = appendWindow(this.lines, newer, WINDOW_LINES)
@@ -274,6 +290,11 @@ export class ScrollbackOverlay {
   private scrollBy(delta: number): void {
     const term = this.term
     if (!term || delta === 0) return
+    if (this.paintsInFlight > 0) {
+      // Bounded to a screen so a drag's autoscroll cannot pile up a long jump.
+      this.heldScroll = Math.max(-term.rows, Math.min(term.rows, this.heldScroll + delta))
+      return
+    }
     const buf = term.buffer.active
     if (delta < 0 && buf.viewportY + delta < 0 && this.fromLine > 0) {
       term.scrollToTop()
@@ -298,7 +319,8 @@ export class ScrollbackOverlay {
 
     const buf = term.buffer.active
     const atBottom = buf.viewportY >= buf.baseY
-    if (e.deltaY > 0 && atBottom && this.atTail && !this.selecting) {
+    const settled = this.paintsInFlight === 0
+    if (settled && e.deltaY > 0 && atBottom && this.atTail && !this.selecting) {
       this.dismiss()
       return
     }
@@ -375,6 +397,9 @@ export class ScrollbackOverlay {
   }
 
   private extendToPointer(): void {
+    // Mid-repaint the view is not where the window says; the repaint's own
+    // landing re-extends the selection.
+    if (this.paintsInFlight > 0) return
     const point = this.pointAt(this.pointer.x, this.pointer.y)
     if (!point) return
     this.focus = point
@@ -625,6 +650,8 @@ export class ScrollbackOverlay {
     this.entering = false
     this.loading = false
     this.pendingSeek = null
+    this.paintsInFlight = 0
+    this.heldScroll = 0
     this.endDrag()
     this.anchor = null
     this.focus = null

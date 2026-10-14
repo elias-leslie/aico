@@ -3,6 +3,15 @@ import type { ScrollbackPage } from '../types'
 import { ScrollbackOverlay, trimTrailingBlankLines } from './scrollback-overlay'
 
 const writes = vi.hoisted(() => [] as string[])
+// Set to hold xterm writes in flight, as a long repaint does across frames.
+const held = vi.hoisted(() => ({ writes: false, done: [] as (() => void)[] }))
+const terms = vi.hoisted(
+  () =>
+    [] as {
+      scrollLines: (n: number) => void
+      buffer: { active: { viewportY: number; baseY: number } }
+    }[],
+)
 
 vi.mock('@xterm/xterm', () => ({
   Terminal: class {
@@ -10,6 +19,9 @@ vi.mock('@xterm/xterm', () => ({
     rows = 24
     buffer = { active: { viewportY: 0, baseY: 0, getLine: () => undefined } }
     options = { fontFamily: '', fontSize: 0 }
+    constructor() {
+      terms.push(this)
+    }
     loadAddon() {}
     open() {}
     onScroll() {}
@@ -18,7 +30,8 @@ vi.mock('@xterm/xterm', () => ({
     reset() {}
     write(text: string, done: () => void) {
       writes.push(text)
-      done()
+      if (held.writes) held.done.push(done)
+      else done()
     }
     scrollToLine() {}
     scrollToBottom() {}
@@ -83,15 +96,16 @@ function fixture(
     },
     { appendChild: vi.fn() } as unknown as HTMLElement,
   )
-  const wheelUp = () => {
-    const wheel = {
-      deltaY: -1,
+  const wheel = (deltaY: number) => {
+    const event = {
+      deltaY,
       preventDefault: vi.fn(),
       stopPropagation: vi.fn(),
       stopImmediatePropagation: vi.fn(),
     }
-    listeners.get('wheel')?.(wheel as unknown as Event)
+    listeners.get('wheel')?.(event as unknown as Event)
   }
+  const wheelUp = () => wheel(-1)
   const pressEscape = () => {
     const event = {
       key: 'Escape',
@@ -102,10 +116,15 @@ function fixture(
     windowListeners.get('keydown')?.(event as unknown as Event)
     return event
   }
-  return { overlay, host, onDismiss, wheelUp, pressEscape, windowListeners }
+  return { overlay, host, onDismiss, wheel, wheelUp, pressEscape, windowListeners }
 }
 
-beforeEach(() => writes.splice(0))
+beforeEach(() => {
+  writes.splice(0)
+  terms.splice(0)
+  held.writes = false
+  held.done.splice(0)
+})
 afterEach(() => vi.unstubAllGlobals())
 
 describe('scrollback capture trimming', () => {
@@ -215,5 +234,37 @@ describe('scrollback overlay pending captures', () => {
     } finally {
       warn.mockRestore()
     }
+  })
+})
+
+describe('scrollback overlay wheel during a repaint', () => {
+  const tail = { fromLine: 5000, totalLines: 10_000, historySize: 9976, text: 'tail\n' }
+
+  it('does not close the overlay on a wheel-down while the window is still being written', async () => {
+    const { overlay, wheel, onDismiss } = fixture(vi.fn().mockResolvedValue(tail))
+    held.writes = true
+    await overlay.enter(0)
+    const scrollLines = vi.spyOn(terms[0], 'scrollLines')
+    wheel(100)
+    expect(onDismiss).not.toHaveBeenCalled()
+    expect(scrollLines).not.toHaveBeenCalled()
+    held.done.shift()?.()
+    expect(scrollLines).toHaveBeenCalledWith(14)
+    expect(onDismiss).not.toHaveBeenCalled()
+  })
+
+  it('holds a wheel-up until the repaint lands instead of paging in older history', async () => {
+    const capturePage = vi.fn().mockResolvedValue(tail)
+    const { overlay, wheel } = fixture(capturePage)
+    held.writes = true
+    await overlay.enter(0)
+    const scrollLines = vi.spyOn(terms[0], 'scrollLines')
+    terms[0].buffer.active = { ...terms[0].buffer.active, viewportY: 4000, baseY: 4976 }
+    wheel(-100)
+    wheel(-100)
+    expect(capturePage).toHaveBeenCalledTimes(1)
+    held.done.shift()?.()
+    // Two notches of 14 lines, capped at a screen (24 rows).
+    expect(scrollLines).toHaveBeenCalledWith(-24)
   })
 })
