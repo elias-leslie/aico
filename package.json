@@ -25,6 +25,7 @@
     "@electron/rebuild": "^4.0.4",
     "@resvg/resvg-js": "^2.6.2",
     "@types/node": "^22.19.7",
+    "@xterm/headless": "6.0.0",
     "electron": "^42.2.0",
     "electron-builder": "^26.15.2",
     "electron-vite": "^5.0.0",
