@@ -11,11 +11,22 @@ contextBridge.exposeInMainWorld('aico', {
     /** Ask tmux to re-send its authoritative grid (manual Refresh). Carries the
      * renderer's live grid size so main can re-pair a drifted pty first. */
     refresh: (size: { cols: number; rows: number }) => ipcRenderer.send('pty:refresh', size),
+    /** Control-mode windows paste through tmux (bracketed when the program asks). */
+    paste: (text: string) => ipcRenderer.send('pty:paste', text),
     onData: (cb: (data: string) => void) => {
       const listener = (_event: unknown, data: string) => cb(data)
       ipcRenderer.on('pty:data', listener)
       return () => ipcRenderer.removeListener('pty:data', listener)
     },
+  },
+  terminal: {
+    /** This window's terminal transport, fixed until the window reloads. */
+    transport: (): Promise<'attach' | 'control'> => ipcRenderer.invoke('terminal:transport'),
+    /** The transport new windows (and reloads) will use. */
+    transportSetting: (): Promise<'attach' | 'control'> =>
+      ipcRenderer.invoke('terminal:transport-setting'),
+    /** Switch every window to the other transport; each reloads and reattaches. */
+    toggleTransport: () => ipcRenderer.send('terminal:toggle-transport'),
   },
   links: {
     /** Open an http(s) URL in the default browser. */

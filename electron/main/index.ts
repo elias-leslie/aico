@@ -15,7 +15,7 @@ import {
   session,
   shell,
 } from 'electron'
-import { type IPty, spawn } from 'node-pty'
+import { spawn } from 'node-pty'
 import { parseTerminalFontSettings } from '../shared/font-settings'
 import { cursorNearTitlebar, nextArcade, parseArcadeKeys, pickArcade } from './arcade'
 import {
@@ -76,6 +76,7 @@ import {
   TetherUnavailable,
   tetherSocketPath,
 } from './tether-client'
+import { ControlTerminal, type TerminalLink } from './tmux-control'
 import { coalesceAsync, coalesceTrailingAsync, refreshAttachedClients } from './tmux-view'
 import { toolMark } from './tool-marks'
 import { createTray, refreshTray, setNeedsYou, setWidgetActivity, type TrayWidget } from './tray'
@@ -108,10 +109,22 @@ let tetherIncompatible: string | null = null
 let tools: TetherTool[] = []
 let restored = false
 
-// One node-pty per open window, and the attach target it was started from.
-const ptys = new Map<number, IPty>()
+// One terminal link per open window, and the attach target it was started from.
+// A link is either a node-pty running `tmux attach` or a tmux control-mode
+// client (tmux-control.ts); the terminal-transport setting picks which.
+const ptys = new Map<number, TerminalLink>()
 const attachTargets = new Map<number, AttachTarget>()
-const sizeClaims = new WeakMap<IPty, () => Promise<void>>()
+const sizeClaims = new WeakMap<TerminalLink, () => Promise<void>>()
+// The transport each window's renderer was told at load, so its terminal and
+// its link agree until the window reloads.
+type TerminalTransport = 'attach' | 'control'
+const transportOf = new Map<number, TerminalTransport>()
+const TRANSPORT_SETTING = 'terminal-transport'
+function configuredTransport(): TerminalTransport {
+  const forced = process.env.AICO_TERMINAL_TRANSPORT
+  if (forced === 'attach' || forced === 'control') return forced
+  return getSetting(TRANSPORT_SETTING) === 'control' ? 'control' : 'attach'
+}
 // Windows Aico itself just resized (tiling, re-tiling, an agent's position):
 // their next terminal resize claims the tmux size even while unfocused, or the
 // grown window would show the old grid in a sea of dots until clicked.
@@ -123,7 +136,7 @@ function setArrangedBounds(win: BrowserWindow, bounds: Electron.Rectangle): void
 const ptyStartGenerations = new Map<number, number>()
 const ptyRefreshes = new Map<
   number,
-  { pty: IPty | undefined; generation: number | undefined; request: Promise<void> }
+  { pty: TerminalLink | undefined; generation: number | undefined; request: Promise<void> }
 >()
 // BrowserWindow.id -> Tether session id. A window opened for a new session has
 // no id until Tether creates it at the window's first grid size.
@@ -756,13 +769,7 @@ async function startPty(win: BrowserWindow, size: PtySize): Promise<void> {
   }
   if (!stillCurrent() || widgetOf.get(winId) !== widgetId) return
   const id = widgetId
-  const pty = spawn(target.argv[0], target.argv.slice(1), {
-    name: 'xterm-256color',
-    cols: size.cols,
-    rows: size.rows,
-    cwd: process.env.HOME,
-    env: attachEnvironment(process.env, target),
-  })
+  const pty = openLink(winId, target, size)
   if (!stillCurrent()) {
     pty.kill()
     return
@@ -819,6 +826,27 @@ async function startPty(win: BrowserWindow, size: PtySize): Promise<void> {
   ptys.set(winId, pty)
   attachTargets.set(winId, target)
   if (win.isFocused()) void claimSize()
+}
+
+/** The window's terminal link: a control-mode client when its renderer runs
+ * the control transport, else a PTY running Tether's `tmux attach` argv. */
+function openLink(winId: number, target: AttachTarget, size: PtySize): TerminalLink {
+  const env = attachEnvironment(process.env, target)
+  if (transportOf.get(winId) === 'control') {
+    try {
+      return new ControlTerminal(target.argv, env, size)
+    } catch (error) {
+      console.warn('[aico] control-mode attach unavailable, using tmux attach:', error)
+      transportOf.set(winId, 'attach')
+    }
+  }
+  return spawn(target.argv[0], target.argv.slice(1), {
+    name: 'xterm-256color',
+    cols: size.cols,
+    rows: size.rows,
+    cwd: process.env.HOME,
+    env,
+  })
 }
 
 /** Attach a legacy A-Term session. Tether gives no generation for it, so there
@@ -902,7 +930,7 @@ function resumeAwaitingAttaches(): void {
   }
 }
 
-function ptyFor(sender: Electron.WebContents): IPty | undefined {
+function ptyFor(sender: Electron.WebContents): TerminalLink | undefined {
   const win = BrowserWindow.fromWebContents(sender)
   return win ? ptys.get(win.id) : undefined
 }
@@ -1104,6 +1132,7 @@ function createWidgetWindow(
     pendingCreates.delete(winId)
     awaitingTether.delete(winId)
     attachTargets.delete(winId)
+    transportOf.delete(winId)
     ptyStartGenerations.delete(winId)
     blurredWins.delete(winId)
     arcadeOf.delete(winId)
@@ -1822,6 +1851,37 @@ const startup = app.whenReady().then(async () => {
     ptyFor(event.sender)?.write(data)
   })
 
+  // Control-mode windows paste through tmux, which brackets the paste only
+  // when the program asked for bracketed paste.
+  ipcMain.on('pty:paste', (event, text: unknown) => {
+    if (typeof text !== 'string' || text.length === 0) return
+    const widgetId = widgetIdFor(event.sender)
+    if (!widgetId || replacing.has(widgetId)) return
+    const link = ptyFor(event.sender)
+    if (link instanceof ControlTerminal) link.paste(text)
+    else link?.write(text)
+  })
+
+  // The renderer asks once, before it starts its terminal; the answer holds
+  // for this window until it reloads. Legacy A-Term sessions stay on attach.
+  ipcMain.handle('terminal:transport', (event): TerminalTransport => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return 'attach'
+    const transport = legacyOf.has(win.id) ? 'attach' : configuredTransport()
+    transportOf.set(win.id, transport)
+    return transport
+  })
+  ipcMain.handle('terminal:transport-setting', () => configuredTransport())
+  // Switch every window: each reloads and reattaches on the other transport.
+  // Sessions are untouched; only the views reattach.
+  ipcMain.on('terminal:toggle-transport', () => {
+    setSetting(TRANSPORT_SETTING, configuredTransport() === 'control' ? 'attach' : 'control')
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed() && (widgetOf.has(win.id) || legacyOf.has(win.id)))
+        win.webContents.reload()
+    }
+  })
+
   ipcMain.on('pty:resize', (event, size: PtySize) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     const pty = ptyFor(event.sender)
@@ -1875,6 +1935,10 @@ const startup = app.whenReady().then(async () => {
       !replacing.has(widgetId)
     const request = (async () => {
       if (pty) await sizeClaims.get(pty)?.()
+      if (pty instanceof ControlTerminal) {
+        if (isCurrent()) pty.reseed()
+        return
+      }
       if (target && attached && isCurrent())
         await refreshAttachedClients(attached, (args) => runTmux(target, args), isCurrent)
     })()

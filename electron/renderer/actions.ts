@@ -193,6 +193,15 @@ export const ACTIONS: Action[] = [
     run: () => window.dispatchEvent(new CustomEvent('aico:refresh')),
   },
   {
+    id: 'terminal-transport-toggle',
+    section: 'Session',
+    label: 'Switch scrollback mode',
+    shortcut: '',
+    icon: '⇅',
+    note: 'Switches every window between the new scrollback, where the terminal keeps its own history, and the old tmux history overlay. Windows reload; sessions keep running.',
+    run: () => window.aico.terminal.toggleTransport(),
+  },
+  {
     // Flyout-only host (no run): hovering opens the "Open workspace ▸" picker.
     // Each choice rebinds THIS widget and respawns its pane there; it does not
     // move the global `st` pointer. Destructive (restarts the agent), so no

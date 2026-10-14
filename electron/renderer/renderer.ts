@@ -21,6 +21,12 @@ import {
 } from './actions'
 import { type Arcade, GAMES, startArcade } from './arcade'
 import { initControlSurface } from './control-surface'
+import {
+  CONTROL_SCROLLBACK_LINES,
+  controlWheelAction,
+  swallowQueryReplies,
+  trackSgrMouse,
+} from './control-view'
 import { wireDraftInput } from './draft-input'
 import { Eyes } from './eyes'
 import { urlAt } from './links'
@@ -51,13 +57,17 @@ let fontSize = terminalFontSettings.fontSize
 let tuiSlug = 'shell'
 let terminalLayoutReady = false
 let terminalLayoutTimer: number | undefined
+// Control mode feeds xterm the pane's own output, so xterm keeps the history
+// and the program's modes itself; attach mode shows tmux's redraws and reads
+// history through the overlay. Fixed until the window reloads.
+const controlMode = (await window.aico.terminal.transport()) === 'control'
 
 const term = new Terminal({
   fontFamily,
   fontSize,
-  // Scrollback lives in tmux history (surfaced via the overlay), not here — the
-  // live view is tmux's alternate screen, which has no scrollback of its own.
-  scrollback: 0,
+  // Attach mode: scrollback lives in tmux history (surfaced via the overlay),
+  // not here — the live view is tmux's alternate screen, which has none.
+  scrollback: controlMode ? CONTROL_SCROLLBACK_LINES : 0,
   // A blinking xterm cursor kept every large transparent widget repainting even
   // when its session was idle; three visible 4K-scale windows held Chromium's
   // GPU process near one-third of a core. A static cursor preserves location
@@ -104,11 +114,44 @@ host.addEventListener(
   { capture: true },
 )
 
-// Wheel scrolling is routed by the capture handler below. The live tmux view
-// has no local history: xterm's fallback would synthesize Up/Down input instead,
-// including before session identity arrives or while scrollback is closing.
-// Mouse-reporting applications use xterm's separate mouse-event path.
-term.attachCustomWheelEventHandler(() => false)
+// Attach mode: wheel scrolling is routed by the capture handler below. The
+// live tmux view has no local history: xterm's fallback would synthesize
+// Up/Down input instead, including before session identity arrives or while
+// scrollback is closing. Mouse-reporting applications use xterm's separate
+// mouse-event path. Control mode decides here, from xterm's own state.
+let sgrMouse = () => false
+term.attachCustomWheelEventHandler((e) => (controlMode ? controlWheel(e) : false))
+
+function controlWheel(e: WheelEvent): boolean {
+  if (e.deltaY === 0) return true
+  const action = controlWheelAction({
+    mouseTracking: mouseReportingActive(term),
+    sgrMouse: sgrMouse(),
+    alternateScreen: term.buffer.active.type === 'alternate',
+  })
+  if (action === 'xterm-report') return true
+  e.preventDefault()
+  if (action === 'forward-sgr') forwardWheel(e)
+  // Same speed as the attach-mode overlay, rather than xterm's own.
+  else if (action === 'scroll') term.scrollLines(wheelLineDelta(e.deltaY))
+  return false
+}
+
+/** Send a wheel event to the program as SGR reports, one per notch's worth. */
+function forwardWheel(wheel: {
+  deltaY: number
+  deltaMode: number
+  clientX: number
+  clientY: number
+}): void {
+  const screen = terminalHost.querySelector<HTMLElement>('.xterm-screen')
+  const cellHeight = screen ? screen.clientHeight / Math.max(term.rows, 1) : 0
+  const ticks = wheelMouseTicks(wheel.deltaY, wheel.deltaMode, cellHeight, term.rows)
+  if (ticks === 0) return
+  const { column, row } = pointToCell(screen, term.cols, term.rows, wheel.clientX, wheel.clientY)
+  const sequence = sgrWheelSequence(wheel.deltaY > 0 ? 'down' : 'up', column, row)
+  for (let tick = 0; tick < ticks; tick += 1) window.aico.pty.input(sequence)
+}
 
 const fit = new FitAddon()
 term.loadAddon(fit)
@@ -477,6 +520,10 @@ try {
   webgl = undefined
 }
 fit.fit()
+if (controlMode) {
+  swallowQueryReplies(term)
+  sgrMouse = trackSgrMouse(term)
+}
 wireDraftInput(term, () => tuiSlug, scheduleTerminalLayoutFit)
 // Copies made inside the pane (Claude Code's own selection) arrive as OSC 52.
 term.parser.registerOscHandler(52, (data) => {
@@ -630,7 +677,12 @@ const pasteFromClipboard = createPasteGuard(
   async () =>
     (await window.aico.clipboard.read()) ||
     ((await window.aico.clipboard.hasImage()) ? IMAGE_PASTE : ''),
-  (text) => (text === IMAGE_PASTE ? window.aico.pty.input(IMAGE_PASTE) : term.paste(text)),
+  (text) => {
+    if (text === IMAGE_PASTE) window.aico.pty.input(IMAGE_PASTE)
+    // tmux pastes for a control-mode window, bracketed when the program asked.
+    else if (controlMode) window.aico.pty.paste(text)
+    else term.paste(text)
+  },
 )
 
 host.addEventListener('contextmenu', (event) => {
@@ -721,6 +773,13 @@ function readPaneMode(fresh = false): PaneMode | Promise<PaneMode> {
 }
 
 function paneOwnsSelection(): boolean {
+  if (controlMode) {
+    return programOwnsSelection({
+      tuiSlug,
+      alternateScreen: term.buffer.active.type === 'alternate',
+      mouseReporting: mouseReportingActive(term),
+    })
+  }
   return paneMode ? programOwnsSelection({ tuiSlug, ...paneMode }) : false
 }
 
@@ -744,6 +803,8 @@ function showLiveRail(mode: PaneMode): void {
 }
 
 async function refreshLiveRail(fresh = false): Promise<void> {
+  // Control mode scrolls xterm's own history; there is no tmux rail to show.
+  if (controlMode) return
   try {
     showLiveRail(await readPaneMode(fresh))
   } catch {
@@ -753,7 +814,7 @@ async function refreshLiveRail(fresh = false): Promise<void> {
 
 host.addEventListener('mouseenter', () => void refreshLiveRail())
 window.addEventListener('focus', () => void refreshLiveRail())
-void readPaneMode()
+if (!controlMode) void readPaneMode()
 
 // A drag selection on the live view can only cover the rows on screen. When it
 // runs off the top edge (or meets the wheel) in a pane whose history is in
@@ -777,6 +838,7 @@ host.addEventListener(
 
 function continueDragInHistory(e: MouseEvent): boolean {
   const anchor = liveDrag
+  if (controlMode) return false // xterm's own selection already reaches history
   if (!anchor || !(e.buttons & 1) || overlay.active || overlay.opening) return false
   if (!paneMode || paneMode.alternateScreen || paneOwnsSelection()) return false
   liveDrag = null
@@ -818,13 +880,7 @@ function applyWheel(
 
   // The TUI holds its own transcript (Claude Code): give it the wheel.
   if (action === 'forward') {
-    const screen = terminalHost.querySelector<HTMLElement>('.xterm-screen')
-    const cellHeight = screen ? screen.clientHeight / Math.max(term.rows, 1) : 0
-    const ticks = wheelMouseTicks(wheel.deltaY, wheel.deltaMode, cellHeight, term.rows)
-    if (ticks === 0) return
-    const { column, row } = pointToCell(screen, term.cols, term.rows, wheel.clientX, wheel.clientY)
-    const sequence = sgrWheelSequence(wheel.deltaY > 0 ? 'down' : 'up', column, row)
-    for (let tick = 0; tick < ticks; tick += 1) window.aico.pty.input(sequence)
+    forwardWheel(wheel)
     return
   }
 
@@ -834,7 +890,8 @@ function applyWheel(
 host.addEventListener(
   'wheel',
   (e) => {
-    if (e.deltaY === 0) return
+    // Control mode: xterm's wheel handler (controlWheel) decides.
+    if (controlMode || e.deltaY === 0) return
 
     // Wheel-up mid-drag carries the selection into history.
     if (e.deltaY < 0 && liveDrag && continueDragInHistory(e)) {
