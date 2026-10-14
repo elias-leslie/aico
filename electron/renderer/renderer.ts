@@ -18,6 +18,7 @@ import {
   type AicoToastDetail,
   setCoordinatorAction,
   setGameActions,
+  setTransportAction,
 } from './actions'
 import { type Arcade, GAMES, startArcade } from './arcade'
 import { initControlSurface } from './control-surface'
@@ -61,6 +62,9 @@ let terminalLayoutTimer: number | undefined
 // and the program's modes itself; attach mode shows tmux's redraws and reads
 // history through the overlay. Fixed until the window reloads.
 const controlMode = (await window.aico.terminal.transport()) === 'control'
+// The palette names the mode every window switches to; A-Term windows stay
+// classic whatever the setting, so ask for the setting, not this window.
+void window.aico.terminal.transportSetting().then(setTransportAction)
 
 const term = new Terminal({
   fontFamily,
