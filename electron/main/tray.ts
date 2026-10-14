@@ -107,6 +107,10 @@ function publishIfChanged(widgets: TrayWidget[]): void {
     pendingWidgets = widgets
     return
   }
+  console.log(
+    '[aico:tray] republish',
+    JSON.stringify(widgets.map((w) => [w.label.slice(0, 18), w.group, w.detail, w.open])),
+  )
   menuKey = key
   publishMenu(buildMenu(widgets))
 }
