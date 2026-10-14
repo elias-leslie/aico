@@ -62,6 +62,10 @@ const thinking = new Set<number>()
 let needsYou = false
 /** Some session's agent is working (Tether's state). */
 let agentsWorking = false
+/** What the published menu was built from. Linux replaces the whole native
+ * menu on setContextMenu and collapses one the owner has open, so an
+ * unchanged catalog must not republish it. */
+let menuKey = ''
 
 function buildMenu(widgets: TrayWidget[]): Menu {
   const h = handlers
@@ -141,6 +145,7 @@ export function createTray(
   tray = new Tray(idleImage)
   tray.setToolTip('Aico')
   tray.setContextMenu(buildMenu([]))
+  menuKey = ''
 }
 
 /** Rebuild the menu from Tether's session catalog (open + closed views), the
@@ -156,7 +161,11 @@ export function refreshTray(
   projects = newWidgetProjects
   unavailable = notice
   agentsWorking = widgets.some((w) => w.group === 'working')
-  tray?.setContextMenu(buildMenu(widgets))
+  const key = JSON.stringify([widgets, tools, projects, unavailable])
+  if (key !== menuKey) {
+    menuKey = key
+    tray?.setContextMenu(buildMenu(widgets))
+  }
   syncIcon()
 }
 

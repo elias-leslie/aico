@@ -58,6 +58,22 @@ describe('tray session catalog', () => {
     const menu = menus.at(-1) ?? []
     expect(menu[0]).toEqual({ label: 'Tether unavailable: sessions keep running', enabled: false })
   })
+
+  it('keeps an open native menu when the catalog has not changed', () => {
+    const rows = [
+      { id: 'a', label: 'a', open: true, group: 'working' as const, detail: 'working 3m' },
+    ]
+    refreshTray(rows, [], [])
+    menus.length = 0
+    refreshTray(
+      rows.map((row) => ({ ...row })),
+      [],
+      [],
+    )
+    expect(menus).toHaveLength(0)
+    refreshTray([{ ...rows[0], detail: 'working 4m' }], [], [])
+    expect(menus).toHaveLength(1)
+  })
 })
 
 describe('tray attention groups', () => {

@@ -1422,9 +1422,9 @@ function syncTray(): void {
   refreshTray(widgets, trayTools(), projects.list(), tetherNotice())
 }
 
-// Keep the tray's ages ("waiting 3m") current; the menu is otherwise rebuilt
-// only on events.
-setInterval(syncTray, 30_000).unref()
+// No periodic rebuild: republishing the native menu collapses it while the
+// owner is navigating it. Ages ("waiting 3m") refresh with the next real change
+// and whenever an Aico window gains focus.
 
 // Push titlebar info to every open window: the session's name (else its
 // workspace, else Tether's label), plus its tool's mark and accent. Changes
