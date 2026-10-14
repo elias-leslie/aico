@@ -146,6 +146,7 @@ export function createTray(
   tray.setToolTip('Aico')
   tray.setContextMenu(buildMenu([]))
   menuKey = ''
+  shownIcon = 'idle'
 }
 
 /** Rebuild the menu from Tether's session catalog (open + closed views), the
@@ -189,8 +190,15 @@ export function trayIcon(): TrayIcon {
   return thinking.size > 0 || agentsWorking ? 'active' : 'idle'
 }
 
+/** The icon last published. Each setImage/setToolTip makes the Linux tray
+ * re-announce the item and close a menu the owner has open, and activity
+ * toggles arrive several times a second, so publish only a change. */
+let shownIcon: TrayIcon | null = null
+
 function syncIcon(): void {
   const icon = trayIcon()
-  tray?.setImage(icon === 'needs-you' ? needsYouImage : icon === 'active' ? activeImage : idleImage)
-  tray?.setToolTip(icon === 'needs-you' ? 'Aico: a session needs you' : 'Aico')
+  if (!tray || icon === shownIcon) return
+  shownIcon = icon
+  tray.setImage(icon === 'needs-you' ? needsYouImage : icon === 'active' ? activeImage : idleImage)
+  tray.setToolTip(icon === 'needs-you' ? 'Aico: a session needs you' : 'Aico')
 }
