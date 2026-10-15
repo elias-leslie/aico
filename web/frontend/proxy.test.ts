@@ -94,6 +94,8 @@ describe('proxy', () => {
     ['%2F%2Fevil.example', 'http://localhost:3002/'],
     ['%2F%5Cevil.example', 'http://localhost:3002/'],
     ['https%3A%2F%2Fevil.example%2F', 'http://localhost:3002/'],
+    ['%2F.%2F%2Fevil.example', 'http://localhost:3002/'],
+    ['%2Fa%2F..%2F%2Fevil.example', 'http://localhost:3002/'],
   ])(
     'sends a signed-in /login?next=%s only to a same-origin path',
     async (next, location) => {

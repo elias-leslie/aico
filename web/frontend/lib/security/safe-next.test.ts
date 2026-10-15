@@ -19,6 +19,12 @@ describe('safeNextPath', () => {
     'https://evil.example/',
     'javascript:alert(1)',
     '/login?next=%2F',
+    '/.//evil.example',
+    '/..//evil.example',
+    '/a/..//evil.example',
+    '/%2e//evil.example',
+    '/%2E%2E//evil.example',
+    '/./\\evil.example',
   ])('falls back to / for %j', (next) => {
     expect(safeNextPath(next, BASE)).toBe('/')
   })

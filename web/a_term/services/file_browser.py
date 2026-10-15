@@ -52,16 +52,30 @@ EXTENSION_TO_LANGUAGE: dict[str, str] = {
 
 # Path parts the browser never lists or reads (secrets and keys), matched case-insensitively against every part of
 # both the requested path and the resolved target, so a symlink inside the root cannot point at one either. SSH key
-# names are spelled out so source files such as id_utils.py stay readable.
+# names are spelled out so source files such as id_utils.py stay readable. Hidden directories (.aws, .config, .claude,
+# .gnupg, ...) are refused as a whole, the same way listings leave them out, which covers a pane rooted at $HOME.
 DENIED_GLOBS: tuple[str, ...] = (
     ".git",
+    ".git-credentials",
     ".env*",
     ".ssh",
+    ".netrc",
+    ".pgpass",
+    ".npmrc",
+    ".pypirc",
+    ".*_history",
     "*.pem",
+    "*.key",
+    "*.p12",
+    "*.pfx",
     "id_rsa*",
     "id_dsa*",
     "id_ecdsa*",
     "id_ed25519*",
+    "credentials",
+    "credentials.json",
+    "*.credentials.json",
+    "auth.json",
 )
 SKIP_DIRS: frozenset[str] = frozenset(
     {
@@ -101,9 +115,11 @@ def is_denied(name: str) -> bool:
     return any(fnmatchcase(lowered, pattern) for pattern in DENIED_GLOBS)
 
 
-def _refuse_denied(parts: tuple[str, ...]) -> None:
-    for part in parts:
-        if is_denied(part):
+def _refuse_denied(parts: tuple[str, ...], *, last_is_dir: bool = True) -> None:
+    """Refuse denied names and hidden directories; every part but the last is a directory."""
+    for index, part in enumerate(parts):
+        is_dir = index < len(parts) - 1 or last_is_dir
+        if is_denied(part) or (is_dir and part.startswith(".")):
             raise PermissionError(f"Access denied: {part}")
 
 
@@ -115,7 +131,7 @@ def _safe_relative(relative_path: str) -> Path:
         raise PermissionError("Access denied: absolute paths are not allowed")
     if ".." in candidate.parts:
         raise PermissionError("Access denied: ..")
-    _refuse_denied(candidate.parts)
+    _refuse_denied(candidate.parts, last_is_dir=False)
     return candidate
 
 
@@ -125,7 +141,10 @@ def resolve_safe_path(root_path: str, relative_path: str) -> Path:
     target = (root / _safe_relative(relative_path)).resolve()
     if os.path.commonpath([str(root), str(target)]) != str(root):
         raise PermissionError("Access denied: path escapes pane root")
-    _refuse_denied(target.relative_to(root).parts)
+    is_dir = target.is_dir()
+    _refuse_denied(target.relative_to(root).parts, last_is_dir=is_dir)
+    if is_dir:
+        _refuse_denied(Path(relative_path or "").parts[-1:])
     return target
 
 
