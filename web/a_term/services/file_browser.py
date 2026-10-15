@@ -189,6 +189,11 @@ def list_directory(root_path: str, relative_path: str = "") -> dict[str, object]
             continue
         if is_denied(entry.name):
             continue
+        if entry.is_symlink():
+            try:
+                resolve_safe_path(root_path, str(entry.relative_to(root)))
+            except PermissionError:
+                continue
         entries.append(_entry_info(entry, root))
     return {
         "entries": entries,

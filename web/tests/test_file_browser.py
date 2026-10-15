@@ -139,6 +139,10 @@ def test_symlink_into_a_hidden_directory_is_refused(tmp_path) -> None:
         file_browser.read_file(str(tmp_path), "gh-hosts.yml")
     with pytest.raises(PermissionError, match="Access denied"):
         file_browser.list_directory(str(tmp_path), "ghdir")
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src-link").symlink_to(tmp_path / "src")
+    names = {entry["name"] for entry in file_browser.list_directory(str(tmp_path))["entries"]}  # type: ignore[union-attr]
+    assert names == {"src", "src-link"}
 
 
 def test_project_dotfiles_and_ordinary_sources_stay_readable(tmp_path) -> None:
