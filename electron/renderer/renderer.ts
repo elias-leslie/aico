@@ -377,6 +377,8 @@ function wireTitle(): void {
     nameBtn.hidden = false
   }
   nameBtn.addEventListener('click', beginRename)
+  // The palette and session menu reach it too, for windows too narrow to show the title.
+  window.addEventListener('aico:rename', beginRename)
   nameInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault()

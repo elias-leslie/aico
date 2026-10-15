@@ -204,6 +204,15 @@ export const ACTIONS: Action[] = [
     run: () => paletteOpener(),
   },
   {
+    id: 'rename',
+    section: 'Session',
+    label: 'Rename session',
+    shortcut: '',
+    icon: '✎',
+    note: 'Same as clicking the title. An empty name goes back to the default.',
+    run: () => window.dispatchEvent(new CustomEvent('aico:rename')),
+  },
+  {
     id: 'refresh',
     section: 'Session',
     label: 'Refresh terminal',
