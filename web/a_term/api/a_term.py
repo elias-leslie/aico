@@ -12,6 +12,7 @@ from typing import Any
 from fastapi import APIRouter, Query, Request, WebSocket
 
 from ..auth import UNAUTHORIZED_WS_CODE, authenticate_websocket
+from ..config import settings
 from ..services.maintenance import get_status as get_maintenance_status
 from ..services.maintenance import list_recent_runs as list_recent_maintenance_runs
 from ..services.maintenance import run_cycle as run_maintenance_cycle
@@ -63,6 +64,10 @@ async def a_term_websocket(
         websocket: WebSocket connection
         session_id: A-Term session identifier
     """
+    origin = websocket.headers.get("origin")
+    if origin is not None and origin not in settings.a_term_ws_origins:
+        await websocket.close(code=1008, reason="Origin not allowed")
+        return
     if authenticate_websocket(websocket) is None:
         await websocket.close(code=UNAUTHORIZED_WS_CODE, reason="Authentication required")
         return
