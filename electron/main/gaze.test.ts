@@ -160,24 +160,53 @@ describe('tileGroups with coordinators', () => {
     })
   })
 
-  it('sends coordinators past three to the sides', () => {
-    expect(groups(4, 4)).toEqual({ lead: ['C448', 'C448', 'C448'], other: ['L1344'] })
-    expect(groups(6, 5)).toEqual({
-      lead: ['C448', 'C448', 'C448'],
-      other: ['L672', 'L672', 'R1344'],
-    })
+  it('keeps every coordinator that fits at 240px in the centre, the rest on the sides', () => {
+    expect(groups(4, 4)).toEqual({ lead: ['C336', 'C336', 'C336', 'C336'], other: [] })
+    const five = tileGroups(6, area, 6)
+    expect(five.coordinator).toHaveLength(5)
+    expect(five.coordinator.every((r) => r.height >= 240)).toBe(true)
+    expect(five.other.map(tag)).toEqual(['L1344'])
   })
 
-  it('stacks side overflow in the centre below the coordinators', () => {
-    // 1 coordinator + 10 others: four per side, two more in the centre.
-    const g = groups(11, 1)
-    expect(g.lead).toEqual(['C448'])
-    expect(g.other.filter((s) => s.startsWith('L'))).toHaveLength(4)
-    expect(g.other.filter((s) => s.startsWith('R'))).toHaveLength(4)
-    expect(g.other.filter((s) => s === 'C448')).toHaveLength(2)
-    const centre = tileGroups(11, area, 1)
-    expect(centre.coordinator[0]?.y).toBe(0)
-    expect(centre.other.filter((r) => r.x === side).map((r) => r.y)).toEqual([448, 896])
+  it('fills the sides evenly and adds columns towards the edges past five per column', () => {
+    // 1 coordinator + 10 others: five per side, one column each.
+    const ten = groups(11, 1)
+    expect(ten.lead).toEqual(['C1344'])
+    expect(ten.other.filter((t) => t.startsWith('L'))).toHaveLength(5)
+    expect(ten.other.filter((t) => t.startsWith('R'))).toHaveLength(5)
+    // 2 coordinators + 12 others: six per side, two columns of three.
+    const g = tileGroups(14, area, 2)
+    expect(g.coordinator.map((r) => [r.x, r.y, r.width, r.height])).toEqual([
+      [side, 0, 3277 - 2 * side, 672],
+      [side, 672, 3277 - 2 * side, 672],
+    ])
+    const columns = (slots: { x: number; width: number }[]) =>
+      [...new Set(slots.map((r) => `${r.x}+${r.width}`))].sort()
+    const half = Math.round(side / 2)
+    const right = 3277 - side
+    expect(columns(g.other.filter((r) => r.x < side))).toEqual(
+      [`0+${half}`, `${half}+${side - half}`].sort(),
+    )
+    expect(columns(g.other.filter((r) => r.x >= right))).toEqual(
+      [`${right}+${half}`, `${right + half}+${side - half}`].sort(),
+    )
+    expect(g.other.every((r) => r.height === 448)).toBe(true)
+    // 1 coordinator + 11 others: six left (3+3), five right (one column).
+    const odd = tileGroups(12, area, 1).other
+    expect(odd.filter((r) => r.x < side)).toHaveLength(6)
+    expect(odd.filter((r) => r.x >= right).every((r) => r.width === side)).toBe(true)
+  })
+
+  it('never stacks a window shorter than 240px or over the centre, for 1-2 coordinators and 0-12 others', () => {
+    for (const c of [1, 2]) {
+      for (let others = 0; others <= 12; others++) {
+        const g = tileGroups(c + others, area, c)
+        expect(g.coordinator).toHaveLength(c)
+        expect(g.other).toHaveLength(others)
+        expect(g.other.every((r) => r.x + r.width <= side || r.x >= 3277 - side)).toBe(true)
+        expect([...g.coordinator, ...g.other].every((r) => r.height >= 240)).toBe(true)
+      }
+    }
   })
 })
 

@@ -150,15 +150,16 @@ export function layoutSnapshot(
 //   1: centre   2: left, right   3: left, centre, right   4: four corners
 //   5: corners + centre   6: three per side   7: three per side + centre
 //
-// Coordinator windows (sessions that launched lanes) own the centre instead:
-// up to CENTRE_MAX of them stack there top to bottom, and every other window,
-// including coordinators past CENTRE_MAX, splits between the sides, the left
-// taking the extra one. A side holding one window gives it the full height.
-// Past SIDE_MAX per side the extras stack in the centre below the coordinators.
+// Coordinator windows (sessions that launched lanes) own the centre instead,
+// at full height, several splitting it top to bottom. Every other window goes
+// to the side columns, split evenly with the left taking the extra one. A
+// column holds as many windows as fit at MIN_TILE_HEIGHT; past that a side
+// splits into more columns towards the screen edge, the inner column taking
+// the extra one. Coordinators that no longer fit the centre join the sides.
 
 export const SIDE_FRACTION = 0.2822265625
 export const SIDE_MAX = 4
-export const CENTRE_MAX = 3
+export const MIN_TILE_HEIGHT = 240
 
 function stack(x: number, width: number, area: Rect, count: number): Rect[] {
   const out: Rect[] = []
@@ -188,7 +189,8 @@ export function tileGroups(n: number, area: Rect, coordinators = 0): TileGroups 
     centre: stack(centreX, rightX - centreX, area, centre),
     right: stack(rightX, side, area, right),
   })
-  const lead = Math.min(CENTRE_MAX, Math.max(0, coordinators), n)
+  const perColumn = Math.max(1, Math.floor(area.height / MIN_TILE_HEIGHT))
+  const lead = Math.min(perColumn, Math.max(0, coordinators), n)
   if (lead === 0) {
     let perSide = Math.min(SIDE_MAX, Math.floor(n / 2))
     let centre = n - perSide * 2
@@ -200,12 +202,25 @@ export function tileGroups(n: number, area: Rect, coordinators = 0): TileGroups 
     return { coordinator: [], other: [...c.left, ...c.centre, ...c.right] }
   }
   const rest = n - lead
-  const left = Math.min(SIDE_MAX, Math.ceil(rest / 2))
-  const right = Math.min(SIDE_MAX, Math.floor(rest / 2))
-  const c = column(left, n - left - right, right)
+  const sideColumns = (x: number, count: number, innerAtRight: boolean): Rect[] => {
+    const columns = Math.ceil(count / perColumn)
+    const out: Rect[] = []
+    for (let i = 0; i < columns; i++) {
+      // Column i counted from the centre outwards.
+      const k = innerAtRight ? columns - 1 - i : i
+      const left = x + Math.round((side * k) / columns)
+      const right = x + Math.round((side * (k + 1)) / columns)
+      const rows = Math.floor(count / columns) + (i < count % columns ? 1 : 0)
+      out.push(...stack(left, right - left, area, rows))
+    }
+    return out
+  }
   return {
-    coordinator: c.centre.slice(0, lead),
-    other: [...c.left, ...c.centre.slice(lead), ...c.right],
+    coordinator: stack(centreX, rightX - centreX, area, lead),
+    other: [
+      ...sideColumns(area.x, Math.ceil(rest / 2), true),
+      ...sideColumns(rightX, Math.floor(rest / 2), false),
+    ],
   }
 }
 
