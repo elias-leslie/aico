@@ -179,7 +179,7 @@ Main endpoints:
 - `GET /selection/current`, `GET /selection/history` — read recent captures.
 - `GET /selection/events` — Server-Sent Events stream of delivery events (the Wayland-safe path for routing captures into a widget).
 
-The sidecar is loopback-only by default. It rejects browser origins other than local pages and the trusted extension IDs (`AICO_EXTENSION_IDS`), and rejects requests whose `Host` header is not `localhost` or a loopback IP such as `127.0.0.1` or `[::1]`, which blocks DNS-rebinding pages. `AICO_SIDECAR_ALLOW_REMOTE=1` lifts the bind and `Host` restrictions for a standalone sidecar; Aico does not pass it to the sidecar it starts.
+The sidecar is loopback-only by default. It rejects every browser origin except the trusted extension IDs (`AICO_EXTENSION_IDS`), local pages included, for writes and cross-origin reads of captured selections, and rejects requests whose `Host` header is not `localhost` or a loopback IP such as `127.0.0.1` or `[::1]`, which blocks DNS-rebinding pages. `AICO_SIDECAR_ALLOW_REMOTE=1` lifts the bind and `Host` restrictions for a standalone sidecar; Aico does not pass it to the sidecar it starts.
 
 ## Optional browser extension
 

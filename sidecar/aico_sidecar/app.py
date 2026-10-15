@@ -57,12 +57,12 @@ logger = logging.getLogger("aico_sidecar")
 router = APIRouter()
 
 def _trusted_origin_regex(extension_ids: Iterable[str]) -> str:
-    """Browser origins allowed to reach the bus over CORS: any loopback page (the
-    DOM source on another localhost port) and the pinned Aico extension ID(s).
-    Replaces a bare "*" so a public website can't read selection state
-    cross-origin, and pins the extension so another installed extension can't."""
+    """Browser origins allowed to read the bus over CORS: only the pinned Aico
+    extension ID(s). Local pages are not trusted either: any localhost dev
+    server or tool page could otherwise read captured selections, which may hold
+    secrets. Pinning the ID keeps another installed extension out too."""
     ids = "|".join(re.escape(ext_id) for ext_id in sorted(extension_ids))
-    return rf"^(chrome-extension://({ids})|https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?)$"
+    return rf"^chrome-extension://({ids})$"
 
 
 def _is_allowed_host(host_header: str | None, port: int) -> bool:
@@ -172,9 +172,9 @@ class BodyLimitMiddleware:
 
 def _is_trusted_origin(origin: str | None, extension_ids: Iterable[str]) -> bool:
     """CSRF guard for the unauthenticated bus: state-changing POSTs are accepted
-    only from native clients (no Origin header — Electron main, `st` CLI, curl),
-    the browser extension, or local pages. A public website's fetch carries its
-    own Origin and is rejected, so a visited page can't silently inject text into
+    only from native clients (no Origin header — Electron main, `st` CLI, curl)
+    or the browser extension. Any web page, local ones included, carries its own
+    Origin and is rejected, so a visited page can't silently inject text into
     the active terminal. The Origin header is browser-set and unforgeable by page
     script, and a page cannot suppress it, so allowing the absent case is safe.
     Extension origins must carry a pinned extension ID, so another installed
@@ -182,15 +182,7 @@ def _is_trusted_origin(origin: str | None, extension_ids: Iterable[str]) -> bool
     if origin is None:
         return True
     parts = urlsplit(origin)
-    if parts.scheme == "chrome-extension":
-        return parts.netloc in extension_ids
-    host = parts.hostname or ""
-    if host == "localhost":
-        return True
-    try:
-        return ipaddress.ip_address(host).is_loopback
-    except ValueError:
-        return False
+    return parts.scheme == "chrome-extension" and parts.netloc in extension_ids
 
 
 async def require_trusted_origin(request: Request) -> None:

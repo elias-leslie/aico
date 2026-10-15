@@ -64,9 +64,20 @@ class TestOriginGuard:
         # Native clients (Electron main, `st` CLI, curl) send no Origin header.
         assert client.post("/selection", json=self.DOM).status_code == 200
 
-    def test_loopback_origin_allowed(self, client: TestClient) -> None:
-        r = client.post("/selection", json=self.DOM, headers={"origin": "http://localhost:3005"})
-        assert r.status_code == 200
+    @pytest.mark.parametrize(
+        "origin", ["http://localhost:3005", "http://127.0.0.1:3003", "http://[::1]:8080", "null"]
+    )
+    def test_local_page_origin_rejected(self, client: TestClient, origin: str) -> None:
+        # Only the extension is a browser caller; a local dev server or tool page is not.
+        r = client.post("/selection", json=self.DOM, headers={"origin": origin})
+        assert r.status_code == 403
+        r = client.post("/selection/send", json={"items": [self.DOM]}, headers={"origin": origin})
+        assert r.status_code == 403
+
+    def test_local_page_cannot_read_selections(self, client: TestClient) -> None:
+        for path in ("/selection/current", "/selection/history"):
+            r = client.get(path, headers={"origin": "http://localhost:3005"})
+            assert "access-control-allow-origin" not in r.headers
 
     def test_extension_origin_allowed(self, client: TestClient) -> None:
         r = client.post(
