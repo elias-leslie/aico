@@ -7,6 +7,8 @@ import {
   CodexTurn,
   claudeSignal,
   type FileTail,
+  findClaude,
+  findCodexRollout,
   hookState,
 } from './agent-state'
 import type { ProcFs } from './continuity'
@@ -241,7 +243,7 @@ describe('Codex rollout', () => {
   })
 })
 
-function procfs(files: Record<string, string>): ProcFs {
+function procfs(files: Record<string, string>, links: Record<string, string> = {}): ProcFs {
   const missing = (path: string) => Object.assign(new Error(`ENOENT ${path}`), { code: 'ENOENT' })
   return {
     readFile: (path) => {
@@ -254,17 +256,68 @@ function procfs(files: Record<string, string>): ProcFs {
     },
     readdir: (path) => {
       const prefix = `${path}/`
-      const names = Object.keys(files)
+      const names = [...Object.keys(files), ...Object.keys(links)]
         .filter((key) => key.startsWith(prefix))
         .map((key) => key.slice(prefix.length).split('/')[0] as string)
       if (!names.length) throw missing(path)
       return [...new Set(names)]
     },
     readlink: (path) => {
+      if (path in links) return links[path] as string
       throw missing(path)
     },
   }
 }
+
+describe('agent process discovery', () => {
+  const SUBAGENT = '01a130a6-a89b-7533-b413-46951175576a'
+  const SOURCED = '01a130a6-a89b-7533-b413-46951175576b'
+  const rollout = (id: string) =>
+    `/home/u/.codex/sessions/2026/10/12/rollout-2026-10-12T11-03-15-${id}.jsonl`
+  const meta = (id: string, extra: Record<string, unknown> = {}) =>
+    `${JSON.stringify({ type: 'session_meta', payload: { id, ...extra } })}\n{"type":"event"}\n`
+
+  it('finds the Claude process by a session file naming its own pid', () => {
+    const files = {
+      '/h/.claude/sessions/20.json': JSON.stringify({ pid: 99, sessionId: CLAUDE }),
+      '/h/.claude/sessions/21.json': JSON.stringify({ pid: 21, sessionId: 'not-a-uuid' }),
+    }
+    // A stale file left by a reused pid names another process; the session ID
+    // does not matter here.
+    expect(findClaude(procfs(files), '/h', [20, 21])).toEqual({
+      pid: 21,
+      file: '/h/.claude/sessions/21.json',
+    })
+    expect(findClaude(procfs(files), '/h', [20])).toBeNull()
+  })
+
+  it("takes the Codex user thread's rollout, never a subagent's", () => {
+    const fs = procfs(
+      {
+        [rollout(SUBAGENT)]: meta(SUBAGENT, { parent_thread_id: CODEX, thread_source: 'subagent' }),
+        [rollout(SOURCED)]: meta(SOURCED, { thread_source: 'subagent' }),
+        [rollout(CODEX)]: meta(CODEX, { thread_source: 'user' }),
+      },
+      {
+        '/proc/30/fd/3': '/dev/null',
+        '/proc/30/fd/92': rollout(SUBAGENT),
+        // A non-user thread_source alone marks a subagent.
+        '/proc/30/fd/93': rollout(SOURCED),
+        '/proc/30/fd/53': rollout(CODEX),
+      },
+    )
+    expect(findCodexRollout(fs, [30])).toEqual({ pid: 30, path: rollout(CODEX), threadId: CODEX })
+  })
+
+  it('returns the first user rollout even when its thread ID is not a UUID', () => {
+    const fs = procfs(
+      { [rollout('odd')]: meta('odd'), [rollout(CODEX)]: meta(CODEX) },
+      { '/proc/30/fd/4': rollout('odd'), '/proc/30/fd/5': rollout(CODEX) },
+    )
+    expect(findCodexRollout(fs, [30])).toEqual({ pid: 30, path: rollout('odd'), threadId: null })
+    expect(findCodexRollout(procfs({}), [30])).toBeNull()
+  })
+})
 
 describe('AgentStatePoller', () => {
   it("finds the pane's Claude process, follows it, and loses it when it exits", async () => {

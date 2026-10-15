@@ -99,6 +99,45 @@ describe('agent observation', () => {
     expect(observeCodex(fs, [30])).toEqual({ resumeId: CODEX, idle: null })
   })
 
+  it('skips a Codex user rollout without a UUID thread ID', () => {
+    const meta = (id: string) =>
+      `${JSON.stringify({ type: 'session_meta', payload: { id } })}\n{"type":"event"}\n`
+    const fs = procfs(
+      { [ROLLOUT('odd')]: meta('odd'), [ROLLOUT(CODEX)]: meta(CODEX) },
+      { '/proc/30/fd/4': ROLLOUT('odd'), '/proc/30/fd/5': ROLLOUT(CODEX) },
+    )
+    expect(observeCodex(fs, [30])).toEqual({ resumeId: CODEX, idle: null })
+  })
+
+  it('skips a Claude session file without a UUID session ID', () => {
+    const fs = procfs({
+      '/h/.claude/sessions/20.json': JSON.stringify({ pid: 20, sessionId: 'not-a-uuid' }),
+      '/h/.claude/sessions/21.json': JSON.stringify({ pid: 21, sessionId: CLAUDE }),
+    })
+    expect(observeClaude(fs, '/h', [20, 21])).toEqual({ resumeId: CLAUDE, idle: true })
+  })
+
+  it('skips a Claude session file holding JSON null', () => {
+    const fs = procfs({
+      '/h/.claude/sessions/20.json': 'null',
+      '/h/.claude/sessions/21.json': JSON.stringify({ pid: 21, sessionId: CLAUDE }),
+    })
+    expect(observeClaude(fs, '/h', [20, 21])).toEqual({ resumeId: CLAUDE, idle: true })
+  })
+
+  it('skips a Codex rollout whose thread_source alone marks a subagent', () => {
+    const meta = (id: string, extra: Record<string, unknown>) =>
+      `${JSON.stringify({ type: 'session_meta', payload: { id, ...extra } })}\n{"type":"event"}\n`
+    const fs = procfs(
+      {
+        [ROLLOUT(SUBAGENT)]: meta(SUBAGENT, { thread_source: 'subagent' }),
+        [ROLLOUT(CODEX)]: meta(CODEX, { thread_source: 'user' }),
+      },
+      { '/proc/30/fd/4': ROLLOUT(SUBAGENT), '/proc/30/fd/5': ROLLOUT(CODEX) },
+    )
+    expect(observeCodex(fs, [30])).toEqual({ resumeId: CODEX, idle: null })
+  })
+
   it('finds the agent anywhere under the pane', () => {
     const fs = procfs({
       '/proc/40/task/40/children': '41',

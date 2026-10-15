@@ -14,8 +14,14 @@
 // or a poll whose status changed after the hook fired and is no longer waiting.
 
 import { closeSync, fstatSync, openSync, readSync } from 'node:fs'
-import { join } from 'node:path'
-import { type ProcFs, processTree } from './continuity'
+import {
+  type CodexRolloutFile,
+  claudeSessions,
+  codexUserRollouts,
+  type ProcFs,
+  processTree,
+  UUID_RE,
+} from './continuity'
 
 export const AGENT_STATES = ['working', 'idle', 'blocked', 'unknown'] as const
 export type AgentState = (typeof AGENT_STATES)[number]
@@ -44,8 +50,6 @@ export interface AgentSignal {
   agentSessionId: string | null
 }
 
-const UUID_RE = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/
-
 // --- Claude Code ------------------------------------------------------------
 
 export interface ClaudeProcess {
@@ -55,15 +59,7 @@ export interface ClaudeProcess {
 
 /** The Claude Code process in a pane's process tree, by its session file. */
 export function findClaude(fs: ProcFs, home: string, pids: number[]): ClaudeProcess | null {
-  for (const pid of pids) {
-    const file = join(home, '.claude', 'sessions', `${pid}.json`)
-    try {
-      const state = JSON.parse(fs.readFile(file)) as Record<string, unknown>
-      if (state.pid === pid) return { pid, file }
-    } catch {
-      // not a Claude process
-    }
-  }
+  for (const { pid, file } of claudeSessions(fs, home, pids)) return { pid, file }
   return null
 }
 
@@ -98,7 +94,6 @@ export function claudeSignal(text: string): AgentSignal | null {
 
 // --- Codex ------------------------------------------------------------------
 
-const ROLLOUT_RE = /\/\.codex\/sessions\/.*\/rollout-[^/]*\.jsonl$/
 /** Tools whose call waits for the user's answer. */
 const CODEX_QUESTION_TOOLS = new Set(['request_user_input'])
 /** Approval prompts, if a Codex build ever records them in the rollout. */
@@ -116,39 +111,8 @@ const ROLLOUT_TAIL_BYTES = 512 * 1024
 const ROLLOUT_MAX_STEP_BYTES = 4 * 1024 * 1024
 
 /** The user thread's rollout (not a subagent's) a Codex process holds open. */
-export function findCodexRollout(
-  fs: ProcFs,
-  pids: number[],
-): { pid: number; path: string; threadId: string | null } | null {
-  for (const pid of pids) {
-    let fds: string[] = []
-    try {
-      fds = fs.readdir(`/proc/${pid}/fd`)
-    } catch {
-      continue
-    }
-    for (const fd of fds) {
-      let target: string
-      try {
-        target = fs.readlink(`/proc/${pid}/fd/${fd}`)
-      } catch {
-        continue
-      }
-      if (!ROLLOUT_RE.test(target)) continue
-      try {
-        const first = fs.readHead(target, 1024 * 1024).split('\n', 1)[0]
-        const meta = JSON.parse(first) as { type?: string; payload?: Record<string, unknown> }
-        const payload = meta.payload ?? {}
-        if (meta.type !== 'session_meta' || payload.parent_thread_id) continue
-        if (payload.thread_source !== undefined && payload.thread_source !== 'user') continue
-        const threadId =
-          typeof payload.id === 'string' && UUID_RE.test(payload.id) ? payload.id : null
-        return { pid, path: target, threadId }
-      } catch {
-        // unreadable or partial rollout
-      }
-    }
-  }
+export function findCodexRollout(fs: ProcFs, pids: number[]): CodexRolloutFile | null {
+  for (const rollout of codexUserRollouts(fs, pids)) return rollout
   return null
 }
 

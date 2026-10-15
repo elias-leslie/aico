@@ -32,7 +32,8 @@ export const CHECKPOINT_PROMPT =
   'A host reboot is pending. Checkpoint now: commit or save work in progress and write down your next step. ' +
   'Tether will resume this session after the reboot.'
 
-const UUID_RE = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/
+/** The shape of Claude Code session IDs and Codex thread IDs. */
+export const UUID_RE = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/
 
 export interface SnapshotSession {
   id: string
@@ -126,27 +127,50 @@ export interface AgentObservation {
   idle: boolean | null
 }
 
-/** Claude Code writes ~/.claude/sessions/<pid>.json for each interactive process. */
-export function observeClaude(fs: ProcFs, home: string, pids: number[]): AgentObservation | null {
+// Both readers below depend on Claude Code's and Codex's undocumented file
+// formats (docs/agent-state.md); agent state and reboot continuity share them.
+
+export interface ClaudeSession {
+  pid: number
+  /** ~/.claude/sessions/<pid>.json */
+  file: string
+  state: Record<string, unknown>
+}
+
+/** Claude Code writes ~/.claude/sessions/<pid>.json for each interactive
+ * process. Yields each pid whose file parses and names that pid (a stale file
+ * left by a reused pid names another process). */
+export function* claudeSessions(
+  fs: ProcFs,
+  home: string,
+  pids: number[],
+): Generator<ClaudeSession> {
   for (const pid of pids) {
+    const file = join(home, '.claude', 'sessions', `${pid}.json`)
     let state: Record<string, unknown>
     try {
-      state = JSON.parse(fs.readFile(join(home, '.claude', 'sessions', `${pid}.json`)))
+      state = JSON.parse(fs.readFile(file)) as Record<string, unknown>
+      if (state.pid !== pid) continue
     } catch {
       continue
     }
-    if (state.pid !== pid || typeof state.sessionId !== 'string' || !UUID_RE.test(state.sessionId))
-      continue
-    return { resumeId: state.sessionId, idle: state.status === 'busy' ? false : true }
+    yield { pid, file, state }
   }
-  return null
 }
 
 const ROLLOUT_RE = /\/\.codex\/sessions\/.*\/rollout-[^/]*\.jsonl$/
 
-/** Codex keeps its thread's rollout file open; the user thread (not a
- * subagent's) names the conversation `codex resume` takes. */
-export function observeCodex(fs: ProcFs, pids: number[]): AgentObservation | null {
+export interface CodexRolloutFile {
+  pid: number
+  path: string
+  /** The thread ID from session_meta; null when it is not a UUID. */
+  threadId: string | null
+}
+
+/** Codex keeps its thread's rollout file open. Yields each held rollout whose
+ * session_meta marks the user thread (not a subagent's): the conversation
+ * `codex resume` takes. */
+export function* codexUserRollouts(fs: ProcFs, pids: number[]): Generator<CodexRolloutFile> {
   for (const pid of pids) {
     let fds: string[] = []
     try {
@@ -162,18 +186,36 @@ export function observeCodex(fs: ProcFs, pids: number[]): AgentObservation | nul
         continue
       }
       if (!ROLLOUT_RE.test(target)) continue
+      let threadId: string | null
       try {
         const first = fs.readHead(target, 1024 * 1024).split('\n', 1)[0]
         const meta = JSON.parse(first) as { type?: string; payload?: Record<string, unknown> }
         const payload = meta.payload ?? {}
         if (meta.type !== 'session_meta' || payload.parent_thread_id) continue
         if (payload.thread_source !== undefined && payload.thread_source !== 'user') continue
-        if (typeof payload.id === 'string' && UUID_RE.test(payload.id))
-          return { resumeId: payload.id, idle: null }
+        threadId = typeof payload.id === 'string' && UUID_RE.test(payload.id) ? payload.id : null
       } catch {
         // unreadable or partial rollout
+        continue
       }
+      yield { pid, path: target, threadId }
     }
+  }
+}
+
+/** The first Claude Code session in `pids` with a resumable session ID. */
+export function observeClaude(fs: ProcFs, home: string, pids: number[]): AgentObservation | null {
+  for (const { state } of claudeSessions(fs, home, pids)) {
+    if (typeof state.sessionId !== 'string' || !UUID_RE.test(state.sessionId)) continue
+    return { resumeId: state.sessionId, idle: state.status !== 'busy' }
+  }
+  return null
+}
+
+/** The first Codex user thread in `pids` with a resumable thread ID. */
+export function observeCodex(fs: ProcFs, pids: number[]): AgentObservation | null {
+  for (const { threadId } of codexUserRollouts(fs, pids)) {
+    if (threadId) return { resumeId: threadId, idle: null }
   }
   return null
 }
