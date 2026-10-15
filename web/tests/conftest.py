@@ -19,6 +19,11 @@ from a_term.tether import TetherClient, set_client
 
 from .fake_tether import FakeTether
 
+# The backend answers only a loopback Host (LoopbackHostGuard); TestClient's default is http://testserver.
+LOOPBACK_BASE_URL = "http://localhost:8002"
+# websocket_connect ignores base_url (always ws://testserver), so WebSocket tests pass this absolute URL.
+LOOPBACK_WS_URL = "ws://localhost:8002"
+
 
 @pytest.fixture(autouse=True)
 def local_state(monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
@@ -93,5 +98,5 @@ def test_app(fake_tether: FakeTether, no_default_tmux: MagicMock) -> Generator[T
     ):
         from a_term.main import app
 
-        with TestClient(app, raise_server_exceptions=False) as client:
+        with TestClient(app, base_url=LOOPBACK_BASE_URL, raise_server_exceptions=False) as client:
             yield client

@@ -12,6 +12,8 @@ from starlette.websockets import WebSocketDisconnect
 from a_term.auth import AuthSettings
 from a_term.config import Settings
 
+from .conftest import LOOPBACK_WS_URL
+
 
 def _auth_settings(**overrides: object) -> AuthSettings:
     values: dict[str, object] = {
@@ -85,7 +87,7 @@ def test_websocket_requires_auth_when_enabled(test_app: TestClient) -> None:
     with (
         patch("a_term.auth.get_auth_settings", return_value=_auth_settings()),
         patch("a_term.api.a_term.handle_a_term_connection", handler),
-        pytest.raises(WebSocketDisconnect),test_app.websocket_connect("/ws/a-term/session-1")
+        pytest.raises(WebSocketDisconnect),test_app.websocket_connect(f"{LOOPBACK_WS_URL}/ws/a-term/session-1")
     ):
         pass
 
@@ -110,7 +112,7 @@ def test_websocket_accepts_authenticated_session_cookie(test_app: TestClient) ->
         )
         assert login_response.status_code == 200
 
-        with test_app.websocket_connect("/ws/a-term/session-1"):
+        with test_app.websocket_connect(f"{LOOPBACK_WS_URL}/ws/a-term/session-1"):
             pass
 
     handler.assert_awaited_once()

@@ -8,3 +8,4 @@ export const PRODUCT_PORTS = {
   backend: 8002,
   frontend: 3002,
 } as const
+export const PRODUCT_PUBLIC_HOST = 'terminal.summitflow.dev' as const

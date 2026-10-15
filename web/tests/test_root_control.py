@@ -12,6 +12,7 @@ from a_term.auth import AuthSettings
 from a_term.storage import panes as pane_store
 from a_term.tether import get_client
 
+from .conftest import LOOPBACK_BASE_URL
 from .fake_tether import FakeTether
 
 CREATE = {
@@ -232,7 +233,7 @@ def test_unknown_action_is_not_found(test_app: TestClient) -> None:
 
 
 def test_non_loopback_clients_are_refused(test_app: TestClient, fake_tether: FakeTether) -> None:
-    remote = TestClient(test_app.app, client=("203.0.113.9", 5000))
+    remote = TestClient(test_app.app, base_url=LOOPBACK_BASE_URL, client=("203.0.113.9", 5000))
     response = remote.get("/v1/roots")
     assert response.status_code == 403
     assert response.json() == {"error": "local_only"}
@@ -257,7 +258,7 @@ def test_tether_down_is_owner_failure(tether_down: str, no_default_tmux) -> None
     ):
         from a_term.main import app
 
-        with TestClient(app, raise_server_exceptions=False) as client:
+        with TestClient(app, base_url=LOOPBACK_BASE_URL, raise_server_exceptions=False) as client:
             for response in (
                 client.get("/v1/roots"),
                 client.get("/v1/roots/root-1"),
