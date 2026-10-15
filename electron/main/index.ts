@@ -123,7 +123,7 @@ const TRANSPORT_SETTING = 'terminal-transport'
 function configuredTransport(): TerminalTransport {
   const forced = process.env.AICO_TERMINAL_TRANSPORT
   if (forced === 'attach' || forced === 'control') return forced
-  return getSetting(TRANSPORT_SETTING) === 'control' ? 'control' : 'attach'
+  return getSetting(TRANSPORT_SETTING) === 'attach' ? 'attach' : 'control'
 }
 // Windows Aico itself just resized (tiling, re-tiling, an agent's position):
 // their next terminal resize claims the tmux size even while unfocused, or the
@@ -1948,56 +1948,6 @@ const startup = app.whenReady().then(async () => {
       .finally(() => {
         if (ptyRefreshes.get(win.id)?.request === request) ptyRefreshes.delete(win.id)
       })
-  })
-
-  // Who owns the pane's scrollback, asked of Tether for the session this
-  // window is attached to.
-  ipcMain.handle('tmux:pane-mode', async (event) => {
-    const none = { alternateScreen: false, mouseReporting: false, historySize: 0 }
-    const win = BrowserWindow.fromWebContents(event.sender)
-    if (!win || !attachTargets.has(win.id)) return none
-    const legacyName = legacyOf.get(win.id)
-    const widgetId = widgetOf.get(win.id)
-    try {
-      const mode = legacyName
-        ? await tether.legacyPaneMode(legacyName)
-        : widgetId
-          ? await tether.paneMode(widgetId)
-          : null
-      if (!mode) return none
-      return {
-        alternateScreen: mode.alternateScreen,
-        mouseReporting: mode.mouseReporting,
-        historySize: mode.historySize,
-      }
-    } catch {
-      return none
-    }
-  })
-
-  // One bounded page of pane history for the renderer's read-only overlay.
-  ipcMain.handle('tmux:scrollback-page', async (event, request?: unknown) => {
-    const empty = { fromLine: 0, totalLines: 0, historySize: 0, text: '' }
-    const widgetId = widgetIdFor(event.sender)
-    if (!widgetId) return empty
-    const input = (request && typeof request === 'object' ? request : {}) as Record<string, unknown>
-    const whole = (n: unknown, max: number) =>
-      typeof n === 'number' && Number.isSafeInteger(n) && n >= 0 ? Math.min(n, max) : undefined
-    try {
-      const page = await tether.scrollback(widgetId, {
-        fromLine: whole(input.fromLine, Number.MAX_SAFE_INTEGER),
-        count: whole(input.count, 5000) || undefined,
-        escapes: input.plain !== true,
-      })
-      return {
-        fromLine: page.fromLine,
-        totalLines: page.totalLines,
-        historySize: page.historySize,
-        text: page.text,
-      }
-    } catch {
-      return empty
-    }
   })
 
   ipcMain.handle('clipboard:read', () => clipboard.readText())

@@ -31,16 +31,9 @@ import {
 import { wireDraftInput } from './draft-input'
 import { Eyes } from './eyes'
 import { urlAt } from './links'
-import { mouseReportingActive, setupMouseShim } from './mouse-shim'
+import { mouseReportingActive, programOwnsSelection, setupMouseShim } from './mouse-shim'
 import { pointToCell, sgrWheelSequence, wheelMouseTicks } from './mouse-wheel'
 import { osc52Text } from './osc52'
-import { ScrollRail } from './scroll-rail'
-import { ScrollbackOverlay } from './scrollback-overlay'
-import {
-  claimsWheelForPane,
-  programOwnsSelection,
-  scrollbackWheelAction,
-} from './scrollback-policy'
 import { terminalShouldTakeFocus } from './terminal-focus'
 import { wireVoice } from './voice'
 import { wheelLineDelta } from './wheel'
@@ -59,8 +52,8 @@ let tuiSlug = 'shell'
 let terminalLayoutReady = false
 let terminalLayoutTimer: number | undefined
 // Control mode feeds xterm the pane's own output, so xterm keeps the history
-// and the program's modes itself; attach mode shows tmux's redraws and reads
-// history through the overlay. Fixed until the window reloads.
+// and the program's modes itself; attach mode (the rollback, and A-Term
+// windows) is a plain tmux client. Fixed until the window reloads.
 const controlMode = (await window.aico.terminal.transport()) === 'control'
 // The palette names the mode every window switches to; A-Term windows stay
 // classic whatever the setting, so ask for the setting, not this window.
@@ -69,8 +62,8 @@ void window.aico.terminal.transportSetting().then(setTransportAction)
 const term = new Terminal({
   fontFamily,
   fontSize,
-  // Attach mode: scrollback lives in tmux history (surfaced via the overlay),
-  // not here — the live view is tmux's alternate screen, which has none.
+  // Attach mode: scrollback lives in tmux, not here — the live view is tmux's
+  // alternate screen, which has none.
   scrollback: controlMode ? CONTROL_SCROLLBACK_LINES : 0,
   // A blinking xterm cursor kept every large transparent widget repainting even
   // when its session was idle; three visible 4K-scale windows held Chromium's
@@ -118,14 +111,13 @@ host.addEventListener(
   { capture: true },
 )
 
-// Attach mode: wheel scrolling is routed by the capture handler below. The
-// live tmux view has no local history: xterm's fallback would synthesize
-// Up/Down input instead, including before session identity arrives or while
-// scrollback is closing. Mouse-reporting applications use xterm's separate
-// mouse-event path. Control mode routes the wheel in that same capture handler
-// (controlWheel) and leaves xterm only the mouse reports it encodes itself.
+// Attach mode: xterm reports the wheel to tmux when tmux asked for the mouse;
+// otherwise the wheel is dropped, since the live tmux view has no local history
+// and xterm's fallback would type Up/Down into the pane. Control mode routes the
+// wheel in the capture handler below (controlWheel) and leaves xterm only the
+// mouse reports it encodes itself.
 let sgrMouse = () => false
-term.attachCustomWheelEventHandler(() => controlMode)
+term.attachCustomWheelEventHandler(() => controlMode || mouseReportingActive(term))
 
 /** Control mode: act on a wheel event, or return false to leave it to xterm. */
 function controlWheel(e: WheelEvent): boolean {
@@ -136,7 +128,7 @@ function controlWheel(e: WheelEvent): boolean {
   })
   if (action === 'xterm-report') return false
   if (action === 'forward-sgr') forwardWheel(e)
-  // Same speed as the attach-mode overlay; xterm's own is ~3 lines a notch.
+  // xterm's own speed is ~3 lines a notch; this matches A-Term's.
   else if (action === 'scroll') term.scrollLines(wheelLineDelta(e.deltaY))
   return true
 }
@@ -161,7 +153,7 @@ const fit = new FitAddon()
 term.loadAddon(fit)
 
 // Single debounced fit shared by every layout-change source (window resize,
-// scrollback-rail toggle, font change). Two independent debouncers used to be
+// draft input, font change). Two independent debouncers used to be
 // able to fire fit+resize back-to-back mid-output — exactly the racing-reflow
 // garble the debounce exists to prevent — so all paths coalesce here.
 function scheduleTerminalLayoutFit(): void {
@@ -170,7 +162,6 @@ function scheduleTerminalLayoutFit(): void {
   terminalLayoutTimer = window.setTimeout(() => {
     fit.fit()
     window.aico.pty.resize({ cols: term.cols, rows: term.rows })
-    overlay.fitToWindow()
   }, 60)
 }
 
@@ -536,33 +527,6 @@ term.parser.registerOscHandler(52, (data) => {
   return true
 })
 
-// Scroll-back overlay: wheel-up on the live terminal opens a read-only xterm
-// view of tmux history. It stays on the same xterm/WebGL renderer path as the
-// live terminal and loads bounded pages on demand so wheel-up does not capture
-// and write the entire tmux history.
-const overlay = new ScrollbackOverlay(
-  {
-    theme,
-    fontFamily,
-    fontSize,
-    size: () => ({ cols: term.cols, rows: term.rows }),
-    capturePage: (request) => window.aico.scrollback.page(request),
-    writeClipboard: (text) => window.aico.clipboard.write(text),
-    onDismiss: () => {
-      term.focus()
-      void refreshLiveRail()
-    },
-    onPosition: (position) => {
-      if (position) rail.update(position)
-    },
-  },
-  host,
-)
-
-// The rail seeks through tmux history; on the live view it opens the overlay
-// at the chosen line.
-const rail = new ScrollRail(host, (topLine) => overlay.seek(topLine, liveTotalLines))
-
 // Renderer -> PTY keystrokes; PTY -> renderer output. PTY output also drives the
 // "thinking" heuristic: active while output flows, settled ~0.5s after it
 // stops. The eyes read along and the tray icon goes amber; the window frame
@@ -582,12 +546,6 @@ function pokeThinking(): void {
   if (thinkTimer) clearTimeout(thinkTimer)
   thinkTimer = window.setTimeout(() => {
     setThinking(false)
-    // Output grows the history above the live view and can switch the pane
-    // into or out of a full-screen program (which decides who owns drags).
-    // The pointer may never leave the terminal meanwhile, so re-ask tmux once
-    // per settled burst, past the cache: a shell's echo can settle and be
-    // cached just before the program it launched takes the alternate screen.
-    void refreshLiveRail(true)
   }, 500)
 }
 
@@ -651,7 +609,6 @@ async function applyTerminalFontSettings(settings: unknown): Promise<void> {
   fontSize = next.fontSize
   term.options.fontFamily = fontFamily
   term.options.fontSize = fontSize
-  overlay.updateFont(fontFamily, fontSize)
   fit.fit()
   window.aico.pty.resize({ cols: term.cols, rows: term.rows })
   term.focus()
@@ -720,10 +677,7 @@ window.addEventListener('aico:refocus', () => term.focus())
 // Decided once per press so a drag never switches owner halfway through.
 let shimForcesDrag = true
 setupMouseShim(term, host, (e) => {
-  if (e.type === 'mousedown') {
-    const overHistory = e.target instanceof Node && overlayHost()?.contains(e.target)
-    shimForcesDrag = !overHistory && !paneOwnsSelection()
-  }
+  if (e.type === 'mousedown') shimForcesDrag = !paneOwnsSelection()
   return shimForcesDrag
 })
 
@@ -731,241 +685,25 @@ window.aico.settings.onTerminalFontChanged((settings) => {
   void applyTerminalFontSettings(settings)
 })
 
-// tmux is the authority on who owns the pane's scrollback. This window's xterm
-// is not: an attached tmux client sits in the alternate screen for the whole
-// session, and the mouse mode it observes comes and goes as tmux redraws, so
-// asking it flipped the wheel between the overlay and the program mid-session.
-// tmux reports the pane's own state and holds it steady, so cache that and
-// refresh it in the background — a wheel event has to decide synchronously.
-type PaneMode = { alternateScreen: boolean; mouseReporting: boolean; historySize: number }
-
-const PANE_MODE_MAX_AGE_MS = 1500
-let paneMode: PaneMode | null = null
-let paneModeFetchedAt = 0
-let paneModeInFlight: Promise<PaneMode> | null = null
-
-/** The pane's state, from cache when it is fresh and from tmux when it is not.
- * The very first wheel of a session has no cache to read, and answering it from
- * the xterm fallback opened the overlay on the three lines of tmux history that
- * a Claude Code pane has — so that event waits for tmux rather than guessing. */
-function readPaneMode(fresh = false): PaneMode | Promise<PaneMode> {
-  const cached = paneMode && performance.now() - paneModeFetchedAt < PANE_MODE_MAX_AGE_MS
-  if (cached && !fresh && paneMode) return paneMode
-  // A fresh read must not take an answer requested before the change it is
-  // looking for, so it queues behind one already in flight.
-  if (paneModeInFlight) {
-    return fresh ? paneModeInFlight.then(() => readPaneMode(true)) : paneModeInFlight
-  }
-  const fallback: PaneMode = {
+function paneOwnsSelection(): boolean {
+  return programOwnsSelection({
+    tuiSlug,
     alternateScreen: term.buffer.active.type === 'alternate',
     mouseReporting: mouseReportingActive(term),
-    historySize: 0,
-  }
-  paneModeInFlight = window.aico.scrollback
-    .paneMode()
-    .then((mode) => {
-      paneMode = mode
-      paneModeFetchedAt = performance.now()
-      showLiveRail(mode)
-      return mode
-    })
-    .catch(() => paneMode ?? fallback) // tmux unreachable — keep the last answer
-    .finally(() => {
-      paneModeInFlight = null
-    })
-  return paneModeInFlight
-}
-
-function paneOwnsSelection(): boolean {
-  if (controlMode) {
-    return programOwnsSelection({
-      tuiSlug,
-      alternateScreen: term.buffer.active.type === 'alternate',
-      mouseReporting: mouseReportingActive(term),
-    })
-  }
-  return paneMode ? programOwnsSelection({ tuiSlug, ...paneMode }) : false
-}
-
-function overlayHost(): HTMLElement | null {
-  return document.getElementById('scrollback-overlay')
-}
-
-// The live view always sits at the bottom of the pane's history. The rail
-// shows how much tmux holds above it; panes whose program draws in the
-// alternate screen keep no tmux history, so they get no rail.
-let liveTotalLines = 0
-function showLiveRail(mode: PaneMode): void {
-  if (overlay.active || overlay.opening) return
-  if (mode.alternateScreen || mode.historySize === 0) {
-    liveTotalLines = 0
-    rail.update(null)
-    return
-  }
-  liveTotalLines = mode.historySize + term.rows
-  rail.update({ topLine: mode.historySize, rows: term.rows, totalLines: liveTotalLines })
-}
-
-async function refreshLiveRail(fresh = false): Promise<void> {
-  // Control mode scrolls xterm's own history; there is no tmux rail to show.
-  if (controlMode) return
-  try {
-    showLiveRail(await readPaneMode(fresh))
-  } catch {
-    // tmux unreachable: leave the rail as it was.
-  }
-}
-
-host.addEventListener('mouseenter', () => void refreshLiveRail())
-window.addEventListener('focus', () => void refreshLiveRail())
-if (!controlMode) void readPaneMode()
-
-// A drag selection on the live view can only cover the rows on screen. When it
-// runs off the top edge (or meets the wheel) in a pane whose history is in
-// tmux, the overlay takes the drag over from where it started and keeps
-// scrolling, so a copy can reach as far back as the history goes.
-let liveDrag: { row: number; col: number } | null = null
-
-host.addEventListener(
-  'mousedown',
-  (e) => {
-    liveDrag = null
-    if (e.button !== 0 || e.shiftKey || overlay.active || overlay.opening) return
-    if (e.target instanceof Node && overlayHost()?.contains(e.target)) return
-    const screen = terminalHost.querySelector<HTMLElement>('.xterm-screen')
-    if (!screen) return
-    const { column, row } = pointToCell(screen, term.cols, term.rows, e.clientX, e.clientY)
-    liveDrag = { row: row - 1, col: column - 1 }
-  },
-  true,
-)
-
-function continueDragInHistory(e: MouseEvent): boolean {
-  const anchor = liveDrag
-  if (controlMode) return false // xterm's own selection already reaches history
-  if (!anchor || !(e.buttons & 1) || overlay.active || overlay.opening) return false
-  if (!paneMode || paneMode.alternateScreen || paneOwnsSelection()) return false
-  liveDrag = null
-  // End xterm's own drag on the live view before the overlay takes over, so it
-  // neither keeps extending a hidden selection nor copies it on release.
-  document.dispatchEvent(
-    new MouseEvent('mouseup', { bubbles: true, button: 0, clientX: e.clientX, clientY: e.clientY }),
-  )
-  term.clearSelection()
-  void overlay.continueSelection(anchor, e.clientX, e.clientY)
-  return true
-}
-
-window.addEventListener(
-  'mousemove',
-  (e) => {
-    if (!liveDrag) return
-    const screen = terminalHost.querySelector<HTMLElement>('.xterm-screen')
-    if (screen && e.clientY < screen.getBoundingClientRect().top) continueDragInHistory(e)
-  },
-  true,
-)
-window.addEventListener('mouseup', () => {
-  liveDrag = null
-})
-
-function applyWheel(
-  wheel: { deltaY: number; deltaMode: number; clientX: number; clientY: number },
-  mode: PaneMode,
-): void {
-  const action = scrollbackWheelAction({
-    deltaY: wheel.deltaY,
-    overlayActive: overlay.active || overlay.opening,
-    mouseReportingActive: mode.mouseReporting,
-    alternateScreen: mode.alternateScreen,
-    tuiSlug,
   })
-  if (action === 'ignore' || action === 'consume') return
-
-  // The TUI holds its own transcript (Claude Code): give it the wheel.
-  if (action === 'forward') {
-    forwardWheel(wheel)
-    return
-  }
-
-  void overlay.enter(wheelLineDelta(wheel.deltaY))
 }
 
-host.addEventListener(
-  'wheel',
-  (e) => {
-    if (e.deltaY === 0) return
-    // Ahead of xterm, whose viewport scrolls its history at its own speed.
-    if (controlMode) {
-      if (!controlWheel(e)) return
+// Control mode: the wheel is routed here, ahead of xterm, whose viewport
+// scrolls its history at its own speed.
+if (controlMode) {
+  host.addEventListener(
+    'wheel',
+    (e) => {
+      if (e.deltaY === 0 || !controlWheel(e)) return
       e.preventDefault()
       e.stopPropagation()
       e.stopImmediatePropagation()
-      return
-    }
-
-    // Wheel-up mid-drag carries the selection into history.
-    if (e.deltaY < 0 && liveDrag && continueDragInHistory(e)) {
-      e.preventDefault()
-      e.stopPropagation()
-      e.stopImmediatePropagation()
-      return
-    }
-
-    // A plain shell keeps its output in tmux history, and xterm already knows
-    // whether a program on top grabbed the mouse, so it needs no tmux
-    // round-trip: open history, or forward the wheel to that program.
-    if (tuiSlug === 'shell') {
-      const mode: PaneMode = {
-        alternateScreen: term.buffer.active.type === 'alternate',
-        mouseReporting: mouseReportingActive(term),
-        historySize: 0,
-      }
-      const action = scrollbackWheelAction({
-        deltaY: e.deltaY,
-        overlayActive: overlay.active || overlay.opening,
-        mouseReportingActive: mode.mouseReporting,
-        alternateScreen: mode.alternateScreen,
-        tuiSlug,
-      })
-      if (action === 'ignore') return
-      e.preventDefault()
-      e.stopPropagation()
-      e.stopImmediatePropagation()
-      if (action === 'consume') return
-      applyWheel(e, mode)
-      return
-    }
-
-    // While the overlay is up it owns the wheel: claiming the event here left
-    // it draggable by its scrollbar and nothing else.
-    if (
-      !claimsWheelForPane({
-        deltaY: e.deltaY,
-        overlayActive: overlay.active || overlay.opening,
-        tuiSlug,
-      })
-    ) {
-      return
-    }
-
-    // An agent TUI's route depends on the pane, so claim the event either way
-    // and act once the answer is in hand.
-    e.preventDefault()
-    e.stopPropagation()
-    e.stopImmediatePropagation()
-    const wheel = {
-      deltaY: e.deltaY,
-      deltaMode: e.deltaMode,
-      clientX: e.clientX,
-      clientY: e.clientY,
-    }
-    const mode = readPaneMode()
-    if (mode instanceof Promise) {
-      void mode.then((resolved) => applyWheel(wheel, resolved))
-      return
-    }
-    applyWheel(wheel, mode)
-  },
-  { passive: false, capture: true },
-)
+    },
+    { passive: false, capture: true },
+  )
+}

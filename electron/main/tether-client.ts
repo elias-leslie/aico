@@ -45,15 +45,6 @@ export interface ContextHook {
   checkedAt: number | null
 }
 
-/** Who owns the pane's scroll: the program, tmux's copy mode, or history. */
-export interface PaneMode {
-  alternateScreen: boolean
-  mouseReporting: boolean
-  historySize: number
-  inMode: boolean
-  mode: string | null
-}
-
 export interface SessionDescriptor {
   id: string
   ownershipId: string
@@ -121,14 +112,6 @@ export interface LegacySession {
 export const LEGACY_SESSION_NAME =
   /^summitflow-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
-export interface ScrollbackPage {
-  generation: string
-  fromLine: number
-  totalLines: number
-  historySize: number
-  text: string
-}
-
 export interface TetherTool {
   slug: string
   name: string
@@ -183,23 +166,6 @@ export class TetherUnavailable extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'TetherUnavailable'
-  }
-}
-
-const PANE_MODE_TIMEOUT_MS = 2_000
-
-/** A pane-mode answer with every field checked; anything odd reads as a plain
- * pane with no history, which keeps wheel and keys on the terminal. */
-export function parsePaneMode(body: unknown): PaneMode {
-  const value = (body ?? {}) as Record<string, unknown>
-  const history = value.historySize
-  return {
-    alternateScreen: value.alternateScreen === true,
-    mouseReporting: value.mouseReporting === true,
-    historySize:
-      typeof history === 'number' && Number.isSafeInteger(history) && history > 0 ? history : 0,
-    inMode: value.inMode === true,
-    mode: typeof value.mode === 'string' ? value.mode : null,
   }
 }
 
@@ -458,27 +424,6 @@ export class TetherClient {
     return parseContextHook(body.contextHook)
   }
 
-  async paneMode(id: string): Promise<PaneMode> {
-    return parsePaneMode(
-      await this.json('GET', `/v1/sessions/${encodeURIComponent(id)}/pane-mode`, undefined, {
-        timeoutMs: PANE_MODE_TIMEOUT_MS,
-      }),
-    )
-  }
-
-  async legacyPaneMode(name: string): Promise<PaneMode> {
-    return parsePaneMode(
-      await this.json(
-        'GET',
-        `/v1/legacy-sessions/${encodeURIComponent(name)}/pane-mode`,
-        undefined,
-        {
-          timeoutMs: PANE_MODE_TIMEOUT_MS,
-        },
-      ),
-    )
-  }
-
   diagnostics(id: string): Promise<Record<string, unknown>> {
     return this.json('GET', `/v1/sessions/${encodeURIComponent(id)}/diagnostics`, undefined, {
       timeoutMs: 15_000,
@@ -509,17 +454,6 @@ export class TetherClient {
       `/v1/legacy-sessions/${encodeURIComponent(name)}/attach`,
     )
     return parseAttachTarget({ ...body, generation: '' })
-  }
-
-  scrollback(
-    id: string,
-    query: { fromLine?: number; count?: number; escapes: boolean },
-  ): Promise<ScrollbackPage> {
-    const params = new URLSearchParams()
-    if (query.fromLine !== undefined) params.set('fromLine', String(query.fromLine))
-    if (query.count !== undefined) params.set('count', String(query.count))
-    if (query.escapes) params.set('escapes', '1')
-    return this.json('GET', `/v1/sessions/${encodeURIComponent(id)}/scrollback?${params}`)
   }
 
   inject(

@@ -74,12 +74,12 @@ export function setCoordinatorAction(on: boolean): void {
 
 const TRANSPORT_ACTION = {
   attach: {
-    label: 'Switch to new scrollback',
-    note: 'You are on classic scrollback. Every window reloads and keeps its history in the terminal itself; sessions keep running.',
+    label: 'Switch to terminal scrollback',
+    note: 'You are on plain tmux attach. Every window reloads and keeps its history in the terminal itself; sessions keep running.',
   },
   control: {
-    label: 'Switch to classic scrollback',
-    note: 'You are on new scrollback. Every window reloads and goes back to the tmux history overlay; sessions keep running.',
+    label: 'Switch to plain tmux attach',
+    note: 'You are on terminal scrollback. As a fallback, every window reloads as a plain tmux client with history in tmux copy mode; sessions keep running.',
   },
 }
 
@@ -215,7 +215,7 @@ export const ACTIONS: Action[] = [
   {
     id: 'terminal-transport-toggle',
     section: 'Session',
-    ...TRANSPORT_ACTION.attach,
+    ...TRANSPORT_ACTION.control,
     shortcut: '',
     icon: '⇅',
     run: () => window.aico.terminal.toggleTransport(),

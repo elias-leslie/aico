@@ -23,8 +23,9 @@ instead. Most were closed by additive v1 changes after the live cutover
 
 1. **Pane mode.** Tether serves `GET /v1/sessions/:id/pane-mode` and
    `GET /v1/legacy-sessions/:name/pane-mode`
-   (`{alternateScreen, mouseReporting, historySize, inMode, mode}`). Aico's
-   `tmux:pane-mode` handler asks Tether and no longer runs `display-message`.
+   (`{alternateScreen, mouseReporting, historySize, inMode, mode}`). Aico used
+   it for its attach-mode scrollback overlay; the overlay is gone (control mode
+   is the default), so Aico no longer calls it.
 2. **Context-hook status.** Every descriptor carries `contextHook`
    (`{state, detail, tool, applicable, checkedAt}`), changes publish
    `session.updated`, Tether re-checks running sessions after its own restart,

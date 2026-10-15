@@ -1,10 +1,9 @@
 // Wheel-to-mouse-report translation for TUIs that own their own scrollback.
 //
 // Claude Code draws in the alternate screen and turns on SGR (1006) mouse
-// reporting, so tmux keeps no usable history for it — the scrollback overlay
-// has nothing to show. The program itself holds that transcript and scrolls it
-// when it receives wheel reports, so aico builds the reports and writes them
-// straight to the pty.
+// reporting, so the terminal keeps no history for it. The program itself holds
+// that transcript and scrolls it when it receives wheel reports, so aico builds
+// the reports and writes them straight to the pane.
 
 /** SGR (1006) mouse button codes for wheel up/down. */
 const SGR_WHEEL_UP_BUTTON = 64

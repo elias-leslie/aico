@@ -15,7 +15,6 @@ import {
   parseAttachTarget,
   parseContextHook,
   parseGuiCommand,
-  parsePaneMode,
   reconnectDelay,
   splitNdjson,
   TetherClient,
@@ -207,21 +206,11 @@ describe('Tether requests', () => {
 })
 
 describe('post-cutover routes', () => {
-  it('switches to a project or a plain root, reads pane mode and re-checks context', async () => {
+  it('switches to a project or a plain root and re-checks context', async () => {
     const seen: { method?: string; url?: string; body: unknown }[] = []
-    const name = 'summitflow-70b339cd-93a0-4898-8c4b-3d694ce8e8dc'
     const { client } = await fakeTether(async (req, res) => {
       seen.push({ method: req.method, url: req.url, body: await readBody(req) })
-      if (req.url?.endsWith('/pane-mode'))
-        json(res, 200, {
-          generation: 'g',
-          alternateScreen: false,
-          mouseReporting: true,
-          historySize: 4200,
-          inMode: true,
-          mode: 'copy-mode',
-        })
-      else if (req.url?.endsWith('/context-check'))
+      if (req.url?.endsWith('/context-check'))
         json(res, 200, {
           generation: 'g',
           contextHook: {
@@ -237,14 +226,6 @@ describe('post-cutover routes', () => {
     const generation = 'c'.repeat(64)
     await client.switchProject('0a1b2c3d', generation, { projectId: 'aico' })
     await client.switchProject('0a1b2c3d', generation, { projectRoot: '/home/u/pw' })
-    expect(await client.paneMode('0a1b2c3d')).toEqual({
-      alternateScreen: false,
-      mouseReporting: true,
-      historySize: 4200,
-      inMode: true,
-      mode: 'copy-mode',
-    })
-    expect((await client.legacyPaneMode(name)).historySize).toBe(4200)
     expect(await client.contextCheck('0a1b2c3d')).toEqual({
       state: 'available',
       detail: 'ok',
@@ -255,20 +236,11 @@ describe('post-cutover routes', () => {
     expect(seen.map(({ method, url, body }) => [method, url, body])).toEqual([
       ['POST', '/v1/sessions/0a1b2c3d/switch-project', { generation, projectId: 'aico' }],
       ['POST', '/v1/sessions/0a1b2c3d/switch-project', { generation, projectRoot: '/home/u/pw' }],
-      ['GET', '/v1/sessions/0a1b2c3d/pane-mode', null],
-      ['GET', `/v1/legacy-sessions/${name}/pane-mode`, null],
       ['POST', '/v1/sessions/0a1b2c3d/context-check', null],
     ])
   })
 
-  it('reads odd pane-mode and context answers safely', () => {
-    expect(parsePaneMode({ historySize: -1, alternateScreen: 'yes' })).toEqual({
-      alternateScreen: false,
-      mouseReporting: false,
-      historySize: 0,
-      inMode: false,
-      mode: null,
-    })
+  it('reads odd context answers safely', () => {
     expect(parseContextHook(undefined)).toBeNull()
     expect(parseContextHook({ state: 'unknown', detail: '', tool: 'shell' })).toBeNull()
   })
