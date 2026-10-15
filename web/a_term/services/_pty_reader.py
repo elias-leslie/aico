@@ -95,6 +95,7 @@ async def _flush_batch(
     backpressure: BackpressureController | None = None,
     use_binary: bool = False,
     diag: SessionDiagnostics | None = None,
+    detect_exit: bool = True,
 ) -> tuple[str, float, bool]:
     """Send buffered output to the websocket.
 
@@ -117,7 +118,7 @@ async def _flush_batch(
             await on_flush(batch_buffer)
         if diag is not None:
             diag.record("pty_flush", batch_size=nbytes, use_binary=use_binary)
-        if _TMUX_EXITED_RE.search(batch_buffer):
+        if detect_exit and _TMUX_EXITED_RE.search(batch_buffer):
             logger.info("tmux_session_exited_detected")
             return "", loop.time(), False
     return "", loop.time(), True
@@ -172,14 +173,16 @@ async def _run_one_iteration(
                 return  # hold for one more cycle
         state["_esc_hold_count"] = 0
         state["batch"], state["flush_time"], ok = await _flush_batch(
-            websocket, state["batch"], loop, on_flush, backpressure, use_binary, diag
+            websocket, state["batch"], loop, on_flush, backpressure, use_binary, diag, state.get("detect_exit", True)
         )
         if not ok:
             state["running"] = False
         return
 
     if output is None:
-        await _flush_batch(websocket, state["batch"], loop, on_flush, backpressure, use_binary, diag)
+        await _flush_batch(
+            websocket, state["batch"], loop, on_flush, backpressure, use_binary, diag, state.get("detect_exit", True)
+        )
         state["running"] = False
         return
 
@@ -195,7 +198,7 @@ async def _run_one_iteration(
         # escape, wait one more iteration (max 16ms / 8KB extra).
         if not incomplete_esc and (size_limit_hit or queue.empty()):
             state["batch"], state["flush_time"], ok = await _flush_batch(
-                websocket, state["batch"], loop, on_flush, backpressure, use_binary, diag
+                websocket, state["batch"], loop, on_flush, backpressure, use_binary, diag, state.get("detect_exit", True)
             )
             if not ok:
                 state["running"] = False
@@ -209,6 +212,7 @@ async def _run_batch_loop(
     backpressure: BackpressureController | None = None,
     use_binary: bool = False,
     diag: SessionDiagnostics | None = None,
+    detect_exit: bool = True,
 ) -> None:
     """Drive the batching loop: read from queue, decode, flush to websocket."""
     state: dict = {
@@ -216,6 +220,9 @@ async def _run_batch_loop(
         "batch": "",
         "flush_time": loop.time(),
         "running": True,
+        # Attach clients print "[exited]" when the session ends; control mode
+        # ends its stream instead, so program output must not stop it.
+        "detect_exit": detect_exit,
     }
 
     try:

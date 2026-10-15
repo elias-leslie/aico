@@ -92,17 +92,19 @@ def test_protocol_routes_replies_output_and_notifications() -> None:
     exits: list[bool] = []
     protocol = ControlProtocol(lambda p, b: outputs.append((p, b)), pauses.append, lambda: exits.append(True))
     replies: list[list[str]] = []
-    protocol.expect(2, lambda blocks: replies.append([line for b in blocks for line in b.lines]))
+    # The first command (refresh-client -A) can carry notifications in its
+    # reply; in the second (a capture) the same text is pane content.
+    protocol.expect(2, lambda blocks: replies.append([line for b in blocks for line in b.lines]), notifying=[0])
     stream = (
         b"%begin 1 1 0\n%end 1 1 0\n"  # the session-open block is not ours
         b"%output %1 hi\\012\n"
-        b"%begin 2 2 1\nfirst\n%pause %1\n%end not ours\n%end 2 2 1\n"
-        b"%begin 3 3 1\n\xc3\xa9\n%end 3 3 1\n"
+        b"%begin 2 2 1\nfirst\n%continue %1\n%end not ours\n%end 2 2 1\n"
+        b"%begin 3 3 1\n\xc3\xa9\n%pause %1\n%end 3 3 1\n"
         b"%extended-output %1 7 : late\n%pause %1\n%exit\n"
     )
     for at in range(0, len(stream), 7):  # arbitrary chunking
         protocol.feed(stream[at : at + 7])
-    assert replies == [["first", "%end not ours", "é"]]
+    assert replies == [["first", "%end not ours", "é", "%pause %1"]]
     assert outputs == [("%1", b"hi\n"), ("%1", b"late")]
     assert pauses == ["%1"] and exits == [True]
 
@@ -197,6 +199,37 @@ async def test_live_alternate_screen_seed_and_resize_reseed(tmux_server) -> None
         assert "100" in tmux("list-clients", "-F", "#{client_width}")
     finally:
         await term.close()
+
+
+@pytest.mark.asyncio
+@pytestmark_live
+async def test_live_reseed_keeps_an_unfinished_escape_sequence(tmux_server) -> None:
+    tmux, argv, env = tmux_server
+    tmux("send-keys", "-t", "t", "clear; printf 'abc\\033[3'; sleep 30", "Enter")
+    await asyncio.sleep(0.5)
+    term = await ControlTerminal.start(argv, env, 80, 24)
+    try:
+        seed = await _drain(term)
+        assert seed.endswith(b"\x1b[3")  # its "1m" arrives in the stream
+    finally:
+        await term.close()
+
+
+@pytest.mark.asyncio
+@pytestmark_live
+async def test_live_cancelled_start_closes_the_client(tmux_server, monkeypatch) -> None:
+    tmux, argv, env = tmux_server
+    monkeypatch.setattr(ControlTerminal, "reseed", lambda self, continue_pane=False: None)  # never ready
+    task = asyncio.create_task(ControlTerminal.start(argv, env, 80, 24))
+    for _ in range(50):  # until the client is attached and start() is waiting
+        await asyncio.sleep(0.05)
+        if tmux("list-clients").strip():
+            break
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    await asyncio.sleep(0.3)
+    assert tmux("list-clients").strip() == ""
 
 
 @pytest.mark.asyncio

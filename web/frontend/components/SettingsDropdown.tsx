@@ -95,20 +95,28 @@ export function SettingsDropdown({
   // Switching renderers means rebuilding every xterm instance, so reload once
   // instead of trying to swap addons underneath live panes. tmux keeps the
   // sessions, so a reload costs nothing but the repaint.
-  const changeRenderer = useCallback((value: ATermRendererPreference) => {
-    setRenderer(value)
-    setRendererPreference(value)
-    window.location.reload()
-  }, [])
+  const changeRenderer = useCallback(
+    (value: ATermRendererPreference) => {
+      if (value === renderer) return
+      setRenderer(value)
+      setRendererPreference(value)
+      window.location.reload()
+    },
+    [renderer],
+  )
   const [scrollbackMode, setScrollbackModeState] =
     useState<ScrollbackMode>('new')
   useEffect(() => setScrollbackModeState(getScrollbackMode()), [])
   // Every pane reconnects on the other transport; tmux keeps the sessions.
-  const changeScrollbackMode = useCallback((value: ScrollbackMode) => {
-    setScrollbackModeState(value)
-    setScrollbackMode(value)
-    window.location.reload()
-  }, [])
+  const changeScrollbackMode = useCallback(
+    (value: ScrollbackMode) => {
+      if (value === scrollbackMode) return
+      setScrollbackModeState(value)
+      setScrollbackMode(value)
+      window.location.reload()
+    },
+    [scrollbackMode],
+  )
   const buttonRef = useRef<HTMLButtonElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
@@ -220,6 +228,10 @@ export function SettingsDropdown({
           label="Scrollback Mode"
           value={scrollbackMode}
           options={SCROLLBACK_MODE_OPTIONS}
+          titles={{
+            new: '20K lines of history, native wheel scrolling',
+            classic: 'tmux attach with the scrollback overlay',
+          }}
           onChange={changeScrollbackMode}
         />
 

@@ -391,6 +391,27 @@ async def test_control_session_streams_its_queue_and_closes_the_client() -> None
     ):
         assert await _run_session(AsyncMock(), plan.session_id) == (None, None)
     assert batch.call_args.args[1] is control.queue
+    assert batch.call_args.kwargs["detect_exit"] is False
     read_pty.assert_not_called()
     scheduler_cls.assert_not_called()
     control.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("detect_exit", "sent"), [(True, "[exited]\n"), (False, "[exited]\nmore")])
+async def test_exited_text_stops_only_attach_output(detect_exit: bool, sent: str) -> None:
+    import asyncio
+
+    from a_term.services._pty_reader import _run_batch_loop
+
+    queue: asyncio.Queue[bytes | None] = asyncio.Queue()
+    websocket = AsyncMock()
+    await queue.put(b"[exited]\n")
+    loop_task = asyncio.create_task(
+        _run_batch_loop(websocket, queue, asyncio.get_running_loop(), detect_exit=detect_exit)
+    )
+    await asyncio.sleep(0.05)
+    await queue.put(b"more")
+    await queue.put(None)
+    await asyncio.wait_for(loop_task, 1)
+    assert "".join(call.args[0] for call in websocket.send_text.call_args_list) == sent

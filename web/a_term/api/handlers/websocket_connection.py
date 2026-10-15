@@ -496,6 +496,7 @@ async def _run_control_session(websocket: WebSocket, plan: AttachPlan, view: Vie
             None,
             "binary_protocol" in view.capabilities,
             diag,
+            detect_exit=False,
         )
     )
     heartbeat_task = asyncio.create_task(_heartbeat_loop(websocket))

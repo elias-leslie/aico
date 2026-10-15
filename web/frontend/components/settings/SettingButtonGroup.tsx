@@ -6,6 +6,8 @@ export interface SettingButtonGroupProps<T extends string> {
   options: readonly T[]
   onChange: (value: T) => void
   capitalize?: boolean
+  /** Optional tooltip per option. */
+  titles?: Partial<Record<T, string>>
 }
 
 export function SettingButtonGroup<T extends string>({
@@ -14,6 +16,7 @@ export function SettingButtonGroup<T extends string>({
   options,
   onChange,
   capitalize = true,
+  titles,
 }: SettingButtonGroupProps<T>) {
   return (
     <div className="mb-4">
@@ -30,6 +33,8 @@ export function SettingButtonGroup<T extends string>({
             <button
               key={option}
               type="button"
+              aria-pressed={isActive}
+              title={titles?.[option]}
               onClick={() => onChange(option)}
               className={`flex-1 px-2 py-2.5 min-h-[44px] text-xs rounded-md transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--term-accent)] ${capitalize ? 'capitalize' : ''}`}
               style={{

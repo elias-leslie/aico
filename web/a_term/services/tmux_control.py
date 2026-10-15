@@ -22,7 +22,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import dataclass, field
 
 from ..logging_config import get_logger
@@ -217,12 +217,23 @@ class ControlProtocol:
         self._block: Block | None = None
         self._block_tail = b""
         self._block_ours = False
-        self._handlers: list[BlockHandler] = []
+        self._block_notifies = False
+        # One (handler, reply may carry %pause/%continue) per expected reply.
+        self._handlers: list[tuple[BlockHandler, bool]] = []
 
-    def expect(self, count: int, handler: Callable[[list[Block]], None] | None = None) -> None:
-        """Register reply handlers for a command list of ``count`` commands."""
+    def expect(
+        self,
+        count: int,
+        handler: Callable[[list[Block]], None] | None = None,
+        notifying: Collection[int] = (),
+    ) -> None:
+        """Register reply handlers for a command list of ``count`` commands.
+
+        ``notifying`` lists the commands (by index) whose reply tmux can
+        interleave a pane's %pause/%continue into (``refresh-client -A``).
+        """
         if handler is None:
-            self._handlers.extend([None] * count)
+            self._handlers.extend((None, i in notifying) for i in range(count))
             return
         blocks: list[Block] = []
 
@@ -231,7 +242,7 @@ class ControlProtocol:
             if len(blocks) == count:
                 handler(blocks)
 
-        self._handlers.extend([collect] * count)
+        self._handlers.extend((collect, i in notifying) for i in range(count))
 
     def feed(self, chunk: bytes) -> None:
         self._buffer += chunk
@@ -248,13 +259,14 @@ class ControlProtocol:
                 # Handlers run here, before the next line is parsed, so a
                 # handler can switch how the output after its reply is treated.
                 if self._block_ours and self._handlers:
-                    handler = self._handlers.pop(0)
+                    handler, _ = self._handlers.pop(0)
                     if handler is not None:
                         handler(done)
                 return
             # tmux can report a pause/continue from inside the reply of the
-            # command that caused it; neither is reply text.
-            if _PAUSE_OR_CONTINUE.match(raw):
+            # command that caused it; neither is reply text. Elsewhere (a
+            # capture) the same text is pane content.
+            if self._block_notifies and _PAUSE_OR_CONTINUE.match(raw):
                 return
             self._block.lines.append(raw.decode("utf-8", errors="replace"))
             return
@@ -263,6 +275,7 @@ class ControlProtocol:
             self._block_tail = raw.split(b" ", 1)[1]
             fields = raw.split(b" ")
             self._block_ours = len(fields) > 3 and fields[3] == b"1"
+            self._block_notifies = self._block_ours and bool(self._handlers) and self._handlers[0][1]
             return
         if raw.startswith(b"%output "):
             space = raw.find(b" ", 8)
@@ -340,13 +353,18 @@ class ControlTerminal:
             cwd=cwd,
         )
         term = cls(process, attach_argv, env, cols, rows, asyncio.Queue(maxsize=256))
-        if sized:
-            term._send([f"refresh-client -C {cols}x{rows}"])
-        else:
-            term.cols = term.rows = 0  # the first real size is always sent
-        term.reseed()
-        with contextlib.suppress(TimeoutError):
-            await asyncio.wait_for(term._ready.wait(), FIRST_SEED_TIMEOUT_SECONDS)
+        try:
+            if sized:
+                term._send([f"refresh-client -C {cols}x{rows}"])
+            else:
+                term.cols = term.rows = 0  # the first real size is always sent
+            term.reseed()
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(term._ready.wait(), FIRST_SEED_TIMEOUT_SECONDS)
+        except BaseException:
+            # Cancelled before the caller owns it: nobody else would close it.
+            await asyncio.shield(term.close())
+            raise
         return term
 
     @property
@@ -404,26 +422,32 @@ class ControlTerminal:
         self._phase = "seeding"
         fmt = " ".join(f"#{{{name}}}" for name in SEED_FLAGS)
         history = f"-S -{SEED_HISTORY_LINES}"
+        resume = [f"refresh-client -A '{self.pane_id}:continue'"] if continue_pane and self.pane_id else []
         commands = [
-            *([f"refresh-client -A '{self.pane_id}:continue'"] if continue_pane and self.pane_id else []),
+            *resume,
             f"display-message -p '{fmt}'",
             f"capture-pane -p -e {history} -E -",
             f"capture-pane -p -e -q -a {history} -E -",
+            # The start of an escape sequence the pane has not finished yet:
+            # its end streams after the seed and must not land as text.
+            "capture-pane -p -P",
         ]
-        seed_at = len(commands) - 3
+        seed_at = len(resume)
 
         # Runs on the list's last %end: output parsed after it is newer than
         # the captures and streams straight after the seed.
         def on_reply(blocks: list[Block]) -> None:
-            flags_block, main_block, alt_block = blocks[seed_at:]
+            flags_block, main_block, alt_block, partial_block = blocks[seed_at:]
             flags = None if flags_block.error else parse_seed_flags(flags_block.lines[0] if flags_block.lines else "")
             if flags is None or main_block.error:
                 self._go_live("")  # pane not readable: stream rather than stall
                 return
             self.pane_id = flags.pane_id
-            self._go_live(build_seed(flags, main_block.lines, [] if alt_block.error else alt_block.lines))
+            seed = build_seed(flags, main_block.lines, [] if alt_block.error else alt_block.lines)
+            partial = "" if partial_block.error else "".join(partial_block.lines)
+            self._go_live(seed + partial)
 
-        self._send_list(commands, on_reply)
+        self._send_list(commands, on_reply, notifying=range(len(resume)))
 
     async def close(self) -> None:
         if self._phase != "closed":
@@ -432,6 +456,11 @@ class ControlTerminal:
                 self._reseed_handle.cancel()
             with contextlib.suppress(Exception):
                 self._process.stdin.close()  # type: ignore[union-attr]
+        # Stop the reader first: it may be blocked on a full queue, and an
+        # unread stdout pipe can keep the client from exiting.
+        self._reader.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await self._reader
         if self._process.returncode is None:
             with contextlib.suppress(ProcessLookupError):
                 self._process.terminate()
@@ -440,10 +469,8 @@ class ControlTerminal:
             except TimeoutError:
                 with contextlib.suppress(ProcessLookupError):
                     self._process.kill()
-                await self._process.wait()
-        self._reader.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await self._reader
+                with contextlib.suppress(TimeoutError):
+                    await asyncio.wait_for(self._process.wait(), 1.0)
 
     # -- internals ---------------------------------------------------------
 
@@ -474,11 +501,16 @@ class ControlTerminal:
         for command in commands:
             self._send_list([command])
 
-    def _send_list(self, commands: list[str], handler: Callable[[list[Block]], None] | None = None) -> None:
+    def _send_list(
+        self,
+        commands: list[str],
+        handler: Callable[[list[Block]], None] | None = None,
+        notifying: Collection[int] = (),
+    ) -> None:
         stdin = self._process.stdin
         if self._phase == "closed" or stdin is None or stdin.is_closing():
             return
-        self._protocol.expect(len(commands), handler)
+        self._protocol.expect(len(commands), handler, notifying)
         stdin.write((" ; ".join(commands) + "\n").encode("utf-8"))
 
     async def _read(self) -> None:
