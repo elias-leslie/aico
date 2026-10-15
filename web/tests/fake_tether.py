@@ -9,14 +9,18 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import socketserver
+import tempfile
 import threading
 import time
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
+
+_TEMP_ROOT = os.path.join(os.path.realpath(tempfile.gettempdir()), "")
 
 TMUX_BIN = "/usr/bin/tmux"
 # Attach env is overrides only, then the unset list (api-v1.md "Terminal I/O").
@@ -517,6 +521,14 @@ def _label(value: Any) -> str | None:
     return label
 
 
+def _test_dir(root: str) -> bool:
+    """The fake only probes directories pytest created under the temp dir, never arbitrary host paths."""
+    if not os.path.isabs(root):
+        return False
+    path = os.path.realpath(root)
+    return path.startswith(_TEMP_ROOT) and os.path.isdir(path)
+
+
 def _projects(state: FakeTetherState, method: str, query: dict[str, str], body: Any) -> tuple[int, Any]:
     if method == "GET":
         return 200, {"source": state.project_source, "fetchedAt": 0, "projects": state.projects}
@@ -529,7 +541,7 @@ def _projects(state: FakeTetherState, method: str, query: dict[str, str], body: 
     project_id, root = body.get("id"), body.get("root")
     if not isinstance(project_id, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", project_id):
         return _error(400, "invalid_project_id")
-    if not isinstance(root, str) or not Path(root).is_absolute() or not Path(root).is_dir():
+    if not isinstance(root, str) or not _test_dir(root):
         return _error(400, "invalid_project_root")
     if any(project["id"] == project_id for project in state.projects):
         return _error(409, "project_exists")
