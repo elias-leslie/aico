@@ -284,3 +284,113 @@ async def test_tether_scrollback_sync_captures_from_the_sessions_socket() -> Non
         captured["get_scrollback_with_cursor_fn"]("tether-a0000001")
 
     capture.assert_called_once_with("tether-a0000001", socket_name=SOCKET)
+
+
+# ---------------------------------------------------------------------------
+# Control-mode transport
+# ---------------------------------------------------------------------------
+
+
+def _control_socket(transport: str | None = "control") -> AsyncMock:
+    websocket = AsyncMock()
+    websocket.query_params = {"transport": transport} if transport else {}
+    return websocket
+
+
+def _control_terminal(pid: int = 31) -> MagicMock:
+    control = MagicMock()
+    control.pid = pid
+    control.close = AsyncMock()
+    return control
+
+
+@pytest.mark.asyncio
+async def test_control_view_starts_after_the_first_size_and_then_claims() -> None:
+    plan = _plan()
+    websocket = _control_socket()
+    control = _control_terminal()
+
+    async def fake_wait(_websocket, view, timeout=5.0):
+        view.last_resize[:] = [100, 40]
+        view.pending_claim = True
+        return True
+
+    with (
+        patch(f"{MODULE}.validate_and_prepare_session", return_value=plan),
+        patch(f"{MODULE}.spawn_pty") as spawn,
+        patch(f"{MODULE}._wait_for_initial_resize", new=fake_wait),
+        patch(f"{MODULE}.ControlTerminal.start", new=AsyncMock(return_value=control)) as start,
+        patch(f"{MODULE}._claim_window_size", return_value=True) as claim,
+        patch(f"{MODULE}.get_scrollback") as get_scrollback,
+    ):
+        _plan_out, view, pid = await _setup_connection(websocket, "a0000001")
+
+    spawn.assert_not_called()
+    get_scrollback.assert_not_called()  # the seed carries history
+    assert start.await_args is not None
+    args, kwargs = start.await_args
+    assert args[0] == plan.argv and args[2:] == (100, 40)
+    assert args[1]["COLORTERM"] == "truecolor" and "TMUX" not in args[1]
+    assert kwargs["sized"] is True
+    assert (view.control, view.client_pid, view.master_fd, pid) == (control, 31, -1, 31)
+    claim.assert_called_once_with(view, 100, 40)
+    assert view.pending_claim is False
+    sent = [json.loads(call.args[0]) for call in websocket.send_text.await_args_list]
+    assert {"__ctrl": True, "transport": "control"} in sent
+
+
+@pytest.mark.asyncio
+async def test_control_view_without_a_size_starts_unsized() -> None:
+    plan = _plan()
+    control = _control_terminal()
+    with (
+        patch(f"{MODULE}.validate_and_prepare_session", return_value=plan),
+        patch(f"{MODULE}._wait_for_initial_resize", new=AsyncMock(return_value=True)),
+        patch(f"{MODULE}.ControlTerminal.start", new=AsyncMock(return_value=control)) as start,
+        patch(f"{MODULE}._claim_window_size") as claim,
+    ):
+        await _setup_connection(_control_socket(), "a0000001")
+    assert start.await_args is not None and start.await_args.kwargs["sized"] is False
+    claim.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_server_setting_keeps_classic_attach_and_says_so() -> None:
+    plan = _plan()
+    websocket = _control_socket()
+    with (
+        patch(f"{MODULE}.TERMINAL_TRANSPORT", "attach"),
+        patch(f"{MODULE}.validate_and_prepare_session", return_value=plan),
+        patch(f"{MODULE}.spawn_pty", return_value=(17, 23)) as spawn,
+        patch(f"{MODULE}._wait_for_initial_resize", new=AsyncMock()),
+        patch(f"{MODULE}.ControlTerminal.start", new=AsyncMock()) as start,
+        patch(f"{MODULE}.get_scrollback", return_value=None),
+    ):
+        _plan_out, view, _pid = await _setup_connection(websocket, "a0000001")
+    start.assert_not_awaited()
+    spawn.assert_called_once()
+    assert view.control is None and view.master_fd == 17
+    sent = [json.loads(call.args[0]) for call in websocket.send_text.await_args_list]
+    assert {"__ctrl": True, "transport": "attach"} in sent
+
+
+@pytest.mark.asyncio
+async def test_control_session_streams_its_queue_and_closes_the_client() -> None:
+    plan = _plan()
+    control = _control_terminal()
+    view = _view(plan)
+    view.master_fd = -1
+    view.control = control
+    with (
+        patch(f"{MODULE}._setup_connection", new=AsyncMock(return_value=(plan, view, 31))),
+        patch(f"{MODULE}._run_message_loop", new=AsyncMock()),
+        patch(f"{MODULE}._run_batch_loop", new=AsyncMock()) as batch,
+        patch(f"{MODULE}.read_pty_output", new=AsyncMock()) as read_pty,
+        patch(f"{MODULE}._heartbeat_loop", new=AsyncMock()),
+        patch(f"{MODULE}.ScrollbackSyncScheduler") as scheduler_cls,
+    ):
+        assert await _run_session(AsyncMock(), plan.session_id) == (None, None)
+    assert batch.call_args.args[1] is control.queue
+    read_pty.assert_not_called()
+    scheduler_cls.assert_not_called()
+    control.close.assert_awaited_once()

@@ -11,17 +11,18 @@ import contextlib
 import json
 import os
 import signal
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 
 from fastapi import WebSocket, WebSocketDisconnect
 
+from ...config import TERMINAL_TRANSPORT, TMUX_DEFAULT_COLS, TMUX_DEFAULT_ROWS
 from ...constants import SHELL_MODE
 from ...logging_config import get_logger
-from ...services._pty_reader import _make_on_readable
+from ...services._pty_reader import _make_on_readable, _run_batch_loop
 from ...services.backpressure import BackpressureController
 from ...services.diagnostics import get_registry as get_diagnostics_registry
 from ...services.metrics import get_metrics
-from ...services.pty_manager import read_pty_output, spawn_pty
+from ...services.pty_manager import attach_environment, read_pty_output, spawn_pty
 from ...services.scrollback_pager import (
     get_scrollback_line_count,
     get_viewport_lines,
@@ -33,6 +34,7 @@ from ...services.scrollback_sync import (
     build_scrollback_sync_payload,
     prepare_scrollback_for_transport,
 )
+from ...services.tmux_control import ControlTerminal
 from ...utils.tmux import (
     apply_external_attach_options,
     get_cursor_position,
@@ -41,7 +43,7 @@ from ...utils.tmux import (
     restore_external_attach_options,
 )
 from .session_validation import AttachPlan, validate_and_prepare_session
-from .websocket_messages import ViewContext, handle_websocket_message
+from .websocket_messages import ViewContext, _claim_window_size, handle_websocket_message
 
 logger = get_logger(__name__)
 SCROLLBACK_SYNC_MIN_LINES = 40
@@ -359,6 +361,53 @@ async def _send_initial_scrollback(websocket: WebSocket, plan: AttachPlan, capab
         await _send_tui_prefetch_scrollback(websocket, plan.session_id, name, socket)
 
 
+def _requested_transport(websocket: WebSocket) -> str | None:
+    params = getattr(websocket, "query_params", None)
+    return params.get("transport") if isinstance(params, Mapping) else None
+
+
+def _wants_control(websocket: WebSocket) -> bool:
+    """The browser asked for the control-mode transport and the server allows it."""
+    return TERMINAL_TRANSPORT == "control" and _requested_transport(websocket) == "control"
+
+
+async def _send_transport(websocket: WebSocket, transport: str) -> None:
+    await websocket.send_text(json.dumps({"__ctrl": True, "transport": transport}))
+
+
+async def _setup_control_connection(websocket: WebSocket, plan: AttachPlan) -> ViewContext:
+    """Start a tmux control client once the view's first size is known.
+
+    No scrollback is sent: the control client's seed carries the pane's
+    history, screen and modes into the browser's own terminal.
+    """
+    view = ViewContext(
+        session_id=plan.session_id,
+        master_fd=-1,
+        tmux_session_name=plan.tmux_session_name,
+        tmux_socket=plan.tmux_socket,
+        kind=plan.kind,
+        generation=plan.generation,
+        websocket=websocket,
+    )
+    await _send_transport(websocket, "control")
+    await _wait_for_initial_resize(websocket, view)
+    cols, rows = view.last_resize
+    view.control = await ControlTerminal.start(
+        plan.argv,
+        attach_environment(plan.env, plan.unset),
+        cols or TMUX_DEFAULT_COLS,
+        rows or TMUX_DEFAULT_ROWS,
+        cwd=os.environ.get("HOME"),
+        sized=bool(cols and rows),
+    )
+    view.client_pid = view.control.pid
+    if view.pending_claim:
+        view.pending_claim = False
+        await asyncio.to_thread(_claim_window_size, view, cols, rows)
+    return view
+
+
 async def _setup_connection(websocket: WebSocket, session_id: str) -> tuple[AttachPlan, ViewContext, int]:
     """Resolve the session, spawn the attach PTY, sync size and send scrollback.
 
@@ -374,6 +423,9 @@ async def _setup_connection(websocket: WebSocket, session_id: str) -> tuple[Atta
             external_attach_applied = bool(
                 await _call_tmux_session_fn(apply_external_attach_options, plan.tmux_session_name, plan.tmux_socket)
             )
+        if _wants_control(websocket):
+            control_view = await _setup_control_connection(websocket, plan)
+            return plan, control_view, control_view.client_pid or -1
         master_fd, pid = spawn_pty(plan.argv, plan.env, plan.unset)
         view = ViewContext(
             session_id=plan.session_id,
@@ -385,6 +437,8 @@ async def _setup_connection(websocket: WebSocket, session_id: str) -> tuple[Atta
             client_pid=pid,
             websocket=websocket,
         )
+        if _requested_transport(websocket) == "control":
+            await _send_transport(websocket, "attach")  # refused by the server setting
         await _wait_for_initial_resize(websocket, view)
         await _send_initial_scrollback(websocket, plan, view.capabilities)
         return plan, view, pid
@@ -417,6 +471,41 @@ async def _run_message_loop(
         await _cleanup_tasks(heartbeat_task, output_task)
 
 
+async def _run_control_session(websocket: WebSocket, plan: AttachPlan, view: ViewContext) -> None:
+    """Stream a control-mode view until the browser or tmux goes away.
+
+    tmux paces the stream itself (pause-after), so there is no byte
+    backpressure and no scrollback sync: history lives in the browser.
+    """
+    control = view.control
+    assert control is not None
+    session_id = plan.session_id
+    diag_registry = get_diagnostics_registry()
+    diag = diag_registry.get_or_create(session_id)
+    a_term_metrics = get_metrics()
+    a_term_metrics.inc("active_connections")
+    a_term_metrics.inc("active_sessions")
+    a_term_metrics.inc("total_sessions_created")
+    on_flush = _make_output_flush_callback(a_term_metrics, None)
+    output_task = asyncio.create_task(
+        _run_batch_loop(
+            websocket,
+            control.queue,
+            asyncio.get_running_loop(),
+            on_flush,
+            None,
+            "binary_protocol" in view.capabilities,
+            diag,
+        )
+    )
+    heartbeat_task = asyncio.create_task(_heartbeat_loop(websocket))
+    try:
+        await _run_message_loop(websocket, view, output_task, heartbeat_task)
+    finally:
+        await control.close()
+        await _teardown_session_resources(plan, session_id, None, None, diag_registry, a_term_metrics)
+
+
 async def _run_session(websocket: WebSocket, session_id: str) -> tuple[int | None, int | None]:
     """Set up and run the full view. Returns (pid, master_fd) for cleanup."""
     try:
@@ -426,6 +515,10 @@ async def _run_session(websocket: WebSocket, session_id: str) -> tuple[int | Non
             code=4000,
             reason=json.dumps({"error": "session_dead", "message": str(e)}),
         )
+        return None, None
+
+    if view.control is not None:
+        await _run_control_session(websocket, plan, view)
         return None, None
 
     capabilities = view.capabilities

@@ -42,6 +42,10 @@ interface UseATermWebSocketOptions {
     alternate_screen: boolean
     mouse_reporting: boolean
   }) => void
+  /** Called with the transport the server chose for this view */
+  onTransport?: (transport: 'control' | 'attach') => void
+  /** Ask the server for the control-mode transport */
+  requestControl?: boolean
   /** Called before reconnect data arrives — clear aTerm buffer to prevent duplicates */
   onBeforeReconnectData?: () => void
   /** Get current aTerm dimensions for resize message */
@@ -86,6 +90,8 @@ export function useATermWebSocket({
   onViewportInit,
   onScrollbackPage,
   onPaneMode,
+  onTransport,
+  requestControl = false,
   onBeforeReconnectData,
   getDimensions,
 }: UseATermWebSocketOptions): UseATermWebSocketReturn {
@@ -110,6 +116,7 @@ export function useATermWebSocket({
   const onViewportInitRef = useRef(onViewportInit)
   const onScrollbackPageRef = useRef(onScrollbackPage)
   const onPaneModeRef = useRef(onPaneMode)
+  const onTransportRef = useRef(onTransport)
   const onBeforeReconnectDataRef = useRef(onBeforeReconnectData)
   const getDimensionsRef = useRef(getDimensions)
 
@@ -124,6 +131,7 @@ export function useATermWebSocket({
     onViewportInitRef.current = onViewportInit
     onScrollbackPageRef.current = onScrollbackPage
     onPaneModeRef.current = onPaneMode
+    onTransportRef.current = onTransport
     onBeforeReconnectDataRef.current = onBeforeReconnectData
     getDimensionsRef.current = getDimensions
   }, [
@@ -136,6 +144,7 @@ export function useATermWebSocket({
     onViewportInit,
     onScrollbackPage,
     onPaneMode,
+    onTransport,
     onBeforeReconnectData,
     getDimensions,
   ])
@@ -180,14 +189,16 @@ export function useATermWebSocket({
         onViewportInit: (data) => onViewportInitRef.current?.(data),
         onScrollbackPage: (data) => onScrollbackPageRef.current?.(data),
         onPaneMode: (data) => onPaneModeRef.current?.(data),
+        onTransport: (transport) => onTransportRef.current?.(transport),
         onBeforeReconnectData: () => onBeforeReconnectDataRef.current?.(),
         onDisconnect: () => onDisconnectRef.current?.(),
         getDimensions: () => getDimensionsRef.current?.() ?? null,
         sendInitialResize,
+        requestControl,
         setStatus: (s) => setStatus(s as ConnectionStatus),
       },
     )
-  }, [sendInitialResize, sessionId, workingDir])
+  }, [requestControl, sendInitialResize, sessionId, workingDir])
 
   // Keep ref in sync for recursive timeout calls
   useEffect(() => {

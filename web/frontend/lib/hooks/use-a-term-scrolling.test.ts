@@ -564,3 +564,76 @@ describe('useATermScrolling', () => {
     wheelCleanup()
   })
 })
+
+describe('useATermScrolling in control mode', () => {
+  function setup(
+    screen: 'normal' | 'alternate',
+    mouseTrackingMode: string,
+    sgr: boolean,
+  ) {
+    const aTerm = {
+      buffer: { active: { type: screen } },
+      cols: 80,
+      modes: { mouseTrackingMode },
+      refresh: vi.fn(),
+      rows: 30,
+      scrollLines: vi.fn(),
+    }
+    const send = vi.fn()
+    const onRequestScrollbackOverlay = vi.fn()
+    const container = document.createElement('div')
+    const { result } = renderHook(() =>
+      useATermScrolling({
+        wsRef: { current: { readyState: WebSocket.OPEN, send } } as never,
+        aTermRef: { current: aTerm } as unknown as {
+          current: XtermATerm | null
+        },
+        isMobile: false,
+        controlMode: true,
+        isSgrMouse: () => sgr,
+        onRequestScrollbackOverlay,
+      }),
+    )
+    const { wheelCleanup } = result.current.setupScrolling(container)
+    const event = new WheelEvent('wheel', {
+      deltaY: -100,
+      bubbles: true,
+      cancelable: true,
+    })
+    container.dispatchEvent(event)
+    wheelCleanup()
+    return { aTerm, send, event, onRequestScrollbackOverlay }
+  }
+
+  it('scrolls xterm history 14 lines a notch, never the overlay', () => {
+    const { aTerm, send, event, onRequestScrollbackOverlay } = setup(
+      'normal',
+      'none',
+      false,
+    )
+    expect(aTerm.scrollLines).toHaveBeenCalledWith(-14)
+    expect(send).not.toHaveBeenCalled()
+    expect(onRequestScrollbackOverlay).not.toHaveBeenCalled()
+    expect(event.defaultPrevented).toBe(true)
+  })
+
+  it('sends SGR wheel reports to a program that reads SGR', () => {
+    const { aTerm, send } = setup('alternate', 'any', true)
+    expect(send).toHaveBeenCalled()
+    expect(send.mock.calls[0][0].startsWith('\x1b[<64;')).toBe(true)
+    expect(aTerm.scrollLines).not.toHaveBeenCalled()
+  })
+
+  it('leaves a non-SGR mouse report to xterm', () => {
+    const { send, event } = setup('alternate', 'vt200', false)
+    expect(send).not.toHaveBeenCalled()
+    expect(event.defaultPrevented).toBe(false)
+  })
+
+  it('consumes the wheel on a full-screen program without mouse tracking', () => {
+    const { aTerm, send, event } = setup('alternate', 'none', false)
+    expect(send).not.toHaveBeenCalled()
+    expect(aTerm.scrollLines).not.toHaveBeenCalled()
+    expect(event.defaultPrevented).toBe(true)
+  })
+})

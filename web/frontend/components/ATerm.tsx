@@ -10,6 +10,7 @@ import {
   useState,
 } from 'react'
 import '@xterm/xterm/css/xterm.css'
+import { swallowQueryReplies, trackSgrMouse } from '../lib/a-term/control-view'
 import { LineCache } from '../lib/a-term/line-cache'
 import {
   A_TERM_THEMES,
@@ -32,6 +33,10 @@ import { useScrollbackPager } from '../lib/hooks/use-scrollback-pager'
 import { profileAnsiColors } from '../lib/utils/ansi-color-profile'
 import { isMobileDevice } from '../lib/utils/device'
 import { isTuiSessionMode } from '../lib/utils/session-mode'
+import {
+  CONTROL_SCROLLBACK_LINES,
+  requestedTransport,
+} from '../lib/utils/terminal-transport'
 import { ATermDiagnosticsOverlay } from './ATermDiagnosticsOverlay'
 import type { ATermHandle, ATermProps } from './a-term.types'
 import { ScrollbackOverlay } from './ScrollbackOverlay'
@@ -160,10 +165,21 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
     const lineCacheRef = useRef(new LineCache())
     const isTuiSession = isTuiSessionMode(sessionMode)
 
+    // Control mode (the default): the backend streams the pane's own output,
+    // so this xterm holds the history and the program's real modes, and the
+    // classic overlay, pane-mode queries and snapshots stay out of the way.
+    // The server confirms the transport on connect and may refuse it.
+    const [requestControl] = useState(() => requestedTransport() === 'control')
+    const [controlMode, setControlMode] = useState(requestControl)
+    const controlModeRef = useRef(controlMode)
+    const sgrMouseRef = useRef<() => boolean>(() => false)
+    const isSgrMouse = useCallback(() => sgrMouseRef.current(), [])
+    const classicSessionMode = controlMode ? undefined : sessionMode
+
     const { enqueueWrite, applySnapshot, resetQueue } = useATermWriteQueue({
       aTermRef,
       isVisibleRef,
-      sessionMode,
+      sessionMode: classicSessionMode,
       diagnostics: {
         enabled: diagnosticsEnabled,
         incrementCounter: incrementDiagnosticCounter,
@@ -219,6 +235,12 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
         sessionId,
         workingDir,
         sendInitialResize: !suppressSharedResize,
+        requestControl,
+        onTransport: (transport) => {
+          const on = transport === 'control'
+          controlModeRef.current = on
+          setControlMode(on)
+        },
         onStatusChange,
         onDisconnect,
         onBeforeReconnectData: () => {
@@ -320,7 +342,7 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
     const overlay = useScrollbackOverlay({ wsRef, sessionMode })
     const { clearSearch, overlaySearchState, search } = useATermSearch({
       aTermRef,
-      sessionMode,
+      sessionMode: classicSessionMode,
       activateOverlay: overlay.activate,
       getOverlayLines: overlay.getCachedLines,
       overlaySearchVersion: overlay.searchVersion,
@@ -359,7 +381,20 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
       [deactivateOverlay, sendInput],
     )
 
-    const pasteInput = useBracketedPaste(sendUserInput)
+    const bracketedPaste = useBracketedPaste(sendUserInput)
+    // Control mode pastes through tmux, which brackets the text only when the
+    // program enabled bracketed paste.
+    const pasteInput = useCallback(
+      (data: string) => {
+        if (!controlModeRef.current) return bracketedPaste(data)
+        const text = data.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+        if (text && wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({ __ctrl: true, paste: text }))
+        }
+        return Promise.resolve()
+      },
+      [bracketedPaste, wsRef],
+    )
     const pasteFile = useCallback(
       (file: File) => {
         void onFilePaste?.(file, sessionId)
@@ -380,11 +415,13 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
       wsRef,
       aTermRef,
       isMobile,
-      sessionMode,
-      onRequestScrollbackOverlay: overlay.activate,
+      sessionMode: classicSessionMode,
+      onRequestScrollbackOverlay: controlMode ? undefined : overlay.activate,
       isScrollbackOverlayActive: overlay.isActive,
-      paneOwnsScrollback,
-      requestPaneMode,
+      paneOwnsScrollback: controlMode ? undefined : paneOwnsScrollback,
+      requestPaneMode: controlMode ? undefined : requestPaneMode,
+      controlMode,
+      isSgrMouse,
     })
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally empty deps — reads refs at call time
@@ -401,7 +438,13 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
     // TUI/agent sessions: scrollback overlay handles all history via tmux.
     // Setting scrollback to 0 prevents a duplicate native scrollbar from
     // accumulating live writes alongside the overlay.
-    const effectiveScrollback = isTuiSession ? 0 : scrollback
+    // Control mode: the pane's own history, as many lines as the seed carries.
+    const effectiveScrollback = controlMode
+      ? CONTROL_SCROLLBACK_LINES
+      : isTuiSession
+        ? 0
+        : scrollback
+    const showScrollbarRail = isTuiSession && !controlMode
 
     const { isReady } = useATermInstance(
       {
@@ -419,6 +462,22 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
       },
       { aTermRef, fitAddonRef, containerRef, isFocusedRef },
     )
+
+    useEffect(() => {
+      const term = aTermRef.current
+      if (!isReady || !term) return
+      const sgr = trackSgrMouse(term)
+      sgrMouseRef.current = sgr.isSgr
+      const stopSwallowing = swallowQueryReplies(
+        term,
+        () => controlModeRef.current,
+      )
+      return () => {
+        sgr.dispose()
+        stopSwallowing()
+        sgrMouseRef.current = () => false
+      }
+    }, [isReady])
 
     const { handleResize } = useATermResize({
       aTermRef,
@@ -463,12 +522,12 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
           className="h-full min-h-0 min-w-0 overflow-hidden"
           style={{
             backgroundColor: theme.background,
-            width: isTuiSession
+            width: showScrollbarRail
               ? `calc(100% - ${TUI_SCROLLBAR_RAIL_WIDTH_PX}px)`
               : '100%',
           }}
         />
-        {isTuiSession && (
+        {showScrollbarRail && (
           <div
             data-testid="a-term-scrollbar-rail"
             style={{
@@ -483,19 +542,21 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
             }}
           />
         )}
-        <ScrollbackOverlay
-          isActive={overlay.isActive}
-          lines={overlay.lines}
-          totalLines={overlay.totalLines}
-          isLoading={overlay.isLoading}
-          initialScrollLineDelta={overlay.initialScrollLineDelta}
-          searchQuery={overlaySearchState?.query ?? ''}
-          searchActiveIndex={overlaySearchState?.activeIndex ?? -1}
-          onDismiss={overlay.deactivate}
-          theme={theme}
-          fontFamily={fontFamily}
-          fontSize={fontSize}
-        />
+        {!controlMode && (
+          <ScrollbackOverlay
+            isActive={overlay.isActive}
+            lines={overlay.lines}
+            totalLines={overlay.totalLines}
+            isLoading={overlay.isLoading}
+            initialScrollLineDelta={overlay.initialScrollLineDelta}
+            searchQuery={overlaySearchState?.query ?? ''}
+            searchActiveIndex={overlaySearchState?.activeIndex ?? -1}
+            onDismiss={overlay.deactivate}
+            theme={theme}
+            fontFamily={fontFamily}
+            fontSize={fontSize}
+          />
+        )}
         <ATermDiagnosticsOverlay
           enabled={diagnosticsEnabled}
           themeId={inferredThemeId}

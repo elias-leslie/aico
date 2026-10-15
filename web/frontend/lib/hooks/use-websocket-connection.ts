@@ -45,10 +45,14 @@ export interface WebSocketConnectionCallbacks {
     alternate_screen: boolean
     mouse_reporting: boolean
   }) => void
+  /** The transport the server chose for this view (control or attach). */
+  onTransport?: (transport: 'control' | 'attach') => void
   onBeforeReconnectData?: () => void
   onDisconnect?: () => void
   getDimensions?: () => { cols: number; rows: number } | null
   sendInitialResize?: boolean
+  /** Ask for the control-mode transport (the server may refuse). */
+  requestControl?: boolean
   setStatus: (status: string) => void
 }
 
@@ -103,6 +107,7 @@ export function openWebSocketConnection(
     onDisconnect,
     getDimensions,
     sendInitialResize = true,
+    requestControl = false,
     setStatus,
   } = callbacks
   const scheduleReconnect = (
@@ -144,10 +149,11 @@ export function openWebSocketConnection(
     pingIntervalRef.current = null
   }
 
-  let wsPath = `/ws/a-term/${sessionId}`
-  if (workingDir) {
-    wsPath += `?working_dir=${encodeURIComponent(workingDir)}`
-  }
+  const query = new URLSearchParams()
+  if (workingDir) query.set('working_dir', workingDir)
+  if (requestControl) query.set('transport', 'control')
+  const queryString = query.toString()
+  const wsPath = `/ws/a-term/${sessionId}${queryString ? `?${queryString}` : ''}`
 
   let ws: WebSocket
   try {
@@ -394,6 +400,11 @@ export function dispatchControlMessage(
           total_lines: number
         },
       )
+      return true
+    }
+
+    if (control.transport === 'control' || control.transport === 'attach') {
+      callbacks.onTransport?.(control.transport)
       return true
     }
 

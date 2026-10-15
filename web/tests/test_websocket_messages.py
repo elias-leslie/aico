@@ -316,3 +316,42 @@ def test_single_byte_binary_is_raw_input() -> None:
 
 def test_empty_message_is_ignored() -> None:
     assert _send({"type": "websocket.receive"}, _external_view()) is None
+
+
+# ---------------------------------------------------------------------------
+# Control-mode views: no PTY, input and size go to the tmux control client
+# ---------------------------------------------------------------------------
+
+
+def test_control_view_routes_input_resize_refresh_and_paste(pty_resize) -> None:
+    control = MagicMock()
+    control.paste = MagicMock(side_effect=lambda text: asyncio.sleep(0))
+    view = ViewContext(session_id="s", master_fd=-1, tmux_session_name="t", kind="external", control=control)
+    with patch("a_term.api.handlers.websocket_messages.os.write") as write:
+        _send({"text": "ls\r"}, view)
+        _send({"bytes": b"\x01" + b"q"}, view)
+        _send(_resize(100, 40), view)
+        _send({"text": json.dumps({"__ctrl": True, "refresh": True})}, view)
+        _send({"text": json.dumps({"__ctrl": True, "paste": "a\nb"})}, view)
+    write.assert_not_called()
+    pty_resize.assert_not_called()
+    assert [c.args[0] for c in control.write.call_args_list] == [b"ls\r", b"q"]
+    control.resize.assert_called_once_with(100, 40)
+    control.reseed.assert_called_once_with()
+    control.paste.assert_called_once_with("a\nb")
+
+
+def test_claim_before_the_control_client_exists_is_deferred(pty_resize) -> None:
+    view = ViewContext(session_id="s", master_fd=-1, tmux_session_name="t", kind="legacy")
+    with patch("a_term.api.handlers.websocket_messages._claim_window_size") as claim:
+        assert _send(_resize(90, 28, claim=True), view) == (90, 28)
+    claim.assert_not_called()
+    pty_resize.assert_not_called()
+    assert view.pending_claim is True and view.last_resize == [90, 28]
+
+
+def test_paste_on_a_pty_view_is_bracketed() -> None:
+    view = ViewContext(session_id="s", master_fd=7, tmux_session_name="t")
+    with patch("a_term.api.handlers.websocket_messages.os.write") as write:
+        _send({"text": json.dumps({"__ctrl": True, "paste": "x"})}, view)
+    write.assert_called_once_with(7, b"\x1b[200~x\x1b[201~")

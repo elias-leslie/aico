@@ -61,6 +61,12 @@ const fakeATerm = {
       })),
     },
   },
+  parser: {
+    registerCsiHandler: vi.fn(() => ({ dispose: vi.fn() })),
+    registerDcsHandler: vi.fn(() => ({ dispose: vi.fn() })),
+    registerEscHandler: vi.fn(() => ({ dispose: vi.fn() })),
+    registerOscHandler: vi.fn(() => ({ dispose: vi.fn() })),
+  },
   reset: vi.fn(),
   scrollToLine: vi.fn(),
   write: vi.fn((_data: string, callback?: () => void) => {
@@ -154,6 +160,9 @@ vi.mock('./ScrollbackOverlay', () => ({
 describe('ATermComponent', () => {
   beforeEach(() => {
     vi.spyOn(document, 'hasFocus').mockReturnValue(true)
+    // These cases cover the classic attach transport; control mode has its
+    // own block below.
+    window.localStorage.setItem('a-term-scrollback-mode', 'classic')
   })
 
   afterEach(() => {
@@ -184,6 +193,7 @@ describe('ATermComponent', () => {
       translateToString: () => 'user@host:~$ ',
     })
     window.history.replaceState({}, '', '/')
+    window.localStorage.removeItem('a-term-scrollback-mode')
   })
 
   it('suppresses shared resize writes in observer mode', () => {
@@ -678,5 +688,60 @@ describe('ATermComponent', () => {
 
     expect(websocketState.connectCalls).toBe(connectCallsBeforeRerender)
     expect(websocketState.disconnectCalls).toBe(disconnectCallsBeforeRerender)
+  })
+})
+
+describe('ATermComponent in control mode', () => {
+  beforeEach(() => {
+    vi.spyOn(document, 'hasFocus').mockReturnValue(true)
+    window.localStorage.removeItem('a-term-scrollback-mode')
+    websocketState.wsRefCurrent = { readyState: WebSocket.OPEN, send: vi.fn() }
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    websocketState.options = null
+    websocketState.wsRefCurrent = null
+    websocketState.sendInput.mockClear()
+    aTermInstanceOptions = null
+    scrollbackOverlayState.length = 0
+  })
+
+  it('asks for control mode and keeps the pane history in xterm', () => {
+    render(<ATermComponent sessionId="session-control" sessionMode="claude" />)
+
+    expect(websocketState.options?.requestControl).toBe(true)
+    expect(aTermInstanceOptions?.scrollback).toBe(20_000)
+    expect(scrollbackOverlayState).toHaveLength(0)
+    expect(fakeATerm.parser.registerCsiHandler).toHaveBeenCalled()
+  })
+
+  it('pastes through tmux as one control message', async () => {
+    render(<ATermComponent sessionId="session-control-paste" />)
+
+    await act(async () => {
+      await aTermInstanceOptions?.onPaste('a\r\nb')
+    })
+
+    expect(websocketState.sendInput).not.toHaveBeenCalled()
+    expect(websocketState.wsRefCurrent?.send).toHaveBeenCalledWith(
+      JSON.stringify({ __ctrl: true, paste: 'a\nb' }),
+    )
+  })
+
+  it('falls back to classic when the server keeps the attach transport', () => {
+    render(
+      <ATermComponent
+        sessionId="session-control-refused"
+        sessionMode="claude"
+      />,
+    )
+
+    act(() => {
+      websocketState.options?.onTransport?.('attach')
+    })
+
+    expect(aTermInstanceOptions?.scrollback).toBe(0)
+    expect(scrollbackOverlayState.length).toBeGreaterThan(0)
   })
 })

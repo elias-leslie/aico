@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from fastapi import WebSocket
 
     from ...services.backpressure import BackpressureController
+    from ...services.tmux_control import ControlTerminal
 
 logger = get_logger(__name__)
 
@@ -37,7 +38,11 @@ _CLAIM_RETRYABLE = frozenset({"client_not_attached", "tmux_unavailable"})
 
 @dataclass
 class ViewContext:
-    """One WebSocket view of a session: its PTY, tmux target and claim identity."""
+    """One WebSocket view of a session: its PTY, tmux target and claim identity.
+
+    A control-mode view has no PTY (``master_fd`` -1): ``control`` is its tmux
+    control client, set once the view's first size is known.
+    """
 
     session_id: str
     master_fd: int
@@ -50,6 +55,13 @@ class ViewContext:
     capabilities: list[str] = field(default_factory=list)
     backpressure: BackpressureController | None = None
     websocket: WebSocket | None = None
+    control: ControlTerminal | None = None
+    # A claim asked for before the control client existed (no pid to claim with).
+    pending_claim: bool = False
+
+    @property
+    def is_control(self) -> bool:
+        return self.master_fd < 0
 
 
 def _clamp_dimension(value: int, min_val: int, max_val: int) -> int:
@@ -146,13 +158,19 @@ async def _handle_resize_command(data: dict[str, Any], view: ViewContext) -> tup
     rows = _clamp_dimension(int(resize.get("rows", TMUX_DEFAULT_ROWS)), TMUX_MIN_ROWS, TMUX_MAX_ROWS)
 
     if cols != view.last_resize[0] or rows != view.last_resize[1]:
-        resize_pty(view.master_fd, cols, rows)
+        if view.control is not None:
+            view.control.resize(cols, rows)
+        elif not view.is_control:
+            resize_pty(view.master_fd, cols, rows)
         view.last_resize[0] = cols
         view.last_resize[1] = rows
         logger.info("a_term_resized", session_id=view.session_id, cols=cols, rows=rows)
 
     if data.get("claim") is True:
-        await asyncio.to_thread(_claim_window_size, view, cols, rows)
+        if view.is_control and view.control is None:
+            view.pending_claim = True
+        else:
+            await asyncio.to_thread(_claim_window_size, view, cols, rows)
 
     return (cols, rows)
 
@@ -238,6 +256,26 @@ async def _handle_pane_mode_request(
     await websocket.send_text(json.dumps(payload))
 
 
+async def _write_input(view: ViewContext, data: bytes) -> None:
+    """Send typed input to the session: send-keys on control views, else the PTY."""
+    if view.is_control:
+        if view.control is not None:
+            view.control.write(data)
+        return
+    await asyncio.to_thread(os.write, view.master_fd, data)
+
+
+async def _handle_paste(text: Any, view: ViewContext) -> None:
+    """Paste text. Control views paste through tmux, which brackets it only
+    when the program enabled bracketed paste; PTY views get it bracketed."""
+    if not isinstance(text, str) or not text:
+        return
+    if view.control is not None:
+        await view.control.paste(text)
+    elif not view.is_control:
+        await _write_input(view, f"\x1b[200~{text}\x1b[201~".encode())
+
+
 async def _handle_ctrl_message(data: dict[str, Any], view: ViewContext) -> tuple[int, int] | None:
     """Dispatch a validated __ctrl message to the appropriate handler."""
     if "resize" in data:
@@ -268,8 +306,16 @@ async def _handle_ctrl_message(data: dict[str, Any], view: ViewContext) -> tuple
         return None
 
     if data.get("refresh"):
+        if view.is_control:
+            if view.control is not None:
+                view.control.reseed()
+            return None
         await asyncio.to_thread(os.write, view.master_fd, b"\x0c")
         logger.debug("a_term_refreshed", session_id=view.session_id)
+        return None
+
+    if "paste" in data:
+        await _handle_paste(data.get("paste"), view)
         return None
 
     if "commit" in data and view.backpressure is not None:
@@ -297,12 +343,12 @@ async def _handle_text_message(text: str, view: ViewContext) -> tuple[int, int] 
         try:
             data = json.loads(text)
         except json.JSONDecodeError:
-            await asyncio.to_thread(os.write, view.master_fd, text.encode("utf-8"))
+            await _write_input(view, text.encode("utf-8"))
             return None
         if isinstance(data, dict) and data.get("__ctrl"):
             return await _handle_ctrl_message(data, view)
 
-    await asyncio.to_thread(os.write, view.master_fd, text.encode("utf-8"))
+    await _write_input(view, text.encode("utf-8"))
     return None
 
 
@@ -313,7 +359,7 @@ async def _handle_binary_message(raw: bytes, view: ViewContext) -> tuple[int, in
 
         msg_type, payload = decode_client_message(raw)
         if msg_type == MSG_INPUT:
-            await asyncio.to_thread(os.write, view.master_fd, payload)
+            await _write_input(view, payload)
             return None
         if msg_type == MSG_CONTROL:
             try:
@@ -322,7 +368,7 @@ async def _handle_binary_message(raw: bytes, view: ViewContext) -> tuple[int, in
                 pass
 
     # Legacy binary: forward raw bytes to the PTY
-    await asyncio.to_thread(os.write, view.master_fd, raw)
+    await _write_input(view, raw)
     return None
 
 

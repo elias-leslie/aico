@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     a_term_auth_session_ttl_hours: int = 24 * 7
 
     # A-Term dimensions
+    # "control": views may use the tmux control-mode transport (xterm keeps
+    # the pane's own scrollback). "attach": every view uses a plain tmux
+    # attach, whatever the browser asks for (instant rollback).
+    a_term_terminal_transport: Literal["control", "attach"] = "control"
+
     tmux_default_cols: int = 120
     tmux_default_rows: int = 30
     tmux_min_cols: int = 1
@@ -128,6 +133,7 @@ AUTH_PROXY_HEADER = settings.a_term_auth_proxy_header
 AUTH_COOKIE_NAME = settings.a_term_auth_cookie_name
 AUTH_COOKIE_SECURE = settings.a_term_auth_cookie_secure
 AUTH_SESSION_TTL_HOURS = settings.a_term_auth_session_ttl_hours
+TERMINAL_TRANSPORT = settings.a_term_terminal_transport
 TMUX_DEFAULT_COLS = settings.tmux_default_cols
 TMUX_DEFAULT_ROWS = settings.tmux_default_rows
 TMUX_MIN_COLS = settings.tmux_min_cols

@@ -313,3 +313,33 @@ describe('openWebSocketConnection', () => {
     expect(callbacks.setStatus).toHaveBeenLastCalledWith('connected')
   })
 })
+
+describe('control-mode transport', () => {
+  it('asks for control mode in the socket URL only when requested', () => {
+    vi.stubGlobal('WebSocket', MockWebSocket)
+    openWebSocketConnection('session-1', '/tmp', buildRefs(), {
+      ...buildCallbacks(),
+      requestControl: true,
+    })
+    openWebSocketConnection(
+      'session-2',
+      undefined,
+      buildRefs(),
+      buildCallbacks(),
+    )
+
+    expect(sockets[0].url).toMatch(
+      /\/ws\/a-term\/session-1\?working_dir=%2Ftmp&transport=control$/,
+    )
+    expect(sockets[1].url).toMatch(/\/ws\/a-term\/session-2$/)
+  })
+
+  it('reports the transport the server chose', () => {
+    const onTransport = vi.fn()
+    const callbacks = { ...buildCallbacks(), onTransport }
+    expect(
+      dispatchControlMessage('{"__ctrl":true,"transport":"attach"}', callbacks),
+    ).toBe(true)
+    expect(onTransport).toHaveBeenCalledWith('attach')
+  })
+})

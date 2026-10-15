@@ -22,6 +22,12 @@ import {
   getRendererPreference,
   setRendererPreference,
 } from '@/lib/utils/renderer-preference'
+import {
+  getScrollbackMode,
+  SCROLLBACK_MODE_OPTIONS,
+  type ScrollbackMode,
+  setScrollbackMode,
+} from '@/lib/utils/terminal-transport'
 import type {
   KeyboardSizePreset,
   KeyboardSpacingPreset,
@@ -92,6 +98,15 @@ export function SettingsDropdown({
   const changeRenderer = useCallback((value: ATermRendererPreference) => {
     setRenderer(value)
     setRendererPreference(value)
+    window.location.reload()
+  }, [])
+  const [scrollbackMode, setScrollbackModeState] =
+    useState<ScrollbackMode>('new')
+  useEffect(() => setScrollbackModeState(getScrollbackMode()), [])
+  // Every pane reconnects on the other transport; tmux keeps the sessions.
+  const changeScrollbackMode = useCallback((value: ScrollbackMode) => {
+    setScrollbackModeState(value)
+    setScrollbackMode(value)
     window.location.reload()
   }, [])
   const buttonRef = useRef<HTMLButtonElement>(null)
@@ -201,14 +216,25 @@ export function SettingsDropdown({
           onChange={setCursorBlink}
         />
 
-        <div className="mb-4">
-          <SettingSelect
-            label="Scrollback Buffer"
-            value={scrollback}
-            onChange={(val) => setScrollback(val as ATermScrollback)}
-            options={scrollbackOptions}
-          />
-        </div>
+        <SettingButtonGroup
+          label="Scrollback Mode"
+          value={scrollbackMode}
+          options={SCROLLBACK_MODE_OPTIONS}
+          onChange={changeScrollbackMode}
+        />
+
+        {/* New mode keeps the pane's own 20K-line history; the buffer size
+            applies to classic mode only. */}
+        {scrollbackMode === 'classic' && (
+          <div className="mb-4">
+            <SettingSelect
+              label="Scrollback Buffer"
+              value={scrollback}
+              onChange={(val) => setScrollback(val as ATermScrollback)}
+              options={scrollbackOptions}
+            />
+          </div>
+        )}
 
         <SettingButtonGroup
           label="Renderer"

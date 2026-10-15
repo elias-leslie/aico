@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback } from 'react'
+import { controlWheelAction } from '../a-term/control-view'
 import { prefersLocalViewportScrollForMode } from '../utils/session-mode'
 import {
   ARROW_DOWN,
@@ -34,6 +35,10 @@ interface UseATermScrollingOptions {
   isScrollbackOverlayActive?: boolean
   paneOwnsScrollback?: () => boolean | null
   requestPaneMode?: () => void
+  /** Control-mode transport: xterm holds the pane's history and real modes. */
+  controlMode?: boolean
+  /** Whether the program asked for SGR mouse reports (control mode). */
+  isSgrMouse?: () => boolean
 }
 
 interface ScrollingSetupResult {
@@ -54,6 +59,8 @@ export function useATermScrolling({
   isScrollbackOverlayActive = false,
   paneOwnsScrollback,
   requestPaneMode,
+  controlMode = false,
+  isSgrMouse,
 }: UseATermScrollingOptions): UseATermScrollingReturn {
   const sendArrowKey = useCallback(
     (direction: 'up' | 'down') => {
@@ -73,9 +80,52 @@ export function useATermScrolling({
 
   const setupScrolling = useCallback(
     (container: HTMLElement): ScrollingSetupResult => {
+      const sendWheelReports = (aTerm: XtermATerm, e: WheelEvent) => {
+        const screen = container.querySelector<HTMLElement>('.xterm-screen')
+        const cellHeight = screen
+          ? screen.clientHeight / Math.max(aTerm.rows, 1)
+          : 0
+        const ticks = getWheelMouseTickCount(
+          e.deltaY,
+          e.deltaMode,
+          cellHeight,
+          aTerm.rows,
+        )
+        if (ticks === 0) return
+        const { column, row } = pointToCell(screen, aTerm, e.clientX, e.clientY)
+        const direction = e.deltaY > 0 ? 'down' : 'up'
+        for (let tick = 0; tick < ticks; tick += 1) {
+          sendMouseWheel(direction, column, row)
+        }
+      }
+
+      // Control mode: the wheel is routed here, ahead of xterm, whose own
+      // viewport would otherwise scroll it (and skip any custom handler).
+      // Only a non-SGR mouse report is left to xterm, which encodes it.
+      const handleControlWheel = (aTerm: XtermATerm, e: WheelEvent) => {
+        const action = controlWheelAction({
+          mouseTracking: aTerm.modes.mouseTrackingMode !== 'none',
+          sgrMouse: isSgrMouse?.() ?? false,
+          alternateScreen: isAlternateScreen(aTerm),
+        })
+        if (action === 'xterm-report') return
+        e.preventDefault()
+        e.stopPropagation()
+        e.stopImmediatePropagation()
+        if (action === 'forward-sgr') sendWheelReports(aTerm, e)
+        else if (action === 'scroll') {
+          aTerm.scrollLines(computeWheelLineDelta(e.deltaY))
+          refreshATermViewport(aTerm)
+        }
+      }
+
       const handleWheel = (e: WheelEvent) => {
         const aTerm = aTermRef.current
         if (!aTerm || e.deltaY === 0) return
+        if (controlMode) {
+          handleControlWheel(aTerm, e)
+          return
+        }
 
         // The application asked for mouse reporting, so it scrolls itself:
         // an alternate-screen TUI has no tmux history to page through, and
@@ -87,27 +137,7 @@ export function useATermScrolling({
           e.preventDefault()
           e.stopPropagation()
           e.stopImmediatePropagation()
-          const screen = container.querySelector<HTMLElement>('.xterm-screen')
-          const cellHeight = screen
-            ? screen.clientHeight / Math.max(aTerm.rows, 1)
-            : 0
-          const ticks = getWheelMouseTickCount(
-            e.deltaY,
-            e.deltaMode,
-            cellHeight,
-            aTerm.rows,
-          )
-          if (ticks === 0) return
-          const { column, row } = pointToCell(
-            screen,
-            aTerm,
-            e.clientX,
-            e.clientY,
-          )
-          const direction = e.deltaY > 0 ? 'down' : 'up'
-          for (let tick = 0; tick < ticks; tick += 1) {
-            sendMouseWheel(direction, column, row)
-          }
+          sendWheelReports(aTerm, e)
           return
         }
 
@@ -170,6 +200,8 @@ export function useATermScrolling({
     },
     [
       aTermRef,
+      controlMode,
+      isSgrMouse,
       isMobile,
       isScrollbackOverlayActive,
       onRequestScrollbackOverlay,
