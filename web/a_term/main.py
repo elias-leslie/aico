@@ -34,7 +34,7 @@ from .api import (
 )
 from .auth import require_request_auth
 from .branding import DESCRIPTION, DISPLAY_NAME, get_cache_root
-from .config import A_TERM_BIND_HOST, A_TERM_PORT, CORS_ORIGINS
+from .config import A_TERM_BIND_HOST, A_TERM_PORT, CORS_ORIGINS, settings
 from .logging_config import SyslogPrefixFormatter, configure_logging, get_logger
 from .rate_limit import limiter
 from .services.maintenance import get_status as get_maintenance_status
@@ -138,6 +138,24 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
 )
+
+
+_UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+
+@app.middleware("http")
+async def foreign_origin_guard(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
+    """Refuse state-changing requests from other sites' pages (same allowlist as the terminal WebSocket).
+
+    With auth mode none, a plain cross-site form POST from any page in the owner's browser could otherwise reset every
+    session or start agents. Clients that send no Origin (CLI, agents, tests) are unaffected.
+    """
+    origin = request.headers.get("origin")
+    if request.method in _UNSAFE_METHODS and origin is not None and origin not in settings.a_term_ws_origins:
+        return JSONResponse(status_code=403, content={"error": "origin_not_allowed"})
+    return await call_next(request)
 
 
 @app.middleware("http")

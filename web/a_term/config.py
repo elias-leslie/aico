@@ -46,7 +46,8 @@ class Settings(BaseSettings):
     cors_origins: list[str] = [
         f"http://localhost:{A_TERM_FRONTEND_PORT}",
     ]
-    # Browser origins allowed to open a terminal WebSocket (A_TERM_WS_ORIGINS). Any other site's page is refused, so a
+    # Browser origins allowed to open a terminal WebSocket or send POST/PUT/PATCH/DELETE (A_TERM_WS_ORIGINS). Any other
+    # site's page is refused, so a
     # page in the owner's browser cannot attach to a session. Clients that send no Origin (CLI, tests) are unaffected.
     a_term_ws_origins: list[str] = [
         f"http://localhost:{A_TERM_FRONTEND_PORT}",

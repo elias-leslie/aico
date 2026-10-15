@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from fastapi.testclient import TestClient
 
 from a_term.api import a_term as a_term_api
 
@@ -36,3 +37,17 @@ async def test_own_origins_and_originless_clients_attach(monkeypatch: pytest.Mon
     ws = _ws(origin)
     await a_term_api.a_term_websocket(ws, "s1")
     attach.assert_awaited_once()
+
+
+@pytest.mark.parametrize(
+    ("origin", "refused"),
+    [("https://evil.example", True), ("null", True), (None, False), ("http://localhost:3002", False)],
+)
+def test_state_changing_requests_refuse_other_sites(test_app: TestClient, origin: str | None, refused: bool) -> None:
+    headers = {} if origin is None else {"origin": origin}
+    response = test_app.post("/api/a-term/reset-all", headers=headers)
+    assert (response.status_code == 403 and response.json() == {"error": "origin_not_allowed"}) is refused
+
+
+def test_reads_from_other_sites_are_not_refused_by_the_guard(test_app: TestClient) -> None:
+    assert test_app.get("/health", headers={"origin": "https://evil.example"}).status_code == 200
