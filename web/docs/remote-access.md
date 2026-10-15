@@ -18,11 +18,11 @@ A-Term should already be running:
 - Backend on port **8002**
 - Frontend on port **3002**
 
-For all approaches, update `CORS_ORIGINS` in your environment to include the origin you'll access A-Term from and make sure auth is enabled before exposing a non-loopback bind:
+For all approaches, set `A_TERM_ALLOWED_ORIGINS` in your environment to include the origin you'll access A-Term from and make sure auth is enabled before exposing a non-loopback bind:
 
 ```bash
 # In ~/.env.local
-CORS_ORIGINS=["http://localhost:3002","https://a-term.your-domain.com"]
+A_TERM_ALLOWED_ORIGINS=["http://localhost:3002","https://a-term.your-domain.com"]
 A_TERM_AUTH_MODE=password
 A_TERM_AUTH_PASSWORD=change-me
 A_TERM_AUTH_SECRET=replace-with-a-long-random-string
@@ -291,6 +291,6 @@ A-Term gives browser-based access to a shell on the host machine. Keep these poi
 
 - **Authentication** — Public deployments should use built-in password auth (`A_TERM_AUTH_MODE=password`) or proxy auth (`A_TERM_AUTH_MODE=proxy`) in front of an identity-aware gateway such as Cloudflare Access.
 - **Network scope** — Tailscale limits access to your Tailnet by default. Cloudflare Tunnel with Access policies restricts by identity. Caddy on LAN is only as secure as your network.
-- **CORS** — Always set `CORS_ORIGINS` to the specific origins you use. Don't use `["*"]` in production.
+- **Allowed origins** — `A_TERM_ALLOWED_ORIGINS` is the one list for CORS, the terminal WebSocket and writes. List only the origins you use; never `["*"]`.
 - **WebSocket** — All three approaches support WebSocket proxying, which A-Term requires for real-time a-term I/O.
 - **tmux sessions** — A-Term sessions are backed by tmux on the host. Anyone with access to A-Term can interact with these sessions.

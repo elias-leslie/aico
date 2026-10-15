@@ -12,7 +12,7 @@ from typing import Literal
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from .branding import BACKEND_PORT, FRONTEND_PORT, REPO_ROOT, get_upload_dir
+from .branding import BACKEND_PORT, FRONTEND_PORT, PUBLIC_HOST, REPO_ROOT, get_upload_dir
 
 # ---------------------------------------------------------------------------
 # Port allocation — single source of truth for A-Term.
@@ -42,17 +42,13 @@ class Settings(BaseSettings):
     a_term_port: int = A_TERM_BACKEND_PORT
     a_term_bind_host: str = "127.0.0.1"
 
-    # CORS
-    cors_origins: list[str] = [
-        f"http://localhost:{A_TERM_FRONTEND_PORT}",
-    ]
-    # Browser origins allowed to open a terminal WebSocket or send POST/PUT/PATCH/DELETE (A_TERM_WS_ORIGINS). Any other
-    # site's page is refused, so a
-    # page in the owner's browser cannot attach to a session. Clients that send no Origin (CLI, tests) are unaffected.
-    a_term_ws_origins: list[str] = [
+    # The one list of browser origins A-Term trusts (A_TERM_ALLOWED_ORIGINS, JSON array): CORS, the terminal
+    # WebSocket and POST/PUT/PATCH/DELETE. Any other site's page is refused, so a page in the owner's browser cannot
+    # attach to a session or change state. Clients that send no Origin (CLI, agents) are unaffected.
+    a_term_allowed_origins: list[str] = [
         f"http://localhost:{A_TERM_FRONTEND_PORT}",
         f"http://127.0.0.1:{A_TERM_FRONTEND_PORT}",
-        "https://terminal.summitflow.dev",
+        *([f"https://{PUBLIC_HOST}"] if PUBLIC_HOST else []),
     ]
 
     # Auth
@@ -133,7 +129,7 @@ def get_settings() -> Settings:
 settings = get_settings()
 A_TERM_PORT = settings.a_term_port
 A_TERM_BIND_HOST = settings.a_term_bind_host
-CORS_ORIGINS = settings.cors_origins
+ALLOWED_ORIGINS = settings.a_term_allowed_origins
 AUTH_MODE = settings.a_term_auth_mode
 AUTH_PASSWORD = settings.a_term_auth_password
 AUTH_SECRET = settings.a_term_auth_secret

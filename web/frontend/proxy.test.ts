@@ -89,6 +89,27 @@ describe('proxy', () => {
     expect(response.headers.get('x-nonce')).toBeTruthy()
   })
 
+  it.each([
+    ['%2F%3Fproject%3Da-term', 'http://localhost:3002/?project=a-term'],
+    ['%2F%2Fevil.example', 'http://localhost:3002/'],
+    ['%2F%5Cevil.example', 'http://localhost:3002/'],
+    ['https%3A%2F%2Fevil.example%2F', 'http://localhost:3002/'],
+  ])(
+    'sends a signed-in /login?next=%s only to a same-origin path',
+    async (next, location) => {
+      vi.stubEnv('A_TERM_AUTH_MODE', 'password')
+      const { proxy } = await importProxy()
+
+      const response = proxy(
+        browserRequest(`http://localhost:3002/login?next=${next}`, {
+          headers: { cookie: 'a_term_session=present' },
+        }),
+      )
+
+      expect(response.headers.get('location')).toBe(location)
+    },
+  )
+
   it('adds only explicit companion origins to connect-src', async () => {
     vi.stubEnv('A_TERM_AUTH_MODE', 'none')
     vi.stubEnv('NEXT_PUBLIC_AGENT_HUB_URL', 'https://agent-hub.example.com')

@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { PRODUCT_PUBLIC_HOST } from '@/lib/project-branding'
 import { buildContentSecurityPolicy, createCspNonce } from '@/lib/security/csp'
+import { safeNextPath } from '@/lib/security/safe-next'
 
 const AUTH_COOKIE_NAME = process.env.A_TERM_AUTH_COOKIE_NAME || 'a_term_session'
 const AUTH_MODE = process.env.A_TERM_AUTH_MODE || 'none'
@@ -78,8 +79,10 @@ export function proxy(request: NextRequest) {
       )
     }
 
-    const next = request.nextUrl.searchParams.get('next')
-    const target = next?.startsWith('/') ? next : '/'
+    const target = safeNextPath(
+      request.nextUrl.searchParams.get('next'),
+      request.url,
+    )
     return applySecurityHeaders(
       NextResponse.redirect(new URL(target, request.url)),
       nonce,

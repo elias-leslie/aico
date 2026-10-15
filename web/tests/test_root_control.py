@@ -12,7 +12,7 @@ from a_term.auth import AuthSettings
 from a_term.storage import panes as pane_store
 from a_term.tether import get_client
 
-from .conftest import LOOPBACK_BASE_URL
+from .conftest import LOOPBACK_BASE_URL, LOOPBACK_CLIENT
 from .fake_tether import FakeTether
 
 CREATE = {
@@ -241,10 +241,23 @@ def test_non_loopback_clients_are_refused(test_app: TestClient, fake_tether: Fak
     assert fake_tether.calls == []
 
 
-def test_foreign_origin_is_refused(test_app: TestClient, fake_tether: FakeTether) -> None:
-    response = test_app.post("/v1/roots", json=CREATE, headers={"origin": "https://evil.example"})
-    assert response.status_code == 403
-    assert response.json() == {"error": "origin_not_allowed"}
+@pytest.mark.parametrize(
+    "origin", ["https://evil.example", "null", "http://localhost:3002", "https://terminal.summitflow.dev"]
+)
+def test_any_browser_origin_is_refused(test_app: TestClient, fake_tether: FakeTether, origin: str) -> None:
+    # CLI-only surface: even A-Term's own page has no business here.
+    for response in (
+        test_app.get("/v1/roots", headers={"origin": origin}),
+        test_app.post("/v1/roots", json=CREATE, headers={"origin": origin}),
+    ):
+        assert response.status_code == 403
+        assert response.json() == {"error": "origin_not_allowed"}
+    assert fake_tether.calls == []
+
+
+def test_the_test_framework_peer_name_is_not_trusted(test_app: TestClient, fake_tether: FakeTether) -> None:
+    named = TestClient(test_app.app, base_url=LOOPBACK_BASE_URL)  # peer "testclient"
+    assert named.get("/v1/roots").json() == {"error": "local_only"}
     assert fake_tether.calls == []
 
 
@@ -258,7 +271,9 @@ def test_tether_down_is_owner_failure(tether_down: str, no_default_tmux) -> None
     ):
         from a_term.main import app
 
-        with TestClient(app, base_url=LOOPBACK_BASE_URL, raise_server_exceptions=False) as client:
+        with TestClient(
+            app, base_url=LOOPBACK_BASE_URL, client=LOOPBACK_CLIENT, raise_server_exceptions=False
+        ) as client:
             for response in (
                 client.get("/v1/roots"),
                 client.get("/v1/roots/root-1"),

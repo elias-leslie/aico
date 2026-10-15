@@ -305,23 +305,27 @@ resolve_service_port() {
   printf '%s\n' "$suggested_port"
 }
 
-sync_default_cors_origin() {
+sync_default_allowed_origins() {
   local file_path="$1"
   local frontend_host="$2"
   local frontend_port="$3"
+  local default_port="$4"
 
-  python3 - "$file_path" "$frontend_host" "$frontend_port" <<'PY'
+  python3 - "$file_path" "$frontend_host" "$frontend_port" "$default_port" <<'PY'
+import json
 from pathlib import Path
 import sys
 
 path = Path(sys.argv[1])
 frontend_host = sys.argv[2]
 frontend_port = sys.argv[3]
+default_port = sys.argv[4]
 
 if not path.exists():
     raise SystemExit(0)
 
-line_prefix = "CORS_ORIGINS="
+line_prefix = "A_TERM_ALLOWED_ORIGINS="
+legacy_prefix = "CORS_ORIGINS="
 lines = path.read_text().splitlines()
 current_value = None
 for line in lines:
@@ -329,30 +333,49 @@ for line in lines:
         current_value = line[len(line_prefix):].strip()
         break
 
-managed_defaults = {
-    "",
-    '["http://localhost:3002"]',
-    '["http://127.0.0.1:3002"]',
-    '["http://0.0.0.0:3002"]',
-}
-if current_value not in managed_defaults:
+local_hosts = {"localhost", "127.0.0.1", "0.0.0.0", frontend_host}
+
+def is_managed(value):
+    """Only lists of local frontend origins are ours to rewrite; anything the owner added (https, a domain) stays."""
+    try:
+        origins = json.loads(value) if value else []
+    except ValueError:
+        return False
+    if not isinstance(origins, list):
+        return False
+    for origin in origins:
+        if not isinstance(origin, str) or not origin.startswith("http://"):
+            return False
+        host, _, port = origin[len("http://"):].rpartition(":")
+        if host not in local_hosts or not port.isdigit():
+            return False
+    return True
+
+if current_value is not None and not is_managed(current_value):
     raise SystemExit(0)
 
-origin_host = frontend_host
-if origin_host in {"127.0.0.1", "0.0.0.0", "::1", "localhost"}:
-    origin_host = "localhost"
-next_value = f'["http://{origin_host}:{frontend_port}"]'
+loopback = frontend_host in {"127.0.0.1", "0.0.0.0", "::1", "localhost"}
+next_value = None
+if not loopback or frontend_port != default_port:
+    origins = [f"http://localhost:{frontend_port}", f"http://127.0.0.1:{frontend_port}"]
+    if not loopback:
+        origins.append(f"http://{frontend_host}:{frontend_port}")
+    next_value = json.dumps(origins, separators=(",", ":"))
 
-updated = False
+# The code default (local frontend + the identity's public host) applies when nothing is written. Old managed
+# CORS_ORIGINS lines are dropped: A_TERM_ALLOWED_ORIGINS is the one list now.
 next_lines = []
 for line in lines:
+    if line.startswith(legacy_prefix) and is_managed(line[len(legacy_prefix):].strip()):
+        continue
     if line.startswith(line_prefix):
-        next_lines.append(f"{line_prefix}{next_value}")
-        updated = True
+        if next_value is not None:
+            next_lines.append(f"{line_prefix}{next_value}")
+            next_value = None
         continue
     next_lines.append(line)
 
-if not updated:
+if next_value is not None:
     if next_lines and next_lines[-1] != "":
         next_lines.append("")
     next_lines.append(f"{line_prefix}{next_value}")
@@ -736,7 +759,7 @@ update_env_value "$ENV_FILE" "A_TERM_PORT" "$BACKEND_PORT"
 update_env_value "$ENV_FILE" "A_TERM_BIND_HOST" "$BACKEND_HOST"
 update_env_value "$ENV_FILE" "A_TERM_FRONTEND_PORT" "$FRONTEND_PORT"
 update_env_value "$ENV_FILE" "A_TERM_FRONTEND_HOST" "$FRONTEND_HOST"
-sync_default_cors_origin "$ENV_FILE" "$FRONTEND_HOST" "$FRONTEND_PORT"
+sync_default_allowed_origins "$ENV_FILE" "$FRONTEND_HOST" "$FRONTEND_PORT" "$FRONTEND_PORT_DEFAULT"
 
 step "Validating tmux"
 bash "$REPO_ROOT/scripts/install-local-tmux.sh"

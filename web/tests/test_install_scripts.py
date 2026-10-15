@@ -160,3 +160,32 @@ def test_tether_check_skips_only_when_explicitly_asked(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     assert "Skipping the Tether check" in result.stdout
+
+
+def _sync_origins(tmp_path: Path, env_text: str, host: str, port: str) -> str:
+    script = (REPO_ROOT / "scripts" / "install.sh").read_text()
+    harness = tmp_path / "origins.sh"
+    env_file = tmp_path / ".env.local"
+    env_file.write_text(env_text)
+    harness.write_text(
+        "set -euo pipefail\n"
+        + _extract_functions(script, "sync_default_allowed_origins")
+        + f'\nsync_default_allowed_origins "{env_file}" "{host}" "{port}" 3002\n'
+    )
+    subprocess.run(["bash", str(harness)], check=True, capture_output=True, text=True)
+    return env_file.read_text()
+
+
+def test_install_drops_the_old_cors_default_so_the_code_default_applies(tmp_path: Path) -> None:
+    text = _sync_origins(tmp_path, 'OTHER=1\nCORS_ORIGINS=["http://localhost:3002"]\n', "127.0.0.1", "3002")
+    assert text == "OTHER=1\n"
+
+
+def test_install_writes_the_one_list_for_a_lan_frontend(tmp_path: Path) -> None:
+    text = _sync_origins(tmp_path, "OTHER=1\n", "192.168.1.5", "3005")
+    assert 'A_TERM_ALLOWED_ORIGINS=["http://localhost:3005","http://127.0.0.1:3005","http://192.168.1.5:3005"]' in text
+
+
+def test_install_keeps_an_owner_edited_list(tmp_path: Path) -> None:
+    owned = 'A_TERM_ALLOWED_ORIGINS=["https://a-term.example.com"]\nCORS_ORIGINS=["https://a-term.example.com"]\n'
+    assert _sync_origins(tmp_path, owned, "127.0.0.1", "3005") == owned

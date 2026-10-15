@@ -2,6 +2,7 @@
 
 import { type FormEvent, useState, useTransition } from 'react'
 import { fetchAuthSession, loginWithPassword } from '@/lib/api/auth'
+import { safeNextPath } from '@/lib/security/safe-next'
 
 interface LoginScreenProps {
   authMode: 'none' | 'password' | 'proxy'
@@ -9,17 +10,10 @@ interface LoginScreenProps {
 
 export function getNextPath(): string {
   if (typeof window === 'undefined') return '/'
-  const params = new URLSearchParams(window.location.search)
-  const next = params.get('next')
-  if (!next) return '/'
-  try {
-    const target = new URL(next, window.location.origin)
-    if (target.origin !== window.location.origin) return '/'
-    const safePath = `${target.pathname}${target.search}${target.hash}`
-    return safePath.startsWith('/login') ? '/' : safePath
-  } catch {
-    return '/'
-  }
+  return safeNextPath(
+    new URLSearchParams(window.location.search).get('next'),
+    window.location.href,
+  )
 }
 
 export function LoginScreen({ authMode }: LoginScreenProps) {

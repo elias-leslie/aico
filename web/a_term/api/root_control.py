@@ -28,7 +28,6 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 
-from ..config import CORS_ORIGINS
 from ..logging_config import get_logger
 from ..services import session_catalog
 from ..storage import panes as pane_store
@@ -54,9 +53,10 @@ class RootError(Exception):
 
 
 def _local(request: Request) -> None:
-    if request.client is None or request.client.host not in {"127.0.0.1", "::1", "testclient"}:
+    """CLI-only surface: a loopback peer and no browser (any Origin, even A-Term's own page, is refused)."""
+    if request.client is None or request.client.host not in {"127.0.0.1", "::1"}:
         raise RootError(403, "local_only")
-    if request.headers.get("origin") and request.headers["origin"] not in CORS_ORIGINS:
+    if "origin" in request.headers:
         raise RootError(403, "origin_not_allowed")
 
 

@@ -77,13 +77,13 @@ def test_config_tmux_dimension_constants() -> None:
     assert cfg.TMUX_MAX_ROWS <= 512
 
 
-def test_config_cors_origins_splits_comma_separated() -> None:
-    """Config module -- CORS_ORIGINS accepts JSON array from env."""
-    # Arrange & Act — pydantic-settings expects JSON for list[str] fields
+def test_config_allowed_origins_reads_a_json_array_from_env() -> None:
+    """A_TERM_ALLOWED_ORIGINS (JSON array) replaces the one origin list; the old CORS_ORIGINS is ignored."""
     with patch.dict(
         "os.environ",
         {
-            "CORS_ORIGINS": '["http://localhost:3000","http://localhost:3002"]',
+            "A_TERM_ALLOWED_ORIGINS": '["http://localhost:3000","http://localhost:3002"]',
+            "CORS_ORIGINS": '["https://evil.example"]',
         },
         clear=False,
     ):
@@ -91,11 +91,17 @@ def test_config_cors_origins_splits_comma_separated() -> None:
         cfg.get_settings.cache_clear()
         importlib.reload(cfg)
 
-    # Assert
-    assert isinstance(cfg.CORS_ORIGINS, list)
-    assert len(cfg.CORS_ORIGINS) == 2
-    assert "http://localhost:3000" in cfg.CORS_ORIGINS
-    assert "http://localhost:3002" in cfg.CORS_ORIGINS
+    assert cfg.ALLOWED_ORIGINS == ["http://localhost:3000", "http://localhost:3002"]
+
+
+def test_config_allowed_origins_default_has_the_frontend_and_the_identity_public_host() -> None:
+    """With no override, the list is the local frontend plus project.identity.json hosts.browser_frontend."""
+    import a_term.config as cfg
+    from a_term.branding import PUBLIC_HOST
+
+    assert PUBLIC_HOST == "terminal.summitflow.dev"
+    default = cfg.Settings.model_fields["a_term_allowed_origins"].default
+    assert default == ["http://localhost:3002", "http://127.0.0.1:3002", "https://terminal.summitflow.dev"]
 
 
 def test_config_maintenance_settings_from_env() -> None:

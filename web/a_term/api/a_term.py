@@ -65,7 +65,7 @@ async def a_term_websocket(
         session_id: A-Term session identifier
     """
     origin = websocket.headers.get("origin")
-    if origin is not None and origin not in settings.a_term_ws_origins:
+    if origin is not None and origin not in settings.a_term_allowed_origins:
         await websocket.close(code=1008, reason="Origin not allowed")
         return
     if authenticate_websocket(websocket) is None:

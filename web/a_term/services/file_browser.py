@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from fnmatch import fnmatchcase
 from pathlib import Path
 
 BINARY_EXTENSIONS: frozenset[str] = frozenset(
@@ -49,7 +50,19 @@ EXTENSION_TO_LANGUAGE: dict[str, str] = {
     ".dockerfile": "dockerfile",
 }
 
-FORBIDDEN_DIRS: frozenset[str] = frozenset({".git", ".env"})
+# Path parts the browser never lists or reads (secrets and keys), matched case-insensitively against every part of
+# both the requested path and the resolved target, so a symlink inside the root cannot point at one either. SSH key
+# names are spelled out so source files such as id_utils.py stay readable.
+DENIED_GLOBS: tuple[str, ...] = (
+    ".git",
+    ".env*",
+    ".ssh",
+    "*.pem",
+    "id_rsa*",
+    "id_dsa*",
+    "id_ecdsa*",
+    "id_ed25519*",
+)
 SKIP_DIRS: frozenset[str] = frozenset(
     {
         ".git",
@@ -83,24 +96,36 @@ def _safe_root(root_path: str) -> Path:
     return Path(os.path.realpath(os.path.abspath(os.path.expanduser(root_path))))
 
 
+def is_denied(name: str) -> bool:
+    lowered = name.lower()
+    return any(fnmatchcase(lowered, pattern) for pattern in DENIED_GLOBS)
+
+
+def _refuse_denied(parts: tuple[str, ...]) -> None:
+    for part in parts:
+        if is_denied(part):
+            raise PermissionError(f"Access denied: {part}")
+
+
 def _safe_relative(relative_path: str) -> Path:
     if "\x00" in relative_path:
         raise PermissionError("Access denied: invalid path")
     candidate = Path(relative_path or "")
     if candidate.is_absolute():
         raise PermissionError("Access denied: absolute paths are not allowed")
-    for part in candidate.parts:
-        if part in ("..", *FORBIDDEN_DIRS):
-            raise PermissionError(f"Access denied: {part}")
+    if ".." in candidate.parts:
+        raise PermissionError("Access denied: ..")
+    _refuse_denied(candidate.parts)
     return candidate
 
 
 def resolve_safe_path(root_path: str, relative_path: str) -> Path:
-    """Resolve a path inside the pane root without allowing traversal."""
+    """Resolve a path inside the pane root without allowing traversal or a denied part (before or after symlinks)."""
     root = _safe_root(root_path)
     target = (root / _safe_relative(relative_path)).resolve()
     if os.path.commonpath([str(root), str(target)]) != str(root):
         raise PermissionError("Access denied: path escapes pane root")
+    _refuse_denied(target.relative_to(root).parts)
     return target
 
 
@@ -142,6 +167,8 @@ def list_directory(root_path: str, relative_path: str = "") -> dict[str, object]
         if entry.name.startswith(".") and entry.is_dir():
             continue
         if entry.is_dir() and entry.name in SKIP_DIRS:
+            continue
+        if is_denied(entry.name):
             continue
         entries.append(_entry_info(entry, root))
     return {

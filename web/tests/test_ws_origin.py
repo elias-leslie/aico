@@ -29,7 +29,9 @@ async def test_foreign_origin_is_refused_before_attach(monkeypatch: pytest.Monke
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("origin", [None, "http://localhost:3002", "https://terminal.summitflow.dev"])
+@pytest.mark.parametrize(
+    "origin", [None, "http://localhost:3002", "http://127.0.0.1:3002", "https://terminal.summitflow.dev"]
+)
 async def test_own_origins_and_originless_clients_attach(monkeypatch: pytest.MonkeyPatch, origin: str | None) -> None:
     attach = AsyncMock()
     monkeypatch.setattr(a_term_api, "handle_a_term_connection", attach)
@@ -47,6 +49,22 @@ def test_state_changing_requests_refuse_other_sites(test_app: TestClient, origin
     headers = {} if origin is None else {"origin": origin}
     response = test_app.post("/api/a-term/reset-all", headers=headers)
     assert (response.status_code == 403 and response.json() == {"error": "origin_not_allowed"}) is refused
+
+
+@pytest.mark.parametrize("origin", ["http://127.0.0.1:3002", "https://terminal.summitflow.dev"])
+def test_cors_and_the_write_guard_use_the_same_list(test_app: TestClient, origin: str) -> None:
+    preflight = test_app.options(
+        "/api/a-term/reset-all", headers={"origin": origin, "access-control-request-method": "POST"}
+    )
+    assert preflight.headers.get("access-control-allow-origin") == origin
+    assert test_app.post("/api/a-term/reset-all", headers={"origin": origin}).status_code != 403
+
+
+def test_cors_does_not_answer_other_sites(test_app: TestClient) -> None:
+    preflight = test_app.options(
+        "/api/a-term/reset-all", headers={"origin": "https://evil.example", "access-control-request-method": "POST"}
+    )
+    assert "access-control-allow-origin" not in preflight.headers
 
 
 def test_reads_from_other_sites_are_not_refused_by_the_guard(test_app: TestClient) -> None:
