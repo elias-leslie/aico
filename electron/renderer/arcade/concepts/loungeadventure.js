@@ -210,7 +210,7 @@
     const torso = (t) => {
       if (v === 'm') return ov(ov(t, 0, 3, 'w'), 7, 4, 'cc')
       if (v !== 'b') return t
-      return t.map((r, i) => (i >= 6 ? [...r].map((ch, j) => (ch === '.' ? '.' : (i + j) % 3 ? 'h' : 'M')).join('') : r.replace(/[Ww]/g, (ch) => (ch === 'W' ? 'M' : 'a')).replace(/Y/g, 'Y')))
+      return t.map((r, i) => (i >= 6 ? [...r].map((ch, j) => (ch === '.' ? '.' : (i + j) % 3 ? 'h' : 'M')).join('') : r.replace(/[Ww]/g, (ch) => (ch === 'W' ? 'M' : 'a'))))
     }
     const legs = (l) => {
       if (v !== 'b') return l
@@ -459,7 +459,7 @@
   const HERO_HEAD = ['KSK.', 'SSSS', 'SSES', '.SSS']
   const TAXI = withHead(TAXI_ROWS, 19, CABBIE)
   const TAXI_SPR = { empty: pairOutlined(TAXI, P), fare: pairOutlined(withHead(TAXI, 10, HERO_HEAD), P) }
-  const CAR_ROWS = rc(TAXI_ROWS.map((r, i) => (i < 2 ? '.'.repeat(r.length) : r)), { Y: 'R', E: 'R' }).map((r, i) => (i >= 10 ? r.replace(/RRR(?=R*a?$)/, 'RRR') : r))
+  const CAR_ROWS = rc(TAXI_ROWS.map((r, i) => (i < 2 ? '.'.repeat(r.length) : r)), { Y: 'R', E: 'R' })
   CAR_ROWS[10] = 'aRRRREEERRRRRRRRRRRRRRRREEERRRRRRa'
   CAR_ROWS[11] = '.RRREEaEERRRRRRRRRRRRRREEaEERRRR..'
   CAR_ROWS[12] = '....EaaaE..............EaaaE......'
