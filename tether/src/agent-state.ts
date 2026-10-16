@@ -71,6 +71,7 @@ export function claudeSignal(text: string): AgentSignal | null {
   } catch {
     return null
   }
+  if (typeof state !== 'object' || state === null) return null
   const at = typeof state.statusUpdatedAt === 'number' ? state.statusUpdatedAt : null
   const agentSessionId =
     typeof state.sessionId === 'string' && UUID_RE.test(state.sessionId) ? state.sessionId : null

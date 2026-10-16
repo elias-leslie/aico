@@ -50,6 +50,10 @@ describe('Claude status file', () => {
     expect(claudeSignal(claudeFile('later-unknown', 7))).toBeNull()
     expect(claudeSignal('{not json')).toBeNull()
   })
+
+  it('reads a session file holding JSON null as no signal', () => {
+    expect(claudeSignal('null')).toBeNull()
+  })
 })
 
 describe('hook reports', () => {
