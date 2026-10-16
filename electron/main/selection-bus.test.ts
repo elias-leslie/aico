@@ -64,7 +64,7 @@ function jsonResponse(body: unknown): Response {
   return { ok: true, json: async () => body } as unknown as Response
 }
 
-function setup(o: { packaged?: boolean } = {}) {
+function setup() {
   const win1 = fakeWindow(1)
   const win2 = fakeWindow(2)
   const all = [win1, win2]
@@ -85,7 +85,6 @@ function setup(o: { packaged?: boolean } = {}) {
   const fetch = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) =>
     jsonResponse(record),
   )
-  const execFile = vi.fn()
   const sidecar = { healthy: false }
   const bus = createSelectionBus({
     registry,
@@ -98,12 +97,7 @@ function setup(o: { packaged?: boolean } = {}) {
       ready: () => sidecar.healthy,
       url: (path) => `http://127.0.0.1:18905${path}`,
     },
-    app: { isPackaged: o.packaged ?? false, getAppPath: () => '/repo' },
-    resourcesPath: '/res',
-    home: '/home/o',
-    env: { PATH: '/usr/bin', OTHER: 'x' },
     fetch: fetch as unknown as typeof globalThis.fetch,
-    execFile,
   })
   const on = new Map<string, (...args: unknown[]) => unknown>()
   bus.registerIpc({
@@ -115,7 +109,7 @@ function setup(o: { packaged?: boolean } = {}) {
   const ready = () => {
     sidecar.healthy = true
   }
-  return { bus, win1, win2, views, catalog, tether, state, fetch, execFile, on, ready }
+  return { bus, win1, win2, views, catalog, tether, state, fetch, on, ready }
 }
 
 const flush = () => new Promise((r) => setTimeout(r, 0))
@@ -226,39 +220,6 @@ describe('selection grab and delivery', () => {
     on.get('selection:grab')?.()
     await flush()
     expect(fetch).toHaveBeenCalledWith('http://127.0.0.1:18905/selection/current')
-  })
-})
-
-describe('desktop grab menu rows', () => {
-  it('grab:run accepts only -p, -t and -r', () => {
-    const { on, execFile } = setup()
-    const run = on.get('grab:run')
-    run?.({}, ['-x'])
-    run?.({}, ['-p', '--rm'])
-    run?.({}, '-p')
-    expect(execFile).not.toHaveBeenCalled()
-    run?.({}, ['-p', '-t', '-r'])
-    expect(execFile).toHaveBeenCalledWith(
-      'bash',
-      ['/repo/scripts/aico-grab.sh', '-p', '-t', '-r'],
-      {
-        env: {
-          PATH: '/home/o/bin:/home/o/.local/bin:/usr/local/bin:/usr/bin',
-          OTHER: 'x',
-          DISPLAY: ':0',
-        },
-      },
-      expect.any(Function),
-    )
-  })
-
-  it('runs the asar-unpacked script when packaged and logs a failed grab', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const { on, execFile } = setup({ packaged: true })
-    on.get('grab:run')?.({}, ['-r'])
-    expect(execFile.mock.calls[0][1]).toEqual(['/res/app.asar.unpacked/scripts/aico-grab.sh', '-r'])
-    execFile.mock.calls[0][3](new Error('no tool'))
-    expect(warn).toHaveBeenCalledWith('[aico] desktop grab failed:', 'no tool')
   })
 })
 

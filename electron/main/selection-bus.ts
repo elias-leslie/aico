@@ -1,10 +1,8 @@
 // The selection bus, main's half: the session an indicated selection goes to,
 // the hotkey harvest and the browser-driven deliver-event stream (both read
-// from the sidecar and type through Tether), and the desktop grab menu rows.
+// from the sidecar and type through Tether).
 
-import { execFile as nodeExecFile } from 'node:child_process'
-import { join } from 'node:path'
-import type { App, IpcMain } from 'electron'
+import type { IpcMain } from 'electron'
 import { parseSse, type SelectionRecord } from './selection'
 import { deliverSelectionToSession } from './selection-delivery'
 import type { SessionCatalog } from './session-catalog'
@@ -35,23 +33,12 @@ interface SelectionBusDeps {
     ready(): boolean
     url(path: string): string
   }
-  app: Pick<App, 'isPackaged' | 'getAppPath'>
-  resourcesPath: string
-  home: string
-  env: NodeJS.ProcessEnv
   fetch?: typeof fetch
-  execFile?: (
-    file: string,
-    args: string[],
-    options: { env: NodeJS.ProcessEnv },
-    callback: (error: Error | null) => void,
-  ) => unknown
 }
 
 export function createSelectionBus(deps: SelectionBusDeps) {
-  const { registry, catalog, app, sidecar } = deps
+  const { registry, catalog, sidecar } = deps
   const fetchImpl: typeof fetch = deps.fetch ?? ((input, init) => fetch(input, init))
-  const execFile = deps.execFile ?? nodeExecFile
 
   const selectionDeliveries = new Map<string, Promise<void>>()
 
@@ -145,32 +132,6 @@ export function createSelectionBus(deps: SelectionBusDeps) {
     }
   }
 
-  // Run a desktop grab from a click (the menu rows). The same `scripts/aico-grab.sh`
-  // the global hotkeys fire, but invoked deliberately: clicking a window grab passes
-  // `-p` so the user picks the target window (the focused window is Aico's menu, so a
-  // bare focused-window grab would only ever shoot Aico), and a region grab passes
-  // `-r`. Env mirrors the hotkey install: keep a usable DISPLAY fallback and
-  // prepend common user bin dirs where optional capture tools may live.
-  // Resolve a bundled `scripts/` file to a real on-disk path bash can exec. When
-  // packaged, scripts/ is asar-unpacked (a script inside app.asar can't be run by
-  // a child process), so point at the unpacked mirror under resources.
-  function scriptsRoot(): string {
-    return app.isPackaged ? join(deps.resourcesPath, 'app.asar.unpacked') : app.getAppPath()
-  }
-
-  function runDesktopGrab(args: string[]): void {
-    const script = join(scriptsRoot(), 'scripts', 'aico-grab.sh')
-    const home = deps.home
-    const env = {
-      ...deps.env,
-      DISPLAY: deps.env.DISPLAY || ':0',
-      PATH: `${home}/bin:${home}/.local/bin:/usr/local/bin:${deps.env.PATH ?? ''}`,
-    }
-    execFile('bash', [script, ...args], { env }, (err) => {
-      if (err) console.warn('[aico] desktop grab failed:', err.message)
-    })
-  }
-
   function subscribeSelectionEvents(): void {
     selectionEvents = new AbortController()
     const url = sidecar.url('/selection/events')
@@ -236,12 +197,6 @@ export function createSelectionBus(deps: SelectionBusDeps) {
     },
     registerIpc: (ipcMain: Pick<IpcMain, 'on'>): void => {
       ipcMain.on('selection:grab', () => void selectionGrab())
-      // Desktop grab fired from a menu click (window pick / region drag). Args are the
-      // aico-grab.sh flags chosen by the renderer; validated to a small allowlist.
-      ipcMain.on('grab:run', (_event, args: string[]) => {
-        const allowed = new Set(['-p', '-t', '-r'])
-        if (Array.isArray(args) && args.every((a) => allowed.has(a))) runDesktopGrab(args)
-      })
     },
   }
 }

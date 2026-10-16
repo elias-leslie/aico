@@ -40,9 +40,10 @@ describe('action registry', () => {
 
   it('treats click-capable actions as pinnable', () => {
     expect(isPinnable(findAction('indicate') as never)).toBe(true)
-    // Grabs run directly; top-level flyout hosts open dropdowns; copy stays a
+    // Runnable actions and top-level flyout hosts are pinnable; copy stays a
     // terminal chord reference, so it is not pinnable.
-    expect(isPinnable(findAction('grab-image') as never)).toBe(true)
+    expect(isPinnable(findAction('hub') as never)).toBe(true)
+    expect(isPinnable(findAction('new-widget') as never)).toBe(true)
     expect(isPinnable(findAction('switch-project') as never)).toBe(true)
     expect(isPinnable(findAction('attach-tmux') as never)).toBe(true)
     expect(isPinnable(findAction('copy-session-diagnostics') as never)).toBe(true)

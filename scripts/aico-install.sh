@@ -220,10 +220,6 @@ install_user_unit() {
 
 install_user_unit
 
-if command -v gsettings >/dev/null 2>&1; then
-  scripts/aico-hotkeys.sh install || true
-fi
-
 # Electron runs with the OS sandbox enabled (webPreferences.sandbox: true). On
 # kernels with kernel.apparmor_restrict_unprivileged_userns=1 (Ubuntu 24.04+)
 # the sandbox cannot create its user namespace unless this checkout's Electron

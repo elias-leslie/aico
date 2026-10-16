@@ -275,10 +275,6 @@ const selection = createSelectionBus({
   isReplacing: sessions.isReplacing,
   isQuitting: lifecycle.isQuitting,
   sidecar,
-  app,
-  resourcesPath: process.resourcesPath,
-  home: homedir(),
-  env: process.env,
 })
 
 // Global shortcuts.

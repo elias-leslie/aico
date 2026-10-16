@@ -7,11 +7,6 @@
 // workspace picker, or opens one of the top-level menu flyouts. Reference entries
 // are listed for discoverability but not clickable (e.g. copy/paste are terminal
 // chords); they still show their shortcut so users learn them.
-//
-// The desktop grabs ARE clickable, but a click and the global hotkey aim
-// differently: clicking the menu means Aico holds focus, so a click *picks* a
-// window (`-p`) or *drags* a region (`-r`); the hotkey grabs whatever window is
-// already focused (the fast path). Each grab's `note` spells this out.
 
 // Late-bound so the `palette` action can open the palette without this module
 // importing the control surface (which imports this module).
@@ -106,8 +101,7 @@ export interface Action {
   /** Optional static SVG mark from the TUI spec, shown in place of `icon` so
    * each per-TUI launcher reads as its tool at a glance. */
   svg?: string
-  /** Optional one-line explainer shown in the hover tooltip (e.g. how a click
-   * differs from the hotkey for a grab). */
+  /** Optional one-line explainer shown in the hover tooltip. */
   note?: string
   /** Present ⇒ runnable from a click and eligible to be pinned. */
   run?: () => void
@@ -129,33 +123,6 @@ export const ACTIONS: Action[] = [
     icon: '⊹',
     note: 'Pull the latest captured text or image into this session.',
     run: () => window.aico.actions.indicate(),
-  },
-  {
-    id: 'grab-image',
-    section: 'Capture',
-    label: 'Grab window · package',
-    shortcut: 'Super+Shift+G',
-    icon: '▣',
-    note: 'Click to pick a window; the hotkey packages the focused one. Bundles image + OCR text + metadata in an index the agent reads cheapest-first.',
-    run: () => window.aico.actions.grab(['-p']),
-  },
-  {
-    id: 'grab-text',
-    section: 'Capture',
-    label: 'Grab window · text only',
-    shortcut: 'Super+Shift+T',
-    icon: '⊟',
-    note: 'Click to pick a window and OCR it to plain text; the hotkey OCRs the focused window. Lighter than a package when text is all you need.',
-    run: () => window.aico.actions.grab(['-p', '-t']),
-  },
-  {
-    id: 'grab-region',
-    section: 'Capture',
-    label: 'Grab region · package',
-    shortcut: 'Super+Shift+R',
-    icon: '◫',
-    note: 'Click (or hotkey) to drag-select a screen region; bundles image + OCR text + metadata, with the native crop kept for legible detail.',
-    run: () => window.aico.actions.grab(['-r']),
   },
   {
     // Flyout-only host (no run): hovering opens the "New widget" picker — the TUI

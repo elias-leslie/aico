@@ -89,10 +89,6 @@ contextBridge.exposeInMainWorld('aico', {
     hub: () => ipcRenderer.send('widget:hub'),
     /** Harvest the freshest selection-bus capture and deliver it (same path as the hotkey). */
     indicate: () => ipcRenderer.send('selection:grab'),
-    /** Fire a desktop grab from a click: aico-grab.sh flags (`-p` pick a window,
-     * `-r` drag a region, `-t` OCR to text). The hotkeys grab the focused window;
-     * a click picks/drags because Aico holds focus when you click the menu. */
-    grab: (args: string[]) => ipcRenderer.send('grab:run', args),
     /** End the current session through Tether. */
     endSession: (): Promise<void> => ipcRenderer.invoke('session:end-self'),
     /** Mark or unmark this session as a coordinator (titlebar label, centre tile). */

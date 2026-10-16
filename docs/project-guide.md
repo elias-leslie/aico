@@ -13,7 +13,6 @@
 - **Workspace picker** — always includes a local Personal Workspace, plus the projects Tether serves (SummitFlow's catalog when installed, else Tether's local list).
 - **Click-to-context capture** — the loopback sidecar accepts local browser/extension and desktop captures and inserts a compact reference into the focused widget's prompt (single, batch, or an image+OCR "package").
 - **Every session, one list** — the tray and palette list every Tether session, whether started from Aico, A-Term, the `tether` CLI or a SummitFlow root, and open any of them as a widget.
-- **Optional desktop capture hotkeys** — when local `st ui` capture tooling is available, GNOME shortcuts (or in-app grab actions) can package a focused window, a picked window, a drag-selected region, or text-only OCR into Aico.
 
 ## Requirements
 
@@ -31,7 +30,7 @@ Source installs and release builds additionally need Node.js 22+, npm, Python 3.
 
 Recommended for the full desktop experience:
 
-- X11/Xorg. The app can run under Wayland, but global shortcuts and desktop capture are more limited there.
+- X11/Xorg. The app can run under Wayland, but global shortcuts are more limited there.
 - Chrome/Chromium if you want to load the optional browser extension.
 - Any terminal AI CLIs you want to launch (`claude`, `codex`, `agy`, `pi`). Aico does not provide accounts or API keys for those tools.
 
@@ -58,7 +57,6 @@ checkout). The installer performs a source install in the current checkout:
 - `uv sync --frozen --python 3.13 --extra dev`
 - installs a desktop launcher at `~/.local/share/applications/aico.desktop`
 - renders `scripts/systemd/aico-shell.service` into `${XDG_CONFIG_HOME:-~/.config}/systemd/user/` (substituting the checkout path, as `st service rebuild aico` does) and runs `systemctl --user daemon-reload`; the unit is not enabled, and `scripts/aico-launch.sh` starts `aico-shell.service`
-- optionally installs GNOME capture hotkeys when `gsettings` is available
 - configures Electron's Linux `chrome-sandbox` helper (root-owned, setuid) when you opt in
 - on kernels with `kernel.apparmor_restrict_unprivileged_userns=1`, installs an AppArmor profile for Electron's sandbox when you opt in
 
@@ -98,8 +96,7 @@ chmod +x dist/electron/Aico-*.AppImage
 
 Tether, `tmux` and whichever terminal AI CLIs you launch (`claude`, `codex`, …)
 remain runtime prerequisites. The browser-driven context capture works
-through the bundled sidecar with no extra setup; the desktop window/region *grab*
-gesture additionally uses the `st` capture CLI when it is installed.
+through the bundled sidecar with no extra setup.
 
 ## Configuration
 

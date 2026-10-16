@@ -9,12 +9,12 @@ Aico is a Linux desktop companion for people working with terminal AI tools. Flo
 - Hosts Claude Code, Codex, Antigravity, Pi, and shells in movable terminal widgets.
 - Remembers each window's position and size per session; closing a window never ends the session, and End asks Tether to retire it.
 - Lists every Tether session, including ones started from A-Term, the CLI or a SummitFlow root, and opens any of them in a window.
-- Offers a command palette, workspace picker, scrollback, browser selection capture, and optional desktop capture.
+- Offers a command palette, workspace picker, scrollback, and browser selection capture.
 - Can animate the window title bar with small optional arcade-style scenes.
 
 ## Current scope
 
-Aico targets a single-user Linux desktop. X11 is the best-supported path for global shortcuts and desktop capture; Wayland has limitations. The optional MV3 extension is loaded unpacked for development. macOS, Windows, and `.deb` packaging are not implemented.
+Aico targets a single-user Linux desktop. X11 is the best-supported path for global shortcuts; Wayland has limitations. The optional MV3 extension is loaded unpacked for development. macOS, Windows, and `.deb` packaging are not implemented.
 
 ## Getting started
 

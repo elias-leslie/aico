@@ -81,8 +81,6 @@ export interface AicoApi {
     hub(): void
     /** Harvest the freshest selection-bus capture and deliver it. */
     indicate(): void
-    /** Fire a desktop grab from a click (aico-grab.sh flags: `-p` `-r` `-t`). */
-    grab(args: string[]): void
     /** Retire this widget: close the window AND end its tmux session. */
     endSession(): Promise<void>
     /** Mark or unmark this session as a coordinator (titlebar label, centre tile). */
