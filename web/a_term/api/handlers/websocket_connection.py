@@ -122,13 +122,19 @@ async def _escalate_to_sigkill(pid: int) -> None:
 
 
 async def _cleanup_pty_process(pid: int, master_fd: int) -> None:
-    """Clean up PTY child process and file descriptor."""
-    with contextlib.suppress(OSError):
-        os.kill(pid, signal.SIGTERM)
-    if not await _wait_for_process(pid, max_iterations=50):
-        await _escalate_to_sigkill(pid)
-    with contextlib.suppress(OSError):
-        os.close(master_fd)
+    """Clean up PTY child process and file descriptor.
+
+    The fd is closed in a finally so a cancellation during the wait for the
+    child cannot leak it.
+    """
+    try:
+        with contextlib.suppress(OSError):
+            os.kill(pid, signal.SIGTERM)
+        if not await _wait_for_process(pid, max_iterations=50):
+            await _escalate_to_sigkill(pid)
+    finally:
+        with contextlib.suppress(OSError):
+            os.close(master_fd)
 
 
 async def _cleanup_tasks(*tasks: asyncio.Task[object]) -> None:
@@ -507,8 +513,12 @@ async def _run_control_session(websocket: WebSocket, plan: AttachPlan, view: Vie
         await _teardown_session_resources(plan, session_id, None, None, diag_registry, a_term_metrics)
 
 
-async def _run_session(websocket: WebSocket, session_id: str) -> tuple[int | None, int | None]:
-    """Set up and run the full view. Returns (pid, master_fd) for cleanup."""
+async def _run_session(websocket: WebSocket, session_id: str) -> None:
+    """Set up and run the full view.
+
+    The view's attach client is cleaned up on every exit path: the control
+    client by ``_run_control_session``, the PTY child and its fd here.
+    """
     try:
         plan, view, pid = await _setup_connection(websocket, session_id)
     except ValueError as e:
@@ -516,12 +526,21 @@ async def _run_session(websocket: WebSocket, session_id: str) -> tuple[int | Non
             code=4000,
             reason=json.dumps({"error": "session_dead", "message": str(e)}),
         )
-        return None, None
+        return
 
     if view.control is not None:
         await _run_control_session(websocket, plan, view)
-        return None, None
+        return
 
+    try:
+        await _run_pty_session(websocket, plan, view)
+    finally:
+        await _cleanup_pty_process(pid, view.master_fd)
+
+
+async def _run_pty_session(websocket: WebSocket, plan: AttachPlan, view: ViewContext) -> None:
+    """Stream a classic attach (PTY) view until the browser or tmux goes away."""
+    session_id = plan.session_id
     capabilities = view.capabilities
     master_fd = view.master_fd
     use_binary = "binary_protocol" in capabilities
@@ -551,7 +570,6 @@ async def _run_session(websocket: WebSocket, session_id: str) -> tuple[int | Non
         await _teardown_session_resources(
             plan, session_id, backpressure, scrollback_sync, diag_registry, a_term_metrics,
         )
-    return pid, master_fd
 
 
 async def handle_a_term_connection(
@@ -564,15 +582,11 @@ async def handle_a_term_connection(
     """
     await websocket.accept()
     logger.info("a_term_connected", session_id=session_id)
-    pid: int | None = None
-    master_fd: int | None = None
     try:
-        pid, master_fd = await _run_session(websocket, session_id)
+        await _run_session(websocket, session_id)
     except Exception as e:
         logger.error("a_term_error", session_id=session_id, error=str(e))
         with contextlib.suppress(Exception):
             await websocket.close(code=1011, reason="Internal server error")
     finally:
-        if pid is not None and master_fd is not None:
-            await _cleanup_pty_process(pid, master_fd)
         logger.info("a_term_cleanup_complete", session_id=session_id)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import ExitStack
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
@@ -12,6 +13,7 @@ from a_term.api.handlers.websocket_connection import (
     _poll_for_resize,
     _run_session,
     _setup_connection,
+    handle_a_term_connection,
 )
 from a_term.api.handlers.websocket_messages import ViewContext
 from a_term.constants import SHELL_MODE
@@ -211,7 +213,7 @@ async def test_demand_paging_shell_gets_viewport_init_from_its_socket() -> None:
 async def test_dead_session_closes_with_session_dead() -> None:
     websocket = AsyncMock()
     with patch(f"{MODULE}.validate_and_prepare_session", side_effect=ValueError("Session not found: x")):
-        assert await _run_session(websocket, "x") == (None, None)
+        assert await _run_session(websocket, "x") is None
     websocket.close.assert_awaited_once()
     reason = json.loads(websocket.close.await_args.kwargs["reason"])
     assert reason == {"error": "session_dead", "message": "Session not found: x"}
@@ -241,8 +243,11 @@ async def test_run_session_syncs_scrollback_and_restores_only_external_options(k
         patch(f"{MODULE}.ScrollbackSyncScheduler", return_value=scheduler) as scheduler_cls,
         patch(f"{MODULE}.ScrollbackSyncOutputTracker", return_value=tracker),
         patch(f"{MODULE}.restore_external_attach_options", return_value=True) as restore,
+        patch(f"{MODULE}._cleanup_pty_process", new=AsyncMock()) as cleanup,
     ):
-        assert await _run_session(websocket, plan.session_id) == (23, 17)
+        await _run_session(websocket, plan.session_id)
+
+    cleanup.assert_awaited_once_with(23, 17)
 
     if kind == "tether":
         scheduler_cls.assert_called_once_with(
@@ -279,11 +284,64 @@ async def test_tether_scrollback_sync_captures_from_the_sessions_socket() -> Non
         patch(f"{MODULE}.ScrollbackSyncScheduler", side_effect=fake_scheduler),
         patch(f"{MODULE}.ScrollbackSyncOutputTracker", return_value=MagicMock()),
         patch(f"{MODULE}.get_scrollback_with_cursor", return_value=("x", None)) as capture,
+        patch(f"{MODULE}._cleanup_pty_process", new=AsyncMock()),
     ):
         await _run_session(AsyncMock(), plan.session_id)
         captured["get_scrollback_with_cursor_fn"]("tether-a0000001")
 
     capture.assert_called_once_with("tether-a0000001", socket_name=SOCKET)
+
+
+def _patch_pty_run(stack: ExitStack, plan: AttachPlan, **overrides) -> None:
+    """Run a PTY view for real around a mocked setup, reader and scrollback sync."""
+    scheduler = MagicMock()
+    scheduler.close = AsyncMock()
+    targets = {
+        "_setup_connection": AsyncMock(return_value=(plan, _view(plan), 23)),
+        "read_pty_output": AsyncMock(),
+        "_heartbeat_loop": AsyncMock(),
+        "ScrollbackSyncScheduler": MagicMock(return_value=scheduler),
+        "ScrollbackSyncOutputTracker": MagicMock(),
+        **overrides,
+    }
+    for name, value in targets.items():
+        stack.enter_context(patch(f"{MODULE}.{name}", new=value))
+
+
+@pytest.mark.asyncio
+async def test_malformed_control_message_keeps_the_view_and_still_cleans_up_the_pty() -> None:
+    plan = _plan()
+    websocket = AsyncMock()
+    websocket.receive = AsyncMock(side_effect=[
+        {"type": "websocket.receive", "text": '{"__ctrl": true, "resize": {"cols": "x", "rows": 24}}'},
+        {"type": "websocket.receive", "text": '{"__ctrl": true, "commit": "many"}'},
+        {"type": "websocket.disconnect"},
+    ])
+    cleanup = AsyncMock()
+    with ExitStack() as stack:
+        _patch_pty_run(stack, plan, _cleanup_pty_process=cleanup)
+        pty_resize = stack.enter_context(patch("a_term.api.handlers.websocket_messages.resize_pty"))
+        await handle_a_term_connection(websocket, plan.session_id)
+    assert websocket.receive.await_count == 3
+    pty_resize.assert_not_called()
+    websocket.close.assert_not_awaited()
+    cleanup.assert_awaited_once_with(23, 17)
+
+
+@pytest.mark.asyncio
+async def test_pty_is_cleaned_up_when_the_message_loop_raises() -> None:
+    plan = _plan()
+    cleanup = AsyncMock()
+    websocket = AsyncMock()
+    with ExitStack() as stack:
+        _patch_pty_run(
+            stack, plan,
+            _cleanup_pty_process=cleanup,
+            _run_message_loop=AsyncMock(side_effect=RuntimeError("loop died")),
+        )
+        await handle_a_term_connection(websocket, plan.session_id)
+    cleanup.assert_awaited_once_with(23, 17)
+    assert websocket.close.await_args.kwargs["code"] == 1011
 
 
 # ---------------------------------------------------------------------------
@@ -388,8 +446,10 @@ async def test_control_session_streams_its_queue_and_closes_the_client() -> None
         patch(f"{MODULE}.read_pty_output", new=AsyncMock()) as read_pty,
         patch(f"{MODULE}._heartbeat_loop", new=AsyncMock()),
         patch(f"{MODULE}.ScrollbackSyncScheduler") as scheduler_cls,
+        patch(f"{MODULE}._cleanup_pty_process", new=AsyncMock()) as cleanup,
     ):
-        assert await _run_session(AsyncMock(), plan.session_id) == (None, None)
+        await _run_session(AsyncMock(), plan.session_id)
+    cleanup.assert_not_awaited()
     assert batch.call_args.args[1] is control.queue
     assert batch.call_args.kwargs["detect_exit"] is False
     read_pty.assert_not_called()
@@ -415,3 +475,26 @@ async def test_exited_text_stops_only_attach_output(detect_exit: bool, sent: str
     await queue.put(None)
     await asyncio.wait_for(loop_task, 1)
     assert "".join(call.args[0] for call in websocket.send_text.call_args_list) == sent
+
+
+@pytest.mark.asyncio
+async def test_pty_fd_is_closed_even_when_cleanup_is_cancelled() -> None:
+    import asyncio
+
+    from a_term.api.handlers.websocket_connection import _cleanup_pty_process
+
+    async def never_exits(*_args, **_kwargs) -> bool:
+        await asyncio.sleep(3600)
+        return False
+
+    with (
+        patch(f"{MODULE}.os.kill"),
+        patch(f"{MODULE}.os.close") as close,
+        patch(f"{MODULE}._wait_for_process", new=never_exits),
+    ):
+        task = asyncio.create_task(_cleanup_pty_process(4242, 17))
+        await asyncio.sleep(0)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    close.assert_called_once_with(17)

@@ -69,6 +69,18 @@ def _clamp_dimension(value: int, min_val: int, max_val: int) -> int:
     return min(max(value, min_val), max_val)
 
 
+def _as_int(value: Any) -> int | None:
+    """``int(value)``, or None when a client sent something that is not a number."""
+    try:
+        return int(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
+def _ignore_malformed(view: ViewContext, field: str) -> None:
+    logger.warning("a_term_malformed_ctrl_ignored", session_id=view.session_id, field=field)
+
+
 def _extract_capabilities(data: dict[str, Any], capabilities: list[str]) -> None:
     """Populate capabilities list from control message, if present."""
     caps = data.get("capabilities")
@@ -145,17 +157,26 @@ def _claim_window_size(view: ViewContext, cols: int, rows: int) -> bool:
     return False
 
 
-async def _handle_resize_command(data: dict[str, Any], view: ViewContext) -> tuple[int, int]:
+async def _handle_resize_command(data: dict[str, Any], view: ViewContext) -> tuple[int, int] | None:
     """Resize this view's PTY; claim the shared window only when asked.
 
     The frontend's active view (visible, focused, connected) sends ``claim:
     true`` on activation and with every settled size change, because a claim
     sets tmux's ``window-size`` to manual and the window then ignores later
     client sizes. A resize without ``claim`` only changes this view's client.
+    A malformed size is ignored.
     """
-    resize = data.get("resize", {})
-    cols = _clamp_dimension(int(resize.get("cols", TMUX_DEFAULT_COLS)), TMUX_MIN_COLS, TMUX_MAX_COLS)
-    rows = _clamp_dimension(int(resize.get("rows", TMUX_DEFAULT_ROWS)), TMUX_MIN_ROWS, TMUX_MAX_ROWS)
+    resize = data.get("resize")
+    if not isinstance(resize, dict):
+        _ignore_malformed(view, "resize")
+        return None
+    cols = _as_int(resize.get("cols", TMUX_DEFAULT_COLS))
+    rows = _as_int(resize.get("rows", TMUX_DEFAULT_ROWS))
+    if cols is None or rows is None:
+        _ignore_malformed(view, "resize")
+        return None
+    cols = _clamp_dimension(cols, TMUX_MIN_COLS, TMUX_MAX_COLS)
+    rows = _clamp_dimension(rows, TMUX_MIN_ROWS, TMUX_MAX_ROWS)
 
     if cols != view.last_resize[0] or rows != view.last_resize[1]:
         if view.control is not None:
@@ -175,25 +196,31 @@ async def _handle_resize_command(data: dict[str, Any], view: ViewContext) -> tup
     return (cols, rows)
 
 
-async def _handle_scroll_request(
-    data: dict[str, Any],
-    websocket: WebSocket,
-    tmux_session_name: str | None,
-    tmux_socket_name: str | None,
-) -> None:
-    """Handle a scroll_request control message — return a scrollback page."""
-    req = data.get("scroll_request", {})
-    count = min(int(req.get("count", 100)), MAX_SCROLL_PAGE_SIZE)
+async def _handle_scroll_request(data: dict[str, Any], view: ViewContext) -> None:
+    """Handle a scroll_request control message — return a scrollback page.
 
-    if not tmux_session_name:
+    A malformed request is ignored.
+    """
+    websocket, tmux_session_name, tmux_socket_name = view.websocket, view.tmux_session_name, view.tmux_socket
+    req = data.get("scroll_request")
+    if not isinstance(req, dict):
+        _ignore_malformed(view, "scroll_request")
+        return
+    count = _as_int(req.get("count", 100))
+    latest = "from_line" not in req
+    from_line = 0 if latest else _as_int(req["from_line"])
+    if count is None or from_line is None:
+        _ignore_malformed(view, "scroll_request")
+        return
+    count = min(count, MAX_SCROLL_PAGE_SIZE)
+
+    if not tmux_session_name or websocket is None:
         return
 
     from ...services.scrollback_pager import get_scrollback_line_count, get_scrollback_range
 
     # "Latest" mode: when from_line is omitted, fetch the most recent lines
-    if "from_line" in req:
-        from_line = int(req["from_line"])
-    else:
+    if latest:
         total = await asyncio.to_thread(
             get_scrollback_line_count,
             tmux_session_name,
@@ -319,11 +346,15 @@ async def _handle_ctrl_message(data: dict[str, Any], view: ViewContext) -> tuple
         return None
 
     if "commit" in data and view.backpressure is not None:
-        view.backpressure.record_commit(int(data["commit"]))
+        committed = _as_int(data["commit"])
+        if committed is None:
+            _ignore_malformed(view, "commit")
+        else:
+            view.backpressure.record_commit(committed)
         return None
 
     if "scroll_request" in data and view.websocket is not None:
-        await _handle_scroll_request(data, view.websocket, view.tmux_session_name, view.tmux_socket)
+        await _handle_scroll_request(data, view)
         return None
 
     if data.get("pane_mode_request") and view.websocket is not None:
@@ -342,7 +373,10 @@ async def _handle_text_message(text: str, view: ViewContext) -> tuple[int, int] 
     if text.startswith("{"):
         try:
             data = json.loads(text)
-        except json.JSONDecodeError:
+        except ValueError:
+            # JSONDecodeError, plus the plain ValueError json raises for an
+            # integer past Python's digit limit: either way it is not a
+            # control message, so it is input like any other text.
             await _write_input(view, text.encode("utf-8"))
             return None
         if isinstance(data, dict) and data.get("__ctrl"):
@@ -364,7 +398,7 @@ async def _handle_binary_message(raw: bytes, view: ViewContext) -> tuple[int, in
         if msg_type == MSG_CONTROL:
             try:
                 return await _handle_text_message(payload.decode("utf-8"), view)
-            except (json.JSONDecodeError, UnicodeDecodeError):
+            except UnicodeDecodeError:
                 pass
 
     # Legacy binary: forward raw bytes to the PTY

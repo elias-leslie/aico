@@ -355,3 +355,61 @@ def test_paste_on_a_pty_view_is_bracketed() -> None:
     with patch("a_term.api.handlers.websocket_messages.os.write") as write:
         _send({"text": json.dumps({"__ctrl": True, "paste": "x"})}, view)
     write.assert_called_once_with(7, b"\x1b[200~x\x1b[201~")
+
+
+# ---------------------------------------------------------------------------
+# Malformed control messages are ignored, never raised into the view's loop
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "ctrl",
+    [
+        {"resize": {"cols": "x", "rows": 24}},
+        {"resize": {"cols": 80, "rows": None}},
+        {"resize": {"cols": [80], "rows": 24}},
+        {"resize": "80x24"},
+        {"scroll_request": {"count": "lots"}},
+        {"scroll_request": {"from_line": "top", "count": 10}},
+        {"scroll_request": ["from_line", 3]},
+        {"commit": "lots"},
+        {"commit": {"bytes": 4096}},
+    ],
+)
+def test_malformed_control_message_is_ignored(ctrl: dict, pty_resize) -> None:
+    socket = _Socket()
+    backpressure = MagicMock()
+    view = _external_view(websocket=socket, backpressure=backpressure)
+    message = {"text": json.dumps({"__ctrl": True, **ctrl})}
+    with (
+        patch("a_term.api.handlers.websocket_messages.os.write") as write,
+        patch("a_term.services.scrollback_pager.get_scrollback_range") as rng,
+        patch("a_term.services.scrollback_pager.get_scrollback_line_count", return_value=50),
+    ):
+        assert _send(message, view) is None
+    pty_resize.assert_not_called()
+    write.assert_not_called()
+    rng.assert_not_called()
+    backpressure.record_commit.assert_not_called()
+    assert view.last_resize == [0, 0]
+    assert socket.sent == []
+
+
+def test_non_finite_dimension_is_ignored(pty_resize) -> None:
+    view = _external_view()
+    assert _send({"text": '{"__ctrl": true, "resize": {"cols": Infinity, "rows": NaN}}'}, view) is None
+    pty_resize.assert_not_called()
+
+
+def test_numeric_strings_still_resize(pty_resize) -> None:
+    view = _external_view()
+    assert _send({"text": json.dumps({"__ctrl": True, "resize": {"cols": "100", "rows": "30"}})}, view) == (100, 30)
+
+
+def test_integer_past_the_digit_limit_is_input_not_a_crash(pty_resize) -> None:
+    view = _external_view()
+    text = '{"__ctrl": true, "commit": ' + "1" * 5000 + "}"
+    with patch("a_term.api.handlers.websocket_messages.os.write") as write:
+        assert _send({"text": text}, view) is None
+    pty_resize.assert_not_called()
+    assert write.call_args.args[1] == text.encode("utf-8")
