@@ -121,3 +121,12 @@ def test_settings_require_password_and_secret_for_password_mode() -> None:
             a_term_auth_mode="password",
             a_term_auth_password="secret",
         )
+
+
+def test_non_ascii_password_and_cookie_are_refused_not_crashed(test_app: TestClient, auth_settings) -> None:
+    auth_settings()
+    assert test_app.post("/api/auth/login", json={"password": "caf\u00e9"}).status_code == 401
+    # A well-formed payload with a non-ASCII signature.
+    cookie = "a_term_session=e30.caf\u00e9".encode("latin-1")
+    response = test_app.get("/api/diagnostics/sessions", headers={"cookie": cookie})
+    assert response.status_code == 401
