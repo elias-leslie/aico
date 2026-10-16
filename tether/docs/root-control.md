@@ -109,7 +109,7 @@ only what it requested and observed.
 | `running` | `running` | Launch dispatched and an active managed workload verified | Allowed with the current generation |
 | `pending` | `pending` | Reserved; never allocated | 409 `workload_unavailable` |
 | `uncertain` | `uncertain` | Allocated, but an active workload is not verified | 409 `workload_unavailable` |
-| `legacy` | none | A lifecycle-v0 session, kept read-only | 409 `workload_unavailable` |
+| `legacy` | `uncertain` (`pending` if never allocated) | A lifecycle-v0 session, kept read-only | 409 `workload_unavailable` |
 | (404) | `ended` | Retired; the root keeps a tombstone with null generation | 410 `ended` (root), 404 (widget) |
 
 | Fleet `status` | `capabilities.launch` | Owner relationship |
@@ -254,9 +254,12 @@ retry. Omit the prompt for the fixed recovery prompt, or use `--stdin` for
 bounded UTF-8 input. The facade rejects secrets/framing controls and caps all
 prompts at 2000 UTF-8 bytes. `--role`, `--lead-root` and `--facet` carry generic
 metadata. `--surface a-term` uses A-Term's loopback endpoint: `--root-url`, else
-`A_TERM_ROOT_CONTROL_URL`, else `http://127.0.0.1:<backend_port>` from the
-`project.identity.json` in A-Term's checkout (its root in Tether's project
-list); when none of those can be read the command stops and says so. A-Term's authentication remains
+`http://127.0.0.1:<backend_port>` from the `project.identity.json` in A-Term's
+checkout (its root in Tether's project list); when that can't be read the
+command stops and says so. Through `st`, `--root-url` is the only override: st
+does not pass `A_TERM_ROOT_CONTROL_URL` to the extension. Running
+`scripts/aico-root-watch.py` directly, that variable still takes the place of
+the identity lookup. A-Term's authentication remains
 enforced, and A-Term forwards the request to Tether. Tether must already be
 running; the command does not start it.
 

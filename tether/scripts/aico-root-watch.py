@@ -273,7 +273,8 @@ def a_term_identity_url(timeout: float = 2.0) -> str:
     except (OSError, ValueError, KeyError, TypeError, StopIteration, http.client.HTTPException):
         raise argparse.ArgumentTypeError(
             "A-Term's port is unknown: Tether's project list or A-Term's project.identity.json "
-            "could not be read; set A_TERM_ROOT_CONTROL_URL or pass --root-url") from None
+            "could not be read; pass --root-url (when running this script directly, "
+            "A_TERM_ROOT_CONTROL_URL also works; st does not pass it through)") from None
     finally:
         connection.close()
         client.close()
