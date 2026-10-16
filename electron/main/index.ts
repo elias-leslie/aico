@@ -23,7 +23,6 @@ import {
   type AttentionMode,
   type AttentionStage,
   agentName,
-  groupRows,
   pushBody,
   pushEventLine,
   pushOutcome,
@@ -38,6 +37,7 @@ import {
   pickScene,
   SCENE_EVERY_MS,
 } from './gaze'
+import { createGuiChannel } from './gui-channel'
 import { parseBoundsRequest, parsePins } from './ipc-validation'
 import { createLifecycle } from './lifecycle'
 import { allowTrustedAudioMedia } from './media-permission'
@@ -52,7 +52,6 @@ import {
 import { parseSse, type SelectionRecord } from './selection'
 import { deliverSelectionToSession } from './selection-delivery'
 import {
-  coordinatorChip,
   createSessionCatalog,
   type SessionCatalog,
   sessionTitle,
@@ -64,25 +63,18 @@ import {
   type AttachTarget,
   attachEnvironment,
   attachSocketTarget,
-  compatibleVersion,
-  eventSession,
-  followEvents,
-  type GuiCommand,
-  type GuiVerdict,
-  holdGuiChannel,
   LEGACY_SESSION_NAME,
   type SessionDescriptor,
   TetherClient,
   TetherError,
-  type TetherEvent,
-  type TetherTool,
   TetherUnavailable,
   tetherSocketPath,
 } from './tether-client'
+import { createTetherLink } from './tether-link'
 import { ControlTerminal, type TerminalLink } from './tmux-control'
-import { coalesceAsync, coalesceTrailingAsync, refreshAttachedClients } from './tmux-view'
+import { coalesceTrailingAsync, refreshAttachedClients } from './tmux-view'
 import { toolMark } from './tool-marks'
-import { createTray, refreshTray, setNeedsYou, setWidgetActivity, type TrayWidget } from './tray'
+import { createTray, refreshTray, setNeedsYou, setWidgetActivity } from './tray'
 import {
   ensureView,
   getSetting,
@@ -94,6 +86,7 @@ import {
   setOpen,
   setSetting,
 } from './views'
+import { createWindowChrome } from './window-chrome'
 import { createWindowLayout } from './window-layout'
 import { WindowRegistry } from './window-registry'
 import { createWindows } from './windows'
@@ -123,10 +116,6 @@ const TMUX_QUERY_TIMEOUT_MS = 2_000
 // close, reload and Aico restarts.
 const tether = new TetherClient(tetherSocketPath())
 const catalog: SessionCatalog = createSessionCatalog()
-let tetherConnected = false
-let tetherIncompatible: string | null = null
-let tools: TetherTool[] = []
-let restored = false
 
 // Which window shows which session, where windows go, and the windows
 // themselves. The hooks run, in this order, what other parts of index.ts do
@@ -161,14 +150,14 @@ const windows = createWindows({
   Menu,
   hooks: {
     loaded: (win) => {
-      refreshContextBadge(win)
+      chrome.refreshContextBadge(win)
       sendAttention(win)
     },
     focused: (win, widgetId) => {
       lastFocusedAico = widgetId ?? lastFocusedAico
       if (widgetId) {
         attention.focused(widgetId)
-        syncTray()
+        chrome.syncTray()
       }
       const pty = ptys.get(win.id)
       if (pty) void sizeClaims.get(pty)?.()
@@ -191,8 +180,7 @@ const windows = createWindows({
       transportOf.delete(winId)
       ptyStartGenerations.delete(winId)
       // Titlebar and tray.
-      setWidgetActivity(winId, false)
-      contextBadges.delete(winId)
+      chrome.forget(winId)
       // Eyes and arcade.
       blurredWins.delete(winId)
       arcadeOf.delete(winId)
@@ -202,7 +190,7 @@ const windows = createWindows({
       syncCursorPump()
       layout.forget(winId)
     },
-    changed: () => syncTray(),
+    changed: () => chrome.syncTray(),
   },
 })
 
@@ -235,8 +223,6 @@ const awaitingTether = new Map<number, PtySize>()
 const replacing = new Set<string>()
 const endsInFlight = new Map<string, Promise<void>>()
 const selectionDeliveries = new Map<string, Promise<void>>()
-let stopEvents: (() => void) | null = null
-let stopGuiChannel: (() => void) | null = null
 
 // Eyes-follow-cursor: while any widget is unfocused, broadcast the global cursor
 // position so those widgets' eyes can track it. One shared interval feeds every
@@ -306,10 +292,34 @@ let sidecar: Sidecar | null = null
 const projects = new ProjectCatalog(
   () => tether.projects(),
   () => {
-    pushTitles()
-    syncTray()
+    chrome.pushTitles()
+    chrome.syncTray()
   },
 )
+
+// The live connection to Tether and the session and tool mirror. The hooks
+// run, in this order, what the rest of Aico does when the catalog changes.
+const link = createTetherLink({
+  tether,
+  catalog,
+  projects,
+  dialog,
+  hooks: {
+    agentState: (descriptor) => noteAgentState(descriptor),
+    removed: (id) => attention.removed(id),
+    destroyWindow: (id) => windows.destroyFor(id),
+    closeEnded: (id) => windows.closeEnded(id),
+    retired: (id, known, reason) => {
+      removeView(id)
+      if (known) logWidgetEvent(id, 'lifecycle_retired', { session_id: known.ownershipId, reason })
+    },
+    firstList: () => windows.restoreOnLaunch(),
+    titles: () => chrome.pushTitles(),
+    tray: () => chrome.syncTray(),
+    connected: () => resumeAwaitingAttaches(),
+    legacyChanged: (names) => windows.closeEndedLegacy(names),
+  },
+})
 
 function logWidgetEvent(widgetId: string, event: string, data: Record<string, unknown>): void {
   // Reuse the sidecar's bounded, rotated per-widget JSONL implementation. The
@@ -393,180 +403,6 @@ function requestCoordinator(id: string, coordinator: boolean): void {
 }
 
 // ---------------------------------------------------------------------------
-// Session catalog: mirrored from Tether, refreshed on events.
-
-const refreshSessions = coalesceAsync(async () => {
-  const mark = catalog.mark()
-  const list = await tether.listSessions()
-  const { gone } = catalog.replace(list, mark)
-  for (const id of gone) attention.removed(id)
-  for (const descriptor of catalog.list()) noteAgentState(descriptor)
-  // A view whose session is absent from a complete list is closed but its row
-  // is kept: only an explicit `session.ended` forgets a view. A wrong or empty
-  // instance must never erase every saved window position.
-  for (const id of gone) windows.destroyFor(id)
-  if (!restored) {
-    restored = true
-    windows.restoreOnLaunch()
-  }
-  pushTitles()
-  syncTray()
-})
-
-function requestSessionRefresh(): void {
-  void refreshSessions().catch((error) => {
-    if (!(error instanceof TetherUnavailable)) console.warn('[aico] session refresh failed:', error)
-  })
-}
-
-const refreshTools = coalesceAsync(async () => {
-  tools = (await tether.tools()).items
-    .filter((tool) => tool.enabled)
-    .sort((a, b) => a.displayOrder - b.displayOrder)
-  pushTitles()
-  syncTray()
-})
-
-function sessionEnded(id: string, reason: string): void {
-  const known = catalog.get(id)
-  catalog.remove(id)
-  attention.removed(id)
-  windows.closeEnded(id)
-  removeView(id)
-  if (known) logWidgetEvent(id, 'lifecycle_retired', { session_id: known.ownershipId, reason })
-  syncTray()
-}
-
-function onTetherEvent(event: TetherEvent): void {
-  const id = typeof event.data.id === 'string' ? event.data.id : null
-  switch (event.type) {
-    case 'session.ended':
-      if (id) sessionEnded(id, 'tether_event')
-      requestSessionRefresh()
-      break
-    case 'session.created':
-    case 'session.updated': {
-      // Tether sends the descriptor with the event; an older Tether does not,
-      // so fall back to re-listing.
-      const snapshot = eventSession(event)
-      if (!snapshot) {
-        requestSessionRefresh()
-        break
-      }
-      catalog.upsert(snapshot)
-      noteAgentState(snapshot)
-      pushTitles()
-      syncTray()
-      break
-    }
-    case 'root.updated':
-      requestSessionRefresh()
-      break
-    case 'legacy.changed':
-      if (Array.isArray(event.data.names)) windows.closeEndedLegacy(event.data.names)
-      break
-    case 'tools.changed':
-      void refreshTools().catch(() => {})
-      break
-    case 'projects.changed':
-      projects.invalidate()
-      void projects.refresh()
-      break
-  }
-}
-
-async function checkTetherVersion(): Promise<void> {
-  try {
-    const version = await tether.version()
-    if (compatibleVersion(version)) {
-      tetherIncompatible = null
-      return
-    }
-    tetherIncompatible = `Tether ${version.version} (API ${version.apiVersion}) is not compatible with this Aico`
-  } catch (error) {
-    if (error instanceof TetherUnavailable) return
-    tetherIncompatible = 'Tether did not report a usable version'
-  }
-  console.error(`[aico:tether] ${tetherIncompatible}; session control is disabled`)
-  stopEvents?.()
-  stopGuiChannel?.()
-  tetherConnected = false
-  syncTray()
-  dialog.showErrorBox(
-    'Update Tether',
-    `${tetherIncompatible}. Your sessions keep running. Install a current Tether (scripts/install.sh in the Tether repo) and restart Aico.`,
-  )
-}
-
-function connectTether(): void {
-  stopEvents = followEvents(tether, {
-    onConnected: () => {
-      const reconnected = !tetherConnected
-      tetherConnected = true
-      if (reconnected) {
-        console.log(`[aico:tether] connected at ${tether.socketPath}`)
-        void checkTetherVersion()
-        void refreshTools().catch(() => {})
-        void projects.refresh()
-        resumeAwaitingAttaches()
-      }
-    },
-    onDisconnected: (error) => {
-      if (tetherConnected) console.warn('[aico:tether] event stream lost:', error)
-      tetherConnected = false
-      syncTray()
-    },
-    onResync: requestSessionRefresh,
-    onEvent: onTetherEvent,
-  })
-  stopGuiChannel = holdGuiChannel(tether, applyGuiCommand, (message, error) =>
-    error === undefined
-      ? console.log(`[aico:gui] ${message}`)
-      : console.warn(`[aico:gui] ${message}:`, error instanceof Error ? error.message : error),
-  )
-}
-
-// ---------------------------------------------------------------------------
-// GUI channel: Tether forwards show/position/title for views to this GUI after
-// fencing the exact running generation under its lifecycle lock.
-
-async function applyGuiCommand(command: GuiCommand): Promise<GuiVerdict> {
-  if (lifecycle.isQuitting()) return { applied: false, error: 'gui_unavailable' }
-  let descriptor = catalog.get(command.sessionId)
-  if (!descriptor || descriptor.generation !== command.generation) {
-    await refreshSessions().catch(() => {})
-    descriptor = catalog.get(command.sessionId)
-  }
-  if (!descriptor) return { applied: false, error: 'not_found' }
-  if (descriptor.generation !== command.generation)
-    return { applied: false, error: 'stale_generation' }
-  const id = command.sessionId
-  if (command.kind === 'show') {
-    windows.focusOrReopen(id)
-  } else if (command.kind === 'position' && command.bounds) {
-    const win = registry.forSession(id)
-    if (win) {
-      layout.arrange(win, command.bounds)
-    } else {
-      saveBounds(id, command.bounds, String(screen.getDisplayMatching(command.bounds).id))
-    }
-  } else if (command.kind === 'coordinator' && command.coordinator !== undefined) {
-    // Tether records the mark once this view applied it and then sends
-    // `session.updated`; show it now.
-    catalog.upsert({ ...descriptor, coordinator: command.coordinator })
-    pushTitles()
-  } else if (command.kind === 'title' && command.label !== undefined) {
-    // Tether renames the session once this view applied the title.
-    catalog.upsert({ ...descriptor, name: command.label, label: command.label })
-    pushTitles()
-    syncTray()
-  } else {
-    return { applied: false, error: 'invalid_body' }
-  }
-  return { applied: true }
-}
-
-// ---------------------------------------------------------------------------
 // Terminal byte path: one `tmux attach` PTY per window.
 
 async function runTmux(
@@ -625,7 +461,7 @@ async function startPty(win: BrowserWindow, size: PtySize): Promise<void> {
       // reopenable from the tray, exactly like a closed view.
       catalog.upsert(created)
       ensureView(created.id, false)
-      syncTray()
+      chrome.syncTray()
       return
     }
     windows.bind(win, created)
@@ -637,7 +473,7 @@ async function startPty(win: BrowserWindow, size: PtySize): Promise<void> {
         33,
       )
     }
-    syncTray()
+    chrome.syncTray()
   }
   if (!stillCurrent()) return
 
@@ -647,7 +483,7 @@ async function startPty(win: BrowserWindow, size: PtySize): Promise<void> {
   } catch (error) {
     if (error instanceof TetherUnavailable) awaitingTether.set(winId, size)
     if (stillCurrent()) writeNotice(win, describeFailure('Could not attach', error))
-    syncTray()
+    chrome.syncTray()
     return
   }
   if (!stillCurrent() || registry.sessionOf(winId) !== widgetId) return
@@ -679,12 +515,12 @@ async function startPty(win: BrowserWindow, size: PtySize): Promise<void> {
       try {
         const result = await tether.resizeClaim(id, sessionGeneration, pty.pid, pty.cols, pty.rows)
         if (result.applied) return
-        if (result.reason === 'stale') await refreshSessions().catch(() => {})
+        if (result.reason === 'stale') await link.refresh().catch(() => {})
         else if (result.reason !== 'client_not_attached' && result.reason !== 'tmux_unavailable')
           return
       } catch (error) {
         if (error instanceof TetherError && error.code === 'stale_generation') {
-          await refreshSessions().catch(() => {})
+          await link.refresh().catch(() => {})
           continue
         }
         if (!(error instanceof TetherUnavailable))
@@ -709,7 +545,7 @@ async function startPty(win: BrowserWindow, size: PtySize): Promise<void> {
     if (ptys.get(winId) === pty) {
       ptys.delete(winId)
       attachTargets.delete(winId)
-      if (!lifecycle.isQuitting()) requestSessionRefresh()
+      if (!lifecycle.isQuitting()) link.requestRefresh()
     }
   })
   ptys.set(winId, pty)
@@ -775,7 +611,7 @@ function resumeAwaitingAttaches(): void {
     awaitingTether.delete(winId)
     if (win && !win.isDestroyed()) {
       void startPty(win, size)
-        .then(() => pushTitles())
+        .then(() => chrome.pushTitles())
         .catch((error) => console.error('[aico] PTY restart failed:', error))
     }
   }
@@ -800,7 +636,7 @@ function endSession(id: string): Promise<void> {
       descriptor = await tether.getSession(id)
     } catch (error) {
       if (error instanceof TetherError && error.code === 'not_found') {
-        sessionEnded(id, 'absent')
+        link.sessionEnded(id, 'absent')
         return
       }
       throw error
@@ -809,12 +645,12 @@ function endSession(id: string): Promise<void> {
       await tether.end(id, descriptor.generation)
     } catch (error) {
       if (error instanceof TetherError && error.code === 'not_found') {
-        sessionEnded(id, 'absent')
+        link.sessionEnded(id, 'absent')
         return
       }
       throw error
     }
-    sessionEnded(id, 'ended')
+    link.sessionEnded(id, 'ended')
   })().finally(() => endsInFlight.delete(id))
   endsInFlight.set(id, attempt)
   return attempt
@@ -837,7 +673,7 @@ async function confirmTrayDiscard(id: string): Promise<void> {
     cancelId: 0,
     noLink: true,
     title: 'End session?',
-    message: `End ${traySessionLabel(sessionTitle(descriptor), toolDisplayName(descriptor.tool, tools))}?`,
+    message: `End ${traySessionLabel(sessionTitle(descriptor), toolDisplayName(descriptor.tool, link.tools()))}?`,
     detail: 'Tether stops only this session’s verified workload. This cannot be undone.',
   })
   if (response.response === 1) discardWidget(id)
@@ -858,12 +694,12 @@ function replacePane(
     .catch((error) => {
       console.warn(`[aico] ${action} failed widget=${id}:`, error)
       writeNotice(registry.forSession(id), describeFailure(action, error))
-      requestSessionRefresh()
+      link.requestRefresh()
     })
     .finally(() => {
       replacing.delete(id)
-      pushTitles()
-      syncTray()
+      chrome.pushTitles()
+      chrome.syncTray()
     })
 }
 
@@ -902,8 +738,8 @@ async function renameSession(id: string, name: unknown): Promise<void> {
   } catch (error) {
     writeNotice(registry.forSession(id), describeFailure('Could not rename', error), 33)
   }
-  pushTitles()
-  syncTray()
+  chrome.pushTitles()
+  chrome.syncTray()
 }
 
 // ---------------------------------------------------------------------------
@@ -926,7 +762,7 @@ const attention = new Attention({
     const descriptor = catalog.get(id)
     if (!descriptor) return
     const title = sessionTitle(descriptor)
-    const agent = agentName(descriptor.stateSource, toolDisplayName(descriptor.tool, tools))
+    const agent = agentName(descriptor.stateSource, toolDisplayName(descriptor.tool, link.tools()))
     // Nightshift's own Web Push to the owner's PWA. Nightshift keys repeats by
     // the --open link (one per session) and keeps them quiet for an hour.
     execFile(
@@ -992,127 +828,32 @@ function noteAgentState(descriptor: SessionDescriptor): void {
 // ---------------------------------------------------------------------------
 // Tray and titlebars.
 
-function tetherNotice(): string | null {
-  if (tetherIncompatible) return `${tetherIncompatible}. Sessions keep running.`
-  return tetherConnected ? null : 'Tether is not reachable. Sessions keep running.'
-}
+const chrome = createWindowChrome({
+  registry,
+  allWindows: () => BrowserWindow.getAllWindows(),
+  catalog,
+  tools: link.tools,
+  notice: link.notice,
+  projects,
+  attention,
+  layout,
+  contextCheck: (id) => tether.contextCheck(id),
+  isQuitting: lifecycle.isQuitting,
+  tray: { createTray, refreshTray, setWidgetActivity },
+})
 
-function trayTools(): { slug: string; label: string }[] {
-  return tools.map((tool) => ({ slug: tool.slug, label: tool.name }))
-}
-
-function syncTray(): void {
-  if (lifecycle.isQuitting()) return
-  const rows = groupRows(catalog.list(), attention, Date.now())
-  const widgets: TrayWidget[] = rows.map(({ item: descriptor, group, detail }) => ({
-    id: descriptor.id,
-    label: traySessionLabel(sessionTitle(descriptor), toolDisplayName(descriptor.tool, tools)),
-    open: registry.forSession(descriptor.id) !== undefined,
-    group,
-    detail,
-  }))
-  refreshTray(widgets, trayTools(), projects.list(), tetherNotice())
-}
-
-// No periodic rebuild: republishing the native menu collapses it while the
-// owner is navigating it. Ages ("waiting 3m") refresh with the next real change
-// and whenever an Aico window gains focus.
-
-// Push titlebar info to every open window: the session's name (else its
-// workspace, else Tether's label), plus its tool's mark and accent. Changes
-// only on Tether events and Aico actions, so this is event-driven, not polled.
-/** What each window's context badge last showed (`tool|state|detail`). */
-const contextBadges = new Map<number, string>()
-
-/** Show Tether's context-hook check as the titlebar badge, once per change. */
-function pushContextBadge(win: BrowserWindow, descriptor: SessionDescriptor): void {
-  const hook = descriptor.contextHook
-  if (!hook) return
-  const shown = contextBadges.get(win.id)
-  // Not checked yet: keep a badge for the same tool, hide one for another tool.
-  if (hook.state === 'unknown') {
-    if (shown === undefined || shown.startsWith(`${hook.tool}|`)) return
-    contextBadges.set(win.id, `${hook.tool}|unknown|`)
-    win.webContents.send('context:mandate', {
-      slug: hook.tool,
-      state: hook.state,
-      detail: hook.detail,
-      applicable: false,
-    })
-    return
-  }
-  const key = `${hook.tool}|${hook.state}|${hook.detail}`
-  if (shown === key) return
-  contextBadges.set(win.id, key)
-  win.webContents.send('context:mandate', {
-    slug: hook.tool,
-    state: hook.state,
-    detail: hook.detail,
-    applicable: hook.applicable,
-  })
-}
-
-/** On window load, show the known badge and ask Tether to check again, as
- * Aico did before Tether owned launches. */
-function refreshContextBadge(win: BrowserWindow): void {
-  contextBadges.delete(win.id)
-  const id = registry.sessionOf(win.id)
-  if (!id) return
-  const known = catalog.get(id)
-  if (known) pushContextBadge(win, known)
-  tether
-    .contextCheck(id)
-    .then((hook) => {
-      const latest = catalog.get(id)
-      if (!hook || !latest || win.isDestroyed()) return
-      catalog.upsert({ ...latest, contextHook: hook })
-      pushContextBadge(win, catalog.get(id) ?? latest)
-    })
-    .catch(() => {})
-}
-
-function pushTitles(): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (win.isDestroyed()) continue
-    const legacyName = registry.legacyOf(win.id)
-    if (legacyName) {
-      const mark = toolMark('shell')
-      win.webContents.send('win:title', {
-        label: `A-Term ${legacyName.slice('summitflow-'.length, 'summitflow-'.length + 8)}`,
-        name: null,
-        icon: mark.icon,
-        accent: mark.accent,
-        tuiName: 'A-Term session',
-        tuiSlug: 'shell',
-        sessionId: legacyName,
-        coordinator: false,
-        chip: null,
-      })
-      continue
-    }
-    const widgetId = registry.sessionOf(win.id)
-    const descriptor = widgetId ? catalog.get(widgetId) : undefined
-    if (!descriptor) continue
-    const tool = tools.find((candidate) => candidate.slug === descriptor.tool)
-    const mark = toolMark(descriptor.tool, tool?.color)
-    pushContextBadge(win, descriptor)
-    win.webContents.send('win:title', {
-      label: sessionTitle(descriptor),
-      name: descriptor.name, // prefills the rename input
-      icon: mark.icon,
-      accent: mark.accent,
-      tuiName: tool?.name ?? descriptor.tool,
-      tuiSlug: descriptor.tool,
-      sessionId: descriptor.tmux.sessionId,
-      coordinator: descriptor.coordinator ?? false,
-      chip: coordinatorChip(descriptor),
-    })
-    layout.noteCoordinator(win, descriptor.coordinator ?? false)
-  }
-  // Names and coordinator marks are in layout.json too; agents read it right
-  // after `root title`.
-  layout.scheduleWrite()
-}
+const applyGuiCommand = createGuiChannel({
+  isQuitting: lifecycle.isQuitting,
+  catalog,
+  refresh: link.refresh,
+  focusOrReopen: windows.focusOrReopen,
+  forSession: registry.forSession,
+  arrange: layout.arrange,
+  saveBounds,
+  displayIdFor: (bounds) => String(screen.getDisplayMatching(bounds).id),
+  titles: () => chrome.pushTitles(),
+  tray: () => chrome.syncTray(),
+})
 
 // ---------------------------------------------------------------------------
 // Selection bus.
@@ -1340,8 +1081,7 @@ function startSidecar(): void {
 }
 
 lifecycle.onQuit(() => {
-  stopEvents?.()
-  stopGuiChannel?.()
+  link.stop()
   // A secondary instance (single-instance lock denied) quits before the app is
   // ready, where globalShortcut would throw; it never registered any anyway.
   if (app.isReady()) globalShortcut.unregisterAll()
@@ -1369,7 +1109,7 @@ const startup = app.whenReady().then(async () => {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (win) {
       void startPty(win, clampSize(size))
-        .then(() => pushTitles()) // fill the titlebar once the session is attached
+        .then(() => chrome.pushTitles()) // fill the titlebar once the session is attached
         .catch((error) => console.error('[aico] PTY start failed:', error))
     }
   })
@@ -1601,10 +1341,7 @@ const startup = app.whenReady().then(async () => {
     syncCursorPump()
     return next.key
   })
-  ipcMain.on('win:thinking', (event, on: boolean) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
-    if (win) setWidgetActivity(win.id, on)
-  })
+  chrome.registerIpc(ipcMain)
 
   // Control-surface actions: same handlers the tray uses. A new session is
   // always an explicit (tool, workspace) pair from the picker — both required,
@@ -1661,8 +1398,8 @@ const startup = app.whenReady().then(async () => {
 
   // Enabled tools from Tether's registry, in its order, with Aico's marks.
   ipcMain.handle('tui:list', async () => {
-    if (!tools.length) await refreshTools().catch(() => {})
-    return tools.map((tool) => {
+    if (!link.tools().length) await link.refreshTools().catch(() => {})
+    return link.tools().map((tool) => {
       const mark = toolMark(tool.slug, tool.color)
       return { slug: tool.slug, displayName: tool.name, accent: mark.accent, icon: mark.icon }
     })
@@ -1675,7 +1412,7 @@ const startup = app.whenReady().then(async () => {
   // Every running Tether session, whichever app created it, plus A-Term's
   // pre-Tether sessions, which Tether lists for attach only.
   ipcMain.handle('session:list-openable', async () => {
-    await refreshSessions()
+    await link.refresh()
     const legacy = await tether.legacySessions().catch(() => [])
     const sessions = catalog
       .list()
@@ -1685,7 +1422,7 @@ const startup = app.whenReady().then(async () => {
         origin: descriptor.origin,
         label: sessionTitle(descriptor),
         project: projects.nameFor(descriptor.projectId, descriptor.projectRoot),
-        tool: toolDisplayName(descriptor.tool, tools),
+        tool: toolDisplayName(descriptor.tool, link.tools()),
         status: 'running' as const,
         locallyOpen: Boolean(registry.forSession(descriptor.id)),
       }))
@@ -1756,28 +1493,24 @@ const startup = app.whenReady().then(async () => {
     }
   })
 
-  createTray(
-    {
-      onSelect: windows.focusOrReopen,
-      onDiscard: (id) => void confirmTrayDiscard(id),
-      onNewWidget: windows.openNew,
-      onRefreshSessions: () => {
-        projects.invalidate()
-        requestSessionRefresh()
-        void refreshTools().catch(() => {})
-      },
-      onHubView: windows.showAll,
+  chrome.createTray({
+    onSelect: windows.focusOrReopen,
+    onDiscard: (id) => void confirmTrayDiscard(id),
+    onNewWidget: windows.openNew,
+    onRefreshSessions: () => {
+      projects.invalidate()
+      link.requestRefresh()
+      void link.refreshTools().catch(() => {})
     },
-    trayTools(),
-    projects.list(),
-  )
+    onHubView: windows.showAll,
+  })
   scheduleGaze()
   layout.scheduleWrite()
   layout.enableTiling()
   // Returning to any Aico window refreshes the native tray catalog as well.
   // Linux does not provide a reliable async hook before its cached tray menu opens.
-  app.on('browser-window-focus', syncTray)
-  app.on('activate', syncTray)
+  app.on('browser-window-focus', chrome.syncTray)
+  app.on('activate', chrome.syncTray)
 
   // System-wide indicate hotkey (X11). Logs whether the grab actually took, so
   // a silent Wayland no-op is visible in the launcher log.
@@ -1830,8 +1563,8 @@ const startup = app.whenReady().then(async () => {
   // Browser-driven sends (and any CLI POST to /selection/send) arrive here.
   subscribeSelectionEvents()
 
-  connectTether()
-  syncTray()
+  link.connect(applyGuiCommand)
+  chrome.syncTray()
   lifecycle.markReady()
 })
 startup.catch(lifecycle.failStartup)
