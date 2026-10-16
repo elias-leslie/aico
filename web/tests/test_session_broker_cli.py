@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -66,6 +67,21 @@ def test_open_prints_json_target(capsys: pytest.CaptureFixture[str]) -> None:
     payload = json.loads(capsys.readouterr().out)
     assert payload["session_id"] == "a0000001" and payload["tmux_socket"] == SOCKET
     ensure.assert_called_once_with(project_id="a-term", tool_slug="codex", working_dir="/srv/a-term")
+
+
+def test_open_resolves_a_relative_or_home_cwd_for_the_caller(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    (tmp_path / "x").mkdir()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    with patch("a_term.cli.session_broker.ensure_project_tool_session", return_value=_target()) as ensure:
+        assert cli.main(["open", "--tool", "codex", "--project", "a-term", "--cwd", "."]) == 0
+        assert cli.main(["open", "--tool", "codex", "--project", "a-term", "--cwd", "~/x"]) == 0
+    assert [c.kwargs["working_dir"] for c in ensure.call_args_list] == [
+        str(tmp_path.resolve()),
+        str((tmp_path / "x").resolve()),
+    ]
 
 
 def test_open_attach_runs_tether_sessions_attach(monkeypatch: pytest.MonkeyPatch) -> None:

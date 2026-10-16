@@ -36,7 +36,7 @@ SHELL_MODE = "shell"
 # ---------------------------------------------------------------------------
 def _project_root(working_dir: str | None) -> str | None:
     """Tether refuses a root that isn't already normalized, so tidy hand-typed
-    spellings ('/x/./y', '//x', '/x/') first. A blank one means "not given".
+    spellings ('/x/./y', '/x/../y', '//x') first. A blank one means "not given".
     It is not made absolute: Tether still refuses a relative one."""
     if not working_dir:
         return None

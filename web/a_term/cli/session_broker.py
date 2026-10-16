@@ -19,6 +19,7 @@ import subprocess
 import sys
 from collections.abc import Sequence
 from dataclasses import asdict
+from pathlib import Path
 
 from ..logging_config import configure_cli_logging
 from ..services import project_catalog
@@ -66,7 +67,10 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _run_open(args: argparse.Namespace) -> int:
-    target = ensure_project_tool_session(project_id=args.project, tool_slug=args.tool, working_dir=args.cwd)
+    # Resolved here, where '.' and '~' still mean the caller's: Tether only
+    # takes an absolute folder, and reuse matching compares resolved paths.
+    working_dir = str(Path(args.cwd).expanduser().resolve()) if args.cwd else None
+    target = ensure_project_tool_session(project_id=args.project, tool_slug=args.tool, working_dir=working_dir)
     if args.attach:
         return _attach(target, print_only=args.print_only)
     print(json.dumps(asdict(target)))
