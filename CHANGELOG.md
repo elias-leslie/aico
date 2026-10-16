@@ -14,8 +14,9 @@ Requires Tether API v1. Install and start Tether (`tether@default`) before Aico.
   checks the API version, follows `/v1/events` with reconnect and gap resync,
   and holds the GUI channel for show, position and title.
 - `aico.db` now keeps only `views` (window geometry, open state, local name
-  override per session ID) and `settings`. On first start the views are
-  migrated from the old `widgets` table, which is left untouched as a backup.
+  override per session ID) and `settings`. Aico never reads, writes or drops
+  the pre-Tether tables (`widgets`, `tmux_servers`, `root_requests`); only
+  `tether import-aico --from PATH` reads them, from an archived copy.
 - The session list shows every Tether session (Aico, A-Term, CLI and root
   origins), plus A-Term's pre-Tether `summitflow-<uuid>` sessions, which open
   attach-only. The separate A-Term federation is gone.
@@ -27,7 +28,8 @@ Requires Tether API v1. Install and start Tether (`tether@default`) before Aico.
   A-Term's `/v1/roots` proxy now returns.
 - The Python sidecar is gone: Aico's main process now listens on
   `127.0.0.1:8005` itself, with the same `/health` identity, Host and Origin
-  guards and 1 MiB body cap. `POST /selection/send` types the captures at the
+  guards and 1 MiB body cap, plus a JSON `Content-Type` check on writes
+  (`415` otherwise). `POST /selection/send` types the captures at the
   last-focused widget and replies `{records, count, delivered, reason}`.
   Indicate selection sends the newest capture again from memory.
 

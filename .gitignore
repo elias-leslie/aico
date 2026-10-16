@@ -1,8 +1,7 @@
-# Python (sidecar)
+# Python (scripts)
 __pycache__/
 *.py[cod]
 .venv/
-sidecar/.venv/
 *.egg-info/
 .pytest_cache/
 .ruff_cache/
