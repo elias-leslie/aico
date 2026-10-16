@@ -6,16 +6,7 @@
   // heads, zombies and the bat roosting under the title come at him. Busy:
   // the vampire lord (or Death) holds court; done: the boss burns away and the orb drops.
 
-  // capture-only: keep the bar lively in long headless runs (?t=…&awake)
-  const KEEP_AWAKE = (() => {
-    try {
-      const q = new URLSearchParams(location.search)
-      return q.has('t') && q.has('awake')
-    } catch {
-      return false
-    }
-  })()
-  const live = (s, now) => s.lively(now) || (KEEP_AWAKE && !s.napping)
+  const live = (s, now) => s.lively(now)
   // someone is playing: a click or drag in the last 9 s, or the cursor moving over the bar
   const engaged = (s, now) => now - s.keyAt < 9000 || now - (s.data.clickAt || -1e9) < 9000 || now - (s.data.grabAt || -1e9) < 9000 || (s.cursor && now - s.cursor.since < 2500)
   const clicked = (s) => (s.data.clickAt = performance.now())
@@ -1673,17 +1664,16 @@
       const d = this.dir
       const x = Math.round(this.x)
       let sp
-      let w
       let h
       let ox
       if (this.kind === 'vampire') {
         if (this.state === 'gone') return
         const open = this.state === 'open'
         sp = (this.flash > 0 && this.f & 1) || (this.state === 'crumble' && this.t < 0.3 && this.f & 1) ? VAMP[open ? 'openW' : 'closedW'] : VAMP[open ? 'open' : 'closed']
-        ;[w, h, ox] = [DW, DH, d === 1 ? DX : DW - 1 - DX]
+        ;[h, ox] = [DH, d === 1 ? DX : DW - 1 - DX]
       } else {
         sp = (this.flash > 0 && this.f & 1) || (this.state === 'crumble' && this.t < 0.3 && this.f & 1) ? DEATH_W : DEATH[(this.f >> 2) & 1]
-        ;[w, h, ox] = [EW, EH, d === 1 ? EX : EW - 1 - EX]
+        ;[h, ox] = [EH, d === 1 ? EX : EW - 1 - EX]
       }
       const img = sp[d]
       const dx = x - ox - 1
@@ -2595,9 +2585,6 @@
         bat.state = 'dive'
         bat.t = 0
       }
-    },
-    onBarClick(s, p) {
-      s.data.hunter.order({ x: p.x, y: p.y })
     },
     onKey(s, k, down) {
       if (down && s.data.hunter) s.data.hunter.key(k)

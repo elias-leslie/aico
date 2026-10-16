@@ -862,7 +862,6 @@
   const NADE = [S(['.k.', 'ooo', 'oQo', 'ooo']), S(['..k', 'ooo', 'oQo', 'ooo.']), S(['ooo', 'oQo', 'ooo', '.k.']), S(['k..', 'ooo', 'oQo', 'ooo'])]
   const SLASH = pair(['.......hh', '........hW', '.........W', '.........W', '........hW', '.......hh.', '......h...'], P)
   const HELMET = S(['..QQO..', '.QOOOo.', 'oOOOOOo', 'ooooooo'])
-  const RIFLE = S(['nnngggggZZ', 'nn..Z.....'])
   const ROPE = [sprite(['N'], P), sprite(['n'], P)]
   const SWEAT = S(['c', 'c'])
   const TOWEL = S(['RRwwRRwwRRwwRRwwRRwwRR', 'RRwwRRwwRRwwRRwwRRwwRR'])
@@ -940,7 +939,6 @@
     }
     return dx
   }
-  const textW = (str, pitch) => str.length * pitch - (pitch - (pitch > 7 ? 10 : 5))
 
   function crate(letter, fill, ink) {
     const c = document.createElement('canvas')
@@ -3682,15 +3680,6 @@
         if (near) m.knife()
         else m.fire()
       }
-    },
-    onBarClick(s, p) {
-      // mockup only (Aico has no empty-bar clicks): the hero runs there
-      s.data.clickAt = performance.now()
-      const m = s.data.lead
-      if (['stand', 'run', 'fire', 'win'].includes(m.state)) {
-        m.steps = []
-        m.go(p.x)
-      } else if (m.state === 'sit') m.standUp()
     },
     onBonk(s) {
       // a window button clicked: the noise startles anyone off guard

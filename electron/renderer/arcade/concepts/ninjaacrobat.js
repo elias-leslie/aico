@@ -1893,15 +1893,6 @@
         h.slide(h.x + h.dir * 90)
       }
     },
-    onBarClick(s, p) {
-      // mockup only (Aico has no empty-bar clicks): run there
-      s.data.clickAt = performance.now()
-      const h = s.data.ninja
-      if (h.state === 'stand' || h.state === 'run' || h.state === 'crouch') {
-        h.state = 'stand'
-        h.setPlan(h.pathTo(p.x))
-      }
-    },
     onBusy(s) {
       const d = s.data
       const now = performance.now()

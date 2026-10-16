@@ -49,7 +49,6 @@
             "noFallthroughSwitchClause": "off"
           },
           "correctness": {
-            "noUnusedVariables": "off",
             "noUnusedFunctionParameters": "off"
           },
           "complexity": {

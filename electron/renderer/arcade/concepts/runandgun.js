@@ -2291,11 +2291,6 @@
       }
       s.poke()
     },
-    onBarClick(s, p) {
-      // mockup extra (Aico has no empty-bar clicks): a burst toward the spot
-      const t = { cx: p.x, alive: true, aimPoint: () => ({ x: p.x, y: p.y }) }
-      for (const c of s.data.team) c.burstAt(t)
-    },
     onBusy(s) {
       const d = s.data
       const now = performance.now()

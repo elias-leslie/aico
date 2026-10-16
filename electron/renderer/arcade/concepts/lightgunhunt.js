@@ -5,16 +5,6 @@
   // dog sniffs in each round, retrieves the hits and laughs at the misses.
   // Clicking a duck shoots it like a light gun, and the hunter yields to you.
 
-  // capture-only: keep the bar lively in headless long runs (?t=…&awake)
-  const KEEP_AWAKE = (() => {
-    try {
-      const q = new URLSearchParams(location.search)
-      return q.has('t') && q.has('awake')
-    } catch {
-      return false
-    }
-  })()
-
   // ---- palettes ---------------------------------------------------------------
   const DOGP = {
     D: '#c47a36', b: '#8a5020', d: '#5e3412', T: '#f6cc94', E: '#141010', w: '#fcfcfc',
@@ -1156,7 +1146,7 @@
 
   function control(s, dt, now) {
     const g = s.data
-    const lively = s.lively(now) || KEEP_AWAKE
+    const lively = s.lively(now)
     if (!lively && g.phase !== 'rest') enterRest(s)
     const dog = g.dog
     g.engagedShotRecently = now - g.user.lastShot < 9000
@@ -1347,14 +1337,6 @@
     },
     onNap(s) {
       if (s.data.phase !== 'rest') enterRest(s)
-    },
-    // mockup only (Aico never delivers clicks on empty bar): a shot that misses
-    onBarClick(s, p) {
-      const g = s.data
-      if (g.phase === 'rest') return
-      g.user.lastShot = performance.now()
-      fire(s, performance.now(), null, false)
-      void p
     },
     drawBehind(s, c) {
       const g = s.data

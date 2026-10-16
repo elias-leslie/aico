@@ -929,13 +929,6 @@
       for (const a of s.actors) if (a.x > s.W) a.x = wrap(a.x, s.W)
       s.data.restX = 0
     },
-    onBarClick(s, p) {
-      const k = s.data.knight
-      const now = performance.now()
-      s.data.lastClick = now
-      k.order = { x: p.x, y: clamp(p.y - SH / 2, 0, MAXY), until: now + 2000 }
-      k.flap(28)
-    },
     onKey(s, key, down) {
       const k = s.data.knight
       if (!down || !k || k.out > 0 || k.held) return

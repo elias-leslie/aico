@@ -8,10 +8,6 @@
   // Busy = a short insult swordfight, done = a win or the scene's punchline,
   // rest = the hero naps and the story waits.
 
-  // Capture-only flags for the mockup page; null (inert) unless the URL has ?t=.
-  const DEBUG = typeof location !== 'undefined' && /[?&]t=/.test(location.search) ? new URLSearchParams(location.search) : null
-  const KEEP_AWAKE = !!(DEBUG && DEBUG.has('awake'))
-
   // ---- pixel painter ---------------------------------------------------------
   const GW = 24
   const GH = 27 // rows 0-2 hats, 3-10 head, 11-18 torso, 19-26 legs
@@ -1036,12 +1032,12 @@
     rope: { verb: 'Look at washing line', lines: ['A washing line. Chicken-compatible.', 'Taut, sturdy, slightly damp.'] },
   }
   const SPOTS = {
-    eyes: { verb: 'Look at strange eyes', lines: ["They're watching me. Probably a pirate thing.", 'Two eyes. Twice what Pirate Two has.'] },
-    title: { verb: 'Read sign', lines: ["It's the name of this place. I think.", 'Sounds like a grog brand.'] },
-    glyph: { verb: 'Look at diamond', lines: ['A diamond. Way too high to reach.', 'It sparkles in a very stealable way.'] },
-    min: { verb: 'Push minimize button', monkey: true },
-    max: { verb: 'Push maximize button', lines: ["I'm big enough already, thanks.", 'It does nothing. Like most buttons.'] },
-    close: { verb: 'Use close button', lines: ["I'd better not touch that. It looks final."] },
+    eyes: { verb: 'Look at strange eyes' },
+    title: { verb: 'Read sign' },
+    glyph: { verb: 'Look at diamond' },
+    min: { verb: 'Push minimize button' },
+    max: { verb: 'Push maximize button' },
+    close: { verb: 'Use close button' },
   }
 
   // ---- runtime ---------------------------------------------------------------------
@@ -1694,36 +1690,6 @@
     for (const f of s.fix) if (f.kind !== 'controls' && p.x >= f.x - 1 && p.x <= f.x + f.w + 1 && p.y >= f.y - 1 && p.y <= f.y + f.h + 1) return f
     return null
   }
-  // mockup extra (the bar is a drag region in Aico): walk over and comment
-  function useSpot(s, f) {
-    const d = s.data
-    const spec = SPOTS[f.kind]
-    const g = d.cast.G
-    if (!g.on || d.fight || d.zip) return
-    const target = clamp(f.x + f.w / 2 + (f.kind === 'title' ? -f.w / 2 - 8 : -10), 6, s.W - 6)
-    d.nextAt = Math.max(d.nextAt, performance.now() + 15000)
-    const back = typeof g.at === 'string' && !g.at.startsWith('off') ? g.at : null
-    const goBack = (ms) => back && d.timers.push({ at: performance.now() + ms, fn: () => !d.resting && !d.fight && !g.moving && g.goto(spot(s, back), null, back) })
-    g.goto(target, () => {
-      g.face(f.x + f.w / 2)
-      if (spec.monkey) {
-        const l = 'Look behind you! A three-headed monkey!'
-        aside(s, 'G', l)
-        const o = ['P1', 'P2', 'P3', 'ST', 'CA', 'EL', 'LC'].map((k) => d.cast[k]).find((c) => c.on && !c.moving)
-        if (o) {
-          const t0 = performance.now() + lineMs(l) + 300
-          d.timers.push({ at: t0, fn: () => { o.dir = o.x > g.x ? 1 : -1; aside(s, o.key, 'Where?!') } })
-          d.timers.push({ at: t0 + 2800, fn: () => { o.face(g.x); aside(s, o.key, 'Hey! There is no monkey!') } })
-          goBack(t0 - performance.now() + 2800 + lineMs('Hey! There is no monkey!'))
-        } else goBack(lineMs(l))
-      } else {
-        d.spotIx[f.kind] = ((d.spotIx[f.kind] ?? -1) + 1) % spec.lines.length
-        aside(s, 'G', spec.lines[d.spotIx[f.kind]])
-        goBack(lineMs(spec.lines[d.spotIx[f.kind]]))
-      }
-    })
-  }
-
   function hoverVerb(s) {
     const c = s.cursor
     if (!c || c.y < 0 || c.y > H || c.x < 0 || c.x > s.W) return null
@@ -1820,9 +1786,6 @@
     s.actors.push(new Props(s))
     d.ep = 0
     startEpisode(s)
-    // capture-only (inert without ?t=): open on a named scene, e.g. &scene=grog
-    const only = DEBUG && S[DEBUG.get('scene')]
-    if (only) d.scenes = [only]
     // the bar opens with the hero and the three pirates already in place
     for (const [k, at] of [['P1', 'R2'], ['P2', 'R3'], ['P3', 'R4'], ['G', 'R0']]) {
       const c = d.cast[k]
@@ -1836,7 +1799,6 @@
     d.line = null
     d.card = null
     d.look = {}
-    d.spotIx = {}
     d.timers = []
     d.melt = 0
     d.duelTurn = 0
@@ -1852,7 +1814,6 @@
 
   function update(s, dt, now) {
     const d = s.data
-    if (KEEP_AWAKE && !s.napping) s.lastTouch = now
     if (d.line && now >= d.line.until) d.line = null
     if (d.card && now >= d.card.until) d.card = null
     d.cast.G.keyWalk = s.lively(now) && !d.resting ? keyWalkDir(s) : 0
@@ -2017,15 +1978,6 @@
       }
       if (d.puddle) d.puddle.x = clamp(d.puddle.x * k, 4, s.W - 8)
       s.poke()
-    },
-    // mockup extra: in Aico the empty bar is the window's drag region
-    onBarClick(s, p) {
-      const d = s.data
-      const g = d.cast.G
-      if (d.resting || d.fight || d.zip || !g.on) return
-      const f = spotAt(s, p)
-      if (f && SPOTS[f.kind]) return useSpot(s, f)
-      g.goto(clamp(p.x, 6, s.W - 6))
     },
     drawBehind(s, c) {
       const d = s.data

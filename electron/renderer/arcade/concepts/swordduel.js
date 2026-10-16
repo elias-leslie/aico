@@ -720,7 +720,6 @@
   // states where a fighter can't be hit or asked to do anything else
   const AWAY = new Set(['down', 'fall', 'headless', 'sag', 'held', 'drop', 'kneel', 'sit', 'toSit', 'enter', 'goto', 'champ', 'yield'])
   const SPILL = typeof SPILL_UP === 'number' ? SPILL_UP : 0 // the stage reaches a little above the bar
-  const lerp = (a, b, u) => a + (b - a) * u
   // the user is playing: a click or drag in the last 9 s, or the cursor moving over the bar
   const engaged = (s, now) => now - (s.data.clickAt || -1e9) < 9000 || now - (s.data.grabAt || -1e9) < 9000 || (!!s.cursor && now - s.cursor.since < 2500) || keyed(s, now)
   // the keyboard is the game's (armed by a click on a character), or a game key went down lately
@@ -1872,9 +1871,6 @@
         // she's still about: send her back to the (new) champion
         Object.assign(d.princess, { champ, side: face, state: 'in', moving: true })
       } else d.princess = s.spawn(new Princess(s, champ))
-    },
-    onBarClick(s, p) {
-      for (const f of s.data.fighters) f.look(p.x, '?')
     },
     // keyboard: the blond barbarian, as on the original joystick. A/D walk, W jumps,
     // S rolls forward; Space swings: alone mid, with W overhead, with S a low sweep,

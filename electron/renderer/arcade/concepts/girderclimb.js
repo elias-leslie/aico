@@ -169,7 +169,6 @@
   APE.sit = OUT(sitRows)
   APE.fall = OUT(flipV(apeRows({ l: 'up', r: 'up', head: 'roar' })))
   APE.head = [OUT(flipV(apeRows({ l: 'push', r: 'push', head: 'daze' }))), OUT(flipV(apeRows({ l: 'up', r: 'up', head: 'daze' })))]
-  const KW = 44
   const KH = 30
 
   // ---- the hero, 16 × 21, faces right ------------------------------------------
@@ -1229,10 +1228,6 @@
       d.jm.restX = null
       for (const a of s.actors) if (a.pickup) a.x = clamp(a.x, d.startX + 4, d.endX - 4)
       for (const h of hazards(s)) h.x = clamp(h.x, 0, s.W - 10)
-    },
-    onBarClick(s) {
-      engage(s, true)
-      s.data.jm.jump()
     },
     // keyboard: A/D run, W or Space jump (carrying his run), S stands him still
     onKey(s, k, down) {

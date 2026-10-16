@@ -484,7 +484,6 @@
     }
     die() {
       // out of energy: the suit flashes and bursts apart, and she comes back in at the edge
-      const s = this.s
       if (this.latched) {
         this.latched.state = 'stunned'
         this.latched.t = 1
@@ -701,7 +700,6 @@
       return FAST
     }
     act(dt, now, s) {
-      const d = s.data
       this.turnCd = (this.turnCd || 0) - dt
       const t = this.task
       const stop = () => {
@@ -1528,10 +1526,6 @@
       if (hero.task && hero.task.x !== undefined) hero.task.x = clamp(hero.task.x, 1, s.W - SW - 1)
       for (const e of enemies(s)) e.x = clamp(e.x, -e.w, s.W)
       if (s.data.tank) s.data.tank.x = clamp(s.data.tank.x, 2, s.W - 12)
-    },
-    onBarClick(s, p) {
-      engage(s)
-      s.data.hero.fire(p.x, p.y)
     },
     // keyboard: A/D run, W screw attack, S ball form, Space fires (a bomb in the ball); W in the ball stands up
     onKey(s, k, down) {

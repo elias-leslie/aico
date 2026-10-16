@@ -7,16 +7,7 @@
   // done is the mission complete moment; at rest the squad stands in a
   // quiet stretch of street with its converts lined up behind it.
 
-  // capture-only: keep the bar lively in long headless runs (?t=…&awake)
-  const KEEP_AWAKE = (() => {
-    try {
-      const q = new URLSearchParams(location.search)
-      return q.has('t') && q.has('awake')
-    } catch {
-      return false
-    }
-  })()
-  const live = (s, now) => s.lively(now) || (KEEP_AWAKE && !s.napping)
+  const live = (s, now) => s.lively(now)
   const NOW = () => performance.now()
   // the user is driving: a click in the last 9 s, or the cursor moving over the bar
   const engaged = (s, now) => now - (s.keyAt ?? -1e9) < 9000 || now < (s.data.userUntil || 0) || (s.cursor && now - s.cursor.t < 1600)
@@ -847,7 +838,6 @@
       return FAST
     }
     fightUpdate(dt, now, s) {
-      const d = s.data
       const tgt = nearestAgent(s, this.x)
       const dist = Math.abs(tgt.x - this.x)
       const range = this.role === 'rival' ? 95 : 70
@@ -1513,12 +1503,6 @@
         }
       }
       s.poke()
-    },
-    // mockup extra (Aico never delivers empty-bar clicks): march there
-    onBarClick(s, p) {
-      if (s.data.mode === 'done') return
-      touched(s)
-      march(s, p.x)
     },
     drawBehind(s, c) {
       if (s.data.city) c.drawImage(s.data.city, 0, 0)

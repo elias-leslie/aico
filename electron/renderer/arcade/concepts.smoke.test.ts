@@ -6,7 +6,8 @@
 // the canvas is a recording fake, so this covers runtime errors, the frame cap,
 // parking and teardown, not pixels. Math.random is seeded per game, so a run is
 // deterministic: set ARCADE_CALL_LOG=<dir> to write each game's canvas call log
-// there and diff two runs to prove a refactor changed nothing on screen.
+// there and diff two runs to prove a refactor changed nothing on screen (the
+// titlebar's own canvas logs as `stage.`; sprite canvases as `e<n>.`).
 import { mkdirSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -24,14 +25,13 @@ const arg = (v: unknown): string =>
       : String(v)
 
 function fakeContext(canvas: FakeEl): CanvasRenderingContext2D {
-  const id = canvas.id
   const state: Record<PropertyKey, unknown> = {}
   return new Proxy(state, {
     get(t, p) {
       if (p === 'canvas') return canvas
       if (p in t) return t[p]
       return (...a: unknown[]) => {
-        if (LOG_DIR) log.push(`${id}.${String(p)}(${a.map(arg).join(',')})`)
+        if (LOG_DIR) log.push(`${canvas.id}.${String(p)}(${a.map(arg).join(',')})`)
         if (p === 'measureText') return { width: String(a[0]).length * 4 }
         if (p === 'getImageData') {
           const [, , w, h] = a as number[]
@@ -43,7 +43,7 @@ function fakeContext(canvas: FakeEl): CanvasRenderingContext2D {
       }
     },
     set(t, p, v) {
-      if (LOG_DIR) log.push(`${id}.${String(p)}=${arg(v)}`)
+      if (LOG_DIR) log.push(`${canvas.id}.${String(p)}=${arg(v)}`)
       t[p] = v
       return true
     },
@@ -206,6 +206,7 @@ describe('titlebar games', () => {
     const { bar, parts } = titlebar()
     const s = new Strip(def, bar as unknown as HTMLElement, { gaze() {} })
     strip = s
+    ;(s.canvas as unknown as FakeEl).id = 'stage'
     const tick = (ms: number) => vi.advanceTimersByTime(ms)
 
     // 10 s of a cursor sweeping the bar, clicking the first character it finds

@@ -6,16 +6,7 @@
   // Busy is the knight on his throne hurling beer mugs; done is the
   // lever that topples the throne; rest is the hero sitting, catching his breath.
 
-  // capture-only: keep the bar lively in long headless runs (?t=…&awake)
-  const KEEP_AWAKE = (() => {
-    try {
-      const q = new URLSearchParams(location.search)
-      return q.has('t') && q.has('awake')
-    } catch {
-      return false
-    }
-  })()
-  const live = (s, now) => s.lively(now) || (KEEP_AWAKE && !s.napping)
+  const live = (s, now) => s.lively(now)
   const NOW = () => performance.now()
   const engaged = (s, now) => now - s.keyAt < 9000 || now < (s.data.userUntil || 0) || (s.cursor && now - s.cursor.t < 1600)
   const keyDir = (s) => (s.keys.has('right') ? 1 : 0) - (s.keys.has('left') ? 1 : 0)
@@ -1703,15 +1694,8 @@
       }
       s.poke()
     },
-    // mockup extra (Aico never delivers empty-bar clicks): throw there
     onKey(s, k, down) {
       if (down && s.data.hero) s.data.hero.key(k, NOW())
-    },
-    onBarClick(s, p) {
-      touched(s)
-      const dn = s.data.hero
-      if (dn.state === 'rest') dn.set('stand', NOW())
-      dn.throwAtPoint(p.x, p.y, NOW(), true)
     },
     drawBehind(s, c) {
       if (s.data.wall) c.drawImage(s.data.wall, 0, 0)

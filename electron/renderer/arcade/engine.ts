@@ -4,8 +4,8 @@
 // at all) when the vignette rests, the window is hidden, or nobody is around.
 //
 // Concepts (./concepts/*.js) are plain scripts written against a small global
-// API (sprite helpers, constants, registerConcept); installGlobals() provides it
-// so the same files run here and in the design mockups.
+// API (sprite helpers, constants, registerConcept), which installGlobals()
+// provides.
 
 /* Concepts are untyped scripts; the engine passes their objects through. */
 type Sprite = HTMLCanvasElement
@@ -38,7 +38,6 @@ export interface Actor {
   grab?(p: Point): void
   drag?(p: Point): void
   drop?(p: Point): void
-  onBarClick?(p: Point): void
   onBusy?(): void
   onDone?(ranMs: number): void
   onNap?(): void
@@ -255,7 +254,6 @@ export function installGlobals(): void {
     rand,
     pick,
     clamp,
-    zoom: 1,
     PAL,
     sprite,
     mirror,
@@ -263,7 +261,6 @@ export function installGlobals(): void {
     pairOutlined,
     outline,
     recolor,
-    DIGITS,
     drawDigits,
     pix,
     ZZ: sprite(['www', '..w', '.w.', 'www']),
@@ -323,7 +320,6 @@ export class Strip {
   keyAt = -1e9
   busy = false
   busySince = 0
-  lastActive = performance.now()
   lastTouch = performance.now()
   napping = false
   visible = !document.hidden
@@ -438,12 +434,6 @@ export class Strip {
   fixtureOver(x0: number, x1 = x0): Rect | undefined {
     return this.fix.find((f) => x1 >= f.x && x0 <= f.x + f.w)
   }
-  groundAt(x0: number, x1: number, y: number, step = 2, extra: Rect[] | null = null): number {
-    let g = FLOOR
-    for (const f of extra ? [...this.fix, ...extra] : this.fix)
-      if (x1 >= f.x && x0 <= f.x + f.w && f.y >= y - step && f.y < g) g = f.y
-    return g
-  }
   spawn<A extends Actor>(a: A): A {
     this.actors.push(a)
     this.poke()
@@ -503,9 +493,6 @@ export class Strip {
     if (this.napping) return false
     return this.busy || now - this.lastTouch < REST_AFTER
   }
-  idleFor(now = performance.now()): number {
-    return this.napping ? 1e9 : this.busy ? 0 : now - this.lastActive
-  }
   actorAt(p: Point): Actor | null {
     for (let i = this.actors.length - 1; i >= 0; i--) {
       const a = this.actors[i] as Actor
@@ -559,7 +546,6 @@ export class Strip {
     }
     if (on) this.def.onBusy?.(this)
     else this.def.onDone?.(this, ran)
-    this.lastActive = now
     this.lastTouch = now
     this.poke()
   }

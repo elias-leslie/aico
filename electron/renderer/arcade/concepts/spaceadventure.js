@@ -1466,7 +1466,6 @@
     d.pending = null
     d.waitUntil = 0
     d.asideUntil = 0
-    d.hold = null
     d.locked = false
     d.box = null
     d.beam = null
@@ -1809,29 +1808,10 @@
     } else if (run.ret) d.run = run.ret
     else nextScene(s)
   }
-  function holdTick(s, now) {
-    const d = s.data
-    const R = d.cast.R
-    const h = d.hold
-    if (R.moving || R.anim) return FAST
-    if (!h.called) {
-      h.called = true
-      if (h.then) h.then()
-      if (R.moving || R.anim) return FAST
-    }
-    if (!h.at) h.at = now
-    if (now < h.at + 400) return h.at + 400 - now
-    d.hold = null
-    return 0
-  }
   function runTick(s, now) {
     const d = s.data
     if (d.grabbed || d.keyWalk) return FAST // the plot waits while the janitor is in your hand, or walking under your keys
     for (let guard = 0; guard < 40; guard++) {
-      if (d.hold) {
-        const w = holdTick(s, now)
-        if (w > 0) return w
-      }
       if (now < d.asideUntil) return d.asideUntil - now
       if (now < d.waitUntil) return d.waitUntil - now
       if (d.pending) {
@@ -1866,7 +1846,6 @@
     d.line = null
     d.box = null
     d.status = null
-    d.hold = null
     for (const k in d.cast) d.cast[k].asleep = true
   }
   function restTick(s) {
@@ -2265,21 +2244,6 @@
     if (R.hidden || R.boarded || R.fly || R.fall || R.anim || R.yOff !== 0 || R.pose === 'ash') return false
     if (d.mode === 'action') return !d.run
     return !d.locked && !d.box && !d.resting
-  }
-  function userWalk(s, x, then) {
-    const d = s.data
-    const R = d.cast.R
-    if (!canWalk(s)) return false
-    if (d.pending && d.pendWho === 'R') {
-      d.run.ip = d.run.cur
-      d.pending = null
-    }
-    if (R.pose === 'doze' || R.pose === 'hide' || R.pose === 'reach') R.pose = 'stand'
-    R.goto(clamp(x, 6, s.W - 7), d.mode === 'action' ? RUN : WALK)
-    R.spotKey = null
-    if (d.mode === 'story') d.hold = { then }
-    else d.act.userUntil = performance.now() + 5000
-    return true
   }
   function canGrab(s) {
     const d = s.data
@@ -2748,23 +2712,6 @@
     onKey,
     onBonk(s, rect, kind) {
       if (DOT_SAY[kind]) aside(s, null, DOT_SAY[kind])
-    },
-    onBarClick(s, p) {
-      const d = s.data
-      if (!d.started) return
-      const f = fixAt(s, p)
-      if (!f) return userWalk(s, p.x)
-      const [, line] = FIX[f.kind]
-      const R = d.cast.R
-      const tx = f.kind === 'eyes' ? f.x + f.w + 10 : f.x + f.w / 2
-      userWalk(s, tx, () => {
-        R.dir = f.x + f.w / 2 > R.x ? 1 : f.kind === 'eyes' ? -1 : R.dir
-        if (f.kind === 'title') R.play(R.set.mop, 1300, 5, () => {
-          aside(s, null, line)
-          R.goto(openSpot(s, R.x))
-        })
-        else aside(s, null, line)
-      })
     },
     relayout(s) {
       const d = s.data

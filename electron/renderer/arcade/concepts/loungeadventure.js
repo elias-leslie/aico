@@ -9,10 +9,6 @@
   // victory, rest = the hero slumps (the story pauses and resumes where it left
   // off).
 
-  const Q = new URLSearchParams(location.search)
-  // capture-only: keep the bar lively in headless long runs (?t=…&awake)
-  const KEEP_AWAKE = Q.has('t') && Q.has('awake')
-
   // EGA-ish palette
   const P = {
     E: '#141414', W: '#fbfbf5', w: '#a6a6b2', S: '#f4b088', s: '#c07650', K: '#4e2e14', k: '#8a5a30',
@@ -2525,11 +2521,6 @@
       d.hero = new Guy(s, 'L', -14, 1)
       s.actors.push(d.hero)
       s.actors.push(new Front(s))
-      // capture-only: start at a given episode/scene (?t=…&lep=1&lscene=4)
-      if (Q.has('t') && Q.has('lscene')) {
-        d.ep = +Q.get('lep') || 0
-        d.si = +Q.get('lscene')
-      }
       d.loc = EPS[d.ep].scenes[d.si].loc
       setLoc(s, d.loc, EPS[d.ep].scenes[d.si].cast)
       startScene(s)
@@ -2555,7 +2546,6 @@
     },
     update(s, dt, now) {
       const d = s.data
-      if (KEEP_AWAKE) s.lastTouch = now
       // run "after" hooks once their step's wait ends
       if (d.after && d.started && now >= d.waitUntil && (!d.waitFor || d.waitFor(now))) {
         const f = d.after

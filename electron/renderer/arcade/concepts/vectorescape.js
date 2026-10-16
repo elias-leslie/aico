@@ -1788,7 +1788,6 @@
     at(d, 300, () => d.chaseToken === T && b.present && b.state === 'chase' && fireAt(s, b.x, FLOOR - 9))
     at(d, 1100, () => d.mode === 'chase' && d.chaseToken === T && resumeRun(s))
   }
-  const covered = (s, x) => !!s.fixtureOver(x - 6, x + 6)
 
   // ---- the gunfight across shields ---------------------------------------
   function startFight(s) {

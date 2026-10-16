@@ -5,26 +5,6 @@
   // While the agent works a boss robot (the scissor robot or the ice robot)
   // drops in for a fight with health meters; Done is the "weapon get" moment.
 
-  // capture-only: keep the bar lively in headless long runs (?t=…&awake)
-  const KEEP_AWAKE = (() => {
-    try {
-      const q = new URLSearchParams(location.search)
-      return q.has('t') && q.has('awake')
-    } catch {
-      return false
-    }
-  })()
-
-  // capture-only: always run this watch-mode episode (?t=…&robotep=shieldbot)
-  const FORCE_EP = (() => {
-    try {
-      const q = new URLSearchParams(location.search)
-      return q.has('t') ? q.get('robotep') : null
-    } catch {
-      return null
-    }
-  })()
-
   // ---- palette (8-bit console) -------------------------------------------------
   const MP = {
     b: '#0070ec', c: '#3cbcfc', S: '#fcd8a8', s: '#e0a070', w: '#fcfcfc', E: '#101010',
@@ -425,7 +405,7 @@
   const touched = (s) => (s.data.clickAt = performance.now())
 
   // ---- helpers -------------------------------------------------------------------
-  const live = (s, now) => s.lively(now) || KEEP_AWAKE
+  const live = (s, now) => s.lively(now)
   const now0 = () => performance.now()
   function openSpot(s, x, hw, avoid = []) {
     const blocks = s.fix.map((f) => [f.x - 3, f.x + f.w + 3]).concat(avoid)
@@ -2197,7 +2177,6 @@
   function runEpisode(s, now, k) {
     const d = s.data
     const hero = d.hero
-    if (!k && FORCE_EP) k = FORCE_EP
     if (!k) {
       if (!d.epBag.length) d.epBag = EPISODES.slice().sort(() => Math.random() - 0.5)
       k = d.epBag.pop()
@@ -2339,17 +2318,6 @@
       const b = s.data.boss
       if (b && b.state !== 'die' && b.state !== 'enter') meter(c, 10, b.shownHp, b.def.color)
       for (let i = 0; i < hero.tanks; i++) c.drawImage(ENERGY_TANK_ICON, (b ? 17 : 10) + i * 6, 1)
-    },
-    // mockup extra (Aico never delivers empty-bar clicks): shoot that way
-    onBarClick(s, p) {
-      touched(s)
-      const hero = s.data.hero
-      if (!hero.visible || hero.state === 'hurt' || hero.state === 'getweapon') return
-      hero.dir = p.x > hero.cx ? 1 : -1
-      hero.turnAt = now0() + 1500
-      if (hero.state === 'rest') hero.state = 'stand'
-      if (hero.charge > 0.5) hero.release()
-      else hero.fire()
     },
     onKey(s, key, down) {
       s.data.hero?.onKey(key, down)
