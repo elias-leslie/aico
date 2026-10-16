@@ -124,6 +124,8 @@ LABEL_INVALID = re.compile(r"[\x00-\x1f\x7f-\x9f\ud800-\udfff\u2028\u2029]")
 BOUNDS = ("x", "y", "width", "height")
 KEY = r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}"
 THREAD = r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}"
+GENERATION = r"[0-9a-f]{64}"
+WIDGET = r"[0-9a-f]{8}"
 # Owner rejections that are definitive before any view or lifecycle effect.
 OWNER_REFUSALS = {400: {"invalid_body", "invalid_generation"}, 404: {"not_found"},
                   409: {"stale_generation", "workload_unavailable", "busy"}, 410: {"ended"},
@@ -181,11 +183,11 @@ class Pin:
         if not isinstance(data, dict) or set(data) != {f.name for f in dataclasses.fields(cls)}:
             raise ValueError("root must contain exactly the Pin fields listed in --help")
         patterns = {
-            "requestId": r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}",
-            "widgetId": r"[0-9a-f]{8}",
+            "requestId": KEY,
+            "widgetId": WIDGET,
             "logicalSessionId": r"aico-root-[A-Za-z0-9-]{1,100}",
-            "generation": r"[0-9a-f]{64}",
-            "sessionId": r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}",
+            "generation": GENERATION,
+            "sessionId": KEY,
             "tmuxSessionId": r"\$\d+",
             "paneId": r"%\d+",
             "tmuxServerId": r"[0-9a-f]{8,64}",
@@ -216,6 +218,30 @@ def local_root_url(value: str) -> str:
     if not valid:
         raise argparse.ArgumentTypeError("A-Term root control requires an exact loopback HTTP URL")
     return value.rstrip("/")
+
+
+def runtime_dir() -> str:
+    return os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
+
+
+# Raw environment defaults; each command keeps its own validation and error path.
+def default_gui_socket() -> str:
+    return os.environ.get("AICO_GUI_CONTROL_SOCKET", f"{runtime_dir()}/aico/gui-control.sock")
+
+
+def default_owner_socket() -> str:
+    return os.environ.get("AICO_CONTROL_SOCKET", f"{runtime_dir()}/aico/control.sock")
+
+
+def default_aterm_url() -> str:
+    return os.environ.get("A_TERM_ROOT_CONTROL_URL", "http://127.0.0.1:8002")
+
+
+def owner_endpoint(surface: str, root_socket: str | None, root_url: str | None) -> str:
+    """An explicit option, else the validated environment default; raises ArgumentTypeError."""
+    if surface == "aico":
+        return root_socket or socket_path(default_gui_socket())
+    return root_url or local_root_url(default_aterm_url())
 
 
 def classify_claude(raw: bytes) -> tuple[dict, str]:
@@ -450,7 +476,7 @@ class Collector:
             if not isinstance(root, dict):
                 raise Unavailable("catalog_invalid")
             key = root.get("requestId")
-            if not isinstance(key, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", key):
+            if not isinstance(key, str) or not re.fullmatch(KEY, key):
                 raise Unavailable("catalog_invalid")
             if key in seen:
                 raise Unavailable("catalog_invalid")
@@ -470,7 +496,7 @@ class Collector:
                 continue
             try:
                 widget = root.get("hostIdentity")
-                if not isinstance(widget, str) or not re.fullmatch(r"[0-9a-f]{8}", widget):
+                if not isinstance(widget, str) or not re.fullmatch(WIDGET, widget):
                     raise Unavailable("receipt_invalid")
                 status, owner = self.receipt(self.owner_socket, f"/v1/sessions/{widget}")
                 if status != 200:
@@ -670,6 +696,14 @@ def emit_json(collector: Collector, record: dict, fd: int = 1) -> None:
             fcntl.fcntl(fd, fcntl.F_SETFL, flags)
 
 
+def emit_unless_stopped(collector: Collector, record: dict) -> None:
+    """Emit a final failure record; nothing is written once the collector is stopped."""
+    try:
+        emit_json(collector, record)
+    except Stopped:
+        pass
+
+
 class ResolvedCollector(Collector):
     """Dispatch only to immutable, already verified per-root server locators."""
 
@@ -719,17 +753,14 @@ def admin_main(argv: list[str]) -> int:
     parser.add_argument("--thread", help="expected current native thread UUID")
     parser.add_argument("--request-key", help="stable operation identity; reuse after uncertain response")
     parser.add_argument("--stdin", action="store_true", help="required for submit; <=2000 UTF-8 bytes, no framing controls")
-    runtime = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
-    parser.add_argument("--root-socket", type=socket_path,
-                        default=os.environ.get("AICO_GUI_CONTROL_SOCKET", f"{runtime}/aico/gui-control.sock"))
+    parser.add_argument("--root-socket", type=socket_path, default=default_gui_socket())
     args = parser.parse_args(argv)
-    key = r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}"
-    if not re.fullmatch(key, args.request_id):
+    if not re.fullmatch(KEY, args.request_id):
         parser.error("invalid root request ID")
     if args.operation:
-        if (not args.generation or not re.fullmatch(r"[0-9a-f]{64}", args.generation)
-                or not args.thread or not re.fullmatch(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", args.thread)
-                or not args.request_key or not re.fullmatch(key, args.request_key)
+        if (not args.generation or not re.fullmatch(GENERATION, args.generation)
+                or not args.thread or not re.fullmatch(THREAD, args.thread)
+                or not args.request_key or not re.fullmatch(KEY, args.request_key)
                 or args.stdin != (args.operation == "submit")):
             parser.error("operation requires generation, thread, request-key, and stdin only for submit")
     elif args.generation or args.thread or args.request_key or args.stdin:
@@ -769,7 +800,7 @@ def admin_main(argv: list[str]) -> int:
             generation = data.get("generation")
             if (status != 200 or data.get("owner") != "aico" or data.get("requestId") != args.request_id
                     or data.get("terminalAdmin") != TERMINAL_ADMIN
-                    or generation is not None and not re.fullmatch(r"[0-9a-f]{64}", str(generation))):
+                    or generation is not None and not re.fullmatch(GENERATION, str(generation))):
                 raise Unavailable("admin_capability_unavailable")
             output.update(generation=generation, currentThreadId=None, terminalAdmin=TERMINAL_ADMIN)
         emit_json(collector, output)
@@ -777,10 +808,7 @@ def admin_main(argv: list[str]) -> int:
     except (Unavailable, Stopped) as error:
         output.update(applied=None if sent else False,
                       reason=str(error) if isinstance(error, Unavailable) else "deadline")
-        try:
-            emit_json(collector, output)
-        except Stopped:
-            pass
+        emit_unless_stopped(collector, output)
         return 1
     except BrokenPipeError:
         return 0
@@ -806,26 +834,22 @@ def create_main(argv: list[str]) -> int:
     parser.add_argument("--lead-root")
     parser.add_argument("--facet")
     parser.add_argument("--resume-session", help="exact native session ID; owner adapter validates format/support, never a picker")
-    runtime = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
     parser.add_argument("--root-socket", type=socket_path)
     parser.add_argument("--root-url", type=local_root_url)
     args = parser.parse_args(argv)
-    key = r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}"
-    if any(not re.fullmatch(key, value) for value in
+    if any(not re.fullmatch(KEY, value) for value in
            (args.request_id, args.project, args.role, *(v for v in (args.lead_root, args.facet) if v is not None))):
         parser.error("invalid root metadata")
     if (not os.path.isabs(args.project_root) or os.path.normpath(args.project_root) != args.project_root
             or "\0" in args.project_root):
         parser.error("project root must be an exact normalized absolute path")
-    if args.resume_session is not None and not re.fullmatch(key, args.resume_session):
+    if args.resume_session is not None and not re.fullmatch(KEY, args.resume_session):
         parser.error("resume requires a bounded exact native session ID")
     if (args.stdin and args.prompt is not None or args.surface == "aico" and args.root_url
             or args.surface == "a-term" and args.root_socket):
         parser.error("conflicting prompt or owner transport options")
     try:
-        endpoint = (args.root_socket or socket_path(os.environ.get("AICO_GUI_CONTROL_SOCKET", f"{runtime}/aico/gui-control.sock"))
-                    if args.surface == "aico" else args.root_url or local_root_url(
-                        os.environ.get("A_TERM_ROOT_CONTROL_URL", "http://127.0.0.1:8002")))
+        endpoint = owner_endpoint(args.surface, args.root_socket, args.root_url)
     except argparse.ArgumentTypeError:
         parser.error("invalid owner transport configuration")
     collector = Collector(endpoint, "", "", time.monotonic() + 10, threading.Event())
@@ -843,7 +867,7 @@ def create_main(argv: list[str]) -> int:
         # Run from a Tether session (Aico or A-Term): Tether records it as the
         # launcher, so the root joins its coordinator (or makes it one).
         creator = os.environ.get("AICO_WIDGET_ID")
-        if isinstance(creator, str) and re.fullmatch(r"[0-9a-f]{8}", creator):
+        if isinstance(creator, str) and re.fullmatch(WIDGET, creator):
             payload["launchedBy"] = creator
         fields = [args.tool, args.project, args.project_root, prompt, args.role, args.lead_root, args.facet]
         if args.resume_session:
@@ -863,11 +887,11 @@ def create_main(argv: list[str]) -> int:
                 or data.get("leadRootReference") != args.lead_root or data.get("facetCapsuleRef") != args.facet
                 or not surface_identity(args.surface, host, data.get("surfaceLocator"))
                 or not isinstance(data.get("logicalSessionId"), str)
-                or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", data["logicalSessionId"])
+                or not re.fullmatch(KEY, data["logicalSessionId"])
                 or state not in ("running", "pending", "uncertain", "ended")
                 or status != (202 if state in ("pending", "uncertain") else 200)
                 or state == "running" and generation is None
-                or generation is not None and (not isinstance(generation, str) or not re.fullmatch(r"[0-9a-f]{64}", generation))
+                or generation is not None and (not isinstance(generation, str) or not re.fullmatch(GENERATION, generation))
                 or state == "ended" and generation is not None):
             raise Unavailable("create_receipt_unqualified")
         output.update({key: data[key] for key in ("digest", "hostIdentity", "logicalSessionId", "generation", "surfaceLocator", "status")})
@@ -879,10 +903,7 @@ def create_main(argv: list[str]) -> int:
         parser.error("invalid prompt or UTF-8 input")
     except (Unavailable, Stopped) as error:
         output.update(status="uncertain", reason=str(error) if isinstance(error, Unavailable) else "deadline")
-        try:
-            emit_json(collector, output)
-        except Stopped:
-            pass
+        emit_unless_stopped(collector, output)
         return 1
     except BrokenPipeError:
         return 0
@@ -896,8 +917,8 @@ def widget_descriptor(data: dict, widget_id: str) -> dict:
     state = data.get("status")
     if (data.get("owner") != "aico" or data.get("widgetId") != widget_id
             or not isinstance(session, str)
-            or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", session)
-            or not isinstance(generation, str) or not re.fullmatch(r"[0-9a-f]{64}", generation)
+            or not re.fullmatch(KEY, session)
+            or not isinstance(generation, str) or not re.fullmatch(GENERATION, generation)
             or state not in ("running", "pending", "uncertain")
             or type(data.get("available")) is not bool
             or data["available"] != (state == "running")):
@@ -925,12 +946,11 @@ def widget_main(argv: list[str]) -> int:
                                       "window a lane of that coordinator (its root), moving its own lanes too")
             command.add_argument("coordinator_id", nargs="?")
     args = parser.parse_args(argv)
-    if not isinstance(args.widget_id, str) or not re.fullmatch(r"[0-9a-f]{8}", args.widget_id):
+    if not isinstance(args.widget_id, str) or not re.fullmatch(WIDGET, args.widget_id):
         parser.error("expected --widget-id or AICO_WIDGET_ID with exactly eight lowercase hex characters")
     payload = view_payload(parser, args)
-    runtime = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
     try:
-        endpoint = args.root_socket or socket_path(os.environ.get("AICO_GUI_CONTROL_SOCKET", f"{runtime}/aico/gui-control.sock"))
+        endpoint = owner_endpoint("aico", args.root_socket, None)
     except argparse.ArgumentTypeError:
         parser.error("invalid owner transport configuration")
     collector = Collector(endpoint, "", "", time.monotonic() + 10, threading.Event())
@@ -964,10 +984,7 @@ def widget_main(argv: list[str]) -> int:
                       reason=str(error) if isinstance(error, Unavailable) else "deadline")
         if args.operation != "status":
             output.update(operation=args.operation, applied=applied(mutation_sent, error))
-        try:
-            emit_json(collector, output)
-        except Stopped:
-            pass
+        emit_unless_stopped(collector, output)
         return 1
     except BrokenPipeError:
         return 0
@@ -982,7 +999,7 @@ def surface_identity(surface: str, host: object, locator: object) -> bool:
     ``aico://widget/<id>`` (owner/origin stays ``a-term``)."""
     if not isinstance(host, str) or not isinstance(locator, str):
         return False
-    tether = bool(re.fullmatch(r"[0-9a-f]{8}", host)) and locator == f"aico://widget/{host}"
+    tether = bool(re.fullmatch(WIDGET, host)) and locator == f"aico://widget/{host}"
     if surface == "aico":
         return tether
     legacy = bool(re.fullmatch(THREAD, host)) and bool(re.fullmatch("a-term://pane/" + THREAD, locator))
@@ -1011,7 +1028,7 @@ def view_payload(parser: argparse.ArgumentParser, args: argparse.Namespace) -> d
         return {"bounds": bounds}
     if args.operation == "coordinator":
         if args.state == "join":
-            if not isinstance(args.coordinator_id, str) or not re.fullmatch(r"[0-9a-f]{8}", args.coordinator_id):
+            if not isinstance(args.coordinator_id, str) or not re.fullmatch(WIDGET, args.coordinator_id):
                 parser.error("join expects the coordinator's eight-character widget ID")
             return {"coordinator": args.coordinator_id}
         if args.coordinator_id is not None:
@@ -1032,7 +1049,7 @@ def root_descriptor(data: dict, surface: str, request_id: str) -> dict:
             or not re.fullmatch(KEY, data["logicalSessionId"])
             or state not in ("running", "pending", "uncertain", "ended")
             or generation is not None and (not isinstance(generation, str)
-                                           or not re.fullmatch(r"[0-9a-f]{64}", generation))
+                                           or not re.fullmatch(GENERATION, generation))
             or state == "running" and generation is None
             or state == "ended" and generation is not None):
         raise Unavailable("root_receipt_unqualified")
@@ -1044,7 +1061,6 @@ def root_main(argv: list[str]) -> int:
         "Inspect or control one exact retained owner root by request ID. Mutations pin its "
         "current generation, send one request and qualify the receipt. No retry or owner startup."))
     commands = parser.add_subparsers(dest="operation", required=True)
-    runtime = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
     for operation in ("status", "show", "title", "position", "end"):
         command = commands.add_parser(operation)
         command.add_argument("request_id")
@@ -1068,11 +1084,9 @@ def root_main(argv: list[str]) -> int:
         parser.error("A-Term root positioning is unavailable")
     payload = view_payload(parser, args)
     try:
-        endpoint = (args.root_socket or socket_path(os.environ.get("AICO_GUI_CONTROL_SOCKET", f"{runtime}/aico/gui-control.sock"))
-                    if aico else args.root_url or local_root_url(
-                        os.environ.get("A_TERM_ROOT_CONTROL_URL", "http://127.0.0.1:8002")))
-        control = (getattr(args, "owner_socket", None) or socket_path(
-            os.environ.get("AICO_CONTROL_SOCKET", f"{runtime}/aico/control.sock"))) if aico else endpoint
+        endpoint = owner_endpoint(args.surface, args.root_socket, args.root_url)
+        control = (getattr(args, "owner_socket", None) or socket_path(default_owner_socket())
+                   if aico else endpoint)
     except argparse.ArgumentTypeError:
         parser.error("invalid owner transport configuration")
     collector = Collector(endpoint, control, "", time.monotonic() + 10, threading.Event())
@@ -1123,10 +1137,7 @@ def root_main(argv: list[str]) -> int:
         output.update(status="uncertain", reason=str(error) if isinstance(error, Unavailable) else "deadline")
         if args.operation != "status":
             output.update(operation=args.operation, applied=applied(sent, error))
-        try:
-            emit_json(collector, output)
-        except Stopped:
-            pass
+        emit_unless_stopped(collector, output)
         return 1
     except BrokenPipeError:
         return 0
@@ -1137,13 +1148,10 @@ def roots_main(argv: list[str]) -> int:
     parser.add_argument("request_id", nargs="?", help="exact retained Aico catalog request ID")
     parser.add_argument("--watch", type=float, help="change-only JSONL seconds, >0 and <=3600")
     parser.add_argument("--interval", type=float, default=2, help="poll seconds, >=0.1")
-    runtime = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
-    parser.add_argument("--root-socket", type=socket_path,
-                        default=os.environ.get("AICO_GUI_CONTROL_SOCKET", f"{runtime}/aico/gui-control.sock"))
-    parser.add_argument("--owner-socket", type=socket_path,
-                        default=os.environ.get("AICO_CONTROL_SOCKET", f"{runtime}/aico/control.sock"))
+    parser.add_argument("--root-socket", type=socket_path, default=default_gui_socket())
+    parser.add_argument("--owner-socket", type=socket_path, default=default_owner_socket())
     args = parser.parse_args(argv)
-    if args.request_id and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", args.request_id):
+    if args.request_id and not re.fullmatch(KEY, args.request_id):
         parser.error("invalid request ID")
     if (args.watch is not None and (not math.isfinite(args.watch) or not 0 < args.watch <= 3600)
             or not math.isfinite(args.interval) or args.interval < .1):
@@ -1167,10 +1175,7 @@ def roots_main(argv: list[str]) -> int:
                         lambda record: emit_json(collector, record))
         return int(bool(unavailable) or outcome in ("identity_changed", "observation_failures"))
     except Unavailable as error:
-        try:
-            emit_json(discovery, {"owner": "aico", "observation": "unavailable", "reason": str(error)})
-        except Stopped:
-            pass
+        emit_unless_stopped(discovery, {"owner": "aico", "observation": "unavailable", "reason": str(error)})
         return 1
     except Stopped:
         # No capture or partial identity is emitted when discovery hits its bound.
@@ -1189,8 +1194,7 @@ def layout_main(argv: list[str]) -> int:
     `st aico widget position --widget-id ID X Y WIDTH HEIGHT`."""
     parser = argparse.ArgumentParser(prog="st aico layout", description=layout_main.__doc__)
     parser.parse_args(argv)
-    runtime = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
-    path = Path(os.environ.get("AICO_LAYOUT_FILE", f"{runtime}/aico/layout.json"))
+    path = Path(os.environ.get("AICO_LAYOUT_FILE", f"{runtime_dir()}/aico/layout.json"))
     try:
         data = json.loads(path.read_text())
     except (OSError, ValueError):
