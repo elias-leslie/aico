@@ -235,8 +235,55 @@ def default_owner_socket() -> str:
     return os.environ.get("AICO_CONTROL_SOCKET", f"{runtime_dir()}/aico/control.sock")
 
 
+def tether_socket() -> str:
+    """Tether's control socket: $TETHER_SOCKET, else $XDG_RUNTIME_DIR/tether/<instance>/control.sock."""
+    configured = os.environ.get("TETHER_SOCKET", "").strip()
+    if configured:
+        return configured
+    instance = os.environ.get("TETHER_INSTANCE", "").strip() or "default"
+    return f"{runtime_dir()}/tether/{instance}/control.sock"
+
+
+PROJECTS_LIMIT = 1 << 20
+
+
+def a_term_identity_url(timeout: float = 2.0) -> str:
+    """http://127.0.0.1:<backend_port> from A-Term's project.identity.json.
+
+    The checkout is the "a-term" root in Tether's project list. Raises
+    ArgumentTypeError, naming the override, when either can't be read.
+    """
+    connection = http.client.HTTPConnection("localhost", timeout=timeout)
+    client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        client.settimeout(timeout)
+        client.connect(tether_socket())
+        connection.sock = client
+        connection.request("GET", "/v1/projects", headers={"Connection": "close"})
+        response = connection.getresponse()
+        body = response.read(PROJECTS_LIMIT + 1)
+        if response.status != 200 or len(body) > PROJECTS_LIMIT:
+            raise ValueError("projects unavailable")
+        projects = json.loads(body)["projects"]
+        root = next(item["root"] for item in projects if isinstance(item, dict) and item.get("id") == "a-term")
+        identity = json.loads((Path(root) / "project.identity.json").read_text())
+        port = identity["runtime"]["backend_port"]
+        if isinstance(port, bool) or not isinstance(port, int) or not 0 < port < 65536:
+            raise ValueError("bad backend_port")
+    except (OSError, ValueError, KeyError, TypeError, StopIteration, http.client.HTTPException):
+        raise argparse.ArgumentTypeError(
+            "A-Term's port is unknown: Tether's project list or A-Term's project.identity.json "
+            "could not be read; set A_TERM_ROOT_CONTROL_URL or pass --root-url") from None
+    finally:
+        connection.close()
+        client.close()
+    return f"http://127.0.0.1:{port}"
+
+
 def default_aterm_url() -> str:
-    return os.environ.get("A_TERM_ROOT_CONTROL_URL", "http://127.0.0.1:8002")
+    """$A_TERM_ROOT_CONTROL_URL, else A-Term's own port from its project identity."""
+    configured = os.environ.get("A_TERM_ROOT_CONTROL_URL")
+    return configured if configured is not None else a_term_identity_url()
 
 
 def owner_endpoint(surface: str, root_socket: str | None, root_url: str | None) -> str:
@@ -860,8 +907,8 @@ def create_main(argv: list[str]) -> int:
         parser.error("conflicting prompt or owner transport options")
     try:
         endpoint = owner_endpoint(args.surface, args.root_socket, args.root_url)
-    except argparse.ArgumentTypeError:
-        parser.error("invalid owner transport configuration")
+    except argparse.ArgumentTypeError as error:
+        parser.error(f"invalid owner transport configuration: {error}")
     collector = Collector(endpoint, "", "", time.monotonic() + 10, threading.Event())
     output = {"owner": args.surface, "requestId": args.request_id}
     try:
@@ -968,8 +1015,8 @@ def widget_main(argv: list[str]) -> int:
     payload = view_payload(parser, args)
     try:
         endpoint = owner_endpoint("aico", args.root_socket, None)
-    except argparse.ArgumentTypeError:
-        parser.error("invalid owner transport configuration")
+    except argparse.ArgumentTypeError as error:
+        parser.error(f"invalid owner transport configuration: {error}")
     collector = Collector(endpoint, "", "", time.monotonic() + 10, threading.Event())
     output: dict = {"owner": "aico", "widgetId": args.widget_id}
     mutation_sent = False
@@ -1104,8 +1151,8 @@ def root_main(argv: list[str]) -> int:
         endpoint = owner_endpoint(args.surface, args.root_socket, args.root_url)
         control = (getattr(args, "owner_socket", None) or socket_path(default_owner_socket())
                    if aico else endpoint)
-    except argparse.ArgumentTypeError:
-        parser.error("invalid owner transport configuration")
+    except argparse.ArgumentTypeError as error:
+        parser.error(f"invalid owner transport configuration: {error}")
     collector = Collector(endpoint, control, "", time.monotonic() + 10, threading.Event())
     output: dict = {"owner": args.surface, "requestId": args.request_id}
     route = f"/v1/roots/{args.request_id}"

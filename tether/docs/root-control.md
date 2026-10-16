@@ -255,8 +255,10 @@ Use the exact saved UUID, a new stable request ID, and the same complete body on
 retry. Omit the prompt for the fixed recovery prompt, or use `--stdin` for
 bounded UTF-8 input. The facade rejects secrets/framing controls and caps all
 prompts at 2000 UTF-8 bytes. `--role`, `--lead-root` and `--facet` carry generic
-metadata. `--surface a-term` uses A-Term's loopback endpoint, configured by
-`A_TERM_ROOT_CONTROL_URL` or `--root-url`; A-Term's authentication remains
+metadata. `--surface a-term` uses A-Term's loopback endpoint: `--root-url`, else
+`A_TERM_ROOT_CONTROL_URL`, else `http://127.0.0.1:<backend_port>` from the
+`project.identity.json` in A-Term's checkout (its root in Tether's project
+list); when none of those can be read the command stops and says so. A-Term's authentication remains
 enforced, and A-Term forwards the request to Tether. Tether must already be
 running; the command does not start it.
 
