@@ -1,6 +1,6 @@
 """Shared fixtures: a fake Tether on a real Unix socket and a throwaway SQLite file.
 
-No test talks to the real Tether, the real tmux server or a real database.
+No test talks to the real Tether, the real tmux server, a real database or the real upload folder.
 """
 
 from __future__ import annotations
@@ -55,6 +55,19 @@ def no_real_tether(monkeypatch: pytest.MonkeyPatch, local_state: Path) -> Iterat
     agent_tools.reset_agent_tokens()
     yield
     agent_tools.reset_agent_tokens()
+
+
+@pytest.fixture(autouse=True)
+def no_real_uploads(local_state: Path) -> Iterator[None]:
+    """A maintenance cycle prunes uploads in a throwaway folder, never the owner's real upload folder."""
+    from a_term.services import maintenance
+    from a_term.services.upload_cleanup import cleanup_old_uploads
+
+    def cleanup(*_args: object, **kwargs: object) -> object:
+        return cleanup_old_uploads(local_state / "uploads", **kwargs)
+
+    with patch.object(maintenance, "cleanup_old_uploads", cleanup):
+        yield
 
 
 @pytest.fixture(autouse=True)

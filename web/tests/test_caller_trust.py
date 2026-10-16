@@ -32,6 +32,7 @@ from a_term.caller_trust import (
 from a_term.config import settings
 
 from .caller_trust_cells import (
+    ENCODED_FALLBACK,
     INTERNAL_TOKEN,
     MODES,
     PEERS,
@@ -291,9 +292,19 @@ def _recorded_decision(result: dict[str, Any]) -> Allow | Deny | str:
     return Allow()
 
 
-def _is_known_divergence(cell: Cell) -> bool:
-    """Today FastAPI checks ``limit`` before the handler checks the token; the one module checks the token first."""
-    return cell.path.endswith("runs?limit=0") and cell.token not in ("bearer", "query")
+def _known_divergence(cell: Cell, recorded: Allow | Deny) -> Allow | Deny | None:
+    """The decision the one module makes where today's answer differs (both narrow; see the design's section 9).
+
+    Today FastAPI checks ``limit`` before the handler checks the token; the one module checks the token first.
+    Today's auth check reads ``request.url.path``, which ends at a decoded ``?`` or ``#`` (``/health%23x`` is read
+    as ``/health``, public, then 404); the one module reads the path as sent, so it is not public and needs auth.
+    """
+    if cell.path.endswith("runs?limit=0") and cell.token not in ("bearer", "query"):
+        return Deny(DenyReason.INTERNAL_TOKEN_REQUIRED)
+    logged_out = cell.mode != "none" and cell.auth in ("none", "invalid", "fwd_blank")
+    if cell.path in ENCODED_FALLBACK and logged_out and isinstance(recorded, Allow):
+        return Deny(DenyReason.AUTH_REQUIRED)
+    return None
 
 
 def _scope(cell: Cell, cookie: str | None) -> dict[str, Any]:
@@ -329,7 +340,7 @@ def test_the_decision_agrees_with_every_recorded_answer(test_app: TestClient, mo
         decided = check(_scope(cell, cookie), app.router.routes, config)
         if isinstance(decided, Allow):
             decided = Allow()
-        expected = Deny(DenyReason.INTERNAL_TOKEN_REQUIRED) if _is_known_divergence(cell) else recorded
+        expected = _known_divergence(cell, recorded) or recorded
         if decided != expected:
             disagreements.append(f"{cell.id}: recorded {recorded}, decided {decided}")
     assert disagreements == []

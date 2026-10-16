@@ -111,6 +111,8 @@ FALLBACK = [
     ("HEAD", "/health", "none"),
     ("OPTIONS", "/api/a-term/panes", "none"),
 ]
+# Encoded ? and # in a path that matches no route (Starlette's request.url.path cuts these at the decoded character).
+ENCODED_FALLBACK = ["/health%23x", "/health%3Fx"]
 PREFLIGHT = ["/api/a-term/panes", "/v1/roots", "/api/internal/maintenance/run", "/api/auth/login"]
 WS_PATH = "/ws/a-term/s1"
 WS_UNMATCHED = "/ws/nope"
@@ -158,6 +160,16 @@ def cells() -> list[Cell]:
         for auth in auths[:2]:
             out.append(Cell(mode, "ws", "GET", WS_PATH, host="bad", auth=auth))
             out.append(Cell(mode, "ws", "GET", WS_PATH, host="bad", origin="foreign", auth=auth))
+        # Added after the first recording, also recorded from the old code (b4f16d2):
+        # the internal token never unlocks a browser route or the terminal WebSocket...
+        if mode != "none":
+            for token in ("bearer", "query"):
+                out.append(Cell(mode, "http", "GET", "/api/a-term/panes", token=token))
+                out.append(Cell(mode, "ws", "GET", WS_PATH, token=token))
+        # ...and an encoded ? or # in an unmatched path is decided on the path as sent.
+        for path in ENCODED_FALLBACK:
+            for auth in auths:
+                out.append(Cell(mode, "http", "GET", path, auth=auth))
     return out
 
 
@@ -270,11 +282,14 @@ def run_cell(app: FastAPI, cell: Cell, valid_cookie: str | None) -> dict[str, An
         return {"ws": "accepted"}
 
     kwargs: dict[str, Any] = {"headers": headers}
+    # A let-in maintenance run answers 200 with no body recorded; never run the real cycle (it prunes uploads).
+    ran = AsyncMock(return_value={})
     if cell.body == "json":
         kwargs["json"] = {"password": "wrong"} if cell.path == "/api/auth/login" else {}
     elif cell.body == "text":
         kwargs["content"] = TEXT_BODY
-    response = client.request(cell.method, url_for(cell), **kwargs)
+    with patch("a_term.api.internal.run_maintenance_cycle", ran):
+        response = client.request(cell.method, url_for(cell), **kwargs)
     result: dict[str, Any] = {"status": response.status_code}
     if response.status_code >= 300 and response.status_code != 422:
         try:
