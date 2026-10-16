@@ -1,0 +1,341 @@
+// Session actions: what the owner can do to a session (End, rename, switch its
+// tool or workspace, mark it coordinator, open one) and the renderer and tray
+// entry points for them. Every action goes through Tether; the catalog and the
+// titlebars follow from what Tether answers.
+
+import type { IpcMain } from 'electron'
+import { describeFailure, writeNotice } from './notices'
+import { PERSONAL_WORKSPACE_ID, type ProjectCatalog } from './project'
+import {
+  type SessionCatalog,
+  sessionTitle,
+  toolDisplayName,
+  traySessionLabel,
+} from './session-catalog'
+import {
+  LEGACY_SESSION_NAME,
+  type SessionDescriptor,
+  type TetherClient,
+  TetherError,
+  type TetherTool,
+} from './tether-client'
+import { toolMark } from './tool-marks'
+import type { WindowRegistry } from './window-registry'
+
+const LEGACY_ID_PREFIX = 'legacy:'
+const SESSION_ID = /^[0-9a-f]{8}$/
+
+interface SessionActionsDeps {
+  tether: Pick<
+    TetherClient,
+    | 'getSession'
+    | 'end'
+    | 'setCoordinator'
+    | 'loadTui'
+    | 'switchProject'
+    | 'rename'
+    | 'diagnostics'
+    | 'legacySessions'
+  >
+  catalog: Pick<SessionCatalog, 'get' | 'upsert' | 'list'>
+  link: {
+    tools(): TetherTool[]
+    refresh(): Promise<void>
+    requestRefresh(): void
+    refreshTools(): Promise<void>
+    sessionEnded(id: string, reason: string): void
+  }
+  registry: Pick<WindowRegistry, 'forSession' | 'forLegacy' | 'senderSession'>
+  windows: {
+    openNew(tool: string, projectId: string): unknown
+    showAll(): void
+    focusOrReopen(id: string): void
+    openLegacy(name: string): void
+  }
+  projects: Pick<ProjectCatalog, 'listFresh' | 'nameFor'>
+  titles(): void
+  tray(): void
+  dialog: {
+    showMessageBox(options: Electron.MessageBoxOptions): Promise<{ response: number }>
+  }
+  personalWorkspace: {
+    /** The Personal Workspace directory, created if missing; null when it cannot be. */
+    ensureRoot(): string | null
+    root(): string
+  }
+}
+
+export function createSessionActions(deps: SessionActionsDeps) {
+  const { tether, catalog, link, registry, windows, projects, dialog } = deps
+  // Sessions whose pane is being replaced (load-TUI, switch-project). Renderer
+  // input is dropped meanwhile, as before: the pane briefly shows Tether's
+  // containment gate and stale keystrokes must never reach it.
+  const replacing = new Set<string>()
+  const endsInFlight = new Map<string, Promise<void>>()
+
+  /** Ask Tether to mark or unmark a coordinator; the change comes back as
+   * `session.updated`. */
+  function requestCoordinator(id: string, coordinator: boolean): void {
+    const descriptor = catalog.get(id)
+    if (!descriptor) return
+    tether.setCoordinator(id, descriptor.generation, coordinator).catch((error) => {
+      writeNotice(
+        registry.forSession(id),
+        describeFailure('Could not change the coordinator mark', error),
+        33,
+      )
+    })
+  }
+
+  /** End a session: re-read its exact generation, then ask Tether to End it.
+   * Repeat requests for the same session share one attempt. */
+  function endSession(id: string): Promise<void> {
+    const current = endsInFlight.get(id)
+    if (current) return current
+    const attempt = (async () => {
+      let descriptor: SessionDescriptor
+      try {
+        descriptor = await tether.getSession(id)
+      } catch (error) {
+        if (error instanceof TetherError && error.code === 'not_found') {
+          link.sessionEnded(id, 'absent')
+          return
+        }
+        throw error
+      }
+      try {
+        await tether.end(id, descriptor.generation)
+      } catch (error) {
+        if (error instanceof TetherError && error.code === 'not_found') {
+          link.sessionEnded(id, 'absent')
+          return
+        }
+        throw error
+      }
+      link.sessionEnded(id, 'ended')
+    })().finally(() => endsInFlight.delete(id))
+    endsInFlight.set(id, attempt)
+    return attempt
+  }
+
+  function discardWidget(id: string): void {
+    void endSession(id).catch((error) => {
+      console.error(`[aico] End failed widget=${id}:`, error)
+      writeNotice(registry.forSession(id), describeFailure('End failed', error))
+    })
+  }
+
+  async function confirmTrayDiscard(id: string): Promise<void> {
+    const descriptor = catalog.get(id)
+    if (!descriptor) return
+    const response = await dialog.showMessageBox({
+      type: 'warning',
+      buttons: ['Cancel', 'End session'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+      title: 'End session?',
+      message: `End ${traySessionLabel(sessionTitle(descriptor), toolDisplayName(descriptor.tool, link.tools()))}?`,
+      detail: 'Tether stops only this session’s verified workload. This cannot be undone.',
+    })
+    if (response.response === 1) discardWidget(id)
+  }
+
+  /** Run a pane replacement with the generation Aico last read. Input is held
+   * back until it settles; failures are shown in the session's terminal. */
+  function replacePane(
+    id: string,
+    action: string,
+    run: (generation: string) => Promise<SessionDescriptor>,
+  ): void {
+    const descriptor = catalog.get(id)
+    if (!descriptor || replacing.has(id)) return
+    replacing.add(id)
+    void run(descriptor.generation)
+      .then((next) => catalog.upsert(next))
+      .catch((error) => {
+        console.warn(`[aico] ${action} failed widget=${id}:`, error)
+        writeNotice(registry.forSession(id), describeFailure(action, error))
+        link.requestRefresh()
+      })
+      .finally(() => {
+        replacing.delete(id)
+        deps.titles()
+        deps.tray()
+      })
+  }
+
+  function loadTui(id: string, slug: string): void {
+    replacePane(id, 'Could not switch the tool', (generation) =>
+      tether.loadTui(id, generation, slug),
+    )
+  }
+
+  function switchProject(id: string, projectId: string): void {
+    if (projectId === PERSONAL_WORKSPACE_ID) {
+      // A directory, not a project: Tether switches to it by root.
+      const root = deps.personalWorkspace.ensureRoot()
+      if (!root) {
+        writeNotice(
+          registry.forSession(id),
+          `Could not switch the workspace: ${deps.personalWorkspace.root()} could not be created.`,
+          33,
+        )
+        return
+      }
+      replacePane(id, 'Could not switch the workspace', (generation) =>
+        tether.switchProject(id, generation, { projectRoot: root }),
+      )
+      return
+    }
+    replacePane(id, 'Could not switch the workspace', (generation) =>
+      tether.switchProject(id, generation, { projectId }),
+    )
+  }
+
+  async function renameSession(id: string, name: unknown): Promise<void> {
+    const descriptor = catalog.get(id)
+    if (!descriptor) return
+    const trimmed = typeof name === 'string' ? name.trim() : ''
+    try {
+      catalog.upsert(await tether.rename(id, descriptor.generation, trimmed || null))
+    } catch (error) {
+      writeNotice(registry.forSession(id), describeFailure('Could not rename', error), 33)
+    }
+    deps.titles()
+    deps.tray()
+  }
+
+  function registerIpc(ipcMain: Pick<IpcMain, 'on' | 'handle'>): void {
+    ipcMain.handle('session:diagnostics', async (event) => {
+      const widgetId = registry.senderSession(event.sender)
+      if (!widgetId) return { capturedAt: new Date().toISOString(), error: 'no session' }
+      try {
+        return await tether.diagnostics(widgetId)
+      } catch (error) {
+        return {
+          capturedAt: new Date().toISOString(),
+          sessionId: widgetId,
+          error: describeFailure('Diagnostics unavailable', error),
+        }
+      }
+    })
+
+    // Control-surface actions: same handlers the tray uses. A new session is
+    // always an explicit (tool, workspace) pair from the picker — both required,
+    // both checked (untrusted renderer input), so a malformed call is ignored.
+    ipcMain.on('widget:new', (_event, tool?: unknown, projectId?: unknown) => {
+      if (typeof tool === 'string' && tool && typeof projectId === 'string' && projectId) {
+        windows.openNew(tool, projectId)
+      }
+    })
+    ipcMain.on('widget:hub', windows.showAll)
+
+    // End this session from the widget itself: Tether ends the workload and the
+    // window closes once it has.
+    ipcMain.handle('session:end-self', async (event) => {
+      const id = registry.senderSession(event.sender)
+      if (!id) throw new Error('Session view is unavailable')
+      try {
+        await endSession(id)
+      } catch (error) {
+        throw new Error(describeFailure('End failed', error))
+      }
+    })
+
+    ipcMain.on('widget:toggle-coordinator', (event) => {
+      const id = registry.senderSession(event.sender)
+      if (id) requestCoordinator(id, !catalog.get(id)?.coordinator)
+    })
+
+    // Replace the focused session's running tool with another (no new window).
+    ipcMain.on('widget:load-tui', (event, slug?: unknown) => {
+      const id = registry.senderSession(event.sender)
+      if (id && typeof slug === 'string' && slug) loadTui(id, slug)
+    })
+
+    // Move the focused session to another workspace: Tether respawns its pane
+    // there with the same tool.
+    ipcMain.on('widget:switch-project', (event, projectId?: unknown) => {
+      const id = registry.senderSession(event.sender)
+      if (id && typeof projectId === 'string' && projectId) switchProject(id, projectId)
+    })
+
+    // Rename from the titlebar. Empty clears it back to Tether's default label.
+    ipcMain.on('widget:set-name', (event, name: unknown) => {
+      const id = registry.senderSession(event.sender)
+      if (id) void renameSession(id, name)
+    })
+
+    // Enabled tools from Tether's registry, in its order, with Aico's marks.
+    ipcMain.handle('tui:list', async () => {
+      if (!link.tools().length) await link.refreshTools().catch(() => {})
+      return link.tools().map((tool) => {
+        const mark = toolMark(tool.slug, tool.color)
+        return { slug: tool.slug, displayName: tool.name, accent: mark.accent, icon: mark.icon }
+      })
+    })
+
+    // Workspace catalog for "Open workspace ▸": Personal Workspace plus Tether's
+    // projects. Awaits a stale refresh so the first menu is complete.
+    ipcMain.handle('project:list', () => projects.listFresh())
+
+    // Every running Tether session, whichever app created it, plus A-Term's
+    // pre-Tether sessions, which Tether lists for attach only.
+    ipcMain.handle('session:list-openable', async () => {
+      await link.refresh()
+      const legacy = await tether.legacySessions().catch(() => [])
+      const sessions = catalog
+        .list()
+        .filter((descriptor) => descriptor.status === 'running' || descriptor.status === 'legacy')
+        .map((descriptor) => ({
+          id: descriptor.id,
+          origin: descriptor.origin,
+          label: sessionTitle(descriptor),
+          project: projects.nameFor(descriptor.projectId, descriptor.projectRoot),
+          tool: toolDisplayName(descriptor.tool, link.tools()),
+          status: 'running' as const,
+          locallyOpen: Boolean(registry.forSession(descriptor.id)),
+        }))
+      return [
+        ...sessions,
+        ...legacy.map((item) => ({
+          id: `${LEGACY_ID_PREFIX}${item.name}`,
+          origin: 'a-term' as const,
+          label: `A-Term ${item.name.slice('summitflow-'.length, 'summitflow-'.length + 8)}`,
+          project: null,
+          tool: 'legacy session',
+          status: 'running' as const,
+          locallyOpen: Boolean(registry.forLegacy(item.name)),
+        })),
+      ]
+    })
+    ipcMain.handle('session:open', async (_event, id: unknown) => {
+      if (typeof id === 'string' && id.startsWith(LEGACY_ID_PREFIX)) {
+        const name = id.slice(LEGACY_ID_PREFIX.length)
+        if (!LEGACY_SESSION_NAME.test(name)) throw new Error('Invalid session')
+        const listed = await tether.legacySessions()
+        if (!listed.some((item) => item.name === name)) throw new Error('Session is unavailable')
+        windows.openLegacy(name)
+        return
+      }
+      if (typeof id !== 'string' || !SESSION_ID.test(id)) throw new Error('Invalid session')
+      const descriptor = await tether.getSession(id)
+      if (descriptor.status !== 'running' && descriptor.status !== 'legacy')
+        throw new Error('Session is unavailable')
+      catalog.upsert(descriptor)
+      windows.focusOrReopen(id)
+    })
+  }
+
+  return {
+    /** End a session through Tether; concurrent calls for one session share one attempt. */
+    end: endSession,
+    /** The tray's End: ask first, then End; a failure shows in the session's terminal. */
+    confirmTrayDiscard,
+    requestCoordinator,
+    /** Tether is replacing this session's pane: renderer input and deliveries wait. */
+    isReplacing: (id: string): boolean => replacing.has(id),
+    registerIpc,
+  }
+}
