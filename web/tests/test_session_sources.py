@@ -13,15 +13,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from a_term.services import lifecycle, session_catalog
+from a_term.services import agent_tools, lifecycle, session_catalog
 from a_term.services._session_sources import ListContext
 from a_term.services._session_sources import own_tmux as own_tmux_module
 from a_term.services._session_sources.legacy import LegacySource
-from a_term.services._session_sources.own_tmux import (
-    AGENT_TOKENS,
-    OwnTmuxSource,
-    default_tool_tokens,
-)
+from a_term.services._session_sources.own_tmux import OwnTmuxSource
 from a_term.services._session_sources.tether import TetherSource
 from a_term.services._session_sources.tmux_panes import PaneRow, read_panes
 from a_term.services.session_capabilities import LifecycleError
@@ -148,7 +144,7 @@ def test_own_tmux_discovers_agent_sessions_and_skips_legacy_and_shells() -> None
         "pi-research",
     ]
     by_id = {session["id"]: session for session in sessions}
-    assert (by_id["claude-summitflow"]["project_id"], by_id["claude-summitflow"]["mode"]) == ("summitflow", "claude")
+    assert (by_id["claude-summitflow"]["project_id"], by_id["claude-summitflow"]["mode"]) == ("summitflow", "claude-code")
     assert (by_id["codex-agent-hub"]["project_id"], by_id["codex-agent-hub"]["mode"]) == ("agent-hub", "codex")
     assert (by_id["pi-research"]["project_id"], by_id["pi-research"]["mode"]) == ("research", "pi")
     assert (by_id["pi-a-term"]["project_id"], by_id["pi-a-term"]["mode"]) == ("a-term", "pi")
@@ -178,12 +174,48 @@ def test_own_tmux_keeps_the_first_pane_with_a_working_dir() -> None:
     assert (session["working_dir"], session["tmux_pane_id"]) == ("/srv/a", "%2")
 
 
-def test_own_tmux_tool_tokens_are_injectable_and_default_to_todays_tokens() -> None:
-    assert tuple(default_tool_tokens()) == AGENT_TOKENS == ("claude", "codex", "aider", "agy", "pi")
+def test_own_tmux_tool_tokens_are_injectable() -> None:
     ctx = _ctx(_row("gemini-work", "gemini"), _row("claude-work", "claude"))
     assert [s["id"] for s in OwnTmuxSource(project_of=_no_project).list(ctx)] == ["claude-work"]
-    custom = OwnTmuxSource(tool_tokens=lambda: ("gemini",), project_of=_no_project)
-    assert [(s["id"], s["mode"]) for s in custom.list(ctx)] == [("gemini-work", "gemini")]
+    custom = OwnTmuxSource(tool_tokens=lambda: {"gemini": "gemini-cli"}, project_of=_no_project)
+    assert [(s["id"], s["mode"]) for s in custom.list(ctx)] == [("gemini-work", "gemini-cli")]
+
+
+def test_own_tmux_tokens_come_from_tethers_tools(fake_tether: FakeTether) -> None:
+    """Slug, aliases, process name and argv program all name the tool; the mode is its slug."""
+    fake_tether.state.tools["gemini-cli"] = {
+        **fake_tether.state.tools["codex"], "slug": "gemini-cli", "name": "Gemini", "argv": ["/opt/bin/gem", "-y"],
+        "processName": "gemini", "aliases": ["gem-old"],
+    }
+    tokens = agent_tools.agent_tokens()
+    assert tokens["claude"] == tokens["claude-code"] == "claude-code"
+    assert tokens["gemini"] == tokens["gem"] == tokens["gem-old"] == tokens["gemini-cli"] == "gemini-cli"
+    assert "shell" not in tokens and "aider" not in tokens
+    source = OwnTmuxSource(project_of=_no_project)
+    ctx = _ctx(_row("work", "gemini"), _row("claude-work", "claude"), _row("old", "aider"))
+    assert [(s["id"], s["mode"]) for s in source.list(ctx)] == [("claude-work", "claude-code"), ("work", "gemini-cli")]
+
+
+def test_own_tmux_tokens_survive_tether_going_down(fake_tether: FakeTether, monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_tether.state.tools["gemini-cli"] = {**fake_tether.state.tools["codex"], "slug": "gemini-cli", "processName": "gemini"}
+    assert agent_tools.agent_tokens()["gemini"] == "gemini-cli"
+    monkeypatch.setattr(agent_tools, "list_tools", MagicMock(side_effect=TetherUnavailable("down")))
+    agent_tools._AGENT_TOKENS._expires = 0.0  # the cached read is due again
+    assert agent_tools.agent_tokens()["gemini"] == "gemini-cli"  # last tokens Tether gave
+
+
+def test_own_tmux_tokens_before_tether_ever_answers_are_the_shipped_agents() -> None:
+    """No Tether at all (the default in tests): the built-in tokens, mapped to canonical slugs."""
+    assert dict(agent_tools.agent_tokens()) == dict(agent_tools.FALLBACK_AGENT_TOKENS)
+    source = OwnTmuxSource(project_of=_no_project)
+    assert source.infer_mode("claude-work", "claude") == ("claude-code", "running")
+    assert source.infer_mode("aider-work", "aider") == ("shell", "not_started")
+
+
+def test_own_tmux_tokens_are_reread_after_a_tool_edit(fake_tether: FakeTether) -> None:
+    assert "gemini" not in agent_tools.agent_tokens()
+    agent_tools.create_tool({"slug": "gemini-cli", "name": "Gemini", "command": "gemini", "process_name": "gemini"})
+    assert agent_tools.agent_tokens()["gemini"] == "gemini-cli"
 
 
 def test_own_tmux_mode_inference_requires_token_boundaries() -> None:
@@ -200,7 +232,7 @@ def test_own_tmux_mode_inference_finds_an_agent_below_a_shell_pane() -> None:
     be classified from its process tree or the agent looks like a shell.
     """
     with patch.object(own_tmux_module, "_pane_descendant_labels", return_value=["claude-real claude-real"]):
-        assert OwnTmuxSource().infer_mode("agent-e03c60b0", "bash", "4242") == ("claude", "running")
+        assert OwnTmuxSource().infer_mode("agent-e03c60b0", "bash", "4242") == ("claude-code", "running")
 
 
 def test_own_tmux_mode_inference_keeps_plain_shell_panes_as_shells() -> None:
@@ -373,7 +405,8 @@ def test_users_own_session_attaches_on_the_default_server(fake_tether: FakeTethe
     assert plan.tmux_socket is None
     assert plan.argv == ["tmux", "attach-session", "-t", "claude-work"]
     touch.assert_not_called()
-    assert not fake_tether.calls
+    # Only the tool registry (to recognise the agent); no Tether session call.
+    assert [call[:2] for call in fake_tether.calls] == [("GET", "/v1/tools")]
 
 
 def test_missing_legacy_session_is_reported(fake_tether: FakeTether, no_default_tmux: MagicMock) -> None:

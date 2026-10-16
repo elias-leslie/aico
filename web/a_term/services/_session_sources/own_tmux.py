@@ -4,22 +4,24 @@ A-Term discovers and shows them, but Tether does not own them, so A-Term
 never renames, respawns or ends them; closing one only closes the View. They
 attach on the default tmux server. The wire keeps ``source: "tmux_external"``.
 
-Which commands count as an agent comes from ``tool_tokens``, injected so the
-token list can later come from Tether's ``/v1/tools`` without touching any
-other module.
+Which commands count as an agent comes from ``tool_tokens``: command token ->
+canonical tool slug, read from Tether's ``/v1/tools`` by default (see
+:func:`a_term.services.agent_tools.agent_tokens`), so a session's mode is the
+same slug A-Term launches that tool with.
 """
 
 from __future__ import annotations
 
 import re
 import subprocess
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ...constants import SHELL_MODE
 from ...logging_config import get_logger
 from ...utils import tmux
+from .. import agent_tools
 from ..session_capabilities import SessionFacts, SessionKind, refusal
 from . import AttachPlan, ListContext, SessionList, finish
 from .tmux_panes import read_panes
@@ -29,13 +31,6 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-AGENT_TOKENS = (
-    "claude",
-    "codex",
-    "aider",
-    "agy",
-    "pi",
-)
 SHELL_COMMANDS = frozenset({"bash", "sh", "zsh", "fish", "dash", "ksh", "tcsh", "csh", "login", "su"})
 # An agent started from a non-job-control shell shares the shell's process
 # group, so tmux reports the shell as ``pane_current_command``. Walk a bounded
@@ -48,17 +43,12 @@ TMUX_SOURCE = "default"
 TMUX_SOURCE_LABEL = "tmux"
 
 
-def default_tool_tokens() -> Sequence[str]:
-    """The agent command tokens Own tmux discovery recognises today."""
-    return AGENT_TOKENS
-
-
-def _match_agent_token(label: str, tokens: Sequence[str]) -> str | None:
-    """Return the agent token named by ``label``, or None."""
+def _match_agent_slug(label: str, tokens: Mapping[str, str]) -> str | None:
+    """Return the slug of the agent token named by ``label``, or None. Longer tokens win."""
     lowered = label.lower()
-    for token in tokens:
+    for token in sorted(tokens, key=lambda item: (-len(item), item)):
         if re.search(rf"(^|[^a-z0-9]){re.escape(token)}([^a-z0-9]|$)", lowered):
-            return token
+            return tokens[token]
     return None
 
 
@@ -139,7 +129,7 @@ class OwnTmuxSource:
 
     def __init__(
         self,
-        tool_tokens: Callable[[], Sequence[str]] = default_tool_tokens,
+        tool_tokens: Callable[[], Mapping[str, str]] = agent_tools.agent_tokens,
         project_of: Callable[[str | None], str | None] | None = None,
     ) -> None:
         self._tool_tokens = tool_tokens
@@ -152,17 +142,17 @@ class OwnTmuxSource:
     def infer_mode(self, session_name: str, current_command: str, pane_pid: str | None = None) -> tuple[str, str]:
         """Classify a default-server pane as an agent mode or a plain shell: ``(mode, agent_state)``."""
         tokens = self._tool_tokens()
-        token = _match_agent_token(f"{session_name} {current_command}", tokens)
-        if token:
-            return token, "running"
+        slug = _match_agent_slug(f"{session_name} {current_command}", tokens)
+        if slug:
+            return slug, "running"
 
         # tmux reports the shell when the agent shares its process group, so look
         # for the agent among the pane's descendants before calling it a shell.
         if current_command.lower() in SHELL_COMMANDS and pane_pid and pane_pid.isdigit():
             for label in _pane_descendant_labels(int(pane_pid)):
-                token = _match_agent_token(label, tokens)
-                if token:
-                    return token, "running"
+                slug = _match_agent_slug(label, tokens)
+                if slug:
+                    return slug, "running"
 
         return SHELL_MODE, "not_started"
 

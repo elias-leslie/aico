@@ -5,7 +5,8 @@
     view state: panes and their layout, project settings, and links to
     pre-Tether sessions that still run on the default tmux server. A dry run
     by default; ``--apply`` writes. Rows already in SQLite are kept, so a
-    second run changes nothing. With ``--apply`` it also writes the old agent
+    second run changes nothing. Old tool slugs are renamed with the aliases in
+    Tether's tool registry, so Tether must be running. With ``--apply`` it also writes the old agent
     tools as JSON for ``a-term import-tools``.
 
 ``a-term import-tools FILE``
@@ -23,7 +24,7 @@ import argparse
 import json
 import os
 import sys
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
 from typing import Any, LiteralString
@@ -33,13 +34,34 @@ from ..logging_config import configure_cli_logging
 from ..storage import local_db
 from ..utils.tmux import get_tmux_session_name, tmux_session_exists_by_name
 
-# A-Term's old slugs that Tether knows under a canonical slug.
-_SLUG_RENAMES = {"claude": "claude-code"}
+
+def tool_slug_renames() -> dict[str, str]:
+    """Old slug -> canonical slug, from the aliases in Tether's tool registry.
+
+    Exits with a clear message when Tether can't be read: without its aliases
+    old slugs (``claude``) would be copied unrenamed.
+    """
+    from ..tether import TetherError, TetherUnavailable, get_client
+
+    try:
+        body = get_client().list_tools()
+    except (TetherUnavailable, TetherError) as error:
+        raise SystemExit(
+            f"a-term: can't read Tether's tool registry ({error}); it maps old tool slugs to current ones. "
+            "Start Tether and run this again."
+        ) from error
+    items = body.get("items") if isinstance(body, dict) else []
+    return {
+        str(alias): str(tool["slug"])
+        for tool in items or []
+        if isinstance(tool, dict) and tool.get("slug")
+        for alias in tool.get("aliases") or []
+    }
 
 
-def canonical_mode(mode: Any) -> str:
+def canonical_mode(mode: Any, renames: Mapping[str, str]) -> str:
     value = str(mode or "shell")
-    return _SLUG_RENAMES.get(value, value)
+    return renames.get(value, value)
 
 
 def default_tools_out() -> Path:
@@ -129,9 +151,10 @@ def _iso(value: Any) -> str:
     return str(value) if value else local_db.now_iso()
 
 
-def tool_import_entry(row: dict[str, Any]) -> dict[str, Any]:
+def tool_import_entry(row: dict[str, Any], renames: Mapping[str, str]) -> dict[str, Any]:
+    slug = canonical_mode(row["slug"], renames)
     return {
-        "slug": canonical_mode(row["slug"]),
+        "slug": slug,
         "name": row.get("name") or row["slug"],
         "command": row.get("command") or "",
         "processName": row.get("process_name"),
@@ -140,12 +163,17 @@ def tool_import_entry(row: dict[str, Any]) -> dict[str, Any]:
         "displayOrder": int(row.get("display_order") or 0),
         "isDefault": bool(row.get("is_default")),
         "enabled": bool(row.get("enabled", True)),
-        **({"aliases": [row["slug"]]} if canonical_mode(row["slug"]) != row["slug"] else {}),
+        **({"aliases": [row["slug"]]} if slug != row["slug"] else {}),
     }
 
 
-def build_plan(source: dict[str, list[dict[str, Any]]], tmux_alive: Any) -> dict[str, Any]:
+def build_plan(
+    source: dict[str, list[dict[str, Any]]], tmux_alive: Any, renames: Mapping[str, str]
+) -> dict[str, Any]:
     """Turn the Postgres rows into SQLite rows plus a report.
+
+    ``renames`` maps old tool slugs to Tether's canonical ones (see
+    :func:`tool_slug_renames`).
 
     ``tmux_alive(session_uuid)`` says whether the pre-Tether session still runs
     on the default tmux server. Only those become (attach-only) legacy links;
@@ -163,7 +191,7 @@ def build_plan(source: dict[str, list[dict[str, Any]]], tmux_alive: Any) -> dict
                 "project_id": row.get("project_id"),
                 "pane_order": int(row.get("pane_order") or 0),
                 "pane_name": row.get("pane_name") or "Terminal",
-                "active_mode": canonical_mode(row.get("active_mode")),
+                "active_mode": canonical_mode(row.get("active_mode"), renames),
                 "width_percent": float(row.get("width_percent") or 100.0),
                 "height_percent": float(row.get("height_percent") or 100.0),
                 "grid_row": int(row.get("grid_row") or 0),
@@ -177,7 +205,7 @@ def build_plan(source: dict[str, list[dict[str, Any]]], tmux_alive: Any) -> dict
             "project_id": str(row["project_id"]),
             "enabled": 1 if row.get("enabled") else 0,
             "display_order": int(row.get("display_order") or 0),
-            "active_mode": canonical_mode(row.get("active_mode")),
+            "active_mode": canonical_mode(row.get("active_mode"), renames),
             "created_at": _iso(row.get("created_at")),
             "updated_at": _iso(row.get("updated_at")),
         }
@@ -191,7 +219,7 @@ def build_plan(source: dict[str, list[dict[str, Any]]], tmux_alive: Any) -> dict
         alive_in_tmux = bool(tmux_alive(session_id))
         entry = {
             "id": session_id,
-            "mode": canonical_mode(row.get("mode")),
+            "mode": canonical_mode(row.get("mode"), renames),
             "project_id": row.get("project_id"),
             "pane_id": pane_id,
             "postgres_is_alive": bool(row.get("is_alive")),
@@ -217,7 +245,7 @@ def build_plan(source: dict[str, list[dict[str, Any]]], tmux_alive: Any) -> dict
         else:
             entry["result"] = "dead"
         session_report.append(entry)
-    tools = [tool_import_entry(row) for row in source.get("agent_tools", [])]
+    tools = [tool_import_entry(row, renames) for row in source.get("agent_tools", [])]
     return {
         "panes": panes,
         "project_settings": settings,
@@ -274,7 +302,7 @@ def _write_json(path: Path, value: Any) -> None:
 
 def run_migrate(args: argparse.Namespace) -> int:
     source = read_postgres(resolve_database_url(args.database_url_env))
-    plan = build_plan(source, _legacy_tmux_alive)
+    plan = build_plan(source, _legacy_tmux_alive, tool_slug_renames())
     db_path = Path(args.db).expanduser() if args.db else local_db.default_db_path()
     tools_out = Path(args.tools_out).expanduser() if args.tools_out else default_tools_out()
     report: dict[str, Any] = {

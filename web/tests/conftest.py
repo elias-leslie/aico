@@ -42,6 +42,20 @@ def local_state(monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
 
 
 @pytest.fixture(autouse=True)
+def no_real_tether(monkeypatch: pytest.MonkeyPatch, local_state: Path) -> Iterator[None]:
+    """By default Tether is absent; ``fake_tether`` points the client at a fake one.
+
+    Also forgets the agent tokens Own tmux discovery cached from an earlier test.
+    """
+    from a_term.services import agent_tools
+
+    monkeypatch.setenv("TETHER_SOCKET", str(local_state / "no-tether.sock"))
+    agent_tools.reset_agent_tokens()
+    yield
+    agent_tools.reset_agent_tokens()
+
+
+@pytest.fixture(autouse=True)
 def reset_rate_limits() -> Iterator[None]:
     """The in-memory rate limiter is process-wide; start every test fresh."""
     from a_term.rate_limit import limiter

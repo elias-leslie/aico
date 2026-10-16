@@ -7,12 +7,30 @@ and aliases (``claude``) resolve to them.
 
 from __future__ import annotations
 
+import time
+from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime
+from pathlib import Path
+from threading import Lock
 from typing import Any
 
-from ..tether import TetherError, get_client
+from ..logging_config import get_logger
+from ..tether import TetherError, TetherUnavailable, TetherVersionError, get_client
+
+logger = get_logger(__name__)
 
 SHELL_SLUG = "shell"
+
+# Command token -> tool slug, used only until Tether has answered once: the
+# agents Tether ships with, so Own tmux discovery still works while it is down.
+FALLBACK_AGENT_TOKENS: Mapping[str, str] = {
+    "claude": "claude-code",
+    "claude-code": "claude-code",
+    "codex": "codex",
+    "agy": "agy",
+    "pi": "pi",
+}
+AGENT_TOKENS_TTL_SECONDS = 30.0
 
 # A-Term field name -> Tether field name, for create and update bodies.
 _FIELD_MAP = {
@@ -120,12 +138,82 @@ def canonical_slug(ref: str) -> str:
 
 
 def create_tool(fields: dict[str, Any]) -> dict[str, Any]:
-    return to_a_term(get_client().create_tool(to_tether_fields(fields)))
+    tool = to_a_term(get_client().create_tool(to_tether_fields(fields)))
+    reset_agent_tokens()
+    return tool
 
 
 def update_tool(ref: str, fields: dict[str, Any]) -> dict[str, Any]:
-    return to_a_term(get_client().update_tool(ref, to_tether_fields(fields)))
+    tool = to_a_term(get_client().update_tool(ref, to_tether_fields(fields)))
+    reset_agent_tokens()
+    return tool
 
 
 def delete_tool(ref: str) -> dict[str, Any]:
-    return get_client().delete_tool(ref)
+    result = get_client().delete_tool(ref)
+    reset_agent_tokens()
+    return result
+
+
+def agent_tokens_from(tools: Iterable[dict[str, Any]]) -> dict[str, str]:
+    """Command token -> canonical slug for every agent tool (the shell excluded).
+
+    A tool is recognised by its slug, its aliases, its process name and the
+    program its ``argv`` starts.
+    """
+    tokens: dict[str, str] = {}
+    for tool in tools:
+        slug = str(tool.get("slug") or "")
+        if not slug or slug == SHELL_SLUG:
+            continue
+        argv = tool.get("argv") or []
+        program = Path(str(argv[0])).name if argv else ""
+        for token in (slug, *(tool.get("aliases") or []), tool.get("process_name") or "", program):
+            normalized = str(token).strip().lower()
+            if normalized:
+                tokens.setdefault(normalized, slug)
+    return tokens
+
+
+class _AgentTokenCache:
+    """Tether's agent tokens, re-read at most every ``ttl`` seconds.
+
+    When Tether can't be read, the last tokens it gave stay in use; before it
+    has ever answered, :data:`FALLBACK_AGENT_TOKENS` does. A failure is also
+    held for ``ttl`` so a down Tether isn't asked on every listing.
+    """
+
+    def __init__(self, ttl: float = AGENT_TOKENS_TTL_SECONDS) -> None:
+        self._ttl = ttl
+        self._lock = Lock()
+        self._tokens: dict[str, str] | None = None
+        self._expires = 0.0
+
+    def get(self) -> Mapping[str, str]:
+        with self._lock:
+            now = time.monotonic()
+            if now >= self._expires:
+                self._expires = now + self._ttl
+                try:
+                    self._tokens = agent_tokens_from(list_tools())
+                except (TetherUnavailable, TetherError, TetherVersionError) as error:
+                    logger.warning("agent_tokens_fallback", error=str(error), cached=self._tokens is not None)
+            return self._tokens if self._tokens is not None else FALLBACK_AGENT_TOKENS
+
+    def reset(self) -> None:
+        with self._lock:
+            self._tokens = None
+            self._expires = 0.0
+
+
+_AGENT_TOKENS = _AgentTokenCache()
+
+
+def agent_tokens() -> Mapping[str, str]:
+    """Command token -> canonical slug for recognising agents A-Term didn't start."""
+    return _AGENT_TOKENS.get()
+
+
+def reset_agent_tokens() -> None:
+    """Forget the cached tokens, so the next listing reads Tether again."""
+    _AGENT_TOKENS.reset()

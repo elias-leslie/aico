@@ -47,7 +47,7 @@ TETHER_ROOT_STATUS_LEGACY = SessionFacts("tether", is_root=True, is_legacy=True,
 TETHER_SHELL = SessionFacts("tether", mode="shell")
 LEGACY_AGENT = SessionFacts("legacy", is_legacy=True, mode="codex")
 LEGACY_SHELL = SessionFacts("legacy", is_legacy=True, mode="shell")
-OWN_TMUX = SessionFacts("tmux_external", mode="claude")
+OWN_TMUX = SessionFacts("tmux_external", mode="claude-code")
 
 # fact row -> (rename, respawn, start_agent, end); None = allowed.
 TABLE: dict[str, tuple[SessionFacts, tuple[tuple[str, str, int | None] | None, ...]]] = {

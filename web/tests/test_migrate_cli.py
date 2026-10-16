@@ -66,7 +66,7 @@ def _source() -> dict[str, list[dict[str, Any]]]:
 
 
 def _plan() -> dict[str, Any]:
-    return cli.build_plan(_source(), lambda session_id: session_id in {LIVE, ORPHAN})
+    return cli.build_plan(_source(), lambda session_id: session_id in {LIVE, ORPHAN}, {"claude": "claude-code"})
 
 
 def test_plan_maps_rows_and_reports_session_fates() -> None:
@@ -97,8 +97,20 @@ def test_apply_is_idempotent_and_keeps_existing_rows() -> None:
     assert link is not None and link["kind"] == "legacy" and link["pane_id"] == PANE
 
 
+def test_slug_renames_come_from_tethers_aliases(fake_tether: FakeTether) -> None:
+    fake_tether.state.tools["codex"]["aliases"] = ["openai-codex"]
+    assert cli.tool_slug_renames() == {"claude": "claude-code", "openai-codex": "codex"}
+
+
+def test_migrate_refuses_clearly_when_tether_is_down(tether_down: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OLD_DB", "postgresql://example/ignored")
+    monkeypatch.setattr(cli, "read_postgres", lambda url: _source())
+    with pytest.raises(SystemExit, match="can't read Tether's tool registry"):
+        cli.main(["migrate-from-postgres", "--database-url-env", "OLD_DB"])
+
+
 def test_run_migrate_dry_run_writes_nothing(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    fake_tether: FakeTether, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setenv("OLD_DB", "postgresql://example/ignored")
     monkeypatch.setattr(cli, "read_postgres", lambda url: _source())
