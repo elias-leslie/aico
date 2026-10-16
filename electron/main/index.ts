@@ -31,11 +31,8 @@ import {
 import { contentSecurityPolicy, voiceConnectSource } from './csp'
 import {
   allLookAt,
-  arrange,
   DEFAULT_EYE_ANCHOR,
   type Face,
-  type LayoutWindow,
-  layoutSnapshot,
   type Point,
   pickScene,
   SCENE_EVERY_MS,
@@ -79,6 +76,7 @@ import {
   TetherUnavailable,
   tetherSocketPath,
 } from './tether-client'
+import { arrange } from './tiling'
 import { ControlTerminal, type TerminalLink } from './tmux-control'
 import { coalesceAsync, coalesceTrailingAsync, refreshAttachedClients } from './tmux-view'
 import { toolMark } from './tool-marks'
@@ -96,6 +94,7 @@ import {
   setSetting,
   type ViewRow,
 } from './views'
+import { type LayoutWindow, layoutSnapshot } from './window-layout'
 
 const execFileAsync = promisify(execFile)
 const TMUX_QUERY_TIMEOUT_MS = 2_000
@@ -383,7 +382,7 @@ function writeLayout(): void {
 }
 
 // Windows opened or closed after startup re-tile their screen to the layout
-// for the new count (see gaze.ts tileSlots). Restoring at launch keeps each
+// for the new count (see tiling.ts tileGroups and arrange). Restoring at launch keeps each
 // window's remembered place.
 let tilingLive = false
 const NEW_WINDOW = '(new)'

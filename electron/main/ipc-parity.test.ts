@@ -46,6 +46,18 @@ describe('preload and main IPC parity', () => {
     expect(nonLiteral(main)).toEqual([])
   })
 
+  it('registers every main channel exactly once', () => {
+    // The checks above dedupe, so they cannot see a channel registered twice.
+    // A second ipcMain.handle throws at startup; a second ipcMain.on fires the
+    // handler twice (every keystroke typed twice on pty:input).
+    const registered = [
+      ...main.matchAll(/ipcMain\.(?:on|once|handle|handleOnce)\(\s*'([^']+)'/g),
+    ].map((m) => m[1] as string)
+    const twice = registered.filter((name, i) => registered.indexOf(name) !== i)
+    expect(twice).toEqual([])
+    expect(registered.length).toBeGreaterThan(30)
+  })
+
   it('finds channels at all, so a refactor cannot make the checks vacuous', () => {
     expect(channels(preload, /ipcRenderer\.send\(\s*'([^']+)'/g).length).toBeGreaterThan(10)
     expect(channels(preload, /ipcRenderer\.invoke\(\s*'([^']+)'/g).length).toBeGreaterThan(5)
