@@ -2347,6 +2347,12 @@
     fight(now, s) {
       this.moving = false
       const d = s.data
+      // things went quiet: a rebel who only now reaches the fight runs off like
+      // the rest did, or the scene would never settle
+      if (d.resting) {
+        this.flee()
+        return FAST
+      }
       const h = nearest(
         d.heroes.filter((q) => q.onFoot || q.state === 'tank'),
         this.x,

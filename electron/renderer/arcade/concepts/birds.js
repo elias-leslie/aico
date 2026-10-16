@@ -1060,7 +1060,14 @@
           a.flyTo(spotFor(s, a, { near: a.x, nearY: a.y }), true)
         }
       }
-      for (const f of D.food) f.x = clamp(f.x, 2, s.W - 2)
+      for (const f of D.food) {
+        f.x = clamp(f.x, 2, s.W - 2)
+        // its perch moved: it drops to whatever is below
+        if (f.landed && !onSurface(s, f.x, f.y)) {
+          f.landed = false
+          f.vy = 0
+        }
+      }
       s.poke()
     },
     update(s, dt, now) {
@@ -1091,7 +1098,11 @@
       }
       if (D.food.length) {
         const before = D.food.length
-        D.food = D.food.filter((f) => now - f.at < 150000)
+        D.food = D.food.filter((f) => {
+          if (now - f.at < 150000) return true
+          f.dead = true // stale: birds still heading for it give up
+          return false
+        })
         if (D.food.length !== before) moving = true
       }
       // gnats while the agent works

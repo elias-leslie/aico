@@ -590,7 +590,11 @@
           return FAST
         }
         const spot = this.restX ?? (this.restX = openSpot(s, this.x, SW))
-        if (Math.abs(spot - this.x) > 1.5) return this.walk(spot, dt, true)
+        if (Math.abs(spot - this.x) > 1.5) {
+          // act() isn't running, so count the turn cooldown down here or she can't turn to go
+          this.turnCd = (this.turnCd || 0) - dt
+          return this.walk(spot, dt, true)
+        }
         if (this.state === 'kneel') return Infinity
         if (this.state === 'stand' || this.state === 'run') {
           this.state = 'kneel'
