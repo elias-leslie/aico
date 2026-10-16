@@ -10,14 +10,18 @@ routes).
 
 ## Guard
 
-The routes stay where they were and keep their guard:
+The routes stay where they were. They are mounted on the `cli-local` surface
+of A-Term's one caller-trust gate (`a_term/caller_trust.py`), which checks, in
+order and before the route runs:
 
+- the app's authentication (none by default; a session in password or proxy
+  mode);
+- a write from another site's page is refused (`403 origin_not_allowed`);
 - loopback clients only (`403 local_only`);
-- a browser `Origin`, if sent, must be one of the configured CORS origins
-  (`403 origin_not_allowed`);
-- the app's normal authentication middleware applies (these routes are not
-  under `/api/internal/` and are never exempt);
-- mutating bodies must be `application/json`, at most 128 KiB.
+- no browser `Origin` at all, not even A-Term's own page
+  (`403 origin_not_allowed`).
+
+Mutating bodies must be `application/json`, at most 128 KiB.
 
 No Tether route is exposed under `/api/*`.
 

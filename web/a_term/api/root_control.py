@@ -12,8 +12,10 @@ actions stay here because views belong to A-Term:
 - ``position`` has no meaning in the browser grid and answers
   ``503 position_unavailable``.
 
-The routes keep their old guard: loopback clients only, a matching origin if
-one is sent, and the app's normal auth middleware.
+The routes are mounted on the ``cli-local`` caller-trust surface
+(``a_term.caller_trust``): the app's auth, a write from another site's page
+refused, then loopback clients only (``local_only``) and no browser ``Origin``
+at all (``origin_not_allowed``).
 """
 
 from __future__ import annotations
@@ -50,14 +52,6 @@ class RootError(Exception):
     def __init__(self, status: int, error: str) -> None:
         self.status, self.error = status, error
         super().__init__(error)
-
-
-def _local(request: Request) -> None:
-    """CLI-only surface: a loopback peer and no browser (any Origin, even A-Term's own page, is refused)."""
-    if request.client is None or request.client.host not in {"127.0.0.1", "::1"}:
-        raise RootError(403, "local_only")
-    if "origin" in request.headers:
-        raise RootError(403, "origin_not_allowed")
 
 
 async def _body(request: Request) -> Any:
@@ -225,10 +219,6 @@ def _guarded(fn: Any, *args: Any) -> Any:
 
 @router.get("/v1/roots")
 async def list_roots(request: Request):
-    try:
-        _local(request)
-    except RootError as error:
-        return _error(error)
     # Forward the filters Tether defines (``ended``); ``origin`` is always A-Term's.
     query = {key: value for key, value in request.query_params.items() if key in _LIST_QUERY}
     path = "/v1/roots?" + urlencode({**query, "origin": OWNER})
@@ -238,7 +228,6 @@ async def list_roots(request: Request):
 @router.post("/v1/roots")
 async def create_root(request: Request):
     try:
-        _local(request)
         value = await _body(request)
     except RootError as error:
         return _error(error)
@@ -248,7 +237,6 @@ async def create_root(request: Request):
 @router.get("/v1/roots/{request_id}")
 async def get_root(request: Request, request_id: str):
     try:
-        _local(request)
         path = _root_path(request_id)
     except RootError as error:
         return _error(error)
@@ -258,7 +246,6 @@ async def get_root(request: Request, request_id: str):
 @router.get("/v1/roots/{request_id}/admin")
 async def root_admin_status(request: Request, request_id: str):
     try:
-        _local(request)
         path = _root_path(request_id, "admin")
     except RootError as error:
         return _error(error)
@@ -268,7 +255,6 @@ async def root_admin_status(request: Request, request_id: str):
 @router.post("/v1/roots/{request_id}/{action}")
 async def mutate_root(request: Request, request_id: str, action: str):
     try:
-        _local(request)
         if action not in {"show", "position", "send", "end", "title", "admin"}:
             raise RootError(404, "not_found")
         path = _root_path(request_id, action)

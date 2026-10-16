@@ -8,7 +8,6 @@ API on port 8002.
 import asyncio
 import os
 import secrets
-import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from importlib.metadata import PackageNotFoundError, version
@@ -34,19 +33,16 @@ from .api import (
     root_control,
     sessions,
 )
-from .auth import UNAUTHORIZED_DETAIL
 from .branding import DESCRIPTION, DISPLAY_NAME, get_cache_root
 from .caller_trust import (
     HostGate,
     Surface,
     SurfaceGate,
-    authenticate,
     declare,
-    facts_from_scope,
     mount,
     trust_config,
 )
-from .config import A_TERM_BIND_HOST, A_TERM_PORT, ALLOWED_ORIGINS, settings
+from .config import A_TERM_BIND_HOST, A_TERM_PORT, ALLOWED_ORIGINS
 from .logging_config import SyslogPrefixFormatter, configure_logging, get_logger
 from .rate_limit import limiter
 from .services.maintenance import get_status as get_maintenance_status
@@ -144,41 +140,7 @@ app.add_middleware(
 )
 
 
-_UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
-
-
-@app.middleware("http")
-async def foreign_origin_guard(
-    request: Request, call_next: Callable[[Request], Awaitable[Response]]
-) -> Response:
-    """Refuse state-changing requests from other sites' pages (the one allowed_origins list).
-
-    With auth mode none, a plain cross-site form POST from any page in the owner's browser could otherwise reset every
-    session or start agents. Clients that send no Origin (CLI, agents, tests) are unaffected.
-    """
-    origin = request.headers.get("origin")
-    if request.method in _UNSAFE_METHODS and origin is not None and origin not in settings.a_term_allowed_origins:
-        return JSONResponse(status_code=403, content={"error": "origin_not_allowed"})
-    return await call_next(request)
-
-
-@app.middleware("http")
-async def auth_guard(
-    request: Request, call_next: Callable[[Request], Awaitable[Response]]
-) -> Response:
-    """Require auth for public API routes when configured."""
-    if request.method != "OPTIONS":
-        path = request.url.path
-        if path != "/health" and not path.startswith("/api/auth/") and not path.startswith(
-            "/api/internal/"
-        ):
-            trust = request.app.state.trust
-            if authenticate(facts_from_scope(request.scope), trust.auth, int(time.time())) is None:
-                return JSONResponse(status_code=401, content={"detail": UNAUTHORIZED_DETAIL})
-    return await call_next(request)
-
-
-# Who gets in on the terminal WebSocket: its route's surface (a_term.caller_trust). Inside the security headers,
+# Who gets in: each route's surface (a_term.caller_trust), for HTTP and the WebSocket. Inside the security headers,
 # outside CORS.
 app.add_middleware(SurfaceGate)
 

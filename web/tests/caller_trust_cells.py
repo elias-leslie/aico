@@ -3,6 +3,10 @@
 The expected answers live in ``fixtures/caller_trust_golden.json``. They were recorded once from the app as it was
 before the trust checks moved into one module, then hand-checked. Never regenerate them from the new rules: a changed
 cell is a changed refusal, and every refusal must stay as it was.
+
+Two kinds of cell changed on purpose when the one gate took over HTTP, both narrowing (74 cells):
+``runs?limit=<invalid>`` without a valid internal token is refused 403 before ``limit`` is checked (was 422), and
+``/v1/roots*`` and internal refusals no longer carry Access-Control-Allow-Origin for an allowed Origin.
 """
 
 from __future__ import annotations

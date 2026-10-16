@@ -323,21 +323,21 @@ class HostGate:
 
 
 class SurfaceGate:
-    """Apply each route's surface before CORS and the router see the caller.
+    """Apply each route's surface to every HTTP request and WebSocket before CORS and the router see it.
 
     Sits inside the security headers (so refusals carry them) and outside CORS (so a refusal never gets an
-    Access-Control-Allow-Origin header). Reads ``app.state.trust``. It decides every WebSocket; HTTP still goes
-    through the older per-route checks for now.
+    Access-Control-Allow-Origin header). Reads ``app.state.trust``.
     """
 
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] == "websocket":
+        if scope["type"] in ("http", "websocket"):
             application = scope["app"]
             decided = check(scope, application.router.routes, request_config(application.state))
             if isinstance(decided, Deny):
-                await ws_refusal(decided.reason)(scope, receive, send)
+                refusal = ws_refusal if scope["type"] == "websocket" else http_refusal
+                await refusal(decided.reason)(scope, receive, send)
                 return
         await self.app(scope, receive, send)

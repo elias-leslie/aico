@@ -157,10 +157,9 @@ def test_one_origin_list_feeds_cors_and_the_trust_checks() -> None:
 def test_middleware_order_is_pinned() -> None:
     stack = [entry.cls for entry in _app().user_middleware]
     dispatches = [getattr(entry.kwargs.get("dispatch"), "__name__", None) for entry in _app().user_middleware]
-    # Outermost first: the Host check, security headers, who gets in (WebSocket), auth and the foreign-Origin write
-    # guard (HTTP), CORS.
-    assert stack == [HostGate, BaseHTTPMiddleware, SurfaceGate, BaseHTTPMiddleware, BaseHTTPMiddleware, CORSMiddleware]
-    assert dispatches == [None, "security_headers", None, "auth_guard", "foreign_origin_guard", None]
+    # Outermost first: the Host check, security headers, who gets in, CORS.
+    assert stack == [HostGate, BaseHTTPMiddleware, SurfaceGate, CORSMiddleware]
+    assert dispatches == [None, "security_headers", None, None]
 
 
 def test_the_host_check_is_the_old_rule() -> None:
@@ -197,6 +196,27 @@ def test_a_router_included_without_mount_is_refused() -> None:
     mount(mounted, router, Surface.PUBLIC)
     assert check(scope, mounted.router.routes, _config()) == Allow()
 
+
+
+def test_the_gate_refuses_an_undeclared_http_route() -> None:
+    router = APIRouter()
+
+    @router.get("/sneaky")
+    async def sneaky() -> dict[str, str]:
+        return {}
+
+    throwaway = FastAPI()
+    throwaway.state.trust = _config()
+    throwaway.include_router(router)
+    throwaway.add_middleware(SurfaceGate)
+    refused = TestClient(throwaway).get("/sneaky")
+    assert (refused.status_code, refused.json()) == (403, {"error": "surface_undeclared"})
+
+    mounted = FastAPI()
+    mounted.state.trust = _config()
+    mount(mounted, router, Surface.PUBLIC)
+    mounted.add_middleware(SurfaceGate)
+    assert TestClient(mounted).get("/sneaky").status_code == 200
 
 
 def test_the_gate_closes_an_undeclared_websocket_route() -> None:
