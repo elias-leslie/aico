@@ -421,8 +421,19 @@ export function useATermTabsState({
       return activeSessionId
     }
 
-    return visibleSessionIds[0] ?? (panes.length === 0 ? activeSessionId : null)
-  }, [activeSessionId, panes.length, slotSource])
+    // Picked without the user asking: one of their panes, or a View they
+    // attached, never one of the phone's free-standing Views of other sessions.
+    const pickableSessionIds = slotSource.flatMap((slot) => {
+      const sessionId = getSlotSessionId(slot)
+      return sessionId &&
+        (isPaneSlot(slot) || attachedExternalSessionIds.includes(sessionId))
+        ? [sessionId]
+        : []
+    })
+    return (
+      pickableSessionIds[0] ?? (panes.length === 0 ? activeSessionId : null)
+    )
+  }, [activeSessionId, attachedExternalSessionIds, panes.length, slotSource])
   const reconciledSlotOrderIds = useMemo(
     () => reconcileOrderedIds(slotSource, storedSlotOrderIds),
     [slotSource, storedSlotOrderIds],
@@ -455,9 +466,11 @@ export function useATermTabsState({
     [reconciledSlotOrderIds, slotSource],
   )
   const orderedIds = useMemo(() => getOrderedIds(aTermSlots), [aTermSlots])
+  // On a phone every session is in the switcher, but only one the user opened
+  // counts; other agents' sessions must not stop A-Term opening its own shell.
   const hasVisibleExternalSlot =
     attachedExternalSessions.length > 0 ||
-    (isMobile && !isDetachedWindow && mobileGlobalSlots.length > 0)
+    (isMobile && !isDetachedWindow && resolvedActiveSessionId !== null)
   const swapPanes = useCallback(
     async (slotIdA: string, slotIdB: string) => {
       const slotA = aTermSlots.find((slot) => getSlotPanelId(slot) === slotIdA)

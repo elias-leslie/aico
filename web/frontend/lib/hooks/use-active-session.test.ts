@@ -57,6 +57,25 @@ describe('deriveActiveSessionId', () => {
     )
   })
 
+  it('never picks a free-standing View on its own: another agent may be using it', () => {
+    const otherAgent = { ...sessions[1], id: 'other-agent', is_external: true }
+    expect(deriveActiveSessionId([otherAgent, ...sessions], null, null)).toBe(
+      'session-1',
+    )
+    expect(deriveActiveSessionId([otherAgent], null, null)).toBe(null)
+    expect(deriveActiveSessionId([otherAgent], null, 'project-2')).toBe(null)
+  })
+
+  it('keeps a free-standing View the user chose by URL or earlier', () => {
+    const otherAgent = { ...sessions[1], id: 'other-agent', is_external: true }
+    expect(deriveActiveSessionId([otherAgent], 'other-agent', null)).toBe(
+      'other-agent',
+    )
+    expect(deriveActiveSessionId([otherAgent], null, null, 'other-agent')).toBe(
+      'other-agent',
+    )
+  })
+
   it('returns null when sessions array is empty', () => {
     expect(deriveActiveSessionId([], 'session-1', null)).toBe(null)
   })

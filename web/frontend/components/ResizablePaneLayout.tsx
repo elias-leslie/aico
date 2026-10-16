@@ -9,7 +9,7 @@ import {
 } from '@/lib/hooks/pane-layout'
 import { usePaneLayoutGroups } from '@/lib/hooks/use-pane-layout-groups'
 import { getScopedATermStorageKey } from '@/lib/utils/detached-pane-window'
-import { getSlotPanelId } from '@/lib/utils/slot'
+import { getSlotPanelId, isPaneSlot } from '@/lib/utils/slot'
 import type { ResizablePaneLayoutProps } from '@/types/pane-layout'
 import {
   EmptyPaneState,
@@ -112,10 +112,19 @@ export function ResizablePaneLayout(props: ResizablePaneLayoutProps) {
         )
       : undefined
 
+    // With nothing chosen, show one of the user's own panes. A free-standing
+    // View opens only when chosen: it may be another agent's live session.
+    const slot = activeSlot ?? displaySlots.find(isPaneSlot)
+    if (!slot) {
+      return (
+        <EmptyPaneState containerRef={containerRef} onOpenModal={onOpenModal} />
+      )
+    }
+
     return (
       <SinglePaneLayout
         containerRef={containerRef}
-        slot={activeSlot ?? displaySlots[0]}
+        slot={slot}
         renderPane={renderPane}
       />
     )

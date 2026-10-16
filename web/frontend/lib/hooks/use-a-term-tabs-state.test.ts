@@ -876,6 +876,51 @@ describe('useATermTabsState', () => {
     )
   })
 
+  it("on mobile, lists another agent's session in the switcher but never opens it unasked", () => {
+    mockUseMediaQuery.mockReturnValue(true)
+    const otherAgent = {
+      ...buildActiveSessionState().sessions[0],
+      id: 'other-agent',
+      name: 'Project A — Hunt',
+      mode: 'codex',
+      source: 'tether',
+      is_external: true,
+      ...TETHER_CAN,
+    }
+    let state = buildActiveSessionState({
+      activeSessionId: null,
+      activeSession: null,
+      sessions: [otherAgent],
+      externalSessions: [otherAgent],
+    })
+    mockUseActiveSession.mockImplementation(() => state)
+
+    const { result, rerender } = renderHook(() =>
+      useATermTabsState({ projectId: undefined, projectPath: undefined }),
+    )
+
+    expect(result.current.aTermSlots).toEqual([
+      expect.objectContaining({ slotId: 'session-other-agent' }),
+    ])
+    expect(result.current.activeSessionId).toBe(null)
+    // Nothing of the user's is open, so A-Term may open its own ad hoc shell.
+    expect(mockUseAutoCreatePane).toHaveBeenLastCalledWith(
+      expect.objectContaining({ hasVisibleExternalSlot: false }),
+    )
+
+    // Chosen from the switcher or the manager: kept.
+    state = {
+      ...state,
+      activeSessionId: 'other-agent',
+      activeSession: otherAgent,
+    }
+    rerender()
+    expect(result.current.activeSessionId).toBe('other-agent')
+    expect(mockUseAutoCreatePane).toHaveBeenLastCalledWith(
+      expect.objectContaining({ hasVisibleExternalSlot: true }),
+    )
+  })
+
   it.each([false, true])(
     'refreshes root titles from Tether and offers no Reset on desktop/mobile=%s',
     (isMobile) => {

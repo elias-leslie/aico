@@ -37,8 +37,12 @@ export function deriveActiveSessionId(
     return urlSessionId
   }
 
+  // Picked without the user asking, so never a free-standing View (no A-Term
+  // pane shows it): that is another app's or agent's session.
+  const shown = sessions.filter((session) => !session.is_external)
+
   if (urlProjectId) {
-    const projectSession = sessions.find(
+    const projectSession = shown.find(
       (session) => session.project_id === urlProjectId,
     )
     if (projectSession) {
@@ -53,7 +57,7 @@ export function deriveActiveSessionId(
     return persistedSessionId
   }
 
-  return sessions[0]?.id ?? null
+  return shown[0]?.id ?? null
 }
 
 export function shouldSyncSessionParam(
@@ -118,8 +122,9 @@ interface UseActiveSessionOptions {
  * 1. Check URL `searchParams` for `?session=<id>`
  * 2. If valid session ID in URL, that's the active session
  * 3. If `?project=<id>` param exists, find session with matching project_id
- * 4. If no URL param but sessions exist, use first session
- * 5. If no sessions, return null
+ * 4. Else the remembered session, if it still exists
+ * 5. Else the first session an A-Term pane shows (never a free-standing View)
+ * 6. Else null
  *
  * @example
  * ```tsx

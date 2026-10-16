@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { PaneSlot } from '@/lib/utils/slot'
+import type { ATermSlot, PaneSlot } from '@/lib/utils/slot'
 import { SLOT_BASE } from '@/test-stubs/session-fixtures'
 import { ResizablePaneLayout } from './ResizablePaneLayout'
 
@@ -87,6 +87,52 @@ describe('ResizablePaneLayout', () => {
       expect.objectContaining({ displaySlots: slots }),
     )
     expect(mockSinglePaneLayout.mock.calls.at(-1)?.[0].slot).toBe(slots[13])
+  })
+
+  it('on mobile with nothing chosen, never opens a free-standing View on its own', () => {
+    const freeView: ATermSlot = {
+      type: 'adhoc',
+      ...SLOT_BASE,
+      slotId: 'session-other-agent',
+      sessionId: 'other-agent',
+      name: 'Other agent',
+      workingDir: null,
+      isExternal: true,
+    }
+    const { rerender } = render(
+      <ResizablePaneLayout
+        slots={[freeView]}
+        isMobile={true}
+        activeSessionId={null}
+        fontFamily="monospace"
+        fontSize={14}
+      />,
+    )
+    expect(screen.getByTestId('empty-pane-state')).toBeTruthy()
+    expect(mockSinglePaneLayout).not.toHaveBeenCalled()
+
+    const pane = makeProjectSlot('1')
+    rerender(
+      <ResizablePaneLayout
+        slots={[freeView, pane]}
+        isMobile={true}
+        activeSessionId={null}
+        fontFamily="monospace"
+        fontSize={14}
+      />,
+    )
+    expect(mockSinglePaneLayout.mock.calls.at(-1)?.[0].slot).toBe(pane)
+
+    rerender(
+      <ResizablePaneLayout
+        slots={[freeView, pane]}
+        isMobile={true}
+        activeSessionId="other-agent"
+        fontFamily="monospace"
+        fontSize={14}
+      />,
+    )
+    expect(mockSinglePaneLayout.mock.calls.at(-1)?.[0].slot).toBe(freeView)
   })
 
   it('keeps the desktop split layout limited to six panes', () => {
