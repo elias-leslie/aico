@@ -8,7 +8,8 @@ export const API_VERSION = 1
 export const DEFAULT_INSTANCE = 'default'
 
 const INSTANCE_RE = /^[a-z0-9][a-z0-9-]{0,31}$/
-const MAX_UNIX_SOCKET_PATH_BYTES = 107
+/** Linux `sun_path` holds 108 bytes including the terminating NUL. */
+export const MAX_UNIX_SOCKET_PATH_BYTES = 107
 /** Aico allocates 16 random bytes per tmux server generation. */
 const GENERATION_HEX_LENGTH = 32
 

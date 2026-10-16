@@ -3,8 +3,8 @@ import { createServer, request, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { listenPrivateSocket } from '../http'
 import { getWidget, removeWidget } from './catalog'
-import { listenOwnerServer } from './owner-control'
 import { createRootHandler, parseRootCreate, type RootControlOperations } from './root-control'
 import { initStore, registerBuiltinTuis } from './testing'
 
@@ -33,8 +33,8 @@ describe('root origin (v1 roots API)', () => {
   beforeAll(async () => {
     registerBuiltinTuis()
     initStore(join(fixture, 'catalog.db'))
-    await listenOwnerServer(serve(true), v1Socket)
-    await listenOwnerServer(serve(false), legacySocket)
+    await listenPrivateSocket(serve(true), v1Socket)
+    await listenPrivateSocket(serve(false), legacySocket)
   })
   afterAll(async () => {
     await Promise.all(servers.map((s) => new Promise<void>((resolve) => s.close(() => resolve()))))

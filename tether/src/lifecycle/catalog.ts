@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
+import { MAX_UNIX_SOCKET_PATH_BYTES } from '../config'
 import { durableTmuxServerUnit, MANAGED_LIFECYCLE_VERSION } from './ownership'
 
 // Session catalog, extracted from Aico's electron/main/store.ts. Aico's
@@ -203,7 +204,6 @@ const TMUX_SERVER_ID_RE = /^[0-9a-f]{8,64}$/
 const SYSTEMD_INVOCATION_ID_RE = /^[0-9a-f]{32}$/i
 const TMUX_STABLE_SESSION_ID_RE = /^\$\d+$/
 const TMUX_STABLE_PANE_ID_RE = /^%\d+$/
-const UNIX_SOCKET_PATH_MAX_BYTES = 107
 
 function assertTmuxServerId(id: string): void {
   if (!TMUX_SERVER_ID_RE.test(id)) throw new Error(`invalid tmux server id: ${id}`)
@@ -213,7 +213,7 @@ function assertSocketPath(socketPath: string): void {
   if (
     !socketPath.startsWith('/') ||
     socketPath.includes('\0') ||
-    Buffer.byteLength(socketPath) > UNIX_SOCKET_PATH_MAX_BYTES
+    Buffer.byteLength(socketPath) > MAX_UNIX_SOCKET_PATH_BYTES
   ) {
     throw new Error(`invalid tmux socket path: ${socketPath}`)
   }

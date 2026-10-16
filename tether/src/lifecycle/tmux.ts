@@ -2,8 +2,9 @@
 // unit-test cheaply. Aico addresses its private server by an absolute socket
 // path, never by tmux's ambient TMUX_TMPDIR-dependent label resolution.
 
+import { MAX_UNIX_SOCKET_PATH_BYTES } from '../config'
+
 const PRODUCTION_SOCKET_LABEL = 'aico'
-const MAX_UNIX_SOCKET_PATH_BYTES = 107
 const SAFE_SOCKET_LABEL = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/
 const SAFE_SOCKET_PATH_SEGMENT = /^[A-Za-z0-9_.-]+$/
 const MANAGED_SERVER_GENERATION_ID = /^[0-9a-f]{8,64}$/

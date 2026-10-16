@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { listenPrivateSocket } from '../http'
 import {
   allocateWidgetId,
   getRootRequest,
@@ -20,7 +21,6 @@ import {
   type WidgetRow,
 } from './catalog'
 import { LifecycleOwnerLock, type ManagedGateState } from './lifecycle-guard'
-import { listenOwnerServer } from './owner-control'
 import { sessionGeneration } from './owner-retirement'
 import {
   createRootServer,
@@ -84,7 +84,7 @@ describe('private root workload control', () => {
   beforeAll(async () => {
     registerBuiltinTuis()
     initStore(database)
-    await listenOwnerServer(server, socket)
+    await listenPrivateSocket(server, socket)
   })
   afterAll(async () => {
     await new Promise<void>((resolve) => server.close(() => resolve()))

@@ -25,7 +25,7 @@ import {
   stopLifecycle,
   verifiedCurrentManagedPane,
 } from './lifecycle/engine'
-import { createOwnerServer, listenOwnerServer } from './lifecycle/owner-control'
+import { createOwnerServer } from './lifecycle/owner-control'
 import { setLifecycleInstance } from './lifecycle/ownership'
 import { createRootServer } from './lifecycle/root-control'
 import { configureTmuxPaths } from './lifecycle/tmux'
@@ -193,7 +193,7 @@ export async function startDaemon(
         verifiedCurrentPane: async (row) => Boolean(await verifiedCurrentManagedPane(row)),
         end: endSession,
       })
-      await listenOwnerServer(owner, paths.legacyControlSocket)
+      await listenPrivateSocket(owner, paths.legacyControlSocket)
       legacyServers.push(owner)
       const guiShim = createRootServer(rootOperations(context))
       await listenPrivateSocket(guiShim, paths.legacyGuiSocket)

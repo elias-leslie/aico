@@ -1,7 +1,6 @@
-import { chmodSync, existsSync, lstatSync, mkdirSync, unlinkSync } from 'node:fs'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
-import { createConnection } from 'node:net'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
+import { assertSocketPath } from '../config'
 import { getTmuxServer, getWidget, type WidgetRow } from './catalog'
 import { type RetirementResult, sessionGeneration } from './owner-retirement'
 import { MANAGED_LIFECYCLE_VERSION } from './ownership'
@@ -23,15 +22,7 @@ export function ownerSocketPath(
   uid: number | undefined = process.getuid?.(),
 ): string {
   const root = runtime || (uid === undefined ? '' : `/run/user/${uid}`)
-  const path = override ?? join(root, 'aico', 'control.sock')
-  if (
-    !path.startsWith('/') ||
-    path.includes('\0') ||
-    path.split('/').some((part, index) => index > 0 && (!part || part === '.' || part === '..')) ||
-    Buffer.byteLength(path) > 107
-  )
-    throw new Error('invalid Aico owner socket path')
-  return path
+  return assertSocketPath(override ?? join(root, 'aico', 'control.sock'), 'Aico owner')
 }
 
 function json(response: ServerResponse, status: number, value: Record<string, unknown>): void {
@@ -132,45 +123,4 @@ export function createOwnerServer(operations: OwnerControlOperations): Server {
       json(response, 500, { error: 'owner_failure' })
     }
   })
-}
-
-async function isLiveSocket(path: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const client = createConnection(path)
-    client.once('connect', () => {
-      client.destroy()
-      resolve(true)
-    })
-    client.once('error', () => resolve(false))
-  })
-}
-
-export async function listenOwnerServer(server: Server, path: string): Promise<void> {
-  const directory = dirname(path)
-  mkdirSync(directory, { recursive: true, mode: 0o700 })
-  const stat = lstatSync(directory)
-  if (!stat.isDirectory() || stat.uid !== process.getuid?.()) {
-    throw new Error('Aico owner socket directory is not owned by this user')
-  }
-  chmodSync(directory, 0o700)
-  if (existsSync(path)) {
-    const existing = lstatSync(path)
-    if (!existing.isSocket() || existing.uid !== process.getuid?.() || (await isLiveSocket(path))) {
-      throw new Error('Aico owner socket is already in use or unsafe')
-    }
-    unlinkSync(path)
-  }
-  const previousUmask = process.umask(0o077)
-  try {
-    await new Promise<void>((resolve, reject) => {
-      server.once('error', reject)
-      server.listen(path, () => {
-        server.off('error', reject)
-        resolve()
-      })
-    })
-    chmodSync(path, 0o600)
-  } finally {
-    process.umask(previousUmask)
-  }
 }

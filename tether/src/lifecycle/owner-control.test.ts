@@ -5,6 +5,7 @@ import { request } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { listenPrivateSocket } from '../http'
 import { Store } from '../store'
 import {
   activateTmuxServer,
@@ -14,7 +15,7 @@ import {
   insertWidget,
 } from './catalog'
 import { LifecycleOwnerLock } from './lifecycle-guard'
-import { createOwnerServer, listenOwnerServer, ownerSocketPath } from './owner-control'
+import { createOwnerServer, ownerSocketPath } from './owner-control'
 import {
   type RetirementOperations,
   retireOwnedSession,
@@ -53,7 +54,7 @@ describe('headless owner control', () => {
 
   beforeAll(async () => {
     bindCatalog(store.db)
-    await listenOwnerServer(server, socket)
+    await listenPrivateSocket(server, socket)
   })
 
   afterAll(async () => {
