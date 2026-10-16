@@ -10,14 +10,26 @@ import { join } from 'node:path'
 import { effectiveTuiPath } from './launch'
 import type { ContextStatus, TuiSpec } from './spec'
 
-/** Directory holding sibling checkouts (agent-hub, codex-config). Override with
- * TETHER_PROJECTS_DIR, or point AGENT_HUB_REPO / CODEX_CONFIG_REPO at a checkout. */
-function projectsDir(): string {
-  return process.env.TETHER_PROJECTS_DIR || join(homedir(), 'projects')
+/** A sibling checkout (agent-hub, codex-config): `$<override>` when set, else
+ * `$TETHER_PROJECTS_DIR/<name>`. With neither set there is no guess (the old
+ * `~/projects` default named a folder that need not exist); the caller shows
+ * {@link unknownCheckout} instead. */
+function checkout(override: string, name: string): string | null {
+  const direct = process.env[override]
+  if (direct) return direct
+  const projects = process.env.TETHER_PROJECTS_DIR
+  return projects ? join(projects, name) : null
 }
 
-function agentHubRepo(): string {
-  return process.env.AGENT_HUB_REPO || join(projectsDir(), 'agent-hub')
+function agentHubRepo(): string | null {
+  return checkout('AGENT_HUB_REPO', 'agent-hub')
+}
+
+function unknownCheckout(override: string, name: string): ContextStatus {
+  return {
+    state: 'missing',
+    detail: `TETHER_PROJECTS_DIR is not set and neither is ${override}, so the ${name} checkout can't be found; native agent continues`,
+  }
 }
 
 interface ContextProbe {
@@ -126,6 +138,7 @@ function verifyLiveDelivery(
 /** Reuse the canonical installer's registration/link checks for retrieval clients. */
 function canonicalRetrieval(surface: 'antigravity'): Promise<ContextStatus> {
   const repo = agentHubRepo()
+  if (!repo) return Promise.resolve(unknownCheckout('AGENT_HUB_REPO', 'agent-hub'))
   return new Promise((resolve) => {
     execFile(
       'python3',
@@ -185,6 +198,7 @@ async function claudeSessionStart(spec: TuiSpec): Promise<ContextStatus> {
   const settings = join(homedir(), '.claude', 'settings.json')
   const client = join(homedir(), '.local', 'bin', 'agent-hub-context-client')
   const repo = agentHubRepo()
+  if (!repo) return unknownCheckout('AGENT_HUB_REPO', 'agent-hub')
   const expectedLauncher = join(repo, 'integrations', 'context-delivery', 'claude', 'launcher')
   if (!existsSync(settings) || !existsSync(client)) {
     return {
@@ -238,6 +252,8 @@ async function claudeSessionStart(spec: TuiSpec): Promise<ContextStatus> {
  * no fresh delivery or binding claim because Codex restores saved thread
  * context. Ask Codex's app-server for the effective hook registry too. */
 async function codexHooks(spec: TuiSpec): Promise<ContextStatus> {
+  const codexConfigRepo = checkout('CODEX_CONFIG_REPO', 'codex-config')
+  if (!codexConfigRepo) return unknownCheckout('CODEX_CONFIG_REPO', 'codex-config')
   const launcher = await resolveLauncher('codex', spec)
   if (!launcher) {
     return {
@@ -252,7 +268,6 @@ async function codexHooks(spec: TuiSpec): Promise<ContextStatus> {
     return { state: 'missing', detail: `${client} absent — canonical context cannot deliver` }
   }
 
-  const codexConfigRepo = process.env.CODEX_CONFIG_REPO || join(projectsDir(), 'codex-config')
   const expectedLauncher = join(codexConfigRepo, 'bin', 'codex')
   try {
     const body = readFileSync(launcher, 'utf8')
@@ -380,6 +395,7 @@ async function codexHooks(spec: TuiSpec): Promise<ContextStatus> {
 function piExtension(): ContextStatus {
   const extension = join(homedir(), '.pi', 'agent', 'extensions', 'agent-hub.ts')
   const repo = agentHubRepo()
+  if (!repo) return unknownCheckout('AGENT_HUB_REPO', 'agent-hub')
   const expected = join(repo, 'integrations', 'context-delivery', 'pi', 'agent-hub.ts')
   if (!existsSync(extension)) {
     return { state: 'missing', detail: `${extension} absent — canonical context cannot deliver` }

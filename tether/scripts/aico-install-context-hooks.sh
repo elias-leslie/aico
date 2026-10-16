@@ -1,10 +1,17 @@
 #!/usr/bin/env bash
 # Compatibility entrypoint. Agent Hub owns canonical TUI context installation.
-# Point AICO_AGENT_HUB_ROOT at an Agent Hub checkout when it is not at
-# $TETHER_PROJECTS_DIR/agent-hub (default ~/projects/agent-hub).
+# The Agent Hub checkout is $AICO_AGENT_HUB_ROOT, else
+# $TETHER_PROJECTS_DIR/agent-hub; with neither set it stops instead of guessing.
 set -euo pipefail
 
-AGENT_HUB_ROOT="${AICO_AGENT_HUB_ROOT:-${TETHER_PROJECTS_DIR:-$HOME/projects}/agent-hub}"
+if [ -n "${AICO_AGENT_HUB_ROOT:-}" ]; then
+  AGENT_HUB_ROOT="$AICO_AGENT_HUB_ROOT"
+elif [ -n "${TETHER_PROJECTS_DIR:-}" ]; then
+  AGENT_HUB_ROOT="$TETHER_PROJECTS_DIR/agent-hub"
+else
+  echo "aico-install-context-hooks: set AICO_AGENT_HUB_ROOT to your Agent Hub checkout, or TETHER_PROJECTS_DIR to the folder holding it." >&2
+  exit 1
+fi
 INSTALLER="$AGENT_HUB_ROOT/integrations/context-delivery/install.py"
 
 if [ ! -f "$INSTALLER" ]; then

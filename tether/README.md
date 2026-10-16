@@ -78,7 +78,7 @@ Each instance keeps its state in `~/.local/state/tether/<instance>/tether.db` (S
 
 ### Context-hook checks
 
-Tether reports whether each agent TUI's optional context hook is installed. Those checks look for sibling checkouts under `$TETHER_PROJECTS_DIR` (default `~/projects`). Set `AGENT_HUB_REPO` or `CODEX_CONFIG_REPO` to point at a checkout directly. If none is present, the status reads `missing` and the agent still launches normally.
+Tether reports whether each agent TUI's optional context hook is installed. Those checks look for sibling checkouts under `$TETHER_PROJECTS_DIR`, set in a unit drop-in such as `~/.config/systemd/user/tether@.service.d/projects-dir.conf` (`Environment=TETHER_PROJECTS_DIR=/srv/workspaces/projects`). Set `AGENT_HUB_REPO` or `CODEX_CONFIG_REPO` to point at a checkout directly. With none of them set, or no checkout there, the status reads `missing` and says why, and the agent still launches normally.
 
 ## License
 

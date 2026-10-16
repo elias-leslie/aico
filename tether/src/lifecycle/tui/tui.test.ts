@@ -464,4 +464,34 @@ describe('ensureContext', () => {
     vi.mocked(readFileSync).mockReturnValue('pi.on("before_agent_start", () => {})')
     expect((await ensureContext(spec({ context: { kind: 'pi-extension' } }))).state).toBe('missing')
   })
+
+  it('says where checkouts are looked for instead of guessing ~/projects', async () => {
+    vi.stubEnv('TETHER_PROJECTS_DIR', '')
+    vi.mocked(existsSync).mockReturnValue(true)
+    for (const context of [
+      { kind: 'pi-extension' as const },
+      { kind: 'claude-session-start' as const },
+      { kind: 'codex-hooks' as const },
+      { kind: 'canonical-retrieval' as const, surface: 'antigravity' as const },
+    ]) {
+      const status = await ensureContext(spec({ command: ['agent'], context }))
+      expect(status.state).toBe('missing')
+      expect(status.detail).toContain('TETHER_PROJECTS_DIR is not set')
+      expect(status.detail).not.toContain('/projects/')
+    }
+  })
+
+  it('uses a checkout named directly even without TETHER_PROJECTS_DIR', async () => {
+    vi.stubEnv('TETHER_PROJECTS_DIR', '')
+    vi.stubEnv('AGENT_HUB_REPO', '/opt/projects/agent-hub')
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(realpathSync).mockReturnValue(
+      '/opt/projects/agent-hub/integrations/context-delivery/pi/agent-hub.ts',
+    )
+    vi.mocked(readFileSync).mockReturnValue(
+      'pi.on("input", () => ({ action: "continue" })); pi.on("before_agent_start", () => event.systemPrompt + contract.rendered); "AH: DEGRADED"',
+    )
+    const status = await ensureContext(spec({ context: { kind: 'pi-extension' } }))
+    expect(status.state).toBe('available')
+  })
 })
