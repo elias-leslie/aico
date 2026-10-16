@@ -172,6 +172,9 @@ export class Eyes {
   /** Which motion the pending dart and end timers belong to. */
   private motionTurn = 0
   private readonly bubble: HTMLElement | null
+  /** Whether the eyes show asleep, and who hears when that changes. */
+  private asleep = false
+  private sleepListener: ((asleep: boolean) => void) | undefined
 
   constructor(
     private readonly root: HTMLElement,
@@ -224,6 +227,12 @@ export class Eyes {
     this.cancel(this.exchangeTimer)
     this.glanceTimer = undefined
     this.exchangeTimer = undefined
+  }
+
+  /** Hear when the eyes fall asleep (true) and wake (false). The titlebar game
+   * naps meanwhile. */
+  onSleep(fn: (asleep: boolean) => void): void {
+    this.sleepListener = fn
   }
 
   /** Tint the irises with the TUI's accent so the face matches its mark. */
@@ -395,6 +404,11 @@ export class Eyes {
   private settle(): void {
     const mood = this.mood()
     if (this.root.dataset.mood !== mood) this.root.dataset.mood = mood
+    const asleep = mood === 'asleep'
+    if (asleep !== this.asleep) {
+      this.asleep = asleep
+      this.sleepListener?.(asleep)
+    }
   }
 
   private play(mood: Mood, ms: number): void {

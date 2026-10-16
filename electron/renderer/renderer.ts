@@ -265,6 +265,8 @@ let arcade: ArcadeWiring | null = null
       events: window,
       gaze: (pt) => eyes?.watch(pt),
     })
+    // asleep eyes: the game naps (plays its nap briefly, then parks)
+    eyes?.onSleep((asleep) => arcade?.nap(asleep))
     setGameActions(GAMES)
   }
 }

@@ -1,6 +1,7 @@
 // Every titlebar game, run through the real engine for a few simulated minutes
 // on a fake DOM: it loads, reacts to the cursor, keys, work and a resize, parks
-// once things go quiet, and leaves nothing behind when it is destroyed.
+// once things go quiet, naps when the eyes fall asleep (its nap hooks run once,
+// then it parks again), and leaves nothing behind when it is destroyed.
 //
 // Concepts load from their files (not games.ts's import.meta.glob loader) and
 // the canvas is a recording fake, so this covers runtime errors, the frame cap,
@@ -11,7 +12,7 @@
 import { mkdirSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { conceptFor, FAST, installGlobals, Strip } from './engine'
+import { type Actor, conceptFor, FAST, installGlobals, NAP_PLAY_MS, Strip } from './engine'
 import { GAMES } from './games'
 
 // ---- fake DOM ------------------------------------------------------------------
@@ -185,7 +186,13 @@ afterEach(() => {
 
 const SEED = 0x5eed
 
-/** One run of a game: cursor, keys, work, a resize, then quiet until it parks, then teardown. */
+/** Every other game has a nap hook of its own (Lounge Adventure's does nothing);
+ * these nap their characters instead, and Vector Escape has no nap at all. */
+const ACTOR_NAPS = new Set(['birds', 'walkerrescue'])
+const NO_NAP = new Set(['vectorescape'])
+
+/** One run of a game: cursor, keys, work, a resize, then quiet until it parks,
+ * a nap and the wake from it, then teardown. */
 async function play(k: string, seed: number, quietMs = 180_000): Promise<void> {
   vi.useFakeTimers({
     toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance'],
@@ -256,6 +263,43 @@ async function play(k: string, seed: number, quietMs = 180_000): Promise<void> {
   tick(60_000)
   expect(draws).not.toHaveBeenCalled()
 
+  // the eyes fall asleep: every nap hook runs once, the nap plays a few seconds
+  // at most, then the loop parks again; a second "asleep" changes nothing
+  const naps = [
+    ...(def.onNap ? [vi.spyOn(def as Required<typeof def>, 'onNap')] : []),
+    ...s.actors
+      .filter((a) => a.onNap)
+      .map((a) => vi.spyOn(a as Required<Actor>, 'onNap').mockName('actor')),
+  ]
+  s.nap(true)
+  s.nap(true)
+  expect(s.napping).toBe(true)
+  for (const n of naps) expect(n).toHaveBeenCalledTimes(1)
+  expect(Boolean(def.onNap)).toBe(!NO_NAP.has(k) && !ACTOR_NAPS.has(k))
+  draws.mockClear()
+  tick(NAP_PLAY_MS + 2 * FAST)
+  expect(draws.mock.calls.length).toBeLessThanOrEqual(Math.ceil(NAP_PLAY_MS / FAST) + 2)
+  expect(s.mode).toBe('parked')
+  draws.mockClear()
+  tick(60_000)
+  expect(draws).not.toHaveBeenCalled()
+
+  // waking ends the nap; asleep again naps again, and typing wakes it too
+  s.nap(false)
+  expect(s.napping).toBe(false)
+  tick(NAP_PLAY_MS)
+  s.nap(true)
+  for (const n of naps) expect(n).toHaveBeenCalledTimes(2)
+  tick(NAP_PLAY_MS + 2 * FAST)
+  expect(s.mode).toBe('parked')
+  s.touch()
+  expect(s.napping).toBe(false)
+  tick(quietMs)
+  expect(s.mode).toBe('parked')
+  draws.mockClear()
+  tick(60_000)
+  expect(draws).not.toHaveBeenCalled()
+
   expect(errors).not.toHaveBeenCalled()
   s.destroy()
   strip = null
@@ -275,7 +319,7 @@ describe('titlebar games', () => {
     expect(GAMES.map((x) => x.key).sort()).toEqual(keys)
   })
 
-  it.each(keys)('%s runs, parks when quiet and tears down clean', (k) => play(k, SEED))
+  it.each(keys)('%s runs, parks when quiet, naps and tears down clean', (k) => play(k, SEED))
 
   // Seeds a full sweep found each hit one of the parking bugs fixed in these
   // games: without the fix the game never parks, or (floating bread) parks only

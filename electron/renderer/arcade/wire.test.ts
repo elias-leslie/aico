@@ -12,6 +12,7 @@ function fakeArcade(): Arcade & { [k: string]: ReturnType<typeof vi.fn> } {
   return {
     output: vi.fn(),
     input: vi.fn(),
+    nap: vi.fn(),
     next: vi.fn(async () => {}),
     pick: vi.fn(async () => {}),
     stop: vi.fn(),
@@ -70,6 +71,7 @@ describe('titlebar arcade wiring', () => {
     expect(t.load).not.toHaveBeenCalled()
     t.wiring.output(true)
     t.wiring.input()
+    t.wiring.nap(true)
   })
 
   it('loads the engine and starts this window’s game once the games are on', async () => {
@@ -80,8 +82,18 @@ describe('titlebar arcade wiring', () => {
     expect(t.startArcade).toHaveBeenCalledWith(t.bar, expect.anything())
     t.wiring.output(true)
     t.wiring.input()
+    t.wiring.nap(true)
     expect(t.arcade?.output).toHaveBeenCalledWith(true)
     expect(t.arcade?.input).toHaveBeenCalledTimes(1)
+    expect(t.arcade?.nap).toHaveBeenCalledWith(true)
+  })
+
+  it('turned off, asleep eyes reach no game', async () => {
+    const t = setup()
+    await t.finishLoad()
+    t.setEnabled(false)
+    t.wiring.nap(true)
+    expect(t.arcade?.nap).not.toHaveBeenCalled()
   })
 
   it('passes the game’s gaze to the eyes, and hands them back when turned off', async () => {

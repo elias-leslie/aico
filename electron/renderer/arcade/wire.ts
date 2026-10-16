@@ -23,6 +23,8 @@ export interface ArcadeWiring {
   output(on: boolean): void
   /** The user typed into the terminal. */
   input(): void
+  /** The window's eyes fell asleep (true) or woke (false); off, nothing runs. */
+  nap(on: boolean): void
 }
 
 const logError = (err: unknown): void => console.error('[arcade]', err)
@@ -91,5 +93,6 @@ export function wireArcade(bar: HTMLElement, deps: ArcadeDeps): ArcadeWiring {
   return {
     output: (on) => arcade?.output(on),
     input: () => arcade?.input(),
+    nap: (on) => arcade?.nap(on),
   }
 }

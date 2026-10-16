@@ -2,6 +2,8 @@
 // titlebar. One canvas over the bar, sprites built once, a loop that runs at
 // 12 fps only while something moves, 4 fps for slow drifts, and parks (no timer
 // at all) when the vignette rests, the window is hidden, or nobody is around.
+// When the window's eyes fall asleep the vignette naps: its nap hooks run once,
+// it plays on for a few seconds at most, then parks until something wakes it.
 //
 // Concepts (./concepts/*.js) are plain scripts written against a small global
 // API (sprite helpers, constants, registerConcept), which installGlobals()
@@ -105,6 +107,8 @@ export const SPILL_UP = 8
 export const FAST = 1000 / 12
 export const SLOW = 250
 export const REST_AFTER = 30_000 // quiet ms before a vignette settles
+/** Once napping, the vignette plays this long at most before it parks. */
+export const NAP_PLAY_MS = 4000
 const rand = (a: number, b: number): number => a + Math.random() * (b - a)
 const pick = <T>(a: readonly T[]): T => a[Math.floor(Math.random() * a.length)] as T
 const clamp = (v: number, a: number, b: number): number => Math.max(a, Math.min(b, v))
@@ -341,6 +345,8 @@ export class Strip {
   busySince = 0
   lastTouch = performance.now()
   napping = false
+  /** While napping: when the loop parks whatever the vignette asks for. */
+  private napUntil = 0
   visible = !document.hidden
   data: Record<string, unknown> = {}
   mode = 'parked'
@@ -572,8 +578,31 @@ export class Strip {
   bonk(el: HTMLElement, kind?: string): void {
     const r = this.rel(el)
     this.lastTouch = performance.now()
+    this.napping = false
     for (const a of this.actors) a.bonked?.(r, kind)
     this.def.onBonk?.(this, r, kind)
+    this.poke()
+  }
+
+  /**
+   * The window's eyes fell asleep (true) or woke (false). Asleep, the vignette
+   * naps: every nap hook runs once, it settles for NAP_PLAY_MS at most, then
+   * parks. Waking only ends the nap; anything lively (cursor, keys, work, a
+   * click) ends it on its own too.
+   */
+  nap(on: boolean): void {
+    if (on === this.napping) return
+    this.napping = on
+    if (on) {
+      this.napUntil = performance.now() + NAP_PLAY_MS
+      try {
+        for (const a of this.actors) a.onNap?.()
+        this.def.onNap?.(this)
+      } catch (err) {
+        this.fail(err)
+        return
+      }
+    }
     this.poke()
   }
 
@@ -611,6 +640,7 @@ export class Strip {
       const p = local(e)
       const actor = this.actorAt(p)
       this.lastTouch = performance.now()
+      this.napping = false
       if (!actor) return
       this.arm(true, p)
       e.preventDefault()
@@ -757,10 +787,7 @@ export class Strip {
       for (const a of this.actors)
         if (!a.dead) want = Math.min(want, a.update(dt, now, this) ?? Infinity)
     } catch (err) {
-      // A broken vignette must never take the window with it: stop drawing.
-      console.error('[arcade]', this.kind, err)
-      this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height)
-      this.mode = 'failed'
+      this.fail(err)
       return Infinity
     }
     this.actors = this.actors.filter((a) => !a.dead)
@@ -776,6 +803,8 @@ export class Strip {
     })
     if (this.parts.length) want = Math.min(want, slowOnly ? SLOW : FAST)
     want = Math.max(want, FAST) // 12 fps is the ceiling, whatever a vignette asks for
+    // a nap plays briefly, then parks however the vignette stands
+    if (this.napping && now >= this.napUntil) want = Infinity
     this.updateGaze()
     this.draw()
     this.mode =
@@ -788,6 +817,12 @@ export class Strip {
             : 'waiting'
     this.nextAt = now + (want === Infinity ? 1e12 : want)
     return want
+  }
+  /** A broken vignette must never take the window with it: stop drawing. */
+  private fail(err: unknown): void {
+    console.error('[arcade]', this.kind, err)
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height)
+    this.mode = 'failed'
   }
   /** With no cursor about, the eyes follow the nearest moving character. */
   private updateGaze(): void {

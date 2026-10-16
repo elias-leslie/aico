@@ -411,6 +411,22 @@ describe('timers', () => {
     expect(f.root.classes.has('snore')).toBe(true)
   })
 
+  it('says once when the eyes fall asleep and once when they wake', () => {
+    const f = face()
+    const heard: boolean[] = []
+    f.eyes.onSleep((asleep) => heard.push(asleep))
+    vi.advanceTimersByTime(ASLEEP_AFTER_MS - 5000)
+    expect(heard).toEqual([])
+    vi.advanceTimersByTime(10_000) // the next snore settles the mood
+    expect(heard).toEqual([true])
+    vi.advanceTimersByTime(60_000)
+    expect(heard).toEqual([true])
+    f.eyes.noticeInput()
+    expect(heard).toEqual([true, false])
+    vi.advanceTimersByTime(60_000)
+    expect(heard).toEqual([true, false])
+  })
+
   it('dispose clears every timer, the click handler and a half-played blink', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0.9) // nudge
     const f = face({ focused: true })

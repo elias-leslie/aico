@@ -11,6 +11,8 @@ export interface Arcade {
   output(on: boolean): void
   /** The user typed into the terminal. */
   input(): void
+  /** The window's eyes fell asleep (true) or woke (false): the game naps. */
+  nap(on: boolean): void
   /** Swap to another game (one this window hasn't shown yet). */
   next(): Promise<void>
   /** Swap to this game. */
@@ -60,6 +62,7 @@ export async function startArcade(
       gate.input()
       strip?.touch()
     },
+    nap: (on) => strip?.nap(on),
     next: async () => {
       if (swapping) return
       swapping = true
