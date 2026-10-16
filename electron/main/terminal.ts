@@ -47,7 +47,14 @@ interface TerminalDeps {
   catalog: Pick<SessionCatalog, 'get' | 'upsert'>
   registry: Pick<
     WindowRegistry,
-    'sessionOf' | 'pending' | 'hasSession' | 'senderWindow' | 'senderSession' | 'byId' | 'all'
+    | 'sessionOf'
+    | 'pending'
+    | 'hasSession'
+    | 'senderWindow'
+    | 'senderSession'
+    | 'byId'
+    | 'all'
+    | 'forSession'
   >
   /** A new session's window now shows it (windows.bind). */
   bind(win: BrowserWindow, descriptor: SessionDescriptor): void
@@ -97,6 +104,12 @@ export function createTerminal(deps: TerminalDeps) {
   >()
   // Windows whose attach waits for Tether to come back, with their last grid.
   const awaitingTether = new Map<number, PtySize>()
+  // Windows still bound to a session whose terminal link is gone (the pane or
+  // tmux died, or attach was refused), with the session generation it was lost
+  // on and the last grid. When Tether brings that session back running with a
+  // different generation (crash recovery, reboot restore), the same window
+  // reattaches. One attempt per generation, so a failing attach cannot loop.
+  const linkLost = new Map<number, { generation: string | undefined; size: PtySize }>()
 
   async function runTmux(
     target: AttachTarget,
@@ -130,6 +143,7 @@ export function createTerminal(deps: TerminalDeps) {
       ptys.delete(winId)
     }
     awaitingTether.delete(winId)
+    linkLost.delete(winId)
 
     let widgetId = registry.sessionOf(winId)
     if (!widgetId) {
@@ -169,6 +183,8 @@ export function createTerminal(deps: TerminalDeps) {
       target = await tether.attach(widgetId)
     } catch (error) {
       if (error instanceof TetherUnavailable) awaitingTether.set(winId, size)
+      else if (stillCurrent())
+        linkLost.set(winId, { generation: catalog.get(widgetId)?.generation, size })
       if (stillCurrent()) writeNotice(win, describeFailure('Could not attach', error))
       deps.tray()
       return
@@ -179,6 +195,7 @@ export function createTerminal(deps: TerminalDeps) {
     try {
       pty = openLink(winId, target, size)
     } catch (error) {
+      linkLost.set(winId, { generation: target.generation, size })
       writeNotice(win, describeFailure('Could not attach', error))
       return
     }
@@ -238,7 +255,14 @@ export function createTerminal(deps: TerminalDeps) {
       if (ptys.get(winId) === pty) {
         ptys.delete(winId)
         attachTargets.delete(winId)
-        if (!deps.isQuitting()) deps.requestRefresh()
+        if (!deps.isQuitting()) {
+          if (!win.isDestroyed())
+            linkLost.set(winId, {
+              generation: target.generation,
+              size: { cols: pty.cols, rows: pty.rows },
+            })
+          deps.requestRefresh()
+        }
       }
     })
     ptys.set(winId, pty)
@@ -270,6 +294,22 @@ export function createTerminal(deps: TerminalDeps) {
           .catch((error) => console.error('[aico] PTY restart failed:', error))
       }
     }
+  }
+
+  /** Tether reported this session: if its window lost its terminal link and the
+   * session is running again under a new generation, reattach that window. */
+  function sessionSeen(descriptor: SessionDescriptor): void {
+    if (descriptor.status !== 'running' || deps.isQuitting()) return
+    const win = registry.forSession(descriptor.id)
+    if (!win || win.isDestroyed()) return
+    const lost = linkLost.get(win.id)
+    if (!lost || lost.generation === descriptor.generation) return
+    if (ptys.has(win.id)) return
+    linkLost.delete(win.id)
+    console.log(`[aico] reattaching widget=${descriptor.id}: session is running again`)
+    void startPty(win, lost.size)
+      .then(() => deps.titles())
+      .catch((error) => console.error('[aico] PTY reattach failed:', error))
   }
 
   function ptyFor(sender: Electron.WebContents): TerminalLink | undefined {
@@ -396,6 +436,8 @@ export function createTerminal(deps: TerminalDeps) {
   return {
     /** Tether is back: start every terminal that was waiting for it. */
     resumeAwaiting: resumeAwaitingAttaches,
+    /** Tether reported this session (event or complete list). */
+    sessionSeen,
     /** The window gained focus: claim the session's size for its terminal. */
     claimSize: (winId: number): void => {
       const pty = ptys.get(winId)
@@ -410,6 +452,7 @@ export function createTerminal(deps: TerminalDeps) {
         ptys.delete(winId)
       }
       awaitingTether.delete(winId)
+      linkLost.delete(winId)
       attachTargets.delete(winId)
       transportOf.delete(winId)
       ptyStartGenerations.delete(winId)

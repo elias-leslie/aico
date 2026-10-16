@@ -30,6 +30,7 @@ class FakeWindow {
   readonly focus = vi.fn()
   readonly loadURL = vi.fn()
   readonly loadFile = vi.fn()
+  readonly reload = vi.fn()
   readonly webContents = {
     send: vi.fn(),
     setWindowOpenHandler: vi.fn(),
@@ -239,6 +240,54 @@ describe('windows: focus and blur', () => {
     const win = only()
     for (const fn of win.contentListeners.get('did-finish-load') ?? []) fn()
     expect(hooks.loaded).toHaveBeenCalledWith(win)
+  })
+})
+
+describe('windows: renderer gone', () => {
+  const gone = (win: FakeWindow, reason = 'oom') => {
+    for (const fn of win.contentListeners.get('render-process-gone') ?? [])
+      fn({}, { reason, exitCode: 9 })
+  }
+
+  it('reloads a window whose renderer died, at most once per 10 s', () => {
+    vi.useFakeTimers()
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { windows, only } = setup()
+    windows.focusOrReopen('aaaaaaaa')
+    const win = only()
+    gone(win)
+    expect(win.reload).toHaveBeenCalledTimes(1)
+    // Dies again at once: the next reload waits for the 10 s mark, and further
+    // deaths in the meantime add nothing.
+    vi.advanceTimersByTime(2_000)
+    gone(win, 'crashed')
+    gone(win, 'killed')
+    vi.advanceTimersByTime(7_999)
+    expect(win.reload).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(1)
+    expect(win.reload).toHaveBeenCalledTimes(2)
+    // Quiet for longer than 10 s: the next death reloads at once.
+    vi.advanceTimersByTime(30_000)
+    gone(win)
+    expect(win.reload).toHaveBeenCalledTimes(3)
+  })
+
+  it('does not reload after a clean exit, while quitting, or once the window is gone', () => {
+    vi.useFakeTimers()
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { windows, state, only } = setup()
+    windows.focusOrReopen('aaaaaaaa')
+    const win = only()
+    gone(win, 'clean-exit')
+    expect(win.reload).not.toHaveBeenCalled()
+    gone(win)
+    gone(win) // waits for the 10 s mark
+    win.emit('closed')
+    vi.advanceTimersByTime(20_000)
+    expect(win.reload).toHaveBeenCalledTimes(1)
+    state.quitting = true
+    gone(win)
+    expect(win.reload).toHaveBeenCalledTimes(1)
   })
 })
 

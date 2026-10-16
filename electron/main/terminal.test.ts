@@ -447,6 +447,95 @@ describe('starting a session', () => {
   })
 })
 
+describe('reattaching when the session comes back', () => {
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
+
+  it('a window whose pane died reattaches once the session runs under a new generation', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    const s = setup()
+    const link = await attached(s, { cols: 120, rows: 40 })
+    link.emitExit()
+    // Still the old workload, or not running yet: nothing to attach to.
+    s.terminal.sessionSeen(descriptor('aaaaaaaa'))
+    s.terminal.sessionSeen(descriptor('aaaaaaaa', { generation: 'g2', status: 'uncertain' }))
+    await settle()
+    expect(s.tether.attach).toHaveBeenCalledTimes(1)
+    s.tether.attach.mockResolvedValueOnce(target('g2'))
+    s.terminal.sessionSeen(descriptor('aaaaaaaa', { generation: 'g2' }))
+    await vi.waitFor(() => expect(s.links).toHaveLength(2))
+    expect(s.tether.attach).toHaveBeenLastCalledWith('aaaaaaaa')
+    expect(s.links[1].cols).toBe(120)
+    expect(s.links[1].rows).toBe(40)
+    // Attached again: later reports of the same or a newer generation leave it be.
+    s.terminal.sessionSeen(descriptor('aaaaaaaa', { generation: 'g2' }))
+    s.terminal.sessionSeen(descriptor('aaaaaaaa', { generation: 'g3' }))
+    await settle()
+    expect(s.tether.attach).toHaveBeenCalledTimes(2)
+    // The window's input reaches the new link.
+    s.on.get('pty:input')?.(s.from(s.all[0]), 'x')
+    expect(s.links[1].write).toHaveBeenCalledWith('x')
+  })
+
+  it('tries once per generation, so a refused or dying attach cannot loop', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    const s = setup()
+    const link = await attached(s)
+    link.emitExit()
+    s.catalog.upsert(descriptor('aaaaaaaa', { generation: 'g2' }))
+    s.tether.attach.mockRejectedValueOnce(new TetherError(409, 'workload_unavailable', {}))
+    s.terminal.sessionSeen(descriptor('aaaaaaaa', { generation: 'g2' }))
+    await vi.waitFor(() => expect(s.tether.attach).toHaveBeenCalledTimes(2))
+    await settle()
+    s.terminal.sessionSeen(descriptor('aaaaaaaa', { generation: 'g2' }))
+    await settle()
+    expect(s.tether.attach).toHaveBeenCalledTimes(2)
+    // A link that exits at once is lost on its own generation: no retry either.
+    s.tether.attach.mockResolvedValueOnce(target('g3'))
+    s.terminal.sessionSeen(descriptor('aaaaaaaa', { generation: 'g3' }))
+    await vi.waitFor(() => expect(s.links).toHaveLength(2))
+    s.links[1].emitExit()
+    s.terminal.sessionSeen(descriptor('aaaaaaaa', { generation: 'g3' }))
+    await settle()
+    expect(s.tether.attach).toHaveBeenCalledTimes(3)
+  })
+
+  it('a window whose attach was refused attaches once the session runs again', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    const s = setup()
+    s.catalog.upsert(descriptor('aaaaaaaa', { status: 'uncertain' }))
+    s.registry.bindSession(1, 'aaaaaaaa')
+    s.tether.attach.mockRejectedValueOnce(new TetherError(409, 'workload_unavailable', {}))
+    s.on.get('pty:start')?.(s.from(s.all[0]), { cols: 90, rows: 25 })
+    await vi.waitFor(() => expect(s.tether.attach).toHaveBeenCalledTimes(1))
+    await settle()
+    s.terminal.sessionSeen(descriptor('aaaaaaaa', { generation: 'g2' }))
+    await vi.waitFor(() => expect(s.links).toHaveLength(1))
+    expect(s.links[0].cols).toBe(90)
+  })
+
+  it('never reattaches a forgotten window, a live link, another session, or while quitting', async () => {
+    const s = setup()
+    // A live link is left alone when the generation moves (a pane respawn).
+    await attached(s)
+    s.terminal.sessionSeen(descriptor('aaaaaaaa', { generation: 'g2' }))
+    await settle()
+    expect(s.tether.attach).toHaveBeenCalledTimes(1)
+    // A lost link while quitting, then for another session's report.
+    s.links[0].emitExit()
+    s.terminal.sessionSeen(descriptor('bbbbbbbb', { generation: 'g2' }))
+    s.state.quitting = true
+    s.terminal.sessionSeen(descriptor('aaaaaaaa', { generation: 'g3' }))
+    await settle()
+    expect(s.tether.attach).toHaveBeenCalledTimes(1)
+    // The window closed (or its session ended): it is forgotten.
+    s.state.quitting = false
+    s.terminal.forget(1)
+    s.terminal.sessionSeen(descriptor('aaaaaaaa', { generation: 'g4' }))
+    await settle()
+    expect(s.tether.attach).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('forget', () => {
   it('detaches the link and drops the window, so input no longer reaches it', async () => {
     const s = setup()

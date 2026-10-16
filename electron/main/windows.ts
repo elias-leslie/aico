@@ -10,6 +10,9 @@ import type { SessionDescriptor } from './tether-client'
 import type { Bounds, ViewRow } from './views'
 import type { PendingCreate, WindowRegistry } from './window-registry'
 
+/** A window's renderer is reloaded after it dies at most this often. */
+export const RELOAD_INTERVAL_MS = 10_000
+
 interface BrowserWindowCtor {
   new (options: Electron.BrowserWindowConstructorOptions): BrowserWindow
   fromId(id: number): BrowserWindow | null
@@ -162,11 +165,27 @@ export function createWindows(deps: WindowsDeps) {
         }
       },
     )
+    // A renderer killed under memory pressure (or crashed) leaves a blank window
+    // over a live session: reload it, at most once per RELOAD_INTERVAL_MS, so a
+    // renderer that keeps dying cannot spin. The reloaded page reattaches its
+    // terminal as on any load; the session itself was never touched.
+    let lastReloadAt = Number.NEGATIVE_INFINITY
+    let reloadTimer: NodeJS.Timeout | null = null
+    const reloadRenderer = () => {
+      reloadTimer = null
+      if (win.isDestroyed() || deps.isQuitting()) return
+      lastReloadAt = Date.now()
+      win.reload()
+    }
     win.webContents.on('render-process-gone', (_event, details) => {
       console.error(
         `[aico:renderer] widget=${row.id} process gone reason=${details.reason} ` +
           `exit_code=${details.exitCode}`,
       )
+      if (details.reason === 'clean-exit' || reloadTimer || deps.isQuitting()) return
+      const wait = lastReloadAt + RELOAD_INTERVAL_MS - Date.now()
+      if (wait <= 0) reloadRenderer()
+      else reloadTimer = setTimeout(reloadRenderer, wait)
     })
 
     const winId = win.id
@@ -219,6 +238,8 @@ export function createWindows(deps: WindowsDeps) {
     })
 
     win.on('closed', () => {
+      if (reloadTimer) clearTimeout(reloadTimer)
+      reloadTimer = null
       const widgetId = registry.sessionOf(winId)
       // Detaches the terminal first; the session persists (close = keep, reopenable).
       hooks.disposing(winId)

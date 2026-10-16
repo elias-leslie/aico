@@ -155,7 +155,11 @@ const link = createTetherLink({
   projects,
   dialog,
   hooks: {
-    agentState: (descriptor) => attention.update(descriptor),
+    agentState: (descriptor) => {
+      attention.update(descriptor)
+      // A window that lost its terminal reattaches once its session runs again.
+      terminal.sessionSeen(descriptor)
+    },
     removed: (id) => attention.removed(id),
     destroyWindow: (id) => windows.destroyFor(id),
     closeEnded: (id) => windows.closeEnded(id),
