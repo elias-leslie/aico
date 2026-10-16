@@ -47,3 +47,6 @@ Requires Tether API v1. Install and start Tether (`tether@default`) before Aico.
   `selections.db` file is left in place. `AICO_SIDECAR_ALLOW_REMOTE` and
   `AICO_SIDECAR_PYTHON` no longer exist, and the release build no longer
   bundles a PyInstaller sidecar.
+- The AppImage release pipeline: the GitHub release workflow, the
+  electron-builder config, `npm run dist` and the packaged-app smoke. Aico
+  installs from source only.

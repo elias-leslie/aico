@@ -12,7 +12,6 @@
     "build": "electron-vite build",
     "dev": "electron-vite dev",
     "rebuild": "electron-rebuild -f -w node-pty",
-    "dist": "npm run build && electron-builder --linux AppImage --publish never",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:scripts": ".venv/bin/python -m pytest scripts/tests",
@@ -42,20 +41,6 @@
   "overrides": {
     "app-builder-lib": {
       "@electron/get": "5.1.0"
-    }
-  },
-  "build": {
-    "appId": "dev.eliasleslie.aico",
-    "productName": "Aico",
-    "directories": { "output": "dist/electron" },
-    "files": ["out/**/*", "package.json", "assets/icon.png", "assets/tray/*.png"],
-    "asarUnpack": ["**/node_modules/node-pty/**"],
-    "linux": {
-      "target": ["AppImage"],
-      "category": "Development",
-      "icon": "assets/icon.png",
-      "executableName": "aico",
-      "syncDesktopName": true
     }
   }
 }

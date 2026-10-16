@@ -1,6 +1,6 @@
 # Install and develop Aico
 
-Install Aico from source. AppImage releases are frozen: the ones on the [Releases page](https://github.com/elias-leslie/aico/releases) (latest v0.1.1, June 2026) predate the move to Tether and manage tmux sessions themselves, and no AppImage is built from the current code on `main`, which requires Tether.
+Install Aico from source; there is no packaged build. The old AppImages on the [Releases page](https://github.com/elias-leslie/aico/releases) (v0.1.0 and v0.1.1, June 2026) predate the move to Tether, manage tmux sessions themselves and are unsupported.
 
 ## System packages
 
@@ -109,12 +109,6 @@ Run the Electron app from the checkout:
 
 ```bash
 npm start
-```
-
-AppImage builds are frozen and unsupported for current code. The build command remains:
-
-```bash
-npm run dist
 ```
 
 ## Optional integrations

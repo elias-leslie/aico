@@ -130,7 +130,7 @@ export function createTray(
   tools = newWidgetTools
   projects = newWidgetProjects
   // createFromPath returns an empty image instead of throwing, which would
-  // leave a blank tray slot. Say so; the packaged smoke fails on this line.
+  // leave a blank tray slot. Say so in the journal.
   if (idleImage.isEmpty() || activeImage.isEmpty() || needsYouImage.isEmpty()) {
     console.error(`[aico] tray icon failed to load from ${iconsDir}`)
   }

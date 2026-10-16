@@ -34,9 +34,7 @@ Recommended for the full desktop experience:
 
 ## Quickstart
 
-### AppImages (frozen)
-
-AppImage releases are frozen. The ones on the [Releases](https://github.com/elias-leslie/aico/releases) page (latest v0.1.1, June 2026) predate the move to Tether: they manage tmux sessions themselves and do not match this guide. Install from source ([INSTALL.md](INSTALL.md)).
+Aico installs from source; there is no packaged build. The old AppImages on the [Releases](https://github.com/elias-leslie/aico/releases) page (v0.1.0 and v0.1.1, June 2026) predate the move to Tether: they manage tmux sessions themselves and do not match this guide.
 
 ### Build from source
 
@@ -71,28 +69,6 @@ For a one-off foreground run during development:
 ```bash
 npm start
 ```
-
-## Standalone AppImage (frozen)
-
-AppImage builds are frozen: the release workflow runs only when started by hand,
-and nothing here is tested against current code. The build path remains for
-reference:
-
-```bash
-npm run dist
-```
-
-This builds the Electron app and emits `dist/electron/Aico-<version>.AppImage`. Run it
-directly:
-
-```bash
-chmod +x dist/electron/Aico-*.AppImage
-./dist/electron/Aico-*.AppImage
-```
-
-Tether, `tmux` and whichever terminal AI CLIs you launch (`claude`, `codex`, …)
-remain runtime prerequisites. The browser-driven context capture is part of
-the app and needs no extra setup.
 
 ## Configuration
 
@@ -221,7 +197,7 @@ The `st aico` extension's client lives in Tether; `scripts/aico-root-watch.py` h
 
 - Linux desktop is the supported path. macOS and Windows packaging are not implemented.
 - X11 is the best-supported session for global shortcuts.
-- AppImage releases are frozen: the published `Aico-*.AppImage` releases predate Tether, and none is built from current code. `.deb` packaging is not implemented.
+- There is no packaged build (AppImage or `.deb`); the old published AppImages predate Tether and are unsupported.
 - The browser extension is loaded unpacked for development; it is not published in a browser store.
 
 ## License

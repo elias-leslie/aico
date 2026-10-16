@@ -18,7 +18,7 @@ Aico targets a single-user Linux desktop. X11 is the best-supported path for glo
 
 ## Getting started
 
-Install from source. AppImage releases are frozen: the ones on the [Releases page](https://github.com/elias-leslie/aico/releases) (latest v0.1.1, June 2026) predate the move to Tether and manage tmux sessions themselves, and no AppImage is built from the current code, which requires Tether.
+Install from source; there is no packaged build. The old AppImages on the [Releases page](https://github.com/elias-leslie/aico/releases) (v0.1.0 and v0.1.1, June 2026) predate the move to Tether, manage tmux sessions themselves and are unsupported.
 
 ```bash
 git clone https://github.com/elias-leslie/aico.git
@@ -30,7 +30,7 @@ scripts/aico-launch.sh
 
 The installer refuses to continue until `tether --json version` reports API v1 or later, then installs the `aico-shell.service` user unit for this checkout. Electron's sandbox needs user namespaces. When the kernel restricts them, the installer offers an AppArmor profile. Only when namespaces stay unavailable (no profile installed, or the kernel turns them off) does it offer Electron's setuid `chrome-sandbox` helper. It prints these `sudo` steps and runs them only after an interactive yes or with `AICO_INSTALL_PRIVILEGED=1`. Configuration comes from environment variables, not a `.env` file.
 
-Source builds need Node.js 22+, npm, Python 3.13+, uv, and native `node-pty` build tools. The [project guide](docs/project-guide.md) retains packaging and installation details.
+Source builds need Node.js 22+, npm, Python 3.13+, uv, and native `node-pty` build tools. The [project guide](docs/project-guide.md) has the installation details.
 
 ## Runtime, data, and integrations
 
@@ -46,11 +46,11 @@ uv sync --frozen --python 3.13 --extra dev
 npm run check
 ```
 
-The npm gate runs lint, type checks, the TypeScript tests, the root-watch entry test, and build. Session lifecycle is verified in the Tether repo. The packaged-app smoke (`scripts/aico-packaged-smoke.sh`) stays with the frozen AppImage build. Avoid broad process-name cleanup. The author also runs these checks through his workspace tool (`st check`).
+The npm gate runs lint, type checks, the TypeScript tests, the root-watch entry test, and build. Session lifecycle is verified in the Tether repo. Avoid broad process-name cleanup. The author also runs these checks through his workspace tool (`st check`).
 
 ## Documentation
 
-- [Project guide](docs/project-guide.md) for features, configuration, APIs, packaging, and limitations.
+- [Project guide](docs/project-guide.md) for features, configuration, APIs, and limitations.
 - [Source installation](docs/INSTALL.md) and [browser extension](extension/README.md).
 - [Glossary](docs/glossary.md) and [root control](docs/root-control.md) (the contract itself lives in Tether).
 - [History](docs/history/README.md): the Tether cutover runbook, Tether API gaps and the July 2026 assessment; the [process incident/recovery report](docs/INCIDENT-2026-07-PROCESS-ESCAPES.md) (lifecycle now lives in Tether).
