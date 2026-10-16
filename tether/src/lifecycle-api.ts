@@ -85,6 +85,7 @@ import { getTui } from './lifecycle/tui/registry'
 import { paneModeArgs, parsePaneMode } from './pane-mode'
 import type { Project, ProjectProvider } from './projects'
 import { type Continuity, registerRebootRoutes } from './reboot'
+import { type Recovery, registerRecoveryRoutes } from './recovery'
 import type { Store } from './store'
 
 const execFileAsync = promisify(execFile)
@@ -121,6 +122,8 @@ export interface LifecycleApiContext {
   projectRoots: Map<string, string>
   /** Reboot continuity; absent when reconciliation is off (test instances). */
   continuity?: Continuity
+  /** Crash recovery; absent when reconciliation is off. */
+  recovery?: Recovery
 }
 
 /** The daemon's agent-state tracker; unbound in tests and scratch instances. */
@@ -425,6 +428,7 @@ export function rootOperations(context: LifecycleApiContext): RootControlOperati
         notifySessionChanged(id, { force: true })
     },
     validate: (request) => Boolean(getTui(request.tool)?.enabled && isDir(request.projectRoot)),
+    resumeOwner: (resumeSessionId) => context.recovery?.resumeOwner(resumeSessionId) ?? null,
     ensure: async (widgetId, prompt, resumeSessionId) => {
       await whenReady()
       const row = getWidget(widgetId)
@@ -505,6 +509,7 @@ export function learnProjects(
 
 export function registerLifecycleRoutes(router: Router, context: LifecycleApiContext): void {
   if (context.continuity) registerRebootRoutes(router, context.continuity)
+  if (context.recovery) registerRecoveryRoutes(router, context.recovery)
   const { store, events, gui } = context
   const rootHandler = createRootHandler(rootOperations(context), { ownerFromOrigin: true })
   const root = (req: IncomingMessage, res: ServerResponse) => rootHandler(req, res)

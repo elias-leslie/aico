@@ -32,6 +32,7 @@ import { withRootPrompt } from './lifecycle/root-launch'
 import { isResumeSessionId } from './lifecycle/tui/launch'
 import { getTui } from './lifecycle/tui/registry'
 import { generationOf, type LifecycleApiContext, pasteIntoRunningSession } from './lifecycle-api'
+import type { Recovery } from './recovery'
 
 const OBSERVE_INTERVAL_MS = 60_000
 const RESTORE_RETRY_MS = 30_000
@@ -93,6 +94,8 @@ export class Continuity {
   private readonly desktopReady: () => boolean
   /** Sessions still waiting to be restored; the observer keeps them listed. */
   private readonly awaitingRestore = new Set<string>()
+  /** Crash recovery: told about each agent session on every pass. */
+  private recovery: Recovery | null = null
 
   constructor(
     private readonly context: LifecycleApiContext,
@@ -123,6 +126,14 @@ export class Continuity {
     this.timer = null
   }
 
+  setRecovery(recovery: Recovery | null): void {
+    this.recovery = recovery
+  }
+
+  isAwaitingRestore(id: string): boolean {
+    return this.awaitingRestore.has(id)
+  }
+
   /** One serialized pass over running sessions; rewrites continuity.json. */
   observe(): Promise<Observed[]> {
     if (!this.observing) {
@@ -143,7 +154,10 @@ export class Continuity {
       } catch {
         continue
       }
-      if (status !== 'running') continue
+      if (status !== 'running') {
+        if (isAgent(row.tool)) await this.recovery?.inspect(row, status, null, null).catch(() => {})
+        continue
+      }
       let resumeId: string | null = null
       let idle: boolean | null = null
       let blocked = false
@@ -153,13 +167,16 @@ export class Continuity {
         if (agent && isResumeSessionId(getTui(row.tool), agent.resumeId)) resumeId = agent.resumeId
         idle = agent?.idle ?? null
         blocked = agent?.blocked ?? false
+        await this.recovery
+          ?.inspect(row, status, pane?.pid ?? null, agent?.pid ?? null)
+          .catch(() => {})
       }
       observed.push({ row, resumeId, idle, blocked })
     }
     const snapshot = mergeSnapshot(
       readJsonFile<ContinuitySnapshot>(this.snapshotPath),
       observed.map(({ row, resumeId }) => ({ id: row.id, tool: row.tool, resumeId })),
-      (id) => this.awaitingRestore.has(id),
+      (id) => this.awaitingRestore.has(id) || Boolean(this.recovery?.retains(id)),
       currentBootId(),
       this.now(),
     )
@@ -230,7 +247,10 @@ export class Continuity {
       const row = getWidget(session.id)
       if (row) statuses.set(row.id, await verifySessionStatus(row).catch(() => 'uncertain'))
     }
-    const candidates = restoreCandidates(snapshot, (id) => statuses.get(id) ?? null)
+    // A session crash recovery holds is resumed there, never twice.
+    const candidates = restoreCandidates(snapshot, (id) => statuses.get(id) ?? null).filter(
+      (session) => !this.recovery?.retains(session.id),
+    )
     if (candidates.length === 0) return null
     for (const session of candidates) this.awaitingRestore.add(session.id)
     const report: RestoreReport = {

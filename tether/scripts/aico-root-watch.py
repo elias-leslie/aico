@@ -933,7 +933,7 @@ def create_main(argv: list[str]) -> int:
             fields.append(args.resume_session)
         digest = hashlib.sha256(json.dumps(fields, ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()
         status, data = collector.receipt(endpoint, "/v1/roots", payload, timeout=10)
-        errors = {400: ("invalid_body", "unsupported_tool"), 409: ("request_conflict",),
+        errors = {400: ("invalid_body", "unsupported_tool"), 409: ("request_conflict", "recovery_pending"),
                   422: ("launch_unavailable",), 503: ("gui_unavailable",)}
         if status not in (200, 202):
             reason = data.get("error")
@@ -943,6 +943,10 @@ def create_main(argv: list[str]) -> int:
             if (reason == "unsupported_tool" and isinstance(supported, list) and 0 < len(supported) <= 50
                     and all(isinstance(slug, str) and re.fullmatch(TOOL_SLUG, slug) for slug in supported)):
                 output["supportedTools"] = supported
+            # Tether is resuming this conversation in its own session after a crash.
+            if reason == "recovery_pending" and isinstance(data.get("widgetId"), str) \
+                    and re.fullmatch(WIDGET, data["widgetId"]):
+                output["recoveringWidget"] = data["widgetId"]
             raise Unavailable(reason)
         host = data.get("hostIdentity")
         generation = data.get("generation")

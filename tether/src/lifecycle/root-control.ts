@@ -81,6 +81,9 @@ export interface RootControlOperations {
   launched?(widgetId: string, launchedBy: string): void
   /** Tether: `POST /v1/roots/:requestId/end`, the shared session End. */
   end?(widgetId: string, generation: string): Promise<RetirementResult | { status: 'busy' }>
+  /** Tether: the session whose pending or held crash recovery will resume
+   * this native conversation, if any. */
+  resumeOwner?(resumeSessionId: string): string | null
 }
 
 /**
@@ -586,6 +589,15 @@ export function createRootHandler(
             return
           }
           if (!root) {
+            // Two agents must never resume one conversation: crash recovery
+            // resumes it in its own session.
+            const owner = input.resumeSessionId
+              ? (operations.resumeOwner?.(input.resumeSessionId) ?? null)
+              : null
+            if (owner) {
+              json(response, 409, { error: 'recovery_pending', widgetId: owner })
+              return
+            }
             if (!operations.validate(input)) {
               json(response, 422, { error: 'launch_unavailable' })
               return

@@ -18,7 +18,9 @@ import {
   endSession,
   flushSessionEvents,
   notifySessionChanged,
+  onAbandonedScope,
   setGenerationFunction,
+  setLaunchGuard,
   setSessionSnapshotFunction,
   startLifecycle,
   stopLifecycle,
@@ -38,6 +40,7 @@ import {
 } from './lifecycle-api'
 import { activeProjectFileFromEnv, ProjectProvider, summitflowUrlFromEnv } from './projects'
 import { Continuity } from './reboot'
+import { Recovery } from './recovery'
 import { createTetherServer } from './server'
 import { Store } from './store'
 import { VERSION } from './version'
@@ -127,12 +130,21 @@ export async function startDaemon(
     activeProjectFile: activeProjectFileFromEnv(env, env.HOME ?? homedir()),
     startedAt: Date.now(),
     continuity: undefined as Continuity | undefined,
+    recovery: undefined as Recovery | undefined,
   }
   if (reconcileEnabled(env)) {
     const graphical = () => userManagerGraphicalEnvironment()
-    context.continuity = new Continuity(context, {
+    const continuity = new Continuity(context, {
       desktopReady: () => Boolean(graphical().DISPLAY || graphical().WAYLAND_DISPLAY),
     })
+    const recovery = new Recovery(context, {
+      awaitingRestore: (id) => continuity.isAwaitingRestore(id),
+    })
+    continuity.setRecovery(recovery)
+    onAbandonedScope((event) => recovery.onAbandoned(event))
+    setLaunchGuard((id) => recovery.holdsLaunch(id))
+    context.continuity = continuity
+    context.recovery = recovery
   }
   const server = createTetherServer(context)
   const legacyServers: Server[] = []
@@ -176,6 +188,7 @@ export async function startDaemon(
   const projectNames = setInterval(learn, PROJECT_NAMES_MS)
   projectNames.unref()
   void context.continuity?.start()
+  void ready.then(() => context.recovery?.start()).catch(() => {})
   // Default instance only: Aico's exact legacy sockets, sharing the one
   // lifecycle lock and End path with the v1 API.
   if (paths.legacy && paths.legacyControlSocket && paths.legacyGuiSocket) {
@@ -207,6 +220,9 @@ export async function startDaemon(
       agentPoller.stop()
       bindAgentStates(null)
       context.continuity?.stop()
+      context.recovery?.stop()
+      onAbandonedScope(null)
+      setLaunchGuard(null)
       gui.close()
       await Promise.all([...legacyServers, server].map(closeServer))
       // Let in-flight reconciliation settle before the database closes.

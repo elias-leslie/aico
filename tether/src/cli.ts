@@ -18,6 +18,8 @@ Commands:
   sessions show <id>            open or focus the session's Aico window
   reboot prepare [--timeout SEC] [--no-notify]   ask agents to checkpoint; exit 0 ready, 3 not
   reboot status                 restore results since the last boot
+  recovery status               crash recoveries: waiting, recovered or held
+  recovery resume <id>          try a held session's recovery again now
   sessions end <id>             retire one session (reads its generation first)
   sessions attach <id> [--print]
                                 attach this terminal (exec tmux); --print shows
@@ -354,6 +356,11 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
           return (response.body as { ready?: boolean } | null)?.ready ? 0 : 3
         }
         if (sub === 'status') return api(io, paths, json, 'GET', '/v1/reboot/status')
+        break
+      case 'recovery':
+        if (sub === 'status') return api(io, paths, json, 'GET', '/v1/recovery/status')
+        if (sub === 'resume' && rest[0])
+          return api(io, paths, json, 'POST', `/v1/recovery/${encodeURIComponent(rest[0])}/resume`)
         break
       case 'import-aico': {
         const options = flags(

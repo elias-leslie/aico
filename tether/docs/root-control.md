@@ -224,6 +224,9 @@ The canonical digest covers every create field except the request key and the
 non-null resume UUID is appended as the eighth field. A transaction reserves the
 key, widget, and unique logical `ST_SESSION_ID` before launch. Matching retries
 reconcile the same widget; changed content returns 409 `request_conflict`.
+A new request whose resume UUID belongs to a session that crash recovery will
+resume, or holds, returns 409 `recovery_pending` with that `widgetId`
+([crash-recovery.md](crash-recovery.md)).
 Retirement keeps the request tombstone, so retries cannot recreate ended work.
 No prompt or transcript is stored in the catalog. Before first allocation, an
 interrupted request needs the same create body to supply its transient prompt

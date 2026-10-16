@@ -23,7 +23,7 @@ If an agent is between conversations, the session keeps the last resume ID Tethe
 3. Agent admission still applies. A launch that is deferred is retried every 30 seconds for up to 15 minutes, and after that it is reported as failed.
 4. If Aico is connected, Tether asks it to show each restored session.
 
-Ending a tmux server without a reboot takes the same path. That is how the behaviour is tested without rebooting the host. An ended session is deleted from the catalog, so it is never restored.
+Ending a tmux server and then restarting Tether takes the same path. That is how the behaviour is tested without rebooting the host. A server, pane or agent that dies while Tether keeps running goes through [crash recovery](crash-recovery.md) instead, with its own prompt and loop limits. An ended session is deleted from the catalog, so it is never restored.
 
 ## Nightshift interface
 
