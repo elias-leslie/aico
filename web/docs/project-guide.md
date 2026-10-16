@@ -131,7 +131,7 @@ journalctl --user -u a-term-frontend.service -f
 
 ## Remote Access
 
-A-Term listens on `localhost` by default. To access it from your phone, another machine, or anywhere on the internet, see the [Remote Access guide](../docs/remote-access.md) — covers Tailscale, Cloudflare Tunnel, and Caddy reverse proxy. Public deployments should use either built-in password auth or `proxy` mode behind an identity-aware gateway.
+A-Term answers on `localhost`, plus one public hostname through a Cloudflare tunnel. LAN, Tailscale and other reverse-proxy setups are refused by the Host guard. See the [Remote Access guide](remote-access.md). Put Cloudflare Access or built-in auth (`password` or `proxy`) in front of the public host.
 
 ## Tech Stack
 
