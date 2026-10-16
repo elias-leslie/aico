@@ -37,7 +37,7 @@ from typing import Literal
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRouter
-from starlette.datastructures import Headers, QueryParams, State
+from starlette.datastructures import URL, Headers, QueryParams, State
 from starlette.requests import cookie_parser
 from starlette.routing import BaseRoute, Match
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -253,7 +253,9 @@ def check(scope: Scope, routes: Iterable[BaseRoute], config: TrustConfig) -> All
     elif scope["type"] == "websocket":
         return Allow()  # no WebSocket route here: the router closes it
     else:
-        surface = _prefix_surface(scope["path"])
+        # Read the path as the old auth check did (request.url.path): it ends at a decoded ? or #, so
+        # /health%23x counts as /health. It only decides which refusal an unmatched path gets, never a handler.
+        surface = _prefix_surface(URL(scope=scope).path)
     return verdict(facts_from_scope(scope), surface, config)
 
 
