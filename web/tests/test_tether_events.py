@@ -112,10 +112,9 @@ def test_session_events_for_unlinked_sessions_cost_nothing(fake_tether: FakeTeth
     assert pane_store.get_link(session["id"]) is None
 
 
-def test_legacy_changed_touches_no_link(fake_tether: FakeTether) -> None:
-    """Tether still announces its pre-Tether session list; A-Term shows none of them."""
+def test_an_unknown_event_touches_no_link(fake_tether: FakeTether) -> None:
+    """An event A-Term doesn't handle, like an older Tether's legacy.changed, is ignored."""
     _linked("cdcdcdcd", "shell")
-    fake_tether.legacy_changed([])
-    TetherEventWatcher().handle(fake_tether.state.events[-1])
+    TetherEventWatcher().handle({"type": "legacy.changed", "data": {"names": []}})
     assert pane_store.get_link("cdcdcdcd") is not None
     assert _session_reads(fake_tether, "cdcdcdcd") == 0

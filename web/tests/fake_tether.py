@@ -628,10 +628,6 @@ class FakeTether:
             self.state.sessions[session_id].update(fields)
             self.state.session_event("session.updated", session_id)
 
-    def legacy_changed(self, names: list[str]) -> None:
-        with self.state.lock:
-            self.state.events.append({"type": "legacy.changed", "data": {"names": names}})
-
     @property
     def calls(self) -> list[tuple[str, str, Any]]:
         return self.state.calls
