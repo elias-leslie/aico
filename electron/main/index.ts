@@ -124,6 +124,7 @@ const windows = createWindows({
       ambient.focused(win.id)
     },
     blurred: (win) => ambient.blurred(win.id),
+    visibility: () => ambient.visibilityChanged(),
     disposing: (winId) => {
       // Terminal: detach first; the session persists (close = keep, reopenable).
       terminal.forget(winId)

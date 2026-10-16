@@ -23,6 +23,8 @@ interface WindowHooks {
   focused(win: BrowserWindow, sessionId: string | undefined): void
   /** Runs after the window is told it lost focus. */
   blurred(win: BrowserWindow): void
+  /** The window was shown, hidden, minimized or restored. */
+  visibility(win: BrowserWindow): void
   /** The window is gone: detach its terminal first, then drop per-window state. */
   disposing(winId: number): void
   /** The set of open windows changed. */
@@ -208,6 +210,8 @@ export function createWindows(deps: WindowsDeps) {
       'restore',
     ] as const)
       win.on(change as 'move', layout.scheduleWrite)
+    for (const change of ['show', 'hide', 'minimize', 'restore'] as const)
+      win.on(change as 'show', () => hooks.visibility(win))
     let closingBounds: Bounds | null = null
     win.on('close', () => {
       layout.persist(win) // final flush while bounds are still valid

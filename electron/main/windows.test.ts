@@ -109,6 +109,7 @@ function setup(o: { views?: ViewRow[]; live?: string[]; catalog?: string[] } = {
     loaded: vi.fn(),
     focused: vi.fn(),
     blurred: vi.fn(),
+    visibility: vi.fn(),
     disposing: vi.fn((winId: number) => {
       calls.push(`disposing ${winId} bound=${registry.sessionOf(winId) ?? '-'}`)
     }),
@@ -221,6 +222,15 @@ describe('windows: focus and blur', () => {
     win.emit('focus')
     win.emit('blur')
     expect(order).toEqual(['hook aaaaaaaa', 'win:focus true', 'win:focus false', 'blur hook'])
+  })
+
+  it('tells the root when the window is shown, hidden, minimized or restored', () => {
+    const { windows, hooks, only } = setup()
+    windows.focusOrReopen('aaaaaaaa')
+    const win = only()
+    for (const change of ['show', 'hide', 'minimize', 'restore', 'move', 'focus']) win.emit(change)
+    expect(hooks.visibility).toHaveBeenCalledTimes(4)
+    expect(hooks.visibility).toHaveBeenCalledWith(win)
   })
 
   it('tells the root when the renderer has loaded', () => {

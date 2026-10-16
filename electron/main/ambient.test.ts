@@ -1,6 +1,6 @@
 import type { BrowserWindow, IpcMainEvent, IpcMainInvokeEvent } from 'electron'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createAmbient } from './ambient'
+import { createAmbient, cursorPumpPeriod, onScreen } from './ambient'
 import { WindowRegistry } from './window-registry'
 
 function fakeWindow(id: number, bounds = { x: id * 1000, y: 0, width: 800, height: 600 }) {
@@ -160,6 +160,68 @@ describe('cursor pump', () => {
     state.cursor = { x: 1600, y: 1600 }
     vi.advanceTimersByTime(100)
     expect(win.webContents.send).toHaveBeenCalledTimes(2)
+  })
+
+  it('picks its period from games and unfocused windows someone can see', () => {
+    expect(cursorPumpPeriod(1, 0)).toBe(100)
+    expect(cursorPumpPeriod(2, 3)).toBe(100)
+    expect(cursorPumpPeriod(0, 1)).toBe(250)
+    expect(cursorPumpPeriod(0, 0)).toBe(0)
+    const win = (visible: boolean, minimized: boolean) => ({
+      isVisible: () => visible,
+      isMinimized: () => minimized,
+    })
+    expect(onScreen(win(true, false))).toBe(true)
+    expect(onScreen(win(false, false))).toBe(false)
+    expect(onScreen(win(true, true))).toBe(false)
+    expect(onScreen(win(false, true))).toBe(false)
+  })
+
+  it('skips hidden and minimized unfocused windows', () => {
+    const shown = fakeWindow(1)
+    const minimized = fakeWindow(2)
+    const hidden = fakeWindow(3)
+    minimized.minimized = true
+    hidden.visible = false
+    const { ambient, state } = setup({ windows: [shown, minimized, hidden], arcade: 'off' })
+    for (const w of [1, 2, 3]) ambient.blurred(w)
+    state.cursor = { x: 5, y: 6 }
+    vi.advanceTimersByTime(250)
+    expect(shown.webContents.send).toHaveBeenCalledWith('win:cursor', { x: 5, y: 6 })
+    expect(minimized.webContents.send).not.toHaveBeenCalled()
+    expect(hidden.webContents.send).not.toHaveBeenCalled()
+  })
+
+  it('stops while every unfocused window is minimized; restoring one resumes with a fresh send', () => {
+    const win = fakeWindow(1)
+    const { ambient, screen } = setup({ windows: [win], arcade: 'off' })
+    ambient.blurred(1)
+    vi.advanceTimersByTime(250)
+    expect(win.webContents.send).toHaveBeenCalledTimes(1)
+    win.minimized = true
+    ambient.visibilityChanged()
+    expect(vi.getTimerCount()).toBe(0)
+    vi.advanceTimersByTime(1000)
+    expect(screen.getCursorScreenPoint).toHaveBeenCalledTimes(1)
+    win.minimized = false
+    ambient.visibilityChanged()
+    vi.advanceTimersByTime(250)
+    // The cursor has not moved, but a restored window gets it once.
+    expect(win.webContents.send).toHaveBeenCalledTimes(2)
+    expect(win.webContents.send).toHaveBeenLastCalledWith('win:cursor', { x: 0, y: 0 })
+  })
+
+  it('keeps the 100 ms game pump while every window is minimized, as before', () => {
+    const win = fakeWindow(1)
+    const { ambient, call, screen } = setup({ windows: [win] })
+    call('arcade:assign', win, KEYS)
+    ambient.blurred(1)
+    win.minimized = true
+    win.visible = false
+    ambient.visibilityChanged()
+    vi.advanceTimersByTime(300)
+    expect(screen.getCursorScreenPoint).toHaveBeenCalledTimes(3)
+    expect(win.webContents.send).not.toHaveBeenCalled()
   })
 
   it('a closed window frees its game and the pump stops', () => {

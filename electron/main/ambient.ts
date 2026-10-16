@@ -3,7 +3,7 @@
 // looks at a window waiting too long, and which window shows which game
 // (arcade.ts). They share the cursor pump, so they live together.
 
-import type { IpcMain, Screen } from 'electron'
+import type { BrowserWindow, IpcMain, Screen } from 'electron'
 import { cursorNearTitlebar, nextArcade, parseArcadeKeys, pickArcade } from './arcade'
 import {
   allLookAt,
@@ -17,6 +17,19 @@ import type { WindowRegistry } from './window-registry'
 
 /** Every ~20 s, the other windows' eyes turn to each window waiting 2+ minutes. */
 const URGENT_LOOK_EVERY_MS = 20_000
+
+/** Someone can see this window: shown and not minimized. */
+export const onScreen = (win: { isVisible(): boolean; isMinimized(): boolean }): boolean =>
+  win.isVisible() && !win.isMinimized()
+
+/**
+ * How often the cursor pump runs: every 100 ms while any window has a game,
+ * every 250 ms while an unfocused window someone can see follows the cursor,
+ * otherwise not at all (0).
+ */
+export function cursorPumpPeriod(games: number, watching: number): number {
+  return games > 0 ? 100 : watching > 0 ? 250 : 0
+}
 
 interface AmbientDeps {
   registry: Pick<
@@ -38,7 +51,8 @@ export function createAmbient(deps: AmbientDeps) {
 
   // Eyes-follow-cursor: while any widget is unfocused, broadcast the global cursor
   // position so those widgets' eyes can track it. One shared interval feeds every
-  // window; the focused window ignores it and stares ahead. Windows running the
+  // window; the focused window ignores it and stares ahead. Hidden and minimized
+  // windows are skipped, and showing or restoring one resyncs. Windows running the
   // titlebar arcade also get the cursor (window coordinates, focused or not) while
   // it is near their titlebar: the titlebar is the OS drag region, so the page
   // itself never sees the pointer there. Runs only while someone needs it.
@@ -55,10 +69,7 @@ export function createAmbient(deps: AmbientDeps) {
     const pt = screen.getCursorScreenPoint()
     if (lastCursorPt && pt.x === lastCursorPt.x && pt.y === lastCursorPt.y) return
     lastCursorPt = pt
-    for (const id of blurredWins) {
-      const win = registry.byId(id)
-      if (win && !win.isDestroyed()) win.webContents.send('win:cursor', pt)
-    }
+    for (const win of watchers()) win.webContents.send('win:cursor', pt)
     for (const id of arcadeOf.keys()) {
       const win = registry.byId(id)
       if (!win || win.isDestroyed() || !win.isVisible()) continue
@@ -68,9 +79,15 @@ export function createAmbient(deps: AmbientDeps) {
       win.webContents.send('arcade:cursor', near)
     }
   }
+  /** Unfocused windows someone can see: the ones whose eyes follow the cursor. */
+  function watchers(): BrowserWindow[] {
+    return [...blurredWins]
+      .map((id) => registry.byId(id))
+      .filter((win): win is BrowserWindow => !!win && !win.isDestroyed() && onScreen(win))
+  }
   function syncCursorPump(): void {
-    lastCursorPt = null // a focus change always gets one fresh send
-    const period = arcadeOf.size > 0 ? 100 : blurredWins.size > 0 ? 250 : 0
+    lastCursorPt = null // a focus or visibility change always gets one fresh send
+    const period = cursorPumpPeriod(arcadeOf.size, watchers().length)
     if (period === cursorPeriod) return
     if (cursorTimer) clearInterval(cursorTimer)
     cursorTimer = period ? setInterval(pumpCursor, period) : undefined
@@ -87,7 +104,7 @@ export function createAmbient(deps: AmbientDeps) {
     const focused = registry.focused()
     return registry
       .sessionWindows()
-      .filter((w) => w.isVisible() && !w.isMinimized())
+      .filter(onScreen)
       .map((w) => {
         const b = w.getContentBounds()
         const a = eyeAnchors.get(w.id) ?? DEFAULT_EYE_ANCHOR
@@ -180,6 +197,8 @@ export function createAmbient(deps: AmbientDeps) {
       blurredWins.add(winId)
       syncCursorPump()
     },
+    /** A window was shown, hidden, minimized or restored. */
+    visibilityChanged: (): void => syncCursorPump(),
     /** The window is gone: its eyes, game and cursor feed. */
     forget: (winId: number): void => {
       blurredWins.delete(winId)
