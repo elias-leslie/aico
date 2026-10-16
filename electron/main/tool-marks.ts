@@ -1,11 +1,13 @@
 // Titlebar marks for agent tools, keyed by Tether tool slug. Tether owns the
-// tool registry (argv, process name, context hook); the inline SVG marks are
-// Aico renderer metadata only. A tool without a mark here uses the shell mark
-// and the tool colour Tether reports.
+// tool registry (argv, process name, context hook, colour); the inline SVG marks
+// are Aico renderer metadata only. A tool without a mark here uses the shell
+// mark. The colour Tether reports wins; the accents here only cover a tool with
+// no colour in Tether, or Tether not answering yet.
 
 export interface ToolMark {
   /** Developer-authored inline SVG drawn in the accent; never user input. */
   icon: string
+  /** Fallback colour, used only when Tether reports none for the tool. */
   accent: string
 }
 
@@ -32,9 +34,12 @@ export const TOOL_MARKS: Readonly<Record<string, ToolMark>> = {
   },
 }
 
-/** The mark for a tool slug, falling back to the shell mark and Tether colour. */
+/** A colour Aico draws as is: `#rrggbb`, the form Tether stores. */
+const HEX_COLOR = /^#[0-9a-f]{6}$/i
+
+/** The mark for a tool slug (else the shell mark), in Tether's colour for the
+ * tool when it has one, else the built-in accent. */
 export function toolMark(slug: string | null | undefined, color?: string | null): ToolMark {
   const mark = (slug && TOOL_MARKS[slug]) || TOOL_MARKS.shell
-  const accent = slug && TOOL_MARKS[slug] ? mark.accent : color || mark.accent
-  return { icon: mark.icon, accent }
+  return { icon: mark.icon, accent: color && HEX_COLOR.test(color) ? color : mark.accent }
 }

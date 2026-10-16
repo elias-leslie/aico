@@ -17,6 +17,8 @@
 // `urgent` after 2 minutes (the other windows' eyes turn to it). A finished
 // one shows a "✓" bubble and happy eyes, nothing more.
 
+import type { TetherTool } from './tether-client'
+
 export type AgentState = 'working' | 'idle' | 'blocked' | 'unknown'
 
 export const DONE_FLASH_MS = 30_000
@@ -281,11 +283,22 @@ export function groupRows<T extends { id: string }>(
   return rows.map(({ item, group, detail }) => ({ item, group, detail }))
 }
 
-/** Which agent a state came from, for the push text (`Claude`, `Codex`). */
-export function agentName(stateSource: string | undefined, fallback: string): string {
-  if (stateSource?.startsWith('claude')) return 'Claude'
-  if (stateSource?.startsWith('codex')) return 'Codex'
-  return fallback
+/** Which agent a state came from, for the push text (`Claude Code`, `Codex`):
+ * the Tether tool the state source names by its first word (`claude-status`
+ * names the tool whose slug, process name or alias is `claude`), else the
+ * session's own tool (`fallback`), which is also what an empty tool list from
+ * a Tether that is not answering leaves. */
+export function agentName(
+  stateSource: string | undefined,
+  tools: readonly Pick<TetherTool, 'slug' | 'name' | 'processName' | 'aliases'>[],
+  fallback: string,
+): string {
+  const word = stateSource?.split('-')[0]
+  if (!word || word === 'none') return fallback
+  const tool = tools.find(
+    (t) => t.slug === word || t.processName === word || t.aliases?.includes(word),
+  )
+  return tool?.name ?? fallback
 }
 
 /** The phone push body, e.g. "Claude in tether is waiting for you". */

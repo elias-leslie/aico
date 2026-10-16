@@ -61,9 +61,11 @@ export function createAttentionWiring(deps: AttentionWiringDeps) {
       const descriptor = catalog.get(id)
       if (!descriptor) return
       const title = sessionTitle(descriptor)
+      const tools = deps.tools()
       const agent = agentName(
         descriptor.stateSource,
-        toolDisplayName(descriptor.tool, deps.tools()),
+        tools,
+        toolDisplayName(descriptor.tool, tools),
       )
       // Nightshift's own Web Push to the owner's PWA. Nightshift keys repeats by
       // the --open link (one per session) and keeps them quiet for an hour.

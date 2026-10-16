@@ -177,12 +177,27 @@ describe('Attention', () => {
     expect(h.flashes).toEqual([])
   })
 
-  it('names the agent for the push', () => {
-    expect(pushBody(agentName('claude-status', 'Shell'), 'tether')).toBe(
-      'Claude in tether is waiting for you',
+  it("names the agent for the push from Tether's tools", () => {
+    const tools = [
+      { slug: 'claude-code', name: 'Claude Code', processName: 'claude', aliases: ['claude'] },
+      { slug: 'codex', name: 'Codex', processName: 'codex', aliases: [] },
+      { slug: 'pi', name: 'Pi', processName: 'pi-coding-agent' },
+    ]
+    expect(pushBody(agentName('claude-status', tools, 'Shell'), 'tether')).toBe(
+      'Claude Code in tether is waiting for you',
     )
-    expect(agentName('codex-rollout', 'Shell')).toBe('Codex')
-    expect(agentName(undefined, 'Pi')).toBe('Pi')
+    expect(agentName('claude-hook', tools, 'Shell')).toBe('Claude Code')
+    expect(agentName('codex-rollout', tools, 'Shell')).toBe('Codex')
+    // a tool renamed in Tether is named the new way
+    expect(agentName('codex-rollout', [{ slug: 'codex', name: 'OpenAI Codex' }], 'Shell')).toBe(
+      'OpenAI Codex',
+    )
+    // no state source, or one naming no tool: the session's own tool
+    expect(agentName(undefined, tools, 'Pi')).toBe('Pi')
+    expect(agentName('none', tools, 'Pi')).toBe('Pi')
+    expect(agentName('gemini-status', tools, 'Shell')).toBe('Shell')
+    // Tether not answering (no tools yet): the session's own tool, never a guess
+    expect(agentName('claude-status', [], 'claude-code')).toBe('claude-code')
   })
 })
 

@@ -101,6 +101,10 @@ export interface TetherTool {
   slug: string
   name: string
   color: string | null
+  /** The process Tether watches for the tool (`claude`). */
+  processName?: string
+  /** Other names the tool answers to (`claude` for `claude-code`). */
+  aliases?: string[]
   displayOrder: number
   isDefault: boolean
   enabled: boolean

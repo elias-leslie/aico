@@ -56,6 +56,16 @@ const codex: TetherTool = {
   isDefault: false,
   enabled: true,
 }
+const claudeCode: TetherTool = {
+  slug: 'claude-code',
+  name: 'Claude Code',
+  color: '#D97757',
+  processName: 'claude',
+  aliases: ['claude'],
+  displayOrder: 0,
+  isDefault: false,
+  enabled: true,
+}
 
 type PushCallback = (error: ExecFileException | null, stdout: string | Buffer) => void
 
@@ -77,7 +87,7 @@ function setup(windows: FakeWindow[] = []) {
   const wiring = createAttentionWiring({
     registry,
     catalog,
-    tools: () => [codex],
+    tools: () => [claudeCode, codex],
     setNeedsYou,
     execFile,
     nightshift: '/usr/local/bin/nightshift',
@@ -144,7 +154,7 @@ describe('attention wiring', () => {
       '/usr/local/bin/nightshift',
       [
         'push',
-        'Claude in Docs is waiting for you',
+        'Claude Code in Docs is waiting for you',
         '--title',
         'Aico: waiting for you',
         '--severity',
