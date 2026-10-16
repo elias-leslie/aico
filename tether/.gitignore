@@ -32,3 +32,4 @@ AGENT_AUDIT.md
 __pycache__/
 .pytest_cache/
 .ruff_cache/
+.fallow/
