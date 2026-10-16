@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import time
 from typing import Any
-from unittest.mock import patch
 
 import pytest
 from fastapi import APIRouter, FastAPI, WebSocket
@@ -37,11 +36,11 @@ from .caller_trust_cells import (
     MODES,
     PEERS,
     Cell,
-    auth_settings,
     cells,
     headers_for,
     load_golden,
     mint_cookie,
+    settings_for,
     url_for,
     use_auth,
 )
@@ -151,7 +150,7 @@ def test_one_origin_list_feeds_cors_and_the_trust_checks() -> None:
     # The #20 merge: CORS, the write guard and the WebSocket all read this one list object.
     middleware = {entry.cls: entry for entry in _app().user_middleware}
     assert middleware[CORSMiddleware].kwargs["allow_origins"] is settings.a_term_allowed_origins
-    assert middleware[SurfaceGate].kwargs["allowed_origins"] is settings.a_term_allowed_origins
+    assert _app().state.trust.allowed_origins is settings.a_term_allowed_origins
 
 
 def test_middleware_order_is_pinned() -> None:
@@ -174,7 +173,7 @@ def test_the_host_check_is_the_old_rule() -> None:
 def _config(mode: str = "none", token: str = INTERNAL_TOKEN) -> TrustConfig:
     return TrustConfig(
         allowed_origins=settings.a_term_allowed_origins,
-        auth=auth_settings(mode),
+        auth=settings_for(mode),
         internal_token=token,
         now=int(time.time()),
     )
@@ -208,17 +207,18 @@ def test_the_gate_closes_an_undeclared_websocket_route() -> None:
         await websocket.close()
 
     throwaway = FastAPI()
+    throwaway.state.trust = _config()
     throwaway.include_router(router)
-    throwaway.add_middleware(SurfaceGate, allowed_origins=[])
+    throwaway.add_middleware(SurfaceGate)
     with pytest.raises(WebSocketDisconnect) as refused, TestClient(throwaway).websocket_connect("/sneaky"):
         pass
     assert (refused.value.code, refused.value.reason) == (1008, "Surface not declared")
 
     mounted = FastAPI()
+    mounted.state.trust = _config()
     mount(mounted, router, Surface.BROWSER)
-    mounted.add_middleware(SurfaceGate, allowed_origins=[])
-    with patch("a_term.auth.get_auth_settings", return_value=auth_settings("none")), \
-            TestClient(mounted).websocket_connect("/sneaky"):
+    mounted.add_middleware(SurfaceGate)
+    with TestClient(mounted).websocket_connect("/sneaky"):
         pass
 
 

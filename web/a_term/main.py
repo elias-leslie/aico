@@ -8,12 +8,13 @@ API on port 8002.
 import asyncio
 import os
 import secrets
+import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from importlib.metadata import PackageNotFoundError, version
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
@@ -33,9 +34,18 @@ from .api import (
     root_control,
     sessions,
 )
-from .auth import require_request_auth
+from .auth import UNAUTHORIZED_DETAIL
 from .branding import DESCRIPTION, DISPLAY_NAME, get_cache_root
-from .caller_trust import HostGate, Surface, SurfaceGate, declare, mount
+from .caller_trust import (
+    HostGate,
+    Surface,
+    SurfaceGate,
+    authenticate,
+    declare,
+    facts_from_scope,
+    mount,
+    trust_config,
+)
 from .config import A_TERM_BIND_HOST, A_TERM_PORT, ALLOWED_ORIGINS, settings
 from .logging_config import SyslogPrefixFormatter, configure_logging, get_logger
 from .rate_limit import limiter
@@ -114,6 +124,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Who gets in reads this: the one origin list (the same object CORS gets below) and the auth settings.
+app.state.trust = trust_config(ALLOWED_ORIGINS)
+
 # Rate limiting
 app.state.limiter = limiter
 app.add_exception_handler(
@@ -159,19 +172,15 @@ async def auth_guard(
         if path != "/health" and not path.startswith("/api/auth/") and not path.startswith(
             "/api/internal/"
         ):
-            try:
-                require_request_auth(request)
-            except HTTPException as err:
-                return JSONResponse(
-                    status_code=err.status_code,
-                    content={"detail": err.detail},
-                )
+            trust = request.app.state.trust
+            if authenticate(facts_from_scope(request.scope), trust.auth, int(time.time())) is None:
+                return JSONResponse(status_code=401, content={"detail": UNAUTHORIZED_DETAIL})
     return await call_next(request)
 
 
 # Who gets in on the terminal WebSocket: its route's surface (a_term.caller_trust). Inside the security headers,
 # outside CORS.
-app.add_middleware(SurfaceGate, allowed_origins=ALLOWED_ORIGINS)
+app.add_middleware(SurfaceGate)
 
 
 @app.middleware("http")

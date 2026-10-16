@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, patch
@@ -165,7 +165,7 @@ def load_golden() -> dict[str, dict[str, Any]]:
     return json.loads(GOLDEN_PATH.read_text())
 
 
-def auth_settings(mode: str) -> AuthSettings:
+def settings_for(mode: str) -> AuthSettings:
     return AuthSettings(
         mode=mode,
         password=PASSWORD if mode == "password" else "",
@@ -180,9 +180,12 @@ def auth_settings(mode: str) -> AuthSettings:
 @contextmanager
 def use_auth(app: FastAPI, mode: str) -> Iterator[None]:
     """Run with auth mode ``mode`` (the one place the golden table switches auth)."""
-    del app
-    with patch("a_term.auth.get_auth_settings", return_value=auth_settings(mode)):
+    original = app.state.trust
+    app.state.trust = replace(original, auth=settings_for(mode))
+    try:
         yield
+    finally:
+        app.state.trust = original
 
 
 def _client(app: FastAPI, cell: Cell) -> TestClient:

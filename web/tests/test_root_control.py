@@ -8,7 +8,6 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
-from a_term.auth import AuthSettings
 from a_term.storage import panes as pane_store
 from a_term.tether import get_client
 
@@ -285,17 +284,8 @@ def test_tether_down_is_owner_failure(tether_down: str, no_default_tmux) -> None
                 assert response.json() == {"error": "owner_failure"}
 
 
-def test_auth_middleware_still_guards_roots(test_app: TestClient, fake_tether: FakeTether) -> None:
-    settings = AuthSettings(
-        mode="password",
-        password="correct horse battery staple",
-        secret="test-secret",
-        proxy_header="X-Forwarded-User",
-        cookie_name="a_term_session",
-        cookie_secure=False,
-        session_ttl_seconds=3600,
-    )
-    with patch("a_term.auth.get_auth_settings", return_value=settings):
-        assert test_app.get("/v1/roots").status_code == 401
-        assert test_app.post("/v1/roots", json=CREATE).status_code == 401
+def test_auth_middleware_still_guards_roots(test_app: TestClient, fake_tether: FakeTether, auth_settings) -> None:
+    auth_settings()
+    assert test_app.get("/v1/roots").status_code == 401
+    assert test_app.post("/v1/roots", json=CREATE).status_code == 401
     assert fake_tether.calls == []

@@ -30,14 +30,14 @@ import hmac
 import re
 import time
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Literal
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRouter
-from starlette.datastructures import Headers, QueryParams
+from starlette.datastructures import Headers, QueryParams, State
 from starlette.requests import cookie_parser
 from starlette.routing import BaseRoute, Match
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -81,8 +81,9 @@ class CallerFacts:
 class TrustConfig:
     """Everything ``verdict`` reads besides the caller.
 
-    ``allowed_origins`` is the one origin list CORS also gets (the same object). ``internal_token`` and ``now`` are
-    filled per request: the token lives on ``app.state.internal_token`` (made at startup), ``now`` is the clock.
+    The app keeps one on ``app.state.trust`` (``trust_config``). ``allowed_origins`` is the one origin list CORS also
+    gets (the same object). ``internal_token`` and ``now`` are filled per request by ``SurfaceGate``: the token lives
+    on ``app.state.internal_token`` (made at startup), ``now`` is the clock.
     """
 
     allowed_origins: Sequence[str]
@@ -104,6 +105,16 @@ class Deny:
 LOOPBACK_PEERS = frozenset({"127.0.0.1", "::1"})
 UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 _SURFACE_ATTR = "a_term_surface"
+
+
+def trust_config(allowed_origins: Sequence[str]) -> TrustConfig:
+    """The app's trust configuration: ``allowed_origins`` (pass the list CORS gets) and the configured auth."""
+    return TrustConfig(allowed_origins=allowed_origins, auth=public_auth.get_auth_settings())
+
+
+def request_config(state: State) -> TrustConfig:
+    """``state.trust`` with this request's internal token and clock filled in."""
+    return replace(state.trust, internal_token=getattr(state, "internal_token", ""), now=int(time.time()))
 
 
 def facts_from_scope(scope: Scope) -> CallerFacts:
@@ -128,12 +139,12 @@ def authenticate(facts: CallerFacts, auth: AuthSettings, now: int) -> AuthSessio
     """The caller's session under ``auth``: mode none lets everyone in, else a signed cookie or a forwarded identity."""
     if auth.mode == "none":
         return AuthSession(identity="local", mode="none", expires_at=2**31)
-    session = public_auth.decode_session_with(facts.cookies.get(auth.cookie_name), auth, now)
+    session = public_auth.decode_session(facts.cookies.get(auth.cookie_name), auth, now)
     if session is not None:
         return session
-    identity = public_auth.proxy_identity_with(facts.headers, auth)
+    identity = public_auth.get_proxy_identity(facts.headers, auth)
     if identity is not None:
-        return AuthSession(identity=identity, mode="proxy", expires_at=now + auth.session_ttl_seconds)
+        return public_auth.create_proxy_session(identity, auth, now)
     return None
 
 
@@ -313,24 +324,17 @@ class SurfaceGate:
     """Apply each route's surface before CORS and the router see the caller.
 
     Sits inside the security headers (so refusals carry them) and outside CORS (so a refusal never gets an
-    Access-Control-Allow-Origin header). ``allowed_origins`` is the same list object CORS gets. It decides every
-    WebSocket; HTTP still goes through the older per-route checks for now.
+    Access-Control-Allow-Origin header). Reads ``app.state.trust``. It decides every WebSocket; HTTP still goes
+    through the older per-route checks for now.
     """
 
-    def __init__(self, app: ASGIApp, allowed_origins: Sequence[str]) -> None:
+    def __init__(self, app: ASGIApp) -> None:
         self.app = app
-        self.allowed_origins = allowed_origins
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] == "websocket":
             application = scope["app"]
-            config = TrustConfig(
-                allowed_origins=self.allowed_origins,
-                auth=public_auth.get_auth_settings(),
-                internal_token=getattr(application.state, "internal_token", ""),
-                now=int(time.time()),
-            )
-            decided = check(scope, application.router.routes, config)
+            decided = check(scope, application.router.routes, request_config(application.state))
             if isinstance(decided, Deny):
                 await ws_refusal(decided.reason)(scope, receive, send)
                 return

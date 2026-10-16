@@ -9,61 +9,41 @@ from fastapi import WebSocket
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from a_term.auth import AuthSettings
 from a_term.config import Settings
 
 from .conftest import LOOPBACK_WS_URL
 
 
-def _auth_settings(**overrides: object) -> AuthSettings:
-    values: dict[str, object] = {
-        "mode": "password",
-        "password": "correct horse battery staple",
-        "secret": "test-secret",
-        "proxy_header": "X-Forwarded-User",
-        "cookie_name": "a_term_session",
-        "cookie_secure": False,
-        "session_ttl_seconds": 3600,
-    }
-    values.update(overrides)
-    return AuthSettings(
-        **values,
-    )
-
-
-def test_password_auth_blocks_api_without_session(test_app: TestClient) -> None:
-    with patch("a_term.auth.get_auth_settings", return_value=_auth_settings()):
-        response = test_app.get("/api/diagnostics/sessions")
+def test_password_auth_blocks_api_without_session(test_app: TestClient, auth_settings) -> None:
+    auth_settings()
+    response = test_app.get("/api/diagnostics/sessions")
 
     assert response.status_code == 401
     assert response.json() == {"detail": "Authentication required"}
 
 
-def test_password_auth_login_sets_cookie_and_allows_api(test_app: TestClient) -> None:
-    with patch("a_term.auth.get_auth_settings", return_value=_auth_settings()):
-        login_response = test_app.post(
-            "/api/auth/login",
-            json={"password": "correct horse battery staple"},
-        )
+def test_password_auth_login_sets_cookie_and_allows_api(test_app: TestClient, auth_settings) -> None:
+    auth_settings()
+    login_response = test_app.post(
+        "/api/auth/login",
+        json={"password": "correct horse battery staple"},
+    )
 
-        assert login_response.status_code == 200
-        assert "a_term_session=" in login_response.headers["set-cookie"]
+    assert login_response.status_code == 200
+    assert "a_term_session=" in login_response.headers["set-cookie"]
 
-        response = test_app.get("/api/diagnostics/sessions")
+    response = test_app.get("/api/diagnostics/sessions")
 
     assert response.status_code == 200
     assert "sessions" in response.json()
 
 
-def test_proxy_auth_bootstraps_from_forwarded_identity(test_app: TestClient) -> None:
-    with patch(
-        "a_term.auth.get_auth_settings",
-        return_value=_auth_settings(mode="proxy", password=""),
-    ):
-        response = test_app.get(
-            "/api/auth/session",
-            headers={"X-Forwarded-User": "owner@example.com"},
-        )
+def test_proxy_auth_bootstraps_from_forwarded_identity(test_app: TestClient, auth_settings) -> None:
+    auth_settings(mode="proxy", password="")
+    response = test_app.get(
+        "/api/auth/session",
+        headers={"X-Forwarded-User": "owner@example.com"},
+    )
 
     assert response.status_code == 200
     assert response.json() == {
@@ -75,17 +55,17 @@ def test_proxy_auth_bootstraps_from_forwarded_identity(test_app: TestClient) -> 
     assert "a_term_session=" in response.headers["set-cookie"]
 
 
-def test_health_stays_public_when_auth_is_enabled(test_app: TestClient) -> None:
-    with patch("a_term.auth.get_auth_settings", return_value=_auth_settings()):
-        response = test_app.get("/health")
+def test_health_stays_public_when_auth_is_enabled(test_app: TestClient, auth_settings) -> None:
+    auth_settings()
+    response = test_app.get("/health")
 
     assert response.status_code == 200
 
 
-def test_websocket_requires_auth_when_enabled(test_app: TestClient) -> None:
+def test_websocket_requires_auth_when_enabled(test_app: TestClient, auth_settings) -> None:
+    auth_settings()
     handler = AsyncMock()
     with (
-        patch("a_term.auth.get_auth_settings", return_value=_auth_settings()),
         patch("a_term.api.a_term.handle_a_term_connection", handler),
         pytest.raises(WebSocketDisconnect),test_app.websocket_connect(f"{LOOPBACK_WS_URL}/ws/a-term/session-1")
     ):
@@ -94,7 +74,8 @@ def test_websocket_requires_auth_when_enabled(test_app: TestClient) -> None:
     handler.assert_not_awaited()
 
 
-def test_websocket_accepts_authenticated_session_cookie(test_app: TestClient) -> None:
+def test_websocket_accepts_authenticated_session_cookie(test_app: TestClient, auth_settings) -> None:
+    auth_settings()
     handler = AsyncMock()
 
     async def fake_handler(websocket: WebSocket, *_args: object, **_kwargs: object) -> None:
@@ -102,10 +83,7 @@ def test_websocket_accepts_authenticated_session_cookie(test_app: TestClient) ->
         await websocket.close()
 
     handler.side_effect = fake_handler
-    with (
-        patch("a_term.auth.get_auth_settings", return_value=_auth_settings()),
-        patch("a_term.api.a_term.handle_a_term_connection", handler),
-    ):
+    with patch("a_term.api.a_term.handle_a_term_connection", handler):
         login_response = test_app.post(
             "/api/auth/login",
             json={"password": "correct horse battery staple"},

@@ -7,13 +7,15 @@ from __future__ import annotations
 
 import shutil
 import tempfile
-from collections.abc import Generator, Iterator
+from collections.abc import Callable, Generator, Iterator
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
+from a_term.auth import AuthSettings
 from a_term.storage import local_db
 from a_term.tether import TetherClient, set_client
 
@@ -116,3 +118,28 @@ def test_app(fake_tether: FakeTether, no_default_tmux: MagicMock) -> Generator[T
             app, base_url=LOOPBACK_BASE_URL, client=LOOPBACK_CLIENT, raise_server_exceptions=False
         ) as client:
             yield client
+
+
+@pytest.fixture()
+def auth_settings(test_app: TestClient) -> Iterator[Callable[..., AuthSettings]]:
+    """Switch the app's auth: password mode by default, ``**overrides`` change any field; undone after the test."""
+    state = test_app.app.state
+    original = state.trust
+
+    def use(**overrides: object) -> AuthSettings:
+        values: dict[str, object] = {
+            "mode": "password",
+            "password": "correct horse battery staple",
+            "secret": "test-secret",
+            "proxy_header": "X-Forwarded-User",
+            "cookie_name": "a_term_session",
+            "cookie_secure": False,
+            "session_ttl_seconds": 3600,
+        }
+        values.update(overrides)
+        settings = AuthSettings(**values)
+        state.trust = replace(original, auth=settings)
+        return settings
+
+    yield use
+    state.trust = original

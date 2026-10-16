@@ -1,4 +1,8 @@
-"""Public auth/session helpers for A-Term HTTP and WebSocket access."""
+"""Public auth/session helpers for A-Term HTTP and WebSocket access.
+
+Every helper takes the ``AuthSettings`` it works under. The app builds them once (``get_auth_settings``) and keeps
+them on ``app.state.trust.auth``; who gets in is decided in ``a_term.caller_trust``.
+"""
 
 from __future__ import annotations
 
@@ -6,12 +10,11 @@ import base64
 import hashlib
 import hmac
 import json
-import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Literal
 
-from fastapi import HTTPException, Request, Response, WebSocket
+from fastapi import Response
 
 from .config import get_settings
 
@@ -38,7 +41,7 @@ class AuthSession:
 
 
 def get_auth_settings() -> AuthSettings:
-    """Return the current auth configuration."""
+    """Build the auth configuration from the app settings."""
     settings = get_settings()
     return AuthSettings(
         mode=settings.a_term_auth_mode,
@@ -49,11 +52,6 @@ def get_auth_settings() -> AuthSettings:
         cookie_secure=settings.a_term_auth_cookie_secure,
         session_ttl_seconds=settings.a_term_auth_session_ttl_hours * 3600,
     )
-
-
-def is_auth_enabled() -> bool:
-    """Return whether public auth is required."""
-    return get_auth_settings().mode != "none"
 
 
 def _urlsafe_b64encode(data: bytes) -> str:
@@ -71,28 +69,18 @@ def _sign(data: str, secret: str) -> str:
     )
 
 
-def _build_session(identity: str, mode: Literal["password", "proxy"]) -> AuthSession:
-    settings = get_auth_settings()
-    return AuthSession(
-        identity=identity,
-        mode=mode,
-        expires_at=int(time.time()) + settings.session_ttl_seconds,
-    )
-
-
-def create_password_session() -> AuthSession:
+def create_password_session(settings: AuthSettings, now: int) -> AuthSession:
     """Build a new password-auth session."""
-    return _build_session("owner", "password")
+    return AuthSession(identity="owner", mode="password", expires_at=now + settings.session_ttl_seconds)
 
 
-def create_proxy_session(identity: str) -> AuthSession:
+def create_proxy_session(identity: str, settings: AuthSettings, now: int) -> AuthSession:
     """Build a new proxy-auth session for the forwarded identity."""
-    return _build_session(identity, "proxy")
+    return AuthSession(identity=identity, mode="proxy", expires_at=now + settings.session_ttl_seconds)
 
 
-def encode_session(session: AuthSession) -> str:
+def encode_session(session: AuthSession, settings: AuthSettings) -> str:
     """Serialize and sign a public auth session."""
-    settings = get_auth_settings()
     payload = json.dumps(
         {
             "identity": session.identity,
@@ -105,12 +93,7 @@ def encode_session(session: AuthSession) -> str:
     return f"{_urlsafe_b64encode(payload.encode())}.{_sign(payload, settings.secret)}"
 
 
-def decode_session(token: str | None) -> AuthSession | None:
-    """Verify and decode a signed session cookie."""
-    return decode_session_with(token, get_auth_settings(), int(time.time()))
-
-
-def decode_session_with(token: str | None, settings: AuthSettings, now: int) -> AuthSession | None:
+def decode_session(token: str | None, settings: AuthSettings, now: int) -> AuthSession | None:
     """Verify and decode a signed session cookie against ``settings`` at time ``now``."""
     if not token:
         return None
@@ -121,7 +104,7 @@ def decode_session_with(token: str | None, settings: AuthSettings, now: int) -> 
         return None
 
     expected_signature = _sign(payload, settings.secret)
-    if not hmac.compare_digest(encoded_signature, expected_signature):
+    if not hmac.compare_digest(encoded_signature.encode(), expected_signature.encode()):
         return None
 
     try:
@@ -141,12 +124,7 @@ def decode_session_with(token: str | None, settings: AuthSettings, now: int) -> 
     return session
 
 
-def get_proxy_identity(headers: Mapping[str, str]) -> str | None:
-    """Extract a trusted upstream identity when proxy auth is enabled."""
-    return proxy_identity_with(headers, get_auth_settings())
-
-
-def proxy_identity_with(headers: Mapping[str, str], settings: AuthSettings) -> str | None:
+def get_proxy_identity(headers: Mapping[str, str], settings: AuthSettings) -> str | None:
     """The forwarded identity under ``settings``: proxy mode only, blank counts as none."""
     if settings.mode != "proxy":
         return None
@@ -157,60 +135,18 @@ def proxy_identity_with(headers: Mapping[str, str], settings: AuthSettings) -> s
     return identity or None
 
 
-def authenticate_request(request: Request) -> AuthSession | None:
-    """Authenticate an HTTP request from cookie or trusted proxy headers."""
-    settings = get_auth_settings()
-    if settings.mode == "none":
-        return AuthSession(identity="local", mode="none", expires_at=2**31)
-
-    session = decode_session(request.cookies.get(settings.cookie_name))
-    if session is not None:
-        return session
-
-    identity = get_proxy_identity(request.headers)
-    if identity is not None:
-        return create_proxy_session(identity)
-    return None
-
-
-def authenticate_websocket(websocket: WebSocket) -> AuthSession | None:
-    """Authenticate a WebSocket handshake from cookie or trusted proxy headers."""
-    settings = get_auth_settings()
-    if settings.mode == "none":
-        return AuthSession(identity="local", mode="none", expires_at=2**31)
-
-    session = decode_session(websocket.cookies.get(settings.cookie_name))
-    if session is not None:
-        return session
-
-    identity = get_proxy_identity(websocket.headers)
-    if identity is not None:
-        return create_proxy_session(identity)
-    return None
-
-
-def require_request_auth(request: Request) -> AuthSession:
-    """Raise 401 when a request is not authenticated."""
-    session = authenticate_request(request)
-    if session is None:
-        raise HTTPException(status_code=401, detail=UNAUTHORIZED_DETAIL)
-    return session
-
-
-def verify_password(password: str) -> bool:
+def verify_password(password: str, settings: AuthSettings) -> bool:
     """Return whether a submitted password matches the configured secret."""
-    settings = get_auth_settings()
     if settings.mode != "password" or not settings.password:
         return False
-    return hmac.compare_digest(password, settings.password)
+    return hmac.compare_digest(password.encode(), settings.password.encode())
 
 
-def set_session_cookie(response: Response, session: AuthSession) -> None:
+def set_session_cookie(response: Response, session: AuthSession, settings: AuthSettings) -> None:
     """Attach the signed session cookie to a response."""
-    settings = get_auth_settings()
     response.set_cookie(
         settings.cookie_name,
-        encode_session(session),
+        encode_session(session, settings),
         httponly=True,
         samesite="lax",
         secure=settings.cookie_secure,
@@ -219,6 +155,6 @@ def set_session_cookie(response: Response, session: AuthSession) -> None:
     )
 
 
-def clear_session_cookie(response: Response) -> None:
+def clear_session_cookie(response: Response, settings: AuthSettings) -> None:
     """Clear the auth session cookie."""
-    response.delete_cookie(get_auth_settings().cookie_name, path="/")
+    response.delete_cookie(settings.cookie_name, path="/")
