@@ -12,7 +12,7 @@ export interface SidecarOptions {
   port: number
   /** Repo root; the sidecar's interpreter and package live under it. */
   repoRoot: string
-  /** State dir passed through so logs/db land where the rest of Aico expects. */
+  /** State dir passed through so the selection db lands where the rest of Aico expects. */
   stateDir: string
   env?: NodeJS.ProcessEnv
   /**

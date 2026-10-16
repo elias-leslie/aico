@@ -4,7 +4,7 @@ Tether owns root control and hosts its contract: the routes, the create body,
 tombstones, the resume adapters, the validation rules and how the `st aico`
 client relies on them. Read Tether's
 [`docs/root-control.md`](https://github.com/elias-leslie/tether/blob/main/docs/root-control.md)
-(in a local checkout, `../tether/docs/root-control.md`).
+(locally, `docs/root-control.md` in the Tether checkout next to this one).
 
 From Aico's side, two things matter:
 
