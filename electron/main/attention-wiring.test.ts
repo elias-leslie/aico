@@ -116,7 +116,7 @@ describe('attention wiring', () => {
     })
     expect(win.flashFrame).toHaveBeenCalledWith(true)
     expect(setNeedsYou).toHaveBeenCalledWith(true)
-    expect(wiring.attention.group('aaaaaaaa')).toMatchObject({ group: 'needs-you', at: 5 })
+    expect(wiring.group('aaaaaaaa')).toMatchObject({ group: 'needs-you', at: 5 })
   })
 
   it('a focused window is not flagged', () => {
@@ -239,7 +239,7 @@ describe('attention wiring', () => {
       mode: 'none',
       stage: 'fresh',
     })
-    expect(wiring.attention.group('aaaaaaaa').group).toBe('idle')
+    expect(wiring.group('aaaaaaaa').group).toBe('idle')
   })
 
   it('a reloaded window gets what it shows, or nothing to show', () => {

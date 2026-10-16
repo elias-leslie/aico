@@ -97,8 +97,8 @@ export function createAttentionWiring(deps: AttentionWiringDeps) {
   })
 
   return {
-    /** The tray's groups (window-chrome). */
-    attention,
+    /** Where a session sits in the tray: needs you, working or idle (window-chrome). */
+    group: (id: string) => attention.group(id),
     /** Blocked windows two minutes unseen: the other windows' eyes look at them. */
     urgent: (): string[] => attention.urgent(),
     /** A session's latest descriptor: its agent state. */

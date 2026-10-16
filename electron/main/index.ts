@@ -203,7 +203,7 @@ const chrome = createWindowChrome({
   tools: link.tools,
   notice: link.notice,
   projects,
-  attention: attention.attention,
+  attention,
   layout,
   contextCheck: (id) => tether.contextCheck(id),
   isQuitting: lifecycle.isQuitting,
