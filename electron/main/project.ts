@@ -11,7 +11,8 @@ export const PERSONAL_WORKSPACE_NAME = 'Personal Workspace'
 
 /** Aico-local workspace for assistant/chat sessions that should not start in a
  * repo. A cwd only: it is sent to Tether as `projectRoot`, never as a project. */
-export function personalWorkspaceRoot(home = process.env.HOME ?? homedir()): string {
+// homedir() is $HOME when it is set (POSIX), else the passwd entry.
+export function personalWorkspaceRoot(home = homedir()): string {
   return join(home, '.local', 'share', 'aico', 'personal-workspace')
 }
 

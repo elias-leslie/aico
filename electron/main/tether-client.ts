@@ -21,10 +21,7 @@ const RECONNECT_MIN_MS = 500
 const RECONNECT_MAX_MS = 10_000
 
 /** `TETHER_SOCKET`, else `$XDG_RUNTIME_DIR/tether/<TETHER_INSTANCE|default>/control.sock`. */
-export function tetherSocketPath(
-  env: NodeJS.ProcessEnv = process.env,
-  uid: number | undefined = process.getuid?.(),
-): string {
+export function tetherSocketPath(env: NodeJS.ProcessEnv, uid: number | undefined): string {
   if (env.TETHER_SOCKET) return env.TETHER_SOCKET
   const runtime = env.XDG_RUNTIME_DIR || (uid === undefined ? '/tmp' : `/run/user/${uid}`)
   const instance = env.TETHER_INSTANCE || 'default'
