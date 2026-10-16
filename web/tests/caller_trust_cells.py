@@ -206,7 +206,7 @@ def mint_cookie(app: FastAPI, mode: str) -> str:
     return response.cookies[COOKIE_NAME]
 
 
-def _headers(cell: Cell, valid_cookie: str | None) -> dict[str, str]:
+def headers_for(cell: Cell, valid_cookie: str | None) -> dict[str, str]:
     headers = {"host": HOSTS[cell.host]}
     origin = ORIGINS[cell.origin]
     if origin is not None:
@@ -233,7 +233,7 @@ def _headers(cell: Cell, valid_cookie: str | None) -> dict[str, str]:
     return headers
 
 
-def _url(cell: Cell) -> str:
+def url_for(cell: Cell) -> str:
     path = cell.path
     if cell.token in ("query", "wrong_bearer_good_query"):
         path += ("&" if "?" in path else "?") + f"token={INTERNAL_TOKEN}"
@@ -249,7 +249,7 @@ def run_cell(app: FastAPI, cell: Cell, valid_cookie: str | None) -> dict[str, An
     limiter.reset()
     app.state.internal_token = "" if cell.token == "empty_expected" else INTERNAL_TOKEN
     client = _client(app, cell)
-    headers = _headers(cell, valid_cookie)
+    headers = headers_for(cell, valid_cookie)
     if cell.kind == "ws":
         async def accept_then_close(websocket: WebSocket, *_args: object) -> None:
             await websocket.accept()
@@ -259,7 +259,7 @@ def run_cell(app: FastAPI, cell: Cell, valid_cookie: str | None) -> dict[str, An
         try:
             with (
                 patch("a_term.api.a_term.handle_a_term_connection", handler),
-                client.websocket_connect(f"ws://{HOSTS[cell.host]}{_url(cell)}", headers=headers),
+                client.websocket_connect(f"ws://{HOSTS[cell.host]}{url_for(cell)}", headers=headers),
             ):
                 pass
         except WebSocketDisconnect as closed:
@@ -271,7 +271,7 @@ def run_cell(app: FastAPI, cell: Cell, valid_cookie: str | None) -> dict[str, An
         kwargs["json"] = {"password": "wrong"} if cell.path == "/api/auth/login" else {}
     elif cell.body == "text":
         kwargs["content"] = TEXT_BODY
-    response = client.request(cell.method, _url(cell), **kwargs)
+    response = client.request(cell.method, url_for(cell), **kwargs)
     result: dict[str, Any] = {"status": response.status_code}
     if response.status_code >= 300 and response.status_code != 422:
         try:

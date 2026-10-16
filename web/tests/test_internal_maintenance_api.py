@@ -40,7 +40,7 @@ def test_internal_maintenance_run_triggers_cycle(test_app: TestClient) -> None:
     """Manual maintenance endpoint runs a maintenance cycle."""
     _app(test_app).state.internal_token = "secret"
     with patch(
-        "a_term.api.a_term.run_maintenance_cycle",
+        "a_term.api.internal.run_maintenance_cycle",
         new=AsyncMock(return_value={"reason": "manual", "skipped": False}),
     ) as mock_run:
         response = test_app.post(

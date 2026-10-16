@@ -29,6 +29,7 @@ from .api import (
     auth,
     diagnostics,
     files,
+    internal,
     pane_files,
     panes,
     projects,
@@ -37,6 +38,7 @@ from .api import (
 )
 from .auth import require_request_auth
 from .branding import DESCRIPTION, DISPLAY_NAME, get_cache_root
+from .caller_trust import Surface, declare, mount
 from .config import A_TERM_BIND_HOST, A_TERM_PORT, ALLOWED_ORIGINS, settings
 from .logging_config import SyslogPrefixFormatter, configure_logging, get_logger
 from .rate_limit import limiter
@@ -214,18 +216,19 @@ class LoopbackHostGuard:
 # Outermost: nothing else runs for a refused Host.
 app.add_middleware(LoopbackHostGuard)
 
-# Include routers
-app.include_router(a_term.router)
-app.include_router(auth.router)
-app.include_router(sessions.router)
-app.include_router(panes.router)
-app.include_router(projects.router)
-app.include_router(agent.router)
-app.include_router(agent_tools.router)
-app.include_router(files.router)
-app.include_router(pane_files.router)
-app.include_router(diagnostics.router)
-app.include_router(root_control.router)
+# Include routers: each one's routes are on one caller-trust surface (a_term.caller_trust).
+mount(app, a_term.router, Surface.BROWSER)
+mount(app, internal.router, Surface.INTERNAL)
+mount(app, auth.router, Surface.PUBLIC)
+mount(app, sessions.router, Surface.BROWSER)
+mount(app, panes.router, Surface.BROWSER)
+mount(app, projects.router, Surface.BROWSER)
+mount(app, agent.router, Surface.BROWSER)
+mount(app, agent_tools.router, Surface.BROWSER)
+mount(app, files.router, Surface.BROWSER)
+mount(app, pane_files.router, Surface.BROWSER)
+mount(app, diagnostics.router, Surface.BROWSER)
+mount(app, root_control.router, Surface.CLI_LOCAL)
 
 
 @app.get("/metrics", response_model=None)
@@ -273,6 +276,20 @@ async def health() -> dict[str, object] | JSONResponse:
         return JSONResponse(status_code=503, content={**checks, "status": "unhealthy"})
     checks["status"] = "healthy"
     return checks
+
+
+# The app's own routes (FastAPI's docs and these two).
+declare(
+    app,
+    {
+        "/openapi.json": Surface.BROWSER,
+        "/docs": Surface.BROWSER,
+        "/docs/oauth2-redirect": Surface.BROWSER,
+        "/redoc": Surface.BROWSER,
+        "/metrics": Surface.BROWSER,
+        "/health": Surface.PUBLIC,
+    },
+)
 
 
 def main() -> None:

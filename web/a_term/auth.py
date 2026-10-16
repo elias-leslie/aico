@@ -107,9 +107,13 @@ def encode_session(session: AuthSession) -> str:
 
 def decode_session(token: str | None) -> AuthSession | None:
     """Verify and decode a signed session cookie."""
+    return decode_session_with(token, get_auth_settings(), int(time.time()))
+
+
+def decode_session_with(token: str | None, settings: AuthSettings, now: int) -> AuthSession | None:
+    """Verify and decode a signed session cookie against ``settings`` at time ``now``."""
     if not token:
         return None
-    settings = get_auth_settings()
     try:
         encoded_payload, encoded_signature = token.split(".", 1)
         payload = _urlsafe_b64decode(encoded_payload).decode()
@@ -132,21 +136,21 @@ def decode_session(token: str | None) -> AuthSession | None:
 
     if session.mode != settings.mode:
         return None
-    if session.expires_at <= int(time.time()):
+    if session.expires_at <= now:
         return None
     return session
 
 
-def _get_header(headers: Mapping[str, str], name: str) -> str | None:
-    return headers.get(name)
-
-
 def get_proxy_identity(headers: Mapping[str, str]) -> str | None:
     """Extract a trusted upstream identity when proxy auth is enabled."""
-    settings = get_auth_settings()
+    return proxy_identity_with(headers, get_auth_settings())
+
+
+def proxy_identity_with(headers: Mapping[str, str], settings: AuthSettings) -> str | None:
+    """The forwarded identity under ``settings``: proxy mode only, blank counts as none."""
     if settings.mode != "proxy":
         return None
-    value = _get_header(headers, settings.proxy_header)
+    value = headers.get(settings.proxy_header)
     if value is None:
         return None
     identity = value.strip()
