@@ -95,8 +95,8 @@ cutover window.
 ## 3. Import Aico's catalog into Tether
 
 ```sh
-tether import-aico            # dry run: review sessions, tmux servers and root requests
-tether import-aico --apply    # refuses while tether@default is listening
+tether import-aico --from "$AICO_DB"           # dry run: review sessions, tmux servers and root requests
+tether import-aico --from "$AICO_DB" --apply   # refuses while tether@default is listening
 ```
 
 The importer opens `aico.db` read-only and copies `tmux_servers`, `root_requests`
@@ -159,6 +159,10 @@ sqlite3 -readonly "file:$AICO_DB?mode=ro" \
 ```
 
 The rows should match the geometry in `$OUT/widgets-before.txt`.
+
+This copy ran once, at the cutover. Current Aico no longer carries it: a
+pre-Tether `aico.db` opened today keeps its old tables untouched and starts with
+no views.
 
 ## 7. Verify
 

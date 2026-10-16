@@ -7,9 +7,10 @@ import { DatabaseSync } from 'node:sqlite'
 // are keyed by the same eight-hex id Aico always used as its widget id, so the
 // sidecar's per-widget JSONL logs keep matching.
 //
-// The pre-Tether tables (`widgets`, `tmux_servers`, `root_requests`) are never
-// written or dropped here: `tether import-aico` still reads them, so dropping
-// them is a Tether change first.
+// The pre-Tether tables (`widgets`, `tmux_servers`, `root_requests`) may still
+// sit in an older aico.db. Aico never reads, writes or drops them; their only
+// reader is `tether import-aico --from PATH`, which opens an explicitly named
+// copy (an archived aico.db), never this file by default.
 
 export interface Bounds {
   x: number
@@ -37,8 +38,6 @@ export interface ViewRow {
 let db: DatabaseSync
 
 const SESSION_ID = /^[0-9a-f]{8}$/
-/** Settings key recording that the widgets table was copied into views. */
-export const VIEWS_MIGRATED_SETTING = 'views-migrated-from-widgets'
 
 interface Raw {
   widget_id: string
@@ -68,7 +67,7 @@ function toRow(r: Raw): ViewRow {
   }
 }
 
-export function initViews(dbPath: string): { migrated: number } {
+export function initViews(dbPath: string): void {
   // A fresh profile (or AICO_STATE_DIR) may not exist yet.
   mkdirSync(dirname(dbPath), { recursive: true, mode: 0o700 })
   db = new DatabaseSync(dbPath)
@@ -95,84 +94,6 @@ export function initViews(dbPath: string): { migrated: number } {
   )
   if (!columns.includes('coordinator'))
     db.exec('ALTER TABLE views ADD COLUMN coordinator INTEGER NOT NULL DEFAULT 0')
-  return { migrated: migrateWidgetViews() }
-}
-
-/**
- * Copy view columns from the pre-Tether `widgets` table once, in one
- * transaction. External (A-Term) rows are skipped: Aico no longer federates
- * them. Pins that named those external sessions (`tmux:*`) are dropped from the
- * pinned-action list; Aico session pins (`session:aico:<id>`) keep their ids.
- */
-export function migrateWidgetViews(): number {
-  if (getSetting(VIEWS_MIGRATED_SETTING) !== undefined) return 0
-  const hasWidgets =
-    db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'widgets'").get() !==
-    undefined
-  let copied = 0
-  db.exec('BEGIN IMMEDIATE')
-  try {
-    if (hasWidgets) {
-      const columns = new Set(
-        (db.prepare('PRAGMA table_info(widgets)').all() as { name: string }[]).map((c) => c.name),
-      )
-      const external = columns.has('external_tmux_session')
-        ? 'AND external_tmux_session IS NULL'
-        : ''
-      const rows = db
-        .prepare(
-          `SELECT id, seq, x, y, width, height, display_id, open FROM widgets
-           WHERE 1 = 1 ${external} ORDER BY seq, id`,
-        )
-        .all() as unknown as {
-        id: string
-        seq: number
-        x: number | null
-        y: number | null
-        width: number | null
-        height: number | null
-        display_id: string | null
-        open: number
-      }[]
-      const insert = db.prepare(
-        `INSERT OR IGNORE INTO views (widget_id, seq, x, y, width, height, display_id, open)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      for (const row of rows) {
-        if (!SESSION_ID.test(row.id)) continue
-        copied += Number(
-          insert.run(
-            row.id,
-            row.seq,
-            row.x,
-            row.y,
-            row.width,
-            row.height,
-            row.display_id,
-            row.open ? 1 : 0,
-          ).changes,
-        )
-      }
-    }
-    const pins = getSetting('pins')
-    if (pins !== undefined) {
-      try {
-        const parsed: unknown = JSON.parse(pins)
-        if (Array.isArray(parsed)) {
-          const kept = parsed.filter((id) => !(typeof id === 'string' && id.startsWith('tmux:')))
-          if (kept.length !== parsed.length) setSetting('pins', JSON.stringify(kept))
-        }
-      } catch {
-        // An unreadable pin list is left for the renderer's own sanitizer.
-      }
-    }
-    setSetting(VIEWS_MIGRATED_SETTING, String(Date.now()))
-    db.exec('COMMIT')
-  } catch (error) {
-    db.exec('ROLLBACK')
-    throw error
-  }
-  return copied
 }
 
 export function getSetting(key: string): string | undefined {

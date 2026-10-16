@@ -302,8 +302,7 @@ lifecycle.setActivationHandler(windows.activate)
 
 const startup = app.whenReady().then(async () => {
   if (!lifecycle.runtimeOwner) return // no runtime initialization
-  const { migrated } = initViews(config.dbPath)
-  if (migrated) console.log(`[aico] copied ${migrated} window views from the pre-Tether catalog`)
+  initViews(config.dbPath)
   // Before any window exists: Electron would otherwise grant every request.
   denyAllPermissions(session.defaultSession)
   sidecar.start()

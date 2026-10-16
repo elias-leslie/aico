@@ -13,7 +13,6 @@ import {
   saveBounds,
   setOpen,
   setSetting,
-  VIEWS_MIGRATED_SETTING,
 } from './views'
 
 const dirs: string[] = []
@@ -27,71 +26,31 @@ function scratchDb(): string {
   return join(dir, 'aico.db')
 }
 
-/** The pre-Tether catalog shape (only the columns the migration reads). */
-function legacyCatalog(path: string): DatabaseSync {
+/** An aico.db from before Tether, with its old tables still present. */
+function legacyCatalog(path: string): void {
   const db = new DatabaseSync(path)
   db.exec(`
-    CREATE TABLE widgets (
-      id TEXT PRIMARY KEY, seq INTEGER NOT NULL, x INTEGER, y INTEGER, width INTEGER,
-      height INTEGER, display_id TEXT, open INTEGER NOT NULL DEFAULT 1,
-      created_at INTEGER NOT NULL, tool TEXT NOT NULL DEFAULT 'shell', name TEXT,
-      external_tmux_socket TEXT, external_tmux_session TEXT,
-      tmux_server_id TEXT, scope_unit TEXT
-    );
+    CREATE TABLE widgets (id TEXT PRIMARY KEY, seq INTEGER NOT NULL, x INTEGER, y INTEGER,
+      width INTEGER, height INTEGER, display_id TEXT, open INTEGER NOT NULL DEFAULT 1);
     CREATE TABLE tmux_servers (id TEXT PRIMARY KEY);
     CREATE TABLE root_requests (request_id TEXT PRIMARY KEY, widget_id TEXT NOT NULL);
-    CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-    INSERT INTO widgets (id, seq, x, y, width, height, display_id, open, created_at, name, tmux_server_id, scope_unit)
-      VALUES ('05e96622', 3, 10, 20, 900, 560, '1', 1, 1, 'Main', 'srv', 'tmux-spawn-a.scope'),
-             ('0a1b2c3d', 1, NULL, NULL, NULL, NULL, NULL, 0, 2, NULL, 'srv', NULL);
-    INSERT INTO widgets (id, seq, open, created_at, external_tmux_session)
-      VALUES ('deadbeef', 2, 1, 3, 'summitflow-00000000-0000-4000-8000-000000000001');
+    INSERT INTO widgets VALUES ('05e96622', 3, 10, 20, 900, 560, '1', 1);
     INSERT INTO tmux_servers VALUES ('srv');
     INSERT INTO root_requests VALUES ('root-1', '05e96622');
-    INSERT INTO settings VALUES ('pins', '["new:codex","tmux:default:summitflow-x","session:aico:05e96622"]');
   `)
-  return db
+  db.close()
 }
 
-describe('view store migration', () => {
-  it('copies internal widget views once and leaves the old tables untouched', () => {
+describe('view store setup', () => {
+  it('leaves the pre-Tether tables untouched and never copies them into views', () => {
     const path = scratchDb()
-    const legacy = legacyCatalog(path)
-    const before = legacy.prepare('SELECT * FROM widgets ORDER BY id').all()
-    legacy.close()
-
-    expect(initViews(path)).toEqual({ migrated: 2 })
-    expect(listViews()).toEqual([
-      {
-        id: '0a1b2c3d',
-        seq: 1,
-        bounds: null,
-        displayId: null,
-        open: false,
-        nameOverride: null,
-        coordinator: false,
-      },
-      {
-        id: '05e96622',
-        seq: 3,
-        bounds: { x: 10, y: 20, width: 900, height: 560 },
-        displayId: '1',
-        open: true,
-        nameOverride: null,
-        coordinator: false,
-      },
-    ])
-    expect(getView('deadbeef')).toBeUndefined() // A-Term federation rows are not views
-    expect(JSON.parse(getSetting('pins') ?? '[]')).toEqual(['new:codex', 'session:aico:05e96622'])
-    expect(getSetting(VIEWS_MIGRATED_SETTING)).toBeDefined()
-
-    // Idempotent: a restart never re-copies or resurrects a forgotten view.
-    removeView('0a1b2c3d')
-    expect(initViews(path)).toEqual({ migrated: 0 })
-    expect(getView('0a1b2c3d')).toBeUndefined()
-
+    legacyCatalog(path)
+    initViews(path)
+    expect(listViews()).toEqual([])
     const check = new DatabaseSync(path)
-    expect(check.prepare('SELECT * FROM widgets ORDER BY id').all()).toEqual(before)
+    expect(check.prepare('SELECT id, x, open FROM widgets').all()).toEqual([
+      { id: '05e96622', x: 10, open: 1 },
+    ])
     expect(check.prepare('SELECT COUNT(*) AS n FROM tmux_servers').get()).toEqual({ n: 1 })
     expect(check.prepare('SELECT COUNT(*) AS n FROM root_requests').get()).toEqual({ n: 1 })
     check.close()
@@ -113,14 +72,14 @@ describe('view store migration', () => {
     expect(listViews()).toHaveLength(1)
   })
 
-  it('starts empty without a pre-Tether catalog', () => {
-    expect(initViews(scratchDb())).toEqual({ migrated: 0 })
+  it('starts empty on a new database', () => {
+    initViews(scratchDb())
     expect(listViews()).toEqual([])
   })
 
   it('creates a missing state directory (fresh profile or AICO_STATE_DIR)', () => {
     const path = join(dirname(scratchDb()), 'state', 'aico', 'aico.db')
-    expect(initViews(path)).toEqual({ migrated: 0 })
+    initViews(path)
     expect(existsSync(path)).toBe(true)
   })
 })
@@ -140,6 +99,8 @@ describe('views', () => {
     expect(getView('0a1b2c3d')?.open).toBe(false)
     expect(ensureView('0a1b2c3d', true).open).toBe(false) // existing rows are not reset
     expect(() => ensureView('not-an-id')).toThrow()
+    removeView('0a1b2c3e')
+    expect(getView('0a1b2c3e')).toBeUndefined()
     setSetting('arcade', 'off')
     expect(getSetting('arcade')).toBe('off')
   })
