@@ -27,6 +27,7 @@ import { ensurePersonalWorkspaceRoot, ProjectCatalog, personalWorkspaceRoot } fr
 import { createSelectionBus } from './selection-bus'
 import { createSessionActions } from './session-actions'
 import { createSessionCatalog, type SessionCatalog, sessionTitle } from './session-catalog'
+import { createSidecarLink } from './sidecar-link'
 import { createTerminal } from './terminal'
 import { TetherClient } from './tether-client'
 import { createTetherLink } from './tether-link'
@@ -135,6 +136,16 @@ const windows = createWindows({
   },
 })
 
+// The optional sidecar: the selection bus reads from it and it keeps the
+// per-widget event log.
+const sidecar = createSidecarLink({
+  host: config.sidecarHost,
+  port: config.sidecarPort,
+  stateDir: config.stateDir,
+  app,
+  resourcesPath: process.resourcesPath,
+})
+
 const projects = new ProjectCatalog(
   () => tether.projects(),
   () => {
@@ -158,7 +169,7 @@ const link = createTetherLink({
     retired: (id, known, reason) => {
       removeView(id)
       if (known)
-        selection.logEvent(id, 'lifecycle_retired', { session_id: known.ownershipId, reason })
+        sidecar.logEvent(id, 'lifecycle_retired', { session_id: known.ownershipId, reason })
     },
     firstList: () => windows.restoreOnLaunch(),
     titles: () => chrome.pushTitles(),
@@ -178,7 +189,7 @@ const attention = createAttentionWiring({
   tools: link.tools,
   setNeedsYou,
   execFile,
-  logEvent: (id, event, data) => selection.logEvent(id, event, data),
+  logEvent: sidecar.logEvent,
   nightshift: config.nightshift,
   atermUrl: config.atermUrl,
 })
@@ -261,7 +272,7 @@ const terminal = createTerminal({
   env: process.env,
 })
 
-// The selection bus: the sidecar, its event log and where selections go.
+// The selection bus: where selections go and how they arrive.
 const selection = createSelectionBus({
   registry,
   catalog,
@@ -269,9 +280,7 @@ const selection = createSelectionBus({
   tether,
   isReplacing: sessions.isReplacing,
   isQuitting: lifecycle.isQuitting,
-  host: config.sidecarHost,
-  port: config.sidecarPort,
-  stateDir: config.stateDir,
+  sidecar,
   app,
   resourcesPath: process.resourcesPath,
   home: homedir(),
@@ -293,6 +302,7 @@ lifecycle.onQuit(() => {
   link.stop()
   hotkeys.stop()
   selection.stop()
+  sidecar.stop()
   ambient.stop()
   layout.stop({ removeFile: lifecycle.runtimeOwner })
 })
@@ -303,7 +313,7 @@ const startup = app.whenReady().then(async () => {
   const { migrated } = initViews(config.dbPath)
   if (migrated) console.log(`[aico] copied ${migrated} window views from the pre-Tether catalog`)
   hotkeys.installCsp()
-  selection.startSidecar()
+  sidecar.start()
 
   // No application menu — the Lantern chrome owns window controls, and the
   // default Edit menu's paste role mangled bracketed paste (handled in renderer).

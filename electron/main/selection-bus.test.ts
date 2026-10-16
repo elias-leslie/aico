@@ -86,15 +86,7 @@ function setup(o: { packaged?: boolean } = {}) {
     jsonResponse(record),
   )
   const execFile = vi.fn()
-  const sidecars: FakeSidecar[] = []
-  class FakeSidecar {
-    ready = false
-    start = vi.fn(async () => true)
-    stop = vi.fn()
-    constructor(public options: unknown) {
-      sidecars.push(this)
-    }
-  }
+  const sidecar = { healthy: false }
   const bus = createSelectionBus({
     registry,
     catalog,
@@ -102,16 +94,16 @@ function setup(o: { packaged?: boolean } = {}) {
     tether: tether as never,
     isReplacing: (id) => state.replacing.has(id),
     isQuitting: () => state.quitting,
-    host: '127.0.0.1',
-    port: 18905,
-    stateDir: '/state',
+    sidecar: {
+      ready: () => sidecar.healthy,
+      url: (path) => `http://127.0.0.1:18905${path}`,
+    },
     app: { isPackaged: o.packaged ?? false, getAppPath: () => '/repo' },
     resourcesPath: '/res',
     home: '/home/o',
     env: { PATH: '/usr/bin', OTHER: 'x' },
     fetch: fetch as unknown as typeof globalThis.fetch,
     execFile,
-    SidecarCtor: FakeSidecar as never,
   })
   const on = new Map<string, (...args: unknown[]) => unknown>()
   bus.registerIpc({
@@ -119,14 +111,11 @@ function setup(o: { packaged?: boolean } = {}) {
       on.set(channel, fn)
     }) as never,
   })
-  /** Start the sidecar and mark it healthy, so the grab may harvest. */
+  /** Mark the sidecar healthy, so the grab may harvest. */
   const ready = () => {
-    bus.startSidecar()
-    const sidecar = sidecars[sidecars.length - 1]
-    sidecar.ready = true
-    return sidecar
+    sidecar.healthy = true
   }
-  return { bus, win1, win2, views, catalog, tether, state, fetch, execFile, sidecars, on, ready }
+  return { bus, win1, win2, views, catalog, tether, state, fetch, execFile, on, ready }
 }
 
 const flush = () => new Promise((r) => setTimeout(r, 0))
@@ -152,9 +141,7 @@ describe('selection target', () => {
 describe('selection grab and delivery', () => {
   it('never harvests before its own sidecar is healthy', async () => {
     const { bus, fetch, ready } = setup()
-    await bus.grab()
-    bus.startSidecar() // started, not yet healthy
-    await bus.grab()
+    await bus.grab() // not started, or started and not yet healthy
     expect(fetch).not.toHaveBeenCalled()
     ready()
     await bus.grab()
@@ -275,51 +262,7 @@ describe('desktop grab menu rows', () => {
   })
 })
 
-describe('widget event log', () => {
-  it('posts to the configured sidecar with a 2 s timeout and swallows errors', async () => {
-    const timeout = vi.spyOn(AbortSignal, 'timeout')
-    const { bus, fetch } = setup()
-    fetch.mockRejectedValueOnce(new Error('refused'))
-    bus.logEvent('a b', 'lifecycle_retired', { reason: 'ended' })
-    await flush()
-    expect(fetch).toHaveBeenCalledWith('http://127.0.0.1:18905/widgets/a%20b/events', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ event: 'lifecycle_retired', data: { reason: 'ended' } }),
-      signal: expect.any(AbortSignal),
-    })
-    expect(timeout).toHaveBeenCalledWith(2_000)
-  })
-})
-
-describe('sidecar and deliver-event stream', () => {
-  it('starts the dev sidecar from the repo and the packaged one from resources', () => {
-    vi.spyOn(console, 'log').mockImplementation(() => {})
-    const dev = setup()
-    dev.bus.startSidecar()
-    expect(dev.sidecars[0].options).toEqual({
-      host: '127.0.0.1',
-      port: 18905,
-      repoRoot: '/repo',
-      stateDir: '/state',
-      command: undefined,
-      args: undefined,
-    })
-    expect(dev.sidecars[0].start).toHaveBeenCalledTimes(1)
-    const packaged = setup({ packaged: true })
-    packaged.bus.startSidecar()
-    expect(packaged.sidecars[0].options).toMatchObject({ repoRoot: '/res', args: [] })
-    expect(String((packaged.sidecars[0].options as { command: string }).command)).toContain('/res')
-  })
-
-  it('stop() is safe before start, and later aborts the stream and stops the sidecar', () => {
-    const { bus, sidecars } = setup()
-    expect(() => bus.stop()).not.toThrow()
-    bus.startSidecar()
-    bus.stop()
-    expect(sidecars[0].stop).toHaveBeenCalledTimes(1)
-  })
-
+describe('deliver-event stream', () => {
   it('delivers records from the deliver-event stream and stops on quit', async () => {
     const { bus, fetch, tether, state, ready } = setup()
     ready()
@@ -351,5 +294,9 @@ describe('sidecar and deliver-event stream', () => {
     await new Promise((r) => setTimeout(r, 1100))
     expect(fetch.mock.calls.filter(([url]) => String(url).endsWith('/events'))).toHaveLength(1)
     bus.stop()
+  })
+
+  it('stop() is safe before subscribing', () => {
+    expect(() => setup().bus.stop()).not.toThrow()
   })
 })

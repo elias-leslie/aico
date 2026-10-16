@@ -1,7 +1,6 @@
-// The selection bus, main's half: the optional sidecar Aico starts and its
-// per-widget event log, the session an indicated selection goes to, the
-// hotkey harvest and the browser-driven deliver-event stream that both type
-// through Tether, and the desktop grab menu rows.
+// The selection bus, main's half: the session an indicated selection goes to,
+// the hotkey harvest and the browser-driven deliver-event stream (both read
+// from the sidecar and type through Tether), and the desktop grab menu rows.
 
 import { execFile as nodeExecFile } from 'node:child_process'
 import { join } from 'node:path'
@@ -9,7 +8,6 @@ import type { App, IpcMain } from 'electron'
 import { parseSse, type SelectionRecord } from './selection'
 import { deliverSelectionToSession } from './selection-delivery'
 import type { SessionCatalog } from './session-catalog'
-import { bundledSidecar, Sidecar } from './sidecar'
 import { type TetherClient, TetherError } from './tether-client'
 import type { ViewRow } from './views'
 import type { WindowRegistry } from './window-registry'
@@ -24,8 +22,6 @@ import type { WindowRegistry } from './window-registry'
 // reconnected rather than silently dropping every later send.
 const SELECTION_EVENTS_IDLE_MS = 45_000
 
-type SidecarLike = Pick<Sidecar, 'ready' | 'start' | 'stop'>
-
 interface SelectionBusDeps {
   registry: Pick<WindowRegistry, 'forSession'>
   catalog: Pick<SessionCatalog, 'get'>
@@ -33,9 +29,12 @@ interface SelectionBusDeps {
   tether: Pick<TetherClient, 'inject'>
   isReplacing(id: string): boolean
   isQuitting(): boolean
-  host: string
-  port: number
-  stateDir: string
+  /** The sidecar the selections come from (sidecar-link). */
+  sidecar: {
+    /** Our own sidecar passed its health check. */
+    ready(): boolean
+    url(path: string): string
+  }
   app: Pick<App, 'isPackaged' | 'getAppPath'>
   resourcesPath: string
   home: string
@@ -47,16 +46,12 @@ interface SelectionBusDeps {
     options: { env: NodeJS.ProcessEnv },
     callback: (error: Error | null) => void,
   ) => unknown
-  SidecarCtor?: new (...args: ConstructorParameters<typeof Sidecar>) => SidecarLike
 }
 
 export function createSelectionBus(deps: SelectionBusDeps) {
-  const { registry, catalog, app } = deps
+  const { registry, catalog, app, sidecar } = deps
   const fetchImpl: typeof fetch = deps.fetch ?? ((input, init) => fetch(input, init))
   const execFile = deps.execFile ?? nodeExecFile
-  const SidecarCtor = deps.SidecarCtor ?? Sidecar
-
-  let sidecar: SidecarLike | null = null
 
   const selectionDeliveries = new Map<string, Promise<void>>()
 
@@ -66,22 +61,6 @@ export function createSelectionBus(deps: SelectionBusDeps) {
   let lastFocusedAico: string | null = null
   // Aborts the sidecar SSE subscription (deliver-event stream) on quit.
   let selectionEvents: AbortController | null = null
-
-  function logWidgetEvent(widgetId: string, event: string, data: Record<string, unknown>): void {
-    // Reuse the sidecar's bounded, rotated per-widget JSONL implementation. The
-    // console line remains authoritative if the optional sidecar is unavailable.
-    void fetchImpl(
-      `http://${deps.host}:${deps.port}/widgets/${encodeURIComponent(widgetId)}/events`,
-      {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ event, data }),
-        // The sidecar is optional. A wedged loopback listener must not retain an
-        // unbounded fetch while Aico is trying to reconcile or retire a workload.
-        signal: AbortSignal.timeout(2_000),
-      },
-    ).catch(() => {})
-  }
 
   // The widget that should receive an indicated selection: the last-focused one
   // if it's still open, else the most recently opened view.
@@ -156,9 +135,9 @@ export function createSelectionBus(deps: SelectionBusDeps) {
   // "Indicate" hotkey (X11 fallback for non-web sources): harvest the freshest
   // capture from the bus and deliver it. Browser sends arrive via SSE instead.
   async function selectionGrab(): Promise<void> {
-    if (!sidecar?.ready) return // never take text from a process we did not start
+    if (!sidecar.ready()) return // never take text from a process we did not start
     try {
-      const res = await fetchImpl(`http://${deps.host}:${deps.port}/selection/current`)
+      const res = await fetchImpl(sidecar.url('/selection/current'))
       if (!res.ok) return
       deliverSelection([(await res.json()) as SelectionRecord])
     } catch {
@@ -194,7 +173,7 @@ export function createSelectionBus(deps: SelectionBusDeps) {
 
   function subscribeSelectionEvents(): void {
     selectionEvents = new AbortController()
-    const url = `http://${deps.host}:${deps.port}/selection/events`
+    const url = sidecar.url('/selection/events')
     void (async () => {
       while (!deps.isQuitting()) {
         const connection = new AbortController()
@@ -206,7 +185,7 @@ export function createSelectionBus(deps: SelectionBusDeps) {
           idle = setTimeout(stopConnection, SELECTION_EVENTS_IDLE_MS)
         }
         try {
-          if (!sidecar?.ready) throw new Error('sidecar not ready')
+          if (!sidecar.ready()) throw new Error('sidecar not ready')
           armIdle()
           const res = await fetchImpl(url, { signal: connection.signal })
           if (!res.ok || !res.body) throw new Error(`events ${res.status}`)
@@ -240,33 +219,7 @@ export function createSelectionBus(deps: SelectionBusDeps) {
     })()
   }
 
-  function startSidecar(): void {
-    // Packaged: spawn the bundled PyInstaller executable from resources (no Python
-    // needed). Dev: `app.getAppPath()` is the repo root, so resolvePython finds the
-    // .venv and runs `-m aico_sidecar`. The packaged spawn cwd is a real directory
-    // (resourcesPath) since app.asar isn't a chdir-able path.
-    const packaged = app.isPackaged
-    const repoRoot = packaged ? deps.resourcesPath : app.getAppPath()
-    const command = packaged ? bundledSidecar(deps.resourcesPath) : undefined
-    const args = packaged ? [] : undefined
-    sidecar = new SidecarCtor(
-      {
-        host: deps.host,
-        port: deps.port,
-        repoRoot,
-        stateDir: deps.stateDir,
-        command,
-        args,
-      },
-      (status, detail) => console.log(`[aico] sidecar ${status}${detail ? `: ${detail}` : ''}`),
-    )
-    // Fire-and-forget: widgets render against tmux without the sidecar, so don't
-    // gate the UI on it; the health result is logged via onStatus.
-    sidecar.start().catch((err) => console.warn('[aico] sidecar start failed:', err))
-  }
-
   return {
-    startSidecar,
     /** Browser-driven sends (and any CLI POST to /selection/send) arrive here. */
     subscribe: subscribeSelectionEvents,
     /** The indicate hotkey's harvest. */
@@ -277,12 +230,9 @@ export function createSelectionBus(deps: SelectionBusDeps) {
     noteFocus: (sessionId: string | undefined): void => {
       lastFocusedAico = sessionId ?? lastFocusedAico
     },
-    /** The per-widget event log (the sidecar's JSONL). */
-    logEvent: logWidgetEvent,
-    /** Quit: stop the deliver-event stream, then the sidecar. Safe if never started. */
+    /** Quit: stop the deliver-event stream. Safe if never subscribed. */
     stop: (): void => {
       selectionEvents?.abort()
-      sidecar?.stop()
     },
     registerIpc: (ipcMain: Pick<IpcMain, 'on'>): void => {
       ipcMain.on('selection:grab', () => void selectionGrab())
