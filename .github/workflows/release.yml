@@ -1,8 +1,8 @@
 name: Release
 
+# Frozen: releases are built only on a manual run. Pushing a v* tag no longer
+# publishes anything; the live app runs the managed build, not an AppImage.
 on:
-  push:
-    tags: ['v*']
   workflow_dispatch:
     inputs:
       tag:
@@ -25,13 +25,13 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.ref }}
+          ref: ${{ format('refs/tags/{0}', inputs.tag) }}
           persist-credentials: false
       - name: Verify the release tag exists and is the checked-out commit
         id: tag
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ inputs.tag || github.ref_name }}
+          TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
           if ! [[ "$TAG" =~ ^v[0-9A-Za-z._+-]+$ ]]; then
