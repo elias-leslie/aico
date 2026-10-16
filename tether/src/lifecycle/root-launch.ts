@@ -49,6 +49,11 @@ export function rootLaunchEnvironment(widgetId: string): Record<string, string> 
   }
 }
 
+/** True while a launch prompt is set for this session (root or not). */
+export function hasLaunchPrompt(widgetId: string): boolean {
+  return prompts.has(widgetId)
+}
+
 export function rootPromptReady(widgetId: string): boolean {
   return !rootRequestForWidget(widgetId) || prompts.has(widgetId)
 }

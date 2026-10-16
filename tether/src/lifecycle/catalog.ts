@@ -514,6 +514,34 @@ export function clearReconciledHistoricalTmuxServerBinding(
   return result.changes === 1
 }
 
+/** Crash recovery: detach a session whose pane crashed from the live managed
+ * server it was on, so it can be recreated in place. The caller has proven a
+ * crash from the journal, freshly proven the session absent from the server
+ * roster under the lifecycle lock, and drained its scopes; peers on the
+ * server are untouched. */
+export function clearCrashedTmuxServerBinding(id: string, expectedTmuxServerId: string): boolean {
+  assertTmuxServerId(expectedTmuxServerId)
+  const result = db
+    .prepare(
+      `UPDATE sessions
+       SET tmux_server_id = NULL, tmux_allocation_state = 'unallocated',
+           launch_state = 'none', launch_nonce = NULL
+       WHERE id = ? AND tmux_server_id = ? AND tmux_allocation_state = 'bound'
+         AND lifecycle_version >= ?
+         AND scope_unit IS NULL AND scope_invocation_id IS NULL
+         AND pending_scope_unit IS NULL AND pending_scope_invocation_id IS NULL
+         AND tmux_session_id IS NULL AND pane_id IS NULL
+         AND EXISTS (
+           SELECT 1 FROM tmux_servers
+           WHERE tmux_servers.id = ?
+             AND tmux_servers.kind = 'managed'
+             AND tmux_servers.phase = 'active'
+         )`,
+    )
+    .run(id, expectedTmuxServerId, MANAGED_LIFECYCLE_VERSION, expectedTmuxServerId)
+  return result.changes === 1
+}
+
 /** All widgets, oldest first. */
 export function listWidgets(): WidgetRow[] {
   return (db.prepare('SELECT * FROM sessions ORDER BY created_at ASC').all() as unknown[]).map(

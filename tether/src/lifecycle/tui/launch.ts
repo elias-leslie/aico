@@ -25,6 +25,9 @@ function shellQuote(value: string): string {
  * is itself far larger. Unprivileged processes may lower it down to -500. */
 export const AGENT_OOM_SCORE_ADJ = 100
 
+/** Set in the pane's fallback shell to the agent's exit status. */
+export const AGENT_EXIT_ENV = 'TETHER_AGENT_EXIT'
+
 /** The shell line typed into a freshly-created session to launch the TUI, or
  * null for a bare shell (empty command). Any per-TUI env is exported inline so
  * it applies to the launched process. Universal — never branches on slug. */
@@ -74,6 +77,9 @@ export function paneCommand(line: string | null): string {
   // workload indistinguishable from a contaminated pre-launch gate during
   // restart reconciliation. The supervisor is deliberately a different exact
   // argv; after the TUI exits it still execs the user's interactive shell.
-  const supervisorScript = `${clearTypedLauncher}; ${line}; ${interactiveShell}`
+  // The agent's exit status is exported into the fallback shell's
+  // environment, where Tether's crash recovery reads it from /proc: 128+N
+  // means a signal (an OOM kill is 137), 0 a clean /exit.
+  const supervisorScript = `${clearTypedLauncher}; ${line}; export ${AGENT_EXIT_ENV}=$?; ${interactiveShell}`
   return `exec /bin/bash --noprofile --norc -c ${shellQuote(supervisorScript)}`
 }

@@ -263,7 +263,7 @@ describe('paneCommand', () => {
 
   it('runs the TUI then execs an interactive shell so the pane survives its exit', () => {
     expect(paneCommand('env -u NO_COLOR claude')).toBe(
-      `exec /bin/bash --noprofile --norc -c 'printf '\\''\\033[3J\\033[H\\033[2J'\\''; env -u NO_COLOR claude; exec "\${SHELL:-/bin/bash}"'`,
+      `exec /bin/bash --noprofile --norc -c 'printf '\\''\\033[3J\\033[H\\033[2J'\\''; env -u NO_COLOR claude; export TETHER_AGENT_EXIT=$?; exec "\${SHELL:-/bin/bash}"'`,
     )
   })
 })

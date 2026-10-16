@@ -68,6 +68,7 @@ describe('agent observation', () => {
     expect(
       observeClaude(procfs({ '/h/.claude/sessions/20.json': state('busy') }), '/h', [19, 20]),
     ).toEqual({
+      pid: 20,
       resumeId: CLAUDE,
       idle: false,
       blocked: false,
@@ -75,6 +76,7 @@ describe('agent observation', () => {
     expect(
       observeClaude(procfs({ '/h/.claude/sessions/20.json': state('idle') }), '/h', [20]),
     ).toEqual({
+      pid: 20,
       resumeId: CLAUDE,
       idle: true,
       blocked: false,
@@ -82,6 +84,7 @@ describe('agent observation', () => {
     expect(
       observeClaude(procfs({ '/h/.claude/sessions/20.json': state('waiting') }), '/h', [20]),
     ).toEqual({
+      pid: 20,
       resumeId: CLAUDE,
       idle: true,
       blocked: true,
@@ -105,7 +108,7 @@ describe('agent observation', () => {
         '/proc/30/fd/53': ROLLOUT(CODEX),
       },
     )
-    expect(observeCodex(fs, [30])).toEqual({ resumeId: CODEX, idle: null, blocked: false })
+    expect(observeCodex(fs, [30])).toEqual({ pid: 30, resumeId: CODEX, idle: null, blocked: false })
   })
 
   it('skips a Codex user rollout without a UUID thread ID', () => {
@@ -115,7 +118,7 @@ describe('agent observation', () => {
       { [ROLLOUT('odd')]: meta('odd'), [ROLLOUT(CODEX)]: meta(CODEX) },
       { '/proc/30/fd/4': ROLLOUT('odd'), '/proc/30/fd/5': ROLLOUT(CODEX) },
     )
-    expect(observeCodex(fs, [30])).toEqual({ resumeId: CODEX, idle: null, blocked: false })
+    expect(observeCodex(fs, [30])).toEqual({ pid: 30, resumeId: CODEX, idle: null, blocked: false })
   })
 
   it('skips a Claude session file without a UUID session ID', () => {
@@ -124,6 +127,7 @@ describe('agent observation', () => {
       '/h/.claude/sessions/21.json': JSON.stringify({ pid: 21, sessionId: CLAUDE }),
     })
     expect(observeClaude(fs, '/h', [20, 21])).toEqual({
+      pid: 21,
       resumeId: CLAUDE,
       idle: true,
       blocked: false,
@@ -136,6 +140,7 @@ describe('agent observation', () => {
       '/h/.claude/sessions/21.json': JSON.stringify({ pid: 21, sessionId: CLAUDE }),
     })
     expect(observeClaude(fs, '/h', [20, 21])).toEqual({
+      pid: 21,
       resumeId: CLAUDE,
       idle: true,
       blocked: false,
@@ -152,7 +157,7 @@ describe('agent observation', () => {
       },
       { '/proc/30/fd/4': ROLLOUT(SUBAGENT), '/proc/30/fd/5': ROLLOUT(CODEX) },
     )
-    expect(observeCodex(fs, [30])).toEqual({ resumeId: CODEX, idle: null, blocked: false })
+    expect(observeCodex(fs, [30])).toEqual({ pid: 30, resumeId: CODEX, idle: null, blocked: false })
   })
 
   it('finds the agent anywhere under the pane', () => {

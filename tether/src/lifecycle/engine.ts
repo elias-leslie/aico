@@ -41,6 +41,7 @@ import {
   activateTmuxServer,
   adoptActiveLegacyTmuxServer,
   bindWidgetTmuxServer,
+  clearCrashedTmuxServerBinding,
   clearReconciledDeadTmuxServerBinding,
   clearReconciledHistoricalTmuxServerBinding,
   clearWidgetPendingScope,
@@ -105,7 +106,12 @@ import {
   processStartTime,
   processStartTimeFromStat,
 } from './procfs'
-import { initialLaunchLine, rootLaunchEnvironment, rootPromptReady } from './root-launch'
+import {
+  hasLaunchPrompt,
+  initialLaunchLine,
+  rootLaunchEnvironment,
+  rootPromptReady,
+} from './root-launch'
 import { terminalClientEnv } from './terminal-env'
 import {
   hasTargetArgs,
@@ -2000,6 +2006,14 @@ async function ensureOwnedInternalSession(widgetId: string, size: PtySize): Prom
   if (!rootPromptReady(widgetId)) {
     return fail(widgetId, { code: 'workload_unavailable', reason: 'root prompt is not available' })
   }
+  // A session crash recovery owns starts only with its resume prompt, so an
+  // attach in the meantime cannot launch a fresh agent in its place.
+  if (launchGuard?.(widgetId) && !hasLaunchPrompt(widgetId)) {
+    return fail(widgetId, {
+      code: 'workload_unavailable',
+      reason: 'crash recovery will resume this session',
+    })
+  }
   if (!durableUserManager) {
     console.error(
       '[tether:lifecycle] user linger is not enabled; refusing a session that would die on logout',
@@ -2222,6 +2236,8 @@ export async function respawnAndRelaunch(
     cwd?: string
     projectId?: string | null
     commitMetadata?: () => void
+    /** Launch with the session's root prompt and resume ID (crash recovery). */
+    initialLaunch?: boolean
     /** Tether: the generation the caller read; checked under the lock. */
     expectedGeneration?: string
     generationOf?: (row: WidgetRow) => string
@@ -2360,7 +2376,11 @@ export async function respawnAndRelaunch(
       const expected = getWidget(widgetId)
       if (!expected?.pendingScopeUnit) return { status: 'stale' }
 
-      const line = tool ? launchLine(tool) : null
+      const line = tool
+        ? options.initialLaunch
+          ? initialLaunchLine(widgetId, tool)
+          : launchLine(tool)
+        : null
       let promoted: ManagedPaneProcess | null = null
       let sameScopeReplacementProven = false
       try {
@@ -2777,6 +2797,7 @@ async function reconcileManagedWidget(row: WidgetRow, useServerSnapshot = false)
         scope_unit: current.scopeUnit,
         scope_invocation_id: current.scopeInvocationId,
       })
+      reportAbandonedScope(current)
       const clean = await stopOwnedPaneScope(
         current.scopeUnit,
         current.scopeInvocationId,
@@ -2815,6 +2836,88 @@ async function reconcileManagedWidget(row: WidgetRow, useServerSnapshot = false)
     }
   } finally {
     releaseLifecycleOwner(row.id, lifecycleOwner, knownServerId)
+  }
+}
+
+/** A session whose pane scope is gone, seen before Tether clears the scope
+ * fields: the exact unit and invocation crash recovery looks up in the
+ * journal. `startup` marks startup reconciliation (a reboot or a daemon
+ * restart), which crash recovery leaves to reboot continuity. */
+export interface AbandonedScope {
+  widgetId: string
+  scopeUnit: string
+  scopeInvocationId: string | null
+  tmuxServerId: string | null
+  serverUnit: string | null
+  serverInvocationId: string | null
+  serverDead: boolean
+  startup: boolean
+  at: number
+}
+
+let launchGuard: ((widgetId: string) => boolean) | null = null
+
+/** Crash recovery: sessions whose fresh start must wait for its resume. */
+export function setLaunchGuard(guard: ((widgetId: string) => boolean) | null): void {
+  launchGuard = guard
+}
+
+let abandonedScopeListener: ((event: AbandonedScope) => void) | null = null
+
+export function onAbandonedScope(listener: ((event: AbandonedScope) => void) | null): void {
+  abandonedScopeListener = listener
+}
+
+function reportAbandonedScope(row: WidgetRow): void {
+  if (!abandonedScopeListener || !row.scopeUnit) return
+  const server = row.tmuxServerId ? getTmuxServer(row.tmuxServerId) : undefined
+  try {
+    abandonedScopeListener({
+      widgetId: row.id,
+      scopeUnit: row.scopeUnit,
+      scopeInvocationId: row.scopeInvocationId,
+      tmuxServerId: row.tmuxServerId,
+      serverUnit: server?.scopeUnit ?? null,
+      serverInvocationId: server?.invocationId ?? null,
+      serverDead: server?.phase === 'dead',
+      startup: lifecycleState !== 'ready',
+      at: Date.now(),
+    })
+  } catch (error) {
+    console.error('[tether:lifecycle] abandoned-scope listener failed:', error)
+  }
+}
+
+/** Reconcile one session now (crash recovery uses it to notice a tmux server
+ * that died while Tether kept running). A busy session is deferred. */
+export async function reconcileSessionNow(widgetId: string): Promise<void> {
+  if (lifecycleState !== 'ready') return
+  const row = getWidget(widgetId)
+  if (row) await reconcileManagedWidget(row)
+}
+
+/** Crash recovery only: after reconciliation drained a crashed session's
+ * scope on a live managed server, return the row to never-allocated so the
+ * next ensure recreates it in place. Same CAS as the historical-server path
+ * plus an exact absence re-check under the lifecycle lock. */
+export async function releaseCrashedSessionBinding(widgetId: string): Promise<boolean> {
+  const owner = lifecycleOwners.acquire(widgetId)
+  if (!owner) return false
+  const knownServerId = getWidget(widgetId)?.tmuxServerId ?? null
+  try {
+    const row = getWidget(widgetId)
+    if (!row) return false
+    if (isNeverAllocatedWidget(row)) return true
+    if (!row.tmuxServerId || row.scopeUnit || row.pendingScopeUnit) return false
+    if ((await internalSessionState(widgetId)) !== 'absent') return false
+    const server = getTmuxServer(row.tmuxServerId)
+    if (server?.phase === 'dead') {
+      return clearReconciledDeadTmuxServerBinding(widgetId, row.tmuxServerId)
+    }
+    return clearCrashedTmuxServerBinding(widgetId, row.tmuxServerId)
+  } finally {
+    releaseLifecycleOwner(widgetId, owner, knownServerId)
+    publishSession(widgetId)
   }
 }
 
