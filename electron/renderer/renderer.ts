@@ -308,7 +308,19 @@ let arcade: Arcade | null = null
         .catch((err: unknown) => console.error('[arcade]', err))
     })
     window.addEventListener('aico:arcade-next', () => {
-      arcade?.next().catch((err: unknown) => console.error('[arcade]', err))
+      if (arcade) {
+        arcade.next().catch((err: unknown) => console.error('[arcade]', err))
+        return
+      }
+      // games are off: turn them on, and this window gets a game it hasn't
+      // shown. Ask first, so a press while one is still loading can't turn
+      // them off instead.
+      window.aico.arcade
+        .enabled()
+        .then((on) => {
+          if (!on) window.aico.arcade.toggle()
+        })
+        .catch((err: unknown) => console.error('[arcade]', err))
     })
   }
 }
