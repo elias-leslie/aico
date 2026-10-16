@@ -365,6 +365,7 @@ describe('timers', () => {
   })
 
   it('an unfocused window runs only the blink and snore timers', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5) // no double blink: its timer would make a fourth
     face()
     expect(vi.getTimerCount()).toBe(2)
     vi.advanceTimersByTime(60_000)
@@ -372,6 +373,7 @@ describe('timers', () => {
   })
 
   it('the glance and exchange timers start on focus and stop when it goes', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5) // no double blink: its timer would make a fourth
     const f = face()
     f.eyes.setFocused(true) // + glance, exchange, and the surprised look's end
     expect(vi.getTimerCount()).toBe(5)
