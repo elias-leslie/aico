@@ -53,8 +53,12 @@ into `${XDG_CONFIG_HOME:-~/.config}/systemd/user/`
 (rendered for this checkout, followed by `systemctl --user daemon-reload`). It
 is safe to rerun; rerun it after moving the checkout.
 
-On Linux it also offers to give Electron's `chrome-sandbox` helper root
-ownership and the setuid bit. Privileged steps never reuse cached `sudo` credentials. The installer prints each command first and runs it only when you answer yes in an interactive shell or set `AICO_INSTALL_PRIVILEGED=1`; otherwise you run the printed commands yourself.
+Electron's sandbox needs unprivileged user namespaces. When the kernel
+restricts them, the installer offers an AppArmor profile (see the
+[AppArmor note](#ubuntu-apparmor-note) below). Only when namespaces stay
+unavailable (no profile installed, or the kernel turns them off) does it offer
+to give Electron's `chrome-sandbox` helper root ownership and the setuid bit.
+Privileged steps never reuse cached `sudo` credentials. The installer prints each command first and runs it only when you answer yes in an interactive shell or set `AICO_INSTALL_PRIVILEGED=1`; otherwise you run the printed commands yourself.
 
 ```bash
 AICO_INSTALL_PRIVILEGED=1 scripts/aico-install.sh
@@ -123,4 +127,4 @@ npm run dist
 
 ## Ubuntu AppArmor note
 
-Ubuntu 24.04+ can set `kernel.apparmor_restrict_unprivileged_userns=1`, which blocks Electron's sandbox from creating an unprivileged user namespace. Only when that sysctl is `1`, `scripts/aico-install.sh` generates the minimal Ubuntu-style profile (`userns` for this checkout's Electron binary) named `aico-electron-<hash of the binary path>`, so separate checkouts get separate profiles. It prints the profile path and the `install`/`apparmor_parser` commands, and runs them only on opt-in as described above. The binary is in your user-writable checkout, so anything that replaces it also gets the permission. A profile named plain `aico-electron` from older installers attaches to the same binary, and two such profiles conflict so neither applies; when it targets this checkout, the installer includes its removal in the same commands. Moving the checkout leaves the old path's profile behind; remove it with `sudo apparmor_parser -R` and `sudo rm` on that file.
+Ubuntu 24.04+ can set `kernel.apparmor_restrict_unprivileged_userns=1`, which blocks Electron's sandbox from creating an unprivileged user namespace. Only when that sysctl is `1`, `scripts/aico-install.sh` generates the minimal Ubuntu-style profile (`userns` for this checkout's Electron binary) named `aico-electron-<hash of the binary path>`, so separate checkouts get separate profiles. It prints the profile path and the `install`/`apparmor_parser` commands, and runs them only on opt-in as described above. The binary is in your user-writable checkout, so anything that replaces it also gets the permission. A profile named plain `aico-electron` from older installers attaches to the same binary, and two such profiles conflict so neither applies; when it targets this checkout, the installer includes its removal in the same commands. Moving the checkout leaves the old path's profile behind; remove it with `sudo apparmor_parser -R` and `sudo rm` on that file. With the profile installed, the installer leaves `chrome-sandbox` alone; without it, it offers the setuid helper as the fallback.

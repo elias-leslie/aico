@@ -28,7 +28,7 @@ scripts/aico-install.sh
 scripts/aico-launch.sh
 ```
 
-The installer refuses to continue until `tether --json version` reports API v1 or later, then installs the `aico-shell.service` user unit for this checkout. It prints any `sudo` step (Electron's `chrome-sandbox` helper, and an AppArmor profile on kernels that restrict user namespaces) and runs it only after an interactive yes or with `AICO_INSTALL_PRIVILEGED=1`. Configuration comes from environment variables, not a `.env` file.
+The installer refuses to continue until `tether --json version` reports API v1 or later, then installs the `aico-shell.service` user unit for this checkout. On kernels that restrict user namespaces it prints the `sudo` steps for an AppArmor profile, and only when no profile is installed and namespaces stay unavailable, for Electron's setuid `chrome-sandbox` helper; it runs them only after an interactive yes or with `AICO_INSTALL_PRIVILEGED=1`. Configuration comes from environment variables, not a `.env` file.
 
 Source builds need Node.js 22+, npm, Python 3.13+, uv, and native `node-pty` build tools. The [project guide](docs/project-guide.md) retains packaging and installation details.
 

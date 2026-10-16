@@ -161,28 +161,6 @@ PY
 
 ensure_electron_binary
 
-configure_electron_suid_sandbox() {
-  [ "$(node -p 'process.platform')" = "linux" ] || return 0
-  local sandbox="$REPO/node_modules/electron/dist/chrome-sandbox"
-  [ -e "$sandbox" ] || return 0
-  if [ "$(stat -c '%u:%a' "$sandbox" 2>/dev/null || true)" = "0:4755" ]; then
-    return 0
-  fi
-  echo "Electron: the chrome-sandbox helper needs root ownership and the setuid bit:"
-  echo "  sudo chown root:root $sandbox"
-  echo "  sudo chmod 4755 $sandbox"
-  if confirm_privileged "Electron: configuring chrome-sandbox."; then
-    if sudo chown root:root "$sandbox" && sudo chmod 4755 "$sandbox"; then
-      echo "Electron: chrome-sandbox configured."
-    else
-      echo "Electron: chrome-sandbox configuration failed; run the commands above manually."
-    fi
-  else
-    echo "Electron: skipped. Run the commands above, or rerun with AICO_INSTALL_PRIVILEGED=1."
-  fi
-}
-
-configure_electron_suid_sandbox
 uv sync --frozen --python 3.13 --extra dev
 
 mkdir -p "$HOME/.local/share/applications"
@@ -220,13 +198,70 @@ install_user_unit() {
 
 install_user_unit
 
+# Electron's sandbox needs unprivileged user namespaces. Prints "open" when
+# they work, "apparmor" when AppArmor restricts them (the profile below fixes
+# that), or "off" when the kernel turns them off (only the setuid helper helps).
+userns_state() {
+  if [ "$(cat /proc/sys/kernel/unprivileged_userns_clone 2>/dev/null || echo 1)" = "0" ] ||
+    [ "$(cat /proc/sys/user/max_user_namespaces 2>/dev/null || echo 1)" = "0" ]; then
+    echo off
+  elif [ "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null || true)" = "1" ]; then
+    echo apparmor
+  else
+    echo open
+  fi
+}
+
+# The setuid chrome-sandbox helper is the fallback for when user namespaces
+# are unavailable: offered only when the kernel restricts them and no AppArmor
+# profile for this checkout's Electron is installed (install_apparmor sets
+# APPARMOR_PROFILE_READY). Otherwise the helper stays as npm left it.
+configure_electron_suid_sandbox() {
+  [ "$(node -p 'process.platform')" = "linux" ] || return 0
+  local sandbox="$REPO/node_modules/electron/dist/chrome-sandbox"
+  [ -e "$sandbox" ] || return 0
+  if [ "$(stat -c '%u:%a' "$sandbox" 2>/dev/null || true)" = "0:4755" ]; then
+    return 0
+  fi
+  case "$(userns_state)" in
+    open)
+      echo "Electron: user namespaces are available; chrome-sandbox needs no setuid bit."
+      return 0
+      ;;
+    apparmor)
+      if [ "${APPARMOR_PROFILE_READY:-0}" = "1" ]; then
+        echo "Electron: the AppArmor profile allows user namespaces; chrome-sandbox needs no setuid bit."
+        return 0
+      fi
+      echo "Electron: this kernel restricts user namespaces and no AppArmor profile for Electron is installed,"
+      ;;
+    off)
+      echo "Electron: this kernel turns off unprivileged user namespaces,"
+      ;;
+  esac
+  echo "so the chrome-sandbox helper needs root ownership and the setuid bit:"
+  echo "  sudo chown root:root $sandbox"
+  echo "  sudo chmod 4755 $sandbox"
+  if confirm_privileged "Electron: configuring chrome-sandbox."; then
+    if sudo chown root:root "$sandbox" && sudo chmod 4755 "$sandbox"; then
+      echo "Electron: chrome-sandbox configured."
+    else
+      echo "Electron: chrome-sandbox configuration failed; run the commands above manually."
+    fi
+  else
+    echo "Electron: skipped. Run the commands above, or rerun with AICO_INSTALL_PRIVILEGED=1."
+  fi
+}
+
 # Electron runs with the OS sandbox enabled (webPreferences.sandbox: true). On
 # kernels with kernel.apparmor_restrict_unprivileged_userns=1 (Ubuntu 24.04+)
 # the sandbox cannot create its user namespace unless this checkout's Electron
 # binary is granted `userns` by an AppArmor profile. The profile below is the
 # minimal form Ubuntu documents for such applications. Its name is derived from
 # a hash of the binary path, so separate checkouts never overwrite each other.
-# Nothing is installed when the kernel restriction is off. Never aborts.
+# Nothing is installed when the kernel restriction is off. Never aborts. Sets
+# APPARMOR_PROFILE_READY=1 when this checkout's profile is installed.
+APPARMOR_PROFILE_READY=0
 install_apparmor() {
   local restrict_file=/proc/sys/kernel/apparmor_restrict_unprivileged_userns
   if [ "$(cat "$restrict_file" 2>/dev/null || true)" != "1" ]; then
@@ -260,6 +295,7 @@ PROFILE
   fi
   if [ -z "$legacy_steps" ] && [ -f "$target" ] && cmp -s "$profile" "$target"; then
     echo "AppArmor: $target is already installed."
+    APPARMOR_PROFILE_READY=1
     rm -f "$profile"
     return 0
   fi
@@ -284,6 +320,7 @@ MESSAGE
     fi
     if sudo install -m 0644 "$profile" "$target" && sudo apparmor_parser -r "$target"; then
       echo "AppArmor: profile $name loaded."
+      APPARMOR_PROFILE_READY=1
       rm -f "$profile"
     else
       echo "AppArmor: install failed; run the commands above manually."
@@ -293,6 +330,7 @@ MESSAGE
   fi
 }
 install_apparmor || true
+configure_electron_suid_sandbox
 
 cat <<'EOF'
 Aico source install complete.

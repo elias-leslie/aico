@@ -57,8 +57,8 @@ checkout). The installer performs a source install in the current checkout:
 - `uv sync --frozen --python 3.13 --extra dev`
 - installs a desktop launcher at `~/.local/share/applications/aico.desktop`
 - renders `scripts/systemd/aico-shell.service` into `${XDG_CONFIG_HOME:-~/.config}/systemd/user/` (substituting the checkout path, as `st service rebuild aico` does) and runs `systemctl --user daemon-reload`; the unit is not enabled, and `scripts/aico-launch.sh` starts `aico-shell.service`
-- configures Electron's Linux `chrome-sandbox` helper (root-owned, setuid) when you opt in
 - on kernels with `kernel.apparmor_restrict_unprivileged_userns=1`, installs an AppArmor profile for Electron's sandbox when you opt in
+- only when user namespaces stay unavailable (restricted with no profile installed, or turned off), configures Electron's Linux `chrome-sandbox` helper (root-owned, setuid) when you opt in
 
 Privileged steps never reuse cached `sudo` credentials. The installer prints each command first and runs it only when you answer yes in an interactive shell or set `AICO_INSTALL_PRIVILEGED=1`; otherwise you run the printed commands yourself. Rerun the installer after moving the checkout so the unit and desktop entry point at the new path.
 
