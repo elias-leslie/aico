@@ -25,6 +25,7 @@ import { sessionGeneration } from './owner-retirement'
 import {
   createRootServer,
   guiSocketPath,
+  isProjectRootPath,
   parseRootCreate,
   rootRequestDigest,
   widgetMutationOperation,
@@ -784,7 +785,11 @@ describe('private root workload control', () => {
     const input = create('digest')
     expect(parseRootCreate({ ...input, command: ['bash'] })).toBeNull()
     expect(parseRootCreate({ ...input, tool: 'shell' })).toBeNull()
-    expect(parseRootCreate({ ...input, projectRoot: '/tmp/../other' })).toBeNull()
+    for (const projectRoot of ['/tmp/../other', '/tmp/./x', '/tmp//x', '/tmp/x\0', 'tmp/x'])
+      expect(parseRootCreate({ ...input, projectRoot })).toBeNull()
+    for (const path of ['/tmp/x', '/tmp/x/', '/']) expect(isProjectRootPath(path)).toBe(true)
+    for (const path of ['/tmp/../x', '/tmp/./x', '//tmp', '/tmp/x\0', 'tmp', '', 7, null])
+      expect(isProjectRootPath(path)).toBe(false)
     expect(parseRootCreate({ ...input, initialPrompt: '\0' })).toBeNull()
     const parsed = present(parseRootCreate(input))
     expect(rootRequestDigest(parsed)).toBe(

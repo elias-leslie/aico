@@ -63,6 +63,7 @@ import { ForegroundPaneMemory, systemdPaneMemoryHost } from './lifecycle/pane-me
 import {
   type Bounds,
   createRootHandler,
+  isProjectRootPath,
   type MutationRejection,
   parseLabel,
   type RootControlOperations,
@@ -475,6 +476,15 @@ export function rootOperations(context: LifecycleApiContext): RootControlOperati
   }
 }
 
+/** A body `projectRoot` on create and switch-project: the /v1/roots path
+ * rule, then an existing directory. switch-project also checks the rule
+ * before its session lookup. */
+function requireProjectRoot(value: unknown): string {
+  if (!isProjectRootPath(value)) throw new HttpError(400, 'invalid_body', { field: 'projectRoot' })
+  if (!isDir(value)) throw new HttpError(400, 'unknown_project')
+  return value
+}
+
 async function resolveProject(
   context: LifecycleApiContext,
   projectId: string,
@@ -559,12 +569,8 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
           throw new HttpError(400, 'invalid_body', { field: 'projectId' })
         projectId = body.projectId
       }
-      if (body.projectRoot !== undefined && body.projectRoot !== null) {
-        if (typeof body.projectRoot !== 'string' || !body.projectRoot.startsWith('/'))
-          throw new HttpError(400, 'invalid_body', { field: 'projectRoot' })
-        if (!isDir(body.projectRoot)) throw new HttpError(400, 'unknown_project')
-        projectRoot = body.projectRoot
-      }
+      if (body.projectRoot !== undefined && body.projectRoot !== null)
+        projectRoot = requireProjectRoot(body.projectRoot)
       if (projectId && !projectRoot) {
         projectRoot = await resolveProject(context, projectId)
         if (!projectRoot) throw new HttpError(400, 'unknown_project')
@@ -674,14 +680,16 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
         throw new HttpError(400, 'invalid_body', { detail: 'send projectId or projectRoot' })
       if (byId && (typeof body.projectId !== 'string' || !body.projectId))
         throw new HttpError(400, 'invalid_body', { field: 'projectId' })
-      if (byRoot && (typeof body.projectRoot !== 'string' || !body.projectRoot.startsWith('/')))
+      // The path rule is body shape, checked up front; existence waits until
+      // the session and generation check out, as with projectId.
+      if (byRoot && !isProjectRootPath(body.projectRoot))
         throw new HttpError(400, 'invalid_body', { field: 'projectRoot' })
       const row = requireSession(params.id)
       fence(row, generation)
       const projectId = byId ? (body.projectId as string) : null
-      let projectRoot: string | null
-      if (projectId) projectRoot = await resolveProject(context, projectId)
-      else projectRoot = isDir(body.projectRoot as string) ? (body.projectRoot as string) : null
+      const projectRoot = projectId
+        ? await resolveProject(context, projectId)
+        : requireProjectRoot(body.projectRoot)
       if (!projectRoot) throw new HttpError(400, 'unknown_project')
       await whenReady()
       await answerReplacement(

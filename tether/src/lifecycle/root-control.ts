@@ -176,6 +176,19 @@ function object(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
+/** A project root Tether may run a session in: absolute, already normalized
+ * (no `.` or `..` segments, no repeated `/`) and free of NUL. Callers check
+ * that the directory exists. Shared by /v1/roots, POST /v1/sessions and
+ * switch-project so a path one refuses is refused by all. */
+export function isProjectRootPath(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    isAbsolute(value) &&
+    normalize(value) === value &&
+    !value.includes('\0')
+  )
+}
+
 export function parseRootCreate(value: unknown): RootCreateRequest | null {
   if (
     !object(value) ||
@@ -225,10 +238,7 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     (tool !== 'codex' && tool !== 'claude-code') ||
     typeof projectId !== 'string' ||
     !KEY.test(projectId) ||
-    typeof projectRoot !== 'string' ||
-    !isAbsolute(projectRoot) ||
-    normalize(projectRoot) !== projectRoot ||
-    projectRoot.includes('\0') ||
+    !isProjectRootPath(projectRoot) ||
     typeof initialPrompt !== 'string' ||
     !initialPrompt.trim() ||
     initialPrompt.includes('\0') ||
