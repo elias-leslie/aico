@@ -10,8 +10,6 @@
 #   ~/.local/lib/tether/{bin/tether,dist/tether.mjs}   stable start path
 #   ~/.local/bin/tether -> ~/.local/lib/tether/bin/tether
 #   ~/.config/systemd/user/tether@.service
-#   ~/.config/systemd/user/tmux-spawn-.scope.d/50-memory-guard.conf (if absent or a
-#     superseded shipped default; running pane scopes get the new limits too)
 #   ~/.local/lib/tether/scripts/aico-root-watch.py   the `st aico` client
 #
 # It never enables or starts an instance unless --start is given, and only the
@@ -109,35 +107,9 @@ fi
 reload=0
 install_file "$repo/systemd/tether@.service" "$unit_dir/tether@.service" 0644 && reload=1 || true
 
-guard_dir="$unit_dir/tmux-spawn-.scope.d"
-guard="$guard_dir/50-memory-guard.conf"
-# Shipped defaults this installer replaces; a hand-edited guard is kept.
-superseded_guards=(
-  f6af17ab8abcb11eef1233fd685b7890237a7aacd44c4b83baa225b829f05776 # MemoryHigh=6G MemoryMax=8G
-)
-guard_superseded() {
-  local sum
-  sum="$(sha256sum "$guard" | cut -d' ' -f1)"
-  printf '%s\n' "${superseded_guards[@]}" | grep -qx "$sum"
-}
-guard_changed=0
-if [ ! -e "$guard" ] || guard_superseded; then
-  install_file "$repo/systemd/tmux-spawn-.scope.d/50-memory-guard.conf" "$guard" 0644 &&
-    reload=1 && guard_changed=1 || true
-elif ! cmp -s "$repo/systemd/tmux-spawn-.scope.d/50-memory-guard.conf" "$guard"; then
-  echo "kept existing $guard (differs from the shipped default)"
-fi
-
+# Pane memory policy (OOMPolicy=continue and the per-pane cap) belongs to
+# Nightshift's deploy/systemd/install.sh; tether doctor checks live panes.
 [ "$reload" = 1 ] && systemctl --user daemon-reload
-
-# A drop-in only reaches scopes started after it; give running panes the new
-# limits now. MemoryHigh=infinity lifts the old fixed throttle.
-if [ "$guard_changed" = 1 ]; then
-  for scope in $(systemctl --user list-units --type=scope --state=active --no-legend --plain 'tmux-spawn-*.scope' | cut -d' ' -f1); do
-    systemctl --user set-property --runtime "$scope" MemoryHigh=infinity MemoryMax=16G MemorySwapMax=3G ||
-      echo "could not update $scope" >&2
-  done
-fi
 
 if [ -n "$start_instance" ]; then
   [[ "$start_instance" =~ ^[a-z0-9][a-z0-9-]{0,31}$ ]] || fail "invalid instance name: $start_instance"

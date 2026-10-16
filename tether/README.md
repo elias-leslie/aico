@@ -34,7 +34,7 @@ tether doctor
 
 Install Tether before Aico or A-Term; both installers refuse to continue until it answers. A single `default` instance can serve both apps.
 
-The installer is idempotent. It never starts an instance unless you pass `--start`. If the tmux pane memory guard (`tmux-spawn-.scope.d/50-memory-guard.conf`) is missing, it installs it.
+The installer is idempotent. It never starts an instance unless you pass `--start`. It installs no pane memory drop-in: Nightshift owns the pane OOM policy and cap, and `tether doctor` checks live panes against it.
 
 ## CLI
 

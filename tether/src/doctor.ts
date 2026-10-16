@@ -83,29 +83,67 @@ export function checkSocket(dir: PathMode, socket: PathMode, uid: number): Check
     : { name: 'socket', status: 'ok', detail: 'directory 0700, socket 0600' }
 }
 
-/** The pane drop-ins in name order (later files win, as in systemd): a
- * MemoryMax backstop and a swap cap, and no fixed MemoryHigh throttle. */
-export function checkMemoryGuard(confs: string[]): Check {
-  const settings = new Map<string, string>()
-  for (const text of confs) {
-    for (const match of text.matchAll(/^\s*(MemoryHigh|MemoryMax|MemorySwapMax)=(.*?)\s*$/gm))
-      settings.set(match[1], match[2])
-  }
-  const high = settings.get('MemoryHigh')
+export interface PaneUnit {
+  unit: string
+  oomPolicy: string
+  memoryMax: string
+}
+
+/** Live pane scopes must keep running when one of their processes is killed
+ * (OOMPolicy=continue) and carry a finite MemoryMax cap. Nightshift installs
+ * both; Tether only reports. Null means systemctl could not answer. */
+export function checkPaneOomPolicy(panes: PaneUnit[] | null): Check {
+  const name = 'pane-oom-policy'
+  if (panes === null) return { name, status: 'warn', detail: 'could not read pane scopes' }
+  if (panes.length === 0) return { name, status: 'ok', detail: 'no live panes' }
+  const stops = panes.filter((pane) => pane.oomPolicy !== 'continue').map((pane) => pane.unit)
+  const uncapped = panes
+    .filter((pane) => !/^[1-9][0-9]*$/.test(pane.memoryMax))
+    .map((pane) => pane.unit)
   const problems: string[] = []
-  if (!settings.get('MemoryMax')) problems.push('no MemoryMax backstop')
-  if (!settings.get('MemorySwapMax')) problems.push('no MemorySwapMax')
-  if (high && high !== 'infinity') problems.push(`fixed MemoryHigh=${high} throttles agent panes`)
+  if (stops.length) problems.push(`not on OOMPolicy=continue: ${stops.join(', ')}`)
+  if (uncapped.length) problems.push(`no MemoryMax cap: ${uncapped.join(', ')}`)
   return problems.length
     ? {
-        name: 'memory-guard',
+        name,
         status: 'warn',
-        detail: `tmux-spawn-.scope drop-in: ${problems.join('; ')}; run scripts/install.sh`,
+        detail: `${problems.join('; ')}. Run Nightshift's deploy/systemd/install.sh; a pane it cannot change keeps the old policy until it is recreated`,
       }
     : {
-        name: 'memory-guard',
+        name,
         status: 'ok',
-        detail: `tmux-spawn-.scope MemoryMax=${settings.get('MemoryMax')} MemorySwapMax=${settings.get('MemorySwapMax')}`,
+        detail: `${panes.length} live pane(s) on OOMPolicy=continue with a MemoryMax cap`,
+      }
+}
+
+/** `systemctl show -p Id -p OOMPolicy -p MemoryMax` output for several units. */
+export function parsePaneUnits(output: string): PaneUnit[] {
+  const panes: PaneUnit[] = []
+  for (const block of output.split(/\n\s*\n/)) {
+    const fields = new Map<string, string>()
+    for (const line of block.split('\n')) {
+      const eq = line.indexOf('=')
+      if (eq > 0) fields.set(line.slice(0, eq), line.slice(eq + 1).trim())
+    }
+    const unit = fields.get('Id')
+    if (unit)
+      panes.push({
+        unit,
+        oomPolicy: fields.get('OOMPolicy') ?? '',
+        memoryMax: fields.get('MemoryMax') ?? '',
+      })
+  }
+  return panes
+}
+
+/** The agent launcher lowers each agent's OOM score with util-linux choom. */
+export function checkChoom(present: boolean): Check {
+  return present
+    ? { name: 'choom', status: 'ok', detail: '/usr/bin/choom present' }
+    : {
+        name: 'choom',
+        status: 'fail',
+        detail: '/usr/bin/choom not found; agent launches need it. Install util-linux',
       }
 }
 
@@ -185,21 +223,34 @@ async function hasNodeSqlite(): Promise<boolean> {
   }
 }
 
-function readMemoryGuardConfs(): string[] {
-  const dir = join(
-    process.env.XDG_CONFIG_HOME || join(homedir(), '.config'),
-    'systemd',
-    'user',
-    'tmux-spawn-.scope.d',
-  )
-  try {
-    return readdirSync(dir)
-      .filter((name) => name.endsWith('.conf'))
-      .sort()
-      .map((name) => readFileSync(join(dir, name), 'utf8'))
-  } catch {
-    return []
-  }
+function readPaneUnits(): PaneUnit[] | null {
+  const listed = run('systemctl', [
+    '--user',
+    'list-units',
+    '--type=scope',
+    '--state=active',
+    '--no-legend',
+    '--plain',
+    'tmux-spawn-*.scope',
+  ])
+  if (listed === null) return null
+  const units = listed
+    .split('\n')
+    .map((line) => line.trim().split(/\s+/)[0] ?? '')
+    .filter((unit) => /^tmux-spawn-[A-Za-z0-9-]+\.scope$/.test(unit))
+  if (units.length === 0) return []
+  const shown = run('systemctl', [
+    '--user',
+    'show',
+    '-p',
+    'Id',
+    '-p',
+    'OOMPolicy',
+    '-p',
+    'MemoryMax',
+    ...units,
+  ])
+  return shown === null ? null : parsePaneUnits(shown)
 }
 
 export async function runDoctor(paths: TetherPaths): Promise<Check[]> {
@@ -216,7 +267,8 @@ export async function runDoctor(paths: TetherPaths): Promise<Check[]> {
     run('/usr/bin/tmux', ['-V'])
       ? { name: 'tmux', status: 'ok', detail: (run('/usr/bin/tmux', ['-V']) ?? '').trim() }
       : { name: 'tmux', status: 'fail', detail: '/usr/bin/tmux not found' },
-    checkMemoryGuard(readMemoryGuardConfs()),
+    checkPaneOomPolicy(readPaneUnits()),
+    checkChoom(existsSync('/usr/bin/choom')),
     checkEnabledInstances(readEnabledInstances()),
     checkSocket(stat(paths.socketDir), stat(paths.socket), uid),
   ]

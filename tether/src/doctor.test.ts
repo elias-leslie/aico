@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
   checkCgroup,
+  checkChoom,
   checkEnabledInstances,
   checkLinger,
-  checkMemoryGuard,
   checkNode,
+  checkPaneOomPolicy,
   checkSocket,
   checkSystemd,
+  parsePaneUnits,
   parseSystemdVersion,
 } from './doctor'
 
@@ -43,20 +45,27 @@ describe('doctor checks', () => {
     expect(checkSocket(dir, socket, 1001).status).toBe('fail')
   })
 
-  it('looks for the tmux-spawn memory guard', () => {
-    expect(checkMemoryGuard(['[Scope]\nMemoryMax=16G\nMemorySwapMax=3G\n'])).toMatchObject({
-      status: 'ok',
-      detail: 'tmux-spawn-.scope MemoryMax=16G MemorySwapMax=3G',
-    })
-    expect(checkMemoryGuard([]).status).toBe('warn')
-    const throttled = checkMemoryGuard(['[Scope]\nMemoryHigh=6G\nMemoryMax=8G\n'])
-    expect(throttled.status).toBe('warn')
-    expect(throttled.detail).toContain('fixed MemoryHigh=6G')
-    expect(throttled.detail).toContain('no MemorySwapMax')
-    // A later drop-in that lifts MemoryHigh wins.
-    expect(
-      checkMemoryGuard(['MemoryHigh=6G\nMemoryMax=8G\n', 'MemoryHigh=infinity\nMemorySwapMax=3G\n'])
-        .status,
-    ).toBe('ok')
+  it('checks that live panes are on OOMPolicy=continue with a MemoryMax cap', () => {
+    const shown =
+      'Id=tmux-spawn-a.scope\nOOMPolicy=continue\nMemoryMax=12884901888\n\n' +
+      'Id=tmux-spawn-b.scope\nOOMPolicy=stop\nMemoryMax=infinity\n'
+    const panes = parsePaneUnits(shown)
+    expect(panes).toEqual([
+      { unit: 'tmux-spawn-a.scope', oomPolicy: 'continue', memoryMax: '12884901888' },
+      { unit: 'tmux-spawn-b.scope', oomPolicy: 'stop', memoryMax: 'infinity' },
+    ])
+    const mixed = checkPaneOomPolicy(panes)
+    expect(mixed.status).toBe('warn')
+    expect(mixed.detail).toContain('not on OOMPolicy=continue: tmux-spawn-b.scope')
+    expect(mixed.detail).toContain('no MemoryMax cap: tmux-spawn-b.scope')
+    expect(mixed.detail).toContain("Nightshift's deploy/systemd/install.sh")
+    expect(checkPaneOomPolicy(panes.slice(0, 1)).status).toBe('ok')
+    expect(checkPaneOomPolicy([]).status).toBe('ok')
+    expect(checkPaneOomPolicy(null).status).toBe('warn')
+  })
+
+  it('needs choom for the agent OOM bias', () => {
+    expect(checkChoom(true).status).toBe('ok')
+    expect(checkChoom(false).status).toBe('fail')
   })
 })

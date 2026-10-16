@@ -19,6 +19,12 @@ function shellQuote(value: string): string {
   return /^[A-Za-z0-9_@%+=:,./-]+$/.test(value) ? value : `'${value.replace(/'/g, "'\\''")}'`
 }
 
+/** Agents run at OOM score adjust 100 while the pane's other processes keep
+ * the inherited 200 (Nightshift's memctl re-raises their children), so under
+ * a pane cap the kernel kills a large tool before the agent unless the agent
+ * is itself far larger. Unprivileged processes may lower it down to -500. */
+export const AGENT_OOM_SCORE_ADJ = 100
+
 /** The shell line typed into a freshly-created session to launch the TUI, or
  * null for a bare shell (empty command). Any per-TUI env is exported inline so
  * it applies to the launched process. Universal — never branches on slug. */
@@ -26,6 +32,10 @@ export function launchLine(spec: TuiSpec): string | null {
   if (spec.command.length === 0) return null
   const env = { ...BASE_TUI_ENV, ...(spec.env ?? {}) }
   const prefix = [
+    '/usr/bin/choom',
+    '-n',
+    String(AGENT_OOM_SCORE_ADJ),
+    '--',
     '/usr/bin/env',
     '-u',
     'NO_COLOR',
