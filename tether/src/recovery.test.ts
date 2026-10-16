@@ -52,6 +52,7 @@ interface Harness {
   paneExitedAt: number | null
   systemState: string
   journal: string
+  kernel: string
   marker: { marker: AgentExitMarker; at: number } | null
   markers: Map<string, number>
   respawn: Mock<(id: string) => Promise<RespawnResult>>
@@ -83,6 +84,7 @@ function harness(): Harness {
     paneExitedAt: null,
     systemState: 'running',
     journal: '',
+    kernel: '',
     marker: null,
     markers: new Map<string, number>(),
     respawn: vi.fn(async (_id: string): Promise<RespawnResult> => ({ status: 'replaced' })),
@@ -103,7 +105,8 @@ function harness(): Harness {
     notify: () => {},
     paneExitedAt: () => h.paneExitedAt,
     runningConversations: async () => h.running,
-    agentExitMarker: () => h.marker,
+    // Only the session's own pane scope has a marker.
+    agentExitMarker: (scopeUnit) => (scopeUnit === `tmux-spawn-${id}.scope` ? h.marker : null),
     agentExitMarkers: () => [...h.markers].map(([scopeUnit, at]) => ({ scopeUnit, at })),
     removeAgentExitMarker: (scopeUnit) => {
       h.markers.delete(scopeUnit)
@@ -121,6 +124,7 @@ function harness(): Harness {
     engine,
     run: async (command, args) => {
       if (command === 'systemctl') return `${h.systemState}\n`
+      if (command === 'journalctl' && args.includes('-k')) return h.kernel
       if (command === 'journalctl' && args.includes('--user') && !args.includes('-u'))
         return h.journal
       return ''
@@ -183,6 +187,17 @@ function unitSigkill(unit: string, pid: number, at: number, signal = 'SIGKILL'):
     USER_INVOCATION_ID: INVOCATION,
     __REALTIME_TIMESTAMP: String(at * 1000),
   })
+}
+
+/** The kernel's record of an OOM kill of `pid` in the session's pane. */
+function kernelOom(h: Harness, pid: number, comm: string, at: number): string {
+  const memcg = `/user.slice/user-1000.slice/user@1000.service/app.slice/tmux-spawn-${h.id}.scope`
+  return [
+    `oom-kill:constraint=CONSTRAINT_MEMCG,nodemask=(null),cpuset=/,mems_allowed=0,oom_memcg=${memcg},task_memcg=${memcg},task=${comm},pid=${pid},uid=1000`,
+    `Memory cgroup out of memory: Killed process ${pid} (${comm}) total-vm:1kB, anon-rss:204800kB, file-rss:0kB`,
+  ]
+    .map((MESSAGE) => JSON.stringify({ MESSAGE, __REALTIME_TIMESTAMP: String(at * 1000) }))
+    .join('\n')
 }
 
 function abandoned(h: Harness, overrides: Partial<AbandonedScope> = {}): AbandonedScope {
@@ -423,6 +438,81 @@ describe('crash recovery', () => {
     h.marker = { marker: { state: 'exit', status: 0 }, at: h.clock.now - 5_000 }
     h.journal = unitSigkill(unit, 300, h.clock.now - 1_000)
     await h.recovery.onAbandoned(abandoned(h))
+    expect(sessions(h)).toEqual([])
+  })
+
+  it('reads a whole-pane SIGKILL as a crash when the owner had started the agent again by hand', async () => {
+    const unit = `tmux-spawn-${h.id}.scope`
+    // The agent was killed and the supervisor wrote its exit; the owner then
+    // typed claude --resume in the fallback shell, which nothing records.
+    h.marker = { marker: { state: 'exit', status: 137 }, at: h.clock.now - 60_000 }
+    await h.recovery.inspect(row(h), 'running', PANE_PID, 777)
+    h.clock.now += 30_000
+    h.pane = null
+    const killedAt = h.clock.now - 1_000
+    h.journal = [unitSigkill(unit, 777, killedAt), unitConsumed(unit, killedAt)].join('\n')
+    await h.recovery.onAbandoned(abandoned(h))
+    expect(sessions(h)).toMatchObject([
+      { kind: 'pane-stopped', cause: 'killed', died_at: killedAt, died_at_approx: false },
+    ])
+  })
+
+  it("needs a systemd SIGKILL to read a hand-started agent's pane ending as a kill", async () => {
+    const unit = `tmux-spawn-${h.id}.scope`
+    h.marker = { marker: { state: 'exit', status: 0 }, at: h.clock.now - 60_000 }
+    await h.recovery.inspect(row(h), 'running', PANE_PID, 777)
+    h.clock.now += 30_000
+    h.pane = null
+    // The owner's agent exited and they typed exit: the scope just ends.
+    h.journal = unitConsumed(unit, h.clock.now - 500)
+    await h.recovery.onAbandoned(abandoned(h))
+    expect(sessions(h)).toEqual([])
+  })
+
+  it('does not read a pane whose processes outlived it, until Tether stopped them, as a kill', async () => {
+    h.pane = null
+    const unit = `tmux-spawn-${h.id}.scope`
+    const at = h.clock.now
+    // The stop timed out and Tether emptied the scope with cgroup.kill.
+    h.marker = { marker: { state: 'started' }, at: T0 - 3600_000 }
+    h.journal = unitConsumed(unit, at + 7_000)
+    await h.recovery.onAbandoned(abandoned(h, { at }))
+    expect(sessions(h)).toEqual([])
+  })
+
+  it('dates a pane kill by the kill, not by an older OOM victim the agent outlived', async () => {
+    h.pane = null
+    const unit = `tmux-spawn-${h.id}.scope`
+    const killedAt = h.clock.now - 2_000
+    h.marker = { marker: { state: 'started' }, at: T0 - 3600_000 }
+    h.kernel = kernelOom(h, 900, 'python', killedAt - 7 * 60_000)
+    h.journal = [unitSigkill(unit, 300, killedAt), unitConsumed(unit, killedAt)].join('\n')
+    await h.recovery.onAbandoned(abandoned(h))
+    expect(sessions(h)).toMatchObject([
+      { cause: 'killed', died_at: killedAt, died_at_approx: false, victim: null },
+    ])
+  })
+
+  it('names the OOM victim that ended a pane with no unit failure', async () => {
+    h.pane = null
+    const unit = `tmux-spawn-${h.id}.scope`
+    const endedAt = h.clock.now - 1_000
+    // The kernel killed the supervisor shell itself; the rest of the pane ended.
+    h.marker = { marker: { state: 'started' }, at: T0 - 3600_000 }
+    h.kernel = kernelOom(h, 901, 'bash', endedAt - 20)
+    h.journal = unitConsumed(unit, endedAt)
+    await h.recovery.onAbandoned(abandoned(h))
+    expect(sessions(h)).toMatchObject([
+      { cause: 'killed', died_at: endedAt - 20, victim: { pid: 901, comm: 'bash' } },
+    ])
+  })
+
+  it('reads no marker for another scope', async () => {
+    h.pane = null
+    h.marker = { marker: { state: 'started' }, at: T0 - 3600_000 }
+    const other = 'tmux-spawn-someone-else.scope'
+    h.journal = unitConsumed(other, h.clock.now - 1_000)
+    await h.recovery.onAbandoned(abandoned(h, { scopeUnit: other }))
     expect(sessions(h)).toEqual([])
   })
 

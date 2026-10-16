@@ -415,6 +415,12 @@ describe('synopsis', () => {
     const killed = renderSynopsis({ ...base, cause: PANE_KILLED, victim: null, transcript: null })
     expect(killed).toContain('every process in your pane was killed from outside')
     expect(killed).not.toContain('result killed')
+    // When the kernel OOM-killed a process as the pane went, that is the cause.
+    const oom = renderSynopsis({ ...base, cause: PANE_KILLED, transcript: null })
+    expect(oom).not.toContain('no memory kill')
+    expect(oom).toMatch(
+      /the kernel killed \S+ pid \d+ at .* in your pane and every process in it ended/,
+    )
   })
 
   it('says about when only the detection time is known', () => {

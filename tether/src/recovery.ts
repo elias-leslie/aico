@@ -115,6 +115,13 @@ const RECONCILE_EVERY_MS = 60_000
 /** Continuity observes once a minute; an agent seen running this recently was
  * still running when its tmux server died. */
 const AGENT_SEEN_FRESH_MS = 150_000
+/** A scope end logged this long after Tether saw the pane go is Tether's own
+ * cleanup of processes that outlived the pane, not the moment it died. */
+const ENDED_BEFORE_SEEN_SLACK_MS = 2_000
+/** An OOM victim counts toward a pane kill only this close to the kill; an
+ * older one (a tool the kernel killed under OOMPolicy=continue while the
+ * agent lived on) is not what ended the pane. */
+const KILL_VICTIM_NEAR_MS = 5_000
 /** Exit statuses of an agent killed by SIGKILL (an OOM kill) or a crash
  * signal (SIGILL, SIGABRT, SIGBUS, SIGFPE, SIGSEGV). SIGHUP, SIGINT and
  * SIGTERM are how people and services stop an agent on purpose. */
@@ -551,7 +558,8 @@ export class Recovery {
             }
           : null,
         died_at: record.diedAt,
-        died_at_approx: Boolean(record.diedAtApprox),
+        // Records from before exact dating carry no flag: their time was detection.
+        died_at_approx: record.diedAtApprox ?? true,
         detected_at: record.detectedAt,
         recovered_at: record.recoveredAt,
         attempt: record.attempt,
@@ -661,18 +669,30 @@ export class Recovery {
       event.serverDead && event.serverUnit
         ? (victimsInScope(kernel, event.serverUnit).at(-1) ?? null)
         : null
+    // A unit end logged after Tether saw the pane go is Tether's own stop of
+    // what outlived the pane: neither the time of death nor an outside kill.
+    const endedBySeen = (at: number | null | undefined) =>
+      at != null && at <= event.at + ENDED_BEFORE_SEEN_SLACK_MS ? at : null
+    const paneEndedAt = endedBySeen(pane.endedAt)
     // A SIGKILL of the whole scope leaves systemd an empty scope and no
     // failure result. The pane supervisor writes the agent's exit before
     // anything else in the pane can end, so a marker still saying `started`
     // means the agent never got to exit. A pane from before the marker
     // counts when systemd itself logged sending SIGKILL to the scope before
     // Tether saw it go (Tether's own cleanup comes later and uses cgroup.kill).
-    const marker = this.engine.agentExitMarker(event.scopeUnit)?.marker ?? null
+    // So does an agent the owner started again by hand in the fallback shell
+    // (seen running after the supervisor wrote its exit) when systemd logged
+    // the SIGKILL: nothing rewrites the marker for that agent.
+    const exitMarker = this.engine.agentExitMarker(event.scopeUnit)
+    const marker = exitMarker?.marker ?? null
     const sigkillAt =
       pane.kills.find((kill) => kill.signal === 'SIGKILL' && kill.at <= event.at)?.at ?? null
+    const restartedByHand =
+      marker?.state === 'exit' && seenAt !== undefined && seenAt > (exitMarker?.at ?? Infinity)
     const killedRunning =
       pane.result === null &&
-      (marker?.state === 'started' || (marker === null && sigkillAt !== null))
+      (pane.endedAt === null || paneEndedAt !== null) &&
+      (marker?.state === 'started' || ((marker === null || restartedByHand) && sigkillAt !== null))
     let serverCrash = server?.result && CRASH_RESULTS.has(server.result) ? server.result : null
     if (!serverCrash && serverVictim) serverCrash = 'oom-kill'
     else if (
@@ -691,19 +711,28 @@ export class Recovery {
       this.log(`${event.widgetId}: pane ${event.scopeUnit} ended without a failure; not recovering`)
       return
     }
+    // For a pane kill, only a victim right at the kill is part of it.
+    const killedAt = sigkillAt ?? paneEndedAt ?? event.at
+    const paneVictim =
+      paneCrash === PANE_KILLED
+        ? victim && Math.abs(killedAt - victim.at) <= KILL_VICTIM_NEAR_MS
+          ? victim
+          : null
+        : victim
     const exactDeath =
-      victim?.at ??
-      serverVictim?.at ??
-      pane.at ??
-      server?.at ??
-      (paneCrash === PANE_KILLED ? (sigkillAt ?? pane.endedAt) : null) ??
-      (serverCrash === SERVER_LOST ? (server?.endedAt ?? pane.endedAt) : null)
+      paneCrash === PANE_KILLED
+        ? (sigkillAt ?? paneVictim?.at ?? paneEndedAt)
+        : (paneVictim?.at ??
+          serverVictim?.at ??
+          pane.at ??
+          server?.at ??
+          (serverCrash === SERVER_LOST ? (endedBySeen(server?.endedAt) ?? paneEndedAt) : null))
     await this.recordCrash({
       id: event.widgetId,
       kind: serverCrash && !paneCrash ? 'server-died' : 'pane-stopped',
       cause: paneCrash ?? (serverCrash as string),
       signal: paneCrash === PANE_KILLED ? 9 : null,
-      victim: victim ?? serverVictim,
+      victim: paneVictim ?? serverVictim,
       diedAt: exactDeath ?? event.at,
       diedAtApprox: exactDeath === null,
       scopeUnit: event.scopeUnit,
@@ -845,7 +874,7 @@ export class Recovery {
         : null,
       agentWasHog,
       diedAt: crash.diedAt,
-      ...(crash.diedAtApprox ? { diedAtApprox: true } : {}),
+      diedAtApprox: Boolean(crash.diedAtApprox),
       detectedAt: now,
       bootId: currentBootId(),
       scopeUnit: crash.scopeUnit,
@@ -994,7 +1023,7 @@ export class Recovery {
       victim,
       agentWasHog: record.agentWasHog,
       diedAt: record.diedAt,
-      diedAtApprox: Boolean(record.diedAtApprox),
+      diedAtApprox: record.diedAtApprox ?? true,
       resumedAt,
       attempt: record.attempt,
       manual: Boolean(record.manual),

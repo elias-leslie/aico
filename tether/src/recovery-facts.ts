@@ -740,7 +740,9 @@ function causeLine(facts: CrashFacts): string {
     return `your process was killed by signal ${facts.signal ?? '?'}${victim ? ` after the kernel OOM-killed ${victim.comm} pid ${victim.pid} (${size(victim.rssBytes)})` : ''}. The pane stayed up; Tether restarted it, which ended every process still in it`
   }
   if (facts.cause === PANE_KILLED)
-    return 'every process in your pane was killed from outside (no memory kill or unit failure was logged), which ended you, your subagents and every process you started'
+    return victim
+      ? `${where}; the kernel killed ${victim.comm} pid ${victim.pid} at ${size(victim.rssBytes)} in your pane and every process in it ended, which ended you, your subagents and every process you started`
+      : 'every process in your pane was killed from outside (no memory kill or unit failure was logged), which ended you, your subagents and every process you started'
   if (facts.kind === 'server-died')
     return `the tmux server holding your pane died${facts.cause === SERVER_LOST ? ' while you were running' : ` (${facts.cause})`}, which ended you, your subagents and every process you started`
   if (victim)

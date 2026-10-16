@@ -100,19 +100,32 @@ export function paneCommand(line: string | null, agentExitDir: string | null = n
   // means a signal (an OOM kill is 137), 0 a clean /exit.
   const lowerOomScore = `{ read -r tether_adj </proc/self/oom_score_adj && echo ${AGENT_OOM_SCORE_ADJ} >/proc/self/oom_score_adj; } 2>/dev/null`
   const restoreOomScore = `{ [ -n "$tether_adj" ] && echo "$tether_adj" >/proc/self/oom_score_adj; } 2>/dev/null`
+  if (!agentExitDir) {
+    const supervisorScript = `${clearTypedLauncher}; ${lowerOomScore}; ${line}; export ${AGENT_EXIT_ENV}=$?; ${restoreOomScore}; ${interactiveShell}`
+    return `exec /bin/bash --noprofile --norc -c ${shellQuote(supervisorScript)}`
+  }
   // With `agentExitDir`, the supervisor also records the agent's fate in a
-  // file named after its own pane scope (read from /proc/self/cgroup, all
-  // builtins): `started`, then `exit N`. A HUP or TERM (a closed pane, a
-  // systemctl stop) is recorded as `signal NAME` once the agent has exited.
-  // When every process in the pane is SIGKILLed nothing can write, so the
-  // file keeps `started`: that is how crash recovery tells such a kill from
-  // an exit, since the scope itself then ends with a clean result.
-  const mark = agentExitDir
-    ? {
-        start: `{ read -r tether_cg </proc/self/cgroup && tether_mark=${shellQuote(agentExitDir)}/\${tether_cg##*/} && printf 'started\\n' >"$tether_mark"; } 2>/dev/null; trap '{ [ -n "$tether_mark" ] && printf "signal HUP\\n" >"$tether_mark"; } 2>/dev/null; exit 129' HUP; trap '{ [ -n "$tether_mark" ] && printf "signal TERM\\n" >"$tether_mark"; } 2>/dev/null; exit 143' TERM; `,
-        end: `; { [ -n "$tether_mark" ] && printf 'exit %s\\n' "$${AGENT_EXIT_ENV}" >"$tether_mark"; } 2>/dev/null; trap - HUP TERM`,
-      }
-    : { start: '', end: '' }
-  const supervisorScript = `${clearTypedLauncher}; ${lowerOomScore}; ${mark.start}${line}; export ${AGENT_EXIT_ENV}=$?${mark.end}; ${restoreOomScore}; ${interactiveShell}`
+  // file named after its own pane scope (the cgroup v2 `0::` line of
+  // /proc/self/cgroup, all builtins): `started`, then `exit N`. When every
+  // process in the pane is SIGKILLed nothing can write, so the file keeps
+  // `started`: that is how crash recovery tells such a kill from an exit,
+  // since the scope itself then ends with a clean result.
+  //
+  // A closed pane (kill-pane, kill-session, a dead tmux server, respawn -k)
+  // sends no signal: the pty hangs up, the kernel sends SIGHUP to the session
+  // leader (this shell) only, and only that leader's death used to hang up
+  // the agent. Bash runs a trap only once a foreground child exits, so the
+  // agent runs as an async child the shell `wait`s on (a trap interrupts
+  // `wait`). The HUP and TERM traps pass the signal on to the pane's process
+  // group as the kernel would (to the agent alone when this shell leads no
+  // group), wait for the agent, then record `signal NAME`
+  // and exit. The shell ignores INT and QUIT while the agent runs (a ^C is
+  // the agent's); the agent gets them back, with the terminal as stdin.
+  const dir = shellQuote(agentExitDir)
+  const markStart = `tether_cg=; tether_mark=; { while read -r tether_l; do case $tether_l in 0::*) tether_cg=\${tether_l#0::} ;; esac; done </proc/self/cgroup; } 2>/dev/null; [ -n "\${tether_cg##*/}" ] && tether_mark=${dir}/\${tether_cg##*/} && { printf 'started\\n' >"$tether_mark"; } 2>/dev/null`
+  const stop = `tether_stop() { trap '' "$1"; kill -"$1" -$$ 2>/dev/null || kill -"$1" "$tether_pid" 2>/dev/null; wait; [ -n "$tether_mark" ] && { printf 'signal %s\\n' "$1" >"$tether_mark"; } 2>/dev/null; exit "$2"; }; trap 'tether_stop HUP 129' HUP; trap 'tether_stop TERM 143' TERM; trap '' INT QUIT`
+  const run = `( trap - INT QUIT; ${line} ) <&0 & tether_pid=$!; wait "$tether_pid"; export ${AGENT_EXIT_ENV}=$?`
+  const markEnd = `{ [ -n "$tether_mark" ] && printf 'exit %s\\n' "$${AGENT_EXIT_ENV}" >"$tether_mark"; } 2>/dev/null; trap - HUP TERM INT QUIT`
+  const supervisorScript = `${clearTypedLauncher}; ${lowerOomScore}; ${markStart}; ${stop}; ${run}; ${markEnd}; ${restoreOomScore}; ${interactiveShell}`
   return `exec /bin/bash --noprofile --norc -c ${shellQuote(supervisorScript)}`
 }
