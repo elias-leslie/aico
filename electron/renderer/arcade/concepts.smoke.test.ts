@@ -183,92 +183,106 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
+const SEED = 0x5eed
+
+/** One run of a game: cursor, keys, work, a resize, then quiet until it parks, then teardown. */
+async function play(k: string, seed: number, quietMs = 180_000): Promise<void> {
+  vi.useFakeTimers({
+    toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance'],
+  })
+  vi.spyOn(Math, 'random').mockImplementation(seeded(seed))
+  const errors = vi.spyOn(console, 'error')
+  const draws = vi.spyOn(Strip.prototype as unknown as { draw(): void }, 'draw')
+  log = []
+  nextId = 0
+  installGlobals()
+  await import(`./concepts/${k}.js`)
+  const def = conceptFor(k)
+  if (!def) throw new Error(`${k} registered no concept`)
+  expect(def.title).toBe(GAMES.find((x) => x.key === k)?.name)
+  const { bar, parts } = titlebar()
+  const s = new Strip(def, bar as unknown as HTMLElement, { gaze() {} })
+  strip = s
+  ;(s.canvas as unknown as FakeEl).id = 'stage'
+  const tick = (ms: number) => vi.advanceTimersByTime(ms)
+
+  // 10 s of a cursor sweeping the bar, clicking the first character it finds
+  let clicked = false
+  for (let t = 0; t < 100; t++) {
+    const p = { x: (t * 37) % 900, y: 4 + ((t * 7) % 28) }
+    s.setCursor(p)
+    if (!clicked && s.actorAt(p)) {
+      clicked = true
+      bar.kids[1]?.dispatchEvent(pointer('pointerdown', p.x, p.y))
+      bar.kids[1]?.dispatchEvent(pointer('pointerup', p.x, p.y))
+    }
+    tick(100)
+  }
+  s.setCursor(null)
+  parts['.ctl.close']?.dispatchEvent(pointer('pointerdown', 880, 18))
+
+  // 10 s of keyboard play
+  s.arm(true)
+  const codes = ['KeyD', 'Space', 'KeyA', 'ArrowUp', 'KeyD', 'Space', 'ArrowDown', 'KeyW']
+  for (let t = 0; t < 20; t++) {
+    const code = codes[t % codes.length] as string
+    win.dispatchEvent(key('keydown', code))
+    tick(300)
+    win.dispatchEvent(key('keyup', code))
+    tick(200)
+  }
+  s.arm(false)
+
+  // 20 s of work, then done and 10 s of the finish: never past 12 fps
+  draws.mockClear()
+  s.setBusy(true)
+  tick(20_000)
+  expect(draws.mock.calls.length).toBeLessThanOrEqual(Math.ceil(20_000 / FAST) + 2)
+  s.setBusy(false)
+  tick(10_000)
+
+  // the window narrows; the window controls stay at its right edge
+  bar.clientWidth = 600
+  bar.rect.width = 600
+  for (const sel of ['.controls', '.ctl.min', '.ctl.max', '.ctl.close'])
+    (parts[sel] as FakeEl).rect.left -= 300
+  for (const cb of [...observers]) cb()
+  win.dispatchEvent(new Event('resize'))
+
+  // quiet (3 minutes unless a case says sooner): the vignette settles and the loop stops
+  tick(quietMs)
+  expect(s.mode).toBe('parked')
+  draws.mockClear()
+  tick(60_000)
+  expect(draws).not.toHaveBeenCalled()
+
+  expect(errors).not.toHaveBeenCalled()
+  s.destroy()
+  strip = null
+  expect(s.mode).toBe('destroyed')
+  expect(vi.getTimerCount()).toBe(0)
+  expect(observers).toHaveLength(0)
+
+  if (LOG_DIR && seed === SEED) {
+    mkdirSync(LOG_DIR, { recursive: true })
+    writeFileSync(join(LOG_DIR, `${k}.log`), `${log.join('\n')}\n`)
+  }
+}
+
 describe('titlebar games', () => {
   it('ships all nineteen, each in the picker', () => {
     expect(keys).toHaveLength(19)
     expect(GAMES.map((x) => x.key).sort()).toEqual(keys)
   })
 
-  it.each(keys)('%s runs, parks when quiet and tears down clean', async (k) => {
-    vi.useFakeTimers({
-      toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance'],
-    })
-    vi.spyOn(Math, 'random').mockImplementation(seeded(0x5eed))
-    const errors = vi.spyOn(console, 'error')
-    const draws = vi.spyOn(Strip.prototype as unknown as { draw(): void }, 'draw')
-    log = []
-    nextId = 0
-    installGlobals()
-    await import(`./concepts/${k}.js`)
-    const def = conceptFor(k)
-    if (!def) throw new Error(`${k} registered no concept`)
-    expect(def.title).toBe(GAMES.find((x) => x.key === k)?.name)
-    const { bar, parts } = titlebar()
-    const s = new Strip(def, bar as unknown as HTMLElement, { gaze() {} })
-    strip = s
-    ;(s.canvas as unknown as FakeEl).id = 'stage'
-    const tick = (ms: number) => vi.advanceTimersByTime(ms)
+  it.each(keys)('%s runs, parks when quiet and tears down clean', (k) => play(k, SEED))
 
-    // 10 s of a cursor sweeping the bar, clicking the first character it finds
-    let clicked = false
-    for (let t = 0; t < 100; t++) {
-      const p = { x: (t * 37) % 900, y: 4 + ((t * 7) % 28) }
-      s.setCursor(p)
-      if (!clicked && s.actorAt(p)) {
-        clicked = true
-        bar.kids[1]?.dispatchEvent(pointer('pointerdown', p.x, p.y))
-        bar.kids[1]?.dispatchEvent(pointer('pointerup', p.x, p.y))
-      }
-      tick(100)
-    }
-    s.setCursor(null)
-    parts['.ctl.close']?.dispatchEvent(pointer('pointerdown', 880, 18))
-
-    // 10 s of keyboard play
-    s.arm(true)
-    const codes = ['KeyD', 'Space', 'KeyA', 'ArrowUp', 'KeyD', 'Space', 'ArrowDown', 'KeyW']
-    for (let t = 0; t < 20; t++) {
-      const code = codes[t % codes.length] as string
-      win.dispatchEvent(key('keydown', code))
-      tick(300)
-      win.dispatchEvent(key('keyup', code))
-      tick(200)
-    }
-    s.arm(false)
-
-    // 20 s of work, then done and 10 s of the finish: never past 12 fps
-    draws.mockClear()
-    s.setBusy(true)
-    tick(20_000)
-    expect(draws.mock.calls.length).toBeLessThanOrEqual(Math.ceil(20_000 / FAST) + 2)
-    s.setBusy(false)
-    tick(10_000)
-
-    // the window narrows; the window controls stay at its right edge
-    bar.clientWidth = 600
-    bar.rect.width = 600
-    for (const sel of ['.controls', '.ctl.min', '.ctl.max', '.ctl.close'])
-      (parts[sel] as FakeEl).rect.left -= 300
-    for (const cb of [...observers]) cb()
-    win.dispatchEvent(new Event('resize'))
-
-    // 3 quiet minutes: the vignette settles and the loop stops
-    tick(180_000)
-    expect(s.mode).toBe('parked')
-    draws.mockClear()
-    tick(60_000)
-    expect(draws).not.toHaveBeenCalled()
-
-    expect(errors).not.toHaveBeenCalled()
-    s.destroy()
-    strip = null
-    expect(s.mode).toBe('destroyed')
-    expect(vi.getTimerCount()).toBe(0)
-    expect(observers).toHaveLength(0)
-
-    if (LOG_DIR) {
-      mkdirSync(LOG_DIR, { recursive: true })
-      writeFileSync(join(LOG_DIR, `${k}.log`), `${log.join('\n')}\n`)
-    }
-  })
+  // Seeds a full sweep found each hit one of the parking bugs fixed in these
+  // games: without the fix the game never parks, or (floating bread) parks only
+  // once the bread goes stale at 150 s.
+  it.each<[game: string, seed: number, quietMs: number, fix: string]>([
+    ['birds', 8, 180_000, 'birds give up on bread that went stale'],
+    ['birds', 1, 60_000, 'birds give up on bread left floating when its perch moved'],
+    ['suitexplorer', 35, 180_000, 'the explorer turns around to walk to her resting spot'],
+  ])('%s seed %i parks within %i ms: %s', (k, seed, quietMs) => play(k, seed, quietMs))
 })
