@@ -793,7 +793,13 @@ async function startPty(win: BrowserWindow, size: PtySize): Promise<void> {
   }
   if (!stillCurrent() || widgetOf.get(winId) !== widgetId) return
   const id = widgetId
-  const pty = openLink(winId, target, size)
+  let pty: TerminalLink
+  try {
+    pty = openLink(winId, target, size)
+  } catch (error) {
+    writeNotice(win, describeFailure('Could not attach', error))
+    return
+  }
   if (!stillCurrent()) {
     pty.kill()
     return
@@ -856,14 +862,7 @@ async function startPty(win: BrowserWindow, size: PtySize): Promise<void> {
  * the control transport, else a PTY running Tether's `tmux attach` argv. */
 function openLink(winId: number, target: AttachTarget, size: PtySize): TerminalLink {
   const env = attachEnvironment(process.env, target)
-  if (transportOf.get(winId) === 'control') {
-    try {
-      return new ControlTerminal(target.argv, env, size)
-    } catch (error) {
-      console.warn('[aico] control-mode attach unavailable, using tmux attach:', error)
-      transportOf.set(winId, 'attach')
-    }
-  }
+  if (transportOf.get(winId) === 'control') return new ControlTerminal(target.argv, env, size)
   return spawn(target.argv[0], target.argv.slice(1), {
     name: 'xterm-256color',
     cols: size.cols,
