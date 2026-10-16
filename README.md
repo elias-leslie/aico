@@ -36,7 +36,7 @@ Source builds need Node.js 22+, npm, Python 3.13+, uv, and native `node-pty` bui
 
 Tether owns sessions: tmux servers, agent launch and admission, End, roots, context hooks, and the legacy `/run/user/<uid>/aico/{control,gui-control}.sock` sockets that `st aico` and SummitFlow use. Its host prerequisites (systemd user manager, cgroup v2, lingering) are checked by Tether's own installer. Aico finds it at `$TETHER_SOCKET`, else `$XDG_RUNTIME_DIR/tether/${TETHER_INSTANCE:-default}/control.sock`. When Tether is down, open windows keep their attached terminals and new actions report that session control is unavailable.
 
-The sidecar binds to `127.0.0.1:8005`, rejects non-local browser origins, and stores selection history in SQLite and widget events in JSONL under `~/.local/state/aico` by default. Aico's own `aico.db` holds only window views (geometry, open state, a local name override) and settings, keyed by session ID. AI provider credentials belong to each CLI. Missing ST capture tooling leaves core widgets working. A-Term is another Tether client; its sessions appear in Aico's session list.
+The sidecar binds to `127.0.0.1:8005`, rejects non-local browser origins, and stores selection history in SQLite under `~/.local/state/aico` by default. Session events (push results, retired sessions) go to the journal as ids-only `[aico:event]` lines. Aico's own `aico.db` holds only window views (geometry, open state, a local name override) and settings, keyed by session ID. AI provider credentials belong to each CLI. Missing ST capture tooling leaves core widgets working. A-Term is another Tether client; its sessions appear in Aico's session list.
 
 ## Development and verification
 

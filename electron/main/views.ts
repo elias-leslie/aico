@@ -4,8 +4,7 @@ import { DatabaseSync } from 'node:sqlite'
 
 // Aico's own state (~/.local/state/aico/aico.db): one view row per session
 // Aico has shown, plus app settings. Sessions themselves belong to Tether and
-// are keyed by the same eight-hex id Aico always used as its widget id, so the
-// sidecar's per-widget JSONL logs keep matching.
+// are keyed by the same eight-hex id Aico always used as its widget id.
 //
 // The pre-Tether tables (`widgets`, `tmux_servers`, `root_requests`) may still
 // sit in an older aico.db. Aico never reads, writes or drops them; their only

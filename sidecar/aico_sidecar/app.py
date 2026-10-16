@@ -1,7 +1,6 @@
 """Aico FastAPI sidecar.
 
-Loopback service for `/health`, local selection delivery, and per-widget
-JSONL event logs.
+Loopback service for `/health` and local selection delivery.
 """
 
 from __future__ import annotations
@@ -29,11 +28,6 @@ from aico_sidecar import __version__
 from aico_sidecar.config import Settings
 from aico_sidecar.events import EventHub
 from aico_sidecar.selection import META_CAP, RING_SIZE, SelectionBus, SelectionKind
-from aico_sidecar.widget_log import WidgetLog, is_valid_widget_id
-
-# Serialized-JSON cap on a widget event's `data`, so a caller can't bypass the
-# per-log rotation by flooding one oversized record.
-WIDGET_EVENT_DATA_CAP = 8000
 
 # Whole-request body cap. A full /selection/send batch (RING_SIZE items, each
 # with capped meta and a source-capped snippet) fits comfortably; anything
@@ -197,24 +191,6 @@ class HealthResponse(BaseModel):
     version: str
 
 
-class WidgetEvent(BaseModel):
-    event: str = Field(min_length=1, max_length=200)
-    data: dict[str, Any] = Field(default_factory=dict)
-
-    @field_validator("data")
-    @classmethod
-    def _cap_data(cls, value: dict[str, Any]) -> dict[str, Any]:
-        encoded = json.dumps(value, separators=(",", ":"))
-        if len(encoded) > WIDGET_EVENT_DATA_CAP:
-            raise ValueError(f"data too large: {len(encoded)} bytes (cap {WIDGET_EVENT_DATA_CAP})")
-        return value
-
-
-class WidgetEventResponse(BaseModel):
-    logged: bool
-    record: dict[str, Any]
-
-
 @router.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
     """Basic liveness check. Returns 200 OK if the sidecar is running."""
@@ -327,21 +303,6 @@ async def selection_events(request: Request) -> StreamingResponse:
     )
 
 
-@router.post(
-    "/widgets/{widget_id}/events",
-    response_model=WidgetEventResponse,
-    dependencies=[Depends(require_trusted_origin)],
-)
-def log_widget_event(widget_id: str, body: WidgetEvent, request: Request) -> WidgetEventResponse:
-    """Append a structured event to the widget's JSONL log."""
-    if not is_valid_widget_id(widget_id):
-        raise HTTPException(status_code=422, detail=f"invalid widget id: {widget_id!r}")
-    widget_log: WidgetLog = request.app.state.widget_log
-    record = widget_log.append(widget_id, body.event, body.data)
-    logger.info("widget %s event %s", widget_id, body.event)
-    return WidgetEventResponse(logged=True, record=record)
-
-
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
 
@@ -375,7 +336,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_remote=settings.allow_remote,
     )
     app.state.settings = settings
-    app.state.widget_log = WidgetLog(settings.logs_dir)
     app.state.selection_bus = SelectionBus(settings.selections_db)
     app.state.event_hub = EventHub()
     app.include_router(router)

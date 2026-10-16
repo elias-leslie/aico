@@ -93,9 +93,7 @@ function setup(o: { list?: SessionDescriptor[]; version?: TetherVersion | Error 
     removed: vi.fn((id: string) => calls.push(`removed ${id}`)),
     destroyWindow: vi.fn((id: string) => calls.push(`destroyWindow ${id}`)),
     closeEnded: vi.fn((id: string) => calls.push(`closeEnded ${id}`)),
-    retired: vi.fn((id: string, known: SessionDescriptor | undefined, reason: string) =>
-      calls.push(`retired ${id} ${known?.ownershipId ?? '-'} ${reason}`),
-    ),
+    retired: vi.fn((id: string) => calls.push(`retired ${id}`)),
     firstList: vi.fn(() => calls.push('firstList')),
     titles: vi.fn(() => calls.push('titles')),
     tray: vi.fn(() => calls.push('tray')),
@@ -156,18 +154,24 @@ describe('Tether events', () => {
     await vi.waitFor(() => expect(catalog.get('aaaaaaaa')).toBeDefined())
   })
 
-  it('session.ended runs removed, closeEnded, retired, then tray, and re-lists', async () => {
+  it('session.ended runs removed, closeEnded, retired, then tray, journals it, and re-lists', async () => {
     const { connect, catalog, calls, tether } = setup()
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
     catalog.upsert(descriptor('aaaaaaaa'))
     const subscriber = connect()
+    log.mockClear()
     subscriber.onEvent(event('session.ended', { id: 'aaaaaaaa' }))
     expect(catalog.get('aaaaaaaa')).toBeUndefined()
     expect(calls.slice(0, 4)).toEqual([
       'removed aaaaaaaa',
       'closeEnded aaaaaaaa',
-      'retired aaaaaaaa aico-widget-aaaaaaaa tether_event',
+      'retired aaaaaaaa',
       'tray',
     ])
+    expect(log).toHaveBeenCalledWith(
+      '[aico:event] lifecycle_retired widget=aaaaaaaa session=aico-widget-aaaaaaaa reason=tether_event',
+    )
+    log.mockRestore()
     await vi.waitFor(() => expect(tether.listSessions).toHaveBeenCalledTimes(1))
   })
 
@@ -232,15 +236,13 @@ describe('refresh', () => {
     warn.mockRestore()
   })
 
-  it('sessionEnded forgets a session nobody knew without a retired record', () => {
+  it('sessionEnded forgets a session nobody knew without a journal line', () => {
     const { link, calls } = setup()
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
     link.sessionEnded('cccccccc', 'absent')
-    expect(calls).toEqual([
-      'removed cccccccc',
-      'closeEnded cccccccc',
-      'retired cccccccc - absent',
-      'tray',
-    ])
+    expect(calls).toEqual(['removed cccccccc', 'closeEnded cccccccc', 'retired cccccccc', 'tray'])
+    expect(log).not.toHaveBeenCalled()
+    log.mockRestore()
   })
 })
 

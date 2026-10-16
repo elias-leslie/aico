@@ -29,8 +29,8 @@ interface LinkHooks {
   destroyWindow(id: string): void
   /** Tether ended this session: close its window. */
   closeEnded(id: string): void
-  /** The session is gone for good; `known` is what the catalog held, if anything. */
-  retired(id: string, known: SessionDescriptor | undefined, reason: string): void
+  /** The session is gone for good: forget its view row. */
+  retired(id: string): void
   /** The first complete list after start. */
   firstList(): void
   titles(): void
@@ -45,6 +45,11 @@ interface TetherLinkDeps {
   projects: Pick<ProjectCatalog, 'invalidate' | 'refresh'>
   dialog: { showErrorBox(title: string, content: string): void }
   hooks: LinkHooks
+}
+
+/** One ids-only journal line per retired session Aico knew: no titles, no paths. */
+function retiredEventLine(id: string, sessionId: string, reason: string): string {
+  return `[aico:event] lifecycle_retired widget=${id} session=${sessionId} reason=${reason}`
 }
 
 export function createTetherLink(deps: TetherLinkDeps) {
@@ -94,7 +99,8 @@ export function createTetherLink(deps: TetherLinkDeps) {
     catalog.remove(id)
     hooks.removed(id)
     hooks.closeEnded(id)
-    hooks.retired(id, known, reason)
+    hooks.retired(id)
+    if (known) console.log(retiredEventLine(id, known.ownershipId, reason))
     hooks.tray()
   }
 

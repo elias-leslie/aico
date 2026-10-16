@@ -125,8 +125,8 @@ Important variables:
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `AICO_SIDECAR_HOST` | `127.0.0.1` | FastAPI sidecar bind host. Keep loopback unless you know why remote access is safe. |
-| `AICO_SIDECAR_PORT` | `8005` | Sidecar HTTP port for health, selection, and widget event APIs. |
-| `AICO_STATE_DIR` | `~/.local/state/aico` | App and sidecar state: selection SQLite, widget event JSONL, and `aico.db` (window views and settings; sessions live in Tether). The launcher pidfile, lock, and `launcher.log` always live in `${XDG_STATE_HOME:-~/.local/state}/aico` and do not follow this variable. |
+| `AICO_SIDECAR_PORT` | `8005` | Sidecar HTTP port for the health and selection APIs. |
+| `AICO_STATE_DIR` | `~/.local/state/aico` | App and sidecar state: selection SQLite and `aico.db` (window views and settings; sessions live in Tether). The launcher pidfile, lock, and `launcher.log` always live in `${XDG_STATE_HOME:-~/.local/state}/aico` and do not follow this variable. |
 | `AICO_SIDECAR_ALLOW_REMOTE` | unset | Set to `1` to allow a non-loopback `AICO_SIDECAR_HOST` and to accept any `Host` header. Applies only to a standalone sidecar (`python -m aico_sidecar`); Aico never passes it to the sidecar it starts, which stays loopback-only. The sidecar is unauthenticated, so leave this unset. |
 | `AICO_EXTENSION_IDS` | `oejadbpdecaenbbihglcnchnkmlilmjf` | Comma-separated Chrome extension IDs the sidecar trusts as browser origins. The default is the stable ID derived from the `key` in `extension/manifest.json`; set this only for a fork or re-keyed extension. |
 | `AICO_SELECTION_HOTKEY` | `CommandOrControl+Shift+Space` | Electron global shortcut for selection indication. |
@@ -171,7 +171,6 @@ curl http://127.0.0.1:8005/health
 Main endpoints:
 
 - `GET /health` — liveness check.
-- `POST /widgets/{widget_id}/events` — append bounded JSONL widget events under the local state directory.
 - `POST /selection` and `POST /selection/send` — local selection/capture bus used by the web helper and browser extension.
 - `GET /selection/current`, `GET /selection/history` — read recent captures.
 - `GET /selection/events` — Server-Sent Events stream of delivery events (the Wayland-safe path for routing captures into a widget).
@@ -213,6 +212,7 @@ Electron main process (a Tether client)
   ├─ holds the GUI channel (/v1/gui/channel) and applies show/position/title/coordinator
   ├─ runs Tether's exact `tmux attach` argv in a PTY per window and claims resize on focus
   ├─ stores views (geometry, open state) and settings in aico.db
+  ├─ writes ids-only `[aico:event]` journal lines (push results, retired sessions)
   └─ starts Python sidecar and health-checks it
 
 Electron renderer
@@ -221,8 +221,7 @@ Electron renderer
 
 Python sidecar
   ├─ FastAPI loopback service
-  ├─ SQLite ring buffer for recent selection captures
-  └─ per-widget JSONL event logs under local state
+  └─ SQLite ring buffer for recent selection captures
 ```
 
 Aico degrades when optional tools are missing: unavailable agent CLIs simply fail in their pane, and missing `st` capture tooling leaves core widgets working. When Tether is unreachable, open windows keep their terminals and the tray says session control is unavailable; Aico reconnects on its own.

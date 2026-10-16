@@ -29,8 +29,6 @@ interface AttentionWiringDeps {
     options: { timeout: number },
     callback: (error: ExecFileException | null, stdout: string | Buffer) => void,
   ): unknown
-  /** The per-widget event log (the sidecar's JSONL). */
-  logEvent(id: string, event: string, data: Record<string, unknown>): void
   nightshift: string
   atermUrl: string
 }
@@ -83,14 +81,7 @@ export function createAttentionWiring(deps: AttentionWiringDeps) {
         ],
         { timeout: 30_000 },
         (error, stdout) => {
-          const output = String(stdout ?? '')
-          const outcome = pushOutcome(error, output)
-          console.log(pushEventLine(id, outcome))
-          // The widget log records pushes that reached the phone, not Nightshift's dedupes.
-          if (outcome.result === 'sent')
-            deps.logEvent(id, 'needs_you_push', {
-              result: (output.trim().split('\n').pop() ?? '').trim().slice(0, 80),
-            })
+          console.log(pushEventLine(id, pushOutcome(error, String(stdout ?? ''))))
         },
       )
     },

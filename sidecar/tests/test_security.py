@@ -127,12 +127,6 @@ class TestOriginGuard:
         )
         assert r.status_code == 403
 
-    def test_public_origin_rejected_on_widget_event(self, client: TestClient) -> None:
-        r = client.post(
-            "/widgets/a1b2c3d4/events", json={"event": "open"}, headers={"origin": "https://evil.com"}
-        )
-        assert r.status_code == 403
-
     def test_reads_are_not_origin_blocked(self, client: TestClient) -> None:
         # GETs rely on CORS for cross-origin read protection, not a server-side 403.
         r = client.get("/selection/current", headers={"origin": "https://evil.com"})

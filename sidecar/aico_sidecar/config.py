@@ -91,10 +91,6 @@ class Settings:
             object.__setattr__(self, "state_dir", _default_state_dir())
 
     @property
-    def logs_dir(self) -> Path:
-        return self.state_dir / "logs"
-
-    @property
     def selections_db(self) -> Path:
         """Selection-bus ring buffer. Separate file from Electron's `aico.db` so
         the sidecar is the sole writer (no cross-process write contention)."""
@@ -103,7 +99,7 @@ class Settings:
     @classmethod
     def from_env(cls) -> Settings:
         # The bus has no authentication; a non-loopback bind would expose the
-        # selection-injection + widget-log endpoints to the whole network. Refuse
+        # selection-injection endpoints to the whole network. Refuse
         # it unless the operator explicitly opts in via AICO_SIDECAR_ALLOW_REMOTE.
         host = os.environ.get("AICO_SIDECAR_HOST", DEFAULT_HOST)
         allow_remote = os.environ.get("AICO_SIDECAR_ALLOW_REMOTE") == "1"

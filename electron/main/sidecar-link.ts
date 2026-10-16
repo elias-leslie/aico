@@ -1,7 +1,6 @@
 // Aico's optional sidecar process as the rest of main sees it: starting it
 // (the bundled executable when packaged, the repo's Python in dev), stopping
-// it at quit, whether it is our own healthy instance, its URLs, and the
-// bounded per-widget event log it keeps.
+// it at quit, whether it is our own healthy instance, and its URLs.
 
 import type { App } from 'electron'
 import { bundledSidecar, Sidecar } from './sidecar'
@@ -14,13 +13,11 @@ interface SidecarLinkDeps {
   stateDir: string
   app: Pick<App, 'isPackaged' | 'getAppPath'>
   resourcesPath: string
-  fetch?: typeof fetch
   SidecarCtor?: new (...args: ConstructorParameters<typeof Sidecar>) => SidecarLike
 }
 
 export function createSidecarLink(deps: SidecarLinkDeps) {
   const { app } = deps
-  const fetchImpl: typeof fetch = deps.fetch ?? ((input, init) => fetch(input, init))
   const SidecarCtor = deps.SidecarCtor ?? Sidecar
   const url = (path: string): string => `http://${deps.host}:${deps.port}${path}`
 
@@ -57,19 +54,6 @@ export function createSidecarLink(deps: SidecarLinkDeps) {
     /** Quit. Safe if never started. */
     stop: (): void => {
       sidecar?.stop()
-    },
-
-    /** The per-widget event log (the sidecar's bounded, rotated JSONL). */
-    logEvent: (widgetId: string, event: string, data: Record<string, unknown>): void => {
-      // The console line remains authoritative if the optional sidecar is unavailable.
-      void fetchImpl(url(`/widgets/${encodeURIComponent(widgetId)}/events`), {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ event, data }),
-        // The sidecar is optional. A wedged loopback listener must not retain an
-        // unbounded fetch while Aico is trying to reconcile or retire a workload.
-        signal: AbortSignal.timeout(2_000),
-      }).catch(() => {})
     },
   }
 }

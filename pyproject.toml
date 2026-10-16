@@ -1,7 +1,7 @@
 [project]
 name = "aico-sidecar"
 version = "0.1.1"
-description = "Aico Python sidecar (FastAPI): /health + per-widget JSONL logging."
+description = "Aico Python sidecar (FastAPI): /health + local selection bus."
 requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.115",

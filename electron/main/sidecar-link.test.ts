@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createSidecarLink } from './sidecar-link'
 
 function setup(o: { packaged?: boolean } = {}) {
-  const fetch = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) => ({}) as Response)
   const sidecars: FakeSidecar[] = []
   class FakeSidecar {
     ready = false
@@ -18,13 +17,10 @@ function setup(o: { packaged?: boolean } = {}) {
     stateDir: '/state',
     app: { isPackaged: o.packaged ?? false, getAppPath: () => '/repo' },
     resourcesPath: '/res',
-    fetch: fetch as unknown as typeof globalThis.fetch,
     SidecarCtor: FakeSidecar as never,
   })
-  return { link, fetch, sidecars }
+  return { link, sidecars }
 }
-
-const flush = () => new Promise((r) => setTimeout(r, 0))
 
 afterEach(() => vi.restoreAllMocks())
 
@@ -64,20 +60,5 @@ describe('sidecar link', () => {
     link.start()
     link.stop()
     expect(sidecars[0].stop).toHaveBeenCalledTimes(1)
-  })
-
-  it('posts a widget event with a 2 s timeout and swallows errors', async () => {
-    const timeout = vi.spyOn(AbortSignal, 'timeout')
-    const { link, fetch } = setup()
-    fetch.mockRejectedValueOnce(new Error('refused'))
-    link.logEvent('a b', 'lifecycle_retired', { reason: 'ended' })
-    await flush()
-    expect(fetch).toHaveBeenCalledWith('http://127.0.0.1:18905/widgets/a%20b/events', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ event: 'lifecycle_retired', data: { reason: 'ended' } }),
-      signal: expect.any(AbortSignal),
-    })
-    expect(timeout).toHaveBeenCalledWith(2_000)
   })
 })

@@ -68,7 +68,6 @@ function setup(windows: FakeWindow[] = []) {
   })
   const catalog = createSessionCatalog()
   const setNeedsYou = vi.fn()
-  const logEvent = vi.fn()
   const pushes: { file: string; args: string[]; options: unknown; done: PushCallback }[] = []
   const execFile = vi.fn(
     (file: string, args: string[], options: { timeout: number }, done: PushCallback) => {
@@ -81,11 +80,10 @@ function setup(windows: FakeWindow[] = []) {
     tools: () => [codex],
     setNeedsYou,
     execFile,
-    logEvent,
     nightshift: '/usr/local/bin/nightshift',
     atermUrl: 'http://aterm.test',
   })
-  return { wiring, registry, catalog, setNeedsYou, logEvent, execFile, pushes }
+  return { wiring, registry, catalog, setNeedsYou, execFile, pushes }
 }
 
 const asWin = (w: FakeWindow) => w as unknown as BrowserWindow
@@ -173,8 +171,8 @@ describe('attention wiring', () => {
     expect(execFile.mock.calls[0]?.[1][1]).toBe('Codex in Docs is waiting for you')
   })
 
-  it('a sent push goes to the journal and the widget log', () => {
-    const { wiring, catalog, logEvent, pushes } = setup()
+  it('a sent push goes to the journal', () => {
+    const { wiring, catalog, pushes } = setup()
     const d = descriptor('aaaaaaaa', { state: 'blocked' })
     catalog.upsert(d)
     wiring.update(d)
@@ -185,11 +183,10 @@ describe('attention wiring', () => {
     expect(log).toHaveBeenCalledWith(
       '[aico:event] needs_you_push result=sent widget=aaaaaaaa nightshift=sent_1/1',
     )
-    expect(logEvent).toHaveBeenCalledWith('aaaaaaaa', 'needs_you_push', { result: 'sent 1/1' })
   })
 
-  it('a suppressed push goes only to the journal', () => {
-    const { wiring, catalog, logEvent, pushes } = setup()
+  it('a suppressed push goes to the journal as suppressed', () => {
+    const { wiring, catalog, pushes } = setup()
     const d = descriptor('aaaaaaaa', { state: 'blocked' })
     catalog.upsert(d)
     wiring.update(d)
@@ -200,7 +197,6 @@ describe('attention wiring', () => {
     expect(log).toHaveBeenCalledWith(
       '[aico:event] needs_you_push result=suppressed widget=aaaaaaaa nightshift=suppressed',
     )
-    expect(logEvent).not.toHaveBeenCalled()
   })
 
   it('no push for a session that left the catalog', () => {

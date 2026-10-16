@@ -137,8 +137,7 @@ const windows = createWindows({
   },
 })
 
-// The optional sidecar: the selection bus reads from it and it keeps the
-// per-widget event log.
+// The optional sidecar: the selection bus reads from it.
 const sidecar = createSidecarLink({
   host: config.sidecarHost,
   port: config.sidecarPort,
@@ -167,11 +166,7 @@ const link = createTetherLink({
     removed: (id) => attention.removed(id),
     destroyWindow: (id) => windows.destroyFor(id),
     closeEnded: (id) => windows.closeEnded(id),
-    retired: (id, known, reason) => {
-      removeView(id)
-      if (known)
-        sidecar.logEvent(id, 'lifecycle_retired', { session_id: known.ownershipId, reason })
-    },
+    retired: (id) => removeView(id),
     firstList: () => windows.restoreOnLaunch(),
     titles: () => chrome.pushTitles(),
     tray: () => chrome.syncTray(),
@@ -189,7 +184,6 @@ const attention = createAttentionWiring({
   tools: link.tools,
   setNeedsYou,
   execFile,
-  logEvent: sidecar.logEvent,
   nightshift: config.nightshift,
   atermUrl: config.atermUrl,
 })
