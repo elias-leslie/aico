@@ -26,6 +26,7 @@ import {
   movePin,
   openExistingSession,
   pinnedActions,
+  prunePins,
   runAction,
   sections,
   setPaletteOpener,
@@ -833,14 +834,15 @@ function closePalette(): void {
 // ---- shared pin commit -----------------------------------------------------
 
 function commitPins(next: string[]): void {
-  pins = next
-  window.aico.settings.setPins(next) // persists + broadcasts to all widgets
+  pins = prunePins(next)
+  window.aico.settings.setPins(pins) // persists + broadcasts to all widgets
   renderCluster()
   syncMenuPinStates()
 }
 
-// The stored list is kept exactly as saved. Rendering skips pins whose feature
-// is unavailable (pinnedActions), and only a pin, unpin or drag writes it back.
+// Loading keeps the stored list as saved. Rendering skips pins whose feature is
+// unavailable (pinnedActions); a pin, unpin or drag writes it back without the
+// ids that can never return (prunePins).
 async function loadPins(): Promise<string[]> {
   const stored = await window.aico.settings.getPins()
   if (stored != null) return stored

@@ -412,8 +412,8 @@ export const DEFAULT_PINS = ['indicate']
 
 /** The pinned actions to show, in pin order: ids whose feature is unavailable
  * right now (a TUI or project the catalog did not list, games not loaded, a
- * retired action) and repeats are skipped. Display only: the stored pin list is
- * never filtered, so a pin comes back as soon as its action does. */
+ * retired action) and repeats are skipped. Display only: showing pins never
+ * changes the stored list, so a pin comes back as soon as its action does. */
 export function pinnedActions(pins: string[]): Action[] {
   const seen = new Set<string>()
   const shown: Action[] = []
@@ -424,6 +424,24 @@ export function pinnedActions(pins: string[]): Action[] {
     if (a && isPinnable(a)) shown.push(a)
   }
   return shown
+}
+
+/** Id families built at runtime from Tether's tools, the project catalog and
+ * the loaded games: a pin in one may only be unavailable for now. */
+const LAUNCHER_PIN = /^(?:new|replace|project|game):/
+
+/** The pins worth saving: drops repeats and ids that can never show again (a
+ * retired action such as `voice`, `grab-*` or an old `session:*` pin), and keeps
+ * a launcher pin whose tool, project or game is missing only for now. Applied on
+ * every pin, unpin or drag, so dead ids do not pile up against the saved cap. */
+export function prunePins(pins: string[]): string[] {
+  const seen = new Set<string>()
+  return pins.filter((id) => {
+    if (seen.has(id)) return false
+    seen.add(id)
+    const a = findAction(id)
+    return a ? isPinnable(a) : LAUNCHER_PIN.test(id)
+  })
 }
 
 export function togglePin(pins: string[], id: string): string[] {

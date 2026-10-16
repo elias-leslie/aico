@@ -9,6 +9,7 @@ import {
   listGames,
   movePin,
   pinnedActions,
+  prunePins,
   setGameActions,
   setSelectionHotkey,
   setTuiActions,
@@ -215,6 +216,34 @@ describe('pinnedActions', () => {
     setTuiActions([{ slug: 'claude', displayName: 'Claude', accent: '#fff' }])
     expect(pinnedActions(['new:claude']).map((a) => a.id)).toEqual(['new:claude'])
     setTuiActions([])
+  })
+})
+
+describe('prunePins', () => {
+  it('drops retired ids and repeats but keeps launcher pins that may come back', () => {
+    setTuiActions([])
+    setGameActions([])
+    const stored = [
+      'hub',
+      'voice',
+      'grab-region',
+      'session:aico:abc',
+      'copy',
+      'new:claude',
+      'replace:codex',
+      'project:tether',
+      'game:snake',
+      'arcade-next',
+      'hub',
+    ]
+    expect(prunePins(stored)).toEqual([
+      'hub',
+      'new:claude',
+      'replace:codex',
+      'project:tether',
+      'game:snake',
+      'arcade-next',
+    ])
   })
 })
 
