@@ -50,7 +50,7 @@ export function nextArcade(
 }
 
 /** How far around a window the cursor still counts as "near the titlebar". */
-export const ARCADE_BAND = { side: 16, above: 40, below: 120 }
+const ARCADE_BAND = { side: 16, above: 40, below: 120 }
 
 /** The cursor in window-content coordinates while it is near the top of the
  * window (the titlebar plus a margin), else null. */

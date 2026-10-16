@@ -17,26 +17,10 @@ import {
 } from 'electron'
 import { spawn } from 'node-pty'
 import { parseTerminalFontSettings } from '../shared/font-settings'
-import { cursorNearTitlebar, nextArcade, parseArcadeKeys, pickArcade } from './arcade'
-import {
-  Attention,
-  type AttentionMode,
-  type AttentionStage,
-  agentName,
-  pushBody,
-  pushEventLine,
-  pushOutcome,
-} from './attention'
+import { createAmbient } from './ambient'
+import { createAttentionWiring } from './attention-wiring'
 import { readConfig } from './config'
 import { contentSecurityPolicy, voiceConnectSource } from './csp'
-import {
-  allLookAt,
-  DEFAULT_EYE_ANCHOR,
-  type Face,
-  type Point,
-  pickScene,
-  SCENE_EVERY_MS,
-} from './gaze'
 import { createGuiChannel } from './gui-channel'
 import { parseBoundsRequest, parsePins } from './ipc-validation'
 import { createLifecycle } from './lifecycle'
@@ -46,20 +30,10 @@ import { ensurePersonalWorkspaceRoot, ProjectCatalog, personalWorkspaceRoot } fr
 import { parseSse, type SelectionRecord } from './selection'
 import { deliverSelectionToSession } from './selection-delivery'
 import { createSessionActions } from './session-actions'
-import {
-  createSessionCatalog,
-  type SessionCatalog,
-  sessionTitle,
-  toolDisplayName,
-} from './session-catalog'
+import { createSessionCatalog, type SessionCatalog, sessionTitle } from './session-catalog'
 import { bundledSidecar, Sidecar } from './sidecar'
 import { createTerminal } from './terminal'
-import {
-  type SessionDescriptor,
-  TetherClient,
-  TetherError,
-  tetherSocketPath,
-} from './tether-client'
+import { TetherClient, TetherError, tetherSocketPath } from './tether-client'
 import { createTetherLink } from './tether-link'
 import { ControlTerminal } from './tmux-control'
 import { createTray, refreshTray, setNeedsYou, setWidgetActivity } from './tray'
@@ -136,7 +110,7 @@ const windows = createWindows({
   hooks: {
     loaded: (win) => {
       chrome.refreshContextBadge(win)
-      sendAttention(win)
+      attention.sendTo(win)
     },
     focused: (win, widgetId) => {
       lastFocusedAico = widgetId ?? lastFocusedAico
@@ -145,25 +119,16 @@ const windows = createWindows({
         chrome.syncTray()
       }
       terminal.claimSize(win.id)
-      blurredWins.delete(win.id)
-      syncCursorPump()
+      ambient.focused(win.id)
     },
-    blurred: (win) => {
-      blurredWins.add(win.id)
-      syncCursorPump()
-    },
+    blurred: (win) => ambient.blurred(win.id),
     disposing: (winId) => {
       // Terminal: detach first; the session persists (close = keep, reopenable).
       terminal.forget(winId)
       // Titlebar and tray.
       chrome.forget(winId)
       // Eyes and arcade.
-      blurredWins.delete(winId)
-      arcadeOf.delete(winId)
-      arcadeShown.delete(winId)
-      arcadeNear.delete(winId)
-      eyeAnchors.delete(winId)
-      syncCursorPump()
+      ambient.forget(winId)
       layout.forget(winId)
     },
     changed: () => chrome.syncTray(),
@@ -172,46 +137,6 @@ const windows = createWindows({
 
 const selectionDeliveries = new Map<string, Promise<void>>()
 
-// Eyes-follow-cursor: while any widget is unfocused, broadcast the global cursor
-// position so those widgets' eyes can track it. One shared interval feeds every
-// window; the focused window ignores it and stares ahead. Windows running the
-// titlebar arcade also get the cursor (window coordinates, focused or not) while
-// it is near their titlebar: the titlebar is the OS drag region, so the page
-// itself never sees the pointer there. Runs only while someone needs it.
-const blurredWins = new Set<number>()
-// Window id -> titlebar arcade game, kept for the window's lifetime (or until
-// the user cycles it), and the games that window has shown this cycle.
-const arcadeOf = new Map<number, string>()
-const arcadeShown = new Map<number, Set<string>>()
-const arcadeNear = new Set<number>()
-let cursorTimer: NodeJS.Timeout | undefined
-let cursorPeriod = 0
-let lastCursorPt: { x: number; y: number } | null = null
-function pumpCursor(): void {
-  const pt = screen.getCursorScreenPoint()
-  if (lastCursorPt && pt.x === lastCursorPt.x && pt.y === lastCursorPt.y) return
-  lastCursorPt = pt
-  for (const id of blurredWins) {
-    const win = BrowserWindow.fromId(id)
-    if (win && !win.isDestroyed()) win.webContents.send('win:cursor', pt)
-  }
-  for (const id of arcadeOf.keys()) {
-    const win = BrowserWindow.fromId(id)
-    if (!win || win.isDestroyed() || !win.isVisible()) continue
-    const near = cursorNearTitlebar(pt, win.getContentBounds())
-    if (near) arcadeNear.add(id)
-    else if (!arcadeNear.delete(id)) continue // already told it the cursor left
-    win.webContents.send('arcade:cursor', near)
-  }
-}
-function syncCursorPump(): void {
-  lastCursorPt = null // a focus change always gets one fresh send
-  const period = arcadeOf.size > 0 ? 100 : blurredWins.size > 0 ? 250 : 0
-  if (period === cursorPeriod) return
-  if (cursorTimer) clearInterval(cursorTimer)
-  cursorTimer = period ? setInterval(pumpCursor, period) : undefined
-  cursorPeriod = period
-}
 // The widget that should receive an indicated selection: the last Aico widget
 // the user focused. (During an indicate gesture the *browser* holds OS focus,
 // so "active session" means most-recently-focused widget, not focused-now.)
@@ -237,7 +162,7 @@ const link = createTetherLink({
   projects,
   dialog,
   hooks: {
-    agentState: (descriptor) => noteAgentState(descriptor),
+    agentState: (descriptor) => attention.update(descriptor),
     removed: (id) => attention.removed(id),
     destroyWindow: (id) => windows.destroyFor(id),
     closeEnded: (id) => windows.closeEnded(id),
@@ -270,138 +195,33 @@ function logWidgetEvent(widgetId: string, event: string, data: Record<string, un
 }
 
 // ---------------------------------------------------------------------------
-// Gaze (see gaze.ts): eyes that look at the other windows.
-
-const eyeAnchors = new Map<number, Point>()
-let gazeTimer: ReturnType<typeof setTimeout> | undefined
-
-function faces(): Face[] {
-  const focused = BrowserWindow.getFocusedWindow()
-  return registry
-    .sessionWindows()
-    .filter((w) => w.isVisible() && !w.isMinimized())
-    .map((w) => {
-      const b = w.getContentBounds()
-      const a = eyeAnchors.get(w.id) ?? DEFAULT_EYE_ANCHOR
-      return { winId: w.id, eye: { x: b.x + a.x, y: b.y + a.y }, focused: w === focused }
-    })
-}
-
-let gazeScenesLogged = 0
-function playGazeScene(): void {
-  const scene = pickScene(faces(), Math.random)
-  // The first few scenes after start go to the log, proof the director runs.
-  if (scene.length && gazeScenesLogged < 3) {
-    gazeScenesLogged++
-    const who = (winId: number) => registry.sessionOf(winId) ?? String(winId)
-    console.log(`[aico:gaze] scene ${scene.map((g) => who(g.winId)).join(' ')}`)
-  }
-  for (const g of scene) {
-    const win = BrowserWindow.fromId(g.winId)
-    if (!win || win.isDestroyed()) continue
-    win.webContents.send('eyes:look', {
-      x: g.target.x,
-      y: g.target.y,
-      delay: g.delay,
-      hold: g.hold,
-    })
-  }
-}
-
-function scheduleGaze(): void {
-  const [lo, hi] = SCENE_EVERY_MS
-  gazeTimer = setTimeout(
-    () => {
-      if (lifecycle.isQuitting()) return
-      playGazeScene()
-      scheduleGaze()
-    },
-    lo + Math.random() * (hi - lo),
-  )
-}
-
-// ---------------------------------------------------------------------------
 // Attention: flash a window and badge the tray when a session needs the owner
 // (attention.ts); after 2 minutes unanswered, one Nightshift push to the phone.
 
-const attention = new Attention({
-  setTimer: (fn, ms) => setTimeout(fn, ms),
-  clearTimer: (handle) => clearTimeout(handle as NodeJS.Timeout),
-  isFocused: (id) => registry.forSession(id)?.isFocused() ?? false,
-  flash: (id, on) => registry.forSession(id)?.flashFrame(on),
-  needsYou: (on) => setNeedsYou(on),
-  attend: (id, mode, stage) => {
-    if (mode === 'none') attending.delete(id)
-    else attending.set(id, { mode, stage })
-    const win = registry.forSession(id)
-    if (win) sendAttention(win)
-  },
-  push: (id) => {
-    const descriptor = catalog.get(id)
-    if (!descriptor) return
-    const title = sessionTitle(descriptor)
-    const agent = agentName(descriptor.stateSource, toolDisplayName(descriptor.tool, link.tools()))
-    // Nightshift's own Web Push to the owner's PWA. Nightshift keys repeats by
-    // the --open link (one per session) and keeps them quiet for an hour.
-    execFile(
-      config.nightshift,
-      [
-        'push',
-        pushBody(agent, title),
-        '--title',
-        'Aico: waiting for you',
-        '--severity',
-        'warning',
-        '--open',
-        `${config.atermUrl}/?session=${encodeURIComponent(id)}`,
-      ],
-      { timeout: 30_000 },
-      (error, stdout) => {
-        const output = String(stdout ?? '')
-        const outcome = pushOutcome(error, output)
-        console.log(pushEventLine(id, outcome))
-        // The widget log records pushes that reached the phone, not Nightshift's dedupes.
-        if (outcome.result === 'sent')
-          logWidgetEvent(id, 'needs_you_push', {
-            result: (output.trim().split('\n').pop() ?? '').trim().slice(0, 80),
-          })
-      },
-    )
-  },
+const attention = createAttentionWiring({
+  registry,
+  catalog,
+  tools: link.tools,
+  setNeedsYou,
+  execFile,
+  logEvent: logWidgetEvent,
+  nightshift: config.nightshift,
+  atermUrl: config.atermUrl,
 })
 
-/** What each waiting window shows on itself; resent when a window (re)loads. */
-const attending = new Map<string, { mode: AttentionMode; stage: AttentionStage }>()
-
-function sendAttention(win: BrowserWindow): void {
-  const id = registry.sessionOf(win.id)
-  if (!id || win.isDestroyed()) return
-  win.webContents.send('eyes:attention', attending.get(id) ?? { mode: 'none', stage: 'fresh' })
-}
-
-/** Every ~20 s, the other windows' eyes turn to each window waiting 2+ minutes. */
-const URGENT_LOOK_EVERY_MS = 20_000
-function lookAtUrgent(): void {
-  const all = faces()
-  for (const id of attention.urgent()) {
-    const win = registry.forSession(id)
-    const star = win && all.find((f) => f.winId === win.id)
-    if (!star) continue
-    for (const g of allLookAt(star, all, Math.random, false)) {
-      BrowserWindow.fromId(g.winId)?.webContents.send('eyes:look', {
-        x: g.target.x,
-        y: g.target.y,
-        delay: g.delay,
-        hold: g.hold,
-      })
-    }
-  }
-}
-setInterval(lookAtUrgent, URGENT_LOOK_EVERY_MS).unref()
-
-function noteAgentState(descriptor: SessionDescriptor): void {
-  attention.update(descriptor.id, descriptor.state ?? 'unknown', descriptor.stateAt ?? null)
-}
+// The eyes and the titlebar arcade: cursor pump, gaze scenes, urgent looks.
+const ambient = createAmbient({
+  registry,
+  windowById: (id) => BrowserWindow.fromId(id),
+  allWindows: () => BrowserWindow.getAllWindows(),
+  focusedWindow: () => BrowserWindow.getFocusedWindow(),
+  screen,
+  getSetting,
+  setSetting,
+  urgent: attention.urgent,
+  isQuitting: lifecycle.isQuitting,
+})
+ambient.startUrgentLooks()
 
 // ---------------------------------------------------------------------------
 // Tray and titlebars.
@@ -413,7 +233,7 @@ const chrome = createWindowChrome({
   tools: link.tools,
   notice: link.notice,
   projects,
-  attention,
+  attention: attention.attention,
   layout,
   contextCheck: (id) => tether.contextCheck(id),
   isQuitting: lifecycle.isQuitting,
@@ -705,7 +525,7 @@ lifecycle.onQuit(() => {
   if (app.isReady()) globalShortcut.unregisterAll()
   selectionEvents?.abort()
   sidecar?.stop()
-  if (gazeTimer) clearTimeout(gazeTimer)
+  ambient.stop()
   layout.stop({ removeFile: lifecycle.runtimeOwner })
 })
 lifecycle.setActivationHandler(windows.activate)
@@ -750,86 +570,11 @@ const startup = app.whenReady().then(async () => {
     }
   })
   ipcMain.on('win:close', (event) => BrowserWindow.fromWebContents(event.sender)?.close())
-  ipcMain.on('eyes:anchor', (event, pt: unknown) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
-    const p = pt as Partial<Point> | null
-    if (!win || typeof p?.x !== 'number' || typeof p.y !== 'number') return
-    if (
-      !Number.isFinite(p.x) ||
-      !Number.isFinite(p.y) ||
-      Math.abs(p.x) > 4000 ||
-      Math.abs(p.y) > 4000
-    )
-      return
-    eyeAnchors.set(win.id, { x: Math.round(p.x), y: Math.round(p.y) })
-  })
   ipcMain.on('win:set-bounds', (event, b: unknown) => {
     const bounds = parseBoundsRequest(b)
     if (bounds) BrowserWindow.fromWebContents(event.sender)?.setBounds(bounds)
   })
-  // Titlebar arcade on or off, for every window (one row in aico.db). Off, no
-  // window runs a game and the cursor pump stops for them.
-  const arcadeOn = (): boolean => getSetting('arcade') !== 'off'
-  ipcMain.handle('arcade:enabled', () => arcadeOn())
-  ipcMain.on('arcade:toggle', () => {
-    const on = !arcadeOn()
-    setSetting('arcade', on ? 'on' : 'off')
-    if (!on) {
-      arcadeOf.clear()
-      arcadeShown.clear()
-      arcadeNear.clear()
-      syncCursorPump()
-    }
-    for (const win of BrowserWindow.getAllWindows()) win.webContents.send('arcade:enabled', on)
-  })
-  // Titlebar arcade: the renderer lists the games it ships; main picks one this
-  // window keeps (reloads included) until it closes.
-  ipcMain.handle('arcade:assign', (event, keys: unknown) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
-    const known = parseArcadeKeys(keys)
-    if (!win || !known || !arcadeOn()) return null
-    const current = arcadeOf.get(win.id)
-    if (current && known.includes(current)) return current
-    arcadeOf.delete(win.id)
-    const key = pickArcade(known, arcadeOf.values())
-    if (key) {
-      arcadeOf.set(win.id, key)
-      arcadeShown.set(win.id, new Set([key]))
-    }
-    syncCursorPump()
-    return key
-  })
-  // "Choose game" from the lantern menu: this game, in this window. Picking one
-  // while the games are off turns them back on.
-  ipcMain.handle('arcade:pick', (event, pick: unknown, keys: unknown) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
-    const known = parseArcadeKeys(keys)
-    if (!win || !known || typeof pick !== 'string' || !known.includes(pick)) return null
-    arcadeOf.set(win.id, pick)
-    arcadeShown.set(win.id, new Set([...(arcadeShown.get(win.id) ?? []), pick]))
-    syncCursorPump()
-    if (!arcadeOn()) {
-      setSetting('arcade', 'on')
-      for (const w of BrowserWindow.getAllWindows()) w.webContents.send('arcade:enabled', true)
-    }
-    return pick
-  })
-  // "Next game" from the lantern menu: another game this window hasn't shown
-  // yet and no other window is showing (while one is free).
-  ipcMain.handle('arcade:next', (event, keys: unknown) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
-    const known = parseArcadeKeys(keys)
-    if (!win || !known || !arcadeOn()) return null
-    const current = arcadeOf.get(win.id)
-    const others = [...arcadeOf].filter(([id]) => id !== win.id).map(([, k]) => k)
-    const shown = arcadeShown.get(win.id) ?? new Set(current ? [current] : [])
-    const next = nextArcade(known, current, others, shown)
-    if (!next.key) return null
-    arcadeOf.set(win.id, next.key)
-    arcadeShown.set(win.id, next.shown)
-    syncCursorPump()
-    return next.key
-  })
+  ambient.registerIpc(ipcMain)
   chrome.registerIpc(ipcMain)
 
   sessions.registerIpc(ipcMain)
@@ -889,7 +634,7 @@ const startup = app.whenReady().then(async () => {
     },
     onHubView: windows.showAll,
   })
-  scheduleGaze()
+  ambient.start()
   layout.scheduleWrite()
   layout.enableTiling()
   // Returning to any Aico window refreshes the native tray catalog as well.
