@@ -22,6 +22,7 @@ import { registerDesktopIpc } from './desktop-ipc'
 import { createGuiChannel } from './gui-channel'
 import { createHotkeys } from './hotkeys'
 import { createLifecycle } from './lifecycle'
+import { denyAllPermissions } from './permissions'
 import { ownStartTime, removeOwnPidFile } from './process-identity'
 import { ensurePersonalWorkspaceRoot, ProjectCatalog, personalWorkspaceRoot } from './project'
 import { createSelectionBus } from './selection-bus'
@@ -287,16 +288,8 @@ const selection = createSelectionBus({
   env: process.env,
 })
 
-// Global shortcuts and the voice plumbing they drive.
-const hotkeys = createHotkeys({
-  registry,
-  grab: selection.grab,
-  target: selection.target,
-  config,
-  globalShortcut,
-  session: () => session.defaultSession,
-  app,
-})
+// Global shortcuts.
+const hotkeys = createHotkeys({ grab: selection.grab, config, globalShortcut, app })
 
 lifecycle.onQuit(() => {
   link.stop()
@@ -312,7 +305,8 @@ const startup = app.whenReady().then(async () => {
   if (!lifecycle.runtimeOwner) return // no runtime initialization
   const { migrated } = initViews(config.dbPath)
   if (migrated) console.log(`[aico] copied ${migrated} window views from the pre-Tether catalog`)
-  hotkeys.installCsp()
+  // Before any window exists: Electron would otherwise grant every request.
+  denyAllPermissions(session.defaultSession)
   sidecar.start()
 
   // No application menu — the Lantern chrome owns window controls, and the
@@ -352,7 +346,6 @@ const startup = app.whenReady().then(async () => {
   app.on('activate', chrome.syncTray)
 
   hotkeys.registerSelection()
-  hotkeys.registerVoice(ipcMain)
 
   // Browser-driven sends (and any CLI POST to /selection/send) arrive here.
   selection.subscribe()

@@ -97,7 +97,7 @@ export interface Action {
   /** Group header in the menu, in first-seen order. */
   section: string
   label: string
-  /** Human-readable shortcut, e.g. "Ctrl+Shift+M", or a CLI verb for references. */
+  /** Human-readable shortcut, e.g. "Ctrl+Shift+Space", or a CLI verb for references. */
   shortcut: string
   /** Single glyph shown in the cluster/menu/palette. */
   icon: string
@@ -121,14 +121,6 @@ export interface Action {
 }
 
 export const ACTIONS: Action[] = [
-  {
-    id: 'voice',
-    section: 'Voice',
-    label: 'Dictate into session',
-    shortcut: 'Ctrl+Shift+M',
-    icon: '🎙',
-    run: () => window.dispatchEvent(new CustomEvent('aico:voice-toggle')),
-  },
   {
     id: 'indicate',
     section: 'Capture',
@@ -471,7 +463,7 @@ export function sections(): string[] {
 }
 
 /** Seeded on first run, before the user customizes anything. */
-export const DEFAULT_PINS = ['voice', 'indicate']
+export const DEFAULT_PINS = ['indicate']
 
 /** Drop unknown/un-pinnable ids so the persisted set stays valid as actions change. */
 export function sanitizePins(pins: string[]): string[] {

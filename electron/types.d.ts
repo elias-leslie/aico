@@ -61,12 +61,6 @@ export interface AicoApi {
       cb: (s: { slug: string; state: string; detail: string; applicable: boolean }) => void,
     ): () => void
   }
-  voice: {
-    /** Optional local voice websocket URL (resolved by main from env/default). */
-    wsUrl(): Promise<string>
-    /** Subscribe to push-to-talk toggles from the global hotkey; returns an unsubscribe function. */
-    onToggle(cb: () => void): () => void
-  }
   actions: {
     /** Create a new widget running `tool` (TUI slug) in workspace `projectId`. */
     newWidget(tool: string, projectId: string): void

@@ -14,7 +14,6 @@
 - **Click-to-context capture** — the loopback sidecar accepts local browser/extension and desktop captures and inserts a compact reference into the focused widget's prompt (single, batch, or an image+OCR "package").
 - **Every session, one list** — the tray and palette list every Tether session, whether started from Aico, A-Term, the `tether` CLI or a SummitFlow root, and open any of them as a widget.
 - **Optional desktop capture hotkeys** — when local `st ui` capture tooling is available, GNOME shortcuts (or in-app grab actions) can package a focused window, a picked window, a drag-selected region, or text-only OCR into Aico.
-- **Optional voice dictation** — when `AICO_VOICE_WS` points at a compatible local Whisper websocket, push-to-talk streams microphone audio and inserts the transcript.
 
 ## Requirements
 
@@ -116,7 +115,7 @@ drop-in, then restart Aico:
 ```bash
 systemctl --user edit aico-shell.service
 # [Service]
-# Environment=AICO_VOICE_WS=ws://127.0.0.1:9000/ws
+# Environment=AICO_SELECTION_HOTKEY=CommandOrControl+Shift+F9
 ```
 
 For a directly-run AppImage or `npm start`, export the variables in the launching shell.
@@ -128,11 +127,9 @@ Important variables:
 | `AICO_SIDECAR_HOST` | `127.0.0.1` | FastAPI sidecar bind host. Keep loopback unless you know why remote access is safe. |
 | `AICO_SIDECAR_PORT` | `8005` | Sidecar HTTP port for health, selection, and widget event APIs. |
 | `AICO_STATE_DIR` | `~/.local/state/aico` | App and sidecar state: selection SQLite, widget event JSONL, and `aico.db` (window views and settings; sessions live in Tether). The launcher pidfile, lock, and `launcher.log` always live in `${XDG_STATE_HOME:-~/.local/state}/aico` and do not follow this variable. |
-| `AICO_VOICE_WS` | `ws://127.0.0.1:8003/api/voice/ws?user_id=aico&app=aico` | Speech-to-text websocket for push-to-talk dictation. Unset uses this local default; there is no off switch. If nothing answers at the URL, only dictation fails and the rest of the app keeps working. |
 | `AICO_SIDECAR_ALLOW_REMOTE` | unset | Set to `1` to allow a non-loopback `AICO_SIDECAR_HOST` and to accept any `Host` header. Applies only to a standalone sidecar (`python -m aico_sidecar`); Aico never passes it to the sidecar it starts, which stays loopback-only. The sidecar is unauthenticated, so leave this unset. |
 | `AICO_EXTENSION_IDS` | `oejadbpdecaenbbihglcnchnkmlilmjf` | Comma-separated Chrome extension IDs the sidecar trusts as browser origins. The default is the stable ID derived from the `key` in `extension/manifest.json`; set this only for a fork or re-keyed extension. |
 | `AICO_SELECTION_HOTKEY` | `CommandOrControl+Shift+Space` | Electron global shortcut for selection indication. |
-| `AICO_VOICE_HOTKEY` | `CommandOrControl+Shift+M` | Electron global shortcut for push-to-talk toggle. |
 | `TETHER_SOCKET` | unset | Tether control socket. Wins over `TETHER_INSTANCE`. |
 | `TETHER_INSTANCE` | `default` | Tether instance; the socket is `$XDG_RUNTIME_DIR/tether/<instance>/control.sock`. |
 
@@ -220,8 +217,7 @@ Electron main process (a Tether client)
 
 Electron renderer
   ├─ xterm.js terminal UI
-  ├─ lantern action menu and workspace picker
-  └─ optional voice dictation client
+  └─ lantern action menu and workspace picker
 
 Python sidecar
   ├─ FastAPI loopback service
@@ -229,7 +225,7 @@ Python sidecar
   └─ per-widget JSONL event logs under local state
 ```
 
-Aico degrades when optional tools are missing: unavailable agent CLIs simply fail in their pane, missing `st` capture tooling leaves core widgets working, and missing voice websocket disables dictation only. When Tether is unreachable, open windows keep their terminals and the tray says session control is unavailable; Aico reconnects on its own.
+Aico degrades when optional tools are missing: unavailable agent CLIs simply fail in their pane, and missing `st` capture tooling leaves core widgets working. When Tether is unreachable, open windows keep their terminals and the tray says session control is unavailable; Aico reconnects on its own.
 
 The `st aico` extension's client lives in Tether; `scripts/aico-root-watch.py` here is the entry SummitFlow runs and execs Tether's installed copy. See [root control](root-control.md). For the process-containment design and recovery, see Tether's `docs/LIFECYCLE_HARNESS.md` and [the July 2026 incident report](INCIDENT-2026-07-PROCESS-ESCAPES.md). The cutover from the old in-process owner is in [cutover-aico.md](cutover-aico.md); known Tether API gaps are in [tether-api-gaps.md](tether-api-gaps.md).
 
@@ -238,7 +234,6 @@ The `st aico` extension's client lives in Tether; `scripts/aico-root-watch.py` h
 - Linux desktop is the supported path. macOS and Windows packaging are not implemented.
 - X11 is the best-supported session for global shortcuts and screen capture.
 - The published `Aico-*.AppImage` releases (built in CI with a SHA256 checksum and a build-provenance attestation) predate Tether; `npm run dist` builds one from current code. `.deb` packaging is not implemented yet.
-- Voice dictation requires a separately running compatible speech-to-text websocket.
 - The browser extension is loaded unpacked for development; it is not published in a browser store.
 
 ## License

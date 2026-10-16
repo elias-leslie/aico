@@ -23,18 +23,6 @@ export interface AicoConfig {
    * shortcut to a CLI that poke this same grab path instead (follow-on).
    */
   readonly selectionHotkey: string
-  /**
-   * Push-to-talk: a press toggles dictation on the focused widget (globalShortcut
-   * fires on press only — no key-release — so this is a toggle, not a hold). The
-   * renderer captures the mic and types the transcript into its own prompt.
-   */
-  readonly voicePttHotkey: string
-  /**
-   * Optional voice websocket. user_id/app are accepted by the default local STT URL;
-   * mode=transcribe is appended by the client (transcript only, no voice-assistant
-   * completion — voice is dictation into the TUI, which then responds).
-   */
-  readonly voiceWsUrl: string
   /** AICO_TERMINAL_TRANSPORT, when it forces a terminal transport over the setting. */
   readonly forcedTransport: 'attach' | 'control' | undefined
   /** The Vite dev server, when running under it. */
@@ -61,8 +49,6 @@ export function readConfig(
     nightshift: join(home, '.local/bin/nightshift'),
     atermUrl: (env.AICO_ATERM_URL ?? 'https://terminal.summitflow.dev').replace(/\/+$/, ''),
     selectionHotkey: env.AICO_SELECTION_HOTKEY ?? 'CommandOrControl+Shift+Space',
-    voicePttHotkey: env.AICO_VOICE_HOTKEY ?? 'CommandOrControl+Shift+M',
-    voiceWsUrl: env.AICO_VOICE_WS ?? 'ws://127.0.0.1:8003/api/voice/ws?user_id=aico&app=aico',
     forcedTransport: forced === 'attach' || forced === 'control' ? forced : undefined,
     rendererUrl: env.ELECTRON_RENDERER_URL,
     activationReadyFile: env.AICO_ACTIVATION_READY_FILE,

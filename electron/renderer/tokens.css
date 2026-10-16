@@ -9,7 +9,7 @@
   /* Identity */
   --lantern: #e5a647; /* warm amber, the accent */
   --lantern-deep: #b47a2a; /* pressed/focused state */
-  --lantern-glow: rgba(229, 166, 71, 0.35); /* amber halo — toast/voice accents */
+  --lantern-glow: rgba(229, 166, 71, 0.35); /* amber halo — toast accents */
 
   /* Frame edge: one steady hairline. A dim brass from the lantern family —
      warm enough to separate tiled widgets from each other and the desktop, too

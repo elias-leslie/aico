@@ -290,7 +290,7 @@ export class Sidecar {
     }
     // Health gate timed out (or aborted). A still-alive child is a hung sidecar
     // holding port 8005 — tear it down so the next launch can bind, instead of
-    // leaking the port and leaving selection/voice silently dead.
+    // leaking the port and leaving selection silently dead.
     if (this.child === child) {
       this.onStatus('unhealthy', 'health gate timed out')
       this.stop()

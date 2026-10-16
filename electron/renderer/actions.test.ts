@@ -39,7 +39,7 @@ describe('action registry', () => {
   })
 
   it('treats click-capable actions as pinnable', () => {
-    expect(isPinnable(findAction('voice') as never)).toBe(true)
+    expect(isPinnable(findAction('indicate') as never)).toBe(true)
     // Grabs run directly; top-level flyout hosts open dropdowns; copy stays a
     // terminal chord reference, so it is not pinnable.
     expect(isPinnable(findAction('grab-image') as never)).toBe(true)
@@ -194,24 +194,22 @@ describe('End session', () => {
 
 describe('sanitizePins', () => {
   it('drops unknown and un-pinnable ids and de-dupes, preserving order', () => {
-    expect(sanitizePins(['hub', 'copy', 'new-widget', 'nope', 'voice', 'voice'])).toEqual([
-      'hub',
-      'new-widget',
-      'voice',
-    ])
+    expect(
+      sanitizePins(['hub', 'copy', 'new-widget', 'nope', 'voice', 'indicate', 'indicate']),
+    ).toEqual(['hub', 'new-widget', 'indicate'])
   })
 })
 
 describe('pinnedActions', () => {
   it('resolves ids to actions in pin order', () => {
-    expect(pinnedActions(['hub', 'voice']).map((a) => a.id)).toEqual(['hub', 'voice'])
+    expect(pinnedActions(['hub', 'indicate']).map((a) => a.id)).toEqual(['hub', 'indicate'])
   })
 })
 
 describe('togglePin', () => {
   it('adds when absent and removes when present', () => {
-    expect(togglePin(['voice'], 'hub')).toEqual(['voice', 'hub'])
-    expect(togglePin(['voice', 'hub'], 'voice')).toEqual(['hub'])
+    expect(togglePin(['indicate'], 'hub')).toEqual(['indicate', 'hub'])
+    expect(togglePin(['indicate', 'hub'], 'indicate')).toEqual(['hub'])
   })
 })
 

@@ -120,7 +120,6 @@ npm run dist
 - Agent CLIs: install and authenticate `claude`, `codex`, `agy` (Antigravity), or `pi` separately; Tether's tool registry also accepts other TUI commands.
 - Project catalog: Aico lists the projects Tether serves (Tether's local list, or the author's SummitFlow catalog when it is running) plus its own Personal Workspace.
 - Screen/OCR capture: if an `st` CLI is installed, Aico can use `st ui` surfaces; otherwise core widgets still work.
-- Voice dictation: Aico connects to `ws://127.0.0.1:8003/api/voice/ws?user_id=aico&app=aico` unless `AICO_VOICE_WS` names another compatible speech-to-text websocket. If nothing answers, only voice dictation fails.
 - Browser extension: load `extension/` unpacked in Chrome/Chromium.
 
 ## Ubuntu AppArmor note

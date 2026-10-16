@@ -85,7 +85,7 @@ function partLabel(part: string): string {
   return part === 'Shift' ? '⇧' : part === 'Space' ? 'Spc' : part
 }
 
-// Shortcut chips for a key chord ("Ctrl+Shift+M"); a single mono token for CLI verbs.
+// Shortcut chips for a key chord ("Ctrl+Shift+Space"); a single mono token for CLI verbs.
 function kbd(shortcut: string): HTMLElement {
   const wrap = make('span', 'aico-kbd')
   if (shortcut.includes('+')) {

@@ -224,7 +224,7 @@ export function createSelectionBus(deps: SelectionBusDeps) {
     subscribe: subscribeSelectionEvents,
     /** The indicate hotkey's harvest. */
     grab: selectionGrab,
-    /** The session an indicated selection (or a voice toggle) goes to. */
+    /** The session an indicated selection goes to. */
     target: selectionTarget,
     /** A window gained focus; a window with no session keeps the last target. */
     noteFocus: (sessionId: string | undefined): void => {

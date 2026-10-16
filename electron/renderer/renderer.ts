@@ -36,7 +36,6 @@ import { mouseReportingActive, programOwnsSelection, setupMouseShim } from './mo
 import { pointToCell, sgrWheelSequence, wheelMouseTicks } from './mouse-wheel'
 import { osc52Text } from './osc52'
 import { terminalShouldTakeFocus } from './terminal-focus'
-import { wireVoice } from './voice'
 import { wheelLineDelta } from './wheel'
 
 const host = document.getElementById('terminal')
@@ -480,10 +479,6 @@ function wireMandate(): void {
   })
 }
 wireMandate()
-
-// Push-to-talk dictation (mic -> optional STT websocket -> this widget's prompt). Async
-// (resolves the WS URL from main); fire-and-forget so it never blocks the term.
-void wireVoice()
 
 // Control surface: lantern menu, pinned cluster, command palette. Independent of
 // the terminal; the palette/menu hand focus back here on close (see below).

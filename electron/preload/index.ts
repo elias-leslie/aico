@@ -64,16 +64,6 @@ contextBridge.exposeInMainWorld('aico', {
       return () => ipcRenderer.removeListener('context:mandate', listener)
     },
   },
-  voice: {
-    /** Optional local voice websocket URL (resolved by main from env/default). */
-    wsUrl: (): Promise<string> => ipcRenderer.invoke('voice:ws-url'),
-    /** Push-to-talk toggle from the global hotkey; returns an unsubscribe function. */
-    onToggle: (cb: () => void) => {
-      const listener = (): void => cb()
-      ipcRenderer.on('voice:toggle', listener)
-      return () => ipcRenderer.removeListener('voice:toggle', listener)
-    },
-  },
   actions: {
     /** Create a new widget running `tool` (TUI slug) in workspace `projectId`.
      * Both are explicit — a launch always names its tool and workspace. */
