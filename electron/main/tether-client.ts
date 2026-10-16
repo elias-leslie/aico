@@ -744,7 +744,14 @@ export function holdGuiChannel(
             } else if (type === 'command') {
               const command = parseGuiCommand(line)
               if (!command) {
-                log('GUI channel: malformed command ignored')
+                // Version skew (an unknown kind or field) should not leave
+                // Tether waiting out its timeout: answer when there is an id.
+                const commandId = (line as { commandId?: unknown }).commandId
+                log('GUI channel: malformed command rejected')
+                if (typeof commandId === 'string' && commandId)
+                  void client
+                    .guiResult(commandId, { applied: false, error: 'invalid_body' })
+                    .catch((error) => log('GUI result could not be posted', error))
                 return
               }
               void apply(command)

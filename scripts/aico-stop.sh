@@ -9,7 +9,7 @@ export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/aico"
 PIDFILE="$LOG_DIR/aico.pid"
 REPO="${AICO_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
-readonly RUNTIME_UNITS=(aico-shell-runtime.service aico-shell.service)
+readonly RUNTIME_UNITS=(aico-shell.service)
 
 is_aico_process() {
   local pid="$1"
@@ -100,9 +100,9 @@ process_is_tracked_aico_application_scope() {
   tracked_aico_application_scope_identity "$1" "$2" >/dev/null
 }
 
-# A live pidfile must point to the MainPID of one of the two supported exact
-# desktop units. Refuse before stopping anything if it points into a pane scope,
-# an unrelated service, or a recycled process.
+# A live pidfile must point to the MainPID of the exact desktop unit. Refuse
+# before stopping anything if it points into a pane scope, an unrelated
+# service, or a recycled process.
 PID="$(cat "$PIDFILE" 2>/dev/null || true)"
 LIVE_PID_UNIT=""
 if [[ "$PID" =~ ^[1-9][0-9]*$ ]] && kill -0 "$PID" 2>/dev/null; then

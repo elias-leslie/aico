@@ -8,8 +8,8 @@ import { DatabaseSync } from 'node:sqlite'
 // sidecar's per-widget JSONL logs keep matching.
 //
 // The pre-Tether tables (`widgets`, `tmux_servers`, `root_requests`) are never
-// written or dropped here: they stay as the rollback copy that the old Aico and
-// `tether import-aico` read.
+// written or dropped here: `tether import-aico` still reads them, so dropping
+// them is a Tether change first.
 
 export interface Bounds {
   x: number

@@ -11,21 +11,24 @@ After=graphical-session.target
 # reboot. The condition still guards a manual start without X11; the desktop
 # launcher imports its display variables and starts this same unit.
 ConditionEnvironment=DISPLAY
-# Historical desktop launches used a transient runtime service. Starting the
-# canonical managed unit retires only that desktop-runtime unit; durable tmux
-# server and pane units have different names and are never conflicted.
-Conflicts=aico-shell-runtime.service
 
 [Service]
 Type=simple
 Slice=app.slice
 WorkingDirectory=__PROJECT_ROOT__
-# Keep the desktop/runtime tree in one bounded cgroup. Tether owns the durable
-# tmux servers and pane workloads in its own units, so they survive this unit
-# stopping; Chromium helpers, tmux attach clients and the sidecar must not.
+# The runner, build, Chromium helpers and sidecar start in this unit's cgroup.
+# Once a window opens, the desktop moves the Electron main process into
+# app-aico-<pid>.scope, and the tmux attach clients it spawns afterwards start
+# there too. `journalctl --user -u aico-shell` therefore misses most of Aico's
+# output; read `journalctl --user -u app-aico-<MainPID>.scope` as well.
+# Electron stays this unit's MainPID, so a stop still reaches it. Tether owns
+# the durable tmux servers and pane workloads in its own units; they survive
+# this unit stopping.
 # SIGTERM only the Electron main process so app.quit can detach PTYs and close
-# renderers cleanly; systemd still SIGKILLs any remaining helper in this exact
-# cgroup after the main process exits/TimeoutStopSec.
+# renderers cleanly; systemd then SIGKILLs any helper left in this unit's
+# cgroup after the main process exits or TimeoutStopSec passes. Helpers in the
+# desktop scope are not this unit's to kill: they exit with Electron, and
+# scripts/aico-stop.sh stops that exact scope.
 KillMode=mixed
 CPUAccounting=yes
 MemoryAccounting=yes

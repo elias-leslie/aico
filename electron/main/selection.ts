@@ -1,6 +1,6 @@
 // Pure selection-delivery helpers, kept out of `index.ts` so they unit-test
 // without pulling in Electron. The record shape is shared by the sidecar,
-// browser extension, web helper, and local capture tooling.
+// browser extension, and local capture tooling.
 
 import { sanitizeTerminalText } from '../shared/terminal-text'
 

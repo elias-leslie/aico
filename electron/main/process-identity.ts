@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, unlinkSync } from 'node:fs'
 
 /**
  * Linux process start time: field 22 of `/proc/<pid>/stat`, in clock ticks
@@ -23,5 +23,19 @@ export function ownStartTime(): string | null {
     return parseStartTime(readFileSync('/proc/self/stat', 'utf8'))
   } catch {
     return null
+  }
+}
+
+/**
+ * Remove a pidfile only while it still names `pid`, so a quitting process never
+ * deletes a newer runtime's registration. True when it removed the file.
+ */
+export function removeOwnPidFile(path: string, pid: number = process.pid): boolean {
+  try {
+    if (readFileSync(path, 'utf8').trim() !== String(pid)) return false
+    unlinkSync(path)
+    return true
+  } catch {
+    return false // already gone, or unreadable: nothing of ours to remove
   }
 }

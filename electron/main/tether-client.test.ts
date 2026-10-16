@@ -406,6 +406,47 @@ describe('GUI channel', () => {
     })
   })
 
+  it('answers a malformed command with invalid_body instead of letting Tether time out', async () => {
+    const results: { url?: string; body: unknown }[] = []
+    const applied: string[] = []
+    const { client } = await fakeTether(async (req, res) => {
+      if (req.url === '/v1/gui/channel') {
+        res.writeHead(200, { 'content-type': 'application/x-ndjson' })
+        // Unknown kind from a newer Tether, a bad session id, then one with no
+        // usable commandId (nothing to answer), then a good one.
+        const show = { type: 'command', kind: 'show', sessionId: '0a1b2c3d', generation: 'g' }
+        for (const line of [
+          { ...show, commandId: 'c1', kind: 'resize' },
+          { ...show, commandId: 'c2', sessionId: '../x' },
+          { ...show, commandId: 7 },
+          { ...show, commandId: 'c3' },
+        ])
+          res.write(`${JSON.stringify(line)}\n`)
+        return
+      }
+      results.push({ url: req.url, body: await readBody(req) })
+      json(res, 200, { accepted: true })
+    })
+    const stop = holdGuiChannel(client, async (command) => {
+      applied.push(command.commandId)
+      return { applied: true }
+    })
+    cleanups.push(stop)
+    await expect.poll(() => results.length, { timeout: 3_000 }).toBe(3)
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(applied).toEqual(['c3'])
+    expect(results).toHaveLength(3)
+    expect(results).toContainEqual({
+      url: '/v1/gui/results/c1',
+      body: { applied: false, error: 'invalid_body' },
+    })
+    expect(results).toContainEqual({
+      url: '/v1/gui/results/c2',
+      body: { applied: false, error: 'invalid_body' },
+    })
+    expect(results).toContainEqual({ url: '/v1/gui/results/c3', body: { applied: true } })
+  })
+
   it('stops for good when another GUI supersedes it', async () => {
     let connections = 0
     const { client } = await fakeTether((_req, res) => {

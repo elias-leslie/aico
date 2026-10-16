@@ -42,7 +42,7 @@ import {
 } from './gaze'
 import { parseBoundsRequest, parsePins } from './ipc-validation'
 import { allowTrustedAudioMedia } from './media-permission'
-import { ownStartTime } from './process-identity'
+import { ownStartTime, removeOwnPidFile } from './process-identity'
 import {
   ensurePersonalWorkspaceRoot,
   PERSONAL_WORKSPACE_ID,
@@ -1849,6 +1849,13 @@ if (runtimeOwner && activationReadyFile) {
     console.warn('[aico] could not publish activation readiness:', error)
   }
 }
+// The foreground runner registers its own PID, which exec hands to Electron.
+// Clear it on a clean quit so the next start finds no stale pidfile.
+const runtimePidFile = process.env.AICO_PIDFILE
+app.on('before-quit', () => {
+  if (runtimeOwner && runtimePidFile) removeOwnPidFile(runtimePidFile)
+})
+
 app.on('before-quit', () => {
   if (!activationReadyFile || !activationIdentity) return
   try {
@@ -2132,10 +2139,6 @@ const startup = app.whenReady().then(async () => {
 
   // End this session from the widget itself: Tether ends the workload and the
   // window closes once it has.
-  ipcMain.on('widget:discard-self', (event) => {
-    const id = widgetIdFor(event.sender)
-    if (id) discardWidget(id)
-  })
   ipcMain.handle('session:end-self', async (event) => {
     const id = widgetIdFor(event.sender)
     if (!id) throw new Error('Session view is unavailable')
