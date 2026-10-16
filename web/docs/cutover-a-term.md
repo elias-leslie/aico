@@ -44,8 +44,8 @@ Postgres table, so rollback is a code rollback.
 4. Pre-Tether A-Term sessions still running on the default tmux server
    (`tmux ls | grep '^summitflow-'`) keep running but are no longer handled
    as A-Term sessions. One still running an agent shows like any of your own
-   tmux sessions: read-only, and closing it only closes the view. Finish or
-   end them with `tether legacy list` and `tether legacy end <name>`.
+   tmux sessions: read-only, and closing it only closes the view. Finish them,
+   or end one with `tmux kill-session -t <name>`.
 
 ## 1. Bring in the code
 
