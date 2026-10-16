@@ -139,7 +139,9 @@ def verify_password(password: str, settings: AuthSettings) -> bool:
     """Return whether a submitted password matches the configured secret."""
     if settings.mode != "password" or not settings.password:
         return False
-    return hmac.compare_digest(password.encode(), settings.password.encode())
+    # JSON allows a lone surrogate ("\ud800"): encode it one-to-one instead of crashing with a 500.
+    submitted = password.encode("utf-8", "surrogatepass")
+    return hmac.compare_digest(submitted, settings.password.encode("utf-8", "surrogatepass"))
 
 
 def set_session_cookie(response: Response, session: AuthSession, settings: AuthSettings) -> None:

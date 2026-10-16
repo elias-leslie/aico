@@ -76,3 +76,12 @@ def test_internal_maintenance_rejects_wrong_token(test_app: TestClient) -> None:
     _app(test_app).state.internal_token = "secret"
     response = test_app.get("/api/internal/maintenance", headers={"Authorization": "Bearer nope"})
     assert response.status_code == 403
+
+
+def test_internal_maintenance_refuses_non_ascii_token_without_crashing(test_app: TestClient) -> None:
+    _app(test_app).state.internal_token = "secret"
+    by_header = test_app.get("/api/internal/maintenance", headers={"Authorization": "Bearer café".encode("latin-1")})
+    by_query = test_app.get("/api/internal/maintenance?token=caf%C3%A9")
+    for response in (by_header, by_query):
+        assert response.status_code == 403
+        assert response.json() == {"detail": "Unauthorized"}

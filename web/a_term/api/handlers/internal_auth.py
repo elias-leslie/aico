@@ -24,7 +24,8 @@ def verify_internal_token(request: Request, token: str) -> bool:
         if hasattr(request.app.state, APP_STATE_TOKEN_ATTR)
         else ""
     )
-    return bool(expected_token) and hmac.compare_digest(token, expected_token)
+    # Compare bytes: compare_digest refuses non-ASCII str, which would turn a wrong token into a 500.
+    return bool(expected_token) and hmac.compare_digest(token.encode(), expected_token.encode())
 
 
 def require_internal_token(request: Request, query_token: str = "") -> None:

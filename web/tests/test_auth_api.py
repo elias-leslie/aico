@@ -130,3 +130,11 @@ def test_non_ascii_password_and_cookie_are_refused_not_crashed(test_app: TestCli
     cookie = "a_term_session=e30.caf\u00e9".encode("latin-1")
     response = test_app.get("/api/diagnostics/sessions", headers={"cookie": cookie})
     assert response.status_code == 401
+
+
+def test_lone_surrogate_password_is_refused_not_crashed(test_app: TestClient, auth_settings) -> None:
+    auth_settings()
+    response = test_app.post(
+        "/api/auth/login", content=b'{"password": "\\ud800"}', headers={"content-type": "application/json"}
+    )
+    assert response.status_code == 401
