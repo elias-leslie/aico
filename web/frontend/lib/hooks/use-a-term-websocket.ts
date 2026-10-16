@@ -42,8 +42,9 @@ interface UseATermWebSocketOptions {
     alternate_screen: boolean
     mouse_reporting: boolean
   }) => void
-  /** Called with the transport the server chose for this view */
-  onTransport?: (transport: 'control' | 'attach') => void
+  /** Called with the transport the server chose for this view (and, in
+   * control mode, how much history its seed carries) */
+  onTransport?: (transport: 'control' | 'attach', historyLines?: number) => void
   /** Ask the server for the control-mode transport */
   requestControl?: boolean
   /** Called before reconnect data arrives — clear aTerm buffer to prevent duplicates */
@@ -189,7 +190,8 @@ export function useATermWebSocket({
         onViewportInit: (data) => onViewportInitRef.current?.(data),
         onScrollbackPage: (data) => onScrollbackPageRef.current?.(data),
         onPaneMode: (data) => onPaneModeRef.current?.(data),
-        onTransport: (transport) => onTransportRef.current?.(transport),
+        onTransport: (transport, historyLines) =>
+          onTransportRef.current?.(transport, historyLines),
         onBeforeReconnectData: () => onBeforeReconnectDataRef.current?.(),
         onDisconnect: () => onDisconnectRef.current?.(),
         getDimensions: () => getDimensionsRef.current?.() ?? null,

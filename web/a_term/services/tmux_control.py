@@ -42,7 +42,8 @@ __all__ = [
     "parse_seed_flags",
 ]
 
-# History lines carried into xterm on attach; matches the browser's scrollback.
+# History lines carried into xterm on attach. The browser sizes its scrollback
+# from this (sent with the transport message), so this is the only copy.
 SEED_HISTORY_LINES = 20_000
 # Seconds tmux may fall behind before it pauses the pane (then we reseed).
 PAUSE_AFTER_SECONDS = 5

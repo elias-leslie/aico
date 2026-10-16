@@ -45,8 +45,9 @@ export interface WebSocketConnectionCallbacks {
     alternate_screen: boolean
     mouse_reporting: boolean
   }) => void
-  /** The transport the server chose for this view (control or attach). */
-  onTransport?: (transport: 'control' | 'attach') => void
+  /** The transport the server chose for this view (control or attach). In
+   * control mode `historyLines` is how much history the server's seed carries. */
+  onTransport?: (transport: 'control' | 'attach', historyLines?: number) => void
   onBeforeReconnectData?: () => void
   onDisconnect?: () => void
   getDimensions?: () => { cols: number; rows: number } | null
@@ -404,7 +405,13 @@ export function dispatchControlMessage(
     }
 
     if (control.transport === 'control' || control.transport === 'attach') {
-      callbacks.onTransport?.(control.transport)
+      const historyLines = control.history_lines
+      callbacks.onTransport?.(
+        control.transport,
+        typeof historyLines === 'number' && historyLines > 0
+          ? historyLines
+          : undefined,
+      )
       return true
     }
 

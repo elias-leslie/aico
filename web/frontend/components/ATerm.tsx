@@ -33,10 +33,7 @@ import { useScrollbackPager } from '../lib/hooks/use-scrollback-pager'
 import { profileAnsiColors } from '../lib/utils/ansi-color-profile'
 import { isMobileDevice } from '../lib/utils/device'
 import { isTuiSessionMode } from '../lib/utils/session-mode'
-import {
-  CONTROL_SCROLLBACK_LINES,
-  requestedTransport,
-} from '../lib/utils/terminal-transport'
+import { requestedTransport } from '../lib/utils/terminal-transport'
 import { ATermDiagnosticsOverlay } from './ATermDiagnosticsOverlay'
 import type { ATermHandle, ATermProps } from './a-term.types'
 import { ScrollbackOverlay } from './ScrollbackOverlay'
@@ -172,6 +169,11 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
     const [requestControl] = useState(() => requestedTransport() === 'control')
     const [controlMode, setControlMode] = useState(requestControl)
     const controlModeRef = useRef(controlMode)
+    // How much history the server's control-mode seed carries (it says so
+    // with the transport, before the seed); null until it has.
+    const [controlHistoryLines, setControlHistoryLines] = useState<
+      number | null
+    >(null)
     const sgrMouseRef = useRef<() => boolean>(() => false)
     const isSgrMouse = useCallback(() => sgrMouseRef.current(), [])
     const classicSessionMode = controlMode ? undefined : sessionMode
@@ -236,10 +238,17 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
         workingDir,
         sendInitialResize: !suppressSharedResize,
         requestControl,
-        onTransport: (transport) => {
+        onTransport: (transport, historyLines) => {
           const on = transport === 'control'
           controlModeRef.current = on
           setControlMode(on)
+          if (on && historyLines) {
+            // Size the buffer now, before the seed is written, not on the
+            // next render.
+            if (aTermRef.current)
+              aTermRef.current.options.scrollback = historyLines
+            setControlHistoryLines(historyLines)
+          }
         },
         onStatusChange,
         onDisconnect,
@@ -438,9 +447,10 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
     // TUI/agent sessions: scrollback overlay handles all history via tmux.
     // Setting scrollback to 0 prevents a duplicate native scrollbar from
     // accumulating live writes alongside the overlay.
-    // Control mode: the pane's own history, as many lines as the seed carries.
+    // Control mode: the pane's own history, as many lines as the seed carries
+    // (the user's setting until the server has said).
     const effectiveScrollback = controlMode
-      ? CONTROL_SCROLLBACK_LINES
+      ? (controlHistoryLines ?? scrollback)
       : isTuiSession
         ? 0
         : scrollback

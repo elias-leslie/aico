@@ -13,9 +13,6 @@ export type TerminalTransport = 'control' | 'attach'
 
 export const SCROLLBACK_MODE_STORAGE_KEY = 'a-term-scrollback-mode'
 
-/** History kept in a control-mode terminal; the backend seeds the same. */
-export const CONTROL_SCROLLBACK_LINES = 20_000
-
 export function getScrollbackMode(): ScrollbackMode {
   if (typeof window === 'undefined') return 'new'
   try {

@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useRef } from 'react'
-import { MAX_PANES } from '@/lib/constants/a-term'
+import { LAYOUT_MAX_PANES } from '@/lib/constants/a-term'
 import {
   useLayoutChangeHandler,
   useMinSizeCalculator,
@@ -45,7 +45,7 @@ export function ResizablePaneLayout(props: ResizablePaneLayoutProps) {
   // Mobile navigates one session at a time; the desktop grid limit must not
   // truncate its switcher or prevent a later session from becoming active.
   const displaySlots = useMemo(
-    () => (isMobile ? slots : slots.slice(0, MAX_PANES)),
+    () => (isMobile ? slots : slots.slice(0, LAYOUT_MAX_PANES)),
     [slots, isMobile],
   )
   const paneCount = displaySlots.length

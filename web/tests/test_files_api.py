@@ -6,6 +6,8 @@ import io
 
 from fastapi.testclient import TestClient
 
+from a_term.config import settings
+
 
 def _upload(client: TestClient, content: bytes, filename: str, content_type: str):
     """Helper to POST a file upload."""
@@ -51,6 +53,12 @@ def test_detect_mime_unknown_binary() -> None:
 # ---------------------------------------------------------------------------
 # Upload endpoint
 # ---------------------------------------------------------------------------
+
+
+def test_upload_limit_is_served_from_the_setting(test_app: TestClient) -> None:
+    response = test_app.get("/api/a-term/files/limits")
+    assert response.status_code == 200
+    assert response.json() == {"max_bytes": settings.max_file_size}
 
 
 def test_upload_text_file(test_app: TestClient) -> None:

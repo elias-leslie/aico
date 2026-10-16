@@ -34,7 +34,7 @@ from ...services.scrollback_sync import (
     build_scrollback_sync_payload,
     prepare_scrollback_for_transport,
 )
-from ...services.tmux_control import ControlTerminal
+from ...services.tmux_control import SEED_HISTORY_LINES, ControlTerminal
 from ...utils.tmux import (
     apply_external_attach_options,
     get_cursor_position,
@@ -378,7 +378,11 @@ def _wants_control(websocket: WebSocket) -> bool:
 
 
 async def _send_transport(websocket: WebSocket, transport: str) -> None:
-    await websocket.send_text(json.dumps({"__ctrl": True, "transport": transport}))
+    """Tell the browser which transport it got; control mode also says how much history the seed carries."""
+    message: dict[str, object] = {"__ctrl": True, "transport": transport}
+    if transport == "control":
+        message["history_lines"] = SEED_HISTORY_LINES
+    await websocket.send_text(json.dumps(message))
 
 
 async def _setup_control_connection(websocket: WebSocket, plan: AttachPlan) -> ViewContext:

@@ -103,4 +103,29 @@ describe('useATermPanes', () => {
       ).toEqual(['session-a'])
     })
   })
+
+  it("takes the pane limit from the backend's pane list, capped by the layouts", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    vi.mocked(api.fetchPanes).mockResolvedValue({
+      ...paneList([attachedPane]),
+      max_panes: 1,
+    })
+    const { result } = renderHook(() => useATermPanes(), {
+      wrapper: createWrapper(queryClient),
+    })
+    await waitFor(() => expect(result.current.maxPanes).toBe(1))
+    expect(result.current.atLimit).toBe(true)
+
+    vi.mocked(api.fetchPanes).mockResolvedValue({
+      ...paneList([attachedPane]),
+      max_panes: 9,
+    })
+    await act(async () => {
+      await queryClient.refetchQueries()
+    })
+    // No layout arranges more than six.
+    await waitFor(() => expect(result.current.maxPanes).toBe(6))
+  })
 })

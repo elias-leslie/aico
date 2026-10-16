@@ -17,6 +17,7 @@ from a_term.api.handlers.websocket_connection import (
 )
 from a_term.api.handlers.websocket_messages import ViewContext
 from a_term.constants import SHELL_MODE
+from a_term.services.tmux_control import SEED_HISTORY_LINES
 
 MODULE = "a_term.api.handlers.websocket_connection"
 SOCKET = "/tmp/tether-test/tmux-a0000001.sock"
@@ -394,7 +395,8 @@ async def test_control_view_starts_after_the_first_size_and_then_claims() -> Non
     claim.assert_called_once_with(view, 100, 40)
     assert view.pending_claim is False
     sent = [json.loads(call.args[0]) for call in websocket.send_text.await_args_list]
-    assert {"__ctrl": True, "transport": "control"} in sent
+    # The browser sizes its history from this, so the seed always fits.
+    assert {"__ctrl": True, "transport": "control", "history_lines": SEED_HISTORY_LINES} in sent
 
 
 @pytest.mark.asyncio

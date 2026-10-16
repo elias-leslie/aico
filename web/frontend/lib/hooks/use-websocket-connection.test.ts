@@ -340,6 +340,21 @@ describe('control-mode transport', () => {
     expect(
       dispatchControlMessage('{"__ctrl":true,"transport":"attach"}', callbacks),
     ).toBe(true)
-    expect(onTransport).toHaveBeenCalledWith('attach')
+    expect(onTransport).toHaveBeenCalledWith('attach', undefined)
+  })
+
+  it('passes on how much history a control-mode seed carries', () => {
+    const onTransport = vi.fn()
+    const callbacks = { ...buildCallbacks(), onTransport }
+    dispatchControlMessage(
+      '{"__ctrl":true,"transport":"control","history_lines":20000}',
+      callbacks,
+    )
+    expect(onTransport).toHaveBeenCalledWith('control', 20000)
+    dispatchControlMessage(
+      '{"__ctrl":true,"transport":"control","history_lines":"lots"}',
+      callbacks,
+    )
+    expect(onTransport).toHaveBeenLastCalledWith('control', undefined)
   })
 })

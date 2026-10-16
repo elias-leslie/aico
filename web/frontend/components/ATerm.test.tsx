@@ -67,6 +67,7 @@ const fakeATerm = {
     registerEscHandler: vi.fn(() => ({ dispose: vi.fn() })),
     registerOscHandler: vi.fn(() => ({ dispose: vi.fn() })),
   },
+  options: { scrollback: 0 },
   reset: vi.fn(),
   scrollToLine: vi.fn(),
   write: vi.fn((_data: string, callback?: () => void) => {
@@ -711,9 +712,26 @@ describe('ATermComponent in control mode', () => {
     render(<ATermComponent sessionId="session-control" sessionMode="claude" />)
 
     expect(websocketState.options?.requestControl).toBe(true)
-    expect(aTermInstanceOptions?.scrollback).toBe(20_000)
     expect(scrollbackOverlayState).toHaveLength(0)
     expect(fakeATerm.parser.registerCsiHandler).toHaveBeenCalled()
+  })
+
+  it('holds as much history as the server says its seed carries', () => {
+    render(
+      <ATermComponent
+        sessionId="session-control-history"
+        sessionMode="claude"
+      />,
+    )
+    // The user's scrollback setting until the server has said.
+    expect(aTermInstanceOptions?.scrollback).toBe(10_000)
+
+    act(() => {
+      websocketState.options?.onTransport?.('control', 1234)
+    })
+
+    expect(aTermInstanceOptions?.scrollback).toBe(1234)
+    expect(fakeATerm.options.scrollback).toBe(1234)
   })
 
   it('pastes through tmux as one control message', async () => {

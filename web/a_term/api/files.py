@@ -56,6 +56,12 @@ def _detect_mime_type(content: bytes, claimed_type: str) -> str | None:
     return None
 
 
+class UploadLimitsResponse(BaseModel):
+    """The largest upload the server takes, in bytes."""
+
+    max_bytes: int
+
+
 class FileUploadResponse(BaseModel):
     """Response for file upload."""
 
@@ -121,13 +127,19 @@ def _save_upload(content: bytes, content_type: str) -> tuple[str, str]:
     return filename, shell_path
 
 
+@router.get("/api/a-term/files/limits", response_model=UploadLimitsResponse)
+async def upload_limits() -> UploadLimitsResponse:
+    """The upload size limit, so the browser can refuse a bigger file before sending it."""
+    return UploadLimitsResponse(max_bytes=MAX_FILE_SIZE)
+
+
 @router.post("/api/a-term/files", response_model=FileUploadResponse)
 @limiter.limit("10/minute")
 async def upload_file(request: Request, file: UploadFile) -> FileUploadResponse:
     """Upload a file for use in a_term commands.
 
     Stores in the configured upload directory with UUID naming.
-    Allowed: png, jpg, gif, webp, md, txt, json, pdf. Max: 10 MB.
+    Allowed: png, jpg, gif, webp, md, txt, json, pdf. Max: ``MAX_FILE_SIZE_MB`` (10 MB by default).
     """
     content = await _read_file_content(file)
     if not content:

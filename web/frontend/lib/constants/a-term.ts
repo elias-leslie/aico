@@ -59,11 +59,12 @@ export const GRID_MIN_WIDTHS: Record<GridLayoutMode, number> = {
   'grid-2x3': ULTRAWIDE_PANE_BREAKPOINT,
 } as const
 
-/** Maximum number of panes allowed by the backend. */
-export const MAX_PANES = 6
+/** The most panes one layout arranges (the 3x2 grid). How many panes may be
+ * open is the backend's limit, sent with the pane list as `max_panes`. */
+export const LAYOUT_MAX_PANES = 6
 
 export function getPaneCapacityForViewport(viewportWidth: number): number {
-  return viewportWidth >= MOBILE_WIDTH_THRESHOLD ? MAX_PANES : 4
+  return viewportWidth >= MOBILE_WIDTH_THRESHOLD ? LAYOUT_MAX_PANES : 4
 }
 
 export function getAvailableLayoutModes(
@@ -71,8 +72,7 @@ export function getAvailableLayoutModes(
   viewportWidth: number,
 ): LayoutMode[] {
   void viewportWidth
-  // Guard: clamp to valid range so values above MAX_PANES don't fall through silently.
-  const count = Math.min(paneCount, MAX_PANES)
+  const count = Math.min(paneCount, LAYOUT_MAX_PANES)
 
   if (count <= 1) return ['split-horizontal']
   if (count === 2) return ['split-horizontal', 'split-vertical']

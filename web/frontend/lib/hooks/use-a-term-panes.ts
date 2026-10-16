@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback } from 'react'
-import { MAX_PANES } from '@/lib/constants/a-term'
+import { LAYOUT_MAX_PANES } from '@/lib/constants/a-term'
 import { paneSessionsAsSessions } from '@/lib/utils/slot'
 import * as api from './a-term-panes-api'
 import type {
@@ -44,7 +44,7 @@ const upsertPane = (
   return {
     items: sortPanes(nextItems),
     total: nextItems.length,
-    max_panes: current?.max_panes ?? MAX_PANES,
+    max_panes: current?.max_panes ?? LAYOUT_MAX_PANES,
   }
 }
 
@@ -176,7 +176,11 @@ export function useATermPanes() {
 
   const panes = data?.items ?? []
   const detachedPanes = detachedData?.items ?? []
-  const maxPanes = data?.max_panes ?? MAX_PANES
+  // The backend's limit, never more than one layout can arrange.
+  const maxPanes = Math.min(
+    data?.max_panes ?? LAYOUT_MAX_PANES,
+    LAYOUT_MAX_PANES,
+  )
   const atLimit = panes.length >= maxPanes
 
   const createMutation = useMutation({
