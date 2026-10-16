@@ -7,7 +7,6 @@ API on port 8002.
 
 import asyncio
 import os
-import re
 import secrets
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
@@ -19,8 +18,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from starlette.types import ASGIApp, Receive, Scope, Send
-from starlette.websockets import WebSocketClose
 
 from .api import (
     a_term,
@@ -38,7 +35,7 @@ from .api import (
 )
 from .auth import require_request_auth
 from .branding import DESCRIPTION, DISPLAY_NAME, get_cache_root
-from .caller_trust import Surface, declare, mount
+from .caller_trust import HostGate, Surface, SurfaceGate, declare, mount
 from .config import A_TERM_BIND_HOST, A_TERM_PORT, ALLOWED_ORIGINS, settings
 from .logging_config import SyslogPrefixFormatter, configure_logging, get_logger
 from .rate_limit import limiter
@@ -172,6 +169,11 @@ async def auth_guard(
     return await call_next(request)
 
 
+# Who gets in on the terminal WebSocket: its route's surface (a_term.caller_trust). Inside the security headers,
+# outside CORS.
+app.add_middleware(SurfaceGate, allowed_origins=ALLOWED_ORIGINS)
+
+
 @app.middleware("http")
 async def security_headers(
     request: Request, call_next: Callable[[Request], Awaitable[Response]]
@@ -186,35 +188,9 @@ async def security_headers(
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     return response
 
-# Host header values the backend answers: loopback names, any port. Next's rewrite (changeOrigin) and local
-# clients (CLI, Aico) send these. X-Forwarded-Host is never consulted.
-_LOOPBACK_HOST = re.compile(r"(127\.0\.0\.1|localhost|\[::1\])(:[0-9]{1,5})?")
-
-
-class LoopbackHostGuard:
-    """Refuse every HTTP request (403) and WebSocket (close 1008) whose Host is not loopback.
-
-    Auth mode none leaves the API open to anything that reaches the socket. A reverse proxy that forwards the original
-    Host (Caddy on :443 for terminal.summitflow.dev) or a DNS-rebinding page would otherwise reach it from off the box.
-    """
-
-    def __init__(self, app: ASGIApp) -> None:
-        self.app = app
-
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] in ("http", "websocket"):
-            host = next((v for k, v in scope["headers"] if k == b"host"), b"").decode("latin-1").lower()
-            if not _LOOPBACK_HOST.fullmatch(host):
-                if scope["type"] == "websocket":
-                    await WebSocketClose(code=1008, reason="Host not allowed")(scope, receive, send)
-                else:
-                    await JSONResponse(status_code=403, content={"error": "host_not_allowed"})(scope, receive, send)
-                return
-        await self.app(scope, receive, send)
-
 
 # Outermost: nothing else runs for a refused Host.
-app.add_middleware(LoopbackHostGuard)
+app.add_middleware(HostGate)
 
 # Include routers: each one's routes are on one caller-trust surface (a_term.caller_trust).
 mount(app, a_term.router, Surface.BROWSER)

@@ -4,23 +4,29 @@ from __future__ import annotations
 
 import time
 from typing import Any
+from unittest.mock import patch
 
 import pytest
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.testclient import TestClient
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.websockets import WebSocketDisconnect
 
 from a_term.caller_trust import (
     Allow,
     CallerFacts,
     Deny,
     DenyReason,
+    HostGate,
     Surface,
+    SurfaceGate,
     TrustConfig,
     check,
     declare,
     declared_surface,
     facts_from_scope,
+    host_allowed,
     mount,
     verdict,
 )
@@ -143,20 +149,26 @@ def test_route_surfaces_match_the_snapshot() -> None:
 
 def test_one_origin_list_feeds_cors_and_the_trust_checks() -> None:
     # The #20 merge: CORS, the write guard and the WebSocket all read this one list object.
-    cors = [entry for entry in _app().user_middleware if entry.cls is CORSMiddleware]
-    assert len(cors) == 1
-    assert cors[0].kwargs["allow_origins"] is settings.a_term_allowed_origins
+    middleware = {entry.cls: entry for entry in _app().user_middleware}
+    assert middleware[CORSMiddleware].kwargs["allow_origins"] is settings.a_term_allowed_origins
+    assert middleware[SurfaceGate].kwargs["allowed_origins"] is settings.a_term_allowed_origins
 
 
 def test_middleware_order_is_pinned() -> None:
-    names = [getattr(entry.cls, "__name__", "") for entry in _app().user_middleware]
-    dispatches = [
-        getattr(entry.kwargs.get("dispatch"), "__name__", None) for entry in _app().user_middleware
-    ]
-    # Outermost first: the Host check, security headers, auth, the foreign-Origin write guard, CORS.
-    assert names == ["LoopbackHostGuard", "BaseHTTPMiddleware", "BaseHTTPMiddleware", "BaseHTTPMiddleware",
-                     "CORSMiddleware"]
-    assert dispatches == [None, "security_headers", "auth_guard", "foreign_origin_guard", None]
+    stack = [entry.cls for entry in _app().user_middleware]
+    dispatches = [getattr(entry.kwargs.get("dispatch"), "__name__", None) for entry in _app().user_middleware]
+    # Outermost first: the Host check, security headers, who gets in (WebSocket), auth and the foreign-Origin write
+    # guard (HTTP), CORS.
+    assert stack == [HostGate, BaseHTTPMiddleware, SurfaceGate, BaseHTTPMiddleware, BaseHTTPMiddleware, CORSMiddleware]
+    assert dispatches == [None, "security_headers", None, "auth_guard", "foreign_origin_guard", None]
+
+
+def test_the_host_check_is_the_old_rule() -> None:
+    for host in ("127.0.0.1", "localhost:8002", "[::1]:65535", "localhost"):
+        assert host_allowed(host)
+    for host in ("", "testserver", "localhost.evil.example", "127.0.0.1:8002@evil.example", "localhost:8002 ",
+                 "127.0.0.1:123456", "LOCALHOST"):  # HostGate lower-cases before asking
+        assert not host_allowed(host)
 
 
 def _config(mode: str = "none", token: str = INTERNAL_TOKEN) -> TrustConfig:
@@ -184,6 +196,30 @@ def test_a_router_included_without_mount_is_refused() -> None:
     mounted = FastAPI()
     mount(mounted, router, Surface.PUBLIC)
     assert check(scope, mounted.router.routes, _config()) == Allow()
+
+
+
+def test_the_gate_closes_an_undeclared_websocket_route() -> None:
+    router = APIRouter()
+
+    @router.websocket("/sneaky")
+    async def sneaky(websocket: WebSocket) -> None:
+        await websocket.accept()
+        await websocket.close()
+
+    throwaway = FastAPI()
+    throwaway.include_router(router)
+    throwaway.add_middleware(SurfaceGate, allowed_origins=[])
+    with pytest.raises(WebSocketDisconnect) as refused, TestClient(throwaway).websocket_connect("/sneaky"):
+        pass
+    assert (refused.value.code, refused.value.reason) == (1008, "Surface not declared")
+
+    mounted = FastAPI()
+    mount(mounted, router, Surface.BROWSER)
+    mounted.add_middleware(SurfaceGate, allowed_origins=[])
+    with patch("a_term.auth.get_auth_settings", return_value=auth_settings("none")), \
+            TestClient(mounted).websocket_connect("/sneaky"):
+        pass
 
 
 def test_declare_refuses_a_path_with_no_route() -> None:
@@ -297,3 +333,10 @@ def test_the_decision_agrees_with_every_recorded_answer(test_app: TestClient, mo
         if decided != expected:
             disagreements.append(f"{cell.id}: recorded {recorded}, decided {decided}")
     assert disagreements == []
+
+
+def test_a_non_ascii_internal_token_is_refused_not_crashed() -> None:
+    facts = _facts(query_token="café", headers={})
+    assert verdict(facts, Surface.INTERNAL, _config()) == Deny(DenyReason.INTERNAL_TOKEN_REQUIRED)
+    facts = _facts(headers={"authorization": "Bearer café"})
+    assert verdict(facts, Surface.INTERNAL, _config()) == Deny(DenyReason.INTERNAL_TOKEN_REQUIRED)

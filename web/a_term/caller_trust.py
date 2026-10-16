@@ -27,17 +27,21 @@ be decided; ``authenticate`` is the one place that decision lands. Mode ``none``
 from __future__ import annotations
 
 import hmac
+import re
+import time
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Literal
 
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from fastapi.routing import APIRouter
 from starlette.datastructures import Headers, QueryParams
 from starlette.requests import cookie_parser
 from starlette.routing import BaseRoute, Match
-from starlette.types import Scope
+from starlette.types import ASGIApp, Receive, Scope, Send
+from starlette.websockets import WebSocketClose
 
 from . import auth as public_auth
 from .auth import AuthSession, AuthSettings
@@ -147,7 +151,7 @@ def _internal_token_ok(facts: CallerFacts, expected: str) -> bool:
     """``Bearer <token>`` if that header is sent, else ``?token=``; an empty expected token lets nobody in."""
     header = facts.headers.get("authorization", "")
     token = header[7:] if header.startswith("Bearer ") else facts.query_token
-    return bool(expected) and hmac.compare_digest(token, expected)
+    return bool(expected) and hmac.compare_digest(token.encode(), expected.encode())
 
 
 def verdict(facts: CallerFacts, surface: Surface | None, config: TrustConfig) -> Allow | Deny:
@@ -240,3 +244,94 @@ def check(scope: Scope, routes: Iterable[BaseRoute], config: TrustConfig) -> All
     else:
         surface = _prefix_surface(scope["path"])
     return verdict(facts_from_scope(scope), surface, config)
+
+
+# ---------------------------------------------------------------------------
+# Gates (ASGI middleware)
+# ---------------------------------------------------------------------------
+# Host header values the backend answers: loopback names, any port. Next's rewrite (changeOrigin) and local
+# clients (CLI, Aico) send these. X-Forwarded-Host is never consulted.
+_LOOPBACK_HOST = re.compile(r"(127\.0\.0\.1|localhost|\[::1\])(:[0-9]{1,5})?")
+
+# Each refusal's HTTP answer and WebSocket close (code, reason), exactly as the old per-route checks gave them.
+_HTTP_REFUSALS: dict[DenyReason, tuple[int, dict[str, str]]] = {
+    DenyReason.HOST_NOT_ALLOWED: (403, {"error": "host_not_allowed"}),
+    DenyReason.AUTH_REQUIRED: (401, {"detail": public_auth.UNAUTHORIZED_DETAIL}),
+    DenyReason.ORIGIN_NOT_ALLOWED: (403, {"error": "origin_not_allowed"}),
+    DenyReason.LOCAL_ONLY: (403, {"error": "local_only"}),
+    DenyReason.INTERNAL_TOKEN_REQUIRED: (403, {"detail": "Unauthorized"}),
+    DenyReason.SURFACE_UNDECLARED: (403, {"error": "surface_undeclared"}),
+}
+_WS_REFUSALS: dict[DenyReason, tuple[int, str]] = {
+    DenyReason.HOST_NOT_ALLOWED: (1008, "Host not allowed"),
+    DenyReason.AUTH_REQUIRED: (public_auth.UNAUTHORIZED_WS_CODE, public_auth.UNAUTHORIZED_DETAIL),
+    DenyReason.ORIGIN_NOT_ALLOWED: (1008, "Origin not allowed"),
+    DenyReason.LOCAL_ONLY: (1008, "Local clients only"),  # no WebSocket route is on this surface
+    DenyReason.INTERNAL_TOKEN_REQUIRED: (1008, "Unauthorized"),  # nor on this one
+    DenyReason.SURFACE_UNDECLARED: (1008, "Surface not declared"),
+}
+
+
+def host_allowed(host: str) -> bool:
+    """Whether a ``Host`` header value names loopback (lower-cased by the caller)."""
+    return _LOOPBACK_HOST.fullmatch(host) is not None
+
+
+def http_refusal(reason: DenyReason) -> JSONResponse:
+    status, body = _HTTP_REFUSALS[reason]
+    return JSONResponse(status_code=status, content=body)
+
+
+def ws_refusal(reason: DenyReason) -> WebSocketClose:
+    """Close before accept: the same ASGI message the endpoint used to send (uvicorn answers the handshake 403)."""
+    code, text = _WS_REFUSALS[reason]
+    return WebSocketClose(code=code, reason=text)
+
+
+class HostGate:
+    """Refuse every HTTP request (403) and WebSocket (close 1008) whose Host is not loopback.
+
+    Auth mode none leaves the API open to anything that reaches the socket. A reverse proxy that forwards the original
+    Host (Caddy on :443 for terminal.summitflow.dev) or a DNS-rebinding page would otherwise reach it from off the box.
+    Outermost: nothing else runs for a refused Host.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] in ("http", "websocket"):
+            host = next((v for k, v in scope["headers"] if k == b"host"), b"").decode("latin-1").lower()
+            if not host_allowed(host):
+                refusal = ws_refusal if scope["type"] == "websocket" else http_refusal
+                await refusal(DenyReason.HOST_NOT_ALLOWED)(scope, receive, send)
+                return
+        await self.app(scope, receive, send)
+
+
+class SurfaceGate:
+    """Apply each route's surface before CORS and the router see the caller.
+
+    Sits inside the security headers (so refusals carry them) and outside CORS (so a refusal never gets an
+    Access-Control-Allow-Origin header). ``allowed_origins`` is the same list object CORS gets. It decides every
+    WebSocket; HTTP still goes through the older per-route checks for now.
+    """
+
+    def __init__(self, app: ASGIApp, allowed_origins: Sequence[str]) -> None:
+        self.app = app
+        self.allowed_origins = allowed_origins
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "websocket":
+            application = scope["app"]
+            config = TrustConfig(
+                allowed_origins=self.allowed_origins,
+                auth=public_auth.get_auth_settings(),
+                internal_token=getattr(application.state, "internal_token", ""),
+                now=int(time.time()),
+            )
+            decided = check(scope, application.router.routes, config)
+            if isinstance(decided, Deny):
+                await ws_refusal(decided.reason)(scope, receive, send)
+                return
+        await self.app(scope, receive, send)
