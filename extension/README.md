@@ -34,4 +34,4 @@ The manifest's `key` field holds only a public key, so every unpacked load gets 
 
 To trust a different build (a fork with its own `key`, or a store-published ID), set `AICO_EXTENSION_IDS` for the sidecar to a comma-separated list of IDs. The list replaces the default, so include `oejadbpdecaenbbihglcnchnkmlilmjf` if you still load this extension.
 
-If the sidecar is not running, sends are best-effort and do not affect the page.
+Every send ends in a toast on the page that says what happened: **Sent … to Aico** when the sidecar took it, **Not sent.** with the reason (Aico unreachable, an HTTP error, or the extension not answering, which reloading the page fixes), or **No answer.** when Aico didn't reply within 5 seconds and may have stored it anyway. A failed batch stays in the tray, and a failed pill send is kept there for a retry. Context-menu sends toast too, except on pages the extension can't run in, such as `chrome://` pages, and tabs opened before the extension last loaded or reloaded (reload the tab to get toasts there). "Sent" means the sidecar stored the capture; it doesn't yet confirm that a widget received it.

@@ -81,12 +81,30 @@
     }
   }
 
+  // The worker answers { ok, status }: the sidecar's HTTP status, or 0 when
+  // Aico couldn't be reached. NO_WORKER means the worker never answered, which
+  // in practice is this page outliving an extension reload: the old content
+  // script's runtime is gone (sendMessage throws, or the port closes unanswered).
+  const NO_WORKER = -1
+
+  function normalizeResult(resp) {
+    return {
+      ok: resp.ok === true,
+      status: Number(resp.status) || 0,
+      timedOut: resp.timedOut === true,
+    }
+  }
+
   function send(items) {
-    chrome.runtime.sendMessage({ type: 'aico:send', items }, (resp) => {
-      // Swallow "receiving end does not exist" when the worker is asleep; the
-      // first send wakes it. Feedback is the pill/tray flash, set by callers.
-      void chrome.runtime.lastError
-      void resp
+    return new Promise((resolve) => {
+      try {
+        chrome.runtime.sendMessage({ type: 'aico:send', items }, (resp) => {
+          if (chrome.runtime.lastError || !resp) resolve({ ok: false, status: NO_WORKER })
+          else resolve(normalizeResult(resp))
+        })
+      } catch {
+        resolve({ ok: false, status: NO_WORKER })
+      }
     })
   }
 
@@ -148,6 +166,7 @@
         box-shadow: 0 6px 22px rgba(0,0,0,.4); display: none;
       }
       .toast b { color: #f5c878; }
+      .toast.fail b { color: #ff9b8f; }
       .pick-outline {
         position: fixed; display: none; pointer-events: none; border: 2px solid #f5c878;
         background: rgba(245,200,120,.12); border-radius: 3px; z-index: 1;
@@ -162,7 +181,7 @@
       <div class="list"></div>
       <button class="send-all"></button>
     </div>
-    <div class="toast"></div>
+    <div class="toast" role="status" aria-live="polite"></div>
     <div class="pick-outline"></div>
   `
   document.documentElement.appendChild(host)
@@ -180,6 +199,12 @@
   // Build the toast from text nodes (and {b} for emphasis) rather than innerHTML,
   // so no caller can ever route page-derived text into an HTML sink.
   function flashToast(...segments) {
+    showToast(segments, false)
+  }
+
+  // Failures stay up longer: they ask the reader to do something.
+  function showToast(segments, failed) {
+    toastEl.classList.toggle('fail', failed)
     toastEl.replaceChildren(
       ...segments.map((seg) => {
         if (typeof seg === 'string') return document.createTextNode(seg)
@@ -188,11 +213,37 @@
         return b
       }),
     )
+    // Sit above the tray when it's open; centered at the bottom, a long toast
+    // runs under it.
+    const trayOpen = trayEl.style.display === 'flex'
+    toastEl.style.bottom = trayOpen ? `${16 + trayEl.offsetHeight + 10}px` : ''
     toastEl.style.display = 'block'
     if (toastTimer) clearTimeout(toastTimer)
+    const shownMs = failed ? 6000 : 2000
     toastTimer = setTimeout(() => {
       toastEl.style.display = 'none'
-    }, 2000)
+    }, shownMs)
+  }
+
+  function failureReason(status) {
+    if (status === 0) return "Couldn't reach Aico. Is it running?"
+    if (status === NO_WORKER) {
+      return "The Aico extension didn't answer. Reload this page and try again."
+    }
+    if (status === 403) return 'Aico refused this extension (HTTP 403).'
+    return `Aico answered HTTP ${status}.`
+  }
+
+  // Toast what the send actually did. `what` names the capture on success
+  // ("text", "3 items"); `extra` follows the failure reason (e.g. batch kept).
+  // A timeout isn't a clean failure: Aico was reachable and may have stored it.
+  function reportSend({ ok, status, timedOut }, what, extra = '') {
+    if (ok) flashToast('Sent ', { b: what }, ' to Aico')
+    else if (timedOut) {
+      const reason =
+        " Aico didn't reply in 5 seconds and may have it anyway, so check before resending."
+      showToast([{ b: 'No answer.' }, `${reason}${extra}`], true)
+    } else showToast([{ b: 'Not sent.' }, ` ${failureReason(status)}${extra}`], true)
   }
 
   // --- batch tray ----------------------------------------------------------
@@ -247,10 +298,18 @@
 
   sendAllEl.addEventListener('click', (e) => {
     if (!e.isTrusted || !tray.length) return
-    const n = tray.length
-    send(tray.splice(0))
+    const items = tray.splice(0)
     renderTray()
-    flashToast('Sent ', { b: String(n) }, ` item${n > 1 ? 's' : ''} to Aico`)
+    void send(items).then((result) => {
+      const what = `${items.length} item${items.length > 1 ? 's' : ''}`
+      if (result.ok) return reportSend(result, what)
+      // Put the batch back (ahead of anything stashed meanwhile) so a failed
+      // send loses nothing.
+      tray.unshift(...items)
+      tray.splice(TRAY_MAX)
+      renderTray()
+      reportSend(result, what, ' Batch kept.')
+    })
   })
 
   root.querySelector('.x').addEventListener('click', (e) => {
@@ -285,8 +344,13 @@
     if (!e.isTrusted) return
     const rec = selectionRecord()
     if (rec) {
-      send([rec])
-      flashToast('Sent ', { b: rec.meta.type }, ' to Aico')
+      void send([rec]).then((result) => {
+        if (result.ok || tray.length >= TRAY_MAX) return reportSend(result, rec.meta.type)
+        // The selection is gone by now, so keep the capture for a retry.
+        tray.push(rec)
+        renderTray()
+        reportSend(result, rec.meta.type, ' Kept in batch.')
+      })
     }
     hidePill()
     window.getSelection()?.removeAllRanges()
@@ -374,9 +438,16 @@
     if (tray.length) flashToast(`${tray.length} in batch — "Send" when ready`)
   }
 
+  // Labels a context-menu send can carry (background.js recordFromContext).
+  const SENT_LABELS = new Set(['text', 'link', 'image', 'page'])
+
   chrome.runtime.onMessage.addListener((msg, sender) => {
-    // Only our own background worker (context-menu click) may start the picker.
+    // Only our own background worker (context-menu click) may start the picker
+    // or report a context-menu send.
     if (sender?.id !== chrome.runtime.id || sender.tab) return
     if (msg?.type === 'aico:start-picker') startPicker()
+    if (msg?.type === 'aico:sent' && SENT_LABELS.has(msg.label)) {
+      reportSend(normalizeResult(msg), msg.label)
+    }
   })
 })()

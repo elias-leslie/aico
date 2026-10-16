@@ -14,18 +14,26 @@
 const SIDECAR = 'http://127.0.0.1:8005'
 const SNIPPET_CAP = 400
 
-// POST one or more records as an explicit, deliverable batch.
+// Give up on a send Aico hasn't answered by then; the caller reports it failed.
+const SEND_TIMEOUT_MS = 5000
+
+// POST one or more records as an explicit, deliverable batch. Resolves to
+// { ok, status }: the sidecar's HTTP status, or 0 when it couldn't be reached.
+// A send that timed out also carries timedOut: Aico was reachable and may have
+// stored it, so callers shouldn't call that "couldn't reach". Callers toast
+// from this.
 async function sendToBus(items) {
   try {
     const res = await fetch(`${SIDECAR}/selection/send`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ items }),
+      signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
     })
-    return res.ok
-  } catch {
-    // Sidecar down / Aico not running — best-effort; the user just sees no insert.
-    return false
+    return { ok: res.ok, status: res.status }
+  } catch (err) {
+    if (err?.name === 'TimeoutError') return { ok: false, status: 0, timedOut: true }
+    return { ok: false, status: 0 }
   }
 }
 
@@ -90,7 +98,15 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     return
   }
   const record = recordFromContext(info, tab)
-  if (record) void sendToBus([record])
+  if (!record) return
+  // The menu itself shows nothing, so the page's content script toasts the
+  // outcome. Pages without it (chrome://, the Web Store, tabs opened before the
+  // extension loaded) get no feedback; the catch keeps that quiet.
+  void sendToBus([record]).then(({ ok, status, timedOut }) => {
+    if (tab?.id == null) return
+    const msg = { type: 'aico:sent', ok, status, timedOut, label: record.meta.type }
+    chrome.tabs.sendMessage(tab.id, msg, { frameId: 0 }).catch(() => {})
+  })
 })
 
 // Mirrors the sidecar's batch cap (selection ring size).
@@ -117,6 +133,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg.items.length || msg.items.length > MAX_ITEMS) return false
   const items = msg.items.map(sanitizeRecord)
   if (items.some((rec) => rec === null)) return false
-  sendToBus(items).then((ok) => sendResponse({ ok }))
+  sendToBus(items).then(sendResponse)
   return true // keep the channel open for the async response
 })
