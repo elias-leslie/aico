@@ -111,6 +111,32 @@ export function exchangeScene(pick: number): ExchangeStep[] {
   ]
 }
 
+/**
+ * Show what the session needs from the owner: data-attention / data-stage on
+ * the document (the amber border and tint in chrome.css) and the bubble's
+ * "?" or "✓", hidden when nothing is needed. Returns the mood the eyes hold
+ * meanwhile (finished: content ^ ^), or null.
+ */
+export function applyAttention(
+  doc: { dataset: DOMStringMap },
+  bubble: { textContent: string | null; hidden: boolean } | null,
+  mode: AttentionMode,
+  stage: AttentionStage,
+): Mood | null {
+  if (mode === 'none') {
+    delete doc.dataset.attention
+    delete doc.dataset.stage
+  } else {
+    doc.dataset.attention = mode
+    doc.dataset.stage = stage
+  }
+  if (bubble) {
+    bubble.textContent = mode === 'blocked' ? '?' : mode === 'finished' ? '✓' : ''
+    bubble.hidden = mode === 'none'
+  }
+  return mode === 'finished' ? 'content' : null
+}
+
 export class Eyes {
   private readonly eyes: HTMLElement[]
   private readonly calm = window.matchMedia('(prefers-reduced-motion: reduce)')
@@ -238,19 +264,7 @@ export class Eyes {
     if (this.focused && mode !== 'none') return
     const was = this.attention
     this.attention = { mode, stage }
-    const doc = document.documentElement
-    if (mode === 'none') {
-      delete doc.dataset.attention
-      delete doc.dataset.stage
-    } else {
-      doc.dataset.attention = mode
-      doc.dataset.stage = stage
-    }
-    if (this.bubble) {
-      this.bubble.textContent = mode === 'blocked' ? '?' : mode === 'finished' ? '✓' : ''
-      this.bubble.hidden = mode === 'none'
-    }
-    this.held = mode === 'finished' ? 'content' : null
+    this.held = applyAttention(document.documentElement, this.bubble, mode, stage)
     this.settle()
     if (mode !== 'blocked') {
       window.clearTimeout(this.motionTimer)

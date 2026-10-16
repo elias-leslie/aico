@@ -1,9 +1,13 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   ASLEEP_AFTER_MS,
   aimOffset,
+  applyAttention,
+  Eyes,
   exchangeScene,
   GAZE_MAX,
+  MOTION_EVERY_MS,
+  MOTION_MS,
   type Motion,
   nextMotion,
   nextReadingGaze,
@@ -76,5 +80,205 @@ describe('nextMotion', () => {
       last = motion
     }
     expect([...seen].sort()).toEqual(['nudge', 'pop', 'wiggle'])
+  })
+})
+
+describe('applyAttention', () => {
+  const fresh = () => ({
+    doc: { dataset: {} as DOMStringMap },
+    bubble: { textContent: '' as string | null, hidden: true },
+  })
+
+  it('a waiting session gets the attention attributes and a "?" bubble', () => {
+    const { doc, bubble } = fresh()
+    expect(applyAttention(doc, bubble, 'blocked', 'rising')).toBeNull()
+    expect(doc.dataset).toEqual({ attention: 'blocked', stage: 'rising' })
+    expect(bubble).toEqual({ textContent: '?', hidden: false })
+  })
+
+  it('a finished session shows "✓" and holds the eyes content', () => {
+    const { doc, bubble } = fresh()
+    expect(applyAttention(doc, bubble, 'finished', 'fresh')).toBe('content')
+    expect(doc.dataset).toEqual({ attention: 'finished', stage: 'fresh' })
+    expect(bubble).toEqual({ textContent: '✓', hidden: false })
+  })
+
+  it('nothing needed clears the attributes and hides the bubble', () => {
+    const { doc, bubble } = fresh()
+    applyAttention(doc, bubble, 'blocked', 'urgent')
+    expect(applyAttention(doc, bubble, 'none', 'fresh')).toBeNull()
+    expect(doc.dataset).toEqual({})
+    expect(bubble).toEqual({ textContent: '', hidden: true })
+  })
+
+  it('works without a bubble', () => {
+    const { doc } = fresh()
+    expect(applyAttention(doc, null, 'finished', 'fresh')).toBe('content')
+    expect(doc.dataset.attention).toBe('finished')
+  })
+})
+
+// ---- the Eyes class on a fake titlebar -------------------------------------------
+class FakeEl {
+  dataset: Record<string, string> = {}
+  props = new Map<string, string>()
+  classes = new Set<string>()
+  textContent: string | null = ''
+  hidden = true
+  offsetWidth = 20
+  style = { setProperty: (k: string, v: string) => this.props.set(k, v) }
+  classList = {
+    add: (c: string) => this.classes.add(c),
+    remove: (c: string) => this.classes.delete(c),
+    contains: (c: string) => this.classes.has(c),
+  }
+  addEventListener() {}
+  getBoundingClientRect() {
+    return { left: 10, top: 6, width: 30, height: 20, right: 40, bottom: 26 }
+  }
+}
+
+/** A face as renderer.ts builds it, plus handles on what the owner sees. */
+function face(opts: { focused?: boolean; reducedMotion?: boolean } = {}) {
+  const root = new FakeEl()
+  const eyesEls = [new FakeEl(), new FakeEl()]
+  const bubble = new FakeEl()
+  const doc = new FakeEl()
+  const r = root as unknown as Record<string, unknown>
+  r.querySelectorAll = () => eyesEls
+  r.querySelector = (sel: string) => (sel === '.bubble' ? bubble : null)
+  vi.stubGlobal('document', { hasFocus: () => opts.focused ?? false, documentElement: doc })
+  vi.stubGlobal('window', {
+    matchMedia: () => ({ matches: opts.reducedMotion ?? false }),
+    setTimeout: (fn: () => void, ms?: number) => setTimeout(fn, ms),
+    clearTimeout: (id?: number) => clearTimeout(id),
+    setInterval: (fn: () => void, ms?: number) => setInterval(fn, ms),
+    screenX: 0,
+    screenY: 0,
+  })
+  const eyes = new Eyes(root as unknown as HTMLElement, null)
+  const motion = (): Motion | null =>
+    (['pop', 'wiggle', 'nudge'] as const).find((m) => root.classes.has(m)) ?? null
+  const gaze = () => ({ x: eyesEls[0]?.props.get('--px'), y: eyesEls[0]?.props.get('--py') })
+  return { eyes, root, bubble, doc, motion, gaze }
+}
+
+describe('Eyes attention', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  it('a waiting window shows the "?" bubble and the attention attributes', () => {
+    const f = face()
+    f.eyes.setAttention('blocked', 'rising')
+    expect(f.doc.dataset).toEqual({ attention: 'blocked', stage: 'rising' })
+    expect(f.bubble.textContent).toBe('?')
+    expect(f.bubble.hidden).toBe(false)
+  })
+
+  it('the focused window ignores attention: the owner is already looking', () => {
+    const f = face({ focused: true })
+    f.eyes.setAttention('blocked', 'urgent')
+    expect(f.doc.dataset).toEqual({})
+    expect(f.bubble.hidden).toBe(true)
+    vi.advanceTimersByTime(30_000)
+    expect(f.motion()).toBeNull()
+  })
+
+  it('gaining focus clears everything at once, before main says so', () => {
+    const f = face()
+    f.eyes.setAttention('blocked', 'urgent')
+    f.eyes.setFocused(true)
+    expect(f.doc.dataset).toEqual({})
+    expect(f.bubble.hidden).toBe(true)
+    expect(f.bubble.textContent).toBe('')
+  })
+
+  it('going back to nothing hides the bubble and stops any motion', () => {
+    const f = face()
+    f.eyes.setAttention('blocked', 'rising')
+    vi.advanceTimersByTime(400)
+    expect(f.motion()).not.toBeNull()
+    f.eyes.setAttention('none', 'fresh')
+    expect(f.bubble.hidden).toBe(true)
+    expect(f.doc.dataset).toEqual({})
+    expect(f.motion()).toBeNull()
+    vi.advanceTimersByTime(30_000)
+    expect(f.motion()).toBeNull()
+  })
+
+  it('finished holds the eyes content until the attention clears', () => {
+    const f = face()
+    f.eyes.setAttention('finished', 'fresh')
+    expect(f.bubble.textContent).toBe('✓')
+    expect(f.root.dataset.mood).toBe('content')
+    vi.advanceTimersByTime(20_000)
+    expect(f.root.dataset.mood).toBe('content')
+    expect(f.motion()).toBeNull()
+    f.eyes.setAttention('none', 'fresh')
+    expect(f.root.dataset.mood).toBe('idle')
+  })
+
+  it('a fresh wait plays one motion 400 ms in, then stays still', () => {
+    const f = face()
+    f.eyes.setAttention('blocked', 'fresh')
+    vi.advanceTimersByTime(399)
+    expect(f.motion()).toBeNull()
+    vi.advanceTimersByTime(1)
+    const first = f.motion()
+    expect(first).not.toBeNull()
+    vi.advanceTimersByTime(MOTION_MS[first as Motion])
+    expect(f.motion()).toBeNull()
+    vi.advanceTimersByTime(30_000)
+    expect(f.motion()).toBeNull()
+  })
+
+  /** Each motion as it starts: [ms since now, which]. */
+  const motionStarts = (f: ReturnType<typeof face>, ms: number): [number, Motion][] => {
+    const starts: [number, Motion][] = []
+    let was: Motion | null = null
+    for (let t = 0; t <= ms; t += 50) {
+      const now = f.motion()
+      if (now && !was) starts.push([t, now])
+      was = now
+      vi.advanceTimersByTime(50)
+    }
+    return starts
+  }
+
+  it.each(['rising', 'urgent'] as const)('a %s wait repeats a motion every 7-9 s', (stage) => {
+    const f = face()
+    f.eyes.setAttention('blocked', stage)
+    const starts = motionStarts(f, 60_000).map(([t]) => t)
+    expect(starts[0]).toBe(400)
+    expect(starts.length).toBeGreaterThanOrEqual(7)
+    // the repeats run on their own clock from the moment the wait began
+    const repeats = [0, ...starts.slice(1)]
+    const [lo, hi] = MOTION_EVERY_MS
+    for (let i = 1; i < repeats.length; i++) {
+      const gap = (repeats[i] as number) - (repeats[i - 1] as number)
+      expect(gap).toBeGreaterThanOrEqual(lo - 50)
+      expect(gap).toBeLessThanOrEqual(hi + 50)
+    }
+  })
+
+  it('a rising wait never plays the same motion twice running', () => {
+    const f = face()
+    f.eyes.setAttention('blocked', 'rising')
+    const seen = motionStarts(f, 60_000).map(([, m]) => m)
+    expect(seen.length).toBeGreaterThanOrEqual(7)
+    for (let i = 1; i < seen.length; i++) expect(seen[i]).not.toBe(seen[i - 1])
+  })
+
+  it('reduced motion keeps the bubble and attributes but never moves', () => {
+    const f = face({ reducedMotion: true })
+    f.eyes.setAttention('blocked', 'urgent')
+    expect(f.bubble.textContent).toBe('?')
+    expect(f.doc.dataset.attention).toBe('blocked')
+    vi.advanceTimersByTime(30_000)
+    expect(f.motion()).toBeNull()
   })
 })
