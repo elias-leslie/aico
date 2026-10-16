@@ -11,7 +11,7 @@ Aico (desktop) and A-Term (web/mobile) each create durable tmux sessions. Each a
 - The other app asks it to over a private socket or an internal HTTP route.
 - Discovery is federated. A-Term reads `aico.db` read-only, and Aico lists A-Term's tmux sessions.
 
-This doubles the hard part. The July 2026 containment incident ([Aico INCIDENT-2026-07-PROCESS-ESCAPES.md](https://github.com/elias-leslie/aico/blob/main/docs/INCIDENT-2026-07-PROCESS-ESCAPES.md)) showed that durable sessions need exact cgroup containment and generation-checked, fail-closed reconciliation. Only Aico has that hardened model. A-Term's sessions still run on the default tmux server with a global hook.
+This doubles the hard part. The July 2026 containment incident ([Aico INCIDENT-2026-07-PROCESS-ESCAPES.md](https://github.com/elias-leslie/aico/blob/040df2b286dd6e43cc7c7b608ac88ac9b972951b/docs/INCIDENT-2026-07-PROCESS-ESCAPES.md)) showed that durable sessions need exact cgroup containment and generation-checked, fail-closed reconciliation. Only Aico has that hardened model. A-Term's sessions still run on the default tmux server with a global hook.
 
 ## Decision
 
@@ -25,7 +25,7 @@ A standalone per-user daemon, **Tether**, owns session lifecycle for both apps:
 - the project list
 - the event stream
 - the active-client resize claim
-- `/v1/roots`
+- `/v1/roots` ([root contract](../root-control.md))
 
 Tether has its own SQLite database and a versioned API on a 0600 Unix socket ([api-v1.md](../api-v1.md)). It is never network-exposed.
 

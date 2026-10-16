@@ -167,7 +167,7 @@ A stale or wrong-workload `generation` is refused before the claim with `409 sta
 
 ## Roots
 
-A root is a session created through the root contract with a stable caller `requestId`. This is Aico's [root contract](https://github.com/elias-leslie/aico/blob/main/docs/root-control.md), moved unchanged, including the digest, tombstones, the resume adapter and every validation rule. Mutations serialize on the session identity and share one handler with the widget routes.
+A root is a session created through the root contract with a stable caller `requestId`. The [root contract](root-control.md) (moved from Aico at the cutover) holds the digest, tombstones, the resume adapters and every validation rule. Mutations serialize on the session identity and share one handler with the widget routes.
 
 | Method and route | Body | Result |
 | --- | --- | --- |

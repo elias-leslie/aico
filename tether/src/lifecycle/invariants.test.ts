@@ -1,7 +1,8 @@
 // One test per containment invariant Tether inherits from Aico.
 //
-// Sources: aico docs/INCIDENT-2026-07-PROCESS-ESCAPES.md ("Repair boundary",
-// "Safe recovery") and aico CONTEXT.md ("Owner and fleet state"), plus the
+// Sources: Aico's incident report ("Repair boundary", "Safe recovery"),
+// https://github.com/elias-leslie/aico/blob/040df2b286dd6e43cc7c7b608ac88ac9b972951b/docs/INCIDENT-2026-07-PROCESS-ESCAPES.md,
+// and the owner and fleet state rules in docs/root-control.md, plus the
 // Tether-specific instance rules in docs/compat-contract.md. Each `describe`
 // names the invariant; detailed behavior stays in the ported module tests.
 //

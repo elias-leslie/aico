@@ -47,7 +47,7 @@ This classifies Aico at `dfe73a3` (`electron/main/*`, `scripts/*`).
 | `scripts/systemd/aico-owner.service` | Remove in Phase 6, after `tether@default` replaces it |
 | `scripts/aico-real-session-smoke.sh`, `scripts/scrollback-gate.sh` | Move or adapt as Tether smoke tests |
 
-## Invariants that must survive (from CONTEXT.md and the incident report)
+## Invariants that must survive (from Aico's CONTEXT.md, now [root-control.md](root-control.md#owner-and-fleet-state), and the [incident report](https://github.com/elias-leslie/aico/blob/040df2b286dd6e43cc7c7b608ac88ac9b972951b/docs/INCIDENT-2026-07-PROCESS-ESCAPES.md))
 
 1. tmux servers are manager-spawned transient `.service` units with null stdin, `--expand-environment=no` and `ExitType=cgroup`. They never inherit the caller's descriptors.
 2. Panes start as a bare no-RC gate. The TUI launches only after the exact `tmux-spawn-*.scope` control group and InvocationID are verified.

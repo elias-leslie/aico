@@ -74,7 +74,7 @@ Tether is a standalone per-user session daemon. It owns tmux session lifecycle f
 - Move the lifecycle modules, their tests and their scripts from Aico into Tether. The list is in the Aico inventory (`docs/inventory-aico.md`).
 - Rewire Aico IPC to call Tether.
 - Split the store: Aico keeps `views` and `settings`; pin IDs are migrated.
-- Preserve every invariant from `INCIDENT-2026-07-PROCESS-ESCAPES.md` and `CONTEXT.md`.
+- Preserve every invariant from Aico's [INCIDENT-2026-07-PROCESS-ESCAPES.md](https://github.com/elias-leslie/aico/blob/040df2b286dd6e43cc7c7b608ac88ac9b972951b/docs/INCIDENT-2026-07-PROCESS-ESCAPES.md) and its owner and fleet state rules (now in [root-control.md](root-control.md#owner-and-fleet-state)).
 - Importer: an idempotent single transaction of `tmux_servers` (all rows), `root_requests`, and widget identity columns. Skip `external` rows. Keep `aico.db` as a backup.
 - Keep A-Term discovery working: switch A-Term's `external.py` from `aico.db` to the Tether API in the same step, or mirror the data.
 - Cutover from a non-Aico terminal context: stop the GUI and `aico-owner`, import, start Tether, start the new Aico. Re-verify live sessions.

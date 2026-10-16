@@ -54,6 +54,7 @@ tether [--instance NAME] [--json] <command>
 ## Documentation
 
 - [API v1](docs/api-v1.md)
+- [Root control](docs/root-control.md): the root contract `st aico` and SummitFlow fleet rely on
 - [Compatibility contract](docs/compat-contract.md): the Aico names and paths Tether keeps
 - [CONTEXT.md](CONTEXT.md): vocabulary
 - [ADR 0001: Tether owns sessions; apps own views](docs/adr/0001-tether-owns-sessions.md)

@@ -37,10 +37,10 @@ The `systemd-run` flags are part of the containment model and must be kept: `--u
 | Pane-exit marker | `/run/user/<uid>/aico/pane-exited-<serverId>` | `$XDG_RUNTIME_DIR/tether/<i>/pane-exits/pane-exited-<serverId>` | `tmux.ts` `paneExitedEventPath` |
 | Pane-exit hook bytes | `set-hook -g pane-exited 'run-shell "/usr/bin/touch <marker>"'`, compared byte for byte before every launch | same form | `tmux.ts` `paneExitedHookCommand` |
 | Legacy owner socket | `/run/user/<uid>/aico/control.sock`, serving exactly `GET /v1/sessions/<widgetId>` and `POST /v1/sessions/<widgetId>/end {generation}` with Aico's response bodies | none | `owner-control.ts` |
-| Legacy GUI socket | `/run/user/<uid>/aico/gui-control.sock` shim, serving `/v1/roots*` and `/v1/widgets*` with Aico's bodies and forwarding view mutations to the GUI channel | none | `root-control.ts` `guiSocketPath`, [root-control.md](https://github.com/elias-leslie/aico/blob/main/docs/root-control.md) |
+| Legacy GUI socket | `/run/user/<uid>/aico/gui-control.sock` shim, serving `/v1/roots*` and `/v1/widgets*` with Aico's bodies and forwarding view mutations to the GUI channel | none | `root-control.ts` `guiSocketPath`, [root-control.md](root-control.md) |
 | Tether socket | `$XDG_RUNTIME_DIR/tether/default/control.sock` | `$XDG_RUNTIME_DIR/tether/<i>/control.sock` | n/a |
 | State | `~/.local/state/tether/default/tether.db` | `~/.local/state/tether/<i>/tether.db` | n/a |
-| Aico catalog | `~/.local/state/aico/aico.db` is kept as a backup after import. A-Term `utils/tmux/external.py` reads it read-only (`A_TERM_AICO_STATE_DIR`) until A-Term switches to the Tether API (Phase 4). | none | A-Term `external.py` |
+| Aico catalog | `~/.local/state/aico/aico.db`. Aico keeps its own views and settings there; its pre-Tether tables stay as a backup after import. No other app reads it: A-Term dropped its read-only reader (`A_TERM_AICO_STATE_DIR` in `utils/tmux/external.py`) when it moved to the Tether API (A-Term `e4d1f16`), and `tether import-aico` reads only the path given with `--from`. | none | none |
 
 Overrides that the Aico process honours and that Tether must not break: `AICO_STATE_DIR`, `AICO_TMUX_SOCKET` (a test or recovery override of the historical socket), `AICO_CONTROL_SOCKET`, `AICO_GUI_CONTROL_SOCKET`.
 
