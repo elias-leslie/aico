@@ -136,8 +136,8 @@ export function usePaneRenderer({
       const paneId = isPaneSlot(slot) ? slot.paneId : null
       const isExternalSlot = slot.type === 'adhoc' && slot.isExternal
       const refreshVersion = refreshVersions[panelId] ?? 0
-      // A legacy default-server session is attach-only: no respawn.
-      const canResetSlot = !isExternalSlot && !slot.isLegacy
+      // The server never respawns legacy (attach-only) or root sessions.
+      const canResetSlot = !isExternalSlot && !slot.isLegacy && !slot.isRoot
       const canCleanSlot =
         (slot.type === 'project' && slot.activeMode !== 'shell') ||
         isExternalSlot

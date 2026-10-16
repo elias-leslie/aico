@@ -304,6 +304,37 @@ describe('paneToSlot', () => {
     }
   })
 
+  it('marks an adhoc pane holding a root session as root', () => {
+    const slot = paneToSlot({
+      id: 'pane-root',
+      pane_type: 'adhoc',
+      project_id: null,
+      pane_order: 0,
+      pane_name: 'Root',
+      active_mode: 'codex',
+      is_detached: false,
+      created_at: null,
+      width_percent: 100,
+      height_percent: 100,
+      grid_row: 0,
+      grid_col: 0,
+      sessions: [
+        {
+          id: 'root-session',
+          name: 'Root',
+          mode: 'codex',
+          session_number: 1,
+          is_alive: true,
+          is_root: true,
+          working_dir: '/tmp',
+          claude_state: 'running',
+        },
+      ],
+    })
+
+    expect(slot).toMatchObject({ type: 'adhoc', isRoot: true })
+  })
+
   it.each([
     ['adhoc', null],
     ['project', 'proj'],

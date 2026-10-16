@@ -344,6 +344,7 @@ export function useATermTabsState({
           task: session.task,
           badge: getCoordinatorBadge(session),
           isLegacy: session.is_legacy,
+          isRoot: session.is_root,
         }
       })
 

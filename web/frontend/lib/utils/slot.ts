@@ -54,6 +54,8 @@ export interface AdHocSlot {
   badge?: CoordinatorBadgeInfo | null
   /** Pre-Tether legacy session (attach-only). */
   isLegacy?: boolean
+  /** Root session: runs one launch and is never respawned. */
+  isRoot?: boolean
 }
 
 export type ATermSlot = ProjectSlot | AdHocSlot
@@ -188,6 +190,7 @@ export function paneToSlot(pane: ATermPane, projectName?: string): PaneSlot {
     task: session?.task,
     badge: getCoordinatorBadge(session),
     isLegacy: session?.is_legacy,
+    isRoot: session?.is_root,
   }
 }
 

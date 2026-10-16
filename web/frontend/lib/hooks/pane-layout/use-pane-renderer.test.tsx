@@ -41,10 +41,12 @@ function RenderHarness({
   slots,
   onSwapPanes,
   onUpload,
+  onReset,
 }: {
   slots: Array<ATermSlot | PaneSlot>
   onSwapPanes?: (slotIdA: string, slotIdB: string) => void
   onUpload?: (sessionId?: string) => void
+  onReset?: (slot: ATermSlot | PaneSlot) => void
 }) {
   const renderPane = usePaneRenderer({
     props: {
@@ -80,6 +82,7 @@ function RenderHarness({
       },
       onSwapPanes,
       onUpload,
+      onReset,
     },
     displaySlots: slots,
     paneCount: slots.length,
@@ -251,6 +254,59 @@ describe('usePaneRenderer', () => {
     expect(headerProps[0]?.showCleanButton).toBe(true)
     expect(headerProps[0]?.onReset).toBeUndefined()
     expect(headerProps[0]?.closeTooltip).toBe('Close view')
+  })
+
+  it('offers Reset only for sessions the server can respawn', () => {
+    headerProps.length = 0
+    const onReset = vi.fn()
+    const agentPane = {
+      type: 'project' as const,
+      projectId: 'project-1',
+      projectName: 'Project 1',
+      rootPath: '/tmp/project-1',
+      activeMode: 'codex',
+      sessionBadge: null,
+    }
+    const slots: PaneSlot[] = [
+      {
+        ...agentPane,
+        paneId: 'pane-agent',
+        activeSessionId: 'agent-session',
+      },
+      {
+        ...agentPane,
+        paneId: 'pane-root',
+        activeSessionId: 'root-session',
+        isRoot: true,
+      },
+      {
+        type: 'adhoc',
+        paneId: 'pane-adhoc-root',
+        sessionId: 'adhoc-root-session',
+        name: 'Root',
+        workingDir: '/tmp',
+        sessionMode: 'codex',
+        isRoot: true,
+      },
+      {
+        ...agentPane,
+        paneId: 'pane-legacy',
+        activeSessionId: 'legacy-session',
+        isLegacy: true,
+      },
+    ]
+
+    render(<RenderHarness slots={slots} onReset={onReset} />)
+
+    expect(headerProps.map((props) => typeof props.onReset)).toEqual([
+      'function',
+      'undefined',
+      'undefined',
+      'undefined',
+    ])
+    const reset = headerProps[0]?.onReset as () => void
+    reset()
+    expect(onReset).toHaveBeenCalledWith(slots[0])
   })
 
   it('routes pane upload actions to the pane session', () => {

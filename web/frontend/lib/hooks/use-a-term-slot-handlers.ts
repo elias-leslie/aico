@@ -121,7 +121,7 @@ export function useATermSlotHandlers({
         slot.type === 'project' ? slot.activeSessionId : slot.sessionId
       if (!sessionId) return
       const session = findSession(sessionId)
-      if (session?.is_external || session?.is_legacy) return
+      if (session?.is_external || session?.is_legacy || session?.is_root) return
 
       const newSession = await reset(sessionId)
       // Invalidate panes so the slot picks up the new session ID
