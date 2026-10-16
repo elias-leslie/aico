@@ -1,9 +1,12 @@
 /**
  * Test fixtures for sessions and Slots. The `*_CAN` rows are the backend's
- * capability flags per kind (a_term/services/session_capabilities.py).
+ * capability flags per kind, read from session-capabilities.json, which
+ * tests/test_session_capabilities.py checks against
+ * a_term/services/session_capabilities.py.
  */
 import type { ATermSession } from '@/lib/hooks/use-a-term-sessions'
 import type { SlotCapabilities } from '@/lib/utils/slot'
+import capabilities from './session-capabilities.json'
 
 type CapabilityFlags = Pick<
   ATermSession,
@@ -11,32 +14,16 @@ type CapabilityFlags = Pick<
 >
 
 /** An ordinary Tether session. */
-export const TETHER_CAN: CapabilityFlags = {
-  can_rename: true,
-  can_respawn: true,
-  can_end: true,
-}
+export const TETHER_CAN: CapabilityFlags = capabilities.tether
 
 /** A Tether root session: runs one launch, never respawned. */
-export const ROOT_CAN: CapabilityFlags = {
-  can_rename: true,
-  can_respawn: false,
-  can_end: true,
-}
+export const ROOT_CAN: CapabilityFlags = capabilities.root
 
 /** A pre-Tether Legacy session: attach-only, but A-Term can end it. */
-export const LEGACY_CAN: CapabilityFlags = {
-  can_rename: false,
-  can_respawn: false,
-  can_end: true,
-}
+export const LEGACY_CAN: CapabilityFlags = capabilities.legacy
 
 /** An Own tmux session: shown, never renamed, respawned or ended. */
-export const OWN_TMUX_CAN: CapabilityFlags = {
-  can_rename: false,
-  can_respawn: false,
-  can_end: false,
-}
+export const OWN_TMUX_CAN: CapabilityFlags = capabilities.own_tmux
 
 /** Session fields a test rarely cares about (a Tether session by default). */
 export const SESSION_BASE = {

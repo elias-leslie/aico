@@ -8,6 +8,8 @@ Three layers, all through the module's interface:
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -220,3 +222,18 @@ def test_session_list_carries_flags_per_source(
     assert caps(root["id"]) == (True, False, True)
     assert caps(make.LEGACY_ID) == (False, False, True)
     assert caps("claude-work") == (False, False, False)
+
+
+# The frontend's *_CAN test fixtures read this file, so they can't drift from the table.
+FRONTEND_FIXTURE = Path(__file__).resolve().parents[1] / "frontend" / "test-stubs" / "session-capabilities.json"
+FRONTEND_FIXTURE_FACTS = {
+    "tether": TETHER,
+    "root": TETHER_ROOT,
+    "legacy": SessionFacts("legacy", is_legacy=True, mode="codex"),
+    "own_tmux": SessionFacts("tmux_external", mode="codex"),
+}
+
+
+def test_frontend_capability_fixture_matches_the_table() -> None:
+    expected = json.dumps({name: flags(facts) for name, facts in FRONTEND_FIXTURE_FACTS.items()}, indent=2) + "\n"
+    assert FRONTEND_FIXTURE.read_text() == expected, f"Write this to {FRONTEND_FIXTURE}:\n{expected}"
