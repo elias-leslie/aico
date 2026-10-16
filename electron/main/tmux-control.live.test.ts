@@ -8,6 +8,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { Terminal } from '@xterm/headless'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { TERMINAL_HISTORY_LINES } from '../shared/terminal-history'
 import { ControlTerminal } from './tmux-control'
 
 const hasTmux = (() => {
@@ -36,7 +37,12 @@ interface Viewer {
 
 const viewers: Viewer[] = []
 function view(cols: number, rows: number): Viewer {
-  const term = new Terminal({ cols, rows, scrollback: 20_000, allowProposedApi: true })
+  const term = new Terminal({
+    cols,
+    rows,
+    scrollback: TERMINAL_HISTORY_LINES,
+    allowProposedApi: true,
+  })
   const link = new ControlTerminal(attachArgv, env, { cols, rows })
   link.onData((data) => term.write(data))
   const viewer = { link, term }

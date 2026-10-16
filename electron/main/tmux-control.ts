@@ -19,6 +19,7 @@
 // the attach path and this one are interchangeable per window.
 
 import { type ChildProcessWithoutNullStreams, execFile, spawn } from 'node:child_process'
+import { TERMINAL_HISTORY_LINES } from '../shared/terminal-history'
 
 /** The IPty surface Aico's main process relies on. */
 export interface TerminalLink {
@@ -32,8 +33,6 @@ export interface TerminalLink {
   onExit(listener: () => void): void
 }
 
-/** History lines carried into xterm on attach; matches the renderer's scrollback. */
-export const SEED_HISTORY_LINES = 20_000
 /** Seconds tmux may fall behind before it pauses the pane (then we reseed). */
 const PAUSE_AFTER_SECONDS = 5
 /** Wait after the last resize before re-reading the pane from tmux. */
@@ -366,7 +365,7 @@ export class ControlTerminal implements TerminalLink {
     }
     this.phase = 'seeding'
     const fmt = SEED_FLAGS.map((flag) => `#{${flag}}`).join(' ')
-    const history = `-S -${SEED_HISTORY_LINES}`
+    const history = `-S -${TERMINAL_HISTORY_LINES}`
     const commands = [
       ...(continuePane && this.paneId ? [`refresh-client -A '${this.paneId}:continue'`] : []),
       `display-message -p '${fmt}'`,

@@ -13,6 +13,7 @@ import {
   fontLoadFaceFor,
   parseTerminalFontSettings,
 } from '../shared/font-settings'
+import { TERMINAL_HISTORY_LINES } from '../shared/terminal-history'
 import {
   AICO_TOAST_EVENT,
   type AicoToastDetail,
@@ -23,12 +24,7 @@ import {
 import { type Arcade, GAMES, startArcade } from './arcade'
 import { nextGame } from './arcade/next-game'
 import { initControlSurface } from './control-surface'
-import {
-  CONTROL_SCROLLBACK_LINES,
-  controlWheelAction,
-  swallowQueryReplies,
-  trackSgrMouse,
-} from './control-view'
+import { controlWheelAction, swallowQueryReplies, trackSgrMouse } from './control-view'
 import { wireDraftInput } from './draft-input'
 import { Eyes } from './eyes'
 import { urlAt } from './links'
@@ -64,7 +60,7 @@ const term = new Terminal({
   fontSize,
   // Attach mode: scrollback lives in tmux, not here — the live view is tmux's
   // alternate screen, which has none.
-  scrollback: controlMode ? CONTROL_SCROLLBACK_LINES : 0,
+  scrollback: controlMode ? TERMINAL_HISTORY_LINES : 0,
   // A blinking xterm cursor kept every large transparent widget repainting even
   // when its session was idle; three visible 4K-scale windows held Chromium's
   // GPU process near one-third of a core. A static cursor preserves location

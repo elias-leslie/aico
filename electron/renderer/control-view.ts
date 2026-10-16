@@ -7,9 +7,6 @@
 
 import type { Terminal } from '@xterm/xterm'
 
-/** History kept in the live terminal; main seeds the same number of lines. */
-export const CONTROL_SCROLLBACK_LINES = 20_000
-
 export type ControlWheelAction = 'forward-sgr' | 'xterm-report' | 'consume' | 'scroll'
 
 /**
