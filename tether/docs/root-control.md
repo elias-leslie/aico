@@ -7,7 +7,9 @@ digest, tombstones, the resume adapters, every validation rule, and how the
 next to the rest of the v1 API.
 
 The contract came from Aico (its `docs/root-control.md`, moved with the
-lifecycle at the Phase 3 cutover). Tether owns it now; Aico's copy points here.
+lifecycle at the Phase 3 cutover). Tether owns it now. Aico's own copy is older
+(it still says Claude Code resume is refused) and is due to become a pointer
+here; until it does, this page wins.
 
 ## Where it is served
 
@@ -198,6 +200,10 @@ reports it as `rootCapable`. Any other tool string, aliases included, returns
 `st aico create` client keeps no tool list of its own: it sends `--tool` as
 given and reports that refusal as `reason: "unsupported_tool"` with
 `supportedTools`.
+Observation is different: `st aico roots` reads each root's terminal through a
+per-tool status profile (codex and claude-code today) and reports a root of any
+other tool as `unsupported_profile`, so a new root tool needs no change to
+`create` but does need a profile before `roots` can observe it.
 
 `resumeSessionId` is either absent/null (a fresh launch) or an exact native
 session ID validated by the selected tool's resume adapter. The adapters are

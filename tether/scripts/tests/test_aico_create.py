@@ -194,7 +194,9 @@ def test_tether_decides_which_tools_can_start_a_root(monkeypatch, supported, sho
     assert output[0].get("supportedTools") == shown
 
 
-def test_a_new_root_tool_needs_no_client_change(monkeypatch):
+def test_a_new_root_tool_needs_no_create_change(monkeypatch):
+    # create keeps no tool list; `roots` observation still needs a per-tool status
+    # profile (see classify), so a new tool is unobservable until one is added.
     output = []
     monkeypatch.setattr(admin.Collector, "receipt", lambda _, path, route, payload, **kw: (200, descriptor(
         {**payload, "resumeSessionId": None})))
@@ -212,6 +214,8 @@ def test_malformed_tool_never_contacts_owner(monkeypatch, tool):
 
 
 def test_tool_help_lists_tools_only(capsys):
+    # Direct script help only: `st aico create --help` prints SummitFlow's aico
+    # manifest page, which SummitFlow's own extension test covers.
     with pytest.raises(SystemExit):
         admin.main(["create", "--help"])
     help_text = " ".join(capsys.readouterr().out.split())

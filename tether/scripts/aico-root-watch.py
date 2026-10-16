@@ -493,6 +493,8 @@ class Collector:
             if root.get("status") != "running":
                 unavailable.append({**record, "reason": "root_not_running"})
                 continue
+            # Observation is per status profile (classify), unlike create, which
+            # sends any tool and lets Tether refuse it.
             if root.get("tool") not in ("codex", "claude-code"):
                 unavailable.append({**record, "terminal": "ambiguous", "reason": "unsupported_profile"})
                 continue
