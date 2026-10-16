@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest'
 import type { ATermPane } from '@/lib/hooks/use-a-term-panes'
 import type { ATermSession } from '@/lib/hooks/use-a-term-sessions'
 import {
-  LEGACY_CAN,
   OWN_TMUX_CAN,
   ROOT_CAN,
   SESSION_BASE,
   SLOT_BASE,
   TETHER_CAN,
+  TETHER_LEGACY_CAN,
 } from '@/test-stubs/session-fixtures'
 import type { AdHocSlot, ProjectSlot } from './slot'
 import {
@@ -164,7 +164,12 @@ describe('getPaneId', () => {
 const KINDS = {
   tether: { source: 'tether', ...TETHER_CAN },
   root: { source: 'tether', is_root: true, ...ROOT_CAN },
-  legacy: { source: 'legacy', is_legacy: true, ...LEGACY_CAN },
+  tetherLegacy: {
+    source: 'tether',
+    status: 'legacy',
+    is_legacy: true,
+    ...TETHER_LEGACY_CAN,
+  },
   ownTmux: { source: 'tmux_external', ...OWN_TMUX_CAN },
 } satisfies Record<string, Partial<ATermSession>>
 type Kind = keyof typeof KINDS
@@ -218,7 +223,7 @@ describe('sessionTitle', () => {
     // kind, pane, free-standing, linked to a pane not loaded here
     ['tether', 'Incident review', 'Incident review', 'Incident review'],
     ['root', 'Incident review', 'Incident review', 'Incident review'],
-    ['legacy', 'Pane name', 'Neri · Incident review', 'Neri'],
+    ['tetherLegacy', 'Incident review', 'Incident review', 'Incident review'],
     ['ownTmux', 'Pane name', 'Neri · Incident review', 'Neri'],
   ] as const)('titles a %s session by place', (kind, pane, free, unloaded) => {
     const session = makeSession(kind)
@@ -234,7 +239,7 @@ describe('sessionTitle', () => {
   })
 
   it('falls back to the session name for a linked session whose project name is unknown', () => {
-    expect(sessionTitle(makeSession('legacy'), { place: 'unloaded' })).toBe(
+    expect(sessionTitle(makeSession('ownTmux'), { place: 'unloaded' })).toBe(
       'Incident review',
     )
   })
@@ -282,8 +287,8 @@ describe('sessionToSlot', () => {
     ['tether', 'unloaded', true, true, true],
     ['root', 'free', true, false, true],
     ['root', 'unloaded', true, false, true],
-    ['legacy', 'free', false, false, true],
-    ['legacy', 'unloaded', false, false, true],
+    ['tetherLegacy', 'free', true, false, true],
+    ['tetherLegacy', 'unloaded', true, false, true],
     ['ownTmux', 'free', false, false, false],
   ] as const)(
     'maps a %s session shown %s to the backend capabilities',
@@ -313,7 +318,7 @@ describe('sessionToSlot', () => {
     ['tether', 'project', null, false],
     ['tether', 'project', 'Focus', true],
     ['tether', 'adhoc', 'Focus', true],
-    ['legacy', 'project', 'Focus', false],
+    ['tetherLegacy', 'project', 'Focus', true],
     ['ownTmux', 'adhoc', 'Focus', false],
   ] as const)(
     'shows the session title for a %s %s slot with task %s: %s',
@@ -335,25 +340,25 @@ describe('sessionToSlot', () => {
   })
 
   it('builds a project slot for a linked session whose pane is not loaded here', () => {
-    const slot = sessionToSlot(makeSession('legacy', { mode: 'shell' }), {
+    const slot = sessionToSlot(makeSession('ownTmux', { mode: 'shell' }), {
       as: 'project',
       place: 'unloaded',
       projectName: 'Neri',
-      slotId: 'session-legacy-session',
+      slotId: 'session-ownTmux-session',
     })
     expect(slot).toEqual({
-      slotId: 'session-legacy-session',
+      slotId: 'session-ownTmux-session',
       type: 'project',
       projectId: 'neri',
       projectName: 'Neri',
       rootPath: '/workspace/neri',
       activeMode: 'shell',
-      activeSessionId: 'legacy-session',
+      activeSessionId: 'ownTmux-session',
       sessionBadge: null,
       claudeState: 'running',
       task: undefined,
       badge: null,
-      can: { rename: false, reset: false, end: true },
+      can: { rename: false, reset: false, end: false },
       showsSessionTitle: false,
     })
   })
@@ -395,10 +400,8 @@ describe('paneSessionsAsSessions', () => {
       display_order: 7,
       task: 'Focus',
     })
-    const legacy = makeSession('legacy', { mode: 'shell' })
-    const sessions = paneSessionsAsSessions(
-      makePane('project', [tether, legacy]),
-    )
+    const own = makeSession('ownTmux', { mode: 'shell' })
+    const sessions = paneSessionsAsSessions(makePane('project', [tether, own]))
     expect(sessions).toEqual([
       {
         ...tether,
@@ -409,7 +412,7 @@ describe('paneSessionsAsSessions', () => {
         last_accessed_at: '2026-10-01T00:00:00Z',
       },
       {
-        ...legacy,
+        ...own,
         user_id: null,
         project_id: 'neri',
         display_order: 1,
@@ -439,12 +442,12 @@ describe('paneToSlot', () => {
   )
 
   it('keeps the pane name for a session Tether does not own', () => {
-    const pane = makePane('project', [makeSession('legacy')], {
+    const pane = makePane('project', [makeSession('ownTmux')], {
       pane_name: 'Root: exact-request',
     })
     expect(paneToSlot(pane)).toMatchObject({
       projectName: 'Root: exact-request',
-      can: { rename: false, reset: false, end: true },
+      can: { rename: false, reset: false, end: false },
       showsSessionTitle: false,
     })
   })

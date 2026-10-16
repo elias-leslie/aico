@@ -2,8 +2,7 @@
 
 ``a-term migrate-from-postgres``
     Reads the old Postgres tables (read-only) and writes A-Term's local SQLite
-    view state: panes and their layout, project settings, and links to
-    pre-Tether sessions that still run on the default tmux server. A dry run
+    view state: panes and their layout, and project settings. A dry run
     by default; ``--apply`` writes. Rows already in SQLite are kept, so a
     second run changes nothing. Old tool slugs are renamed with the aliases in
     Tether's tool registry, so Tether must be running. With ``--apply`` it also writes the old agent
@@ -32,7 +31,6 @@ from typing import Any, LiteralString
 from ..branding import REPO_ROOT
 from ..logging_config import configure_cli_logging
 from ..storage import local_db
-from ..utils.tmux import get_tmux_session_name, tmux_session_exists_by_name
 
 
 def tool_slug_renames() -> dict[str, str]:
@@ -102,7 +100,7 @@ def resolve_database_url(env_name: str) -> str:
 
 
 def read_postgres(database_url: str) -> dict[str, list[dict[str, Any]]]:
-    """Read the four source tables in one read-only transaction."""
+    """Read the three source tables in one read-only transaction."""
     try:
         import psycopg
         from psycopg.rows import dict_row
@@ -119,10 +117,6 @@ def read_postgres(database_url: str) -> dict[str, list[dict[str, Any]]]:
         "project_settings": (
             "SELECT project_id, enabled, display_order, active_mode, created_at, updated_at "
             "FROM a_term_project_settings ORDER BY display_order, project_id"
-        ),
-        "sessions": (
-            "SELECT id, name, project_id, working_dir, display_order, is_alive, created_at, "
-            "last_accessed_at, mode, pane_id FROM a_term_sessions ORDER BY created_at"
         ),
         "agent_tools": (
             "SELECT slug, name, command, process_name, description, color, display_order, is_default, enabled "
@@ -167,23 +161,15 @@ def tool_import_entry(row: dict[str, Any], renames: Mapping[str, str]) -> dict[s
     }
 
 
-def build_plan(
-    source: dict[str, list[dict[str, Any]]], tmux_alive: Any, renames: Mapping[str, str]
-) -> dict[str, Any]:
+def build_plan(source: dict[str, list[dict[str, Any]]], renames: Mapping[str, str]) -> dict[str, Any]:
     """Turn the Postgres rows into SQLite rows plus a report.
 
     ``renames`` maps old tool slugs to Tether's canonical ones (see
-    :func:`tool_slug_renames`).
-
-    ``tmux_alive(session_uuid)`` says whether the pre-Tether session still runs
-    on the default tmux server. Only those become (attach-only) legacy links;
-    a row Postgres calls alive whose tmux session is gone is reported dead here
-    and left untouched in Postgres.
+    :func:`tool_slug_renames`). Pre-Tether sessions are not copied: A-Term
+    shows only Tether's sessions and the user's own tmux sessions.
     """
     panes = []
-    pane_ids = set()
     for row in source.get("panes", []):
-        pane_ids.add(str(row["id"]))
         panes.append(
             {
                 "id": str(row["id"]),
@@ -211,53 +197,13 @@ def build_plan(
         }
         for row in source.get("project_settings", [])
     ]
-    links = []
-    session_report = []
-    for row in source.get("sessions", []):
-        session_id = str(row["id"])
-        pane_id = str(row["pane_id"]) if row.get("pane_id") else None
-        alive_in_tmux = bool(tmux_alive(session_id))
-        entry = {
-            "id": session_id,
-            "mode": canonical_mode(row.get("mode"), renames),
-            "project_id": row.get("project_id"),
-            "pane_id": pane_id,
-            "postgres_is_alive": bool(row.get("is_alive")),
-            "tmux_alive": alive_in_tmux,
-        }
-        if alive_in_tmux and pane_id in pane_ids:
-            entry["result"] = "legacy_link"
-            links.append(
-                {
-                    "session_id": session_id,
-                    "pane_id": pane_id,
-                    "mode": entry["mode"],
-                    "kind": "legacy",
-                    "display_order": int(row.get("display_order") or 0),
-                    "created_at": _iso(row.get("created_at")),
-                    "last_accessed_at": _iso(row.get("last_accessed_at")),
-                }
-            )
-        elif alive_in_tmux:
-            entry["result"] = "running_without_pane"
-        elif row.get("is_alive"):
-            entry["result"] = "marked_dead"  # stale in Postgres; only this report says so
-        else:
-            entry["result"] = "dead"
-        session_report.append(entry)
     tools = [tool_import_entry(row, renames) for row in source.get("agent_tools", [])]
-    return {
-        "panes": panes,
-        "project_settings": settings,
-        "links": links,
-        "sessions": session_report,
-        "tools": tools,
-    }
+    return {"panes": panes, "project_settings": settings, "tools": tools}
 
 
 def apply_plan(plan: dict[str, Any], db_path: Path | None = None) -> dict[str, int]:
     """Insert the plan's rows, keeping any row SQLite already has (idempotent)."""
-    counts = {"panes": 0, "project_settings": 0, "links": 0}
+    counts = {"panes": 0, "project_settings": 0}
     with local_db.transaction(db_path) as db:
         for pane in plan["panes"]:
             cursor = db.execute(
@@ -277,19 +223,7 @@ def apply_plan(plan: dict[str, Any], db_path: Path | None = None) -> dict[str, i
                 setting,
             )
             counts["project_settings"] += cursor.rowcount
-        for link in plan["links"]:
-            cursor = db.execute(
-                """INSERT INTO pane_sessions (session_id, pane_id, mode, kind, display_order, created_at, last_accessed_at)
-                   VALUES (:session_id, :pane_id, :mode, :kind, :display_order, :created_at, :last_accessed_at)
-                   ON CONFLICT (session_id) DO NOTHING""",
-                link,
-            )
-            counts["links"] += cursor.rowcount
     return counts
-
-
-def _legacy_tmux_alive(session_id: str) -> bool:
-    return tmux_session_exists_by_name(get_tmux_session_name(session_id))
 
 
 def _write_json(path: Path, value: Any) -> None:
@@ -302,7 +236,7 @@ def _write_json(path: Path, value: Any) -> None:
 
 def run_migrate(args: argparse.Namespace) -> int:
     source = read_postgres(resolve_database_url(args.database_url_env))
-    plan = build_plan(source, _legacy_tmux_alive, tool_slug_renames())
+    plan = build_plan(source, tool_slug_renames())
     db_path = Path(args.db).expanduser() if args.db else local_db.default_db_path()
     tools_out = Path(args.tools_out).expanduser() if args.tools_out else default_tools_out()
     report: dict[str, Any] = {
@@ -312,8 +246,6 @@ def run_migrate(args: argparse.Namespace) -> int:
         "source_counts": {key: len(rows) for key, rows in source.items()},
         "panes": len(plan["panes"]),
         "project_settings": len(plan["project_settings"]),
-        "legacy_links": len(plan["links"]),
-        "sessions": plan["sessions"],
         "tools": [tool["slug"] for tool in plan["tools"]],
     }
     if args.apply:

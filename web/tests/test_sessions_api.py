@@ -1,4 +1,4 @@
-"""Sessions API: Tether sessions, legacy default-server sessions, rename, end, reset."""
+"""Sessions API: Tether sessions, the user's own tmux sessions, rename, end, reset."""
 
 from __future__ import annotations
 
@@ -12,8 +12,10 @@ from fastapi.testclient import TestClient
 from a_term.rate_limit import limiter
 from a_term.storage import panes as pane_store
 
+from . import session_factory as make
 from .fake_tether import FakeTether
 
+# A pre-Tether A-Term session (``summitflow-<uuid>``): A-Term no longer shows or ends one.
 LEGACY_ID = "70b339cd-93a0-4898-8c4b-3d694ce8e8dc"
 LEGACY_ROW = f"summitflow-{LEGACY_ID}\t$1\t%1\t/tmp\tbash\t999999"
 
@@ -25,14 +27,14 @@ def _reset_rate_limits() -> Iterator[None]:
     limiter.reset()
 
 
-def _legacy_tmux(run: MagicMock, *, alive: bool = True) -> list[list[str]]:
-    """Make the default tmux server report one legacy A-Term session."""
+def _default_tmux(run: MagicMock, lines: str = LEGACY_ROW) -> list[list[str]]:
+    """Make the default tmux server report ``lines`` (one pre-Tether session by default)."""
     calls: list[list[str]] = []
 
     def fake_run(args: list[str], **_: Any) -> tuple[bool, str]:
         calls.append(list(args))
         if args[0] == "list-panes":
-            return (True, LEGACY_ROW) if alive else (False, "no server running")
+            return True, lines
         if args[0] == "kill-session":
             return True, ""
         return False, "unsupported"
@@ -48,23 +50,25 @@ def _pane_with_session(fake: FakeTether, *, detached: bool = False, tool: str = 
     return pane, session
 
 
-def test_list_includes_tether_and_legacy(test_app: TestClient, fake_tether: FakeTether, no_default_tmux: MagicMock) -> None:
-    _legacy_tmux(no_default_tmux)
+def test_list_includes_tether_sessions_but_not_pre_tether_ones(
+    test_app: TestClient, fake_tether: FakeTether, no_default_tmux: MagicMock
+) -> None:
+    _default_tmux(no_default_tmux)
     pane, linked = _pane_with_session(fake_tether)
     aico = fake_tether.add_session(tool="claude-code", origin="aico")
+    older = fake_tether.add_session(status="legacy")
 
     body = test_app.get("/api/a-term/sessions").json()
     by_id = {item["id"]: item for item in body["items"]}
-    assert set(by_id) == {linked["id"], aico["id"], LEGACY_ID}
+    assert set(by_id) == {linked["id"], aico["id"], older["id"]}
     assert by_id[linked["id"]]["pane_id"] == pane["id"]
     assert by_id[linked["id"]]["is_external"] is False
     assert by_id[linked["id"]]["origin"] == "a-term"
     assert by_id[aico["id"]]["is_external"] is True
     assert by_id[aico["id"]]["tmux_socket"] == aico["tmux"]["socket"]
-    legacy = by_id[LEGACY_ID]
-    assert legacy["is_legacy"] is True
-    assert legacy["tmux_session_name"] == f"summitflow-{LEGACY_ID}"
-    assert legacy["tmux_socket"] is None
+    assert by_id[older["id"]]["is_legacy"] is True
+    assert by_id[older["id"]]["source"] == "tether"
+    assert by_id[linked["id"]]["is_legacy"] is False
 
 
 def test_titles_and_badges_come_from_tether(test_app: TestClient, fake_tether: FakeTether) -> None:
@@ -106,11 +110,11 @@ def test_list_hides_detached_unless_asked(test_app: TestClient, fake_tether: Fak
 
 
 def test_list_survives_tether_down(test_app: TestClient, fake_tether: FakeTether, no_default_tmux: MagicMock) -> None:
-    _legacy_tmux(no_default_tmux)
+    _default_tmux(no_default_tmux, make.own_tmux_panes())
     fake_tether.add_session()
     fake_tether.stop()
     ids = [item["id"] for item in test_app.get("/api/a-term/sessions").json()["items"]]
-    assert ids == [LEGACY_ID]
+    assert ids == ["claude-work"]
 
 
 def test_get_session(test_app: TestClient, fake_tether: FakeTether) -> None:
@@ -138,12 +142,6 @@ def test_rename_sends_current_generation(test_app: TestClient, fake_tether: Fake
     assert patch_calls == [{"generation": session["generation"], "name": "Build"}]
 
 
-def test_rename_refuses_legacy(test_app: TestClient, no_default_tmux: MagicMock, fake_tether: FakeTether) -> None:
-    _legacy_tmux(no_default_tmux)
-    response = test_app.patch(f"/api/a-term/sessions/{LEGACY_ID}", json={"name": "x"})
-    assert response.status_code == 400
-
-
 def test_delete_ends_and_is_idempotent(test_app: TestClient, fake_tether: FakeTether) -> None:
     pane, session = _pane_with_session(fake_tether)
     first = test_app.delete(f"/api/a-term/sessions/{session['id']}")
@@ -157,11 +155,14 @@ def test_delete_ends_and_is_idempotent(test_app: TestClient, fake_tether: FakeTe
     assert again.json()["deleted"] is True
 
 
-def test_delete_legacy_kills_exact_session(test_app: TestClient, no_default_tmux: MagicMock, fake_tether: FakeTether) -> None:
-    calls = _legacy_tmux(no_default_tmux)
+def test_delete_never_kills_a_pre_tether_session(
+    test_app: TestClient, no_default_tmux: MagicMock, fake_tether: FakeTether
+) -> None:
+    calls = _default_tmux(no_default_tmux)
     response = test_app.delete(f"/api/a-term/sessions/{LEGACY_ID}")
     assert response.status_code == 200
-    assert ["kill-session", "-t", f"=summitflow-{LEGACY_ID}"] in calls
+    assert response.json()["is_external"] is True
+    assert not any(args[0] == "kill-session" for args in calls)
 
 
 def test_delete_external_session_only_detaches_view(test_app: TestClient, fake_tether: FakeTether) -> None:
@@ -182,9 +183,9 @@ def test_reset_respawns(test_app: TestClient, fake_tether: FakeTether) -> None:
     assert respawns == [{"generation": before}]
 
 
-def test_reset_refuses_legacy(test_app: TestClient, no_default_tmux: MagicMock, fake_tether: FakeTether) -> None:
-    _legacy_tmux(no_default_tmux)
-    response = test_app.post(f"/api/a-term/sessions/{LEGACY_ID}/reset")
+def test_reset_refuses_a_session_an_older_tether_made(test_app: TestClient, fake_tether: FakeTether) -> None:
+    older = fake_tether.add_session(status="legacy")
+    response = test_app.post(f"/api/a-term/sessions/{older['id']}/reset")
     assert response.status_code == 409
     assert "attach-only" in response.json()["detail"]
 

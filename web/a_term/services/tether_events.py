@@ -3,8 +3,7 @@
 When a session ends, A-Term drops its pane link. ``session.created`` and
 ``session.updated`` carry the session's descriptor, which keeps a linked pane's
 mode on the session's tool (an older Tether sends no descriptor, so A-Term
-reads it). ``legacy.changed`` lists the legacy sessions still running; links to
-the others are dropped. A ``gap`` (missed events or a daemon restart) means
+reads it). A ``gap`` (missed events or a daemon restart) means
 A-Term re-lists and reconciles. The watcher runs in one
 daemon thread and reconnects with backoff while Tether is away.
 """
@@ -17,7 +16,6 @@ from typing import Any
 from ..logging_config import get_logger
 from ..storage import panes as pane_store
 from ..tether import TetherError, TetherUnavailable, get_client
-from ..utils import tmux
 from . import lifecycle
 
 logger = get_logger(__name__)
@@ -83,21 +81,6 @@ class TetherEventWatcher:
             pane_store.update_link(session_id, mode=tool)
             logger.info("view_link_mode_updated", session_id=session_id, mode=tool)
 
-    def _apply_legacy(self, data: dict[str, Any]) -> None:
-        """Drop links to legacy sessions that are no longer listed."""
-        names = data.get("names")
-        if not isinstance(names, list):
-            return
-        alive = {
-            name[len(tmux.TMUX_SESSION_PREFIX) :]
-            for name in names
-            if isinstance(name, str) and tmux.is_managed_tmux_session_name(name)
-        }
-        for link in pane_store.list_links():
-            if link["kind"] == "legacy" and link["session_id"] not in alive:
-                pane_store.unlink_session(link["session_id"])
-                logger.info("view_link_dropped", session_id=link["session_id"], reason="legacy.changed")
-
     def handle(self, event: dict[str, Any]) -> None:
         """Apply one event (public for tests)."""
         event_type = event.get("type")
@@ -117,8 +100,6 @@ class TetherEventWatcher:
                 logger.info("view_link_dropped", session_id=session_id, reason="session.ended")
         elif event_type in {"session.created", "session.updated"}:
             self._apply_session(data, event_type)
-        elif event_type == "legacy.changed":
-            self._apply_legacy(data)
         elif event_type == "gap":
             self._reconcile("gap")
 

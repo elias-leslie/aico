@@ -123,9 +123,6 @@ def test_additive_check_catches_a_removed_or_retyped_property() -> None:
 def _rebuild(name: str, inputs: dict[str, Any]) -> Session:
     if name.startswith("tether"):
         return session_catalog.from_tether(inputs["descriptor"], inputs["link"])
-    if name.startswith("legacy"):
-        with patch("a_term.services.session_catalog.pane_store.get_pane", return_value=inputs["pane"]):
-            return session_catalog.from_legacy(inputs["uuid"], inputs["row"], inputs["link"])
     with (
         patch("a_term.utils.tmux.run_tmux_command", return_value=(True, inputs["list_panes"])),
         patch("a_term.services._session_sources.own_tmux._infer_project_id", return_value=inputs["project_id"]),
@@ -165,12 +162,10 @@ def test_pane_sessions_only_gain_fields(name: str) -> None:
     assert wire["claude_state"] == wire["agent_state"]
 
 
-def test_own_tmux_and_legacy_pins() -> None:
+def test_own_tmux_pins() -> None:
     own = _rebuild("own_tmux", BUILDERS_BASELINE["own_tmux"]["inputs"])
     assert (own["session_number"], own["display_order"], own["tmux_source"], own["tmux_source_label"]) == (
         0, 0, "default", "tmux")
-    legacy = _rebuild("legacy_unlinked", BUILDERS_BASELINE["legacy_unlinked"]["inputs"])
-    assert (legacy["tmux_source"], legacy["tmux_source_label"], legacy["origin"]) == ("legacy", "A-Term (legacy)", "a-term")
 
 
 # ---------------------------------------------------------------------------

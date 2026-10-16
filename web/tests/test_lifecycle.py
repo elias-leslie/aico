@@ -14,8 +14,6 @@ from a_term.tether import TetherError, TetherUnavailable
 from . import session_factory as make
 from .fake_tether import FakeTether
 
-LEGACY_ID = "70b339cd-93a0-4898-8c4b-3d694ce8e8dc"
-
 
 @pytest.fixture()
 def tether(fake_tether: FakeTether, no_default_tmux: MagicMock) -> FakeTether:
@@ -100,21 +98,12 @@ def test_end_tether_session_is_generation_fenced_and_unlinks(tether: FakeTether)
     assert lifecycle.end_session(session["id"]) is False
 
 
-def test_end_legacy_session_kills_exact_session(tether: FakeTether) -> None:
-    pane = _pane()
-    pane_store.link_session(LEGACY_ID, pane["id"], "shell", kind="legacy")
-    with patch("a_term.utils.tmux.kill_legacy_session", return_value=True) as kill:
-        assert lifecycle.end_session(LEGACY_ID) is True
-    kill.assert_called_once_with(LEGACY_ID)
-    assert pane_store.get_link(LEGACY_ID) is None
-
-
 def test_end_refuses_external_session(tether: FakeTether, no_default_tmux: MagicMock) -> None:
     with pytest.raises(lifecycle.LifecycleError) as caught:
         lifecycle.end_session("my-own-session")
     assert (caught.value.status_code, caught.value.detail) == (
         400,
-        "Only Tether and legacy A-Term sessions can be ended here",
+        "Only Tether sessions can be ended here",
     )
     no_default_tmux.assert_not_called()
     assert tether.calls == []
@@ -154,12 +143,12 @@ def test_reset_respawns_with_new_generation(tether: FakeTether) -> None:
     ("build", "status", "detail"),
     [
         (lambda: None, 404, "Session aaaaaaaa not found"),
-        (make.legacy, 409, "This session predates Tether and is attach-only"),
+        (lambda: make.tether(status="legacy"), 409, "This session predates Tether and is attach-only"),
         (lambda: make.tether(rootRequestId="req-1"), 409, "A root session runs one launch; start a new root instead"),
         (make.own_tmux, 400, "External tmux sessions are read-only"),
     ],
 )
-def test_reset_refuses_legacy_root_and_external(tether: FakeTether, build, status: int, detail: str) -> None:
+def test_reset_refuses_older_tether_root_and_external(tether: FakeTether, build, status: int, detail: str) -> None:
     session = build()
     with (
         patch("a_term.services.lifecycle.session_catalog.get_session", return_value=session),
@@ -218,19 +207,11 @@ def test_reconcile_drops_links_of_ended_sessions(tether: FakeTether) -> None:
     alive = lifecycle.create_session(pane_id=pane["id"], mode="shell")
     gone = lifecycle.create_session(pane_id=pane["id"], mode="codex")
     tether.end(gone["id"])
-    pane_store.link_session(LEGACY_ID, pane["id"], "shell", kind="legacy")  # its tmux session is gone too
 
     stats = lifecycle.reconcile_links()
 
-    assert stats == {"links": 3, "links_dropped": 2, "panes_pruned": 0}
+    assert stats == {"links": 2, "links_dropped": 1, "panes_pruned": 0}
     assert [link["session_id"] for link in pane_store.list_links()] == [alive["id"]]
-
-
-def test_reconcile_keeps_live_legacy_links(tether: FakeTether) -> None:
-    pane = _pane()
-    pane_store.link_session(LEGACY_ID, pane["id"], "shell", kind="legacy")
-    with patch("a_term.utils.tmux.list_tmux_sessions", return_value={LEGACY_ID}):
-        assert lifecycle.reconcile_links()["links_dropped"] == 0
 
 
 def test_reconcile_never_treats_tether_down_as_all_ended(tether_down: str, no_default_tmux: MagicMock) -> None:

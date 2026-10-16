@@ -7,9 +7,8 @@ import type { CoordinatorFields } from '../utils/coordinator-badge'
 
 /**
  * A session as A-Term lists it (the backend's ATermSessionResponse, used by
- * the Sessions and Panes APIs alike). Ids are Tether's 8-hex session ids; a
- * legacy `summitflow-*` session on the default tmux server keeps its UUID, and
- * an Own tmux session (`source: 'tmux_external'`) keeps its tmux session name.
+ * the Sessions and Panes APIs alike). Ids are Tether's 8-hex session ids; an
+ * Own tmux session (`source: 'tmux_external'`) keeps its tmux session name.
  *
  * What the UI may offer comes from `can_*`; `source`, `is_root`, `is_legacy`
  * and `is_external` are informational.
@@ -41,7 +40,7 @@ export interface ATermSession extends CoordinatorFields {
   origin?: string | null
   /** Tether status: running | pending | uncertain | legacy. */
   status?: string | null
-  /** A pre-Tether session on the default tmux server: attach-only. */
+  /** A Tether session an older Tether started (status `legacy`): never respawned. */
   is_legacy?: boolean
   generation?: string | null
   /** The A-Term pane this session belongs to, if any. */

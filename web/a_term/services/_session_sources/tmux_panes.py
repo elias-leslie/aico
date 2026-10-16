@@ -1,4 +1,4 @@
-"""One reader of the default tmux server's panes, shared by the Legacy and Own tmux adapters.
+"""The reader of the default tmux server's panes, for the Own tmux adapter.
 
 One format and one parser. It runs through ``a_term.utils.tmux.run_tmux_command``,
 so swapping the tmux runner later changes nothing here.

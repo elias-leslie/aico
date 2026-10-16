@@ -2,7 +2,7 @@
 
 A view is a PTY running a tmux client attached to the session: Tether's exact
 ``tmux -S <socket> attach-session -t <target>`` argv for Tether sessions, or a
-default-server attach for legacy and external sessions. Tether never proxies
+default-server attach for the user's own (external) sessions. Tether never proxies
 terminal bytes; A-Term keeps its own byte path.
 """
 
@@ -31,8 +31,8 @@ logger = get_logger(__name__)
 __all__ = ["attach_environment", "read_pty_output", "resize_pty", "spawn_pty"]
 
 # Never let the client inherit a parent tmux or a colour veto. Tether's attach
-# ``unset`` list names these too (and may add more); legacy and external
-# attaches, which get no list from Tether, use this one.
+# ``unset`` list names these too (and may add more); external attaches, which
+# get no list from Tether, use this one.
 _DROPPED_ENV = ("TMUX", "TMUX_PANE", "TMUX_TMPDIR", "NO_COLOR")
 
 

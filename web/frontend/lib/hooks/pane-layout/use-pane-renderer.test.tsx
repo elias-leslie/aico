@@ -10,12 +10,12 @@ import {
   sessionToSlot,
 } from '@/lib/utils/slot'
 import {
-  LEGACY_CAN,
   OWN_TMUX_CAN,
   ROOT_CAN,
   SESSION_BASE,
   SLOT_BASE,
   TETHER_CAN,
+  TETHER_LEGACY_CAN,
 } from '@/test-stubs/session-fixtures'
 import { usePaneRenderer } from './use-pane-renderer'
 
@@ -342,8 +342,9 @@ describe('usePaneRenderer', () => {
       }),
       paneToSlot(
         projectPane('pane-legacy', {
-          ...LEGACY_CAN,
-          source: 'legacy',
+          ...TETHER_LEGACY_CAN,
+          source: 'tether',
+          status: 'legacy',
           is_legacy: true,
         }),
       ),

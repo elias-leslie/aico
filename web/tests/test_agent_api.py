@@ -2,23 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
-from unittest.mock import MagicMock
-
 import pytest
 from fastapi.testclient import TestClient
 
 from .fake_tether import FakeTether
-
-LEGACY_ID = "70b339cd-93a0-4898-8c4b-3d694ce8e8dc"
-
-
-@pytest.fixture()
-def legacy_tmux(no_default_tmux: MagicMock) -> Iterator[MagicMock]:
-    no_default_tmux.side_effect = lambda args, **_: (
-        (True, f"summitflow-{LEGACY_ID}\t$1\t%1\t/tmp\tcodex\t999999") if args[0] == "list-panes" else (False, "")
-    )
-    yield no_default_tmux
 
 
 @pytest.mark.parametrize("route", ["agent-state", "claude-state"])
@@ -58,8 +45,9 @@ def test_start_agent_refuses_shell(test_app: TestClient, fake_tether: FakeTether
     assert test_app.post(f"/api/a-term/sessions/{session['id']}/start-agent").status_code == 400
 
 
-def test_start_agent_refuses_legacy(test_app: TestClient, fake_tether: FakeTether, legacy_tmux: MagicMock) -> None:
-    response = test_app.post(f"/api/a-term/sessions/{LEGACY_ID}/start-agent")
+def test_start_agent_refuses_a_session_an_older_tether_made(test_app: TestClient, fake_tether: FakeTether) -> None:
+    session = fake_tether.add_session(tool="codex", status="legacy")
+    response = test_app.post(f"/api/a-term/sessions/{session['id']}/start-agent")
     assert response.status_code == 409
 
 

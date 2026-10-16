@@ -2,8 +2,7 @@
 
 Tether creates and ends sessions on private servers; A-Term only attaches,
 captures and toggles view options, always against the session's own socket.
-Legacy ``summitflow-*`` sessions on the user's default server and the user's
-own default-server sessions are reached with ``socket_name=None``.
+The user's own default-server sessions are reached with ``socket_name=None``.
 
 Public API is intentionally flat: import names from ``a_term.utils.tmux``.
 """
@@ -16,7 +15,6 @@ import subprocess  # noqa: F401
 from .core import (
     _SESSION_NAME_PATTERN,  # noqa: F401
     TMUX_COMMAND_TIMEOUT,
-    TMUX_SESSION_PREFIX,
     TmuxError,
     build_tmux_command,
     run_tmux_command,
@@ -39,38 +37,21 @@ from .scrollback import (
     get_scrollback,
     get_scrollback_with_cursor,
 )
-from .sessions import (
-    _is_valid_uuid,  # noqa: F401
-    get_tmux_session_name,
-    is_managed_tmux_session_name,
-    kill_legacy_session,
-    list_tmux_sessions,
-    tmux_session_exists,
-    tmux_session_exists_by_name,
-)
-from .window import reset_tmux_window_size_policy, resize_tmux_window
+from .window import reset_tmux_window_size_policy
 
 __all__ = [
     "TMUX_COMMAND_TIMEOUT",
-    "TMUX_SESSION_PREFIX",
     "TmuxError",
     "apply_external_attach_options",
     "build_tmux_command",
     "get_cursor_position",
     "get_scrollback",
     "get_scrollback_with_cursor",
-    "get_tmux_session_name",
     "get_tmux_session_option",
-    "is_managed_tmux_session_name",
-    "kill_legacy_session",
-    "list_tmux_sessions",
     "reset_tmux_window_size_policy",
-    "resize_tmux_window",
     "restore_external_attach_options",
     "run_tmux_command",
     "set_tmux_session_option",
-    "tmux_session_exists",
-    "tmux_session_exists_by_name",
     "validate_session_name",
     "validate_socket_name",
 ]

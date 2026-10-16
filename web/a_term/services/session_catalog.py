@@ -1,12 +1,9 @@
 """The sessions A-Term shows, in A-Term's API shape.
 
-Three kinds of session reach A-Term:
+Two kinds of session reach A-Term:
 
 - **Tether sessions** (8-hex ids): every session Tether owns, whichever app
   created it. Aico-created sessions are listed and attached natively.
-- **Legacy sessions** (UUID ids): pre-Tether A-Term sessions still running as
-  ``summitflow-<uuid>`` on the user's default tmux server. Attach-only until
-  they end.
 - **Own tmux sessions** (tmux session name ids): the user's own default-server
   sessions running an agent. A-Term shows them but never renames, respawns or
   ends them. The wire keeps ``source: "tmux_external"``.
@@ -27,10 +24,8 @@ from typing import Any, TypedDict
 
 from ..constants import AgentState
 from ..storage import panes as pane_store
-from ..storage.panes import LinkKind
 from ..tether import get_client
 from ._session_sources import AttachPlan, ListContext, SessionSource, tmux_panes
-from ._session_sources.legacy import LegacySource
 from ._session_sources.own_tmux import OwnTmuxSource
 from ._session_sources.tether import TetherSource, from_tether
 from .session_capabilities import SessionKind
@@ -40,7 +35,6 @@ __all__ = [
     "Session",
     "attach_plan",
     "end",
-    "from_legacy",
     "from_tether",
     "get_pane_with_sessions",
     "get_session",
@@ -79,7 +73,7 @@ class Session(TypedDict):
     tmux_source_label: str
     is_external: bool  # a View fact: no A-Term pane shows it (link is None)
     is_root: bool
-    is_legacy: bool
+    is_legacy: bool  # a Tether session with status "legacy"
     origin: str | None
     generation: str | None
     pane_id: str | None
@@ -99,14 +93,7 @@ class Session(TypedDict):
 # One adapter per kind. Own tmux is last: it owns every id the others don't.
 _OWN_TMUX = OwnTmuxSource()
 _TETHER = TetherSource()
-_LEGACY = LegacySource(infer_mode=_OWN_TMUX.infer_mode)
-_SOURCES: tuple[SessionSource, ...] = (_TETHER, _LEGACY, _OWN_TMUX)
-_BY_LINK_KIND: dict[LinkKind, SessionSource] = {"tether": _TETHER, "legacy": _LEGACY}
-
-
-def from_legacy(session_uuid: str, row: dict[str, str], link: dict[str, Any] | None) -> Session:
-    """A Legacy pane row -> A-Term session dict (``row`` as the Legacy adapter reads it)."""
-    return _LEGACY.build(session_uuid, row, link)
+_SOURCES: tuple[SessionSource, ...] = (_TETHER, _OWN_TMUX)
 
 
 def _context(links: Mapping[str, dict[str, Any]]) -> ListContext:
@@ -146,11 +133,11 @@ def list_tether_sessions() -> list[dict[str, Any]]:
 def list_sessions(*, include_external: bool = True) -> list[Session]:
     """Every session A-Term can show. Tether being down hides only Tether sessions.
 
-    ``include_external`` adds the user's Own tmux sessions. One call reads the
-    default tmux server's panes once, for Legacy and Own tmux alike.
+    ``include_external`` adds the user's Own tmux sessions, read from the
+    default tmux server's panes.
     """
     ctx = _context({link["session_id"]: link for link in pane_store.list_links()})
-    sessions = _TETHER.list(ctx) + _LEGACY.list(ctx)
+    sessions = _TETHER.list(ctx)
     _number_sessions(sessions)
     if include_external:
         sessions.extend(_OWN_TMUX.list(ctx))
@@ -184,13 +171,12 @@ def end(session_ref: str) -> bool:
     return _source_for(session_ref).end(session_ref)
 
 
-def live_ids(link_kind: LinkKind) -> set[str]:
-    """Ids still running for one kind of pane link.
+def live_ids() -> set[str]:
+    """Ids of the Tether sessions still running: what a pane link may point at.
 
-    ``"tether"`` raises :class:`~a_term.tether.TetherUnavailable` when Tether is
-    down; ``"legacy"`` is the default server's ``summitflow-<uuid>`` sessions.
+    Raises :class:`~a_term.tether.TetherUnavailable` when Tether is down.
     """
-    return _BY_LINK_KIND[link_kind].live_ids()
+    return _TETHER.live_ids()
 
 
 def sessions_by_id() -> dict[str, Session]:

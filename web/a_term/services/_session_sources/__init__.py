@@ -4,8 +4,6 @@ Only :mod:`a_term.services.session_catalog` imports this package. Each
 adapter answers the same port (:class:`SessionSource`) for its own kind:
 
 - :mod:`.tether`: Tether sessions (8-hex ids), read and ended through Tether.
-- :mod:`.legacy`: pre-Tether ``summitflow-<uuid>`` sessions on the default
-  tmux server, attach-only until they end.
 - :mod:`.own_tmux`: the user's own default-server sessions running an agent.
 
 Respawn, load tool and rename are not on the port: only Tether can do them,
@@ -52,7 +50,7 @@ class AttachPlan:
     """Everything a WebSocket view needs to attach to and observe one session."""
 
     session: dict[str, Any]
-    kind: str  # "tether" | "legacy" | "external"
+    kind: str  # "tether" | "external"
     tmux_session_name: str
     tmux_socket: str | None
     argv: list[str]

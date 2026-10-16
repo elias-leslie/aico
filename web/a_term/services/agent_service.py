@@ -37,7 +37,8 @@ def start_agent(session_id: str) -> StartResult:
     Own tmux and root sessions are never respawned here: the capability table
     declines them, and they return a ``StartResult`` with ``started=False`` and
     their current state. Raises :class:`lifecycle.LifecycleError` for unknown
-    sessions and for the refusals the table raises (shell and legacy sessions).
+    sessions and for the refusals the table raises (shell sessions, and sessions
+    an older Tether made, which are attach-only).
     """
     session = session_catalog.get_session(session_id)
     if session is None:

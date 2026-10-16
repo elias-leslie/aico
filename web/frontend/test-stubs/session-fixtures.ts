@@ -19,8 +19,8 @@ export const TETHER_CAN: CapabilityFlags = capabilities.tether
 /** A Tether root session: runs one launch, never respawned. */
 export const ROOT_CAN: CapabilityFlags = capabilities.root
 
-/** A pre-Tether Legacy session: attach-only, but A-Term can end it. */
-export const LEGACY_CAN: CapabilityFlags = capabilities.legacy
+/** A Tether session an older Tether started (status `legacy`): never respawned. */
+export const TETHER_LEGACY_CAN: CapabilityFlags = capabilities.tether_legacy
 
 /** An Own tmux session: shown, never renamed, respawned or ended. */
 export const OWN_TMUX_CAN: CapabilityFlags = capabilities.own_tmux

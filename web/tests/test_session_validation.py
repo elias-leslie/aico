@@ -1,6 +1,6 @@
 """Resolving a session into the attach plan a WebSocket view runs.
 
-Legacy and Own tmux attach plans are covered with the adapters in
+Own tmux attach plans are covered with the adapters in
 ``test_session_sources.py``; these pin the Tether plan through the
 ``validate_and_prepare_session`` alias the WebSocket handlers call.
 """

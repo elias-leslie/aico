@@ -86,7 +86,7 @@ All of it was checked live against a running non-default instance
   `NO_COLOR`). Both lists may grow.
 - A-Term: a view's tmux client starts from A-Term's environment, sets Tether's
   `env`, then removes every key in `unset` plus its own baseline list (the same
-  four keys, used for legacy and external attaches that get no list).
+  four keys, used for external attaches that get no list).
 
 ## 9. The Tether CLI could not create or attach sessions (resolved)
 

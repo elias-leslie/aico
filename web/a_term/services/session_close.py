@@ -1,8 +1,7 @@
 """End a session from A-Term while keeping the pane's view semantics.
 
 Ending goes through Tether for every Tether session, whichever app created
-it (there is no cross-app owner any more). A legacy default-server session is
-ended with an exact ``kill-session``. The user's own default-server sessions
+it (there is no cross-app owner any more). The user's own default-server sessions
 are never ended from A-Term: closing one only detaches A-Term's view.
 """
 

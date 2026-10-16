@@ -116,10 +116,8 @@ def _infer_project_id(working_dir: str | None) -> str | None:
 
 
 def _is_own_session_name(session_name: str) -> bool:
-    """A valid tmux name that is not a Legacy ``summitflow-<uuid>`` session."""
-    return bool(session_name) and tmux.validate_session_name(session_name) and not tmux.is_managed_tmux_session_name(
-        session_name
-    )
+    """A tmux name A-Term can attach to safely."""
+    return bool(session_name) and tmux.validate_session_name(session_name)
 
 
 class OwnTmuxSource:
@@ -136,7 +134,7 @@ class OwnTmuxSource:
         self._project_of = project_of
 
     def owns(self, ref: str) -> bool:
-        """The fallback: any id that is neither a Tether nor a Legacy id."""
+        """The fallback: any id that is not a Tether id."""
         return True
 
     def infer_mode(self, session_name: str, current_command: str, pane_pid: str | None = None) -> tuple[str, str]:

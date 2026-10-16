@@ -16,19 +16,29 @@ import pytest
 from a_term.services import agent_tools, lifecycle, session_catalog
 from a_term.services._session_sources import ListContext
 from a_term.services._session_sources import own_tmux as own_tmux_module
-from a_term.services._session_sources.legacy import LegacySource
 from a_term.services._session_sources.own_tmux import OwnTmuxSource
 from a_term.services._session_sources.tether import TetherSource
 from a_term.services._session_sources.tmux_panes import PaneRow, read_panes
 from a_term.services.session_capabilities import LifecycleError
+from a_term.storage import local_db
 from a_term.storage import panes as pane_store
 from a_term.tether import TetherUnavailable
 
 from . import session_factory as make
 from .fake_tether import TMUX_BIN, FakeTether
 
+# A pre-Tether A-Term session id: A-Term no longer shows these sessions.
 LEGACY_ID = "123e4567-e89b-12d3-a456-426614174000"
 LEGACY_LINE = f"summitflow-{LEGACY_ID}\t$1\t%1\t/home/u/proj\tbash\t42"
+
+
+def _leftover_legacy_link(pane_id: str) -> None:
+    """A pane link the pre-Tether A-Term wrote (kind 'legacy'); nothing writes one now."""
+    with local_db.connect() as db:
+        db.execute(
+            "INSERT INTO pane_sessions (session_id, pane_id, mode, kind, created_at) VALUES (?, ?, 'shell', 'legacy', ?)",
+            (LEGACY_ID, pane_id, local_db.now_iso()),
+        )
 
 
 def _row(name: str, command: str, cwd: str = "", session_id: str = "$9", pane_id: str = "%9", pid: str = "0") -> PaneRow:
@@ -63,7 +73,7 @@ def _default_server(lines: str):
     [
         ("a1b2c3d4", "tether"),
         ("deadbeef", "tether"),
-        (LEGACY_ID, "legacy"),
+        (LEGACY_ID, "tmux_external"),  # a pre-Tether id is no longer a kind of its own
         ("claude-work", "tmux_external"),
         ("A1B2C3D4", "tmux_external"),  # Tether ids are lower-case hex
         ("a1b2c3d", "tmux_external"),
@@ -101,22 +111,22 @@ def test_list_sessions_reads_the_default_server_once(fake_tether: FakeTether) ->
     fake_run, calls = _default_server(f"{LEGACY_LINE}\n{make.own_tmux_panes()}")
     with patch("a_term.utils.tmux.run_tmux_command", side_effect=fake_run):
         sessions = session_catalog.list_sessions()
-    assert sorted(session["source"] for session in sessions) == ["legacy", "tether", "tmux_external"]
+    assert sorted(session["source"] for session in sessions) == ["tether", "tmux_external"]  # the shell pane is not shown
     assert [args[0] for args in calls] == ["list-panes"]
 
 
 def test_session_lookups_read_the_default_server_once(fake_tether: FakeTether) -> None:
     fake_run, calls = _default_server(make.own_tmux_panes())
     with patch("a_term.utils.tmux.run_tmux_command", side_effect=fake_run):
-        assert session_catalog.sessions_by_id() == {}
+        assert session_catalog.sessions_by_id() == {}  # Tether's sessions only: no tmux read
         assert session_catalog.get_session("claude-work") is not None
-    assert [args[0] for args in calls] == ["list-panes", "list-panes"]
+    assert [args[0] for args in calls] == ["list-panes"]
 
 
 # ---------------------------------------------------------------------------
 # Own tmux adapter (discovery moved from test_tmux_utils)
 # ---------------------------------------------------------------------------
-def test_own_tmux_discovers_agent_sessions_and_skips_legacy_and_shells() -> None:
+def test_own_tmux_discovers_agent_sessions_and_skips_shells() -> None:
     projects = {
         "/home/testuser/summitflow": "summitflow",
         "/home/testuser/agent-hub": "agent-hub",
@@ -257,62 +267,13 @@ def test_own_tmux_end_raises_todays_400() -> None:
         OwnTmuxSource().end("claude-work")
     assert (caught.value.status_code, caught.value.detail) == (
         400,
-        "Only Tether and legacy A-Term sessions can be ended here",
+        "Only Tether sessions can be ended here",
     )
 
 
 def test_own_tmux_live_ids_are_the_discovered_sessions() -> None:
     with patch("a_term.utils.tmux.run_tmux_command", return_value=(True, make.own_tmux_panes("codex-x", "codex"))):
         assert OwnTmuxSource().live_ids() == {"codex-x"}
-
-
-# ---------------------------------------------------------------------------
-# Legacy adapter
-# ---------------------------------------------------------------------------
-def test_legacy_lists_managed_panes_and_infers_mode_through_the_injected_reader() -> None:
-    seen: list[tuple[str, str, str | None]] = []
-
-    def infer(name: str, command: str, pid: str | None = None) -> tuple[str, str]:
-        seen.append((name, command, pid))
-        return "codex", "running"
-
-    source = LegacySource(infer_mode=infer)
-    ctx = _ctx(
-        _row(f"summitflow-{LEGACY_ID}", "bash", "/srv/old", "$1", "%1", "42"),
-        _row(f"summitflow-{LEGACY_ID}", "vim", "/srv/other", "$1", "%5", "43"),  # second pane: ignored
-        _row("claude-work", "claude"),
-    )
-    (session,) = source.list(ctx)
-    assert (session["id"], session["mode"], session["working_dir"], session["tmux_pane_id"]) == (
-        LEGACY_ID,
-        "codex",
-        "/srv/old",
-        "%1",
-    )
-    assert seen == [(f"summitflow-{LEGACY_ID}", "bash", "42")]
-    assert (session["can_rename"], session["can_respawn"], session["can_end"]) == (False, False, True)
-
-
-def test_legacy_linked_mode_comes_from_the_link() -> None:
-    pane = pane_store.create_pane(pane_type="adhoc", pane_name="Old")
-    link = pane_store.link_session(LEGACY_ID, pane["id"], "shell", kind="legacy")
-    source = LegacySource(infer_mode=lambda *_: pytest.fail("a linked session never infers its mode"))
-    session = source.get(LEGACY_ID, _ctx(_row(f"summitflow-{LEGACY_ID}", "codex"), links={LEGACY_ID: link}))
-    assert session is not None
-    assert (session["mode"], session["name"], session["is_external"]) == ("shell", "Old", False)
-
-
-def test_legacy_get_missing_is_none() -> None:
-    assert LegacySource(infer_mode=OwnTmuxSource().infer_mode).get(LEGACY_ID, _ctx()) is None
-
-
-def test_legacy_end_kills_exactly_and_live_ids_list_sessions() -> None:
-    source = LegacySource(infer_mode=OwnTmuxSource().infer_mode)
-    with patch("a_term.utils.tmux.kill_legacy_session", return_value=False) as kill:
-        assert source.end(LEGACY_ID) is False
-    kill.assert_called_once_with(LEGACY_ID)
-    with patch("a_term.utils.tmux.list_tmux_sessions", return_value={LEGACY_ID}):
-        assert source.live_ids() == {LEGACY_ID}
 
 
 # ---------------------------------------------------------------------------
@@ -377,23 +338,6 @@ def test_tether_attach_plan_uses_tethers_argv_and_touches_the_link(fake_tether: 
     assert pane_store.get_link(session["id"])["last_accessed_at"] >= link["last_accessed_at"]  # type: ignore[index]
 
 
-def test_legacy_session_attaches_on_the_default_server(fake_tether: FakeTether) -> None:
-    pane = pane_store.create_pane(pane_type="adhoc", pane_name="Old")
-    pane_store.link_session(LEGACY_ID, pane["id"], "shell", kind="legacy")
-    fake_run, _calls = _default_server(LEGACY_LINE)
-    with (
-        patch("a_term.utils.tmux.run_tmux_command", side_effect=fake_run),
-        patch("a_term.services.session_catalog.pane_store.touch_link") as touch,
-    ):
-        plan = session_catalog.attach_plan(LEGACY_ID)
-
-    assert plan.kind == "legacy"
-    assert plan.tmux_socket is None
-    assert plan.argv == ["tmux", "attach-session", "-t", f"summitflow-{LEGACY_ID}"]
-    assert plan.generation is None
-    touch.assert_called_once_with(LEGACY_ID)
-
-
 def test_users_own_session_attaches_on_the_default_server(fake_tether: FakeTether) -> None:
     with (
         patch("a_term.utils.tmux.run_tmux_command", return_value=(True, make.own_tmux_panes("claude-work"))),
@@ -409,11 +353,6 @@ def test_users_own_session_attaches_on_the_default_server(fake_tether: FakeTethe
     assert [call[:2] for call in fake_tether.calls] == [("GET", "/v1/tools")]
 
 
-def test_missing_legacy_session_is_reported(fake_tether: FakeTether, no_default_tmux: MagicMock) -> None:
-    with pytest.raises(ValueError, match="Session not found"):
-        session_catalog.attach_plan(LEGACY_ID)
-
-
 def test_missing_own_tmux_session_is_reported(fake_tether: FakeTether, no_default_tmux: MagicMock) -> None:
     with pytest.raises(ValueError, match="Session not found: claude-gone"):
         session_catalog.attach_plan("claude-gone")
@@ -426,31 +365,35 @@ def test_catalog_end_dispatches_by_kind(fake_tether: FakeTether, no_default_tmux
     session = fake_tether.add_session()
     assert session_catalog.end(session["id"]) is True
     assert session_catalog.end(session["id"]) is False
-    with patch("a_term.utils.tmux.kill_legacy_session", return_value=True) as kill:
-        assert session_catalog.end(LEGACY_ID) is True
-    kill.assert_called_once_with(LEGACY_ID)
-    with pytest.raises(LifecycleError) as caught:
-        session_catalog.end("claude-work")
-    assert caught.value.status_code == 400
+    for own_or_old in ("claude-work", LEGACY_ID):
+        with pytest.raises(LifecycleError) as caught:
+            session_catalog.end(own_or_old)
+        assert caught.value.status_code == 400
 
 
-def test_catalog_live_ids_per_link_kind(fake_tether: FakeTether) -> None:
+def test_catalog_live_ids_are_tethers(fake_tether: FakeTether) -> None:
     session = fake_tether.add_session()
-    assert session_catalog.live_ids("tether") == {session["id"]}
-    with patch("a_term.utils.tmux.list_tmux_sessions", return_value={LEGACY_ID}):
-        assert session_catalog.live_ids("legacy") == {LEGACY_ID}
+    assert session_catalog.live_ids() == {session["id"]}
 
 
-def test_catalog_live_ids_tether_raises_when_tether_is_down(tether_down: str) -> None:
+def test_catalog_live_ids_raise_when_tether_is_down(tether_down: str) -> None:
     with pytest.raises(TetherUnavailable):
-        session_catalog.live_ids("tether")
+        session_catalog.live_ids()
 
 
-def test_reconcile_raises_during_an_outage_even_with_only_legacy_links(
+def test_reconcile_drops_a_leftover_legacy_link(fake_tether: FakeTether, no_default_tmux: MagicMock) -> None:
+    pane = pane_store.create_pane(pane_type="adhoc", pane_name="Old")
+    _leftover_legacy_link(pane["id"])
+    stats = lifecycle.reconcile_links(empty_pane_days=10_000)
+    assert (stats["links"], stats["links_dropped"]) == (1, 1)
+    assert pane_store.get_link(LEGACY_ID) is None
+
+
+def test_reconcile_raises_during_an_outage_even_with_only_leftover_links(
     tether_down: str, no_default_tmux: MagicMock
 ) -> None:
     pane = pane_store.create_pane(pane_type="adhoc", pane_name="Old")
-    pane_store.link_session(LEGACY_ID, pane["id"], "shell", kind="legacy")
+    _leftover_legacy_link(pane["id"])
     with pytest.raises(TetherUnavailable):
         lifecycle.reconcile_links()
     assert pane_store.get_link(LEGACY_ID) is not None

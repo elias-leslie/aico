@@ -8,15 +8,10 @@ import pytest
 
 from a_term.utils import tmux
 from a_term.utils.tmux import (
-    TMUX_SESSION_PREFIX,
     apply_external_attach_options,
     build_tmux_command,
     get_cursor_position,
     get_scrollback_with_cursor,
-    get_tmux_session_name,
-    is_managed_tmux_session_name,
-    kill_legacy_session,
-    list_tmux_sessions,
     reset_tmux_window_size_policy,
     restore_external_attach_options,
     validate_session_name,
@@ -87,55 +82,6 @@ class TestValidateSocketName:
             socket_path,
             "list-sessions",
         ]
-
-
-class TestSessionNameHelpers:
-    def test_get_tmux_session_name(self) -> None:
-        assert get_tmux_session_name("abc") == f"{TMUX_SESSION_PREFIX}abc"
-
-    def test_is_managed_with_uuid(self) -> None:
-        assert is_managed_tmux_session_name("summitflow-123e4567-e89b-12d3-a456-426614174000") is True
-
-    def test_is_managed_without_prefix(self) -> None:
-        assert is_managed_tmux_session_name("other-session") is False
-
-    def test_is_managed_with_prefix_but_not_uuid(self) -> None:
-        assert is_managed_tmux_session_name("summitflow-not-a-uuid") is False
-
-
-class TestListTmuxSessions:
-    def test_returns_uuids_only(self) -> None:
-        output = "\n".join([
-            "summitflow-123e4567-e89b-12d3-a456-426614174000",
-            "summitflow-not-a-uuid",
-            "other-session",
-        ])
-        with patch("a_term.utils.tmux.run_tmux_command", return_value=(True, output)):
-            result = list_tmux_sessions()
-        assert result == {"123e4567-e89b-12d3-a456-426614174000"}
-
-    def test_returns_empty_on_failure(self) -> None:
-        with patch("a_term.utils.tmux.run_tmux_command", return_value=(False, "error")):
-            assert list_tmux_sessions() == set()
-
-
-class TestKillLegacySession:
-    def test_uses_exact_session_target(self) -> None:
-        session_id = "123e4567-e89b-12d3-a456-426614174000"
-        with patch("a_term.utils.tmux.run_tmux_command", return_value=(True, "")) as mock_run:
-            assert kill_legacy_session(session_id) is True
-        mock_run.assert_called_once_with(["kill-session", "-t", f"=summitflow-{session_id}"])
-
-    def test_already_gone_is_not_an_error(self) -> None:
-        with patch("a_term.utils.tmux.run_tmux_command", return_value=(False, "can't find session: x")):
-            assert kill_legacy_session("123e4567-e89b-12d3-a456-426614174000") is False
-
-    def test_other_failures_raise(self) -> None:
-        with (
-            patch("a_term.utils.tmux.run_tmux_command", return_value=(False, "permission denied")),
-            pytest.raises(tmux.TmuxError),
-        ):
-            kill_legacy_session("123e4567-e89b-12d3-a456-426614174000")
 
 
 def test_get_cursor_position_returns_coordinates() -> None:

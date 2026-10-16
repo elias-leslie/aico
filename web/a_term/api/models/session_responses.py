@@ -38,8 +38,8 @@ class ATermSessionResponse(BaseModel):
     # ``is_root``, ``is_legacy`` and ``source``: permissions are the ``can_*`` flags.
     is_external: bool
     is_root: bool
-    is_legacy: bool
-    source: str  # "tether" | "legacy" | "tmux_external" (an Own tmux session)
+    is_legacy: bool  # a Tether session with status "legacy"
+    source: str  # "tether" | "tmux_external" (an Own tmux session)
     origin: str | None
     status: str | None
     generation: str | None

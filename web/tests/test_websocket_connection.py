@@ -101,20 +101,6 @@ async def test_external_session_toggles_attach_options_on_its_server() -> None:
 
 
 @pytest.mark.asyncio
-async def test_legacy_session_does_not_toggle_attach_options() -> None:
-    plan = _plan(kind="legacy", name="summitflow-123e4567-e89b-12d3-a456-426614174000")
-    with (
-        patch(f"{MODULE}.validate_and_prepare_session", return_value=plan),
-        patch(f"{MODULE}.apply_external_attach_options") as apply_options,
-        patch(f"{MODULE}.spawn_pty", return_value=(17, 23)),
-        patch(f"{MODULE}._wait_for_initial_resize", new=AsyncMock()),
-        patch(f"{MODULE}.get_scrollback", return_value=None),
-    ):
-        await _setup_connection(AsyncMock(), "x")
-    apply_options.assert_not_called()
-
-
-@pytest.mark.asyncio
 async def test_failed_setup_cleans_up_the_pty_and_restores_options() -> None:
     plan = _plan(kind="external", name="codex-agent-hub")
     with (
@@ -229,7 +215,7 @@ def _view(plan: AttachPlan) -> ViewContext:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("kind", ["tether", "legacy", "external"])
+@pytest.mark.parametrize("kind", ["tether", "external"])
 async def test_run_session_syncs_scrollback_and_restores_only_external_options(kind: str) -> None:
     plan = _plan(kind=kind, name="tether-a0000001" if kind == "tether" else "codex-agent-hub")
     websocket = AsyncMock()

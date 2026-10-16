@@ -19,7 +19,6 @@ from ...config import (
 )
 from ...logging_config import get_logger
 from ...services.pty_manager import resize_pty
-from ...utils.tmux import is_managed_tmux_session_name, resize_tmux_window
 
 if TYPE_CHECKING:
     from fastapi import WebSocket
@@ -48,7 +47,7 @@ class ViewContext:
     master_fd: int
     tmux_session_name: str
     tmux_socket: str | None = None
-    kind: str = "external"  # "tether" | "legacy" | "external"
+    kind: str = "external"  # "tether" | "external"
     generation: str | None = None
     client_pid: int | None = None
     last_resize: list[int] = field(default_factory=lambda: [0, 0])
@@ -151,8 +150,6 @@ def _claim_tether_size(view: ViewContext, cols: int, rows: int) -> bool:
 def _claim_window_size(view: ViewContext, cols: int, rows: int) -> bool:
     if view.kind == "tether":
         return _claim_tether_size(view, cols, rows)
-    if view.kind == "legacy" and is_managed_tmux_session_name(view.tmux_session_name):
-        return resize_tmux_window(view.tmux_session_name, cols, rows)
     # The user's own sessions: only this view's PTY follows the browser.
     return False
 

@@ -53,10 +53,10 @@ def test_shell_unknown_and_legacy_are_refused(tether: FakeTether) -> None:
         agent_service.start_agent("bbbbbbbb")
     assert caught.value.status_code == 404
     with (
-        patch("a_term.services.agent_service.session_catalog.get_session", return_value=make.legacy()),
+        patch("a_term.services.agent_service.session_catalog.get_session", return_value=make.tether(status="legacy")),
         pytest.raises(lifecycle.LifecycleError) as caught,
     ):
-        agent_service.start_agent(make.LEGACY_ID)
+        agent_service.start_agent(make.TETHER_ID)
     assert (caught.value.status_code, caught.value.detail) == (409, "This session predates Tether and is attach-only")
 
 

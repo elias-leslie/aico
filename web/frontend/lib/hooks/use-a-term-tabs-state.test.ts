@@ -5,6 +5,7 @@ import {
   OWN_TMUX_CAN,
   ROOT_CAN,
   TETHER_CAN,
+  TETHER_LEGACY_CAN,
 } from '@/test-stubs/session-fixtures'
 import { useATermTabsState } from './use-a-term-tabs-state'
 
@@ -817,14 +818,13 @@ describe('useATermTabsState', () => {
     const unloadedLegacy = {
       ...base,
       id: 'unloaded-legacy',
-      name: 'summitflow-legacy',
+      name: 'Project A — Old review',
       mode: 'codex',
-      source: 'legacy',
+      source: 'tether',
+      status: 'legacy',
       is_legacy: true,
       is_external: false,
-      can_rename: false,
-      can_respawn: false,
-      can_end: true,
+      ...TETHER_LEGACY_CAN,
     }
     const unloadedTether = {
       ...base,
@@ -861,8 +861,8 @@ describe('useATermTabsState', () => {
         expect.objectContaining({
           slotId: 'session-unloaded-legacy',
           type: 'project',
-          projectName: 'Project A',
-          can: { rename: false, reset: false, end: true },
+          projectName: 'Project A — Old review',
+          can: { rename: true, reset: false, end: true },
           showsSessionTitle: false,
         }),
         expect.objectContaining({

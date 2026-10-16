@@ -14,7 +14,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from typing import Any, Literal, NamedTuple, TypedDict, get_args
 
-SessionKind = Literal["tether", "legacy", "tmux_external"]  # == the wire ``source``
+SessionKind = Literal["tether", "tmux_external"]  # == the wire ``source``
 Action = Literal["rename", "respawn", "start_agent", "end"]  # respawn = reset + load tool
 RefusalCode = Literal["not_tether", "legacy_attach_only", "root_single_launch", "own_tmux_read_only", "shell_mode"]
 
@@ -37,7 +37,7 @@ class SessionFacts(NamedTuple):
 
     kind: SessionKind
     is_root: bool = False
-    is_legacy: bool = False  # a Legacy session, or a Tether session with status "legacy"
+    is_legacy: bool = False  # a Tether session with status "legacy" (made by an older Tether)
     mode: str = ""
 
     @classmethod
@@ -97,7 +97,7 @@ _TABLE: dict[Action, tuple[_Rule, ...]] = {
     "end": (
         (
             lambda f: f.kind == "tmux_external",
-            Refusal("own_tmux_read_only", "Only Tether and legacy A-Term sessions can be ended here", 400),
+            Refusal("own_tmux_read_only", "Only Tether sessions can be ended here", 400),
         ),
     ),
 }

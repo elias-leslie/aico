@@ -1,7 +1,7 @@
 """A-Term Sessions API.
 
-Lists every session A-Term can show (Tether's catalog, legacy default-server
-A-Term sessions, and the user's own default-server agent sessions), renames
+Lists every session A-Term can show (Tether's catalog and the user's own
+default-server agent sessions), renames
 Tether sessions, ends sessions and respawns their workloads. Tether owns the
 sessions; A-Term only keeps which pane shows each one.
 """

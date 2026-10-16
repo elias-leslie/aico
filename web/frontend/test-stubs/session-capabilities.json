@@ -9,8 +9,8 @@
     "can_respawn": false,
     "can_end": true
   },
-  "legacy": {
-    "can_rename": false,
+  "tether_legacy": {
+    "can_rename": true,
     "can_respawn": false,
     "can_end": true
   },

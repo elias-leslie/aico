@@ -12,6 +12,7 @@ from a_term.storage import panes as pane_store
 
 from .fake_tether import FakeTether
 
+# A pre-Tether A-Term session id.
 LEGACY_ID = "70b339cd-93a0-4898-8c4b-3d694ce8e8dc"
 
 
@@ -87,10 +88,9 @@ def test_unlinked_tether_session_is_ended_and_reported_external(tether: FakeTeth
     assert session["id"] not in tether.state.sessions
 
 
-def test_legacy_session_is_killed_exactly(tether: FakeTether) -> None:
-    pane = pane_store.create_pane(pane_type="adhoc", pane_name="Old")
-    pane_store.link_session(LEGACY_ID, pane["id"], "shell", kind="legacy")
-    with patch("a_term.utils.tmux.kill_legacy_session", return_value=True) as kill:
-        result = close_session(LEGACY_ID)
-    kill.assert_called_once_with(LEGACY_ID)
-    assert result["pane_deleted"] is True
+def test_pre_tether_session_only_closes_the_view(tether: FakeTether, no_default_tmux: MagicMock) -> None:
+    """A pre-Tether ``summitflow-<uuid>`` session is no longer A-Term's to end."""
+    result = close_session(LEGACY_ID)
+    assert result["is_external"] is True
+    no_default_tmux.assert_not_called()
+    assert tether.calls == []

@@ -17,10 +17,6 @@ from a_term.storage import project_settings
 
 from .fake_tether import FakeTether
 
-LIVE = "70b339cd-93a0-4898-8c4b-3d694ce8e8dc"
-STALE = "5e9027bd-fede-42c2-b923-649fa0e5deae"
-DEAD = "11111111-2222-3333-4444-555555555555"
-ORPHAN = "66666666-7777-8888-9999-000000000000"
 PANE = "ad54f346-e90a-4b83-9807-1a00d00cb96b"
 WHEN = datetime(2026, 9, 1, tzinfo=UTC)
 
@@ -46,13 +42,6 @@ def _source() -> dict[str, list[dict[str, Any]]]:
             {"project_id": "proj", "enabled": True, "display_order": 1, "active_mode": "claude",
              "created_at": WHEN, "updated_at": WHEN},
         ],
-        "sessions": [
-            {"id": LIVE, "mode": "claude", "pane_id": PANE, "is_alive": True, "display_order": 0,
-             "created_at": WHEN, "last_accessed_at": WHEN, "project_id": "proj"},
-            {"id": STALE, "mode": "codex", "pane_id": PANE, "is_alive": True, "created_at": WHEN},
-            {"id": DEAD, "mode": "codex", "pane_id": PANE, "is_alive": False, "created_at": WHEN},
-            {"id": ORPHAN, "mode": "shell", "pane_id": None, "is_alive": True, "created_at": WHEN},
-        ],
         "agent_tools": [
             {"slug": "claude", "name": "Claude Code", "command": "claude --dangerously-skip-permissions",
              "process_name": "claude", "description": None, "color": None, "display_order": 0,
@@ -66,22 +55,17 @@ def _source() -> dict[str, list[dict[str, Any]]]:
 
 
 def _plan() -> dict[str, Any]:
-    return cli.build_plan(_source(), lambda session_id: session_id in {LIVE, ORPHAN}, {"claude": "claude-code"})
+    return cli.build_plan(_source(), {"claude": "claude-code"})
 
 
-def test_plan_maps_rows_and_reports_session_fates() -> None:
+def test_plan_maps_rows() -> None:
     plan = _plan()
     pane = next(p for p in plan["panes"] if p["id"] == PANE)
     assert pane["active_mode"] == "claude-code" and pane["is_detached"] == 0 and pane["width_percent"] == 50.0
     adhoc = next(p for p in plan["panes"] if p["id"] != PANE)
     assert adhoc["width_percent"] == 100.0 and adhoc["is_detached"] == 1
     assert plan["project_settings"][0]["active_mode"] == "claude-code"
-    assert plan["links"] == [
-        {"session_id": LIVE, "pane_id": PANE, "mode": "claude-code", "kind": "legacy", "display_order": 0,
-         "created_at": WHEN.isoformat(), "last_accessed_at": WHEN.isoformat()},
-    ]
-    fates = {entry["id"]: entry["result"] for entry in plan["sessions"]}
-    assert fates == {LIVE: "legacy_link", STALE: "marked_dead", DEAD: "dead", ORPHAN: "running_without_pane"}
+    assert set(plan) == {"panes", "project_settings", "tools"}  # pre-Tether sessions are not copied
     tools = {tool["slug"]: tool for tool in plan["tools"]}
     assert tools["claude-code"]["aliases"] == ["claude"]
     assert "aliases" not in tools["pi"]
@@ -89,12 +73,11 @@ def test_plan_maps_rows_and_reports_session_fates() -> None:
 
 def test_apply_is_idempotent_and_keeps_existing_rows() -> None:
     plan = _plan()
-    assert cli.apply_plan(plan) == {"panes": 2, "project_settings": 1, "links": 1}
+    assert cli.apply_plan(plan) == {"panes": 2, "project_settings": 1}
     project_settings.upsert_settings("proj", display_order=9)  # a later user change survives a rerun
-    assert cli.apply_plan(plan) == {"panes": 0, "project_settings": 0, "links": 0}
+    assert cli.apply_plan(plan) == {"panes": 0, "project_settings": 0}
     assert project_settings.get_settings("proj")["display_order"] == 9  # type: ignore[index]
-    link = pane_store.get_link(LIVE)
-    assert link is not None and link["kind"] == "legacy" and link["pane_id"] == PANE
+    assert pane_store.list_links() == []
 
 
 def test_slug_renames_come_from_tethers_aliases(fake_tether: FakeTether) -> None:
@@ -114,19 +97,18 @@ def test_run_migrate_dry_run_writes_nothing(
 ) -> None:
     monkeypatch.setenv("OLD_DB", "postgresql://example/ignored")
     monkeypatch.setattr(cli, "read_postgres", lambda url: _source())
-    monkeypatch.setattr(cli, "_legacy_tmux_alive", lambda session_id: session_id == LIVE)
     db, tools = tmp_path / "v.db", tmp_path / "tools.json"
     args = ["migrate-from-postgres", "--database-url-env", "OLD_DB", "--db", str(db), "--tools-out", str(tools)]
 
     assert cli.main(args) == 0
     report = json.loads(capsys.readouterr().out)
-    assert report["mode"] == "dry-run" and report["legacy_links"] == 1 and "inserted" not in report
+    assert report["mode"] == "dry-run" and "legacy_links" not in report and "inserted" not in report
     assert "postgresql://" not in json.dumps(report)
     assert not db.exists() and not tools.exists()
 
     assert cli.main([*args, "--apply"]) == 0
     report = json.loads(capsys.readouterr().out)
-    assert report["inserted"] == {"panes": 2, "project_settings": 1, "links": 1}
+    assert report["inserted"] == {"panes": 2, "project_settings": 1}
     assert json.loads(tools.read_text())["tools"][0]["slug"] == "claude-code"
     assert oct(tools.stat().st_mode & 0o777) == "0o600"
 

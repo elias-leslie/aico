@@ -42,9 +42,9 @@ CREATE TABLE IF NOT EXISTS panes (
     created_at     TEXT NOT NULL
 );
 
--- One row per session a pane shows. session_id is a Tether session id, or for
--- kind='legacy' the UUID of a pre-Tether A-Term session that still runs on the
--- user's default tmux server (attach-only until it ends).
+-- One row per session a pane shows. session_id is a Tether session id. kind is
+-- always 'tether' now; a 'legacy' row (a pre-Tether A-Term session) is no
+-- longer written and reconcile drops any that remain.
 CREATE TABLE IF NOT EXISTS pane_sessions (
     session_id       TEXT PRIMARY KEY,
     pane_id          TEXT NOT NULL REFERENCES panes(id) ON DELETE CASCADE,

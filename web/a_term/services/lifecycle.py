@@ -5,9 +5,7 @@ a session (``origin=a-term``), to End it, or to respawn its workload, and it
 records which pane shows the session. Ending is always explicit: a dead
 session is never silently re-created, and closing a view never ends a session.
 
-Legacy ``summitflow-*`` sessions on the default tmux server are attach-only:
-they can be ended (A-Term created them) but never respawned or reset. What is
-refused is decided by :mod:`session_capabilities`; its ``LifecycleError`` is
+What is refused is decided by :mod:`session_capabilities`; its ``LifecycleError`` is
 re-exported here, so callers keep catching ``lifecycle.LifecycleError``.
 """
 
@@ -154,7 +152,7 @@ def create_pane_with_sessions(
 # End
 # ---------------------------------------------------------------------------
 def end_session(session_id: str) -> bool:
-    """End a session (Tether or legacy) and drop its pane link.
+    """End a Tether session and drop its pane link.
 
     Returns False when the session was already gone. Tether's End is fenced by
     the generation read just before it; a changed generation is reported, not
@@ -208,11 +206,9 @@ def load_tool(session_id: str, tool: str) -> session_catalog.Session:
 
 
 def reset_all_sessions() -> int:
-    """Respawn every Tether session A-Term panes show (legacy and roots skipped)."""
+    """Respawn every Tether session A-Term panes show (roots and older-Tether sessions skipped)."""
     count = 0
     for link in pane_store.list_links():
-        if link["kind"] != "tether":
-            continue
         try:
             reset_session(link["session_id"])
             count += 1
@@ -283,17 +279,15 @@ def reconcile_links(empty_pane_days: int = 7) -> dict[str, int]:
     Raises :class:`~a_term.tether.TetherUnavailable` when Tether is down: an
     unreachable Tether never counts as "every session ended".
     """
-    # Tether's liveness is read up front, so an outage raises even with no Tether links.
-    alive: dict[str, set[str]] = {"tether": session_catalog.live_ids("tether")}
+    # Tether's liveness is read up front, so an outage raises even with no links.
+    alive = session_catalog.live_ids()
     stats = {"links": 0, "links_dropped": 0, "panes_pruned": 0}
     for link in pane_store.list_links():
         stats["links"] += 1
-        kind = link["kind"]
-        if kind not in alive:
-            alive[kind] = session_catalog.live_ids(kind)
-        if link["session_id"] not in alive[kind]:
+        # A leftover pre-Tether ("legacy") link is dropped like an ended session.
+        if link["kind"] != "tether" or link["session_id"] not in alive:
             pane_store.unlink_session(link["session_id"])
             stats["links_dropped"] += 1
-            logger.info("view_link_dropped", session_id=link["session_id"], kind=kind)
+            logger.info("view_link_dropped", session_id=link["session_id"], kind=link["kind"])
     stats["panes_pruned"] = pane_store.delete_empty_panes(empty_pane_days)
     return stats

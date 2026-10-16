@@ -60,9 +60,9 @@ def test_watcher_thread_follows_the_stream(fake_tether: FakeTether, no_default_t
     assert pane_store.get_link(session["id"]) is None
 
 
-def _linked(session_id: str, mode: str, kind: str = "tether") -> None:
+def _linked(session_id: str, mode: str) -> None:
     pane = pane_store.create_pane(pane_type="adhoc", pane_name="P")
-    pane_store.link_session(session_id, pane["id"], mode, kind=kind)
+    pane_store.link_session(session_id, pane["id"], mode)
 
 
 def _session_reads(fake_tether: FakeTether, session_id: str) -> int:
@@ -112,21 +112,10 @@ def test_session_events_for_unlinked_sessions_cost_nothing(fake_tether: FakeTeth
     assert pane_store.get_link(session["id"]) is None
 
 
-def test_legacy_changed_drops_links_to_unlisted_legacy_sessions(fake_tether: FakeTether) -> None:
-    kept, gone = "11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222"
-    _linked(kept, "shell", kind="legacy")
-    _linked(gone, "claude-code", kind="legacy")
-    _linked("cdcdcdcd", "shell")  # a Tether session is not affected
-    fake_tether.legacy_changed([f"summitflow-{kept}"])
-
-    watcher = TetherEventWatcher()
-    watcher.handle(fake_tether.state.events[-1])
-
-    assert pane_store.get_link(kept) is not None
-    assert pane_store.get_link(gone) is None
+def test_legacy_changed_touches_no_link(fake_tether: FakeTether) -> None:
+    """Tether still announces its pre-Tether session list; A-Term shows none of them."""
+    _linked("cdcdcdcd", "shell")
+    fake_tether.legacy_changed([])
+    TetherEventWatcher().handle(fake_tether.state.events[-1])
     assert pane_store.get_link("cdcdcdcd") is not None
-    # A malformed list never drops everything.
-    watcher.handle({"type": "legacy.changed", "data": {"names": "nope"}})
-    assert pane_store.get_link(kept) is not None
-    watcher.handle({"type": "legacy.changed", "data": {"names": []}})
-    assert pane_store.get_link(kept) is None
+    assert _session_reads(fake_tether, "cdcdcdcd") == 0

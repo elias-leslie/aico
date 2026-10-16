@@ -36,7 +36,7 @@ OWN_TMUX_RESPAWN = ("own_tmux_read_only", "External tmux sessions are read-only"
 OWN_TMUX_START = ("own_tmux_read_only", "External tmux agent session is already running", None)
 ROOT_START = ("root_single_launch", "Root launch is owned by its retained request", None)
 SHELL_START = ("shell_mode", "Session is in shell mode, not agent mode", 400)
-OWN_TMUX_END = ("own_tmux_read_only", "Only Tether and legacy A-Term sessions can be ended here", 400)
+OWN_TMUX_END = ("own_tmux_read_only", "Only Tether sessions can be ended here", 400)
 
 TETHER = SessionFacts("tether", mode="codex")
 TETHER_ROOT = SessionFacts("tether", is_root=True, mode="codex")
@@ -45,8 +45,6 @@ TETHER_STATUS_LEGACY = SessionFacts("tether", is_legacy=True, mode="codex")
 # Cannot exist (roots postdate Tether) but pins both orders: respawn checks legacy first, start_agent root first.
 TETHER_ROOT_STATUS_LEGACY = SessionFacts("tether", is_root=True, is_legacy=True, mode="codex")
 TETHER_SHELL = SessionFacts("tether", mode="shell")
-LEGACY_AGENT = SessionFacts("legacy", is_legacy=True, mode="codex")
-LEGACY_SHELL = SessionFacts("legacy", is_legacy=True, mode="shell")
 OWN_TMUX = SessionFacts("tmux_external", mode="claude-code")
 
 # fact row -> (rename, respawn, start_agent, end); None = allowed.
@@ -57,8 +55,6 @@ TABLE: dict[str, tuple[SessionFacts, tuple[tuple[str, str, int | None] | None, .
     "tether status legacy": (TETHER_STATUS_LEGACY, (None, LEGACY_ATTACH_ONLY, LEGACY_ATTACH_ONLY, None)),
     "tether root status legacy": (TETHER_ROOT_STATUS_LEGACY, (None, LEGACY_ATTACH_ONLY, ROOT_START, None)),
     "tether shell": (TETHER_SHELL, (None, None, SHELL_START, None)),
-    "legacy agent": (LEGACY_AGENT, (NOT_TETHER, LEGACY_ATTACH_ONLY, LEGACY_ATTACH_ONLY, None)),
-    "legacy shell": (LEGACY_SHELL, (NOT_TETHER, LEGACY_ATTACH_ONLY, SHELL_START, None)),
     "own tmux": (OWN_TMUX, (NOT_TETHER, OWN_TMUX_RESPAWN, OWN_TMUX_START, OWN_TMUX_END)),
 }
 
@@ -100,6 +96,8 @@ def test_facts_of_a_partial_session_is_an_error() -> None:
         SessionFacts.of({"source": "tether", "mode": "codex"})
     with pytest.raises(ValueError, match="Unknown session kind"):
         SessionFacts.of({"source": "other", "is_root": False, "is_legacy": False, "mode": "codex"})
+    with pytest.raises(ValueError, match="Unknown session kind"):
+        SessionFacts.of({"source": "legacy", "is_root": False, "is_legacy": True, "mode": "codex"})
 
 
 def test_lifecycle_error_is_the_same_class_everywhere() -> None:
@@ -121,8 +119,6 @@ def _built_sessions() -> list[tuple[str, session_catalog.Session, SessionFacts]]
         ("tether root", make.tether(rootRequestId="req-1"), TETHER_ROOT),
         ("tether status legacy", make.tether(link=LINK, status="legacy"), TETHER_STATUS_LEGACY),
         ("tether shell", make.tether(tool="shell"), TETHER_SHELL),
-        ("legacy unlinked", make.legacy(), LEGACY_AGENT),
-        ("legacy linked shell", make.legacy(link={**LINK, "mode": "shell"}), LEGACY_SHELL),
         ("own tmux", make.own_tmux(), OWN_TMUX),
     ]
 
@@ -144,9 +140,6 @@ def test_own_tmux_sessions_are_listed_with_flags(no_default_tmux: MagicMock, tet
 # ---------------------------------------------------------------------------
 # One HTTP route per refusal
 # ---------------------------------------------------------------------------
-LEGACY_LINE = f"summitflow-{make.LEGACY_ID}\t$1\t%1\t/tmp\tcodex\t999999999"
-
-
 def _default_server(run: MagicMock, line: str) -> None:
     def fake_run(args: list[str], **_: Any) -> tuple[bool, str]:
         return (True, line) if args[0] == "list-panes" else (False, "unsupported")
@@ -158,11 +151,9 @@ def _detail(response: Any) -> tuple[int, str]:
     return response.status_code, response.json()["detail"]
 
 
-def test_rename_refuses_own_tmux_and_legacy(test_app: TestClient, no_default_tmux: MagicMock) -> None:
+def test_rename_refuses_own_tmux(test_app: TestClient, no_default_tmux: MagicMock) -> None:
     _default_server(no_default_tmux, make.own_tmux_panes())
     assert _detail(test_app.patch("/api/a-term/sessions/claude-work", json={"name": "x"})) == (400, NOT_TETHER[1])
-    _default_server(no_default_tmux, LEGACY_LINE)
-    assert _detail(test_app.patch(f"/api/a-term/sessions/{make.LEGACY_ID}", json={"name": "x"})) == (400, NOT_TETHER[1])
 
 
 def test_reset_refuses_root_legacy_and_own_tmux(
@@ -170,8 +161,8 @@ def test_reset_refuses_root_legacy_and_own_tmux(
 ) -> None:
     root = fake_tether.add_session(root_request_id="req-1")
     assert _detail(test_app.post(f"/api/a-term/sessions/{root['id']}/reset")) == (409, ROOT_RESPAWN[1])
-    _default_server(no_default_tmux, LEGACY_LINE)
-    assert _detail(test_app.post(f"/api/a-term/sessions/{make.LEGACY_ID}/reset")) == (409, LEGACY_ATTACH_ONLY[1])
+    older = fake_tether.add_session(status="legacy")
+    assert _detail(test_app.post(f"/api/a-term/sessions/{older['id']}/reset")) == (409, LEGACY_ATTACH_ONLY[1])
     _default_server(no_default_tmux, make.own_tmux_panes())
     assert _detail(test_app.post("/api/a-term/sessions/claude-work/reset")) == (400, OWN_TMUX_RESPAWN[1])
     assert not any(path.endswith("/respawn") for _, path, _ in fake_tether.calls)
@@ -195,8 +186,8 @@ def test_start_agent_refuses_shell_and_legacy(
 ) -> None:
     shell = fake_tether.add_session(tool="shell")
     assert _detail(test_app.post(f"/api/a-term/sessions/{shell['id']}/start-agent")) == (400, SHELL_START[1])
-    _default_server(no_default_tmux, LEGACY_LINE)
-    assert _detail(test_app.post(f"/api/a-term/sessions/{make.LEGACY_ID}/start-agent")) == (409, LEGACY_ATTACH_ONLY[1])
+    older = fake_tether.add_session(status="legacy")
+    assert _detail(test_app.post(f"/api/a-term/sessions/{older['id']}/start-agent")) == (409, LEGACY_ATTACH_ONLY[1])
 
 
 def test_delete_own_tmux_only_closes_the_view(test_app: TestClient, fake_tether: FakeTether) -> None:
@@ -209,9 +200,10 @@ def test_delete_own_tmux_only_closes_the_view(test_app: TestClient, fake_tether:
 def test_session_list_carries_flags_per_source(
     test_app: TestClient, fake_tether: FakeTether, no_default_tmux: MagicMock
 ) -> None:
-    _default_server(no_default_tmux, f"{LEGACY_LINE}\n{make.own_tmux_panes()}")
+    _default_server(no_default_tmux, make.own_tmux_panes())
     plain = fake_tether.add_session()
     root = fake_tether.add_session(root_request_id="req-1")
+    older = fake_tether.add_session(status="legacy")
     items = {item["id"]: item for item in test_app.get("/api/a-term/sessions").json()["items"]}
 
     def caps(session_id: str) -> tuple[bool, bool, bool]:
@@ -220,7 +212,7 @@ def test_session_list_carries_flags_per_source(
 
     assert caps(plain["id"]) == (True, True, True)
     assert caps(root["id"]) == (True, False, True)
-    assert caps(make.LEGACY_ID) == (False, False, True)
+    assert caps(older["id"]) == (True, False, True)
     assert caps("claude-work") == (False, False, False)
 
 
@@ -229,7 +221,7 @@ FRONTEND_FIXTURE = Path(__file__).resolve().parents[1] / "frontend" / "test-stub
 FRONTEND_FIXTURE_FACTS = {
     "tether": TETHER,
     "root": TETHER_ROOT,
-    "legacy": SessionFacts("legacy", is_legacy=True, mode="codex"),
+    "tether_legacy": TETHER_STATUS_LEGACY,
     "own_tmux": SessionFacts("tmux_external", mode="codex"),
 }
 

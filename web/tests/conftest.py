@@ -95,7 +95,7 @@ def tether_down(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
 
 @pytest.fixture()
 def no_default_tmux() -> Iterator[MagicMock]:
-    """The default tmux server has no sessions (no legacy or external sessions)."""
+    """The default tmux server has no sessions (no Own tmux sessions)."""
     with patch("a_term.utils.tmux.run_tmux_command", return_value=(False, "no server running")) as run:
         yield run
 
@@ -109,8 +109,6 @@ def test_app(fake_tether: FakeTether, no_default_tmux: MagicMock) -> Generator[T
         patch("a_term.main.start_watcher"),
         patch("a_term.main.stop_watcher"),
         patch("a_term.main._write_internal_token"),
-        # Never touch the host's default tmux server from tests.
-        patch("a_term.main._remove_legacy_session_switch_hook"),
     ):
         from a_term.main import app
 

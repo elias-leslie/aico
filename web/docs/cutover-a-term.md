@@ -1,6 +1,8 @@
 # A-Term cutover to Tether
 
 This moves a running A-Term from its own tmux sessions and Postgres to Tether.
+The cutover was done on 2026-10-11; since then A-Term no longer shows
+pre-Tether `summitflow-<uuid>` sessions, so the steps below reflect that.
 It assumes A-Term runs from a source checkout as the user services
 `a-term-backend.service` and `a-term-frontend.service`. Run every command
 from the checkout root.
@@ -39,8 +41,9 @@ Postgres table, so rollback is a code rollback.
 3. Note the current A-Term `main` commit for rollback:
    `git rev-parse HEAD > /tmp/a-term-pre-tether.sha`.
 4. Pre-Tether A-Term sessions still running on the default tmux server
-   (`tmux ls | grep '^summitflow-'`) keep working after the cutover as
-   attach-only legacy sessions until they end. Nothing needs to be closed first.
+   (`tmux ls | grep '^summitflow-'`) keep running but no longer appear in
+   A-Term. Finish or end them first (`tether legacy list`, `tether legacy end
+   <name>`) if you still need them.
 
 ## 1. Bring in the code
 
@@ -62,11 +65,8 @@ did, from `.env.local`, `.env` or `~/.env.local`. It never prints it.
 Check the report:
 
 - `source_counts` and `panes` / `project_settings` match Postgres
-  (at branch time: 36 panes, 12 project settings, 2 sessions, 4 tools);
-- every session has a `result`: `legacy_link` (still running on the default
-  tmux server; it stays visible in its pane), `marked_dead` (Postgres said
-  alive but its tmux session is gone; reported here only, Postgres untouched),
-  `dead`, or `running_without_pane`.
+  (at branch time: 36 panes, 12 project settings, 4 tools);
+- `tools` lists the tool slugs, already renamed with Tether's aliases.
 
 Then write it:
 
@@ -110,10 +110,10 @@ change first. Only then:
 st service rebuild a-term --detach
 ```
 
-The new backend has no database step. On its first start it also removes the
-old global `client-session-changed` tmux hook (the one calling
-`/api/internal/session-switch`) from the default tmux server, and the old
-`hook-token` file.
+The new backend has no database step. If an old global
+`client-session-changed` tmux hook (the one calling
+`/api/internal/session-switch`) is still set on the default tmux server, remove
+it with `tmux set-hook -gu client-session-changed`.
 
 The installed backend unit gains `Wants=`/`After=tether@default.service` only
 when the unit is re-rendered (`bash scripts/install.sh`). That is ordering
@@ -142,8 +142,6 @@ Desktop browser (`http://localhost:3002`):
 6. Settings > Agent tools lists Tether's tools; renaming one shows in Aico.
 7. Projects: with SummitFlow running, "Register project" is unavailable and the
    list matches SummitFlow.
-8. A legacy pane (if the migration reported `legacy_link`) still attaches; its
-   reset action is hidden; closing it ends that tmux session.
 
 Terminal launchers:
 

@@ -14,7 +14,6 @@ from ..constants import MAX_PANES
 from .local_db import connect, new_id, now_iso, transaction
 
 PaneType = Literal["project", "adhoc"]
-LinkKind = Literal["tether", "legacy"]
 
 _PANE_COLUMNS = (
     "id, pane_type, project_id, pane_order, pane_name, active_mode, is_detached, created_at, "
@@ -249,7 +248,6 @@ def link_session(
     pane_id: str,
     mode: str,
     *,
-    kind: LinkKind = "tether",
     display_order: int = 0,
 ) -> dict[str, Any]:
     """Show ``session_id`` in ``pane_id``. A session belongs to at most one pane."""
@@ -257,9 +255,9 @@ def link_session(
     with connect() as db:
         db.execute(
             """INSERT INTO pane_sessions (session_id, pane_id, mode, kind, display_order, created_at, last_accessed_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?)
+               VALUES (?, ?, ?, 'tether', ?, ?, ?)
                ON CONFLICT (session_id) DO UPDATE SET pane_id = excluded.pane_id, mode = excluded.mode""",
-            (str(session_id), str(pane_id), mode, kind, display_order, now, now),
+            (str(session_id), str(pane_id), mode, display_order, now, now),
         )
     link = get_link(session_id)
     if link is None:

@@ -58,7 +58,7 @@ def test_links_belong_to_one_pane_and_cascade() -> None:
     store.link_session("aaaaaaaa", b["id"], "codex")
     link = store.get_link("aaaaaaaa")
     assert link is not None and link["pane_id"] == b["id"] and link["mode"] == "codex" and link["kind"] == "tether"
-    store.link_session("bbbbbbbb", b["id"], "shell", kind="legacy")
+    store.link_session("bbbbbbbb", b["id"], "shell")
     assert [row["session_id"] for row in store.links_for_pane(b["id"])] == ["aaaaaaaa", "bbbbbbbb"]
 
     store.update_link("aaaaaaaa", mode="claude-code", display_order=3, pane_id="ignored")

@@ -13,8 +13,6 @@ from a_term.tether import TetherError, get_client
 
 from .fake_tether import FakeTether
 
-LEGACY_NAME = "summitflow-123e4567-e89b-12d3-a456-426614174000"
-
 
 def _resize(cols: int = 90, rows: int = 28, *, claim: bool | None = None) -> dict[str, str]:
     payload: dict[str, object] = {"__ctrl": True, "resize": {"cols": cols, "rows": rows}}
@@ -50,7 +48,8 @@ def pty_resize():
 
 @pytest.fixture()
 def tmux_resize():
-    with patch("a_term.api.handlers.websocket_messages.resize_tmux_window", return_value=True) as mock:
+    """Any tmux command A-Term would run itself (a shared-window resize would be one)."""
+    with patch("a_term.utils.tmux.run_tmux_command", return_value=(True, "")) as mock:
         yield mock
 
 
@@ -175,18 +174,6 @@ def test_tether_claim_needs_a_client_pid_and_generation(fake_tether: FakeTether,
     view.client_pid = None
     _send(_resize(claim=True), view)
     assert fake_tether.state.resize_claims == []
-
-
-def test_legacy_claim_resizes_the_default_server_window(pty_resize, tmux_resize) -> None:
-    view = ViewContext(session_id="legacy", master_fd=7, tmux_session_name=LEGACY_NAME, kind="legacy")
-    _send(_resize(100, 30, claim=True), view)
-    tmux_resize.assert_called_once_with(LEGACY_NAME, 100, 30)
-
-
-def test_legacy_claim_refuses_unmanaged_names(pty_resize, tmux_resize) -> None:
-    view = ViewContext(session_id="x", master_fd=7, tmux_session_name="someone-else", kind="legacy")
-    _send(_resize(claim=True), view)
-    tmux_resize.assert_not_called()
 
 
 def test_external_claim_only_resizes_the_pty(pty_resize, tmux_resize) -> None:
@@ -342,7 +329,7 @@ def test_control_view_routes_input_resize_refresh_and_paste(pty_resize) -> None:
 
 
 def test_claim_before_the_control_client_exists_is_deferred(pty_resize) -> None:
-    view = ViewContext(session_id="s", master_fd=-1, tmux_session_name="t", kind="legacy")
+    view = ViewContext(session_id="s", master_fd=-1, tmux_session_name="t", kind="external")
     with patch("a_term.api.handlers.websocket_messages._claim_window_size") as claim:
         assert _send(_resize(90, 28, claim=True), view) == (90, 28)
     claim.assert_not_called()

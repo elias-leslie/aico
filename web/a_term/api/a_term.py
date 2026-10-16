@@ -1,7 +1,7 @@
 """A-Term WebSocket API and internal maintenance endpoints.
 
-- ``/ws/a-term/{session_id}`` attaches a view to a session (Tether, legacy or
-  the user's own tmux session).
+- ``/ws/a-term/{session_id}`` attaches a view to a session (Tether or the
+  user's own tmux session).
 - ``/api/internal/maintenance*`` need the internal token.
 """
 

@@ -85,16 +85,6 @@ def _write_internal_token(token: str) -> None:
     token_file.touch(mode=0o600, exist_ok=True)
     token_file.chmod(0o600)
     token_file.write_text(token)
-    # The old tmux session-switch hook read this file; nothing does any more.
-    (cache_root / "hook-token").unlink(missing_ok=True)
-
-
-def _remove_legacy_session_switch_hook() -> None:
-    """Drop the global tmux hook older A-Term versions set on the default server."""
-    ok, hooks = run_tmux_command(["show-hooks", "-g", "client-session-changed"])
-    if ok and "/api/internal/session-switch" in hooks:
-        removed, _ = run_tmux_command(["set-hook", "-gu", "client-session-changed"])
-        logger.info("legacy_session_switch_hook_removed", removed=removed)
 
 
 @asynccontextmanager
@@ -106,7 +96,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     local_db.initialize()
     app.state.internal_token = secrets.token_urlsafe(32)
     _write_internal_token(app.state.internal_token)
-    await asyncio.to_thread(_remove_legacy_session_switch_hook)
     start_watcher()
     await start_scheduler(app)
 
@@ -273,8 +262,8 @@ async def health() -> dict[str, object] | JSONResponse:
     tether = await asyncio.to_thread(_tether_health)
     checks["tether"] = tether
 
-    # Legacy and the user's own sessions live on the default tmux server. A
-    # failure here only means it has no sessions, which is fine.
+    # The user's own sessions live on the default tmux server. A failure here
+    # only means it has no sessions, which is fine.
     tmux_ok, _ = await asyncio.to_thread(run_tmux_command, ["list-sessions"])
     checks["tmux"] = "ok" if tmux_ok else "no_sessions"
     checks["maintenance"] = get_maintenance_status(app)
