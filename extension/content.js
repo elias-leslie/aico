@@ -2,7 +2,7 @@
 //
 // Renders Aico's in-page grab UI inside a Shadow DOM host (so page CSS can't
 // bleed in) and relays captures to the background worker, which POSTs them to
-// the sidecar. Three SOTA gestures, all explicit (EULA: no silent injection):
+// Aico. Three SOTA gestures, all explicit (EULA: no silent injection):
 //
 //   1. Pill   — auto-appears by a text selection; "Send" delivers it now, "+"
 //               stashes it in the batch tray.
@@ -81,8 +81,9 @@
     }
   }
 
-  // The worker answers { ok, status }: the sidecar's HTTP status, or 0 when
-  // Aico couldn't be reached. NO_WORKER means the worker never answered, which
+  // The worker answers { ok, status, reason }: Aico's HTTP status, or 0 when
+  // Aico couldn't be reached; reason says why an answered send wasn't typed
+  // into a session. NO_WORKER means the worker never answered, which
   // in practice is this page outliving an extension reload: the old content
   // script's runtime is gone (sendMessage throws, or the port closes unanswered).
   const NO_WORKER = -1
@@ -92,6 +93,7 @@
       ok: resp.ok === true,
       status: Number(resp.status) || 0,
       timedOut: resp.timedOut === true,
+      reason: typeof resp.reason === 'string' ? resp.reason : '',
     }
   }
 
@@ -225,6 +227,14 @@
     }, shownMs)
   }
 
+  // Why Aico took a send but typed it into no session (its `reason`).
+  const NOT_INSERTED = {
+    no_session: 'No Aico window is open to type it into.',
+    busy: 'Aico is still typing the last one. Try again.',
+    session_changing: 'The session was changing. Try again.',
+    stale_generation: 'The session was changing. Try again.',
+  }
+
   function failureReason(status) {
     if (status === 0) return "Couldn't reach Aico. Is it running?"
     if (status === NO_WORKER) {
@@ -237,9 +247,12 @@
   // Toast what the send actually did. `what` names the capture on success
   // ("text", "3 items"); `extra` follows the failure reason (e.g. batch kept).
   // A timeout isn't a clean failure: Aico was reachable and may have stored it.
-  function reportSend({ ok, status, timedOut }, what, extra = '') {
+  function reportSend({ ok, status, timedOut, reason }, what, extra = '') {
     if (ok) flashToast('Sent ', { b: what }, ' to Aico')
-    else if (timedOut) {
+    else if (status >= 200 && status < 300) {
+      const why = NOT_INSERTED[reason] ?? "Aico couldn't type it into the session."
+      showToast([{ b: 'Not inserted.' }, ` ${why}${extra}`], true)
+    } else if (timedOut) {
       const reason =
         " Aico didn't reply in 5 seconds and may have it anyway, so check before resending."
       showToast([{ b: 'No answer.' }, `${reason}${extra}`], true)
@@ -282,8 +295,7 @@
     sendAllEl.textContent = `Send ${tray.length} to Aico`
   }
 
-  // The relay and the sidecar both refuse a batch over 50 (the selection ring
-  // size), so the tray stops there rather than lose a larger send silently.
+  // The relay and Aico both refuse a batch over 50, so the tray stops there rather than lose a larger send silently.
   const TRAY_MAX = 50
 
   function addToTray(rec) {

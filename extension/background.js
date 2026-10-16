@@ -1,36 +1,43 @@
 // Aico extension — background service worker.
 //
-// The only component allowed to talk to the sidecar: a content script's fetch
+// The only component allowed to talk to Aico: a content script's fetch
 // to 127.0.0.1 is blocked by the page's CORS, but a service worker holding
 // `host_permissions` for the loopback origin is exempt. So every send funnels
 // here: context-menu clicks build a record directly; the content script (pill /
 // picker / tray) relays its records via chrome.runtime.sendMessage.
 //
-// All sends hit POST /selection/send, which stores the capture(s) AND pushes a
-// deliver event over SSE to Aico's main process — which inserts a compact
-// reference at the active widget's prompt. Web captures are kind:"dom"; the
-// sub-type (text/element/link/image/page) rides in meta.type.
+// All sends hit POST /selection/send on Aico's loopback listener, which types a
+// compact reference at the last-focused widget's prompt and answers whether it
+// did ({delivered, reason}). Web captures are kind:"dom"; the sub-type
+// (text/element/link/image/page) rides in meta.type.
 
-const SIDECAR = 'http://127.0.0.1:8005'
+const AICO = 'http://127.0.0.1:8005'
 const SNIPPET_CAP = 400
 
 // Give up on a send Aico hasn't answered by then; the caller reports it failed.
 const SEND_TIMEOUT_MS = 5000
 
 // POST one or more records as an explicit, deliverable batch. Resolves to
-// { ok, status }: the sidecar's HTTP status, or 0 when it couldn't be reached.
-// A send that timed out also carries timedOut: Aico was reachable and may have
-// stored it, so callers shouldn't call that "couldn't reach". Callers toast
-// from this.
+// { ok, status }: Aico's HTTP status, or 0 when it couldn't be reached. ok means
+// the reference reached a session; an answered send Aico couldn't type anywhere
+// is not ok and carries Aico's reason. (A reply without `delivered` is an older
+// Aico that only stored it, taken as sent.) A send that timed out also carries
+// timedOut: Aico was reachable and may have it, so callers shouldn't call that
+// "couldn't reach". Callers toast from this.
 async function sendToBus(items) {
   try {
-    const res = await fetch(`${SIDECAR}/selection/send`, {
+    const res = await fetch(`${AICO}/selection/send`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ items }),
       signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
     })
-    return { ok: res.ok, status: res.status }
+    if (!res.ok) return { ok: false, status: res.status }
+    const body = await res.json().catch(() => null)
+    if (body?.delivered === false) {
+      return { ok: false, status: res.status, reason: String(body.reason ?? '') }
+    }
+    return { ok: true, status: res.status }
   } catch (err) {
     if (err?.name === 'TimeoutError') return { ok: false, status: 0, timedOut: true }
     return { ok: false, status: 0 }
@@ -102,14 +109,14 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   // The menu itself shows nothing, so the page's content script toasts the
   // outcome. Pages without it (chrome://, the Web Store, tabs opened before the
   // extension loaded) get no feedback; the catch keeps that quiet.
-  void sendToBus([record]).then(({ ok, status, timedOut }) => {
+  void sendToBus([record]).then(({ ok, status, timedOut, reason }) => {
     if (tab?.id == null) return
-    const msg = { type: 'aico:sent', ok, status, timedOut, label: record.meta.type }
+    const msg = { type: 'aico:sent', ok, status, timedOut, reason, label: record.meta.type }
     chrome.tabs.sendMessage(tab.id, msg, { frameId: 0 }).catch(() => {})
   })
 })
 
-// Mirrors the sidecar's batch cap (selection ring size).
+// Mirrors Aico's batch cap.
 const MAX_ITEMS = 50
 
 function isPlainObject(value) {

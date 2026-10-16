@@ -10,10 +10,17 @@ import { describe, expect, it } from 'vitest'
 
 const source = readFileSync(resolve(import.meta.dirname, '../../extension/background.js'), 'utf8')
 
-type SendResult = { ok: boolean; status: number; timedOut?: boolean }
+type SendResult = { ok: boolean; status: number; timedOut?: boolean; reason?: string }
 type Listener = (...args: unknown[]) => unknown
 
-function loadWorker(fetchImpl: () => Promise<{ ok: boolean; status: number }>) {
+type FakeResponse = { ok: boolean; status: number; json?: () => Promise<unknown> }
+
+/** Aico's answer to a send it took: typed at a session, or why not. */
+function answered(delivered: boolean, reason: string | null = null): FakeResponse {
+  return { ok: true, status: 200, json: async () => ({ records: [], count: 1, delivered, reason }) }
+}
+
+function loadWorker(fetchImpl: () => Promise<FakeResponse>) {
   const listeners: Record<string, Listener> = {}
   const tabMessages: Array<{ tabId: number; msg: unknown; options: unknown }> = []
   const fetchCalls: Array<{ url: string; init: { body: string; signal?: unknown } }> = []
@@ -50,18 +57,32 @@ function relay(worker: ReturnType<typeof loadWorker>): Promise<SendResult> {
 }
 
 async function settle(): Promise<void> {
-  for (let i = 0; i < 5; i++) await Promise.resolve()
+  for (let i = 0; i < 20; i++) await Promise.resolve()
 }
 
 describe('extension relay reports the real send outcome', () => {
-  it('answers ok with the status when the sidecar accepts the batch', async () => {
-    const worker = loadWorker(async () => ({ ok: true, status: 200 }))
+  it('answers ok when Aico typed the batch into a session', async () => {
+    const worker = loadWorker(async () => answered(true))
     await expect(relay(worker)).resolves.toEqual({ ok: true, status: 200 })
     expect(worker.fetchCalls[0].url).toBe('http://127.0.0.1:8005/selection/send')
     expect(worker.fetchCalls[0].init.signal).toBeDefined()
   })
 
-  it('answers not ok with the HTTP status when the sidecar refuses', async () => {
+  it('answers not ok with the reason when Aico took the batch but typed it nowhere', async () => {
+    const worker = loadWorker(async () => answered(false, 'no_session'))
+    await expect(relay(worker)).resolves.toEqual({ ok: false, status: 200, reason: 'no_session' })
+  })
+
+  it('takes a reply without delivered (an older Aico) as sent', async () => {
+    const worker = loadWorker(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ records: [], count: 1 }),
+    }))
+    await expect(relay(worker)).resolves.toEqual({ ok: true, status: 200 })
+  })
+
+  it('answers not ok with the HTTP status when Aico refuses', async () => {
     const worker = loadWorker(async () => ({ ok: false, status: 403 }))
     await expect(relay(worker)).resolves.toEqual({ ok: false, status: 403 })
   })
@@ -78,7 +99,7 @@ describe('extension relay reports the real send outcome', () => {
   })
 
   it('ignores relays from outside this extension', () => {
-    const worker = loadWorker(async () => ({ ok: true, status: 200 }))
+    const worker = loadWorker(async () => answered(true))
     const msg = { type: 'aico:send', items: [{ kind: 'dom', snippet: 'hi', meta: {} }] }
     expect(worker.listeners.message(msg, { id: 'other', tab: { id: 7 } }, () => {})).toBe(false)
     expect(worker.fetchCalls).toHaveLength(0)
@@ -89,7 +110,7 @@ describe('context-menu sends give in-page feedback', () => {
   const click = { menuItemId: 'aico-send-selection', selectionText: 'quote', pageUrl: 'https://x' }
   const tab = { id: 9, title: 'X', url: 'https://x' }
 
-  it('tells the page the send failed when the sidecar is down', async () => {
+  it('tells the page the send failed when Aico is down', async () => {
     const worker = loadWorker(() => Promise.reject(new TypeError('Failed to fetch')))
     worker.listeners.clicked(click, tab)
     await settle()
@@ -116,7 +137,7 @@ describe('context-menu sends give in-page feedback', () => {
   })
 
   it('tells the page the send worked, naming what was sent', async () => {
-    const worker = loadWorker(async () => ({ ok: true, status: 200 }))
+    const worker = loadWorker(async () => answered(true))
     worker.listeners.clicked({ menuItemId: 'aico-send-link', linkUrl: 'https://y' }, tab)
     await settle()
     expect(worker.tabMessages[0].msg).toEqual({
@@ -127,8 +148,21 @@ describe('context-menu sends give in-page feedback', () => {
     })
   })
 
+  it('passes the reason on when Aico typed it nowhere', async () => {
+    const worker = loadWorker(async () => answered(false, 'busy'))
+    worker.listeners.clicked(click, tab)
+    await settle()
+    expect(worker.tabMessages[0].msg).toEqual({
+      type: 'aico:sent',
+      ok: false,
+      status: 200,
+      reason: 'busy',
+      label: 'text',
+    })
+  })
+
   it('sends nothing for a click with nothing to send', async () => {
-    const worker = loadWorker(async () => ({ ok: true, status: 200 }))
+    const worker = loadWorker(async () => answered(true))
     worker.listeners.clicked({ menuItemId: 'aico-send-selection' }, tab)
     await settle()
     expect(worker.fetchCalls).toHaveLength(0)
