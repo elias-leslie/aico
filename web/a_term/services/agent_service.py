@@ -33,8 +33,10 @@ class StartResult:
 def start_agent(session_id: str) -> StartResult:
     """Respawn an agent session whose workload is not running.
 
-    Raises :class:`lifecycle.LifecycleError` for unknown, shell, legacy, root
-    and external sessions.
+    External tmux and root sessions are never respawned here: they return a
+    ``StartResult`` with ``started=False`` and their current state. Raises
+    :class:`lifecycle.LifecycleError` for unknown, shell and legacy sessions,
+    and for any other session that is not Tether-owned.
     """
     session = session_catalog.get_session(session_id)
     if session is None:
