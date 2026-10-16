@@ -18,6 +18,15 @@ export const RESUME_ADAPTERS: Readonly<Record<string, NonNullable<TuiSpec['resum
   },
 }
 
+/** Tools Tether can start as a root: exactly the slugs with a resume adapter,
+ * since a root must be resumable after a crash. Canonical slugs only, as the
+ * root digest covers the tool string as sent. */
+export const ROOT_TOOLS: readonly string[] = Object.keys(RESUME_ADAPTERS).sort()
+
+export function isRootTool(slug: unknown): slug is string {
+  return typeof slug === 'string' && Object.hasOwn(RESUME_ADAPTERS, slug)
+}
+
 function contextHook(hook: ToolContextHook | null): ContextHook | undefined {
   switch (hook) {
     case 'claude-session-start':

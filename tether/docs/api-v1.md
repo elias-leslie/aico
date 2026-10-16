@@ -172,7 +172,7 @@ A root is a session created through the root contract with a stable caller `requ
 | Method and route | Body | Result |
 | --- | --- | --- |
 | `GET /v1/roots` | query `origin=aico\|a-term` *(3a)*, `ended=0\|1` *(post-cutover)* | `{owner, available, directedDelivery, roots: Descriptor[]}`. `owner` is the `origin` filter, else `"aico"`. `ended=0` leaves out ended tombstones (they stay readable at `GET /v1/roots/:requestId`); the legacy `gui-control.sock` accepts it too. `400 invalid_query` for another origin or `ended` value. |
-| `POST /v1/roots` | `{requestId, tool, projectId, projectRoot, initialPrompt, role, leadRootReference?, facetCapsuleRef?, resumeSessionId?, origin?, aTermSessionId?, launchedBy?}` | Existing or reserved root descriptor. `200` for running or ended, `202` for pending or uncertain. `409 request_conflict` if the same key arrives with a different digest. |
+| `POST /v1/roots` | `{requestId, tool, projectId, projectRoot, initialPrompt, role, leadRootReference?, facetCapsuleRef?, resumeSessionId?, origin?, aTermSessionId?, launchedBy?}` | Existing or reserved root descriptor. `200` for running or ended, `202` for pending or uncertain. `400 unsupported_tool` with `supported: slug[]` for a tool that can't start a root (`rootCapable: false`). `409 request_conflict` if the same key arrives with a different digest. |
 | `GET /v1/roots/:requestId` | none | Current descriptor, including ended tombstones (`status: "ended"`, `generation: null`) |
 | `POST /v1/roots/:requestId/show` | `{generation}` | Forwarded to the GUI |
 | `POST /v1/roots/:requestId/position` | `{generation, bounds: {x, y, width, height}}` | Forwarded to the GUI |
@@ -256,7 +256,8 @@ This is the merged registry. Editing it from either app changes launches in both
   "aliases": [],
   "contextHook": "codex-hooks",
   "createdAt": 0,
-  "updatedAt": 0
+  "updatedAt": 0,
+  "rootCapable": true
 }
 ```
 
@@ -267,7 +268,9 @@ How tool fields work:
 - Setting `isDefault: true` atomically clears the previous default. If no enabled tool is marked default, the first enabled tool by `displayOrder` is used.
 - Slugs and aliases share one namespace (`409`/`400 slug_conflict`).
 - `contextHook` is one of `claude-session-start`, `codex-hooks`, `pi-extension` or `canonical-retrieval:antigravity`. Tether verifies it at launch (Aico `tui/context.ts`). A failed check stays visible but never blocks the native TUI.
-- Resume adapters (Codex `resume --no-daemon <uuid>`) are code, not data. They are keyed by canonical slug and cannot be edited through this API.
+- Resume adapters (Codex `resume --no-daemon <uuid>`, Claude Code `--resume <uuid>`) are code, not data. They are keyed by canonical slug and cannot be edited through this API.
+- `rootCapable` is read-only and derived: true exactly when the tool has a resume adapter, because a root must be resumable after a crash. Only those tools can start a root ([root contract](root-control.md#create)).
+- This list is the one source of tool names, colours (`color` may be `null`), process names and root capability for both apps.
 
 Seeded tools, from the Aico TUI specs reconciled with A-Term's live rows:
 
@@ -278,6 +281,8 @@ Seeded tools, from the Aico TUI specs reconciled with A-Term's live rows:
 | `agy` | `agy --dangerously-skip-permissions` | | |
 | `pi` | `pi --approve` | | Aico's flag. A-Term's bare `pi` showed Pi's project-trust prompt. |
 | `shell` | (empty) | | Interactive login shell |
+
+There is no `aider` row, on purpose: Aider isn't installed and no session has run it. A-Term's own-tmux discovery still lists it among the commands it recognises; once that discovery reads process names from this list, Aider sessions are no longer picked up. Add a row (it can be disabled) if that's ever wanted.
 
 ## Projects
 

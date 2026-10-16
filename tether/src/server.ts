@@ -5,6 +5,7 @@ import type { GuiChannel } from './gui-channel'
 import { HttpError, Router, readJsonObject, sendError, sendJson } from './http'
 import type { LegacyATermSessions } from './legacy-aterm'
 import { lifecycleStatus } from './lifecycle/engine'
+import { isRootTool } from './lifecycle/tui/registry'
 import { learnProjects, registerLifecycleRoutes } from './lifecycle-api'
 import {
   type ProjectProvider,
@@ -32,8 +33,9 @@ export interface ServerContext {
   now?: () => number
 }
 
+/** `rootCapable`: the tool can be started as a root (`POST /v1/roots`). */
 function toolJson(tool: AgentTool): Record<string, unknown> {
-  return { ...tool }
+  return { ...tool, rootCapable: isRootTool(tool.slug) }
 }
 
 function str(body: Record<string, unknown>, key: string): string | undefined {

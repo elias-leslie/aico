@@ -16,7 +16,7 @@ import type { RetirementResult } from './owner-retirement'
 import { sessionGeneration } from './owner-retirement'
 import { isBoundedTerminalText } from './tmux'
 import { isResumeSessionId } from './tui/launch'
-import { getTui } from './tui/registry'
+import { getTui, isRootTool, ROOT_TOOLS } from './tui/registry'
 
 const KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/
 const MAX_BODY_BYTES = 128 * 1024
@@ -35,7 +35,8 @@ export interface Bounds {
 
 export interface RootCreateRequest {
   requestId: string
-  tool: 'codex' | 'claude-code'
+  /** A root-capable tool slug (`ROOT_TOOLS`). */
+  tool: string
   projectId: string
   projectRoot: string
   initialPrompt: string
@@ -235,7 +236,7 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
         !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(aTermSessionId))) ||
     typeof requestId !== 'string' ||
     !KEY.test(requestId) ||
-    (tool !== 'codex' && tool !== 'claude-code') ||
+    !isRootTool(tool) ||
     typeof projectId !== 'string' ||
     !KEY.test(projectId) ||
     !isProjectRootPath(projectRoot) ||
@@ -559,10 +560,18 @@ export function createRootHandler(
       }
       if (path === '/v1/roots' && request.method === 'POST') {
         let parsed: RootCreateRequest | null
+        let unsupportedTool = false
         try {
-          parsed = parseRootCreate(await body(request))
+          const value = await body(request)
+          unsupportedTool =
+            object(value) && typeof value.tool === 'string' && !isRootTool(value.tool)
+          parsed = parseRootCreate(value)
         } catch {
           parsed = null
+        }
+        if (unsupportedTool) {
+          json(response, 400, { error: 'unsupported_tool', supported: ROOT_TOOLS })
+          return
         }
         if (!parsed) {
           json(response, 400, { error: 'invalid_body' })

@@ -126,6 +126,8 @@ KEY = r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}"
 THREAD = r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}"
 GENERATION = r"[0-9a-f]{64}"
 WIDGET = r"[0-9a-f]{8}"
+# Agent tool slugs, as Tether's registry spells them (src/tools.ts SLUG_RE).
+TOOL_SLUG = r"[a-z0-9_-]{1,50}"
 # Owner rejections that are definitive before any view or lifecycle effect.
 OWNER_REFUSALS = {400: {"invalid_body", "invalid_generation"}, 404: {"not_found"},
                   409: {"stale_generation", "workload_unavailable", "busy"}, 410: {"ended"},
@@ -814,6 +816,13 @@ def admin_main(argv: list[str]) -> int:
         return 0
 
 
+def tool_slug(value: str) -> str:
+    """An agent tool slug as Tether's registry spells it; Tether decides support."""
+    if not re.fullmatch(TOOL_SLUG, value):
+        raise argparse.ArgumentTypeError("expected an agent tool slug such as claude-code")
+    return value
+
+
 def create_main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="st aico create", description=(
         "Create one exact owner root; native resume uses an adapter-validated session ID in a new root. "
@@ -823,12 +832,11 @@ def create_main(argv: list[str]) -> int:
     parser.add_argument("--stdin", action="store_true", help="read prompt from bounded stdin instead")
     parser.add_argument("--project", required=True)
     parser.add_argument("--project-root", required=True)
-    # No default: the caller picks the agent on purpose. Each tool runs the
-    # model set in its own config (~/.claude/settings.json, ~/.codex/config.toml),
-    # so this list never goes stale on model names.
-    parser.add_argument("--tool", choices=("claude-code", "codex"), required=True, help=(
-        "required. claude-code: the default choice for delegated work. codex: only where "
-        "routing assigns Codex (e.g. Neri hunt skills and report review)."))
+    # No default: the caller picks the agent on purpose. No local list either:
+    # Tether decides which tools can start a root (`rootCapable` in /v1/tools)
+    # and its refusal names them.
+    parser.add_argument("--tool", type=tool_slug, required=True, help=(
+        "required. Agent tool slug: claude-code or codex."))
     parser.add_argument("--surface", choices=("aico", "a-term"), default="aico")
     parser.add_argument("--role", default="portfolio-root")
     parser.add_argument("--lead-root")
@@ -875,10 +883,17 @@ def create_main(argv: list[str]) -> int:
             fields.append(args.resume_session)
         digest = hashlib.sha256(json.dumps(fields, ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()
         status, data = collector.receipt(endpoint, "/v1/roots", payload, timeout=10)
-        errors = {400: "invalid_body", 409: "request_conflict", 422: "launch_unavailable", 503: "gui_unavailable"}
+        errors = {400: ("invalid_body", "unsupported_tool"), 409: ("request_conflict",),
+                  422: ("launch_unavailable",), 503: ("gui_unavailable",)}
         if status not in (200, 202):
-            reason = errors.get(status)
-            raise Unavailable(reason if reason and data.get("error") == reason else "create_receipt_unqualified")
+            reason = data.get("error")
+            if reason not in errors.get(status, ()):
+                raise Unavailable("create_receipt_unqualified")
+            supported = data.get("supported")
+            if (reason == "unsupported_tool" and isinstance(supported, list) and 0 < len(supported) <= 50
+                    and all(isinstance(slug, str) and re.fullmatch(TOOL_SLUG, slug) for slug in supported)):
+                output["supportedTools"] = supported
+            raise Unavailable(reason)
         host = data.get("hostIdentity")
         generation = data.get("generation")
         state = data.get("status")

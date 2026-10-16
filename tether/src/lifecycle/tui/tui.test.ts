@@ -15,7 +15,15 @@ import {
   paneGatePath,
   resumeLaunchLine,
 } from './launch'
-import { bindToolSource, defaultTui, getTui, listTuis } from './registry'
+import {
+  bindToolSource,
+  defaultTui,
+  getTui,
+  isRootTool,
+  listTuis,
+  RESUME_ADAPTERS,
+  ROOT_TOOLS,
+} from './registry'
 import type { TuiSpec } from './spec'
 
 vi.mock('node:fs', () => ({
@@ -195,6 +203,15 @@ describe('registry', () => {
     registerTools([tool({ slug: 'codex', argv: ['/opt/codex'] }), tool({ slug: 'other' })])
     expect(getTui('codex')?.resume?.arguments).toEqual(['resume', '--no-daemon'])
     expect(getTui('other')?.resume).toBeUndefined()
+  })
+
+  it('makes a tool root-capable exactly when it has a resume adapter', () => {
+    expect(ROOT_TOOLS).toEqual(Object.keys(RESUME_ADAPTERS).sort())
+    expect(ROOT_TOOLS).toEqual(['claude-code', 'codex'])
+    expect(isRootTool('codex')).toBe(true)
+    // Canonical slugs only: the root digest covers the tool string as sent.
+    for (const slug of ['claude', 'pi', 'agy', 'shell', 'toString', '__proto__', 7])
+      expect(isRootTool(slug)).toBe(false)
   })
 })
 

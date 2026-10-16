@@ -185,11 +185,19 @@ those roots.
 
 ## Create
 
-Create accepts exactly `requestId`, `tool` (`codex` or `claude-code`),
+Create accepts exactly `requestId`, `tool` (a root-capable slug, today
+`claude-code` or `codex`),
 `projectId`, absolute normalized `projectRoot`, nonempty `initialPrompt`, `role`,
 and optional opaque `leadRootReference`, `facetCapsuleRef`, and
 `resumeSessionId`. On `/v1` it also accepts `origin`, `aTermSessionId` and
 `launchedBy` ([api-v1.md](api-v1.md#roots)); none of them is part of the digest.
+
+A tool is root-capable exactly when it has a resume adapter; `GET /v1/tools`
+reports it as `rootCapable`. Any other tool string, aliases included, returns
+400 `unsupported_tool` with `supported` listing the root-capable slugs. The
+`st aico create` client keeps no tool list of its own: it sends `--tool` as
+given and reports that refusal as `reason: "unsupported_tool"` with
+`supportedTools`.
 
 `resumeSessionId` is either absent/null (a fresh launch) or an exact native
 session ID validated by the selected tool's resume adapter. The adapters are

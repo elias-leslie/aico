@@ -167,3 +167,54 @@ def test_tool_is_required():
     without = [arg for arg in BASE if arg not in ("--tool", "codex")]
     with pytest.raises(SystemExit):
         admin.main(without)
+
+
+def fresh(tool):
+    return ["create", "fresh-1", "Start.", "--tool", tool, "--project", "sample-app",
+            "--project-root", "/fixture/project"]
+
+
+@pytest.mark.parametrize("supported, shown", [
+    (["claude-code", "codex"], ["claude-code", "codex"]),
+    (["bad slug!"], None), ("codex", None),
+])
+def test_tether_decides_which_tools_can_start_a_root(monkeypatch, supported, shown):
+    """No local tool list: Tether's refusal, and the tools it names, reach the caller."""
+    calls, output = [], []
+
+    def receipt(_, path, route, payload, **kwargs):
+        calls.append(payload["tool"])
+        return 400, {"error": "unsupported_tool", "supported": supported}
+
+    monkeypatch.setattr(admin.Collector, "receipt", receipt)
+    monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
+    assert admin.main(fresh("pi")) == 1
+    assert calls == ["pi"]
+    assert output[0]["reason"] == "unsupported_tool"
+    assert output[0].get("supportedTools") == shown
+
+
+def test_a_new_root_tool_needs_no_client_change(monkeypatch):
+    output = []
+    monkeypatch.setattr(admin.Collector, "receipt", lambda _, path, route, payload, **kw: (200, descriptor(
+        {**payload, "resumeSessionId": None})))
+    monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
+    assert admin.main(fresh("future-agent")) == 0
+    assert output[0]["status"] == "running"
+
+
+@pytest.mark.parametrize("tool", ["", "Codex", "pi; echo", "a" * 51])
+def test_malformed_tool_never_contacts_owner(monkeypatch, tool):
+    monkeypatch.setattr(admin.Collector, "receipt", lambda *_a, **_k: pytest.fail("contacted owner"))
+    with pytest.raises(SystemExit) as exit_info:
+        admin.main(fresh(tool))
+    assert exit_info.value.code == 2
+
+
+def test_tool_help_lists_tools_only(capsys):
+    with pytest.raises(SystemExit):
+        admin.main(["create", "--help"])
+    help_text = " ".join(capsys.readouterr().out.split())
+    assert "claude-code" in help_text and "codex" in help_text
+    for policy in ("routing", "default choice", "delegated", "Neri"):
+        assert policy not in help_text

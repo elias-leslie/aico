@@ -217,6 +217,19 @@ describe('agent tools API', () => {
     const list = await call('GET', '/v1/tools')
     expect(list.body).toMatchObject({ defaultSlug: 'codex' })
     expect((list.body as { items: unknown[] }).items.length).toBe(5)
+    // Clients take tool names, colours and root capability from here.
+    expect(
+      (list.body as { items: { slug: string; rootCapable: boolean }[] }).items.map((t) => [
+        t.slug,
+        t.rootCapable,
+      ]),
+    ).toEqual([
+      ['claude-code', true],
+      ['codex', true],
+      ['agy', false],
+      ['pi', false],
+      ['shell', false],
+    ])
 
     expect((await call('GET', '/v1/tools/claude')).body).toMatchObject({ slug: 'claude-code' })
 
@@ -226,7 +239,11 @@ describe('agent tools API', () => {
       command: 'aider --yes',
     })
     expect(created.status).toBe(201)
-    expect(created.body).toMatchObject({ argv: ['aider', '--yes'], processName: 'aider' })
+    expect(created.body).toMatchObject({
+      argv: ['aider', '--yes'],
+      processName: 'aider',
+      rootCapable: false,
+    })
 
     expect(
       (await call('POST', '/v1/tools', { slug: 'x', name: 'X', command: 'a; b' })).body,

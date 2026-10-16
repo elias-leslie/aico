@@ -71,6 +71,20 @@ describe('root origin (v1 roots API)', () => {
     ...extra,
   })
 
+  it('refuses a tool it cannot start as a root by name, listing the ones it can', async () => {
+    for (const socket of [v1Socket, legacySocket])
+      for (const tool of ['pi', 'claude', 'aider'])
+        expect(await call(socket, '/v1/roots', 'POST', create('t', { tool }))).toEqual({
+          status: 400,
+          body: { error: 'unsupported_tool', supported: ['claude-code', 'codex'] },
+        })
+    // A malformed tool value is just a bad body.
+    expect((await call(v1Socket, '/v1/roots', 'POST', create('t', { tool: 7 }))).body).toEqual({
+      error: 'invalid_body',
+    })
+    expect(parseRootCreate(create('a', { tool: 'claude-code' }))?.tool).toBe('claude-code')
+  })
+
   it('accepts origin and an A-Term session id only together', () => {
     expect(parseRootCreate(create('a'))?.origin).toBe('aico')
     expect(parseRootCreate(create('a', { origin: 'a-term', aTermSessionId: ATERM }))).toMatchObject(
