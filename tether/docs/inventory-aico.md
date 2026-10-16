@@ -16,7 +16,7 @@ This classifies Aico at `dfe73a3` (`electron/main/*`, `scripts/*`).
 | `procfs.ts` | Move | /proc and cgroup readers |
 | `owner-scope.ts` | Move | Exact scope stop, `cgroup.kill`, inode identity |
 | `owner-retirement.ts` | Move | End sequence. `sessionGeneration` already lives in `src/generation.ts`. |
-| `owner-runtime.ts` | Move | Headless verification |
+| `owner-runtime.ts` | Replaced | By `engineRetirementOperations` in `engine.ts` (headless copy removed) |
 | `owner-control.ts` | Move | Becomes the legacy `aico/control.sock` adapter on `default` |
 | `owner-service.ts` | Replaced | By `src/daemon.ts` |
 | `lifecycle-guard.ts` | Move | Lifecycle owner lock and gate-recovery decisions |
