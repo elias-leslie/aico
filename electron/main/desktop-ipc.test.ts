@@ -46,10 +46,12 @@ function setup(stored: Record<string, string> = {}) {
     {
       clipboard: clipboard as never,
       shell,
-      fromWebContents: (wc) =>
-        (all.find((w) => w.webContents === (wc as unknown)) ??
-          null) as unknown as BrowserWindow | null,
-      allWindows: () => all as unknown as BrowserWindow[],
+      registry: {
+        senderWindow: (wc) =>
+          (all.find((w) => w.webContents === (wc as unknown)) ??
+            null) as unknown as BrowserWindow | null,
+        all: () => all as unknown as BrowserWindow[],
+      },
       getSetting: (key) => settings.get(key),
       setSetting,
     },

@@ -84,7 +84,6 @@ const registry = new WindowRegistry(BrowserWindow)
 const layout = createWindowLayout({
   registry,
   screen,
-  focusedWindow: () => BrowserWindow.getFocusedWindow(),
   isCoordinator: (id) => catalog.get(id)?.coordinator ?? false,
   sessionName: (id) => {
     const descriptor = catalog.get(id)
@@ -187,9 +186,6 @@ const attention = createAttentionWiring({
 // The eyes and the titlebar arcade: cursor pump, gaze scenes, urgent looks.
 const ambient = createAmbient({
   registry,
-  windowById: (id) => BrowserWindow.fromId(id),
-  allWindows: () => BrowserWindow.getAllWindows(),
-  focusedWindow: () => BrowserWindow.getFocusedWindow(),
   screen,
   getSetting,
   setSetting,
@@ -203,7 +199,6 @@ ambient.startUrgentLooks()
 
 const chrome = createWindowChrome({
   registry,
-  allWindows: () => BrowserWindow.getAllWindows(),
   catalog,
   tools: link.tools,
   notice: link.notice,
@@ -247,8 +242,6 @@ const terminal = createTerminal({
   tether,
   catalog,
   registry,
-  windowById: (id) => BrowserWindow.fromId(id),
-  allWindows: () => BrowserWindow.getAllWindows(),
   bind: windows.bind,
   ensureView,
   refresh: link.refresh,
@@ -294,8 +287,6 @@ const hotkeys = createHotkeys({
   globalShortcut,
   session: () => session.defaultSession,
   app,
-  fromWebContents: (webContents) => BrowserWindow.fromWebContents(webContents),
-  focusedWindow: () => BrowserWindow.getFocusedWindow(),
 })
 
 lifecycle.onQuit(() => {
@@ -322,8 +313,7 @@ const startup = app.whenReady().then(async () => {
   registerDesktopIpc(ipcMain, {
     clipboard,
     shell,
-    fromWebContents: (webContents) => BrowserWindow.fromWebContents(webContents),
-    allWindows: () => BrowserWindow.getAllWindows(),
+    registry,
     getSetting,
     setSetting,
   })

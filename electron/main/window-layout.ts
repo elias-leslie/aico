@@ -146,10 +146,9 @@ type ScreenLike = Pick<
 >
 
 interface WindowLayoutDeps {
-  registry: Pick<WindowRegistry, 'sessionWindows' | 'sessionOf' | 'forSession'>
+  registry: Pick<WindowRegistry, 'sessionWindows' | 'sessionOf' | 'forSession' | 'focused'>
   /** Read only after the app is ready. */
   screen: ScreenLike
-  focusedWindow(): BrowserWindow | null
   isCoordinator(id: string): boolean
   /** The title layout.json shows for a session. */
   sessionName(id: string): string
@@ -169,7 +168,7 @@ export function createWindowLayout(deps: WindowLayoutDeps) {
     isReady: deps.isReady,
     isQuitting: deps.isQuitting,
     collect: () => {
-      const focused = deps.focusedWindow()
+      const focused = registry.focused()
       const windows: LayoutWindow[] = []
       for (const w of registry.sessionWindows()) {
         const id = registry.sessionOf(w.id)

@@ -64,6 +64,7 @@ function setup(windows: FakeWindow[] = []) {
     fromId: (id) => (windows.find((w) => w.id === id) ?? null) as unknown as BrowserWindow | null,
     fromWebContents: () => null,
     getAllWindows: () => windows as unknown as BrowserWindow[],
+    getFocusedWindow: () => null,
   })
   const catalog = createSessionCatalog()
   const setNeedsYou = vi.fn()

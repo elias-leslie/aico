@@ -3,7 +3,7 @@
 // looks at a window waiting too long, and which window shows which game
 // (arcade.ts). They share the cursor pump, so they live together.
 
-import type { BrowserWindow, IpcMain, Screen } from 'electron'
+import type { IpcMain, Screen } from 'electron'
 import { cursorNearTitlebar, nextArcade, parseArcadeKeys, pickArcade } from './arcade'
 import {
   allLookAt,
@@ -19,10 +19,10 @@ import type { WindowRegistry } from './window-registry'
 const URGENT_LOOK_EVERY_MS = 20_000
 
 interface AmbientDeps {
-  registry: Pick<WindowRegistry, 'sessionOf' | 'forSession' | 'sessionWindows' | 'senderWindow'>
-  windowById(id: number): BrowserWindow | null
-  allWindows(): BrowserWindow[]
-  focusedWindow(): BrowserWindow | null
+  registry: Pick<
+    WindowRegistry,
+    'sessionOf' | 'forSession' | 'sessionWindows' | 'senderWindow' | 'byId' | 'all' | 'focused'
+  >
   screen: Pick<Screen, 'getCursorScreenPoint'>
   getSetting(key: string): string | undefined
   setSetting(key: string, value: string): void
@@ -56,11 +56,11 @@ export function createAmbient(deps: AmbientDeps) {
     if (lastCursorPt && pt.x === lastCursorPt.x && pt.y === lastCursorPt.y) return
     lastCursorPt = pt
     for (const id of blurredWins) {
-      const win = deps.windowById(id)
+      const win = registry.byId(id)
       if (win && !win.isDestroyed()) win.webContents.send('win:cursor', pt)
     }
     for (const id of arcadeOf.keys()) {
-      const win = deps.windowById(id)
+      const win = registry.byId(id)
       if (!win || win.isDestroyed() || !win.isVisible()) continue
       const near = cursorNearTitlebar(pt, win.getContentBounds())
       if (near) arcadeNear.add(id)
@@ -84,7 +84,7 @@ export function createAmbient(deps: AmbientDeps) {
   let gazeTimer: ReturnType<typeof setTimeout> | undefined
 
   function faces(): Face[] {
-    const focused = deps.focusedWindow()
+    const focused = registry.focused()
     return registry
       .sessionWindows()
       .filter((w) => w.isVisible() && !w.isMinimized())
@@ -105,7 +105,7 @@ export function createAmbient(deps: AmbientDeps) {
       console.log(`[aico:gaze] scene ${scene.map((g) => who(g.winId)).join(' ')}`)
     }
     for (const g of scene) {
-      const win = deps.windowById(g.winId)
+      const win = registry.byId(g.winId)
       if (!win || win.isDestroyed()) continue
       win.webContents.send('eyes:look', {
         x: g.target.x,
@@ -135,7 +135,7 @@ export function createAmbient(deps: AmbientDeps) {
       const star = win && all.find((f) => f.winId === win.id)
       if (!star) continue
       for (const g of allLookAt(star, all, random, false)) {
-        deps.windowById(g.winId)?.webContents.send('eyes:look', {
+        registry.byId(g.winId)?.webContents.send('eyes:look', {
           x: g.target.x,
           y: g.target.y,
           delay: g.delay,
@@ -201,7 +201,7 @@ export function createAmbient(deps: AmbientDeps) {
           arcadeNear.clear()
           syncCursorPump()
         }
-        for (const win of deps.allWindows()) win.webContents.send('arcade:enabled', on)
+        for (const win of registry.all()) win.webContents.send('arcade:enabled', on)
       })
       // Titlebar arcade: the renderer lists the games it ships; main picks one this
       // window keeps (reloads included) until it closes.
@@ -231,7 +231,7 @@ export function createAmbient(deps: AmbientDeps) {
         syncCursorPump()
         if (!arcadeOn()) {
           deps.setSetting('arcade', 'on')
-          for (const w of deps.allWindows()) w.webContents.send('arcade:enabled', true)
+          for (const w of registry.all()) w.webContents.send('arcade:enabled', true)
         }
         return pick
       })

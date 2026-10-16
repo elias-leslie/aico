@@ -69,6 +69,7 @@ function setup() {
       (all.find((w) => w.webContents === (wc as unknown)) ??
         null) as unknown as BrowserWindow | null,
     getAllWindows: () => all as unknown as BrowserWindow[],
+    getFocusedWindow: () => null,
   })
   registry.bindSession(1, 'aaaaaaaa')
   const catalog = createSessionCatalog()

@@ -2,14 +2,14 @@
 // hotkey, the push-to-talk hotkey with its websocket URL and microphone
 // permission, and the response-header CSP that exists for the voice connect-src.
 
-import type { App, BrowserWindow, GlobalShortcut, IpcMain, Session, WebContents } from 'electron'
+import type { App, GlobalShortcut, IpcMain, Session } from 'electron'
 import type { AicoConfig } from './config'
 import { contentSecurityPolicy, voiceConnectSource } from './csp'
 import { allowTrustedAudioMedia } from './media-permission'
 import type { WindowRegistry } from './window-registry'
 
 interface HotkeysDeps {
-  registry: Pick<WindowRegistry, 'hasSession' | 'forSession'>
+  registry: Pick<WindowRegistry, 'hasSession' | 'forSession' | 'senderWindow' | 'focused'>
   /** The selection bus's indicate harvest. */
   grab(): Promise<void>
   /** The selection bus's target session. */
@@ -22,8 +22,6 @@ interface HotkeysDeps {
     'webRequest' | 'setPermissionRequestHandler' | 'setPermissionCheckHandler'
   >
   app: Pick<App, 'isReady'>
-  fromWebContents(webContents: WebContents): BrowserWindow | null
-  focusedWindow(): BrowserWindow | null
 }
 
 export function createHotkeys(deps: HotkeysDeps) {
@@ -33,7 +31,7 @@ export function createHotkeys(deps: HotkeysDeps) {
   // focused Aico window, falling back to the same target the selection bus uses
   // (last-focused open widget). That renderer owns the mic capture + insert.
   function toggleVoice(): void {
-    const focused = deps.focusedWindow()
+    const focused = registry.focused()
     const win =
       focused && registry.hasSession(focused.id)
         ? focused
@@ -79,7 +77,7 @@ export function createHotkeys(deps: HotkeysDeps) {
       // webContents, iframe, navigated document, or video request is rejected.
       const session = deps.session()
       session.setPermissionRequestHandler((webContents, permission, cb, details) => {
-        const win = deps.fromWebContents(webContents)
+        const win = registry.senderWindow(webContents)
         const mediaTypes = 'mediaTypes' in details ? details.mediaTypes : undefined
         cb(
           allowTrustedAudioMedia({
@@ -93,7 +91,7 @@ export function createHotkeys(deps: HotkeysDeps) {
         )
       })
       session.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
-        const win = webContents ? deps.fromWebContents(webContents) : null
+        const win = webContents ? registry.senderWindow(webContents) : null
         return allowTrustedAudioMedia({
           permission,
           trustedRenderer: win !== null && registry.hasSession(win.id),

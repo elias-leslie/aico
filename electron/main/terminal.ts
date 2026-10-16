@@ -54,9 +54,9 @@ interface TerminalDeps {
     | 'hasLegacy'
     | 'senderWindow'
     | 'senderSession'
+    | 'byId'
+    | 'all'
   >
-  windowById(id: number): BrowserWindow | null
-  allWindows(): BrowserWindow[]
   /** A new session's window now shows it (windows.bind). */
   bind(win: BrowserWindow, descriptor: SessionDescriptor): void
   ensureView(id: string, open?: boolean): unknown
@@ -314,7 +314,7 @@ export function createTerminal(deps: TerminalDeps) {
 
   function resumeAwaitingAttaches(): void {
     for (const [winId, size] of awaitingTether) {
-      const win = deps.windowById(winId)
+      const win = registry.byId(winId)
       awaitingTether.delete(winId)
       if (win && !win.isDestroyed()) {
         void startPty(win, size)
@@ -371,7 +371,7 @@ export function createTerminal(deps: TerminalDeps) {
     // Sessions are untouched; only the views reattach.
     ipcMain.on('terminal:toggle-transport', () => {
       deps.setSetting(TRANSPORT_SETTING, configuredTransport() === 'control' ? 'attach' : 'control')
-      for (const win of deps.allWindows()) {
+      for (const win of registry.all()) {
         if (!win.isDestroyed() && (registry.hasSession(win.id) || registry.hasLegacy(win.id)))
           win.webContents.reload()
       }

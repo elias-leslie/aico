@@ -18,8 +18,7 @@ import type { createTray, refreshTray, setWidgetActivity, TrayHandlers, TrayWidg
 import type { WindowRegistry } from './window-registry'
 
 interface WindowChromeDeps {
-  registry: Pick<WindowRegistry, 'sessionOf' | 'legacyOf' | 'forSession' | 'senderWindow'>
-  allWindows(): BrowserWindow[]
+  registry: Pick<WindowRegistry, 'sessionOf' | 'legacyOf' | 'forSession' | 'senderWindow' | 'all'>
   catalog: Pick<SessionCatalog, 'get' | 'upsert' | 'list'>
   tools(): TetherTool[]
   /** Why session control is unavailable, shown at the top of the tray menu. */
@@ -122,7 +121,7 @@ export function createWindowChrome(deps: WindowChromeDeps) {
   }
 
   function pushTitles(): void {
-    for (const win of deps.allWindows()) {
+    for (const win of registry.all()) {
       if (win.isDestroyed()) continue
       const legacyName = registry.legacyOf(win.id)
       if (legacyName) {

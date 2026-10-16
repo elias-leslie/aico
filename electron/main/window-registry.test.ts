@@ -2,7 +2,7 @@ import type { BrowserWindow, WebContents } from 'electron'
 import { describe, expect, it } from 'vitest'
 import { WindowRegistry } from './window-registry'
 
-function setup(ids: number[]) {
+function setup(ids: number[], focusedId?: number) {
   const wins = ids.map((id) => {
     let destroyed = false
     return {
@@ -20,6 +20,8 @@ function setup(ids: number[]) {
       (wins.find((w) => w.webContents === (wc as unknown)) ??
         null) as unknown as BrowserWindow | null,
     getAllWindows: () => wins as unknown as BrowserWindow[],
+    getFocusedWindow: () =>
+      (wins.find((w) => w.id === focusedId) ?? null) as unknown as BrowserWindow | null,
   })
   const sender = (id: number) =>
     wins.find((w) => w.id === id)?.webContents as unknown as WebContents
@@ -82,6 +84,16 @@ describe('WindowRegistry', () => {
     const stranger = { id: 99 } as unknown as WebContents
     expect(registry.senderWindow(stranger)).toBeNull()
     expect(registry.senderSession(stranger)).toBeUndefined()
+  })
+
+  it('looks up any window, bound or not, by id, as a list and by focus', () => {
+    const { registry, wins } = setup([1, 2], 2)
+    registry.bindSession(1, 'aaaaaaaa')
+    expect(registry.byId(2)).toBe(wins[1])
+    expect(registry.byId(9)).toBeNull()
+    expect(registry.all()).toEqual(wins)
+    expect(registry.focused()).toBe(wins[1])
+    expect(setup([1]).registry.focused()).toBeNull()
   })
 
   it('forgets every binding of a closed window', () => {

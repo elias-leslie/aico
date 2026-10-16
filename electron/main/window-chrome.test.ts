@@ -65,6 +65,7 @@ function setup(o: { windows?: FakeWindow[]; quitting?: boolean } = {}) {
       (windows.find((w) => w.webContents === (wc as unknown)) ??
         null) as unknown as BrowserWindow | null,
     getAllWindows: () => windows as unknown as BrowserWindow[],
+    getFocusedWindow: () => null,
   })
   const catalog = createSessionCatalog()
   const layout = { scheduleWrite: vi.fn(), noteCoordinator: vi.fn() }
@@ -74,7 +75,6 @@ function setup(o: { windows?: FakeWindow[]; quitting?: boolean } = {}) {
   const contextCheck = vi.fn(async (_id: string): Promise<ContextHook | null> => null)
   const chrome = createWindowChrome({
     registry,
-    allWindows: () => windows as unknown as BrowserWindow[],
     catalog,
     tools: () => state.tools,
     notice: () => state.notice,

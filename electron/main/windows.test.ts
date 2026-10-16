@@ -81,6 +81,7 @@ function setup(o: { views?: ViewRow[]; live?: string[]; catalog?: string[] } = {
     fromId: (id) => FakeWindow.fromId(id) as unknown as BrowserWindow | null,
     fromWebContents: () => null,
     getAllWindows: () => FakeWindow.getAllWindows() as unknown as BrowserWindow[],
+    getFocusedWindow: () => null,
   })
   const forget = registry.forget
   registry.forget = (winId) => {

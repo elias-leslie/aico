@@ -178,6 +178,7 @@ describe('a GUI title reaches layout.json', () => {
       fromId: (id) => windows.find((w) => w.id === id) ?? null,
       fromWebContents: () => null,
       getAllWindows: () => windows,
+      getFocusedWindow: () => null,
     })
     registry.bindSession(1, 'aaaaaaaa')
     const catalog = createSessionCatalog()
@@ -205,7 +206,6 @@ describe('a GUI title reaches layout.json', () => {
     })
     const chrome = createWindowChrome({
       registry,
-      allWindows: () => windows,
       catalog,
       tools: () => [],
       notice: () => null,

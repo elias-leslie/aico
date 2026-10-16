@@ -111,6 +111,7 @@ function setup(o: { forced?: 'attach' | 'control'; setting?: string } = {}) {
       (all.find((w) => w.webContents === (wc as unknown)) ??
         null) as unknown as BrowserWindow | null,
     getAllWindows: () => all as unknown as BrowserWindow[],
+    getFocusedWindow: () => null,
   })
   const catalog = createSessionCatalog()
   const settings = new Map<string, string>()
@@ -128,9 +129,6 @@ function setup(o: { forced?: 'attach' | 'control'; setting?: string } = {}) {
     tether,
     catalog,
     registry,
-    windowById: (id: number) =>
-      (all.find((w) => w.id === id) ?? null) as unknown as BrowserWindow | null,
-    allWindows: () => all as unknown as BrowserWindow[],
     bind: vi.fn((win: BrowserWindow, d: SessionDescriptor) => {
       catalog.upsert(d)
       registry.bindSession(win.id, d.id)

@@ -72,6 +72,7 @@ function setup(o: { packaged?: boolean } = {}) {
     fromId: (id) => (all.find((w) => w.id === id) ?? null) as unknown as BrowserWindow | null,
     fromWebContents: () => null,
     getAllWindows: () => all as unknown as BrowserWindow[],
+    getFocusedWindow: () => null,
   })
   registry.bindSession(1, 'aaaaaaaa')
   registry.bindSession(2, 'bbbbbbbb')

@@ -33,8 +33,11 @@ function setup(o: { rendererUrl?: string; ready?: boolean; registered?: boolean 
   const all: FakeWindow[] = [sessionWin, otherWin]
   const registry = new WindowRegistry({
     fromId: (id) => (all.find((w) => w.id === id) ?? null) as unknown as BrowserWindow | null,
-    fromWebContents: () => null,
+    fromWebContents: (wc) =>
+      (all.find((w) => w.webContents === (wc as unknown)) ??
+        null) as unknown as BrowserWindow | null,
     getAllWindows: () => all as unknown as BrowserWindow[],
+    getFocusedWindow: () => state.focused as unknown as BrowserWindow | null,
   })
   registry.bindSession(1, 'aaaaaaaa')
   const shortcuts = new Map<string, () => void>()
@@ -75,10 +78,6 @@ function setup(o: { rendererUrl?: string; ready?: boolean; registered?: boolean 
     globalShortcut,
     session: session as never,
     app: { isReady: () => o.ready ?? true },
-    fromWebContents: (wc) =>
-      (all.find((w) => w.webContents === (wc as unknown)) ??
-        null) as unknown as BrowserWindow | null,
-    focusedWindow: () => state.focused as unknown as BrowserWindow | null,
   })
   const handle = new Map<string, (...args: unknown[]) => unknown>()
   const ipcMain = {

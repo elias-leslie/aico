@@ -197,6 +197,7 @@ describe('createWindowLayout: the tiler and the window picture', () => {
       fromId: (id) => (all.find((w) => w.id === id) ?? null) as unknown as BrowserWindow | null,
       fromWebContents: () => null,
       getAllWindows: () => all as unknown as BrowserWindow[],
+      getFocusedWindow: () => (windows[0] ?? null) as unknown as BrowserWindow | null,
     })
     for (const w of windows) registry.bindSession(w.id, `s${w.id}`)
     const coordinators = new Set(o.coordinators)
@@ -205,7 +206,6 @@ describe('createWindowLayout: the tiler and the window picture', () => {
     const layout = createWindowLayout({
       registry,
       screen: fakeScreen as unknown as Parameters<typeof createWindowLayout>[0]['screen'],
-      focusedWindow: () => (windows[0] ?? null) as unknown as BrowserWindow | null,
       isCoordinator: (id) => coordinators.has(id),
       sessionName: (id) => `name of ${id}`,
       saveBounds,

@@ -32,6 +32,7 @@ function setup(o: { windows?: FakeWindow[]; arcade?: string; urgent?: string[] }
       (windows.find((w) => w.webContents === (wc as unknown)) ??
         null) as unknown as BrowserWindow | null,
     getAllWindows: () => windows as unknown as BrowserWindow[],
+    getFocusedWindow: () => state.focused as unknown as BrowserWindow | null,
   })
   for (const w of windows) registry.bindSession(w.id, `s${w.id}`)
   const settings = new Map<string, string>()
@@ -48,9 +49,6 @@ function setup(o: { windows?: FakeWindow[]; arcade?: string; urgent?: string[] }
   })
   const ambient = createAmbient({
     registry,
-    windowById: (id) => byId(id) as unknown as BrowserWindow | null,
-    allWindows: () => windows as unknown as BrowserWindow[],
-    focusedWindow: () => state.focused as unknown as BrowserWindow | null,
     screen: screen as never,
     getSetting: (key) => settings.get(key),
     setSetting,
