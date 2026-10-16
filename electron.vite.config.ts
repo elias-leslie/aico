@@ -5,7 +5,8 @@ import { contentSecurityPolicy } from './electron/main/csp'
 
 // The packaged renderer loads from file://, where Electron never applies a
 // response-header CSP, so production builds carry the policy as a <meta> tag.
-// main/index.ts still sets the matching header for any non-file load. Dev is
+// main/hotkeys.ts (installCsp) still sets the matching header for any
+// non-file load. Dev is
 // left alone: Vite's HMR needs inline scripts and its own websocket. Voice is
 // the only remote connection and its service is loopback-only. Chromium's CSP
 // host grammar has no IPv6 literals: `ws://[::1]:*` is rejected as invalid and

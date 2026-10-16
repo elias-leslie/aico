@@ -7,7 +7,6 @@ import type { BrowserWindow, Menu, Screen } from 'electron'
 import { PERSONAL_WORKSPACE_ID } from './project'
 import type { SessionDescriptor } from './tether-client'
 import type { Bounds, ViewRow } from './views'
-import type { WindowLayout } from './window-layout'
 import type { PendingCreate, WindowRegistry } from './window-registry'
 
 interface BrowserWindowCtor {
@@ -42,7 +41,13 @@ interface WindowsDeps {
     | 'legacyEntries'
     | 'forget'
   >
-  layout: Pick<WindowLayout, 'placeNew' | 'persist' | 'scheduleWrite' | 'retileDisplay'>
+  layout: {
+    /** Where a new window goes when tiling is on; null leaves it to the caller. */
+    placeNew(): Bounds | null
+    persist(win: BrowserWindow): void
+    scheduleWrite(): void
+    retileDisplay(displayId: number): void
+  }
   views: {
     ensureView(id: string, open?: boolean): ViewRow
     setOpen(id: string, open: boolean): void

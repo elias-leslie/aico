@@ -50,7 +50,8 @@ import { createWindows } from './windows'
 
 // The composition root: it builds every feature module, hands each the others
 // it needs as closures, and runs startup and quit in order. No feature module
-// imports another; this file is the only place they meet.
+// imports another, not even for a type (each declares what it needs of the
+// others structurally); this file is the only place they meet.
 
 const config = readConfig(process.env, homedir(), process.getuid?.())
 // The single-instance lock and the process listeners, before anything else.
@@ -76,8 +77,9 @@ const tether = new TetherClient(tetherSocketPath())
 const catalog: SessionCatalog = createSessionCatalog()
 
 // Which window shows which session, where windows go, and the windows
-// themselves. The hooks run, in this order, what other parts of index.ts do
-// when a window loads, focuses, blurs or goes away.
+// themselves. The hooks run, in this order, what the other feature modules
+// (terminal, window chrome, ambient, attention, selection) do when a window
+// loads, focuses, blurs or goes away.
 const registry = new WindowRegistry(BrowserWindow)
 const layout = createWindowLayout({
   registry,
