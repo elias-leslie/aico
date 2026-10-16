@@ -129,10 +129,18 @@ class FakeEl {
   style = { setProperty: (k: string, v: string) => this.props.set(k, v) }
   classList = {
     add: (c: string) => this.classes.add(c),
-    remove: (c: string) => this.classes.delete(c),
+    remove: (...cs: string[]) => {
+      for (const c of cs) this.classes.delete(c)
+    },
     contains: (c: string) => this.classes.has(c),
   }
-  addEventListener() {}
+  listeners = 0
+  addEventListener() {
+    this.listeners++
+  }
+  removeEventListener() {
+    this.listeners--
+  }
   getBoundingClientRect() {
     return { left: 10, top: 6, width: 30, height: 20, right: 40, bottom: 26 }
   }
@@ -345,5 +353,77 @@ describe('a motion owns the gaze until it ends', () => {
     vi.advanceTimersByTime(800)
     expect(f.motion()).toBe('nudge')
     expect(f.gaze()).toEqual(NUDGE)
+  })
+})
+
+describe('timers', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  it('an unfocused window runs only the blink and snore timers', () => {
+    face()
+    expect(vi.getTimerCount()).toBe(2)
+    vi.advanceTimersByTime(60_000)
+    expect(vi.getTimerCount()).toBeLessThanOrEqual(3) // blink, snore, a blink's reopen
+  })
+
+  it('the glance and exchange timers start on focus and stop when it goes', () => {
+    const f = face()
+    f.eyes.setFocused(true) // + glance, exchange, and the surprised look's end
+    expect(vi.getTimerCount()).toBe(5)
+    vi.advanceTimersByTime(400)
+    f.eyes.setFocused(false)
+    expect(vi.getTimerCount()).toBeLessThanOrEqual(3)
+    vi.advanceTimersByTime(120_000)
+    expect(vi.getTimerCount()).toBeLessThanOrEqual(3)
+  })
+
+  it('an unfocused window never glances', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0) // every glance would fire
+    const f = face()
+    vi.advanceTimersByTime(30_000)
+    expect(f.gaze()).toEqual({ x: undefined, y: undefined })
+  })
+
+  it('a focused window glances off-centre and back on the same cadence', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0) // glance fires, angle 0, radius 0.8
+    const f = face({ focused: true })
+    vi.advanceTimersByTime(2199)
+    expect(f.gaze()).toEqual({ x: undefined, y: undefined })
+    vi.advanceTimersByTime(1)
+    expect(f.gaze()).toEqual({ x: '0.8px', y: '0.0px' })
+    vi.advanceTimersByTime(500) // back to centre after 500-1300 ms
+    expect(f.gaze()).toEqual({ x: '0.0px', y: '0.0px' })
+    vi.advanceTimersByTime(1400) // next glance 1.9-4.6 s after the last
+    expect(f.gaze()).toEqual({ x: '0.8px', y: '0.0px' })
+  })
+
+  it('asleep, a "z" still drifts up every few seconds', () => {
+    const f = face()
+    vi.advanceTimersByTime(6 * 60_000 + 4200)
+    expect(f.root.dataset.mood).toBe('asleep')
+    expect(f.root.classes.has('snore')).toBe(true)
+  })
+
+  it('dispose clears every timer, the click handler and a half-played blink', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.9) // nudge
+    const f = face({ focused: true })
+    f.eyes.setFocused(false)
+    f.eyes.setAttention('blocked', 'rising')
+    f.eyes.setBusy(true)
+    vi.advanceTimersByTime(800)
+    f.eyes.setBusy(true) // reading saccades
+    f.eyes.lookAtPeer(100, 100, 50, 1000)
+    f.root.classes.add('blink')
+    expect(vi.getTimerCount()).toBeGreaterThan(4)
+    f.eyes.dispose()
+    expect(vi.getTimerCount()).toBe(0)
+    expect(f.root.listeners).toBe(0)
+    expect(f.root.classes.has('blink')).toBe(false)
+    expect(f.motion()).toBeNull()
   })
 })

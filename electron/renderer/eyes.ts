@@ -162,6 +162,11 @@ export class Eyes {
   }
   private lastMotion: Motion | null = null
   private motionTimer: number | undefined
+  /** The idle glance and eye-exchange chains; they run only while focused. */
+  private glanceTimer: number | undefined
+  private exchangeTimer: number | undefined
+  /** Every pending timer, so dispose() can clear them all. */
+  private readonly timers = new Set<number>()
   /** A motion owns the gaze until it ends. */
   private performing = false
   /** Which motion the pending dart and end timers belong to. */
@@ -175,12 +180,50 @@ export class Eyes {
     this.eyes = [...root.querySelectorAll<HTMLElement>('.eye')]
     this.bubble = root.querySelector<HTMLElement>('.bubble')
     root.addEventListener('click', this.boop)
-    window.setTimeout(() => this.blink(), 1500 + Math.random() * 2500)
-    window.setTimeout(() => this.glance(), 2200)
-    window.setInterval(() => this.settle(), 15_000)
-    window.setTimeout(() => this.snore(), 4000)
-    this.scheduleExchange()
+    this.later(() => this.blink(), 1500 + Math.random() * 2500)
+    // snore() also refreshes the resting mood every few seconds (sleepy, asleep).
+    this.later(() => this.snore(), 4000)
+    if (this.focused) this.startFocusedChains(2200, this.exchangeDelay())
     this.settle()
+  }
+
+  /** Stop for good: every timer, the click handler, and any half-played blink. */
+  dispose(): void {
+    for (const id of this.timers) window.clearTimeout(id)
+    this.timers.clear()
+    this.root.removeEventListener('click', this.boop)
+    this.root.classList.remove('blink', 'snore', ...MOTIONS)
+    this.eyes[0]?.classList.remove('wink')
+  }
+
+  private later(fn: () => void, ms: number): number {
+    const id = window.setTimeout(() => {
+      this.timers.delete(id)
+      fn()
+    }, ms)
+    this.timers.add(id)
+    return id
+  }
+
+  private cancel(id: number | undefined): void {
+    if (id === undefined) return
+    window.clearTimeout(id)
+    this.timers.delete(id)
+  }
+
+  /** The idle glance and the eyes looking at each other only show while
+   * focused, so their timers run only then. */
+  private startFocusedChains(glanceIn: number, exchangeIn: number): void {
+    this.stopFocusedChains()
+    this.glanceTimer = this.later(() => this.glance(), glanceIn)
+    this.exchangeTimer = this.later(() => this.exchange(), exchangeIn)
+  }
+
+  private stopFocusedChains(): void {
+    this.cancel(this.glanceTimer)
+    this.cancel(this.exchangeTimer)
+    this.glanceTimer = undefined
+    this.exchangeTimer = undefined
   }
 
   /** Tint the irises with the TUI's accent so the face matches its mark. */
@@ -213,8 +256,8 @@ export class Eyes {
     if (this.reading || this.calm.matches) return
     this.lookingDown = true
     this.look(-0.6, GAZE_MAX)
-    window.clearTimeout(this.inputTimer)
-    this.inputTimer = window.setTimeout(() => {
+    this.cancel(this.inputTimer)
+    this.inputTimer = this.later(() => {
       this.lookingDown = false
       if (!this.reading) this.look(0, 0)
     }, 1400)
@@ -222,7 +265,16 @@ export class Eyes {
 
   setFocused(focused: boolean): void {
     const gained = focused && !this.focused
+    const lost = !focused && this.focused
     this.focused = focused
+    // Fresh random delays, part way into a period as if the chains had been
+    // running all along, so windows focused in turn don't glance in step.
+    if (gained)
+      this.startFocusedChains(
+        Math.random() * this.glanceDelay(),
+        Math.random() * this.exchangeDelay(),
+      )
+    if (lost) this.stopFocusedChains()
     // Focus is the owner looking: everything clears at once, before main says so.
     if (gained) this.setAttention('none', 'fresh')
     if (gained) {
@@ -269,18 +321,18 @@ export class Eyes {
     this.held = applyAttention(document.documentElement, this.bubble, mode, stage)
     this.settle()
     if (mode !== 'blocked') {
-      window.clearTimeout(this.motionTimer)
+      this.cancel(this.motionTimer)
       this.motionTimer = undefined
       this.endMotion()
       return
     }
-    if (was.mode !== 'blocked') window.setTimeout(() => this.perform(), 400)
+    if (was.mode !== 'blocked') this.later(() => this.perform(), 400)
     if (stage !== 'fresh' && this.motionTimer === undefined) this.scheduleMotion()
   }
 
   private scheduleMotion(): void {
     const [lo, hi] = MOTION_EVERY_MS
-    this.motionTimer = window.setTimeout(
+    this.motionTimer = this.later(
       () => {
         this.motionTimer = undefined
         if (this.attention.mode !== 'blocked') return
@@ -307,16 +359,16 @@ export class Eyes {
       this.settle()
       const darts = [-GAZE_MAX, GAZE_MAX, -GAZE_MAX, GAZE_MAX, -GAZE_MAX * 0.6]
       darts.forEach((x, i) => {
-        window.setTimeout(() => mine() && this.look(x, 0), i * 170)
+        this.later(() => mine() && this.look(x, 0), i * 170)
       })
-      window.setTimeout(() => mine() && this.look(0, 0), darts.length * 170)
+      this.later(() => mine() && this.look(0, 0), darts.length * 170)
     } else if (motion === 'nudge') {
       this.look(GAZE_MAX * 0.8, -GAZE_MAX * 0.7)
     } else {
       this.look(0, 0)
     }
     // a motion that was cut short and replaced must not end its successor
-    window.setTimeout(() => turn === this.motionTurn && this.endMotion(), MOTION_MS[motion])
+    this.later(() => turn === this.motionTurn && this.endMotion(), MOTION_MS[motion])
   }
 
   private endMotion(): void {
@@ -348,8 +400,8 @@ export class Eyes {
   private play(mood: Mood, ms: number): void {
     this.transient = { mood, until: Date.now() + ms }
     this.settle()
-    window.clearTimeout(this.transientTimer)
-    this.transientTimer = window.setTimeout(() => {
+    this.cancel(this.transientTimer)
+    this.transientTimer = this.later(() => {
       this.transient = null
       this.settle()
     }, ms)
@@ -370,11 +422,11 @@ export class Eyes {
    * glance up from the work; typing, hovered or sleeping eyes stay put. */
   lookAtPeer(screenX: number, screenY: number, delay: number, hold: number): void {
     const turn = ++this.peerTurn
-    window.setTimeout(() => {
+    this.later(() => {
       if (turn !== this.peerTurn || !this.canGlanceAtPeer()) return
       this.peerUntil = Date.now() + hold
       this.aimAt(screenX, screenY)
-      window.setTimeout(() => {
+      this.later(() => {
         if (turn !== this.peerTurn) return
         this.peerUntil = 0
         // Reading resumes on its own next saccade.
@@ -416,24 +468,28 @@ export class Eyes {
     )
   }
 
-  private scheduleExchange(): void {
+  private exchangeDelay(): number {
     const [lo, hi] = EXCHANGE_EVERY_MS
-    window.setTimeout(() => this.exchange(), lo + Math.random() * (hi - lo))
+    return lo + Math.random() * (hi - lo)
+  }
+
+  private glanceDelay(): number {
+    return 1900 + Math.random() * 2700
   }
 
   /** The eyes look at each other. Any other gaze (cursor, typing, reading)
    * calls look(), which ends the scene where it stands. */
   private exchange(): void {
-    this.scheduleExchange()
+    this.exchangeTimer = this.later(() => this.exchange(), this.exchangeDelay())
     if (!this.focused || !this.atRest() || this.eyes.length < 2) return
     this.exchanging = true
     const scene = exchangeScene(Math.random())
     for (const step of scene) {
-      window.setTimeout(() => {
+      this.later(() => {
         if (this.exchanging && this.atRest()) this.lookEach(step.left, step.right)
       }, step.at)
     }
-    window.setTimeout(
+    this.later(
       () => {
         this.exchanging = false
       },
@@ -460,14 +516,14 @@ export class Eyes {
     const step = (): void => {
       if (!this.reading) return
       if (Date.now() < this.peerUntil) {
-        this.readTimer = window.setTimeout(step, this.peerUntil - Date.now() + 60)
+        this.readTimer = this.later(step, this.peerUntil - Date.now() + 60)
         return
       }
       this.gaze = nextReadingGaze(this.gaze, 0.9 + Math.random() * 0.8)
       this.look(this.gaze.x, READING_Y[this.gaze.line] ?? 1)
       // A line return is a longer sweep; word hops are quick.
       const sweep = this.gaze.x === -GAZE_MAX
-      this.readTimer = window.setTimeout(step, sweep ? 420 : 230 + Math.random() * 200)
+      this.readTimer = this.later(step, sweep ? 420 : 230 + Math.random() * 200)
     }
     step()
   }
@@ -475,7 +531,7 @@ export class Eyes {
   private stopReading(): void {
     if (!this.reading) return
     this.reading = false
-    window.clearTimeout(this.readTimer)
+    this.cancel(this.readTimer)
     this.gaze = { x: -GAZE_MAX, line: 0 }
     this.look(0, 0)
     this.settle()
@@ -485,17 +541,17 @@ export class Eyes {
     const mood = this.mood()
     if (mood !== 'asleep' && mood !== 'happy' && mood !== 'content') {
       this.root.classList.add('blink')
-      window.setTimeout(() => this.root.classList.remove('blink'), 110)
+      this.later(() => this.root.classList.remove('blink'), 110)
       // Now and then a double blink, the way people do.
       if (Math.random() < 0.18) {
-        window.setTimeout(() => {
+        this.later(() => {
           this.root.classList.add('blink')
-          window.setTimeout(() => this.root.classList.remove('blink'), 100)
+          this.later(() => this.root.classList.remove('blink'), 100)
         }, 230)
       }
     }
     const heavy = mood === 'sleepy' ? 0.6 : 1
-    window.setTimeout(() => this.blink(), (2600 + Math.random() * 4400) * heavy)
+    this.later(() => this.blink(), (2600 + Math.random() * 4400) * heavy)
   }
 
   /** Idle saccade: while focused and at rest, glance off-centre and back. */
@@ -513,14 +569,14 @@ export class Eyes {
       const a = Math.random() * Math.PI * 2
       const r = 0.8 + Math.random() * (GAZE_MAX - 0.8)
       this.look(Math.cos(a) * r, Math.sin(a) * r)
-      window.setTimeout(
+      this.later(
         () => {
           if (!this.reading && !this.hovering && !this.lookingDown) this.look(0, 0)
         },
         500 + Math.random() * 800,
       )
     }
-    window.setTimeout(() => this.glance(), 1900 + Math.random() * 2700)
+    this.glanceTimer = this.later(() => this.glance(), this.glanceDelay())
   }
 
   /** While asleep, a small "z" drifts up from the face every few seconds. */
@@ -531,7 +587,7 @@ export class Eyes {
       void this.root.offsetWidth // restart the one-shot drift
       this.root.classList.add('snore')
     }
-    window.setTimeout(() => this.snore(), 4200)
+    this.later(() => this.snore(), 4200)
   }
 
   /** Click the face: a happy squint and a wink — or a startled wake-up. */
@@ -546,6 +602,6 @@ export class Eyes {
     const left = this.eyes[0]
     if (!left) return
     left.classList.add('wink')
-    window.setTimeout(() => left.classList.remove('wink'), 260)
+    this.later(() => left.classList.remove('wink'), 260)
   }
 }
