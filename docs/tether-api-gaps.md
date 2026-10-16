@@ -56,9 +56,9 @@ instead. Most were closed by additive v1 changes after the live cutover
    execs Tether's installed copy (`TETHER_ROOT_WATCH` overrides the path).
 8. **Legacy A-Term sessions had no events.** Tether publishes
    `legacy.changed {names}` when the legacy list changes (its own End, any list,
-   and a 15 s poll while legacy sessions exist). Aico closes a legacy window when
-   its name leaves the list. They stay attach-only: no generation, no resize
-   claim, no rename.
+   and a 15 s poll while legacy sessions exist). Aico no longer lists, opens or
+   attaches legacy sessions (none were left), so it ignores this event and the
+   `/v1/legacy-sessions` routes.
 9. **Events carried IDs only.** `session.created` and `session.updated` carry
    the descriptor as `session`; Aico applies it directly and re-lists only when
    an event has none (an older Tether), on `gap`, and on a daemon restart.

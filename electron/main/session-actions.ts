@@ -13,7 +13,6 @@ import {
   traySessionLabel,
 } from './session-catalog'
 import {
-  LEGACY_SESSION_NAME,
   type SessionDescriptor,
   type TetherClient,
   TetherError,
@@ -22,20 +21,12 @@ import {
 import { toolMark } from './tool-marks'
 import type { WindowRegistry } from './window-registry'
 
-const LEGACY_ID_PREFIX = 'legacy:'
 const SESSION_ID = /^[0-9a-f]{8}$/
 
 interface SessionActionsDeps {
   tether: Pick<
     TetherClient,
-    | 'getSession'
-    | 'end'
-    | 'setCoordinator'
-    | 'loadTui'
-    | 'switchProject'
-    | 'rename'
-    | 'diagnostics'
-    | 'legacySessions'
+    'getSession' | 'end' | 'setCoordinator' | 'loadTui' | 'switchProject' | 'rename' | 'diagnostics'
   >
   catalog: Pick<SessionCatalog, 'get' | 'upsert' | 'list'>
   link: {
@@ -45,12 +36,11 @@ interface SessionActionsDeps {
     refreshTools(): Promise<void>
     sessionEnded(id: string, reason: string): void
   }
-  registry: Pick<WindowRegistry, 'forSession' | 'forLegacy' | 'senderSession'>
+  registry: Pick<WindowRegistry, 'forSession' | 'senderSession'>
   windows: {
     openNew(tool: string, projectId: string): unknown
     showAll(): void
     focusOrReopen(id: string): void
-    openLegacy(name: string): void
   }
   projects: Pick<ProjectCatalog, 'listFresh' | 'nameFor'>
   titles(): void
@@ -280,12 +270,10 @@ export function createSessionActions(deps: SessionActionsDeps) {
     // projects. Awaits a stale refresh so the first menu is complete.
     ipcMain.handle('project:list', () => projects.listFresh())
 
-    // Every running Tether session, whichever app created it, plus A-Term's
-    // pre-Tether sessions, which Tether lists for attach only.
+    // Every running Tether session, whichever app created it.
     ipcMain.handle('session:list-openable', async () => {
       await link.refresh()
-      const legacy = await tether.legacySessions().catch(() => [])
-      const sessions = catalog
+      return catalog
         .list()
         .filter((descriptor) => descriptor.status === 'running' || descriptor.status === 'legacy')
         .map((descriptor) => ({
@@ -297,28 +285,8 @@ export function createSessionActions(deps: SessionActionsDeps) {
           status: 'running' as const,
           locallyOpen: Boolean(registry.forSession(descriptor.id)),
         }))
-      return [
-        ...sessions,
-        ...legacy.map((item) => ({
-          id: `${LEGACY_ID_PREFIX}${item.name}`,
-          origin: 'a-term' as const,
-          label: `A-Term ${item.name.slice('summitflow-'.length, 'summitflow-'.length + 8)}`,
-          project: null,
-          tool: 'legacy session',
-          status: 'running' as const,
-          locallyOpen: Boolean(registry.forLegacy(item.name)),
-        })),
-      ]
     })
     ipcMain.handle('session:open', async (_event, id: unknown) => {
-      if (typeof id === 'string' && id.startsWith(LEGACY_ID_PREFIX)) {
-        const name = id.slice(LEGACY_ID_PREFIX.length)
-        if (!LEGACY_SESSION_NAME.test(name)) throw new Error('Invalid session')
-        const listed = await tether.legacySessions()
-        if (!listed.some((item) => item.name === name)) throw new Error('Session is unavailable')
-        windows.openLegacy(name)
-        return
-      }
       if (typeof id !== 'string' || !SESSION_ID.test(id)) throw new Error('Invalid session')
       const descriptor = await tether.getSession(id)
       if (descriptor.status !== 'running' && descriptor.status !== 'legacy')

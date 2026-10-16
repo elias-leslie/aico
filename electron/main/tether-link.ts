@@ -37,8 +37,6 @@ interface LinkHooks {
   tray(): void
   /** The event stream came back after being down (or connected the first time). */
   connected(): void
-  /** Tether's legacy A-Term session names changed. */
-  legacyChanged(names: unknown[]): void
 }
 
 interface TetherLinkDeps {
@@ -124,9 +122,6 @@ export function createTetherLink(deps: TetherLinkDeps) {
       }
       case 'root.updated':
         requestSessionRefresh()
-        break
-      case 'legacy.changed':
-        if (Array.isArray(event.data.names)) hooks.legacyChanged(event.data.names)
         break
       case 'tools.changed':
         void refreshTools().catch(() => {})

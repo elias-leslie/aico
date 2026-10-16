@@ -18,7 +18,7 @@ import type { createTray, refreshTray, setWidgetActivity, TrayHandlers, TrayWidg
 import type { WindowRegistry } from './window-registry'
 
 interface WindowChromeDeps {
-  registry: Pick<WindowRegistry, 'sessionOf' | 'legacyOf' | 'forSession' | 'senderWindow' | 'all'>
+  registry: Pick<WindowRegistry, 'sessionOf' | 'forSession' | 'senderWindow' | 'all'>
   catalog: Pick<SessionCatalog, 'get' | 'upsert' | 'list'>
   tools(): TetherTool[]
   /** Why session control is unavailable, shown at the top of the tray menu. */
@@ -123,22 +123,6 @@ export function createWindowChrome(deps: WindowChromeDeps) {
   function pushTitles(): void {
     for (const win of registry.all()) {
       if (win.isDestroyed()) continue
-      const legacyName = registry.legacyOf(win.id)
-      if (legacyName) {
-        const mark = toolMark('shell')
-        win.webContents.send('win:title', {
-          label: `A-Term ${legacyName.slice('summitflow-'.length, 'summitflow-'.length + 8)}`,
-          name: null,
-          icon: mark.icon,
-          accent: mark.accent,
-          tuiName: 'A-Term session',
-          tuiSlug: 'shell',
-          sessionId: legacyName,
-          coordinator: false,
-          chip: null,
-        })
-        continue
-      }
       const widgetId = registry.sessionOf(win.id)
       const descriptor = widgetId ? catalog.get(widgetId) : undefined
       if (!descriptor) continue

@@ -100,7 +100,6 @@ function setup(o: { list?: SessionDescriptor[]; version?: TetherVersion | Error 
     titles: vi.fn(() => calls.push('titles')),
     tray: vi.fn(() => calls.push('tray')),
     connected: vi.fn(() => calls.push('connected')),
-    legacyChanged: vi.fn((names: unknown[]) => calls.push(`legacyChanged ${names.join(',')}`)),
   }
   const link = createTetherLink({
     tether: tether as unknown as TetherClient,
@@ -172,12 +171,11 @@ describe('Tether events', () => {
     await vi.waitFor(() => expect(tether.listSessions).toHaveBeenCalledTimes(1))
   })
 
-  it('passes legacy name changes, tool and project changes through', async () => {
+  it('ignores legacy name changes and passes tool and project changes through', async () => {
     const { connect, calls, tether, link, projects } = setup()
     const subscriber = connect()
     subscriber.onEvent(event('legacy.changed', { names: ['x', 'y'] }))
-    subscriber.onEvent(event('legacy.changed', { names: 'nope' }))
-    expect(calls).toEqual(['legacyChanged x,y'])
+    expect(calls).toEqual([])
     subscriber.onEvent(event('tools.changed'))
     await vi.waitFor(() => expect(link.tools().map((t) => t.slug)).toEqual(['a', 'b']))
     expect(tether.tools).toHaveBeenCalledTimes(1)

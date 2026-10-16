@@ -31,15 +31,7 @@ interface WindowHooks {
 interface WindowsDeps {
   registry: Pick<
     WindowRegistry,
-    | 'bindSession'
-    | 'bindLegacy'
-    | 'setPending'
-    | 'clearPending'
-    | 'sessionOf'
-    | 'forSession'
-    | 'forLegacy'
-    | 'legacyEntries'
-    | 'forget'
+    'bindSession' | 'setPending' | 'clearPending' | 'sessionOf' | 'forSession' | 'forget'
   >
   layout: {
     /** Where a new window goes when tiling is on; null leaves it to the caller. */
@@ -271,17 +263,6 @@ export function createWindows(deps: WindowsDeps) {
     openNew: newWidget,
     focusOrReopen,
 
-    openLegacy: (name: string): void => {
-      const existing = registry.forLegacy(name)
-      if (existing) {
-        existing.show()
-        existing.focus()
-        return
-      }
-      const win = createWidgetWindow(null, null)
-      registry.bindLegacy(win.id, name)
-    },
-
     restoreOnLaunch: (): void => {
       const live = views.listViews().filter((view) => deps.isLive(view.id))
       const open = live.filter((view) => view.open)
@@ -336,17 +317,6 @@ export function createWindows(deps: WindowsDeps) {
       if (freed && !deps.isQuitting()) {
         const displayId = screen.getDisplayMatching(freed).id
         setImmediate(() => layout.retileDisplay(displayId))
-      }
-    },
-
-    /** Tether announced the legacy list; close windows whose session is gone,
-     * as an ended Tether session closes its window. */
-    closeEndedLegacy: (names: unknown[]): void => {
-      const live = new Set(names.filter((name): name is string => typeof name === 'string'))
-      for (const [winId, name] of registry.legacyEntries()) {
-        if (live.has(name)) continue
-        const win = deps.BrowserWindow.fromId(winId)
-        if (win && !win.isDestroyed()) win.destroy()
       }
     },
   }

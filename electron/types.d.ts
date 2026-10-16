@@ -3,8 +3,7 @@
 import type { AicoTerminalFontSettings } from './shared/font-settings'
 
 export interface OpenableSession {
-  /** Tether session id (8 lowercase hex), or `legacy:<name>` for a pre-Tether
-   * A-Term session that Tether lists for attach only. */
+  /** Tether session id (8 lowercase hex). */
   id: string
   /** The app or contract that started it; display only. */
   origin: 'aico' | 'a-term' | 'cli' | 'root'

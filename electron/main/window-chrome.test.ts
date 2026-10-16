@@ -47,7 +47,6 @@ function descriptor(id: string, extra: Partial<SessionDescriptor> = {}): Session
   }
 }
 
-const LEGACY = 'summitflow-1234abcd-0000-0000-0000-000000000000'
 const codex: TetherTool = {
   slug: 'codex',
   name: 'Codex',
@@ -97,12 +96,11 @@ function setup(o: { windows?: FakeWindow[]; quitting?: boolean } = {}) {
 const asWin = (w: FakeWindow) => w as unknown as BrowserWindow
 
 describe('pushTitles', () => {
-  it('pushes every window its title and schedules one layout write', () => {
+  it('pushes every session window its title and schedules one layout write', () => {
     const win1 = fakeWindow(1)
     const win2 = fakeWindow(2)
     const { chrome, registry, catalog, layout } = setup({ windows: [win1, win2] })
     registry.bindSession(1, 'aaaaaaaa')
-    registry.bindLegacy(2, LEGACY)
     catalog.upsert(descriptor('aaaaaaaa', { name: 'Docs', label: 'Docs' }))
 
     chrome.pushTitles()
@@ -118,19 +116,9 @@ describe('pushTitles', () => {
       coordinator: false,
       chip: null,
     })
-    expect(win2.webContents.send).toHaveBeenCalledWith(
-      'win:title',
-      expect.objectContaining({
-        label: 'A-Term 1234abcd',
-        name: null,
-        tuiName: 'A-Term session',
-        tuiSlug: 'shell',
-        sessionId: LEGACY,
-        coordinator: false,
-        chip: null,
-      }),
-    )
-    expect(layout.noteCoordinator).toHaveBeenCalledTimes(1) // not for the legacy window
+    // Window 2 has no session yet (Tether is still creating it): no title.
+    expect(win2.webContents.send).not.toHaveBeenCalledWith('win:title', expect.anything())
+    expect(layout.noteCoordinator).toHaveBeenCalledTimes(1)
     expect(layout.noteCoordinator).toHaveBeenCalledWith(win1, false)
     expect(layout.scheduleWrite).toHaveBeenCalledTimes(1)
   })

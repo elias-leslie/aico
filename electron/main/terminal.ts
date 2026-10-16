@@ -43,19 +43,11 @@ export function clampSize(size: PtySize): PtySize {
 }
 
 interface TerminalDeps {
-  tether: Pick<TetherClient, 'createSession' | 'attach' | 'legacyAttach' | 'resizeClaim'>
+  tether: Pick<TetherClient, 'createSession' | 'attach' | 'resizeClaim'>
   catalog: Pick<SessionCatalog, 'get' | 'upsert'>
   registry: Pick<
     WindowRegistry,
-    | 'sessionOf'
-    | 'legacyOf'
-    | 'pending'
-    | 'hasSession'
-    | 'hasLegacy'
-    | 'senderWindow'
-    | 'senderSession'
-    | 'byId'
-    | 'all'
+    'sessionOf' | 'pending' | 'hasSession' | 'senderWindow' | 'senderSession' | 'byId' | 'all'
   >
   /** A new session's window now shows it (windows.bind). */
   bind(win: BrowserWindow, descriptor: SessionDescriptor): void
@@ -138,12 +130,6 @@ export function createTerminal(deps: TerminalDeps) {
       ptys.delete(winId)
     }
     awaitingTether.delete(winId)
-
-    const legacyName = registry.legacyOf(winId)
-    if (legacyName) {
-      await startLegacyPty(win, legacyName, size, stillCurrent)
-      return
-    }
 
     let widgetId = registry.sessionOf(winId)
     if (!widgetId) {
@@ -274,44 +260,6 @@ export function createTerminal(deps: TerminalDeps) {
     })
   }
 
-  /** Attach a legacy A-Term session. Tether gives no generation for it, so there
-   * is no resize claim; the attach client sizes the window as tmux decides. */
-  async function startLegacyPty(
-    win: BrowserWindow,
-    name: string,
-    size: PtySize,
-    stillCurrent: () => boolean,
-  ): Promise<void> {
-    const winId = win.id
-    let target: AttachTarget
-    try {
-      target = await tether.legacyAttach(name)
-    } catch (error) {
-      if (error instanceof TetherUnavailable) awaitingTether.set(winId, size)
-      if (stillCurrent()) writeNotice(win, describeFailure('Could not attach', error))
-      return
-    }
-    if (!stillCurrent()) return
-    const pty = deps.spawnPty(target.argv[0], target.argv.slice(1), {
-      name: 'xterm-256color',
-      cols: size.cols,
-      rows: size.rows,
-      cwd: deps.env.HOME,
-      env: attachEnvironment(deps.env, target),
-    })
-    pty.onData((data) => {
-      if (!win.isDestroyed()) win.webContents.send('pty:data', data)
-    })
-    pty.onExit(() => {
-      if (ptys.get(winId) === pty) {
-        ptys.delete(winId)
-        attachTargets.delete(winId)
-      }
-    })
-    ptys.set(winId, pty)
-    attachTargets.set(winId, target)
-  }
-
   function resumeAwaitingAttaches(): void {
     for (const [winId, size] of awaitingTether) {
       const win = registry.byId(winId)
@@ -358,11 +306,11 @@ export function createTerminal(deps: TerminalDeps) {
     })
 
     // The renderer asks once, before it starts its terminal; the answer holds
-    // for this window until it reloads. Legacy A-Term sessions stay on attach.
+    // for this window until it reloads.
     ipcMain.handle('terminal:transport', (event): TerminalTransport => {
       const win = registry.senderWindow(event.sender)
       if (!win) return 'attach'
-      const transport = registry.hasLegacy(win.id) ? 'attach' : configuredTransport()
+      const transport = configuredTransport()
       transportOf.set(win.id, transport)
       return transport
     })
@@ -372,8 +320,7 @@ export function createTerminal(deps: TerminalDeps) {
     ipcMain.on('terminal:toggle-transport', () => {
       deps.setSetting(TRANSPORT_SETTING, configuredTransport() === 'control' ? 'attach' : 'control')
       for (const win of registry.all()) {
-        if (!win.isDestroyed() && (registry.hasSession(win.id) || registry.hasLegacy(win.id)))
-          win.webContents.reload()
+        if (!win.isDestroyed() && registry.hasSession(win.id)) win.webContents.reload()
       }
     })
 

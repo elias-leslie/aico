@@ -11,8 +11,6 @@ import {
 } from './tether-client'
 import { WindowRegistry } from './window-registry'
 
-const LEGACY = 'summitflow-1234abcd-0000-0000-0000-000000000000'
-
 function descriptor(id: string, extra: Partial<SessionDescriptor> = {}): SessionDescriptor {
   return {
     id,
@@ -121,7 +119,6 @@ function setup(o: { forced?: 'attach' | 'control'; setting?: string } = {}) {
   const tether = {
     createSession: vi.fn(async (_input: unknown) => descriptor('bbbbbbbb')),
     attach: vi.fn(async (_id: string) => target()),
-    legacyAttach: vi.fn(async (_name: string) => target()),
     resizeClaim: vi.fn(async () => ({ applied: true }) as { applied: boolean; reason?: string }),
   }
   const state = { replacing: new Set<string>(), quitting: false, arranged: false }
@@ -227,11 +224,9 @@ describe('terminal transport', () => {
     ])
   })
 
-  it('tells session windows the setting, legacy windows attach, and records it per window', async () => {
+  it('tells every window the setting, and records it per window', async () => {
     const s = setup()
-    s.registry.bindLegacy(2, LEGACY)
     expect(s.handle.get('terminal:transport')?.(s.from(s.all[0]))).toBe('control')
-    expect(s.handle.get('terminal:transport')?.(s.from(s.all[1]))).toBe('attach')
     expect(s.handle.get('terminal:transport')?.({ sender: {} })).toBe('attach')
     expect(s.handle.get('terminal:transport-setting')?.()).toBe('control')
     // Window 1 was told control, so its link is a control-mode client.
@@ -260,10 +255,10 @@ describe('terminal transport', () => {
     ).toBe('control')
   })
 
-  it('switching the transport saves it and reloads only session and legacy windows', () => {
+  it('switching the transport saves it and reloads only session windows', () => {
     const s = setup()
     s.registry.bindSession(1, 'aaaaaaaa')
-    s.registry.bindLegacy(2, LEGACY)
+    s.registry.bindSession(2, 'bbbbbbbb')
     s.on.get('terminal:toggle-transport')?.()
     expect(s.deps.setSetting).toHaveBeenCalledWith('terminal-transport', 'attach')
     expect(s.all[0].webContents.reload).toHaveBeenCalledTimes(1)
@@ -437,18 +432,6 @@ describe('starting a session', () => {
     s.terminal.resumeAwaiting()
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(s.tether.attach).toHaveBeenCalledTimes(2)
-  })
-
-  it('attaches a legacy A-Term session with a PTY and no size claim', async () => {
-    const s = setup()
-    s.registry.bindLegacy(2, LEGACY)
-    s.on.get('pty:start')?.(s.from(s.all[1]), { cols: 100, rows: 30 })
-    await vi.waitFor(() => expect(s.links).toHaveLength(1))
-    expect(s.tether.legacyAttach).toHaveBeenCalledWith(LEGACY)
-    s.links[0].emitData('x')
-    expect(s.all[1].webContents.send).toHaveBeenCalledWith('pty:data', 'x')
-    await new Promise((resolve) => setTimeout(resolve, 0))
-    expect(s.tether.resizeClaim).not.toHaveBeenCalled()
   })
 
   it('a link that exits re-lists sessions, except while quitting', async () => {

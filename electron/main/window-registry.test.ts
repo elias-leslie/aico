@@ -39,16 +39,9 @@ describe('WindowRegistry', () => {
     expect(registry.forSession('bbbbbbbb')).toBeUndefined()
   })
 
-  it('keeps legacy A-Term windows apart from session windows', () => {
+  it('lists only the windows bound to a session', () => {
     const { registry, wins } = setup([1, 2])
     registry.bindSession(1, 'aaaaaaaa')
-    registry.bindLegacy(2, 'summitflow-1234abcd')
-    expect(registry.legacyOf(2)).toBe('summitflow-1234abcd')
-    expect(registry.hasLegacy(2)).toBe(true)
-    expect(registry.hasLegacy(1)).toBe(false)
-    expect(registry.forLegacy('summitflow-1234abcd')).toBe(wins[1])
-    expect(registry.forLegacy('summitflow-other')).toBeUndefined()
-    expect(registry.legacyEntries()).toEqual([[2, 'summitflow-1234abcd']])
     expect(registry.sessionWindows()).toEqual([wins[0]])
   })
 
@@ -65,13 +58,11 @@ describe('WindowRegistry', () => {
     registry.bindSession(2, 'aaaaaaaa')
     registry.bindSession(1, 'aaaaaaaa')
     registry.bindSession(3, 'cccccccc')
-    registry.bindLegacy(3, 'summitflow-x')
     expect(registry.forSession('aaaaaaaa')).toBe(wins[1])
     wins[1]?.destroy()
     expect(registry.forSession('aaaaaaaa')).toBe(wins[0])
     wins[2]?.destroy()
     expect(registry.forSession('cccccccc')).toBeUndefined()
-    expect(registry.forLegacy('summitflow-x')).toBeUndefined()
     expect(registry.sessionWindows()).toEqual([wins[0]])
   })
 
@@ -99,12 +90,10 @@ describe('WindowRegistry', () => {
   it('forgets every binding of a closed window', () => {
     const { registry } = setup([1, 2])
     registry.bindSession(1, 'aaaaaaaa')
-    registry.bindLegacy(1, 'summitflow-x')
     registry.setPending(1, { tool: 'shell', projectId: 'p' })
     registry.bindSession(2, 'bbbbbbbb')
     registry.forget(1)
     expect(registry.sessionOf(1)).toBeUndefined()
-    expect(registry.legacyOf(1)).toBeUndefined()
     expect(registry.pending(1)).toBeUndefined()
     expect(registry.sessionOf(2)).toBe('bbbbbbbb')
   })

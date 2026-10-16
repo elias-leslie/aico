@@ -97,18 +97,6 @@ export interface AttachTarget {
   unset: string[]
 }
 
-/** A pre-Tether A-Term session (`summitflow-<uuid>` on the default tmux
- * server). Tether lists it for attach and End only; it has no generation. */
-export interface LegacySession {
-  name: string
-  aTermSessionId: string | null
-  createdAt: number
-  attachedClients: number
-}
-
-export const LEGACY_SESSION_NAME =
-  /^summitflow-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
-
 export interface TetherTool {
   slug: string
   name: string
@@ -433,24 +421,6 @@ export class TetherClient {
         timeoutMs: 30_000,
       }),
     )
-  }
-
-  async legacySessions(): Promise<LegacySession[]> {
-    const { items } = await this.json<{ items: LegacySession[] }>('GET', '/v1/legacy-sessions')
-    return Array.isArray(items)
-      ? items.filter(
-          (item) => typeof item?.name === 'string' && LEGACY_SESSION_NAME.test(item.name),
-        )
-      : []
-  }
-
-  /** Attach argv for a legacy A-Term session. It has no generation (`''`). */
-  async legacyAttach(name: string): Promise<AttachTarget> {
-    const body = await this.json<Omit<AttachTarget, 'generation'>>(
-      'GET',
-      `/v1/legacy-sessions/${encodeURIComponent(name)}/attach`,
-    )
-    return parseAttachTarget({ ...body, generation: '' })
   }
 
   inject(

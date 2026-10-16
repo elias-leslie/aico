@@ -1,7 +1,7 @@
-// Which Electron window shows which Tether session, which pre-Tether A-Term
-// session, or which session still being created, and the one place features
-// look windows up. Nearly every feature reads this map; it holds no Electron
-// value of its own, only the lookups it is given (BrowserWindow's statics).
+// Which Electron window shows which Tether session, or which session still
+// being created, and the one place features look windows up. Nearly every
+// feature reads this map; it holds no Electron value of its own, only the
+// lookups it is given (BrowserWindow's statics).
 
 import type { BrowserWindow, WebContents } from 'electron'
 
@@ -23,18 +23,11 @@ export class WindowRegistry {
   // no id until Tether creates it at the window's first grid size.
   private readonly widgetOf = new Map<number, string>()
   private readonly pendingCreates = new Map<number, PendingCreate>()
-  // Windows showing a pre-Tether A-Term session (`summitflow-<uuid>` on the
-  // default tmux server): attach-only, no generation, no view row, no actions.
-  private readonly legacyNames = new Map<number, string>()
 
   constructor(private readonly bw: WindowLookup) {}
 
   bindSession = (winId: number, sessionId: string): void => {
     this.widgetOf.set(winId, sessionId)
-  }
-
-  bindLegacy = (winId: number, name: string): void => {
-    this.legacyNames.set(winId, name)
   }
 
   setPending = (winId: number, pending: PendingCreate): void => {
@@ -49,11 +42,7 @@ export class WindowRegistry {
 
   sessionOf = (winId: number): string | undefined => this.widgetOf.get(winId)
 
-  legacyOf = (winId: number): string | undefined => this.legacyNames.get(winId)
-
   hasSession = (winId: number): boolean => this.widgetOf.has(winId)
-
-  hasLegacy = (winId: number): boolean => this.legacyNames.has(winId)
 
   /** The first live window bound to this session, in binding order. */
   forSession = (id: string): BrowserWindow | undefined => {
@@ -65,18 +54,6 @@ export class WindowRegistry {
     }
     return undefined
   }
-
-  forLegacy = (name: string): BrowserWindow | undefined => {
-    for (const [winId, legacy] of this.legacyNames) {
-      if (legacy !== name) continue
-      const win = this.bw.fromId(winId)
-      if (win && !win.isDestroyed()) return win
-    }
-    return undefined
-  }
-
-  /** A copy, so callers may destroy windows while walking it. */
-  legacyEntries = (): [number, string][] => [...this.legacyNames]
 
   /** Every live window bound to a Tether session. */
   sessionWindows = (): BrowserWindow[] =>
@@ -102,7 +79,6 @@ export class WindowRegistry {
 
   forget = (winId: number): void => {
     this.widgetOf.delete(winId)
-    this.legacyNames.delete(winId)
     this.pendingCreates.delete(winId)
   }
 }

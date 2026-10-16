@@ -176,7 +176,6 @@ const link = createTetherLink({
     titles: () => chrome.pushTitles(),
     tray: () => chrome.syncTray(),
     connected: () => terminal.resumeAwaiting(),
-    legacyChanged: (names) => windows.closeEndedLegacy(names),
   },
 })
 

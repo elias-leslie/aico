@@ -205,15 +205,6 @@ describe('windows: opening', () => {
     expect(registry.sessionOf(win.id)).toBe('bbbbbbbb')
     expect(registry.pending(win.id)).toBeUndefined()
   })
-
-  it('opens a legacy A-Term window once', () => {
-    const { windows, registry, only } = setup()
-    windows.openLegacy('summitflow-1234abcd')
-    windows.openLegacy('summitflow-1234abcd')
-    const win = only()
-    expect(registry.legacyOf(win.id)).toBe('summitflow-1234abcd')
-    expect(win.focus).toHaveBeenCalledTimes(1)
-  })
 })
 
 describe('windows: focus and blur', () => {
@@ -337,14 +328,6 @@ describe('windows: closing', () => {
     windows.focusOrReopen('aaaaaaaa')
     windows.destroyFor('aaaaaaaa')
     expect(only().destroyed).toBe(true)
-  })
-
-  it('closes legacy windows whose session is no longer listed', () => {
-    const { windows } = setup()
-    windows.openLegacy('summitflow-keep')
-    windows.openLegacy('summitflow-gone')
-    windows.closeEndedLegacy(['summitflow-keep', 42])
-    expect(FakeWindow.all.map((w) => w.destroyed)).toEqual([false, true])
   })
 })
 

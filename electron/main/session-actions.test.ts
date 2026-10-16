@@ -6,8 +6,6 @@ import { createSessionCatalog } from './session-catalog'
 import { type SessionDescriptor, TetherError, type TetherTool } from './tether-client'
 import { WindowRegistry } from './window-registry'
 
-const LEGACY = 'summitflow-1234abcd-0000-0000-0000-000000000000'
-
 function descriptor(id: string, extra: Partial<SessionDescriptor> = {}): SessionDescriptor {
   return {
     id,
@@ -82,7 +80,6 @@ function setup() {
     switchProject: vi.fn(async (id: string) => descriptor(id)),
     rename: vi.fn(async (id: string, _g: string, name: string | null) => descriptor(id, { name })),
     diagnostics: vi.fn(async (id: string) => ({ sessionId: id })),
-    legacySessions: vi.fn(async () => [{ name: LEGACY }]),
   }
   const link = {
     tools: () => [codex],
@@ -95,7 +92,6 @@ function setup() {
     openNew: vi.fn(),
     showAll: vi.fn(),
     focusOrReopen: vi.fn(),
-    openLegacy: vi.fn(),
   }
   const titles = vi.fn()
   const tray = vi.fn()
@@ -288,18 +284,17 @@ describe('session actions', () => {
     expect(windows.focusOrReopen).toHaveBeenCalledWith('bbbbbbbb')
   })
 
-  it('opens a legacy A-Term session only when Tether lists it', async () => {
+  it('rejects an old pre-Tether A-Term id', async () => {
     const { handle, windows, tether } = setup()
     const open = handle.get('session:open')
-    await expect(open?.({}, 'legacy:bogus')).rejects.toThrow('Invalid session')
-    tether.legacySessions.mockResolvedValueOnce([])
-    await expect(open?.({}, `legacy:${LEGACY}`)).rejects.toThrow('Session is unavailable')
-    expect(windows.openLegacy).not.toHaveBeenCalled()
-    await open?.({}, `legacy:${LEGACY}`)
-    expect(windows.openLegacy).toHaveBeenCalledWith(LEGACY)
+    await expect(
+      open?.({}, 'legacy:summitflow-1234abcd-0000-0000-0000-000000000000'),
+    ).rejects.toThrow('Invalid session')
+    expect(tether.getSession).not.toHaveBeenCalled()
+    expect(windows.focusOrReopen).not.toHaveBeenCalled()
   })
 
-  it('lists openable sessions with legacy ones after them', async () => {
+  it('lists openable sessions', async () => {
     const { handle, link } = setup()
     const rows = (await handle.get('session:list-openable')?.()) as { id: string }[]
     expect(link.refresh).toHaveBeenCalledTimes(1)
@@ -309,11 +304,6 @@ describe('session actions', () => {
         tool: 'Codex',
         project: 'Docs',
         locallyOpen: true,
-      }),
-      expect.objectContaining({
-        id: `legacy:${LEGACY}`,
-        label: 'A-Term 1234abcd',
-        locallyOpen: false,
       }),
     ])
   })
