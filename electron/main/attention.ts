@@ -4,6 +4,8 @@
 // - Blocked (a permission prompt or a question) while the window is not
 //   focused: flash the window and show the tray's "needs you" icon. If it is
 //   still blocked and unfocused 2 minutes later, send one phone push.
+//   Nightshift keeps repeats for the same session quiet for an hour, so Aico
+//   keeps no cooldown of its own.
 // - Done (working -> idle) while unfocused: flash only, and only after the
 //   window has stayed unfocused and idle for 30 s. No tray change.
 // - Focusing the window, or the session leaving the state, clears both.
@@ -21,14 +23,11 @@ export const DONE_FLASH_MS = 30_000
 /** Blocked and unseen this long: the window's border and titlebar turn amber. */
 export const RISE_AFTER_MS = 30_000
 export const PUSH_AFTER_MS = 2 * 60_000
-/** At most one push per session in this window. */
-export const PUSH_COOLDOWN_MS = 15 * 60_000
 
 export type AttentionMode = 'none' | 'blocked' | 'finished'
 export type AttentionStage = 'fresh' | 'rising' | 'urgent'
 
 export interface AttentionDeps {
-  now(): number
   setTimer(fn: () => void, ms: number): unknown
   clearTimer(handle: unknown): void
   isFocused(id: string): boolean
@@ -58,7 +57,6 @@ interface Entry {
 
 export class Attention {
   private readonly entries = new Map<string, Entry>()
-  private readonly lastPush = new Map<string, number>()
   private trayOn = false
 
   constructor(private readonly deps: AttentionDeps) {}
@@ -176,10 +174,6 @@ export class Attention {
     entry.pushTimer = null
     if (entry.state !== 'blocked' || !entry.needsYou || this.deps.isFocused(id)) return
     this.setAttend(id, entry, 'blocked', 'urgent')
-    const now = this.deps.now()
-    const last = this.lastPush.get(id)
-    if (last !== undefined && now - last < PUSH_COOLDOWN_MS) return
-    this.lastPush.set(id, now)
     this.deps.push(id)
   }
 
@@ -297,4 +291,58 @@ export function agentName(stateSource: string | undefined, fallback: string): st
 /** The phone push body, e.g. "Claude in tether is waiting for you". */
 export function pushBody(agent: string, title: string): string {
   return `${agent} in ${title} is waiting for you`
+}
+
+/** What became of one `nightshift push`. `suppressed` is Nightshift keeping a
+ * repeat for the same session quiet: nothing reached the phone. */
+export interface PushOutcome {
+  result: 'sent' | 'suppressed' | 'failed'
+  /** Nightshift's result word (`sent_1/2`, `suppressed`, `gone,rejected:410`), when it printed one. */
+  nightshift?: string
+  /** Exit code, spawn error code or `killed` (timeout) when the command failed. */
+  exit?: string
+}
+
+/** Reads `nightshift push` output: `sent N/M` or `spooled` (Nightshift retries
+ * delivery itself) count as sent, `suppressed` as suppressed, anything else
+ * (no subscribers, every device rejected, a crash, a timeout) as failed.
+ * Nightshift prints its result last, after any state-file diagnostics. */
+export function pushOutcome(
+  error: { code?: unknown; killed?: boolean } | null,
+  stdout: string,
+): PushOutcome {
+  const last = stdout.trim().split('\n').pop()?.trim() ?? ''
+  // Only a Nightshift result word goes in the journal, never other output.
+  const word = /^[a-z][a-z0-9 ,:/-]{0,39}$/.test(last) ? last.replace(/ /g, '_') : undefined
+  const result =
+    !error && (last.startsWith('sent ') || last === 'spooled')
+      ? 'sent'
+      : !error && last === 'suppressed'
+        ? 'suppressed'
+        : 'failed'
+  const outcome: PushOutcome = { result }
+  if (word) outcome.nightshift = word
+  if (error) {
+    const code = error.code
+    outcome.exit =
+      typeof code === 'number' || (typeof code === 'string' && /^[A-Z0-9_]{1,24}$/.test(code))
+        ? String(code)
+        : error.killed
+          ? 'killed'
+          : 'error'
+  }
+  return outcome
+}
+
+/** One ids-only journal line per push: no titles, no message text. */
+export function pushEventLine(id: string, outcome: PushOutcome): string {
+  return [
+    '[aico:event] needs_you_push',
+    `result=${outcome.result}`,
+    `widget=${id}`,
+    outcome.nightshift ? `nightshift=${outcome.nightshift}` : '',
+    outcome.exit ? `exit=${outcome.exit}` : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
 }

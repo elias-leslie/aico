@@ -25,6 +25,8 @@ import {
   agentName,
   groupRows,
   pushBody,
+  pushEventLine,
+  pushOutcome,
 } from './attention'
 import { contentSecurityPolicy, voiceConnectSource } from './csp'
 import {
@@ -1343,7 +1345,6 @@ const ATERM_URL = (process.env.AICO_ATERM_URL ?? 'https://terminal.summitflow.de
 )
 
 const attention = new Attention({
-  now: Date.now,
   setTimer: (fn, ms) => setTimeout(fn, ms),
   clearTimer: (handle) => clearTimeout(handle as NodeJS.Timeout),
   isFocused: (id) => windowForWidget(id)?.isFocused() ?? false,
@@ -1360,7 +1361,8 @@ const attention = new Attention({
     if (!descriptor) return
     const title = sessionTitle(descriptor)
     const agent = agentName(descriptor.stateSource, toolDisplayName(descriptor.tool, tools))
-    // Nightshift's own Web Push to the owner's PWA; Aico keeps the per-session cooldown.
+    // Nightshift's own Web Push to the owner's PWA. Nightshift keys repeats by
+    // the --open link (one per session) and keeps them quiet for an hour.
     execFile(
       NIGHTSHIFT,
       [
@@ -1375,8 +1377,14 @@ const attention = new Attention({
       ],
       { timeout: 30_000 },
       (error, stdout) => {
-        if (error) console.warn(`[aico] needs-you push for ${id} failed: ${error.message}`)
-        else logWidgetEvent(id, 'needs_you_push', { result: stdout.trim().slice(0, 80) })
+        const output = String(stdout ?? '')
+        const outcome = pushOutcome(error, output)
+        console.log(pushEventLine(id, outcome))
+        // The widget log records pushes that reached the phone, not Nightshift's dedupes.
+        if (outcome.result === 'sent')
+          logWidgetEvent(id, 'needs_you_push', {
+            result: (output.trim().split('\n').pop() ?? '').trim().slice(0, 80),
+          })
       },
     )
   },

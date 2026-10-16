@@ -7,8 +7,9 @@ import {
   formatAge,
   groupRows,
   PUSH_AFTER_MS,
-  PUSH_COOLDOWN_MS,
   pushBody,
+  pushEventLine,
+  pushOutcome,
   RISE_AFTER_MS,
 } from './attention'
 
@@ -22,7 +23,6 @@ function harness() {
   const pushes: string[] = []
   const attends: string[] = []
   const attention = new Attention({
-    now: () => clock,
     setTimer: (fn, ms) => {
       const id = next++
       timers.set(id, { at: clock + ms, fn })
@@ -133,16 +133,11 @@ describe('Attention', () => {
     expect(h.tray).toEqual([true, false])
   })
 
-  it('cools pushes down per session', () => {
+  it('pushes again for each new unseen block; Nightshift dedupes repeats', () => {
     const h = harness()
     h.set('a', 'blocked')
     h.advance(PUSH_AFTER_MS)
     h.set('a', 'working')
-    h.set('a', 'blocked')
-    h.advance(PUSH_AFTER_MS)
-    expect(h.pushes).toEqual(['a'])
-    h.set('a', 'working')
-    h.advance(PUSH_COOLDOWN_MS)
     h.set('a', 'blocked')
     h.advance(PUSH_AFTER_MS)
     expect(h.pushes).toEqual(['a', 'a'])
@@ -227,5 +222,61 @@ describe('attention groups', () => {
     expect(formatAge(3 * 60_000)).toBe('3m')
     expect(formatAge(2 * 3_600_000)).toBe('2h')
     expect(formatAge(50 * 3_600_000)).toBe('2d')
+  })
+})
+
+describe('push outcome', () => {
+  it('reads Nightshift sent and spooled as sent', () => {
+    expect(pushOutcome(null, 'sent 2/2\n')).toEqual({ result: 'sent', nightshift: 'sent_2/2' })
+    expect(pushOutcome(null, 'spooled\n').result).toBe('sent')
+  })
+
+  it('reads the result from the last line, after Nightshift diagnostics', () => {
+    expect(pushOutcome(null, 'delivery record not written: OSError\nsent 1/1\n')).toEqual({
+      result: 'sent',
+      nightshift: 'sent_1/1',
+    })
+  })
+
+  it('reads a Nightshift dedupe as suppressed, not as a push', () => {
+    expect(pushOutcome(null, 'suppressed\n')).toEqual({
+      result: 'suppressed',
+      nightshift: 'suppressed',
+    })
+  })
+
+  it('reads anything else as failed, with the exit code', () => {
+    expect(pushOutcome(null, 'no-subscribers\n')).toEqual({
+      result: 'failed',
+      nightshift: 'no-subscribers',
+    })
+    expect(pushOutcome({ code: 1 }, 'gone,rejected:403\n')).toEqual({
+      result: 'failed',
+      nightshift: 'gone,rejected:403',
+      exit: '1',
+    })
+    expect(pushOutcome({ code: 'ENOENT' }, '')).toEqual({ result: 'failed', exit: 'ENOENT' })
+    expect(pushOutcome({ code: null, killed: true }, '')).toEqual({
+      result: 'failed',
+      exit: 'killed',
+    })
+  })
+
+  it('writes one ids-only journal line', () => {
+    expect(pushEventLine('w1', pushOutcome(null, 'suppressed\n'))).toBe(
+      '[aico:event] needs_you_push result=suppressed widget=w1 nightshift=suppressed',
+    )
+    expect(pushEventLine('w2', pushOutcome({ code: 1 }, 'rejected:410\n'))).toBe(
+      '[aico:event] needs_you_push result=failed widget=w2 nightshift=rejected:410 exit=1',
+    )
+    // Output that is not a Nightshift result word (say, a traceback) stays out of the journal.
+    const odd = pushEventLine(
+      'w3',
+      pushOutcome(
+        { code: 1 },
+        'Traceback (most recent call last):\n  File "x"\nOSError: Claude in tether\n',
+      ),
+    )
+    expect(odd).toBe('[aico:event] needs_you_push result=failed widget=w3 exit=1')
   })
 })
