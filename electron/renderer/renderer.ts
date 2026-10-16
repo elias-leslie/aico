@@ -21,6 +21,7 @@ import {
   setTransportAction,
 } from './actions'
 import { type Arcade, GAMES, startArcade } from './arcade'
+import { nextGame } from './arcade/next-game'
 import { initControlSurface } from './control-surface'
 import {
   CONTROL_SCROLLBACK_LINES,
@@ -307,21 +308,7 @@ let arcade: Arcade | null = null
         )
         .catch((err: unknown) => console.error('[arcade]', err))
     })
-    window.addEventListener('aico:arcade-next', () => {
-      if (arcade) {
-        arcade.next().catch((err: unknown) => console.error('[arcade]', err))
-        return
-      }
-      // games are off: turn them on, and this window gets a game it hasn't
-      // shown. Ask first, so a press while one is still loading can't turn
-      // them off instead.
-      window.aico.arcade
-        .enabled()
-        .then((on) => {
-          if (!on) window.aico.arcade.toggle()
-        })
-        .catch((err: unknown) => console.error('[arcade]', err))
-    })
+    window.addEventListener('aico:arcade-next', () => nextGame(arcade, window.aico.arcade))
   }
 }
 

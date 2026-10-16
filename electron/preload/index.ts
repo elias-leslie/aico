@@ -221,6 +221,7 @@ contextBridge.exposeInMainWorld('aico', {
     pick: (key: string, keys: string[]) => ipcRenderer.invoke('arcade:pick', key, keys),
     enabled: () => ipcRenderer.invoke('arcade:enabled'),
     toggle: () => ipcRenderer.send('arcade:toggle'),
+    turnOn: () => ipcRenderer.send('arcade:turn-on'),
     onEnabled: (cb: (on: boolean) => void) => {
       const listener = (_event: unknown, on: boolean) => cb(on)
       ipcRenderer.on('arcade:enabled', listener)

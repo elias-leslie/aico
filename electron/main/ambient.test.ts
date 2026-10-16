@@ -85,7 +85,7 @@ afterEach(() => {
 })
 
 describe('IPC', () => {
-  it('registers the six eyes and arcade channels', () => {
+  it('registers the seven eyes and arcade channels', () => {
     const { handlers } = setup()
     expect([...handlers.keys()].sort()).toEqual([
       'arcade:assign',
@@ -93,6 +93,7 @@ describe('IPC', () => {
       'arcade:next',
       'arcade:pick',
       'arcade:toggle',
+      'arcade:turn-on',
       'eyes:anchor',
     ])
   })
@@ -231,6 +232,20 @@ describe('arcade', () => {
     expect(win1.webContents.send).toHaveBeenCalledWith('arcade:enabled', true)
     expect(win2.webContents.send).toHaveBeenCalledWith('arcade:enabled', true)
     expect(call('arcade:assign', win1, KEYS)).toBe('maze')
+  })
+
+  it('Next game while games are off turns them on once; a second press keeps them on', () => {
+    const win1 = fakeWindow(1)
+    const win2 = fakeWindow(2)
+    const { call, settings, setSetting } = setup({ windows: [win1, win2], arcade: 'off' })
+    // Two presses that both saw the games off (two windows, or one press racing a load).
+    call('arcade:turn-on', win1)
+    call('arcade:turn-on', win2)
+    expect(settings.get('arcade')).toBe('on')
+    expect(setSetting).toHaveBeenCalledTimes(1)
+    expect(win1.webContents.send).toHaveBeenCalledWith('arcade:enabled', true)
+    expect(win2.webContents.send).not.toHaveBeenCalledWith('arcade:enabled', false)
+    expect(call('arcade:assign', win1, KEYS)).not.toBeNull()
   })
 
   it('choosing a game the window does not ship is refused', () => {

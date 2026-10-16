@@ -149,6 +149,18 @@ export function createAmbient(deps: AmbientDeps) {
   // window runs a game and the cursor pump stops for them.
   const arcadeOn = (): boolean => deps.getSetting('arcade') !== 'off'
 
+  /** Turn the games on or off for every window; off clears every window's game. */
+  function setArcade(on: boolean): void {
+    deps.setSetting('arcade', on ? 'on' : 'off')
+    if (!on) {
+      arcadeOf.clear()
+      arcadeShown.clear()
+      arcadeNear.clear()
+      syncCursorPump()
+    }
+    for (const win of registry.all()) win.webContents.send('arcade:enabled', on)
+  }
+
   return {
     /** The first gaze scene in 20-45 s, then one every 20-45 s until quit. */
     start: scheduleGaze,
@@ -192,16 +204,11 @@ export function createAmbient(deps: AmbientDeps) {
         eyeAnchors.set(win.id, { x: Math.round(p.x), y: Math.round(p.y) })
       })
       ipcMain.handle('arcade:enabled', () => arcadeOn())
-      ipcMain.on('arcade:toggle', () => {
-        const on = !arcadeOn()
-        deps.setSetting('arcade', on ? 'on' : 'off')
-        if (!on) {
-          arcadeOf.clear()
-          arcadeShown.clear()
-          arcadeNear.clear()
-          syncCursorPump()
-        }
-        for (const win of registry.all()) win.webContents.send('arcade:enabled', on)
+      ipcMain.on('arcade:toggle', () => setArcade(!arcadeOn()))
+      // "Next game" while the games are off. Turning on twice stays on, so two
+      // presses (or two windows) racing can never turn them back off.
+      ipcMain.on('arcade:turn-on', () => {
+        if (!arcadeOn()) setArcade(true)
       })
       // Titlebar arcade: the renderer lists the games it ships; main picks one this
       // window keeps (reloads included) until it closes.
@@ -229,10 +236,7 @@ export function createAmbient(deps: AmbientDeps) {
         arcadeOf.set(win.id, pick)
         arcadeShown.set(win.id, new Set([...(arcadeShown.get(win.id) ?? []), pick]))
         syncCursorPump()
-        if (!arcadeOn()) {
-          deps.setSetting('arcade', 'on')
-          for (const w of registry.all()) w.webContents.send('arcade:enabled', true)
-        }
+        if (!arcadeOn()) setArcade(true)
         return pick
       })
       // "Next game" from the lantern menu: another game this window hasn't shown

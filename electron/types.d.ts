@@ -167,6 +167,8 @@ export interface AicoApi {
     enabled(): Promise<boolean>
     /** Turn the titlebar games off, or back on, in every window. */
     toggle(): void
+    /** Turn the titlebar games on in every window; already on, nothing changes. */
+    turnOn(): void
     /** Called when the games are turned on or off; returns an unsubscribe function. */
     onEnabled(cb: (on: boolean) => void): () => void
     /** The cursor in window coordinates while it is near the titlebar, then one
