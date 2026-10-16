@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -124,6 +124,26 @@ describe('main', () => {
       await main(['-i', 'clitest', 'import-aico', '--from', join(dir, 'absent.db')], missing.io),
     ).toBe(2)
     expect(missing.err.join('\n')).toContain('not found')
+  })
+
+  it('refuses import-aico without an explicit --from, even when the old Aico catalog exists', async () => {
+    const home = process.env.HOME
+    const fakeHome = join(dir, 'home-with-aico-db')
+    mkdirSync(join(fakeHome, '.local', 'state', 'aico'), { recursive: true })
+    writeFileSync(join(fakeHome, '.local', 'state', 'aico', 'aico.db'), '')
+    process.env.HOME = fakeHome
+    try {
+      for (const argv of [['import-aico'], ['import-aico', '--apply']]) {
+        const run = capture()
+        expect(await main(['-i', 'clitest', ...argv], run.io)).toBe(2)
+        const err = run.err.join('\n')
+        expect(err).toContain('--from')
+        expect(err).not.toContain('not found')
+        expect(run.out).toEqual([])
+      }
+    } finally {
+      process.env.HOME = home
+    }
   })
 
   it('prints only JSON for --json version, with or without a daemon', async () => {

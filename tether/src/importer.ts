@@ -1,6 +1,7 @@
 // `tether import-aico`: copy Aico's lifecycle catalog into a Tether instance.
 //
-// * aico.db is opened read-only and is never modified.
+// * The source is always an explicit path (`--from`), normally an archived
+//   pre-Tether aico.db; it is opened read-only and is never modified.
 // * Copied: every tmux_servers row, every root_requests row (tombstones
 //   included), and the identity columns of every internal widget into
 //   `sessions`. External (`external_tmux_*`) widgets are skipped. View columns

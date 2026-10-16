@@ -1,6 +1,4 @@
 import { spawnSync } from 'node:child_process'
-import { homedir } from 'node:os'
-import { join } from 'node:path'
 import { callSocket } from './client'
 import { resolvePaths, type TetherPaths } from './config'
 import { startDaemon } from './daemon'
@@ -29,9 +27,10 @@ Commands:
   sessions diagnostics <id>
   legacy [list | end <name>]    A-Term summitflow-<uuid> sessions (attach/end only)
   roots [list | show <requestId>]
-  import-aico [--from PATH] [--apply]
-                                copy Aico's catalog (dry-run unless --apply;
-                                aico.db is opened read-only; stop the daemon first)
+  import-aico --from PATH [--apply]
+                                copy a pre-Tether Aico catalog (an archived
+                                aico.db; dry-run unless --apply; opened
+                                read-only; stop the daemon first)
   tools [list]                  merged agent-tool registry
   tools get <slug>
   tools add <slug> <name> -- <argv...>
@@ -379,7 +378,13 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
           ['--from'],
         )
         const apply = [sub, ...rest].includes('--apply')
-        const from = options['--from'] || join(homedir(), '.local', 'state', 'aico', 'aico.db')
+        // Explicit source only: the pre-Tether tables in the live aico.db are
+        // being dropped, so an archived copy is the only meaningful input.
+        const from = options['--from']
+        if (!from) {
+          io.err('usage: tether import-aico --from PATH [--apply] (PATH: an archived aico.db)')
+          return 2
+        }
         if (!apply) {
           const plan = planImportForPath(from, paths.dbPath)
           if (json)

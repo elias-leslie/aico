@@ -46,7 +46,7 @@ tether [--instance NAME] [--json] <command>
   sessions diagnostics <id>
   legacy [list | end <name>]        A-Term summitflow-<uuid> sessions
   roots [list | show <requestId>]
-  import-aico [--from PATH] [--apply]
+  import-aico --from PATH [--apply]   one-off import from an archived pre-Tether aico.db
   tools [list | get <slug> | add <slug> <name> -- <argv...> | default|enable|disable|rm <slug>]
   projects [--refresh]
 ```

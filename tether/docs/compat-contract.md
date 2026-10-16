@@ -32,7 +32,7 @@ The `systemd-run` flags are part of the containment model and must be kept: `--u
 | Contract | `default` | Instance `<i>` | Aico source |
 | --- | --- | --- | --- |
 | tmux server socket | `<state>/tmux/<id>/server.sock`; dirs 0700 | same | `index.ts` `createManagedServerDirectory` |
-| Imported server sockets | `~/.local/state/aico/tmux/<id>/server.sock`. Rows keep their absolute `socket_path` and are never moved. | none | `store.ts` `tmux_servers.socket_path` |
+| Imported server sockets | `~/.local/state/aico/tmux/<id>/server.sock`. Rows keep their absolute `socket_path` and are never moved. Every imported row is now `phase = 'dead'` with no session bound to it; Tether never opens or stats a dead row's socket or directory, so the Aico dirs may be deleted and the rows stay as history. | none | `store.ts` `tmux_servers.socket_path` |
 | Historical shared socket | `/tmp/tmux-<uid>/aico`, adopted read-only and never respawned | none | `tmux.ts` `resolveInternalTmuxSocket` |
 | Pane-exit marker | `/run/user/<uid>/aico/pane-exited-<serverId>` | `$XDG_RUNTIME_DIR/tether/<i>/pane-exits/pane-exited-<serverId>` | `tmux.ts` `paneExitedEventPath` |
 | Pane-exit hook bytes | `set-hook -g pane-exited 'run-shell "/usr/bin/touch <marker>"'`, compared byte for byte before every launch | same form | `tmux.ts` `paneExitedHookCommand` |
@@ -93,7 +93,7 @@ Correction to the migration plan: `AICO_TMUX_SOCKET` is not a pane marker. Aico 
 - `sessions` keeps the identity columns of Aico's `widgets` table with identical names. View columns (`x`, `y`, `width`, `height`, `display_id`, `open`) stay in Aico. `external_tmux_*` rows are not imported.
 - `generation` is computed exactly as Aico's `sessionGeneration`: the JSON array `[id, sessionId, externalTmuxSocket=null, externalTmuxSession=null, {11 ownership fields in Aico's key order}]`. `src/generation.test.ts` pins a vector computed with Aico's own function. A generation read from Aico before cutover therefore stays valid against the imported row.
 - Session ids are never reused: allocation checks `sessions.id` and `root_requests.widget_id`, as Aico does, plus `retired_session_ids` (schema v2), which a trigger fills when a session row is deleted.
-- `tether import-aico` copies every `tmux_servers` row, every `root_requests` row (including tombstones) and the identity columns of every internal widget, in one transaction. It skips `external` widgets, opens `aico.db` read-only, is a dry run unless `--apply`, refuses `--apply` while the instance's daemon is listening, and is idempotent: identical rows are `same`, rows Tether has changed since are `kept`, never overwritten.
+- `tether import-aico --from PATH` (an explicit path is required; there is no default, because the live `aico.db` drops its pre-Tether tables after archiving) copies every `tmux_servers` row, every `root_requests` row (including tombstones) and the identity columns of every internal widget, in one transaction. It skips `external` widgets, opens `aico.db` read-only, is a dry run unless `--apply`, refuses `--apply` while the instance's daemon is listening, and is idempotent: identical rows are `same`, rows Tether has changed since are `kept`, never overwritten.
 
 ## Wire contracts
 
