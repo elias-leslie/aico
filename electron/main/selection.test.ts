@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { compactRef, parseSse } from './selection'
+import { compactRef } from './selection'
 
 function hasTerminalControlCharacter(value: string): boolean {
   return Array.from(value).some((character) => {
@@ -80,29 +80,5 @@ describe('compactRef', () => {
 
   it('falls back to the plain ref when meta.package is absent', () => {
     expect(compactRef([{ kind: 'region', snippet: '/tmp/x.png' }])).toBe('[region: "/tmp/x.png"] ')
-  })
-})
-
-describe('parseSse', () => {
-  it('extracts data payloads from complete frames', () => {
-    const { events, rest } = parseSse('data: {"a":1}\n\ndata: {"b":2}\n\n')
-    expect(events).toEqual(['{"a":1}', '{"b":2}'])
-    expect(rest).toBe('')
-  })
-
-  it('keeps an unterminated trailing frame in rest', () => {
-    const { events, rest } = parseSse('data: {"a":1}\n\ndata: {"b":2}')
-    expect(events).toEqual(['{"a":1}'])
-    expect(rest).toBe('data: {"b":2}')
-  })
-
-  it('drops keepalive comment frames (no data line)', () => {
-    const { events, rest } = parseSse(': connected\n\n: ping\n\ndata: {"x":1}\n\n')
-    expect(events).toEqual(['{"x":1}'])
-    expect(rest).toBe('')
-  })
-
-  it('returns no events for a buffer with no frame terminator', () => {
-    expect(parseSse('data: partial')).toEqual({ events: [], rest: 'data: partial' })
   })
 })

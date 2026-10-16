@@ -15,6 +15,7 @@ import {
   shell,
 } from 'electron'
 import { spawn } from 'node-pty'
+import { version } from '../../package.json'
 import { createAmbient } from './ambient'
 import { createAttentionWiring } from './attention-wiring'
 import { readConfig } from './config'
@@ -26,9 +27,9 @@ import { denyAllPermissions } from './permissions'
 import { ownStartTime, removeOwnPidFile } from './process-identity'
 import { ensurePersonalWorkspaceRoot, ProjectCatalog, personalWorkspaceRoot } from './project'
 import { createSelectionBus } from './selection-bus'
+import { createSelectionListener } from './selection-listener'
 import { createSessionActions } from './session-actions'
 import { createSessionCatalog, type SessionCatalog, sessionTitle } from './session-catalog'
-import { createSidecarLink } from './sidecar-link'
 import { createTerminal } from './terminal'
 import { TetherClient } from './tether-client'
 import { createTetherLink } from './tether-link'
@@ -136,15 +137,6 @@ const windows = createWindows({
     },
     changed: () => chrome.syncTray(),
   },
-})
-
-// The optional sidecar: the selection bus reads from it.
-const sidecar = createSidecarLink({
-  host: config.sidecarHost,
-  port: config.sidecarPort,
-  stateDir: config.stateDir,
-  app,
-  resourcesPath: process.resourcesPath,
 })
 
 const projects = new ProjectCatalog(
@@ -275,7 +267,18 @@ const selection = createSelectionBus({
   tether,
   isReplacing: sessions.isReplacing,
   isQuitting: lifecycle.isQuitting,
-  sidecar,
+})
+
+// The loopback listener: /health, and sends from the browser extension and
+// `st selection send`, delivered through the selection bus.
+const listener = createSelectionListener({
+  host: config.listenerHost,
+  port: config.listenerPort,
+  extensionIds: config.extensionIds,
+  // package.json's, whichever way Electron was launched (app.getVersion() is
+  // Electron's own when started on the bundle path).
+  version,
+  deliver: selection.deliver,
 })
 
 // Global shortcuts.
@@ -284,8 +287,7 @@ const hotkeys = createHotkeys({ grab: selection.grab, config, globalShortcut, ap
 lifecycle.onQuit(() => {
   link.stop()
   hotkeys.stop()
-  selection.stop()
-  sidecar.stop()
+  listener.stop()
   ambient.stop()
   layout.stop({ removeFile: lifecycle.runtimeOwner })
 })
@@ -296,7 +298,8 @@ const startup = app.whenReady().then(async () => {
   initViews(config.dbPath)
   // Before any window exists: Electron would otherwise grant every request.
   denyAllPermissions(session.defaultSession)
-  sidecar.start()
+  // Fire-and-forget: windows work without capture; the result is logged.
+  void listener.start()
 
   // No application menu — the Lantern chrome owns window controls, and the
   // default Edit menu's paste role mangled bracketed paste (handled in renderer).
@@ -336,9 +339,6 @@ const startup = app.whenReady().then(async () => {
   app.on('activate', chrome.syncTray)
 
   hotkeys.registerSelection()
-
-  // Browser-driven sends (and any CLI POST to /selection/send) arrive here.
-  selection.subscribe()
 
   link.connect(applyGuiCommand)
   chrome.syncTray()

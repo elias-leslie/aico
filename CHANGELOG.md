@@ -25,6 +25,11 @@ Requires Tether API v1. Install and start Tether (`tether@default`) before Aico.
   installs `aico-owner.service` or the context hooks.
 - `st aico ... --surface a-term` accepts the Tether-shaped root descriptors that
   A-Term's `/v1/roots` proxy now returns.
+- The Python sidecar is gone: Aico's main process now listens on
+  `127.0.0.1:8005` itself, with the same `/health` identity, Host and Origin
+  guards and 1 MiB body cap. `POST /selection/send` types the captures at the
+  last-focused widget and replies `{records, count, delivered, reason}`.
+  Indicate selection sends the newest capture again from memory.
 
 ### Removed
 
@@ -36,3 +41,9 @@ Requires Tether API v1. Install and start Tether (`tether@default`) before Aico.
   configured in Tether.
 - The titlebar context-mandate badge; Tether has no route for it yet (see
   `docs/tether-api-gaps.md`).
+- Stored selection history (`selections.db`) and the sidecar routes that read
+  or stored it without delivering: `POST /selection`, `GET /selection/current`,
+  `GET /selection/history` and `GET /selection/events`. The existing
+  `selections.db` file is left in place. `AICO_SIDECAR_ALLOW_REMOTE` and
+  `AICO_SIDECAR_PYTHON` no longer exist, and the release build no longer
+  bundles a PyInstaller sidecar.

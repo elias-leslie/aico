@@ -3,7 +3,7 @@
 # taskbar/app-grid click builds the repo and runs the built (prod) app — always
 # the latest code. Output is appended to the launcher log for debugging.
 #
-# The app tree (Electron + helpers + Python sidecar) runs in the canonical
+# The app tree (Electron and its helpers) runs in the canonical
 # managed `aico-shell.service`. The .desktop launcher imports only its explicit
 # graphical-session variables and starts that same unit instead of inventing a
 # second transient runtime. This keeps `st service rebuild`, desktop clicks, and
@@ -57,7 +57,7 @@ is_aico_process() {
 
 # The running Electron process owns the single-instance lock. A second Electron
 # invocation delivers the desktop click to that process; it exits without
-# starting another sidecar or replacing the managed service.
+# starting another runtime or replacing the managed service.
 activate_runtime() {
   local pid expected_exe actual_exe actual_cwd unit_group process_group state
   local ready_pid ready_starttime current_starttime current_pid current_state

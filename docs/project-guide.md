@@ -11,7 +11,7 @@
 - **Command palette & pinned controls** — a searchable command palette (`Ctrl+Shift+P`) and a pinned, drag-reorderable titlebar cluster, both driven by one action registry. A pin whose feature is unavailable (a tool or project Tether did not list, games not loaded) is hidden, not deleted, and comes back with it. Rename widgets inline.
 - **Native scrollback** — each widget is a tmux control-mode client, so the terminal itself holds the pane's history: wheel, drag-select and copy reach as far back as it goes. Plain `tmux attach` stays as a fallback (palette: "Switch to plain tmux attach", or `AICO_TERMINAL_TRANSPORT=attach`).
 - **Workspace picker** — always includes a local Personal Workspace, plus the projects Tether serves (SummitFlow's catalog when installed, else Tether's local list).
-- **Click-to-context capture** — the loopback sidecar accepts captures from the browser extension and the `st` capture tools and inserts a compact reference into the focused widget's prompt (single, batch, or a capture package from `st ui grab`).
+- **Click-to-context capture** — Aico's loopback listener accepts captures from the browser extension and `st selection send` and types a compact reference at the last-focused widget's prompt (single, batch, or a capture package from `st ui grab`). Nothing is stored.
 - **Every session, one list** — the tray and **Open session** (in the lantern menu, the palette or as a pin) list every Tether session, whether started from Aico, A-Term, the `tether` CLI or a SummitFlow root, and open any of them as a widget.
 
 ## Requirements
@@ -76,16 +76,13 @@ npm start
 
 AppImage builds are frozen: the release workflow runs only when started by hand,
 and nothing here is tested against current code. The build path remains for
-reference. It bundles the sidecar so the packaged app needs no Python, `uv`, or
-`.venv` at runtime:
+reference:
 
 ```bash
-uv sync --frozen --python 3.13 --extra dev --extra release
 npm run dist
 ```
 
-This bundles the FastAPI sidecar into a standalone executable (PyInstaller),
-builds the Electron app, and emits `dist/electron/Aico-<version>.AppImage`. Run it
+This builds the Electron app and emits `dist/electron/Aico-<version>.AppImage`. Run it
 directly:
 
 ```bash
@@ -94,8 +91,8 @@ chmod +x dist/electron/Aico-*.AppImage
 ```
 
 Tether, `tmux` and whichever terminal AI CLIs you launch (`claude`, `codex`, …)
-remain runtime prerequisites. The browser-driven context capture works
-through the bundled sidecar with no extra setup.
+remain runtime prerequisites. The browser-driven context capture is part of
+the app and needs no extra setup.
 
 ## Configuration
 
@@ -120,12 +117,11 @@ Important variables:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `AICO_SIDECAR_HOST` | `127.0.0.1` | FastAPI sidecar bind host. Keep loopback unless you know why remote access is safe. |
-| `AICO_SIDECAR_PORT` | `8005` | Sidecar HTTP port for the health and selection APIs. |
-| `AICO_STATE_DIR` | `~/.local/state/aico` | App and sidecar state: selection SQLite and `aico.db` (window views and settings; sessions live in Tether). The launcher pidfile, lock, and `launcher.log` always live in `${XDG_STATE_HOME:-~/.local/state}/aico` and do not follow this variable. |
-| `AICO_SIDECAR_ALLOW_REMOTE` | unset | Set to `1` to allow a non-loopback `AICO_SIDECAR_HOST` and to accept any `Host` header. Applies only to a standalone sidecar (`python -m aico_sidecar`); Aico never passes it to the sidecar it starts, which stays loopback-only. The sidecar is unauthenticated, so leave this unset. |
-| `AICO_EXTENSION_IDS` | `oejadbpdecaenbbihglcnchnkmlilmjf` | Comma-separated Chrome extension IDs the sidecar trusts as browser origins. The default is the stable ID derived from the `key` in `extension/manifest.json`; set this only for a fork or re-keyed extension. |
-| `AICO_SELECTION_HOTKEY` | `CommandOrControl+Shift+Space` | Electron global shortcut for selection indication. |
+| `AICO_SIDECAR_HOST` | `127.0.0.1` | Capture listener bind host (the old sidecar's name). Only a loopback host is accepted; anything else leaves the listener off. |
+| `AICO_SIDECAR_PORT` | `8005` | Capture listener port, for `/health` and `/selection/send`. |
+| `AICO_STATE_DIR` | `~/.local/state/aico` | App state: `aico.db` (window views and settings; sessions live in Tether). The launcher pidfile, lock, and `launcher.log` always live in `${XDG_STATE_HOME:-~/.local/state}/aico` and do not follow this variable. |
+| `AICO_EXTENSION_IDS` | `oejadbpdecaenbbihglcnchnkmlilmjf` | Comma-separated Chrome extension IDs the listener trusts as browser origins. A malformed ID leaves the listener off. The default is the stable ID derived from the `key` in `extension/manifest.json`; set this only for a fork or re-keyed extension. |
+| `AICO_SELECTION_HOTKEY` | `CommandOrControl+Shift+Space` | Electron global shortcut for Indicate selection, which sends the newest capture again to the last-focused widget. |
 | `TETHER_SOCKET` | unset | Tether control socket. Wins over `TETHER_INSTANCE`. |
 | `TETHER_INSTANCE` | `default` | Tether instance; the socket is `$XDG_RUNTIME_DIR/tether/<instance>/control.sock`. |
 
@@ -145,7 +141,7 @@ After `scripts/aico-install.sh`:
 npm run lint
 npm run typecheck
 npm test
-npm run test:sidecar
+npm run test:scripts
 npm run build
 ```
 
@@ -155,29 +151,30 @@ Or run the combined public gate:
 npm run check
 ```
 
-## Sidecar API
+## Capture listener
 
-The Python sidecar starts on `127.0.0.1:8005` by default.
+Aico's main process listens on `127.0.0.1:8005` by default (this replaced the
+Python sidecar and keeps its port, variable names and health identity):
 
 ```bash
-.venv/bin/python -m aico_sidecar
 curl http://127.0.0.1:8005/health
+# {"status":"ok","service":"aico-sidecar","version":"0.1.1"}
 ```
 
-Main endpoints:
+Endpoints:
 
-- `GET /health` — liveness check.
-- `POST /selection` and `POST /selection/send` — local selection/capture bus used by the web helper and browser extension.
-- `GET /selection/current`, `GET /selection/history` — read recent captures.
-- `GET /selection/events` — Server-Sent Events stream of delivery events (the Wayland-safe path for routing captures into a widget).
+- `GET /health` — liveness and identity; SummitFlow's health check reads it.
+- `POST /selection/send` — `{"items": [{"kind": "dom"|"a11y"|"region", "snippet", "meta"}]}`, 1-50 items. The captures are typed as one compact reference at the last-focused widget's prompt. The reply is `{records, count, delivered, reason}`: `delivered` says whether the reference reached a session; when it is false, `reason` is one of `no_session`, `busy`, `session_changing`, `stale_generation` or `insert_failed`.
 
-The sidecar is loopback-only by default. It rejects every browser origin except the trusted extension IDs (`AICO_EXTENSION_IDS`), local pages included, for writes and cross-origin reads of captured selections, and rejects requests whose `Host` header is not `localhost` or a loopback IP such as `127.0.0.1` or `[::1]`, which blocks DNS-rebinding pages. `AICO_SIDECAR_ALLOW_REMOTE=1` lifts the bind and `Host` restrictions for a standalone sidecar; Aico does not pass it to the sidecar it starts.
+Nothing is stored. The Indicate selection hotkey sends the newest capture again from memory.
+
+The listener has no authentication. It binds only to a loopback host, answers `403` to a request whose `Host` header is not `localhost` or a loopback IP such as `127.0.0.1` or `[::1]` (DNS rebinding), answers `403` to a write from any browser origin except the trusted extension IDs (`AICO_EXTENSION_IDS`), local pages included, sends CORS headers only to those IDs, and refuses bodies over 1 MiB with `413`.
 
 ## Optional browser extension
 
-The `extension/` directory contains a development MV3 extension that can send selected text, links, images, or page context to the local sidecar.
+The `extension/` directory contains a development MV3 extension that can send selected text, links, images, or page context to Aico.
 
-1. Start Aico so the sidecar is listening on `127.0.0.1:8005`.
+1. Start Aico, which listens on `127.0.0.1:8005`.
 2. Open Chrome/Chromium `chrome://extensions`.
 3. Enable **Developer mode**.
 4. **Load unpacked** and select this repo's `extension/` directory.
@@ -203,21 +200,17 @@ Tether (separate daemon; owns sessions)
   └─ legacy /run/user/<uid>/aico/{control,gui-control}.sock for `st aico` and SummitFlow
 
 Electron main process (a Tether client)
-  ├─ owns widget windows, global shortcuts, tray, and sidecar lifecycle
+  ├─ owns widget windows, global shortcuts, and tray
   ├─ mirrors Tether's session list and follows /v1/events (reconnects, resyncs on gaps)
   ├─ holds the GUI channel (/v1/gui/channel) and applies show/position/title/coordinator
   ├─ runs a tmux control-mode client per window (plain `tmux attach` as a fallback) and claims resize on focus
   ├─ stores views (geometry, open state) and settings in aico.db
   ├─ writes ids-only `[aico:event]` journal lines (push results, retired sessions)
-  └─ starts Python sidecar and health-checks it
+  └─ listens on 127.0.0.1:8005: /health, and captures typed at a session prompt
 
 Electron renderer
   ├─ xterm.js terminal UI
   └─ lantern action menu and workspace picker
-
-Python sidecar
-  ├─ FastAPI loopback service
-  └─ SQLite ring buffer for recent selection captures
 ```
 
 Aico degrades when optional tools are missing: unavailable agent CLIs simply fail in their pane, and missing `st` capture tooling leaves core widgets working. When Tether is unreachable, open windows keep their terminals and the tray says session control is unavailable; Aico reconnects on its own.

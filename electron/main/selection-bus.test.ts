@@ -60,10 +60,6 @@ function deferred<T>() {
 
 const record: SelectionRecord = { kind: 'dom', snippet: 'Save button' }
 
-function jsonResponse(body: unknown): Response {
-  return { ok: true, json: async () => body } as unknown as Response
-}
-
 function setup() {
   const win1 = fakeWindow(1)
   const win2 = fakeWindow(2)
@@ -82,10 +78,6 @@ function setup() {
   const views = [view('aaaaaaaa'), view('bbbbbbbb')]
   const tether = { inject: vi.fn(async () => ({}) as never) }
   const state = { replacing: new Set<string>(), quitting: false }
-  const fetch = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) =>
-    jsonResponse(record),
-  )
-  const sidecar = { healthy: false }
   const bus = createSelectionBus({
     registry,
     catalog,
@@ -93,11 +85,6 @@ function setup() {
     tether: tether as never,
     isReplacing: (id) => state.replacing.has(id),
     isQuitting: () => state.quitting,
-    sidecar: {
-      ready: () => sidecar.healthy,
-      url: (path) => `http://127.0.0.1:18905${path}`,
-    },
-    fetch: fetch as unknown as typeof globalThis.fetch,
   })
   const on = new Map<string, (...args: unknown[]) => unknown>()
   bus.registerIpc({
@@ -105,11 +92,7 @@ function setup() {
       on.set(channel, fn)
     }) as never,
   })
-  /** Mark the sidecar healthy, so the grab may harvest. */
-  const ready = () => {
-    sidecar.healthy = true
-  }
-  return { bus, win1, win2, views, catalog, tether, state, fetch, on, ready }
+  return { bus, win1, win2, views, catalog, tether, state, on }
 }
 
 const flush = () => new Promise((r) => setTimeout(r, 0))
@@ -132,21 +115,13 @@ describe('selection target', () => {
   })
 })
 
-describe('selection grab and delivery', () => {
-  it('never harvests before its own sidecar is healthy', async () => {
-    const { bus, fetch, ready } = setup()
-    await bus.grab() // not started, or started and not yet healthy
-    expect(fetch).not.toHaveBeenCalled()
-    ready()
-    await bus.grab()
-    expect(fetch).toHaveBeenCalledWith('http://127.0.0.1:18905/selection/current')
-  })
-
-  it('types the compact reference at the target, then shows and toasts it', async () => {
-    const { bus, tether, win2, ready } = setup()
-    ready()
-    await bus.grab()
-    await flush()
+describe('delivery', () => {
+  it('types one compact reference at the target, then shows and toasts it', async () => {
+    const { bus, tether, win2 } = setup()
+    await expect(bus.deliver([record, { kind: 'empty' }])).resolves.toEqual({
+      delivered: true,
+      reason: null,
+    })
     expect(tether.inject).toHaveBeenCalledWith('bbbbbbbb', 'g7', compactRef([record]), 'type')
     expect(win2.show).toHaveBeenCalled()
     expect(win2.focus).toHaveBeenCalled()
@@ -156,19 +131,41 @@ describe('selection grab and delivery', () => {
     })
   })
 
+  it('toasts a batch as a count', async () => {
+    const { bus, win2 } = setup()
+    await bus.deliver([record, { kind: 'region', snippet: '/tmp/x.png' }])
+    expect(win2.webContents.send).toHaveBeenCalledWith('selection:toast', {
+      kind: '2 items',
+      snippet: 'Save button · /tmp/x.png',
+    })
+  })
+
   it('ignores an empty capture', async () => {
-    const { bus, tether, fetch, ready } = setup()
-    ready()
-    fetch.mockResolvedValueOnce(jsonResponse({ kind: 'empty' }))
-    await bus.grab()
+    const { bus, tether } = setup()
+    await expect(bus.deliver([{ kind: 'empty' }])).resolves.toEqual({
+      delivered: false,
+      reason: 'empty',
+    })
+    expect(tether.inject).not.toHaveBeenCalled()
+  })
+
+  it('says so when no session window is open', async () => {
+    const { bus, tether, views } = setup()
+    views.length = 0
+    await expect(bus.deliver([record])).resolves.toEqual({
+      delivered: false,
+      reason: 'no_session',
+    })
     expect(tether.inject).not.toHaveBeenCalled()
   })
 
   it('refuses while the target terminal is being replaced', async () => {
-    const { bus, tether, win2, state, ready } = setup()
-    ready()
+    const { bus, tether, win2, state } = setup()
     state.replacing.add('bbbbbbbb')
-    await bus.grab()
+    await expect(bus.deliver([record])).resolves.toEqual({
+      delivered: false,
+      reason: 'session_changing',
+    })
     expect(tether.inject).not.toHaveBeenCalled()
     expect(win2.webContents.send).toHaveBeenCalledWith('selection:toast', {
       kind: 'Session changing',
@@ -176,88 +173,97 @@ describe('selection grab and delivery', () => {
     })
   })
 
+  it('sends nothing while quitting', async () => {
+    const { bus, tether, state } = setup()
+    state.quitting = true
+    await expect(bus.deliver([record])).resolves.toMatchObject({ delivered: false })
+    expect(tether.inject).not.toHaveBeenCalled()
+  })
+
   it('refuses a second selection while one is still being inserted', async () => {
-    const { bus, tether, win2, ready } = setup()
-    ready()
+    const { bus, tether, win2 } = setup()
     const first = deferred<never>()
     tether.inject.mockReturnValueOnce(first.promise)
-    await bus.grab()
-    await bus.grab()
+    const pending = bus.deliver([record])
+    await expect(bus.deliver([record])).resolves.toEqual({ delivered: false, reason: 'busy' })
     expect(tether.inject).toHaveBeenCalledTimes(1)
     expect(win2.webContents.send).toHaveBeenCalledWith('selection:toast', {
       kind: 'Selection not inserted',
       snippet: 'Another selection is still being inserted. Try again.',
     })
     first.resolve(undefined as never)
-    await flush()
-    await bus.grab()
+    await expect(pending).resolves.toEqual({ delivered: true, reason: null })
+    await bus.deliver([record])
     expect(tether.inject).toHaveBeenCalledTimes(2)
   })
 
-  it('says the session changed on a stale generation, else that Tether could not insert', async () => {
+  it('says the session changed on a stale generation, else that Tether could not insert; never retries', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const { bus, tether, win2, ready } = setup()
-    ready()
+    const { bus, tether, win2 } = setup()
     tether.inject.mockRejectedValueOnce(new TetherError(409, 'stale_generation', {}))
-    await bus.grab()
-    await flush()
+    await expect(bus.deliver([record])).resolves.toEqual({
+      delivered: false,
+      reason: 'stale_generation',
+    })
     expect(win2.webContents.send).toHaveBeenLastCalledWith('selection:toast', {
       kind: 'Selection not inserted',
       snippet: 'The session changed. Try again.',
     })
     tether.inject.mockRejectedValueOnce(new Error('boom'))
-    await bus.grab()
-    await flush()
+    await expect(bus.deliver([record])).resolves.toEqual({
+      delivered: false,
+      reason: 'insert_failed',
+    })
     expect(win2.webContents.send).toHaveBeenLastCalledWith('selection:toast', {
       kind: 'Selection not inserted',
       snippet: 'Tether could not insert the selection.',
     })
+    expect(tether.inject).toHaveBeenCalledTimes(2)
+    expect(win2.show).not.toHaveBeenCalled()
   })
 
-  it('selection:grab runs the same harvest', async () => {
-    const { on, fetch, ready } = setup()
-    ready()
-    on.get('selection:grab')?.()
-    await flush()
-    expect(fetch).toHaveBeenCalledWith('http://127.0.0.1:18905/selection/current')
+  it('does not raise the window when the session changed during the insert', async () => {
+    const { bus, tether, win2, catalog } = setup()
+    tether.inject.mockImplementationOnce(async () => {
+      catalog.upsert(descriptor('bbbbbbbb', { generation: 'g8' }))
+      return {} as never
+    })
+    await expect(bus.deliver([record])).resolves.toEqual({ delivered: true, reason: null })
+    expect(win2.show).not.toHaveBeenCalled()
   })
 })
 
-describe('deliver-event stream', () => {
-  it('delivers records from the deliver-event stream and stops on quit', async () => {
-    const { bus, fetch, tether, state, ready } = setup()
-    ready()
-    const encoder = new TextEncoder()
-    const frames = [
-      ': ping\n\n',
-      `data: ${JSON.stringify({ records: [record] })}\n\n`,
-      'data: {not json\n\n',
-    ]
-    fetch.mockImplementation(async (url) => {
-      if (String(url).endsWith('/selection/events')) {
-        const body = new ReadableStream<Uint8Array>({
-          start(controller) {
-            for (const frame of frames) controller.enqueue(encoder.encode(frame))
-            controller.close()
-          },
-        })
-        return { ok: true, status: 200, body } as unknown as Response
-      }
-      return jsonResponse(record)
-    })
-    bus.subscribe()
-    await vi.waitFor(() => expect(tether.inject).toHaveBeenCalledTimes(1))
-    // Quitting before the 1 s reconnect backoff ends the loop.
-    state.quitting = true
-    expect(fetch).toHaveBeenCalledWith('http://127.0.0.1:18905/selection/events', {
-      signal: expect.any(AbortSignal),
-    })
-    await new Promise((r) => setTimeout(r, 1100))
-    expect(fetch.mock.calls.filter(([url]) => String(url).endsWith('/events'))).toHaveLength(1)
-    bus.stop()
+describe('indicate', () => {
+  it('does nothing before any capture arrived', async () => {
+    const { bus, tether } = setup()
+    await bus.grab()
+    expect(tether.inject).not.toHaveBeenCalled()
   })
 
-  it('stop() is safe before subscribing', () => {
-    expect(() => setup().bus.stop()).not.toThrow()
+  it('re-sends the newest capture, from memory, to the current target', async () => {
+    const { bus, tether } = setup()
+    const older = { kind: 'dom', snippet: 'older' }
+    await bus.deliver([older, record])
+    bus.noteFocus('aaaaaaaa')
+    await bus.grab()
+    expect(tether.inject).toHaveBeenLastCalledWith('aaaaaaaa', 'g1', compactRef([record]), 'type')
+  })
+
+  it('keeps a capture that was not delivered, so indicate can retry it', async () => {
+    const { bus, tether, views } = setup()
+    const saved = [...views]
+    views.length = 0
+    await bus.deliver([record])
+    views.push(...saved)
+    await bus.grab()
+    expect(tether.inject).toHaveBeenCalledWith('bbbbbbbb', 'g7', compactRef([record]), 'type')
+  })
+
+  it('selection:grab runs the same re-send', async () => {
+    const { bus, on, tether } = setup()
+    await bus.deliver([record])
+    on.get('selection:grab')?.()
+    await flush()
+    expect(tether.inject).toHaveBeenCalledTimes(2)
   })
 })

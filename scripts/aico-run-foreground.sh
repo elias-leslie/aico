@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Foreground runner for systemd. It never detaches: the script, build, Electron,
-# Chromium helpers, and sidecar all remain in the exact service cgroup. The
+# and Chromium helpers all remain in the exact service cgroup. The
 # pidfile names systemd's MainPID so aico-stop.sh can prove unit ownership.
 set -euo pipefail
 

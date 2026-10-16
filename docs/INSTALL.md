@@ -15,7 +15,7 @@ sudo apt-get install -y \
   libxcomposite1 libxkbcommon0 libxshmfence1 libpango-1.0-0 libcairo2
 ```
 
-Install Node.js 22+ and `uv` using the methods you trust for your system. The Python sidecar requires Python 3.13+; `uv venv --python 3.13` can use an existing Python 3.13 interpreter or a uv-managed one.
+Install Node.js 22+ and `uv` using the methods you trust for your system. The test environment needs Python 3.13+ (for the `st aico` entry test); `uv venv --python 3.13` can use an existing Python 3.13 interpreter or a uv-managed one.
 
 Aico requires [Tether](https://github.com/elias-leslie/tether) (API v1 or
 later), the per-user session daemon that owns every tmux server, agent launch,
@@ -47,7 +47,7 @@ scripts/aico-install.sh
 
 The installer first requires `tether --json version` to report API v1 or later
 (otherwise it prints the Tether install steps and exits; set `TETHER_REPO` if your Tether checkout is not next to this one). It then runs `npm ci`, rebuilds native Electron modules, syncs the locked
-Python 3.13 sidecar environment with `uv`, writes a desktop entry under
+Python 3.13 test environment with `uv`, writes a desktop entry under
 `~/.local/share/applications`, and installs the `aico-shell.service` user unit
 into `${XDG_CONFIG_HOME:-~/.config}/systemd/user/`
 (rendered for this checkout, followed by `systemctl --user daemon-reload`). It
@@ -89,7 +89,7 @@ history: [`INCIDENT-2026-07-PROCESS-ESCAPES.md`](INCIDENT-2026-07-PROCESS-ESCAPE
 npm run lint
 npm run typecheck
 npm test
-npm run test:sidecar
+npm run test:scripts
 npm run build
 ```
 
@@ -99,10 +99,9 @@ Or:
 npm run check
 ```
 
-Run the sidecar alone:
+Check the capture listener of a running Aico:
 
 ```bash
-.venv/bin/python -m aico_sidecar
 curl http://127.0.0.1:8005/health
 ```
 
@@ -112,10 +111,9 @@ Run the Electron app from the checkout:
 npm start
 ```
 
-AppImage builds are frozen and unsupported for current code. The locked PyInstaller toolchain and the build command remain:
+AppImage builds are frozen and unsupported for current code. The build command remains:
 
 ```bash
-uv sync --frozen --python 3.13 --extra dev --extra release
 npm run dist
 ```
 

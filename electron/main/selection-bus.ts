@@ -1,24 +1,23 @@
-// The selection bus, main's half: the session an indicated selection goes to,
-// the hotkey harvest and the browser-driven deliver-event stream (both read
-// from the sidecar and type through Tether).
+// The selection bus, main's half: the session a selection goes to, and typing
+// it there through Tether. Sends arrive from the loopback listener (browser
+// extension, `st selection send`); the indicate hotkey re-sends the newest
+// capture, which is kept in memory only.
 
 import type { IpcMain } from 'electron'
-import { parseSse, type SelectionRecord } from './selection'
-import { deliverSelectionToSession } from './selection-delivery'
+import { compactRef, type SelectionRecord } from './selection'
 import type { SessionCatalog } from './session-catalog'
 import { type TetherClient, TetherError } from './tether-client'
 import type { ViewRow } from './views'
 import type { WindowRegistry } from './window-registry'
 
-// Subscribe to the sidecar's deliver-event stream so a browser-side "send"
-// (extension pill / right-click / picker) reaches the same insert path as the
-// hotkey. Reconnects with backoff across sidecar restarts; cancelled on quit.
-// This is also the Wayland-safe trigger (a CLI POST to /selection/send fires it).
-// Only our own healthy sidecar is subscribed: if something else holds the port,
-// its events must never be typed into an agent prompt. The sidecar pings every
-// 15s, so a stream silent for SELECTION_EVENTS_IDLE_MS is half-open and is
-// reconnected rather than silently dropping every later send.
-const SELECTION_EVENTS_IDLE_MS = 45_000
+/** What became of a send: typed at a session prompt, or why not. */
+export type SelectionDelivery =
+  | { delivered: true; reason: null }
+  | {
+      delivered: false
+      /** empty | no_session | busy | session_changing | stale_generation | insert_failed */
+      reason: string
+    }
 
 interface SelectionBusDeps {
   registry: Pick<WindowRegistry, 'forSession'>
@@ -27,50 +26,46 @@ interface SelectionBusDeps {
   tether: Pick<TetherClient, 'inject'>
   isReplacing(id: string): boolean
   isQuitting(): boolean
-  /** The sidecar the selections come from (sidecar-link). */
-  sidecar: {
-    /** Our own sidecar passed its health check. */
-    ready(): boolean
-    url(path: string): string
-  }
-  fetch?: typeof fetch
 }
 
+const refused = (reason: string): SelectionDelivery => ({ delivered: false, reason })
+
 export function createSelectionBus(deps: SelectionBusDeps) {
-  const { registry, catalog, sidecar } = deps
-  const fetchImpl: typeof fetch = deps.fetch ?? ((input, init) => fetch(input, init))
+  const { registry, catalog } = deps
 
-  const selectionDeliveries = new Map<string, Promise<void>>()
-
-  // The widget that should receive an indicated selection: the last Aico widget
-  // the user focused. (During an indicate gesture the *browser* holds OS focus,
-  // so "active session" means most-recently-focused widget, not focused-now.)
+  const inFlight = new Set<string>()
+  // The widget that should receive a selection: the last Aico widget the user
+  // focused. (During a browser send the *browser* holds OS focus, so "active
+  // session" means most-recently-focused widget, not focused-now.)
   let lastFocusedAico: string | null = null
-  // Aborts the sidecar SSE subscription (deliver-event stream) on quit.
-  let selectionEvents: AbortController | null = null
+  // The newest capture, for the indicate hotkey. Never written to disk.
+  let newest: SelectionRecord | null = null
 
-  // The widget that should receive an indicated selection: the last-focused one
-  // if it's still open, else the most recently opened view.
+  // The last-focused session if its window is still open, else the most
+  // recently opened view.
   function selectionTarget(): string | undefined {
     if (lastFocusedAico && registry.forSession(lastFocusedAico)) return lastFocusedAico
     const open = deps.listViews().filter((view) => registry.forSession(view.id))
     return open.length ? open[open.length - 1].id : undefined
   }
 
-  // Shared deliver path for every trigger (X11 hotkey + browser-driven SSE):
-  // type a compact reference at the target session's prompt through Tether (no
-  // Enter — the user adds their ask and submits), then flash a toast.
-  function deliverSelection(records: SelectionRecord[]): void {
-    if (!records.some((record) => record?.kind && record.kind !== 'empty')) return
+  // Shared deliver path for every trigger: type one compact reference at the
+  // target session's prompt through Tether's generation-fenced inject (no Enter;
+  // the user adds their ask and submits), then show the window and toast it.
+  // Tether refuses a stale generation or a stopped session; nothing is retried.
+  async function deliver(records: SelectionRecord[]): Promise<SelectionDelivery> {
+    const usable = records.filter((record) => record?.kind && record.kind !== 'empty')
+    if (!usable.length) return refused('empty')
+    newest = usable[usable.length - 1]
     const targetId = selectionTarget()
-    if (!targetId) return
+    if (!targetId) return refused('no_session')
     const win = registry.forSession(targetId)
-    if (selectionDeliveries.has(targetId)) {
+    if (inFlight.has(targetId)) {
       win?.webContents.send('selection:toast', {
         kind: 'Selection not inserted',
         snippet: 'Another selection is still being inserted. Try again.',
       })
-      return
+      return refused('busy')
     }
     const descriptor = catalog.get(targetId)
     if (!win || !descriptor || deps.isReplacing(targetId)) {
@@ -78,122 +73,60 @@ export function createSelectionBus(deps: SelectionBusDeps) {
         kind: 'Session changing',
         snippet: 'Selection was not inserted while the terminal was being replaced.',
       })
-      return
+      return refused('session_changing')
     }
-    const request = deliverSelectionToSession(
-      records,
-      {
-        isCurrent: () =>
-          !deps.isQuitting() &&
-          !win.isDestroyed() &&
-          registry.forSession(targetId) === win &&
-          catalog.get(targetId)?.generation === descriptor.generation,
-        inject: async (text) => {
-          await deps.tether.inject(targetId, descriptor.generation, text, 'type')
-        },
-        delivered: (usable) => {
-          win.show()
-          win.focus()
-          const head = usable[0]
-          win.webContents.send('selection:toast', {
-            kind: usable.length > 1 ? `${usable.length} items` : head.kind,
-            snippet:
-              usable.length > 1 ? usable.map((r) => r.snippet ?? '').join(' · ') : head.snippet,
-          })
-        },
-      },
-      (error) => {
-        console.warn('[aico] selection insert failed:', error)
+    const isCurrent = (): boolean =>
+      !deps.isQuitting() &&
+      !win.isDestroyed() &&
+      registry.forSession(targetId) === win &&
+      catalog.get(targetId)?.generation === descriptor.generation
+    if (!isCurrent()) return refused('session_changing')
+    inFlight.add(targetId)
+    try {
+      await deps.tether.inject(targetId, descriptor.generation, compactRef(usable), 'type')
+    } catch (error) {
+      console.warn('[aico] selection insert failed:', error)
+      const stale = error instanceof TetherError && error.code === 'stale_generation'
+      if (!win.isDestroyed()) {
         win.webContents.send('selection:toast', {
           kind: 'Selection not inserted',
-          snippet:
-            error instanceof TetherError && error.code === 'stale_generation'
-              ? 'The session changed. Try again.'
-              : 'Tether could not insert the selection.',
+          snippet: stale
+            ? 'The session changed. Try again.'
+            : 'Tether could not insert the selection.',
         })
-      },
-    )
-    selectionDeliveries.set(targetId, request)
-    void request.finally(() => {
-      if (selectionDeliveries.get(targetId) === request) selectionDeliveries.delete(targetId)
-    })
-  }
-
-  // "Indicate" hotkey (X11 fallback for non-web sources): harvest the freshest
-  // capture from the bus and deliver it. Browser sends arrive via SSE instead.
-  async function selectionGrab(): Promise<void> {
-    if (!sidecar.ready()) return // never take text from a process we did not start
-    try {
-      const res = await fetchImpl(sidecar.url('/selection/current'))
-      if (!res.ok) return
-      deliverSelection([(await res.json()) as SelectionRecord])
-    } catch {
-      // sidecar unreachable — best-effort
-    }
-  }
-
-  function subscribeSelectionEvents(): void {
-    selectionEvents = new AbortController()
-    const url = sidecar.url('/selection/events')
-    void (async () => {
-      while (!deps.isQuitting()) {
-        const connection = new AbortController()
-        const stopConnection = () => connection.abort()
-        selectionEvents?.signal.addEventListener('abort', stopConnection)
-        let idle: NodeJS.Timeout | undefined
-        const armIdle = () => {
-          clearTimeout(idle)
-          idle = setTimeout(stopConnection, SELECTION_EVENTS_IDLE_MS)
-        }
-        try {
-          if (!sidecar.ready()) throw new Error('sidecar not ready')
-          armIdle()
-          const res = await fetchImpl(url, { signal: connection.signal })
-          if (!res.ok || !res.body) throw new Error(`events ${res.status}`)
-          const reader = res.body.getReader()
-          const decoder = new TextDecoder()
-          let buf = ''
-          for (;;) {
-            const { value, done } = await reader.read()
-            if (done) break
-            armIdle()
-            buf += decoder.decode(value, { stream: true })
-            const { events, rest } = parseSse(buf)
-            buf = rest
-            for (const data of events) {
-              try {
-                const payload = JSON.parse(data) as { records?: SelectionRecord[] }
-                if (payload.records?.length) deliverSelection(payload.records)
-              } catch {
-                // malformed frame — skip
-              }
-            }
-          }
-        } catch {
-          if (deps.isQuitting() || selectionEvents?.signal.aborted) return
-        } finally {
-          clearTimeout(idle)
-          selectionEvents?.signal.removeEventListener('abort', stopConnection)
-        }
-        await new Promise((r) => setTimeout(r, 1000)) // backoff before reconnect
       }
-    })()
+      return refused(stale ? 'stale_generation' : 'insert_failed')
+    } finally {
+      inFlight.delete(targetId)
+    }
+    if (isCurrent()) {
+      win.show()
+      win.focus()
+      const head = usable[0]
+      win.webContents.send('selection:toast', {
+        kind: usable.length > 1 ? `${usable.length} items` : head.kind,
+        snippet: usable.length > 1 ? usable.map((r) => r.snippet ?? '').join(' · ') : head.snippet,
+      })
+    }
+    return { delivered: true, reason: null }
+  }
+
+  // "Indicate" (hotkey or menu): send the newest capture again, to whichever
+  // session is the target now.
+  async function selectionGrab(): Promise<void> {
+    if (newest) await deliver([newest])
   }
 
   return {
-    /** Browser-driven sends (and any CLI POST to /selection/send) arrive here. */
-    subscribe: subscribeSelectionEvents,
-    /** The indicate hotkey's harvest. */
+    /** Type captures at the target session; resolves what became of them. */
+    deliver,
+    /** The indicate hotkey and menu item: re-send the newest capture. */
     grab: selectionGrab,
-    /** The session an indicated selection goes to. */
+    /** The session a selection goes to. */
     target: selectionTarget,
     /** A window gained focus; a window with no session keeps the last target. */
     noteFocus: (sessionId: string | undefined): void => {
       lastFocusedAico = sessionId ?? lastFocusedAico
-    },
-    /** Quit: stop the deliver-event stream. Safe if never subscribed. */
-    stop: (): void => {
-      selectionEvents?.abort()
     },
     registerIpc: (ipcMain: Pick<IpcMain, 'on'>): void => {
       ipcMain.on('selection:grab', () => void selectionGrab())

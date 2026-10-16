@@ -12,12 +12,11 @@
     "build": "electron-vite build",
     "dev": "electron-vite dev",
     "rebuild": "electron-rebuild -f -w node-pty",
-    "dist:sidecar": ".venv/bin/pyinstaller --noconfirm --clean --log-level WARN --name aico-sidecar --distpath dist/sidecar --workpath dist/.pyi-build --specpath dist/.pyi-build --paths sidecar --collect-submodules uvicorn --collect-submodules aico_sidecar --hidden-import aico_sidecar.app sidecar/aico_sidecar/__main__.py",
-    "dist": "npm run dist:sidecar && npm run build && electron-builder --linux AppImage --publish never",
+    "dist": "npm run build && electron-builder --linux AppImage --publish never",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:sidecar": ".venv/bin/python -m pytest sidecar/tests scripts/tests",
-    "check": "npm run lint && npm run typecheck && npm test && npm run test:sidecar && npm run build",
+    "test:scripts": ".venv/bin/python -m pytest scripts/tests",
+    "check": "npm run lint && npm run typecheck && npm test && npm run test:scripts && npm run build",
     "lint": "biome check ."
   },
   "devDependencies": {
@@ -51,7 +50,6 @@
     "directories": { "output": "dist/electron" },
     "files": ["out/**/*", "package.json", "assets/icon.png", "assets/tray/*.png"],
     "asarUnpack": ["**/node_modules/node-pty/**"],
-    "extraResources": [{ "from": "dist/sidecar/aico-sidecar", "to": "sidecar/aico-sidecar" }],
     "linux": {
       "target": ["AppImage"],
       "category": "Development",

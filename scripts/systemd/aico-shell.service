@@ -16,7 +16,7 @@ ConditionEnvironment=DISPLAY
 Type=simple
 Slice=app.slice
 WorkingDirectory=__PROJECT_ROOT__
-# The runner, build, Chromium helpers and sidecar start in this unit's cgroup.
+# The runner, build and Chromium helpers start in this unit's cgroup.
 # Once a window opens, the desktop moves the Electron main process into
 # app-aico-<pid>.scope, and the tmux attach clients it spawns afterwards start
 # there too. `journalctl --user -u aico-shell` therefore misses most of Aico's

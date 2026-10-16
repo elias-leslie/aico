@@ -1,10 +1,10 @@
 // Pure selection-delivery helpers, kept out of `index.ts` so they unit-test
-// without pulling in Electron. The record shape is shared by the sidecar,
-// browser extension, and local capture tooling.
+// without pulling in Electron. The record shape is shared by the loopback
+// listener, browser extension, and local capture tooling.
 
 import { sanitizeTerminalText } from '../shared/terminal-text'
 
-// One capture as read off the bus / pushed over SSE.
+// One capture as sent to the loopback listener.
 export interface SelectionRecord {
   kind?: string
   snippet?: string
@@ -29,8 +29,7 @@ function positiveFiniteNumber(value: unknown): number | null {
 // Compact prompt reference for one or more captures. Single → `[dom: "…"]`;
 // batch → `[3 items: dom "…", img "…", …]`. A capture package (from `st ui grab`,
 // flagged by `meta.package`) renders as a pointer to its index so the agent opens
-// the cheap text/meta before the image. Full detail stays in the bus (pullable
-// via `st selection history`).
+// the cheap text/meta before the image.
 export function compactRef(records: SelectionRecord[]): string {
   if (records.length === 1) {
     const pkg = packageRef(records[0])
@@ -68,25 +67,4 @@ function packageRef(record: SelectionRecord): string | null {
     `[capture: ${path} (${count}${dims}) — open the index first; ` +
     `it ranks the text/meta/image by token cost, read cheapest-first] `
   )
-}
-
-// Parse complete SSE frames out of a rolling buffer, returning the decoded
-// `data:` payloads and the unterminated remainder. Comment lines (`:` keepalive
-// pings) carry no data and are dropped.
-export function parseSse(buffer: string): { events: string[]; rest: string } {
-  const events: string[] = []
-  let rest = buffer
-  let idx = rest.indexOf('\n\n')
-  while (idx !== -1) {
-    const frame = rest.slice(0, idx)
-    rest = rest.slice(idx + 2)
-    const data = frame
-      .split('\n')
-      .filter((l) => l.startsWith('data:'))
-      .map((l) => l.slice(5).trim())
-      .join('\n')
-    if (data) events.push(data)
-    idx = rest.indexOf('\n\n')
-  }
-  return { events, rest }
 }

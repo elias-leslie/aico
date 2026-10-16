@@ -1,6 +1,6 @@
 // Every environment-derived setting of the main process, read once at start,
 // so no feature module reads process.env itself. The child processes features
-// start (terminal PTYs, the sidecar) get the environment handed in by the root.
+// start (terminal PTYs) get the environment handed in by the root.
 
 import { join } from 'node:path'
 import { tetherSocketPath } from './tether-client'
@@ -8,8 +8,12 @@ import { tetherSocketPath } from './tether-client'
 export interface AicoConfig {
   readonly stateDir: string
   readonly dbPath: string
-  readonly sidecarHost: string
-  readonly sidecarPort: number
+  /** The loopback listener (extension and `st selection send`); it keeps the
+   * old sidecar's AICO_SIDECAR_* names, which `st selection` reads too. */
+  readonly listenerHost: string
+  readonly listenerPort: number
+  /** Raw AICO_EXTENSION_IDS; the listener validates it. */
+  readonly extensionIds: string | undefined
   /** $XDG_RUNTIME_DIR/aico/layout.json: the window picture agents read. */
   readonly layoutPath: string
   /** Tether's control socket (TETHER_SOCKET, TETHER_INSTANCE, XDG_RUNTIME_DIR). */
@@ -42,8 +46,9 @@ export function readConfig(
   return Object.freeze({
     stateDir,
     dbPath: join(stateDir, 'aico.db'),
-    sidecarHost: env.AICO_SIDECAR_HOST ?? '127.0.0.1',
-    sidecarPort: Number(env.AICO_SIDECAR_PORT ?? 8005),
+    listenerHost: env.AICO_SIDECAR_HOST ?? '127.0.0.1',
+    listenerPort: Number(env.AICO_SIDECAR_PORT ?? 8005),
+    extensionIds: env.AICO_EXTENSION_IDS,
     layoutPath: join(env.XDG_RUNTIME_DIR || `/run/user/${uid ?? 1000}`, 'aico', 'layout.json'),
     tetherSocket: tetherSocketPath(env, uid),
     nightshift: join(home, '.local/bin/nightshift'),

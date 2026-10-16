@@ -42,7 +42,7 @@ cleanup() {
     wait "$primary_pid" 2>/dev/null || true
   fi
   if ((status != 0)); then
-    echo 'Packaged AppImage smoke failed; Electron/sidecar log follows:' >&2
+    echo 'Packaged AppImage smoke failed; Electron log follows:' >&2
     if [[ -f $tmp/app.log ]]; then tail -n 120 "$tmp/app.log" >&2; fi
     if [[ -f $tmp/activation.log ]]; then
       echo 'Second-launch log follows:' >&2
@@ -109,25 +109,25 @@ PY
 }
 
 deadline=$((SECONDS + 90))
-until health_ok && grep -q '\[aico\] sidecar ready:' "$tmp/app.log"; do
+until health_ok && grep -q '\[aico\] selection listener ready:' "$tmp/app.log"; do
   if ! kill -0 "$primary_pid" 2>/dev/null; then
-    echo 'AppImage exited before its bundled sidecar became ready' >&2
+    echo 'AppImage exited before its capture listener became ready' >&2
     exit 1
   fi
   if ((SECONDS >= deadline)); then
-    echo 'Timed out waiting for the bundled sidecar health gate' >&2
+    echo 'Timed out waiting for the capture listener health gate' >&2
     exit 1
   fi
   sleep 0.5
 done
-echo 'Bundled sidecar returned the expected health identity and Electron reported ready.'
+echo 'The capture listener returned the expected health identity and Electron reported ready.'
 
 # A fresh Aico profile starts in the tray. The second launch activates the
 # first instance and opens a shell widget. No Tether daemon runs here, so the
 # widget shows its "could not start" notice; the window and renderer are what
 # this gate checks. The second launch gets its own TMPDIR: with
 # APPIMAGE_EXTRACT_AND_RUN the runtime deletes its extraction directory on exit,
-# and a shared one would vanish under the primary's running sidecar.
+# and a shared one would vanish under the primary's running listener.
 mkdir -p "$tmp/temp-second"
 timeout --signal=TERM --kill-after=5s 30s \
   "${app_env[@]}" TMPDIR="$tmp/temp-second" "$artifact" --no-sandbox --disable-gpu --disable-dev-shm-usage \
@@ -177,7 +177,7 @@ if ! kill -0 "$primary_pid" 2>/dev/null || ! widget_window_ok; then
   echo 'Packaged Aico window did not remain open' >&2
   exit 1
 fi
-health_ok || { echo 'Bundled sidecar became unhealthy after widget activation' >&2; exit 1; }
+health_ok || { echo 'The capture listener became unhealthy after widget activation' >&2; exit 1; }
 # Icons load from inside app.asar; a bad path yields an empty image, not an error.
 widget_icon_ok() {
   local id icon
@@ -198,4 +198,4 @@ if grep -Eq '\[aico:renderer\].*( error |load failed|process gone)' "$tmp/app.lo
   echo 'Packaged renderer logged an error, load failure, or crash' >&2
   exit 1
 fi
-echo 'Packaged Electron renderer and control surface are ready on Xvfb; sidecar remains healthy.'
+echo 'Packaged Electron renderer and control surface are ready on Xvfb; capture listener remains healthy.'

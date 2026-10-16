@@ -87,7 +87,7 @@ contextBridge.exposeInMainWorld('aico', {
     switchProject: (id: string) => ipcRenderer.send('widget:switch-project', id),
     /** Hub view: surface every widget. */
     hub: () => ipcRenderer.send('widget:hub'),
-    /** Harvest the freshest selection-bus capture and deliver it (same path as the hotkey). */
+    /** Send the newest capture again to the last-focused widget (same path as the hotkey). */
     indicate: () => ipcRenderer.send('selection:grab'),
     /** The indicate hotkey main registered (an Electron accelerator), or null when none took. */
     selectionHotkey: (): Promise<string | null> => ipcRenderer.invoke('hotkeys:selection'),
