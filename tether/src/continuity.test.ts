@@ -70,12 +70,21 @@ describe('agent observation', () => {
     ).toEqual({
       resumeId: CLAUDE,
       idle: false,
+      blocked: false,
     })
     expect(
       observeClaude(procfs({ '/h/.claude/sessions/20.json': state('idle') }), '/h', [20]),
     ).toEqual({
       resumeId: CLAUDE,
       idle: true,
+      blocked: false,
+    })
+    expect(
+      observeClaude(procfs({ '/h/.claude/sessions/20.json': state('waiting') }), '/h', [20]),
+    ).toEqual({
+      resumeId: CLAUDE,
+      idle: true,
+      blocked: true,
     })
     // A stale file left by a reused pid names another process.
     const stale = JSON.stringify({ pid: 99, sessionId: CLAUDE })
@@ -96,7 +105,7 @@ describe('agent observation', () => {
         '/proc/30/fd/53': ROLLOUT(CODEX),
       },
     )
-    expect(observeCodex(fs, [30])).toEqual({ resumeId: CODEX, idle: null })
+    expect(observeCodex(fs, [30])).toEqual({ resumeId: CODEX, idle: null, blocked: false })
   })
 
   it('skips a Codex user rollout without a UUID thread ID', () => {
@@ -106,7 +115,7 @@ describe('agent observation', () => {
       { [ROLLOUT('odd')]: meta('odd'), [ROLLOUT(CODEX)]: meta(CODEX) },
       { '/proc/30/fd/4': ROLLOUT('odd'), '/proc/30/fd/5': ROLLOUT(CODEX) },
     )
-    expect(observeCodex(fs, [30])).toEqual({ resumeId: CODEX, idle: null })
+    expect(observeCodex(fs, [30])).toEqual({ resumeId: CODEX, idle: null, blocked: false })
   })
 
   it('skips a Claude session file without a UUID session ID', () => {
@@ -114,7 +123,11 @@ describe('agent observation', () => {
       '/h/.claude/sessions/20.json': JSON.stringify({ pid: 20, sessionId: 'not-a-uuid' }),
       '/h/.claude/sessions/21.json': JSON.stringify({ pid: 21, sessionId: CLAUDE }),
     })
-    expect(observeClaude(fs, '/h', [20, 21])).toEqual({ resumeId: CLAUDE, idle: true })
+    expect(observeClaude(fs, '/h', [20, 21])).toEqual({
+      resumeId: CLAUDE,
+      idle: true,
+      blocked: false,
+    })
   })
 
   it('skips a Claude session file holding JSON null', () => {
@@ -122,7 +135,11 @@ describe('agent observation', () => {
       '/h/.claude/sessions/20.json': 'null',
       '/h/.claude/sessions/21.json': JSON.stringify({ pid: 21, sessionId: CLAUDE }),
     })
-    expect(observeClaude(fs, '/h', [20, 21])).toEqual({ resumeId: CLAUDE, idle: true })
+    expect(observeClaude(fs, '/h', [20, 21])).toEqual({
+      resumeId: CLAUDE,
+      idle: true,
+      blocked: false,
+    })
   })
 
   it('skips a Codex rollout whose thread_source alone marks a subagent', () => {
@@ -135,7 +152,7 @@ describe('agent observation', () => {
       },
       { '/proc/30/fd/4': ROLLOUT(SUBAGENT), '/proc/30/fd/5': ROLLOUT(CODEX) },
     )
-    expect(observeCodex(fs, [30])).toEqual({ resumeId: CODEX, idle: null })
+    expect(observeCodex(fs, [30])).toEqual({ resumeId: CODEX, idle: null, blocked: false })
   })
 
   it('finds the agent anywhere under the pane', () => {

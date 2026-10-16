@@ -319,7 +319,7 @@ describe('agent process discovery', () => {
       { '/proc/30/fd/4': rollout('odd'), '/proc/30/fd/5': rollout(CODEX) },
     )
     expect(findCodexRollout(fs, [30])).toEqual({ pid: 30, path: rollout(CODEX), threadId: CODEX })
-    expect(observeCodex(fs, [30])).toEqual({ resumeId: CODEX, idle: null })
+    expect(observeCodex(fs, [30])).toEqual({ resumeId: CODEX, idle: null, blocked: false })
   })
 
   it('falls back to a user rollout without a UUID thread ID when it is the only one', () => {

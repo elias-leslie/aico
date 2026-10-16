@@ -36,7 +36,7 @@ tether reboot prepare [--timeout SEC] [--no-notify] [--json]
 POST /v1/reboot/prepare {"timeoutSec": 300, "notify": true}
 ```
 
-This refreshes the snapshot. Unless notify is off, it pastes a checkpoint request into every running agent, then waits up to the timeout for Claude agents to report idle. Codex does not report idle, so its `idle` is `null` and it never blocks readiness. The exit code is 0 when ready and 3 when not ready.
+This refreshes the snapshot. Unless notify is off, it pastes a checkpoint request into every running agent except a Claude agent sitting at a permission prompt or question (submitting a paste there could pick the prompt's default answer; its `notified` is false), then waits up to the timeout for Claude agents to report idle. A Claude agent at a prompt counts as idle, so it does not block readiness either. Codex does not report idle, so its `idle` is `null` and it never blocks readiness. The exit code is 0 when ready and 3 when not ready.
 
 ```json
 {"ready": true, "bootId": "…", "sessions": [

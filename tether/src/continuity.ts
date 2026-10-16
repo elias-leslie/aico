@@ -125,6 +125,8 @@ export interface AgentObservation {
   resumeId: string
   /** Claude reports busy/idle; null when the tool does not say. */
   idle: boolean | null
+  /** Claude is at a permission prompt or question; false when the tool does not say. */
+  blocked: boolean
 }
 
 // Both readers below depend on Claude Code's and Codex's undocumented file
@@ -207,7 +209,11 @@ export function* codexUserRollouts(fs: ProcFs, pids: number[]): Generator<CodexR
 export function observeClaude(fs: ProcFs, home: string, pids: number[]): AgentObservation | null {
   for (const { state } of claudeSessions(fs, home, pids)) {
     if (typeof state.sessionId !== 'string' || !UUID_RE.test(state.sessionId)) continue
-    return { resumeId: state.sessionId, idle: state.status !== 'busy' }
+    return {
+      resumeId: state.sessionId,
+      idle: state.status !== 'busy',
+      blocked: state.status === 'waiting',
+    }
   }
   return null
 }
@@ -215,7 +221,7 @@ export function observeClaude(fs: ProcFs, home: string, pids: number[]): AgentOb
 /** The first Codex user thread in `pids` with a resumable thread ID. */
 export function observeCodex(fs: ProcFs, pids: number[]): AgentObservation | null {
   for (const { threadId } of codexUserRollouts(fs, pids)) {
-    if (threadId) return { resumeId: threadId, idle: null }
+    if (threadId) return { resumeId: threadId, idle: null, blocked: false }
   }
   return null
 }

@@ -69,6 +69,8 @@ interface Observed {
   row: WidgetRow
   resumeId: string | null
   idle: boolean | null
+  /** At a permission prompt or question, where a pasted Enter could answer it. */
+  blocked: boolean
 }
 
 function isAgent(tool: string): boolean {
@@ -144,13 +146,15 @@ export class Continuity {
       if (status !== 'running') continue
       let resumeId: string | null = null
       let idle: boolean | null = null
+      let blocked = false
       if (isAgent(row.tool)) {
         const pane = await verifiedCurrentManagedPane(row).catch(() => null)
         const agent = pane ? observeAgent(nodeProcFs, this.home, pane.pid) : null
         if (agent && isResumeSessionId(getTui(row.tool), agent.resumeId)) resumeId = agent.resumeId
         idle = agent?.idle ?? null
+        blocked = agent?.blocked ?? false
       }
-      observed.push({ row, resumeId, idle })
+      observed.push({ row, resumeId, idle, blocked })
     }
     const snapshot = mergeSnapshot(
       readJsonFile<ContinuitySnapshot>(this.snapshotPath),
@@ -170,9 +174,10 @@ export class Continuity {
     const notified = new Set<string>()
     let observed = await this.observe()
     if (options.notify) {
-      for (const { row } of observed) {
-        if (isAgent(row.tool) && (await pasteIntoRunningSession(row.id, CHECKPOINT_PROMPT)))
-          notified.add(row.id)
+      for (const { row, blocked } of observed) {
+        // A submitted paste into a prompt could pick its default answer.
+        if (blocked || !isAgent(row.tool)) continue
+        if (await pasteIntoRunningSession(row.id, CHECKPOINT_PROMPT)) notified.add(row.id)
       }
       if (notified.size) await this.sleep(Math.min(PREPARE_SETTLE_MS, options.timeoutMs))
     }
