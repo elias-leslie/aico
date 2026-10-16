@@ -151,6 +151,12 @@ def test_tool_input_leaves_out_unset_fields() -> None:
     assert entries["mine"]["description"] == "x"
 
 
+def test_tool_import_treats_the_old_default_green_as_no_colour() -> None:
+    row = {"slug": "mine", "name": "Mine", "command": "mine", "display_order": 0, "enabled": True}
+    assert cli.tool_import_entry({**row, "color": "#00ff9F"}, {})["color"] is None
+    assert cli.tool_import_entry({**row, "color": "#123456"}, {})["color"] == "#123456"
+
+
 def test_import_tools_dry_run_then_apply(
     fake_tether: FakeTether, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

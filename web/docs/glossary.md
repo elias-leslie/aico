@@ -24,7 +24,7 @@ _Avoid_: Attachment, when describing authority to end a session
 The app that created a session (`a-term` or `aico`). It is informational; it grants no extra authority.
 
 **Legacy session**:
-A Tether session an older Tether started (Tether status `legacy`). A-Term shows, attaches to and can end it, but never restarts it. A-Term's own pre-Tether `summitflow-<uuid>` sessions are no longer shown; `tether legacy list` covers any that remain.
+A Tether session an older Tether started (Tether status `legacy`). A-Term shows, attaches to and can end it, but never restarts it. A-Term's own pre-Tether `summitflow-<uuid>` sessions are no longer handled as A-Term sessions: one still running an agent shows as an Own tmux session (read-only), and `tether legacy list` and `tether legacy end` cover any that remain.
 
 **Own tmux session**:
 A session the user started on their own default tmux server that is running an agent. A-Term discovers and shows it, but Tether does not own it, so A-Term never renames, respawns or ends it; closing it only closes the View.

@@ -1,8 +1,9 @@
 # A-Term cutover to Tether
 
 This moves a running A-Term from its own tmux sessions and Postgres to Tether.
-The cutover was done on 2026-10-11; since then A-Term no longer shows
-pre-Tether `summitflow-<uuid>` sessions, so the steps below reflect that.
+The cutover was done on 2026-10-11; since then A-Term no longer handles
+pre-Tether `summitflow-<uuid>` sessions as its own, so the steps below reflect
+that.
 It assumes A-Term runs from a source checkout as the user services
 `a-term-backend.service` and `a-term-frontend.service`. Run every command
 from the checkout root.
@@ -41,9 +42,10 @@ Postgres table, so rollback is a code rollback.
 3. Note the current A-Term `main` commit for rollback:
    `git rev-parse HEAD > /tmp/a-term-pre-tether.sha`.
 4. Pre-Tether A-Term sessions still running on the default tmux server
-   (`tmux ls | grep '^summitflow-'`) keep running but no longer appear in
-   A-Term. Finish or end them first (`tether legacy list`, `tether legacy end
-   <name>`) if you still need them.
+   (`tmux ls | grep '^summitflow-'`) keep running but are no longer handled
+   as A-Term sessions. One still running an agent shows like any of your own
+   tmux sessions: read-only, and closing it only closes the view. Finish or
+   end them with `tether legacy list` and `tether legacy end <name>`.
 
 ## 1. Bring in the code
 
@@ -76,7 +78,9 @@ Then write it:
 
 This creates `~/.local/state/a-term/a-term.db` (mode 0600) and
 `~/.local/state/a-term/tether-tools-import.json`. Running it again inserts
-nothing that is already there.
+nothing that is already there. A tool colour of `#00FF9F`, which the old
+Settings form saved when no colour was picked, goes into the file as no
+colour, so the tool keeps its built-in colour.
 
 ## 3. Import agent tools into Tether
 

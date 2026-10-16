@@ -145,6 +145,16 @@ def _iso(value: Any) -> str:
     return str(value) if value else local_db.now_iso()
 
 
+# The old Settings form saved the accent green as its "no colour" value, so a
+# Postgres row holding it almost always meant unset; import it as no colour so
+# the tool keeps its built-in colour.
+_OLD_NO_COLOUR = "#00ff9f"
+
+
+def _imported_color(value: Any) -> Any:
+    return None if isinstance(value, str) and value.strip().lower() == _OLD_NO_COLOUR else value
+
+
 def tool_import_entry(row: dict[str, Any], renames: Mapping[str, str]) -> dict[str, Any]:
     slug = canonical_mode(row["slug"], renames)
     return {
@@ -153,7 +163,7 @@ def tool_import_entry(row: dict[str, Any], renames: Mapping[str, str]) -> dict[s
         "command": row.get("command") or "",
         "processName": row.get("process_name"),
         "description": row.get("description"),
-        "color": row.get("color"),
+        "color": _imported_color(row.get("color")),
         "displayOrder": int(row.get("display_order") or 0),
         "isDefault": bool(row.get("is_default")),
         "enabled": bool(row.get("enabled", True)),
