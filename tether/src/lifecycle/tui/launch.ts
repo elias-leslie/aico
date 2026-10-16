@@ -30,6 +30,26 @@ export const AGENT_OOM_SCORE_ADJ = 100
 /** Set in the pane's fallback shell to the agent's exit status. */
 export const AGENT_EXIT_ENV = 'TETHER_AGENT_EXIT'
 
+/** What the pane supervisor wrote to `<agentExitDir>/<pane scope unit>`:
+ * `started` while the agent runs, `exit N` once it exited with status N, or
+ * `signal NAME` when the supervisor itself was told to stop (HUP or TERM).
+ * A pane whose marker still says `started` after its scope ended was killed
+ * with the agent still running: nothing got to write the exit. */
+export type AgentExitMarker =
+  | { state: 'started' }
+  | { state: 'exit'; status: number }
+  | { state: 'signal'; signal: string }
+
+export function parseAgentExitMarker(text: string): AgentExitMarker | null {
+  const line = text.trim()
+  if (line === 'started') return { state: 'started' }
+  const exit = /^exit ([0-9]{1,3})$/.exec(line)
+  if (exit) return { state: 'exit', status: Number(exit[1]) }
+  const signal = /^signal ([A-Z]{2,8})$/.exec(line)
+  if (signal) return { state: 'signal', signal: signal[1] as string }
+  return null
+}
+
 /** The shell line typed into a freshly-created session to launch the TUI, or
  * null for a bare shell (empty command). Any per-TUI env is exported inline so
  * it applies to the launched process. Universal — never branches on slug. */
@@ -62,7 +82,7 @@ export function resumeLaunchLine(spec: TuiSpec): string | null {
  * shell. A TUI is followed by that same shell so exiting the agent leaves a
  * usable prompt rather than a dead pane.
  */
-export function paneCommand(line: string | null): string {
+export function paneCommand(line: string | null, agentExitDir: string | null = null): string {
   const interactiveShell = `exec "\${SHELL:-/bin/bash}"`
   if (line === null) return interactiveShell
 
@@ -80,6 +100,19 @@ export function paneCommand(line: string | null): string {
   // means a signal (an OOM kill is 137), 0 a clean /exit.
   const lowerOomScore = `{ read -r tether_adj </proc/self/oom_score_adj && echo ${AGENT_OOM_SCORE_ADJ} >/proc/self/oom_score_adj; } 2>/dev/null`
   const restoreOomScore = `{ [ -n "$tether_adj" ] && echo "$tether_adj" >/proc/self/oom_score_adj; } 2>/dev/null`
-  const supervisorScript = `${clearTypedLauncher}; ${lowerOomScore}; ${line}; export ${AGENT_EXIT_ENV}=$?; ${restoreOomScore}; ${interactiveShell}`
+  // With `agentExitDir`, the supervisor also records the agent's fate in a
+  // file named after its own pane scope (read from /proc/self/cgroup, all
+  // builtins): `started`, then `exit N`. A HUP or TERM (a closed pane, a
+  // systemctl stop) is recorded as `signal NAME` once the agent has exited.
+  // When every process in the pane is SIGKILLed nothing can write, so the
+  // file keeps `started`: that is how crash recovery tells such a kill from
+  // an exit, since the scope itself then ends with a clean result.
+  const mark = agentExitDir
+    ? {
+        start: `{ read -r tether_cg </proc/self/cgroup && tether_mark=${shellQuote(agentExitDir)}/\${tether_cg##*/} && printf 'started\\n' >"$tether_mark"; } 2>/dev/null; trap '{ [ -n "$tether_mark" ] && printf "signal HUP\\n" >"$tether_mark"; } 2>/dev/null; exit 129' HUP; trap '{ [ -n "$tether_mark" ] && printf "signal TERM\\n" >"$tether_mark"; } 2>/dev/null; exit 143' TERM; `,
+        end: `; { [ -n "$tether_mark" ] && printf 'exit %s\\n' "$${AGENT_EXIT_ENV}" >"$tether_mark"; } 2>/dev/null; trap - HUP TERM`,
+      }
+    : { start: '', end: '' }
+  const supervisorScript = `${clearTypedLauncher}; ${lowerOomScore}; ${mark.start}${line}; export ${AGENT_EXIT_ENV}=$?${mark.end}; ${restoreOomScore}; ${interactiveShell}`
   return `exec /bin/bash --noprofile --norc -c ${shellQuote(supervisorScript)}`
 }

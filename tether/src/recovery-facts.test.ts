@@ -12,6 +12,7 @@ import {
   kernelOomVictims,
   likelyCulprit,
   nodeFileReader,
+  PANE_KILLED,
   parseGitState,
   parseJournal,
   renderDetail,
@@ -77,6 +78,51 @@ describe('journal evidence', () => {
     expect(unitOutcome(parseJournal(userJournal), SCOPE, INVOCATION, DIED + 2000).result).toBe(
       'oom-kill',
     )
+  })
+
+  it('dates a unit that ended with no failure by its end record', () => {
+    const entries = [
+      {
+        MESSAGE: `Started ${SCOPE}.`,
+        MESSAGE_ID: '39f53479d3a045ac8e11786248231fbf',
+        at: DIED - 3600_000,
+      },
+      {
+        MESSAGE: `${SCOPE}: Consumed 3.1s CPU time.`,
+        MESSAGE_ID: 'ae8f7b866b0347b9af31fe1c80b127c0',
+        at: DIED,
+      },
+    ].map(({ at, ...entry }) =>
+      JSON.stringify({
+        ...entry,
+        USER_UNIT: SCOPE,
+        USER_INVOCATION_ID: INVOCATION,
+        __REALTIME_TIMESTAMP: us(at),
+      }),
+    )
+    const outcome = unitOutcome(parseJournal(entries.join('\n')), SCOPE, INVOCATION, DIED + 10_000)
+    expect(outcome.result).toBeNull()
+    expect(outcome.endedAt).toBe(DIED)
+    // Only the start record so far: no end time yet.
+    expect(unitOutcome(parseJournal(entries[0] as string), SCOPE, INVOCATION).endedAt).toBeNull()
+    // An end logged after the grace belongs to a later stop.
+    expect(
+      unitOutcome(parseJournal(entries.join('\n')), SCOPE, INVOCATION, DIED - 1).endedAt,
+    ).toBeNull()
+    expect(unitOutcome(parseJournal(userJournal), SCOPE, INVOCATION).endedAt).toBe(DIED + 2000)
+  })
+
+  it('reads the signals systemctl kill sent to the unit', () => {
+    const line = JSON.stringify({
+      MESSAGE: `${SCOPE}: Sending signal SIGKILL to process 2754637 (bash) on client request.`,
+      USER_UNIT: SCOPE,
+      USER_INVOCATION_ID: INVOCATION,
+      __REALTIME_TIMESTAMP: us(DIED),
+    })
+    expect(unitOutcome(parseJournal(line), SCOPE, INVOCATION).kills).toEqual([
+      { signal: 'SIGKILL', pid: 2754637, at: DIED },
+    ])
+    expect(unitOutcome(parseJournal(userJournal), SCOPE, INVOCATION).kills).toEqual([])
   })
 
   it('never counts a stop timeout as a crash', () => {
@@ -363,6 +409,33 @@ describe('synopsis', () => {
     const lost = renderSynopsis({ ...base, kind: 'server-died', cause: SERVER_LOST, victim: null })
     expect(lost).toContain('the tmux server holding your pane died while you were running')
     expect(lost).not.toContain('(lost)')
+  })
+
+  it('says every process in the pane was killed from outside', () => {
+    const killed = renderSynopsis({ ...base, cause: PANE_KILLED, victim: null, transcript: null })
+    expect(killed).toContain('every process in your pane was killed from outside')
+    expect(killed).not.toContain('result killed')
+  })
+
+  it('says about when only the detection time is known', () => {
+    const exact = renderSynopsis(base)
+    expect(exact).toMatch(/^Recovery: this session crashed at [0-9][0-9 :-]+ and /)
+    expect(exact).toContain('(down 8h)')
+    const approx = renderSynopsis({ ...base, diedAtApprox: true })
+    expect(approx).toMatch(/^Recovery: this session crashed at about [0-9][0-9 :-]+ and /)
+    expect(approx).toContain('(down about 8h)')
+    const detail = renderDetail(
+      { ...base, diedAtApprox: true },
+      {
+        synopsis: approx,
+        unitLines: [],
+        kernelLines: [],
+        memctlLines: [],
+        memoryEvents: null,
+        leases: [],
+      },
+    )
+    expect(detail).toMatch(/^# Crash recovery, about 2026-10-1[56] /)
   })
 
   it('says the owner resumed a held crash instead of counting it', () => {

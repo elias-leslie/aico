@@ -21,6 +21,14 @@ import { CHECKPOINT_PROMPT, RESUME_PROMPT } from './continuity'
  * failure when it is killed; the agent seen running is the evidence. */
 export const SERVER_LOST = 'lost'
 
+/** Cause of a pane whose scope ended cleanly while its agent was still
+ * running: every process in it was SIGKILLed from outside (systemctl kill,
+ * a kill of the whole cgroup), so systemd saw an empty scope, not a failure.
+ * The evidence is the pane supervisor's exit marker still saying `started`,
+ * or, for a pane from before the marker, systemd's own "Sending signal
+ * SIGKILL" record for the scope. */
+export const PANE_KILLED = 'killed'
+
 const SYNOPSIS_HEAD = 'Recovery: this session crashed at '
 
 /** Prompts Tether itself pasted: never the owner's last instruction. */
@@ -44,6 +52,14 @@ export const CRASH_RESULTS: ReadonlySet<string> = new Set([
 
 const UNIT_RESULT_MESSAGE_ID = 'd9b373ed55a64feb8242e02dbe79a49c'
 const UNIT_OOM_MESSAGE_ID = 'fe6faa94e7774663a0da52717891d8ef'
+/** systemd records logged as a unit ends: its failure result, "Deactivated
+ * successfully" and the "Consumed ... CPU time" summary (the only one a pane
+ * scope that simply emptied gets). */
+const UNIT_END_MESSAGE_IDS: ReadonlySet<string> = new Set([
+  UNIT_RESULT_MESSAGE_ID,
+  '7ad2d189f7e94e70a38c781354912448',
+  'ae8f7b866b0347b9af31fe1c80b127c0',
+])
 
 export type JournalEntry = Record<string, unknown>
 
@@ -82,8 +98,17 @@ export interface UnitOutcome {
   /** systemd logged that the kernel OOM killer killed a process of the unit. */
   oomKilledProcess: boolean
   at: number | null
+  /** When systemd logged the unit's end (its result, deactivation or
+   * resource summary) up to `until`: the time of death when it ended with no
+   * failure. */
+  endedAt: number | null
+  /** `systemctl kill` on the unit: systemd logs "Sending signal SIGKILL to
+   * process N (comm)" for each process it signals. */
+  kills: { signal: string; pid: number; at: number }[]
   lines: string[]
 }
+
+const SENT_SIGNAL_RE = /: Sending signal (SIG[A-Z0-9]+) to process ([0-9]+)\b/
 
 /** The outcome of one exact unit invocation from user-manager records. A
  * result logged after `until` belongs to a later stop, not to the death. */
@@ -93,13 +118,33 @@ export function unitOutcome(
   invocationId: string | null,
   until: number | null = null,
 ): UnitOutcome {
-  const outcome: UnitOutcome = { result: null, oomKilledProcess: false, at: null, lines: [] }
+  const outcome: UnitOutcome = {
+    result: null,
+    oomKilledProcess: false,
+    at: null,
+    endedAt: null,
+    kills: [],
+    lines: [],
+  }
   for (const entry of entries) {
     if (entry.USER_UNIT !== unit && entry.UNIT !== unit) continue
     const invocation = entry.USER_INVOCATION_ID ?? entry.INVOCATION_ID
     if (invocationId && invocation !== undefined && invocation !== invocationId) continue
     outcome.lines.push(`${stamp(entryTime(entry))} ${message(entry)}`)
+    if (
+      typeof entry.MESSAGE_ID === 'string' &&
+      UNIT_END_MESSAGE_IDS.has(entry.MESSAGE_ID) &&
+      (until === null || entryTime(entry) <= until)
+    )
+      outcome.endedAt = Math.max(outcome.endedAt ?? 0, entryTime(entry))
     if (entry.MESSAGE_ID === UNIT_OOM_MESSAGE_ID) outcome.oomKilledProcess = true
+    const sent = SENT_SIGNAL_RE.exec(message(entry))
+    if (sent)
+      outcome.kills.push({
+        signal: sent[1] as string,
+        pid: Number(sent[2]),
+        at: entryTime(entry),
+      })
     if (
       entry.MESSAGE_ID === UNIT_RESULT_MESSAGE_ID &&
       typeof entry.UNIT_RESULT === 'string' &&
@@ -641,6 +686,8 @@ export interface CrashFacts {
   victim: OomVictim | null
   agentWasHog: boolean
   diedAt: number
+  /** Only the time Tether noticed the death is known, up to a minute late. */
+  diedAtApprox?: boolean
   resumedAt: number
   attempt: number
   /** The owner resumed a held crash; not an automatic attempt. */
@@ -692,6 +739,8 @@ function causeLine(facts: CrashFacts): string {
       return `${where} and the kernel killed your own process (${victim.comm} pid ${victim.pid}, ${size(victim.rssBytes)}). The pane stayed up; Tether restarted it, which ended every process still in it`
     return `your process was killed by signal ${facts.signal ?? '?'}${victim ? ` after the kernel OOM-killed ${victim.comm} pid ${victim.pid} (${size(victim.rssBytes)})` : ''}. The pane stayed up; Tether restarted it, which ended every process still in it`
   }
+  if (facts.cause === PANE_KILLED)
+    return 'every process in your pane was killed from outside (no memory kill or unit failure was logged), which ended you, your subagents and every process you started'
   if (facts.kind === 'server-died')
     return `the tmux server holding your pane died${facts.cause === SERVER_LOST ? ' while you were running' : ` (${facts.cause})`}, which ended you, your subagents and every process you started`
   if (victim)
@@ -712,8 +761,8 @@ export function renderSynopsis(facts: CrashFacts, limit = 2000): string {
   const build = (level: number): string => {
     const lines: string[] = []
     let head =
-      `${SYNOPSIS_HEAD}${clock(facts.diedAt, facts.resumedAt)} and Tether resumed it at ` +
-      `${clock(facts.resumedAt, facts.resumedAt)} (down ${duration(facts.resumedAt - facts.diedAt)}). ` +
+      `${SYNOPSIS_HEAD}${facts.diedAtApprox ? 'about ' : ''}${clock(facts.diedAt, facts.resumedAt)} and Tether resumed it at ` +
+      `${clock(facts.resumedAt, facts.resumedAt)} (down ${facts.diedAtApprox ? 'about ' : ''}${duration(facts.resumedAt - facts.diedAt)}). ` +
       `Cause: ${causeLine(facts)}.`
     if (culprit)
       head += ` Likely culprit: ${callLabel(culprit)} ran \`${oneLine(culprit.command, level > 2 ? 80 : 160)}\`${culprit.startedAt ? ` from ${clock(culprit.startedAt, facts.resumedAt)}` : ''}, ${culprit.outcome}.`
@@ -807,7 +856,12 @@ export function renderDetail(facts: CrashFacts, sections: DetailSections): strin
     else out.push('```', ...lines, '```')
     out.push('')
   }
-  out.push(`# Crash recovery, ${stamp(facts.diedAt)}`, '')
+  out.push(`# Crash recovery, ${facts.diedAtApprox ? 'about ' : ''}${stamp(facts.diedAt)}`, '')
+  if (facts.diedAtApprox)
+    out.push(
+      'Only the time Tether noticed the death is known; it can be up to a minute after the crash.',
+      '',
+    )
   out.push('## Prompt the agent was resumed with', '', sections.synopsis, '')
   block('Unit journal', sections.unitLines)
   block('Kernel OOM records', sections.kernelLines)

@@ -4,7 +4,7 @@ import type { Server } from 'node:http'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { AgentStatePoller, AgentStateTracker } from './agent-state'
-import type { TetherPaths } from './config'
+import { agentExitMarkerDir, type TetherPaths } from './config'
 import { nodeProcFs } from './continuity'
 import { parseGraphicalEnvironment } from './env'
 import { EventBus } from './events'
@@ -91,6 +91,7 @@ export async function startDaemon(
 ): Promise<RunningDaemon> {
   mkdirSync(paths.stateDir, { recursive: true, mode: 0o700 })
   chmodSync(paths.stateDir, 0o700)
+  mkdirSync(agentExitMarkerDir(paths), { recursive: true, mode: 0o700 })
   const store = new Store(paths.dbPath)
   const events = new EventBus()
   const projects = new ProjectProvider({

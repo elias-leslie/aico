@@ -167,3 +167,10 @@ export function paneExitMarkerPath(paths: TetherPaths, serverId: string): string
     throw new Error(`unsafe tmux server generation id: ${serverId}`)
   return join(paths.paneExitMarkerDir, `pane-exited-${serverId}`)
 }
+
+/** Directory the pane supervisor writes each agent's fate to, one file per
+ * pane scope (src/lifecycle/tui/launch.ts paneCommand). Inside the instance's
+ * runtime directory, so a reboot clears it. */
+export function agentExitMarkerDir(paths: Pick<TetherPaths, 'runtimeDir'>): string {
+  return join(paths.runtimeDir, 'agent-exits')
+}

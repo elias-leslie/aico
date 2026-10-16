@@ -7,6 +7,7 @@ When a session dies and nobody ended it, Tether resumes the same session in plac
 | What died | How Tether proves it | Kind |
 | --- | --- | --- |
 | The pane scope (for example an OOM kill while the pane is on `OOMPolicy=stop`) | The user journal has a failure result for that exact scope unit and invocation ID, logged no later than 10 seconds after Tether saw the pane go: `oom-kill`, `signal`, `core-dump` or `exit-code`. `timeout` never counts: on a pane it only comes from a stop that took too long, such as Tether's own cleanup | `pane-stopped` |
+| Every process in the pane, killed at once from outside (for example `systemctl --user kill -s KILL` on the scope) | The scope then simply empties, so systemd logs no failure. The pane supervisor writes `started` to `<runtimeDir>/agent-exits/<scope unit>` before it starts the agent and `exit N` as soon as the agent exits (`signal HUP` or `signal TERM` when the pane is closed or stopped). A scope that ended with no failure while that file still says `started` was killed with the agent running, even if its tmux server then exited empty. A pane started before this marker existed counts when systemd logged `Sending signal SIGKILL to process` for that scope before Tether saw it go (`systemctl kill` logs that; Tether's own cleanup uses `cgroup.kill` and comes later). The death time is that kill record, else the scope's end record | `pane-stopped`, cause `killed` |
 | The agent only; the pane fell back to its shell | The supervisor exports the agent's exit status as `TETHER_AGENT_EXIT` into the fallback shell. 137 (SIGKILL, which is what an OOM kill sends) and the crash signals 132, 134, 135, 136 and 139 count. 0 (`/exit`) and the stop signals 129, 130 and 143 do not | `agent-exited` |
 | The tmux server, while Tether kept running | The server unit's journal result is a failure, the kernel OOM-killed a process in it, or continuity saw the agent running in the last 150 seconds and no pane on that server exited since. tmux runs as a non-main process of an `ExitType=cgroup` unit, so a killed server leaves no failure result; cause `lost`. A pane that exits runs tmux's pane-exited hook and a killed server does not, so an owner `/exit` and `exit` in the last session is not read as a crash | `server-died` |
 
@@ -15,7 +16,7 @@ The kernel log (`journalctl -k`) adds the OOM victim: its pid, command name, mem
 These never recover:
 
 - **An End** (Aico discard, `st aico root end`, `tether sessions end`, fleet close). End deletes the row, and with it any crash record.
-- **A clean exit:** a pane whose scope ended without a failure result, or an agent that exited with 0.
+- **A clean exit:** a pane whose scope ended without a failure result after its agent exited (the owner typed `/exit`, then `exit`), or an agent that exited with 0.
 - **A killed child in a live pane.** On `OOMPolicy=continue` the kernel kills only the biggest process; when that is a job and the agent keeps running, nothing needs recovering.
 - **A reboot or a Tether restart.** Startup reconciliation leaves these to reboot continuity, which resumes with the reboot prompt as before.
 - **A shutdown or logout.** Nothing that ends while the host or the user manager reports `stopping` is read as a crash.
@@ -46,7 +47,7 @@ Transcript facts come from a per-tool adapter. Claude Code has one: the main tra
 - A launch that admission defers, or that finds another operation on the session in progress, is retried every 30 seconds; after 15 minutes the session is held.
 - An owner resume (`tether recovery resume`) does not count toward the 2 in 6 hours, but a crash within 10 minutes of it is still held.
 
-A held session stays `uncertain`. Its record says why, and Nightshift pushes the owner. `tether recovery resume <id>` tries it again at once, outside the limits.
+Holding changes nothing in the session itself, so its catalog status stays what its pane really is: `running` when the pane survived (an `agent-exited` crash: the window shows the fallback shell), `uncertain` when the pane is gone. That status says whether a verified workload is in the pane, which is what Aico and `st` act on; whether the agent needs recovering is the record's `state: "held"` in `tether recovery status`, which says why, and Nightshift pushes the owner. `tether recovery resume <id>` tries it again at once, outside the limits.
 
 While a death is being classified, or its record is waiting or held, `st aico create --resume-session` for the same conversation is refused with `409 recovery_pending` and the widget that owns it, so two agents never resume one conversation.
 
@@ -72,7 +73,7 @@ POST /v1/recovery/<id>/resume      202, or 409 not_held
       "state": "recovered",
       "kind": "pane-stopped", "cause": "oom-kill", "signal": null, "agent_was_hog": false,
       "victim": { "pid": 192829, "comm": "python", "rss_bytes": 14213173248, "constraint": "global" },
-      "died_at": 1792121278651, "detected_at": 1792121281000, "recovered_at": 1792121400000,
+      "died_at": 1792121278651, "died_at_approx": false, "detected_at": 1792121281000, "recovered_at": 1792121400000,
       "attempt": 1, "not_before": null, "reason": null,
       "detail_file": "/home/…/.local/state/tether/default/recovery/236eb8e2-2026-10-16T03-27-58-651Z.md",
       "resumable": true, "resume_command": null
@@ -81,7 +82,7 @@ POST /v1/recovery/<id>/resume      202, or 409 not_held
 }
 ```
 
-`state` is `waiting`, `recovering`, `recovered` or `held`. Times are epoch milliseconds. `reason` says why a session waits or is held. `resume_command` is set for held sessions. A record whose session was ended disappears; recovered and held records stay for 24 hours. Detail files are removed after 7 days. Push keys should combine `id`, `died_at` and `attempt`.
+`state` is `waiting`, `recovering`, `recovered` or `held`. Times are epoch milliseconds. `died_at` comes from the best evidence of the death: the kernel's OOM record, the unit's journal result or end record, or the moment the supervisor wrote the agent's exit status. When none exists, it is the time Tether noticed (up to a minute late), `died_at_approx` is true, and the prompt says "about". `reason` says why a session waits or is held. `resume_command` is set for held sessions. A record whose session was ended disappears; recovered and held records stay for 24 hours. Detail files are removed after 7 days. Push keys should combine `id`, `died_at` and `attempt`.
 
 ## Fleet roots
 

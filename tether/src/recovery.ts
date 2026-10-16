@@ -1,10 +1,11 @@
 // Crash self-recovery (docs/adr/0001-tether-owns-sessions.md, "Crash restore").
 //
 // A session the owner did not end can die three ways: its pane scope fails
-// (an OOM kill under OOMPolicy=stop, a signal), its agent is killed while the
-// pane survives and falls back to a shell, or its tmux server dies. Tether
-// proves which from the user journal (the exact scope unit and invocation)
-// and the agent's exit status, keeps the agent's resume ID, and resumes the
+// (an OOM kill under OOMPolicy=stop, a signal) or every process in it is
+// killed at once, its agent is killed while the pane survives and falls back
+// to a shell, or its tmux server dies. Tether proves which from the user
+// journal (the exact scope unit and invocation), the agent's exit status and
+// the pane supervisor's exit marker, keeps the agent's resume ID, and resumes the
 // same session in place, with the same widget, window, origin and root
 // lineage, through the reboot-restore launch path and a short synopsis prompt.
 // An End deletes the row, so an ended session is never recovered.
@@ -13,15 +14,18 @@
 // first waits until host admission has allowed launches for 60 s, the second
 // waits at least 10 minutes after the first; a crash within 10 minutes of a
 // recovery holds; an agent that was itself the memory hog twice holds; one
-// recovery runs at a time. A held session stays uncertain with its reason in
-// <stateDir>/recoveries.json, which Nightshift reads to push the owner.
+// recovery runs at a time. A held session keeps its pane's own status
+// (running while the fallback shell is up, uncertain once the pane is gone);
+// its reason is in <stateDir>/recoveries.json, which Nightshift reads to push
+// the owner.
 
 import { execFile } from 'node:child_process'
-import { mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs'
+import { mkdirSync, readdirSync, readFileSync, statSync, unlinkSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
+import { agentExitMarkerDir } from './config'
 import {
   type ContinuitySnapshot,
   currentBootId,
@@ -38,7 +42,7 @@ import {
   nightshiftAdmissionPath,
   readNightshiftAdmission,
 } from './lifecycle/agent-admission'
-import { getWidget, rootRequestForWidget, type WidgetRow } from './lifecycle/catalog'
+import { getWidget, listWidgets, rootRequestForWidget, type WidgetRow } from './lifecycle/catalog'
 import {
   type AbandonedScope,
   ensureSessionSerialized,
@@ -53,7 +57,12 @@ import {
 import { processEnvironment } from './lifecycle/procfs'
 import { launchingResume, withRootPrompt } from './lifecycle/root-launch'
 import { paneExitedEventPath } from './lifecycle/tmux'
-import { AGENT_EXIT_ENV, isResumeSessionId } from './lifecycle/tui/launch'
+import {
+  AGENT_EXIT_ENV,
+  type AgentExitMarker,
+  isResumeSessionId,
+  parseAgentExitMarker,
+} from './lifecycle/tui/launch'
 import { getTui } from './lifecycle/tui/registry'
 import type { TuiSpec } from './lifecycle/tui/spec'
 import type { LifecycleApiContext } from './lifecycle-api'
@@ -68,6 +77,7 @@ import {
   kernelOomVictims,
   nodeFileReader,
   type OomVictim,
+  PANE_KILLED,
   parseGitState,
   parseJournal,
   renderDetail,
@@ -91,6 +101,10 @@ const CLASSIFY_POLLS = 10
 const CLASSIFY_POLL_MS = 2_000
 const KEEP_MS = 24 * 3600_000
 const DETAIL_KEEP_MS = 7 * 24 * 3600_000
+/** Exit markers of panes no session owns any more (an End, a respawn) are
+ * removed once they are this old. */
+const MARKER_KEEP_MS = 10 * 60_000
+const MARKER_SWEEP_MS = 3600_000
 /** A resumed agent must show up in its pane within this time. */
 const CONFIRM_MS = 120_000
 const CONFIRM_POLL_MS = 5_000
@@ -120,6 +134,8 @@ export interface CrashRecord {
   victim: Pick<OomVictim, 'pid' | 'comm' | 'rssBytes' | 'constraint'> | null
   agentWasHog: boolean
   diedAt: number
+  /** Only the time Tether noticed the death is known (up to a minute late). */
+  diedAtApprox?: boolean
   detectedAt: number
   bootId: string
   scopeUnit: string | null
@@ -205,6 +221,11 @@ export interface RecoveryEngine {
   paneExitedAt(serverId: string): number | null
   /** Sessions running an agent now, with the conversation each one holds. */
   runningConversations(): Promise<{ id: string; resumeId: string | null }[]>
+  /** What the pane supervisor recorded for this pane scope, and when. */
+  agentExitMarker(scopeUnit: string): { marker: AgentExitMarker; at: number } | null
+  /** Exit marker files: scope unit name and last write. */
+  agentExitMarkers(): { scopeUnit: string; at: number }[]
+  removeAgentExitMarker(scopeUnit: string): void
 }
 
 export interface RecoveryOptions {
@@ -234,7 +255,11 @@ function agentInPane(home: string, panePid: number, tool: string): AgentSeen | n
   return null
 }
 
-function defaultEngine(home: string, stateDir: string): RecoveryEngine {
+const SCOPE_NAME_RE = /^tmux-spawn-[0-9A-Za-z-]{1,64}\.scope$/
+
+function defaultEngine(home: string, stateDir: string, markerDir: string): RecoveryEngine {
+  const markerPath = (scopeUnit: string) =>
+    SCOPE_NAME_RE.test(scopeUnit) ? join(markerDir, scopeUnit) : null
   return {
     currentPane: (row) => verifiedCurrentManagedPane(row),
     agentIn: (panePid, tool) => agentInPane(home, panePid, tool),
@@ -260,6 +285,42 @@ function defaultEngine(home: string, stateDir: string): RecoveryEngine {
       (readJsonFile<ContinuitySnapshot>(join(stateDir, 'continuity.json'))?.sessions ?? []).map(
         (session) => ({ id: session.id, resumeId: session.resumeId }),
       ),
+    agentExitMarker: (scopeUnit) => {
+      const path = markerPath(scopeUnit)
+      if (!path) return null
+      try {
+        const marker = parseAgentExitMarker(readFileSync(path, 'utf8'))
+        return marker ? { marker, at: statSync(path).mtimeMs } : null
+      } catch {
+        return null
+      }
+    },
+    agentExitMarkers: () => {
+      const out: { scopeUnit: string; at: number }[] = []
+      let names: string[] = []
+      try {
+        names = readdirSync(markerDir)
+      } catch {
+        return out
+      }
+      for (const name of names) {
+        if (!SCOPE_NAME_RE.test(name)) continue
+        try {
+          out.push({ scopeUnit: name, at: statSync(join(markerDir, name)).mtimeMs })
+        } catch {
+          // gone meanwhile
+        }
+      }
+      return out
+    },
+    removeAgentExitMarker: (scopeUnit) => {
+      const path = markerPath(scopeUnit)
+      try {
+        if (path) unlinkSync(path)
+      } catch {
+        // already gone
+      }
+    },
   }
 }
 
@@ -308,6 +369,7 @@ export class Recovery {
   private readonly agentSeenAt = new Map<string, number>()
   private readonly lastReconcile = new Map<string, number>()
   private admitSince: number | null = null
+  private lastMarkerSweep = 0
   private timer: NodeJS.Timeout | null = null
   private busy = false
 
@@ -323,7 +385,10 @@ export class Recovery {
     this.log = options.log ?? ((message) => console.log(`[tether:recovery] ${message}`))
     this.awaitingRestore = options.awaitingRestore ?? (() => false)
     this.run = options.run ?? runCommand
-    this.engine = { ...defaultEngine(this.home, context.paths.stateDir), ...options.engine }
+    this.engine = {
+      ...defaultEngine(this.home, context.paths.stateDir, agentExitMarkerDir(context.paths)),
+      ...options.engine,
+    }
     this.load()
   }
 
@@ -351,6 +416,21 @@ export class Recovery {
       if (record.state === 'recovering') record.state = 'waiting'
     this.prune()
     this.removeOldDetailFiles()
+    this.sweepExitMarkers()
+  }
+
+  /** Remove exit markers of pane scopes no session owns any more. */
+  private sweepExitMarkers(): void {
+    const now = this.now()
+    this.lastMarkerSweep = now
+    const owned = new Set<string>()
+    for (const row of listWidgets()) {
+      if (row.scopeUnit) owned.add(row.scopeUnit)
+      if (row.pendingScopeUnit) owned.add(row.pendingScopeUnit)
+    }
+    for (const { scopeUnit, at } of this.engine.agentExitMarkers())
+      if (!owned.has(scopeUnit) && now - at > MARKER_KEEP_MS)
+        this.engine.removeAgentExitMarker(scopeUnit)
   }
 
   private removeOldDetailFiles(): void {
@@ -471,6 +551,7 @@ export class Recovery {
             }
           : null,
         died_at: record.diedAt,
+        died_at_approx: Boolean(record.diedAtApprox),
         detected_at: record.detectedAt,
         recovered_at: record.recoveredAt,
         attempt: record.attempt,
@@ -508,7 +589,10 @@ export class Recovery {
     this.classifying.add(event.widgetId)
     return this.classify(event)
       .catch((error) => this.log(`classify ${event.widgetId} failed: ${(error as Error).message}`))
-      .finally(() => this.classifying.delete(event.widgetId))
+      .finally(() => {
+        this.classifying.delete(event.widgetId)
+        this.engine.removeAgentExitMarker(event.scopeUnit)
+      })
   }
 
   private async journalUnit(unit: string, invocationId: string | null, until: number | null) {
@@ -577,6 +661,18 @@ export class Recovery {
       event.serverDead && event.serverUnit
         ? (victimsInScope(kernel, event.serverUnit).at(-1) ?? null)
         : null
+    // A SIGKILL of the whole scope leaves systemd an empty scope and no
+    // failure result. The pane supervisor writes the agent's exit before
+    // anything else in the pane can end, so a marker still saying `started`
+    // means the agent never got to exit. A pane from before the marker
+    // counts when systemd itself logged sending SIGKILL to the scope before
+    // Tether saw it go (Tether's own cleanup comes later and uses cgroup.kill).
+    const marker = this.engine.agentExitMarker(event.scopeUnit)?.marker ?? null
+    const sigkillAt =
+      pane.kills.find((kill) => kill.signal === 'SIGKILL' && kill.at <= event.at)?.at ?? null
+    const killedRunning =
+      pane.result === null &&
+      (marker?.state === 'started' || (marker === null && sigkillAt !== null))
     let serverCrash = server?.result && CRASH_RESULTS.has(server.result) ? server.result : null
     if (!serverCrash && serverVictim) serverCrash = 'oom-kill'
     else if (
@@ -587,18 +683,29 @@ export class Recovery {
       !this.paneExitedSince(event.tmuxServerId, seenAt)
     )
       serverCrash = SERVER_LOST
-    const paneCrash = pane.result && CRASH_RESULTS.has(pane.result) ? pane.result : null
+    let paneCrash = pane.result && CRASH_RESULTS.has(pane.result) ? pane.result : null
+    // The pane was killed first; a tmux server that then exited empty is a
+    // consequence, not the cause.
+    if (!paneCrash && killedRunning) paneCrash = PANE_KILLED
     if (!paneCrash && !serverCrash) {
       this.log(`${event.widgetId}: pane ${event.scopeUnit} ended without a failure; not recovering`)
       return
     }
+    const exactDeath =
+      victim?.at ??
+      serverVictim?.at ??
+      pane.at ??
+      server?.at ??
+      (paneCrash === PANE_KILLED ? (sigkillAt ?? pane.endedAt) : null) ??
+      (serverCrash === SERVER_LOST ? (server?.endedAt ?? pane.endedAt) : null)
     await this.recordCrash({
       id: event.widgetId,
       kind: serverCrash && !paneCrash ? 'server-died' : 'pane-stopped',
       cause: paneCrash ?? (serverCrash as string),
-      signal: null,
+      signal: paneCrash === PANE_KILLED ? 9 : null,
       victim: victim ?? serverVictim,
-      diedAt: victim?.at ?? serverVictim?.at ?? pane.at ?? server?.at ?? event.at,
+      diedAt: exactDeath ?? event.at,
+      diedAtApprox: exactDeath === null,
       scopeUnit: event.scopeUnit,
       scopeInvocationId: event.scopeInvocationId,
     })
@@ -661,6 +768,11 @@ export class Recovery {
       victims.find((v) => v.pid === agentPid_) ??
       (agentPid_ === undefined ? victims.find((v) => v.comm === processName) : undefined) ??
       null
+    // The supervisor wrote this exit status as the agent ended.
+    const marker = row.scopeUnit ? this.engine.agentExitMarker(row.scopeUnit) : null
+    const exitAt =
+      marker?.marker.state === 'exit' && marker.marker.status === exit ? marker.at : null
+    const exactDeath = victim?.at ?? exitAt
     await this.recordCrash({
       id: row.id,
       kind: 'agent-exited',
@@ -668,7 +780,8 @@ export class Recovery {
       signal: exit - 128,
       victim,
       agentWasHog: victim !== null,
-      diedAt: victim?.at ?? now,
+      diedAt: exactDeath ?? now,
+      diedAtApprox: exactDeath === null,
       scopeUnit: row.scopeUnit,
       scopeInvocationId: row.scopeInvocationId,
     })
@@ -690,6 +803,7 @@ export class Recovery {
     victim: OomVictim | null
     agentWasHog?: boolean
     diedAt: number
+    diedAtApprox?: boolean
     scopeUnit: string | null
     scopeInvocationId: string | null
   }): Promise<void> {
@@ -731,6 +845,7 @@ export class Recovery {
         : null,
       agentWasHog,
       diedAt: crash.diedAt,
+      ...(crash.diedAtApprox ? { diedAtApprox: true } : {}),
       detectedAt: now,
       bootId: currentBootId(),
       scopeUnit: crash.scopeUnit,
@@ -779,6 +894,7 @@ export class Recovery {
     this.busy = true
     try {
       const now = this.now()
+      if (now - this.lastMarkerSweep >= MARKER_SWEEP_MS) this.sweepExitMarkers()
       const settled = await this.admissionSettled(now)
       const due = [...this.records.values()]
         .filter((record) => record.state === 'waiting' && record.notBefore <= now)
@@ -878,6 +994,7 @@ export class Recovery {
       victim,
       agentWasHog: record.agentWasHog,
       diedAt: record.diedAt,
+      diedAtApprox: Boolean(record.diedAtApprox),
       resumedAt,
       attempt: record.attempt,
       manual: Boolean(record.manual),

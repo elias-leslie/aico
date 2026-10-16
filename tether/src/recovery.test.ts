@@ -9,6 +9,7 @@ import { writeJsonFile } from './continuity'
 import { getWidget, insertWidget, removeWidget, setWidgetOwnership } from './lifecycle/catalog'
 import type { AbandonedScope, RespawnResult } from './lifecycle/engine'
 import { initStore, registerBuiltinTuis } from './lifecycle/testing'
+import type { AgentExitMarker } from './lifecycle/tui/launch'
 import type { LifecycleApiContext } from './lifecycle-api'
 import { type AgentSeen, Recovery, type RecoveryEngine } from './recovery'
 
@@ -51,6 +52,8 @@ interface Harness {
   paneExitedAt: number | null
   systemState: string
   journal: string
+  marker: { marker: AgentExitMarker; at: number } | null
+  markers: Map<string, number>
   respawn: Mock<(id: string) => Promise<RespawnResult>>
   ensure: Mock<(id: string) => Promise<boolean>>
   sleep: (ms: number) => Promise<void>
@@ -80,6 +83,8 @@ function harness(): Harness {
     paneExitedAt: null,
     systemState: 'running',
     journal: '',
+    marker: null,
+    markers: new Map<string, number>(),
     respawn: vi.fn(async (_id: string): Promise<RespawnResult> => ({ status: 'replaced' })),
     ensure: vi.fn(async (_id: string) => true),
     sleep: async (ms: number) => {
@@ -98,9 +103,15 @@ function harness(): Harness {
     notify: () => {},
     paneExitedAt: () => h.paneExitedAt,
     runningConversations: async () => h.running,
+    agentExitMarker: () => h.marker,
+    agentExitMarkers: () => [...h.markers].map(([scopeUnit, at]) => ({ scopeUnit, at })),
+    removeAgentExitMarker: (scopeUnit) => {
+      h.markers.delete(scopeUnit)
+      if (scopeUnit === `tmux-spawn-${id}.scope`) h.marker = null
+    },
   }
   const context = {
-    paths: { stateDir },
+    paths: { stateDir, runtimeDir: join(dir, 'run') },
     gui: { connected: () => false, send: async () => true },
   } as unknown as LifecycleApiContext
   h.recovery = new Recovery(context, {
@@ -147,6 +158,27 @@ function unitResult(unit: string, result: string, at: number): string {
     MESSAGE: `${unit}: Failed with result '${result}'.`,
     MESSAGE_ID: 'd9b373ed55a64feb8242e02dbe79a49c',
     UNIT_RESULT: result,
+    USER_UNIT: unit,
+    USER_INVOCATION_ID: INVOCATION,
+    __REALTIME_TIMESTAMP: String(at * 1000),
+  })
+}
+
+/** systemd's resource summary, the only record a scope that emptied gets. */
+function unitConsumed(unit: string, at: number): string {
+  return JSON.stringify({
+    MESSAGE: `${unit}: Consumed 1.2s CPU time.`,
+    MESSAGE_ID: 'ae8f7b866b0347b9af31fe1c80b127c0',
+    USER_UNIT: unit,
+    USER_INVOCATION_ID: INVOCATION,
+    __REALTIME_TIMESTAMP: String(at * 1000),
+  })
+}
+
+/** What systemd logs for each process `systemctl kill` signals. */
+function unitSigkill(unit: string, pid: number, at: number, signal = 'SIGKILL'): string {
+  return JSON.stringify({
+    MESSAGE: `${unit}: Sending signal ${signal} to process ${pid} (bash) on client request.`,
     USER_UNIT: unit,
     USER_INVOCATION_ID: INVOCATION,
     __REALTIME_TIMESTAMP: String(at * 1000),
@@ -293,6 +325,126 @@ describe('crash recovery', () => {
     h.systemState = 'running'
     await h.recovery.onAbandoned(abandoned(h, server))
     expect(sessions(h)).toMatchObject([{ kind: 'server-died', cause: 'lost', state: 'waiting' }])
+  })
+
+  it('reads a pane whose every process was SIGKILLed while the agent ran as a crash', async () => {
+    h.pane = null
+    const unit = `tmux-spawn-${h.id}.scope`
+    const killedAt = h.clock.now - 4_000
+    // The scope just emptied: no failure result, only the resource summary.
+    h.journal = unitConsumed(unit, killedAt)
+    h.marker = { marker: { state: 'started' }, at: T0 - 3600_000 }
+    await h.recovery.onAbandoned(abandoned(h))
+    expect(sessions(h)).toMatchObject([
+      {
+        kind: 'pane-stopped',
+        cause: 'killed',
+        state: 'waiting',
+        died_at: killedAt,
+        died_at_approx: false,
+      },
+    ])
+    // The marker is read once and removed.
+    expect(h.marker).toBeNull()
+    h.ensure.mockImplementation(async () => {
+      h.pane = { pid: 11 }
+      h.agent = { pid: 12, resumeId: RESUME }
+      return true
+    })
+    await runDue(h)
+    expect(h.ensure).toHaveBeenCalledTimes(1)
+    expect(sessions(h)).toMatchObject([{ state: 'recovered' }])
+  })
+
+  it('does not read a clean exit, a closed or stopped pane, or an old supervisor as a kill', async () => {
+    h.pane = null
+    const unit = `tmux-spawn-${h.id}.scope`
+    h.journal = unitConsumed(unit, h.clock.now)
+    // The owner typed /exit, then exit in the fallback shell.
+    for (const marker of [
+      { state: 'exit', status: 0 },
+      { state: 'signal', signal: 'HUP' },
+      { state: 'signal', signal: 'TERM' },
+    ] as AgentExitMarker[]) {
+      h.marker = { marker, at: h.clock.now }
+      await h.recovery.onAbandoned(abandoned(h))
+      expect(sessions(h)).toEqual([])
+    }
+    // A pane started before supervisors wrote markers.
+    h.marker = null
+    await h.recovery.onAbandoned(abandoned(h))
+    expect(sessions(h)).toEqual([])
+    // A stop that timed out is Tether's own cleanup, even with the agent running.
+    h.marker = { marker: { state: 'started' }, at: h.clock.now }
+    h.journal = unitResult(unit, 'timeout', h.clock.now)
+    await h.recovery.onAbandoned(abandoned(h))
+    expect(sessions(h)).toEqual([])
+  })
+
+  it('reads a killed pane whose empty tmux server then exited as the pane being killed', async () => {
+    h.pane = null
+    h.marker = { marker: { state: 'started' }, at: T0 }
+    const unit = `tmux-spawn-${h.id}.scope`
+    const killedAt = h.clock.now - 50_000
+    h.journal = [unitSigkill(unit, 300, killedAt), unitSigkill(unit, 301, killedAt)].join('\n')
+    const serverUnit = `aico-tmux-server-${SERVER}.service`
+    await h.recovery.onAbandoned(abandoned(h, { serverDead: true, serverUnit }))
+    expect(sessions(h)).toMatchObject([
+      {
+        kind: 'pane-stopped',
+        cause: 'killed',
+        signal: 9,
+        died_at: killedAt,
+        died_at_approx: false,
+      },
+    ])
+  })
+
+  it('reads a pane from before the exit marker as killed only on systemd SIGKILL records', async () => {
+    h.pane = null
+    const unit = `tmux-spawn-${h.id}.scope`
+    const at = h.clock.now
+    // A SIGKILL logged after Tether saw the pane go is not what ended it.
+    h.journal = unitSigkill(unit, 300, at + 1_000)
+    await h.recovery.onAbandoned(abandoned(h, { at }))
+    expect(sessions(h)).toEqual([])
+    // systemctl kill with its default SIGTERM is a stop on purpose.
+    h.journal = unitSigkill(unit, 300, at - 1_000, 'SIGTERM')
+    await h.recovery.onAbandoned(abandoned(h, { at }))
+    expect(sessions(h)).toEqual([])
+    h.journal = unitSigkill(unit, 300, at - 1_000)
+    await h.recovery.onAbandoned(abandoned(h, { at }))
+    expect(sessions(h)).toMatchObject([{ kind: 'pane-stopped', cause: 'killed' }])
+  })
+
+  it('does not read a SIGKILL after the agent exited as a crash', async () => {
+    h.pane = null
+    const unit = `tmux-spawn-${h.id}.scope`
+    h.marker = { marker: { state: 'exit', status: 0 }, at: h.clock.now - 5_000 }
+    h.journal = unitSigkill(unit, 300, h.clock.now - 1_000)
+    await h.recovery.onAbandoned(abandoned(h))
+    expect(sessions(h)).toEqual([])
+  })
+
+  it('dates a killed agent by its exit marker, or says about when only detection is known', async () => {
+    const exitedAt = T0 - 40_000
+    h.marker = { marker: { state: 'exit', status: 137 }, at: exitedAt }
+    await agentKilled(h)
+    expect(sessions(h)).toMatchObject([{ died_at: exitedAt, died_at_approx: false }])
+    const other = harness()
+    await other.recovery.inspect(row(other), 'running', PANE_PID, null)
+    expect(sessions(other)).toMatchObject([{ died_at: T0, died_at_approx: true }])
+  })
+
+  it('sweeps exit markers of panes no session owns once they are old', async () => {
+    h.markers.set(`tmux-spawn-${h.id}.scope`, T0 - 3 * 3600_000)
+    h.markers.set('tmux-spawn-gone-recent.scope', T0 + 3600_000 - 60_000)
+    h.markers.set('tmux-spawn-gone-old.scope', T0)
+    h.clock.now = T0 + 3600_000
+    await h.recovery.tick()
+    expect(new Set(h.markers.keys())).toEqual(
+      new Set(['tmux-spawn-gone-recent.scope', `tmux-spawn-${h.id}.scope`]),
+    )
   })
 
   it('forgets the record of a session that was ended', async () => {

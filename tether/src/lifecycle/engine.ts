@@ -25,7 +25,7 @@ import { readdir, readFile } from 'node:fs/promises'
 import { homedir, uptime } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
-import { ownsTmuxServerUnit, type TetherPaths } from '../config'
+import { agentExitMarkerDir, ownsTmuxServerUnit, type TetherPaths } from '../config'
 import { cleanEnvArgv, passthroughFromEnv, sessionEnvironment, tmuxServerEnvironment } from '../env'
 import type { EventBus } from '../events'
 import {
@@ -375,6 +375,11 @@ async function serializeTmuxServerAllocation<T>(operation: () => Promise<T>): Pr
   } finally {
     release()
   }
+}
+
+/** Where pane supervisors record each agent's fate (crash recovery reads it). */
+function supervisorExitDir(): string | null {
+  return config ? agentExitMarkerDir(config.paths) : null
 }
 
 /** Tether: `/run/user/<uid>/aico` on `default`, the instance's own
@@ -1659,7 +1664,10 @@ async function recoverInterruptedManagedPane(
       }
       execFileSync(
         TMUX_BIN,
-        runInPaneTargetArgs(tmuxPaneTargetForWidget(row.id), paneCommand(line)),
+        runInPaneTargetArgs(
+          tmuxPaneTargetForWidget(row.id),
+          paneCommand(line, supervisorExitDir()),
+        ),
         {
           env: terminalClientEnv(),
           timeout: TMUX_QUERY_TIMEOUT_MS,
@@ -2095,7 +2103,10 @@ async function ensureOwnedInternalSession(widgetId: string, size: PtySize): Prom
     }
     execFileSync(
       TMUX_BIN,
-      runInPaneTargetArgs(tmuxPaneTargetForWidget(widgetId), paneCommand(line)),
+      runInPaneTargetArgs(
+        tmuxPaneTargetForWidget(widgetId),
+        paneCommand(line, supervisorExitDir()),
+      ),
       {
         env: terminalClientEnv(),
         timeout: TMUX_QUERY_TIMEOUT_MS,
@@ -2441,7 +2452,10 @@ export async function respawnAndRelaunch(
 
         execFileSync(
           TMUX_BIN,
-          runInPaneTargetArgs(tmuxPaneTargetForWidget(widgetId), paneCommand(line)),
+          runInPaneTargetArgs(
+            tmuxPaneTargetForWidget(widgetId),
+            paneCommand(line, supervisorExitDir()),
+          ),
           { env: terminalClientEnv(), timeout: TMUX_QUERY_TIMEOUT_MS },
         )
         admission?.commit(promoted?.scopeUnit ?? null)
