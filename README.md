@@ -18,7 +18,7 @@ Aico targets a single-user Linux desktop. X11 is the best-supported path for glo
 
 ## Getting started
 
-Install from source. The AppImages on the [Releases page](https://github.com/elias-leslie/aico/releases) (latest v0.1.1, June 2026) predate the move to Tether and manage tmux sessions themselves; the current code requires Tether and has no AppImage release yet.
+Install from source. AppImage releases are frozen: the ones on the [Releases page](https://github.com/elias-leslie/aico/releases) (latest v0.1.1, June 2026) predate the move to Tether and manage tmux sessions themselves, and no AppImage is built from the current code, which requires Tether.
 
 ```bash
 git clone https://github.com/elias-leslie/aico.git
@@ -46,11 +46,12 @@ uv sync --frozen --python 3.13 --extra dev
 npm run check
 ```
 
-The npm gate runs lint, type checks, renderer tests, sidecar tests, and build. Session lifecycle is verified in the Tether repo; the packaged-app smoke (`scripts/aico-packaged-smoke.sh`) runs here. Avoid broad process-name cleanup. The author also runs these checks through his workspace tool (`st check`).
+The npm gate runs lint, type checks, renderer tests, sidecar tests, and build. Session lifecycle is verified in the Tether repo. The packaged-app smoke (`scripts/aico-packaged-smoke.sh`) stays with the frozen AppImage build. Avoid broad process-name cleanup. The author also runs these checks through his workspace tool (`st check`).
 
 ## Documentation
 
 - [Project guide](docs/project-guide.md) for features, configuration, APIs, packaging, and limitations.
 - [Source installation](docs/INSTALL.md) and [browser extension](extension/README.md).
-- [Tether cutover runbook](docs/cutover-aico.md), [Tether API gaps](docs/tether-api-gaps.md), and the [process incident/recovery report](docs/INCIDENT-2026-07-PROCESS-ESCAPES.md) (lifecycle now lives in Tether).
+- [Glossary](docs/glossary.md) and [root control](docs/root-control.md) (the contract itself lives in Tether).
+- [History](docs/history/README.md): the Tether cutover runbook, Tether API gaps and the July 2026 assessment; the [process incident/recovery report](docs/INCIDENT-2026-07-PROCESS-ESCAPES.md) (lifecycle now lives in Tether).
 - [Security](SECURITY.md), [Apache 2.0 license](LICENSE), [notice](NOTICE), and [font licenses](assets/fonts/README.md).

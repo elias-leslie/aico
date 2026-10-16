@@ -36,22 +36,6 @@ A root that SummitFlow registered (`root-<32 hex>`) in its event ledger before a
 
 ## Owner and fleet state
 
-Tether is the authority for workload state; Aico mirrors it from `GET /v1/sessions` and the `/v1/events` stream, and SummitFlow's fleet state records only what it requested and observed.
+Tether is the authority for workload state; Aico mirrors it from `GET /v1/sessions` and the `/v1/events` stream, and SummitFlow's fleet state records only what it requested and observed. The session, root and fleet status tables live with the root contract in Tether's [`docs/root-control.md`](https://github.com/elias-leslie/tether/blob/main/docs/root-control.md#owner-and-fleet-state).
 
-| Tether session `status` | Root descriptor `status` | Meaning | View mutations |
-| --- | --- | --- | --- |
-| `running` | `running` | Launch dispatched and an active managed workload verified | Allowed with the current generation |
-| `pending` | `pending` | Reserved; never allocated | 409 `workload_unavailable` |
-| `uncertain` | `uncertain` | Allocated, but an active workload is not verified | 409 `workload_unavailable` |
-| `legacy` | — | A pre-Tether A-Term session on the default tmux server; attach and End only | Not addressable as a root |
-| (404) | `ended` | Retired; the root keeps a tombstone with null generation | 410 `ended` (root), 404 (widget) |
-
-| Fleet `status` | `capabilities.launch` | Owner relationship |
-| --- | --- | --- |
-| `registered` | `unobserved` | Intent recorded before any owner request |
-| `registered` | `host-acknowledged` | The owner returned an exact descriptor (any owner status) |
-| `registered` | `unavailable` | Owner request failed or was uncertain; retained, never recreated |
-| `close-uncertain` | any | End was not confirmed; capacity stays allocated and the root is never relaunched |
-| `closed` | any | Owner acknowledged End for the stored generation, or returned the exact ended tombstone |
-
-Show, position and title use one Tether handler for both `/v1/roots/<requestId>/…` and `/v1/widgets/<widgetId>/…` on the legacy `/run/user/<uid>/aico/control.sock`. Tether checks the generation, then forwards the view part to Aico over its GUI channel (`GET /v1/gui/channel`); Aico applies it to its window and view row and posts the result.
+Show, position and title for roots and widgets go through Tether's legacy `$XDG_RUNTIME_DIR/aico/gui-control.sock` (`/v1/roots/<requestId>/…` and `/v1/widgets/<widgetId>/…`, one handler for both); `control.sock` beside it only reads and ends sessions. Tether checks the generation, then forwards the view part to Aico over its GUI channel (`GET /v1/gui/channel`); Aico applies it to its window and view row and posts the result.

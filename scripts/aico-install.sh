@@ -188,10 +188,10 @@ install_user_unit() {
       echo "systemd: could not reach the user manager; run 'systemctl --user daemon-reload' later." >&2
     fi
   fi
-  # The pre-Tether lifecycle owner is retired. It is never stopped here: that is
-  # a cutover step (docs/cutover-aico.md), done once Tether serves the sessions.
+  # The pre-Tether lifecycle owner is retired. It is never stopped here: that was
+  # a cutover step (docs/history/cutover-aico.md), done once Tether served the sessions.
   if [ -f "$unit_dir/aico-owner.service" ]; then
-    echo "systemd: aico-owner.service is retired (Tether owns sessions). After the cutover:"
+    echo "systemd: aico-owner.service is retired (Tether owns sessions; see docs/history/cutover-aico.md). Once Tether serves your sessions:"
     echo "  systemctl --user disable --now aico-owner.service && rm $unit_dir/aico-owner.service"
   fi
 }

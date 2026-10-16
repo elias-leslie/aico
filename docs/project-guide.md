@@ -7,26 +7,24 @@
 - **Floating terminal widgets** — one or more compact Electron windows, each running a tmux-backed terminal with a WebGL renderer (DOM fallback), configurable font, animated "eyes" that track your cursor, and a "thinking" halo while the agent is working.
 - **Persistent sessions, owned by Tether** — every session lives in [Tether](https://github.com/elias-leslie/tether), the per-user session daemon; each widget is a view of one Tether session, keyed by its 8-hex session ID. Closing a widget only detaches its `tmux attach` client, so work reattaches across close/reopen/restart, and Aico restarts never touch sessions. Aico stores only window geometry and open state per session; titles (`displayTitle`, `Project — Task`) and the coordinator chip (`badge`) come from the Tether descriptor as they are.
 - **Lifecycle diagnostics** — “Copy session diagnostics” copies Tether's report for the session: ownership, tmux target, command, scope, age, CPU time, memory, swap, process/task counts, and containment warnings.
-- **Agent launcher menu** — start any tool Tether has enabled (Claude Code, Codex, Antigravity, Pi, a plain shell, …) from the same lantern menu, choosing the TUI and the workspace to launch it into; "Replace TUI" swaps the tool in the focused widget.
-- **Command palette & pinned controls** — a searchable command palette (`Ctrl+Shift+P`) and a pinned, drag-reorderable titlebar cluster, both driven by one action registry. Rename widgets inline.
+- **Agent launcher menu** — start any tool Tether has enabled (Claude Code, Codex, Antigravity, Pi, a plain shell, …) from the same lantern menu, choosing the TUI and the workspace to launch it into; "Restart with another tool" swaps the tool in the focused widget.
+- **Command palette & pinned controls** — a searchable command palette (`Ctrl+Shift+P`) and a pinned, drag-reorderable titlebar cluster, both driven by one action registry. A pin whose feature is unavailable (a tool or project Tether did not list, games not loaded) is hidden, not deleted, and comes back with it. Rename widgets inline.
 - **Native scrollback** — each widget is a tmux control-mode client, so the terminal itself holds the pane's history: wheel, drag-select and copy reach as far back as it goes. Plain `tmux attach` stays as a fallback (palette: "Switch to plain tmux attach", or `AICO_TERMINAL_TRANSPORT=attach`).
 - **Workspace picker** — always includes a local Personal Workspace, plus the projects Tether serves (SummitFlow's catalog when installed, else Tether's local list).
-- **Click-to-context capture** — the loopback sidecar accepts local browser/extension and desktop captures and inserts a compact reference into the focused widget's prompt (single, batch, or an image+OCR "package").
-- **Every session, one list** — the tray and palette list every Tether session, whether started from Aico, A-Term, the `tether` CLI or a SummitFlow root, and open any of them as a widget.
+- **Click-to-context capture** — the loopback sidecar accepts captures from the browser extension and the `st` capture tools and inserts a compact reference into the focused widget's prompt (single, batch, or a capture package from `st ui grab`).
+- **Every session, one list** — the tray and **Open session** (in the lantern menu, the palette or as a pin) list every Tether session, whether started from Aico, A-Term, the `tether` CLI or a SummitFlow root, and open any of them as a widget.
 
 ## Requirements
 
 Aico currently targets a **single-user Linux desktop**.
 
-The AppImage bundles Electron and the Python sidecar; it does not require Node.js, Python, `uv`, or a virtualenv at runtime.
-
-Required for both packaged and source installs:
+Required:
 
 - a running [Tether](https://github.com/elias-leslie/tether) daemon, API v1 or later (`tether --json version`). Tether's installer checks its own durable-session prerequisites: a systemd 254+ user manager, cgroup v2, per-pane tmux scopes and user lingering
-- `tmux` (Aico runs `tmux attach` for each window)
+- `tmux` (each window is a tmux client of its session)
 - Electron runtime libraries (`libgtk-3-0`, `libnss3`, `libatk1.0-0`, `libatk-bridge2.0-0`, `libcups2`, `libgbm1`, `libasound2t64`, and related X11/desktop libraries on Debian/Ubuntu)
 
-Source installs and release builds additionally need Node.js 22+, npm, Python 3.13+, `uv`, and native `node-pty` build tools such as `make` and `g++`.
+Source installs additionally need Node.js 22+, npm, Python 3.13+, `uv`, and native `node-pty` build tools such as `make` and `g++`.
 
 Recommended for the full desktop experience:
 
@@ -36,9 +34,9 @@ Recommended for the full desktop experience:
 
 ## Quickstart
 
-### Released AppImages
+### AppImages (frozen)
 
-The AppImages on the [Releases](https://github.com/elias-leslie/aico/releases) page (latest v0.1.1, June 2026) predate the move to Tether: they manage tmux sessions themselves and do not match this guide. The current code has no AppImage release yet, so install from source ([INSTALL.md](INSTALL.md)), or build an AppImage locally as described under [Standalone AppImage](#standalone-appimage-no-python-at-runtime). Tether, `tmux` and whichever terminal AI CLIs you launch remain runtime prerequisites either way.
+AppImage releases are frozen. The ones on the [Releases](https://github.com/elias-leslie/aico/releases) page (latest v0.1.1, June 2026) predate the move to Tether: they manage tmux sessions themselves and do not match this guide. Install from source ([INSTALL.md](INSTALL.md)).
 
 ### Build from source
 
@@ -74,11 +72,12 @@ For a one-off foreground run during development:
 npm start
 ```
 
-## Standalone AppImage (no Python at runtime)
+## Standalone AppImage (frozen)
 
-The source install above runs the sidecar from a `uv` virtualenv. To produce a
-**self-contained AppImage** that bundles the sidecar — so the packaged app needs
-no Python, `uv`, or `.venv` at runtime — build a distributable from a dev checkout:
+AppImage builds are frozen: the release workflow runs only when started by hand,
+and nothing here is tested against current code. The build path remains for
+reference. It bundles the sidecar so the packaged app needs no Python, `uv`, or
+`.venv` at runtime:
 
 ```bash
 uv sync --frozen --python 3.13 --extra dev --extra release
@@ -115,7 +114,7 @@ systemctl --user edit aico-shell.service
 # Environment=AICO_SELECTION_HOTKEY=CommandOrControl+Shift+F9
 ```
 
-For a directly-run AppImage or `npm start`, export the variables in the launching shell.
+For `npm start`, export the variables in the launching shell.
 
 Important variables:
 
@@ -207,7 +206,7 @@ Electron main process (a Tether client)
   ├─ owns widget windows, global shortcuts, tray, and sidecar lifecycle
   ├─ mirrors Tether's session list and follows /v1/events (reconnects, resyncs on gaps)
   ├─ holds the GUI channel (/v1/gui/channel) and applies show/position/title/coordinator
-  ├─ runs Tether's exact `tmux attach` argv in a PTY per window and claims resize on focus
+  ├─ runs a tmux control-mode client per window (plain `tmux attach` as a fallback) and claims resize on focus
   ├─ stores views (geometry, open state) and settings in aico.db
   ├─ writes ids-only `[aico:event]` journal lines (push results, retired sessions)
   └─ starts Python sidecar and health-checks it
@@ -223,13 +222,13 @@ Python sidecar
 
 Aico degrades when optional tools are missing: unavailable agent CLIs simply fail in their pane, and missing `st` capture tooling leaves core widgets working. When Tether is unreachable, open windows keep their terminals and the tray says session control is unavailable; Aico reconnects on its own.
 
-The `st aico` extension's client lives in Tether; `scripts/aico-root-watch.py` here is the entry SummitFlow runs and execs Tether's installed copy. See [root control](root-control.md). For the process-containment design and recovery, see Tether's `docs/LIFECYCLE_HARNESS.md` and [the July 2026 incident report](INCIDENT-2026-07-PROCESS-ESCAPES.md). The cutover from the old in-process owner is in [cutover-aico.md](cutover-aico.md); known Tether API gaps are in [tether-api-gaps.md](tether-api-gaps.md).
+The `st aico` extension's client lives in Tether; `scripts/aico-root-watch.py` here is the entry SummitFlow runs and execs Tether's installed copy. The root contract lives in Tether's `docs/root-control.md` ([pointer](root-control.md)). For the process-containment design and recovery, see Tether's `docs/LIFECYCLE_HARNESS.md` and [the July 2026 incident report](INCIDENT-2026-07-PROCESS-ESCAPES.md). The cutover from the old in-process owner and the Tether API gaps seen then are in [history](history/README.md).
 
 ## Current limitations
 
 - Linux desktop is the supported path. macOS and Windows packaging are not implemented.
-- X11 is the best-supported session for global shortcuts and screen capture.
-- The published `Aico-*.AppImage` releases (built in CI with a SHA256 checksum and a build-provenance attestation) predate Tether; `npm run dist` builds one from current code. `.deb` packaging is not implemented yet.
+- X11 is the best-supported session for global shortcuts.
+- AppImage releases are frozen: the published `Aico-*.AppImage` releases predate Tether, and none is built from current code. `.deb` packaging is not implemented.
 - The browser extension is loaded unpacked for development; it is not published in a browser store.
 
 ## License
