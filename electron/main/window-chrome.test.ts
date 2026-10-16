@@ -250,7 +250,7 @@ describe('tray', () => {
       [
         {
           id: 'bbbbbbbb',
-          label: 'Site · shell',
+          label: 'Site · Shell',
           open: false,
           group: 'needs-you',
           detail: 'waiting <1m',

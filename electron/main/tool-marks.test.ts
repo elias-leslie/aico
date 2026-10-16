@@ -23,8 +23,19 @@ describe('toolMark', () => {
     expect(toolMark(null).icon).toBe(TOOL_MARKS.shell?.icon)
   })
 
-  it('ignores a colour that is not #rrggbb', () => {
+  it('accepts the short #rgb form', () => {
+    expect(toolMark('pi', '#0a5').accent).toBe('#0a5')
+  })
+
+  it('treats a slug that is not a built-in key as unknown', () => {
+    expect(toolMark('constructor').icon).toBe(TOOL_MARKS.shell?.icon)
+    expect(toolMark('').icon).toBe(TOOL_MARKS.shell?.icon)
+  })
+
+  it('ignores a colour that is not #rrggbb or #rgb', () => {
     expect(toolMark('pi', 'red; background: url(x)').accent).toBe(TOOL_MARKS.pi?.accent)
     expect(toolMark('pi', '').accent).toBe(TOOL_MARKS.pi?.accent)
+    expect(toolMark('pi', 'red').accent).toBe(TOOL_MARKS.pi?.accent)
+    expect(toolMark('pi', '#12345').accent).toBe(TOOL_MARKS.pi?.accent)
   })
 })

@@ -1,4 +1,5 @@
 import type { SessionDescriptor } from './tether-client'
+import { builtinTool } from './tool-marks'
 
 // Aico's in-memory mirror of Tether's session list. Tether is the authority;
 // this cache only feeds titles, the tray and the open-session picker, and is
@@ -80,12 +81,13 @@ export function coordinatorChip(
   return { text: badge.text, color: badge.color }
 }
 
-/** A tool's registry name (`Claude Code`), else its slug. */
+/** A tool's registry name (`Claude Code`), else Aico's built-in name for the
+ * slug (Tether's list not loaded yet), else the slug. */
 export function toolDisplayName(
   slug: string,
   tools: readonly { slug: string; name: string }[],
 ): string {
-  return tools.find((tool) => tool.slug === slug)?.name ?? slug
+  return tools.find((tool) => tool.slug === slug)?.name ?? builtinTool(slug)?.name ?? slug
 }
 
 /** The tray's label for a session: its display label and tool, as the window

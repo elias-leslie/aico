@@ -69,7 +69,7 @@ const claudeCode: TetherTool = {
 
 type PushCallback = (error: ExecFileException | null, stdout: string | Buffer) => void
 
-function setup(windows: FakeWindow[] = []) {
+function setup(windows: FakeWindow[] = [], tools: TetherTool[] = [claudeCode, codex]) {
   const registry = new WindowRegistry({
     fromId: (id) => (windows.find((w) => w.id === id) ?? null) as unknown as BrowserWindow | null,
     fromWebContents: () => null,
@@ -87,7 +87,7 @@ function setup(windows: FakeWindow[] = []) {
   const wiring = createAttentionWiring({
     registry,
     catalog,
-    tools: () => [claudeCode, codex],
+    tools: () => tools,
     setNeedsYou,
     execFile,
     nightshift: '/usr/local/bin/nightshift',
@@ -179,6 +179,21 @@ describe('attention wiring', () => {
     wiring.update(d)
     vi.advanceTimersByTime(PUSH_AFTER_MS)
     expect(execFile.mock.calls[0]?.[1][1]).toBe('Codex in Docs is waiting for you')
+  })
+
+  it("names the agent by Aico's built-in name while Tether's tool list is unavailable", () => {
+    const win = fakeWindow(1)
+    const { wiring, registry, catalog, execFile } = setup([win], [])
+    registry.bindSession(1, 'aaaaaaaa')
+    const d = descriptor('aaaaaaaa', {
+      tool: 'claude-code',
+      state: 'blocked',
+      stateSource: 'claude-hook',
+    })
+    catalog.upsert(d)
+    wiring.update(d)
+    vi.advanceTimersByTime(PUSH_AFTER_MS)
+    expect(execFile.mock.calls[0]?.[1][1]).toBe('Claude Code in Docs is waiting for you')
   })
 
   it('a sent push goes to the journal', () => {

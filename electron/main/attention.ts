@@ -286,8 +286,8 @@ export function groupRows<T extends { id: string }>(
 /** Which agent a state came from, for the push text (`Claude Code`, `Codex`):
  * the Tether tool the state source names by its first word (`claude-status`
  * names the tool whose slug, process name or alias is `claude`), else the
- * session's own tool (`fallback`), which is also what an empty tool list from
- * a Tether that is not answering leaves. */
+ * session's own tool (`fallback`, which names it by Aico's built-in name while
+ * Tether's tool list is unavailable). */
 export function agentName(
   stateSource: string | undefined,
   tools: readonly Pick<TetherTool, 'slug' | 'name' | 'processName' | 'aliases'>[],

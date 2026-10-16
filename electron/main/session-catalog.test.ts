@@ -97,9 +97,13 @@ describe('tray labels', () => {
     { slug: 'shell', name: 'Shell' },
   ]
 
-  it('names the tool from the registry, else by slug', () => {
+  it("names the tool from the registry, else by Aico's built-in name, else by slug", () => {
     expect(toolDisplayName('claude-code', tools)).toBe('Claude Code')
-    expect(toolDisplayName('pi', tools)).toBe('pi')
+    expect(toolDisplayName('claude-code', [{ slug: 'claude-code', name: 'Claude' }])).toBe('Claude')
+    expect(toolDisplayName('pi', tools)).toBe('Pi')
+    expect(toolDisplayName('codex', [])).toBe('Codex')
+    expect(toolDisplayName('aider', tools)).toBe('aider')
+    expect(toolDisplayName('constructor', [])).toBe('constructor')
   })
 
   it('tells apart sessions that share a workspace label', () => {
