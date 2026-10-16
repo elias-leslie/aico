@@ -5,7 +5,11 @@ ANDROID_LAUNCHER="${ANDROID_EMULATOR_LAUNCHER:-$HOME/bin/start-a-term-android-em
 ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}"
 AVD_NAME="${ANDROID_AVD_NAME:-Pixel_8_API_latest}"
 CDP_PORT="${MOBILE_CDP_PORT:-9222}"
-A_TERM_URL="${A_TERM_MOBILE_URL:-http://10.0.2.2:3002}"
+# The frontend answers only localhost, 127.0.0.1 and its public host
+# (frontend/proxy.ts), so the emulator reaches it through `adb reverse` on
+# localhost, not the emulator's 10.0.2.2 host alias (that gets a 403).
+A_TERM_PORT="${A_TERM_MOBILE_PORT:-3002}"
+A_TERM_URL="${A_TERM_MOBILE_URL:-http://localhost:${A_TERM_PORT}}"
 BOOT_TIMEOUT_SECONDS="${MOBILE_BOOT_TIMEOUT_SECONDS:-180}"
 HEADLESS_MODE="${MOBILE_EMULATOR_HEADLESS:-1}"
 
@@ -18,7 +22,8 @@ Commands:
   start-emulator   Launch the Android emulator in the background
   wait-boot        Wait for adb=device and sys.boot_completed=1
   forward-cdp      Forward Android Chrome DevTools to localhost:${CDP_PORT}
-  open-app         Open A-Term in Android Chrome at ${A_TERM_URL}
+  reverse-app      Map the emulator's localhost:${A_TERM_PORT} to this host's (adb reverse)
+  open-app         Open A-Term in Android Chrome at ${A_TERM_URL} (runs reverse-app)
   browser [args]   Launch agent-browser attached to forwarded CDP
   workflow         Run doctor, forward-cdp, and open-app
 
@@ -27,7 +32,8 @@ Environment overrides:
   ANDROID_SDK_ROOT           Android SDK root
   ANDROID_AVD_NAME           Emulator AVD name
   MOBILE_CDP_PORT            Local forwarded CDP port
-  A_TERM_MOBILE_URL        URL to open inside the emulator
+  A_TERM_MOBILE_PORT         Frontend port reversed into the emulator (default 3002)
+  A_TERM_MOBILE_URL          URL to open inside the emulator
   MOBILE_BOOT_TIMEOUT_SECONDS Seconds to wait for boot completion
   MOBILE_EMULATOR_HEADLESS   1 for headless emulator, 0 for windowed
 EOF
@@ -261,9 +267,15 @@ forward_cdp() {
   echo "Forwarded Android Chrome DevTools to localhost:${CDP_PORT}"
 }
 
-open_app() {
+reverse_app() {
   require_cmd adb
   wait_for_boot
+  adb reverse "tcp:${A_TERM_PORT}" "tcp:${A_TERM_PORT}"
+  echo "Emulator localhost:${A_TERM_PORT} now reaches this host's localhost:${A_TERM_PORT}"
+}
+
+open_app() {
+  reverse_app
   adb shell monkey -p com.android.chrome -c android.intent.category.LAUNCHER 1 >/dev/null
   sleep 2
   prepare_chrome || true
@@ -313,6 +325,9 @@ case "$command" in
     ;;
   forward-cdp)
     forward_cdp
+    ;;
+  reverse-app)
+    reverse_app
     ;;
   open-app)
     open_app

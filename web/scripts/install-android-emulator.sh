@@ -197,8 +197,11 @@ Install complete.
 Run the emulator as your normal user with:
   ${LAUNCHER}
 
-Inside the emulator, browse to:
-  http://10.0.2.2:3002
+Then map the emulator's port 3002 to this host's and browse to localhost
+(A-Term refuses the 10.0.2.2 host alias with a 403):
+  adb reverse tcp:3002 tcp:3002
+  http://localhost:3002
+(scripts/mobile-verification.sh open-app does both.)
 
 If KVM group membership is not active yet, a logout/login will improve performance,
 but the launcher is ready now and temporary /dev/kvm access was attempted.

@@ -25,7 +25,9 @@ That does four things:
 1. Checks whether `adb`, `agent-browser`, `sg`, and the emulator binary exist.
 2. Starts the emulator when needed and waits for `adb=device` plus `sys.boot_completed=1`.
 3. Forwards Android Chrome DevTools to `localhost:9222`.
-4. Opens A-Term in Android Chrome at `http://10.0.2.2:3002`.
+4. Runs `adb reverse tcp:3002 tcp:3002` and opens A-Term in Android Chrome at `http://localhost:3002`.
+
+The frontend answers only `localhost`, `127.0.0.1` and its public host (`frontend/proxy.ts`); any other Host gets a 403. The emulator's host alias `http://10.0.2.2:3002` is refused, so the script reverses the port and opens `localhost` instead.
 
 ## Common Commands
 
@@ -34,6 +36,7 @@ bash ./scripts/mobile-verification.sh doctor
 bash ./scripts/mobile-verification.sh start-emulator
 bash ./scripts/mobile-verification.sh wait-boot
 bash ./scripts/mobile-verification.sh forward-cdp
+bash ./scripts/mobile-verification.sh reverse-app
 bash ./scripts/mobile-verification.sh open-app
 bash ./scripts/mobile-verification.sh browser
 ```
@@ -43,7 +46,7 @@ Overrides:
 ```bash
 MOBILE_EMULATOR_HEADLESS=0 bash ./scripts/mobile-verification.sh start-emulator
 MOBILE_CDP_PORT=9333 bash ./scripts/mobile-verification.sh forward-cdp
-A_TERM_MOBILE_URL=http://10.0.2.2:3002 bash ./scripts/mobile-verification.sh open-app
+A_TERM_MOBILE_PORT=3002 bash ./scripts/mobile-verification.sh open-app
 ```
 
 ## What To Verify
