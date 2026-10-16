@@ -22,8 +22,6 @@
   // the user is playing: a click or drag in the last 9 s, or the cursor moving over the bar
   const engaged = (s, now) => now - (s.data.clickAt || -1e9) < 9000 || now - (s.data.grabAt || -1e9) < 9000 || (!!s.cursor && now - s.cursor.since < 2500) || keyed(s, now)
   // the keyboard is the game's (armed by a click on a character), or a game key went down lately
-  const keyed = (s, now) => now - (s.keyAt ?? -1e9) < 9000
-  const keyDir = (s) => (s.keys?.has('right') ? 1 : 0) - (s.keys?.has('left') ? 1 : 0)
 
   // ---- sprite helpers ----------------------------------------------------------
   const G = (w, h) => Array.from({ length: h }, () => '.'.repeat(w))

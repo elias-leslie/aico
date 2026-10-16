@@ -304,8 +304,6 @@
   // ---- shared helpers -------------------------------------------------------------
   const enemies = (s) => s.actors.filter((a) => a.enemy && !a.dead)
   const overlap = (a, b) => a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0
-  const keyed = (s, now) => now - s.keyAt < 9000
-  const keyDir = (s) => (s.keys.has('right') ? 1 : 0) - (s.keys.has('left') ? 1 : 0)
   const engaged = (s, now) => keyed(s, now) || now < s.data.engagedUntil || (s.cursor && s.cursor.y < H + 4 && now - s.cursor.t < 1500 && s.cursor.speed > 10)
   function engage(s) {
     s.data.engagedUntil = performance.now() + 9000

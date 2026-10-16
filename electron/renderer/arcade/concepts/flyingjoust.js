@@ -211,7 +211,6 @@
   const eggs = (s) => s.actors.filter((a) => a.egg && !a.dead)
   // keyboard: A/D fly left/right, W or Space flap, S dives
   const keying = (s, now) => now - (s.keyAt ?? -1e9) < 9000
-  const keyDir = (s) => (s.keys && s.keys.has('left') !== s.keys.has('right') ? (s.keys.has('left') ? -1 : 1) : 0)
   const SPILL = typeof SPILL_UP === 'number' ? SPILL_UP : 0
   const engaged = (s, now) => keying(s, now) || now - (s.data.lastClick || -1e9) < 9000 || (s.cursor && now - s.cursor.t < 1200 && s.cursor.y < H + 2)
   const steering = (s, now) => s.cursor && now - s.cursor.t < 1500 && s.cursor.y < H + 2 && engaged(s, now)

@@ -12,8 +12,6 @@
   // the user is driving: a click in the last 9 s, or the cursor moving over the bar
   const engaged = (s, now) => now - (s.keyAt ?? -1e9) < 9000 || now < (s.data.userUntil || 0) || (s.cursor && now - s.cursor.t < 1600)
   // the keys are driving: held now, or pressed in the last 9 s
-  const keyMode = (s, now) => (s.keys && s.keys.size > 0) || now - (s.keyAt ?? -1e9) < 9000
-  const keyDir = (s) => (s.keys.has('right') ? 1 : 0) - (s.keys.has('left') ? 1 : 0)
   const touched = (s) => {
     s.data.userUntil = NOW() + 9000
   }

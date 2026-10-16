@@ -9,7 +9,6 @@
   const live = (s, now) => s.lively(now)
   const NOW = () => performance.now()
   const engaged = (s, now) => now - s.keyAt < 9000 || now < (s.data.userUntil || 0) || (s.cursor && now - s.cursor.t < 1600)
-  const keyDir = (s) => (s.keys.has('right') ? 1 : 0) - (s.keys.has('left') ? 1 : 0)
   const touched = (s) => {
     s.data.userUntil = NOW() + 9000
   }

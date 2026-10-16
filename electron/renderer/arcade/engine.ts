@@ -109,6 +109,22 @@ const rand = (a: number, b: number): number => a + Math.random() * (b - a)
 const pick = <T>(a: readonly T[]): T => a[Math.floor(Math.random() * a.length)] as T
 const clamp = (v: number, a: number, b: number): number => Math.max(a, Math.min(b, v))
 
+/** Keyboard play, for the games: how long after the last game key they keep
+ * playing by keyboard instead of on their own. */
+const KEY_PLAY_MS = 9000
+interface KeyState {
+  keys?: ReadonlySet<GameKey>
+  keyAt?: number
+}
+/** Left/right held: -1, 1, or 0 for neither or both. */
+const keyDir = (s: KeyState): number =>
+  (s.keys?.has('right') ? 1 : 0) - (s.keys?.has('left') ? 1 : 0)
+/** A game key went down (or the keyboard was armed) in the last 9 s. */
+const keyed = (s: KeyState, now: number): boolean => now - (s.keyAt ?? -1e9) < KEY_PLAY_MS
+/** A game key is held, or one went down in the last 9 s. */
+const keyMode = (s: KeyState, now: number): boolean =>
+  (s.keys !== undefined && s.keys.size > 0) || keyed(s, now)
+
 type Palette = Record<string, string>
 export const PAL: Palette = {
   G: '#56d24e',
@@ -254,6 +270,9 @@ export function installGlobals(): void {
     rand,
     pick,
     clamp,
+    keyDir,
+    keyed,
+    keyMode,
     PAL,
     sprite,
     mirror,

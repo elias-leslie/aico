@@ -533,8 +533,6 @@
   /** Someone is playing: a click or drag in the last 9 s, or the cursor moving over the bar. */
   const engaged = (s, now) => now - (s.keyAt ?? -1e9) < 9000 || now - (s.data.clickAt ?? -1e9) < 9000 || now - (s.data.grabAt ?? -1e9) < 9000 || (!!s.cursor && now - s.cursor.since < 2500)
   /** Playing on the keys: one held, or one pressed in the last 9 s. */
-  const keyMode = (s, now) => (s.keys && s.keys.size > 0) || now - (s.keyAt ?? -1e9) < 9000
-  const keyDir = (s) => (s.keys.has('right') ? 1 : 0) - (s.keys.has('left') ? 1 : 0)
 
   // the code: drag a commando up, up, down, down, left, right, left, right, then B (click), A (double-click)
   function codeKey(s, tok, now) {

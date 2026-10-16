@@ -400,7 +400,6 @@
   const COILV = -Math.sqrt(1000 * Math.max(10, H - 24 + SPILL))
   const keying = (s, now) => now - (s.keyAt ?? -1e9) < 9000
   const engaged = (s, now) => keying(s, now) || now - (s.data.clickAt || -1e9) < 9000 || now - (s.data.grabAt || -1e9) < 9000 || (s.cursor && now - s.cursor.since < 2500)
-  const keyDir = (s) => (s.keys && s.keys.has('left') !== s.keys.has('right') ? (s.keys.has('left') ? -1 : 1) : 0)
   const KRUN = 52
   const touched = (s) => (s.data.clickAt = performance.now())
 

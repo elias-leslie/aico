@@ -323,8 +323,6 @@
   const hazards = (s) => s.actors.filter((a) => a.hazard && !a.dead)
   const onFloor = (h) => h.y + h.h >= FLOOR - 1.5
   /** Someone has been clicking or steering in the last few seconds. */
-  const keyed = (s, now) => now - s.keyAt < 9000
-  const keyDir = (s) => (s.keys.has('right') ? 1 : 0) - (s.keys.has('left') ? 1 : 0)
   const engaged = (s, now) => keyed(s, now) || now < s.data.engagedUntil || (s.cursor && s.cursor.y < H + 4 && now - s.cursor.t < 1200 && s.cursor.speed > 12)
   const handsOn = (s, now) => keyed(s, now) || now < s.data.manualUntil
   function engage(s, manual = false) {

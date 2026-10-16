@@ -132,7 +132,6 @@
     return best
   }
   const SPILL = typeof SPILL_UP === 'number' ? SPILL_UP : 0
-  const keyDir = (s) => (s.keys.has('right') ? 1 : 0) - (s.keys.has('left') ? 1 : 0)
   /** The bird the keys steer: the last one touched, else the one nearest the middle. */
   function lead(s) {
     const D = s.data

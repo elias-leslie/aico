@@ -158,7 +158,6 @@
   // keyboard: A/D send him left or right (he keeps going, as in the arcade), S holds him still,
   // W or Space gulps a power pellet
   const keying = (s, now) => now - (s.keyAt ?? -1e9) < 9000
-  const keyDir = (s) => (s.keys && s.keys.has('left') !== s.keys.has('right') ? (s.keys.has('left') ? -1 : 1) : 0)
   const engaged = (s, now) => keying(s, now) || now - (s.data.lastClick || -1e9) < 9000 || (s.cursor && now - s.cursor.t < 1200 && s.cursor.y < H + 2)
 
   function clip(c, s) {

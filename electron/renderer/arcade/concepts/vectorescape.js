@@ -495,8 +495,6 @@
   /** Someone is playing: a click or drag in the last 9 s, or the cursor moving over the bar. */
   const SPILL = typeof SPILL_UP === 'number' ? SPILL_UP : 0
   const engaged = (s, now) => now - (s.keyAt ?? -1e9) < 9000 || now - (s.data.clickAt ?? -1e9) < 9000 || now - (s.data.grabAt ?? -1e9) < 9000 || (!!s.cursor && now - s.cursor.since < 2500)
-  const keyMode = (s, now) => (s.keys && s.keys.size > 0) || now - (s.keyAt ?? -1e9) < 9000
-  const keyDir = (s) => (s.keys.has('right') ? 1 : 0) - (s.keys.has('left') ? 1 : 0)
   const FRIEND_SAYS = ['Monal ti?', 'Ash! Ash!', 'Huu-ma.', 'Eh-leh?', 'Pista, pista!', 'Na kara.']
   const bubble = (s, k, x) => s.particle({ img: BUBBLE[k], x: x - 2, y: Math.max(1, FLOOR - 34), life: 0.9, vy: -2 })
 
