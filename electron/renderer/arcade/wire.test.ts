@@ -88,6 +88,18 @@ describe('titlebar arcade wiring', () => {
     expect(t.arcade?.nap).toHaveBeenCalledWith(true)
   })
 
+  it('a game that starts while the eyes sleep hears they are asleep', async () => {
+    const t = setup()
+    t.wiring.nap(true)
+    await t.finishLoad()
+    expect(t.arcade?.nap).toHaveBeenCalledWith(true)
+    t.setEnabled(false)
+    t.wiring.nap(false)
+    t.setEnabled(true)
+    await settle()
+    expect(t.arcade?.nap).toHaveBeenCalledTimes(1)
+  })
+
   it('turned off, asleep eyes reach no game', async () => {
     const t = setup()
     await t.finishLoad()

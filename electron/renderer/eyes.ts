@@ -229,8 +229,9 @@ export class Eyes {
     this.exchangeTimer = undefined
   }
 
-  /** Hear when the eyes fall asleep (true) and wake (false). The titlebar game
-   * naps meanwhile. */
+  /** Hear when the window has been quiet long enough for the eyes to sleep
+   * (true), and when it stops being quiet (false). The titlebar game naps
+   * meanwhile. */
   onSleep(fn: (asleep: boolean) => void): void {
     this.sleepListener = fn
   }
@@ -393,6 +394,7 @@ export class Eyes {
     const mood = this.mood()
     this.lastActivity = Date.now()
     if (mood === 'asleep' || mood === 'sleepy') this.play('surprised', 380)
+    else this.settle() // a held mood can hide a quiet clock that just reset
   }
 
   private mood(): Mood {
@@ -404,7 +406,9 @@ export class Eyes {
   private settle(): void {
     const mood = this.mood()
     if (this.root.dataset.mood !== mood) this.root.dataset.mood = mood
-    const asleep = mood === 'asleep'
+    // the quiet clock, not the shown mood: a held or passing mood neither
+    // keeps the game from napping nor makes it nap twice in one quiet spell
+    const asleep = restingMood(this.reading, Date.now() - this.lastActivity) === 'asleep'
     if (asleep !== this.asleep) {
       this.asleep = asleep
       this.sleepListener?.(asleep)

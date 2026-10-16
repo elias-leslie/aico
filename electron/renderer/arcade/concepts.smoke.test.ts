@@ -12,7 +12,15 @@
 import { mkdirSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { type Actor, conceptFor, FAST, installGlobals, NAP_PLAY_MS, Strip } from './engine'
+import {
+  type Actor,
+  conceptFor,
+  FAST,
+  installGlobals,
+  NAP_PLAY_MS,
+  REST_AFTER,
+  Strip,
+} from './engine'
 import { GAMES } from './games'
 
 // ---- fake DOM ------------------------------------------------------------------
@@ -295,6 +303,27 @@ async function play(k: string, seed: number, quietMs = 180_000): Promise<void> {
   s.touch()
   expect(s.napping).toBe(false)
   tick(quietMs)
+  expect(s.mode).toBe('parked')
+  draws.mockClear()
+  tick(60_000)
+  expect(draws).not.toHaveBeenCalled()
+
+  // a game at work or being played never naps mid-run: the nap waits until
+  // the game goes quiet, then runs once and parks as before
+  s.nap(false)
+  const gameNap = def.onNap ? vi.spyOn(def as Required<typeof def>, 'onNap') : null
+  gameNap?.mockClear()
+  s.setBusy(true)
+  s.nap(true)
+  expect(s.napping).toBe(false)
+  tick(5_000)
+  s.setBusy(false)
+  tick(REST_AFTER / 2)
+  expect(s.napping).toBe(false)
+  if (gameNap) expect(gameNap).not.toHaveBeenCalled()
+  tick(quietMs)
+  expect(s.napping).toBe(true)
+  if (gameNap) expect(gameNap).toHaveBeenCalledTimes(1)
   expect(s.mode).toBe('parked')
   draws.mockClear()
   tick(60_000)

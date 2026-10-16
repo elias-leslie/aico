@@ -427,6 +427,21 @@ describe('timers', () => {
     expect(heard).toEqual([true, false])
   })
 
+  it('the sleep signal follows the quiet clock, not a held mood', () => {
+    const f = face()
+    const heard: boolean[] = []
+    f.eyes.onSleep((asleep) => heard.push(asleep))
+    f.eyes.setAttention('finished', 'fresh')
+    vi.advanceTimersByTime(ASLEEP_AFTER_MS + 10_000)
+    expect(f.root.dataset.mood).toBe('content')
+    expect(heard).toEqual([true])
+    f.eyes.setAttention('none', 'fresh')
+    vi.advanceTimersByTime(10_000)
+    expect(heard).toEqual([true]) // no second nap in the same quiet spell
+    f.eyes.noticeInput()
+    expect(heard).toEqual([true, false])
+  })
+
   it('dispose clears every timer, the click handler and a half-played blink', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0.9) // nudge
     const f = face({ focused: true })

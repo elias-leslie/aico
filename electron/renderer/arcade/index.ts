@@ -29,6 +29,8 @@ export async function startArcade(
   const keys = [...paths.keys()]
   installGlobals()
   let strip: Strip | null = null
+  /** The eyes sleep: a game that starts now naps too, once it goes quiet. */
+  let asleep = false
 
   const show = async (key: string | null): Promise<boolean> => {
     const path = key ? paths.get(key) : undefined
@@ -41,6 +43,7 @@ export async function startArcade(
     strip?.destroy()
     strip = new Strip(def, bar, hooks)
     if (busy) strip.setBusy(true)
+    if (asleep) strip.nap(true)
     bar.dataset.arcade = key
     return true
   }
@@ -62,7 +65,10 @@ export async function startArcade(
       gate.input()
       strip?.touch()
     },
-    nap: (on) => strip?.nap(on),
+    nap: (on) => {
+      asleep = on
+      strip?.nap(on)
+    },
     next: async () => {
       if (swapping) return
       swapping = true

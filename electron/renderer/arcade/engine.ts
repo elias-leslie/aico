@@ -2,8 +2,9 @@
 // titlebar. One canvas over the bar, sprites built once, a loop that runs at
 // 12 fps only while something moves, 4 fps for slow drifts, and parks (no timer
 // at all) when the vignette rests, the window is hidden, or nobody is around.
-// When the window's eyes fall asleep the vignette naps: its nap hooks run once,
-// it plays on for a few seconds at most, then parks until something wakes it.
+// When the window's eyes fall asleep the vignette naps once nobody is playing:
+// its nap hooks run once, it plays on for a few seconds at most, then parks
+// until something wakes it.
 //
 // Concepts (./concepts/*.js) are plain scripts written against a small global
 // API (sprite helpers, constants, registerConcept), which installGlobals()
@@ -347,6 +348,10 @@ export class Strip {
   napping = false
   /** While napping: when the loop parks whatever the vignette asks for. */
   private napUntil = 0
+  /** The window's eyes are asleep; the nap waits until nobody is playing. */
+  private sleepy = false
+  /** The nap already ran while the eyes slept; it runs again only after they wake. */
+  private napped = false
   visible = !document.hidden
   data: Record<string, unknown> = {}
   mode = 'parked'
@@ -586,24 +591,37 @@ export class Strip {
 
   /**
    * The window's eyes fell asleep (true) or woke (false). Asleep, the vignette
-   * naps: every nap hook runs once, it settles for NAP_PLAY_MS at most, then
-   * parks. Waking only ends the nap; anything lively (cursor, keys, work, a
-   * click) ends it on its own too.
+   * naps once nobody is playing and no work runs: every nap hook runs once, it
+   * settles for NAP_PLAY_MS at most, then parks. A game being played never
+   * naps mid-run; its nap waits until it goes quiet. Waking ends the nap;
+   * anything lively (cursor, keys, work, a click) ends it on its own too.
    */
   nap(on: boolean): void {
-    if (on === this.napping) return
-    this.napping = on
+    if (on === this.sleepy) return
+    this.sleepy = on
     if (on) {
-      this.napUntil = performance.now() + NAP_PLAY_MS
-      try {
-        for (const a of this.actors) a.onNap?.()
-        this.def.onNap?.(this)
-      } catch (err) {
-        this.fail(err)
-        return
-      }
+      if (this.startNap(performance.now()) === 'napping') this.poke()
+      return
     }
+    this.napped = false
+    if (!this.napping) return
+    this.napping = false
     this.poke()
+  }
+  /** Start the nap if the eyes sleep, it has not run yet and nobody is playing. */
+  private startNap(now: number): 'waiting' | 'napping' | 'failed' {
+    if (!this.sleepy || this.napped || this.armed || this.lively(now)) return 'waiting'
+    this.napped = true
+    this.napping = true
+    this.napUntil = now + NAP_PLAY_MS
+    try {
+      for (const a of this.actors) a.onNap?.()
+      this.def.onNap?.(this)
+    } catch (err) {
+      this.fail(err)
+      return 'failed'
+    }
+    return 'napping'
   }
 
   // ---- pointer: a small no-drag pad follows the cursor while it is over a
@@ -778,6 +796,8 @@ export class Strip {
   private tick(now: number): number {
     if (now < this.nextAt) return this.nextAt - now
     if (this.armed && now - this.keyAt > REST_AFTER) this.arm(false)
+    // a nap that waited for play to stop starts once the vignette goes quiet
+    if (this.startNap(now) === 'failed') return Infinity
     const dt = Math.min(0.25, (now - this.lastStep) / 1000)
     this.lastStep = now
     let want = Infinity

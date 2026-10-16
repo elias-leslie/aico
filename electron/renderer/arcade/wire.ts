@@ -35,6 +35,8 @@ export function wireArcade(bar: HTMLElement, deps: ArcadeDeps): ArcadeWiring {
   let arcade: Arcade | null = null
   let wanted = false
   let starting = false
+  /** The eyes sleep: games turned on now nap too, once they go quiet. */
+  let asleep = false
 
   const start = (): void => {
     wanted = true
@@ -43,8 +45,12 @@ export function wireArcade(bar: HTMLElement, deps: ArcadeDeps): ArcadeWiring {
     load()
       .then(({ startArcade }) => startArcade(bar, { gaze: (pt) => deps.gaze?.(pt) }))
       .then((a) => {
-        if (wanted) arcade = a
-        else a?.stop() // turned off while it was loading
+        if (!wanted) {
+          a?.stop() // turned off while it was loading
+          return
+        }
+        arcade = a
+        if (asleep) a?.nap(true)
       })
       .catch(logError)
       .finally(() => {
@@ -93,6 +99,9 @@ export function wireArcade(bar: HTMLElement, deps: ArcadeDeps): ArcadeWiring {
   return {
     output: (on) => arcade?.output(on),
     input: () => arcade?.input(),
-    nap: (on) => arcade?.nap(on),
+    nap: (on) => {
+      asleep = on
+      arcade?.nap(on)
+    },
   }
 }
