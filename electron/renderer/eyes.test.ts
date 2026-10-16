@@ -282,3 +282,68 @@ describe('Eyes attention', () => {
     expect(f.motion()).toBeNull()
   })
 })
+
+describe('a motion owns the gaze until it ends', () => {
+  // nudge looks up at the "?" bubble
+  const NUDGE = { x: `${(GAZE_MAX * 0.8).toFixed(1)}px`, y: `${(-GAZE_MAX * 0.7).toFixed(1)}px` }
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  it('a peer glance does not pull the eyes off a nudge', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.9) // first motion: nudge
+    const f = face()
+    f.eyes.setAttention('blocked', 'rising')
+    vi.advanceTimersByTime(450)
+    expect(f.motion()).toBe('nudge')
+    f.eyes.lookAtPeer(1200, 600, 0, 1700)
+    vi.advanceTimersByTime(50)
+    expect(f.gaze()).toEqual(NUDGE)
+    vi.advanceTimersByTime(MOTION_MS.nudge - 600)
+    expect(f.motion()).toBe('nudge')
+    expect(f.gaze()).toEqual(NUDGE)
+  })
+
+  it('a glance already holding does not recentre the eyes over a motion', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.9)
+    const f = face()
+    f.eyes.lookAtPeer(1200, 600, 100, 1000) // holds from 100 to 1100
+    f.eyes.setAttention('blocked', 'fresh') // nudge from 400 to 1600
+    vi.advanceTimersByTime(1150)
+    expect(f.motion()).toBe('nudge')
+    expect(f.gaze()).toEqual(NUDGE)
+  })
+
+  it('a motion cut short cannot end the next one early', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.9) // nudge, then wiggle
+    const f = face()
+    f.eyes.setAttention('blocked', 'fresh') // nudge at 400, its end timer at 1600
+    vi.advanceTimersByTime(500)
+    f.eyes.setAttention('none', 'fresh') // a brief focus, say
+    vi.advanceTimersByTime(100)
+    f.eyes.setAttention('blocked', 'fresh') // wiggle at 1000, due to end at 2900
+    vi.advanceTimersByTime(400)
+    expect(f.motion()).toBe('wiggle')
+    vi.advanceTimersByTime(MOTION_MS.wiggle - 1)
+    expect(f.motion()).toBe('wiggle')
+    vi.advanceTimersByTime(1)
+    expect(f.motion()).toBeNull()
+  })
+
+  it('the darts of a wiggle cut short leave the next nudge alone', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5) // wiggle, then nudge
+    const f = face()
+    f.eyes.setAttention('blocked', 'fresh') // wiggle at 400, darts until 1250
+    vi.advanceTimersByTime(450)
+    expect(f.motion()).toBe('wiggle')
+    f.eyes.setAttention('none', 'fresh')
+    vi.advanceTimersByTime(50)
+    f.eyes.setAttention('blocked', 'fresh') // nudge at 900
+    vi.advanceTimersByTime(800)
+    expect(f.motion()).toBe('nudge')
+    expect(f.gaze()).toEqual(NUDGE)
+  })
+})

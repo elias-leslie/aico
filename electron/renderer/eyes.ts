@@ -164,6 +164,8 @@ export class Eyes {
   private motionTimer: number | undefined
   /** A motion owns the gaze until it ends. */
   private performing = false
+  /** Which motion the pending dart and end timers belong to. */
+  private motionTurn = 0
   private readonly bubble: HTMLElement | null
 
   constructor(
@@ -295,6 +297,8 @@ export class Eyes {
     const motion = nextMotion(this.lastMotion, Math.random)
     this.lastMotion = motion
     this.performing = true
+    const turn = ++this.motionTurn
+    const mine = (): boolean => this.performing && turn === this.motionTurn
     this.wake()
     this.root.classList.add(motion)
     if (motion === 'wiggle') {
@@ -303,15 +307,16 @@ export class Eyes {
       this.settle()
       const darts = [-GAZE_MAX, GAZE_MAX, -GAZE_MAX, GAZE_MAX, -GAZE_MAX * 0.6]
       darts.forEach((x, i) => {
-        window.setTimeout(() => this.performing && this.look(x, 0), i * 170)
+        window.setTimeout(() => mine() && this.look(x, 0), i * 170)
       })
-      window.setTimeout(() => this.performing && this.look(0, 0), darts.length * 170)
+      window.setTimeout(() => mine() && this.look(0, 0), darts.length * 170)
     } else if (motion === 'nudge') {
       this.look(GAZE_MAX * 0.8, -GAZE_MAX * 0.7)
     } else {
       this.look(0, 0)
     }
-    window.setTimeout(() => this.endMotion(), MOTION_MS[motion])
+    // a motion that was cut short and replaced must not end its successor
+    window.setTimeout(() => turn === this.motionTurn && this.endMotion(), MOTION_MS[motion])
   }
 
   private endMotion(): void {
@@ -383,6 +388,7 @@ export class Eyes {
     return (
       !this.hovering &&
       !this.lookingDown &&
+      !this.performing &&
       !this.calm.matches &&
       (mood === 'idle' || mood === 'sleepy' || mood === 'busy')
     )
@@ -404,6 +410,7 @@ export class Eyes {
       !this.hovering &&
       !this.reading &&
       !this.lookingDown &&
+      !this.performing &&
       !this.calm.matches &&
       (this.mood() === 'idle' || this.mood() === 'sleepy')
     )
