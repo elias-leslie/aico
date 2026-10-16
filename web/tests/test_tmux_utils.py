@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import call, patch
 
 import pytest
 
@@ -12,19 +12,16 @@ from a_term.utils.tmux import (
     apply_external_attach_options,
     build_tmux_command,
     get_cursor_position,
-    get_external_agent_tmux_session,
     get_scrollback_with_cursor,
     get_tmux_session_name,
     is_managed_tmux_session_name,
     kill_legacy_session,
-    list_external_agent_tmux_sessions,
     list_tmux_sessions,
     reset_tmux_window_size_policy,
     restore_external_attach_options,
     validate_session_name,
     validate_socket_name,
 )
-from a_term.utils.tmux import external as external_tmux
 
 
 @pytest.fixture(autouse=True)
@@ -122,82 +119,6 @@ class TestListTmuxSessions:
             assert list_tmux_sessions() == set()
 
 
-def test_list_external_agent_tmux_sessions_discovers_non_a_term_agent_sessions() -> None:
-    with (
-        patch(
-            "a_term.utils.tmux.run_tmux_command",
-            return_value=(
-                True,
-                "\n".join(
-                    [
-                        "claude-summitflow\t%1\t/home/testuser/summitflow\tclaude\t0",
-                        "summitflow-123e4567-e89b-12d3-a456-426614174000\t%2\t/home/testuser/summitflow\tbash\t0",
-                        "codex-agent-hub\t%3\t/home/testuser/agent-hub\tcodex\t0",
-                        "pi-research\t%4\t/home/testuser/research\tpi\t0",
-                        "pi-a-term\t%5\t/home/testuser/a-term\tpi\t0",
-                        "agy-antigravity\t%6\t/home/testuser/antigravity\tagy\t0",
-                    ]
-                ),
-            ),
-        ),
-        patch("a_term.utils.tmux.subprocess.run") as mock_subprocess,
-    ):
-        mock_subprocess.side_effect = [
-            MagicMock(stdout="/home/testuser/summitflow\n"),
-            MagicMock(stdout="/home/testuser/agent-hub\n"),
-            MagicMock(stdout="/home/testuser/research\n"),
-            MagicMock(stdout="/home/testuser/a-term\n"),
-            MagicMock(stdout="/home/testuser/antigravity\n"),
-        ]
-        sessions = list_external_agent_tmux_sessions()
-
-    assert [session["id"] for session in sessions] == [
-        "agy-antigravity",
-        "claude-summitflow",
-        "codex-agent-hub",
-        "pi-a-term",
-        "pi-research",
-    ]
-    by_id = {str(session["id"]): session for session in sessions}
-    assert by_id["claude-summitflow"]["project_id"] == "summitflow"
-    assert by_id["claude-summitflow"]["mode"] == "claude"
-    assert by_id["codex-agent-hub"]["project_id"] == "agent-hub"
-    assert by_id["codex-agent-hub"]["mode"] == "codex"
-    assert by_id["pi-research"]["project_id"] == "research"
-    assert by_id["pi-research"]["mode"] == "pi"
-    assert by_id["pi-a-term"]["project_id"] == "a-term"
-    assert by_id["pi-a-term"]["mode"] == "pi"
-    assert by_id["agy-antigravity"]["project_id"] == "antigravity"
-    assert by_id["agy-antigravity"]["mode"] == "agy"
-
-
-def test_external_discovery_reads_only_the_default_server() -> None:
-    seen_sockets: list[str | None] = []
-
-    def fake_run_tmux_command(args, check=False, socket_name=None):
-        seen_sockets.append(socket_name)
-        return True, "codex-default\t%4\t/home/testuser/default\tcodex\t0"
-
-    with (
-        patch("a_term.utils.tmux.run_tmux_command", side_effect=fake_run_tmux_command),
-        patch("a_term.utils.tmux.subprocess.run", return_value=MagicMock(stdout="/home/testuser/default\n")),
-    ):
-        sessions = list_external_agent_tmux_sessions()
-
-    assert seen_sockets == [None]
-    assert [session["id"] for session in sessions] == ["codex-default"]
-    assert sessions[0]["tmux_socket"] is None
-    assert sessions[0]["tmux_source"] == "default"
-    assert not hasattr(external_tmux, "_catalogued_aico_tmux_sources")
-    assert [source.id for source in external_tmux._external_tmux_sources()] == ["default"]
-
-
-def test_external_mode_inference_requires_token_boundaries() -> None:
-    assert tmux._infer_external_mode("pi-a-term", "node") == ("pi", "running")
-    assert tmux._infer_external_mode("antigravity", "agy") == ("agy", "running")
-    assert tmux._infer_external_mode("api-service", "python") == ("shell", "not_started")
-
-
 class TestKillLegacySession:
     def test_uses_exact_session_target(self) -> None:
         session_id = "123e4567-e89b-12d3-a456-426614174000"
@@ -215,16 +136,6 @@ class TestKillLegacySession:
             pytest.raises(tmux.TmuxError),
         ):
             kill_legacy_session("123e4567-e89b-12d3-a456-426614174000")
-
-
-def test_get_external_agent_tmux_session_matches_by_name() -> None:
-    session = {
-        "id": "claude-summitflow",
-        "tmux_session_name": "claude-summitflow",
-        "is_external": True,
-    }
-    with patch("a_term.utils.tmux.list_external_agent_tmux_sessions", return_value=[session]):
-        assert get_external_agent_tmux_session("claude-summitflow") == session
 
 
 def test_get_cursor_position_returns_coordinates() -> None:
@@ -358,41 +269,3 @@ def test_apply_external_attach_options_targets_the_given_socket() -> None:
         call(["set-option", "-t", "tether-7", "status", "off"], socket_name=SOCKET),
         call(["set-option", "-t", "tether-7", "status", "on"], socket_name=SOCKET),
     ]
-
-
-def test_infer_external_mode_finds_agent_below_a_shell_pane() -> None:
-    """An agent started from a shell shares its process group.
-
-    tmux then reports the shell as ``pane_current_command``, so the pane has to
-    be classified from its process tree or the agent looks like a shell.
-    """
-    with patch(
-        "a_term.utils.tmux.external._pane_descendant_labels",
-        return_value=["claude-real claude-real"],
-    ):
-        assert external_tmux._infer_external_mode("agent-e03c60b0", "bash", "4242") == (
-            "claude",
-            "running",
-        )
-
-
-def test_infer_external_mode_keeps_plain_shell_panes_as_shells() -> None:
-    with patch(
-        "a_term.utils.tmux.external._pane_descendant_labels",
-        return_value=["git git", "less less"],
-    ):
-        assert external_tmux._infer_external_mode("scratch-bfa0cfb0", "bash", "4242") == (
-            "shell",
-            "not_started",
-        )
-
-
-def test_infer_external_mode_skips_process_scan_for_non_shell_panes() -> None:
-    with patch(
-        "a_term.utils.tmux.external._pane_descendant_labels",
-        side_effect=AssertionError("must not scan"),
-    ):
-        assert external_tmux._infer_external_mode("scratch", "vim", "4242") == (
-            "shell",
-            "not_started",
-        )

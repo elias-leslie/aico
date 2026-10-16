@@ -24,20 +24,12 @@ from .core import (
     validate_socket_name,
 )
 from .external import (
-    _EXTERNAL_AGENT_TOKENS,  # noqa: F401
     _EXTERNAL_ATTACH_LOCK,  # noqa: F401
     _EXTERNAL_ATTACH_STATES,  # noqa: F401
-    _EXTERNAL_TMUX_SOURCES,  # noqa: F401
-    ExternalTmuxSource,
     _ExternalAttachState,  # noqa: F401
-    _infer_external_mode,  # noqa: F401
-    _infer_project_id,  # noqa: F401
     _normalize_tmux_toggle,  # noqa: F401
     apply_external_attach_options,
-    get_external_agent_tmux_session,
     get_tmux_session_option,
-    list_external_agent_tmux_sessions,
-    list_external_tmux_sessions,
     restore_external_attach_options,
     set_tmux_session_option,
 )
@@ -61,20 +53,16 @@ from .window import reset_tmux_window_size_policy, resize_tmux_window
 __all__ = [
     "TMUX_COMMAND_TIMEOUT",
     "TMUX_SESSION_PREFIX",
-    "ExternalTmuxSource",
     "TmuxError",
     "apply_external_attach_options",
     "build_tmux_command",
     "get_cursor_position",
-    "get_external_agent_tmux_session",
     "get_scrollback",
     "get_scrollback_with_cursor",
     "get_tmux_session_name",
     "get_tmux_session_option",
     "is_managed_tmux_session_name",
     "kill_legacy_session",
-    "list_external_agent_tmux_sessions",
-    "list_external_tmux_sessions",
     "list_tmux_sessions",
     "reset_tmux_window_size_policy",
     "resize_tmux_window",

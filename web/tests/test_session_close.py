@@ -63,11 +63,21 @@ def test_closing_last_session_deletes_adhoc_pane(tether: FakeTether) -> None:
     assert result["pane_deleted"] is True
 
 
-def test_external_session_is_never_ended(tether: FakeTether) -> None:
+def test_external_session_is_never_ended(tether: FakeTether, no_default_tmux: MagicMock) -> None:
     with patch("a_term.services.session_close.lifecycle.end_session") as end:
         result = close_session("my-own-tmux")
     end.assert_not_called()
-    assert result["is_external"] is True
+    assert result == {
+        "deleted": True,
+        "id": "my-own-tmux",
+        "next_session_id": None,
+        "pane_id": None,
+        "pane_deleted": False,
+        "is_external": True,
+    }
+    # Decided from the id alone: no tmux or Tether lookup.
+    no_default_tmux.assert_not_called()
+    assert tether.calls == []
 
 
 def test_unlinked_tether_session_is_ended_and_reported_external(tether: FakeTether) -> None:

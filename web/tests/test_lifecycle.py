@@ -83,9 +83,30 @@ def test_end_legacy_session_kills_exact_session(tether: FakeTether) -> None:
     assert pane_store.get_link(LEGACY_ID) is None
 
 
-def test_end_refuses_external_session(tether: FakeTether) -> None:
-    with pytest.raises(lifecycle.LifecycleError):
+def test_end_refuses_external_session(tether: FakeTether, no_default_tmux: MagicMock) -> None:
+    with pytest.raises(lifecycle.LifecycleError) as caught:
         lifecycle.end_session("my-own-session")
+    assert (caught.value.status_code, caught.value.detail) == (
+        400,
+        "Only Tether and legacy A-Term sessions can be ended here",
+    )
+    no_default_tmux.assert_not_called()
+    assert tether.calls == []
+
+
+def test_end_tether_session_without_generation_is_409_and_keeps_the_link(tether: FakeTether) -> None:
+    pane = _pane()
+    session = lifecycle.create_session(pane_id=pane["id"], mode="shell")
+    with (
+        patch("a_term.tether.client.TetherClient.get_session", return_value={"id": session["id"]}),
+        pytest.raises(lifecycle.LifecycleError) as caught,
+    ):
+        lifecycle.end_session(session["id"])
+    assert (caught.value.status_code, caught.value.detail) == (
+        409,
+        "The session has no generation yet; refresh and try again",
+    )
+    assert pane_store.get_link(session["id"]) is not None
 
 
 def test_end_pane_ends_every_session_and_deletes_pane(tether: FakeTether) -> None:

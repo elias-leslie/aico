@@ -128,7 +128,7 @@ def _rebuild(name: str, inputs: dict[str, Any]) -> Session:
             return session_catalog.from_legacy(inputs["uuid"], inputs["row"], inputs["link"])
     with (
         patch("a_term.utils.tmux.run_tmux_command", return_value=(True, inputs["list_panes"])),
-        patch("a_term.utils.tmux.external._infer_project_id", return_value=inputs["project_id"]),
+        patch("a_term.services._session_sources.own_tmux._infer_project_id", return_value=inputs["project_id"]),
     ):
         session = session_catalog.get_session(inputs["list_panes"].split("\t", 1)[0])
     assert session is not None
