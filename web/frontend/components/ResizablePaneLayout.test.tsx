@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PaneSlot } from '@/lib/utils/slot'
+import { SLOT_BASE } from '@/test-stubs/session-fixtures'
 import { ResizablePaneLayout } from './ResizablePaneLayout'
 
 const { mockUsePaneRenderer, mockSinglePaneLayout } = vi.hoisted(() => ({
@@ -46,6 +47,7 @@ vi.mock('./pane-layouts', () => ({
 function makeProjectSlot(id: string): PaneSlot {
   return {
     type: 'project',
+    ...SLOT_BASE,
     paneId: `pane-${id}`,
     projectId: `project-${id}`,
     projectName: `Project ${id}`,

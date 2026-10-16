@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { PaneSlot } from '@/lib/utils/slot'
+import type { AdHocSlot, PaneSlot } from '@/lib/utils/slot'
+import { SLOT_BASE } from '@/test-stubs/session-fixtures'
 import { UnifiedATermHeaderContent } from './UnifiedATermHeaderContent'
 
 const { renamePane, updateSession } = vi.hoisted(() => ({
@@ -75,6 +76,7 @@ function makeProjectSlot(
 ): Extract<PaneSlot, { type: 'project' }> {
   return {
     type: 'project',
+    ...SLOT_BASE,
     paneId: id,
     projectId: `${id}-project`,
     projectName: name,
@@ -102,15 +104,16 @@ describe('UnifiedATermHeaderContent', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it.each([false, true])(
-    'keeps manual editing canonical for root=%s',
-    (isRoot) => {
-      const slot = { ...makeProjectSlot('a', 'Alpha · Focus'), isRoot }
+    'routes a rename by the backend rename flag: can.rename=%s',
+    (canRename) => {
+      const base = makeProjectSlot('a', 'Alpha · Focus')
+      const slot = { ...base, can: { ...base.can, rename: canRename } }
       render(<UnifiedATermHeaderContent slot={slot} onCloseSession={vi.fn()} />)
       fireEvent.click(screen.getByRole('button', { name: 'Rename' }))
       const input = screen.getByRole('textbox')
       fireEvent.change(input, { target: { value: 'Alpha · Next focus' } })
       fireEvent.keyDown(input, { key: 'Enter' })
-      if (isRoot) {
+      if (canRename) {
         expect(updateSession).toHaveBeenCalledWith('a-session', {
           name: 'Alpha · Next focus',
         })
@@ -127,7 +130,8 @@ describe('UnifiedATermHeaderContent', () => {
       <UnifiedATermHeaderContent
         slot={{
           ...makeProjectSlot('a', 'Alpha — Focus'),
-          isTether: true,
+          can: { rename: true, reset: true, end: true },
+          showsSessionTitle: true,
           task: 'Focus',
           badge: { label: '↳ Lead', color: '#6fa8ff' },
         }}
@@ -144,11 +148,54 @@ describe('UnifiedATermHeaderContent', () => {
   it('keeps the project switcher for a session with no task or chip', () => {
     render(
       <UnifiedATermHeaderContent
-        slot={{ ...makeProjectSlot('a', 'Alpha'), isTether: true }}
+        slot={{
+          ...makeProjectSlot('a', 'Alpha'),
+          can: { rename: true, reset: true, end: true },
+        }}
         onProjectSwitch={vi.fn()}
       />,
     )
     expect(screen.getByTestId('pane-project-switcher')).toBeInTheDocument()
+  })
+
+  it('renames a free-standing View in Tether when the backend allows it', () => {
+    const slot: AdHocSlot = {
+      type: 'adhoc',
+      sessionId: 'free-session',
+      name: 'Alpha — Focus',
+      workingDir: '/workspace/a',
+      isExternal: true,
+      task: 'Focus',
+      can: { rename: true, reset: false, end: true },
+      showsSessionTitle: true,
+    }
+    render(<UnifiedATermHeaderContent slot={slot} onCloseSession={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Rename' }))
+    const input = screen.getByRole('textbox')
+    expect(input).toHaveValue('Focus')
+    fireEvent.change(input, { target: { value: 'Next focus' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(updateSession).toHaveBeenCalledWith('free-session', {
+      name: 'Next focus',
+    })
+    expect(renamePane).not.toHaveBeenCalled()
+  })
+
+  it('offers no rename on a free-standing View the backend will not rename', () => {
+    const slot: AdHocSlot = {
+      type: 'adhoc',
+      sessionId: 'own-tmux',
+      name: 'codex-agent-hub',
+      workingDir: '/workspace/a',
+      isExternal: true,
+      can: { rename: false, reset: false, end: false },
+      showsSessionTitle: false,
+    }
+    render(<UnifiedATermHeaderContent slot={slot} onCloseSession={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Rename' }))
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+    expect(updateSession).not.toHaveBeenCalled()
+    expect(renamePane).not.toHaveBeenCalled()
   })
 
   it('swaps panes when one header is dropped onto another header', () => {

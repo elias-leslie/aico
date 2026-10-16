@@ -1,11 +1,13 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ATermSlot } from '@/lib/utils/slot'
+import { SLOT_BASE } from '@/test-stubs/session-fixtures'
 import { ATermTabs } from './ATermTabs'
 
 const endSession = vi.hoisted(() => vi.fn())
 const slot: ATermSlot = {
   type: 'adhoc',
+  ...SLOT_BASE,
   sessionId: 'session-a',
   name: 'Work shell',
   workingDir: '/tmp',

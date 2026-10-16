@@ -119,9 +119,7 @@ export function useATermSlotHandlers({
     async (slot: ATermSlot) => {
       const sessionId =
         slot.type === 'project' ? slot.activeSessionId : slot.sessionId
-      if (!sessionId) return
-      const session = findSession(sessionId)
-      if (session?.is_external || session?.is_legacy || session?.is_root) return
+      if (!sessionId || !slot.can.reset) return
 
       const newSession = await reset(sessionId)
       // Invalidate panes so the slot picks up the new session ID
@@ -129,7 +127,7 @@ export function useATermSlotHandlers({
       // Navigate to the new session so the aTerm re-renders with the fresh connection
       switchToSession(newSession.id)
     },
-    [findSession, reset, switchToSession, queryClient],
+    [reset, switchToSession, queryClient],
   )
 
   // Handler for closing a slot's a-term

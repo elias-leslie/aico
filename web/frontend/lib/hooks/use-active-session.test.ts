@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { TETHER_CAN } from '@/test-stubs/session-fixtures'
 import type { ATermSession } from './use-a-term-sessions'
 import {
   deriveActiveSessionId,
@@ -18,6 +19,7 @@ const sessions: ATermSession[] = [
     is_alive: true,
     created_at: '2026-03-06T00:00:00Z',
     last_accessed_at: '2026-03-06T00:00:00Z',
+    ...TETHER_CAN,
   },
   {
     id: 'session-2',
@@ -30,6 +32,7 @@ const sessions: ATermSession[] = [
     is_alive: true,
     created_at: '2026-03-06T00:00:00Z',
     last_accessed_at: '2026-03-06T00:00:00Z',
+    ...TETHER_CAN,
   },
 ]
 

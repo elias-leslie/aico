@@ -1,20 +1,7 @@
-import type { CoordinatorFields } from '@/lib/utils/coordinator-badge'
+import type { ATermSession } from './use-a-term-sessions'
 
-export interface PaneSession extends CoordinatorFields {
-  id: string
-  name: string
-  mode: string
-  session_number: number
-  is_alive: boolean
-  is_root?: boolean
-  /** Pre-Tether default-server session: attach-only, no reset. */
-  is_legacy?: boolean
-  /** `tether` for a Tether session: its `name` is the one Aico shows too. */
-  source?: string | null
-  working_dir: string | null
-  agent_state?: 'not_started' | 'starting' | 'running' | 'stopped' | 'error'
-  claude_state: 'not_started' | 'starting' | 'running' | 'stopped' | 'error'
-}
+/** A pane's session: the same full session the Sessions API returns. */
+export type PaneSession = ATermSession
 
 export interface ATermPane {
   id: string

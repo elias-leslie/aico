@@ -1,6 +1,7 @@
 import { renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { PaneBasedSlot } from '@/lib/utils/slot'
+import { SLOT_BASE } from '@/test-stubs/session-fixtures'
 import { useATermOrchestration } from './use-a-term-orchestration'
 
 const mockUseDetachedPaneWindow = vi.fn()
@@ -94,6 +95,7 @@ function makeProjectSlot(
 ): PaneBasedSlot {
   return {
     type: 'project',
+    ...SLOT_BASE,
     paneId: 'pane-a',
     projectId: 'project-a',
     projectName: 'Project A',

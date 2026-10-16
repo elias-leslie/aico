@@ -36,8 +36,9 @@ export const HeaderNameDisplay = memo(function HeaderNameDisplay({
   onEditingChange,
 }: HeaderNameDisplayProps) {
   const name = getSlotName(slot)
-  // A Tether session renames its task; the project stays the workspace's.
-  const renameValue = slot.isTether ? (slot.task ?? '') : name
+  // A session renamed in Tether renames its task; the project stays the
+  // workspace's.
+  const renameValue = slot.can.rename ? (slot.task ?? '') : name
   const attention = useSessionAttention()
   const textColor = isActive
     ? 'var(--term-text-primary)'

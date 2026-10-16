@@ -1,7 +1,77 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { type ATermSlot, getSlotPanelId, type PaneSlot } from '@/lib/utils/slot'
+import type { ATermPane } from '@/lib/hooks/use-a-term-panes'
+import type { ATermSession } from '@/lib/hooks/use-a-term-sessions'
+import {
+  type ATermSlot,
+  getSlotPanelId,
+  type PaneSlot,
+  paneToSlot,
+  sessionToSlot,
+} from '@/lib/utils/slot'
+import {
+  LEGACY_CAN,
+  OWN_TMUX_CAN,
+  ROOT_CAN,
+  SESSION_BASE,
+  SLOT_BASE,
+  TETHER_CAN,
+} from '@/test-stubs/session-fixtures'
 import { usePaneRenderer } from './use-pane-renderer'
+
+function session(
+  id: string,
+  overrides: Partial<ATermSession> = {},
+): ATermSession {
+  return {
+    ...SESSION_BASE,
+    id,
+    name: id,
+    project_id: 'project-1',
+    working_dir: '/tmp/project-1',
+    mode: 'codex',
+    is_alive: true,
+    is_external: false,
+    source: 'tether',
+    ...overrides,
+  }
+}
+
+function projectPane(
+  paneId: string,
+  overrides: Partial<ATermSession> = {},
+): ATermPane {
+  return {
+    id: paneId,
+    pane_type: 'project',
+    project_id: 'project-1',
+    pane_order: 0,
+    pane_name: 'Project 1',
+    active_mode: 'codex',
+    is_detached: false,
+    created_at: null,
+    sessions: [session(`${paneId}-session`, overrides)],
+    width_percent: 100,
+    height_percent: 100,
+    grid_row: 0,
+    grid_col: 0,
+  }
+}
+
+/** An Own tmux session shown as a free-standing View. */
+function ownTmuxView(): ATermSlot {
+  return sessionToSlot(
+    session('external-codex', {
+      ...OWN_TMUX_CAN,
+      name: 'codex-agent-hub',
+      project_id: null,
+      working_dir: '/home/testuser/agent-hub',
+      source: 'tmux_external',
+      is_external: true,
+    }),
+    { as: 'adhoc', place: 'free' },
+  )
+}
 
 const aTermProps = vi.hoisted(
   () =>
@@ -42,11 +112,13 @@ function RenderHarness({
   onSwapPanes,
   onUpload,
   onReset,
+  onCloseSession,
 }: {
   slots: Array<ATermSlot | PaneSlot>
   onSwapPanes?: (slotIdA: string, slotIdB: string) => void
   onUpload?: (sessionId?: string) => void
   onReset?: (slot: ATermSlot | PaneSlot) => void
+  onCloseSession?: (slot: ATermSlot | PaneSlot) => void
 }) {
   const renderPane = usePaneRenderer({
     props: {
@@ -83,6 +155,7 @@ function RenderHarness({
       onSwapPanes,
       onUpload,
       onReset,
+      onCloseSession,
     },
     displaySlots: slots,
     paneCount: slots.length,
@@ -105,6 +178,7 @@ describe('usePaneRenderer', () => {
     const slots: PaneSlot[] = [
       {
         type: 'project',
+        ...SLOT_BASE,
         paneId: 'pane-1',
         projectId: 'project-1',
         projectName: 'Project 1',
@@ -115,6 +189,7 @@ describe('usePaneRenderer', () => {
       },
       {
         type: 'project',
+        ...SLOT_BASE,
         paneId: 'pane-2',
         projectId: 'project-2',
         projectName: 'Project 2',
@@ -151,6 +226,7 @@ describe('usePaneRenderer', () => {
     const slots: PaneSlot[] = [
       {
         type: 'project',
+        ...SLOT_BASE,
         paneId: 'pane-1',
         projectId: 'project-1',
         projectName: 'Project 1',
@@ -161,6 +237,7 @@ describe('usePaneRenderer', () => {
       },
       {
         type: 'project',
+        ...SLOT_BASE,
         paneId: 'pane-2',
         projectId: 'project-2',
         projectName: 'Project 2',
@@ -199,6 +276,7 @@ describe('usePaneRenderer', () => {
     const slots: PaneSlot[] = [
       {
         type: 'project',
+        ...SLOT_BASE,
         paneId: 'pane-1',
         projectId: 'project-1',
         projectName: 'Project 1',
@@ -209,6 +287,7 @@ describe('usePaneRenderer', () => {
       },
       {
         type: 'project',
+        ...SLOT_BASE,
         paneId: 'pane-2',
         projectId: 'project-2',
         projectName: 'Project 2',
@@ -230,18 +309,9 @@ describe('usePaneRenderer', () => {
     aTermProps.length = 0
     headerProps.length = 0
 
-    const slots: ATermSlot[] = [
-      {
-        type: 'adhoc',
-        sessionId: 'external-codex',
-        name: 'codex-agent-hub',
-        workingDir: '/home/testuser/agent-hub',
-        sessionMode: 'codex',
-        isExternal: true,
-      },
-    ]
+    const slots: ATermSlot[] = [ownTmuxView()]
 
-    render(<RenderHarness slots={slots} />)
+    render(<RenderHarness slots={slots} onCloseSession={vi.fn()} />)
 
     expect(headerProps).toHaveLength(1)
     expect(aTermProps).toEqual([
@@ -253,55 +323,61 @@ describe('usePaneRenderer', () => {
     ])
     expect(headerProps[0]?.showCleanButton).toBe(true)
     expect(headerProps[0]?.onReset).toBeUndefined()
+    // A-Term never ends an Own tmux session: closing it only closes the View.
+    expect(headerProps[0]?.onCloseSession).toBeUndefined()
     expect(headerProps[0]?.closeTooltip).toBe('Close view')
   })
 
-  it('offers Reset only for sessions the server can respawn', () => {
+  it('offers Reset and End only where the backend allows them', () => {
     headerProps.length = 0
     const onReset = vi.fn()
-    const agentPane = {
-      type: 'project' as const,
-      projectId: 'project-1',
-      projectName: 'Project 1',
-      rootPath: '/tmp/project-1',
-      activeMode: 'codex',
-      sessionBadge: null,
-    }
-    const slots: PaneSlot[] = [
-      {
-        ...agentPane,
-        paneId: 'pane-agent',
-        activeSessionId: 'agent-session',
-      },
-      {
-        ...agentPane,
-        paneId: 'pane-root',
-        activeSessionId: 'root-session',
-        isRoot: true,
-      },
-      {
-        type: 'adhoc',
-        paneId: 'pane-adhoc-root',
-        sessionId: 'adhoc-root-session',
-        name: 'Root',
-        workingDir: '/tmp',
-        sessionMode: 'codex',
-        isRoot: true,
-      },
-      {
-        ...agentPane,
-        paneId: 'pane-legacy',
-        activeSessionId: 'legacy-session',
-        isLegacy: true,
-      },
+    const onCloseSession = vi.fn()
+    const slots: Array<ATermSlot | PaneSlot> = [
+      paneToSlot(projectPane('pane-agent', { ...TETHER_CAN })),
+      paneToSlot(projectPane('pane-root', { ...ROOT_CAN, is_root: true })),
+      paneToSlot({
+        ...projectPane('pane-adhoc-root', { ...ROOT_CAN, is_root: true }),
+        pane_type: 'adhoc',
+        project_id: null,
+      }),
+      paneToSlot(
+        projectPane('pane-legacy', {
+          ...LEGACY_CAN,
+          source: 'legacy',
+          is_legacy: true,
+        }),
+      ),
+      // A desktop free-standing Tether View: the session can be respawned,
+      // but a View that no pane shows never offers Reset.
+      sessionToSlot(
+        session('free-tether', { ...TETHER_CAN, is_external: true }),
+        { as: 'adhoc', place: 'free' },
+      ),
+      ownTmuxView(),
     ]
 
-    render(<RenderHarness slots={slots} onReset={onReset} />)
+    render(
+      <RenderHarness
+        slots={slots}
+        onReset={onReset}
+        onCloseSession={onCloseSession}
+      />,
+    )
 
     expect(headerProps.map((props) => typeof props.onReset)).toEqual([
       'function',
       'undefined',
       'undefined',
+      'undefined',
+      'undefined',
+      'undefined',
+    ])
+    expect(headerProps.map((props) => typeof props.onCloseSession)).toEqual([
+      'function',
+      'function',
+      'function',
+      'function',
+      'function',
       'undefined',
     ])
     const reset = headerProps[0]?.onReset as () => void
@@ -313,16 +389,7 @@ describe('usePaneRenderer', () => {
     headerProps.length = 0
     const onUpload = vi.fn()
 
-    const slots: ATermSlot[] = [
-      {
-        type: 'adhoc',
-        sessionId: 'external-codex',
-        name: 'codex-agent-hub',
-        workingDir: '/home/testuser/agent-hub',
-        sessionMode: 'codex',
-        isExternal: true,
-      },
-    ]
+    const slots: ATermSlot[] = [ownTmuxView()]
 
     render(<RenderHarness slots={slots} onUpload={onUpload} />)
 
@@ -340,6 +407,7 @@ describe('usePaneRenderer', () => {
     const slots: PaneSlot[] = [
       {
         type: 'project',
+        ...SLOT_BASE,
         paneId: 'pane-1',
         projectId: 'project-1',
         projectName: 'Project 1',

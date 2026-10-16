@@ -1,6 +1,11 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ComponentProps } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  OWN_TMUX_CAN,
+  SESSION_BASE,
+  TETHER_CAN,
+} from '@/test-stubs/session-fixtures'
 import { ATermManagerModal } from './ATermManagerModal'
 
 const mockUseProjectSettings = vi.fn()
@@ -88,6 +93,7 @@ describe('ATermManagerModal', () => {
           last_accessed_at: null,
           is_external: true,
           source: 'tmux_external',
+          ...OWN_TMUX_CAN,
         },
       ],
     })
@@ -154,6 +160,7 @@ describe('ATermManagerModal', () => {
           last_accessed_at: null,
           is_external: true,
           source: 'tmux_external',
+          ...OWN_TMUX_CAN,
         },
       ],
     })
@@ -187,6 +194,7 @@ describe('ATermManagerModal', () => {
           last_accessed_at: null,
           is_external: true,
           source: 'tmux_external',
+          ...OWN_TMUX_CAN,
         },
         {
           id: 'codex-agent-hub',
@@ -201,6 +209,7 @@ describe('ATermManagerModal', () => {
           last_accessed_at: null,
           is_external: true,
           source: 'tmux_external',
+          ...OWN_TMUX_CAN,
         },
       ],
     })
@@ -229,6 +238,7 @@ describe('ATermManagerModal', () => {
       last_accessed_at: null,
       is_external: true,
       source: 'tether',
+      ...TETHER_CAN,
       origin: 'aico',
       tmux_session_name: 'aico-0a1b2c3d',
       tmux_source: 'tether',
@@ -272,6 +282,7 @@ describe('ATermManagerModal', () => {
           last_accessed_at: null,
           is_external: true,
           source: 'tmux_external',
+          ...OWN_TMUX_CAN,
         },
       ],
     })
@@ -301,6 +312,7 @@ describe('ATermManagerModal', () => {
           last_accessed_at: null,
           is_external: true,
           source: 'tmux_external',
+          ...OWN_TMUX_CAN,
         },
       ],
     })
@@ -333,6 +345,7 @@ describe('ATermManagerModal', () => {
               id: 'shell-a-term',
               name: 'A-Term Shell',
               mode: 'shell',
+              ...SESSION_BASE,
               session_number: 1,
               is_alive: true,
               working_dir: '/workspace/a-term',
@@ -342,6 +355,7 @@ describe('ATermManagerModal', () => {
               id: 'codex-a-term',
               name: 'A-Term Codex',
               mode: 'codex',
+              ...SESSION_BASE,
               session_number: 1,
               is_alive: true,
               working_dir: '/workspace/a-term',
@@ -484,6 +498,7 @@ describe('ATermManagerModal', () => {
           last_accessed_at: null,
           is_external: true,
           source: 'tmux_external',
+          ...OWN_TMUX_CAN,
         },
       ],
     })

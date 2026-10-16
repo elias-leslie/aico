@@ -1,6 +1,11 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { useState } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  OWN_TMUX_CAN,
+  ROOT_CAN,
+  TETHER_CAN,
+} from '@/test-stubs/session-fixtures'
 import { useATermTabsState } from './use-a-term-tabs-state'
 
 const mockUseActiveSession = vi.fn()
@@ -74,6 +79,7 @@ function buildActiveSessionState(
       is_alive: true,
       created_at: '2026-03-06T00:00:00Z',
       last_accessed_at: '2026-03-06T00:00:00Z',
+      ...TETHER_CAN,
     },
     {
       id: 'session-project-b',
@@ -86,6 +92,7 @@ function buildActiveSessionState(
       is_alive: true,
       created_at: '2026-03-06T00:00:00Z',
       last_accessed_at: '2026-03-06T00:00:00Z',
+      ...TETHER_CAN,
     },
     {
       id: 'session-adhoc',
@@ -98,6 +105,7 @@ function buildActiveSessionState(
       is_alive: true,
       created_at: '2026-03-06T00:00:00Z',
       last_accessed_at: '2026-03-06T00:00:00Z',
+      ...TETHER_CAN,
     },
   ]
 
@@ -225,6 +233,7 @@ describe('useATermTabsState', () => {
               id: 'session-project-a',
               name: 'Project A Shell',
               mode: 'shell',
+              ...TETHER_CAN,
               session_number: 1,
               is_alive: true,
               working_dir: '/workspace/project-a',
@@ -252,6 +261,7 @@ describe('useATermTabsState', () => {
               id: 'session-project-b',
               name: 'Project B Shell',
               mode: 'shell',
+              ...TETHER_CAN,
               session_number: 1,
               is_alive: true,
               working_dir: '/workspace/project-b',
@@ -336,6 +346,7 @@ describe('useATermTabsState', () => {
               id: 'session-project-a',
               name: 'Project A Shell',
               mode: 'shell',
+              ...TETHER_CAN,
               session_number: 1,
               is_alive: true,
               working_dir: '/workspace/project-a',
@@ -393,6 +404,7 @@ describe('useATermTabsState', () => {
           id: 'session-project-b',
           name: 'Project B Shell',
           mode: 'shell',
+          ...TETHER_CAN,
           session_number: 1,
           is_alive: true,
           working_dir: '/workspace/project-b',
@@ -422,6 +434,7 @@ describe('useATermTabsState', () => {
               id: 'session-project-a',
               name: 'Project A Shell',
               mode: 'shell',
+              ...TETHER_CAN,
               session_number: 1,
               is_alive: true,
               working_dir: '/workspace/project-a',
@@ -482,6 +495,7 @@ describe('useATermTabsState', () => {
           id: 'session-project-a-new',
           name: 'Project A Shell',
           mode: 'shell',
+          ...TETHER_CAN,
           session_number: 1,
           is_alive: true,
           working_dir: '/workspace/project-a',
@@ -556,6 +570,7 @@ describe('useATermTabsState', () => {
         is_alive: true,
         created_at: '2026-03-06T00:00:00Z',
         last_accessed_at: '2026-03-06T00:00:00Z',
+        ...TETHER_CAN,
       },
       switchToSession: vi.fn(),
       sessions: [
@@ -570,6 +585,7 @@ describe('useATermTabsState', () => {
           is_alive: true,
           created_at: '2026-03-06T00:00:00Z',
           last_accessed_at: '2026-03-06T00:00:00Z',
+          ...TETHER_CAN,
         },
         {
           id: 'project-a-codex',
@@ -582,6 +598,7 @@ describe('useATermTabsState', () => {
           is_alive: true,
           created_at: '2026-03-06T00:00:00Z',
           last_accessed_at: '2026-03-06T00:00:00Z',
+          ...TETHER_CAN,
         },
         {
           id: 'project-b-shell',
@@ -594,6 +611,7 @@ describe('useATermTabsState', () => {
           is_alive: true,
           created_at: '2026-03-06T00:00:00Z',
           last_accessed_at: '2026-03-06T00:00:00Z',
+          ...TETHER_CAN,
         },
       ],
       projectATerms: [
@@ -637,6 +655,7 @@ describe('useATermTabsState', () => {
               id: 'project-a-shell',
               name: 'Project A Shell',
               mode: 'shell',
+              ...TETHER_CAN,
               session_number: 1,
               is_alive: true,
               working_dir: '/workspace/project-a',
@@ -646,6 +665,7 @@ describe('useATermTabsState', () => {
               id: 'project-a-codex',
               name: 'Project A Codex',
               mode: 'codex',
+              ...TETHER_CAN,
               session_number: 2,
               is_alive: true,
               working_dir: '/workspace/project-a',
@@ -673,6 +693,7 @@ describe('useATermTabsState', () => {
               id: 'project-b-shell',
               name: 'Project B Shell',
               mode: 'shell',
+              ...TETHER_CAN,
               session_number: 1,
               is_alive: true,
               working_dir: '/workspace/project-b',
@@ -758,6 +779,7 @@ describe('useATermTabsState', () => {
       last_accessed_at: null,
       is_external: true,
       source: 'tmux_external',
+      ...OWN_TMUX_CAN,
     }
     mockUseActiveSession.mockReturnValue(
       buildActiveSessionState({
@@ -779,18 +801,95 @@ describe('useATermTabsState', () => {
     })
   })
 
+  it('maps mobile fallback sessions through the backend flags: no Reset on a free-standing View', () => {
+    mockUseMediaQuery.mockReturnValue(true)
+    const base = buildActiveSessionState().sessions[0]
+    const freeTether = {
+      ...base,
+      id: 'free-tether',
+      name: 'Project A — Incident review',
+      mode: 'codex',
+      source: 'tether',
+      task: 'Incident review',
+      is_external: true,
+      ...TETHER_CAN,
+    }
+    const unloadedLegacy = {
+      ...base,
+      id: 'unloaded-legacy',
+      name: 'summitflow-legacy',
+      mode: 'codex',
+      source: 'legacy',
+      is_legacy: true,
+      is_external: false,
+      can_rename: false,
+      can_respawn: false,
+      can_end: true,
+    }
+    const unloadedTether = {
+      ...base,
+      id: 'unloaded-tether',
+      name: 'Plain agent',
+      project_id: null,
+      mode: 'codex',
+      source: 'tether',
+      is_external: false,
+      ...TETHER_CAN,
+    }
+    mockUseActiveSession.mockReturnValue(
+      buildActiveSessionState({
+        activeSessionId: freeTether.id,
+        activeSession: freeTether,
+        sessions: [freeTether, unloadedLegacy, unloadedTether],
+        externalSessions: [freeTether],
+      }),
+    )
+
+    const { result } = renderHook(() =>
+      useATermTabsState({ projectId: undefined, projectPath: undefined }),
+    )
+
+    expect(result.current.aTermSlots).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          slotId: 'session-free-tether',
+          type: 'project',
+          projectName: 'Project A — Incident review',
+          can: { rename: true, reset: false, end: true },
+          showsSessionTitle: true,
+        }),
+        expect.objectContaining({
+          slotId: 'session-unloaded-legacy',
+          type: 'project',
+          projectName: 'Project A',
+          can: { rename: false, reset: false, end: true },
+          showsSessionTitle: false,
+        }),
+        expect.objectContaining({
+          slotId: 'session-unloaded-tether',
+          type: 'adhoc',
+          name: 'Plain agent',
+          isExternal: false,
+          can: { rename: true, reset: true, end: true },
+        }),
+      ]),
+    )
+  })
+
   it.each([false, true])(
-    'refreshes root focus labels on desktop/mobile=%s',
+    'refreshes root titles from Tether and offers no Reset on desktop/mobile=%s',
     (isMobile) => {
       mockUseMediaQuery.mockReturnValue(isMobile)
       const rootSession = {
         ...buildActiveSessionState().sessions[0],
         id: 'root-session',
-        name: 'Focus',
+        name: 'Project A — Focus',
         mode: 'codex',
+        source: 'tether',
         is_root: true,
         session_number: 1,
         claude_state: 'running',
+        ...ROOT_CAN,
       }
       const pane = {
         id: 'root-pane',
@@ -818,22 +917,23 @@ describe('useATermTabsState', () => {
       )
       const { result, rerender } = renderHook(() => useATermTabsState({}))
       expect(result.current.aTermSlots[0]).toMatchObject({
-        projectName: 'Project A · Focus',
-        isRoot: true,
+        projectName: 'Project A — Focus',
+        can: { rename: true, reset: false, end: true },
+        showsSessionTitle: true,
       })
       mockUseATermPanes.mockReturnValue({
         ...paneState,
         panes: [
           {
             ...pane,
-            sessions: [{ ...rootSession, name: 'Project A · Next focus' }],
+            sessions: [{ ...rootSession, name: 'Project A — Next focus' }],
           },
         ],
       })
       rerender()
       expect(result.current.aTermSlots[0]).toMatchObject({
-        projectName: 'Project A · Next focus',
-        isRoot: true,
+        projectName: 'Project A — Next focus',
+        can: { rename: true, reset: false, end: true },
       })
     },
   )
@@ -863,6 +963,7 @@ describe('useATermTabsState', () => {
         is_alive: true,
         created_at: '2026-03-06T00:00:00Z',
         last_accessed_at: '2026-03-06T00:00:00Z',
+        ...TETHER_CAN,
       },
     })
 
@@ -885,6 +986,7 @@ describe('useATermTabsState', () => {
         is_alive: true,
         created_at: '2026-03-06T00:00:00Z',
         last_accessed_at: '2026-03-06T00:00:00Z',
+        ...TETHER_CAN,
       },
     })
 
@@ -911,6 +1013,7 @@ describe('useATermTabsState', () => {
           id: 'session-detached-new',
           name: 'Detached Shell',
           mode: 'shell',
+          ...TETHER_CAN,
           session_number: 1,
           is_alive: true,
           working_dir: '/tmp',
@@ -937,6 +1040,7 @@ describe('useATermTabsState', () => {
           is_alive: true,
           created_at: '2026-03-06T00:00:00Z',
           last_accessed_at: '2026-03-06T00:00:00Z',
+          ...TETHER_CAN,
         },
         switchToSession,
       }),
@@ -958,6 +1062,7 @@ describe('useATermTabsState', () => {
               id: 'session-project-b',
               name: 'Project B Shell',
               mode: 'shell',
+              ...TETHER_CAN,
               session_number: 1,
               is_alive: true,
               working_dir: '/workspace/project-b',
@@ -1028,6 +1133,7 @@ describe('useATermTabsState', () => {
           id: 'session-shell',
           name: 'Project A Shell',
           mode: 'shell',
+          ...TETHER_CAN,
           session_number: 1,
           is_alive: true,
           working_dir: '/workspace/project-a',
@@ -1037,6 +1143,7 @@ describe('useATermTabsState', () => {
           id: 'session-codex',
           name: 'Project A Codex',
           mode: 'codex',
+          ...TETHER_CAN,
           session_number: 1,
           is_alive: true,
           working_dir: '/workspace/project-a',
@@ -1157,6 +1264,7 @@ describe('useATermTabsState', () => {
           id: 'session-created-shell',
           name: 'Project C Shell',
           mode: 'shell',
+          ...TETHER_CAN,
           session_number: 1,
           is_alive: true,
           working_dir: '/workspace/project-c',
@@ -1166,6 +1274,7 @@ describe('useATermTabsState', () => {
           id: 'session-created-claude',
           name: 'Project C Claude',
           mode: 'claude',
+          ...TETHER_CAN,
           session_number: 1,
           is_alive: true,
           working_dir: '/workspace/project-c',
@@ -1245,6 +1354,7 @@ describe('useATermTabsState', () => {
             is_alive: true,
             created_at: '2026-03-06T00:00:00Z',
             last_accessed_at: '2026-03-06T00:00:00Z',
+            ...TETHER_CAN,
           },
         ],
         projectATerms: [
@@ -1267,6 +1377,7 @@ describe('useATermTabsState', () => {
                   is_alive: true,
                   created_at: '2026-03-06T00:00:00Z',
                   last_accessed_at: '2026-03-06T00:00:00Z',
+                  ...TETHER_CAN,
                 },
               },
             ],
@@ -1281,6 +1392,7 @@ describe('useATermTabsState', () => {
               is_alive: true,
               created_at: '2026-03-06T00:00:00Z',
               last_accessed_at: '2026-03-06T00:00:00Z',
+              ...TETHER_CAN,
             },
             activeSessionId: 'session-project-a',
             sessionBadge: 1,
@@ -1336,6 +1448,7 @@ describe('useATermTabsState', () => {
             last_accessed_at: '2026-03-06T00:00:00Z',
             is_external: true,
             source: 'tmux_external',
+            ...OWN_TMUX_CAN,
             tmux_session_name: 'aico-deadbeef',
             tmux_source: 'tether',
             origin: 'aico',
@@ -1358,6 +1471,7 @@ describe('useATermTabsState', () => {
               id: 'session-project-a',
               name: 'Project A Shell',
               mode: 'shell',
+              ...TETHER_CAN,
               session_number: 1,
               is_alive: true,
               working_dir: '/workspace/project-a',
@@ -1421,6 +1535,7 @@ describe('useATermTabsState', () => {
             last_accessed_at: null,
             is_external: true,
             source: 'tmux_external',
+            ...OWN_TMUX_CAN,
           },
         ],
       }),
@@ -1457,6 +1572,7 @@ describe('useATermTabsState', () => {
             last_accessed_at: '2026-03-06T00:00:00Z',
             is_external: true,
             source: 'tmux_external',
+            ...OWN_TMUX_CAN,
           },
           {
             id: 'external-claude',
@@ -1471,6 +1587,7 @@ describe('useATermTabsState', () => {
             last_accessed_at: '2026-03-06T00:00:00Z',
             is_external: true,
             source: 'tmux_external',
+            ...OWN_TMUX_CAN,
           },
         ],
       }),
@@ -1560,6 +1677,7 @@ describe('useATermTabsState', () => {
             id: `session-project-${letter}`,
             name: `Project ${letter.toUpperCase()} Shell`,
             mode: 'shell',
+            ...TETHER_CAN,
             session_number: 1,
             is_alive: true,
             working_dir: `/workspace/project-${letter}`,
@@ -1669,6 +1787,7 @@ describe('useATermTabsState', () => {
               id: 'session-project-a',
               name: 'Project A Shell',
               mode: 'shell',
+              ...TETHER_CAN,
               session_number: 1,
               is_alive: true,
               working_dir: '/workspace/project-a',
@@ -1720,6 +1839,7 @@ describe('useATermTabsState', () => {
           last_accessed_at: '2026-03-06T00:00:00Z',
           is_external: true,
           source: 'tmux_external',
+          ...OWN_TMUX_CAN,
         },
       ],
       isLoading: false,

@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { createElement } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ROOT_CAN, TETHER_CAN } from '@/test-stubs/session-fixtures'
 import { useATermSessions } from './use-a-term-sessions'
 
 // Mock the api-config module
@@ -39,6 +40,7 @@ const mockSessions = [
     is_alive: true,
     created_at: '2026-01-01T00:00:00Z',
     last_accessed_at: '2026-01-01T00:00:00Z',
+    ...TETHER_CAN,
   },
   {
     id: 'session-2',
@@ -51,6 +53,7 @@ const mockSessions = [
     is_alive: true,
     created_at: '2026-01-01T00:00:00Z',
     last_accessed_at: '2026-01-01T00:00:00Z',
+    ...TETHER_CAN,
   },
 ]
 
@@ -143,7 +146,9 @@ describe('useATermSessions', () => {
     const renamed = {
       ...mockSessions[0],
       name: 'Project · Focus',
+      source: 'tether',
       is_root: true,
+      ...ROOT_CAN,
     }
     mockFetch.mockImplementation(async (_url, options) => ({
       ok: true,

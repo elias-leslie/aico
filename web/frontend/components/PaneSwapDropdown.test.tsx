@@ -2,11 +2,13 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { Attention } from '@/lib/attention'
 import type { PaneSlot } from '@/lib/utils/slot'
+import { SLOT_BASE } from '@/test-stubs/session-fixtures'
 import { PaneSwapDropdown } from './PaneSwapDropdown'
 
 function makeProjectSlot(id: string, name: string): PaneSlot {
   return {
     type: 'project',
+    ...SLOT_BASE,
     paneId: id,
     projectId: `${id}-project`,
     projectName: name,

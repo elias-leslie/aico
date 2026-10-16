@@ -1,5 +1,6 @@
 import { renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import { SLOT_BASE } from '@/test-stubs/session-fixtures'
 import { useLayoutChangeHandler } from './use-layout-change-handler'
 
 describe('useLayoutChangeHandler', () => {
@@ -8,6 +9,7 @@ describe('useLayoutChangeHandler', () => {
     const displaySlots = [
       {
         type: 'adhoc' as const,
+        ...SLOT_BASE,
         paneId: 'pane-native',
         sessionId: 'native-session',
         name: 'Ad-Hoc A-Term',
@@ -15,6 +17,7 @@ describe('useLayoutChangeHandler', () => {
       },
       {
         type: 'adhoc' as const,
+        ...SLOT_BASE,
         sessionId: 'codex-agent-hub',
         name: 'codex-agent-hub',
         workingDir: '/workspace/agent-hub',

@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { createElement, type ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { SESSION_BASE } from '@/test-stubs/session-fixtures'
 import * as api from './a-term-panes-api'
 import type { ATermPane, PaneListResponse } from './a-term-panes-types'
 import { useATermPanes } from './use-a-term-panes'
@@ -22,6 +23,7 @@ const detachedPane: ATermPane = {
       id: 'session-a',
       name: 'Project A Shell',
       mode: 'shell',
+      ...SESSION_BASE,
       session_number: 1,
       is_alive: true,
       working_dir: '/workspace/project-a',

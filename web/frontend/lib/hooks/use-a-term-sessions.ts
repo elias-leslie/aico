@@ -6,9 +6,13 @@ import { apiFetch } from '../api-fetch'
 import type { CoordinatorFields } from '../utils/coordinator-badge'
 
 /**
- * A session as A-Term lists it. Ids are Tether's 8-hex session ids; a legacy
- * `summitflow-*` session on the default tmux server keeps its UUID, and an
- * external default-server tmux session keeps its tmux session name.
+ * A session as A-Term lists it (the backend's ATermSessionResponse, used by
+ * the Sessions and Panes APIs alike). Ids are Tether's 8-hex session ids; a
+ * legacy `summitflow-*` session on the default tmux server keeps its UUID, and
+ * an Own tmux session (`source: 'tmux_external'`) keeps its tmux session name.
+ *
+ * What the UI may offer comes from `can_*`; `source`, `is_root`, `is_legacy`
+ * and `is_external` are informational.
  */
 export interface ATermSession extends CoordinatorFields {
   id: string
@@ -19,6 +23,7 @@ export interface ATermSession extends CoordinatorFields {
   working_dir: string | null
   mode: string
   display_order: number
+  session_number?: number
   is_alive: boolean
   created_at: string | null
   last_accessed_at: string | null
@@ -48,6 +53,12 @@ export interface ATermSession extends CoordinatorFields {
   activity_at?: number | null
   /** Why blocked: `permission prompt`, `input needed`, ... */
   activity_detail?: string | null
+  /** The session can be renamed (in Tether). */
+  can_rename: boolean
+  /** The session can be reset (respawned) or switch tools. */
+  can_respawn: boolean
+  /** The session can be ended from A-Term. */
+  can_end: boolean
 }
 
 interface SessionListResponse {

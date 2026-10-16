@@ -6,7 +6,12 @@ import {
   DETACHED_WINDOW_PANES_PARAM,
   DETACHED_WINDOW_SCOPE_PARAM,
 } from '@/lib/utils/detached-pane-window'
-import { type ATermSlot, isPaneSlot, type PaneSlot } from '@/lib/utils/slot'
+import {
+  type ATermSlot,
+  isPaneSlot,
+  type PaneSlot,
+  paneSessionsAsSessions,
+} from '@/lib/utils/slot'
 import { useTranscription } from '@/lib/voice/use-transcription'
 import {
   findSessionByMode,
@@ -15,7 +20,6 @@ import {
 import { useATermActionHandlers } from './use-a-term-action-handlers'
 import { useATermModals } from './use-a-term-modals'
 import { useATermNavigation } from './use-a-term-navigation'
-import type { ATermSession } from './use-a-term-sessions'
 import { useATermSlotHandlers } from './use-a-term-slot-handlers'
 import { useATermTabsState } from './use-a-term-tabs-state'
 import { useDetachedPaneWindow } from './use-detached-pane-window'
@@ -197,24 +201,6 @@ export function useATermOrchestration({
     voiceResetTranscript: transcription.resetTranscript,
     voiceStatus: transcription.status,
   })
-  const buildProjectSessionsFromPane = useCallback(
-    (pane: (typeof panes)[number]): ATermSession[] =>
-      pane.sessions.map((session, index) => ({
-        id: session.id,
-        name: session.name,
-        user_id: null,
-        project_id: pane.project_id,
-        working_dir: session.working_dir,
-        mode: session.mode,
-        display_order: index,
-        is_alive: session.is_alive,
-        created_at: pane.created_at,
-        last_accessed_at: pane.created_at,
-        agent_state: session.agent_state,
-        claude_state: session.claude_state,
-      })),
-    [],
-  )
   const alignTargetPaneMode = useCallback(
     async (
       pane: (typeof panes)[number],
@@ -233,7 +219,7 @@ export function useATermOrchestration({
           await handleProjectModeChange(
             targetProjectId,
             desiredMode,
-            buildProjectSessionsFromPane(pane),
+            paneSessionsAsSessions(pane),
             pane.id,
             pane,
           )
@@ -251,7 +237,7 @@ export function useATermOrchestration({
       await handleProjectModeChange(
         targetProjectId,
         desiredMode,
-        buildProjectSessionsFromPane(pane),
+        paneSessionsAsSessions(pane),
         pane.id,
         pane,
       )
@@ -261,7 +247,7 @@ export function useATermOrchestration({
         sessionId: initialSessionId,
       }
     },
-    [buildProjectSessionsFromPane, handleProjectModeChange],
+    [handleProjectModeChange],
   )
   const handleSlotProjectSwitch = useCallback(
     async (

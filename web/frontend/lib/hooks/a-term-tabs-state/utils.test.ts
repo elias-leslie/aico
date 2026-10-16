@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { PaneSlot } from '@/lib/utils/slot'
+import { SLOT_BASE } from '@/test-stubs/session-fixtures'
 import {
   getOrderedIds,
   orderATermSlots,
@@ -10,6 +11,7 @@ import {
 function makePaneSlot(paneId: string, name: string): PaneSlot {
   return {
     type: 'project',
+    ...SLOT_BASE,
     paneId,
     projectId: `${paneId}-project`,
     projectName: name,

@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback } from 'react'
 import { MAX_PANES } from '@/lib/constants/a-term'
+import { paneSessionsAsSessions } from '@/lib/utils/slot'
 import * as api from './a-term-panes-api'
 import type {
   ATermPane,
@@ -94,23 +95,6 @@ const removePaneFromCaches = (
   )
 }
 
-const buildSessionsFromPane = (pane: ATermPane): ATermSession[] =>
-  pane.sessions.map((session, index) => ({
-    id: session.id,
-    name: session.name,
-    user_id: null,
-    project_id: pane.project_id,
-    working_dir: session.working_dir,
-    mode: session.mode,
-    display_order: index,
-    is_alive: session.is_alive,
-    is_root: session.is_root,
-    created_at: pane.created_at,
-    last_accessed_at: pane.created_at,
-    agent_state: session.agent_state,
-    claude_state: session.claude_state,
-  }))
-
 const upsertSessions = (
   current: ATermSession[] | undefined,
   sessions: ATermSession[],
@@ -137,7 +121,7 @@ const syncSessionCaches = (
   qc: ReturnType<typeof useQueryClient>,
   pane: ATermPane,
 ) => {
-  const sessions = buildSessionsFromPane(pane)
+  const sessions = paneSessionsAsSessions(pane)
   const sessionIds = new Set(sessions.map((session) => session.id))
   if (pane.is_detached) {
     qc.setQueryData<ATermSession[]>(ACTIVE_SESSIONS_QUERY_KEY, (current) =>

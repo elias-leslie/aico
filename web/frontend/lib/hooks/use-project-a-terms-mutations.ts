@@ -36,6 +36,11 @@ function createATermSession(
     is_alive: true,
     created_at: new Date().toISOString(),
     last_accessed_at: new Date().toISOString(),
+    // A placeholder until the session list refetches: offer nothing the
+    // backend has not confirmed.
+    can_rename: false,
+    can_respawn: false,
+    can_end: false,
   }
 }
 

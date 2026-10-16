@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, renderHook } from '@testing-library/react'
 import { createElement } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { SESSION_BASE, TETHER_CAN } from '@/test-stubs/session-fixtures'
 import { useProjectModeSwitch } from './use-project-mode-switch'
 
 const mockPush = vi.fn()
@@ -64,6 +65,7 @@ describe('useProjectModeSwitch', () => {
           id: 'session-shell',
           name: 'Shell',
           mode: 'shell',
+          ...SESSION_BASE,
           session_number: 1,
           is_alive: true,
           working_dir: '/workspace/project-a',
@@ -73,6 +75,7 @@ describe('useProjectModeSwitch', () => {
           id: 'session-codex',
           name: 'Codex',
           mode: 'codex',
+          ...SESSION_BASE,
           session_number: 1,
           is_alive: true,
           working_dir: '/workspace/project-a',
@@ -104,6 +107,7 @@ describe('useProjectModeSwitch', () => {
             id: 'session-shell',
             name: 'Shell',
             mode: 'shell',
+            ...SESSION_BASE,
             session_number: 1,
             is_alive: true,
             working_dir: '/workspace/project-a',
@@ -113,6 +117,7 @@ describe('useProjectModeSwitch', () => {
             id: 'session-claude',
             name: 'Claude',
             mode: 'claude',
+            ...SESSION_BASE,
             session_number: 1,
             is_alive: true,
             working_dir: '/workspace/project-a',
@@ -154,6 +159,7 @@ describe('useProjectModeSwitch', () => {
             is_alive: true,
             created_at: '2026-03-13T00:00:00Z',
             last_accessed_at: '2026-03-13T00:00:00Z',
+            ...TETHER_CAN,
             claude_state: 'not_started',
           },
           {
@@ -167,6 +173,7 @@ describe('useProjectModeSwitch', () => {
             is_alive: true,
             created_at: '2026-03-13T00:00:00Z',
             last_accessed_at: '2026-03-13T00:00:00Z',
+            ...TETHER_CAN,
             claude_state: 'running',
           },
         ],
@@ -205,6 +212,7 @@ describe('useProjectModeSwitch', () => {
           id: 'session-b-shell',
           name: 'Shell',
           mode: 'shell',
+          ...SESSION_BASE,
           session_number: 1,
           is_alive: true,
           working_dir: '/workspace/project-b',
@@ -214,6 +222,7 @@ describe('useProjectModeSwitch', () => {
           id: 'session-b-codex',
           name: 'Codex',
           mode: 'codex',
+          ...SESSION_BASE,
           session_number: 1,
           is_alive: true,
           working_dir: '/workspace/project-b',
@@ -239,6 +248,7 @@ describe('useProjectModeSwitch', () => {
           id: 'session-b-shell',
           name: 'Shell',
           mode: 'shell',
+          ...SESSION_BASE,
           session_number: 1,
           is_alive: true,
           working_dir: '/workspace/project-b',
@@ -248,6 +258,7 @@ describe('useProjectModeSwitch', () => {
           id: 'session-b-claude',
           name: 'Claude',
           mode: 'claude',
+          ...SESSION_BASE,
           session_number: 1,
           is_alive: true,
           working_dir: '/workspace/project-b',
@@ -287,6 +298,7 @@ describe('useProjectModeSwitch', () => {
             is_alive: true,
             created_at: '2026-04-15T00:00:00Z',
             last_accessed_at: '2026-04-15T00:00:00Z',
+            ...TETHER_CAN,
             claude_state: 'not_started',
           },
           {
@@ -300,6 +312,7 @@ describe('useProjectModeSwitch', () => {
             is_alive: true,
             created_at: '2026-04-15T00:00:00Z',
             last_accessed_at: '2026-04-15T00:00:00Z',
+            ...TETHER_CAN,
             claude_state: 'running',
           },
         ],

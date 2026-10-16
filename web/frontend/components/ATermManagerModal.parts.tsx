@@ -12,7 +12,7 @@ import {
   type CoordinatorBadgeInfo,
   getCoordinatorBadge,
 } from '@/lib/utils/coordinator-badge'
-import { getExternalSessionDisplayName } from '@/lib/utils/external-session-name'
+import { sessionTitle } from '@/lib/utils/slot'
 import { AgentIcon } from './AgentIcon'
 import { CoordinatorBadge } from './CoordinatorBadge'
 
@@ -89,7 +89,7 @@ export function makeExternalAttachableOption(
 ): AttachableATermOption {
   return {
     id: session.id,
-    label: `${getExternalSessionDisplayName(session, projectName)} (${session.mode})`,
+    label: `${sessionTitle(session, { place: 'free', projectName })} (${session.mode})`,
     description: formatSessionDescription(session),
     projectId: session.project_id,
     kind: 'external-session',
@@ -106,7 +106,9 @@ export function makeDetachedPaneAttachableOption(
     pane.sessions.find((item) => item.mode === pane.active_mode) ??
     pane.sessions[0]
   // A Tether session's title is the one Aico shows; the pane name is A-Term's.
-  const name = session?.source === 'tether' ? session.name : pane.pane_name
+  const name = session
+    ? sessionTitle(session, { place: 'pane', paneName: pane.pane_name })
+    : pane.pane_name
   return {
     id: pane.id,
     label: `${name} (${pane.active_mode})`,

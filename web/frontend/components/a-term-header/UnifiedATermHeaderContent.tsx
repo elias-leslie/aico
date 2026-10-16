@@ -75,19 +75,17 @@ export const UnifiedATermHeaderContent = memo(
     const [isDragTarget, setIsDragTarget] = useState(false)
     const [isRenaming, setIsRenaming] = useState(false)
     const paneId = isPaneSlot(slot) ? slot.paneId : null
-    const rootSessionId =
-      slot.type === 'project' && slot.isRoot ? slot.activeSessionId : null
-    // A Tether session's name lives in Tether (Aico shows it too); a pane
-    // name is only for sessions Tether does not own.
-    const tetherSessionId =
-      slot.isTether || rootSessionId ? getSlotSessionId(slot) : null
+    // A session the backend lets us rename keeps its name in Tether (Aico
+    // shows it too); a pane name is only for sessions Tether does not own.
+    const sessionRenameId = slot.can.rename ? getSlotSessionId(slot) : null
+    const canRename = !!paneId || !!sessionRenameId
 
     const handleRename = useCallback(
       (newName: string) => {
-        if (tetherSessionId) updateSession(tetherSessionId, { name: newName })
+        if (sessionRenameId) updateSession(sessionRenameId, { name: newName })
         else if (paneId) renamePane(paneId, newName)
       },
-      [paneId, renamePane, tetherSessionId, updateSession],
+      [paneId, renamePane, sessionRenameId, updateSession],
     )
     const isAgentMode =
       (slot.type === 'project' && slot.activeMode !== 'shell') ||
@@ -95,16 +93,15 @@ export const UnifiedATermHeaderContent = memo(
     const shouldShowClean = showCleanButton && isAgentMode
     const slotId = getSlotPanelId(slot)
     const slotName = getSlotName(slot)
-    // A Tether session with a task or coordinator chip shows the title Aico
-    // shows (`Project — Task`) in place of the project switcher: the title
-    // already names the project, and both do not fit a pane header.
-    const showsSessionTitle =
-      !!rootSessionId || (!!slot.isTether && (!!slot.task || !!slot.badge))
+    // A project root, or a Tether session with a task or coordinator chip,
+    // shows the title Aico shows (`Project — Task`) in place of the project
+    // switcher: the title already names the project, and both do not fit a
+    // pane header.
     const showProjectSwitcher =
       !isMobile &&
       slot.type === 'project' &&
       !!onProjectSwitch &&
-      !showsSessionTitle
+      !slot.showsSessionTitle
     const showHeaderName = isMobile || !showProjectSwitcher
     const showStatusBadge = shouldShowPaneStatus(connectionStatus)
     const closePaneLabel = formatActionLabel(closeTooltip ?? 'Close view')
@@ -258,7 +255,7 @@ export const UnifiedATermHeaderContent = memo(
             onSwapWith={onSwapWith}
             onSwitchTo={onSwitchTo}
             onSwitch={onSwitch}
-            onRename={paneId || tetherSessionId ? handleRename : undefined}
+            onRename={canRename ? handleRename : undefined}
             isEditing={isRenaming}
             onEditingChange={setIsRenaming}
           />
@@ -317,9 +314,7 @@ export const UnifiedATermHeaderContent = memo(
 
           {hasPaneActions && (
             <PaneOverflowMenu
-              onRename={
-                paneId || rootSessionId ? () => setIsRenaming(true) : undefined
-              }
+              onRename={canRename ? () => setIsRenaming(true) : undefined}
               onDetach={onDetach}
               onClosePane={onClose}
               closePaneLabel={closePaneLabel}

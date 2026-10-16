@@ -15,12 +15,10 @@ import {
 } from '@/lib/hooks/a-term-handler-utils'
 import { useATermHandlers } from '@/lib/hooks/use-a-term-handlers'
 import {
-  type ATermPane,
   type AttachPaneRequest,
   type PanePlacementOptions,
   useATermPanes,
 } from '@/lib/hooks/use-a-term-panes'
-import type { ATermSession } from '@/lib/hooks/use-a-term-sessions'
 import { useATermSettings } from '@/lib/hooks/use-a-term-settings'
 import { useActiveSession } from '@/lib/hooks/use-active-session'
 import { useAutoCreatePane } from '@/lib/hooks/use-auto-create-pane'
@@ -32,10 +30,14 @@ import { useLocalStorageState } from '@/lib/hooks/use-local-storage-state'
 import { useMediaQuery } from '@/lib/hooks/use-media-query'
 import { useProjectSettings } from '@/lib/hooks/use-project-settings'
 import { useTabEditing } from '@/lib/hooks/use-tab-editing'
-import { getCoordinatorBadge } from '@/lib/utils/coordinator-badge'
 import { getScopedATermStorageKey } from '@/lib/utils/detached-pane-window'
-import { getExternalSessionDisplayName } from '@/lib/utils/external-session-name'
-import { getSlotPanelId, getSlotSessionId, isPaneSlot } from '@/lib/utils/slot'
+import {
+  getSlotPanelId,
+  getSlotSessionId,
+  isPaneSlot,
+  paneSessionsAsSessions,
+  sessionToSlot,
+} from '@/lib/utils/slot'
 import {
   useConnectionStatus,
   useLayoutAutoDowngrade,
@@ -54,24 +56,6 @@ import {
   useBrowserWindowScopeId,
   useWindowPaneOwnership,
 } from './use-window-pane-ownership'
-
-function buildProjectSessionsFromPane(pane: ATermPane): ATermSession[] {
-  return pane.sessions.map((session, index) => ({
-    id: session.id,
-    name: session.name,
-    user_id: null,
-    project_id: pane.project_id,
-    working_dir: session.working_dir,
-    mode: session.mode,
-    display_order: index,
-    is_alive: session.is_alive,
-    is_root: session.is_root,
-    created_at: pane.created_at,
-    last_accessed_at: pane.created_at,
-    agent_state: session.agent_state,
-    claude_state: session.claude_state,
-  }))
-}
 
 export function useATermTabsState({
   projectId,
@@ -298,55 +282,22 @@ export function useATermTabsState({
     }
 
     const mobilePanes = [...panes, ...detachedPanes]
-    const paneSlots = getPanesToSlots(mobilePanes, projectNames)
+    const paneSlots = getPanesToSlots(mobilePanes)
     const paneSessionIds = new Set(
       mobilePanes.flatMap((pane) => pane.sessions.map((session) => session.id)),
     )
     const fallbackSessionSlots = sessions
       .filter((session) => !paneSessionIds.has(session.id))
-      .map((session) => {
-        const slotId = `session-${session.id}`
-
-        if (session.project_id) {
-          const projectName = projectNames.get(session.project_id)
-          return {
-            slotId,
-            type: 'project' as const,
-            projectId: session.project_id,
-            projectName:
-              session.is_external ||
-              session.is_root ||
-              session.source === 'tether'
-                ? getExternalSessionDisplayName(session, projectName)
-                : (projectName ?? session.name),
-            rootPath: session.working_dir,
-            activeMode: session.mode,
-            activeSessionId: session.id,
-            sessionBadge: null,
-            isRoot: session.is_root,
-            isTether: session.source === 'tether',
-            task: session.task,
-            badge: getCoordinatorBadge(session),
-            isLegacy: session.is_legacy,
-            claudeState: session.claude_state,
-          }
-        }
-
-        return {
-          slotId,
-          type: 'adhoc' as const,
-          sessionId: session.id,
-          name: getExternalSessionDisplayName(session),
-          workingDir: session.working_dir,
-          sessionMode: session.mode,
-          isExternal: session.is_external,
-          isTether: session.source === 'tether',
-          task: session.task,
-          badge: getCoordinatorBadge(session),
-          isLegacy: session.is_legacy,
-          isRoot: session.is_root,
-        }
-      })
+      .map((session) =>
+        sessionToSlot(session, {
+          as: session.project_id ? 'project' : 'adhoc',
+          place: session.is_external ? 'free' : 'unloaded',
+          projectName: session.project_id
+            ? projectNames.get(session.project_id)
+            : undefined,
+          slotId: `session-${session.id}`,
+        }),
+      )
 
     return [...paneSlots, ...fallbackSessionSlots]
   }, [detachedPanes, isDetachedWindow, isMobile, panes, projectNames, sessions])
@@ -441,21 +392,16 @@ export function useATermTabsState({
   const previousPaneCountRef = useRef<number | null>(null)
 
   const visibleSlots = useMemo(() => {
-    const paneSlots = getPanesToSlots(visiblePanes, projectNames)
-    const externalSlots = attachedExternalSessions.map((session) => ({
-      type: 'adhoc' as const,
-      sessionId: session.id,
-      name: getExternalSessionDisplayName(
-        session,
-        session.project_id ? projectNames.get(session.project_id) : undefined,
-      ),
-      workingDir: session.working_dir,
-      sessionMode: session.mode,
-      isExternal: true,
-      isTether: session.source === 'tether',
-      task: session.task,
-      badge: getCoordinatorBadge(session),
-    }))
+    const paneSlots = getPanesToSlots(visiblePanes)
+    const externalSlots = attachedExternalSessions.map((session) =>
+      sessionToSlot(session, {
+        as: 'adhoc',
+        place: 'free',
+        projectName: session.project_id
+          ? projectNames.get(session.project_id)
+          : undefined,
+      }),
+    )
     return [...paneSlots, ...externalSlots]
   }, [attachedExternalSessions, projectNames, visiblePanes])
   const slotSource = useMemo(
@@ -641,7 +587,7 @@ export function useATermTabsState({
         await handleProjectModeChange(
           targetProjectId,
           targetMode,
-          buildProjectSessionsFromPane(newPane),
+          paneSessionsAsSessions(newPane),
           newPane.id,
           newPane,
         )

@@ -3,6 +3,7 @@ import { act, renderHook } from '@testing-library/react'
 import { createElement, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PaneSlot } from '@/lib/utils/slot'
+import { SLOT_BASE } from '@/test-stubs/session-fixtures'
 import { useATermSlotHandlers } from './use-a-term-slot-handlers'
 
 function createWrapper() {
@@ -16,6 +17,7 @@ function createWrapper() {
 
 const slot: PaneSlot = {
   type: 'adhoc',
+  ...SLOT_BASE,
   paneId: 'pane-a',
   sessionId: 'session-a',
   name: 'Detached A-Term',
@@ -25,6 +27,7 @@ const slot: PaneSlot = {
 
 const otherSlot: PaneSlot = {
   type: 'adhoc',
+  ...SLOT_BASE,
   paneId: 'pane-b',
   sessionId: 'session-b',
   name: 'Other Detached A-Term',
@@ -101,4 +104,47 @@ describe('useATermSlotHandlers', () => {
     expect(popupParams.get('windowScope')).not.toBe('scope-old')
     expect(popup.focus).toHaveBeenCalled()
   })
+  it.each([
+    [true, 1],
+    [false, 0],
+  ] as const)(
+    'resets a slot only when its session can be reset (can.reset=%s)',
+    async (canReset, resetCalls) => {
+      const reset = vi.fn().mockResolvedValue({ id: 'session-a2' })
+      const switchToSession = vi.fn()
+      const resetSlot: PaneSlot = {
+        ...slot,
+        can: { ...slot.can, reset: canReset },
+      }
+      const { result } = renderHook(
+        () =>
+          useATermSlotHandlers({
+            aTermRefs: { current: new Map() },
+            switchToSession,
+            activeSessionId: 'session-a',
+            reset,
+            disableProject: vi.fn(),
+            remove: vi.fn(),
+            setShowCleaner: vi.fn(),
+            setCleanerRawPrompt: vi.fn(),
+            sessions: [],
+            visibleSlots: [resetSlot],
+            handleProjectModeChange: vi.fn(),
+          }),
+        { wrapper: createWrapper() },
+      )
+
+      await act(async () => {
+        await result.current.handleSlotReset(resetSlot)
+      })
+
+      expect(reset).toHaveBeenCalledTimes(resetCalls)
+      if (resetCalls) {
+        expect(reset).toHaveBeenCalledWith('session-a')
+        expect(switchToSession).toHaveBeenCalledWith('session-a2')
+      } else {
+        expect(switchToSession).not.toHaveBeenCalled()
+      }
+    },
+  )
 })

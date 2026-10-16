@@ -136,8 +136,6 @@ export function usePaneRenderer({
       const paneId = isPaneSlot(slot) ? slot.paneId : null
       const isExternalSlot = slot.type === 'adhoc' && slot.isExternal
       const refreshVersion = refreshVersions[panelId] ?? 0
-      // The server never respawns legacy (attach-only) or root sessions.
-      const canResetSlot = !isExternalSlot && !slot.isLegacy && !slot.isRoot
       const canCleanSlot =
         (slot.type === 'project' && slot.activeMode !== 'shell') ||
         isExternalSlot
@@ -190,13 +188,17 @@ export function usePaneRenderer({
             showCleanButton={canCleanSlot}
             onSwitch={onSwitch ? () => onSwitch(slot) : undefined}
             onSettings={onSettings}
-            onReset={onReset && canResetSlot ? () => onReset(slot) : undefined}
+            onReset={
+              onReset && slot.can.reset ? () => onReset(slot) : undefined
+            }
             onDetach={
               onDetach && isPaneSlot(slot) ? () => onDetach(slot) : undefined
             }
             onClose={onClose ? () => onClose(slot) : undefined}
             onCloseSession={
-              onCloseSession ? () => onCloseSession(slot) : undefined
+              onCloseSession && slot.can.end
+                ? () => onCloseSession(slot)
+                : undefined
             }
             onRefresh={
               onRefresh ? () => onRefresh(slot) : () => refreshPane(panelId)
