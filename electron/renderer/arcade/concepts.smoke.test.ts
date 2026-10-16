@@ -2,7 +2,7 @@
 // on a fake DOM: it loads, reacts to the cursor, keys, work and a resize, parks
 // once things go quiet, and leaves nothing behind when it is destroyed.
 //
-// Concepts load from their files (not index.ts's import.meta.glob loader) and
+// Concepts load from their files (not games.ts's import.meta.glob loader) and
 // the canvas is a recording fake, so this covers runtime errors, the frame cap,
 // parking and teardown, not pixels. Math.random is seeded per game, so a run is
 // deterministic: set ARCADE_CALL_LOG=<dir> to write each game's canvas call log
@@ -12,7 +12,7 @@ import { mkdirSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { conceptFor, FAST, installGlobals, Strip } from './engine'
-import { GAMES } from './index'
+import { GAMES } from './games'
 
 // ---- fake DOM ------------------------------------------------------------------
 const LOG_DIR = process.env.ARCADE_CALL_LOG

@@ -22,8 +22,8 @@ import {
   setGameActions,
   setTransportAction,
 } from './actions'
-import { type Arcade, GAMES, startArcade } from './arcade'
-import { nextGame } from './arcade/next-game'
+import { GAMES } from './arcade/games'
+import { type ArcadeWiring, wireArcade } from './arcade/wire'
 import { WINDOW_CHORDS } from './chords'
 import { initControlSurface } from './control-surface'
 import { controlWheelAction, swallowQueryReplies, trackSgrMouse } from './control-view'
@@ -254,58 +254,18 @@ function wireEyes(): Eyes | null {
 }
 const eyes = wireEyes()
 
-// The titlebar arcade: a game vignette main assigns this window for its
-// lifetime, until "Next game" swaps it (see arcade/). Loads after first paint; never blocks the terminal.
-// The games can be turned off for every window; off, none of this runs.
-let arcade: Arcade | null = null
+// The titlebar arcade (see arcade/wire.ts): a game per window, on unless
+// turned off for every window; the engine loads only while the games are on.
+let arcade: ArcadeWiring | null = null
 {
   const bar = document.querySelector<HTMLElement>('.titlebar')
   if (bar) {
-    let wanted = false
-    let starting = false
-    const start = (): void => {
-      wanted = true
-      if (arcade || starting) return
-      starting = true
-      startArcade(bar, { gaze: (pt) => eyes?.watch(pt) })
-        .then((a) => {
-          if (wanted) arcade = a
-          else a?.stop() // turned off while it was loading
-        })
-        .catch((err: unknown) => console.error('[arcade]', err))
-        .finally(() => {
-          starting = false
-        })
-    }
-    const stop = (): void => {
-      wanted = false
-      arcade?.stop()
-      arcade = null
-      eyes?.watch(null)
-    }
-    window.aico.arcade
-      .enabled()
-      .then((on) => {
-        if (on) start()
-      })
-      .catch((err: unknown) => console.error('[arcade]', err))
-    window.aico.arcade.onEnabled((on) => (on ? start() : stop()))
-    setGameActions(GAMES)
-    window.addEventListener('aico:arcade-pick', (e) => {
-      const key = (e as CustomEvent<string>).detail
-      if (arcade) {
-        arcade.pick(key).catch((err: unknown) => console.error('[arcade]', err))
-        return
-      }
-      // games are off (or still loading): main turns them on with this one assigned
-      window.aico.arcade
-        .pick(
-          key,
-          GAMES.map((g) => g.key),
-        )
-        .catch((err: unknown) => console.error('[arcade]', err))
+    arcade = wireArcade(bar, {
+      api: window.aico.arcade,
+      events: window,
+      gaze: (pt) => eyes?.watch(pt),
     })
-    window.addEventListener('aico:arcade-next', () => nextGame(arcade, window.aico.arcade))
+    setGameActions(GAMES)
   }
 }
 
