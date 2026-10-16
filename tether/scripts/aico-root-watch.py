@@ -1188,10 +1188,40 @@ def roots_main(argv: list[str]) -> int:
             signal.signal(s, handler)
 
 
+def layout_writer(data: object) -> tuple[int, str | None] | None:
+    """The Aico process a v1 layout.json names as its writer: its pid and its
+    `/proc/<pid>/stat` start time (null when Aico couldn't read procfs). None
+    when the file doesn't name one, so it can't be told from a crash leftover."""
+    if not isinstance(data, dict):
+        return None
+    layout = typing.cast("dict[str, object]", data)
+    if layout.get("v") != 1:
+        return None
+    pid, start = layout.get("pid"), layout.get("startTime")
+    if type(pid) is not int or pid <= 0:
+        return None
+    if start is not None and not (isinstance(start, str) and start.isdigit()):
+        return None
+    return pid, start
+
+
+def process_running(pid: int, start_time: str | None) -> bool:
+    """True while `pid` is alive and, when a start time is given, is still the
+    same process (a reused pid has another start time). Never an age check:
+    an idle Aico leaves layout.json untouched for hours."""
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text()
+    except OSError:
+        return False
+    fields = stat[stat.rfind(")") + 1:].split()
+    return start_time is None or (len(fields) > 19 and fields[19] == start_time)
+
+
 def layout_main(argv: list[str]) -> int:
     """Print the running Aico GUI's window layout (displays, every window's
     bounds) so an agent can plan an arrangement, then move windows with
-    `st aico widget position --widget-id ID X Y WIDTH HEIGHT`."""
+    `st aico widget position --widget-id ID X Y WIDTH HEIGHT`. A layout left
+    by an Aico that is no longer running reports layout_stale."""
     parser = argparse.ArgumentParser(prog="st aico layout", description=layout_main.__doc__)
     parser.parse_args(argv)
     path = Path(os.environ.get("AICO_LAYOUT_FILE", f"{runtime_dir()}/aico/layout.json"))
@@ -1201,9 +1231,14 @@ def layout_main(argv: list[str]) -> int:
         print(json.dumps({"owner": "aico", "observation": "unavailable",
                           "reason": "layout_missing", "path": str(path)}))
         return 1
-    if not isinstance(data, dict) or data.get("v") != 1:
+    writer = layout_writer(data)
+    if writer is None:
         print(json.dumps({"owner": "aico", "observation": "unavailable",
                           "reason": "layout_unqualified"}))
+        return 1
+    if not process_running(*writer):
+        print(json.dumps({"owner": "aico", "observation": "unavailable",
+                          "reason": "layout_stale"}))
         return 1
     print(json.dumps({"owner": "aico", **data}, indent=2))
     return 0

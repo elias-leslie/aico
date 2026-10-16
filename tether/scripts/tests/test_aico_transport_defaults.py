@@ -173,7 +173,8 @@ def test_roots_rejects_an_invalid_default_through_argparse(monkeypatch, capsys, 
 
 def test_layout_reads_from_the_runtime_directory(tmp_path, monkeypatch, capsys):
     (tmp_path / "aico").mkdir()
-    (tmp_path / "aico" / "layout.json").write_text(json.dumps({"v": 1, "windows": []}))
+    layout = {"v": 1, "pid": os.getpid(), "startTime": None, "windows": []}
+    (tmp_path / "aico" / "layout.json").write_text(json.dumps(layout))
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
     assert admin.main(["layout"]) == 0
-    assert json.loads(capsys.readouterr().out) == {"owner": "aico", "v": 1, "windows": []}
+    assert json.loads(capsys.readouterr().out) == {"owner": "aico", **layout}
