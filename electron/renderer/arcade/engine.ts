@@ -96,7 +96,7 @@ export interface Cursor extends Point {
 }
 
 // ---- constants & sprite helpers ------------------------------------------------
-export const H = 36 // titlebar height (CSS px); keep in step with .titlebar
+export const H = 36 // titlebar height (CSS px); keep in step with --titlebar-height in tokens.css
 export const FLOOR = H // feet line: the top edge of the terminal
 // The stage reaches up into the window's top margin (keep in step with
 // --frame-top), so jumps and flights may leave the bar's top edge: drawing

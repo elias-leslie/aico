@@ -80,9 +80,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  /* Room for the titlebar arcade's characters plus a line of their dialogue.
-     Keep in step with H in arcade/engine.ts. */
-  height: 36px;
+  height: var(--titlebar-height);
   padding: 0 10px 0 14px;
 }
 /* Titlebar arcade (arcade/): the game is drawn over the bar's furniture and

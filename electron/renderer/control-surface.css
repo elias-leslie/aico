@@ -89,14 +89,14 @@
 /* ---- lantern menu popover ---- */
 .aico-menu {
   position: absolute;
-  top: 36px; /* the titlebar's height */
+  top: var(--titlebar-height);
   right: 8px;
   z-index: 5;
   width: 360px;
   max-width: calc(100% - 16px);
   /* The action list can be taller than a small widget — cap to the viewport and scroll. */
   box-sizing: border-box;
-  max-height: calc(100% - 50px);
+  max-height: calc(100% - var(--titlebar-height) - 14px);
   overflow-x: hidden;
   overflow-y: auto;
   scrollbar-gutter: stable;

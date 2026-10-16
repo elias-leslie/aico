@@ -32,6 +32,10 @@
      leave the bar and rise into it. Keep in step with SPILL_UP in
      arcade/engine.ts. */
   --frame-top: 8px;
+  /* Titlebar: room for the titlebar arcade's characters plus a line of their
+     dialogue; the lantern menu opens just below it. Keep in step with H in
+     arcade/engine.ts. */
+  --titlebar-height: 36px;
 
   /* Type */
   --mist: #8b8f94; /* secondary text */
