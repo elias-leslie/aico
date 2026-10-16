@@ -6,10 +6,8 @@ digest, tombstones, the resume adapters, every validation rule, and how the
 `st aico` client relies on them. [api-v1.md](api-v1.md#roots) lists the routes
 next to the rest of the v1 API.
 
-The contract came from Aico (its `docs/root-control.md`, moved with the
-lifecycle at the Phase 3 cutover). Tether owns it now. Aico's own copy is older
-(it still says Claude Code resume is refused) and is due to become a pointer
-here; until it does, this page wins.
+The contract came from Aico, moved with the lifecycle at the Phase 3 cutover.
+Tether owns it now; Aico's `docs/root-control.md` points here.
 
 ## Where it is served
 
