@@ -9,6 +9,7 @@ import {
   createSelectionListener,
   DEFAULT_EXTENSION_ID,
   type Delivery,
+  isJsonContentType,
   MAX_BODY_BYTES,
   trustedExtensionIds,
 } from './selection-listener'
@@ -125,6 +126,7 @@ describe('bind guard', () => {
 
   it('refuses a port that is not a TCP port', () => {
     expect(bindError('127.0.0.1', 9001)).toBeNull()
+    expect(bindError('127.0.0.1', Number.NaN)).toMatch(/invalid AICO_SIDECAR_PORT/)
     expect(bindError('127.0.0.1', Number('notaport'))).toMatch(/invalid AICO_SIDECAR_PORT/)
     expect(bindError('127.0.0.1', 70000)).toMatch(/invalid AICO_SIDECAR_PORT/)
   })
@@ -372,6 +374,43 @@ describe('body cap', () => {
     })
     expect(r.status).toBe(413)
     expect(r.headers['access-control-allow-origin']).toBe(EXT)
+  })
+})
+
+describe('content type guard', () => {
+  it.each([
+    ['application/json', true],
+    ['application/json; charset=utf-8', true],
+    ['Application/JSON', true],
+    ['application/vnd.api+json', true],
+    [undefined, true],
+    ['text/plain', false],
+    ['application/x-www-form-urlencoded', false],
+    ['multipart/form-data; boundary=x', false],
+    ['application/jsonp', false],
+    ['', false],
+  ])('%s -> %s', (header, ok) => {
+    expect(isJsonContentType(header)).toBe(ok)
+  })
+
+  it.each([
+    'text/plain',
+    'application/x-www-form-urlencoded',
+  ])('refuses a %s send with 415 and delivers nothing', async (type) => {
+    const { send, deliver } = await start()
+    const r = await send('POST', '/selection/send', {
+      headers: { 'content-type': type },
+      body: JSON.stringify({ items: [DOM] }),
+    })
+    expect(r.status).toBe(415)
+    expect(deliver).not.toHaveBeenCalled()
+  })
+
+  it('accepts a native send with no Content-Type', async () => {
+    const { send, deliver } = await start()
+    const r = await send('POST', '/selection/send', { body: JSON.stringify({ items: [DOM] }) })
+    expect(r.status).toBe(200)
+    expect(deliver).toHaveBeenCalledOnce()
   })
 })
 

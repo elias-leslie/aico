@@ -5,10 +5,10 @@
 //   GET  /health          -> {status:"ok", service:"aico-sidecar", version}
 //   POST /selection/send  -> deliver the captures to the selection target, and
 //                            reply {records, count, delivered, reason}
-// Nothing is stored. The listener has no authentication, so it keeps the three
+// Nothing is stored. The listener has no authentication, so it keeps the
 // guards the sidecar had: a loopback Host header (DNS rebinding), a trusted
-// Origin for writes (only native clients and the pinned extension), and a 1 MiB
-// body cap.
+// Origin for writes (only native clients and the pinned extension), a JSON
+// Content-Type for writes, and a 1 MiB body cap.
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { BlockList, isIP } from 'node:net'
@@ -78,15 +78,26 @@ function isLoopbackName(host: string): boolean {
 }
 
 /** Refuse a bind the listener should never make: it is unauthenticated, so a
- * non-loopback host would open selection injection to the network. */
+ * non-loopback host would open selection injection to the network. A bad
+ * `AICO_SIDECAR_PORT` reaches here as NaN (see readConfig); port 0, a free
+ * port, is only for tests and never comes from config. */
 export function bindError(host: string, port: number): string | null {
   if (!isLoopbackName(host)) {
     return `refusing non-loopback bind host ${JSON.stringify(host)}: the listener is unauthenticated`
   }
   if (!Number.isInteger(port) || port < 0 || port > 65535) {
-    return `invalid AICO_SIDECAR_PORT ${JSON.stringify(String(port))}: expected 1-65535`
+    return 'invalid AICO_SIDECAR_PORT: expected a whole number 1-65535'
   }
   return null
+}
+
+/** A send's body must be JSON: no Content-Type (native clients) or
+ * application/json or +json. This keeps the old sidecar's second layer
+ * against form or text/plain posts from a client that leaves Origin off. */
+export function isJsonContentType(header: string | undefined): boolean {
+  if (header === undefined) return true
+  const type = header.split(';')[0].trim().toLowerCase()
+  return type === 'application/json' || /^application\/[^/\s]+\+json$/.test(type)
 }
 
 /** True if a Host header names this listener: localhost or a loopback IP
@@ -153,7 +164,7 @@ export function parseBatch(body: unknown, now = new Date()): CaptureRecord[] {
     if (!isPlainObject(meta)) throw new HttpError(422, 'meta must be an object')
     const metaLength = JSON.stringify(meta).length
     if (metaLength > META_CAP) {
-      throw new HttpError(422, `meta too large: ${metaLength} bytes (cap ${META_CAP})`)
+      throw new HttpError(422, `meta too large: ${metaLength} characters (cap ${META_CAP})`)
     }
     return {
       kind: item.kind,
@@ -256,6 +267,9 @@ export function createSelectionListener(opts: SelectionListenerOptions) {
         reply(res, 403, { detail: 'origin not allowed' })
         return
       }
+      if (!isJsonContentType(req.headers['content-type'])) {
+        throw new HttpError(415, 'Content-Type must be application/json')
+      }
       const raw = await readBody(req)
       let body: unknown
       try {
@@ -313,13 +327,20 @@ export function createSelectionListener(opts: SelectionListenerOptions) {
       listening.requestTimeout = 15_000
       listening.headersTimeout = 10_000
       return new Promise((resolve) => {
-        listening.once('error', (error) => {
+        const onBindError = (error: Error): void => {
           log(`[aico] selection listener not started: ${error.message}`)
           resolve(null)
-        })
+        }
+        listening.once('error', onBindError)
         listening.listen(opts.port, opts.host, () => {
           const address = listening.address()
           boundPort = typeof address === 'object' && address ? address.port : opts.port
+          // Once bound, a server error (an accept failure such as EMFILE) is
+          // logged; an unhandled 'error' would throw in the main process.
+          listening.off('error', onBindError)
+          listening.on('error', (error) => {
+            log(`[aico] selection listener error: ${error.message}`)
+          })
           server = listening
           log(`[aico] selection listener ready: http://${opts.host}:${boundPort}/health`)
           resolve(boundPort)

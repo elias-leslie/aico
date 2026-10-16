@@ -36,6 +36,15 @@ export interface AicoConfig {
   readonly pidFile: string | undefined
 }
 
+/** `AICO_SIDECAR_PORT` as a TCP port: unset means 8005; anything but plain
+ * digits in 1-65535 (blank, 0, hex, exponents, spaces) is NaN, which the
+ * listener refuses rather than binding some other port. */
+function listenerPort(raw: string | undefined): number {
+  if (raw === undefined) return 8005
+  const port = /^\d{1,5}$/.test(raw) ? Number(raw) : Number.NaN
+  return port >= 1 && port <= 65535 ? port : Number.NaN
+}
+
 export function readConfig(
   env: NodeJS.ProcessEnv,
   home: string,
@@ -47,7 +56,7 @@ export function readConfig(
     stateDir,
     dbPath: join(stateDir, 'aico.db'),
     listenerHost: env.AICO_SIDECAR_HOST ?? '127.0.0.1',
-    listenerPort: Number(env.AICO_SIDECAR_PORT ?? 8005),
+    listenerPort: listenerPort(env.AICO_SIDECAR_PORT),
     extensionIds: env.AICO_EXTENSION_IDS,
     layoutPath: join(env.XDG_RUNTIME_DIR || `/run/user/${uid ?? 1000}`, 'aico', 'layout.json'),
     tetherSocket: tetherSocketPath(env, uid),

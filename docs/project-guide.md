@@ -144,7 +144,7 @@ Endpoints:
 
 Nothing is stored. The Indicate selection hotkey sends the newest capture again from memory.
 
-The listener has no authentication. It binds only to a loopback host, answers `403` to a request whose `Host` header is not `localhost` or a loopback IP such as `127.0.0.1` or `[::1]` (DNS rebinding), answers `403` to a write from any browser origin except the trusted extension IDs (`AICO_EXTENSION_IDS`), local pages included, sends CORS headers only to those IDs, and refuses bodies over 1 MiB with `413`.
+The listener has no authentication. It binds only to a loopback host, answers `403` to a request whose `Host` header is not `localhost` or a loopback IP such as `127.0.0.1` or `[::1]` (DNS rebinding), answers `403` to a write from any browser origin except the trusted extension IDs (`AICO_EXTENSION_IDS`), local pages included, sends CORS headers only to those IDs, answers `415` to a write whose `Content-Type` is set but is not `application/json`, and refuses bodies over 1 MiB with `413`. A blank or malformed `AICO_SIDECAR_PORT` (anything but digits 1-65535) leaves the listener off with a log line.
 
 ## Optional browser extension
 

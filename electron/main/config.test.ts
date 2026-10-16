@@ -60,6 +60,14 @@ describe('readConfig', () => {
     )
   })
 
+  it('turns a listener port that is not plain digits in 1-65535 into NaN', () => {
+    for (const raw of ['', '0', '0x1f45', '1e3', ' 8005 ', '8005.0', '-1', '65536', 'abc']) {
+      expect(readConfig({ AICO_SIDECAR_PORT: raw }, '/h', 1).listenerPort).toBeNaN()
+    }
+    expect(readConfig({ AICO_SIDECAR_PORT: '1' }, '/h', 1).listenerPort).toBe(1)
+    expect(readConfig({ AICO_SIDECAR_PORT: '65535' }, '/h', 1).listenerPort).toBe(65535)
+  })
+
   it('ignores a terminal transport it does not know', () => {
     expect(readConfig({ AICO_TERMINAL_TRANSPORT: 'pty' }, '/h', 1).forcedTransport).toBeUndefined()
   })
