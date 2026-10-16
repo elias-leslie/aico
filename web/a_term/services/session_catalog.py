@@ -44,8 +44,6 @@ __all__ = [
     "from_tether",
     "get_pane_with_sessions",
     "get_session",
-    "is_legacy_id",
-    "is_tether_id",
     "kind_of",
     "list_panes_with_sessions",
     "list_sessions",
@@ -122,14 +120,6 @@ def _ref_context(session_ref: str) -> ListContext:
 
 def _source_for(session_ref: str) -> SessionSource:
     return next(source for source in _SOURCES if source.owns(session_ref))
-
-
-def is_tether_id(session_id: str) -> bool:
-    return _TETHER.owns(session_id)
-
-
-def is_legacy_id(session_id: str) -> bool:
-    return _LEGACY.owns(session_id)
 
 
 def kind_of(session_ref: str) -> SessionKind:

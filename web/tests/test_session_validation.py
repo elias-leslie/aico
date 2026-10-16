@@ -1,4 +1,9 @@
-"""Resolving a session into the attach plan a WebSocket view runs."""
+"""Resolving a session into the attach plan a WebSocket view runs.
+
+Legacy and Own tmux attach plans are covered with the adapters in
+``test_session_sources.py``; these pin the Tether plan through the
+``validate_and_prepare_session`` alias the WebSocket handlers call.
+"""
 
 from __future__ import annotations
 
@@ -11,16 +16,6 @@ from a_term.services.pty_manager import attach_environment
 from a_term.storage import panes as pane_store
 
 from .fake_tether import TMUX_BIN, FakeTether
-from .session_factory import own_tmux_panes
-
-LEGACY_ID = "123e4567-e89b-12d3-a456-426614174000"
-
-
-def _legacy_tmux(args, check=False, socket_name=None):
-    assert socket_name is None
-    if args[:2] == ["list-panes", "-a"]:
-        return True, f"summitflow-{LEGACY_ID}\t$1\t%1\t/home/u/proj\tbash\t42"
-    return False, "unexpected"
 
 
 def test_tether_session_attaches_with_tethers_exact_argv(fake_tether: FakeTether) -> None:
@@ -78,32 +73,6 @@ def test_ended_tether_session_is_reported_not_recreated(fake_tether: FakeTether)
 def test_tether_down_is_a_clear_error(tether_down: str) -> None:
     with pytest.raises(ValueError, match="Tether is not reachable"):
         validate_and_prepare_session("deadbeef")
-
-
-def test_legacy_session_attaches_on_the_default_server(fake_tether: FakeTether) -> None:
-    pane = pane_store.create_pane(pane_type="adhoc", pane_name="Old")
-    pane_store.link_session(LEGACY_ID, pane["id"], "shell", kind="legacy")
-    with patch("a_term.utils.tmux.run_tmux_command", side_effect=_legacy_tmux):
-        plan = validate_and_prepare_session(LEGACY_ID)
-
-    assert plan.kind == "legacy"
-    assert plan.tmux_socket is None
-    assert plan.argv == ["tmux", "attach-session", "-t", f"summitflow-{LEGACY_ID}"]
-    assert plan.generation is None
-
-
-def test_users_own_session_attaches_on_the_default_server(fake_tether: FakeTether) -> None:
-    with patch("a_term.utils.tmux.run_tmux_command", return_value=(True, own_tmux_panes("claude-work"))):
-        plan = validate_and_prepare_session("claude-work")
-
-    assert plan.kind == "external"
-    assert plan.tmux_socket is None
-    assert plan.argv == ["tmux", "attach-session", "-t", "claude-work"]
-
-
-def test_missing_legacy_session_is_reported(fake_tether: FakeTether, no_default_tmux) -> None:
-    with pytest.raises(ValueError, match="Session not found"):
-        validate_and_prepare_session(LEGACY_ID)
 
 
 def test_attach_environment_drops_tmux_markers_and_applies_overrides(monkeypatch: pytest.MonkeyPatch) -> None:

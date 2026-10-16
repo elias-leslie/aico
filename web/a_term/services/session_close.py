@@ -12,6 +12,7 @@ from typing import Any
 
 from ..storage import panes as pane_store
 from . import lifecycle, session_catalog
+from .session_capabilities import SessionFacts, refusal
 
 
 def _build_result(
@@ -42,8 +43,8 @@ def _should_clean_pane(closed_mode: str, remaining_links: list[dict[str, Any]]) 
 
 def close_session(session_id: str) -> dict[str, Any]:
     """End a session and update the pane that showed it."""
-    if not (session_catalog.is_tether_id(session_id) or session_catalog.is_legacy_id(session_id)):
-        # The user's own tmux session: A-Term only had a view of it.
+    if refusal("end", SessionFacts(session_catalog.kind_of(session_id))) is not None:
+        # The user's own tmux session: A-Term only had a view of it. No lookup.
         return _build_result(session_id, is_external=True)
 
     link = pane_store.get_link(session_id)

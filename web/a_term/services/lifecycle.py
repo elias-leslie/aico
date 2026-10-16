@@ -21,7 +21,6 @@ from ..logging_config import get_logger
 from ..storage import panes as pane_store
 from ..storage import project_settings as settings_store
 from ..tether import TetherError, get_client
-from ..utils import tmux
 from . import agent_tools, session_catalog
 from .session_capabilities import LifecycleError, SessionFacts, refusal
 
@@ -147,35 +146,14 @@ def end_session(session_id: str) -> bool:
 
     Returns False when the session was already gone. Tether's End is fenced by
     the generation read just before it; a changed generation is reported, not
-    retried.
+    retried. An Own tmux session is refused with a 400 (A-Term never ends it).
     """
-    if session_catalog.is_legacy_id(session_id):
-        ended = tmux.kill_legacy_session(session_id)
-        pane_store.unlink_session(session_id)
-        return ended
-    if not session_catalog.is_tether_id(session_id):
-        raise LifecycleError(400, "Only Tether and legacy A-Term sessions can be ended here")
-    client = get_client()
-    try:
-        descriptor = client.get_session(session_id)
-    except TetherError as error:
-        if error.status == 404:
-            pane_store.unlink_session(session_id)
-            return False
-        raise
-    generation = descriptor.get("generation")
-    if not isinstance(generation, str):
-        raise LifecycleError(409, "The session has no generation yet; refresh and try again")
-    try:
-        client.end_session(session_id, generation)
-    except TetherError as error:
-        if error.status == 404:
-            pane_store.unlink_session(session_id)
-            return False
-        raise
+    refused = refusal("end", SessionFacts(session_catalog.kind_of(session_id)))
+    if refused is not None:
+        raise refused.error()
+    ended = session_catalog.end(session_id)
     pane_store.unlink_session(session_id)
-    logger.info("session_ended", session_id=session_id)
-    return True
+    return ended
 
 
 def end_pane(pane_id: str) -> int:
@@ -293,15 +271,17 @@ def reconcile_links(empty_pane_days: int = 7) -> dict[str, int]:
     Raises :class:`~a_term.tether.TetherUnavailable` when Tether is down: an
     unreachable Tether never counts as "every session ended".
     """
-    tether_ids = {str(item["id"]) for item in session_catalog.list_tether_sessions() if item.get("id")}
-    legacy_ids = tmux.list_tmux_sessions()
+    # Tether's liveness is read up front, so an outage raises even with no Tether links.
+    alive: dict[str, set[str]] = {"tether": session_catalog.live_ids("tether")}
     stats = {"links": 0, "links_dropped": 0, "panes_pruned": 0}
     for link in pane_store.list_links():
         stats["links"] += 1
-        alive = tether_ids if link["kind"] == "tether" else legacy_ids
-        if link["session_id"] not in alive:
+        kind = link["kind"]
+        if kind not in alive:
+            alive[kind] = session_catalog.live_ids(kind)
+        if link["session_id"] not in alive[kind]:
             pane_store.unlink_session(link["session_id"])
             stats["links_dropped"] += 1
-            logger.info("view_link_dropped", session_id=link["session_id"], kind=link["kind"])
+            logger.info("view_link_dropped", session_id=link["session_id"], kind=kind)
     stats["panes_pruned"] = pane_store.delete_empty_panes(empty_pane_days)
     return stats
