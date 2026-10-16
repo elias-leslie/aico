@@ -15,7 +15,6 @@ import { PRODUCT_PORTS } from './project-branding'
 export const PORTS = {
   frontend: PRODUCT_PORTS.frontend,
   backend: PRODUCT_PORTS.backend,
-  summitflow: 8001,
   agentHub: 8003,
 } as const
 
