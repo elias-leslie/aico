@@ -4,6 +4,7 @@
 
 import { join } from 'node:path'
 import type { BrowserWindow, Menu, Screen } from 'electron'
+import { INK } from '../shared/palette'
 import { PERSONAL_WORKSPACE_ID } from './project'
 import type { SessionDescriptor } from './tether-client'
 import type { Bounds, ViewRow } from './views'
@@ -107,7 +108,7 @@ export function createWindows(deps: WindowsDeps) {
       // across tens of millions of pixels even though only the 8px rim used alpha.
       frame: false,
       transparent: false,
-      backgroundColor: '#0B0D11',
+      backgroundColor: INK,
       icon: join(__dirname, '../../assets/icon.png'),
       webPreferences: {
         preload: join(__dirname, '../preload/index.cjs'),

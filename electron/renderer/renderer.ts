@@ -13,6 +13,7 @@ import {
   fontLoadFaceFor,
   parseTerminalFontSettings,
 } from '../shared/font-settings'
+import { BONE, INK } from '../shared/palette'
 import { TERMINAL_HISTORY_LINES } from '../shared/terminal-history'
 import {
   AICO_TOAST_EVENT,
@@ -40,7 +41,7 @@ if (!host) {
 }
 const terminalHost = host
 
-const theme = { background: '#0B0D11', foreground: '#E7E2D6' }
+const theme = { background: INK, foreground: BONE }
 let terminalFontSettings = parseTerminalFontSettings(await window.aico.settings.getTerminalFont())
 let fontFamily = fontFamilyFor(terminalFontSettings.fontId)
 let fontSize = terminalFontSettings.fontSize

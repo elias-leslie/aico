@@ -28,7 +28,7 @@
   transition: background 0.15s var(--ease-arrival);
 }
 .aico-pin-icon:hover {
-  background: rgba(229, 166, 71, 0.14);
+  background: rgb(var(--lantern-rgb) / 0.14);
 }
 .aico-pin-icon.dragging {
   opacity: 0.4;
@@ -40,7 +40,7 @@
 .aico-sub-row.armed,
 .aico-palette-item.armed {
   box-shadow: inset 0 0 0 1.5px var(--lantern);
-  background: rgba(229, 166, 71, 0.16);
+  background: rgb(var(--lantern-rgb) / 0.16);
   animation: aico-arm-pulse 0.9s ease-in-out infinite;
 }
 @keyframes aico-arm-pulse {
@@ -69,9 +69,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(229, 166, 71, 0.35);
+  border: 1px solid rgb(var(--lantern-rgb) / 0.35);
   border-radius: 7px;
-  background: rgba(229, 166, 71, 0.1);
+  background: rgb(var(--lantern-rgb) / 0.1);
   color: var(--lantern);
   font-size: 14px;
   line-height: 1;
@@ -82,7 +82,7 @@
 }
 .lantern-glyph:hover,
 .lantern-glyph.active {
-  background: rgba(229, 166, 71, 0.2);
+  background: rgb(var(--lantern-rgb) / 0.2);
   border-color: var(--lantern);
 }
 
@@ -102,11 +102,11 @@
   scrollbar-gutter: stable;
   padding: 12px 8px 8px;
   border-radius: 14px;
-  background: rgba(20, 18, 16, 0.92);
+  background: rgb(var(--umber-rgb) / 0.92);
   backdrop-filter: blur(28px);
   box-shadow:
     var(--shadow-soft),
-    0 0 0 1px rgba(255, 255, 255, 0.06);
+    0 0 0 1px rgb(var(--glass-rgb) / 0.06);
   -webkit-app-region: no-drag;
 }
 .aico-menu-head {
@@ -177,9 +177,9 @@
 }
 .aico-setting-select {
   width: 138px;
-  border: 1px solid rgba(229, 166, 71, 0.24);
+  border: 1px solid rgb(var(--lantern-rgb) / 0.24);
   border-radius: 7px;
-  background: rgba(11, 13, 17, 0.86);
+  background: rgb(var(--ink-rgb) / 0.86);
   color: var(--bone);
   font-family: var(--font-ui);
   font-size: 12px;
@@ -187,8 +187,8 @@
 }
 .aico-setting-select:focus {
   outline: none;
-  border-color: rgba(229, 166, 71, 0.7);
-  box-shadow: 0 0 0 2px rgba(229, 166, 71, 0.12);
+  border-color: rgb(var(--lantern-rgb) / 0.7);
+  box-shadow: 0 0 0 2px rgb(var(--lantern-rgb) / 0.12);
 }
 .aico-kbd {
   display: flex;
@@ -198,8 +198,8 @@
   font-family: var(--font-mono);
   font-size: 10px;
   color: var(--mist);
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgb(var(--glass-rgb) / 0.05);
+  border: 1px solid rgb(var(--glass-rgb) / 0.08);
   border-radius: 4px;
   padding: 1px 5px;
 }
@@ -226,11 +226,11 @@
   overflow-y: auto;
   padding: 6px;
   border-radius: 12px;
-  background: rgba(20, 18, 16, 0.96);
+  background: rgb(var(--umber-rgb) / 0.96);
   backdrop-filter: blur(28px);
   box-shadow:
     var(--shadow-soft),
-    0 0 0 1px rgba(255, 255, 255, 0.07);
+    0 0 0 1px rgb(var(--glass-rgb) / 0.07);
   -webkit-app-region: no-drag;
 }
 .aico-submenu[hidden] {
@@ -307,7 +307,7 @@
   opacity: 0.7;
 }
 .aico-pin:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgb(var(--glass-rgb) / 0.06);
 }
 .aico-pin.is-pinned {
   opacity: 1;
@@ -327,7 +327,7 @@
   justify-content: center;
   align-items: flex-start;
   padding-top: 60px;
-  background: rgba(6, 6, 8, 0.4);
+  background: var(--scrim);
   border-radius: 14px;
   -webkit-app-region: no-drag;
 }
@@ -336,18 +336,18 @@
   max-width: 86%;
   border-radius: 14px;
   overflow: hidden;
-  background: rgba(20, 18, 16, 0.95);
+  background: rgb(var(--umber-rgb) / 0.95);
   backdrop-filter: blur(30px);
   box-shadow:
     var(--shadow-soft),
-    0 0 0 1px rgba(255, 255, 255, 0.07);
+    0 0 0 1px rgb(var(--glass-rgb) / 0.07);
 }
 .aico-palette-input {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 13px 15px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgb(var(--glass-rgb) / 0.06);
 }
 .aico-palette-mag {
   color: var(--lantern);
@@ -379,8 +379,8 @@
   cursor: pointer;
 }
 .aico-palette-item.sel {
-  background: rgba(229, 166, 71, 0.14);
-  box-shadow: inset 0 0 0 1px rgba(229, 166, 71, 0.25);
+  background: rgb(var(--lantern-rgb) / 0.14);
+  box-shadow: inset 0 0 0 1px rgb(var(--lantern-rgb) / 0.25);
 }
 .aico-palette-item.sel .aico-lbl {
   color: var(--lantern);
@@ -397,11 +397,11 @@
   max-width: 260px;
   padding: 7px 10px;
   border-radius: 9px;
-  background: rgba(20, 18, 16, 0.96);
+  background: rgb(var(--umber-rgb) / 0.96);
   backdrop-filter: blur(20px);
   box-shadow:
     var(--shadow-soft),
-    0 0 0 1px rgba(255, 255, 255, 0.07);
+    0 0 0 1px rgb(var(--glass-rgb) / 0.07);
   pointer-events: none;
   white-space: nowrap;
 }
@@ -436,7 +436,7 @@
 .aico-menu::-webkit-scrollbar-thumb,
 .aico-submenu::-webkit-scrollbar-thumb,
 .aico-palette-list::-webkit-scrollbar-thumb {
-  background: rgba(229, 166, 71, 0.28);
+  background: rgb(var(--lantern-rgb) / 0.28);
   border-radius: 999px;
   border: 3px solid transparent; /* inset the thumb so it reads as a thin pill */
   background-clip: padding-box;
@@ -444,7 +444,7 @@
 .aico-menu::-webkit-scrollbar-thumb:hover,
 .aico-submenu::-webkit-scrollbar-thumb:hover,
 .aico-palette-list::-webkit-scrollbar-thumb:hover {
-  background: rgba(229, 166, 71, 0.5);
+  background: rgb(var(--lantern-rgb) / 0.5);
   background-clip: padding-box;
 }
 

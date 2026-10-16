@@ -1,20 +1,29 @@
 /* Lantern design tokens — see plan: "UI/UX direction — Lantern". */
 :root {
+  /* Channels (r g b): the colours chrome draws at more than one strength,
+     as rgb(var(--x-rgb) / alpha). */
+  --ink-rgb: 11 13 17;
+  --bone-rgb: 231 226 214;
+  --lantern-rgb: 229 166 71;
+  --umber-rgb: 20 18 16; /* popover surfaces: menu, submenu, palette, tooltip */
+  --glass-rgb: 255 255 255; /* light washes and hairlines on dark chrome */
+  --shade-rgb: 0 0 0; /* drop shadows and vignettes */
+
   /* Surfaces */
-  --ink: #0b0d11; /* terminal bg, deepest */
+  --ink: rgb(var(--ink-rgb)); /* terminal bg, deepest */
   --rim: #1c1f24; /* chrome interior */
   --paper: rgba(245, 240, 233, 0.06); /* frosted shell base */
   --paper-veil: rgba(245, 240, 233, 0.12); /* hover-lift on chrome */
 
   /* Identity */
-  --lantern: #e5a647; /* warm amber, the accent */
+  --lantern: rgb(var(--lantern-rgb)); /* warm amber, the accent */
   --lantern-deep: #b47a2a; /* pressed/focused state */
-  --lantern-glow: rgba(229, 166, 71, 0.35); /* amber halo — toast accents */
+  --lantern-glow: rgb(var(--lantern-rgb) / 0.35); /* amber halo — toast accents */
 
   /* Frame edge: one steady hairline. A dim brass from the lantern family —
      warm enough to separate tiled widgets from each other and the desktop, too
      quiet to read as a status or compete with the amber accent. */
-  --frame-edge: rgba(229, 166, 71, 0.26);
+  --frame-edge: rgb(var(--lantern-rgb) / 0.26);
   /* A window waiting on the owner (attention, eyes.ts): a brighter amber than
      the lantern so a thin border still reads at a glance across the desk. */
   --beacon: #ffbd52;
@@ -39,8 +48,15 @@
 
   /* Type */
   --mist: #8b8f94; /* secondary text */
-  --bone: #e7e2d6; /* primary text on dark */
+  --bone: rgb(var(--bone-rgb)); /* primary text on dark */
   --ember: #c9483d; /* danger only — rare */
+
+  /* The eyes: a warm white, shaded toward the rim. */
+  --eye-white: #f4f0e6;
+  --eye-white-edge: #d4cdbd;
+
+  /* Dims the terminal behind the command palette. */
+  --scrim: rgba(6, 6, 8, 0.4);
 
   /* Atmosphere */
   --shadow-soft: 0 24px 64px -16px rgba(0, 0, 0, 0.55);
