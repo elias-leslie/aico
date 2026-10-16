@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
+import { readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -79,13 +79,11 @@ import {
   TetherUnavailable,
   tetherSocketPath,
 } from './tether-client'
-import { arrange } from './tiling'
 import { ControlTerminal, type TerminalLink } from './tmux-control'
 import { coalesceAsync, coalesceTrailingAsync, refreshAttachedClients } from './tmux-view'
 import { toolMark } from './tool-marks'
 import { createTray, refreshTray, setNeedsYou, setWidgetActivity, type TrayWidget } from './tray'
 import {
-  type Bounds,
   ensureView,
   getSetting,
   getView,
@@ -95,9 +93,10 @@ import {
   saveBounds,
   setOpen,
   setSetting,
-  type ViewRow,
 } from './views'
-import { type LayoutWindow, layoutSnapshot } from './window-layout'
+import { createWindowLayout } from './window-layout'
+import { WindowRegistry } from './window-registry'
+import { createWindows } from './windows'
 
 const config = readConfig(process.env, homedir(), process.getuid?.())
 // The single-instance lock and the process listeners, before anything else.
@@ -129,6 +128,84 @@ let tetherIncompatible: string | null = null
 let tools: TetherTool[] = []
 let restored = false
 
+// Which window shows which session, where windows go, and the windows
+// themselves. The hooks run, in this order, what other parts of index.ts do
+// when a window loads, focuses, blurs or goes away.
+const registry = new WindowRegistry(BrowserWindow)
+const layout = createWindowLayout({
+  registry,
+  screen,
+  focusedWindow: () => BrowserWindow.getFocusedWindow(),
+  isCoordinator: (id) => catalog.get(id)?.coordinator ?? false,
+  sessionName: (id) => {
+    const descriptor = catalog.get(id)
+    return descriptor ? sessionTitle(descriptor) : id
+  },
+  saveBounds,
+  isReady: () => app.isReady(),
+  isQuitting: lifecycle.isQuitting,
+  path: config.layoutPath,
+  owner: lifecycle.ownProcess,
+})
+const windows = createWindows({
+  registry,
+  layout,
+  views: { ensureView, setOpen, getView, listViews },
+  screen,
+  isLive: (id) => Boolean(catalog.get(id)),
+  upsert: (descriptor) => catalog.upsert(descriptor),
+  catalogList: () => catalog.list(),
+  isQuitting: lifecycle.isQuitting,
+  rendererUrl: config.rendererUrl,
+  BrowserWindow,
+  Menu,
+  hooks: {
+    loaded: (win) => {
+      refreshContextBadge(win)
+      sendAttention(win)
+    },
+    focused: (win, widgetId) => {
+      lastFocusedAico = widgetId ?? lastFocusedAico
+      if (widgetId) {
+        attention.focused(widgetId)
+        syncTray()
+      }
+      const pty = ptys.get(win.id)
+      if (pty) void sizeClaims.get(pty)?.()
+      blurredWins.delete(win.id)
+      syncCursorPump()
+    },
+    blurred: (win) => {
+      blurredWins.add(win.id)
+      syncCursorPump()
+    },
+    disposing: (winId) => {
+      // Terminal: detach first; the session persists (close = keep, reopenable).
+      const pty = ptys.get(winId)
+      if (pty) {
+        pty.kill()
+        ptys.delete(winId)
+      }
+      awaitingTether.delete(winId)
+      attachTargets.delete(winId)
+      transportOf.delete(winId)
+      ptyStartGenerations.delete(winId)
+      // Titlebar and tray.
+      setWidgetActivity(winId, false)
+      contextBadges.delete(winId)
+      // Eyes and arcade.
+      blurredWins.delete(winId)
+      arcadeOf.delete(winId)
+      arcadeShown.delete(winId)
+      arcadeNear.delete(winId)
+      eyeAnchors.delete(winId)
+      syncCursorPump()
+      layout.forget(winId)
+    },
+    changed: () => syncTray(),
+  },
+})
+
 // One terminal link per open window, and the attach target it was started from.
 // A link is either a node-pty running `tmux attach` or a tmux control-mode
 // client (tmux-control.ts); the terminal-transport setting picks which.
@@ -144,30 +221,14 @@ function configuredTransport(): TerminalTransport {
   if (config.forcedTransport) return config.forcedTransport
   return getSetting(TRANSPORT_SETTING) === 'attach' ? 'attach' : 'control'
 }
-// Windows Aico itself just resized (tiling, re-tiling, an agent's position):
-// their next terminal resize claims the tmux size even while unfocused, or the
-// grown window would show the old grid in a sea of dots until clicked.
-const arrangedUntil = new Map<number, number>()
-function setArrangedBounds(win: BrowserWindow, bounds: Electron.Rectangle): void {
-  arrangedUntil.set(win.id, Date.now() + 3000)
-  win.setBounds(bounds)
-}
 const ptyStartGenerations = new Map<number, number>()
 const ptyRefreshes = new Map<
   number,
   { pty: TerminalLink | undefined; generation: number | undefined; request: Promise<void> }
 >()
-// BrowserWindow.id -> Tether session id. A window opened for a new session has
-// no id until Tether creates it at the window's first grid size.
-const widgetOf = new Map<number, string>()
-const pendingCreates = new Map<number, { tool: string; projectId: string }>()
-// Windows showing a pre-Tether A-Term session (`summitflow-<uuid>` on the
-// default tmux server): attach-only, no generation, no view row, no actions.
-const legacyOf = new Map<number, string>()
 const LEGACY_ID_PREFIX = 'legacy:'
 // Windows whose attach waits for Tether to come back, with their last grid.
 const awaitingTether = new Map<number, PtySize>()
-const boundsTimers = new Map<number, NodeJS.Timeout>()
 // Sessions whose pane is being replaced (load-TUI, switch-project). Renderer
 // input is dropped meanwhile, as before: the pane briefly shows Tether's
 // containment gate and stale keystrokes must never reach it.
@@ -267,23 +328,15 @@ function logWidgetEvent(widgetId: string, event: string, data: Record<string, un
 }
 
 // ---------------------------------------------------------------------------
-// Gaze and layout (see gaze.ts): eyes that look at the other windows, and the
-// window picture agents read before arranging them.
+// Gaze (see gaze.ts): eyes that look at the other windows.
 
 const eyeAnchors = new Map<number, Point>()
 let gazeTimer: ReturnType<typeof setTimeout> | undefined
-let layoutTimer: ReturnType<typeof setTimeout> | undefined
-// A burst of changes (a drag, several sessions updating at once) writes once,
-// 300 ms after it settles, but never later than 1 s after the first change.
-let layoutDeadline = 0
-
-function aicoWindows(): BrowserWindow[] {
-  return BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed() && widgetOf.has(w.id))
-}
 
 function faces(): Face[] {
   const focused = BrowserWindow.getFocusedWindow()
-  return aicoWindows()
+  return registry
+    .sessionWindows()
     .filter((w) => w.isVisible() && !w.isMinimized())
     .map((w) => {
       const b = w.getContentBounds()
@@ -298,7 +351,7 @@ function playGazeScene(): void {
   // The first few scenes after start go to the log, proof the director runs.
   if (scene.length && gazeScenesLogged < 3) {
     gazeScenesLogged++
-    const who = (winId: number) => widgetOf.get(winId) ?? String(winId)
+    const who = (winId: number) => registry.sessionOf(winId) ?? String(winId)
     console.log(`[aico:gaze] scene ${scene.map((g) => who(g.winId)).join(' ')}`)
   }
   for (const g of scene) {
@@ -325,110 +378,6 @@ function scheduleGaze(): void {
   )
 }
 
-function writeLayout(): void {
-  const focused = BrowserWindow.getFocusedWindow()
-  const windows: LayoutWindow[] = []
-  for (const w of aicoWindows()) {
-    const id = widgetOf.get(w.id)
-    if (!id) continue
-    const descriptor = catalog.get(id)
-    const bounds = w.getBounds()
-    windows.push({
-      id,
-      name: descriptor ? sessionTitle(descriptor) : id,
-      bounds,
-      displayId: String(screen.getDisplayMatching(bounds).id),
-      focused: w === focused,
-      visible: w.isVisible(),
-      minimized: w.isMinimized(),
-      maximized: w.isMaximized(),
-      coordinator: descriptor?.coordinator ?? false,
-    })
-  }
-  const primary = screen.getPrimaryDisplay().id
-  const displays = screen.getAllDisplays().map((d) => ({
-    id: String(d.id),
-    primary: d.id === primary,
-    bounds: d.bounds,
-    workArea: d.workArea,
-    scaleFactor: d.scaleFactor,
-  }))
-  try {
-    mkdirSync(join(config.layoutPath, '..'), { recursive: true, mode: 0o700 })
-    const tmp = `${config.layoutPath}.${process.pid}.tmp`
-    writeFileSync(
-      tmp,
-      `${JSON.stringify(layoutSnapshot(displays, windows, lifecycle.ownProcess), null, 2)}\n`,
-      {
-        mode: 0o600,
-      },
-    )
-    renameSync(tmp, config.layoutPath)
-  } catch (error) {
-    console.warn('[aico:layout] write failed:', error instanceof Error ? error.message : error)
-  }
-}
-
-// Windows opened or closed after startup re-tile their screen to the layout
-// for the new count (see tiling.ts tileGroups and arrange). Restoring at launch keeps each
-// window's remembered place.
-let tilingLive = false
-const NEW_WINDOW = '(new)'
-
-function tileable(displayId: number): { id: string; bounds: Bounds }[] {
-  return aicoWindows()
-    .filter((w) => w.isVisible() && !w.isMinimized() && !w.isMaximized())
-    .filter((w) => screen.getDisplayMatching(w.getBounds()).id === displayId)
-    .map((w) => {
-      const id = widgetOf.get(w.id) ?? ''
-      return { id, bounds: w.getBounds(), coordinator: Boolean(id && catalog.get(id)?.coordinator) }
-    })
-    .filter((w) => w.id)
-}
-
-function applyMoves(moves: { id: string; bounds: Bounds }[]): void {
-  for (const move of moves) {
-    const win = windowForWidget(move.id)
-    if (!win) continue
-    const b = win.getBounds()
-    if (
-      b.x === move.bounds.x &&
-      b.y === move.bounds.y &&
-      b.width === move.bounds.width &&
-      b.height === move.bounds.height
-    )
-      continue
-    setArrangedBounds(win, move.bounds)
-    persistBounds(win)
-  }
-}
-
-/** Where a window opening now goes; moves the others to make room. */
-function tileNewWindow(): Bounds {
-  const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
-  const moves = arrange(display.workArea, tileable(display.id), NEW_WINDOW)
-  applyMoves(moves.filter((m) => m.id !== NEW_WINDOW))
-  return moves.find((m) => m.id === NEW_WINDOW)?.bounds ?? display.workArea
-}
-
-function retileDisplay(displayId: number): void {
-  const display = screen.getAllDisplays().find((d) => d.id === displayId)
-  if (display) applyMoves(arrange(display.workArea, tileable(display.id)))
-}
-
-// The coordinator mark lives on the Tether descriptor. Each window's last
-// seen mark, so a change (from any app or `st aico widget coordinator`)
-// re-tiles its screen; a window seen for the first time keeps its place.
-const shownCoordinator = new Map<number, boolean>()
-
-function retileOnCoordinatorChange(win: BrowserWindow, coordinator: boolean): void {
-  const before = shownCoordinator.get(win.id)
-  shownCoordinator.set(win.id, coordinator)
-  if (before === undefined || before === coordinator || lifecycle.isQuitting()) return
-  retileDisplay(screen.getDisplayMatching(win.getBounds()).id)
-  scheduleLayout()
-}
-
 /** Ask Tether to mark or unmark a coordinator; the change comes back as
  * `session.updated`. */
 function requestCoordinator(id: string, coordinator: boolean): void {
@@ -436,37 +385,11 @@ function requestCoordinator(id: string, coordinator: boolean): void {
   if (!descriptor) return
   tether.setCoordinator(id, descriptor.generation, coordinator).catch((error) => {
     writeNotice(
-      windowForWidget(id),
+      registry.forSession(id),
       describeFailure('Could not change the coordinator mark', error),
       33,
     )
   })
-}
-
-function scheduleLayout(): void {
-  // Before ready there is no screen to read (startup writes once when ready);
-  // after quit starts, a late write would undo the unlink at quit.
-  if (lifecycle.isQuitting() || !app.isReady()) return
-  const now = Date.now()
-  if (layoutTimer) clearTimeout(layoutTimer)
-  else layoutDeadline = now + 1000
-  layoutTimer = setTimeout(
-    () => {
-      layoutTimer = undefined
-      writeLayout()
-    },
-    Math.max(0, Math.min(300, layoutDeadline - now)),
-  )
-}
-
-function windowForWidget(id: string): BrowserWindow | undefined {
-  for (const [winId, wid] of widgetOf) {
-    if (wid === id) {
-      const win = BrowserWindow.fromId(winId)
-      if (win && !win.isDestroyed()) return win
-    }
-  }
-  return undefined
 }
 
 // ---------------------------------------------------------------------------
@@ -481,10 +404,10 @@ const refreshSessions = coalesceAsync(async () => {
   // A view whose session is absent from a complete list is closed but its row
   // is kept: only an explicit `session.ended` forgets a view. A wrong or empty
   // instance must never erase every saved window position.
-  for (const id of gone) windowForWidget(id)?.destroy()
+  for (const id of gone) windows.destroyFor(id)
   if (!restored) {
     restored = true
-    restoreOnLaunch()
+    windows.restoreOnLaunch()
   }
   pushTitles()
   syncTray()
@@ -508,15 +431,7 @@ function sessionEnded(id: string, reason: string): void {
   const known = catalog.get(id)
   catalog.remove(id)
   attention.removed(id)
-  // destroy() skips the 'close' event, so take the space it leaves here and
-  // let neighbours grow into it once the window is gone.
-  const win = windowForWidget(id)
-  const freed = win?.isVisible() && !win.isMinimized() ? win.getBounds() : null
-  win?.destroy()
-  if (freed && !lifecycle.isQuitting()) {
-    const displayId = screen.getDisplayMatching(freed).id
-    setImmediate(() => retileDisplay(displayId))
-  }
+  windows.closeEnded(id)
   removeView(id)
   if (known) logWidgetEvent(id, 'lifecycle_retired', { session_id: known.ownershipId, reason })
   syncTray()
@@ -548,7 +463,7 @@ function onTetherEvent(event: TetherEvent): void {
       requestSessionRefresh()
       break
     case 'legacy.changed':
-      if (Array.isArray(event.data.names)) closeEndedLegacyWindows(event.data.names)
+      if (Array.isArray(event.data.names)) windows.closeEndedLegacy(event.data.names)
       break
     case 'tools.changed':
       void refreshTools().catch(() => {})
@@ -627,12 +542,11 @@ async function applyGuiCommand(command: GuiCommand): Promise<GuiVerdict> {
     return { applied: false, error: 'stale_generation' }
   const id = command.sessionId
   if (command.kind === 'show') {
-    focusOrReopen(id)
+    windows.focusOrReopen(id)
   } else if (command.kind === 'position' && command.bounds) {
-    const win = windowForWidget(id)
+    const win = registry.forSession(id)
     if (win) {
-      setArrangedBounds(win, command.bounds)
-      persistBounds(win)
+      layout.arrange(win, command.bounds)
     } else {
       saveBounds(id, command.bounds, String(screen.getDisplayMatching(command.bounds).id))
     }
@@ -676,15 +590,6 @@ function createRequest(pending: { tool: string; projectId: string }, size: PtySi
   return { tool: pending.tool, projectId: pending.projectId, size }
 }
 
-function bindWindow(win: BrowserWindow, descriptor: SessionDescriptor): void {
-  catalog.upsert(descriptor)
-  widgetOf.set(win.id, descriptor.id)
-  pendingCreates.delete(win.id)
-  ensureView(descriptor.id, true)
-  setOpen(descriptor.id, true)
-  persistBounds(win)
-}
-
 async function startPty(win: BrowserWindow, size: PtySize): Promise<void> {
   const winId = win.id
   const generation = (ptyStartGenerations.get(winId) ?? 0) + 1
@@ -697,15 +602,15 @@ async function startPty(win: BrowserWindow, size: PtySize): Promise<void> {
   }
   awaitingTether.delete(winId)
 
-  const legacyName = legacyOf.get(winId)
+  const legacyName = registry.legacyOf(winId)
   if (legacyName) {
     await startLegacyPty(win, legacyName, size, stillCurrent)
     return
   }
 
-  let widgetId = widgetOf.get(winId)
+  let widgetId = registry.sessionOf(winId)
   if (!widgetId) {
-    const pending = pendingCreates.get(winId)
+    const pending = registry.pending(winId)
     if (!pending) return
     let created: SessionDescriptor
     try {
@@ -723,7 +628,7 @@ async function startPty(win: BrowserWindow, size: PtySize): Promise<void> {
       syncTray()
       return
     }
-    bindWindow(win, created)
+    windows.bind(win, created)
     widgetId = created.id
     if (created.status !== 'running' && created.failure) {
       writeNotice(
@@ -745,7 +650,7 @@ async function startPty(win: BrowserWindow, size: PtySize): Promise<void> {
     syncTray()
     return
   }
-  if (!stillCurrent() || widgetOf.get(winId) !== widgetId) return
+  if (!stillCurrent() || registry.sessionOf(winId) !== widgetId) return
   const id = widgetId
   let pty: TerminalLink
   try {
@@ -761,7 +666,7 @@ async function startPty(win: BrowserWindow, size: PtySize): Promise<void> {
   const isCurrent = () =>
     !lifecycle.isQuitting() &&
     !win.isDestroyed() &&
-    widgetOf.get(winId) === id &&
+    registry.sessionOf(winId) === id &&
     ptys.get(winId) === pty &&
     ptyStartGenerations.get(winId) === generation &&
     !replacing.has(id)
@@ -864,37 +769,6 @@ async function startLegacyPty(
   attachTargets.set(winId, target)
 }
 
-function windowForLegacy(name: string): BrowserWindow | undefined {
-  for (const [winId, legacy] of legacyOf) {
-    if (legacy !== name) continue
-    const win = BrowserWindow.fromId(winId)
-    if (win && !win.isDestroyed()) return win
-  }
-  return undefined
-}
-
-/** Tether announced the legacy list; close windows whose session is gone,
- * as an ended Tether session closes its window. */
-function closeEndedLegacyWindows(names: unknown[]): void {
-  const live = new Set(names.filter((name): name is string => typeof name === 'string'))
-  for (const [winId, name] of [...legacyOf]) {
-    if (live.has(name)) continue
-    const win = BrowserWindow.fromId(winId)
-    if (win && !win.isDestroyed()) win.destroy()
-  }
-}
-
-function openLegacySession(name: string): void {
-  const existing = windowForLegacy(name)
-  if (existing) {
-    existing.show()
-    existing.focus()
-    return
-  }
-  const win = createWidgetWindow(null, null)
-  legacyOf.set(win.id, name)
-}
-
 function resumeAwaitingAttaches(): void {
   for (const [winId, size] of awaitingTether) {
     const win = BrowserWindow.fromId(winId)
@@ -908,263 +782,8 @@ function resumeAwaitingAttaches(): void {
 }
 
 function ptyFor(sender: Electron.WebContents): TerminalLink | undefined {
-  const win = BrowserWindow.fromWebContents(sender)
+  const win = registry.senderWindow(sender)
   return win ? ptys.get(win.id) : undefined
-}
-
-/** The session a renderer's window shows, if any (untrusted IPC sender). */
-function widgetIdFor(sender: Electron.WebContents): string | undefined {
-  const win = BrowserWindow.fromWebContents(sender)
-  return win ? widgetOf.get(win.id) : undefined
-}
-
-// ---------------------------------------------------------------------------
-// Views: windows, bounds and restore.
-
-// Persist a window's bounds (and which monitor it's on) so it restores in place.
-function persistBounds(win: BrowserWindow): void {
-  const widgetId = widgetOf.get(win.id)
-  if (!widgetId || win.isDestroyed()) return
-  const bounds = win.getBounds()
-  saveBounds(widgetId, bounds, String(screen.getDisplayMatching(bounds).id))
-}
-
-function scheduleBoundsSave(win: BrowserWindow): void {
-  const prev = boundsTimers.get(win.id)
-  if (prev) clearTimeout(prev)
-  boundsTimers.set(
-    win.id,
-    setTimeout(() => persistBounds(win), 400),
-  )
-}
-
-// Restore a saved rect only if it still lands on a connected display; otherwise
-// keep just the size and let the OS place it (avoids off-screen windows).
-function placement(b: Bounds | null): Electron.BrowserWindowConstructorOptions {
-  if (!b) return { width: 900, height: 560 }
-  const onScreen = screen.getAllDisplays().some(({ workArea: w }) => {
-    return (
-      b.x < w.x + w.width && b.x + b.width > w.x && b.y < w.y + w.height && b.y + b.height > w.y
-    )
-  })
-  return onScreen
-    ? { x: b.x, y: b.y, width: b.width, height: b.height }
-    : { width: b.width, height: b.height }
-}
-
-/** One frameless widget window, bound to a session now (`view`) or once
- * Tether creates it (`pending`). */
-function createWidgetWindow(
-  view: ViewRow | null,
-  pending: { tool: string; projectId: string } | null,
-  restore = false,
-): BrowserWindow {
-  const row = { id: view?.id ?? 'new' }
-  // Opened after startup: tile in on the screen under the pointer.
-  const tiled = tilingLive && !(restore && view?.bounds) ? tileNewWindow() : null
-  const win = new BrowserWindow({
-    ...(tiled ?? placement(view?.bounds ?? null)),
-    minWidth: 360,
-    minHeight: 240,
-    // Keep the frameless Lantern chrome, but make the native surface opaque.
-    // These windows are often nearly full-height on a scaled 4K display; a
-    // transparent surface made Chromium alpha-composite every terminal repaint
-    // across tens of millions of pixels even though only the 8px rim used alpha.
-    frame: false,
-    transparent: false,
-    backgroundColor: '#0B0D11',
-    icon: join(__dirname, '../../assets/icon.png'),
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.cjs'),
-      contextIsolation: true,
-      // Renderer runs in the OS sandbox. The preload is a pure contextBridge shim
-      // (requires only electron's contextBridge/ipcRenderer, both available to a
-      // sandboxed CommonJS preload), so nothing here needs Node at module scope.
-      sandbox: true,
-      // Keep Chromium's default background throttling. Three idle Aico windows
-      // previously kept the GPU process near one-third of a core solely so the
-      // cosmetic eyes could repaint at 60 ms while unfocused.
-      backgroundThrottling: true,
-    },
-  })
-
-  // Fixed local UI: no popups, and never navigate the frame away from the
-  // renderer. Defense-in-depth so a renderer compromise can't open or redirect
-  // to arbitrary content.
-  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
-  win.webContents.on('will-navigate', (e) => e.preventDefault())
-  // The native textarea offers Chromium's spelling marks. Show its dictionary
-  // suggestions on right-click; the terminal's separate right-click paste path
-  // still runs because its xterm helper has spellcheck disabled.
-  win.webContents.on('context-menu', (_event, params) => {
-    if (!params.isEditable || !params.misspelledWord) return
-    const suggestions = params.dictionarySuggestions.map((suggestion) => ({
-      label: suggestion,
-      click: () => win.webContents.replaceMisspelling(suggestion),
-    }))
-    if (suggestions.length === 0) return
-    Menu.buildFromTemplate(suggestions).popup({ window: win })
-  })
-  win.webContents.on('console-message', (details) => {
-    if (details.level !== 'warning' && details.level !== 'error') return
-    const log = details.level === 'error' ? console.error : console.warn
-    log(
-      `[aico:renderer] widget=${row.id} ${details.level} ` +
-        `${details.sourceId || 'unknown'}:${details.lineNumber} ${details.message}`,
-    )
-  })
-  win.webContents.on(
-    'did-fail-load',
-    (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
-      if (isMainFrame) {
-        console.error(
-          `[aico:renderer] widget=${row.id} load failed code=${errorCode} ` +
-            `url=${validatedURL}: ${errorDescription}`,
-        )
-      }
-    },
-  )
-  win.webContents.on('render-process-gone', (_event, details) => {
-    console.error(
-      `[aico:renderer] widget=${row.id} process gone reason=${details.reason} ` +
-        `exit_code=${details.exitCode}`,
-    )
-  })
-
-  const winId = win.id
-  if (view) {
-    widgetOf.set(winId, view.id)
-    setOpen(view.id, true)
-  } else if (pending) {
-    pendingCreates.set(winId, pending)
-  }
-
-  win.webContents.on('did-finish-load', () => {
-    refreshContextBadge(win)
-    sendAttention(win)
-  })
-
-  if (config.rendererUrl) {
-    win.loadURL(config.rendererUrl)
-  } else {
-    win.loadFile(join(__dirname, '../renderer/index.html'))
-  }
-
-  // Renderer toggles the focused/unfocused chrome state off these. Focus also
-  // records this widget as the selection-grab target ("last-focused widget")
-  // and claims the shared tmux window size for this view.
-  win.on('focus', () => {
-    const widgetId = widgetOf.get(win.id)
-    lastFocusedAico = widgetId ?? lastFocusedAico
-    if (widgetId) {
-      attention.focused(widgetId)
-      syncTray()
-    }
-    const pty = ptys.get(win.id)
-    if (pty) void sizeClaims.get(pty)?.()
-    win.webContents.send('win:focus', true)
-    blurredWins.delete(win.id)
-    syncCursorPump()
-  })
-  win.on('blur', () => {
-    win.webContents.send('win:focus', false)
-    blurredWins.add(win.id)
-    syncCursorPump()
-  })
-
-  win.on('move', () => scheduleBoundsSave(win))
-  win.on('resize', () => scheduleBoundsSave(win))
-  for (const change of [
-    'move',
-    'resize',
-    'focus',
-    'blur',
-    'show',
-    'hide',
-    'minimize',
-    'restore',
-  ] as const)
-    win.on(change as 'move', scheduleLayout)
-  let closingBounds: Bounds | null = null
-  win.on('close', () => {
-    persistBounds(win) // final flush while bounds are still valid
-    closingBounds = win.isVisible() && !win.isMinimized() ? win.getBounds() : null
-  })
-
-  win.on('closed', () => {
-    const widgetId = widgetOf.get(winId)
-    const pty = ptys.get(winId)
-    if (pty) {
-      pty.kill() // detach; the session persists (close = keep, reopenable)
-      ptys.delete(winId)
-    }
-    const timer = boundsTimers.get(winId)
-    if (timer) {
-      clearTimeout(timer)
-      boundsTimers.delete(winId)
-    }
-    setWidgetActivity(winId, false)
-    widgetOf.delete(winId)
-    legacyOf.delete(winId)
-    pendingCreates.delete(winId)
-    awaitingTether.delete(winId)
-    attachTargets.delete(winId)
-    transportOf.delete(winId)
-    ptyStartGenerations.delete(winId)
-    blurredWins.delete(winId)
-    arcadeOf.delete(winId)
-    arcadeShown.delete(winId)
-    arcadeNear.delete(winId)
-    contextBadges.delete(winId)
-    eyeAnchors.delete(winId)
-    arrangedUntil.delete(winId)
-    syncCursorPump()
-    // Neighbours grow into the space this window leaves (not on quit: the
-    // whole arrangement is coming back next launch).
-    if (!lifecycle.isQuitting() && closingBounds)
-      retileDisplay(screen.getDisplayMatching(closingBounds).id)
-    scheduleLayout()
-    // On quit, leave `open` as-is so live views restore next launch; on an
-    // explicit close, mark it closed (it moves to the tray's reopen list).
-    if (!lifecycle.isQuitting() && widgetId && getView(widgetId)) setOpen(widgetId, false)
-    syncTray()
-  })
-
-  syncTray()
-  return win
-}
-
-/** `restore`: reopen at the remembered place instead of tiling in. */
-function openWidget(id: string, restore = false): void {
-  createWidgetWindow(ensureView(id), null, restore)
-}
-
-// A new session is always an explicit (tool, workspace) pair. Its window opens
-// at once; Tether creates the session at that window's first grid size.
-function newWidget(tool: string, projectId: string): void {
-  createWidgetWindow(null, { tool, projectId })
-}
-
-function focusOrReopen(id: string): void {
-  const win = windowForWidget(id)
-  if (win) {
-    win.show()
-    win.focus()
-    return
-  }
-  openWidget(id)
-}
-
-function restoreOnLaunch(): void {
-  const live = listViews().filter((view) => catalog.get(view.id))
-  const open = live.filter((view) => view.open)
-  if (open.length) {
-    // Restore runs after the first session list, by which time tiling is
-    // live; each window still goes back to where it was.
-    for (const view of open) if (!windowForWidget(view.id)) openWidget(view.id, true)
-  } else if (live.length && BrowserWindow.getAllWindows().length === 0) {
-    openWidget(live[0].id) // nothing was open: bring back the oldest view
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1204,7 +823,7 @@ function endSession(id: string): Promise<void> {
 function discardWidget(id: string): void {
   void endSession(id).catch((error) => {
     console.error(`[aico] End failed widget=${id}:`, error)
-    writeNotice(windowForWidget(id), describeFailure('End failed', error))
+    writeNotice(registry.forSession(id), describeFailure('End failed', error))
   })
 }
 
@@ -1238,7 +857,7 @@ function replacePane(
     .then((next) => catalog.upsert(next))
     .catch((error) => {
       console.warn(`[aico] ${action} failed widget=${id}:`, error)
-      writeNotice(windowForWidget(id), describeFailure(action, error))
+      writeNotice(registry.forSession(id), describeFailure(action, error))
       requestSessionRefresh()
     })
     .finally(() => {
@@ -1258,7 +877,7 @@ function switchProject(id: string, projectId: string): void {
     const root = ensurePersonalWorkspaceRoot()
     if (!root) {
       writeNotice(
-        windowForWidget(id),
+        registry.forSession(id),
         `Could not switch the workspace: ${personalWorkspaceRoot()} could not be created.`,
         33,
       )
@@ -1281,7 +900,7 @@ async function renameSession(id: string, name: unknown): Promise<void> {
   try {
     catalog.upsert(await tether.rename(id, descriptor.generation, trimmed || null))
   } catch (error) {
-    writeNotice(windowForWidget(id), describeFailure('Could not rename', error), 33)
+    writeNotice(registry.forSession(id), describeFailure('Could not rename', error), 33)
   }
   pushTitles()
   syncTray()
@@ -1294,13 +913,13 @@ async function renameSession(id: string, name: unknown): Promise<void> {
 const attention = new Attention({
   setTimer: (fn, ms) => setTimeout(fn, ms),
   clearTimer: (handle) => clearTimeout(handle as NodeJS.Timeout),
-  isFocused: (id) => windowForWidget(id)?.isFocused() ?? false,
-  flash: (id, on) => windowForWidget(id)?.flashFrame(on),
+  isFocused: (id) => registry.forSession(id)?.isFocused() ?? false,
+  flash: (id, on) => registry.forSession(id)?.flashFrame(on),
   needsYou: (on) => setNeedsYou(on),
   attend: (id, mode, stage) => {
     if (mode === 'none') attending.delete(id)
     else attending.set(id, { mode, stage })
-    const win = windowForWidget(id)
+    const win = registry.forSession(id)
     if (win) sendAttention(win)
   },
   push: (id) => {
@@ -1341,7 +960,7 @@ const attention = new Attention({
 const attending = new Map<string, { mode: AttentionMode; stage: AttentionStage }>()
 
 function sendAttention(win: BrowserWindow): void {
-  const id = widgetOf.get(win.id)
+  const id = registry.sessionOf(win.id)
   if (!id || win.isDestroyed()) return
   win.webContents.send('eyes:attention', attending.get(id) ?? { mode: 'none', stage: 'fresh' })
 }
@@ -1351,7 +970,7 @@ const URGENT_LOOK_EVERY_MS = 20_000
 function lookAtUrgent(): void {
   const all = faces()
   for (const id of attention.urgent()) {
-    const win = windowForWidget(id)
+    const win = registry.forSession(id)
     const star = win && all.find((f) => f.winId === win.id)
     if (!star) continue
     for (const g of allLookAt(star, all, Math.random, false)) {
@@ -1373,10 +992,6 @@ function noteAgentState(descriptor: SessionDescriptor): void {
 // ---------------------------------------------------------------------------
 // Tray and titlebars.
 
-function showHub(): void {
-  for (const win of BrowserWindow.getAllWindows()) win.show()
-}
-
 function tetherNotice(): string | null {
   if (tetherIncompatible) return `${tetherIncompatible}. Sessions keep running.`
   return tetherConnected ? null : 'Tether is not reachable. Sessions keep running.'
@@ -1392,7 +1007,7 @@ function syncTray(): void {
   const widgets: TrayWidget[] = rows.map(({ item: descriptor, group, detail }) => ({
     id: descriptor.id,
     label: traySessionLabel(sessionTitle(descriptor), toolDisplayName(descriptor.tool, tools)),
-    open: windowForWidget(descriptor.id) !== undefined,
+    open: registry.forSession(descriptor.id) !== undefined,
     group,
     detail,
   }))
@@ -1441,7 +1056,7 @@ function pushContextBadge(win: BrowserWindow, descriptor: SessionDescriptor): vo
  * Aico did before Tether owned launches. */
 function refreshContextBadge(win: BrowserWindow): void {
   contextBadges.delete(win.id)
-  const id = widgetOf.get(win.id)
+  const id = registry.sessionOf(win.id)
   if (!id) return
   const known = catalog.get(id)
   if (known) pushContextBadge(win, known)
@@ -1459,7 +1074,7 @@ function refreshContextBadge(win: BrowserWindow): void {
 function pushTitles(): void {
   for (const win of BrowserWindow.getAllWindows()) {
     if (win.isDestroyed()) continue
-    const legacyName = legacyOf.get(win.id)
+    const legacyName = registry.legacyOf(win.id)
     if (legacyName) {
       const mark = toolMark('shell')
       win.webContents.send('win:title', {
@@ -1475,7 +1090,7 @@ function pushTitles(): void {
       })
       continue
     }
-    const widgetId = widgetOf.get(win.id)
+    const widgetId = registry.sessionOf(win.id)
     const descriptor = widgetId ? catalog.get(widgetId) : undefined
     if (!descriptor) continue
     const tool = tools.find((candidate) => candidate.slug === descriptor.tool)
@@ -1492,11 +1107,11 @@ function pushTitles(): void {
       coordinator: descriptor.coordinator ?? false,
       chip: coordinatorChip(descriptor),
     })
-    retileOnCoordinatorChange(win, descriptor.coordinator ?? false)
+    layout.noteCoordinator(win, descriptor.coordinator ?? false)
   }
   // Names and coordinator marks are in layout.json too; agents read it right
   // after `root title`.
-  scheduleLayout()
+  layout.scheduleWrite()
 }
 
 // ---------------------------------------------------------------------------
@@ -1505,8 +1120,8 @@ function pushTitles(): void {
 // The widget that should receive an indicated selection: the last-focused one
 // if it's still open, else the most recently opened view.
 function selectionTarget(): string | undefined {
-  if (lastFocusedAico && windowForWidget(lastFocusedAico)) return lastFocusedAico
-  const open = listViews().filter((view) => windowForWidget(view.id))
+  if (lastFocusedAico && registry.forSession(lastFocusedAico)) return lastFocusedAico
+  const open = listViews().filter((view) => registry.forSession(view.id))
   return open.length ? open[open.length - 1].id : undefined
 }
 
@@ -1517,7 +1132,7 @@ function deliverSelection(records: SelectionRecord[]): void {
   if (!records.some((record) => record?.kind && record.kind !== 'empty')) return
   const targetId = selectionTarget()
   if (!targetId) return
-  const win = windowForWidget(targetId)
+  const win = registry.forSession(targetId)
   if (selectionDeliveries.has(targetId)) {
     win?.webContents.send('selection:toast', {
       kind: 'Selection not inserted',
@@ -1539,7 +1154,7 @@ function deliverSelection(records: SelectionRecord[]): void {
       isCurrent: () =>
         !lifecycle.isQuitting() &&
         !win.isDestroyed() &&
-        windowForWidget(targetId) === win &&
+        registry.forSession(targetId) === win &&
         catalog.get(targetId)?.generation === descriptor.generation,
       inject: async (text) => {
         await tether.inject(targetId, descriptor.generation, text, 'type')
@@ -1578,7 +1193,9 @@ function deliverSelection(records: SelectionRecord[]): void {
 function toggleVoice(): void {
   const focused = BrowserWindow.getFocusedWindow()
   const win =
-    focused && widgetOf.has(focused.id) ? focused : windowForWidget(selectionTarget() ?? '')
+    focused && registry.hasSession(focused.id)
+      ? focused
+      : registry.forSession(selectionTarget() ?? '')
   win?.webContents.send('voice:toggle')
 }
 
@@ -1731,30 +1348,9 @@ lifecycle.onQuit(() => {
   selectionEvents?.abort()
   sidecar?.stop()
   if (gazeTimer) clearTimeout(gazeTimer)
-  if (layoutTimer) clearTimeout(layoutTimer)
-  // Only the runtime that wrote layout.json removes it. A launcher click
-  // (`--aico-activate`) quits through here too while the runtime keeps going.
-  if (!lifecycle.runtimeOwner) return
-  try {
-    const written = JSON.parse(readFileSync(config.layoutPath, 'utf8')) as { pid?: unknown }
-    if (written.pid === process.pid) unlinkSync(config.layoutPath) // no Aico running: no layout
-  } catch {
-    // Never written, or already gone.
-  }
+  layout.stop({ removeFile: lifecycle.runtimeOwner })
 })
-
-function activateAico(): void {
-  const windows = BrowserWindow.getAllWindows()
-  if (windows.length > 0) {
-    for (const win of windows) win.show()
-    windows[0].focus()
-    return
-  }
-  const oldest = listViews().find((view) => catalog.get(view.id)) ?? catalog.list()[0]
-  if (oldest) focusOrReopen(oldest.id)
-  else newWidget('shell', PERSONAL_WORKSPACE_ID)
-}
-lifecycle.setActivationHandler(activateAico)
+lifecycle.setActivationHandler(windows.activate)
 
 const SESSION_ID = /^[0-9a-f]{8}$/
 
@@ -1780,7 +1376,7 @@ const startup = app.whenReady().then(async () => {
 
   ipcMain.on('pty:input', (event, data: unknown) => {
     if (typeof data !== 'string' || data.length === 0) return
-    const widgetId = widgetIdFor(event.sender)
+    const widgetId = registry.senderSession(event.sender)
     if (!widgetId || replacing.has(widgetId)) return
     ptyFor(event.sender)?.write(data)
   })
@@ -1789,7 +1385,7 @@ const startup = app.whenReady().then(async () => {
   // when the program asked for bracketed paste.
   ipcMain.on('pty:paste', (event, text: unknown) => {
     if (typeof text !== 'string' || text.length === 0) return
-    const widgetId = widgetIdFor(event.sender)
+    const widgetId = registry.senderSession(event.sender)
     if (!widgetId || replacing.has(widgetId)) return
     const link = ptyFor(event.sender)
     if (link instanceof ControlTerminal) link.paste(text)
@@ -1801,7 +1397,7 @@ const startup = app.whenReady().then(async () => {
   ipcMain.handle('terminal:transport', (event): TerminalTransport => {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return 'attach'
-    const transport = legacyOf.has(win.id) ? 'attach' : configuredTransport()
+    const transport = registry.hasLegacy(win.id) ? 'attach' : configuredTransport()
     transportOf.set(win.id, transport)
     return transport
   })
@@ -1811,7 +1407,7 @@ const startup = app.whenReady().then(async () => {
   ipcMain.on('terminal:toggle-transport', () => {
     setSetting(TRANSPORT_SETTING, configuredTransport() === 'control' ? 'attach' : 'control')
     for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed() && (widgetOf.has(win.id) || legacyOf.has(win.id)))
+      if (!win.isDestroyed() && (registry.hasSession(win.id) || registry.hasLegacy(win.id)))
         win.webContents.reload()
     }
   })
@@ -1823,7 +1419,7 @@ const startup = app.whenReady().then(async () => {
       const { cols, rows } = clampSize(size)
       try {
         pty.resize(cols, rows)
-        const arranged = win ? (arrangedUntil.get(win.id) ?? 0) > Date.now() : false
+        const arranged = win ? layout.recentlyArranged(win.id) : false
         if (win?.isFocused() || arranged) void sizeClaims.get(pty)?.()
       } catch (err) {
         console.warn('[aico] pty resize failed:', err)
@@ -1837,7 +1433,7 @@ const startup = app.whenReady().then(async () => {
   // Best-effort: a missing session or no clients is a no-op, never a crash.
   ipcMain.on('pty:refresh', (event, size?: PtySize) => {
     const win = BrowserWindow.fromWebContents(event.sender)
-    const widgetId = win ? widgetOf.get(win.id) : undefined
+    const widgetId = win ? registry.sessionOf(win.id) : undefined
     if (!win || !widgetId || lifecycle.isQuitting() || replacing.has(widgetId)) return
     // Re-pair a drifted pty before the repaint: if the pty's size disagrees with
     // the renderer's live grid, tmux paints for the wrong geometry.
@@ -1863,7 +1459,7 @@ const startup = app.whenReady().then(async () => {
     const isCurrent = () =>
       !lifecycle.isQuitting() &&
       !win.isDestroyed() &&
-      widgetOf.get(win.id) === widgetId &&
+      registry.sessionOf(win.id) === widgetId &&
       ptys.get(win.id) === pty &&
       ptyStartGenerations.get(win.id) === generation &&
       !replacing.has(widgetId)
@@ -1901,7 +1497,7 @@ const startup = app.whenReady().then(async () => {
   })
 
   ipcMain.handle('session:diagnostics', async (event) => {
-    const widgetId = widgetIdFor(event.sender)
+    const widgetId = registry.senderSession(event.sender)
     if (!widgetId) return { capturedAt: new Date().toISOString(), error: 'no session' }
     try {
       return await tether.diagnostics(widgetId)
@@ -2015,10 +1611,10 @@ const startup = app.whenReady().then(async () => {
   // both checked (untrusted renderer input), so a malformed call is ignored.
   ipcMain.on('widget:new', (_event, tool?: unknown, projectId?: unknown) => {
     if (typeof tool === 'string' && tool && typeof projectId === 'string' && projectId) {
-      newWidget(tool, projectId)
+      windows.openNew(tool, projectId)
     }
   })
-  ipcMain.on('widget:hub', showHub)
+  ipcMain.on('widget:hub', windows.showAll)
   ipcMain.on('selection:grab', () => void selectionGrab())
   // Desktop grab fired from a menu click (window pick / region drag). Args are the
   // aico-grab.sh flags chosen by the renderer; validated to a small allowlist.
@@ -2030,7 +1626,7 @@ const startup = app.whenReady().then(async () => {
   // End this session from the widget itself: Tether ends the workload and the
   // window closes once it has.
   ipcMain.handle('session:end-self', async (event) => {
-    const id = widgetIdFor(event.sender)
+    const id = registry.senderSession(event.sender)
     if (!id) throw new Error('Session view is unavailable')
     try {
       await endSession(id)
@@ -2040,26 +1636,26 @@ const startup = app.whenReady().then(async () => {
   })
 
   ipcMain.on('widget:toggle-coordinator', (event) => {
-    const id = widgetIdFor(event.sender)
+    const id = registry.senderSession(event.sender)
     if (id) requestCoordinator(id, !catalog.get(id)?.coordinator)
   })
 
   // Replace the focused session's running tool with another (no new window).
   ipcMain.on('widget:load-tui', (event, slug?: unknown) => {
-    const id = widgetIdFor(event.sender)
+    const id = registry.senderSession(event.sender)
     if (id && typeof slug === 'string' && slug) loadTui(id, slug)
   })
 
   // Move the focused session to another workspace: Tether respawns its pane
   // there with the same tool.
   ipcMain.on('widget:switch-project', (event, projectId?: unknown) => {
-    const id = widgetIdFor(event.sender)
+    const id = registry.senderSession(event.sender)
     if (id && typeof projectId === 'string' && projectId) switchProject(id, projectId)
   })
 
   // Rename from the titlebar. Empty clears it back to Tether's default label.
   ipcMain.on('widget:set-name', (event, name: unknown) => {
-    const id = widgetIdFor(event.sender)
+    const id = registry.senderSession(event.sender)
     if (id) void renameSession(id, name)
   })
 
@@ -2091,7 +1687,7 @@ const startup = app.whenReady().then(async () => {
         project: projects.nameFor(descriptor.projectId, descriptor.projectRoot),
         tool: toolDisplayName(descriptor.tool, tools),
         status: 'running' as const,
-        locallyOpen: Boolean(windowForWidget(descriptor.id)),
+        locallyOpen: Boolean(registry.forSession(descriptor.id)),
       }))
     return [
       ...sessions,
@@ -2102,7 +1698,7 @@ const startup = app.whenReady().then(async () => {
         project: null,
         tool: 'legacy session',
         status: 'running' as const,
-        locallyOpen: Boolean(windowForLegacy(item.name)),
+        locallyOpen: Boolean(registry.forLegacy(item.name)),
       })),
     ]
   })
@@ -2112,7 +1708,7 @@ const startup = app.whenReady().then(async () => {
       if (!LEGACY_SESSION_NAME.test(name)) throw new Error('Invalid session')
       const listed = await tether.legacySessions()
       if (!listed.some((item) => item.name === name)) throw new Error('Session is unavailable')
-      openLegacySession(name)
+      windows.openLegacy(name)
       return
     }
     if (typeof id !== 'string' || !SESSION_ID.test(id)) throw new Error('Invalid session')
@@ -2120,7 +1716,7 @@ const startup = app.whenReady().then(async () => {
     if (descriptor.status !== 'running' && descriptor.status !== 'legacy')
       throw new Error('Session is unavailable')
     catalog.upsert(descriptor)
-    focusOrReopen(id)
+    windows.focusOrReopen(id)
   })
 
   // Global pinned-action set (one row in aico.db, shared across widgets). A
@@ -2162,22 +1758,22 @@ const startup = app.whenReady().then(async () => {
 
   createTray(
     {
-      onSelect: focusOrReopen,
+      onSelect: windows.focusOrReopen,
       onDiscard: (id) => void confirmTrayDiscard(id),
-      onNewWidget: newWidget,
+      onNewWidget: windows.openNew,
       onRefreshSessions: () => {
         projects.invalidate()
         requestSessionRefresh()
         void refreshTools().catch(() => {})
       },
-      onHubView: showHub,
+      onHubView: windows.showAll,
     },
     trayTools(),
     projects.list(),
   )
   scheduleGaze()
-  scheduleLayout()
-  tilingLive = true
+  layout.scheduleWrite()
+  layout.enableTiling()
   // Returning to any Aico window refreshes the native tray catalog as well.
   // Linux does not provide a reliable async hook before its cached tray menu opens.
   app.on('browser-window-focus', syncTray)
@@ -2203,7 +1799,7 @@ const startup = app.whenReady().then(async () => {
     cb(
       allowTrustedAudioMedia({
         permission,
-        trustedRenderer: win !== null && widgetOf.has(win.id),
+        trustedRenderer: win !== null && registry.hasSession(win.id),
         currentUrl: webContents.getURL(),
         requestingUrl: details.requestingUrl,
         isMainFrame: details.isMainFrame,
@@ -2216,7 +1812,7 @@ const startup = app.whenReady().then(async () => {
       const win = webContents ? BrowserWindow.fromWebContents(webContents) : null
       return allowTrustedAudioMedia({
         permission,
-        trustedRenderer: win !== null && widgetOf.has(win.id),
+        trustedRenderer: win !== null && registry.hasSession(win.id),
         currentUrl: webContents?.getURL() ?? '',
         requestingUrl: details.requestingUrl ?? requestingOrigin,
         isMainFrame: details.isMainFrame,
