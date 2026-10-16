@@ -28,6 +28,7 @@ import {
   pushEventLine,
   pushOutcome,
 } from './attention'
+import { readConfig } from './config'
 import { contentSecurityPolicy, voiceConnectSource } from './csp'
 import {
   allLookAt,
@@ -38,7 +39,9 @@ import {
   SCENE_EVERY_MS,
 } from './gaze'
 import { parseBoundsRequest, parsePins } from './ipc-validation'
+import { createLifecycle } from './lifecycle'
 import { allowTrustedAudioMedia } from './media-permission'
+import { describeFailure, writeNotice } from './notices'
 import { ownStartTime, removeOwnPidFile } from './process-identity'
 import {
   ensurePersonalWorkspaceRoot,
@@ -96,6 +99,21 @@ import {
 } from './views'
 import { type LayoutWindow, layoutSnapshot } from './window-layout'
 
+const config = readConfig(process.env, homedir(), process.getuid?.())
+// The single-instance lock and the process listeners, before anything else.
+const lifecycle = createLifecycle({
+  app,
+  dialog,
+  argv: process.argv,
+  config,
+  onSignal: (signal, listener) => {
+    process.on(signal, listener)
+  },
+  startTime: ownStartTime,
+  removeOwnPidFile,
+  fs: { readFileSync, writeFileSync, renameSync, unlinkSync },
+})
+
 const execFileAsync = promisify(execFile)
 const TMUX_QUERY_TIMEOUT_MS = 2_000
 
@@ -123,8 +141,7 @@ type TerminalTransport = 'attach' | 'control'
 const transportOf = new Map<number, TerminalTransport>()
 const TRANSPORT_SETTING = 'terminal-transport'
 function configuredTransport(): TerminalTransport {
-  const forced = process.env.AICO_TERMINAL_TRANSPORT
-  if (forced === 'attach' || forced === 'control') return forced
+  if (config.forcedTransport) return config.forcedTransport
   return getSetting(TRANSPORT_SETTING) === 'attach' ? 'attach' : 'control'
 }
 // Windows Aico itself just resized (tiling, re-tiling, an agent's position):
@@ -157,7 +174,6 @@ const boundsTimers = new Map<number, NodeJS.Timeout>()
 const replacing = new Set<string>()
 const endsInFlight = new Map<string, Promise<void>>()
 const selectionDeliveries = new Map<string, Promise<void>>()
-let quitting = false
 let stopEvents: (() => void) | null = null
 let stopGuiChannel: (() => void) | null = null
 
@@ -208,21 +224,6 @@ let lastFocusedAico: string | null = null
 // Aborts the sidecar SSE subscription (deliver-event stream) on quit.
 let selectionEvents: AbortController | null = null
 
-// System-wide "indicate" hotkey. Works on X11 today; on Wayland (GNOME 46, no
-// GlobalShortcuts portal) globalShortcut silently no-ops — bind a GNOME custom
-// shortcut to a CLI that poke this same grab path instead (follow-on).
-const SELECTION_HOTKEY = process.env.AICO_SELECTION_HOTKEY ?? 'CommandOrControl+Shift+Space'
-
-// Push-to-talk: a press toggles dictation on the focused widget (globalShortcut
-// fires on press only — no key-release — so this is a toggle, not a hold). The
-// renderer captures the mic and types the transcript into its own prompt.
-const VOICE_PTT_HOTKEY = process.env.AICO_VOICE_HOTKEY ?? 'CommandOrControl+Shift+M'
-// Optional voice websocket. user_id/app are accepted by the default local STT URL;
-// mode=transcribe is appended by the client (transcript only, no voice-assistant
-// completion — voice is dictation into the TUI, which then responds).
-const VOICE_WS_URL =
-  process.env.AICO_VOICE_WS ?? 'ws://127.0.0.1:8003/api/voice/ws?user_id=aico&app=aico'
-
 interface PtySize {
   cols: number
   rows: number
@@ -239,11 +240,6 @@ function clampSize(size: PtySize): PtySize {
   return { cols: clampDim(size?.cols, 80), rows: clampDim(size?.rows, 24) }
 }
 
-const stateDir = process.env.AICO_STATE_DIR ?? join(homedir(), '.local', 'state', 'aico')
-const dbPath = join(stateDir, 'aico.db')
-
-const sidecarHost = process.env.AICO_SIDECAR_HOST ?? '127.0.0.1'
-const sidecarPort = Number(process.env.AICO_SIDECAR_PORT ?? 8005)
 let sidecar: Sidecar | null = null
 
 const projects = new ProjectCatalog(
@@ -258,7 +254,7 @@ function logWidgetEvent(widgetId: string, event: string, data: Record<string, un
   // Reuse the sidecar's bounded, rotated per-widget JSONL implementation. The
   // console line remains authoritative if the optional sidecar is unavailable.
   void fetch(
-    `http://${sidecarHost}:${sidecarPort}/widgets/${encodeURIComponent(widgetId)}/events`,
+    `http://${config.sidecarHost}:${config.sidecarPort}/widgets/${encodeURIComponent(widgetId)}/events`,
     {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -280,14 +276,6 @@ let layoutTimer: ReturnType<typeof setTimeout> | undefined
 // A burst of changes (a drag, several sessions updating at once) writes once,
 // 300 ms after it settles, but never later than 1 s after the first change.
 let layoutDeadline = 0
-const LAYOUT_PATH = join(
-  process.env.XDG_RUNTIME_DIR || `/run/user/${process.getuid?.() ?? 1000}`,
-  'aico',
-  'layout.json',
-)
-// Written into layout.json: readers check this process is still alive before
-// trusting the file, since a SIGKILL or crash skips the unlink at quit.
-const OWN_PROCESS = { pid: process.pid, startTime: ownStartTime() }
 
 function aicoWindows(): BrowserWindow[] {
   return BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed() && widgetOf.has(w.id))
@@ -329,7 +317,7 @@ function scheduleGaze(): void {
   const [lo, hi] = SCENE_EVERY_MS
   gazeTimer = setTimeout(
     () => {
-      if (quitting) return
+      if (lifecycle.isQuitting()) return
       playGazeScene()
       scheduleGaze()
     },
@@ -366,16 +354,16 @@ function writeLayout(): void {
     scaleFactor: d.scaleFactor,
   }))
   try {
-    mkdirSync(join(LAYOUT_PATH, '..'), { recursive: true, mode: 0o700 })
-    const tmp = `${LAYOUT_PATH}.${process.pid}.tmp`
+    mkdirSync(join(config.layoutPath, '..'), { recursive: true, mode: 0o700 })
+    const tmp = `${config.layoutPath}.${process.pid}.tmp`
     writeFileSync(
       tmp,
-      `${JSON.stringify(layoutSnapshot(displays, windows, OWN_PROCESS), null, 2)}\n`,
+      `${JSON.stringify(layoutSnapshot(displays, windows, lifecycle.ownProcess), null, 2)}\n`,
       {
         mode: 0o600,
       },
     )
-    renameSync(tmp, LAYOUT_PATH)
+    renameSync(tmp, config.layoutPath)
   } catch (error) {
     console.warn('[aico:layout] write failed:', error instanceof Error ? error.message : error)
   }
@@ -436,7 +424,7 @@ const shownCoordinator = new Map<number, boolean>()
 function retileOnCoordinatorChange(win: BrowserWindow, coordinator: boolean): void {
   const before = shownCoordinator.get(win.id)
   shownCoordinator.set(win.id, coordinator)
-  if (before === undefined || before === coordinator || quitting) return
+  if (before === undefined || before === coordinator || lifecycle.isQuitting()) return
   retileDisplay(screen.getDisplayMatching(win.getBounds()).id)
   scheduleLayout()
 }
@@ -458,7 +446,7 @@ function requestCoordinator(id: string, coordinator: boolean): void {
 function scheduleLayout(): void {
   // Before ready there is no screen to read (startup writes once when ready);
   // after quit starts, a late write would undo the unlink at quit.
-  if (quitting || !app.isReady()) return
+  if (lifecycle.isQuitting() || !app.isReady()) return
   const now = Date.now()
   if (layoutTimer) clearTimeout(layoutTimer)
   else layoutDeadline = now + 1000
@@ -479,39 +467,6 @@ function windowForWidget(id: string): BrowserWindow | undefined {
     }
   }
   return undefined
-}
-
-function writeNotice(win: BrowserWindow | undefined, message: string, color = 31): void {
-  if (win && !win.isDestroyed())
-    win.webContents.send('pty:data', `\r\n\u001b[${color}m${message}\u001b[0m\r\n`)
-}
-
-/** Plain words for a Tether refusal, shown in the session's own terminal. */
-function describeFailure(action: string, error: unknown): string {
-  if (error instanceof TetherUnavailable)
-    return `${action}: Tether is not reachable. Your sessions keep running; Aico reconnects on its own.`
-  if (error instanceof TetherError) {
-    switch (error.code) {
-      case 'admission_denied':
-        return `${action}: deferred by host admission (${error.reason ?? 'not enough memory or too many agents'}). Nothing was started.`
-      case 'linger_required':
-        return `${action}: user linger is off, so a session would die on logout. Run: loginctl enable-linger`
-      case 'stale_generation':
-      case 'identity_changed':
-        return `${action}: the session changed meanwhile. Nothing was applied; try again.`
-      case 'busy':
-        return `${action}: another change to this session is in progress. Try again shortly.`
-      case 'workload_unavailable':
-        return `${action}: the session is not running${error.reason ? ` (${error.reason})` : ''}.`
-      case 'legacy_session':
-        return `${action}: this session predates managed lifecycle and is kept read-only.`
-      case 'outcome_uncertain':
-        return `${action}: the outcome is unknown. Check the session before trying again.`
-      default:
-        return `${action}: ${error.reason ?? error.code}.`
-    }
-  }
-  return `${action}: ${error instanceof Error ? error.message : String(error)}`
 }
 
 // ---------------------------------------------------------------------------
@@ -558,7 +513,7 @@ function sessionEnded(id: string, reason: string): void {
   const win = windowForWidget(id)
   const freed = win?.isVisible() && !win.isMinimized() ? win.getBounds() : null
   win?.destroy()
-  if (freed && !quitting) {
+  if (freed && !lifecycle.isQuitting()) {
     const displayId = screen.getDisplayMatching(freed).id
     setImmediate(() => retileDisplay(displayId))
   }
@@ -661,7 +616,7 @@ function connectTether(): void {
 // fencing the exact running generation under its lifecycle lock.
 
 async function applyGuiCommand(command: GuiCommand): Promise<GuiVerdict> {
-  if (quitting) return { applied: false, error: 'gui_unavailable' }
+  if (lifecycle.isQuitting()) return { applied: false, error: 'gui_unavailable' }
   let descriptor = catalog.get(command.sessionId)
   if (!descriptor || descriptor.generation !== command.generation) {
     await refreshSessions().catch(() => {})
@@ -804,7 +759,7 @@ async function startPty(win: BrowserWindow, size: PtySize): Promise<void> {
     return
   }
   const isCurrent = () =>
-    !quitting &&
+    !lifecycle.isQuitting() &&
     !win.isDestroyed() &&
     widgetOf.get(winId) === id &&
     ptys.get(winId) === pty &&
@@ -849,7 +804,7 @@ async function startPty(win: BrowserWindow, size: PtySize): Promise<void> {
     if (ptys.get(winId) === pty) {
       ptys.delete(winId)
       attachTargets.delete(winId)
-      if (!quitting) requestSessionRefresh()
+      if (!lifecycle.isQuitting()) requestSessionRefresh()
     }
   })
   ptys.set(winId, pty)
@@ -1089,8 +1044,8 @@ function createWidgetWindow(
     sendAttention(win)
   })
 
-  if (process.env.ELECTRON_RENDERER_URL) {
-    win.loadURL(process.env.ELECTRON_RENDERER_URL)
+  if (config.rendererUrl) {
+    win.loadURL(config.rendererUrl)
   } else {
     win.loadFile(join(__dirname, '../renderer/index.html'))
   }
@@ -1166,11 +1121,12 @@ function createWidgetWindow(
     syncCursorPump()
     // Neighbours grow into the space this window leaves (not on quit: the
     // whole arrangement is coming back next launch).
-    if (!quitting && closingBounds) retileDisplay(screen.getDisplayMatching(closingBounds).id)
+    if (!lifecycle.isQuitting() && closingBounds)
+      retileDisplay(screen.getDisplayMatching(closingBounds).id)
     scheduleLayout()
     // On quit, leave `open` as-is so live views restore next launch; on an
     // explicit close, mark it closed (it moves to the tray's reopen list).
-    if (!quitting && widgetId && getView(widgetId)) setOpen(widgetId, false)
+    if (!lifecycle.isQuitting() && widgetId && getView(widgetId)) setOpen(widgetId, false)
     syncTray()
   })
 
@@ -1335,13 +1291,6 @@ async function renameSession(id: string, name: unknown): Promise<void> {
 // Attention: flash a window and badge the tray when a session needs the owner
 // (attention.ts); after 2 minutes unanswered, one Nightshift push to the phone.
 
-const NIGHTSHIFT = join(homedir(), '.local/bin/nightshift')
-/** a-term on the owner's phone; a tap on the push opens the waiting session there (Nightshift allowlists the origin). */
-const ATERM_URL = (process.env.AICO_ATERM_URL ?? 'https://terminal.summitflow.dev').replace(
-  /\/+$/,
-  '',
-)
-
 const attention = new Attention({
   setTimer: (fn, ms) => setTimeout(fn, ms),
   clearTimer: (handle) => clearTimeout(handle as NodeJS.Timeout),
@@ -1362,7 +1311,7 @@ const attention = new Attention({
     // Nightshift's own Web Push to the owner's PWA. Nightshift keys repeats by
     // the --open link (one per session) and keeps them quiet for an hour.
     execFile(
-      NIGHTSHIFT,
+      config.nightshift,
       [
         'push',
         pushBody(agent, title),
@@ -1371,7 +1320,7 @@ const attention = new Attention({
         '--severity',
         'warning',
         '--open',
-        `${ATERM_URL}/?session=${encodeURIComponent(id)}`,
+        `${config.atermUrl}/?session=${encodeURIComponent(id)}`,
       ],
       { timeout: 30_000 },
       (error, stdout) => {
@@ -1438,7 +1387,7 @@ function trayTools(): { slug: string; label: string }[] {
 }
 
 function syncTray(): void {
-  if (quitting) return
+  if (lifecycle.isQuitting()) return
   const rows = groupRows(catalog.list(), attention, Date.now())
   const widgets: TrayWidget[] = rows.map(({ item: descriptor, group, detail }) => ({
     id: descriptor.id,
@@ -1588,7 +1537,7 @@ function deliverSelection(records: SelectionRecord[]): void {
     records,
     {
       isCurrent: () =>
-        !quitting &&
+        !lifecycle.isQuitting() &&
         !win.isDestroyed() &&
         windowForWidget(targetId) === win &&
         catalog.get(targetId)?.generation === descriptor.generation,
@@ -1638,7 +1587,7 @@ function toggleVoice(): void {
 async function selectionGrab(): Promise<void> {
   if (!sidecar?.ready) return // never take text from a process we did not start
   try {
-    const res = await fetch(`http://${sidecarHost}:${sidecarPort}/selection/current`)
+    const res = await fetch(`http://${config.sidecarHost}:${config.sidecarPort}/selection/current`)
     if (!res.ok) return
     deliverSelection([(await res.json()) as SelectionRecord])
   } catch {
@@ -1684,9 +1633,9 @@ const SELECTION_EVENTS_IDLE_MS = 45_000
 
 function subscribeSelectionEvents(): void {
   selectionEvents = new AbortController()
-  const url = `http://${sidecarHost}:${sidecarPort}/selection/events`
+  const url = `http://${config.sidecarHost}:${config.sidecarPort}/selection/events`
   void (async () => {
-    while (!quitting) {
+    while (!lifecycle.isQuitting()) {
       const connection = new AbortController()
       const stopConnection = () => connection.abort()
       selectionEvents?.signal.addEventListener('abort', stopConnection)
@@ -1720,7 +1669,7 @@ function subscribeSelectionEvents(): void {
           }
         }
       } catch {
-        if (quitting || selectionEvents?.signal.aborted) return
+        if (lifecycle.isQuitting() || selectionEvents?.signal.aborted) return
       } finally {
         clearTimeout(idle)
         selectionEvents?.signal.removeEventListener('abort', stopConnection)
@@ -1735,8 +1684,8 @@ function subscribeSelectionEvents(): void {
 // own websocket. connect-src is opened only to the voice WS; everything else is
 // 'self'. Defense-in-depth so a renderer XSS can't reach arbitrary origins.
 function installContentSecurityPolicy(): void {
-  if (process.env.ELECTRON_RENDERER_URL) return // dev server: leave Vite's needs alone
-  const voice = voiceConnectSource(VOICE_WS_URL)
+  if (config.rendererUrl) return // dev server: leave Vite's needs alone
+  const voice = voiceConnectSource(config.voiceWsUrl)
   const csp = contentSecurityPolicy(voice ? [voice] : [])
   session.defaultSession.webRequest.onHeadersReceived((details, cb) => {
     cb({
@@ -1758,7 +1707,14 @@ function startSidecar(): void {
   const command = packaged ? bundledSidecar(process.resourcesPath) : undefined
   const args = packaged ? [] : undefined
   sidecar = new Sidecar(
-    { host: sidecarHost, port: sidecarPort, repoRoot, stateDir, command, args },
+    {
+      host: config.sidecarHost,
+      port: config.sidecarPort,
+      repoRoot,
+      stateDir: config.stateDir,
+      command,
+      args,
+    },
     (status, detail) => console.log(`[aico] sidecar ${status}${detail ? `: ${detail}` : ''}`),
   )
   // Fire-and-forget: widgets render against tmux without the sidecar, so don't
@@ -1766,26 +1722,7 @@ function startSidecar(): void {
   sidecar.start().catch((err) => console.warn('[aico] sidecar start failed:', err))
 }
 
-let signalQuitRequested = false
-function requestGracefulSignalQuit(signal: NodeJS.Signals): void {
-  if (signalQuitRequested) return
-  signalQuitRequested = true
-  console.log(`[aico:lifecycle] graceful ${signal} shutdown requested`)
-  app.quit()
-}
-process.on('SIGTERM', () => requestGracefulSignalQuit('SIGTERM'))
-process.on('SIGINT', () => requestGracefulSignalQuit('SIGINT'))
-
-// Single-instance lock: a second launch must not spawn a duplicate (it would
-// fight over the sidecar port :8005 and re-adopt the same widget catalog). The
-// secondary quits immediately; the primary handles the desktop activation.
-const gotSingleInstanceLock = app.requestSingleInstanceLock()
-const activationOnly = process.argv.includes('--aico-activate')
-/** This process is the desktop runtime, not a launcher click or a duplicate. */
-const runtimeOwner = gotSingleInstanceLock && !activationOnly
-
-app.on('before-quit', () => {
-  quitting = true
+lifecycle.onQuit(() => {
   stopEvents?.()
   stopGuiChannel?.()
   // A secondary instance (single-instance lock denied) quits before the app is
@@ -1797,28 +1734,16 @@ app.on('before-quit', () => {
   if (layoutTimer) clearTimeout(layoutTimer)
   // Only the runtime that wrote layout.json removes it. A launcher click
   // (`--aico-activate`) quits through here too while the runtime keeps going.
-  if (!runtimeOwner) return
+  if (!lifecycle.runtimeOwner) return
   try {
-    const written = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8')) as { pid?: unknown }
-    if (written.pid === process.pid) unlinkSync(LAYOUT_PATH) // no Aico running: no layout
+    const written = JSON.parse(readFileSync(config.layoutPath, 'utf8')) as { pid?: unknown }
+    if (written.pid === process.pid) unlinkSync(config.layoutPath) // no Aico running: no layout
   } catch {
     // Never written, or already gone.
   }
 })
 
-if (gotSingleInstanceLock && activationOnly) {
-  // An activation helper must never become the desktop runtime if the managed
-  // process exits between launcher verification and this lock request.
-  app.exit(1)
-} else if (!gotSingleInstanceLock) app.quit()
-
-let activationReady = false
-let activationPending = false
 function activateAico(): void {
-  if (!activationReady) {
-    activationPending = true
-    return
-  }
   const windows = BrowserWindow.getAllWindows()
   if (windows.length > 0) {
     for (const win of windows) win.show()
@@ -1829,47 +1754,13 @@ function activateAico(): void {
   if (oldest) focusOrReopen(oldest.id)
   else newWidget('shell', PERSONAL_WORKSPACE_ID)
 }
-
-app.on('second-instance', activateAico)
-app.on('activate', activateAico)
-
-const activationReadyFile = process.env.AICO_ACTIVATION_READY_FILE
-let activationIdentity: string | null = null
-if (runtimeOwner && activationReadyFile) {
-  try {
-    // The start time disambiguates a reused PID without exposing an
-    // application or agent environment variable.
-    if (!OWN_PROCESS.startTime) throw new Error('missing process starttime')
-    activationIdentity = `${process.pid} ${OWN_PROCESS.startTime}\n`
-    const temporary = `${activationReadyFile}.tmp.${process.pid}`
-    writeFileSync(temporary, activationIdentity, { mode: 0o600 })
-    renameSync(temporary, activationReadyFile)
-  } catch (error) {
-    console.warn('[aico] could not publish activation readiness:', error)
-  }
-}
-// The foreground runner registers its own PID, which exec hands to Electron.
-// Clear it on a clean quit so the next start finds no stale pidfile.
-const runtimePidFile = process.env.AICO_PIDFILE
-app.on('before-quit', () => {
-  if (runtimeOwner && runtimePidFile) removeOwnPidFile(runtimePidFile)
-})
-
-app.on('before-quit', () => {
-  if (!activationReadyFile || !activationIdentity) return
-  try {
-    if (readFileSync(activationReadyFile, 'utf8') === activationIdentity)
-      unlinkSync(activationReadyFile)
-  } catch {
-    // Startup may have failed before publication, or a restart replaced us.
-  }
-})
+lifecycle.setActivationHandler(activateAico)
 
 const SESSION_ID = /^[0-9a-f]{8}$/
 
 const startup = app.whenReady().then(async () => {
-  if (!runtimeOwner) return // no runtime initialization
-  const { migrated } = initViews(dbPath)
+  if (!lifecycle.runtimeOwner) return // no runtime initialization
+  const { migrated } = initViews(config.dbPath)
   if (migrated) console.log(`[aico] copied ${migrated} window views from the pre-Tether catalog`)
   installContentSecurityPolicy()
   startSidecar()
@@ -1947,7 +1838,7 @@ const startup = app.whenReady().then(async () => {
   ipcMain.on('pty:refresh', (event, size?: PtySize) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     const widgetId = win ? widgetOf.get(win.id) : undefined
-    if (!win || !widgetId || quitting || replacing.has(widgetId)) return
+    if (!win || !widgetId || lifecycle.isQuitting() || replacing.has(widgetId)) return
     // Re-pair a drifted pty before the repaint: if the pty's size disagrees with
     // the renderer's live grid, tmux paints for the wrong geometry.
     const pty = ptyFor(event.sender)
@@ -1970,7 +1861,7 @@ const startup = app.whenReady().then(async () => {
     const target = attachTargets.get(win.id)
     const attached = target ? attachSocketTarget(target.argv) : null
     const isCurrent = () =>
-      !quitting &&
+      !lifecycle.isQuitting() &&
       !win.isDestroyed() &&
       widgetOf.get(win.id) === widgetId &&
       ptys.get(win.id) === pty &&
@@ -2294,15 +2185,15 @@ const startup = app.whenReady().then(async () => {
 
   // System-wide indicate hotkey (X11). Logs whether the grab actually took, so
   // a silent Wayland no-op is visible in the launcher log.
-  const hotkeyOk = globalShortcut.register(SELECTION_HOTKEY, () => void selectionGrab())
+  const hotkeyOk = globalShortcut.register(config.selectionHotkey, () => void selectionGrab())
   console.log(
-    `[aico] selection hotkey ${SELECTION_HOTKEY}: ${
+    `[aico] selection hotkey ${config.selectionHotkey}: ${
       hotkeyOk ? 'registered' : 'unavailable (Wayland? bind a GNOME shortcut to the grab path)'
     }`,
   )
 
   // Push-to-talk hotkey (X11). Same Wayland caveat as the selection hotkey.
-  ipcMain.handle('voice:ws-url', () => VOICE_WS_URL)
+  ipcMain.handle('voice:ws-url', () => config.voiceWsUrl)
   // getUserMedia is denied by default. Bind the grant to a currently catalogued
   // Aico widget's main renderer document and to audio-only requests; another
   // webContents, iframe, navigated document, or video request is rejected.
@@ -2333,9 +2224,9 @@ const startup = app.whenReady().then(async () => {
       })
     },
   )
-  const voiceHotkeyOk = globalShortcut.register(VOICE_PTT_HOTKEY, toggleVoice)
+  const voiceHotkeyOk = globalShortcut.register(config.voicePttHotkey, toggleVoice)
   console.log(
-    `[aico] voice PTT hotkey ${VOICE_PTT_HOTKEY}: ${
+    `[aico] voice PTT hotkey ${config.voicePttHotkey}: ${
       voiceHotkeyOk ? 'registered' : 'unavailable (Wayland? bind a GNOME shortcut to toggle voice)'
     }`,
   )
@@ -2345,32 +2236,6 @@ const startup = app.whenReady().then(async () => {
 
   connectTether()
   syncTray()
-  activationReady = true
-  if (activationPending) {
-    activationPending = false
-    activateAico()
-  }
+  lifecycle.markReady()
 })
-startup.catch(failStartup)
-
-/**
- * Startup that throws part-way leaves no tray, IPC or control socket while the
- * process still holds the single-instance lock, so every later launch would be
- * swallowed by `second-instance`. Say why and exit so the next launch starts
- * clean; durable tmux sessions are untouched.
- */
-function failStartup(error: unknown): void {
-  console.error('[aico] startup failed:', error)
-  try {
-    dialog.showErrorBox(
-      'Aico could not start',
-      `${error instanceof Error ? error.message : String(error)}\n\nYour sessions are still running. Fix the cause and open Aico again.`,
-    )
-  } finally {
-    app.exit(1)
-  }
-}
-
-app.on('window-all-closed', () => {
-  // Aico lives in the tray after the last widget closes; Quit (tray) exits.
-})
+startup.catch(lifecycle.failStartup)

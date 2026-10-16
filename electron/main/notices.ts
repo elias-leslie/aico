@@ -1,0 +1,38 @@
+// Plain-words failure text, and the notice that shows it in a session's own
+// terminal.
+
+import type { BrowserWindow } from 'electron'
+import { TetherError, TetherUnavailable } from './tether-client'
+
+export function writeNotice(win: BrowserWindow | undefined, message: string, color = 31): void {
+  if (win && !win.isDestroyed())
+    win.webContents.send('pty:data', `\r\n\u001b[${color}m${message}\u001b[0m\r\n`)
+}
+
+/** Plain words for a Tether refusal, shown in the session's own terminal. */
+export function describeFailure(action: string, error: unknown): string {
+  if (error instanceof TetherUnavailable)
+    return `${action}: Tether is not reachable. Your sessions keep running; Aico reconnects on its own.`
+  if (error instanceof TetherError) {
+    switch (error.code) {
+      case 'admission_denied':
+        return `${action}: deferred by host admission (${error.reason ?? 'not enough memory or too many agents'}). Nothing was started.`
+      case 'linger_required':
+        return `${action}: user linger is off, so a session would die on logout. Run: loginctl enable-linger`
+      case 'stale_generation':
+      case 'identity_changed':
+        return `${action}: the session changed meanwhile. Nothing was applied; try again.`
+      case 'busy':
+        return `${action}: another change to this session is in progress. Try again shortly.`
+      case 'workload_unavailable':
+        return `${action}: the session is not running${error.reason ? ` (${error.reason})` : ''}.`
+      case 'legacy_session':
+        return `${action}: this session predates managed lifecycle and is kept read-only.`
+      case 'outcome_uncertain':
+        return `${action}: the outcome is unknown. Check the session before trying again.`
+      default:
+        return `${action}: ${error.reason ?? error.code}.`
+    }
+  }
+  return `${action}: ${error instanceof Error ? error.message : String(error)}`
+}

@@ -1,0 +1,66 @@
+// Every environment-derived setting of the main process, read once at start,
+// so no feature module reads process.env itself.
+
+import { join } from 'node:path'
+
+export interface AicoConfig {
+  readonly stateDir: string
+  readonly dbPath: string
+  readonly sidecarHost: string
+  readonly sidecarPort: number
+  /** $XDG_RUNTIME_DIR/aico/layout.json: the window picture agents read. */
+  readonly layoutPath: string
+  readonly nightshift: string
+  /** a-term on the owner's phone; a tap on the push opens the waiting session there (Nightshift allowlists the origin). */
+  readonly atermUrl: string
+  /**
+   * System-wide "indicate" hotkey. Works on X11 today; on Wayland (GNOME 46, no
+   * GlobalShortcuts portal) globalShortcut silently no-ops — bind a GNOME custom
+   * shortcut to a CLI that poke this same grab path instead (follow-on).
+   */
+  readonly selectionHotkey: string
+  /**
+   * Push-to-talk: a press toggles dictation on the focused widget (globalShortcut
+   * fires on press only — no key-release — so this is a toggle, not a hold). The
+   * renderer captures the mic and types the transcript into its own prompt.
+   */
+  readonly voicePttHotkey: string
+  /**
+   * Optional voice websocket. user_id/app are accepted by the default local STT URL;
+   * mode=transcribe is appended by the client (transcript only, no voice-assistant
+   * completion — voice is dictation into the TUI, which then responds).
+   */
+  readonly voiceWsUrl: string
+  /** AICO_TERMINAL_TRANSPORT, when it forces a terminal transport over the setting. */
+  readonly forcedTransport: 'attach' | 'control' | undefined
+  /** The Vite dev server, when running under it. */
+  readonly rendererUrl: string | undefined
+  readonly activationReadyFile: string | undefined
+  /** The foreground runner registers its own PID, which exec hands to Electron. */
+  readonly pidFile: string | undefined
+}
+
+export function readConfig(
+  env: NodeJS.ProcessEnv,
+  home: string,
+  uid: number | undefined,
+): AicoConfig {
+  const stateDir = env.AICO_STATE_DIR ?? join(home, '.local', 'state', 'aico')
+  const forced = env.AICO_TERMINAL_TRANSPORT
+  return Object.freeze({
+    stateDir,
+    dbPath: join(stateDir, 'aico.db'),
+    sidecarHost: env.AICO_SIDECAR_HOST ?? '127.0.0.1',
+    sidecarPort: Number(env.AICO_SIDECAR_PORT ?? 8005),
+    layoutPath: join(env.XDG_RUNTIME_DIR || `/run/user/${uid ?? 1000}`, 'aico', 'layout.json'),
+    nightshift: join(home, '.local/bin/nightshift'),
+    atermUrl: (env.AICO_ATERM_URL ?? 'https://terminal.summitflow.dev').replace(/\/+$/, ''),
+    selectionHotkey: env.AICO_SELECTION_HOTKEY ?? 'CommandOrControl+Shift+Space',
+    voicePttHotkey: env.AICO_VOICE_HOTKEY ?? 'CommandOrControl+Shift+M',
+    voiceWsUrl: env.AICO_VOICE_WS ?? 'ws://127.0.0.1:8003/api/voice/ws?user_id=aico&app=aico',
+    forcedTransport: forced === 'attach' || forced === 'control' ? forced : undefined,
+    rendererUrl: env.ELECTRON_RENDERER_URL,
+    activationReadyFile: env.AICO_ACTIVATION_READY_FILE,
+    pidFile: env.AICO_PIDFILE,
+  })
+}
