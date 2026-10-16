@@ -348,7 +348,7 @@ def _replace_agent_session(pane: dict[str, Any], pane_id: str, agent_tool_slug: 
     keeps its id. Without one, a new agent session is created.
     """
     agent_session = next((s for s in pane.get("sessions", []) if s.get("mode") != "shell"), None)
-    if agent_session and agent_session.get("source") == "tether" and not agent_session.get("is_legacy") and not agent_session.get("is_root"):
+    if agent_session and agent_session["can_respawn"]:
         lifecycle.load_tool(str(agent_session["id"]), agent_tool_slug)
         return
     if agent_session:

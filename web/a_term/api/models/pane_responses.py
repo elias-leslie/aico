@@ -2,45 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any
+from pydantic import BaseModel
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from .session_responses import ATermSessionResponse
 
-
-class SessionInPaneResponse(BaseModel):
-    """Session data within a pane response."""
-
-    model_config = ConfigDict(extra="ignore")
-
-    id: str
-    name: str
-    mode: str
-    session_number: int
-    is_alive: bool
-    is_root: bool = False
-    is_legacy: bool = False
-    origin: str | None = None
-    source: str | None = None
-    task: str | None = None
-    badge: dict[str, str] | None = None
-    is_coordinator: bool = False
-    coordinator_id: str | None = None
-    status: str | None = None
-    working_dir: str | None
-    agent_state: str = "not_started"
-    claude_state: str = "not_started"
-
-    @model_validator(mode="before")
-    @classmethod
-    def populate_agent_state(cls, values: Any) -> Any:
-        if not isinstance(values, dict):
-            return values
-        agent_state = values.get("agent_state") or values.get("claude_state") or "not_started"
-        return {
-            **values,
-            "agent_state": agent_state,
-            "claude_state": values.get("claude_state") or agent_state,
-        }
+# A pane's sessions are full catalog sessions: the same model as the Sessions API.
+SessionInPaneResponse = ATermSessionResponse
 
 
 class PaneResponse(BaseModel):

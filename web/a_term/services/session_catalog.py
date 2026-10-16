@@ -7,25 +7,79 @@ Three kinds of session reach A-Term:
 - **Legacy sessions** (UUID ids): pre-Tether A-Term sessions still running as
   ``summitflow-<uuid>`` on the user's default tmux server. Attach-only until
   they end.
-- **External sessions** (tmux session name ids): the user's own default-server
-  sessions running an agent.
+- **Own tmux sessions** (tmux session name ids): the user's own default-server
+  sessions running an agent. A-Term shows them but never renames, respawns or
+  ends them. The wire keeps ``source: "tmux_external"``.
 
-A session that no A-Term pane shows is ``is_external`` (the frontend attaches
-it as a free-standing view). Pane links live in local view state.
+Every builder writes every :class:`Session` key, then :func:`_finish` adds the
+capability flags (``can_rename``, ``can_respawn``, ``can_end``) from
+:mod:`session_capabilities`, so callers read a flag instead of re-deriving a
+rule. A session that no A-Term pane shows is ``is_external`` (the frontend
+attaches it as a free-standing view). Pane links live in local view state.
 """
 
 from __future__ import annotations
 
 import re
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, TypedDict, cast
 
+from ..constants import AgentState
 from ..logging_config import get_logger
 from ..storage import panes as pane_store
 from ..tether import TetherError, TetherUnavailable, get_client
 from ..utils import tmux
+from . import session_capabilities
+from .session_capabilities import SessionFacts, SessionKind
 
 logger = get_logger(__name__)
+
+
+class Session(TypedDict):
+    """One session in A-Term's shape. Total: every builder writes every key."""
+
+    id: str
+    source: SessionKind
+    name: str
+    mode: str
+    status: str | None
+    project_id: str | None
+    working_dir: str | None
+    user_id: None
+    display_order: int
+    session_number: int
+    is_alive: bool
+    created_at: str | None
+    last_accessed_at: str | None
+    agent_state: AgentState
+    tmux_session_name: str | None
+    tmux_session_id: str | None
+    tmux_pane_id: str | None
+    tmux_socket: str | None
+    tmux_source: str
+    tmux_source_label: str
+    is_external: bool  # a View fact: no A-Term pane shows it (link is None)
+    is_root: bool
+    is_legacy: bool
+    origin: str | None
+    generation: str | None
+    pane_id: str | None
+    activity: str
+    activity_previous: str
+    activity_at: int | None
+    activity_detail: str | None
+    task: str | None
+    badge: dict[str, str] | None
+    is_coordinator: bool
+    coordinator_id: str | None
+    can_rename: bool
+    can_respawn: bool
+    can_end: bool
+
+
+def _finish(row: dict[str, Any]) -> Session:
+    """Add the capability flags to a builder's row. Raises ``KeyError`` on a partial row."""
+    return cast("Session", {**row, **session_capabilities.flags(SessionFacts.of(row))})
 
 SHELL_MODE = "shell"
 TETHER_ID = re.compile(r"^[0-9a-f]{8}$")
@@ -86,7 +140,7 @@ def _badge(descriptor: dict[str, Any]) -> dict[str, str] | None:
     return {"kind": kind, "text": text, "color": color}
 
 
-def from_tether(descriptor: dict[str, Any], link: dict[str, Any] | None = None) -> dict[str, Any]:
+def from_tether(descriptor: dict[str, Any], link: dict[str, Any] | None = None) -> Session:
     """Tether session descriptor -> A-Term session dict.
 
     The title (``displayTitle``) and the badge come worded from Tether
@@ -100,7 +154,7 @@ def from_tether(descriptor: dict[str, Any], link: dict[str, Any] | None = None) 
     mode = str(descriptor.get("tool") or SHELL_MODE)
     status = descriptor.get("status")
     agent_state = agent_state_for(mode, status if isinstance(status, str) else None)
-    return {
+    return _finish({
         "id": descriptor["id"],
         "name": title.strip() if isinstance(title, str) and title.strip() else str(descriptor.get("label") or descriptor["id"]),
         "task": _task(descriptor),
@@ -117,7 +171,6 @@ def from_tether(descriptor: dict[str, Any], link: dict[str, Any] | None = None) 
         "created_at": _iso(descriptor.get("createdAt")),
         "last_accessed_at": (link or {}).get("last_accessed_at"),
         "agent_state": agent_state,
-        "claude_state": agent_state,
         "tmux_session_name": tmux_info.get("sessionName"),
         "tmux_session_id": tmux_info.get("sessionId"),
         "tmux_pane_id": tmux_info.get("paneId"),
@@ -130,17 +183,15 @@ def from_tether(descriptor: dict[str, Any], link: dict[str, Any] | None = None) 
         "source": "tether",
         "origin": descriptor.get("origin"),
         "status": status,
-        "available": bool(descriptor.get("available")),
         "generation": descriptor.get("generation"),
         "pane_id": (link or {}).get("pane_id"),
-        "root_request_id": descriptor.get("rootRequestId"),
         # Tether's agent state (tether docs/agent-state.md), read as-is: the
         # session list groups by it (needs you, finished, working, idle).
         "activity": _activity(descriptor.get("state")),
         "activity_previous": _activity(descriptor.get("statePrevious")),
         "activity_at": descriptor.get("stateAt") if isinstance(descriptor.get("stateAt"), int) else None,
         "activity_detail": descriptor.get("stateDetail") if isinstance(descriptor.get("stateDetail"), str) else None,
-    }
+    })
 
 
 def _legacy_rows() -> dict[str, dict[str, str]]:
@@ -175,14 +226,14 @@ def _legacy_rows() -> dict[str, dict[str, str]]:
     return rows
 
 
-def from_legacy(session_uuid: str, row: dict[str, str], link: dict[str, Any] | None) -> dict[str, Any]:
+def from_legacy(session_uuid: str, row: dict[str, str], link: dict[str, Any] | None) -> Session:
     if link is not None:
         mode = str(link.get("mode") or SHELL_MODE)
     else:
         mode, _ = tmux._infer_external_mode(row["session_name"], row["command"], row["pane_pid"])
     pane = pane_store.get_pane(link["pane_id"]) if link else None
     agent_state = agent_state_for(mode, "legacy")
-    return {
+    return _finish({
         "id": session_uuid,
         "name": (pane or {}).get("pane_name") or row["session_name"],
         "user_id": None,
@@ -195,7 +246,6 @@ def from_legacy(session_uuid: str, row: dict[str, str], link: dict[str, Any] | N
         "created_at": (link or {}).get("created_at"),
         "last_accessed_at": (link or {}).get("last_accessed_at"),
         "agent_state": agent_state,
-        "claude_state": agent_state,
         "tmux_session_name": row["session_name"],
         "tmux_session_id": row["session_id"] or None,
         "tmux_pane_id": row["pane_id"] or None,
@@ -208,14 +258,20 @@ def from_legacy(session_uuid: str, row: dict[str, str], link: dict[str, Any] | N
         "source": "legacy",
         "origin": "a-term",
         "status": "legacy",
-        "available": True,
         "generation": None,
         "pane_id": (link or {}).get("pane_id"),
-        "root_request_id": None,
-    }
+        "activity": "unknown",
+        "activity_previous": "unknown",
+        "activity_at": None,
+        "activity_detail": None,
+        "task": None,
+        "badge": None,
+        "is_coordinator": False,
+        "coordinator_id": None,
+    })
 
 
-def _number_sessions(sessions: list[dict[str, Any]]) -> None:
+def _number_sessions(sessions: list[Session]) -> None:
     counters: dict[tuple[Any, str], int] = {}
     for session in sorted(sessions, key=lambda item: str(item.get("created_at") or "")):
         key = (session.get("project_id"), str(session.get("mode")))
@@ -228,10 +284,13 @@ def list_tether_sessions() -> list[dict[str, Any]]:
     return get_client().list_sessions()
 
 
-def list_sessions(*, include_external: bool = True) -> list[dict[str, Any]]:
-    """Every session A-Term can show. Tether being down hides only Tether sessions."""
+def list_sessions(*, include_external: bool = True) -> list[Session]:
+    """Every session A-Term can show. Tether being down hides only Tether sessions.
+
+    ``include_external`` adds the user's Own tmux sessions.
+    """
     links = {link["session_id"]: link for link in pane_store.list_links()}
-    sessions: list[dict[str, Any]] = []
+    sessions: list[Session] = []
     try:
         descriptors = [d for d in list_tether_sessions() if isinstance(d.get("id"), str)]
         for descriptor in descriptors:
@@ -242,12 +301,12 @@ def list_sessions(*, include_external: bool = True) -> list[dict[str, Any]]:
         sessions.append(from_legacy(session_uuid, row, links.get(session_uuid)))
     _number_sessions(sessions)
     if include_external:
-        sessions.extend(tmux.list_external_tmux_sessions())
+        sessions.extend(_finish(dict(row)) for row in tmux.list_external_tmux_sessions())
     sessions.sort(key=lambda item: (int(item.get("display_order") or 0), str(item.get("created_at") or "")))
     return sessions
 
 
-def get_session(session_ref: str) -> dict[str, Any] | None:
+def get_session(session_ref: str) -> Session | None:
     """One session by A-Term id. Tether sessions are live-verified by Tether."""
     if is_tether_id(session_ref):
         try:
@@ -261,14 +320,14 @@ def get_session(session_ref: str) -> dict[str, Any] | None:
         row = _legacy_rows().get(session_ref)
         return from_legacy(session_ref, row, pane_store.get_link(session_ref)) if row else None
     external = tmux.get_external_agent_tmux_session(session_ref)
-    return dict(external) if external else None
+    return _finish(dict(external)) if external else None
 
 
-def sessions_by_id() -> dict[str, dict[str, Any]]:
+def sessions_by_id() -> dict[str, Session]:
     return {str(session["id"]): session for session in list_sessions(include_external=False)}
 
 
-def pane_with_sessions(pane: dict[str, Any], known: dict[str, dict[str, Any]]) -> dict[str, Any]:
+def pane_with_sessions(pane: dict[str, Any], known: dict[str, Session]) -> dict[str, Any]:
     """Attach the live sessions a pane shows (dead links are skipped, not deleted)."""
     sessions = []
     for link in pane_store.links_for_pane(pane["id"]):

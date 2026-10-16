@@ -7,8 +7,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from a_term.services import agent_service, lifecycle
+from a_term.services.session_catalog import Session
 from a_term.storage import panes as pane_store
 
+from . import session_factory as make
 from .fake_tether import FakeTether
 
 
@@ -17,7 +19,7 @@ def tether(fake_tether: FakeTether, no_default_tmux: MagicMock) -> FakeTether:
     return fake_tether
 
 
-def _session(tether: FakeTether, mode: str = "codex", status: str = "running") -> dict:
+def _session(tether: FakeTether, mode: str = "codex", status: str = "running") -> Session:
     tether.state.next_create_status = status
     pane = pane_store.create_pane(pane_type="project", pane_name="P", project_id="proj")
     return lifecycle.create_session(pane_id=pane["id"], mode=mode)
@@ -46,23 +48,27 @@ def test_shell_unknown_and_legacy_are_refused(tether: FakeTether) -> None:
     shell = _session(tether, mode="shell")
     with pytest.raises(lifecycle.LifecycleError) as caught:
         agent_service.start_agent(shell["id"])
-    assert caught.value.status_code == 400
+    assert (caught.value.status_code, caught.value.detail) == (400, "Session is in shell mode, not agent mode")
     with pytest.raises(lifecycle.LifecycleError) as caught:
         agent_service.start_agent("bbbbbbbb")
     assert caught.value.status_code == 404
-    legacy = {"mode": "codex", "is_legacy": True, "agent_state": "running", "source": "legacy"}
     with (
-        patch("a_term.services.agent_service.session_catalog.get_session", return_value=legacy),
+        patch("a_term.services.agent_service.session_catalog.get_session", return_value=make.legacy()),
         pytest.raises(lifecycle.LifecycleError) as caught,
     ):
-        agent_service.start_agent("70b339cd-93a0-4898-8c4b-3d694ce8e8dc")
-    assert caught.value.status_code == 409
+        agent_service.start_agent(make.LEGACY_ID)
+    assert (caught.value.status_code, caught.value.detail) == (409, "This session predates Tether and is attach-only")
 
 
 def test_root_and_external_sessions_are_not_started(tether: FakeTether) -> None:
-    for session in ({"source": "tmux_external", "agent_state": "running"}, {"is_root": True, "source": "tether"}):
+    cases = [
+        (make.own_tmux(), "External tmux agent session is already running", "running"),
+        (make.tether(rootRequestId="req-1", status="uncertain"), "Root launch is owned by its retained request", "error"),
+    ]
+    for session, message, state in cases:
         with patch("a_term.services.agent_service.session_catalog.get_session", return_value=session):
-            assert agent_service.start_agent("x").started is False
+            assert agent_service.start_agent("x") == agent_service.StartResult(False, state, message)
+    assert not any(path.endswith("/respawn") for _, path, _ in tether.calls)
 
 
 def test_normalize_state() -> None:

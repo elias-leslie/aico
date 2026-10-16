@@ -13,6 +13,7 @@ from typing import cast
 from ..constants import AgentState
 from ..logging_config import get_logger
 from . import lifecycle, session_catalog
+from .session_capabilities import SessionFacts, refusal
 
 logger = get_logger(__name__)
 
@@ -33,23 +34,20 @@ class StartResult:
 def start_agent(session_id: str) -> StartResult:
     """Respawn an agent session whose workload is not running.
 
-    External tmux and root sessions are never respawned here: they return a
-    ``StartResult`` with ``started=False`` and their current state. Raises
-    :class:`lifecycle.LifecycleError` for unknown, shell and legacy sessions,
-    and for any other session that is not Tether-owned.
+    Own tmux and root sessions are never respawned here: the capability table
+    declines them, and they return a ``StartResult`` with ``started=False`` and
+    their current state. Raises :class:`lifecycle.LifecycleError` for unknown
+    sessions and for the refusals the table raises (shell and legacy sessions).
     """
     session = session_catalog.get_session(session_id)
     if session is None:
         raise lifecycle.LifecycleError(404, f"Session {session_id} not found")
-    state = normalize_state(session.get("agent_state"))
-    if session.get("source") == "tmux_external":
-        return StartResult(False, state, "External tmux agent session is already running")
-    if session.get("is_root"):
-        return StartResult(False, state, "Root launch is owned by its retained request")
-    if session.get("mode") == "shell":
-        raise lifecycle.LifecycleError(400, "Session is in shell mode, not agent mode")
-    if session.get("is_legacy"):
-        raise lifecycle.LifecycleError(409, "This session predates Tether and is attach-only")
+    state = normalize_state(session["agent_state"])
+    refused = refusal("start_agent", SessionFacts.of(session))
+    if refused is not None:
+        if refused.status is None:
+            return StartResult(False, state, refused.detail)
+        raise refused.error()
     if session.get("status") == "running":
         return StartResult(False, "running", "Agent is already running")
     if session.get("status") == "pending":

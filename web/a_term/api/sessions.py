@@ -11,71 +11,21 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, Field
 
 from ..logging_config import get_logger
 from ..rate_limit import limiter
 from ..services import lifecycle, session_catalog
+from ..services.session_capabilities import SessionFacts, refusal
 from ..services.session_close import close_session
 from ..services.tether_errors import to_http_error
 from ..storage import panes as pane_store
 from ..tether import TetherError, TetherUnavailable, get_client
+from .models.session_responses import ATermSessionResponse  # re-exported: the one session response
 
 logger = get_logger(__name__)
 
 router = APIRouter(tags=["A-Term Sessions"])
-
-
-class ATermSessionResponse(BaseModel):
-    """A-Term session response model."""
-
-    model_config = ConfigDict(extra="ignore")
-
-    id: str
-    name: str
-    user_id: str | None = None
-    project_id: str | None = None
-    working_dir: str | None = None
-    display_order: int = 0
-    mode: str
-    session_number: int = 1
-    is_alive: bool = True
-    created_at: str | None = None
-    last_accessed_at: str | None = None
-    agent_state: str | None = None
-    claude_state: str | None = None
-    tmux_session_name: str | None = None
-    tmux_session_id: str | None = None
-    tmux_pane_id: str | None = None
-    tmux_socket: str | None = None
-    tmux_source: str | None = None
-    tmux_source_label: str | None = None
-    is_external: bool = False
-    is_root: bool = False
-    is_legacy: bool = False
-    source: str | None = None
-    origin: str | None = None
-    status: str | None = None
-    generation: str | None = None
-    pane_id: str | None = None
-    activity: str = "unknown"
-    activity_previous: str = "unknown"
-    activity_at: int | None = None
-    activity_detail: str | None = None
-    # ``name`` is Tether's displayTitle; ``task`` its raw name (the rename
-    # value); ``badge`` {kind, text, color} as Tether words it.
-    task: str | None = None
-    badge: dict[str, str] | None = None
-    is_coordinator: bool = False
-    coordinator_id: str | None = None
-
-    @model_validator(mode="before")
-    @classmethod
-    def populate_agent_state(cls, values: Any) -> Any:
-        if not isinstance(values, dict):
-            return values
-        agent_state = values.get("agent_state") or values.get("claude_state") or "not_started"
-        return {**values, "agent_state": agent_state, "claude_state": values.get("claude_state") or agent_state}
 
 
 class ATermSessionListResponse(BaseModel):
@@ -88,7 +38,7 @@ class UpdateSessionRequest(BaseModel):
     display_order: int | None = None
 
 
-def _get_or_404(session_id: str) -> dict[str, Any]:
+def _get_or_404(session_id: str) -> session_catalog.Session:
     try:
         session = session_catalog.get_session(session_id)
     except (TetherError, TetherUnavailable) as error:
@@ -120,8 +70,10 @@ def get_session(session_id: str) -> ATermSessionResponse:
 def update_session(session_id: str, request: UpdateSessionRequest) -> ATermSessionResponse:
     """Rename a Tether session (in Tether, visible in Aico too) or reorder its view."""
     session = _get_or_404(session_id)
-    if session.get("source") != "tether":
-        raise HTTPException(status_code=400, detail="Only Tether sessions can be renamed")
+    refused = refusal("rename", SessionFacts.of(session))
+    if refused is not None:
+        error = refused.error()
+        raise HTTPException(status_code=error.status_code, detail=error.detail)
     if request.display_order is not None and session.get("pane_id"):
         pane_store.update_link(session_id, display_order=request.display_order)
     if request.name is not None:

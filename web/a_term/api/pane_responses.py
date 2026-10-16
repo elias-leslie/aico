@@ -9,14 +9,7 @@ from .models.pane_responses import PaneResponse, SessionInPaneResponse
 
 def build_pane_response(pane: dict[str, Any]) -> PaneResponse:
     """Convert storage pane dict to API response."""
-    sessions = [
-        {
-            **session,
-            "agent_state": session.get("agent_state") or session.get("claude_state") or "not_started",
-            "claude_state": session.get("claude_state") or session.get("agent_state") or "not_started",
-        }
-        for session in pane.get("sessions", [])
-    ]
+    sessions = list(pane.get("sessions", []))
     active_mode = pane.get("active_mode", "shell")
     if sessions and active_mode not in {session.get("mode") for session in sessions}:
         fallback_session = next(

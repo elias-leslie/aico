@@ -11,6 +11,7 @@ from a_term.services import lifecycle
 from a_term.storage import panes as pane_store
 from a_term.tether import TetherError, TetherUnavailable
 
+from . import session_factory as make
 from .fake_tether import FakeTether
 
 LEGACY_ID = "70b339cd-93a0-4898-8c4b-3d694ce8e8dc"
@@ -103,21 +104,49 @@ def test_reset_respawns_with_new_generation(tether: FakeTether) -> None:
 
 
 @pytest.mark.parametrize(
-    ("session", "status"),
+    ("build", "status", "detail"),
     [
-        (None, 404),
-        ({"is_legacy": True, "source": "legacy"}, 409),
-        ({"is_root": True, "source": "tether"}, 409),
-        ({"source": "tmux_external"}, 400),
+        (lambda: None, 404, "Session aaaaaaaa not found"),
+        (make.legacy, 409, "This session predates Tether and is attach-only"),
+        (lambda: make.tether(rootRequestId="req-1"), 409, "A root session runs one launch; start a new root instead"),
+        (make.own_tmux, 400, "External tmux sessions are read-only"),
     ],
 )
-def test_reset_refuses_legacy_root_and_external(tether: FakeTether, session: dict | None, status: int) -> None:
+def test_reset_refuses_legacy_root_and_external(tether: FakeTether, build, status: int, detail: str) -> None:
+    session = build()
     with (
         patch("a_term.services.lifecycle.session_catalog.get_session", return_value=session),
         pytest.raises(lifecycle.LifecycleError) as caught,
     ):
         lifecycle.reset_session("aaaaaaaa")
-    assert caught.value.status_code == status
+    assert (caught.value.status_code, caught.value.detail) == (status, detail)
+    assert not any(path.endswith("/respawn") for _, path, _ in tether.calls)
+
+
+def test_load_tool_refuses_a_root(tether: FakeTether) -> None:
+    root = tether.add_session(root_request_id="req-1")
+    with pytest.raises(lifecycle.LifecycleError) as caught:
+        lifecycle.load_tool(root["id"], "claude")
+    assert (caught.value.status_code, caught.value.detail) == (
+        409,
+        "A root session runs one launch; start a new root instead",
+    )
+    assert not any(path.endswith("/load-tui") for _, path, _ in tether.calls)
+
+
+def test_reset_project_skips_roots_and_respawns_the_rest(tether: FakeTether) -> None:
+    pane = _pane()
+    shell = lifecycle.create_session(pane_id=pane["id"], mode="shell", project_id="proj")
+    root = tether.add_session(tool="codex", project_id="proj", root_request_id="req-1")
+    pane_store.link_session(root["id"], pane["id"], "codex")
+    before = len(tether.calls)
+
+    result = lifecycle.reset_project_sessions("proj")
+
+    respawned = [path for _, path, _ in tether.calls[before:] if path.endswith("/respawn")]
+    assert respawned == [f"/v1/sessions/{shell['id']}/respawn"]
+    assert result["shell"] == shell["id"]
+    assert result["codex"] not in (None, root["id"])  # a new agent session, not the root
 
 
 def test_load_tool_switches_tool_and_remembers_it(tether: FakeTether) -> None:

@@ -179,7 +179,11 @@ def _session_matches_source(source: ExternalTmuxSource, session_name: str) -> bo
 
 
 def list_external_tmux_sessions() -> list[dict[str, object]]:
-    """List externally created tmux sessions that A-Term can attach to."""
+    """List the user's Own tmux sessions (running an agent) that A-Term can attach to.
+
+    Each row carries every session catalog key except the capability flags,
+    which the catalog adds.
+    """
     pkg = _pkg()
     sessions: dict[str, dict[str, object]] = {}
     for source in _external_tmux_sources():
@@ -234,7 +238,6 @@ def list_external_tmux_sessions() -> list[dict[str, object]]:
                 "created_at": None,
                 "last_accessed_at": None,
                 "agent_state": agent_state,
-                "claude_state": agent_state,
                 "tmux_session_name": session_name,
                 "tmux_session_id": tmux_session_id or None,
                 "tmux_pane_id": pane_id or None,
@@ -243,6 +246,22 @@ def list_external_tmux_sessions() -> list[dict[str, object]]:
                 "tmux_source_label": source.label,
                 "is_external": True,
                 "source": "tmux_external",
+                # Tether and A-Term facts an Own tmux session never has, written
+                # explicitly so the session catalog reads every key.
+                "is_root": False,
+                "is_legacy": False,
+                "origin": None,
+                "status": None,
+                "generation": None,
+                "pane_id": None,
+                "activity": "unknown",
+                "activity_previous": "unknown",
+                "activity_at": None,
+                "activity_detail": None,
+                "task": None,
+                "badge": None,
+                "is_coordinator": False,
+                "coordinator_id": None,
             }
     return sorted(sessions.values(), key=lambda row: str(row.get("name") or ""))
 

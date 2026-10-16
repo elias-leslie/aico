@@ -6,7 +6,9 @@ records which pane shows the session. Ending is always explicit: a dead
 session is never silently re-created, and closing a view never ends a session.
 
 Legacy ``summitflow-*`` sessions on the default tmux server are attach-only:
-they can be ended (A-Term created them) but never respawned or reset.
+they can be ended (A-Term created them) but never respawned or reset. What is
+refused is decided by :mod:`session_capabilities`; its ``LifecycleError`` is
+re-exported here, so callers keep catching ``lifecycle.LifecycleError``.
 """
 
 from __future__ import annotations
@@ -21,20 +23,12 @@ from ..storage import project_settings as settings_store
 from ..tether import TetherError, get_client
 from ..utils import tmux
 from . import agent_tools, session_catalog
+from .session_capabilities import LifecycleError, SessionFacts, refusal
 
 logger = get_logger(__name__)
 
 ORIGIN = "a-term"
 SHELL_MODE = "shell"
-
-
-class LifecycleError(Exception):
-    """A lifecycle request A-Term refuses before reaching Tether."""
-
-    def __init__(self, status_code: int, detail: str) -> None:
-        self.status_code = status_code
-        self.detail = detail
-        super().__init__(detail)
 
 
 # ---------------------------------------------------------------------------
@@ -49,7 +43,7 @@ def create_session(
     name: str | None = None,
     cols: int = TMUX_DEFAULT_COLS,
     rows: int = TMUX_DEFAULT_ROWS,
-) -> dict[str, Any]:
+) -> session_catalog.Session:
     """Ask Tether for a new session and show it in ``pane_id``.
 
     ``mode`` is ``shell`` or an agent tool slug or alias. Tether resolves the
@@ -197,19 +191,16 @@ def end_pane(pane_id: str) -> int:
 # ---------------------------------------------------------------------------
 # Respawn (explicit reset)
 # ---------------------------------------------------------------------------
-def _require_respawnable(session: dict[str, Any] | None, session_id: str) -> dict[str, Any]:
+def _require_respawnable(session: session_catalog.Session | None, session_id: str) -> session_catalog.Session:
     if session is None:
         raise LifecycleError(404, f"Session {session_id} not found")
-    if session.get("is_legacy"):
-        raise LifecycleError(409, "This session predates Tether and is attach-only")
-    if session.get("is_root"):
-        raise LifecycleError(409, "A root session runs one launch; start a new root instead")
-    if session.get("source") != "tether":
-        raise LifecycleError(400, "External tmux sessions are read-only")
+    refused = refusal("respawn", SessionFacts.of(session))
+    if refused is not None:
+        raise refused.error()
     return session
 
 
-def reset_session(session_id: str) -> dict[str, Any]:
+def reset_session(session_id: str) -> session_catalog.Session:
     """Replace the session's workload with a fresh one of the same tool."""
     session = _require_respawnable(session_catalog.get_session(session_id), session_id)
     descriptor = get_client().respawn_session(session_id, str(session.get("generation")))
@@ -217,7 +208,7 @@ def reset_session(session_id: str) -> dict[str, Any]:
     return session_catalog.from_tether(descriptor, pane_store.get_link(session_id))
 
 
-def load_tool(session_id: str, tool: str) -> dict[str, Any]:
+def load_tool(session_id: str, tool: str) -> session_catalog.Session:
     """Respawn the session with another tool and remember it on the link."""
     session = _require_respawnable(session_catalog.get_session(session_id), session_id)
     descriptor = get_client().load_tui(session_id, str(session.get("generation")), tool)
@@ -260,7 +251,7 @@ def reset_project_sessions(project_id: str, working_dir: str | None = None) -> d
         pane_id = pane_id or link["pane_id"]
         session = known.get(link["session_id"])
         mode = str((session or {}).get("mode") or link["mode"])
-        if session is None or session.get("is_legacy") or session.get("is_root"):
+        if session is None or not session["can_respawn"]:
             continue
         if mode in result and result[mode] is None:
             result[mode] = str(reset_session(link["session_id"])["id"])

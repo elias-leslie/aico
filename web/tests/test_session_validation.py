@@ -11,6 +11,7 @@ from a_term.services.pty_manager import attach_environment
 from a_term.storage import panes as pane_store
 
 from .fake_tether import TMUX_BIN, FakeTether
+from .session_factory import own_tmux_panes
 
 LEGACY_ID = "123e4567-e89b-12d3-a456-426614174000"
 
@@ -92,8 +93,7 @@ def test_legacy_session_attaches_on_the_default_server(fake_tether: FakeTether) 
 
 
 def test_users_own_session_attaches_on_the_default_server(fake_tether: FakeTether) -> None:
-    external = {"id": "claude-work", "tmux_session_name": "claude-work", "is_external": True, "mode": "claude"}
-    with patch("a_term.utils.tmux.get_external_agent_tmux_session", return_value=external):
+    with patch("a_term.utils.tmux.run_tmux_command", return_value=(True, own_tmux_panes("claude-work"))):
         plan = validate_and_prepare_session("claude-work")
 
     assert plan.kind == "external"
