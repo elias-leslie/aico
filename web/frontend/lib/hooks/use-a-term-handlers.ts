@@ -108,9 +108,8 @@ export function useATermHandlers({
         return
       }
       // Fallback: activeSessionId may not match any mounted pane (e.g. on
-      // mobile where the pane falls back to displaySlots[0] but
-      // activeSessionId points to a persisted session not in the layout).
-      // Send to the first available aTerm ref instead of dropping input.
+      // mobile, where nothing is chosen yet and the layout shows the first
+      // pane). Send to the first available aTerm ref instead of dropping input.
       aTermRefs.current.values().next().value?.sendInput(data)
     },
     [activeSessionId, aTermRefs],

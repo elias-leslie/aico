@@ -440,13 +440,17 @@ export function useATermTabsState({
   )
   useEffect(() => {
     if (
-      resolvedActiveSessionId &&
-      activeSessionId &&
-      resolvedActiveSessionId !== activeSessionId
+      !resolvedActiveSessionId ||
+      resolvedActiveSessionId === activeSessionId
     ) {
+      return
+    }
+    // Also once loaded with nothing active (only attached Views, say), so the
+    // URL and remembered session follow what is on screen.
+    if (activeSessionId || !isLoading) {
       switchToSession(resolvedActiveSessionId)
     }
-  }, [activeSessionId, resolvedActiveSessionId, switchToSession])
+  }, [activeSessionId, isLoading, resolvedActiveSessionId, switchToSession])
   useEffect(() => {
     if (activeSessionLoading) return
     if (
@@ -652,14 +656,24 @@ export function useATermTabsState({
       return
     }
 
+    // A project link opens one of the user's own sessions (or a View they
+    // attached), never a free-standing View of another app's or agent's
+    // session; with none of those it opens a new project pane.
     const projectATerm = projectATerms.find(
       (aTerm) => aTerm.projectId === projectId,
     )
+    const ownSessions = (projectATerm?.sessions ?? [])
+      .map(({ session }) => session)
+      .filter(
+        (session) =>
+          !session.is_external ||
+          attachedExternalSessionIds.includes(session.id),
+      )
     const existingSessionId =
-      projectATerm?.activeSessionId ??
-      projectATerm?.sessions.find((session) => session.session.mode === 'shell')
-        ?.session.id ??
-      projectATerm?.sessions[0]?.session.id ??
+      ownSessions.find((session) => session.mode === projectATerm?.activeMode)
+        ?.id ??
+      ownSessions.find((session) => session.mode === 'shell')?.id ??
+      ownSessions[0]?.id ??
       null
 
     if (existingSessionId) {
@@ -698,6 +712,7 @@ export function useATermTabsState({
       })
   }, [
     activeSessionId,
+    attachedExternalSessionIds,
     createProjectPaneForWindow,
     isLoading,
     isDetachedWindow,

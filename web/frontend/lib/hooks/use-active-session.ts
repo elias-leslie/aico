@@ -38,7 +38,9 @@ export function deriveActiveSessionId(
   }
 
   // Picked without the user asking, so never a free-standing View (no A-Term
-  // pane shows it): that is another app's or agent's session.
+  // pane shows it): that is another app's or agent's session. A remembered one
+  // counts as unasked too: older builds remembered such a View they had
+  // picked by themselves.
   const shown = sessions.filter((session) => !session.is_external)
 
   if (urlProjectId) {
@@ -52,7 +54,7 @@ export function deriveActiveSessionId(
 
   if (
     persistedSessionId &&
-    sessions.some((session) => session.id === persistedSessionId)
+    shown.some((session) => session.id === persistedSessionId)
   ) {
     return persistedSessionId
   }
@@ -122,7 +124,7 @@ interface UseActiveSessionOptions {
  * 1. Check URL `searchParams` for `?session=<id>`
  * 2. If valid session ID in URL, that's the active session
  * 3. If `?project=<id>` param exists, find session with matching project_id
- * 4. Else the remembered session, if it still exists
+ * 4. Else the remembered session, if it still exists and a pane shows it
  * 5. Else the first session an A-Term pane shows (never a free-standing View)
  * 6. Else null
  *

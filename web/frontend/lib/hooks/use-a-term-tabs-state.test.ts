@@ -1476,6 +1476,127 @@ describe('useATermTabsState', () => {
     expect(switchToSession).toHaveBeenCalledWith('session-project-a')
   })
 
+  it("on a phone, a project link opens the project's own pane, never another agent's session", async () => {
+    mockUseMediaQuery.mockReturnValue(true)
+    mockUseProjectSettings.mockReturnValue({
+      projects: [{ id: 'neri', name: 'Neri' }],
+    })
+    const switchToSession = vi.fn()
+    const otherAgent = {
+      ...buildActiveSessionState().sessions[0],
+      id: 'other',
+      name: 'Neri hunt',
+      project_id: 'neri',
+      mode: 'codex',
+      source: 'tether',
+      is_external: true,
+      ...TETHER_CAN,
+    }
+    const createProjectPane = vi.fn().mockResolvedValue({
+      id: 'pane-neri',
+      pane_type: 'project',
+      project_id: 'neri',
+      pane_order: 0,
+      pane_name: 'Neri',
+      active_mode: 'codex',
+      created_at: '2026-03-06T00:00:00Z',
+      sessions: [
+        {
+          id: 'neri-own-codex',
+          name: 'Neri Codex',
+          mode: 'codex',
+          ...TETHER_CAN,
+          session_number: 1,
+          is_alive: true,
+          working_dir: '/workspace/neri',
+          claude_state: 'starting',
+        },
+      ],
+      width_percent: 100,
+      height_percent: 100,
+      grid_row: 0,
+      grid_col: 0,
+    })
+    mockUseActiveSession.mockReturnValue(
+      buildActiveSessionState({
+        activeSessionId: null,
+        activeSession: null,
+        switchToSession,
+        sessions: [otherAgent],
+        externalSessions: [otherAgent],
+        adHocSessions: [],
+        projectATerms: [
+          {
+            projectId: 'neri',
+            projectName: 'Neri',
+            rootPath: '/workspace/neri',
+            activeMode: 'codex',
+            sessions: [{ badge: 1, session: otherAgent }],
+            activeSession: otherAgent,
+            activeSessionId: 'other',
+            sessionBadge: 1,
+          },
+        ],
+      }),
+    )
+    mockUseATermPanes.mockReturnValue({
+      ...mockUseATermPanes(),
+      panes: [],
+      createProjectPane,
+    })
+
+    renderHook(() =>
+      useATermTabsState({ projectId: 'neri', projectPath: '/workspace/neri' }),
+    )
+
+    await waitFor(() => {
+      expect(switchToSession).toHaveBeenCalledWith('neri-own-codex')
+    })
+    expect(createProjectPane).toHaveBeenCalledWith(
+      'Neri',
+      'neri',
+      '/workspace/neri',
+    )
+    expect(switchToSession).not.toHaveBeenCalledWith('other')
+  })
+
+  it('with only attached Views and nothing chosen, makes the first one the active session', () => {
+    const switchToSession = vi.fn()
+    const view = {
+      ...buildActiveSessionState().sessions[0],
+      id: 'v1',
+      name: 'Attached view',
+      mode: 'codex',
+      source: 'tmux_external',
+      is_external: true,
+      ...OWN_TMUX_CAN,
+    }
+    mockUseLocalStorageState.mockImplementation(
+      (key: string, defaultValue: unknown) =>
+        useState(
+          (key === `a-term-attached-external-session-ids:${TEST_WINDOW_SCOPE}`
+            ? ['v1']
+            : defaultValue) as typeof defaultValue,
+        ),
+    )
+    mockUseActiveSession.mockReturnValue(
+      buildActiveSessionState({
+        activeSessionId: null,
+        activeSession: null,
+        switchToSession,
+        sessions: [view],
+        externalSessions: [view],
+        adHocSessions: [],
+      }),
+    )
+
+    renderHook(() =>
+      useATermTabsState({ projectId: undefined, projectPath: undefined }),
+    )
+
+    expect(switchToSession).toHaveBeenCalledWith('v1')
+  })
+
   it('adds and removes attached external sessions as separate slots', () => {
     mockUseActiveSession.mockReturnValue(
       buildActiveSessionState({
