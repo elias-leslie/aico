@@ -46,7 +46,12 @@ export interface CreateAgentToolInput {
   aliases?: string[]
 }
 
-export type UpdateAgentToolInput = Partial<Omit<CreateAgentToolInput, 'slug'>>
+export type UpdateAgentToolInput = Partial<
+  Omit<CreateAgentToolInput, 'slug' | 'color'>
+> & {
+  /** `null` clears the tool's own colour. */
+  color?: string | null
+}
 
 /** The Tether slug of the bare-shell registry entry. */
 export const SHELL_TOOL_SLUG = 'shell'

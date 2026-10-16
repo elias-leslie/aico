@@ -51,7 +51,7 @@ export function AgentToolsSettings() {
           command: data.command,
           process_name: data.process_name || undefined,
           description: data.description || undefined,
-          color: data.color || undefined,
+          color: data.color || null,
           aliases: parseAliases(data.aliases),
         })
         setFeedback(null)
@@ -145,7 +145,7 @@ export function AgentToolsSettings() {
                 command: tool.command,
                 process_name: tool.process_name,
                 description: tool.description || '',
-                color: tool.color || '#00FF9F',
+                color: tool.color ?? '',
                 aliases: (tool.aliases ?? []).join(', '),
               }}
               contextHook={tool.context_hook}

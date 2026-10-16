@@ -3,6 +3,7 @@
 import { Check, X } from 'lucide-react'
 import { useState } from 'react'
 import { AGENT_DEFAULT_COLORS } from '@/components/AgentIcon'
+import { PHOSPHOR_THEME } from '@/lib/constants/a-term'
 
 export interface ToolFormData {
   name: string
@@ -10,6 +11,7 @@ export interface ToolFormData {
   command: string
   process_name: string
   description: string
+  /** `#RRGGBB`, or empty for no colour of its own (the tool's built-in one). */
   color: string
   /** Comma-separated alternate slugs (e.g. `claude` for `claude-code`). */
   aliases: string
@@ -21,7 +23,7 @@ export const EMPTY_FORM: ToolFormData = {
   command: '',
   process_name: '',
   description: '',
-  color: '#00FF9F',
+  color: '',
   aliases: '',
 }
 
@@ -45,9 +47,17 @@ function normalizeCommand(value: string): string {
   return value.trim().replace(/\s+/g, ' ')
 }
 
+const HEX_COLOR = /^#[0-9a-f]{6}$/i
+
 function normalizeColor(value: string): string {
   const trimmed = value.trim()
-  return /^#[0-9a-f]{6}$/i.test(trimmed) ? trimmed.toUpperCase() : trimmed
+  return HEX_COLOR.test(trimmed) ? trimmed.toUpperCase() : trimmed
+}
+
+/** What the picker shows with no colour set: the colour the tool gets anyway. */
+function swatchColor(color: string, slug: string): string {
+  if (HEX_COLOR.test(color)) return color
+  return AGENT_DEFAULT_COLORS[slugify(slug)] ?? PHOSPHOR_THEME.green
 }
 
 const inputStyle: React.CSSProperties = {
@@ -139,8 +149,8 @@ export function ToolForm({
       )
       return
     }
-    if (normalizedHex && !/^#[0-9a-f]{6}$/i.test(normalizedHex)) {
-      setError('Color must be a 6-digit hex value like #00FF9F')
+    if (normalizedHex && !HEX_COLOR.test(normalizedHex)) {
+      setError('Color must be a 6-digit hex value like #D97757, or empty')
       return
     }
     setSubmitting(true)
@@ -152,7 +162,7 @@ export function ToolForm({
         command: normalizedCommand,
         process_name: normalizedProcessName,
         description: normalizedDescription,
-        color: normalizedHex || EMPTY_FORM.color,
+        color: normalizedHex,
         aliases: parseAliases(form.aliases).join(', '),
       })
     } catch (err) {
@@ -258,9 +268,7 @@ export function ToolForm({
         <div className="flex items-center gap-2">
           <input
             type="color"
-            value={
-              /^#[0-9a-f]{6}$/i.test(form.color) ? form.color : EMPTY_FORM.color
-            }
+            value={swatchColor(form.color, form.slug)}
             onChange={(e) =>
               setForm((f) => ({ ...f, color: e.target.value.toUpperCase() }))
             }
@@ -278,7 +286,7 @@ export function ToolForm({
             style={{ ...inputStyle, flex: 1 }}
             value={form.color}
             onChange={(e) => setForm((f) => ({ ...f, color: e.target.value }))}
-            placeholder="#00FF9F"
+            placeholder="Default"
             aria-label="Tool color"
           />
         </div>

@@ -67,9 +67,70 @@ describe('ToolForm', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add' }))
 
     expect(
-      await screen.findByText('Color must be a 6-digit hex value like #00FF9F'),
+      await screen.findByText(
+        'Color must be a 6-digit hex value like #D97757, or empty',
+      ),
     ).toBeInTheDocument()
     expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it('starts with no color and submits none unless one is picked', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    render(
+      <ToolForm
+        initial={EMPTY_FORM}
+        onSubmit={onSubmit}
+        onCancel={vi.fn()}
+        isEdit={false}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText('Tool name'), {
+      target: { value: 'Mine' },
+    })
+    fireEvent.change(screen.getByLabelText('Tool command'), {
+      target: { value: 'mine --go' },
+    })
+    expect(screen.getByLabelText('Tool color')).toHaveValue('')
+    // The swatch shows the color the tool gets anyway: the accent.
+    expect(screen.getByLabelText('Tool color picker')).toHaveValue('#00ff9f')
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({ slug: 'mine', color: '' }),
+      )
+    })
+  })
+
+  it('lets an edited tool clear its color', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    render(
+      <ToolForm
+        initial={{
+          ...EMPTY_FORM,
+          name: 'Codex',
+          slug: 'codex',
+          command: 'codex --yolo',
+          color: '#123456',
+        }}
+        onSubmit={onSubmit}
+        onCancel={vi.fn()}
+        isEdit
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText('Tool color'), {
+      target: { value: '' },
+    })
+    expect(screen.getByLabelText('Tool color picker')).toHaveValue('#9b8cff')
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({ slug: 'codex', color: '' }),
+      )
+    })
   })
 
   it('prefills Hermes slug and built-in color from the tool name', () => {

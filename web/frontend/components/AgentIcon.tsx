@@ -305,13 +305,10 @@ export const AGENT_DEFAULT_COLORS: Record<string, string> = {
   shell: '#8A8F98', // Neutral gray — plain terminal
 }
 
-/** Resolve display color for an agent tool.
- *  Treats the generic phosphor green (#00FF9F) as "no custom color set". */
+/** Resolve display color for an agent tool: its own color, else the built-in
+ *  one for its slug, else the accent. */
 export function getAgentColor(slug: string, toolColor?: string | null): string {
-  if (!toolColor || toolColor.toUpperCase() === '#00FF9F') {
-    return AGENT_DEFAULT_COLORS[slug] || 'var(--term-accent)'
-  }
-  return toolColor
+  return toolColor || AGENT_DEFAULT_COLORS[slug] || 'var(--term-accent)'
 }
 
 export const AgentIcon = memo(function AgentIcon({
