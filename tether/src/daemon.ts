@@ -139,9 +139,14 @@ export async function startDaemon(
     })
     const recovery = new Recovery(context, {
       awaitingRestore: (id) => continuity.isAwaitingRestore(id),
+      // A fresh pass, so a session started a moment ago is seen too.
+      engine: {
+        runningConversations: async () =>
+          (await continuity.observe()).map(({ row, resumeId }) => ({ id: row.id, resumeId })),
+      },
     })
     continuity.setRecovery(recovery)
-    onAbandonedScope((event) => recovery.onAbandoned(event))
+    onAbandonedScope((event) => void recovery.onAbandoned(event))
     setLaunchGuard((id) => recovery.holdsLaunch(id))
     context.continuity = continuity
     context.recovery = recovery

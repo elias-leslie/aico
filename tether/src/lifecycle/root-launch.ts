@@ -31,6 +31,14 @@ export async function withRootPrompt<T>(
   }
 }
 
+/** A session other than `except` whose launch is resuming this conversation
+ * right now, if any. */
+export function launchingResume(resumeSessionId: string, except: string): string | null {
+  for (const [widgetId, id] of resumeSessions)
+    if (id === resumeSessionId && widgetId !== except) return widgetId
+  return null
+}
+
 /** True while a launch prompt is set for a session that is not a root. */
 function plainSessionPrompt(widgetId: string): boolean {
   return prompts.has(widgetId) && !rootRequestForWidget(widgetId)

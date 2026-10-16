@@ -1,12 +1,17 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { isBoundedTerminalText } from './lifecycle/tmux'
 import { decideRecovery, LOOP_WINDOW_MS, RECOVERY_WINDOW_MS } from './recovery'
 import {
+  CRASH_RESULTS,
   type CrashFacts,
   claudeTranscriptFacts,
   type FileReader,
   kernelOomVictims,
   likelyCulprit,
+  nodeFileReader,
   parseGitState,
   parseJournal,
   renderDetail,
@@ -67,6 +72,29 @@ describe('journal evidence', () => {
     expect(outcome.lines).toHaveLength(3)
     // Another invocation of a reused unit name is not evidence.
     expect(unitOutcome(parseJournal(userJournal), SCOPE, 'f'.repeat(32)).result).toBeNull()
+    // A result logged after the pane was seen gone belongs to a later stop.
+    expect(unitOutcome(parseJournal(userJournal), SCOPE, INVOCATION, DIED + 1999).result).toBeNull()
+    expect(unitOutcome(parseJournal(userJournal), SCOPE, INVOCATION, DIED + 2000).result).toBe(
+      'oom-kill',
+    )
+  })
+
+  it('never counts a stop timeout as a crash', () => {
+    expect(CRASH_RESULTS.has('timeout')).toBe(false)
+    expect(CRASH_RESULTS.has('oom-kill')).toBe(true)
+  })
+
+  it('reads only the tail of a large transcript, from a whole line', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tether-tail-'))
+    try {
+      const path = join(dir, 'big.jsonl')
+      writeFileSync(path, `${'x'.repeat(100)}\n{"a":1}\n{"b":2}\n`)
+      expect(nodeFileReader.read(path, 12)).toBe('{"b":2}\n')
+      expect(nodeFileReader.read(path, 10_000)).toBe(nodeFileReader.read(path))
+      expect(nodeFileReader.read(join(dir, 'missing'), 12)).toBeNull()
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 
   it('names the kernel victim, its memory and whether the host or a cap ran out', () => {
@@ -127,6 +155,16 @@ describe('loop protection', () => {
       'attempt',
       2,
     )
+    // An owner resume still counts for the 10-minute rule, not for the cap.
+    const manual = [{ ...recent, manual: true }]
+    expect(decideRecovery(manual, { diedAt: now, agentWasHog: false }, now)).toHaveProperty('hold')
+    expect(
+      decideRecovery(
+        [...twice.slice(0, 1), { ...twice[1], manual: true }] as typeof twice,
+        { diedAt: now, agentWasHog: false },
+        now,
+      ),
+    ).toHaveProperty('attempt', 2)
     // Attempts older than the window no longer count.
     const old = twice.map((attempt) => ({
       ...attempt,

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   checkCgroup,
-  checkChoom,
   checkEnabledInstances,
   checkLinger,
   checkNode,
@@ -62,10 +61,5 @@ describe('doctor checks', () => {
     expect(checkPaneOomPolicy(panes.slice(0, 1)).status).toBe('ok')
     expect(checkPaneOomPolicy([]).status).toBe('ok')
     expect(checkPaneOomPolicy(null).status).toBe('warn')
-  })
-
-  it('needs choom for the agent OOM bias', () => {
-    expect(checkChoom(true).status).toBe('ok')
-    expect(checkChoom(false).status).toBe('fail')
   })
 })

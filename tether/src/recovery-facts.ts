@@ -4,11 +4,18 @@
 // (git, leases). Everything here is pure parsing plus bounded reads, so the
 // synopsis prompt and the detail file can be tested from fixtures.
 
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import {
+  closeSync,
+  fstatSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  readSync,
+  statSync,
+} from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { CHECKPOINT_PROMPT, RESUME_PROMPT } from './continuity'
 
-/** systemd unit results that mean the unit failed rather than stopped cleanly. */
 /** Cause for a tmux server that vanished while its agent was running. tmux
  * runs as a non-main process of an ExitType=cgroup unit, so systemd records no
  * failure when it is killed; the agent seen running is the evidence. */
@@ -25,11 +32,13 @@ function isTetherPrompt(text: string): boolean {
   )
 }
 
+/** systemd unit results that mean the unit failed rather than stopped cleanly.
+ * `timeout` is left out: on a pane scope or tmux server it only comes from a
+ * stop that took too long, and Tether's own cleanup is such a stop. */
 export const CRASH_RESULTS: ReadonlySet<string> = new Set([
   'oom-kill',
   'signal',
   'core-dump',
-  'timeout',
   'exit-code',
 ])
 
@@ -76,11 +85,13 @@ export interface UnitOutcome {
   lines: string[]
 }
 
-/** The outcome of one exact unit invocation from user-manager records. */
+/** The outcome of one exact unit invocation from user-manager records. A
+ * result logged after `until` belongs to a later stop, not to the death. */
 export function unitOutcome(
   entries: JournalEntry[],
   unit: string,
   invocationId: string | null,
+  until: number | null = null,
 ): UnitOutcome {
   const outcome: UnitOutcome = { result: null, oomKilledProcess: false, at: null, lines: [] }
   for (const entry of entries) {
@@ -89,7 +100,11 @@ export function unitOutcome(
     if (invocationId && invocation !== undefined && invocation !== invocationId) continue
     outcome.lines.push(`${stamp(entryTime(entry))} ${message(entry)}`)
     if (entry.MESSAGE_ID === UNIT_OOM_MESSAGE_ID) outcome.oomKilledProcess = true
-    if (entry.MESSAGE_ID === UNIT_RESULT_MESSAGE_ID && typeof entry.UNIT_RESULT === 'string') {
+    if (
+      entry.MESSAGE_ID === UNIT_RESULT_MESSAGE_ID &&
+      typeof entry.UNIT_RESULT === 'string' &&
+      (until === null || entryTime(entry) <= until)
+    ) {
       outcome.result = entry.UNIT_RESULT
       outcome.at = entryTime(entry)
     }
@@ -211,15 +226,31 @@ export interface TranscriptFacts {
 }
 
 export interface FileReader {
-  read(path: string): string | null
+  /** The file's text, or only its last `maxBytes` (starting at a line). */
+  read(path: string, maxBytes?: number): string | null
   list(path: string): string[]
   mtime(path: string): number | null
 }
 
+/** The last `maxBytes` of a file, from its first whole line. */
+function readTail(path: string, maxBytes: number): string {
+  const fd = openSync(path, 'r')
+  try {
+    const size = fstatSync(fd).size
+    if (size <= maxBytes) return readFileSync(fd, 'utf8')
+    const buffer = Buffer.alloc(maxBytes)
+    const read = readSync(fd, buffer, 0, maxBytes, size - maxBytes)
+    const text = buffer.subarray(0, read).toString('utf8')
+    return text.slice(text.indexOf('\n') + 1)
+  } finally {
+    closeSync(fd)
+  }
+}
+
 export const nodeFileReader: FileReader = {
-  read: (path) => {
+  read: (path, maxBytes) => {
     try {
-      return readFileSync(path, 'utf8')
+      return maxBytes === undefined ? readFileSync(path, 'utf8') : readTail(path, maxBytes)
     } catch {
       return null
     }
@@ -478,6 +509,11 @@ function subagentTranscripts(
   return found.slice(0, 400)
 }
 
+/** Transcripts run to tens of MB and are read on the daemon's event loop.
+ * What was in flight at the death is at the end, so only the tail is read. */
+const MAIN_TAIL_BYTES = 4 * 1024 * 1024
+const SUBAGENT_TAIL_BYTES = 256 * 1024
+
 /** Claude Code adapter: facts from the main transcript, its subagents and
  * workflow journals for a session that died at `diedAt`. */
 export function claudeTranscriptFacts(
@@ -486,7 +522,7 @@ export function claudeTranscriptFacts(
   diedAt: number,
   uid: number,
 ): TranscriptFacts | null {
-  const text = files.read(transcript)
+  const text = files.read(transcript, MAIN_TAIL_BYTES)
   if (text === null) return null
   const main = parseTranscript(text)
   const sessionId = basename(transcript, '.jsonl')
@@ -498,7 +534,7 @@ export function claudeTranscriptFacts(
   })
   const labels = new Map<string, Map<string, string>>()
   for (const { path, runId } of subagentTranscripts(files, sessionDir, diedAt - 6 * 3600_000)) {
-    const body = files.read(path)
+    const body = files.read(path, SUBAGENT_TAIL_BYTES)
     if (body === null) continue
     const agentId = basename(path, '.jsonl').replace(/^agent-/, '')
     let where = agentId

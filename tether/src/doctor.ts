@@ -136,17 +136,6 @@ export function parsePaneUnits(output: string): PaneUnit[] {
   return panes
 }
 
-/** The agent launcher lowers each agent's OOM score with util-linux choom. */
-export function checkChoom(present: boolean): Check {
-  return present
-    ? { name: 'choom', status: 'ok', detail: '/usr/bin/choom present' }
-    : {
-        name: 'choom',
-        status: 'fail',
-        detail: '/usr/bin/choom not found; agent launches need it. Install util-linux',
-      }
-}
-
 /** Only `tether@default` should start at boot. A test instance enabled at
  * boot comes back after every reboot with its own catalog and sockets. */
 export function checkEnabledInstances(enabled: string[]): Check {
@@ -268,7 +257,6 @@ export async function runDoctor(paths: TetherPaths): Promise<Check[]> {
       ? { name: 'tmux', status: 'ok', detail: (run('/usr/bin/tmux', ['-V']) ?? '').trim() }
       : { name: 'tmux', status: 'fail', detail: '/usr/bin/tmux not found' },
     checkPaneOomPolicy(readPaneUnits()),
-    checkChoom(existsSync('/usr/bin/choom')),
     checkEnabledInstances(readEnabledInstances()),
     checkSocket(stat(paths.socketDir), stat(paths.socket), uid),
   ]

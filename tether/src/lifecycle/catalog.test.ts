@@ -9,6 +9,7 @@ import {
   bindCatalog,
   bindWidgetTmuxServer,
   COORDINATOR_COLORS,
+  clearCrashedTmuxServerBinding,
   clearReconciledDeadTmuxServerBinding,
   clearReconciledHistoricalTmuxServerBinding,
   clearWidgetPendingScope,
@@ -470,6 +471,40 @@ describe('tmux server generation persistence', () => {
       tmuxAllocationState: 'bound',
     })
     expect(removeWidgetIfOwnership(service.id, ownership(service.id))).toBe(true)
+  })
+
+  it('detaches a crashed session from a live managed server only once it is fully drained', () => {
+    const crashed = insertWidget('c0000003', 'shell')
+    const peer = insertWidget('c0000004', 'shell')
+    expect(bindWidgetTmuxServer(crashed.id, null, managedB, '$8', '%13')).toBe(true)
+    expect(bindWidgetTmuxServer(peer.id, null, managedB, '$9', '%14')).toBe(true)
+    // Any persisted scope generation is still cleanup authority.
+    setWidgetOwnership(crashed.id, 'tmux-spawn-crashed.scope', 1, invocationA, null, null)
+    expect(clearCrashedTmuxServerBinding(crashed.id, managedB)).toBe(false)
+    setWidgetOwnership(crashed.id, null, 1, null, null, null)
+    expect(
+      setWidgetPendingScope(crashed.id, ownership(crashed.id), 'tmux-spawn-p.scope', invocationA),
+    ).toBe(true)
+    expect(clearCrashedTmuxServerBinding(crashed.id, managedB)).toBe(false)
+    expect(clearWidgetPendingScope(crashed.id, 'tmux-spawn-p.scope', invocationA)).toBe(true)
+    // Only against the server the caller proved it absent from.
+    expect(clearCrashedTmuxServerBinding(crashed.id, managedA)).toBe(false)
+    expect(clearCrashedTmuxServerBinding(crashed.id, managedB)).toBe(true)
+    expect(clearCrashedTmuxServerBinding(crashed.id, managedB)).toBe(false)
+    expect(getWidget(crashed.id)).toMatchObject({
+      tmuxServerId: null,
+      tmuxAllocationState: 'unallocated',
+      launchState: 'none',
+      launchNonce: null,
+    })
+    // Peers on the server are untouched.
+    expect(getWidget(peer.id)).toMatchObject({
+      tmuxServerId: managedB,
+      tmuxAllocationState: 'bound',
+    })
+    setWidgetOwnership(peer.id, null, 1, null, null, null)
+    expect(removeWidgetIfOwnership(peer.id, ownership(peer.id))).toBe(true)
+    expect(removeWidgetIfOwnership(crashed.id, ownership(crashed.id))).toBe(true)
   })
 
   it('includes the server generation in ownership compare-and-set authority', () => {

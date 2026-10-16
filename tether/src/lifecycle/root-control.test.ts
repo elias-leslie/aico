@@ -68,6 +68,8 @@ describe('private root workload control', () => {
   const server = createRootServer({
     available: () => available,
     validate: (input) => input.projectRoot !== '/missing',
+    resumeOwner: (resumeSessionId) =>
+      resumeSessionId === '00000000-0000-4000-8000-0000000000aa' ? 'c0ffee01' : null,
     launched: (widgetId, launchedBy) => {
       recordLauncher(widgetId, launchedBy)
     },
@@ -874,6 +876,22 @@ describe('private root workload control', () => {
     } finally {
       reader.close()
     }
+  })
+
+  it('refuses a new root that would resume a conversation crash recovery owns', async () => {
+    const before = ensure.mock.calls.length
+    const widgets = listWidgets().length
+    const input = {
+      ...create('resume-pending'),
+      resumeSessionId: '00000000-0000-4000-8000-0000000000aa',
+    }
+    expect(await call('/v1/roots', 'POST', input)).toEqual({
+      status: 409,
+      body: { error: 'recovery_pending', widgetId: 'c0ffee01' },
+    })
+    expect(getRootRequest('resume-pending')).toBeUndefined()
+    expect(listWidgets()).toHaveLength(widgets)
+    expect(ensure.mock.calls).toHaveLength(before)
   })
 
   it('validates exact native resume and retains idempotency across resume conflicts', async () => {

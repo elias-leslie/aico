@@ -17,7 +17,7 @@
 // <stateDir>/recoveries.json, which Nightshift reads to push the owner.
 
 import { execFile } from 'node:child_process'
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -25,6 +25,9 @@ import { promisify } from 'node:util'
 import {
   type ContinuitySnapshot,
   currentBootId,
+  nodeProcFs,
+  observeAgent,
+  processTree,
   readJsonFile,
   UUID_RE,
   writeJsonFile,
@@ -41,16 +44,18 @@ import {
   ensureSessionSerialized,
   lastEnsureFailure,
   notifySessionChanged,
+  type RespawnResult,
   reconcileSessionNow,
   releaseCrashedSessionBinding,
   respawnAndRelaunch,
   verifiedCurrentManagedPane,
-  verifySessionStatus,
 } from './lifecycle/engine'
 import { processEnvironment } from './lifecycle/procfs'
-import { withRootPrompt } from './lifecycle/root-launch'
+import { launchingResume, withRootPrompt } from './lifecycle/root-launch'
+import { paneExitedEventPath } from './lifecycle/tmux'
 import { AGENT_EXIT_ENV, isResumeSessionId } from './lifecycle/tui/launch'
 import { getTui } from './lifecycle/tui/registry'
+import type { TuiSpec } from './lifecycle/tui/spec'
 import type { LifecycleApiContext } from './lifecycle-api'
 import { generationOf } from './lifecycle-api'
 import {
@@ -85,6 +90,13 @@ const GIVE_UP_MS = 15 * 60_000
 const CLASSIFY_POLLS = 10
 const CLASSIFY_POLL_MS = 2_000
 const KEEP_MS = 24 * 3600_000
+const DETAIL_KEEP_MS = 7 * 24 * 3600_000
+/** A resumed agent must show up in its pane within this time. */
+const CONFIRM_MS = 120_000
+const CONFIRM_POLL_MS = 5_000
+/** systemd logs a unit's result as its last process goes, before Tether sees
+ * the pane gone; a result logged later than this belongs to a later stop. */
+const RESULT_GRACE_MS = 10_000
 const RECONCILE_EVERY_MS = 60_000
 /** Continuity observes once a minute; an agent seen running this recently was
  * still running when its tmux server died. */
@@ -116,6 +128,8 @@ export interface CrashRecord {
   attempt: number
   notBefore: number
   firstTryAt: number | null
+  /** When the resume was launched; set before Tether confirms it started. */
+  launchedAt?: number | null
   recoveredAt: number | null
   reason: string | null
   detailFile: string | null
@@ -127,6 +141,8 @@ export interface RecoveryAttempt {
   diedAt: number
   recoveredAt: number
   agentWasHog: boolean
+  /** The owner asked for it; counts for the 10-minute rule only. */
+  manual?: boolean
 }
 
 interface RecoveryFile {
@@ -134,6 +150,10 @@ interface RecoveryFile {
   updatedAt: number
   records: CrashRecord[]
   history: RecoveryAttempt[]
+  /** Pane scope invocation whose fallback shell still says the agent was
+   * killed, though that crash was settled (the owner restarted the agent by
+   * hand); never recorded again. */
+  dismissed?: Record<string, string>
 }
 
 export type RecoveryDecision = { hold: string } | { notBefore: number; attempt: number }
@@ -146,17 +166,45 @@ export function decideRecovery(
   now: number,
 ): RecoveryDecision {
   const recent = history.filter((attempt) => now - attempt.recoveredAt < RECOVERY_WINDOW_MS)
+  const automatic = recent.filter((attempt) => !attempt.manual)
   const last = recent.reduce((max, attempt) => Math.max(max, attempt.recoveredAt), 0)
   if (last && crash.diedAt - last < LOOP_WINDOW_MS)
     return { hold: 'it crashed again within 10 minutes of being recovered' }
-  if (recent.length >= MAX_AUTO_RECOVERIES)
+  if (automatic.length >= MAX_AUTO_RECOVERIES)
     return { hold: 'it was already recovered automatically twice in the last 6 hours' }
   if (crash.agentWasHog && recent.some((attempt) => attempt.agentWasHog))
     return { hold: 'its own process was the memory hog again' }
   return {
     notBefore: Math.max(now + ADMIT_SETTLE_MS, last ? last + LOOP_WINDOW_MS : 0),
-    attempt: recent.length + 1,
+    attempt: automatic.length + 1,
   }
+}
+
+/** An agent process found in a pane; `resumeId` is null until it has a
+ * resumable conversation. */
+export interface AgentSeen {
+  pid: number
+  resumeId: string | null
+}
+
+/** What recovery needs from the lifecycle engine and /proc; tests replace it. */
+export interface RecoveryEngine {
+  /** The session's live, verified pane, if it has one. */
+  currentPane(row: WidgetRow): Promise<{ pid: number } | null>
+  /** The agent running under a pane, if any. */
+  agentIn(panePid: number, tool: string): AgentSeen | null
+  /** The agent exit status the pane's fallback shell was given, if any. */
+  agentExit(panePid: number): number | null
+  reconcile(id: string): Promise<void>
+  release(id: string): Promise<'released' | 'busy' | 'refused'>
+  ensure(id: string): Promise<boolean>
+  respawn(id: string, tool: TuiSpec | undefined): Promise<RespawnResult>
+  lastFailure(id: string): { code: string; reason: string } | undefined
+  notify(id: string): void
+  /** When the tmux server's pane-exited hook last fired (epoch ms). */
+  paneExitedAt(serverId: string): number | null
+  /** Sessions running an agent now, with the conversation each one holds. */
+  runningConversations(): Promise<{ id: string; resumeId: string | null }[]>
 }
 
 export interface RecoveryOptions {
@@ -166,6 +214,53 @@ export interface RecoveryOptions {
   /** Sessions reboot continuity is restoring; recovery leaves them alone. */
   awaitingRestore?: (id: string) => boolean
   run?: (command: string, args: string[], timeoutMs: number) => Promise<string | null>
+  engine?: Partial<RecoveryEngine>
+}
+
+function agentInPane(home: string, panePid: number, tool: string): AgentSeen | null {
+  const observed = observeAgent(nodeProcFs, home, panePid)
+  if (observed) return { pid: observed.pid, resumeId: observed.resumeId }
+  // An agent that has no conversation yet still counts as running.
+  const name = getTui(tool)?.processName
+  if (!name) return null
+  for (const pid of processTree(nodeProcFs, panePid)) {
+    if (pid === panePid) continue
+    try {
+      if (nodeProcFs.readFile(`/proc/${pid}/comm`).trim() === name) return { pid, resumeId: null }
+    } catch {
+      // exited meanwhile
+    }
+  }
+  return null
+}
+
+function defaultEngine(home: string, stateDir: string): RecoveryEngine {
+  return {
+    currentPane: (row) => verifiedCurrentManagedPane(row),
+    agentIn: (panePid, tool) => agentInPane(home, panePid, tool),
+    agentExit: (panePid) => {
+      const raw = processEnvironment(panePid)?.get(AGENT_EXIT_ENV)
+      return raw !== undefined && /^[0-9]{1,3}$/.test(raw) ? Number(raw) : null
+    },
+    reconcile: (id) => reconcileSessionNow(id),
+    release: (id) => releaseCrashedSessionBinding(id),
+    ensure: (id) => ensureSessionSerialized(id, { cols: 100, rows: 30 }),
+    respawn: (id, tool) => respawnAndRelaunch(id, tool, { initialLaunch: true }),
+    lastFailure: (id) => lastEnsureFailure(id),
+    notify: (id) => notifySessionChanged(id, { force: true }),
+    paneExitedAt: (serverId) => {
+      try {
+        return statSync(paneExitedEventPath(serverId)).mtimeMs
+      } catch {
+        return null
+      }
+    },
+    // Without the continuity observer, the last snapshot (up to a minute old).
+    runningConversations: async () =>
+      (readJsonFile<ContinuitySnapshot>(join(stateDir, 'continuity.json'))?.sessions ?? []).map(
+        (session) => ({ id: session.id, resumeId: session.resumeId }),
+      ),
+  }
 }
 
 async function runCommand(
@@ -200,8 +295,12 @@ export class Recovery {
     args: string[],
     timeoutMs: number,
   ) => Promise<string | null>
+  private readonly engine: RecoveryEngine
   private records = new Map<string, CrashRecord>()
   private history: RecoveryAttempt[] = []
+  private dismissed: Record<string, string> = {}
+  /** Transcript facts per crash, read once and reused across retries. */
+  private readonly transcripts = new Map<string, TranscriptFacts | null>()
   /** Abandoned scopes whose journal outcome is still being read. */
   private readonly classifying = new Set<string>()
   /** Last agent pid seen per session, to tell whether the OOM victim was the agent. */
@@ -224,6 +323,7 @@ export class Recovery {
     this.log = options.log ?? ((message) => console.log(`[tether:recovery] ${message}`))
     this.awaitingRestore = options.awaitingRestore ?? (() => false)
     this.run = options.run ?? runCommand
+    this.engine = { ...defaultEngine(this.home, context.paths.stateDir), ...options.engine }
     this.load()
   }
 
@@ -246,9 +346,29 @@ export class Recovery {
     for (const record of file?.records ?? [])
       if (record.bootId === boot) this.records.set(record.id, record)
     this.history = file?.history ?? []
+    this.dismissed = { ...(file?.dismissed ?? {}) }
     for (const record of this.records.values())
       if (record.state === 'recovering') record.state = 'waiting'
     this.prune()
+    this.removeOldDetailFiles()
+  }
+
+  private removeOldDetailFiles(): void {
+    let names: string[] = []
+    try {
+      names = readdirSync(this.recoveryDir)
+    } catch {
+      return
+    }
+    for (const name of names) {
+      const path = join(this.recoveryDir, name)
+      try {
+        if (name.endsWith('.md') && this.now() - statSync(path).mtimeMs > DETAIL_KEEP_MS)
+          unlinkSync(path)
+      } catch {
+        // gone meanwhile
+      }
+    }
   }
 
   private prune(): void {
@@ -265,6 +385,8 @@ export class Recovery {
     this.history = this.history.filter(
       (attempt) => now - attempt.recoveredAt < RECOVERY_WINDOW_MS && getWidget(attempt.id),
     )
+    for (const [id, invocation] of Object.entries(this.dismissed))
+      if (getWidget(id)?.scopeInvocationId !== invocation) delete this.dismissed[id]
   }
 
   private save(): void {
@@ -275,6 +397,7 @@ export class Recovery {
       updatedAt: this.now(),
       records: [...this.records.values()],
       history: this.history,
+      dismissed: this.dismissed,
     } satisfies RecoveryFile)
   }
 
@@ -282,10 +405,20 @@ export class Recovery {
     Object.assign(record, changes)
     this.records.set(record.id, record)
     this.save()
-    notifySessionChanged(record.id, { force: true })
+    this.engine.notify(record.id)
   }
 
-  /** Continuity keeps these sessions' resume IDs in its snapshot. */
+  /** Forget a crash record that no longer needs recovering. A fallback shell
+   * still holding the killed agent's exit status is never recorded again. */
+  private drop(record: CrashRecord, why: string, dismissInvocation: string | null = null): void {
+    this.log(`${record.id}: recovery dropped: ${why}`)
+    this.records.delete(record.id)
+    this.transcripts.delete(`${record.id}:${record.diedAt}`)
+    if (dismissInvocation) this.dismissed[record.id] = dismissInvocation
+    this.save()
+    this.engine.notify(record.id)
+  }
+
   /** Continuity keeps this session's saved conversation: it is being
    * classified or has a crash record still waiting, recovering or held. */
   retains(id: string): boolean {
@@ -304,6 +437,8 @@ export class Recovery {
   resumeOwner(resumeId: string): string | null {
     for (const record of this.records.values())
       if (ACTIVE.has(record.state) && record.resumeId === resumeId) return record.id
+    // A session whose death is still being read keeps its conversation too.
+    for (const id of this.classifying) if (this.resumeIdFor(id) === resumeId) return id
     return null
   }
 
@@ -357,6 +492,7 @@ export class Recovery {
       manual: true,
       notBefore: this.now(),
       firstTryAt: null,
+      launchedAt: null,
       reason: null,
     })
     return record
@@ -364,23 +500,38 @@ export class Recovery {
 
   // --- detection ----------------------------------------------------------------
 
-  /** Engine hook: a session's pane scope is gone. */
-  onAbandoned(event: AbandonedScope): void {
-    if (event.startup || this.awaitingRestore(event.widgetId)) return
-    if (this.retains(event.widgetId)) return
+  /** Engine hook: a session's pane scope is gone. Settles once the death is
+   * classified; the engine does not wait for it. */
+  onAbandoned(event: AbandonedScope): Promise<void> {
+    if (event.startup || this.awaitingRestore(event.widgetId)) return Promise.resolve()
+    if (this.retains(event.widgetId)) return Promise.resolve()
     this.classifying.add(event.widgetId)
-    void this.classify(event)
+    return this.classify(event)
       .catch((error) => this.log(`classify ${event.widgetId} failed: ${(error as Error).message}`))
       .finally(() => this.classifying.delete(event.widgetId))
   }
 
-  private async journalUnit(unit: string, invocationId: string | null) {
+  private async journalUnit(unit: string, invocationId: string | null, until: number | null) {
     const text = await this.run(
       'journalctl',
       ['--user', '-b', '-o', 'json', '--no-pager', `USER_UNIT=${unit}`],
       10_000,
     )
-    return unitOutcome(parseJournal(text ?? ''), unit, invocationId)
+    return unitOutcome(parseJournal(text ?? ''), unit, invocationId, until)
+  }
+
+  /** The host is shutting down or the user is logging out: units stop on
+   * purpose and nothing that ends is a crash. */
+  private async hostStopping(): Promise<boolean> {
+    for (const scope of [[], ['--user']]) {
+      const state = await this.run(
+        'systemctl',
+        [...scope, 'show', '--property=SystemState', '--value'],
+        5_000,
+      )
+      if (state?.trim() === 'stopping') return true
+    }
+    return false
   }
 
   private async kernelVictims(since: number, until: number): Promise<OomVictim[]> {
@@ -403,17 +554,22 @@ export class Recovery {
   private async classify(event: AbandonedScope): Promise<void> {
     const seenAt = this.agentSeenAt.get(event.widgetId)
     this.agentSeenAt.delete(event.widgetId)
-    let pane = await this.journalUnit(event.scopeUnit, event.scopeInvocationId)
+    if (await this.hostStopping()) {
+      this.log(`${event.widgetId}: pane ended while the host or user session is stopping`)
+      return
+    }
+    const until = event.at + RESULT_GRACE_MS
+    let pane = await this.journalUnit(event.scopeUnit, event.scopeInvocationId, until)
     let server =
       event.serverDead && event.serverUnit
-        ? await this.journalUnit(event.serverUnit, event.serverInvocationId)
+        ? await this.journalUnit(event.serverUnit, event.serverInvocationId, until)
         : null
     // systemd logs the unit result a moment after the pane disappears.
     for (let poll = 1; poll < CLASSIFY_POLLS && !pane.result && !server?.result; poll += 1) {
       await this.sleep(CLASSIFY_POLL_MS)
-      pane = await this.journalUnit(event.scopeUnit, event.scopeInvocationId)
+      pane = await this.journalUnit(event.scopeUnit, event.scopeInvocationId, until)
       if (event.serverDead && event.serverUnit)
-        server = await this.journalUnit(event.serverUnit, event.serverInvocationId)
+        server = await this.journalUnit(event.serverUnit, event.serverInvocationId, until)
     }
     const kernel = await this.kernelVictims(event.at - LOOP_WINDOW_MS, this.now())
     const victim = victimsInScope(kernel, event.scopeUnit).at(-1) ?? null
@@ -423,7 +579,13 @@ export class Recovery {
         : null
     let serverCrash = server?.result && CRASH_RESULTS.has(server.result) ? server.result : null
     if (!serverCrash && serverVictim) serverCrash = 'oom-kill'
-    else if (!serverCrash && event.serverDead && seenAt && event.at - seenAt <= AGENT_SEEN_FRESH_MS)
+    else if (
+      !serverCrash &&
+      event.serverDead &&
+      seenAt &&
+      event.at - seenAt <= AGENT_SEEN_FRESH_MS &&
+      !this.paneExitedSince(event.tmuxServerId, seenAt)
+    )
       serverCrash = SERVER_LOST
     const paneCrash = pane.result && CRASH_RESULTS.has(pane.result) ? pane.result : null
     if (!paneCrash && !serverCrash) {
@@ -442,6 +604,14 @@ export class Recovery {
     })
   }
 
+  /** A pane on this server exited normally after `since`. tmux's pane-exited
+   * hook runs for a pane that ends (an owner `exit`), not for a killed
+   * server, so the server ending right after it is an exit, not a crash. */
+  private paneExitedSince(serverId: string | null, since: number): boolean {
+    const at = serverId ? this.engine.paneExitedAt(serverId) : null
+    return at !== null && at >= since
+  }
+
   /** Continuity observer hook, once per pass for each agent session. */
   async inspect(
     row: WidgetRow,
@@ -452,6 +622,11 @@ export class Recovery {
     if (agentPid !== null) {
       this.agentPids.set(row.id, agentPid)
       this.agentSeenAt.set(row.id, this.now())
+      // The agent is running again (the owner restarted it by hand): a crash
+      // record that never launched anything has nothing left to do.
+      const record = this.records.get(row.id)
+      if (record && (record.state === 'held' || (record.state === 'waiting' && !record.launchedAt)))
+        this.drop(record, 'its agent is running again', row.scopeInvocationId)
       return
     }
     if (status !== 'running') {
@@ -464,16 +639,15 @@ export class Recovery {
         this.now() - last >= RECONCILE_EVERY_MS
       ) {
         this.lastReconcile.set(row.id, this.now())
-        await reconcileSessionNow(row.id).catch(() => {})
+        await this.engine.reconcile(row.id).catch(() => {})
       }
       return
     }
     this.agentSeenAt.delete(row.id)
     if (panePid === null || this.retains(row.id) || this.awaitingRestore(row.id)) return
-    const raw = processEnvironment(panePid)?.get(AGENT_EXIT_ENV)
-    if (raw === undefined || !/^[0-9]{1,3}$/.test(raw)) return
-    const exit = Number(raw)
-    if (!CRASH_EXIT_STATUSES.has(exit)) return
+    if (row.scopeInvocationId && this.dismissed[row.id] === row.scopeInvocationId) return
+    const exit = this.engine.agentExit(panePid)
+    if (exit === null || !CRASH_EXIT_STATUSES.has(exit)) return
     const existing = this.records.get(row.id)
     if (existing?.kind === 'agent-exited' && existing.scopeInvocationId === row.scopeInvocationId)
       return
@@ -624,7 +798,9 @@ export class Recovery {
   private async gather(record: CrashRecord, row: WidgetRow, resumedAt: number) {
     const unitLines: string[] = []
     if (record.scopeUnit)
-      unitLines.push(...(await this.journalUnit(record.scopeUnit, record.scopeInvocationId)).lines)
+      unitLines.push(
+        ...(await this.journalUnit(record.scopeUnit, record.scopeInvocationId, null)).lines,
+      )
     const kernel = record.scopeUnit
       ? victimsInScope(
           await this.kernelVictims(record.diedAt - LOOP_WINDOW_MS, record.diedAt + 60_000),
@@ -675,17 +851,22 @@ export class Recovery {
           .filter((line) => line.includes(`:${prefix} `) || line.includes(`:${prefix})`))
           .slice(0, 40)
       : []
-    let transcript: TranscriptFacts | null = null
-    if (record.resumeId && getTui(row.tool)?.slug === 'claude-code') {
-      const path = findClaudeTranscript(nodeFileReader, this.home, record.resumeId)
-      if (path)
-        transcript = claudeTranscriptFacts(
-          nodeFileReader,
-          path,
-          record.diedAt,
-          process.getuid?.() ?? 1000,
-        )
+    const key = `${record.id}:${record.diedAt}`
+    if (!this.transcripts.has(key)) {
+      let facts: TranscriptFacts | null = null
+      if (record.resumeId && getTui(row.tool)?.slug === 'claude-code') {
+        const path = findClaudeTranscript(nodeFileReader, this.home, record.resumeId)
+        if (path)
+          facts = claudeTranscriptFacts(
+            nodeFileReader,
+            path,
+            record.diedAt,
+            process.getuid?.() ?? 1000,
+          )
+      }
+      this.transcripts.set(key, facts)
     }
+    const transcript = this.transcripts.get(key) ?? null
     const detailFile = join(
       this.recoveryDir,
       `${row.id}-${new Date(record.diedAt).toISOString().replace(/[:.]/g, '-')}.md`,
@@ -725,6 +906,10 @@ export class Recovery {
       this.save()
       return
     }
+    if (row.tool !== record.tool) {
+      this.drop(record, 'its tool changed')
+      return
+    }
     const tool = getTui(row.tool)
     if (!record.resumeId || !isResumeSessionId(tool, record.resumeId)) {
       this.update(record, { state: 'held', reason: 'its saved conversation ID is not resumable' })
@@ -738,93 +923,150 @@ export class Recovery {
       })
       return
     }
-    if (record.kind === 'agent-exited') {
-      // The owner may have restarted the agent by hand in the fallback shell.
-      const pane = await verifiedCurrentManagedPane(row).catch(() => null)
-      const exit = pane ? processEnvironment(pane.pid)?.get(AGENT_EXIT_ENV) : undefined
-      if (!pane || row.scopeInvocationId !== record.scopeInvocationId || exit === undefined) {
-        this.log(`${row.id}: pane changed since the crash; recovery dropped`)
-        this.records.delete(row.id)
-        this.save()
-        return
-      }
+    const pane = await this.engine.currentPane(row).catch(() => null)
+    const agent = pane ? this.engine.agentIn(pane.pid, row.tool) : null
+    if (agent) {
+      // Tether restarted after launching the resume, and it is running.
+      if (record.launchedAt && agent.resumeId === record.resumeId) this.finish(record, row)
+      // Or the owner restarted the agent by hand: never start a second one.
+      else this.drop(record, 'its agent is running again', row.scopeInvocationId)
+      return
+    }
+    const elsewhere = await this.conversationElsewhere(record)
+    // The observer pass that answered may have settled the record meanwhile.
+    if (this.records.get(record.id) !== record) return
+    if (elsewhere) {
+      this.drop(
+        record,
+        `session ${elsewhere} is already running conversation ${record.resumeId}`,
+        pane ? row.scopeInvocationId : null,
+      )
+      return
     }
     this.update(record, { state: 'recovering', firstTryAt: record.firstTryAt ?? now })
     const { synopsis, detail, detailFile } = await this.gather(record, row, now)
     mkdirSync(this.recoveryDir, { recursive: true, mode: 0o700 })
     await writeFile(detailFile, detail, { mode: 0o600 })
     record.detailFile = detailFile
-    let outcome: 'recovered' | 'retry' | string
+    let outcome: LaunchOutcome
     try {
-      outcome = await this.launch(record, row, synopsis)
+      outcome = await this.launch(record, row, synopsis, pane !== null)
     } catch (error) {
-      outcome = (error as Error).message
+      outcome = { kind: 'failed', reason: (error as Error).message }
     }
-    if (outcome === 'recovered') {
-      const recoveredAt = this.now()
-      if (!record.manual)
-        this.history.push({
-          id: row.id,
-          diedAt: record.diedAt,
-          recoveredAt,
-          agentWasHog: record.agentWasHog,
-        })
-      this.update(record, { state: 'recovered', recoveredAt, reason: null })
-      this.log(`${row.id}: resumed in place (attempt ${record.attempt})`)
-      const latest = getWidget(row.id)
-      if (latest && this.context.gui.connected())
-        void this.context.gui.send({
-          kind: 'show',
-          sessionId: row.id,
-          generation: generationOf(latest),
-        })
-    } else if (outcome === 'retry') {
+    if (outcome.kind === 'retry') {
       this.update(record, {
         state: 'waiting',
         notBefore: this.now() + RETRY_MS,
-        reason: lastEnsureFailure(row.id)?.reason ?? 'host admission deferred the relaunch',
+        reason: outcome.reason,
       })
-    } else {
-      this.update(record, { state: 'held', reason: `the relaunch failed: ${outcome}` })
-      this.log(`${row.id}: held: ${outcome}`)
+      return
+    }
+    if (outcome.kind === 'failed') {
+      this.update(record, { state: 'held', reason: `the relaunch failed: ${outcome.reason}` })
+      this.log(`${row.id}: held: ${outcome.reason}`)
+      return
+    }
+    this.update(record, { launchedAt: this.now() })
+    if (!(await this.confirm(record))) {
+      if (!getWidget(row.id)) return
+      this.update(record, {
+        state: 'held',
+        reason:
+          'the resume did not start: no agent with its conversation appeared within 2 minutes',
+      })
+      this.log(`${row.id}: held: the resumed agent did not appear`)
+      return
+    }
+    this.finish(record, getWidget(row.id) ?? row)
+  }
+
+  private finish(record: CrashRecord, row: WidgetRow): void {
+    const recoveredAt = this.now()
+    this.history.push({
+      id: row.id,
+      diedAt: record.diedAt,
+      recoveredAt,
+      agentWasHog: record.agentWasHog,
+      ...(record.manual ? { manual: true } : {}),
+    })
+    this.transcripts.delete(`${record.id}:${record.diedAt}`)
+    this.update(record, { state: 'recovered', recoveredAt, reason: null })
+    this.log(`${row.id}: resumed in place (attempt ${record.attempt})`)
+    if (this.context.gui.connected())
+      void this.context.gui.send({ kind: 'show', sessionId: row.id, generation: generationOf(row) })
+  }
+
+  /** Another session that is resuming or running this conversation now. */
+  private async conversationElsewhere(record: CrashRecord): Promise<string | null> {
+    const resumeId = record.resumeId as string
+    const launching = launchingResume(resumeId, record.id)
+    if (launching) return launching
+    const running = await this.engine.runningConversations().catch(() => [])
+    return running.find((s) => s.id !== record.id && s.resumeId === resumeId)?.id ?? null
+  }
+
+  /** The resumed agent shows up in the session's pane with its conversation. */
+  private async confirm(record: CrashRecord): Promise<boolean> {
+    const deadline = this.now() + CONFIRM_MS
+    for (;;) {
+      const row = getWidget(record.id)
+      if (!row) return false
+      const pane = await this.engine.currentPane(row).catch(() => null)
+      if (pane && this.engine.agentIn(pane.pid, row.tool)?.resumeId === record.resumeId) return true
+      if (this.now() >= deadline) return false
+      await this.sleep(CONFIRM_POLL_MS)
     }
   }
 
-  private async launch(record: CrashRecord, row: WidgetRow, prompt: string): Promise<string> {
+  private async launch(
+    record: CrashRecord,
+    row: WidgetRow,
+    prompt: string,
+    panePresent: boolean,
+  ): Promise<LaunchOutcome> {
     const resumeId = record.resumeId as string
-    if (record.kind === 'agent-exited') {
+    if (panePresent) {
+      // The pane survived (the agent died, or a resume fell back to the
+      // shell): respawn it with the resume.
       const result = await withRootPrompt(
         row.id,
         prompt,
-        () => respawnAndRelaunch(row.id, getTui(row.tool), { initialLaunch: true }),
+        () => this.engine.respawn(row.id, getTui(row.tool)),
         resumeId,
       )
-      if (result.status === 'replaced') return 'recovered'
-      if (result.status === 'admission_denied' || result.status === 'busy') return 'retry'
-      return 'reason' in result ? result.reason : result.status
+      if (result.status === 'replaced') return { kind: 'launched' }
+      if (result.status === 'admission_denied')
+        return { kind: 'retry', reason: `host admission deferred the relaunch: ${result.reason}` }
+      if (result.status === 'busy')
+        return { kind: 'retry', reason: 'another operation on the session was in progress' }
+      return { kind: 'failed', reason: 'reason' in result ? result.reason : result.status }
     }
     // Releasing the crashed binding makes the row startable; host admission
     // refusals are retried against the same released row.
-    if (!(await releaseCrashedSessionBinding(row.id))) {
-      const current = getWidget(row.id)
-      return current && (await verifySessionStatus(current)) === 'running'
-        ? 'recovered'
-        : 'Tether could not release the crashed pane'
+    const released = await this.engine.release(row.id)
+    if (released === 'busy')
+      return { kind: 'retry', reason: 'another operation on the session was in progress' }
+    if (released === 'refused') {
+      const latest = getWidget(row.id)
+      // A pane came back meanwhile; the next try respawns it.
+      if (latest && (await this.engine.currentPane(latest).catch(() => null)))
+        return { kind: 'retry', reason: 'the session has a pane again' }
+      return { kind: 'failed', reason: 'Tether could not release the crashed pane' }
     }
-    const ok = await withRootPrompt(
-      row.id,
-      prompt,
-      () => ensureSessionSerialized(row.id, { cols: 100, rows: 30 }),
-      resumeId,
-    )
-    const latest = getWidget(row.id)
-    const status = latest ? await verifySessionStatus(latest) : 'pending'
-    if (ok && status !== 'pending') return 'recovered'
-    const failure = lastEnsureFailure(row.id)
-    if (failure?.code === 'admission_denied') return 'retry'
-    return failure?.reason ?? 'the launch did not start'
+    const ok = await withRootPrompt(row.id, prompt, () => this.engine.ensure(row.id), resumeId)
+    if (ok) return { kind: 'launched' }
+    const failure = this.engine.lastFailure(row.id)
+    if (failure?.code === 'admission_denied')
+      return { kind: 'retry', reason: `host admission deferred the relaunch: ${failure.reason}` }
+    return { kind: 'failed', reason: failure?.reason ?? 'the launch did not start' }
   }
 }
+
+type LaunchOutcome =
+  | { kind: 'launched' }
+  | { kind: 'retry'; reason: string }
+  | { kind: 'failed'; reason: string }
 
 export function registerRecoveryRoutes(router: Router, recovery: Recovery): void {
   router

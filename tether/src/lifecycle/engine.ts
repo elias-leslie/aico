@@ -2899,22 +2899,26 @@ export async function reconcileSessionNow(widgetId: string): Promise<void> {
 /** Crash recovery only: after reconciliation drained a crashed session's
  * scope on a live managed server, return the row to never-allocated so the
  * next ensure recreates it in place. Same CAS as the historical-server path
- * plus an exact absence re-check under the lifecycle lock. */
-export async function releaseCrashedSessionBinding(widgetId: string): Promise<boolean> {
+ * plus an exact absence re-check under the lifecycle lock. `busy` means
+ * another lifecycle operation holds the session; try again later. */
+export async function releaseCrashedSessionBinding(
+  widgetId: string,
+): Promise<'released' | 'busy' | 'refused'> {
   const owner = lifecycleOwners.acquire(widgetId)
-  if (!owner) return false
+  if (!owner) return 'busy'
   const knownServerId = getWidget(widgetId)?.tmuxServerId ?? null
   try {
     const row = getWidget(widgetId)
-    if (!row) return false
-    if (isNeverAllocatedWidget(row)) return true
-    if (!row.tmuxServerId || row.scopeUnit || row.pendingScopeUnit) return false
-    if ((await internalSessionState(widgetId)) !== 'absent') return false
+    if (!row) return 'refused'
+    if (isNeverAllocatedWidget(row)) return 'released'
+    if (!row.tmuxServerId || row.scopeUnit || row.pendingScopeUnit) return 'refused'
+    if ((await internalSessionState(widgetId)) !== 'absent') return 'refused'
     const server = getTmuxServer(row.tmuxServerId)
-    if (server?.phase === 'dead') {
-      return clearReconciledDeadTmuxServerBinding(widgetId, row.tmuxServerId)
-    }
-    return clearCrashedTmuxServerBinding(widgetId, row.tmuxServerId)
+    const cleared =
+      server?.phase === 'dead'
+        ? clearReconciledDeadTmuxServerBinding(widgetId, row.tmuxServerId)
+        : clearCrashedTmuxServerBinding(widgetId, row.tmuxServerId)
+    return cleared ? 'released' : 'refused'
   } finally {
     releaseLifecycleOwner(widgetId, owner, knownServerId)
     publishSession(widgetId)

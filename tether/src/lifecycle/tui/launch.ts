@@ -22,7 +22,9 @@ function shellQuote(value: string): string {
 /** Agents run at OOM score adjust 100 while the pane's other processes keep
  * the inherited 200 (Nightshift's memctl re-raises their children), so under
  * a pane cap the kernel kills a large tool before the agent unless the agent
- * is itself far larger. Unprivileged processes may lower it down to -500. */
+ * is itself far larger. The pane supervisor sets it on itself before starting
+ * the agent and restores it for the fallback shell; a failed write is
+ * ignored, so the agent still starts at the inherited value. */
 export const AGENT_OOM_SCORE_ADJ = 100
 
 /** Set in the pane's fallback shell to the agent's exit status. */
@@ -35,10 +37,6 @@ export function launchLine(spec: TuiSpec): string | null {
   if (spec.command.length === 0) return null
   const env = { ...BASE_TUI_ENV, ...(spec.env ?? {}) }
   const prefix = [
-    '/usr/bin/choom',
-    '-n',
-    String(AGENT_OOM_SCORE_ADJ),
-    '--',
     '/usr/bin/env',
     '-u',
     'NO_COLOR',
@@ -80,6 +78,8 @@ export function paneCommand(line: string | null): string {
   // The agent's exit status is exported into the fallback shell's
   // environment, where Tether's crash recovery reads it from /proc: 128+N
   // means a signal (an OOM kill is 137), 0 a clean /exit.
-  const supervisorScript = `${clearTypedLauncher}; ${line}; export ${AGENT_EXIT_ENV}=$?; ${interactiveShell}`
+  const lowerOomScore = `{ read -r tether_adj </proc/self/oom_score_adj && echo ${AGENT_OOM_SCORE_ADJ} >/proc/self/oom_score_adj; } 2>/dev/null`
+  const restoreOomScore = `{ [ -n "$tether_adj" ] && echo "$tether_adj" >/proc/self/oom_score_adj; } 2>/dev/null`
+  const supervisorScript = `${clearTypedLauncher}; ${lowerOomScore}; ${line}; export ${AGENT_EXIT_ENV}=$?; ${restoreOomScore}; ${interactiveShell}`
   return `exec /bin/bash --noprofile --norc -c ${shellQuote(supervisorScript)}`
 }

@@ -175,19 +175,19 @@ describe('registry', () => {
     const antigravity = getTui('agy')
     const pi = getTui('pi')
     expect(claude && launchLine(claude)).toBe(
-      '/usr/bin/choom -n 100 -- /usr/bin/env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 claude --dangerously-skip-permissions',
+      '/usr/bin/env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 claude --dangerously-skip-permissions',
     )
     expect(codex && launchLine(codex)).toBe(
-      '/usr/bin/choom -n 100 -- /usr/bin/env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 codex --yolo',
+      '/usr/bin/env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 codex --yolo',
     )
     expect(codex && resumeLaunchLine(codex)).toBe(
-      '/usr/bin/choom -n 100 -- /usr/bin/env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 codex --yolo resume --no-daemon',
+      '/usr/bin/env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 codex --yolo resume --no-daemon',
     )
     expect(antigravity && launchLine(antigravity)).toBe(
-      '/usr/bin/choom -n 100 -- /usr/bin/env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 agy --dangerously-skip-permissions',
+      '/usr/bin/env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 agy --dangerously-skip-permissions',
     )
     expect(pi && launchLine(pi)).toBe(
-      '/usr/bin/choom -n 100 -- /usr/bin/env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 pi --approve',
+      '/usr/bin/env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 pi --approve',
     )
     expect(getTui('claude')?.slug).toBe('claude-code')
     expect(getTui('shell') && launchLine(getTui('shell') as TuiSpec)).toBeNull()
@@ -225,7 +225,7 @@ describe('launchLine', () => {
     expect(isResumeSessionId(tool, 'native:saved;echo unsafe')).toBe(false)
     expect(isResumeSessionId(spec(), 'native:saved')).toBe(false)
     expect(resumeLaunchLine(tool)).toBe(
-      '/usr/bin/choom -n 100 -- /usr/bin/env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 fixture --configured --resume',
+      '/usr/bin/env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 fixture --configured --resume',
     )
     expect(resumeLaunchLine(spec())).toBeNull()
     registerBuiltinTuis()
@@ -241,7 +241,7 @@ describe('launchLine', () => {
   })
   it('joins argv into the command typed at the session', () => {
     expect(launchLine(spec({ command: ['codex', '--yolo'] }))).toBe(
-      '/usr/bin/choom -n 100 -- /usr/bin/env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 codex --yolo',
+      '/usr/bin/env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 codex --yolo',
     )
   })
 
@@ -251,7 +251,7 @@ describe('launchLine', () => {
 
   it('exports per-TUI env inline before the command', () => {
     expect(launchLine(spec({ command: ['claude'], env: { FOO: 'bar' } }))).toBe(
-      '/usr/bin/choom -n 100 -- /usr/bin/env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 FOO=bar claude',
+      '/usr/bin/env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 FOO=bar claude',
     )
   })
 })
@@ -263,7 +263,7 @@ describe('paneCommand', () => {
 
   it('runs the TUI then execs an interactive shell so the pane survives its exit', () => {
     expect(paneCommand('env -u NO_COLOR claude')).toBe(
-      `exec /bin/bash --noprofile --norc -c 'printf '\\''\\033[3J\\033[H\\033[2J'\\''; env -u NO_COLOR claude; export TETHER_AGENT_EXIT=$?; exec "\${SHELL:-/bin/bash}"'`,
+      `exec /bin/bash --noprofile --norc -c 'printf '\\''\\033[3J\\033[H\\033[2J'\\''; { read -r tether_adj </proc/self/oom_score_adj && echo 100 >/proc/self/oom_score_adj; } 2>/dev/null; env -u NO_COLOR claude; export TETHER_AGENT_EXIT=$?; { [ -n "$tether_adj" ] && echo "$tether_adj" >/proc/self/oom_score_adj; } 2>/dev/null; exec "\${SHELL:-/bin/bash}"'`,
     )
   })
 })

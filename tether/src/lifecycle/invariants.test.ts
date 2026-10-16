@@ -37,6 +37,7 @@ import {
   releaseLifecycleOwner,
   respawnAndRelaunch,
   serverEnvironmentPrefix,
+  setLaunchGuard,
 } from './engine'
 import { decideManagedGateRecovery, isNeverAllocatedWidget } from './lifecycle-guard'
 import { ownershipGeneration, retireOwnedSession, sessionGeneration } from './owner-retirement'
@@ -47,6 +48,7 @@ import {
   paneScopeFromCgroup,
   setLifecycleInstance,
 } from './ownership'
+import { withRootPrompt } from './root-launch'
 import {
   configureTmuxPaths,
   newDetachedTargetArgs,
@@ -342,6 +344,29 @@ describe('INV-10 durable work requires Linger=yes', () => {
     expect(lastEnsureFailure('e0000010')?.code).toBe('linger_required')
     const row = getWidget('e0000010') as WidgetRow
     expect(isNeverAllocatedWidget(row)).toBe(true)
+  })
+})
+
+describe('INV-10b a session crash recovery holds starts only with its resume', () => {
+  it('a plain start is refused; the recovery launch with its prompt goes on', async () => {
+    insertWidget('e0000912', 'claude-code', 1)
+    setLaunchGuard((id) => id === 'e0000912')
+    try {
+      expect(await ensureSessionSerialized('e0000912', { cols: 80, rows: 24 })).toBe(false)
+      expect(lastEnsureFailure('e0000912')).toEqual({
+        code: 'workload_unavailable',
+        reason: 'crash recovery will resume this session',
+      })
+      // The recovery's own launch passes the guard (and stops at linger here).
+      expect(
+        await withRootPrompt('e0000912', 'Recovery: test', () =>
+          ensureSessionSerialized('e0000912', { cols: 80, rows: 24 }),
+        ),
+      ).toBe(false)
+      expect(lastEnsureFailure('e0000912')?.code).toBe('linger_required')
+    } finally {
+      setLaunchGuard(null)
+    }
   })
 })
 
