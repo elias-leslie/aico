@@ -3,21 +3,90 @@
 import { Keyboard, X } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
+export interface ATermShortcutHandlers {
+  onNewATerm: () => void
+  onCloseTab: () => void
+  /** Switch to next A-Term (Ctrl+Tab) */
+  onNextATerm?: () => void
+  /** Switch to previous A-Term (Ctrl+Shift+Tab) */
+  onPrevATerm?: () => void
+  /** Jump to A-Term at position (Ctrl+1-9) */
+  onJumpToATerm?: (index: number) => void
+  /** Toggle voice input (Pause key) */
+  onVoiceToggle?: () => void
+}
+
+type ShortcutActions = ATermShortcutHandlers & { showHelp: () => void }
+
 interface Shortcut {
   keys: string
   description: string
+  /** Absent: listed only; each dialog closes itself on Esc. */
+  matches?: (e: KeyboardEvent) => boolean
+  run?: (actions: ShortcutActions, e: KeyboardEvent) => void
+  /** Also fires while the user types in an input. */
+  whileTyping?: boolean
 }
 
-const SHORTCUTS: Shortcut[] = [
-  { keys: 'Ctrl+T', description: 'New A-Term' },
-  { keys: 'Ctrl+W', description: 'Close current tab' },
-  { keys: 'Ctrl+Tab', description: 'Next tab' },
-  { keys: ['Ctrl', 'Shift', 'Tab'].join('+'), description: 'Previous tab' },
-  { keys: 'Ctrl+1-9', description: 'Jump to tab N' },
-  { keys: '?', description: 'Show this help' },
-  { keys: 'Pause', description: 'Toggle voice input' },
+const HELP_SHORTCUT: Shortcut = {
+  keys: '?',
+  description: 'Show this help',
+  matches: (e) => e.key === '?' && !e.ctrlKey && !e.altKey && !e.metaKey,
+  run: (a) => a.showHelp(),
+}
+
+/** The one table of A-Term shortcuts: the help lists it and the handler runs it. */
+export const SHORTCUTS: readonly Shortcut[] = [
+  {
+    keys: 'Ctrl+T',
+    description: 'New A-Term',
+    matches: (e) => e.ctrlKey && e.key === 't',
+    run: (a) => a.onNewATerm(),
+  },
+  {
+    keys: 'Ctrl+W',
+    description: 'Close current tab',
+    matches: (e) => e.ctrlKey && e.key === 'w',
+    run: (a) => a.onCloseTab(),
+  },
+  {
+    keys: 'Ctrl+Tab',
+    description: 'Next tab',
+    matches: (e) => e.ctrlKey && e.key === 'Tab' && !e.shiftKey,
+    run: (a) => a.onNextATerm?.(),
+  },
+  {
+    // Joined so the secret scanner doesn't read the literal as an API key.
+    keys: ['Ctrl', 'Shift', 'Tab'].join('+'),
+    description: 'Previous tab',
+    matches: (e) => e.ctrlKey && e.key === 'Tab' && e.shiftKey,
+    run: (a) => a.onPrevATerm?.(),
+  },
+  {
+    keys: 'Ctrl+1-9',
+    description: 'Jump to tab N',
+    matches: (e) => e.ctrlKey && /^[1-9]$/.test(e.key),
+    run: (a, e) => a.onJumpToATerm?.(parseInt(e.key, 10) - 1), // 0-indexed
+  },
+  HELP_SHORTCUT,
+  {
+    keys: 'Pause',
+    description: 'Toggle voice input',
+    matches: (e) => e.code === 'Pause',
+    run: (a) => a.onVoiceToggle?.(),
+    whileTyping: true,
+  },
   { keys: 'Esc', description: 'Close dialogs' },
 ]
+
+function isTyping(target: EventTarget | null): boolean {
+  const element = target as HTMLElement | null
+  return (
+    element?.tagName === 'INPUT' ||
+    element?.tagName === 'TEXTAREA' ||
+    element?.isContentEditable === true
+  )
+}
 
 interface KeyboardShortcutsProps {
   isOpen: boolean
@@ -133,7 +202,9 @@ export function KeyboardShortcuts({ isOpen, onClose }: KeyboardShortcutsProps) {
           }}
         >
           Press{' '}
-          <kbd className="px-1 rounded bg-[var(--term-bg-elevated)]">?</kbd>{' '}
+          <kbd className="px-1 rounded bg-[var(--term-bg-elevated)]">
+            {HELP_SHORTCUT.keys}
+          </kbd>{' '}
           anytime to show this help
         </div>
       </div>
@@ -144,80 +215,18 @@ export function KeyboardShortcuts({ isOpen, onClose }: KeyboardShortcutsProps) {
 /**
  * Hook to register global keyboard shortcuts for A-Term navigation.
  */
-export function useATermKeyboardShortcuts(handlers: {
-  onNewATerm: () => void
-  onCloseTab: () => void
-  /** Switch to next A-Term (Ctrl+Tab) */
-  onNextATerm?: () => void
-  /** Switch to previous A-Term (Ctrl+Shift+Tab) */
-  onPrevATerm?: () => void
-  /** Jump to A-Term at position (Ctrl+1-9) */
-  onJumpToATerm?: (index: number) => void
-  /** Toggle voice input (Pause key) */
-  onVoiceToggle?: () => void
-}) {
+export function useATermKeyboardShortcuts(handlers: ATermShortcutHandlers) {
   const [showHelp, setShowHelp] = useState(false)
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      // Pause key toggles voice input — works regardless of focus
-      if (e.code === 'Pause') {
-        e.preventDefault()
-        handlers.onVoiceToggle?.()
-        return
-      }
-
-      // Don't trigger other shortcuts if user is typing in an input
-      const target = e.target as HTMLElement
-      if (
-        target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.isContentEditable
-      ) {
-        return
-      }
-
-      // ? to show help (only without modifiers)
-      if (e.key === '?' && !e.ctrlKey && !e.altKey && !e.metaKey) {
-        e.preventDefault()
-        setShowHelp(true)
-        return
-      }
-
-      // Ctrl+T for new A-Term
-      if (e.ctrlKey && e.key === 't') {
-        e.preventDefault()
-        handlers.onNewATerm()
-        return
-      }
-
-      // Ctrl+W to close tab
-      if (e.ctrlKey && e.key === 'w') {
-        e.preventDefault()
-        handlers.onCloseTab()
-        return
-      }
-
-      // Ctrl+Tab for next A-Term
-      if (e.ctrlKey && e.key === 'Tab' && !e.shiftKey) {
-        e.preventDefault()
-        handlers.onNextATerm?.()
-        return
-      }
-
-      // Ctrl+Shift+Tab for previous A-Term
-      if (e.ctrlKey && e.key === 'Tab' && e.shiftKey) {
-        e.preventDefault()
-        handlers.onPrevATerm?.()
-        return
-      }
-
-      // Ctrl+1-9 to jump to A-Term at position
-      if (e.ctrlKey && /^[1-9]$/.test(e.key)) {
-        e.preventDefault()
-        handlers.onJumpToATerm?.(parseInt(e.key, 10) - 1) // 0-indexed
-        return
-      }
+      const typing = isTyping(e.target)
+      const shortcut = SHORTCUTS.find(
+        (item) => item.matches?.(e) && (item.whileTyping || !typing),
+      )
+      if (!shortcut?.run) return
+      e.preventDefault()
+      shortcut.run({ ...handlers, showHelp: () => setShowHelp(true) }, e)
     },
     [handlers],
   )
