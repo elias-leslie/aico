@@ -18,8 +18,9 @@ Requires Tether API v1. Install and start Tether (`tether@default`) before Aico.
   the pre-Tether tables (`widgets`, `tmux_servers`, `root_requests`); only
   `tether import-aico --from PATH` reads them, from an archived copy.
 - The session list shows every Tether session (Aico, A-Term, CLI and root
-  origins), plus A-Term's pre-Tether `summitflow-<uuid>` sessions, which open
-  attach-only. The separate A-Term federation is gone.
+  origins). A-Term's old pre-Tether `summitflow-<uuid>` sessions are no longer
+  listed (Tether dropped its legacy session API). The separate A-Term
+  federation is gone.
 - Window focus claims the tmux window size through Tether's resize claim;
   desktop auto-resize is unchanged.
 - `scripts/aico-install.sh` requires Tether API v1 or later and no longer
