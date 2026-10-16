@@ -302,5 +302,3 @@ export function createWindowLayout(deps: WindowLayoutDeps) {
     },
   }
 }
-
-export type WindowLayout = ReturnType<typeof createWindowLayout>
