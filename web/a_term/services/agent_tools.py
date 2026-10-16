@@ -32,6 +32,15 @@ FALLBACK_AGENT_TOKENS: Mapping[str, str] = {
 }
 AGENT_TOKENS_TTL_SECONDS = 30.0
 
+# Shells, and launchers that start many different programs. A tool whose argv
+# or process name is one of these (``bash -lc ...``, ``npx ...``, ``node``)
+# says nothing about which agent a pane runs, so none of them is a token.
+SHELL_COMMANDS = frozenset({"bash", "sh", "zsh", "fish", "dash", "ksh", "tcsh", "csh", "login", "su"})
+GENERIC_LAUNCHERS = frozenset({
+    "env", "exec", "nohup", "sudo", "npx", "npm", "pnpm", "pnpx", "yarn", "bunx", "bun", "node", "nodejs",
+    "deno", "python", "python3", "uv", "uvx", "pipx",
+})
+
 # A-Term field name -> Tether field name, for create and update bodies.
 _FIELD_MAP = {
     "slug": "slug",
@@ -139,19 +148,19 @@ def canonical_slug(ref: str) -> str:
 
 def create_tool(fields: dict[str, Any]) -> dict[str, Any]:
     tool = to_a_term(get_client().create_tool(to_tether_fields(fields)))
-    reset_agent_tokens()
+    refresh_agent_tokens()
     return tool
 
 
 def update_tool(ref: str, fields: dict[str, Any]) -> dict[str, Any]:
     tool = to_a_term(get_client().update_tool(ref, to_tether_fields(fields)))
-    reset_agent_tokens()
+    refresh_agent_tokens()
     return tool
 
 
 def delete_tool(ref: str) -> dict[str, Any]:
     result = get_client().delete_tool(ref)
-    reset_agent_tokens()
+    refresh_agent_tokens()
     return result
 
 
@@ -159,7 +168,9 @@ def agent_tokens_from(tools: Iterable[dict[str, Any]]) -> dict[str, str]:
     """Command token -> canonical slug for every agent tool (the shell excluded).
 
     A tool is recognised by its slug, its aliases, its process name and the
-    program its ``argv`` starts.
+    program its ``argv`` starts, except shells and generic launchers
+    (:data:`SHELL_COMMANDS`, :data:`GENERIC_LAUNCHERS`), which would make every
+    plain ``bash`` or ``node`` pane look like that tool.
     """
     tokens: dict[str, str] = {}
     for tool in tools:
@@ -170,7 +181,7 @@ def agent_tokens_from(tools: Iterable[dict[str, Any]]) -> dict[str, str]:
         program = Path(str(argv[0])).name if argv else ""
         for token in (slug, *(tool.get("aliases") or []), tool.get("process_name") or "", program):
             normalized = str(token).strip().lower()
-            if normalized:
+            if normalized and normalized not in SHELL_COMMANDS and normalized not in GENERIC_LAUNCHERS:
                 tokens.setdefault(normalized, slug)
     return tokens
 
@@ -200,7 +211,13 @@ class _AgentTokenCache:
                     logger.warning("agent_tokens_fallback", error=str(error), cached=self._tokens is not None)
             return self._tokens if self._tokens is not None else FALLBACK_AGENT_TOKENS
 
+    def refresh(self) -> None:
+        """Make the next read ask Tether again, keeping the last good tokens if it can't answer."""
+        with self._lock:
+            self._expires = 0.0
+
     def reset(self) -> None:
+        """Forget everything, back to :data:`FALLBACK_AGENT_TOKENS` until Tether answers."""
         with self._lock:
             self._tokens = None
             self._expires = 0.0
@@ -214,6 +231,11 @@ def agent_tokens() -> Mapping[str, str]:
     return _AGENT_TOKENS.get()
 
 
+def refresh_agent_tokens() -> None:
+    """Re-read Tether on the next listing (after a tool edit); the last good tokens stay as a fallback."""
+    _AGENT_TOKENS.refresh()
+
+
 def reset_agent_tokens() -> None:
-    """Forget the cached tokens, so the next listing reads Tether again."""
+    """Forget the cached tokens entirely, so the shipped agents apply until Tether answers."""
     _AGENT_TOKENS.reset()

@@ -206,6 +206,20 @@ def test_own_tmux_tokens_come_from_tethers_tools(fake_tether: FakeTether) -> Non
     assert [(s["id"], s["mode"]) for s in source.list(ctx)] == [("claude-work", "claude-code"), ("work", "gemini-cli")]
 
 
+def test_own_tmux_tokens_skip_shells_and_generic_launchers() -> None:
+    """A tool started through bash, npx or node must not claim every bash, npx or node pane."""
+    tokens = agent_tools.agent_tokens_from([
+        {"slug": "gemini-cli", "argv": ["npx", "@google/gemini-cli"], "process_name": "node"},
+        {"slug": "mytool", "argv": ["/bin/bash", "-lc", "mytool --tui"]},
+    ])
+    assert tokens == {"gemini-cli": "gemini-cli", "mytool": "mytool"}
+    source = OwnTmuxSource(tool_tokens=lambda: tokens, project_of=_no_project)
+    assert source.infer_mode("work", "bash") == ("shell", "not_started")
+    assert source.infer_mode("web", "node") == ("shell", "not_started")
+    assert source.infer_mode("web", "npx") == ("shell", "not_started")
+    assert source.infer_mode("gemini-cli", "node") == ("gemini-cli", "running")
+
+
 def test_own_tmux_tokens_survive_tether_going_down(fake_tether: FakeTether, monkeypatch: pytest.MonkeyPatch) -> None:
     fake_tether.state.tools["gemini-cli"] = {**fake_tether.state.tools["codex"], "slug": "gemini-cli", "processName": "gemini"}
     assert agent_tools.agent_tokens()["gemini"] == "gemini-cli"
@@ -226,6 +240,16 @@ def test_own_tmux_tokens_are_reread_after_a_tool_edit(fake_tether: FakeTether) -
     assert "gemini" not in agent_tools.agent_tokens()
     agent_tools.create_tool({"slug": "gemini-cli", "name": "Gemini", "command": "gemini", "process_name": "gemini"})
     assert agent_tools.agent_tokens()["gemini"] == "gemini-cli"
+
+
+def test_own_tmux_tokens_after_a_tool_edit_keep_the_last_list_while_tether_is_down(
+    fake_tether: FakeTether, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    agent_tools.create_tool({"slug": "gemini-cli", "name": "Gemini", "command": "gemini", "process_name": "gemini"})
+    assert agent_tools.agent_tokens()["gemini"] == "gemini-cli"
+    agent_tools.update_tool("gemini-cli", {"description": "edited"})
+    monkeypatch.setattr(agent_tools, "list_tools", MagicMock(side_effect=TetherUnavailable("down")))
+    assert agent_tools.agent_tokens()["gemini"] == "gemini-cli"  # not the shipped fallback
 
 
 def test_own_tmux_mode_inference_requires_token_boundaries() -> None:

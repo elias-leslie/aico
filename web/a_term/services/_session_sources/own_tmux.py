@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-SHELL_COMMANDS = frozenset({"bash", "sh", "zsh", "fish", "dash", "ksh", "tcsh", "csh", "login", "su"})
+SHELL_COMMANDS = agent_tools.SHELL_COMMANDS
 # An agent started from a non-job-control shell shares the shell's process
 # group, so tmux reports the shell as ``pane_current_command``. Walk a bounded
 # slice of the pane's process tree to recover the real agent command.
