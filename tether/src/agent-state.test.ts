@@ -11,7 +11,7 @@ import {
   findCodexRollout,
   hookState,
 } from './agent-state'
-import type { ProcFs } from './continuity'
+import { observeCodex, type ProcFs } from './continuity'
 import { parseHookReport } from './lifecycle-api'
 
 const CLAUDE = '5a7741ea-e6b1-4062-853b-0d9d2e03d549'
@@ -313,11 +313,17 @@ describe('agent process discovery', () => {
     expect(findCodexRollout(fs, [30])).toEqual({ pid: 30, path: rollout(CODEX), threadId: CODEX })
   })
 
-  it('returns the first user rollout even when its thread ID is not a UUID', () => {
+  it('takes the user rollout with a UUID thread ID, the one reboot continuity resumes', () => {
     const fs = procfs(
       { [rollout('odd')]: meta('odd'), [rollout(CODEX)]: meta(CODEX) },
       { '/proc/30/fd/4': rollout('odd'), '/proc/30/fd/5': rollout(CODEX) },
     )
+    expect(findCodexRollout(fs, [30])).toEqual({ pid: 30, path: rollout(CODEX), threadId: CODEX })
+    expect(observeCodex(fs, [30])).toEqual({ resumeId: CODEX, idle: null })
+  })
+
+  it('falls back to a user rollout without a UUID thread ID when it is the only one', () => {
+    const fs = procfs({ [rollout('odd')]: meta('odd') }, { '/proc/30/fd/4': rollout('odd') })
     expect(findCodexRollout(fs, [30])).toEqual({ pid: 30, path: rollout('odd'), threadId: null })
     expect(findCodexRollout(procfs({}), [30])).toBeNull()
   })

@@ -111,10 +111,16 @@ const ESCALATED = /sandbox_permissions\W+require_escalated/
 const ROLLOUT_TAIL_BYTES = 512 * 1024
 const ROLLOUT_MAX_STEP_BYTES = 4 * 1024 * 1024
 
-/** The user thread's rollout (not a subagent's) a Codex process holds open. */
+/** The user thread's rollout (not a subagent's) a Codex process holds open:
+ * the first with a UUID thread ID, the thread reboot continuity resumes
+ * (observeCodex), else the first user rollout so its state still shows. */
 export function findCodexRollout(fs: ProcFs, pids: number[]): CodexRolloutFile | null {
-  for (const rollout of codexUserRollouts(fs, pids)) return rollout
-  return null
+  let fallback: CodexRolloutFile | null = null
+  for (const rollout of codexUserRollouts(fs, pids)) {
+    if (rollout.threadId) return rollout
+    fallback ??= rollout
+  }
+  return fallback
 }
 
 /** Folds rollout lines into the thread's turn state. */
