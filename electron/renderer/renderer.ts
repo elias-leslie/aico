@@ -24,6 +24,7 @@ import {
 } from './actions'
 import { type Arcade, GAMES, startArcade } from './arcade'
 import { nextGame } from './arcade/next-game'
+import { WINDOW_CHORDS } from './chords'
 import { initControlSurface } from './control-surface'
 import { controlWheelAction, swallowQueryReplies, trackSgrMouse } from './control-view'
 import { wireDraftInput } from './draft-input'
@@ -649,14 +650,14 @@ term.attachCustomKeyEventHandler((event) => {
   if (event.type !== 'keydown' || !event.ctrlKey || !event.shiftKey) {
     return true
   }
-  if (event.code === 'KeyV') {
+  if (event.code === WINDOW_CHORDS.paste) {
     // xterm skips preventDefault when this handler returns false, so Chromium
     // would also fire a native paste event into xterm's textarea: a second paste.
     event.preventDefault()
     void pasteFromClipboard()
     return false
   }
-  if (event.code === 'KeyC') {
+  if (event.code === WINDOW_CHORDS.copy) {
     const selection = term.getSelection()
     if (selection) window.aico.clipboard.write(selection)
     return false

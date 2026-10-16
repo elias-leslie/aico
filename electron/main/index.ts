@@ -313,6 +313,7 @@ const startup = app.whenReady().then(async () => {
   chrome.registerIpc(ipcMain)
   sessions.registerIpc(ipcMain)
   selection.registerIpc(ipcMain)
+  hotkeys.registerIpc(ipcMain)
 
   chrome.createTray({
     onSelect: windows.focusOrReopen,

@@ -8,6 +8,8 @@
 // are listed for discoverability but not clickable (e.g. copy/paste are terminal
 // chords); they still show their shortcut so users learn them.
 
+import { acceleratorLabel, chordLabel } from './chords'
+
 // Late-bound so the `palette` action can open the palette without this module
 // importing the control surface (which imports this module).
 let paletteOpener: () => void = () => {}
@@ -94,7 +96,9 @@ export interface Action {
   /** Group header in the menu, in first-seen order. */
   section: string
   label: string
-  /** Human-readable shortcut, e.g. "Ctrl+Shift+Space", or a CLI verb for references. */
+  /** Human-readable shortcut, e.g. "Ctrl+Shift+Space", or a CLI verb for
+   * references; always read from the keys actually bound (chords.ts, or the
+   * global hotkey main registered), never written by hand. */
   shortcut: string
   /** Single glyph shown in the cluster/menu/palette. */
   icon: string
@@ -121,7 +125,7 @@ export const ACTIONS: Action[] = [
     id: 'indicate',
     section: 'Capture',
     label: 'Indicate selection',
-    shortcut: 'Ctrl+Shift+Space',
+    shortcut: '', // the global hotkey main registered (setSelectionHotkey)
     icon: '⊹',
     note: 'Pull the latest captured text or image into this session.',
     run: () => window.aico.actions.indicate(),
@@ -152,7 +156,7 @@ export const ACTIONS: Action[] = [
     id: 'hub',
     section: 'Session',
     label: 'Show windows',
-    shortcut: 'Ctrl+Shift+H',
+    shortcut: chordLabel('hub'),
     icon: '⊞',
     run: () => window.aico.actions.hub(),
   },
@@ -160,7 +164,7 @@ export const ACTIONS: Action[] = [
     id: 'palette',
     section: 'Session',
     label: 'Command palette',
-    shortcut: 'Ctrl+Shift+P',
+    shortcut: chordLabel('palette'),
     icon: '⌕',
     run: () => paletteOpener(),
   },
@@ -177,7 +181,7 @@ export const ACTIONS: Action[] = [
     id: 'refresh',
     section: 'Session',
     label: 'Refresh terminal',
-    shortcut: 'Ctrl+Shift+R',
+    shortcut: chordLabel('refresh'),
     icon: '↻',
     note: 'Repaint the view from tmux if output looks garbled or duplicated.',
     run: () => window.dispatchEvent(new CustomEvent('aico:refresh')),
@@ -240,7 +244,7 @@ export const ACTIONS: Action[] = [
     id: 'copy',
     section: 'Edit',
     label: 'Copy selection',
-    shortcut: 'Ctrl+Shift+C',
+    shortcut: chordLabel('copy'),
     icon: '⧉',
   },
   {
@@ -256,7 +260,7 @@ export const ACTIONS: Action[] = [
     id: 'paste',
     section: 'Edit',
     label: 'Paste',
-    shortcut: 'Ctrl+Shift+V',
+    shortcut: chordLabel('paste'),
     icon: '⎘',
   },
   {
@@ -288,6 +292,13 @@ export const ACTIONS: Action[] = [
     run: () => window.aico.arcade.toggle(),
   },
 ]
+
+/** Label "Indicate selection" with the global hotkey main registered for it,
+ * or none when it could not register one (Wayland, or another app holds it). */
+export function setSelectionHotkey(accelerator: string | null): void {
+  const indicate = ACTIONS.find((a) => a.id === 'indicate')
+  if (indicate) indicate.shortcut = acceleratorLabel(accelerator)
+}
 
 // Per-TUI launch actions, built from the registry at init (the TUI list lives in
 // the main process, fetched over IPC). They are runnable ⇒ pinnable and palette-

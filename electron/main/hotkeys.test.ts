@@ -40,8 +40,26 @@ describe('hotkeys', () => {
 
     setup({ registered: false }).hotkeys.registerSelection()
     expect(log).toHaveBeenLastCalledWith(
-      '[aico] selection hotkey Ctrl+Shift+Space: unavailable (Wayland? bind a GNOME shortcut to the grab path)',
+      '[aico] selection hotkey Ctrl+Shift+Space: unavailable (Wayland, or another app holds it)',
     )
+  })
+
+  it('tells windows the indicate hotkey only once it took', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    const handlers = new Map<string, () => unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, fn: () => unknown) => handlers.set(channel, fn)),
+    }
+    const ok = setup()
+    ok.hotkeys.registerIpc(ipcMain as never)
+    expect(handlers.get('hotkeys:selection')?.()).toBeNull()
+    ok.hotkeys.registerSelection()
+    expect(handlers.get('hotkeys:selection')?.()).toBe('Ctrl+Shift+Space')
+
+    const taken = setup({ registered: false })
+    taken.hotkeys.registerIpc(ipcMain as never)
+    taken.hotkeys.registerSelection()
+    expect(handlers.get('hotkeys:selection')?.()).toBeNull()
   })
 
   it('stop() unregisters the shortcuts only once the app is ready', () => {

@@ -10,9 +10,11 @@ import {
   movePin,
   pinnedActions,
   setGameActions,
+  setSelectionHotkey,
   setTuiActions,
   togglePin,
 } from './actions'
+import { chordLabel } from './chords'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -27,6 +29,19 @@ describe('action registry', () => {
     const shortcuts = ACTIONS.map((a) => a.shortcut).filter((s) => s.length > 0)
     expect(new Set(ids).size).toBe(ids.length)
     expect(new Set(shortcuts).size).toBe(shortcuts.length)
+  })
+
+  it('labels each chord action with the key its handler listens for', () => {
+    for (const id of ['palette', 'hub', 'refresh', 'copy', 'paste'] as const) {
+      expect(findAction(id)?.shortcut).toBe(chordLabel(id))
+    }
+  })
+
+  it('labels Indicate selection with the hotkey main registered, or none', () => {
+    setSelectionHotkey('CommandOrControl+Shift+Space')
+    expect(findAction('indicate')?.shortcut).toBe('Ctrl+Shift+Space')
+    setSelectionHotkey(null)
+    expect(findAction('indicate')?.shortcut).toBe('')
   })
 
   it('gives every action a non-empty label and icon', () => {

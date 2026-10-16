@@ -29,10 +29,12 @@ import {
   runAction,
   sections,
   setPaletteOpener,
+  setSelectionHotkey,
   togglePin,
 } from './actions'
 import { createArmGuard } from './arm-guard'
 import { createCatalogState, type ProjectInfo, type TuiInfo } from './catalog-state'
+import { windowChord } from './chords'
 import { paletteKeyIntent, paletteMatches } from './palette'
 
 // Filled thumbtack; color + opacity (via CSS) distinguish pinned from unpinned.
@@ -859,19 +861,18 @@ async function loadTerminalFontSettings(): Promise<AicoTerminalFontSettings> {
 /** Handle an Aico chrome chord from the terminal key handler. Returns true if
  * it consumed the event (so the caller swallows it from the PTY). */
 export function controlSurfaceChord(e: KeyboardEvent): boolean {
-  if (!e.ctrlKey || !e.shiftKey || e.altKey || e.metaKey) return false
-  switch (e.code) {
-    case 'KeyP':
+  switch (windowChord(e)) {
+    case 'palette':
       openPalette()
       return true
-    case 'KeyH':
+    case 'hub':
       runAction('hub')
       return true
-    case 'KeyR':
+    case 'refresh':
       runAction('refresh')
       return true
     default:
-      return false
+      return false // copy and paste belong to the terminal (renderer.ts)
   }
 }
 
@@ -888,7 +889,11 @@ export async function initControlSurface(): Promise<void> {
 
   // Independent catalogs load together, so their pinned launchers show on the
   // first render.
-  await catalogs.loadInitial()
+  // Independent catalogs and the indicate hotkey's label load together.
+  await Promise.all([
+    catalogs.loadInitial(),
+    window.aico.actions.selectionHotkey().then(setSelectionHotkey, () => setSelectionHotkey(null)),
+  ])
   submenuEl = make('div', 'aico-submenu')
   submenuEl.hidden = true
   submenuEl.addEventListener('mouseleave', (e) => {
