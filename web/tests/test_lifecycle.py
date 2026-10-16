@@ -42,6 +42,32 @@ def test_create_session_asks_tether_with_a_term_origin_and_links(tether: FakeTet
     assert session["is_external"] is False and session["source"] == "tether"
 
 
+@pytest.mark.parametrize(
+    ("working_dir", "sent"),
+    [
+        ("/tmp/./a//b/", "/tmp/a/b"),
+        ("//tmp", "/tmp"),
+        ("/tmp/a/../b", "/tmp/b"),
+        ("/tmp", "/tmp"),
+        ("", None),
+        (None, None),
+    ],
+)
+def test_create_session_sends_tether_a_normalized_project_root(
+    tether: FakeTether, working_dir: str | None, sent: str | None
+) -> None:
+    lifecycle.create_session(pane_id=_pane()["id"], mode="shell", project_id="proj", working_dir=working_dir)
+    body = next(body for method, path, body in tether.calls if (method, path) == ("POST", "/v1/sessions"))
+    assert body.get("projectRoot") == sent
+
+
+def test_create_session_leaves_a_relative_root_for_tether_to_refuse(tether: FakeTether) -> None:
+    with pytest.raises(TetherError) as caught:
+        lifecycle.create_session(pane_id=_pane()["id"], mode="shell", working_dir="./tmp")
+    assert caught.value.code == "invalid_body"
+    assert tether.state.sessions == {}
+
+
 def test_create_pane_with_sessions_creates_shell_and_agent(tether: FakeTether) -> None:
     pane = lifecycle.create_pane_with_sessions(pane_type="project", pane_name="P", project_id="proj")
     assert [s["mode"] for s in pane["sessions"]] == ["shell", "codex"]  # codex is Tether's default

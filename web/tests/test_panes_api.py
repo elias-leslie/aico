@@ -46,6 +46,12 @@ def test_project_pane_creates_shell_and_agent_sessions(test_app: TestClient, fak
     assert {link["session_id"] for link in links} == {s["id"] for s in pane["sessions"]}
 
 
+def test_hand_typed_working_dir_spelling_is_normalized(test_app: TestClient, fake_tether: FakeTether) -> None:
+    _create(test_app, pane_type="project", pane_name="Proj", project_id="proj", working_dir="//tmp/./")
+
+    assert {body["projectRoot"] for body in _session_creates(fake_tether)} == {"/tmp"}
+
+
 def test_project_pane_uses_requested_tool_alias(test_app: TestClient, fake_tether: FakeTether) -> None:
     pane = _create(test_app, pane_type="project", pane_name="Proj", project_id="proj", agent_tool_slug="claude")
     assert {s["mode"] for s in pane["sessions"]} == {"shell", "claude-code"}

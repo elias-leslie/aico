@@ -13,6 +13,7 @@ re-exported here, so callers keep catching ``lifecycle.LifecycleError``.
 
 from __future__ import annotations
 
+import posixpath
 import uuid
 from typing import Any
 
@@ -33,6 +34,17 @@ SHELL_MODE = "shell"
 # ---------------------------------------------------------------------------
 # Create
 # ---------------------------------------------------------------------------
+def _project_root(working_dir: str | None) -> str | None:
+    """Tether refuses a root that isn't already normalized, so tidy hand-typed
+    spellings ('/x/./y', '//x', '/x/') first. A blank one means "not given".
+    It is not made absolute: Tether still refuses a relative one."""
+    if not working_dir:
+        return None
+    normalized = posixpath.normpath(working_dir)
+    # POSIX keeps exactly two leading slashes; Tether (Node) collapses them.
+    return normalized[1:] if normalized.startswith("//") else normalized
+
+
 def create_session(
     *,
     pane_id: str,
@@ -54,7 +66,7 @@ def create_session(
         rows=rows,
         tool=mode,
         project_id=project_id,
-        project_root=working_dir,
+        project_root=_project_root(working_dir),
         name=name,
         a_term_session_id=str(uuid.uuid4()),
     )

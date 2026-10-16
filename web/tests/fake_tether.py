@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import posixpath
 import re
 import socketserver
 import tempfile
@@ -165,6 +166,18 @@ class FakeTetherState:
         self.events.append({"type": "session.ended", "data": {"id": session_id}})
 
 
+def _is_project_root_path(value: Any) -> bool:
+    """Tether's isProjectRootPath: absolute, Node-normalized, no NUL."""
+    if not isinstance(value, str) or not value.startswith("/") or "\0" in value:
+        return False
+    normalized = posixpath.normpath(value)
+    if normalized.startswith("//"):  # POSIX keeps two leading slashes; Node does not.
+        normalized = normalized[1:]
+    if value.endswith("/") and normalized != "/":  # Node keeps a trailing slash.
+        normalized += "/"
+    return normalized == value
+
+
 def _error(status: int, code: str, **extra: Any) -> tuple[int, dict[str, Any]]:
     return status, {"error": code, **extra}
 
@@ -255,6 +268,8 @@ def _sessions(state: FakeTetherState, method: str, rest: list[str], query: dict[
                 return _error(400, "invalid_body")
             if body.get("aTermSessionId") is not None and body["origin"] != "a-term":
                 return _error(400, "invalid_body")
+            if body.get("projectRoot") is not None and not _is_project_root_path(body["projectRoot"]):
+                return _error(400, "invalid_body", field="projectRoot")
             tool = state.resolve_tool(body.get("tool"))
             if tool is None:
                 return _error(400, "unknown_tool")

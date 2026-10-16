@@ -58,6 +58,13 @@ def test_working_dir_must_match_to_reuse(tether: FakeTether, tmp_path) -> None:
     assert target.created is True
 
 
+def test_hand_typed_working_dir_spelling_is_normalized(tether: FakeTether, tmp_path) -> None:
+    target = ensure_project_tool_session("proj", "codex", working_dir=f"/{tmp_path}/./")
+    assert target.created is True and target.working_dir == str(tmp_path)
+    again = ensure_project_tool_session("proj", "codex", working_dir=str(tmp_path))
+    assert again.session_id == target.session_id
+
+
 def test_not_running_agent_is_respawned(tether: FakeTether, tmp_path) -> None:
     tether.add_session(tool="codex", project_id="proj", project_root=str(tmp_path), status="uncertain")
     target = ensure_project_tool_session("proj", "codex", working_dir=str(tmp_path))
