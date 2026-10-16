@@ -120,7 +120,16 @@ export interface LayoutDisplay {
   scaleFactor: number
 }
 
-export interface Layout {
+/** The Aico process that wrote the layout. */
+export interface LayoutOwner {
+  pid: number
+  /** `/proc/<pid>/stat` field 22 as printed (see process-identity.ts); null
+   * if procfs couldn't be read. A file whose pid is gone, or whose pid now
+   * has another start time, was left by a crash: no Aico is running. */
+  startTime: string | null
+}
+
+export interface Layout extends LayoutOwner {
   v: 1
   updatedAt: string
   displays: LayoutDisplay[]
@@ -130,6 +139,7 @@ export interface Layout {
 export function layoutSnapshot(
   displays: LayoutDisplay[],
   windows: LayoutWindow[],
+  owner: LayoutOwner,
   now = new Date(),
 ): Layout {
   const order = (w: LayoutWindow): [number, number] => [w.bounds.y, w.bounds.x]
@@ -138,7 +148,14 @@ export function layoutSnapshot(
     const [qy, qx] = order(q)
     return px - qx || py - qy
   })
-  return { v: 1, updatedAt: now.toISOString(), displays, windows: sorted }
+  return {
+    v: 1,
+    pid: owner.pid,
+    startTime: owner.startTime,
+    updatedAt: now.toISOString(),
+    displays,
+    windows: sorted,
+  }
 }
 
 // ---------------------------------------------------------------------------

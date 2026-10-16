@@ -40,6 +40,7 @@ import {
 } from './gaze'
 import { parseBoundsRequest, parsePins } from './ipc-validation'
 import { allowTrustedAudioMedia } from './media-permission'
+import { ownStartTime } from './process-identity'
 import {
   ensurePersonalWorkspaceRoot,
   PERSONAL_WORKSPACE_ID,
@@ -275,11 +276,17 @@ function logWidgetEvent(widgetId: string, event: string, data: Record<string, un
 const eyeAnchors = new Map<number, Point>()
 let gazeTimer: ReturnType<typeof setTimeout> | undefined
 let layoutTimer: ReturnType<typeof setTimeout> | undefined
+// A burst of changes (a drag, several sessions updating at once) writes once,
+// 300 ms after it settles, but never later than 1 s after the first change.
+let layoutDeadline = 0
 const LAYOUT_PATH = join(
   process.env.XDG_RUNTIME_DIR || `/run/user/${process.getuid?.() ?? 1000}`,
   'aico',
   'layout.json',
 )
+// Written into layout.json: readers check this process is still alive before
+// trusting the file, since a SIGKILL or crash skips the unlink at quit.
+const OWN_PROCESS = { pid: process.pid, startTime: ownStartTime() }
 
 function aicoWindows(): BrowserWindow[] {
   return BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed() && widgetOf.has(w.id))
@@ -360,9 +367,13 @@ function writeLayout(): void {
   try {
     mkdirSync(join(LAYOUT_PATH, '..'), { recursive: true, mode: 0o700 })
     const tmp = `${LAYOUT_PATH}.${process.pid}.tmp`
-    writeFileSync(tmp, `${JSON.stringify(layoutSnapshot(displays, windows), null, 2)}\n`, {
-      mode: 0o600,
-    })
+    writeFileSync(
+      tmp,
+      `${JSON.stringify(layoutSnapshot(displays, windows, OWN_PROCESS), null, 2)}\n`,
+      {
+        mode: 0o600,
+      },
+    )
     renameSync(tmp, LAYOUT_PATH)
   } catch (error) {
     console.warn('[aico:layout] write failed:', error instanceof Error ? error.message : error)
@@ -444,8 +455,19 @@ function requestCoordinator(id: string, coordinator: boolean): void {
 }
 
 function scheduleLayout(): void {
+  // Before ready there is no screen to read (startup writes once when ready);
+  // after quit starts, a late write would undo the unlink at quit.
+  if (quitting || !app.isReady()) return
+  const now = Date.now()
   if (layoutTimer) clearTimeout(layoutTimer)
-  layoutTimer = setTimeout(writeLayout, 300)
+  else layoutDeadline = now + 1000
+  layoutTimer = setTimeout(
+    () => {
+      layoutTimer = undefined
+      writeLayout()
+    },
+    Math.max(0, Math.min(300, layoutDeadline - now)),
+  )
 }
 
 function windowForWidget(id: string): BrowserWindow | undefined {
@@ -1517,6 +1539,9 @@ function pushTitles(): void {
     })
     retileOnCoordinatorChange(win, descriptor.coordinator ?? false)
   }
+  // Names and coordinator marks are in layout.json too; agents read it right
+  // after `root title`.
+  scheduleLayout()
 }
 
 // ---------------------------------------------------------------------------
@@ -1745,6 +1770,14 @@ function requestGracefulSignalQuit(signal: NodeJS.Signals): void {
 process.on('SIGTERM', () => requestGracefulSignalQuit('SIGTERM'))
 process.on('SIGINT', () => requestGracefulSignalQuit('SIGINT'))
 
+// Single-instance lock: a second launch must not spawn a duplicate (it would
+// fight over the sidecar port :8005 and re-adopt the same widget catalog). The
+// secondary quits immediately; the primary handles the desktop activation.
+const gotSingleInstanceLock = app.requestSingleInstanceLock()
+const activationOnly = process.argv.includes('--aico-activate')
+/** This process is the desktop runtime, not a launcher click or a duplicate. */
+const runtimeOwner = gotSingleInstanceLock && !activationOnly
+
 app.on('before-quit', () => {
   quitting = true
   stopEvents?.()
@@ -1756,18 +1789,17 @@ app.on('before-quit', () => {
   sidecar?.stop()
   if (gazeTimer) clearTimeout(gazeTimer)
   if (layoutTimer) clearTimeout(layoutTimer)
+  // Only the runtime that wrote layout.json removes it. A launcher click
+  // (`--aico-activate`) quits through here too while the runtime keeps going.
+  if (!runtimeOwner) return
   try {
-    unlinkSync(LAYOUT_PATH) // no Aico running: no layout to report
+    const written = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8')) as { pid?: unknown }
+    if (written.pid === process.pid) unlinkSync(LAYOUT_PATH) // no Aico running: no layout
   } catch {
     // Never written, or already gone.
   }
 })
 
-// Single-instance lock: a second launch must not spawn a duplicate (it would
-// fight over the sidecar port :8005 and re-adopt the same widget catalog). The
-// secondary quits immediately; the primary handles the desktop activation.
-const gotSingleInstanceLock = app.requestSingleInstanceLock()
-const activationOnly = process.argv.includes('--aico-activate')
 if (gotSingleInstanceLock && activationOnly) {
   // An activation helper must never become the desktop runtime if the managed
   // process exits between launcher verification and this lock request.
@@ -1797,14 +1829,12 @@ app.on('activate', activateAico)
 
 const activationReadyFile = process.env.AICO_ACTIVATION_READY_FILE
 let activationIdentity: string | null = null
-if (gotSingleInstanceLock && !activationOnly && activationReadyFile) {
+if (runtimeOwner && activationReadyFile) {
   try {
-    // Linux stat field 22 is process starttime. It disambiguates a reused PID
-    // without exposing an application or agent environment variable.
-    const stat = readFileSync('/proc/self/stat', 'utf8').replace(/^.*\) /, '')
-    const starttime = stat.trim().split(/\s+/)[19]
-    if (!/^\d+$/.test(starttime)) throw new Error('missing process starttime')
-    activationIdentity = `${process.pid} ${starttime}\n`
+    // The start time disambiguates a reused PID without exposing an
+    // application or agent environment variable.
+    if (!OWN_PROCESS.startTime) throw new Error('missing process starttime')
+    activationIdentity = `${process.pid} ${OWN_PROCESS.startTime}\n`
     const temporary = `${activationReadyFile}.tmp.${process.pid}`
     writeFileSync(temporary, activationIdentity, { mode: 0o600 })
     renameSync(temporary, activationReadyFile)
@@ -1825,7 +1855,7 @@ app.on('before-quit', () => {
 const SESSION_ID = /^[0-9a-f]{8}$/
 
 const startup = app.whenReady().then(async () => {
-  if (!gotSingleInstanceLock || activationOnly) return // no runtime initialization
+  if (!runtimeOwner) return // no runtime initialization
   const { migrated } = initViews(dbPath)
   if (migrated) console.log(`[aico] copied ${migrated} window views from the pre-Tether catalog`)
   installContentSecurityPolicy()

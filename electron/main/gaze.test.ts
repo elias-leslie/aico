@@ -80,9 +80,22 @@ describe('layoutSnapshot', () => {
       maximized: false,
       coordinator: false,
     })
-    const out = layoutSnapshot([], [w('c', 500, 0), w('b', 0, 400), w('a', 0, 0)])
+    const owner = { pid: 4242, startTime: '987654' }
+    const out = layoutSnapshot([], [w('c', 500, 0), w('b', 0, 400), w('a', 0, 0)], owner)
     expect(out.windows.map((x) => x.id)).toEqual(['a', 'b', 'c'])
     expect(out.v).toBe(1)
+  })
+
+  it('names the writing process so a reader can tell a crash leftover from a live Aico', () => {
+    const now = new Date('2026-10-15T20:00:00.000Z')
+    const out = layoutSnapshot([], [], { pid: 4242, startTime: '987654' }, now)
+    expect(out).toMatchObject({
+      v: 1,
+      pid: 4242,
+      startTime: '987654',
+      updatedAt: now.toISOString(),
+    })
+    expect(layoutSnapshot([], [], { pid: 4242, startTime: null }).startTime).toBeNull()
   })
 })
 
