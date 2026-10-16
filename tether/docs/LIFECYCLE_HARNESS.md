@@ -32,8 +32,7 @@ Both default to the `dev` instance and refuse `default`. They are adapted from A
 10. Respawn moves the first session to a new scope; the old scope and its detached child are gone; the peer is intact.
 11. A pane exit while detached is reconciled through the pane-exit marker, then the session is Ended.
 12. Ending the second session retires its exact scope and its detached child.
-13. `GET /v1/legacy-sessions` answers (read-only).
-14. No workload PID, scope or session from the run remains, and the server unit exited once empty.
+13. No workload PID, scope or session from the run remains, and the server unit exited once empty.
 
 ## Real-session smoke coverage
 

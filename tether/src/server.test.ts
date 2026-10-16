@@ -18,7 +18,6 @@ let daemon: RunningDaemon
 const TEST_ENV = {
   TETHER_SUMMITFLOW_URL: 'off',
   TETHER_RECONCILE: 'off',
-  TETHER_ATERM_LEGACY_SOCKET: '/nonexistent/tether-test/default',
   HOME: '/nonexistent',
 }
 
@@ -150,7 +149,7 @@ describe('lifecycle API (no tmux started)', () => {
     ).toBe(404)
   })
 
-  it('serves roots, widgets, the GUI channel and A-Term legacy sessions', async () => {
+  it('serves roots, widgets and the GUI channel, and no legacy session routes', async () => {
     expect((await call('GET', '/v1/roots')).body).toMatchObject({ owner: 'aico', roots: [] })
     expect((await call('GET', '/v1/roots/r1')).status).toBe(404)
     expect((await call('POST', '/v1/roots/r1/show', {})).status).toBe(404)
@@ -160,12 +159,9 @@ describe('lifecycle API (no tmux started)', () => {
     })
     expect((await call('GET', '/v1/gui/channel')).body).toEqual({ error: 'invalid_client' })
     expect((await call('POST', '/v1/gui/results/x', { applied: true })).status).toBe(404)
-    expect(await call('GET', '/v1/legacy-sessions')).toMatchObject({
-      status: 200,
-      body: { items: [] },
-    })
+    // The A-Term legacy session API is gone.
+    expect((await call('GET', '/v1/legacy-sessions')).status).toBe(404)
     expect((await call('POST', '/v1/legacy-sessions/summitflow-x/end', {})).status).toBe(404)
-    expect((await call('GET', '/v1/legacy-sessions/summitflow-x/pane-mode')).status).toBe(404)
   })
 
   it('validates switch-project, pane-mode and context-check', async () => {

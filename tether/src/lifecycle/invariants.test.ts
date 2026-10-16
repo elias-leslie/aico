@@ -14,7 +14,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { DEFAULT_INSTANCE, ownsTmuxServerUnit, resolvePaths, type TetherPaths } from '../config'
-import { LegacyATermSessions } from '../legacy-aterm'
 import { Store } from '../store'
 import {
   allocateWidgetId,
@@ -470,25 +469,5 @@ describe('INV-16 session and root identities are never reused', () => {
     store.db.prepare('DELETE FROM sessions WHERE id = ?').run('e0000016')
     const candidates = ['e0000016', 'e0000113', 'e0000013', 'e00000ff']
     expect(allocateWidgetId(() => candidates.shift() as string)).toBe('e00000ff')
-  })
-})
-
-describe('INV-17 A-Term legacy sessions are attach/end only, by exact name', () => {
-  it('rejects non-A-Term names and uses exact-match targets', async () => {
-    const legacy = new LegacyATermSessions(join(dir, 'no-server', 'default'))
-    const name = 'summitflow-11111111-2222-4333-8444-555555555555'
-    expect(legacy.attachArgv(name)).toEqual([
-      '/usr/bin/tmux',
-      '-S',
-      join(dir, 'no-server', 'default'),
-      'attach-session',
-      '-t',
-      `=${name}`,
-    ])
-    expect(() => legacy.attachArgv('summitflow-x')).toThrow()
-    expect(() => legacy.attachArgv('aico-e0000001')).toThrow()
-    expect(await legacy.list()).toEqual([])
-    expect(await legacy.end(name)).toBe(false)
-    expect(await legacy.end('summitflow-*')).toBe(false)
   })
 })

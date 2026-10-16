@@ -52,7 +52,6 @@ Overrides that the Aico process honours and that Tether must not break: `AICO_ST
 | Stable targets | `$<n>` session id and `%<n>` pane id; one pane per session, and extra panes fail closed | `store.ts` |
 | Server global environment | exactly `AICO_OWNER=aico`, `AICO_WORKLOAD_CLASS=durable-tmux-server`, `AICO_TMUX_SERVER_ID=<id>`. These authenticate a zero-session server. | `tmux.ts` `matchesServerIdentityEnvironment` |
 | Profile | `history-limit 200000`, `mouse off`, `focus-events on`, `status off` (the resize claim requires it), `default-terminal tmux-256color`, `terminal-overrides ,xterm-256color:Tc`, `terminal-features xterm*:sync`, `NO_COLOR` unset, `COLORTERM truecolor`, `CLICOLOR 1` | `tmux.ts` `tmuxConf` |
-| A-Term legacy sessions | `summitflow-*` on the default tmux server: attach-only until they end | `tmux.ts` `A_TERM_SESSION_PREFIX` |
 
 ## Pane environment markers
 

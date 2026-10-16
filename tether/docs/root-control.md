@@ -109,7 +109,7 @@ only what it requested and observed.
 | `running` | `running` | Launch dispatched and an active managed workload verified | Allowed with the current generation |
 | `pending` | `pending` | Reserved; never allocated | 409 `workload_unavailable` |
 | `uncertain` | `uncertain` | Allocated, but an active workload is not verified | 409 `workload_unavailable` |
-| `legacy` | none | A pre-Tether A-Term session on the default tmux server; attach and End only | Not addressable as a root |
+| `legacy` | none | A lifecycle-v0 session, kept read-only | 409 `workload_unavailable` |
 | (404) | `ended` | Retired; the root keeps a tombstone with null generation | 410 `ended` (root), 404 (widget) |
 
 | Fleet `status` | `capabilities.launch` | Owner relationship |

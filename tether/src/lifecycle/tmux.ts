@@ -105,9 +105,6 @@ function validateMarkerDir(dir: string): string {
   }
   return dir
 }
-// A-Term currently exposes attachable tmux sessions with this legacy prefix.
-export const A_TERM_SESSION_PREFIX = 'summitflow-'
-
 export interface TmuxTarget {
   socket: string | null
   session: string
@@ -473,11 +470,6 @@ export function widgetIdFromSession(session: string): string | null {
   return m ? m[1] : null
 }
 
-/** A-Term managed sessions live on the default tmux server with this prefix. */
-export function isATermSessionName(session: string): boolean {
-  return new RegExp(`^${A_TERM_SESSION_PREFIX}[0-9a-f-]{36}$`).test(session)
-}
-
 /** `tmux` argv that tests whether a widget's session already exists (exit 0). */
 export function hasSessionArgs(widgetId: string): string[] {
   return hasTargetArgs(internalTarget(widgetId))
@@ -756,16 +748,6 @@ export function panePidTargetArgs(target: TmuxTarget): string[] {
  */
 export function refreshClientArgs(client: string, socket: string | null = TMUX_SOCKET): string[] {
   return [...socketArgs(socket), 'refresh-client', '-t', client]
-}
-
-/** Default-server panes that can be attached as external A-Term sessions. */
-export function listDefaultPanesArgs(): string[] {
-  return [
-    'list-panes',
-    '-a',
-    '-F',
-    '#{session_name}\t#{pane_id}\t#{pane_current_path}\t#{pane_current_command}',
-  ]
 }
 
 /** Tether: the visible screen only (`GET /v1/sessions/:id/capture`). */

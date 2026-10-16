@@ -321,7 +321,6 @@ Event types:
 - `root.updated`
 - `tools.changed` (`{slug|ref, change}`)
 - `projects.changed` (`{id, change: "registered"}`)
-- `legacy.changed` *(post-cutover)*: `{names}`, the A-Term legacy session names now listed (see below)
 - `gui.connected`, `gui.disconnected`
 
 `session.created` and `session.updated` carry `session` *(post-cutover)*: the session descriptor as `GET /v1/sessions` would list it, with a status verified for the exact generation the event announces. Clients can apply it instead of fetching the descriptor; one that sees no `session` (an older Tether) re-reads. Session events are published in order through one queue. `session.ended` and `session.resized` carry the ID (and generation) only.
@@ -329,21 +328,6 @@ Event types:
 Events never carry terminal contents or prompts. A `session` snapshot carries the session's name and label, which every `GET /v1/sessions` caller on the same socket can read anyway.
 
 SSE was rejected. NDJSON is simpler to consume from both Node and Python (`httpx` line streaming) over a Unix socket, and browsers never connect to Tether directly.
-
-## A-Term legacy sessions
-
-A-Term's pre-Tether sessions (`summitflow-<uuid>` on `/tmp/tmux-<uid>/default`) are listed for attach and end only. Tether never adopts that server, never respawns them, and never touches any other session on it.
-
-Only the `default` instance reads that server *(post-cutover)*. Another instance (a test `dev`) lists none and cannot attach or end them, unless `TETHER_ATERM_LEGACY_SOCKET` names a server explicitly.
-
-| Method and route | Body | Result |
-| --- | --- | --- |
-| `GET /v1/legacy-sessions` | none | `{items: [{kind: "legacy-attach-only", name, aTermSessionId, createdAt, attachedClients}]}`; empty when the server is not running |
-| `GET /v1/legacy-sessions/:name/attach` | none | `{argv: [tmux, "-S", socket, "attach-session", "-t", "=<name>"], env, unset}` |
-| `GET /v1/legacy-sessions/:name/pane-mode` *(post-cutover)* | none | The same pane-mode answer as for a session, without `generation`; `404 not_found` for a name that is not listed |
-| `POST /v1/legacy-sessions/:name/end` | none | `{status: "ended"}` after `tmux kill-session -t =<name>` for an exactly listed name; `404 not_found` otherwise |
-
-`legacy.changed` *(post-cutover)* announces a changed list with `{names}`. Tether compares each list it reads with the previous one: after its own End, on every `GET`, and from a 15 s poll that runs while legacy sessions exist. Nothing creates legacy sessions any more, so the poll stops for good once the list is empty. The first list after a daemon start is the baseline and is not announced; clients re-list on `hello`/`gap` as for sessions.
 
 ## Health and version
 

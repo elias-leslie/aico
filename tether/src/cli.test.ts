@@ -81,7 +81,6 @@ describe('main', () => {
     daemon = await startDaemon(resolvePaths({ instance: 'clitest' }), {
       TETHER_SUMMITFLOW_URL: 'off',
       TETHER_RECONCILE: 'off',
-      TETHER_ATERM_LEGACY_SOCKET: join(dir, 'no-aterm', 'default'),
     })
     await daemon.ready
   })
@@ -117,8 +116,6 @@ describe('main', () => {
   it('lists an empty session catalog and dry-runs an import', async () => {
     const list = capture()
     expect(await main(['-i', 'clitest', 'sessions'], list.io)).toBe(0)
-    const legacy = capture()
-    expect(await main(['-i', 'clitest', 'legacy'], legacy.io)).toBe(0)
     const missing = capture()
     expect(
       await main(['-i', 'clitest', 'import-aico', '--from', join(dir, 'absent.db')], missing.io),

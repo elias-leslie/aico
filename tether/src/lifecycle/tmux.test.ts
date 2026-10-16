@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  A_TERM_SESSION_PREFIX,
   attachArgs,
   attachTargetArgs,
   bracketedSubmitTextTargetArgs,
@@ -10,7 +9,6 @@ import {
   HISTORY_LIMIT,
   hasSessionArgs,
   hasTargetArgs,
-  isATermSessionName,
   isDefinitiveTmuxAbsence,
   isTmuxTransportUnavailable,
   killArgs,
@@ -18,7 +16,6 @@ import {
   listArgs,
   listClientsArgs,
   listClientsTargetArgs,
-  listDefaultPanesArgs,
   listSessionPanesArgs,
   listSessionPanesTargetArgs,
   matchesServerIdentityEnvironment,
@@ -53,7 +50,7 @@ import {
   widgetIdFromSession,
 } from './tmux'
 
-const EXTERNAL_A_TERM_SESSION = `${A_TERM_SESSION_PREFIX}123e4567-e89b-12d3-a456-426614174000`
+const EXTERNAL_A_TERM_SESSION = 'summitflow-123e4567-e89b-12d3-a456-426614174000'
 const INTERNAL_SOCKET_ARGS = ['-S', TMUX_SOCKET]
 
 describe('tmux model', () => {
@@ -575,20 +572,6 @@ describe('tmux model', () => {
       'aico-7',
       '-F',
       '#{pane_id}\t#{pane_pid}',
-    ])
-  })
-
-  it('identifies A-Term managed sessions on the default tmux server', () => {
-    expect(isATermSessionName(EXTERNAL_A_TERM_SESSION)).toBe(true)
-    expect(isATermSessionName('aico-123e4567-e89b-12d3-a456-426614174000')).toBe(false)
-  })
-
-  it('lists default-server panes for attachable discovery', () => {
-    expect(listDefaultPanesArgs()).toEqual([
-      'list-panes',
-      '-a',
-      '-F',
-      '#{session_name}\t#{pane_id}\t#{pane_current_path}\t#{pane_current_command}',
     ])
   })
 })

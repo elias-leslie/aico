@@ -25,7 +25,6 @@ Commands:
                                 nests with TMUX unset; inside the same server
                                 it switches the current client.
   sessions diagnostics <id>
-  legacy [list | end <name>]    A-Term summitflow-<uuid> sessions (attach/end only)
   roots [list | show <requestId>]
   import-aico --from PATH [--apply]
                                 copy a pre-Tether Aico catalog (an archived
@@ -85,17 +84,12 @@ function render(io: Io, json: boolean, status: number, body: unknown): number {
       io.err(`error ${status}: ${record.error}${record.detail ? ` — ${record.detail}` : ''}`)
     } else if (
       Array.isArray(record.items) &&
-      (record.items as Record<string, unknown>[]).some(
-        (item) => 'generation' in item || 'kind' in item,
-      )
+      (record.items as Record<string, unknown>[]).some((item) => 'generation' in item)
     ) {
-      for (const item of record.items as Record<string, unknown>[]) {
-        if (item.kind === 'legacy-attach-only') io.out(`  ${item.name}  (legacy, attach/end only)`)
-        else
-          io.out(
-            `  ${item.id}  ${String(item.status).padEnd(9)} ${String(item.tool).padEnd(12)} ${item.projectId ?? '-'}  ${item.label}`,
-          )
-      }
+      for (const item of record.items as Record<string, unknown>[])
+        io.out(
+          `  ${item.id}  ${String(item.status).padEnd(9)} ${String(item.tool).padEnd(12)} ${item.projectId ?? '-'}  ${item.label}`,
+        )
     } else if (Array.isArray(record.items)) {
       for (const item of record.items as Record<string, unknown>[]) {
         const marker = item.isDefault ? '*' : ' '
@@ -360,17 +354,6 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
           return (response.body as { ready?: boolean } | null)?.ready ? 0 : 3
         }
         if (sub === 'status') return api(io, paths, json, 'GET', '/v1/reboot/status')
-        break
-      case 'legacy':
-        if (!sub || sub === 'list') return api(io, paths, json, 'GET', '/v1/legacy-sessions')
-        if (sub === 'end' && rest[0])
-          return api(
-            io,
-            paths,
-            json,
-            'POST',
-            `/v1/legacy-sessions/${encodeURIComponent(rest[0])}/end`,
-          )
         break
       case 'import-aico': {
         const options = flags(

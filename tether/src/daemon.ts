@@ -10,7 +10,6 @@ import { parseGraphicalEnvironment } from './env'
 import { EventBus } from './events'
 import { GuiChannel } from './gui-channel'
 import { listenPrivateSocket } from './http'
-import { LegacyATermSessions, legacyATermSocket } from './legacy-aterm'
 import { bindCatalog, listWidgets } from './lifecycle/catalog'
 import { setPersonalWorkspaceRoot } from './lifecycle/display'
 import {
@@ -59,7 +58,6 @@ export function reconcileEnabled(env: NodeJS.ProcessEnv): boolean {
   return env.TETHER_RECONCILE !== 'off'
 }
 
-const LEGACY_WATCH_MS = 15_000
 const PROJECT_NAMES_MS = 300_000
 
 /** The desktop variables the graphical session imported into the user
@@ -97,9 +95,6 @@ export async function startDaemon(
     localFile: paths.localProjectsFile,
   })
   const gui = new GuiChannel(events)
-  const legacy = new LegacyATermSessions(legacyATermSocket(paths, env), (names) =>
-    events.publish('legacy.changed', { names }),
-  )
   const projectRoots = new Map<string, string>()
 
   // One process serves one instance: bind the extracted lifecycle modules.
@@ -128,7 +123,6 @@ export async function startDaemon(
     events,
     projects,
     gui,
-    legacy,
     projectRoots,
     activeProjectFile: activeProjectFileFromEnv(env, env.HOME ?? homedir()),
     startedAt: Date.now(),
@@ -182,9 +176,6 @@ export async function startDaemon(
   const projectNames = setInterval(learn, PROJECT_NAMES_MS)
   projectNames.unref()
   void context.continuity?.start()
-  // Announce legacy A-Term sessions that end or exit outside Tether.
-  if (reconcileEnabled(env)) legacy.watch(LEGACY_WATCH_MS)
-
   // Default instance only: Aico's exact legacy sockets, sharing the one
   // lifecycle lock and End path with the v1 API.
   if (paths.legacy && paths.legacyControlSocket && paths.legacyGuiSocket) {
@@ -216,7 +207,6 @@ export async function startDaemon(
       agentPoller.stop()
       bindAgentStates(null)
       context.continuity?.stop()
-      legacy.unwatch()
       gui.close()
       await Promise.all([...legacyServers, server].map(closeServer))
       // Let in-flight reconciliation settle before the database closes.

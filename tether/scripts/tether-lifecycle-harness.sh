@@ -262,11 +262,7 @@ wait_until 'B scope stopped' unit_gone "$b_scope"
 api GET "/v1/sessions/$b_id" >/dev/null; expect_status 404 'ended session is gone'
 pass "End retired $b_id exactly; its detached child is gone"
 
-# --- 10. A-Term legacy listing is read-only ----------------------------------------
-api GET /v1/legacy-sessions >/dev/null; expect_status 200 'legacy list'
-pass 'legacy A-Term session listing answers'
-
-# --- 11. residue ------------------------------------------------------------------------
+# --- 10. residue ------------------------------------------------------------------------
 created=()
 remaining=$(api GET /v1/sessions | jq --arg s "$server_id" '[.items[] | select(.tmux.serverId == $s)] | length')
 if [[ $remaining == 0 ]]; then

@@ -45,10 +45,6 @@ The retained request record of an ended root. It stops the same request ID from 
 **Origin**:
 The app that asked for a session or root (`aico`, `a-term`, `cli`, or `root` for sessions created through the root contract). On Tether's own API a root's `owner` field reports its origin.
 
-**Legacy A-Term session**:
-An A-Term `summitflow-<uuid>` session on the default tmux server, created before Tether. Tether lists, attaches and ends it by exact name, and never adopts its server.
-_Avoid_: Legacy session (that is lifecycle v0)
-
 **Fleet root**:
 A root that SummitFlow registered in its own ledger before asking Tether to create it.
 

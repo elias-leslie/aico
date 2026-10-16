@@ -18,7 +18,6 @@ vi.mock('./lifecycle/engine', async (importOriginal) => ({
 const TEST_ENV = {
   TETHER_SUMMITFLOW_URL: 'off',
   TETHER_RECONCILE: 'off',
-  TETHER_ATERM_LEGACY_SOCKET: '/nonexistent/tether-test/default',
   HOME: '/nonexistent',
 }
 

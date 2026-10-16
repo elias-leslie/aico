@@ -3,7 +3,6 @@ import { API_VERSION, type TetherPaths } from './config'
 import type { EventBus, TetherEvent } from './events'
 import type { GuiChannel } from './gui-channel'
 import { HttpError, Router, readJsonObject, sendError, sendJson } from './http'
-import type { LegacyATermSessions } from './legacy-aterm'
 import { lifecycleStatus } from './lifecycle/engine'
 import { isRootTool } from './lifecycle/tui/registry'
 import { learnProjects, registerLifecycleRoutes } from './lifecycle-api'
@@ -23,7 +22,6 @@ export interface ServerContext {
   events: EventBus
   projects: ProjectProvider
   gui: GuiChannel
-  legacy: LegacyATermSessions
   /** Project-root cache shared with the lifecycle engine. */
   projectRoots: Map<string, string>
   /** SummitFlow's active-project pointer file, or null to ignore it. */

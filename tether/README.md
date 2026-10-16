@@ -44,7 +44,6 @@ tether [--instance NAME] [--json] <command>
   sessions [list | get <id> | create [--tool T] [--project P] [--name N] | end <id>]
   sessions attach <id> [--print]    exec tmux attach (nests with a notice inside another tmux)
   sessions diagnostics <id>
-  legacy [list | end <name>]        A-Term summitflow-<uuid> sessions
   roots [list | show <requestId>]
   import-aico --from PATH [--apply]   one-off import from an archived pre-Tether aico.db
   tools [list | get <slug> | add <slug> <name> -- <argv...> | default|enable|disable|rm <slug>]

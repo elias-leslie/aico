@@ -16,7 +16,6 @@ export type EventType =
   | 'root.updated'
   | 'tools.changed'
   | 'projects.changed'
-  | 'legacy.changed'
   | 'gui.connected'
   | 'gui.disconnected'
 

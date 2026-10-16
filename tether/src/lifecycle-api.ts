@@ -1,5 +1,5 @@
 // HTTP surface over the extracted lifecycle engine (docs/api-v1.md: Sessions,
-// Terminal I/O, Roots, GUI forwarding, A-Term legacy sessions). Handlers only
+// Terminal I/O, Roots, GUI forwarding). Handlers only
 // parse, fence and map results; every lifecycle decision is the engine's.
 
 import { execFile } from 'node:child_process'
@@ -10,7 +10,6 @@ import type { TetherPaths } from './config'
 import type { EventBus } from './events'
 import type { GuiChannel, GuiCommand } from './gui-channel'
 import { HttpError, type Router, readJsonObject, sendJson } from './http'
-import type { LegacyATermSessions } from './legacy-aterm'
 import {
   allocateWidgetId,
   getTmuxServer,
@@ -118,7 +117,6 @@ export interface LifecycleApiContext {
   events: EventBus
   projects: ProjectProvider
   gui: GuiChannel
-  legacy: LegacyATermSessions
   /** Sync project-root cache the engine reads on gate recovery. */
   projectRoots: Map<string, string>
   /** Reboot continuity; absent when reconciliation is off (test instances). */
@@ -507,7 +505,7 @@ export function learnProjects(
 
 export function registerLifecycleRoutes(router: Router, context: LifecycleApiContext): void {
   if (context.continuity) registerRebootRoutes(router, context.continuity)
-  const { store, events, gui, legacy } = context
+  const { store, events, gui } = context
   const rootHandler = createRootHandler(rootOperations(context), { ownerFromOrigin: true })
   const root = (req: IncomingMessage, res: ServerResponse) => rootHandler(req, res)
 
@@ -888,28 +886,6 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
       }
       if (!accepted) throw new HttpError(404, 'not_found')
       sendJson(res, 200, { accepted: true })
-    })
-    // A-Term's pre-Tether sessions: list, attach, end. Never adopted.
-    .add('GET', '/v1/legacy-sessions', async (_req, res) => {
-      sendJson(res, 200, { items: await legacy.list() })
-    })
-    .add('GET', '/v1/legacy-sessions/:name/attach', async (_req, res, params) => {
-      const session = await legacy.get(params.name ?? '')
-      if (!session) throw new HttpError(404, 'not_found')
-      sendJson(res, 200, {
-        argv: legacy.attachArgv(session.name),
-        env: ATTACH_ENV,
-        unset: ATTACH_UNSET,
-      })
-    })
-    .add('GET', '/v1/legacy-sessions/:name/pane-mode', async (_req, res, params) => {
-      const mode = await legacy.paneMode(params.name ?? '')
-      if (!mode) throw new HttpError(404, 'not_found')
-      sendJson(res, 200, mode)
-    })
-    .add('POST', '/v1/legacy-sessions/:name/end', async (_req, res, params) => {
-      if (!(await legacy.end(params.name ?? ''))) throw new HttpError(404, 'not_found')
-      sendJson(res, 200, { status: 'ended' })
     })
 }
 
