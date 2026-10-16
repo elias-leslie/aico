@@ -23,12 +23,11 @@ import {
   findAction,
   isPinnable,
   listGames,
+  movePin,
+  openExistingSession,
   pinnedActions,
-  reorderPins,
   runAction,
-  sanitizePins,
   sections,
-  sessionActionId,
   setPaletteOpener,
   togglePin,
 } from './actions'
@@ -61,7 +60,7 @@ const catalogs = createCatalogState({
 let submenuEl: HTMLElement
 let submenuKind: FlyoutKind | null = null
 
-/** Requery Tether's sessions whenever an Open surface appears. */
+/** Requery Tether's sessions whenever the "Open session" flyout appears. */
 export function refreshSessions(): Promise<{ status: 'ready' | 'empty' | 'unavailable' }> {
   return catalogs.refreshSessions()
 }
@@ -252,11 +251,11 @@ function menuRow(a: Action): HTMLElement {
     })
   }
 
-  // Rows that own a picker flyout: "New widget" (kind 'new', new widgets),
-  // "Replace TUI" (kind 'replace', the focused widget), "Open workspace" (kind
-  // 'project', rebinds the focused widget), and "Attach tmux session" (kind
-  // 'tmux'). Hovering or clicking opens the choices; the flyout replaces the
-  // left tooltip for these rows.
+  // Rows that own a picker flyout: "New session" (kind 'new', new widgets),
+  // "Restart with another tool" (kind 'replace', the focused widget), "Restart
+  // in project" (kind 'project', rebinds the focused widget), "Open session"
+  // (kind 'sessions') and "Choose game" (kind 'game'). Hovering or clicking
+  // opens the choices; the flyout replaces the left tooltip for these rows.
   if (flyoutKind) {
     row.classList.add('has-flyout')
     const caret = make('span', 'aico-caret')
@@ -274,13 +273,13 @@ function menuRow(a: Action): HTMLElement {
 
 // The flyout-bearing menu rows and the launcher action-id prefix each uses
 // (`<kind>:<slug>` for TUIs, `project:<id>` for workspaces).
-type FlyoutKind = 'new' | 'replace' | 'project' | 'tmux' | 'game'
+type FlyoutKind = 'new' | 'replace' | 'project' | 'sessions' | 'game'
 const FLYOUTS: Partial<Record<string, FlyoutKind>> = {
   'arcade-pick': 'game',
   'new-widget': 'new',
   'replace-tui': 'replace',
   'switch-project': 'project',
-  'attach-tmux': 'tmux',
+  'attach-tmux': 'sessions', // the id predates Tether; kept so existing pins resolve
 }
 
 // One flyout row: the launcher id, the bare display label (the fuller action
@@ -375,6 +374,22 @@ function populateNewProjects(slug: string, withBack: boolean): void {
   }
 }
 
+// A row in the "Open session" flyout: opens that Tether session in a window.
+// Sessions come and go, so a row is neither an action nor pinnable; pin "Open
+// session" itself instead. Opening is not destructive (no arm guard).
+function sessionRow(session: OpenableSession): HTMLElement {
+  const item = make('div', 'aico-sub-row runnable')
+  const dot = make('span', 'aico-sub-dot project')
+  const lbl = make('span', 'aico-lbl')
+  lbl.textContent = sessionSubmenuLabel(session)
+  item.append(dot, lbl)
+  item.addEventListener('click', () => {
+    closeMenu()
+    void openExistingSession(session.id)
+  })
+  return item
+}
+
 function emptySubmenuRow(label: string): HTMLElement {
   const empty = make('div', 'aico-sub-row empty')
   empty.textContent = label
@@ -434,15 +449,9 @@ function populateSubmenu(kind: FlyoutKind): void {
         }),
       )
     }
-  } else if (kind === 'tmux') {
+  } else if (kind === 'sessions') {
     if (catalogs.sessions.length) {
-      for (const session of catalogs.sessions) {
-        submenuEl.append(
-          submenuRow(sessionActionId(session), sessionSubmenuLabel(session), (dot) => {
-            dot.classList.add('project')
-          }),
-        )
-      }
+      for (const session of catalogs.sessions) submenuEl.append(sessionRow(session))
     } else {
       submenuEl.append(
         emptySubmenuRow(
@@ -507,7 +516,7 @@ function showSubmenu(row: HTMLElement, kind: FlyoutKind): void {
   populateSubmenu(kind)
   submenuEl.hidden = false // unhide before measuring
   placeSubmenu(row, 'left')
-  if (kind === 'tmux') {
+  if (kind === 'sessions') {
     void refreshSessions().then(() => {
       if (submenuEl.hidden || submenuKind !== kind) return
       populateSubmenu(kind)
@@ -529,7 +538,7 @@ function showStandaloneSubmenu(
   submenuEl.hidden = false
   submenuStandalone = true
   placeSubmenu(anchor, place)
-  if (kind === 'tmux') {
+  if (kind === 'sessions') {
     void refreshSessions().then(() => {
       if (submenuEl.hidden || submenuKind !== kind) return
       populateSubmenu(kind)
@@ -665,7 +674,7 @@ function toggleMenu(): void {
 
 // ---- pinned cluster --------------------------------------------------------
 
-function clusterIcon(a: Action, index: number): HTMLElement {
+function clusterIcon(a: Action): HTMLElement {
   const b = make('button', 'aico-pin-icon')
   b.type = 'button'
   setActionIcon(b, a)
@@ -699,24 +708,22 @@ function clusterIcon(a: Action, index: number): HTMLElement {
     arming.release(b)
   })
   b.addEventListener('dragstart', (e) => {
-    e.dataTransfer?.setData('text/plain', String(index))
+    e.dataTransfer?.setData('text/plain', a.id)
     b.classList.add('dragging')
   })
   b.addEventListener('dragend', () => b.classList.remove('dragging'))
   b.addEventListener('dragover', (e) => e.preventDefault())
   b.addEventListener('drop', (e) => {
     e.preventDefault()
-    const from = Number(e.dataTransfer?.getData('text/plain'))
-    if (!Number.isNaN(from)) commitPins(reorderPins(pins, from, index))
+    const from = e.dataTransfer?.getData('text/plain')
+    if (from) commitPins(movePin(pins, from, a.id))
   })
   return b
 }
 
 function renderCluster(): void {
   clusterEl.innerHTML = ''
-  pinnedActions(pins).forEach((a, i) => {
-    clusterEl.append(clusterIcon(a, i))
-  })
+  for (const a of pinnedActions(pins)) clusterEl.append(clusterIcon(a))
 }
 
 // ---- command palette -------------------------------------------------------
@@ -813,9 +820,6 @@ function openPalette(): void {
   renderPaletteList()
   paletteEl.hidden = false
   paletteInput.focus()
-  void refreshSessions().then(() => {
-    if (paletteShowing()) renderPaletteList()
-  })
 }
 function closePalette(): void {
   if (paletteEl.hidden) return
@@ -833,16 +837,13 @@ function commitPins(next: string[]): void {
   syncMenuPinStates()
 }
 
+// The stored list is kept exactly as saved. Rendering skips pins whose feature
+// is unavailable (pinnedActions), and only a pin, unpin or drag writes it back.
 async function loadPins(): Promise<string[]> {
   const stored = await window.aico.settings.getPins()
-  if (stored == null) {
-    const seed = sanitizePins(DEFAULT_PINS) // first run
-    window.aico.settings.setPins(seed)
-    return seed
-  }
-  const clean = sanitizePins(stored)
-  if (clean.length !== stored.length) window.aico.settings.setPins(clean) // heal stale ids
-  return clean
+  if (stored != null) return stored
+  window.aico.settings.setPins(DEFAULT_PINS) // first run
+  return DEFAULT_PINS
 }
 
 async function loadTerminalFontSettings(): Promise<AicoTerminalFontSettings> {
@@ -885,8 +886,8 @@ export async function initControlSurface(): Promise<void> {
   tipEl.hidden = true
   required('.shell').append(tipEl)
 
-  // Independent catalogs load together. Their actions must all be registered
-  // before pin sanitization or persisted dynamic pins would disappear.
+  // Independent catalogs load together, so their pinned launchers show on the
+  // first render.
   await catalogs.loadInitial()
   submenuEl = make('div', 'aico-submenu')
   submenuEl.hidden = true
@@ -950,7 +951,7 @@ export async function initControlSurface(): Promise<void> {
   })
 
   window.aico.settings.onPinsChanged((ids) => {
-    pins = sanitizePins(ids)
+    pins = ids
     renderCluster()
     syncMenuPinStates()
   })

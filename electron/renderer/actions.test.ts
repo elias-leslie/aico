@@ -7,11 +7,9 @@ import {
   findAction,
   isPinnable,
   listGames,
+  movePin,
   pinnedActions,
-  reorderPins,
-  sanitizePins,
   setGameActions,
-  setSessionActions,
   setTuiActions,
   togglePin,
 } from './actions'
@@ -106,23 +104,14 @@ describe('action registry', () => {
     expect(typeof findAction('arcade-toggle')?.run).toBe('function')
   })
 
-  it('treats discovered sessions as pinnable open actions', () => {
-    setSessionActions([
-      {
-        origin: 'a-term',
-        id: '0a1b2c3d',
-        label: 'A-Term demo',
-        project: null,
-        tool: null,
-        status: 'running',
-        locallyOpen: false,
-      },
-    ])
-    const a = findAction('session:aico:0a1b2c3d')
-    expect(a?.label).toBe('Open A-Term demo')
-    expect(a?.note).toBe('A-Term')
-    expect(typeof a?.run).toBe('function')
-    expect(a && isPinnable(a)).toBe(true)
+  it('gives each glyph to one action only', () => {
+    const icons = ACTIONS.map((a) => a.icon)
+    expect(new Set(icons).size).toBe(icons.length)
+  })
+
+  it('opens sessions only through the "Open session" flyout, never as separate actions', () => {
+    expect(findAction('attach-tmux')?.label).toBe('Open session')
+    expect(ACTIONS.filter((a) => a.label.startsWith('Open '))).toHaveLength(1)
   })
 })
 
@@ -193,17 +182,24 @@ describe('End session', () => {
   })
 })
 
-describe('sanitizePins', () => {
-  it('drops unknown and un-pinnable ids and de-dupes, preserving order', () => {
-    expect(
-      sanitizePins(['hub', 'copy', 'new-widget', 'nope', 'voice', 'indicate', 'indicate']),
-    ).toEqual(['hub', 'new-widget', 'indicate'])
-  })
-})
-
 describe('pinnedActions', () => {
   it('resolves ids to actions in pin order', () => {
     expect(pinnedActions(['hub', 'indicate']).map((a) => a.id)).toEqual(['hub', 'indicate'])
+  })
+
+  it('skips unavailable, un-pinnable and repeated ids without changing the list', () => {
+    const stored = ['hub', 'copy', 'new-widget', 'voice', 'new:gone', 'hub']
+    const before = [...stored]
+    expect(pinnedActions(stored).map((a) => a.id)).toEqual(['hub', 'new-widget'])
+    expect(stored).toEqual(before)
+  })
+
+  it('shows a hidden launcher pin again once its catalog lists it', () => {
+    setTuiActions([])
+    expect(pinnedActions(['new:claude']).map((a) => a.id)).toEqual([])
+    setTuiActions([{ slug: 'claude', displayName: 'Claude', accent: '#fff' }])
+    expect(pinnedActions(['new:claude']).map((a) => a.id)).toEqual(['new:claude'])
+    setTuiActions([])
   })
 })
 
@@ -214,15 +210,24 @@ describe('togglePin', () => {
   })
 })
 
-describe('reorderPins', () => {
-  it('moves an item to a new index', () => {
-    expect(reorderPins(['a', 'b', 'c'], 0, 2)).toEqual(['b', 'c', 'a'])
-    expect(reorderPins(['a', 'b', 'c'], 2, 0)).toEqual(['c', 'a', 'b'])
+describe('movePin', () => {
+  it('moves a pin to where another sits, by id', () => {
+    expect(movePin(['a', 'b', 'c'], 'a', 'c')).toEqual(['b', 'c', 'a'])
+    expect(movePin(['a', 'b', 'c'], 'c', 'a')).toEqual(['c', 'a', 'b'])
   })
 
-  it('returns the input unchanged when out of range or a no-op', () => {
-    expect(reorderPins(['a', 'b'], 1, 1)).toEqual(['a', 'b'])
-    expect(reorderPins(['a', 'b'], 0, 5)).toEqual(['a', 'b'])
-    expect(reorderPins(['a', 'b'], -1, 0)).toEqual(['a', 'b'])
+  it('keeps hidden pins in the stored list when dragging past them', () => {
+    expect(movePin(['hub', 'arcade-next', 'indicate'], 'indicate', 'hub')).toEqual([
+      'indicate',
+      'hub',
+      'arcade-next',
+    ])
+  })
+
+  it('returns the input unchanged when an id is missing or it is a no-op', () => {
+    const pins = ['a', 'b']
+    expect(movePin(pins, 'b', 'b')).toBe(pins)
+    expect(movePin(pins, 'a', 'z')).toBe(pins)
+    expect(movePin(pins, 'z', 'a')).toBe(pins)
   })
 })

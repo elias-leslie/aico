@@ -1,12 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { OpenableSession } from '../types'
-import {
-  allActions,
-  sanitizePins,
-  setProjectActions,
-  setSessionActions,
-  setTuiActions,
-} from './actions'
+import { allActions, pinnedActions, setProjectActions, setTuiActions } from './actions'
 import { createCatalogState, type TuiInfo } from './catalog-state'
 
 const aTermSession = (id: string): OpenableSession => ({
@@ -32,11 +26,10 @@ function deferred<T>() {
 afterEach(() => {
   setTuiActions([])
   setProjectActions([])
-  setSessionActions([])
 })
 
 describe('picker catalog state', () => {
-  it('starts independent requests together and registers all dynamic pins before initialization ends', async () => {
+  it('starts independent requests together and registers every launcher pin before initialization ends', async () => {
     const tuis = deferred<TuiInfo[]>()
     const projects = deferred<{ id: string; name: string; current: boolean }[]>()
     const sessions = deferred<OpenableSession[]>()
@@ -61,13 +54,8 @@ describe('picker catalog state', () => {
     tuis.resolve([{ slug: 'claude', displayName: 'Claude', accent: '#fff', icon: '' }])
     await loading
     expect(
-      sanitizePins([
-        'new:claude',
-        'replace:claude',
-        'project:workspace-1',
-        'session:aico:0a1b2c01',
-      ]),
-    ).toEqual(['new:claude', 'replace:claude', 'project:workspace-1', 'session:aico:0a1b2c01'])
+      pinnedActions(['new:claude', 'replace:claude', 'project:workspace-1']).map((a) => a.id),
+    ).toEqual(['new:claude', 'replace:claude', 'project:workspace-1'])
     expect(catalogs.tuis).toHaveLength(1)
     expect(catalogs.projects).toHaveLength(1)
     expect(catalogs.sessionStatus).toBe('ready')
@@ -93,8 +81,6 @@ describe('picker catalog state', () => {
     await oldRefresh
 
     expect(catalogs.sessions.map((session) => session.id)).toEqual(['new'])
-    expect(allActions().some((action) => action.id === 'session:aico:new')).toBe(true)
-    expect(allActions().some((action) => action.id === 'session:aico:old')).toBe(false)
   })
 
   it('degrades a failed catalog independently of the others', async () => {
@@ -108,7 +94,9 @@ describe('picker catalog state', () => {
     await catalogs.loadInitial()
 
     expect(catalogs.projects).toEqual([])
-    expect(sanitizePins(['new:claude', 'project:missing'])).toEqual(['new:claude'])
+    expect(pinnedActions(['new:claude', 'project:missing']).map((a) => a.id)).toEqual([
+      'new:claude',
+    ])
     expect(catalogs.sessionStatus).toBe('empty')
   })
 
@@ -133,9 +121,6 @@ describe('picker catalog state', () => {
     await catalogs.loadInitial()
 
     expect(catalogs.sessions.map((session) => session.origin)).toEqual(['aico', 'a-term'])
-    expect(sanitizePins(['session:aico:0a1b2c00', 'session:aico:0a1b2c02'])).toEqual([
-      'session:aico:0a1b2c00',
-      'session:aico:0a1b2c02',
-    ])
+    expect(allActions().some((action) => action.id.includes('0a1b2c0'))).toBe(false)
   })
 })

@@ -26,7 +26,9 @@ function showToast(detail: AicoToastDetail): void {
   window.dispatchEvent(new CustomEvent<AicoToastDetail>(AICO_TOAST_EVENT, { detail }))
 }
 
-async function openExistingSession(id: string): Promise<void> {
+/** Open a Tether session in a window: the one path behind every row of the
+ * "Open session" flyout. A refusal shows the safe text toast. */
+export async function openExistingSession(id: string): Promise<void> {
   try {
     await window.aico.actions.openSession(id)
   } catch (error) {
@@ -222,7 +224,7 @@ export const ACTIONS: Action[] = [
     section: 'Session',
     label: 'Copy session diagnostics',
     shortcut: '',
-    icon: '⧉',
+    icon: 'ⓘ',
     note: "Copy this session's ownership, tmux, resource, and warning snapshot as formatted JSON.",
     run: () => void copySessionDiagnostics(),
   },
@@ -246,7 +248,7 @@ export const ACTIONS: Action[] = [
     section: 'Edit',
     label: 'Compose text',
     shortcut: '',
-    icon: '✎',
+    icon: '¶',
     note: 'Correct a draft before inserting it into this session.',
     run: () => window.dispatchEvent(new CustomEvent('aico:compose-open')),
   },
@@ -367,47 +369,12 @@ export function setGameActions(games: { key: string; name: string }[]): void {
   }))
 }
 
-let sessionActions: Action[] = []
-
-/** Pins keep the id format Aico sessions always had; Tether ids are the old
- * widget ids, so existing session pins still resolve. */
-export function sessionActionId(session: { id: string }): string {
-  return `session:aico:${session.id}`
-}
-
-const ORIGIN_NAMES: Record<string, string> = {
-  aico: 'Aico',
-  'a-term': 'A-Term',
-  cli: 'CLI',
-  root: 'Root',
-}
-
-export function setSessionActions(
-  sessions: {
-    origin: string
-    id: string
-    label: string
-    project: string | null
-    tool: string | null
-    status: 'running'
-    locallyOpen: boolean
-  }[],
-): void {
-  sessionActions = sessions.map((s) => ({
-    id: sessionActionId(s),
-    section: 'Session',
-    label: `Open ${s.label}`,
-    shortcut: '',
-    icon: '⇱',
-    note: [s.project, s.tool, ORIGIN_NAMES[s.origin] ?? s.origin].filter(Boolean).join(' · '),
-    run: () => void openExistingSession(s.id),
-  }))
-}
-
-/** The static registry plus the dynamic per-TUI and per-project launchers — what
- * findAction, the palette, and the pin set resolve over (the menu uses ACTIONS). */
+/** The static registry plus the dynamic per-TUI, per-project and per-game
+ * launchers — what findAction, the palette, and the pin set resolve over (the
+ * menu uses ACTIONS). Sessions are not actions: the "Open session" flyout lists
+ * them live, so there is one way to open one. */
 export function allActions(): Action[] {
-  return [...ACTIONS, ...tuiActions, ...projectActions, ...sessionActions, ...gameActions]
+  return [...ACTIONS, ...tuiActions, ...projectActions, ...gameActions]
 }
 
 /** A capability is pinnable when a click does something: it runs directly, pops
@@ -432,31 +399,34 @@ export function sections(): string[] {
 /** Seeded on first run, before the user customizes anything. */
 export const DEFAULT_PINS = ['indicate']
 
-/** Drop unknown/un-pinnable ids so the persisted set stays valid as actions change. */
-export function sanitizePins(pins: string[]): string[] {
+/** The pinned actions to show, in pin order: ids whose feature is unavailable
+ * right now (a TUI or project the catalog did not list, games not loaded, a
+ * retired action) and repeats are skipped. Display only: the stored pin list is
+ * never filtered, so a pin comes back as soon as its action does. */
+export function pinnedActions(pins: string[]): Action[] {
   const seen = new Set<string>()
-  return pins.filter((id) => {
-    if (seen.has(id)) return false
+  const shown: Action[] = []
+  for (const id of pins) {
+    if (seen.has(id)) continue
     seen.add(id)
     const a = findAction(id)
-    return !!a && isPinnable(a)
-  })
-}
-
-/** Resolve pinned ids (already sanitized) to their actions, preserving order. */
-export function pinnedActions(pins: string[]): Action[] {
-  return pins.map(findAction).filter((a): a is Action => !!a)
+    if (a && isPinnable(a)) shown.push(a)
+  }
+  return shown
 }
 
 export function togglePin(pins: string[], id: string): string[] {
   return pins.includes(id) ? pins.filter((p) => p !== id) : [...pins, id]
 }
 
-/** Move the pin at `from` to index `to`; returns the input unchanged if out of range. */
-export function reorderPins(pins: string[], from: number, to: number): string[] {
-  if (from === to || from < 0 || to < 0 || from >= pins.length || to >= pins.length) return pins
+/** Move pin `from` to where pin `to` sits, by id, so hidden pins between them
+ * keep their place; returns the input unchanged when either id is missing. */
+export function movePin(pins: string[], from: string, to: string): string[] {
+  const i = pins.indexOf(from)
+  const j = pins.indexOf(to)
+  if (i < 0 || j < 0 || i === j) return pins
   const next = [...pins]
-  const [moved] = next.splice(from, 1)
-  next.splice(to, 0, moved)
+  next.splice(i, 1)
+  next.splice(j, 0, from)
   return next
 }

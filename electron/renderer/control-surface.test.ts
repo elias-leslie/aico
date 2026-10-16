@@ -1,9 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { allActions, setSessionActions } from './actions'
 import { refreshSessions, sessionSubmenuLabel } from './control-surface'
 
 afterEach(() => {
-  setSessionActions([])
   vi.unstubAllGlobals()
 })
 
@@ -38,7 +36,6 @@ describe('openable session discovery', () => {
     vi.stubGlobal('window', { aico: { actions: { listOpenableSessions } } })
 
     expect(await refreshSessions()).toEqual({ status: 'empty' })
-    expect(allActions().some((action) => action.id === 'session:aico:0a1b2c3d')).toBe(false)
 
     sessions = [
       {
@@ -52,7 +49,6 @@ describe('openable session discovery', () => {
       },
     ]
     expect(await refreshSessions()).toEqual({ status: 'ready' })
-    expect(allActions().some((action) => action.id === 'session:aico:0a1b2c3d')).toBe(true)
     expect(listOpenableSessions).toHaveBeenCalledTimes(2)
   })
 
@@ -66,6 +62,5 @@ describe('openable session discovery', () => {
     })
 
     expect(await refreshSessions()).toEqual({ status: 'unavailable' })
-    expect(allActions().some((action) => action.id.startsWith('tmux:'))).toBe(false)
   })
 })
