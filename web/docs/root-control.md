@@ -3,10 +3,10 @@
 Tether owns root workloads now. A-Term keeps `/v1/roots` on its existing
 service (`http://127.0.0.1:8002`) so SummitFlow fleet's `a-term` surface keeps
 working unchanged, but A-Term no longer creates, launches, fences or retires
-roots itself. Each route forwards to Tether's root contract
-(`/v1/roots` in Tether's `docs/api-v1.md`, which is Aico's contract moved
-unchanged: request IDs, digest, tombstones, the Codex resume adapter and every
-validation rule).
+roots itself. Each route forwards to Tether's root contract (Tether's
+`docs/root-control.md`: request IDs, digest, tombstones, the Claude Code and
+Codex resume adapters and every validation rule; `docs/api-v1.md` lists the
+routes).
 
 ## Guard
 
