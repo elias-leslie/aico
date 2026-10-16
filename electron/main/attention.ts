@@ -216,7 +216,7 @@ export class Attention {
 
 export type AttentionGroup = 'needs-you' | 'finished' | 'working' | 'idle'
 
-/** Most urgent first. */
+/** Most urgent first; the tray menu lists its groups under these titles. */
 export const ATTENTION_GROUPS: readonly { group: AttentionGroup; title: string }[] = [
   { group: 'needs-you', title: 'Needs you' },
   { group: 'finished', title: 'Finished' },

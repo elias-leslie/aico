@@ -1,5 +1,6 @@
 import { join } from 'node:path'
 import { app, Menu, nativeImage, Tray } from 'electron'
+import { ATTENTION_GROUPS, type AttentionGroup } from './attention'
 
 // Lantern orb tray icon, three states: muted idle / amber active (at least one
 // widget is thinking) / amber with a red badge, "needs you" (a session is
@@ -10,24 +11,15 @@ const idleImage = nativeImage.createFromPath(join(iconsDir, 'idle.png'))
 const activeImage = nativeImage.createFromPath(join(iconsDir, 'active.png'))
 const needsYouImage = nativeImage.createFromPath(join(iconsDir, 'needs-you.png'))
 
-export type TrayGroup = 'needs-you' | 'finished' | 'working' | 'idle'
-
 export interface TrayWidget {
   id: string
   label: string
   open: boolean
   /** Attention group (attention.ts); the menu lists groups most-urgent first. */
-  group?: TrayGroup
+  group?: AttentionGroup
   /** State and age, e.g. `waiting 3m`. */
   detail?: string | null
 }
-
-const GROUP_TITLES: readonly [TrayGroup, string][] = [
-  ['needs-you', 'Needs you'],
-  ['finished', 'Finished'],
-  ['working', 'Working'],
-  ['idle', 'Idle'],
-]
 
 /** A launchable TUI as the tray sees it (slug + menu label), from the registry. */
 export interface NewWidgetTool {
@@ -77,7 +69,7 @@ function buildMenu(widgets: TrayWidget[]): Menu {
   ]
   // Every session, grouped most-urgent first (widgets arrive sorted). A row
   // opens or focuses its window; ● marks an open window, ○ a closed one.
-  for (const [group, title] of GROUP_TITLES) {
+  for (const { group, title } of ATTENTION_GROUPS) {
     const rows = widgets.filter((w) => (w.group ?? 'idle') === group)
     if (!rows.length) continue
     template.push({ label: title, enabled: false })
