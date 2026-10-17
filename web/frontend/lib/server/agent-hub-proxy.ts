@@ -46,10 +46,17 @@ export async function proxyAgentHubRequest({
     )
   }
 
+  // Agent Hub refuses /api/complete from a caller that does not name its
+  // registered client (AGENT_HUB_CLIENT_ID) and request source.
+  const upstreamHeaders = new Headers(headers)
+  upstreamHeaders.set('X-Request-Source', 'a-term')
+  const clientId = process.env.AGENT_HUB_CLIENT_ID?.trim()
+  if (clientId) upstreamHeaders.set('X-Client-Id', clientId)
+
   try {
     const upstream = await fetch(`${agentHubUrl}${path}`, {
       method,
-      headers,
+      headers: upstreamHeaders,
       body,
       cache: 'no-store',
     })

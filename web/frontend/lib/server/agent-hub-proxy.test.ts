@@ -9,6 +9,39 @@ vi.mock('./agent-hub', () => ({
 describe('proxyAgentHubRequest', () => {
   afterEach(() => {
     vi.restoreAllMocks()
+    vi.unstubAllEnvs()
+  })
+
+  it('names A-Term and its registered client to Agent Hub', async () => {
+    vi.mocked(getAgentHubServerUrl).mockReturnValue('http://agent-hub.test')
+    vi.stubEnv('AGENT_HUB_CLIENT_ID', ' 11111111-2222-3333-4444-555555555555 ')
+    const fetchSpy = vi.fn().mockResolvedValue(new Response('{}'))
+    vi.stubGlobal('fetch', fetchSpy)
+
+    await proxyAgentHubRequest({
+      method: 'POST',
+      path: '/api/complete',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    })
+
+    const sent = new Headers(fetchSpy.mock.calls[0][1].headers)
+    expect(sent.get('x-request-source')).toBe('a-term')
+    expect(sent.get('x-client-id')).toBe('11111111-2222-3333-4444-555555555555')
+    expect(sent.get('content-type')).toBe('application/json')
+  })
+
+  it('sends no client id when none is configured', async () => {
+    vi.mocked(getAgentHubServerUrl).mockReturnValue('http://agent-hub.test')
+    vi.stubEnv('AGENT_HUB_CLIENT_ID', '')
+    const fetchSpy = vi.fn().mockResolvedValue(new Response('{}'))
+    vi.stubGlobal('fetch', fetchSpy)
+
+    await proxyAgentHubRequest({ method: 'GET', path: '/api/models' })
+
+    const sent = new Headers(fetchSpy.mock.calls[0][1].headers)
+    expect(sent.has('x-client-id')).toBe(false)
+    expect(sent.get('x-request-source')).toBe('a-term')
   })
 
   it('returns 503 when Agent Hub is not configured', async () => {
