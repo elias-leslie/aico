@@ -20,20 +20,21 @@ function getErrorMessage(err: unknown): string {
   return err.name === 'TimeoutError' ? 'Request timed out' : err.message
 }
 
-// System prompt for cleaning
-const SYSTEM_PROMPT = `You are a prompt formatting assistant. Your task is to clean and improve user prompts.
+// The cleaning rules are the prompt-builder agent's own prompt in Agent Hub,
+// which Agent Hub applies to every request for that agent. A-Term sends only
+// the draft and what to change, in the shape SummitFlow's note refinement uses.
+const DEFAULT_REFINEMENT =
+  'Fix typos, grammar and punctuation and make it clearer. Keep the intent, the level of detail and any code or technical terms exactly.'
 
-Rules:
-1. Fix typos, grammar, and punctuation
-2. Improve clarity and structure
-3. Maintain the original intent
-4. Keep the same level of detail unless refinement requests otherwise
-5. Return ONLY the cleaned prompt, no explanations or preambles
-6. If the prompt mentions code or technical terms, preserve them exactly`
+export function buildPromptCleanerMessage(
+  prompt: string,
+  refinement?: string,
+): string {
+  return `CURRENT PROMPT:\n${prompt}\n\nREFINEMENT:\n${refinement?.trim() || DEFAULT_REFINEMENT}`
+}
 
 /**
- * Hook for cleaning prompts via agent-hub.
- * Routes through the prompt-builder agent.
+ * Hook for cleaning prompts via agent-hub's prompt-builder agent.
  */
 export function usePromptCleaner(): UsePromptCleanerReturn {
   const [isLoading, setIsLoading] = useState(false)
@@ -51,12 +52,6 @@ export function usePromptCleaner(): UsePromptCleanerReturn {
           return prompt.trim()
         }
 
-        // Build the user message
-        let userMessage = `Clean and improve this prompt:\n\n${prompt}`
-        if (refinement) {
-          userMessage += `\n\nAdditional instruction: ${refinement}`
-        }
-
         const response = await fetch(endpoint, {
           method: 'POST',
           headers: {
@@ -67,8 +62,10 @@ export function usePromptCleaner(): UsePromptCleanerReturn {
           body: JSON.stringify({
             agent_slug: getPromptCleanerAgentSlug(),
             messages: [
-              { role: 'system', content: SYSTEM_PROMPT },
-              { role: 'user', content: userMessage },
+              {
+                role: 'user',
+                content: buildPromptCleanerMessage(prompt, refinement),
+              },
             ],
             max_tokens: 4096,
             temperature: 0.3,
