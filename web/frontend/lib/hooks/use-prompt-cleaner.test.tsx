@@ -47,6 +47,7 @@ describe('usePromptCleaner', () => {
 
     const body = sentBody(fetchSpy)
     expect(body.agent_slug).toBe('prompt-builder')
+    expect(body.project_id).toBe('a-term')
     expect(body.messages).toHaveLength(1)
     expect(body.messages[0].role).toBe('user')
     const { head, refinement } = refinementOf(body.messages[0].content)

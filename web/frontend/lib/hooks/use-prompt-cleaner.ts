@@ -67,7 +67,7 @@ export function usePromptCleaner(): UsePromptCleanerReturn {
             messages: [{ role: 'user', content }],
             max_tokens: 4096,
             temperature: 0.3,
-            project_id: 'a-term-prompt-cleaner',
+            project_id: 'a-term',
             persist_session: false,
           }),
           signal: AbortSignal.timeout(10000),
