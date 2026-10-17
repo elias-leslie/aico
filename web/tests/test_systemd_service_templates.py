@@ -8,11 +8,19 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SYSTEMD_DIR = REPO_ROOT / "scripts" / "systemd"
+# SummitFlow runs the code from a release copy (REPO_ROOT here) and points this
+# placeholder at the owner's checkout, where the env files live.
+HOST_CONFIG_ROOT = Path("/owner/checkout")
 
 
 def _render(name: str) -> dict[str, list[tuple[str, str]]]:
-    """Render a unit as install.sh does and parse it into ordered (key, value) pairs per section."""
-    text = (SYSTEMD_DIR / name).read_text().replace("__PROJECT_ROOT__", str(REPO_ROOT))
+    """Render a unit as SummitFlow's managed deploy does and parse it into ordered (key, value) pairs per section."""
+    text = (
+        (SYSTEMD_DIR / name)
+        .read_text()
+        .replace("__PROJECT_ROOT__", str(REPO_ROOT))
+        .replace("__SUMMITFLOW_HOST_CONFIG_ROOT__", str(HOST_CONFIG_ROOT))
+    )
     sections: dict[str, list[tuple[str, str]]] = {}
     current = None
     for line in text.splitlines():
@@ -45,7 +53,8 @@ def test_rendered_unit_runs_from_the_project_on_localhost(name: str, workdir: Pa
     assert set(unit) == {"Unit", "Service", "Install"}
     assert _values(service, "WorkingDirectory") == [str(workdir)]
     assert workdir.is_dir()
-    assert _values(service, "EnvironmentFile") == [f"-{REPO_ROOT}/.env.local", f"-{REPO_ROOT}/.env"]
+    # A release copy has no env files (git archive), so they come from the owner's checkout.
+    assert _values(service, "EnvironmentFile") == [f"-{HOST_CONFIG_ROOT}/.env.local", f"-{HOST_CONFIG_ROOT}/.env"]
     assert "%h/.local/bin" in _values(service, "Environment")[0]
 
     (exec_start,) = _values(service, "ExecStart")

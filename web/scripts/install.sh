@@ -807,7 +807,10 @@ template_path = Path(sys.argv[1])
 destination_path = Path(sys.argv[2])
 project_root = sys.argv[3]
 text = template_path.read_text()
-destination_path.write_text(text.replace("__PROJECT_ROOT__", project_root))
+# The env files live with the owner's checkout; SummitFlow's managed deploy
+# points __SUMMITFLOW_HOST_CONFIG_ROOT__ there while the code runs from a release.
+text = text.replace("__PROJECT_ROOT__", project_root)
+destination_path.write_text(text.replace("__SUMMITFLOW_HOST_CONFIG_ROOT__", project_root))
 PY
 }
 

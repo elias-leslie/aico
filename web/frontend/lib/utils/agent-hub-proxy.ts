@@ -2,16 +2,9 @@
 
 const AGENT_HUB_PROXY_BASE = '/api/agent-hub'
 
-export function isAgentHubConfigured(): boolean {
-  return Boolean(process.env.NEXT_PUBLIC_AGENT_HUB_URL)
-}
-
-export function getAgentHubProxyUrl(
-  path: 'models' | 'complete',
-): string | null {
-  if (!isAgentHubConfigured()) {
-    return null
-  }
-
+/** The same-origin proxy route. Whether Agent Hub is configured is the
+ * server's runtime setting (AGENT_HUB_URL); the proxy answers 503 without it,
+ * so a build made without the env file still finds Agent Hub once it is set. */
+export function getAgentHubProxyUrl(path: 'models' | 'complete'): string {
   return `${AGENT_HUB_PROXY_BASE}/${path}`
 }

@@ -51,14 +51,11 @@ export function usePromptCleaner(): UsePromptCleanerReturn {
       setError(null)
 
       try {
-        const endpoint = getAgentHubProxyUrl('complete')
         const content = buildPromptCleanerMessage(prompt, refinement)
-        if (!endpoint || content === null) {
-          // Agent Hub not configured, or nothing to clean: keep the draft
-          return prompt.trim()
-        }
+        // Nothing to clean: keep the (empty) draft
+        if (content === null) return prompt.trim()
 
-        const response = await fetch(endpoint, {
+        const response = await fetch(getAgentHubProxyUrl('complete'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

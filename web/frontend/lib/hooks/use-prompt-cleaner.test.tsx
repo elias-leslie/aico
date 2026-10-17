@@ -1,17 +1,12 @@
 import { act, renderHook } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { usePromptCleaner } from './use-prompt-cleaner'
 
 const CLEAN_UP = /^Fix typos, grammar and punctuation/
 
 describe('usePromptCleaner', () => {
-  beforeEach(() => {
-    process.env.NEXT_PUBLIC_AGENT_HUB_URL = 'http://agent-hub.test'
-  })
-
   afterEach(() => {
     vi.unstubAllGlobals()
-    delete process.env.NEXT_PUBLIC_AGENT_HUB_URL
   })
 
   function stubFetch(content = 'cleaned') {
@@ -23,13 +18,17 @@ describe('usePromptCleaner', () => {
     return fetchSpy
   }
 
-  async function clean(prompt: string, refinement?: string) {
+  async function cleanWith(prompt: string, refinement?: string) {
     const { result } = renderHook(() => usePromptCleaner())
     let cleaned = ''
     await act(async () => {
       cleaned = await result.current.cleanPrompt(prompt, refinement)
     })
-    return cleaned
+    return { cleaned, error: result.current.error }
+  }
+
+  async function clean(prompt: string, refinement?: string) {
+    return (await cleanWith(prompt, refinement)).cleaned
   }
 
   function sentBody(fetchSpy: ReturnType<typeof vi.fn>) {
@@ -82,11 +81,19 @@ describe('usePromptCleaner', () => {
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 
-  it('returns the draft unchanged when Agent Hub is not configured', async () => {
-    delete process.env.NEXT_PUBLIC_AGENT_HUB_URL
-    const fetchSpy = stubFetch()
+  it('keeps the draft and says why when the server has no Agent Hub', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 503,
+        json: async () => ({ detail: 'Agent Hub is not configured' }),
+      }),
+    )
 
-    expect(await clean('  draft  ')).toBe('draft')
-    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(await cleanWith('  draft  ')).toEqual({
+      cleaned: 'draft',
+      error: 'Agent Hub is not configured',
+    })
   })
 })

@@ -4,17 +4,15 @@ import {
   getClaudeModelOptions,
   getPromptCleanerAgentSlug,
 } from './agent-hub-models'
-import { getAgentHubProxyUrl, isAgentHubConfigured } from './agent-hub-proxy'
+import { getAgentHubProxyUrl } from './agent-hub-proxy'
 
 describe('agent-hub-models', () => {
   afterEach(() => {
     clearAgentHubModelCache()
     vi.restoreAllMocks()
-    delete process.env.NEXT_PUBLIC_AGENT_HUB_URL
   })
 
   it('derives Claude model picker options from the Agent Hub catalog', async () => {
-    process.env.NEXT_PUBLIC_AGENT_HUB_URL = 'http://agent-hub.test'
     const fetchSpy = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -57,15 +55,24 @@ describe('agent-hub-models', () => {
     expect(fetchSpy).toHaveBeenCalledWith('/api/agent-hub/models')
   })
 
-  it('reports whether Agent Hub companion features are configured', () => {
-    expect(isAgentHubConfigured()).toBe(false)
-    expect(getAgentHubProxyUrl('models')).toBeNull()
-
-    process.env.NEXT_PUBLIC_AGENT_HUB_URL = 'http://agent-hub.test'
-
-    expect(isAgentHubConfigured()).toBe(true)
+  it('always goes through the proxy, whatever the build saw', () => {
     expect(getAgentHubProxyUrl('models')).toBe('/api/agent-hub/models')
     expect(getAgentHubProxyUrl('complete')).toBe('/api/agent-hub/complete')
+  })
+
+  it('uses the built-in aliases when the server has no Agent Hub', async () => {
+    const consoleSpy = vi.spyOn(console, 'error')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: false, status: 503 }),
+    )
+
+    expect((await getClaudeModelOptions()).map((o) => o.id)).toEqual([
+      'opus',
+      'sonnet',
+      'haiku',
+    ])
+    expect(consoleSpy).not.toHaveBeenCalled()
   })
 
   it('falls back to built-in Claude aliases when the catalog is unavailable', async () => {

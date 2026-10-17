@@ -43,11 +43,10 @@ function getFallbackClaudeModelOptions(): ClaudeModelOption[] {
 }
 
 async function fetchModelsFromApi(): Promise<AgentHubCatalogModel[]> {
-  const endpoint = getAgentHubProxyUrl('models')
-  if (!endpoint) return []
-
   try {
-    const response = await fetch(endpoint)
+    const response = await fetch(getAgentHubProxyUrl('models'))
+    // 503: the server has no Agent Hub configured; use the built-in aliases.
+    if (response.status === 503) return []
     if (!response.ok)
       throw new Error(`Failed to fetch models: ${response.status}`)
     const data: AgentHubModelsResponse = await response.json()
