@@ -23,14 +23,19 @@ function getErrorMessage(err: unknown): string {
 // The cleaning rules are the prompt-builder agent's own prompt in Agent Hub,
 // which Agent Hub applies to every request for that agent. A-Term sends only
 // the draft and what to change, in the shape SummitFlow's note refinement uses.
-const DEFAULT_REFINEMENT =
+// A refinement always starts from the raw draft, so the clean-up asks ride
+// along with it.
+const CLEAN_UP =
   'Fix typos, grammar and punctuation and make it clearer. Keep the intent, the level of detail and any code or technical terms exactly.'
 
-export function buildPromptCleanerMessage(
+/** The user message, or null when there is nothing to send. */
+function buildPromptCleanerMessage(
   prompt: string,
   refinement?: string,
-): string {
-  return `CURRENT PROMPT:\n${prompt}\n\nREFINEMENT:\n${refinement?.trim() || DEFAULT_REFINEMENT}`
+): string | null {
+  const extra = refinement?.trim()
+  if (!prompt.trim()) return extra || null
+  return `CURRENT PROMPT:\n${prompt}\n\nREFINEMENT:\n${extra ? `${CLEAN_UP}\n${extra}` : CLEAN_UP}`
 }
 
 /**
@@ -47,8 +52,9 @@ export function usePromptCleaner(): UsePromptCleanerReturn {
 
       try {
         const endpoint = getAgentHubProxyUrl('complete')
-        if (!endpoint) {
-          // Agent-hub not configured - return original prompt
+        const content = buildPromptCleanerMessage(prompt, refinement)
+        if (!endpoint || content === null) {
+          // Agent Hub not configured, or nothing to clean: keep the draft
           return prompt.trim()
         }
 
@@ -61,12 +67,7 @@ export function usePromptCleaner(): UsePromptCleanerReturn {
           },
           body: JSON.stringify({
             agent_slug: getPromptCleanerAgentSlug(),
-            messages: [
-              {
-                role: 'user',
-                content: buildPromptCleanerMessage(prompt, refinement),
-              },
-            ],
+            messages: [{ role: 'user', content }],
             max_tokens: 4096,
             temperature: 0.3,
             project_id: 'a-term-prompt-cleaner',
@@ -81,7 +82,7 @@ export function usePromptCleaner(): UsePromptCleanerReturn {
         }
 
         const data = await response.json()
-        const cleanedContent = data.content || data.message?.content
+        const cleanedContent = (data.content || data.message?.content)?.trim()
 
         if (!cleanedContent) {
           throw new Error('No content in response')
