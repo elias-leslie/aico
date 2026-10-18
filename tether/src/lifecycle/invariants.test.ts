@@ -453,8 +453,11 @@ describe('INV-13b pane PATH puts the agent shims first', () => {
     configure('inv13b', { TETHER_SHIM_DIR: shims })
     insertWidget('e0000014', 'codex', 1)
     expect(managedEnvironment('e0000014', 'codex').PATH).toBe('/usr/bin:/bin')
+    expect(serverEnvironmentPrefix('s')).toContain('PATH=/usr/bin:/bin')
     mkdirSync(shims, { recursive: true })
     expect(managedEnvironment('e0000014', 'codex').PATH).toBe(`${shims}:/usr/bin:/bin`)
+    // tmux gives a pane its spawning client's PATH, so the server's client needs it too.
+    expect(serverEnvironmentPrefix('s')).toContain(`PATH=${shims}:/usr/bin:/bin`)
   })
 })
 

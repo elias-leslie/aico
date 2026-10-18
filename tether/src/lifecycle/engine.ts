@@ -692,13 +692,31 @@ function createManagedServerDirectory(serverId: string): string {
   return directory
 }
 
+/** `path` with the agent shim directory first, once the installer created it. */
+function agentPanePath(path: string): string {
+  const shimDir = shimDirectory(cfg().env)
+  return isDir(shimDir) ? withShimPath(path, shimDir) : path
+}
+
+/** Environment of a tmux client that spawns a pane. tmux hands the pane the
+ * client's PATH, not the `-e PATH=` value, so the client carries the pane's. */
+function paneSpawnClientEnv(environment: Record<string, string>): Record<string, string> {
+  const env = terminalClientEnv()
+  if (environment.PATH) env.PATH = environment.PATH
+  return env
+}
+
 /** Tether: the exact environment a new tmux server starts with. It becomes the
  * tmux global environment and so reaches every pane; the user manager's own
  * block (which systemd-run services otherwise inherit) is replaced. */
 export function serverEnvironmentPrefix(serverId: string): string[] {
   const base = { ...cfg().env, ...cfg().graphicalEnv?.() }
+  const serverEnvironment = tmuxServerEnvironment(base, passthroughFromEnv(base))
+  // tmux gives a new pane the PATH of the client that spawned it, whatever -e
+  // PATH says, so the shims must be on this client's PATH too.
+  if (serverEnvironment.PATH) serverEnvironment.PATH = agentPanePath(serverEnvironment.PATH)
   return cleanEnvArgv({
-    ...tmuxServerEnvironment(base, passthroughFromEnv(base)),
+    ...serverEnvironment,
     AICO_OWNER: 'aico',
     AICO_WORKLOAD_CLASS: 'durable-tmux-server',
     AICO_TMUX_SERVER_ID: serverId,
@@ -896,8 +914,7 @@ export function managedEnvironment(
   // Agent shims go first on PATH so a system-bus systemctl/systemd-run/pkexec
   // from an agent fails at once instead of popping the owner's polkit dialog
   // (scripts/shims/). Skipped until the installer has created the directory.
-  const shimDir = shimDirectory(cfg().env)
-  if (isDir(shimDir)) environment.PATH = withShimPath(environment.PATH, shimDir)
+  environment.PATH = agentPanePath(environment.PATH)
   // The durable tmux server starts under the user manager, whose HOME may
   // differ from this process (for example in an isolated test run). Keep the
   // pane's home aligned with the daemon profile and its chosen cwd.
@@ -2409,14 +2426,19 @@ export async function respawnAndRelaunch(
       try {
         // The target is the persisted pane id, not the mutable active pane. The
         // replacement starts in the inert gate and cannot fork before promotion.
+        const replacementEnvironment = managedEnvironment(
+          widgetId,
+          tool?.slug ?? 'shell',
+          options.projectId,
+        )
         execFileSync(
           TMUX_BIN,
           respawnTargetArgs(
             tmuxPaneTargetForWidget(widgetId),
             options.cwd ?? cwdForWidget(widgetId),
-            managedEnvironment(widgetId, tool?.slug ?? 'shell', options.projectId),
+            replacementEnvironment,
           ),
-          { env: terminalClientEnv(), timeout: TMUX_QUERY_TIMEOUT_MS },
+          { env: paneSpawnClientEnv(replacementEnvironment), timeout: TMUX_QUERY_TIMEOUT_MS },
         )
         promoted = await recordManagedPane(widgetId, ownershipGeneration(expected))
         if (!promoted?.scopeUnit) {
