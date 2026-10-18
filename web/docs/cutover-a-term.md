@@ -58,7 +58,7 @@ uv sync --extra dev --extra migrate      # psycopg, for the one-shot migration o
 ## 2. Migrate view state (dry run, then apply)
 
 The command reads `DATABASE_URL` from the environment or, as the old service
-did, from `.env.local`, `.env` or `~/.env.local`. It never prints it.
+did, from `~/.config/credstore/a-term/env` or `~/.env.local`. It never prints it.
 
 ```bash
 .venv/bin/a-term migrate-from-postgres            # dry run: prints the plan, writes nothing

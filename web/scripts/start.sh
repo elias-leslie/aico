@@ -47,13 +47,12 @@ import os
 import shlex
 from pathlib import Path
 
-repo_root = Path(os.environ["REPO_ROOT"])
 values = {
     "A_TERM_FRONTEND_HOST": "",
     "A_TERM_FRONTEND_PORT": "",
 }
 
-for path in (repo_root / ".env", repo_root / ".env.local"):
+for path in (Path.home() / ".config/credstore/a-term/env",):
     if not path.exists():
         continue
     for raw_line in path.read_text().splitlines():

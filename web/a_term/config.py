@@ -12,7 +12,7 @@ from typing import Literal
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from .branding import BACKEND_PORT, FRONTEND_PORT, PUBLIC_HOST, REPO_ROOT, get_upload_dir
+from .branding import BACKEND_PORT, FRONTEND_PORT, PUBLIC_HOST, get_upload_dir
 
 # ---------------------------------------------------------------------------
 # Port allocation — single source of truth for A-Term.
@@ -24,14 +24,13 @@ A_TERM_FRONTEND_PORT = FRONTEND_PORT
 class Settings(BaseSettings):
     """Application settings loaded from environment variables.
 
-    Loads from repo-local env files first, then falls back to ~/.env.local for
+    Loads from the owner-only credentials file outside the repo, then falls back to ~/.env.local for
     the internal shared environment.
     """
 
     model_config = SettingsConfigDict(
         env_file=(
-            str(REPO_ROOT / ".env.local"),
-            str(REPO_ROOT / ".env"),
+            str(Path.home() / ".config/credstore/a-term/env"),
             str(Path.home() / ".env.local"),
         ),
         env_file_encoding="utf-8",

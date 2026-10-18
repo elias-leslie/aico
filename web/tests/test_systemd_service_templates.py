@@ -54,7 +54,7 @@ def test_rendered_unit_runs_from_the_project_on_localhost(name: str, workdir: Pa
     assert _values(service, "WorkingDirectory") == [str(workdir)]
     assert workdir.is_dir()
     # A release copy has no env files (git archive), so they come from the owner's checkout.
-    assert _values(service, "EnvironmentFile") == [f"-{HOST_CONFIG_ROOT}/.env.local", f"-{HOST_CONFIG_ROOT}/.env"]
+    assert _values(service, "EnvironmentFile") == ["-%h/.config/credstore/a-term/env"]
     assert "%h/.local/bin" in _values(service, "Environment")[0]
 
     (exec_start,) = _values(service, "ExecStart")

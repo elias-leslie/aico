@@ -115,7 +115,6 @@ def test_run_migrate_dry_run_writes_nothing(
 
 def test_missing_database_url_is_a_clear_error(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.delenv("NOPE_DB", raising=False)
-    monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(cli.Path, "home", lambda: tmp_path)
     with pytest.raises(SystemExit, match="NOPE_DB is not set"):
         cli.resolve_database_url("NOPE_DB")
@@ -123,8 +122,10 @@ def test_missing_database_url_is_a_clear_error(monkeypatch: pytest.MonkeyPatch, 
 
 def test_database_url_falls_back_to_env_files(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.delenv("SOME_DB", raising=False)
-    (tmp_path / ".env.local").write_text("OTHER=1\nexport SOME_DB='postgresql://u@h/db'\n")
-    monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
+    env_file = tmp_path / ".config/credstore/a-term/env"
+    env_file.parent.mkdir(parents=True)
+    env_file.write_text("OTHER=1\nexport SOME_DB='postgresql://u@h/db'\n")
+    monkeypatch.setattr(cli.Path, "home", lambda: tmp_path)
     assert cli.resolve_database_url("SOME_DB") == "postgresql://u@h/db"
 
 

@@ -12,7 +12,7 @@ bash scripts/install.sh
 
 Then open **http://localhost:3002** and start working.
 
-A-Term currently targets **Linux with systemd** and needs **Tether**, the local session daemon that owns the terminal sessions (API version 1 or newer, normally `tether@default.service`). Install and start Tether first; the installer stops with a clear message if it cannot reach it. The installer then sets up `.env.local`, Node.js, corepack, Python, uv, tmux, dependencies, frontend build output, and user services. There is no database server to install.
+A-Term currently targets **Linux with systemd** and needs **Tether**, the local session daemon that owns the terminal sessions (API version 1 or newer, normally `tether@default.service`). Install and start Tether first; the installer stops with a clear message if it cannot reach it. The installer then sets up `~/.config/credstore/a-term/env`, Node.js, corepack, Python, uv, tmux, dependencies, frontend build output, and user services. There is no database server to install.
 The first install can take a few minutes because it downloads the pieces it needs for you.
 
 Projects come from Tether: by default its local list (`~/.config/tether/projects.json`), which A-Term's "Register project" adds to through Tether's `POST /v1/projects`.
@@ -78,7 +78,7 @@ For any deployment beyond localhost, turn on browser auth first. `A_TERM_AUTH_MO
 <details>
 <summary><strong>Environment variables</strong></summary>
 
-Copy `.env.example` to `.env.local` only if you want to review or override settings first. `bash scripts/install.sh` creates `.env.local` for you. Everything is optional:
+Copy `.env.example` to `~/.config/credstore/a-term/env` (mode 0600, outside the repo) only if you want to review or override settings first. `bash scripts/install.sh` creates it for you. Everything is optional:
 
 ```bash
 # Tether control socket (default: $XDG_RUNTIME_DIR/tether/default/control.sock)

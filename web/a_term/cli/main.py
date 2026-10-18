@@ -28,7 +28,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, LiteralString
 
-from ..branding import REPO_ROOT
 from ..logging_config import configure_cli_logging
 from ..storage import local_db
 
@@ -73,7 +72,7 @@ def default_tools_out() -> Path:
 
 def _env_file_value(name: str) -> str | None:
     """``name`` from the env files the old service read, without printing it."""
-    for path in (REPO_ROOT / ".env.local", REPO_ROOT / ".env", Path.home() / ".env.local"):
+    for path in (Path.home() / ".config/credstore/a-term/env", Path.home() / ".env.local"):
         try:
             lines = path.read_text().splitlines()
         except OSError:

@@ -12,7 +12,7 @@ usage() {
 Usage: bash scripts/install.sh [--no-start] [--skip-systemd]
 
 Bootstraps A-Term for a native Linux install:
-  - prepares .env.local when missing
+  - prepares ~/.config/credstore/a-term/env when missing
   - bootstraps Node.js 22, corepack, uv, and Python 3.13 when needed
   - installs tmux automatically when it is missing
   - checks that a compatible Tether session daemon is running
@@ -403,7 +403,7 @@ configure_agent_hub_companion() {
   fi
 
   if ! install_is_interactive; then
-    echo "Detected optional Agent Hub locally at ${agent_hub_health}. Set AGENT_HUB_URL=${agent_hub_url} and NEXT_PUBLIC_AGENT_HUB_URL=${agent_hub_url} in .env.local if you want model catalog, prompt cleaning, and Agent Hub voice integration." >&2
+    echo "Detected optional Agent Hub locally at ${agent_hub_health}. Set AGENT_HUB_URL=${agent_hub_url} and NEXT_PUBLIC_AGENT_HUB_URL=${agent_hub_url} in ~/.config/credstore/a-term/env if you want model catalog, prompt cleaning, and Agent Hub voice integration." >&2
     return
   fi
 
@@ -689,17 +689,14 @@ PY
 )"
 
 cd "$REPO_ROOT"
-ENV_FILE="$REPO_ROOT/.env.local"
+ENV_FILE="$HOME/.config/credstore/a-term/env"
 
 if [[ ! -f "$ENV_FILE" ]]; then
-  step "Creating .env.local"
-  cp "$REPO_ROOT/.env.example" "$ENV_FILE"
+  step "Creating $ENV_FILE"
+  (umask 077 && mkdir -p "$(dirname "$ENV_FILE")" && cp "$REPO_ROOT/.env.example" "$ENV_FILE")
 fi
 
-remove_blank_env_keys "$REPO_ROOT/.env.local" \
-  "NEXT_PUBLIC_AGENT_HUB_URL" \
-  "AGENT_HUB_URL"
-remove_blank_env_keys "$REPO_ROOT/.env" \
+remove_blank_env_keys "$ENV_FILE" \
   "NEXT_PUBLIC_AGENT_HUB_URL" \
   "AGENT_HUB_URL"
 
@@ -709,7 +706,6 @@ import os
 import shlex
 from pathlib import Path
 
-repo_root = Path(os.environ["REPO_ROOT"])
 keys = [
     "A_TERM_PORT",
     "A_TERM_BIND_HOST",
@@ -720,7 +716,7 @@ keys = [
 ]
 values: dict[str, str] = {}
 
-for path in (repo_root / ".env", repo_root / ".env.local"):
+for path in (Path.home() / ".config/credstore/a-term/env",):
     if not path.exists():
         continue
     for raw_line in path.read_text().splitlines():
