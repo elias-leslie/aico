@@ -824,7 +824,7 @@ async function createInternalSessionOwned(
           cwd,
           { ...environment, AICO_TMUX_SERVER_ID: bound.id },
         ),
-        { env: terminalClientEnv(), timeout: TMUX_QUERY_TIMEOUT_MS },
+        { env: paneSpawnClientEnv(environment), timeout: TMUX_QUERY_TIMEOUT_MS },
       )
       return
     } else if (bound?.phase !== 'dead') {
@@ -865,7 +865,7 @@ async function createInternalSessionOwned(
         cwd,
         { ...environment, AICO_TMUX_SERVER_ID: current.id },
       ),
-      { env: terminalClientEnv(), timeout: TMUX_QUERY_TIMEOUT_MS },
+      { env: paneSpawnClientEnv(environment), timeout: TMUX_QUERY_TIMEOUT_MS },
     )
     return
   }
