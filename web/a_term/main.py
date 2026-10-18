@@ -27,6 +27,7 @@ from .api import (
     diagnostics,
     files,
     internal,
+    memory_policy,
     pane_files,
     panes,
     projects,
@@ -172,6 +173,7 @@ mount(app, panes.router, Surface.BROWSER)
 mount(app, projects.router, Surface.BROWSER)
 mount(app, agent.router, Surface.BROWSER)
 mount(app, agent_tools.router, Surface.BROWSER)
+mount(app, memory_policy.router, Surface.BROWSER)
 mount(app, files.router, Surface.BROWSER)
 mount(app, pane_files.router, Surface.BROWSER)
 mount(app, diagnostics.router, Surface.BROWSER)

@@ -66,6 +66,9 @@ class FakeTetherState:
         self.sessions: dict[str, dict[str, Any]] = {}
         self.ended: set[str] = set()
         self.tools: dict[str, dict[str, Any]] = {}
+        self.memory_policy: dict[str, Any] = {
+            "paneMemoryMaxGib": 12, "paneSwapMaxGib": 2, "killEnabled": True, "killAfterSeconds": 10,
+            "killGapSeconds": 30, "killMinGib": 1, "killOrder": "largest"}
         self.projects: list[dict[str, Any]] = []
         self.project_source = "local"
         self.roots: dict[str, dict[str, Any]] = {}
@@ -211,7 +214,7 @@ class _Handler(BaseHTTPRequestHandler):
         parsed = urlsplit(self.path)
         parts = [unquote(part) for part in parsed.path.split("/") if part]
         query = {key: values[-1] for key, values in parse_qs(parsed.query).items()}
-        body = self._body() if method in {"POST", "PATCH"} else None
+        body = self._body() if method in {"POST", "PATCH", "PUT"} else None
         state = self.server.state
         with state.lock:
             state.calls.append((method, parsed.path, body))
@@ -237,6 +240,9 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_PATCH(self) -> None:
         self._dispatch("PATCH")
+
+    def do_PUT(self) -> None:
+        self._dispatch("PUT")
 
     def do_DELETE(self) -> None:
         self._dispatch("DELETE")
@@ -583,7 +589,24 @@ def route(state: FakeTetherState, method: str, parts: list[str], query: dict[str
         return _projects(state, method, query, body)
     if rest[:1] == ["roots"]:
         return _roots(state, method, rest[1:], query, body)
+    if rest == ["memory-policy"]:
+        return _memory_policy(state, method, body)
     return _error(404, "not_found")
+
+
+def _memory_policy(state: FakeTetherState, method: str, body: Any) -> tuple[int, Any]:
+    """Tether's GET/PUT /v1/memory-policy, with its bound on the pane cap."""
+    if method == "PUT":
+        if not isinstance(body, dict) or set(body) - set(state.memory_policy):
+            return _error(400, "invalid_body")
+        cap = body.get("paneMemoryMaxGib", 12)
+        if not isinstance(cap, int) or not 2 <= cap <= 64:
+            return _error(400, "invalid_body", field="paneMemoryMaxGib", detail="must be a whole number from 2 to 64")
+        state.memory_policy.update(body)
+    elif method != "GET":
+        return _error(405, "method_not_allowed")
+    return 200, {"policy": dict(state.memory_policy), "killOrders": ["largest", "background-first"],
+                 "guard": {"running": True, "hostState": "green", "lastKillAt": None, "paneCapFile": "unchanged"}}
 
 
 class _Server(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):

@@ -91,6 +91,8 @@ SURFACES: dict[Surface, list[tuple[str, str]]] = {
         ("POST", "/api/a-term/agent-tools"),
         ("PATCH", "/api/a-term/agent-tools/{tool_ref}"),
         ("DELETE", "/api/a-term/agent-tools/{tool_ref}"),
+        ("GET", "/api/a-term/memory-policy"),
+        ("PUT", "/api/a-term/memory-policy"),
         ("GET", "/api/a-term/files/limits"),
         ("POST", "/api/a-term/files"),
         ("GET", "/api/a-term/panes/{pane_id}/files/tree"),
@@ -143,7 +145,7 @@ def test_every_route_declares_a_surface() -> None:
 
 def test_route_surfaces_match_the_snapshot() -> None:
     expected = {key: surface for surface, keys in SURFACES.items() for key in keys}
-    assert len(expected) == 62
+    assert len(expected) == 64
     assert _served(_app()) == expected
 
 

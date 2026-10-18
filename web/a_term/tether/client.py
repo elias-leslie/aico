@@ -275,6 +275,15 @@ class TetherClient:
         )
 
     # ------------------------------------------------------------------
+    # Memory policy (agent-pane cap and runaway job kills; Tether owns it)
+    # ------------------------------------------------------------------
+    def get_memory_policy(self) -> dict[str, Any]:
+        return self.call("GET", "/v1/memory-policy")
+
+    def update_memory_policy(self, fields: dict[str, Any]) -> dict[str, Any]:
+        return self.call("PUT", "/v1/memory-policy", fields)
+
+    # ------------------------------------------------------------------
     # Agent tools
     # ------------------------------------------------------------------
     def list_tools(self, *, enabled_only: bool = False) -> dict[str, Any]:

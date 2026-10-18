@@ -34,6 +34,7 @@ import type {
   MobileKeyboardMode,
 } from './keyboard/types'
 import { AgentToolsSettings } from './settings/AgentToolsSettings'
+import { MemoryPolicySettings } from './settings/MemoryPolicySettings'
 import { SettingButtonGroup } from './settings/SettingButtonGroup'
 import { SettingCheckbox } from './settings/SettingCheckbox'
 import { SettingSelect } from './settings/SettingSelect'
@@ -285,6 +286,8 @@ export function SettingsDropdown({
         )}
 
         <AgentToolsSettings />
+
+        <MemoryPolicySettings />
       </SettingsPanel>
     </div>
   )
