@@ -34,6 +34,8 @@ tether doctor
 
 Install Tether before Aico or A-Term; both installers refuse to continue until it answers. A single `default` instance can serve both apps.
 
+Agent shims: the installer also puts `systemctl`, `systemd-run`, `pkexec` and a few siblings as wrappers under `~/.local/lib/tether/shims/` (the list is `scripts/shims/shims.list`), and every session Tether creates gets that directory first on PATH. The wrappers add `--no-ask-password` (or `--no-user-interaction` for `udisksctl`) so an agent's system-bus call fails at once instead of popping the owner's polkit password dialog; `pkexec` is refused. Only panes created after the install pick it up, and a caller that uses an absolute path such as `/usr/bin/systemctl` bypasses it.
+
 The installer is idempotent. It never starts an instance unless you pass `--start`. It installs no pane memory drop-in: Nightshift owns the pane OOM policy and cap, and `tether doctor` checks live panes against it.
 
 ## CLI

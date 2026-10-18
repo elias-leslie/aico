@@ -1,0 +1,58 @@
+#!/bin/sh
+# Tether agent shim. Installed as ~/.local/lib/tether/shims/tether-shim and
+# linked under each command name in shims.list (same directory). Changes the
+# argv of the real command as the list says, then execs it. Shell builtins
+# only, so a pane PATH of just the shim dir and the real tools still works.
+set -f
+
+name=${0##*/}
+here=${0%/*}
+[ "$here" = "$0" ] && here=.
+shim_dir=$(cd -P -- "$here" 2>/dev/null && pwd -P) || exit 127
+
+action= flag= rest=
+while read -r rule_name rule_action rule_flag rule_rest || [ -n "$rule_name" ]; do
+  case $rule_name in '' | '#'*) continue ;; esac
+  [ "$rule_name" = "$name" ] || continue
+  action=$rule_action flag=$rule_flag rest=$rule_rest
+  break
+done <"$shim_dir/shims.list"
+
+if [ "$action" = refuse ]; then
+  printf '%s\n' "$flag${rest:+ $rest}" >&2
+  exit 126
+fi
+
+real=
+IFS=:
+for dir in $PATH /usr/bin /bin /usr/sbin /sbin; do
+  [ -n "$dir" ] || continue
+  [ -f "$dir/$name" ] && [ -x "$dir/$name" ] || continue
+  physical=$(cd -P -- "$dir" 2>/dev/null && pwd -P) || continue
+  [ "$physical" = "$shim_dir" ] && continue
+  real=$dir/$name
+  break
+done
+unset IFS
+if [ -z "$real" ]; then
+  printf '%s: command not found\n' "$name" >&2
+  exit 127
+fi
+
+case $action in
+  prepend)
+    exec "$real" "$flag" "$@"
+    ;;
+  after-subcommand)
+    if [ $# -gt 0 ]; then
+      case ",$rest," in
+        *",$1,"*)
+          subcommand=$1
+          shift
+          exec "$real" "$subcommand" "$flag" "$@"
+          ;;
+      esac
+    fi
+    ;;
+esac
+exec "$real" "$@"

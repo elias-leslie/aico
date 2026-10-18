@@ -9,7 +9,7 @@
 // Nothing here starts tmux, systemd units or processes.
 
 import { createHash } from 'node:crypto'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -444,6 +444,17 @@ describe('INV-13 pane markers follow the compatibility contract', () => {
       if (previous === undefined) delete process.env.AICO_TMUX_SOCKET
       else process.env.AICO_TMUX_SOCKET = previous
     }
+  })
+})
+
+describe('INV-13b pane PATH puts the agent shims first', () => {
+  it('prepends the shim directory once it exists and leaves PATH alone before', () => {
+    const shims = join(dir, 'shim-test', 'shims')
+    configure('inv13b', { TETHER_SHIM_DIR: shims })
+    insertWidget('e0000014', 'codex', 1)
+    expect(managedEnvironment('e0000014', 'codex').PATH).toBe('/usr/bin:/bin')
+    mkdirSync(shims, { recursive: true })
+    expect(managedEnvironment('e0000014', 'codex').PATH).toBe(`${shims}:/usr/bin:/bin`)
   })
 })
 

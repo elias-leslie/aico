@@ -5,7 +5,9 @@ import {
   parseGraphicalEnvironment,
   passthroughFromEnv,
   sessionEnvironment,
+  shimDirectory,
   tmuxServerEnvironment,
+  withShimPath,
 } from './env'
 
 describe('tmuxServerEnvironment', () => {
@@ -87,5 +89,21 @@ describe('parseGraphicalEnvironment', () => {
       XAUTHORITY: '/run/user/1000/gdm/Xauthority',
       DBUS_SESSION_BUS_ADDRESS: 'unix:path=/run/user/1000/bus',
     })
+  })
+})
+
+describe('agent shim PATH', () => {
+  it('puts the shim directory first once, whatever PATH held', () => {
+    expect(withShimPath('/usr/bin:/bin', '/lib/shims')).toBe('/lib/shims:/usr/bin:/bin')
+    expect(withShimPath('/usr/bin:/lib/shims::/bin', '/lib/shims')).toBe('/lib/shims:/usr/bin:/bin')
+    expect(withShimPath('', '/lib/shims')).toBe('/lib/shims')
+  })
+
+  it('finds the shim directory under the Tether lib dir unless overridden', () => {
+    expect(shimDirectory({ HOME: '/home/u' })).toBe('/home/u/.local/lib/tether/shims')
+    expect(shimDirectory({ HOME: '/home/u', TETHER_LIB_DIR: '/opt/tether' })).toBe(
+      '/opt/tether/shims',
+    )
+    expect(shimDirectory({ HOME: '/home/u', TETHER_SHIM_DIR: '/x/shims' })).toBe('/x/shims')
   })
 })

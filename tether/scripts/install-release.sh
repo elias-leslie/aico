@@ -29,3 +29,6 @@ install_copy() {
 install_copy "$repo/dist/tether.mjs" "$lib_dir/dist/tether.mjs" 0644
 install_copy "$repo/bin/tether" "$lib_dir/bin/tether" 0755
 install_copy "$repo/scripts/aico-root-watch.py" "$lib_dir/scripts/aico-root-watch.py" 0755
+# shellcheck source=scripts/install-shims.sh
+source "$repo/scripts/install-shims.sh"
+install_shims "$repo" "$lib_dir"

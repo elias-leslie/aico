@@ -26,7 +26,14 @@ import { homedir, uptime } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { agentExitMarkerDir, ownsTmuxServerUnit, type TetherPaths } from '../config'
-import { cleanEnvArgv, passthroughFromEnv, sessionEnvironment, tmuxServerEnvironment } from '../env'
+import {
+  cleanEnvArgv,
+  passthroughFromEnv,
+  sessionEnvironment,
+  shimDirectory,
+  tmuxServerEnvironment,
+  withShimPath,
+} from '../env'
 import type { EventBus } from '../events'
 import {
   type AdmissionRequest,
@@ -886,6 +893,11 @@ export function managedEnvironment(
   // service PATH onto every new/respawned pane so context verification and the
   // command that actually runs cannot resolve different launcher binaries.
   environment.PATH = paneGatePath(cfg().env)
+  // Agent shims go first on PATH so a system-bus systemctl/systemd-run/pkexec
+  // from an agent fails at once instead of popping the owner's polkit dialog
+  // (scripts/shims/). Skipped until the installer has created the directory.
+  const shimDir = shimDirectory(cfg().env)
+  if (isDir(shimDir)) environment.PATH = withShimPath(environment.PATH, shimDir)
   // The durable tmux server starts under the user manager, whose HOME may
   // differ from this process (for example in an isolated test run). Keep the
   // pane's home aligned with the daemon profile and its chosen cwd.

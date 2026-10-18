@@ -11,6 +11,7 @@
 #   ~/.local/bin/tether -> ~/.local/lib/tether/bin/tether
 #   ~/.config/systemd/user/tether@.service
 #   ~/.local/lib/tether/scripts/aico-root-watch.py   the `st aico` client
+#   ~/.local/lib/tether/shims/                      agent PATH shims (scripts/shims/)
 #
 # It never enables or starts an instance unless --start is given, and only the
 # default instance is ever enabled at boot. A test instance such as tether@dev
@@ -35,7 +36,7 @@ while [ $# -gt 0 ]; do
       shift
       ;;
     -h | --help)
-      sed -n '2,18p' "$0"
+      sed -n '2,19p' "$0"
       exit 0
       ;;
     *)
@@ -94,6 +95,9 @@ changed=0
 install_file "$repo/dist/tether.mjs" "$lib_dir/dist/tether.mjs" 0644 && changed=1 || true
 install_file "$repo/bin/tether" "$lib_dir/bin/tether" 0755 && changed=1 || true
 install_file "$repo/scripts/aico-root-watch.py" "$lib_dir/scripts/aico-root-watch.py" 0755 || true
+# shellcheck source=scripts/install-shims.sh
+source "$repo/scripts/install-shims.sh"
+install_shims "$repo" "$lib_dir"
 
 mkdir -p "$bin_dir"
 if [ "$(readlink "$bin_dir/tether" 2>/dev/null || true)" != "$lib_dir/bin/tether" ]; then

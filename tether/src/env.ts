@@ -1,3 +1,6 @@
+import { homedir } from 'node:os'
+import { delimiter, join } from 'node:path'
+
 // Environment hygiene for tmux servers and every session Tether creates.
 //
 // tmux servers start from an allow-listed environment (never the daemon's or an
@@ -153,4 +156,22 @@ export function cleanEnvArgv(env: Record<string, string>): string[] {
       .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
       .map(([name, value]) => `${name}=${value}`),
   ]
+}
+
+/**
+ * Where the installer puts the agent shims (scripts/shims/): wrappers that make
+ * systemctl, systemd-run, pkexec and friends fail at once instead of popping
+ * the owner's polkit password dialog. `TETHER_SHIM_DIR` overrides it.
+ */
+export function shimDirectory(env: NodeJS.ProcessEnv = process.env): string {
+  if (env.TETHER_SHIM_DIR) return env.TETHER_SHIM_DIR
+  const lib = env.TETHER_LIB_DIR || join(env.HOME || homedir(), '.local', 'lib', 'tether')
+  return join(lib, 'shims')
+}
+
+/** `path` with `shimDir` as its first entry (any other copy of it removed). */
+export function withShimPath(path: string, shimDir: string): string {
+  return [shimDir, ...path.split(delimiter).filter((entry) => entry && entry !== shimDir)].join(
+    delimiter,
+  )
 }
