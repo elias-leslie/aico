@@ -11,6 +11,7 @@ import {
   ROOT_REQUESTS_TABLE_SQL,
   SCHEMA_VERSION,
   SESSIONS_TABLE_SQL,
+  SETTINGS_SQL,
   TMUX_SERVERS_TABLE_SQL,
 } from './schema'
 import {
@@ -176,7 +177,31 @@ export class Store {
           .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
           .run(4, now)
       }
+      if (current < 5) {
+        // v5: owner settings (memory policy).
+        this.db.exec(SETTINGS_SQL)
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(5, now)
+      }
     })
+  }
+
+  // --- settings --------------------------------------------------------------
+
+  getSetting(key: string): string | null {
+    const row = this.db.prepare('SELECT value FROM settings WHERE key = ?').get(key) as
+      | { value: string }
+      | undefined
+    return row?.value ?? null
+  }
+
+  putSetting(key: string, value: string, now: number): void {
+    this.db
+      .prepare(
+        'INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at',
+      )
+      .run(key, value, now)
   }
 
   transaction<T>(work: () => T): T {

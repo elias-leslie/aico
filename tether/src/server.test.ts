@@ -59,7 +59,7 @@ describe('control socket', () => {
       status: 'ok',
       instance: 'test',
       apiVersion: 1,
-      schemaVersion: 4,
+      schemaVersion: 5,
       lifecycle: 'disabled',
       gui: { connected: false },
     })
@@ -359,5 +359,35 @@ describe('event stream', () => {
       .map((line) => JSON.parse(line))
     expect(hello.type).toBe('hello')
     expect(gapEvent).toMatchObject({ type: 'gap', data: { since: 0 } })
+  })
+})
+
+describe('memory policy', () => {
+  it('serves the defaults and stores a valid update', async () => {
+    const first = await call('GET', '/v1/memory-policy')
+    expect(first.status).toBe(200)
+    expect(first.body).toMatchObject({
+      policy: { paneMemoryMaxGib: 12, killOrder: 'largest', killEnabled: true },
+      killOrders: ['largest', 'background-first'],
+      guard: { running: false },
+    })
+    const put = await call('PUT', '/v1/memory-policy', {
+      killOrder: 'background-first',
+      killMinGib: 2,
+    })
+    expect(put.status).toBe(200)
+    expect((await call('GET', '/v1/memory-policy')).body).toMatchObject({
+      policy: { killOrder: 'background-first', killMinGib: 2, paneMemoryMaxGib: 12 },
+    })
+  })
+
+  it('refuses an out-of-range or unknown field and keeps the stored policy', async () => {
+    const bad = await call('PUT', '/v1/memory-policy', { paneMemoryMaxGib: 1 })
+    expect(bad.status).toBe(400)
+    expect(bad.body).toMatchObject({ error: 'invalid_body', field: 'paneMemoryMaxGib' })
+    expect((await call('PUT', '/v1/memory-policy', { nope: 1 })).status).toBe(400)
+    expect((await call('GET', '/v1/memory-policy')).body).toMatchObject({
+      policy: { paneMemoryMaxGib: 12 },
+    })
   })
 })

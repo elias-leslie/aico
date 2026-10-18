@@ -33,11 +33,13 @@ import { configureTmuxPaths } from './lifecycle/tmux'
 import { bindToolSource } from './lifecycle/tui/registry'
 import {
   bindAgentStates,
+  foregroundPaneScope,
   generationOf,
   learnProjects,
   rootOperations,
   sessionSnapshot,
 } from './lifecycle-api'
+import { startMemoryGuard } from './memory-guard'
 import { activeProjectFileFromEnv, ProjectProvider, summitflowUrlFromEnv } from './projects'
 import { Continuity } from './reboot'
 import { Recovery } from './recovery'
@@ -132,6 +134,13 @@ export async function startDaemon(
     startedAt: Date.now(),
     continuity: undefined as Continuity | undefined,
     recovery: undefined as Recovery | undefined,
+    memoryPolicy: startMemoryGuard(paths, store, env, {
+      foreground: foregroundPaneScope,
+      sessionOf: () =>
+        new Map(
+          listWidgets().flatMap((row) => (row.scopeUnit ? [[row.scopeUnit, row.id] as const] : [])),
+        ),
+    }),
   }
   if (reconcileEnabled(env)) {
     const graphical = () => userManagerGraphicalEnvironment()
@@ -222,6 +231,7 @@ export async function startDaemon(
     ready,
     close: async () => {
       stopLifecycle()
+      context.memoryPolicy.stop()
       clearInterval(projectNames)
       agentPoller.stop()
       bindAgentStates(null)

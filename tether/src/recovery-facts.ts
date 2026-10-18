@@ -867,7 +867,7 @@ export function renderDetail(facts: CrashFacts, sections: DetailSections): strin
   out.push('## Prompt the agent was resumed with', '', sections.synopsis, '')
   block('Unit journal', sections.unitLines)
   block('Kernel OOM records', sections.kernelLines)
-  block('Memory controller (memctl)', sections.memctlLines)
+  block('Memory controller (Nightshift memctl, Tether memory guard)', sections.memctlLines)
   if (sections.memoryEvents) block('nightshift memory events', sections.memoryEvents.split('\n'))
   const t = facts.transcript
   if (t) {

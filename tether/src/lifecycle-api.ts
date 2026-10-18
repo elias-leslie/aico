@@ -112,6 +112,11 @@ function foregroundMemory(): ForegroundPaneMemory {
   return foregroundPaneMemory
 }
 
+/** The pane scope the owner is looking at, if a focus has been seen. */
+export function foregroundPaneScope(): string | null {
+  return foregroundPaneMemory?.foreground ?? null
+}
+
 export interface LifecycleApiContext {
   paths: TetherPaths
   store: Store

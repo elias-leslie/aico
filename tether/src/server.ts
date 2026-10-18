@@ -6,6 +6,13 @@ import { HttpError, Router, readJsonObject, sendError, sendJson } from './http'
 import { lifecycleStatus } from './lifecycle/engine'
 import { isRootTool } from './lifecycle/tui/registry'
 import { learnProjects, registerLifecycleRoutes } from './lifecycle-api'
+import type { MemoryPolicyService } from './memory-guard'
+import {
+  DEFAULT_MEMORY_POLICY,
+  KILL_ORDERS,
+  MEMORY_POLICY_BOUNDS,
+  MemoryPolicyError,
+} from './memory-policy'
 import {
   type ProjectProvider,
   ProjectRegistrationError,
@@ -29,6 +36,8 @@ export interface ServerContext {
   startedAt: number
   heartbeatMs?: number
   now?: () => number
+  /** Agent-pane memory policy (pane cap, runaway job kills). */
+  memoryPolicy?: MemoryPolicyService
 }
 
 /** `rootCapable`: the tool can be started as a root (`POST /v1/roots`). */
@@ -148,6 +157,16 @@ function streamEvents(
   }
   request.once('close', stop)
   response.once('close', stop)
+}
+
+function memoryPolicyJson(service: MemoryPolicyService): Record<string, unknown> {
+  return {
+    policy: service.get(),
+    defaults: DEFAULT_MEMORY_POLICY,
+    bounds: MEMORY_POLICY_BOUNDS,
+    killOrders: KILL_ORDERS,
+    guard: service.status(),
+  }
 }
 
 export function buildRouter(context: ServerContext): Router {
@@ -292,6 +311,24 @@ export function buildRouter(context: ServerContext): Router {
       if (result !== 'deleted') throw new HttpError(409, result)
       events.publish('tools.changed', { ref: params.ref, change: 'deleted' })
       sendJson(res, 200, { deleted: true })
+    })
+    .add('GET', '/v1/memory-policy', (_req, res) => {
+      const service = context.memoryPolicy
+      if (!service) throw new HttpError(404, 'not_found')
+      sendJson(res, 200, memoryPolicyJson(service))
+    })
+    .add('PUT', '/v1/memory-policy', async (req, res) => {
+      const service = context.memoryPolicy
+      if (!service) throw new HttpError(404, 'not_found')
+      try {
+        await service.update(await readJsonObject(req), now())
+      } catch (error) {
+        if (error instanceof MemoryPolicyError)
+          throw new HttpError(400, 'invalid_body', { field: error.field, detail: error.message })
+        throw error
+      }
+      events.publish('memory-policy.changed', {})
+      sendJson(res, 200, memoryPolicyJson(service))
     })
     .add('GET', '/v1/events', (req, res, _params, query) => {
       streamEvents(context, req, res, query)

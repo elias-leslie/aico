@@ -960,6 +960,9 @@ export class Recovery {
           '--user',
           '-u',
           'nightshift-memctl.service',
+          // Tether's own runaway-job guard logs in the daemon's journal
+          '-u',
+          `tether@${this.context.paths.instance}.service`,
           '-o',
           'json',
           '--no-pager',
@@ -969,6 +972,11 @@ export class Recovery {
         10_000,
       )) ?? '',
     )
+      .filter(
+        (entry) =>
+          entry._SYSTEMD_USER_UNIT === 'nightshift-memctl.service' ||
+          (typeof entry.MESSAGE === 'string' && entry.MESSAGE.includes('[tether:memory-guard]')),
+      )
       .map((entry) => (typeof entry.MESSAGE === 'string' ? entry.MESSAGE : ''))
       .filter(Boolean)
       .slice(-60)

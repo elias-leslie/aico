@@ -20,7 +20,7 @@ function shellQuote(value: string): string {
 }
 
 /** Agents run at OOM score adjust 100 while the pane's other processes keep
- * the inherited 200 (Nightshift's memctl re-raises their children), so under
+ * the inherited 200 (Tether's memory guard re-raises their children), so under
  * a pane cap the kernel kills a large tool before the agent unless the agent
  * is itself far larger. The pane supervisor sets it on itself before starting
  * the agent and restores it for the fallback shell; a failed write is

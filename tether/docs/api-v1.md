@@ -329,6 +329,36 @@ Events never carry terminal contents or prompts. A `session` snapshot carries th
 
 SSE was rejected. NDJSON is simpler to consume from both Node and Python (`httpx` line streaming) over a Unix socket, and browsers never connect to Tether directly.
 
+## Memory policy
+
+Tether owns the agent-pane memory policy: the pane cap and the kill policy for runaway agent tool jobs. Host memory
+(the host's pressure state in Nightshift's `admission.json`, swap, systemd-oomd, the app.slice cap) stays with
+Nightshift. A-Term's settings panel edits it.
+
+- `GET /v1/memory-policy` returns `{policy, defaults, bounds, killOrders, guard}`. `guard` is `{running, hostState,
+  lastKillAt, paneCapFile}`; only the default instance runs the guard.
+- `PUT /v1/memory-policy` takes any subset of `policy` and returns the same shape; a bad field is `400 invalid_body`
+  with `field` and `detail`. It publishes `memory-policy.changed`.
+
+| Field | Default | Meaning |
+|---|---|---|
+| `paneMemoryMaxGib` | 12 | MemoryMax of every `tmux-spawn-*.scope` pane (2-64) |
+| `paneSwapMaxGib` | 2 | MemorySwapMax of every pane (0-16) |
+| `killEnabled` | true | kill the largest agent tool job when host memory is critical |
+| `killAfterSeconds` | 10 | memory must have been critical this long first (5-300) |
+| `killGapSeconds` | 30 | at most one kill per this many seconds (10-600) |
+| `killMinGib` | 1 | smaller jobs are left to the pane cap and the kernel (0.25-16) |
+| `killOrder` | `largest` | `largest`, or `background-first`: spare the pane the owner is looking at while a background pane has a job big enough |
+
+The cap is the drop-in `~/.config/systemd/user/tmux-spawn-.scope.d/40-tether-pane.conf`, written only while panes are
+on OOMPolicy=continue (a pane past it loses one process and keeps running); every 5 s the guard also caps any running
+pane at no cap, or at the cap the owner just replaced, unless it is already near the cap. A cap raised by hand at
+runtime is kept. The guard (`src/lifecycle/job-guard.ts`) never kills a pane's root shell or its agent; it writes
+`kill`, `warning` and `agent-hog` records with killer `tether` to Nightshift's memory event record
+(`~/.local/state/nightshift/memory-events.jsonl`, schema v1) before acting, and its heartbeat
+`$XDG_RUNTIME_DIR/tether/default/memory-guard.json` lists each pane process's class (tool, agent, container) so
+Nightshift can class kernel kills.
+
 ## Crash recovery
 
 | Method and route | Body | Result |

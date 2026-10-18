@@ -37,7 +37,7 @@ const seedTool = {
 }
 
 describe('Store schema', () => {
-  it('creates schema v1 with WAL and the five tables', () => {
+  it('creates schema v1 with WAL and its tables', () => {
     const dir = mkdtempSync(join(tmpdir(), 'tether-store-'))
     const store = open(join(dir, 'state', 'tether.db'))
     expect(store.schemaVersion()).toBe(SCHEMA_VERSION)
@@ -58,6 +58,7 @@ describe('Store schema', () => {
       'root_requests',
       'schema_version',
       'sessions',
+      'settings',
       'tmux_servers',
     ])
   })
@@ -193,5 +194,17 @@ describe('agent tools', () => {
     expect(store.deleteTool('agy')).toBe('deleted')
     expect(store.deleteTool('agy')).toBe('absent')
     expect(store.listSessions()[0]?.ownershipId).toBe('aico-widget-0a1b2c3d')
+  })
+})
+
+describe('settings', () => {
+  it('stores one JSON value per key and replaces it', () => {
+    const store = open(':memory:')
+    expect(store.getSetting('memory_policy')).toBeNull()
+    store.putSetting('memory_policy', '{"killMinGib":2}', 1)
+    store.putSetting('memory_policy', '{"killMinGib":3}', 2)
+    expect(store.getSetting('memory_policy')).toBe('{"killMinGib":3}')
+    expect(() => store.putSetting('bad', 'not json', 3)).toThrow()
+    store.close()
   })
 })

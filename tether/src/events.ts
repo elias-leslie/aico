@@ -15,6 +15,7 @@ export type EventType =
   | 'session.resized'
   | 'root.updated'
   | 'tools.changed'
+  | 'memory-policy.changed'
   | 'projects.changed'
   | 'gui.connected'
   | 'gui.disconnected'
