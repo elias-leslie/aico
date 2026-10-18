@@ -290,18 +290,24 @@ describe('JobGuard', () => {
     expect(killed).not.toContain(102)
   })
 
-  it('moves tools off the agent oom_score_adj and publishes each process class', () => {
+  it('moves tools off the agent oom_score_adj and says in its heartbeat whether a job may be stopped', () => {
     twoPanes()
     const { g } = guard()
     setState('green', T0)
     g.tick(T0)
     expect(readFileSync(join(proc, '201', 'oom_score_adj'), 'utf8')).toBe('200')
     expect(readFileSync(join(proc, '101', 'oom_score_adj'), 'utf8').trim()).toBe('100')
-    const doc = JSON.parse(readFileSync(heartbeat, 'utf8'))
-    const cls = Object.fromEntries(
-      doc.procs.map((p: { pid: number; class: string }) => [p.pid, p.class]),
-    )
-    expect(cls).toMatchObject({ 100: 'container', 101: 'agent', 201: 'tool', 501: 'agent' })
+    expect(JSON.parse(readFileSync(heartbeat, 'utf8'))).toMatchObject({
+      v: 1,
+      host_state: 'green',
+      kill_candidate: false,
+    })
+    setState('red', T0 + 5_000)
+    g.tick(T0 + 5_000)
+    expect(JSON.parse(readFileSync(heartbeat, 'utf8'))).toMatchObject({
+      host_state: 'red',
+      kill_candidate: true,
+    })
   })
 })
 

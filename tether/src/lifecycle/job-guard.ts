@@ -20,9 +20,9 @@
  * Records go to the shared memory event record Nightshift's readers already
  * read (~/.local/state/nightshift/memory-events.jsonl, schema v1, killer
  * "tether"); the kill record is written before the signal. The heartbeat
- * ($runtimeDir/memory-guard.json) carries every pane process's class, so
- * Nightshift can class a kernel kill (tool, agent, container) without
- * reading the panes itself. On red the guard only reads /proc and /sys.
+ * ($runtimeDir/memory-guard.json) tells Nightshift whether a job the guard
+ * may stop exists (its outside-hog note waits for that) and that the guard is
+ * alive. On red the guard only reads /proc and /sys.
  */
 
 import { execFile } from 'node:child_process'
@@ -514,15 +514,6 @@ export interface JobGuardOptions {
   log?: (message: string) => void
 }
 
-interface Remembered {
-  pid: number
-  starttime: number
-  comm: string
-  cmdline_head: string | null
-  scope: string
-  class: 'tool' | 'agent' | 'container'
-}
-
 export class JobGuard {
   private readonly procRoot: string
   private readonly app: string
@@ -712,7 +703,8 @@ export class JobGuard {
     let candidate: Job | null = null
     if (this.state === 'red') candidate = this.actRed(now, policy, panes, jobs)
     else this.sweepCaps(policy, panes)
-    const doc = this.heartbeat(now, policy, panes, jobs, runs, candidate)
+    if (this.state !== 'red') this.primeCmdlines(panes, jobs)
+    const doc = this.heartbeat(now, policy, candidate)
     try {
       writeAtomic(this.options.heartbeatPath, doc)
     } catch (error) {
@@ -860,41 +852,32 @@ export class JobGuard {
     return this.capping
   }
 
+  /** Cache command lines while memory is not critical, for the processes a
+   * record on red may name (agents, and tools of 256 MiB or more): on red a
+   * read can stall on a thrashing process. */
+  private primeCmdlines(panes: Map<string, Pane>, jobs: Job[]): void {
+    const keep = new Set<number>()
+    for (const pane of panes.values())
+      for (const pid of pane.agents) {
+        const p = pane.procs.get(pid)
+        if (p) {
+          keep.add(pid)
+          this.cmdline(p, true)
+        }
+      }
+    for (const job of jobs)
+      for (const p of job.members) {
+        keep.add(p.pid)
+        this.cmdline(p, p.bytes >= CACHE_CMD_MIN)
+      }
+    for (const pid of this.cmdCache.keys()) if (!keep.has(pid)) this.cmdCache.delete(pid)
+  }
+
   private heartbeat(
     now: number,
     policy: MemoryPolicy,
-    panes: Map<string, Pane>,
-    jobs: Job[],
-    runs: Map<number, Proc>,
     candidate: Job | null,
   ): Record<string, unknown> {
-    const procs: Remembered[] = []
-    const keep = new Set<number>()
-    const add = (p: Proc, scope: string, cls: Remembered['class']) => {
-      keep.add(p.pid)
-      procs.push({
-        pid: p.pid,
-        starttime: p.starttime,
-        comm: p.comm,
-        cmdline_head: this.cmdline(p, cls !== 'tool' || p.bytes >= CACHE_CMD_MIN),
-        scope,
-        class: cls,
-      })
-    }
-    for (const pane of panes.values()) {
-      for (const pid of protectedPids(pane)) {
-        const p = pane.procs.get(pid)
-        if (p) add(p, pane.scope, pane.agents.has(pid) ? 'agent' : 'container')
-      }
-    }
-    const paneRunScopes = new Set<string>()
-    for (const job of jobs) {
-      for (const p of job.members) {
-        add(p, job.scope, 'tool')
-        if (runs.has(p.pid)) paneRunScopes.add(p.unit)
-      }
-    }
-    for (const pid of this.cmdCache.keys()) if (!keep.has(pid)) this.cmdCache.delete(pid)
     return {
       v: 1,
       ts: Math.floor(now / 1000),
@@ -903,11 +886,8 @@ export class JobGuard {
       critical_since: this.criticalSince ? Math.floor(this.criticalSince / 1000) : null,
       last_kill_at: Number.isFinite(this.lastKill) ? Math.floor(this.lastKill / 1000) : null,
       kill_enabled: policy.killEnabled,
-      kill_min_bytes: Math.round(policy.killMinGib * GIB),
-      // a tool job the guard may stop exists: Nightshift's outside-hog waits
+      // a tool job the guard may stop exists: Nightshift's outside-hog waits for it
       kill_candidate: candidate !== null && policy.killEnabled,
-      pane_run_scopes: [...paneRunScopes].sort(),
-      procs,
     }
   }
 }

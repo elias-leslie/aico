@@ -356,8 +356,8 @@ pane at no cap, or at the cap the owner just replaced, unless it is already near
 runtime is kept. The guard (`src/lifecycle/job-guard.ts`) never kills a pane's root shell or its agent; it writes
 `kill`, `warning` and `agent-hog` records with killer `tether` to Nightshift's memory event record
 (`~/.local/state/nightshift/memory-events.jsonl`, schema v1) before acting, and its heartbeat
-`$XDG_RUNTIME_DIR/tether/default/memory-guard.json` lists each pane process's class (tool, agent, container) so
-Nightshift can class kernel kills.
+`$XDG_RUNTIME_DIR/tether/default/memory-guard.json` (`v, ts, pid, host_state, critical_since, last_kill_at,
+kill_enabled, kill_candidate`) tells Nightshift whether a job it may stop exists and that the guard is alive.
 
 ## Crash recovery
 
