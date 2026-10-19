@@ -1,5 +1,16 @@
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
 import type { BrowserWindow } from 'electron'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { registerDesktopIpc } from './desktop-ipc'
 
 function fakeWindow(id: number) {
@@ -18,6 +29,12 @@ function fakeWindow(id: number) {
   }
 }
 
+const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3])
+const roots: string[] = []
+afterEach(() => {
+  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
+})
+
 function setup(stored: Record<string, string> = {}) {
   const win1 = fakeWindow(1)
   const win2 = fakeWindow(2)
@@ -26,9 +43,15 @@ function setup(stored: Record<string, string> = {}) {
   const setSetting = vi.fn((key: string, value: string) => {
     settings.set(key, value)
   })
+  const root = mkdtempSync(join(tmpdir(), 'aico-desktop-ipc-'))
+  roots.push(root)
+  const pastedImages = { dir: join(root, 'pasted-images'), maxAgeMs: 86_400_000 }
   const clipboard = {
     readText: vi.fn(() => 'copied'),
-    readImage: vi.fn(() => ({ isEmpty: () => false })),
+    readImage: vi.fn((): { isEmpty(): boolean; toPNG(): Buffer } => ({
+      isEmpty: () => false,
+      toPNG: () => PNG,
+    })),
     writeText: vi.fn(),
   }
   const shell = { openExternal: vi.fn(async () => {}) }
@@ -45,6 +68,7 @@ function setup(stored: Record<string, string> = {}) {
     },
     {
       clipboard: clipboard as never,
+      pastedImages,
       shell,
       registry: {
         senderWindow: (wc) =>
@@ -57,14 +81,14 @@ function setup(stored: Record<string, string> = {}) {
     },
   )
   const event = { sender: win1.webContents }
-  return { win1, win2, settings, setSetting, clipboard, shell, on, handle, event }
+  return { win1, win2, settings, pastedImages, setSetting, clipboard, shell, on, handle, event }
 }
 
 describe('desktop IPC', () => {
   it('registers its twelve channels', () => {
     const { on, handle } = setup()
     expect([...handle.keys()].sort()).toEqual([
-      'clipboard:has-image',
+      'clipboard:image-path',
       'clipboard:read',
       'settings:get-pins',
       'settings:get-terminal-font',
@@ -84,11 +108,41 @@ describe('desktop IPC', () => {
   it('reads and writes the clipboard, writing only text', () => {
     const { on, handle, clipboard } = setup()
     expect(handle.get('clipboard:read')?.()).toBe('copied')
-    expect(handle.get('clipboard:has-image')?.()).toBe(true)
     on.get('clipboard:write')?.({}, 42)
     expect(clipboard.writeText).not.toHaveBeenCalled()
     on.get('clipboard:write')?.({}, 'hello')
     expect(clipboard.writeText).toHaveBeenCalledWith('hello')
+  })
+
+  it('saves a clipboard image as a PNG file and returns its path', () => {
+    const { handle, pastedImages } = setup()
+    const path = handle.get('clipboard:image-path')?.() as string
+    expect(path.startsWith(`${pastedImages.dir}/paste-`)).toBe(true)
+    expect(path.endsWith('.png')).toBe(true)
+    expect(readFileSync(path)).toEqual(PNG)
+    expect(statSync(path).mode & 0o777).toBe(0o640)
+    expect(statSync(pastedImages.dir).mode & 0o777).toBe(0o750)
+    expect(handle.get('clipboard:image-path')?.()).not.toBe(path)
+  })
+
+  it('returns no path when the clipboard has no image, leaving text paste alone', () => {
+    const { handle, clipboard, pastedImages } = setup()
+    clipboard.readImage.mockReturnValue({ isEmpty: () => true, toPNG: () => PNG })
+    expect(handle.get('clipboard:image-path')?.()).toBe('')
+    expect(existsSync(pastedImages.dir)).toBe(false)
+    expect(handle.get('clipboard:read')?.()).toBe('copied')
+  })
+
+  it('returns no path when the image cannot be saved', () => {
+    const { handle, pastedImages } = setup()
+    // A folder that can't exist: its parent is a file.
+    mkdirSync(dirname(pastedImages.dir), { recursive: true })
+    writeFileSync(join(dirname(pastedImages.dir), 'file'), '')
+    pastedImages.dir = join(dirname(pastedImages.dir), 'file', 'pasted-images')
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(handle.get('clipboard:image-path')?.()).toBe('')
+    expect(error).toHaveBeenCalled()
+    error.mockRestore()
   })
 
   it('opens only http(s) links of at most 8192 characters', () => {

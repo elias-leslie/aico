@@ -5,10 +5,12 @@
 import type { Clipboard, IpcMain, Shell } from 'electron'
 import { parseTerminalFontSettings } from '../shared/font-settings'
 import { parseBoundsRequest, parsePins } from './ipc-validation'
+import { type PastedImageStore, savePastedImage } from './pasted-image'
 import type { WindowRegistry } from './window-registry'
 
 interface DesktopIpcDeps {
   clipboard: Pick<Clipboard, 'readText' | 'readImage' | 'writeText'>
+  pastedImages: PastedImageStore
   shell: Pick<Shell, 'openExternal'>
   registry: Pick<WindowRegistry, 'senderWindow' | 'all'>
   getSetting(key: string): string | undefined
@@ -19,10 +21,21 @@ export function registerDesktopIpc(
   ipcMain: Pick<IpcMain, 'on' | 'handle'>,
   deps: DesktopIpcDeps,
 ): void {
-  const { clipboard, shell, getSetting, setSetting } = deps
+  const { clipboard, shell, pastedImages, getSetting, setSetting } = deps
 
   ipcMain.handle('clipboard:read', () => clipboard.readText())
-  ipcMain.handle('clipboard:has-image', () => !clipboard.readImage().isEmpty())
+  // The clipboard image as a file path the terminal program can read, or ''
+  // when there is no image or it can't be saved.
+  ipcMain.handle('clipboard:image-path', () => {
+    const image = clipboard.readImage()
+    if (image.isEmpty()) return ''
+    try {
+      return savePastedImage(pastedImages, image.toPNG())
+    } catch (error) {
+      console.error('Could not save the pasted image:', error)
+      return ''
+    }
+  })
   ipcMain.on('link:open', (_event, url: unknown) => {
     if (typeof url !== 'string' || url.length > 8192) return
     try {

@@ -47,8 +47,9 @@ export interface AicoApi {
   }
   clipboard: {
     read(): Promise<string>
-    /** True when the clipboard holds an image (e.g. a screenshot). */
-    hasImage(): Promise<boolean>
+    /** Saves a clipboard image (e.g. a screenshot) to a file and returns its
+     * path, or '' when the clipboard holds no image. */
+    imagePath(): Promise<string>
     write(text: string): void
   }
   selection: {

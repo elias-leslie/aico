@@ -17,6 +17,7 @@ describe('readConfig', () => {
       ],
       agentTetherSocket: '/run/tether/agent/default/control.sock',
       exchangeRoot: '/srv/workspaces/exchange',
+      pastedImages: { dir: '/srv/workspaces/handoffs/pasted-images', maxAgeMs: 86_400_000 },
       nightshift: '/home/o/.local/bin/nightshift',
       atermUrl: 'https://terminal.summitflow.dev',
       selectionHotkey: 'CommandOrControl+Shift+Space',
@@ -37,6 +38,8 @@ describe('readConfig', () => {
         XDG_RUNTIME_DIR: '/tmp/r',
         TETHER_INSTANCE: 'dev',
         TETHER_EXCHANGE_ROOT: '/exchange',
+        AICO_PASTED_IMAGES_DIR: '/pasted',
+        AICO_PASTED_IMAGES_KEEP_HOURS: '2',
         AICO_ATERM_URL: 'https://a.example',
         AICO_SELECTION_HOTKEY: 'F1',
         AICO_TERMINAL_TRANSPORT: 'attach',
@@ -57,6 +60,7 @@ describe('readConfig', () => {
       tetherSocket: '/tmp/r/tether/dev/control.sock',
       tetherSockets: ['/tmp/r/tether/dev/control.sock', '/run/tether/agent/default/control.sock'],
       exchangeRoot: '/exchange',
+      pastedImages: { dir: '/pasted', maxAgeMs: 7_200_000 },
       atermUrl: 'https://a.example',
       selectionHotkey: 'F1',
       forcedTransport: 'attach',
@@ -67,6 +71,14 @@ describe('readConfig', () => {
     expect(readConfig({ AICO_TERMINAL_TRANSPORT: 'control' }, '/h', 1).forcedTransport).toBe(
       'control',
     )
+  })
+
+  it('keeps pasted images a day unless the hours are a positive number', () => {
+    for (const raw of ['', '0', '-3', 'abc']) {
+      expect(
+        readConfig({ AICO_PASTED_IMAGES_KEEP_HOURS: raw }, '/h', 1).pastedImages.maxAgeMs,
+      ).toBe(86_400_000)
+    }
   })
 
   it('turns a listener port that is not plain digits in 1-65535 into NaN', () => {

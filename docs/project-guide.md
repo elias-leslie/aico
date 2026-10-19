@@ -96,6 +96,8 @@ Important variables:
 | `AICO_SIDECAR_HOST` | `127.0.0.1` | Capture listener bind host (the old sidecar's name). Only a loopback host is accepted; anything else leaves the listener off. |
 | `AICO_SIDECAR_PORT` | `8005` | Capture listener port, for `/health` and `/selection/send`. |
 | `AICO_STATE_DIR` | `~/.local/state/aico` | App state: `aico.db` (window views and settings; sessions live in Tether). The launcher pidfile, lock, and `launcher.log` always live in `${XDG_STATE_HOME:-~/.local/state}/aico` and do not follow this variable. |
+| `AICO_PASTED_IMAGES_DIR` | `/srv/workspaces/handoffs/pasted-images` | Where Aico writes a pasted clipboard image (`paste-<time>-<random>.png`, mode `0640` in a `0750` folder) so a program running as another user, such as the agent's Tether instance, can read it. The pasted text is the file's path. Must be readable by that user. |
+| `AICO_PASTED_IMAGES_KEEP_HOURS` | `24` | Pasted images older than this are deleted whenever a new one is written. |
 | `AICO_EXTENSION_IDS` | `oejadbpdecaenbbihglcnchnkmlilmjf` | Comma-separated Chrome extension IDs the listener trusts as browser origins. A malformed ID leaves the listener off. The default is the stable ID derived from the `key` in `extension/manifest.json`; set this only for a fork or re-keyed extension. |
 | `AICO_SELECTION_HOTKEY` | `CommandOrControl+Shift+Space` | Electron global shortcut for Indicate selection, which sends the newest capture again to the last-focused widget. |
 | `TETHER_SOCKET` | unset | Tether control socket. Wins over `TETHER_INSTANCE`. |

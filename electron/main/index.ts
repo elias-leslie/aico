@@ -357,6 +357,7 @@ const startup = app.whenReady().then(async () => {
   terminal.registerIpc(ipcMain)
   registerDesktopIpc(ipcMain, {
     clipboard,
+    pastedImages: config.pastedImages,
     shell,
     registry,
     getSetting,

@@ -34,7 +34,7 @@ contextBridge.exposeInMainWorld('aico', {
   },
   clipboard: {
     read: (): Promise<string> => ipcRenderer.invoke('clipboard:read'),
-    hasImage: (): Promise<boolean> => ipcRenderer.invoke('clipboard:has-image'),
+    imagePath: (): Promise<string> => ipcRenderer.invoke('clipboard:image-path'),
     write: (text: string) => ipcRenderer.send('clipboard:write', text),
   },
   selection: {

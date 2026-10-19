@@ -22,6 +22,8 @@ export interface AicoConfig {
   readonly tetherSockets: readonly string[]
   readonly agentTetherSocket: string
   readonly exchangeRoot: string
+  /** Where a pasted clipboard image is written for the terminal program to read (AICO_PASTED_IMAGES_DIR, AICO_PASTED_IMAGES_KEEP_HOURS). */
+  readonly pastedImages: { readonly dir: string; readonly maxAgeMs: number }
   readonly nightshift: string
   /** a-term on the owner's phone; a tap on the push opens the waiting session there (Nightshift allowlists the origin). */
   readonly atermUrl: string
@@ -38,6 +40,12 @@ export interface AicoConfig {
   readonly activationReadyFile: string | undefined
   /** The foreground runner registers its own PID, which exec hands to Electron. */
   readonly pidFile: string | undefined
+}
+
+/** `AICO_PASTED_IMAGES_KEEP_HOURS` in milliseconds; blank or not a positive number means a day. */
+function pastedImageMaxAgeMs(raw: string | undefined): number {
+  const hours = Number(raw)
+  return (Number.isFinite(hours) && hours > 0 ? hours : 24) * 3_600_000
 }
 
 /** `AICO_SIDECAR_PORT` as a TCP port: unset means 8005; anything but plain
@@ -67,6 +75,10 @@ export function readConfig(
     tetherSockets: Object.freeze(knownTetherSockets(env, uid)),
     agentTetherSocket: env.TETHER_AGENT_SOCKET || DEFAULT_AGENT_TETHER_SOCKET,
     exchangeRoot: env.TETHER_EXCHANGE_ROOT || '/srv/workspaces/exchange',
+    pastedImages: {
+      dir: env.AICO_PASTED_IMAGES_DIR || '/srv/workspaces/handoffs/pasted-images',
+      maxAgeMs: pastedImageMaxAgeMs(env.AICO_PASTED_IMAGES_KEEP_HOURS),
+    },
     nightshift: join(home, '.local/bin/nightshift'),
     atermUrl: (env.AICO_ATERM_URL ?? 'https://terminal.summitflow.dev').replace(/\/+$/, ''),
     selectionHotkey: env.AICO_SELECTION_HOTKEY ?? 'CommandOrControl+Shift+Space',

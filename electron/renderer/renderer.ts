@@ -606,18 +606,15 @@ host.addEventListener('mouseup', (e) => {
 })
 
 // One gesture, one paste: see paste-guard.ts for the duplicate sources.
-// An image-only clipboard (a screenshot) can't go through term.paste, so Aico
-// sends Ctrl+V instead: Claude Code and Codex read the image from the clipboard
-// themselves on that key.
-const IMAGE_PASTE = '\x16'
+// An image-only clipboard (a screenshot) is saved to a file by main and its
+// path is pasted as text: Claude Code and Codex attach an image when a pasted
+// path points at one. Ctrl+V would make the program read the clipboard itself,
+// which fails when it runs as another user with no display.
 const pasteFromClipboard = createPasteGuard(
-  async () =>
-    (await window.aico.clipboard.read()) ||
-    ((await window.aico.clipboard.hasImage()) ? IMAGE_PASTE : ''),
+  async () => (await window.aico.clipboard.read()) || (await window.aico.clipboard.imagePath()),
   (text) => {
-    if (text === IMAGE_PASTE) window.aico.pty.input(IMAGE_PASTE)
     // tmux pastes for a control-mode window, bracketed when the program asked.
-    else if (controlMode) window.aico.pty.paste(text)
+    if (controlMode) window.aico.pty.paste(text)
     else term.paste(text)
   },
 )
