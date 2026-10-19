@@ -7,7 +7,6 @@ import threading
 from http.server import BaseHTTPRequestHandler
 
 import pytest
-
 from conftest import REAL_A_TERM_IDENTITY_URL
 from test_aico_admin import admin
 from test_aico_create import BASE, descriptor

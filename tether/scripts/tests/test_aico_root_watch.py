@@ -241,10 +241,10 @@ def test_current_banners(screen, banner, state):
 
 
 def test_control_sequences_credentials_and_closed_output():
-    raw = ("\x1b]0;secret title\x07\x1b[31mAPI_KEY=abc123\x1b[0m\n"
-           "Authorization: Bearer abc123\npassword=abc123\n"
-           "sk-private123\nghp_private123\nhttps://owner:password@example.test\n"
-           "No recognizable chrome").encode()
+    raw = (b"\x1b]0;secret title\x07\x1b[31mAPI_KEY=abc123\x1b[0m\n"
+           b"Authorization: Bearer abc123\npassword=abc123\n"
+           b"sk-private123\nghp_private123\nhttps://owner:password@example.test\n"
+           b"No recognizable chrome")
     state, sample = watcher.classify(raw)
     assert "\x1b" not in sample
     assert "abc123" not in sample

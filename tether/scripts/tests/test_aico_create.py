@@ -7,9 +7,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
-
 from test_aico_admin import admin
-
 
 THREAD = "00000000-0000-4000-8000-000000000001"
 BASE = ["create", "recovery-1", "Reconcile after crash.", "--tool", "codex", "--project", "sample-app",

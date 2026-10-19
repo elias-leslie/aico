@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Installed TUI qualification in a private tmux server and network namespace.
 
 Only synthetic input is used. stdout contains assertions/metadata, never text.
@@ -210,7 +209,7 @@ trust_level = "trusted"
                                   "permissions_preserved": True, "sandbox_policy": json.loads(new[1]),
                                   "approval_policy": new[2], "provider_calls": len(receipts)}), flush=True)
             finally:
-                subprocess.run(["tmux", "-S", tmux_socket, "kill-server"], capture_output=True, timeout=3)
+                subprocess.run(["tmux", "-S", tmux_socket, "kill-server"], capture_output=True, timeout=3, check=False)
     finally:
         provider.shutdown()
         provider.server_close()

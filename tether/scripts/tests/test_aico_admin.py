@@ -153,7 +153,7 @@ def test_stdin_is_bounded_utf8_and_rejects_frame_escapes(monkeypatch):
             os.write(write, text)
             os.close(write)
             write = -1
-            monkeypatch.setattr(sys, "stdin", type("Input", (), {"fileno": lambda _: read})())
+            monkeypatch.setattr(sys, "stdin", type("Input", (), {"fileno": lambda _, fd=read: fd})())
             collector = admin.Collector("", "", "", admin.time.monotonic() + 1, admin.threading.Event())
             if text == b"fixture":
                 assert admin.admin_stdin(collector) == "fixture"

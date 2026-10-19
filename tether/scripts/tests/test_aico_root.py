@@ -3,7 +3,6 @@
 import json
 
 import pytest
-
 from test_aico_admin import admin
 
 ROOT = "root-fixture"

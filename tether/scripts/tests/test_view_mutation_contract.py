@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from test_aico_admin import admin
 
 VECTORS = json.loads((Path(__file__).resolve().parents[2] / "contracts/view-mutation-vectors.json").read_text())

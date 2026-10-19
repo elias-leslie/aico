@@ -9,7 +9,8 @@ from test_aico_admin import admin
 
 
 def own_start_time() -> str:
-    stat = open(f"/proc/{os.getpid()}/stat").read()
+    with open(f"/proc/{os.getpid()}/stat") as stream:
+        stat = stream.read()
     return stat[stat.rindex(")") + 1:].split()[19]
 
 

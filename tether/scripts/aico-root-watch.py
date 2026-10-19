@@ -19,12 +19,11 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import fcntl
-import http.client
 import hashlib
+import http.client
 import json
 import math
 import os
-from pathlib import Path
 import re
 import select
 import selectors
@@ -35,6 +34,7 @@ import threading
 import time
 import typing
 from collections.abc import Callable
+from pathlib import Path
 from urllib.parse import quote, urlsplit
 
 CAPTURE_LIMIT = 32 * 1024
@@ -49,41 +49,41 @@ CONTROL = re.compile(
 )
 PROMPT = re.compile(r"^\s*[›❯]\s?(.*)$")
 EMPTY_PROMPTS = {"", "Ask Codex to do anything"}
-WORKED = re.compile(r"^[─━\s]*(?:[•●]\s*)?Worked for\s+\S.+$", re.I)
+WORKED = re.compile(r"^[─━\s]*(?:[•●]\s*)?Worked for\s+\S.+$", re.IGNORECASE)
 ACTIVE = re.compile(
     r"^[\s•●◦✻✽✶✳⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]*"
     r"(?:(?:Working|Compacting context)(?:…|\.\.\.)?(?:\s*\([^)]*\))?"
     r"(?:\s*·\s*\d+\s+background terminals? running(?:…|\.\.\.)?"
     r"(?:\s*·\s*/ps to view\s*·\s*/stop to close)?)?|"
     r"(?:Running|Calling|Executing|Thinking|Searching|Reading|Editing|Testing)\b.*"
-    r"(?:esc to interrupt|\btool\b|\([^)]*\)))\s*$", re.I,
+    r"(?:esc to interrupt|\btool\b|\([^)]*\)))\s*$", re.IGNORECASE,
 )
 FOOTER = re.compile(
     r"^(?:[─━]+|.*\s·\s.*\bcontext\s+\d{1,3}%\s*(?:left|remaining)\b.*|"
     r"context\s+\d{1,3}%\s*(?:left|remaining)\b.*|"
-    r"\d{1,3}%\s*context\s*(?:left|remaining)\b.*)$", re.I,
+    r"\d{1,3}%\s*context\s*(?:left|remaining)\b.*)$", re.IGNORECASE,
 )
 BANNERS = (
     ("approval", re.compile(
         r"^(?:[⚠!]\s*)?(?:Would you like to (?:run|proceed).*\?|"
         r"Do you want to (?:run|proceed|allow).*\?|Approval required(?:[:.].*)?|"
-        r"Waiting for (?:your )?approval[.!]?)$", re.I)),
+        r"Waiting for (?:your )?approval[.!]?)$", re.IGNORECASE)),
     ("capacity", re.compile(
         r"^(?:[⚠!]\s*)?(?:You've hit your usage limit.*|"
         r"You have hit your usage limit.*|Usage limit reached.*|"
         r"Rate limit (?:reached|exceeded).*|Model (?:is )?(?:at capacity|overloaded).*|"
-        r"API Error:\s*(?:429|529)\b.*)$", re.I)),
+        r"API Error:\s*(?:429|529)\b.*)$", re.IGNORECASE)),
     ("error", re.compile(
         r"^(?:[⚠!]\s*(?:Error|Connection failed|Authentication failed)\b.*|"
         r"API Error:\s*(?:401|403|5\d\d)\b.*|"
-        r"Reconnecting\.\.\.\s*\d+/\d+.*)$", re.I)),
+        r"Reconnecting\.\.\.\s*\d+/\d+.*)$", re.IGNORECASE)),
 )
-CLAUDE_PAUSED = re.compile(r"Session paused[.!]?", re.I)
-CLAUDE_SAFEGUARD = re.compile(r"Safeguard\b.*\bflagged\b.*", re.I)
+CLAUDE_PAUSED = re.compile(r"Session paused[.!]?", re.IGNORECASE)
+CLAUDE_SAFEGUARD = re.compile(r"Safeguard\b.*\bflagged\b.*", re.IGNORECASE)
 CLAUDE_CHOICE = re.compile(r"[1-9]\.\s+\S.*")
 CLAUDE_RETRY = re.compile(
     r"Waiting for API response\b.*\bwill retry\s+in\s+\d+\s*"
-    r"(?:s|sec(?:ond)?s?)\b[.!]?", re.I,
+    r"(?:s|sec(?:ond)?s?)\b[.!]?", re.IGNORECASE,
 )
 CLAUDE_PROMPT = re.compile(r"\s*[❯›]\s?.*")
 SECRET = re.compile(
@@ -391,7 +391,7 @@ def classify(raw: bytes, profile: str = "codex") -> tuple[dict, str]:
     context = re.findall(
         r"(?:\bcontext\s+(\d{1,3})%\s*(?:left|remaining)\b|"
         r"\b(\d{1,3})%\s*context\s*(?:left|remaining)\b)",
-        "\n".join(unquoted), re.I,
+        "\n".join(unquoted), re.IGNORECASE,
     )
     low_context = bool(context and int(context[-1][0] or context[-1][1]) <= 10)
     markers = []

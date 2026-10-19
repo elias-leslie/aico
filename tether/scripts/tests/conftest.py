@@ -1,7 +1,6 @@
 """Shared fixtures: no test reads the host's Tether or A-Term checkout."""
 
 import pytest
-
 from test_aico_admin import admin
 
 REAL_A_TERM_IDENTITY_URL = admin.a_term_identity_url
