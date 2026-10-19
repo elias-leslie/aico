@@ -31,7 +31,10 @@ export function sendError(response: ServerResponse, error: HttpError): void {
 }
 
 /** Strict JSON body: `application/json`, bounded, an object. */
-export async function readJsonObject(request: IncomingMessage): Promise<Record<string, unknown>> {
+export async function readJsonObject(
+  request: IncomingMessage,
+  maxBytes = MAX_BODY_BYTES,
+): Promise<Record<string, unknown>> {
   const type = (request.headers['content-type'] ?? '').split(';')[0]?.trim()
   if (type !== 'application/json') throw new HttpError(415, 'unsupported_media_type')
   const parts: Buffer[] = []
@@ -39,7 +42,7 @@ export async function readJsonObject(request: IncomingMessage): Promise<Record<s
   for await (const part of request) {
     const chunk = part as Buffer
     size += chunk.length
-    if (size > MAX_BODY_BYTES) throw new HttpError(413, 'body_too_large')
+    if (size > maxBytes) throw new HttpError(413, 'body_too_large')
     parts.push(chunk)
   }
   let value: unknown
