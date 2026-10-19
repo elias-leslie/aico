@@ -30,6 +30,7 @@ import { createSelectionBus } from './selection-bus'
 import { createSelectionListener } from './selection-listener'
 import { createSessionActions } from './session-actions'
 import { createSessionCatalog, type SessionCatalog, sessionTitle } from './session-catalog'
+import { createAgentShares } from './show'
 import { createTerminal } from './terminal'
 import { TetherPool } from './tether-client'
 import { createTetherLink } from './tether-link'
@@ -152,6 +153,7 @@ const projects = new ProjectCatalog(
 // run, in this order, what the rest of Aico does when the catalog changes.
 const link = createTetherLink({
   tether,
+  agentSocket: config.agentTetherSocket,
   catalog,
   projects,
   dialog,
@@ -169,6 +171,7 @@ const link = createTetherLink({
     titles: () => chrome.pushTitles(),
     tray: () => chrome.syncTray(),
     connected: () => terminal.resumeAwaiting(),
+    shared: (data) => shares.notify(data),
   },
 })
 
@@ -276,6 +279,45 @@ const selection = createSelectionBus({
   isQuitting: lifecycle.isQuitting,
 })
 
+const previews = new Set<BrowserWindow>()
+const shares = createAgentShares({
+  exchangeRoot: config.exchangeRoot,
+  windowFor: (id) => (id ? registry.forSession(id) : undefined) ?? registry.sessionWindows()[0],
+  sessionName: (id) => {
+    const descriptor = id ? catalog.get(id) : undefined
+    return descriptor ? sessionTitle(descriptor) : undefined
+  },
+  clipboard,
+  shell,
+  dialog,
+  preview: async (html, title) => {
+    const win = new BrowserWindow({
+      width: 900,
+      height: 680,
+      title,
+      backgroundColor: '#0b0d11',
+      autoHideMenuBar: true,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: true,
+        webSecurity: true,
+        javascript: false,
+      },
+    })
+    previews.add(win)
+    win.on('closed', () => previews.delete(win))
+    win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+    win.webContents.on('will-navigate', (event) => event.preventDefault())
+    try {
+      await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
+    } catch (error) {
+      win.destroy()
+      throw error
+    }
+  },
+})
+
 // The loopback listener: /health, and sends from the browser extension and
 // `st selection send`, delivered through the selection bus.
 const listener = createSelectionListener({
@@ -324,6 +366,7 @@ const startup = app.whenReady().then(async () => {
   chrome.registerIpc(ipcMain)
   sessions.registerIpc(ipcMain)
   selection.registerIpc(ipcMain)
+  shares.registerIpc(ipcMain)
   hotkeys.registerIpc(ipcMain)
 
   chrome.createTray({

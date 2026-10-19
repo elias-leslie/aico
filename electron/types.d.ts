@@ -2,6 +2,12 @@
 
 import type { AicoTerminalFontSettings } from './shared/font-settings'
 
+export interface SelectionToast {
+  kind: string
+  snippet: string
+  action?: { kind: 'file'; id: string } | { kind: 'copy'; text: string }
+}
+
 export interface OpenableSession {
   /** Tether session id (8 lowercase hex). */
   id: string
@@ -48,7 +54,9 @@ export interface AicoApi {
   selection: {
     /** Subscribe to indicated-selection deliveries (drives the capture toast);
      * returns an unsubscribe function. */
-    onToast(cb: (sel: { kind: string; snippet: string }) => void): () => void
+    onToast(cb: (sel: SelectionToast) => void): () => void
+    /** Show a pending handoff; main accepts only an id sent to this window. */
+    showFile(id: string): void
   }
   context: {
     /** Subscribe to this widget's supplemental-context availability status

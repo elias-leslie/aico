@@ -358,21 +358,41 @@ function wireSelectionToast(): void {
   const toast = document.querySelector<HTMLElement>('.selection-toast')
   const chip = toast?.querySelector<HTMLElement>('.chip')
   const snip = toast?.querySelector<HTMLElement>('.snip')
-  if (!toast || !chip || !snip) return
+  const actionButton = toast?.querySelector<HTMLButtonElement>('.toast-action')
+  const dismissButton = toast?.querySelector<HTMLButtonElement>('.toast-dismiss')
+  if (!toast || !chip || !snip || !actionButton || !dismissButton) return
   let hideTimer: number | undefined
+  let currentAction: AicoToastDetail['action']
 
-  const show = ({ kind, snippet }: AicoToastDetail): void => {
+  const show = ({ kind, snippet, action }: AicoToastDetail): void => {
     // Expose the live region before changing its text. Updating a subtree while
     // it is `hidden` is not announced consistently by assistive technology.
     toast.hidden = false
     chip.textContent = kind
-    snip.textContent = snippet.slice(0, 40) // textContent, never innerHTML (untrusted)
+    snip.textContent = action ? snippet : snippet.slice(0, 40) // textContent, never innerHTML (untrusted)
+    currentAction = action
+    toast.classList.toggle('actionable', Boolean(action))
+    actionButton.hidden = !action
+    dismissButton.hidden = !action
+    actionButton.textContent = action?.kind === 'copy' ? 'Copy' : 'Show file'
     // Reflow so the .show transition replays on a back-to-back capture.
     void toast.offsetWidth
     toast.classList.add('show')
     if (hideTimer) clearTimeout(hideTimer)
-    hideTimer = window.setTimeout(() => toast.classList.remove('show'), 2500)
+    // Handoffs stay readable and actionable until dismissed or acted on.
+    if (!action) hideTimer = window.setTimeout(() => toast.classList.remove('show'), 2500)
   }
+
+  actionButton.addEventListener('click', () => {
+    if (currentAction?.kind === 'copy') {
+      window.aico.clipboard.write(currentAction.text)
+      actionButton.textContent = 'Copied'
+    } else if (currentAction?.kind === 'file') {
+      window.aico.selection.showFile(currentAction.id)
+      toast.classList.remove('show')
+    }
+  })
+  dismissButton.addEventListener('click', () => toast.classList.remove('show'))
 
   window.aico.selection.onToast(show)
   window.addEventListener(AICO_TOAST_EVENT, (event) => {

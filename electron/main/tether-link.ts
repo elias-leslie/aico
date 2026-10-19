@@ -37,10 +37,13 @@ interface LinkHooks {
   tray(): void
   /** The event stream came back after being down (or connected the first time). */
   connected(): void
+  /** A handoff received from the agent's socket only; payload is still untrusted. */
+  shared(data: Record<string, unknown>): void
 }
 
 interface TetherLinkDeps {
   tether: TetherClient
+  agentSocket: string
   catalog: SessionCatalog
   projects: Pick<ProjectCatalog, 'invalidate' | 'refresh'>
   dialog: { showErrorBox(title: string, content: string): void }
@@ -106,9 +109,12 @@ export function createTetherLink(deps: TetherLinkDeps) {
     hooks.tray()
   }
 
-  function onTetherEvent(event: TetherEvent): void {
+  function onTetherEvent(event: TetherEvent, socketPath: string): void {
     const id = typeof event.data.id === 'string' ? event.data.id : null
     switch (event.type) {
+      case 'show.requested':
+        if (socketPath === deps.agentSocket) hooks.shared(event.data)
+        break
       case 'session.ended':
         if (id) sessionEnded(id, 'tether_event')
         requestSessionRefresh()
@@ -184,7 +190,7 @@ export function createTetherLink(deps: TetherLinkDeps) {
       onResync: requestSessionRefresh,
       onEvent: (event) => {
         if (event.type !== 'tools.changed' && event.type !== 'projects.changed')
-          onTetherEvent(event)
+          onTetherEvent(event, client.socketPath)
       },
     })
     const stopGui = holdGuiChannel(client, applyGuiCommand, (message, error) => {
@@ -213,7 +219,7 @@ export function createTetherLink(deps: TetherLinkDeps) {
         hooks.tray()
       },
       onResync: requestSessionRefresh,
-      onEvent: onTetherEvent,
+      onEvent: (event) => onTetherEvent(event, active.socketPath),
     })
     const stopActiveGui = holdGuiChannel(active, applyGuiCommand, (message, error) =>
       error === undefined

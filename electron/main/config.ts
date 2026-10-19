@@ -3,7 +3,7 @@
 // start (terminal PTYs) get the environment handed in by the root.
 
 import { join } from 'node:path'
-import { knownTetherSockets, tetherSocketPath } from './tether-client'
+import { DEFAULT_AGENT_TETHER_SOCKET, knownTetherSockets, tetherSocketPath } from './tether-client'
 
 export interface AicoConfig {
   readonly stateDir: string
@@ -20,6 +20,8 @@ export interface AicoConfig {
   readonly tetherSocket: string
   /** Every Tether instance Aico shows, active (`tetherSocket`) first: this user's own and the agent's (TETHER_AGENT_SOCKET). */
   readonly tetherSockets: readonly string[]
+  readonly agentTetherSocket: string
+  readonly exchangeRoot: string
   readonly nightshift: string
   /** a-term on the owner's phone; a tap on the push opens the waiting session there (Nightshift allowlists the origin). */
   readonly atermUrl: string
@@ -63,6 +65,8 @@ export function readConfig(
     layoutPath: join(env.XDG_RUNTIME_DIR || `/run/user/${uid ?? 1000}`, 'aico', 'layout.json'),
     tetherSocket: tetherSocketPath(env, uid),
     tetherSockets: Object.freeze(knownTetherSockets(env, uid)),
+    agentTetherSocket: env.TETHER_AGENT_SOCKET || DEFAULT_AGENT_TETHER_SOCKET,
+    exchangeRoot: env.TETHER_EXCHANGE_ROOT || '/srv/workspaces/exchange',
     nightshift: join(home, '.local/bin/nightshift'),
     atermUrl: (env.AICO_ATERM_URL ?? 'https://terminal.summitflow.dev').replace(/\/+$/, ''),
     selectionHotkey: env.AICO_SELECTION_HOTKEY ?? 'CommandOrControl+Shift+Space',

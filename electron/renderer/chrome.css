@@ -852,6 +852,9 @@ body {
   opacity: 1;
   transform: translate(-50%, 0);
 }
+.selection-toast[hidden] {
+  display: none;
+}
 .selection-toast .chip {
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -864,6 +867,42 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--mist);
+}
+.selection-toast.actionable {
+  width: min(600px, 90%);
+  max-width: 90%;
+  border-radius: 12px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  background: var(--ink);
+  pointer-events: auto;
+}
+.selection-toast.actionable .chip {
+  flex-basis: 100%;
+  text-transform: none;
+  overflow-wrap: anywhere;
+}
+.selection-toast.actionable .snip {
+  flex: 1;
+  min-width: 0;
+  max-height: 35vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--bone);
+}
+.selection-toast button {
+  border: 1px solid var(--lantern);
+  border-radius: 6px;
+  padding: 3px 8px;
+  background: var(--rim);
+  color: var(--bone);
+  font: inherit;
+  cursor: pointer;
+}
+.selection-toast button:focus-visible {
+  outline: 2px solid var(--lantern);
+  outline-offset: 2px;
 }
 @media (prefers-reduced-motion: reduce) {
   .selection-toast {

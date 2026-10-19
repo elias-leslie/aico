@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { OpenableSession } from '../types'
+import type { OpenableSession, SelectionToast } from '../types'
 
 // Minimal, explicit bridge — no nodeIntegration in the renderer. The renderer
 // talks to the tmux-backed PTY only through these channels.
@@ -40,11 +40,12 @@ contextBridge.exposeInMainWorld('aico', {
   selection: {
     /** Fired when an indicated selection is delivered to this widget; drives the
      * frosted capture toast. Returns an unsubscribe function. */
-    onToast: (cb: (sel: { kind: string; snippet: string }) => void) => {
-      const listener = (_event: unknown, sel: { kind: string; snippet: string }) => cb(sel)
+    onToast: (cb: (sel: SelectionToast) => void) => {
+      const listener = (_event: unknown, sel: SelectionToast) => cb(sel)
       ipcRenderer.on('selection:toast', listener)
       return () => ipcRenderer.removeListener('selection:toast', listener)
     },
+    showFile: (id: string) => ipcRenderer.send('show:file', id),
   },
   context: {
     /** Supplemental-context availability for this widget's TUI, pushed by main

@@ -38,6 +38,10 @@ Tether owns sessions: tmux servers, agent launch and admission, End, roots, cont
 
 Aico listens on `127.0.0.1:8005` for captures from the browser extension and `st selection send`, refuses other browser origins, and stores none of them: a capture is typed at the last-focused session's prompt or refused. Session events (push results, retired sessions) go to the journal as ids-only `[aico:event]` lines. Aico's own `aico.db` holds only window views (geometry, open state, a local name override) and settings, keyed by session ID. AI provider credentials belong to each CLI. Missing ST capture tooling leaves core widgets working. A-Term is another Tether client; its sessions appear in Aico's session list.
 
+Agent handoffs (`show.requested`, Tether commit `c4741f2` or later) are accepted only from `TETHER_AGENT_SOCKET` (default `/run/tether/agent/default/control.sock`). A notification offers **Show file** or displays the URL with **Copy**. Files are copied on click into `$TETHER_EXCHANGE_ROOT/owner/shown/<id>-<name>`; the root defaults to `/srv/workspaces/exchange`. Previews show raster images or escaped text; other files are revealed in the file manager. URLs are copied without opening a browser.
+
+Before deployment, provision the exchange root and the agent's writable `agent/` subtree. Aico can create `owner/` when the existing exchange root belongs to the owner and is writable only by the owner; otherwise provision `owner/` with owner ownership beforehand. Owner directories must have no group or other write permissions; new directories use `0755` and copies use `0644`. Set the same `TETHER_EXCHANGE_ROOT` for Tether and Aico. Capture packages are produced by external `st ui grab` tooling, so their paths and Aico's `[capture: ...]` references are unchanged here.
+
 ## Development and verification
 
 ```bash

@@ -8,6 +8,7 @@
 // are listed for discoverability but not clickable (e.g. copy/paste are terminal
 // chords); they still show their shortcut so users learn them.
 
+import type { SelectionToast } from '../types'
 import { acceleratorLabel, chordLabel } from './chords'
 
 // Late-bound so the `palette` action can open the palette without this module
@@ -19,10 +20,7 @@ export function setPaletteOpener(fn: () => void): void {
 
 export const AICO_TOAST_EVENT = 'aico:toast'
 
-export interface AicoToastDetail {
-  kind: string
-  snippet: string
-}
+export type AicoToastDetail = SelectionToast
 
 function showToast(detail: AicoToastDetail): void {
   window.dispatchEvent(new CustomEvent<AicoToastDetail>(AICO_TOAST_EVENT, { detail }))
