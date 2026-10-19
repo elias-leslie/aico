@@ -22,6 +22,10 @@ UMask=0077
 # onto every pane), so agent CLIs resolve identically from either app. The
 # daemon never sources shell profiles.
 Environment=PATH=%h/.claude/bin:%h/.codex/bin:%h/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+# Sibling checkouts (agent-hub, codex-config) live here, not ~/projects.
+Environment=TETHER_PROJECTS_DIR=/srv/workspaces/projects
+# systemd-oomd picks this unit only when no other candidate is left.
+ManagedOOMPreference=avoid
 CPUAccounting=yes
 MemoryAccounting=yes
 TasksAccounting=yes

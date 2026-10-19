@@ -7,6 +7,7 @@ import { execFile, spawn } from 'node:child_process'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { currentPaneRefusal } from '../../pane-policy'
 import { effectiveTuiPath } from './launch'
 import type { ContextStatus, TuiSpec } from './spec'
 
@@ -291,6 +292,10 @@ async function codexHooks(spec: TuiSpec): Promise<ContextStatus> {
   } catch {
     return { state: 'missing', detail: `${launcher} is unreadable — cannot verify Codex launcher` }
   }
+
+  // The daemon starts this Codex process itself, so the uid refusal covers it too.
+  const uidRefusal = currentPaneRefusal()
+  if (uidRefusal) return { state: 'missing', detail: uidRefusal }
 
   return new Promise((resolve) => {
     const child = spawn(launcher, ['app-server'], { stdio: ['pipe', 'pipe', 'pipe'] })

@@ -58,9 +58,23 @@ export interface PrepareResult {
   sessions: PreparedSession[]
 }
 
+/** Wait up to five minutes for the desktop session's variables, unless no desktop will come. */
+export async function waitForDesktop(options: {
+  headless: boolean
+  desktopReady: () => boolean
+  now: () => number
+  sleep: (ms: number) => Promise<void>
+}): Promise<void> {
+  if (options.headless) return
+  const waitUntil = options.now() + DESKTOP_WAIT_MS
+  while (!options.desktopReady() && options.now() < waitUntil) await options.sleep(5_000)
+}
+
 export interface ContinuityOptions {
   /** True once the desktop session's variables reach the user manager. */
   desktopReady?: () => boolean
+  /** No desktop will ever come (shared mode, TETHER_HEADLESS=1): restore at once. */
+  headless?: boolean
   now?: () => number
   sleep?: (ms: number) => Promise<void>
   log?: (message: string) => void
@@ -92,6 +106,7 @@ export class Continuity {
   private readonly sleep: (ms: number) => Promise<void>
   private readonly log: (message: string) => void
   private readonly desktopReady: () => boolean
+  private readonly headless: boolean
   /** Sessions still waiting to be restored; the observer keeps them listed. */
   private readonly awaitingRestore = new Set<string>()
   /** Crash recovery: told about each agent session on every pass. */
@@ -108,6 +123,7 @@ export class Continuity {
     this.sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)))
     this.log = options.log ?? ((message) => console.log(`[tether:continuity] ${message}`))
     this.desktopReady = options.desktopReady ?? (() => true)
+    this.headless = options.headless ?? false
   }
 
   /** Restore what the last boot left running, then keep the snapshot fresh. */
@@ -266,8 +282,12 @@ export class Continuity {
     this.log(`restoring ${candidates.length} session(s) from the last boot`)
 
     // Panes started before the desktop session would have no DISPLAY.
-    const waitUntil = this.now() + DESKTOP_WAIT_MS
-    while (!this.desktopReady() && this.now() < waitUntil) await this.sleep(5_000)
+    await waitForDesktop({
+      headless: this.headless,
+      desktopReady: this.desktopReady,
+      now: this.now,
+      sleep: this.sleep,
+    })
 
     let queue = candidates
     const giveUp = this.now() + RESTORE_GIVE_UP_MS

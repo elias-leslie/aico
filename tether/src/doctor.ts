@@ -4,6 +4,13 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { callSocket } from './client'
 import type { TetherPaths } from './config'
+import {
+  PANE_UID_REFUSED,
+  type PolicyLocation,
+  paneUidRefusal,
+  readAllowFlag,
+  readPanePolicy,
+} from './pane-policy'
 
 export type CheckStatus = 'ok' | 'warn' | 'fail'
 
@@ -69,18 +76,60 @@ export interface PathMode {
   uid?: number
 }
 
-export function checkSocket(dir: PathMode, socket: PathMode, uid: number): Check {
+export function checkSocket(dir: PathMode, socket: PathMode, uid: number, shared = false): Check {
   if (!socket.exists) {
     return { name: 'socket', status: 'warn', detail: 'control socket absent (daemon not running)' }
   }
+  // Shared mode opens the directory (setgid) and socket to the attach group.
+  const dirMode = shared ? 0o2750 : 0o700
+  const socketMode = shared ? 0o660 : 0o600
+  const octal = (mode: number, width: number) => mode.toString(8).padStart(width, '0')
   const problems: string[] = []
-  if (!dir.isDirectory || dir.uid !== uid || ((dir.mode ?? 0) & 0o777) !== 0o700)
-    problems.push(`directory must be 0700 and owned by uid ${uid}`)
-  if (!socket.isSocket || socket.uid !== uid || ((socket.mode ?? 0) & 0o777) !== 0o600)
-    problems.push(`socket must be a 0600 socket owned by uid ${uid}`)
+  if (!dir.isDirectory || dir.uid !== uid || ((dir.mode ?? 0) & 0o7777) !== dirMode)
+    problems.push(`directory must be ${octal(dirMode, 4)} and owned by uid ${uid}`)
+  if (!socket.isSocket || socket.uid !== uid || ((socket.mode ?? 0) & 0o777) !== socketMode)
+    problems.push(`socket must be a ${octal(socketMode, 4)} socket owned by uid ${uid}`)
   return problems.length
     ? { name: 'socket', status: 'fail', detail: problems.join('; ') }
-    : { name: 'socket', status: 'ok', detail: 'directory 0700, socket 0600' }
+    : {
+        name: 'socket',
+        status: 'ok',
+        detail: `directory ${octal(dirMode, 4)}, socket ${octal(socketMode, 4)}${shared ? ' (shared mode)' : ''}`,
+      }
+}
+
+/** The host pane-uid policy as this instance sees it (src/pane-policy.ts). */
+export function checkPanePolicy(
+  uid: number,
+  instance: string,
+  location: PolicyLocation,
+  shared: boolean,
+): Check {
+  const name = 'pane-policy'
+  const policy = readPanePolicy(location)
+  if (policy.state === 'absent')
+    return { name, status: 'ok', detail: `${policy.detail}; panes launch normally` }
+  if (policy.state !== 'ok')
+    return {
+      name,
+      status: 'warn',
+      detail: `policy ignored (${policy.state}): ${policy.detail}`,
+    }
+  const mode = shared ? '; shared mode on' : ''
+  if (!policy.refuseUids.includes(uid))
+    return { name, status: 'ok', detail: `uid ${uid} may launch panes${mode}` }
+  if (paneUidRefusal(uid, instance, location) === null)
+    return {
+      name,
+      status: 'ok',
+      detail: `uid ${uid} is refused, instance ${instance} is still allowed by ${location.allowFile}${mode}`,
+    }
+  const flag = readAllowFlag(location)
+  return {
+    name,
+    status: 'warn',
+    detail: `new panes refused (${PANE_UID_REFUSED}): uid ${uid} is in refuse_pane_uids and ${instance} is not in ${location.allowFile}${flag.state === 'untrusted' ? ` (flag ignored: ${flag.detail})` : ''}${mode}`,
+  }
 }
 
 export interface PaneUnit {
@@ -258,9 +307,10 @@ export async function runDoctor(paths: TetherPaths): Promise<Check[]> {
       : { name: 'tmux', status: 'fail', detail: '/usr/bin/tmux not found' },
     checkPaneOomPolicy(readPaneUnits()),
     checkEnabledInstances(readEnabledInstances()),
-    checkSocket(stat(paths.socketDir), stat(paths.socket), uid),
+    checkSocket(stat(paths.socketDir), stat(paths.socket), uid, paths.shared !== null),
+    checkPanePolicy(uid, paths.instance, paths.policyLocation, paths.shared !== null),
   ]
-  const socketCheck = checks.at(-1)
+  const socketCheck = checks.find((check) => check.name === 'socket')
   if (socketCheck?.status === 'ok') {
     try {
       const health = await callSocket(paths.socket, 'GET', '/v1/health', undefined, 2_000)

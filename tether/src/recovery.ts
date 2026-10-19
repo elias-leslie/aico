@@ -67,6 +67,7 @@ import { getTui } from './lifecycle/tui/registry'
 import type { TuiSpec } from './lifecycle/tui/spec'
 import type { LifecycleApiContext } from './lifecycle-api'
 import { generationOf } from './lifecycle-api'
+import { currentPaneRefusal } from './pane-policy'
 import {
   CRASH_RESULTS,
   type CrashFacts,
@@ -1180,6 +1181,9 @@ export class Recovery {
     panePresent: boolean,
   ): Promise<LaunchOutcome> {
     const resumeId = record.resumeId as string
+    // Before the release below changes the crashed binding: a refused uid never relaunches.
+    const uidRefusal = currentPaneRefusal()
+    if (uidRefusal) return { kind: 'failed', reason: uidRefusal }
     if (panePresent) {
       // The pane survived (the agent died, or a resume fell back to the
       // shell): respawn it with the resume.

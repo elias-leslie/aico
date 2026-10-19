@@ -1,5 +1,6 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { detectSharedMode, HOST_POLICY, type PolicyLocation, type SharedMode } from './pane-policy'
 
 /** Tether's own API contract version. Clients declare the minimum they need. */
 export const API_VERSION = 1
@@ -22,7 +23,7 @@ export interface TetherPaths {
   /** Parent of `<id>/server.sock` for each private tmux server generation. */
   tmuxDir: string
   runtimeDir: string
-  /** 0700 directory holding the control socket. */
+  /** Directory holding the control socket: 0700, or 2750 in shared mode. */
   socketDir: string
   socket: string
   /** Directory the generation-specific tmux `pane-exited` hook touches. */
@@ -36,6 +37,10 @@ export interface TetherPaths {
   /** Optional local project list for the fallback provider. */
   localProjectsFile: string
   configDir: string
+  /** Cross-user attach mode (src/pane-policy.ts detectSharedMode), else null. */
+  shared: SharedMode | null
+  /** Where the host pane policy is read from; tests point it at a tmp dir. */
+  policyLocation: PolicyLocation
 }
 
 export function isInstanceName(value: string): boolean {
@@ -76,6 +81,10 @@ export interface ResolveOptions {
   env?: NodeJS.ProcessEnv
   uid?: number
   home?: string
+  /** Tests only: where the host policy lives (production always uses /etc/tether). */
+  policy?: PolicyLocation
+  /** Tests only: the user name of `uid` for the shared-mode check. */
+  username?: string
 }
 
 /**
@@ -95,7 +104,13 @@ export function resolvePaths(options: ResolveOptions = {}): TetherPaths {
   const configRoot = env.XDG_CONFIG_HOME || join(home, '.config')
   const configDir = join(configRoot, 'tether')
   const userRuntime = env.XDG_RUNTIME_DIR || `/run/user/${uid}`
-  const runtimeDir = env.TETHER_RUNTIME_DIR || join(userRuntime, 'tether', instance)
+  const policyLocation = options.policy ?? HOST_POLICY
+  // Shared mode: root made /run/tether/<me> for me and the policy lists who may
+  // attach. The instance then lives under it so those users can reach its sockets.
+  const shared = detectSharedMode(uid, policyLocation, options.username)
+  const runtimeDir =
+    env.TETHER_RUNTIME_DIR ||
+    (shared ? join(shared.root, instance) : join(userRuntime, 'tether', instance))
   const socket = assertSocketPath(env.TETHER_SOCKET || join(runtimeDir, 'control.sock'), 'control')
   const socketDir = socket.slice(0, socket.lastIndexOf('/')) || '/'
 
@@ -104,7 +119,7 @@ export function resolvePaths(options: ResolveOptions = {}): TetherPaths {
   const aicoRuntime = `/run/user/${uid}/aico`
   const paneExitMarkerDir = legacy ? aicoRuntime : join(runtimeDir, 'pane-exits')
 
-  const tmuxDir = join(stateDir, 'tmux')
+  const tmuxDir = shared ? join(runtimeDir, 'tmux') : join(stateDir, 'tmux')
   const longest = join(tmuxDir, 'f'.repeat(GENERATION_HEX_LENGTH), 'server.sock')
   assertSocketPath(longest, 'tmux server')
 
@@ -127,6 +142,8 @@ export function resolvePaths(options: ResolveOptions = {}): TetherPaths {
     historicalTmuxSocket: legacy ? `/tmp/tmux-${uid}/aico` : null,
     localProjectsFile: join(configDir, 'projects.json'),
     configDir,
+    shared,
+    policyLocation,
   }
 }
 

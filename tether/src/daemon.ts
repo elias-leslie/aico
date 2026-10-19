@@ -145,6 +145,9 @@ export async function startDaemon(
   if (reconcileEnabled(env)) {
     const graphical = () => userManagerGraphicalEnvironment()
     const continuity = new Continuity(context, {
+      // A shared-mode instance runs for a user with no desktop; TETHER_HEADLESS=1
+      // says the same for any other instance. Neither waits for DISPLAY.
+      headless: paths.shared !== null || env.TETHER_HEADLESS === '1',
       desktopReady: () => Boolean(graphical().DISPLAY || graphical().WAYLAND_DISPLAY),
     })
     const recovery = new Recovery(context, {
@@ -164,7 +167,7 @@ export async function startDaemon(
   const server = createTetherServer(context)
   const legacyServers: Server[] = []
   try {
-    await listenPrivateSocket(server, paths.socket)
+    await listenPrivateSocket(server, paths.socket, { shared: paths.shared !== null })
   } catch (error) {
     store.close()
     throw error

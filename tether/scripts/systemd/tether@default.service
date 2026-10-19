@@ -17,6 +17,10 @@ Restart=on-failure
 RestartSec=2
 UMask=0077
 Environment=PATH=%h/.claude/bin:%h/.codex/bin:%h/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+# Sibling checkouts (agent-hub, codex-config) live here, not ~/projects.
+Environment=TETHER_PROJECTS_DIR=/srv/workspaces/projects
+# systemd-oomd picks this unit only when no other candidate is left.
+ManagedOOMPreference=avoid
 CPUAccounting=yes
 MemoryAccounting=yes
 TasksAccounting=yes

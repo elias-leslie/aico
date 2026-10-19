@@ -83,6 +83,7 @@ import {
 import { staticContextStatus } from './lifecycle/tui/context'
 import { getTui } from './lifecycle/tui/registry'
 import { paneModeArgs, parsePaneMode } from './pane-mode'
+import { currentPaneRefusal, PANE_UID_REFUSED } from './pane-policy'
 import type { Project, ProjectProvider } from './projects'
 import { type Continuity, registerRebootRoutes } from './reboot'
 import { type Recovery, registerRecoveryRoutes } from './recovery'
@@ -585,6 +586,8 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
       }
       await whenReady()
       if (!lingerEnabled()) throw new HttpError(503, 'linger_required')
+      const uidRefusal = currentPaneRefusal()
+      if (uidRefusal) throw new HttpError(403, PANE_UID_REFUSED, { reason: uidRefusal })
 
       const id = allocateWidgetId()
       insertWidget(id, tool.slug, Date.now(), { origin: origin as SessionOrigin, aTermSessionId })
@@ -593,10 +596,20 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
       const started = await ensureSessionSerialized(id, grid)
       if (!started) {
         const failure = lastEnsureFailure(id)
-        if (failure?.code === 'admission_denied' || failure?.code === 'linger_required') {
+        if (
+          failure?.code === 'admission_denied' ||
+          failure?.code === 'linger_required' ||
+          failure?.code === 'pane_uid_refused'
+        ) {
           // Refused before allocation: nothing exists, so nothing is kept.
           if (discardNeverAllocated(id)) notifySessionChanged(id, { ended: true })
-          throw new HttpError(failure.code === 'linger_required' ? 503 : 409, failure.code, {
+          const refusalStatus =
+            failure.code === 'linger_required'
+              ? 503
+              : failure.code === 'pane_uid_refused'
+                ? 403
+                : 409
+          throw new HttpError(refusalStatus, failure.code, {
             reason: failure.reason,
           })
         }

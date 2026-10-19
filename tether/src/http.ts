@@ -126,15 +126,24 @@ async function isLiveSocket(path: string): Promise<boolean> {
  * by this user, socket 0600. A live socket (another daemon) or a non-socket at
  * the path is refused; a stale socket is replaced. This is also the
  * single-writer guard for the instance database.
+ *
+ * Shared mode (src/pane-policy.ts) opens it to the directory's group only:
+ * directory 2750 (setgid, group from the root-made parent), socket 0660. The
+ * directory must still be owned by this user.
  */
-export async function listenPrivateSocket(server: Server, path: string): Promise<void> {
+export async function listenPrivateSocket(
+  server: Server,
+  path: string,
+  options: { shared?: boolean } = {},
+): Promise<void> {
   const directory = dirname(path)
-  mkdirSync(directory, { recursive: true, mode: 0o700 })
+  const dirMode = options.shared ? 0o2750 : 0o700
+  mkdirSync(directory, { recursive: true, mode: dirMode })
   const stat = lstatSync(directory)
   if (!stat.isDirectory() || stat.uid !== process.getuid?.()) {
     throw new Error(`socket directory ${directory} is not a directory owned by this user`)
   }
-  chmodSync(directory, 0o700)
+  chmodSync(directory, dirMode)
   if (existsSync(path)) {
     const existing = lstatSync(path)
     if (!existing.isSocket() || existing.uid !== process.getuid?.()) {
@@ -154,7 +163,7 @@ export async function listenPrivateSocket(server: Server, path: string): Promise
         resolve()
       })
     })
-    chmodSync(path, 0o600)
+    chmodSync(path, options.shared ? 0o660 : 0o600)
   } finally {
     process.umask(previousUmask)
   }
