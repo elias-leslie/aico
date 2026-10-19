@@ -128,7 +128,8 @@ async function isLiveSocket(path: string): Promise<boolean> {
  * single-writer guard for the instance database.
  *
  * Shared mode (src/pane-policy.ts) opens it to the directory's group only:
- * directory 2750 (setgid, group from the root-made parent), socket 0660. The
+ * directory 0750 (group and setgid inherited from the root-made parent, never set
+ * here: a sandbox with RestrictSUIDSGID refuses that), socket 0660. The
  * directory must still be owned by this user.
  */
 export async function listenPrivateSocket(
@@ -137,13 +138,13 @@ export async function listenPrivateSocket(
   options: { shared?: boolean } = {},
 ): Promise<void> {
   const directory = dirname(path)
-  const dirMode = options.shared ? 0o2750 : 0o700
+  const dirMode = options.shared ? 0o750 : 0o700
   mkdirSync(directory, { recursive: true, mode: dirMode })
   const stat = lstatSync(directory)
   if (!stat.isDirectory() || stat.uid !== process.getuid?.()) {
     throw new Error(`socket directory ${directory} is not a directory owned by this user`)
   }
-  chmodSync(directory, dirMode)
+  chmodSync(directory, dirMode | (options.shared ? stat.mode & 0o2000 : 0))
   if (existsSync(path)) {
     const existing = lstatSync(path)
     if (!existing.isSocket() || existing.uid !== process.getuid?.()) {

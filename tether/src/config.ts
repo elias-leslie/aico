@@ -23,7 +23,7 @@ export interface TetherPaths {
   /** Parent of `<id>/server.sock` for each private tmux server generation. */
   tmuxDir: string
   runtimeDir: string
-  /** Directory holding the control socket: 0700, or 2750 in shared mode. */
+  /** Directory holding the control socket: 0700, or 0750 in shared mode (setgid inherited). */
   socketDir: string
   socket: string
   /** Directory the generation-specific tmux `pane-exited` hook touches. */

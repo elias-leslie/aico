@@ -80,12 +80,17 @@ export function checkSocket(dir: PathMode, socket: PathMode, uid: number, shared
   if (!socket.exists) {
     return { name: 'socket', status: 'warn', detail: 'control socket absent (daemon not running)' }
   }
-  // Shared mode opens the directory (setgid) and socket to the attach group.
-  const dirMode = shared ? 0o2750 : 0o700
+  // Shared mode opens the directory and socket to the attach group (setgid, when
+  // inherited from the root-made parent, is allowed but not required).
+  const dirMode = shared ? 0o750 : 0o700
   const socketMode = shared ? 0o660 : 0o600
   const octal = (mode: number, width: number) => mode.toString(8).padStart(width, '0')
   const problems: string[] = []
-  if (!dir.isDirectory || dir.uid !== uid || ((dir.mode ?? 0) & 0o7777) !== dirMode)
+  if (
+    !dir.isDirectory ||
+    dir.uid !== uid ||
+    ((dir.mode ?? 0) & (shared ? 0o5777 : 0o7777)) !== dirMode
+  )
     problems.push(`directory must be ${octal(dirMode, 4)} and owned by uid ${uid}`)
   if (!socket.isSocket || socket.uid !== uid || ((socket.mode ?? 0) & 0o777) !== socketMode)
     problems.push(`socket must be a ${octal(socketMode, 4)} socket owned by uid ${uid}`)

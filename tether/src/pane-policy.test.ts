@@ -187,14 +187,14 @@ describe('shared mode', () => {
     )
   })
 
-  it('binds the control socket 0660 in a 2750 directory, still owned by me', async () => {
+  it('binds the control socket 0660 in a 0750 directory, still owned by me', async () => {
     const dir = join(root, 'agent', 'default')
     mkdirSync(join(root, 'agent'), { mode: 0o755 })
     const socket = join(dir, 'control.sock')
     const server = createServer()
     await listenPrivateSocket(server, socket, { shared: true })
     const { statSync } = await import('node:fs')
-    expect(statSync(dir).mode & 0o7777).toBe(0o2750)
+    expect(statSync(dir).mode & 0o5777).toBe(0o750)
     expect(statSync(socket).mode & 0o777).toBe(0o660)
     const pathMode = (path: string) => {
       const s = statSync(path)

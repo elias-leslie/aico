@@ -14,6 +14,7 @@ import { randomBytes } from 'node:crypto'
 import {
   chmodSync,
   type FSWatcher,
+  lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
@@ -688,14 +689,18 @@ async function reconcileProvisioningTmuxServer(
 
 function createManagedServerDirectory(serverId: string): string {
   const parent = cfg().paths.tmuxDir
-  // Shared mode: group-traversable (setgid keeps the root-made group) so the
-  // attach users reach server.sock; still owned by this user alone.
-  const mode = cfg().paths.shared ? 0o2750 : 0o700
+  // Shared mode: group-traversable so the attach users reach server.sock; still
+  // owned by this user alone. The group and setgid are inherited from the
+  // root-made parent, never set here (RestrictSUIDSGID sandboxes refuse that).
+  const shared = Boolean(cfg().paths.shared)
+  const mode = shared ? 0o750 : 0o700
+  const settle = (path: string) =>
+    chmodSync(path, mode | (shared ? lstatSync(path).mode & 0o2000 : 0))
   mkdirSync(parent, { recursive: true, mode })
-  chmodSync(parent, mode)
+  settle(parent)
   const directory = join(parent, serverId)
   mkdirSync(directory, { mode })
-  chmodSync(directory, mode)
+  settle(directory)
   return directory
 }
 
