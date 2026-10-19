@@ -15,7 +15,8 @@
     "frontend_port": 0,
     "backend_dir": ".",
     "frontend_dir": ".",
-    "health_endpoint": "/health"
+    "health_endpoint": "/health",
+    "infra": []
   },
   "services": {
     "backend": "aico-shell.service",
