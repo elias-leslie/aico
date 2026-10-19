@@ -331,13 +331,17 @@ async function codexHooks(spec: TuiSpec): Promise<ContextStatus> {
         }
         if (response.id !== 1) continue
         const hooks = response.result?.data?.[0]?.hooks ?? []
-        const expectedCommand = `${client} bind --surface codex`
+        const expectedCommands = [
+          `${client} bind --surface codex`,
+          '$HOME/.local/bin/agent-hub-context-client bind --surface codex',
+          '"$HOME"/.local/bin/agent-hub-context-client bind --surface codex',
+        ]
         const unhealthy = ['sessionStart', 'subagentStart'].filter(
           (eventName) =>
             !hooks.some(
               (hook) =>
                 hook.eventName === eventName &&
-                hook.command === expectedCommand &&
+                expectedCommands.includes(String(hook.command ?? '')) &&
                 hook.enabled === true &&
                 hook.trustStatus === 'trusted',
             ),

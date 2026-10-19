@@ -68,7 +68,7 @@ beforeEach(() => {
 
 function mockCodexHooks(
   path: string,
-  events: Array<{ eventName: string; trusted?: boolean }>,
+  events: Array<{ eventName: string; trusted?: boolean; command?: string }>,
 ): void {
   mockPaneResolve(path)
   vi.mocked(spawn).mockImplementation((() => {
@@ -84,9 +84,9 @@ function mockCodexHooks(
     process.stdin = {
       write: () => {
         const client = join(homedir(), '.local', 'bin', 'agent-hub-context-client')
-        const hooks = events.map(({ eventName, trusted = true }) => ({
+        const hooks = events.map(({ eventName, trusted = true, command }) => ({
           eventName,
-          command: `${client} bind --surface codex`,
+          command: command ?? `${client} bind --surface codex`,
           enabled: true,
           trustStatus: trusted ? 'trusted' : 'untrusted',
         }))
@@ -411,6 +411,25 @@ describe('ensureContext', () => {
     const s = await ensureContext(spec({ context: { kind: 'codex-hooks' } }))
     expect(s.state).toBe('available')
     expect(s.detail).toContain('lossless context')
+  })
+
+  it.each([
+    '$HOME',
+    '"$HOME"',
+  ])('accepts trusted canonical Codex hooks relative to %s', async (home) => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    const command = `${home}/.local/bin/agent-hub-context-client bind --surface codex`
+    mockCodexHooks('/home/demo/.local/bin/codex', [
+      { eventName: 'sessionStart', command },
+      { eventName: 'subagentStart', command },
+    ])
+    vi.mocked(realpathSync).mockReturnValue('/opt/projects/codex-config/bin/codex')
+    vi.mocked(readFileSync).mockReturnValue(
+      'CODEX_REAL AGENT_HUB_CONTEXT_CLIENT developer_instructions=\n',
+    )
+    expect((await ensureContext(spec({ context: { kind: 'codex-hooks' } }))).state).toBe(
+      'available',
+    )
   })
 
   it('reports missing when a required native Codex hook is untrusted', async () => {
