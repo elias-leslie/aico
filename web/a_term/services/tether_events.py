@@ -18,7 +18,8 @@ from typing import Any
 from ..logging_config import get_logger
 from ..storage import panes as pane_store
 from ..tether import TetherClient, TetherError, TetherUnavailable, get_client, known_socket_paths
-from . import lifecycle
+from ..tether.client import agent_socket_path
+from . import lifecycle, shows
 
 logger = get_logger(__name__)
 
@@ -100,7 +101,10 @@ class TetherEventWatcher:
             self._seq = seq
         raw_data = event.get("data")
         data: dict[str, Any] = raw_data if isinstance(raw_data, dict) else {}
-        if event_type == "session.ended":
+        if event_type == "show.requested":
+            if self._socket_path == str(agent_socket_path()):
+                shows.receive_show(data)
+        elif event_type == "session.ended":
             session_id = data.get("id")
             if isinstance(session_id, str) and pane_store.unlink_session(session_id):
                 logger.info("view_link_dropped", session_id=session_id, reason="session.ended")

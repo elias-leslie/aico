@@ -33,6 +33,7 @@ from .api import (
     projects,
     root_control,
     sessions,
+    shows,
 )
 from .branding import DESCRIPTION, DISPLAY_NAME, get_cache_root
 from .caller_trust import (
@@ -175,6 +176,7 @@ mount(app, agent.router, Surface.BROWSER)
 mount(app, agent_tools.router, Surface.BROWSER)
 mount(app, memory_policy.router, Surface.BROWSER)
 mount(app, files.router, Surface.BROWSER)
+mount(app, shows.router, Surface.BROWSER)
 mount(app, pane_files.router, Surface.BROWSER)
 mount(app, diagnostics.router, Surface.BROWSER)
 mount(app, root_control.router, Surface.CLI_LOCAL)

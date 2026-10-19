@@ -1,4 +1,5 @@
 import { clsx } from 'clsx'
+import { AgentShows } from './AgentShowToast'
 import { ATermFileSection } from './a-term-content/ATermFileSection'
 import { ATermMobileSection } from './a-term-content/ATermMobileSection'
 import type { ATermContentProps } from './a-term-content/types'
@@ -104,6 +105,7 @@ export function ATermContent({
         className,
       )}
     >
+      <AgentShows />
       {/* Settings dropdown - all settings controls */}
       <SettingsDropdown
         fontId={fontId}
