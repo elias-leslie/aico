@@ -12,6 +12,7 @@ import {
   eventStreamPath,
   followEvents,
   holdGuiChannel,
+  knownTetherSockets,
   parseAttachTarget,
   parseContextHook,
   parseGuiCommand,
@@ -20,6 +21,7 @@ import {
   TetherClient,
   TetherError,
   type TetherEvent,
+  TetherPool,
   TetherUnavailable,
   tetherSocketPath,
 } from './tether-client'
@@ -422,5 +424,68 @@ describe('GUI channel', () => {
     await expect.poll(() => connections).toBe(1)
     await new Promise((resolve) => setTimeout(resolve, 800))
     expect(connections).toBe(1)
+  })
+})
+
+describe('two Tether instances', () => {
+  const own = '/run/user/1000/tether/default/control.sock'
+  const agent = '/run/tether/agent/default/control.sock'
+
+  it('puts the active instance first and pins an unknown TETHER_SOCKET alone', () => {
+    expect(knownTetherSockets({}, 1000)).toEqual([own, agent])
+    expect(knownTetherSockets({ TETHER_SOCKET: agent }, 1000)).toEqual([agent, own])
+    expect(knownTetherSockets({ TETHER_AGENT_SOCKET: '/a.sock' }, 1000)).toEqual([own, '/a.sock'])
+    expect(knownTetherSockets({ TETHER_SOCKET: '/x/y.sock' }, 1000)).toEqual(['/x/y.sock'])
+  })
+
+  async function pair() {
+    const seen: string[] = []
+    const make = async (name: string, sessions: string[]) =>
+      (
+        await fakeTether(async (req, res) => {
+          seen.push(`${name} ${req.method} ${req.url}`)
+          if (req.url === '/v1/sessions' && req.method === 'GET')
+            return json(res, 200, { items: sessions.map((id) => ({ id })) })
+          if (req.url === '/v1/sessions' && req.method === 'POST')
+            return json(res, 201, { id: `${name}-new` })
+          const id = req.url?.split('/')[3]
+          if (id && sessions.includes(id)) return json(res, 200, { id, owner: name })
+          json(res, 404, { error: 'not_found' })
+        })
+      ).client
+    const active = await make('own', ['aaaaaaaa'])
+    const other = await make('agent', ['bbbbbbbb'])
+    return { active, other, seen }
+  }
+
+  it('lists both, creates on the active one and asks the owning instance by id', async () => {
+    const { active, other, seen } = await pair()
+    const pool = new TetherPool([active.socketPath, other.socketPath], 1_000)
+    expect((await pool.listSessions()).map((s) => s.id)).toEqual(['aaaaaaaa', 'bbbbbbbb'])
+    expect((await pool.createSession({ tool: 'shell', size: { cols: 80, rows: 24 } })).id).toBe(
+      'own-new',
+    )
+    expect(await pool.getSession('bbbbbbbb')).toEqual({ id: 'bbbbbbbb', owner: 'agent' })
+    expect(seen.filter((line) => line.includes('POST'))).toEqual(['own POST /v1/sessions'])
+    await expect(pool.getSession('cccccccc')).rejects.toMatchObject({ status: 404 })
+    expect(pool.instances().map((c) => c.socketPath)).toEqual([active.socketPath, other.socketPath])
+  })
+
+  it('treats a missing other socket as absent, but an unreachable seen one as an outage', async () => {
+    const { active, other } = await pair()
+    const missing = join(tmpdir(), 'aico-no-such.sock')
+    const alone = new TetherPool([active.socketPath, missing], 1_000)
+    expect((await alone.listSessions()).map((s) => s.id)).toEqual(['aaaaaaaa'])
+    await expect(alone.getSession('zzzzzzzz')).rejects.toMatchObject({ status: 404 })
+
+    let up = true
+    const pool = new TetherPool([active.socketPath, other.socketPath], 1_000, () => up)
+    expect(await pool.listSessions()).toHaveLength(2)
+    // Its socket is gone for a moment: never "its sessions ended", never "not found".
+    pool.instances()[1].request = () => Promise.reject(new TetherUnavailable('down'))
+    await expect(pool.listSessions()).rejects.toBeInstanceOf(TetherUnavailable)
+    await expect(pool.getSession('cccccccc')).rejects.toBeInstanceOf(TetherUnavailable)
+    up = false
+    await expect(pool.listSessions()).rejects.toBeInstanceOf(TetherUnavailable)
   })
 })

@@ -31,7 +31,7 @@ import { createSelectionListener } from './selection-listener'
 import { createSessionActions } from './session-actions'
 import { createSessionCatalog, type SessionCatalog, sessionTitle } from './session-catalog'
 import { createTerminal } from './terminal'
-import { TetherClient } from './tether-client'
+import { TetherPool } from './tether-client'
 import { createTetherLink } from './tether-link'
 import { ControlTerminal } from './tmux-control'
 import { sandboxedTmux, tmuxClientPid } from './tmux-sandbox'
@@ -77,7 +77,7 @@ const lifecycle = createLifecycle({
 // geometry and its settings. A window's PTY runs the exact `tmux attach` argv
 // Tether hands out; killing that PTY only detaches, so the session survives
 // close, reload and Aico restarts.
-const tether = new TetherClient(config.tetherSocket)
+const tether = new TetherPool([...config.tetherSockets])
 const catalog: SessionCatalog = createSessionCatalog()
 
 // Which window shows which session, where windows go, and the windows

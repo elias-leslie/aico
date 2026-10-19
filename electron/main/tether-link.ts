@@ -60,6 +60,8 @@ export function createTetherLink(deps: TetherLinkDeps) {
   let restored = false
   let stopEvents: (() => void) | null = null
   let stopGuiChannel: (() => void) | null = null
+  /** Other instances (the agent's, or the owner's when that is not active) that answered. */
+  const otherConnected = new Set<string>()
 
   const refreshSessions = coalesceAsync(async () => {
     const mark = catalog.mark()
@@ -162,8 +164,38 @@ export function createTetherLink(deps: TetherLinkDeps) {
     )
   }
 
+  /** Events and the GUI channel of an instance that is not the active one: its
+   * sessions join the catalog, and its absence is quiet (the agent's instance may not run). */
+  function connectOther(
+    client: TetherClient,
+    applyGuiCommand: (command: GuiCommand) => Promise<GuiVerdict>,
+  ): (() => void)[] {
+    const stopFollow = followEvents(client, {
+      onConnected: () => {
+        if (otherConnected.has(client.socketPath)) return
+        otherConnected.add(client.socketPath)
+        console.log(`[aico:tether] also connected at ${client.socketPath}`)
+        hooks.connected()
+      },
+      onDisconnected: (error) => {
+        if (otherConnected.delete(client.socketPath))
+          console.warn(`[aico:tether] event stream lost at ${client.socketPath}:`, error)
+      },
+      onResync: requestSessionRefresh,
+      onEvent: (event) => {
+        if (event.type !== 'tools.changed' && event.type !== 'projects.changed')
+          onTetherEvent(event)
+      },
+    })
+    const stopGui = holdGuiChannel(client, applyGuiCommand, (message, error) => {
+      if (error === undefined) console.log(`[aico:gui] ${message} (${client.socketPath})`)
+    })
+    return [stopFollow, stopGui]
+  }
+
   function connectTether(applyGuiCommand: (command: GuiCommand) => Promise<GuiVerdict>): void {
-    stopEvents = followEvents(tether, {
+    const [active, ...others] = tether.instances()
+    stopEvents = followEvents(active, {
       onConnected: () => {
         const reconnected = !tetherConnected
         tetherConnected = true
@@ -183,11 +215,16 @@ export function createTetherLink(deps: TetherLinkDeps) {
       onResync: requestSessionRefresh,
       onEvent: onTetherEvent,
     })
-    stopGuiChannel = holdGuiChannel(tether, applyGuiCommand, (message, error) =>
+    const stopActiveGui = holdGuiChannel(active, applyGuiCommand, (message, error) =>
       error === undefined
         ? console.log(`[aico:gui] ${message}`)
         : console.warn(`[aico:gui] ${message}:`, error instanceof Error ? error.message : error),
     )
+    const stopOthers = others.flatMap((client) => connectOther(client, applyGuiCommand))
+    stopGuiChannel = () => {
+      stopActiveGui()
+      for (const stop of stopOthers) stop()
+    }
   }
 
   function tetherNotice(): string | null {

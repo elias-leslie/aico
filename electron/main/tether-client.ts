@@ -6,6 +6,7 @@
 // Tether being down is "control unavailable", never "session gone": tmux
 // servers and panes keep running while the daemon restarts.
 
+import { statSync } from 'node:fs'
 import { request } from 'node:http'
 import { join } from 'node:path'
 import { attachFromTether } from './tmux-sandbox'
@@ -21,12 +22,33 @@ export const STREAM_IDLE_MS = 45_000
 const RECONNECT_MIN_MS = 500
 const RECONNECT_MAX_MS = 10_000
 
-/** `TETHER_SOCKET`, else `$XDG_RUNTIME_DIR/tether/<TETHER_INSTANCE|default>/control.sock`. */
-export function tetherSocketPath(env: NodeJS.ProcessEnv, uid: number | undefined): string {
-  if (env.TETHER_SOCKET) return env.TETHER_SOCKET
+/** The agent user's Tether instance (system-run, shared to the owner's group);
+ * `TETHER_AGENT_SOCKET` overrides it. */
+export const DEFAULT_AGENT_TETHER_SOCKET = '/run/tether/agent/default/control.sock'
+
+/** This user's own `$XDG_RUNTIME_DIR/tether/<TETHER_INSTANCE|default>/control.sock`. */
+export function ownTetherSocketPath(env: NodeJS.ProcessEnv, uid: number | undefined): string {
   const runtime = env.XDG_RUNTIME_DIR || (uid === undefined ? '/tmp' : `/run/user/${uid}`)
   const instance = env.TETHER_INSTANCE || 'default'
   return join(runtime, 'tether', instance, 'control.sock')
+}
+
+/** The active instance, the one new sessions go to: `TETHER_SOCKET`, else this user's own. */
+export function tetherSocketPath(env: NodeJS.ProcessEnv, uid: number | undefined): string {
+  return env.TETHER_SOCKET || ownTetherSocketPath(env, uid)
+}
+
+/** Instances to consult: the active one first, then the other known one (this
+ * user's, the agent's). A `TETHER_SOCKET` pinned to some third path means
+ * exactly that socket. */
+export function knownTetherSockets(env: NodeJS.ProcessEnv, uid: number | undefined): string[] {
+  const active = tetherSocketPath(env, uid)
+  const known = [
+    ownTetherSocketPath(env, uid),
+    env.TETHER_AGENT_SOCKET || DEFAULT_AGENT_TETHER_SOCKET,
+  ]
+  if (!known.includes(active)) return [active]
+  return [active, ...new Set(known.filter((path) => path !== active))]
 }
 
 export type SessionStatus = 'running' | 'pending' | 'uncertain' | 'legacy'
@@ -321,6 +343,11 @@ export class TetherClient {
     })
   }
 
+  /** The instances this client covers; a plain client is just itself. */
+  instances(): TetherClient[] {
+    return [this]
+  }
+
   private async json<T>(
     method: string,
     path: string,
@@ -520,6 +547,109 @@ export class TetherClient {
       req.on('error', (error) => finish(error))
       req.end()
     })
+  }
+}
+
+function isSocket(path: string): boolean {
+  try {
+    return statSync(path).isSocket()
+  } catch {
+    return false
+  }
+}
+
+const isMissing = (error: unknown): error is TetherError =>
+  error instanceof TetherError && error.status === 404
+
+/**
+ * The active instance plus the other known one, behind the one-client API.
+ * New sessions, tools and projects go to the active instance; the session list
+ * merges both; a call about one session asks the active instance first and
+ * falls back to the other on 404, so each session is handled by the instance
+ * that owns it. The other instance counts only while its socket exists (or
+ * answered earlier). An unreachable instance fails the list and any lookup that
+ * ended in 404: "gone" is never concluded while one may still own it.
+ */
+export class TetherPool extends TetherClient {
+  private readonly all: TetherClient[]
+  private readonly seen = new Set<string>()
+
+  constructor(
+    sockets: string[],
+    defaultTimeoutMs = DEFAULT_TIMEOUT_MS,
+    private readonly socketExists: (path: string) => boolean = isSocket,
+  ) {
+    super(sockets[0], defaultTimeoutMs)
+    this.all = sockets.map((path) => new TetherClient(path, defaultTimeoutMs))
+  }
+
+  override instances(): TetherClient[] {
+    return this.all
+  }
+
+  private candidates(): TetherClient[] {
+    const [active, ...others] = this.all
+    return [
+      active,
+      ...others.filter(
+        (client) => this.seen.has(client.socketPath) || this.socketExists(client.socketPath),
+      ),
+    ]
+  }
+
+  override async request<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    options: RequestOptions = {},
+  ): Promise<{ status: number; body: T }> {
+    const route = path.split('?')[0].replace(/\/+$/, '')
+    if (route === '/v1/sessions' && method === 'GET') return this.mergedSessions(path, options)
+    if (/^\/v1\/(sessions|widgets)\/[^/]/.test(route))
+      return this.byOwner(method, path, body, options)
+    return this.all[0].request<T>(method, path, body, options)
+  }
+
+  private async mergedSessions<T>(
+    path: string,
+    options: RequestOptions,
+  ): Promise<{ status: number; body: T }> {
+    const merged = new Map<string, unknown>()
+    let first: { status: number; body: T } | null = null
+    for (const client of this.candidates()) {
+      const answer = await client.request<T>('GET', path, undefined, options)
+      this.seen.add(client.socketPath)
+      first ??= answer
+      const items = (answer.body as { items?: { id: string }[] } | null)?.items
+      for (const item of items ?? []) if (!merged.has(item.id)) merged.set(item.id, item)
+    }
+    const head = first as { status: number; body: T }
+    return { status: head.status, body: { ...head.body, items: [...merged.values()] } }
+  }
+
+  private async byOwner<T>(
+    method: string,
+    path: string,
+    body: unknown,
+    options: RequestOptions,
+  ): Promise<{ status: number; body: T }> {
+    let missing: { status: number; body: T } | TetherError | null = null
+    let unavailable: TetherUnavailable | null = null
+    for (const client of this.candidates()) {
+      try {
+        const answer = await client.request<T>(method, path, body, options)
+        this.seen.add(client.socketPath)
+        if (answer.status !== 404) return answer
+        missing ??= answer
+      } catch (error) {
+        if (error instanceof TetherUnavailable) unavailable ??= error
+        else if (isMissing(error)) missing ??= error
+        else throw error
+      }
+    }
+    if (unavailable) throw unavailable // another instance may still own it: not "gone"
+    if (missing instanceof TetherError) throw missing
+    return missing as { status: number; body: T }
   }
 }
 

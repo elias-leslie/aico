@@ -68,10 +68,13 @@ const event = (type: string, data: Record<string, unknown> = {}): TetherEvent =>
   data,
 })
 
-function setup(o: { list?: SessionDescriptor[]; version?: TetherVersion | Error } = {}) {
+function setup(
+  o: { list?: SessionDescriptor[]; version?: TetherVersion | Error; other?: TetherClient } = {},
+) {
   const calls: string[] = []
   const tether = {
     socketPath: '/run/test/tether.sock',
+    instances: (): unknown[] => (o.other ? [tether, o.other] : [tether]),
     listSessions: vi.fn(async () => o.list ?? []),
     tools: vi.fn(async () => ({ items: [tool('b', 2), tool('a', 1), tool('off', 0, false)] })),
     version: vi.fn(async () => {
@@ -312,6 +315,39 @@ describe('connection', () => {
     await Promise.resolve()
     expect(dialog.showErrorBox).not.toHaveBeenCalled()
     vi.restoreAllMocks()
+  })
+
+  it('follows the other instance too: its sessions join the catalog, its outage is quiet, stop stops all', () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const other = { socketPath: '/run/test/agent.sock' } as TetherClient
+    const { link, tether, catalog, hooks, apply, stopEvents, stopGui, projects } = setup({ other })
+    link.connect(apply)
+    expect(follow).toHaveBeenCalledTimes(2)
+    expect(follow.mock.calls[0]?.[0]).toBe(tether)
+    expect(follow.mock.calls[1]?.[0]).toBe(other)
+    expect(hold.mock.calls.map((call) => call[0])).toEqual([tether, other])
+    const second = follow.mock.calls[1]?.[1] as EventSubscriber
+    second.onDisconnected?.(new Error('no agent tether')) // never connected: nothing to say
+    expect(warn).not.toHaveBeenCalled()
+    second.onConnected?.()
+    expect(hooks.connected).toHaveBeenCalledTimes(1)
+    expect(log).toHaveBeenCalledWith('[aico:tether] also connected at /run/test/agent.sock')
+    second.onEvent({
+      seq: 2,
+      bootId: 'b',
+      type: 'session.created',
+      at: 0,
+      data: { id: 'bbbbbbbb', session: descriptor('bbbbbbbb') },
+    })
+    expect(catalog.get('bbbbbbbb')).toBeDefined()
+    second.onEvent(event('projects.changed'))
+    expect(projects.invalidate).not.toHaveBeenCalled()
+    link.stop()
+    expect(stopEvents).toHaveBeenCalledTimes(2) // one stop per instance
+    expect(stopGui).toHaveBeenCalledTimes(2)
+    log.mockRestore()
+    warn.mockRestore()
   })
 
   it('stop is safe before connect and stops both streams after', () => {

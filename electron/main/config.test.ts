@@ -11,6 +11,10 @@ describe('readConfig', () => {
       extensionIds: undefined,
       layoutPath: '/run/user/1234/aico/layout.json',
       tetherSocket: '/run/user/1234/tether/default/control.sock',
+      tetherSockets: [
+        '/run/user/1234/tether/default/control.sock',
+        '/run/tether/agent/default/control.sock',
+      ],
       nightshift: '/home/o/.local/bin/nightshift',
       atermUrl: 'https://terminal.summitflow.dev',
       selectionHotkey: 'CommandOrControl+Shift+Space',
@@ -48,6 +52,7 @@ describe('readConfig', () => {
       extensionIds: 'x',
       layoutPath: '/tmp/r/aico/layout.json',
       tetherSocket: '/tmp/r/tether/dev/control.sock',
+      tetherSockets: ['/tmp/r/tether/dev/control.sock', '/run/tether/agent/default/control.sock'],
       atermUrl: 'https://a.example',
       selectionHotkey: 'F1',
       forcedTransport: 'attach',
