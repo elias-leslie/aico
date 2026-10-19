@@ -26,6 +26,7 @@ from collections.abc import Callable, Collection
 from dataclasses import dataclass, field
 
 from ..logging_config import get_logger
+from .tmux_sandbox import client_pid, sandboxed
 
 logger = get_logger(__name__)
 
@@ -312,9 +313,12 @@ class ControlTerminal:
         cols: int,
         rows: int,
         queue: asyncio.Queue[bytes | None],
+        sandbox: bool = False,
     ) -> None:
         self._process = process
         self._attach_argv = attach_argv
+        self._sandbox = sandbox
+        self.client_pid = process.pid  # the sandbox's tmux child, once known (see start)
         self._env = env
         self.cols = cols
         self.rows = rows
@@ -338,6 +342,7 @@ class ControlTerminal:
         rows: int,
         cwd: str | None = None,
         sized: bool = True,
+        sandbox: bool = False,
     ) -> ControlTerminal:
         """Start the client and wait (briefly) for its first seed.
 
@@ -345,6 +350,8 @@ class ControlTerminal:
         window) sends no ``refresh-client -C``, so tmux ignores its size.
         """
         argv = control_argv(attach_argv)
+        if sandbox:
+            argv, cwd = sandboxed(argv), None
         process = await asyncio.create_subprocess_exec(
             *argv,
             stdin=asyncio.subprocess.PIPE,
@@ -353,8 +360,10 @@ class ControlTerminal:
             env=env,
             cwd=cwd,
         )
-        term = cls(process, attach_argv, env, cols, rows, asyncio.Queue(maxsize=256))
+        term = cls(process, attach_argv, env, cols, rows, asyncio.Queue(maxsize=256), sandbox)
         try:
+            if sandbox:
+                term.client_pid = await asyncio.to_thread(client_pid, process.pid)
             if sized:
                 term._send([f"refresh-client -C {cols}x{rows}"])
             else:
@@ -386,13 +395,11 @@ class ControlTerminal:
             return
         self._paste_seq += 1
         name = f"a-term-paste-{self.pid}-{self._paste_seq}"
+        load_argv = [self._attach_argv[0], *socket_args(self._attach_argv), "load-buffer", "-b", name, "-"]
+        if self._sandbox:
+            load_argv = sandboxed(load_argv)
         load = await asyncio.create_subprocess_exec(
-            self._attach_argv[0],
-            *socket_args(self._attach_argv),
-            "load-buffer",
-            "-b",
-            name,
-            "-",
+            *load_argv,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,

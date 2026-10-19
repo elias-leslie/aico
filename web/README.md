@@ -23,7 +23,7 @@ cd a-term
 bash scripts/install.sh
 ```
 
-Install and start Tether first. Then open <http://localhost:3002>. The installer checks that Tether answers, then sets up dependencies, frontend output, user services and local configuration. Source requirements include Python 3.13+, Node.js, pnpm, uv, and tmux. Install smoke tests without a user systemd session can use `bash scripts/install.sh --skip-systemd` (add `A_TERM_SKIP_TETHER_CHECK=1` where no Tether runs).
+Install and start Tether first. Then open <http://localhost:3002>. The installer checks that Tether answers, then sets up dependencies, frontend output, user services and local configuration. Source requirements include Python 3.13+, Node.js, pnpm, uv, tmux and bubblewrap (`/usr/bin/bwrap`; the tmux client that attaches a view runs inside it). Install smoke tests without a user systemd session can use `bash scripts/install.sh --skip-systemd` (add `A_TERM_SKIP_TETHER_CHECK=1` where no Tether runs).
 
 ## Runtime, data, and integrations
 

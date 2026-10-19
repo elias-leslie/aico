@@ -20,7 +20,7 @@ from a_term.constants import SHELL_MODE
 from a_term.services.tmux_control import SEED_HISTORY_LINES
 
 MODULE = "a_term.api.handlers.websocket_connection"
-SOCKET = "/tmp/tether-test/tmux-a0000001.sock"
+SOCKET = "/tmp/tether-test/tether/default/tmux/" + "a0000001" * 4 + "/server.sock"
 
 
 def _plan(kind: str = "tether", mode: str = "codex", name: str = "tether-a0000001") -> AttachPlan:
@@ -38,6 +38,7 @@ def _plan(kind: str = "tether", mode: str = "codex", name: str = "tether-a000000
         argv=argv,
         env={"COLORTERM": "truecolor"} if kind == "tether" else {},
         generation="g" * 64 if kind == "tether" else None,
+        sandbox=kind == "tether",
     )
 
 
@@ -70,18 +71,19 @@ async def test_setup_spawns_tethers_argv_and_builds_the_claim_identity() -> None
     with (
         patch(f"{MODULE}.validate_and_prepare_session", return_value=plan),
         patch(f"{MODULE}.spawn_pty", return_value=(17, 23)) as spawn,
+        patch(f"{MODULE}.client_pid", return_value=24),
         patch(f"{MODULE}._wait_for_initial_resize", new=AsyncMock()) as wait,
         patch(f"{MODULE}.apply_external_attach_options") as apply_options,
         patch(f"{MODULE}.get_scrollback", return_value=None),
     ):
         result_plan, view, pid = await _setup_connection(websocket, "a0000001")
 
-    spawn.assert_called_once_with(plan.argv, plan.env, plan.unset)
+    spawn.assert_called_once_with(plan.argv, plan.env, plan.unset, sandbox=True)
     apply_options.assert_not_called()
     wait.assert_awaited_once()
     assert result_plan is plan
-    assert pid == 23
-    assert (view.master_fd, view.client_pid, view.kind) == (17, 23, "tether")
+    assert pid == 23  # bubblewrap's pid, which cleanup reaps
+    assert (view.master_fd, view.client_pid, view.kind) == (17, 24, "tether")  # tmux's pid claims the size
     assert view.generation == plan.generation
     assert view.tmux_socket == SOCKET
 
@@ -345,6 +347,7 @@ def _control_socket(transport: str | None = "control") -> AsyncMock:
 def _control_terminal(pid: int = 31) -> MagicMock:
     control = MagicMock()
     control.pid = pid
+    control.client_pid = pid + 1  # the sandbox forks: tmux is bwrap's child
     control.close = AsyncMock()
     return control
 
@@ -375,9 +378,9 @@ async def test_control_view_starts_after_the_first_size_and_then_claims() -> Non
     assert start.await_args is not None
     args, kwargs = start.await_args
     assert args[0] == plan.argv and args[2:] == (100, 40)
-    assert args[1]["COLORTERM"] == "truecolor" and "TMUX" not in args[1]
-    assert kwargs["sized"] is True
-    assert (view.control, view.client_pid, view.master_fd, pid) == (control, 31, -1, 31)
+    assert args[1] == plan.env  # exactly the sandbox environment, nothing inherited
+    assert kwargs["sized"] is True and kwargs["sandbox"] is True
+    assert (view.control, view.client_pid, view.master_fd, pid) == (control, 32, -1, 32)
     claim.assert_called_once_with(view, 100, 40)
     assert view.pending_claim is False
     sent = [json.loads(call.args[0]) for call in websocket.send_text.await_args_list]

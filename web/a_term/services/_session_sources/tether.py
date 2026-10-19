@@ -1,13 +1,13 @@
 """Tether sessions (8-hex ids): every session Tether owns, whichever app created it.
 
-Listed, attached and ended through Tether. Tether sessions attach with the
-exact argv Tether hands out (``tmux -S <socket> attach-session -t <target>``),
-and every later tmux call for the view uses that socket.
+Listed, attached and ended through Tether. Tether sessions attach with an argv A-Term
+builds itself (``tmux -S <socket> attach-session -t <target>``, from the socket
+and target Tether hands out) inside the tmux sandbox, and every later tmux call
+for the view uses that socket.
 """
 
 from __future__ import annotations
 
-import os
 import re
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -16,8 +16,9 @@ from typing import TYPE_CHECKING, Any
 from ...constants import SHELL_MODE
 from ...logging_config import get_logger
 from ...tether import TetherClient, TetherError, TetherUnavailable, get_client
-from ...utils.tmux import validate_session_name, validate_socket_name
+from ...utils.tmux import validate_session_name
 from ..session_capabilities import LifecycleError, SessionKind
+from ..tmux_sandbox import attach_argv, sandbox_env
 from . import AttachPlan, Link, ListContext, SessionList, agent_state_for, finish
 
 if TYPE_CHECKING:
@@ -26,7 +27,6 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 TETHER_ID = re.compile(r"^[0-9a-f]{8}$")
-TMUX_SESSION_ID = re.compile(r"^\$[0-9]+$")
 HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 ACTIVITY_STATES = frozenset({"working", "idle", "blocked", "unknown"})
 
@@ -114,26 +114,6 @@ def from_tether(descriptor: dict[str, Any], link: Link | None = None) -> Session
     })
 
 
-def _validated_tether_argv(target: dict[str, Any], socket_path: str) -> list[str]:
-    """Accept only ``<abs>/tmux -S <socket> attach-session -t <target>`` from Tether."""
-    argv = target.get("argv")
-    if (
-        not isinstance(argv, list)
-        or len(argv) != 6
-        or not all(isinstance(arg, str) for arg in argv)
-        or not os.path.isabs(argv[0])
-        or os.path.basename(argv[0]) != "tmux"
-        or argv[1] != "-S"
-        or argv[2] != socket_path
-        or not validate_socket_name(argv[2])
-        or argv[3] not in {"attach-session", "attach"}
-        or argv[4] != "-t"
-        or not (TMUX_SESSION_ID.fullmatch(argv[5]) or validate_session_name(argv[5]))
-    ):
-        raise ValueError("Tether returned an unexpected attach target")
-    return [str(arg) for arg in argv]
-
-
 class TetherSource:
     """Tether's catalog, through the Tether client."""
 
@@ -180,23 +160,15 @@ class TetherSource:
         session_name = session.get("tmux_session_name")
         if not isinstance(socket_path, str) or not isinstance(session_name, str) or not validate_session_name(session_name):
             raise ValueError(f"Session has no attachable tmux target: {ref}")
-        argv = _validated_tether_argv(target, socket_path)
-        raw_env = target.get("env")
-        env = (
-            {str(key): value for key, value in raw_env.items() if isinstance(value, str)}
-            if isinstance(raw_env, dict)
-            else {}
-        )
-        raw_unset = target.get("unset")
-        unset = [key for key in raw_unset if isinstance(key, str)] if isinstance(raw_unset, list) else []
+        argv = attach_argv(target, socket_path)
         return AttachPlan(
             session=session,
             kind="tether",
             tmux_session_name=session_name,
             tmux_socket=socket_path,
             argv=argv,
-            env=env,
-            unset=unset,
+            env=sandbox_env(target.get("env")),
+            sandbox=True,
             generation=target.get("generation") if isinstance(target.get("generation"), str) else session.get("generation"),
         )
 

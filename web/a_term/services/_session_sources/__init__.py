@@ -57,6 +57,8 @@ class AttachPlan:
     env: dict[str, str] = field(default_factory=dict)
     unset: list[str] = field(default_factory=list)
     generation: str | None = None
+    # Run the client inside the tmux sandbox (Tether sessions).
+    sandbox: bool = False
 
     @property
     def session_id(self) -> str:

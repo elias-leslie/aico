@@ -18,7 +18,7 @@ from a_term.storage import panes as pane_store
 from .fake_tether import TMUX_BIN, FakeTether
 
 
-def test_tether_session_attaches_with_tethers_exact_argv(fake_tether: FakeTether) -> None:
+def test_tether_session_attaches_with_an_argv_a_term_builds(fake_tether: FakeTether) -> None:
     session = fake_tether.add_session(tool="codex", project_id="p", origin="a-term")
     pane = pane_store.create_pane(pane_type="project", pane_name="P", project_id="p")
     pane_store.link_session(session["id"], pane["id"], "codex")
@@ -27,12 +27,12 @@ def test_tether_session_attaches_with_tethers_exact_argv(fake_tether: FakeTether
 
     socket_path = session["tmux"]["socket"]
     assert plan.kind == "tether"
-    assert plan.argv == [TMUX_BIN, "-S", socket_path, "attach-session", "-t", session["tmux"]["sessionId"]]
+    assert plan.sandbox is True
+    assert plan.argv == ["/usr/bin/tmux", "-S", socket_path, "attach-session", "-t", session["tmux"]["sessionId"]]
     assert plan.tmux_socket == socket_path
     assert plan.tmux_session_name == session["tmux"]["sessionName"]
     assert plan.generation == session["generation"]
-    assert plan.env["COLORTERM"] == "truecolor"
-    assert plan.unset == ["TMUX", "TMUX_PANE", "TMUX_TMPDIR", "NO_COLOR"]
+    assert plan.env == {"TERM": "xterm-256color", "LANG": "C.UTF-8", "COLORTERM": "truecolor", "CLICOLOR": "1"}
     assert plan.session["pane_id"] == pane["id"]
     assert pane_store.get_link(session["id"])["last_accessed_at"]  # type: ignore[index]
 
@@ -40,10 +40,9 @@ def test_tether_session_attaches_with_tethers_exact_argv(fake_tether: FakeTether
 @pytest.mark.parametrize(
     "mutate",
     [
-        lambda argv: argv.__setitem__(0, "tmux"),  # not absolute
-        lambda argv: argv.__setitem__(0, "/bin/sh"),  # not tmux
         lambda argv: argv.__setitem__(1, "-L"),  # named socket
         lambda argv: argv.__setitem__(2, "/tmp/other.sock"),  # another server
+        lambda argv: argv.__setitem__(2, "/run/tether/agent/default/tmux/x/server.sock"),  # not the session's own
         lambda argv: argv.__setitem__(3, "kill-server"),
         lambda argv: argv.__setitem__(5, "$1; rm -rf /"),
         lambda argv: argv.append("-d"),

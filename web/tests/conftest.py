@@ -85,6 +85,7 @@ def fake_tether(monkeypatch: pytest.MonkeyPatch) -> Iterator[FakeTether]:
     directory = Path(tempfile.mkdtemp(prefix="at-tether-", dir="/tmp"))
     fake = FakeTether(directory).start()
     monkeypatch.setenv("TETHER_SOCKET", fake.socket_path)
+    monkeypatch.setenv("XDG_STATE_HOME", str(directory))
     set_client(TetherClient(fake.socket_path, timeout=5.0))
     try:
         yield fake

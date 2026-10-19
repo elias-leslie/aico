@@ -35,6 +35,7 @@ from ...services.scrollback_sync import (
     prepare_scrollback_for_transport,
 )
 from ...services.tmux_control import SEED_HISTORY_LINES, ControlTerminal
+from ...services.tmux_sandbox import client_pid
 from ...utils.tmux import (
     apply_external_attach_options,
     get_cursor_position,
@@ -405,13 +406,14 @@ async def _setup_control_connection(websocket: WebSocket, plan: AttachPlan) -> V
     cols, rows = view.last_resize
     view.control = await ControlTerminal.start(
         plan.argv,
-        attach_environment(plan.env, plan.unset),
+        plan.env if plan.sandbox else attach_environment(plan.env, plan.unset),
         cols or TMUX_DEFAULT_COLS,
         rows or TMUX_DEFAULT_ROWS,
         cwd=os.environ.get("HOME"),
         sized=bool(cols and rows),
+        sandbox=plan.sandbox,
     )
-    view.client_pid = view.control.pid
+    view.client_pid = view.control.client_pid
     if view.pending_claim:
         view.pending_claim = False
         await asyncio.to_thread(_claim_window_size, view, cols, rows)
@@ -436,7 +438,7 @@ async def _setup_connection(websocket: WebSocket, session_id: str) -> tuple[Atta
         if _wants_control(websocket):
             control_view = await _setup_control_connection(websocket, plan)
             return plan, control_view, control_view.client_pid or -1
-        master_fd, pid = spawn_pty(plan.argv, plan.env, plan.unset)
+        master_fd, pid = spawn_pty(plan.argv, plan.env, plan.unset, sandbox=plan.sandbox)
         view = ViewContext(
             session_id=plan.session_id,
             master_fd=master_fd,
@@ -444,7 +446,7 @@ async def _setup_connection(websocket: WebSocket, session_id: str) -> tuple[Atta
             tmux_socket=plan.tmux_socket,
             kind=plan.kind,
             generation=plan.generation,
-            client_pid=pid,
+            client_pid=await asyncio.to_thread(client_pid, pid) if plan.sandbox else pid,
             websocket=websocket,
         )
         if _requested_transport(websocket) == "control":

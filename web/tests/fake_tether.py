@@ -133,7 +133,8 @@ class FakeTetherState:
     ) -> dict[str, Any]:
         self._counter += 1
         session_id = f"{0xA0000000 + self._counter:08x}"
-        socket_path = str(self.root / f"tmux-{session_id}.sock")
+        # The layout A-Term trusts: $XDG_STATE_HOME/tether/<instance>/tmux/<32 hex>/server.sock
+        socket_path = str(self.root / "tether" / "default" / "tmux" / (session_id * 4) / "server.sock")
         descriptor = {
             "id": session_id,
             "ownershipId": f"aico-widget-{session_id}",

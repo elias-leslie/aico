@@ -1,8 +1,9 @@
 """PTY management for WebSocket views.
 
-A view is a PTY running a tmux client attached to the session: Tether's exact
-``tmux -S <socket> attach-session -t <target>`` argv for Tether sessions, or a
-default-server attach for the user's own (external) sessions. Tether never proxies
+A view is a PTY running a tmux client attached to the session: the
+``tmux -S <socket> attach-session -t <target>`` argv A-Term builds for Tether
+sessions (run in the tmux sandbox), or a default-server attach for the user's
+own (external) sessions. Tether never proxies
 terminal bytes; A-Term keeps its own byte path.
 """
 
@@ -19,6 +20,7 @@ from typing import TYPE_CHECKING
 
 from ..logging_config import get_logger
 from ._pty_reader import _make_on_readable, _run_batch_loop
+from .tmux_sandbox import sandboxed
 
 if TYPE_CHECKING:
     from fastapi import WebSocket
@@ -53,15 +55,23 @@ def attach_environment(
 
 
 def spawn_pty(
-    argv: list[str], env: dict[str, str] | None = None, unset: list[str] | None = None
+    argv: list[str],
+    env: dict[str, str] | None = None,
+    unset: list[str] | None = None,
+    sandbox: bool = False,
 ) -> tuple[int, int]:
     """Fork a PTY whose child execs ``argv`` (a tmux attach). Returns (master_fd, pid).
 
     The child pid is the tmux client's pid, which Tether's resize claim needs.
+    With ``sandbox`` the client runs under bubblewrap with exactly ``env`` as
+    its environment.
     """
     if not argv or not isinstance(argv[0], str):
         raise ValueError("Empty attach argv")
-    child_env = attach_environment(env, unset)
+    if sandbox:
+        argv, child_env = sandboxed(argv), dict(env or {})
+    else:
+        child_env = attach_environment(env, unset)
     pid, master_fd = pty.fork()
     if pid == 0:  # pragma: no cover - child process
         try:
