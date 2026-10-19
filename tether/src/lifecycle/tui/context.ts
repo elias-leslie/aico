@@ -219,10 +219,14 @@ async function claudeSessionStart(spec: TuiSpec): Promise<ContextStatus> {
     const parsed = JSON.parse(readFileSync(settings, 'utf8')) as {
       hooks?: Record<string, Array<{ hooks?: Array<{ command?: string }> }>>
     }
-    const expectedCommand = `${client} bind --surface claude_code`
+    // The shared settings.json spells the client home-relative so every user's sessions bind.
+    const expectedCommands = [
+      `${client} bind --surface claude_code`,
+      '"$HOME"/.local/bin/agent-hub-context-client bind --surface claude_code',
+    ]
     const hasHook = (event: string): boolean =>
       parsed.hooks?.[event]?.some((group) =>
-        group.hooks?.some((hook) => hook.command === expectedCommand),
+        group.hooks?.some((hook) => expectedCommands.includes(hook.command ?? '')),
       ) ?? false
     const resolved = realpathSync(launcher)
     const canonicalLauncher = resolved === expectedLauncher

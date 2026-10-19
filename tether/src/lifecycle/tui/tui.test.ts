@@ -335,6 +335,44 @@ describe('ensureContext', () => {
     )
   })
 
+  it('accepts the home-relative hook command the shared settings use', async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    mockPaneResolve('/home/demo/.claude/bin/claude')
+    vi.mocked(realpathSync).mockReturnValue(
+      '/opt/projects/agent-hub/integrations/context-delivery/claude/launcher',
+    )
+    vi.mocked(readFileSync).mockImplementation(((path: string) => {
+      if (path.endsWith('settings.json')) {
+        const command = '"$HOME"/.local/bin/agent-hub-context-client bind --surface claude_code'
+        return JSON.stringify({
+          hooks: {
+            SessionStart: [{ hooks: [{ command }] }],
+            SubagentStart: [{ hooks: [{ command }] }],
+          },
+        })
+      }
+      return 'CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1 exec "$REAL_CLAUDE" "--add-dir" "$CONTEXT_DIR" # CLAUDE.md\n'
+    }) as never)
+    const s = await ensureContext(
+      spec({
+        command: ['claude', '--dangerously-skip-permissions'],
+        context: { kind: 'claude-session-start' },
+        env: { PATH: '/canonical/managed-pane-path' },
+      }),
+    )
+    expect(s.state).toBe('available')
+    expect(s.detail).toContain('canonical additive Claude launcher')
+    expect(s.detail).toContain('canonical context available')
+    expect(execFile).toHaveBeenCalledWith(
+      '/bin/sh',
+      ['-c', 'command -v -- "$1"', 'aico-resolve-launcher', 'claude'],
+      expect.objectContaining({
+        env: expect.objectContaining({ PATH: '/canonical/managed-pane-path' }),
+      }),
+      expect.any(Function),
+    )
+  })
+
   it('reports missing when the managed pane resolves the stock upstream Claude binary', async () => {
     vi.mocked(existsSync).mockReturnValue(true)
     mockPaneResolve('/home/demo/.local/bin/claude') // a claude resolves, but not the wrapper
