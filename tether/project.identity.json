@@ -17,7 +17,8 @@
     "frontend_dir": ".",
     "health_endpoint": "/v1/health",
     "transport": "unix-socket",
-    "socket": "$XDG_RUNTIME_DIR/tether/default/control.sock"
+    "socket": "$XDG_RUNTIME_DIR/tether/default/control.sock",
+    "runtime_user": "agent"
   },
   "services": {
     "backend": "tether@default.service",
