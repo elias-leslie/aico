@@ -143,6 +143,8 @@ function setup(o: { forced?: 'attach' | 'control'; setting?: string } = {}) {
       settings.set(key, value)
     }),
     forcedTransport: o.forced,
+    sandboxTmux: (argv: string[]) => argv,
+    tmuxClientPid: async (pid: number) => pid,
     spawnPty: vi.fn((_file: string, _args: string[], opts: { cols: number; rows: number }) => {
       const link = fakeLink(opts)
       links.push(link)

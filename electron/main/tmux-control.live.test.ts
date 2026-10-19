@@ -43,7 +43,7 @@ function view(cols: number, rows: number): Viewer {
     scrollback: TERMINAL_HISTORY_LINES,
     allowProposedApi: true,
   })
-  const link = new ControlTerminal(attachArgv, env, { cols, rows })
+  const link = new ControlTerminal(attachArgv, env, { cols, rows }, (argv) => argv)
   link.onData((data) => term.write(data))
   const viewer = { link, term }
   viewers.push(viewer)

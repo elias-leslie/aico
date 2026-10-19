@@ -20,6 +20,7 @@
 
 import { type ChildProcessWithoutNullStreams, execFile, spawn } from 'node:child_process'
 import { TERMINAL_HISTORY_LINES } from '../shared/terminal-history'
+import { sandboxedTmux } from './tmux-sandbox'
 
 /** The IPty surface Aico's main process relies on. */
 export interface TerminalLink {
@@ -285,11 +286,13 @@ export class ControlTerminal implements TerminalLink {
     private readonly attachArgv: readonly string[],
     private readonly env: NodeJS.ProcessEnv,
     size: { cols: number; rows: number },
+    /** Runs a tmux argv in the sandbox; tests that use their own tmux pass identity. */
+    private readonly wrap: (tmuxArgv: string[]) => string[] = sandboxedTmux,
   ) {
     this.cols = size.cols
     this.rows = size.rows
-    const argv = controlArgv(attachArgv)
-    this.child = spawn(argv[0], argv.slice(1), { env, cwd: env.HOME, stdio: 'pipe' })
+    const argv = this.wrap(controlArgv(attachArgv))
+    this.child = spawn(argv[0], argv.slice(1), { env, stdio: 'pipe' })
     this.protocol = new ControlProtocol({
       output: (paneId, bytes) => this.output(paneId, bytes),
       pause: (paneId) => {
@@ -330,15 +333,16 @@ export class ControlTerminal implements TerminalLink {
     this.inputChain = this.inputChain.then(async () => {
       if (!this.paneId || this.phase === 'closed') return
       const name = `aico-paste-${this.pid}-${++this.pasteSeq}`
-      const bin = this.attachArgv[0]
-      const socketArgs = socketArgsOf(this.attachArgv)
+      const [bin, ...loadArgs] = this.wrap([
+        this.attachArgv[0],
+        ...socketArgsOf(this.attachArgv),
+        'load-buffer',
+        '-b',
+        name,
+        '-',
+      ])
       await new Promise<void>((resolve) => {
-        const load = execFile(
-          bin,
-          [...socketArgs, 'load-buffer', '-b', name, '-'],
-          { env: this.env },
-          () => resolve(),
-        )
+        const load = execFile(bin, loadArgs, { env: this.env }, () => resolve())
         load.stdin?.end(text)
       })
       this.send([`paste-buffer -p -d -b ${name} -t ${this.paneId}`])

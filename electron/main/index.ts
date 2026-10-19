@@ -34,6 +34,7 @@ import { createTerminal } from './terminal'
 import { TetherClient } from './tether-client'
 import { createTetherLink } from './tether-link'
 import { ControlTerminal } from './tmux-control'
+import { sandboxedTmux, tmuxClientPid } from './tmux-sandbox'
 import { createTray, refreshTray, setNeedsYou, setWidgetActivity } from './tray'
 import {
   ensureView,
@@ -256,6 +257,8 @@ const terminal = createTerminal({
   setSetting,
   forcedTransport: config.forcedTransport,
   spawnPty: spawn,
+  sandboxTmux: sandboxedTmux,
+  tmuxClientPid,
   controlTerminal: (argv, env, size) => new ControlTerminal(argv, env, size),
   execFileAsync: promisify(execFile),
   ensurePersonalWorkspaceRoot,

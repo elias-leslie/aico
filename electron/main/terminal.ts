@@ -73,6 +73,10 @@ interface TerminalDeps {
   /** AICO_TERMINAL_TRANSPORT: wins over the setting when set. */
   forcedTransport?: TerminalTransport
   spawnPty: typeof spawn
+  /** The attach client's command under bubblewrap (tmux-sandbox.ts). */
+  sandboxTmux(tmuxArgv: string[]): string[]
+  /** The tmux client's pid, given the pid of the bubblewrap that runs it. */
+  tmuxClientPid(bwrapPid: number): Promise<number>
   controlTerminal(argv: string[], env: NodeJS.ProcessEnv, size: PtySize): TerminalLink
   execFileAsync(
     file: string,
@@ -90,6 +94,15 @@ export function createTerminal(deps: TerminalDeps) {
   const ptys = new Map<number, TerminalLink>()
   const attachTargets = new Map<number, AttachTarget>()
   const sizeClaims = new WeakMap<TerminalLink, () => Promise<void>>()
+  const clientPids = new WeakMap<TerminalLink, Promise<number>>()
+  function clientPidOf(link: TerminalLink): Promise<number> {
+    let known = clientPids.get(link)
+    if (!known) {
+      known = deps.tmuxClientPid(link.pid)
+      clientPids.set(link, known)
+    }
+    return known
+  }
   // The transport each window's renderer was told at load, so its terminal and
   // its link agree until the window reloads.
   const transportOf = new Map<number, TerminalTransport>()
@@ -116,8 +129,9 @@ export function createTerminal(deps: TerminalDeps) {
     args: string[],
     maxBuffer = 1024 * 1024,
   ): Promise<string> {
-    const { stdout } = await deps.execFileAsync(target.argv[0], args, {
-      env: attachEnvironment(deps.env, target),
+    const [file, ...sandboxArgs] = deps.sandboxTmux([target.argv[0], ...args])
+    const { stdout } = await deps.execFileAsync(file, sandboxArgs, {
+      env: attachEnvironment(target),
       timeout: TMUX_QUERY_TIMEOUT_MS,
       maxBuffer,
     })
@@ -220,7 +234,7 @@ export function createTerminal(deps: TerminalDeps) {
           const result = await tether.resizeClaim(
             id,
             sessionGeneration,
-            pty.pid,
+            await clientPidOf(pty),
             pty.cols,
             pty.rows,
           )
@@ -271,11 +285,12 @@ export function createTerminal(deps: TerminalDeps) {
   }
 
   /** The window's terminal link: a control-mode client when its renderer runs
-   * the control transport, else a PTY running Tether's `tmux attach` argv. */
+   * the control transport, else a PTY running the `tmux attach` argv. */
   function openLink(winId: number, target: AttachTarget, size: PtySize): TerminalLink {
-    const env = attachEnvironment(deps.env, target)
+    const env = attachEnvironment(target)
     if (transportOf.get(winId) === 'control') return deps.controlTerminal(target.argv, env, size)
-    return deps.spawnPty(target.argv[0], target.argv.slice(1), {
+    const [file, ...args] = deps.sandboxTmux(target.argv)
+    return deps.spawnPty(file, args, {
       name: 'xterm-256color',
       cols: size.cols,
       rows: size.rows,

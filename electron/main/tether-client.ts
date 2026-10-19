@@ -8,6 +8,7 @@
 
 import { request } from 'node:http'
 import { join } from 'node:path'
+import { attachFromTether } from './tmux-sandbox'
 
 /** Lowest Tether API version this Aico needs (GET /v1/version). */
 export const MIN_TETHER_API_VERSION = 1
@@ -89,11 +90,11 @@ export interface SessionDescriptor {
 
 export interface AttachTarget {
   generation: string
-  /** Exact tmux client argv, e.g. `/usr/bin/tmux -S <socket> attach-session -t $3`. */
+  /** The tmux client argv Aico built: `/usr/bin/tmux -S <socket> attach-session -t $3`. */
   argv: string[]
-  /** Overrides only, applied over Aico's own environment. */
+  /** The client's whole environment (allowlisted keys), not overrides. */
   env: Record<string, string>
-  /** Keys removed after the overrides. */
+  /** Always empty: the environment is built from nothing, so nothing is left to unset. */
   unset: string[]
 }
 
@@ -215,20 +216,15 @@ export function splitNdjson(buffer: string): { lines: string[]; rest: string } {
   return { lines: parts.map((line) => line.trim()).filter(Boolean), rest }
 }
 
-/** The environment for a `tmux attach` PTY: Aico's own, plus Tether's
- * overrides, minus Tether's unset list (docs/api-v1.md Terminal I/O). */
-export function attachEnvironment(
-  base: NodeJS.ProcessEnv,
-  target: Pick<AttachTarget, 'env' | 'unset'>,
-): Record<string, string> {
-  const env: Record<string, string> = {}
-  for (const [key, value] of Object.entries(base)) if (value !== undefined) env[key] = value
-  Object.assign(env, target.env)
-  for (const key of target.unset) delete env[key]
-  return env
+/** The environment for the `tmux attach` client: exactly the target's. Aico's
+ * own environment never reaches it, and neither do Tether's `unset` or any key
+ * outside the allowlist (tmux-sandbox.ts). */
+export function attachEnvironment(target: Pick<AttachTarget, 'env'>): Record<string, string> {
+  return { ...target.env }
 }
 
-/** Validate an attach answer before it is ever executed. */
+/** Validate an attach answer before it is ever executed. Only the socket and
+ * target are taken from it: the argv and environment are Aico's own. */
 export function parseAttachTarget(body: unknown): AttachTarget {
   const value = body as Partial<AttachTarget> | null
   const strings = (list: unknown): list is string[] =>
@@ -237,15 +233,17 @@ export function parseAttachTarget(body: unknown): AttachTarget {
     !value ||
     typeof value.generation !== 'string' ||
     !strings(value.argv) ||
-    value.argv.length < 2 ||
-    !value.argv[0].startsWith('/') ||
     !value.env ||
     typeof value.env !== 'object' ||
-    !Object.values(value.env).every((item) => typeof item === 'string') ||
-    !strings(value.unset)
+    !Object.values(value.env).every((item) => typeof item === 'string')
   )
     throw new TetherUnavailable('Tether returned an invalid attach target')
-  return value as AttachTarget
+  try {
+    const own = attachFromTether({ argv: value.argv, env: value.env })
+    return { generation: value.generation, argv: own.argv, env: own.env, unset: [] }
+  } catch {
+    throw new TetherUnavailable('Tether returned an invalid attach target')
+  }
 }
 
 /** The tmux socket and target an attach argv names, for read-only view
