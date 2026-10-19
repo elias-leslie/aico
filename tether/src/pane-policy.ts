@@ -1,6 +1,6 @@
-import { lstatSync, readFileSync } from 'node:fs'
+import { lstatSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { userInfo } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 
 /**
  * Host policy for which uids may launch panes, and for cross-user attach
@@ -209,4 +209,50 @@ export function detectSharedMode(
     return null
   }
   return { username: name, attachUsers, root }
+}
+
+/**
+ * Make a shared-mode directory: born 0750 with the root-made parent's group and
+ * setgid. Never chmod it afterwards: chmod by a user outside the file's group
+ * silently drops setgid (chmod(2)), and sockets made later would get our own group.
+ */
+export function makeSharedDir(path: string): void {
+  const previous = process.umask(0o027)
+  try {
+    mkdirSync(path, { recursive: true, mode: 0o750 })
+  } finally {
+    process.umask(previous)
+  }
+}
+
+/**
+ * The instance runtime dir in shared mode, made fresh when an earlier start left
+ * it without the parent's setgid (an older Tether chmod'ed it). Only while no
+ * tmux server lives in it: removing it then would cut live panes off.
+ */
+export function prepareSharedRuntime(runtimeDir: string, tmuxDir: string): void {
+  const setgid = (path: string) => {
+    try {
+      return (lstatSync(path).mode & 0o2000) !== 0
+    } catch {
+      return false
+    }
+  }
+  if (setgid(dirname(runtimeDir)) && !setgid(runtimeDir)) {
+    let servers: string[] = []
+    try {
+      servers = readdirSync(tmuxDir)
+    } catch {}
+    try {
+      lstatSync(runtimeDir)
+      if (servers.length)
+        throw new Error(
+          `${runtimeDir} lost setgid but still holds tmux servers; restart after they end`,
+        )
+      rmSync(runtimeDir, { recursive: true })
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    }
+  }
+  makeSharedDir(runtimeDir)
 }

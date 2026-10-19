@@ -14,7 +14,6 @@ import { randomBytes } from 'node:crypto'
 import {
   chmodSync,
   type FSWatcher,
-  lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
@@ -36,7 +35,7 @@ import {
   withShimPath,
 } from '../env'
 import type { EventBus } from '../events'
-import { bindPanePolicy, currentPaneRefusal, PANE_UID_REFUSED } from '../pane-policy'
+import { bindPanePolicy, currentPaneRefusal, makeSharedDir, PANE_UID_REFUSED } from '../pane-policy'
 import {
   type AdmissionRequest,
   type AdmissionTicket,
@@ -692,15 +691,15 @@ function createManagedServerDirectory(serverId: string): string {
   // Shared mode: group-traversable so the attach users reach server.sock; still
   // owned by this user alone. The group and setgid are inherited from the
   // root-made parent, never set here (RestrictSUIDSGID sandboxes refuse that).
-  const shared = Boolean(cfg().paths.shared)
-  const mode = shared ? 0o750 : 0o700
-  const settle = (path: string) =>
-    chmodSync(path, mode | (shared ? lstatSync(path).mode & 0o2000 : 0))
-  mkdirSync(parent, { recursive: true, mode })
-  settle(parent)
   const directory = join(parent, serverId)
-  mkdirSync(directory, { mode })
-  settle(directory)
+  if (cfg().paths.shared) {
+    makeSharedDir(directory)
+    return directory
+  }
+  mkdirSync(parent, { recursive: true, mode: 0o700 })
+  chmodSync(parent, 0o700)
+  mkdirSync(directory, { mode: 0o700 })
+  chmodSync(directory, 0o700)
   return directory
 }
 

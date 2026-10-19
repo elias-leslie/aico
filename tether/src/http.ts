@@ -2,6 +2,7 @@ import { chmodSync, existsSync, lstatSync, mkdirSync, unlinkSync } from 'node:fs
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 import { createConnection } from 'node:net'
 import { dirname } from 'node:path'
+import { makeSharedDir } from './pane-policy'
 
 export const MAX_BODY_BYTES = 128 * 1024
 
@@ -139,12 +140,15 @@ export async function listenPrivateSocket(
 ): Promise<void> {
   const directory = dirname(path)
   const dirMode = options.shared ? 0o750 : 0o700
-  mkdirSync(directory, { recursive: true, mode: dirMode })
+  if (options.shared) makeSharedDir(directory)
+  else mkdirSync(directory, { recursive: true, mode: dirMode })
   const stat = lstatSync(directory)
   if (!stat.isDirectory() || stat.uid !== process.getuid?.()) {
     throw new Error(`socket directory ${directory} is not a directory owned by this user`)
   }
-  chmodSync(directory, dirMode | (options.shared ? stat.mode & 0o2000 : 0))
+  if (!options.shared) chmodSync(directory, dirMode)
+  else if ((stat.mode & 0o077) !== 0o050)
+    throw new Error(`socket directory ${directory} must be 0750`)
   if (existsSync(path)) {
     const existing = lstatSync(path)
     if (!existing.isSocket() || existing.uid !== process.getuid?.()) {

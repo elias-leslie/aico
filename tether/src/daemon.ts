@@ -40,6 +40,7 @@ import {
   sessionSnapshot,
 } from './lifecycle-api'
 import { startMemoryGuard } from './memory-guard'
+import { prepareSharedRuntime } from './pane-policy'
 import { activeProjectFileFromEnv, ProjectProvider, summitflowUrlFromEnv } from './projects'
 import { Continuity } from './reboot'
 import { Recovery } from './recovery'
@@ -93,6 +94,7 @@ export async function startDaemon(
 ): Promise<RunningDaemon> {
   mkdirSync(paths.stateDir, { recursive: true, mode: 0o700 })
   chmodSync(paths.stateDir, 0o700)
+  if (paths.shared) prepareSharedRuntime(paths.runtimeDir, paths.tmuxDir)
   mkdirSync(agentExitMarkerDir(paths), { recursive: true, mode: 0o700 })
   const store = new Store(paths.dbPath)
   const events = new EventBus()

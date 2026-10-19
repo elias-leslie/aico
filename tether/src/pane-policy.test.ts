@@ -1,4 +1,13 @@
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -11,9 +20,11 @@ import {
   bindPanePolicy,
   currentPaneRefusal,
   detectSharedMode,
+  makeSharedDir,
   type PolicyLocation,
   paneUidRefusal,
   policyLocationIn,
+  prepareSharedRuntime,
   readAllowFlag,
   readPanePolicy,
 } from './pane-policy'
@@ -193,7 +204,6 @@ describe('shared mode', () => {
     const socket = join(dir, 'control.sock')
     const server = createServer()
     await listenPrivateSocket(server, socket, { shared: true })
-    const { statSync } = await import('node:fs')
     expect(statSync(dir).mode & 0o5777).toBe(0o750)
     expect(statSync(socket).mode & 0o777).toBe(0o660)
     const pathMode = (path: string) => {
@@ -245,5 +255,32 @@ describe('headless restore', () => {
     sleeps.length = 0
     await waitForDesktop({ headless: false, desktopReady: () => true, now: () => now, sleep })
     expect(sleeps).toEqual([])
+  })
+})
+
+describe('shared runtime dir', () => {
+  it('remakes a runtime dir that lost the parent setgid, only while no tmux server lives in it', (ctx) => {
+    const parent = mkdtempSync(join(tmpdir(), 'tether-shared-'))
+    try {
+      chmodSync(parent, 0o2750)
+    } catch {
+      ctx.skip() // a RestrictSUIDSGID sandbox (the deploy gate) can't set setgid
+    }
+    if ((statSync(parent).mode & 0o2000) === 0) ctx.skip()
+    const runtime = join(parent, 'default')
+    mkdirSync(runtime, { mode: 0o750 })
+    chmodSync(runtime, 0o750) // setgid dropped, as an older Tether left it
+    writeFileSync(join(runtime, 'stale'), '')
+    mkdirSync(join(runtime, 'tmux', 'abc'), { recursive: true })
+    expect(() => prepareSharedRuntime(runtime, join(runtime, 'tmux'))).toThrow(
+      'still holds tmux servers',
+    )
+    rmSync(join(runtime, 'tmux'), { recursive: true })
+    prepareSharedRuntime(runtime, join(runtime, 'tmux'))
+    expect(statSync(runtime).mode & 0o2777).toBe(0o2750)
+    expect(existsSync(join(runtime, 'stale'))).toBe(false)
+    makeSharedDir(join(runtime, 'tmux', 'srv'))
+    expect(statSync(join(runtime, 'tmux', 'srv')).mode & 0o2777).toBe(0o2750)
+    rmSync(parent, { recursive: true })
   })
 })
