@@ -128,6 +128,51 @@ Session errors:
 | 503 | `linger_required` | Linger is off. Durable work is refused. |
 | 500 | `internal_error` | Unexpected failure |
 
+## Owner handoffs *(post-cutover)*
+
+| Method and route | Body | Result |
+| --- | --- | --- |
+| `POST /v1/show` | `{session?, title?, url?, path?}`; exactly one of `url` and `path` | `201 {id, session, kind, title, name, url?}` after copying a file or accepting a link, and a `show.requested` event with the same data. |
+
+This hands a file or link to the owner's apps through `GET /v1/events`.
+It is independent of `POST /v1/sessions/:id/show`, which focuses a session view.
+`session` is an optional eight-character lowercase hex Tether ID (the pane's
+`AICO_WIDGET_ID`), used as attribution without requiring a live catalog entry.
+Absent `session` and `title` are returned as `null`. `title` is plain text, at
+most 120 Unicode characters, without control, format or line separator characters.
+Apps must render it as text. `url` must be an absolute HTTP(S) URL, at most 2000
+Unicode characters, without control characters or surrounding whitespace.
+For URLs, `kind` is `"url"`, and both `name` and `url` contain the supplied URL.
+Tether does not fetch the URL.
+
+`path` must be absolute and name a regular file. Tether opens it with
+`O_NOFOLLOW` (symlinks are refused), checks the size and copies from that open
+descriptor. The cap is also enforced while reading, so file growth cannot
+produce an oversized handoff. The copy is
+`<exchange>/agent/<session-or-none>/out/<id>-<basename>`, with a random 12-character
+hex `id`. The basename uses only `[A-Za-z0-9._-]` and is truncated to 80 characters.
+For files, `kind` is `"file"`, `name` is the copy's path **relative to
+`<exchange>/agent`** (for example `0123abcd/out/abcdef123456-report.pdf`), and `url`
+is absent. The event and response never include file contents or the source path.
+The copy closes before the event is published. New handoff directories are 0755,
+copies are 0644, and symlink handoff directories are refused.
+
+Daemon configuration is read from `TETHER_EXCHANGE_ROOT` (default
+`/srv/workspaces/exchange`, an absolute path) and `TETHER_SHOW_MAX_BYTES` (default
+`26214400`, 25 MiB, a positive integer). The exchange root must already exist;
+Tether never creates it. A root installation creates it with permissions allowing
+the agent daemon to create `agent/` and the owner apps to traverse it.
+
+Malformed bodies return `400 invalid_body`; unreadable, missing, symlink or
+nonregular sources return `400 invalid_file`; oversized files return
+`413 file_too_large` with `maxBytes`; an absent or invalid exchange root or a
+symlink handoff directory returns `503 exchange_unavailable` with a clear
+`detail`. Failed requests publish no event. URL requests do not need the exchange.
+
+`st show <url|file> [--title T]` posts to the agent instance at
+`/run/tether/agent/default/control.sock`. A successful request records the handoff;
+owner-app notification handling is a separate consumer of `show.requested`.
+
 ## Terminal I/O
 
 Apps keep their own byte path: a PTY that runs `tmux attach` against the session's private socket. Tether hands out the target. It never proxies terminal bytes.

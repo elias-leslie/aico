@@ -19,6 +19,7 @@ export type EventType =
   | 'projects.changed'
   | 'gui.connected'
   | 'gui.disconnected'
+  | 'show.requested'
 
 export interface TetherEvent {
   seq: number

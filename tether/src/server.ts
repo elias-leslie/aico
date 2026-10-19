@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
-import { API_VERSION, type TetherPaths } from './config'
+import { API_VERSION, resolveShowConfig, type ShowConfig, type TetherPaths } from './config'
 import type { EventBus, TetherEvent } from './events'
 import type { GuiChannel } from './gui-channel'
 import { HttpError, Router, readJsonObject, sendError, sendJson } from './http'
@@ -19,6 +19,7 @@ import {
   registerLocalProject,
   withActiveProject,
 } from './projects'
+import { registerShowRoute } from './show'
 import type { Store, ToolPatch } from './store'
 import { type AgentTool, parseCommand, type ToolSeed, ToolValidationError } from './tools'
 import { VERSION } from './version'
@@ -38,6 +39,7 @@ export interface ServerContext {
   now?: () => number
   /** Agent-pane memory policy (pane cap, runaway job kills). */
   memoryPolicy?: MemoryPolicyService
+  show?: ShowConfig
 }
 
 /** `rootCapable`: the tool can be started as a root (`POST /v1/roots`). */
@@ -335,6 +337,7 @@ export function buildRouter(context: ServerContext): Router {
     })
 
   registerLifecycleRoutes(router, context)
+  registerShowRoute(router, events, context.show ?? resolveShowConfig({}))
 
   return router
 }

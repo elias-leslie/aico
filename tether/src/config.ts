@@ -1,5 +1,5 @@
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 import { detectSharedMode, HOST_POLICY, type PolicyLocation, type SharedMode } from './pane-policy'
 
 /** Tether's own API contract version. Clients declare the minimum they need. */
@@ -7,6 +7,29 @@ export const API_VERSION = 1
 
 /** The one instance that serves Aico's legacy sockets and adopts historical servers. */
 export const DEFAULT_INSTANCE = 'default'
+
+export interface ShowConfig {
+  exchangeRoot: string
+  maxBytes: number
+}
+
+/** File handoffs use an install-created exchange root, never a daemon-created root. */
+export function resolveShowConfig(env: NodeJS.ProcessEnv = process.env): ShowConfig {
+  const exchangeRoot = env.TETHER_EXCHANGE_ROOT ?? '/srv/workspaces/exchange'
+  if (!isAbsolute(exchangeRoot) || exchangeRoot.includes('\0')) {
+    throw new Error('TETHER_EXCHANGE_ROOT must be an absolute path without NUL')
+  }
+  const raw = env.TETHER_SHOW_MAX_BYTES
+  const maxBytes = raw === undefined ? 25 * 1024 * 1024 : Number(raw)
+  if (
+    (raw !== undefined && !/^\d+$/.test(raw)) ||
+    !Number.isSafeInteger(maxBytes) ||
+    maxBytes < 1
+  ) {
+    throw new Error('TETHER_SHOW_MAX_BYTES must be a positive safe integer')
+  }
+  return { exchangeRoot, maxBytes }
+}
 
 const INSTANCE_RE = /^[a-z0-9][a-z0-9-]{0,31}$/
 /** Linux `sun_path` holds 108 bytes including the terminating NUL. */

@@ -4,7 +4,7 @@ import type { Server } from 'node:http'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { AgentStatePoller, AgentStateTracker } from './agent-state'
-import { agentExitMarkerDir, type TetherPaths } from './config'
+import { agentExitMarkerDir, resolveShowConfig, type TetherPaths } from './config'
 import { nodeProcFs } from './continuity'
 import { parseGraphicalEnvironment } from './env'
 import { EventBus } from './events'
@@ -92,6 +92,7 @@ export async function startDaemon(
   paths: TetherPaths,
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<RunningDaemon> {
+  const show = resolveShowConfig(env)
   const stateMode = paths.shared ? 0o750 : 0o700 // shared: an ACL for the owner on this dir must keep a mask (store.ts)
   mkdirSync(paths.stateDir, { recursive: true, mode: stateMode })
   chmodSync(paths.stateDir, stateMode)
@@ -127,6 +128,7 @@ export async function startDaemon(
   })
 
   const context = {
+    show,
     paths,
     store,
     events,
