@@ -164,8 +164,10 @@ describe('owner copies', () => {
       expect((await stat(join(root, directory))).mode & 0o777).toBe(0o755)
     }
     expect((await stat(copy.path)).mode & 0o777).toBe(0o644)
-    await expect(copyShownFile(root, id, name)).rejects.toMatchObject({ code: 'EEXIST' })
+    expect(await copyShownFile(root, id, name)).toEqual(copy)
     expect(await readFile(copy.path, 'utf8')).toBe('first version')
+    await rm(source)
+    expect(await copyShownFile(root, id, name)).toEqual(copy)
   })
   it('refuses symlinks in the file or any agent-controlled directory', async () => {
     for (const part of ['agent', 'agent/ab12cd34', 'agent/ab12cd34/out', `agent/${name}`]) {
@@ -214,7 +216,7 @@ function ui(windowOpen = true) {
     exchangeRoot: '/unused',
     windowFor: () => (windowOpen ? (win as unknown as BrowserWindow) : undefined),
     sessionName: () => 'Research',
-    preview: vi.fn(async (_html: string, _title: string) => {}),
+    preview: vi.fn(async (_path: string, _title: string) => {}),
     clipboard: { writeText: vi.fn() },
     shell: { showItemInFolder: vi.fn() },
     dialog: {
@@ -230,8 +232,8 @@ function ui(windowOpen = true) {
       return {}
     },
   } as Pick<IpcMain, 'on'>)
-  const click = (sender = win.webContents) =>
-    handlers.get('show:file')?.({ sender } as unknown as IpcMainEvent, id)
+  const click = (sender = win.webContents, shareId = id) =>
+    handlers.get('show:file')?.({ sender } as unknown as IpcMainEvent, shareId)
   return { deps, win, shares, click }
 }
 
@@ -261,6 +263,9 @@ describe('handoff notifications', () => {
     expect(deps.preview).not.toHaveBeenCalled()
     click()
     await vi.waitFor(() => expect(deps.preview).toHaveBeenCalledTimes(1))
+    const path = join(root, 'owner/shown', `${id}-ab12cd34`, 'preview.html')
+    expect(deps.preview).toHaveBeenCalledWith(path, name)
+    expect(await readFile(path, 'utf8')).toBe(previewHtml(Buffer.from('# Report'), name))
     expect(deps.shell.showItemInFolder).not.toHaveBeenCalled()
   })
   it('reveals a PDF copy and reports unsafe file failures', async () => {
@@ -278,8 +283,8 @@ describe('handoff notifications', () => {
     expect(deps.preview).not.toHaveBeenCalled()
     await rm(source)
     await symlink('/etc/passwd', source)
-    shares.notify(file)
-    click()
+    shares.notify({ ...file, id: '001122334455' })
+    click(undefined, '001122334455')
     await vi.waitFor(() => expect(deps.dialog.showErrorBox).toHaveBeenCalledTimes(1))
   })
   it('offers Copy in the existing dialog when no widget is open', async () => {
@@ -292,5 +297,56 @@ describe('handoff notifications', () => {
     expect(deps.dialog.showMessageBox).toHaveBeenCalledWith(
       expect.objectContaining({ buttons: ['Copy', 'Close'], detail: `Research\n${url.url}` }),
     )
+  })
+  it('drops handoffs while a dialog is open and allows another after dismissal', async () => {
+    const { deps, shares } = ui(false)
+    const result = { response: 1, checkboxChecked: false }
+    let dismiss = (_result: typeof result) => {}
+    deps.dialog.showMessageBox.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          dismiss = resolve
+        }),
+    )
+    shares.notify(url)
+    shares.notify(file)
+    shares.notify({ ...url, id: '001122334455' })
+    expect(deps.dialog.showMessageBox).toHaveBeenCalledTimes(1)
+    dismiss(result)
+    await new Promise<void>((resolve) => setImmediate(resolve))
+    shares.notify(url)
+    expect(deps.dialog.showMessageBox).toHaveBeenCalledTimes(2)
+    expect(deps.preview).not.toHaveBeenCalled()
+    expect(deps.clipboard.writeText).not.toHaveBeenCalled()
+  })
+  it('allows another handoff dialog after a dialog failure', async () => {
+    const { deps, shares } = ui(false)
+    deps.dialog.showMessageBox.mockRejectedValueOnce(new Error('Dialog failed'))
+    shares.notify(url)
+    await new Promise<void>((resolve) => setImmediate(resolve))
+    expect(deps.dialog.showErrorBox).toHaveBeenCalledExactlyOnceWith(
+      'Could not show shared file',
+      'Dialog failed',
+    )
+    shares.notify(url)
+    expect(deps.dialog.showMessageBox).toHaveBeenCalledTimes(2)
+  })
+  it('shows the original owner copy when the same handoff is clicked again', async () => {
+    const { root, source } = await fixture()
+    await writeFile(source, '%PDF-1.7 original')
+    const { deps, shares, click } = ui()
+    deps.exchangeRoot = root
+    shares.notify(file)
+    click()
+    await vi.waitFor(() => expect(deps.shell.showItemInFolder).toHaveBeenCalledTimes(1))
+    await writeFile(source, 'Changed to text by the agent')
+    shares.notify(file)
+    click()
+    await vi.waitFor(() => expect(deps.shell.showItemInFolder).toHaveBeenCalledTimes(2))
+    expect(deps.shell.showItemInFolder).toHaveBeenLastCalledWith(
+      join(root, 'owner/shown', `${id}-${name}`),
+    )
+    expect(deps.preview).not.toHaveBeenCalled()
+    expect(deps.dialog.showErrorBox).not.toHaveBeenCalled()
   })
 })

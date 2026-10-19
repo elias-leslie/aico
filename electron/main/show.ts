@@ -1,8 +1,8 @@
 // Agent handoffs are untrusted metadata and bytes. Only a click reads a file;
 // the preview uses the bounded owner copy, never an agent path or active content.
 import { constants } from 'node:fs'
-import { type FileHandle, mkdir, open, unlink } from 'node:fs/promises'
-import { join } from 'node:path'
+import { type FileHandle, mkdir, open, unlink, writeFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 import type { BrowserWindow, Clipboard, Dialog, IpcMain, Shell, WebContents } from 'electron'
 import type { SelectionToast } from '../types'
 
@@ -60,16 +60,41 @@ export function parseShare(data: Record<string, unknown>): Share | null {
 
 const at = (directory: FileHandle, name: string): string => `/proc/self/fd/${directory.fd}/${name}`
 const DIRECTORY_FLAGS = constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW
+const FILE_FLAGS = constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
+
+async function readShownBytes(file: FileHandle): Promise<Buffer> {
+  const stat = await file.stat()
+  if (!stat.isFile()) throw new Error('The shared file must be a regular file.')
+  if (stat.size > MAX_SHOWN_BYTES) throw new Error('The shared file exceeds 25 MB.')
+  const chunks: Buffer[] = []
+  const buffer = Buffer.alloc(64 * 1024)
+  let total = 0
+  for (;;) {
+    const { bytesRead } = await file.read(
+      buffer,
+      0,
+      Math.min(buffer.length, MAX_SHOWN_BYTES - total + 1),
+      null,
+    )
+    if (!bytesRead) break
+    total += bytesRead
+    if (total > MAX_SHOWN_BYTES) throw new Error('The shared file exceeds 25 MB.')
+    chunks.push(Buffer.from(buffer.subarray(0, bytesRead)))
+  }
+  return Buffer.concat(chunks, total)
+}
 
 async function childDirectory(
   parent: FileHandle,
   name: string,
   owner?: number,
+  create = true,
 ): Promise<FileHandle> {
   const path = at(parent, name)
   let created = false
   const directory = await open(path, DIRECTORY_FLAGS).catch(async (error: unknown) => {
-    if (owner === undefined || (error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    if (!create || owner === undefined || (error as NodeJS.ErrnoException).code !== 'ENOENT')
+      throw error
     const stat = await parent.stat()
     if (stat.uid !== owner || (stat.mode & 0o022) !== 0) {
       throw new Error(
@@ -110,49 +135,44 @@ export async function copyShownFile(exchangeRoot: string, id: string, name: stri
   }
   try {
     const root = keep(await open(exchangeRoot, DIRECTORY_FLAGS))
+    const parts = name.split('/')
+    const targetParts = ['owner', 'shown', `${id}-${parts[0]}`, 'out']
+    const path = join(exchangeRoot, ...targetParts, parts[2])
+    // Repeated handoffs use the retained owner bytes even if the agent's
+    // original has since changed or disappeared. Do not create directories yet.
+    try {
+      let existingDir = root
+      for (const part of targetParts)
+        existingDir = keep(await childDirectory(existingDir, part, owner, false))
+      const existing = keep(await open(at(existingDir, parts[2]), FILE_FLAGS))
+      return { path, bytes: await readShownBytes(existing) }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    }
     // Pin each directory: O_NOFOLLOW on just the final file would still allow
     // the agent to substitute a symlink for its session or out directory.
     let sourceDir = root
-    const parts = name.split('/')
     for (const part of ['agent', ...parts.slice(0, -1)]) {
       sourceDir = keep(await childDirectory(sourceDir, part))
     }
-    const source = keep(
-      await open(
-        at(sourceDir, parts[2]),
-        constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
-      ),
-    )
-    const stat = await source.stat()
-    if (!stat.isFile()) throw new Error('The shared file must be a regular file.')
-    if (stat.size > MAX_SHOWN_BYTES) throw new Error('The shared file exceeds 25 MB.')
-    const chunks: Buffer[] = []
-    const buffer = Buffer.alloc(64 * 1024)
-    let total = 0
-    for (;;) {
-      const { bytesRead } = await source.read(
-        buffer,
-        0,
-        Math.min(buffer.length, MAX_SHOWN_BYTES - total + 1),
-        null,
-      )
-      if (!bytesRead) break
-      total += bytesRead
-      if (total > MAX_SHOWN_BYTES) throw new Error('The shared file exceeds 25 MB.')
-      chunks.push(Buffer.from(buffer.subarray(0, bytesRead)))
-    }
-    const bytes = Buffer.concat(chunks, total)
+    const source = keep(await open(at(sourceDir, parts[2]), FILE_FLAGS))
+    const bytes = await readShownBytes(source)
     let targetDir = root
-    const targetParts = ['owner', 'shown', `${id}-${parts[0]}`, 'out']
     for (const part of targetParts) targetDir = keep(await childDirectory(targetDir, part, owner))
     const targetAt = at(targetDir, parts[2])
+    let existing = false
     const target = keep(
       await open(
         targetAt,
         constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
         0o644,
-      ),
+      ).catch((error: unknown) => {
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+        existing = true
+        return open(targetAt, FILE_FLAGS)
+      }),
     )
+    if (existing) return { path, bytes: await readShownBytes(target) }
     try {
       await target.writeFile(bytes)
       await target.chmod(0o644)
@@ -160,7 +180,7 @@ export async function copyShownFile(exchangeRoot: string, id: string, name: stri
       await unlink(targetAt)
       throw error
     }
-    return { path: join(exchangeRoot, ...targetParts, parts[2]), bytes }
+    return { path, bytes }
   } finally {
     await Promise.all(handles.map((handle) => handle.close()))
   }
@@ -208,7 +228,7 @@ interface SharesDeps {
   exchangeRoot: string
   windowFor(session: string | null): BrowserWindow | undefined
   sessionName(session: string | null): string | undefined
-  preview(html: string, title: string): Promise<void>
+  preview(path: string, title: string): Promise<void>
   clipboard: Pick<Clipboard, 'writeText'>
   shell: Pick<Shell, 'showItemInFolder'>
   dialog: Pick<Dialog, 'showMessageBox' | 'showErrorBox'>
@@ -216,6 +236,7 @@ interface SharesDeps {
 
 export function createAgentShares(deps: SharesDeps) {
   const pending = new Map<string, { share: Share & { kind: 'file' }; recipient: WebContents }>()
+  let dialogOpen = false
   const fail = (error: unknown): void =>
     deps.dialog.showErrorBox(
       'Could not show shared file',
@@ -227,7 +248,11 @@ export function createAgentShares(deps: SharesDeps) {
       const title = share.title || share.name
       const html = previewHtml(copy.bytes, title)
       if (html === null) deps.shell.showItemInFolder(copy.path)
-      else await deps.preview(html, title)
+      else {
+        const path = join(dirname(dirname(copy.path)), 'preview.html')
+        await writeFile(path, html, { mode: 0o644 })
+        await deps.preview(path, title)
+      }
     } catch (error) {
       fail(error)
     }
@@ -254,6 +279,8 @@ export function createAgentShares(deps: SharesDeps) {
       }
       // No open widget: retain an actionable notification through Aico's
       // existing dialog UI. Copying a URL never invokes the owner's browser.
+      if (dialogOpen) return
+      dialogOpen = true
       void deps.dialog
         .showMessageBox({
           type: 'info',
@@ -271,6 +298,9 @@ export function createAgentShares(deps: SharesDeps) {
           else await showFile(share)
         })
         .catch(fail)
+        .finally(() => {
+          dialogOpen = false
+        })
     },
     registerIpc: (ipcMain: Pick<IpcMain, 'on'>): void => {
       ipcMain.on('show:file', (event, id: unknown) => {

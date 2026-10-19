@@ -290,7 +290,7 @@ const shares = createAgentShares({
   clipboard,
   shell,
   dialog,
-  preview: async (html, title) => {
+  preview: async (path, title) => {
     const win = new BrowserWindow({
       width: 900,
       height: 680,
@@ -310,7 +310,7 @@ const shares = createAgentShares({
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
     win.webContents.on('will-navigate', (event) => event.preventDefault())
     try {
-      await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
+      await win.loadFile(path)
     } catch (error) {
       win.destroy()
       throw error
