@@ -1,8 +1,9 @@
-// Project list. SummitFlow is the source when installed (loopback, no token);
+// Project list. SummitFlow is the source when installed (loopback, with the owner or agent token);
 // otherwise a local list. A cached SummitFlow answer is preferred over the
 // local list while SummitFlow is briefly unreachable.
 
 import { mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, normalize } from 'node:path'
 
 export interface Project {
@@ -62,8 +63,38 @@ export type FetchJson = (url: string, timeoutMs: number) => Promise<unknown>
 export const DEFAULT_SUMMITFLOW_PROJECTS_URL = 'http://127.0.0.1:8001/api/projects'
 const PROJECT_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 
+/**
+ * SummitFlow's identity header for this user: the owner token if its file is readable, else the agent
+ * token. Each file is the env var's path or its default under the home directory (same as `st`).
+ */
+export function summitflowTokenHeaders(
+  env: NodeJS.ProcessEnv = process.env,
+  home: string = homedir(),
+): Record<string, string> {
+  const sources: [string, string, string][] = [
+    [
+      'SUMMITFLOW_OWNER_TOKEN_FILE',
+      '.config/credstore/summitflow/owner-token',
+      'X-SummitFlow-Owner-Token',
+    ],
+    ['SUMMITFLOW_AGENT_TOKEN_FILE', '.config/agent-tokens/summitflow', 'X-SummitFlow-Agent-Token'],
+  ]
+  for (const [name, fallback, header] of sources) {
+    try {
+      const token = readFileSync(env[name]?.trim() || join(home, fallback), 'utf8').trim()
+      if (token) return { [header]: token }
+    } catch {
+      // unreadable or missing: try the next token
+    }
+  }
+  return {}
+}
+
 async function defaultFetchJson(url: string, timeoutMs: number): Promise<unknown> {
-  const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) })
+  const response = await fetch(url, {
+    headers: summitflowTokenHeaders(),
+    signal: AbortSignal.timeout(timeoutMs),
+  })
   if (!response.ok) throw new Error(`SummitFlow projects returned HTTP ${response.status}`)
   return response.json()
 }

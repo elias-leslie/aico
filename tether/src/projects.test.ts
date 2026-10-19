@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -6,6 +6,7 @@ import {
   ProjectProvider,
   parseSummitFlowProjects,
   readLocalProjects,
+  summitflowTokenHeaders,
   summitflowUrlFromEnv,
 } from './projects'
 
@@ -87,5 +88,20 @@ describe('ProjectProvider', () => {
     expect(readLocalProjects('/nonexistent/projects.json')).toEqual([])
     expect(summitflowUrlFromEnv({ TETHER_SUMMITFLOW_URL: 'off' })).toBeNull()
     expect(summitflowUrlFromEnv({})).toBe('http://127.0.0.1:8001/api/projects')
+  })
+})
+
+describe('summitflowTokenHeaders', () => {
+  it('sends the owner token, else the agent token, else nothing', () => {
+    const home = mkdtempSync(join(tmpdir(), 'tether-token-'))
+    expect(summitflowTokenHeaders({}, home)).toEqual({})
+    mkdirSync(join(home, '.config/agent-tokens'), { recursive: true })
+    writeFileSync(join(home, '.config/agent-tokens/summitflow'), 'agent-s3cret\n')
+    expect(summitflowTokenHeaders({}, home)).toEqual({ 'X-SummitFlow-Agent-Token': 'agent-s3cret' })
+    const ownerFile = join(home, 'owner')
+    writeFileSync(ownerFile, 'owner-s3cret\n')
+    expect(summitflowTokenHeaders({ SUMMITFLOW_OWNER_TOKEN_FILE: ownerFile }, home)).toEqual({
+      'X-SummitFlow-Owner-Token': 'owner-s3cret',
+    })
   })
 })
