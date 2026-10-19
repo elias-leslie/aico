@@ -355,7 +355,8 @@ on OOMPolicy=continue (a pane past it loses one process and keeps running); ever
 pane at no cap, or at the cap the owner just replaced, unless it is already near the cap. A cap raised by hand at
 runtime is kept. The guard (`src/lifecycle/job-guard.ts`) never kills a pane's root shell or its agent; it writes
 `kill`, `warning` and `agent-hog` records with killer `tether` to Nightshift's memory event record
-(`~/.local/state/nightshift/memory-events.jsonl`, schema v1) before acting, and its heartbeat
+(`~/.local/state/nightshift/memory-events.jsonl`, schema v1; `TETHER_NIGHTSHIFT_EVENTS` names another absolute path, which
+the agent user's unit uses to keep the record in its state dir where Nightshift reads it) before acting, and its heartbeat
 `$XDG_RUNTIME_DIR/tether/default/memory-guard.json` (`v, ts, pid, host_state, critical_since, last_kill_at,
 kill_enabled, kill_candidate`) tells Nightshift whether a job it may stop exists and that the guard is alive.
 

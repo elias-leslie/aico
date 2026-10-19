@@ -450,6 +450,19 @@ describe('Nightshift admission state', () => {
       join(dir, 'nightshift', 'admission.json'),
     )
     expect(nightshiftAdmissionPath({})).toBeNull()
+    // another user's Tether reads the file Nightshift publishes elsewhere; a relative override is ignored
+    expect(
+      nightshiftAdmissionPath({
+        XDG_RUNTIME_DIR: dir,
+        TETHER_NIGHTSHIFT_ADMISSION: '/run/nightshift/admission.json',
+      }),
+    ).toBe('/run/nightshift/admission.json')
+    expect(
+      nightshiftAdmissionPath({ TETHER_NIGHTSHIFT_ADMISSION: '/run/nightshift/admission.json' }),
+    ).toBe('/run/nightshift/admission.json')
+    expect(
+      nightshiftAdmissionPath({ XDG_RUNTIME_DIR: dir, TETHER_NIGHTSHIFT_ADMISSION: 'x/y.json' }),
+    ).toBe(join(dir, 'nightshift', 'admission.json'))
     const file = join(dir, 'admission.json')
     expect(await readNightshiftAdmission(file, now)).toBeNull()
     writeFileSync(file, state({}))

@@ -28,6 +28,7 @@
 import { execFile } from 'node:child_process'
 import {
   appendFileSync,
+  chmodSync,
   mkdirSync,
   readdirSync,
   readFileSync,
@@ -407,8 +408,12 @@ function setAdj(procRoot: string, p: Proc, value: number): boolean {
   }
 }
 
-/** The shared memory event record (Nightshift memevents.py, schema v1). */
+/** The shared memory event record (Nightshift memevents.py, schema v1) this
+ * Tether appends to: ~/.local/state/nightshift/memory-events.jsonl, or the
+ * absolute path in TETHER_NIGHTSHIFT_EVENTS (a Tether running as another user
+ * than Nightshift's keeps its own file where Nightshift can read it). */
 export function memoryEventsPath(env: NodeJS.ProcessEnv, home: string): string {
+  if (env.TETHER_NIGHTSHIFT_EVENTS?.startsWith('/')) return env.TETHER_NIGHTSHIFT_EVENTS
   return join(
     env.XDG_STATE_HOME || join(home, '.local', 'state'),
     'nightshift',
@@ -449,6 +454,7 @@ function writeAtomic(path: string, doc: unknown): void {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
   const tmp = join(dirname(path), `.${basename(path)}.tmp`)
   writeFileSync(tmp, JSON.stringify(doc))
+  chmodSync(tmp, 0o644) // numbers only; the dir's own mode says who can reach it (shared mode: the owner's group)
   renameSync(tmp, path)
 }
 

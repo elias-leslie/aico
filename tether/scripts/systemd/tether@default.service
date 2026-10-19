@@ -19,6 +19,10 @@ UMask=0077
 Environment=PATH=%h/.claude/bin:%h/.codex/bin:%h/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 # Sibling checkouts (agent-hub, codex-config) live here, not ~/projects.
 Environment=TETHER_PROJECTS_DIR=/srv/workspaces/projects
+# Shared mode (this unit runs as the agent user, Nightshift as the owner): read the host verdict Nightshift publishes
+# in /run/nightshift, and keep this Tether's memory event record in its state dir, where Nightshift reads it.
+Environment=TETHER_NIGHTSHIFT_ADMISSION=/run/nightshift/admission.json
+Environment=TETHER_NIGHTSHIFT_EVENTS=%h/.local/state/tether/default/memory-events.jsonl
 # systemd-oomd picks this unit only when no other candidate is left.
 ManagedOOMPreference=avoid
 CPUAccounting=yes

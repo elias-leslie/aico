@@ -212,8 +212,12 @@ export interface NightshiftVerdict {
   reason: string
 }
 
-/** Nightshift's admission state, rewritten atomically every ~10 s. */
+/** Nightshift's admission state, rewritten atomically every ~10 s. In
+ * $XDG_RUNTIME_DIR/nightshift/, or the absolute path in TETHER_NIGHTSHIFT_ADMISSION
+ * (a Tether running as another user than Nightshift's reads the file Nightshift
+ * publishes in a dir that user can read). */
 export function nightshiftAdmissionPath(env: NodeJS.ProcessEnv = process.env): string | null {
+  if (env.TETHER_NIGHTSHIFT_ADMISSION?.startsWith('/')) return env.TETHER_NIGHTSHIFT_ADMISSION
   const runtime = env.XDG_RUNTIME_DIR
   return runtime ? join(runtime, 'nightshift', 'admission.json') : null
 }

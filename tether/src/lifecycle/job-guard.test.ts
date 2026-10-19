@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -8,6 +8,7 @@ import {
   chooseVictim,
   type Job,
   JobGuard,
+  memoryEventsPath,
   type Pane,
   type PaneCapHost,
   type Proc,
@@ -308,6 +309,23 @@ describe('JobGuard', () => {
       host_state: 'red',
       kill_candidate: true,
     })
+    // the owner's group reads it through the runtime dir (shared mode); the umask 0077 would have made it 0600
+    expect(statSync(heartbeat).mode & 0o777).toBe(0o644)
+  })
+
+  it('appends to ~/.local/state/nightshift unless TETHER_NIGHTSHIFT_EVENTS names an absolute path', () => {
+    expect(memoryEventsPath({}, '/home/u')).toBe(
+      '/home/u/.local/state/nightshift/memory-events.jsonl',
+    )
+    expect(memoryEventsPath({ XDG_STATE_HOME: '/s' }, '/home/u')).toBe(
+      '/s/nightshift/memory-events.jsonl',
+    )
+    expect(memoryEventsPath({ TETHER_NIGHTSHIFT_EVENTS: '/home/u/e.jsonl' }, '/home/u')).toBe(
+      '/home/u/e.jsonl',
+    )
+    expect(memoryEventsPath({ TETHER_NIGHTSHIFT_EVENTS: 'e.jsonl' }, '/home/u')).toBe(
+      '/home/u/.local/state/nightshift/memory-events.jsonl',
+    )
   })
 })
 
