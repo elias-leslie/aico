@@ -4,8 +4,10 @@ When a session ends, A-Term drops its pane link. ``session.created`` and
 ``session.updated`` carry the session's descriptor, which keeps a linked pane's
 mode on the session's tool (an older Tether sends no descriptor, so A-Term
 reads it). A ``gap`` (missed events or a daemon restart) means
-A-Term re-lists and reconciles. The watcher runs in one
-daemon thread and reconnects with backoff while Tether is away.
+A-Term re-lists and reconciles. One watcher per known instance (the owner's
+and the agent's) runs in its own daemon thread and reconnects with backoff
+while its Tether is away; reconciling reads every instance, so a link to a
+session on the other instance is never dropped for being absent from one.
 """
 
 from __future__ import annotations
@@ -15,7 +17,7 @@ from typing import Any
 
 from ..logging_config import get_logger
 from ..storage import panes as pane_store
-from ..tether import TetherError, TetherUnavailable, get_client
+from ..tether import TetherClient, TetherError, TetherUnavailable, get_client, known_socket_paths
 from . import lifecycle
 
 logger = get_logger(__name__)
@@ -26,17 +28,21 @@ _MAX_BACKOFF_SECONDS = 30.0
 class TetherEventWatcher:
     """Background consumer of ``GET /v1/events``."""
 
-    def __init__(self) -> None:
+    def __init__(self, socket_path: str | None = None) -> None:
+        self._socket_path = socket_path
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._seq: int | None = None
         self._boot_id: str | None = None
 
+    def _events_client(self) -> TetherClient:
+        return TetherClient(self._socket_path) if self._socket_path else get_client()
+
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
             return
         self._stop.clear()
-        self._thread = threading.Thread(target=self._run, name="tether-events", daemon=True)
+        self._thread = threading.Thread(target=self._run, name=f"tether-events-{self._socket_path or 'active'}", daemon=True)
         self._thread.start()
 
     def stop(self) -> None:
@@ -108,7 +114,7 @@ class TetherEventWatcher:
         while not self._stop.is_set():
             resuming = self._seq is not None and self._boot_id is not None
             try:
-                stream = get_client().events(
+                stream = self._events_client().events(
                     since=self._seq if resuming else None, boot_id=self._boot_id if resuming else None
                 )
                 if not resuming:
@@ -127,12 +133,14 @@ class TetherEventWatcher:
             backoff = min(backoff * 2, _MAX_BACKOFF_SECONDS)
 
 
-_watcher = TetherEventWatcher()
+_watchers: dict[str, TetherEventWatcher] = {}
 
 
 def start_watcher() -> None:
-    _watcher.start()
+    for path in known_socket_paths():
+        _watchers.setdefault(path, TetherEventWatcher(path)).start()
 
 
 def stop_watcher() -> None:
-    _watcher.stop()
+    for watcher in _watchers.values():
+        watcher.stop()

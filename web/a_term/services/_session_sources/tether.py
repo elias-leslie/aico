@@ -199,4 +199,4 @@ class TetherSource:
 
     def live_ids(self) -> set[str]:
         """Raises :class:`TetherUnavailable` when Tether is down: never "every session ended"."""
-        return {str(item["id"]) for item in self._client().list_sessions() if item.get("id")}
+        return self._client().live_session_ids()

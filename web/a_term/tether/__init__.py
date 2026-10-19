@@ -4,11 +4,13 @@ from .client import (
     MIN_API_VERSION,
     TetherClient,
     TetherError,
+    TetherPool,
     TetherResponse,
     TetherUnavailable,
     TetherVersionError,
     default_socket_path,
     get_client,
+    known_socket_paths,
     set_client,
 )
 
@@ -16,10 +18,12 @@ __all__ = [
     "MIN_API_VERSION",
     "TetherClient",
     "TetherError",
+    "TetherPool",
     "TetherResponse",
     "TetherUnavailable",
     "TetherVersionError",
     "default_socket_path",
     "get_client",
+    "known_socket_paths",
     "set_client",
 ]

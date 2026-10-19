@@ -27,7 +27,7 @@ Install and start Tether first. Then open <http://localhost:3002>. The installer
 
 ## Runtime, data, and integrations
 
-FastAPI uses port 8002 and Next.js uses port 3002 by default. A-Term has no database server. Tether owns sessions, agent tools and the project list, and A-Term reaches it over its Unix socket (`TETHER_SOCKET`, default `$XDG_RUNTIME_DIR/tether/default/control.sock`). A-Term keeps only its own view state (panes, layout, which session each pane shows, project display settings) in `~/.local/state/a-term/a-term.db`. Losing that file loses layout, never a running session.
+FastAPI uses port 8002 and Next.js uses port 3002 by default. A-Term has no database server. Tether owns sessions, agent tools and the project list, and A-Term reaches it over its Unix socket (`TETHER_SOCKET`, default `$XDG_RUNTIME_DIR/tether/default/control.sock`); that instance gets new sessions). Sessions on the agent user's instance (`TETHER_AGENT_SOCKET`, default `/run/tether/agent/default/control.sock`) are listed and handled too, each by the instance that owns it. A-Term keeps only its own view state (panes, layout, which session each pane shows, project display settings) in `~/.local/state/a-term/a-term.db`. Losing that file loses layout, never a running session.
 
 Default authentication is loopback-only `none`. Before exposing A-Term beyond localhost, use built-in password authentication or `proxy` mode behind an identity-aware gateway. Agent Hub adds optional model catalog and prompt refinement; browser speech input can work independently.
 

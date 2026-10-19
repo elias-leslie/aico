@@ -20,7 +20,8 @@ import http.client
 import json
 import os
 import socket
-from collections.abc import Iterator
+import stat
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -29,6 +30,9 @@ from urllib.parse import quote, urlencode
 #: The lowest Tether API version this A-Term build speaks.
 MIN_API_VERSION = 1
 DEFAULT_INSTANCE = "default"
+#: The agent user's Tether instance (system-run, shared to the owner's group).
+#: ``TETHER_AGENT_SOCKET`` overrides it.
+DEFAULT_AGENT_SOCKET = "/run/tether/agent/default/control.sock"
 DEFAULT_TIMEOUT_SECONDS = 10.0
 #: Tether sends a heartbeat every 15 s; a silent stream for longer is dead.
 EVENT_READ_TIMEOUT_SECONDS = 45.0
@@ -59,13 +63,36 @@ class TetherResponse:
 
 
 def default_socket_path() -> Path:
-    """``$TETHER_SOCKET``, else ``$XDG_RUNTIME_DIR/tether/<instance>/control.sock``."""
+    """The active instance: ``$TETHER_SOCKET``, else the caller's own instance."""
     configured = os.environ.get("TETHER_SOCKET", "").strip()
     if configured:
         return Path(configured).expanduser()
+    return owner_socket_path()
+
+
+def owner_socket_path() -> Path:
+    """The caller's own ``$XDG_RUNTIME_DIR/tether/<instance>/control.sock``."""
     runtime_dir = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
     instance = os.environ.get("TETHER_INSTANCE", "").strip() or DEFAULT_INSTANCE
     return Path(runtime_dir) / "tether" / instance / "control.sock"
+
+
+def agent_socket_path() -> Path:
+    """The agent user's instance: ``$TETHER_AGENT_SOCKET``, else :data:`DEFAULT_AGENT_SOCKET`."""
+    configured = os.environ.get("TETHER_AGENT_SOCKET", "").strip()
+    return Path(configured or DEFAULT_AGENT_SOCKET).expanduser()
+
+
+def known_socket_paths() -> list[str]:
+    """Instances to consult: the active one first, then the other known one.
+
+    A ``TETHER_SOCKET`` pinned to some third path means exactly that socket.
+    """
+    active = str(default_socket_path())
+    known = [str(owner_socket_path()), str(agent_socket_path())]
+    if active not in known:
+        return [active]
+    return [active, *(path for path in dict.fromkeys(known) if path != active)]
 
 
 class _UnixHTTPConnection(http.client.HTTPConnection):
@@ -188,6 +215,10 @@ class TetherClient:
         body = self.call("GET", _with_query("/v1/sessions", query))
         items = body.get("items") if isinstance(body, dict) else None
         return [item for item in items or [] if isinstance(item, dict)]
+
+    def live_session_ids(self) -> set[str]:
+        """Ids of the sessions Tether lists; raises :class:`TetherUnavailable` when it is down."""
+        return {str(item["id"]) for item in self.list_sessions() if item.get("id")}
 
     def get_session(self, session_id: str) -> dict[str, Any]:
         return self.call("GET", _path("v1", "sessions", session_id))
@@ -362,15 +393,118 @@ class TetherClient:
             connection.close()
 
 
+# Sockets that have answered in this process: one that later goes missing is an
+# outage, not "every session on it ended".
+_seen: set[str] = set()
+
+
+def _socket_exists(path: str) -> bool:
+    try:
+        return stat.S_ISSOCK(os.stat(path).st_mode)
+    except OSError:
+        return False
+
+
+class TetherPool(TetherClient):
+    """The active instance plus the other known one, behind the one-client API.
+
+    New sessions, tools, projects and roots go to the active instance. Lists
+    merge both. A call about one session or root asks the active instance
+    first and falls back to the other on 404, so each session is handled by
+    the instance that owns it. The other instance counts only while its socket
+    exists (or answered earlier in this process).
+    """
+
+    def __init__(self, sockets: list[str], timeout: float = DEFAULT_TIMEOUT_SECONDS) -> None:
+        super().__init__(sockets[0], timeout)
+        self.clients = [TetherClient(path, timeout) for path in sockets]
+
+    def _candidates(self) -> list[TetherClient]:
+        """The active instance (always), then the others that exist."""
+        others = (c for c in self.clients[1:] if c.socket_path in _seen or _socket_exists(c.socket_path))
+        return [self.clients[0], *others]
+
+    def _fan_out(self, fetch: Callable[[TetherClient], Any], *, strict: bool) -> list[Any]:
+        """``fetch(client)`` on every candidate. The active instance's failure raises; another's only when ``strict``."""
+        results = []
+        for index, client in enumerate(self._candidates()):
+            try:
+                results.append(fetch(client))
+            except (TetherUnavailable, TetherError):
+                if index == 0 or strict:
+                    raise
+            else:
+                _seen.add(client.socket_path)
+        return results
+
+    @staticmethod
+    def _merged(groups: list[list[dict[str, Any]]]) -> list[dict[str, Any]]:
+        merged: dict[Any, dict[str, Any]] = {}
+        for group in groups:
+            for item in group:
+                merged.setdefault(item.get("id"), item)
+        return list(merged.values())
+
+    def list_sessions(
+        self, *, project: str | None = None, origin: str | None = None, tool: str | None = None
+    ) -> list[dict[str, Any]]:
+        groups = self._fan_out(
+            lambda client: client.list_sessions(project=project, origin=origin, tool=tool), strict=False
+        )
+        return self._merged(groups)
+
+    def live_session_ids(self) -> set[str]:
+        """Ids on every instance; an unreachable instance raises (never "its sessions ended")."""
+        groups = self._fan_out(lambda client: client.list_sessions(), strict=True)
+        return {str(item["id"]) for group in groups for item in group if item.get("id")}
+
+    def raw(self, method: str, path: str, body: Any = None, *, timeout: float | None = None) -> TetherResponse:
+        route = path.split("?", 1)[0].rstrip("/")
+        if route == "/v1/roots" and method == "GET":
+            return self._merged_roots(method, path, body, timeout)
+        if not route.startswith(("/v1/sessions/", "/v1/roots/")):
+            return self.clients[0].raw(method, path, body, timeout=timeout)
+        first_missing: TetherResponse | None = None
+        unavailable: TetherUnavailable | None = None
+        for client in self._candidates():
+            try:
+                response = client.raw(method, path, body, timeout=timeout)
+            except TetherUnavailable as error:
+                unavailable = unavailable or error
+                continue
+            _seen.add(client.socket_path)
+            if response.status != 404:
+                return response
+            first_missing = first_missing or response
+        if unavailable is not None:
+            raise unavailable  # the other instance may still own it: not "gone"
+        assert first_missing is not None
+        return first_missing
+
+    def _merged_roots(self, method: str, path: str, body: Any, timeout: float | None) -> TetherResponse:
+        responses = self._fan_out(lambda client: client.raw(method, path, body, timeout=timeout), strict=False)
+        first = responses[0]
+        if first.status != 200 or not isinstance(first.body, dict):
+            return first
+        roots: dict[Any, Any] = {}
+        for response in responses:
+            items = response.body.get("roots") if response.status == 200 and isinstance(response.body, dict) else None
+            for position, root in enumerate(items or []):
+                key = root.get("requestId") or root.get("id") if isinstance(root, dict) else None
+                roots.setdefault(key or (id(response), position), root)
+        return TetherResponse(200, {**first.body, "roots": list(roots.values())})
+
+
 _client: TetherClient | None = None
 
 
 def get_client() -> TetherClient:
-    """Process-wide client for the configured socket (re-resolved if the env changes)."""
+    """Process-wide client for the known instances (re-resolved if the env changes)."""
     global _client
-    socket_path = str(default_socket_path())
-    if _client is None or _client.socket_path != socket_path:
-        _client = TetherClient(socket_path)
+    sockets = known_socket_paths()
+    current = [c.socket_path for c in _client.clients] if isinstance(_client, TetherPool) else None
+    if _client is None or _client.socket_path != sockets[0] or (current is not None and current != sockets):
+        _client = TetherPool(sockets)
     return _client
 
 

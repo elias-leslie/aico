@@ -321,6 +321,7 @@ def test_tether_down_hides_only_tether_sessions(tether_down: str) -> None:
 def test_tether_client_factory_is_injectable() -> None:
     client = MagicMock()
     client.list_sessions.return_value = [make.tether_descriptor(), {"id": None}]
+    client.live_session_ids.return_value = {make.TETHER_ID}
     source = TetherSource(client_factory=lambda: client)
     assert source.live_ids() == {make.TETHER_ID}
     assert [session["id"] for session in source.list(_ctx())] == [make.TETHER_ID]
