@@ -116,7 +116,7 @@ def test_push_uses_owner_public_host_and_fixed_argv(monkeypatch: pytest.MonkeyPa
     shows.receive_show(payload(title="$(never execute); <title>"))
     isolated_shows.assert_called_once_with(
         ["nightshift", "push", "--title", "Agent shared something", "--severity", "info", "--key", f"show:{SHOW_ID}",
-         "--open", f"https://terminal.example.test/?show={SHOW_ID}"],
+         "--open", f"https://terminal.example.test/?show={SHOW_ID}", "Open A-Term to see it."],
         timeout=10, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
 
@@ -126,7 +126,8 @@ def test_push_without_public_host_omits_open(monkeypatch: pytest.MonkeyPatch, is
     url = "https://untrusted.example/a?b=1"
     shows.receive_show(payload(kind="url", name=url, url=url))
     argv = isolated_shows.call_args.args[0]
-    assert argv == ["nightshift", "push", "--title", "Agent shared something", "--severity", "info", "--key", f"show:{SHOW_ID}"]
+    assert argv == ["nightshift", "push", "--title", "Agent shared something", "--severity", "info", "--key", f"show:{SHOW_ID}",
+                    "Open A-Term to see it."]
     assert url not in argv
 
 
