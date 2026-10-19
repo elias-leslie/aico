@@ -37,6 +37,16 @@ const seedTool = {
 }
 
 describe('Store schema', () => {
+  it('shared mode keeps the state dir 0750 and the database 0640 (an owner ACL needs a mask that reads)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tether-store-'))
+    const path = join(dir, 'state', 'tether.db')
+    new Store(path, Date.now, true).close()
+    expect(statSync(path).mode & 0o777).toBe(0o640)
+    expect(statSync(join(dir, 'state')).mode & 0o777).toBe(0o750)
+    new Store(path).close() // an unshared start tightens them again
+    expect(statSync(path).mode & 0o777).toBe(0o600)
+  })
+
   it('creates schema v1 with WAL and its tables', () => {
     const dir = mkdtempSync(join(tmpdir(), 'tether-store-'))
     const store = open(join(dir, 'state', 'tether.db'))

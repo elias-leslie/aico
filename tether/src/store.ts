@@ -108,15 +108,18 @@ export interface SessionSummary {
 export class Store {
   readonly db: DatabaseSync
 
-  constructor(path: string, now: () => number = Date.now) {
+  /** `groupRead`: shared mode. The dir is 0750 and the database 0640, so an ACL the
+   * root-side installer gave the owner (named user r-x, mask from these bits) keeps
+   * working: chmod 0700/0600 on every start would zero the ACL mask. */
+  constructor(path: string, now: () => number = Date.now, groupRead = false) {
     if (path !== ':memory:') {
-      mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
-      chmodSync(dirname(path), 0o700)
+      mkdirSync(dirname(path), { recursive: true, mode: groupRead ? 0o750 : 0o700 })
+      chmodSync(dirname(path), groupRead ? 0o750 : 0o700)
     }
     this.db = new DatabaseSync(path)
     // Owner-only even when created outside the service's UMask (import-aico).
     // SQLite gives the -wal and -shm files the database file's mode.
-    if (path !== ':memory:') chmodSync(path, 0o600)
+    if (path !== ':memory:') chmodSync(path, groupRead ? 0o640 : 0o600)
     this.db.exec('PRAGMA busy_timeout = 2000; PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON')
     this.migrate(now())
   }

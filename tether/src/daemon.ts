@@ -92,11 +92,12 @@ export async function startDaemon(
   paths: TetherPaths,
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<RunningDaemon> {
-  mkdirSync(paths.stateDir, { recursive: true, mode: 0o700 })
-  chmodSync(paths.stateDir, 0o700)
+  const stateMode = paths.shared ? 0o750 : 0o700 // shared: an ACL for the owner on this dir must keep a mask (store.ts)
+  mkdirSync(paths.stateDir, { recursive: true, mode: stateMode })
+  chmodSync(paths.stateDir, stateMode)
   if (paths.shared) prepareSharedRuntime(paths.runtimeDir, paths.tmuxDir)
   mkdirSync(agentExitMarkerDir(paths), { recursive: true, mode: 0o700 })
-  const store = new Store(paths.dbPath)
+  const store = new Store(paths.dbPath, Date.now, Boolean(paths.shared))
   const events = new EventBus()
   const projects = new ProjectProvider({
     summitflowUrl: summitflowUrlFromEnv(env),
