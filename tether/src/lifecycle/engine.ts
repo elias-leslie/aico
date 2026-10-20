@@ -2256,14 +2256,10 @@ function publishContextStatus(widgetId: string, tool: TuiSpec, status: ContextSt
   publishSession(widgetId, { force: changed })
 }
 
-// Independently probe a TUI's source chain and live delivery availability. This
-// does not claim what an already-running native session received. The native
-// model always continues. It never gates launch.
+// Check the TUI's context installation after launch. Model receipt is unverified;
+// the result never gates the native model.
 export function probeContext(widgetId: string, tool: TuiSpec): Promise<void> {
-  return ensureContext(tool, {
-    cwd: cwdForWidget(widgetId),
-    session: getWidget(widgetId)?.sessionId,
-  })
+  return ensureContext(tool)
     .then((status) => publishContextStatus(widgetId, tool, status))
     .catch((error) =>
       publishContextStatus(widgetId, tool, {

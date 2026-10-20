@@ -42,14 +42,7 @@ function mockPaneResolve(path: string | null): void {
     _opts: unknown,
     cb: unknown,
   ) => {
-    if (cmd !== '/bin/sh') {
-      ;(cb as (e: Error | null, out: string, err: string) => void)(
-        null,
-        `${JSON.stringify({ status: 'ok', payload_hash: 'a'.repeat(64) })}\n`,
-        '',
-      )
-      return undefined as never
-    }
+    if (cmd !== '/bin/sh') throw new Error(`Unexpected status command: ${cmd}`)
     ;(cb as (e: Error | null, out: string, err: string) => void)(
       path ? null : new Error('not found'),
       path ? `${path}\n` : '',
@@ -108,6 +101,11 @@ function mockCodexHooks(
 }
 
 afterEach(() => {
+  expect(
+    vi
+      .mocked(execFile)
+      .mock.calls.some(([, args]) => Array.isArray(args) && args.includes('deliver')),
+  ).toBe(false)
   vi.unstubAllEnvs()
   bindToolSource(null)
   vi.clearAllMocks()
@@ -324,7 +322,7 @@ describe('ensureContext', () => {
     )
     expect(s.state).toBe('available')
     expect(s.detail).toContain('canonical additive Claude launcher')
-    expect(s.detail).toContain('canonical context available')
+    expect(s.detail).toContain('model receipt is unverified')
     expect(execFile).toHaveBeenCalledWith(
       '/bin/sh',
       ['-c', 'command -v -- "$1"', 'aico-resolve-launcher', 'claude'],
@@ -362,7 +360,7 @@ describe('ensureContext', () => {
     )
     expect(s.state).toBe('available')
     expect(s.detail).toContain('canonical additive Claude launcher')
-    expect(s.detail).toContain('canonical context available')
+    expect(s.detail).toContain('model receipt is unverified')
     expect(execFile).toHaveBeenCalledWith(
       '/bin/sh',
       ['-c', 'command -v -- "$1"', 'aico-resolve-launcher', 'claude'],
@@ -475,33 +473,6 @@ describe('ensureContext', () => {
     expect((await ensureContext(spec({ context: { kind: 'codex-hooks' } }))).state).toBe('missing')
   })
 
-  it('shows degraded status when the adapter is installed but live delivery fails', async () => {
-    vi.mocked(existsSync).mockReturnValue(true)
-    vi.mocked(realpathSync).mockReturnValue(
-      '/opt/projects/agent-hub/integrations/context-delivery/pi/agent-hub.ts',
-    )
-    vi.mocked(readFileSync).mockReturnValue(
-      'pi.on("input", () => ({ action: "continue" })); pi.on("before_agent_start", () => event.systemPrompt + contract.rendered); "AH: DEGRADED"',
-    )
-    vi.mocked(execFile).mockImplementation(((
-      _cmd: string,
-      _args: string[],
-      _opts: unknown,
-      callback: (error: Error | null, stdout: string, stderr: string) => void,
-    ) => {
-      callback(new Error('Agent Hub unavailable'), '', 'delivery unavailable')
-      return undefined as never
-    }) as never)
-
-    const status = await ensureContext(spec({ context: { kind: 'pi-extension' } }))
-
-    expect(status.state).toBe('missing')
-    expect(status.detail).toContain(
-      'Agent Hub live delivery unavailable or unconfirmed; native model continues',
-    )
-    expect(status.detail).toContain('delivery unavailable')
-  })
-
   it('reports ok when Pi uses the source-linked additive Agent Hub extension', async () => {
     vi.mocked(existsSync).mockReturnValue(true)
     vi.mocked(realpathSync).mockReturnValue(
@@ -520,6 +491,32 @@ describe('ensureContext', () => {
     vi.mocked(realpathSync).mockReturnValue('/home/demo/.pi/agent/extensions/agent-hub.ts')
     vi.mocked(readFileSync).mockReturnValue('pi.on("before_agent_start", () => {})')
     expect((await ensureContext(spec({ context: { kind: 'pi-extension' } }))).state).toBe('missing')
+  })
+
+  it.each([
+    true,
+    false,
+  ])('reports retrieval installation availability %s without delivery', async (passed) => {
+    vi.mocked(execFile).mockImplementation(((
+      _cmd: string,
+      args: string[],
+      _opts: unknown,
+      cb: unknown,
+    ) => {
+      expect(args).toEqual([
+        '/opt/projects/agent-hub/integrations/context-delivery/install.py',
+        '--surface',
+        'antigravity',
+        '--check',
+      ])
+      ;(cb as (error: Error | null, stdout: string) => void)(null, JSON.stringify({ passed }))
+      return undefined as never
+    }) as never)
+    const status = await ensureContext(
+      spec({ context: { kind: 'canonical-retrieval', surface: 'antigravity' } }),
+    )
+    expect(status.state).toBe(passed ? 'available' : 'missing')
+    expect(execFile).toHaveBeenCalledTimes(1)
   })
 
   it('says where checkouts are looked for instead of guessing ~/projects', async () => {

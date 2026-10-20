@@ -1,4 +1,4 @@
-// Universal supplemental-context verifier. `ensureContext` dispatches on the
+// Supplemental-context installation checks. `ensureContext` dispatches on the
 // declarative hook `kind` to a handler implemented ONCE here and shared by every
 // TUI that declares that kind. New TUIs reuse a kind; only a genuinely new
 // delivery mechanism adds a handler. No per-tool verification code lives outside.
@@ -33,11 +33,6 @@ function unknownCheckout(override: string, name: string): ContextStatus {
   }
 }
 
-interface ContextProbe {
-  cwd?: string
-  session?: string
-}
-
 /** The answer for a TUI with no context hook, known without probing. */
 export function staticContextStatus(spec: TuiSpec): ContextStatus | null {
   if (spec.context) return null
@@ -49,91 +44,21 @@ export function staticContextStatus(spec: TuiSpec): ContextStatus | null {
     : { state: 'not_applicable', detail: 'A bare shell has no model context.' }
 }
 
-/** Verify (not install) a TUI's supplemental-context path after native launch.
- * The result drives visible status only; it never gates pane dispatch. */
-export async function ensureContext(
-  spec: TuiSpec,
-  probe: ContextProbe = {},
-): Promise<ContextStatus> {
+/** Check installation availability only; model receipt is unverified.
+ * The result drives visible status and never gates pane dispatch. */
+export async function ensureContext(spec: TuiSpec): Promise<ContextStatus> {
   const fixed = staticContextStatus(spec)
   if (fixed || !spec.context) return fixed as ContextStatus
-  let installed: ContextStatus
   switch (spec.context.kind) {
     case 'claude-session-start':
-      installed = await claudeSessionStart(spec)
-      break
+      return claudeSessionStart(spec)
     case 'codex-hooks':
-      installed = await codexHooks(spec)
-      break
+      return codexHooks(spec)
     case 'pi-extension':
-      installed = piExtension()
-      break
+      return piExtension()
     case 'canonical-retrieval':
-      installed = await canonicalRetrieval(spec.context.surface)
-      break
+      return canonicalRetrieval(spec.context.surface)
   }
-  if (installed.state !== 'available') return installed
-  const surface =
-    spec.context.kind === 'claude-session-start'
-      ? 'claude_code'
-      : spec.context.kind === 'codex-hooks'
-        ? 'codex'
-        : spec.context.kind === 'canonical-retrieval'
-          ? spec.context.surface
-          : 'pi'
-  return verifyLiveDelivery(surface, installed.detail, probe)
-}
-
-/** A green badge means the source-owned chain and live delivery availability
- * were verified by an independent probe. It does not prove what an already-
- * running native session received. This observability probe runs after pane
- * dispatch; failure returns degraded status but never stops the model. */
-function verifyLiveDelivery(
-  surface: string,
-  installedDetail: string,
-  probe: ContextProbe,
-): Promise<ContextStatus> {
-  const client = join(homedir(), '.local', 'bin', 'agent-hub-context-client')
-  const args = [
-    'deliver',
-    '--surface',
-    surface,
-    '--capability',
-    'bash',
-    '--cwd',
-    probe.cwd ?? process.cwd(),
-    '--phase',
-    'aico_status',
-    '--emit',
-    'descriptor',
-  ]
-  if (probe.session) args.push('--session', probe.session)
-  return new Promise((resolve) => {
-    execFile(client, args, { timeout: 20000 }, (error, stdout, stderr) => {
-      try {
-        const descriptor = JSON.parse(stdout) as { status?: unknown; payload_hash?: unknown }
-        if (
-          !error &&
-          descriptor.status === 'ok' &&
-          typeof descriptor.payload_hash === 'string' &&
-          /^[0-9a-f]{64}$/.test(descriptor.payload_hash)
-        ) {
-          resolve({
-            state: 'available',
-            detail: `${installedDetail}; canonical context available ${descriptor.payload_hash.slice(0, 8)}. Independent probe only; receipt by the running model is unverified.`,
-          })
-          return
-        }
-      } catch {
-        // Use the single degraded result below.
-      }
-      const detail = stderr.trim() || error?.message || 'invalid delivery descriptor'
-      resolve({
-        state: 'missing',
-        detail: `Agent Hub live delivery unavailable or unconfirmed; native model continues (${detail})`,
-      })
-    })
-  })
 }
 
 /** Reuse the canonical installer's registration/link checks for retrieval clients. */
@@ -152,7 +77,7 @@ function canonicalRetrieval(surface: 'antigravity'): Promise<ContextStatus> {
             resolve({
               state: 'available',
               detail:
-                'Canonical retrieval rule installed; context requires agent retrieval, not automatic injection',
+                'Canonical retrieval rule installed; agent retrieval is required. Model receipt is unverified.',
             })
             return
           }
@@ -204,7 +129,7 @@ async function claudeSessionStart(spec: TuiSpec): Promise<ContextStatus> {
   if (!existsSync(settings) || !existsSync(client)) {
     return {
       state: 'missing',
-      detail: `${settings} or ${client} absent — canonical context cannot deliver`,
+      detail: `${settings} or ${client} absent — canonical context installation is incomplete`,
     }
   }
   const command = spec.command[0]
@@ -212,7 +137,7 @@ async function claudeSessionStart(spec: TuiSpec): Promise<ContextStatus> {
   if (!launcher) {
     return {
       state: 'missing',
-      detail: `${command || 'Claude command'} not on the managed pane PATH — Agent Hub context delivery is unavailable or unconfirmed; native Claude continues`,
+      detail: `${command || 'Claude command'} not on the managed pane PATH — canonical context launcher unavailable; native Claude continues`,
     }
   }
   try {
@@ -238,7 +163,7 @@ async function claudeSessionStart(spec: TuiSpec): Promise<ContextStatus> {
     if (canonicalLauncher && additive && hasHook('SessionStart') && hasHook('SubagentStart')) {
       return {
         state: 'available',
-        detail: `${launcher} reaches the canonical additive Claude launcher and native hooks bind its session IDs`,
+        detail: `${launcher} reaches the canonical additive Claude launcher with native session binding hooks installed; model receipt is unverified`,
       }
     }
   } catch {
@@ -264,13 +189,16 @@ async function codexHooks(spec: TuiSpec): Promise<ContextStatus> {
     return {
       state: 'missing',
       detail:
-        'codex not on the managed pane PATH — Agent Hub context delivery is unavailable or unconfirmed; native Codex continues',
+        'codex not on the managed pane PATH — canonical context launcher unavailable; native Codex continues',
     }
   }
 
   const client = join(homedir(), '.local', 'bin', 'agent-hub-context-client')
   if (!existsSync(client)) {
-    return { state: 'missing', detail: `${client} absent — canonical context cannot deliver` }
+    return {
+      state: 'missing',
+      detail: `${client} absent — canonical context installation is incomplete`,
+    }
   }
 
   const expectedLauncher = join(codexConfigRepo, 'bin', 'codex')
@@ -350,7 +278,7 @@ async function codexHooks(spec: TuiSpec): Promise<ContextStatus> {
           unhealthy.length === 0
             ? {
                 state: 'available',
-                detail: `${launcher} injects lossless context on fresh threads and has trusted native session bindings; resume/fork preserve saved native context without a fresh delivery`,
+                detail: `${launcher} has the canonical lossless context launcher and trusted native session binding hooks installed; model receipt is unverified`,
               }
             : {
                 state: 'missing',
@@ -411,7 +339,10 @@ function piExtension(): ContextStatus {
   if (!repo) return unknownCheckout('AGENT_HUB_REPO', 'agent-hub')
   const expected = join(repo, 'integrations', 'context-delivery', 'pi', 'agent-hub.ts')
   if (!existsSync(extension)) {
-    return { state: 'missing', detail: `${extension} absent — canonical context cannot deliver` }
+    return {
+      state: 'missing',
+      detail: `${extension} absent — canonical context installation is incomplete`,
+    }
   }
   try {
     const body = readFileSync(extension, 'utf8')
@@ -424,7 +355,10 @@ function piExtension(): ContextStatus {
       body.includes('contract.rendered') &&
       body.includes('AH: DEGRADED')
     return canonical && additive
-      ? { state: 'available', detail: `${extension} is the canonical additive Agent Hub extension` }
+      ? {
+          state: 'available',
+          detail: `${extension}: canonical additive Agent Hub extension installed; model receipt is unverified`,
+        }
       : {
           state: 'missing',
           detail: `${extension} is drifted or does not preserve Pi's native system prompt`,
