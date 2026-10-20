@@ -566,13 +566,12 @@ const isMissing = (error: unknown): error is TetherError =>
  * New sessions, tools and projects go to the active instance; the session list
  * merges both; a call about one session asks the active instance first and
  * falls back to the other on 404, so each session is handled by the instance
- * that owns it. The other instance counts only while its socket exists (or
- * answered earlier). An unreachable instance fails the list and any lookup that
- * ended in 404: "gone" is never concluded while one may still own it.
+ * that owns it. The other instance counts only while its socket exists; its
+ * outage does not hide the active instance's list. An unreachable candidate
+ * fails any lookup that ended in 404: it may still own that session.
  */
 export class TetherPool extends TetherClient {
   private readonly all: TetherClient[]
-  private readonly seen = new Set<string>()
 
   constructor(
     sockets: string[],
@@ -589,12 +588,7 @@ export class TetherPool extends TetherClient {
 
   private candidates(): TetherClient[] {
     const [active, ...others] = this.all
-    return [
-      active,
-      ...others.filter(
-        (client) => this.seen.has(client.socketPath) || this.socketExists(client.socketPath),
-      ),
-    ]
+    return [active, ...others.filter((client) => this.socketExists(client.socketPath))]
   }
 
   override async request<T>(
@@ -617,8 +611,13 @@ export class TetherPool extends TetherClient {
     const merged = new Map<string, unknown>()
     let first: { status: number; body: T } | null = null
     for (const client of this.candidates()) {
-      const answer = await client.request<T>('GET', path, undefined, options)
-      this.seen.add(client.socketPath)
+      let answer: { status: number; body: T }
+      try {
+        answer = await client.request<T>('GET', path, undefined, options)
+      } catch (error) {
+        if (client !== this.all[0] && error instanceof TetherUnavailable) continue
+        throw error
+      }
       first ??= answer
       const items = (answer.body as { items?: { id: string }[] } | null)?.items
       for (const item of items ?? []) if (!merged.has(item.id)) merged.set(item.id, item)
@@ -638,7 +637,6 @@ export class TetherPool extends TetherClient {
     for (const client of this.candidates()) {
       try {
         const answer = await client.request<T>(method, path, body, options)
-        this.seen.add(client.socketPath)
         if (answer.status !== 404) return answer
         missing ??= answer
       } catch (error) {

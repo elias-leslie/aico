@@ -441,21 +441,19 @@ describe('two Tether instances', () => {
   async function pair() {
     const seen: string[] = []
     const make = async (name: string, sessions: string[]) =>
-      (
-        await fakeTether(async (req, res) => {
-          seen.push(`${name} ${req.method} ${req.url}`)
-          if (req.url === '/v1/sessions' && req.method === 'GET')
-            return json(res, 200, { items: sessions.map((id) => ({ id })) })
-          if (req.url === '/v1/sessions' && req.method === 'POST')
-            return json(res, 201, { id: `${name}-new` })
-          const id = req.url?.split('/')[3]
-          if (id && sessions.includes(id)) return json(res, 200, { id, owner: name })
-          json(res, 404, { error: 'not_found' })
-        })
-      ).client
+      await fakeTether(async (req, res) => {
+        seen.push(`${name} ${req.method} ${req.url}`)
+        if (req.url === '/v1/sessions' && req.method === 'GET')
+          return json(res, 200, { items: sessions.map((id) => ({ id })) })
+        if (req.url === '/v1/sessions' && req.method === 'POST')
+          return json(res, 201, { id: `${name}-new` })
+        const id = req.url?.split('/')[3]
+        if (id && sessions.includes(id)) return json(res, 200, { id, owner: name })
+        json(res, 404, { error: 'not_found' })
+      })
     const active = await make('own', ['aaaaaaaa'])
     const other = await make('agent', ['bbbbbbbb'])
-    return { active, other, seen }
+    return { active: active.client, other: other.client, otherServer: other.server, seen }
   }
 
   it('lists both, creates on the active one and asks the owning instance by id', async () => {
@@ -471,21 +469,42 @@ describe('two Tether instances', () => {
     expect(pool.instances().map((c) => c.socketPath)).toEqual([active.socketPath, other.socketPath])
   })
 
-  it('treats a missing other socket as absent, but an unreachable seen one as an outage', async () => {
-    const { active, other } = await pair()
+  it('treats a missing other socket as absent', async () => {
+    const { active } = await pair()
     const missing = join(tmpdir(), 'aico-no-such.sock')
     const alone = new TetherPool([active.socketPath, missing], 1_000)
     expect((await alone.listSessions()).map((s) => s.id)).toEqual(['aaaaaaaa'])
     await expect(alone.getSession('zzzzzzzz')).rejects.toMatchObject({ status: 404 })
+  })
 
+  it('keeps the active sessions after a previously seen secondary stops', async () => {
+    const { active, other, otherServer } = await pair()
+    const pool = new TetherPool([active.socketPath, other.socketPath], 1_000)
+    expect(await pool.listSessions()).toHaveLength(2)
+    await new Promise<void>((resolve, reject) =>
+      otherServer.close((error) => (error ? reject(error) : resolve())),
+    )
+    expect((await pool.listSessions()).map((s) => s.id)).toEqual(['aaaaaaaa'])
+  })
+
+  it('keeps active sessions during a secondary outage while session lookup reports it', async () => {
+    const { active, other } = await pair()
     let up = true
     const pool = new TetherPool([active.socketPath, other.socketPath], 1_000, () => up)
     expect(await pool.listSessions()).toHaveLength(2)
-    // Its socket is gone for a moment: never "its sessions ended", never "not found".
     pool.instances()[1].request = () => Promise.reject(new TetherUnavailable('down'))
-    await expect(pool.listSessions()).rejects.toBeInstanceOf(TetherUnavailable)
+    expect((await pool.listSessions()).map((s) => s.id)).toEqual(['aaaaaaaa'])
     await expect(pool.getSession('cccccccc')).rejects.toBeInstanceOf(TetherUnavailable)
     up = false
+    expect((await pool.listSessions()).map((s) => s.id)).toEqual(['aaaaaaaa'])
+  })
+
+  it('still reports an unavailable active instance and secondary API errors', async () => {
+    const { active, other } = await pair()
+    const pool = new TetherPool([active.socketPath, other.socketPath], 1_000)
+    pool.instances()[1].request = () => Promise.reject(new TetherError(500, 'broken', {}))
+    await expect(pool.listSessions()).rejects.toMatchObject({ status: 500, code: 'broken' })
+    pool.instances()[0].request = () => Promise.reject(new TetherUnavailable('active down'))
     await expect(pool.listSessions()).rejects.toBeInstanceOf(TetherUnavailable)
   })
 })
