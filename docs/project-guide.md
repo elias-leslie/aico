@@ -28,7 +28,7 @@ Source installs additionally need Node.js 22+, npm, Python 3.13+, `uv`, and nati
 
 Recommended for the full desktop experience:
 
-- X11/Xorg. The app can run under Wayland, but global shortcuts are more limited there.
+- X11/Xorg or a Wayland desktop with Xwayland. The managed launcher uses Electron's X11 backend on either desktop so window tiling, saved positions and focus control work. Native Wayland restricts these operations; global shortcuts can also be more limited on a Wayland desktop.
 - Chrome/Chromium if you want to load the optional browser extension.
 - Any terminal AI CLIs you want to launch (`claude`, `codex`, `agy`, `pi`). Aico does not provide accounts or API keys for those tools.
 
@@ -100,6 +100,7 @@ Important variables:
 | `AICO_PASTED_IMAGES_KEEP_HOURS` | `24` | Pasted images older than this are deleted whenever a new one is written. |
 | `AICO_EXTENSION_IDS` | `oejadbpdecaenbbihglcnchnkmlilmjf` | Comma-separated Chrome extension IDs the listener trusts as browser origins. A malformed ID leaves the listener off. The default is the stable ID derived from the `key` in `extension/manifest.json`; set this only for a fork or re-keyed extension. |
 | `AICO_SELECTION_HOTKEY` | `CommandOrControl+Shift+Space` | Electron global shortcut for Indicate selection, which sends the newest capture again to the last-focused widget. |
+| `AICO_OZONE_PLATFORM` | `x11` | Electron display backend used by the managed foreground runner. Keeps tiling and window restoration working through Xwayland on a Wayland desktop. Set `wayland` only for explicit native-Wayland testing; positioning, resizing and focus control are restricted there. Does not change the desktop session or terminal environment. |
 | `TETHER_SOCKET` | unset | Tether control socket. Wins over `TETHER_INSTANCE`. |
 | `TETHER_INSTANCE` | `default` | Tether instance; the socket is `$XDG_RUNTIME_DIR/tether/<instance>/control.sock`. |
 | `TETHER_AGENT_SOCKET` | `/run/tether/agent/default/control.sock` | The agent user's Tether instance. Aico lists and handles its sessions next to the active instance's (`TETHER_SOCKET`), which gets new sessions. |

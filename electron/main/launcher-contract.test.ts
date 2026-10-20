@@ -122,3 +122,40 @@ describe('foreground runner build step', () => {
     expect(runner).toMatch(/if prebuilt_release; then[\s\S]*?else\n\s*npm run build\nfi/)
   })
 })
+
+describe('desktop display backend', () => {
+  // Exercise the runner's actual exec command with a fake Electron binary.
+  // Native Wayland cannot provide the absolute window positioning the tiler
+  // needs, even when Electron's cached getBounds appears to accept a move.
+  const runner = projectFile('scripts/aico-run-foreground.sh')
+  const command = runner.match(/^exec \.\/node_modules\/electron\/dist\/electron .*$/m)?.[0]
+
+  function argumentsFor(backend?: string): string[] {
+    const dir = mkdtempSync(join(tmpdir(), 'aico-display-'))
+    try {
+      const bin = join(dir, 'node_modules/electron/dist')
+      mkdirSync(bin, { recursive: true })
+      writeFileSync(join(bin, 'electron'), '#!/bin/sh\nprintf "%s\\n" "$@"\n', { mode: 0o755 })
+      const env: NodeJS.ProcessEnv = {
+        ...process.env,
+        XDG_SESSION_TYPE: 'wayland',
+        WAYLAND_DISPLAY: 'wayland-test',
+      }
+      delete env.AICO_OZONE_PLATFORM
+      if (backend !== undefined) env.AICO_OZONE_PLATFORM = backend
+      return execFileSync('bash', ['-c', command ?? 'exit 1'], { cwd: dir, env, encoding: 'utf8' })
+        .trim()
+        .split('\n')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  }
+
+  it('requests Xwayland for window tiling by default on a Wayland desktop', () => {
+    expect(argumentsFor()).toEqual(['.', '--ozone-platform=x11'])
+  })
+
+  it('allows an explicit display backend override', () => {
+    expect(argumentsFor('wayland')).toEqual(['.', '--ozone-platform=wayland'])
+  })
+})

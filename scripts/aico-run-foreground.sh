@@ -128,4 +128,8 @@ export AICO_ACTIVATION_READY_FILE="$READYFILE"
 # Electron keeps this shell's PID across exec; it clears the pidfile on a clean
 # quit while the file still names it.
 export AICO_PIDFILE="$PIDFILE"
-exec ./node_modules/electron/dist/electron .
+# Aico tiles and restores windows by absolute position. Native Wayland does
+# not honor those operations; use Electron's supported Xwayland backend while
+# leaving the actual desktop/session environment intact for terminal children.
+# An explicit override is useful for native-Wayland compatibility testing.
+exec ./node_modules/electron/dist/electron . "--ozone-platform=${AICO_OZONE_PLATFORM:-x11}"
