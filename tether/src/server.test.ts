@@ -164,6 +164,68 @@ describe('lifecycle API (no tmux started)', () => {
     expect((await call('POST', '/v1/legacy-sessions/summitflow-x/end', {})).status).toBe(404)
   })
 
+  it('reads a correlated live GUI layout without any session or generation', async () => {
+    expect(await call('GET', '/v1/gui/layout')).toEqual({
+      status: 503,
+      body: { error: 'gui_unavailable' },
+    })
+    let receive: (command: Record<string, string>) => void = () => {}
+    const commands = () =>
+      new Promise<Record<string, string>>((resolve) => {
+        receive = resolve
+      })
+    const channel = request({
+      socketPath: paths.socket,
+      path: '/v1/gui/channel',
+      headers: { 'x-tether-client': 'aico-gui' },
+    })
+    await new Promise<void>((resolve) => {
+      channel.on('response', (res) => {
+        let tail = ''
+        res.on('data', (chunk) => {
+          tail += chunk.toString()
+          const lines = tail.split('\n')
+          tail = lines.pop() ?? ''
+          for (const line of lines) {
+            const value = JSON.parse(line)
+            if (value.type === 'hello') resolve()
+            if (value.type === 'command') receive(value)
+          }
+        })
+      })
+      channel.end()
+    })
+    try {
+      const next = commands()
+      const layoutRequest = call('GET', '/v1/gui/layout')
+      const command = await next
+      expect(command).toEqual({ type: 'command', commandId: expect.any(String), kind: 'layout' })
+      const resultPath = `/v1/gui/results/${command.commandId}`
+      expect((await call('POST', resultPath, { applied: true })).status).toBe(400)
+      const layout = {
+        v: 1,
+        pid: process.pid,
+        startTime: null,
+        updatedAt: new Date().toISOString(),
+        displays: [],
+        windows: [],
+      }
+      expect(await call('POST', resultPath, { applied: true, layout })).toEqual({
+        status: 200,
+        body: { accepted: true },
+      })
+      expect(await layoutRequest).toEqual({ status: 200, body: layout })
+      expect((await call('POST', resultPath, { applied: true, layout })).status).toBe(404)
+      const disconnected = commands()
+      const inFlight = call('GET', '/v1/gui/layout')
+      await disconnected
+      channel.destroy()
+      expect(await inFlight).toEqual({ status: 504, body: { error: 'gui_timeout' } })
+    } finally {
+      channel.destroy()
+    }
+  })
+
   it('validates switch-project, pane-mode and context-check', async () => {
     const generation = 'a'.repeat(64)
     expect((await call('GET', '/v1/sessions/ffffffff/pane-mode')).status).toBe(404)

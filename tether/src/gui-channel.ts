@@ -1,13 +1,14 @@
 // The one GUI view channel per instance (docs/api-v1.md "GUI view-mutation
 // forwarding"). Views belong to the app: Tether validates a show/position/
 // title request against the exact running generation, then forwards it to the
-// connected GUI and answers with the GUI's result. Tether never starts a GUI.
+// connected GUI and answers with the GUI's result. Layout reads use this same
+// correlated channel without a session fence. Tether never starts a GUI.
 
 import { randomUUID } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { EventBus } from './events'
 
-export interface GuiCommand {
+export interface GuiMutationCommand {
   kind: 'show' | 'position' | 'title' | 'coordinator'
   sessionId: string
   generation: string
@@ -16,8 +17,10 @@ export interface GuiCommand {
   coordinator?: boolean
 }
 
+export type GuiCommand = GuiMutationCommand | { kind: 'layout' }
+
 export type GuiOutcome =
-  | { status: 'applied' }
+  | { status: 'applied'; layout?: Record<string, unknown> }
   | { status: 'rejected'; error: string }
   | { status: 'unavailable' }
   | { status: 'timeout' }
@@ -26,6 +29,7 @@ interface Pending {
   resolve(outcome: GuiOutcome): void
   timer: NodeJS.Timeout
   stream: ServerResponse
+  kind: GuiCommand['kind']
 }
 
 export const GUI_RESULT_TIMEOUT_MS = 5_000
@@ -84,7 +88,7 @@ export class GuiChannel {
         this.pending.delete(commandId)
         resolve({ status: 'timeout' })
       }, this.timeoutMs)
-      this.pending.set(commandId, { resolve, timer, stream })
+      this.pending.set(commandId, { resolve, timer, stream, kind: command.kind })
       stream.write(`${JSON.stringify({ type: 'command', commandId, ...command })}\n`)
     })
   }
@@ -95,9 +99,30 @@ export class GuiChannel {
     const pending = this.pending.get(commandId)
     if (!pending) return false
     if (typeof body.applied !== 'boolean') throw new Error('invalid result')
+    let layout: Record<string, unknown> | undefined
+    if (body.applied && pending.kind === 'layout') {
+      const value = body.layout
+      if (!value || typeof value !== 'object' || Array.isArray(value))
+        throw new Error('invalid layout')
+      layout = value as Record<string, unknown>
+      if (
+        layout.v !== 1 ||
+        !Number.isSafeInteger(layout.pid) ||
+        (layout.pid as number) <= 0 ||
+        !(
+          layout.startTime === null ||
+          (typeof layout.startTime === 'string' && /^\d+$/.test(layout.startTime))
+        ) ||
+        typeof layout.updatedAt !== 'string' ||
+        !Array.isArray(layout.displays) ||
+        !Array.isArray(layout.windows)
+      )
+        throw new Error('invalid layout')
+    } else if (body.layout !== undefined) throw new Error('unexpected layout')
     this.pending.delete(commandId)
     clearTimeout(pending.timer)
-    if (body.applied) pending.resolve({ status: 'applied' })
+    if (body.applied)
+      pending.resolve(layout ? { status: 'applied', layout } : { status: 'applied' })
     else {
       const error =
         typeof body.error === 'string' && ERROR_RE.test(body.error) ? body.error : 'gui_rejected'

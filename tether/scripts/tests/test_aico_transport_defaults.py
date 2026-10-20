@@ -174,12 +174,20 @@ def test_roots_rejects_an_invalid_default_through_argparse(monkeypatch, capsys, 
     assert f"argument {option}: socket must be an exact normalized absolute path" in capsys.readouterr().err
 
 
-def test_layout_reads_from_the_runtime_directory(tmp_path, monkeypatch, capsys):
-    (tmp_path / "aico").mkdir()
+@pytest.mark.parametrize("env,expected", [
+    ({"XDG_RUNTIME_DIR": "/fixture/run"}, "/fixture/run/tether/default/control.sock"),
+    ({"XDG_RUNTIME_DIR": "/fixture/run", "TETHER_INSTANCE": "dev"}, "/fixture/run/tether/dev/control.sock"),
+    ({"TETHER_SOCKET": "/fixture/tether.sock"}, "/fixture/tether.sock"),
+])
+def test_layout_reads_from_tether(monkeypatch, capsys, env, expected):
+    for name in ("TETHER_SOCKET", "TETHER_INSTANCE"):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
     layout = {"v": 1, "pid": os.getpid(), "startTime": None, "windows": []}
-    (tmp_path / "aico" / "layout.json").write_text(json.dumps(layout))
-    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    calls, _ = record(monkeypatch, [(200, layout)])
     assert admin.main(["layout"]) == 0
+    assert calls == [(expected, "/v1/gui/layout", None)]
     assert json.loads(capsys.readouterr().out) == {"owner": "aico", **layout}
 
 

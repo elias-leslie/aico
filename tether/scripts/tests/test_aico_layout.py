@@ -2,9 +2,13 @@
 
 import json
 import os
+import socketserver
 import subprocess
 import sys
+import threading
+from http.server import BaseHTTPRequestHandler
 
+import pytest
 from test_aico_admin import admin
 
 
@@ -71,3 +75,48 @@ def test_layout_without_a_writer_pid_is_unqualified(tmp_path, monkeypatch, capsy
         write_layout(tmp_path, monkeypatch, {"v": 1, **owner, "windows": []})
         assert admin.main(["layout"]) == 1
         assert json.loads(capsys.readouterr().out)["reason"] == "layout_unqualified", owner
+
+
+@pytest.mark.parametrize("status,body,reason", [
+    (200, {"v": 1, **live_owner(), "updatedAt": "x", "displays": [], "windows": []}, None),
+    (503, {"error": "gui_unavailable"}, "gui_unavailable"),
+    (504, {"error": "gui_timeout"}, "gui_timeout"),
+    (200, {}, "layout_unqualified"),
+])
+def test_live_layout_without_owner_file(tmp_path, monkeypatch, capsys, status, body, reason):
+    calls = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, format, *args):
+            pass
+
+        def do_GET(self):
+            calls.append(self.path)
+            payload = json.dumps(body).encode()
+            self.send_response(status)
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+    path = tmp_path / "tether.sock"
+    server = socketserver.UnixStreamServer(str(path), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    monkeypatch.delenv("AICO_LAYOUT_FILE", raising=False)
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path / "agent-runtime-without-layout"))
+    monkeypatch.setenv("TETHER_SOCKET", str(path))
+    try:
+        assert admin.main(["layout"]) == int(reason is not None)
+    finally:
+        server.shutdown()
+        server.server_close()
+    assert calls == ["/v1/gui/layout"]
+    output = json.loads(capsys.readouterr().out)
+    assert output == ({"owner": "aico", **body} if reason is None else {
+        "owner": "aico", "observation": "unavailable", "reason": reason})
+
+
+def test_disconnected_tether_is_unavailable(tmp_path, monkeypatch, capsys):
+    monkeypatch.delenv("AICO_LAYOUT_FILE", raising=False)
+    monkeypatch.setenv("TETHER_SOCKET", str(tmp_path / "absent.sock"))
+    assert admin.main(["layout"]) == 1
+    assert json.loads(capsys.readouterr().out)["reason"] == "owner_unavailable"

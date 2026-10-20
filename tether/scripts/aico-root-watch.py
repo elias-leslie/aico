@@ -426,7 +426,7 @@ class Collector:
 
     def receipt(self, path: str, route: str, payload: dict | None = None,
                 *, timeout: float = .25) -> tuple[int, dict]:
-        limit = CATALOG_LIMIT if route.split("?")[0] == "/v1/roots" else RECEIPT_LIMIT
+        limit = CATALOG_LIMIT if route.split("?")[0] in ("/v1/roots", "/v1/gui/layout") else RECEIPT_LIMIT
         client = None
         if path.startswith("http:"):
             parsed = urlsplit(local_root_url(path))
@@ -1290,15 +1290,31 @@ def layout_main(argv: list[str]) -> int:
     """Print the running Aico GUI's window layout (displays, every window's
     bounds) so an agent can plan an arrangement, then move windows with
     `st aico widget position --widget-id ID X Y WIDTH HEIGHT`. A layout left
-    by an Aico that is no longer running reports layout_stale."""
+    by an Aico that is no longer running reports layout_stale. Reads the live GUI
+    through Tether; AICO_LAYOUT_FILE selects an explicit offline/fixture file."""
     parser = argparse.ArgumentParser(prog="st aico layout", description=layout_main.__doc__)
     parser.parse_args(argv)
-    path = Path(os.environ.get("AICO_LAYOUT_FILE", f"{runtime_dir()}/aico/layout.json"))
+    override = os.environ.get("AICO_LAYOUT_FILE")
     try:
-        data = json.loads(path.read_text())
-    except (OSError, ValueError):
+        if override is not None:
+            path = Path(override)
+            try:
+                data = json.loads(path.read_text())
+            except (OSError, ValueError):
+                print(json.dumps({"owner": "aico", "observation": "unavailable",
+                                  "reason": "layout_missing", "path": str(path)}))
+                return 1
+        else:
+            collector = Collector("", "", "", time.monotonic() + 7, threading.Event())
+            status, data = collector.receipt(tether_socket(), "/v1/gui/layout", timeout=6)
+            if status != 200:
+                reason = data.get("error")
+                raise Unavailable(reason if reason in (
+                    "gui_unavailable", "gui_timeout", "gui_failed", "invalid_body"
+                ) else "layout_unavailable")
+    except (Unavailable, Stopped) as error:
         print(json.dumps({"owner": "aico", "observation": "unavailable",
-                          "reason": "layout_missing", "path": str(path)}))
+                          "reason": str(error) if isinstance(error, Unavailable) else "gui_timeout"}))
         return 1
     writer = layout_writer(data)
     if writer is None:

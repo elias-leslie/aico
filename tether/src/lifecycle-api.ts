@@ -8,7 +8,7 @@ import { promisify } from 'node:util'
 import type { AgentStateTracker, HookReport } from './agent-state'
 import type { TetherPaths } from './config'
 import type { EventBus } from './events'
-import type { GuiChannel, GuiCommand } from './gui-channel'
+import type { GuiChannel, GuiMutationCommand } from './gui-channel'
 import { HttpError, type Router, readJsonObject, sendJson } from './http'
 import {
   allocateWidgetId,
@@ -403,7 +403,7 @@ export function forwardViewMutation(
       return changed
     }
     const result = await withRunningSession(widgetId, generation, async (row) => {
-      const command: GuiCommand = { kind: mutation.kind, sessionId: row.id, generation }
+      const command: GuiMutationCommand = { kind: mutation.kind, sessionId: row.id, generation }
       if (mutation.kind === 'position') command.bounds = mutation.bounds as Bounds
       if (mutation.kind === 'title') command.label = mutation.label
       // The GUI hears only whether the window is a coordinator; lineage
@@ -894,13 +894,20 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
     .add('GET', '/v1/roots/:requestId/:action', root)
     .add('GET', '/v1/widgets/:id', root)
     .add('POST', '/v1/widgets/:id/:action', root)
+    .add('GET', '/v1/gui/layout', async (_req, res) => {
+      const outcome = await gui.send({ kind: 'layout' })
+      if (outcome.status === 'unavailable') throw new HttpError(503, 'gui_unavailable')
+      if (outcome.status === 'timeout') throw new HttpError(504, 'gui_timeout')
+      if (outcome.status === 'rejected') throw new HttpError(503, outcome.error)
+      sendJson(res, 200, outcome.layout)
+    })
     .add('GET', '/v1/gui/channel', (req, res) => {
       if (req.headers['x-tether-client'] !== 'aico-gui') throw new HttpError(400, 'invalid_client')
       gui.attach(req, res)
     })
     .add('POST', '/v1/gui/results/:commandId', async (req, res, params) => {
       const body = await readJsonObject(req)
-      only(body, ['applied', 'error'])
+      only(body, ['applied', 'error', 'layout'])
       let accepted: boolean
       try {
         accepted = gui.result(params.commandId ?? '', body)

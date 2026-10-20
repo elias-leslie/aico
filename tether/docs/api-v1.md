@@ -270,6 +270,10 @@ Show, position, title and coordinator change views, and views belong to the app.
 2. For each command, the GUI verifies and applies the change (Aico `widgetMutationOperation`). It then posts `POST /v1/gui/results/:commandId` with `{applied: true}` or `{applied: false, error}`.
 3. Tether answers the original caller with the GUI's result. A command that gets no result within 5 s answers `409 outcome_uncertain`.
 
+`GET /v1/gui/layout` reads the connected Aico GUI's current window picture over this same channel. It sends `{type:"command", commandId, kind:"layout"}` without a session or generation; the GUI replies with `{applied:true, layout}` using the existing v1 layout snapshot (`v`, `pid`, `startTime`, `updatedAt`, `displays`, `windows`). This read never opens, focuses, moves, or changes a session. The route returns the snapshot directly, `503 gui_unavailable` when no GUI is connected, or `504 gui_timeout` on timeout/disconnect. The GUI may reject a read while quitting or before it is ready. Mutation commands retain their existing generation checks and result bodies.
+
+`st aico layout` uses this route on the socket selected by `TETHER_SOCKET`, or the current runtime's Tether instance. `AICO_LAYOUT_FILE` explicitly selects a fixture/offline file instead; file reads retain writer PID/start-time freshness checks.
+
 With no GUI connected, `show` and `position` return `503 gui_unavailable` and nothing is applied; Tether never starts the desktop. `coordinator` without a GUI changes only the catalog. `title` without a GUI *(3a)* renames the session in the catalog under the lifecycle lock, fenced on the exact running generation, and publishes `session.updated`. With a GUI connected, `title` renames the catalog entry only when the GUI applies it, so the result stays atomic. `GET /v1/health` reports `gui.connected`, and the events `gui.connected` / `gui.disconnected` announce changes.
 
 ## Agent tools

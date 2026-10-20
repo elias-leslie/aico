@@ -53,6 +53,21 @@ describe('GuiChannel', () => {
     gui.close()
   })
 
+  it('keeps mutation verdicts unchanged and times out an unanswered layout read', async () => {
+    const gui = new GuiChannel(null, 20)
+    const client = stream()
+    gui.attach(client.request, client.response, 60_000)
+    const mutation = gui.send({ kind: 'show', sessionId: 'a0000001', generation: 'g' })
+    const command = client.lines.at(-1) as Record<string, string>
+    expect(() => gui.result(command.commandId, { applied: true, layout: {} })).toThrow(
+      'unexpected layout',
+    )
+    gui.result(command.commandId, { applied: true })
+    expect(await mutation).toEqual({ status: 'applied' })
+    expect(await gui.send({ kind: 'layout' })).toEqual({ status: 'timeout' })
+    gui.close()
+  })
+
   it('times out to outcome-uncertain and a second GUI supersedes the first', async () => {
     const gui = new GuiChannel(null, 20)
     const first = stream()
