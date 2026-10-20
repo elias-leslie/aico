@@ -11,7 +11,6 @@
     "description": "Floating-widget desktop AI companion. Wraps terminal AI agents and shell CLIs in Electron widgets as views of Tether-owned tmux sessions, with click-to-context capture."
   },
   "runtime": {
-    "runtime_user": "owner",
     "backend_port": 8005,
     "frontend_port": 0,
     "backend_dir": ".",
