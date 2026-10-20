@@ -5,7 +5,7 @@ import type { BrowserWindow } from 'electron'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createGuiChannel } from './gui-channel'
 import { createSessionCatalog, sessionTitle } from './session-catalog'
-import type { GuiCommand, SessionDescriptor } from './tether-client'
+import type { GuiMutationCommand, SessionDescriptor } from './tether-client'
 import { createWindowChrome } from './window-chrome'
 import { createLayoutFile } from './window-layout'
 import { WindowRegistry } from './window-registry'
@@ -37,7 +37,7 @@ function descriptor(id: string, extra: Partial<SessionDescriptor> = {}): Session
   }
 }
 
-const command = (extra: Partial<GuiCommand>): GuiCommand => ({
+const command = (extra: Partial<GuiMutationCommand>): GuiMutationCommand => ({
   commandId: 'c1',
   kind: 'title',
   sessionId: 'aaaaaaaa',
@@ -51,6 +51,14 @@ function setup(o: { listed?: SessionDescriptor[] } = {}) {
   const state = { quitting: false }
   const win = { id: 1 } as unknown as BrowserWindow
   const deps = {
+    layout: vi.fn(() => ({
+      v: 1 as const,
+      pid: 4242,
+      startTime: null,
+      updatedAt: 'now',
+      displays: [],
+      windows: [],
+    })),
     isQuitting: () => state.quitting,
     catalog,
     refresh: vi.fn(async () => {
@@ -68,6 +76,25 @@ function setup(o: { listed?: SessionDescriptor[] } = {}) {
 }
 
 describe('applyGuiCommand', () => {
+  it('reads layout without a session or generation and without mutating views', async () => {
+    const { gui, deps, catalog, state } = setup()
+    catalog.remove('aaaaaaaa')
+    expect(await gui({ commandId: 'layout-1', kind: 'layout' })).toEqual({
+      applied: true,
+      layout: deps.layout.mock.results[0]?.value,
+    })
+    expect(deps.refresh).not.toHaveBeenCalled()
+    expect(deps.arrange).not.toHaveBeenCalled()
+    expect(deps.saveBounds).not.toHaveBeenCalled()
+    expect(deps.titles).not.toHaveBeenCalled()
+    state.quitting = true
+    expect(await gui({ commandId: 'layout-2', kind: 'layout' })).toEqual({
+      applied: false,
+      error: 'gui_unavailable',
+    })
+    expect(deps.layout).toHaveBeenCalledTimes(1)
+  })
+
   it('applies a title command and refreshes titles and tray', async () => {
     const { gui, deps, catalog } = setup()
     expect(await gui(command({ kind: 'title', label: 'New' }))).toEqual({ applied: true })
@@ -217,6 +244,7 @@ describe('a GUI title reaches layout.json', () => {
       tray: { createTray: vi.fn(), refreshTray: vi.fn(), setWidgetActivity: vi.fn() },
     })
     const gui = createGuiChannel({
+      layout: () => null,
       isQuitting: () => false,
       catalog,
       refresh: async () => {},

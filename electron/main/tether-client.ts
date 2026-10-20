@@ -10,6 +10,7 @@ import { statSync } from 'node:fs'
 import { request } from 'node:http'
 import { join } from 'node:path'
 import { attachFromTether } from './tmux-sandbox'
+import type { Layout } from './window-layout'
 
 /** Lowest Tether API version this Aico needs (GET /v1/version). */
 export const MIN_TETHER_API_VERSION = 1
@@ -492,7 +493,7 @@ export class TetherClient {
     return body.projects
   }
 
-  guiResult(commandId: string, result: { applied: boolean; error?: string }): Promise<unknown> {
+  guiResult(commandId: string, result: GuiVerdict): Promise<unknown> {
     return this.json('POST', `/v1/gui/results/${encodeURIComponent(commandId)}`, result)
   }
 
@@ -755,7 +756,7 @@ export function followEvents(client: TetherClient, subscriber: EventSubscriber):
   return () => controller.abort()
 }
 
-export interface GuiCommand {
+export interface GuiMutationCommand {
   commandId: string
   kind: 'show' | 'position' | 'title' | 'coordinator'
   sessionId: string
@@ -765,12 +766,14 @@ export interface GuiCommand {
   coordinator?: boolean
 }
 
+export type GuiCommand = GuiMutationCommand | { commandId: string; kind: 'layout' }
+
 /** Validate one GUI channel command line. */
 export function parseGuiCommand(value: unknown): GuiCommand | null {
   const line = value as Record<string, unknown> | null
-  if (!line || line.type !== 'command') return null
+  if (!line || line.type !== 'command' || typeof line.commandId !== 'string') return null
+  if (line.kind === 'layout') return { commandId: line.commandId, kind: 'layout' }
   if (
-    typeof line.commandId !== 'string' ||
     (line.kind !== 'show' &&
       line.kind !== 'position' &&
       line.kind !== 'title' &&
@@ -780,7 +783,7 @@ export function parseGuiCommand(value: unknown): GuiCommand | null {
     typeof line.generation !== 'string'
   )
     return null
-  const command: GuiCommand = {
+  const command: GuiMutationCommand = {
     commandId: line.commandId,
     kind: line.kind,
     sessionId: line.sessionId,
@@ -809,11 +812,11 @@ export function parseGuiCommand(value: unknown): GuiCommand | null {
 }
 
 /** The GUI's verdict for one command: applied, or a stable error code. */
-export type GuiVerdict = { applied: true } | { applied: false; error: string }
+export type GuiVerdict = { applied: true; layout?: Layout } | { applied: false; error: string }
 
 /**
  * Hold `GET /v1/gui/channel` as the one Aico GUI client, apply each
- * show/position/title command and post its result. Reconnects with backoff;
+ * view mutation or read-only layout command and post its result. Reconnects with backoff;
  * a `superseded` notice (another GUI took over) stops it for good.
  */
 export function holdGuiChannel(

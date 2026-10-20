@@ -3,6 +3,8 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { createGuiChannel } from './gui-channel'
+import { createSessionCatalog } from './session-catalog'
 import {
   applyStreamEvent,
   attachEnvironment,
@@ -25,6 +27,7 @@ import {
   TetherUnavailable,
   tetherSocketPath,
 } from './tether-client'
+import { layoutSnapshot } from './window-layout'
 
 type Handler = (req: IncomingMessage, res: ServerResponse) => void
 
@@ -313,6 +316,10 @@ describe('event stream', () => {
 
 describe('GUI channel', () => {
   it('parses only well-formed commands', () => {
+    expect(parseGuiCommand({ type: 'command', commandId: 'layout-1', kind: 'layout' })).toEqual({
+      commandId: 'layout-1',
+      kind: 'layout',
+    })
     const base = { type: 'command', commandId: 'c1', sessionId: '0a1b2c3d', generation: 'g' }
     expect(parseGuiCommand({ ...base, kind: 'show' })).toEqual({
       commandId: 'c1',
@@ -325,13 +332,13 @@ describe('GUI channel', () => {
         ...base,
         kind: 'position',
         bounds: { x: 1, y: 2, width: 900, height: 600 },
-      })?.bounds,
-    ).toEqual({ x: 1, y: 2, width: 900, height: 600 })
+      }),
+    ).toMatchObject({ bounds: { x: 1, y: 2, width: 900, height: 600 } })
     expect(parseGuiCommand({ ...base, kind: 'position', bounds: { x: 1.5 } })).toBeNull()
     expect(parseGuiCommand({ ...base, kind: 'title' })).toBeNull()
-    expect(parseGuiCommand({ ...base, kind: 'coordinator', coordinator: true })?.coordinator).toBe(
-      true,
-    )
+    expect(parseGuiCommand({ ...base, kind: 'coordinator', coordinator: true })).toMatchObject({
+      coordinator: true,
+    })
     expect(parseGuiCommand({ ...base, kind: 'coordinator', coordinator: 'yes' })).toBeNull()
     expect(parseGuiCommand({ ...base, kind: 'coordinator' })).toBeNull()
     expect(parseGuiCommand({ ...base, kind: 'show', sessionId: '../x' })).toBeNull()
@@ -369,6 +376,40 @@ describe('GUI channel', () => {
       url: '/v1/gui/results/c2',
       body: { applied: false, error: 'stale_generation' },
     })
+  })
+
+  it('parses a layout request, collects it through the GUI and posts its snapshot', async () => {
+    const snapshot = layoutSnapshot([], [], { pid: 4242, startTime: '777' })
+    const results: unknown[] = []
+    const { client } = await fakeTether(async (req, res) => {
+      if (req.url === '/v1/gui/channel') {
+        res.writeHead(200, { 'content-type': 'application/x-ndjson' })
+        res.write(`${JSON.stringify({ type: 'command', commandId: 'layout-1', kind: 'layout' })}\n`)
+        return
+      }
+      expect(req.url).toBe('/v1/gui/results/layout-1')
+      results.push(await readBody(req))
+      json(res, 200, { accepted: true })
+    })
+    const unexpected = () => {
+      throw new Error('layout must not mutate views or read sessions')
+    }
+    const apply = createGuiChannel({
+      isQuitting: () => false,
+      layout: () => snapshot,
+      catalog: createSessionCatalog(),
+      refresh: async () => unexpected(),
+      focusOrReopen: unexpected,
+      forSession: unexpected,
+      arrange: unexpected,
+      saveBounds: unexpected,
+      displayIdFor: unexpected,
+      titles: unexpected,
+      tray: unexpected,
+    })
+    cleanups.push(holdGuiChannel(client, apply))
+    await expect.poll(() => results.length).toBe(1)
+    expect(results).toEqual([{ applied: true, layout: snapshot }])
   })
 
   it('answers a malformed command with invalid_body instead of letting Tether time out', async () => {

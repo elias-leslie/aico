@@ -217,6 +217,7 @@ const chrome = createWindowChrome({
 })
 
 const applyGuiCommand = createGuiChannel({
+  layout: layout.snapshot,
   isQuitting: lifecycle.isQuitting,
   catalog,
   refresh: link.refresh,

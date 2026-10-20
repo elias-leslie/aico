@@ -6,9 +6,11 @@ import type { BrowserWindow } from 'electron'
 import type { SessionCatalog } from './session-catalog'
 import type { GuiCommand, GuiVerdict } from './tether-client'
 import type { Bounds } from './views'
+import type { Layout } from './window-layout'
 
 interface GuiChannelDeps {
   isQuitting(): boolean
+  layout(): Layout | null
   catalog: Pick<SessionCatalog, 'get' | 'upsert'>
   /** Re-list every session (the link's one shared refresh). */
   refresh(): Promise<void>
@@ -28,6 +30,10 @@ export function createGuiChannel(deps: GuiChannelDeps) {
 
   return async function applyGuiCommand(command: GuiCommand): Promise<GuiVerdict> {
     if (deps.isQuitting()) return { applied: false, error: 'gui_unavailable' }
+    if (command.kind === 'layout') {
+      const layout = deps.layout()
+      return layout ? { applied: true, layout } : { applied: false, error: 'gui_unavailable' }
+    }
     let descriptor = catalog.get(command.sessionId)
     if (!descriptor || descriptor.generation !== command.generation) {
       await deps.refresh().catch(() => {})

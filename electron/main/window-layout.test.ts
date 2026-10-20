@@ -218,6 +218,25 @@ describe('createWindowLayout: the tiler and the window picture', () => {
     return { layout, registry, saveBounds, state, coordinators, win, all }
   }
 
+  it('collects live bounds without writing a file, and refuses before ready or during quit', () => {
+    const window = fakeWindow(1, WORK_AREA)
+    const { layout, state } = setup([window])
+    expect(layout.snapshot()).toMatchObject({
+      v: 1,
+      pid: 4242,
+      windows: [{ id: 's1', bounds: WORK_AREA }],
+    })
+    const moved = { ...WORK_AREA, x: 73 }
+    window.setBounds(moved)
+    expect(layout.snapshot()?.windows[0]?.bounds).toEqual(moved)
+    expect(existsSync(path)).toBe(false)
+    state.ready = false
+    expect(layout.snapshot()).toBeNull()
+    state.ready = true
+    state.quitting = true
+    expect(layout.snapshot()).toBeNull()
+  })
+
   it('places nothing before tiling is live', () => {
     const a = fakeWindow(1, { x: 500, y: 0, width: 300, height: 800 })
     const { layout } = setup([a])

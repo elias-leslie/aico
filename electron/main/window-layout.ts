@@ -1,6 +1,6 @@
 // The window picture, in and out. Out: the picture main has of every Aico
-// window is written to $XDG_RUNTIME_DIR/aico/layout.json so agents can see how
-// the windows are arranged before moving them with `st aico widget position`.
+// window is available live over Tether's GUI channel and written privately to
+// $XDG_RUNTIME_DIR/aico/layout.json. `st aico layout` reads the live snapshot.
 // In: windows opened or closed after startup re-tile their screen (tiling.ts).
 
 import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
@@ -162,40 +162,42 @@ interface WindowLayoutDeps {
 export function createWindowLayout(deps: WindowLayoutDeps) {
   const { registry, screen } = deps
 
+  function collect(): { displays: LayoutDisplay[]; windows: LayoutWindow[] } {
+    const focused = registry.focused()
+    const windows: LayoutWindow[] = []
+    for (const w of registry.sessionWindows()) {
+      const id = registry.sessionOf(w.id)
+      if (!id) continue
+      const bounds = w.getBounds()
+      windows.push({
+        id,
+        name: deps.sessionName(id),
+        bounds,
+        displayId: String(screen.getDisplayMatching(bounds).id),
+        focused: w === focused,
+        visible: w.isVisible(),
+        minimized: w.isMinimized(),
+        maximized: w.isMaximized(),
+        coordinator: deps.isCoordinator(id),
+      })
+    }
+    const primary = screen.getPrimaryDisplay().id
+    const displays = screen.getAllDisplays().map((d) => ({
+      id: String(d.id),
+      primary: d.id === primary,
+      bounds: d.bounds,
+      workArea: d.workArea,
+      scaleFactor: d.scaleFactor,
+    }))
+    return { displays, windows }
+  }
+
   const file = createLayoutFile({
     path: deps.path,
     owner: deps.owner,
     isReady: deps.isReady,
     isQuitting: deps.isQuitting,
-    collect: () => {
-      const focused = registry.focused()
-      const windows: LayoutWindow[] = []
-      for (const w of registry.sessionWindows()) {
-        const id = registry.sessionOf(w.id)
-        if (!id) continue
-        const bounds = w.getBounds()
-        windows.push({
-          id,
-          name: deps.sessionName(id),
-          bounds,
-          displayId: String(screen.getDisplayMatching(bounds).id),
-          focused: w === focused,
-          visible: w.isVisible(),
-          minimized: w.isMinimized(),
-          maximized: w.isMaximized(),
-          coordinator: deps.isCoordinator(id),
-        })
-      }
-      const primary = screen.getPrimaryDisplay().id
-      const displays = screen.getAllDisplays().map((d) => ({
-        id: String(d.id),
-        primary: d.id === primary,
-        bounds: d.bounds,
-        workArea: d.workArea,
-        scaleFactor: d.scaleFactor,
-      }))
-      return { displays, windows }
-    },
+    collect,
   })
 
   // Windows Aico itself just resized (tiling, re-tiling, an agent's position):
@@ -277,6 +279,12 @@ export function createWindowLayout(deps: WindowLayoutDeps) {
   }
 
   return {
+    /** Current window picture, independent of the debounced private file. */
+    snapshot: (): Layout | null => {
+      if (!deps.isReady() || deps.isQuitting()) return null
+      const { displays, windows } = collect()
+      return layoutSnapshot(displays, windows, deps.owner)
+    },
     /** No-op before ready or while quitting; 300 ms settle, 1 s cap. */
     scheduleWrite: file.scheduleWrite,
     /** Clears a pending write; removes layout.json only if asked and this process wrote it. */
