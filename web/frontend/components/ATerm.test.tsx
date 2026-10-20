@@ -396,7 +396,7 @@ describe('ATermComponent', () => {
     )
   })
 
-  it('keeps the same lines in view when xterm auto-scrolls a scrolled-up viewport', async () => {
+  it('leaves viewport following to xterm when a live write finishes', async () => {
     fakeATerm.buffer.active.baseY = 120
     fakeATerm.buffer.active.viewportY = 90
 
@@ -408,12 +408,12 @@ describe('ATermComponent', () => {
     expect(fakeATerm.write).toHaveBeenCalledTimes(1)
 
     fakeATerm.buffer.active.baseY = 140
-    fakeATerm.buffer.active.viewportY = 140
 
     operationCallbacks.shift()?.()
     await Promise.resolve()
 
-    expect(fakeATerm.scrollToLine).toHaveBeenCalledWith(110)
+    expect(fakeATerm.scrollToLine).not.toHaveBeenCalled()
+    expect(fakeATerm.buffer.active.viewportY).toBe(90)
   })
 
   it('keeps large live writes intact instead of splitting escape sequences', async () => {

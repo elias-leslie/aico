@@ -96,23 +96,12 @@ export function useATermWriteQueue({
 
         if (operation.type === 'write') {
           const buffer = term.buffer.active
-          const savedViewportY = buffer.viewportY
-          const savedLinesFromBottom = buffer.baseY - savedViewportY
           const isScrolledUp = buffer.viewportY < buffer.baseY
 
+          // xterm preserves the visible history rows itself, including when
+          // scrollback trims or the reader scrolls during an async write.
+          // Restoring distance from the growing bottom moves those rows.
           term.write(operation.data, () => {
-            const nextTerm = aTermRef.current
-            const nextBuffer = nextTerm?.buffer.active
-
-            if (!isStale() && isScrolledUp && nextTerm && nextBuffer) {
-              const targetLine = Math.max(
-                nextBuffer.baseY - savedLinesFromBottom,
-                0,
-              )
-              if (nextBuffer.viewportY !== targetLine) {
-                nextTerm.scrollToLine(targetLine)
-              }
-            }
             if (!isStale()) {
               bumpCounter('writesFlushed')
               diagnostics?.record('write_flushed', {
@@ -122,6 +111,17 @@ export function useATermWriteQueue({
             }
             resolve()
           })
+          return
+        }
+
+        // A shell sync replaces the buffer wholesale. Leave history in place
+        // while it is being read; raw writes still update the live terminal,
+        // and the next sync at bottom can repair the live view normally.
+        if (term.buffer.active.viewportY < term.buffer.active.baseY) {
+          diagnostics?.record('snapshot_skipped_scrolled_up', {
+            chars: operation.data.length,
+          })
+          resolve()
           return
         }
 
@@ -138,8 +138,6 @@ export function useATermWriteQueue({
         const cursorMove = operation.cursorPosition
           ? formatCursorMove(operation.cursorPosition)
           : ''
-        const buffer = term.buffer.active
-
         // Fast path: snapshot is byte-identical — skip entirely.
         if (previousSnapshot === operation.data) {
           const finish = () => {
@@ -158,22 +156,14 @@ export function useATermWriteQueue({
           return
         }
 
-        const linesFromBottom = buffer.baseY - buffer.viewportY
         term.reset()
         term.write(`${operation.data}${SGR_RESET}${cursorMove}`, () => {
-          if (!isStale() && aTermRef.current && linesFromBottom > 0) {
-            const nextBuffer = aTermRef.current.buffer.active
-            aTermRef.current.scrollToLine(
-              Math.max(nextBuffer.baseY - linesFromBottom, 0),
-            )
-          }
           if (!isStale()) {
             lastSnapshotRef.current = operation.data
             bumpCounter('snapshotApplied')
             bumpCounter('fullResetApplied')
             diagnostics?.record('snapshot_full_reset_applied', {
               chars: operation.data.length,
-              linesFromBottom,
             })
           }
           resolve()
