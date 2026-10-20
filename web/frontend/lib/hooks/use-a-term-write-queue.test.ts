@@ -124,4 +124,24 @@ describe('useATermWriteQueue viewport following', () => {
       'history 31',
     )
   })
+
+  it('retains queued live output when the reader scrolls up before a queued sync', async () => {
+    const { term, hook } = await setup()
+    act(() => {
+      hook.result.current.enqueueWrite('\r\nnew 1')
+      hook.result.current.enqueueWrite('\r\nnew 2')
+      hook.result.current.applySnapshot('replacement sync\r\n')
+    })
+    term.scrollToLine(8)
+    const before = readingLine(term)
+
+    await waitFor(() => {
+      expect(
+        term.buffer.active
+          .getLine(term.buffer.active.baseY + 4)
+          ?.translateToString(true),
+      ).toBe('new 2')
+    })
+    expect(readingLine(term)).toBe(before)
+  })
 })

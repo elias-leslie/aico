@@ -352,7 +352,7 @@ describe('ATermComponent', () => {
     expect(fakeATerm.scrollToLine).not.toHaveBeenCalled()
   })
 
-  it('collapses queued writes to the latest snapshot before replaying newer output', async () => {
+  it('retains live writes around the latest queued snapshot', async () => {
     render(<ATermComponent sessionId="session-queue" />)
 
     websocketState.options?.onMessage?.('live-1')
@@ -376,21 +376,31 @@ describe('ATermComponent', () => {
 
     operationCallbacks.shift()?.()
     await waitFor(() => {
-      expect(fakeATerm.reset).toHaveBeenCalledTimes(1)
       expect(fakeATerm.write).toHaveBeenCalledTimes(2)
     })
     expect(fakeATerm.write).toHaveBeenNthCalledWith(
       2,
+      'live-2live-3',
+      expect.any(Function),
+    )
+
+    operationCallbacks.shift()?.()
+    await waitFor(() => {
+      expect(fakeATerm.reset).toHaveBeenCalledTimes(1)
+      expect(fakeATerm.write).toHaveBeenCalledTimes(3)
+    })
+    expect(fakeATerm.write).toHaveBeenNthCalledWith(
+      3,
       'snapshot-2\x1b[0m',
       expect.any(Function),
     )
 
     operationCallbacks.shift()?.()
     await waitFor(() => {
-      expect(fakeATerm.write).toHaveBeenCalledTimes(3)
+      expect(fakeATerm.write).toHaveBeenCalledTimes(4)
     })
     expect(fakeATerm.write).toHaveBeenNthCalledWith(
-      3,
+      4,
       'live-4',
       expect.any(Function),
     )

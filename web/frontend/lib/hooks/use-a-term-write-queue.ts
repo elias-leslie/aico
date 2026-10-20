@@ -210,7 +210,11 @@ export function useATermWriteQueue({
   const enqueueOperation = useCallback(
     (operation: ATermOperation) => {
       if (operation.type === 'snapshot') {
-        pendingOperationsRef.current.length = 0
+        // Keep raw writes: the reader may scroll up before this sync runs,
+        // in which case skipping its reset must not lose incoming output.
+        pendingOperationsRef.current = pendingOperationsRef.current.filter(
+          (pending) => pending.type === 'write',
+        )
         pendingOperationsRef.current.push(operation)
       } else {
         const lastOperation = pendingOperationsRef.current.at(-1)
