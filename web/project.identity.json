@@ -19,8 +19,6 @@
     "description": "Host-native browser workspace for persistent tmux, shell, and agent sessions."
   },
   "runtime": {
-    "runtime_user": "owner",
-    "infra": [],
     "backend_port": 8002,
     "frontend_port": 3002,
     "backend_dir": ".",
