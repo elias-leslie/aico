@@ -120,8 +120,8 @@ describe('desktop IPC', () => {
     expect(path.startsWith(`${pastedImages.dir}/paste-`)).toBe(true)
     expect(path.endsWith('.png')).toBe(true)
     expect(readFileSync(path)).toEqual(PNG)
-    expect(statSync(path).mode & 0o777).toBe(0o640)
-    expect(statSync(pastedImages.dir).mode & 0o777).toBe(0o750)
+    expect(statSync(path).mode & 0o777).toBe(0o644)
+    expect(statSync(pastedImages.dir).mode & 0o777).toBe(0o755)
     expect(handle.get('clipboard:image-path')?.()).not.toBe(path)
   })
 

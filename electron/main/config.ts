@@ -64,6 +64,7 @@ export function readConfig(
 ): AicoConfig {
   const stateDir = env.AICO_STATE_DIR ?? join(home, '.local', 'state', 'aico')
   const forced = env.AICO_TERMINAL_TRANSPORT
+  const exchangeRoot = env.TETHER_EXCHANGE_ROOT || '/srv/workspaces/exchange'
   return Object.freeze({
     stateDir,
     dbPath: join(stateDir, 'aico.db'),
@@ -74,9 +75,9 @@ export function readConfig(
     tetherSocket: tetherSocketPath(env, uid),
     tetherSockets: Object.freeze(knownTetherSockets(env, uid)),
     agentTetherSocket: env.TETHER_AGENT_SOCKET || DEFAULT_AGENT_TETHER_SOCKET,
-    exchangeRoot: env.TETHER_EXCHANGE_ROOT || '/srv/workspaces/exchange',
+    exchangeRoot,
     pastedImages: {
-      dir: env.AICO_PASTED_IMAGES_DIR || '/srv/workspaces/handoffs/pasted-images',
+      dir: env.AICO_PASTED_IMAGES_DIR || join(exchangeRoot, 'owner', 'pasted-images'),
       maxAgeMs: pastedImageMaxAgeMs(env.AICO_PASTED_IMAGES_KEEP_HOURS),
     },
     nightshift: join(home, '.local/bin/nightshift'),

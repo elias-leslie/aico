@@ -17,7 +17,7 @@ describe('readConfig', () => {
       ],
       agentTetherSocket: '/run/tether/agent/default/control.sock',
       exchangeRoot: '/srv/workspaces/exchange',
-      pastedImages: { dir: '/srv/workspaces/handoffs/pasted-images', maxAgeMs: 86_400_000 },
+      pastedImages: { dir: '/srv/workspaces/exchange/owner/pasted-images', maxAgeMs: 86_400_000 },
       nightshift: '/home/o/.local/bin/nightshift',
       atermUrl: 'https://terminal.summitflow.dev',
       selectionHotkey: 'CommandOrControl+Shift+Space',
@@ -26,6 +26,12 @@ describe('readConfig', () => {
       activationReadyFile: undefined,
       pidFile: undefined,
     })
+  })
+
+  it('keeps pasted images under the configured owner exchange by default', () => {
+    expect(readConfig({ TETHER_EXCHANGE_ROOT: '/exchange' }, '/h', 1).pastedImages.dir).toBe(
+      '/exchange/owner/pasted-images',
+    )
   })
 
   it('takes every override from the environment', () => {
