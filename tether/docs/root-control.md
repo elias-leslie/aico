@@ -222,22 +222,56 @@ it is not an atomic native submission receipt. If the supported route leaves a
 request queued, observe it and keep the same key rather than pasting a second
 copy into the pane.
 
-`model` and `reasoningEffort` are per-launch create fields for Codex and Pi; boolean `daybreak` is Codex-only. Model IDs
+`model` and `reasoningEffort` are per-launch create fields for Codex and Pi. Boolean
+`daybreak` supports Codex and Pi's explicit `openai/gpt-6-sol` selection. Model IDs
 are passed literally, without a hardcoded model catalog. Native Codex validates
 availability and whether the selected model supports the effort. The options
 apply to fresh and exact-resume launches, are included in the request digest,
 and do not alter persistent defaults. Use `--daybreak off` when the connected
 server cannot confirm Daybreak support for the requested model; omit it to
 inherit the user's setting. A nonempty selection appends
-`{model: string|null, reasoningEffort: string|null, daybreak?: boolean}` after the existing digest
+`{model: string|null, reasoningEffort: string|null, daybreak?: boolean, agentHubContext?: boolean}` after the existing digest
 fields, preserving digests for callers that omit both fields.
 
 Pi requires an explicit `--model PROVIDER/MODEL`, including on resume. For example,
 `--tool pi --model openai/gpt-6.1-sol --reasoning-effort high` passes native
 `--provider openai --model gpt-6.1-sol --thinking high`. This avoids inheriting
 a different provider from Pi's saved default. Pi efforts are `off`, `minimal`, `low`,
-`medium`, `high`, `xhigh`, and `max`; `none` and Daybreak are refused. Authentication
+`medium`, `high`, `xhigh`, and `max`; `none` is refused. Authentication
 failure remains a native error, with no provider or paid-key fallback added here.
+
+Pi's source-linked Agent Hub extension handles explicit Daybreak selection through
+the native OpenAI provider's model metadata, including compaction and nested
+provider calls. `--daybreak on` requests `access_programs.cyber=daybreak_blue`;
+`--daybreak off` requests `standard`. Both require `openai/gpt-6-sol`; omission
+leaves native provider behavior unchanged. The extension preserves native
+authentication and the dynamic provider catalog. Project/model/program access
+still requires a separate harmless authenticated qualification.
+
+`--agent-hub-context on|off` is Pi-only and controls **optional** Agent Hub context
+for this session. Off omits advisory references, reference/project indexes, tool
+guidance and continuity. Required global/project policy, mandates, guardrails,
+Pi's native/project instructions, and session ingestion remain active. Omission
+and `on` keep the existing default. Explicit values are included in create
+idempotency and carried through fresh/resumed launch environment; no persistent
+settings are changed.
+
+For two independent sessions, use distinct request IDs and change only the last
+flag (replace the project ID/path with the intended registered project):
+
+```bash
+st aico create pi-context-on 'Reply OK.' --project PROJECT --project-root /absolute/project \
+  --tool pi --model openai/gpt-6-sol --reasoning-effort xhigh --daybreak on --agent-hub-context on
+st aico create pi-context-off 'Reply OK.' --project PROJECT --project-root /absolute/project \
+  --tool pi --model openai/gpt-6-sol --reasoning-effort xhigh --daybreak on --agent-hub-context off
+```
+
+Integrate the Tether and Agent Hub checkpoints together, rebuild/restart Tether
+through its managed service, and verify the source-linked Pi adapter installation
+before starting new sessions. Existing Pi processes must reload extensions (or
+start fresh) to use updated source; a source checkpoint alone does not qualify
+provider access or prove delivery to a live model.
+
 Exact UUID resume uses Pi's `--session` in the original working directory, without
 a picker. Use the original `projectRoot`: a UUID from another directory enters
 Pi's native fork confirmation and creates a new UUID if confirmed. Automatic Pi conversation

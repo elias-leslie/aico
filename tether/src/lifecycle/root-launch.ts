@@ -62,6 +62,7 @@ export function rootLaunchEnvironment(widgetId: string): Record<string, string> 
     AICO_ROOT_MODEL: launchOptions.get(widgetId)?.model ?? '',
     AICO_ROOT_REASONING_EFFORT: launchOptions.get(widgetId)?.reasoningEffort ?? '',
     AICO_ROOT_DAYBREAK: launchOptions.get(widgetId)?.daybreak?.toString() ?? '',
+    AICO_ROOT_AGENT_HUB_CONTEXT: launchOptions.get(widgetId)?.agentHubContext?.toString() ?? '',
   }
 }
 
@@ -79,8 +80,13 @@ export function initialLaunchLine(widgetId: string, tool: TuiSpec): string | nul
   if (!line || (!rootRequestForWidget(widgetId) && !plainSessionPrompt(widgetId))) return line
   // Fixed shell bytes, quoted argv expansion. Even control characters and
   // shell metacharacters in the prompt cannot act as gate input or shell code.
+  // Pi's native extension consumes only the explicit per-session selection.
+  // Prompt bytes are always removed; other tools receive no Pi metadata.
   const clean =
-    '/usr/bin/env -u AICO_ROOT_INITIAL_PROMPT -u AICO_ROOT_RESUME_SESSION_ID -u AICO_ROOT_MODEL -u AICO_ROOT_REASONING_EFFORT -u AICO_ROOT_DAYBREAK'
+    '/usr/bin/env -u AICO_ROOT_INITIAL_PROMPT -u AICO_ROOT_RESUME_SESSION_ID -u AICO_ROOT_REASONING_EFFORT' +
+    (tool.slug === 'pi'
+      ? ''
+      : ' -u AICO_ROOT_MODEL -u AICO_ROOT_DAYBREAK -u AICO_ROOT_AGENT_HUB_CONTEXT')
   // Fixed adapter flags and quoted environment values. Configure before resume's
   // subcommand so both fresh and resumed native launches receive the overrides.
   const selection = tool.modelSelection
@@ -94,9 +100,10 @@ export function initialLaunchLine(widgetId: string, tool: TuiSpec): string | nul
   const flags = selection
     ? `if [ -n "$AICO_ROOT_MODEL" ]; then set -- "$@" ${modelFlags}; fi; if [ -n "$AICO_ROOT_REASONING_EFFORT" ]; then set -- "$@" ${effort?.arguments.join(' ')} ${effortValue}; fi; `
     : ''
-  const daybreak = selection?.daybreak
-    ? `if [ -n "$AICO_ROOT_DAYBREAK" ]; then set -- "$@" ${selection.daybreak.arguments.join(' ')} "${selection.daybreak.key}=$AICO_ROOT_DAYBREAK"; fi; `
-    : ''
+  const daybreak =
+    selection?.daybreak && 'arguments' in selection.daybreak
+      ? `if [ -n "$AICO_ROOT_DAYBREAK" ]; then set -- "$@" ${selection.daybreak.arguments.join(' ')} "${selection.daybreak.key}=$AICO_ROOT_DAYBREAK"; fi; `
+      : ''
   const selected = `${line} "$@"`
   const initial = `${clean} ${selected}`
   const resume = resumeLaunchLine(tool)

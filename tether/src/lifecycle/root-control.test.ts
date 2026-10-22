@@ -860,6 +860,7 @@ describe('private root workload control', () => {
       AICO_ROOT_MODEL: '',
       AICO_ROOT_REASONING_EFFORT: '',
       AICO_ROOT_DAYBREAK: '',
+      AICO_ROOT_AGENT_HUB_CONTEXT: '',
     })
     const replacementResult = execFileSync(
       '/bin/bash',
@@ -1010,6 +1011,84 @@ describe('private root workload control', () => {
         resume,
         { model: input.model, reasoningEffort: input.reasoningEffort },
       )
+  })
+
+  it('carries Pi Daybreak and optional context for fresh and resumed launches without leaking the prompt', async () => {
+    const input = {
+      ...create('pi-daybreak'),
+      tool: 'pi',
+      model: 'openai/gpt-6-sol',
+      reasoningEffort: 'xhigh',
+      daybreak: true,
+      agentHubContext: false,
+    }
+    const parsed = present(parseRootCreate(input))
+    for (const change of [
+      { daybreak: 'on' },
+      { model: 'openai-codex/gpt-6-sol' },
+      { model: 'openai/another-model' },
+      { agentHubContext: 'off' },
+      { tool: 'codex' },
+    ])
+      expect(parseRootCreate({ ...input, ...change })).toBeNull()
+    expect(rootRequestDigest(parsed)).not.toBe(
+      rootRequestDigest(present(parseRootCreate({ ...input, agentHubContext: true }))),
+    )
+    const first = await call('/v1/roots', 'POST', input)
+    expect(first.status).toBe(200)
+    expect(ensure).toHaveBeenLastCalledWith(first.body.hostIdentity, input.initialPrompt, null, {
+      model: input.model,
+      reasoningEffort: 'xhigh',
+      daybreak: true,
+      agentHubContext: false,
+    })
+    expect((await call('/v1/roots', 'POST', { ...input, agentHubContext: true })).status).toBe(409)
+    const root = present(getRootRequest(input.requestId))
+    const tool = {
+      ...present(getTui('pi')),
+      command: [
+        process.execPath,
+        '-e',
+        'console.log(JSON.stringify({args:process.argv.slice(1),model:process.env.AICO_ROOT_MODEL,daybreak:process.env.AICO_ROOT_DAYBREAK,context:process.env.AICO_ROOT_AGENT_HUB_CONTEXT,prompt:process.env.AICO_ROOT_INITIAL_PROMPT}))',
+        '--',
+      ],
+    }
+    for (const daybreak of [true, false])
+      for (const resume of [null, '00000000-0000-4000-8000-000000000001'])
+        await withRootPrompt(
+          root.widgetId,
+          'Synthetic prompt.',
+          async () => {
+            const result = execFileSync(
+              '/bin/bash',
+              ['--noprofile', '--norc', '-c', present(initialLaunchLine(root.widgetId, tool))],
+              {
+                env: { PATH: '/usr/bin:/bin', ...rootLaunchEnvironment(root.widgetId) },
+                encoding: 'utf8',
+              },
+            )
+            expect(JSON.parse(result)).toEqual({
+              args: [
+                '--provider',
+                'openai',
+                '--model',
+                'gpt-6-sol',
+                '--thinking',
+                'xhigh',
+                ...(resume ? ['--session', resume] : []),
+                '--',
+                'Synthetic prompt.',
+              ],
+              model: input.model,
+              daybreak: daybreak.toString(),
+              context: 'false',
+            })
+          },
+          resume,
+          { model: input.model, reasoningEffort: 'xhigh', daybreak, agentHubContext: false },
+        )
+    expect(rootLaunchEnvironment(root.widgetId).AICO_ROOT_DAYBREAK).toBe('')
+    expect(rootLaunchEnvironment(root.widgetId).AICO_ROOT_AGENT_HUB_CONTEXT).toBe('')
   })
 
   it('refuses a new root that would resume a conversation crash recovery owns', async () => {

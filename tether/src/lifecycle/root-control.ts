@@ -37,6 +37,7 @@ export interface RootLaunchOptions {
   model: string | null
   reasoningEffort: string | null
   daybreak?: boolean | null
+  agentHubContext?: boolean | null
 }
 
 export interface RootCreateRequest {
@@ -53,6 +54,8 @@ export interface RootCreateRequest {
   model?: string | null
   reasoningEffort?: string | null
   daybreak?: boolean | null
+  /** Pi optional context only; required shared and native context is retained. */
+  agentHubContext?: boolean | null
   /** Tether: which app requested the root. Not part of the digest. */
   origin: 'aico' | 'a-term'
   /** Tether: A-Term's session UUID (pane `A_TERM_SESSION_ID`); a-term only. */
@@ -225,6 +228,7 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
           'model',
           'reasoningEffort',
           'daybreak',
+          'agentHubContext',
           'origin',
           'aTermSessionId',
           'launchedBy',
@@ -245,6 +249,7 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     model = null,
     reasoningEffort = null,
     daybreak = null,
+    agentHubContext = null,
     origin = 'aico',
     aTermSessionId = null,
     launchedBy = null,
@@ -264,6 +269,8 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
       !getTui(tool)?.modelSelection) ||
     (daybreak !== null && typeof daybreak !== 'boolean') ||
     (daybreak !== null && !getTui(tool)?.modelSelection?.daybreak) ||
+    (tool === 'pi' && daybreak !== null && model !== 'openai/gpt-6-sol') ||
+    (agentHubContext !== null && (typeof agentHubContext !== 'boolean' || tool !== 'pi')) ||
     (getTui(tool)?.modelSelection?.modelProvider !== undefined &&
       (typeof model !== 'string' ||
         !/^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._:/-]*$/.test(model))) ||
@@ -309,6 +316,7 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     model: model as string | null,
     reasoningEffort: reasoningEffort as string | null,
     daybreak: daybreak as boolean | null,
+    agentHubContext: agentHubContext as boolean | null,
     origin,
     aTermSessionId: (aTermSessionId as string | null) ?? null,
     launchedBy: (launchedBy as string | null) ?? null,
@@ -327,12 +335,18 @@ export function rootRequestDigest(request: RootCreateRequest): string {
         request.leadRootReference,
         request.facetCapsuleRef,
         ...(request.resumeSessionId ? [request.resumeSessionId] : []),
-        ...(request.model || request.reasoningEffort || request.daybreak != null
+        ...(request.model ||
+        request.reasoningEffort ||
+        request.daybreak != null ||
+        request.agentHubContext != null
           ? [
               {
                 model: request.model ?? null,
                 reasoningEffort: request.reasoningEffort ?? null,
                 ...(request.daybreak != null ? { daybreak: request.daybreak } : {}),
+                ...(request.agentHubContext != null
+                  ? { agentHubContext: request.agentHubContext }
+                  : {}),
               },
             ]
           : []),
@@ -676,11 +690,19 @@ export function createRootHandler(
             // Do not disclose the launch error or prompt; identity/state is the
             // reconciliation receipt, including an ambiguous launch outcome.
             try {
-              if (input.model || input.reasoningEffort || input.daybreak != null)
+              if (
+                input.model ||
+                input.reasoningEffort ||
+                input.daybreak != null ||
+                input.agentHubContext != null
+              )
                 await operations.ensure(root.widgetId, input.initialPrompt, input.resumeSessionId, {
                   model: input.model ?? null,
                   reasoningEffort: input.reasoningEffort ?? null,
                   ...(input.daybreak != null ? { daybreak: input.daybreak } : {}),
+                  ...(input.agentHubContext != null
+                    ? { agentHubContext: input.agentHubContext }
+                    : {}),
                 })
               else
                 await operations.ensure(root.widgetId, input.initialPrompt, input.resumeSessionId)

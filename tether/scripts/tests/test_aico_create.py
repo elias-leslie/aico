@@ -24,9 +24,10 @@ def descriptor(payload, surface="aico", tether=False):
     fields = [payload[k] for k in ("tool", "projectId", "projectRoot", "initialPrompt", "role", "leadRootReference", "facetCapsuleRef")]
     if payload.get("resumeSessionId"):
         fields.append(payload["resumeSessionId"])
-    if payload.get("model") or payload.get("reasoningEffort") or payload.get("daybreak") is not None:
+    if payload.get("model") or payload.get("reasoningEffort") or payload.get("daybreak") is not None or payload.get("agentHubContext") is not None:
         fields.append({"model": payload.get("model"), "reasoningEffort": payload.get("reasoningEffort"),
-                       **({"daybreak": payload["daybreak"]} if payload.get("daybreak") is not None else {})})
+                       **({"daybreak": payload["daybreak"]} if payload.get("daybreak") is not None else {}),
+                       **({"agentHubContext": payload["agentHubContext"]} if payload.get("agentHubContext") is not None else {})})
     return {"owner": surface, "requestId": payload["requestId"],
             "digest": hashlib.sha256(json.dumps(fields, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest(),
             "hostIdentity": "12345678" if surface == "aico" or tether else THREAD,
@@ -253,3 +254,18 @@ def test_pi_selection_is_forwarded_without_using_another_tool(monkeypatch, provi
     assert calls[0]["model"] == f"{provider}/gpt-6.1-sol"
     assert calls[0]["reasoningEffort"] == effort
     assert calls[0]["resumeSessionId"] == THREAD
+
+
+@pytest.mark.parametrize("context", ["on", "off"])
+def test_pi_daybreak_and_optional_context_are_bound_to_create_digest(monkeypatch, context):
+    calls = []
+    def receipt(_, path, route, payload, **kwargs):
+        calls.append(payload)
+        return 200, descriptor(payload)
+    monkeypatch.setattr(admin.Collector, "receipt", receipt)
+    monkeypatch.setattr(admin, "emit_json", lambda *_: None)
+    argv = ["pi" if arg == "codex" else arg for arg in BASE]
+    assert admin.main([*argv, "--model", "openai/gpt-6-sol", "--reasoning-effort", "xhigh",
+                       "--daybreak", "on", "--agent-hub-context", context]) == 0
+    assert calls[0]["daybreak"] is True
+    assert calls[0]["agentHubContext"] is (context == "on")

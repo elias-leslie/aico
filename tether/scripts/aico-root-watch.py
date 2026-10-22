@@ -894,7 +894,8 @@ def create_main(argv: list[str]) -> int:
     parser.add_argument("--resume-session", help="exact native session ID; owner adapter validates format/support, never a picker")
     parser.add_argument("--model", help="per-launch model; Pi requires provider/model, passed as separate native provider/model flags")
     parser.add_argument("--reasoning-effort", choices=("none", "off", "minimal", "low", "medium", "high", "xhigh", "max"))
-    parser.add_argument("--daybreak", choices=("on", "off"), help="Codex Daybreak for this launch; leaves shared defaults alone")
+    parser.add_argument("--daybreak", choices=("on", "off"), help="Daybreak for this launch; Pi supports openai/gpt-6-sol; leaves shared defaults alone")
+    parser.add_argument("--agent-hub-context", choices=("on", "off"), help="Pi optional Agent Hub context; off retains required policy, native/project instructions and ingestion")
     parser.add_argument("--root-socket", type=socket_path)
     parser.add_argument("--root-url", type=local_root_url)
     args = parser.parse_args(argv)
@@ -936,10 +937,12 @@ def create_main(argv: list[str]) -> int:
         if args.resume_session:
             payload["resumeSessionId"] = args.resume_session
             fields.append(args.resume_session)
-        if args.model or args.reasoning_effort or args.daybreak is not None:
+        if args.model or args.reasoning_effort or args.daybreak is not None or args.agent_hub_context is not None:
             selection = {"model": args.model, "reasoningEffort": args.reasoning_effort}
             if args.daybreak is not None:
                 selection["daybreak"] = args.daybreak == "on"
+            if args.agent_hub_context is not None:
+                selection["agentHubContext"] = args.agent_hub_context == "on"
             payload.update(selection)
             fields.append(selection)
         digest = hashlib.sha256(json.dumps(fields, ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()
