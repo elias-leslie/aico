@@ -154,7 +154,7 @@ import {
   type TmuxServerRuntimeState,
   type TmuxServerUnitEvidence,
 } from './tmux-server-state'
-import { ensureContext } from './tui/context'
+import { ensureContext, finalizeContext } from './tui/context'
 import { detectTuiFromProcessNames, parseProcessTable, processTreeNames } from './tui/detect'
 import { launchLine, paneCommand, paneGatePath } from './tui/launch'
 import { getTui, listTuis } from './tui/registry'
@@ -2711,6 +2711,14 @@ async function discardWidgetOwned(
       contextStatuses.delete(id)
       ensureFailures.delete(id)
       publishSession(id, { ended: true })
+      const finalized = await finalizeContext(getTui(row.tool), row.sessionId)
+      if (finalized !== null) {
+        if (!finalized)
+          console.error(
+            `[tether:lifecycle] OpenCode accounting finalization unavailable session=${row.sessionId}`,
+          )
+        return { status: 'ended', contextFinalization: finalized ? 'completed' : 'unavailable' }
+      }
     } else if (result.status === 'blocked') {
       console.error(`[tether:lifecycle] retaining ${row.sessionId}: ${result.reason}`)
     } else if (result.status === 'stale') {

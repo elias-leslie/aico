@@ -15,7 +15,7 @@ import { stopOwnedPaneScope } from './owner-scope'
 import { MANAGED_LIFECYCLE_VERSION } from './ownership'
 
 export type RetirementResult =
-  | { status: 'ended' }
+  | { status: 'ended'; contextFinalization?: 'completed' | 'unavailable' }
   | { status: 'absent' }
   | { status: 'stale' }
   | { status: 'blocked'; reason: string }

@@ -30,3 +30,10 @@ preserves all existing operator edits, including a preexisting conflicting slug,
 and leaves the default tool as configured. Existing Aico sessions are unaffected.
 OpenCode controls free-model availability and limits; these entries select only
 the `-free` IDs. Official documentation describes them as free for a limited time.
+
+The launcher applies full-access permission rules to each native session through
+OpenCode's supported session API. Routine tool calls do not require confirmation;
+OpenCode-managed policies remain enforced. Global user configuration is not edited.
+After exact Tether retirement, Agent Hub exports/finalizes only the correlated
+native OpenCode sessions. The End response includes `contextFinalization` with
+`completed` or `unavailable`; a late idle sync cannot reopen a retired record.

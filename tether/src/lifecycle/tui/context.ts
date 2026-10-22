@@ -391,3 +391,19 @@ function opencodePlugin(): ContextStatus {
   }
   return { state: 'missing', detail: 'Canonical OpenCode plugin or launcher is missing or drifted' }
 }
+
+/** Run only after Tether has retired the exact owned workload. */
+export function finalizeContext(
+  spec: TuiSpec | undefined,
+  ownershipId: string,
+): Promise<boolean | null> {
+  if (spec?.context?.kind !== 'opencode-plugin') return Promise.resolve(null)
+  return new Promise((resolve) => {
+    execFile(
+      join(homedir(), '.local', 'bin', 'agent-hub-context-client'),
+      ['retire-opencode', '--surface', 'opencode', '--aico-session', ownershipId],
+      { timeout: 20000 },
+      (error) => resolve(!error),
+    )
+  })
+}

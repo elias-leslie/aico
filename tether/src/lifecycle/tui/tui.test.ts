@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Store } from '../../store'
 import type { AgentTool } from '../../tools'
-import { ensureContext } from './context'
+import { ensureContext, finalizeContext } from './context'
 import {
   effectiveTuiPath,
   isResumeSessionId,
@@ -570,5 +570,45 @@ describe('ensureContext', () => {
     )
     const status = await ensureContext(spec({ context: { kind: 'pi-extension' } }))
     expect(status.state).toBe('available')
+  })
+})
+
+describe('OpenCode retirement context', () => {
+  it('finalizes only the exact ownership ID after an OpenCode retirement', async () => {
+    vi.mocked(execFile).mockImplementation(((
+      _file: string,
+      _args: string[],
+      _options: unknown,
+      callback: unknown,
+    ) => {
+      ;(callback as (error: Error | null) => void)(null)
+      return undefined as never
+    }) as never)
+    expect(
+      await finalizeContext(spec({ context: { kind: 'opencode-plugin' } }), 'aico-widget-12345678'),
+    ).toBe(true)
+    expect(execFile).toHaveBeenCalledWith(
+      join(homedir(), '.local', 'bin', 'agent-hub-context-client'),
+      ['retire-opencode', '--surface', 'opencode', '--aico-session', 'aico-widget-12345678'],
+      { timeout: 20000 },
+      expect.any(Function),
+    )
+    vi.mocked(execFile).mockClear()
+    expect(await finalizeContext(spec(), 'aico-widget-12345678')).toBeNull()
+    expect(execFile).not.toHaveBeenCalled()
+  })
+  it('reports unavailable accounting without claiming completion', async () => {
+    vi.mocked(execFile).mockImplementation(((
+      _file: string,
+      _args: string[],
+      _options: unknown,
+      callback: unknown,
+    ) => {
+      ;(callback as (error: Error | null) => void)(new Error('offline'))
+      return undefined as never
+    }) as never)
+    expect(
+      await finalizeContext(spec({ context: { kind: 'opencode-plugin' } }), 'aico-widget-12345678'),
+    ).toBe(false)
   })
 })
