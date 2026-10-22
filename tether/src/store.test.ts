@@ -73,6 +73,28 @@ describe('Store schema', () => {
     ])
   })
 
+  it('migrates retained v5 roots without inventing a work role or changing their digest', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tether-role-migration-'))
+    const path = join(dir, 'tether.db')
+    const previous = open(path)
+    previous.db.exec(`ALTER TABLE root_requests DROP COLUMN work_role;
+      ALTER TABLE root_requests DROP COLUMN work_role_display_name;
+      DELETE FROM schema_version WHERE version = 6;
+      INSERT INTO root_requests (request_id, digest, widget_id, logical_session_id, role, created_at)
+      VALUES ('legacy', 'retained-digest', '12345678', 'legacy-session', 'portfolio-root', 1);`)
+    previous.close()
+    const migrated = open(path)
+    expect(
+      migrated.db
+        .prepare('SELECT digest, work_role, work_role_display_name FROM root_requests')
+        .get(),
+    ).toMatchObject({
+      digest: 'retained-digest',
+      work_role: null,
+      work_role_display_name: null,
+    })
+  })
+
   it('reopens without reseeding and refuses a newer schema', () => {
     const dir = mkdtempSync(join(tmpdir(), 'tether-store-'))
     const path = join(dir, 'tether.db')
@@ -116,6 +138,8 @@ describe('Store schema', () => {
       'created_at',
       // Tether v3: appended after Aico's columns, so the import stays positional.
       'origin',
+      'work_role',
+      'work_role_display_name',
     ])
     expect(columns('sessions').slice(0, 19)).toEqual([
       'id',

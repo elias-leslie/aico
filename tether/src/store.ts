@@ -9,6 +9,7 @@ import {
   RETIRED_SESSION_IDS_SQL,
   ROOT_ORIGIN_SQL,
   ROOT_REQUESTS_TABLE_SQL,
+  ROOT_WORK_ROLE_SQL,
   SCHEMA_VERSION,
   SESSIONS_TABLE_SQL,
   SETTINGS_SQL,
@@ -186,6 +187,12 @@ export class Store {
         this.db
           .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
           .run(5, now)
+      }
+      if (current < 6) {
+        this.db.exec(ROOT_WORK_ROLE_SQL)
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(6, now)
       }
     })
   }

@@ -55,6 +55,9 @@ export function rootLaunchEnvironment(widgetId: string): Record<string, string> 
   const prompt = prompts.get(widgetId)
   return {
     ...(root ? { ST_SESSION_ID: root.logicalSessionId } : {}),
+    ST_WORK_ROLE: root?.workRole ?? '',
+    ST_WORK_ROLE_SOURCE: root?.workRole ? `tether:root:${root.logicalSessionId}` : '',
+    ST_WORK_ROLE_DISPLAY_NAME: root?.workRoleDisplayName ?? '',
     // Explicitly clear inherited session variables on a manual replacement.
     AICO_ROOT_INITIAL_LAUNCH: prompt === undefined ? '0' : '1',
     AICO_ROOT_INITIAL_PROMPT: prompt ?? '',

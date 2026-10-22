@@ -11,7 +11,7 @@ from test_aico_admin import admin
 
 THREAD = "00000000-0000-4000-8000-000000000001"
 BASE = ["create", "recovery-1", "Reconcile after crash.", "--tool", "codex", "--project", "sample-app",
-        "--project-root", "/fixture/project", "--resume-session", THREAD]
+        "--project-root", "/fixture/project", "--work-role", "implementation", "--resume-session", THREAD]
 
 
 @pytest.fixture(autouse=True)
@@ -28,6 +28,8 @@ def descriptor(payload, surface="aico", tether=False):
         fields.append({"model": payload.get("model"), "reasoningEffort": payload.get("reasoningEffort"),
                        **({"daybreak": payload["daybreak"]} if payload.get("daybreak") is not None else {}),
                        **({"agentHubContext": payload["agentHubContext"]} if payload.get("agentHubContext") is not None else {})})
+    if payload.get("workRole"):
+        fields.append({"workRole": payload.get("workRole"), "workRoleDisplayName": payload.get("workRoleDisplayName")})
     return {"owner": surface, "requestId": payload["requestId"],
             "digest": hashlib.sha256(json.dumps(fields, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest(),
             "hostIdentity": "12345678" if surface == "aico" or tether else THREAD,
@@ -35,6 +37,7 @@ def descriptor(payload, surface="aico", tether=False):
             "surfaceLocator": "aico://widget/12345678" if surface == "aico" or tether
                               else "a-term://pane/" + THREAD,
             "status": "running", "role": payload["role"],
+            "workRole": payload.get("workRole"), "workRoleDisplayName": payload.get("workRoleDisplayName"),
             "leadRootReference": payload["leadRootReference"], "facetCapsuleRef": payload["facetCapsuleRef"]}
 
 
@@ -269,3 +272,37 @@ def test_pi_daybreak_and_optional_context_are_bound_to_create_digest(monkeypatch
                        "--daybreak", "on", "--agent-hub-context", context]) == 0
     assert calls[0]["daybreak"] is True
     assert calls[0]["agentHubContext"] is (context == "on")
+
+
+@pytest.mark.parametrize("role", ["unknown", "invalid role", ""])
+def test_work_role_refuses_unregistered_ids(monkeypatch, role):
+    monkeypatch.setattr(admin.Collector, "receipt", lambda *_a, **_kw: pytest.fail("owner contacted"))
+    with pytest.raises(SystemExit) as result:
+        admin.main([*BASE, "--work-role", role])
+    assert result.value.code == 2
+
+
+def test_work_role_is_explicit_independent_metadata(monkeypatch):
+    calls = []
+    monkeypatch.setenv("ST_WORK_ROLE", "coordinator")
+    def receipt(_, path, route, payload, **kwargs):
+        calls.append(payload)
+        return 200, descriptor(payload)
+    monkeypatch.setattr(admin.Collector, "receipt", receipt)
+    monkeypatch.setattr(admin, "emit_json", lambda *_: None)
+    assert admin.main([*BASE, "--role", "opaque-facet", "--work-role-name", "Builder"]) == 0
+    assert calls[0]["workRole"] == "implementation"
+    assert calls[0]["workRoleDisplayName"] == "Builder"
+    assert calls[0]["role"] == "opaque-facet"
+    assert calls[0]["initialPrompt"] == "Reconcile after crash."
+
+
+def test_legacy_create_retry_keeps_its_original_digest(monkeypatch):
+    calls = []
+    def receipt(_, path, route, payload, **kwargs):
+        calls.append(payload)
+        return 200, descriptor(payload)
+    monkeypatch.setattr(admin.Collector, "receipt", receipt)
+    monkeypatch.setattr(admin, "emit_json", lambda *_: None)
+    assert admin.main(fresh("codex")) == 0
+    assert "workRole" not in calls[0]

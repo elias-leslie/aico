@@ -629,6 +629,8 @@ export interface RootRequestRow {
   widgetId: string
   logicalSessionId: string
   role: string
+  workRole?: string | null
+  workRoleDisplayName?: string | null
   leadRootReference: string | null
   facetCapsuleRef: string | null
   createdAt: number
@@ -643,6 +645,8 @@ function rootRequestRow(row: Record<string, unknown>): RootRequestRow {
     widgetId: row.widget_id as string,
     logicalSessionId: row.logical_session_id as string,
     role: row.role as string,
+    workRole: row.work_role as string | null,
+    workRoleDisplayName: row.work_role_display_name as string | null,
     leadRootReference: row.lead_root_reference as string | null,
     facetCapsuleRef: row.facet_capsule_ref as string | null,
     createdAt: row.created_at as number,
@@ -688,8 +692,8 @@ export function reserveRootRequest(
     })
     setWidgetProject(request.widgetId, projectId, projectRoot)
     db.prepare(`INSERT INTO root_requests
-      (request_id, digest, widget_id, logical_session_id, role, lead_root_reference, facet_capsule_ref, created_at, origin)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+      (request_id, digest, widget_id, logical_session_id, role, lead_root_reference, facet_capsule_ref, created_at, origin, work_role, work_role_display_name)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
       request.requestId,
       request.digest,
       request.widgetId,
@@ -699,6 +703,8 @@ export function reserveRootRequest(
       request.facetCapsuleRef,
       request.createdAt,
       request.origin ?? 'aico',
+      request.workRole ?? null,
+      request.workRoleDisplayName ?? null,
     )
     db.exec('COMMIT')
     return request

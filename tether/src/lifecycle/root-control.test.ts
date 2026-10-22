@@ -102,6 +102,7 @@ describe('private root workload control', () => {
     projectRoot: fixture,
     initialPrompt: 'Only this independent root.',
     role: 'sample-app-target-root',
+    workRole: 'implementation',
     leadRootReference: 'portfolio-center',
   })
   const call = (
@@ -784,8 +785,54 @@ describe('private root workload control', () => {
     })
   })
 
+  it('requires an explicit fixed work role only on new requests and fences role changes', async () => {
+    const omitted = { ...create('undeclared-new'), workRole: undefined }
+    expect((await call('/v1/roots', 'POST', omitted)).body).toEqual({ error: 'work_role_required' })
+    expect(getRootRequest('undeclared-new')).toBeUndefined()
+    for (const workRole of ['unknown', 'invalid role', '', 1])
+      expect(parseRootCreate({ ...omitted, workRole })).toBeNull()
+    const input = { ...create('work-role-fixed'), workRoleDisplayName: 'Builder' }
+    const first = await call('/v1/roots', 'POST', input)
+    expect(first.status).toBe(200)
+    expect(first.body).toMatchObject({ workRole: 'implementation', workRoleDisplayName: 'Builder' })
+    const root = present(getRootRequest(input.requestId))
+    expect(rootLaunchEnvironment(root.widgetId)).toMatchObject({
+      ST_WORK_ROLE: 'implementation',
+      ST_WORK_ROLE_DISPLAY_NAME: 'Builder',
+      ST_WORK_ROLE_SOURCE: `tether:root:${root.logicalSessionId}`,
+    })
+    expect((await call('/v1/roots', 'POST', input)).body.digest).toBe(first.body.digest)
+    expect((await call('/v1/roots', 'POST', { ...input, workRole: 'research' })).status).toBe(409)
+    expect(
+      (await call('/v1/roots', 'POST', { ...input, workRoleDisplayName: 'Changed' })).status,
+    ).toBe(409)
+    const legacy = present(parseRootCreate({ ...create('legacy-role-retry'), workRole: null }))
+    reserveRootRequest(
+      {
+        requestId: legacy.requestId,
+        widgetId: allocateWidgetId(),
+        logicalSessionId: 'legacy-role-session',
+        role: legacy.role,
+        digest: rootRequestDigest(legacy),
+        createdAt: Date.now(),
+        origin: 'aico',
+        leadRootReference: legacy.leadRootReference,
+        facetCapsuleRef: null,
+      },
+      'codex',
+      legacy.projectId,
+      legacy.projectRoot,
+    )
+    expect((await call('/v1/roots', 'POST', legacy)).status).toBe(200)
+    const legacyRoot = present(getRootRequest(legacy.requestId))
+    expect(rootLaunchEnvironment(legacyRoot.widgetId).ST_WORK_ROLE).toBe('')
+    expect((await call('/v1/roots', 'POST', { ...legacy, workRole: 'coordinator' })).status).toBe(
+      409,
+    )
+  })
+
   it('rejects arbitrary command injection and canonicalizes exact launch content', () => {
-    const input = create('digest')
+    const input = { ...create('digest'), workRole: null }
     expect(parseRootCreate({ ...input, command: ['bash'] })).toBeNull()
     expect(parseRootCreate({ ...input, tool: 'shell' })).toBeNull()
     for (const projectRoot of ['/tmp/../other', '/tmp/./x', '/tmp//x', '/tmp/x\0', 'tmp/x'])
@@ -854,6 +901,9 @@ describe('private root workload control', () => {
     })
     expect(rootLaunchEnvironment(root.widgetId)).toEqual({
       ST_SESSION_ID: root.logicalSessionId,
+      ST_WORK_ROLE: root.workRole,
+      ST_WORK_ROLE_SOURCE: `tether:root:${root.logicalSessionId}`,
+      ST_WORK_ROLE_DISPLAY_NAME: '',
       AICO_ROOT_INITIAL_LAUNCH: '0',
       AICO_ROOT_INITIAL_PROMPT: '',
       AICO_ROOT_RESUME_SESSION_ID: '',
@@ -1203,6 +1253,8 @@ describe('private root workload control', () => {
             prompt,
             '--tool',
             'codex',
+            '--work-role',
+            'implementation',
             '--project',
             'sample-app',
             '--project-root',

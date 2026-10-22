@@ -888,7 +888,10 @@ def create_main(argv: list[str]) -> int:
     parser.add_argument("--tool", type=tool_slug, required=True, help=(
         "required. Agent tool slug: claude-code, codex or pi."))
     parser.add_argument("--surface", choices=("aico", "a-term"), default="aico")
-    parser.add_argument("--role", default="portfolio-root")
+    parser.add_argument("--role", default="portfolio-root", help="opaque orchestration metadata")
+    parser.add_argument("--work-role",
+                        help="required for a new root: coordinator, implementation, research, review, recon, hunting, operations or other; fixed including resume")
+    parser.add_argument("--work-role-name", help="optional display name (1-128 characters)")
     parser.add_argument("--lead-root")
     parser.add_argument("--facet")
     parser.add_argument("--resume-session", help="exact native session ID; owner adapter validates format/support, never a picker")
@@ -899,6 +902,11 @@ def create_main(argv: list[str]) -> int:
     parser.add_argument("--root-socket", type=socket_path)
     parser.add_argument("--root-url", type=local_root_url)
     args = parser.parse_args(argv)
+    if args.work_role is not None and (not re.fullmatch(KEY, args.work_role) or args.work_role == "unknown"):
+        parser.error("expected a declared work role ID; unknown is reserved for legacy sessions")
+    if args.work_role_name is not None and (not args.work_role or not args.work_role_name.strip()
+            or len(args.work_role_name) > 128 or re.search(r"[\x00-\x1f\x7f]", args.work_role_name)):
+        parser.error("work role name must be 1-128 characters of single-line text")
     if any(not re.fullmatch(KEY, value) for value in
            (args.request_id, args.project, args.role, *(v for v in (args.lead_root, args.facet) if v is not None))):
         parser.error("invalid root metadata")
@@ -945,9 +953,12 @@ def create_main(argv: list[str]) -> int:
                 selection["agentHubContext"] = args.agent_hub_context == "on"
             payload.update(selection)
             fields.append(selection)
+        if args.work_role:
+            payload.update(workRole=args.work_role, workRoleDisplayName=args.work_role_name)
+            fields.append({"workRole": args.work_role, "workRoleDisplayName": args.work_role_name})
         digest = hashlib.sha256(json.dumps(fields, ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()
         status, data = collector.receipt(endpoint, "/v1/roots", payload, timeout=10)
-        errors = {400: ("invalid_body", "unsupported_tool"), 409: ("request_conflict", "recovery_pending"),
+        errors = {400: ("invalid_body", "unsupported_tool", "work_role_required"), 409: ("request_conflict", "recovery_pending"),
                   422: ("launch_unavailable",), 503: ("gui_unavailable",)}
         if status not in (200, 202):
             reason = data.get("error")
@@ -967,6 +978,7 @@ def create_main(argv: list[str]) -> int:
         state = data.get("status")
         if (data.get("owner") != args.surface or data.get("requestId") != args.request_id
                 or data.get("digest") != digest or data.get("role") != args.role
+                or data.get("workRole") != args.work_role or data.get("workRoleDisplayName") != args.work_role_name
                 or data.get("leadRootReference") != args.lead_root or data.get("facetCapsuleRef") != args.facet
                 or not surface_identity(args.surface, host, data.get("surfaceLocator"))
                 or not isinstance(data.get("logicalSessionId"), str)
@@ -978,6 +990,7 @@ def create_main(argv: list[str]) -> int:
                 or state == "ended" and generation is not None):
             raise Unavailable("create_receipt_unqualified")
         output.update({key: data[key] for key in ("digest", "hostIdentity", "logicalSessionId", "generation", "surfaceLocator", "status")})
+        output.update(workRole=args.work_role, workRoleDisplayName=args.work_role_name)
         if "launchedBy" in payload:
             output["launchedBy"] = payload["launchedBy"]
         emit_json(collector, output)

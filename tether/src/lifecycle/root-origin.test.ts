@@ -67,6 +67,7 @@ describe('root origin (v1 roots API)', () => {
     projectRoot: fixture,
     initialPrompt: 'Only this root.',
     role: 'lead',
+    workRole: 'implementation',
     leadRootReference: null,
     ...extra,
   })

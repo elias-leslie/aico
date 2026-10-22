@@ -59,7 +59,7 @@ describe('control socket', () => {
       status: 'ok',
       instance: 'test',
       apiVersion: 1,
-      schemaVersion: 5,
+      schemaVersion: 6,
       lifecycle: 'disabled',
       gui: { connected: false },
     })

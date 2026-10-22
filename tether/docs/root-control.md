@@ -234,7 +234,7 @@ inherit the user's setting. A nonempty selection appends
 fields, preserving digests for callers that omit both fields.
 
 Pi requires an explicit `--model PROVIDER/MODEL`, including on resume. For example,
-`--tool pi --model openai/gpt-6.1-sol --reasoning-effort high` passes native
+`--tool pi --work-role implementation --model openai/gpt-6.1-sol --reasoning-effort high` passes native
 `--provider openai --model gpt-6.1-sol --thinking high`. This avoids inheriting
 a different provider from Pi's saved default. Pi efforts are `off`, `minimal`, `low`,
 `medium`, `high`, `xhigh`, and `max`; `none` is refused. Authentication
@@ -261,9 +261,9 @@ flag (replace the project ID/path with the intended registered project):
 
 ```bash
 st aico create pi-context-on 'Reply OK.' --project PROJECT --project-root /absolute/project \
-  --tool pi --model openai/gpt-6-sol --reasoning-effort xhigh --daybreak on --agent-hub-context on
+  --tool pi --work-role implementation --model openai/gpt-6-sol --reasoning-effort xhigh --daybreak on --agent-hub-context on
 st aico create pi-context-off 'Reply OK.' --project PROJECT --project-root /absolute/project \
-  --tool pi --model openai/gpt-6-sol --reasoning-effort xhigh --daybreak on --agent-hub-context off
+  --tool pi --work-role implementation --model openai/gpt-6-sol --reasoning-effort xhigh --daybreak on --agent-hub-context off
 ```
 
 Integrate the Tether and Agent Hub checkpoints together, rebuild/restart Tether
@@ -279,9 +279,32 @@ discovery for reboot/crash recovery is unavailable; no new runtime state is inst
 Pi terminal observation remains `unsupported_profile`, and atomic follow-up submission
 is unavailable. Use exact root status/end and a new create request for a fresh instruction.
 
+New roots require an explicit `workRole` from Agent Hub’s canonical work-role registry:
+`coordinator`, `implementation`, `research`, `review`, `recon`, `hunting`,
+`operations`, or `other`. Use `--work-role implementation` with either
+`--surface aico` or `--surface a-term`. `--work-role-name Builder` optionally
+sets a human display name. The opaque `--role` field keeps its existing meaning.
+Work roles never come from titles, prompts, coordinator membership, or a parent.
+Tether transports safe explicit IDs; Agent Hub owns registry membership validation.
+
+The declaration and optional name are immutable root creation metadata. They
+append `{workRole, workRoleDisplayName}` to the digest after all existing fields.
+The pane receives `ST_WORK_ROLE`, `ST_WORK_ROLE_SOURCE` (the immutable root
+logical identity prefixed by `tether:root:`), and `ST_WORK_ROLE_DISPLAY_NAME`.
+No launch prompt text is added. Same-request retries and tombstones retain the
+original declaration; changing either declaration field conflicts. Legacy
+requests can still retry with their original body/digest and remain Unknown;
+a new request without a work role returns `400 work_role_required`.
+
+Native producers register the declaration against the actual native UUID.
+Resuming a UUID retains its first native-session declaration in Agent Hub;
+choose that same role on resume. A different role requires a new native session
+or a fitting existing one. Tether's logical root ID is provenance, never the
+native UUID. Existing owner-created sessions and imported roots stay Unknown.
+
 Create accepts exactly `requestId`, `tool` (a root-capable slug, today
 `claude-code`, `codex` or `pi`),
-`projectId`, absolute normalized `projectRoot`, nonempty `initialPrompt`, `role`,
+`projectId`, absolute normalized `projectRoot`, nonempty `initialPrompt`, `role`, `workRole`, optional `workRoleDisplayName`,
 and optional opaque `leadRootReference`, `facetCapsuleRef`, and
 `resumeSessionId`, `model`, `reasoningEffort`, and `daybreak`. On `/v1` it also accepts `origin`, `aTermSessionId` and
 `launchedBy` ([api-v1.md](api-v1.md#roots)); none of them is part of the digest.
@@ -314,7 +337,7 @@ beginning with a letter or number. Roles and references are generic metadata;
 Tether interprets no campaign, focus, scheduling, or orchestration semantics.
 
 The canonical digest covers every create field except the request key and the
-`/v1`-only fields. Fresh launches keep the original seven-field digest; a
+`/v1`-only fields. Legacy fresh launches keep the original seven-field digest; a
 non-null resume UUID is appended as the eighth field. A transaction reserves the
 key, widget, and unique logical `ST_SESSION_ID` before launch. Matching retries
 reconcile the same widget; changed content returns 409 `request_conflict`.
@@ -343,7 +366,7 @@ repo's `scripts/aico-root-watch.py`) creates one root without a fleet ledger or
 prompt retention:
 
 ```sh
-st aico create recovery-root-1 'Reconcile current state after the crash before continuing.' --tool codex --project myapp --project-root ~/projects/myapp --resume-session 00000000-0000-4000-8000-000000000001
+st aico create recovery-root-1 'Reconcile current state after the crash before continuing.' --tool codex --work-role implementation --project myapp --project-root ~/projects/myapp --resume-session 00000000-0000-4000-8000-000000000001
 ```
 
 Use the exact saved UUID, a new stable request ID, and the same complete body on

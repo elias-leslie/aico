@@ -48,6 +48,9 @@ export interface RootCreateRequest {
   projectRoot: string
   initialPrompt: string
   role: string
+  /** Fixed declaration, separate from the opaque orchestration role. */
+  workRole?: string | null
+  workRoleDisplayName?: string | null
   leadRootReference: string | null
   facetCapsuleRef: string | null
   resumeSessionId: string | null
@@ -222,6 +225,8 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
           'projectRoot',
           'initialPrompt',
           'role',
+          'workRole',
+          'workRoleDisplayName',
           'leadRootReference',
           'facetCapsuleRef',
           'resumeSessionId',
@@ -243,6 +248,8 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     projectRoot,
     initialPrompt,
     role,
+    workRole = null,
+    workRoleDisplayName = null,
     leadRootReference,
     facetCapsuleRef,
     resumeSessionId,
@@ -293,6 +300,16 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
       resumeSessionId !== null &&
       (!isResumeSessionId(getTui(tool), resumeSessionId) ||
         !isBoundedTerminalText(initialPrompt))) ||
+    (workRole !== null &&
+      (typeof workRole !== 'string' || !KEY.test(workRole) || workRole === 'unknown')) ||
+    (workRoleDisplayName !== null &&
+      (workRole === null ||
+        typeof workRoleDisplayName !== 'string' ||
+        !workRoleDisplayName.trim() ||
+        [...workRoleDisplayName].length > 128 ||
+        [...workRoleDisplayName].some(
+          (char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127,
+        ))) ||
     typeof role !== 'string' ||
     !KEY.test(role) ||
     (leadRootReference !== undefined &&
@@ -310,6 +327,8 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     projectRoot,
     initialPrompt,
     role,
+    workRole: workRole as string | null,
+    workRoleDisplayName: workRoleDisplayName as string | null,
     leadRootReference: leadRootReference ?? null,
     facetCapsuleRef: facetCapsuleRef ?? null,
     resumeSessionId: resumeSessionId ?? null,
@@ -347,6 +366,14 @@ export function rootRequestDigest(request: RootCreateRequest): string {
                 ...(request.agentHubContext != null
                   ? { agentHubContext: request.agentHubContext }
                   : {}),
+              },
+            ]
+          : []),
+        ...(request.workRole
+          ? [
+              {
+                workRole: request.workRole,
+                workRoleDisplayName: request.workRoleDisplayName ?? null,
               },
             ]
           : []),
@@ -493,6 +520,8 @@ export function createRootHandler(
       generation: row ? sessionGeneration(row) : null,
       surfaceLocator: `aico://widget/${root.widgetId}`,
       role: root.role,
+      workRole: root.workRole ?? null,
+      workRoleDisplayName: root.workRoleDisplayName ?? null,
       leadRootReference: root.leadRootReference,
       facetCapsuleRef: root.facetCapsuleRef,
       status: row ? await operations.status(row) : 'ended',
@@ -650,6 +679,10 @@ export function createRootHandler(
             return
           }
           if (!root) {
+            if (!input.workRole) {
+              json(response, 400, { error: 'work_role_required' })
+              return
+            }
             // Two agents must never resume one conversation: crash recovery
             // resumes it in its own session.
             const owner = input.resumeSessionId
@@ -670,6 +703,8 @@ export function createRootHandler(
                 widgetId: allocateWidgetId(),
                 logicalSessionId: `aico-root-${randomUUID()}`,
                 role: input.role,
+                workRole: input.workRole,
+                workRoleDisplayName: input.workRoleDisplayName,
                 leadRootReference: input.leadRootReference,
                 facetCapsuleRef: input.facetCapsuleRef,
                 createdAt: Date.now(),

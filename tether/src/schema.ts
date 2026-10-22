@@ -3,7 +3,7 @@
 // copies rows byte for byte. The only widening is the tmux_servers unit CHECK,
 // which additionally admits non-default instance unit names.
 
-export const SCHEMA_VERSION = 5
+export const SCHEMA_VERSION = 6
 
 /** Aico's tmux_servers table (electron/main/store.ts TMUX_SERVERS_TABLE_SQL),
  * plus `tether-<instance>-tmux-server-<id>.service` for non-default instances. */
@@ -189,4 +189,10 @@ export const SETTINGS_SQL = `
     value      TEXT NOT NULL CHECK(json_valid(value)),
     updated_at INTEGER NOT NULL CHECK(updated_at >= 0)
   );
+`
+
+/** Root declarations are creation metadata; imported roots remain undeclared. */
+export const ROOT_WORK_ROLE_SQL = `
+  ALTER TABLE root_requests ADD COLUMN work_role TEXT;
+  ALTER TABLE root_requests ADD COLUMN work_role_display_name TEXT;
 `
