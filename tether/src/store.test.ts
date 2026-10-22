@@ -100,26 +100,69 @@ describe('Store schema', () => {
     const path = join(dir, 'tether.db')
     const old = open(path)
     old.updateTool('pi', { name: 'My Pi', enabled: false })
-    old.updateTool('opencode-deepseek-free', {
+    old.updateTool('opencode', {
       name: 'My OpenCode',
       argv: ['/opt/custom-opencode'],
     })
-    old.db.exec(
-      "DELETE FROM agent_tools WHERE slug = 'opencode-glm-free'; DELETE FROM schema_version WHERE version >= 7",
-    )
+    old.db.exec('DELETE FROM schema_version WHERE version >= 7')
     const retained = old.getTool('pi')
     old.close()
     const migrated = open(path)
     expect(migrated.getTool('pi')).toEqual(retained)
-    expect(migrated.getTool('opencode-deepseek-free')?.argv).toEqual(['/opt/custom-opencode'])
-    expect(migrated.getTool('opencode-glm-free')?.argv).toEqual([
-      'agent-hub-opencode',
-      'mini',
-      '--model',
-      'opencode/glm-5.3-flash-free',
-    ])
-    expect(migrated.getTool('opencode-glm-free')?.contextHook).toBe('opencode-plugin')
+    expect(migrated.getTool('opencode')?.argv).toEqual(['/opt/custom-opencode'])
+    expect(migrated.getTool('opencode')?.contextHook).toBe('opencode-plugin')
     expect(migrated.defaultTool()?.slug).toBe('codex')
+  })
+
+  it('consolidates v7 OpenCode picker rows while preserving retained sessions and commands', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tether-opencode-picker-migration-'))
+    const path = join(dir, 'tether.db')
+    const old = open(path)
+    old.deleteTool('opencode')
+    const legacy = [
+      ['opencode-deepseek-free', 'opencode/deepseek-v4.1-flash-free'],
+      ['opencode-glm-free', 'opencode/glm-5.3-flash-free'],
+    ].map(([slug, model], index) => {
+      const tool = old.createTool(
+        {
+          ...seedTool,
+          slug,
+          name: `Saved ${slug}`,
+          argv: ['agent-hub-opencode', 'mini', '--model', model],
+          processName: 'opencode',
+          contextHook: 'opencode-plugin',
+          isDefault: index === 0,
+        },
+        500,
+      )
+      old.db
+        .prepare(
+          'INSERT INTO sessions (id, seq, created_at, tool, session_id) VALUES (?, ?, 1, ?, ?)',
+        )
+        .run(`0a1b2c3${index}`, index + 1, slug, `saved-session-${index}`)
+      return tool
+    })
+    const sessions = old.listSessions()
+    old.db.exec('DELETE FROM schema_version WHERE version >= 8')
+    old.close()
+
+    const migrated = open(path)
+    expect(migrated.listSessions()).toEqual(sessions)
+    for (const tool of legacy) {
+      expect(migrated.resolveTool(tool.slug)).toEqual({
+        ...tool,
+        enabled: false,
+        isDefault: false,
+        updatedAt: 1_000,
+      })
+    }
+    expect(
+      migrated.listTools({ enabledOnly: true }).filter((tool) => tool.processName === 'opencode'),
+    ).toMatchObject([{ slug: 'opencode', name: 'OpenCode', argv: ['agent-hub-opencode', 'mini'] }])
+    expect(migrated.defaultTool()?.slug).toBe('opencode')
+    const canonical = migrated.getTool('opencode')
+    migrated.close()
+    expect(open(path).getTool('opencode')).toEqual(canonical)
   })
 
   it('reopens without reseeding and refuses a newer schema', () => {
@@ -216,13 +259,13 @@ describe('agent tools', () => {
       'codex',
       'agy',
       'pi',
-      'opencode-deepseek-free',
-      'opencode-glm-free',
+      'opencode',
       'shell',
     ])
     expect(store.defaultTool()?.slug).toBe('codex')
     expect(store.getTool('codex')?.command).toBe('codex --yolo')
     expect(store.getTool('shell')?.argv).toEqual([])
+    expect(store.getTool('opencode')?.argv).toEqual(['agent-hub-opencode', 'mini'])
   })
 
   it("resolves A-Term's claude slug as an alias", () => {

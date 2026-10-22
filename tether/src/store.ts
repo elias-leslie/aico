@@ -20,6 +20,7 @@ import {
   DEFAULT_TOOLS,
   formatCommand,
   isContextHook,
+  OPENCODE_TOOL,
   SLUG_RE,
   type ToolSeed,
   ToolValidationError,
@@ -213,6 +214,25 @@ export class Store {
         this.db
           .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
           .run(7, now)
+      }
+      if (current < 8) {
+        // OpenCode is one harness; its native UI owns interactive model choice.
+        // Retain old tool identities/commands for existing sessions, but hide
+        // model-specific rows from both apps' enabled-tool pickers.
+        const legacy = ['opencode-deepseek-free', 'opencode-glm-free']
+          .map((slug) => this.getTool(slug))
+          .filter((tool) => tool !== undefined)
+        if (!this.getTool(OPENCODE_TOOL.slug)) this.insertTool(OPENCODE_TOOL, now)
+        for (const tool of legacy) {
+          this.applyToolPatch(tool, { enabled: false, isDefault: false }, now)
+        }
+        if (legacy.some((tool) => tool.isDefault)) {
+          const opencode = this.getTool(OPENCODE_TOOL.slug)
+          if (opencode) this.applyToolPatch(opencode, { enabled: true, isDefault: true }, now)
+        }
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(8, now)
       }
     })
   }

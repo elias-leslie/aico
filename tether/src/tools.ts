@@ -28,6 +28,20 @@ export interface AgentTool {
 
 export type ToolSeed = Omit<AgentTool, 'id' | 'command' | 'createdAt' | 'updatedAt'>
 
+export const OPENCODE_TOOL: ToolSeed = {
+  slug: 'opencode',
+  name: 'OpenCode',
+  argv: ['agent-hub-opencode', 'mini'],
+  processName: 'opencode',
+  description: 'OpenCode coding agent',
+  color: '#7C3AED',
+  displayOrder: 4,
+  isDefault: false,
+  enabled: true,
+  aliases: [],
+  contextHook: 'opencode-plugin',
+}
+
 /**
  * Seeded once when the database is created. Canonical slugs follow Aico
  * (widget rows and the root contract use `claude-code`); A-Term's `claude`
@@ -89,32 +103,7 @@ export const DEFAULT_TOOLS: readonly ToolSeed[] = [
     aliases: [],
     contextHook: 'pi-extension',
   },
-  {
-    slug: 'opencode-deepseek-free',
-    name: 'DeepSeek V4.1 Flash Free (OpenCode)',
-    argv: ['agent-hub-opencode', 'mini', '--model', 'opencode/deepseek-v4.1-flash-free'],
-    processName: 'opencode',
-    description: 'OpenCode native free model; availability is controlled by OpenCode',
-    color: '#7C3AED',
-    displayOrder: 4,
-    isDefault: false,
-    enabled: true,
-    aliases: [],
-    contextHook: 'opencode-plugin',
-  },
-  {
-    slug: 'opencode-glm-free',
-    name: 'GLM 5.3 Flash Free (OpenCode)',
-    argv: ['agent-hub-opencode', 'mini', '--model', 'opencode/glm-5.3-flash-free'],
-    processName: 'opencode',
-    description: 'OpenCode native free model; availability is controlled by OpenCode',
-    color: '#7C3AED',
-    displayOrder: 5,
-    isDefault: false,
-    enabled: true,
-    aliases: [],
-    contextHook: 'opencode-plugin',
-  },
+  OPENCODE_TOOL,
   {
     slug: 'shell',
     name: 'Shell',
