@@ -954,12 +954,18 @@ describe('private root workload control', () => {
     expect(rootLaunchEnvironment(root.widgetId).AICO_ROOT_MODEL).toBe('')
   })
 
-  it('launches and resumes Pi with literal provider/model and thinking argv', async () => {
+  it.each([
+    { provider: 'openai-codex', effort: 'xhigh' },
+    { provider: 'openai', effort: 'high' },
+  ])('launches and resumes Pi with explicit $provider/$effort argv', async ({
+    provider,
+    effort,
+  }) => {
     const input = {
-      ...create('pi-selection'),
+      ...create(`pi-selection-${provider}`),
       tool: 'pi',
-      model: 'openai-codex/gpt-6.1-sol',
-      reasoningEffort: 'xhigh',
+      model: `${provider}/gpt-6.1-sol`,
+      reasoningEffort: effort,
     }
     expect(parseRootCreate(input)).not.toBeNull()
     expect(parseRootCreate({ ...input, model: null })).toBeNull()
@@ -991,11 +997,11 @@ describe('private root workload control', () => {
           )
           expect(JSON.parse(output)).toEqual([
             '--provider',
-            'openai-codex',
+            provider,
             '--model',
             'gpt-6.1-sol',
             '--thinking',
-            'xhigh',
+            effort,
             ...(resume ? ['--session', resume] : []),
             '--',
             'Reply only.',

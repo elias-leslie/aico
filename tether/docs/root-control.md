@@ -233,8 +233,8 @@ inherit the user's setting. A nonempty selection appends
 fields, preserving digests for callers that omit both fields.
 
 Pi requires an explicit `--model PROVIDER/MODEL`, including on resume. For example,
-`--tool pi --model openai-codex/gpt-6.1-sol --reasoning-effort xhigh` passes native
-`--provider openai-codex --model gpt-6.1-sol --thinking xhigh`. This avoids inheriting
+`--tool pi --model openai/gpt-6.1-sol --reasoning-effort high` passes native
+`--provider openai --model gpt-6.1-sol --thinking high`. This avoids inheriting
 a different provider from Pi's saved default. Pi efforts are `off`, `minimal`, `low`,
 `medium`, `high`, `xhigh`, and `max`; `none` and Daybreak are refused. Authentication
 failure remains a native error, with no provider or paid-key fallback added here.

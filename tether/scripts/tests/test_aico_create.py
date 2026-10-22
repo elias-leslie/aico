@@ -239,7 +239,8 @@ def test_tool_help_lists_tools_only(capsys):
         assert policy not in help_text
 
 
-def test_pi_selection_is_forwarded_without_using_another_tool(monkeypatch):
+@pytest.mark.parametrize("provider,effort", [("openai-codex", "xhigh"), ("openai", "high")])
+def test_pi_selection_is_forwarded_without_using_another_tool(monkeypatch, provider, effort):
     calls = []
     def receipt(_, path, route, payload, **kwargs):
         calls.append(payload)
@@ -247,7 +248,8 @@ def test_pi_selection_is_forwarded_without_using_another_tool(monkeypatch):
     monkeypatch.setattr(admin.Collector, "receipt", receipt)
     monkeypatch.setattr(admin, "emit_json", lambda *_: None)
     argv = ["pi" if arg == "codex" else arg for arg in BASE]
-    assert admin.main([*argv, "--model", "openai-codex/gpt-6.1-sol", "--reasoning-effort", "xhigh"]) == 0
+    assert admin.main([*argv, "--model", f"{provider}/gpt-6.1-sol", "--reasoning-effort", effort]) == 0
     assert calls[0]["tool"] == "pi"
-    assert calls[0]["model"] == "openai-codex/gpt-6.1-sol"
+    assert calls[0]["model"] == f"{provider}/gpt-6.1-sol"
+    assert calls[0]["reasoningEffort"] == effort
     assert calls[0]["resumeSessionId"] == THREAD
