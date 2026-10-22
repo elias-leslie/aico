@@ -185,11 +185,56 @@ those roots.
 
 ## Create
 
+### Quick coordination path
+
+Launch a requested Codex model without changing shared defaults or using a
+model picker:
+
+```sh
+st aico create review-1 'Read the brief at /path/BRIEF.md.' --tool codex \
+  --project PROJECT --project-root /path/project \
+  --model gpt-6.1-sol --reasoning-effort high
+st aico root title review-1 'Review'
+st aico roots review-1
+```
+
+For an ordinary followup, use `st sessions send AGENT 'instruction'
+--source-key REVISION`; the recipient acknowledges it and the sender confirms
+the exchange. An exact native Codex UUID can instead use `--delivery
+native-thread`; `st -P PROJECT sessions verify UUID --source-key REVISION`
+reads that delivery's retained receipt. Live Codex sends use its coordination
+inbox, whose hook or idle watcher surfaces the request. Offline sends use the
+native queue. Reusing the same source key reconciles the original send.
+Queued means retained; seen means surfaced; acknowledged means the agent
+answered. None proves the requested work finished. Live inbox verification
+reports no native turn-execution proof, and an expired inbox receipt is unknown.
+Native verification of live sends requires receipts created after this repair.
+
+Recycle only a session the coordinator opened, after its report and checkpoint
+are verified: `st aico root end OLD_REQUEST`, verify `status: ended`, then
+create a fresh root with a new request ID, the followup brief, and the requested
+model/effort. This retains native history and avoids `/clear` resetting model
+defaults. Do not use `--resume-session` when the purpose is fresh context.
+`st aico admin clear|submit` remains unavailable: its native compare-and-apply
+interface is absent. Routine followups and recycling need no desktop focus or
+operator tmux input. The existing idle watcher may use exact-pane tmux internally;
+it is not an atomic native submission receipt. If the supported route leaves a
+request queued, observe it and keep the same key rather than pasting a second
+copy into the pane.
+
+`model` and `reasoningEffort` are optional Codex-only create fields. Model IDs
+are passed literally, without a hardcoded model catalog. Native Codex validates
+availability and whether the selected model supports the effort. The options
+apply to fresh and exact-resume launches, are included in the request digest,
+and do not alter persistent defaults. A nonempty selection appends
+`{model: string|null, reasoningEffort: string|null}` after the existing digest
+fields, preserving digests for callers that omit both fields.
+
 Create accepts exactly `requestId`, `tool` (a root-capable slug, today
 `claude-code` or `codex`),
 `projectId`, absolute normalized `projectRoot`, nonempty `initialPrompt`, `role`,
 and optional opaque `leadRootReference`, `facetCapsuleRef`, and
-`resumeSessionId`. On `/v1` it also accepts `origin`, `aTermSessionId` and
+`resumeSessionId`, `model`, and `reasoningEffort`. On `/v1` it also accepts `origin`, `aTermSessionId` and
 `launchedBy` ([api-v1.md](api-v1.md#roots)); none of them is part of the digest.
 
 A tool is root-capable exactly when it has a resume adapter; `GET /v1/tools`

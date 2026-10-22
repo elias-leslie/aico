@@ -61,4 +61,6 @@ export interface TuiSpec {
    * this adapter's pattern and appends only these fixed arguments before the
    * session ID, then `--` and the transient recovery prompt. No caller argv. */
   resume?: { sessionIdPattern: RegExp; arguments: string[] }
+  /** Fixed CLI flags for per-launch model overrides; never caller-supplied argv. */
+  modelSelection?: { model: string[]; reasoningEffort: { arguments: string[]; key: string } }
 }

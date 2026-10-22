@@ -33,6 +33,11 @@ export interface Bounds {
   height: number
 }
 
+export interface RootLaunchOptions {
+  model: string | null
+  reasoningEffort: string | null
+}
+
 export interface RootCreateRequest {
   requestId: string
   /** A root-capable tool slug (`ROOT_TOOLS`). */
@@ -44,6 +49,8 @@ export interface RootCreateRequest {
   leadRootReference: string | null
   facetCapsuleRef: string | null
   resumeSessionId: string | null
+  model?: string | null
+  reasoningEffort?: string | null
   /** Tether: which app requested the root. Not part of the digest. */
   origin: 'aico' | 'a-term'
   /** Tether: A-Term's session UUID (pane `A_TERM_SESSION_ID`); a-term only. */
@@ -70,7 +77,12 @@ export type MutationRejection = { status: number; error: string }
 export interface RootControlOperations {
   available(): boolean
   validate(request: RootCreateRequest): boolean
-  ensure(widgetId: string, initialPrompt: string, resumeSessionId: string | null): Promise<void>
+  ensure(
+    widgetId: string,
+    initialPrompt: string,
+    resumeSessionId: string | null,
+    options?: RootLaunchOptions,
+  ): Promise<void>
   status(row: WidgetRow): Promise<'running' | 'pending' | 'uncertain'>
   mutate(
     widgetId: string,
@@ -208,6 +220,8 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
           'leadRootReference',
           'facetCapsuleRef',
           'resumeSessionId',
+          'model',
+          'reasoningEffort',
           'origin',
           'aTermSessionId',
           'launchedBy',
@@ -225,6 +239,8 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     leadRootReference,
     facetCapsuleRef,
     resumeSessionId,
+    model = null,
+    reasoningEffort = null,
     origin = 'aico',
     aTermSessionId = null,
     launchedBy = null,
@@ -240,6 +256,13 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     typeof requestId !== 'string' ||
     !KEY.test(requestId) ||
     !isRootTool(tool) ||
+    ((model !== null || reasoningEffort !== null) && !getTui(tool)?.modelSelection) ||
+    (model !== null &&
+      (typeof model !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/.test(model))) ||
+    (reasoningEffort !== null &&
+      !['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(
+        reasoningEffort as string,
+      )) ||
     typeof projectId !== 'string' ||
     !KEY.test(projectId) ||
     !isProjectRootPath(projectRoot) ||
@@ -271,6 +294,8 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     leadRootReference: leadRootReference ?? null,
     facetCapsuleRef: facetCapsuleRef ?? null,
     resumeSessionId: resumeSessionId ?? null,
+    model: model as string | null,
+    reasoningEffort: reasoningEffort as string | null,
     origin,
     aTermSessionId: (aTermSessionId as string | null) ?? null,
     launchedBy: (launchedBy as string | null) ?? null,
@@ -289,6 +314,9 @@ export function rootRequestDigest(request: RootCreateRequest): string {
         request.leadRootReference,
         request.facetCapsuleRef,
         ...(request.resumeSessionId ? [request.resumeSessionId] : []),
+        ...(request.model || request.reasoningEffort
+          ? [{ model: request.model ?? null, reasoningEffort: request.reasoningEffort ?? null }]
+          : []),
       ]),
     )
     .digest('hex')
@@ -629,7 +657,13 @@ export function createRootHandler(
             // Do not disclose the launch error or prompt; identity/state is the
             // reconciliation receipt, including an ambiguous launch outcome.
             try {
-              await operations.ensure(root.widgetId, input.initialPrompt, input.resumeSessionId)
+              if (input.model || input.reasoningEffort)
+                await operations.ensure(root.widgetId, input.initialPrompt, input.resumeSessionId, {
+                  model: input.model ?? null,
+                  reasoningEffort: input.reasoningEffort ?? null,
+                })
+              else
+                await operations.ensure(root.widgetId, input.initialPrompt, input.resumeSessionId)
             } catch {
               /* reconcile below */
             }

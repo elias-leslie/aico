@@ -57,6 +57,11 @@ export function toolSpec(tool: AgentTool): TuiSpec {
   if (context) spec.context = context
   const resume = RESUME_ADAPTERS[tool.slug]
   if (resume) spec.resume = resume
+  if (tool.slug === 'codex')
+    spec.modelSelection = {
+      model: ['--model'],
+      reasoningEffort: { arguments: ['-c'], key: 'model_reasoning_effort' },
+    }
   return spec
 }
 

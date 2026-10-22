@@ -1,4 +1,5 @@
 import { getWidget, rootRequestForWidget } from './catalog'
+import type { RootLaunchOptions } from './root-control'
 import { isResumeSessionId, launchLine, resumeLaunchLine } from './tui/launch'
 import { getTui } from './tui/registry'
 import type { TuiSpec } from './tui/spec'
@@ -9,12 +10,14 @@ import type { TuiSpec } from './tui/spec'
 // is saved in the catalog or sent to a running TUI.
 const prompts = new Map<string, string>()
 const resumeSessions = new Map<string, string>()
+const launchOptions = new Map<string, RootLaunchOptions>()
 
 export async function withRootPrompt<T>(
   widgetId: string,
   prompt: string,
   action: () => Promise<T>,
   resumeSessionId: string | null = null,
+  options?: RootLaunchOptions,
 ): Promise<T> {
   if (
     resumeSessionId !== null &&
@@ -23,11 +26,13 @@ export async function withRootPrompt<T>(
     throw new Error('invalid resume session')
   prompts.set(widgetId, prompt)
   if (resumeSessionId !== null) resumeSessions.set(widgetId, resumeSessionId)
+  if (options) launchOptions.set(widgetId, options)
   try {
     return await action()
   } finally {
     prompts.delete(widgetId)
     resumeSessions.delete(widgetId)
+    launchOptions.delete(widgetId)
   }
 }
 
@@ -54,6 +59,8 @@ export function rootLaunchEnvironment(widgetId: string): Record<string, string> 
     AICO_ROOT_INITIAL_LAUNCH: prompt === undefined ? '0' : '1',
     AICO_ROOT_INITIAL_PROMPT: prompt ?? '',
     AICO_ROOT_RESUME_SESSION_ID: resumeSessions.get(widgetId) ?? '',
+    AICO_ROOT_MODEL: launchOptions.get(widgetId)?.model ?? '',
+    AICO_ROOT_REASONING_EFFORT: launchOptions.get(widgetId)?.reasoningEffort ?? '',
   }
 }
 
@@ -71,11 +78,20 @@ export function initialLaunchLine(widgetId: string, tool: TuiSpec): string | nul
   if (!line || (!rootRequestForWidget(widgetId) && !plainSessionPrompt(widgetId))) return line
   // Fixed shell bytes, quoted argv expansion. Even control characters and
   // shell metacharacters in the prompt cannot act as gate input or shell code.
-  const initial = `/usr/bin/env -u AICO_ROOT_INITIAL_PROMPT -u AICO_ROOT_RESUME_SESSION_ID ${line}`
+  const clean =
+    '/usr/bin/env -u AICO_ROOT_INITIAL_PROMPT -u AICO_ROOT_RESUME_SESSION_ID -u AICO_ROOT_MODEL -u AICO_ROOT_REASONING_EFFORT'
+  // Fixed adapter flags and quoted environment values. Configure before resume's
+  // subcommand so both fresh and resumed native launches receive the overrides.
+  const selection = tool.modelSelection
+  const flags = selection
+    ? `if [ -n "$AICO_ROOT_MODEL" ]; then set -- "$@" ${selection.model.join(' ')} "$AICO_ROOT_MODEL"; fi; if [ -n "$AICO_ROOT_REASONING_EFFORT" ]; then set -- "$@" ${selection.reasoningEffort.arguments.join(' ')} '${selection.reasoningEffort.key}="'"$AICO_ROOT_REASONING_EFFORT"'"'; fi; `
+    : ''
+  const selected = `${line} "$@"`
+  const initial = `${clean} ${selected}`
   const resume = resumeLaunchLine(tool)
   const resumed = resume
-    ? `/usr/bin/env -u AICO_ROOT_INITIAL_PROMPT -u AICO_ROOT_RESUME_SESSION_ID ${resume} "$AICO_ROOT_RESUME_SESSION_ID" -- "$AICO_ROOT_INITIAL_PROMPT"`
+    ? `${clean} ${selected} ${tool.resume?.arguments.join(' ')} "$AICO_ROOT_RESUME_SESSION_ID" -- "$AICO_ROOT_INITIAL_PROMPT"`
     : 'exit 64'
   const launch = `if [ -n "$AICO_ROOT_RESUME_SESSION_ID" ]; then ${resumed}; else ${initial} -- "$AICO_ROOT_INITIAL_PROMPT"; fi`
-  return `if [ "$AICO_ROOT_INITIAL_LAUNCH" = 1 ]; then ${launch}; else ${line}; fi`
+  return `if [ "$AICO_ROOT_INITIAL_LAUNCH" = 1 ]; then set --; ${flags}${launch}; else ${line}; fi`
 }

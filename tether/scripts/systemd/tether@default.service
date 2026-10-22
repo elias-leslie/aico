@@ -10,6 +10,7 @@ Documentation=https://github.com/elias-leslie/tether
 [Service]
 Type=simple
 Slice=app.slice
+WorkingDirectory=__PROJECT_ROOT__
 # "-": a missing release never keeps the installed daemon from starting.
 ExecStartPre=-__PROJECT_ROOT__/scripts/install-release.sh
 ExecStart=%h/.local/lib/tether/bin/tether --instance default serve

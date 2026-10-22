@@ -856,6 +856,8 @@ describe('private root workload control', () => {
       AICO_ROOT_INITIAL_LAUNCH: '0',
       AICO_ROOT_INITIAL_PROMPT: '',
       AICO_ROOT_RESUME_SESSION_ID: '',
+      AICO_ROOT_MODEL: '',
+      AICO_ROOT_REASONING_EFFORT: '',
     })
     const replacementResult = execFileSync(
       '/bin/bash',
@@ -876,6 +878,72 @@ describe('private root workload control', () => {
     } finally {
       reader.close()
     }
+  })
+
+  it('binds model selection to create idempotency and passes it to the launch', async () => {
+    const input = { ...create('model-selection'), model: 'gpt-6.1-sol', reasoningEffort: 'high' }
+    const parsed = present(parseRootCreate(input))
+    expect(rootRequestDigest(parsed)).not.toBe(
+      rootRequestDigest(present(parseRootCreate(create('model-selection')))),
+    )
+    const first = await call('/v1/roots', 'POST', input)
+    expect(first.status).toBe(200)
+    expect(await call('/v1/roots', 'POST', input)).toEqual(first)
+    expect(ensure).toHaveBeenLastCalledWith(first.body.hostIdentity, input.initialPrompt, null, {
+      model: 'gpt-6.1-sol',
+      reasoningEffort: 'high',
+    })
+    expect((await call('/v1/roots', 'POST', { ...input, model: 'another-model' })).status).toBe(409)
+    for (const model of ['', '--flag', 'x\nunsafe', 'x'.repeat(129)])
+      expect(parseRootCreate({ ...input, model })).toBeNull()
+    expect(parseRootCreate({ ...input, reasoningEffort: 'unknown' })).toBeNull()
+    expect(parseRootCreate({ ...input, tool: 'claude-code' })).toBeNull()
+  })
+
+  it('passes model and effort as literal argv for fresh and resumed launches', async () => {
+    const root = present(getRootRequest('model-selection'))
+    const tool = {
+      ...codexTui,
+      modelSelection: {
+        model: ['--model'],
+        reasoningEffort: { arguments: ['-c'], key: 'model_reasoning_effort' },
+      },
+      command: [
+        process.execPath,
+        '-e',
+        'console.log(JSON.stringify({args:process.argv.slice(1),model:process.env.AICO_ROOT_MODEL,effort:process.env.AICO_ROOT_REASONING_EFFORT}))',
+        '--',
+      ],
+    }
+    for (const resume of [null, '00000000-0000-4000-8000-000000000001'])
+      await withRootPrompt(
+        root.widgetId,
+        'Reply only.',
+        async () => {
+          const result = execFileSync(
+            '/bin/bash',
+            ['--noprofile', '--norc', '-c', present(initialLaunchLine(root.widgetId, tool))],
+            {
+              env: { PATH: '/usr/bin:/bin', ...rootLaunchEnvironment(root.widgetId) },
+              encoding: 'utf8',
+            },
+          )
+          expect(JSON.parse(result)).toEqual({
+            args: [
+              '--model',
+              'gpt-6.1-sol',
+              '-c',
+              'model_reasoning_effort="high"',
+              ...(resume ? ['resume', '--no-daemon', resume] : []),
+              '--',
+              'Reply only.',
+            ],
+          })
+        },
+        resume,
+        { model: 'gpt-6.1-sol', reasoningEffort: 'high' },
+      )
+    expect(rootLaunchEnvironment(root.widgetId).AICO_ROOT_MODEL).toBe('')
   })
 
   it('refuses a new root that would resume a conversation crash recovery owns', async () => {

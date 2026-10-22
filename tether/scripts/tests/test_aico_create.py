@@ -24,6 +24,8 @@ def descriptor(payload, surface="aico", tether=False):
     fields = [payload[k] for k in ("tool", "projectId", "projectRoot", "initialPrompt", "role", "leadRootReference", "facetCapsuleRef")]
     if payload.get("resumeSessionId"):
         fields.append(payload["resumeSessionId"])
+    if payload.get("model") or payload.get("reasoningEffort"):
+        fields.append({"model": payload.get("model"), "reasoningEffort": payload.get("reasoningEffort")})
     return {"owner": surface, "requestId": payload["requestId"],
             "digest": hashlib.sha256(json.dumps(fields, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest(),
             "hostIdentity": "12345678" if surface == "aico" or tether else THREAD,
@@ -165,6 +167,19 @@ def test_tool_is_required():
     without = [arg for arg in BASE if arg not in ("--tool", "codex")]
     with pytest.raises(SystemExit):
         admin.main(without)
+
+
+def test_requested_model_and_effort_are_digest_bound(monkeypatch):
+    calls = []
+
+    def receipt(_, endpoint, route, payload, **kwargs):
+        calls.append(payload)
+        return 200, descriptor(payload)
+
+    monkeypatch.setattr(admin.Collector, "receipt", receipt)
+    assert admin.main([*BASE, "--model", "gpt-6.1-sol", "--reasoning-effort", "high"]) == 0
+    assert calls[0]["model"] == "gpt-6.1-sol"
+    assert calls[0]["reasoningEffort"] == "high"
 
 
 def fresh(tool):

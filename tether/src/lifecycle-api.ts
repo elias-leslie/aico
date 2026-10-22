@@ -435,7 +435,7 @@ export function rootOperations(context: LifecycleApiContext): RootControlOperati
     },
     validate: (request) => Boolean(getTui(request.tool)?.enabled && isDir(request.projectRoot)),
     resumeOwner: (resumeSessionId) => context.recovery?.resumeOwner(resumeSessionId) ?? null,
-    ensure: async (widgetId, prompt, resumeSessionId) => {
+    ensure: async (widgetId, prompt, resumeSessionId, options) => {
       await whenReady()
       const row = getWidget(widgetId)
       // Root cwd is exact. Never inherit another project or fall back to a
@@ -448,6 +448,7 @@ export function rootOperations(context: LifecycleApiContext): RootControlOperati
           await ensureSessionSerialized(widgetId, { cols: 100, rows: 30 })
         },
         resumeSessionId,
+        options,
       )
       const latest = getWidget(widgetId)
       // Verify now so `GET /v1/sessions` agrees with `GET /v1/sessions/:id`.

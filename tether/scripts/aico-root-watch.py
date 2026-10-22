@@ -892,6 +892,8 @@ def create_main(argv: list[str]) -> int:
     parser.add_argument("--lead-root")
     parser.add_argument("--facet")
     parser.add_argument("--resume-session", help="exact native session ID; owner adapter validates format/support, never a picker")
+    parser.add_argument("--model", help="exact Codex model for this launch; does not change defaults")
+    parser.add_argument("--reasoning-effort", choices=("none", "minimal", "low", "medium", "high", "xhigh", "max"))
     parser.add_argument("--root-socket", type=socket_path)
     parser.add_argument("--root-url", type=local_root_url)
     args = parser.parse_args(argv)
@@ -903,6 +905,8 @@ def create_main(argv: list[str]) -> int:
         parser.error("project root must be an exact normalized absolute path")
     if args.resume_session is not None and not re.fullmatch(KEY, args.resume_session):
         parser.error("resume requires a bounded exact native session ID")
+    if args.model is not None and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}", args.model):
+        parser.error("invalid model identifier")
     if (args.stdin and args.prompt is not None or args.surface == "aico" and args.root_url
             or args.surface == "a-term" and args.root_socket):
         parser.error("conflicting prompt or owner transport options")
@@ -931,6 +935,9 @@ def create_main(argv: list[str]) -> int:
         if args.resume_session:
             payload["resumeSessionId"] = args.resume_session
             fields.append(args.resume_session)
+        if args.model or args.reasoning_effort:
+            payload.update(model=args.model, reasoningEffort=args.reasoning_effort)
+            fields.append({"model": args.model, "reasoningEffort": args.reasoning_effort})
         digest = hashlib.sha256(json.dumps(fields, ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()
         status, data = collector.receipt(endpoint, "/v1/roots", payload, timeout=10)
         errors = {400: ("invalid_body", "unsupported_tool"), 409: ("request_conflict", "recovery_pending"),
