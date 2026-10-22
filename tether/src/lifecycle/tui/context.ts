@@ -56,6 +56,8 @@ export async function ensureContext(spec: TuiSpec): Promise<ContextStatus> {
       return codexHooks(spec)
     case 'pi-extension':
       return piExtension()
+    case 'opencode-plugin':
+      return opencodePlugin()
     case 'canonical-retrieval':
       return canonicalRetrieval(spec.context.surface)
   }
@@ -366,4 +368,26 @@ function piExtension(): ContextStatus {
   } catch {
     return { state: 'missing', detail: `${extension} is unreadable — cannot verify context` }
   }
+}
+
+/** Verify source links only; receipt of context remains a per-request fact. */
+function opencodePlugin(): ContextStatus {
+  const repo = agentHubRepo()
+  if (!repo) return unknownCheckout('AGENT_HUB_REPO', 'agent-hub')
+  const root = join(repo, 'integrations', 'context-delivery', 'opencode')
+  const links = [
+    [join(homedir(), '.config', 'opencode', 'plugins', 'agent-hub.js'), join(root, 'agent-hub.js')],
+    [join(homedir(), '.local', 'bin', 'agent-hub-opencode'), join(root, 'launcher')],
+  ]
+  try {
+    if (links.every(([target, source]) => realpathSync(target) === source)) {
+      return {
+        state: 'available',
+        detail: 'Canonical OpenCode plugin and launcher installed; model receipt is unverified',
+      }
+    }
+  } catch {
+    // Native OpenCode can still run when supplemental context is unavailable.
+  }
+  return { state: 'missing', detail: 'Canonical OpenCode plugin or launcher is missing or drifted' }
 }

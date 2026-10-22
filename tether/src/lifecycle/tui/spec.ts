@@ -17,6 +17,7 @@ export type ContextHook =
   | { kind: 'claude-session-start' }
   | { kind: 'codex-hooks' }
   | { kind: 'pi-extension' }
+  | { kind: 'opencode-plugin' }
   | { kind: 'canonical-retrieval'; surface: 'antigravity' }
 
 /** Outcome of verifying/ensuring a TUI's context hook. */

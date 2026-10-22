@@ -39,6 +39,8 @@ function contextHook(hook: ToolContextHook | null): ContextHook | undefined {
       return { kind: 'codex-hooks' }
     case 'pi-extension':
       return { kind: 'pi-extension' }
+    case 'opencode-plugin':
+      return { kind: 'opencode-plugin' }
     case 'canonical-retrieval:antigravity':
       return { kind: 'canonical-retrieval', surface: 'antigravity' }
     default:

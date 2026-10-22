@@ -158,7 +158,15 @@ const spec = (over: Partial<TuiSpec> = {}): TuiSpec => ({
 describe('registry', () => {
   it('serves the seeded agent tools in display order', () => {
     registerBuiltinTuis()
-    expect(listTuis().map((t) => t.slug)).toEqual(['claude-code', 'codex', 'agy', 'pi', 'shell'])
+    expect(listTuis().map((t) => t.slug)).toEqual([
+      'claude-code',
+      'codex',
+      'agy',
+      'pi',
+      'opencode-deepseek-free',
+      'opencode-glm-free',
+      'shell',
+    ])
   })
 
   it('defaults to the registry default (Codex, owner decision)', () => {
@@ -189,6 +197,21 @@ describe('registry', () => {
     )
     expect(getTui('claude')?.slug).toBe('claude-code')
     expect(getTui('shell') && launchLine(getTui('shell') as TuiSpec)).toBeNull()
+  })
+
+  it('launches each free model through its exact native OpenCode selection', () => {
+    registerBuiltinTuis()
+    for (const [slug, model] of [
+      ['opencode-deepseek-free', 'deepseek-v4.1-flash-free'],
+      ['opencode-glm-free', 'glm-5.3-flash-free'],
+    ]) {
+      const tool = getTui(slug)
+      expect(tool?.context).toEqual({ kind: 'opencode-plugin' })
+      expect(tool && launchLine(tool)).toContain(
+        `agent-hub-opencode mini --model opencode/${model}`,
+      )
+      expect(tool?.command).not.toContain('--standalone')
+    }
   })
 
   it('hides disabled tools from listing but keeps them resolvable', () => {

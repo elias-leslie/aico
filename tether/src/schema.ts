@@ -3,7 +3,7 @@
 // copies rows byte for byte. The only widening is the tmux_servers unit CHECK,
 // which additionally admits non-default instance unit names.
 
-export const SCHEMA_VERSION = 6
+export const SCHEMA_VERSION = 7
 
 /** Aico's tmux_servers table (electron/main/store.ts TMUX_SERVERS_TABLE_SQL),
  * plus `tether-<instance>-tmux-server-<id>.service` for non-default instances. */
@@ -109,6 +109,7 @@ export const CONTEXT_HOOKS = [
   'claude-session-start',
   'codex-hooks',
   'pi-extension',
+  'opencode-plugin',
   'canonical-retrieval:antigravity',
 ] as const
 

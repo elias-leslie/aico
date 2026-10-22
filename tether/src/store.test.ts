@@ -79,7 +79,7 @@ describe('Store schema', () => {
     const previous = open(path)
     previous.db.exec(`ALTER TABLE root_requests DROP COLUMN work_role;
       ALTER TABLE root_requests DROP COLUMN work_role_display_name;
-      DELETE FROM schema_version WHERE version = 6;
+      DELETE FROM schema_version WHERE version >= 6;
       INSERT INTO root_requests (request_id, digest, widget_id, logical_session_id, role, created_at)
       VALUES ('legacy', 'retained-digest', '12345678', 'legacy-session', 'portfolio-root', 1);`)
     previous.close()
@@ -93,6 +93,33 @@ describe('Store schema', () => {
       work_role: null,
       work_role_display_name: null,
     })
+  })
+
+  it('migrates v6 tools without changing operator edits or replacing a conflicting slug', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tether-opencode-migration-'))
+    const path = join(dir, 'tether.db')
+    const old = open(path)
+    old.updateTool('pi', { name: 'My Pi', enabled: false })
+    old.updateTool('opencode-deepseek-free', {
+      name: 'My OpenCode',
+      argv: ['/opt/custom-opencode'],
+    })
+    old.db.exec(
+      "DELETE FROM agent_tools WHERE slug = 'opencode-glm-free'; DELETE FROM schema_version WHERE version >= 7",
+    )
+    const retained = old.getTool('pi')
+    old.close()
+    const migrated = open(path)
+    expect(migrated.getTool('pi')).toEqual(retained)
+    expect(migrated.getTool('opencode-deepseek-free')?.argv).toEqual(['/opt/custom-opencode'])
+    expect(migrated.getTool('opencode-glm-free')?.argv).toEqual([
+      'agent-hub-opencode',
+      'mini',
+      '--model',
+      'opencode/glm-5.3-flash-free',
+    ])
+    expect(migrated.getTool('opencode-glm-free')?.contextHook).toBe('opencode-plugin')
+    expect(migrated.defaultTool()?.slug).toBe('codex')
   })
 
   it('reopens without reseeding and refuses a newer schema', () => {
@@ -184,7 +211,15 @@ describe('agent tools', () => {
   it('seeds the merged registry with codex as default', () => {
     const store = open()
     const tools = store.listTools()
-    expect(tools.map((tool) => tool.slug)).toEqual(['claude-code', 'codex', 'agy', 'pi', 'shell'])
+    expect(tools.map((tool) => tool.slug)).toEqual([
+      'claude-code',
+      'codex',
+      'agy',
+      'pi',
+      'opencode-deepseek-free',
+      'opencode-glm-free',
+      'shell',
+    ])
     expect(store.defaultTool()?.slug).toBe('codex')
     expect(store.getTool('codex')?.command).toBe('codex --yolo')
     expect(store.getTool('shell')?.argv).toEqual([])

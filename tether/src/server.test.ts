@@ -59,7 +59,7 @@ describe('control socket', () => {
       status: 'ok',
       instance: 'test',
       apiVersion: 1,
-      schemaVersion: 6,
+      schemaVersion: 7,
       lifecycle: 'disabled',
       gui: { connected: false },
     })
@@ -274,7 +274,7 @@ describe('agent tools API', () => {
   it('lists, creates from an A-Term command string, patches and deletes', async () => {
     const list = await call('GET', '/v1/tools')
     expect(list.body).toMatchObject({ defaultSlug: 'codex' })
-    expect((list.body as { items: unknown[] }).items.length).toBe(5)
+    expect((list.body as { items: unknown[] }).items.length).toBe(7)
     // Clients take tool names, colours and root capability from here.
     expect(
       (list.body as { items: { slug: string; rootCapable: boolean }[] }).items.map((t) => [
@@ -286,6 +286,8 @@ describe('agent tools API', () => {
       ['codex', true],
       ['agy', false],
       ['pi', true],
+      ['opencode-deepseek-free', false],
+      ['opencode-glm-free', false],
       ['shell', false],
     ])
 

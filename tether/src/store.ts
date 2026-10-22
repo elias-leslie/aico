@@ -194,6 +194,26 @@ export class Store {
           .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
           .run(6, now)
       }
+      if (current < 7) {
+        // Widen the context-hook CHECK while retaining every operator-edited row.
+        this.db.exec(
+          AGENT_TOOLS_TABLE_SQL.replace(
+            'CREATE TABLE agent_tools',
+            'CREATE TABLE agent_tools_next',
+          ),
+        )
+        this.db.exec(`INSERT INTO agent_tools_next SELECT * FROM agent_tools;
+          DROP INDEX agent_tools_one_default;
+          DROP TABLE agent_tools;
+          ALTER TABLE agent_tools_next RENAME TO agent_tools;
+          CREATE UNIQUE INDEX agent_tools_one_default ON agent_tools(is_default) WHERE is_default = 1;`)
+        for (const seed of DEFAULT_TOOLS.filter((tool) => tool.contextHook === 'opencode-plugin')) {
+          if (!this.getTool(seed.slug)) this.insertTool(seed, now)
+        }
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(7, now)
+      }
     })
   }
 
