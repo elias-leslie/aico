@@ -37,6 +37,7 @@ import {
   withRootPrompt,
 } from './root-launch'
 import { codexTui, initStore, registerBuiltinTuis } from './testing'
+import { getTui } from './tui/registry'
 
 function present<T>(value: T | null | undefined): T {
   if (value === undefined || value === null) throw new Error('fixture value missing')
@@ -951,6 +952,58 @@ describe('private root workload control', () => {
         { model: 'gpt-6.1-sol', reasoningEffort: 'high', daybreak: false },
       )
     expect(rootLaunchEnvironment(root.widgetId).AICO_ROOT_MODEL).toBe('')
+  })
+
+  it('launches and resumes Pi with literal provider/model and thinking argv', async () => {
+    const input = {
+      ...create('pi-selection'),
+      tool: 'pi',
+      model: 'openai-codex/gpt-6.1-sol',
+      reasoningEffort: 'xhigh',
+    }
+    expect(parseRootCreate(input)).not.toBeNull()
+    expect(parseRootCreate({ ...input, model: null })).toBeNull()
+    expect(parseRootCreate({ ...input, model: 'gpt-6.1-sol' })).toBeNull()
+    expect(parseRootCreate({ ...input, daybreak: false })).toBeNull()
+    expect(parseRootCreate({ ...input, reasoningEffort: 'none' })).toBeNull()
+    expect(parseRootCreate({ ...input, reasoningEffort: 'off' })).not.toBeNull()
+    const first = await call('/v1/roots', 'POST', input)
+    expect(first.status).toBe(200)
+    expect(await call('/v1/roots', 'POST', input)).toEqual(first)
+    expect((await call('/v1/roots', 'POST', { ...input, model: 'another/model' })).status).toBe(409)
+    const root = present(getRootRequest(input.requestId))
+    const tool = {
+      ...present(getTui('pi')),
+      command: [process.execPath, '-e', 'console.log(JSON.stringify(process.argv.slice(1)))', '--'],
+    }
+    for (const resume of [null, '00000000-0000-4000-8000-000000000001'])
+      await withRootPrompt(
+        root.widgetId,
+        'Reply only.',
+        async () => {
+          const output = execFileSync(
+            '/bin/bash',
+            ['--noprofile', '--norc', '-c', present(initialLaunchLine(root.widgetId, tool))],
+            {
+              env: { PATH: '/usr/bin:/bin', ...rootLaunchEnvironment(root.widgetId) },
+              encoding: 'utf8',
+            },
+          )
+          expect(JSON.parse(output)).toEqual([
+            '--provider',
+            'openai-codex',
+            '--model',
+            'gpt-6.1-sol',
+            '--thinking',
+            'xhigh',
+            ...(resume ? ['--session', resume] : []),
+            '--',
+            'Reply only.',
+          ])
+        },
+        resume,
+        { model: input.model, reasoningEffort: input.reasoningEffort },
+      )
   })
 
   it('refuses a new root that would resume a conversation crash recovery owns', async () => {

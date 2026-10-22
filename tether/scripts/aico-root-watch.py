@@ -426,7 +426,7 @@ class Collector:
 
     def receipt(self, path: str, route: str, payload: dict | None = None,
                 *, timeout: float = .25) -> tuple[int, dict]:
-        limit = CATALOG_LIMIT if route.split("?")[0] in ("/v1/roots", "/v1/gui/layout") else RECEIPT_LIMIT
+        limit = CATALOG_LIMIT if route.split("?")[0] in ("/v1/roots", "/v1/sessions", "/v1/gui/layout") else RECEIPT_LIMIT
         client = None
         if path.startswith("http:"):
             parsed = urlsplit(local_root_url(path))
@@ -886,14 +886,14 @@ def create_main(argv: list[str]) -> int:
     # Tether decides which tools can start a root (`rootCapable` in /v1/tools)
     # and its refusal names them.
     parser.add_argument("--tool", type=tool_slug, required=True, help=(
-        "required. Agent tool slug: claude-code or codex."))
+        "required. Agent tool slug: claude-code, codex or pi."))
     parser.add_argument("--surface", choices=("aico", "a-term"), default="aico")
     parser.add_argument("--role", default="portfolio-root")
     parser.add_argument("--lead-root")
     parser.add_argument("--facet")
     parser.add_argument("--resume-session", help="exact native session ID; owner adapter validates format/support, never a picker")
-    parser.add_argument("--model", help="exact Codex model for this launch; does not change defaults")
-    parser.add_argument("--reasoning-effort", choices=("none", "minimal", "low", "medium", "high", "xhigh", "max"))
+    parser.add_argument("--model", help="per-launch model; Pi requires provider/model, passed as separate native provider/model flags")
+    parser.add_argument("--reasoning-effort", choices=("none", "off", "minimal", "low", "medium", "high", "xhigh", "max"))
     parser.add_argument("--daybreak", choices=("on", "off"), help="Codex Daybreak for this launch; leaves shared defaults alone")
     parser.add_argument("--root-socket", type=socket_path)
     parser.add_argument("--root-url", type=local_root_url)
@@ -1340,10 +1340,66 @@ def layout_main(argv: list[str]) -> int:
     return 0
 
 
+def session_inventory_item(item: object) -> dict:
+    """Project catalog metadata only; never infer ownership from a root list."""
+    if not isinstance(item, dict):
+        raise Unavailable("sessions_receipt_unqualified")
+    data = typing.cast(dict[str, object], item)
+    checks = {"id": WIDGET, "ownershipId": KEY, "tool": TOOL_SLUG}
+    optional = {"coordinatorId": WIDGET, "rootRequestId": KEY}
+    if (any(not isinstance(value := data.get(key), str) or not re.fullmatch(pattern, value)
+            for key, pattern in checks.items())
+            or any((value := data.get(key)) is not None and (not isinstance(value, str)
+                    or not re.fullmatch(pattern, value)) for key, pattern in optional.items())
+            or (data.get("projectId") is not None and not isinstance(data.get("projectId"), str))
+            or type(data.get("coordinator")) is not bool
+            or data.get("status") not in ("running", "pending", "uncertain", "legacy")
+            or data.get("state") not in ("working", "idle", "blocked", "unknown")
+            or data.get("origin") not in ("aico", "a-term", "cli", "root")):
+        raise Unavailable("sessions_receipt_unqualified")
+    title = data.get("displayTitle", data.get("label"))
+    if not isinstance(title, str):
+        raise Unavailable("sessions_receipt_unqualified")
+    project = data.get("projectId")
+    return {"widgetId": data["id"], "ownershipId": data["ownershipId"],
+            "coordinator": data["coordinator"], "coordinatorId": data.get("coordinatorId"),
+            "rootRequestId": data.get("rootRequestId"), "tool": data["tool"],
+            "projectId": CONTROL.sub("", SECRET.sub("[redacted]", project)) if isinstance(project, str) else None,
+            "title": CONTROL.sub("", SECRET.sub("[redacted]", title)),
+            "origin": data["origin"], "status": data["status"], "state": data["state"]}
+
+
+def sessions_main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="st aico sessions", description=(
+        "List all Tether catalog sessions, including ordinary/unlinked Aico widgets and roots. "
+        "Read-only metadata: exact widget ID, ownership/coordinator, tool, project/title and state. "
+        "Includes retained sessions with no visible window; ended sessions are omitted by the owner."))
+    parser.add_argument("--owner-socket", type=socket_path, default=tether_socket())
+    args = parser.parse_args(argv)
+    collector = Collector("", args.owner_socket, "", time.monotonic() + 10, threading.Event())
+    try:
+        status, data = collector.receipt(args.owner_socket, "/v1/sessions", timeout=2)
+        if status != 200 or not isinstance(data.get("items"), list):
+            raise Unavailable("sessions_unavailable")
+        items = [session_inventory_item(item) for item in data["items"]]
+        if len({item["widgetId"] for item in items}) != len(items):
+            raise Unavailable("sessions_receipt_unqualified")
+        emit_json(collector, {"owner": "aico", "source": "tether", "items": items})
+        return 0
+    except (Unavailable, Stopped) as error:
+        print(json.dumps({"owner": "aico", "observation": "unavailable",
+                          "reason": str(error) if isinstance(error, Unavailable) else "deadline"}))
+        return 1
+    except BrokenPipeError:
+        return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     import sys
 
     argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "sessions":
+        return sessions_main(argv[1:])
     if argv and argv[0] == "roots":
         return roots_main(argv[1:])
     if argv and argv[0] == "admin":

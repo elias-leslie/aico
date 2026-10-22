@@ -317,7 +317,7 @@ How tool fields work:
 - Setting `isDefault: true` atomically clears the previous default. If no enabled tool is marked default, the first enabled tool by `displayOrder` is used.
 - Slugs and aliases share one namespace (`409`/`400 slug_conflict`).
 - `contextHook` is one of `claude-session-start`, `codex-hooks`, `pi-extension` or `canonical-retrieval:antigravity`. Tether verifies it at launch (Aico `tui/context.ts`). A failed check stays visible but never blocks the native TUI.
-- Resume adapters (Codex `resume --no-daemon <uuid>`, Claude Code `--resume <uuid>`) are code, not data. They are keyed by canonical slug and cannot be edited through this API.
+- Resume adapters (Codex `resume --no-daemon <uuid>`, Claude Code `--resume <uuid>`, Pi `--session <uuid>`) are code, not data. They are keyed by canonical slug and cannot be edited through this API. Pi root creation requires an explicit provider/model selection; automatic Pi session discovery is unavailable.
 - `rootCapable` is read-only and derived: true exactly when the tool has a resume adapter, because a root must be resumable after a crash. Only those tools can start a root ([root contract](root-control.md#create)).
 - This list is the one source of tool names, colours (`color` may be `null`), process names and root capability for both apps.
 

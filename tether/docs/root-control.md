@@ -222,7 +222,7 @@ it is not an atomic native submission receipt. If the supported route leaves a
 request queued, observe it and keep the same key rather than pasting a second
 copy into the pane.
 
-`model`, `reasoningEffort`, and boolean `daybreak` are optional Codex-only create fields. Model IDs
+`model` and `reasoningEffort` are per-launch create fields for Codex and Pi; boolean `daybreak` is Codex-only. Model IDs
 are passed literally, without a hardcoded model catalog. Native Codex validates
 availability and whether the selected model supports the effort. The options
 apply to fresh and exact-resume launches, are included in the request digest,
@@ -232,8 +232,21 @@ inherit the user's setting. A nonempty selection appends
 `{model: string|null, reasoningEffort: string|null, daybreak?: boolean}` after the existing digest
 fields, preserving digests for callers that omit both fields.
 
+Pi requires an explicit `--model PROVIDER/MODEL`, including on resume. For example,
+`--tool pi --model openai-codex/gpt-6.1-sol --reasoning-effort xhigh` passes native
+`--provider openai-codex --model gpt-6.1-sol --thinking xhigh`. This avoids inheriting
+a different provider from Pi's saved default. Pi efforts are `off`, `minimal`, `low`,
+`medium`, `high`, `xhigh`, and `max`; `none` and Daybreak are refused. Authentication
+failure remains a native error, with no provider or paid-key fallback added here.
+Exact UUID resume uses Pi's `--session` in the original working directory, without
+a picker. Use the original `projectRoot`: a UUID from another directory enters
+Pi's native fork confirmation and creates a new UUID if confirmed. Automatic Pi conversation
+discovery for reboot/crash recovery is unavailable; no new runtime state is installed.
+Pi terminal observation remains `unsupported_profile`, and atomic follow-up submission
+is unavailable. Use exact root status/end and a new create request for a fresh instruction.
+
 Create accepts exactly `requestId`, `tool` (a root-capable slug, today
-`claude-code` or `codex`),
+`claude-code`, `codex` or `pi`),
 `projectId`, absolute normalized `projectRoot`, nonempty `initialPrompt`, `role`,
 and optional opaque `leadRootReference`, `facetCapsuleRef`, and
 `resumeSessionId`, `model`, `reasoningEffort`, and `daybreak`. On `/v1` it also accepts `origin`, `aTermSessionId` and
@@ -358,3 +371,13 @@ unavailable, and a root whose tool is not Codex gets 422 `unsupported_tool`. The
 qualification evidence and exact native patch contract are in Aico's
 [codex-terminal-admin.md](https://github.com/elias-leslie/aico/blob/040df2b286dd6e43cc7c7b608ac88ac9b972951b/docs/codex-terminal-admin.md)
 (a fixed revision, so the link survives Aico moving its history docs).
+
+## Full session inventory
+
+`st aico sessions` reads Tether's current catalog, including ordinary/unlinked Pi
+and Codex widgets as well as retained coordinator-created roots. It reports exact
+widget IDs, ownership/coordinator IDs, tool, project/title, workload status and
+agent state. `roots` covers retained roots only. The inventory includes retained
+sessions with no visible window; Tether omits ended sessions. `--owner-socket`
+selects an exact Tether control socket. No terminal capture, input or focus change
+is involved.

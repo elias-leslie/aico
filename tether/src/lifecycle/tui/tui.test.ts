@@ -205,10 +205,10 @@ describe('registry', () => {
 
   it('makes a tool root-capable exactly when it has a resume adapter', () => {
     expect(ROOT_TOOLS).toEqual(Object.keys(RESUME_ADAPTERS).sort())
-    expect(ROOT_TOOLS).toEqual(['claude-code', 'codex'])
+    expect(ROOT_TOOLS).toEqual(['claude-code', 'codex', 'pi'])
     expect(isRootTool('codex')).toBe(true)
     // Canonical slugs only: the root digest covers the tool string as sent.
-    for (const slug of ['claude', 'pi', 'agy', 'shell', 'toString', '__proto__', 7])
+    for (const slug of ['claude', 'agy', 'shell', 'toString', '__proto__', 7])
       expect(isRootTool(slug)).toBe(false)
   })
 })

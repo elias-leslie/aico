@@ -16,6 +16,10 @@ export const RESUME_ADAPTERS: Readonly<Record<string, NonNullable<TuiSpec['resum
     sessionIdPattern: /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/,
     arguments: ['--resume'],
   },
+  pi: {
+    sessionIdPattern: /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/,
+    arguments: ['--session'],
+  },
 }
 
 /** Tools Tether can start as a root: exactly the slugs with a resume adapter,
@@ -62,6 +66,12 @@ export function toolSpec(tool: AgentTool): TuiSpec {
       model: ['--model'],
       reasoningEffort: { arguments: ['-c'], key: 'model_reasoning_effort' },
       daybreak: { arguments: ['-c'], key: 'daybreak' },
+    }
+  if (tool.slug === 'pi')
+    spec.modelSelection = {
+      model: ['--model'],
+      modelProvider: ['--provider'],
+      reasoningEffort: { arguments: ['--thinking'] },
     }
   return spec
 }

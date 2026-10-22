@@ -64,7 +64,9 @@ export interface TuiSpec {
   /** Fixed CLI flags for per-launch model overrides; never caller-supplied argv. */
   modelSelection?: {
     model: string[]
-    reasoningEffort: { arguments: string[]; key: string }
+    /** A provider/model selection is required when this native flag is declared. */
+    modelProvider?: string[]
+    reasoningEffort: { arguments: string[]; key?: string }
     daybreak?: { arguments: string[]; key: string }
   }
 }

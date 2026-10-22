@@ -263,12 +263,18 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     ((model !== null || reasoningEffort !== null || daybreak !== null) &&
       !getTui(tool)?.modelSelection) ||
     (daybreak !== null && typeof daybreak !== 'boolean') ||
+    (daybreak !== null && !getTui(tool)?.modelSelection?.daybreak) ||
+    (getTui(tool)?.modelSelection?.modelProvider !== undefined &&
+      (typeof model !== 'string' ||
+        !/^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._:/-]*$/.test(model))) ||
     (model !== null &&
       (typeof model !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/.test(model))) ||
     (reasoningEffort !== null &&
-      !['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(
-        reasoningEffort as string,
-      )) ||
+      !(
+        getTui(tool)?.modelSelection?.reasoningEffort.key
+          ? ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
+          : ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
+      ).includes(reasoningEffort as string)) ||
     typeof projectId !== 'string' ||
     !KEY.test(projectId) ||
     !isProjectRootPath(projectRoot) ||

@@ -285,7 +285,7 @@ describe('agent tools API', () => {
       ['claude-code', true],
       ['codex', true],
       ['agy', false],
-      ['pi', false],
+      ['pi', true],
       ['shell', false],
     ])
 

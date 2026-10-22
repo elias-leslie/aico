@@ -84,8 +84,15 @@ export function initialLaunchLine(widgetId: string, tool: TuiSpec): string | nul
   // Fixed adapter flags and quoted environment values. Configure before resume's
   // subcommand so both fresh and resumed native launches receive the overrides.
   const selection = tool.modelSelection
+  const effort = selection?.reasoningEffort
+  const effortValue = effort?.key
+    ? `'${effort.key}="'"$AICO_ROOT_REASONING_EFFORT"'"'`
+    : '"$AICO_ROOT_REASONING_EFFORT"'
+  const modelFlags = selection?.modelProvider
+    ? `${selection.modelProvider.join(' ')} "\${AICO_ROOT_MODEL%%/*}" ${selection.model.join(' ')} "\${AICO_ROOT_MODEL#*/}"`
+    : `${selection?.model.join(' ')} "$AICO_ROOT_MODEL"`
   const flags = selection
-    ? `if [ -n "$AICO_ROOT_MODEL" ]; then set -- "$@" ${selection.model.join(' ')} "$AICO_ROOT_MODEL"; fi; if [ -n "$AICO_ROOT_REASONING_EFFORT" ]; then set -- "$@" ${selection.reasoningEffort.arguments.join(' ')} '${selection.reasoningEffort.key}="'"$AICO_ROOT_REASONING_EFFORT"'"'; fi; `
+    ? `if [ -n "$AICO_ROOT_MODEL" ]; then set -- "$@" ${modelFlags}; fi; if [ -n "$AICO_ROOT_REASONING_EFFORT" ]; then set -- "$@" ${effort?.arguments.join(' ')} ${effortValue}; fi; `
     : ''
   const daybreak = selection?.daybreak
     ? `if [ -n "$AICO_ROOT_DAYBREAK" ]; then set -- "$@" ${selection.daybreak.arguments.join(' ')} "${selection.daybreak.key}=$AICO_ROOT_DAYBREAK"; fi; `
