@@ -146,6 +146,10 @@ export async function stopOwnedPaneScope(
   }
   const beforeCgroupIdentity = cgroupIdentity(before.controlGroup)
   if (!beforeCgroupIdentity) {
+    // Stopping tmux can remove the scope's cgroup before systemd forgets its
+    // matching unit/invocation. There is nothing to signal in an absent or
+    // verified empty cgroup; an unreadable cgroup remains unknown below.
+    if (readCgroupPopulated(before.controlGroup) === false) return true
     console.error(
       `[tether:lifecycle] refusing ${unit}: cgroup identity is unavailable before ${reason}`,
     )
