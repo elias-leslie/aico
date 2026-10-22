@@ -654,7 +654,7 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
       requireSession(params.id)
       await whenReady()
       const result = await endSession(params.id as string, generation)
-      if (result.status === 'ended') sendJson(res, 200, { status: 'ended' })
+      if (result.status === 'ended') sendJson(res, 200, result)
       else if (result.status === 'absent') throw new HttpError(404, 'not_found')
       else if (result.status === 'stale') throw new HttpError(409, 'stale_generation')
       else if (result.status === 'busy') throw new HttpError(409, 'busy')
