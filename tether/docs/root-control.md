@@ -193,7 +193,7 @@ model picker:
 ```sh
 st aico create review-1 'Read the brief at /path/BRIEF.md.' --tool codex \
   --project PROJECT --project-root /path/project \
-  --model gpt-6.1-sol --reasoning-effort high
+  --model gpt-6.1-sol --reasoning-effort high --daybreak off
 st aico root title review-1 'Review'
 st aico roots review-1
 ```
@@ -222,19 +222,21 @@ it is not an atomic native submission receipt. If the supported route leaves a
 request queued, observe it and keep the same key rather than pasting a second
 copy into the pane.
 
-`model` and `reasoningEffort` are optional Codex-only create fields. Model IDs
+`model`, `reasoningEffort`, and boolean `daybreak` are optional Codex-only create fields. Model IDs
 are passed literally, without a hardcoded model catalog. Native Codex validates
 availability and whether the selected model supports the effort. The options
 apply to fresh and exact-resume launches, are included in the request digest,
-and do not alter persistent defaults. A nonempty selection appends
-`{model: string|null, reasoningEffort: string|null}` after the existing digest
+and do not alter persistent defaults. Use `--daybreak off` when the connected
+server cannot confirm Daybreak support for the requested model; omit it to
+inherit the user's setting. A nonempty selection appends
+`{model: string|null, reasoningEffort: string|null, daybreak?: boolean}` after the existing digest
 fields, preserving digests for callers that omit both fields.
 
 Create accepts exactly `requestId`, `tool` (a root-capable slug, today
 `claude-code` or `codex`),
 `projectId`, absolute normalized `projectRoot`, nonempty `initialPrompt`, `role`,
 and optional opaque `leadRootReference`, `facetCapsuleRef`, and
-`resumeSessionId`, `model`, and `reasoningEffort`. On `/v1` it also accepts `origin`, `aTermSessionId` and
+`resumeSessionId`, `model`, `reasoningEffort`, and `daybreak`. On `/v1` it also accepts `origin`, `aTermSessionId` and
 `launchedBy` ([api-v1.md](api-v1.md#roots)); none of them is part of the digest.
 
 A tool is root-capable exactly when it has a resume adapter; `GET /v1/tools`

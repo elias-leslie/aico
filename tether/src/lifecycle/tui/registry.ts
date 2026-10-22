@@ -61,6 +61,7 @@ export function toolSpec(tool: AgentTool): TuiSpec {
     spec.modelSelection = {
       model: ['--model'],
       reasoningEffort: { arguments: ['-c'], key: 'model_reasoning_effort' },
+      daybreak: { arguments: ['-c'], key: 'daybreak' },
     }
   return spec
 }

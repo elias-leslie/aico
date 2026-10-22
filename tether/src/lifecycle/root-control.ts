@@ -36,6 +36,7 @@ export interface Bounds {
 export interface RootLaunchOptions {
   model: string | null
   reasoningEffort: string | null
+  daybreak?: boolean | null
 }
 
 export interface RootCreateRequest {
@@ -51,6 +52,7 @@ export interface RootCreateRequest {
   resumeSessionId: string | null
   model?: string | null
   reasoningEffort?: string | null
+  daybreak?: boolean | null
   /** Tether: which app requested the root. Not part of the digest. */
   origin: 'aico' | 'a-term'
   /** Tether: A-Term's session UUID (pane `A_TERM_SESSION_ID`); a-term only. */
@@ -222,6 +224,7 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
           'resumeSessionId',
           'model',
           'reasoningEffort',
+          'daybreak',
           'origin',
           'aTermSessionId',
           'launchedBy',
@@ -241,6 +244,7 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     resumeSessionId,
     model = null,
     reasoningEffort = null,
+    daybreak = null,
     origin = 'aico',
     aTermSessionId = null,
     launchedBy = null,
@@ -256,7 +260,9 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     typeof requestId !== 'string' ||
     !KEY.test(requestId) ||
     !isRootTool(tool) ||
-    ((model !== null || reasoningEffort !== null) && !getTui(tool)?.modelSelection) ||
+    ((model !== null || reasoningEffort !== null || daybreak !== null) &&
+      !getTui(tool)?.modelSelection) ||
+    (daybreak !== null && typeof daybreak !== 'boolean') ||
     (model !== null &&
       (typeof model !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/.test(model))) ||
     (reasoningEffort !== null &&
@@ -296,6 +302,7 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     resumeSessionId: resumeSessionId ?? null,
     model: model as string | null,
     reasoningEffort: reasoningEffort as string | null,
+    daybreak: daybreak as boolean | null,
     origin,
     aTermSessionId: (aTermSessionId as string | null) ?? null,
     launchedBy: (launchedBy as string | null) ?? null,
@@ -314,8 +321,14 @@ export function rootRequestDigest(request: RootCreateRequest): string {
         request.leadRootReference,
         request.facetCapsuleRef,
         ...(request.resumeSessionId ? [request.resumeSessionId] : []),
-        ...(request.model || request.reasoningEffort
-          ? [{ model: request.model ?? null, reasoningEffort: request.reasoningEffort ?? null }]
+        ...(request.model || request.reasoningEffort || request.daybreak != null
+          ? [
+              {
+                model: request.model ?? null,
+                reasoningEffort: request.reasoningEffort ?? null,
+                ...(request.daybreak != null ? { daybreak: request.daybreak } : {}),
+              },
+            ]
           : []),
       ]),
     )
@@ -657,10 +670,11 @@ export function createRootHandler(
             // Do not disclose the launch error or prompt; identity/state is the
             // reconciliation receipt, including an ambiguous launch outcome.
             try {
-              if (input.model || input.reasoningEffort)
+              if (input.model || input.reasoningEffort || input.daybreak != null)
                 await operations.ensure(root.widgetId, input.initialPrompt, input.resumeSessionId, {
                   model: input.model ?? null,
                   reasoningEffort: input.reasoningEffort ?? null,
+                  ...(input.daybreak != null ? { daybreak: input.daybreak } : {}),
                 })
               else
                 await operations.ensure(root.widgetId, input.initialPrompt, input.resumeSessionId)

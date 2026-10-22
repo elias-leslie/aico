@@ -858,6 +858,7 @@ describe('private root workload control', () => {
       AICO_ROOT_RESUME_SESSION_ID: '',
       AICO_ROOT_MODEL: '',
       AICO_ROOT_REASONING_EFFORT: '',
+      AICO_ROOT_DAYBREAK: '',
     })
     const replacementResult = execFileSync(
       '/bin/bash',
@@ -897,6 +898,9 @@ describe('private root workload control', () => {
     for (const model of ['', '--flag', 'x\nunsafe', 'x'.repeat(129)])
       expect(parseRootCreate({ ...input, model })).toBeNull()
     expect(parseRootCreate({ ...input, reasoningEffort: 'unknown' })).toBeNull()
+    expect(parseRootCreate({ ...input, daybreak: 'off' })).toBeNull()
+    const selected = present(parseRootCreate({ ...input, daybreak: false }))
+    expect(rootRequestDigest(selected)).not.toBe(rootRequestDigest(parsed))
     expect(parseRootCreate({ ...input, tool: 'claude-code' })).toBeNull()
   })
 
@@ -907,6 +911,7 @@ describe('private root workload control', () => {
       modelSelection: {
         model: ['--model'],
         reasoningEffort: { arguments: ['-c'], key: 'model_reasoning_effort' },
+        daybreak: { arguments: ['-c'], key: 'daybreak' },
       },
       command: [
         process.execPath,
@@ -934,6 +939,8 @@ describe('private root workload control', () => {
               'gpt-6.1-sol',
               '-c',
               'model_reasoning_effort="high"',
+              '-c',
+              'daybreak=false',
               ...(resume ? ['resume', '--no-daemon', resume] : []),
               '--',
               'Reply only.',
@@ -941,7 +948,7 @@ describe('private root workload control', () => {
           })
         },
         resume,
-        { model: 'gpt-6.1-sol', reasoningEffort: 'high' },
+        { model: 'gpt-6.1-sol', reasoningEffort: 'high', daybreak: false },
       )
     expect(rootLaunchEnvironment(root.widgetId).AICO_ROOT_MODEL).toBe('')
   })

@@ -24,8 +24,9 @@ def descriptor(payload, surface="aico", tether=False):
     fields = [payload[k] for k in ("tool", "projectId", "projectRoot", "initialPrompt", "role", "leadRootReference", "facetCapsuleRef")]
     if payload.get("resumeSessionId"):
         fields.append(payload["resumeSessionId"])
-    if payload.get("model") or payload.get("reasoningEffort"):
-        fields.append({"model": payload.get("model"), "reasoningEffort": payload.get("reasoningEffort")})
+    if payload.get("model") or payload.get("reasoningEffort") or payload.get("daybreak") is not None:
+        fields.append({"model": payload.get("model"), "reasoningEffort": payload.get("reasoningEffort"),
+                       **({"daybreak": payload["daybreak"]} if payload.get("daybreak") is not None else {})})
     return {"owner": surface, "requestId": payload["requestId"],
             "digest": hashlib.sha256(json.dumps(fields, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest(),
             "hostIdentity": "12345678" if surface == "aico" or tether else THREAD,
@@ -177,9 +178,10 @@ def test_requested_model_and_effort_are_digest_bound(monkeypatch):
         return 200, descriptor(payload)
 
     monkeypatch.setattr(admin.Collector, "receipt", receipt)
-    assert admin.main([*BASE, "--model", "gpt-6.1-sol", "--reasoning-effort", "high"]) == 0
+    assert admin.main([*BASE, "--model", "gpt-6.1-sol", "--reasoning-effort", "high", "--daybreak", "off"]) == 0
     assert calls[0]["model"] == "gpt-6.1-sol"
     assert calls[0]["reasoningEffort"] == "high"
+    assert calls[0]["daybreak"] is False
 
 
 def fresh(tool):
