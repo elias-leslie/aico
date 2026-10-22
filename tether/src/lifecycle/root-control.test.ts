@@ -1143,6 +1143,102 @@ describe('private root workload control', () => {
     expect(rootLaunchEnvironment(root.widgetId).AICO_ROOT_AGENT_HUB_CONTEXT).toBe('')
   })
 
+  it.each([
+    null,
+    'opencode/deepseek-v4.1-flash-free',
+    'opencode/glm-5.3-flash-free',
+  ])('creates and resumes OpenCode with model %s and an exact native session', async (model) => {
+    const thread = 'ses_0123456789abcdefghijklmnopqrstuvwxyz'
+    const modelKey = model?.split('/')[1] ?? 'default'
+    const input = { ...create(`opencode-${modelKey}`), tool: 'opencode', model }
+    for (const resume of [null, thread]) {
+      const request = {
+        ...input,
+        requestId: `${modelKey}-${resume ? 'resume' : 'fresh'}`,
+        resumeSessionId: resume,
+      }
+      const created = await call('/v1/roots', 'POST', request)
+      expect(created.status).toBe(200)
+      expect(created.body.tool).toBe('opencode')
+      expect(await call('/v1/roots', 'POST', request)).toEqual(created)
+      const options = model === null ? undefined : { model, reasoningEffort: null }
+      expect(ensure).toHaveBeenLastCalledWith(
+        created.body.hostIdentity,
+        input.initialPrompt,
+        resume,
+        ...(options ? [options] : []),
+      )
+      const root = present(getRootRequest(request.requestId))
+      const tool = present(getTui('opencode'))
+      await withRootPrompt(
+        root.widgetId,
+        input.initialPrompt,
+        async () => {
+          const line = present(
+            initialLaunchLine(root.widgetId, {
+              ...tool,
+              command: [
+                process.execPath,
+                '-e',
+                'console.log(JSON.stringify(process.argv.slice(1)))',
+                ...tool.command.slice(1),
+              ],
+            }),
+          )
+          const output = execFileSync('/bin/bash', ['--noprofile', '--norc', '-c', line], {
+            env: { PATH: '/usr/bin:/bin', ...rootLaunchEnvironment(root.widgetId) },
+            encoding: 'utf8',
+          })
+          expect(JSON.parse(output)).toEqual([
+            'mini',
+            ...(model ? ['--model', model] : []),
+            ...(resume ? ['--session', resume] : []),
+            '--',
+            input.initialPrompt,
+          ])
+        },
+        resume,
+        options,
+      )
+      for (const changed of [
+        { model: 'another-provider/model' },
+        { resumeSessionId: 'ses_another' },
+      ])
+        expect((await call('/v1/roots', 'POST', { ...request, ...changed })).status).toBe(409)
+    }
+    for (const invalid of [
+      '',
+      'last',
+      'ses_',
+      'SES_native',
+      '00000000-0000-4000-8000-000000000001',
+      `ses_${'a'.repeat(101)}`,
+      `${thread};echo x`,
+      `${thread}/other`,
+      ...['\n', '\r', '\r\n', '\u2028', '\u2029'].map((suffix) => thread + suffix),
+    ])
+      expect(parseRootCreate({ ...input, resumeSessionId: invalid })).toBeNull()
+    expect(parseRootCreate({ ...input, resumeSessionId: `ses_${'a'.repeat(100)}` })).not.toBeNull()
+    for (const model of [
+      '',
+      'model-only',
+      '/model',
+      'provider/',
+      'provider/model;echo x',
+      `provider/${'a'.repeat(128)}`,
+    ])
+      expect(parseRootCreate({ ...input, model })).toBeNull()
+    expect(parseRootCreate({ ...input, model: 'another-provider/model' })).not.toBeNull()
+    for (const selection of [
+      { reasoningEffort: 'high' },
+      { daybreak: false },
+      { agentHubContext: true },
+    ])
+      expect(parseRootCreate({ ...input, ...selection })).toBeNull()
+    for (const tool of ['opencode-deepseek-free', 'opencode-glm-free', 'opencode-other-free'])
+      expect(parseRootCreate({ ...input, tool })).toBeNull()
+  })
+
   it('refuses a new root that would resume a conversation crash recovery owns', async () => {
     const before = ensure.mock.calls.length
     const widgets = listWidgets().length

@@ -278,14 +278,16 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     (daybreak !== null && !getTui(tool)?.modelSelection?.daybreak) ||
     (tool === 'pi' && daybreak !== null && model !== 'openai/gpt-6-sol') ||
     (agentHubContext !== null && (typeof agentHubContext !== 'boolean' || tool !== 'pi')) ||
-    (getTui(tool)?.modelSelection?.modelProvider !== undefined &&
+    ((getTui(tool)?.modelSelection?.modelProvider !== undefined ||
+      (tool === 'opencode' && model !== null)) &&
       (typeof model !== 'string' ||
         !/^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._:/-]*$/.test(model))) ||
     (model !== null &&
       (typeof model !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/.test(model))) ||
+    (reasoningEffort !== null && !getTui(tool)?.modelSelection?.reasoningEffort) ||
     (reasoningEffort !== null &&
       !(
-        getTui(tool)?.modelSelection?.reasoningEffort.key
+        getTui(tool)?.modelSelection?.reasoningEffort?.key
           ? ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
           : ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
       ).includes(reasoningEffort as string)) ||

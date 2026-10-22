@@ -239,8 +239,30 @@ def test_tool_help_lists_tools_only(capsys):
         admin.main(["create", "--help"])
     help_text = " ".join(capsys.readouterr().out.split())
     assert "claude-code" in help_text and "codex" in help_text
+    assert "pi or opencode" in help_text
+    assert "OpenCode ses_..." in help_text
+    assert "OpenCode accepts provider/model or uses its native default" in help_text
     for policy in ("routing", "default choice", "delegated", "Neri"):
         assert policy not in help_text
+
+
+@pytest.mark.parametrize("model", [None, "opencode/deepseek-v4.1-flash-free", "opencode/glm-5.3-flash-free"])
+@pytest.mark.parametrize("thread", [None, "ses_0123456789abcdefghijklmnopqrstuvwxyz"])
+def test_opencode_create_forwards_optional_model_and_exact_native_resume(monkeypatch, model, thread):
+    calls, output = [], []
+    def receipt(_, path, route, payload, **kwargs):
+        calls.append(payload)
+        return 200, descriptor(payload)
+    monkeypatch.setattr(admin.Collector, "receipt", receipt)
+    monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
+    assert admin.main([*fresh("opencode"), "--work-role", "implementation",
+                       *(["--resume-session", thread] if thread else []),
+                       *(["--model", model] if model else [])]) == 0
+    assert len(calls) == 1
+    assert calls[0]["tool"] == "opencode"
+    assert calls[0].get("resumeSessionId") == thread
+    assert calls[0].get("model") == model and calls[0].get("reasoningEffort") is None
+    assert output[0]["status"] == "running"
 
 
 @pytest.mark.parametrize("provider,effort", [("openai-codex", "xhigh"), ("openai", "high")])

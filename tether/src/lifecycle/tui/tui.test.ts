@@ -163,8 +163,7 @@ describe('registry', () => {
       'codex',
       'agy',
       'pi',
-      'opencode-deepseek-free',
-      'opencode-glm-free',
+      'opencode',
       'shell',
     ])
   })
@@ -199,19 +198,15 @@ describe('registry', () => {
     expect(getTui('shell') && launchLine(getTui('shell') as TuiSpec)).toBeNull()
   })
 
-  it('launches each free model through its exact native OpenCode selection', () => {
+  it('launches one OpenCode harness with native model selection and exact resume', () => {
     registerBuiltinTuis()
-    for (const [slug, model] of [
-      ['opencode-deepseek-free', 'deepseek-v4.1-flash-free'],
-      ['opencode-glm-free', 'glm-5.3-flash-free'],
-    ]) {
-      const tool = getTui(slug)
-      expect(tool?.context).toEqual({ kind: 'opencode-plugin' })
-      expect(tool && launchLine(tool)).toContain(
-        `agent-hub-opencode mini --model opencode/${model}`,
-      )
-      expect(tool?.command).not.toContain('--standalone')
-    }
+    const tool = getTui('opencode')
+    expect(tool?.context).toEqual({ kind: 'opencode-plugin' })
+    expect(tool?.command).toEqual(['agent-hub-opencode', 'mini'])
+    expect(tool?.modelSelection).toEqual({ model: ['--model'] })
+    expect(tool?.resume?.arguments).toEqual(['--session'])
+    expect(tool && launchLine(tool)).toContain('agent-hub-opencode mini')
+    expect(tool && resumeLaunchLine(tool)).toContain('agent-hub-opencode mini --session')
   })
 
   it('hides disabled tools from listing but keeps them resolvable', () => {
@@ -228,10 +223,21 @@ describe('registry', () => {
 
   it('makes a tool root-capable exactly when it has a resume adapter', () => {
     expect(ROOT_TOOLS).toEqual(Object.keys(RESUME_ADAPTERS).sort())
-    expect(ROOT_TOOLS).toEqual(['claude-code', 'codex', 'pi'])
-    expect(isRootTool('codex')).toBe(true)
+    expect(ROOT_TOOLS).toEqual(['claude-code', 'codex', 'opencode', 'pi'])
+    for (const slug of ROOT_TOOLS) expect(isRootTool(slug)).toBe(true)
     // Canonical slugs only: the root digest covers the tool string as sent.
-    for (const slug of ['claude', 'agy', 'shell', 'toString', '__proto__', 7])
+    for (const slug of [
+      'claude',
+      'agy',
+      'shell',
+      'opencode-deepseek-free',
+      'opencode-glm-free',
+      'opencode-other-free',
+      'opencode-deepseek',
+      'toString',
+      '__proto__',
+      7,
+    ])
       expect(isRootTool(slug)).toBe(false)
   })
 })

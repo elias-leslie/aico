@@ -101,7 +101,10 @@ export function initialLaunchLine(widgetId: string, tool: TuiSpec): string | nul
     ? `${selection.modelProvider.join(' ')} "\${AICO_ROOT_MODEL%%/*}" ${selection.model.join(' ')} "\${AICO_ROOT_MODEL#*/}"`
     : `${selection?.model.join(' ')} "$AICO_ROOT_MODEL"`
   const flags = selection
-    ? `if [ -n "$AICO_ROOT_MODEL" ]; then set -- "$@" ${modelFlags}; fi; if [ -n "$AICO_ROOT_REASONING_EFFORT" ]; then set -- "$@" ${effort?.arguments.join(' ')} ${effortValue}; fi; `
+    ? `if [ -n "$AICO_ROOT_MODEL" ]; then set -- "$@" ${modelFlags}; fi; ` +
+      (effort
+        ? `if [ -n "$AICO_ROOT_REASONING_EFFORT" ]; then set -- "$@" ${effort.arguments.join(' ')} ${effortValue}; fi; `
+        : '')
     : ''
   const daybreak =
     selection?.daybreak && 'arguments' in selection.daybreak

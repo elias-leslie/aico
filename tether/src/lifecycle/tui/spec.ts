@@ -67,7 +67,7 @@ export interface TuiSpec {
     model: string[]
     /** A provider/model selection is required when this native flag is declared. */
     modelProvider?: string[]
-    reasoningEffort: { arguments: string[]; key?: string }
+    reasoningEffort?: { arguments: string[]; key?: string }
     daybreak?: { arguments: string[]; key: string } | { environment: true }
   }
 }

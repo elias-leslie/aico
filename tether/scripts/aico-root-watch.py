@@ -886,7 +886,7 @@ def create_main(argv: list[str]) -> int:
     # Tether decides which tools can start a root (`rootCapable` in /v1/tools)
     # and its refusal names them.
     parser.add_argument("--tool", type=tool_slug, required=True, help=(
-        "required. Agent tool slug: claude-code, codex or pi."))
+        "required. Agent tool slug: claude-code, codex, pi or opencode."))
     parser.add_argument("--surface", choices=("aico", "a-term"), default="aico")
     parser.add_argument("--role", default="portfolio-root", help="opaque orchestration metadata")
     parser.add_argument("--work-role",
@@ -894,8 +894,8 @@ def create_main(argv: list[str]) -> int:
     parser.add_argument("--work-role-name", help="optional display name (1-128 characters)")
     parser.add_argument("--lead-root")
     parser.add_argument("--facet")
-    parser.add_argument("--resume-session", help="exact native session ID; owner adapter validates format/support, never a picker")
-    parser.add_argument("--model", help="per-launch model; Pi requires provider/model, passed as separate native provider/model flags")
+    parser.add_argument("--resume-session", help="exact native session ID: Claude/Codex/Pi UUID or OpenCode ses_...; owner adapter validates format/support")
+    parser.add_argument("--model", help="per-launch model; Pi requires provider/model; OpenCode accepts provider/model or uses its native default")
     parser.add_argument("--reasoning-effort", choices=("none", "off", "minimal", "low", "medium", "high", "xhigh", "max"))
     parser.add_argument("--daybreak", choices=("on", "off"), help="Daybreak for this launch; Pi supports openai/gpt-6-sol; leaves shared defaults alone")
     parser.add_argument("--agent-hub-context", choices=("on", "off"), help="Pi optional Agent Hub context; off retains required policy, native/project instructions and ingestion")

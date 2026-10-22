@@ -77,7 +77,10 @@ describe('root origin (v1 roots API)', () => {
       for (const tool of ['shell', 'claude', 'aider'])
         expect(await call(socket, '/v1/roots', 'POST', create('t', { tool }))).toEqual({
           status: 400,
-          body: { error: 'unsupported_tool', supported: ['claude-code', 'codex', 'pi'] },
+          body: {
+            error: 'unsupported_tool',
+            supported: ['claude-code', 'codex', 'opencode', 'pi'],
+          },
         })
     // A malformed tool value is just a bad body.
     expect((await call(v1Socket, '/v1/roots', 'POST', create('t', { tool: 7 }))).body).toEqual({
