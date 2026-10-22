@@ -397,11 +397,17 @@ export function finalizeContext(
   spec: TuiSpec | undefined,
   ownershipId: string,
 ): Promise<boolean | null> {
-  if (spec?.context?.kind !== 'opencode-plugin') return Promise.resolve(null)
+  const surface =
+    spec?.context?.kind === 'opencode-plugin'
+      ? 'opencode'
+      : spec?.context?.kind === 'pi-extension'
+        ? 'pi'
+        : null
+  if (!surface) return Promise.resolve(null)
   return new Promise((resolve) => {
     execFile(
       join(homedir(), '.local', 'bin', 'agent-hub-context-client'),
-      ['retire-opencode', '--surface', 'opencode', '--aico-session', ownershipId],
+      [`retire-${surface}`, '--surface', surface, '--aico-session', ownershipId],
       { timeout: 20000 },
       (error) => resolve(!error),
     )

@@ -579,8 +579,11 @@ describe('ensureContext', () => {
   })
 })
 
-describe('OpenCode retirement context', () => {
-  it('finalizes only the exact ownership ID after an OpenCode retirement', async () => {
+describe('Native retirement context', () => {
+  it.each([
+    ['opencode-plugin', 'opencode'],
+    ['pi-extension', 'pi'],
+  ] as const)('finalizes only the exact ownership ID after %s retirement', async (kind, surface) => {
     vi.mocked(execFile).mockImplementation(((
       _file: string,
       _args: string[],
@@ -590,12 +593,10 @@ describe('OpenCode retirement context', () => {
       ;(callback as (error: Error | null) => void)(null)
       return undefined as never
     }) as never)
-    expect(
-      await finalizeContext(spec({ context: { kind: 'opencode-plugin' } }), 'aico-widget-12345678'),
-    ).toBe(true)
+    expect(await finalizeContext(spec({ context: { kind } }), 'aico-widget-12345678')).toBe(true)
     expect(execFile).toHaveBeenCalledWith(
       join(homedir(), '.local', 'bin', 'agent-hub-context-client'),
-      ['retire-opencode', '--surface', 'opencode', '--aico-session', 'aico-widget-12345678'],
+      [`retire-${surface}`, '--surface', surface, '--aico-session', 'aico-widget-12345678'],
       { timeout: 20000 },
       expect.any(Function),
     )
@@ -603,7 +604,10 @@ describe('OpenCode retirement context', () => {
     expect(await finalizeContext(spec(), 'aico-widget-12345678')).toBeNull()
     expect(execFile).not.toHaveBeenCalled()
   })
-  it('reports unavailable accounting without claiming completion', async () => {
+  it.each([
+    'opencode-plugin',
+    'pi-extension',
+  ] as const)('reports unavailable %s accounting without claiming completion', async (kind) => {
     vi.mocked(execFile).mockImplementation(((
       _file: string,
       _args: string[],
@@ -613,8 +617,6 @@ describe('OpenCode retirement context', () => {
       ;(callback as (error: Error | null) => void)(new Error('offline'))
       return undefined as never
     }) as never)
-    expect(
-      await finalizeContext(spec({ context: { kind: 'opencode-plugin' } }), 'aico-widget-12345678'),
-    ).toBe(false)
+    expect(await finalizeContext(spec({ context: { kind } }), 'aico-widget-12345678')).toBe(false)
   })
 })

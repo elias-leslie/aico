@@ -2715,7 +2715,7 @@ async function discardWidgetOwned(
       if (finalized !== null) {
         if (!finalized)
           console.error(
-            `[tether:lifecycle] OpenCode accounting finalization unavailable session=${row.sessionId}`,
+            `[tether:lifecycle] ${row.tool} accounting finalization unavailable session=${row.sessionId}`,
           )
         return { status: 'ended', contextFinalization: finalized ? 'completed' : 'unavailable' }
       }
