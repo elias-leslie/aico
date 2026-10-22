@@ -104,6 +104,7 @@ export function initialLaunchLine(widgetId: string, tool: TuiSpec): string | nul
     selection?.daybreak && 'arguments' in selection.daybreak
       ? `if [ -n "$AICO_ROOT_DAYBREAK" ]; then set -- "$@" ${selection.daybreak.arguments.join(' ')} "${selection.daybreak.key}=$AICO_ROOT_DAYBREAK"; fi; `
       : ''
+  const projectTrust = tool.slug === 'pi' ? 'set -- "$@" --approve; ' : ''
   const selected = `${line} "$@"`
   const initial = `${clean} ${selected}`
   const resume = resumeLaunchLine(tool)
@@ -111,5 +112,5 @@ export function initialLaunchLine(widgetId: string, tool: TuiSpec): string | nul
     ? `${clean} ${selected} ${tool.resume?.arguments.join(' ')} "$AICO_ROOT_RESUME_SESSION_ID" -- "$AICO_ROOT_INITIAL_PROMPT"`
     : 'exit 64'
   const launch = `if [ -n "$AICO_ROOT_RESUME_SESSION_ID" ]; then ${resumed}; else ${initial} -- "$AICO_ROOT_INITIAL_PROMPT"; fi`
-  return `if [ "$AICO_ROOT_INITIAL_LAUNCH" = 1 ]; then set --; ${flags}${daybreak}${launch}; else ${line}; fi`
+  return `if [ "$AICO_ROOT_INITIAL_LAUNCH" = 1 ]; then set --; ${flags}${daybreak}${projectTrust}${launch}; else ${line}; fi`
 }
