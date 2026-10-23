@@ -13,12 +13,12 @@ afterEach(() => {
   for (const term of terminals.splice(0)) term.dispose()
 })
 
-async function setup(keep: boolean) {
-  const term = new Terminal({ cols: 40, rows: 10, scrollback: 500 })
+async function setup(keep: boolean, scrollback = 500, lines = 100) {
+  const term = new Terminal({ cols: 40, rows: 10, scrollback })
   terminals.push(term)
   await new Promise<void>((resolve) =>
     term.write(
-      Array.from({ length: 100 }, (_, index) => `line ${index}`).join('\r\n'),
+      Array.from({ length: lines }, (_, index) => `line ${index}`).join('\r\n'),
       resolve,
     ),
   )
@@ -53,6 +53,20 @@ describe('keepReadingPlace', () => {
       expect(term.buffer.active.viewportY).toBeLessThan(
         term.buffer.active.baseY,
       )
+    },
+  )
+
+  it.each([4, 14])(
+    'keeps the same text on top at the scrollback limit when the rows change to %i',
+    async (rows) => {
+      // 400 lines through a 100-line scrollback: the oldest line is 290.
+      const term = await setup(true, 100, 400)
+      term.scrollToLine(50)
+      const before = topLine(term)
+
+      term.resize(40, rows)
+
+      expect(topLine(term)).toBe(before)
     },
   )
 

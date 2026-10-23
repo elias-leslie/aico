@@ -71,6 +71,7 @@ const fakeATerm = {
   reset: vi.fn(),
   onScroll: vi.fn(() => ({ dispose: vi.fn() })),
   onResize: vi.fn(() => ({ dispose: vi.fn() })),
+  registerMarker: vi.fn(() => ({ line: 0, dispose: vi.fn() })),
   onWriteParsed: vi.fn(() => ({ dispose: vi.fn() })),
   cols: 80,
   scrollToLine: vi.fn(),
