@@ -2286,7 +2286,6 @@ export type RespawnResult =
   | { status: 'not_found' }
   | { status: 'busy' }
   | { status: 'stale' }
-  | { status: 'legacy_session' }
   | { status: 'workload_unavailable'; reason: string }
   | { status: 'admission_denied'; reason: string }
   | { status: 'pane_uid_refused'; reason: string }
@@ -2332,7 +2331,8 @@ export async function respawnAndRelaunch(
     ) {
       return { status: 'stale' }
     }
-    if (previous.lifecycleVersion < MANAGED_LIFECYCLE_VERSION) return { status: 'legacy_session' }
+    if (previous.lifecycleVersion < MANAGED_LIFECYCLE_VERSION)
+      return { status: 'workload_unavailable', reason: 'lifecycle-v0 session' }
     const initialState = await internalSessionState(widgetId)
     if (initialState !== 'present') {
       console.error(
@@ -2358,7 +2358,8 @@ export async function respawnAndRelaunch(
       )
       return { status: 'blocked', reason: 'interrupted launch state is ambiguous' }
     }
-    if (recovery === 'legacy') return { status: 'legacy_session' }
+    if (recovery === 'legacy')
+      return { status: 'workload_unavailable', reason: 'lifecycle-v0 session' }
 
     let previousWasInertGate = false
     if (recovery === 'blocked-replay') {
@@ -3024,7 +3025,9 @@ async function reconcileAbandonedScopes(): Promise<void> {
 
 // --- status cache and events (Tether) ---------------------------------------
 
-export type SessionStatus = 'running' | 'pending' | 'uncertain' | 'legacy'
+/** `pending`: never allocated; `uncertain`: not proven running (a lifecycle-v0
+ * row is never proven). */
+export type SessionStatus = 'running' | 'pending' | 'uncertain'
 
 /** Last verified status per session, keyed by the generation it was computed
  * for. List answers from here; GET re-verifies. */
@@ -3038,8 +3041,8 @@ export function setGenerationFunction(fn: (row: WidgetRow) => string): void {
 export async function verifySessionStatus(row: WidgetRow): Promise<SessionStatus> {
   let status: SessionStatus
   if (isNeverAllocatedWidget(row)) status = 'pending'
-  else if (row.lifecycleVersion < MANAGED_LIFECYCLE_VERSION) status = 'legacy'
   else if (
+    row.lifecycleVersion >= MANAGED_LIFECYCLE_VERSION &&
     row.launchState === 'dispatched' &&
     (await rootManagedGateState(row)) === 'active-workload'
   )
@@ -3053,7 +3056,6 @@ export function cachedSessionStatus(row: WidgetRow): SessionStatus {
   const cached = statusCache.get(row.id)
   if (cached && cached.generation === generationOf(row)) return cached.status
   if (isNeverAllocatedWidget(row)) return 'pending'
-  if (row.lifecycleVersion < MANAGED_LIFECYCLE_VERSION) return 'legacy'
   return 'uncertain'
 }
 

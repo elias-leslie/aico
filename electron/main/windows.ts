@@ -4,9 +4,9 @@
 
 import { join } from 'node:path'
 import type { BrowserWindow, Menu, Screen } from 'electron'
+import type { SessionDescriptor } from 'tether/client'
 import { INK } from '../shared/palette'
 import { PERSONAL_WORKSPACE_ID } from './project'
-import type { SessionDescriptor } from './tether-client'
 import type { Bounds, ViewRow } from './views'
 import type { PendingCreate, WindowRegistry } from './window-registry'
 

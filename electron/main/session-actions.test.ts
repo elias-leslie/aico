@@ -1,9 +1,13 @@
 import type { BrowserWindow } from 'electron'
+import {
+  createSessionCatalog,
+  type SessionDescriptor,
+  TetherError,
+  type TetherTool,
+} from 'tether/client'
 import { describe, expect, it, vi } from 'vitest'
 import { PERSONAL_WORKSPACE_ID } from './project'
 import { createSessionActions } from './session-actions'
-import { createSessionCatalog } from './session-catalog'
-import { type SessionDescriptor, TetherError, type TetherTool } from './tether-client'
 import { WindowRegistry } from './window-registry'
 
 function descriptor(id: string, extra: Partial<SessionDescriptor> = {}): SessionDescriptor {

@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process'
 import { readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
-import { homedir } from 'node:os'
+import { homedir, hostname } from 'node:os'
 import {
   app,
   BrowserWindow,
@@ -13,6 +13,12 @@ import {
   session,
   shell,
 } from 'electron'
+import {
+  createSessionCatalog,
+  createTetherLink,
+  type SessionCatalog,
+  TetherPool,
+} from 'tether/client'
 import { version } from '../../package.json'
 import { createAmbient } from './ambient'
 import { createAttentionWiring } from './attention-wiring'
@@ -27,11 +33,9 @@ import { ensurePersonalWorkspaceRoot, ProjectCatalog, personalWorkspaceRoot } fr
 import { createSelectionBus } from './selection-bus'
 import { createSelectionListener } from './selection-listener'
 import { createSessionActions } from './session-actions'
-import { createSessionCatalog, type SessionCatalog, sessionTitle } from './session-catalog'
+import { sessionTitle } from './session-catalog'
 import { createAgentShares } from './show'
 import { createTerminal } from './terminal'
-import { TetherPool } from './tether-client'
-import { createTetherLink } from './tether-link'
 import { ControlTerminal } from './tmux-control'
 import { tmuxClientPid } from './tmux-sandbox'
 import { createTray, refreshTray, setNeedsYou, setWidgetActivity } from './tray'
@@ -260,6 +264,7 @@ const terminal = createTerminal({
   controlTerminal: (argv, env, size) => new ControlTerminal(argv, env, size),
   ensurePersonalWorkspaceRoot,
   isQuitting: lifecycle.isQuitting,
+  viewer: { app: 'desktop', device: hostname() },
 })
 
 // The selection bus: where selections go and how they arrive.

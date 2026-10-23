@@ -3,16 +3,10 @@
 // workspaces. Both change only on Tether events and Aico actions.
 
 import type { BrowserWindow, IpcMain } from 'electron'
+import type { ContextHook, SessionCatalog, SessionDescriptor, TetherTool } from 'tether/client'
 import { type Attention, groupRows } from './attention'
 import type { ProjectCatalog } from './project'
-import {
-  coordinatorChip,
-  type SessionCatalog,
-  sessionTitle,
-  toolDisplayName,
-  traySessionLabel,
-} from './session-catalog'
-import type { ContextHook, SessionDescriptor, TetherTool } from './tether-client'
+import { coordinatorChip, sessionTitle, toolDisplayName, traySessionLabel } from './session-catalog'
 import { toolMark } from './tool-marks'
 import type { createTray, refreshTray, setWidgetActivity, TrayHandlers, TrayWidget } from './tray'
 import type { WindowRegistry } from './window-registry'

@@ -4,6 +4,7 @@
 
 import type { ExecFileException } from 'node:child_process'
 import type { BrowserWindow } from 'electron'
+import type { SessionCatalog, SessionDescriptor, TetherTool } from 'tether/client'
 import {
   Attention,
   type AttentionMode,
@@ -13,8 +14,7 @@ import {
   pushEventLine,
   pushOutcome,
 } from './attention'
-import { type SessionCatalog, sessionTitle, toolDisplayName } from './session-catalog'
-import type { SessionDescriptor, TetherTool } from './tether-client'
+import { sessionTitle, toolDisplayName } from './session-catalog'
 import type { WindowRegistry } from './window-registry'
 
 interface AttentionWiringDeps {

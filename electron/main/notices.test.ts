@@ -1,7 +1,7 @@
 import type { BrowserWindow } from 'electron'
+import { TetherError, TetherUnavailable } from 'tether/client'
 import { describe, expect, it, vi } from 'vitest'
 import { describeFailure, writeNotice } from './notices'
-import { TetherError, TetherUnavailable } from './tether-client'
 
 const refusal = (code: string, reason?: string) =>
   new TetherError(409, code, reason === undefined ? {} : { reason })
@@ -41,10 +41,6 @@ describe('describeFailure', () => {
       'End failed: the session is not running (pane exited).',
     ],
     [refusal('workload_unavailable'), 'End failed: the session is not running.'],
-    [
-      refusal('legacy_session'),
-      'End failed: this session predates managed lifecycle and is kept read-only.',
-    ],
     [
       refusal('outcome_uncertain'),
       'End failed: the outcome is unknown. Check the session before trying again.',

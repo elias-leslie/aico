@@ -1,9 +1,8 @@
 import type { BrowserWindow } from 'electron'
+import { createSessionCatalog, type SessionDescriptor, TetherError } from 'tether/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { compactRef, type SelectionRecord } from './selection'
 import { createSelectionBus } from './selection-bus'
-import { createSessionCatalog } from './session-catalog'
-import { type SessionDescriptor, TetherError } from './tether-client'
 import type { ViewRow } from './views'
 import { WindowRegistry } from './window-registry'
 

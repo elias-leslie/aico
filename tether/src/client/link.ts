@@ -3,22 +3,33 @@
 // stream and complete lists, holds the GUI channel, and tells the rest of Aico
 // what changed through hooks, called in the order the root relies on.
 
-import type { ProjectCatalog } from './project'
-import type { SessionCatalog } from './session-catalog'
+import type { SessionCatalog } from './catalog'
+import { followEvents, holdGuiChannel, type TetherClient } from './client'
 import {
   compatibleVersion,
   eventSession,
-  followEvents,
   type GuiCommand,
   type GuiVerdict,
-  holdGuiChannel,
   type SessionDescriptor,
-  type TetherClient,
   type TetherEvent,
   type TetherTool,
   TetherUnavailable,
-} from './tether-client'
-import { coalesceAsync } from './tmux-view'
+} from './contracts'
+
+/** Share one pending query without retaining a stale result. */
+export function coalesceAsync<T>(load: () => Promise<T>): () => Promise<T> {
+  let pending: Promise<T> | undefined
+  return () => {
+    if (pending) return pending
+    const request = Promise.resolve().then(load)
+    pending = request
+    const clear = () => {
+      if (pending === request) pending = undefined
+    }
+    void request.then(clear, clear)
+    return request
+  }
+}
 
 interface LinkHooks {
   /** A session's agent state as Tether last reported it. */
@@ -47,7 +58,7 @@ interface TetherLinkDeps {
   tether: TetherClient
   shareSocket: string
   catalog: SessionCatalog
-  projects: Pick<ProjectCatalog, 'invalidate' | 'refresh'>
+  projects: { invalidate(): void; refresh(): Promise<unknown> }
   dialog: { showErrorBox(title: string, content: string): void }
   hooks: LinkHooks
 }

@@ -1,7 +1,7 @@
 // Aico's client for Tether, the per-user session daemon that owns every tmux
-// session, tmux server and agent launch (Tether docs/api-v1.md; gaps in docs/history/tether-api-gaps.md).
-// Aico keeps only views and settings. Everything here speaks HTTP/1.1 over
-// Tether's private 0600 Unix socket; nothing is network-exposed.
+// session, tmux server and agent launch (docs/api-v1.md). The desktop and the
+// web server share it. Everything here speaks HTTP/1.1 over Tether's private
+// 0600 Unix socket; nothing is network-exposed.
 //
 // Tether being down is "control unavailable", never "session gone": tmux
 // servers and panes keep running while the daemon restarts.
@@ -9,13 +9,26 @@
 import { statSync } from 'node:fs'
 import { request } from 'node:http'
 import { join } from 'node:path'
-import { attachFromTether } from './tmux-sandbox'
-import type { Layout } from './window-layout'
-
-/** Lowest Tether API version this Aico needs (GET /v1/version). */
-export const MIN_TETHER_API_VERSION = 1
-/** The API version this Aico speaks; Tether must still accept it. */
-export const AICO_TETHER_API_VERSION = 1
+import {
+  type AttachAnswer,
+  type ContextHook,
+  type GuiCommand,
+  type GuiVerdict,
+  parseAttachAnswer,
+  parseContextHook,
+  parseGuiCommand,
+  type ResizeClaimAnswer,
+  type SessionDescriptor,
+  type SizeHolder,
+  splitNdjson,
+  TetherError,
+  type TetherEvent,
+  type TetherProject,
+  type TetherTool,
+  TetherUnavailable,
+  type TetherVersion,
+  type ViewerLabel,
+} from './contracts'
 
 const DEFAULT_TIMEOUT_MS = 5_000
 /** Tether sends a heartbeat every 15 s; three missed ones mean a half-open stream. */
@@ -55,223 +68,6 @@ export function knownTetherSockets(env: NodeJS.ProcessEnv, uid: number | undefin
   ]
   if (!known.includes(active)) return [active]
   return [active, ...new Set(known.filter((path) => path !== active))]
-}
-
-export type SessionStatus = 'running' | 'pending' | 'uncertain' | 'legacy'
-export type SessionOrigin = 'aico' | 'a-term' | 'cli' | 'root'
-
-/** Tether's check of a session's Agent Hub context hook (docs/api-v1.md). */
-export interface ContextHook {
-  /** `available`, `missing`, `unsupported`, `not_applicable` or `unknown`. */
-  state: string
-  detail: string
-  tool: string
-  /** False for a tool with no context mechanism (a bare shell). */
-  applicable: boolean
-  checkedAt: number | null
-}
-
-export interface SessionDescriptor {
-  id: string
-  ownershipId: string
-  generation: string
-  status: SessionStatus
-  available: boolean
-  tool: string
-  name: string | null
-  label: string
-  projectId: string | null
-  projectRoot: string | null
-  origin: SessionOrigin
-  rootRequestId: string | null
-  lifecycleVersion: number
-  tmux: {
-    serverId: string | null
-    socket: string | null
-    sessionId: string | null
-    paneId: string | null
-    sessionName: string
-  }
-  createdAt: number
-  /** Absent from a Tether older than the context-hook field. */
-  contextHook?: ContextHook
-  /** The agent's state (tether docs/agent-state.md); absent from an older Tether. */
-  state?: 'working' | 'idle' | 'blocked' | 'unknown'
-  stateSource?: string
-  stateAt?: number | null
-  stateDetail?: string | null
-  /** Coordinator lineage (tether docs/api-v1.md "Coordinators"); absent from
-   * an older Tether. */
-  coordinator?: boolean
-  /** The root coordinator that launched this session. */
-  coordinatorId?: string | null
-  /** `#rrggbb`, on a coordinator and its lanes. */
-  coordinatorColor?: string | null
-  /** Tether's title, `Project — Task` (docs/api-v1.md "Display title and
-   * badge"); absent from an older Tether. */
-  displayTitle?: string
-  /** The titlebar chip, worded and coloured by Tether. */
-  badge?: { kind: 'coordinator' | 'child'; text: string; color: string } | null
-  /** Present on a 202 create: why the session is not running yet. */
-  failure?: { code: string; reason?: string } | null
-}
-
-export interface AttachTarget {
-  generation: string
-  /** The tmux client argv Aico built: `/usr/bin/tmux -S <socket> attach-session -t $3`. */
-  argv: string[]
-  /** The client's whole environment (allowlisted keys), not overrides. */
-  env: Record<string, string>
-  /** Always empty: the environment is built from nothing, so nothing is left to unset. */
-  unset: string[]
-}
-
-export interface TetherTool {
-  slug: string
-  name: string
-  color: string | null
-  /** The process Tether watches for the tool (`claude`). */
-  processName?: string
-  /** Other names the tool answers to (`claude` for `claude-code`). */
-  aliases?: string[]
-  displayOrder: number
-  isDefault: boolean
-  enabled: boolean
-}
-
-export interface TetherProject {
-  id: string
-  name: string
-  root: string
-  /** SummitFlow's active project (`st projects active`); absent from older Tether. */
-  current?: boolean
-}
-
-export interface TetherVersion {
-  name: string
-  version: string
-  apiVersion: number
-  minApiVersion: number
-}
-
-export interface TetherEvent {
-  seq: number
-  bootId: string
-  type: string
-  at: number
-  data: Record<string, unknown>
-}
-
-/** A Tether answer other than 2xx. `code` is Tether's stable error code. */
-export class TetherError extends Error {
-  constructor(
-    readonly status: number,
-    readonly code: string,
-    readonly body: Record<string, unknown>,
-  ) {
-    super(typeof body.reason === 'string' ? `${code}: ${body.reason}` : code)
-    this.name = 'TetherError'
-  }
-
-  get reason(): string | undefined {
-    return typeof this.body.reason === 'string' ? this.body.reason : undefined
-  }
-}
-
-/** The socket could not be reached or the exchange broke. Nothing is known to
- * have changed; for a mutation, the outcome is unknown. */
-export class TetherUnavailable extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'TetherUnavailable'
-  }
-}
-
-export function parseContextHook(value: unknown): ContextHook | null {
-  const hook = value as Record<string, unknown> | null
-  if (
-    !hook ||
-    typeof hook !== 'object' ||
-    typeof hook.state !== 'string' ||
-    typeof hook.detail !== 'string' ||
-    typeof hook.tool !== 'string' ||
-    typeof hook.applicable !== 'boolean'
-  )
-    return null
-  return {
-    state: hook.state,
-    detail: hook.detail,
-    tool: hook.tool,
-    applicable: hook.applicable,
-    checkedAt: typeof hook.checkedAt === 'number' ? hook.checkedAt : null,
-  }
-}
-
-/** The descriptor a session event carries (`data.session`), or null when the
- * event has none (an older Tether) or it does not match the event's id. */
-export function eventSession(event: TetherEvent): SessionDescriptor | null {
-  const session = event.data.session as Partial<SessionDescriptor> | undefined
-  if (
-    !session ||
-    typeof session !== 'object' ||
-    typeof session.id !== 'string' ||
-    session.id !== event.data.id ||
-    typeof session.generation !== 'string' ||
-    typeof session.status !== 'string' ||
-    typeof session.tool !== 'string' ||
-    typeof session.createdAt !== 'number' ||
-    !session.tmux ||
-    typeof session.tmux !== 'object'
-  )
-    return null
-  return session as SessionDescriptor
-}
-
-/** True when Tether accepts this Aico and offers what it needs. */
-export function compatibleVersion(version: TetherVersion): boolean {
-  return (
-    Number.isSafeInteger(version.apiVersion) &&
-    version.apiVersion >= MIN_TETHER_API_VERSION &&
-    (!Number.isSafeInteger(version.minApiVersion) ||
-      version.minApiVersion <= AICO_TETHER_API_VERSION)
-  )
-}
-
-/** Split complete NDJSON lines from a buffer; the incomplete tail is kept. */
-export function splitNdjson(buffer: string): { lines: string[]; rest: string } {
-  const parts = buffer.split('\n')
-  const rest = parts.pop() ?? ''
-  return { lines: parts.map((line) => line.trim()).filter(Boolean), rest }
-}
-
-/** The environment for the tmux client: exactly the target's. Aico's
- * own environment never reaches it, and neither do Tether's `unset` or any key
- * outside the allowlist (tmux-sandbox.ts). */
-export function attachEnvironment(target: Pick<AttachTarget, 'env'>): Record<string, string> {
-  return { ...target.env }
-}
-
-/** Validate an attach answer before it is ever executed. Only the socket and
- * target are taken from it: the argv and environment are Aico's own. */
-export function parseAttachTarget(body: unknown): AttachTarget {
-  const value = body as Partial<AttachTarget> | null
-  const strings = (list: unknown): list is string[] =>
-    Array.isArray(list) && list.every((item) => typeof item === 'string')
-  if (
-    !value ||
-    typeof value.generation !== 'string' ||
-    !strings(value.argv) ||
-    !value.env ||
-    typeof value.env !== 'object' ||
-    !Object.values(value.env).every((item) => typeof item === 'string')
-  )
-    throw new TetherUnavailable('Tether returned an invalid attach target')
-  try {
-    const own = attachFromTether({ argv: value.argv, env: value.env })
-    return { generation: value.generation, argv: own.argv, env: own.env, unset: [] }
-  } catch {
-    throw new TetherUnavailable('Tether returned an invalid attach target')
-  }
 }
 
 interface RequestOptions {
@@ -440,12 +236,10 @@ export class TetherClient {
     })
   }
 
-  async attach(id: string): Promise<AttachTarget> {
-    return parseAttachTarget(
-      await this.json('GET', `/v1/sessions/${encodeURIComponent(id)}/attach`, undefined, {
-        timeoutMs: 30_000,
-      }),
-    )
+  attach(id: string): Promise<AttachAnswer> {
+    return this.json('GET', `/v1/sessions/${encodeURIComponent(id)}/attach`, undefined, {
+      timeoutMs: 30_000,
+    }).then(parseAttachAnswer)
   }
 
   inject(
@@ -461,19 +255,28 @@ export class TetherClient {
     })
   }
 
+  /** Claim the shared window size for this attached tmux client. `viewer`
+   * names the claimer for the other views ("Viewing on …"). */
   resizeClaim(
     id: string,
     generation: string,
     clientPid: number,
     cols: number,
     rows: number,
-  ): Promise<{ applied: boolean; changed?: boolean; reason?: string }> {
+    viewer?: ViewerLabel,
+  ): Promise<ResizeClaimAnswer> {
     return this.json('POST', `/v1/sessions/${encodeURIComponent(id)}/resize-claim`, {
       generation,
       clientPid,
       cols,
       rows,
+      ...(viewer ? { viewer } : {}),
     })
+  }
+
+  /** Who holds the session's shared window size; null when unknown. */
+  resizeHolder(id: string): Promise<{ generation: string; holder: SizeHolder | null }> {
+    return this.json('GET', `/v1/sessions/${encodeURIComponent(id)}/resize-claim`)
   }
 
   async tools(): Promise<{ items: TetherTool[]; defaultSlug: string | null }> {
@@ -750,64 +553,6 @@ export function followEvents(client: TetherClient, subscriber: EventSubscriber):
   })()
   return () => controller.abort()
 }
-
-export interface GuiMutationCommand {
-  commandId: string
-  kind: 'show' | 'position' | 'title' | 'coordinator'
-  sessionId: string
-  generation: string
-  bounds?: { x: number; y: number; width: number; height: number }
-  label?: string
-  coordinator?: boolean
-}
-
-export type GuiCommand = GuiMutationCommand | { commandId: string; kind: 'layout' }
-
-/** Validate one GUI channel command line. */
-export function parseGuiCommand(value: unknown): GuiCommand | null {
-  const line = value as Record<string, unknown> | null
-  if (line?.type !== 'command' || typeof line.commandId !== 'string') return null
-  if (line.kind === 'layout') return { commandId: line.commandId, kind: 'layout' }
-  if (
-    (line.kind !== 'show' &&
-      line.kind !== 'position' &&
-      line.kind !== 'title' &&
-      line.kind !== 'coordinator') ||
-    typeof line.sessionId !== 'string' ||
-    !/^[0-9a-f]{8}$/.test(line.sessionId) ||
-    typeof line.generation !== 'string'
-  )
-    return null
-  const command: GuiMutationCommand = {
-    commandId: line.commandId,
-    kind: line.kind,
-    sessionId: line.sessionId,
-    generation: line.generation,
-  }
-  if (line.kind === 'position') {
-    const b = line.bounds as Record<string, unknown> | null
-    const int = (n: unknown) => typeof n === 'number' && Number.isSafeInteger(n)
-    if (!b || !int(b.x) || !int(b.y) || !int(b.width) || !int(b.height)) return null
-    command.bounds = {
-      x: b.x as number,
-      y: b.y as number,
-      width: b.width as number,
-      height: b.height as number,
-    }
-  }
-  if (line.kind === 'title') {
-    if (typeof line.label !== 'string') return null
-    command.label = line.label
-  }
-  if (line.kind === 'coordinator') {
-    if (typeof line.coordinator !== 'boolean') return null
-    command.coordinator = line.coordinator
-  }
-  return command
-}
-
-/** The GUI's verdict for one command: applied, or a stable error code. */
-export type GuiVerdict = { applied: true; layout?: Layout } | { applied: false; error: string }
 
 /**
  * Hold `GET /v1/gui/channel` as the one Aico GUI client, apply each

@@ -3,7 +3,7 @@
 // start (terminal clients) get the environment handed in by the root.
 
 import { join } from 'node:path'
-import { defaultTetherSocketPath, knownTetherSockets, tetherSocketPath } from './tether-client'
+import { defaultTetherSocketPath, knownTetherSockets, tetherSocketPath } from 'tether/client'
 
 export interface AicoConfig {
   readonly stateDir: string

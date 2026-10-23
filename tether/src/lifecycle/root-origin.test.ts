@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { listenPrivateSocket } from '../http'
+import { opensRootWindow } from '../lifecycle-api'
 import { getWidget, removeWidget } from './catalog'
 import { createRootHandler, parseRootCreate, type RootControlOperations } from './root-control'
 import { initStore, registerBuiltinTuis } from './testing'
@@ -141,5 +142,12 @@ describe('root origin (v1 roots API)', () => {
         generation: null,
       })
     }
+  })
+})
+
+describe('root windows', () => {
+  it('opens a window for desktop and st aico create roots, never for web roots', () => {
+    expect(opensRootWindow({ origin: 'root' })).toBe(true)
+    expect(opensRootWindow({ origin: 'a-term' })).toBe(false)
   })
 })

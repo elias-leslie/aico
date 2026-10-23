@@ -87,7 +87,7 @@ import { currentPaneRefusal, PANE_UID_REFUSED } from './pane-policy'
 import type { Project, ProjectProvider } from './projects'
 import { type Continuity, registerRebootRoutes } from './reboot'
 import { type Recovery, registerRecoveryRoutes } from './recovery'
-import { recordSizeHolder, sizeHolderOf } from './size-holder'
+import { parseViewerLabel, recordSizeHolder, sizeHolderOf } from './size-holder'
 import type { Store } from './store'
 
 const execFileAsync = promisify(execFile)
@@ -303,6 +303,13 @@ async function settleRunning(
   }
 }
 
+/** A new root gets a desktop window only when the desktop or `st aico create`
+ * asked for it (session origin `root`). One the web app started (`a-term`)
+ * still joins the desktop catalog and tray, without a window. */
+export function opensRootWindow(row: Pick<WidgetRow, 'origin'>): boolean {
+  return row.origin === 'root'
+}
+
 function respawnError(result: RespawnResult): HttpError | null {
   switch (result.status) {
     case 'replaced':
@@ -312,7 +319,6 @@ function respawnError(result: RespawnResult): HttpError | null {
     case 'stale':
       return new HttpError(409, 'stale_generation')
     case 'busy':
-    case 'legacy_session':
       return new HttpError(409, result.status)
     default:
       return new HttpError(409, result.status, { reason: result.reason })
@@ -455,7 +461,9 @@ export function rootOperations(context: LifecycleApiContext): RootControlOperati
       // Verify now so `GET /v1/sessions` agrees with `GET /v1/sessions/:id`.
       if (latest) await verifySessionStatus(latest).catch(() => undefined)
       if (
-        latest?.launchState === 'dispatched' &&
+        latest &&
+        opensRootWindow(latest) &&
+        latest.launchState === 'dispatched' &&
         context.gui.connected() &&
         (await verifiedCurrentManagedPane(latest))
       ) {
@@ -858,8 +866,10 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
     })
     .add('POST', '/v1/sessions/:id/resize-claim', async (req, res, params) => {
       const body = await readJsonObject(req)
-      only(body, ['generation', 'clientPid', 'cols', 'rows'])
+      only(body, ['generation', 'clientPid', 'cols', 'rows', 'viewer'])
       const generation = requireGeneration(body)
+      const viewer = parseViewerLabel(body.viewer)
+      if (viewer === null) throw new HttpError(400, 'invalid_viewer')
       const row = requireSession(params.id)
       fence(row, generation)
       const isCurrent = () => {
@@ -887,6 +897,7 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
           cols: body.cols as number,
           rows: body.rows as number,
           generation,
+          viewer,
         })
         events.publish('session.resized', {
           id: row.id,
@@ -895,6 +906,7 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
           cols: holder.cols,
           rows: holder.rows,
           changed: result.changed,
+          viewer: holder.viewer,
         })
         sendJson(res, 200, { applied: true, changed: result.changed })
       } else {

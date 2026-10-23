@@ -11,6 +11,7 @@ import { execFileSync } from 'node:child_process'
 import { readdirSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname } from 'node:path'
+import { type AttachAnswer, TetherUnavailable } from 'tether/client'
 
 export const TMUX_BIN = '/usr/bin/tmux'
 export const BWRAP_BIN = '/usr/bin/bwrap'
@@ -62,6 +63,31 @@ export function attachFromTether(
     if (typeof value === 'string' && ENV_VALUE.test(value)) clientEnv[key] = value
   }
   return { argv: [TMUX_BIN, '-S', argv[2], 'attach-session', '-t', argv[5]], env: clientEnv }
+}
+
+export interface AttachTarget {
+  generation: string
+  /** The tmux client argv Aico built: `/usr/bin/tmux -S <socket> attach-session -t $3`. */
+  argv: string[]
+  /** The client's whole environment (allowlisted keys), not overrides. */
+  env: Record<string, string>
+}
+
+/** Validate an attach answer before it is ever executed. Only the socket and
+ * target are taken from it: the argv and environment are Aico's own. */
+export function ownAttachTarget(answer: AttachAnswer): AttachTarget {
+  try {
+    const own = attachFromTether(answer)
+    return { generation: answer.generation, argv: own.argv, env: own.env }
+  } catch {
+    throw new TetherUnavailable('Tether returned an invalid attach target')
+  }
+}
+
+/** The environment for the tmux client: exactly the target's. Aico's own
+ * environment never reaches it, and neither does any key outside the allowlist. */
+export function attachEnvironment(target: Pick<AttachTarget, 'env'>): Record<string, string> {
+  return { ...target.env }
 }
 
 let libsCache: { key: string; paths: string[] } | null = null

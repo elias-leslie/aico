@@ -3,8 +3,7 @@
 // one command and says whether it did.
 
 import type { BrowserWindow } from 'electron'
-import type { SessionCatalog } from './session-catalog'
-import type { GuiCommand, GuiVerdict } from './tether-client'
+import type { GuiCommand, GuiVerdict, SessionCatalog } from 'tether/client'
 import type { Bounds } from './views'
 import type { Layout } from './window-layout'
 

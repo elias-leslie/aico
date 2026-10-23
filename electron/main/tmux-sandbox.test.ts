@@ -2,10 +2,13 @@ import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { TetherUnavailable } from 'tether/client'
 import { describe, expect, it } from 'vitest'
 import {
+  attachEnvironment,
   attachFromTether,
   BWRAP_BIN,
+  ownAttachTarget,
   sandboxedTmux,
   TMUX_BIN,
   tmuxClientPid,
@@ -67,6 +70,38 @@ describe('attach answer', () => {
       expect(() => attachFromTether(answer([...good.slice(0, 5), target]), env)).toThrow()
     },
   )
+})
+
+describe('attach target', () => {
+  const answer = {
+    generation: 'a'.repeat(64),
+    argv: ['/usr/bin/tmux', '-S', agentSocket, 'attach-session', '-t', '$3'],
+    env: { TERM: 'xterm-256color', COLORTERM: 'truecolor', CLICOLOR: '1' },
+  }
+
+  it("builds the argv and a fixed-key environment itself from Tether's answer", () => {
+    const target = ownAttachTarget({
+      ...answer,
+      argv: ['/bin/sh', ...answer.argv.slice(1)],
+      env: { ...answer.env, LD_PRELOAD: '/x.so', PATH: '/x', CLICOLOR: '1; id' },
+    })
+    expect(target).toEqual({
+      generation: answer.generation,
+      argv: ['/usr/bin/tmux', '-S', agentSocket, 'attach-session', '-t', '$3'],
+      env: { TERM: 'xterm-256color', LANG: 'C.UTF-8', COLORTERM: 'truecolor' },
+    })
+    expect(attachEnvironment(target)).toEqual(target.env)
+  })
+
+  it('refuses answers that name another socket, a hostile target or extra words', () => {
+    const bad = (argv: string[]) =>
+      expect(() => ownAttachTarget({ ...answer, argv })).toThrow(TetherUnavailable)
+    bad(['tmux', 'attach'])
+    bad(['/usr/bin/tmux', '-S', '/tmp/evil.sock', 'attach-session', '-t', '$3'])
+    bad(['/usr/bin/tmux', '-S', agentSocket, 'attach-session', '-t', '$3; id'])
+    bad(['/usr/bin/tmux', '-S', agentSocket, 'attach-session', '-t', '-d'])
+    bad([...answer.argv, '-d'])
+  })
 })
 
 describe('sandbox argv', () => {

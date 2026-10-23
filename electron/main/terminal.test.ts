@@ -1,15 +1,15 @@
 import type { BrowserWindow } from 'electron'
-import { describe, expect, it, vi } from 'vitest'
-import { PERSONAL_WORKSPACE_ID } from './project'
-import { createSessionCatalog } from './session-catalog'
-import { OVERLAY_DELAY_MS, RECLAIM_SPACING_MS } from './size-holder'
-import { clampSize, createTerminal } from './terminal'
 import {
-  type AttachTarget,
+  type AttachAnswer,
+  createSessionCatalog,
   type SessionDescriptor,
   TetherError,
   TetherUnavailable,
-} from './tether-client'
+} from 'tether/client'
+import { describe, expect, it, vi } from 'vitest'
+import { PERSONAL_WORKSPACE_ID } from './project'
+import { OVERLAY_DELAY_MS, RECLAIM_SPACING_MS } from './size-holder'
+import { clampSize, createTerminal } from './terminal'
 import { WindowRegistry } from './window-registry'
 
 function descriptor(id: string, extra: Partial<SessionDescriptor> = {}): SessionDescriptor {
@@ -39,12 +39,13 @@ function descriptor(id: string, extra: Partial<SessionDescriptor> = {}): Session
   }
 }
 
-function target(generation = 'g1'): AttachTarget {
+const SERVER_SOCKET = `/run/tether/agent/default/tmux/${'ab'.repeat(16)}/server.sock`
+
+function target(generation = 'g1'): AttachAnswer {
   return {
     generation,
-    argv: ['/usr/bin/tmux', '-S', '/run/t/sock', 'attach-session', '-t', '$1'],
-    env: {},
-    unset: [],
+    argv: ['/usr/bin/tmux', '-S', SERVER_SOCKET, 'attach-session', '-t', '$1'],
+    env: { TERM: 'xterm-256color' },
   }
 }
 
@@ -149,6 +150,7 @@ function setup() {
     }),
     ensurePersonalWorkspaceRoot: () => '/home/o/Personal',
     isQuitting: () => state.quitting,
+    viewer: { app: 'desktop', device: 'test-host' },
   }
   const terminal = createTerminal(deps as never)
   const on = new Map<string, (...args: unknown[]) => unknown>()
@@ -217,8 +219,8 @@ describe('terminal channels', () => {
     const s = setup()
     await attached(s)
     expect(s.deps.controlTerminal).toHaveBeenCalledWith(
-      ['/usr/bin/tmux', '-S', '/run/t/sock', 'attach-session', '-t', '$1'],
-      {},
+      ['/usr/bin/tmux', '-S', SERVER_SOCKET, 'attach-session', '-t', '$1'],
+      { TERM: 'xterm-256color', LANG: 'C.UTF-8' },
       { cols: 100, rows: 30 },
     )
   })
@@ -250,7 +252,10 @@ describe('terminal input', () => {
     link.emitData('hello')
     expect(s.all[0].webContents.send).toHaveBeenCalledWith('pty:data', 'hello')
     await vi.waitFor(() =>
-      expect(s.tether.resizeClaim).toHaveBeenCalledWith('aaaaaaaa', 'g1', 4242, 100, 30),
+      expect(s.tether.resizeClaim).toHaveBeenCalledWith('aaaaaaaa', 'g1', 4242, 100, 30, {
+        app: 'desktop',
+        device: 'test-host',
+      }),
     )
     link.emitData('more')
     expect(s.tether.resizeClaim).toHaveBeenCalledTimes(1)
@@ -556,7 +561,10 @@ describe('another client holds the size', () => {
       expect(sent(s).at(-1)).toEqual(['pty:size-other', true])
       s.on.get('pty:claim-size')?.(s.from(s.all[0]), true) // Use here
       await vi.advanceTimersByTimeAsync(0)
-      expect(s.tether.resizeClaim).toHaveBeenCalledWith('aaaaaaaa', 'g1', 4242, 100, 30)
+      expect(s.tether.resizeClaim).toHaveBeenCalledWith('aaaaaaaa', 'g1', 4242, 100, 30, {
+        app: 'desktop',
+        device: 'test-host',
+      })
       expect(sent(s).at(-1)).toEqual(['pty:size-other', false])
       expect(link.settleSize).not.toHaveBeenCalled() // nothing changed in tmux
     } finally {
