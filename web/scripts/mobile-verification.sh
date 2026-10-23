@@ -23,7 +23,7 @@ Commands:
   wait-boot        Wait for adb=device and sys.boot_completed=1
   forward-cdp      Forward Android Chrome DevTools to localhost:${CDP_PORT}
   reverse-app      Map the emulator's localhost:${A_TERM_PORT} to this host's (adb reverse)
-  open-app         Open A-Term in Android Chrome at ${A_TERM_URL} (runs reverse-app)
+  open-app         Open the web app in Android Chrome at ${A_TERM_URL} (runs reverse-app)
   browser [args]   Launch agent-browser attached to forwarded CDP
   workflow         Run doctor, forward-cdp, and open-app
 

@@ -1,0 +1,170 @@
+# Web app guide
+
+The web app is Aico in a browser or on a phone: the same Tether sessions as the desktop, in panes. [Project overview](../README.md). Run shell commands from the repository root unless a step changes directory.
+
+## Quickstart
+
+```bash
+git clone https://github.com/elias-leslie/aico.git
+cd aico
+scripts/install.sh --start
+```
+
+Then open **http://localhost:3002**.
+
+The web app targets **Linux with systemd** and needs **Tether**, the session daemon that owns every session (API version 1 or newer, `tether@default.service`). `scripts/install.sh` builds the front end, sets up the backend's Python environment in `web/.venv` and installs Tether and the user units; `--start` starts Tether and both web units. There is no database server to install. See [install](INSTALL.md).
+
+Projects come from Tether: by default its local list (`~/.config/tether/projects.json`), which the web app's "Register project" adds to through Tether's `POST /v1/projects`.
+
+See the [Changelog](../CHANGELOG.md) for shipped changes.
+
+## Features
+
+**`persistent sessions`** — Sessions live in Tether, not in the web app, so they survive browser closes, web app restarts, and network drops. Reconnect exactly where you left off. The same sessions show up in the desktop app, and sessions started there show up here.
+
+**`stable scrollback rendering`** — Terminal panes render with the xterm.js WebGL renderer with DOM fallback, so history keeps font metrics, wrap points, and columns aligned.
+
+**`multi-pane layouts`** — Up to 6 resizable panes. Put planning, implementation, review, release checks, and files on the same screen, detach any pane into its own browser window when you want to spread work across monitors, and use the pane menu's Refresh Layout action to remount a pane cleanly without restarting its session. Several views can show one session; the view you activate (focus) claims the session's window size, and the others keep their own size until you activate them.
+
+**`files browser`** — Browse the active pane's working directory. Preview files, copy paths, insert paths into prompts — without leaving the terminal.
+
+**`prompt cleaning`** — With Agent Hub connected, the web app can clean a draft prompt, show an original-vs-cleaned diff, take follow-up refinement instructions, let you edit the result before sending, and fall back to the original prompt if the cleaner is unavailable.
+
+**`voice input`** — Dictate commands and prompts via browser speech-to-text when your browser and microphone permissions support it. It merges cumulative browser speech chunks so dictated phrases do not repeat as interim text becomes final.
+
+On a phone, tap Talk to start dictating. Words appear while you speak, and pauses in speech keep it listening. Tap the same button to pause, then review or edit the transcript. Resume continues the same draft; Send submits it to the terminal. The Talk button only controls listening. Browser permission, microphone, or network failures still stop recording and show an error.
+
+**`project deep links`** — Open `/?project=myapp&dir=/path` to jump straight into a project workspace. Bookmark your setups.
+
+**`same-pane project switching`** — Swap a pane to another project from the header instead of closing and reopening work by hand. The pane keeps the current tool mode when possible, so moving from one project to another in `codex`, `claude`, or shell does not drop you back to a generic terminal first.
+
+**`dual mode`** — Switch any pane between raw shell and your configured AI agent with one click. Supports Claude Code, Codex, Antigravity CLI, and Pi out of the box.
+
+**`agent presets and custom tools`** — Built-in profiles for Claude Code, Codex, Antigravity CLI, and Pi appear in Settings by default. Antigravity launches as `agy --dangerously-skip-permissions`, its explicit auto-approval mode. Pick a default tool, tune the launch command or process name, color-code panes, and add your own TUI agent commands when your workflow expands. The tool list is Tether's shared registry, so a change here also applies to sessions launched from the desktop; Claude Code's slug is `claude-code` (`claude` still works as an alias). The web app also lists agent sessions you started yourself on your default tmux server alongside your own panes, recognising any tool in that registry by its slug, aliases, process name or command; closing one here only closes the view.
+
+**`scrollback`** — Each pane is attached in tmux control mode, which seeds the pane's history into xterm.js. Scroll up and the view holds still while output keeps arriving; a Latest button returns you to the bottom.
+
+**`mobile workspace controls`** — On-screen keyboard with arrow keys, Ctrl, Esc, and modifier support for touch devices, visible-bottom-row viewport handling, plus a touch-friendly session switcher that can jump into any attached or detached session from your phone.
+
+Expand the arrow controls to find Enter, which activates a TUI selection without typing a draft. Terminal keys keep the phone keyboard and arrow controls open. With a draft focused, Left and Right move its caret; Up and Down navigate the terminal. Send submits the draft, while the toolbox's Enter sends only the Enter key and leaves the draft intact.
+
+**`terminal themes and tuning`** — Five built-in xterm color palettes (Phosphor, Dracula, Monokai, Solarized Dark, Tokyo Night) plus a system/light/dark app theme that respects `prefers-color-scheme`. Settings also configure font family, font size, cursor style, and cursor blink — all persisted across sessions.
+
+**`in-terminal search`** — Search the live buffer and scrollback for a string and step through matches, without leaving the pane.
+
+**`clickable links and clipboard`** — URLs in terminal output are clickable (web-links addon) and copy/paste flows use the xterm clipboard addon, including bracketed-paste support.
+
+**`file upload`** — Drag and drop images and docs (PNG/JPG/GIF/WebP/Markdown/text/JSON/PDF, up to 10 MB) into a pane; the web app validates the file by magic bytes and returns a `~`-relative path you can drop straight into a command.
+
+**`diagnostics`** — Optional, off by default: capture per-session render/diagnostic events to debug terminal behavior.
+
+**`install as a PWA`** — The web app ships a manifest, so you can install it to your phone or desktop and run it standalone.
+
+**`auth modes for remote access`** — Ships loopback-only (`none`) by default, with built-in password auth (signed-cookie sessions) or `proxy` mode for an identity-aware reverse proxy. Security headers, a CSP with per-request nonces, CORS allowlisting, and per-route rate limiting are on by default.
+
+**`self-maintaining`** — A background loop drops pane links to sessions that ended, prunes long-empty panes, cleans up old uploads, and prunes settings for projects that no longer exist; it also follows Tether's event stream so an ended session leaves its pane promptly. `/health` reports Tether and tmux, and `/metrics` exposes runtime status.
+
+## Advanced Setup
+
+For install smoke or CI validation on Linux hosts without a user systemd session, run `scripts/install.sh --skip-systemd`.
+
+For any deployment beyond localhost, turn on browser auth first. `A_TERM_AUTH_MODE=password` is the built-in path. `A_TERM_AUTH_MODE=proxy` is for running behind an identity-aware reverse proxy.
+
+<details>
+<summary><strong>Environment variables</strong></summary>
+
+Copy `web/.env.example` to `~/.config/credstore/a-term/env` (mode 0600, outside the repo) if you want to override settings; both web units read it when present. Everything is optional:
+
+```bash
+# Tether control socket (default: $XDG_RUNTIME_DIR/tether/default/control.sock)
+TETHER_SOCKET=/run/user/1000/tether/default/control.sock
+
+# Where the web app keeps its view state (default: ~/.local/state/a-term/a-term.db)
+A_TERM_DB_PATH=/home/you/.local/state/a-term/a-term.db
+
+# Service tuning
+A_TERM_PORT=8002
+A_TERM_BIND_HOST=127.0.0.1
+A_TERM_FRONTEND_PORT=3002
+LOG_LEVEL=INFO
+
+# Public auth
+A_TERM_AUTH_MODE=password
+A_TERM_AUTH_PASSWORD=change-me
+A_TERM_AUTH_SECRET=replace-with-a-long-random-string
+A_TERM_AUTH_COOKIE_SECURE=true
+
+# Maintenance
+MAINTENANCE_INTERVAL_SECONDS=900
+MAINTENANCE_SESSION_PURGE_DAYS=7
+
+# Optional companion services (the web app works without these)
+NEXT_PUBLIC_AGENT_HUB_URL=http://localhost:8003
+AGENT_HUB_URL=http://localhost:8003
+```
+
+</details>
+
+<details>
+<summary><strong>Terminal launchers</strong></summary>
+
+`scripts/tclaude`, `scripts/tcodex` and `scripts/tsession` open a project's agent session from a terminal: they reuse the most recently used Tether session for that project and tool, or create one (it also appears in the web app and the desktop), then attach with `tether sessions attach`. Run outside tmux, it attaches directly. Inside a tmux client on the same Tether server it switches the client. Inside a different tmux server (for example your default one), tmux cannot switch across servers, so it attaches nested after printing a notice; detach the inner client with its prefix key then `d`. `tsession open --tool codex --project myapp --attach --print` prints Tether's attach target instead. The `tether` CLI must be on `PATH` (or set `TETHER_BIN`).
+
+</details>
+
+<details>
+<summary><strong>Daily commands</strong></summary>
+
+```bash
+bash scripts/start.sh
+bash scripts/shutdown.sh
+journalctl --user -u a-term-backend.service -f
+journalctl --user -u a-term-frontend.service -f
+```
+
+</details>
+
+## Remote Access
+
+The web app answers on `localhost`, plus one public hostname through a Cloudflare tunnel. LAN, Tailscale and other reverse-proxy setups are refused by the Host guard. See the [Remote Access guide](remote-access.md). Put Cloudflare Access or built-in auth (`password` or `proxy`) in front of the public host.
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Backend | FastAPI, Python 3.13+, Uvicorn |
+| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 4 |
+| Terminal | xterm.js 6 with WebGL renderer (DOM fallback), tmux client attached to Tether's sessions |
+| Sessions | Tether (local daemon, Unix-socket HTTP API v1) |
+| View state | SQLite (`~/.local/state/a-term/a-term.db`) |
+| Quality | Ruff, Ty, pytest, Vitest, Biome |
+
+<details>
+<summary><strong>Architecture</strong></summary>
+
+- `a_term/api/` — REST and WebSocket endpoints
+- `a_term/tether/` — Tether API client (Unix socket, stdlib HTTP, NDJSON events)
+- `a_term/services/` — session lifecycle through Tether, view links, maintenance
+- `a_term/storage/` — local SQLite view state (panes, layout, session links, project settings)
+- `a_term/cli/` — `tsession` and the `a-term` cutover commands
+- `frontend/app/`, `frontend/components/`, `frontend/lib/` — Next.js UI
+- `web/scripts/` — start, stop, launchers and verification; the installer and units are in the root `scripts/`
+
+Full API schema available at `/openapi.json` when running.
+
+</details>
+
+<details>
+<summary><strong>Optional companion integrations</strong></summary>
+
+All core features work without any external service.
+
+**SummitFlow project catalog** — Tether reads SummitFlow's projects when SummitFlow is installed, and the web app shows those. Registering projects from the web app is then turned off; without SummitFlow, it adds projects to Tether's local list.
+
+**Agent Hub** (`NEXT_PUBLIC_AGENT_HUB_URL`, `AGENT_HUB_URL`) — Adds model catalog and prompt cleaning/refinement proxies. Browser-native voice input works standalone; Agent Hub provides an optional enhanced path.
+
+</details>
+
+## License
+
+Apache License 2.0 — see [LICENSE](../LICENSE) and [NOTICE](../NOTICE).

@@ -12,7 +12,7 @@
 - **Native scrollback** — each widget is a tmux control-mode client, so the terminal itself holds the pane's history: wheel, drag-select and copy reach as far back as it goes.
 - **Workspace picker** — always includes a local Personal Workspace, plus the projects Tether serves (SummitFlow's catalog when installed, else Tether's local list).
 - **Click-to-context capture** — Aico's loopback listener accepts captures from the browser extension and `st selection send` and types a compact reference at the last-focused widget's prompt (single, batch, or a capture package from `st ui grab`). Nothing is stored.
-- **Every session, one list** — the tray and **Open session** (in the lantern menu, the palette or as a pin) list every Tether session, whether started from Aico, A-Term, the `tether` CLI or a SummitFlow root, and open any of them as a widget.
+- **Every session, one list** — the tray and **Open session** (in the lantern menu, the palette or as a pin) list every Tether session, whether started from the desktop, the web app, the `tether` CLI or a SummitFlow root, and open any of them as a widget.
 
 ## Requirements
 

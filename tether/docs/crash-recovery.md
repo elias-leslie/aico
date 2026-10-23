@@ -1,6 +1,6 @@
 # Crash recovery
 
-When a session dies and nobody ended it, Tether resumes the same session in place: same widget, window, origin, coordinator and root request, with the agent's own conversation. The agent's first prompt says what happened and what to check first. This is the second announced exception to "no silent resurrection" in [ADR 0001](adr/0001-tether-owns-sessions.md); reboot restore ([reboot-continuity.md](reboot-continuity.md)) is the first.
+When a session dies and nobody ended it, Tether resumes the same session in place: same widget, window, origin, coordinator and root request, with the agent's own conversation. The agent's first prompt says what happened and what to check first. This is the second announced exception to "no silent resurrection" in [ADR 0001](../../docs/adr/0001-tether-owns-sessions.md); reboot restore ([reboot-continuity.md](reboot-continuity.md)) is the first.
 
 ## What counts as a crash
 

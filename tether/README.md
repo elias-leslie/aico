@@ -1,6 +1,6 @@
 # Tether
 
-Tether is a per-user session daemon for Linux. It owns the lifecycle of durable tmux sessions for [Aico](https://github.com/elias-leslie/aico) (desktop) and [A-Term](https://github.com/elias-leslie/a-term) (web and mobile):
+Tether is a per-user session daemon for Linux. It is part of [Aico](../README.md) and owns the lifecycle of the durable tmux sessions that Aico's desktop and web front ends show:
 
 - containment
 - the catalog and generation fencing
@@ -8,13 +8,13 @@ Tether is a per-user session daemon for Linux. It owns the lifecycle of durable 
 - the project list
 - events
 
-Either app works alone against Tether, and both can share one instance.
+Either front end works alone against Tether, and both share one instance.
 
-Tether serves a versioned HTTP API on a private Unix socket (`$XDG_RUNTIME_DIR/tether/<instance>/control.sock`, mode 0600). It is never exposed on the network. Apps keep their own terminal byte path (`tmux attach`) and their own view state.
+Tether serves a versioned HTTP API on a private Unix socket (`$XDG_RUNTIME_DIR/tether/<instance>/control.sock`, mode 0600). It is never exposed on the network. The front ends keep their own terminal byte path (`tmux attach`) and their own view state.
 
-**Status:** early release (v0.1.0, API v1). In daily use on the author's workstation since October 2026, where `tether@default` owns every Aico and A-Term session ([cutover retrospective](docs/cutover-log-2026-10-11.md)). Both apps are clients: they keep only their views (Aico windows; A-Term panes, layout and project display settings) and require API v1 or later.
+**Status:** early release (v0.1.0, API v1). In daily use on the author's workstation since October 2026, where `tether@default` owns every Aico session ([cutover retrospective](../docs/history/cutover-log-2026-10-11.md)). Both front ends are clients: they keep only their views (desktop windows; web app panes, layout and project display settings) and require API v1 or later.
 
-Tether's project list comes from SummitFlow, the author's workspace tool, when it answers on `http://127.0.0.1:8001/api/projects` (override with `TETHER_SUMMITFLOW_URL`, or set it to `off`). Otherwise Tether reads a local list at `~/.config/tether/projects.json`, so it works without SummitFlow. Remaining cleanup work in the two apps is tracked in [docs/migration-plan.md](docs/migration-plan.md).
+Tether's project list comes from SummitFlow, the author's workspace tool, when it answers on `http://127.0.0.1:8001/api/projects` (override with `TETHER_SUMMITFLOW_URL`, or set it to `off`). Otherwise Tether reads a local list at `~/.config/tether/projects.json`, so it works without SummitFlow. The original migration plan is in [docs/history/migration-plan.md](../docs/history/migration-plan.md).
 
 ## Requirements
 
@@ -24,19 +24,19 @@ Tether's project list comes from SummitFlow, the author's workspace tool, when i
 
 ## Install
 
+Aico's installer installs Tether with the rest of the product (see [docs/INSTALL.md](../docs/INSTALL.md)):
+
 ```sh
-npm ci
-scripts/install.sh              # build; install ~/.local/lib/tether, ~/.local/bin/tether and the unit template
-scripts/install.sh --start default  # also enable and start tether@default
-scripts/install.sh --start dev      # start a test instance for this boot only (never enabled)
+scripts/install.sh --start          # from the repo root; enables and starts tether@default
+systemctl --user start tether@dev   # a test instance for this boot only (never enabled)
 tether doctor
 ```
 
-Install Tether before Aico or A-Term; both installers refuse to continue until it answers. A single `default` instance can serve both apps.
+It puts the bundle, CLI and shims in `~/.local/lib/tether` and links `~/.local/bin/tether`. `tether/scripts/install-release.sh` copies an already built release there; the `tether@default` unit runs it before each start. On a SummitFlow host, `st service rebuild aico --worker tether@default` deploys Tether.
 
 Agent shims: the installer also puts `systemctl`, `systemd-run`, `pkexec` and a few siblings as wrappers under `~/.local/lib/tether/shims/` (the list is `scripts/shims/shims.list`), and every session Tether creates gets that directory first on PATH. The wrappers add `--no-ask-password` (or `--no-user-interaction` for `udisksctl`) so an agent's system-bus call fails at once instead of popping the owner's polkit password dialog; `pkexec` is refused. Only panes created after the install pick it up, and a caller that uses an absolute path such as `/usr/bin/systemctl` bypasses it.
 
-The installer is idempotent. It never starts an instance unless you pass `--start`. It installs no pane memory drop-in: Nightshift owns the pane OOM policy and cap, and `tether doctor` checks live panes against it.
+The installer is idempotent and starts nothing unless you pass `--start`. It installs no pane memory drop-in: Nightshift owns the pane OOM policy and cap, and `tether doctor` checks live panes against it.
 
 ## CLI
 
@@ -55,21 +55,21 @@ tether [--instance NAME] [--json] <command>
 ## Documentation
 
 - [API v1](docs/api-v1.md)
-- [Root control](docs/root-control.md): the root contract `st aico` and SummitFlow fleet rely on
+- [Root control](../docs/root-control.md): the root contract `st aico` and SummitFlow fleet rely on
 - [Compatibility contract](docs/compat-contract.md): the Aico names and paths Tether keeps
 - [CONTEXT.md](CONTEXT.md): vocabulary
-- [ADR 0001: Tether owns sessions; apps own views](docs/adr/0001-tether-owns-sessions.md)
-- [ADR 0002: Runtime and packaging](docs/adr/0002-runtime-and-packaging.md)
+- [ADR 0001: Tether owns sessions; apps own views](../docs/adr/0001-tether-owns-sessions.md)
+- [ADR 0002: Runtime and packaging](../docs/adr/0002-runtime-and-packaging.md)
 - [Lifecycle harness](docs/LIFECYCLE_HARNESS.md): host integration tests against a running instance
-- [Aico inventory](docs/inventory-aico.md): what moved from Aico into Tether
-- [Migration plan](docs/migration-plan.md) and [cutover retrospective](docs/cutover-log-2026-10-11.md)
+- [Aico inventory](../docs/history/inventory-aico.md): what moved from Aico's desktop into Tether
+- [Migration plan](../docs/history/migration-plan.md) and [cutover retrospective](../docs/history/cutover-log-2026-10-11.md)
 
 ## Development
 
 ```sh
-npm ci
-npm run check                       # biome, tsc, vitest, esbuild bundle
-uv run pytest                       # operator script tests (scripts/tests)
+npm ci                              # at the repo root
+npm run check                       # biome, tsc, vitest, esbuild bundle (in tether/)
+web/.venv/bin/pytest tether/scripts/tests   # operator script tests, from the repo root
 scripts/tether-lifecycle-harness.sh dev   # host integration tests against a running instance
 ```
 
@@ -83,4 +83,4 @@ Tether reports whether each agent TUI's optional context hook is installed. Thos
 
 ## License
 
-Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+Apache-2.0. See [LICENSE](../LICENSE) and [NOTICE](../NOTICE).

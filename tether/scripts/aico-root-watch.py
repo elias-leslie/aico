@@ -219,7 +219,7 @@ def local_root_url(value: str) -> str:
     except ValueError:
         valid = False
     if not valid:
-        raise argparse.ArgumentTypeError("A-Term root control requires an exact loopback HTTP URL")
+        raise argparse.ArgumentTypeError("Web app root control requires an exact loopback HTTP URL")
     return value.rstrip("/")
 
 
@@ -273,7 +273,7 @@ def a_term_identity_url(timeout: float = 2.0) -> str:
             raise ValueError("bad backend_port")
     except (OSError, ValueError, KeyError, TypeError, StopIteration, http.client.HTTPException):
         raise argparse.ArgumentTypeError(
-            "A-Term's port is unknown: Tether's project list or A-Term's project.identity.json "
+            "The web app's port is unknown: Tether's project list or the web app's project.identity.json "
             "could not be read; pass --root-url (when running this script directly, "
             "A_TERM_ROOT_CONTROL_URL also works; st does not pass it through)") from None
     finally:
@@ -1200,7 +1200,7 @@ def root_main(argv: list[str]) -> int:
     if (aico and args.root_url or not aico and (args.root_socket or getattr(args, "owner_socket", None))):
         parser.error("conflicting owner transport options")
     if not aico and args.operation == "position":
-        parser.error("A-Term root positioning is unavailable")
+        parser.error("Web app root positioning is unavailable")
     payload = view_payload(parser, args)
     try:
         endpoint = owner_endpoint(args.surface, args.root_socket, args.root_url)

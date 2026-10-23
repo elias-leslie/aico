@@ -13,5 +13,15 @@ Aico is early software. Security fixes are made on `main` only. The old AppImage
 ## Security notes
 
 - Aico's capture listener binds only to a loopback address (`127.0.0.1:8005` by default) and refuses any other. It has no authentication, so it accepts writes only from native clients and the pinned browser extension, and only with a loopback `Host` header.
+- Tether serves its API only on a private Unix socket
+  (`$XDG_RUNTIME_DIR/tether/<instance>/control.sock`: directory 0700, socket
+  0600) and never listens on the network. The socket's file permissions are the
+  only authentication, so any process running as the same user can call it.
+  Reports that show another user, or a network peer, reaching the API or a
+  Tether-owned tmux server are in scope.
+- The web app binds to loopback and refuses other sites' pages (origin checks on
+  the terminal WebSocket and on writes). With no login of its own (the default),
+  it must not be exposed beyond localhost except behind an identity-aware
+  gateway (Cloudflare Access on the author's host).
 - Aico does not need provider API keys itself; configure third-party AI CLIs using their own secret storage.
 - Keep `.env`, local state, logs, screenshots, and browser profiles out of commits.

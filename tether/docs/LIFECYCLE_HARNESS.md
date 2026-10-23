@@ -1,6 +1,6 @@
 # Tether lifecycle integration harness
 
-Two host integration tests prove Aico's durable-session containment contract against a running Tether instance. Both drive the instance only through its v1 control socket, the way Aico and A-Term do, so they test the daemon as deployed rather than the library in isolation. They are not part of the unit suite: a build container without a systemd user manager, linger and tmux's Linux scope integration cannot provide this evidence.
+Two host integration tests prove Aico's durable-session containment contract against a running Tether instance. Both drive the instance only through its v1 control socket, the way the desktop and web app do, so they test the daemon as deployed rather than the library in isolation. They are not part of the unit suite: a build container without a systemd user manager, linger and tmux's Linux scope integration cannot provide this evidence.
 
 | Script | Workload | Proves |
 | --- | --- | --- |
@@ -36,7 +36,7 @@ Both default to the `dev` instance and refuse `default`. They are adapted from A
 
 ## Real-session smoke coverage
 
-1. Creates a session as A-Term would (`origin: "a-term"` with a fresh `aTermSessionId`) and waits for `running`.
+1. Creates a session as the web app would (`origin: "a-term"` with a fresh `aTermSessionId`) and waits for `running`.
 2. The agent's process runs inside the pane scope, and the pane carries `AICO_OWNER`, `AICO_AGENT_SLUG`, `AICO_WIDGET_ID` and `A_TERM_SESSION_ID`, never `AICO_TMUX_SOCKET`.
 3. The first frame paints, a real attach client's resize claim is applied, typed input is delivered, and killing the client leaves the agent running. If a first-run dialog (for example a folder-trust prompt) swallows the typed text, the script prints a `WARN` instead of failing, because delivery itself was acknowledged.
 4. End retires the session; no agent process, scope or session remains.

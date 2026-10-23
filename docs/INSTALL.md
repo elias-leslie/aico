@@ -15,42 +15,45 @@ sudo apt-get install -y \
   libxcomposite1 libxkbcommon0 libxshmfence1 libpango-1.0-0 libcairo2
 ```
 
-Install Node.js 22+ and `uv` using the methods you trust for your system. The test environment needs Python 3.13+ (for the `st aico` entry test); `uv venv --python 3.13` can use an existing Python 3.13 interpreter or a uv-managed one.
-
-Aico requires [Tether](https://github.com/elias-leslie/tether) (API v1 or
-later), the per-user session daemon that owns every tmux server, agent launch,
-End, root request and context hook. It lives in `tether/` in this repo; install
-and start it first:
-
-```bash
-npm ci                              # at the repo root: one workspace for all packages
-cd tether
-scripts/install.sh --start default
-tether --json version                # prints one JSON object with "apiVersion": 1
-```
-
-Tether's installer checks the durable-session prerequisites (systemd user
-manager, cgroup v2, lingering). Aico itself only needs a systemd user manager
-for `aico-shell.service`. Aico connects to `$TETHER_SOCKET`, else
-`$XDG_RUNTIME_DIR/tether/${TETHER_INSTANCE:-default}/control.sock`. If Tether is
-down, open windows keep their terminals; new sessions, End and other session
-actions report that session control is unavailable until it is back.
+Install Node.js 22+ and `uv` using the methods you trust for your system. The
+web backend needs Python 3.13+; `uv` can use an existing interpreter or a
+uv-managed one. Tether needs systemd 254+, cgroup v2 and tmux at `/usr/bin/tmux`.
 
 ## Source install
 
 ```bash
 git clone https://github.com/elias-leslie/aico.git
 cd aico
-scripts/aico-install.sh
+scripts/install.sh --dry-run   # print every step; change nothing
+scripts/install.sh --start
 ```
 
-The installer first requires `tether --json version` to report API v1 or later
-(otherwise it prints the Tether install steps and exits; set `TETHER_REPO` to point the hint at another Tether checkout). It then runs `npm ci`, rebuilds native Electron modules, syncs the locked
-Python 3.13 test environment with `uv`, writes a desktop entry under
-`~/.local/share/applications`, and installs the `aico-shell.service` user unit
-into `${XDG_CONFIG_HOME:-~/.config}/systemd/user/`
-(rendered for this checkout, followed by `systemctl --user daemon-reload`). It
-is safe to rerun; rerun it after moving the checkout.
+`scripts/install.sh` installs the whole product from this checkout:
+
+- runs `npm ci` (one workspace: desktop, Tether, web front end), makes sure
+  Electron's binary is present, and runs `npm run build`;
+- runs `uv sync --locked` in `web/` for the web backend;
+- installs Tether's bundle, CLI and agent shims into `~/.local/lib/tether`
+  (`TETHER_LIB_DIR`) and links `~/.local/bin/tether` (`TETHER_BIN_DIR`);
+- renders the user units in `scripts/systemd/` for this checkout
+  (`aico-shell`, `a-term-backend`, `a-term-frontend`, `tether@default`) plus
+  the `tether@.service` template into `${XDG_CONFIG_HOME:-~/.config}/systemd/user/`,
+  then reloads the user manager;
+- writes `~/.local/share/applications/aico.desktop`;
+- links `~/.pi/agent/extensions/st-coord.ts` to SummitFlow's Pi coordination
+  extension, only when SummitFlow is installed;
+- turns on user linger so sessions survive logout.
+
+`--start` also enables and restarts `tether@default`, `a-term-backend` and
+`a-term-frontend`. The desktop's `aico-shell.service` is started by
+`scripts/aico-launch.sh`. `--skip-systemd` installs files only (no units, no
+systemd checks), for clean-room runs. The installer is safe to rerun: it
+rewrites only files whose content changed. Rerun it after moving the checkout.
+A test Tether instance runs with `systemctl --user start tether@dev` and is never
+enabled at boot.
+
+On a host with SummitFlow, `st service rebuild aico` deploys instead, and
+`st service rebuild aico --worker tether@default` deploys Tether.
 
 Electron's sandbox needs unprivileged user namespaces. When the kernel
 restricts them, the installer offers an AppArmor profile (see the
@@ -60,10 +63,15 @@ to give Electron's `chrome-sandbox` helper root ownership and the setuid bit.
 Privileged steps never reuse cached `sudo` credentials. The installer prints each command first and runs it only when you answer yes in an interactive shell or set `AICO_INSTALL_PRIVILEGED=1`; otherwise you run the printed commands yourself.
 
 ```bash
-AICO_INSTALL_PRIVILEGED=1 scripts/aico-install.sh
+AICO_INSTALL_PRIVILEGED=1 scripts/install.sh
 ```
 
-Launch and stop:
+Aico connects to `$TETHER_SOCKET`, else
+`$XDG_RUNTIME_DIR/tether/${TETHER_INSTANCE:-default}/control.sock`. If Tether is
+down, open windows keep their terminals; new sessions, End and other session
+actions report that session control is unavailable until it is back.
+
+Launch and stop the desktop app:
 
 ```bash
 scripts/aico-launch.sh
@@ -79,22 +87,15 @@ Use **Copy session diagnostics** inside a widget to copy Tether's diagnostics
 for that session (ownership ID, tmux server generation and socket, session and
 pane IDs, pane scope, resource use and lifecycle warnings). Session lifecycle,
 historical `/tmp/tmux-$(id -u)/aico` sessions and incident recovery are Tether's;
-see its `docs/LIFECYCLE_HARNESS.md`. The 2026-07 incident report stays here as
+see [`tether/docs/LIFECYCLE_HARNESS.md`](../tether/docs/LIFECYCLE_HARNESS.md). The 2026-07 incident report stays here as
 history: [`INCIDENT-2026-07-PROCESS-ESCAPES.md`](INCIDENT-2026-07-PROCESS-ESCAPES.md).
 
 ## Development loop
 
 ```bash
-npm run lint
-npm run typecheck
-npm test
-npm run build
-```
-
-Or:
-
-```bash
-npm run check
+npm run check                        # lint, type checks, TypeScript tests, build
+(cd web && uv sync --locked --extra dev)
+web/.venv/bin/pytest -q               # web backend and Tether script tests
 ```
 
 Check the capture listener of a running Aico:
@@ -117,4 +118,4 @@ npm start
 
 ## Ubuntu AppArmor note
 
-Ubuntu 24.04+ can set `kernel.apparmor_restrict_unprivileged_userns=1`, which blocks Electron's sandbox from creating an unprivileged user namespace. Only when that sysctl is `1`, `scripts/aico-install.sh` generates the minimal Ubuntu-style profile (`userns` for this checkout's Electron binary) named `aico-electron-<hash of the binary path>`, so separate checkouts get separate profiles. It prints the profile path and the `install`/`apparmor_parser` commands, and runs them only on opt-in as described above. The binary is in your user-writable checkout, so anything that replaces it also gets the permission. A profile named plain `aico-electron` from older installers attaches to the same binary, and two such profiles conflict so neither applies; when it targets this checkout, the installer includes its removal in the same commands. Moving the checkout leaves the old path's profile behind; remove it with `sudo apparmor_parser -R` and `sudo rm` on that file. With the profile installed, the installer leaves `chrome-sandbox` alone; without it, it offers the setuid helper as the fallback.
+Ubuntu 24.04+ can set `kernel.apparmor_restrict_unprivileged_userns=1`, which blocks Electron's sandbox from creating an unprivileged user namespace. Only when that sysctl is `1`, `scripts/install.sh` generates the minimal Ubuntu-style profile (`userns` for this checkout's Electron binary) named `aico-electron-<hash of the binary path>`, so separate checkouts get separate profiles. It prints the profile path and the `install`/`apparmor_parser` commands, and runs them only on opt-in as described above. The binary is in your user-writable checkout, so anything that replaces it also gets the permission. A profile named plain `aico-electron` from older installers attaches to the same binary, and two such profiles conflict so neither applies; when it targets this checkout, the installer includes its removal in the same commands. Moving the checkout leaves the old path's profile behind; remove it with `sudo apparmor_parser -R` and `sudo rm` on that file. With the profile installed, the installer leaves `chrome-sandbox` alone; without it, it offers the setuid helper as the fallback.

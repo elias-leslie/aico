@@ -99,7 +99,7 @@ class Settings(BaseSettings):
             "localhost",
         }:
             raise ValueError(
-                "A-Term must not bind to non-loopback hosts when A_TERM_AUTH_MODE=none"
+                "The web backend must not bind to non-loopback hosts when A_TERM_AUTH_MODE=none"
             )
         if self.a_term_auth_mode == "password" and not self.a_term_auth_password:
             raise ValueError(

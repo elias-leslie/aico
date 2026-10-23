@@ -1,24 +1,28 @@
 # Aico session context
 
-Aico presents durable terminal sessions as desktop windows. Tether, the per-user session daemon, owns every session; Aico and A-Term are clients that show views of them. A session can be opened from Aico or A-Term without starting another agent process.
+Aico presents durable terminal sessions in two front ends: desktop windows, and the web app in a browser or on a phone (`aico.summitflow.dev`). Tether, the per-user session daemon, owns every session; both front ends are clients that show views of them. A session can be opened from either without starting another agent process.
 
 ## Language
 
 **Project**:
-The working directory and project identity selected when starting a session.
+The working directory and project identity selected when starting a session. The project list comes from Tether.
 _Avoid_: Workspace, when naming the choice in the user interface
 
 **Session**:
-One running terminal workload and its durable tmux state, owned by Tether and created from Aico, A-Term, the `tether` CLI or a root request. Closing a view does not end it.
+One running terminal workload and its durable tmux state, owned by Tether and created from the desktop, the web app, the `tether` CLI or a root request. Closing a view does not end it.
 _Avoid_: Widget, attachment, pane, when naming the workload in the user interface
 
 **View**:
-A local Aico window or A-Term tab that shows an existing session. Several views may show the same session. Aico stores one view row per session ID (geometry, open state, local name override) in `aico.db`.
+A desktop window or a web app tab that shows an existing session. Several views may show the same session. The desktop stores one view row per session ID (geometry, open state, local name override) in `aico.db`; the web app keeps its panes in `~/.local/state/a-term/a-term.db`.
 _Avoid_: Session, when only the local display is being closed
 
 **Owner**:
-Tether. It verifies and ends every session's workload; Aico and A-Term ask it to. A session's `origin` (`aico`, `a-term`, `cli`, `root`) records which client started it, not who may end it.
+Tether. It verifies and ends every session's workload; the front ends ask it to. A session's `origin` (`aico` for the desktop, `a-term` for the web app, `cli`, `root`) records which client started it, not who may end it.
 _Avoid_: Attachment, when describing authority to end a session
+
+**Own tmux session**:
+A session the user started on their own default tmux server that is running an agent. The web app discovers and shows it, but Tether does not own it, so the web app never renames, respawns or ends it; closing it only closes the view.
+_Avoid_: External session (the wire value `source: "tmux_external"` is kept for compatibility)
 
 **Widget**:
 A session as Aico shows it, addressed by Tether's exact eight-character lowercase hexadecimal session ID, which is also the widget ID (`AICO_WIDGET_ID` inside its pane). A widget may have zero or more views.

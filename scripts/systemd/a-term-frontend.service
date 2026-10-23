@@ -1,5 +1,5 @@
 [Unit]
-Description=A-Term Frontend (Next.js)
+Description=Aico web frontend (Next.js)
 After=network.target a-term-backend.service
 Wants=a-term-backend.service
 

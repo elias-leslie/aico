@@ -116,7 +116,7 @@ def initialize(path: Path | None = None) -> Path:
                 connection.execute("INSERT INTO schema_version (version) VALUES (?)", (SCHEMA_VERSION,))
             elif row["version"] > SCHEMA_VERSION:
                 raise RuntimeError(
-                    f"{db_path} has schema {row['version']}, newer than this A-Term ({SCHEMA_VERSION})"
+                    f"{db_path} has schema {row['version']}, newer than this Aico ({SCHEMA_VERSION})"
                 )
         finally:
             connection.close()

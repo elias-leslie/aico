@@ -218,7 +218,7 @@ def _migrate_path(legacy_paths: list[Path], target_path: Path) -> Path:
 
 
 PROJECT_ID = _project_section().get("id", "a-term")
-DISPLAY_NAME = _project_section().get("display_name", "A-Term")
+DISPLAY_NAME = _project_section().get("display_name", "Aico")
 SHORT_NAME = _branding_section().get("short_name", DISPLAY_NAME)
 DESCRIPTION = _branding_section().get(
     "description",

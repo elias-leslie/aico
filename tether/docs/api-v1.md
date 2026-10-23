@@ -7,9 +7,9 @@ Tether serves one versioned HTTP/1.1 API per instance over a private Unix socket
 | any | `$XDG_RUNTIME_DIR/tether/<instance>/control.sock` (directory 0700, socket 0600) |
 | `default` only | also `/run/user/<uid>/aico/control.sock` (legacy owner contract) and `/run/user/<uid>/aico/gui-control.sock` (legacy GUI shim); see [compat-contract.md](compat-contract.md) |
 
-The socket's file permissions are the only authentication: any process running as the same uid may call the API. Apps that put Tether behind their own HTTP surface keep their own auth in front of it. A-Term in particular must never treat loopback as authenticated, because proxied traffic arrives from loopback.
+The socket's file permissions are the only authentication: any process running as the same uid may call the API. Apps that put Tether behind their own HTTP surface keep their own auth in front of it. The web app in particular must never treat loopback as authenticated, because proxied traffic arrives from loopback.
 
-Status: every route below is implemented (Phase 3a). Additions made for A-Term during 3a are additive v1 changes and are marked *(3a)*. Additions made after the live cutover are marked *(post-cutover)*. Schema version 3.
+Status: every route below is implemented (Phase 3a). Additions made for the web app (then A-Term) during 3a are additive v1 changes and are marked *(3a)*. Additions made after the live cutover are marked *(post-cutover)*. Schema version 3.
 
 ## Conventions
 
@@ -208,11 +208,11 @@ Tether resizes only the window of the attached tmux client whose `client_pid` is
 | `status_row` | no | The session shows a tmux status row (`status` is not `off`, including the global value). |
 | `invalid` | no | `clientPid`, `cols` or `rows` is not a positive integer. |
 
-A stale or wrong-workload `generation` is refused before the claim with `409 stale_generation` / `409 workload_unavailable`. A successful claim records the claiming client as the session's **size holder** (the client the shared window now fits; any other attached client sees the window at a size that is not its own) and publishes `session.resized` with `{id, generation, clientPid, cols, rows, changed}`. A client compares `clientPid` with its own attached client's pid to learn it no longer holds the size. `GET /v1/sessions/:id/resize-claim` returns `{generation, holder}`, where `holder` is `{clientPid, cols, rows, generation, claimedAt}` or `null` when unknown (no claim yet, or Tether restarted; the holder is kept in memory only). Desktop auto-resize on active-client change is intended behavior. A-Term claims only when its view becomes active, not on every resize.
+A stale or wrong-workload `generation` is refused before the claim with `409 stale_generation` / `409 workload_unavailable`. A successful claim records the claiming client as the session's **size holder** (the client the shared window now fits; any other attached client sees the window at a size that is not its own) and publishes `session.resized` with `{id, generation, clientPid, cols, rows, changed}`. A client compares `clientPid` with its own attached client's pid to learn it no longer holds the size. `GET /v1/sessions/:id/resize-claim` returns `{generation, holder}`, where `holder` is `{clientPid, cols, rows, generation, claimedAt}` or `null` when unknown (no claim yet, or Tether restarted; the holder is kept in memory only). Desktop auto-resize on active-client change is intended behavior. The web app claims only when its view becomes active, not on every resize.
 
 ## Roots
 
-A root is a session created through the root contract with a stable caller `requestId`. The [root contract](root-control.md) (moved from Aico at the cutover) holds the digest, tombstones, the resume adapters and every validation rule. Mutations serialize on the session identity and share one handler with the widget routes.
+A root is a session created through the root contract with a stable caller `requestId`. The [root contract](../../docs/root-control.md) (moved from Aico at the cutover) holds the digest, tombstones, the resume adapters and every validation rule. Mutations serialize on the session identity and share one handler with the widget routes.
 
 | Method and route | Body | Result |
 | --- | --- | --- |
@@ -246,9 +246,9 @@ Generation fencing:
 
 ### Coordinators
 
-A coordinator is a session that launches and steers other sessions (lanes). The catalog is the one record of who coordinates whom; Aico and A-Term both draw it from the descriptor.
+A coordinator is a session that launches and steers other sessions (lanes). The catalog is the one record of who coordinates whom; the desktop and web app both draw it from the descriptor.
 
-- `launchedBy` on `POST /v1/roots` names the session that asked for the root (`st aico create` sends its `AICO_WIDGET_ID`, from Aico or A-Term). It is not part of the digest and only counts when the root is first reserved. If the launcher belongs to a coordinator, the new root belongs to that same root coordinator, so a lane's helpers join the lane's coordinator. Otherwise the launcher becomes a coordinator and the root belongs to it. An unknown launcher records nothing.
+- `launchedBy` on `POST /v1/roots` names the session that asked for the root (`st aico create` sends its `AICO_WIDGET_ID`, from the desktop or web app). It is not part of the digest and only counts when the root is first reserved. If the launcher belongs to a coordinator, the new root belongs to that same root coordinator, so a lane's helpers join the lane's coordinator. Otherwise the launcher becomes a coordinator and the root belongs to it. An unknown launcher records nothing.
 - `coordinator` is true for a coordinator. `coordinatorId` is the root coordinator that launched this session, or null (always null for a coordinator). It stays set after that coordinator ends.
 - `coordinatorColor` is the coordinator's colour, `#rrggbb` from a fixed palette of eight, on the coordinator and on each of its lanes. A new coordinator takes the first colour no other coordinator holds, so coordinators on screen together differ until there are more than eight. Lanes keep their colour after the coordinator ends.
 - `POST /v1/widgets/:id/coordinator` marks or unmarks one by hand (`st aico widget coordinator on|off`), with or without a GUI connected, and publishes `session.updated`. Unmarking frees the colour; lanes keep theirs.
@@ -256,7 +256,7 @@ A coordinator is a session that launches and steers other sessions (lanes). The 
 
 ### Display title and badge
 
-Tether names every session once, and Aico, A-Term and `st` show these fields as they are, without composing their own.
+Tether names every session once, and the desktop, the web app and `st` show these fields as they are, without composing their own.
 
 - `displayTitle` is `Project — Task`: the project's name from the project list (Aico's Personal Workspace root is "Personal Workspace") and the session's `name`. Either one alone when the other is missing or the task only repeats the project; `Session <n>` when both are missing.
 - `badge` is `{kind, text, color}` or null. A coordinator has `{kind: "coordinator", text: "Coordinator"}`. A session it launched has `{kind: "child", text: "↳ <coordinator>"}`, naming the root coordinator by its task, else its project, else "Coordinator" (ended). `color` is `coordinatorColor`, or `#6fa8ff` for sessions from before colours.
@@ -312,26 +312,26 @@ This is the merged registry. Editing it from either app changes launches in both
 
 How tool fields work:
 
-- `argv` is authoritative. `command` is accepted on input for A-Term compatibility. It is split on spaces and tabs, and only plain words are allowed: no quotes, `$`, globs, redirections or operators (`400 invalid_command`). On output, `command` is the shell-quoted rendering of `argv`.
+- `argv` is authoritative. `command` is accepted on input for web app compatibility. It is split on spaces and tabs, and only plain words are allowed: no quotes, `$`, globs, redirections or operators (`400 invalid_command`). On output, `command` is the shell-quoted rendering of `argv`.
 - An empty `argv` is the bare shell.
 - Setting `isDefault: true` atomically clears the previous default. If no enabled tool is marked default, the first enabled tool by `displayOrder` is used.
 - Slugs and aliases share one namespace (`409`/`400 slug_conflict`).
 - `contextHook` is one of `claude-session-start`, `codex-hooks`, `pi-extension` or `canonical-retrieval:antigravity`. Tether verifies it at launch (Aico `tui/context.ts`). A failed check stays visible but never blocks the native TUI.
 - Resume adapters (Codex `resume --no-daemon <uuid>`, Claude Code `--resume <uuid>`, Pi `--session <uuid>`) are code, not data. They are keyed by canonical slug and cannot be edited through this API. Pi root creation requires an explicit provider/model selection; automatic Pi session discovery is unavailable.
-- `rootCapable` is read-only and derived: true exactly when the tool has a resume adapter, because a root must be resumable after a crash. Only those tools can start a root ([root contract](root-control.md#create)).
+- `rootCapable` is read-only and derived: true exactly when the tool has a resume adapter, because a root must be resumable after a crash. Only those tools can start a root ([root contract](../../docs/root-control.md#create)).
 - This list is the one source of tool names, colours (`color` may be `null`), process names and root capability for both apps.
 
-Seeded tools, from the Aico TUI specs reconciled with A-Term's live rows:
+Seeded tools, from the Aico TUI specs reconciled with the web app's live rows:
 
 | Slug | argv | Default | Notes |
 | --- | --- | --- | --- |
-| `claude-code` | `claude --dangerously-skip-permissions` | | Alias `claude` (A-Term's slug) |
+| `claude-code` | `claude --dangerously-skip-permissions` | | Alias `claude` (the web app's old slug) |
 | `codex` | `codex --yolo` | yes | Owner decision. Aico's tray default was `claude-code`. |
 | `agy` | `agy --dangerously-skip-permissions` | | |
-| `pi` | `pi --approve` | | Aico's flag. A-Term's bare `pi` showed Pi's project-trust prompt. |
+| `pi` | `pi --approve` | | Aico's flag. The web app's bare `pi` showed Pi's project-trust prompt. |
 | `shell` | (empty) | | Interactive login shell |
 
-There is no `aider` row, on purpose: Aider isn't installed and no session has run it. A-Term's own-tmux discovery still lists it among the commands it recognises; once that discovery reads process names from this list, Aider sessions are no longer picked up. Add a row (it can be disabled) if that's ever wanted.
+There is no `aider` row, on purpose: Aider isn't installed and no session has run it. The web app's own-tmux discovery still lists it among the commands it recognises; once that discovery reads process names from this list, Aider sessions are no longer picked up. Add a row (it can be disabled) if that's ever wanted.
 
 ## Projects
 
@@ -382,7 +382,7 @@ SSE was rejected. NDJSON is simpler to consume from both Node and Python (`httpx
 
 Tether owns the agent-pane memory policy: the pane cap and the kill policy for runaway agent tool jobs. Host memory
 (the host's pressure state in Nightshift's `admission.json`, swap, systemd-oomd, the app.slice cap) stays with
-Nightshift. A-Term's settings panel edits it.
+Nightshift. The web app's settings panel edits it.
 
 - `GET /v1/memory-policy` returns `{policy, defaults, bounds, killOrders, guard}`. `guard` is `{running, hostState,
   lastKillAt, paneCapFile}`; only the default instance runs the guard.

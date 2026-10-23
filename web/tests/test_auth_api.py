@@ -97,7 +97,7 @@ def test_websocket_accepts_authenticated_session_cookie(test_app: TestClient, au
 
 
 def test_settings_require_auth_for_non_loopback_hosts() -> None:
-    with pytest.raises(ValueError, match="A-Term must not bind to non-loopback"):
+    with pytest.raises(ValueError, match="The web backend must not bind to non-loopback"):
         Settings(
             database_url="postgresql://user:pass@localhost:5432/a-term",
             a_term_bind_host="0.0.0.0",

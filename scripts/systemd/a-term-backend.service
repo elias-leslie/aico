@@ -1,5 +1,5 @@
 [Unit]
-Description=A-Term Backend (FastAPI)
+Description=Aico web backend (FastAPI)
 # Sessions live in Tether. Wants (not Requires): A-Term still starts and reports
 # Tether as down on /health, and restarting Tether never restarts A-Term.
 Wants=tether@default.service

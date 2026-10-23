@@ -60,7 +60,7 @@ print_named_swatches() {
 }
 
 cat <<EOF
-Truecolor A-Term Test
+Truecolor Test
 TERM=${TERM:-unknown}
 TMUX=${TMUX:+yes}${TMUX:-no}
 
