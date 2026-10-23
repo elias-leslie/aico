@@ -210,6 +210,68 @@ describe.skipIf(!hasTmux)('ControlTerminal against tmux', () => {
     expect(historyOf(v)).toEqual(tmuxHistory())
   })
 
+  it('holds the resize reseed while typing, then repaints once, with every key kept', async () => {
+    // A prompt that echoes after a delay and repaints its line with absolute
+    // moves, like an agent TUI: a reseed in the middle of typing is the thing
+    // that must not happen, and no key may be lost or reordered.
+    const prompt = join(dir, 'prompt.py')
+    writeFileSync(
+      prompt,
+      [
+        'import sys, os, tty, time',
+        'tty.setraw(0)',
+        "sys.stdout.write('\\x1b[?1049h\\x1b[2J'); sys.stdout.flush()",
+        "text = ''",
+        'while True:',
+        '    b = os.read(0, 4096)',
+        "    if b'\\x03' in b: break",
+        '    time.sleep(0.03)',
+        '    text += b.decode()',
+        "    sys.stdout.write('\\x1b[?25l\\x1b[5;1H\\x1b[2K> ' + text + '\\x1b[?25h'); sys.stdout.flush()",
+        "sys.stdout.write('\\x1b[?1049l'); sys.stdout.flush()",
+      ].join('\n'),
+    )
+    const v = view(80, 24)
+    await settle(v)
+    run(`python3 ${prompt}`)
+    await sleep(600)
+    const seeds: number[] = []
+    v.link.onData((data) => {
+      if (data.startsWith(`${'\x1b'}c`)) seeds.push(Date.now())
+    })
+    const promptLine = () => screenOf(v)[4]
+    let longest = 0
+    let shortened = 0
+    const keys = 'the quick brown fox jumps over the lazy dog'
+    const typingStart = Date.now()
+    for (let i = 0; i < keys.length; i += 1) {
+      v.link.write(keys[i])
+      // Resizes land further apart than the reseed delay, so each one's
+      // reseed would fire in the middle of typing without the hold.
+      if (i % 12 === 3) {
+        const cols = i % 24 === 3 ? 79 : 80
+        v.term.resize(cols, 24)
+        v.link.resize(cols, 24)
+      }
+      await sleep(40)
+      await new Promise<void>((resolve) => v.term.write('', resolve))
+      const shown = trim(promptLine()).replace(/^> ?/, '').length
+      if (shown < longest) shortened += 1
+      longest = Math.max(longest, shown)
+    }
+    const typingEnd = Date.now()
+    expect(seeds.filter((at) => at < typingEnd)).toEqual([])
+    expect(shortened).toBe(0)
+    // Once typing pauses the pane is read again and still shows every key.
+    await settle(v, 1500)
+    expect(seeds.length).toBeGreaterThan(0)
+    expect(seeds[0]).toBeGreaterThan(typingStart)
+    expect(trim(promptLine())).toBe(`> ${keys}`)
+    expect(screenOf(v)).toEqual(tmuxScreen(24))
+    tmux('send-keys', '-t', 't', 'C-c')
+    await settle(v, 400)
+  })
+
   it('types UTF-8 and pastes through tmux, bracketed only when the program asks', async () => {
     const reader = join(dir, 'reader.py')
     writeFileSync(

@@ -38,6 +38,13 @@ export interface TerminalLink {
 const PAUSE_AFTER_SECONDS = 5
 /** Wait after the last resize before re-reading the pane from tmux. */
 const RESEED_AFTER_RESIZE_MS = 300
+/**
+ * A resize-driven reseed waits until typing has paused this long, for at most
+ * INPUT_HOLD_MAX_MS: a reseed resets the terminal and parses the whole history
+ * again, which stalls the window while keystrokes are still being echoed.
+ */
+const INPUT_QUIET_MS = 400
+const INPUT_HOLD_MAX_MS = 3000
 /** Bytes per send-keys command; keeps each command line short. */
 const INPUT_CHUNK_BYTES = 512
 
@@ -260,6 +267,9 @@ export class ControlProtocol {
 
 type Phase = 'starting' | 'seeding' | 'live' | 'closed'
 
+/** Why the pane was read again; logged with every reseed. */
+export type ReseedReason = 'attach' | 'resize' | 'pause' | 'refresh' | 'queued'
+
 export class ControlTerminal implements TerminalLink {
   private readonly child: ChildProcessWithoutNullStreams
   private readonly protocol: ControlProtocol
@@ -275,6 +285,11 @@ export class ControlTerminal implements TerminalLink {
     this.markReady = resolve
   })
   private reseedTimer: NodeJS.Timeout | undefined
+  private lastInputAt = 0
+  /** When a resize-driven reseed started waiting for typing to pause (0: not waiting). */
+  private holdSince = 0
+  private seedStartedAt = 0
+  private seedReason: ReseedReason = 'attach'
   /** Input waits behind a paste so typed keys cannot overtake it. */
   private inputChain: Promise<void> = this.ready
   private pasteSeq = 0
@@ -296,7 +311,7 @@ export class ControlTerminal implements TerminalLink {
     this.protocol = new ControlProtocol({
       output: (paneId, bytes) => this.output(paneId, bytes),
       pause: (paneId) => {
-        if (paneId === this.paneId) this.reseed(true)
+        if (paneId === this.paneId) this.reseed(true, 'pause')
       },
       exit: () => this.kill(),
     })
@@ -306,7 +321,7 @@ export class ControlTerminal implements TerminalLink {
     this.child.on('exit', () => this.finish())
     this.child.on('error', () => this.finish())
     this.send([`refresh-client -C ${this.cols}x${this.rows}`])
-    this.reseed()
+    this.reseed(false, 'attach')
   }
 
   get pid(): number {
@@ -322,6 +337,7 @@ export class ControlTerminal implements TerminalLink {
   }
 
   write(data: string): void {
+    this.lastInputAt = Date.now()
     const bytes = Buffer.from(data, 'utf8')
     this.inputChain = this.inputChain.then(() => {
       if (this.paneId) this.send(inputCommands(this.paneId, bytes))
@@ -330,6 +346,7 @@ export class ControlTerminal implements TerminalLink {
 
   /** Paste through tmux, which brackets it when the program asked for that. */
   paste(text: string): void {
+    this.lastInputAt = Date.now()
     this.inputChain = this.inputChain.then(async () => {
       if (!this.paneId || this.phase === 'closed') return
       const name = `aico-paste-${this.pid}-${++this.pasteSeq}`
@@ -357,17 +374,32 @@ export class ControlTerminal implements TerminalLink {
     // tmux and xterm rewrap old lines differently; once the size settles, take
     // the pane from tmux again so the two agree.
     if (this.reseedTimer) clearTimeout(this.reseedTimer)
-    this.reseedTimer = setTimeout(() => this.reseed(), RESEED_AFTER_RESIZE_MS)
+    this.reseedTimer = setTimeout(() => this.reseedAfterTyping(), RESEED_AFTER_RESIZE_MS)
+  }
+
+  /** A resize's reseed, held back while the owner is typing. */
+  private reseedAfterTyping(): void {
+    const now = Date.now()
+    if (!this.holdSince) this.holdSince = now
+    const quietFor = now - this.lastInputAt
+    if (quietFor < INPUT_QUIET_MS && now - this.holdSince < INPUT_HOLD_MAX_MS) {
+      this.reseedTimer = setTimeout(() => this.reseedAfterTyping(), INPUT_QUIET_MS - quietFor)
+      return
+    }
+    this.holdSince = 0
+    this.reseed(false, 'resize')
   }
 
   /** Re-read the pane from tmux and repaint the terminal from it. */
-  reseed(continuePane = false): void {
+  reseed(continuePane = false, reason: ReseedReason = 'refresh'): void {
     if (this.phase === 'closed') return
     if (this.phase === 'seeding') {
       this.reseedQueued = { continuePane: continuePane || !!this.reseedQueued?.continuePane }
       return
     }
     this.phase = 'seeding'
+    this.seedStartedAt = Date.now()
+    this.seedReason = reason
     const fmt = SEED_FLAGS.map((flag) => `#{${flag}}`).join(' ')
     const history = `-S -${TERMINAL_HISTORY_LINES}`
     const commands = [
@@ -410,11 +442,16 @@ export class ControlTerminal implements TerminalLink {
     if (this.phase === 'closed') return
     this.decoder = new TextDecoder('utf-8')
     if (seed) this.emit(seed)
+    console.log(
+      `[aico:event] terminal_reseed reason=${this.seedReason} target=${this.attachArgv.at(-1) ?? '?'} ` +
+        `read_ms=${Date.now() - this.seedStartedAt} seed_bytes=${seed.length} ` +
+        `since_input_ms=${this.lastInputAt ? Date.now() - this.lastInputAt : -1}`,
+    )
     this.phase = 'live'
     this.markReady()
     const queued = this.reseedQueued
     this.reseedQueued = null
-    if (queued) this.reseed(queued.continuePane)
+    if (queued) this.reseed(queued.continuePane, 'queued')
   }
 
   private output(paneId: string, bytes: Buffer): void {
