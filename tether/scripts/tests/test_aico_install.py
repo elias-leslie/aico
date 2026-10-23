@@ -41,7 +41,7 @@ def env(tmp_path: Path, home: Path) -> dict[str, str]:
 
 
 def install(env: dict[str, str], *args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(["bash", str(INSTALL), *args], capture_output=True, env=env, text=True, timeout=60)
+    return subprocess.run(["bash", str(INSTALL), *args], check=False, capture_output=True, env=env, text=True, timeout=60)
 
 
 def files_under(path: Path) -> list[Path]:
