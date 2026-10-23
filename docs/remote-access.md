@@ -25,13 +25,13 @@ The Host guard refuses every other route in, so these no longer work:
 
 ## Cloudflare tunnel
 
-The public host is `hosts.browser_frontend` in `project.identity.json` (`terminal.summitflow.dev` here). The frontend bakes it in at build (`pnpm prepare:branding` writes `lib/generated/project-branding.generated.ts`), so after changing it, regenerate, rebuild and restart both services. The backend adds `https://<public host>` to its allowed origins by default.
+The public host is `hosts.browser_frontend` in `project.identity.json` (`aico.summitflow.dev` here). The frontend bakes it in at build (`npm run build` regenerates `web/frontend/lib/generated/project-branding.generated.ts`), so after changing it, rebuild and restart both services. The backend adds `https://<public host>` to its allowed origins by default.
 
 Point the tunnel's ingress for that hostname at the frontend:
 
 ```yaml
 ingress:
-  - hostname: terminal.summitflow.dev
+  - hostname: aico.summitflow.dev
     service: http://localhost:3002
   - service: http_status:404
 ```

@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '../api-fetch'
 
-/** Tether's agent-pane memory policy (Tether owns it; A-Term edits it). */
+/** Tether's agent-pane memory policy (Tether owns it; the web app edits it). */
 export type KillOrder = 'largest' | 'background-first'
 
 export interface MemoryPolicy {

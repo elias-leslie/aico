@@ -226,7 +226,7 @@ DESCRIPTION = _branding_section().get(
 )
 BACKEND_PORT = int(_runtime_section().get("backend_port", 8002))
 FRONTEND_PORT = int(_runtime_section().get("frontend_port", 3002))
-# The public host the owner opens the UI on (behind Cloudflare Access), e.g. terminal.summitflow.dev.
+# The public host the owner opens the UI on (behind Cloudflare Access), e.g. aico.summitflow.dev.
 PUBLIC_HOST: str | None = _identity().get("hosts", {}).get("browser_frontend") or None
 PYTHON_DISTRIBUTION = _artifacts_section().get("python_distribution", "a-term")
 CACHE_DIR_NAME = _artifacts_section().get("cache_dir_name", "a-term")

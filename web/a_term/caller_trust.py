@@ -305,7 +305,7 @@ class HostGate:
     """Refuse every HTTP request (403) and WebSocket (close 1008) whose Host is not loopback.
 
     Auth mode none leaves the API open to anything that reaches the socket. A reverse proxy that forwards the original
-    Host (Caddy on :443 for terminal.summitflow.dev) or a DNS-rebinding page would otherwise reach it from off the box.
+    Host (Caddy on :443 for the public host) or a DNS-rebinding page would otherwise reach it from off the box.
     Outermost: nothing else runs for a refused Host.
     """
 
