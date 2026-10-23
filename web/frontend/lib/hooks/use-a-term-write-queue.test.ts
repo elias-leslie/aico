@@ -144,4 +144,114 @@ describe('useATermWriteQueue viewport following', () => {
     })
     expect(readingLine(term)).toBe(before)
   })
+
+  describe('control-mode repaint (a seed starts with a full terminal reset)', () => {
+    const seed = `\x1bc${Array.from({ length: 40 }, (_, index) => `seeded ${index}`).join('\r\n')}`
+
+    async function setupReseed(available = true) {
+      const request = vi.fn()
+      const base = await setup()
+      const hook = renderHook(() =>
+        useATermWriteQueue({
+          aTermRef: { current: base.term },
+          isVisibleRef: { current: true },
+          reseed: { available: () => available, request },
+        }),
+      )
+      const write = async (data: string) => {
+        act(() => hook.result.current.enqueueWrite(data))
+        await new Promise<void>((resolve) => base.term.write('', resolve))
+      }
+      return { term: base.term, hook, write, request }
+    }
+
+    it('keeps the reader in place through a repaint and asks for it again at the bottom', async () => {
+      const { term, hook, write, request } = await setupReseed()
+      term.scrollToLine(8)
+      const before = readingLine(term)
+
+      await write(seed)
+      await write('\r\nlive after the seed')
+
+      expect(term.buffer.active.viewportY).toBe(8)
+      expect(readingLine(term)).toBe(before)
+      expect(request).not.toHaveBeenCalled()
+
+      term.scrollToBottom()
+      act(() => hook.result.current.onViewportMoved())
+      expect(request).toHaveBeenCalledTimes(1)
+
+      // The server's repaint now lands on the live terminal.
+      await write(seed)
+      expect(term.buffer.active.getLine(0)?.translateToString(true)).toBe(
+        'seeded 0',
+      )
+      expect(request).toHaveBeenCalledTimes(1)
+    })
+
+    it('still writes the output that came before the reset in the same chunk', async () => {
+      const { term, write } = await setupReseed()
+      term.scrollToLine(8)
+      const before = readingLine(term)
+
+      await write(`\r\nbefore the reset${seed}`)
+
+      expect(readingLine(term)).toBe(before)
+      term.scrollToBottom()
+      expect(
+        term.buffer.active
+          .getLine(term.buffer.active.baseY + 4)
+          ?.translateToString(true),
+      ).toBe('before the reset')
+    })
+
+    it('asks for the repaint when output arrives after the reader is back at the bottom', async () => {
+      const { term, write, request } = await setupReseed()
+      term.scrollToLine(8)
+      await write(seed)
+      term.scrollToBottom()
+
+      await write('\r\nnext output')
+
+      expect(request).toHaveBeenCalledTimes(1)
+    })
+
+    it('applies a reset at once when the reader is at the bottom', async () => {
+      const { term, write, request } = await setupReseed()
+
+      await write(seed)
+
+      expect(term.buffer.active.getLine(0)?.translateToString(true)).toBe(
+        'seeded 0',
+      )
+      expect(request).not.toHaveBeenCalled()
+    })
+
+    it('applies a reset when the stream cannot be repainted on request', async () => {
+      const { term, write, request } = await setupReseed(false)
+      term.scrollToLine(8)
+
+      await write(seed)
+
+      expect(term.buffer.active.getLine(0)?.translateToString(true)).toBe(
+        'seeded 0',
+      )
+      expect(request).not.toHaveBeenCalled()
+    })
+
+    it('keeps a reader in history across a reconnect and clears the terminal otherwise', async () => {
+      const { term, hook, request } = await setupReseed()
+      term.scrollToLine(8)
+      const before = readingLine(term)
+
+      act(() => hook.result.current.restartStream())
+      expect(readingLine(term)).toBe(before)
+      term.scrollToBottom()
+      act(() => hook.result.current.onViewportMoved())
+      expect(request).toHaveBeenCalledTimes(1)
+
+      act(() => hook.result.current.restartStream())
+      expect(term.buffer.active.getLine(0)?.translateToString(true)).toBe('')
+    })
+  })
 })

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { isTuiSessionMode } from '../utils/session-mode'
 import type {
   DiagnosticCounters,
@@ -14,6 +14,16 @@ type ATermOperation =
   | { type: 'snapshot'; data: string; cursorPosition?: CursorPosition }
 const MAX_COALESCE_CHARS = 16_384
 const SGR_RESET = '\x1b[0m'
+// Control-mode seeds (and a program's own reset) start with a full terminal
+// reset, which throws the reader's place away.
+const FULL_RESET = '\x1bc'
+
+/** The server's way to repaint the terminal from the pane (control mode). */
+export interface ATermReseedSource {
+  /** Whether a repaint can be asked for now (control-mode stream). */
+  available: () => boolean
+  request: () => void
+}
 
 function splitSnapshotLines(snapshot: string): string[] {
   const lines = snapshot.split(/\r?\n/)
@@ -27,6 +37,7 @@ interface UseATermWriteQueueOptions {
   aTermRef: React.RefObject<XtermATerm | null>
   isVisibleRef: React.RefObject<boolean>
   sessionMode?: string
+  reseed?: ATermReseedSource
   diagnostics?: Pick<
     UseATermDiagnosticsReturn,
     'enabled' | 'incrementCounter' | 'record'
@@ -37,6 +48,12 @@ interface UseATermWriteQueueReturn {
   enqueueWrite: (data: string) => void
   applySnapshot: (snapshot: string, cursorPosition?: CursorPosition) => void
   resetQueue: () => void
+  /** A new connection starts a new stream: clear the terminal for its seed, or
+   * wait for the reader to come back when they are reading history. */
+  restartStream: () => void
+  /** Tell the queue the viewport moved, so a held repaint can be requested
+   * as soon as the reader is back at the bottom. */
+  onViewportMoved: () => void
 }
 
 function formatCursorMove(cursorPosition: CursorPosition): string {
@@ -47,12 +64,22 @@ export function useATermWriteQueue({
   aTermRef,
   isVisibleRef,
   sessionMode,
+  reseed,
   diagnostics,
 }: UseATermWriteQueueOptions): UseATermWriteQueueReturn {
   const pendingOperationsRef = useRef<ATermOperation[]>([])
   const isDrainingRef = useRef(false)
   const resetGenerationRef = useRef(0)
   const lastSnapshotRef = useRef<string | null>(null)
+  // Set while the reader is above the bottom and the stream said it was
+  // starting over: the terminal keeps the history they are reading and the
+  // stream is dropped. The server repaints the whole pane once they are back
+  // at the bottom, so nothing is lost.
+  const reseedHeldRef = useRef(false)
+  const reseedRef = useRef(reseed)
+  useEffect(() => {
+    reseedRef.current = reseed
+  }, [reseed])
   const isTuiSession = isTuiSessionMode(sessionMode)
 
   const getSnapshotLastLine = useCallback((snapshot: string) => {
@@ -97,15 +124,41 @@ export function useATermWriteQueue({
         if (operation.type === 'write') {
           const buffer = term.buffer.active
           const isScrolledUp = buffer.viewportY < buffer.baseY
+          let data = operation.data
+
+          if (reseedHeldRef.current) {
+            if (isScrolledUp) {
+              resolve()
+              return
+            }
+            reseedHeldRef.current = false
+            reseedRef.current?.request()
+            resolve()
+            return
+          }
+          if (isScrolledUp && reseedRef.current?.available()) {
+            const resetAt = data.indexOf(FULL_RESET)
+            if (resetAt >= 0) {
+              reseedHeldRef.current = true
+              diagnostics?.record('reseed_held_scrolled_up', {
+                chars: data.length - resetAt,
+              })
+              data = data.slice(0, resetAt)
+              if (!data) {
+                resolve()
+                return
+              }
+            }
+          }
 
           // xterm preserves the visible history rows itself, including when
           // scrollback trims or the reader scrolls during an async write.
           // Restoring distance from the growing bottom moves those rows.
-          term.write(operation.data, () => {
+          term.write(data, () => {
             if (!isStale()) {
               bumpCounter('writesFlushed')
               diagnostics?.record('write_flushed', {
-                chars: operation.data.length,
+                chars: data.length,
                 scrolledUp: isScrolledUp,
               })
             }
@@ -263,7 +316,35 @@ export function useATermWriteQueue({
     resetGenerationRef.current += 1
     pendingOperationsRef.current.length = 0
     lastSnapshotRef.current = null
+    reseedHeldRef.current = false
   }, [])
 
-  return { enqueueWrite, applySnapshot, resetQueue }
+  const restartStream = useCallback(() => {
+    resetQueue()
+    const term = aTermRef.current
+    if (!term) return
+    const buffer = term.buffer.active
+    if (buffer.viewportY < buffer.baseY && reseedRef.current?.available()) {
+      reseedHeldRef.current = true
+      return
+    }
+    term.reset()
+  }, [aTermRef, resetQueue])
+
+  const onViewportMoved = useCallback(() => {
+    const term = aTermRef.current
+    if (!term || !reseedHeldRef.current) return
+    const buffer = term.buffer.active
+    if (buffer.viewportY < buffer.baseY) return
+    reseedHeldRef.current = false
+    reseedRef.current?.request()
+  }, [aTermRef])
+
+  return {
+    enqueueWrite,
+    applySnapshot,
+    resetQueue,
+    restartStream,
+    onViewportMoved,
+  }
 }

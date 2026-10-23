@@ -178,16 +178,36 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
     const isSgrMouse = useCallback(() => sgrMouseRef.current(), [])
     const classicSessionMode = controlMode ? undefined : sessionMode
 
-    const { enqueueWrite, applySnapshot, resetQueue } = useATermWriteQueue({
-      aTermRef,
-      isVisibleRef,
-      sessionMode: classicSessionMode,
-      diagnostics: {
-        enabled: diagnosticsEnabled,
-        incrementCounter: incrementDiagnosticCounter,
-        record: recordDiagnostic,
-      },
-    })
+    // The control-mode server repaints the whole pane on request; the write
+    // queue asks for it once a reader who held the old view is back at the
+    // bottom.
+    const reseedWsRef = useRef<React.RefObject<WebSocket | null> | null>(null)
+    const reseedSource = useMemo(
+      () => ({
+        available: () =>
+          controlModeRef.current &&
+          reseedWsRef.current?.current?.readyState === WebSocket.OPEN,
+        request: () => {
+          reseedWsRef.current?.current?.send(
+            JSON.stringify({ __ctrl: true, refresh: true }),
+          )
+        },
+      }),
+      [],
+    )
+
+    const { enqueueWrite, applySnapshot, restartStream, onViewportMoved } =
+      useATermWriteQueue({
+        aTermRef,
+        isVisibleRef,
+        sessionMode: classicSessionMode,
+        reseed: reseedSource,
+        diagnostics: {
+          enabled: diagnosticsEnabled,
+          incrementCounter: incrementDiagnosticCounter,
+          record: recordDiagnostic,
+        },
+      })
 
     // Refs for pager/overlay callbacks — breaks circular dep between WebSocket and consumer hooks
     const viewportInitRef = useRef<
@@ -253,9 +273,8 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
         onStatusChange,
         onDisconnect,
         onBeforeReconnectData: () => {
-          resetQueue()
           lineCacheRef.current.reset()
-          aTermRef.current?.reset()
+          restartStream()
         },
         onMessage: (data) => {
           if (!aTermRef.current) return
@@ -315,6 +334,10 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
             ? (fitAddonRef.current?.proposeDimensions() ?? null)
             : null,
       })
+
+    useEffect(() => {
+      reseedWsRef.current = wsRef
+    }, [wsRef])
 
     const sendRendererStatus = useCallback(
       (rendererStatus: ATermRendererStatus) => {
@@ -482,12 +505,14 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
         term,
         () => controlModeRef.current,
       )
+      const scrolled = term.onScroll(onViewportMoved)
       return () => {
         sgr.dispose()
         stopSwallowing()
+        scrolled.dispose()
         sgrMouseRef.current = () => false
       }
-    }, [isReady])
+    }, [isReady, onViewportMoved])
 
     const { handleResize } = useATermResize({
       aTermRef,
