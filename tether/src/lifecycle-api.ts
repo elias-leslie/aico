@@ -55,7 +55,7 @@ import {
   verifySessionStatus,
   whenReady,
 } from './lifecycle/engine'
-import { claimTmuxViewSize, type ResizeRefusal } from './lifecycle/interactive-tmux'
+import { claimTmuxViewSize, type ResizeClaimResult } from './lifecycle/interactive-tmux'
 import { isNeverAllocatedWidget } from './lifecycle/lifecycle-guard'
 import { sessionGeneration } from './lifecycle/owner-retirement'
 import { ForegroundPaneMemory, systemdPaneMemoryHost } from './lifecycle/pane-memory'
@@ -87,6 +87,7 @@ import { currentPaneRefusal, PANE_UID_REFUSED } from './pane-policy'
 import type { Project, ProjectProvider } from './projects'
 import { type Continuity, registerRebootRoutes } from './reboot'
 import { type Recovery, registerRecoveryRoutes } from './recovery'
+import { recordSizeHolder, sizeHolderOf } from './size-holder'
 import type { Store } from './store'
 
 const execFileAsync = promisify(execFile)
@@ -865,9 +866,9 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
         const latest = getWidget(row.id)
         return Boolean(latest && generationOf(latest) === generation)
       }
-      let refusal: ResizeRefusal | 'tmux_unavailable' | null
+      let result: ResizeClaimResult | { applied: false; reason: 'tmux_unavailable' }
       try {
-        refusal = await claimTmuxViewSize(
+        result = await claimTmuxViewSize(
           tmuxTargetForWidget(row.id),
           body.clientPid as number,
           body.cols as number,
@@ -876,16 +877,34 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
           isCurrent,
         )
       } catch {
-        refusal = 'tmux_unavailable'
+        result = { applied: false, reason: 'tmux_unavailable' }
       }
-      if (refusal === null) {
+      if (result.applied) {
         // Aico claims the size when a view gains focus: that pane is foreground.
         void foregroundMemory().focus(getWidget(row.id)?.scopeUnit ?? null)
-        events.publish('session.resized', { id: row.id, generation })
-        sendJson(res, 200, { applied: true })
+        const holder = recordSizeHolder(row.id, {
+          clientPid: body.clientPid as number,
+          cols: body.cols as number,
+          rows: body.rows as number,
+          generation,
+        })
+        events.publish('session.resized', {
+          id: row.id,
+          generation,
+          clientPid: holder.clientPid,
+          cols: holder.cols,
+          rows: holder.rows,
+          changed: result.changed,
+        })
+        sendJson(res, 200, { applied: true, changed: result.changed })
       } else {
-        sendJson(res, 200, { applied: false, reason: refusal })
+        sendJson(res, 200, { applied: false, reason: result.reason })
       }
+    })
+    .add('GET', '/v1/sessions/:id/resize-claim', async (_req, res, params) => {
+      const row = requireSession(params.id)
+      const generation = generationOf(row)
+      sendJson(res, 200, { generation, holder: sizeHolderOf(row.id, generation) })
     })
     // Roots and the compact widget routes share Aico's one handler.
     .add('GET', '/v1/roots', root)

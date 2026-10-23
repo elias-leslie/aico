@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   activateTmuxViewSize,
+  claimTmuxViewSize,
   coalesceAsync,
   coalesceTrailingAsync,
   refreshAttachedTmuxClients,
@@ -12,6 +13,7 @@ import {
   resizeWindowArgs,
   sessionStatusArgs,
   type TmuxTarget,
+  windowSizeArgs,
 } from './tmux'
 
 const target: TmuxTarget = { socket: '/tmp/tmux-1000/aico', session: 'aico-widget' }
@@ -50,6 +52,31 @@ describe('interactive tmux work', () => {
     })
     expect(await activateTmuxViewSize(target, 432, 101, 79, run, () => true)).toBe(true)
     expect(run.mock.calls.at(-1)?.[0]).toEqual(resizeWindowArgs('@7', target.socket, 101, 79))
+  })
+
+  it('reports whether a claim changed the window size', async () => {
+    const clientArgs = listClientsTargetArgs(target, '#{client_pid}\t#{window_id}')
+    const key = (args: string[]) => JSON.stringify(args)
+    const runWith = (current: string) =>
+      vi.fn(async (args: string[]) => {
+        if (key(args) === key(clientArgs)) return '432\t@7\n'
+        if (key(args) === key(listWindowIdsArgs(target.socket))) return '@7\n'
+        if (key(args) === key(sessionStatusArgs(target))) return 'off\n'
+        if (key(args) === key(windowSizeArgs('@7', target.socket))) return `${current}\n`
+        return ''
+      })
+    expect(await claimTmuxViewSize(target, 432, 101, 79, runWith('40x20'), () => true)).toEqual({
+      applied: true,
+      changed: true,
+    })
+    expect(await claimTmuxViewSize(target, 432, 101, 79, runWith('101x79'), () => true)).toEqual({
+      applied: true,
+      changed: false,
+    })
+    expect(await claimTmuxViewSize(target, 0, 101, 79, runWith('1x1'), () => true)).toEqual({
+      applied: false,
+      reason: 'invalid',
+    })
   })
 
   it('does not size a linked window or stale attachment', async () => {

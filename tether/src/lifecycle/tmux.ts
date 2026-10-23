@@ -693,6 +693,18 @@ export function resizeWindowArgs(
   ]
 }
 
+/** The window's current size as `<cols>x<rows>`. */
+export function windowSizeArgs(windowId: string, socket: string | null): string[] {
+  return [
+    ...socketArgs(socket),
+    'display-message',
+    '-p',
+    '-t',
+    windowId,
+    '#{window_width}x#{window_height}',
+  ]
+}
+
 /** Stable server-assigned identity of an internal durable tmux session. */
 export function sessionIdArgs(widgetId: string): string[] {
   return sessionIdTargetArgs(internalTarget(widgetId))

@@ -193,7 +193,7 @@ Attach `env` holds **overrides only**, not a full environment: set exactly `TERM
 
 When a view becomes active, it claims the shared tmux window size:
 
-`POST /v1/sessions/:id/resize-claim` with body `{generation, clientPid, cols, rows}` returns `200 {applied: true}` or `{applied: false, reason}`. A successful claim also moves the foreground pane's `MemoryLow=2G` to this session's pane scope, since Aico claims the size when a view gains focus.
+`POST /v1/sessions/:id/resize-claim` with body `{generation, clientPid, cols, rows}` returns `200 {applied: true, changed}` or `{applied: false, reason}`. `changed` is true when the window's size differed before the claim, so a view that took the size back knows to repaint. A successful claim also moves the foreground pane's `MemoryLow=2G` to this session's pane scope, since Aico claims the size when a view gains focus.
 
 `POST /v1/sessions/:id/show` with body `{generation}` asks the connected GUI to open or focus the session's view. It returns `200 {shown: true}`, `503 gui_unavailable` with no GUI connected, or `409` when the session is not running or the GUI rejected the command.
 
@@ -208,7 +208,7 @@ Tether resizes only the window of the attached tmux client whose `client_pid` is
 | `status_row` | no | The session shows a tmux status row (`status` is not `off`, including the global value). |
 | `invalid` | no | `clientPid`, `cols` or `rows` is not a positive integer. |
 
-A stale or wrong-workload `generation` is refused before the claim with `409 stale_generation` / `409 workload_unavailable`. A successful claim publishes `session.resized`. Desktop auto-resize on active-client change is intended behavior. A-Term claims only when its view becomes active, not on every resize.
+A stale or wrong-workload `generation` is refused before the claim with `409 stale_generation` / `409 workload_unavailable`. A successful claim records the claiming client as the session's **size holder** (the client the shared window now fits; any other attached client sees the window at a size that is not its own) and publishes `session.resized` with `{id, generation, clientPid, cols, rows, changed}`. A client compares `clientPid` with its own attached client's pid to learn it no longer holds the size. `GET /v1/sessions/:id/resize-claim` returns `{generation, holder}`, where `holder` is `{clientPid, cols, rows, generation, claimedAt}` or `null` when unknown (no claim yet, or Tether restarted; the holder is kept in memory only). Desktop auto-resize on active-client change is intended behavior. A-Term claims only when its view becomes active, not on every resize.
 
 ## Roots
 
@@ -372,7 +372,7 @@ Event types:
 - `projects.changed` (`{id, change: "registered"}`)
 - `gui.connected`, `gui.disconnected`
 
-`session.created` and `session.updated` carry `session` *(post-cutover)*: the session descriptor as `GET /v1/sessions` would list it, with a status verified for the exact generation the event announces. Clients can apply it instead of fetching the descriptor; one that sees no `session` (an older Tether) re-reads. Session events are published in order through one queue. `session.ended` and `session.resized` carry the ID (and generation) only.
+`session.created` and `session.updated` carry `session` *(post-cutover)*: the session descriptor as `GET /v1/sessions` would list it, with a status verified for the exact generation the event announces. Clients can apply it instead of fetching the descriptor; one that sees no `session` (an older Tether) re-reads. Session events are published in order through one queue. `session.ended` carries the ID (and generation) only; `session.resized` adds the size holder as above.
 
 Events never carry terminal contents or prompts. A `session` snapshot carries the session's name and label, which every `GET /v1/sessions` caller on the same socket can read anyway.
 
