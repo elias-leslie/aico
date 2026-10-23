@@ -138,57 +138,6 @@ function GeminiIcon({ size, color }: { size: number; color: string }) {
   )
 }
 
-/** OpenCode — open a-term frame with blinking prompt */
-function OpenCodeIcon({ size, color }: { size: number; color: string }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <rect
-        x="3"
-        y="4"
-        width="18"
-        height="16"
-        rx="3"
-        stroke={color}
-        strokeWidth="1.5"
-        opacity="0.7"
-      />
-      <path
-        d="M7 12L10 9.5L7 7"
-        stroke={color}
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <line
-        x1="11"
-        y1="12"
-        x2="16"
-        y2="12"
-        stroke={color}
-        strokeWidth="2"
-        strokeLinecap="round"
-        opacity="0.7"
-      />
-      <line
-        x1="7"
-        y1="16"
-        x2="17"
-        y2="16"
-        stroke={color}
-        strokeWidth="1"
-        strokeLinecap="round"
-        opacity="0.3"
-      />
-    </svg>
-  )
-}
-
 /** Hermes — H frame with courier speed lines */
 function HermesIcon({ size, color }: { size: number; color: string }) {
   return (
@@ -287,7 +236,6 @@ const ICON_MAP: Record<string, (props: MarkProps) => JSX.Element> = {
   codex: CodexIcon,
   gemini: GeminiIcon,
   hermes: HermesIcon,
-  opencode: OpenCodeIcon,
   pi: PiIcon,
   shell: ShellIcon,
 }
@@ -300,7 +248,6 @@ export const AGENT_DEFAULT_COLORS: Record<string, string> = {
   codex: '#9B8CFF', // Codex lavender
   gemini: '#A78BFA', // Soft violet — dual/twin energy
   hermes: '#F59E0B', // Amber — courier / signal energy
-  opencode: '#60A5FA', // Cerulean blue — open sky
   pi: '#C16A8A', // Pi rose
   shell: '#8A8F98', // Neutral gray — plain terminal
 }

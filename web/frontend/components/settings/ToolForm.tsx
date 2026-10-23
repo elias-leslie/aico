@@ -185,7 +185,7 @@ export function ToolForm({
           style={inputStyle}
           value={form.name}
           onChange={(e) => handleNameChange(e.target.value)}
-          placeholder="OpenCode"
+          placeholder="Codex"
           aria-label="Tool name"
         />
       </div>
@@ -199,7 +199,7 @@ export function ToolForm({
             !isEdit && setForm((f) => ({ ...f, slug: e.target.value }))
           }
           readOnly={isEdit}
-          placeholder="opencode"
+          placeholder="codex"
           aria-label="Tool slug"
         />
       </div>
