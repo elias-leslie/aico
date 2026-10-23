@@ -18,7 +18,6 @@ export interface UseATermHandlersProps {
     workingDir?: string,
     agentToolSlug?: string,
   ) => Promise<ATermPane>
-  createAdHocPane: (paneName: string, workingDir?: string) => Promise<ATermPane>
   setActiveMode: (paneId: string, mode: string) => Promise<ATermPane>
 }
 
@@ -31,7 +30,6 @@ export interface UseATermHandlersReturn {
     action: 'insert' | 'send',
   ) => Promise<boolean>
   handleReconnect: () => void
-  handleAddTab: () => Promise<void>
   handleNewATermForProject: (
     projectId: string,
     mode?: string,

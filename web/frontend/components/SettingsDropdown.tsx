@@ -6,8 +6,6 @@ import {
   type ATermFontSize,
 } from '@/lib/hooks/use-a-term-settings'
 import { useClickOutside } from '@/lib/hooks/use-click-outside'
-import { AgentToolsSettings } from './settings/AgentToolsSettings'
-import { MemoryPolicySettings } from './settings/MemoryPolicySettings'
 import { SettingSelect } from './settings/SettingSelect'
 import { SettingsButton } from './settings/SettingsButton'
 import { SettingsPanel } from './settings/SettingsPanel'
@@ -70,10 +68,6 @@ export function SettingsDropdown({
           onChange={(val) => setFontSize(val as ATermFontSize)}
           options={fontSizeOptions}
         />
-
-        <AgentToolsSettings />
-
-        <MemoryPolicySettings />
       </SettingsPanel>
     </div>
   )

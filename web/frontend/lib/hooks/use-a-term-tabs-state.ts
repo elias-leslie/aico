@@ -52,7 +52,6 @@ export function useATermTabsState({
     isLoading: panesLoading,
     removePane,
     setActiveMode,
-    createAdHocPane,
     createProjectPane,
     isCreating: isPaneCreating,
   } = useATermPanes()
@@ -72,12 +71,6 @@ export function useATermTabsState({
       }),
     [createProjectPane],
   )
-  const createDetachedAdHocPane = useCallback(
-    (paneName: string, workingDir?: string) =>
-      createAdHocPane(paneName, workingDir, { detached: true }),
-    [createAdHocPane],
-  )
-
   const { fontSize, setFontSize } = useATermSettings(
     getActiveSessionProjectId(activeSessionId, sessions),
   )
@@ -94,7 +87,6 @@ export function useATermTabsState({
     handleKeyboardInput,
     handleComposeInput,
     handleReconnect,
-    handleAddTab,
     handleNewATermForProject,
     handleProjectModeChange,
     setATermRef,
@@ -110,7 +102,6 @@ export function useATermTabsState({
     setATermStatuses,
     panes,
     createProjectPane: createDetachedProjectPane,
-    createAdHocPane: createDetachedAdHocPane,
     setActiveMode,
   })
 
@@ -244,7 +235,6 @@ export function useATermTabsState({
     handleKeyboardInput,
     handleComposeInput,
     handleReconnect,
-    handleAddTab,
     handleNewATermForProject,
     handleProjectModeChange,
     reset,

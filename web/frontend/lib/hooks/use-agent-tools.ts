@@ -33,26 +33,6 @@ export interface AgentTool {
   updated_at: string | null
 }
 
-export interface CreateAgentToolInput {
-  name: string
-  slug: string
-  command: string
-  process_name?: string
-  description?: string
-  color?: string
-  display_order?: number
-  is_default?: boolean
-  enabled?: boolean
-  aliases?: string[]
-}
-
-export type UpdateAgentToolInput = Partial<
-  Omit<CreateAgentToolInput, 'slug' | 'color'>
-> & {
-  /** `null` clears the tool's own colour. */
-  color?: string | null
-}
-
 /** The Tether slug of the bare-shell registry entry. */
 export const SHELL_TOOL_SLUG = 'shell'
 
@@ -69,45 +49,6 @@ async function fetchAgentTools(): Promise<AgentTool[]> {
     '/api/a-term/agent-tools',
     undefined,
     'Failed to fetch agent tools',
-  )
-}
-
-async function createAgentTool(
-  input: CreateAgentToolInput,
-): Promise<AgentTool> {
-  return apiFetch(
-    '/api/a-term/agent-tools',
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(input),
-    },
-    'Failed to create agent tool',
-  )
-}
-
-async function updateAgentTool(
-  toolRef: string,
-  input: UpdateAgentToolInput,
-): Promise<AgentTool> {
-  return apiFetch(
-    `/api/a-term/agent-tools/${encodeURIComponent(toolRef)}`,
-    {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(input),
-    },
-    'Failed to update agent tool',
-  )
-}
-
-async function deleteAgentTool(toolRef: string): Promise<void> {
-  await apiFetch(
-    `/api/a-term/agent-tools/${encodeURIComponent(toolRef)}`,
-    {
-      method: 'DELETE',
-    },
-    'Failed to delete agent tool',
   )
 }
 
@@ -148,31 +89,6 @@ export function useAgentTools() {
   const enabledTools = agentTools.filter((t) => t.enabled && isAgentTool(t))
   const defaultTool = enabledTools.find((t) => t.is_default) ?? enabledTools[0]
 
-  const createMutation = useMutation({
-    mutationFn: createAgentTool,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['agent-tools'] })
-    },
-  })
-
-  const updateMutation = useMutation({
-    mutationFn: ({
-      toolRef,
-      ...input
-    }: UpdateAgentToolInput & { toolRef: string }) =>
-      updateAgentTool(toolRef, input),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['agent-tools'] })
-    },
-  })
-
-  const deleteMutation = useMutation({
-    mutationFn: deleteAgentTool,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['agent-tools'] })
-    },
-  })
-
   const switchToolMutation = useMutation({
     mutationFn: ({ paneId, slug }: { paneId: string; slug: string }) =>
       switchPaneAgentTool(paneId, slug),
@@ -181,23 +97,6 @@ export function useAgentTools() {
       queryClient.invalidateQueries({ queryKey: ['a-term-sessions'] })
     },
   })
-
-  const create = useCallback(
-    async (input: CreateAgentToolInput) => createMutation.mutateAsync(input),
-    [createMutation],
-  )
-
-  /** `toolRef` is the tool's slug (or id). */
-  const update = useCallback(
-    async (toolRef: string, input: UpdateAgentToolInput) =>
-      updateMutation.mutateAsync({ toolRef, ...input }),
-    [updateMutation],
-  )
-
-  const remove = useCallback(
-    async (toolRef: string) => deleteMutation.mutateAsync(toolRef),
-    [deleteMutation],
-  )
 
   const switchTool = useCallback(
     async (paneId: string, slug: string) =>
@@ -209,17 +108,10 @@ export function useAgentTools() {
     agentTools,
     enabledTools,
     defaultTool,
-    create,
-    update,
-    remove,
     switchTool,
     isLoading,
     isError,
     error,
-    isMutating:
-      createMutation.isPending ||
-      updateMutation.isPending ||
-      deleteMutation.isPending ||
-      switchToolMutation.isPending,
+    isMutating: switchToolMutation.isPending,
   }
 }

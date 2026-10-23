@@ -113,7 +113,6 @@ describe('useATermTabsState', () => {
       isLoading: false,
       removePane: vi.fn(),
       setActiveMode: vi.fn(),
-      createAdHocPane: vi.fn(),
       createProjectPane: vi.fn(),
       isCreating: false,
     })
@@ -123,7 +122,6 @@ describe('useATermTabsState', () => {
       handleKeyboardInput: vi.fn(),
       handleComposeInput: vi.fn(),
       handleReconnect: vi.fn(),
-      handleAddTab: vi.fn(),
       handleNewATermForProject: vi.fn(),
       handleProjectModeChange: vi.fn(),
       setATermRef: vi.fn(),
@@ -295,7 +293,6 @@ describe('useATermTabsState', () => {
       isLoading: false,
       removePane: vi.fn(),
       setActiveMode: vi.fn(),
-      createAdHocPane: vi.fn(),
       createProjectPane: vi.fn(),
       isCreating: false,
     })
@@ -640,7 +637,6 @@ describe('useATermTabsState', () => {
       isLoading: false,
       removePane: vi.fn(),
       setActiveMode: vi.fn(),
-      createAdHocPane: vi.fn(),
       createProjectPane,
       isCreating: false,
     })
@@ -738,7 +734,6 @@ describe('useATermTabsState', () => {
       isLoading: false,
       removePane: vi.fn(),
       setActiveMode: vi.fn(),
-      createAdHocPane: vi.fn(),
       createProjectPane,
       isCreating: false,
     })
@@ -846,7 +841,6 @@ describe('useATermTabsState', () => {
     renderHook(() => useATermTabsState({}))
 
     const handlerParams = mockUseATermHandlers.mock.calls.at(-1)?.[0] as {
-      createAdHocPane: (name: string, dir?: string) => Promise<unknown>
       createProjectPane: (
         name: string,
         projectId: string,
@@ -854,11 +848,7 @@ describe('useATermTabsState', () => {
         tool?: string,
       ) => Promise<unknown>
     }
-    await handlerParams.createAdHocPane('Shell', '/tmp')
     await handlerParams.createProjectPane('A', 'project-a', '/a', 'codex')
-    expect(panes.createAdHocPane).toHaveBeenCalledWith('Shell', '/tmp', {
-      detached: true,
-    })
     expect(panes.createProjectPane).toHaveBeenCalledWith(
       'A',
       'project-a',

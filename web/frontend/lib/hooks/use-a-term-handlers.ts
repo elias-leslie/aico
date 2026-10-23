@@ -9,10 +9,7 @@ import { useAgentPolling } from '@/lib/hooks/use-agent-polling'
 import { useAgentTools } from '@/lib/hooks/use-agent-tools'
 import { useProjectATerms } from '@/lib/hooks/use-project-a-terms'
 import { useProjectModeSwitch } from '@/lib/hooks/use-project-mode-switch'
-import {
-  addAdHocPaneAction,
-  addProjectPaneAction,
-} from './a-term-handler-actions'
+import { addProjectPaneAction } from './a-term-handler-actions'
 import { commitComposeInput } from './compose-input'
 import type {
   UseATermHandlersProps,
@@ -27,7 +24,6 @@ export function useATermHandlers({
   setATermStatuses,
   panes,
   createProjectPane,
-  createAdHocPane,
   setActiveMode,
 }: UseATermHandlersProps): UseATermHandlersReturn {
   const router = useRouter()
@@ -97,11 +93,6 @@ export function useATermHandlers({
     }
     aTermRefs.current.values().next().value?.reconnect()
   }, [activeSessionId, aTermRefs])
-  const handleAddTab = useCallback(
-    () => addAdHocPaneAction(panes, createAdHocPane, navigateToSession),
-    [panes, createAdHocPane, navigateToSession],
-  )
-
   const handleNewATermForProject = useCallback(
     (targetProjectId: string, mode?: string, rootPath?: string | null) =>
       addProjectPaneAction(
@@ -147,7 +138,6 @@ export function useATermHandlers({
     handleKeyboardInput,
     handleComposeInput,
     handleReconnect,
-    handleAddTab,
     handleNewATermForProject,
     handleProjectModeChange,
     setATermRef,

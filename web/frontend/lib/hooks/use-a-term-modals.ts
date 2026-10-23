@@ -15,14 +15,13 @@ export function useATermModals({ setShowATermManager }: UseATermModalsProps) {
   const urlModal = searchParams.get('modal')
 
   const setModalParam = useCallback(
-    (value: string | null, sessionId?: string) => {
+    (value: string | null) => {
       const params =
         typeof window !== 'undefined'
           ? new URLSearchParams(window.location.search)
           : new URLSearchParams(searchParams.toString())
       if (value === null) params.delete('modal')
       else params.set('modal', value)
-      if (sessionId) params.set('session', sessionId)
       const query = params.toString()
       router.replace(`${pathname}${query ? `?${query}` : ''}`, {
         scroll: false,
@@ -41,16 +40,6 @@ export function useATermModals({ setShowATermManager }: UseATermModalsProps) {
     setModalParam(null)
   }, [setShowATermManager, setModalParam])
 
-  // Opens a running session from the picker: one URL change, so the
-  // session switch cannot bring the closed picker back.
-  const handleOpenSession = useCallback(
-    (sessionId: string) => {
-      setShowATermManager(false)
-      setModalParam(null, sessionId)
-    },
-    [setShowATermManager, setModalParam],
-  )
-
   useEffect(() => {
     setShowATermManager(urlModal === 'a-term-manager')
   }, [urlModal, setShowATermManager])
@@ -58,6 +47,5 @@ export function useATermModals({ setShowATermManager }: UseATermModalsProps) {
   return {
     handleOpenATermManager,
     handleCloseATermManager,
-    handleOpenSession,
   }
 }

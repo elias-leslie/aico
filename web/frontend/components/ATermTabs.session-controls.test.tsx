@@ -41,7 +41,7 @@ vi.mock('./ATermContent', () => ({
     </button>
   ),
 }))
-vi.mock('./ATermManagerModal', () => ({ ATermManagerModal: () => null }))
+vi.mock('./NewSessionDialog', () => ({ NewSessionDialog: () => null }))
 
 describe('ATermTabs session controls', () => {
   beforeEach(() => endSession.mockReset())

@@ -2,34 +2,9 @@ import type { ATermPane } from '@/lib/hooks/use-a-term-panes'
 import type { ProjectATerm } from '@/lib/hooks/use-project-a-terms'
 import {
   findSessionByMode,
-  generateAdHocPaneName,
   generateProjectPaneName,
   waitForTmuxInit,
 } from './a-term-handler-utils'
-
-/**
- * Add a new ad-hoc aTerm pane
- */
-export async function addAdHocPaneAction(
-  panes: ATermPane[],
-  createAdHocPane: (
-    paneName: string,
-    workingDir?: string,
-  ) => Promise<ATermPane>,
-  navigateToSession: (sessionId: string) => void,
-): Promise<void> {
-  try {
-    const paneName = generateAdHocPaneName(panes)
-    const newPane = await createAdHocPane(paneName)
-    const shellSession = findSessionByMode(newPane, 'shell')
-    if (shellSession) {
-      navigateToSession(shellSession.id)
-    }
-  } catch (error) {
-    // eslint-disable-next-line no-console -- action error boundary
-    console.error('Failed to create ad-hoc pane:', error)
-  }
-}
 
 /**
  * Add a new project a-term pane

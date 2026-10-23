@@ -222,17 +222,6 @@ export function useATermPanes() {
     [createMutation],
   )
 
-  const createAdHocPane = useCallback(
-    (name: string, workingDir?: string, options?: PanePlacementOptions) =>
-      createMutation.mutateAsync({
-        pane_type: 'adhoc',
-        pane_name: name,
-        working_dir: workingDir,
-        detached: options?.detached,
-      }),
-    [createMutation],
-  )
-
   const setActiveMode = useCallback(
     (paneId: string, mode: string) =>
       updateMutation.mutateAsync({ paneId, active_mode: mode }),
@@ -259,7 +248,6 @@ export function useATermPanes() {
     isError,
     error,
     createProjectPane,
-    createAdHocPane,
     isCreating: createMutation.isPending,
     setActiveMode,
     renamePane,

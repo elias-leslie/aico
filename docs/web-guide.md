@@ -14,7 +14,7 @@ Then open **http://localhost:3002**.
 
 The web app targets **Linux with systemd** and needs **Tether**, the session daemon that owns every session (API version 1 or newer, `tether@default.service`). `scripts/install.sh` builds the front end, sets up the backend's Python environment in `web/.venv` and installs Tether and the user units; `--start` starts Tether and both web units. There is no database server to install. See [install](INSTALL.md).
 
-Projects come from Tether: by default its local list (`~/.config/tether/projects.json`), which the web app's "Register project" adds to through Tether's `POST /v1/projects`.
+Projects come from Tether: by default its local list (`~/.config/tether/projects.json`).
 
 See the [Changelog](../CHANGELOG.md) for shipped changes.
 
@@ -24,7 +24,7 @@ See the [Changelog](../CHANGELOG.md) for shipped changes.
 
 **`stable scrollback rendering`** — Terminal panes render with the xterm.js WebGL renderer with DOM fallback, so history keeps font metrics, wrap points, and columns aligned.
 
-**`one session at a time`** — The session bar's title opens every running session, grouped Needs you, Finished, Working and Idle; pick one to switch. Ctrl+Tab and Ctrl+Shift+Tab step through them and Ctrl+1 to Ctrl+9 jump to one (not while you are typing in a text box). New session starts one in a project or a plain shell. The session menu's Redraw remounts the view without restarting the session. Several devices can show one session; the one you use last claims the session's window size.
+**`one session at a time`** — The session bar's title opens every running session, grouped Needs you, Finished, Working and Idle; pick one to switch. Ctrl+Tab and Ctrl+Shift+Tab step through them and Ctrl+1 to Ctrl+9 jump to one (not while you are typing in a text box). New session starts an agent or a shell in a project you pick. The session menu's Redraw remounts the view without restarting the session. Several devices can show one session; the one you use last claims the session's window size.
 
 **`files browser`** — Browse the session's working directory. Preview files, copy paths, insert paths into prompts — without leaving the terminal.
 
@@ -38,7 +38,7 @@ On a phone, tap Talk to start dictating. Words appear while you speak, and pause
 
 **`dual mode`** — Switch any session between raw shell and your configured AI agent with one click. Supports Claude Code, Codex, Antigravity CLI, and Pi out of the box.
 
-**`agent presets and custom tools`** — Built-in profiles for Claude Code, Codex, Antigravity CLI, and Pi appear in Settings by default. Antigravity launches as `agy --dangerously-skip-permissions`, its explicit auto-approval mode. Pick a default tool, tune the launch command or process name, and add your own TUI agent commands when your workflow expands. The tool list is Tether's shared registry, so a change here also applies to sessions launched from the desktop; Claude Code's slug is `claude-code` (`claude` still works as an alias). The web app also lists agent sessions you started yourself on your default tmux server alongside your own sessions, recognising any tool in that registry by its slug, aliases, process name or command; closing one here only closes the view.
+**`agent tools`** — New session offers the enabled tools in Tether's shared registry: Claude Code, Codex, Antigravity CLI and Pi by default, plus any you add there. Antigravity launches as `agy --dangerously-skip-permissions`, its explicit auto-approval mode. Claude Code's slug is `claude-code` (`claude` still works as an alias). The web app also lists agent sessions you started yourself on your default tmux server alongside your own sessions, recognising any tool in that registry by its slug, aliases, process name or command; closing one here only closes the view.
 
 **`scrollback`** — Each session is attached in tmux control mode, which seeds its history into xterm.js. Scroll up and the view holds still while output keeps arriving; a Latest button returns you to the bottom.
 
@@ -155,7 +155,7 @@ Full API schema available at `/openapi.json` when running.
 
 All core features work without any external service.
 
-**SummitFlow project catalog** — Tether reads SummitFlow's projects when SummitFlow is installed, and the web app shows those. Registering projects from the web app is then turned off; without SummitFlow, it adds projects to Tether's local list.
+**SummitFlow project catalog** — Tether reads SummitFlow's projects when SummitFlow is installed, and the web app shows those. Without SummitFlow, Tether uses its local list.
 
 **Agent Hub** (`NEXT_PUBLIC_AGENT_HUB_URL`, `AGENT_HUB_URL`) — Adds model catalog and prompt cleaning/refinement proxies. Browser-native voice input works standalone; Agent Hub provides an optional enhanced path.
 

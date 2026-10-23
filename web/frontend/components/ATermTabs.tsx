@@ -16,9 +16,9 @@ import {
   type PaneSlot,
 } from '@/lib/utils/slot'
 import { ATermContent } from './ATermContent'
-import { ATermManagerModal } from './ATermManagerModal'
 import { ATermSkeleton } from './ATermSkeleton'
 import { ConfirmationDialog } from './ConfirmationDialog'
+import { NewSessionDialog } from './NewSessionDialog'
 
 interface ATermTabsProps {
   projectId?: string
@@ -41,7 +41,6 @@ export function ATermTabs({
   const {
     isLoading,
     sessions,
-    externalSessions,
     aTermSlots,
     fontSize,
     showSettings,
@@ -57,13 +56,10 @@ export function ATermTabs({
     handleKeyboardInput,
     handleComposeInput,
     handleReconnect,
-    panes,
-    handleAddTab,
     handleNewATermForProject,
     showATermManager,
     handleOpenATermManager,
     handleCloseATermManager,
-    handleOpenSession,
     handleSlotSwitch,
     handleSlotReset,
     handleSlotCloseSession,
@@ -195,19 +191,16 @@ export function ATermTabs({
         }}
       />
 
-      {/* A-Term Manager Modal */}
-      <ATermManagerModal
+      <NewSessionDialog
         isOpen={showATermManager}
         onClose={handleCloseATermManager}
-        onCreateGenericATerm={handleAddTab}
-        onCreateProjectATerm={(projectId, rootPath) =>
-          handleNewATermForProject(projectId, undefined, rootPath)
+        defaultProjectId={
+          sessions.find((session) => session.id === activeSessionId)?.project_id
         }
-        externalSessions={externalSessions}
-        detachedPanes={[]}
-        onAttachExternalSession={handleOpenSession}
-        onAttachDetachedPane={() => undefined}
-        panes={panes}
+        onStart={(projectId, rootPath, mode) =>
+          handleNewATermForProject(projectId, mode, rootPath)
+        }
+        isMobile={isMobile}
       />
     </>
   )

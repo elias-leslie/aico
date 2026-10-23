@@ -1,9 +1,7 @@
 'use client'
 
-import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useMemo } from 'react'
 import { type ATermSession, useATermSessions } from './use-a-term-sessions'
-import { useResetProjectMutation } from './use-project-a-terms-mutations'
 import { useProjectSettings } from './use-project-settings'
 
 interface UseProjectATermsOptions {
@@ -35,8 +33,6 @@ export interface UseProjectATermsResult {
   isLoading: boolean
   isError: boolean
   switchMode: (projectId: string, mode: string) => Promise<void>
-  resetProject: (projectId: string) => Promise<void>
-  disableProject: (projectId: string) => Promise<void>
 }
 
 function buildProjectATerm(
@@ -76,13 +72,9 @@ function buildProjectATerm(
 export function useProjectATerms(
   options: UseProjectATermsOptions = {},
 ): UseProjectATermsResult {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-
   const {
     enabledProjects,
     switchMode: switchProjectMode,
-    disableProject: disableProjectATerm,
     isLoading: projectsLoading,
     isError: projectsError,
   } = useProjectSettings()
@@ -92,15 +84,6 @@ export function useProjectATerms(
   const sessionsLoading =
     options.sessionsLoadingOverride ?? sessionQuery.isLoading
   const sessionsError = options.sessionsErrorOverride ?? sessionQuery.isError
-
-  const switchToSessionViaUrl = useCallback(
-    (sessionId: string) => {
-      const params = new URLSearchParams(searchParams.toString())
-      params.set('session', sessionId)
-      router.push(`?${params.toString()}`, { scroll: false })
-    },
-    [searchParams, router],
-  )
 
   const projectATerms = useMemo(
     () =>
@@ -125,25 +108,6 @@ export function useProjectATerms(
     [switchProjectMode],
   )
 
-  const resetProjectMutation = useResetProjectMutation(
-    projectATerms,
-    switchToSessionViaUrl,
-  )
-
-  const resetProject = useCallback(
-    async (projectId: string) => {
-      await resetProjectMutation.mutateAsync(projectId)
-    },
-    [resetProjectMutation],
-  )
-
-  const disableProject = useCallback(
-    async (projectId: string) => {
-      await disableProjectATerm(projectId)
-    },
-    [disableProjectATerm],
-  )
-
   return {
     projectATerms,
     adHocSessions,
@@ -151,7 +115,5 @@ export function useProjectATerms(
     isLoading: projectsLoading || sessionsLoading,
     isError: projectsError || sessionsError,
     switchMode,
-    resetProject,
-    disableProject,
   }
 }

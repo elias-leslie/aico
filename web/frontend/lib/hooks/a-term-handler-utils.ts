@@ -16,14 +16,6 @@ export function generatePaneName(
 }
 
 /**
- * Generate an ad-hoc a-term name based on existing ad-hoc panes
- */
-export function generateAdHocPaneName(panes: ATermPane[]): string {
-  const adHocCount = panes.filter((p) => p.pane_type === 'adhoc').length
-  return generatePaneName('Ad-Hoc Session', adHocCount)
-}
-
-/**
  * Generate a project pane name based on project ID and existing panes
  */
 export function generateProjectPaneName(
