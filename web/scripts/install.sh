@@ -5,6 +5,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 export REPO_ROOT
+# The aico repo root: unit templates live in its scripts/systemd/.
+PROJECT_ROOT="$(cd "$REPO_ROOT/.." && pwd)"
 export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
 
 usage() {
@@ -676,7 +678,7 @@ import json
 import os
 from pathlib import Path
 
-identity = json.loads((Path(os.environ["REPO_ROOT"]) / "project.identity.json").read_text())
+identity = json.loads((Path(os.environ["REPO_ROOT"]).parent / "project.identity.json").read_text())
 project = identity.get("project", {})
 runtime = identity.get("runtime", {})
 services = identity.get("services", {})
@@ -767,10 +769,10 @@ step "Installing Python dependencies"
 uv sync --extra dev --managed-python --python "$PYTHON_VERSION"
 
 step "Installing frontend dependencies"
-corepack pnpm --dir "$REPO_ROOT/frontend" install --frozen-lockfile
+npm --prefix "$PROJECT_ROOT" ci
 
 step "Building frontend"
-corepack pnpm --dir "$REPO_ROOT/frontend" build
+npm --prefix "$PROJECT_ROOT" run build --workspace web/frontend
 
 if [[ "$SKIP_SYSTEMD" -eq 1 ]]; then
   step "Bootstrap complete"
@@ -795,7 +797,7 @@ mkdir -p "$SYSTEMD_USER_DIR"
 render_service() {
   local template_path="$1"
   local destination_path="$2"
-  python3 - "$template_path" "$destination_path" "$REPO_ROOT" <<'PY'
+  python3 - "$template_path" "$destination_path" "$PROJECT_ROOT" <<'PY'
 from pathlib import Path
 import sys
 
@@ -811,10 +813,10 @@ PY
 }
 
 render_service \
-  "$REPO_ROOT/scripts/systemd/$BACKEND_SERVICE" \
+  "$PROJECT_ROOT/scripts/systemd/$BACKEND_SERVICE" \
   "$SYSTEMD_USER_DIR/$BACKEND_SERVICE"
 render_service \
-  "$REPO_ROOT/scripts/systemd/$FRONTEND_SERVICE" \
+  "$PROJECT_ROOT/scripts/systemd/$FRONTEND_SERVICE" \
   "$SYSTEMD_USER_DIR/$FRONTEND_SERVICE"
 
 step "Checking ports"

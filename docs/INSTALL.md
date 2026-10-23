@@ -19,13 +19,12 @@ Install Node.js 22+ and `uv` using the methods you trust for your system. The te
 
 Aico requires [Tether](https://github.com/elias-leslie/tether) (API v1 or
 later), the per-user session daemon that owns every tmux server, agent launch,
-End, root request and context hook. Install and start it from its checkout
-first:
+End, root request and context hook. It lives in `tether/` in this repo; install
+and start it first:
 
 ```bash
-git clone https://github.com/elias-leslie/tether.git ../tether
-cd ../tether                        # or wherever Tether is checked out
-npm ci
+npm ci                              # at the repo root: one workspace for all packages
+cd tether
 scripts/install.sh --start default
 tether --json version                # prints one JSON object with "apiVersion": 1
 ```
@@ -46,7 +45,7 @@ scripts/aico-install.sh
 ```
 
 The installer first requires `tether --json version` to report API v1 or later
-(otherwise it prints the Tether install steps and exits; set `TETHER_REPO` if your Tether checkout is not next to this one). It then runs `npm ci`, rebuilds native Electron modules, syncs the locked
+(otherwise it prints the Tether install steps and exits; set `TETHER_REPO` to point the hint at another Tether checkout). It then runs `npm ci`, rebuilds native Electron modules, syncs the locked
 Python 3.13 test environment with `uv`, writes a desktop entry under
 `~/.local/share/applications`, and installs the `aico-shell.service` user unit
 into `${XDG_CONFIG_HOME:-~/.config}/systemd/user/`
@@ -89,7 +88,6 @@ history: [`INCIDENT-2026-07-PROCESS-ESCAPES.md`](INCIDENT-2026-07-PROCESS-ESCAPE
 npm run lint
 npm run typecheck
 npm test
-npm run test:scripts
 npm run build
 ```
 

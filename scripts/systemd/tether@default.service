@@ -1,8 +1,10 @@
-# SummitFlow-managed tether@default. `st service rebuild tether` renders this
-# with __PROJECT_ROOT__ set to the release it built and restarts the unit, so
+# SummitFlow-managed tether@default, a manual worker of the aico project: only
+# `st service rebuild aico --worker tether@default` renders this (with
+# __PROJECT_ROOT__ set to the release it built) and restarts the unit, so
 # ExecStartPre installs that release into the stable path before the daemon
-# starts. Otherwise identical to systemd/tether@.service (see its notes: tmux
-# servers are separate units, so a restart never stops a pane).
+# starts. A plain `st service rebuild aico` never touches it. Otherwise
+# identical to tether/systemd/tether@.service (see its notes: tmux servers are
+# separate units, so a restart never stops a pane).
 [Unit]
 Description=Tether session daemon (default)
 Documentation=https://github.com/elias-leslie/tether
@@ -10,9 +12,9 @@ Documentation=https://github.com/elias-leslie/tether
 [Service]
 Type=simple
 Slice=app.slice
-WorkingDirectory=__PROJECT_ROOT__
+WorkingDirectory=__PROJECT_ROOT__/tether
 # "-": a missing release never keeps the installed daemon from starting.
-ExecStartPre=-__PROJECT_ROOT__/scripts/install-release.sh
+ExecStartPre=-__PROJECT_ROOT__/tether/scripts/install-release.sh
 ExecStart=%h/.local/lib/tether/bin/tether --instance default serve
 Restart=on-failure
 RestartSec=2
@@ -20,8 +22,8 @@ UMask=0077
 Environment=PATH=%h/.claude/bin:%h/.codex/bin:%h/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 # Sibling checkouts (agent-hub, codex-config) live here, not ~/projects.
 Environment=TETHER_PROJECTS_DIR=/srv/workspaces/projects
-# Shared mode (this unit runs as the agent user, Nightshift as the owner): read the host verdict Nightshift publishes
-# in /run/nightshift, and keep this Tether's memory event record in its state dir, where Nightshift reads it.
+# Read the host verdict Nightshift publishes in /run/nightshift, and keep this
+# Tether's memory event record in its state dir, where Nightshift reads it.
 Environment=TETHER_NIGHTSHIFT_ADMISSION=/run/nightshift/admission.json
 Environment=TETHER_NIGHTSHIFT_EVENTS=%h/.local/state/tether/default/memory-events.jsonl
 # systemd-oomd picks this unit only when no other candidate is left.

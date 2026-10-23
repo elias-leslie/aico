@@ -6,9 +6,11 @@ PROJECT_LAUNCHER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 A_TERM_SCRIPTS_DIR="$(cd "$PROJECT_LAUNCHER_DIR/.." && pwd)"
 A_TERM_REPO_ROOT="$(cd "$PROJECT_LAUNCHER_DIR/../.." && pwd)"
 
+# The aico checkout holding web/; it sits in <workspaces>/projects.
+AICO_REPO_ROOT="$(cd "$A_TERM_REPO_ROOT/.." && pwd)"
 DEFAULT_WORKSPACES_ROOT=""
-if [ "$(basename "$(dirname "$A_TERM_REPO_ROOT")")" = "projects" ]; then
-  DEFAULT_WORKSPACES_ROOT="$(cd "$A_TERM_REPO_ROOT/../.." && pwd)"
+if [ "$(basename "$(dirname "$AICO_REPO_ROOT")")" = "projects" ]; then
+  DEFAULT_WORKSPACES_ROOT="$(cd "$AICO_REPO_ROOT/../.." && pwd)"
 fi
 
 WORKSPACES_ROOT="${ST_WORKSPACES_ROOT:-$DEFAULT_WORKSPACES_ROOT}"

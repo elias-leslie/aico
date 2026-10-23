@@ -6,7 +6,9 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+# The aico repo root: the unit templates live in its scripts/systemd/ and
+# __PROJECT_ROOT__ is that root, so units reach into web/.
+REPO_ROOT = Path(__file__).resolve().parents[2]
 SYSTEMD_DIR = REPO_ROOT / "scripts" / "systemd"
 # SummitFlow runs the code from a release copy (REPO_ROOT here) and points this
 # placeholder at the owner's checkout, where the env files live.
@@ -42,8 +44,12 @@ def _values(section: list[tuple[str, str]], key: str) -> list[str]:
 @pytest.mark.parametrize(
     ("name", "workdir", "exec_target"),
     [
-        ("a-term-backend.service", REPO_ROOT, "uvicorn a_term.main:app"),
-        ("a-term-frontend.service", REPO_ROOT / "frontend", "/usr/bin/node .next/standalone/server.js"),
+        ("a-term-backend.service", REPO_ROOT / "web", "uvicorn a_term.main:app"),
+        (
+            "a-term-frontend.service",
+            REPO_ROOT / "web" / "frontend",
+            "/usr/bin/node .next/standalone/web/frontend/server.js",
+        ),
     ],
 )
 def test_rendered_unit_runs_from_the_project_on_localhost(name: str, workdir: Path, exec_target: str) -> None:

@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 import os
 
-identity = json.loads((Path(os.environ["REPO_ROOT"]) / "project.identity.json").read_text())
+identity = json.loads((Path(os.environ["REPO_ROOT"]).parent / "project.identity.json").read_text())
 print(identity["project"]["display_name"])
 PY
 )"
@@ -21,7 +21,7 @@ import json
 from pathlib import Path
 import os
 
-identity = json.loads((Path(os.environ["REPO_ROOT"]) / "project.identity.json").read_text())
+identity = json.loads((Path(os.environ["REPO_ROOT"]).parent / "project.identity.json").read_text())
 runtime = identity.get("runtime", {})
 print(f'DEFAULT_BACKEND_PORT={runtime.get("backend_port", 8002)}')
 print(f'DEFAULT_FRONTEND_PORT={runtime.get("frontend_port", 3002)}')
@@ -34,7 +34,7 @@ import json
 from pathlib import Path
 import os
 
-identity = json.loads((Path(os.environ["REPO_ROOT"]) / "project.identity.json").read_text())
+identity = json.loads((Path(os.environ["REPO_ROOT"]).parent / "project.identity.json").read_text())
 services = identity.get("services", {})
 print(f'BACKEND_SERVICE={services.get("backend", "a-term-backend.service")}')
 print(f'FRONTEND_SERVICE={services.get("frontend", "a-term-frontend.service")}')

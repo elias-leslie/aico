@@ -26,7 +26,7 @@ def test_state_changing_requests_refuse_other_sites(test_app: TestClient, origin
     assert (response.status_code == 403 and response.json() == {"error": "origin_not_allowed"}) is refused
 
 
-@pytest.mark.parametrize("origin", ["http://127.0.0.1:3002", "https://terminal.summitflow.dev"])
+@pytest.mark.parametrize("origin", ["http://127.0.0.1:3002", "https://aico.summitflow.dev"])
 def test_cors_and_the_write_guard_use_the_same_list(test_app: TestClient, origin: str) -> None:
     preflight = test_app.options(
         "/api/a-term/reset-all", headers={"origin": origin, "access-control-request-method": "POST"}
@@ -47,7 +47,7 @@ def test_reads_from_other_sites_are_not_refused_by_the_guard(test_app: TestClien
 
 
 @pytest.mark.parametrize(
-    "origin", [None, "http://localhost:3002", "http://127.0.0.1:3002", "https://terminal.summitflow.dev"]
+    "origin", [None, "http://localhost:3002", "http://127.0.0.1:3002", "https://aico.summitflow.dev"]
 )
 def test_terminal_websocket_attaches_for_every_own_origin(test_app: TestClient, origin: str | None) -> None:
     assert origin is None or origin in cast(FastAPI, test_app.app).state.trust.allowed_origins

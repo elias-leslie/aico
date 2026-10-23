@@ -7,11 +7,11 @@ After=network.target tether@default.service
 
 [Service]
 Type=simple
-WorkingDirectory=__PROJECT_ROOT__
-Environment="PATH=%h/.claude/bin:%h/.codex/bin:%h/bin:%h/.local/bin:__PROJECT_ROOT__/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+WorkingDirectory=__PROJECT_ROOT__/web
+Environment="PATH=%h/.claude/bin:%h/.codex/bin:%h/bin:%h/.local/bin:__PROJECT_ROOT__/web/.venv/bin:/usr/local/bin:/usr/bin:/bin"
 Environment="HOME=%h"
 EnvironmentFile=-%h/.config/credstore/a-term/env
-ExecStart=/bin/bash -lc 'export A_TERM_BIND_HOST="${A_TERM_BIND_HOST:-127.0.0.1}"; export A_TERM_PORT="${A_TERM_PORT:-8002}"; exec __PROJECT_ROOT__/.venv/bin/uvicorn a_term.main:app --host "$A_TERM_BIND_HOST" --port "$A_TERM_PORT"'
+ExecStart=/bin/bash -lc 'export A_TERM_BIND_HOST="${A_TERM_BIND_HOST:-127.0.0.1}"; export A_TERM_PORT="${A_TERM_PORT:-8002}"; exec __PROJECT_ROOT__/web/.venv/bin/uvicorn a_term.main:app --host "$A_TERM_BIND_HOST" --port "$A_TERM_PORT"'
 Restart=always
 RestartSec=10
 KillMode=mixed

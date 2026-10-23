@@ -117,11 +117,11 @@ describe('proxy', () => {
     vi.stubEnv('NEXT_PUBLIC_AGENT_HUB_URL', 'https://agent-hub.example.com')
     const { proxy } = await importProxy()
 
-    const response = proxy(browserRequest('https://terminal.summitflow.dev/'))
+    const response = proxy(browserRequest('https://aico.summitflow.dev/'))
     const connectSrc = getDirectiveTokens(response, 'connect-src')
 
     expect(connectSrc).toContain("'self'")
-    expect(connectSrc).toContain('wss://terminal.summitflow.dev:8003')
+    expect(connectSrc).toContain('wss://aico.summitflow.dev:8003')
     expect(connectSrc).toContain('https://agent-hub.example.com')
     expect(connectSrc).toContain('wss://agent-hub.example.com')
     expect(connectSrc).not.toContain('http:')
@@ -137,7 +137,7 @@ describe('proxy', () => {
       '192.168.86.128:3002',
       'localhost.evil.example:3002',
       '127.0.0.1.evil.example',
-      'terminal.summitflow.dev.evil.example',
+      'aico.summitflow.dev.evil.example',
       'evil.example@127.0.0.1:3002',
       '127.0.0.1:3002@evil.example',
       '[::1]:3002',
@@ -177,8 +177,8 @@ describe('proxy', () => {
       'localhost:3002',
       '127.0.0.1:3002',
       'LOCALHOST:3002',
-      'terminal.summitflow.dev',
-      'terminal.summitflow.dev:443',
+      'aico.summitflow.dev',
+      'aico.summitflow.dev:443',
     ])(
       'lets Host %j through to the rewrites without page headers',
       async (host) => {

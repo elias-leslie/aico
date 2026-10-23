@@ -50,7 +50,6 @@ checkout). The installer performs a source install in the current checkout:
 
 - requires `tether --json version` to report API v1 or later; otherwise it prints the Tether install steps and exits
 - `npm ci`
-- `uv sync --frozen --python 3.13 --extra dev`
 - installs a desktop launcher at `~/.local/share/applications/aico.desktop`
 - renders `scripts/systemd/aico-shell.service` into `${XDG_CONFIG_HOME:-~/.config}/systemd/user/` (substituting the checkout path, as `st service rebuild aico` does) and runs `systemctl --user daemon-reload`; the unit is not enabled, and `scripts/aico-launch.sh` starts `aico-shell.service`
 - on kernels with `kernel.apparmor_restrict_unprivileged_userns=1`, installs an AppArmor profile for Electron's sandbox when you opt in
@@ -121,7 +120,6 @@ After `scripts/aico-install.sh`:
 npm run lint
 npm run typecheck
 npm test
-npm run test:scripts
 npm run build
 ```
 
@@ -165,7 +163,7 @@ See [`extension/README.md`](../extension/README.md) for details.
 
 Every session is a tmux session on a Tether-managed absolute socket, so any
 tmux-capable client on the same machine can attach: `tether sessions attach <id>`
-(or `--print` for the exact argv). [A-term](../../a-term) is another Tether
+(or `--print` for the exact argv). [A-term](../web) is another Tether
 client with an authenticated WebSocket, so opening the A-term PWA on a phone
 gives live, two-way access to the same sessions Aico shows.
 

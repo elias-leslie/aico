@@ -99,9 +99,9 @@ def test_config_allowed_origins_default_has_the_frontend_and_the_identity_public
     import a_term.config as cfg
     from a_term.branding import PUBLIC_HOST
 
-    assert PUBLIC_HOST == "terminal.summitflow.dev"
+    assert PUBLIC_HOST == "aico.summitflow.dev"
     default = cfg.Settings.model_fields["a_term_allowed_origins"].default
-    assert default == ["http://localhost:3002", "http://127.0.0.1:3002", "https://terminal.summitflow.dev"]
+    assert default == ["http://localhost:3002", "http://127.0.0.1:3002", "https://aico.summitflow.dev"]
 
 
 def test_config_maintenance_settings_from_env() -> None:

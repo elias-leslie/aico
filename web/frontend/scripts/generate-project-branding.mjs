@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const frontendRoot = path.resolve(scriptDir, '..')
-const repoRoot = path.resolve(frontendRoot, '..')
+const repoRoot = path.resolve(frontendRoot, '..', '..')
 const identityPath = path.join(repoRoot, 'project.identity.json')
 const outputPath = path.join(frontendRoot, 'lib', 'generated', 'project-branding.generated.ts')
 const checkOnly = process.argv.includes('--check')

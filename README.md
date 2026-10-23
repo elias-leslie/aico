@@ -46,11 +46,10 @@ Before deployment, provision the exchange root and the agent's writable `agent/`
 
 ```bash
 npm ci
-uv sync --frozen --python 3.13 --extra dev
 npm run check
 ```
 
-The npm gate runs lint, type checks, the TypeScript tests, the root-watch entry test, and build. Session lifecycle is verified in the Tether repo. Avoid broad process-name cleanup. The author also runs these checks through his workspace tool (`st check`).
+The npm gate runs lint, type checks, the TypeScript tests of the desktop, Tether and web workspaces, and the build. Session lifecycle is verified in the Tether repo. Avoid broad process-name cleanup. The author also runs these checks through his workspace tool (`st check`).
 
 ## Documentation
 
