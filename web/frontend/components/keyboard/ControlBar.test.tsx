@@ -47,7 +47,6 @@ function renderNativeControlBar() {
         onSend={onSend}
         onVoice={vi.fn()}
         onToggleMinimize={vi.fn()}
-        showShiftControl
       />
     </ModifierProvider>,
   )
@@ -102,9 +101,7 @@ describe('ControlBar', () => {
     const toolbox = screen.getByRole('button', { name: 'Show arrow keys' })
     expect(toolbox).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByRole('button', { name: '←' })).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole('button', { name: /shift/i }),
-    ).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Shift' })).toBeInTheDocument()
 
     fireEvent.click(toolbox)
     expect(
@@ -300,7 +297,7 @@ describe('ControlBar', () => {
     const onSend = vi.fn()
     render(
       <ModifierProvider>
-        <ControlBar onSend={onSend} onArrow={onArrow} showShiftControl />
+        <ControlBar onSend={onSend} onArrow={onArrow} />
       </ModifierProvider>,
     )
 

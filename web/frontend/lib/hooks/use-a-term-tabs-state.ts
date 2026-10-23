@@ -2,11 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ATermHandle, ConnectionStatus } from '@/components/ATerm'
-import type {
-  KeyboardSizePreset,
-  KeyboardSpacingPreset,
-  MobileKeyboardMode,
-} from '@/components/keyboard/types'
 import { getDefaultLayoutMode, type LayoutMode } from '@/lib/constants/a-term'
 import {
   findSessionByMode,
@@ -158,15 +153,6 @@ export function useATermTabsState({
   }, [activeSessionId, isDetachedWindow, scopedDetachedPanes, sessions])
   const { fontSize, setFontSize } = useATermSettings(activeSessionProjectId)
   const [showSettings, setShowSettings] = useState(false)
-  const [keyboardMode, setKeyboardMode] =
-    useLocalStorageState<MobileKeyboardMode>('a-term-keyboard-mode', 'native')
-  const [keyboardSize, setKeyboardSize] =
-    useLocalStorageState<KeyboardSizePreset>('a-term-keyboard-size', 'medium')
-  const [keyboardSpacing, setKeyboardSpacing] =
-    useLocalStorageState<KeyboardSpacingPreset>(
-      'a-term-keyboard-spacing',
-      'normal',
-    )
   const [storedSlotOrderIds, setStoredSlotOrderIds] = useLocalStorageState<
     string[]
   >(getScopedATermStorageKey('a-term-slot-order', effectiveStorageScopeId), [])
@@ -328,9 +314,6 @@ export function useATermTabsState({
   )
 
   const {
-    handleKeyboardModeChange,
-    handleKeyboardSizeChange,
-    handleKeyboardSpacingChange,
     handleStatusChange,
     handleKeyboardInput,
     handleComposeInput,
@@ -356,9 +339,6 @@ export function useATermTabsState({
     projectTabRefs,
     setATermStatuses,
     setLayoutMode,
-    setKeyboardMode,
-    setKeyboardSize,
-    setKeyboardSpacing,
     panes: visiblePanes,
     panesAtLimit: visiblePanesAtLimit,
     createProjectPane: createProjectPaneForWindow,
@@ -755,12 +735,6 @@ export function useATermTabsState({
     setFontSize,
     showSettings,
     setShowSettings,
-    keyboardMode,
-    keyboardSize,
-    keyboardSpacing,
-    handleKeyboardModeChange,
-    handleKeyboardSizeChange,
-    handleKeyboardSpacingChange,
     isMobile,
     showATermManager,
     setShowATermManager,

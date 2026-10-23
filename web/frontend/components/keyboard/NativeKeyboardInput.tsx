@@ -10,14 +10,7 @@ import {
   useSyncExternalStore,
 } from 'react'
 import { BOTTOM_OVERLAY_HEIGHT_VAR } from '../../lib/constants/a-term'
-import {
-  KEYBOARD_SPACING_METRICS,
-  type KeyboardSizePreset,
-  type KeyboardSpacingPreset,
-  keepKeyboardOpen,
-  NATIVE_INPUT_HEIGHTS,
-  remSize,
-} from './types'
+import { KEY_ROW_METRICS, keepKeyboardOpen, remSize } from './types'
 
 type ComposeAction = 'insert' | 'send'
 const drafts = new Map<string, string>()
@@ -44,12 +37,8 @@ interface NativeKeyboardInputProps {
     action: ComposeAction,
   ) => Promise<boolean>
   onFocusChange?: (focused: boolean) => void
-  keyboardSize?: KeyboardSizePreset
-  keyboardSpacing?: KeyboardSpacingPreset
   inputRef?: React.RefObject<HTMLInputElement | HTMLTextAreaElement | null>
   mobileOverlay?: boolean
-  visible?: boolean
-  onDraftPresenceChange?: (hasDraft: boolean) => void
   ctrlActive?: boolean
   onCtrlLetter?: (letter: string) => void
   onCtrlCancel?: () => void
@@ -86,12 +75,8 @@ export function NativeKeyboardInput({
   connected,
   onCommit,
   onFocusChange,
-  keyboardSize = 'medium',
-  keyboardSpacing = 'normal',
   inputRef,
   mobileOverlay = false,
-  visible = true,
-  onDraftPresenceChange,
   ctrlActive = false,
   onCtrlLetter,
   onCtrlCancel,
@@ -116,8 +101,7 @@ export function NativeKeyboardInput({
   const composingRef = useRef(false)
   const busyRef = useRef(false)
   const inputId = useId()
-  const spacing = KEYBOARD_SPACING_METRICS[keyboardSpacing]
-  const inputHeight = remSize(NATIVE_INPUT_HEIGHTS[keyboardSize])
+  const inputHeight = remSize(KEY_ROW_METRICS.composeHeight)
 
   useEffect(() => {
     if (!pendingForSession) setValue(readDraft(storageKey))
@@ -128,7 +112,7 @@ export function NativeKeyboardInput({
   // "Latest" pill) sit above it instead of under it.
   useLayoutEffect(() => {
     const overlay = overlayRef.current
-    if (!mobileOverlay || !visible || !overlay) return
+    if (!mobileOverlay || !overlay) return
     const root = document.documentElement
     const publish = () =>
       root.style.setProperty(
@@ -143,14 +127,10 @@ export function NativeKeyboardInput({
       observer?.disconnect()
       root.style.removeProperty(BOTTOM_OVERLAY_HEIGHT_VAR)
     }
-  }, [mobileOverlay, visible])
-
-  useEffect(() => {
-    onDraftPresenceChange?.(value.length > 0)
-  }, [onDraftPresenceChange, value])
+  }, [mobileOverlay])
 
   useLayoutEffect(() => {
-    if (!mobileOverlay || !visible) return
+    if (!mobileOverlay) return
     const field = resolvedRef.current
     if (!(field instanceof HTMLTextAreaElement)) return
 
@@ -164,7 +144,7 @@ export function NativeKeyboardInput({
       field.style.height = `${Math.min(field.scrollHeight, maxHeight)}px`
     }
     field.style.overflowY = field.scrollHeight > maxHeight ? 'auto' : 'hidden'
-  }, [mobileOverlay, resolvedRef, value, visible])
+  }, [mobileOverlay, resolvedRef, value])
 
   const commit = useCallback(
     async (action: ComposeAction) => {
@@ -241,10 +221,8 @@ export function NativeKeyboardInput({
     return (
       <div
         ref={overlayRef}
-        hidden={!visible}
         className="absolute bottom-full left-0 right-0 z-20 flex flex-col gap-1 border-t p-2"
         style={{
-          display: visible ? undefined : 'none',
           backgroundColor: 'var(--term-bg-surface)',
           borderColor: 'var(--term-border)',
         }}
@@ -299,7 +277,7 @@ export function NativeKeyboardInput({
               backgroundColor: 'var(--term-bg-elevated)',
               border: '1px solid var(--term-border)',
               color: 'var(--term-text-primary)',
-              borderRadius: spacing.keyRadius,
+              borderRadius: KEY_ROW_METRICS.keyRadius,
             }}
           />
           <button
@@ -347,8 +325,8 @@ export function NativeKeyboardInput({
     <div
       className="flex flex-col"
       style={{
-        gap: spacing.nativeInputGap,
-        padding: `0 ${spacing.controlPaddingX}px`,
+        gap: KEY_ROW_METRICS.composeGap,
+        padding: `0 ${KEY_ROW_METRICS.paddingX}px`,
         backgroundColor: 'var(--term-bg-surface)',
       }}
     >
@@ -397,7 +375,7 @@ export function NativeKeyboardInput({
             backgroundColor: 'var(--term-bg-elevated)',
             border: '1px solid var(--term-border)',
             color: 'var(--term-text-primary)',
-            borderRadius: spacing.keyRadius,
+            borderRadius: KEY_ROW_METRICS.keyRadius,
           }}
         />
         <button

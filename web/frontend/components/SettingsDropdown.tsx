@@ -6,14 +6,8 @@ import {
   type ATermFontSize,
 } from '@/lib/hooks/use-a-term-settings'
 import { useClickOutside } from '@/lib/hooks/use-click-outside'
-import type {
-  KeyboardSizePreset,
-  KeyboardSpacingPreset,
-  MobileKeyboardMode,
-} from './keyboard/types'
 import { AgentToolsSettings } from './settings/AgentToolsSettings'
 import { MemoryPolicySettings } from './settings/MemoryPolicySettings'
-import { SettingButtonGroup } from './settings/SettingButtonGroup'
 import { SettingSelect } from './settings/SettingSelect'
 import { SettingsButton } from './settings/SettingsButton'
 import { SettingsPanel } from './settings/SettingsPanel'
@@ -23,13 +17,6 @@ export interface SettingsDropdownProps {
   setFontSize: (size: ATermFontSize) => void
   showSettings: boolean
   setShowSettings: (show: boolean) => void
-  keyboardMode?: MobileKeyboardMode
-  setKeyboardMode?: (mode: MobileKeyboardMode) => void
-  keyboardSize?: KeyboardSizePreset
-  keyboardSpacing?: KeyboardSpacingPreset
-  setKeyboardSpacing?: (spacing: KeyboardSpacingPreset) => void
-  setKeyboardSize?: (size: KeyboardSizePreset) => void
-  isMobile?: boolean
   renderTrigger?: boolean
 }
 
@@ -38,13 +25,6 @@ export function SettingsDropdown({
   setFontSize,
   showSettings,
   setShowSettings,
-  keyboardMode,
-  setKeyboardMode,
-  keyboardSize,
-  keyboardSpacing,
-  setKeyboardSpacing,
-  setKeyboardSize,
-  isMobile,
   renderTrigger = true,
 }: SettingsDropdownProps) {
   const buttonRef = useRef<HTMLButtonElement>(null)
@@ -68,15 +48,6 @@ export function SettingsDropdown({
     label: `${size}px`,
   }))
 
-  const showKeyboardSettings =
-    isMobile &&
-    keyboardMode !== undefined &&
-    keyboardSize !== undefined &&
-    keyboardSpacing !== undefined &&
-    setKeyboardMode &&
-    setKeyboardSize &&
-    setKeyboardSpacing
-
   return (
     <div className={renderTrigger ? 'relative ml-2' : ''}>
       {renderTrigger && (
@@ -99,35 +70,6 @@ export function SettingsDropdown({
           onChange={(val) => setFontSize(val as ATermFontSize)}
           options={fontSizeOptions}
         />
-
-        {showKeyboardSettings && (
-          <>
-            <SettingButtonGroup
-              label="Keyboard Input"
-              value={keyboardMode}
-              options={['custom', 'native'] as const}
-              onChange={setKeyboardMode}
-            />
-            <SettingButtonGroup
-              label={
-                keyboardMode === 'native' ? 'Ribbon Size' : 'Keyboard Size'
-              }
-              value={keyboardSize}
-              options={['small', 'medium', 'large'] as const}
-              onChange={setKeyboardSize}
-            />
-            <SettingButtonGroup
-              label={
-                keyboardMode === 'native'
-                  ? 'Ribbon Spacing'
-                  : 'Keyboard Spacing'
-              }
-              value={keyboardSpacing}
-              options={['tight', 'normal', 'roomy'] as const}
-              onChange={setKeyboardSpacing}
-            />
-          </>
-        )}
 
         <AgentToolsSettings />
 

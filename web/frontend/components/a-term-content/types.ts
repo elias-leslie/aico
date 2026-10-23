@@ -1,10 +1,5 @@
 import type { RefObject } from 'react'
 import type { ATermHandle, ConnectionStatus } from '@/components/a-term.types'
-import type {
-  KeyboardSizePreset,
-  KeyboardSpacingPreset,
-  MobileKeyboardMode,
-} from '@/components/keyboard/types'
 import type { LayoutMode } from '@/lib/constants/a-term'
 import type { ATermFontSize } from '@/lib/hooks/use-a-term-settings'
 import type { ATermSlot, PaneSlot } from '@/lib/utils/slot'
@@ -20,12 +15,6 @@ export interface ATermContentProps {
   showSettings: boolean
   setFontSize: (size: ATermFontSize) => void
   setShowSettings: (show: boolean) => void
-  keyboardMode?: MobileKeyboardMode
-  keyboardSize?: KeyboardSizePreset
-  keyboardSpacing?: KeyboardSpacingPreset
-  handleKeyboardModeChange: (mode: MobileKeyboardMode) => void
-  handleKeyboardSizeChange: (size: KeyboardSizePreset) => void
-  handleKeyboardSpacingChange: (spacing: KeyboardSpacingPreset) => void
   isMobile?: boolean
 
   // Handlers

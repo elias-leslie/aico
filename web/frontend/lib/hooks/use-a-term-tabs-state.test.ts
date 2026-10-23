@@ -156,9 +156,6 @@ describe('useATermTabsState', () => {
     })
 
     mockUseATermHandlers.mockReturnValue({
-      handleKeyboardModeChange: vi.fn(),
-      handleKeyboardSizeChange: vi.fn(),
-      handleKeyboardSpacingChange: vi.fn(),
       handleStatusChange: vi.fn(),
       handleKeyboardInput: vi.fn(),
       handleReconnect: vi.fn(),
@@ -1178,9 +1175,6 @@ describe('useATermTabsState', () => {
       }),
     )
     mockUseATermHandlers.mockReturnValue({
-      handleKeyboardModeChange: vi.fn(),
-      handleKeyboardSizeChange: vi.fn(),
-      handleKeyboardSpacingChange: vi.fn(),
       handleStatusChange: vi.fn(),
       handleKeyboardInput: vi.fn(),
       handleReconnect: vi.fn(),

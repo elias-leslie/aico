@@ -44,11 +44,11 @@ On a phone, tap Talk to start dictating. Words appear while you speak, and pause
 
 **`scrollback`** — Each pane is attached in tmux control mode, which seeds the pane's history into xterm.js. Scroll up and the view holds still while output keeps arriving; a Latest button returns you to the bottom.
 
-**`mobile workspace controls`** — On-screen keyboard with arrow keys, Ctrl, Esc, and modifier support for touch devices, visible-bottom-row viewport handling, plus a touch-friendly session switcher that can jump into any attached or detached session from your phone.
+**`mobile workspace controls`** — On a phone you type with the phone's own keyboard into a compose box that stays above a key row (Tab, Shift, voice, Esc, Ctrl, arrow keys). The first key shows or hides the phone keyboard. The visible bottom row stays in view as the keyboard opens, and a touch-friendly session switcher jumps into any session.
 
 Expand the arrow controls to find Enter, which activates a TUI selection without typing a draft. Terminal keys keep the phone keyboard and arrow controls open. With a draft focused, Left and Right move its caret; Up and Down navigate the terminal. Send submits the draft, while the toolbox's Enter sends only the Enter key and leaves the draft intact.
 
-**`terminal themes and tuning`** — Five built-in xterm color palettes (Phosphor, Dracula, Monokai, Solarized Dark, Tokyo Night) plus a system/light/dark app theme that respects `prefers-color-scheme`. Settings also configure font family, font size, cursor style, and cursor blink — all persisted across sessions.
+**`text size`** — Settings change the terminal text size, remembered per project in this browser.
 
 **`in-terminal search`** — Search the live buffer and scrollback for a string and step through matches, without leaving the pane.
 

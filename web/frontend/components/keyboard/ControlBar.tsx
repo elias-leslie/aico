@@ -20,11 +20,7 @@ import {
 import { useModifiers } from './ModifierContext'
 import {
   type ATermInputHandler,
-  CONTROL_BAR_ARROW_SIZES,
-  CONTROL_BAR_BUTTON_SIZES,
-  KEYBOARD_SPACING_METRICS,
-  type KeyboardSizePreset,
-  type KeyboardSpacingPreset,
+  KEY_ROW_METRICS,
   keepKeyboardOpen,
   remSize,
 } from './types'
@@ -48,12 +44,6 @@ interface ControlBarProps {
   activeMode?: string
   connectionStatus?: ConnectionStatus
   onReconnect?: () => void
-  keyboardSize?: KeyboardSizePreset
-  keyboardSpacing?: KeyboardSpacingPreset
-  collapseTarget?: 'keyboard' | 'ribbon'
-  showShiftControl?: boolean
-  hasUnsentDraft?: boolean
-  closeToolboxWhenMinimized?: boolean
   onBeforeTerminalAction?: () => boolean
 }
 
@@ -69,12 +59,6 @@ export function ControlBar({
   activeMode,
   connectionStatus,
   onReconnect,
-  keyboardSize = 'medium',
-  keyboardSpacing = 'normal',
-  collapseTarget = 'keyboard',
-  showShiftControl = false,
-  hasUnsentDraft = false,
-  closeToolboxWhenMinimized = false,
   onBeforeTerminalAction,
 }: ControlBarProps) {
   const { modifiers, resetModifiers, toggleModifier } = useModifiers()
@@ -83,10 +67,6 @@ export function ControlBar({
   const [modelOptions, setModelOptions] = useState<ClaudeModelOption[]>([])
   const pickerRef = useRef<HTMLDivElement>(null)
   const isClaudeMode = activeMode === 'claude-code'
-
-  useEffect(() => {
-    if (minimized && closeToolboxWhenMinimized) setShowToolbox(false)
-  }, [closeToolboxWhenMinimized, minimized])
 
   useEffect(() => {
     if (!isClaudeMode) {
@@ -191,18 +171,15 @@ export function ControlBar({
     color: 'var(--term-text-muted)',
     border: '1px solid var(--term-border)',
   }
-  const spacing = KEYBOARD_SPACING_METRICS[keyboardSpacing]
   // Sized in rem so the phone's text-scaling setting scales the bar with the
   // keyboard it sits against.
-  const controlButtonSize = remSize(CONTROL_BAR_BUTTON_SIZES[keyboardSize])
-  const arrowButtonSize = remSize(CONTROL_BAR_ARROW_SIZES[keyboardSize])
-  const iconSize = remSize(
-    keyboardSize === 'small' ? 18 : keyboardSize === 'large' ? 22 : 20,
-  )
+  const controlButtonSize = remSize(KEY_ROW_METRICS.buttonSize)
+  const arrowButtonSize = remSize(KEY_ROW_METRICS.arrowSize)
+  const iconSize = remSize(KEY_ROW_METRICS.iconSize)
   const topRowButtonStyle = {
     height: controlButtonSize,
-    minWidth: remSize(showShiftControl ? 32 : 36),
-    borderRadius: spacing.keyRadius,
+    minWidth: remSize(32),
+    borderRadius: KEY_ROW_METRICS.keyRadius,
   }
 
   const bannerState = getMobileATermBannerState({
@@ -249,8 +226,8 @@ export function ControlBar({
       style={{
         backgroundColor: 'var(--term-bg-surface)',
         borderTop: '1px solid var(--term-border)',
-        gap: spacing.controlRowGap,
-        padding: `${spacing.controlPaddingY}px ${spacing.controlPaddingX}px`,
+        gap: KEY_ROW_METRICS.rowGap,
+        padding: `${KEY_ROW_METRICS.paddingY}px ${KEY_ROW_METRICS.paddingX}px`,
       }}
     >
       {showToolbox && (
@@ -258,7 +235,7 @@ export function ControlBar({
           id="control-bar-arrows"
           aria-label="Arrow keys"
           className="flex items-center justify-center"
-          style={{ gap: spacing.arrowGroupGap }}
+          style={{ gap: KEY_ROW_METRICS.arrowGroupGap }}
         >
           <KeyboardKey
             label="←"
@@ -316,7 +293,7 @@ export function ControlBar({
       {/* Persistent utility row */}
       <div
         className="flex min-w-0 items-center justify-between"
-        style={{ gap: spacing.keyGap }}
+        style={{ gap: KEY_ROW_METRICS.keyGap }}
       >
         {/* Keyboard toggle — far left */}
         {onToggleMinimize && (
@@ -336,7 +313,7 @@ export function ControlBar({
               border: `1px solid ${minimized ? 'var(--term-accent)' : 'var(--term-border)'}`,
               boxShadow: minimized ? '0 0 8px var(--term-accent-glow)' : 'none',
             }}
-            aria-label={`${minimized ? 'Show' : 'Hide'} ${collapseTarget}${hasUnsentDraft ? ', unsent draft' : ''}`}
+            aria-label={minimized ? 'Show keyboard' : 'Hide keyboard'}
           >
             {minimized ? (
               <ChevronUp
@@ -347,13 +324,6 @@ export function ControlBar({
               <ChevronDown
                 className="shrink-0"
                 style={{ width: iconSize, height: iconSize }}
-              />
-            )}
-            {hasUnsentDraft && (
-              <span
-                aria-hidden="true"
-                className="absolute right-1 top-1 size-1.5 rounded-full"
-                style={{ backgroundColor: 'var(--term-accent)' }}
               />
             )}
           </button>
@@ -373,31 +343,29 @@ export function ControlBar({
           TAB
         </button>
 
-        {showShiftControl && (
-          <button
-            type="button"
-            onPointerDown={keepKeyboardOpen}
-            onClick={() => toggleModifier('shift')}
-            aria-label="Shift"
-            aria-pressed={modifiers.shift !== 'off'}
-            title="Shift for next key; double tap to lock"
-            className="min-w-0 flex-1 text-lg font-medium transition-all duration-150 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-            style={{
-              ...topRowButtonStyle,
-              backgroundColor:
-                modifiers.shift !== 'off'
-                  ? 'var(--term-accent)'
-                  : 'var(--term-bg-elevated)',
-              color:
-                modifiers.shift !== 'off'
-                  ? 'var(--term-accent-foreground)'
-                  : 'var(--term-text-muted)',
-              border: `1px solid ${modifiers.shift !== 'off' ? 'var(--term-accent)' : 'var(--term-border)'}`,
-            }}
-          >
-            ⇧
-          </button>
-        )}
+        <button
+          type="button"
+          onPointerDown={keepKeyboardOpen}
+          onClick={() => toggleModifier('shift')}
+          aria-label="Shift"
+          aria-pressed={modifiers.shift !== 'off'}
+          title="Shift for next key; double tap to lock"
+          className="min-w-0 flex-1 text-lg font-medium transition-all duration-150 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+          style={{
+            ...topRowButtonStyle,
+            backgroundColor:
+              modifiers.shift !== 'off'
+                ? 'var(--term-accent)'
+                : 'var(--term-bg-elevated)',
+            color:
+              modifiers.shift !== 'off'
+                ? 'var(--term-accent-foreground)'
+                : 'var(--term-text-muted)',
+            border: `1px solid ${modifiers.shift !== 'off' ? 'var(--term-accent)' : 'var(--term-border)'}`,
+          }}
+        >
+          ⇧
+        </button>
 
         <button
           type="button"
@@ -477,8 +445,8 @@ export function ControlBar({
               <Sparkles
                 className="shrink-0"
                 style={{
-                  width: remSize(keyboardSize === 'small' ? 14 : 16),
-                  height: remSize(keyboardSize === 'small' ? 14 : 16),
+                  width: remSize(16),
+                  height: remSize(16),
                 }}
               />
             </button>

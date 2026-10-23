@@ -1,23 +1,13 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { flushSync } from 'react-dom'
-import { useLocalStorageState } from '@/lib/hooks/use-local-storage-state'
 import type { ConnectionStatus } from '../ATerm'
 import { ControlBar } from './ControlBar'
 import { moveComposeCaret } from './composeNavigation'
-import { FullKeyboard } from './FullKeyboard'
 import type { ArrowDirection } from './keyMappings'
 import { ModifierProvider } from './ModifierContext'
 import { isComposePending, NativeKeyboardInput } from './NativeKeyboardInput'
-import type {
-  ATermInputHandler,
-  KeyboardSizePreset,
-  KeyboardSpacingPreset,
-  MobileKeyboardMode,
-} from './types'
-
-const MINIMIZED_STORAGE_KEY = 'a-term-keyboard-minimized'
+import type { ATermInputHandler } from './types'
 
 interface MobileKeyboardProps {
   onSend: ATermInputHandler
@@ -30,14 +20,15 @@ interface MobileKeyboardProps {
   ) => Promise<boolean>
   connectionStatus?: ConnectionStatus
   onReconnect?: () => void
-  keyboardSize?: KeyboardSizePreset
-  keyboardSpacing?: KeyboardSpacingPreset
-  keyboardMode?: MobileKeyboardMode
   onVoice?: () => void
   voiceActive?: boolean
   activeMode?: string
 }
 
+/**
+ * The phone's input area: the compose box above the key row. Typing uses the
+ * phone's own keyboard; the key row's first button shows or hides it.
+ */
 export function MobileKeyboard({
   onSend,
   sessionId,
@@ -45,75 +36,35 @@ export function MobileKeyboard({
   onCompose,
   connectionStatus,
   onReconnect,
-  keyboardSize = 'medium',
-  keyboardSpacing = 'normal',
-  keyboardMode = 'custom',
   onVoice,
   voiceActive = false,
   activeMode,
 }: MobileKeyboardProps) {
   const [ctrlActive, setCtrlActive] = useState(false)
   const [composeFocused, setComposeFocused] = useState(false)
-  const [nativeEditingOpen, setNativeEditingOpen] = useState(false)
-  const [hasNativeDraft, setHasNativeDraft] = useState(false)
-  const [minimized, setMinimized] = useLocalStorageState(
-    MINIMIZED_STORAGE_KEY,
-    false,
-  )
-  const nativeInputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null)
+  const composeRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null)
   const lastSessionIdentityRef = useRef<string | null>(null)
   const viewportBeforeFocusRef = useRef<number | null>(null)
   const keyboardSeenRef = useRef(false)
-  const isNativeMode = keyboardMode === 'native'
   const sessionIdentity = `${storageScopeId ?? ''}:${sessionId ?? ''}`
 
-  const handleToggleMinimize = useCallback(() => {
-    setMinimized(!minimized)
-  }, [minimized, setMinimized])
-  const dismissNativeEditing = useCallback(() => {
-    if (isComposePending(storageScopeId, sessionId)) return false
-    if (!nativeEditingOpen) return true
-    nativeInputRef.current?.blur()
-    flushSync(() => setNativeEditingOpen(false))
-    return true
-  }, [nativeEditingOpen, sessionId, storageScopeId])
-
-  const handleToggleNativeEditing = useCallback(() => {
-    if (nativeEditingOpen) {
-      dismissNativeEditing()
+  const handleToggleKeyboard = useCallback(() => {
+    if (composeFocused) {
+      if (isComposePending(storageScopeId, sessionId)) return
+      composeRef.current?.blur()
       return
     }
     viewportBeforeFocusRef.current =
       window.visualViewport?.height ?? window.innerHeight
     keyboardSeenRef.current = false
     // iOS requires focus to remain in the same user gesture as the tap.
-    flushSync(() => setNativeEditingOpen(true))
-    nativeInputRef.current?.focus({ preventScroll: true })
-  }, [nativeEditingOpen, dismissNativeEditing])
-
-  // Wrapped onSend that handles CTRL modifier
-  const handleSend = useCallback(
-    (key: string) => {
-      if (isComposePending(storageScopeId, sessionId)) return
-      if (ctrlActive && key.length === 1) {
-        // Send Ctrl+key sequence (ASCII control codes)
-        const char = key.toLowerCase()
-        if (char >= 'a' && char <= 'z') {
-          const ctrlCode = char.charCodeAt(0) - 96 // a=1, b=2, ..., z=26
-          onSend(String.fromCharCode(ctrlCode))
-          setCtrlActive(false)
-          return
-        }
-      }
-      onSend(key)
-    },
-    [ctrlActive, onSend, sessionId, storageScopeId],
-  )
+    composeRef.current?.focus({ preventScroll: true })
+  }, [composeFocused, sessionId, storageScopeId])
 
   const handleCtrlToggle = useCallback(() => {
     setCtrlActive((prev) => !prev)
   }, [])
-  const handleNativeCtrlLetter = useCallback(
+  const handleCtrlLetter = useCallback(
     (letter: string) => {
       if (!ctrlActive || isComposePending(storageScopeId, sessionId)) return
       onSend(String.fromCharCode(letter.toLowerCase().charCodeAt(0) - 96))
@@ -135,7 +86,7 @@ export function MobileKeyboard({
       direction: ArrowDirection,
       modifiers: { shift: boolean; ctrl: boolean; alt: boolean },
     ) => {
-      const input = nativeInputRef.current
+      const input = composeRef.current
       if (!composeFocused || !input || modifiers.ctrl || modifiers.alt)
         return false
       return moveComposeCaret(input, direction, modifiers.shift)
@@ -144,37 +95,36 @@ export function MobileKeyboard({
   )
 
   useEffect(() => {
-    if (isNativeMode && !voiceActive) return
-    nativeInputRef.current?.blur()
-    setNativeEditingOpen(false)
-  }, [isNativeMode, voiceActive])
+    if (voiceActive) composeRef.current?.blur()
+  }, [voiceActive])
 
   useEffect(() => {
     if (lastSessionIdentityRef.current === sessionIdentity) return
     lastSessionIdentityRef.current = sessionIdentity
-    nativeInputRef.current?.blur()
-    setNativeEditingOpen(false)
+    composeRef.current?.blur()
     setComposeFocused(false)
   }, [sessionIdentity])
 
+  // Closing the phone's keyboard (back gesture, keyboard's own button) leaves
+  // the compose box focused; blur it so the key row offers to show it again.
   useEffect(() => {
-    if (!isNativeMode || !nativeEditingOpen) return
+    if (!composeFocused) return
     const viewport = window.visualViewport
-    const before = viewportBeforeFocusRef.current
+    const before =
+      viewportBeforeFocusRef.current ?? viewport?.height ?? window.innerHeight
     if (!viewport || !before) return
     const handleViewportResize = () => {
       const shrink = before - viewport.height
       // A software keyboard takes a substantial part of the phone viewport;
-      // small browser-chrome changes should not dismiss the editor.
+      // small browser-chrome changes should not count as closing it.
       if (shrink > before * 0.2) keyboardSeenRef.current = true
       if (keyboardSeenRef.current && shrink < before * 0.08) {
-        nativeInputRef.current?.blur()
-        setNativeEditingOpen(false)
+        composeRef.current?.blur()
       }
     }
     viewport.addEventListener('resize', handleViewportResize)
     return () => viewport.removeEventListener('resize', handleViewportResize)
-  }, [isNativeMode, nativeEditingOpen])
+  }, [composeFocused])
 
   return (
     <ModifierProvider>
@@ -184,7 +134,7 @@ export function MobileKeyboard({
           paddingBottom: voiceActive ? 0 : 'env(safe-area-inset-bottom, 0px)',
         }}
       >
-        {isNativeMode && sessionId && !voiceActive && (
+        {sessionId && !voiceActive && (
           <NativeKeyboardInput
             key={`${storageScopeId ?? ''}:${sessionId}`}
             sessionId={sessionId}
@@ -193,16 +143,19 @@ export function MobileKeyboard({
             onCommit={onCompose}
             onFocusChange={(focused) => {
               setComposeFocused(focused)
-              if (!focused) setNativeEditingOpen(false)
+              if (focused && viewportBeforeFocusRef.current === null) {
+                viewportBeforeFocusRef.current =
+                  window.visualViewport?.height ?? window.innerHeight
+              }
+              if (!focused) {
+                viewportBeforeFocusRef.current = null
+                keyboardSeenRef.current = false
+              }
             }}
-            keyboardSize={keyboardSize}
-            keyboardSpacing={keyboardSpacing}
-            inputRef={nativeInputRef}
+            inputRef={composeRef}
             mobileOverlay
-            visible={nativeEditingOpen}
-            onDraftPresenceChange={setHasNativeDraft}
             ctrlActive={ctrlActive}
-            onCtrlLetter={handleNativeCtrlLetter}
+            onCtrlLetter={handleCtrlLetter}
             onCtrlCancel={() => setCtrlActive(false)}
           />
         )}
@@ -214,31 +167,14 @@ export function MobileKeyboard({
           }
           ctrlActive={ctrlActive}
           onCtrlToggle={handleCtrlToggle}
-          minimized={isNativeMode ? !nativeEditingOpen : minimized}
-          onToggleMinimize={
-            isNativeMode ? handleToggleNativeEditing : handleToggleMinimize
-          }
+          minimized={!composeFocused}
+          onToggleMinimize={handleToggleKeyboard}
           onVoice={onVoice ? handleVoice : undefined}
           voiceActive={voiceActive}
           activeMode={activeMode}
           connectionStatus={connectionStatus}
           onReconnect={onReconnect}
-          keyboardSize={keyboardSize}
-          keyboardSpacing={keyboardSpacing}
-          collapseTarget="keyboard"
-          showShiftControl={isNativeMode}
-          hasUnsentDraft={isNativeMode && hasNativeDraft}
-          closeToolboxWhenMinimized={isNativeMode}
         />
-
-        {/* Full keyboard - hidden when minimized or voice is active */}
-        {!isNativeMode && !minimized && !voiceActive && (
-          <FullKeyboard
-            onSend={handleSend}
-            keyboardSize={keyboardSize}
-            keyboardSpacing={keyboardSpacing}
-          />
-        )}
       </div>
     </ModifierProvider>
   )

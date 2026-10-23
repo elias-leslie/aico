@@ -19,12 +19,6 @@ export function ATermContent({
   showSettings,
   setFontSize,
   setShowSettings,
-  keyboardMode,
-  keyboardSize,
-  keyboardSpacing,
-  handleKeyboardModeChange,
-  handleKeyboardSizeChange,
-  handleKeyboardSpacingChange,
   isMobile,
   setATermRef,
   handleStatusChange,
@@ -90,13 +84,6 @@ export function ATermContent({
         setFontSize={setFontSize}
         showSettings={showSettings}
         setShowSettings={setShowSettings}
-        keyboardMode={keyboardMode}
-        keyboardSize={keyboardSize}
-        keyboardSpacing={keyboardSpacing}
-        setKeyboardMode={handleKeyboardModeChange}
-        setKeyboardSize={handleKeyboardSizeChange}
-        setKeyboardSpacing={handleKeyboardSpacingChange}
-        isMobile={isMobile}
         renderTrigger={false}
       />
 
@@ -149,9 +136,6 @@ export function ATermContent({
         handleKeyboardInput={handleKeyboardInput}
         handleComposeInput={handleComposeInput}
         handleReconnect={handleReconnect}
-        keyboardMode={keyboardMode}
-        keyboardSize={keyboardSize}
-        keyboardSpacing={keyboardSpacing}
         isVoiceSupported={isVoiceSupported}
         handleVoiceOpen={handleVoiceOpen}
         showVoice={showVoice}

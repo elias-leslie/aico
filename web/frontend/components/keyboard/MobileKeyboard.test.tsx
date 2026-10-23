@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import type { RefObject } from 'react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { MobileKeyboard } from './MobileKeyboard'
 
 vi.mock('./ControlBar', () => ({
@@ -17,9 +17,12 @@ vi.mock('./ControlBar', () => ({
     ) => boolean
   }) => (
     <div>
-      <span>{minimized ? 'minimized' : 'expanded'}</span>
-      <button onClick={onToggleMinimize}>toggle minimize</button>
+      <span>{minimized ? 'keyboard hidden' : 'keyboard shown'}</span>
+      <button type="button" onClick={onToggleMinimize}>
+        toggle keyboard
+      </button>
       <button
+        type="button"
         onClick={() =>
           onArrow?.('left', { shift: true, ctrl: false, alt: false })
         }
@@ -30,11 +33,8 @@ vi.mock('./ControlBar', () => ({
   ),
 }))
 
-vi.mock('./FullKeyboard', () => ({
-  FullKeyboard: () => <div data-testid="full-keyboard">keyboard</div>,
-}))
-
 vi.mock('./NativeKeyboardInput', () => ({
+  isComposePending: () => false,
   NativeKeyboardInput: ({
     inputRef,
     onFocusChange,
@@ -43,7 +43,7 @@ vi.mock('./NativeKeyboardInput', () => ({
     onFocusChange: (focused: boolean) => void
   }) => (
     <input
-      data-testid="native-keyboard-input"
+      data-testid="compose"
       ref={inputRef}
       onFocus={() => onFocusChange(true)}
       onBlur={() => onFocusChange(false)}
@@ -56,89 +56,31 @@ describe('MobileKeyboard', () => {
     sessionId: 'one',
     onCompose: vi.fn().mockResolvedValue(true),
   }
-  beforeEach(() => {
-    window.localStorage.clear()
-  })
 
-  it('hydrates legacy minimized state from storage', () => {
-    window.localStorage.setItem('a-term-keyboard-minimized', 'true')
-
+  it('shows the compose box with the phone keyboard hidden at first', () => {
     render(<MobileKeyboard onSend={vi.fn()} {...composeProps} />)
 
-    expect(screen.getByText('minimized')).toBeInTheDocument()
-    expect(screen.queryByTestId('full-keyboard')).not.toBeInTheDocument()
+    expect(screen.getByTestId('compose')).toBeInTheDocument()
+    expect(screen.getByText('keyboard hidden')).toBeInTheDocument()
   })
 
-  it('persists minimize toggles through the shared storage hook', () => {
+  it('shows and hides the phone keyboard by focusing the compose box', () => {
     render(<MobileKeyboard onSend={vi.fn()} {...composeProps} />)
+    const toggle = screen.getByRole('button', { name: 'toggle keyboard' })
 
-    fireEvent.click(screen.getByRole('button', { name: 'toggle minimize' }))
+    fireEvent.click(toggle)
+    expect(screen.getByTestId('compose')).toHaveFocus()
+    expect(screen.getByText('keyboard shown')).toBeInTheDocument()
 
-    expect(screen.getByText('minimized')).toBeInTheDocument()
-    expect(window.localStorage.getItem('a-term-keyboard-minimized')).toBe(
-      'true',
-    )
-  })
-
-  it('renders native ribbon input instead of the custom keyboard in native mode', () => {
-    render(
-      <MobileKeyboard
-        onSend={vi.fn()}
-        keyboardMode="native"
-        {...composeProps}
-      />,
-    )
-
-    expect(screen.getByTestId('native-keyboard-input')).toBeInTheDocument()
-    expect(screen.queryByTestId('full-keyboard')).not.toBeInTheDocument()
-  })
-
-  it('keeps custom typing at the terminal without a separate compose input', () => {
-    render(<MobileKeyboard onSend={vi.fn()} {...composeProps} />)
-
-    expect(screen.getByTestId('full-keyboard')).toBeInTheDocument()
-    expect(
-      screen.queryByTestId('native-keyboard-input'),
-    ).not.toBeInTheDocument()
-  })
-
-  it('shows custom keys after leaving a focused native input', () => {
-    const onSend = vi.fn()
-    const { rerender } = render(
-      <MobileKeyboard
-        onSend={onSend}
-        keyboardMode="native"
-        {...composeProps}
-      />,
-    )
-    fireEvent.focus(screen.getByTestId('native-keyboard-input'))
-
-    rerender(
-      <MobileKeyboard
-        onSend={onSend}
-        keyboardMode="custom"
-        {...composeProps}
-      />,
-    )
-
-    expect(screen.getByTestId('full-keyboard')).toBeInTheDocument()
-    expect(
-      screen.queryByTestId('native-keyboard-input'),
-    ).not.toBeInTheDocument()
+    fireEvent.click(toggle)
+    expect(screen.getByTestId('compose')).not.toHaveFocus()
+    expect(screen.getByText('keyboard hidden')).toBeInTheDocument()
   })
 
   it('moves the compose selection when Shift+Left is tapped', () => {
     const onSend = vi.fn()
-    render(
-      <MobileKeyboard
-        onSend={onSend}
-        keyboardMode="native"
-        {...composeProps}
-      />,
-    )
-    const input = screen.getByTestId(
-      'native-keyboard-input',
-    ) as HTMLInputElement
+    render(<MobileKeyboard onSend={onSend} {...composeProps} />)
+    const input = screen.getByTestId('compose') as HTMLInputElement
     fireEvent.focus(input)
     fireEvent.change(input, { target: { value: 'answer' } })
     input.setSelectionRange(6, 6)
@@ -149,11 +91,12 @@ describe('MobileKeyboard', () => {
     expect(onSend).not.toHaveBeenCalled()
   })
 
-  it('lets the voice panel own bottom safe-area padding while voice is active', () => {
+  it('hides the compose box and lets the voice panel own bottom padding while voice is active', () => {
     const { container } = render(
       <MobileKeyboard onSend={vi.fn()} voiceActive={true} {...composeProps} />,
     )
 
+    expect(screen.queryByTestId('compose')).not.toBeInTheDocument()
     expect((container.firstChild as HTMLElement).style.paddingBottom).toBe(
       '0px',
     )

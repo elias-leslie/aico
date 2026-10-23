@@ -24,7 +24,7 @@ describe('NativeKeyboardInput', () => {
     expect(container.firstElementChild).toHaveClass('absolute', 'bottom-full')
   })
 
-  it('publishes its height while open so floating pane controls can clear it', () => {
+  it('publishes its height while shown so floating pane controls can clear it', () => {
     const offsetHeight = vi
       .spyOn(HTMLElement.prototype, 'offsetHeight', 'get')
       .mockReturnValue(64)
@@ -35,22 +35,13 @@ describe('NativeKeyboardInput', () => {
           sessionId="mobile-height"
           connected
           mobileOverlay
-          visible
           onCommit={vi.fn().mockResolvedValue(true)}
         />,
       )
       expect(root.style.getPropertyValue(BOTTOM_OVERLAY_HEIGHT_VAR)).toBe(
         '64px',
       )
-      view.rerender(
-        <NativeKeyboardInput
-          sessionId="mobile-height"
-          connected
-          mobileOverlay
-          visible={false}
-          onCommit={vi.fn().mockResolvedValue(true)}
-        />,
-      )
+      view.unmount()
       expect(root.style.getPropertyValue(BOTTOM_OVERLAY_HEIGHT_VAR)).toBe('')
     } finally {
       offsetHeight.mockRestore()
@@ -83,44 +74,26 @@ describe('NativeKeyboardInput', () => {
     }
   })
 
-  it('hides and reopens the overlay without losing its draft', () => {
-    const onDraftPresenceChange = vi.fn()
+  it('keeps the draft when the compose box is shown again', () => {
     const onCommit = vi.fn().mockResolvedValue(true)
-    const { rerender, container } = render(
+    const first = render(
       <NativeKeyboardInput
         sessionId="mobile-hidden"
         connected
         mobileOverlay
-        visible
         onCommit={onCommit}
-        onDraftPresenceChange={onDraftPresenceChange}
       />,
     )
-    expect(onDraftPresenceChange).toHaveBeenLastCalledWith(false)
     fireEvent.change(screen.getByRole('textbox', { name: 'Compose' }), {
       target: { value: 'saved draft' },
     })
-    expect(onDraftPresenceChange).toHaveBeenLastCalledWith(true)
-    rerender(
+    first.unmount()
+    render(
       <NativeKeyboardInput
         sessionId="mobile-hidden"
         connected
         mobileOverlay
-        visible={false}
         onCommit={onCommit}
-        onDraftPresenceChange={onDraftPresenceChange}
-      />,
-    )
-    expect(container.firstElementChild).toHaveAttribute('hidden')
-    expect(screen.queryByRole('textbox', { name: 'Compose' })).toBeNull()
-    rerender(
-      <NativeKeyboardInput
-        sessionId="mobile-hidden"
-        connected
-        mobileOverlay
-        visible
-        onCommit={onCommit}
-        onDraftPresenceChange={onDraftPresenceChange}
       />,
     )
     expect(screen.getByRole('textbox', { name: 'Compose' })).toHaveValue(
@@ -130,14 +103,12 @@ describe('NativeKeyboardInput', () => {
 
   it('sends the current DOM value on deliberate Enter and ignores IME Enter', async () => {
     const onCommit = vi.fn().mockResolvedValue(true)
-    const onDraftPresenceChange = vi.fn()
     render(
       <NativeKeyboardInput
         sessionId="mobile-enter"
         connected
         mobileOverlay
         onCommit={onCommit}
-        onDraftPresenceChange={onDraftPresenceChange}
       />,
     )
     const field = screen.getByRole('textbox', {
@@ -162,9 +133,6 @@ describe('NativeKeyboardInput', () => {
       ),
     )
     expect(field).toHaveValue('')
-    await waitFor(() =>
-      expect(onDraftPresenceChange).toHaveBeenLastCalledWith(false),
-    )
   })
 
   it('commits once for repeated mobile submission and retains a failed draft', async () => {

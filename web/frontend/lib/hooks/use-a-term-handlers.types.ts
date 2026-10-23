@@ -1,9 +1,4 @@
 import type { ATermHandle, ConnectionStatus } from '@/components/ATerm'
-import type {
-  KeyboardSizePreset,
-  KeyboardSpacingPreset,
-  MobileKeyboardMode,
-} from '@/components/keyboard/types'
 import type { LayoutMode } from '@/lib/constants/a-term'
 import type { ATermPane, PanePlacementOptions } from './use-a-term-panes'
 import type { ATermSession, useATermSessions } from './use-a-term-sessions'
@@ -18,9 +13,6 @@ export interface UseATermHandlersProps {
     React.SetStateAction<Map<string, ConnectionStatus>>
   >
   setLayoutMode: (mode: LayoutMode) => void
-  setKeyboardMode: (mode: MobileKeyboardMode) => void
-  setKeyboardSize: (size: KeyboardSizePreset) => void
-  setKeyboardSpacing: (spacing: KeyboardSpacingPreset) => void
   panes: ATermPane[]
   panesAtLimit: boolean
   createProjectPane: (
@@ -40,9 +32,6 @@ export interface UseATermHandlersProps {
 }
 
 export interface UseATermHandlersReturn {
-  handleKeyboardModeChange: (mode: MobileKeyboardMode) => void
-  handleKeyboardSizeChange: (size: KeyboardSizePreset) => void
-  handleKeyboardSpacingChange: (spacing: KeyboardSpacingPreset) => void
   handleStatusChange: (sessionId: string, status: ConnectionStatus) => void
   handleKeyboardInput: (data: string) => void
   handleComposeInput: (
