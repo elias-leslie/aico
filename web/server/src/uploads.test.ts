@@ -36,7 +36,7 @@ describe('detectMimeType', () => {
   })
 
   it('shows paths under home as ~/…', () => {
-    expect(shellPath('/home/me/a-term-uploads/x.png', '/home/me')).toBe('~/a-term-uploads/x.png')
+    expect(shellPath('/home/me/aico-uploads/x.png', '/home/me')).toBe('~/aico-uploads/x.png')
     expect(shellPath('/srv/uploads/x.png', '/home/me')).toBe('/srv/uploads/x.png')
   })
 

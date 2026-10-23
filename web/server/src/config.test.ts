@@ -62,7 +62,7 @@ describe('loadConfig: uploads, shares and maintenance', () => {
   it('defaults to the Python backend’s settings', () => {
     const config = loadConfig({ HOME: '/home/u', XDG_RUNTIME_DIR: '/run/user/7' }, ID)
     expect(config.uploads).toEqual({
-      dir: '/home/u/a-term-uploads',
+      dir: '/home/u/aico-uploads',
       maxBytes: 10 * 1024 * 1024,
       maxAgeMs: 86_400_000,
     })

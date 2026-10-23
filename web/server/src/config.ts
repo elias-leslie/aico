@@ -62,8 +62,9 @@ interface Identity {
   artifacts?: { upload_dir_name?: unknown }
 }
 
-// The Python backend's settings names and defaults, so its EnvironmentFile keeps working.
-const DEFAULT_UPLOAD_DIR_NAME = 'a-term-uploads'
+// The Python backend's settings names and defaults, so its EnvironmentFile keeps
+// working; only the upload dir name is Aico's own.
+const DEFAULT_UPLOAD_DIR_NAME = 'aico-uploads'
 const DEFAULT_MAX_UPLOAD_MB = 10
 const DEFAULT_UPLOAD_MAX_AGE_SECONDS = 24 * 60 * 60
 const DEFAULT_MAINTENANCE_INTERVAL_SECONDS = 15 * 60

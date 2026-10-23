@@ -43,9 +43,9 @@
     "browser_frontend": "aico.summitflow.dev"
   },
   "artifacts": {
-    "cache_dir_name": "a-term",
-    "upload_dir_name": "a-term-uploads",
-    "env_prefix": "A_TERM"
+    "cache_dir_name": "aico",
+    "upload_dir_name": "aico-uploads",
+    "env_prefix": "AICO"
   },
   "repository": {
     "owner": "elias-leslie",
