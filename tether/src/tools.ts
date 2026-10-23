@@ -1,5 +1,5 @@
 // Merged agent-tool registry: Aico's declarative TUI specs (electron/main/tui/
-// tuis/*) reconciled with A-Term's live agent_tools rows. Editing the registry
+// tuis/*) reconciled with the old web backend's agent_tools rows. Editing the registry
 // from either app changes launches in both.
 
 import { CONTEXT_HOOKS } from './schema'
@@ -11,7 +11,7 @@ export interface AgentTool {
   slug: string
   name: string
   argv: string[]
-  /** Shell-quoted rendering of argv, for A-Term's string `command` field. */
+  /** Shell-quoted rendering of argv, for the web app's string `command` field. */
   command: string
   processName: string
   description: string | null
@@ -19,7 +19,7 @@ export interface AgentTool {
   displayOrder: number
   isDefault: boolean
   enabled: boolean
-  /** Other slugs that resolve to this tool (A-Term's `claude` → `claude-code`). */
+  /** Other slugs that resolve to this tool (the web app's `claude` → `claude-code`). */
   aliases: string[]
   contextHook: ContextHook | null
   createdAt: number
@@ -30,11 +30,11 @@ export type ToolSeed = Omit<AgentTool, 'id' | 'command' | 'createdAt' | 'updated
 
 /**
  * Seeded once when the database is created. Canonical slugs follow Aico
- * (widget rows and the root contract use `claude-code`); A-Term's `claude`
+ * (widget rows and the root contract use `claude-code`); the web app's `claude`
  * slug is an alias. Codex is the default (owner decision 2026-10-10).
- * Colours are Aico's titlebar accents; descriptions come from A-Term rows.
+ * Colours are Aico's titlebar accents; descriptions come from the old web backend's rows.
  * Pi keeps Aico's `--approve`, which removes Pi's project-trust prompt in this
- * operator-owned workspace; A-Term's bare `pi` predates it.
+ * operator-owned workspace; the web app's bare `pi` predates it.
  */
 export const DEFAULT_TOOLS: readonly ToolSeed[] = [
   {
@@ -116,7 +116,7 @@ export class ToolValidationError extends Error {
 }
 
 /**
- * Parse A-Term's string `command` into argv. Only whitespace-separated plain
+ * Parse the web app's string `command` into argv. Only whitespace-separated plain
  * words are accepted: no quotes, expansions, globs, redirections or control
  * operators, so the stored argv is exactly what the operator typed.
  */

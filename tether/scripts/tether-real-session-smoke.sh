@@ -3,8 +3,8 @@
 #
 #   scripts/tether-real-session-smoke.sh [INSTANCE] [TOOL]     defaults: dev codex
 #
-# Starts one real agent TUI through the v1 API exactly as A-Term would
-# (origin a-term with an A-Term session id), proves it runs contained in its
+# Starts one real agent TUI through the v1 API exactly as the web app would
+# (origin a-term with a web app session id), proves it runs contained in its
 # pane scope with the compatibility markers, exercises capture, a real attach
 # client (resize claim, crash, survival), typed input framing, and End, then
 # proves zero residue. No prompt is ever submitted to the agent, so no model
@@ -26,7 +26,7 @@ run_id="$(date +%s)-$$"
 work=$(mktemp -d "/tmp/tether-smoke-$run_id.XXXXXX")
 chmod 700 "$work"
 mkdir "$work/project"
-aterm_id=$(cat /proc/sys/kernel/random/uuid)
+web_session_id=$(cat /proc/sys/kernel/random/uuid)
 session_id=
 client_pid=
 passed=0
@@ -71,8 +71,8 @@ process_name=$(api GET "/v1/tools/$tool" | jq -r .processName)
 expect_status 200 "tool $tool"
 [[ -n $process_name ]] || die "$tool has no process name to verify"
 
-# --- create as A-Term would -------------------------------------------------------
-created=$(api POST /v1/sessions "{\"tool\":\"$tool\",\"origin\":\"a-term\",\"aTermSessionId\":\"$aterm_id\",\"projectRoot\":\"$work/project\",\"size\":{\"cols\":120,\"rows\":40}}")
+# --- create as the web app would ------------------------------------------------
+created=$(api POST /v1/sessions "{\"tool\":\"$tool\",\"origin\":\"a-term\",\"aTermSessionId\":\"$web_session_id\",\"projectRoot\":\"$work/project\",\"size\":{\"cols\":120,\"rows\":40}}")
 case $(cat "$work/status") in
   201 | 202) ;;
   409) [[ $(jqr .error "$created") == admission_denied ]] && { log "SKIP host admission deferred the agent: $(jqr .reason "$created")"; exit 3; } ;&
@@ -82,7 +82,7 @@ session_id=$(jqr .id "$created")
 running() { [[ $(api GET "/v1/sessions/$session_id" | jq -r .status) == running ]]; }
 wait_until 'running agent' running
 desc=$(api GET "/v1/sessions/$session_id")
-[[ $(jqr .origin "$desc") == a-term && $(jqr .aTermSessionId "$desc") == "$aterm_id" && $(jqr .tool "$desc") == "$tool" ]] ||
+[[ $(jqr .origin "$desc") == a-term && $(jqr .aTermSessionId "$desc") == "$web_session_id" && $(jqr .tool "$desc") == "$tool" ]] ||
   die "descriptor mismatch: $desc"
 socket=$(jqr .tmux.socket "$desc"); pane=$(jqr .tmux.paneId "$desc"); server_id=$(jqr .tmux.serverId "$desc")
 pass "created running $tool session $session_id (origin a-term)"
@@ -101,7 +101,7 @@ agent_in_scope() {
 }
 wait_until "$process_name in $scope" agent_in_scope
 pane_env=$(tr '\0' '\n' <"/proc/$pane_pid/environ")
-for marker in AICO_OWNER=aico "AICO_AGENT_SLUG=$tool" "AICO_WIDGET_ID=$session_id" "A_TERM_SESSION_ID=$aterm_id"; do
+for marker in AICO_OWNER=aico "AICO_AGENT_SLUG=$tool" "AICO_WIDGET_ID=$session_id" "A_TERM_SESSION_ID=$web_session_id"; do
   grep -Fxq "$marker" <<<"$pane_env" || die "pane lacks $marker"
 done
 ! grep -q '^AICO_TMUX_SOCKET=' <<<"$pane_env" || die 'pane exports AICO_TMUX_SOCKET'

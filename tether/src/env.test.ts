@@ -46,7 +46,7 @@ describe('tmuxServerEnvironment', () => {
     expect(env).not.toHaveProperty('GITHUB_TOKEN')
   })
 
-  it("is a superset of A-Term's FILTERED_ENV_VARS", () => {
+  it("is a superset of the old web backend's FILTERED_ENV_VARS", () => {
     for (const name of [
       'DATABASE_URL',
       'CF_ACCESS_CLIENT_SECRET',

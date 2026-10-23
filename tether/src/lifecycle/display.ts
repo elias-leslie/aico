@@ -1,4 +1,4 @@
-// How a session is named on screen: one rule for Aico, A-Term and `st`
+// How a session is named on screen: one rule for the desktop, the web app and `st`
 // (docs/api-v1.md "Display title and badge"). Clients render these fields
 // as-is and never compose titles or badge wording themselves.
 

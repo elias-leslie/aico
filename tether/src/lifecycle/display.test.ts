@@ -26,7 +26,7 @@ beforeAll(() => {
   setPersonalWorkspaceRoot(PERSONAL)
   rememberProjects([
     { id: 'summitflow', name: 'SummitFlow', root: '/srv/summitflow', lifecycle: null },
-    { id: 'a-term', name: 'A-Term', root: '/srv/a-term', lifecycle: null },
+    { id: 'agent-hub', name: 'Agent Hub', root: '/srv/agent-hub', lifecycle: null },
   ])
 })
 afterAll(() => store.close())
@@ -47,8 +47,8 @@ describe('display title', () => {
     expect(displayTitle(row('d0000001'))).toBe('SummitFlow — Browser move')
     // A task that only repeats the project collapses; roots name projects too.
     setWidgetName('d0000001', 'summitflow')
-    setWidgetProject('d0000001', null, '/srv/a-term')
-    expect(displayTitle(row('d0000001'))).toBe('A-Term — summitflow')
+    setWidgetProject('d0000001', null, '/srv/agent-hub')
+    expect(displayTitle(row('d0000001'))).toBe('Agent Hub — summitflow')
     setWidgetProject('d0000001', null, PERSONAL)
     setWidgetName('d0000001', null)
     expect(displayTitle(row('d0000001'))).toBe('Personal Workspace')
@@ -57,7 +57,7 @@ describe('display title', () => {
   it('reports whether project names changed', () => {
     const same = [
       { id: 'summitflow', name: 'SummitFlow', root: '/srv/summitflow', lifecycle: null },
-      { id: 'a-term', name: 'A-Term', root: '/srv/a-term', lifecycle: null },
+      { id: 'agent-hub', name: 'Agent Hub', root: '/srv/agent-hub', lifecycle: null },
     ]
     expect(rememberProjects(same)).toBe(false)
     expect(rememberProjects([{ ...same[0], name: 'Summit' }, same[1]])).toBe(true)

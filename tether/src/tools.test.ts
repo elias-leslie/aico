@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { formatCommand, parseCommand, ToolValidationError } from './tools'
 
 describe('parseCommand', () => {
-  it("splits A-Term's plain command strings", () => {
+  it("splits the web app's plain command strings", () => {
     expect(parseCommand('  claude --dangerously-skip-permissions ')).toEqual([
       'claude',
       '--dangerously-skip-permissions',

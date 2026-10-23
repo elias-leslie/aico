@@ -2,7 +2,7 @@
  * Agent-pane memory policy: the pane cap and the kill policy for runaway
  * agent tool jobs. Tether owns it as data (the `settings` row
  * `memory_policy`); the owner edits it through `GET/PUT /v1/memory-policy`
- * (A-Term's settings panel). Host memory policy (the host's pressure state,
+ * (the web app's settings panel). Host memory policy (the host's pressure state,
  * admission, swap, systemd-oomd, the app.slice cap) stays with Nightshift.
  */
 

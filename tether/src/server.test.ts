@@ -168,7 +168,7 @@ describe('lifecycle API (no tmux started)', () => {
     })
     expect((await call('GET', '/v1/gui/channel')).body).toEqual({ error: 'invalid_client' })
     expect((await call('POST', '/v1/gui/results/x', { applied: true })).status).toBe(404)
-    // The A-Term legacy session API is gone.
+    // The old web backend's session API is gone.
     expect((await call('GET', '/v1/legacy-sessions')).status).toBe(404)
     expect((await call('POST', '/v1/legacy-sessions/summitflow-x/end', {})).status).toBe(404)
   })
@@ -280,7 +280,7 @@ describe('lifecycle API (no tmux started)', () => {
 })
 
 describe('agent tools API', () => {
-  it('lists, creates from an A-Term command string, patches and deletes', async () => {
+  it('lists, creates from a command string, patches and deletes', async () => {
     const list = await call('GET', '/v1/tools')
     expect(list.body).toMatchObject({ defaultSlug: 'codex' })
     expect((list.body as { items: unknown[] }).items.length).toBe(5)

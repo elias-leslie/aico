@@ -854,7 +854,7 @@ def create_main(argv: list[str]) -> int:
     parser.add_argument("--daybreak", choices=("on", "off"), help="Daybreak for this launch; Pi supports openai/gpt-6-sol; leaves shared defaults alone")
     parser.add_argument("--agent-hub-context", choices=("on", "off"), help="Pi optional Agent Hub context; off retains required policy, native/project instructions and ingestion")
     parser.add_argument("--root-socket", type=socket_path)
-    # Older callers (SummitFlow before its a-term removal) still pass `--surface aico`.
+    # Older callers (SummitFlow before it dropped the web app surface) still pass `--surface aico`.
     parser.add_argument("--surface", choices=("aico",), default="aico", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     if args.work_role is not None and (not re.fullmatch(KEY, args.work_role) or args.work_role == "unknown"):
@@ -1046,7 +1046,7 @@ def surface_identity(owner: object, host: object, locator: object) -> bool:
     Roots are 8-hex widget ids at ``aico://widget/<id>``. Stored roots with owner
     ``a-term`` are still read in both shapes: that same Tether shape and the
     pre-Tether pane UUID at ``a-term://pane/<uuid>``. Nothing creates or targets
-    the a-term surface any more."""
+    the web app surface any more."""
     if not isinstance(host, str) or not isinstance(locator, str):
         return False
     tether = bool(re.fullmatch(WIDGET, host)) and locator == f"aico://widget/{host}"

@@ -666,7 +666,7 @@ export function listWindowIdsArgs(socket: string | null): string[] {
   return [...socketArgs(socket), 'list-windows', '-a', '-F', '#{window_id}']
 }
 
-/** Aico and A-Term sessions disable the tmux status bar, so client rows are usable rows.
+/** Desktop and web app sessions disable the tmux status bar, so client rows are usable rows.
  * Tether fix: `-A` reports the inherited value. The profile sets `status` with
  * `-g`, so Aico's `show-options -t <session> -v status` printed an empty line
  * and every resize claim was refused (verified against tmux 3.4). */

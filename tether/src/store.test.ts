@@ -258,7 +258,7 @@ describe('agent tools', () => {
     expect(store.getTool('pi')?.processName).toBe('pi')
   })
 
-  it("resolves A-Term's claude slug as an alias", () => {
+  it("resolves the web app's claude slug as an alias", () => {
     expect(open().resolveTool('claude')?.slug).toBe('claude-code')
   })
 

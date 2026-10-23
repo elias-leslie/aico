@@ -139,7 +139,7 @@ export function resolvePaths(options: ResolveOptions = {}): TetherPaths {
   const socketDir = socket.slice(0, socket.lastIndexOf('/')) || '/'
 
   // The default instance keeps Aico's exact runtime layout so existing hooks,
-  // scripts and A-Term discovery keep working. Other instances never touch it.
+  // scripts and the web app's discovery keep working. Other instances never touch it.
   const aicoRuntime = `/run/user/${uid}/aico`
   const paneExitMarkerDir = legacy ? aicoRuntime : join(runtimeDir, 'pane-exits')
 

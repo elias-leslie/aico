@@ -15,9 +15,9 @@ const rows = [
   { id: 'old', name: 'Old', root_path: '/srv/old', lifecycle: 'archived' },
   { id: 'bad', name: 'Bad', root_path: 'relative' },
   {
-    id: 'a-term',
-    name: 'A-Term',
-    root_path: '/home/demo/projects/a-term/',
+    id: 'agent-hub',
+    name: 'Agent Hub',
+    root_path: '/home/demo/projects/agent-hub/',
     lifecycle: 'active',
   },
 ]
@@ -26,9 +26,9 @@ describe('parseSummitFlowProjects', () => {
   it('keeps valid, non-archived projects sorted by id', () => {
     expect(parseSummitFlowProjects(rows)).toEqual([
       {
-        id: 'a-term',
-        name: 'A-Term',
-        root: '/home/demo/projects/a-term/',
+        id: 'agent-hub',
+        name: 'Agent Hub',
+        root: '/home/demo/projects/agent-hub/',
         lifecycle: 'active',
       },
       { id: 'aico', name: 'Aico', root: '/home/demo/projects/aico', lifecycle: 'active' },

@@ -92,7 +92,7 @@ const TOOL_FIELDS = new Set([
   'contextHook',
 ])
 
-/** Shared create/patch parsing. `argv` or A-Term's string `command`, not both. */
+/** Shared create/patch parsing. `argv` or the web app's string `command`, not both. */
 function toolFields(body: Record<string, unknown>): ToolPatch & { slug?: string } {
   const unknown = Object.keys(body).filter((key) => !TOOL_FIELDS.has(key))
   if (unknown.length) throw new HttpError(400, 'invalid_body', { fields: unknown })

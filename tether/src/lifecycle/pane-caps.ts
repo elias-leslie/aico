@@ -21,7 +21,7 @@ const OOM_FALLBACK = 'tmux-spawn-.scope.d/45-nightshift-oom.conf'
 
 export function paneCapDropInText(policy: MemoryPolicy): string {
   return [
-    '# Tether pane cap (Tether memory policy, edited in A-Term settings). Written by Tether; do not edit.',
+    '# Tether pane cap (Tether memory policy, edited in web app settings). Written by Tether; do not edit.',
     '# A pane past it loses its biggest process to the kernel and keeps running (OOMPolicy=continue).',
     '[Scope]',
     `MemoryMax=${policy.paneMemoryMaxGib}G`,

@@ -10,8 +10,8 @@ GENERATION = "a" * 64
 DESCRIPTOR = {"owner": "aico", "requestId": ROOT, "hostIdentity": "aabbcc01",
               "logicalSessionId": "aico-root-fixture", "surfaceLocator": "aico://widget/aabbcc01",
               "generation": GENERATION, "status": "running"}
-ATERM = {**DESCRIPTOR, "owner": "a-term", "hostIdentity": "00000000-0000-4000-8000-000000000001",
-         "surfaceLocator": "a-term://pane/00000000-0000-4000-8000-000000000002"}
+PRE_TETHER_WEB_ROOT = {**DESCRIPTOR, "owner": "a-term", "hostIdentity": "00000000-0000-4000-8000-000000000001",
+                       "surfaceLocator": "a-term://pane/00000000-0000-4000-8000-000000000002"}
 
 
 def invoke(monkeypatch, args, responses):
@@ -113,30 +113,30 @@ def test_end_of_tombstone_is_idempotent_without_owner_mutation(monkeypatch):
 # Stored roots keep the origin they were created with. Web-app roots made through
 # Tether are 8-hex session ids at aico://widget/<id> with owner "a-term"; the
 # pre-Tether ones are pane UUIDs at a-term://pane/<uuid>. Both are still readable.
-TETHER_ATERM = {**DESCRIPTOR, "owner": "a-term"}
+TETHER_WEB_ROOT = {**DESCRIPTOR, "owner": "a-term"}
 
 
-def test_stored_aterm_roots_are_still_read(monkeypatch):
-    code, calls, output = invoke(monkeypatch, ["status", ROOT], [(200, TETHER_ATERM)])
+def test_stored_web_app_roots_are_still_read(monkeypatch):
+    code, calls, output = invoke(monkeypatch, ["status", ROOT], [(200, TETHER_WEB_ROOT)])
     assert code == 0 and calls == [("/fixture/gui.sock", f"/v1/roots/{ROOT}", None)]
     assert output[0]["owner"] == "a-term" and output[0]["surfaceLocator"] == "aico://widget/aabbcc01"
-    code, _, output = invoke(monkeypatch, ["status", ROOT], [(200, ATERM)])
-    assert code == 0 and output[0]["surfaceLocator"] == ATERM["surfaceLocator"]
+    code, _, output = invoke(monkeypatch, ["status", ROOT], [(200, PRE_TETHER_WEB_ROOT)])
+    assert code == 0 and output[0]["surfaceLocator"] == PRE_TETHER_WEB_ROOT["surfaceLocator"]
 
 
-def test_stored_aterm_tether_root_ends_through_the_owner_socket(monkeypatch):
-    code, calls, output = invoke(monkeypatch, ["end", ROOT], [(200, TETHER_ATERM), (200, {"status": "ended"})])
+def test_stored_web_app_tether_root_ends_through_the_owner_socket(monkeypatch):
+    code, calls, output = invoke(monkeypatch, ["end", ROOT], [(200, TETHER_WEB_ROOT), (200, {"status": "ended"})])
     assert code == 0 and calls[1] == ("/fixture/control.sock", "/v1/sessions/aabbcc01/end", {"generation": GENERATION})
     assert output[0]["owner"] == "a-term" and output[0]["applied"] is True
 
 
 @pytest.mark.parametrize("descriptor", [
-    # Shapes may not mix: a Tether id with an A-Term locator, or the reverse.
-    {**TETHER_ATERM, "surfaceLocator": "a-term://pane/00000000-0000-4000-8000-000000000002"},
-    {**ATERM, "surfaceLocator": "aico://widget/aabbcc01"},
-    {**TETHER_ATERM, "surfaceLocator": "aico://widget/ffffffff"},
+    # Shapes may not mix: a Tether id with a pre-Tether web app locator, or the reverse.
+    {**TETHER_WEB_ROOT, "surfaceLocator": "a-term://pane/00000000-0000-4000-8000-000000000002"},
+    {**PRE_TETHER_WEB_ROOT, "surfaceLocator": "aico://widget/aabbcc01"},
+    {**TETHER_WEB_ROOT, "surfaceLocator": "aico://widget/ffffffff"},
     # An aico owner never takes a pane UUID; unknown owners are refused.
-    {**ATERM, "owner": "aico"},
+    {**PRE_TETHER_WEB_ROOT, "owner": "aico"},
     {**DESCRIPTOR, "owner": "other"},
 ])
 def test_surface_identity_refuses_mixed_shapes(monkeypatch, descriptor):

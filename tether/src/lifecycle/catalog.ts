@@ -68,7 +68,7 @@ export interface WidgetRow {
   lifecycleVersion: number
   /** Tether: which client created the session. */
   origin: SessionOrigin
-  /** Tether: A-Term's session UUID when A-Term created it (pane marker). */
+  /** Tether: the web app's session UUID when the web app created it (pane marker). */
   aTermSessionId: string | null
   /** Tether: this session coordinates lanes (docs/api-v1.md Coordinators). */
   coordinator: boolean

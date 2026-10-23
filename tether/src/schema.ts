@@ -112,7 +112,7 @@ export const CONTEXT_HOOKS = [
   'canonical-retrieval:antigravity',
 ] as const
 
-/** Merged agent-tool registry (Aico TUI specs + A-Term agent_tools rows). */
+/** Merged agent-tool registry (Aico TUI specs + the old web backend's agent_tools rows). */
 export const AGENT_TOOLS_TABLE_SQL = `
   CREATE TABLE agent_tools (
     id            TEXT PRIMARY KEY,
@@ -162,7 +162,7 @@ export const RETIRED_SESSION_IDS_SQL = `
   END;
 `
 
-/** v3: which app requested a root (A-Term or Aico). The tombstone keeps it. */
+/** v3: which app requested a root (the web app or the desktop). The tombstone keeps it. */
 export const ROOT_ORIGIN_SQL = `
   ALTER TABLE root_requests ADD COLUMN origin TEXT NOT NULL DEFAULT 'aico'
     CHECK(origin IN ('aico', 'a-term'));

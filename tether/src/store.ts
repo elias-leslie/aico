@@ -295,7 +295,7 @@ export class Store {
     return raw ? toTool(raw) : undefined
   }
 
-  /** Resolve a slug or alias (A-Term `claude`) to its tool. */
+  /** Resolve a slug or alias (the web app's `claude`) to its tool. */
   resolveTool(slugOrAlias: string): AgentTool | undefined {
     return (
       this.getTool(slugOrAlias) ??

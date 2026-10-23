@@ -50,7 +50,7 @@ import {
   widgetIdFromSession,
 } from './tmux'
 
-const EXTERNAL_A_TERM_SESSION = 'summitflow-123e4567-e89b-12d3-a456-426614174000'
+const EXTERNAL_WEB_SESSION = 'summitflow-123e4567-e89b-12d3-a456-426614174000'
 const INTERNAL_SOCKET_ARGS = ['-S', TMUX_SOCKET]
 
 describe('tmux model', () => {
@@ -252,26 +252,26 @@ describe('tmux model', () => {
   })
 
   it('builds target commands for externally-owned default-socket sessions', () => {
-    const target = { socket: null, session: EXTERNAL_A_TERM_SESSION }
-    expect(attachTargetArgs(target)).toEqual(['attach-session', '-t', EXTERNAL_A_TERM_SESSION])
+    const target = { socket: null, session: EXTERNAL_WEB_SESSION }
+    expect(attachTargetArgs(target)).toEqual(['attach-session', '-t', EXTERNAL_WEB_SESSION])
     expect(captureTargetArgs(target).slice(0, 3)).toEqual([
       'capture-pane',
       '-t',
-      EXTERNAL_A_TERM_SESSION,
+      EXTERNAL_WEB_SESSION,
     ])
-    expect(hasTargetArgs(target)).toEqual(['has-session', '-t', EXTERNAL_A_TERM_SESSION])
-    expect(killTargetArgs(target)).toEqual(['kill-session', '-t', EXTERNAL_A_TERM_SESSION])
+    expect(hasTargetArgs(target)).toEqual(['has-session', '-t', EXTERNAL_WEB_SESSION])
+    expect(killTargetArgs(target)).toEqual(['kill-session', '-t', EXTERNAL_WEB_SESSION])
     expect(sendTextTargetArgs(target, 'hi')).toEqual([
       'send-keys',
       '-t',
-      EXTERNAL_A_TERM_SESSION,
+      EXTERNAL_WEB_SESSION,
       '-l',
       'hi',
     ])
     expect(listClientsTargetArgs(target)).toEqual([
       'list-clients',
       '-t',
-      EXTERNAL_A_TERM_SESSION,
+      EXTERNAL_WEB_SESSION,
       '-F',
       '#{client_name}',
     ])
@@ -279,20 +279,20 @@ describe('tmux model', () => {
       'display-message',
       '-p',
       '-t',
-      EXTERNAL_A_TERM_SESSION,
+      EXTERNAL_WEB_SESSION,
       '#{pane_pid}',
     ])
     expect(sessionIdTargetArgs(target)).toEqual([
       'display-message',
       '-p',
       '-t',
-      EXTERNAL_A_TERM_SESSION,
+      EXTERNAL_WEB_SESSION,
       '#{session_id}',
     ])
     expect(listSessionPanesTargetArgs(target)).toEqual([
       'list-panes',
       '-t',
-      EXTERNAL_A_TERM_SESSION,
+      EXTERNAL_WEB_SESSION,
       '-F',
       '#{pane_id}\t#{pane_pid}',
     ])

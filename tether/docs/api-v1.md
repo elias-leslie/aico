@@ -9,7 +9,7 @@ Tether serves one versioned HTTP/1.1 API per instance over a private Unix socket
 
 The socket's file permissions are the only authentication: any process running as the same uid may call the API. Apps that put Tether behind their own HTTP surface keep their own auth in front of it. The web app in particular must never treat loopback as authenticated, because proxied traffic arrives from loopback.
 
-Status: every route below is implemented (Phase 3a). Additions made for the web app (then A-Term) during 3a are additive v1 changes and are marked *(3a)*. Additions made after the live cutover are marked *(post-cutover)*. Schema version 3.
+Status: every route below is implemented (Phase 3a). Additions made for the web app during 3a are additive v1 changes and are marked *(3a)*. Additions made after the live cutover are marked *(post-cutover)*. Schema version 3.
 
 ## Conventions
 

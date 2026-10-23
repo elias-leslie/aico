@@ -147,7 +147,7 @@ def test_actual_owner_transport_uses_compact_utf8_and_exact_resume(tmp_path, mon
     assert "界" not in json.dumps(output, ensure_ascii=False)
 
 
-def test_create_refuses_a_receipt_owned_by_a_term(monkeypatch):
+def test_create_refuses_a_receipt_owned_by_the_web_app(monkeypatch):
     """Only Aico-owned roots come back from create; the web app is not an owner."""
     output = []
     monkeypatch.setattr(admin.Collector, "receipt",

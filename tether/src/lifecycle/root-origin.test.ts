@@ -9,7 +9,7 @@ import { getWidget, removeWidget } from './catalog'
 import { createRootHandler, parseRootCreate, type RootControlOperations } from './root-control'
 import { initStore, registerBuiltinTuis } from './testing'
 
-const ATERM = '0b1c2d3e-4f50-4a6b-8c7d-9e0f1a2b3c4d'
+const WEB_SESSION_ID = '0b1c2d3e-4f50-4a6b-8c7d-9e0f1a2b3c4d'
 
 describe('root origin (v1 roots API)', () => {
   const fixture = mkdtempSync(join(tmpdir(), 'tether-root-origin-'))
@@ -90,39 +90,39 @@ describe('root origin (v1 roots API)', () => {
     expect(parseRootCreate(create('a', { tool: 'claude-code' }))?.tool).toBe('claude-code')
   })
 
-  it('accepts origin and an A-Term session id only together', () => {
+  it('accepts origin and a web app session id only together', () => {
     expect(parseRootCreate(create('a'))?.origin).toBe('aico')
-    expect(parseRootCreate(create('a', { origin: 'a-term', aTermSessionId: ATERM }))).toMatchObject(
-      { origin: 'a-term', aTermSessionId: ATERM },
-    )
+    expect(
+      parseRootCreate(create('a', { origin: 'a-term', aTermSessionId: WEB_SESSION_ID })),
+    ).toMatchObject({ origin: 'a-term', aTermSessionId: WEB_SESSION_ID })
     expect(parseRootCreate(create('a', { origin: 'other' }))).toBeNull()
-    expect(parseRootCreate(create('a', { aTermSessionId: ATERM }))).toBeNull()
+    expect(parseRootCreate(create('a', { aTermSessionId: WEB_SESSION_ID }))).toBeNull()
     expect(parseRootCreate(create('a', { origin: 'a-term', aTermSessionId: 'x' }))).toBeNull()
   })
 
   it('stores origin, reports it as owner, and filters by it', async () => {
-    const aterm = await call(
+    const web = await call(
       v1Socket,
       '/v1/roots',
       'POST',
-      create('from-aterm', { origin: 'a-term', aTermSessionId: ATERM }),
+      create('from-web', { origin: 'a-term', aTermSessionId: WEB_SESSION_ID }),
     )
-    expect(aterm.body).toMatchObject({ owner: 'a-term', origin: 'a-term' })
-    const session = getWidget(aterm.body.hostIdentity as string)
-    expect(session).toMatchObject({ origin: 'a-term', aTermSessionId: ATERM })
+    expect(web.body).toMatchObject({ owner: 'a-term', origin: 'a-term' })
+    const session = getWidget(web.body.hostIdentity as string)
+    expect(session).toMatchObject({ origin: 'a-term', aTermSessionId: WEB_SESSION_ID })
     const aico = await call(v1Socket, '/v1/roots', 'POST', create('from-aico'))
     expect(aico.body).toMatchObject({ owner: 'aico', origin: 'aico' })
 
     const filtered = await call(v1Socket, '/v1/roots?origin=a-term')
     expect(filtered.body.owner).toBe('a-term')
     expect((filtered.body.roots as { requestId: string }[]).map((r) => r.requestId)).toEqual([
-      'from-aterm',
+      'from-web',
     ])
     expect((await call(v1Socket, '/v1/roots?origin=x')).body).toEqual({ error: 'invalid_query' })
   })
 
   it('keeps the legacy Aico wire format unchanged', async () => {
-    const root = await call(legacySocket, '/v1/roots/from-aterm')
+    const root = await call(legacySocket, '/v1/roots/from-web')
     expect(root.body.owner).toBe('aico')
     expect(root.body).not.toHaveProperty('origin')
   })

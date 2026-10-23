@@ -953,7 +953,7 @@ export function managedEnvironment(
   Object.assign(environment, cfg().graphicalEnv?.())
   Object.assign(environment, rootLaunchEnvironment(widgetId))
   if (row?.tmuxServerId) environment.AICO_TMUX_SERVER_ID = row.tmuxServerId
-  // Tether: A-Term-created sessions carry A-Term's session id. AICO_TMUX_SOCKET
+  // Tether: sessions the web app created carry its session id. AICO_TMUX_SOCKET
   // is never exported (it is Aico's process override, not a pane marker).
   if (row?.origin === 'a-term' && row.aTermSessionId) {
     environment.A_TERM_SESSION_ID = row.aTermSessionId
