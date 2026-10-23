@@ -339,6 +339,16 @@ select {
   border-radius: 50%;
 }
 
+.lantern-choice .path {
+  font: 11.5px var(--font-mono);
+  color: var(--mist);
+}
+
+/* Mist on the selected row's veil is under 4.5:1. */
+.lantern-choice[aria-checked="true"] .path {
+  color: rgb(var(--bone-rgb) / 0.72);
+}
+
 .lantern-choice[aria-checked="true"] .radio {
   border-color: var(--lantern);
   box-shadow:

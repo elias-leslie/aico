@@ -178,13 +178,7 @@ export function NewSessionDialog({
                     <span className="min-w-0">
                       <span className="block truncate text-sm">{p.name}</span>
                       {p.root_path && (
-                        <span
-                          className="block truncate text-[11.5px]"
-                          style={{
-                            color: 'var(--mist)',
-                            fontFamily: 'var(--font-mono)',
-                          }}
-                        >
+                        <span className="path block truncate">
                           {p.root_path}
                         </span>
                       )}
