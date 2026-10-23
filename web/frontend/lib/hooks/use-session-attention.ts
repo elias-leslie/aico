@@ -48,7 +48,8 @@ export interface SessionAttention {
 const NO_SESSIONS: ATermSession[] = []
 
 export function useSessionAttention(): SessionAttention {
-  const sessions = useATermSessions().sessions ?? NO_SESSIONS
+  const sessions =
+    useATermSessions({ includeDetached: true }).sessions ?? NO_SESSIONS
   const seen = useSyncExternalStore(
     subscribeSeen,
     seenSnapshot,
@@ -80,7 +81,8 @@ export function useSessionAttention(): SessionAttention {
  * it marked seen (opening a session clears its needs-you or finished state).
  */
 export function useMarkActiveSeen(activeSessionId: string | null): void {
-  const sessions = useATermSessions().sessions ?? NO_SESSIONS
+  const sessions =
+    useATermSessions({ includeDetached: true }).sessions ?? NO_SESSIONS
   const active = sessions.find((s) => s.id === activeSessionId)
   const paneSessions = useMemo(
     () =>
