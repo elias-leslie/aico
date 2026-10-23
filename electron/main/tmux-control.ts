@@ -30,6 +30,9 @@ export interface TerminalLink {
   /** Re-read the pane from tmux and repaint the terminal from it. */
   reseed(): void
   resize(cols: number, rows: number): void
+  /** The shared window's size changed under this client (another client held
+   * it and this one took it back): read the pane again once typing pauses. */
+  settleSize(): void
   kill(): void
   onData(listener: (data: string) => void): void
   onExit(listener: () => void): void
@@ -372,8 +375,13 @@ export class ControlTerminal implements TerminalLink {
     this.cols = cols
     this.rows = rows
     this.send([`refresh-client -C ${cols}x${rows}`])
-    // tmux and xterm rewrap old lines differently; once the size settles, take
-    // the pane from tmux again so the two agree.
+    this.settleSize()
+  }
+
+  /** tmux and xterm rewrap old lines differently; once the size settles, take
+   * the pane from tmux again so the two agree. */
+  settleSize(): void {
+    if (this.phase === 'closed') return
     if (this.reseedTimer) clearTimeout(this.reseedTimer)
     this.reseedTimer = setTimeout(() => this.reseedAfterTyping(), RESEED_AFTER_RESIZE_MS)
   }

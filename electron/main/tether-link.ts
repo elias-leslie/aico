@@ -39,6 +39,8 @@ interface LinkHooks {
   connected(): void
   /** A handoff received from the agent's socket only; payload is still untrusted. */
   shared(data: Record<string, unknown>): void
+  /** A client claimed this session's shared window size. */
+  sizeHeld(id: string, clientPid: number): void
 }
 
 interface TetherLinkDeps {
@@ -134,6 +136,11 @@ export function createTetherLink(deps: TetherLinkDeps) {
         hooks.tray()
         break
       }
+      case 'session.resized':
+        // An older Tether sends no holder; the window then learns nothing new.
+        if (id && Number.isSafeInteger(event.data.clientPid))
+          hooks.sizeHeld(id, event.data.clientPid as number)
+        break
       case 'root.updated':
         requestSessionRefresh()
         break

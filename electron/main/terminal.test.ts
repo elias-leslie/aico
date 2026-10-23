@@ -2,6 +2,7 @@ import type { BrowserWindow } from 'electron'
 import { describe, expect, it, vi } from 'vitest'
 import { PERSONAL_WORKSPACE_ID } from './project'
 import { createSessionCatalog } from './session-catalog'
+import { OVERLAY_DELAY_MS, RECLAIM_SPACING_MS } from './size-holder'
 import { clampSize, createTerminal } from './terminal'
 import {
   type AttachTarget,
@@ -57,6 +58,7 @@ function fakeLink(size: { cols: number; rows: number }) {
     write: vi.fn(),
     paste: vi.fn(),
     reseed: vi.fn(),
+    settleSize: vi.fn(),
     resize: vi.fn(function (this: { cols: number; rows: number }, cols: number, rows: number) {
       this.cols = cols
       this.rows = rows
@@ -118,7 +120,9 @@ function setup() {
   const tether = {
     createSession: vi.fn(async (_input: unknown) => descriptor('bbbbbbbb')),
     attach: vi.fn(async (_id: string) => target()),
-    resizeClaim: vi.fn(async () => ({ applied: true }) as { applied: boolean; reason?: string }),
+    resizeClaim: vi.fn(
+      async () => ({ applied: true }) as { applied: boolean; changed?: boolean; reason?: string },
+    ),
   }
   const state = { replacing: new Set<string>(), quitting: false, arranged: false }
   const deps = {
@@ -200,6 +204,7 @@ describe('terminal channels', () => {
   it('registers its channels', () => {
     const { on, handle } = setup()
     expect([...on.keys(), ...handle.keys()].sort()).toEqual([
+      'pty:claim-size',
       'pty:input',
       'pty:paste',
       'pty:refresh',
@@ -502,5 +507,128 @@ describe('forget', () => {
     s.terminal.resumeAwaiting()
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(s.tether.attach).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('another client holds the size', () => {
+  const sent = (s: Setup) =>
+    s.all[0].webContents.send.mock.calls.filter(([channel]) => channel === 'pty:size-other')
+  /** A claim by a client other than this window's (pid 4242), once the notice delay passes. */
+  async function lostTo(s: Setup, pid = 9999) {
+    s.terminal.sizeHeldBy('aaaaaaaa', pid)
+    await vi.advanceTimersByTimeAsync(OVERLAY_DELAY_MS + 10)
+  }
+
+  it('shows the notice only after another client has held the size a moment', async () => {
+    vi.useFakeTimers()
+    try {
+      const s = setup()
+      await attached(s)
+      await vi.advanceTimersByTimeAsync(0)
+      s.terminal.sizeHeldBy('aaaaaaaa', 9999)
+      await vi.advanceTimersByTimeAsync(OVERLAY_DELAY_MS - 100)
+      expect(sent(s).at(-1)).toEqual(['pty:size-other', false])
+      await vi.advanceTimersByTimeAsync(200)
+      expect(sent(s).at(-1)).toEqual(['pty:size-other', true])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("stays quiet when the claim is this window's own", async () => {
+    vi.useFakeTimers()
+    try {
+      const s = setup()
+      await attached(s)
+      await lostTo(s, 4242)
+      expect(sent(s).every(([, shown]) => shown === false)).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('hides the notice the moment this window claims the size again', async () => {
+    vi.useFakeTimers()
+    try {
+      const s = setup()
+      const link = await attached(s)
+      await lostTo(s)
+      expect(sent(s).at(-1)).toEqual(['pty:size-other', true])
+      s.on.get('pty:claim-size')?.(s.from(s.all[0]), true) // Use here
+      await vi.advanceTimersByTimeAsync(0)
+      expect(s.tether.resizeClaim).toHaveBeenCalledWith('aaaaaaaa', 'g1', 4242, 100, 30)
+      expect(sent(s).at(-1)).toEqual(['pty:size-other', false])
+      expect(link.settleSize).not.toHaveBeenCalled() // nothing changed in tmux
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('reseeds when a claim took the size back from the other client', async () => {
+    vi.useFakeTimers()
+    try {
+      const s = setup()
+      const link = await attached(s)
+      await lostTo(s)
+      s.tether.resizeClaim.mockResolvedValueOnce({ applied: true, changed: true })
+      s.terminal.claimSize(1) // the window gained focus
+      await vi.advanceTimersByTimeAsync(0)
+      expect(link.settleSize).toHaveBeenCalledTimes(1)
+      expect(sent(s).at(-1)).toEqual(['pty:size-other', false])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('takes the size back when the owner clicks in the terminal or types', async () => {
+    vi.useFakeTimers()
+    try {
+      const s = setup()
+      const link = await attached(s)
+      await lostTo(s)
+      s.on.get('pty:claim-size')?.(s.from(s.all[0]), false) // a click
+      await vi.advanceTimersByTimeAsync(0)
+      expect(s.tether.resizeClaim).toHaveBeenCalledTimes(1)
+      s.terminal.sizeHeldBy('aaaaaaaa', 9999)
+      await vi.advanceTimersByTimeAsync(RECLAIM_SPACING_MS + 10)
+      s.on.get('pty:input')?.(s.from(s.all[0]), 'x') // typing
+      await vi.advanceTimersByTimeAsync(0)
+      expect(link.write).toHaveBeenCalledWith('x')
+      expect(s.tether.resizeClaim).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('does not flash the notice when the owner is typing and takes the size back at once', async () => {
+    vi.useFakeTimers()
+    try {
+      const s = setup()
+      await attached(s)
+      s.all[0].focused = true
+      s.on.get('pty:input')?.(s.from(s.all[0]), 'x')
+      s.terminal.sizeHeldBy('aaaaaaaa', 9999)
+      await vi.advanceTimersByTimeAsync(0)
+      expect(s.tether.resizeClaim).toHaveBeenCalledTimes(1) // reclaimed by itself
+      s.terminal.sizeHeldBy('aaaaaaaa', 4242) // the claim landed
+      await vi.advanceTimersByTimeAsync(OVERLAY_DELAY_MS * 2)
+      expect(sent(s).every(([, shown]) => shown === false)).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('clears the notice when the window attaches again', async () => {
+    vi.useFakeTimers()
+    try {
+      const s = setup()
+      await attached(s)
+      await lostTo(s)
+      s.on.get('pty:start')?.(s.from(s.all[0]), { cols: 100, rows: 30 })
+      await vi.advanceTimersByTimeAsync(0)
+      expect(sent(s).at(-1)).toEqual(['pty:size-other', false])
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

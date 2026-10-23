@@ -659,6 +659,59 @@ body {
   -webkit-app-region: no-drag;
 }
 
+/* Another client holds the session's size: the cramped pane is covered by a
+   calm notice with one way back. Typing or clicking also takes the size back. */
+.size-notice {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 16px;
+  text-align: center;
+  background: rgb(var(--ink-rgb) / 0.92);
+  font-family: var(--font-ui);
+  -webkit-app-region: no-drag;
+}
+.size-notice[hidden] {
+  display: none;
+}
+.size-notice p {
+  margin: 0;
+}
+.size-notice-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--bone);
+}
+.size-notice-detail {
+  max-width: 34ch;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--mist);
+}
+.size-notice-use {
+  margin-top: 10px;
+  padding: 6px 16px;
+  border: 1px solid var(--lantern);
+  border-radius: 4px;
+  background: rgb(var(--lantern-rgb) / 0.14);
+  color: var(--lantern);
+  font: 600 12px var(--font-ui);
+  cursor: pointer;
+  transition: background 0.16s var(--ease-arrival);
+}
+.size-notice-use:hover {
+  background: rgb(var(--lantern-rgb) / 0.26);
+}
+.size-notice-use:focus-visible {
+  outline: 2px solid var(--lantern);
+  outline-offset: 2px;
+}
+
 .draft-composer {
   -webkit-app-region: no-drag;
   flex: 0 0 auto;

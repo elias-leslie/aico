@@ -38,7 +38,13 @@
           <button id="draft-close" type="button" aria-label="Close draft">×</button>
         </div>
       </section>
-      <div id="terminal"></div>
+      <div id="terminal">
+        <div class="size-notice" id="size-notice" role="status" aria-live="polite" hidden>
+          <p class="size-notice-title">Viewing remotely</p>
+          <p class="size-notice-detail">Another device is using this session, so it is sized for that screen.</p>
+          <button class="size-notice-use" id="size-notice-use" type="button">Use here</button>
+        </div>
+      </div>
       <nav class="aico-menu" id="aico-menu" aria-label="Aico actions" hidden></nav>
       <div class="aico-palette" id="aico-palette" hidden></div>
       <div class="selection-toast" role="status" aria-live="polite" aria-atomic="true" hidden>

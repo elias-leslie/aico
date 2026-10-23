@@ -108,6 +108,7 @@ function setup(
     tray: vi.fn(() => calls.push('tray')),
     connected: vi.fn(() => calls.push('connected')),
     shared: vi.fn(),
+    sizeHeld: vi.fn(),
   }
   const link = createTetherLink({
     tether: tether as unknown as TetherClient,
@@ -180,6 +181,15 @@ describe('Tether events', () => {
     expect(catalog.get('aaaaaaaa')).toMatchObject({ state: 'blocked' })
     expect(calls).toEqual(['agentState aaaaaaaa', 'titles', 'tray'])
     expect(tether.listSessions).not.toHaveBeenCalled()
+  })
+
+  it('session.resized hands the size holder to the window; one without a holder is ignored', () => {
+    const { connect, hooks } = setup()
+    const subscriber = connect()
+    subscriber.onEvent(event('session.resized', { id: 'aaaaaaaa', generation: 'g1' }))
+    expect(hooks.sizeHeld).not.toHaveBeenCalled()
+    subscriber.onEvent(event('session.resized', { id: 'aaaaaaaa', clientPid: 4242, cols: 40 }))
+    expect(hooks.sizeHeld).toHaveBeenCalledExactlyOnceWith('aaaaaaaa', 4242)
   })
 
   it('without a snapshot it re-lists', async () => {

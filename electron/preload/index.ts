@@ -18,6 +18,14 @@ contextBridge.exposeInMainWorld('aico', {
       ipcRenderer.on('pty:data', listener)
       return () => ipcRenderer.removeListener('pty:data', listener)
     },
+    /** Another client holds this session's size (true) or it is back here (false). */
+    onSizeOther: (cb: (other: boolean) => void) => {
+      const listener = (_event: unknown, other: boolean) => cb(other)
+      ipcRenderer.on('pty:size-other', listener)
+      return () => ipcRenderer.removeListener('pty:size-other', listener)
+    },
+    /** Take the size back: deliberate for the Use here button, else a click in the terminal. */
+    claimSize: (deliberate = false) => ipcRenderer.send('pty:claim-size', deliberate),
   },
   links: {
     /** Open an http(s) URL in the default browser. */

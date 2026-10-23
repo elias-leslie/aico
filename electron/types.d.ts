@@ -32,6 +32,11 @@ export interface AicoApi {
     onData(cb: (data: string) => void): () => void
     /** Paste goes through tmux (bracketed when the program asks). */
     paste(text: string): void
+    /** Another client holds this session's size (true) or it is back here (false);
+     * returns an unsubscribe function. */
+    onSizeOther(cb: (other: boolean) => void): () => void
+    /** Take the size back: deliberate for the Use here button, else a click in the terminal. */
+    claimSize(deliberate?: boolean): void
   }
   links: {
     /** Open an http(s) URL in the default browser. */

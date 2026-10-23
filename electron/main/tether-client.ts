@@ -462,7 +462,7 @@ export class TetherClient {
     clientPid: number,
     cols: number,
     rows: number,
-  ): Promise<{ applied: boolean; reason?: string }> {
+  ): Promise<{ applied: boolean; changed?: boolean; reason?: string }> {
     return this.json('POST', `/v1/sessions/${encodeURIComponent(id)}/resize-claim`, {
       generation,
       clientPid,

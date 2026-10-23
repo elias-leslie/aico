@@ -520,6 +520,21 @@ window.aico.pty.onData((data) => {
   pokeThinking()
 })
 
+// Another client holds the session's size: cover the cramped pane with a notice.
+// The button takes the size back deliberately; a click anywhere in the
+// terminal (the notice included) and typing do too (main). The terminal keeps keyboard focus throughout.
+const sizeNotice = document.getElementById('size-notice') as HTMLElement
+window.aico.pty.onSizeOther((other) => {
+  sizeNotice.hidden = !other
+  if (!other && terminalShouldTakeFocus(document)) term.focus()
+})
+document.getElementById('size-notice-use')?.addEventListener('click', (event) => {
+  event.stopPropagation()
+  window.aico.pty.claimSize(true)
+  term.focus()
+})
+host.addEventListener('mousedown', () => window.aico.pty.claimSize(false))
+
 // (Re)attach the tmux session for this window at the current viewport size.
 // On a renderer reload this fires again and re-attaches the same session.
 window.aico.pty.start({ cols: term.cols, rows: term.rows })

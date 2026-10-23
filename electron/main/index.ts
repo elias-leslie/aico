@@ -170,6 +170,7 @@ const link = createTetherLink({
     tray: () => chrome.syncTray(),
     connected: () => terminal.resumeAwaiting(),
     shared: (data) => shares.notify(data),
+    sizeHeld: (id, clientPid) => terminal.sizeHeldBy(id, clientPid),
   },
 })
 

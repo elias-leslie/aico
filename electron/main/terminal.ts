@@ -6,6 +6,7 @@ import type { BrowserWindow, IpcMain } from 'electron'
 import { describeFailure, writeNotice } from './notices'
 import { PERSONAL_WORKSPACE_ID } from './project'
 import type { SessionCatalog } from './session-catalog'
+import { ACTIVE_WITHIN_MS, createSizeHolder, type SizeHolder } from './size-holder'
 import {
   type AttachTarget,
   attachEnvironment,
@@ -72,6 +73,8 @@ export function createTerminal(deps: TerminalDeps) {
   // One terminal link per open window.
   const ptys = new Map<number, TerminalLink>()
   const sizeClaims = new WeakMap<TerminalLink, () => Promise<void>>()
+  const sizeHolders = new WeakMap<TerminalLink, SizeHolder>()
+  const lastInput = new Map<number, number>()
   const clientPids = new WeakMap<TerminalLink, Promise<number>>()
   function clientPidOf(link: TerminalLink): Promise<number> {
     let known = clientPids.get(link)
@@ -110,6 +113,7 @@ export function createTerminal(deps: TerminalDeps) {
     const stillCurrent = () => !win.isDestroyed() && ptyStartGenerations.get(winId) === generation
     const existing = ptys.get(winId)
     if (existing) {
+      sizeHolders.get(existing)?.dispose()
       existing.kill() // detaches the client; the tmux session persists
       ptys.delete(winId)
     }
@@ -184,6 +188,18 @@ export function createTerminal(deps: TerminalDeps) {
     // Desktop auto-resize: a window claims the shared tmux window size for its
     // own attached client (Tether's active-client resize claim) when it attaches,
     // gains focus, or is resized by Aico's tiling. Callers pick the moment.
+    // Whether another client holds the size shows in the window as a notice with
+    // a Use here button (size-holder.ts); this window's own claims clear it.
+    const holder = createSizeHolder({
+      reclaim: () => void claimSize(),
+      show: (visible) => {
+        if (!win.isDestroyed()) win.webContents.send('pty:size-other', visible)
+      },
+      isActive: () =>
+        win.isFocused() && Date.now() - (lastInput.get(winId) ?? -Infinity) < ACTIVE_WITHIN_MS,
+    })
+    sizeHolders.set(pty, holder)
+    if (!win.isDestroyed()) win.webContents.send('pty:size-other', false) // a fresh attach holds nothing against it
     const claimSize = coalesceTrailingAsync(async () => {
       for (let attempt = 0; attempt < 4 && isCurrent(); attempt += 1) {
         const sessionGeneration = catalog.get(id)?.generation ?? target.generation
@@ -195,7 +211,13 @@ export function createTerminal(deps: TerminalDeps) {
             pty.cols,
             pty.rows,
           )
-          if (result.applied) return
+          if (result.applied) {
+            holder.held()
+            // The window changed size under this client (another client held
+            // it): read the pane again, as after any resize.
+            if (result.changed && isCurrent()) pty.settleSize()
+            return
+          }
           if (result.reason === 'stale') await deps.refresh().catch(() => {})
           else if (result.reason !== 'client_not_attached' && result.reason !== 'tmux_unavailable')
             return
@@ -223,6 +245,7 @@ export function createTerminal(deps: TerminalDeps) {
     pty.onExit(() => {
       // Only clear the map if this is still the current pty: a prior pty killed on
       // re-attach can fire its exit after the replacement is stored.
+      sizeHolders.get(pty)?.dispose()
       if (ptys.get(winId) === pty) {
         ptys.delete(winId)
         if (!deps.isQuitting()) {
@@ -286,7 +309,11 @@ export function createTerminal(deps: TerminalDeps) {
       if (typeof data !== 'string' || data.length === 0) return
       const widgetId = registry.senderSession(event.sender)
       if (!widgetId || deps.isReplacing(widgetId)) return
-      ptyFor(event.sender)?.write(data)
+      const pty = ptyFor(event.sender)
+      const win = registry.senderWindow(event.sender)
+      if (win) lastInput.set(win.id, Date.now())
+      pty?.write(data)
+      if (pty) sizeHolders.get(pty)?.activity()
     })
 
     // Paste goes through tmux, which brackets it only when the program asked
@@ -296,6 +323,16 @@ export function createTerminal(deps: TerminalDeps) {
       const widgetId = registry.senderSession(event.sender)
       if (!widgetId || deps.isReplacing(widgetId)) return
       ptyFor(event.sender)?.paste(text)
+    })
+
+    // The owner clicked in the terminal (a deliberate Use here press, or a
+    // plain click): take the size back if another client holds it.
+    ipcMain.on('pty:claim-size', (event, deliberate: unknown) => {
+      const pty = ptyFor(event.sender)
+      const holder = pty ? sizeHolders.get(pty) : undefined
+      if (!holder) return
+      if (deliberate === true) holder.force()
+      else holder.activity()
     })
 
     ipcMain.on('pty:resize', (event, size: PtySize) => {
@@ -365,6 +402,21 @@ export function createTerminal(deps: TerminalDeps) {
     resumeAwaiting: resumeAwaitingAttaches,
     /** Tether reported this session (event or complete list). */
     sessionSeen,
+    /** A client claimed this session's size (Tether's `session.resized`): if it is
+     * not this window's own terminal, another client now holds the size. */
+    sizeHeldBy: (id: string, clientPid: number): void => {
+      const win = registry.forSession(id)
+      const pty = win ? ptys.get(win.id) : undefined
+      const holder = pty ? sizeHolders.get(pty) : undefined
+      if (!pty || !holder) return
+      void clientPidOf(pty)
+        .then((mine) => {
+          if (ptys.get(win?.id ?? -1) !== pty) return
+          if (mine === clientPid) holder.held()
+          else holder.lost()
+        })
+        .catch(() => {})
+    },
     /** The window gained focus: claim the session's size for its terminal. */
     claimSize: (winId: number): void => {
       const pty = ptys.get(winId)
@@ -375,9 +427,11 @@ export function createTerminal(deps: TerminalDeps) {
     forget: (winId: number): void => {
       const pty = ptys.get(winId)
       if (pty) {
+        sizeHolders.get(pty)?.dispose()
         pty.kill()
         ptys.delete(winId)
       }
+      lastInput.delete(winId)
       awaitingTether.delete(winId)
       linkLost.delete(winId)
       ptyStartGenerations.delete(winId)
