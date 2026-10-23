@@ -39,7 +39,7 @@ describe('PaneOverflowMenu', () => {
     )
 
     expect(
-      screen.getByRole('menuitem', { name: 'Reset A-Term' }),
+      screen.getByRole('menuitem', { name: 'Reset session' }),
     ).toBeInTheDocument()
     expect(
       screen.getByRole('menuitem', { name: 'Refresh Layout' }),

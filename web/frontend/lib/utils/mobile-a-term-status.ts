@@ -52,14 +52,14 @@ export function getMobileATermBannerState({
     case 'disconnected':
       return {
         label: 'Disconnected',
-        detail: 'Reconnect to resume this A-Term',
+        detail: 'Reconnect to resume this session',
         tone: 'danger',
         actionLabel: canReconnect ? 'Reconnect' : undefined,
       }
     case 'error':
       return {
         label: 'Connection error',
-        detail: 'Reconnect to rejoin the A-Term',
+        detail: 'Reconnect to rejoin this session',
         tone: 'danger',
         actionLabel: canReconnect ? 'Reconnect' : undefined,
       }

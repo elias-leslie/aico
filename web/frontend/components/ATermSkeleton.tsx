@@ -10,7 +10,7 @@ export function ATermSkeleton() {
       className="flex-1 flex flex-col"
       style={{ backgroundColor: 'var(--term-bg-deep)' }}
       aria-busy="true"
-      aria-label="Loading A-Term"
+      aria-label="Loading Aico"
     >
       {/* Header skeleton */}
       <div

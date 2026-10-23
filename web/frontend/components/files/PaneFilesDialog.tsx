@@ -309,7 +309,7 @@ export function PaneFilesDialog({
               {!selectedEntry ? (
                 <div className="flex h-full items-center justify-center px-6 text-center text-sm text-slate-500">
                   Select a file to preview it and insert its path into the
-                  terminal.
+                  session.
                 </div>
               ) : content.isLoading ? (
                 <div className="flex h-full items-center justify-center gap-2 text-sm text-slate-500">

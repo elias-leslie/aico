@@ -17,8 +17,8 @@ export const SettingsButton = forwardRef<
       ref={ref}
       data-testid="settings-dropdown"
       onClick={onClick}
-      title="A-Term settings"
-      aria-label="A-Term settings"
+      title="Aico settings"
+      aria-label="Aico settings"
       className="p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-md transition-all duration-150"
       style={{
         backgroundColor: isActive ? 'var(--term-bg-elevated)' : 'transparent',

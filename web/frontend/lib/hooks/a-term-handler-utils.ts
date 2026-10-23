@@ -20,7 +20,7 @@ export function generatePaneName(
  */
 export function generateAdHocPaneName(panes: ATermPane[]): string {
   const adHocCount = panes.filter((p) => p.pane_type === 'adhoc').length
-  return generatePaneName('Ad-Hoc A-Term', adHocCount)
+  return generatePaneName('Ad-Hoc Session', adHocCount)
 }
 
 /**

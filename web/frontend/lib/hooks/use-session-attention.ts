@@ -107,7 +107,7 @@ export function useMarkActiveSeen(activeSessionId: string | null): void {
   }, [ids, stamps])
 }
 
-/** Prefix the tab/app title with the needs-you count: `(2) A-Term`. */
+/** Prefix the tab/app title with the needs-you count: `(2) Aico`. */
 export function useAttentionTitle(count: number): void {
   useEffect(() => {
     const apply = () => {

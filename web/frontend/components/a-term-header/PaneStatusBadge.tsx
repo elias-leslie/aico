@@ -102,7 +102,7 @@ export function PaneStatusBadge({ status, onReconnect }: PaneStatusBadgeProps) {
           e.currentTarget.style.borderColor = meta.glow
         }}
         title="Tap to reconnect"
-        aria-label="Reconnect A-Term session"
+        aria-label="Reconnect session"
       >
         {content}
       </button>

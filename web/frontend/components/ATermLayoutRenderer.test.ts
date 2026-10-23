@@ -10,7 +10,7 @@ describe('getLayoutRemountKey', () => {
         ...SLOT_BASE,
         paneId: 'pane-1',
         sessionId: 'native-1',
-        name: 'Ad-Hoc A-Term',
+        name: 'Ad-Hoc Session',
         workingDir: null,
       },
       {
@@ -36,7 +36,7 @@ describe('getLayoutRemountKey', () => {
         ...SLOT_BASE,
         paneId: 'pane-1',
         sessionId: 'native-1',
-        name: 'Ad-Hoc A-Term',
+        name: 'Ad-Hoc Session',
         workingDir: null,
       },
     ])
@@ -61,7 +61,7 @@ describe('getLayoutRemountKey', () => {
         ...SLOT_BASE,
         paneId: 'pane-1',
         sessionId: 'native-1',
-        name: 'Ad-Hoc A-Term',
+        name: 'Ad-Hoc Session',
         workingDir: null,
       },
     ])

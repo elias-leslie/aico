@@ -565,7 +565,7 @@ export function useATermTabsState({
   const handleDetachedAddTab = useCallback(async () => {
     const newPane = await createAdHocPane(
       generatePaneName(
-        'Ad-Hoc A-Term',
+        'Ad-Hoc Session',
         detachedPanes.filter((pane) => pane.pane_type === 'adhoc').length,
       ),
       undefined,

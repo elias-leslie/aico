@@ -12,7 +12,7 @@ describe('useLayoutChangeHandler', () => {
         ...SLOT_BASE,
         paneId: 'pane-native',
         sessionId: 'native-session',
-        name: 'Ad-Hoc A-Term',
+        name: 'Ad-Hoc Session',
         workingDir: null,
       },
       {

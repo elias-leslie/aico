@@ -110,7 +110,7 @@ export async function closeAllPanesAction(
   }
 
   try {
-    const newPane = await createAdHocPane('Ad-Hoc A-Term')
+    const newPane = await createAdHocPane('Ad-Hoc Session')
     const shellSession = findSessionByMode(newPane, 'shell')
     if (shellSession) {
       navigateToSession(shellSession.id)

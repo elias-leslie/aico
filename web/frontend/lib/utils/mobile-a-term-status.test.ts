@@ -62,7 +62,7 @@ describe('mobile-a-term-status', () => {
       }),
     ).toEqual({
       label: 'Disconnected',
-      detail: 'Reconnect to resume this A-Term',
+      detail: 'Reconnect to resume this session',
       tone: 'danger',
       actionLabel: 'Reconnect',
     })

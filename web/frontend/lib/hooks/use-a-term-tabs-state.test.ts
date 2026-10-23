@@ -97,7 +97,7 @@ function buildActiveSessionState(
     },
     {
       id: 'session-adhoc',
-      name: 'Ad-Hoc A-Term',
+      name: 'Ad-Hoc Session',
       user_id: null,
       project_id: null,
       working_dir: '/tmp',
@@ -1020,7 +1020,7 @@ describe('useATermTabsState', () => {
       activeSessionId: 'session-adhoc',
       activeSession: {
         id: 'session-adhoc',
-        name: 'Ad-Hoc A-Term',
+        name: 'Ad-Hoc Session',
         user_id: null,
         project_id: null,
         working_dir: '/tmp',
@@ -1048,7 +1048,7 @@ describe('useATermTabsState', () => {
       pane_type: 'adhoc',
       project_id: null,
       pane_order: 1,
-      pane_name: 'Ad-Hoc A-Term 2',
+      pane_name: 'Ad-Hoc Session 2',
       active_mode: 'shell',
       created_at: '2026-03-06T00:00:00Z',
       sessions: [
@@ -1149,7 +1149,7 @@ describe('useATermTabsState', () => {
       await result.current.handleAddTab()
     })
 
-    expect(createAdHocPane).toHaveBeenCalledWith('Ad-Hoc A-Term', undefined, {
+    expect(createAdHocPane).toHaveBeenCalledWith('Ad-Hoc Session', undefined, {
       detached: true,
     })
     expect(addDetachedWindowPane).toHaveBeenCalledWith(

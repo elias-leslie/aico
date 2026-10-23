@@ -152,7 +152,7 @@ describe('ControlBar', () => {
 
     expect(onReconnect).toHaveBeenCalledTimes(1)
     expect(
-      screen.getByText('Reconnect to resume this A-Term'),
+      screen.getByText('Reconnect to resume this session'),
     ).toBeInTheDocument()
   })
 

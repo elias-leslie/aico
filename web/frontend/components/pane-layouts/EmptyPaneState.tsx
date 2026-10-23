@@ -23,7 +23,7 @@ export function EmptyPaneState({
       <button
         type="button"
         onClick={onOpenModal}
-        aria-label="Open A-Term manager to create a new A-Term"
+        aria-label="Open the session picker to start or attach a session"
         className="flex flex-col items-center gap-4 p-8 rounded-lg cursor-pointer transition-all duration-200 hover:scale-[1.02]"
         style={{
           backgroundColor: 'var(--term-bg-surface)',
@@ -47,13 +47,13 @@ export function EmptyPaneState({
             className="block text-sm font-medium mb-1"
             style={{ color: 'var(--term-text-primary)' }}
           >
-            Open an A-Term
+            Open a session
           </span>
           <span
             className="block text-xs"
             style={{ color: 'var(--term-text-muted)' }}
           >
-            Create or attach to a session
+            Start a new one or attach to a running one
           </span>
         </div>
       </button>

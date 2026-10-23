@@ -47,7 +47,7 @@ export function RegisterProjectCard({
           }}
         >
           {projectRegistrySource === 'local'
-            ? 'Add a repo path once, then A-Term can reopen it as a named project workspace.'
+            ? 'Add a repo path once, then Aico can reopen it as a named project.'
             : 'Project registration is managed by the external companion API.'}
         </p>
       </div>

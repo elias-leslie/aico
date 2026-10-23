@@ -2,6 +2,7 @@
 
 import { type FormEvent, useState, useTransition } from 'react'
 import { fetchAuthSession, loginWithPassword } from '@/lib/api/auth'
+import { PRODUCT_NAME } from '@/lib/project-branding'
 import { safeNextPath } from '@/lib/security/safe-next'
 
 interface LoginScreenProps {
@@ -69,7 +70,7 @@ export function LoginScreen({ authMode }: LoginScreenProps) {
             color: 'var(--term-text-muted)',
           }}
         >
-          A-Term access
+          {PRODUCT_NAME} access
         </div>
         <h1
           className="text-2xl font-semibold"
@@ -86,7 +87,7 @@ export function LoginScreen({ authMode }: LoginScreenProps) {
         >
           {authMode === 'proxy'
             ? 'This deployment expects identity from a trusted reverse proxy before it unlocks the workspace.'
-            : 'This A-Term instance protects browser access with a shared password.'}
+            : `${PRODUCT_NAME} asks for a shared password in the browser.`}
         </p>
 
         {authMode === 'proxy' ? (
@@ -98,9 +99,9 @@ export function LoginScreen({ authMode }: LoginScreenProps) {
               backgroundColor: 'var(--term-surface-overlay)',
             }}
           >
-            Finish the upstream sign-in flow, then retry. A-Term will store the
-            verified proxy identity in its session cookie and send you back to
-            the requested page.
+            Finish the upstream sign-in flow, then retry. {PRODUCT_NAME} keeps
+            the verified proxy identity in its session cookie and sends you back
+            to the page you asked for.
             <div className="mt-4">
               <button
                 type="button"

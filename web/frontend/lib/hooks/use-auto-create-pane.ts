@@ -83,7 +83,7 @@ export function useAutoCreatePane({
         void (async () => {
           try {
             if (!cancelled && (await shouldAutoCreate())) {
-              await createAndFocusPane(generatePaneName('Ad-Hoc A-Term', 0))
+              await createAndFocusPane(generatePaneName('Ad-Hoc Session', 0))
             }
           } catch (error) {
             if (!cancelled) {
@@ -117,7 +117,7 @@ export function useAutoCreatePane({
         try {
           if (!cancelled && (await shouldAutoCreate())) {
             await createAndFocusPane(
-              generatePaneName('Ad-Hoc A-Term', adHocCount),
+              generatePaneName('Ad-Hoc Session', adHocCount),
             )
           }
         } catch (error) {

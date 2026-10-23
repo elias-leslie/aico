@@ -39,7 +39,7 @@ export function ModeTogglePopover({
       />
       <div
         role="menu"
-        aria-label="Select A-Term mode"
+        aria-label="Select session mode"
         className="fixed z-[10000] rounded-lg overflow-hidden animate-in fade-in slide-in-from-top-1 duration-100"
         style={{
           ...position,

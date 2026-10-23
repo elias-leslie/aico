@@ -15,17 +15,17 @@ describe('useAttentionTitle', () => {
   afterEach(() => setHeadTitle(''))
 
   it('keeps the needs-you count when the page title is re-rendered', async () => {
-    setHeadTitle('A-Term')
+    setHeadTitle('Aico')
     const { rerender, unmount } = renderHook(
       ({ count }) => useAttentionTitle(count),
       { initialProps: { count: 2 } },
     )
-    expect(document.title).toBe('(2) A-Term')
+    expect(document.title).toBe('(2) Aico')
     // Next re-renders its metadata <title>, dropping the prefix.
-    setHeadTitle('A-Term')
-    await waitFor(() => expect(document.title).toBe('(2) A-Term'))
+    setHeadTitle('Aico')
+    await waitFor(() => expect(document.title).toBe('(2) Aico'))
     rerender({ count: 0 })
-    expect(document.title).toBe('A-Term')
+    expect(document.title).toBe('Aico')
     unmount()
   })
 })

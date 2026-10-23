@@ -8,7 +8,7 @@ describe('PaneStatusBadge', () => {
 
     expect(screen.queryByLabelText(/Pane status:/i)).not.toBeInTheDocument()
     expect(
-      screen.queryByLabelText(/Reconnect A-Term session/i),
+      screen.queryByLabelText(/Reconnect session/i),
     ).not.toBeInTheDocument()
   })
 
@@ -18,7 +18,7 @@ describe('PaneStatusBadge', () => {
     render(<PaneStatusBadge status="disconnected" onReconnect={onReconnect} />)
 
     expect(
-      screen.getByRole('button', { name: 'Reconnect A-Term session' }),
+      screen.getByRole('button', { name: 'Reconnect session' }),
     ).toBeInTheDocument()
   })
 })

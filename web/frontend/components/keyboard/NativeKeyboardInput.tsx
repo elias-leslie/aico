@@ -330,7 +330,7 @@ export function NativeKeyboardInput({
             className="text-xs"
             style={{ color: 'var(--term-error)' }}
           >
-            Send was interrupted. Check the terminal before retrying; your draft
+            Send was interrupted. Check the session before retrying; your draft
             is saved.
           </span>
         )}
