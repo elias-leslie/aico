@@ -26,9 +26,8 @@ directory is mode 0700 and the sockets mode 0600. Other instances (for example
 `tether@dev`) do not serve the legacy sockets.
 
 The `st aico` client and its tests live in this repo
-(`scripts/aico-root-watch.py`, installed to `~/.local/lib/tether/scripts/`).
-SummitFlow runs Aico's `scripts/aico-root-watch.py`, a shim that hands over to
-the installed copy (`TETHER_ROOT_WATCH` overrides the path). `st aico roots`
+(`tether/scripts/aico-root-watch.py`, also installed to
+`~/.local/lib/tether/scripts/`). SummitFlow runs it from the aico checkout. `st aico roots`
 lists with `GET /v1/roots?ended=0`, so retained tombstones never push the list
 past the client's root limit.
 
@@ -365,7 +364,7 @@ View mutations require the current generation and reject stale requests. The
 headless `/v1/sessions/<hostIdentity>/end` owns exact containment retirement.
 
 The direct facade (`st` is the author's workspace tool; `st aico` runs this
-repo's `scripts/aico-root-watch.py`) creates one root without a fleet ledger or
+repo's `tether/scripts/aico-root-watch.py`) creates one root without a fleet ledger or
 prompt retention:
 
 ```sh
@@ -381,7 +380,7 @@ metadata. `--surface a-term` uses the web app's loopback endpoint: `--root-url`,
 checkout (its root in Tether's project list); when that can't be read the
 command stops and says so. Through `st`, `--root-url` is the only override: st
 does not pass `A_TERM_ROOT_CONTROL_URL` to the extension. Running
-`scripts/aico-root-watch.py` directly, that variable still takes the place of
+`tether/scripts/aico-root-watch.py` directly, that variable still takes the place of
 the identity lookup. The web app's authentication remains
 enforced, and the web app forwards the request to Tether. Tether must already be
 running; the command does not start it.

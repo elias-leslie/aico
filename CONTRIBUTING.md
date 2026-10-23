@@ -18,8 +18,8 @@ The repo holds the whole product: the desktop at the root (`electron/`,
 a Tether daemon; the tests do not, because they use a fake Tether socket.
 Session lifecycle changes (tmux servers, launch, End, roots) go in `tether/`;
 the front ends keep views, view state and rendering. The `st aico` client lives
-in `tether/scripts/`; `scripts/aico-root-watch.py` is only the entry SummitFlow
-runs, and it execs Tether's installed copy.
+in `tether/scripts/`; SummitFlow runs `tether/scripts/aico-root-watch.py`
+from this checkout.
 
 ## Pull request expectations
 
