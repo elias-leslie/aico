@@ -1,12 +1,12 @@
 # One gate for the three parts of this repo: the desktop at the root, Tether in
-# tether/ and the web app in web/ (Python backend) and web/frontend. Prepare once:
+# tether/ and the web app in web/ (Python backend, web/server and web/frontend). Prepare once:
 # `npm ci` at the root and `uv sync --locked --extra dev` in web/.
 #
 # The tools run from the root: Ruff and Biome pick up each part's nested config,
 # ty reads ty.toml, pytest reads pytest.ini (web/tests and tether/scripts/tests),
-# Vitest's root config runs the desktop, Tether and web/frontend projects, and
-# tsc checks the desktop. Tether and web/frontend each have their own tsconfig,
-# so they type-check in the native stages below.
+# Vitest's root config runs the desktop, Tether, web/server and web/frontend
+# projects, and tsc checks the desktop. Tether, web/server and web/frontend each
+# have their own tsconfig, so they type-check in the native stages below.
 [paths]
 pytest = "web/.venv/bin"
 types = "web/.venv/bin"
@@ -33,3 +33,9 @@ id = "web-tsc"
 kind = "check"
 coverage = "full"
 argv = ["node_modules/.bin/tsc", "--noEmit", "-p", "web/frontend"]
+
+[[native.stages]]
+id = "web-server-tsc"
+kind = "check"
+coverage = "full"
+argv = ["node_modules/.bin/tsc", "--noEmit", "-p", "web/server"]

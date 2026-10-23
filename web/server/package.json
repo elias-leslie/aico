@@ -1,0 +1,23 @@
+{
+  "name": "aico-web",
+  "version": "0.2.0",
+  "description": "Aico's web server: the browser and phone app's API and terminal WebSocket over Tether.",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "build": "esbuild src/main.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/aico-web.mjs --banner:js=\"// Aico web server bundle. Built by npm run build; do not edit.\nimport { createRequire as __aicoRequire } from 'node:module'; const require = __aicoRequire(import.meta.url);\"",
+    "start": "node dist/aico-web.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.2"
+  },
+  "dependencies": {
+    "ws": "^8.22.0"
+  }
+}

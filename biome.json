@@ -15,6 +15,7 @@
       "vitest.config.ts",
       "electron.vite.config.ts",
       "tether/**",
+      "web/server/**",
       "web/frontend/**"
     ]
   },
