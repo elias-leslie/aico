@@ -173,7 +173,7 @@ export function createTetherLink(deps: TetherLinkDeps) {
     hooks.tray()
     dialog.showErrorBox(
       'Update Tether',
-      `${tetherIncompatible}. Your sessions keep running. Install a current Tether (scripts/install.sh in the Tether repo) and restart Aico.`,
+      `${tetherIncompatible}. Your sessions keep running. Update Aico (scripts/install.sh) and restart it.`,
     )
   }
 

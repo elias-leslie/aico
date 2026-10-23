@@ -2,7 +2,8 @@
 # Install an already built release (dist/tether.mjs, bin/tether and the
 # `st aico` client) into the stable path ~/.local/lib/tether, without building.
 # SummitFlow's rendered tether@default.service runs it as ExecStartPre, so
-# `st service rebuild tether` puts the release it built live on restart.
+# `st service rebuild aico --worker tether@default` puts the release it built
+# live on restart. scripts/install.sh runs it for source installs.
 set -euo pipefail
 
 repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)

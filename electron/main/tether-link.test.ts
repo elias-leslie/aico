@@ -342,7 +342,7 @@ describe('connection', () => {
     )
     expect(dialog.showErrorBox).toHaveBeenCalledWith(
       'Update Tether',
-      'Tether 9.0.0 (API 9) is not compatible with this Aico. Your sessions keep running. Install a current Tether (scripts/install.sh in the Tether repo) and restart Aico.',
+      'Tether 9.0.0 (API 9) is not compatible with this Aico. Your sessions keep running. Update Aico (scripts/install.sh) and restart it.',
     )
     expect(link.notice()).toBe(
       'Tether 9.0.0 (API 9) is not compatible with this Aico. Sessions keep running.',

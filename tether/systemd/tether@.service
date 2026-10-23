@@ -1,5 +1,5 @@
 # Tether session daemon, one unit per instance: tether@default, tether@dev, ...
-# Installed by scripts/install.sh into ~/.config/systemd/user/. ExecStart uses
+# Installed by the repo's scripts/install.sh into ~/.config/systemd/user/. ExecStart uses
 # the stable install path, so upgrading Tether never edits this unit.
 #
 # tmux servers are separate transient units (aico-tmux-server-<id>.service for

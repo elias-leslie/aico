@@ -1,5 +1,5 @@
 # TEMPLATE — do not `cp` this into systemd directly: `__PROJECT_ROOT__` is a
-# placeholder. scripts/aico-install.sh (source installs) and
+# placeholder. scripts/install.sh (source installs) and
 # `st service rebuild aico` (managed hosts) render it with the repo path and
 # install the unit to ~/.config/systemd/user/; see docs/INSTALL.md.
 [Unit]

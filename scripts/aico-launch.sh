@@ -174,7 +174,7 @@ if ! command -v systemctl >/dev/null 2>&1; then
 fi
 UNIT_FRAGMENT="$(systemctl --user show "$RUNTIME_UNIT" --property=FragmentPath --value 2>/dev/null || true)"
 if [ -z "$UNIT_FRAGMENT" ] || [ ! -f "$UNIT_FRAGMENT" ]; then
-  echo "aico-launch: managed unit $RUNTIME_UNIT is not installed; run scripts/aico-install.sh" >&2
+  echo "aico-launch: managed unit $RUNTIME_UNIT is not installed; run scripts/install.sh" >&2
   exit 1
 fi
 if [ -z "${DISPLAY:-}" ]; then

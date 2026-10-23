@@ -6,7 +6,7 @@ its tests), because Tether owns the root contract it speaks. This file keeps the
 path SummitFlow's tool registry runs and hands over to Tether's installed copy
 with the same arguments, environment and exit status.
 
-`TETHER_ROOT_WATCH` overrides the target; the default is the copy Tether's
+`TETHER_ROOT_WATCH` overrides the target; the default is the copy
 `scripts/install.sh` installs.
 """
 
@@ -32,7 +32,7 @@ def main(argv: list[str]) -> int:
         # Same shape as the client's own unavailable answers: one JSON object.
         print(json.dumps({"owner": "aico", "observation": "unavailable",
                           "reason": "tether_root_watch_missing", "path": str(script)}))
-        print(f"aico-root-watch: {script} not found; run Tether's scripts/install.sh",
+        print(f"aico-root-watch: {script} not found; run scripts/install.sh",
               file=sys.stderr)
         return 2
     os.execv(sys.executable, [sys.executable, str(script), *argv])
