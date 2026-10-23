@@ -72,6 +72,10 @@ class Settings(BaseSettings):
     upload_dir: Path = get_upload_dir()
     upload_max_age_seconds: int = 24 * 60 * 60
 
+    # Agent shares: the default Tether copies shared files under <root>/agent (TETHER_EXCHANGE_ROOT, same
+    # variable and default as Tether's).
+    tether_exchange_root: Path = Path("/srv/workspaces/exchange")
+
     # Diagnostics
     diagnostics_enabled: bool = False
 

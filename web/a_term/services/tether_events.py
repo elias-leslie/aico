@@ -18,7 +18,7 @@ from typing import Any
 from ..logging_config import get_logger
 from ..storage import panes as pane_store
 from ..tether import TetherClient, TetherError, TetherUnavailable, get_client, known_socket_paths
-from ..tether.client import agent_socket_path
+from ..tether.client import DEFAULT_INSTANCE, owner_socket_path
 from . import lifecycle, shows
 
 logger = get_logger(__name__)
@@ -102,7 +102,8 @@ class TetherEventWatcher:
         raw_data = event.get("data")
         data: dict[str, Any] = raw_data if isinstance(raw_data, dict) else {}
         if event_type == "show.requested":
-            if self._socket_path == str(agent_socket_path()):
+            # Only the owner's tether@default (a socket in the owner's runtime dir) delivers shares.
+            if self._socket_path == str(owner_socket_path(DEFAULT_INSTANCE)):
                 shows.receive_show(data)
         elif event_type == "session.ended":
             session_id = data.get("id")

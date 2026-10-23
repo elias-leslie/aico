@@ -1,4 +1,4 @@
-"""Bounded, process-local metadata for handoffs from the agent's Tether."""
+"""Bounded, process-local metadata for agent shares delivered by the default Tether."""
 
 from __future__ import annotations
 
@@ -110,7 +110,7 @@ def push_show(show: Show) -> None:
     ]
     if PUBLIC_HOST:
         argv.extend(["--open", f"https://{PUBLIC_HOST}/?show={show.id}"])
-    argv.append("Open A-Term to see it.")  # fixed text: nothing the agent wrote reaches the push
+    argv.append("Open Aico to see it.")  # fixed text: nothing the agent wrote reaches the push
     try:
         subprocess.run(argv, timeout=10, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except (OSError, subprocess.SubprocessError) as error:

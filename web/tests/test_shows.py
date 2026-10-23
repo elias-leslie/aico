@@ -12,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from a_term.api import shows as routes
+from a_term.config import get_settings
 from a_term.services import shows
 from a_term.services.tether_events import TetherEventWatcher
 from a_term.tether.client import agent_socket_path, owner_socket_path
@@ -81,16 +82,19 @@ def test_invalid_urls_are_rejected(url: str) -> None:
     assert shows.validate_show(payload(kind="url", name=url, url=url)) is None
 
 
-def test_only_the_agent_instance_can_deliver_a_show(monkeypatch: pytest.MonkeyPatch, isolated_shows: MagicMock) -> None:
+def test_only_the_default_tether_can_deliver_a_show(monkeypatch: pytest.MonkeyPatch, isolated_shows: MagicMock) -> None:
+    monkeypatch.setenv("XDG_RUNTIME_DIR", "/run/user/test-owner")
+    monkeypatch.setenv("TETHER_INSTANCE", "dev")
     monkeypatch.setenv("TETHER_AGENT_SOCKET", "/run/tether/test-agent/control.sock")
     monkeypatch.setenv("TETHER_SOCKET", "/tmp/third.sock")
     event = {"type": "show.requested", "data": payload()}
-    for socket in (None, str(owner_socket_path()), "/tmp/third.sock", "/tmp/agent/control.sock"):
+    others = (None, str(owner_socket_path()), str(agent_socket_path()), "/tmp/third.sock", "/tmp/default/control.sock")
+    for socket in others:
         TetherEventWatcher(socket).handle(event)
     assert shows.store.recent() == []
     isolated_shows.assert_not_called()
 
-    watcher = TetherEventWatcher(str(agent_socket_path()))
+    watcher = TetherEventWatcher("/run/user/test-owner/tether/default/control.sock")
     watcher.handle({"type": "show.requested", "data": payload(name="../escape")})
     watcher.handle({"type": "show.requested", "data": "malformed"})
     assert shows.store.recent() == []
@@ -116,7 +120,7 @@ def test_push_uses_owner_public_host_and_fixed_argv(monkeypatch: pytest.MonkeyPa
     shows.receive_show(payload(title="$(never execute); <title>"))
     isolated_shows.assert_called_once_with(
         ["nightshift", "push", "--title", "Agent shared something", "--severity", "info", "--key", f"show:{SHOW_ID}",
-         "--open", f"https://terminal.example.test/?show={SHOW_ID}", "Open A-Term to see it."],
+         "--open", f"https://terminal.example.test/?show={SHOW_ID}", "Open Aico to see it."],
         timeout=10, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
 
@@ -127,7 +131,7 @@ def test_push_without_public_host_omits_open(monkeypatch: pytest.MonkeyPatch, is
     shows.receive_show(payload(kind="url", name=url, url=url))
     argv = isolated_shows.call_args.args[0]
     assert argv == ["nightshift", "push", "--title", "Agent shared something", "--severity", "info", "--key", f"show:{SHOW_ID}",
-                    "Open A-Term to see it."]
+                    "Open Aico to see it."]
     assert url not in argv
 
 
@@ -152,8 +156,10 @@ def test_metadata_route_returns_no_contents_and_accepts_cursor(test_app: TestCli
 
 
 @pytest.fixture
-def shared_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+def shared_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest) -> Path:
     monkeypatch.setenv("TETHER_EXCHANGE_ROOT", str(tmp_path))
+    get_settings.cache_clear()
+    request.addfinalizer(get_settings.cache_clear)
     path = tmp_path / "agent" / NAME
     path.parent.mkdir(parents=True)
     path.write_bytes(b"private report contents")

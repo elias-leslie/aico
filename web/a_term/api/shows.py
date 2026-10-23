@@ -5,13 +5,13 @@ from __future__ import annotations
 import os
 import stat
 from collections.abc import Iterator
-from pathlib import Path
 from typing import BinaryIO
 
 from fastapi import APIRouter, HTTPException, Response
 from fastapi.responses import StreamingResponse
 from starlette.background import BackgroundTask
 
+from ..config import get_settings
 from ..services import shows
 
 router = APIRouter()
@@ -25,7 +25,7 @@ def recent_shows(response: Response, since: str | None = None) -> dict[str, list
 
 
 def _open_file(name: str) -> BinaryIO:
-    root = Path(os.environ.get("TETHER_EXCHANGE_ROOT", "/srv/workspaces/exchange"))
+    root = get_settings().tether_exchange_root
     directory = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
         # Pin each directory by descriptor: no agent-controlled parent can redirect a read.

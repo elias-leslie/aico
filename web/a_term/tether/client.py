@@ -70,10 +70,10 @@ def default_socket_path() -> Path:
     return owner_socket_path()
 
 
-def owner_socket_path() -> Path:
-    """The caller's own ``$XDG_RUNTIME_DIR/tether/<instance>/control.sock``."""
+def owner_socket_path(instance: str | None = None) -> Path:
+    """The caller's own ``$XDG_RUNTIME_DIR/tether/<instance>/control.sock`` (``$TETHER_INSTANCE`` by default)."""
     runtime_dir = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
-    instance = os.environ.get("TETHER_INSTANCE", "").strip() or DEFAULT_INSTANCE
+    instance = instance or os.environ.get("TETHER_INSTANCE", "").strip() or DEFAULT_INSTANCE
     return Path(runtime_dir) / "tether" / instance / "control.sock"
 
 
