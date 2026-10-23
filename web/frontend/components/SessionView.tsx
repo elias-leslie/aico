@@ -34,6 +34,9 @@ export interface SessionViewProps {
     mode: ATermMode,
   ) => void | Promise<void>
   isModeSwitching?: boolean
+  /** Desktop: whether the compose box is shown */
+  composeOpen?: boolean
+  onToggleCompose?: () => void
 }
 
 /** The active session, or one of the user's own when none is chosen. */
@@ -70,6 +73,8 @@ export function SessionView({
   onNewSession,
   onModeSwitch,
   isModeSwitching,
+  composeOpen,
+  onToggleCompose,
 }: SessionViewProps) {
   const [refreshVersion, setRefreshVersion] = useState(0)
   const [filesPaneId, setFilesPaneId] = useState<string | null>(null)
@@ -130,6 +135,8 @@ export function SessionView({
             onModeSwitch ? (mode) => onModeSwitch(slot, mode) : undefined
           }
           isModeSwitching={isModeSwitching}
+          composeOpen={composeOpen}
+          onToggleCompose={onToggleCompose}
           isMobile={isMobile}
           allSlots={slots}
           onSwitchTo={onSwitch}

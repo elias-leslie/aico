@@ -1,4 +1,6 @@
 import { clsx } from 'clsx'
+import { useCallback, useEffect, useRef } from 'react'
+import { useLocalStorageState } from '@/lib/hooks/use-local-storage-state'
 import { AgentShows } from './AgentShowToast'
 import { ATermFileSection } from './a-term-content/ATermFileSection'
 import { ATermMobileSection } from './a-term-content/ATermMobileSection'
@@ -7,6 +9,10 @@ import { NativeKeyboardInput } from './keyboard/NativeKeyboardInput'
 import { SettingsDropdown } from './SettingsDropdown'
 
 export type { ATermContentProps }
+
+/** Desktop browsers hide the compose box until it is opened, then remember
+ * it on this device. Phones always show it. */
+const COMPOSE_OPEN_KEY = 'a-term-compose-open'
 
 /**
  * Renders the a-term content area with all modals and overlays
@@ -58,6 +64,23 @@ export function ATermContent({
   handleVoiceReset,
   className,
 }: ATermContentProps) {
+  const [composeOpen, setComposeOpen] = useLocalStorageState(
+    COMPOSE_OPEN_KEY,
+    false,
+  )
+  const composeInputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null)
+  const focusComposeRef = useRef(false)
+  const toggleCompose = useCallback(() => {
+    focusComposeRef.current = !composeOpen
+    setComposeOpen(!composeOpen)
+  }, [composeOpen, setComposeOpen])
+  useEffect(() => {
+    if (composeOpen && focusComposeRef.current) {
+      focusComposeRef.current = false
+      composeInputRef.current?.focus()
+    }
+  }, [composeOpen])
+
   return (
     <div
       className={clsx(
@@ -99,6 +122,8 @@ export function ATermContent({
         handleFileSelect={handleFileSelect}
         activeSessionId={activeSessionId}
         isMobile={isMobile}
+        composeOpen={composeOpen}
+        onToggleCompose={isMobile ? undefined : toggleCompose}
       />
 
       {/* Mobile keyboard + voice panel */}
@@ -125,9 +150,10 @@ export function ATermContent({
         isMobile={isMobile}
       />
 
-      {!isMobile && activeSessionId && sessions.length > 0 && (
+      {!isMobile && composeOpen && activeSessionId && sessions.length > 0 && (
         <NativeKeyboardInput
           key={activeSessionId}
+          inputRef={composeInputRef}
           sessionId={activeSessionId}
           connected={activeStatus === 'connected'}
           onCommit={handleComposeInput}

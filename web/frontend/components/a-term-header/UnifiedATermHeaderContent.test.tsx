@@ -232,4 +232,24 @@ describe('UnifiedATermHeaderContent', () => {
     fireEvent.click(screen.getByRole('button', { name: 'New session' }))
     expect(onOpenModal).toHaveBeenCalledTimes(1)
   })
+
+  it('offers Compose only where the compose box can be hidden, showing its state', () => {
+    const onToggleCompose = vi.fn()
+    const { rerender } = render(
+      <UnifiedATermHeaderContent slot={makeProjectSlot('a', 'Alpha')} />,
+    )
+    expect(screen.queryByRole('button', { name: 'Compose' })).toBeNull()
+
+    rerender(
+      <UnifiedATermHeaderContent
+        slot={makeProjectSlot('a', 'Alpha')}
+        composeOpen
+        onToggleCompose={onToggleCompose}
+      />,
+    )
+    const compose = screen.getByRole('button', { name: 'Compose' })
+    expect(compose).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(compose)
+    expect(onToggleCompose).toHaveBeenCalledTimes(1)
+  })
 })

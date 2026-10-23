@@ -1,7 +1,7 @@
 'use client'
 
 import { clsx } from 'clsx'
-import { FolderOpen } from 'lucide-react'
+import { FolderOpen, SquarePen } from 'lucide-react'
 import { memo, useCallback, useState } from 'react'
 import { useATermPanes } from '@/lib/hooks/use-a-term-panes'
 import { useATermSessions } from '@/lib/hooks/use-a-term-sessions'
@@ -36,6 +36,8 @@ export const UnifiedATermHeaderContent = memo(
     onReconnect,
     onSearch,
     onClearSearch,
+    composeOpen = false,
+    onToggleCompose,
   }: UnifiedATermHeaderProps) {
     const { enabledTools } = useAgentTools()
     const { renamePane } = useATermPanes()
@@ -119,6 +121,24 @@ export const UnifiedATermHeaderContent = memo(
         <PaneStatusBadge status={connectionStatus} onReconnect={onReconnect} />
 
         <div className="flex items-center gap-0.5">
+          {onToggleCompose && (
+            <button
+              type="button"
+              onClick={onToggleCompose}
+              aria-pressed={composeOpen}
+              data-testid="compose-toggle"
+              className="flex h-6 items-center gap-1 rounded px-1.5 text-xs transition-colors hover:bg-[var(--term-bg-surface)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--term-accent)]"
+              style={{
+                color: composeOpen
+                  ? 'var(--term-accent)'
+                  : 'var(--term-text-muted)',
+              }}
+            >
+              <SquarePen className="h-3.5 w-3.5" />
+              Compose
+            </button>
+          )}
+
           {onSearch && onClearSearch && (
             <PaneSearchControl
               onSearch={onSearch}

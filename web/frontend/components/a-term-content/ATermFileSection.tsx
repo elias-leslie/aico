@@ -24,6 +24,8 @@ interface ATermFileSectionProps {
   handleUploadClick: (sessionId?: string) => void
   onModeSwitch: (slot: ATermSlot | PaneSlot, mode: string) => void
   isModeSwitching: boolean
+  composeOpen?: boolean
+  onToggleCompose?: () => void
   fileInputRef: RefObject<HTMLInputElement | null>
   progress: number
   isUploading: boolean
@@ -49,6 +51,8 @@ export function ATermFileSection({
   handleUploadClick,
   onModeSwitch,
   isModeSwitching,
+  composeOpen,
+  onToggleCompose,
   fileInputRef,
   progress,
   isUploading,
@@ -105,6 +109,8 @@ export function ATermFileSection({
           onNewSession={handleOpenATermManager}
           onModeSwitch={onModeSwitch}
           isModeSwitching={isModeSwitching}
+          composeOpen={composeOpen}
+          onToggleCompose={onToggleCompose}
         />
       </FileUploadDropzone>
     </>

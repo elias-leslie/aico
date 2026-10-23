@@ -44,6 +44,8 @@ On a phone, tap Talk to start dictating. Words appear while you speak, and pause
 
 **`mobile workspace controls`** — On a phone you type with the phone's own keyboard into a compose box that stays above a key row (Tab, Shift, voice, Esc, Ctrl, arrow keys). The first key shows or hides the phone keyboard. The visible bottom row stays in view as the keyboard opens, and a touch-friendly session switcher jumps into any session.
 
+**`compose box`** — In a desktop browser the compose box is hidden until you press Compose in the session bar; this browser then remembers whether it is open. Write a message there and send it to the session in one go.
+
 Expand the arrow controls to find Enter, which activates a TUI selection without typing a draft. Terminal keys keep the phone keyboard and arrow controls open. With a draft focused, Left and Right move its caret; Up and Down navigate the terminal. Send submits the draft, while the toolbox's Enter sends only the Enter key and leaves the draft intact.
 
 **`text size`** — Settings change the terminal text size, remembered per project in this browser.

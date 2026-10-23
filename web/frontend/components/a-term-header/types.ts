@@ -31,6 +31,10 @@ export interface UnifiedATermHeaderProps {
   onReconnect?: () => void
   onSearch?: (query: string, options?: ATermSearchOptions) => ATermSearchResult
   onClearSearch?: () => void
+  /** Desktop: whether the compose box is shown */
+  composeOpen?: boolean
+  /** Desktop: show or hide the compose box */
+  onToggleCompose?: () => void
 }
 
 export interface IconButtonProps {
