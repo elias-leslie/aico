@@ -3,7 +3,6 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import { clsx } from 'clsx'
 import {
-  AlertTriangle,
   Binary,
   Check,
   ChevronRight,
@@ -14,7 +13,6 @@ import {
   FileText,
   Folder,
   FolderOpen,
-  Loader2,
   X,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -120,47 +118,44 @@ function TreeNode({
       <button
         type="button"
         onClick={handleClick}
-        className={clsx(
-          'flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left text-sm transition-colors',
-          isSelected
-            ? 'bg-[var(--term-accent)]/12 text-[var(--term-accent)]'
-            : 'text-slate-300 hover:bg-slate-800/60',
-        )}
-        style={{ paddingLeft: 12 + depth * 16 }}
+        aria-current={isSelected ? 'true' : undefined}
+        className="lantern-file-row"
+        style={{ paddingLeft: 10 + depth * 16 }}
       >
         {entry.is_directory ? (
-          <ChevronRight
-            className={clsx(
-              'h-3.5 w-3.5 flex-shrink-0 text-slate-500 transition-transform',
-              expanded && 'rotate-90',
-            )}
-          />
-        ) : (
-          <span className="w-3.5 flex-shrink-0" />
-        )}
-
-        {entry.is_directory ? (
           expanded ? (
-            <FolderOpen className="h-4 w-4 flex-shrink-0 text-[var(--term-accent)]/80" />
+            <FolderOpen className="dir" strokeWidth={1.7} />
           ) : (
-            <Folder className="h-4 w-4 flex-shrink-0 text-slate-500" />
+            <Folder className="dir" strokeWidth={1.7} />
           )
         ) : FileIcon ? (
-          <FileIcon className="h-4 w-4 flex-shrink-0 text-slate-500" />
+          <FileIcon strokeWidth={1.7} />
         ) : null}
 
-        <span className="truncate">{entry.name}</span>
+        <span className="n">{entry.name}</span>
+        <span className="s">
+          {entry.is_directory ? (
+            <ChevronRight
+              aria-hidden="true"
+              className={clsx(
+                'h-3.5 w-3.5 transition-transform',
+                expanded && 'rotate-90',
+              )}
+            />
+          ) : entry.size !== undefined ? (
+            formatSize(entry.size)
+          ) : null}
+        </span>
       </button>
 
       {entry.is_directory && expanded && (
-        <ul role="group" className="py-0.5">
+        <ul role="group">
           {childTree.isLoading ? (
             <li
-              className="flex items-center gap-2 py-1 text-xs text-slate-500"
-              style={{ paddingLeft: 32 + depth * 16 }}
+              className="py-1.5 text-xs"
+              style={{ paddingLeft: 38 + depth * 16, color: 'var(--mist)' }}
             >
-              <Loader2 className="h-3 w-3 animate-spin" />
-              Loading...
+              Loading
             </li>
           ) : (
             childTree.data?.entries?.map((child) => (
@@ -236,179 +231,215 @@ export function PaneFilesDialog({
     ].filter(Boolean)
   }, [content.data])
 
+  const folder = tree.data?.path ?? ''
+  const folderName = folder.split('/').filter(Boolean).pop() ?? folder
+  const parentPath = folder.slice(0, folder.length - folderName.length)
+
   return (
     <Dialog.Root open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-[70] bg-slate-950/75 backdrop-blur-sm" />
+        <Dialog.Overlay
+          className="fixed inset-0 z-[70]"
+          style={{ backgroundColor: 'var(--scrim)' }}
+        />
         <Dialog.Content
-          className={clsx(
-            'fixed inset-x-3 top-3 bottom-3 z-[71] flex flex-col overflow-hidden rounded-2xl border border-slate-800/80 bg-[#08070d] shadow-[0_28px_80px_rgba(0,0,0,0.55)]',
-            'sm:inset-x-6 sm:top-6 sm:bottom-6',
-          )}
+          aria-describedby={undefined}
+          className="lantern-sheet lantern-enter fixed inset-0 z-[71] flex flex-col overflow-hidden md:inset-x-6 md:top-6 md:bottom-6 md:rounded-[14px]"
         >
-          <div className="flex items-center justify-between gap-3 border-b border-slate-800/80 px-4 py-3">
-            <div className="min-w-0">
-              <Dialog.Title className="text-sm font-semibold text-slate-100">
-                Files
-              </Dialog.Title>
-              <p className="truncate text-xs text-slate-500">
-                {tree.data?.path
-                  ? `Current folder: ${tree.data.path}`
-                  : 'Pane workspace'}
-              </p>
-            </div>
+          <div className="flex flex-none items-center gap-2 pt-2 pr-2 pl-[18px]">
+            <Dialog.Title
+              className="m-0 flex-1"
+              style={{ font: '500 18px/1.2 var(--font-display)' }}
+            >
+              Files
+            </Dialog.Title>
             <button
               type="button"
               onClick={onClose}
-              className="rounded-md p-2 text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-200"
+              className="lantern-icon-btn"
               aria-label="Close files"
             >
-              <X className="h-4 w-4" />
+              <X className="h-[18px] w-[18px]" strokeWidth={1.7} />
             </button>
           </div>
+          {folder && (
+            <p
+              className="m-0 flex-none truncate px-[18px] pb-2.5 text-xs"
+              style={{ fontFamily: 'var(--font-mono)', color: 'var(--mist)' }}
+              title={folder}
+            >
+              {parentPath}
+              <span style={{ color: 'var(--bone)' }}>{folderName}</span>
+            </p>
+          )}
 
-          <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[300px_minmax(0,1fr)]">
-            <div className="border-b border-slate-800/80 md:border-b-0 md:border-r">
-              <div className="flex h-full min-h-0 flex-col">
-                <div className="border-b border-slate-800/60 px-4 py-2 text-[11px] uppercase tracking-[0.18em] text-slate-500">
-                  Browser
+          <div className="flex min-h-0 flex-1 flex-col md:grid md:grid-cols-[320px_minmax(0,1fr)]">
+            <div
+              className={clsx(
+                'min-h-0 overflow-auto overscroll-contain px-2 pb-2',
+                selectedEntry
+                  ? 'max-h-[42%] flex-none md:max-h-none'
+                  : 'flex-1',
+              )}
+            >
+              {tree.isLoading ? (
+                <p className="files-state">Loading files</p>
+              ) : tree.isError ? (
+                <div className="files-state">
+                  <p>Couldn’t load the files.</p>
+                  <button
+                    type="button"
+                    className="lantern-btn mt-3"
+                    onClick={() => void tree.refetch()}
+                  >
+                    Try again
+                  </button>
                 </div>
-                <div className="min-h-0 flex-1 overflow-auto py-2">
-                  {tree.isLoading ? (
-                    <div className="flex items-center gap-2 px-4 py-4 text-sm text-slate-500">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Loading files...
-                    </div>
-                  ) : tree.isError ? (
-                    <div className="px-4 py-4 text-sm text-rose-400">
-                      {tree.error?.message ?? 'Failed to load pane files'}
-                    </div>
-                  ) : tree.data?.entries.length ? (
-                    <ul className="space-y-0.5">
-                      {tree.data.entries.map((entry) => (
-                        <TreeNode
-                          key={entry.path}
-                          paneId={paneId}
-                          entry={entry}
-                          depth={0}
-                          selectedPath={selectedEntry?.path ?? null}
-                          onSelect={setSelectedEntry}
-                        />
-                      ))}
-                    </ul>
-                  ) : (
-                    <div className="px-4 py-4 text-sm text-slate-500">
-                      No files found
-                    </div>
-                  )}
-                </div>
-              </div>
+              ) : tree.data?.entries.length ? (
+                <ul className="m-0 list-none p-0">
+                  {tree.data.entries.map((entry) => (
+                    <TreeNode
+                      key={entry.path}
+                      paneId={paneId}
+                      entry={entry}
+                      depth={0}
+                      selectedPath={selectedEntry?.path ?? null}
+                      onSelect={setSelectedEntry}
+                    />
+                  ))}
+                </ul>
+              ) : (
+                <p className="files-state">This folder is empty.</p>
+              )}
             </div>
 
-            <div className="min-h-0 flex-1 overflow-hidden">
+            <section
+              aria-label={selectedEntry?.name ?? 'Preview'}
+              className={clsx(
+                'mx-1 mb-1 min-h-0 flex-1 flex-col overflow-hidden rounded',
+                selectedEntry ? 'flex' : 'hidden md:flex',
+              )}
+              style={{
+                backgroundColor: 'var(--ink)',
+                boxShadow: 'inset 0 0 0 1px var(--frame-edge)',
+              }}
+            >
               {!selectedEntry ? (
-                <div className="flex h-full items-center justify-center px-6 text-center text-sm text-slate-500">
-                  Select a file to preview it and insert its path into the
-                  session.
-                </div>
+                <p className="files-state m-auto">Pick a file to preview it.</p>
               ) : content.isLoading ? (
-                <div className="flex h-full items-center justify-center gap-2 text-sm text-slate-500">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading file...
-                </div>
+                <p className="files-state m-auto">Loading the file</p>
               ) : content.isError ? (
-                <div className="flex h-full items-center justify-center px-6 text-center text-sm text-rose-400">
-                  {content.error?.message ?? 'Failed to load file'}
+                <div className="files-state m-auto">
+                  <p>Couldn’t open this file.</p>
+                  <button
+                    type="button"
+                    className="lantern-btn mt-3"
+                    onClick={() => void content.refetch()}
+                  >
+                    Try again
+                  </button>
                 </div>
               ) : content.data ? (
-                <div className="flex h-full min-h-0 flex-col">
-                  <div className="flex flex-wrap items-center gap-2 border-b border-slate-800/80 px-4 py-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium text-slate-100">
-                        {content.data.name}
-                      </div>
-                      <div className="truncate text-xs text-slate-500">
-                        {content.data.path}
-                      </div>
-                    </div>
-                    {infoPills.map((pill) => (
-                      <span
-                        key={pill}
-                        className="rounded-full border border-slate-700/70 bg-slate-900/70 px-2 py-0.5 text-[11px] text-slate-400"
+                <>
+                  <div
+                    className="flex flex-none flex-wrap items-center gap-x-2 gap-y-1.5 py-2 pr-2 pl-3"
+                    style={{
+                      borderBottom: '1px solid rgb(var(--glass-rgb) / 0.06)',
+                    }}
+                  >
+                    <div className="min-w-0 flex-[1_1_12rem]">
+                      <p
+                        className="m-0 truncate text-[12.5px]"
+                        style={{ fontFamily: 'var(--font-mono)' }}
+                        title={content.data.path}
                       >
-                        {pill}
-                      </span>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={handleInsertPath}
-                      className="rounded-md border border-[var(--term-accent)]/30 bg-[var(--term-accent)]/12 px-3 py-1.5 text-xs font-medium text-[var(--term-accent)] transition-colors hover:bg-[var(--term-accent)]/18"
-                    >
-                      Insert Path
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleCopy('path')}
-                      className="rounded-md border border-slate-700/70 px-3 py-1.5 text-xs text-slate-300 transition-colors hover:bg-slate-800"
-                    >
-                      {copiedThing === 'path' ? (
-                        <span className="inline-flex items-center gap-1">
-                          <Check className="h-3 w-3" />
-                          Copied Path
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1">
-                          <Copy className="h-3 w-3" />
-                          Copy Path
-                        </span>
-                      )}
-                    </button>
-                    {!content.data.is_binary && content.data.content && (
+                        {content.data.name}
+                      </p>
+                      <p
+                        className="m-0 truncate text-[11.5px]"
+                        style={{
+                          fontFamily: 'var(--font-mono)',
+                          color: 'var(--mist)',
+                        }}
+                      >
+                        {infoPills.join(' · ')}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
                       <button
                         type="button"
-                        onClick={() => handleCopy('content')}
-                        className="rounded-md border border-slate-700/70 px-3 py-1.5 text-xs text-slate-300 transition-colors hover:bg-slate-800"
+                        onClick={handleInsertPath}
+                        className="lantern-btn primary h-8! px-2.5! text-xs!"
                       >
-                        {copiedThing === 'content' ? (
-                          <span className="inline-flex items-center gap-1">
-                            <Check className="h-3 w-3" />
-                            Copied Contents
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1">
-                            <Copy className="h-3 w-3" />
-                            Copy Contents
-                          </span>
-                        )}
+                        Insert path
                       </button>
-                    )}
+                      <button
+                        type="button"
+                        onClick={() => handleCopy('path')}
+                        className="lantern-btn h-8! px-2.5! text-xs!"
+                      >
+                        {copiedThing === 'path' ? (
+                          <Check className="h-3.5 w-3.5" />
+                        ) : (
+                          <Copy className="h-3.5 w-3.5" />
+                        )}
+                        {copiedThing === 'path' ? 'Copied' : 'Copy path'}
+                      </button>
+                      {!content.data.is_binary && content.data.content && (
+                        <button
+                          type="button"
+                          onClick={() => handleCopy('content')}
+                          className="lantern-btn h-8! px-2.5! text-xs!"
+                        >
+                          {copiedThing === 'content' ? (
+                            <Check className="h-3.5 w-3.5" />
+                          ) : (
+                            <Copy className="h-3.5 w-3.5" />
+                          )}
+                          {copiedThing === 'content'
+                            ? 'Copied'
+                            : 'Copy contents'}
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {content.data.truncated && (
-                    <div className="flex items-center gap-2 border-b border-amber-500/20 bg-amber-500/8 px-4 py-2 text-xs text-amber-300">
-                      <AlertTriangle className="h-3.5 w-3.5" />
-                      Preview truncated to 1 MB
-                    </div>
+                    <p
+                      className="m-0 flex-none px-3 py-1.5 text-xs"
+                      style={{
+                        color: 'var(--mist)',
+                        backgroundColor: 'var(--paper)',
+                      }}
+                    >
+                      Showing the first 1 MB
+                    </p>
                   )}
 
                   {content.data.is_binary ? (
-                    <div className="flex flex-1 items-center justify-center px-6 text-center">
-                      <div>
-                        <Binary className="mx-auto mb-3 h-10 w-10 text-slate-700" />
-                        <p className="text-sm text-slate-300">Binary file</p>
-                        <p className="mt-1 text-xs text-slate-500">
-                          {formatSize(content.data.size)}
-                        </p>
-                      </div>
+                    <div className="files-state m-auto">
+                      <Binary
+                        aria-hidden="true"
+                        className="mx-auto mb-2 h-8 w-8"
+                        strokeWidth={1.5}
+                      />
+                      <p>Binary file, {formatSize(content.data.size)}</p>
                     </div>
                   ) : (
-                    <pre className="min-h-0 flex-1 overflow-auto bg-[#05040a] p-4 text-sm text-slate-200 whitespace-pre-wrap">
+                    <pre
+                      className="m-0 min-h-0 flex-1 overflow-auto px-3 py-2 text-xs whitespace-pre-wrap"
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        lineHeight: 1.45,
+                        color: 'var(--bone)',
+                      }}
+                    >
                       {content.data.content}
                     </pre>
                   )}
-                </div>
+                </>
               ) : null}
-            </div>
+            </section>
           </div>
         </Dialog.Content>
       </Dialog.Portal>

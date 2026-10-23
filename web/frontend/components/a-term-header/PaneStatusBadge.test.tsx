@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { render, screen } from '@testing-library/react'
+import { describe, expect, it } from 'vitest'
 import { PaneStatusBadge } from './PaneStatusBadge'
 
 describe('PaneStatusBadge', () => {
@@ -9,20 +9,17 @@ describe('PaneStatusBadge', () => {
   })
 
   it('says Connecting while it connects', () => {
-    render(<PaneStatusBadge status="connecting" onReconnect={vi.fn()} />)
+    render(<PaneStatusBadge status="connecting" />)
     expect(screen.getByRole('status')).toHaveTextContent('Connecting')
+  })
+
+  it('names a dropped connection and leaves Reconnect to the terminal area', () => {
+    render(<PaneStatusBadge status="disconnected" />)
+    expect(screen.getByRole('status')).toHaveTextContent('Disconnected')
     expect(screen.queryByRole('button')).toBeNull()
   })
 
-  it('offers Reconnect after a transient failure', () => {
-    const onReconnect = vi.fn()
-    render(<PaneStatusBadge status="disconnected" onReconnect={onReconnect} />)
-    expect(screen.getByRole('status')).toHaveTextContent('Disconnected')
-    fireEvent.click(screen.getByRole('button', { name: 'Reconnect session' }))
-    expect(onReconnect).toHaveBeenCalledTimes(1)
-  })
-
-  it('names the failure when there is no way to reconnect', () => {
+  it('names a timeout', () => {
     render(<PaneStatusBadge status="timeout" />)
     expect(screen.getByRole('status')).toHaveTextContent('Timed out')
   })

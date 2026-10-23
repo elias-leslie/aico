@@ -12,7 +12,7 @@ import {
 import '@xterm/xterm/css/xterm.css'
 import { swallowQueryReplies, trackSgrMouse } from '../lib/a-term/control-view'
 import { keepReadingPlace } from '../lib/a-term/reading-place'
-import { PHOSPHOR_THEME, SCROLLBACK } from '../lib/constants/a-term'
+import { LANTERN_TERMINAL_THEME, SCROLLBACK } from '../lib/constants/a-term'
 import type { ATermRendererStatus } from '../lib/hooks/a-term-instance-utils'
 import { useATermHandle } from '../lib/hooks/use-a-term-handle'
 import { useATermInstance } from '../lib/hooks/use-a-term-instance'
@@ -301,7 +301,7 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
           data-testid="a-term-live-container"
           className="h-full min-h-0 min-w-0 overflow-hidden"
           style={{
-            backgroundColor: PHOSPHOR_THEME.background,
+            backgroundColor: LANTERN_TERMINAL_THEME.background,
             width: '100%',
           }}
         />

@@ -1,6 +1,6 @@
 import type { FitAddon } from '@xterm/addon-fit'
 import type { WebglAddon } from '@xterm/addon-webgl'
-import { A_TERM_FONT_FAMILY, PHOSPHOR_THEME } from '../constants/a-term'
+import { A_TERM_FONT_FAMILY, LANTERN_TERMINAL_THEME } from '../constants/a-term'
 import { isMobileDevice } from '../utils/device'
 import { applyMobileATermTouchStyles } from '../utils/mobile-a-term-touch'
 import { shouldUseWebglRenderer } from '../utils/webgl-renderer'
@@ -103,7 +103,8 @@ export function createATermWithAddons(
   fitAddon: InstanceType<typeof FitAddon>
 } {
   const term = new modules.XtermATerm({
-    cursorBlink: true,
+    // Static, as on the desktop: nothing moves at rest.
+    cursorBlink: false,
     cursorStyle: 'block',
     fontSize: opts.fontSize,
     fontFamily: A_TERM_FONT_FAMILY,
@@ -112,7 +113,7 @@ export function createATermWithAddons(
     rightClickSelectsWord: true,
     macOptionClickForcesSelection: true,
     altClickMovesCursor: false,
-    theme: PHOSPHOR_THEME,
+    theme: LANTERN_TERMINAL_THEME,
   })
 
   const fitAddon = new modules.FitAddon()

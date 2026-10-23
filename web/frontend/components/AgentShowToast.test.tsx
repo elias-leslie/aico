@@ -25,6 +25,19 @@ afterEach(() => {
 })
 
 describe('AgentShowToast', () => {
+  it('names the session that shared it', () => {
+    render(
+      <AgentShowToast
+        show={{ ...metadata, kind: 'file' }}
+        onDismiss={vi.fn()}
+        sessionName="SlopMiner — web look"
+      />,
+    )
+    expect(screen.getByText('Shared by SlopMiner — web look')).toBeVisible()
+    expect(screen.getByText('Report')).toBeVisible()
+    expect(screen.getByText('report.pdf')).toBeVisible()
+  })
+
   it('opens only the authenticated file route and supports dismissal', () => {
     const dismiss = vi.fn()
     render(
@@ -34,7 +47,7 @@ describe('AgentShowToast', () => {
       />,
     )
     expect(screen.getByRole('status')).toHaveTextContent(
-      'Agent shared: <script>literal</script>',
+      'Shared by an agent<script>literal</script>report.pdf',
     )
     expect(document.querySelector('script')).toBeNull()
     expect(screen.getByRole('link', { name: 'Open' })).toHaveAttribute(
@@ -61,7 +74,7 @@ describe('AgentShowToast', () => {
     )
     expect(screen.getByText(url)).toBeVisible()
     expect(screen.queryByRole('link')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Copy' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Copy link' }))
     expect(await screen.findByRole('button', { name: 'Copied' })).toBeVisible()
     expect(writeText).toHaveBeenCalledWith(url)
     expect(open).not.toHaveBeenCalled()
@@ -85,11 +98,11 @@ describe('AgentShowToast', () => {
       />,
     )
     expect(screen.getByRole('status')).toHaveTextContent(
-      'Agent shared: https://agent.example',
+      'Shared by an agenthttps://agent.example',
     )
-    fireEvent.click(screen.getByRole('button', { name: 'Copy' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Copy link' }))
     expect(
-      await screen.findByRole('button', { name: 'Copy failed' }),
+      await screen.findByRole('button', { name: 'Couldn’t copy' }),
     ).toBeVisible()
   })
 })

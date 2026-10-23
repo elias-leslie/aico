@@ -14,16 +14,14 @@ export type ATermInputHandler = (sequence: string) => void
 // Sizes of the key row and compose box, in design pixels.
 export const KEY_ROW_METRICS = {
   buttonSize: 44,
-  arrowSize: 56,
-  iconSize: 20,
+  arrowSize: 52,
+  iconSize: 18,
   composeHeight: 46,
-  keyGap: 3,
-  keyRadius: 7,
-  paddingX: 8,
+  keyGap: 5,
+  paddingX: 4,
   paddingY: 6,
-  rowGap: 10,
-  arrowGroupGap: 14,
-  composeGap: 8,
+  rowGap: 6,
+  arrowGroupGap: 5,
 } as const
 
 /**

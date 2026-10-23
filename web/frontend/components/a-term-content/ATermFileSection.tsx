@@ -26,6 +26,8 @@ interface ATermFileSectionProps {
   isModeSwitching: boolean
   composeOpen?: boolean
   onToggleCompose?: () => void
+  /** The session list sits beside the session (desktop) */
+  sideList?: boolean
   fileInputRef: RefObject<HTMLInputElement | null>
   progress: number
   isUploading: boolean
@@ -53,6 +55,7 @@ export function ATermFileSection({
   isModeSwitching,
   composeOpen,
   onToggleCompose,
+  sideList,
   fileInputRef,
   progress,
   isUploading,
@@ -111,6 +114,7 @@ export function ATermFileSection({
           isModeSwitching={isModeSwitching}
           composeOpen={composeOpen}
           onToggleCompose={onToggleCompose}
+          sideList={sideList}
         />
       </FileUploadDropzone>
     </>

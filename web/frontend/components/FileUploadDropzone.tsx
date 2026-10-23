@@ -97,37 +97,24 @@ export function FileUploadDropzone({
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
-      aria-label="File upload dropzone"
     >
       {children}
 
-      {/* Drag overlay */}
+      {/* Drag overlay: the terminal notice look, with an amber edge */}
       {isDragging && (
         <div
-          className="absolute inset-0 z-50 flex flex-col items-center justify-center backdrop-blur-sm transition-opacity duration-200"
-          style={{
-            backgroundColor: 'rgba(15, 20, 25, 0.9)',
-            border: '2px dashed var(--term-accent)',
-          }}
+          className="lantern-term-notice"
+          style={{ boxShadow: 'inset 0 0 0 1px var(--lantern)', zIndex: 50 }}
           role="status"
-          aria-label="Drop file to upload"
         >
           <Upload
-            className="w-12 h-12 mb-3"
-            style={{ color: 'var(--term-accent)' }}
+            aria-hidden="true"
+            className="mb-1 h-6 w-6"
+            strokeWidth={1.7}
+            style={{ color: 'var(--lantern)' }}
           />
-          <span
-            className="text-lg font-medium"
-            style={{ color: 'var(--term-text-primary)' }}
-          >
-            Drop file to upload
-          </span>
-          <span
-            className="text-sm mt-1"
-            style={{ color: 'var(--term-text-muted)' }}
-          >
-            File will be uploaded and path inserted
-          </span>
+          <p className="t">Drop a file to upload it</p>
+          <p className="d">Its path goes into the session.</p>
         </div>
       )}
     </div>

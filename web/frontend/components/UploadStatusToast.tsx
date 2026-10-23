@@ -1,9 +1,9 @@
 'use client'
 
-import { Loader2, X } from 'lucide-react'
+import { AlertTriangle, X } from 'lucide-react'
 
 const TOAST_BASE_CLASSES =
-  'absolute top-10 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-md shadow-lg'
+  'lantern-sheet lantern-enter absolute top-14 left-1/2 z-50 w-[calc(100%-20px)] max-w-md -translate-x-1/2 rounded-xl px-3.5 py-2.5'
 
 interface UploadProgressToastProps {
   progress: number
@@ -16,31 +16,20 @@ export function UploadProgressToast({ progress }: UploadProgressToastProps) {
       role="status"
       aria-label={`Uploading file: ${progress}%`}
       className={TOAST_BASE_CLASSES}
-      style={{
-        backgroundColor: 'var(--term-bg-elevated)',
-        border: '1px solid var(--term-border)',
-      }}
     >
-      <div className="flex items-center gap-2">
-        <Loader2
-          className="w-4 h-4 animate-spin"
-          style={{ color: 'var(--term-accent)' }}
-        />
-        <span className="text-sm" style={{ color: 'var(--term-text-primary)' }}>
-          Uploading... {progress}%
+      <div className="flex items-center justify-between gap-2 text-[13px]">
+        <span>Uploading</span>
+        <span style={{ color: 'var(--mist)', fontFamily: 'var(--font-mono)' }}>
+          {progress}%
         </span>
       </div>
-      {/* Progress bar */}
       <div
-        className="mt-1.5 h-1 rounded-full overflow-hidden"
-        style={{ backgroundColor: 'var(--term-bg-deep)' }}
+        className="mt-2 h-1 overflow-hidden rounded-full"
+        style={{ backgroundColor: 'var(--paper-veil)' }}
       >
         <div
-          className="h-full rounded-full transition-all duration-300 ease-out"
-          style={{
-            width: `${progress}%`,
-            backgroundColor: 'var(--term-accent)',
-          }}
+          className="h-full rounded-full transition-[width] duration-200 ease-out"
+          style={{ width: `${progress}%`, backgroundColor: 'var(--lantern)' }}
         />
       </div>
     </div>
@@ -61,23 +50,24 @@ export function UploadErrorToast({
       data-testid="upload-error-toast"
       role="alert"
       className={TOAST_BASE_CLASSES}
-      style={{
-        backgroundColor: 'var(--term-bg-elevated)',
-        border: '1px solid var(--term-error)',
-      }}
     >
-      <div className="flex items-center gap-2">
-        <span className="text-sm flex-1" style={{ color: 'var(--term-error)' }}>
-          {message}
-        </span>
+      <div className="flex items-center gap-2.5">
+        {/* Ember text on umber is under 4.5:1: the icon carries it. */}
+        <AlertTriangle
+          aria-hidden="true"
+          className="h-4 w-4 flex-none"
+          strokeWidth={1.7}
+          style={{ color: 'var(--ember)' }}
+        />
+        <span className="flex-1 text-[13px]">{message}</span>
         {onDismiss && (
           <button
+            type="button"
             onClick={onDismiss}
-            className="flex-shrink-0 p-0.5 rounded transition-colors hover:bg-white/5"
-            style={{ color: 'var(--term-text-muted)' }}
+            className="lantern-icon-btn compact -my-1.5 -mr-1.5"
             aria-label="Dismiss error"
           >
-            <X className="w-3.5 h-3.5" />
+            <X className="h-4 w-4" strokeWidth={1.7} />
           </button>
         )}
       </div>

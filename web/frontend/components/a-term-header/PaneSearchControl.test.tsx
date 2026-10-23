@@ -59,4 +59,32 @@ describe('PaneSearchControl', () => {
     })
     expect(onClearSearch).toHaveBeenCalledTimes(1)
   })
+
+  it('stays a field when always open; Escape clears instead of closing', () => {
+    const onSearch = vi.fn().mockReturnValue({
+      query: 'alpha',
+      totalMatches: 2,
+      activeIndex: 0,
+      found: true,
+    })
+    const onClearSearch = vi.fn()
+    render(
+      <PaneSearchControl
+        onSearch={onSearch}
+        onClearSearch={onClearSearch}
+        alwaysOpen
+      />,
+    )
+    const input = screen.getByTestId('pane-search-input')
+    expect(screen.queryByRole('button', { name: 'Next match' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Close search' })).toBeNull()
+
+    fireEvent.change(input, { target: { value: 'alpha' } })
+    expect(screen.getByText('1/2')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Next match' })).toBeVisible()
+
+    fireEvent.keyDown(input, { key: 'Escape' })
+    expect(onClearSearch).toHaveBeenCalled()
+    expect(screen.getByTestId('pane-search-input')).toHaveValue('')
+  })
 })

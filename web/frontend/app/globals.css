@@ -436,13 +436,6 @@ select {
   outline-offset: 2px;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .lantern-enter,
-  .lantern-rise {
-    animation: none;
-  }
-}
-
 /* xterm styles - ensure consistent font rendering */
 .xterm {
   height: 100%;
@@ -467,6 +460,12 @@ select {
      character grid doesn't shift when the native scrollbar activates. */
   overflow-y: scroll;
   scrollbar-gutter: stable;
+}
+
+/* xterm.css paints the viewport black; the strip under the last whole row
+   should be the terminal's ink. Outranks xterm.css, which loads later. */
+div.xterm .xterm-viewport {
+  background-color: var(--term-bg);
 }
 
 /* Mobile long-press selection layer (lib/hooks/mobile-native-selection.ts):
@@ -521,13 +520,13 @@ select {
 
 .xterm-viewport:hover::-webkit-scrollbar-thumb,
 .xterm-viewport.scrolling::-webkit-scrollbar-thumb {
-  background: var(--term-accent-muted);
-  border-color: var(--term-bg-surface);
+  background: var(--paper-veil);
+  border-color: var(--ink);
 }
 
 .xterm-viewport:hover::-webkit-scrollbar-thumb:hover,
 .xterm-viewport.scrolling::-webkit-scrollbar-thumb:hover {
-  background: var(--term-accent);
+  background: rgb(var(--bone-rgb) / 0.3);
 }
 
 /* Firefox scrollbar */
@@ -538,7 +537,7 @@ select {
 
 .xterm-viewport:hover,
 .xterm-viewport.scrolling {
-  scrollbar-color: var(--term-accent-muted) transparent;
+  scrollbar-color: var(--paper-veil) transparent;
 }
 
 /* Mobile a-term needs a persistent, wider drag target. Hover/fade behavior
@@ -548,18 +547,18 @@ select {
 }
 
 .xterm-viewport.mobile-a-term-viewport::-webkit-scrollbar-thumb {
-  background: var(--term-accent-muted);
+  background: var(--paper-veil);
   border-radius: 999px;
-  border: 5px solid var(--term-bg-surface);
+  border: 5px solid var(--ink);
 }
 
 .xterm-viewport.mobile-a-term-viewport::-webkit-scrollbar-thumb:hover {
-  background: var(--term-accent);
+  background: rgb(var(--bone-rgb) / 0.3);
 }
 
 .xterm-viewport.mobile-a-term-viewport {
   scrollbar-width: auto;
-  scrollbar-color: var(--term-accent-muted) transparent;
+  scrollbar-color: var(--paper-veil) transparent;
 }
 
 /* A spinner while an action runs (mode switch). */
@@ -590,4 +589,230 @@ select {
 .term-input:focus {
   border-color: var(--term-accent) !important;
   box-shadow: 0 0 0 1px var(--term-accent-glow);
+}
+
+/* ---- The session's terminal area ---- */
+
+/* Notices that cover the terminal: connection lost, session ended, another
+   device holding the size. As the desktop's size notice. */
+.lantern-term-notice {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 16px;
+  text-align: center;
+  background: rgb(var(--ink-rgb) / 0.92);
+  animation: lantern-fade 0.2s var(--ease-arrival);
+}
+
+.lantern-term-notice p {
+  margin: 0;
+}
+
+.lantern-term-notice .t {
+  font: 450 17px / 1.25 var(--font-display);
+  color: var(--bone);
+}
+
+.lantern-term-notice .d {
+  max-width: 34ch;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--mist);
+}
+
+.lantern-term-notice .lantern-btn {
+  margin-top: 10px;
+}
+
+/* Connecting for the first time: a word on the empty terminal, no cover. */
+.lantern-term-notice.quiet {
+  background: transparent;
+  pointer-events: none;
+}
+
+@keyframes lantern-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Jump to latest: shown only while reading above the live bottom. */
+.lantern-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--lantern);
+  border-radius: 16px;
+  background: rgb(var(--umber-rgb) / 0.92);
+  color: var(--lantern);
+  font: 600 12px var(--font-ui);
+  box-shadow: var(--shadow-soft);
+}
+
+@media (pointer: coarse) {
+  .lantern-jump {
+    height: 40px;
+    padding: 0 16px;
+    font-size: 13px;
+  }
+}
+
+/* Compose box: an ink well under the terminal, the field on the rim. */
+.lantern-compose {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 4px 4px;
+  padding: 6px;
+  border: 1px solid var(--paper-veil);
+  border-radius: 6px;
+  background: var(--ink);
+}
+
+.lantern-compose-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.lantern-compose :is(textarea, input) {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--paper-veil);
+  border-radius: 4px;
+  outline: none;
+  background: var(--rim);
+  color: var(--bone);
+  font: 14px / 1.4 var(--font-ui);
+  resize: none;
+}
+
+.lantern-compose :is(textarea, input):focus-visible {
+  border-color: var(--lantern);
+}
+
+.lantern-compose :is(textarea, input)::placeholder {
+  color: var(--mist);
+}
+
+/* Phone key ribbon. A held modifier or open panel is an amber outline. */
+.lantern-key {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  border: 1px solid var(--paper-veil);
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--bone);
+  font: 12px var(--font-mono);
+  letter-spacing: 0.04em;
+  touch-action: manipulation;
+  user-select: none;
+  transition: background 0.15s var(--ease-arrival);
+}
+
+.lantern-key:active:not(:disabled) {
+  background: var(--paper-veil);
+}
+
+.lantern-key:disabled {
+  opacity: 0.5;
+}
+
+.lantern-key[aria-pressed="true"],
+.lantern-key[aria-expanded="true"] {
+  border-color: var(--lantern);
+  background: rgb(var(--lantern-rgb) / 0.14);
+  color: var(--lantern);
+}
+
+/* Shift locked (double tap): a fuller wash than a one-key hold. */
+.lantern-key.locked {
+  background: rgb(var(--lantern-rgb) / 0.26);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lantern-enter,
+  .lantern-rise,
+  .lantern-term-notice {
+    animation: none;
+  }
+}
+
+/* File browser rows and states. */
+.lantern-file-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 10px;
+  width: 100%;
+  min-height: 38px;
+  padding-right: 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--bone);
+  font-size: 14px;
+  text-align: left;
+}
+
+@media (pointer: coarse) {
+  .lantern-file-row {
+    min-height: 42px;
+  }
+}
+
+.lantern-file-row:hover {
+  background: var(--paper);
+}
+
+.lantern-file-row[aria-current="true"] {
+  background: var(--paper-veil);
+}
+
+.lantern-file-row > svg {
+  width: 18px;
+  height: 18px;
+  color: var(--mist);
+}
+
+.lantern-file-row > svg.dir {
+  color: var(--lantern);
+}
+
+.lantern-file-row .n {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lantern-file-row .s {
+  font: 11.5px var(--font-mono);
+  color: var(--mist);
+}
+
+.lantern-file-row[aria-current="true"] .s {
+  color: rgb(var(--bone-rgb) / 0.72);
+}
+
+.files-state {
+  margin: 0;
+  padding: 16px 10px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--mist);
+}
+
+.files-state p {
+  margin: 0;
 }

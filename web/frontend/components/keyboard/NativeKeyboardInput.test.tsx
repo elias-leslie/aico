@@ -1,15 +1,14 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { BOTTOM_OVERLAY_HEIGHT_VAR } from '../../lib/constants/a-term'
 import { NativeKeyboardInput } from './NativeKeyboardInput'
 
 describe('NativeKeyboardInput', () => {
-  it('renders a one-row mobile overlay without a visible Compose label', () => {
+  it('renders a one-row phone box in the layout, not over the terminal', () => {
     const { container } = render(
       <NativeKeyboardInput
         sessionId="mobile-layout"
         connected
-        mobileOverlay
+        phone
         onCommit={vi.fn().mockResolvedValue(true)}
       />,
     )
@@ -21,31 +20,8 @@ describe('NativeKeyboardInput', () => {
     expect(
       screen.getAllByRole('button').map((button) => button.textContent),
     ).toEqual(['Send'])
-    expect(container.firstElementChild).toHaveClass('absolute', 'bottom-full')
-  })
-
-  it('publishes its height while shown so floating pane controls can clear it', () => {
-    const offsetHeight = vi
-      .spyOn(HTMLElement.prototype, 'offsetHeight', 'get')
-      .mockReturnValue(64)
-    const root = document.documentElement
-    try {
-      const view = render(
-        <NativeKeyboardInput
-          sessionId="mobile-height"
-          connected
-          mobileOverlay
-          onCommit={vi.fn().mockResolvedValue(true)}
-        />,
-      )
-      expect(root.style.getPropertyValue(BOTTOM_OVERLAY_HEIGHT_VAR)).toBe(
-        '64px',
-      )
-      view.unmount()
-      expect(root.style.getPropertyValue(BOTTOM_OVERLAY_HEIGHT_VAR)).toBe('')
-    } finally {
-      offsetHeight.mockRestore()
-    }
+    expect(container.firstElementChild).toHaveClass('lantern-compose')
+    expect(container.firstElementChild).not.toHaveClass('absolute')
   })
 
   it('grows with wrapping up to a scrollable maximum', () => {
@@ -58,7 +34,7 @@ describe('NativeKeyboardInput', () => {
         <NativeKeyboardInput
           sessionId="mobile-grow"
           connected
-          mobileOverlay
+          phone
           onCommit={vi.fn().mockResolvedValue(true)}
         />,
       )
@@ -80,7 +56,7 @@ describe('NativeKeyboardInput', () => {
       <NativeKeyboardInput
         sessionId="mobile-hidden"
         connected
-        mobileOverlay
+        phone
         onCommit={onCommit}
       />,
     )
@@ -92,7 +68,7 @@ describe('NativeKeyboardInput', () => {
       <NativeKeyboardInput
         sessionId="mobile-hidden"
         connected
-        mobileOverlay
+        phone
         onCommit={onCommit}
       />,
     )
@@ -107,7 +83,7 @@ describe('NativeKeyboardInput', () => {
       <NativeKeyboardInput
         sessionId="mobile-enter"
         connected
-        mobileOverlay
+        phone
         onCommit={onCommit}
       />,
     )
@@ -147,7 +123,7 @@ describe('NativeKeyboardInput', () => {
       <NativeKeyboardInput
         sessionId="mobile-failed"
         connected
-        mobileOverlay
+        phone
         onCommit={onCommit}
       />,
     )
@@ -172,7 +148,7 @@ describe('NativeKeyboardInput', () => {
       <NativeKeyboardInput
         sessionId="mobile-last-correction"
         connected
-        mobileOverlay
+        phone
         onCommit={onCommit}
       />,
     )
@@ -200,7 +176,7 @@ describe('NativeKeyboardInput', () => {
       <NativeKeyboardInput
         sessionId="mobile-ctrl"
         connected
-        mobileOverlay
+        phone
         ctrlActive
         onCtrlLetter={onCtrlLetter}
         onCtrlCancel={onCtrlCancel}
@@ -217,7 +193,7 @@ describe('NativeKeyboardInput', () => {
       <NativeKeyboardInput
         sessionId="mobile-ctrl"
         connected
-        mobileOverlay
+        phone
         ctrlActive
         onCtrlLetter={onCtrlLetter}
         onCtrlCancel={onCtrlCancel}
@@ -238,7 +214,7 @@ describe('NativeKeyboardInput', () => {
       <NativeKeyboardInput
         sessionId="mobile-multiline"
         connected
-        mobileOverlay
+        phone
         onCommit={vi.fn().mockResolvedValue(true)}
       />,
     )
@@ -386,7 +362,7 @@ describe('NativeKeyboardInput', () => {
     await waitFor(() => expect(onCommit).toHaveBeenCalledTimes(1))
     expect(input.value).toBe('typed')
     expect(screen.getByRole('alert')).toHaveTextContent(
-      'Your draft is still here',
+      'Insert was interrupted. Check the session before retrying; your draft is saved.',
     )
   })
 })

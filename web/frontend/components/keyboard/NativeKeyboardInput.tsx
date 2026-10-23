@@ -3,13 +3,11 @@
 import {
   useCallback,
   useEffect,
-  useId,
   useLayoutEffect,
   useRef,
   useState,
   useSyncExternalStore,
 } from 'react'
-import { BOTTOM_OVERLAY_HEIGHT_VAR } from '../../lib/constants/a-term'
 import { KEY_ROW_METRICS, keepKeyboardOpen, remSize } from './types'
 
 type ComposeAction = 'insert' | 'send'
@@ -37,7 +35,7 @@ interface NativeKeyboardInputProps {
   ) => Promise<boolean>
   onFocusChange?: (focused: boolean) => void
   inputRef?: React.RefObject<HTMLInputElement | HTMLTextAreaElement | null>
-  mobileOverlay?: boolean
+  phone?: boolean
   ctrlActive?: boolean
   onCtrlLetter?: (letter: string) => void
   onCtrlCancel?: () => void
@@ -59,6 +57,9 @@ function saveDraft(key: string, value: string) {
   return revision
 }
 
+/** The desktop box is one line, as the desktop mockup's. */
+const DESKTOP_COMPOSE_HEIGHT = 38
+
 export function isComposePending(sessionId: string | null | undefined) {
   return Boolean(sessionId && pendingCommits.has(draftStorageKey(sessionId)))
 }
@@ -69,7 +70,7 @@ export function NativeKeyboardInput({
   onCommit,
   onFocusChange,
   inputRef,
-  mobileOverlay = false,
+  phone = false,
   ctrlActive = false,
   onCtrlLetter,
   onCtrlCancel,
@@ -90,40 +91,17 @@ export function NativeKeyboardInput({
     () => pendingCommits.has(storageKey),
     () => false,
   )
-  const [error, setError] = useState(false)
+  const [failed, setFailed] = useState<ComposeAction | null>(null)
   const composingRef = useRef(false)
   const busyRef = useRef(false)
-  const inputId = useId()
   const inputHeight = remSize(KEY_ROW_METRICS.composeHeight)
 
   useEffect(() => {
     if (!pendingForSession) setValue(readDraft(storageKey))
   }, [storageKey, pendingForSession])
 
-  const overlayRef = useRef<HTMLDivElement>(null)
-  // Publish the overlay's height so the pane's floating controls (the
-  // "Latest" pill) sit above it instead of under it.
   useLayoutEffect(() => {
-    const overlay = overlayRef.current
-    if (!mobileOverlay || !overlay) return
-    const root = document.documentElement
-    const publish = () =>
-      root.style.setProperty(
-        BOTTOM_OVERLAY_HEIGHT_VAR,
-        `${overlay.offsetHeight}px`,
-      )
-    publish()
-    const observer =
-      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(publish)
-    observer?.observe(overlay)
-    return () => {
-      observer?.disconnect()
-      root.style.removeProperty(BOTTOM_OVERLAY_HEIGHT_VAR)
-    }
-  }, [mobileOverlay])
-
-  useLayoutEffect(() => {
-    if (!mobileOverlay) return
+    if (!phone) return
     const field = resolvedRef.current
     if (!(field instanceof HTMLTextAreaElement)) return
 
@@ -137,7 +115,7 @@ export function NativeKeyboardInput({
       field.style.height = `${Math.min(field.scrollHeight, maxHeight)}px`
     }
     field.style.overflowY = field.scrollHeight > maxHeight ? 'auto' : 'hidden'
-  }, [mobileOverlay, resolvedRef, value])
+  }, [phone, resolvedRef, value])
 
   const commit = useCallback(
     async (action: ComposeAction) => {
@@ -161,7 +139,7 @@ export function NativeKeyboardInput({
       notifyPending()
       busyRef.current = true
       setBusy(true)
-      setError(false)
+      setFailed(null)
       try {
         if (await onCommit(sessionId, text, action)) {
           if (draftRevisions.get(storageKey) === submittedRevision) {
@@ -169,10 +147,10 @@ export function NativeKeyboardInput({
             setValue('')
           }
         } else {
-          setError(true)
+          setFailed(action)
         }
       } catch {
-        setError(true)
+        setFailed(action)
       } finally {
         busyRef.current = false
         if (pendingCommits.get(storageKey) === operation) {
@@ -188,7 +166,7 @@ export function NativeKeyboardInput({
   const handleChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       const next = event.target.value
-      if (mobileOverlay && ctrlActive && !composingRef.current) {
+      if (phone && ctrlActive && !composingRef.current) {
         let inserted: string | undefined
         if (next.length === value.length + 1) {
           let index = 0
@@ -205,22 +183,33 @@ export function NativeKeyboardInput({
       }
       setValue(next)
       saveDraft(storageKey, next)
-      setError(false)
+      setFailed(null)
     },
-    [ctrlActive, mobileOverlay, onCtrlCancel, onCtrlLetter, storageKey, value],
+    [ctrlActive, phone, onCtrlCancel, onCtrlLetter, storageKey, value],
   )
 
-  if (mobileOverlay) {
+  const interrupted = failed && (
+    <span
+      role="alert"
+      className="px-0.5 text-xs"
+      style={{ color: 'var(--bone)' }}
+    >
+      {failed === 'send' ? 'Send' : 'Insert'} was interrupted. Check the session
+      before retrying; your draft is saved.
+    </span>
+  )
+  const lineBreakHint = /\r|\n/.test(value) && (
+    <span className="px-0.5 text-xs" style={{ color: 'var(--mist)' }}>
+      Remove line breaks to send this draft.
+    </span>
+  )
+  const cannotSend =
+    !connected || !value || /[\r\n]/.test(value) || busy || pendingForSession
+
+  if (phone) {
     return (
-      <div
-        ref={overlayRef}
-        className="absolute bottom-full left-0 right-0 z-20 flex flex-col gap-1 border-t p-2"
-        style={{
-          backgroundColor: 'var(--term-bg-surface)',
-          borderColor: 'var(--term-border)',
-        }}
-      >
-        <div className="flex items-end gap-2">
+      <div className="lantern-compose">
+        <div className="lantern-compose-row">
           <textarea
             ref={assignInputRef}
             rows={1}
@@ -263,78 +252,32 @@ export function NativeKeyboardInput({
             autoCapitalize="none"
             spellCheck={true}
             enterKeyHint="send"
-            className="term-input min-w-0 flex-1 resize-none rounded-md px-3 py-2 text-sm leading-5 focus:outline-none focus-visible:ring-2"
-            style={{
-              minHeight: inputHeight,
-              maxHeight: 120,
-              backgroundColor: 'var(--term-bg-elevated)',
-              border: '1px solid var(--term-border)',
-              color: 'var(--term-text-primary)',
-              borderRadius: KEY_ROW_METRICS.keyRadius,
-            }}
+            style={{ minHeight: inputHeight, maxHeight: 120 }}
           />
           <button
             type="button"
             onPointerDown={keepKeyboardOpen}
             onClick={() => void commit('send')}
-            disabled={
-              !connected ||
-              !value ||
-              /[\r\n]/.test(value) ||
-              busy ||
-              pendingForSession
-            }
-            className="rounded-md border px-2 text-xs font-semibold disabled:opacity-50 focus-visible:ring-2"
-            style={{
-              minHeight: inputHeight,
-              borderColor: 'var(--term-border)',
-              backgroundColor: 'var(--term-accent)',
-              color: 'var(--term-accent-foreground)',
-            }}
+            disabled={cannotSend}
+            className="lantern-btn primary"
+            style={{ height: inputHeight }}
           >
             Send
           </button>
         </div>
-        {error && (
-          <span
-            role="alert"
-            className="text-xs"
-            style={{ color: 'var(--term-error)' }}
-          >
-            Send was interrupted. Check the session before retrying; your draft
-            is saved.
-          </span>
-        )}
-        {/\r|\n/.test(value) && (
-          <span className="text-xs" style={{ color: 'var(--term-text-muted)' }}>
-            Remove line breaks to send this draft.
-          </span>
-        )}
+        {interrupted}
+        {lineBreakHint}
       </div>
     )
   }
 
   return (
-    <div
-      className="flex flex-col"
-      style={{
-        gap: KEY_ROW_METRICS.composeGap,
-        padding: `0 ${KEY_ROW_METRICS.paddingX}px`,
-        backgroundColor: 'var(--term-bg-surface)',
-      }}
-    >
-      <label
-        htmlFor={inputId}
-        className="text-[11px] font-semibold uppercase tracking-[0.14em]"
-        style={{ color: 'var(--term-text-muted)' }}
-      >
-        Compose
-      </label>
-      <div className="flex items-center gap-2">
+    <div className="lantern-compose">
+      <div className="lantern-compose-row items-center!">
         <input
-          id={inputId}
           ref={assignInputRef}
           type="text"
+          aria-label="Compose"
           value={value}
           readOnly={busy}
           onChange={handleChange}
@@ -362,26 +305,15 @@ export function NativeKeyboardInput({
           autoCapitalize="none"
           spellCheck={true}
           enterKeyHint="done"
-          className="term-input min-w-0 flex-1 rounded-md px-3 text-sm focus:outline-none focus-visible:ring-2"
-          style={{
-            minHeight: inputHeight,
-            backgroundColor: 'var(--term-bg-elevated)',
-            border: '1px solid var(--term-border)',
-            color: 'var(--term-text-primary)',
-            borderRadius: KEY_ROW_METRICS.keyRadius,
-          }}
+          style={{ height: DESKTOP_COMPOSE_HEIGHT }}
         />
         <button
           type="button"
           onPointerDown={keepKeyboardOpen}
           onClick={() => void commit('insert')}
           disabled={!connected || !value || busy}
-          className="rounded-md border px-2 text-xs font-semibold disabled:opacity-50 focus-visible:ring-2"
-          style={{
-            minHeight: inputHeight,
-            borderColor: 'var(--term-border)',
-            color: 'var(--term-text-primary)',
-          }}
+          className="lantern-btn"
+          style={{ height: DESKTOP_COMPOSE_HEIGHT }}
         >
           Insert
         </button>
@@ -389,27 +321,15 @@ export function NativeKeyboardInput({
           type="button"
           onPointerDown={keepKeyboardOpen}
           onClick={() => void commit('send')}
-          disabled={!connected || !value || /[\r\n]/.test(value) || busy}
-          className="rounded-md border px-2 text-xs font-semibold disabled:opacity-50 focus-visible:ring-2"
-          style={{
-            minHeight: inputHeight,
-            borderColor: 'var(--term-border)',
-            backgroundColor: 'var(--term-accent)',
-            color: 'var(--term-accent-foreground)',
-          }}
+          disabled={cannotSend}
+          className="lantern-btn primary"
+          style={{ height: DESKTOP_COMPOSE_HEIGHT }}
         >
           Send
         </button>
       </div>
-      {error && (
-        <span
-          role="alert"
-          className="text-xs"
-          style={{ color: 'var(--term-error)' }}
-        >
-          Could not insert. Your draft is still here.
-        </span>
-      )}
+      {interrupted}
+      {lineBreakHint}
     </div>
   )
 }

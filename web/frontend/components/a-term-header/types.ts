@@ -30,8 +30,8 @@ export interface UnifiedATermHeaderProps {
   /** Open another session */
   onSwitchTo?: (slot: ATermSlot | PaneSlot) => void
   connectionStatus?: ConnectionStatus
-  /** Callback to reconnect the session */
-  onReconnect?: () => void
+  /** Desktop with the session list beside it: search stays open */
+  searchAlwaysOpen?: boolean
   onSearch?: (query: string, options?: ATermSearchOptions) => ATermSearchResult
   onClearSearch?: () => void
   /** Desktop: whether the compose box is shown */

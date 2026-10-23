@@ -34,7 +34,7 @@ export const UnifiedATermHeaderContent = memo(
     allSlots,
     onSwitchTo,
     connectionStatus,
-    onReconnect,
+    searchAlwaysOpen = false,
     onSearch,
     onClearSearch,
     composeOpen = false,
@@ -69,7 +69,7 @@ export const UnifiedATermHeaderContent = memo(
       <div
         data-testid={`a-term-header-${getSlotPanelId(slot)}`}
         className={clsx(
-          'flex h-12 flex-shrink-0 items-center gap-1',
+          'relative flex h-12 flex-shrink-0 items-center gap-1',
           isMobile ? 'pr-1 pl-1.5' : 'pr-1.5 pl-2.5',
         )}
       >
@@ -98,13 +98,22 @@ export const UnifiedATermHeaderContent = memo(
           />
         </div>
 
-        <PaneStatusBadge status={connectionStatus} onReconnect={onReconnect} />
+        <PaneStatusBadge status={connectionStatus} />
 
         <div className="min-w-1 flex-1" />
 
         <div className="flex flex-none items-center gap-0.5">
           {onOpenModal && (
             <NewSessionButton onClick={onOpenModal} isMobile={isMobile} />
+          )}
+
+          {onSearch && onClearSearch && (
+            <PaneSearchControl
+              onSearch={onSearch}
+              onClearSearch={onClearSearch}
+              isMobile={isMobile}
+              alwaysOpen={searchAlwaysOpen}
+            />
           )}
 
           {onToggleCompose && (
@@ -120,14 +129,6 @@ export const UnifiedATermHeaderContent = memo(
               <Pencil className="h-4 w-4" strokeWidth={1.7} />
               Compose
             </button>
-          )}
-
-          {onSearch && onClearSearch && (
-            <PaneSearchControl
-              onSearch={onSearch}
-              onClearSearch={onClearSearch}
-              isMobile={isMobile}
-            />
           )}
 
           {onFiles && (

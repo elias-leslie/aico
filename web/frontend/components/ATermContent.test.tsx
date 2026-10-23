@@ -3,6 +3,15 @@ import type { RefObject } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ATermContent, type ATermContentProps } from './ATermContent'
 
+const media = vi.hoisted(() => ({ wide: false }))
+vi.mock('@/lib/hooks/use-media-query', () => ({
+  useMediaQuery: () => media.wide,
+}))
+vi.mock('./SessionSidebar', () => ({
+  SessionSidebar: ({ currentId }: { currentId?: string }) => (
+    <nav aria-label="Session list">{currentId}</nav>
+  ),
+}))
 vi.mock('./AgentShowToast', () => ({ AgentShows: () => null }))
 vi.mock('./a-term-content/ATermMobileSection', () => ({
   ATermMobileSection: () => null,
@@ -37,11 +46,15 @@ const props = {
   isMobile: false,
   activeSessionId: 'session-a',
   sessions: [{ id: 'session-a' }],
+  aTermSlots: [],
   activeStatus: 'connected',
 } as unknown as ATermContentProps
 
 describe('ATermContent compose box', () => {
-  beforeEach(() => window.localStorage.clear())
+  beforeEach(() => {
+    window.localStorage.clear()
+    media.wide = false
+  })
   afterEach(() => vi.restoreAllMocks())
 
   it('on a desktop, stays hidden until Compose opens it, then is remembered', () => {
@@ -84,5 +97,24 @@ describe('ATermContent compose box', () => {
     render(<ATermContent {...props} isMobile />)
     expect(screen.queryByRole('button', { name: 'Compose' })).toBeNull()
     expect(screen.queryByRole('textbox', { name: 'Compose box' })).toBeNull()
+  })
+
+  it('puts the session list beside the session in a wide desktop window', () => {
+    media.wide = true
+    const { rerender } = render(<ATermContent {...props} />)
+    expect(
+      screen.getByRole('navigation', { name: 'Session list' }),
+    ).toBeVisible()
+
+    rerender(<ATermContent {...props} isMobile />)
+    expect(
+      screen.queryByRole('navigation', { name: 'Session list' }),
+    ).toBeNull()
+
+    media.wide = false
+    rerender(<ATermContent {...props} />)
+    expect(
+      screen.queryByRole('navigation', { name: 'Session list' }),
+    ).toBeNull()
   })
 })

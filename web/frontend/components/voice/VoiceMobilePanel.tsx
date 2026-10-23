@@ -43,20 +43,15 @@ export function VoiceMobilePanel({
     status === 'error' && error
       ? (SHORT_ERROR_MESSAGES[error] ?? 'Error')
       : isListening
-        ? 'Listening...'
+        ? 'Listening'
         : isProcessing
-          ? 'Processing...'
+          ? 'Transcribing'
           : hasText
             ? 'Paused'
             : 'Tap to speak'
 
   return (
-    <div
-      style={{
-        background: 'var(--term-bg-surface)',
-        borderTop: '1px solid var(--term-border)',
-      }}
-    >
+    <div style={{ background: 'var(--rim)' }}>
       <textarea
         ref={textareaRef}
         className={styles.editTextarea}
@@ -68,17 +63,10 @@ export function VoiceMobilePanel({
         rows={3}
         style={{
           display: 'block',
-          width: 'calc(100% - 24px)',
+          width: 'calc(100% - 8px)',
           maxHeight: 128,
           overflowY: 'auto',
-          padding: '8px 12px',
-          margin: '8px 12px 0',
-          borderRadius: 8,
-          background: 'var(--term-bg-elevated)',
-          fontFamily: 'var(--font-mono)',
-          fontSize: 16,
-          lineHeight: 1.5,
-          color: 'var(--term-text-primary)',
+          margin: '0 4px',
         }}
       />
 
@@ -87,14 +75,12 @@ export function VoiceMobilePanel({
         style={{
           textAlign: 'center',
           padding: '6px 0 2px',
-          fontFamily: 'var(--font-mono)',
-          fontSize: 11,
-          color:
-            status === 'error'
-              ? 'var(--term-error)'
-              : isListening
-                ? 'var(--term-accent)'
-                : 'var(--term-text-muted)',
+          fontSize: 12,
+          color: isListening
+            ? 'var(--lantern)'
+            : status === 'error'
+              ? 'var(--bone)'
+              : 'var(--mist)',
         }}
       >
         {statusMessage}
@@ -122,9 +108,9 @@ export function VoiceMobilePanel({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            background: 'transparent',
-            border: '1px solid var(--term-border-active)',
-            color: 'var(--term-text-muted)',
+            background: 'var(--paper)',
+            border: '1px solid var(--paper-veil)',
+            color: 'var(--bone)',
             cursor: 'pointer',
           }}
         >
@@ -154,14 +140,12 @@ export function VoiceMobilePanel({
             flexDirection: 'column',
             gap: 2,
             cursor: isProcessing ? 'not-allowed' : 'pointer',
-            transition: 'all 0.2s',
-            border: `2px solid ${
-              showPulse ? 'var(--term-error)' : 'var(--term-accent)'
-            }`,
+            transition: 'background 0.18s var(--ease-arrival)',
+            border: '1px solid var(--lantern)',
             background: showPulse
-              ? 'color-mix(in srgb, var(--term-error) 15%, transparent)'
-              : 'color-mix(in srgb, var(--term-accent) 8%, transparent)',
-            color: showPulse ? 'var(--term-error)' : 'var(--term-accent)',
+              ? 'rgb(var(--lantern-rgb) / 0.26)'
+              : 'rgb(var(--lantern-rgb) / 0.14)',
+            color: 'var(--lantern)',
             opacity: isProcessing ? 0.5 : 1,
           }}
         >
@@ -190,10 +174,9 @@ export function VoiceMobilePanel({
               justifyContent: 'center',
               flexDirection: 'column',
               gap: 2,
-              background:
-                'color-mix(in srgb, var(--term-accent) 15%, transparent)',
-              border: '1px solid var(--term-accent)',
-              color: 'var(--term-accent)',
+              background: 'rgb(var(--lantern-rgb) / 0.14)',
+              border: '1px solid var(--lantern)',
+              color: 'var(--lantern)',
               cursor: isProcessing ? 'not-allowed' : 'pointer',
               opacity: isProcessing ? 0.5 : 1,
             }}
@@ -215,9 +198,9 @@ export function VoiceMobilePanel({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            background: 'transparent',
-            border: '1px solid var(--term-border-active)',
-            color: 'var(--term-text-muted)',
+            background: 'var(--paper)',
+            border: '1px solid var(--paper-veil)',
+            color: 'var(--bone)',
             cursor: 'pointer',
           }}
         >

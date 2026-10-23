@@ -1,7 +1,6 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { createRef } from 'react'
 import { describe, expect, it, vi } from 'vitest'
-import { BOTTOM_OVERLAY_HEIGHT_VAR } from '../lib/constants/a-term'
 import { ScrollToBottomPill } from './ScrollToBottomPill'
 
 type Listener = () => void
@@ -55,15 +54,6 @@ describe('ScrollToBottomPill', () => {
     fireEvent.click(pill)
     expect(term.scrollToBottom).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('button')).toBeNull()
-  })
-
-  it('lifts above the compose overlay by the height it publishes', () => {
-    const { term, emit } = makeTerm()
-    mount(term)
-    term.buffer.active.viewportY = 20
-    emit('scroll')
-    const wrapper = screen.getByTestId('a-term-scroll-to-bottom')
-    expect(wrapper.style.bottom).toContain(`var(${BOTTOM_OVERLAY_HEIGHT_VAR}`)
   })
 
   it('says so when output arrives while the reader stays put', () => {

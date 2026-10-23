@@ -1,12 +1,13 @@
 'use client'
 
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ATermComponent, type ATermHandle } from '@/components/ATerm'
 import type { ConnectionStatus } from '@/components/a-term.types'
 import { UnifiedATermHeaderContent as UnifiedATermHeader } from '@/components/a-term-header'
 import { EmptySessionState } from '@/components/EmptySessionState'
 import { PaneFilesDialog } from '@/components/files/PaneFilesDialog'
 import type { ATermMode } from '@/components/ModeToggle'
+import { ConnectionNotice, SizeHolderNotice } from '@/components/TerminalNotice'
 import type { ATermFontSize } from '@/lib/hooks/use-a-term-settings'
 import type { ATermSlot, PaneSlot } from '@/lib/utils/slot'
 import {
@@ -38,6 +39,12 @@ export interface SessionViewProps {
   /** Desktop: whether the compose box is shown */
   composeOpen?: boolean
   onToggleCompose?: () => void
+  /** The session list sits beside the session (desktop browsers), so the
+   * bar shows the title without a switcher and keeps search open. */
+  sideList?: boolean
+  /** Another device holds the shared terminal size: its name, and how to
+   * take the size back. */
+  sizeHolder?: { device: string; onUseHere: () => void } | null
 }
 
 /** The active session, or one of the user's own when none is chosen. */
@@ -76,10 +83,21 @@ export function SessionView({
   isModeSwitching,
   composeOpen,
   onToggleCompose,
+  sideList = false,
+  sizeHolder,
 }: SessionViewProps) {
   const [refreshVersion, setRefreshVersion] = useState(0)
   const [filesPaneId, setFilesPaneId] = useState<string | null>(null)
   const handleRef = useRef<ATermHandle | null>(null)
+  const slot = getShownSlot(slots, activeSessionId)
+  const sessionId = slot ? getSlotSessionId(slot) : null
+  const status = sessionId ? aTermStatuses?.get(sessionId) : undefined
+  // Which terminal (session and redraw) has shown live output.
+  const termKey = `${sessionId}:${refreshVersion}`
+  const [connectedKey, setConnectedKey] = useState<string | null>(null)
+  useEffect(() => {
+    if (status === 'connected') setConnectedKey(termKey)
+  }, [status, termKey])
 
   const refresh = useCallback(() => {
     setRefreshVersion((current) => current + 1)
@@ -90,7 +108,6 @@ export function SessionView({
     }
   }, [])
 
-  const slot = getShownSlot(slots, activeSessionId)
   if (!slot) {
     return (
       <EmptySessionState
@@ -101,7 +118,6 @@ export function SessionView({
     )
   }
 
-  const sessionId = getSlotSessionId(slot)
   const workingDir = getSlotWorkingDir(slot)
   const paneId = isPaneSlot(slot) ? slot.paneId : null
 
@@ -126,7 +142,7 @@ export function SessionView({
           onUpload={
             onUpload ? () => onUpload(sessionId ?? undefined) : undefined
           }
-          onOpenModal={onNewSession}
+          onOpenModal={sideList ? undefined : onNewSession}
           onModeSwitch={
             onModeSwitch ? (mode) => onModeSwitch(slot, mode) : undefined
           }
@@ -134,14 +150,10 @@ export function SessionView({
           composeOpen={composeOpen}
           onToggleCompose={onToggleCompose}
           isMobile={isMobile}
-          allSlots={slots}
-          onSwitchTo={onSwitch}
-          connectionStatus={
-            sessionId ? aTermStatuses?.get(sessionId) : undefined
-          }
-          onReconnect={
-            sessionId ? () => handleRef.current?.reconnect() : undefined
-          }
+          allSlots={sideList ? undefined : slots}
+          onSwitchTo={sideList ? undefined : onSwitch}
+          searchAlwaysOpen={sideList}
+          connectionStatus={status}
           onSearch={
             sessionId
               ? (query, options) =>
@@ -188,6 +200,21 @@ export function SessionView({
                     }
                   : undefined
               }
+            />
+          )}
+          {sessionId && (
+            <ConnectionNotice
+              status={status}
+              hasConnected={connectedKey === termKey}
+              onReconnect={() => handleRef.current?.reconnect()}
+              onNewSession={onNewSession}
+            />
+          )}
+          {sizeHolder && (
+            <SizeHolderNotice
+              holder={sizeHolder.device}
+              onUseHere={sizeHolder.onUseHere}
+              isMobile={isMobile}
             />
           )}
         </div>

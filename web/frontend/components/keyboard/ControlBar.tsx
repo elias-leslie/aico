@@ -1,6 +1,7 @@
 'use client'
 
-import { ChevronDown, ChevronUp, Mic, Sparkles } from 'lucide-react'
+import { clsx } from 'clsx'
+import { ChevronDown, ChevronUp, Mic, Move, Sparkles } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   type ClaudeModelOption,
@@ -157,30 +158,21 @@ export function ControlBar({
     [onBeforeTerminalAction, onSend],
   )
 
-  const btnStyle = {
-    backgroundColor: 'var(--term-bg-elevated)',
-    color: 'var(--term-text-muted)',
-    border: '1px solid var(--term-border)',
-  }
   // Sized in rem so the phone's text-scaling setting scales the bar with the
   // keyboard it sits against.
   const controlButtonSize = remSize(KEY_ROW_METRICS.buttonSize)
   const arrowButtonSize = remSize(KEY_ROW_METRICS.arrowSize)
   const iconSize = remSize(KEY_ROW_METRICS.iconSize)
-  const topRowButtonStyle = {
-    height: controlButtonSize,
-    minWidth: remSize(32),
-    borderRadius: KEY_ROW_METRICS.keyRadius,
-  }
+  const keyStyle = { height: controlButtonSize, minWidth: remSize(32) }
+  const arrowStyle = { flex: '1 1 0', height: arrowButtonSize, minWidth: 0 }
+  const shiftState = modifiers.shift
 
   return (
     <div
       className="flex flex-col"
       style={{
-        backgroundColor: 'var(--term-bg-surface)',
-        borderTop: '1px solid var(--term-border)',
         gap: KEY_ROW_METRICS.rowGap,
-        padding: `${KEY_ROW_METRICS.paddingY}px ${KEY_ROW_METRICS.paddingX}px`,
+        padding: `0 ${KEY_ROW_METRICS.paddingX}px ${KEY_ROW_METRICS.paddingY}px`,
       }}
     >
       {showToolbox && (
@@ -194,51 +186,31 @@ export function ControlBar({
             label="←"
             onPress={() => handleArrow('left')}
             className="text-xl"
-            style={{
-              flex: '1 1 0',
-              height: arrowButtonSize,
-              minWidth: 0,
-            }}
+            style={arrowStyle}
           />
           <KeyboardKey
             label="↑"
             onPress={() => handleArrow('up')}
             className="text-xl"
-            style={{
-              flex: '1 1 0',
-              height: arrowButtonSize,
-              minWidth: 0,
-            }}
+            style={arrowStyle}
           />
           <KeyboardKey
             label="↓"
             onPress={() => handleArrow('down')}
             className="text-xl"
-            style={{
-              flex: '1 1 0',
-              height: arrowButtonSize,
-              minWidth: 0,
-            }}
+            style={arrowStyle}
           />
           <KeyboardKey
             label="→"
             onPress={() => handleArrow('right')}
             className="text-xl"
-            style={{
-              flex: '1 1 0',
-              height: arrowButtonSize,
-              minWidth: 0,
-            }}
+            style={arrowStyle}
           />
           <KeyboardKey
             label="Enter"
             onPress={handleEnter}
             className="text-sm"
-            style={{
-              flex: '1 1 0',
-              height: arrowButtonSize,
-              minWidth: 0,
-            }}
+            style={arrowStyle}
           />
         </div>
       )}
@@ -254,30 +226,14 @@ export function ControlBar({
             type="button"
             onPointerDown={keepKeyboardOpen}
             onClick={onToggleMinimize}
-            className="relative flex shrink-0 items-center justify-center transition-all duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-            style={{
-              ...topRowButtonStyle,
-              backgroundColor: minimized
-                ? 'var(--term-accent)'
-                : 'var(--term-bg-elevated)',
-              color: minimized
-                ? 'var(--term-accent-foreground)'
-                : 'var(--term-text-muted)',
-              border: `1px solid ${minimized ? 'var(--term-accent)' : 'var(--term-border)'}`,
-              boxShadow: minimized ? '0 0 8px var(--term-accent-glow)' : 'none',
-            }}
+            className="lantern-key shrink-0"
+            style={keyStyle}
             aria-label={minimized ? 'Show keyboard' : 'Hide keyboard'}
           >
             {minimized ? (
-              <ChevronUp
-                className="shrink-0"
-                style={{ width: iconSize, height: iconSize }}
-              />
+              <ChevronUp style={{ width: iconSize, height: iconSize }} />
             ) : (
-              <ChevronDown
-                className="shrink-0"
-                style={{ width: iconSize, height: iconSize }}
-              />
+              <ChevronDown style={{ width: iconSize, height: iconSize }} />
             )}
           </button>
         )}
@@ -286,11 +242,8 @@ export function ControlBar({
           type="button"
           onPointerDown={keepKeyboardOpen}
           onClick={handleTab}
-          className="min-w-0 flex-1 text-xs font-medium transition-all duration-150 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-          style={{
-            ...btnStyle,
-            ...topRowButtonStyle,
-          }}
+          className="lantern-key flex-1"
+          style={keyStyle}
           aria-label="Tab"
         >
           TAB
@@ -301,21 +254,13 @@ export function ControlBar({
           onPointerDown={keepKeyboardOpen}
           onClick={() => toggleModifier('shift')}
           aria-label="Shift"
-          aria-pressed={modifiers.shift !== 'off'}
+          aria-pressed={shiftState !== 'off'}
           title="Shift for next key; double tap to lock"
-          className="min-w-0 flex-1 text-lg font-medium transition-all duration-150 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-          style={{
-            ...topRowButtonStyle,
-            backgroundColor:
-              modifiers.shift !== 'off'
-                ? 'var(--term-accent)'
-                : 'var(--term-bg-elevated)',
-            color:
-              modifiers.shift !== 'off'
-                ? 'var(--term-accent-foreground)'
-                : 'var(--term-text-muted)',
-            border: `1px solid ${modifiers.shift !== 'off' ? 'var(--term-accent)' : 'var(--term-border)'}`,
-          }}
+          className={clsx(
+            'lantern-key flex-1 text-base!',
+            shiftState === 'locked' && 'locked',
+          )}
+          style={keyStyle}
         >
           ⇧
         </button>
@@ -328,15 +273,15 @@ export function ControlBar({
             onVoice?.()
           }}
           disabled={!onVoice}
-          className="flex min-w-0 flex-1 items-center justify-center transition-all duration-150 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
-          style={{ ...btnStyle, ...topRowButtonStyle }}
+          className="lantern-key flex-1"
+          style={keyStyle}
           aria-label={onVoice ? 'Voice input' : 'Voice input unavailable'}
           aria-pressed={voiceActive}
           title={onVoice ? 'Voice input' : 'Voice input unavailable'}
         >
           <Mic
-            className="shrink-0"
             style={{ width: iconSize, height: iconSize }}
+            strokeWidth={1.7}
           />
         </button>
 
@@ -344,8 +289,8 @@ export function ControlBar({
           type="button"
           onPointerDown={keepKeyboardOpen}
           onClick={handleEsc}
-          className="min-w-0 flex-1 text-xs font-medium transition-all duration-150 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-          style={{ ...btnStyle, ...topRowButtonStyle }}
+          className="lantern-key flex-1"
+          style={keyStyle}
         >
           ESC
         </button>
@@ -355,18 +300,8 @@ export function ControlBar({
           onPointerDown={keepKeyboardOpen}
           onClick={onCtrlToggle}
           aria-pressed={ctrlActive}
-          className="min-w-0 flex-1 text-xs font-medium transition-all duration-150 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-          style={{
-            ...topRowButtonStyle,
-            backgroundColor: ctrlActive
-              ? 'var(--term-accent)'
-              : 'var(--term-bg-elevated)',
-            color: ctrlActive
-              ? 'var(--term-accent-foreground)'
-              : 'var(--term-text-muted)',
-            border: `1px solid ${ctrlActive ? 'var(--term-accent)' : 'var(--term-border)'}`,
-            boxShadow: ctrlActive ? '0 0 8px var(--term-accent-glow)' : 'none',
-          }}
+          className="lantern-key flex-1"
+          style={keyStyle}
         >
           CTRL
         </button>
@@ -378,64 +313,31 @@ export function ControlBar({
               type="button"
               onPointerDown={keepKeyboardOpen}
               onClick={() => setShowModelPicker((p) => !p)}
-              className="flex w-full items-center justify-center transition-all duration-150 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-              style={
-                showModelPicker
-                  ? {
-                      ...topRowButtonStyle,
-                      backgroundColor: 'var(--term-accent-soft)',
-                      color: 'var(--term-accent)',
-                      border: '1px solid var(--term-accent)',
-                    }
-                  : {
-                      ...btnStyle,
-                      ...topRowButtonStyle,
-                    }
-              }
+              className="lantern-key w-full"
+              style={keyStyle}
               aria-label="Switch Claude model"
               aria-expanded={showModelPicker}
             >
               <Sparkles
-                className="shrink-0"
-                style={{
-                  width: remSize(16),
-                  height: remSize(16),
-                }}
+                style={{ width: remSize(16), height: remSize(16) }}
+                strokeWidth={1.7}
               />
             </button>
 
-            {/* Dropdown */}
             {showModelPicker && (
               <div
-                className="absolute bottom-full mb-1 right-0 rounded-lg overflow-hidden"
-                style={{
-                  backgroundColor: 'var(--term-bg-elevated)',
-                  border: '1px solid var(--term-border-active)',
-                  boxShadow: 'var(--term-shadow-dropdown)',
-                  minWidth: 140,
-                  zIndex: 50,
-                }}
+                className="lantern-sheet lantern-enter absolute right-0 bottom-full z-50 mb-1.5 min-w-[160px] rounded-xl p-1.5"
+                role="menu"
               >
                 {modelOptions.map((opt) => (
                   <button
                     key={opt.id}
                     type="button"
+                    role="menuitem"
                     onPointerDown={keepKeyboardOpen}
                     onClick={() => handleModelSelect(opt.command)}
-                    className="w-full text-left px-4 py-3 text-sm font-medium transition-colors duration-100"
-                    style={{
-                      color: 'var(--term-text-primary)',
-                      backgroundColor: 'transparent',
-                      borderBottom: '1px solid var(--term-border)',
-                      fontFamily: 'var(--font-mono)',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor =
-                        'rgba(0, 255, 159, 0.1)'
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = 'transparent'
-                    }}
+                    className="lantern-menu-item"
+                    style={{ fontFamily: 'var(--font-mono)' }}
                   >
                     {opt.label}
                   </button>
@@ -452,23 +354,13 @@ export function ControlBar({
           aria-label={showToolbox ? 'Hide arrow keys' : 'Show arrow keys'}
           aria-expanded={showToolbox}
           aria-controls="control-bar-arrows"
-          className="flex shrink-0 items-center justify-center transition-all duration-150 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-          style={{
-            ...topRowButtonStyle,
-            backgroundColor: showToolbox
-              ? 'var(--term-accent-soft)'
-              : 'var(--term-bg-elevated)',
-            color: showToolbox
-              ? 'var(--term-accent)'
-              : 'var(--term-text-muted)',
-            border: `1px solid ${showToolbox ? 'var(--term-accent)' : 'var(--term-border)'}`,
-          }}
+          className="lantern-key shrink-0"
+          style={keyStyle}
         >
-          {showToolbox ? (
-            <ChevronDown style={{ width: iconSize, height: iconSize }} />
-          ) : (
-            <ChevronUp style={{ width: iconSize, height: iconSize }} />
-          )}
+          <Move
+            style={{ width: iconSize, height: iconSize }}
+            strokeWidth={1.7}
+          />
         </button>
       </div>
     </div>

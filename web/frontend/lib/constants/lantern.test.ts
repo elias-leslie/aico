@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import { LANTERN_TERMINAL_THEME } from './a-term'
 import { LANTERN_MONO_FAMILY, LANTERN_RIM } from './lantern'
 
 const read = (path: string) =>
@@ -27,5 +28,19 @@ describe('Lantern tokens on the web', () => {
     expect(read('../../../../electron/shared/font-settings.ts')).toContain(
       `family: "${LANTERN_MONO_FAMILY}"`,
     )
+  })
+
+  it('draws the search highlight in the desktop lantern amber', () => {
+    const channels = read('../../../../electron/renderer/tokens.css').match(
+      /--lantern-rgb: (\d+) (\d+) (\d+);/,
+    )
+    expect(channels).not.toBeNull()
+    const amber = `rgba(${channels?.slice(1).join(', ')},`
+    expect(LANTERN_TERMINAL_THEME.selectionBackground.startsWith(amber)).toBe(
+      true,
+    )
+    expect(
+      LANTERN_TERMINAL_THEME.selectionInactiveBackground.startsWith(amber),
+    ).toBe(true)
   })
 })

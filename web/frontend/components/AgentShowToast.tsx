@@ -1,23 +1,28 @@
 'use client'
 
-import { X } from 'lucide-react'
+import { Copy, ExternalLink, X } from 'lucide-react'
 import { useState } from 'react'
 import { buildApiUrl } from '@/lib/api-config'
 import { type AgentShow, useAgentShows } from '@/lib/hooks/use-agent-shows'
 
-const ACTION_CLASSES =
-  'rounded px-2 py-1 text-sm hover:bg-white/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2'
+/** The shared file's own name, without its exchange folder. */
+function fileName(name: string): string {
+  return name.slice(name.lastIndexOf('/') + 1)
+}
 
 export function AgentShowToast({
   show,
   onDismiss,
+  sessionName,
 }: {
   show: AgentShow
   onDismiss: () => void
+  /** The sharing session's name, when it is one of the listed sessions */
+  sessionName?: string | null
 }) {
-  const [copyState, setCopyState] = useState<'Copy' | 'Copied' | 'Copy failed'>(
-    'Copy',
-  )
+  const [copyState, setCopyState] = useState<
+    'Copy link' | 'Copied' | 'Couldn’t copy'
+  >('Copy link')
 
   async function copyUrl() {
     if (show.kind !== 'url') return
@@ -25,62 +30,87 @@ export function AgentShowToast({
       await navigator.clipboard.writeText(show.url)
       setCopyState('Copied')
     } catch {
-      setCopyState('Copy failed')
+      setCopyState('Couldn’t copy')
     }
   }
 
+  const target = show.kind === 'file' ? fileName(show.name) : show.url
+
   return (
-    <div
+    <section
       role="status"
-      className="fixed top-20 left-1/2 -translate-x-1/2 z-50 max-h-[calc(100dvh-6rem)] w-[calc(100vw-2rem)] max-w-md overflow-y-auto rounded-md px-4 py-2 shadow-lg"
-      style={{
-        backgroundColor: 'var(--term-bg-elevated)',
-        border: '1px solid var(--term-border)',
-        color: 'var(--term-text-primary)',
-      }}
+      className="lantern-sheet lantern-enter fixed top-14 left-1/2 z-50 max-h-[calc(100dvh-5rem)] w-[calc(100vw-20px)] max-w-md -translate-x-1/2 overflow-y-auto rounded-xl px-3.5 pt-3 pb-2.5"
     >
       <div className="flex items-start gap-2">
-        <span className="min-w-0 flex-1 break-words text-sm">
-          Agent shared: {show.title || show.name}
-        </span>
+        <div className="min-w-0 flex-1">
+          <p className="m-0 text-xs" style={{ color: 'var(--mist)' }}>
+            {sessionName ? `Shared by ${sessionName}` : 'Shared by an agent'}
+          </p>
+          <p
+            className="m-0 mt-[3px] break-words"
+            style={{ font: '450 17px/1.25 var(--font-display)' }}
+            dir="auto"
+          >
+            {show.title || target}
+          </p>
+          {show.title && (
+            <p
+              className="m-0 mt-1 select-text break-all text-[11.5px]"
+              style={{ fontFamily: 'var(--font-mono)', color: 'var(--mist)' }}
+              dir="auto"
+            >
+              {target}
+            </p>
+          )}
+        </div>
         <button
           type="button"
           onClick={onDismiss}
-          className={`${ACTION_CLASSES} shrink-0`}
-          style={{ color: 'var(--term-text-muted)' }}
+          className="lantern-icon-btn compact -mt-1 -mr-1"
           aria-label="Dismiss shared item"
         >
-          <X className="h-3.5 w-3.5" />
+          <X className="h-[18px] w-[18px]" strokeWidth={1.7} />
         </button>
       </div>
-      {show.kind === 'url' && show.title && (
-        <p className="mt-1 select-text break-all text-sm" dir="auto">
-          {show.url}
-        </p>
-      )}
-      <div className="mt-1" style={{ color: 'var(--term-accent)' }}>
+      <div className="mt-3 flex">
         {show.kind === 'file' ? (
           <a
-            className={ACTION_CLASSES}
+            className="lantern-btn primary flex-1"
             href={buildApiUrl(`/api/a-term/shows/${show.id}/file`)}
             target="_blank"
             rel="noopener noreferrer"
           >
+            <ExternalLink className="h-4 w-4" strokeWidth={1.7} />
             Open
           </a>
         ) : (
-          <button type="button" className={ACTION_CLASSES} onClick={copyUrl}>
+          <button
+            type="button"
+            className="lantern-btn primary flex-1"
+            onClick={copyUrl}
+          >
+            <Copy className="h-4 w-4" strokeWidth={1.7} />
             {copyState}
           </button>
         )}
       </div>
-    </div>
+    </section>
   )
 }
 
-export function AgentShows() {
+export function AgentShows({
+  sessionName,
+}: {
+  /** Names the session a share came from (Tether's 8-character id). */
+  sessionName?: (session: string) => string | null
+}) {
   const { show, dismiss } = useAgentShows()
   return show ? (
-    <AgentShowToast key={show.id} show={show} onDismiss={dismiss} />
+    <AgentShowToast
+      key={show.id}
+      show={show}
+      onDismiss={dismiss}
+      sessionName={show.session ? sessionName?.(show.session) : null}
+    />
   ) : null
 }

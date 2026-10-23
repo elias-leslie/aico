@@ -52,9 +52,12 @@ A_TERM_MOBILE_PORT=3002 bash ./scripts/mobile-verification.sh open-app
 ## What To Verify
 
 - The web app viewport scrolls vertically on touch without pull-to-refresh fighting it.
-- Keyboard minimize/restore leaves the a-term session live and readable.
+- Keyboard minimize/restore leaves the session live and readable.
+- The compose box sits between the terminal and the key ribbon; the terminal's last rows stay visible above it.
 - Voice/keyboard transitions keep the operator oriented.
-- Connection state is obvious on mobile, including reconnect affordance for transient failures.
+- Connection state is obvious on mobile: a lost connection says so inside the terminal area with Reconnect, an ended session with New session.
+- Scrolled up, the Latest pill (New output when something arrived) returns to the live bottom.
+- Open search takes the whole header row; the current match is amber with readable text.
 - The active pane remains usable after Android Chrome address-bar collapse/expand.
 
 ## Current Limitation

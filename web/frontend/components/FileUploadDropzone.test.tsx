@@ -39,16 +39,14 @@ describe('FileUploadDropzone', () => {
       </FileUploadDropzone>,
     )
 
-    const dropzone = screen.getByLabelText('File upload dropzone')
+    const dropzone = screen.getByText('a-term content')
     const dataTransfer = createPaneDragDataTransfer()
 
     fireEvent.dragEnter(dropzone, { dataTransfer })
     fireEvent.dragOver(dropzone, { dataTransfer })
     fireEvent.drop(dropzone, { dataTransfer })
 
-    expect(
-      screen.queryByLabelText('Drop file to upload'),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
     expect(onFileSelect).not.toHaveBeenCalled()
   })
 
@@ -62,17 +60,17 @@ describe('FileUploadDropzone', () => {
       </FileUploadDropzone>,
     )
 
-    const dropzone = screen.getByLabelText('File upload dropzone')
+    const dropzone = screen.getByText('a-term content')
     const dataTransfer = createFileDragDataTransfer(file)
 
     fireEvent.dragEnter(dropzone, { dataTransfer })
-    expect(screen.getByLabelText('Drop file to upload')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Drop a file to upload it',
+    )
 
     fireEvent.drop(dropzone, { dataTransfer })
 
     expect(onFileSelect).toHaveBeenCalledWith(file)
-    expect(
-      screen.queryByLabelText('Drop file to upload'),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 })

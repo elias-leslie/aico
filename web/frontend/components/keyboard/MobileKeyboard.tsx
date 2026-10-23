@@ -148,7 +148,7 @@ export function MobileKeyboard({
               }
             }}
             inputRef={composeRef}
-            mobileOverlay
+            phone
             ctrlActive={ctrlActive}
             onCtrlLetter={handleCtrlLetter}
             onCtrlCancel={() => setCtrlActive(false)}

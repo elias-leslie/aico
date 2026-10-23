@@ -139,7 +139,7 @@ describe('ControlBar', () => {
     const { onSend } = renderControlBar({ activeMode: 'claude-code' })
 
     fireEvent.click(screen.getByRole('button', { name: 'Switch Claude model' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Sonnet' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Sonnet' }))
 
     expect(onSend).toHaveBeenCalledWith('/model sonnet\r')
     expect(

@@ -1,3 +1,4 @@
+import { BONE, INK } from '../../../../electron/shared/palette'
 import { LANTERN_MONO_FAMILY } from './lantern'
 
 /** WebSocket connection timeout in milliseconds */
@@ -34,35 +35,16 @@ export const COPY_MODE_TIMEOUT_MS = 10000
 /** Terminal font: the vendored Iosevka (assets/fonts), as on the desktop. */
 export const A_TERM_FONT_FAMILY = LANTERN_MONO_FAMILY
 
-/** Terminal colors. */
-export const PHOSPHOR_THEME = {
-  background: '#0a0e14',
-  foreground: '#e6edf3',
-  cursor: '#00ff9f',
-  cursorAccent: '#ffffff',
-  selectionBackground: 'rgba(0, 255, 159, 0.3)',
-  selectionForeground: '#e6edf3',
-  black: '#0f1419',
-  red: '#f85149',
-  green: '#00ff9f',
-  yellow: '#d29922',
-  blue: '#58a6ff',
-  magenta: '#bc8cff',
-  cyan: '#39c5cf',
-  white: '#e6edf3',
-  brightBlack: '#7d8590',
-  brightRed: '#ff7b72',
-  brightGreen: '#39ffb3',
-  brightYellow: '#e3b341',
-  brightBlue: '#79c0ff',
-  brightMagenta: '#d2a8ff',
-  brightCyan: '#56d4dd',
-  brightWhite: '#ffffff',
+/** The terminal draws bone on ink with a bone cursor, like the desktop;
+ * the ANSI colours stay xterm's own, as there. Search matches are selected,
+ * so the selection is the search highlight: amber, kept while the search
+ * field has focus, with bone text so coloured output stays readable on it. */
+export const LANTERN_TERMINAL_THEME = {
+  background: INK,
+  foreground: BONE,
+  cursor: BONE,
+  cursorAccent: INK,
+  selectionBackground: 'rgba(229, 166, 71, 0.38)',
+  selectionForeground: BONE,
+  selectionInactiveBackground: 'rgba(229, 166, 71, 0.3)',
 } as const
-
-/**
- * Height of whatever floats over the bottom of the terminal pane (the phone
- * compose box). The overlay publishes it on the document root; the pane's
- * floating controls lift themselves by it so they stay visible and tappable.
- */
-export const BOTTOM_OVERLAY_HEIGHT_VAR = '--a-term-bottom-overlay-height'

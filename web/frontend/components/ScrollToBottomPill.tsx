@@ -1,11 +1,7 @@
 'use client'
 
+import { ArrowDown } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import {
-  A_TERM_FONT_FAMILY,
-  BOTTOM_OVERLAY_HEIGHT_VAR,
-  PHOSPHOR_THEME,
-} from '../lib/constants/a-term'
 
 type XtermATerm = InstanceType<typeof import('@xterm/xterm').Terminal>
 
@@ -60,7 +56,6 @@ export function ScrollToBottomPill({
   aTermRef,
   isReady,
 }: ScrollToBottomPillProps) {
-  const theme = PHOSPHOR_THEME
   const [state, setState] = useState<ReadingState>(AT_BOTTOM)
   const trackerRef = useRef<Tracker | null>(null)
 
@@ -95,11 +90,7 @@ export function ScrollToBottomPill({
 
   return (
     <div
-      className="pointer-events-none absolute inset-x-0 z-[5] flex justify-center"
-      // Lift above anything overlaying the pane bottom (the compose box).
-      style={{
-        bottom: `calc(0.75rem + var(${BOTTOM_OVERLAY_HEIGHT_VAR}, 0px))`,
-      }}
+      className="pointer-events-none absolute inset-x-0 bottom-3 z-[5] flex justify-center"
       data-testid="a-term-scroll-to-bottom"
     >
       <button
@@ -116,16 +107,13 @@ export function ScrollToBottomPill({
             ? 'Jump to latest output, new output below'
             : 'Jump to latest output'
         }
-        className="pointer-events-auto inline-flex min-h-9 items-center gap-1.5 rounded-full px-4 text-xs shadow-lg focus-visible:outline-2 focus-visible:outline-offset-2 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:px-5 [@media(pointer:coarse)]:text-sm"
-        style={{
-          fontFamily: A_TERM_FONT_FAMILY,
-          color: theme.green,
-          background: `color-mix(in srgb, ${theme.background} 88%, ${theme.green})`,
-          border: `1px solid ${theme.green}66`,
-          outlineColor: theme.green,
-        }}
+        className="lantern-jump pointer-events-auto"
       >
-        <span aria-hidden="true">↓</span>
+        <ArrowDown
+          aria-hidden="true"
+          className="h-3.5 w-3.5"
+          strokeWidth={1.7}
+        />
         <span>{state.newOutput ? 'New output' : 'Latest'}</span>
       </button>
     </div>

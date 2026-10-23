@@ -1,32 +1,42 @@
+/* The transcript field: the compose box's field, on the rim. */
 .editTextarea {
   flex: 1;
-  background: var(--term-surface-overlay);
-  border: 1px solid var(--term-accent-border);
-  border-radius: 8px;
-  padding: 14px;
-  font-family: var(--font-mono);
-  font-size: 14px;
-  line-height: 1.7;
-  color: var(--term-text-primary);
-  resize: none;
-  outline: none;
   min-height: 80px;
-}
-.editTextarea:focus {
-  border-color: var(--term-accent);
-  box-shadow: 0 0 0 2px var(--term-accent-soft);
+  padding: 8px 10px;
+  border: 1px solid var(--paper-veil);
+  border-radius: 6px;
+  outline: none;
+  background: var(--ink);
+  color: var(--bone);
+  font: 16px / 1.5 var(--font-ui);
+  resize: none;
 }
 
-/* Mobile inline mic button — pulsing border glow when listening */
-.mobileMicPulse {
-  animation: pulseRing 1.5s ease-in-out infinite;
+.editTextarea:focus-visible {
+  border-color: var(--lantern);
 }
+
+.editTextarea::placeholder {
+  color: var(--mist);
+}
+
+/* Listening: a soft amber ring breathes around the mic. */
+.mobileMicPulse {
+  animation: pulseRing 1.6s var(--ease-arrival) infinite;
+}
+
 @keyframes pulseRing {
   0%,
   100% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--term-error) 50%, transparent);
+    box-shadow: 0 0 0 0 rgb(var(--lantern-rgb) / 0.4);
   }
   50% {
-    box-shadow: 0 0 0 8px color-mix(in srgb, var(--term-error) 0%, transparent);
+    box-shadow: 0 0 0 8px rgb(var(--lantern-rgb) / 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mobileMicPulse {
+    animation: none;
   }
 }
