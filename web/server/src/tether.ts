@@ -16,6 +16,8 @@ export class HttpError extends Error {
   constructor(
     readonly status: number,
     readonly detail: string,
+    /** The Tether failure it answers, when there was one. */
+    readonly cause?: unknown,
   ) {
     super(detail)
   }
@@ -108,7 +110,7 @@ export const UNAVAILABLE_DETAIL =
 /** A Tether failure as the API answers it (anything else is rethrown). */
 export function toHttpError(error: unknown, notFound?: string): HttpError {
   if (error instanceof HttpError) return error
-  if (error instanceof TetherUnavailable) return new HttpError(503, UNAVAILABLE_DETAIL)
+  if (error instanceof TetherUnavailable) return new HttpError(503, UNAVAILABLE_DETAIL, error)
   if (error instanceof TetherError) {
     const known = DETAILS[error.code]
     const [status, knownDetail] = known ?? [
@@ -118,7 +120,7 @@ export function toHttpError(error: unknown, notFound?: string): HttpError {
     let detail = error.code === 'not_found' && notFound ? notFound : knownDetail
     if ((error.code === 'blocked' || error.code === 'admission_denied') && error.reason)
       detail = `${detail} (${error.reason})`
-    return new HttpError(status, detail)
+    return new HttpError(status, detail, error)
   }
   throw error
 }

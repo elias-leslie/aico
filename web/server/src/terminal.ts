@@ -13,7 +13,6 @@
 
 import type { IncomingMessage } from 'node:http'
 import {
-  followEvents,
   type TetherClient,
   TetherError,
   type TetherEvent,
@@ -151,24 +150,14 @@ const defaultOpenLink =
 
 export class TerminalHub {
   private readonly views = new Map<string, Set<View>>()
-  private stopEvents: (() => void) | null = null
   private readonly openLink: NonNullable<TerminalDeps['openLink']>
 
   constructor(private readonly deps: TerminalDeps) {
     this.openLink = deps.openLink ?? defaultOpenLink(deps.historyLines)
   }
 
-  /** Follow Tether's events (size holders, ended sessions) for the open sockets. */
-  start(): void {
-    this.stopEvents ??= followEvents(this.deps.tether, {
-      onResync: () => {},
-      onEvent: (event) => this.event(event),
-    })
-  }
-
+  /** Close every open socket (the server is stopping). */
   stop(): void {
-    this.stopEvents?.()
-    this.stopEvents = null
     for (const views of this.views.values())
       for (const view of views) view.close(1001, 'server stopping')
   }
@@ -179,6 +168,7 @@ export class TerminalHub {
     return count
   }
 
+  /** One Tether event (size holders, ended sessions) for the open sockets; the server's stream feeds it. */
   event(event: TetherEvent): void {
     const id = typeof event.data.id === 'string' ? event.data.id : null
     const views = id ? this.views.get(id) : undefined

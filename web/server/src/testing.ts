@@ -1,5 +1,7 @@
 // A fake Tether for the tests: sessions in memory, every call recorded.
 
+import { createServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { homedir } from 'node:os'
 import {
   type SessionDescriptor,
@@ -7,6 +9,7 @@ import {
   TetherError,
   type ViewerLabel,
 } from 'tether/client'
+import { Router } from './http'
 
 export interface Call {
   method: string
@@ -184,5 +187,28 @@ export class FakeTether {
 
   get client(): TetherClient {
     return this as unknown as TetherClient
+  }
+}
+
+/** A loopback server answering only `register`'s routes; `close` when done. */
+export async function serveRoutes(register: (router: Router) => void) {
+  const router = new Router()
+  register(router)
+  const server = createServer((req, res) => {
+    void router.handle(req, res, new URL(req.url ?? '/', 'http://localhost')).then((handled) => {
+      if (!handled) {
+        res.statusCode = 404
+        res.end()
+      }
+    })
+  })
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  return {
+    base: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+    close: () =>
+      new Promise<void>((resolve) => {
+        server.closeAllConnections()
+        server.close(() => resolve())
+      }),
   }
 }

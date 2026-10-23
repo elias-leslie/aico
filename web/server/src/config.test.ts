@@ -57,3 +57,47 @@ describe('loadConfig', () => {
     expect(() => loadConfig({}, identity({}))).toThrow(/No port/)
   })
 })
+
+describe('loadConfig: uploads, shares and maintenance', () => {
+  it('defaults to the Python backend’s settings', () => {
+    const config = loadConfig({ HOME: '/home/u', XDG_RUNTIME_DIR: '/run/user/7' }, ID)
+    expect(config.uploads).toEqual({
+      dir: '/home/u/a-term-uploads',
+      maxBytes: 10 * 1024 * 1024,
+      maxAgeMs: 86_400_000,
+    })
+    expect(config.exchangeRoot).toBe('/srv/workspaces/exchange')
+    expect(config.maintenance).toEqual({ enabled: true, intervalMs: 900_000, emptyPaneDays: 7 })
+  })
+
+  it('reads the same environment names as the Python backend', () => {
+    const config = loadConfig(
+      {
+        HOME: '/home/u',
+        UPLOAD_DIR: '~/drops',
+        MAX_FILE_SIZE_MB: '2',
+        UPLOAD_MAX_AGE_SECONDS: '60',
+        TETHER_EXCHANGE_ROOT: '/exchange',
+        MAINTENANCE_ENABLED: 'false',
+        MAINTENANCE_INTERVAL_SECONDS: '30',
+        MAINTENANCE_SESSION_PURGE_DAYS: '3',
+      },
+      identity({ runtime: { frontend_port: 1 }, artifacts: { upload_dir_name: 'ignored' } }),
+    )
+    expect(config.uploads).toEqual({
+      dir: '/home/u/drops',
+      maxBytes: 2 * 1024 * 1024,
+      maxAgeMs: 60_000,
+    })
+    expect(config.exchangeRoot).toBe('/exchange')
+    expect(config.maintenance).toEqual({ enabled: false, intervalMs: 30_000, emptyPaneDays: 3 })
+    expect(() => loadConfig({ TETHER_EXCHANGE_ROOT: 'relative' }, ID)).toThrow(/absolute/)
+  })
+
+  it("trusts agent shares only from the owner's default Tether", () => {
+    const env = { HOME: '/home/u', XDG_RUNTIME_DIR: '/run/user/7' }
+    expect(loadConfig(env, ID).trustShows).toBe(true)
+    expect(loadConfig({ ...env, TETHER_INSTANCE: 'dev' }, ID).trustShows).toBe(false)
+    expect(loadConfig({ ...env, TETHER_SOCKET: '/tmp/third.sock' }, ID).trustShows).toBe(false)
+  })
+})

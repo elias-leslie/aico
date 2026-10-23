@@ -2,10 +2,10 @@
 // shapes. Tether owns every session; this server keeps only which tab (pane)
 // shows each one, and each project's tab settings.
 
-import { posix } from 'node:path'
-import { compatibleVersion, type TetherClient, TetherError } from 'tether/client'
+import { compatibleVersion, type TetherClient } from 'tether/client'
 import { AGENT_HUB_PATHS, type AgentHubConfig, proxyAgentHub } from './agent-hub'
-import type { Pane, WebStore } from './db'
+import type { UploadConfig } from './config'
+import type { WebStore } from './db'
 import {
   objectBody,
   optionalInt,
@@ -15,94 +15,43 @@ import {
   requiredString,
   sendJson,
 } from './http'
-import {
-  agentStateFor,
-  byText,
-  fromTether,
-  numberSessions,
-  requireRespawnable,
-  SHELL_MODE,
-  sortSessions,
-  type WebSession,
-} from './sessions'
-import {
-  createSession,
-  findSession,
-  HttpError,
-  listTools,
-  respawnSession,
-  toHttpError,
-} from './tether'
+import { createLifecycle, type PaneView, tetherCall } from './lifecycle'
+import { registerPaneFileRoutes } from './pane-files'
+import { byText, SHELL_MODE } from './sessions'
+import { registerShowRoutes, type Shows } from './shows'
+import { HttpError, listTools } from './tether'
+import { registerUploadRoutes } from './uploads'
 
 export interface ApiDeps {
   tether: TetherClient
   store: WebStore
   config: AgentHubConfig
+  uploads: UploadConfig
+  shows: Shows
   /** The size a new session starts at, before any viewer claims one. */
   defaultSize?: { cols: number; rows: number }
 }
 
-const DEFAULT_SIZE = { cols: 120, rows: 30 }
 const SLUG = /^[a-z0-9_-]+$/
 const MAX_SESSION_NAME = 160
 
-/** Run a Tether call, answering its refusals as the API's errors. */
-async function tetherCall<T>(work: () => Promise<T>, notFound?: string): Promise<T> {
-  try {
-    return await work()
-  } catch (error) {
-    throw toHttpError(error, notFound)
-  }
-}
-
-/** Tether refuses a project root that is not normalized; a blank one is "not given". */
-function projectRoot(workingDir: string | undefined | null): string | null {
-  if (!workingDir) return null
-  const normalized = posix.normalize(workingDir).replace(/\/+$/, '') || '/'
-  return normalized
-}
-
 export function buildApi(deps: ApiDeps): Router {
+  const life = createLifecycle(deps)
   const { tether, store } = deps
-  const size = deps.defaultSize ?? DEFAULT_SIZE
+  const {
+    listSessions,
+    getSession,
+    sessionsById,
+    withSessions,
+    paneById,
+    requireTool,
+    newSession,
+    endSession,
+    respawn,
+  } = life
   const router = new Router()
 
-  // -- Reading sessions -------------------------------------------------------
-
-  async function listSessions(): Promise<WebSession[]> {
-    const links = new Map(store.listLinks().map((link) => [link.session_id, link]))
-    const descriptors = await tetherCall(() => tether.listSessions())
-    const sessions = descriptors
-      .filter((descriptor) => typeof descriptor.id === 'string')
-      .map((descriptor) => fromTether(descriptor, links.get(descriptor.id) ?? null))
-    numberSessions(sessions)
-    return sortSessions(sessions)
-  }
-
-  async function getSession(id: string): Promise<WebSession> {
-    const descriptor = await tetherCall(() => findSession(tether, id))
-    if (!descriptor) throw new HttpError(404, `Session ${id} not found`)
-    return fromTether(descriptor, store.getLink(id))
-  }
-
-  async function sessionsById(): Promise<Map<string, WebSession>> {
-    return new Map((await listSessions()).map((session) => [session.id, session]))
-  }
-
   // -- Panes (tabs) -----------------------------------------------------------
-
-  interface PaneView extends Pane {
-    sessions: WebSession[]
-  }
-
-  function withSessions(pane: Pane, known: Map<string, WebSession>): PaneView {
-    const sessions = store
-      .linksForPane(pane.id)
-      .map((link) => known.get(link.session_id))
-      .filter((session): session is WebSession => session !== undefined)
-      .sort((a, b) => byText(a.mode, b.mode))
-    return { ...pane, sessions }
-  }
 
   function paneResponse(pane: PaneView, order: number) {
     return {
@@ -120,90 +69,6 @@ export function buildApi(deps: ApiDeps): Router {
       grid_row: 0,
       grid_col: 0,
     }
-  }
-
-  async function paneById(id: string, requireLive = true) {
-    const panes = store.listPanes()
-    const order = panes.findIndex((pane) => pane.id === id)
-    if (order < 0) throw new HttpError(404, `Pane ${id} not found`)
-    const pane = withSessions(panes[order], await sessionsById())
-    if (requireLive && pane.sessions.length === 0)
-      throw new HttpError(404, `Pane ${id} has no live sessions`)
-    return { pane, order }
-  }
-
-  async function defaultAgentSlug(): Promise<string> {
-    const { items, defaultSlug } = await tetherCall(() => listTools(tether))
-    const usable = items.filter((tool) => tool.enabled !== false && tool.slug !== SHELL_MODE)
-    if (defaultSlug && usable.some((tool) => tool.slug === defaultSlug)) return defaultSlug
-    const preferred = usable.find((tool) => tool.isDefault === true) ?? usable[0]
-    if (!preferred || typeof preferred.slug !== 'string')
-      throw new HttpError(400, 'No agent tool is enabled')
-    return preferred.slug
-  }
-
-  /** The tool by slug or alias; 404 unknown, 400 disabled. Returns its canonical slug. */
-  async function requireTool(ref: string): Promise<string> {
-    const { items } = await tetherCall(() => listTools(tether))
-    const tool = items.find(
-      (item) =>
-        item.slug === ref ||
-        item.id === ref ||
-        (Array.isArray(item.aliases) && item.aliases.includes(ref)),
-    )
-    if (!tool || typeof tool.slug !== 'string')
-      throw new HttpError(404, `Agent tool '${ref}' not found`)
-    if (tool.enabled === false)
-      throw new HttpError(400, `Agent tool '${String(tool.name ?? tool.slug)}' is disabled`)
-    return tool.slug
-  }
-
-  async function newSession(input: {
-    paneId: string
-    mode: string
-    projectId: string | null
-    workingDir: string | null
-    name?: string | null
-  }): Promise<WebSession> {
-    const descriptor = await tetherCall(() =>
-      createSession(tether, {
-        tool: input.mode,
-        projectId: input.projectId,
-        projectRoot: projectRoot(input.workingDir),
-        name: input.name,
-        size,
-      }),
-    )
-    const link = store.link(descriptor.id, input.paneId, descriptor.tool || input.mode)
-    return fromTether(descriptor, link)
-  }
-
-  /** Tether's End, fenced by the generation read just before it; false when already gone. */
-  async function endSession(id: string): Promise<boolean> {
-    const ended = await tetherCall(async () => {
-      const descriptor = await findSession(tether, id)
-      if (!descriptor) return false
-      if (typeof descriptor.generation !== 'string')
-        throw new HttpError(409, 'The session has no generation yet; refresh and try again')
-      try {
-        await tether.end(id, descriptor.generation)
-        return true
-      } catch (error) {
-        if (error instanceof TetherError && error.status === 404) return false
-        throw error
-      }
-    })
-    store.unlink(id)
-    return ended
-  }
-
-  async function respawn(session: WebSession): Promise<WebSession> {
-    requireRespawnable(session)
-    const descriptor = await tetherCall(
-      () => respawnSession(tether, session.id, String(session.generation)),
-      `Session ${session.id} not found`,
-    )
-    return fromTether(descriptor, store.getLink(session.id))
   }
 
   router.on('GET', '/api/a-term/panes', async () => {
@@ -233,41 +98,8 @@ export function buildApi(deps: ApiDeps): Router {
     if (paneType === 'adhoc' && projectId)
       throw new HttpError(400, 'project_id must be empty for adhoc panes')
     const agentMode = toolRef ? await requireTool(toolRef) : null
-
-    const modes = [SHELL_MODE]
-    if (paneType === 'project') {
-      const agent = agentMode ?? (await defaultAgentSlug())
-      if (agent !== SHELL_MODE) modes.push(agent)
-    }
-    const pane = store.createPane({
-      projectId,
-      name: paneName,
-      activeMode: modes[modes.length - 1],
-    })
-    const created: WebSession[] = []
-    try {
-      for (const mode of modes)
-        created.push(
-          await newSession({
-            paneId: pane.id,
-            mode,
-            projectId,
-            workingDir,
-            name: projectId ? null : paneName,
-          }),
-        )
-    } catch (error) {
-      for (const session of created.reverse())
-        await endSession(session.id).catch((cleanup) =>
-          console.warn(`[aico-web] rollback end failed session=${session.id}:`, cleanup),
-        )
-      store.deletePane(pane.id)
-      throw error
-    }
-    const activeMode = created[created.length - 1].mode
-    store.updatePane(pane.id, { activeMode })
-    if (projectId) store.upsertProjectSettings(projectId, { enabled: true, activeMode })
-    const { pane: view, order } = await paneById(pane.id, false)
+    const created = await life.createPane({ paneType, paneName, projectId, workingDir, agentMode })
+    const { pane: view, order } = await paneById(created.id, false)
     return paneResponse(view, order)
   })
 
@@ -428,20 +260,14 @@ export function buildApi(deps: ApiDeps): Router {
 
   router.on('POST', '/api/a-term/sessions/:sessionId/start-agent', async (ctx) => {
     const session = await getSession(ctx.params.sessionId)
-    const answer = (started: boolean, message: string, state = session.agent_state) => ({
+    const result = await life.startAgent(session)
+    return {
       session_id: session.id,
-      started,
-      message,
-      agent_state: state,
-      claude_state: state,
-    })
-    if (session.is_root) return answer(false, 'Root launch is owned by its retained request')
-    if (session.mode === SHELL_MODE)
-      throw new HttpError(400, 'Session is in shell mode, not agent mode')
-    if (session.status === 'running') return answer(false, 'Agent is already running')
-    if (session.status === 'pending') return answer(false, 'Agent is already starting')
-    const restarted = await respawn(session)
-    return answer(true, 'Agent restarted', agentStateFor(restarted.mode, restarted.status))
+      started: result.started,
+      message: result.message,
+      agent_state: result.state,
+      claude_state: result.state,
+    }
   })
 
   // -- Projects and tools ---------------------------------------------------------
@@ -511,6 +337,12 @@ export function buildApi(deps: ApiDeps): Router {
       .filter((tool) => !enabledOnly || tool.enabled)
       .sort((a, b) => a.display_order - b.display_order || byText(String(a.name), String(b.name)))
   })
+
+  // -- Files and agent shares -------------------------------------------------------
+
+  registerUploadRoutes(router, deps.uploads)
+  registerPaneFileRoutes(router, life)
+  registerShowRoutes(router, deps.shows)
 
   // -- Agent Hub, auth, health ------------------------------------------------------
 

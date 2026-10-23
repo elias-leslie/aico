@@ -53,6 +53,8 @@ export interface SessionDescriptor {
   contextHook?: ContextHook
   /** The agent's state (tether docs/agent-state.md); absent from an older Tether. */
   state?: 'working' | 'idle' | 'blocked' | 'unknown'
+  /** The state before the last change; absent from an older Tether. */
+  statePrevious?: 'working' | 'idle' | 'blocked' | 'unknown'
   stateSource?: string
   stateAt?: number | null
   stateDetail?: string | null
