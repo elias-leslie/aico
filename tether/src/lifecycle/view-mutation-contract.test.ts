@@ -1,12 +1,15 @@
 import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { parseBounds, parseLabel, parseWidgetMutation } from './root-control'
 
 // The same vectors drive scripts/tests/test_view_mutation_contract.py, so the
 // owner and its Python client cannot drift silently.
 const vectors = JSON.parse(
-  readFileSync(join(process.cwd(), 'contracts/view-mutation-vectors.json'), 'utf8'),
+  readFileSync(
+    fileURLToPath(new URL('../../contracts/view-mutation-vectors.json', import.meta.url)),
+    'utf8',
+  ),
 ) as {
   version: number
   labels: { input: string; label: string | null }[]

@@ -7,7 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-ENTRY = Path(__file__).resolve().parents[1] / "aico-root-watch.py"
+ENTRY = Path(__file__).resolve().parents[3] / "scripts" / "aico-root-watch.py"
 SPEC = importlib.util.spec_from_file_location("aico_root_watch_entry", ENTRY)
 assert SPEC and SPEC.loader
 entry = importlib.util.module_from_spec(SPEC)

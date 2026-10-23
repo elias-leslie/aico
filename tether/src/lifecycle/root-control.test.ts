@@ -5,6 +5,7 @@ import { request } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
+import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { UUID_RE as UUID } from '../continuity'
 import { listenPrivateSocket } from '../http'
@@ -39,6 +40,8 @@ import {
 } from './root-launch'
 import { codexTui, initStore, registerBuiltinTuis } from './testing'
 import { getTui } from './tui/registry'
+
+const ROOT_WATCH = fileURLToPath(new URL('../../scripts/aico-root-watch.py', import.meta.url))
 
 function present<T>(value: T | null | undefined): T {
   if (value === undefined || value === null) throw new Error('fixture value missing')
@@ -419,14 +422,7 @@ describe('private root workload control', () => {
     const receipt = await new Promise<Record<string, unknown>>((resolve, reject) => {
       execFile(
         '/usr/bin/python3',
-        [
-          join(process.cwd(), 'scripts/aico-root-watch.py'),
-          'widget',
-          'title',
-          'CLI private label',
-          '--root-socket',
-          socket,
-        ],
+        [ROOT_WATCH, 'widget', 'title', 'CLI private label', '--root-socket', socket],
         { encoding: 'utf8', env: { ...process.env, AICO_WIDGET_ID: row.id } },
         (error, stdout) => {
           if (error) reject(error)
@@ -446,14 +442,7 @@ describe('private root workload control', () => {
     const marked = await new Promise<Record<string, unknown>>((resolve, reject) => {
       execFile(
         '/usr/bin/python3',
-        [
-          join(process.cwd(), 'scripts/aico-root-watch.py'),
-          'widget',
-          'coordinator',
-          'off',
-          '--root-socket',
-          socket,
-        ],
+        [ROOT_WATCH, 'widget', 'coordinator', 'off', '--root-socket', socket],
         { encoding: 'utf8', env: { ...process.env, AICO_WIDGET_ID: row.id } },
         (error, stdout) => (error ? reject(error) : resolve(JSON.parse(stdout))),
       )
@@ -732,7 +721,7 @@ describe('private root workload control', () => {
         )
         .replace(/\\n/g, '\\u000a')
         .replace(/\\t/g, '\\u0009')
-    for (const text of ['界'.repeat(666) + 'ab', 'x' + '\n\t'.repeat(999) + '\n']) {
+    for (const text of [`${'界'.repeat(666)}ab`, `x${'\n\t'.repeat(999)}\n`]) {
       expect(Buffer.byteLength(text)).toBe(2000)
       const result = await call('/v1/roots/target-1/admin', 'POST', { ...pin, text }, ascii)
       expect(result.status).toBe(503)
@@ -751,14 +740,7 @@ describe('private root workload control', () => {
       new Promise<{ code: string | number; body: Record<string, unknown> }>((resolve, reject) => {
         execFile(
           '/usr/bin/python3',
-          [
-            join(process.cwd(), 'scripts/aico-root-watch.py'),
-            'admin',
-            'target-1',
-            ...args,
-            '--root-socket',
-            socket,
-          ],
+          [ROOT_WATCH, 'admin', 'target-1', ...args, '--root-socket', socket],
           { encoding: 'utf8' },
           (error, stdout) => {
             try {
@@ -1009,61 +991,68 @@ describe('private root workload control', () => {
   it.each([
     { provider: 'openai-codex', effort: 'xhigh' },
     { provider: 'openai', effort: 'high' },
-  ])('launches and resumes Pi with explicit $provider/$effort argv', async ({
-    provider,
-    effort,
-  }) => {
-    const input = {
-      ...create(`pi-selection-${provider}`),
-      tool: 'pi',
-      model: `${provider}/gpt-6.1-sol`,
-      reasoningEffort: effort,
-    }
-    expect(parseRootCreate(input)).not.toBeNull()
-    expect(parseRootCreate({ ...input, model: null })).toBeNull()
-    expect(parseRootCreate({ ...input, model: 'gpt-6.1-sol' })).toBeNull()
-    expect(parseRootCreate({ ...input, daybreak: false })).toBeNull()
-    expect(parseRootCreate({ ...input, reasoningEffort: 'none' })).toBeNull()
-    expect(parseRootCreate({ ...input, reasoningEffort: 'off' })).not.toBeNull()
-    const first = await call('/v1/roots', 'POST', input)
-    expect(first.status).toBe(200)
-    expect(await call('/v1/roots', 'POST', input)).toEqual(first)
-    expect((await call('/v1/roots', 'POST', { ...input, model: 'another/model' })).status).toBe(409)
-    const root = present(getRootRequest(input.requestId))
-    const tool = {
-      ...present(getTui('pi')),
-      command: [process.execPath, '-e', 'console.log(JSON.stringify(process.argv.slice(1)))', '--'],
-    }
-    for (const resume of [null, '00000000-0000-4000-8000-000000000001'])
-      await withRootPrompt(
-        root.widgetId,
-        'Reply only.',
-        async () => {
-          const output = execFileSync(
-            '/bin/bash',
-            ['--noprofile', '--norc', '-c', present(initialLaunchLine(root.widgetId, tool))],
-            {
-              env: { PATH: '/usr/bin:/bin', ...rootLaunchEnvironment(root.widgetId) },
-              encoding: 'utf8',
-            },
-          )
-          expect(JSON.parse(output)).toEqual([
-            '--provider',
-            provider,
-            '--model',
-            'gpt-6.1-sol',
-            '--thinking',
-            effort,
-            '--approve',
-            ...(resume ? ['--session', resume] : ['--session-id', expect.stringMatching(UUID)]),
-            '--',
-            'Reply only.',
-          ])
-        },
-        resume,
-        { model: input.model, reasoningEffort: input.reasoningEffort },
+  ])(
+    'launches and resumes Pi with explicit $provider/$effort argv',
+    async ({ provider, effort }) => {
+      const input = {
+        ...create(`pi-selection-${provider}`),
+        tool: 'pi',
+        model: `${provider}/gpt-6.1-sol`,
+        reasoningEffort: effort,
+      }
+      expect(parseRootCreate(input)).not.toBeNull()
+      expect(parseRootCreate({ ...input, model: null })).toBeNull()
+      expect(parseRootCreate({ ...input, model: 'gpt-6.1-sol' })).toBeNull()
+      expect(parseRootCreate({ ...input, daybreak: false })).toBeNull()
+      expect(parseRootCreate({ ...input, reasoningEffort: 'none' })).toBeNull()
+      expect(parseRootCreate({ ...input, reasoningEffort: 'off' })).not.toBeNull()
+      const first = await call('/v1/roots', 'POST', input)
+      expect(first.status).toBe(200)
+      expect(await call('/v1/roots', 'POST', input)).toEqual(first)
+      expect((await call('/v1/roots', 'POST', { ...input, model: 'another/model' })).status).toBe(
+        409,
       )
-  })
+      const root = present(getRootRequest(input.requestId))
+      const tool = {
+        ...present(getTui('pi')),
+        command: [
+          process.execPath,
+          '-e',
+          'console.log(JSON.stringify(process.argv.slice(1)))',
+          '--',
+        ],
+      }
+      for (const resume of [null, '00000000-0000-4000-8000-000000000001'])
+        await withRootPrompt(
+          root.widgetId,
+          'Reply only.',
+          async () => {
+            const output = execFileSync(
+              '/bin/bash',
+              ['--noprofile', '--norc', '-c', present(initialLaunchLine(root.widgetId, tool))],
+              {
+                env: { PATH: '/usr/bin:/bin', ...rootLaunchEnvironment(root.widgetId) },
+                encoding: 'utf8',
+              },
+            )
+            expect(JSON.parse(output)).toEqual([
+              '--provider',
+              provider,
+              '--model',
+              'gpt-6.1-sol',
+              '--thinking',
+              effort,
+              '--approve',
+              ...(resume ? ['--session', resume] : ['--session-id', expect.stringMatching(UUID)]),
+              '--',
+              'Reply only.',
+            ])
+          },
+          resume,
+          { model: input.model, reasoningEffort: input.reasoningEffort },
+        )
+    },
+  )
 
   it('carries Pi Daybreak and optional context for fresh and resumed launches without leaking the prompt', async () => {
     const input = {
@@ -1302,7 +1291,7 @@ describe('private root workload control', () => {
         execFile(
           '/usr/bin/python3',
           [
-            join(process.cwd(), 'scripts/aico-root-watch.py'),
+            ROOT_WATCH,
             'create',
             requestId,
             prompt,

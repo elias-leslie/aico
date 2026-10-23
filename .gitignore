@@ -58,3 +58,8 @@ AGENT_AUDIT.md
 # Local workspace tool config (backups, dead-code audit)
 .backupignore
 .fallowrc.json
+
+# Test-run leftovers when the gate runs from the repo root
+/.bash_history
+/a-term-uploads/
+/logs/

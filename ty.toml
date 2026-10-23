@@ -1,0 +1,14 @@
+# ty from the repo root (how `st check` runs it): resolve imports from the web
+# backend's environment, which also covers Tether's stdlib-only scripts.
+[environment]
+python = "./web/.venv"
+
+[src]
+include = ["web", "tether/scripts", "scripts"]
+
+[rules]
+# Suppress beta-quality rules (ty 0.0.x false positives)
+# Remove these as ty matures past 0.1
+invalid-argument-type = "ignore"
+unknown-argument = "ignore"
+unresolved-import = "ignore"

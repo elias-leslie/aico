@@ -58,22 +58,3 @@ ignore = ["E501"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["a_term"]
-
-[tool.ty.rules]
-# Suppress beta-quality rules (ty 0.0.x false positives)
-# Remove these as ty matures past 0.1
-invalid-argument-type = "ignore"
-unknown-argument = "ignore"
-unresolved-import = "ignore"
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-asyncio_mode = "auto"
-asyncio_default_fixture_loop_scope = "function"
-markers = [
-    "asyncio: mark tests that await async code",
-]
-filterwarnings = [
-    # slowapi 0.1.9 uses deprecated asyncio.iscoroutinefunction (removed in 3.16)
-    "ignore:'asyncio.iscoroutinefunction':DeprecationWarning:slowapi",
-]
