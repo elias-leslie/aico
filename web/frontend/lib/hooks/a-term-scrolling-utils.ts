@@ -12,6 +12,10 @@ export const ARROW_DOWN = '\x1b[B'
 /** SGR (1006) mouse button codes for wheel up/down. */
 const SGR_WHEEL_UP_BUTTON = 64
 const SGR_WHEEL_DOWN_BUTTON = 65
+const SGR_LEFT_BUTTON = 0
+/** A touch counts as a tap when it ends this soon and moves this little. */
+const TAP_MAX_DURATION_MS = 350
+const TAP_MAX_MOVEMENT_PX = 10
 /** Cap per scroll event so a fling cannot flood the session with reports. */
 const MAX_MOUSE_WHEEL_TICKS_PER_EVENT = 12
 /** WheelEvent.deltaMode values. */
@@ -50,6 +54,19 @@ export function buildMouseWheelSequence(
   const button =
     direction === 'up' ? SGR_WHEEL_UP_BUTTON : SGR_WHEEL_DOWN_BUTTON
   return `\x1b[<${button};${clampCell(column)};${clampCell(row)}M`
+}
+
+/**
+ * SGR press and release for a left click on a terminal cell.
+ *
+ * A program that tracks the mouse draws its own buttons (Claude Code's "Jump
+ * to bottom"), and a finger tap is the only click a phone has. The browser's
+ * own click never reaches the program because mouse reports are held back for
+ * local text selection, so the tap is translated here.
+ */
+export function buildMouseClickSequence(column = 1, row = 1): string {
+  const cell = `${clampCell(column)};${clampCell(row)}`
+  return `\x1b[<${SGR_LEFT_BUTTON};${cell}M\x1b[<${SGR_LEFT_BUTTON};${cell}m`
 }
 
 function clampCell(value: number, max = Number.POSITIVE_INFINITY): number {
@@ -191,6 +208,10 @@ export interface TouchScrollDeps {
     column: number,
     row: number,
   ) => void
+  /** Report a left click at a cell to a program that tracks the mouse. */
+  sendMouseClick?: (column: number, row: number) => void
+  /** Whether the program asked for SGR mouse reports. */
+  isSgrMouse?: () => boolean
 }
 
 export function setupTouchHandlers(
@@ -200,12 +221,18 @@ export function setupTouchHandlers(
   let touchStartY = 0
   let lastSentY = 0
   let pendingNormalScrollDeltaY = 0
+  let tap: { x: number; y: number; at: number } | null = null
 
   // Touch start must not send anything to the pane. Entering tmux copy-mode
   // here left the pane stuck in copy-mode once the drag finished, and tmux then
   // swallowed every later keystroke — the session looked like it had stopped
   // accepting input entirely.
   const handleTouchStart = (e: TouchEvent) => {
+    const touch = e.touches[0]
+    tap =
+      e.touches.length === 1
+        ? { x: touch.clientX, y: touch.clientY, at: Date.now() }
+        : null
     touchStartY = e.touches[0].clientY
     lastSentY = touchStartY
     pendingNormalScrollDeltaY = 0
@@ -217,6 +244,13 @@ export function setupTouchHandlers(
     // Long-press then drag extends the browser's text selection.
     if (isNativeSelectionActive(container)) return
     const currentY = e.touches[0].clientY
+    if (
+      tap &&
+      Math.hypot(e.touches[0].clientX - tap.x, currentY - tap.y) >
+        TAP_MAX_MOVEMENT_PX
+    ) {
+      tap = null
+    }
 
     if (touchStartY === 0 && lastSentY === 0) {
       ;({ touchStartY, lastSentY } = initializeTouchTracking(currentY))
@@ -288,10 +322,35 @@ export function setupTouchHandlers(
       lineDelta * getTouchScrollEffectiveCellHeight(cellHeight)
   }
 
-  const handleTouchEnd = () => {
+  const resetTouch = () => {
+    tap = null
     touchStartY = 0
     lastSentY = 0
     pendingNormalScrollDeltaY = 0
+  }
+
+  // A short touch that stayed put is a click. The browser's own click on the
+  // terminal is held back for local selection, so a program that tracks the
+  // mouse only ever hears about it from here.
+  const handleTouchEnd = (e: TouchEvent) => {
+    const started = tap
+    resetTouch()
+    const aTerm = deps.aTermRef.current
+    if (
+      !started ||
+      !aTerm ||
+      !deps.sendMouseClick ||
+      e.touches.length > 0 ||
+      Date.now() - started.at > TAP_MAX_DURATION_MS ||
+      isNativeSelectionActive(container) ||
+      !isMouseTrackingActive(aTerm) ||
+      !deps.isSgrMouse?.()
+    ) {
+      return
+    }
+    const screen = container.querySelector<HTMLElement>('.xterm-screen')
+    const { column, row } = pointToCell(screen, aTerm, started.x, started.y)
+    deps.sendMouseClick(column, row)
   }
 
   container.addEventListener('touchstart', handleTouchStart, {
@@ -306,7 +365,7 @@ export function setupTouchHandlers(
     passive: true,
     capture: true,
   })
-  container.addEventListener('touchcancel', handleTouchEnd, {
+  container.addEventListener('touchcancel', resetTouch, {
     passive: true,
     capture: true,
   })
@@ -321,7 +380,7 @@ export function setupTouchHandlers(
     container.removeEventListener('touchend', handleTouchEnd, {
       capture: true,
     })
-    container.removeEventListener('touchcancel', handleTouchEnd, {
+    container.removeEventListener('touchcancel', resetTouch, {
       capture: true,
     })
   }

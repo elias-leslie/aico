@@ -15,14 +15,21 @@ import {
   useATermScrolling,
 } from './use-a-term-scrolling'
 
-function createTouchEvent(type: string, clientY: number): Event {
+function createTouchEvent(
+  type: string,
+  clientY: number,
+  clientX = 0,
+  touchCount = 1,
+): Event {
   const event = new Event(type, {
     bubbles: true,
     cancelable: true,
   })
 
+  // touchend and touchcancel list no touch once the last finger is up.
+  const active = type === 'touchend' || type === 'touchcancel' ? 0 : touchCount
   Object.defineProperty(event, 'touches', {
-    value: [{ clientX: 0, clientY }],
+    value: Array.from({ length: active }, () => ({ clientX, clientY })),
     configurable: true,
   })
 
@@ -209,6 +216,112 @@ describe('useATermScrolling', () => {
 
     touchCleanup()
     wheelCleanup()
+  })
+})
+
+describe('useATermScrolling touch taps', () => {
+  const clickPrefix = `${String.fromCharCode(27)}[<0;`
+
+  function setup(options: { tracking?: 'any' | 'none'; sgr?: boolean } = {}) {
+    const { tracking = 'any', sgr = true } = options
+    const aTerm = {
+      buffer: { active: { type: 'alternate' } },
+      modes: { mouseTrackingMode: tracking },
+      cols: 100,
+      refresh: vi.fn(),
+      rows: 50,
+      scrollLines: vi.fn(),
+    }
+    const send = vi.fn()
+    const wsRef = { current: { readyState: WebSocket.OPEN, send } }
+    const container = document.createElement('div')
+    const screen = document.createElement('div')
+    screen.className = 'xterm-screen'
+    screen.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 1000, height: 500 }) as DOMRect
+    container.appendChild(screen)
+    const { result } = renderHook(() =>
+      useATermScrolling({
+        wsRef: wsRef as never,
+        aTermRef: { current: aTerm } as unknown as {
+          current: XtermATerm | null
+        },
+        isMobile: true,
+        isSgrMouse: () => sgr,
+      }),
+    )
+    const cleanup = result.current.setupScrolling(container)
+    return { container, send, cleanup }
+  }
+
+  it('reports a tap as a left click to a program that tracks the mouse', () => {
+    const { container, send, cleanup } = setup()
+
+    container.dispatchEvent(createTouchEvent('touchstart', 255, 345))
+    container.dispatchEvent(createTouchEvent('touchend', 255, 345))
+
+    // Cell (column 35, row 26): the pixel point scaled to the 100x50 grid.
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(send).toHaveBeenCalledWith(
+      `${clickPrefix}35;26M${clickPrefix}35;26m`,
+    )
+    cleanup.touchCleanup()
+    cleanup.wheelCleanup()
+  })
+
+  it('does not click when the finger moved (a scroll)', () => {
+    const { container, send, cleanup } = setup()
+
+    container.dispatchEvent(createTouchEvent('touchstart', 255, 345))
+    container.dispatchEvent(createTouchEvent('touchmove', 300, 345))
+    container.dispatchEvent(createTouchEvent('touchend', 300, 345))
+
+    expect(
+      send.mock.calls.some(([payload]) => payload.startsWith(clickPrefix)),
+    ).toBe(false)
+    cleanup.touchCleanup()
+    cleanup.wheelCleanup()
+  })
+
+  it('does not click after a long press', () => {
+    vi.useFakeTimers()
+    const { container, send, cleanup } = setup()
+
+    container.dispatchEvent(createTouchEvent('touchstart', 255, 345))
+    vi.advanceTimersByTime(600)
+    container.dispatchEvent(createTouchEvent('touchend', 255, 345))
+
+    expect(send).not.toHaveBeenCalled()
+    cleanup.touchCleanup()
+    cleanup.wheelCleanup()
+  })
+
+  it('does not click for a second finger, a cancelled touch, or a program that ignores the mouse', () => {
+    const multi = setup()
+    multi.container.dispatchEvent(createTouchEvent('touchstart', 255, 345, 2))
+    multi.container.dispatchEvent(createTouchEvent('touchend', 255, 345))
+    expect(multi.send).not.toHaveBeenCalled()
+
+    const cancelled = setup()
+    cancelled.container.dispatchEvent(createTouchEvent('touchstart', 255, 345))
+    cancelled.container.dispatchEvent(createTouchEvent('touchcancel', 255, 345))
+    cancelled.container.dispatchEvent(createTouchEvent('touchend', 255, 345))
+    expect(cancelled.send).not.toHaveBeenCalled()
+
+    const plain = setup({ tracking: 'none' })
+    plain.container.dispatchEvent(createTouchEvent('touchstart', 255, 345))
+    plain.container.dispatchEvent(createTouchEvent('touchend', 255, 345))
+    expect(plain.send).not.toHaveBeenCalled()
+
+    const notSgr = setup({ sgr: false })
+    notSgr.container.dispatchEvent(createTouchEvent('touchstart', 255, 345))
+    notSgr.container.dispatchEvent(createTouchEvent('touchend', 255, 345))
+    expect(notSgr.send).not.toHaveBeenCalled()
+
+    for (const run of [multi, cancelled, plain, notSgr]) {
+      run.cleanup.touchCleanup()
+      run.cleanup.wheelCleanup()
+    }
   })
 })
 

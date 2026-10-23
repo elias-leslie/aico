@@ -5,6 +5,7 @@ import { controlWheelAction } from '../a-term/control-view'
 import {
   ARROW_DOWN,
   ARROW_UP,
+  buildMouseClickSequence,
   buildMouseWheelSequence,
   computeWheelLineDelta,
   getWheelMouseTickCount,
@@ -59,6 +60,14 @@ export function useATermScrolling({
     (direction: 'up' | 'down', column: number, row: number) => {
       if (wsRef.current?.readyState !== WebSocket.OPEN) return
       wsRef.current.send(buildMouseWheelSequence(direction, column, row))
+    },
+    [wsRef],
+  )
+
+  const sendMouseClick = useCallback(
+    (column: number, row: number) => {
+      if (wsRef.current?.readyState !== WebSocket.OPEN) return
+      wsRef.current.send(buildMouseClickSequence(column, row))
     },
     [wsRef],
   )
@@ -121,12 +130,21 @@ export function useATermScrolling({
           aTermRef,
           sendArrowKey,
           sendMouseWheel,
+          sendMouseClick,
+          isSgrMouse,
         })
       }
 
       return { wheelCleanup, touchCleanup }
     },
-    [aTermRef, isSgrMouse, isMobile, sendArrowKey, sendMouseWheel],
+    [
+      aTermRef,
+      isSgrMouse,
+      isMobile,
+      sendArrowKey,
+      sendMouseClick,
+      sendMouseWheel,
+    ],
   )
 
   return { setupScrolling }
