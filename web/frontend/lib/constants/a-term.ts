@@ -253,3 +253,10 @@ export const A_TERM_THEMES = {
 } as const
 
 export type ATermThemeId = keyof typeof A_TERM_THEMES
+
+/**
+ * Height of whatever floats over the bottom of the terminal pane (the phone
+ * compose box). The overlay publishes it on the document root; the pane's
+ * floating controls lift themselves by it so they stay visible and tappable.
+ */
+export const BOTTOM_OVERLAY_HEIGHT_VAR = '--a-term-bottom-overlay-height'

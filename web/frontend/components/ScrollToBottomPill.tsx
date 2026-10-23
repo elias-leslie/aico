@@ -1,7 +1,10 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ATermTheme } from '../lib/constants/a-term'
+import {
+  type ATermTheme,
+  BOTTOM_OVERLAY_HEIGHT_VAR,
+} from '../lib/constants/a-term'
 
 type XtermATerm = InstanceType<typeof import('@xterm/xterm').Terminal>
 
@@ -94,7 +97,11 @@ export function ScrollToBottomPill({
 
   return (
     <div
-      className="pointer-events-none absolute inset-x-0 bottom-3 z-[5] flex justify-center"
+      className="pointer-events-none absolute inset-x-0 z-[5] flex justify-center"
+      // Lift above anything overlaying the pane bottom (the compose box).
+      style={{
+        bottom: `calc(0.75rem + var(${BOTTOM_OVERLAY_HEIGHT_VAR}, 0px))`,
+      }}
       data-testid="a-term-scroll-to-bottom"
     >
       <button

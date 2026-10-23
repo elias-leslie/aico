@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import { BOTTOM_OVERLAY_HEIGHT_VAR } from '../../lib/constants/a-term'
 import { NativeKeyboardInput } from './NativeKeyboardInput'
 
 describe('NativeKeyboardInput', () => {
@@ -21,6 +22,39 @@ describe('NativeKeyboardInput', () => {
       screen.getAllByRole('button').map((button) => button.textContent),
     ).toEqual(['Send'])
     expect(container.firstElementChild).toHaveClass('absolute', 'bottom-full')
+  })
+
+  it('publishes its height while open so floating pane controls can clear it', () => {
+    const offsetHeight = vi
+      .spyOn(HTMLElement.prototype, 'offsetHeight', 'get')
+      .mockReturnValue(64)
+    const root = document.documentElement
+    try {
+      const view = render(
+        <NativeKeyboardInput
+          sessionId="mobile-height"
+          connected
+          mobileOverlay
+          visible
+          onCommit={vi.fn().mockResolvedValue(true)}
+        />,
+      )
+      expect(root.style.getPropertyValue(BOTTOM_OVERLAY_HEIGHT_VAR)).toBe(
+        '64px',
+      )
+      view.rerender(
+        <NativeKeyboardInput
+          sessionId="mobile-height"
+          connected
+          mobileOverlay
+          visible={false}
+          onCommit={vi.fn().mockResolvedValue(true)}
+        />,
+      )
+      expect(root.style.getPropertyValue(BOTTOM_OVERLAY_HEIGHT_VAR)).toBe('')
+    } finally {
+      offsetHeight.mockRestore()
+    }
   })
 
   it('grows with wrapping up to a scrollable maximum', () => {

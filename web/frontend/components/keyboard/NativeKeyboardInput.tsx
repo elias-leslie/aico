@@ -9,6 +9,7 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react'
+import { BOTTOM_OVERLAY_HEIGHT_VAR } from '../../lib/constants/a-term'
 import {
   KEYBOARD_SPACING_METRICS,
   type KeyboardSizePreset,
@@ -122,6 +123,28 @@ export function NativeKeyboardInput({
     if (!pendingForSession) setValue(readDraft(storageKey))
   }, [storageKey, pendingForSession])
 
+  const overlayRef = useRef<HTMLDivElement>(null)
+  // Publish the overlay's height so the pane's floating controls (the
+  // "Latest" pill) sit above it instead of under it.
+  useLayoutEffect(() => {
+    const overlay = overlayRef.current
+    if (!mobileOverlay || !visible || !overlay) return
+    const root = document.documentElement
+    const publish = () =>
+      root.style.setProperty(
+        BOTTOM_OVERLAY_HEIGHT_VAR,
+        `${overlay.offsetHeight}px`,
+      )
+    publish()
+    const observer =
+      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(publish)
+    observer?.observe(overlay)
+    return () => {
+      observer?.disconnect()
+      root.style.removeProperty(BOTTOM_OVERLAY_HEIGHT_VAR)
+    }
+  }, [mobileOverlay, visible])
+
   useEffect(() => {
     onDraftPresenceChange?.(value.length > 0)
   }, [onDraftPresenceChange, value])
@@ -217,6 +240,7 @@ export function NativeKeyboardInput({
   if (mobileOverlay) {
     return (
       <div
+        ref={overlayRef}
         hidden={!visible}
         className="absolute bottom-full left-0 right-0 z-20 flex flex-col gap-1 border-t p-2"
         style={{
