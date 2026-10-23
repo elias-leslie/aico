@@ -18,7 +18,6 @@ interface MobileKeyboardProps {
     action: 'insert' | 'send',
   ) => Promise<boolean>
   connectionStatus?: ConnectionStatus
-  onReconnect?: () => void
   onVoice?: () => void
   voiceActive?: boolean
   activeMode?: string
@@ -33,7 +32,6 @@ export function MobileKeyboard({
   sessionId,
   onCompose,
   connectionStatus,
-  onReconnect,
   onVoice,
   voiceActive = false,
   activeMode,
@@ -167,8 +165,6 @@ export function MobileKeyboard({
           onVoice={onVoice ? handleVoice : undefined}
           voiceActive={voiceActive}
           activeMode={activeMode}
-          connectionStatus={connectionStatus}
-          onReconnect={onReconnect}
         />
       </div>
     </ModifierProvider>

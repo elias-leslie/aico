@@ -60,35 +60,35 @@ export function PaneSearchControl({
   if (!isOpen) {
     return (
       <HeaderIconButton
-        icon={<Search className="w-3.5 h-3.5" />}
+        icon={<Search className="h-[18px] w-[18px]" strokeWidth={1.7} />}
         onClick={() => setIsOpen(true)}
-        tooltip="Search pane output"
+        tooltip="Search output"
         isMobile={isMobile}
       />
     )
   }
 
+  const navButton =
+    'lantern-icon-btn h-7! w-7! disabled:cursor-not-allowed disabled:opacity-40'
+
   return (
     <div
+      data-testid="pane-search-control"
       className={clsx(
-        'flex items-center gap-1 rounded-md border px-1 py-1',
-        isMobile ? 'max-w-[180px]' : 'max-w-[240px]',
+        'lantern-field h-[34px]! gap-1! pr-0.5! pl-2.5!',
+        isMobile ? 'max-w-[200px]' : 'w-[300px]',
       )}
-      style={{
-        backgroundColor: 'var(--term-bg-deep)',
-        borderColor:
-          query.trim() && !result.found
-            ? 'var(--term-error)'
-            : 'var(--term-border-active)',
-      }}
+      style={
+        query.trim() && !result.found
+          ? { borderColor: 'var(--ember)' }
+          : undefined
+      }
     >
-      <Search
-        className="h-3.5 w-3.5 flex-shrink-0"
-        style={{ color: 'var(--term-text-muted)' }}
-      />
+      <Search className="h-4 w-4 flex-shrink-0" strokeWidth={1.7} />
       <input
         ref={inputRef}
         data-testid="pane-search-input"
+        aria-label="Search output"
         value={query}
         onChange={(event) => {
           const nextQuery = event.target.value
@@ -106,22 +106,14 @@ export function PaneSearchControl({
           event.stopPropagation()
         }}
         placeholder="Search output"
-        className={clsx(
-          'min-w-0 flex-1 bg-transparent text-xs outline-none',
-          isMobile ? 'w-20' : 'w-28',
-        )}
-        style={{
-          color: 'var(--term-text-primary)',
-          fontFamily: 'var(--font-mono)',
-        }}
+        className="text-[13px]"
         spellCheck={false}
         autoComplete="off"
       />
       <span
-        className="rounded px-1 py-0.5 text-[10px]"
+        className="px-1 text-[11px]"
         style={{
-          color: result.found ? 'var(--term-accent)' : 'var(--term-text-muted)',
-          backgroundColor: 'var(--term-bg-surface)',
+          color: result.found ? 'var(--lantern)' : 'var(--mist)',
           fontFamily: 'var(--font-mono)',
         }}
       >
@@ -132,34 +124,31 @@ export function PaneSearchControl({
       <button
         type="button"
         onClick={() => navigate('previous')}
-        className="flex h-5 w-5 items-center justify-center rounded transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-40"
-        style={{ color: 'var(--term-text-muted)' }}
+        className={navButton}
         title="Previous match"
         aria-label="Previous match"
         disabled={!query.trim()}
       >
-        <ChevronUp className="h-3 w-3" />
+        <ChevronUp className="h-3.5 w-3.5" />
       </button>
       <button
         type="button"
         onClick={() => navigate('next')}
-        className="flex h-5 w-5 items-center justify-center rounded transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-40"
-        style={{ color: 'var(--term-text-muted)' }}
+        className={navButton}
         title="Next match"
         aria-label="Next match"
         disabled={!query.trim()}
       >
-        <ChevronDown className="h-3 w-3" />
+        <ChevronDown className="h-3.5 w-3.5" />
       </button>
       <button
         type="button"
         onClick={closeSearch}
-        className="flex h-5 w-5 items-center justify-center rounded transition-all duration-150"
-        style={{ color: 'var(--term-text-muted)' }}
+        className={navButton}
         title="Close search"
         aria-label="Close search"
       >
-        <X className="h-3 w-3" />
+        <X className="h-3.5 w-3.5" />
       </button>
     </div>
   )

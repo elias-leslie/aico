@@ -1,86 +1,47 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { createElement } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { HeaderIconButton } from './HeaderIconButton'
 
 describe('HeaderIconButton', () => {
-  it('renders with tooltip and aria-label', () => {
-    const icon = createElement('span', { 'data-testid': 'icon' }, 'X')
+  it('names the button by its tooltip', () => {
     render(
-      <HeaderIconButton icon={icon} onClick={vi.fn()} tooltip="Close A-Term" />,
+      <HeaderIconButton
+        icon={<span data-testid="icon" />}
+        onClick={vi.fn()}
+        tooltip="Files"
+      />,
     )
-
-    const button = screen.getByTitle('Close A-Term')
-    expect(button).toBeInTheDocument()
-    expect(button).toHaveAttribute('aria-label', 'Close A-Term')
+    const button = screen.getByRole('button', { name: 'Files' })
+    expect(button).toHaveAttribute('title', 'Files')
     expect(screen.getByTestId('icon')).toBeInTheDocument()
   })
 
   it('calls onClick when clicked', () => {
     const handleClick = vi.fn()
-    const icon = createElement('span', null, 'X')
     render(
-      <HeaderIconButton icon={icon} onClick={handleClick} tooltip="Click me" />,
+      <HeaderIconButton
+        icon={<span />}
+        onClick={handleClick}
+        tooltip="Files"
+      />,
     )
-
-    fireEvent.click(screen.getByTitle('Click me'))
+    fireEvent.click(screen.getByRole('button'))
     expect(handleClick).toHaveBeenCalledTimes(1)
   })
 
-  it('applies danger variant styling', () => {
-    const icon = createElement('span', null, 'X')
-    render(
+  it('is a full-size touch target on a phone and compact on a desktop', () => {
+    const { rerender } = render(
       <HeaderIconButton
-        icon={icon}
+        icon={<span />}
         onClick={vi.fn()}
-        tooltip="Delete"
-        variant="danger"
-      />,
-    )
-
-    const button = screen.getByTitle('Delete')
-    expect(button.style.color).toBe('var(--term-error)')
-  })
-
-  it('applies default variant styling when no variant specified', () => {
-    const icon = createElement('span', null, 'X')
-    render(
-      <HeaderIconButton icon={icon} onClick={vi.fn()} tooltip="Settings" />,
-    )
-
-    const button = screen.getByTitle('Settings')
-    expect(button.style.color).toBe('var(--term-text-muted)')
-  })
-
-  it('applies mobile sizing classes when isMobile is true', () => {
-    const icon = createElement('span', null, 'X')
-    render(
-      <HeaderIconButton
-        icon={icon}
-        onClick={vi.fn()}
-        tooltip="Mobile button"
+        tooltip="Files"
         isMobile
       />,
     )
-
-    const button = screen.getByTitle('Mobile button')
-    expect(button.className).toContain('w-8')
-    expect(button.className).toContain('h-8')
-  })
-
-  it('applies desktop sizing classes when isMobile is false', () => {
-    const icon = createElement('span', null, 'X')
-    render(
-      <HeaderIconButton
-        icon={icon}
-        onClick={vi.fn()}
-        tooltip="Desktop button"
-        isMobile={false}
-      />,
+    expect(screen.getByRole('button').className).not.toContain('compact')
+    rerender(
+      <HeaderIconButton icon={<span />} onClick={vi.fn()} tooltip="Files" />,
     )
-
-    const button = screen.getByTitle('Desktop button')
-    expect(button.className).toContain('w-6')
-    expect(button.className).toContain('h-6')
+    expect(screen.getByRole('button').className).toContain('compact')
   })
 })

@@ -34,9 +34,7 @@ export const HeaderNameDisplay = memo(function HeaderNameDisplay({
   // workspace's.
   const renameValue = slot.can.rename ? (slot.task ?? '') : name
   const attention = useSessionAttention()
-  const textColor = isActive
-    ? 'var(--term-text-primary)'
-    : 'var(--term-text-muted)'
+  const textColor = isActive ? 'var(--bone)' : 'var(--mist)'
 
   const [editValue, setEditValue] = useState(renameValue)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -84,16 +82,15 @@ export const HeaderNameDisplay = memo(function HeaderNameDisplay({
           e.stopPropagation()
         }}
         onBlur={commitEdit}
-        className="px-1.5 py-0.5 text-xs rounded max-w-[160px]"
+        aria-label="Session name"
+        className="h-8 max-w-[220px] rounded-md px-2"
         style={{
-          color: 'var(--term-text-primary)',
-          backgroundColor: 'var(--term-bg-deep)',
-          border: '1px solid var(--term-accent)',
-          boxShadow:
-            '0 0 6px var(--term-accent-glow), inset 0 0 4px rgba(0, 255, 159, 0.05)',
+          color: 'var(--bone)',
+          backgroundColor: 'rgb(var(--ink-rgb) / 0.86)',
+          border: '1px solid var(--lantern)',
           outline: 'none',
-          fontFamily: 'var(--font-ui)',
-          caretColor: 'var(--term-accent)',
+          font: '450 15px/1.2 var(--font-display)',
+          caretColor: 'var(--lantern)',
           minWidth: 60,
         }}
         spellCheck={false}
@@ -121,8 +118,8 @@ export const HeaderNameDisplay = memo(function HeaderNameDisplay({
     <span className="flex min-w-0 items-center gap-1.5 overflow-hidden">
       <CoordinatorBadge badge={slot.badge} dot={isMobile} />
       <span
-        className="flex min-w-0 items-center overflow-hidden px-1.5 py-0.5 text-xs max-w-[320px]"
-        style={{ color: textColor }}
+        className="flex min-w-0 max-w-[320px] items-center overflow-hidden px-1.5 py-0.5"
+        style={{ color: textColor, font: '450 15px/1.2 var(--font-display)' }}
         title={name}
       >
         <SessionTitle name={name} task={slot.task} />

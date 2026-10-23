@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { SESSION_BASE } from '@/test-stubs/session-fixtures'
 import * as api from './a-term-panes-api'
 import type { ATermPane, PaneListResponse } from './a-term-panes-types'
-import { useATermPanes } from './use-a-term-panes'
+import { useATermPanes, usePaneListError } from './use-a-term-panes'
 
 vi.mock('./a-term-panes-api')
 
@@ -103,5 +103,28 @@ describe('useATermPanes', () => {
           ?.map((session) => session.id),
       ).toEqual(['session-a'])
     })
+  })
+
+  it('stays failed, not loading, while a list that never loaded is refetched', async () => {
+    vi.mocked(api.fetchPanes).mockRejectedValue(new Error('down'))
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    const { result } = renderHook(
+      () => ({ panes: useATermPanes(), list: usePaneListError() }),
+      { wrapper: createWrapper(queryClient) },
+    )
+
+    await waitFor(() => expect(result.current.list.isError).toBe(true))
+    expect(result.current.panes.isLoading).toBe(false)
+    expect(result.current.panes.loadFailed).toBe(true)
+
+    vi.mocked(api.fetchPanes).mockReturnValue(new Promise(() => {}))
+    act(() => result.current.list.retry())
+    await waitFor(() =>
+      expect(queryClient.isFetching({ queryKey: ['a-term-panes'] })).toBe(1),
+    )
+    expect(result.current.list.isError).toBe(true)
+    expect(result.current.panes.isLoading).toBe(false)
   })
 })

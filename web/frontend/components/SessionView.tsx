@@ -7,6 +7,7 @@ import { UnifiedATermHeaderContent as UnifiedATermHeader } from '@/components/a-
 import { EmptySessionState } from '@/components/EmptySessionState'
 import { PaneFilesDialog } from '@/components/files/PaneFilesDialog'
 import type { ATermMode } from '@/components/ModeToggle'
+import type { ATermFontSize } from '@/lib/hooks/use-a-term-settings'
 import type { ATermSlot, PaneSlot } from '@/lib/utils/slot'
 import {
   getSlotSessionId,
@@ -17,13 +18,13 @@ import {
 export interface SessionViewProps {
   slots: (ATermSlot | PaneSlot)[]
   activeSessionId?: string | null
-  fontSize: number
+  fontSize: ATermFontSize
   isMobile?: boolean
   onATermRef?: (sessionId: string, handle: ATermHandle | null) => void
   onStatusChange?: (sessionId: string, status: ConnectionStatus) => void
   aTermStatuses?: Map<string, ConnectionStatus>
   onSwitch?: (slot: ATermSlot | PaneSlot) => void
-  onSettings?: () => void
+  onFontSizeChange?: (size: ATermFontSize) => void
   onReset?: (slot: ATermSlot | PaneSlot) => void
   onCloseSession?: (slot: ATermSlot | PaneSlot) => void
   onUpload?: (sessionId?: string) => void
@@ -65,7 +66,7 @@ export function SessionView({
   onStatusChange,
   aTermStatuses,
   onSwitch,
-  onSettings,
+  onFontSizeChange,
   onReset,
   onCloseSession,
   onUpload,
@@ -105,18 +106,13 @@ export function SessionView({
   const paneId = isPaneSlot(slot) ? slot.paneId : null
 
   return (
-    <div
-      className="w-full h-full p-1"
-      style={{ backgroundColor: 'var(--term-bg-deep)' }}
-    >
-      <div
-        className="a-term-pane-shell flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-md"
-        style={{ backgroundColor: 'var(--term-bg-surface)' }}
-      >
+    <div className="h-full w-full" style={{ backgroundColor: 'var(--rim)' }}>
+      <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
         <UnifiedATermHeader
           slot={slot}
           isActive={true}
-          onSettings={onSettings}
+          fontSize={fontSize}
+          onFontSizeChange={onFontSizeChange}
           onReset={onReset && slot.can.reset ? () => onReset(slot) : undefined}
           onCloseSession={
             onCloseSession && slot.can.end
@@ -162,9 +158,13 @@ export function SessionView({
           }
         />
 
+        {/* Ink terminal inside one steady frame-edge hairline */}
         <div
-          className="relative flex-1 min-h-0 min-w-0 overflow-hidden"
-          style={{ backgroundColor: 'var(--term-bg-deep)' }}
+          className="relative mx-1 mb-1 min-h-0 min-w-0 flex-1 overflow-hidden rounded"
+          style={{
+            backgroundColor: 'var(--ink)',
+            boxShadow: 'inset 0 0 0 1px var(--frame-edge)',
+          }}
         >
           {sessionId && (
             <ATermComponent

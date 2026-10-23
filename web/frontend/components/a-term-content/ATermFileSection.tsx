@@ -19,7 +19,7 @@ interface ATermFileSectionProps {
   onSlotSwitch: (slot: ATermSlot | PaneSlot) => void
   onSlotReset: (slot: ATermSlot | PaneSlot) => void
   onSlotCloseSession: (slot: ATermSlot | PaneSlot) => void
-  handleOpenSettings: () => void
+  setFontSize: (size: ATermFontSize) => void
   handleOpenATermManager?: () => void
   handleUploadClick: (sessionId?: string) => void
   onModeSwitch: (slot: ATermSlot | PaneSlot, mode: string) => void
@@ -46,7 +46,7 @@ export function ATermFileSection({
   onSlotSwitch,
   onSlotReset,
   onSlotCloseSession,
-  handleOpenSettings,
+  setFontSize,
   handleOpenATermManager,
   handleUploadClick,
   onModeSwitch,
@@ -101,7 +101,7 @@ export function ATermFileSection({
           onStatusChange={handleStatusChange}
           aTermStatuses={aTermStatuses}
           onSwitch={onSlotSwitch}
-          onSettings={handleOpenSettings}
+          onFontSizeChange={setFontSize}
           onReset={onSlotReset}
           onCloseSession={onSlotCloseSession}
           onUpload={handleUploadClick}

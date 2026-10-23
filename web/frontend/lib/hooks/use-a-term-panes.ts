@@ -156,21 +156,45 @@ const removePaneSessionsFromCaches = (
   )
 }
 
+/** Failed and never loaded. React Query puts a query with no data back to
+ * pending on every refetch, so isError alone would flicker. */
+const failedWithoutData = (query: {
+  data: unknown
+  errorUpdateCount: number
+}) => query.data === undefined && query.errorUpdateCount > 0
+
+/** Whether the session list failed to load, and a way to ask again. */
+export function usePaneListError() {
+  const query = useQuery({
+    queryKey: ACTIVE_PANES_QUERY_KEY,
+    queryFn: api.fetchPanes,
+    refetchInterval: SESSION_REFRESH_MS,
+  })
+  return {
+    isError: failedWithoutData(query),
+    retry: () => void query.refetch(),
+  }
+}
+
 export function useATermPanes() {
   const queryClient = useQueryClient()
 
   // Pane sessions carry Tether's session names, which Aico can change at any
   // time: refresh at the session list's pace.
-  const { data, isLoading, isError, error } = useQuery({
+  const activeQuery = useQuery({
     queryKey: ACTIVE_PANES_QUERY_KEY,
     queryFn: api.fetchPanes,
     refetchInterval: SESSION_REFRESH_MS,
   })
-  const { data: detachedData, isLoading: detachedLoading } = useQuery({
+  const detachedQuery = useQuery({
     queryKey: DETACHED_PANES_QUERY_KEY,
     queryFn: api.fetchDetachedPanes,
     refetchInterval: SESSION_REFRESH_MS,
   })
+  const { data, isError, error } = activeQuery
+  const detachedData = detachedQuery.data
+  const loadFailed =
+    failedWithoutData(activeQuery) || failedWithoutData(detachedQuery)
 
   const panes = data?.items ?? []
   const detachedPanes = detachedData?.items ?? []
@@ -243,7 +267,9 @@ export function useATermPanes() {
     panes,
     detachedPanes,
     // New sessions are detached panes: a link to one waits for both lists.
-    isLoading: isLoading || detachedLoading,
+    isLoading:
+      (activeQuery.isLoading || detachedQuery.isLoading) && !loadFailed,
+    loadFailed,
     isError,
     error,
     createProjectPane,

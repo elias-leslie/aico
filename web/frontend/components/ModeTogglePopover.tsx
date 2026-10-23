@@ -40,56 +40,40 @@ export function ModeTogglePopover({
       <div
         role="menu"
         aria-label="Select session mode"
-        className="fixed z-[10000] rounded-lg overflow-hidden animate-in fade-in slide-in-from-top-1 duration-100"
-        style={{
-          ...position,
-          backgroundColor: 'var(--term-surface-glass)',
-          backdropFilter: 'blur(12px)',
-          border: '1px solid var(--term-border-active)',
-          boxShadow: 'var(--term-shadow-dropdown)',
-          minWidth: 180,
-          fontFamily: 'var(--font-ui)',
-        }}
+        className="lantern-sheet lantern-enter fixed z-[10000] min-w-[200px] rounded-xl p-1.5"
+        style={position}
       >
-        <button
-          role="menuitem"
-          onClick={() => onSelectMode('shell')}
-          className="flex items-center gap-2.5 w-full px-3 py-2.5 text-left text-xs hover:bg-[var(--term-bg-surface)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--term-accent)]"
-          style={{
-            color:
-              value === 'shell'
-                ? 'var(--term-accent)'
-                : 'var(--term-text-muted)',
-          }}
-        >
-          <AgentIcon slug="shell" size={14} color={getAgentColor('shell')} />
-          <span style={{ fontWeight: 500 }}>Shell</span>
-          {value === 'shell' && <span className="ml-auto text-[10px]">●</span>}
-        </button>
-        {agentTools.map((tool) => (
-          <button
-            key={tool.slug}
-            role="menuitem"
-            onClick={() => onSelectMode(tool.slug)}
-            className="flex items-center gap-2.5 w-full px-3 py-2.5 text-left text-xs hover:bg-[var(--term-bg-surface)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--term-accent)]"
-            style={{
-              color:
-                value === tool.slug
-                  ? getAgentColor(tool.slug, tool.color)
-                  : 'var(--term-text-muted)',
-            }}
-          >
-            <AgentIcon
-              slug={tool.slug}
-              size={14}
-              color={getAgentColor(tool.slug, tool.color)}
-            />
-            <span style={{ fontWeight: 500 }}>{tool.name}</span>
-            {value === tool.slug && (
-              <span className="ml-auto text-[10px]">●</span>
-            )}
-          </button>
-        ))}
+        {[
+          { slug: 'shell', name: 'Shell', color: undefined },
+          ...agentTools,
+        ].map((tool) => {
+          const active = value === tool.slug
+          return (
+            <button
+              key={tool.slug}
+              type="button"
+              role="menuitem"
+              aria-current={active ? 'true' : undefined}
+              onClick={() => onSelectMode(tool.slug)}
+              className="lantern-menu-item"
+              style={active ? { color: 'var(--bone)' } : undefined}
+            >
+              <AgentIcon
+                slug={tool.slug}
+                size={16}
+                color={getAgentColor(tool.slug, tool.color)}
+              />
+              <span>{tool.name}</span>
+              {active && (
+                <span
+                  aria-hidden="true"
+                  className="ml-auto h-1.5 w-1.5 rounded-full"
+                  style={{ backgroundColor: 'var(--lantern)' }}
+                />
+              )}
+            </button>
+          )
+        })}
       </div>
     </>
   )

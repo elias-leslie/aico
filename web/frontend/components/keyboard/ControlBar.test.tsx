@@ -23,20 +23,14 @@ function renderControlBar(
   overrides: Partial<ComponentProps<typeof ControlBar>> = {},
 ) {
   const onSend = vi.fn()
-  const onReconnect = vi.fn()
 
   render(
     <ModifierProvider>
-      <ControlBar
-        onSend={onSend}
-        connectionStatus="connected"
-        onReconnect={onReconnect}
-        {...overrides}
-      />
+      <ControlBar onSend={onSend} {...overrides} />
     </ModifierProvider>,
   )
 
-  return { onSend, onReconnect }
+  return { onSend }
 }
 
 function renderNativeControlBar() {
@@ -57,15 +51,6 @@ describe('ControlBar', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(getClaudeModelOptions).mockResolvedValue([])
-  })
-
-  it('hides status banner for connected sessions (status shown in header badge)', async () => {
-    renderControlBar({ activeMode: 'shell' })
-
-    // Banner should NOT render for connected (success tone) — status is in header
-    await waitFor(() => {
-      expect(screen.queryByText('Live')).not.toBeInTheDocument()
-    })
   })
 
   it('does not load Claude model options for non-Claude tools', () => {
@@ -125,34 +110,6 @@ describe('ControlBar', () => {
     expect(screen.queryByRole('button', { name: '←' })).not.toBeInTheDocument()
   })
 
-  it('hides status banner for voice active sessions', async () => {
-    renderControlBar({
-      activeMode: 'claude-code',
-      voiceActive: true,
-    })
-
-    // Voice active is success tone — banner hidden
-    await waitFor(() => {
-      expect(screen.queryByText('Voice active')).not.toBeInTheDocument()
-    })
-  })
-
-  it('renders reconnect affordance for reconnectable failures', async () => {
-    const { onReconnect } = renderControlBar({
-      connectionStatus: 'disconnected',
-    })
-
-    const reconnectButton = await screen.findByRole('button', {
-      name: 'Reconnect',
-    })
-    fireEvent.click(reconnectButton)
-
-    expect(onReconnect).toHaveBeenCalledTimes(1)
-    expect(
-      screen.getByText('Reconnect to resume this session'),
-    ).toBeInTheDocument()
-  })
-
   it('logs model option loading failures and keeps the picker usable', async () => {
     const error = new Error('network down')
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -199,11 +156,7 @@ describe('ControlBar', () => {
 
     const view = render(
       <ModifierProvider>
-        <ControlBar
-          onSend={vi.fn()}
-          activeMode="claude-code"
-          connectionStatus="connected"
-        />
+        <ControlBar onSend={vi.fn()} activeMode="claude-code" />
       </ModifierProvider>,
     )
 

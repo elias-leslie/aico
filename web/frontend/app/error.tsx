@@ -44,8 +44,8 @@ export default function Error({
       </div>
       <div className="text-center max-w-md">
         <h1
-          className="text-base font-medium mb-2"
-          style={{ fontFamily: 'var(--font-mono)' }}
+          className="mb-2"
+          style={{ font: '450 17px/1.25 var(--font-display)' }}
         >
           {PRODUCT_NAME} encountered an error
         </h1>
@@ -70,17 +70,7 @@ export default function Error({
           </p>
         ) : null}
       </div>
-      <button
-        type="button"
-        onClick={reset}
-        className="flex items-center gap-2 px-5 py-2.5 rounded-md text-sm font-medium transition-all duration-150 hover:brightness-110"
-        style={{
-          backgroundColor: 'var(--term-bg-elevated)',
-          border: '1px solid var(--term-border-active)',
-          color: 'var(--term-accent)',
-          fontFamily: 'var(--font-mono)',
-        }}
-      >
+      <button type="button" onClick={reset} className="lantern-btn primary">
         <RefreshCw className="w-4 h-4" />
         Reload {PRODUCT_NAME}
       </button>

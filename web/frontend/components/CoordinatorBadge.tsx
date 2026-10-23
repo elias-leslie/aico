@@ -1,6 +1,7 @@
 import type { CoordinatorBadgeInfo } from '@/lib/utils/coordinator-badge'
 
-/** A coordinator or lane chip in its coordinator's colour (Aico's role chip). */
+/** A coordinator or lane chip in its coordinator's colour, drawn like the
+ * desktop's role chip. */
 export function CoordinatorBadge({
   badge,
   ownLine = false,
@@ -35,8 +36,7 @@ export function CoordinatorBadge({
         flex: ownLine ? 'none' : '0 2 auto',
         minWidth: '3.25rem',
         maxWidth: ownLine ? '100%' : '45%',
-        // Readable on light and dark themes: lean toward the theme's text.
-        color: `color-mix(in srgb, ${badge.color} 70%, var(--term-text-primary))`,
+        color: badge.color,
         backgroundColor: `color-mix(in srgb, ${badge.color} 16%, transparent)`,
         fontFamily: 'var(--font-ui)',
         letterSpacing: '0.02em',

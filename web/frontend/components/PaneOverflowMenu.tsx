@@ -1,15 +1,19 @@
 'use client'
 
-import { clsx } from 'clsx'
 import {
-  Menu,
+  MoreHorizontal,
   Paperclip,
   Pencil,
   RefreshCw,
-  Settings,
-  Trash2,
+  RotateCcw,
+  Square,
+  Type,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  A_TERM_FONT_SIZES,
+  type ATermFontSize,
+} from '@/lib/hooks/use-a-term-settings'
 import { useClickOutside } from '@/lib/hooks/use-click-outside'
 import { MenuItemButton } from './MenuItemButton'
 
@@ -17,22 +21,28 @@ export interface PaneOverflowMenuProps {
   onCloseSession?: () => void
   onRefresh?: () => void
   onReset?: () => void
-  onSettings?: () => void
   onUpload?: () => void
   onRename?: () => void
+  /** Text size, the one type setting; shown as a stepper when given. */
+  fontSize?: ATermFontSize
+  onFontSizeChange?: (size: ATermFontSize) => void
   isMobile?: boolean
 }
 
+const ICON = 'h-[18px] w-[18px]'
+
 /**
- * The session menu in the session bar.
+ * The session menu in the session bar: upload, text size, the session's own
+ * actions, and End session last.
  */
 export function PaneOverflowMenu({
   onCloseSession,
   onRefresh,
   onReset,
-  onSettings,
   onUpload,
   onRename,
+  fontSize,
+  onFontSizeChange,
   isMobile = false,
 }: PaneOverflowMenuProps) {
   const [isOpen, setIsOpen] = useState(false)
@@ -60,8 +70,13 @@ export function PaneOverflowMenu({
     [],
   )
 
-  const hasSessionActions = !!(onCloseSession || onRename)
-  const hasUtilityActions = !!(onReset || onSettings || onUpload || onRefresh)
+  const sizeIndex =
+    fontSize === undefined ? -1 : A_TERM_FONT_SIZES.indexOf(fontSize)
+  const stepSize = (step: number) => {
+    const next = A_TERM_FONT_SIZES[sizeIndex + step]
+    if (next !== undefined) onFontSizeChange?.(next)
+  }
+  const hasSessionActions = !!(onRename || onReset || onRefresh)
 
   return (
     <div className="relative">
@@ -70,27 +85,13 @@ export function PaneOverflowMenu({
         type="button"
         data-testid="pane-overflow-menu"
         onClick={() => setIsOpen(!isOpen)}
-        className={clsx(
-          'flex items-center justify-center rounded transition-all duration-150',
-          isMobile ? 'w-8 h-8' : 'w-6 h-6',
-        )}
-        style={{ color: 'var(--term-text-muted)' }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.backgroundColor = 'var(--term-bg-elevated)'
-          e.currentTarget.style.color = 'var(--term-accent)'
-        }}
-        onMouseLeave={(e) => {
-          if (!isOpen) {
-            e.currentTarget.style.backgroundColor = 'transparent'
-            e.currentTarget.style.color = 'var(--term-text-muted)'
-          }
-        }}
+        className={isMobile ? 'lantern-icon-btn' : 'lantern-icon-btn compact'}
         title="Session menu"
         aria-label="Session menu"
         aria-haspopup="menu"
         aria-expanded={isOpen}
       >
-        <Menu className="w-3.5 h-3.5" />
+        <MoreHorizontal className={ICON} strokeWidth={1.7} />
       </button>
 
       {isOpen && (
@@ -99,43 +100,71 @@ export function PaneOverflowMenu({
           role="menu"
           aria-label="Session menu"
           data-testid="pane-overflow-menu-items"
-          className="absolute right-0 top-full mt-1 z-50 min-w-[180px] py-1 rounded-md shadow-lg animate-in fade-in slide-in-from-top-1 duration-100"
-          style={{
-            backgroundColor: 'var(--term-surface-glass)',
-            backdropFilter: 'blur(12px)',
-            WebkitBackdropFilter: 'blur(12px)',
-            border: '1px solid var(--term-border-active)',
-            boxShadow: 'var(--term-shadow-dropdown)',
-          }}
+          className="lantern-sheet lantern-enter absolute right-0 top-full z-50 mt-1.5 min-w-[232px] rounded-xl p-1.5"
         >
-          {onCloseSession && (
+          {onUpload && (
             <MenuItemButton
-              icon={<Trash2 className="w-3.5 h-3.5" />}
-              label="End session"
-              onClick={run(onCloseSession)}
+              icon={<Paperclip className={ICON} strokeWidth={1.7} />}
+              label="Upload a file"
+              onClick={run(onUpload)}
               isMobile={isMobile}
-              variant="danger"
-              title="End session: stop its process everywhere it is open."
             />
+          )}
+          {fontSize !== undefined && onFontSizeChange && (
+            <div
+              role="group"
+              aria-label="Text size"
+              className="lantern-menu-item"
+              style={{ minHeight: isMobile ? 44 : 38 }}
+            >
+              <Type className={ICON} strokeWidth={1.7} aria-hidden="true" />
+              Text size
+              <span className="ml-auto inline-flex items-center gap-0.5">
+                <button
+                  type="button"
+                  className="lantern-btn"
+                  style={{ width: 30, height: 30, padding: 0 }}
+                  aria-label="Smaller text"
+                  disabled={sizeIndex <= 0}
+                  onClick={() => stepSize(-1)}
+                >
+                  −
+                </button>
+                <span
+                  aria-live="polite"
+                  className="w-[30px] text-center text-xs"
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    color: 'var(--mist)',
+                  }}
+                >
+                  {fontSize}
+                </span>
+                <button
+                  type="button"
+                  className="lantern-btn"
+                  style={{ width: 30, height: 30, padding: 0 }}
+                  aria-label="Larger text"
+                  disabled={sizeIndex >= A_TERM_FONT_SIZES.length - 1}
+                  onClick={() => stepSize(1)}
+                >
+                  +
+                </button>
+              </span>
+            </div>
           )}
           {onRename && (
             <MenuItemButton
-              icon={<Pencil className="w-3.5 h-3.5" />}
+              icon={<Pencil className={ICON} strokeWidth={1.7} />}
               label="Rename"
               onClick={run(onRename)}
               isMobile={isMobile}
               title="Rename this session"
             />
           )}
-          {hasSessionActions && hasUtilityActions && (
-            <div
-              className="mx-2 my-1 h-px"
-              style={{ backgroundColor: 'var(--term-border)' }}
-            />
-          )}
           {onReset && (
             <MenuItemButton
-              icon={<RefreshCw className="w-3.5 h-3.5" />}
+              icon={<RotateCcw className={ICON} strokeWidth={1.7} />}
               label="Reset session"
               onClick={run(onReset)}
               isMobile={isMobile}
@@ -143,28 +172,30 @@ export function PaneOverflowMenu({
           )}
           {onRefresh && (
             <MenuItemButton
-              icon={<RefreshCw className="w-3.5 h-3.5" />}
+              icon={<RefreshCw className={ICON} strokeWidth={1.7} />}
               label="Redraw"
               onClick={run(onRefresh)}
               isMobile={isMobile}
               title="Redraw this session's screen without restarting it"
             />
           )}
-          {onUpload && (
-            <MenuItemButton
-              icon={<Paperclip className="w-3.5 h-3.5" />}
-              label="Upload file"
-              onClick={run(onUpload)}
-              isMobile={isMobile}
-            />
-          )}
-          {onSettings && (
-            <MenuItemButton
-              icon={<Settings className="w-3.5 h-3.5" />}
-              label="Settings"
-              onClick={run(onSettings)}
-              isMobile={isMobile}
-            />
+          {onCloseSession && (
+            <>
+              {(onUpload || onFontSizeChange || hasSessionActions) && (
+                <hr
+                  className="mx-1.5 my-1 border-0 border-t"
+                  style={{ borderColor: 'rgb(var(--glass-rgb) / 0.06)' }}
+                />
+              )}
+              <MenuItemButton
+                icon={<Square className={ICON} strokeWidth={1.7} />}
+                label="End session"
+                onClick={run(onCloseSession)}
+                isMobile={isMobile}
+                variant="danger"
+                title="End session: stop its process everywhere it is open."
+              />
+            </>
           )}
         </div>
       )}

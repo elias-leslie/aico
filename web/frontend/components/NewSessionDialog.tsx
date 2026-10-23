@@ -94,67 +94,50 @@ export function NewSessionDialog({
       <Dialog.Portal>
         <Dialog.Overlay
           className="fixed inset-0 z-[10000]"
-          style={{ backgroundColor: 'var(--term-overlay-backdrop)' }}
+          style={{ backgroundColor: 'var(--scrim)' }}
         />
         <Dialog.Content
           data-testid="new-session-dialog"
           aria-describedby={undefined}
           className={clsx(
-            'fixed z-[10001] flex flex-col overflow-hidden outline-none',
+            'lantern-sheet fixed z-[10001] flex flex-col overflow-hidden outline-none',
             isMobile
-              ? 'inset-x-0 bottom-0 h-[84dvh] rounded-t-2xl animate-in slide-in-from-bottom-3 duration-150'
-              : 'left-1/2 top-1/2 max-h-[min(90dvh,720px)] w-[min(92vw,520px)] -translate-x-1/2 -translate-y-1/2 rounded-xl animate-in fade-in zoom-in-95 duration-150',
+              ? 'lantern-rise inset-x-0 bottom-0 h-[84dvh] rounded-t-[14px]'
+              : 'lantern-enter top-1/2 left-1/2 max-h-[min(90dvh,720px)] w-[min(92vw,520px)] -translate-x-1/2 -translate-y-1/2 rounded-xl',
           )}
-          style={{
-            backgroundColor: 'var(--term-bg-elevated)',
-            border: '1px solid var(--term-border-active)',
-            boxShadow: 'var(--term-shadow-modal)',
-            fontFamily: 'var(--font-ui)',
-            color: 'var(--term-text-primary)',
-          }}
+          style={{ color: 'var(--bone)' }}
         >
           {isMobile && (
             <div
               aria-hidden="true"
               className="mx-auto mt-2 h-1 w-9 rounded-full"
-              style={{ backgroundColor: 'var(--term-border)' }}
+              style={{ backgroundColor: 'var(--paper-veil)' }}
             />
           )}
-          <div className="flex items-center justify-between px-4 pt-3 pb-1">
-            <Dialog.Title className="text-base font-medium">
+          <div className="flex items-center gap-2 pt-3.5 pr-2 pb-2 pl-[18px]">
+            <Dialog.Title
+              className="flex-1"
+              style={{ font: '500 18px/1.2 var(--font-display)' }}
+            >
               New session
             </Dialog.Title>
-            <Dialog.Close
-              aria-label="Close"
-              className="flex h-9 w-9 items-center justify-center rounded-md transition-colors hover:bg-[var(--term-bg-surface)]"
-              style={{ color: 'var(--term-text-muted)' }}
-            >
-              <X className="h-4 w-4" />
+            <Dialog.Close aria-label="Close" className="lantern-icon-btn">
+              <X className="h-[18px] w-[18px]" strokeWidth={1.7} />
             </Dialog.Close>
           </div>
 
           <div className="flex-1 overflow-y-auto overscroll-contain pb-2">
             <SectionTitle>Project</SectionTitle>
-            <div className="px-4">
-              <label
-                className="flex items-center gap-2 rounded-md px-3 py-2"
-                style={{
-                  backgroundColor: 'var(--term-bg-surface)',
-                  border: '1px solid var(--term-border)',
-                }}
-              >
-                <Search
-                  className="h-4 w-4 flex-shrink-0"
-                  style={{ color: 'var(--term-text-muted)' }}
-                />
+            <div className="px-[18px]">
+              <label className="lantern-field">
+                <Search className="h-4 w-4 flex-shrink-0" strokeWidth={1.7} />
                 <input
                   type="search"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="Find a project"
                   aria-label="Find a project"
-                  className="min-w-0 flex-1 bg-transparent text-sm outline-none"
-                  style={{ color: 'var(--term-text-primary)' }}
+                  className="text-sm"
                 />
               </label>
             </div>
@@ -167,7 +150,7 @@ export function NewSessionDialog({
                   type="button"
                   onClick={() => void refetch()}
                   className="underline"
-                  style={{ color: 'var(--term-accent)' }}
+                  style={{ color: 'var(--lantern)' }}
                 >
                   Try again
                 </button>
@@ -182,80 +165,45 @@ export function NewSessionDialog({
                 aria-label="Project"
                 className="mx-2 mt-2 flex flex-col"
               >
-                {visibleProjects.map((p) => {
-                  const checked = p.id === projectId
-                  return (
-                    <button
-                      key={p.id}
-                      type="button"
-                      role="radio"
-                      aria-checked={checked}
-                      onClick={() => setPickedProjectId(p.id)}
-                      className="flex min-h-12 w-full items-center gap-3 rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-[var(--term-bg-surface)]"
-                      style={{
-                        backgroundColor: checked
-                          ? 'var(--term-bg-surface)'
-                          : undefined,
-                      }}
-                    >
-                      <span
-                        aria-hidden="true"
-                        className="h-4 w-4 flex-shrink-0 rounded-full"
-                        style={{
-                          border: `1.5px solid ${checked ? 'var(--term-accent)' : 'var(--term-text-muted)'}`,
-                          boxShadow: checked
-                            ? 'inset 0 0 0 3px var(--term-bg-elevated), inset 0 0 0 8px var(--term-accent)'
-                            : undefined,
-                        }}
-                      />
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm">{p.name}</span>
-                        {p.root_path && (
-                          <span
-                            className="block truncate text-[11.5px]"
-                            style={{
-                              color: 'var(--term-text-muted)',
-                              fontFamily: 'var(--font-mono)',
-                            }}
-                          >
-                            {p.root_path}
-                          </span>
-                        )}
-                      </span>
-                    </button>
-                  )
-                })}
+                {visibleProjects.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={p.id === projectId}
+                    onClick={() => setPickedProjectId(p.id)}
+                    className="lantern-choice"
+                  >
+                    <span aria-hidden="true" className="radio" />
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm">{p.name}</span>
+                      {p.root_path && (
+                        <span
+                          className="block truncate text-[11.5px]"
+                          style={{
+                            color: 'var(--mist)',
+                            fontFamily: 'var(--font-mono)',
+                          }}
+                        >
+                          {p.root_path}
+                        </span>
+                      )}
+                    </span>
+                  </button>
+                ))}
               </div>
             )}
 
             <SectionTitle>Start</SectionTitle>
-            <div className="px-4">
+            <div className="px-[18px]">
               {enabledTools.length > 0 && (
-                <fieldset
-                  aria-label="Session kind"
-                  className="inline-flex rounded-md p-0.5"
-                  style={{
-                    backgroundColor: 'var(--term-bg-surface)',
-                    border: '1px solid var(--term-border)',
-                  }}
-                >
+                <fieldset aria-label="Session kind" className="lantern-seg">
                   {(['agent', 'shell'] as const).map((value) => (
                     <button
                       key={value}
                       type="button"
                       aria-pressed={kind === value}
                       onClick={() => setKind(value)}
-                      className="rounded px-4 py-1.5 text-sm transition-colors"
-                      style={{
-                        backgroundColor:
-                          kind === value
-                            ? 'var(--term-bg-elevated)'
-                            : 'transparent',
-                        color:
-                          kind === value
-                            ? 'var(--term-text-primary)'
-                            : 'var(--term-text-muted)',
-                      }}
                     >
                       {value === 'agent' ? 'Agent' : 'Shell'}
                     </button>
@@ -263,52 +211,36 @@ export function NewSessionDialog({
                 </fieldset>
               )}
               {kind === 'agent' && enabledTools.length > 0 && (
-                <fieldset
-                  aria-label="Agent"
-                  className="mt-2.5 flex flex-wrap gap-2"
-                >
-                  {enabledTools.map((t) => {
-                    const pressed = t.slug === tool?.slug
-                    return (
-                      <button
-                        key={t.slug}
-                        type="button"
-                        aria-pressed={pressed}
-                        onClick={() => setPickedToolSlug(t.slug)}
-                        className="flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors"
-                        style={{
-                          backgroundColor: pressed
-                            ? 'var(--term-bg-surface)'
-                            : 'transparent',
-                          border: `1px solid ${pressed ? 'var(--term-border-active)' : 'var(--term-border)'}`,
-                        }}
-                      >
-                        <AgentIcon
-                          slug={t.slug}
-                          color={getAgentColor(t.slug, t.color)}
-                        />
-                        {t.name}
-                      </button>
-                    )
-                  })}
+                <fieldset aria-label="Agent" className="lantern-tools mt-2.5">
+                  {enabledTools.map((t) => (
+                    <button
+                      key={t.slug}
+                      type="button"
+                      aria-pressed={t.slug === tool?.slug}
+                      onClick={() => setPickedToolSlug(t.slug)}
+                      className="lantern-tool"
+                    >
+                      <AgentIcon
+                        slug={t.slug}
+                        color={getAgentColor(t.slug, t.color)}
+                      />
+                      <span className="truncate">{t.name}</span>
+                    </button>
+                  ))}
                 </fieldset>
               )}
             </div>
           </div>
 
           <div
-            className="flex-none px-4 pt-2.5 pb-4"
-            style={{ borderTop: '1px solid var(--term-border)' }}
+            className="flex-none px-[18px] pt-2.5 pb-[18px]"
+            style={{ borderTop: '1px solid var(--paper)' }}
           >
             <button
               type="button"
               onClick={start}
               disabled={!project}
-              className="h-11 w-full rounded-md text-sm font-medium transition-[filter] hover:brightness-110 disabled:opacity-50"
-              style={{
-                backgroundColor: 'var(--term-accent)',
-                color: 'var(--term-accent-foreground)',
-              }}
+              className="lantern-btn primary h-11! w-full text-sm!"
             >
               {startLabel}
             </button>
@@ -320,22 +252,12 @@ export function NewSessionDialog({
 }
 
 function SectionTitle({ children }: { children: string }) {
-  return (
-    <h3
-      className="px-4 pt-4 pb-2 text-[11px] uppercase tracking-wide"
-      style={{ color: 'var(--term-text-muted)' }}
-    >
-      {children}
-    </h3>
-  )
+  return <h3 className="lantern-sec mx-[18px] mt-3.5 mb-1.5">{children}</h3>
 }
 
 function Note({ children }: { children: ReactNode }) {
   return (
-    <p
-      className="px-4 pt-3 text-sm"
-      style={{ color: 'var(--term-text-muted)' }}
-    >
+    <p className="px-[18px] pt-3 text-sm" style={{ color: 'var(--mist)' }}>
       {children}
     </p>
   )

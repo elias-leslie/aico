@@ -106,6 +106,14 @@ vi.mock('@/components/a-term-header', () => ({
   },
 }))
 
+vi.mock('@/lib/hooks/use-agent-tools', () => ({
+  useAgentTools: () => ({ agentTools: [] }),
+}))
+
+vi.mock('@/lib/hooks/use-a-term-panes', () => ({
+  usePaneListError: () => ({ isError: false, retry: vi.fn() }),
+}))
+
 vi.mock('@/lib/hooks/use-session-attention', () => ({
   useSessionAttention: () => ({ forSlot: () => null, needsYouCount: 0 }),
 }))

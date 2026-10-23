@@ -1,7 +1,7 @@
 'use client'
 
 import { clsx } from 'clsx'
-import { FolderOpen, SquarePen } from 'lucide-react'
+import { Folder, Pencil } from 'lucide-react'
 import { memo, useCallback, useState } from 'react'
 import { useATermPanes } from '@/lib/hooks/use-a-term-panes'
 import { useATermSessions } from '@/lib/hooks/use-a-term-sessions'
@@ -13,14 +13,15 @@ import { HeaderIconButton } from './HeaderIconButton'
 import { HeaderNameDisplay } from './HeaderNameDisplay'
 import { NewSessionButton } from './NewSessionButton'
 import { PaneSearchControl } from './PaneSearchControl'
-import { PaneStatusBadge, shouldShowPaneStatus } from './PaneStatusBadge'
+import { PaneStatusBadge } from './PaneStatusBadge'
 import type { UnifiedATermHeaderProps } from './types'
 
 export const UnifiedATermHeaderContent = memo(
   function UnifiedATermHeaderContent({
     slot,
     isActive = false,
-    onSettings,
+    fontSize,
+    onFontSizeChange,
     onReset,
     onCloseSession,
     onRefresh,
@@ -56,10 +57,9 @@ export const UnifiedATermHeaderContent = memo(
       },
       [paneId, renamePane, sessionRenameId, updateSession],
     )
-    const showStatusBadge = shouldShowPaneStatus(connectionStatus)
     const hasSessionActions =
       !!onUpload ||
-      !!onSettings ||
+      !!onFontSizeChange ||
       !!onRefresh ||
       !!onReset ||
       !!onCloseSession ||
@@ -69,20 +69,11 @@ export const UnifiedATermHeaderContent = memo(
       <div
         data-testid={`a-term-header-${getSlotPanelId(slot)}`}
         className={clsx(
-          'flex-shrink-0 flex items-center gap-1',
-          isMobile ? 'h-9 px-1.5' : 'h-8 px-2',
+          'flex h-12 flex-shrink-0 items-center gap-1',
+          isMobile ? 'pr-1 pl-1.5' : 'pr-1.5 pl-2.5',
         )}
-        style={{
-          backgroundColor: isActive
-            ? 'var(--term-bg-elevated)'
-            : 'var(--term-bg-surface)',
-          borderBottom: isActive
-            ? '2px solid var(--term-accent)'
-            : '1px solid var(--term-border)',
-          fontFamily: 'var(--font-ui)',
-        }}
       >
-        {/* Mode toggle (shell <-> agent) - only for project slots */}
+        {/* The session's tool mark; switches shell <-> agent on a project */}
         {slot.type === 'project' && onModeSwitch && (
           <ModeToggle
             value={slot.activeMode}
@@ -94,47 +85,39 @@ export const UnifiedATermHeaderContent = memo(
           />
         )}
 
-        <HeaderNameDisplay
-          slot={slot}
-          isActive={isActive}
-          isMobile={isMobile}
-          allSlots={allSlots}
-          onSwitchTo={onSwitchTo}
-          onRename={canRename ? handleRename : undefined}
-          isEditing={isRenaming}
-          onEditingChange={setIsRenaming}
-        />
-
-        {onOpenModal && (
-          <NewSessionButton onClick={onOpenModal} isMobile={isMobile} />
-        )}
-
-        {/* Spacer */}
-        <div className="flex-1" />
-
-        {showStatusBadge && (
-          <span
-            className="h-3.5 w-px mx-0.5"
-            style={{ backgroundColor: 'var(--term-border)' }}
+        <div className="flex min-w-0 flex-[0_1_auto] items-center">
+          <HeaderNameDisplay
+            slot={slot}
+            isActive={isActive}
+            isMobile={isMobile}
+            allSlots={allSlots}
+            onSwitchTo={onSwitchTo}
+            onRename={canRename ? handleRename : undefined}
+            isEditing={isRenaming}
+            onEditingChange={setIsRenaming}
           />
-        )}
+        </div>
+
         <PaneStatusBadge status={connectionStatus} onReconnect={onReconnect} />
 
-        <div className="flex items-center gap-0.5">
+        <div className="min-w-1 flex-1" />
+
+        <div className="flex flex-none items-center gap-0.5">
+          {onOpenModal && (
+            <NewSessionButton onClick={onOpenModal} isMobile={isMobile} />
+          )}
+
           {onToggleCompose && (
             <button
               type="button"
               onClick={onToggleCompose}
               aria-pressed={composeOpen}
               data-testid="compose-toggle"
-              className="flex h-6 items-center gap-1 rounded px-1.5 text-xs transition-colors hover:bg-[var(--term-bg-surface)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--term-accent)]"
-              style={{
-                color: composeOpen
-                  ? 'var(--term-accent)'
-                  : 'var(--term-text-muted)',
-              }}
+              title="Compose text (stays open once opened)"
+              className="lantern-btn ghost"
+              style={{ height: 34, padding: '0 10px' }}
             >
-              <SquarePen className="h-3.5 w-3.5" />
+              <Pencil className="h-4 w-4" strokeWidth={1.7} />
               Compose
             </button>
           )}
@@ -149,7 +132,7 @@ export const UnifiedATermHeaderContent = memo(
 
           {onFiles && (
             <HeaderIconButton
-              icon={<FolderOpen className="w-3.5 h-3.5" />}
+              icon={<Folder className="h-[18px] w-[18px]" strokeWidth={1.7} />}
               onClick={onFiles}
               tooltip="Files"
               isMobile={isMobile}
@@ -162,8 +145,9 @@ export const UnifiedATermHeaderContent = memo(
               onCloseSession={onCloseSession}
               onRefresh={onRefresh}
               onReset={onReset}
-              onSettings={onSettings}
               onUpload={onUpload}
+              fontSize={fontSize}
+              onFontSizeChange={onFontSizeChange}
               isMobile={isMobile}
             />
           )}

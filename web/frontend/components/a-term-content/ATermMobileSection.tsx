@@ -14,7 +14,6 @@ interface ATermMobileSectionProps {
     text: string,
     action: 'insert' | 'send',
   ) => Promise<boolean>
-  handleReconnect: () => void
   isVoiceSupported: boolean
   handleVoiceOpen: () => void
   showVoice: boolean
@@ -35,7 +34,6 @@ export function ATermMobileSection({
   activeMode,
   handleKeyboardInput,
   handleComposeInput,
-  handleReconnect,
   isVoiceSupported,
   handleVoiceOpen,
   showVoice,
@@ -57,7 +55,6 @@ export function ATermMobileSection({
         sessionId={activeSessionId}
         onCompose={handleComposeInput}
         connectionStatus={activeStatus}
-        onReconnect={handleReconnect}
         onVoice={isVoiceSupported ? handleVoiceOpen : undefined}
         voiceActive={showVoice}
         activeMode={activeMode}

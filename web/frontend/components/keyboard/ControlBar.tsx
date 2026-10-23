@@ -2,15 +2,10 @@
 
 import { ChevronDown, ChevronUp, Mic, Sparkles } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ConnectionStatus } from '@/components/a-term.types'
 import {
   type ClaudeModelOption,
   getClaudeModelOptions,
 } from '@/lib/utils/agent-hub-models'
-import {
-  getMobileATermBannerState,
-  isReconnectableStatus,
-} from '@/lib/utils/mobile-a-term-status'
 import { KeyboardKey } from './KeyboardKey'
 import {
   type ArrowDirection,
@@ -42,8 +37,6 @@ interface ControlBarProps {
   voiceActive?: boolean
   // Active pane mode (show model picker when agent mode)
   activeMode?: string
-  connectionStatus?: ConnectionStatus
-  onReconnect?: () => void
   onBeforeTerminalAction?: () => boolean
 }
 
@@ -57,8 +50,6 @@ export function ControlBar({
   onVoice,
   voiceActive = false,
   activeMode,
-  connectionStatus,
-  onReconnect,
   onBeforeTerminalAction,
 }: ControlBarProps) {
   const { modifiers, resetModifiers, toggleModifier } = useModifiers()
@@ -181,44 +172,6 @@ export function ControlBar({
     minWidth: remSize(32),
     borderRadius: KEY_ROW_METRICS.keyRadius,
   }
-
-  const bannerState = getMobileATermBannerState({
-    connectionStatus,
-    activeMode,
-    voiceActive,
-    minimized,
-    canReconnect:
-      isReconnectableStatus(connectionStatus) && onReconnect !== undefined,
-  })
-
-  const bannerToneStyles = {
-    neutral: {
-      borderColor: 'var(--term-border)',
-      backgroundColor: 'var(--term-surface-soft)',
-      dotColor: 'var(--term-text-muted)',
-      labelColor: 'var(--term-text-primary)',
-    },
-    success: {
-      borderColor: 'color-mix(in srgb, var(--term-success) 35%, transparent)',
-      backgroundColor:
-        'color-mix(in srgb, var(--term-success) 12%, transparent)',
-      dotColor: 'var(--term-success)',
-      labelColor: 'var(--term-text-primary)',
-    },
-    warning: {
-      borderColor: 'color-mix(in srgb, var(--term-warning) 35%, transparent)',
-      backgroundColor:
-        'color-mix(in srgb, var(--term-warning) 12%, transparent)',
-      dotColor: 'var(--term-warning)',
-      labelColor: 'var(--term-text-primary)',
-    },
-    danger: {
-      borderColor: 'var(--term-danger-border)',
-      backgroundColor: 'var(--term-danger-soft)',
-      dotColor: 'var(--term-error)',
-      labelColor: 'var(--term-text-primary)',
-    },
-  }[bannerState.tone]
 
   return (
     <div
@@ -518,56 +471,6 @@ export function ControlBar({
           )}
         </button>
       </div>
-
-      {/* Status banner — only shown for error/disconnect states that need
-          user action. Connected/minimized/voice status is in the header badge. */}
-      {(bannerState.tone === 'danger' || bannerState.tone === 'warning') && (
-        <div className="flex items-center gap-2 px-1">
-          <div
-            className="flex min-w-0 flex-1 items-center gap-2 rounded-md border px-2.5 py-2"
-            style={{
-              borderColor: bannerToneStyles.borderColor,
-              backgroundColor: bannerToneStyles.backgroundColor,
-            }}
-          >
-            <span
-              aria-hidden="true"
-              className="h-2 w-2 shrink-0 rounded-full"
-              style={{ backgroundColor: bannerToneStyles.dotColor }}
-            />
-            <span
-              className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.14em]"
-              style={{ color: bannerToneStyles.labelColor }}
-            >
-              {bannerState.label}
-            </span>
-            {bannerState.detail && (
-              <span
-                className="min-w-0 truncate text-[11px]"
-                style={{ color: 'var(--term-text-muted)' }}
-              >
-                {bannerState.detail}
-              </span>
-            )}
-          </div>
-
-          {bannerState.actionLabel && onReconnect && (
-            <button
-              type="button"
-              onPointerDown={keepKeyboardOpen}
-              onClick={onReconnect}
-              className="shrink-0 rounded-md border px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] transition-all duration-150 active:scale-95"
-              style={{
-                borderColor: 'var(--term-danger-border)',
-                backgroundColor: 'var(--term-danger-soft)',
-                color: 'var(--term-text-primary)',
-              }}
-            >
-              {bannerState.actionLabel}
-            </button>
-          )}
-        </div>
-      )}
     </div>
   )
 }

@@ -36,8 +36,7 @@ export function ConfirmationDialog({
   const titleId = useId()
   const messageId = useId()
   const confirmButtonRef = useRef<HTMLButtonElement>(null)
-  const accentColor =
-    variant === 'danger' ? 'var(--term-error)' : 'var(--term-warning, #f59e0b)'
+  const accentColor = variant === 'danger' ? 'var(--ember)' : 'var(--beacon)'
 
   return (
     <Dialog.Root
@@ -49,10 +48,7 @@ export function ConfirmationDialog({
       <Dialog.Portal>
         <Dialog.Overlay
           className="fixed inset-0 z-[10000]"
-          style={{
-            backgroundColor: 'var(--term-overlay-backdrop)',
-            backdropFilter: 'blur(4px)',
-          }}
+          style={{ backgroundColor: 'var(--scrim)' }}
         />
         <Dialog.Content
           data-testid="confirm-dialog"
@@ -64,94 +60,49 @@ export function ConfirmationDialog({
             confirmButtonRef.current?.focus()
           }}
         >
-          <div
-            className="w-full max-w-md overflow-hidden rounded-lg animate-in fade-in zoom-in-95 duration-150"
-            style={{
-              backgroundColor: 'var(--term-bg-elevated)',
-              border: `1px solid ${accentColor}`,
-              boxShadow: 'var(--term-shadow-modal)',
-            }}
-          >
-            <div
-              className="flex items-center gap-3 px-4 py-3"
-              style={{
-                backgroundColor:
-                  variant === 'danger'
-                    ? 'var(--term-danger-soft)'
-                    : 'color-mix(in srgb, var(--term-warning) 15%, transparent)',
-                borderBottom:
-                  variant === 'danger'
-                    ? '1px solid var(--term-danger-border)'
-                    : '1px solid color-mix(in srgb, var(--term-warning) 36%, transparent)',
-              }}
-            >
+          <div className="lantern-sheet lantern-enter w-full max-w-sm rounded-xl p-5">
+            <div className="flex items-start gap-3">
               <AlertTriangle
-                className="h-5 w-5 flex-shrink-0"
+                className="mt-0.5 h-5 w-5 flex-shrink-0"
+                strokeWidth={1.7}
                 style={{ color: accentColor }}
               />
-              <Dialog.Title
-                id={titleId}
-                className="text-sm font-medium"
-                style={{
-                  color: 'var(--term-text-primary)',
-                  fontFamily: 'var(--font-mono)',
-                }}
-              >
-                {title}
-              </Dialog.Title>
-            </div>
-
-            <div className="px-4 py-4">
-              <Dialog.Description
-                id={messageId}
-                className="text-sm"
-                style={{
-                  color: 'var(--term-text-muted)',
-                  fontFamily: 'var(--font-mono)',
-                  lineHeight: 1.5,
-                }}
-              >
-                {message}
-              </Dialog.Description>
-              {error && (
-                <p
-                  role="alert"
-                  className="mt-3 text-sm"
-                  style={{ color: 'var(--term-error)' }}
+              <div className="min-w-0">
+                <Dialog.Title
+                  id={titleId}
+                  style={{
+                    font: '500 17px/1.25 var(--font-display)',
+                    color: 'var(--bone)',
+                  }}
                 >
-                  {error}
-                </p>
-              )}
+                  {title}
+                </Dialog.Title>
+                <Dialog.Description
+                  id={messageId}
+                  className="mt-1.5 text-[13px] leading-normal"
+                  style={{ color: 'var(--mist)' }}
+                >
+                  {message}
+                </Dialog.Description>
+                {error && (
+                  <p
+                    role="alert"
+                    className="mt-3 text-[13px]"
+                    style={{ color: 'var(--bone)' }}
+                  >
+                    {error}
+                  </p>
+                )}
+              </div>
             </div>
 
-            <div
-              className="flex justify-end gap-2 px-4 py-3"
-              style={{
-                backgroundColor: 'var(--term-bg-elevated)',
-                borderTop: '1px solid var(--term-border)',
-              }}
-            >
+            <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
                 data-testid="confirm-dialog-cancel"
                 onClick={onCancel}
                 disabled={isPending}
-                className="rounded-md px-4 py-2 text-xs transition-colors"
-                style={{
-                  backgroundColor: 'transparent',
-                  color: 'var(--term-text-muted)',
-                  border: '1px solid var(--term-border)',
-                  fontFamily: 'var(--font-mono)',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor =
-                    'var(--term-bg-surface)'
-                  e.currentTarget.style.color = 'var(--term-text-primary)'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent'
-                  e.currentTarget.style.color = 'var(--term-text-muted)'
-                }}
+                className="lantern-btn ghost"
               >
                 {cancelText}
               </button>
@@ -162,18 +113,10 @@ export function ConfirmationDialog({
                 onClick={onConfirm}
                 disabled={isPending}
                 aria-busy={isPending}
-                className="rounded-md px-4 py-2 text-xs font-medium transition-colors"
+                className="lantern-btn"
                 style={{
-                  backgroundColor: accentColor,
-                  color: 'var(--term-accent-foreground)',
-                  border: 'none',
-                  fontFamily: 'var(--font-mono)',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.filter = 'brightness(1.1)'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.filter = 'brightness(1)'
+                  borderColor: accentColor,
+                  backgroundColor: `color-mix(in srgb, ${accentColor} 16%, transparent)`,
                 }}
               >
                 {isPending ? 'Ending session…' : confirmText}

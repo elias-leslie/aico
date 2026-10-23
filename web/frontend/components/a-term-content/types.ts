@@ -9,10 +9,7 @@ export interface ATermContentProps {
   aTermSlots: (ATermSlot | PaneSlot)[]
   fontSize: ATermFontSize
 
-  // Settings
-  showSettings: boolean
   setFontSize: (size: ATermFontSize) => void
-  setShowSettings: (show: boolean) => void
   isMobile?: boolean
 
   // Handlers
@@ -22,7 +19,6 @@ export interface ATermContentProps {
   onSlotSwitch: (slot: ATermSlot | PaneSlot) => void
   onSlotReset: (slot: ATermSlot | PaneSlot) => void
   onSlotCloseSession: (slot: ATermSlot | PaneSlot) => void
-  handleOpenSettings: () => void
   handleOpenATermManager?: () => void
   handleUploadClick: (sessionId?: string) => void
   onModeSwitch: (slot: ATermSlot | PaneSlot, mode: string) => void
@@ -48,7 +44,6 @@ export interface ATermContentProps {
     text: string,
     action: 'insert' | 'send',
   ) => Promise<boolean>
-  handleReconnect: () => void
 
   // Voice input
   showVoice: boolean

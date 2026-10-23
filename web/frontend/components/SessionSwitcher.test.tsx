@@ -1,9 +1,13 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { Attention } from '@/lib/attention'
 import type { PaneSlot } from '@/lib/utils/slot'
 import { SLOT_BASE } from '@/test-stubs/session-fixtures'
 import { SessionSwitcher } from './SessionSwitcher'
+
+vi.mock('@/lib/hooks/use-agent-tools', () => ({
+  useAgentTools: () => ({ agentTools: [] }),
+}))
 
 function makeProjectSlot(id: string, name: string): PaneSlot {
   return {
@@ -35,14 +39,14 @@ describe('SessionSwitcher', () => {
     )
 
     fireEvent.click(screen.getByTestId('session-switcher'))
-    expect(screen.getByTestId('session-sheet')).toBeInTheDocument()
-    expect(screen.getByText('Alpha [shell]')).toBeInTheDocument()
+    const sheet = within(screen.getByTestId('session-sheet'))
+    expect(sheet.getByText('Alpha')).toBeInTheDocument()
     const scrollRegion = screen.getByTestId('session-list')
     expect(scrollRegion.className).toContain('overflow-y-auto')
     expect(scrollRegion.getAttribute('style')).toContain(
       '-webkit-overflow-scrolling: touch',
     )
-    fireEvent.click(screen.getByRole('button', { name: /beta \[shell\]/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^beta/i }))
 
     expect(onSwitchTo).toHaveBeenCalledWith(slotB)
   })
@@ -62,8 +66,9 @@ describe('SessionSwitcher', () => {
 
     fireEvent.click(screen.getByTestId('session-switcher'))
 
-    expect(screen.getByText('Alpha [shell]')).toBeInTheDocument()
-    expect(screen.getByText('Alpha [shell] #2')).toBeInTheDocument()
+    const sheet = within(screen.getByTestId('session-sheet'))
+    expect(sheet.getByText('Alpha')).toBeInTheDocument()
+    expect(sheet.getByText('Alpha #2')).toBeInTheDocument()
   })
 })
 
@@ -100,15 +105,34 @@ describe('SessionSwitcher attention', () => {
       makeProjectSlot('d', 'Delta'),
     ]
     const states: Record<string, Attention> = {
-      a: { group: 'idle', activity: 'idle', at: 1, detail: 'idle 2h' },
-      b: { group: 'working', activity: 'working', at: 5, detail: 'working 4m' },
+      a: {
+        group: 'idle',
+        activity: 'idle',
+        at: 1,
+        detail: 'idle 2h',
+        age: '2h',
+      },
+      b: {
+        group: 'working',
+        activity: 'working',
+        at: 5,
+        detail: 'working 4m',
+        age: '4m',
+      },
       c: {
         group: 'needs-you',
         activity: 'blocked',
         at: 9,
         detail: 'waiting 3m',
+        age: '3m',
       },
-      d: { group: 'finished', activity: 'idle', at: 8, detail: 'done 1m' },
+      d: {
+        group: 'finished',
+        activity: 'idle',
+        at: 8,
+        detail: 'done 1m',
+        age: '1m',
+      },
     }
     const onSwitchTo = vi.fn()
     render(
@@ -130,16 +154,21 @@ describe('SessionSwitcher attention', () => {
       [...sheet.querySelectorAll('[data-testid="session-group-header"]')].map(
         (el) => el.textContent,
       ),
-    ).toEqual(['Needs you', 'Finished', 'Working', 'Idle'])
+    ).toEqual(['Needs you1', 'Finished1', 'Working1', 'Idle1'])
     const rows = [...sheet.querySelectorAll('button[type="button"]')]
       .map((el) => el.textContent ?? '')
       .filter((text) => /Alpha|Beta|Gamma|Delta/.test(text))
     expect(rows).toEqual([
-      'Gamma [shell]waiting 3m',
-      'Delta [shell]done 1m',
-      'Beta [shell]working 4m',
-      'Alpha [shell]idle 2hCurrent',
+      'Gamma3mShell is waiting for you',
+      'Delta1mShell finished · not opened yet',
+      'Beta4mShell',
+      'Alpha2hShell',
     ])
+    expect(
+      screen
+        .getByRole('button', { name: /^Alpha/ })
+        .getAttribute('aria-current'),
+    ).toBe('true')
     fireEvent.click(screen.getByRole('button', { name: /Gamma/ }))
     expect(onSwitchTo).toHaveBeenCalledWith(slots[2])
   })
@@ -159,7 +188,7 @@ describe('SessionSwitcher attention', () => {
     fireEvent.click(screen.getByTestId('session-switcher'))
     expect(screen.queryByTestId('session-sheet')).toBeNull()
     expect(screen.getByRole('dialog', { name: 'Sessions' })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /beta \[shell\]/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^beta/i }))
 
     expect(onSwitchTo).toHaveBeenCalledWith(slotB)
     expect(screen.queryByRole('dialog', { name: 'Sessions' })).toBeNull()

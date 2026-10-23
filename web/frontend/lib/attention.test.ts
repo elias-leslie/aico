@@ -22,6 +22,7 @@ describe('attentionOf', () => {
     expect(attentionOf(blocked, 0, NOW)).toMatchObject({
       group: 'needs-you',
       detail: 'waiting 3m',
+      age: '3m',
     })
     // Opened after it blocked: still waiting, but no longer needs-you.
     expect(attentionOf(blocked, at(1), NOW)).toMatchObject({
@@ -64,6 +65,7 @@ describe('attentionOf', () => {
       group: 'idle',
       activity: 'unknown',
       detail: null,
+      age: null,
     })
   })
 })

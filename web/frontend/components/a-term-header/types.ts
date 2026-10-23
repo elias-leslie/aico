@@ -3,13 +3,16 @@ import type {
   ATermSearchResult,
   ConnectionStatus,
 } from '@/components/a-term.types'
+import type { ATermFontSize } from '@/lib/hooks/use-a-term-settings'
 import type { ATermSlot, PaneSlot } from '@/lib/utils/slot'
 import type { ATermMode } from '../ModeToggle'
 
 export interface UnifiedATermHeaderProps {
   slot: ATermSlot | PaneSlot
   isActive?: boolean
-  onSettings?: () => void
+  /** Text size, stepped in the session menu */
+  fontSize?: ATermFontSize
+  onFontSizeChange?: (size: ATermFontSize) => void
   onReset?: () => void
   onCloseSession?: () => void
   onRefresh?: () => void
@@ -41,6 +44,5 @@ export interface IconButtonProps {
   icon: React.ReactNode
   onClick: () => void
   tooltip: string
-  variant?: 'default' | 'danger'
   isMobile?: boolean
 }

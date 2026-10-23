@@ -13,7 +13,7 @@ describe('PaneSearchControl', () => {
 
     render(<PaneSearchControl onSearch={onSearch} onClearSearch={vi.fn()} />)
 
-    fireEvent.click(screen.getByTitle('Search pane output'))
+    fireEvent.click(screen.getByTitle('Search output'))
     fireEvent.change(screen.getByTestId('pane-search-input'), {
       target: { value: 'alpha' },
     })
@@ -46,7 +46,7 @@ describe('PaneSearchControl', () => {
       <PaneSearchControl onSearch={onSearch} onClearSearch={onClearSearch} />,
     )
 
-    fireEvent.click(screen.getByTitle('Search pane output'))
+    fireEvent.click(screen.getByTitle('Search output'))
     fireEvent.change(screen.getByTestId('pane-search-input'), {
       target: { value: 'alpha' },
     })

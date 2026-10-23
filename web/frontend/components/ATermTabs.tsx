@@ -43,9 +43,7 @@ export function ATermTabs({
     sessions,
     aTermSlots,
     fontSize,
-    showSettings,
     setFontSize,
-    setShowSettings,
     isMobile,
     setATermRef,
     handleStatusChange,
@@ -55,7 +53,6 @@ export function ATermTabs({
     activeStatus,
     handleKeyboardInput,
     handleComposeInput,
-    handleReconnect,
     handleNewATermForProject,
     showATermManager,
     handleOpenATermManager,
@@ -126,9 +123,7 @@ export function ATermTabs({
       <ATermContent
         aTermSlots={aTermSlots}
         fontSize={fontSize}
-        showSettings={showSettings}
         setFontSize={setFontSize}
-        setShowSettings={setShowSettings}
         isMobile={isMobile}
         setATermRef={setATermRef}
         handleStatusChange={handleStatusChange}
@@ -139,7 +134,6 @@ export function ATermTabs({
           setEndSessionError(null)
           setSessionToEnd(slot)
         }}
-        handleOpenSettings={() => setShowSettings(true)}
         handleOpenATermManager={handleOpenATermManager}
         handleUploadClick={handleUploadClick}
         onModeSwitch={handleSlotModeSwitch}
@@ -157,7 +151,6 @@ export function ATermTabs({
         activeStatus={activeStatus}
         handleKeyboardInput={handleKeyboardInput}
         handleComposeInput={handleComposeInput}
-        handleReconnect={handleReconnect}
         showVoice={showVoice}
         isVoiceSupported={isVoiceSupported}
         voiceFinalTranscript={voiceFinalTranscript}

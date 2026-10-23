@@ -2,12 +2,13 @@
 
 import type { Attention, AttentionGroup } from '@/lib/attention'
 
-/** Tones per attention group; needs-you is the only alarm color. */
+/** Tones per attention group, as on the desktop: beacon waits on the owner,
+ * jade is finished, the rest stay quiet. */
 const TONE: Record<AttentionGroup, string> = {
-  'needs-you': 'var(--term-danger)',
-  finished: 'var(--term-accent)',
-  working: 'var(--term-warning)',
-  idle: 'var(--term-text-muted)',
+  'needs-you': 'var(--beacon)',
+  finished: 'var(--jade)',
+  working: 'var(--mist)',
+  idle: 'var(--mist)',
 }
 
 /** A session's state and age as a small pill: `waiting 3m`, `done 1m`. */
@@ -22,8 +23,6 @@ export function AttentionBadge({ attention }: { attention: Attention | null }) {
       style={{
         color: tone,
         backgroundColor: `color-mix(in srgb, ${tone} 14%, transparent)`,
-        border: `1px solid color-mix(in srgb, ${tone} 30%, transparent)`,
-        fontFamily: 'var(--font-ui)',
       }}
     >
       <span
@@ -45,8 +44,9 @@ export function NeedsYouCount({ count }: { count: number }) {
       title={`${count} session${count === 1 ? '' : 's'} waiting for you`}
       className="inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full px-1 text-[10px] font-semibold leading-none"
       style={{
-        backgroundColor: 'var(--term-danger)',
-        color: 'var(--term-bg-deep)',
+        backgroundColor: 'var(--beacon)',
+        color: 'var(--ink)',
+        fontFamily: 'var(--font-ui)',
       }}
     >
       {count}

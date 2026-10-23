@@ -50,6 +50,7 @@ export function useATermTabsState({
     panes: attachedPanes,
     detachedPanes,
     isLoading: panesLoading,
+    loadFailed: panesFailed,
     removePane,
     setActiveMode,
     createProjectPane,
@@ -74,7 +75,6 @@ export function useATermTabsState({
   const { fontSize, setFontSize } = useATermSettings(
     getActiveSessionProjectId(activeSessionId, sessions),
   )
-  const [showSettings, setShowSettings] = useState(false)
   const [showATermManager, setShowATermManager] = useState(false)
   const aTermRefs = useRef<Map<string, ATermHandle>>(new Map())
   const [aTermStatuses, setATermStatuses] = useState<
@@ -153,7 +153,8 @@ export function useATermTabsState({
       startupLaunchKeyRef.current = null
       return
     }
-    if (isLoading || isPaneCreating) return
+    // A failed pane list can't show which sessions exist: start nothing.
+    if (isLoading || isPaneCreating || panesFailed) return
 
     const startupKey = `${projectId}:${projectPath ?? ''}`
     if (startupLaunchKeyRef.current === startupKey) return
@@ -204,6 +205,7 @@ export function useATermTabsState({
     isLoading,
     isPaneCreating,
     panes,
+    panesFailed,
     projectId,
     projectPath,
     projectATerms,
@@ -226,8 +228,6 @@ export function useATermTabsState({
     setATermRef,
     fontSize,
     setFontSize,
-    showSettings,
-    setShowSettings,
     isMobile,
     showATermManager,
     setShowATermManager,

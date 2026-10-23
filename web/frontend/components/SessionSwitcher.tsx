@@ -2,13 +2,14 @@
 
 import { clsx } from 'clsx'
 import { ChevronDown } from 'lucide-react'
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   ATTENTION_GROUPS,
   type Attention,
   compareAttention,
 } from '@/lib/attention'
+import { useAgentTools } from '@/lib/hooks/use-agent-tools'
 import { useClickOutside } from '@/lib/hooks/use-click-outside'
 import type { SessionAttention } from '@/lib/hooks/use-session-attention'
 import {
@@ -17,7 +18,8 @@ import {
   getSlotPanelId,
   type PaneSlot,
 } from '@/lib/utils/slot'
-import { AttentionBadge, NeedsYouCount } from './AttentionBadge'
+import { AgentIcon, getAgentColor } from './AgentIcon'
+import { NeedsYouCount } from './AttentionBadge'
 import { CoordinatorBadge } from './CoordinatorBadge'
 import { SessionTitle } from './SessionTitle'
 
@@ -28,43 +30,41 @@ function getSlotMode(slot: ATermSlot | PaneSlot): string {
   return slot.sessionMode ?? 'shell'
 }
 
-function getSlotLabel(slot: ATermSlot | PaneSlot): string {
-  return `${getSlotName(slot)} [${getSlotMode(slot)}]`
-}
-
 interface SessionListEntry {
   id: string
   label: string
+  mode: string
   slot: ATermSlot | PaneSlot
   state: Attention | null
 }
 
 /** Sessions most urgent first (Aico's tray order), alphabetical within equal
- * state, with duplicate labels numbered. */
+ * state; the same name with the same agent is numbered. */
 export function sortSessionEntries(
   slots: Array<ATermSlot | PaneSlot>,
   attention?: SessionAttention,
 ): SessionListEntry[] {
+  const key = (slot: ATermSlot | PaneSlot) =>
+    `${getSlotName(slot)} [${getSlotMode(slot)}]`
   const sorted = [...slots].sort((slotA, slotB) => {
-    const labelCompare = getSlotLabel(slotA).localeCompare(
-      getSlotLabel(slotB),
-      undefined,
-      { sensitivity: 'base' },
-    )
+    const labelCompare = key(slotA).localeCompare(key(slotB), undefined, {
+      sensitivity: 'base',
+    })
     if (labelCompare !== 0) {
       return labelCompare
     }
     return getSlotPanelId(slotA).localeCompare(getSlotPanelId(slotB))
   })
-  const seenLabelCounts = new Map<string, number>()
+  const seenCounts = new Map<string, number>()
   return sorted
     .map((slot) => {
-      const baseLabel = getSlotLabel(slot)
-      const count = (seenLabelCounts.get(baseLabel) ?? 0) + 1
-      seenLabelCounts.set(baseLabel, count)
+      const count = (seenCounts.get(key(slot)) ?? 0) + 1
+      seenCounts.set(key(slot), count)
+      const name = getSlotName(slot)
       return {
         id: getSlotPanelId(slot),
-        label: count > 1 ? `${baseLabel} #${count}` : baseLabel,
+        label: count > 1 ? `${name} #${count}` : name,
+        mode: getSlotMode(slot),
         slot,
         state: attention?.forSlot(slot) ?? null,
       }
@@ -72,6 +72,13 @@ export function sortSessionEntries(
     .sort((a, b) =>
       a.state && b.state ? compareAttention(a.state, b.state) : 0,
     )
+}
+
+/** What a row says under its name: who it waits on, or just its agent. */
+function rowMeta(agent: string, state: Attention | null): string {
+  if (state?.group === 'needs-you') return `${agent} is waiting for you`
+  if (state?.group === 'finished') return `${agent} finished · not opened yet`
+  return agent
 }
 
 interface SessionListProps {
@@ -88,67 +95,65 @@ export function SessionList({
   attention,
   onSelect,
 }: SessionListProps) {
+  const { agentTools } = useAgentTools()
   const entries = useMemo(
     () => sortSessionEntries(slots, attention),
     [slots, attention],
   )
+  const agentName = (mode: string) =>
+    agentTools.find((tool) => tool.slug === mode)?.name ??
+    (mode === 'shell' ? 'Shell' : mode)
+  const groupSize = (group: string) =>
+    entries.filter((entry) => entry.state?.group === group).length
   return (
     <>
-      {entries.map(({ id, label, slot, state }, index) => {
+      {entries.map(({ id, label, mode, slot, state }, index) => {
         const isCurrent = id === currentId
         const group = state?.group
         const header =
           group && group !== entries[index - 1]?.state?.group
             ? ATTENTION_GROUPS.find((g) => g.group === group)?.title
             : null
+        const tool = agentTools.find((t) => t.slug === mode)
         return (
           <div key={id}>
             {header && (
-              <div
+              <h3
                 data-testid="session-group-header"
-                className="px-3 pt-2 pb-1 text-[11px] uppercase tracking-wide"
-                style={{
-                  color:
-                    group === 'needs-you'
-                      ? 'var(--term-danger)'
-                      : 'var(--term-text-muted)',
-                }}
+                className="lantern-sec mx-2.5 mt-3.5 mb-1.5"
               >
                 {header}
-              </div>
+                {group && <span className="n">{groupSize(group)}</span>}
+              </h3>
             )}
             <button
               type="button"
               onClick={() => onSelect(slot)}
               aria-current={isCurrent ? 'true' : undefined}
-              className={clsx(
-                'mb-1 flex w-full items-center justify-between rounded-lg px-3 py-3 text-left text-sm transition-colors hover:bg-[var(--term-bg-elevated)]',
-                isCurrent && 'ring-1',
-              )}
-              style={{
-                color: 'var(--term-text-primary)',
-                backgroundColor: isCurrent
-                  ? 'var(--term-bg-elevated)'
-                  : 'transparent',
-                borderColor: isCurrent
-                  ? 'var(--term-accent-muted)'
-                  : 'transparent',
-              }}
+              className={clsx('lantern-row', group === 'needs-you' && 'needs')}
             >
-              <span className="flex min-w-0 flex-col items-start gap-1">
-                <span className="min-w-0 max-w-full truncate">{label}</span>
-                <CoordinatorBadge badge={slot.badge} ownLine />
-              </span>
-              <span className="ml-3 flex shrink-0 items-center gap-2">
-                <AttentionBadge attention={state} />
-                {isCurrent && (
+              <AgentIcon
+                slug={mode}
+                size={16}
+                color={getAgentColor(mode, tool?.color)}
+              />
+              <span className="name">{label}</span>
+              <span className="when">{state?.age ?? ''}</span>
+              <span className="meta">
+                {(group === 'needs-you' || group === 'finished') && (
                   <span
-                    className="text-[11px] uppercase tracking-wide"
-                    style={{ color: 'var(--term-text-muted)' }}
-                  >
-                    Current
-                  </span>
+                    aria-hidden="true"
+                    className="h-[7px] w-[7px] flex-none rounded-full"
+                    style={{
+                      backgroundColor:
+                        group === 'needs-you' ? 'var(--beacon)' : 'var(--jade)',
+                    }}
+                  />
                 )}
+                <CoordinatorBadge badge={slot.badge} ownLine />
+                <span className="truncate">
+                  {rowMeta(agentName(mode), state)}
+                </span>
               </span>
             </button>
           </div>
@@ -199,12 +204,22 @@ export function SessionSwitcher({
     [onSwitchTo],
   )
 
+  useEffect(() => {
+    if (!isOpen) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsOpen(false)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [isOpen])
+
   const list = (
     <div
       data-testid="session-list"
       className="overflow-y-auto overscroll-contain px-2 pb-3"
       style={{
-        maxHeight: isMobile ? 'calc(70vh - 3.5rem)' : '70vh',
+        maxHeight: isMobile ? undefined : '70vh',
+        flex: isMobile ? '1 1 auto' : undefined,
         WebkitOverflowScrolling: 'touch',
         overscrollBehavior: 'contain',
         scrollbarGutter: 'stable',
@@ -221,17 +236,20 @@ export function SessionSwitcher({
   )
 
   return (
-    <div ref={triggerRef} className="relative flex min-w-0 items-center gap-1">
+    <div ref={triggerRef} className="relative flex min-w-0 items-center">
       <button
         type="button"
         data-testid="session-switcher"
         onClick={() => setIsOpen(!isOpen)}
         className={clsx(
-          'flex min-w-0 items-center gap-1 px-1.5 py-0.5 rounded text-xs transition-all duration-150',
-          isMobile ? 'max-w-[60vw]' : 'max-w-[420px]',
-          'hover:bg-[var(--term-bg-elevated)]',
+          'flex min-w-0 items-center gap-1.5 rounded-md px-1.5 py-1 transition-colors hover:bg-[var(--paper-veil)]',
+          isMobile ? 'max-w-full' : 'max-w-[460px]',
         )}
-        style={{ color: 'var(--term-text-primary)' }}
+        style={{
+          color: 'var(--bone)',
+          font: '450 15px/1.2 var(--font-display)',
+          letterSpacing: '0.01em',
+        }}
         title={currentName}
         aria-label={`Sessions. Open: ${currentName}${currentSlot.badge ? ` (${currentSlot.badge.label})` : ''}`}
         aria-haspopup="dialog"
@@ -241,10 +259,12 @@ export function SessionSwitcher({
         <SessionTitle name={currentName} task={currentSlot.task} />
         <NeedsYouCount count={needsYouCount} />
         <ChevronDown
+          aria-hidden="true"
           className={clsx(
-            'w-3 h-3 flex-shrink-0 transition-transform',
+            'h-3.5 w-3.5 flex-shrink-0 transition-transform',
             isOpen && 'rotate-180',
           )}
+          style={{ color: 'var(--mist)' }}
         />
       </button>
 
@@ -253,12 +273,7 @@ export function SessionSwitcher({
           ref={listRef}
           role="dialog"
           aria-label="Sessions"
-          className="absolute left-0 top-full mt-1 z-50 w-[360px] max-w-[90vw] rounded-md pt-2 shadow-lg animate-in fade-in slide-in-from-top-1 duration-100"
-          style={{
-            backgroundColor: 'var(--term-bg-surface)',
-            border: '1px solid var(--term-border-active)',
-            boxShadow: 'var(--term-shadow-dropdown)',
-          }}
+          className="lantern-sheet lantern-enter absolute left-0 top-full z-50 mt-1.5 w-[380px] max-w-[90vw] rounded-xl pt-1"
         >
           {list}
         </div>
@@ -278,28 +293,25 @@ export function SessionSwitcher({
             <button
               type="button"
               aria-label="Close sessions"
-              className="absolute inset-0 bg-black/50"
+              className="absolute inset-0"
+              style={{ backgroundColor: 'var(--scrim)' }}
               onClick={close}
             />
             <div
               ref={listRef}
-              className="relative z-[91] max-h-[70vh] w-full overflow-hidden rounded-t-2xl border-t animate-in slide-in-from-bottom-3 duration-150"
-              style={{
-                backgroundColor: 'var(--term-bg-surface)',
-                borderColor: 'var(--term-border-active)',
-                boxShadow: 'var(--term-shadow-dropdown)',
-              }}
+              className="lantern-sheet lantern-rise relative z-[91] flex max-h-[84dvh] w-full flex-col overflow-hidden rounded-t-[14px]"
             >
               <div
-                className="mx-auto mt-2 h-1.5 w-12 rounded-full"
-                style={{ backgroundColor: 'var(--term-border)' }}
+                aria-hidden="true"
+                className="mx-auto mt-2 h-1 w-9 flex-none rounded-full"
+                style={{ backgroundColor: 'var(--paper-veil)' }}
               />
-              <div
-                className="px-4 py-3 text-[11px] uppercase tracking-wide"
-                style={{ color: 'var(--term-text-muted)' }}
+              <h2
+                className="flex-none px-[18px] pt-3 pb-1"
+                style={{ font: '500 18px/1.2 var(--font-display)' }}
               >
                 Sessions
-              </div>
+              </h2>
               {list}
             </div>
           </div>,

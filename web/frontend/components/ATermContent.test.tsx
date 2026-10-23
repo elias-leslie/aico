@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ATermContent, type ATermContentProps } from './ATermContent'
 
 vi.mock('./AgentShowToast', () => ({ AgentShows: () => null }))
-vi.mock('./SettingsDropdown', () => ({ SettingsDropdown: () => null }))
 vi.mock('./a-term-content/ATermMobileSection', () => ({
   ATermMobileSection: () => null,
 }))

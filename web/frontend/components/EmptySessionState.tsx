@@ -1,6 +1,7 @@
 'use client'
 
-import { Plus } from 'lucide-react'
+import { Plus, RotateCcw } from 'lucide-react'
+import { usePaneListError } from '@/lib/hooks/use-a-term-panes'
 import { useSessionAttention } from '@/lib/hooks/use-session-attention'
 import type { ATermSlot, PaneSlot } from '@/lib/utils/slot'
 import { SessionList } from './SessionSwitcher'
@@ -21,41 +22,59 @@ export function EmptySessionState({
   onNewSession,
 }: EmptySessionStateProps) {
   const attention = useSessionAttention()
+  const { isError, retry } = usePaneListError()
+  const failed = isError && slots.length === 0
   return (
     <div
-      className="w-full h-full overflow-y-auto p-4"
-      style={{ backgroundColor: 'var(--term-bg-deep)' }}
+      className="h-full w-full overflow-y-auto p-4"
+      style={{ backgroundColor: 'var(--rim)' }}
     >
-      <div className="mx-auto flex max-w-md flex-col gap-4 pt-[10vh]">
-        <p
-          className="text-center text-sm"
-          style={{ color: 'var(--term-text-muted)' }}
-        >
-          No session open.
-        </p>
-        <button
-          type="button"
-          onClick={onNewSession}
-          className="mx-auto flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors"
-          style={{
-            backgroundColor: 'var(--term-bg-elevated)',
-            border: '1px solid var(--term-border-active)',
-            color: 'var(--term-text-primary)',
-          }}
-        >
-          <Plus className="h-4 w-4" style={{ color: 'var(--term-accent)' }} />
-          New session
-        </button>
-        {slots.length > 0 && onOpen && (
-          <section aria-label="Running sessions">
-            <SessionList
-              slots={slots}
-              attention={attention}
-              onSelect={onOpen}
-            />
-          </section>
+      <div className="mx-auto flex max-w-md flex-col items-center gap-3 pt-[12vh] text-center">
+        {failed ? (
+          <>
+            <p
+              role="alert"
+              style={{
+                font: '450 17px/1.25 var(--font-display)',
+                color: 'var(--bone)',
+              }}
+            >
+              Couldn't load your sessions.
+            </p>
+            <button type="button" onClick={retry} className="lantern-btn">
+              <RotateCcw className="h-4 w-4" strokeWidth={1.7} />
+              Try again
+            </button>
+          </>
+        ) : (
+          <>
+            <p
+              style={{
+                font: '450 17px/1.25 var(--font-display)',
+                color: 'var(--bone)',
+              }}
+            >
+              No session open.
+            </p>
+            <button
+              type="button"
+              onClick={onNewSession}
+              className="lantern-btn primary"
+            >
+              <Plus className="h-4 w-4" strokeWidth={1.7} />
+              New session
+            </button>
+          </>
         )}
       </div>
+      {slots.length > 0 && onOpen && (
+        <section
+          aria-label="Running sessions"
+          className="mx-auto mt-6 max-w-md"
+        >
+          <SessionList slots={slots} attention={attention} onSelect={onOpen} />
+        </section>
+      )}
     </div>
   )
 }

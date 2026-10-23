@@ -57,7 +57,7 @@ export function LoginScreen({ authMode }: LoginScreenProps) {
       style={{ backgroundColor: 'var(--term-bg-deep)' }}
     >
       <div
-        className="w-full max-w-md rounded-[2rem] border px-6 py-7 shadow-[0_24px_72px_rgba(0,0,0,0.34)]"
+        className="w-full max-w-md rounded-xl border px-6 py-7 shadow-[var(--term-shadow-modal)]"
         style={{
           borderColor: 'var(--term-border)',
           backgroundColor: 'var(--term-bg-surface)',
@@ -73,10 +73,9 @@ export function LoginScreen({ authMode }: LoginScreenProps) {
           {PRODUCT_NAME} access
         </div>
         <h1
-          className="text-2xl font-semibold"
           style={{
-            color: 'var(--term-text-primary)',
-            fontFamily: 'var(--font-ui)',
+            color: 'var(--bone)',
+            font: '500 24px/1.2 var(--font-display)',
           }}
         >
           Sign in

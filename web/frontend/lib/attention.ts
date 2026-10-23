@@ -28,6 +28,8 @@ export interface Attention {
   at: number | null
   /** State and age, e.g. `waiting 3m`, `done 1m`. */
   detail: string | null
+  /** Time since the activity began, e.g. `3m`, or null. */
+  age: string | null
 }
 
 type ActivitySession = Pick<
@@ -71,8 +73,9 @@ export function attentionOf(
         : activity === 'working' || activity === 'idle'
           ? activity
           : null
-  const detail = word && at ? `${word} ${formatAge(now - at)}` : word
-  return { group, activity, at, detail }
+  const age = at ? formatAge(now - at) : null
+  const detail = word && age ? `${word} ${age}` : word
+  return { group, activity, at, detail, age }
 }
 
 const RANK: Record<AttentionGroup, number> = {

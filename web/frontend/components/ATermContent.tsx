@@ -6,7 +6,6 @@ import { ATermFileSection } from './a-term-content/ATermFileSection'
 import { ATermMobileSection } from './a-term-content/ATermMobileSection'
 import type { ATermContentProps } from './a-term-content/types'
 import { NativeKeyboardInput } from './keyboard/NativeKeyboardInput'
-import { SettingsDropdown } from './SettingsDropdown'
 
 export type { ATermContentProps }
 
@@ -21,9 +20,7 @@ const COMPOSE_OPEN_KEY = 'a-term-compose-open'
 export function ATermContent({
   aTermSlots,
   fontSize,
-  showSettings,
   setFontSize,
-  setShowSettings,
   isMobile,
   setATermRef,
   handleStatusChange,
@@ -31,7 +28,6 @@ export function ATermContent({
   onSlotSwitch,
   onSlotReset,
   onSlotCloseSession,
-  handleOpenSettings,
   handleOpenATermManager,
   handleUploadClick,
   onModeSwitch,
@@ -49,7 +45,6 @@ export function ATermContent({
   activeStatus,
   handleKeyboardInput,
   handleComposeInput,
-  handleReconnect,
   showVoice,
   isVoiceSupported,
   voiceFinalTranscript,
@@ -87,15 +82,6 @@ export function ATermContent({
       )}
     >
       <AgentShows />
-      {/* Settings dropdown - all settings controls */}
-      <SettingsDropdown
-        fontSize={fontSize}
-        setFontSize={setFontSize}
-        showSettings={showSettings}
-        setShowSettings={setShowSettings}
-        renderTrigger={false}
-      />
-
       {/* A-Term panels, file upload input, and upload status toasts */}
       <ATermFileSection
         aTermSlots={aTermSlots}
@@ -106,7 +92,7 @@ export function ATermContent({
         onSlotSwitch={onSlotSwitch}
         onSlotReset={onSlotReset}
         onSlotCloseSession={onSlotCloseSession}
-        handleOpenSettings={handleOpenSettings}
+        setFontSize={setFontSize}
         handleOpenATermManager={handleOpenATermManager}
         handleUploadClick={handleUploadClick}
         onModeSwitch={onModeSwitch}
@@ -132,7 +118,6 @@ export function ATermContent({
         activeMode={activeMode}
         handleKeyboardInput={handleKeyboardInput}
         handleComposeInput={handleComposeInput}
-        handleReconnect={handleReconnect}
         isVoiceSupported={isVoiceSupported}
         handleVoiceOpen={handleVoiceOpen}
         showVoice={showVoice}

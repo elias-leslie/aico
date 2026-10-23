@@ -10,7 +10,7 @@ const { renamePane, updateSession } = vi.hoisted(() => ({
 }))
 
 vi.mock('@/lib/hooks/use-agent-tools', () => ({
-  useAgentTools: () => ({ enabledTools: [] }),
+  useAgentTools: () => ({ enabledTools: [], agentTools: [] }),
 }))
 
 vi.mock('@/lib/hooks/use-a-term-panes', () => ({

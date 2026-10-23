@@ -1,35 +1,28 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { PaneStatusBadge, shouldShowPaneStatus } from './PaneStatusBadge'
+import { PaneStatusBadge } from './PaneStatusBadge'
 
 describe('PaneStatusBadge', () => {
-  it('stays hidden for connected panes', () => {
+  it('says Live while connected', () => {
     render(<PaneStatusBadge status="connected" />)
-
-    expect(screen.queryByLabelText(/Pane status:/i)).not.toBeInTheDocument()
-    expect(
-      screen.queryByLabelText(/Reconnect session/i),
-    ).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Live')
   })
 
-  it('renders reconnect affordance for disconnected panes', () => {
+  it('says Connecting while it connects', () => {
+    render(<PaneStatusBadge status="connecting" onReconnect={vi.fn()} />)
+    expect(screen.getByRole('status')).toHaveTextContent('Connecting')
+    expect(screen.queryByRole('button')).toBeNull()
+  })
+
+  it('offers Reconnect after a transient failure', () => {
     const onReconnect = vi.fn()
-
     render(<PaneStatusBadge status="disconnected" onReconnect={onReconnect} />)
-
-    expect(
-      screen.getByRole('button', { name: 'Reconnect session' }),
-    ).toBeInTheDocument()
-  })
-})
-
-describe('shouldShowPaneStatus', () => {
-  it('hides healthy connected state', () => {
-    expect(shouldShowPaneStatus('connected')).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: 'Reconnect session' }))
+    expect(onReconnect).toHaveBeenCalledTimes(1)
   })
 
-  it('keeps unhealthy states visible', () => {
-    expect(shouldShowPaneStatus('disconnected')).toBe(true)
-    expect(shouldShowPaneStatus('error')).toBe(true)
+  it('names the failure when there is no way to reconnect', () => {
+    render(<PaneStatusBadge status="timeout" />)
+    expect(screen.getByRole('status')).toHaveTextContent('Timed out')
   })
 })

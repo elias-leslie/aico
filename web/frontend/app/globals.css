@@ -47,11 +47,14 @@
 }
 
 html,
-body {
-  overflow: hidden;
+html {
+  color-scheme: dark;
+  scrollbar-color: var(--paper-veil) transparent;
+  scrollbar-width: thin;
 }
 
 body {
+  overflow: hidden;
   background: var(--rim);
   color: var(--bone);
   font: 14px / 1.4 var(--font-ui);
@@ -172,8 +175,8 @@ select {
   display: inline-grid;
   place-items: center;
   flex: none;
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   border: none;
   border-radius: 8px;
   background: transparent;
@@ -190,8 +193,8 @@ select {
 }
 
 .lantern-icon-btn.compact {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
 }
 
 .lantern-field {
@@ -252,6 +255,95 @@ select {
 /* Ember text on umber is under 4.5:1: danger shows in the icon only. */
 .lantern-menu-item.danger svg {
   color: var(--ember);
+}
+
+/* New session picker. */
+.lantern-seg {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--paper-veil);
+  border-radius: 8px;
+  background: rgb(var(--ink-rgb) / 0.86);
+}
+
+.lantern-seg button {
+  height: 34px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--mist);
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.lantern-seg button[aria-pressed="true"] {
+  background: var(--paper-veil);
+  color: var(--bone);
+}
+
+.lantern-tools {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.lantern-tool {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--paper-veil);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--bone);
+  font-size: 13.5px;
+  text-align: left;
+}
+
+.lantern-tool[aria-pressed="true"] {
+  border-color: var(--lantern);
+  background: rgb(var(--lantern-rgb) / 0.1);
+}
+
+.lantern-choice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 48px;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--bone);
+  text-align: left;
+}
+
+.lantern-choice:hover {
+  background: var(--paper);
+}
+
+.lantern-choice[aria-checked="true"] {
+  background: var(--paper-veil);
+}
+
+.lantern-choice .radio {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--mist);
+  border-radius: 50%;
+}
+
+.lantern-choice[aria-checked="true"] .radio {
+  border-color: var(--lantern);
+  box-shadow:
+    inset 0 0 0 3.5px var(--rim),
+    inset 0 0 0 8px var(--lantern);
 }
 
 /* Session rows. */
