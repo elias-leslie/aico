@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { LANTERN_TERMINAL_THEME } from './a-term'
 import { LANTERN_MONO_FAMILY, LANTERN_RIM } from './lantern'
+import { LANTERN_TERMINAL_THEME } from './terminal'
 
 const read = (path: string) =>
   readFileSync(new URL(path, import.meta.url), 'utf8')

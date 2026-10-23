@@ -241,7 +241,7 @@ const ICON_MAP: Record<string, (props: MarkProps) => JSX.Element> = {
 }
 
 /** Default brand-suggestive colors per agent slug.
- *  Spectrally distinct on a dark a-term canvas. */
+ *  Spectrally distinct on a dark terminal canvas. */
 export const AGENT_DEFAULT_COLORS: Record<string, string> = {
   agy: '#3186FF', // Antigravity blue
   'claude-code': '#D97757', // Claude terracotta

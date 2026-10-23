@@ -6,7 +6,7 @@
 // open (localStorage). A blocked session is "needs you" until it is opened; a
 // turn that finished since it was last open is "finished".
 
-import type { ATermSession } from './hooks/use-a-term-sessions'
+import type { TerminalSession } from './hooks/use-terminal-sessions'
 
 export type Activity = 'working' | 'idle' | 'blocked' | 'unknown'
 export type AttentionGroup = 'needs-you' | 'finished' | 'working' | 'idle'
@@ -33,7 +33,7 @@ export interface Attention {
 }
 
 type ActivitySession = Pick<
-  ATermSession,
+  TerminalSession,
   'activity' | 'activity_previous' | 'activity_at'
 >
 

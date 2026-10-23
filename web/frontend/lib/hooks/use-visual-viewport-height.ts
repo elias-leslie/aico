@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react'
 
-const VIEWPORT_HEIGHT_VAR = '--a-term-viewport-height'
+const VIEWPORT_HEIGHT_VAR = '--terminal-viewport-height'
 
 function getViewportHeight(): number {
   return window.visualViewport?.height ?? window.innerHeight

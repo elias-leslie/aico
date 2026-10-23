@@ -10,11 +10,11 @@ import {
   Type,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  A_TERM_FONT_SIZES,
-  type ATermFontSize,
-} from '@/lib/hooks/use-a-term-settings'
 import { useClickOutside } from '@/lib/hooks/use-click-outside'
+import {
+  TERMINAL_FONT_SIZES,
+  type TerminalFontSize,
+} from '@/lib/hooks/use-terminal-settings'
 import { MenuItemButton } from './MenuItemButton'
 
 export interface PaneOverflowMenuProps {
@@ -24,8 +24,8 @@ export interface PaneOverflowMenuProps {
   onUpload?: () => void
   onRename?: () => void
   /** Text size, the one type setting; shown as a stepper when given. */
-  fontSize?: ATermFontSize
-  onFontSizeChange?: (size: ATermFontSize) => void
+  fontSize?: TerminalFontSize
+  onFontSizeChange?: (size: TerminalFontSize) => void
   isMobile?: boolean
 }
 
@@ -71,9 +71,9 @@ export function PaneOverflowMenu({
   )
 
   const sizeIndex =
-    fontSize === undefined ? -1 : A_TERM_FONT_SIZES.indexOf(fontSize)
+    fontSize === undefined ? -1 : TERMINAL_FONT_SIZES.indexOf(fontSize)
   const stepSize = (step: number) => {
-    const next = A_TERM_FONT_SIZES[sizeIndex + step]
+    const next = TERMINAL_FONT_SIZES[sizeIndex + step]
     if (next !== undefined) onFontSizeChange?.(next)
   }
   const hasSessionActions = !!(onRename || onReset || onRefresh)
@@ -145,7 +145,7 @@ export function PaneOverflowMenu({
                   className="lantern-btn"
                   style={{ width: 30, height: 30, padding: 0 }}
                   aria-label="Larger text"
-                  disabled={sizeIndex >= A_TERM_FONT_SIZES.length - 1}
+                  disabled={sizeIndex >= TERMINAL_FONT_SIZES.length - 1}
                   onClick={() => stepSize(1)}
                 >
                   +

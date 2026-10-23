@@ -15,14 +15,14 @@ import {
 } from './keyMappings'
 import { useModifiers } from './ModifierContext'
 import {
-  type ATermInputHandler,
   KEY_ROW_METRICS,
   keepKeyboardOpen,
   remSize,
+  type TerminalInputHandler,
 } from './types'
 
 interface ControlBarProps {
-  onSend: ATermInputHandler
+  onSend: TerminalInputHandler
   onArrow?: (
     direction: ArrowDirection,
     modifiers: { shift: boolean; ctrl: boolean; alt: boolean },

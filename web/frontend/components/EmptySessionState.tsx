@@ -1,15 +1,15 @@
 'use client'
 
 import { Plus, RotateCcw } from 'lucide-react'
-import { usePaneListError } from '@/lib/hooks/use-a-term-panes'
 import { useSessionAttention } from '@/lib/hooks/use-session-attention'
-import type { ATermSlot, PaneSlot } from '@/lib/utils/slot'
+import { usePaneListError } from '@/lib/hooks/use-terminal-panes'
+import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
 import { SessionList } from './SessionSwitcher'
 
 interface EmptySessionStateProps {
   /** Running sessions the user can open. */
-  slots: Array<ATermSlot | PaneSlot>
-  onOpen?: (slot: ATermSlot | PaneSlot) => void
+  slots: Array<TerminalSlot | PaneSlot>
+  onOpen?: (slot: TerminalSlot | PaneSlot) => void
   onNewSession?: () => void
 }
 

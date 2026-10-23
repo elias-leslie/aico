@@ -282,7 +282,7 @@ export function buildApi(deps: ApiDeps): Router {
       id,
       name: project?.name ?? id,
       root_path: project?.root ?? null,
-      a_term_enabled: own?.enabled ?? false,
+      enabled: own?.enabled ?? false,
       mode: own?.active_mode ?? SHELL_MODE,
       display_order: own?.display_order ?? 0,
     }

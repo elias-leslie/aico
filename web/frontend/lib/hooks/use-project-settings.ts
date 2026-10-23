@@ -12,7 +12,7 @@ export interface ProjectSetting {
   id: string
   name: string
   root_path: string | null
-  a_term_enabled: boolean
+  enabled: boolean
   mode: string // Active mode (shell or agent tool slug)
   display_order: number
 }
@@ -57,13 +57,13 @@ export function useProjectSettings() {
     error,
     refetch,
   } = useQuery({
-    queryKey: ['a-term-projects'],
+    queryKey: ['terminal-projects'],
     queryFn: fetchProjects,
     staleTime: 30000, // Consider fresh for 30s
   })
   // Derived: only enabled projects, sorted by display_order
   const enabledProjects = projects
-    .filter((p) => p.a_term_enabled)
+    .filter((p) => p.enabled)
     .sort((a, b) => a.display_order - b.display_order)
 
   // Mutation: switch project mode
@@ -72,13 +72,13 @@ export function useProjectSettings() {
       switchProjectMode(projectId, mode),
     onMutate: async ({ projectId, mode }) => {
       // Cancel any outgoing refetches
-      await queryClient.cancelQueries({ queryKey: ['a-term-projects'] })
+      await queryClient.cancelQueries({ queryKey: ['terminal-projects'] })
       // Snapshot the previous value
       const previousProjects = queryClient.getQueryData<ProjectSetting[]>([
-        'a-term-projects',
+        'terminal-projects',
       ])
       // Optimistically update to the new mode
-      queryClient.setQueryData<ProjectSetting[]>(['a-term-projects'], (old) =>
+      queryClient.setQueryData<ProjectSetting[]>(['terminal-projects'], (old) =>
         old?.map((p) => (p.id === projectId ? { ...p, mode: mode } : p)),
       )
       return { previousProjects }
@@ -86,12 +86,15 @@ export function useProjectSettings() {
     onError: (_err, _variables, context) => {
       // Rollback on error
       if (context?.previousProjects) {
-        queryClient.setQueryData(['a-term-projects'], context.previousProjects)
+        queryClient.setQueryData(
+          ['terminal-projects'],
+          context.previousProjects,
+        )
       }
     },
     onSettled: () => {
       // Always refetch to ensure consistency
-      queryClient.invalidateQueries({ queryKey: ['a-term-projects'] })
+      queryClient.invalidateQueries({ queryKey: ['terminal-projects'] })
     },
   })
 

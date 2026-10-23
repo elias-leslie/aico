@@ -9,9 +9,12 @@ import {
   seenSnapshot,
   subscribeSeen,
 } from '../attention'
-import type { ATermSlot, PaneSlot } from '../utils/slot'
+import type { PaneSlot, TerminalSlot } from '../utils/slot'
 import { getSlotSessionId, isPaneSlot } from '../utils/slot'
-import { type ATermSession, useATermSessions } from './use-a-term-sessions'
+import {
+  type TerminalSession,
+  useTerminalSessions,
+} from './use-terminal-sessions'
 
 const EMPTY_SEEN: Record<string, number> = {}
 const AGE_TICK_MS = 30_000
@@ -27,9 +30,9 @@ function useNow(intervalMs: number): number {
 
 /** Sessions that belong to a slot: every session of its pane, else its own. */
 export function slotSessions(
-  slot: ATermSlot | PaneSlot,
-  sessions: readonly ATermSession[],
-): ATermSession[] {
+  slot: TerminalSlot | PaneSlot,
+  sessions: readonly TerminalSession[],
+): TerminalSession[] {
   if (isPaneSlot(slot)) {
     const inPane = sessions.filter((s) => s.pane_id === slot.paneId)
     if (inPane.length) return inPane
@@ -40,16 +43,16 @@ export function slotSessions(
 
 export interface SessionAttention {
   /** A slot's most urgent session state, or null when unknown. */
-  forSlot(slot: ATermSlot | PaneSlot): Attention | null
+  forSlot(slot: TerminalSlot | PaneSlot): Attention | null
   /** Sessions that need the owner now. */
   needsYouCount: number
 }
 
-const NO_SESSIONS: ATermSession[] = []
+const NO_SESSIONS: TerminalSession[] = []
 
 export function useSessionAttention(): SessionAttention {
   const sessions =
-    useATermSessions({ includeDetached: true }).sessions ?? NO_SESSIONS
+    useTerminalSessions({ includeDetached: true }).sessions ?? NO_SESSIONS
   const seen = useSyncExternalStore(
     subscribeSeen,
     seenSnapshot,
@@ -82,7 +85,7 @@ export function useSessionAttention(): SessionAttention {
  */
 export function useMarkActiveSeen(activeSessionId: string | null): void {
   const sessions =
-    useATermSessions({ includeDetached: true }).sessions ?? NO_SESSIONS
+    useTerminalSessions({ includeDetached: true }).sessions ?? NO_SESSIONS
   const active = sessions.find((s) => s.id === activeSessionId)
   const paneSessions = useMemo(
     () =>

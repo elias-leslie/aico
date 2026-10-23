@@ -2,9 +2,9 @@
 
 import { useEffect } from 'react'
 import {
-  type ATermSlot,
   getSlotSessionId,
   type PaneSlot,
+  type TerminalSlot,
 } from '@/lib/utils/slot'
 
 interface Shortcut {
@@ -40,9 +40,9 @@ function isTyping(target: EventTarget | null): boolean {
 
 /** Registers the session-switching shortcuts over the switcher's sessions. */
 export function useSessionShortcuts(
-  slots: Array<ATermSlot | PaneSlot>,
+  slots: Array<TerminalSlot | PaneSlot>,
   activeSessionId: string | null,
-  onSwitch: (slot: ATermSlot | PaneSlot) => void,
+  onSwitch: (slot: TerminalSlot | PaneSlot) => void,
 ) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

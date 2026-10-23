@@ -3,14 +3,14 @@
 import { useEffect, useState } from 'react'
 import type { AgentTool } from '@/lib/hooks/use-agent-tools'
 import { AgentIcon, getAgentColor } from './AgentIcon'
-import type { ATermMode } from './ModeToggle'
+import type { TerminalMode } from './ModeToggle'
 
 interface ModeTogglePopoverProps {
   buttonRef: React.RefObject<HTMLButtonElement | null>
-  value: ATermMode
+  value: TerminalMode
   agentTools: AgentTool[]
   onClose: () => void
-  onSelectMode: (mode: ATermMode) => void
+  onSelectMode: (mode: TerminalMode) => void
 }
 
 export function ModeTogglePopover({

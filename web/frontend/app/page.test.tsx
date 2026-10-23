@@ -8,8 +8,8 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => searchParams.current,
 }))
 
-vi.mock('@/components/ATermTabs', () => ({
-  ATermTabs: ({
+vi.mock('@/components/TerminalTabs', () => ({
+  TerminalTabs: ({
     projectId,
     projectPath,
     className,
@@ -19,7 +19,7 @@ vi.mock('@/components/ATermTabs', () => ({
     className?: string
   }) => (
     <div
-      data-testid="a-term-tabs"
+      data-testid="terminal-tabs"
       data-class-name={className ?? ''}
       data-project-id={projectId ?? ''}
       data-project-path={projectPath ?? ''}
@@ -32,14 +32,14 @@ describe('Home page', () => {
     searchParams.current = new URLSearchParams()
   })
 
-  it('passes the query to ATermTabs', () => {
+  it('passes the query to TerminalTabs', () => {
     searchParams.current = new URLSearchParams(
       'project=agent-hub&dir=/home/demo/projects/agent-hub',
     )
 
     render(<Home />)
 
-    const tabs = screen.getByTestId('a-term-tabs')
+    const tabs = screen.getByTestId('terminal-tabs')
     expect(tabs).toHaveAttribute('data-project-id', 'agent-hub')
     expect(tabs).toHaveAttribute(
       'data-project-path',
@@ -55,7 +55,7 @@ describe('Home page', () => {
 
     render(<Home />)
 
-    const tabs = screen.getByTestId('a-term-tabs')
+    const tabs = screen.getByTestId('terminal-tabs')
     expect(tabs).toHaveAttribute('data-project-id', 'portfolio-ai')
     expect(tabs).toHaveAttribute(
       'data-project-path',

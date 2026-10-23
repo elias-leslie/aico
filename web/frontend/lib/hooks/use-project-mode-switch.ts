@@ -4,13 +4,13 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { type MutableRefObject, useCallback } from 'react'
 import { getAgentState } from '../utils/agent-state'
-import type { ATermPane } from './use-a-term-panes'
-import type { ATermSession } from './use-a-term-sessions'
 import { useAgentPolling } from './use-agent-polling'
+import type { TerminalPane } from './use-terminal-panes'
+import type { TerminalSession } from './use-terminal-sessions'
 
 /** Pane list response type for query cache access */
 interface PaneListResponse {
-  items: ATermPane[]
+  items: TerminalPane[]
   total: number
 }
 
@@ -21,24 +21,24 @@ interface SwitchProjectModeParams {
   projectId: string
   mode: string
   /** All sessions for this project */
-  projectSessions: ATermSession[]
+  projectSessions: TerminalSession[]
   /** Pane ID if available (for direct pane mode switching) */
   paneId?: string
   /** Concrete pane snapshot for just-created or just-attached panes */
-  pane?: ATermPane
+  pane?: TerminalPane
 }
 
 interface UseProjectModeSwitchOptions {
-  /** Function to switch mode in backend (from useProjectATerms) */
+  /** Function to switch mode in backend (from useProjectTerminals) */
   switchMode: (projectId: string, mode: string) => Promise<void>
   /** Refs to project tabs for scroll-into-view */
   projectTabRefs: MutableRefObject<Map<string, HTMLDivElement>>
   /** Panes array (new architecture) */
-  panes: ATermPane[]
+  panes: TerminalPane[]
   /** Function to set active mode on a pane */
-  setActiveMode: (paneId: string, mode: string) => Promise<ATermPane>
+  setActiveMode: (paneId: string, mode: string) => Promise<TerminalPane>
   /** Function to switch agent tool on a pane (kills old tmux, creates new session) */
-  switchAgentTool?: (paneId: string, slug: string) => Promise<ATermPane>
+  switchAgentTool?: (paneId: string, slug: string) => Promise<TerminalPane>
 }
 
 interface UseProjectModeSwitchReturn {
@@ -116,10 +116,10 @@ export function useProjectModeSwitch({
       // This is critical after operations like Close All where the panes array
       // in the closure may be outdated
       const freshPanesData = queryClient.getQueryData<PaneListResponse>([
-        'a-term-panes',
+        'terminal-panes',
       ])
       const freshDetachedPanesData = queryClient.getQueryData<PaneListResponse>(
-        ['a-term-detached-panes'],
+        ['terminal-detached-panes'],
       )
       const freshPanes = [
         ...(freshPanesData?.items ?? panes),
@@ -144,7 +144,7 @@ export function useProjectModeSwitch({
           currentAgentSession.mode !== mode &&
           switchAgentTool
 
-        let updatedPane: ATermPane
+        let updatedPane: TerminalPane
 
         if (isAgentToAgentSwitch) {
           // Switching between agent tools: replace the agent session entirely.

@@ -1,16 +1,16 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ConnectionStatus } from '../ATerm'
+import type { ConnectionStatus } from '../Terminal'
 import { ControlBar } from './ControlBar'
 import { moveComposeCaret } from './composeNavigation'
 import type { ArrowDirection } from './keyMappings'
 import { ModifierProvider } from './ModifierContext'
 import { isComposePending, NativeKeyboardInput } from './NativeKeyboardInput'
-import type { ATermInputHandler } from './types'
+import type { TerminalInputHandler } from './types'
 
 interface MobileKeyboardProps {
-  onSend: ATermInputHandler
+  onSend: TerminalInputHandler
   sessionId: string | null | undefined
   onCompose: (
     sessionId: string,

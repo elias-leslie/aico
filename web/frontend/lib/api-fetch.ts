@@ -1,5 +1,5 @@
 /**
- * Fetch wrapper with standard error handling for A-Term API calls.
+ * Fetch wrapper with standard error handling for web app API calls.
  * Parses error details from JSON responses and throws with the detail message.
  */
 export async function apiFetch<T>(

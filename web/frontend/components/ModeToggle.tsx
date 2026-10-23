@@ -7,12 +7,12 @@ import type { AgentTool } from '@/lib/hooks/use-agent-tools'
 import { AgentIcon, getAgentColor } from './AgentIcon'
 import { ModeTogglePopover } from './ModeTogglePopover'
 
-/** Mode is either 'shell' for a-term mode, or an agent tool slug */
-export type ATermMode = string
+/** Mode is either 'shell' for terminal mode, or an agent tool slug */
+export type TerminalMode = string
 
 interface ModeToggleProps {
-  value: ATermMode
-  onChange: (mode: ATermMode) => void | Promise<void>
+  value: TerminalMode
+  onChange: (mode: TerminalMode) => void | Promise<void>
   disabled?: boolean
   isMobile?: boolean
   /** External loading state - when true, toggle is disabled and shows spinner */
@@ -83,7 +83,9 @@ export const ModeToggle = memo(function ModeToggle({
         return
       }
       if (!isAgentMode && !defaultTool) return
-      const oppositeMode: ATermMode = isAgentMode ? 'shell' : defaultTool.slug
+      const oppositeMode: TerminalMode = isAgentMode
+        ? 'shell'
+        : defaultTool.slug
       setInternalLoading(true)
       try {
         await onChange(oppositeMode)
@@ -97,7 +99,7 @@ export const ModeToggle = memo(function ModeToggle({
   )
 
   const handleSelectMode = useCallback(
-    async (mode: ATermMode) => {
+    async (mode: TerminalMode) => {
       setShowPopover(false)
       if (mode === value) return
       setInternalLoading(true)

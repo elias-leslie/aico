@@ -2,8 +2,8 @@
  * Slot helper utilities for discriminated union access, and the one mapper
  * from a session to the Slot the UI renders.
  *
- * PaneSlot (pane-based) is the primary type. ATermSlot (session-based)
- * exists only for sessions shown without an A-Term pane here: a free-standing
+ * PaneSlot (pane-based) is the primary type. TerminalSlot (session-based)
+ * exists only for sessions shown without a web app pane here: a free-standing
  * View, or a session whose pane is not loaded in this window.
  *
  * Every Slot is built by `paneToSlot` or `sessionToSlot`. What a Slot may do
@@ -11,8 +11,8 @@
  * permission from `source` or `is_root`.
  */
 
-import type { ATermPane } from '@/lib/hooks/use-a-term-panes'
-import type { ATermSession } from '@/lib/hooks/use-a-term-sessions'
+import type { TerminalPane } from '@/lib/hooks/use-terminal-panes'
+import type { TerminalSession } from '@/lib/hooks/use-terminal-sessions'
 import { getAgentState } from './agent-state'
 import {
   type CoordinatorBadgeInfo,
@@ -40,7 +40,7 @@ interface SlotSessionFields {
   showsSessionTitle: boolean
 }
 
-// Slot types for split-pane A-Term sessions
+// Slot types for split-pane terminal sessions
 export interface ProjectSlot extends SlotSessionFields {
   slotId?: string
   type: 'project'
@@ -63,18 +63,18 @@ export interface AdHocSlot extends SlotSessionFields {
   name: string
   workingDir: string | null
   sessionMode?: string
-  /** A free-standing View: no A-Term pane shows this session. */
+  /** A free-standing View: no web app pane shows this session. */
   isExternal?: boolean
 }
 
-export type ATermSlot = ProjectSlot | AdHocSlot
+export type TerminalSlot = ProjectSlot | AdHocSlot
 
 /**
  * Get the active session ID for a slot.
  * For project slots, returns the active session ID.
- * Works with both ATermSlot and PaneSlot.
+ * Works with both TerminalSlot and PaneSlot.
  */
-export function getSlotSessionId(slot: ATermSlot | PaneSlot): string | null {
+export function getSlotSessionId(slot: TerminalSlot | PaneSlot): string | null {
   if (slot.type === 'project') {
     return slot.activeSessionId
   }
@@ -84,7 +84,7 @@ export function getSlotSessionId(slot: ATermSlot | PaneSlot): string | null {
 /**
  * Get a unique panel ID for a slot.
  */
-export function getSlotPanelId(slot: ATermSlot | PaneSlot): string {
+export function getSlotPanelId(slot: TerminalSlot | PaneSlot): string {
   if (slot.slotId) {
     return slot.slotId
   }
@@ -100,7 +100,7 @@ export function getSlotPanelId(slot: ATermSlot | PaneSlot): string {
 /**
  * Get display name for a slot (includes badge if applicable).
  */
-export function getSlotName(slot: ATermSlot | PaneSlot): string {
+export function getSlotName(slot: TerminalSlot | PaneSlot): string {
   if (slot.type === 'project') {
     const badge = slot.sessionBadge
     if (badge !== null && badge > 1) {
@@ -114,7 +114,7 @@ export function getSlotName(slot: ATermSlot | PaneSlot): string {
 /**
  * Get base project name without badge.
  */
-export function getSlotBaseName(slot: ATermSlot | PaneSlot): string {
+export function getSlotBaseName(slot: TerminalSlot | PaneSlot): string {
   if (slot.type === 'project') {
     return slot.projectName
   }
@@ -124,7 +124,9 @@ export function getSlotBaseName(slot: ATermSlot | PaneSlot): string {
 /**
  * Get working directory for a slot.
  */
-export function getSlotWorkingDir(slot: ATermSlot | PaneSlot): string | null {
+export function getSlotWorkingDir(
+  slot: TerminalSlot | PaneSlot,
+): string | null {
   if (slot.type === 'project') {
     return slot.rootPath
   }
@@ -137,7 +139,7 @@ export function getSlotWorkingDir(slot: ATermSlot | PaneSlot): string | null {
 
 /**
  * Extended slot type that includes the pane ID for direct DB operations.
- * This type wraps the base ATermSlot with additional pane metadata.
+ * This type wraps the base TerminalSlot with additional pane metadata.
  */
 export interface PaneBasedSlot extends ProjectSlot {
   /** Pane ID for DB operations (swap, delete, etc.) */
@@ -155,7 +157,7 @@ export type PaneSlot = PaneBasedSlot | AdHocPaneSlot
 // Session-to-Slot mapper
 // ============================================================================
 
-/** Where a session is shown: in an A-Term pane, as a free-standing View, or
+/** Where a session is shown: in a web app pane, as a free-standing View, or
  * linked to a pane that is not loaded in this window. */
 export type SessionPlace = 'pane' | 'free' | 'unloaded'
 
@@ -165,14 +167,14 @@ export type SessionTitleOptions =
 
 /** A Tether session's name is Tether's (Aico shows the same one). The only
  * place the UI reads `source`, and only for titles, never for permissions. */
-function ownerTitled(session: Pick<ATermSession, 'source'>): boolean {
+function ownerTitled(session: Pick<TerminalSession, 'source'>): boolean {
   return session.source === 'tether'
 }
 
 /** The project-prefix rule for a free-standing session: prefix the project
  * name unless the session's own name already carries it. */
 function freeSessionTitle(
-  session: Pick<ATermSession, 'name' | 'project_id'>,
+  session: Pick<TerminalSession, 'name' | 'project_id'>,
   projectName?: string,
 ): string {
   if (!session.project_id) return session.name
@@ -194,7 +196,7 @@ function freeSessionTitle(
  * pane not loaded here, the project's name.
  */
 export function sessionTitle(
-  session: Pick<ATermSession, 'name' | 'project_id' | 'source'>,
+  session: Pick<TerminalSession, 'name' | 'project_id' | 'source'>,
   options: SessionTitleOptions,
 ): string {
   if (ownerTitled(session)) return session.name
@@ -215,8 +217,8 @@ const NO_CAPABILITIES: SlotCapabilities = {
 }
 
 function slotFields(
-  session: ATermSession | undefined,
-  type: ATermSlot['type'],
+  session: TerminalSession | undefined,
+  type: TerminalSlot['type'],
 ): SlotSessionFields {
   if (!session) {
     return { can: NO_CAPABILITIES, showsSessionTitle: false }
@@ -247,9 +249,9 @@ export interface SessionToSlotOptions {
 
 /** The Slot for a session shown without a pane here. */
 export function sessionToSlot(
-  session: ATermSession,
+  session: TerminalSession,
   options: SessionToSlotOptions,
-): ATermSlot {
+): TerminalSlot {
   const title = sessionTitle(session, {
     place: options.place,
     projectName: options.projectName,
@@ -283,7 +285,7 @@ export function sessionToSlot(
 
 /** A pane's sessions as full sessions, placed in the pane's project and
  * ordered as the pane lists them. */
-export function paneSessionsAsSessions(pane: ATermPane): ATermSession[] {
+export function paneSessionsAsSessions(pane: TerminalPane): TerminalSession[] {
   return pane.sessions.map((session, index) => ({
     ...session,
     user_id: null,
@@ -295,11 +297,11 @@ export function paneSessionsAsSessions(pane: ATermPane): ATermSession[] {
 }
 
 /**
- * Convert a ATermPane to a ATermSlot for UI rendering. A pane's title is its
+ * Convert a TerminalPane to a TerminalSlot for UI rendering. A pane's title is its
  * session's Tether name or else the pane's own name, so it never needs the
  * project's display name.
  */
-export function paneToSlot(pane: ATermPane): PaneSlot {
+export function paneToSlot(pane: TerminalPane): PaneSlot {
   if (pane.pane_type === 'project') {
     const activeSession =
       pane.sessions.find((s) => s.mode === pane.active_mode) ??
@@ -341,10 +343,10 @@ export function paneToSlot(pane: ATermPane): PaneSlot {
 }
 
 /**
- * Convert array of ATermPanes to PaneSlots.
+ * Convert array of TerminalPanes to PaneSlots.
  * Panes are already ordered by pane_order from the API.
  */
-export function panesToSlots(panes: ATermPane[]): PaneSlot[] {
+export function panesToSlots(panes: TerminalPane[]): PaneSlot[] {
   return panes.map(paneToSlot)
 }
 
@@ -358,6 +360,6 @@ export function getPaneId(slot: PaneSlot): string {
 /**
  * Check if a slot is a PaneSlot (has paneId).
  */
-export function isPaneSlot(slot: ATermSlot | PaneSlot): slot is PaneSlot {
+export function isPaneSlot(slot: TerminalSlot | PaneSlot): slot is PaneSlot {
   return 'paneId' in slot
 }

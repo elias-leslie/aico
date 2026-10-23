@@ -1,4 +1,0 @@
-export { HeaderIconButton } from './HeaderIconButton'
-export { HeaderNameDisplay } from './HeaderNameDisplay'
-export type { IconButtonProps, UnifiedATermHeaderProps } from './types'
-export { UnifiedATermHeaderContent } from './UnifiedATermHeaderContent'

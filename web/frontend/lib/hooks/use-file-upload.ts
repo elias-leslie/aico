@@ -33,7 +33,7 @@ interface UploadLimits {
   max_bytes: number
 }
 
-export const UPLOAD_LIMITS_QUERY_KEY = ['a-term', 'upload-limits'] as const
+export const UPLOAD_LIMITS_QUERY_KEY = ['terminal', 'upload-limits'] as const
 
 const BYTES_PER_MB = 1024 * 1024
 
@@ -47,7 +47,7 @@ export function fileTooLargeMessage(size: number, maxBytes: number): string {
 }
 
 /**
- * Hook for uploading files to the a-term server.
+ * Hook for uploading files to the terminal server.
  * Uses XMLHttpRequest for progress tracking.
  */
 export function useFileUpload(): UseFileUploadReturn {

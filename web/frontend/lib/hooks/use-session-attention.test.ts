@@ -1,8 +1,8 @@
 import { renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { PaneSlot } from '../utils/slot'
-import type { ATermSession } from './use-a-term-sessions'
 import { useSessionAttention } from './use-session-attention'
+import type { TerminalSession } from './use-terminal-sessions'
 
 // Sessions started from the web are detached; only the list that includes
 // them knows about them.
@@ -11,10 +11,10 @@ const detachedSession = {
   pane_id: 'pane-a',
   activity: 'blocked',
   activity_at: Date.now(),
-} as unknown as ATermSession
+} as unknown as TerminalSession
 
-vi.mock('./use-a-term-sessions', () => ({
-  useATermSessions: (options?: { includeDetached?: boolean }) => ({
+vi.mock('./use-terminal-sessions', () => ({
+  useTerminalSessions: (options?: { includeDetached?: boolean }) => ({
     sessions: options?.includeDetached ? [detachedSession] : [],
   }),
 }))

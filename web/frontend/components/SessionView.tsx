@@ -1,15 +1,15 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ATermComponent, type ATermHandle } from '@/components/ATerm'
-import type { ConnectionStatus } from '@/components/a-term.types'
-import { UnifiedATermHeaderContent as UnifiedATermHeader } from '@/components/a-term-header'
 import { EmptySessionState } from '@/components/EmptySessionState'
 import { PaneFilesDialog } from '@/components/files/PaneFilesDialog'
-import type { ATermMode } from '@/components/ModeToggle'
+import type { TerminalMode } from '@/components/ModeToggle'
+import { TerminalComponent, type TerminalHandle } from '@/components/Terminal'
 import { ConnectionNotice, SizeHolderNotice } from '@/components/TerminalNotice'
-import type { ATermFontSize } from '@/lib/hooks/use-a-term-settings'
-import type { ATermSlot, PaneSlot } from '@/lib/utils/slot'
+import type { ConnectionStatus } from '@/components/terminal.types'
+import { UnifiedTerminalHeaderContent as UnifiedTerminalHeader } from '@/components/terminal-header'
+import type { TerminalFontSize } from '@/lib/hooks/use-terminal-settings'
+import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
 import {
   getSlotSessionId,
   getSlotWorkingDir,
@@ -17,23 +17,23 @@ import {
 } from '@/lib/utils/slot'
 
 export interface SessionViewProps {
-  slots: (ATermSlot | PaneSlot)[]
+  slots: (TerminalSlot | PaneSlot)[]
   activeSessionId?: string | null
-  fontSize: ATermFontSize
+  fontSize: TerminalFontSize
   isMobile?: boolean
-  onATermRef?: (sessionId: string, handle: ATermHandle | null) => void
+  onTerminalRef?: (sessionId: string, handle: TerminalHandle | null) => void
   onStatusChange?: (sessionId: string, status: ConnectionStatus) => void
-  aTermStatuses?: Map<string, ConnectionStatus>
-  onSwitch?: (slot: ATermSlot | PaneSlot) => void
-  onFontSizeChange?: (size: ATermFontSize) => void
-  onReset?: (slot: ATermSlot | PaneSlot) => void
-  onCloseSession?: (slot: ATermSlot | PaneSlot) => void
+  terminalStatuses?: Map<string, ConnectionStatus>
+  onSwitch?: (slot: TerminalSlot | PaneSlot) => void
+  onFontSizeChange?: (size: TerminalFontSize) => void
+  onReset?: (slot: TerminalSlot | PaneSlot) => void
+  onCloseSession?: (slot: TerminalSlot | PaneSlot) => void
   onUpload?: (sessionId?: string) => void
   onFilePaste?: (file: File, sessionId?: string) => void | Promise<void>
   onNewSession?: () => void
   onModeSwitch?: (
-    slot: ATermSlot | PaneSlot,
-    mode: ATermMode,
+    slot: TerminalSlot | PaneSlot,
+    mode: TerminalMode,
   ) => void | Promise<void>
   isModeSwitching?: boolean
   /** Desktop: whether the compose box is shown */
@@ -46,9 +46,9 @@ export interface SessionViewProps {
 
 /** The active session, or one of the user's own when none is chosen. */
 export function getShownSlot(
-  slots: (ATermSlot | PaneSlot)[],
+  slots: (TerminalSlot | PaneSlot)[],
   activeSessionId?: string | null,
-): ATermSlot | PaneSlot | undefined {
+): TerminalSlot | PaneSlot | undefined {
   const activeSlot = activeSessionId
     ? slots.find((slot) => getSlotSessionId(slot) === activeSessionId)
     : undefined
@@ -66,9 +66,9 @@ export function SessionView({
   activeSessionId,
   fontSize,
   isMobile = false,
-  onATermRef,
+  onTerminalRef,
   onStatusChange,
-  aTermStatuses,
+  terminalStatuses,
   onSwitch,
   onFontSizeChange,
   onReset,
@@ -84,10 +84,10 @@ export function SessionView({
 }: SessionViewProps) {
   const [refreshVersion, setRefreshVersion] = useState(0)
   const [filesPaneId, setFilesPaneId] = useState<string | null>(null)
-  const handleRef = useRef<ATermHandle | null>(null)
+  const handleRef = useRef<TerminalHandle | null>(null)
   const slot = getShownSlot(slots, activeSessionId)
   const sessionId = slot ? getSlotSessionId(slot) : null
-  const status = sessionId ? aTermStatuses?.get(sessionId) : undefined
+  const status = sessionId ? terminalStatuses?.get(sessionId) : undefined
   // Which terminal (session and redraw) has shown live output.
   const termKey = `${sessionId}:${refreshVersion}`
   const [connectedKey, setConnectedKey] = useState<string | null>(null)
@@ -130,7 +130,7 @@ export function SessionView({
   return (
     <div className="h-full w-full" style={{ backgroundColor: 'var(--rim)' }}>
       <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
-        <UnifiedATermHeader
+        <UnifiedTerminalHeader
           slot={slot}
           isActive={true}
           fontSize={fontSize}
@@ -185,11 +185,11 @@ export function SessionView({
           }}
         >
           {sessionId && (
-            <ATermComponent
+            <TerminalComponent
               key={`${sessionId}:${refreshVersion}`}
               ref={(handle) => {
                 handleRef.current = handle
-                onATermRef?.(sessionId, handle)
+                onTerminalRef?.(sessionId, handle)
               }}
               sessionId={sessionId}
               sessionMode={

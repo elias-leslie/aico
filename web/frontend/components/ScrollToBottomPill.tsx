@@ -3,10 +3,10 @@
 import { ArrowDown } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-type XtermATerm = InstanceType<typeof import('@xterm/xterm').Terminal>
+type XtermTerminal = InstanceType<typeof import('@xterm/xterm').Terminal>
 
 interface ScrollToBottomPillProps {
-  aTermRef: React.RefObject<XtermATerm | null>
+  terminalRef: React.RefObject<XtermTerminal | null>
   /** The terminal exists and can be listened to. */
   isReady: boolean
 }
@@ -29,7 +29,7 @@ const AT_BOTTOM: ReadingState = { scrolledUp: false, newOutput: false }
  * pushes the bottom further away, which is what "new output" means.
  */
 export function readViewport(
-  term: Pick<XtermATerm, 'buffer'>,
+  term: Pick<XtermTerminal, 'buffer'>,
   tracker: { current: Tracker | null },
 ): ReadingState {
   const { baseY, viewportY } = term.buffer.active
@@ -53,14 +53,14 @@ export function readViewport(
  * and the compose box stay as they were.
  */
 export function ScrollToBottomPill({
-  aTermRef,
+  terminalRef,
   isReady,
 }: ScrollToBottomPillProps) {
   const [state, setState] = useState<ReadingState>(AT_BOTTOM)
   const trackerRef = useRef<Tracker | null>(null)
 
   useEffect(() => {
-    const term = aTermRef.current
+    const term = terminalRef.current
     if (!isReady || !term) return
     const update = () => {
       const next = readViewport(term, trackerRef)
@@ -80,18 +80,18 @@ export function ScrollToBottomPill({
       for (const subscription of subscriptions) subscription.dispose()
       trackerRef.current = null
     }
-  }, [aTermRef, isReady])
+  }, [terminalRef, isReady])
 
   const jump = useCallback(() => {
-    aTermRef.current?.scrollToBottom()
-  }, [aTermRef])
+    terminalRef.current?.scrollToBottom()
+  }, [terminalRef])
 
   if (!state.scrolledUp) return null
 
   return (
     <div
       className="pointer-events-none absolute inset-x-0 bottom-3 z-[5] flex justify-center"
-      data-testid="a-term-scroll-to-bottom"
+      data-testid="terminal-scroll-to-bottom"
     >
       <button
         type="button"

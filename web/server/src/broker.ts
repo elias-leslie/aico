@@ -37,7 +37,7 @@ export function normalizeWorkingDir(value: string | null | undefined): string | 
   return realpathLoose(resolve(expanded))
 }
 
-/** Python's str.title() for an id: "a-term" -> "A Term". */
+/** Python's str.title() for an id: "my-app" -> "My App". */
 function titled(id: string): string {
   return id
     .replace(/-/g, ' ')

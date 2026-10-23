@@ -196,12 +196,12 @@ describe('tsession', () => {
 
   it("prints Tether's projects as TSV, leaving out unsafe ones, and nothing while it is down", async () => {
     tether.projectList = [
-      { id: 'a-term', name: 'A-Term', root: '/srv/a-term' },
+      { id: 'summitflow', name: 'SummitFlow', root: '/srv/summitflow' },
       { id: 'bad', name: 'Bad', root: '/srv/with\ttab' },
     ]
     const io = fakeIo()
     expect(await run(io, 'tsession', 'projects', '--format', 'tsv')).toBe(0)
-    expect(io.stdout).toBe('a-term\t/srv/a-term\n')
+    expect(io.stdout).toBe('summitflow\t/srv/summitflow\n')
     const quiet = fakeIo()
     expect(await runCommand(down(), quiet, 'tsession', ['projects'])).toBe(0)
     expect(quiet.stdout).toBe('')

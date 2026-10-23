@@ -1,7 +1,7 @@
-import type { ATermHandle } from '@/components/a-term.types'
+import type { TerminalHandle } from '@/components/terminal.types'
 
 export async function commitComposeInput(
-  handles: Map<string, ATermHandle>,
+  handles: Map<string, TerminalHandle>,
   sessionId: string,
   text: string,
   action: 'insert' | 'send',

@@ -1,6 +1,6 @@
 'use client'
 
-import type { ConnectionStatus } from '@/components/a-term.types'
+import type { ConnectionStatus } from '@/components/terminal.types'
 
 const LOST: Partial<Record<ConnectionStatus, string>> = {
   disconnected: 'Disconnected',

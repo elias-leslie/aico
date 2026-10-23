@@ -10,7 +10,7 @@
   /* The web's mono is JetBrains Mono (lib/constants/lantern.ts), not the
      desktop's Iosevka. */
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
-  --a-term-viewport-height: 100dvh;
+  --terminal-viewport-height: 100dvh;
 
   --term-bg-deep: var(--ink);
   --term-bg: var(--ink);
@@ -473,7 +473,7 @@ div.xterm .xterm-viewport {
 
 /* Mobile long-press selection layer (lib/hooks/mobile-native-selection.ts):
    invisible, cell-aligned text over the canvas so the browser can select it. */
-.xterm .xterm-screen .a-term-native-selection {
+.xterm .xterm-screen .terminal-native-selection {
   display: none;
   position: absolute;
   inset: 0;
@@ -482,7 +482,7 @@ div.xterm .xterm-viewport {
   margin: 0;
   padding: 0;
   white-space: pre;
-  line-height: var(--a-term-cell-height);
+  line-height: var(--terminal-cell-height);
   color: transparent;
   caret-color: transparent;
   background: transparent;
@@ -493,15 +493,15 @@ div.xterm .xterm-viewport {
   -webkit-tap-highlight-color: transparent;
 }
 
-.xterm .xterm-screen .a-term-native-selection > div {
-  height: var(--a-term-cell-height);
+.xterm .xterm-screen .terminal-native-selection > div {
+  height: var(--terminal-cell-height);
   overflow: hidden;
 }
 
 /* New output under a selection: show the captured rows instead. */
-.xterm .xterm-screen .a-term-native-selection.is-frozen {
-  color: var(--a-term-fg);
-  background: var(--a-term-bg);
+.xterm .xterm-screen .terminal-native-selection.is-frozen {
+  color: var(--terminal-fg);
+  background: var(--terminal-bg);
 }
 
 /* Auto-hiding scrollbar: fades in on scroll, fades out after idle */
@@ -543,23 +543,23 @@ div.xterm .xterm-viewport {
   scrollbar-color: var(--paper-veil) transparent;
 }
 
-/* Mobile a-term needs a persistent, wider drag target. Hover/fade behavior
+/* Mobile terminal needs a persistent, wider drag target. Hover/fade behavior
    is unreliable on touch devices and makes the scrollbar feel unresponsive. */
-.xterm-viewport.mobile-a-term-viewport::-webkit-scrollbar {
+.xterm-viewport.mobile-terminal-viewport::-webkit-scrollbar {
   width: 20px;
 }
 
-.xterm-viewport.mobile-a-term-viewport::-webkit-scrollbar-thumb {
+.xterm-viewport.mobile-terminal-viewport::-webkit-scrollbar-thumb {
   background: var(--paper-veil);
   border-radius: 999px;
   border: 5px solid var(--ink);
 }
 
-.xterm-viewport.mobile-a-term-viewport::-webkit-scrollbar-thumb:hover {
+.xterm-viewport.mobile-terminal-viewport::-webkit-scrollbar-thumb:hover {
   background: rgb(var(--bone-rgb) / 0.3);
 }
 
-.xterm-viewport.mobile-a-term-viewport {
+.xterm-viewport.mobile-terminal-viewport {
   scrollbar-width: auto;
   scrollbar-color: var(--paper-veil) transparent;
 }

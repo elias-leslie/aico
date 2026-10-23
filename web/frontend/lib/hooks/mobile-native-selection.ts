@@ -1,7 +1,7 @@
 import { isMobileDevice } from '../utils/device'
-import { forwardClipboardPaste } from './a-term-instance-utils'
+import { forwardClipboardPaste } from './terminal-instance-utils'
 
-type XtermATerm = InstanceType<typeof import('@xterm/xterm').Terminal>
+type XtermTerminal = InstanceType<typeof import('@xterm/xterm').Terminal>
 
 /**
  * Native touch selection for the terminal on phones.
@@ -19,7 +19,7 @@ type XtermATerm = InstanceType<typeof import('@xterm/xterm').Terminal>
  * selection is active (see `isNativeSelectionActive`).
  */
 
-export const NATIVE_SELECTION_LAYER_CLASS = 'a-term-native-selection'
+export const NATIVE_SELECTION_LAYER_CLASS = 'terminal-native-selection'
 const FROZEN_CLASS = 'is-frozen'
 const ACTIVE_ATTRIBUTE = 'data-native-selection'
 
@@ -65,7 +65,7 @@ export function getLayerSelectionText(
 }
 
 export function setupMobileNativeSelection(
-  term: XtermATerm,
+  term: XtermTerminal,
   container: HTMLElement,
   options: MobileNativeSelectionOptions,
 ): () => void {
@@ -95,9 +95,9 @@ export function setupMobileNativeSelection(
 
     layer.style.fontFamily = term.options.fontFamily ?? 'monospace'
     layer.style.fontSize = `${term.options.fontSize ?? 14}px`
-    layer.style.setProperty('--a-term-cell-height', `${cellHeight}px`)
-    layer.style.setProperty('--a-term-bg', theme.background ?? '#000')
-    layer.style.setProperty('--a-term-fg', theme.foreground ?? '#fff')
+    layer.style.setProperty('--terminal-cell-height', `${cellHeight}px`)
+    layer.style.setProperty('--terminal-bg', theme.background ?? '#000')
+    layer.style.setProperty('--terminal-fg', theme.foreground ?? '#fff')
     layer.style.letterSpacing = '0px'
 
     // Stretch the font's advance to the canvas cell so long rows stay

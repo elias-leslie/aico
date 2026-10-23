@@ -6,7 +6,7 @@ import {
   CONNECTION_TIMEOUT,
   WS_CLIENT_PING_INTERVAL,
   WS_CLOSE_CODE_SESSION_DEAD,
-} from '../constants/a-term'
+} from '../constants/terminal'
 
 export interface WebSocketConnectionRefs {
   wsRef: React.MutableRefObject<WebSocket | null>
@@ -307,7 +307,7 @@ export function dispatchControlMessage(
     }
 
     // Unknown control frames still belong to the control channel and should
-    // never be rendered into the visible aTerm buffer.
+    // never be rendered into the visible terminal buffer.
     return true
   } catch {
     return false

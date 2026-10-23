@@ -1,5 +1,5 @@
 // Sessions in the shape the web UI reads (the Python backend's
-// ATermSessionResponse, kept field for field), and what the UI may do to each.
+// session response, kept field for field), and what the UI may do to each.
 // Every session is a Tether session; Tether words the title and badge.
 
 import type { SessionDescriptor } from 'tether/client'

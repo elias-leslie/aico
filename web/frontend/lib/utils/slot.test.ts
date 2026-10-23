@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { ATermPane } from '@/lib/hooks/use-a-term-panes'
-import type { ATermSession } from '@/lib/hooks/use-a-term-sessions'
+import type { TerminalPane } from '@/lib/hooks/use-terminal-panes'
+import type { TerminalSession } from '@/lib/hooks/use-terminal-sessions'
 import {
   OWN_TMUX_CAN,
   ROOT_CAN,
@@ -40,7 +40,7 @@ const makeAdHocSlot = (overrides?: Partial<AdHocSlot>): AdHocSlot => ({
   type: 'adhoc',
   ...SLOT_BASE,
   sessionId: 'adhoc-123',
-  name: 'Ad Hoc A-Term',
+  name: 'Ad Hoc Session',
   workingDir: '/tmp',
   ...overrides,
 })
@@ -99,8 +99,8 @@ describe('getSlotName', () => {
   })
 
   it('returns name for adhoc slot', () => {
-    const slot = makeAdHocSlot({ name: 'My A-Term' })
-    expect(getSlotName(slot)).toBe('My A-Term')
+    const slot = makeAdHocSlot({ name: 'My Session' })
+    expect(getSlotName(slot)).toBe('My Session')
   })
 })
 
@@ -111,8 +111,8 @@ describe('getSlotBaseName', () => {
   })
 
   it('returns name for adhoc slot', () => {
-    const slot = makeAdHocSlot({ name: 'A-Term X' })
-    expect(getSlotBaseName(slot)).toBe('A-Term X')
+    const slot = makeAdHocSlot({ name: 'Session X' })
+    expect(getSlotBaseName(slot)).toBe('Session X')
   })
 })
 
@@ -164,13 +164,13 @@ const KINDS = {
   tether: { source: 'tether', ...TETHER_CAN },
   root: { source: 'tether', is_root: true, ...ROOT_CAN },
   ownTmux: { source: 'tmux_external', ...OWN_TMUX_CAN },
-} satisfies Record<string, Partial<ATermSession>>
+} satisfies Record<string, Partial<TerminalSession>>
 type Kind = keyof typeof KINDS
 
 function makeSession(
   kind: Kind,
-  overrides: Partial<ATermSession> = {},
-): ATermSession {
+  overrides: Partial<TerminalSession> = {},
+): TerminalSession {
   return {
     ...SESSION_BASE,
     id: `${kind}-session`,
@@ -189,10 +189,10 @@ function makeSession(
 }
 
 function makePane(
-  paneType: ATermPane['pane_type'],
-  sessions: ATermSession[],
-  overrides: Partial<ATermPane> = {},
-): ATermPane {
+  paneType: TerminalPane['pane_type'],
+  sessions: TerminalSession[],
+  overrides: Partial<TerminalPane> = {},
+): TerminalPane {
   return {
     id: 'pane-1',
     pane_type: paneType,
@@ -447,7 +447,7 @@ describe('paneToSlot', () => {
       pane_type: 'project',
       project_id: 'proj-x',
       pane_order: 0,
-      pane_name: 'A-Term',
+      pane_name: 'Main',
       active_mode: 'shell',
       is_detached: false,
       created_at: null,
@@ -494,7 +494,7 @@ describe('paneToSlot', () => {
       pane_type: 'project',
       project_id: 'proj-x',
       pane_order: 0,
-      pane_name: 'A-Term',
+      pane_name: 'Main',
       active_mode: 'codex',
       is_detached: false,
       created_at: null,

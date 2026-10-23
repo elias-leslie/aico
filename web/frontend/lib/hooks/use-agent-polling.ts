@@ -23,7 +23,7 @@ interface UseAgentPollingReturn {
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 /**
- * Hook for starting an agent in a a-term session and polling for state changes.
+ * Hook for starting an agent in a terminal session and polling for state changes.
  *
  * Uses the /start-agent and /agent-state endpoints.
  */
@@ -60,10 +60,7 @@ export function useAgentPolling(): UseAgentPollingReturn {
       const pollStart = Date.now()
 
       while (!controller.signal.aborted) {
-        if (Date.now() - pollStart > AGENT_POLL_TIMEOUT_MS) {
-          queryClient.invalidateQueries({ queryKey: ['aTerm-sessions'] })
-          break
-        }
+        if (Date.now() - pollStart > AGENT_POLL_TIMEOUT_MS) break
 
         await delay(AGENT_POLL_INTERVAL_MS)
 
@@ -78,7 +75,7 @@ export function useAgentPolling(): UseAgentPollingReturn {
             const stateData = await stateRes.json()
             const agentState = getAgentState(stateData)
             if (agentState === 'running' || agentState === 'error') {
-              queryClient.invalidateQueries({ queryKey: ['a-term-sessions'] })
+              queryClient.invalidateQueries({ queryKey: ['terminal-sessions'] })
               break
             }
           }
@@ -87,7 +84,7 @@ export function useAgentPolling(): UseAgentPollingReturn {
         }
       }
 
-      queryClient.invalidateQueries({ queryKey: ['a-term-sessions'] })
+      queryClient.invalidateQueries({ queryKey: ['terminal-sessions'] })
       setIsPolling(false)
       abortControllerRef.current = null
     },
@@ -109,7 +106,7 @@ export function useAgentPolling(): UseAgentPollingReturn {
 
         const data = await res.json()
 
-        queryClient.invalidateQueries({ queryKey: ['a-term-sessions'] })
+        queryClient.invalidateQueries({ queryKey: ['terminal-sessions'] })
 
         if (getAgentState(data) === 'starting') {
           // Fire and forget - don't await

@@ -1,0 +1,130 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { act, renderHook, waitFor } from '@testing-library/react'
+import { createElement, type ReactNode } from 'react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { SESSION_BASE } from '@/test-stubs/session-fixtures'
+import * as api from './terminal-panes-api'
+import type { PaneListResponse, TerminalPane } from './terminal-panes-types'
+import { usePaneListError, useTerminalPanes } from './use-terminal-panes'
+
+vi.mock('./terminal-panes-api')
+
+const detachedPane: TerminalPane = {
+  id: 'pane-detached',
+  pane_type: 'project',
+  project_id: 'project-a',
+  pane_order: 1,
+  pane_name: 'Project A',
+  active_mode: 'shell',
+  is_detached: true,
+  created_at: '2026-03-06T00:00:00Z',
+  sessions: [
+    {
+      id: 'session-a',
+      name: 'Project A Shell',
+      mode: 'shell',
+      ...SESSION_BASE,
+      session_number: 1,
+      is_alive: true,
+      working_dir: '/workspace/project-a',
+      claude_state: 'not_started',
+    },
+  ],
+  width_percent: 100,
+  height_percent: 100,
+  grid_row: 0,
+  grid_col: 0,
+}
+
+function paneList(items: TerminalPane[]): PaneListResponse {
+  return { items, total: items.length }
+}
+
+function createWrapper(queryClient: QueryClient) {
+  return function Wrapper({ children }: { children: ReactNode }) {
+    return createElement(QueryClientProvider, { client: queryClient }, children)
+  }
+}
+
+describe('useTerminalPanes', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(api.fetchPanes).mockResolvedValue(paneList([]))
+    vi.mocked(api.fetchDetachedPanes).mockResolvedValue(
+      paneList([detachedPane]),
+    )
+  })
+
+  it('puts a new detached pane in the detached cache and the full session list at once', async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    queryClient.setQueryData(['terminal-panes'], paneList([]))
+    queryClient.setQueryData(['terminal-detached-panes'], paneList([]))
+    queryClient.setQueryData(['terminal-sessions', false], [])
+    queryClient.setQueryData(['terminal-sessions', true], [])
+    vi.mocked(api.createPane).mockResolvedValue(detachedPane)
+    vi.mocked(api.fetchDetachedPanes).mockResolvedValue(
+      paneList([detachedPane]),
+    )
+
+    const { result } = renderHook(() => useTerminalPanes(), {
+      wrapper: createWrapper(queryClient),
+    })
+
+    await act(async () => {
+      await result.current.createProjectPane(
+        'Project A',
+        'project-a',
+        '/workspace/project-a',
+        undefined,
+        { detached: true },
+      )
+    })
+
+    expect(vi.mocked(api.createPane).mock.calls[0]?.[0]).toMatchObject({
+      project_id: 'project-a',
+      detached: true,
+    })
+    await waitFor(() => {
+      expect(
+        queryClient.getQueryData<PaneListResponse>(['terminal-panes'])?.items,
+      ).toEqual([])
+      expect(
+        queryClient.getQueryData<PaneListResponse>(['terminal-detached-panes'])
+          ?.items,
+      ).toEqual([detachedPane])
+      expect(
+        queryClient
+          .getQueryData<Array<{ id: string }>>(['terminal-sessions', true])
+          ?.map((session) => session.id),
+      ).toEqual(['session-a'])
+    })
+  })
+
+  it('stays failed, not loading, while a list that never loaded is refetched', async () => {
+    vi.mocked(api.fetchPanes).mockRejectedValue(new Error('down'))
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    const { result } = renderHook(
+      () => ({ panes: useTerminalPanes(), list: usePaneListError() }),
+      { wrapper: createWrapper(queryClient) },
+    )
+
+    await waitFor(() => expect(result.current.list.isError).toBe(true))
+    expect(result.current.panes.isLoading).toBe(false)
+    expect(result.current.panes.loadFailed).toBe(true)
+
+    vi.mocked(api.fetchPanes).mockReturnValue(new Promise(() => {}))
+    act(() => result.current.list.retry())
+    await waitFor(() =>
+      expect(queryClient.isFetching({ queryKey: ['terminal-panes'] })).toBe(1),
+    )
+    expect(result.current.list.isError).toBe(true)
+    expect(result.current.panes.isLoading).toBe(false)
+  })
+})

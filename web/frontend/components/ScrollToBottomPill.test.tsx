@@ -32,7 +32,7 @@ function makeTerm() {
 function mount(term: ReturnType<typeof makeTerm>['term']) {
   const ref = createRef<never>() as { current: unknown }
   ref.current = term
-  return render(<ScrollToBottomPill aTermRef={ref as never} isReady />)
+  return render(<ScrollToBottomPill terminalRef={ref as never} isReady />)
 }
 
 describe('ScrollToBottomPill', () => {

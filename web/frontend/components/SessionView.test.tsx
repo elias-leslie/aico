@@ -1,13 +1,13 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import type { ATermPane } from '@/lib/hooks/use-a-term-panes'
-import type { ATermSession } from '@/lib/hooks/use-a-term-sessions'
+import type { TerminalPane } from '@/lib/hooks/use-terminal-panes'
+import type { TerminalSession } from '@/lib/hooks/use-terminal-sessions'
 import {
-  type ATermSlot,
   getSlotSessionId,
   type PaneSlot,
   paneToSlot,
   sessionToSlot,
+  type TerminalSlot,
 } from '@/lib/utils/slot'
 import {
   OWN_TMUX_CAN,
@@ -20,8 +20,8 @@ import { SessionView, type SessionViewProps } from './SessionView'
 
 function session(
   id: string,
-  overrides: Partial<ATermSession> = {},
-): ATermSession {
+  overrides: Partial<TerminalSession> = {},
+): TerminalSession {
   return {
     ...SESSION_BASE,
     id,
@@ -38,8 +38,8 @@ function session(
 
 function projectPane(
   paneId: string,
-  overrides: Partial<ATermSession> = {},
-): ATermPane {
+  overrides: Partial<TerminalSession> = {},
+): TerminalPane {
   return {
     id: paneId,
     pane_type: 'project',
@@ -58,7 +58,7 @@ function projectPane(
 }
 
 /** An Own tmux session shown as a free-standing View. */
-function ownTmuxView(): ATermSlot {
+function ownTmuxView(): TerminalSlot {
   return sessionToSlot(
     session('external-codex', {
       ...OWN_TMUX_CAN,
@@ -72,7 +72,7 @@ function ownTmuxView(): ATermSlot {
   )
 }
 
-const aTermProps = vi.hoisted(
+const terminalProps = vi.hoisted(
   () =>
     [] as Array<{
       sessionId: string
@@ -87,10 +87,10 @@ const sizeHolderHooks = vi.hoisted(() => ({
   claimSize: vi.fn(),
 }))
 
-vi.mock('@/components/ATerm', async () => {
+vi.mock('@/components/Terminal', async () => {
   const { forwardRef, useImperativeHandle } = await import('react')
   return {
-    ATermComponent: forwardRef(function MockATerm(
+    TerminalComponent: forwardRef(function MockTerminal(
       {
         sessionId,
         sessionMode,
@@ -107,19 +107,19 @@ vi.mock('@/components/ATerm', async () => {
       useImperativeHandle(ref, () => ({
         claimSize: sizeHolderHooks.claimSize,
       }))
-      aTermProps.push({ sessionId, sessionMode, isVisible })
+      terminalProps.push({ sessionId, sessionMode, isVisible })
       sizeHolderHooks.change = onSizeHolderChange ?? null
-      return <div data-testid={`a-term-${sessionId}`} />
+      return <div data-testid={`terminal-${sessionId}`} />
     }),
   }
 })
 
-vi.mock('@/components/a-term-header', () => ({
-  UnifiedATermHeaderContent: (props: Record<string, unknown>) => {
+vi.mock('@/components/terminal-header', () => ({
+  UnifiedTerminalHeaderContent: (props: Record<string, unknown>) => {
     headerProps.push(props)
     const slot = props.slot as { paneId?: string; sessionId?: string }
     const id = slot.paneId ?? slot.sessionId ?? 'unknown'
-    return <div data-testid={`a-term-header-${id}`} />
+    return <div data-testid={`terminal-header-${id}`} />
   },
 }))
 
@@ -127,7 +127,7 @@ vi.mock('@/lib/hooks/use-agent-tools', () => ({
   useAgentTools: () => ({ agentTools: [] }),
 }))
 
-vi.mock('@/lib/hooks/use-a-term-panes', () => ({
+vi.mock('@/lib/hooks/use-terminal-panes', () => ({
   usePaneListError: () => ({ isError: false, retry: vi.fn() }),
 }))
 
@@ -138,14 +138,14 @@ vi.mock('@/lib/hooks/use-session-attention', () => ({
 function renderView(
   props: Partial<SessionViewProps> & { slots: SessionViewProps['slots'] },
 ) {
-  aTermProps.length = 0
+  terminalProps.length = 0
   headerProps.length = 0
   return render(<SessionView fontSize={14} {...props} />)
 }
 
 /** Each slot shown as the active session, one after another. */
 function headersFor(
-  slots: Array<ATermSlot | PaneSlot>,
+  slots: Array<TerminalSlot | PaneSlot>,
   props: Partial<SessionViewProps> = {},
 ) {
   const all: Array<Record<string, unknown>> = []
@@ -178,7 +178,7 @@ function ownSlot(id: string): PaneSlot {
 describe('SessionView', () => {
   it('names the device holding the size while connected, and Use here takes it back', () => {
     const statuses = new Map([['session-1', 'connected' as const]])
-    renderView({ slots: [ownSlot('1')], aTermStatuses: statuses })
+    renderView({ slots: [ownSlot('1')], terminalStatuses: statuses })
     expect(screen.queryByTestId('size-holder-notice')).toBeNull()
 
     act(() => sizeHolderHooks.change?.('Chrome on Android'))
@@ -194,14 +194,14 @@ describe('SessionView', () => {
     const slots = [ownSlot('1'), ownSlot('2'), ownTmuxView()]
     renderView({ slots, activeSessionId: 'session-2' })
 
-    expect(aTermProps.map((p) => p.sessionId)).toEqual(['session-2'])
+    expect(terminalProps.map((p) => p.sessionId)).toEqual(['session-2'])
     expect(headerProps[0]?.allSlots).toBe(slots)
   })
 
   it("with nothing chosen, shows one of the user's own sessions", () => {
     renderView({ slots: [ownTmuxView(), ownSlot('1')] })
 
-    expect(aTermProps.map((p) => p.sessionId)).toEqual(['session-1'])
+    expect(terminalProps.map((p) => p.sessionId)).toEqual(['session-1'])
   })
 
   it("never opens another agent's session unasked: lists it with New session", () => {
@@ -210,7 +210,7 @@ describe('SessionView', () => {
     const view = ownTmuxView()
     renderView({ slots: [view], onSwitch, onNewSession })
 
-    expect(aTermProps).toEqual([])
+    expect(terminalProps).toEqual([])
     fireEvent.click(screen.getByRole('button', { name: 'New session' }))
     expect(onNewSession).toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: /codex-agent-hub/ }))
@@ -220,7 +220,7 @@ describe('SessionView', () => {
   it('offers Reset and End only where the backend allows them', () => {
     const onReset = vi.fn()
     const onCloseSession = vi.fn()
-    const slots: Array<ATermSlot | PaneSlot> = [
+    const slots: Array<TerminalSlot | PaneSlot> = [
       paneToSlot(projectPane('pane-agent', { ...TETHER_CAN })),
       paneToSlot(projectPane('pane-root', { ...ROOT_CAN, is_root: true })),
       paneToSlot({

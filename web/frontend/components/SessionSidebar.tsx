@@ -2,14 +2,14 @@
 
 import { Plus } from 'lucide-react'
 import { useSessionAttention } from '@/lib/hooks/use-session-attention'
-import type { ATermSlot, PaneSlot } from '@/lib/utils/slot'
+import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
 import { SessionList } from './SessionSwitcher'
 
 interface SessionSidebarProps {
-  slots: Array<ATermSlot | PaneSlot>
+  slots: Array<TerminalSlot | PaneSlot>
   /** The session on screen */
   currentId?: string
-  onSelect: (slot: ATermSlot | PaneSlot) => void
+  onSelect: (slot: TerminalSlot | PaneSlot) => void
   onNewSession?: () => void
 }
 

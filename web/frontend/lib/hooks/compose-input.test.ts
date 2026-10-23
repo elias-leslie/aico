@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { ATermHandle } from '@/components/a-term.types'
+import type { TerminalHandle } from '@/components/terminal.types'
 import { commitComposeInput } from './compose-input'
 
 function handle() {
@@ -7,7 +7,7 @@ function handle() {
     status: 'connected',
     pasteInput: vi.fn().mockResolvedValue(undefined),
     sendInput: vi.fn(),
-  } as unknown as ATermHandle
+  } as unknown as TerminalHandle
 }
 
 describe('commitComposeInput', () => {

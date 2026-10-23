@@ -13,17 +13,17 @@ import { useAgentTools } from '@/lib/hooks/use-agent-tools'
 import { useClickOutside } from '@/lib/hooks/use-click-outside'
 import type { SessionAttention } from '@/lib/hooks/use-session-attention'
 import {
-  type ATermSlot,
   getSlotName,
   getSlotPanelId,
   type PaneSlot,
+  type TerminalSlot,
 } from '@/lib/utils/slot'
 import { AgentIcon, getAgentColor } from './AgentIcon'
 import { NeedsYouCount } from './AttentionBadge'
 import { CoordinatorBadge } from './CoordinatorBadge'
 import { SessionTitle } from './SessionTitle'
 
-function getSlotMode(slot: ATermSlot | PaneSlot): string {
+function getSlotMode(slot: TerminalSlot | PaneSlot): string {
   if (slot.type === 'project') {
     return slot.activeMode
   }
@@ -34,17 +34,17 @@ interface SessionListEntry {
   id: string
   label: string
   mode: string
-  slot: ATermSlot | PaneSlot
+  slot: TerminalSlot | PaneSlot
   state: Attention | null
 }
 
 /** Sessions most urgent first (Aico's tray order), alphabetical within equal
  * state; the same name with the same agent is numbered. */
 export function sortSessionEntries(
-  slots: Array<ATermSlot | PaneSlot>,
+  slots: Array<TerminalSlot | PaneSlot>,
   attention?: SessionAttention,
 ): SessionListEntry[] {
-  const key = (slot: ATermSlot | PaneSlot) =>
+  const key = (slot: TerminalSlot | PaneSlot) =>
     `${getSlotName(slot)} [${getSlotMode(slot)}]`
   const sorted = [...slots].sort((slotA, slotB) => {
     const labelCompare = key(slotA).localeCompare(key(slotB), undefined, {
@@ -82,10 +82,10 @@ function rowMeta(agent: string, state: Attention | null): string {
 }
 
 interface SessionListProps {
-  slots: Array<ATermSlot | PaneSlot>
+  slots: Array<TerminalSlot | PaneSlot>
   currentId?: string
   attention?: SessionAttention
-  onSelect: (slot: ATermSlot | PaneSlot) => void
+  onSelect: (slot: TerminalSlot | PaneSlot) => void
 }
 
 /** Every session, grouped Needs you / Finished / Working / Idle. */
@@ -165,10 +165,10 @@ export function SessionList({
 
 export interface SessionSwitcherProps {
   /** The session on screen */
-  currentSlot: ATermSlot | PaneSlot
+  currentSlot: TerminalSlot | PaneSlot
   /** Every session the switcher lists */
-  allSlots: Array<ATermSlot | PaneSlot>
-  onSwitchTo: (slot: ATermSlot | PaneSlot) => void
+  allSlots: Array<TerminalSlot | PaneSlot>
+  onSwitchTo: (slot: TerminalSlot | PaneSlot) => void
   isMobile?: boolean
   /** Agent state per slot (needs you, finished, working, idle); without it
    * the list is alphabetical and has no badges. */
@@ -197,7 +197,7 @@ export function SessionSwitcher({
   const clickOutsideRefs = useMemo(() => [triggerRef, listRef], [])
   useClickOutside(clickOutsideRefs, close, isOpen)
   const select = useCallback(
-    (slot: ATermSlot | PaneSlot) => {
+    (slot: TerminalSlot | PaneSlot) => {
       onSwitchTo(slot)
       setIsOpen(false)
     },

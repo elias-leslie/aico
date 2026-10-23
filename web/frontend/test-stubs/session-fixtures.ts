@@ -4,12 +4,12 @@
  * and root rows are what web/server/src/sessions.ts sets (own_tmux sessions
  * are no longer listed).
  */
-import type { ATermSession } from '@/lib/hooks/use-a-term-sessions'
+import type { TerminalSession } from '@/lib/hooks/use-terminal-sessions'
 import type { SlotCapabilities } from '@/lib/utils/slot'
 import capabilities from './session-capabilities.json'
 
 type CapabilityFlags = Pick<
-  ATermSession,
+  TerminalSession,
   'can_rename' | 'can_respawn' | 'can_end'
 >
 
@@ -30,7 +30,7 @@ export const SESSION_BASE = {
   created_at: null,
   last_accessed_at: null,
   ...TETHER_CAN,
-} satisfies Partial<ATermSession>
+} satisfies Partial<TerminalSession>
 
 /** Slot capabilities for tests that do not exercise them: a pane session that
  * is renamed as a pane and can be reset and ended. */

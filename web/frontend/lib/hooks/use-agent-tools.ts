@@ -3,14 +3,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback } from 'react'
 import { apiFetch } from '../api-fetch'
-import type { ATermPane } from './use-a-term-panes'
+import type { TerminalPane } from './use-terminal-panes'
 
 // ============================================================================
 // Types
 // ============================================================================
 
 /**
- * One entry of Tether's merged agent-tool registry, as A-Term serves it.
+ * One entry of Tether's merged agent-tool registry, as the web server serves it.
  * `argv` is authoritative; `command` is its plain-word rendering. An empty
  * argv is the bare shell. Aliases share the slug namespace (`claude` →
  * `claude-code`).
@@ -51,7 +51,7 @@ async function fetchAgentTools(): Promise<AgentTool[]> {
 async function switchPaneAgentTool(
   paneId: string,
   agentToolSlug: string,
-): Promise<ATermPane> {
+): Promise<TerminalPane> {
   return apiFetch(
     `/api/panes/${paneId}/agent-tool`,
     {
@@ -81,7 +81,7 @@ export function useAgentTools() {
     staleTime: 60000,
   })
 
-  // The registry's `shell` tool is A-Term's shell mode, not an agent choice.
+  // The registry's `shell` tool is the web app's shell mode, not an agent choice.
   const enabledTools = agentTools.filter((t) => t.enabled && isAgentTool(t))
   const defaultTool = enabledTools.find((t) => t.is_default) ?? enabledTools[0]
 
@@ -89,8 +89,8 @@ export function useAgentTools() {
     mutationFn: ({ paneId, slug }: { paneId: string; slug: string }) =>
       switchPaneAgentTool(paneId, slug),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['a-term-panes'] })
-      queryClient.invalidateQueries({ queryKey: ['a-term-sessions'] })
+      queryClient.invalidateQueries({ queryKey: ['terminal-panes'] })
+      queryClient.invalidateQueries({ queryKey: ['terminal-sessions'] })
     },
   })
 

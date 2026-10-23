@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import { TETHER_CAN } from '@/test-stubs/session-fixtures'
-import type { ATermSession } from './use-a-term-sessions'
 import {
   deriveActiveSessionId,
   parsePersistedSessionId,
   shouldSyncSessionParam,
 } from './use-active-session'
+import type { TerminalSession } from './use-terminal-sessions'
 
-const sessions: ATermSession[] = [
+const sessions: TerminalSession[] = [
   {
     id: 'session-1',
-    name: 'A-Term 1',
+    name: 'Session 1',
     user_id: null,
     project_id: null,
     working_dir: null,
@@ -23,7 +23,7 @@ const sessions: ATermSession[] = [
   },
   {
     id: 'session-2',
-    name: 'A-Term 2',
+    name: 'Session 2',
     user_id: null,
     project_id: 'project-2',
     working_dir: null,

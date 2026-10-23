@@ -8,8 +8,8 @@ export interface ModifierStates {
   alt: ModifierState
 }
 
-// A-Term input handler type
-export type ATermInputHandler = (sequence: string) => void
+// Terminal input handler type
+export type TerminalInputHandler = (sequence: string) => void
 
 // Sizes of the key row and compose box, in design pixels.
 export const KEY_ROW_METRICS = {
