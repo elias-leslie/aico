@@ -12,6 +12,7 @@ import {
 import '@xterm/xterm/css/xterm.css'
 import { swallowQueryReplies, trackSgrMouse } from '../lib/a-term/control-view'
 import { LineCache } from '../lib/a-term/line-cache'
+import { keepReadingPlace } from '../lib/a-term/reading-place'
 import {
   A_TERM_THEMES,
   PHOSPHOR_THEME,
@@ -507,7 +508,9 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
         () => controlModeRef.current,
       )
       const scrolled = term.onScroll(onViewportMoved)
+      const readingPlace = keepReadingPlace(term)
       return () => {
+        readingPlace.dispose()
         sgr.dispose()
         stopSwallowing()
         scrolled.dispose()

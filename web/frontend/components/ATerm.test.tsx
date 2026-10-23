@@ -70,6 +70,9 @@ const fakeATerm = {
   options: { scrollback: 0 },
   reset: vi.fn(),
   onScroll: vi.fn(() => ({ dispose: vi.fn() })),
+  onResize: vi.fn(() => ({ dispose: vi.fn() })),
+  onWriteParsed: vi.fn(() => ({ dispose: vi.fn() })),
+  cols: 80,
   scrollToLine: vi.fn(),
   write: vi.fn((_data: string, callback?: () => void) => {
     if (callback) {
