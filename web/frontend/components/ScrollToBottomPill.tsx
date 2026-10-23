@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  type ATermTheme,
+  A_TERM_FONT_FAMILY,
   BOTTOM_OVERLAY_HEIGHT_VAR,
+  PHOSPHOR_THEME,
 } from '../lib/constants/a-term'
 
 type XtermATerm = InstanceType<typeof import('@xterm/xterm').Terminal>
@@ -12,8 +13,6 @@ interface ScrollToBottomPillProps {
   aTermRef: React.RefObject<XtermATerm | null>
   /** The terminal exists and can be listened to. */
   isReady: boolean
-  theme: ATermTheme
-  fontFamily?: string
 }
 
 interface ReadingState {
@@ -60,9 +59,8 @@ export function readViewport(
 export function ScrollToBottomPill({
   aTermRef,
   isReady,
-  theme,
-  fontFamily = "'JetBrains Mono', monospace",
 }: ScrollToBottomPillProps) {
+  const theme = PHOSPHOR_THEME
   const [state, setState] = useState<ReadingState>(AT_BOTTOM)
   const trackerRef = useRef<Tracker | null>(null)
 
@@ -120,7 +118,7 @@ export function ScrollToBottomPill({
         }
         className="pointer-events-auto inline-flex min-h-9 items-center gap-1.5 rounded-full px-4 text-xs shadow-lg focus-visible:outline-2 focus-visible:outline-offset-2 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:px-5 [@media(pointer:coarse)]:text-sm"
         style={{
-          fontFamily,
+          fontFamily: A_TERM_FONT_FAMILY,
           color: theme.green,
           background: `color-mix(in srgb, ${theme.background} 88%, ${theme.green})`,
           border: `1px solid ${theme.green}66`,

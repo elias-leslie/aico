@@ -1,10 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { createRef } from 'react'
 import { describe, expect, it, vi } from 'vitest'
-import {
-  BOTTOM_OVERLAY_HEIGHT_VAR,
-  PHOSPHOR_THEME,
-} from '../lib/constants/a-term'
+import { BOTTOM_OVERLAY_HEIGHT_VAR } from '../lib/constants/a-term'
 import { ScrollToBottomPill } from './ScrollToBottomPill'
 
 type Listener = () => void
@@ -36,13 +33,7 @@ function makeTerm() {
 function mount(term: ReturnType<typeof makeTerm>['term']) {
   const ref = createRef<never>() as { current: unknown }
   ref.current = term
-  return render(
-    <ScrollToBottomPill
-      aTermRef={ref as never}
-      isReady
-      theme={PHOSPHOR_THEME}
-    />,
-  )
+  return render(<ScrollToBottomPill aTermRef={ref as never} isReady />)
 }
 
 describe('ScrollToBottomPill', () => {

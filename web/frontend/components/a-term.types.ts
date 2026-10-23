@@ -1,5 +1,3 @@
-import type { ATermTheme } from '../lib/constants/a-term'
-
 export interface ATermProps {
   sessionId: string
   sessionMode?: string
@@ -7,11 +5,7 @@ export interface ATermProps {
   className?: string
   onDisconnect?: () => void
   onStatusChange?: (status: ConnectionStatus) => void
-  fontFamily?: string
   fontSize?: number
-  cursorStyle?: 'block' | 'underline' | 'bar'
-  cursorBlink?: boolean
-  theme?: ATermTheme
   isVisible?: boolean
   onFilePaste?: (file: File, sessionId: string) => void | Promise<void>
 }

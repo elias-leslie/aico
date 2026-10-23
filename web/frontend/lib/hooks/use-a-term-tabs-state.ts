@@ -156,20 +156,7 @@ export function useATermTabsState({
       getActiveSessionProjectId(activeSessionId, sessions) ?? scopedProjectId
     )
   }, [activeSessionId, isDetachedWindow, scopedDetachedPanes, sessions])
-  const {
-    fontId,
-    fontSize,
-    fontFamily,
-    cursorStyle,
-    cursorBlink,
-    themeId,
-    theme,
-    setFontId,
-    setFontSize,
-    setCursorStyle,
-    setCursorBlink,
-    setThemeId,
-  } = useATermSettings(activeSessionProjectId)
+  const { fontSize, setFontSize } = useATermSettings(activeSessionProjectId)
   const [showSettings, setShowSettings] = useState(false)
   const [keyboardMode, setKeyboardMode] =
     useLocalStorageState<MobileKeyboardMode>('a-term-keyboard-mode', 'native')
@@ -764,18 +751,8 @@ export function useATermTabsState({
     aTermStatuses,
     projectTabRefs,
     setATermRef,
-    fontId,
     fontSize,
-    fontFamily,
-    cursorStyle,
-    cursorBlink,
-    themeId,
-    theme,
-    setFontId,
     setFontSize,
-    setCursorStyle,
-    setCursorBlink,
-    setThemeId,
     showSettings,
     setShowSettings,
     keyboardMode,

@@ -37,11 +37,7 @@ interface UsePaneRendererOptions {
     | 'isMobile'
     | 'onSwapPanes'
     | 'onATermRef'
-    | 'fontFamily'
     | 'fontSize'
-    | 'cursorStyle'
-    | 'cursorBlink'
-    | 'theme'
     | 'onStatusChange'
     | 'onVoice'
     | 'layoutMode'
@@ -79,11 +75,7 @@ export function usePaneRenderer({
     isMobile,
     onSwapPanes,
     onATermRef,
-    fontFamily,
     fontSize,
-    cursorStyle,
-    cursorBlink,
-    theme,
     onStatusChange,
     onVoice,
     layoutMode,
@@ -283,11 +275,7 @@ export function usePaneRenderer({
                 }
                 workingDir={workingDir || undefined}
                 className="h-full"
-                fontFamily={fontFamily}
                 fontSize={fontSize}
-                cursorStyle={cursorStyle}
-                cursorBlink={cursorBlink}
-                theme={theme}
                 onStatusChange={(status) => onStatusChange?.(sessionId, status)}
                 onFilePaste={
                   onFilePaste
@@ -337,11 +325,7 @@ export function usePaneRenderer({
       paneCount,
       onSwapPanes,
       onATermRef,
-      fontFamily,
       fontSize,
-      cursorStyle,
-      cursorBlink,
-      theme,
       onStatusChange,
       onVoice,
       layoutMode,

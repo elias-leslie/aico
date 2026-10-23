@@ -1,8 +1,9 @@
 import type { FitAddon } from '@xterm/addon-fit'
 import type { WebglAddon } from '@xterm/addon-webgl'
+import { A_TERM_FONT_FAMILY, PHOSPHOR_THEME } from '../constants/a-term'
 import { isMobileDevice } from '../utils/device'
 import { applyMobileATermTouchStyles } from '../utils/mobile-a-term-touch'
-import { shouldUseWebglRenderer } from '../utils/renderer-preference'
+import { shouldUseWebglRenderer } from '../utils/webgl-renderer'
 
 type XtermATermConstructor = typeof import('@xterm/xterm').Terminal
 type XtermATerm = InstanceType<XtermATermConstructor>
@@ -102,16 +103,16 @@ export function createATermWithAddons(
   fitAddon: InstanceType<typeof FitAddon>
 } {
   const term = new modules.XtermATerm({
-    cursorBlink: opts.cursorBlink,
-    cursorStyle: opts.cursorStyle,
+    cursorBlink: true,
+    cursorStyle: 'block',
     fontSize: opts.fontSize,
-    fontFamily: opts.fontFamily,
+    fontFamily: A_TERM_FONT_FAMILY,
     scrollback: opts.scrollback,
     allowProposedApi: true,
     rightClickSelectsWord: true,
     macOptionClickForcesSelection: true,
     altClickMovesCursor: false,
-    theme: opts.theme,
+    theme: PHOSPHOR_THEME,
   })
 
   const fitAddon = new modules.FitAddon()
@@ -127,35 +128,8 @@ export function createATermWithAddons(
 // ---------------------------------------------------------------------------
 
 export interface ATermInstanceOptions {
-  cursorBlink: boolean
-  cursorStyle: 'block' | 'underline' | 'bar'
   fontSize: number
-  fontFamily: string
   scrollback: number
-  theme: {
-    background: string
-    foreground: string
-    cursor: string
-    cursorAccent: string
-    selectionBackground: string
-    selectionForeground?: string
-    black: string
-    red: string
-    green: string
-    yellow: string
-    blue: string
-    magenta: string
-    cyan: string
-    white: string
-    brightBlack: string
-    brightRed: string
-    brightGreen: string
-    brightYellow: string
-    brightBlue: string
-    brightMagenta: string
-    brightCyan: string
-    brightWhite: string
-  }
   onData: (data: string) => void
   onPaste: (data: string) => void
   onFilePaste?: (file: File) => void

@@ -23,11 +23,7 @@ export interface PaneLayout {
 
 export interface ResizablePaneLayoutProps {
   slots: (ATermSlot | PaneSlot)[]
-  fontFamily: string
   fontSize: number
-  cursorStyle?: 'block' | 'underline' | 'bar'
-  cursorBlink?: boolean
-  theme?: Parameters<typeof ATermComponent>[0]['theme']
   onATermRef?: (sessionId: string, handle: ATermHandle | null) => void
   onStatusChange?: (sessionId: string, status: ConnectionStatus) => void
   aTermStatuses?: Map<string, ConnectionStatus>

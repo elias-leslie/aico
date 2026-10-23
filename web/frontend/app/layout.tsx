@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { DM_Sans, JetBrains_Mono } from 'next/font/google'
 import { headers } from 'next/headers'
 import Script from 'next/script'
-import { APP_THEME_COLORS, APP_THEME_INIT_SCRIPT } from '@/lib/app-theme'
+import { PHOSPHOR_THEME } from '@/lib/constants/a-term'
 import {
   PRODUCT_DESCRIPTION,
   PRODUCT_NAME,
@@ -45,10 +45,7 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  themeColor: [
-    { media: '(prefers-color-scheme: dark)', color: APP_THEME_COLORS.dark },
-    { media: '(prefers-color-scheme: light)', color: APP_THEME_COLORS.light },
-  ],
+  themeColor: PHOSPHOR_THEME.background,
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
@@ -65,9 +62,6 @@ export default async function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <Script id="app-theme-init" nonce={nonce} strategy="beforeInteractive">
-          {APP_THEME_INIT_SCRIPT}
-        </Script>
         <Script id="pwa-register" nonce={nonce} strategy="afterInteractive">
           {PWA_REGISTER_SCRIPT}
         </Script>

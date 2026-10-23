@@ -1,5 +1,4 @@
 import type { RefObject } from 'react'
-import type { ATermLayoutRenderer } from '@/components/ATermLayoutRenderer'
 import type { ATermHandle, ConnectionStatus } from '@/components/a-term.types'
 import type {
   KeyboardSizePreset,
@@ -7,12 +6,7 @@ import type {
   MobileKeyboardMode,
 } from '@/components/keyboard/types'
 import type { LayoutMode } from '@/lib/constants/a-term'
-import type {
-  ATermCursorStyle,
-  ATermFontId,
-  ATermFontSize,
-  ATermThemeId,
-} from '@/lib/hooks/use-a-term-settings'
+import type { ATermFontSize } from '@/lib/hooks/use-a-term-settings'
 import type { ATermSlot, PaneSlot } from '@/lib/utils/slot'
 import type { TranscriptionError, TranscriptionStatus } from '@/lib/voice/types'
 import type { PaneLayout } from '@/types/pane-layout'
@@ -20,21 +14,11 @@ import type { PaneLayout } from '@/types/pane-layout'
 export interface ATermContentProps {
   // A-Term state
   aTermSlots: (ATermSlot | PaneSlot)[]
-  fontFamily: string
   fontSize: ATermFontSize
-  cursorStyle: 'block' | 'underline' | 'bar'
-  cursorBlink: boolean
-  theme?: Parameters<typeof ATermLayoutRenderer>[0]['theme']
 
   // Settings
-  fontId: ATermFontId
-  themeId: ATermThemeId
   showSettings: boolean
-  setFontId: (id: ATermFontId) => void
   setFontSize: (size: ATermFontSize) => void
-  setCursorStyle: (style: ATermCursorStyle) => void
-  setCursorBlink: (blink: boolean) => void
-  setThemeId: (id: ATermThemeId) => void
   setShowSettings: (show: boolean) => void
   keyboardMode?: MobileKeyboardMode
   keyboardSize?: KeyboardSizePreset

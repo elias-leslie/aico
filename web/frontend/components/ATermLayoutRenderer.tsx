@@ -3,7 +3,7 @@
 import type { LayoutMode } from '@/lib/constants/a-term'
 import type { ATermSlot, PaneSlot } from '@/lib/utils/slot'
 import { getSlotPanelId } from '@/lib/utils/slot'
-import type { ATermComponent, ATermHandle } from './ATerm'
+import type { ATermHandle } from './ATerm'
 import type { ConnectionStatus } from './a-term.types'
 import type { ATermMode } from './ModeToggle'
 import { type PaneLayout, ResizablePaneLayout } from './ResizablePaneLayout'
@@ -24,11 +24,7 @@ interface ATermLayoutRendererProps {
   aTermSlots: (ATermSlot | PaneSlot)[]
 
   // A-Term settings
-  fontFamily: string
   fontSize: number
-  cursorStyle: 'bar' | 'block' | 'underline'
-  cursorBlink: boolean
-  theme?: Parameters<typeof ATermComponent>[0]['theme']
 
   // A-Term ref and status handlers
   onATermRef: (sessionId: string, handle: ATermHandle | null) => void
@@ -84,11 +80,7 @@ interface ATermLayoutRendererProps {
 
 export function ATermLayoutRenderer({
   aTermSlots,
-  fontFamily,
   fontSize,
-  cursorStyle,
-  cursorBlink,
-  theme,
   onATermRef,
   onStatusChange,
   aTermStatuses,
@@ -122,11 +114,7 @@ export function ATermLayoutRenderer({
     <ResizablePaneLayout
       key={layoutKey}
       slots={aTermSlots}
-      fontFamily={fontFamily}
       fontSize={fontSize}
-      cursorStyle={cursorStyle}
-      cursorBlink={cursorBlink}
-      theme={theme}
       onATermRef={onATermRef}
       onStatusChange={onStatusChange}
       aTermStatuses={aTermStatuses}

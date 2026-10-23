@@ -15,19 +15,9 @@ export type { ATermContentProps }
  */
 export function ATermContent({
   aTermSlots,
-  fontFamily,
   fontSize,
-  cursorStyle,
-  cursorBlink,
-  theme,
-  fontId,
-  themeId,
   showSettings,
-  setFontId,
   setFontSize,
-  setCursorStyle,
-  setCursorBlink,
-  setThemeId,
   setShowSettings,
   keyboardMode,
   keyboardSize,
@@ -96,16 +86,8 @@ export function ATermContent({
       <AgentShows />
       {/* Settings dropdown - all settings controls */}
       <SettingsDropdown
-        fontId={fontId}
         fontSize={fontSize}
-        cursorStyle={cursorStyle}
-        cursorBlink={cursorBlink}
-        themeId={themeId}
-        setFontId={setFontId}
         setFontSize={setFontSize}
-        setCursorStyle={setCursorStyle}
-        setCursorBlink={setCursorBlink}
-        setThemeId={setThemeId}
         showSettings={showSettings}
         setShowSettings={setShowSettings}
         keyboardMode={keyboardMode}
@@ -121,11 +103,7 @@ export function ATermContent({
       {/* A-Term panels, file upload input, and upload status toasts */}
       <ATermFileSection
         aTermSlots={aTermSlots}
-        fontFamily={fontFamily}
         fontSize={fontSize}
-        cursorStyle={cursorStyle}
-        cursorBlink={cursorBlink}
-        theme={theme}
         setATermRef={setATermRef}
         handleStatusChange={handleStatusChange}
         aTermStatuses={aTermStatuses}

@@ -78,7 +78,6 @@ describe('ResizablePaneLayout', () => {
         slots={slots}
         isMobile={true}
         activeSessionId="session-14"
-        fontFamily="monospace"
         fontSize={14}
       />,
     )
@@ -104,7 +103,6 @@ describe('ResizablePaneLayout', () => {
         slots={[freeView]}
         isMobile={true}
         activeSessionId={null}
-        fontFamily="monospace"
         fontSize={14}
       />,
     )
@@ -117,7 +115,6 @@ describe('ResizablePaneLayout', () => {
         slots={[freeView, pane]}
         isMobile={true}
         activeSessionId={null}
-        fontFamily="monospace"
         fontSize={14}
       />,
     )
@@ -128,7 +125,6 @@ describe('ResizablePaneLayout', () => {
         slots={[freeView, pane]}
         isMobile={true}
         activeSessionId="other-agent"
-        fontFamily="monospace"
         fontSize={14}
       />,
     )
@@ -139,13 +135,7 @@ describe('ResizablePaneLayout', () => {
     const slots = Array.from({ length: 14 }, (_, index) =>
       makeProjectSlot(String(index + 1)),
     )
-    render(
-      <ResizablePaneLayout
-        slots={slots}
-        fontFamily="monospace"
-        fontSize={14}
-      />,
-    )
+    render(<ResizablePaneLayout slots={slots} fontSize={14} />)
 
     expect(mockUsePaneRenderer).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -159,7 +149,6 @@ describe('ResizablePaneLayout', () => {
     render(
       <ResizablePaneLayout
         slots={[makeProjectSlot('1'), makeProjectSlot('2')]}
-        fontFamily="monospace"
         fontSize={14}
         layoutMode="split-vertical"
       />,
@@ -179,7 +168,6 @@ describe('ResizablePaneLayout', () => {
           makeProjectSlot('5'),
           makeProjectSlot('6'),
         ]}
-        fontFamily="monospace"
         fontSize={14}
         layoutMode="grid-3x2"
       />,
@@ -197,7 +185,6 @@ describe('ResizablePaneLayout', () => {
           makeProjectSlot('3'),
           makeProjectSlot('4'),
         ]}
-        fontFamily="monospace"
         fontSize={14}
         layoutMode="split-horizontal"
       />,
@@ -215,7 +202,6 @@ describe('ResizablePaneLayout', () => {
           makeProjectSlot('3'),
           makeProjectSlot('4'),
         ]}
-        fontFamily="monospace"
         fontSize={14}
         layoutMode="grid-2x2"
       />,
@@ -232,7 +218,6 @@ describe('ResizablePaneLayout', () => {
           makeProjectSlot('2'),
           makeProjectSlot('3'),
         ]}
-        fontFamily="monospace"
         fontSize={14}
         layoutMode="split-vertical"
       />,
@@ -252,7 +237,6 @@ describe('ResizablePaneLayout', () => {
           makeProjectSlot('5'),
           makeProjectSlot('6'),
         ]}
-        fontFamily="monospace"
         fontSize={14}
         layoutMode="split-horizontal"
       />,
@@ -284,7 +268,6 @@ describe('ResizablePaneLayout', () => {
           makeProjectSlot('4'),
           makeProjectSlot('5'),
         ]}
-        fontFamily="monospace"
         fontSize={14}
         layoutMode="grid-3x2"
       />,
@@ -302,7 +285,6 @@ describe('ResizablePaneLayout', () => {
           makeProjectSlot('5'),
           makeProjectSlot('6'),
         ]}
-        fontFamily="monospace"
         fontSize={14}
         layoutMode="grid-3x2"
       />,
@@ -328,7 +310,6 @@ describe('ResizablePaneLayout', () => {
           makeProjectSlot('4'),
           makeProjectSlot('5'),
         ]}
-        fontFamily="monospace"
         fontSize={14}
         layoutMode="grid-3x2"
       />,

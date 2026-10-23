@@ -48,19 +48,9 @@ export function ATermTabs({
     externalSessions,
     detachedPanes,
     aTermSlots,
-    fontFamily,
     fontSize,
-    cursorStyle,
-    cursorBlink,
-    theme,
-    fontId,
-    themeId,
     showSettings,
-    setFontId,
     setFontSize,
-    setCursorStyle,
-    setCursorBlink,
-    setThemeId,
     setShowSettings,
     keyboardMode,
     keyboardSize,
@@ -177,19 +167,9 @@ export function ATermTabs({
     <>
       <ATermContent
         aTermSlots={aTermSlots}
-        fontFamily={fontFamily}
         fontSize={fontSize}
-        cursorStyle={cursorStyle}
-        cursorBlink={cursorBlink}
-        theme={theme}
-        fontId={fontId}
-        themeId={themeId}
         showSettings={showSettings}
-        setFontId={setFontId}
         setFontSize={setFontSize}
-        setCursorStyle={setCursorStyle}
-        setCursorBlink={setCursorBlink}
-        setThemeId={setThemeId}
         setShowSettings={setShowSettings}
         keyboardMode={keyboardMode}
         keyboardSize={keyboardSize}

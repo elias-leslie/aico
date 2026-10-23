@@ -194,23 +194,9 @@ describe('useATermTabsState', () => {
     mockUseMediaQuery.mockReturnValue(false)
     mockUseAutoCreatePane.mockReturnValue(undefined)
     mockUseATermSettings.mockImplementation((projectId?: string) => ({
-      fontId: 'jetbrains-mono',
-      fontSize: 14,
-      fontFamily: "'JetBrains Mono', monospace",
-      cursorStyle: 'block',
-      cursorBlink: true,
-      themeId:
-        projectId === 'project-a'
-          ? 'dracula'
-          : projectId === 'project-b'
-            ? 'tokyo-night'
-            : 'phosphor',
-      theme: {},
-      setFontId: vi.fn(),
+      fontSize:
+        projectId === 'project-a' ? 16 : projectId === 'project-b' ? 18 : 14,
       setFontSize: vi.fn(),
-      setCursorStyle: vi.fn(),
-      setCursorBlink: vi.fn(),
-      setThemeId: vi.fn(),
     }))
   })
 
@@ -302,7 +288,7 @@ describe('useATermTabsState', () => {
       includeDetached: true,
       persistKey: 'aTerm:last-active-session-id',
     })
-    expect(result.current.themeId).toBe('tokyo-night')
+    expect(result.current.fontSize).toBe(18)
     expect(result.current.aTermSlots).toHaveLength(1)
     expect(result.current.aTermSlots[0]).toMatchObject({
       paneId: 'pane-detached',
@@ -971,7 +957,7 @@ describe('useATermTabsState', () => {
     )
 
     expect(result.current.activeSessionId).toBe('session-project-a')
-    expect(result.current.themeId).toBe('dracula')
+    expect(result.current.fontSize).toBe(16)
     expect(mockUseATermSettings).toHaveBeenLastCalledWith('project-a')
 
     activeSessionState = buildActiveSessionState({
@@ -994,7 +980,7 @@ describe('useATermTabsState', () => {
     rerender()
 
     expect(result.current.activeSessionId).toBe('session-project-b')
-    expect(result.current.themeId).toBe('tokyo-night')
+    expect(result.current.fontSize).toBe(18)
     expect(mockUseATermSettings).toHaveBeenLastCalledWith('project-b')
 
     activeSessionState = buildActiveSessionState({
@@ -1017,7 +1003,7 @@ describe('useATermTabsState', () => {
     rerender()
 
     expect(result.current.activeSessionId).toBe('session-adhoc')
-    expect(result.current.themeId).toBe('phosphor')
+    expect(result.current.fontSize).toBe(14)
     expect(mockUseATermSettings).toHaveBeenLastCalledWith(undefined)
   })
 

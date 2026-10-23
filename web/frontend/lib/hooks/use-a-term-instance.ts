@@ -186,23 +186,10 @@ export function useATermInstance(
   // Apply incremental settings changes to existing aTerm
   useEffect(() => {
     if (!aTermRef.current) return
-    aTermRef.current.options.fontFamily = options.fontFamily
     aTermRef.current.options.fontSize = options.fontSize
     aTermRef.current.options.scrollback = options.scrollback
-    aTermRef.current.options.cursorStyle = options.cursorStyle
-    aTermRef.current.options.cursorBlink = options.cursorBlink
-    aTermRef.current.options.theme = options.theme
     fitAddonRef.current?.fit()
-  }, [
-    options.fontFamily,
-    options.fontSize,
-    options.scrollback,
-    options.cursorStyle,
-    options.cursorBlink,
-    options.theme,
-    aTermRef,
-    fitAddonRef,
-  ])
+  }, [options.fontSize, options.scrollback, aTermRef, fitAddonRef])
 
   return { isReady }
 }

@@ -47,11 +47,7 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
       className,
       onDisconnect,
       onStatusChange,
-      fontFamily = "'JetBrains Mono', monospace",
       fontSize = 14,
-      cursorStyle = 'block',
-      cursorBlink = true,
-      theme = PHOSPHOR_THEME,
       isVisible = true,
       onFilePaste,
     },
@@ -235,12 +231,8 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
 
     const { isReady } = useATermInstance(
       {
-        cursorBlink,
-        cursorStyle,
         fontSize,
-        fontFamily,
         scrollback: controlHistoryLines ?? SCROLLBACK,
-        theme,
         onData: handleATermData,
         onPaste: pasteInput,
         onFilePaste: pasteFile,
@@ -309,16 +301,11 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
           data-testid="a-term-live-container"
           className="h-full min-h-0 min-w-0 overflow-hidden"
           style={{
-            backgroundColor: theme.background,
+            backgroundColor: PHOSPHOR_THEME.background,
             width: '100%',
           }}
         />
-        <ScrollToBottomPill
-          aTermRef={aTermRef}
-          isReady={isReady}
-          theme={theme}
-          fontFamily={fontFamily}
-        />
+        <ScrollToBottomPill aTermRef={aTermRef} isReady={isReady} />
       </div>
     )
   },

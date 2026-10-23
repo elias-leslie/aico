@@ -14,11 +14,7 @@ import type { PaneLayout } from '@/types/pane-layout'
 
 interface ATermFileSectionProps {
   aTermSlots: (ATermSlot | PaneSlot)[]
-  fontFamily: string
   fontSize: ATermFontSize
-  cursorStyle: 'block' | 'underline' | 'bar'
-  cursorBlink: boolean
-  theme?: Parameters<typeof ATermLayoutRenderer>[0]['theme']
   setATermRef: (sessionId: string, handle: ATermHandle | null) => void
   handleStatusChange: (sessionId: string, status: ConnectionStatus) => void
   aTermStatuses: Map<string, ConnectionStatus>
@@ -60,11 +56,7 @@ interface ATermFileSectionProps {
 
 export function ATermFileSection({
   aTermSlots,
-  fontFamily,
   fontSize,
-  cursorStyle,
-  cursorBlink,
-  theme,
   setATermRef,
   handleStatusChange,
   aTermStatuses,
@@ -130,11 +122,7 @@ export function ATermFileSection({
       >
         <ATermLayoutRenderer
           aTermSlots={aTermSlots}
-          fontFamily={fontFamily}
           fontSize={fontSize}
-          cursorStyle={cursorStyle}
-          cursorBlink={cursorBlink}
-          theme={theme}
           onATermRef={setATermRef}
           onStatusChange={handleStatusChange}
           aTermStatuses={aTermStatuses}

@@ -1,5 +1,5 @@
 import type { MetadataRoute } from 'next'
-import { APP_THEME_COLORS } from '@/lib/app-theme'
+import { PHOSPHOR_THEME } from '@/lib/constants/a-term'
 import {
   PRODUCT_DESCRIPTION,
   PRODUCT_NAME,
@@ -15,8 +15,8 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: '/',
     scope: '/',
     display: 'standalone',
-    background_color: APP_THEME_COLORS.dark,
-    theme_color: APP_THEME_COLORS.dark,
+    background_color: PHOSPHOR_THEME.background,
+    theme_color: PHOSPHOR_THEME.background,
     icons: [
       {
         src: '/icons/icon-192.png',

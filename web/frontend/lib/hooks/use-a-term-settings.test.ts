@@ -15,96 +15,53 @@ describe('useATermSettings', () => {
     window.localStorage.clear()
   })
 
-  it('falls back to global settings when project settings are missing', () => {
+  it('falls back to the global size when the project has none', () => {
+    // Settings saved by older versions carry fields that are now ignored.
     writeSettings('a-term-settings', {
       fontId: 'fira-code',
       fontSize: 16,
-      scrollback: 5000,
-      cursorStyle: 'underline',
-      cursorBlink: false,
       themeId: 'dracula',
     })
 
     const { result } = renderHook(() => useATermSettings('project-a'))
 
-    expect(result.current.fontId).toBe('fira-code')
-    expect(result.current.fontSize).toBe(16)
-    // A stored buffer size from the old settings is simply ignored.
-    expect(result.current).not.toHaveProperty('scrollback')
-    expect(result.current.cursorStyle).toBe('underline')
-    expect(result.current.cursorBlink).toBe(false)
-    expect(result.current.themeId).toBe('dracula')
+    expect(result.current).toEqual({
+      fontSize: 16,
+      setFontSize: expect.any(Function),
+    })
   })
 
-  it('reloads project-scoped settings when projectId changes', async () => {
-    writeSettings('a-term-settings', {
-      fontId: 'jetbrains-mono',
-      fontSize: 14,
-      cursorStyle: 'block',
-      cursorBlink: true,
-      themeId: 'phosphor',
-    })
-    writeSettings('a-term-settings-project-project-a', {
-      fontId: 'fira-code',
-      fontSize: 18,
-      cursorStyle: 'bar',
-      cursorBlink: false,
-      themeId: 'dracula',
-    })
+  it('reloads the size when the project changes', async () => {
+    writeSettings('a-term-settings', { fontSize: 14 })
+    writeSettings('a-term-settings-project-project-a', { fontSize: 18 })
 
     const { result, rerender } = renderHook(
       ({ projectId }: HookProps) => useATermSettings(projectId),
       { initialProps: { projectId: undefined } as HookProps },
     )
 
-    expect(result.current.fontId).toBe('jetbrains-mono')
+    expect(result.current.fontSize).toBe(14)
 
     rerender({ projectId: 'project-a' })
-
-    await waitFor(() => {
-      expect(result.current.fontId).toBe('fira-code')
-      expect(result.current.fontSize).toBe(18)
-      expect(result.current.cursorStyle).toBe('bar')
-      expect(result.current.cursorBlink).toBe(false)
-      expect(result.current.themeId).toBe('dracula')
-    })
-  })
-
-  it('reloads global settings when leaving a project scope', async () => {
-    writeSettings('a-term-settings', {
-      fontId: 'source-code-pro',
-      fontSize: 15,
-      cursorStyle: 'underline',
-      cursorBlink: true,
-      themeId: 'tokyo-night',
-    })
-    writeSettings('a-term-settings-project-project-a', {
-      fontId: 'fira-code',
-      fontSize: 18,
-      cursorStyle: 'bar',
-      cursorBlink: false,
-      themeId: 'dracula',
-    })
-
-    const { result, rerender } = renderHook(
-      ({ projectId }: HookProps) => useATermSettings(projectId),
-      { initialProps: { projectId: 'project-a' } as HookProps },
-    )
-
-    expect(result.current.fontId).toBe('fira-code')
+    await waitFor(() => expect(result.current.fontSize).toBe(18))
 
     rerender({ projectId: undefined })
-
-    await waitFor(() => {
-      expect(result.current.fontId).toBe('source-code-pro')
-      expect(result.current.fontSize).toBe(15)
-      expect(result.current.cursorStyle).toBe('underline')
-      expect(result.current.cursorBlink).toBe(true)
-      expect(result.current.themeId).toBe('tokyo-night')
-    })
+    await waitFor(() => expect(result.current.fontSize).toBe(14))
   })
 
-  it('keeps updating in-memory settings when storage writes fail', () => {
+  it('saves the size under the project key', () => {
+    const { result } = renderHook(() => useATermSettings('project-a'))
+
+    act(() => result.current.setFontSize(12))
+
+    expect(
+      JSON.parse(
+        window.localStorage.getItem('a-term-settings-project-project-a') ?? '',
+      ),
+    ).toEqual({ fontSize: 12 })
+  })
+
+  it('keeps the new size in memory when storage writes fail', () => {
     const setItemSpy = vi
       .spyOn(Storage.prototype, 'setItem')
       .mockImplementation(() => {
@@ -114,12 +71,9 @@ describe('useATermSettings', () => {
     const { result } = renderHook(() => useATermSettings())
 
     expect(() => {
-      act(() => {
-        result.current.setThemeId('dracula')
-      })
+      act(() => result.current.setFontSize(18))
     }).not.toThrow()
-
-    expect(result.current.themeId).toBe('dracula')
+    expect(result.current.fontSize).toBe(18)
 
     setItemSpy.mockRestore()
   })
