@@ -30,7 +30,11 @@ def env(tmp_path: Path, home: Path) -> dict[str, str]:
     stub(bin_dir, "node", 'case "$1" in -p) echo 24 ;; *) echo v24.0.0 ;; esac')
     for name in ("npm", "git"):
         stub(bin_dir, name, f'echo "{name} must not run in a dry run" >&2; exit 99')
-    stub(bin_dir, "systemctl", 'case "$1" in --version) echo "systemd 255 (255)" ;; *) exit 99 ;; esac')
+    stub(
+        bin_dir,
+        "systemctl",
+        'case "$1" in --version) echo "systemd 255 (255)" ;; *) exit 99 ;; esac',
+    )
     stub(bin_dir, "loginctl", "echo yes")
     return {
         "PATH": f"{bin_dir}:/usr/bin:/bin",
@@ -41,7 +45,14 @@ def env(tmp_path: Path, home: Path) -> dict[str, str]:
 
 
 def install(env: dict[str, str], *args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(["bash", str(INSTALL), *args], check=False, capture_output=True, env=env, text=True, timeout=60)
+    return subprocess.run(
+        ["bash", str(INSTALL), *args],
+        check=False,
+        capture_output=True,
+        env=env,
+        text=True,
+        timeout=60,
+    )
 
 
 def files_under(path: Path) -> list[Path]:
@@ -81,7 +92,9 @@ def test_dry_run_lists_every_unit(env: dict[str, str], home: Path) -> None:
     assert files_under(home) == []
 
 
-def test_pi_extension_links_only_when_summitflow_has_it(env: dict[str, str], home: Path, tmp_path: Path) -> None:
+def test_pi_extension_links_only_when_summitflow_has_it(
+    env: dict[str, str], home: Path, tmp_path: Path
+) -> None:
     source = tmp_path / "pi-coord-extension.ts"
     source.write_text("// fixture\n")
     result = install({**env, "ST_PI_COORD_EXTENSION": str(source)}, "--dry-run", "--skip-systemd")
