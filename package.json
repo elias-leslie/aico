@@ -9,10 +9,10 @@
   "scripts": {
     "postinstall": "install-electron",
     "start": "npm run build:desktop && electron-vite preview",
-    "build": "npm run build:desktop && npm run build --workspace tether && npm run build --workspace web/frontend",
+    "build": "npm run build:desktop && npm run build --workspace tether && npm run build --workspace web/server && npm run build --workspace web/frontend",
     "build:desktop": "electron-vite build",
     "dev": "electron-vite dev",
-    "typecheck": "tsc --noEmit && npm run typecheck --workspace tether && tsc --noEmit -p web/frontend",
+    "typecheck": "tsc --noEmit && npm run typecheck --workspace tether && tsc --noEmit -p web/server && tsc --noEmit -p web/frontend",
     "test": "vitest run",
     "check": "npm run lint && npm run typecheck && npm test && npm run build",
     "lint": "biome check ."
@@ -49,6 +49,7 @@
   },
   "workspaces": [
     "tether",
-    "web/frontend"
+    "web/frontend",
+    "web/server"
   ]
 }
