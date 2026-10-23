@@ -22,3 +22,23 @@ describe('RootLayout', () => {
     )
   })
 })
+
+describe('manifest route', () => {
+  it('serves an installable manifest', async () => {
+    const { GET } = await import('./manifest.webmanifest/route')
+    const response = GET()
+    expect(response.headers.get('Content-Type')).toBe(
+      'application/manifest+json',
+    )
+    const body = await response.json()
+    expect(body).toMatchObject({
+      name: 'Aico',
+      display: 'standalone',
+      start_url: '/',
+    })
+    expect(body.icons.map((icon: { sizes: string }) => icon.sizes)).toEqual([
+      '192x192',
+      '512x512',
+    ])
+  })
+})
