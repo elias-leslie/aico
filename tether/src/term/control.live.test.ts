@@ -7,9 +7,8 @@ import { execFileSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { Terminal } from '@xterm/headless'
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
-import { TERMINAL_HISTORY_LINES } from '../shared/terminal-history'
-import { ControlTerminal } from './tmux-control'
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { ControlTerminal, type ControlTerminalOptions } from './control'
 
 const hasTmux = (() => {
   try {
@@ -29,6 +28,7 @@ const tmux = (...args: string[]) =>
   execFileSync('tmux', ['-S', sock, ...args], { encoding: 'utf8', env })
 const attachArgv = ['tmux', '-S', sock, 'attach-session', '-t', 't']
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+const HISTORY_LINES = 20_000
 
 interface Viewer {
   link: ControlTerminal
@@ -36,14 +36,22 @@ interface Viewer {
 }
 
 const viewers: Viewer[] = []
-function view(cols: number, rows: number): Viewer {
+function view(
+  cols: number,
+  rows: number,
+  options: { sized?: boolean } & Partial<ControlTerminalOptions> = {},
+): Viewer {
   const term = new Terminal({
     cols,
     rows,
-    scrollback: TERMINAL_HISTORY_LINES,
+    scrollback: HISTORY_LINES,
     allowProposedApi: true,
   })
-  const link = new ControlTerminal(attachArgv, env, { cols, rows }, (argv) => argv)
+  const { sized = true, ...rest } = options
+  const link = new ControlTerminal(attachArgv, env, sized ? { cols, rows } : null, {
+    historyLines: HISTORY_LINES,
+    ...rest,
+  })
   link.onData((data) => term.write(data))
   const viewer = { link, term }
   viewers.push(viewer)
@@ -296,6 +304,80 @@ describe.skipIf(!hasTmux)('ControlTerminal against tmux', () => {
     await sleep(800)
     expect(readFileSync(out, 'utf8')).toBe('é❯ \x1b[200~one\rtwo\x1b[201~Q')
   })
+
+  it('an unsized client leaves the window size to the sized one and still seeds the screen', async () => {
+    const sized = view(80, 24)
+    await settle(sized)
+    run('clear; seq 1 50')
+    await settle(sized)
+    const watcher = view(80, 24, { sized: false })
+    await settle(watcher, 800)
+    expect(tmux('display', '-p', '-t', 't', '#{window_width}x#{window_height}').trim()).toBe(
+      '80x24',
+    )
+    expect(screenOf(watcher)).toEqual(tmuxScreen(24))
+    sized.link.resize(60, 20)
+    sized.term.resize(60, 20)
+    await settle(sized, 1000)
+    // tmux sizes the window to the sized client alone.
+    expect(tmux('display', '-p', '-t', 't', '#{window_width}x#{window_height}').trim()).toBe(
+      '60x20',
+    )
+  })
+
+  it('a slow viewer holds bounded memory: tmux pauses the pane for it and the link reseeds', async () => {
+    // A viewer that delivers nothing for a while next to one that keeps up:
+    // the slow link stops reading once its credit is out, tmux falls behind
+    // for it alone and pauses the pane, and when the viewer catches up the
+    // link reseeds to exactly what tmux holds. (With no viewer keeping up,
+    // tmux stops reading the pane instead and the program waits.)
+    const credit = 64 * 1024
+    const reasons: string[] = []
+    const fast = view(80, 24)
+    await settle(fast)
+    const slow = view(80, 24, {
+      sized: false,
+      creditBytes: credit,
+      onReseed: (r) => reasons.push(r.reason),
+    })
+    let held: string[] = []
+    let delivering = false
+    slow.link.onData((data) => {
+      if (delivering) slow.link.delivered(data.length)
+      else held.push(data)
+    })
+    await settle(slow)
+    const deliverHeld = () => {
+      const pending = held
+      held = []
+      for (const data of pending) slow.link.delivered(data.length)
+    }
+    deliverHeld()
+    // stty sane: an earlier test's raw-mode reader leaves LF without CR, where
+    // xterm and tmux place wrapped text differently with or without a seed.
+    run('stty sane; clear; while :; do seq 1 5000; sleep 0.05; done')
+    // Wait for the credit to run out, then long enough for tmux to pause the pane.
+    let peak = 0
+    let stalledAt = 0
+    for (let waited = 0; waited < 20_000; waited += 100) {
+      await sleep(100)
+      peak = Math.max(peak, slow.link.backlog)
+      if (!stalledAt && slow.link.backlog >= credit) stalledAt = Date.now()
+      if (stalledAt && Date.now() - stalledAt > 6500) break
+    }
+    expect(stalledAt).toBeGreaterThan(0)
+    // Credit plus at most one read from tmux beyond it.
+    expect(peak).toBeLessThan(credit + 256 * 1024)
+    delivering = true
+    deliverHeld()
+    await vi.waitFor(() => expect(reasons).toContain('pause'), { timeout: 10_000 })
+    tmux('send-keys', '-t', 't', 'C-c')
+    await sleep(1500)
+    await settle(slow, 800)
+    await settle(fast)
+    expect(screenOf(slow)).toEqual(tmuxScreen(24))
+    expect(screenOf(fast)).toEqual(tmuxScreen(24))
+  }, 40_000)
 
   it('reports exit when the session goes away', async () => {
     const v = view(50, 16)

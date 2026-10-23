@@ -3,10 +3,9 @@ import { join } from 'node:path'
 import { build } from 'esbuild'
 import { describe, expect, it } from 'vitest'
 
-// The daemon bundle (dist/tether.mjs, built from src/cli.ts) and the client
-// library (src/client, bundled by the apps) stay apart: the daemon never
-// imports the client or the terminal engine, and the client takes only types
-// from the daemon.
+// The daemon bundle (dist/tether.mjs, built from src/cli.ts) and the libraries
+// the apps bundle (src/client, src/term) stay apart: the daemon never imports
+// the client or the terminal engine, and they take only types from the daemon.
 
 const SRC = import.meta.dirname
 
@@ -27,8 +26,13 @@ describe('package boundaries', () => {
     expect(inputs.filter((path) => /(^|\/)src\/(client|term)\//.test(path))).toEqual([])
   })
 
-  it('imports daemon modules into the client by type only', () => {
-    const dir = join(SRC, 'client')
+  // The engine may use the client library itself (`../client/index`), but
+  // nothing else outside its own directory.
+  it.each([
+    ['client', []],
+    ['term', ['../client/index']],
+  ])('imports daemon modules into src/%s by type only', (lib, allowed) => {
+    const dir = join(SRC, lib)
     const valueImports = readdirSync(dir)
       .filter((name) => name.endsWith('.ts') && !name.endsWith('.test.ts'))
       .flatMap((name) =>
@@ -36,7 +40,9 @@ describe('package boundaries', () => {
           ...readFileSync(join(dir, name), 'utf8').matchAll(
             /^import (?!type )[^']*from '(\.\.\/[^']*)'/gm,
           ),
-        ].map((match) => `${name}: ${match[1]}`),
+        ]
+          .filter((match) => !allowed.includes(match[1]))
+          .map((match) => `${name}: ${match[1]}`),
       )
     expect(valueImports).toEqual([])
   })

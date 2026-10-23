@@ -1,5 +1,5 @@
 // Terminal byte path: one terminal link per open window, a tmux control-mode
-// client (tmux-control.ts). Killing a link only detaches, so the session
+// client (tether/term). Killing a link only detaches, so the session
 // survives close, reload and Aico restarts.
 
 import type { BrowserWindow, IpcMain } from 'electron'
@@ -7,16 +7,19 @@ import {
   type SessionCatalog,
   type SessionDescriptor,
   type TetherClient,
-  TetherError,
   TetherUnavailable,
   type ViewerLabel,
 } from 'tether/client'
+import {
+  type AttachTarget,
+  attachEnvironment,
+  createSizeClaim,
+  ownAttachTarget,
+  type TerminalLink,
+} from 'tether/term'
 import { describeFailure, writeNotice } from './notices'
 import { PERSONAL_WORKSPACE_ID } from './project'
 import { ACTIVE_WITHIN_MS, createSizeHolder, type SizeHolder } from './size-holder'
-import type { TerminalLink } from './tmux-control'
-import { type AttachTarget, attachEnvironment, ownAttachTarget } from './tmux-sandbox'
-import { coalesceTrailingAsync } from './tmux-view'
 import type { WindowRegistry } from './window-registry'
 
 interface PtySize {
@@ -61,8 +64,6 @@ interface TerminalDeps {
   recentlyArranged(winId: number): boolean
   titles(): void
   tray(): void
-  /** The tmux client's pid, given the pid of the bubblewrap that runs it. */
-  tmuxClientPid(bwrapPid: number): Promise<number>
   controlTerminal(argv: string[], env: NodeJS.ProcessEnv, size: PtySize): TerminalLink
   ensurePersonalWorkspaceRoot(): string | null
   isQuitting(): boolean
@@ -77,15 +78,6 @@ export function createTerminal(deps: TerminalDeps) {
   const sizeClaims = new WeakMap<TerminalLink, () => Promise<void>>()
   const sizeHolders = new WeakMap<TerminalLink, SizeHolder>()
   const lastInput = new Map<number, number>()
-  const clientPids = new WeakMap<TerminalLink, Promise<number>>()
-  function clientPidOf(link: TerminalLink): Promise<number> {
-    let known = clientPids.get(link)
-    if (!known) {
-      known = deps.tmuxClientPid(link.pid)
-      clientPids.set(link, known)
-    }
-    return known
-  }
   const ptyStartGenerations = new Map<number, number>()
   const ptyRefreshes = new Map<
     number,
@@ -202,39 +194,20 @@ export function createTerminal(deps: TerminalDeps) {
     })
     sizeHolders.set(pty, holder)
     if (!win.isDestroyed()) win.webContents.send('pty:size-other', false) // a fresh attach holds nothing against it
-    const claimSize = coalesceTrailingAsync(async () => {
-      for (let attempt = 0; attempt < 4 && isCurrent(); attempt += 1) {
-        const sessionGeneration = catalog.get(id)?.generation ?? target.generation
-        try {
-          const result = await tether.resizeClaim(
-            id,
-            sessionGeneration,
-            await clientPidOf(pty),
-            pty.cols,
-            pty.rows,
-            deps.viewer,
-          )
-          if (result.applied) {
-            holder.held()
-            // The window changed size under this client (another client held
-            // it): read the pane again, as after any resize.
-            if (result.changed && isCurrent()) pty.settleSize()
-            return
-          }
-          if (result.reason === 'stale') await deps.refresh().catch(() => {})
-          else if (result.reason !== 'client_not_attached' && result.reason !== 'tmux_unavailable')
-            return
-        } catch (error) {
-          if (error instanceof TetherError && error.code === 'stale_generation') {
-            await deps.refresh().catch(() => {})
-            continue
-          }
-          if (!(error instanceof TetherUnavailable))
-            console.warn(`[aico] resize claim failed widget=${id}:`, error)
-          return
-        }
-        await new Promise((resolve) => setTimeout(resolve, 200))
-      }
+    const claimSize = createSizeClaim({
+      tether,
+      id,
+      generation: () => catalog.get(id)?.generation ?? target.generation,
+      link: pty,
+      viewer: deps.viewer,
+      isCurrent,
+      refresh: () => deps.refresh(),
+      applied: (changed) => {
+        holder.held()
+        // The window changed size under this client (another client held
+        // it): read the pane again, as after any resize.
+        if (changed && isCurrent()) pty.settleSize()
+      },
     })
     sizeClaims.set(pty, claimSize)
     let claimAfterAttach = true
@@ -412,13 +385,8 @@ export function createTerminal(deps: TerminalDeps) {
       const pty = win ? ptys.get(win.id) : undefined
       const holder = pty ? sizeHolders.get(pty) : undefined
       if (!pty || !holder) return
-      void clientPidOf(pty)
-        .then((mine) => {
-          if (ptys.get(win?.id ?? -1) !== pty) return
-          if (mine === clientPid) holder.held()
-          else holder.lost()
-        })
-        .catch(() => {})
+      if (pty.pid === clientPid) holder.held()
+      else holder.lost()
     },
     /** The window gained focus: claim the session's size for its terminal. */
     claimSize: (winId: number): void => {

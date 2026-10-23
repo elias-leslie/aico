@@ -36,10 +36,6 @@ export const STREAM_IDLE_MS = 45_000
 const RECONNECT_MIN_MS = 500
 const RECONNECT_MAX_MS = 10_000
 
-/** The agent user's Tether instance (system-run, shared to the owner's group);
- * `TETHER_AGENT_SOCKET` overrides it. */
-export const DEFAULT_AGENT_TETHER_SOCKET = '/run/tether/agent/default/control.sock'
-
 /** This user's own `$XDG_RUNTIME_DIR/tether/<TETHER_INSTANCE|default>/control.sock`. */
 export function ownTetherSocketPath(env: NodeJS.ProcessEnv, uid: number | undefined): string {
   const runtime = env.XDG_RUNTIME_DIR || (uid === undefined ? '/tmp' : `/run/user/${uid}`)
@@ -57,17 +53,10 @@ export function tetherSocketPath(env: NodeJS.ProcessEnv, uid: number | undefined
   return env.TETHER_SOCKET || ownTetherSocketPath(env, uid)
 }
 
-/** Instances to consult: the active one first, then the other known one (this
- * user's, the agent's). A `TETHER_SOCKET` pinned to some third path means
- * exactly that socket. */
+/** Instances to consult (a pool's sockets): only the active one, since every
+ * session belongs to this user's own Tether. */
 export function knownTetherSockets(env: NodeJS.ProcessEnv, uid: number | undefined): string[] {
-  const active = tetherSocketPath(env, uid)
-  const known = [
-    ownTetherSocketPath(env, uid),
-    env.TETHER_AGENT_SOCKET || DEFAULT_AGENT_TETHER_SOCKET,
-  ]
-  if (!known.includes(active)) return [active]
-  return [active, ...new Set(known.filter((path) => path !== active))]
+  return [tetherSocketPath(env, uid)]
 }
 
 interface RequestOptions {

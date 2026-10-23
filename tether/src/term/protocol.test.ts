@@ -8,13 +8,15 @@ import {
   parseSeedFlags,
   SEED_FLAGS,
   type SeedFlags,
-} from './tmux-control'
+  socketArgsOf,
+} from './protocol'
 
 const ESC = '\x1b'
 
 function flags(overrides: Partial<SeedFlags> = {}): SeedFlags {
   return {
     paneId: '%3',
+    pane_height: 24,
     alternate_on: 0,
     alternate_saved_x: 0,
     alternate_saved_y: 0,
@@ -56,7 +58,8 @@ describe('parseSeedFlags', () => {
     const values = SEED_FLAGS.map((_, i) => (i === 0 ? '%7' : String(i)))
     const parsed = parseSeedFlags(values.join(' '))
     expect(parsed?.paneId).toBe('%7')
-    expect(parsed?.alternate_on).toBe(1)
+    expect(parsed?.pane_height).toBe(1)
+    expect(parsed?.alternate_on).toBe(2)
     expect(parsed?.scroll_region_lower).toBe(SEED_FLAGS.length - 1)
   })
 
@@ -64,12 +67,13 @@ describe('parseSeedFlags', () => {
     expect(parseSeedFlags('')).toBeNull()
     expect(parseSeedFlags('%1 0 0')).toBeNull()
     expect(parseSeedFlags(['x', ...SEED_FLAGS.slice(1).map(() => '0')].join(' '))).toBeNull()
+    expect(parseSeedFlags(['%1', ...SEED_FLAGS.slice(1).map(() => '1.5')].join(' '))).toBeNull()
   })
 })
 
 describe('buildSeed', () => {
   it('resets, writes history and screen, then places the cursor', () => {
-    const seed = buildSeed(flags(), ['one', 'two'], [], 24)
+    const seed = buildSeed(flags(), ['one', 'two'], [])
     expect(seed.startsWith(`${ESC}c`)).toBe(true)
     expect(seed).toContain(`one${ESC}[0m\r\ntwo${ESC}[0m`)
     expect(seed).toContain(`${ESC}[1;24r`)
@@ -79,10 +83,9 @@ describe('buildSeed', () => {
   it('puts the saved normal screen under an alternate one', () => {
     const screen = ['h1', 'h2', 'alt1', 'alt2']
     const seed = buildSeed(
-      flags({ alternate_on: 1, alternate_saved_x: 2, alternate_saved_y: 1 }),
+      flags({ pane_height: 2, alternate_on: 1, alternate_saved_x: 2, alternate_saved_y: 1 }),
       screen,
       ['n1', 'n2'],
-      2,
     )
     const normalAt = seed.indexOf(`h1${ESC}[0m\r\nh2${ESC}[0m\r\nn1${ESC}[0m\r\nn2`)
     const switchAt = seed.indexOf(`${ESC}[2;3H${ESC}[?1049h${ESC}[H`)
@@ -90,6 +93,14 @@ describe('buildSeed', () => {
     expect(normalAt).toBeGreaterThan(0)
     expect(switchAt).toBeGreaterThan(normalAt)
     expect(altAt).toBeGreaterThan(switchAt)
+  })
+
+  it("splits the alternate screen from history by the pane's own height", () => {
+    // An unsized client knows no rows of its own: the pane's height decides.
+    const seed = buildSeed(flags({ pane_height: 1, alternate_on: 1 }), ['h1', 'alt'], ['n1', 'n2'])
+    expect(seed).toContain(`h1${ESC}[0m\r\nn2${ESC}[0m`)
+    expect(seed).not.toContain('n1')
+    expect(seed).toContain(`${ESC}[?1049h${ESC}[Halt${ESC}[0m`)
   })
 
   it('restores the modes tmux reports', () => {
@@ -107,7 +118,6 @@ describe('buildSeed', () => {
       }),
       ['x'],
       [],
-      24,
     )
     for (const mode of ['[?25l', '[?7l', '[4h', '[?1h', '=', '[?6h', '[?1002h', '[?1006h'])
       expect(seed).toContain(`${ESC}${mode}`)
@@ -115,7 +125,7 @@ describe('buildSeed', () => {
   })
 
   it('asks for any-event tracking when that is the only mouse mode', () => {
-    expect(buildSeed(flags({ mouse_any_flag: 1 }), ['x'], [], 24)).toContain(`${ESC}[?1003h`)
+    expect(buildSeed(flags({ mouse_any_flag: 1 }), ['x'], [])).toContain(`${ESC}[?1003h`)
   })
 })
 
@@ -138,6 +148,13 @@ describe('controlArgv', () => {
 
   it('refuses an argv that does not attach', () => {
     expect(() => controlArgv(['tmux', 'new-session'])).toThrow()
+  })
+})
+
+describe('socketArgsOf', () => {
+  it('keeps only the socket arguments', () => {
+    expect(socketArgsOf(['tmux', '-S', '/s', 'attach-session', '-t', 'x'])).toEqual(['-S', '/s'])
+    expect(socketArgsOf(['tmux', '-L', 'n', 'attach'])).toEqual(['-L', 'n'])
   })
 })
 
@@ -196,14 +213,44 @@ describe('ControlProtocol', () => {
     expect(exit).toHaveBeenCalled()
   })
 
-  it('ignores a pause notice inside a reply instead of taking it as reply text', () => {
+  it('ignores a pause notice inside the reply of a command that can cause one', () => {
     const { p } = protocol()
     let lines: string[] = []
-    p.expect(1, ([block]) => {
-      lines = block.lines
-    })
+    p.expect(
+      2,
+      ([resume, capture]) => {
+        lines = [...resume.lines, ...capture.lines]
+      },
+      [0],
+    )
     p.feed(Buffer.from('%begin 1 2 1\n%continue %0\n%end 1 2 1\n'))
-    expect(lines).toEqual([])
+    p.feed(Buffer.from('%begin 1 3 1\nscreen\n%end 1 3 1\n'))
+    expect(lines).toEqual(['screen'])
+  })
+
+  it('keeps pause-like and %end-like pane text inside a capture', () => {
+    // A capture is pane content: a line that reads like a notice or like
+    // another reply's %end is text, and only this block's own %end closes it.
+    const { p } = protocol()
+    const replies: string[][] = []
+    p.expect(2, (blocks) => replies.push(...blocks.map((b) => b.lines)))
+    p.feed(
+      Buffer.from(
+        '%begin 1700 5 1\n%continue %0\n%end 1700 4 1\n%error 1 1 1\n%end x\n%end 1700 5 1\n' +
+          '%begin 1700 6 1\nlast\n%end 1700 6 1\n',
+      ),
+    )
+    expect(replies).toEqual([['%continue %0', '%end 1700 4 1', '%error 1 1 1', '%end x'], ['last']])
+  })
+
+  it('reports an error reply as an error block', () => {
+    const { p } = protocol()
+    let error = false
+    p.expect(1, ([block]) => {
+      error = block.error
+    })
+    p.feed(Buffer.from('%begin 9 2 1\nno such pane\n%error 9 2 1\n'))
+    expect(error).toBe(true)
   })
 
   it('lets a reply handler act before the output that follows its %end', () => {

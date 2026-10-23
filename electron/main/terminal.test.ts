@@ -39,7 +39,7 @@ function descriptor(id: string, extra: Partial<SessionDescriptor> = {}): Session
   }
 }
 
-const SERVER_SOCKET = `/run/tether/agent/default/tmux/${'ab'.repeat(16)}/server.sock`
+const SERVER_SOCKET = `${process.env.XDG_STATE_HOME || `${process.env.HOME}/.local/state`}/tether/default/tmux/${'ab'.repeat(16)}/server.sock`
 
 function target(generation = 'g1'): AttachAnswer {
   return {
@@ -142,7 +142,6 @@ function setup() {
     recentlyArranged: () => state.arranged,
     titles: vi.fn(),
     tray: vi.fn(),
-    tmuxClientPid: async (pid: number) => pid,
     controlTerminal: vi.fn((_argv: string[], _env: NodeJS.ProcessEnv, size) => {
       const link = fakeLink(size)
       links.push(link)
