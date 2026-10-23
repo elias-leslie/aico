@@ -1,0 +1,2 @@
+# False positive in the imported web history: a shortcut-list entry matched generic-api-key.
+1077b1bf3401ffdcc3032ace06f50c28191ba6fc:web/frontend/components/KeyboardShortcuts.tsx:generic-api-key:15
