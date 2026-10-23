@@ -18,7 +18,7 @@ describe('trusted sockets', () => {
 
   it.each([
     // The retired agent-user Tether's runtime tree is no longer trusted.
-    `/run/tether/agent/default/tmux/${hex}/server.sock`,
+    `/run/user/1000/tether/default/tmux/${hex}/server.sock`,
     `/home/me/.local/state/tether/default/tmux/${'ab'.repeat(15)}/server.sock`,
     `/home/me/.local/state/tether/default/tmux/${hex}/../server.sock`,
     `/home/me/.local/state/tether/Default/tmux/${hex}/server.sock`,
@@ -94,7 +94,7 @@ describe('attach target', () => {
     bad([
       '/usr/bin/tmux',
       '-S',
-      `/run/tether/agent/default/tmux/${hex}/server.sock`,
+      `/run/user/1000/tether/default/tmux/${hex}/server.sock`,
       'attach',
       '-t',
       '$3',

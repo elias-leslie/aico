@@ -35,7 +35,6 @@ import {
   withShimPath,
 } from '../env'
 import type { EventBus } from '../events'
-import { bindPanePolicy, currentPaneRefusal, makeSharedDir, PANE_UID_REFUSED } from '../pane-policy'
 import {
   type AdmissionRequest,
   type AdmissionTicket,
@@ -205,7 +204,6 @@ function tmuxConfPath(): string {
 /** Bind the instance. The daemon calls this once before `startLifecycle`. */
 export function configureEngine(next: EngineConfig): void {
   config = next
-  bindPanePolicy(next.paths.instance, next.paths.policyLocation)
 }
 
 // --- Aico index.ts state ---------------------------------------------------
@@ -293,7 +291,7 @@ function logWidgetEvent(widgetId: string, event: string, data: Record<string, un
 
 function ensureTmuxConf(): void {
   mkdirSync(stateDir(), { recursive: true, mode: 0o700 })
-  writeFileSync(tmuxConfPath(), tmuxConf(cfg().paths.shared?.attachUsers))
+  writeFileSync(tmuxConfPath(), tmuxConf())
 }
 
 function syncManagedTmuxProfile(server: TmuxServerRow): boolean {
@@ -309,7 +307,6 @@ function syncManagedTmuxProfile(server: TmuxServerRow): boolean {
       timeout: TMUX_QUERY_TIMEOUT_MS,
       stdio: 'ignore',
     })
-    openServerToAttachUsers(server)
     paneExitEventReady.add(server.id)
     if (paneExitEventMarkerExists(server.id)) observePaneExitEvent(server.id)
     return true
@@ -684,38 +681,12 @@ async function reconcileProvisioningTmuxServer(
 
 function createManagedServerDirectory(serverId: string): string {
   const parent = cfg().paths.tmuxDir
-  // Shared mode: group-traversable so the attach users reach server.sock; still
-  // owned by this user alone. The group and setgid are inherited from the
-  // root-made parent, never set here (RestrictSUIDSGID sandboxes refuse that).
   const directory = join(parent, serverId)
-  if (cfg().paths.shared) {
-    makeSharedDir(directory)
-    return directory
-  }
   mkdirSync(parent, { recursive: true, mode: 0o700 })
   chmodSync(parent, 0o700)
   mkdirSync(directory, { mode: 0o700 })
   chmodSync(directory, 0o700)
   return directory
-}
-
-/** Shared mode only: the attach users get server access and the socket opens to its group. */
-function openServerToAttachUsers(server: TmuxServerRow): void {
-  const shared = cfg().paths.shared
-  if (!shared) return
-  for (const user of shared.attachUsers) {
-    try {
-      // Already added (it is in tmux.conf) is an error we ignore.
-      execFileSync(TMUX_BIN, ['-S', server.socketPath, 'server-access', '-a', user], {
-        env: terminalClientEnv(),
-        timeout: TMUX_QUERY_TIMEOUT_MS,
-        stdio: 'ignore',
-      })
-    } catch {
-      // keep going: the access list is checked by the attach itself
-    }
-  }
-  chmodSync(server.socketPath, 0o660)
 }
 
 /** `path` with the agent shim directory first, once the installer created it. */
@@ -945,9 +916,6 @@ export function managedEnvironment(
   // differ from this process (for example in an isolated test run). Keep the
   // pane's home aligned with the daemon profile and its chosen cwd.
   environment.HOME = cfg().env.HOME ?? homedir()
-  // Shared mode: tsession and the tether CLI inside a pane must find this
-  // instance's socket, not the per-user default.
-  if (cfg().paths.shared) environment.TETHER_SOCKET = cfg().paths.socket
   // Clipboard image paste and desktop notifications need the live desktop
   // session, even in panes of a server that started before it existed.
   Object.assign(environment, cfg().graphicalEnv?.())
@@ -2008,7 +1976,6 @@ export async function reconcileWidgetTool(widgetId: string): Promise<boolean> {
 export type EnsureFailure =
   | { code: 'admission_denied'; reason: string }
   | { code: 'linger_required'; reason: string }
-  | { code: 'pane_uid_refused'; reason: string }
   | { code: 'workload_unavailable'; reason: string }
   | { code: 'outcome_uncertain'; reason: string }
 const ensureFailures = new Map<string, EnsureFailure>()
@@ -2084,11 +2051,6 @@ async function ensureOwnedInternalSession(widgetId: string, size: PtySize): Prom
       '[tether:lifecycle] user linger is not enabled; refusing a session that would die on logout',
     )
     return fail(widgetId, { code: 'linger_required', reason: 'user linger is not enabled' })
-  }
-  const uidRefusal = currentPaneRefusal()
-  if (uidRefusal) {
-    console.error(`[tether:lifecycle] ${PANE_UID_REFUSED}: ${uidRefusal}`)
-    return fail(widgetId, { code: PANE_UID_REFUSED, reason: uidRefusal })
   }
   const cwd = cwdForWidget(widgetId)
   // Lifecycle ordering is deliberate: create a bare pane first, let tmux move it
@@ -2288,7 +2250,6 @@ export type RespawnResult =
   | { status: 'stale' }
   | { status: 'workload_unavailable'; reason: string }
   | { status: 'admission_denied'; reason: string }
-  | { status: 'pane_uid_refused'; reason: string }
   | { status: 'blocked'; reason: string }
   | { status: 'outcome_uncertain'; reason: string }
 
@@ -2318,11 +2279,6 @@ export async function respawnAndRelaunch(
     return { status: 'busy' }
   }
   try {
-    const uidRefusal = currentPaneRefusal()
-    if (uidRefusal) {
-      console.error(`[tether:lifecycle] ${PANE_UID_REFUSED}: ${uidRefusal}`)
-      return { status: PANE_UID_REFUSED, reason: uidRefusal }
-    }
     let previous = getWidget(widgetId)
     if (!previous) return { status: 'not_found' }
     if (

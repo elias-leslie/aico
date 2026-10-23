@@ -322,7 +322,7 @@ describe('JobGuard', () => {
       host_state: 'red',
       kill_candidate: true,
     })
-    // the owner's group reads it through the runtime dir (shared mode); the umask 0077 would have made it 0600
+    // the umask 0077 would have made it 0600
     expect(statSync(heartbeat).mode & 0o777).toBe(0o644)
   })
 

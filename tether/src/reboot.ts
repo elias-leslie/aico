@@ -73,7 +73,7 @@ export async function waitForDesktop(options: {
 export interface ContinuityOptions {
   /** True once the desktop session's variables reach the user manager. */
   desktopReady?: () => boolean
-  /** No desktop will ever come (shared mode, TETHER_HEADLESS=1): restore at once. */
+  /** No desktop will ever come (TETHER_HEADLESS=1): restore at once. */
   headless?: boolean
   now?: () => number
   sleep?: (ms: number) => Promise<void>

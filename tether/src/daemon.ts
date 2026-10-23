@@ -40,7 +40,6 @@ import {
   sessionSnapshot,
 } from './lifecycle-api'
 import { startMemoryGuard } from './memory-guard'
-import { prepareSharedRuntime } from './pane-policy'
 import { activeProjectFileFromEnv, ProjectProvider, summitflowUrlFromEnv } from './projects'
 import { Continuity } from './reboot'
 import { Recovery } from './recovery'
@@ -93,12 +92,10 @@ export async function startDaemon(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<RunningDaemon> {
   const show = resolveShowConfig(env)
-  const stateMode = paths.shared ? 0o750 : 0o700 // shared: an ACL for the owner on this dir must keep a mask (store.ts)
-  mkdirSync(paths.stateDir, { recursive: true, mode: stateMode })
-  chmodSync(paths.stateDir, stateMode)
-  if (paths.shared) prepareSharedRuntime(paths.runtimeDir, paths.tmuxDir)
+  mkdirSync(paths.stateDir, { recursive: true, mode: 0o700 })
+  chmodSync(paths.stateDir, 0o700)
   mkdirSync(agentExitMarkerDir(paths), { recursive: true, mode: 0o700 })
-  const store = new Store(paths.dbPath, Date.now, Boolean(paths.shared))
+  const store = new Store(paths.dbPath)
   const events = new EventBus()
   const projects = new ProjectProvider({
     summitflowUrl: summitflowUrlFromEnv(env),
@@ -150,9 +147,8 @@ export async function startDaemon(
   if (reconcileEnabled(env)) {
     const graphical = () => userManagerGraphicalEnvironment()
     const continuity = new Continuity(context, {
-      // A shared-mode instance runs for a user with no desktop; TETHER_HEADLESS=1
-      // says the same for any other instance. Neither waits for DISPLAY.
-      headless: paths.shared !== null || env.TETHER_HEADLESS === '1',
+      // TETHER_HEADLESS=1: an instance with no desktop never waits for DISPLAY.
+      headless: env.TETHER_HEADLESS === '1',
       desktopReady: () => Boolean(graphical().DISPLAY || graphical().WAYLAND_DISPLAY),
     })
     const recovery = new Recovery(context, {
@@ -172,7 +168,7 @@ export async function startDaemon(
   const server = createTetherServer(context)
   const legacyServers: Server[] = []
   try {
-    await listenPrivateSocket(server, paths.socket, { shared: paths.shared !== null })
+    await listenPrivateSocket(server, paths.socket)
   } catch (error) {
     store.close()
     throw error

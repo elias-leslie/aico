@@ -169,7 +169,7 @@ symlink handoff directory returns `503 exchange_unavailable` with a clear
 `detail`. Failed requests publish no event. URL requests do not need the exchange.
 
 `st show <url|file> [--title T]` posts to the agent instance at
-`/run/tether/agent/default/control.sock`. A successful request records the handoff;
+`$XDG_RUNTIME_DIR/tether/default/control.sock`. A successful request records the handoff;
 owner-app notification handling is a separate consumer of `show.requested`.
 
 ## Terminal I/O

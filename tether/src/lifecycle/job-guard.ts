@@ -460,7 +460,7 @@ function writeAtomic(path: string, doc: unknown): void {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
   const tmp = join(dirname(path), `.${basename(path)}.tmp`)
   writeFileSync(tmp, JSON.stringify(doc))
-  chmodSync(tmp, 0o644) // numbers only; the dir's own mode says who can reach it (shared mode: the owner's group)
+  chmodSync(tmp, 0o644) // numbers only; the dir's own mode says who can reach it
   renameSync(tmp, path)
 }
 

@@ -182,10 +182,8 @@ export function sessionName(widgetId: string): string {
  * border), so the green `[aico-1] 0:bash*` + clock row is redundant and just
  * eats a terminal row.
  */
-export function tmuxConf(attachUsers: readonly string[] = []): string {
-  // Shared mode: tmux refuses other uids unless the server lists them.
-  const access = attachUsers.map((user) => `server-access -a ${user}`)
-  return `${[...tmuxProfileLines(), ...access].join('\n')}\n`
+export function tmuxConf(): string {
+  return `${tmuxProfileLines().join('\n')}\n`
 }
 
 function tmuxProfileLines(): string[] {

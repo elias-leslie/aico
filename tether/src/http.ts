@@ -2,7 +2,6 @@ import { chmodSync, existsSync, lstatSync, mkdirSync, unlinkSync } from 'node:fs
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 import { createConnection } from 'node:net'
 import { dirname } from 'node:path'
-import { makeSharedDir } from './pane-policy'
 
 export const MAX_BODY_BYTES = 128 * 1024
 
@@ -130,28 +129,15 @@ async function isLiveSocket(path: string): Promise<boolean> {
  * by this user, socket 0600. A live socket (another daemon) or a non-socket at
  * the path is refused; a stale socket is replaced. This is also the
  * single-writer guard for the instance database.
- *
- * Shared mode (src/pane-policy.ts) opens it to the directory's group only:
- * directory 0750 (group and setgid inherited from the root-made parent, never set
- * here: a sandbox with RestrictSUIDSGID refuses that), socket 0660. The
- * directory must still be owned by this user.
  */
-export async function listenPrivateSocket(
-  server: Server,
-  path: string,
-  options: { shared?: boolean } = {},
-): Promise<void> {
+export async function listenPrivateSocket(server: Server, path: string): Promise<void> {
   const directory = dirname(path)
-  const dirMode = options.shared ? 0o750 : 0o700
-  if (options.shared) makeSharedDir(directory)
-  else mkdirSync(directory, { recursive: true, mode: dirMode })
+  mkdirSync(directory, { recursive: true, mode: 0o700 })
   const stat = lstatSync(directory)
   if (!stat.isDirectory() || stat.uid !== process.getuid?.()) {
     throw new Error(`socket directory ${directory} is not a directory owned by this user`)
   }
-  if (!options.shared) chmodSync(directory, dirMode)
-  else if ((stat.mode & 0o077) !== 0o050)
-    throw new Error(`socket directory ${directory} must be 0750`)
+  chmodSync(directory, 0o700)
   if (existsSync(path)) {
     const existing = lstatSync(path)
     if (!existing.isSocket() || existing.uid !== process.getuid?.()) {
@@ -171,7 +157,7 @@ export async function listenPrivateSocket(
         resolve()
       })
     })
-    chmodSync(path, options.shared ? 0o660 : 0o600)
+    chmodSync(path, 0o600)
   } finally {
     process.umask(previousUmask)
   }

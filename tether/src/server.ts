@@ -1,7 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { API_VERSION, resolveShowConfig, type ShowConfig, type TetherPaths } from './config'
 import type { EventBus, TetherEvent } from './events'
-import { registerExecRoute } from './exec'
 import type { GuiChannel } from './gui-channel'
 import { HttpError, Router, readJsonObject, sendError, sendJson } from './http'
 import { lifecycleStatus } from './lifecycle/engine'
@@ -338,7 +337,6 @@ export function buildRouter(context: ServerContext): Router {
     })
 
   registerLifecycleRoutes(router, context)
-  registerExecRoute(router)
   registerShowRoute(router, events, context.show ?? resolveShowConfig({}))
 
   return router
