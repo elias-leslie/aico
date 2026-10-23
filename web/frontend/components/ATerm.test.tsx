@@ -144,6 +144,10 @@ vi.mock('../lib/utils/device', () => ({
   isMobileDevice: () => false,
 }))
 
+vi.mock('./ScrollToBottomPill', () => ({
+  ScrollToBottomPill: () => null,
+}))
+
 vi.mock('./ScrollbackOverlay', () => ({
   ScrollbackOverlay: (props: {
     isActive: boolean

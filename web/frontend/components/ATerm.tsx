@@ -37,6 +37,7 @@ import { requestedTransport } from '../lib/utils/terminal-transport'
 import { ATermDiagnosticsOverlay } from './ATermDiagnosticsOverlay'
 import type { ATermHandle, ATermProps } from './a-term.types'
 import { ScrollbackOverlay } from './ScrollbackOverlay'
+import { ScrollToBottomPill } from './ScrollToBottomPill'
 
 export type {
   ATermHandle,
@@ -592,6 +593,12 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
             fontSize={fontSize}
           />
         )}
+        <ScrollToBottomPill
+          aTermRef={aTermRef}
+          isReady={isReady}
+          theme={theme}
+          fontFamily={fontFamily}
+        />
         <ATermDiagnosticsOverlay
           enabled={diagnosticsEnabled}
           themeId={inferredThemeId}
