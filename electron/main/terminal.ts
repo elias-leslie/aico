@@ -3,19 +3,19 @@
 // survives close, reload and Aico restarts.
 
 import type { BrowserWindow, IpcMain } from 'electron'
-import { describeFailure, writeNotice } from './notices'
-import { PERSONAL_WORKSPACE_ID } from './project'
-import type { SessionCatalog } from './session-catalog'
-import { ACTIVE_WITHIN_MS, createSizeHolder, type SizeHolder } from './size-holder'
 import {
-  type AttachTarget,
-  attachEnvironment,
+  type SessionCatalog,
   type SessionDescriptor,
   type TetherClient,
   TetherError,
   TetherUnavailable,
-} from './tether-client'
+  type ViewerLabel,
+} from 'tether/client'
+import { describeFailure, writeNotice } from './notices'
+import { PERSONAL_WORKSPACE_ID } from './project'
+import { ACTIVE_WITHIN_MS, createSizeHolder, type SizeHolder } from './size-holder'
 import type { TerminalLink } from './tmux-control'
+import { type AttachTarget, attachEnvironment, ownAttachTarget } from './tmux-sandbox'
 import { coalesceTrailingAsync } from './tmux-view'
 import type { WindowRegistry } from './window-registry'
 
@@ -66,6 +66,8 @@ interface TerminalDeps {
   controlTerminal(argv: string[], env: NodeJS.ProcessEnv, size: PtySize): TerminalLink
   ensurePersonalWorkspaceRoot(): string | null
   isQuitting(): boolean
+  /** Names this app and device on its size claims ("Viewing on …" elsewhere). */
+  viewer: ViewerLabel
 }
 
 export function createTerminal(deps: TerminalDeps) {
@@ -155,7 +157,7 @@ export function createTerminal(deps: TerminalDeps) {
 
     let target: AttachTarget
     try {
-      target = await tether.attach(widgetId)
+      target = ownAttachTarget(await tether.attach(widgetId))
     } catch (error) {
       if (error instanceof TetherUnavailable) awaitingTether.set(winId, size)
       else if (stillCurrent())
@@ -210,6 +212,7 @@ export function createTerminal(deps: TerminalDeps) {
             await clientPidOf(pty),
             pty.cols,
             pty.rows,
+            deps.viewer,
           )
           if (result.applied) {
             holder.held()

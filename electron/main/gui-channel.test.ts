@@ -2,10 +2,14 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { BrowserWindow } from 'electron'
+import {
+  createSessionCatalog,
+  type GuiMutationCommand,
+  type SessionDescriptor,
+} from 'tether/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createGuiChannel } from './gui-channel'
-import { createSessionCatalog, sessionTitle } from './session-catalog'
-import type { GuiMutationCommand, SessionDescriptor } from './tether-client'
+import { sessionTitle } from './session-catalog'
 import { createWindowChrome } from './window-chrome'
 import { createLayoutFile } from './window-layout'
 import { WindowRegistry } from './window-registry'

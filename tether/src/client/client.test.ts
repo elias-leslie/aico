@@ -3,18 +3,15 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { createGuiChannel } from './gui-channel'
-import { createSessionCatalog } from './session-catalog'
 import {
   applyStreamEvent,
-  attachEnvironment,
   compatibleVersion,
   eventSession,
   eventStreamPath,
   followEvents,
   holdGuiChannel,
   knownTetherSockets,
-  parseAttachTarget,
+  parseAttachAnswer,
   parseContextHook,
   parseGuiCommand,
   reconnectDelay,
@@ -25,8 +22,7 @@ import {
   TetherPool,
   TetherUnavailable,
   tetherSocketPath,
-} from './tether-client'
-import { layoutSnapshot } from './window-layout'
+} from './index'
 
 type Handler = (req: IncomingMessage, res: ServerResponse) => void
 
@@ -36,7 +32,7 @@ afterEach(() => {
 })
 
 async function fakeTether(handler: Handler): Promise<{ client: TetherClient; server: Server }> {
-  const dir = mkdtempSync(join(tmpdir(), 'aico-tether-test-'))
+  const dir = mkdtempSync(join(tmpdir(), 'tether-client-test-'))
   const socket = join(dir, 'control.sock')
   const server = createServer(handler)
   await new Promise<void>((resolve) => server.listen(socket, resolve))
@@ -84,49 +80,29 @@ describe('Tether socket path', () => {
 })
 
 describe('version compatibility', () => {
-  it('needs API 1 or later that still accepts this Aico', () => {
-    const v = { name: 'tether', version: '0.0.1', apiVersion: 1, minApiVersion: 1 }
+  it('needs API 2 or later that still accepts this Aico', () => {
+    const v = { name: 'tether', version: '0.0.1', apiVersion: 2, minApiVersion: 1 }
     expect(compatibleVersion(v)).toBe(true)
-    expect(compatibleVersion({ ...v, apiVersion: 0 })).toBe(false)
+    expect(compatibleVersion({ ...v, apiVersion: 1 })).toBe(false)
     expect(compatibleVersion({ ...v, apiVersion: 3, minApiVersion: 2 })).toBe(false)
     expect(compatibleVersion({ ...v, apiVersion: 2, minApiVersion: 1 })).toBe(true)
   })
 })
 
-describe('attach target', () => {
-  const socket = `/run/tether/agent/default/tmux/${'ab'.repeat(16)}/server.sock`
+describe('attach answer', () => {
   const answer = {
     generation: 'a'.repeat(64),
-    argv: ['/usr/bin/tmux', '-S', socket, 'attach-session', '-t', '$3'],
-    env: { TERM: 'xterm-256color', COLORTERM: 'truecolor', CLICOLOR: '1' },
-    unset: ['TMUX', 'TMUX_PANE', 'TMUX_TMPDIR', 'NO_COLOR'],
+    argv: ['/usr/bin/tmux', '-S', '/x/server.sock', 'attach-session', '-t', '$3'],
+    env: { TERM: 'xterm-256color' },
   }
 
-  it("builds the argv and a fixed-key environment itself, ignoring Tether's unset list", () => {
-    const target = parseAttachTarget({
-      ...answer,
-      argv: ['/bin/sh', ...answer.argv.slice(1)],
-      env: { ...answer.env, LD_PRELOAD: '/x.so', PATH: '/x', CLICOLOR: '1; id' },
-    })
-    expect(target.argv).toEqual(['/usr/bin/tmux', '-S', socket, 'attach-session', '-t', '$3'])
-    expect(target.env).toEqual({
-      TERM: 'xterm-256color',
-      LANG: 'C.UTF-8',
-      COLORTERM: 'truecolor',
-    })
-    expect(target.unset).toEqual([])
-    expect(attachEnvironment(target)).toEqual(target.env)
+  it("keeps Tether's argv and environment as sent, for the caller to check", () => {
+    expect(parseAttachAnswer({ ...answer, unset: ['TMUX'] })).toEqual(answer)
   })
 
-  it('refuses answers that name another socket, a hostile target or extra words', () => {
-    const bad = (argv: string[]) =>
-      expect(() => parseAttachTarget({ ...answer, argv })).toThrow(TetherUnavailable)
-    bad(['tmux', 'attach'])
-    bad(['/usr/bin/tmux', '-S', '/tmp/evil.sock', 'attach-session', '-t', '$3'])
-    bad(['/usr/bin/tmux', '-S', socket, 'attach-session', '-t', '$3; id'])
-    bad(['/usr/bin/tmux', '-S', socket, 'attach-session', '-t', '-d'])
-    bad([...answer.argv, '-d'])
-    expect(() => parseAttachTarget({ ...answer, env: { TERM: 1 } })).toThrow(TetherUnavailable)
+  it('refuses an answer of the wrong shape', () => {
+    for (const bad of [null, { ...answer, argv: [1] }, { ...answer, env: { TERM: 1 } }, {}])
+      expect(() => parseAttachAnswer(bad)).toThrow(TetherUnavailable)
   })
 })
 
@@ -210,6 +186,45 @@ describe('Tether requests', () => {
         url: '/v1/sessions/0a1b2c3d/inject',
         body: { generation: 'b'.repeat(64), text: '[dom: "x"] ', mode: 'type' },
       },
+    ])
+  })
+})
+
+describe('resize claim', () => {
+  it('sends the viewer label when given, and reads the holder back', async () => {
+    const seen: { method?: string; url?: string; body: unknown }[] = []
+    const holder = {
+      clientPid: 7,
+      cols: 80,
+      rows: 24,
+      generation: 'g',
+      claimedAt: 'now',
+      viewer: { app: 'desktop', device: 'box' },
+    }
+    const { client } = await fakeTether(async (req, res) => {
+      seen.push({ method: req.method, url: req.url, body: await readBody(req) })
+      if (req.method === 'GET') json(res, 200, { generation: 'g', holder })
+      else json(res, 200, { applied: true, changed: false })
+    })
+    const viewer = { app: 'desktop', device: 'box' }
+    expect(await client.resizeClaim('0a1b2c3d', 'g', 7, 80, 24, viewer)).toEqual({
+      applied: true,
+      changed: false,
+    })
+    await client.resizeClaim('0a1b2c3d', 'g', 7, 80, 24)
+    expect(await client.resizeHolder('0a1b2c3d')).toEqual({ generation: 'g', holder })
+    expect(seen).toEqual([
+      {
+        method: 'POST',
+        url: '/v1/sessions/0a1b2c3d/resize-claim',
+        body: { generation: 'g', clientPid: 7, cols: 80, rows: 24, viewer },
+      },
+      {
+        method: 'POST',
+        url: '/v1/sessions/0a1b2c3d/resize-claim',
+        body: { generation: 'g', clientPid: 7, cols: 80, rows: 24 },
+      },
+      { method: 'GET', url: '/v1/sessions/0a1b2c3d/resize-claim', body: null },
     ])
   })
 })
@@ -372,8 +387,8 @@ describe('GUI channel', () => {
     })
   })
 
-  it('parses a layout request, collects it through the GUI and posts its snapshot', async () => {
-    const snapshot = layoutSnapshot([], [], { pid: 4242, startTime: '777' })
+  it('posts the GUI snapshot a layout request collected', async () => {
+    const snapshot = { windows: [] }
     const results: unknown[] = []
     const { client } = await fakeTether(async (req, res) => {
       if (req.url === '/v1/gui/channel') {
@@ -385,23 +400,13 @@ describe('GUI channel', () => {
       results.push(await readBody(req))
       json(res, 200, { accepted: true })
     })
-    const unexpected = () => {
-      throw new Error('layout must not mutate views or read sessions')
-    }
-    const apply = createGuiChannel({
-      isQuitting: () => false,
-      layout: () => snapshot,
-      catalog: createSessionCatalog(),
-      refresh: async () => unexpected(),
-      focusOrReopen: unexpected,
-      forSession: unexpected,
-      arrange: unexpected,
-      saveBounds: unexpected,
-      displayIdFor: unexpected,
-      titles: unexpected,
-      tray: unexpected,
-    })
-    cleanups.push(holdGuiChannel(client, apply))
+    cleanups.push(
+      holdGuiChannel(client, async (command) =>
+        command.kind === 'layout'
+          ? { applied: true, layout: snapshot }
+          : { applied: false, error: 'invalid_body' },
+      ),
+    )
     await expect.poll(() => results.length).toBe(1)
     expect(results).toEqual([{ applied: true, layout: snapshot }])
   })

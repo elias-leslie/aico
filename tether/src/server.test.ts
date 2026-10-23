@@ -58,13 +58,13 @@ describe('control socket', () => {
     expect(health.body).toMatchObject({
       status: 'ok',
       instance: 'test',
-      apiVersion: 1,
+      apiVersion: 2,
       schemaVersion: 9,
       lifecycle: 'disabled',
       gui: { connected: false },
     })
     const version = await call('GET', '/v1/version')
-    expect(version.body).toMatchObject({ name: 'tether', apiVersion: 1, minApiVersion: 1 })
+    expect(version.body).toMatchObject({ name: 'tether', apiVersion: 2, minApiVersion: 1 })
   })
 
   it('returns 404 and 405 with stable error codes', async () => {
@@ -147,6 +147,15 @@ describe('lifecycle API (no tmux started)', () => {
     expect(
       (await call('POST', '/v1/sessions/ffffffff/end', { generation: 'a'.repeat(64) })).status,
     ).toBe(404)
+    const claim = { generation: 'a'.repeat(64), clientPid: 7, cols: 80, rows: 24 }
+    const viewer = { app: 'desktop', device: 'davion-sidarli' }
+    expect(
+      (await call('POST', '/v1/sessions/ffffffff/resize-claim', { ...claim, viewer })).status,
+    ).toBe(404)
+    expect(
+      (await call('POST', '/v1/sessions/ffffffff/resize-claim', { ...claim, viewer: { app: 1 } }))
+        .body,
+    ).toEqual({ error: 'invalid_viewer' })
   })
 
   it('serves roots, widgets and the GUI channel, and no legacy session routes', async () => {
@@ -397,7 +406,7 @@ describe('event stream', () => {
     await call('PATCH', '/v1/tools/pi', { enabled: false })
     await new Promise((resolve) => setTimeout(resolve, 50))
     req.destroy()
-    expect(lines[0]).toMatchObject({ type: 'hello', data: { apiVersion: 1, instance: 'test' } })
+    expect(lines[0]).toMatchObject({ type: 'hello', data: { apiVersion: 2, instance: 'test' } })
     expect(lines[1]).toMatchObject({ type: 'tools.changed', seq: 1, data: { slug: 'pi' } })
 
     const gap = await new Promise<string>((resolve) => {

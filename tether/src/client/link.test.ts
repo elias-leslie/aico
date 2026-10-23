@@ -1,22 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { createSessionCatalog } from './session-catalog'
+import { createSessionCatalog } from './catalog'
+import { type EventSubscriber, followEvents, holdGuiChannel, type TetherClient } from './client'
 import {
-  type EventSubscriber,
-  followEvents,
   type GuiCommand,
   type GuiVerdict,
-  holdGuiChannel,
   type SessionDescriptor,
-  type TetherClient,
   type TetherEvent,
   type TetherTool,
   TetherUnavailable,
   type TetherVersion,
-} from './tether-client'
-import { createTetherLink } from './tether-link'
+} from './contracts'
+import { coalesceAsync, createTetherLink } from './link'
 
-vi.mock('./tether-client', async (original) => ({
-  ...(await original<typeof import('./tether-client')>()),
+vi.mock('./client', async (original) => ({
+  ...(await original<typeof import('./client')>()),
   followEvents: vi.fn(),
   holdGuiChannel: vi.fn(),
 }))
@@ -84,7 +81,7 @@ function setup(
     listSessions: vi.fn(async () => o.list ?? []),
     tools: vi.fn(async () => ({ items: [tool('b', 2), tool('a', 1), tool('off', 0, false)] })),
     version: vi.fn(async () => {
-      const v = o.version ?? { name: 'tether', version: '1.0.0', apiVersion: 1, minApiVersion: 1 }
+      const v = o.version ?? { name: 'tether', version: '1.0.0', apiVersion: 2, minApiVersion: 1 }
       if (v instanceof Error) throw v
       return v
     }),
@@ -400,5 +397,15 @@ describe('connection', () => {
     link.stop()
     expect(stopEvents).toHaveBeenCalledTimes(1)
     expect(stopGui).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('coalescing', () => {
+  it('shares one pending load and starts a fresh one afterwards', async () => {
+    const load = vi.fn(async () => 1)
+    const run = coalesceAsync(load)
+    await Promise.all([run(), run()])
+    await run()
+    expect(load).toHaveBeenCalledTimes(2)
   })
 })

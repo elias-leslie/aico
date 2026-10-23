@@ -20,6 +20,9 @@
   - `Type=notify` was rejected because Node cannot `sd_notify` without a native module or a subprocess.
   - Readiness is the socket answering `GET /v1/health`, which clients and `tether doctor` already check.
   - KillMode stays at its default because Tether's cgroup holds only Tether and its short-lived `tmux`/`systemctl` clients. tmux servers are separate transient units. Tether must never start a tmux server inside its own cgroup.
+- **Shared client library:** `tether/src/client` is Tether's typed client (contracts, pool, event follower, GUI channel holder, version gate) for the desktop and the web server. `tether/package.json` exports it as TS source (`tether/client`), and each app's bundler compiles it in.
+  - `tether` never goes in the root `dependencies`: electron-vite externalizes dependencies, so it would be loaded at runtime instead of bundled. The workspace link resolves it.
+  - The client takes only types from daemon modules (`import type`), and the daemon never imports the client; `src/bundle.test.ts` checks both against the `dist/tether.mjs` inputs.
 - **Future: single executable.** A Node SEA (single executable application) binary at the same `~/.local/lib/tether/bin/tether` path would remove the system-Node dependency for other hosts. It is deferred: no other hosts exist yet, SEA plus `node:sqlite` adds build complexity, and the launcher path is already the stable contract.
 
 ## Consequences

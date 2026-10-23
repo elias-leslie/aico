@@ -4,9 +4,8 @@
 // capture, which is kept in memory only.
 
 import type { IpcMain } from 'electron'
+import { type SessionCatalog, type TetherClient, TetherError } from 'tether/client'
 import { compactRef, type SelectionRecord } from './selection'
-import type { SessionCatalog } from './session-catalog'
-import { type TetherClient, TetherError } from './tether-client'
 import type { ViewRow } from './views'
 import type { WindowRegistry } from './window-registry'
 

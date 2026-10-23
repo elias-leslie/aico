@@ -318,7 +318,7 @@ describe('INV-08 lifecycle-v0 sessions are preserved read-only', () => {
         expectedGeneration: generation,
         generationOf: sessionGeneration,
       }),
-    ).toEqual({ status: 'legacy_session' })
+    ).toEqual({ status: 'workload_unavailable', reason: 'lifecycle-v0 session' })
     expect(getWidget(row.id)).toBeDefined()
   })
 })

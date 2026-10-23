@@ -37,6 +37,10 @@ Aico (`GET /v1/gui/channel`), which applies it and posts the result. With no
 Aico connected, those routes return 503 `gui_unavailable`; Tether never starts
 the desktop. Status, create and End work without Aico.
 
+A new root opens an Aico window by itself only when the desktop or `st aico
+create` started it. A root the web app started appears in the desktop's catalog
+and tray without a window (open it from there).
+
 ## Routes
 
 | Method and route | Request | Result |
@@ -108,7 +112,6 @@ only what it requested and observed.
 | `running` | `running` | Launch dispatched and an active managed workload verified | Allowed with the current generation |
 | `pending` | `pending` | Reserved; never allocated | 409 `workload_unavailable` |
 | `uncertain` | `uncertain` | Allocated, but an active workload is not verified | 409 `workload_unavailable` |
-| `legacy` | `uncertain` (`pending` if never allocated) | A lifecycle-v0 session, kept read-only | 409 `workload_unavailable` |
 | (404) | `ended` | Retired; the root keeps a tombstone with null generation | 410 `ended` (root), 404 (widget) |
 
 | Fleet `status` | `capabilities.launch` | Owner relationship |

@@ -1,10 +1,9 @@
 import type { ExecFileException } from 'node:child_process'
 import type { BrowserWindow } from 'electron'
+import { createSessionCatalog, type SessionDescriptor, type TetherTool } from 'tether/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PUSH_AFTER_MS } from './attention'
 import { createAttentionWiring } from './attention-wiring'
-import { createSessionCatalog } from './session-catalog'
-import type { SessionDescriptor, TetherTool } from './tether-client'
 import { WindowRegistry } from './window-registry'
 
 function fakeWindow(id: number) {

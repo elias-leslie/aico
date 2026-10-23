@@ -2,8 +2,9 @@ import { homedir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
 import { detectSharedMode, HOST_POLICY, type PolicyLocation, type SharedMode } from './pane-policy'
 
-/** Tether's own API contract version. Clients declare the minimum they need. */
-export const API_VERSION = 1
+/** Tether's own API contract version. Clients declare the minimum they need.
+ * 2: resize claims carry a viewer label (still accepted without one). */
+export const API_VERSION = 2
 
 /** The one instance that serves Aico's legacy sockets and adopts historical servers. */
 export const DEFAULT_INSTANCE = 'default'

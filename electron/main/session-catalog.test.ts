@@ -1,12 +1,6 @@
+import type { SessionDescriptor } from 'tether/client'
 import { describe, expect, it } from 'vitest'
-import {
-  coordinatorChip,
-  createSessionCatalog,
-  sessionTitle,
-  toolDisplayName,
-  traySessionLabel,
-} from './session-catalog'
-import type { SessionDescriptor } from './tether-client'
+import { coordinatorChip, sessionTitle, toolDisplayName, traySessionLabel } from './session-catalog'
 
 function descriptor(id: string, createdAt: number, extra: Partial<SessionDescriptor> = {}) {
   return {
@@ -34,32 +28,6 @@ function descriptor(id: string, createdAt: number, extra: Partial<SessionDescrip
     ...extra,
   } as SessionDescriptor
 }
-
-describe('session catalog mirror', () => {
-  it('reports sessions that left a complete list and orders oldest first', () => {
-    const catalog = createSessionCatalog()
-    catalog.replace([descriptor('0000000b', 2), descriptor('0000000a', 1)])
-    expect(catalog.list().map((d) => d.id)).toEqual(['0000000a', '0000000b'])
-    expect(catalog.replace([descriptor('0000000b', 2), descriptor('0000000c', 3)])).toEqual({
-      gone: ['0000000a'],
-    })
-    catalog.remove('0000000b')
-    expect(catalog.get('0000000b')).toBeUndefined()
-  })
-
-  it('keeps a session created locally while an older list was in flight', () => {
-    const catalog = createSessionCatalog()
-    catalog.replace([descriptor('0000000a', 1)])
-    const mark = catalog.mark()
-    catalog.upsert(descriptor('0000000c', 3)) // created after the list request
-    expect(catalog.replace([descriptor('0000000a', 1)], mark)).toEqual({ gone: [] })
-    expect(catalog.get('0000000c')).toBeDefined()
-    // A later complete list that still lacks it does report it gone.
-    expect(catalog.replace([descriptor('0000000a', 1)], catalog.mark())).toEqual({
-      gone: ['0000000c'],
-    })
-  })
-})
 
 describe('session titles', () => {
   it("shows Tether's display title, else the default label", () => {

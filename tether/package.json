@@ -5,6 +5,9 @@
   "license": "Apache-2.0",
   "private": true,
   "type": "module",
+  "exports": {
+    "./client": "./src/client/index.ts"
+  },
   "engines": {
     "node": ">=22.13.0"
   },

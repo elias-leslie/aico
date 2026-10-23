@@ -1,7 +1,11 @@
 import type { BrowserWindow } from 'electron'
+import {
+  type ContextHook,
+  createSessionCatalog,
+  type SessionDescriptor,
+  type TetherTool,
+} from 'tether/client'
 import { describe, expect, it, vi } from 'vitest'
-import { createSessionCatalog } from './session-catalog'
-import type { ContextHook, SessionDescriptor, TetherTool } from './tether-client'
 import { createWindowChrome } from './window-chrome'
 import { WindowRegistry } from './window-registry'
 

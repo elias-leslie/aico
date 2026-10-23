@@ -2,7 +2,7 @@
 // terminal.
 
 import type { BrowserWindow } from 'electron'
-import { TetherError, TetherUnavailable } from './tether-client'
+import { TetherError, TetherUnavailable } from 'tether/client'
 
 export function writeNotice(win: BrowserWindow | undefined, message: string, color = 31): void {
   if (win && !win.isDestroyed())
@@ -26,8 +26,6 @@ export function describeFailure(action: string, error: unknown): string {
         return `${action}: another change to this session is in progress. Try again shortly.`
       case 'workload_unavailable':
         return `${action}: the session is not running${error.reason ? ` (${error.reason})` : ''}.`
-      case 'legacy_session':
-        return `${action}: this session predates managed lifecycle and is kept read-only.`
       case 'outcome_uncertain':
         return `${action}: the outcome is unknown. Check the session before trying again.`
       default:

@@ -1,7 +1,7 @@
 import type { BrowserWindow } from 'electron'
+import type { SessionDescriptor } from 'tether/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PERSONAL_WORKSPACE_ID } from './project'
-import type { SessionDescriptor } from './tether-client'
 import type { ViewRow } from './views'
 import { WindowRegistry } from './window-registry'
 import { createWindows } from './windows'

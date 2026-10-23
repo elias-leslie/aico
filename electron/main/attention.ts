@@ -17,7 +17,7 @@
 // `urgent` after 2 minutes (the other windows' eyes turn to it). A finished
 // one shows a "✓" bubble and happy eyes, nothing more.
 
-import type { TetherTool } from './tether-client'
+import type { TetherTool } from 'tether/client'
 
 export type AgentState = 'working' | 'idle' | 'blocked' | 'unknown'
 

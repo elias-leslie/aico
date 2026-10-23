@@ -4,20 +4,16 @@
 // titlebars follow from what Tether answers.
 
 import type { IpcMain } from 'electron'
-import { describeFailure, writeNotice } from './notices'
-import { PERSONAL_WORKSPACE_ID, type ProjectCatalog } from './project'
 import {
   type SessionCatalog,
-  sessionTitle,
-  toolDisplayName,
-  traySessionLabel,
-} from './session-catalog'
-import {
   type SessionDescriptor,
   type TetherClient,
   TetherError,
   type TetherTool,
-} from './tether-client'
+} from 'tether/client'
+import { describeFailure, writeNotice } from './notices'
+import { PERSONAL_WORKSPACE_ID, type ProjectCatalog } from './project'
+import { sessionTitle, toolDisplayName, traySessionLabel } from './session-catalog'
 import { toolMark } from './tool-marks'
 import type { WindowRegistry } from './window-registry'
 
@@ -275,7 +271,7 @@ export function createSessionActions(deps: SessionActionsDeps) {
       await link.refresh()
       return catalog
         .list()
-        .filter((descriptor) => descriptor.status === 'running' || descriptor.status === 'legacy')
+        .filter((descriptor) => descriptor.status === 'running')
         .map((descriptor) => ({
           id: descriptor.id,
           origin: descriptor.origin,
@@ -289,8 +285,7 @@ export function createSessionActions(deps: SessionActionsDeps) {
     ipcMain.handle('session:open', async (_event, id: unknown) => {
       if (typeof id !== 'string' || !SESSION_ID.test(id)) throw new Error('Invalid session')
       const descriptor = await tether.getSession(id)
-      if (descriptor.status !== 'running' && descriptor.status !== 'legacy')
-        throw new Error('Session is unavailable')
+      if (descriptor.status !== 'running') throw new Error('Session is unavailable')
       catalog.upsert(descriptor)
       windows.focusOrReopen(id)
     })

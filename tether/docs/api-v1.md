@@ -16,7 +16,7 @@ Status: every route below is implemented (Phase 3a). Additions made for the web 
 - Bodies are JSON (`content-type: application/json`, at most 128 KiB) and must be objects. Unknown fields are rejected with `400 invalid_body`, never ignored. Field names are camelCase.
 - Errors are `{"error": "<code>", ...}` and the codes are stable API. A 4xx or 503 means nothing was applied. A 2xx or `409 outcome_uncertain` may have applied.
 - No route retries anything on the caller's behalf. Clients must not retry an uncertain mutation with a different identity.
-- Versioning: `apiVersion` is an integer. v1 only grows additively: new routes, new optional request fields, new response fields, new event types. Clients ignore unknown response fields and event types. A breaking change ships as `/v2` next to `/v1`. Apps declare the minimum `apiVersion` they need and compare it with `GET /v1/version`.
+- Versioning: `apiVersion` is an integer. v1 only grows additively: new routes, new optional request fields, new response fields, new event types. Clients ignore unknown response fields and event types. A breaking change ships as `/v2` next to `/v1`. Apps declare the minimum `apiVersion` they need and compare it with `GET /v1/version`; an addition an app depends on (a request field an older Tether would refuse) raises `apiVersion`. 2 *(post-cutover)*: the resize claim's `viewer`.
 - Times are Unix epoch milliseconds.
 
 ## Identity
@@ -76,8 +76,7 @@ Status: every route below is implemented (Phase 3a). Additions made for the web 
 
 - `running`: launch dispatched and an active managed workload verified.
 - `pending`: reserved, never allocated.
-- `uncertain`: allocated, but an active workload is not verified.
-- `legacy`: a lifecycle-v0 session, kept read-only.
+- `uncertain`: allocated, but an active workload is not verified (a lifecycle-v0 row is never verified). The `legacy` status was removed *(post-cutover)*.
 
 `origin` is `aico`, `a-term`, `cli` or `root` (created through `POST /v1/roots`).
 
@@ -98,7 +97,7 @@ Status: every route below is implemented (Phase 3a). Additions made for the web 
 | `GET /v1/sessions/:id` | none | live-verified descriptor. Rechecks the generation after the async verification and returns `409 identity_changed` if it moved. |
 | `PATCH /v1/sessions/:id` | `{generation, name}` | rename. `name: null` clears to the default label. The label follows the root title rules (trimmed, 1–160 UTF-8 bytes, no control characters). |
 | `POST /v1/sessions/:id/end` | `{generation}` | `200 {status:"ended"}`. Exact containment retirement: stops only the owned pane scope and uses `cgroup.kill` fallback. |
-| `POST /v1/sessions/:id/respawn` | `{generation}` | Replaces the pane workload with the session's stored tool. Returns the new descriptor and generation. A lifecycle-v0 session is refused with `409 legacy_session`. |
+| `POST /v1/sessions/:id/respawn` | `{generation}` | Replaces the pane workload with the session's stored tool. Returns the new descriptor and generation. A lifecycle-v0 session is refused with `409 workload_unavailable`. |
 | `POST /v1/sessions/:id/load-tui` | `{generation, tool}` | Respawns with another tool and stores it on success |
 | `POST /v1/sessions/:id/switch-project` | `{generation, projectId}` or `{generation, projectRoot}` *(post-cutover)* | With `projectId`: resolves the project root once, respawns there with the same tool, and stores `projectId`/`projectRoot`. With `projectRoot` (an existing directory under the same path rule as on create; Aico's Personal Workspace): respawns there and stores `projectId: null`. Exactly one of the two; a root that is not a directory is `400 unknown_project`. |
 | `GET /v1/sessions/:id/diagnostics` | none | Content-free containment diagnostics (Aico's Session diagnostics): server, scope, invocation and cgroup identities, plus `agent: {state, stateSource, stateAt, stateDetail}` |
@@ -193,9 +192,11 @@ Attach `env` holds **overrides only**, not a full environment: set exactly `TERM
 
 When a view becomes active, it claims the shared tmux window size:
 
-`POST /v1/sessions/:id/resize-claim` with body `{generation, clientPid, cols, rows}` returns `200 {applied: true, changed}` or `{applied: false, reason}`. `changed` is true when the window's size differed before the claim, so a view that took the size back knows to repaint. A successful claim also moves the foreground pane's `MemoryLow=2G` to this session's pane scope, since Aico claims the size when a view gains focus.
+`POST /v1/sessions/:id/resize-claim` with body `{generation, clientPid, cols, rows, viewer?}` returns `200 {applied: true, changed}` or `{applied: false, reason}`. `changed` is true when the window's size differed before the claim, so a view that took the size back knows to repaint. A successful claim also moves the foreground pane's `MemoryLow=2G` to this session's pane scope, since Aico claims the size when a view gains focus.
 
 `POST /v1/sessions/:id/show` with body `{generation}` asks the connected GUI to open or focus the session's view. It returns `200 {shown: true}`, `503 gui_unavailable` with no GUI connected, or `409` when the session is not running or the GUI rejected the command.
+
+`viewer` *(post-cutover, apiVersion 2)* names the claimer for the other views: `{app, device}`, exactly those two keys, `app` a lowercase slug (`desktop`, `web`; 1–32 of `a-z0-9-`, starting with a letter) and `device` 1–64 characters with no control characters or surrounding spaces (the desktop sends its hostname). It is optional; a malformed one is refused with `400 invalid_viewer` before anything else about the session is checked.
 
 Tether resizes only the window of the attached tmux client whose `client_pid` is `clientPid` (Aico `activateTmuxViewSize`). `reason` is one of *(3a)*:
 
@@ -208,7 +209,7 @@ Tether resizes only the window of the attached tmux client whose `client_pid` is
 | `status_row` | no | The session shows a tmux status row (`status` is not `off`, including the global value). |
 | `invalid` | no | `clientPid`, `cols` or `rows` is not a positive integer. |
 
-A stale or wrong-workload `generation` is refused before the claim with `409 stale_generation` / `409 workload_unavailable`. A successful claim records the claiming client as the session's **size holder** (the client the shared window now fits; any other attached client sees the window at a size that is not its own) and publishes `session.resized` with `{id, generation, clientPid, cols, rows, changed}`. A client compares `clientPid` with its own attached client's pid to learn it no longer holds the size. `GET /v1/sessions/:id/resize-claim` returns `{generation, holder}`, where `holder` is `{clientPid, cols, rows, generation, claimedAt}` or `null` when unknown (no claim yet, or Tether restarted; the holder is kept in memory only). Desktop auto-resize on active-client change is intended behavior. The web app claims only when its view becomes active, not on every resize.
+A stale or wrong-workload `generation` is refused before the claim with `409 stale_generation` / `409 workload_unavailable`. A successful claim records the claiming client as the session's **size holder** (the client the shared window now fits; any other attached client sees the window at a size that is not its own) and publishes `session.resized` with `{id, generation, clientPid, cols, rows, changed, viewer}`. A client compares `clientPid` with its own attached client's pid to learn it no longer holds the size. `GET /v1/sessions/:id/resize-claim` returns `{generation, holder}`, where `holder` is `{clientPid, cols, rows, generation, claimedAt, viewer}` or `null` when unknown (no claim yet, or Tether restarted; the holder is kept in memory only). `viewer` is `null` when the claimer sent none. Desktop auto-resize on active-client change is intended behavior. The web app claims only when its view becomes active, not on every resize.
 
 ## Roots
 
@@ -234,13 +235,15 @@ The root descriptor keeps Aico's fields: `owner`, `hostIdentity`, `generation`, 
 
 Root origin *(3a)*: `origin` is `"aico"` (default) or `"a-term"`; `aTermSessionId` (a UUID) is accepted only with `"a-term"` and becomes the pane's `A_TERM_SESSION_ID`. Neither is part of the request digest. On `/v1`, a root's `owner` is its stored origin and the descriptor also carries `origin`. The legacy sockets on the default instance (`/run/user/<uid>/aico/control.sock` and `gui-control.sock`) keep Aico's wire format exactly: `owner: "aico"` and no `origin` field, so `st aico` and SummitFlow fleet are unaffected.
 
+Root window *(post-cutover)*: once a new root is running, Tether asks the connected GUI to show it only when the desktop or `st aico create` requested it (session origin `root`). A root the web app started (origin `a-term`) joins the desktop catalog and tray without a window, so no window layout is written for it.
+
 Root-request tombstones from Aico are imported by `tether import-aico`; there is no separate tombstone import route.
 
 Generation fencing:
 
 - Every mutation requires the exact current generation and a `running` workload.
 - A stale generation returns `409 stale_generation`.
-- `pending`, `uncertain` or `legacy` returns `409 workload_unavailable`.
+- `pending` or `uncertain` returns `409 workload_unavailable`.
 - If the session retires while the request waits, the response is `410 ended`.
 - A root that has ended returns `410 ended`. Its tombstone means the same `requestId` can never start new work.
 
@@ -423,7 +426,7 @@ Absent when the daemon runs with `TETHER_RECONCILE=off`.
 `GET /v1/health` never touches tmux. It returns:
 
 ```json
-{"status":"ok","name":"tether","instance":"default","version":"0.1.0","apiVersion":1,"schemaVersion":3,
+{"status":"ok","name":"tether","instance":"default","version":"0.1.0","apiVersion":2,"schemaVersion":3,
  "uptimeMs":966,"bootId":"uuid","eventSeq":0,"catalog":{"sessions":0,"tmuxServersActive":0,"rootRequests":0},
  "gui":{"connected":false},"lifecycle":"ready"}
 ```
