@@ -74,7 +74,7 @@ function setup(
     version?: TetherVersion | Error
     other?: TetherClient
     activeSocket?: string
-    agentSocket?: string
+    shareSocket?: string
   } = {},
 ) {
   const calls: string[] = []
@@ -112,7 +112,7 @@ function setup(
   }
   const link = createTetherLink({
     tether: tether as unknown as TetherClient,
-    agentSocket: o.agentSocket ?? '/run/test/agent.sock',
+    shareSocket: o.shareSocket ?? '/run/test/default.sock',
     catalog,
     projects,
     dialog,
@@ -148,20 +148,20 @@ beforeEach(() => {
 })
 
 describe('Tether events', () => {
-  it.each([false, true])('accepts handoffs only from the agent socket (active=%s)', (active) => {
-    const agentSocket = '/custom/agent.sock'
-    const ownerSocket = '/run/test/owner.sock'
+  it.each([false, true])('accepts handoffs only from tether@default (active=%s)', (active) => {
+    const shareSocket = '/run/test/default.sock'
+    const agentSocket = '/run/tether/agent/default/control.sock'
     const { link, apply, hooks } = setup({
-      activeSocket: active ? agentSocket : ownerSocket,
-      other: { socketPath: active ? ownerSocket : agentSocket } as TetherClient,
-      agentSocket,
+      activeSocket: active ? shareSocket : agentSocket,
+      other: { socketPath: active ? agentSocket : shareSocket } as TetherClient,
+      shareSocket,
     })
     link.connect(apply)
     const data = { id: 'aabbccddeeff', kind: 'url', name: 'https://example.com' }
     for (const [client, subscriber] of follow.mock.calls) {
       subscriber.onEvent(event('show.requested', data))
       expect(hooks.shared).toHaveBeenCalledTimes(
-        client.socketPath === agentSocket ? 1 : active ? 1 : 0,
+        client.socketPath === shareSocket ? 1 : active ? 1 : 0,
       )
     }
     expect(hooks.shared).toHaveBeenCalledExactlyOnceWith(data)

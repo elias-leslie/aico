@@ -30,7 +30,7 @@ interface AttentionWiringDeps {
     callback: (error: ExecFileException | null, stdout: string | Buffer) => void,
   ): unknown
   nightshift: string
-  atermUrl: string
+  webUrl: string
 }
 
 export function createAttentionWiring(deps: AttentionWiringDeps) {
@@ -79,7 +79,7 @@ export function createAttentionWiring(deps: AttentionWiringDeps) {
           '--severity',
           'warning',
           '--open',
-          `${deps.atermUrl}/?session=${encodeURIComponent(id)}`,
+          `${deps.webUrl}/?session=${encodeURIComponent(id)}`,
         ],
         { timeout: 30_000 },
         (error, stdout) => {

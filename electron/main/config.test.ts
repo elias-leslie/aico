@@ -15,11 +15,11 @@ describe('readConfig', () => {
         '/run/user/1234/tether/default/control.sock',
         '/run/tether/agent/default/control.sock',
       ],
-      agentTetherSocket: '/run/tether/agent/default/control.sock',
+      shareTetherSocket: '/run/user/1234/tether/default/control.sock',
       exchangeRoot: '/srv/workspaces/exchange',
       pastedImages: { dir: '/srv/workspaces/exchange/owner/pasted-images', maxAgeMs: 86_400_000 },
       nightshift: '/home/o/.local/bin/nightshift',
-      atermUrl: 'https://terminal.summitflow.dev',
+      webUrl: 'https://aico.summitflow.dev',
       selectionHotkey: 'CommandOrControl+Shift+Space',
       rendererUrl: undefined,
       activationReadyFile: undefined,
@@ -45,7 +45,7 @@ describe('readConfig', () => {
         TETHER_EXCHANGE_ROOT: '/exchange',
         AICO_PASTED_IMAGES_DIR: '/pasted',
         AICO_PASTED_IMAGES_KEEP_HOURS: '2',
-        AICO_ATERM_URL: 'https://a.example',
+        AICO_WEB_URL: 'https://a.example',
         AICO_SELECTION_HOTKEY: 'F1',
         ELECTRON_RENDERER_URL: 'http://localhost:5173',
         AICO_ACTIVATION_READY_FILE: '/r/ready',
@@ -63,9 +63,10 @@ describe('readConfig', () => {
       layoutPath: '/tmp/r/aico/layout.json',
       tetherSocket: '/tmp/r/tether/dev/control.sock',
       tetherSockets: ['/tmp/r/tether/dev/control.sock', '/run/tether/agent/default/control.sock'],
+      shareTetherSocket: '/tmp/r/tether/default/control.sock',
       exchangeRoot: '/exchange',
       pastedImages: { dir: '/pasted', maxAgeMs: 7_200_000 },
-      atermUrl: 'https://a.example',
+      webUrl: 'https://a.example',
       selectionHotkey: 'F1',
       rendererUrl: 'http://localhost:5173',
       activationReadyFile: '/r/ready',
@@ -90,7 +91,7 @@ describe('readConfig', () => {
   })
 
   it('strips trailing slashes from the a-term URL', () => {
-    expect(readConfig({ AICO_ATERM_URL: 'https://a.example///' }, '/h', 1).atermUrl).toBe(
+    expect(readConfig({ AICO_WEB_URL: 'https://a.example///' }, '/h', 1).webUrl).toBe(
       'https://a.example',
     )
   })

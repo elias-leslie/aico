@@ -91,7 +91,7 @@ function setup(windows: FakeWindow[] = [], tools: TetherTool[] = [claudeCode, co
     setNeedsYou,
     execFile,
     nightshift: '/usr/local/bin/nightshift',
-    atermUrl: 'http://aterm.test',
+    webUrl: 'http://web.test',
   })
   return { wiring, registry, catalog, setNeedsYou, execFile, pushes }
 }
@@ -160,7 +160,7 @@ describe('attention wiring', () => {
         '--severity',
         'warning',
         '--open',
-        'http://aterm.test/?session=aaaaaaaa',
+        'http://web.test/?session=aaaaaaaa',
       ],
       { timeout: 30_000 },
       expect.any(Function),

@@ -151,7 +151,7 @@ const projects = new ProjectCatalog(
 // run, in this order, what the rest of Aico does when the catalog changes.
 const link = createTetherLink({
   tether,
-  agentSocket: config.agentTetherSocket,
+  shareSocket: config.shareTetherSocket,
   catalog,
   projects,
   dialog,
@@ -185,7 +185,7 @@ const attention = createAttentionWiring({
   setNeedsYou,
   execFile,
   nightshift: config.nightshift,
-  atermUrl: config.atermUrl,
+  webUrl: config.webUrl,
 })
 
 // The eyes and the titlebar arcade: cursor pump, gaze scenes, urgent looks.

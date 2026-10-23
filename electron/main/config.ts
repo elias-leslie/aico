@@ -3,7 +3,7 @@
 // start (terminal clients) get the environment handed in by the root.
 
 import { join } from 'node:path'
-import { DEFAULT_AGENT_TETHER_SOCKET, knownTetherSockets, tetherSocketPath } from './tether-client'
+import { defaultTetherSocketPath, knownTetherSockets, tetherSocketPath } from './tether-client'
 
 export interface AicoConfig {
   readonly stateDir: string
@@ -20,13 +20,14 @@ export interface AicoConfig {
   readonly tetherSocket: string
   /** Every Tether instance Aico shows, active (`tetherSocket`) first: this user's own and the agent's (TETHER_AGENT_SOCKET). */
   readonly tetherSockets: readonly string[]
-  readonly agentTetherSocket: string
+  /** Agent shares (`show.requested`) are accepted only from this user's tether@default. */
+  readonly shareTetherSocket: string
   readonly exchangeRoot: string
   /** Where a pasted clipboard image is written for the terminal program to read (AICO_PASTED_IMAGES_DIR, AICO_PASTED_IMAGES_KEEP_HOURS). */
   readonly pastedImages: { readonly dir: string; readonly maxAgeMs: number }
   readonly nightshift: string
-  /** a-term on the owner's phone; a tap on the push opens the waiting session there (Nightshift allowlists the origin). */
-  readonly atermUrl: string
+  /** The web app (AICO_WEB_URL): a tap on the push opens the waiting session there on the owner's phone (Nightshift allowlists the origin). */
+  readonly webUrl: string
   /**
    * System-wide "indicate" hotkey. Works on X11 today; on Wayland (GNOME 46, no
    * GlobalShortcuts portal) globalShortcut silently no-ops — bind a GNOME custom
@@ -71,14 +72,14 @@ export function readConfig(
     layoutPath: join(env.XDG_RUNTIME_DIR || `/run/user/${uid ?? 1000}`, 'aico', 'layout.json'),
     tetherSocket: tetherSocketPath(env, uid),
     tetherSockets: Object.freeze(knownTetherSockets(env, uid)),
-    agentTetherSocket: env.TETHER_AGENT_SOCKET || DEFAULT_AGENT_TETHER_SOCKET,
+    shareTetherSocket: defaultTetherSocketPath(env, uid),
     exchangeRoot,
     pastedImages: {
       dir: env.AICO_PASTED_IMAGES_DIR || join(exchangeRoot, 'owner', 'pasted-images'),
       maxAgeMs: pastedImageMaxAgeMs(env.AICO_PASTED_IMAGES_KEEP_HOURS),
     },
     nightshift: join(home, '.local/bin/nightshift'),
-    atermUrl: (env.AICO_ATERM_URL ?? 'https://terminal.summitflow.dev').replace(/\/+$/, ''),
+    webUrl: (env.AICO_WEB_URL ?? 'https://aico.summitflow.dev').replace(/\/+$/, ''),
     selectionHotkey: env.AICO_SELECTION_HOTKEY ?? 'CommandOrControl+Shift+Space',
     rendererUrl: env.ELECTRON_RENDERER_URL,
     activationReadyFile: env.AICO_ACTIVATION_READY_FILE,

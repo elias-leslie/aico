@@ -34,6 +34,11 @@ export function ownTetherSocketPath(env: NodeJS.ProcessEnv, uid: number | undefi
   return join(runtime, 'tether', instance, 'control.sock')
 }
 
+/** This user's `tether@default`, the one instance agent shares are accepted from. */
+export function defaultTetherSocketPath(env: NodeJS.ProcessEnv, uid: number | undefined): string {
+  return ownTetherSocketPath({ ...env, TETHER_INSTANCE: 'default' }, uid)
+}
+
 /** The active instance, the one new sessions go to: `TETHER_SOCKET`, else this user's own. */
 export function tetherSocketPath(env: NodeJS.ProcessEnv, uid: number | undefined): string {
   return env.TETHER_SOCKET || ownTetherSocketPath(env, uid)

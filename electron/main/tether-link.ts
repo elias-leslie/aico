@@ -45,7 +45,7 @@ interface LinkHooks {
 
 interface TetherLinkDeps {
   tether: TetherClient
-  agentSocket: string
+  shareSocket: string
   catalog: SessionCatalog
   projects: Pick<ProjectCatalog, 'invalidate' | 'refresh'>
   dialog: { showErrorBox(title: string, content: string): void }
@@ -115,7 +115,7 @@ export function createTetherLink(deps: TetherLinkDeps) {
     const id = typeof event.data.id === 'string' ? event.data.id : null
     switch (event.type) {
       case 'show.requested':
-        if (socketPath === deps.agentSocket) hooks.shared(event.data)
+        if (socketPath === deps.shareSocket) hooks.shared(event.data)
         break
       case 'session.ended':
         if (id) sessionEnded(id, 'tether_event')
