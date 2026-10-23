@@ -1,10 +1,45 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 - 2026-10-23
 
-Requires Tether API v1. Install and start Tether (`tether@default`) before Aico.
+Aico, A-Term and Tether are now one product, Aico, in one repository. The web
+and phone app (formerly A-Term) lives in `web/`, the Tether session daemon in
+`tether/`, and the desktop stays at the root. Both imports keep their history:
+A-Term's release tags are now `a-term/vX.Y.Z` (its last release was 0.2.11);
+Tether had no tags. From here on `vX.Y.Z` tags and this file cover the whole
+product.
 
-### Changed
+Requires Tether API v1 (`tether@default`); `scripts/install.sh --start` installs
+and starts it.
+
+### Merged
+
+- One npm workspace (root, `tether`, `web/frontend`) with one lockfile and one
+  Biome version; `npm run build` builds the desktop, Tether and the web app.
+- One project identity, one quality gate (`st check`), one CI workflow and one
+  tag release workflow. The web app's own CHANGELOG and RELEASING notes are
+  folded in here.
+- The web app is called Aico everywhere you see it, with Aico's lantern icons.
+  The desktop opens it at `AICO_WEB_URL` (default `https://aico.summitflow.dev`).
+- Docs live in one `docs/` tree; Tether's decision records are in `docs/adr/`.
+- One installer, `scripts/install.sh` (with `--dry-run`), replaces
+  `scripts/aico-install.sh` and the web app's and Tether's own installers.
+- Agent shares now arrive through the default Tether (`tether@default`); the
+  separate agent-user Tether is no longer needed for them.
+
+### Web app (was A-Term)
+
+- Sessions are owned by Tether: the web app creates, attaches, ends, renames and
+  switches tools through it, and the same sessions show in the desktop and the
+  browser. It follows Tether's event stream to keep its views current.
+- Postgres is gone; the web app keeps only view state in
+  `~/.local/state/a-term/a-term.db`.
+- Control mode is the only terminal transport. Notes, the prompt library and
+  session recording are removed.
+
+### Desktop
+
+#### Changed
 
 - Aico is now a client of Tether, the per-user session daemon. Tether owns
   tmux servers, panes, agent launch and admission, End, roots and context hooks,
@@ -23,7 +58,7 @@ Requires Tether API v1. Install and start Tether (`tether@default`) before Aico.
   federation is gone.
 - Window focus claims the tmux window size through Tether's resize claim;
   desktop auto-resize is unchanged.
-- `scripts/aico-install.sh` requires Tether API v1 or later and no longer
+- The installer (then `scripts/aico-install.sh`) requires Tether API v1 or later and no longer
   installs `aico-owner.service` or the context hooks.
 - `st aico ... --surface a-term` accepts the Tether-shaped root descriptors that
   A-Term's `/v1/roots` proxy now returns.
@@ -34,7 +69,7 @@ Requires Tether API v1. Install and start Tether (`tether@default`) before Aico.
   last-focused widget and replies `{records, count, delivered, reason}`.
   Indicate selection sends the newest capture again from memory.
 
-### Removed
+#### Removed
 
 - The in-process lifecycle owner, `aico-owner.service`, the owner bundle, the
   lifecycle harness, the real-session smoke, `qualify-codex-admin.py`, the
