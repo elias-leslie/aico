@@ -15,7 +15,6 @@ export const metadata: Metadata = {
   title: PRODUCT_NAME,
   description: PRODUCT_DESCRIPTION,
   applicationName: PRODUCT_NAME,
-  manifest: '/manifest.webmanifest',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
@@ -50,6 +49,13 @@ export default async function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        {/* Cloudflare Access guards every path, so the browser must send the
+            login cookie with the manifest fetch or the app can't be installed. */}
+        <link
+          rel="manifest"
+          href="/manifest.webmanifest"
+          crossOrigin="use-credentials"
+        />
         <Script id="pwa-register" nonce={nonce} strategy="afterInteractive">
           {PWA_REGISTER_SCRIPT}
         </Script>
