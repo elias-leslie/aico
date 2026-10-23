@@ -147,7 +147,7 @@ beforeEach(() => {
 describe('Tether events', () => {
   it.each([false, true])('accepts handoffs only from tether@default (active=%s)', (active) => {
     const shareSocket = '/run/test/default.sock'
-    const agentSocket = '/run/tether/agent/default/control.sock'
+    const agentSocket = '/run/user/1000/tether/dev/control.sock'
     const { link, apply, hooks } = setup({
       activeSocket: active ? shareSocket : agentSocket,
       other: { socketPath: active ? agentSocket : shareSocket } as TetherClient,
@@ -186,7 +186,14 @@ describe('Tether events', () => {
     subscriber.onEvent(event('session.resized', { id: 'aaaaaaaa', generation: 'g1' }))
     expect(hooks.sizeHeld).not.toHaveBeenCalled()
     subscriber.onEvent(event('session.resized', { id: 'aaaaaaaa', clientPid: 4242, cols: 40 }))
-    expect(hooks.sizeHeld).toHaveBeenCalledExactlyOnceWith('aaaaaaaa', 4242)
+    expect(hooks.sizeHeld).toHaveBeenCalledExactlyOnceWith('aaaaaaaa', 4242, null)
+    const viewer = { app: 'web', device: 'Pixel 9' }
+    subscriber.onEvent(event('session.resized', { id: 'aaaaaaaa', clientPid: 7, viewer }))
+    expect(hooks.sizeHeld).toHaveBeenLastCalledWith('aaaaaaaa', 7, viewer)
+    subscriber.onEvent(
+      event('session.resized', { id: 'aaaaaaaa', clientPid: 8, viewer: { app: 1 } }),
+    )
+    expect(hooks.sizeHeld).toHaveBeenLastCalledWith('aaaaaaaa', 8, null)
   })
 
   it('without a snapshot it re-lists', async () => {

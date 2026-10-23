@@ -18,7 +18,7 @@ export interface AicoConfig {
   readonly layoutPath: string
   /** Tether's control socket (TETHER_SOCKET, TETHER_INSTANCE, XDG_RUNTIME_DIR). */
   readonly tetherSocket: string
-  /** Every Tether instance Aico shows, active (`tetherSocket`) first: this user's own and the agent's (TETHER_AGENT_SOCKET). */
+  /** Every Tether instance Aico shows: the active one (`tetherSocket`). */
   readonly tetherSockets: readonly string[]
   /** Agent shares (`show.requested`) are accepted only from this user's tether@default. */
   readonly shareTetherSocket: string

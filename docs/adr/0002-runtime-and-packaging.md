@@ -23,6 +23,8 @@
 - **Shared client library:** `tether/src/client` is Tether's typed client (contracts, pool, event follower, GUI channel holder, version gate) for the desktop and the web server. `tether/package.json` exports it as TS source (`tether/client`), and each app's bundler compiles it in.
   - `tether` never goes in the root `dependencies`: electron-vite externalizes dependencies, so it would be loaded at runtime instead of bundled. The workspace link resolves it.
   - The client takes only types from daemon modules (`import type`), and the daemon never imports the client; `src/bundle.test.ts` checks both against the `dist/tether.mjs` inputs.
+- **Terminal engine:** `tether/src/term` (`tether/term`) is the tmux control-mode client both front ends run per viewer: the attach check, the seed and stream, typing and paste, the size claim, and WebSocket viewer frames with per-viewer credit. Same packaging rules as the client: TS source bundled by each app, daemon modules by type only (it may use `src/client`), never in `dist/tether.mjs`.
+  - The web server, not the daemon or the engine, depends on `ws`: the engine's `ViewerSocket` is the shape a `ws` socket already has.
 - **Future: single executable.** A Node SEA (single executable application) binary at the same `~/.local/lib/tether/bin/tether` path would remove the system-Node dependency for other hosts. It is deferred: no other hosts exist yet, SEA plus `node:sqlite` adds build complexity, and the launcher path is already the stable contract.
 
 ## Consequences

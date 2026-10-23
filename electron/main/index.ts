@@ -19,7 +19,9 @@ import {
   type SessionCatalog,
   TetherPool,
 } from 'tether/client'
+import { ControlTerminal } from 'tether/term'
 import { version } from '../../package.json'
+import { TERMINAL_HISTORY_LINES } from '../shared/terminal-history'
 import { createAmbient } from './ambient'
 import { createAttentionWiring } from './attention-wiring'
 import { readConfig } from './config'
@@ -36,8 +38,6 @@ import { createSessionActions } from './session-actions'
 import { sessionTitle } from './session-catalog'
 import { createAgentShares } from './show'
 import { createTerminal } from './terminal'
-import { ControlTerminal } from './tmux-control'
-import { tmuxClientPid } from './tmux-sandbox'
 import { createTray, refreshTray, setNeedsYou, setWidgetActivity } from './tray'
 import {
   ensureView,
@@ -260,8 +260,15 @@ const terminal = createTerminal({
   recentlyArranged: layout.recentlyArranged,
   titles: () => chrome.pushTitles(),
   tray: () => chrome.syncTray(),
-  tmuxClientPid,
-  controlTerminal: (argv, env, size) => new ControlTerminal(argv, env, size),
+  controlTerminal: (argv, env, size) =>
+    new ControlTerminal(argv, env, size, {
+      historyLines: TERMINAL_HISTORY_LINES,
+      onReseed: (r) =>
+        console.log(
+          `[aico:event] terminal_reseed reason=${r.reason} target=${r.target} ` +
+            `read_ms=${r.readMs} seed_bytes=${r.seedBytes} since_input_ms=${r.sinceInputMs}`,
+        ),
+    }),
   ensurePersonalWorkspaceRoot,
   isQuitting: lifecycle.isQuitting,
   viewer: { app: 'desktop', device: hostname() },

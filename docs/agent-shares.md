@@ -8,8 +8,7 @@ event; both front ends pick it up from there.
 
 Shares are accepted only from the owner's default Tether, `tether@default`
 (`$XDG_RUNTIME_DIR/tether/default/control.sock`, a socket in the owner's private
-runtime directory). Events from any other instance, including the old agent-user
-instance at `/run/tether/agent/default/control.sock`, are ignored. Agents run as
+runtime directory). Events from any other instance are ignored. Agents run as
 the owner, so `tether show` from any session reaches `tether@default`.
 
 Tether writes files under `$TETHER_EXCHANGE_ROOT/agent/<session-or-none>/out/`

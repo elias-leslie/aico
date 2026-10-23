@@ -1,4 +1,4 @@
-// Renderer side of the control-mode transport (main/tmux-control.ts).
+// Renderer side of the control-mode transport (tether/term, run by main/terminal.ts).
 //
 // The terminal parses the pane's own output, so it holds real scrollback and
 // knows the program's modes. tmux stays the terminal the program talks to: it

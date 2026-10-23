@@ -102,7 +102,6 @@ Important variables:
 | `AICO_OZONE_PLATFORM` | `x11` | Electron display backend used by the managed foreground runner. Keeps tiling and window restoration working through Xwayland on a Wayland desktop. Set `wayland` only for explicit native-Wayland testing; positioning, resizing and focus control are restricted there. Does not change the desktop session or terminal environment. |
 | `TETHER_SOCKET` | unset | Tether control socket. Wins over `TETHER_INSTANCE`. |
 | `TETHER_INSTANCE` | `default` | Tether instance; the socket is `$XDG_RUNTIME_DIR/tether/<instance>/control.sock`. |
-| `TETHER_AGENT_SOCKET` | `/run/tether/agent/default/control.sock` | The agent user's Tether instance. Aico lists and handles its sessions next to the active instance's (`TETHER_SOCKET`), which gets new sessions. |
 
 Aico intentionally does not store third-party AI provider secrets. Authenticate each AI CLI with its own documented login/config flow.
 

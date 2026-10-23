@@ -469,12 +469,12 @@ describe('GUI channel', () => {
 
 describe('two Tether instances', () => {
   const own = '/run/user/1000/tether/default/control.sock'
-  const agent = '/run/tether/agent/default/control.sock'
 
-  it('puts the active instance first and pins an unknown TETHER_SOCKET alone', () => {
-    expect(knownTetherSockets({}, 1000)).toEqual([own, agent])
-    expect(knownTetherSockets({ TETHER_SOCKET: agent }, 1000)).toEqual([agent, own])
-    expect(knownTetherSockets({ TETHER_AGENT_SOCKET: '/a.sock' }, 1000)).toEqual([own, '/a.sock'])
+  it('consults only the active instance', () => {
+    expect(knownTetherSockets({}, 1000)).toEqual([own])
+    expect(knownTetherSockets({ TETHER_INSTANCE: 'dev' }, 1000)).toEqual([
+      '/run/user/1000/tether/dev/control.sock',
+    ])
     expect(knownTetherSockets({ TETHER_SOCKET: '/x/y.sock' }, 1000)).toEqual(['/x/y.sock'])
   })
 
