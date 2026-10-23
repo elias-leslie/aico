@@ -14,7 +14,16 @@ import {
   type TetherEvent,
   type TetherTool,
   TetherUnavailable,
+  type ViewerLabel,
 } from './contracts'
+
+/** The holder's label from a `session.resized` event (Tether checked it on the claim). */
+function viewerOf(value: unknown): ViewerLabel | null {
+  const label = value as Partial<ViewerLabel> | null
+  return label && typeof label.app === 'string' && typeof label.device === 'string'
+    ? { app: label.app, device: label.device }
+    : null
+}
 
 /** Share one pending query without retaining a stale result. */
 export function coalesceAsync<T>(load: () => Promise<T>): () => Promise<T> {
@@ -50,8 +59,9 @@ interface LinkHooks {
   connected(): void
   /** A handoff received from the agent's socket only; payload is still untrusted. */
   shared(data: Record<string, unknown>): void
-  /** A client claimed this session's shared window size. */
-  sizeHeld(id: string, clientPid: number): void
+  /** A client claimed this session's shared window size; `viewer` names its
+   * app and device (null when the claimer sent none). */
+  sizeHeld(id: string, clientPid: number, viewer: ViewerLabel | null): void
 }
 
 interface TetherLinkDeps {
@@ -150,7 +160,7 @@ export function createTetherLink(deps: TetherLinkDeps) {
       case 'session.resized':
         // An older Tether sends no holder; the window then learns nothing new.
         if (id && Number.isSafeInteger(event.data.clientPid))
-          hooks.sizeHeld(id, event.data.clientPid as number)
+          hooks.sizeHeld(id, event.data.clientPid as number, viewerOf(event.data.viewer))
         break
       case 'root.updated':
         requestSessionRefresh()

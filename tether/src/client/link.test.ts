@@ -186,7 +186,14 @@ describe('Tether events', () => {
     subscriber.onEvent(event('session.resized', { id: 'aaaaaaaa', generation: 'g1' }))
     expect(hooks.sizeHeld).not.toHaveBeenCalled()
     subscriber.onEvent(event('session.resized', { id: 'aaaaaaaa', clientPid: 4242, cols: 40 }))
-    expect(hooks.sizeHeld).toHaveBeenCalledExactlyOnceWith('aaaaaaaa', 4242)
+    expect(hooks.sizeHeld).toHaveBeenCalledExactlyOnceWith('aaaaaaaa', 4242, null)
+    const viewer = { app: 'web', device: 'Pixel 9' }
+    subscriber.onEvent(event('session.resized', { id: 'aaaaaaaa', clientPid: 7, viewer }))
+    expect(hooks.sizeHeld).toHaveBeenLastCalledWith('aaaaaaaa', 7, viewer)
+    subscriber.onEvent(
+      event('session.resized', { id: 'aaaaaaaa', clientPid: 8, viewer: { app: 1 } }),
+    )
+    expect(hooks.sizeHeld).toHaveBeenLastCalledWith('aaaaaaaa', 8, null)
   })
 
   it('without a snapshot it re-lists', async () => {
