@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { LANTERN_MONO_FACE } from '../constants/lantern'
 import {
   type ATermInstanceOptions,
   type ATermInstanceRefs,
@@ -85,7 +86,12 @@ export function useATermInstance(
       // The webfont must be loaded before xterm measures its glyph cell, or
       // the view renders at fallback metrics and misaligns once it swaps in.
       try {
-        await document.fonts?.load(`${opts.fontSize}px 'Iosevka'`)
+        await Promise.all([
+          document.fonts?.load(`${opts.fontSize}px '${LANTERN_MONO_FACE}'`),
+          document.fonts?.load(
+            `bold ${opts.fontSize}px '${LANTERN_MONO_FACE}'`,
+          ),
+        ])
       } catch {
         /* render with whatever font is available */
       }

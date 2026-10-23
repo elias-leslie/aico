@@ -1,5 +1,6 @@
 /* Lantern typefaces — vendored woff2 (Latin subsets). See README.md for sources.
-   Fraunces = display (variable wght+ital), Pretendard = UI, Iosevka = mono. */
+   Fraunces = display (variable wght+ital), Pretendard = UI, Iosevka = desktop
+   mono, JetBrains Mono = web terminal (full glyph set, incl. box drawing). */
 
 @font-face {
   font-family: 'Fraunces';
@@ -37,4 +38,19 @@
   font-weight: 400;
   font-display: swap;
   src: url('./Iosevka-400.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./JetBrainsMono-Regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./JetBrainsMono-Bold.woff2') format('woff2');
 }

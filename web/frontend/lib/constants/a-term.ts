@@ -32,7 +32,7 @@ export const SCROLL_THRESHOLD = 50
 /** Copy-mode timeout in milliseconds (auto-exit after inactivity) */
 export const COPY_MODE_TIMEOUT_MS = 10000
 
-/** Terminal font: the vendored Iosevka (assets/fonts), as on the desktop. */
+/** Terminal font: the vendored JetBrains Mono (assets/fonts). */
 export const A_TERM_FONT_FAMILY = LANTERN_MONO_FAMILY
 
 /** The terminal draws bone on ink with a bone cursor, like the desktop;

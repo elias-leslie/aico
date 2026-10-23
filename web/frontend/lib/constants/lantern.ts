@@ -3,5 +3,8 @@
  * them equal. */
 export const LANTERN_RIM = '#1c1f24'
 
-/** The terminal typeface, as the desktop's Iosevka setting names it. */
-export const LANTERN_MONO_FAMILY = "'Iosevka', ui-monospace, monospace"
+/** The web terminal's typeface: JetBrains Mono, wider than the desktop's
+ * Iosevka default and easier to read on a phone. Named as the desktop's
+ * JetBrains Mono setting names it. */
+export const LANTERN_MONO_FACE = 'JetBrains Mono'
+export const LANTERN_MONO_FAMILY = `'${LANTERN_MONO_FACE}', ui-monospace, monospace`
