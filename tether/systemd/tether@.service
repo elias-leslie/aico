@@ -1,0 +1,34 @@
+# Tether session daemon, one unit per instance: tether@default, tether@dev, ...
+# Installed by scripts/install.sh into ~/.config/systemd/user/. ExecStart uses
+# the stable install path, so upgrading Tether never edits this unit.
+#
+# tmux servers are separate transient units (aico-tmux-server-<id>.service for
+# the default instance, tether-<instance>-tmux-server-<id>.service otherwise).
+# Stopping or restarting Tether therefore never stops a tmux server or a pane,
+# and the default KillMode=control-group only reaches Tether's own short-lived
+# children. Never start a tmux server directly from this unit's cgroup.
+[Unit]
+Description=Tether session daemon (%i)
+Documentation=https://github.com/elias-leslie/tether
+
+[Service]
+Type=simple
+Slice=app.slice
+ExecStart=%h/.local/lib/tether/bin/tether --instance %i serve
+Restart=on-failure
+RestartSec=2
+UMask=0077
+# Same PATH as aico-shell.service. Panes inherit it (Aico pinned its own PATH
+# onto every pane), so agent CLIs resolve identically from either app. The
+# daemon never sources shell profiles.
+Environment=PATH=%h/.claude/bin:%h/.codex/bin:%h/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+# Sibling checkouts (agent-hub, codex-config) live here, not ~/projects.
+Environment=TETHER_PROJECTS_DIR=/srv/workspaces/projects
+# systemd-oomd picks this unit only when no other candidate is left.
+ManagedOOMPreference=avoid
+CPUAccounting=yes
+MemoryAccounting=yes
+TasksAccounting=yes
+
+[Install]
+WantedBy=default.target

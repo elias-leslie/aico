@@ -1,0 +1,126 @@
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
+import { join } from 'node:path'
+import { assertSocketPath } from '../config'
+import { getTmuxServer, getWidget, type WidgetRow } from './catalog'
+import { type RetirementResult, sessionGeneration } from './owner-retirement'
+import { MANAGED_LIFECYCLE_VERSION } from './ownership'
+
+const WIDGET_ID_RE = /^[0-9a-f]{8}$/
+const MAX_BODY_BYTES = 1024
+
+/** Tether: the legacy socket shares the daemon's single lifecycle lock and End
+ * path (src/lifecycle/engine.ts), so it can never race the v1 API. */
+export interface OwnerControlOperations {
+  verifiedCurrentPane(row: WidgetRow): Promise<boolean>
+  /** `busy` when another lifecycle operation holds the session. */
+  end(widgetId: string, generation: string): Promise<RetirementResult | { status: 'busy' }>
+}
+
+export function ownerSocketPath(
+  override: string | undefined = process.env.AICO_CONTROL_SOCKET,
+  runtime: string | undefined = process.env.XDG_RUNTIME_DIR,
+  uid: number | undefined = process.getuid?.(),
+): string {
+  const root = runtime || (uid === undefined ? '' : `/run/user/${uid}`)
+  return assertSocketPath(override ?? join(root, 'aico', 'control.sock'), 'Aico owner')
+}
+
+function json(response: ServerResponse, status: number, value: Record<string, unknown>): void {
+  response.writeHead(status, { 'content-type': 'application/json; charset=utf-8' })
+  response.end(JSON.stringify(value))
+}
+
+async function readJson(request: IncomingMessage): Promise<unknown> {
+  let text = ''
+  for await (const part of request) {
+    text += part.toString('utf8')
+    if (Buffer.byteLength(text) > MAX_BODY_BYTES) throw new Error('request body too large')
+  }
+  return JSON.parse(text)
+}
+
+export function createOwnerServer(operations: OwnerControlOperations): Server {
+  return createServer(async (request, response) => {
+    const path = request.url?.split('?')[0] ?? ''
+    if (path === '/v1/roots' || path.startsWith('/v1/roots/')) {
+      json(response, 503, { error: 'gui_unavailable' })
+      return
+    }
+    const match = /^\/v1\/sessions\/([0-9a-f]{8})(\/end)?$/.exec(path)
+    if (!match || !WIDGET_ID_RE.test(match[1])) {
+      json(response, 404, { error: 'not_found' })
+      return
+    }
+    const widgetId = match[1]
+    try {
+      if (request.method === 'GET' && !match[2]) {
+        const row = getWidget(widgetId)
+        if (
+          !row ||
+          row.externalTmuxSession ||
+          row.lifecycleVersion < MANAGED_LIFECYCLE_VERSION ||
+          !row.tmuxServerId ||
+          !row.tmuxSessionId ||
+          !row.paneId ||
+          !(await operations.verifiedCurrentPane(row))
+        ) {
+          json(response, 404, { error: 'not_found' })
+          return
+        }
+        // The async pane verification must still describe this exact catalog
+        // generation. Never publish a stale row as a discovery receipt.
+        const current = getWidget(widgetId)
+        const server = getTmuxServer(row.tmuxServerId)
+        if (
+          !current ||
+          sessionGeneration(current) !== sessionGeneration(row) ||
+          !server ||
+          server.phase !== 'active'
+        ) {
+          json(response, 409, { error: 'identity_changed' })
+          return
+        }
+        json(response, 200, {
+          owner: 'aico',
+          widgetId,
+          sessionId: row.sessionId,
+          generation: sessionGeneration(row),
+          tmuxSessionId: row.tmuxSessionId,
+          paneId: row.paneId,
+          tmuxServerId: server.id,
+          tmuxSocket: server.socketPath,
+          tool: row.tool,
+        })
+        return
+      }
+      if (request.method === 'POST' && match[2]) {
+        let body: unknown
+        try {
+          body = await readJson(request)
+        } catch {
+          json(response, 400, { error: 'invalid_body' })
+          return
+        }
+        const generation =
+          body && typeof body === 'object' && 'generation' in body
+            ? (body as { generation: unknown }).generation
+            : null
+        if (typeof generation !== 'string' || !/^[0-9a-f]{64}$/.test(generation)) {
+          json(response, 400, { error: 'invalid_generation' })
+          return
+        }
+        const result = await operations.end(widgetId, generation)
+        if (result.status === 'ended') json(response, 200, { status: 'ended' })
+        else if (result.status === 'busy') json(response, 409, { error: 'busy' })
+        else if (result.status === 'absent') json(response, 404, { error: 'not_found' })
+        else if (result.status === 'stale') json(response, 409, { error: 'stale_generation' })
+        else json(response, 409, { error: 'blocked', reason: result.reason })
+        return
+      }
+      json(response, 405, { error: 'method_not_allowed' })
+    } catch (error) {
+      console.error('[tether:owner] request failed:', error)
+      json(response, 500, { error: 'owner_failure' })
+    }
+  })
+}

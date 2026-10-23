@@ -1,0 +1,30 @@
+# Agent shims: the one list of commands Tether wraps for agent panes.
+#
+# Each line is: <command> <action> <argument...>. The installer links
+# ~/.local/lib/tether/shims/<command> to tether-shim; Tether puts that
+# directory first on PATH in every session it creates. Each shim runs the real
+# binary (the next one on PATH) with argv changed as the action says.
+#
+#   prepend           <flag>                  put <flag> before the arguments
+#                                             (systemd-run treats anything after
+#                                             its COMMAND as that command's own)
+#   after-subcommand  <flag> <sub,sub,...>    put <flag> after the first argument
+#                                             when it is one of the listed
+#                                             subcommands (udisksctl options are
+#                                             per subcommand)
+#   refuse            <message>               print the message, exit 126
+#
+# Why: a system-bus polkit check from an agent process otherwise falls back to
+# the owner's desktop session and pops a password dialog. With
+# --no-ask-password / --no-user-interaction the call fails at once instead.
+# resolvectl has no such flag, so it is not listed.
+systemctl      prepend           --no-ask-password
+systemd-run    prepend           --no-ask-password
+systemd-mount  prepend           --no-ask-password
+loginctl       prepend           --no-ask-password
+timedatectl    prepend           --no-ask-password
+hostnamectl    prepend           --no-ask-password
+localectl      prepend           --no-ask-password
+machinectl     prepend           --no-ask-password
+udisksctl      after-subcommand  --no-user-interaction  mount,unmount,unlock,lock,loop-setup,loop-delete,power-off,smart-simulate
+pkexec         refuse            pkexec is blocked for agents; use nightshift request/bypass

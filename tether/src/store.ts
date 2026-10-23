@@ -1,0 +1,546 @@
+import { randomUUID } from 'node:crypto'
+import { chmodSync, mkdirSync } from 'node:fs'
+import { dirname } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
+import {
+  AGENT_TOOLS_TABLE_SQL,
+  COORDINATOR_SQL,
+  INDEXES_SQL,
+  RETIRED_SESSION_IDS_SQL,
+  ROOT_ORIGIN_SQL,
+  ROOT_REQUESTS_TABLE_SQL,
+  ROOT_WORK_ROLE_SQL,
+  SCHEMA_VERSION,
+  SESSIONS_TABLE_SQL,
+  SETTINGS_SQL,
+  TMUX_SERVERS_TABLE_SQL,
+} from './schema'
+import {
+  type AgentTool,
+  DEFAULT_TOOLS,
+  formatCommand,
+  isContextHook,
+  SLUG_RE,
+  type ToolSeed,
+  ToolValidationError,
+  validateArgv,
+} from './tools'
+
+interface RawTool {
+  id: string
+  slug: string
+  name: string
+  argv: string
+  process_name: string
+  description: string | null
+  color: string | null
+  display_order: number
+  is_default: number
+  enabled: number
+  aliases: string
+  context_hook: string | null
+  created_at: number
+  updated_at: number
+}
+
+function toTool(raw: RawTool): AgentTool {
+  const argv = JSON.parse(raw.argv) as string[]
+  return {
+    id: raw.id,
+    slug: raw.slug,
+    name: raw.name,
+    argv,
+    command: formatCommand(argv),
+    processName: raw.process_name,
+    description: raw.description,
+    color: raw.color,
+    displayOrder: raw.display_order,
+    isDefault: raw.is_default === 1,
+    enabled: raw.enabled === 1,
+    aliases: JSON.parse(raw.aliases) as string[],
+    contextHook: isContextHook(raw.context_hook) ? raw.context_hook : null,
+    createdAt: raw.created_at,
+    updatedAt: raw.updated_at,
+  }
+}
+
+export type ToolPatch = Partial<
+  Pick<
+    AgentTool,
+    | 'name'
+    | 'argv'
+    | 'processName'
+    | 'description'
+    | 'color'
+    | 'displayOrder'
+    | 'isDefault'
+    | 'enabled'
+    | 'aliases'
+    | 'contextHook'
+  >
+>
+
+export interface ToolImportResult {
+  created: string[]
+  updated: string[]
+  unchanged: string[]
+  /** Existing tools whose fields differ and were left unchanged. */
+  differs: { slug: string; fields: string[] }[]
+}
+
+export interface SessionSummary {
+  id: string
+  ownershipId: string
+  tool: string
+  name: string | null
+  projectId: string | null
+  tmuxServerId: string | null
+  launchState: string
+  lifecycleVersion: number
+  origin: string
+  createdAt: number
+}
+
+/**
+ * Tether's catalog. One daemon process per instance is the only writer (the
+ * control socket's liveness check refuses a second daemon); WAL keeps reads
+ * available to diagnostics. All multi-row writes use BEGIN IMMEDIATE.
+ */
+export class Store {
+  readonly db: DatabaseSync
+
+  /** `groupRead`: shared mode. The dir is 0750 and the database 0640, so an ACL the
+   * root-side installer gave the owner (named user r-x, mask from these bits) keeps
+   * working: chmod 0700/0600 on every start would zero the ACL mask. */
+  constructor(path: string, now: () => number = Date.now, groupRead = false) {
+    if (path !== ':memory:') {
+      mkdirSync(dirname(path), { recursive: true, mode: groupRead ? 0o750 : 0o700 })
+      chmodSync(dirname(path), groupRead ? 0o750 : 0o700)
+    }
+    this.db = new DatabaseSync(path)
+    // Owner-only even when created outside the service's UMask (import-aico).
+    // SQLite gives the -wal and -shm files the database file's mode.
+    if (path !== ':memory:') chmodSync(path, groupRead ? 0o640 : 0o600)
+    this.db.exec('PRAGMA busy_timeout = 2000; PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON')
+    this.migrate(now())
+  }
+
+  close(): void {
+    this.db.close()
+  }
+
+  schemaVersion(): number {
+    const row = this.db.prepare('SELECT max(version) AS version FROM schema_version').get() as {
+      version: number | null
+    }
+    return row.version ?? 0
+  }
+
+  private migrate(now: number): void {
+    this.db.exec(
+      'CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL)',
+    )
+    const current = this.schemaVersion()
+    if (current > SCHEMA_VERSION) {
+      throw new Error(
+        `database schema ${current} is newer than this Tether build (${SCHEMA_VERSION}); refusing to start`,
+      )
+    }
+    if (current === SCHEMA_VERSION) return
+    this.transaction(() => {
+      if (current < 1) {
+        // v1: the initial schema plus seeded tools.
+        this.db.exec(TMUX_SERVERS_TABLE_SQL)
+        this.db.exec(SESSIONS_TABLE_SQL)
+        this.db.exec(ROOT_REQUESTS_TABLE_SQL)
+        this.db.exec(AGENT_TOOLS_TABLE_SQL)
+        this.db.exec(INDEXES_SQL)
+        for (const seed of DEFAULT_TOOLS) this.insertTool(seed, now)
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(1, now)
+      }
+      if (current < 2) {
+        // v2: retired session IDs are never reallocated.
+        this.db.exec(RETIRED_SESSION_IDS_SQL)
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(2, now)
+      }
+      if (current < 3) {
+        // v3: the requesting app of each root (tombstones keep it).
+        this.db.exec(ROOT_ORIGIN_SQL)
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(3, now)
+      }
+      if (current < 4) {
+        // v4: coordinators, their lanes and colours.
+        this.db.exec(COORDINATOR_SQL)
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(4, now)
+      }
+      if (current < 5) {
+        // v5: owner settings (memory policy).
+        this.db.exec(SETTINGS_SQL)
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(5, now)
+      }
+      if (current < 6) {
+        this.db.exec(ROOT_WORK_ROLE_SQL)
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(6, now)
+      }
+      if (current < 7) {
+        // Rebuild with the current context-hook CHECK, retaining every
+        // operator-edited row. (v7 once also seeded OpenCode, since retired.)
+        this.db.exec(
+          AGENT_TOOLS_TABLE_SQL.replace(
+            'CREATE TABLE agent_tools',
+            'CREATE TABLE agent_tools_next',
+          ),
+        )
+        this.db.exec(`INSERT INTO agent_tools_next SELECT * FROM agent_tools;
+          DROP INDEX agent_tools_one_default;
+          DROP TABLE agent_tools;
+          ALTER TABLE agent_tools_next RENAME TO agent_tools;
+          CREATE UNIQUE INDEX agent_tools_one_default ON agent_tools(is_default) WHERE is_default = 1;`)
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(7, now)
+      }
+      if (current < 8) {
+        // v8 once folded OpenCode's model-specific rows into one; OpenCode is retired.
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(8, now)
+      }
+      if (current < 9) {
+        // v9: OpenCode leaves the platform (no session used it). Pi 1.4 names its
+        // process `pi`. The rebuild narrows the context-hook CHECK.
+        this.db.exec(`DELETE FROM agent_tools
+            WHERE slug IN ('opencode', 'opencode-deepseek-free', 'opencode-glm-free');
+          UPDATE agent_tools SET context_hook = NULL WHERE context_hook = 'opencode-plugin';
+          UPDATE agent_tools SET process_name = 'pi' WHERE slug = 'pi';`)
+        this.db.exec(
+          AGENT_TOOLS_TABLE_SQL.replace(
+            'CREATE TABLE agent_tools',
+            'CREATE TABLE agent_tools_next',
+          ),
+        )
+        this.db.exec(`INSERT INTO agent_tools_next SELECT * FROM agent_tools;
+          DROP INDEX agent_tools_one_default;
+          DROP TABLE agent_tools;
+          ALTER TABLE agent_tools_next RENAME TO agent_tools;
+          CREATE UNIQUE INDEX agent_tools_one_default ON agent_tools(is_default) WHERE is_default = 1;`)
+        if (!this.listTools().some((tool) => tool.isDefault)) {
+          const seeded = DEFAULT_TOOLS.find((tool) => tool.isDefault)?.slug
+          const enabled = this.listTools({ enabledOnly: true })
+          const next = enabled.find((tool) => tool.slug === seeded) ?? enabled[0]
+          if (next) this.applyToolPatch(next, { isDefault: true }, now)
+        }
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(9, now)
+      }
+    })
+  }
+
+  // --- settings --------------------------------------------------------------
+
+  getSetting(key: string): string | null {
+    const row = this.db.prepare('SELECT value FROM settings WHERE key = ?').get(key) as
+      | { value: string }
+      | undefined
+    return row?.value ?? null
+  }
+
+  putSetting(key: string, value: string, now: number): void {
+    this.db
+      .prepare(
+        'INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at',
+      )
+      .run(key, value, now)
+  }
+
+  transaction<T>(work: () => T): T {
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      const result = work()
+      this.db.exec('COMMIT')
+      return result
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  // --- agent tools ---------------------------------------------------------
+
+  listTools(options: { enabledOnly?: boolean } = {}): AgentTool[] {
+    const where = options.enabledOnly ? 'WHERE enabled = 1' : ''
+    const rows = this.db
+      .prepare(`SELECT * FROM agent_tools ${where} ORDER BY display_order, name`)
+      .all() as unknown as RawTool[]
+    return rows.map(toTool)
+  }
+
+  getTool(idOrSlug: string): AgentTool | undefined {
+    const raw = this.db
+      .prepare('SELECT * FROM agent_tools WHERE id = ? OR slug = ?')
+      .get(idOrSlug, idOrSlug) as RawTool | undefined
+    return raw ? toTool(raw) : undefined
+  }
+
+  /** Resolve a slug or alias (A-Term `claude`) to its tool. */
+  resolveTool(slugOrAlias: string): AgentTool | undefined {
+    return (
+      this.getTool(slugOrAlias) ??
+      this.listTools().find((tool) => tool.aliases.includes(slugOrAlias))
+    )
+  }
+
+  /** The default enabled tool, else the first enabled tool by order. */
+  defaultTool(): AgentTool | undefined {
+    const enabled = this.listTools({ enabledOnly: true })
+    return enabled.find((tool) => tool.isDefault) ?? enabled[0]
+  }
+
+  private assertNamesFree(slug: string, aliases: readonly string[], exceptId: string | null): void {
+    for (const tool of this.listTools()) {
+      if (tool.id === exceptId) continue
+      const taken = new Set([tool.slug, ...tool.aliases])
+      if (taken.has(slug) || aliases.some((alias) => taken.has(alias))) {
+        throw new ToolValidationError('slug_conflict')
+      }
+    }
+  }
+
+  private insertTool(seed: ToolSeed, now: number): AgentTool {
+    const id = randomUUID()
+    this.db
+      .prepare(
+        `INSERT INTO agent_tools (id, slug, name, argv, process_name, description, color,
+           display_order, is_default, enabled, aliases, context_hook, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        id,
+        seed.slug,
+        seed.name,
+        JSON.stringify(seed.argv),
+        seed.processName,
+        seed.description,
+        seed.color,
+        seed.displayOrder,
+        seed.isDefault ? 1 : 0,
+        seed.enabled ? 1 : 0,
+        JSON.stringify(seed.aliases),
+        seed.contextHook,
+        now,
+        now,
+      )
+    return this.getTool(id) as AgentTool
+  }
+
+  createTool(seed: ToolSeed, now = Date.now()): AgentTool {
+    validateToolFields(seed)
+    if (!SLUG_RE.test(seed.slug)) throw new ToolValidationError('invalid_slug')
+    return this.transaction(() => {
+      this.assertNamesFree(seed.slug, seed.aliases, null)
+      if (seed.isDefault) this.db.exec('UPDATE agent_tools SET is_default = 0 WHERE is_default = 1')
+      return this.insertTool(seed, now)
+    })
+  }
+
+  /** Slug is immutable after creation. */
+  updateTool(idOrSlug: string, patch: ToolPatch, now = Date.now()): AgentTool | undefined {
+    validateToolFields(patch)
+    return this.transaction(() => {
+      const existing = this.getTool(idOrSlug)
+      if (!existing) return undefined
+      if (patch.aliases) this.assertNamesFree(existing.slug, patch.aliases, existing.id)
+      this.applyToolPatch(existing, patch, now)
+      return this.getTool(existing.id)
+    })
+  }
+
+  /**
+   * Bulk import (`POST /v1/tools/import`): one transaction for every row.
+   * Missing slugs are created; an existing slug is changed only with
+   * `updateExisting` and otherwise reported with the fields that differ. Any
+   * invalid row or name conflict rolls back the whole import. `dryRun` plans
+   * the same changes and rolls back.
+   */
+  importTools(
+    seeds: readonly (ToolPatch & { slug: string; name: string; argv: string[] })[],
+    options: { updateExisting?: boolean; dryRun?: boolean } = {},
+    now = Date.now(),
+  ): ToolImportResult {
+    const result: ToolImportResult = { created: [], updated: [], unchanged: [], differs: [] }
+    const DRY_RUN = Symbol('dry-run')
+    try {
+      this.transaction(() => {
+        for (const seed of seeds) {
+          if (!SLUG_RE.test(seed.slug)) throw new ToolValidationError('invalid_slug')
+          validateToolFields(seed)
+          const existing = this.getTool(seed.slug)
+          if (!existing) {
+            const full: ToolSeed = {
+              slug: seed.slug,
+              name: seed.name,
+              argv: seed.argv,
+              processName: seed.processName ?? seed.argv[0] ?? '',
+              description: seed.description ?? null,
+              color: seed.color ?? null,
+              displayOrder: seed.displayOrder ?? 0,
+              isDefault: seed.isDefault ?? false,
+              enabled: seed.enabled ?? true,
+              aliases: seed.aliases ?? [],
+              contextHook: seed.contextHook ?? null,
+            }
+            this.assertNamesFree(full.slug, full.aliases, null)
+            if (full.isDefault)
+              this.db.exec('UPDATE agent_tools SET is_default = 0 WHERE is_default = 1')
+            this.insertTool(full, now)
+            result.created.push(seed.slug)
+            continue
+          }
+          const { slug: _slug, ...patch } = seed
+          const fields = (Object.keys(patch) as (keyof ToolPatch)[]).filter(
+            (key) => JSON.stringify(existing[key]) !== JSON.stringify(patch[key]),
+          )
+          if (fields.length === 0) result.unchanged.push(seed.slug)
+          else if (!options.updateExisting) result.differs.push({ slug: seed.slug, fields })
+          else {
+            if (patch.aliases) this.assertNamesFree(existing.slug, patch.aliases, existing.id)
+            this.applyToolPatch(existing, patch, now)
+            result.updated.push(seed.slug)
+          }
+        }
+        if (options.dryRun) throw DRY_RUN
+      })
+    } catch (error) {
+      if (error !== DRY_RUN) throw error
+    }
+    return result
+  }
+
+  private applyToolPatch(existing: AgentTool, patch: ToolPatch, now: number): void {
+    if (patch.isDefault === true) {
+      this.db
+        .prepare('UPDATE agent_tools SET is_default = 0 WHERE is_default = 1 AND id <> ?')
+        .run(existing.id)
+    }
+    const next = { ...existing, ...patch }
+    this.db
+      .prepare(
+        `UPDATE agent_tools SET name = ?, argv = ?, process_name = ?, description = ?, color = ?,
+         display_order = ?, is_default = ?, enabled = ?, aliases = ?, context_hook = ?,
+         updated_at = max(?, created_at)
+         WHERE id = ?`,
+      )
+      .run(
+        next.name,
+        JSON.stringify(next.argv),
+        next.processName,
+        next.description,
+        next.color,
+        next.displayOrder,
+        next.isDefault ? 1 : 0,
+        next.enabled ? 1 : 0,
+        JSON.stringify(next.aliases),
+        next.contextHook,
+        now,
+        existing.id,
+      )
+  }
+
+  /** Refuses the default tool and any tool a catalogued session still runs. */
+  deleteTool(idOrSlug: string): 'deleted' | 'absent' | 'default_tool' | 'tool_in_use' {
+    return this.transaction(() => {
+      const tool = this.getTool(idOrSlug)
+      if (!tool) return 'absent'
+      if (tool.isDefault) return 'default_tool'
+      const names = [tool.slug, ...tool.aliases]
+      const inUse = this.db
+        .prepare(
+          `SELECT 1 FROM sessions WHERE tool IN (${names.map(() => '?').join(', ')}) LIMIT 1`,
+        )
+        .get(...names)
+      if (inUse) return 'tool_in_use'
+      this.db.prepare('DELETE FROM agent_tools WHERE id = ?').run(tool.id)
+      return 'deleted'
+    })
+  }
+
+  // --- sessions (read side; lifecycle writes arrive in Phase 3) ------------
+
+  listSessions(): SessionSummary[] {
+    const rows = this.db
+      .prepare(
+        `SELECT id, session_id, tool, name, project_id, tmux_server_id, launch_state,
+           lifecycle_version, origin, created_at
+         FROM sessions ORDER BY seq, id`,
+      )
+      .all() as {
+      id: string
+      session_id: string | null
+      tool: string
+      name: string | null
+      project_id: string | null
+      tmux_server_id: string | null
+      launch_state: string
+      lifecycle_version: number
+      origin: string
+      created_at: number
+    }[]
+    return rows.map((row) => ({
+      id: row.id,
+      ownershipId: row.session_id || `aico-widget-${row.id}`,
+      tool: row.tool,
+      name: row.name,
+      projectId: row.project_id,
+      tmuxServerId: row.tmux_server_id,
+      launchState: row.launch_state,
+      lifecycleVersion: row.lifecycle_version,
+      origin: row.origin,
+      createdAt: row.created_at,
+    }))
+  }
+
+  counts(): { sessions: number; tmuxServersActive: number; rootRequests: number } {
+    const one = (sql: string) => (this.db.prepare(sql).get() as { n: number }).n
+    return {
+      sessions: one('SELECT count(*) AS n FROM sessions'),
+      tmuxServersActive: one("SELECT count(*) AS n FROM tmux_servers WHERE phase = 'active'"),
+      rootRequests: one('SELECT count(*) AS n FROM root_requests'),
+    }
+  }
+}
+
+function validateToolFields(fields: ToolPatch): void {
+  if (fields.name !== undefined && (fields.name.trim().length === 0 || fields.name.length > 100))
+    throw new ToolValidationError('invalid_name')
+  if (fields.argv !== undefined) validateArgv(fields.argv)
+  if (fields.processName !== undefined && fields.processName.length > 100)
+    throw new ToolValidationError('invalid_process_name')
+  if (fields.color !== undefined && fields.color !== null && fields.color.length > 20)
+    throw new ToolValidationError('invalid_color')
+  if (fields.displayOrder !== undefined && !Number.isSafeInteger(fields.displayOrder))
+    throw new ToolValidationError('invalid_display_order')
+  if (
+    fields.aliases !== undefined &&
+    (!Array.isArray(fields.aliases) || fields.aliases.some((alias) => !SLUG_RE.test(alias)))
+  )
+    throw new ToolValidationError('invalid_aliases')
+  if (
+    fields.contextHook !== undefined &&
+    fields.contextHook !== null &&
+    !isContextHook(fields.contextHook)
+  )
+    throw new ToolValidationError('invalid_context_hook')
+}
