@@ -1,3 +1,5 @@
+import { LANTERN_MONO_FAMILY } from './lantern'
+
 /** WebSocket connection timeout in milliseconds */
 export const CONNECTION_TIMEOUT = 10000
 
@@ -29,8 +31,8 @@ export const SCROLL_THRESHOLD = 50
 /** Copy-mode timeout in milliseconds (auto-exit after inactivity) */
 export const COPY_MODE_TIMEOUT_MS = 10000
 
-/** Terminal font. */
-export const A_TERM_FONT_FAMILY = "'JetBrains Mono', monospace"
+/** Terminal font: the vendored Iosevka (assets/fonts), as on the desktop. */
+export const A_TERM_FONT_FAMILY = LANTERN_MONO_FAMILY
 
 /** Terminal colors. */
 export const PHOSPHOR_THEME = {

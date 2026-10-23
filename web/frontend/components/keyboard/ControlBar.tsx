@@ -474,7 +474,7 @@ export function ControlBar({
                       color: 'var(--term-text-primary)',
                       backgroundColor: 'transparent',
                       borderBottom: '1px solid var(--term-border)',
-                      fontFamily: '"JetBrains Mono", monospace',
+                      fontFamily: 'var(--font-mono)',
                     }}
                     onMouseEnter={(e) => {
                       e.currentTarget.style.backgroundColor =

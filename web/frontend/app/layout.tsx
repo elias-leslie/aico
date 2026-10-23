@@ -1,8 +1,7 @@
 import type { Metadata, Viewport } from 'next'
-import { DM_Sans, JetBrains_Mono } from 'next/font/google'
 import { headers } from 'next/headers'
 import Script from 'next/script'
-import { PHOSPHOR_THEME } from '@/lib/constants/a-term'
+import { LANTERN_RIM } from '@/lib/constants/lantern'
 import {
   PRODUCT_DESCRIPTION,
   PRODUCT_NAME,
@@ -11,17 +10,6 @@ import {
 import { PWA_REGISTER_SCRIPT } from '@/lib/runtime-scripts'
 import './globals.css'
 import { Providers } from './providers'
-
-const jetbrainsMono = JetBrains_Mono({
-  variable: '--font-jetbrains-mono',
-  subsets: ['latin'],
-})
-
-const dmSans = DM_Sans({
-  variable: '--font-dm-sans',
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
-})
 
 export const metadata: Metadata = {
   title: PRODUCT_NAME,
@@ -45,7 +33,7 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  themeColor: PHOSPHOR_THEME.background,
+  themeColor: LANTERN_RIM,
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
@@ -66,9 +54,7 @@ export default async function RootLayout({
           {PWA_REGISTER_SCRIPT}
         </Script>
       </head>
-      <body
-        className={`${jetbrainsMono.variable} ${dmSans.variable} antialiased`}
-      >
+      <body>
         <Providers>{children}</Providers>
       </body>
     </html>

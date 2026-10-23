@@ -1,5 +1,5 @@
 import type { MetadataRoute } from 'next'
-import { PHOSPHOR_THEME } from '@/lib/constants/a-term'
+import { LANTERN_RIM } from '@/lib/constants/lantern'
 import {
   PRODUCT_DESCRIPTION,
   PRODUCT_NAME,
@@ -15,8 +15,8 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: '/',
     scope: '/',
     display: 'standalone',
-    background_color: PHOSPHOR_THEME.background,
-    theme_color: PHOSPHOR_THEME.background,
+    background_color: LANTERN_RIM,
+    theme_color: LANTERN_RIM,
     icons: [
       {
         src: '/icons/icon-192.png',

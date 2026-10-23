@@ -82,6 +82,15 @@ export function useATermInstance(
       if (!mounted) return
 
       const opts = optionsRef.current
+      // The webfont must be loaded before xterm measures its glyph cell, or
+      // the view renders at fallback metrics and misaligns once it swaps in.
+      try {
+        await document.fonts?.load(`${opts.fontSize}px 'Iosevka'`)
+      } catch {
+        /* render with whatever font is available */
+      }
+      if (!mounted) return
+
       const { term, fitAddon } = createATermWithAddons(modules, opts)
       if (!mounted) return
 
