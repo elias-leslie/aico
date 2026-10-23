@@ -81,10 +81,8 @@ export function ATermTabs({
     isVoiceSupported,
     handleVoiceOpen,
     handleVoiceSend,
-    handleVoiceInsert,
     handleVoiceCancel,
     handleVoiceToggle,
-    handleVoiceReset,
   } = useATermOrchestration({ projectId, projectPath })
   // Opening a session clears its needs-you/finished state; the title carries
   // the count of sessions waiting on the owner.
@@ -168,10 +166,8 @@ export function ATermTabs({
         voiceError={voiceError}
         handleVoiceOpen={handleVoiceOpen}
         handleVoiceSend={handleVoiceSend}
-        handleVoiceInsert={handleVoiceInsert}
         handleVoiceCancel={handleVoiceCancel}
         handleVoiceToggle={handleVoiceToggle}
-        handleVoiceReset={handleVoiceReset}
         className={className}
       />
 

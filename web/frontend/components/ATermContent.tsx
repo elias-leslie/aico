@@ -58,10 +58,8 @@ export function ATermContent({
   voiceError,
   handleVoiceOpen,
   handleVoiceSend,
-  handleVoiceInsert,
   handleVoiceCancel,
   handleVoiceToggle,
-  handleVoiceReset,
   className,
 }: ATermContentProps) {
   const [composeOpen, setComposeOpen] = useLocalStorageState(
@@ -143,10 +141,8 @@ export function ATermContent({
         voiceStatus={voiceStatus}
         voiceError={voiceError}
         handleVoiceSend={handleVoiceSend}
-        handleVoiceInsert={handleVoiceInsert}
         handleVoiceCancel={handleVoiceCancel}
         handleVoiceToggle={handleVoiceToggle}
-        handleVoiceReset={handleVoiceReset}
         isMobile={isMobile}
       />
 

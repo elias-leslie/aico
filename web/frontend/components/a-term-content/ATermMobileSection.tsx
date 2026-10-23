@@ -23,10 +23,8 @@ interface ATermMobileSectionProps {
   voiceStatus: TranscriptionStatus
   voiceError: TranscriptionError
   handleVoiceSend: (text: string) => void
-  handleVoiceInsert: (text: string) => void
   handleVoiceCancel: () => void
   handleVoiceToggle: () => void
-  handleVoiceReset: () => void
   isMobile?: boolean
 }
 
@@ -46,10 +44,8 @@ export function ATermMobileSection({
   voiceStatus,
   voiceError,
   handleVoiceSend,
-  handleVoiceInsert,
   handleVoiceCancel,
   handleVoiceToggle,
-  handleVoiceReset,
   isMobile,
 }: ATermMobileSectionProps) {
   if (!isMobile || sessions.length === 0) return null
@@ -74,11 +70,8 @@ export function ATermMobileSection({
           status={voiceStatus}
           error={voiceError}
           onSend={handleVoiceSend}
-          onInsert={handleVoiceInsert}
           onCancel={handleVoiceCancel}
           onToggleListening={handleVoiceToggle}
-          onReset={handleVoiceReset}
-          isMobile={isMobile}
         />
       )}
     </div>

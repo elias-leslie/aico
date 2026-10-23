@@ -129,28 +129,6 @@ export function useATermActionHandlers({
     ],
   )
 
-  const handleVoiceInsert = useCallback(
-    (text: string) => {
-      const aTermRef = voiceTargetRef.current
-        ? (aTermRefs.current.get(voiceTargetRef.current) ?? null)
-        : findActiveRef(aTermRefs.current, activeSessionId)
-      if (aTermRef) {
-        aTermRef.pasteInput(text)
-      }
-      voiceTargetRef.current = null
-      voiceStopListening()
-      voiceResetTranscript()
-      setShowVoice(false)
-    },
-    [
-      activeSessionId,
-      aTermRefs,
-      voiceStopListening,
-      voiceResetTranscript,
-      setShowVoice,
-    ],
-  )
-
   const handleVoiceCancel = useCallback(() => {
     voiceStopListening()
     voiceResetTranscript()
@@ -178,9 +156,7 @@ export function useATermActionHandlers({
     // Voice input
     handleVoiceOpen,
     handleVoiceSend,
-    handleVoiceInsert,
     handleVoiceCancel,
     handleVoiceToggle,
-    handleVoiceReset: voiceResetTranscript,
   }
 }

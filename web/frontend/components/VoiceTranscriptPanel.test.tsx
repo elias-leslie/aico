@@ -9,11 +9,8 @@ function panelProps() {
     status: 'idle' as const,
     error: null,
     onSend: vi.fn(),
-    onInsert: vi.fn(),
     onCancel: vi.fn(),
     onToggleListening: vi.fn(),
-    onReset: vi.fn(),
-    isMobile: true,
   }
 }
 
@@ -38,11 +35,8 @@ describe('VoiceTranscriptPanel', () => {
         status="listening"
         error={null}
         onSend={onSend}
-        onInsert={vi.fn()}
         onCancel={vi.fn()}
         onToggleListening={onToggleListening}
-        onReset={vi.fn()}
-        isMobile={true}
       />,
     )
 
@@ -64,11 +58,8 @@ describe('VoiceTranscriptPanel', () => {
         status="listening"
         error={null}
         onSend={onSend}
-        onInsert={vi.fn()}
         onCancel={vi.fn()}
         onToggleListening={vi.fn()}
-        onReset={vi.fn()}
-        isMobile={true}
       />,
     )
 
@@ -85,11 +76,8 @@ describe('VoiceTranscriptPanel', () => {
         status="listening"
         error={null}
         onSend={vi.fn()}
-        onInsert={vi.fn()}
         onCancel={vi.fn()}
         onToggleListening={vi.fn()}
-        onReset={vi.fn()}
-        isMobile={true}
       />,
     )
 
@@ -213,7 +201,6 @@ describe('VoiceTranscriptPanel', () => {
     rerender(<VoiceTranscriptPanel {...props} status="error" error="network" />)
     fireEvent.click(screen.getByLabelText('Resume dictation'))
 
-    expect(props.onReset).not.toHaveBeenCalled()
     expect(props.onToggleListening).toHaveBeenCalledOnce()
     expect(screen.getByLabelText('Voice transcript')).toHaveValue(
       'corrected words',
@@ -246,28 +233,5 @@ describe('VoiceTranscriptPanel', () => {
       />,
     )
     expect(screen.getByLabelText('Voice transcript')).toHaveValue('new phrase')
-  })
-
-  it('preserves desktop corrections when resumed words are sent or inserted', () => {
-    const props = panelProps()
-    const { rerender } = render(
-      <VoiceTranscriptPanel {...props} isMobile={false} />,
-    )
-    fireEvent.change(screen.getByLabelText('Voice transcript'), {
-      target: { value: 'hi' },
-    })
-    rerender(
-      <VoiceTranscriptPanel
-        {...props}
-        isMobile={false}
-        transcript="hello world"
-        status="listening"
-      />,
-    )
-    expect(screen.getByLabelText('Voice transcript')).toHaveValue('hi world')
-    fireEvent.click(screen.getByLabelText('Insert transcript without enter'))
-    fireEvent.click(screen.getByLabelText('Send transcript'))
-    expect(props.onInsert).toHaveBeenCalledWith('hi world')
-    expect(props.onSend).toHaveBeenCalledWith('hi world')
   })
 })

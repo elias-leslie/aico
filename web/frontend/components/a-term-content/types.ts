@@ -59,10 +59,8 @@ export interface ATermContentProps {
   voiceError: TranscriptionError
   handleVoiceOpen: () => void
   handleVoiceSend: (text: string) => void
-  handleVoiceInsert: (text: string) => void
   handleVoiceCancel: () => void
   handleVoiceToggle: () => void
-  handleVoiceReset: () => void
 
   // Class name
   className?: string
