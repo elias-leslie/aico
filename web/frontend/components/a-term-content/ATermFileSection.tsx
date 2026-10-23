@@ -1,16 +1,14 @@
 import { clsx } from 'clsx'
 import type { RefObject } from 'react'
-import { ATermLayoutRenderer } from '@/components/ATermLayoutRenderer'
 import type { ATermHandle, ConnectionStatus } from '@/components/a-term.types'
 import { FileUploadDropzone } from '@/components/FileUploadDropzone'
+import { SessionView } from '@/components/SessionView'
 import {
   UploadErrorToast,
   UploadProgressToast,
 } from '@/components/UploadStatusToast'
-import type { LayoutMode } from '@/lib/constants/a-term'
 import type { ATermFontSize } from '@/lib/hooks/use-a-term-settings'
 import type { ATermSlot, PaneSlot } from '@/lib/utils/slot'
-import type { PaneLayout } from '@/types/pane-layout'
 
 interface ATermFileSectionProps {
   aTermSlots: (ATermSlot | PaneSlot)[]
@@ -20,26 +18,12 @@ interface ATermFileSectionProps {
   aTermStatuses: Map<string, ConnectionStatus>
   onSlotSwitch: (slot: ATermSlot | PaneSlot) => void
   onSlotReset: (slot: ATermSlot | PaneSlot) => void
-  onSlotDetach: (slot: ATermSlot | PaneSlot) => void
-  onSlotClose: (slot: ATermSlot | PaneSlot) => void
   onSlotCloseSession: (slot: ATermSlot | PaneSlot) => void
-  onSlotRefresh?: (slot: ATermSlot | PaneSlot) => void
-  canAddPane: boolean
   handleOpenSettings: () => void
   handleOpenATermManager?: () => void
-  handleUploadClick: () => void
+  handleUploadClick: (sessionId?: string) => void
   onModeSwitch: (slot: ATermSlot | PaneSlot, mode: string) => void
-  onProjectSwitch?: (
-    slot: ATermSlot | PaneSlot,
-    projectId: string,
-    rootPath: string | null,
-  ) => Promise<void> | void
   isModeSwitching: boolean
-  onSwapPanes: (slotIdA: string, slotIdB: string) => void
-  layoutMode: LayoutMode
-  availableLayouts: LayoutMode[]
-  onLayoutModeChange: (mode: LayoutMode) => void
-  onLayoutChange?: (layouts: PaneLayout[]) => void
   fileInputRef: RefObject<HTMLInputElement | null>
   progress: number
   isUploading: boolean
@@ -48,9 +32,6 @@ interface ATermFileSectionProps {
   handleFileInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void
   handleFileSelect: (file: File, targetSessionId?: string) => void
   activeSessionId?: string | null
-  storageScopeId?: string | null
-  isVoiceSupported: boolean
-  handleVoiceOpen: () => void
   isMobile?: boolean
 }
 
@@ -62,22 +43,12 @@ export function ATermFileSection({
   aTermStatuses,
   onSlotSwitch,
   onSlotReset,
-  onSlotDetach,
-  onSlotClose,
   onSlotCloseSession,
-  onSlotRefresh,
-  canAddPane,
   handleOpenSettings,
   handleOpenATermManager,
   handleUploadClick,
   onModeSwitch,
-  onProjectSwitch,
   isModeSwitching,
-  onSwapPanes,
-  layoutMode,
-  availableLayouts,
-  onLayoutModeChange,
-  onLayoutChange,
   fileInputRef,
   progress,
   isUploading,
@@ -86,9 +57,6 @@ export function ATermFileSection({
   handleFileInputChange,
   handleFileSelect,
   activeSessionId,
-  storageScopeId,
-  isVoiceSupported,
-  handleVoiceOpen,
   isMobile,
 }: ATermFileSectionProps) {
   return (
@@ -111,7 +79,7 @@ export function ATermFileSection({
         />
       )}
 
-      {/* A-Term panels with drag-drop upload */}
+      {/* The session, with drag-drop upload */}
       <FileUploadDropzone
         onFileSelect={handleFileSelect}
         disabled={isUploading}
@@ -120,35 +88,23 @@ export function ATermFileSection({
           isMobile ? 'order-1' : 'order-2',
         )}
       >
-        <ATermLayoutRenderer
-          aTermSlots={aTermSlots}
+        <SessionView
+          slots={aTermSlots}
+          activeSessionId={activeSessionId}
           fontSize={fontSize}
+          isMobile={isMobile ?? false}
           onATermRef={setATermRef}
           onStatusChange={handleStatusChange}
           aTermStatuses={aTermStatuses}
-          onSlotSwitch={onSlotSwitch}
-          onSlotReset={onSlotReset}
-          onSlotDetach={onSlotDetach}
-          onSlotClose={onSlotClose}
-          onSlotCloseSession={onSlotCloseSession}
-          onSlotRefresh={onSlotRefresh}
-          canAddPane={canAddPane}
-          onShowSettings={handleOpenSettings}
-          onShowATermManager={handleOpenATermManager}
-          onUploadClick={handleUploadClick}
+          onSwitch={onSlotSwitch}
+          onSettings={handleOpenSettings}
+          onReset={onSlotReset}
+          onCloseSession={onSlotCloseSession}
+          onUpload={handleUploadClick}
           onFilePaste={handleFileSelect}
+          onNewSession={handleOpenATermManager}
           onModeSwitch={onModeSwitch}
-          onProjectSwitch={onProjectSwitch}
           isModeSwitching={isModeSwitching}
-          isMobile={isMobile ?? false}
-          activeSessionId={activeSessionId}
-          storageScopeId={storageScopeId}
-          layoutMode={layoutMode}
-          availableLayouts={availableLayouts}
-          onLayoutModeChange={onLayoutModeChange}
-          onSwapPanes={onSwapPanes}
-          onLayoutChange={onLayoutChange}
-          onVoice={isVoiceSupported ? handleVoiceOpen : undefined}
         />
       </FileUploadDropzone>
     </>

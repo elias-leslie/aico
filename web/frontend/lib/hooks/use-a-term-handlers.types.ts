@@ -1,8 +1,7 @@
 import type { ATermHandle, ConnectionStatus } from '@/components/ATerm'
-import type { LayoutMode } from '@/lib/constants/a-term'
-import type { ATermPane, PanePlacementOptions } from './use-a-term-panes'
+import type { ATermPane } from './use-a-term-panes'
 import type { ATermSession, useATermSessions } from './use-a-term-sessions'
-import type { ProjectATerm, useProjectATerms } from './use-project-a-terms'
+import type { ProjectATerm } from './use-project-a-terms'
 
 export interface UseATermHandlersProps {
   projectATerms: ProjectATerm[]
@@ -12,23 +11,15 @@ export interface UseATermHandlersProps {
   setATermStatuses: React.Dispatch<
     React.SetStateAction<Map<string, ConnectionStatus>>
   >
-  setLayoutMode: (mode: LayoutMode) => void
   panes: ATermPane[]
-  panesAtLimit: boolean
   createProjectPane: (
     paneName: string,
     projectId: string,
     workingDir?: string,
     agentToolSlug?: string,
-    options?: PanePlacementOptions,
   ) => Promise<ATermPane>
-  createAdHocPane: (
-    paneName: string,
-    workingDir?: string,
-    options?: PanePlacementOptions,
-  ) => Promise<ATermPane>
+  createAdHocPane: (paneName: string, workingDir?: string) => Promise<ATermPane>
   setActiveMode: (paneId: string, mode: string) => Promise<ATermPane>
-  removePane: (paneId: string) => Promise<void>
 }
 
 export interface UseATermHandlersReturn {
@@ -40,7 +31,6 @@ export interface UseATermHandlersReturn {
     action: 'insert' | 'send',
   ) => Promise<boolean>
   handleReconnect: () => void
-  handleLayoutModeChange: (mode: LayoutMode) => Promise<void>
   handleAddTab: () => Promise<void>
   handleNewATermForProject: (
     projectId: string,
@@ -54,15 +44,11 @@ export interface UseATermHandlersReturn {
     paneId?: string,
     pane?: ATermPane,
   ) => Promise<void>
-  handleCloseAll: () => Promise<void>
   setATermRef: (sessionId: string, handle: ATermHandle | null) => void
   navigateToSession: (sessionId: string) => void
   update: ReturnType<typeof useATermSessions>['update']
   remove: ReturnType<typeof useATermSessions>['remove']
   reset: ReturnType<typeof useATermSessions>['reset']
-  resetAll: ReturnType<typeof useATermSessions>['resetAll']
-  resetProject: ReturnType<typeof useProjectATerms>['resetProject']
-  disableProject: ReturnType<typeof useProjectATerms>['disableProject']
   sessionsLoading: boolean
   projectsLoading: boolean
 }

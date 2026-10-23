@@ -3,7 +3,6 @@
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback } from 'react'
 import type { ATermHandle, ConnectionStatus } from '@/components/ATerm'
-import type { LayoutMode } from '@/lib/constants/a-term'
 import type { ATermSession } from '@/lib/hooks/use-a-term-sessions'
 import { useATermSessions } from '@/lib/hooks/use-a-term-sessions'
 import { useAgentPolling } from '@/lib/hooks/use-agent-polling'
@@ -13,7 +12,6 @@ import { useProjectModeSwitch } from '@/lib/hooks/use-project-mode-switch'
 import {
   addAdHocPaneAction,
   addProjectPaneAction,
-  closeAllPanesAction,
 } from './a-term-handler-actions'
 import { commitComposeInput } from './compose-input'
 import type {
@@ -27,13 +25,10 @@ export function useATermHandlers({
   aTermRefs,
   projectTabRefs,
   setATermStatuses,
-  setLayoutMode,
   panes,
-  panesAtLimit,
   createProjectPane,
   createAdHocPane,
   setActiveMode,
-  removePane,
 }: UseATermHandlersProps): UseATermHandlersReturn {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -41,15 +36,9 @@ export function useATermHandlers({
     update,
     remove,
     reset,
-    resetAll,
     isLoading: sessionsLoading,
   } = useATermSessions()
-  const {
-    switchMode,
-    resetProject,
-    disableProject,
-    isLoading: projectsLoading,
-  } = useProjectATerms()
+  const { switchMode, isLoading: projectsLoading } = useProjectATerms()
   const { startAgent } = useAgentPolling()
   const { switchTool } = useAgentTools()
   const { switchProjectMode } = useProjectModeSwitch({
@@ -108,19 +97,9 @@ export function useATermHandlers({
     }
     aTermRefs.current.values().next().value?.reconnect()
   }, [activeSessionId, aTermRefs])
-  const handleLayoutModeChange = useCallback(
-    async (mode: LayoutMode) => setLayoutMode(mode),
-    [setLayoutMode],
-  )
   const handleAddTab = useCallback(
-    () =>
-      addAdHocPaneAction(
-        panes,
-        panesAtLimit,
-        createAdHocPane,
-        navigateToSession,
-      ),
-    [panes, panesAtLimit, createAdHocPane, navigateToSession],
+    () => addAdHocPaneAction(panes, createAdHocPane, navigateToSession),
+    [panes, createAdHocPane, navigateToSession],
   )
 
   const handleNewATermForProject = useCallback(
@@ -131,19 +110,11 @@ export function useATermHandlers({
         rootPath,
         projectATerms,
         panes,
-        panesAtLimit,
         createProjectPane,
         navigateToSession,
         startAgent,
       ),
-    [
-      projectATerms,
-      panes,
-      panesAtLimit,
-      createProjectPane,
-      navigateToSession,
-      startAgent,
-    ],
+    [projectATerms, panes, createProjectPane, navigateToSession, startAgent],
   )
 
   const handleProjectModeChange = useCallback(
@@ -163,16 +134,6 @@ export function useATermHandlers({
       }),
     [switchProjectMode],
   )
-  const handleCloseAll = useCallback(
-    () =>
-      closeAllPanesAction(
-        panes,
-        removePane,
-        createAdHocPane,
-        navigateToSession,
-      ),
-    [panes, removePane, createAdHocPane, navigateToSession],
-  )
   const setATermRef = useCallback(
     (sessionId: string, handle: ATermHandle | null) =>
       handle
@@ -186,19 +147,14 @@ export function useATermHandlers({
     handleKeyboardInput,
     handleComposeInput,
     handleReconnect,
-    handleLayoutModeChange,
     handleAddTab,
     handleNewATermForProject,
     handleProjectModeChange,
-    handleCloseAll,
     setATermRef,
     navigateToSession,
     update,
     remove,
     reset,
-    resetAll,
-    resetProject,
-    disableProject,
     sessionsLoading,
     projectsLoading,
   }

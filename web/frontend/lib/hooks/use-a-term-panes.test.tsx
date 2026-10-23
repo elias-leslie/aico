@@ -36,10 +36,8 @@ const detachedPane: ATermPane = {
   grid_col: 0,
 }
 
-const attachedPane: ATermPane = { ...detachedPane, is_detached: false }
-
 function paneList(items: ATermPane[]): PaneListResponse {
-  return { items, total: items.length, max_panes: 6 }
+  return { items, total: items.length }
 }
 
 function createWrapper(queryClient: QueryClient) {
@@ -57,7 +55,7 @@ describe('useATermPanes', () => {
     )
   })
 
-  it('moves an attached pane into the active cache immediately', async () => {
+  it('puts a new detached pane in the detached cache and the full session list at once', async () => {
     const queryClient = new QueryClient({
       defaultOptions: {
         queries: { retry: false },
@@ -65,67 +63,45 @@ describe('useATermPanes', () => {
       },
     })
     queryClient.setQueryData(['a-term-panes'], paneList([]))
-    queryClient.setQueryData(
-      ['a-term-detached-panes'],
-      paneList([detachedPane]),
-    )
+    queryClient.setQueryData(['a-term-detached-panes'], paneList([]))
     queryClient.setQueryData(['a-term-sessions', false], [])
     queryClient.setQueryData(['a-term-sessions', true], [])
-    vi.mocked(api.attachPane).mockResolvedValue(attachedPane)
-    vi.mocked(api.fetchPanes).mockResolvedValue(paneList([attachedPane]))
-    vi.mocked(api.fetchDetachedPanes).mockResolvedValue(paneList([]))
+    vi.mocked(api.createPane).mockResolvedValue(detachedPane)
+    vi.mocked(api.fetchDetachedPanes).mockResolvedValue(
+      paneList([detachedPane]),
+    )
 
     const { result } = renderHook(() => useATermPanes(), {
       wrapper: createWrapper(queryClient),
     })
 
     await act(async () => {
-      await result.current.attachPane('pane-detached')
+      await result.current.createProjectPane(
+        'Project A',
+        'project-a',
+        '/workspace/project-a',
+        undefined,
+        { detached: true },
+      )
     })
 
+    expect(vi.mocked(api.createPane).mock.calls[0]?.[0]).toMatchObject({
+      project_id: 'project-a',
+      detached: true,
+    })
     await waitFor(() => {
       expect(
         queryClient.getQueryData<PaneListResponse>(['a-term-panes'])?.items,
-      ).toEqual([attachedPane])
+      ).toEqual([])
       expect(
         queryClient.getQueryData<PaneListResponse>(['a-term-detached-panes'])
           ?.items,
-      ).toEqual([])
-      expect(
-        queryClient
-          .getQueryData<Array<{ id: string }>>(['a-term-sessions', false])
-          ?.map((session) => session.id),
-      ).toEqual(['session-a'])
+      ).toEqual([detachedPane])
       expect(
         queryClient
           .getQueryData<Array<{ id: string }>>(['a-term-sessions', true])
           ?.map((session) => session.id),
       ).toEqual(['session-a'])
     })
-  })
-
-  it("takes the pane limit from the backend's pane list, capped by the layouts", async () => {
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    })
-    vi.mocked(api.fetchPanes).mockResolvedValue({
-      ...paneList([attachedPane]),
-      max_panes: 1,
-    })
-    const { result } = renderHook(() => useATermPanes(), {
-      wrapper: createWrapper(queryClient),
-    })
-    await waitFor(() => expect(result.current.maxPanes).toBe(1))
-    expect(result.current.atLimit).toBe(true)
-
-    vi.mocked(api.fetchPanes).mockResolvedValue({
-      ...paneList([attachedPane]),
-      max_panes: 9,
-    })
-    await act(async () => {
-      await queryClient.refetchQueries()
-    })
-    // No layout arranges more than six.
-    await waitFor(() => expect(result.current.maxPanes).toBe(6))
   })
 })

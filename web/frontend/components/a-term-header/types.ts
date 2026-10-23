@@ -3,52 +3,31 @@ import type {
   ATermSearchResult,
   ConnectionStatus,
 } from '@/components/a-term.types'
-import type { LayoutMode } from '@/lib/constants/a-term'
 import type { ATermSlot, PaneSlot } from '@/lib/utils/slot'
 import type { ATermMode } from '../ModeToggle'
 
 export interface UnifiedATermHeaderProps {
   slot: ATermSlot | PaneSlot
   isActive?: boolean
-  onSwitch?: () => void
   onSettings?: () => void
   onReset?: () => void
-  onDetach?: () => void
-  onClose?: () => void
   onCloseSession?: () => void
-  closeTooltip?: string
   onRefresh?: () => void
   onFiles?: () => void
   onUpload?: () => void
-  onVoice?: () => void
-  /** Opens a-term manager modal - appears in ALL pane headers */
+  /** Opens the new-session picker */
   onOpenModal?: () => void
-  /** Whether new panes can be added (at limit = false) */
-  canAddPane?: boolean
   /** Callback for mode switch (shell <-> agent) - only for project slots */
   onModeSwitch?: (mode: ATermMode) => void | Promise<void>
-  onProjectSwitch?: (
-    projectId: string,
-    rootPath: string | null,
-  ) => void | Promise<void>
   /** Whether mode switch is in progress */
   isModeSwitching?: boolean
   isMobile?: boolean
-  /** All slots for swap dropdown (split/grid mode) - shows dropdown when provided */
+  /** Every session, for the switcher */
   allSlots?: Array<ATermSlot | PaneSlot>
-  /** Callback when user selects another slot to swap positions with */
-  onSwapWith?: (otherSlotId: string) => void
-  /** Callback to switch to another slot (mobile: navigate instead of swap) */
+  /** Open another session */
   onSwitchTo?: (slot: ATermSlot | PaneSlot) => void
-  /** Callback to reset all panes (overflow menu) */
-  onResetAll?: () => void
-  /** Callback to close all panes (overflow menu) */
-  onCloseAll?: () => void
-  layoutMode?: LayoutMode
-  availableLayouts?: LayoutMode[]
-  onLayoutModeChange?: (mode: LayoutMode) => void
   connectionStatus?: ConnectionStatus
-  /** Callback to reconnect the pane's session */
+  /** Callback to reconnect the session */
   onReconnect?: () => void
   onSearch?: (query: string, options?: ATermSearchOptions) => ATermSearchResult
   onClearSearch?: () => void

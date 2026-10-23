@@ -2,12 +2,10 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback } from 'react'
-import { LAYOUT_MAX_PANES } from '@/lib/constants/a-term'
 import { paneSessionsAsSessions } from '@/lib/utils/slot'
 import * as api from './a-term-panes-api'
 import type {
   ATermPane,
-  AttachPaneRequest,
   PaneListResponse,
   PanePlacementOptions,
   UpdatePaneRequest,
@@ -42,9 +40,9 @@ const upsertPane = (
     : [...existingItems, pane]
 
   return {
+    ...current,
     items: sortPanes(nextItems),
     total: nextItems.length,
-    max_panes: current?.max_panes ?? LAYOUT_MAX_PANES,
   }
 }
 
@@ -176,12 +174,6 @@ export function useATermPanes() {
 
   const panes = data?.items ?? []
   const detachedPanes = detachedData?.items ?? []
-  // The backend's limit, never more than one layout can arrange.
-  const maxPanes = Math.min(
-    data?.max_panes ?? LAYOUT_MAX_PANES,
-    LAYOUT_MAX_PANES,
-  )
-  const atLimit = panes.length >= maxPanes
 
   const createMutation = useMutation({
     mutationFn: api.createPane,
@@ -210,65 +202,6 @@ export function useATermPanes() {
       invalidatePanesAndSessions(queryClient)
     },
   })
-  const detachMutation = useMutation({
-    mutationFn: api.detachPane,
-    onSuccess: (pane) => {
-      syncPaneCaches(queryClient, pane)
-      syncSessionCaches(queryClient, pane)
-      invalidatePanesAndSessions(queryClient)
-    },
-  })
-  const attachMutation = useMutation({
-    mutationFn: ({
-      paneId,
-      request,
-    }: {
-      paneId: string
-      request?: AttachPaneRequest
-    }) => api.attachPane(paneId, request),
-    onSuccess: (pane) => {
-      syncPaneCaches(queryClient, pane)
-      syncSessionCaches(queryClient, pane)
-      invalidatePanesAndSessions(queryClient)
-    },
-  })
-
-  const swapMutation = useMutation({
-    mutationFn: api.swapPanes,
-    onMutate: async ({ pane_id_a, pane_id_b }) => {
-      await queryClient.cancelQueries({ queryKey: ACTIVE_PANES_QUERY_KEY })
-      const previous = queryClient.getQueryData<PaneListResponse>([
-        'a-term-panes',
-      ])
-
-      if (previous) {
-        const paneA = previous.items.find((p) => p.id === pane_id_a)
-        const paneB = previous.items.find((p) => p.id === pane_id_b)
-        if (paneA && paneB) {
-          const items = previous.items.map((p) =>
-            p.id === pane_id_a
-              ? { ...p, pane_order: paneB.pane_order }
-              : p.id === pane_id_b
-                ? { ...p, pane_order: paneA.pane_order }
-                : p,
-          )
-          items.sort((a, b) => a.pane_order - b.pane_order)
-          queryClient.setQueryData(ACTIVE_PANES_QUERY_KEY, {
-            ...previous,
-            items,
-          })
-        }
-      }
-      return { previous }
-    },
-    onError: (_e, _v, ctx) =>
-      ctx?.previous &&
-      queryClient.setQueryData(ACTIVE_PANES_QUERY_KEY, ctx.previous),
-    onSettled: () =>
-      queryClient.invalidateQueries({ queryKey: ACTIVE_PANES_QUERY_KEY }),
-  })
-
-  const layoutMutation = useMutation({ mutationFn: api.updateAllLayouts })
 
   const createProjectPane = useCallback(
     (
@@ -285,11 +218,6 @@ export function useATermPanes() {
         working_dir: workingDir,
         agent_tool_slug: agentToolSlug,
         detached: options?.detached,
-        pane_order: options?.paneOrder,
-        width_percent: options?.widthPercent,
-        height_percent: options?.heightPercent,
-        grid_row: options?.gridRow,
-        grid_col: options?.gridCol,
       }),
     [createMutation],
   )
@@ -301,11 +229,6 @@ export function useATermPanes() {
         pane_name: name,
         working_dir: workingDir,
         detached: options?.detached,
-        pane_order: options?.paneOrder,
-        width_percent: options?.widthPercent,
-        height_percent: options?.heightPercent,
-        grid_row: options?.gridRow,
-        grid_col: options?.gridCol,
       }),
     [createMutation],
   )
@@ -326,45 +249,10 @@ export function useATermPanes() {
     (paneId: string) => deleteMutation.mutateAsync(paneId),
     [deleteMutation],
   )
-  const detachPane = useCallback(
-    (paneId: string) => detachMutation.mutateAsync(paneId),
-    [detachMutation],
-  )
-  const attachPane = useCallback(
-    (paneId: string, request?: AttachPaneRequest) =>
-      attachMutation.mutateAsync({ paneId, request }),
-    [attachMutation],
-  )
-
-  const swapPanePositions = useCallback(
-    (paneIdA: string, paneIdB: string) =>
-      swapMutation.mutateAsync({ pane_id_a: paneIdA, pane_id_b: paneIdB }),
-    [swapMutation],
-  )
-
-  const saveLayouts = useCallback(
-    (
-      layouts: Array<{
-        paneId: string
-        widthPercent?: number
-        heightPercent?: number
-      }>,
-    ) =>
-      layoutMutation.mutateAsync({
-        layouts: layouts.map((l) => ({
-          pane_id: l.paneId,
-          width_percent: l.widthPercent,
-          height_percent: l.heightPercent,
-        })),
-      }),
-    [layoutMutation],
-  )
 
   return {
     panes,
     detachedPanes,
-    maxPanes,
-    atLimit,
     isLoading,
     detachedLoadedOnce: detachedData !== undefined,
     hasLoadedOnce: data !== undefined,
@@ -378,23 +266,13 @@ export function useATermPanes() {
     isUpdating: updateMutation.isPending,
     removePane,
     isDeleting: deleteMutation.isPending,
-    detachPane,
-    attachPane,
-    isDetaching: detachMutation.isPending,
-    isAttaching: attachMutation.isPending,
-    swapPanePositions,
-    isSwapping: swapMutation.isPending,
-    saveLayouts,
-    isSavingLayouts: layoutMutation.isPending,
   }
 }
 
 export type {
   ATermPane,
-  AttachPaneRequest,
   CreatePaneRequest,
   PanePlacementOptions,
   PaneSession,
-  SwapPanesRequest,
   UpdatePaneRequest,
 } from './a-term-panes-types'

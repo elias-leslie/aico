@@ -5,7 +5,6 @@ import { ATermMobileSection } from './a-term-content/ATermMobileSection'
 import type { ATermContentProps } from './a-term-content/types'
 import { NativeKeyboardInput } from './keyboard/NativeKeyboardInput'
 import { SettingsDropdown } from './SettingsDropdown'
-import { VoiceTranscriptPanel } from './VoiceTranscriptPanel'
 
 export type { ATermContentProps }
 
@@ -25,22 +24,12 @@ export function ATermContent({
   aTermStatuses,
   onSlotSwitch,
   onSlotReset,
-  onSlotDetach,
-  onSlotClose,
   onSlotCloseSession,
-  onSlotRefresh,
-  canAddPane,
   handleOpenSettings,
   handleOpenATermManager,
   handleUploadClick,
   onModeSwitch,
-  onProjectSwitch,
   isModeSwitching,
-  onSwapPanes,
-  layoutMode,
-  availableLayouts,
-  onLayoutModeChange,
-  onLayoutChange,
   fileInputRef,
   progress,
   isUploading,
@@ -50,7 +39,6 @@ export function ATermContent({
   handleFileSelect,
   sessions,
   activeSessionId,
-  storageScopeId,
   activeMode,
   activeStatus,
   handleKeyboardInput,
@@ -96,22 +84,12 @@ export function ATermContent({
         aTermStatuses={aTermStatuses}
         onSlotSwitch={onSlotSwitch}
         onSlotReset={onSlotReset}
-        onSlotDetach={onSlotDetach}
-        onSlotClose={onSlotClose}
         onSlotCloseSession={onSlotCloseSession}
-        onSlotRefresh={onSlotRefresh}
-        canAddPane={canAddPane}
         handleOpenSettings={handleOpenSettings}
         handleOpenATermManager={handleOpenATermManager}
         handleUploadClick={handleUploadClick}
         onModeSwitch={onModeSwitch}
-        onProjectSwitch={onProjectSwitch}
         isModeSwitching={isModeSwitching}
-        onSwapPanes={onSwapPanes}
-        layoutMode={layoutMode}
-        availableLayouts={availableLayouts}
-        onLayoutModeChange={onLayoutModeChange}
-        onLayoutChange={onLayoutChange}
         fileInputRef={fileInputRef}
         progress={progress}
         isUploading={isUploading}
@@ -120,9 +98,6 @@ export function ATermContent({
         handleFileInputChange={handleFileInputChange}
         handleFileSelect={handleFileSelect}
         activeSessionId={activeSessionId}
-        storageScopeId={storageScopeId}
-        isVoiceSupported={isVoiceSupported}
-        handleVoiceOpen={handleVoiceOpen}
         isMobile={isMobile}
       />
 
@@ -130,7 +105,6 @@ export function ATermContent({
       <ATermMobileSection
         sessions={sessions}
         activeSessionId={activeSessionId}
-        storageScopeId={storageScopeId}
         activeStatus={activeStatus}
         activeMode={activeMode}
         handleKeyboardInput={handleKeyboardInput}
@@ -153,26 +127,10 @@ export function ATermContent({
 
       {!isMobile && activeSessionId && sessions.length > 0 && (
         <NativeKeyboardInput
-          key={`${storageScopeId ?? ''}:${activeSessionId}`}
+          key={activeSessionId}
           sessionId={activeSessionId}
-          storageScopeId={storageScopeId}
           connected={activeStatus === 'connected'}
           onCommit={handleComposeInput}
-        />
-      )}
-
-      {/* Desktop voice panel — overlay/bottom-sheet */}
-      {showVoice && !isMobile && (
-        <VoiceTranscriptPanel
-          transcript={voiceFinalTranscript}
-          interimTranscript={voiceInterimTranscript}
-          status={voiceStatus}
-          error={voiceError}
-          onSend={handleVoiceSend}
-          onInsert={handleVoiceInsert}
-          onCancel={handleVoiceCancel}
-          onToggleListening={handleVoiceToggle}
-          onReset={handleVoiceReset}
         />
       )}
     </div>

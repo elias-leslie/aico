@@ -1,8 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, renderHook } from '@testing-library/react'
 import { createElement, type ReactNode } from 'react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { PaneSlot } from '@/lib/utils/slot'
+import { describe, expect, it, vi } from 'vitest'
+import type { ATermSlot, PaneSlot } from '@/lib/utils/slot'
 import { SLOT_BASE } from '@/test-stubs/session-fixtures'
 import { useATermSlotHandlers } from './use-a-term-slot-handlers'
 
@@ -15,130 +15,93 @@ function createWrapper() {
   }
 }
 
-const slot: PaneSlot = {
-  type: 'adhoc',
-  ...SLOT_BASE,
-  paneId: 'pane-a',
-  sessionId: 'session-a',
-  name: 'Detached A-Term',
-  workingDir: '/tmp',
-  sessionMode: 'shell',
+function paneSlot(id: string): PaneSlot {
+  return {
+    type: 'adhoc',
+    ...SLOT_BASE,
+    paneId: `pane-${id}`,
+    sessionId: `session-${id}`,
+    name: `Session ${id}`,
+    workingDir: '/tmp',
+    sessionMode: 'shell',
+  }
 }
 
-const otherSlot: PaneSlot = {
+const externalSlot: ATermSlot = {
   type: 'adhoc',
   ...SLOT_BASE,
-  paneId: 'pane-b',
-  sessionId: 'session-b',
-  name: 'Other Detached A-Term',
+  sessionId: 'session-agent',
+  name: 'Agent session',
   workingDir: '/tmp',
   sessionMode: 'shell',
+  isExternal: true,
+}
+
+function setup(
+  slots: Array<ATermSlot | PaneSlot>,
+  nextSessionId: string | null = null,
+) {
+  const switchToSession = vi.fn()
+  const remove = vi.fn().mockResolvedValue({
+    deleted: true,
+    id: 'session-a',
+    next_session_id: nextSessionId,
+    pane_id: 'pane-a',
+    pane_deleted: true,
+    is_external: false,
+  })
+  const { result } = renderHook(
+    () =>
+      useATermSlotHandlers({
+        switchToSession,
+        activeSessionId: 'session-a',
+        reset: vi.fn(),
+        remove,
+        sessions: [],
+        slots,
+        handleProjectModeChange: vi.fn(),
+      }),
+    { wrapper: createWrapper() },
+  )
+  return { result, switchToSession, remove }
 }
 
 describe('useATermSlotHandlers', () => {
-  beforeEach(() => {
-    window.history.replaceState(
-      null,
-      '',
-      '/?windowScope=scope-old&detachedPane=pane-a&windowPanes=pane-a&session=session-a',
-    )
-  })
-
-  afterEach(() => {
-    vi.restoreAllMocks()
-    window.history.replaceState(null, '', '/')
-  })
-
-  it('detaches a pane from an existing detached window into a fresh popup target', async () => {
-    const detachPane = vi.fn()
-    const removeDetachedWindowPane = vi.fn()
-    const popup = {
-      closed: false,
-      close: vi.fn(),
-      focus: vi.fn(),
-      location: { href: '' },
-    }
-    const openMock = vi
-      .spyOn(window, 'open')
-      .mockReturnValue(popup as unknown as Window)
-    const switchToSession = vi.fn()
-
-    const { result } = renderHook(
-      () =>
-        useATermSlotHandlers({
-          switchToSession,
-          activeSessionId: 'session-a',
-          reset: vi.fn(),
-          disableProject: vi.fn(),
-          remove: vi.fn(),
-          detachExternalSession: vi.fn(),
-          detachPane,
-          removePane: vi.fn(),
-          sessions: [],
-          visibleSlots: [slot, otherSlot],
-          handleProjectModeChange: vi.fn(),
-          isDetachedPaneWindow: true,
-          removeDetachedWindowPane,
-        }),
-      { wrapper: createWrapper() },
-    )
+  it("after ending the open session, shows the user's next own session", async () => {
+    const a = paneSlot('a')
+    const { result, switchToSession, remove } = setup([
+      a,
+      externalSlot,
+      paneSlot('b'),
+    ])
 
     await act(async () => {
-      await result.current.handleSlotDetach(slot)
+      await result.current.handleSlotCloseSession(a)
     })
 
-    const [, popupName] = openMock.mock.calls[0]
-    const popupParams = new URL(popup.location.href, 'http://localhost')
-      .searchParams
-
-    expect(detachPane).not.toHaveBeenCalled()
-    expect(removeDetachedWindowPane).toHaveBeenCalledWith('pane-a', 'session-b')
-    expect(switchToSession).not.toHaveBeenCalled()
-    expect(popupName).not.toBe('a-term-detached-pane-pane-a')
-    expect(popupParams.get('detachedPane')).toBe('pane-a')
-    expect(popupParams.get('windowPanes')).toBe('pane-a')
-    expect(popupParams.get('windowScope')).toBeTruthy()
-    expect(popupParams.get('windowScope')).not.toBe('scope-old')
-    expect(popup.focus).toHaveBeenCalled()
+    expect(remove).toHaveBeenCalledWith('session-a')
+    expect(switchToSession).toHaveBeenCalledWith('session-b')
   })
-  it.each([
-    [true, 1],
-    [false, 0],
-  ] as const)(
-    'resets a slot only when its session can be reset (can.reset=%s)',
-    async (canReset, resetCalls) => {
-      const reset = vi.fn().mockResolvedValue({ id: 'session-a2' })
-      const switchToSession = vi.fn()
-      const resetSlot: PaneSlot = {
-        ...slot,
-        can: { ...slot.can, reset: canReset },
-      }
-      const { result } = renderHook(
-        () =>
-          useATermSlotHandlers({
-            switchToSession,
-            activeSessionId: 'session-a',
-            reset,
-            disableProject: vi.fn(),
-            remove: vi.fn(),
-            sessions: [],
-            visibleSlots: [resetSlot],
-            handleProjectModeChange: vi.fn(),
-          }),
-        { wrapper: createWrapper() },
-      )
 
-      await act(async () => {
-        await result.current.handleSlotReset(resetSlot)
-      })
+  it('prefers the session the backend names next', async () => {
+    const a = paneSlot('a')
+    const { result, switchToSession } = setup([a, paneSlot('b')], 'session-c')
 
-      expect(reset).toHaveBeenCalledTimes(resetCalls)
-      if (resetCalls) {
-        expect(reset).toHaveBeenCalledWith('session-a')
-        expect(switchToSession).toHaveBeenCalledWith('session-a2')
-      } else {
-        expect(switchToSession).not.toHaveBeenCalled()
-      }
-    },
-  )
+    await act(async () => {
+      await result.current.handleSlotCloseSession(a)
+    })
+
+    expect(switchToSession).toHaveBeenCalledWith('session-c')
+  })
+
+  it("never opens another agent's session after the last own one ends", async () => {
+    const a = paneSlot('a')
+    const { result, switchToSession } = setup([a, externalSlot])
+
+    await act(async () => {
+      await result.current.handleSlotCloseSession(a)
+    })
+
+    expect(switchToSession).not.toHaveBeenCalled()
+  })
 })

@@ -29,65 +29,6 @@ export const SCROLL_THRESHOLD = 50
 /** Copy-mode timeout in milliseconds (auto-exit after inactivity) */
 export const COPY_MODE_TIMEOUT_MS = 10000
 
-/** Layout modes supported by the desktop pane renderer. */
-export type LayoutMode =
-  | 'split-horizontal'
-  | 'split-vertical'
-  | 'split-main-side'
-  | 'grid-2x2'
-  | 'grid-4x1'
-  | 'grid-3x2'
-  | 'grid-2x3'
-
-/** Grid layout types. */
-export type GridLayoutMode = Extract<LayoutMode, `grid-${string}`>
-
-/** Minimum viewport widths required for wider pane capacities. */
-export const ULTRAWIDE_PANE_BREAKPOINT = 1920
-export const FOUR_COLUMN_LAYOUT_BREAKPOINT = 1600
-
-/** Minimum viewport widths required for each grid layout mode (in pixels) */
-export const GRID_MIN_WIDTHS: Record<GridLayoutMode, number> = {
-  'grid-2x2': 1280,
-  'grid-4x1': FOUR_COLUMN_LAYOUT_BREAKPOINT,
-  'grid-3x2': ULTRAWIDE_PANE_BREAKPOINT,
-  'grid-2x3': ULTRAWIDE_PANE_BREAKPOINT,
-} as const
-
-/** The most panes one layout arranges (the 3x2 grid). How many panes may be
- * open is the backend's limit, sent with the pane list as `max_panes`. */
-export const LAYOUT_MAX_PANES = 6
-
-export function getPaneCapacityForViewport(viewportWidth: number): number {
-  return viewportWidth >= MOBILE_WIDTH_THRESHOLD ? LAYOUT_MAX_PANES : 4
-}
-
-export function getAvailableLayoutModes(
-  paneCount: number,
-  viewportWidth: number,
-): LayoutMode[] {
-  void viewportWidth
-  const count = Math.min(paneCount, LAYOUT_MAX_PANES)
-
-  if (count <= 1) return ['split-horizontal']
-  if (count === 2) return ['split-horizontal', 'split-vertical']
-  if (count === 3)
-    return ['split-horizontal', 'split-vertical', 'split-main-side']
-  if (count === 4) return ['split-horizontal', 'grid-2x2']
-  return ['split-horizontal', 'grid-3x2']
-}
-
-export function getDefaultLayoutMode(
-  paneCount: number,
-  viewportWidth: number,
-): LayoutMode {
-  const availableLayouts = getAvailableLayoutModes(paneCount, viewportWidth)
-  if (paneCount <= 2) {
-    return 'split-horizontal'
-  }
-  return availableLayouts[availableLayouts.length - 1] ?? 'split-horizontal'
-}
-
 /** Terminal font. */
 export const A_TERM_FONT_FAMILY = "'JetBrains Mono', monospace"
 

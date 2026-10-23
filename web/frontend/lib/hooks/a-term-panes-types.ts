@@ -22,13 +22,6 @@ export interface ATermPane {
 export interface PaneListResponse {
   items: ATermPane[]
   total: number
-  max_panes: number
-}
-
-export interface PaneCountResponse {
-  count: number
-  max_panes: number
-  at_limit: boolean
 }
 
 export interface CreatePaneRequest {
@@ -38,11 +31,6 @@ export interface CreatePaneRequest {
   working_dir?: string
   agent_tool_slug?: string
   detached?: boolean
-  pane_order?: number
-  width_percent?: number
-  height_percent?: number
-  grid_row?: number
-  grid_col?: number
 }
 
 export interface UpdatePaneRequest {
@@ -50,34 +38,6 @@ export interface UpdatePaneRequest {
   active_mode?: string
 }
 
-export interface AttachPaneRequest {
-  pane_order?: number
-  width_percent?: number
-  height_percent?: number
-  grid_row?: number
-  grid_col?: number
-}
-
 export interface PanePlacementOptions {
   detached?: boolean
-  paneOrder?: number
-  widthPercent?: number
-  heightPercent?: number
-  gridRow?: number
-  gridCol?: number
-}
-
-export interface SwapPanesRequest {
-  pane_id_a: string
-  pane_id_b: string
-}
-
-export interface PaneLayoutItem {
-  pane_id: string
-  width_percent?: number
-  height_percent?: number
-}
-
-export interface BulkLayoutUpdateRequest {
-  layouts: PaneLayoutItem[]
 }

@@ -332,88 +332,9 @@ a:focus-visible {
   border-bottom-color: color-mix(in srgb, var(--term-accent) 40%, transparent);
 }
 
-/* Resizable pane dividers (react-resizable-panels) */
-.resizable-handle-horizontal,
-.resizable-handle-vertical {
-  flex-shrink: 0;
-  position: relative;
-  background-color: transparent;
-  outline: none;
-  touch-action: none;
-  user-select: none;
-  z-index: 1;
-  transition: box-shadow 0.15s ease;
-}
-
-/* Horizontal handle (vertical divider between side-by-side panes) */
-.resizable-handle-horizontal {
-  width: 8px;
-  cursor: col-resize;
-}
-
-.resizable-handle-horizontal::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  width: 2px;
-  transform: translateX(-50%);
-  border-radius: 9999px;
-  background-color: var(--term-border-active);
-  transition:
-    width 0.15s ease,
-    background-color 0.15s ease,
-    box-shadow 0.15s ease;
-}
-
-.resizable-handle-horizontal:hover::after,
-.resizable-handle-horizontal:focus-visible::after,
-.resizable-handle-horizontal:active::after {
-  width: 5px;
-  background-color: var(--term-accent);
-  box-shadow: 0 0 8px var(--term-accent-glow);
-}
-
-/* Vertical handle (horizontal divider between stacked panes) */
-.resizable-handle-vertical {
-  height: 8px;
-  cursor: row-resize;
-}
-
-.resizable-handle-vertical::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 50%;
-  height: 2px;
-  transform: translateY(-50%);
-  border-radius: 9999px;
-  background-color: var(--term-border-active);
-  transition:
-    height 0.15s ease,
-    background-color 0.15s ease,
-    box-shadow 0.15s ease;
-}
-
-.resizable-handle-vertical:hover::after,
-.resizable-handle-vertical:focus-visible::after,
-.resizable-handle-vertical:active::after {
-  height: 5px;
-  background-color: var(--term-accent);
-  box-shadow: 0 0 8px var(--term-accent-glow);
-}
-
 .a-term-pane-shell {
   border: 1px solid var(--term-border-active);
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--term-text-primary) 2%, transparent),
     0 0 0 1px color-mix(in srgb, var(--term-text-primary) 14%, transparent);
-}
-
-.a-term-pane-shell-drag-target {
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--term-text-primary) 4%, transparent),
-    0 0 0 1px var(--term-accent-glow);
 }

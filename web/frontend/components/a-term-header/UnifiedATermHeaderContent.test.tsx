@@ -21,10 +21,6 @@ vi.mock('@/lib/hooks/use-a-term-sessions', () => ({
   useATermSessions: () => ({ update: updateSession }),
 }))
 
-vi.mock('@/components/LayoutModeButton', () => ({
-  LayoutModeButtons: () => <div data-testid="layout-mode-buttons" />,
-}))
-
 vi.mock('../ModeToggle', () => ({
   ModeToggle: () => null,
 }))
@@ -37,14 +33,6 @@ vi.mock('../PaneOverflowMenu', () => ({
       </button>
     </div>
   ),
-}))
-
-vi.mock('./AddATermButton', () => ({
-  AddATermButton: () => null,
-}))
-
-vi.mock('./PaneProjectSwitcher', () => ({
-  PaneProjectSwitcher: () => <div data-testid="pane-project-switcher" />,
 }))
 
 vi.mock('./HeaderIconButton', () => ({
@@ -87,19 +75,6 @@ function makeProjectSlot(
   }
 }
 
-function createDataTransfer() {
-  const data = new Map<string, string>()
-  return {
-    effectAllowed: 'move',
-    dropEffect: 'move',
-    setData: (type: string, value: string) => {
-      data.set(type, value)
-    },
-    getData: (type: string) => data.get(type) ?? '',
-    clearData: () => data.clear(),
-  }
-}
-
 describe('UnifiedATermHeaderContent', () => {
   beforeEach(() => vi.clearAllMocks())
 
@@ -125,7 +100,7 @@ describe('UnifiedATermHeaderContent', () => {
     },
   )
 
-  it('shows a lane title and chip in place of the project switcher', () => {
+  it('shows a lane title and chip', () => {
     render(
       <UnifiedATermHeaderContent
         slot={{
@@ -135,27 +110,10 @@ describe('UnifiedATermHeaderContent', () => {
           task: 'Focus',
           badge: { label: '↳ Lead', color: '#6fa8ff' },
         }}
-        onProjectSwitch={vi.fn()}
       />,
     )
     expect(screen.getByText('Focus')).toBeInTheDocument()
     expect(screen.getByTestId('coordinator-badge')).toHaveTextContent('↳ Lead')
-    expect(
-      screen.queryByTestId('pane-project-switcher'),
-    ).not.toBeInTheDocument()
-  })
-
-  it('keeps the project switcher for a session with no task or chip', () => {
-    render(
-      <UnifiedATermHeaderContent
-        slot={{
-          ...makeProjectSlot('a', 'Alpha'),
-          can: { rename: true, reset: true, end: true },
-        }}
-        onProjectSwitch={vi.fn()}
-      />,
-    )
-    expect(screen.getByTestId('pane-project-switcher')).toBeInTheDocument()
   })
 
   it('renames a free-standing View in Tether when the backend allows it', () => {
@@ -196,40 +154,6 @@ describe('UnifiedATermHeaderContent', () => {
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
     expect(updateSession).not.toHaveBeenCalled()
     expect(renamePane).not.toHaveBeenCalled()
-  })
-
-  it('swaps panes when one header is dropped onto another header', () => {
-    const slotA = makeProjectSlot('a', 'Alpha')
-    const slotB = makeProjectSlot('b', 'Beta')
-    const onSwapA = vi.fn()
-    const onSwapB = vi.fn()
-
-    render(
-      <>
-        <UnifiedATermHeaderContent
-          slot={slotA}
-          allSlots={[slotA, slotB]}
-          onSwapWith={onSwapA}
-        />
-        <UnifiedATermHeaderContent
-          slot={slotB}
-          allSlots={[slotA, slotB]}
-          onSwapWith={onSwapB}
-        />
-      </>,
-    )
-
-    const dragHandleA = screen.getByTestId('pane-drag-handle-pane-a')
-    const headerB = screen.getByTestId('a-term-header-pane-b')
-
-    const dataTransfer = createDataTransfer()
-
-    fireEvent.dragStart(dragHandleA, { dataTransfer })
-    fireEvent.dragOver(headerB, { dataTransfer })
-    fireEvent.drop(headerB, { dataTransfer })
-
-    expect(onSwapA).not.toHaveBeenCalled()
-    expect(onSwapB).toHaveBeenCalledWith('pane-a')
   })
 
   it('renders the pane actions menu when close session is the only available action', () => {
@@ -275,109 +199,37 @@ describe('UnifiedATermHeaderContent', () => {
     expect(onFiles).toHaveBeenCalledTimes(1)
   })
 
-  it('does not render the swap dropdown on desktop when drag-swap is available', () => {
-    const slotA = makeProjectSlot('a', 'Alpha')
-    const slotB = makeProjectSlot('b', 'Beta')
+  it.each([false, true])(
+    'opens the session list from the title (phone: %s)',
+    (isMobile) => {
+      const slotA = makeProjectSlot('a', 'Alpha')
+      const slotB = makeProjectSlot('b', 'Beta')
+      const onSwitchTo = vi.fn()
 
+      render(
+        <UnifiedATermHeaderContent
+          slot={slotA}
+          allSlots={[slotA, slotB]}
+          onSwitchTo={onSwitchTo}
+          isMobile={isMobile}
+        />,
+      )
+
+      fireEvent.click(screen.getByTestId('session-switcher'))
+      fireEvent.click(screen.getByRole('button', { name: /beta/i }))
+      expect(onSwitchTo).toHaveBeenCalledWith(slotB)
+    },
+  )
+
+  it('offers New session from the bar', () => {
+    const onOpenModal = vi.fn()
     render(
       <UnifiedATermHeaderContent
-        slot={slotA}
-        allSlots={[slotA, slotB]}
-        onSwapWith={vi.fn()}
+        slot={makeProjectSlot('a', 'Alpha')}
+        onOpenModal={onOpenModal}
       />,
     )
-
-    expect(screen.queryByTestId('pane-swap-dropdown')).not.toBeInTheDocument()
-    expect(screen.getByTestId('pane-drag-handle-pane-a')).toBeInTheDocument()
-  })
-
-  it('renders the pane title as static text on desktop even when onSwitch exists', () => {
-    const slot = makeProjectSlot('a', 'Alpha')
-
-    render(<UnifiedATermHeaderContent slot={slot} onSwitch={vi.fn()} />)
-
-    expect(screen.getByText('Alpha')).toBeInTheDocument()
-    expect(
-      screen.queryByRole('button', { name: 'Alpha' }),
-    ).not.toBeInTheDocument()
-  })
-
-  it('hides the pane title when the project switcher is shown', () => {
-    const slot = makeProjectSlot('a', 'Alpha')
-
-    render(<UnifiedATermHeaderContent slot={slot} onProjectSwitch={vi.fn()} />)
-
-    expect(screen.getByTestId('pane-project-switcher')).toBeInTheDocument()
-    expect(screen.queryByText('Alpha')).not.toBeInTheDocument()
-  })
-
-  it('keeps the project switcher desktop-only on mobile', () => {
-    const slot = makeProjectSlot('a', 'Alpha')
-
-    render(
-      <UnifiedATermHeaderContent
-        slot={slot}
-        onProjectSwitch={vi.fn()}
-        isMobile={true}
-        allSlots={[slot]}
-        onSwitchTo={vi.fn()}
-      />,
-    )
-
-    expect(
-      screen.queryByTestId('pane-project-switcher'),
-    ).not.toBeInTheDocument()
-    expect(screen.getByTestId('pane-swap-dropdown')).toBeInTheDocument()
-  })
-
-  it('uses the pane switcher on mobile when multiple panes exist', () => {
-    const slotA = makeProjectSlot('a', 'Alpha')
-    const slotB = makeProjectSlot('b', 'Beta')
-
-    render(
-      <UnifiedATermHeaderContent
-        slot={slotA}
-        allSlots={[slotA, slotB]}
-        onSwitchTo={vi.fn()}
-        onProjectSwitch={vi.fn()}
-        isMobile={true}
-      />,
-    )
-
-    expect(
-      screen.queryByTestId('pane-project-switcher'),
-    ).not.toBeInTheDocument()
-    expect(screen.getByTestId('pane-swap-dropdown')).toBeInTheDocument()
-  })
-
-  it('hides layout controls on mobile', () => {
-    const slot = makeProjectSlot('a', 'Alpha')
-
-    render(
-      <UnifiedATermHeaderContent
-        slot={slot}
-        isMobile={true}
-        layoutMode="split-horizontal"
-        availableLayouts={['split-horizontal', 'split-vertical']}
-        onLayoutModeChange={vi.fn()}
-      />,
-    )
-
-    expect(screen.queryByTestId('layout-mode-buttons')).not.toBeInTheDocument()
-  })
-
-  it('renders layout controls on desktop when multiple layouts exist', () => {
-    const slot = makeProjectSlot('a', 'Alpha')
-
-    render(
-      <UnifiedATermHeaderContent
-        slot={slot}
-        layoutMode="split-horizontal"
-        availableLayouts={['split-horizontal', 'split-vertical']}
-        onLayoutModeChange={vi.fn()}
-      />,
-    )
-
-    expect(screen.getByTestId('layout-mode-buttons')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'New session' }))
+    expect(onOpenModal).toHaveBeenCalledTimes(1)
   })
 })

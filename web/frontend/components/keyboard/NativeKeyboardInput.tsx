@@ -29,7 +29,6 @@ function notifyPending() {
 
 interface NativeKeyboardInputProps {
   sessionId: string
-  storageScopeId?: string | null
   connected: boolean
   onCommit: (
     sessionId: string,
@@ -44,8 +43,8 @@ interface NativeKeyboardInputProps {
   onCtrlCancel?: () => void
 }
 
-function draftStorageKey(scope: string | null | undefined, sessionId: string) {
-  return `a-term-compose:${scope ?? 'default'}:${sessionId}`
+function draftStorageKey(sessionId: string) {
+  return `a-term-compose:${sessionId}`
 }
 
 function readDraft(key: string): string {
@@ -60,18 +59,12 @@ function saveDraft(key: string, value: string) {
   return revision
 }
 
-export function isComposePending(
-  scope: string | null | undefined,
-  sessionId: string | null | undefined,
-) {
-  return Boolean(
-    sessionId && pendingCommits.has(draftStorageKey(scope, sessionId)),
-  )
+export function isComposePending(sessionId: string | null | undefined) {
+  return Boolean(sessionId && pendingCommits.has(draftStorageKey(sessionId)))
 }
 
 export function NativeKeyboardInput({
   sessionId,
-  storageScopeId,
   connected,
   onCommit,
   onFocusChange,
@@ -89,7 +82,7 @@ export function NativeKeyboardInput({
     },
     [resolvedRef],
   )
-  const storageKey = draftStorageKey(storageScopeId, sessionId)
+  const storageKey = draftStorageKey(sessionId)
   const [value, setValue] = useState(() => readDraft(storageKey))
   const [busy, setBusy] = useState(false)
   const pendingForSession = useSyncExternalStore(

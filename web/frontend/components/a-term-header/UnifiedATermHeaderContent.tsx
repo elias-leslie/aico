@@ -1,67 +1,37 @@
 'use client'
 
 import { clsx } from 'clsx'
-import { FolderOpen, GripVertical } from 'lucide-react'
-import { type DragEvent, memo, useCallback, useMemo, useState } from 'react'
-import { LayoutModeButtons } from '@/components/LayoutModeButton'
+import { FolderOpen } from 'lucide-react'
+import { memo, useCallback, useState } from 'react'
 import { useATermPanes } from '@/lib/hooks/use-a-term-panes'
 import { useATermSessions } from '@/lib/hooks/use-a-term-sessions'
 import { useAgentTools } from '@/lib/hooks/use-agent-tools'
-import {
-  clearDraggedPaneSlotId,
-  getDraggedPaneSlotId,
-  isPaneSwapDragEvent,
-  setDraggedPaneSlotId,
-} from '@/lib/utils/pane-swap-dnd'
-import {
-  getSlotName,
-  getSlotPanelId,
-  getSlotSessionId,
-  isPaneSlot,
-} from '@/lib/utils/slot'
+import { getSlotPanelId, getSlotSessionId, isPaneSlot } from '@/lib/utils/slot'
 import { ModeToggle } from '../ModeToggle'
 import { PaneOverflowMenu } from '../PaneOverflowMenu'
-import { AddATermButton } from './AddATermButton'
 import { HeaderIconButton } from './HeaderIconButton'
 import { HeaderNameDisplay } from './HeaderNameDisplay'
-import { PaneProjectSwitcher } from './PaneProjectSwitcher'
+import { NewSessionButton } from './NewSessionButton'
 import { PaneSearchControl } from './PaneSearchControl'
 import { PaneStatusBadge, shouldShowPaneStatus } from './PaneStatusBadge'
 import type { UnifiedATermHeaderProps } from './types'
-
-function formatActionLabel(label: string) {
-  return label.charAt(0).toUpperCase() + label.slice(1)
-}
 
 export const UnifiedATermHeaderContent = memo(
   function UnifiedATermHeaderContent({
     slot,
     isActive = false,
-    onSwitch,
     onSettings,
     onReset,
-    onDetach,
-    onClose,
     onCloseSession,
-    closeTooltip,
     onRefresh,
     onFiles,
     onUpload,
-    onVoice,
     onOpenModal,
-    canAddPane = true,
     onModeSwitch,
-    onProjectSwitch,
     isModeSwitching = false,
     isMobile = false,
     allSlots,
-    onSwapWith,
     onSwitchTo,
-    onResetAll,
-    onCloseAll,
-    layoutMode,
-    availableLayouts,
-    onLayoutModeChange,
     connectionStatus,
     onReconnect,
     onSearch,
@@ -70,7 +40,6 @@ export const UnifiedATermHeaderContent = memo(
     const { enabledTools } = useAgentTools()
     const { renamePane } = useATermPanes()
     const { update: updateSession } = useATermSessions()
-    const [isDragTarget, setIsDragTarget] = useState(false)
     const [isRenaming, setIsRenaming] = useState(false)
     const paneId = isPaneSlot(slot) ? slot.paneId : null
     // A session the backend lets us rename keeps its name in Tether (Aico
@@ -85,104 +54,21 @@ export const UnifiedATermHeaderContent = memo(
       },
       [paneId, renamePane, sessionRenameId, updateSession],
     )
-    const slotId = getSlotPanelId(slot)
-    const slotName = getSlotName(slot)
-    // A project root, or a Tether session with a task or coordinator chip,
-    // shows the title Aico shows (`Project — Task`) in place of the project
-    // switcher: the title already names the project, and both do not fit a
-    // pane header.
-    const showProjectSwitcher =
-      !isMobile &&
-      slot.type === 'project' &&
-      !!onProjectSwitch &&
-      !slot.showsSessionTitle
-    const showHeaderName = isMobile || !showProjectSwitcher
     const showStatusBadge = shouldShowPaneStatus(connectionStatus)
-    const closePaneLabel = formatActionLabel(closeTooltip ?? 'Close view')
-    const closePaneTooltip = `${closePaneLabel}. The session keeps running and can be opened again.`
-    const swapTargets = useMemo(
-      () =>
-        !isMobile && onSwapWith && allSlots
-          ? allSlots
-              .filter((candidate) => getSlotPanelId(candidate) !== slotId)
-              .map((candidate) => ({
-                id: getSlotPanelId(candidate),
-                label: getSlotName(candidate),
-              }))
-          : [],
-      [allSlots, isMobile, onSwapWith, slotId],
-    )
-    const hasPaneActions =
-      !!onDetach ||
-      !!onVoice ||
+    const hasSessionActions =
       !!onUpload ||
       !!onSettings ||
       !!onRefresh ||
       !!onReset ||
-      !!onClose ||
       !!onCloseSession ||
-      !!onResetAll ||
-      !!onCloseAll
-    const canSwapByDrag = useMemo(
-      () => !isMobile && !!onSwapWith && (allSlots?.length ?? 0) > 1,
-      [allSlots, isMobile, onSwapWith],
-    )
-
-    const handleDragStart = useCallback(
-      (event: DragEvent<HTMLButtonElement>) => {
-        if (!canSwapByDrag) return
-        setDraggedPaneSlotId(event, slotId)
-      },
-      [canSwapByDrag, slotId],
-    )
-
-    const handleDragEnd = useCallback(() => {
-      clearDraggedPaneSlotId()
-      setIsDragTarget(false)
-    }, [])
-
-    const handleDragOver = useCallback(
-      (event: DragEvent<HTMLDivElement>) => {
-        if (!canSwapByDrag) return
-        if (!isPaneSwapDragEvent(event)) return
-        const draggedSlotId = getDraggedPaneSlotId(event)
-        if (!draggedSlotId || draggedSlotId === slotId) return
-        event.preventDefault()
-        event.dataTransfer.dropEffect = 'move'
-        setIsDragTarget(true)
-      },
-      [canSwapByDrag, slotId],
-    )
-
-    const handleDragLeave = useCallback((event: DragEvent<HTMLDivElement>) => {
-      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-        setIsDragTarget(false)
-      }
-    }, [])
-
-    const handleDrop = useCallback(
-      (event: DragEvent<HTMLDivElement>) => {
-        if (!canSwapByDrag || !onSwapWith) return
-        const draggedSlotId = getDraggedPaneSlotId(event)
-        clearDraggedPaneSlotId()
-        setIsDragTarget(false)
-        if (!draggedSlotId || draggedSlotId === slotId) return
-        event.preventDefault()
-        onSwapWith(draggedSlotId)
-      },
-      [canSwapByDrag, onSwapWith, slotId],
-    )
+      canRename
 
     return (
       <div
-        data-testid={`a-term-header-${slotId}`}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
+        data-testid={`a-term-header-${getSlotPanelId(slot)}`}
         className={clsx(
-          'flex-shrink-0 flex items-center gap-1 transition-colors duration-150',
+          'flex-shrink-0 flex items-center gap-1',
           isMobile ? 'h-9 px-1.5' : 'h-8 px-2',
-          isDragTarget && 'ring-1 ring-inset ring-[var(--term-accent)]',
         )}
         style={{
           backgroundColor: isActive
@@ -193,33 +79,7 @@ export const UnifiedATermHeaderContent = memo(
             : '1px solid var(--term-border)',
           fontFamily: 'var(--font-ui)',
         }}
-        title={
-          canSwapByDrag
-            ? `${slotName}: drag this header onto another pane to swap positions`
-            : undefined
-        }
       >
-        {canSwapByDrag && (
-          <button
-            type="button"
-            data-testid={`pane-drag-handle-${slotId}`}
-            draggable={true}
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
-            className={clsx(
-              'flex items-center justify-center rounded transition-all duration-150',
-              isMobile ? 'w-8 h-8' : 'w-6 h-6',
-              'cursor-grab active:cursor-grabbing',
-              'text-[var(--term-text-muted)] hover:bg-[var(--term-bg-elevated)] hover:text-[var(--term-accent)]',
-              'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--term-accent)]',
-            )}
-            title={`Drag ${slotName} to swap panes`}
-            aria-label={`Drag ${slotName} to swap panes`}
-          >
-            <GripVertical className="w-3.5 h-3.5" />
-          </button>
-        )}
-
         {/* Mode toggle (shell <-> agent) - only for project slots */}
         {slot.type === 'project' && onModeSwitch && (
           <ModeToggle
@@ -231,54 +91,25 @@ export const UnifiedATermHeaderContent = memo(
             agentTools={enabledTools}
           />
         )}
-        {showProjectSwitcher && (
-          <PaneProjectSwitcher
-            projectId={slot.projectId}
-            onProjectSwitch={onProjectSwitch}
-            isMobile={isMobile}
-          />
-        )}
 
-        {showHeaderName && (
-          <HeaderNameDisplay
-            slot={slot}
-            isActive={isActive}
-            isMobile={isMobile}
-            allSlots={allSlots}
-            onSwapWith={onSwapWith}
-            onSwitchTo={onSwitchTo}
-            onSwitch={onSwitch}
-            onRename={canRename ? handleRename : undefined}
-            isEditing={isRenaming}
-            onEditingChange={setIsRenaming}
-          />
-        )}
+        <HeaderNameDisplay
+          slot={slot}
+          isActive={isActive}
+          isMobile={isMobile}
+          allSlots={allSlots}
+          onSwitchTo={onSwitchTo}
+          onRename={canRename ? handleRename : undefined}
+          isEditing={isRenaming}
+          onEditingChange={setIsRenaming}
+        />
 
-        {/* Add a-term button */}
         {onOpenModal && (
-          <AddATermButton
-            onOpenModal={onOpenModal}
-            canAddPane={canAddPane}
-            isMobile={isMobile}
-          />
+          <NewSessionButton onClick={onOpenModal} isMobile={isMobile} />
         )}
-
-        {layoutMode &&
-          onLayoutModeChange &&
-          availableLayouts &&
-          !isMobile &&
-          availableLayouts.length > 1 && (
-            <LayoutModeButtons
-              layoutMode={layoutMode}
-              onLayoutChange={onLayoutModeChange}
-              availableLayouts={availableLayouts}
-            />
-          )}
 
         {/* Spacer */}
         <div className="flex-1" />
 
-        {/* Status badge — before overflow menu (desktop + mobile) */}
         {showStatusBadge && (
           <span
             className="h-3.5 w-px mx-0.5"
@@ -305,23 +136,14 @@ export const UnifiedATermHeaderContent = memo(
             />
           )}
 
-          {hasPaneActions && (
+          {hasSessionActions && (
             <PaneOverflowMenu
               onRename={canRename ? () => setIsRenaming(true) : undefined}
-              onDetach={onDetach}
-              onClosePane={onClose}
-              closePaneLabel={closePaneLabel}
-              closePaneTooltip={closePaneTooltip}
               onCloseSession={onCloseSession}
               onRefresh={onRefresh}
               onReset={onReset}
               onSettings={onSettings}
               onUpload={onUpload}
-              onVoice={onVoice}
-              onResetAll={onResetAll}
-              onCloseAll={onCloseAll}
-              onSwapWith={onSwapWith}
-              swapTargets={swapTargets}
               isMobile={isMobile}
             />
           )}

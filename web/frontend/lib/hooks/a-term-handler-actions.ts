@@ -12,15 +12,12 @@ import {
  */
 export async function addAdHocPaneAction(
   panes: ATermPane[],
-  panesAtLimit: boolean,
   createAdHocPane: (
     paneName: string,
     workingDir?: string,
   ) => Promise<ATermPane>,
   navigateToSession: (sessionId: string) => void,
 ): Promise<void> {
-  if (panesAtLimit) return
-
   try {
     const paneName = generateAdHocPaneName(panes)
     const newPane = await createAdHocPane(paneName)
@@ -43,7 +40,6 @@ export async function addProjectPaneAction(
   rootPath: string | null | undefined,
   projectATerms: ProjectATerm[],
   panes: ATermPane[],
-  panesAtLimit: boolean,
   createProjectPane: (
     paneName: string,
     projectId: string,
@@ -53,7 +49,6 @@ export async function addProjectPaneAction(
   navigateToSession: (sessionId: string) => void,
   startAgent: (sessionId: string) => Promise<boolean>,
 ): Promise<void> {
-  if (panesAtLimit) return
   const requestedMode = mode ?? undefined
 
   // Resolve working directory
@@ -90,33 +85,5 @@ export async function addProjectPaneAction(
   } catch (error) {
     // eslint-disable-next-line no-console -- action error boundary
     console.error('Failed to create project pane:', error)
-  }
-}
-
-/**
- * Close all a-term panes and create a new ad-hoc aTerm
- */
-export async function closeAllPanesAction(
-  panes: ATermPane[],
-  removePane: (paneId: string) => Promise<void>,
-  createAdHocPane: (
-    paneName: string,
-    workingDir?: string,
-  ) => Promise<ATermPane>,
-  navigateToSession: (sessionId: string) => void,
-): Promise<void> {
-  for (const pane of panes) {
-    await removePane(pane.id)
-  }
-
-  try {
-    const newPane = await createAdHocPane('Ad-Hoc Session')
-    const shellSession = findSessionByMode(newPane, 'shell')
-    if (shellSession) {
-      navigateToSession(shellSession.id)
-    }
-  } catch (error) {
-    // eslint-disable-next-line no-console -- action error boundary
-    console.error('Failed to create ad-hoc pane after close all:', error)
   }
 }

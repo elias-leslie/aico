@@ -6,7 +6,6 @@ import type { TranscriptionError, TranscriptionStatus } from '@/lib/voice/types'
 interface ATermMobileSectionProps {
   sessions: Array<{ id: string }>
   activeSessionId?: string | null
-  storageScopeId?: string | null
   activeStatus?: ConnectionStatus
   activeMode?: string
   handleKeyboardInput: (input: string) => void
@@ -34,7 +33,6 @@ interface ATermMobileSectionProps {
 export function ATermMobileSection({
   sessions,
   activeSessionId,
-  storageScopeId,
   activeStatus,
   activeMode,
   handleKeyboardInput,
@@ -61,7 +59,6 @@ export function ATermMobileSection({
       <MobileKeyboard
         onSend={handleKeyboardInput}
         sessionId={activeSessionId}
-        storageScopeId={storageScopeId}
         onCompose={handleComposeInput}
         connectionStatus={activeStatus}
         onReconnect={handleReconnect}
@@ -69,7 +66,7 @@ export function ATermMobileSection({
         voiceActive={showVoice}
         activeMode={activeMode}
       />
-      {/* Mobile voice panel renders below ControlBar, replacing FullKeyboard */}
+      {/* Voice panel renders below the key row */}
       {showVoice && (
         <VoiceTranscriptPanel
           transcript={voiceFinalTranscript}

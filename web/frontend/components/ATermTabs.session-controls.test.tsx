@@ -18,7 +18,6 @@ vi.mock('@/lib/hooks/use-a-term-orchestration', () => ({
   useATermOrchestration: () => ({
     isLoading: false,
     sessions: [{ id: 'session-a', name: 'Work shell' }],
-    canAddPane: () => true,
     handleSlotCloseSession: endSession,
   }),
 }))
@@ -43,7 +42,6 @@ vi.mock('./ATermContent', () => ({
   ),
 }))
 vi.mock('./ATermManagerModal', () => ({ ATermManagerModal: () => null }))
-vi.mock('./KeyboardShortcuts', () => ({ KeyboardShortcuts: () => null }))
 
 describe('ATermTabs session controls', () => {
   beforeEach(() => endSession.mockReset())

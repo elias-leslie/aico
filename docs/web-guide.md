@@ -1,6 +1,6 @@
 # Web app guide
 
-The web app is Aico in a browser or on a phone: the same Tether sessions as the desktop, in panes. [Project overview](../README.md). Run shell commands from the repository root unless a step changes directory.
+The web app is Aico in a browser or on a phone: the same Tether sessions as the desktop, one session on screen at a time. [Project overview](../README.md). Run shell commands from the repository root unless a step changes directory.
 
 ## Quickstart
 
@@ -24,9 +24,9 @@ See the [Changelog](../CHANGELOG.md) for shipped changes.
 
 **`stable scrollback rendering`** — Terminal panes render with the xterm.js WebGL renderer with DOM fallback, so history keeps font metrics, wrap points, and columns aligned.
 
-**`multi-pane layouts`** — Up to 6 resizable panes. Put planning, implementation, review, release checks, and files on the same screen, detach any pane into its own browser window when you want to spread work across monitors, and use the pane menu's Refresh Layout action to remount a pane cleanly without restarting its session. Several views can show one session; the view you activate (focus) claims the session's window size, and the others keep their own size until you activate them.
+**`one session at a time`** — The session bar's title opens every running session, grouped Needs you, Finished, Working and Idle; pick one to switch. Ctrl+Tab and Ctrl+Shift+Tab step through them and Ctrl+1 to Ctrl+9 jump to one (not while you are typing in a text box). New session starts one in a project or a plain shell. The session menu's Redraw remounts the view without restarting the session. Several devices can show one session; the one you use last claims the session's window size.
 
-**`files browser`** — Browse the active pane's working directory. Preview files, copy paths, insert paths into prompts — without leaving the terminal.
+**`files browser`** — Browse the session's working directory. Preview files, copy paths, insert paths into prompts — without leaving the terminal.
 
 **`prompt cleaning`** — With Agent Hub connected, the web app can clean a draft prompt, show an original-vs-cleaned diff, take follow-up refinement instructions, let you edit the result before sending, and fall back to the original prompt if the cleaner is unavailable.
 
@@ -36,13 +36,11 @@ On a phone, tap Talk to start dictating. Words appear while you speak, and pause
 
 **`project deep links`** — Open `/?project=myapp&dir=/path` to jump straight into a project workspace. Bookmark your setups.
 
-**`same-pane project switching`** — Swap a pane to another project from the header instead of closing and reopening work by hand. The pane keeps the current tool mode when possible, so moving from one project to another in `codex`, `claude`, or shell does not drop you back to a generic terminal first.
+**`dual mode`** — Switch any session between raw shell and your configured AI agent with one click. Supports Claude Code, Codex, Antigravity CLI, and Pi out of the box.
 
-**`dual mode`** — Switch any pane between raw shell and your configured AI agent with one click. Supports Claude Code, Codex, Antigravity CLI, and Pi out of the box.
+**`agent presets and custom tools`** — Built-in profiles for Claude Code, Codex, Antigravity CLI, and Pi appear in Settings by default. Antigravity launches as `agy --dangerously-skip-permissions`, its explicit auto-approval mode. Pick a default tool, tune the launch command or process name, and add your own TUI agent commands when your workflow expands. The tool list is Tether's shared registry, so a change here also applies to sessions launched from the desktop; Claude Code's slug is `claude-code` (`claude` still works as an alias). The web app also lists agent sessions you started yourself on your default tmux server alongside your own sessions, recognising any tool in that registry by its slug, aliases, process name or command; closing one here only closes the view.
 
-**`agent presets and custom tools`** — Built-in profiles for Claude Code, Codex, Antigravity CLI, and Pi appear in Settings by default. Antigravity launches as `agy --dangerously-skip-permissions`, its explicit auto-approval mode. Pick a default tool, tune the launch command or process name, color-code panes, and add your own TUI agent commands when your workflow expands. The tool list is Tether's shared registry, so a change here also applies to sessions launched from the desktop; Claude Code's slug is `claude-code` (`claude` still works as an alias). The web app also lists agent sessions you started yourself on your default tmux server alongside your own panes, recognising any tool in that registry by its slug, aliases, process name or command; closing one here only closes the view.
-
-**`scrollback`** — Each pane is attached in tmux control mode, which seeds the pane's history into xterm.js. Scroll up and the view holds still while output keeps arriving; a Latest button returns you to the bottom.
+**`scrollback`** — Each session is attached in tmux control mode, which seeds its history into xterm.js. Scroll up and the view holds still while output keeps arriving; a Latest button returns you to the bottom.
 
 **`mobile workspace controls`** — On a phone you type with the phone's own keyboard into a compose box that stays above a key row (Tab, Shift, voice, Esc, Ctrl, arrow keys). The first key shows or hides the phone keyboard. The visible bottom row stays in view as the keyboard opens, and a touch-friendly session switcher jumps into any session.
 
@@ -50,13 +48,11 @@ Expand the arrow controls to find Enter, which activates a TUI selection without
 
 **`text size`** — Settings change the terminal text size, remembered per project in this browser.
 
-**`in-terminal search`** — Search the live buffer and scrollback for a string and step through matches, without leaving the pane.
+**`in-terminal search`** — Search the live buffer and scrollback for a string and step through matches, without leaving the session.
 
 **`clickable links and clipboard`** — URLs in terminal output are clickable (web-links addon) and copy/paste flows use the xterm clipboard addon, including bracketed-paste support.
 
-**`file upload`** — Drag and drop images and docs (PNG/JPG/GIF/WebP/Markdown/text/JSON/PDF, up to 10 MB) into a pane; the web app validates the file by magic bytes and returns a `~`-relative path you can drop straight into a command.
-
-**`diagnostics`** — Optional, off by default: capture per-session render/diagnostic events to debug terminal behavior.
+**`file upload`** — Drag and drop images and docs (PNG/JPG/GIF/WebP/Markdown/text/JSON/PDF, up to 10 MB) into a session; the web app validates the file by magic bytes and returns a `~`-relative path you can drop straight into a command.
 
 **`install as a PWA`** — The web app ships a manifest, so you can install it to your phone or desktop and run it standalone.
 

@@ -19,19 +19,16 @@ import { ATermContent } from './ATermContent'
 import { ATermManagerModal } from './ATermManagerModal'
 import { ATermSkeleton } from './ATermSkeleton'
 import { ConfirmationDialog } from './ConfirmationDialog'
-import { KeyboardShortcuts } from './KeyboardShortcuts'
 
 interface ATermTabsProps {
   projectId?: string
   projectPath?: string
-  detachedPaneId?: string
   className?: string
 }
 
 export function ATermTabs({
   projectId,
   projectPath,
-  detachedPaneId,
   className,
 }: ATermTabsProps) {
   useVisualViewportHeight()
@@ -42,11 +39,9 @@ export function ATermTabs({
   const [endSessionError, setEndSessionError] = useState<string | null>(null)
 
   const {
-    // Core state
     isLoading,
     sessions,
     externalSessions,
-    detachedPanes,
     aTermSlots,
     fontSize,
     showSettings,
@@ -56,47 +51,24 @@ export function ATermTabs({
     setATermRef,
     handleStatusChange,
     aTermStatuses,
-    canAddPane,
-    swapPanes,
     activeSessionId,
     activeMode,
     activeStatus,
-    layoutMode,
-    availableLayouts,
-    storageScopeId,
     handleKeyboardInput,
     handleComposeInput,
     handleReconnect,
     panes,
     handleAddTab,
     handleNewATermForProject,
-
-    // Modal handlers
     showATermManager,
     handleOpenATermManager,
-    handleAttachExternalSession,
-    handleAttachDetachedPane,
     handleCloseATermManager,
-    handleCloseKeyboardHelp,
-
-    // Slot handlers
+    handleOpenSession,
     handleSlotSwitch,
     handleSlotReset,
-    handleSlotDetach,
-    handleSlotClose,
     handleSlotCloseSession,
     handleSlotModeSwitch,
-    handleSlotProjectSwitch,
     isModeSwitching,
-
-    // Layout handlers
-    handleLayoutModeChange,
-    handleLayoutChange,
-
-    // Keyboard shortcuts
-    showKeyboardHelp,
-
-    // Action handlers
     fileInputRef,
     progress,
     isUploading,
@@ -105,8 +77,6 @@ export function ATermTabs({
     handleUploadClick,
     handleFileSelect,
     handleFileInputChange,
-
-    // Voice input
     showVoice,
     voiceFinalTranscript,
     voiceInterimTranscript,
@@ -119,7 +89,7 @@ export function ATermTabs({
     handleVoiceCancel,
     handleVoiceToggle,
     handleVoiceReset,
-  } = useATermOrchestration({ projectId, projectPath, detachedPaneId })
+  } = useATermOrchestration({ projectId, projectPath })
   // Opening a session clears its needs-you/finished state; the title carries
   // the count of sessions waiting on the owner.
   useMarkActiveSeen(activeSessionId)
@@ -171,24 +141,15 @@ export function ATermTabs({
         aTermStatuses={aTermStatuses}
         onSlotSwitch={handleSlotSwitch}
         onSlotReset={handleSlotReset}
-        onSlotDetach={handleSlotDetach}
-        onSlotClose={handleSlotClose}
         onSlotCloseSession={(slot) => {
           setEndSessionError(null)
           setSessionToEnd(slot)
         }}
-        canAddPane={canAddPane()}
         handleOpenSettings={() => setShowSettings(true)}
         handleOpenATermManager={handleOpenATermManager}
         handleUploadClick={handleUploadClick}
         onModeSwitch={handleSlotModeSwitch}
-        onProjectSwitch={handleSlotProjectSwitch}
         isModeSwitching={!!isModeSwitching}
-        onSwapPanes={swapPanes}
-        layoutMode={layoutMode}
-        availableLayouts={availableLayouts}
-        onLayoutModeChange={handleLayoutModeChange}
-        onLayoutChange={handleLayoutChange}
         fileInputRef={fileInputRef}
         progress={progress}
         isUploading={isUploading}
@@ -198,7 +159,6 @@ export function ATermTabs({
         handleFileSelect={handleFileSelect}
         sessions={sessions}
         activeSessionId={activeSessionId}
-        storageScopeId={storageScopeId}
         activeMode={activeMode}
         activeStatus={activeStatus}
         handleKeyboardInput={handleKeyboardInput}
@@ -244,16 +204,10 @@ export function ATermTabs({
           handleNewATermForProject(projectId, undefined, rootPath)
         }
         externalSessions={externalSessions}
-        detachedPanes={detachedPanes}
-        onAttachExternalSession={handleAttachExternalSession}
-        onAttachDetachedPane={handleAttachDetachedPane}
+        detachedPanes={[]}
+        onAttachExternalSession={handleOpenSession}
+        onAttachDetachedPane={() => undefined}
         panes={panes}
-      />
-
-      {/* Keyboard shortcuts help overlay */}
-      <KeyboardShortcuts
-        isOpen={showKeyboardHelp}
-        onClose={handleCloseKeyboardHelp}
       />
     </>
   )

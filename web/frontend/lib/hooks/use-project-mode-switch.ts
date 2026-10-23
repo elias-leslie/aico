@@ -12,7 +12,6 @@ import { useAgentPolling } from './use-agent-polling'
 interface PaneListResponse {
   items: ATermPane[]
   total: number
-  max_panes: number
 }
 
 /** Delay before scrolling tab into view */

@@ -1,13 +1,11 @@
 'use client'
 
-import { clsx } from 'clsx'
-import { ChevronDown } from 'lucide-react'
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { useSessionAttention } from '@/lib/hooks/use-session-attention'
 import { type ATermSlot, getSlotName, type PaneSlot } from '@/lib/utils/slot'
 import { AttentionBadge } from '../AttentionBadge'
 import { CoordinatorBadge } from '../CoordinatorBadge'
-import { PaneSwapDropdown } from '../PaneSwapDropdown'
+import { SessionSwitcher } from '../SessionSwitcher'
 import { SessionTitle } from '../SessionTitle'
 
 interface HeaderNameDisplayProps {
@@ -15,9 +13,7 @@ interface HeaderNameDisplayProps {
   isActive: boolean
   isMobile: boolean
   allSlots?: Array<ATermSlot | PaneSlot>
-  onSwapWith?: (otherSlotId: string) => void
   onSwitchTo?: (slot: ATermSlot | PaneSlot) => void
-  onSwitch?: () => void
   onRename?: (newName: string) => void
   isEditing?: boolean
   onEditingChange?: (editing: boolean) => void
@@ -28,9 +24,7 @@ export const HeaderNameDisplay = memo(function HeaderNameDisplay({
   isActive,
   isMobile,
   allSlots,
-  onSwapWith,
   onSwitchTo,
-  onSwitch,
   onRename,
   isEditing = false,
   onEditingChange,
@@ -108,37 +102,16 @@ export const HeaderNameDisplay = memo(function HeaderNameDisplay({
     )
   }
 
-  // Mobile uses the pane switcher trigger for all pane/session navigation.
-  if (isMobile && allSlots && (onSwitchTo || onSwapWith)) {
+  // The title opens the session list.
+  if (allSlots && onSwitchTo) {
     return (
-      <PaneSwapDropdown
+      <SessionSwitcher
         currentSlot={slot}
         allSlots={allSlots}
-        onSwapWith={onSwapWith}
         onSwitchTo={onSwitchTo}
         isMobile={isMobile}
         attention={attention}
       />
-    )
-  }
-
-  // Mobile keeps explicit switch button when drag or tab targets are not ideal.
-  if (isMobile && onSwitch) {
-    return (
-      <button
-        onClick={onSwitch}
-        className={clsx(
-          'flex items-center gap-1 px-1.5 py-0.5 rounded text-xs truncate max-w-[140px] transition-all duration-150',
-          'hover:bg-[var(--term-bg-elevated)]',
-          'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--term-accent)]',
-        )}
-        style={{ color: textColor }}
-        title={name}
-      >
-        <CoordinatorBadge badge={slot.badge} dot />
-        <SessionTitle name={name} task={slot.task} />
-        <ChevronDown className="w-3 h-3 flex-shrink-0" />
-      </button>
     )
   }
 

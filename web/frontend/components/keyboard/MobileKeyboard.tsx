@@ -12,7 +12,6 @@ import type { ATermInputHandler } from './types'
 interface MobileKeyboardProps {
   onSend: ATermInputHandler
   sessionId: string | null | undefined
-  storageScopeId?: string | null
   onCompose: (
     sessionId: string,
     text: string,
@@ -32,7 +31,6 @@ interface MobileKeyboardProps {
 export function MobileKeyboard({
   onSend,
   sessionId,
-  storageScopeId,
   onCompose,
   connectionStatus,
   onReconnect,
@@ -46,11 +44,11 @@ export function MobileKeyboard({
   const lastSessionIdentityRef = useRef<string | null>(null)
   const viewportBeforeFocusRef = useRef<number | null>(null)
   const keyboardSeenRef = useRef(false)
-  const sessionIdentity = `${storageScopeId ?? ''}:${sessionId ?? ''}`
+  const sessionIdentity = sessionId ?? ''
 
   const handleToggleKeyboard = useCallback(() => {
     if (composeFocused) {
-      if (isComposePending(storageScopeId, sessionId)) return
+      if (isComposePending(sessionId)) return
       composeRef.current?.blur()
       return
     }
@@ -59,28 +57,28 @@ export function MobileKeyboard({
     keyboardSeenRef.current = false
     // iOS requires focus to remain in the same user gesture as the tap.
     composeRef.current?.focus({ preventScroll: true })
-  }, [composeFocused, sessionId, storageScopeId])
+  }, [composeFocused, sessionId])
 
   const handleCtrlToggle = useCallback(() => {
     setCtrlActive((prev) => !prev)
   }, [])
   const handleCtrlLetter = useCallback(
     (letter: string) => {
-      if (!ctrlActive || isComposePending(storageScopeId, sessionId)) return
+      if (!ctrlActive || isComposePending(sessionId)) return
       onSend(String.fromCharCode(letter.toLowerCase().charCodeAt(0) - 96))
       setCtrlActive(false)
     },
-    [ctrlActive, onSend, sessionId, storageScopeId],
+    [ctrlActive, onSend, sessionId],
   )
   const handleRibbonSend = useCallback(
     (key: string) => {
-      if (!isComposePending(storageScopeId, sessionId)) onSend(key)
+      if (!isComposePending(sessionId)) onSend(key)
     },
-    [onSend, sessionId, storageScopeId],
+    [onSend, sessionId],
   )
   const handleVoice = useCallback(() => {
-    if (!isComposePending(storageScopeId, sessionId)) onVoice?.()
-  }, [onVoice, sessionId, storageScopeId])
+    if (!isComposePending(sessionId)) onVoice?.()
+  }, [onVoice, sessionId])
   const handleArrow = useCallback(
     (
       direction: ArrowDirection,
@@ -136,9 +134,8 @@ export function MobileKeyboard({
       >
         {sessionId && !voiceActive && (
           <NativeKeyboardInput
-            key={`${storageScopeId ?? ''}:${sessionId}`}
+            key={sessionId}
             sessionId={sessionId}
-            storageScopeId={storageScopeId}
             connected={connectionStatus === 'connected'}
             onCommit={onCompose}
             onFocusChange={(focused) => {
@@ -162,9 +159,7 @@ export function MobileKeyboard({
         <ControlBar
           onSend={handleRibbonSend}
           onArrow={handleArrow}
-          onBeforeTerminalAction={() =>
-            !isComposePending(storageScopeId, sessionId)
-          }
+          onBeforeTerminalAction={() => !isComposePending(sessionId)}
           ctrlActive={ctrlActive}
           onCtrlToggle={handleCtrlToggle}
           minimized={!composeFocused}

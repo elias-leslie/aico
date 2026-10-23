@@ -1,10 +1,8 @@
 import type { RefObject } from 'react'
 import type { ATermHandle, ConnectionStatus } from '@/components/a-term.types'
-import type { LayoutMode } from '@/lib/constants/a-term'
 import type { ATermFontSize } from '@/lib/hooks/use-a-term-settings'
 import type { ATermSlot, PaneSlot } from '@/lib/utils/slot'
 import type { TranscriptionError, TranscriptionStatus } from '@/lib/voice/types'
-import type { PaneLayout } from '@/types/pane-layout'
 
 export interface ATermContentProps {
   // A-Term state
@@ -23,26 +21,12 @@ export interface ATermContentProps {
   aTermStatuses: Map<string, ConnectionStatus>
   onSlotSwitch: (slot: ATermSlot | PaneSlot) => void
   onSlotReset: (slot: ATermSlot | PaneSlot) => void
-  onSlotDetach: (slot: ATermSlot | PaneSlot) => void
-  onSlotClose: (slot: ATermSlot | PaneSlot) => void
   onSlotCloseSession: (slot: ATermSlot | PaneSlot) => void
-  onSlotRefresh?: (slot: ATermSlot | PaneSlot) => void
-  canAddPane: boolean
   handleOpenSettings: () => void
   handleOpenATermManager?: () => void
-  handleUploadClick: () => void
+  handleUploadClick: (sessionId?: string) => void
   onModeSwitch: (slot: ATermSlot | PaneSlot, mode: string) => void
-  onProjectSwitch?: (
-    slot: ATermSlot | PaneSlot,
-    projectId: string,
-    rootPath: string | null,
-  ) => Promise<void> | void
   isModeSwitching: boolean
-  onSwapPanes: (slotIdA: string, slotIdB: string) => void
-  onLayoutChange?: (layouts: PaneLayout[]) => void
-  layoutMode: LayoutMode
-  availableLayouts: LayoutMode[]
-  onLayoutModeChange: (mode: LayoutMode) => void
 
   // File upload
   fileInputRef: RefObject<HTMLInputElement | null>
@@ -56,7 +40,6 @@ export interface ATermContentProps {
   // Mobile keyboard
   sessions: Array<{ id: string }>
   activeSessionId?: string | null
-  storageScopeId?: string | null
   activeMode?: string
   activeStatus?: ConnectionStatus
   handleKeyboardInput: (input: string) => void

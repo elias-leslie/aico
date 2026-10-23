@@ -6,18 +6,15 @@ const mockATermTabs = vi.fn(
   ({
     projectId,
     projectPath,
-    detachedPaneId,
     className,
   }: {
     projectId?: string
     projectPath?: string
-    detachedPaneId?: string
     className?: string
   }) => (
     <div
       data-testid="a-term-tabs"
       data-class-name={className ?? ''}
-      data-detached-pane-id={detachedPaneId ?? ''}
       data-project-id={projectId ?? ''}
       data-project-path={projectPath ?? ''}
     />
@@ -28,7 +25,6 @@ vi.mock('@/components/ATermTabs', () => ({
   ATermTabs: (props: {
     projectId?: string
     projectPath?: string
-    detachedPaneId?: string
     className?: string
   }) => mockATermTabs(props),
 }))
@@ -56,10 +52,6 @@ describe('Home page', () => {
       'data-class-name',
       'flex-1 min-h-0',
     )
-    expect(screen.getByTestId('a-term-tabs')).toHaveAttribute(
-      'data-detached-pane-id',
-      '',
-    )
   })
 
   it('uses the first non-empty value when search params are arrays', async () => {
@@ -79,21 +71,6 @@ describe('Home page', () => {
     expect(screen.getByTestId('a-term-tabs')).toHaveAttribute(
       'data-project-path',
       '/home/demo/projects/portfolio-ai',
-    )
-  })
-
-  it('forwards detached pane scope to ATermTabs', async () => {
-    const view = await Home({
-      searchParams: Promise.resolve({
-        detachedPane: 'pane-detached-1',
-      }),
-    })
-
-    render(view)
-
-    expect(screen.getByTestId('a-term-tabs')).toHaveAttribute(
-      'data-detached-pane-id',
-      'pane-detached-1',
     )
   })
 })
