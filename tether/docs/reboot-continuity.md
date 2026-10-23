@@ -10,6 +10,7 @@ Every 60 seconds Tether writes `<stateDir>/continuity.json` (`~/.local/state/tet
 | --- | --- | --- |
 | Claude Code (`claude-code`) | `~/.claude/sessions/<pid>.json` for a process in the pane (`sessionId`; `status` gives busy or idle) | `claude … --resume <id> -- "<prompt>"` |
 | Codex (`codex`) | the `rollout-*.jsonl` the Codex process holds open, user thread only (not a subagent's) | `codex … resume --no-daemon <id> -- "<prompt>"` |
+| Pi (`pi`) | Pi keeps no per-process session record, so a root or prompted launch starts it with `--session-id <id>` under an ID Tether picks and passes as `TETHER_AGENT_SESSION_ID` in the agent's environment | `pi … --session <id> -- "<prompt>"` |
 | Shell, or an agent with no resume ID | none | relaunched fresh |
 
 If an agent is between conversations, the session keeps the last resume ID Tether saw.

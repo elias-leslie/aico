@@ -278,8 +278,7 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     (daybreak !== null && !getTui(tool)?.modelSelection?.daybreak) ||
     (tool === 'pi' && daybreak !== null && model !== 'openai/gpt-6-sol') ||
     (agentHubContext !== null && (typeof agentHubContext !== 'boolean' || tool !== 'pi')) ||
-    ((getTui(tool)?.modelSelection?.modelProvider !== undefined ||
-      (tool === 'opencode' && model !== null)) &&
+    (getTui(tool)?.modelSelection?.modelProvider !== undefined &&
       (typeof model !== 'string' ||
         !/^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._:/-]*$/.test(model))) ||
     (model !== null &&

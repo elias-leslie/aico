@@ -19,10 +19,7 @@ export const RESUME_ADAPTERS: Readonly<Record<string, NonNullable<TuiSpec['resum
   pi: {
     sessionIdPattern: /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/,
     arguments: ['--session'],
-  },
-  opencode: {
-    sessionIdPattern: /^ses_[A-Za-z0-9_-]{1,100}$/,
-    arguments: ['--session'],
+    freshArguments: ['--session-id'],
   },
 }
 
@@ -43,8 +40,6 @@ function contextHook(hook: ToolContextHook | null): ContextHook | undefined {
       return { kind: 'codex-hooks' }
     case 'pi-extension':
       return { kind: 'pi-extension' }
-    case 'opencode-plugin':
-      return { kind: 'opencode-plugin' }
     case 'canonical-retrieval:antigravity':
       return { kind: 'canonical-retrieval', surface: 'antigravity' }
     default:
@@ -80,7 +75,6 @@ export function toolSpec(tool: AgentTool): TuiSpec {
       reasoningEffort: { arguments: ['--thinking'] },
       daybreak: { environment: true },
     }
-  if (tool.slug === 'opencode') spec.modelSelection = { model: ['--model'] }
   return spec
 }
 
@@ -112,6 +106,16 @@ export function canonicalToolSlug(slug: string): string | undefined {
 
 export function listTuis(): TuiSpec[] {
   return (source?.listTools({ enabledOnly: true }) ?? []).map(toolSpec)
+}
+
+/** Process names (comm) of every agent tool, disabled ones included since
+ * their sessions keep running; a shell has none. */
+export function agentProcessNames(): ReadonlySet<string> {
+  return new Set(
+    (source?.listTools() ?? []).flatMap((tool) =>
+      tool.argv.length && tool.processName ? [tool.processName] : [],
+    ),
+  )
 }
 
 export function defaultTui(): TuiSpec {

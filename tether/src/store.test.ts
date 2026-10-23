@@ -2,7 +2,7 @@ import { mkdtempSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { SCHEMA_VERSION } from './schema'
+import { AGENT_TOOLS_TABLE_SQL, SCHEMA_VERSION } from './schema'
 import { Store } from './store'
 import { ToolValidationError } from './tools'
 
@@ -95,74 +95,71 @@ describe('Store schema', () => {
     })
   })
 
-  it('migrates v6 tools without changing operator edits or replacing a conflicting slug', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'tether-opencode-migration-'))
+  it('migrates v6 tools without changing operator edits', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tether-tools-migration-'))
     const path = join(dir, 'tether.db')
     const old = open(path)
     old.updateTool('pi', { name: 'My Pi', enabled: false })
-    old.updateTool('opencode', {
-      name: 'My OpenCode',
-      argv: ['/opt/custom-opencode'],
-    })
     old.db.exec('DELETE FROM schema_version WHERE version >= 7')
     const retained = old.getTool('pi')
     old.close()
     const migrated = open(path)
     expect(migrated.getTool('pi')).toEqual(retained)
-    expect(migrated.getTool('opencode')?.argv).toEqual(['/opt/custom-opencode'])
-    expect(migrated.getTool('opencode')?.contextHook).toBe('opencode-plugin')
+    expect(migrated.getTool('opencode')).toBeUndefined()
     expect(migrated.defaultTool()?.slug).toBe('codex')
   })
 
-  it('consolidates v7 OpenCode picker rows while preserving retained sessions and commands', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'tether-opencode-picker-migration-'))
+  it('v9 retires the OpenCode rows, moves their default and names Pi `pi`', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tether-opencode-retire-'))
     const path = join(dir, 'tether.db')
     const old = open(path)
-    old.deleteTool('opencode')
-    const legacy = [
-      ['opencode-deepseek-free', 'opencode/deepseek-v4.1-flash-free'],
-      ['opencode-glm-free', 'opencode/glm-5.3-flash-free'],
-    ].map(([slug, model], index) => {
-      const tool = old.createTool(
-        {
-          ...seedTool,
-          slug,
-          name: `Saved ${slug}`,
-          argv: ['agent-hub-opencode', 'mini', '--model', model],
-          processName: 'opencode',
-          contextHook: 'opencode-plugin',
-          isDefault: index === 0,
-        },
-        500,
-      )
+    // A v8 database: the wider context-hook CHECK and OpenCode's rows.
+    old.db.exec(
+      AGENT_TOOLS_TABLE_SQL.replace(
+        'CREATE TABLE agent_tools',
+        'CREATE TABLE agent_tools_v8',
+      ).replace(
+        "'canonical-retrieval:antigravity'",
+        "'canonical-retrieval:antigravity', 'opencode-plugin'",
+      ),
+    )
+    old.db.exec(`INSERT INTO agent_tools_v8 SELECT * FROM agent_tools;
+      DROP INDEX agent_tools_one_default;
+      DROP TABLE agent_tools;
+      ALTER TABLE agent_tools_v8 RENAME TO agent_tools;
+      CREATE UNIQUE INDEX agent_tools_one_default ON agent_tools(is_default) WHERE is_default = 1;
+      UPDATE agent_tools SET is_default = 0;
+      UPDATE agent_tools SET process_name = 'pi-coding-agent' WHERE slug = 'pi';`)
+    for (const [slug, isDefault] of [
+      ['opencode', 1],
+      ['opencode-deepseek-free', 0],
+      ['opencode-glm-free', 0],
+    ] as const) {
       old.db
         .prepare(
-          'INSERT INTO sessions (id, seq, created_at, tool, session_id) VALUES (?, ?, 1, ?, ?)',
+          `INSERT INTO agent_tools (id, slug, name, argv, process_name, is_default, enabled,
+             context_hook, created_at, updated_at)
+           VALUES (?, ?, ?, '["agent-hub-opencode","mini"]', 'opencode', ?, 1, 'opencode-plugin', 1, 1)`,
         )
-        .run(`0a1b2c3${index}`, index + 1, slug, `saved-session-${index}`)
-      return tool
-    })
-    const sessions = old.listSessions()
-    old.db.exec('DELETE FROM schema_version WHERE version >= 8')
+        .run(`id-${slug}`, slug, slug, isDefault)
+    }
+    old.db.exec('DELETE FROM schema_version WHERE version >= 9')
     old.close()
 
     const migrated = open(path)
-    expect(migrated.listSessions()).toEqual(sessions)
-    for (const tool of legacy) {
-      expect(migrated.resolveTool(tool.slug)).toEqual({
-        ...tool,
-        enabled: false,
-        isDefault: false,
-        updatedAt: 1_000,
-      })
-    }
-    expect(
-      migrated.listTools({ enabledOnly: true }).filter((tool) => tool.processName === 'opencode'),
-    ).toMatchObject([{ slug: 'opencode', name: 'OpenCode', argv: ['agent-hub-opencode', 'mini'] }])
-    expect(migrated.defaultTool()?.slug).toBe('opencode')
-    const canonical = migrated.getTool('opencode')
-    migrated.close()
-    expect(open(path).getTool('opencode')).toEqual(canonical)
+    expect(migrated.schemaVersion()).toBe(9)
+    expect(migrated.listTools().map((tool) => tool.slug)).toEqual([
+      'claude-code',
+      'codex',
+      'agy',
+      'pi',
+      'shell',
+    ])
+    expect(migrated.defaultTool()?.slug).toBe('codex')
+    expect(migrated.getTool('pi')?.processName).toBe('pi')
+    expect(() =>
+      migrated.db.exec("UPDATE agent_tools SET context_hook = 'opencode-plugin' WHERE slug = 'pi'"),
+    ).toThrow(/CHECK constraint/)
   })
 
   it('reopens without reseeding and refuses a newer schema', () => {
@@ -254,18 +251,11 @@ describe('agent tools', () => {
   it('seeds the merged registry with codex as default', () => {
     const store = open()
     const tools = store.listTools()
-    expect(tools.map((tool) => tool.slug)).toEqual([
-      'claude-code',
-      'codex',
-      'agy',
-      'pi',
-      'opencode',
-      'shell',
-    ])
+    expect(tools.map((tool) => tool.slug)).toEqual(['claude-code', 'codex', 'agy', 'pi', 'shell'])
     expect(store.defaultTool()?.slug).toBe('codex')
     expect(store.getTool('codex')?.command).toBe('codex --yolo')
     expect(store.getTool('shell')?.argv).toEqual([])
-    expect(store.getTool('opencode')?.argv).toEqual(['agent-hub-opencode', 'mini'])
+    expect(store.getTool('pi')?.processName).toBe('pi')
   })
 
   it("resolves A-Term's claude slug as an alias", () => {

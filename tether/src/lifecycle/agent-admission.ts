@@ -13,6 +13,7 @@
 
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { isNamedProcess } from './procfs'
 
 export interface AgentAdmissionLimits {
   /** Optional emergency ceiling on active agents; null disables the ceiling. */
@@ -187,7 +188,9 @@ async function cgroupHasAgent(
     if (!pid) continue
     if (!/^[1-9][0-9]*$/.test(pid)) throw new Error('malformed cgroup.procs')
     try {
-      if (names.has((await fs.readFile(`/proc/${pid}/comm`)).trim())) return true
+      const comm = (await fs.readFile(`/proc/${pid}/comm`)).trim()
+      const cmdline = names.has(comm) ? '' : await fs.readFile(`/proc/${pid}/cmdline`)
+      if (isNamedProcess(comm, () => cmdline, names)) return true
     } catch (error) {
       if (!isMissing(error)) throw error
     }

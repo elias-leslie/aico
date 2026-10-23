@@ -20,7 +20,6 @@ import {
   DEFAULT_TOOLS,
   formatCommand,
   isContextHook,
-  OPENCODE_TOOL,
   SLUG_RE,
   type ToolSeed,
   ToolValidationError,
@@ -196,7 +195,8 @@ export class Store {
           .run(6, now)
       }
       if (current < 7) {
-        // Widen the context-hook CHECK while retaining every operator-edited row.
+        // Rebuild with the current context-hook CHECK, retaining every
+        // operator-edited row. (v7 once also seeded OpenCode, since retired.)
         this.db.exec(
           AGENT_TOOLS_TABLE_SQL.replace(
             'CREATE TABLE agent_tools',
@@ -208,31 +208,43 @@ export class Store {
           DROP TABLE agent_tools;
           ALTER TABLE agent_tools_next RENAME TO agent_tools;
           CREATE UNIQUE INDEX agent_tools_one_default ON agent_tools(is_default) WHERE is_default = 1;`)
-        for (const seed of DEFAULT_TOOLS.filter((tool) => tool.contextHook === 'opencode-plugin')) {
-          if (!this.getTool(seed.slug)) this.insertTool(seed, now)
-        }
         this.db
           .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
           .run(7, now)
       }
       if (current < 8) {
-        // OpenCode is one harness; its native UI owns interactive model choice.
-        // Retain old tool identities/commands for existing sessions, but hide
-        // model-specific rows from both apps' enabled-tool pickers.
-        const legacy = ['opencode-deepseek-free', 'opencode-glm-free']
-          .map((slug) => this.getTool(slug))
-          .filter((tool) => tool !== undefined)
-        if (!this.getTool(OPENCODE_TOOL.slug)) this.insertTool(OPENCODE_TOOL, now)
-        for (const tool of legacy) {
-          this.applyToolPatch(tool, { enabled: false, isDefault: false }, now)
-        }
-        if (legacy.some((tool) => tool.isDefault)) {
-          const opencode = this.getTool(OPENCODE_TOOL.slug)
-          if (opencode) this.applyToolPatch(opencode, { enabled: true, isDefault: true }, now)
-        }
+        // v8 once folded OpenCode's model-specific rows into one; OpenCode is retired.
         this.db
           .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
           .run(8, now)
+      }
+      if (current < 9) {
+        // v9: OpenCode leaves the platform (no session used it). Pi 1.4 names its
+        // process `pi`. The rebuild narrows the context-hook CHECK.
+        this.db.exec(`DELETE FROM agent_tools
+            WHERE slug IN ('opencode', 'opencode-deepseek-free', 'opencode-glm-free');
+          UPDATE agent_tools SET context_hook = NULL WHERE context_hook = 'opencode-plugin';
+          UPDATE agent_tools SET process_name = 'pi' WHERE slug = 'pi';`)
+        this.db.exec(
+          AGENT_TOOLS_TABLE_SQL.replace(
+            'CREATE TABLE agent_tools',
+            'CREATE TABLE agent_tools_next',
+          ),
+        )
+        this.db.exec(`INSERT INTO agent_tools_next SELECT * FROM agent_tools;
+          DROP INDEX agent_tools_one_default;
+          DROP TABLE agent_tools;
+          ALTER TABLE agent_tools_next RENAME TO agent_tools;
+          CREATE UNIQUE INDEX agent_tools_one_default ON agent_tools(is_default) WHERE is_default = 1;`)
+        if (!this.listTools().some((tool) => tool.isDefault)) {
+          const seeded = DEFAULT_TOOLS.find((tool) => tool.isDefault)?.slug
+          const enabled = this.listTools({ enabledOnly: true })
+          const next = enabled.find((tool) => tool.slug === seeded) ?? enabled[0]
+          if (next) this.applyToolPatch(next, { isDefault: true }, now)
+        }
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(9, now)
       }
     })
   }

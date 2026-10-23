@@ -28,20 +28,6 @@ export interface AgentTool {
 
 export type ToolSeed = Omit<AgentTool, 'id' | 'command' | 'createdAt' | 'updatedAt'>
 
-export const OPENCODE_TOOL: ToolSeed = {
-  slug: 'opencode',
-  name: 'OpenCode',
-  argv: ['agent-hub-opencode', 'mini'],
-  processName: 'opencode',
-  description: 'OpenCode coding agent',
-  color: '#7C3AED',
-  displayOrder: 4,
-  isDefault: false,
-  enabled: true,
-  aliases: [],
-  contextHook: 'opencode-plugin',
-}
-
 /**
  * Seeded once when the database is created. Canonical slugs follow Aico
  * (widget rows and the root contract use `claude-code`); A-Term's `claude`
@@ -94,7 +80,7 @@ export const DEFAULT_TOOLS: readonly ToolSeed[] = [
     slug: 'pi',
     name: 'Pi',
     argv: ['pi', '--approve'],
-    processName: 'pi-coding-agent',
+    processName: 'pi',
     description: 'Pi coding agent',
     color: '#C16A8A',
     displayOrder: 3,
@@ -103,7 +89,6 @@ export const DEFAULT_TOOLS: readonly ToolSeed[] = [
     aliases: [],
     contextHook: 'pi-extension',
   },
-  OPENCODE_TOOL,
   {
     slug: 'shell',
     name: 'Shell',

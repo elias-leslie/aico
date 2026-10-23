@@ -56,8 +56,6 @@ export async function ensureContext(spec: TuiSpec): Promise<ContextStatus> {
       return codexHooks(spec)
     case 'pi-extension':
       return piExtension()
-    case 'opencode-plugin':
-      return opencodePlugin()
     case 'canonical-retrieval':
       return canonicalRetrieval(spec.context.surface)
   }
@@ -331,10 +329,36 @@ async function codexHooks(spec: TuiSpec): Promise<ContextStatus> {
   })
 }
 
+/** SummitFlow's deployed Pi coordination extension: `$ST_PI_COORD_EXTENSION`,
+ * else the current SummitFlow release under ~/.summitflow. */
+function stCoordSource(): string {
+  return (
+    process.env.ST_PI_COORD_EXTENSION ||
+    join(
+      homedir(),
+      '.summitflow/services/projects/summitflow/current/source/scripts/lib/pi-coord-extension.ts',
+    )
+  )
+}
+
+/** Null when ~/.pi/agent/extensions/st-coord.ts resolves to SummitFlow's
+ * current extension, else what drifted. Installing it is SummitFlow's job. */
+function stCoordDrift(): string | null {
+  const link = join(homedir(), '.pi', 'agent', 'extensions', 'st-coord.ts')
+  try {
+    return realpathSync(link) === realpathSync(stCoordSource())
+      ? null
+      : `${link} does not resolve to SummitFlow's current ${stCoordSource()}`
+  } catch {
+    return `${link} or ${stCoordSource()} is missing`
+  }
+}
+
 /** Pi loads source-controlled extensions from ~/.pi/agent/extensions. Verify
  * that the active entry resolves to Agent Hub's canonical adapter source and
  * that the adapter preserves Pi's native system prompt before appending the
- * delivered contract. */
+ * delivered contract, and that SummitFlow's coordination extension has not
+ * drifted from its current release. */
 function piExtension(): ContextStatus {
   const extension = join(homedir(), '.pi', 'agent', 'extensions', 'agent-hub.ts')
   const repo = agentHubRepo()
@@ -356,40 +380,22 @@ function piExtension(): ContextStatus {
       body.includes('event.systemPrompt') &&
       body.includes('contract.rendered') &&
       body.includes('AH: DEGRADED')
-    return canonical && additive
-      ? {
-          state: 'available',
-          detail: `${extension}: canonical additive Agent Hub extension installed; model receipt is unverified`,
-        }
+    if (!canonical || !additive) {
+      return {
+        state: 'missing',
+        detail: `${extension} is drifted or does not preserve Pi's native system prompt`,
+      }
+    }
+    const drift = stCoordDrift()
+    return drift
+      ? { state: 'missing', detail: `${drift}; native Pi continues` }
       : {
-          state: 'missing',
-          detail: `${extension} is drifted or does not preserve Pi's native system prompt`,
+          state: 'available',
+          detail: `${extension}: canonical additive Agent Hub extension installed and st-coord.ts current; model receipt is unverified`,
         }
   } catch {
     return { state: 'missing', detail: `${extension} is unreadable — cannot verify context` }
   }
-}
-
-/** Verify source links only; receipt of context remains a per-request fact. */
-function opencodePlugin(): ContextStatus {
-  const repo = agentHubRepo()
-  if (!repo) return unknownCheckout('AGENT_HUB_REPO', 'agent-hub')
-  const root = join(repo, 'integrations', 'context-delivery', 'opencode')
-  const links = [
-    [join(homedir(), '.config', 'opencode', 'plugins', 'agent-hub.js'), join(root, 'agent-hub.js')],
-    [join(homedir(), '.local', 'bin', 'agent-hub-opencode'), join(root, 'launcher')],
-  ]
-  try {
-    if (links.every(([target, source]) => realpathSync(target) === source)) {
-      return {
-        state: 'available',
-        detail: 'Canonical OpenCode plugin and launcher installed; model receipt is unverified',
-      }
-    }
-  } catch {
-    // Native OpenCode can still run when supplemental context is unavailable.
-  }
-  return { state: 'missing', detail: 'Canonical OpenCode plugin or launcher is missing or drifted' }
 }
 
 /** Run only after Tether has retired the exact owned workload. */
@@ -397,12 +403,7 @@ export function finalizeContext(
   spec: TuiSpec | undefined,
   ownershipId: string,
 ): Promise<boolean | null> {
-  const surface =
-    spec?.context?.kind === 'opencode-plugin'
-      ? 'opencode'
-      : spec?.context?.kind === 'pi-extension'
-        ? 'pi'
-        : null
+  const surface = spec?.context?.kind === 'pi-extension' ? 'pi' : null
   if (!surface) return Promise.resolve(null)
   return new Promise((resolve) => {
     execFile(

@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { UUID_RE as UUID } from '../continuity'
 import { listenPrivateSocket } from '../http'
 import {
   allocateWidgetId,
@@ -1054,7 +1055,7 @@ describe('private root workload control', () => {
             '--thinking',
             effort,
             '--approve',
-            ...(resume ? ['--session', resume] : []),
+            ...(resume ? ['--session', resume] : ['--session-id', expect.stringMatching(UUID)]),
             '--',
             'Reply only.',
           ])
@@ -1127,7 +1128,7 @@ describe('private root workload control', () => {
                 '--thinking',
                 'xhigh',
                 '--approve',
-                ...(resume ? ['--session', resume] : []),
+                ...(resume ? ['--session', resume] : ['--session-id', expect.stringMatching(UUID)]),
                 '--',
                 'Synthetic prompt.',
               ],
@@ -1143,100 +1144,58 @@ describe('private root workload control', () => {
     expect(rootLaunchEnvironment(root.widgetId).AICO_ROOT_AGENT_HUB_CONTEXT).toBe('')
   })
 
-  it.each([
-    null,
-    'opencode/deepseek-v4.1-flash-free',
-    'opencode/glm-5.3-flash-free',
-  ])('creates and resumes OpenCode with model %s and an exact native session', async (model) => {
-    const thread = 'ses_0123456789abcdefghijklmnopqrstuvwxyz'
-    const modelKey = model?.split('/')[1] ?? 'default'
-    const input = { ...create(`opencode-${modelKey}`), tool: 'opencode', model }
-    for (const resume of [null, thread]) {
-      const request = {
-        ...input,
-        requestId: `${modelKey}-${resume ? 'resume' : 'fresh'}`,
-        resumeSessionId: resume,
-      }
-      const created = await call('/v1/roots', 'POST', request)
-      expect(created.status).toBe(200)
-      expect(created.body.tool).toBe('opencode')
-      expect(await call('/v1/roots', 'POST', request)).toEqual(created)
-      const options = model === null ? undefined : { model, reasoningEffort: null }
-      expect(ensure).toHaveBeenLastCalledWith(
-        created.body.hostIdentity,
-        input.initialPrompt,
-        resume,
-        ...(options ? [options] : []),
-      )
-      const root = present(getRootRequest(request.requestId))
-      const tool = present(getTui('opencode'))
+  it('launches Pi with one --approve and carries its chosen session ID to the agent', async () => {
+    const input = { ...create('pi-approve-once'), tool: 'pi', model: 'openai/gpt-6.1-sol' }
+    expect((await call('/v1/roots', 'POST', input)).status).toBe(200)
+    const root = present(getRootRequest(input.requestId))
+    const pi = present(getTui('pi'))
+    expect(pi.command).toEqual(['pi', '--approve'])
+    // The registry argv's own --approve reaches the agent; the launch adds none.
+    const tool = {
+      ...pi,
+      command: [
+        process.execPath,
+        '-e',
+        'console.log(JSON.stringify({args:process.argv.slice(1),session:process.env.TETHER_AGENT_SESSION_ID}))',
+        '--',
+        ...pi.command.slice(1),
+      ],
+    }
+    for (const resume of [null, '00000000-0000-4000-8000-000000000002'])
       await withRootPrompt(
         root.widgetId,
-        input.initialPrompt,
+        'Reply only.',
         async () => {
-          const line = present(
-            initialLaunchLine(root.widgetId, {
-              ...tool,
-              command: [
-                process.execPath,
-                '-e',
-                'console.log(JSON.stringify(process.argv.slice(1)))',
-                ...tool.command.slice(1),
-              ],
-            }),
-          )
-          const output = execFileSync('/bin/bash', ['--noprofile', '--norc', '-c', line], {
-            env: { PATH: '/usr/bin:/bin', ...rootLaunchEnvironment(root.widgetId) },
-            encoding: 'utf8',
+          const result = JSON.parse(
+            execFileSync(
+              '/bin/bash',
+              ['--noprofile', '--norc', '-c', present(initialLaunchLine(root.widgetId, tool))],
+              {
+                env: { PATH: '/usr/bin:/bin', ...rootLaunchEnvironment(root.widgetId) },
+                encoding: 'utf8',
+              },
+            ),
+          ) as { args: string[]; session: string }
+          const session = resume ?? result.session
+          expect(session).toMatch(UUID)
+          expect(result).toEqual({
+            args: [
+              '--approve',
+              '--provider',
+              'openai',
+              '--model',
+              'gpt-6.1-sol',
+              ...(resume ? ['--session', resume] : ['--session-id', session]),
+              '--',
+              'Reply only.',
+            ],
+            session,
           })
-          expect(JSON.parse(output)).toEqual([
-            'mini',
-            ...(model ? ['--model', model] : []),
-            ...(resume ? ['--session', resume] : []),
-            '--',
-            input.initialPrompt,
-          ])
         },
         resume,
-        options,
+        { model: input.model, reasoningEffort: null },
       )
-      for (const changed of [
-        { model: 'another-provider/model' },
-        { resumeSessionId: 'ses_another' },
-      ])
-        expect((await call('/v1/roots', 'POST', { ...request, ...changed })).status).toBe(409)
-    }
-    for (const invalid of [
-      '',
-      'last',
-      'ses_',
-      'SES_native',
-      '00000000-0000-4000-8000-000000000001',
-      `ses_${'a'.repeat(101)}`,
-      `${thread};echo x`,
-      `${thread}/other`,
-      ...['\n', '\r', '\r\n', '\u2028', '\u2029'].map((suffix) => thread + suffix),
-    ])
-      expect(parseRootCreate({ ...input, resumeSessionId: invalid })).toBeNull()
-    expect(parseRootCreate({ ...input, resumeSessionId: `ses_${'a'.repeat(100)}` })).not.toBeNull()
-    for (const model of [
-      '',
-      'model-only',
-      '/model',
-      'provider/',
-      'provider/model;echo x',
-      `provider/${'a'.repeat(128)}`,
-    ])
-      expect(parseRootCreate({ ...input, model })).toBeNull()
-    expect(parseRootCreate({ ...input, model: 'another-provider/model' })).not.toBeNull()
-    for (const selection of [
-      { reasoningEffort: 'high' },
-      { daybreak: false },
-      { agentHubContext: true },
-    ])
-      expect(parseRootCreate({ ...input, ...selection })).toBeNull()
-    for (const tool of ['opencode-deepseek-free', 'opencode-glm-free', 'opencode-other-free'])
-      expect(parseRootCreate({ ...input, tool })).toBeNull()
+    expect(parseRootCreate({ ...input, tool: 'opencode' })).toBeNull()
   })
 
   it('refuses a new root that would resume a conversation crash recovery owns', async () => {

@@ -12,7 +12,7 @@
  * A tool job is one tool session (a Claude Bash call is its own session) or,
  * when it shares the agent's session (Codex), the process tree under one agent
  * child; it can sit in a pane or in a run-*.scope started from one. The guard
- * never kills a pane's root shell or its agent (claude, codex): an agent that
+ * never kills a pane's root shell or its agent (a registry tool): an agent that
  * is itself the biggest user is only recorded (agent-hog).
  * Each tick it also moves pane tools that inherited the agent's oom_score_adj
  * 100 back to 200, so the kernel prefers a tool over the agent.
@@ -46,8 +46,8 @@ const MIN_GROWTH = 256 * 2 ** 20
 const NOTE_GAP_MS = 1_800_000
 export const AGENT_ADJ = 100
 export const TOOL_ADJ = 200
-const AGENT_COMMS = new Set(['claude', 'codex'])
-const AGENT_BINS = new Set(['claude', 'codex', 'codex-real'])
+/** codex-config's `codex` launcher runs the real binary under this name. */
+const WRAPPED_AGENT_BINS = new Set(['codex-real'])
 const CMDLINE_HEAD = 200
 const CACHE_CMD_MIN = 256 * 2 ** 20
 const EVENTS_MAX_BYTES = 2 * 2 ** 20
@@ -108,12 +108,18 @@ export function jobTop(job: Job): Proc {
   )
 }
 
-export function isAgentProcess(comm: string, argv: string[]): boolean {
-  return AGENT_COMMS.has(comm) || argv.slice(0, 2).some((a) => AGENT_BINS.has(basename(a)))
+/** `names` are the registry's agent process names. The argv check also covers
+ * an agent whose comm is still its interpreter's (Pi is `node` until it sets
+ * its title). */
+export function isAgentProcess(comm: string, argv: string[], names: ReadonlySet<string>): boolean {
+  return (
+    names.has(comm) ||
+    argv.slice(0, 2).some((a) => names.has(basename(a)) || WRAPPED_AGENT_BINS.has(basename(a)))
+  )
 }
 
 /**
- * Find a pane's root shell and agents. An agent is a claude/codex the root
+ * Find a pane's root shell and agents. An agent is a registry tool the root
  * shell started, or an agent child of an agent in that agent's process group
  * (codex-real under codex). Codex tools run in their own process groups, so a
  * `codex exec` tool stays a tool. With no root shell every agent process is
@@ -509,6 +515,8 @@ export interface JobGuardOptions {
   eventsPath: string
   heartbeatPath: string
   policy: () => MemoryPolicy
+  /** Agent process names (comm) from the tool registry. */
+  agentNames: () => ReadonlySet<string>
   /** The pane scope the owner is looking at (background-first). */
   foreground?: () => string | null
   /** Pane scope -> Tether session id, for records. */
@@ -597,10 +605,11 @@ export class JobGuard {
     const cached = this.agentCache.get(key)
     if (cached !== undefined) return cached
     let verdict: boolean
-    if (AGENT_COMMS.has(p.comm)) verdict = true
+    const names = this.options.agentNames()
+    if (names.has(p.comm)) verdict = true
     else if (this.state === 'red' && !seed)
       return false // asked again once memory is not critical
-    else verdict = isAgentProcess(p.comm, argvOf(this.procRoot, p.pid))
+    else verdict = isAgentProcess(p.comm, argvOf(this.procRoot, p.pid), names)
     this.agentCache.set(key, verdict)
     return verdict
   }

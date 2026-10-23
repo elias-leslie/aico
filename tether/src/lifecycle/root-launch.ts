@@ -1,3 +1,4 @@
+import { AGENT_SESSION_ENV } from '../continuity'
 import { getWidget, rootRequestForWidget } from './catalog'
 import type { RootLaunchOptions } from './root-control'
 import { isResumeSessionId, launchLine, resumeLaunchLine } from './tui/launch'
@@ -110,13 +111,21 @@ export function initialLaunchLine(widgetId: string, tool: TuiSpec): string | nul
     selection?.daybreak && 'arguments' in selection.daybreak
       ? `if [ -n "$AICO_ROOT_DAYBREAK" ]; then set -- "$@" ${selection.daybreak.arguments.join(' ')} "${selection.daybreak.key}=$AICO_ROOT_DAYBREAK"; fi; `
       : ''
-  const projectTrust = tool.slug === 'pi' ? 'set -- "$@" --approve; ' : ''
+  const projectTrust =
+    tool.slug === 'pi' && !tool.command.includes('--approve') ? 'set -- "$@" --approve; ' : ''
+  // A tool that keeps no observable session record starts under an ID Tether
+  // picks; the agent's environment carries it so continuity can read it.
+  const fresh = tool.resume?.freshArguments
+  const chosen = fresh
+    ? `${AGENT_SESSION_ENV}="\${AICO_ROOT_RESUME_SESSION_ID:-$(cat /proc/sys/kernel/random/uuid)}"; `
+    : ''
+  const agentEnv = fresh ? ` ${AGENT_SESSION_ENV}="$${AGENT_SESSION_ENV}"` : ''
   const selected = `${line} "$@"`
-  const initial = `${clean} ${selected}`
+  const initial = `${clean}${agentEnv} ${selected}${fresh ? ` ${fresh.join(' ')} "$${AGENT_SESSION_ENV}"` : ''}`
   const resume = resumeLaunchLine(tool)
   const resumed = resume
-    ? `${clean} ${selected} ${tool.resume?.arguments.join(' ')} "$AICO_ROOT_RESUME_SESSION_ID" -- "$AICO_ROOT_INITIAL_PROMPT"`
+    ? `${clean}${agentEnv} ${selected} ${tool.resume?.arguments.join(' ')} "$AICO_ROOT_RESUME_SESSION_ID" -- "$AICO_ROOT_INITIAL_PROMPT"`
     : 'exit 64'
   const launch = `if [ -n "$AICO_ROOT_RESUME_SESSION_ID" ]; then ${resumed}; else ${initial} -- "$AICO_ROOT_INITIAL_PROMPT"; fi`
-  return `if [ "$AICO_ROOT_INITIAL_LAUNCH" = 1 ]; then set --; ${flags}${daybreak}${projectTrust}${launch}; else ${line}; fi`
+  return `if [ "$AICO_ROOT_INITIAL_LAUNCH" = 1 ]; then set --; ${flags}${daybreak}${projectTrust}${chosen}${launch}; else ${line}; fi`
 }

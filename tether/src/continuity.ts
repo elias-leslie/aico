@@ -229,9 +229,32 @@ export function observeCodex(fs: ProcFs, pids: number[]): AgentObservation | nul
   return null
 }
 
+/** Environment variable carrying the conversation ID Tether chose for an
+ * agent that keeps no observable session record (root-launch.ts). */
+export const AGENT_SESSION_ENV = 'TETHER_AGENT_SESSION_ID'
+
+/** The first process in `pids` (pane order, so the agent before anything it
+ * started) launched under a Tether-chosen conversation ID. */
+export function observeChosenSession(fs: ProcFs, pids: number[]): AgentObservation | null {
+  for (const pid of pids) {
+    let environ: string
+    try {
+      environ = fs.readFile(`/proc/${pid}/environ`)
+    } catch {
+      continue
+    }
+    for (const entry of environ.split('\0')) {
+      if (!entry.startsWith(`${AGENT_SESSION_ENV}=`)) continue
+      const id = entry.slice(AGENT_SESSION_ENV.length + 1)
+      if (UUID_RE.test(id)) return { pid, resumeId: id, idle: null, blocked: false }
+    }
+  }
+  return null
+}
+
 export function observeAgent(fs: ProcFs, home: string, panePid: number): AgentObservation | null {
   const pids = processTree(fs, panePid)
-  return observeClaude(fs, home, pids) ?? observeCodex(fs, pids)
+  return observeClaude(fs, home, pids) ?? observeCodex(fs, pids) ?? observeChosenSession(fs, pids)
 }
 
 // --- state files ----------------------------------------------------------------

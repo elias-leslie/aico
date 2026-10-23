@@ -3,6 +3,7 @@ import {
   type ContinuitySnapshot,
   mergeSnapshot,
   observeAgent,
+  observeChosenSession,
   observeClaude,
   observeCodex,
   type ProcFs,
@@ -51,6 +52,23 @@ function procfs(files: Record<string, string>, links: Record<string, string> = {
 }
 
 describe('agent observation', () => {
+  it('reads a Tether-chosen conversation ID from the first process that carries it', () => {
+    const PI = '01a16927-f86d-712d-ba90-b9f5c9ac553b'
+    const fs = procfs({
+      '/proc/20/environ': 'HOME=/home/u\0',
+      '/proc/21/environ': `HOME=/home/u\0TETHER_AGENT_SESSION_ID=${PI}\0`,
+      '/proc/22/environ': 'TETHER_AGENT_SESSION_ID=00000000-0000-4000-8000-000000000009\0',
+      '/proc/23/environ': 'TETHER_AGENT_SESSION_ID=not-a-uuid\0',
+    })
+    expect(observeChosenSession(fs, [20, 21, 22])).toEqual({
+      pid: 21,
+      resumeId: PI,
+      idle: null,
+      blocked: false,
+    })
+    expect(observeChosenSession(fs, [19, 20, 23])).toBeNull()
+  })
+
   it('walks the pane process tree through every task', () => {
     const fs = procfs({
       '/proc/10/task/10/children': '11 12',

@@ -17,7 +17,6 @@ export type ContextHook =
   | { kind: 'claude-session-start' }
   | { kind: 'codex-hooks' }
   | { kind: 'pi-extension' }
-  | { kind: 'opencode-plugin' }
   | { kind: 'canonical-retrieval'; surface: 'antigravity' }
 
 /** Outcome of verifying/ensuring a TUI's context hook. */
@@ -61,7 +60,13 @@ export interface TuiSpec {
   /** Native resume capability. The owner validates the opaque session ID with
    * this adapter's pattern and appends only these fixed arguments before the
    * session ID, then `--` and the transient recovery prompt. No caller argv. */
-  resume?: { sessionIdPattern: RegExp; arguments: string[] }
+  resume?: {
+    sessionIdPattern: RegExp
+    arguments: string[]
+    /** Fixed arguments that start a fresh conversation under an ID Tether
+     * picks, for a tool whose running process names no session (Pi). */
+    freshArguments?: string[]
+  }
   /** Fixed CLI flags for per-launch model overrides; never caller-supplied argv. */
   modelSelection?: {
     model: string[]

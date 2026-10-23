@@ -158,14 +158,7 @@ const spec = (over: Partial<TuiSpec> = {}): TuiSpec => ({
 describe('registry', () => {
   it('serves the seeded agent tools in display order', () => {
     registerBuiltinTuis()
-    expect(listTuis().map((t) => t.slug)).toEqual([
-      'claude-code',
-      'codex',
-      'agy',
-      'pi',
-      'opencode',
-      'shell',
-    ])
+    expect(listTuis().map((t) => t.slug)).toEqual(['claude-code', 'codex', 'agy', 'pi', 'shell'])
   })
 
   it('defaults to the registry default (Codex, owner decision)', () => {
@@ -198,17 +191,6 @@ describe('registry', () => {
     expect(getTui('shell') && launchLine(getTui('shell') as TuiSpec)).toBeNull()
   })
 
-  it('launches one OpenCode harness with native model selection and exact resume', () => {
-    registerBuiltinTuis()
-    const tool = getTui('opencode')
-    expect(tool?.context).toEqual({ kind: 'opencode-plugin' })
-    expect(tool?.command).toEqual(['agent-hub-opencode', 'mini'])
-    expect(tool?.modelSelection).toEqual({ model: ['--model'] })
-    expect(tool?.resume?.arguments).toEqual(['--session'])
-    expect(tool && launchLine(tool)).toContain('agent-hub-opencode mini')
-    expect(tool && resumeLaunchLine(tool)).toContain('agent-hub-opencode mini --session')
-  })
-
   it('hides disabled tools from listing but keeps them resolvable', () => {
     registerTools([tool({ slug: 'hidden', enabled: false })])
     expect(listTuis()).toHaveLength(0)
@@ -223,21 +205,10 @@ describe('registry', () => {
 
   it('makes a tool root-capable exactly when it has a resume adapter', () => {
     expect(ROOT_TOOLS).toEqual(Object.keys(RESUME_ADAPTERS).sort())
-    expect(ROOT_TOOLS).toEqual(['claude-code', 'codex', 'opencode', 'pi'])
+    expect(ROOT_TOOLS).toEqual(['claude-code', 'codex', 'pi'])
     for (const slug of ROOT_TOOLS) expect(isRootTool(slug)).toBe(true)
     // Canonical slugs only: the root digest covers the tool string as sent.
-    for (const slug of [
-      'claude',
-      'agy',
-      'shell',
-      'opencode-deepseek-free',
-      'opencode-glm-free',
-      'opencode-other-free',
-      'opencode-deepseek',
-      'toString',
-      '__proto__',
-      7,
-    ])
+    for (const slug of ['claude', 'agy', 'shell', 'opencode', 'toString', '__proto__', 7])
       expect(isRootTool(slug)).toBe(false)
   })
 })
@@ -577,11 +548,36 @@ describe('ensureContext', () => {
     const status = await ensureContext(spec({ context: { kind: 'pi-extension' } }))
     expect(status.state).toBe('available')
   })
+
+  it("reports Pi's st-coord.ts drifting from SummitFlow's current extension", async () => {
+    vi.stubEnv('AGENT_HUB_REPO', '/opt/projects/agent-hub')
+    vi.stubEnv('ST_PI_COORD_EXTENSION', '/opt/summitflow/current/pi-coord-extension.ts')
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(readFileSync).mockReturnValue(
+      'pi.on("input", () => ({ action: "continue" })); pi.on("before_agent_start", () => event.systemPrompt + contract.rendered); "AH: DEGRADED"',
+    )
+    const resolve = (coord: string) =>
+      vi
+        .mocked(realpathSync)
+        .mockImplementation(((path: string) =>
+          path.endsWith('agent-hub.ts')
+            ? '/opt/projects/agent-hub/integrations/context-delivery/pi/agent-hub.ts'
+            : path.endsWith('st-coord.ts')
+              ? coord
+              : '/opt/summitflow/releases/b/pi-coord-extension.ts') as never)
+    resolve('/opt/summitflow/releases/b/pi-coord-extension.ts')
+    expect((await ensureContext(spec({ context: { kind: 'pi-extension' } }))).state).toBe(
+      'available',
+    )
+    resolve('/opt/summitflow/releases/a/pi-coord-extension.ts')
+    const drifted = await ensureContext(spec({ context: { kind: 'pi-extension' } }))
+    expect(drifted.state).toBe('missing')
+    expect(drifted.detail).toContain('st-coord.ts does not resolve')
+  })
 })
 
 describe('Native retirement context', () => {
   it.each([
-    ['opencode-plugin', 'opencode'],
     ['pi-extension', 'pi'],
   ] as const)('finalizes only the exact ownership ID after %s retirement', async (kind, surface) => {
     vi.mocked(execFile).mockImplementation(((
@@ -605,7 +601,6 @@ describe('Native retirement context', () => {
     expect(execFile).not.toHaveBeenCalled()
   })
   it.each([
-    'opencode-plugin',
     'pi-extension',
   ] as const)('reports unavailable %s accounting without claiming completion', async (kind) => {
     vi.mocked(execFile).mockImplementation(((

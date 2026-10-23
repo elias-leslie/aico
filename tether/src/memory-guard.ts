@@ -15,6 +15,7 @@ import {
   type PaneCapResult,
   systemdPaneCapFiles,
 } from './lifecycle/pane-caps'
+import { agentProcessNames } from './lifecycle/tui/registry'
 import { applyMemoryPolicyPatch, type MemoryPolicy, parseStoredMemoryPolicy } from './memory-policy'
 import type { Store } from './store'
 
@@ -114,6 +115,7 @@ export function startMemoryGuard(
     eventsPath: memoryEventsPath(env, home),
     heartbeatPath: join(paths.runtimeDir, 'memory-guard.json'),
     policy: () => service.get(),
+    agentNames: agentProcessNames,
     foreground: hooks.foreground,
     sessionOf: hooks.sessionOf,
   })

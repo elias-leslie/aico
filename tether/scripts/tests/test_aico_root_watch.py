@@ -343,7 +343,7 @@ def pane_receipt():
 
 def discovery_receipts(monkeypatch, instance, roots=None, mutate=None):
     root = {**root_receipt(), "tool": "codex"}
-    if roots and len(roots) == 1 and roots[0].get("tool") == "claude-code":
+    if roots and len(roots) == 1 and roots[0].get("tool") in ("claude-code", "pi"):
         root = roots[0]
     owner = {**pane_receipt(), "tmuxServerId": PIN.tmuxServerId,
              "tmuxSocket": "/fixture/tmux", "tool": root["tool"]}
@@ -401,6 +401,43 @@ def test_discovery_claude_uses_verified_profile_and_content_free_sample(monkeypa
     assert state["terminal"] == "input_required"
     assert state["observation"] == "available"
     assert "Safeguard" not in json.dumps(state)
+
+
+@pytest.mark.parametrize("screen,terminal,banners", [
+    ("Earlier answer\n⠋ Working (escape to interrupt)\n─────\n~/project\n$0.010 0.4%/1.0M", "busy", []),
+    ("Earlier answer\n─────\n~/project\n$0.010 0.4%/1.0M (openai) gpt-6.1-sol", "ambiguous", []),
+    ("```text\nWorking (escape to interrupt)\n```\n─────", "ambiguous", []),
+    ("Rate limit exceeded, retrying\n─────", "ambiguous", ["capacity"]),
+    ("Would you like to run this?\n─────", "ambiguous", []),
+])
+def test_pi_advisory_states_keep_no_text(screen, terminal, banners):
+    state, sample = watcher.classify(screen.encode(), "pi")
+    assert (state["terminal"], state["banners"]) == (terminal, banners)
+    assert sample == ""
+    assert "project" not in json.dumps(state)
+
+
+def test_discovery_pi_uses_its_profile(monkeypatch):
+    instance = collector()
+    discovery_receipts(monkeypatch, instance, [{**root_receipt(), "tool": "pi"}])
+    resolved, unavailable = instance.discover(None)
+    assert unavailable == []
+    pin, child = resolved[0]
+    assert child.profile == "pi"
+    fake_commands(monkeypatch, child, "⠋ Working (escape to interrupt)\n".encode())
+    assert child.sample(pin)["terminal"] == "busy"
+
+
+@pytest.mark.parametrize("reason,code", [("unsupported_profile", 0), ("pane_unavailable", 1)])
+def test_roots_fail_only_for_failed_observation(monkeypatch, reason, code):
+    record = {"requestId": "other", "observation": "unavailable", "identity": "unresolved",
+              "reason": reason}
+    output = []
+    monkeypatch.setattr(watcher.Collector, "discover", lambda self, request_id: ([], [record]))
+    monkeypatch.setattr(watcher, "emit_json", lambda _, row: output.append(row))
+    assert watcher.roots_main(["--root-socket", "/fixture/root",
+                               "--owner-socket", "/fixture/owner"]) == code
+    assert output == [{"owner": "aico", "roots": [record]}]
 
 
 def test_discovery_claude_owner_tool_mismatch_fails_closed(monkeypatch):

@@ -23,6 +23,22 @@ export function processEnvironment(pid: number): ReadonlyMap<string, string> | n
   }
 }
 
+/** True when the process with this comm and raw /proc cmdline is one of the
+ * named agents: by comm, else by the basename of its first two argv words,
+ * which covers an interpreted agent before it sets its title (Pi runs as
+ * `node …/bin/pi` until it renames itself `pi`). */
+export function isNamedProcess(
+  comm: string,
+  cmdline: () => string,
+  names: ReadonlySet<string>,
+): boolean {
+  if (names.has(comm)) return true
+  return cmdline()
+    .split('\0')
+    .slice(0, 2)
+    .some((arg) => names.has(arg.slice(arg.lastIndexOf('/') + 1)))
+}
+
 export function processStartTime(pid: number): string | null {
   try {
     return processStartTimeFromStat(readFileSync(`/proc/${pid}/stat`, 'utf8'))

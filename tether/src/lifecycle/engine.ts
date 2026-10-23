@@ -157,7 +157,7 @@ import {
 import { ensureContext, finalizeContext } from './tui/context'
 import { detectTuiFromProcessNames, parseProcessTable, processTreeNames } from './tui/detect'
 import { launchLine, paneCommand, paneGatePath } from './tui/launch'
-import { getTui, listTuis } from './tui/registry'
+import { agentProcessNames, getTui, listTuis } from './tui/registry'
 import type { ContextStatus, TuiSpec } from './tui/spec'
 
 const execFileAsync = promisify(execFile)
@@ -229,11 +229,7 @@ const agentAdmission = new AgentAdmission(
         },
         appSliceDir: `/sys/fs/cgroup/user.slice/user-${uid}.slice/user@${uid}.service/app.slice`,
         isPaneScope: isOwnedPaneScope,
-        agentProcessNames: new Set(
-          listTuis()
-            .filter((tui) => tui.slug !== 'shell' && tui.processName)
-            .map((tui) => tui.processName),
-        ),
+        agentProcessNames: agentProcessNames(),
       })
     },
     nightshiftVerdict: () => readNightshiftAdmission(nightshiftAdmissionPath()),

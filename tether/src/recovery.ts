@@ -54,7 +54,7 @@ import {
   respawnAndRelaunch,
   verifiedCurrentManagedPane,
 } from './lifecycle/engine'
-import { processEnvironment } from './lifecycle/procfs'
+import { isNamedProcess, processEnvironment } from './lifecycle/procfs'
 import { launchingResume, withRootPrompt } from './lifecycle/root-launch'
 import { paneExitedEventPath } from './lifecycle/tmux'
 import {
@@ -255,7 +255,9 @@ function agentInPane(home: string, panePid: number, tool: string): AgentSeen | n
   for (const pid of processTree(nodeProcFs, panePid)) {
     if (pid === panePid) continue
     try {
-      if (nodeProcFs.readFile(`/proc/${pid}/comm`).trim() === name) return { pid, resumeId: null }
+      const comm = nodeProcFs.readFile(`/proc/${pid}/comm`).trim()
+      if (isNamedProcess(comm, () => nodeProcFs.readFile(`/proc/${pid}/cmdline`), new Set([name])))
+        return { pid, resumeId: null }
     } catch {
       // exited meanwhile
     }

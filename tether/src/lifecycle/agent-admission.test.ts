@@ -374,6 +374,22 @@ describe('observeAgentScopes', () => {
     )
   })
 
+  it('counts Pi while it still runs as node, before it names itself', async () => {
+    const fs = fakeFs(
+      { [APP]: ['tmux-spawn-pi.scope'], [`${APP}/tmux-spawn-pi.scope`]: [] },
+      {
+        [`${APP}/tmux-spawn-pi.scope/cgroup.procs`]: '40\n41\n',
+        '/proc/40/comm': 'bash\n',
+        '/proc/40/cmdline': 'bash\0',
+        '/proc/41/comm': 'node\n',
+        '/proc/41/cmdline': 'node\0/opt/pi/node_modules/.bin/pi\0--approve\0',
+      },
+    )
+    expect(
+      await observeAgentScopes({ ...options(fs), agentProcessNames: new Set(['pi']) }),
+    ).toEqual(new Set(['tmux-spawn-pi.scope']))
+  })
+
   it('fails closed on malformed cgroup.procs', async () => {
     const fs = fakeFs(
       { [APP]: ['tmux-spawn-a.scope'], [`${APP}/tmux-spawn-a.scope`]: [] },

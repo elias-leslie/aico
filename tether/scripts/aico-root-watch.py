@@ -4,7 +4,8 @@
 Use `st aico roots [REQUEST_ID] [--watch SECONDS]` for compact snapshots or
 bounded change-only JSONL. Discovery reads existing private catalog/owner receipts
 and verifies exact tmux server/pane identity once; a watch never re-pins.
-Unknown TUI profiles are unavailable. Output contains no terminal or draft text.
+Unknown TUI profiles are reported unavailable without failing the command. Output
+contains no terminal or draft text.
 
 Explicit-pin compatibility: invoke with --root-socket, --owner-socket, --tmux-socket,
 --duration SECONDS and one or more --root JSON objects containing all Pin fields.
@@ -330,10 +331,32 @@ def classify_claude(raw: bytes) -> tuple[dict, str]:
             "banners": [], "markers": []}, ""
 
 
+def classify_pi(raw: bytes) -> tuple[dict, str]:
+    """Recognize only Pi's working indicator and bottom banners; never retain Pi pane text."""
+    if len(raw) > CAPTURE_LIMIT:
+        raise Unavailable("capture_limit")
+    lines = CONTROL.sub("", raw.decode("utf-8", errors="replace")).splitlines()
+    tail = []
+    fenced = False
+    for i, line in enumerate(lines):
+        fence = line.strip().startswith(("```", "~~~"))
+        if not fenced and not fence and line.strip() and i >= len(lines) - 12:
+            tail.append(line.strip())
+        if fence:
+            fenced = not fenced
+    banners = sorted({kind for kind, pattern in BANNERS
+                      if kind != "approval" and any(pattern.fullmatch(line) for line in tail)})
+    terminal = "busy" if any(ACTIVE.fullmatch(line) for line in tail) else "ambiguous"
+    return {"terminal": terminal, "draft_present": False, "low_context": False,
+            "banners": banners, "markers": []}, ""
+
+
 def classify(raw: bytes, profile: str = "codex") -> tuple[dict, str]:
     """Returns closed metadata and one sanitized sample; neither draft nor prose is emitted."""
     if profile == "claude-code":
         return classify_claude(raw)
+    if profile == "pi":
+        return classify_pi(raw)
     if profile != "codex":
         raise Unavailable("unsupported_profile")
     if len(raw) > CAPTURE_LIMIT:
@@ -512,9 +535,9 @@ class Collector:
         else:
             # Tombstones are kept forever; general discovery only wants live roots.
             status, catalog = self.receipt(self.root_socket, "/v1/roots?ended=0")
-            roots = catalog.get("roots")
             if status != 200 or catalog.get("owner") != "aico":
                 raise Unavailable("catalog_unavailable")
+            roots = catalog.get("roots")
         if not isinstance(roots, list):
             raise Unavailable("catalog_unavailable")
         if len(roots) > ROOT_LIMIT:
@@ -543,7 +566,7 @@ class Collector:
                 continue
             # Observation is per status profile (classify), unlike create, which
             # sends any tool and lets Tether refuse it.
-            if root.get("tool") not in ("codex", "claude-code"):
+            if root.get("tool") not in ("codex", "claude-code", "pi"):
                 unavailable.append({**record, "terminal": "ambiguous", "reason": "unsupported_profile"})
                 continue
             try:
@@ -886,7 +909,7 @@ def create_main(argv: list[str]) -> int:
     # Tether decides which tools can start a root (`rootCapable` in /v1/tools)
     # and its refusal names them.
     parser.add_argument("--tool", type=tool_slug, required=True, help=(
-        "required. Agent tool slug: claude-code, codex, pi or opencode."))
+        "required. Agent tool slug: claude-code, codex or pi."))
     parser.add_argument("--surface", choices=("aico", "a-term"), default="aico")
     parser.add_argument("--role", default="portfolio-root", help="opaque orchestration metadata")
     parser.add_argument("--work-role",
@@ -894,8 +917,8 @@ def create_main(argv: list[str]) -> int:
     parser.add_argument("--work-role-name", help="optional display name (1-128 characters)")
     parser.add_argument("--lead-root")
     parser.add_argument("--facet")
-    parser.add_argument("--resume-session", help="exact native session ID: Claude/Codex/Pi UUID or OpenCode ses_...; owner adapter validates format/support")
-    parser.add_argument("--model", help="per-launch model; Pi requires provider/model; OpenCode accepts provider/model or uses its native default")
+    parser.add_argument("--resume-session", help="exact native session ID: Claude/Codex/Pi UUID; owner adapter validates format/support")
+    parser.add_argument("--model", help="per-launch model; Pi requires provider/model")
     parser.add_argument("--reasoning-effort", choices=("none", "off", "minimal", "low", "medium", "high", "xhigh", "max"))
     parser.add_argument("--daybreak", choices=("on", "off"), help="Daybreak for this launch; Pi supports openai/gpt-6-sol; leaves shared defaults alone")
     parser.add_argument("--agent-hub-context", choices=("on", "off"), help="Pi optional Agent Hub context; off retains required policy, native/project instructions and ingestion")
@@ -1239,6 +1262,12 @@ def root_main(argv: list[str]) -> int:
         return 0
 
 
+def failed(row: dict) -> bool:
+    """An unavailable observation fails the command; a root whose TUI has no
+    status profile is reported but is not a failure."""
+    return row["observation"] == "unavailable" and row.get("reason") != "unsupported_profile"
+
+
 def roots_main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="st aico roots", description=__doc__)
     parser.add_argument("request_id", nargs="?", help="exact retained Aico catalog request ID")
@@ -1262,14 +1291,15 @@ def roots_main(argv: list[str]) -> int:
         if args.watch is None:
             records = [{**dataclasses.asdict(pin), **collector.sample(pin)} for pin, _ in resolved]
             emit_json(collector, {"owner": "aico", "roots": records + unavailable})
-            return int(any(row["observation"] == "unavailable" for row in records + unavailable))
+            return int(any(failed(row) for row in records + unavailable))
         for record in unavailable:
             emit_json(collector, {"event": "baseline", **record})
         if not resolved or any(row["identity"] == "changed" for row in unavailable):
-            return int(bool(unavailable))
+            return int(any(failed(row) for row in unavailable))
         outcome = watch(collector, [pin for pin, _ in resolved], args.interval, 3,
                         lambda record: emit_json(collector, record))
-        return int(bool(unavailable) or outcome in ("identity_changed", "observation_failures"))
+        return int(any(failed(row) for row in unavailable)
+                   or outcome in ("identity_changed", "observation_failures"))
     except Unavailable as error:
         emit_unless_stopped(discovery, {"owner": "aico", "observation": "unavailable", "reason": str(error)})
         return 1

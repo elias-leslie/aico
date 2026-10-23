@@ -6,6 +6,7 @@ import { DEFAULT_MEMORY_POLICY, GIB, type MemoryPolicy } from '../memory-policy'
 import {
   buildJobs,
   chooseVictim,
+  isAgentProcess,
   type Job,
   JobGuard,
   memoryEventsPath,
@@ -15,6 +16,7 @@ import {
   parseHostState,
 } from './job-guard'
 
+const AGENT_NAMES = new Set(['claude', 'codex', 'pi'])
 const A = 'tmux-spawn-6019d1b3-0bc2-4cc8-811f-f2a5615c140f.scope'
 const B = 'tmux-spawn-7dcd5091-db97-423d-a3aa-57b784f0a0c9.scope'
 const UID = 1000
@@ -123,6 +125,7 @@ function guard(
     admissionPath: admission,
     eventsPath: events,
     heartbeatPath: heartbeat,
+    agentNames: () => AGENT_NAMES,
     policy: () => ({ ...DEFAULT_MEMORY_POLICY, ...policy }),
     foreground: () => extra.foreground ?? null,
     sessionOf: () => new Map([[A, 'aaaaaaaa']]),
@@ -160,6 +163,16 @@ beforeEach(() => {
 afterEach(() => rmSync(dir, { recursive: true, force: true }))
 
 const T0 = 1_800_000_000_000
+
+describe('isAgentProcess', () => {
+  it('knows registry agents by comm, by argv while starting, and codex-real', () => {
+    expect(isAgentProcess('pi', [], AGENT_NAMES)).toBe(true)
+    expect(isAgentProcess('node', ['node', '/opt/pi/node_modules/.bin/pi'], AGENT_NAMES)).toBe(true)
+    expect(isAgentProcess('codex-real', ['/opt/codex/codex-real'], AGENT_NAMES)).toBe(true)
+    expect(isAgentProcess('node', ['node', '/opt/app/server.js'], AGENT_NAMES)).toBe(false)
+    expect(isAgentProcess('pi', [], new Set(['claude']))).toBe(false)
+  })
+})
 
 describe('kill order', () => {
   function job(scope: string, key: number, bytes: number): Job {
@@ -370,6 +383,7 @@ describe('pane caps', () => {
       admissionPath: admission,
       eventsPath: events,
       heartbeatPath: heartbeat,
+      agentNames: () => AGENT_NAMES,
       policy: () => ({ ...DEFAULT_MEMORY_POLICY, ...policy }),
       kill: (_r, pid) => killed.push(pid) > 0,
       caps: host,

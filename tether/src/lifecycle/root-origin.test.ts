@@ -79,7 +79,7 @@ describe('root origin (v1 roots API)', () => {
           status: 400,
           body: {
             error: 'unsupported_tool',
-            supported: ['claude-code', 'codex', 'opencode', 'pi'],
+            supported: ['claude-code', 'codex', 'pi'],
           },
         })
     // A malformed tool value is just a bad body.

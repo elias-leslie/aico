@@ -236,7 +236,10 @@ fields, preserving digests for callers that omit both fields.
 Pi requires an explicit `--model PROVIDER/MODEL`, including on resume. For example,
 `--tool pi --work-role implementation --model openai/gpt-6.1-sol --reasoning-effort high` passes native
 `--provider openai --model gpt-6.1-sol --thinking high`. This avoids inheriting
-a different provider from Pi's saved default. Pi efforts are `off`, `minimal`, `low`,
+a different provider from Pi's saved default. The registry's `pi --approve`
+carries Pi's project trust; Tether adds `--approve` only to a Pi command that
+lacks it. A fresh Pi root also gets `--session-id <uuid>` so crash recovery and
+reboot continuity know its conversation. Pi efforts are `off`, `minimal`, `low`,
 `medium`, `high`, `xhigh`, and `max`; `none` is refused. Authentication
 failure remains a native error, with no provider or paid-key fallback added here.
 

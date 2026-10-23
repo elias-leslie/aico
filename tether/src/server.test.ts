@@ -59,7 +59,7 @@ describe('control socket', () => {
       status: 'ok',
       instance: 'test',
       apiVersion: 1,
-      schemaVersion: 8,
+      schemaVersion: 9,
       lifecycle: 'disabled',
       gui: { connected: false },
     })
@@ -274,7 +274,7 @@ describe('agent tools API', () => {
   it('lists, creates from an A-Term command string, patches and deletes', async () => {
     const list = await call('GET', '/v1/tools')
     expect(list.body).toMatchObject({ defaultSlug: 'codex' })
-    expect((list.body as { items: unknown[] }).items.length).toBe(6)
+    expect((list.body as { items: unknown[] }).items.length).toBe(5)
     // Clients take tool names, colours and root capability from here.
     expect(
       (list.body as { items: { slug: string; rootCapable: boolean }[] }).items.map((t) => [
@@ -286,17 +286,11 @@ describe('agent tools API', () => {
       ['codex', true],
       ['agy', false],
       ['pi', true],
-      ['opencode', true],
       ['shell', false],
     ])
 
     expect((await call('GET', '/v1/tools/claude')).body).toMatchObject({ slug: 'claude-code' })
-    expect((await call('GET', '/v1/tools/opencode')).body).toMatchObject({
-      slug: 'opencode',
-      name: 'OpenCode',
-      argv: ['agent-hub-opencode', 'mini'],
-      enabled: true,
-    })
+    expect((await call('GET', '/v1/tools/opencode')).status).toBe(404)
 
     const created = await call('POST', '/v1/tools', {
       slug: 'aider',
