@@ -159,21 +159,19 @@ st aico root position recovery-root-1 -10 20 900 560
 st aico root end recovery-root-1
 ```
 
-Each command accepts `--surface aico|a-term` (default Aico), `--root-socket` for
-Aico and `--root-url` for the web app. The web app's `/v1/roots` proxies Tether, so its
-descriptors carry Tether's 8-hex host identity and an `aico://widget/<id>`
-locator with `owner: "a-term"`; the client accepts that shape, and the older
-UUID host with an `a-term://pane/<UUID>` locator, but never a mix of the two.
+Each command accepts `--root-socket` (default `AICO_GUI_CONTROL_SOCKET`) for Aico's
+GUI socket. There is no `--surface` or `--root-url`: the web app has no root route,
+so `st aico` only talks to Aico and Tether. A stored root whose owner is `a-term`
+(requested through the web app before it dropped the route) is still read: the client
+accepts Tether's 8-hex host identity at `aico://widget/<id>` with `owner: "a-term"`, and
+the older UUID host with an `a-term://pane/<UUID>` locator, but never a mix of the two.
 Show, title and position read `GET /v1/roots/<requestId>`, require a qualified
 `running` descriptor, pin its generation, then send one request and require the
-same identity, generation and `running` status in the receipt. The web app supports
-status, show, title and end; its position returns unavailable, so the facade
-rejects it locally. End reads the exact descriptor and pins its generation, but
+same identity, generation and `running` status in the receipt. End reads the exact descriptor and pins its generation, but
 does not require a running workload: it can contain a pending or uncertain root
 with a generation. On Aico, it uses the headless `/v1/sessions/<widgetId>/end`
 containment contract on `--owner-socket` (default `AICO_CONTROL_SOCKET`) and
-accepts only the exact `{status: "ended"}` receipt; on the web app it uses
-`/v1/roots/<requestId>/end`. An already ended tombstone returns
+accepts only the exact `{status: "ended"}` receipt. An already ended tombstone returns
 `applied: false` with exit 0 and sends nothing. A root without a generation
 cannot authorize End. These commands work for direct and fleet-started roots;
 for fleet roots, prefer `st sessions close` so the fleet ledger records the
@@ -286,8 +284,8 @@ is unavailable. Use exact root status/end and a new create request for a fresh i
 
 New roots require an explicit `workRole` from Agent Hub’s canonical work-role registry:
 `coordinator`, `implementation`, `research`, `review`, `recon`, `hunting`,
-`operations`, or `other`. Use `--work-role implementation` with either
-`--surface aico` or `--surface a-term`. `--work-role-name Builder` optionally
+`operations`, or `other`. Use `--work-role implementation`.
+`--work-role-name Builder` optionally
 sets a human display name. The opaque `--role` field keeps its existing meaning.
 Work roles never come from titles, prompts, coordinator membership, or a parent.
 Tether transports safe explicit IDs; Agent Hub owns registry membership validation.
@@ -378,14 +376,7 @@ Use the exact saved UUID, a new stable request ID, and the same complete body on
 retry. Omit the prompt for the fixed recovery prompt, or use `--stdin` for
 bounded UTF-8 input. The facade rejects secrets/framing controls and caps all
 prompts at 2000 UTF-8 bytes. `--role`, `--lead-root` and `--facet` carry generic
-metadata. `--surface a-term` uses the web app's loopback endpoint: `--root-url`, else
-`http://127.0.0.1:<backend_port>` from the `project.identity.json` in the web app's
-checkout (its root in Tether's project list); when that can't be read the
-command stops and says so. Through `st`, `--root-url` is the only override: st
-does not pass `A_TERM_ROOT_CONTROL_URL` to the extension. Running
-`tether/scripts/aico-root-watch.py` directly, that variable still takes the place of
-the identity lookup. The web app's authentication remains
-enforced, and the web app forwards the request to Tether. Tether must already be
+metadata. `--root-socket` selects Aico's GUI socket. Tether must already be
 running; the command does not start it.
 
 Create is explicit recovery. Automatic reboot recovery is a separate path
@@ -444,64 +435,22 @@ sessions with no visible window; Tether omits ended sessions. `--owner-socket`
 selects an exact Tether control socket. No terminal capture, input or focus change
 is involved.
 
-## The web app's `/v1/roots`
+## The web app has no root route
 
-The web backend (`http://127.0.0.1:8002`) keeps `/v1/roots` so SummitFlow
-fleet's `a-term` surface keeps working, but it never creates, launches, fences
-or retires roots itself: each route forwards to this contract with
-`origin: "a-term"` (the origin name stays; it is an identifier). This forwarder
-goes away when the web backend moves to Node; SummitFlow then calls Tether
-directly.
-
-### Guard
-
-The routes stay where they were. They are mounted on the `cli-local` surface
-of the web backend's one caller-trust gate (`web/a_term/caller_trust.py`), which checks, in
-order and before the route runs:
-
-- the app's authentication (none by default; a session in password or proxy
-  mode);
-- a write from another site's page is refused (`403 origin_not_allowed`);
-- loopback clients only (`403 local_only`);
-- no browser `Origin` at all, not even the web app's own page
-  (`403 origin_not_allowed`).
-
-Mutating bodies must be `application/json`, at most 128 KiB.
-
-No Tether route is exposed under `/api/*`.
-
-### What it forwards and what it answers itself
-
-| Route | Handling |
-| --- | --- |
-| `GET /v1/roots` | Forwarded as `GET /v1/roots?origin=a-term`: only roots requested through the web app, with Tether's `owner: "a-term"`. the web app adds its `position` block to the list and to each descriptor. |
-| `POST /v1/roots` | Forwarded with `origin: "a-term"` and an `aTermSessionId` (a new UUID unless the caller sent one); a body naming another origin is `400 invalid_body`. Neither field is part of Tether's digest. On `200`/`202` for a running or pending root, the web app links the root's session (`hostIdentity`) to a new detached pane so it can be shown later. |
-| `GET /v1/roots/:requestId` | Forwarded, with the `position` block added. |
-| `POST /v1/roots/:requestId/show` | Answered by the web app: generation-fenced against Tether's descriptor, then the root's pane is brought into the layout (created first if missing). Browser focus is never implied. |
-| `POST /v1/roots/:requestId/position` | Generation-checked, then `503 position_unavailable`: the browser grid has no pixel window bounds. |
-| `POST /v1/roots/:requestId/title` | Forwarded. Tether validates the label, and with no Aico GUI connected renames the session under its lifecycle lock, fenced on the exact running generation. With an Aico GUI connected, Tether applies the title through the GUI and renames only if the GUI applies it. |
-| `POST /v1/roots/:requestId/end` | Forwarded. Tether retires the session and keeps the tombstone. |
-| `POST /v1/roots/:requestId/send` | Forwarded. Tether answers `503 directed_delivery_unavailable`. |
-| `GET` and `POST /v1/roots/:requestId/admin` | Forwarded. |
-
-Status codes and error bodies are Tether's: `409 request_conflict`,
-`409 stale_generation`, `409 workload_unavailable`, `410 ended`, and so on.
-When Tether cannot be reached every route answers `503 {"error":"owner_failure"}`.
+The Node web server (`aico-web`, port 3002) serves the browser UI at `/`, the API
+at `/api` and the terminal WebSocket at `/ws`. It deliberately does not forward
+`/v1/roots`; the Python backend that did, on `127.0.0.1:8002`, is gone. Roots go
+through Aico's GUI socket (`st aico create|root`) or Tether's own `/v1/roots`
+(SummitFlow's fleet calls Tether directly). `st aico` can no longer target the
+web app, and SummitFlow refuses to start roots on an `a-term` surface.
 
 ### Owner and origin
 
 Tether stores the origin a root was requested through. On its `/v1` socket a
-root's `owner` is that origin and the descriptor carries `origin`, so roots
-requested here report `owner: "a-term"`, the owner SummitFlow's `a-term`
-surface checks, without the web app changing anything. (Tether's legacy Aico
-sockets keep `owner: "aico"` for `st aico`.) `hostIdentity` (the 8-hex Tether
-session ID), `generation`, `logicalSessionId` and `surfaceLocator` pass
-through unchanged, so the identity SummitFlow retains stays stable across
-reconciles. `GET /v1/roots/:requestId` and the mutations address any root by
-`requestId`; a root requested through Aico reports `owner: "aico"` there.
-
-### Migration note
-
-The web app's own `a_term_root_requests` table was empty at cutover, so no tombstone
-moves to Tether. Roots requested through the web app before this version have no
-receipts to carry over.
+root's `owner` is that origin and the descriptor carries `origin`, so roots the
+web app requested earlier still report `owner: "a-term"`, and
+`GET /v1/roots?origin=a-term` still lists them. (Tether's legacy Aico sockets
+keep `owner: "aico"` for `st aico`.) `hostIdentity` (the 8-hex Tether session
+ID), `generation`, `logicalSessionId` and `surfaceLocator` are unchanged, so
+the identity SummitFlow retains stays stable. A root requested through Aico
+reports `owner: "aico"`. The origin name stays `a-term`; it is an identifier.

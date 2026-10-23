@@ -115,9 +115,23 @@ def test_closed_connection_body_checks_stop_before_each_chunk(monkeypatch, stop)
         def close(self):
             pass
 
+    class Socket:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def settimeout(self, _timeout):
+            pass
+
+        def connect(self, _path):
+            pass
+
+        def close(self):
+            pass
+
     monkeypatch.setattr(watcher.http.client, "HTTPConnection", Connection)
+    monkeypatch.setattr(watcher.socket, "socket", Socket)
     with pytest.raises(watcher.Stopped):
-        instance.receipt("http://127.0.0.1:8002", "/v1/roots")
+        instance.receipt("/fixture/gui.sock", "/v1/roots")
     assert len(reads) == 1
 
 

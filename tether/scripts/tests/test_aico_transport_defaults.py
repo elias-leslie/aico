@@ -2,12 +2,8 @@
 
 import json
 import os
-import socketserver
-import threading
-from http.server import BaseHTTPRequestHandler
 
 import pytest
-from conftest import REAL_A_TERM_IDENTITY_URL
 from test_aico_admin import admin
 from test_aico_create import BASE, descriptor
 
@@ -19,9 +15,8 @@ ROOT = "root-fixture"
 ROOT_DESCRIPTOR = {"owner": "aico", "requestId": ROOT, "hostIdentity": WIDGET,
                    "logicalSessionId": "aico-root-fixture", "surfaceLocator": f"aico://widget/{WIDGET}",
                    "generation": GENERATION, "status": "running"}
-ATERM_DESCRIPTOR = {**ROOT_DESCRIPTOR, "owner": "a-term"}
 TRANSPORT = ("XDG_RUNTIME_DIR", "AICO_GUI_CONTROL_SOCKET", "AICO_CONTROL_SOCKET",
-             "A_TERM_ROOT_CONTROL_URL", "AICO_LAYOUT_FILE", "AICO_WIDGET_ID")
+             "AICO_LAYOUT_FILE", "AICO_WIDGET_ID")
 FALLBACK = f"/run/user/{os.getuid()}"
 
 
@@ -75,28 +70,14 @@ def test_root_end_resolves_gui_and_owner_sockets(monkeypatch, env, expected):
 
 
 @pytest.mark.parametrize("env,expected", [
-    ({}, "http://127.0.0.1:8002"),
-    ({"A_TERM_ROOT_CONTROL_URL": "http://localhost:9000/"}, "http://localhost:9000"),
+    ({"XDG_RUNTIME_DIR": "/fixture/run"}, "/fixture/run/aico/gui-control.sock"),
+    ({"AICO_GUI_CONTROL_SOCKET": "/fixture/gui.sock"}, "/fixture/gui.sock"),
 ])
-def test_root_status_resolves_the_a_term_url(monkeypatch, env, expected):
+def test_create_resolves_the_gui_socket(monkeypatch, env, expected):
     for name, value in env.items():
         monkeypatch.setenv(name, value)
-    calls, _ = record(monkeypatch, [(200, ATERM_DESCRIPTOR)])
-    assert admin.main(["root", "status", ROOT, "--surface", "a-term"]) == 0
-    assert calls == [(expected, f"/v1/roots/{ROOT}", None)]
-
-
-@pytest.mark.parametrize("surface,env,expected", [
-    ("aico", {"XDG_RUNTIME_DIR": "/fixture/run"}, "/fixture/run/aico/gui-control.sock"),
-    ("aico", {"AICO_GUI_CONTROL_SOCKET": "/fixture/gui.sock"}, "/fixture/gui.sock"),
-    ("a-term", {}, "http://127.0.0.1:8002"),
-    ("a-term", {"A_TERM_ROOT_CONTROL_URL": "http://[::1]:9000"}, "http://[::1]:9000"),
-])
-def test_create_resolves_the_surface_endpoint(monkeypatch, surface, env, expected):
-    for name, value in env.items():
-        monkeypatch.setenv(name, value)
-    calls, _ = record(monkeypatch, lambda payload: (200, descriptor(payload, surface)))
-    assert admin.main([*BASE, "--surface", surface]) == 0
+    calls, _ = record(monkeypatch, lambda payload: (200, descriptor(payload)))
+    assert admin.main(BASE) == 0
     assert [call[:2] for call in calls] == [(expected, "/v1/roots")]
 
 
@@ -106,9 +87,7 @@ def test_create_resolves_the_surface_endpoint(monkeypatch, surface, env, expecte
     (["root", "status", ROOT], {"AICO_GUI_CONTROL_SOCKET": "relative.sock"}),
     # The owner socket is resolved for every Aico root operation, not only end.
     (["root", "status", ROOT], {"AICO_CONTROL_SOCKET": "relative.sock"}),
-    (["root", "status", ROOT, "--surface", "a-term"], {"A_TERM_ROOT_CONTROL_URL": "https://127.0.0.1:8002"}),
     ([*BASE], {"AICO_GUI_CONTROL_SOCKET": "relative.sock"}),
-    ([*BASE, "--surface", "a-term"], {"A_TERM_ROOT_CONTROL_URL": "http://example.test:8002"}),
 ])
 def test_invalid_environment_is_an_owner_transport_error(monkeypatch, capsys, argv, env):
     for name, value in env.items():
@@ -189,70 +168,3 @@ def test_layout_reads_from_tether(monkeypatch, capsys, env, expected):
     assert admin.main(["layout"]) == 0
     assert calls == [(expected, "/v1/gui/layout", None)]
     assert json.loads(capsys.readouterr().out) == {"owner": "aico", **layout}
-
-
-class _Projects(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
-    daemon_threads = True
-
-
-def _tether_projects(path, projects):
-    """A fake Tether control socket answering GET /v1/projects."""
-
-    class Handler(BaseHTTPRequestHandler):
-        def address_string(self):
-            return "tether"
-
-        def log_message(self, format, *args):
-            pass
-
-        def do_GET(self):
-            body = json.dumps({"source": "summitflow", "projects": projects}).encode()
-            self.send_response(200 if self.path == "/v1/projects" else 404)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-
-    server = _Projects(str(path), Handler)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
-    return server
-
-
-def test_a_term_url_comes_from_its_project_identity(monkeypatch, tmp_path):
-    """No URL configured: A-Term's backend port from the project.identity.json in the checkout Tether lists."""
-    root = tmp_path / "a-term"
-    root.mkdir()
-    (root / "project.identity.json").write_text(json.dumps({"runtime": {"backend_port": 9123}}))
-    server = _tether_projects(tmp_path / "t.sock", [{"id": "agent-hub", "root": "/nowhere"},
-                                                     {"id": "a-term", "root": str(root)}])
-    monkeypatch.setattr(admin, "a_term_identity_url", REAL_A_TERM_IDENTITY_URL)
-    monkeypatch.setenv("TETHER_SOCKET", str(tmp_path / "t.sock"))
-    try:
-        calls, _ = record(monkeypatch, [(200, ATERM_DESCRIPTOR)])
-        assert admin.main(["root", "status", ROOT, "--surface", "a-term"]) == 0
-    finally:
-        server.shutdown()
-        server.server_close()
-    assert calls == [("http://127.0.0.1:9123", f"/v1/roots/{ROOT}", None)]
-
-
-@pytest.mark.parametrize("case", ["tether_down", "no_a_term", "no_identity"])
-def test_unknown_a_term_port_says_how_to_set_it(monkeypatch, tmp_path, capsys, case):
-    monkeypatch.setattr(admin, "a_term_identity_url", REAL_A_TERM_IDENTITY_URL)
-    monkeypatch.setenv("TETHER_SOCKET", str(tmp_path / "t.sock"))
-    server = None
-    if case != "tether_down":
-        projects = [{"id": "a-term", "root": str(tmp_path / "missing")}] if case == "no_identity" else []
-        server = _tether_projects(tmp_path / "t.sock", projects)
-    calls, output = record(monkeypatch, [])
-    try:
-        with pytest.raises(SystemExit) as exit_info:
-            admin.main(["root", "status", ROOT, "--surface", "a-term"])
-    finally:
-        if server is not None:
-            server.shutdown()
-            server.server_close()
-    assert exit_info.value.code == 2
-    err = capsys.readouterr().err
-    assert "invalid owner transport configuration" in err and "A_TERM_ROOT_CONTROL_URL" in err
-    assert calls == [] and output == []

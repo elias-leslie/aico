@@ -4,7 +4,7 @@ import hashlib
 import json
 import socketserver
 import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler
 
 import pytest
 from test_aico_admin import admin
@@ -20,7 +20,7 @@ def outside_aico(monkeypatch):
     monkeypatch.delenv("AICO_WIDGET_ID", raising=False)
 
 
-def descriptor(payload, surface="aico", tether=False):
+def descriptor(payload, owner="aico"):
     fields = [payload[k] for k in ("tool", "projectId", "projectRoot", "initialPrompt", "role", "leadRootReference", "facetCapsuleRef")]
     if payload.get("resumeSessionId"):
         fields.append(payload["resumeSessionId"])
@@ -30,12 +30,11 @@ def descriptor(payload, surface="aico", tether=False):
                        **({"agentHubContext": payload["agentHubContext"]} if payload.get("agentHubContext") is not None else {})})
     if payload.get("workRole"):
         fields.append({"workRole": payload.get("workRole"), "workRoleDisplayName": payload.get("workRoleDisplayName")})
-    return {"owner": surface, "requestId": payload["requestId"],
+    return {"owner": owner, "requestId": payload["requestId"],
             "digest": hashlib.sha256(json.dumps(fields, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest(),
-            "hostIdentity": "12345678" if surface == "aico" or tether else THREAD,
+            "hostIdentity": "12345678",
             "logicalSessionId": "aico-root-" + THREAD, "generation": "a" * 64,
-            "surfaceLocator": "aico://widget/12345678" if surface == "aico" or tether
-                              else "a-term://pane/" + THREAD,
+            "surfaceLocator": "aico://widget/12345678",
             "status": "running", "role": payload["role"],
             "workRole": payload.get("workRole"), "workRoleDisplayName": payload.get("workRoleDisplayName"),
             "leadRootReference": payload["leadRootReference"], "facetCapsuleRef": payload["facetCapsuleRef"]}
@@ -59,20 +58,18 @@ def test_exact_create_is_one_content_free_request_with_no_fleet_ledger(monkeypat
     assert "private-owner-content" not in json.dumps(output)
 
 
-@pytest.mark.parametrize("surface", ["aico", "a-term"])
-def test_create_from_a_session_names_its_launcher(monkeypatch, surface):
+def test_create_from_a_session_names_its_launcher(monkeypatch):
     """Tether makes the launcher a coordinator; the CLI only names it."""
     calls, output = [], []
 
     def receipt(_, path, route, payload=None, **kwargs):
         calls.append((route, payload))
-        return 200, descriptor(payload, surface)
+        return 200, descriptor(payload)
 
     monkeypatch.setenv("AICO_WIDGET_ID", "abcdef01")
     monkeypatch.setattr(admin.Collector, "receipt", receipt)
     monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
-    transport = ["--root-socket", "/fixture/gui.sock"] if surface == "aico" else ["--root-url", "http://127.0.0.1:8002"]
-    assert admin.main([*BASE, "--surface", surface, *transport]) == 0
+    assert admin.main([*BASE, "--root-socket", "/fixture/gui.sock"]) == 0
     assert [route for route, _ in calls] == ["/v1/roots"]
     assert calls[0][1]["launchedBy"] == "abcdef01"
     assert output[0]["launchedBy"] == "abcdef01"
@@ -81,7 +78,9 @@ def test_create_from_a_session_names_its_launcher(monkeypatch, surface):
 @pytest.mark.parametrize("extra", [
     ["--resume-session", ""], ["--resume-session", "id; echo unsafe"],
     ["--project-root", "/fixture/../project"],
-    ["--role", "invalid role"], ["--lead-root", ""], ["--root-url", "http://127.0.0.1:8002"],
+    ["--role", "invalid role"], ["--lead-root", ""],
+    # The web app has no root route: neither option exists any more.
+    ["--root-url", "http://127.0.0.1:8002"], ["--surface", "a-term"], ["--surface", "aico"],
 ])
 def test_invalid_resume_or_metadata_never_contacts_owner(monkeypatch, extra):
     monkeypatch.setattr(admin.Collector, "receipt", lambda *_args, **_kwargs: pytest.fail("owner contacted"))
@@ -112,8 +111,7 @@ def test_conflicts_auth_and_unknown_receipts_never_retry_or_echo(monkeypatch, re
     assert "private" not in json.dumps(output)
 
 
-@pytest.mark.parametrize("surface", ["aico", "a-term"])
-def test_actual_owner_transport_uses_compact_utf8_and_exact_resume(tmp_path, monkeypatch, surface):
+def test_actual_owner_transport_uses_compact_utf8_and_exact_resume(tmp_path, monkeypatch):
     requests, output = [], []
 
     class Handler(BaseHTTPRequestHandler):
@@ -121,7 +119,7 @@ def test_actual_owner_transport_uses_compact_utf8_and_exact_resume(tmp_path, mon
             raw = self.rfile.read(int(self.headers["Content-Length"]))
             body = json.loads(raw)
             requests.append((self.path, body, raw))
-            response = json.dumps(descriptor(body, surface)).encode()
+            response = json.dumps(descriptor(body)).encode()
             self.send_response(200)
             self.send_header("Content-Length", str(len(response)))
             self.end_headers()
@@ -131,15 +129,13 @@ def test_actual_owner_transport_uses_compact_utf8_and_exact_resume(tmp_path, mon
             pass
 
     path = str(tmp_path / "fixture.sock")
-    server = socketserver.UnixStreamServer(path, Handler) if surface == "aico" else HTTPServer(("127.0.0.1", 0), Handler)
-    transport = (["--root-url", f"http://127.0.0.1:{server.server_port}"]
-                 if isinstance(server, HTTPServer) else ["--root-socket", path])
+    server = socketserver.UnixStreamServer(path, Handler)
     monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
     with server:
         thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": .01})
         thread.start()
         try:
-            assert admin.main([*BASE[:2], "界" * 666 + "ab", *BASE[3:], "--surface", surface, *transport]) == 0
+            assert admin.main([*BASE[:2], "界" * 666 + "ab", *BASE[3:], "--root-socket", path]) == 0
         finally:
             server.shutdown()
             thread.join(timeout=1)
@@ -151,21 +147,14 @@ def test_actual_owner_transport_uses_compact_utf8_and_exact_resume(tmp_path, mon
     assert "界" not in json.dumps(output, ensure_ascii=False)
 
 
-@pytest.mark.parametrize("url", ["http://external.example:8002", "https://localhost:8002", "http://user:pass@localhost:8002", "http://localhost:8002?query=x"])
-def test_aterm_transport_rejects_external_credentials_and_proxy_routes(url):
-    with pytest.raises(admin.argparse.ArgumentTypeError):
-        admin.local_root_url(url)
-
-
-def test_aterm_create_accepts_tether_shaped_receipt(monkeypatch):
-    """A-Term's /v1/roots now proxies Tether: 8-hex id, aico://widget locator, owner a-term."""
+def test_create_refuses_a_receipt_owned_by_a_term(monkeypatch):
+    """Only Aico-owned roots come back from create; the web app is not an owner."""
     output = []
     monkeypatch.setattr(admin.Collector, "receipt",
-                        lambda _self, _endpoint, _route, payload=None, **_kw: (200, descriptor(payload, "a-term", tether=True)))
+                        lambda _self, _endpoint, _route, payload=None, **_kw: (200, descriptor(payload, "a-term")))
     monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
-    assert admin.main([*BASE, "--surface", "a-term"]) == 0
-    assert output[0]["owner"] == "a-term" and output[0]["hostIdentity"] == "12345678"
-    assert output[0]["surfaceLocator"] == "aico://widget/12345678"
+    assert admin.main(BASE) == 1
+    assert output[0]["reason"] == "create_receipt_unqualified"
 
 
 def test_tool_is_required():

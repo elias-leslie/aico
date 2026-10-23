@@ -36,7 +36,7 @@ import time
 import typing
 from collections.abc import Callable
 from pathlib import Path
-from urllib.parse import quote, urlsplit
+from urllib.parse import quote
 
 CAPTURE_LIMIT = 32 * 1024
 RECEIPT_LIMIT = 16 * 1024
@@ -209,20 +209,6 @@ def socket_path(value: str) -> str:
     return value
 
 
-def local_root_url(value: str) -> str:
-    """Use the established loopback A-Term owner route without proxy/auth bypass."""
-    try:
-        parsed = urlsplit(value)
-        valid = (parsed.scheme == "http" and parsed.hostname in {"127.0.0.1", "localhost", "::1"}
-                 and not parsed.username and not parsed.password and not parsed.query
-                 and not parsed.fragment and parsed.port is not None)
-    except ValueError:
-        valid = False
-    if not valid:
-        raise argparse.ArgumentTypeError("Web app root control requires an exact loopback HTTP URL")
-    return value.rstrip("/")
-
-
 def runtime_dir() -> str:
     return os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
 
@@ -245,54 +231,9 @@ def tether_socket() -> str:
     return f"{runtime_dir()}/tether/{instance}/control.sock"
 
 
-PROJECTS_LIMIT = 1 << 20
-
-
-def a_term_identity_url(timeout: float = 2.0) -> str:
-    """http://127.0.0.1:<backend_port> from A-Term's project.identity.json.
-
-    The checkout is the "a-term" root in Tether's project list. Raises
-    ArgumentTypeError, naming the override, when either can't be read.
-    """
-    connection = http.client.HTTPConnection("localhost", timeout=timeout)
-    client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    try:
-        client.settimeout(timeout)
-        client.connect(tether_socket())
-        connection.sock = client
-        connection.request("GET", "/v1/projects", headers={"Connection": "close"})
-        response = connection.getresponse()
-        body = response.read(PROJECTS_LIMIT + 1)
-        if response.status != 200 or len(body) > PROJECTS_LIMIT:
-            raise ValueError("projects unavailable")
-        projects = json.loads(body)["projects"]
-        root = next(item["root"] for item in projects if isinstance(item, dict) and item.get("id") == "a-term")
-        identity = json.loads((Path(root) / "project.identity.json").read_text())
-        port = identity["runtime"]["backend_port"]
-        if isinstance(port, bool) or not isinstance(port, int) or not 0 < port < 65536:
-            raise ValueError("bad backend_port")
-    except (OSError, ValueError, KeyError, TypeError, StopIteration, http.client.HTTPException):
-        raise argparse.ArgumentTypeError(
-            "The web app's port is unknown: Tether's project list or the web app's project.identity.json "
-            "could not be read; pass --root-url (when running this script directly, "
-            "A_TERM_ROOT_CONTROL_URL also works; st does not pass it through)") from None
-    finally:
-        connection.close()
-        client.close()
-    return f"http://127.0.0.1:{port}"
-
-
-def default_aterm_url() -> str:
-    """$A_TERM_ROOT_CONTROL_URL, else A-Term's own port from its project identity."""
-    configured = os.environ.get("A_TERM_ROOT_CONTROL_URL")
-    return configured if configured is not None else a_term_identity_url()
-
-
-def owner_endpoint(surface: str, root_socket: str | None, root_url: str | None) -> str:
-    """An explicit option, else the validated environment default; raises ArgumentTypeError."""
-    if surface == "aico":
-        return root_socket or socket_path(default_gui_socket())
-    return root_url or local_root_url(default_aterm_url())
+def owner_endpoint(root_socket: str | None) -> str:
+    """An explicit --root-socket, else the validated environment default; raises ArgumentTypeError."""
+    return root_socket or socket_path(default_gui_socket())
 
 
 def classify_claude(raw: bytes) -> tuple[dict, str]:
@@ -450,21 +391,12 @@ class Collector:
     def receipt(self, path: str, route: str, payload: dict | None = None,
                 *, timeout: float = .25) -> tuple[int, dict]:
         limit = CATALOG_LIMIT if route.split("?")[0] in ("/v1/roots", "/v1/sessions", "/v1/gui/layout") else RECEIPT_LIMIT
-        client = None
-        if path.startswith("http:"):
-            parsed = urlsplit(local_root_url(path))
-            assert parsed.hostname is not None
-            connection = http.client.HTTPConnection(parsed.hostname, parsed.port,
-                                                    timeout=min(timeout, self.remaining()))
-            route = parsed.path.rstrip("/") + route
-        else:
-            connection = http.client.HTTPConnection("localhost", timeout=min(timeout, self.remaining()))
-            client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            connection.sock = client
+        connection = http.client.HTTPConnection("localhost", timeout=min(timeout, self.remaining()))
+        client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        connection.sock = client
         try:
-            if client is not None:
-                client.settimeout(min(timeout, self.remaining()))
-                client.connect(path)
+            client.settimeout(min(timeout, self.remaining()))
+            client.connect(path)
             connection.request("GET" if payload is None else "POST", route,
                                body=None if payload is None else json.dumps(
                                    payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
@@ -910,7 +842,6 @@ def create_main(argv: list[str]) -> int:
     # and its refusal names them.
     parser.add_argument("--tool", type=tool_slug, required=True, help=(
         "required. Agent tool slug: claude-code, codex or pi."))
-    parser.add_argument("--surface", choices=("aico", "a-term"), default="aico")
     parser.add_argument("--role", default="portfolio-root", help="opaque orchestration metadata")
     parser.add_argument("--work-role",
                         help="required for a new root: coordinator, implementation, research, review, recon, hunting, operations or other; fixed including resume")
@@ -923,7 +854,6 @@ def create_main(argv: list[str]) -> int:
     parser.add_argument("--daybreak", choices=("on", "off"), help="Daybreak for this launch; Pi supports openai/gpt-6-sol; leaves shared defaults alone")
     parser.add_argument("--agent-hub-context", choices=("on", "off"), help="Pi optional Agent Hub context; off retains required policy, native/project instructions and ingestion")
     parser.add_argument("--root-socket", type=socket_path)
-    parser.add_argument("--root-url", type=local_root_url)
     args = parser.parse_args(argv)
     if args.work_role is not None and (not re.fullmatch(KEY, args.work_role) or args.work_role == "unknown"):
         parser.error("expected a declared work role ID; unknown is reserved for legacy sessions")
@@ -940,15 +870,14 @@ def create_main(argv: list[str]) -> int:
         parser.error("resume requires a bounded exact native session ID")
     if args.model is not None and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}", args.model):
         parser.error("invalid model identifier")
-    if (args.stdin and args.prompt is not None or args.surface == "aico" and args.root_url
-            or args.surface == "a-term" and args.root_socket):
-        parser.error("conflicting prompt or owner transport options")
+    if args.stdin and args.prompt is not None:
+        parser.error("conflicting prompt options")
     try:
-        endpoint = owner_endpoint(args.surface, args.root_socket, args.root_url)
+        endpoint = owner_endpoint(args.root_socket)
     except argparse.ArgumentTypeError as error:
         parser.error(f"invalid owner transport configuration: {error}")
     collector = Collector(endpoint, "", "", time.monotonic() + 10, threading.Event())
-    output = {"owner": args.surface, "requestId": args.request_id}
+    output = {"owner": "aico", "requestId": args.request_id}
     try:
         prompt = admin_stdin(collector) if args.stdin else args.prompt
         if prompt is None and args.resume_session:
@@ -959,7 +888,7 @@ def create_main(argv: list[str]) -> int:
         payload = {"requestId": args.request_id, "tool": args.tool, "projectId": args.project,
                    "projectRoot": args.project_root, "initialPrompt": prompt, "role": args.role,
                    "leadRootReference": args.lead_root, "facetCapsuleRef": args.facet}
-        # Run from a Tether session (Aico or A-Term): Tether records it as the
+        # Run from an Aico session: Tether records it as the
         # launcher, so the root joins its coordinator (or makes it one).
         creator = os.environ.get("AICO_WIDGET_ID")
         if isinstance(creator, str) and re.fullmatch(WIDGET, creator):
@@ -999,11 +928,11 @@ def create_main(argv: list[str]) -> int:
         host = data.get("hostIdentity")
         generation = data.get("generation")
         state = data.get("status")
-        if (data.get("owner") != args.surface or data.get("requestId") != args.request_id
+        if (data.get("owner") != "aico" or data.get("requestId") != args.request_id
                 or data.get("digest") != digest or data.get("role") != args.role
                 or data.get("workRole") != args.work_role or data.get("workRoleDisplayName") != args.work_role_name
                 or data.get("leadRootReference") != args.lead_root or data.get("facetCapsuleRef") != args.facet
-                or not surface_identity(args.surface, host, data.get("surfaceLocator"))
+                or not surface_identity("aico", host, data.get("surfaceLocator"))
                 or not isinstance(data.get("logicalSessionId"), str)
                 or not re.fullmatch(KEY, data["logicalSessionId"])
                 or state not in ("running", "pending", "uncertain", "ended")
@@ -1069,7 +998,7 @@ def widget_main(argv: list[str]) -> int:
         parser.error("expected --widget-id or AICO_WIDGET_ID with exactly eight lowercase hex characters")
     payload = view_payload(parser, args)
     try:
-        endpoint = owner_endpoint("aico", args.root_socket, None)
+        endpoint = owner_endpoint(args.root_socket)
     except argparse.ArgumentTypeError as error:
         parser.error(f"invalid owner transport configuration: {error}")
     collector = Collector(endpoint, "", "", time.monotonic() + 10, threading.Event())
@@ -1109,18 +1038,20 @@ def widget_main(argv: list[str]) -> int:
         return 0
 
 
-def surface_identity(surface: str, host: object, locator: object) -> bool:
-    """Exact host/locator pairing for a root surface.
+def surface_identity(owner: object, host: object, locator: object) -> bool:
+    """Exact host/locator pairing for a root owner.
 
-    Aico roots are 8-hex widget ids at ``aico://widget/<id>``. A-Term roots are
-    accepted in both shapes: the pre-Tether pane UUID at ``a-term://pane/<uuid>``
-    and, since A-Term's /v1/roots proxies Tether, a Tether session id at
-    ``aico://widget/<id>`` (owner/origin stays ``a-term``)."""
+    Roots are 8-hex widget ids at ``aico://widget/<id>``. Stored roots with owner
+    ``a-term`` are still read in both shapes: that same Tether shape and the
+    pre-Tether pane UUID at ``a-term://pane/<uuid>``. Nothing creates or targets
+    the a-term surface any more."""
     if not isinstance(host, str) or not isinstance(locator, str):
         return False
     tether = bool(re.fullmatch(WIDGET, host)) and locator == f"aico://widget/{host}"
-    if surface == "aico":
+    if owner == "aico":
         return tether
+    if owner != "a-term":
+        return False
     legacy = bool(re.fullmatch(THREAD, host)) and bool(re.fullmatch("a-term://pane/" + THREAD, locator))
     return tether or legacy
 
@@ -1156,14 +1087,14 @@ def view_payload(parser: argparse.ArgumentParser, args: argparse.Namespace) -> d
     return {}
 
 
-def root_descriptor(data: dict, surface: str, request_id: str) -> dict:
+def root_descriptor(data: dict, request_id: str) -> dict:
     """Project only a qualified exact retained-root identity and status."""
     host = data.get("hostIdentity")
     locator = data.get("surfaceLocator")
     generation = data.get("generation")
     state = data.get("status")
-    if (data.get("owner") != surface or data.get("requestId") != request_id
-            or not surface_identity(surface, host, locator)
+    if (data.get("requestId") != request_id
+            or not surface_identity(data.get("owner"), host, locator)
             or not isinstance(data.get("logicalSessionId"), str)
             or not re.fullmatch(KEY, data["logicalSessionId"])
             or state not in ("running", "pending", "uncertain", "ended")
@@ -1188,34 +1119,26 @@ def root_main(argv: list[str]) -> int:
         elif operation == "position":
             for dimension in BOUNDS:
                 command.add_argument(dimension, type=int)
-        command.add_argument("--surface", choices=("aico", "a-term"), default="aico")
         command.add_argument("--root-socket", type=socket_path)
-        command.add_argument("--root-url", type=local_root_url)
         if operation == "end":
             command.add_argument("--owner-socket", type=socket_path)
     args = parser.parse_args(argv)
     if not re.fullmatch(KEY, args.request_id):
         parser.error("invalid root request ID")
-    aico = args.surface == "aico"
-    if (aico and args.root_url or not aico and (args.root_socket or getattr(args, "owner_socket", None))):
-        parser.error("conflicting owner transport options")
-    if not aico and args.operation == "position":
-        parser.error("Web app root positioning is unavailable")
     payload = view_payload(parser, args)
     try:
-        endpoint = owner_endpoint(args.surface, args.root_socket, args.root_url)
-        control = (getattr(args, "owner_socket", None) or socket_path(default_owner_socket())
-                   if aico else endpoint)
+        endpoint = owner_endpoint(args.root_socket)
+        control = getattr(args, "owner_socket", None) or socket_path(default_owner_socket())
     except argparse.ArgumentTypeError as error:
         parser.error(f"invalid owner transport configuration: {error}")
     collector = Collector(endpoint, control, "", time.monotonic() + 10, threading.Event())
-    output: dict = {"owner": args.surface, "requestId": args.request_id}
+    output: dict = {"owner": "aico", "requestId": args.request_id}
     route = f"/v1/roots/{args.request_id}"
     sent = False
     try:
         status, data = collector.receipt(endpoint, route)
         owner_reply(status, data, "root_receipt_unqualified")
-        pinned = root_descriptor(data, args.surface, args.request_id)
+        pinned = root_descriptor(data, args.request_id)
         output.update(pinned)
         if args.operation == "status":
             emit_json(collector, output)
@@ -1230,7 +1153,7 @@ def root_main(argv: list[str]) -> int:
             raise Refused("workload_unavailable")
         payload["generation"] = pinned["generation"]
         sent = True
-        if args.operation == "end" and aico:
+        if args.operation == "end":
             # Exact containment retirement remains the headless owner's contract.
             status, data = collector.receipt(control, f"/v1/sessions/{pinned['hostIdentity']}/end", payload,
                                              timeout=10)
@@ -1242,7 +1165,7 @@ def root_main(argv: list[str]) -> int:
             status, data = collector.receipt(endpoint, f"{route}/{args.operation}", payload,
                                              timeout=10 if args.operation == "end" else 5)
             owner_reply(status, data, "root_receipt_unqualified")
-            changed = root_descriptor(data, args.surface, args.request_id)
+            changed = root_descriptor(data, args.request_id)
             expected = "ended" if args.operation == "end" else "running"
             if (changed["status"] != expected
                     or any(changed[key] != pinned[key] for key in ROOT_IDENTITY)
