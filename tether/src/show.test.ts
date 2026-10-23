@@ -177,24 +177,23 @@ describe('POST /v1/show', () => {
     expect(existsSync(join(root, 'agent'))).toBe(false)
   })
 
-  it.each([
-    'agent',
-    'agent/none',
-    'agent/none/out',
-  ])('refuses a symlink at exchange subdirectory %s', async (part) => {
-    const other = join(dir, 'outside')
-    mkdirSync(other)
-    mkdirSync(join(root, part, '..'), { recursive: true })
-    symlinkSync(other, join(root, part))
-    const source = join(dir, 'report')
-    writeFileSync(source, 'report')
-    expect(await show({ path: source })).toMatchObject({
-      status: 503,
-      body: { error: 'exchange_unavailable' },
-    })
-    expect(readdirSync(other)).toEqual([])
-    expect(daemon.events.lastSeq).toBe(0)
-  })
+  it.each(['agent', 'agent/none', 'agent/none/out'])(
+    'refuses a symlink at exchange subdirectory %s',
+    async (part) => {
+      const other = join(dir, 'outside')
+      mkdirSync(other)
+      mkdirSync(join(root, part, '..'), { recursive: true })
+      symlinkSync(other, join(root, part))
+      const source = join(dir, 'report')
+      writeFileSync(source, 'report')
+      expect(await show({ path: source })).toMatchObject({
+        status: 503,
+        body: { error: 'exchange_unavailable' },
+      })
+      expect(readdirSync(other)).toEqual([])
+      expect(daemon.events.lastSeq).toBe(0)
+    },
+  )
 
   it.each([
     {},
@@ -239,18 +238,14 @@ describe('show configuration', () => {
     })
   })
 
-  it.each([
-    '0',
-    '-1',
-    '1.5',
-    '',
-    'abc',
-    '9007199254740992',
-  ])('rejects invalid size cap %j', (value) => {
-    expect(() => resolveShowConfig({ TETHER_SHOW_MAX_BYTES: value })).toThrow(
-      /TETHER_SHOW_MAX_BYTES/,
-    )
-  })
+  it.each(['0', '-1', '1.5', '', 'abc', '9007199254740992'])(
+    'rejects invalid size cap %j',
+    (value) => {
+      expect(() => resolveShowConfig({ TETHER_SHOW_MAX_BYTES: value })).toThrow(
+        /TETHER_SHOW_MAX_BYTES/,
+      )
+    },
+  )
 
   it('rejects relative exchange roots', () => {
     expect(() => resolveShowConfig({ TETHER_EXCHANGE_ROOT: 'relative' })).toThrow(

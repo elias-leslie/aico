@@ -174,14 +174,14 @@ describe('engine session state', () => {
     expect(await internalSessionState(row.id)).toBe(expected)
   })
 
-  it.each([
-    'own',
-    'other',
-  ])('keeps state unknown on a socket collision (%s name)', async (which) => {
-    const row = seed()
-    roster(`4321\t$3\t${which === 'own' ? `aico-${row.id}` : 'aico-4369c029'}\t100`)
-    expect(await internalSessionState(row.id)).toBe('unknown')
-  })
+  it.each(['own', 'other'])(
+    'keeps state unknown on a socket collision (%s name)',
+    async (which) => {
+      const row = seed()
+      roster(`4321\t$3\t${which === 'own' ? `aico-${row.id}` : 'aico-4369c029'}\t100`)
+      expect(await internalSessionState(row.id)).toBe('unknown')
+    },
+  )
 
   it('keeps state unknown when the exact live server does not answer', async () => {
     const row = seed()

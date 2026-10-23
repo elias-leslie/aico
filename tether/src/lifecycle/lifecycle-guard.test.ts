@@ -240,16 +240,19 @@ describe('managed launch-gate recovery', () => {
     ['already dispatched', 'dispatched' as const, false, true],
     ['matching pending generation', 'gated' as const, true, true],
     ['verify-only replacement', 'gated' as const, false, false],
-  ])('never replays an inert gate that is %s', (_label, launchState, pendingMatchesCurrent, dispatchGate) => {
-    expect(
-      decideManagedGateRecovery({
-        gateState: 'inert',
-        launchState,
-        pendingMatchesCurrent,
-        dispatchGate,
-      }),
-    ).toBe('blocked-replay')
-  })
+  ])(
+    'never replays an inert gate that is %s',
+    (_label, launchState, pendingMatchesCurrent, dispatchGate) => {
+      expect(
+        decideManagedGateRecovery({
+          gateState: 'inert',
+          launchState,
+          pendingMatchesCurrent,
+          dispatchGate,
+        }),
+      ).toBe('blocked-replay')
+    },
+  )
 
   it('distinguishes active work from an ambiguous cgroup', () => {
     expect(

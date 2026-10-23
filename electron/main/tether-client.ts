@@ -761,7 +761,7 @@ export type GuiCommand = GuiMutationCommand | { commandId: string; kind: 'layout
 /** Validate one GUI channel command line. */
 export function parseGuiCommand(value: unknown): GuiCommand | null {
   const line = value as Record<string, unknown> | null
-  if (!line || line.type !== 'command' || typeof line.commandId !== 'string') return null
+  if (line?.type !== 'command' || typeof line.commandId !== 'string') return null
   if (line.kind === 'layout') return { commandId: line.commandId, kind: 'layout' }
   if (
     (line.kind !== 'show' &&

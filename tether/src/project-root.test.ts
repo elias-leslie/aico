@@ -57,7 +57,7 @@ const invalid = { error: 'invalid_body', field: 'projectRoot' }
 // Each refused spelling names an existing directory, so only the path rule
 // can refuse it.
 const refused = (): [string, string][] => [
-  ['a .. segment', join(dir, 'other') + '/../proj'],
+  ['a .. segment', `${join(dir, 'other')}/../proj`],
   ['a . segment', `${dir}/./proj`],
   ['a double slash', `${dir}//proj`],
   ['a NUL byte', `${project}\0`],

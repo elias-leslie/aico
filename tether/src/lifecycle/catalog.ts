@@ -295,7 +295,7 @@ export function insertProvisioningTmuxServer(input: ProvisioningTmuxServer): Tmu
 export function activateTmuxServer(id: string, identity: ActiveTmuxServerIdentity): boolean {
   assertTmuxServerId(id)
   const current = getTmuxServer(id)
-  if (!current || current.kind !== 'managed' || current.phase !== 'provisioning') return false
+  if (current?.kind !== 'managed' || current.phase !== 'provisioning') return false
   assertActiveIdentity(current.scopeUnit, identity)
   const result = db
     .prepare(

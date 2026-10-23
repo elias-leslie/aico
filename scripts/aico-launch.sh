@@ -200,7 +200,7 @@ exec 9>&-
 systemctl --user reset-failed "$RUNTIME_UNIT" 2>/dev/null || true
 systemctl --user start "$RUNTIME_UNIT"
 
-# The runner writes its pid under the shared lock before `npm run build`, so this
+# The runner writes its pid under the shared lock before `npm run build:desktop`, so this
 # registration normally resolves in milliseconds. Bound the observation so a
 # failed runner cannot leave the desktop launcher hanging indefinitely.
 for _ in $(seq 1 50); do

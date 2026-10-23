@@ -578,7 +578,7 @@ export class Recovery {
   /** Owner request: try a held session again now, outside the loop limits. */
   resumeHeld(id: string): CrashRecord | null {
     const record = this.records.get(id)
-    if (!record || record.state !== 'held') return null
+    if (record?.state !== 'held') return null
     this.update(record, {
       state: 'waiting',
       manual: true,

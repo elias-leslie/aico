@@ -61,17 +61,12 @@ describe('attach answer', () => {
     expect(built.env).toEqual({ TERM: 'tmux-256color', LANG: 'C.UTF-8', COLORTERM: 'truecolor' })
   })
 
-  it.each([
-    '',
-    '$1; rm -rf /',
-    'a b',
-    '-d',
-    'x'.repeat(65),
-    '$(id)',
-    'a\nb',
-  ])('refuses target %j', (target) => {
-    expect(() => attachFromTether(answer([...good.slice(0, 5), target]), env)).toThrow()
-  })
+  it.each(['', '$1; rm -rf /', 'a b', '-d', 'x'.repeat(65), '$(id)', 'a\nb'])(
+    'refuses target %j',
+    (target) => {
+      expect(() => attachFromTether(answer([...good.slice(0, 5), target]), env)).toThrow()
+    },
+  )
 })
 
 describe('sandbox argv', () => {

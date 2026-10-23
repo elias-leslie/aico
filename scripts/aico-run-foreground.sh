@@ -121,7 +121,7 @@ prebuilt_release() {
 if prebuilt_release; then
   echo "aico-run-foreground: using the release build" >&2
 else
-  npm run build
+  npm run build:desktop
 fi
 export PATH="$RUNTIME_PATH"
 export AICO_ACTIVATION_READY_FILE="$READYFILE"

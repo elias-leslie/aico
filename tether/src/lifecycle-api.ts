@@ -572,7 +572,7 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
         throw new HttpError(400, 'invalid_body', { field: 'tool' })
       const tool =
         body.tool === undefined ? store.defaultTool() : store.resolveTool(body.tool as string)
-      if (!tool || !tool.enabled) throw new HttpError(400, 'unknown_tool')
+      if (!tool?.enabled) throw new HttpError(400, 'unknown_tool')
       let projectId: string | null = null
       let projectRoot: string | null = null
       if (body.projectId !== undefined && body.projectId !== null) {

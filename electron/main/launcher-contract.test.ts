@@ -119,7 +119,7 @@ describe('foreground runner build step', () => {
   })
 
   it('builds unless that check passes', () => {
-    expect(runner).toMatch(/if prebuilt_release; then[\s\S]*?else\n\s*npm run build\nfi/)
+    expect(runner).toMatch(/if prebuilt_release; then[\s\S]*?else\n\s*npm run build:desktop\nfi/)
   })
 })
 

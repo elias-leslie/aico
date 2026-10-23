@@ -247,10 +247,6 @@
 .aico-sub-row:hover {
   background: var(--paper-veil);
 }
-/* pin toggle in the flyout: same reveal-on-hover behavior as the menu rows */
-.aico-sub-row:hover .aico-pin {
-  opacity: 0.7;
-}
 .aico-sub-dot {
   flex: 0 0 8px;
   width: 8px;
@@ -303,7 +299,9 @@
   width: 13px;
   height: 13px;
 }
-.aico-row:hover .aico-pin {
+.aico-row:hover .aico-pin,
+/* pin toggle in the flyout: same reveal-on-hover behavior as the menu rows */
+.aico-sub-row:hover .aico-pin {
   opacity: 0.7;
 }
 .aico-pin:hover {

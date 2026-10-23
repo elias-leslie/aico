@@ -5,12 +5,15 @@ import { fileURLToPath } from 'node:url'
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const frontendRoot = path.resolve(scriptDir, '..')
 const nextRoot = path.join(frontendRoot, '.next')
+// The npm workspace root is the repo root, so Next traces from there and nests
+// this app's server under standalone/web/frontend.
 const standaloneRoot = path.join(nextRoot, 'standalone')
-const standaloneNextRoot = path.join(standaloneRoot, '.next')
+const standaloneAppRoot = path.join(standaloneRoot, 'web', 'frontend')
+const standaloneNextRoot = path.join(standaloneAppRoot, '.next')
 const staticSource = path.join(nextRoot, 'static')
 const staticTarget = path.join(standaloneNextRoot, 'static')
 const publicSource = path.join(frontendRoot, 'public')
-const publicTarget = path.join(standaloneRoot, 'public')
+const publicTarget = path.join(standaloneAppRoot, 'public')
 
 async function ensurePath(sourcePath, label) {
   try {
@@ -26,7 +29,7 @@ async function replaceCopy(sourcePath, targetPath) {
   await cp(sourcePath, targetPath, { recursive: true })
 }
 
-await ensurePath(standaloneRoot, 'standalone output')
+await ensurePath(path.join(standaloneAppRoot, 'server.js'), 'standalone server')
 await ensurePath(staticSource, 'static assets')
 await ensurePath(publicSource, 'public assets')
 

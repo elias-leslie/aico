@@ -537,7 +537,7 @@ export async function internalSessionState(widgetId: string): Promise<InternalSe
   if (row.tmuxServerId) {
     const server = getTmuxServer(row.tmuxServerId)
     if (server?.phase === 'dead') return 'absent'
-    if (!server || server.phase !== 'active') return 'unknown'
+    if (server?.phase !== 'active') return 'unknown'
     // Tether: a row bound to another instance's server is never probed.
     if (!ownsServerRow(server)) return 'unknown'
     await observeTmuxServer(server)
@@ -1305,8 +1305,7 @@ async function adoptHistoricalTmuxServer(): Promise<TmuxServerRow | null> {
     if (!procStartTime || !controlGroup || !scopeUnit?.endsWith('.scope')) return null
     const identity = await scopeIdentity(scopeUnit)
     if (
-      !identity ||
-      identity.activeState !== 'active' ||
+      identity?.activeState !== 'active' ||
       identity.controlGroup !== controlGroup ||
       !isSystemdInvocationId(identity.invocationId)
     ) {
@@ -1442,7 +1441,7 @@ function isPaneExitBridgeReady(row: WidgetRow): boolean {
     return false
   }
   const server = getTmuxServer(row.tmuxServerId)
-  if (!server || server.kind !== 'managed' || server.phase !== 'active') return false
+  if (server?.kind !== 'managed' || server.phase !== 'active') return false
   try {
     const installed = execFileSync(TMUX_BIN, showPaneExitedHookTargetArgs(server.socketPath), {
       encoding: 'utf8',
@@ -1549,8 +1548,7 @@ export async function verifiedCurrentManagedPane(
   const identity = await scopeIdentity(row.scopeUnit)
   const uid = process.getuid?.() ?? -1
   if (
-    !identity ||
-    identity.activeState !== 'active' ||
+    identity?.activeState !== 'active' ||
     identity.invocationId !== row.scopeInvocationId ||
     !isOwnedPaneControlGroup(row.scopeUnit, identity.controlGroup, uid) ||
     !processInControlGroup(pane.pid, identity.controlGroup)

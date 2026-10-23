@@ -231,7 +231,7 @@ describe('launchLine', () => {
     expect(isResumeSessionId(getTui('codex'), 'last')).toBe(false)
     for (const suffix of ['\n', '\r', '\r\n', '\u2028', '\u2029']) {
       expect(
-        isResumeSessionId(getTui('codex'), '00000000-0000-4000-8000-000000000001' + suffix),
+        isResumeSessionId(getTui('codex'), `00000000-0000-4000-8000-000000000001${suffix}`),
       ).toBe(false)
     }
     expect(isResumeSessionId(getTui('claude-code'), 'native:saved')).toBe(false)
@@ -411,24 +411,24 @@ describe('ensureContext', () => {
     expect(s.detail).toContain('lossless context')
   })
 
-  it.each([
-    '$HOME',
-    '"$HOME"',
-  ])('accepts trusted canonical Codex hooks relative to %s', async (home) => {
-    vi.mocked(existsSync).mockReturnValue(true)
-    const command = `${home}/.local/bin/agent-hub-context-client bind --surface codex`
-    mockCodexHooks('/home/demo/.local/bin/codex', [
-      { eventName: 'sessionStart', command },
-      { eventName: 'subagentStart', command },
-    ])
-    vi.mocked(realpathSync).mockReturnValue('/opt/projects/codex-config/bin/codex')
-    vi.mocked(readFileSync).mockReturnValue(
-      'CODEX_REAL AGENT_HUB_CONTEXT_CLIENT developer_instructions=\n',
-    )
-    expect((await ensureContext(spec({ context: { kind: 'codex-hooks' } }))).state).toBe(
-      'available',
-    )
-  })
+  it.each(['$HOME', '"$HOME"'])(
+    'accepts trusted canonical Codex hooks relative to %s',
+    async (home) => {
+      vi.mocked(existsSync).mockReturnValue(true)
+      const command = `${home}/.local/bin/agent-hub-context-client bind --surface codex`
+      mockCodexHooks('/home/demo/.local/bin/codex', [
+        { eventName: 'sessionStart', command },
+        { eventName: 'subagentStart', command },
+      ])
+      vi.mocked(realpathSync).mockReturnValue('/opt/projects/codex-config/bin/codex')
+      vi.mocked(readFileSync).mockReturnValue(
+        'CODEX_REAL AGENT_HUB_CONTEXT_CLIENT developer_instructions=\n',
+      )
+      expect((await ensureContext(spec({ context: { kind: 'codex-hooks' } }))).state).toBe(
+        'available',
+      )
+    },
+  )
 
   it('reports missing when a required native Codex hook is untrusted', async () => {
     vi.mocked(existsSync).mockReturnValue(true)
@@ -493,31 +493,31 @@ describe('ensureContext', () => {
     expect((await ensureContext(spec({ context: { kind: 'pi-extension' } }))).state).toBe('missing')
   })
 
-  it.each([
-    true,
-    false,
-  ])('reports retrieval installation availability %s without delivery', async (passed) => {
-    vi.mocked(execFile).mockImplementation(((
-      _cmd: string,
-      args: string[],
-      _opts: unknown,
-      cb: unknown,
-    ) => {
-      expect(args).toEqual([
-        '/opt/projects/agent-hub/integrations/context-delivery/install.py',
-        '--surface',
-        'antigravity',
-        '--check',
-      ])
-      ;(cb as (error: Error | null, stdout: string) => void)(null, JSON.stringify({ passed }))
-      return undefined as never
-    }) as never)
-    const status = await ensureContext(
-      spec({ context: { kind: 'canonical-retrieval', surface: 'antigravity' } }),
-    )
-    expect(status.state).toBe(passed ? 'available' : 'missing')
-    expect(execFile).toHaveBeenCalledTimes(1)
-  })
+  it.each([true, false])(
+    'reports retrieval installation availability %s without delivery',
+    async (passed) => {
+      vi.mocked(execFile).mockImplementation(((
+        _cmd: string,
+        args: string[],
+        _opts: unknown,
+        cb: unknown,
+      ) => {
+        expect(args).toEqual([
+          '/opt/projects/agent-hub/integrations/context-delivery/install.py',
+          '--surface',
+          'antigravity',
+          '--check',
+        ])
+        ;(cb as (error: Error | null, stdout: string) => void)(null, JSON.stringify({ passed }))
+        return undefined as never
+      }) as never)
+      const status = await ensureContext(
+        spec({ context: { kind: 'canonical-retrieval', surface: 'antigravity' } }),
+      )
+      expect(status.state).toBe(passed ? 'available' : 'missing')
+      expect(execFile).toHaveBeenCalledTimes(1)
+    },
+  )
 
   it('says where checkouts are looked for instead of guessing ~/projects', async () => {
     vi.stubEnv('TETHER_PROJECTS_DIR', '')
@@ -577,41 +577,43 @@ describe('ensureContext', () => {
 })
 
 describe('Native retirement context', () => {
-  it.each([
-    ['pi-extension', 'pi'],
-  ] as const)('finalizes only the exact ownership ID after %s retirement', async (kind, surface) => {
-    vi.mocked(execFile).mockImplementation(((
-      _file: string,
-      _args: string[],
-      _options: unknown,
-      callback: unknown,
-    ) => {
-      ;(callback as (error: Error | null) => void)(null)
-      return undefined as never
-    }) as never)
-    expect(await finalizeContext(spec({ context: { kind } }), 'aico-widget-12345678')).toBe(true)
-    expect(execFile).toHaveBeenCalledWith(
-      join(homedir(), '.local', 'bin', 'agent-hub-context-client'),
-      [`retire-${surface}`, '--surface', surface, '--aico-session', 'aico-widget-12345678'],
-      { timeout: 20000 },
-      expect.any(Function),
-    )
-    vi.mocked(execFile).mockClear()
-    expect(await finalizeContext(spec(), 'aico-widget-12345678')).toBeNull()
-    expect(execFile).not.toHaveBeenCalled()
-  })
-  it.each([
-    'pi-extension',
-  ] as const)('reports unavailable %s accounting without claiming completion', async (kind) => {
-    vi.mocked(execFile).mockImplementation(((
-      _file: string,
-      _args: string[],
-      _options: unknown,
-      callback: unknown,
-    ) => {
-      ;(callback as (error: Error | null) => void)(new Error('offline'))
-      return undefined as never
-    }) as never)
-    expect(await finalizeContext(spec({ context: { kind } }), 'aico-widget-12345678')).toBe(false)
-  })
+  it.each([['pi-extension', 'pi']] as const)(
+    'finalizes only the exact ownership ID after %s retirement',
+    async (kind, surface) => {
+      vi.mocked(execFile).mockImplementation(((
+        _file: string,
+        _args: string[],
+        _options: unknown,
+        callback: unknown,
+      ) => {
+        ;(callback as (error: Error | null) => void)(null)
+        return undefined as never
+      }) as never)
+      expect(await finalizeContext(spec({ context: { kind } }), 'aico-widget-12345678')).toBe(true)
+      expect(execFile).toHaveBeenCalledWith(
+        join(homedir(), '.local', 'bin', 'agent-hub-context-client'),
+        [`retire-${surface}`, '--surface', surface, '--aico-session', 'aico-widget-12345678'],
+        { timeout: 20000 },
+        expect.any(Function),
+      )
+      vi.mocked(execFile).mockClear()
+      expect(await finalizeContext(spec(), 'aico-widget-12345678')).toBeNull()
+      expect(execFile).not.toHaveBeenCalled()
+    },
+  )
+  it.each(['pi-extension'] as const)(
+    'reports unavailable %s accounting without claiming completion',
+    async (kind) => {
+      vi.mocked(execFile).mockImplementation(((
+        _file: string,
+        _args: string[],
+        _options: unknown,
+        callback: unknown,
+      ) => {
+        ;(callback as (error: Error | null) => void)(new Error('offline'))
+        return undefined as never
+      }) as never)
+      expect(await finalizeContext(spec({ context: { kind } }), 'aico-widget-12345678')).toBe(false)
+    },
+  )
 })

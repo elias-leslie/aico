@@ -172,16 +172,14 @@ describe('origin guard', () => {
     expect((await post('/selection/send', { items: [DOM] })).status).toBe(200)
   })
 
-  it.each([
-    'http://localhost:3005',
-    'http://127.0.0.1:3003',
-    'http://[::1]:8080',
-    'null',
-  ])('refuses a local page (%s)', async (origin) => {
-    const { post, deliver } = await start()
-    expect((await post('/selection/send', { items: [DOM] }, { origin })).status).toBe(403)
-    expect(deliver).not.toHaveBeenCalled()
-  })
+  it.each(['http://localhost:3005', 'http://127.0.0.1:3003', 'http://[::1]:8080', 'null'])(
+    'refuses a local page (%s)',
+    async (origin) => {
+      const { post, deliver } = await start()
+      expect((await post('/selection/send', { items: [DOM] }, { origin })).status).toBe(403)
+      expect(deliver).not.toHaveBeenCalled()
+    },
+  )
 
   it('never lets a local page read a reply over CORS', async () => {
     const { send } = await start()
@@ -393,18 +391,18 @@ describe('content type guard', () => {
     expect(isJsonContentType(header)).toBe(ok)
   })
 
-  it.each([
-    'text/plain',
-    'application/x-www-form-urlencoded',
-  ])('refuses a %s send with 415 and delivers nothing', async (type) => {
-    const { send, deliver } = await start()
-    const r = await send('POST', '/selection/send', {
-      headers: { 'content-type': type },
-      body: JSON.stringify({ items: [DOM] }),
-    })
-    expect(r.status).toBe(415)
-    expect(deliver).not.toHaveBeenCalled()
-  })
+  it.each(['text/plain', 'application/x-www-form-urlencoded'])(
+    'refuses a %s send with 415 and delivers nothing',
+    async (type) => {
+      const { send, deliver } = await start()
+      const r = await send('POST', '/selection/send', {
+        headers: { 'content-type': type },
+        body: JSON.stringify({ items: [DOM] }),
+      })
+      expect(r.status).toBe(415)
+      expect(deliver).not.toHaveBeenCalled()
+    },
+  )
 
   it('accepts a native send with no Content-Type', async () => {
     const { send, deliver } = await start()

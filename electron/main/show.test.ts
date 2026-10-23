@@ -47,13 +47,12 @@ async function fixture() {
 }
 
 describe('shared file names', () => {
-  it.each([
-    'ab12cd34/out/report.pdf',
-    'none/out/image-1.PNG',
-    '01234567/out/a_b.c-d',
-  ])('accepts %s', (value) => {
-    expect(validShowName(value)).toBe(true)
-  })
+  it.each(['ab12cd34/out/report.pdf', 'none/out/image-1.PNG', '01234567/out/a_b.c-d'])(
+    'accepts %s',
+    (value) => {
+      expect(validShowName(value)).toBe(true)
+    },
+  )
   it.each([
     'ab12cd34',
     'ab12cd34/out/',

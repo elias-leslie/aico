@@ -86,8 +86,9 @@ install_file() {
 check_prerequisites
 [ "$check_only" = 1 ] && exit 0
 
-if [ ! -d "$repo/node_modules" ]; then
-  (cd "$repo" && npm ci --no-audit --no-fund)
+# Dependencies install once for the whole aico npm workspace, at its root.
+if [ ! -d "$repo/../node_modules" ]; then
+  (cd "$repo/.." && npm ci --no-audit --no-fund)
 fi
 (cd "$repo" && npm run --silent build)
 

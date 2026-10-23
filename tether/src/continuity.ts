@@ -318,6 +318,6 @@ export function restoreCandidates(
   snapshot: ContinuitySnapshot | null,
   statusOf: (id: string) => string | null,
 ): SnapshotSession[] {
-  if (!snapshot || snapshot.v !== 1 || !Array.isArray(snapshot.sessions)) return []
+  if (snapshot?.v !== 1 || !Array.isArray(snapshot.sessions)) return []
   return snapshot.sessions.filter((session) => statusOf(session.id) === 'pending')
 }
