@@ -12,7 +12,7 @@ from unittest.mock import patch
 import pytest
 
 from a_term.api.handlers.session_validation import validate_and_prepare_session
-from a_term.services.pty_manager import attach_environment
+from a_term.services.tmux_control import attach_environment
 from a_term.storage import panes as pane_store
 
 from .fake_tether import TMUX_BIN, FakeTether

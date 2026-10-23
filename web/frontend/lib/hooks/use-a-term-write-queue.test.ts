@@ -101,51 +101,7 @@ describe('useATermWriteQueue viewport following', () => {
     expect(term.buffer.active.viewportY).toBe(term.buffer.active.baseY)
   })
 
-  it('keeps shell history still during a sync and accepts fresh syncs after returning to bottom', async () => {
-    const { term, hook, write } = await setup()
-    term.scrollToLine(8)
-    const before = readingLine(term)
-    const snapshot = `${Array.from({ length: 32 }, (_, index) => `history ${index}`).join('\r\n')}\r\n`
-
-    act(() => hook.result.current.applySnapshot(snapshot))
-    await new Promise<void>((resolve) => term.write('', resolve))
-
-    expect(term.buffer.active.viewportY).toBe(8)
-    expect(readingLine(term)).toBe(before)
-
-    // Raw output continues filling the live terminal while the reader pauses.
-    await write('\r\nnew output')
-    expect(readingLine(term)).toBe(before)
-    term.scrollToBottom()
-    act(() => hook.result.current.applySnapshot(snapshot))
-    await new Promise<void>((resolve) => term.write('', resolve))
-    expect(term.buffer.active.viewportY).toBe(term.buffer.active.baseY)
-    expect(term.buffer.active.getLine(31)?.translateToString(true)).toBe(
-      'history 31',
-    )
-  })
-
-  it('retains queued live output when the reader scrolls up before a queued sync', async () => {
-    const { term, hook } = await setup()
-    act(() => {
-      hook.result.current.enqueueWrite('\r\nnew 1')
-      hook.result.current.enqueueWrite('\r\nnew 2')
-      hook.result.current.applySnapshot('replacement sync\r\n')
-    })
-    term.scrollToLine(8)
-    const before = readingLine(term)
-
-    await waitFor(() => {
-      expect(
-        term.buffer.active
-          .getLine(term.buffer.active.baseY + 4)
-          ?.translateToString(true),
-      ).toBe('new 2')
-    })
-    expect(readingLine(term)).toBe(before)
-  })
-
-  describe('control-mode repaint (a seed starts with a full terminal reset)', () => {
+  describe('repaint (a seed starts with a full terminal reset)', () => {
     const seed = `\x1bc${Array.from({ length: 40 }, (_, index) => `seeded ${index}`).join('\r\n')}`
 
     async function setupReseed(available = true) {

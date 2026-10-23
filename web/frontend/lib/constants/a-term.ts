@@ -1,10 +1,8 @@
 /** WebSocket connection timeout in milliseconds */
 export const CONNECTION_TIMEOUT = 10000
 
-/** A-Term scrollback buffer size.
- * 10K lines balances history access with browser performance.
- * 100K caused progressive slowdown as xterm.js buffer management
- * and DOM overhead grew with session lifetime. */
+/** Scrollback buffer size until the server says how much history its seed
+ * carries. Very large buffers slow xterm.js down as a session ages. */
 export const SCROLLBACK = 10000
 
 /** Mobile device width threshold in pixels */
@@ -15,9 +13,6 @@ export const WS_CLOSE_CODE_SESSION_DEAD = 4000
 
 /** Client→server ping interval (ms) to prevent reverse proxy idle disconnects */
 export const WS_CLIENT_PING_INTERVAL = 25000
-
-/** Bytes between backpressure commit messages (Phase 1) */
-export const BACKPRESSURE_COMMIT_INTERVAL = 256 * 1024
 
 /** Local fit-to-container debounce — short so xterm visually keeps up with drags. */
 export const FIT_DEBOUNCE_MS = 16

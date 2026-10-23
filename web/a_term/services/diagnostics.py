@@ -1,8 +1,8 @@
 """Per-session diagnostic event tracing.
 
-Captures timestamped events (PTY flushes, scrollback syncs, input, etc.)
+Captures timestamped events (output flushes, input, etc.)
 in an in-memory ring buffer so we can correlate the exact interleaving
-of writes, snapshots, and deltas when TUI jumping occurs.
+of writes and viewport moves when TUI jumping occurs.
 
 When ``diagnostics_enabled=False`` (the default), ``DiagnosticsRegistry``
 returns a no-op instance whose ``record()`` is essentially free.

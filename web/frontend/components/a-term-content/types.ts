@@ -11,7 +11,6 @@ import type {
   ATermCursorStyle,
   ATermFontId,
   ATermFontSize,
-  ATermScrollback,
   ATermThemeId,
 } from '@/lib/hooks/use-a-term-settings'
 import type { ATermSlot, PaneSlot } from '@/lib/utils/slot'
@@ -23,7 +22,6 @@ export interface ATermContentProps {
   aTermSlots: (ATermSlot | PaneSlot)[]
   fontFamily: string
   fontSize: ATermFontSize
-  scrollback: ATermScrollback
   cursorStyle: 'block' | 'underline' | 'bar'
   cursorBlink: boolean
   theme?: Parameters<typeof ATermLayoutRenderer>[0]['theme']
@@ -34,7 +32,6 @@ export interface ATermContentProps {
   showSettings: boolean
   setFontId: (id: ATermFontId) => void
   setFontSize: (size: ATermFontSize) => void
-  setScrollback: (lines: ATermScrollback) => void
   setCursorStyle: (style: ATermCursorStyle) => void
   setCursorBlink: (blink: boolean) => void
   setThemeId: (id: ATermThemeId) => void

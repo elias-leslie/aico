@@ -9,7 +9,6 @@ export interface ATermProps {
   onStatusChange?: (status: ConnectionStatus) => void
   fontFamily?: string
   fontSize?: number
-  scrollback?: number
   cursorStyle?: 'block' | 'underline' | 'bar'
   cursorBlink?: boolean
   theme?: ATermTheme

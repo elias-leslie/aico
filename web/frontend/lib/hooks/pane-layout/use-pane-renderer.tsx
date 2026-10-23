@@ -40,7 +40,6 @@ interface UsePaneRendererOptions {
     | 'onATermRef'
     | 'fontFamily'
     | 'fontSize'
-    | 'scrollback'
     | 'cursorStyle'
     | 'cursorBlink'
     | 'theme'
@@ -84,7 +83,6 @@ export function usePaneRenderer({
     onATermRef,
     fontFamily,
     fontSize,
-    scrollback,
     cursorStyle,
     cursorBlink,
     theme,
@@ -295,7 +293,6 @@ export function usePaneRenderer({
                 className="h-full"
                 fontFamily={fontFamily}
                 fontSize={fontSize}
-                scrollback={scrollback}
                 cursorStyle={cursorStyle}
                 cursorBlink={cursorBlink}
                 theme={theme}
@@ -351,7 +348,6 @@ export function usePaneRenderer({
       onATermRef,
       fontFamily,
       fontSize,
-      scrollback,
       cursorStyle,
       cursorBlink,
       theme,

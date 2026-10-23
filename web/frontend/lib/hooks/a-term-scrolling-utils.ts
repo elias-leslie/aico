@@ -1,5 +1,4 @@
 import { SCROLL_THRESHOLD } from '../constants/a-term'
-import { prefersLocalViewportScrollForMode } from '../utils/session-mode'
 import { isNativeSelectionActive } from './mobile-native-selection'
 
 type XtermATerm = InstanceType<typeof import('@xterm/xterm').Terminal>
@@ -184,20 +183,6 @@ export function computeWheelLineDelta(deltaY: number): number {
 // Touch event handler setup
 // ---------------------------------------------------------------------------
 
-/**
- * Whether the program in the pane owns its own scrollback.
- *
- * tmux is the authority (see `usePaneMode`); until it has answered, fall back
- * to what this xterm has observed, which is what a-term always used.
- */
-export function resolvesToAppOwnedScrollback(
-  aTerm: XtermATerm,
-  paneOwnsScrollback?: () => boolean | null,
-): boolean {
-  const owned = paneOwnsScrollback?.() ?? null
-  return owned === null ? isMouseTrackingActive(aTerm) : owned
-}
-
 export interface TouchScrollDeps {
   aTermRef: React.RefObject<XtermATerm | null>
   sendArrowKey: (direction: 'up' | 'down') => void
@@ -206,11 +191,6 @@ export interface TouchScrollDeps {
     column: number,
     row: number,
   ) => void
-  sessionMode?: string
-  onRequestScrollbackOverlay?: () => void
-  isScrollbackOverlayActive?: boolean
-  paneOwnsScrollback?: () => boolean | null
-  requestPaneMode?: () => void
 }
 
 export function setupTouchHandlers(
@@ -229,9 +209,6 @@ export function setupTouchHandlers(
     touchStartY = e.touches[0].clientY
     lastSentY = touchStartY
     pendingNormalScrollDeltaY = 0
-    // Ask tmux who owns the scrollback now, so the answer is in hand by the
-    // time the finger has moved far enough to scroll anything.
-    deps.requestPaneMode?.()
   }
 
   const handleTouchMove = (e: TouchEvent) => {
@@ -249,7 +226,7 @@ export function setupTouchHandlers(
     // draws in the alternate screen, where tmux stores no history at all), so
     // hand the drag to the application as wheel reports. That is what a wheel
     // does on a desktop terminal, and it is the only history these panes have.
-    if (resolvesToAppOwnedScrollback(aTerm, deps.paneOwnsScrollback)) {
+    if (isMouseTrackingActive(aTerm)) {
       e.preventDefault()
       e.stopPropagation()
       const screen = container.querySelector<HTMLElement>('.xterm-screen')
@@ -275,24 +252,6 @@ export function setupTouchHandlers(
         const consumed =
           ticks * (cellHeight > 0 ? cellHeight : SCROLL_THRESHOLD)
         lastSentY -= deltaY > 0 ? consumed : -consumed
-      }
-      return
-    }
-
-    // TUI sessions: activate scrollback overlay on a natural downward drag,
-    // matching the rest of mobile aTerm scrolling.
-    if (prefersLocalViewportScrollForMode(deps.sessionMode)) {
-      e.preventDefault()
-      e.stopPropagation()
-      const deltaY = lastSentY - currentY
-      // deltaY < 0 means finger moved down = scroll up into earlier history.
-      // Only update lastSentY when threshold is met — touch events fire
-      // with tiny deltas (1-5px) that must accumulate to reach the threshold.
-      if (Math.abs(deltaY) >= SCROLL_THRESHOLD) {
-        if (deltaY < 0 && !deps.isScrollbackOverlayActive) {
-          deps.onRequestScrollbackOverlay?.()
-        }
-        lastSentY = currentY
       }
       return
     }

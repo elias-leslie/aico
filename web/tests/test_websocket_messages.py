@@ -1,4 +1,4 @@
-"""WebSocket control messages: PTY resize, the window-size claim and dispatch."""
+"""WebSocket control messages: resize, the window-size claim and dispatch."""
 
 from __future__ import annotations
 
@@ -25,25 +25,24 @@ def _send(message: dict, view: ViewContext):
     return asyncio.run(handle_websocket_message(message, view))
 
 
+def _control(view: ViewContext) -> MagicMock:
+    assert isinstance(view.control, MagicMock)
+    return view.control
+
+
 def _tether_view(fake: FakeTether, **overrides) -> tuple[ViewContext, dict]:
     session = fake.add_session(origin="a-term")
     view = ViewContext(
         session_id=session["id"],
-        master_fd=7,
         tmux_session_name=session["tmux"]["sessionName"],
         tmux_socket=session["tmux"]["socket"],
         kind="tether",
         generation=session["generation"],
         client_pid=4242,
+        control=MagicMock(),
         **overrides,
     )
     return view, session
-
-
-@pytest.fixture()
-def pty_resize():
-    with patch("a_term.api.handlers.websocket_messages.resize_pty") as mock:
-        yield mock
 
 
 @pytest.fixture()
@@ -64,34 +63,34 @@ def no_sleep():
 # ---------------------------------------------------------------------------
 
 
-def test_resize_without_claim_only_resizes_this_views_pty(fake_tether: FakeTether, pty_resize, tmux_resize) -> None:
+def test_resize_without_claim_only_resizes_this_views_pty(fake_tether: FakeTether, tmux_resize) -> None:
     view, _ = _tether_view(fake_tether)
     assert _send(_resize(), view) == (90, 28)
-    pty_resize.assert_called_once_with(7, 90, 28)
+    _control(view).resize.assert_called_once_with(90, 28)
     assert fake_tether.state.resize_claims == []
     tmux_resize.assert_not_called()
 
 
-def test_claim_false_does_not_claim(fake_tether: FakeTether, pty_resize) -> None:
+def test_claim_false_does_not_claim(fake_tether: FakeTether) -> None:
     view, _ = _tether_view(fake_tether)
     _send(_resize(claim=False), view)
     assert fake_tether.state.resize_claims == []
 
 
-def test_repeated_dimensions_skip_the_pty_but_still_claim(fake_tether: FakeTether, pty_resize) -> None:
+def test_repeated_dimensions_skip_the_resize_but_still_claim(fake_tether: FakeTether) -> None:
     view, _ = _tether_view(fake_tether)
     _send(_resize(claim=True), view)
     _send(_resize(claim=True), view)
-    pty_resize.assert_called_once_with(7, 90, 28)
+    _control(view).resize.assert_called_once_with(90, 28)
     assert len(fake_tether.state.resize_claims) == 2
 
 
-def test_dimensions_are_clamped(fake_tether: FakeTether, pty_resize) -> None:
+def test_dimensions_are_clamped(fake_tether: FakeTether) -> None:
     view, _ = _tether_view(fake_tether)
     assert _send(_resize(99999, 0), view) == (512, 1)
 
 
-def test_tether_claim_names_the_views_tmux_client_and_generation(fake_tether: FakeTether, pty_resize) -> None:
+def test_tether_claim_names_the_views_tmux_client_and_generation(fake_tether: FakeTether) -> None:
     view, session = _tether_view(fake_tether)
     _send(_resize(120, 40, claim=True), view)
     assert fake_tether.state.resize_claims == [
@@ -100,7 +99,7 @@ def test_tether_claim_names_the_views_tmux_client_and_generation(fake_tether: Fa
 
 
 def test_refused_claim_is_retried_a_bounded_number_of_times(
-    fake_tether: FakeTether, pty_resize, no_sleep
+    fake_tether: FakeTether, no_sleep
 ) -> None:
     view, _ = _tether_view(fake_tether)
     fake_tether.state.resize_results = [{"applied": False, "reason": "client_not_attached"}] * 10
@@ -110,7 +109,7 @@ def test_refused_claim_is_retried_a_bounded_number_of_times(
 
 
 @pytest.mark.parametrize("reason", ["window_linked", "status_row", "invalid", "something_new"])
-def test_permanent_refusal_is_not_retried(fake_tether: FakeTether, pty_resize, no_sleep, reason: str) -> None:
+def test_permanent_refusal_is_not_retried(fake_tether: FakeTether, no_sleep, reason: str) -> None:
     view, _ = _tether_view(fake_tether)
     fake_tether.state.resize_results = [{"applied": False, "reason": reason}] * 5
     _send(_resize(claim=True), view)
@@ -118,14 +117,14 @@ def test_permanent_refusal_is_not_retried(fake_tether: FakeTether, pty_resize, n
     assert no_sleep.call_count == 0
 
 
-def test_tmux_unavailable_is_retried(fake_tether: FakeTether, pty_resize, no_sleep) -> None:
+def test_tmux_unavailable_is_retried(fake_tether: FakeTether, no_sleep) -> None:
     view, _ = _tether_view(fake_tether)
     fake_tether.state.resize_results = [{"applied": False, "reason": "tmux_unavailable"}, {"applied": True}]
     _send(_resize(claim=True), view)
     assert len(fake_tether.state.resize_claims) == 2
 
 
-def test_stale_reason_re_reads_the_generation_once(fake_tether: FakeTether, pty_resize, no_sleep) -> None:
+def test_stale_reason_re_reads_the_generation_once(fake_tether: FakeTether, no_sleep) -> None:
     view, session = _tether_view(fake_tether)
     fake_tether.state.resize_results = [{"applied": False, "reason": "stale"}] * 3
     _send(_resize(claim=True), view)
@@ -135,14 +134,14 @@ def test_stale_reason_re_reads_the_generation_once(fake_tether: FakeTether, pty_
     assert no_sleep.call_count == 0
 
 
-def test_claim_retry_stops_once_applied(fake_tether: FakeTether, pty_resize, no_sleep) -> None:
+def test_claim_retry_stops_once_applied(fake_tether: FakeTether, no_sleep) -> None:
     view, _ = _tether_view(fake_tether)
     fake_tether.state.resize_results = [{"applied": False, "reason": "client_not_attached"}, {"applied": True}]
     _send(_resize(claim=True), view)
     assert len(fake_tether.state.resize_claims) == 2
 
 
-def test_stale_generation_is_re_read_once(fake_tether: FakeTether, pty_resize) -> None:
+def test_stale_generation_is_re_read_once(fake_tether: FakeTether) -> None:
     view, session = _tether_view(fake_tether)
     # The workload was respawned elsewhere: the view's generation is stale.
     current = get_client().respawn_session(session["id"], session["generation"])
@@ -152,7 +151,7 @@ def test_stale_generation_is_re_read_once(fake_tether: FakeTether, pty_resize) -
     assert [claim["generation"] for claim in fake_tether.state.resize_claims] == [current["generation"]]
 
 
-def test_persistently_stale_generation_gives_up(fake_tether: FakeTether, pty_resize) -> None:
+def test_persistently_stale_generation_gives_up(fake_tether: FakeTether) -> None:
     view, _ = _tether_view(fake_tether)
     with patch(
         "a_term.tether.client.TetherClient.resize_claim", side_effect=TetherError(409, "stale_generation")
@@ -161,26 +160,26 @@ def test_persistently_stale_generation_gives_up(fake_tether: FakeTether, pty_res
     assert claim.call_count == 2
 
 
-def test_claim_with_tether_down_is_harmless(tether_down: str, pty_resize) -> None:
+def test_claim_with_tether_down_is_harmless(tether_down: str) -> None:
     view = ViewContext(
-        session_id="deadbeef", master_fd=7, tmux_session_name="tether-deadbeef",
-        tmux_socket="/tmp/x.sock", kind="tether", generation="a" * 64, client_pid=1,
+        session_id="deadbeef", tmux_session_name="tether-deadbeef",
+        tmux_socket="/tmp/x.sock", kind="tether", generation="a" * 64, client_pid=1, control=MagicMock(),
     )
     assert _send(_resize(claim=True), view) == (90, 28)
 
 
-def test_tether_claim_needs_a_client_pid_and_generation(fake_tether: FakeTether, pty_resize) -> None:
+def test_tether_claim_needs_a_client_pid_and_generation(fake_tether: FakeTether) -> None:
     view, _ = _tether_view(fake_tether)
     view.client_pid = None
     _send(_resize(claim=True), view)
     assert fake_tether.state.resize_claims == []
 
 
-def test_external_claim_only_resizes_the_pty(pty_resize, tmux_resize) -> None:
-    view = ViewContext(session_id="claude-work", master_fd=7, tmux_session_name="claude-work", kind="external")
+def test_external_claim_only_resizes_the_client(tmux_resize) -> None:
+    view = ViewContext(session_id="claude-work", tmux_session_name="claude-work", kind="external", control=MagicMock())
     with patch("a_term.tether.client.TetherClient.resize_claim") as claim:
         assert _send(_resize(claim=True), view) == (90, 28)
-    pty_resize.assert_called_once()
+    _control(view).resize.assert_called_once()
     tmux_resize.assert_not_called()
     claim.assert_not_called()
 
@@ -191,103 +190,47 @@ def test_external_claim_only_resizes_the_pty(pty_resize, tmux_resize) -> None:
 
 
 def _external_view(**overrides) -> ViewContext:
-    return ViewContext(session_id="s", master_fd=7, tmux_session_name="t", kind="external", **overrides)
+    return ViewContext(session_id="s", tmux_session_name="t", kind="external", control=MagicMock(), **overrides)
 
 
-def test_resize_message_carries_capabilities(pty_resize) -> None:
+def test_resize_message_carries_capabilities() -> None:
     view = _external_view()
     message = {"text": json.dumps({"__ctrl": True, "resize": {"cols": 80, "rows": 24}, "capabilities": ["binary_protocol"]})}
     _send(message, view)
     assert view.capabilities == ["binary_protocol"]
 
 
-def test_capabilities_only_message_does_not_resize(pty_resize) -> None:
+def test_capabilities_only_message_does_not_resize() -> None:
     view = _external_view()
-    assert _send({"text": '{"__ctrl": true, "capabilities": ["diff_sync"]}'}, view) is None
-    assert view.capabilities == ["diff_sync"]
-    pty_resize.assert_not_called()
+    assert _send({"text": '{"__ctrl": true, "capabilities": ["binary_protocol"]}'}, view) is None
+    assert view.capabilities == ["binary_protocol"]
+    _control(view).resize.assert_not_called()
 
 
-def test_plain_text_and_uncontrolled_json_go_to_the_pty() -> None:
+def test_plain_text_and_uncontrolled_json_go_to_the_session() -> None:
     view = _external_view()
-    with patch("a_term.api.handlers.websocket_messages.os.write") as write:
-        _send({"text": "ls\r"}, view)
-        _send({"text": '{"resize": {"cols": 1}}'}, view)
-        _send({"text": "{not json"}, view)
-    assert [c.args[1] for c in write.call_args_list] == [b"ls\r", b'{"resize": {"cols": 1}}', b"{not json"]
-
-
-def test_refresh_sends_ctrl_l() -> None:
-    view = _external_view()
-    with patch("a_term.api.handlers.websocket_messages.os.write") as write:
-        _send({"text": '{"__ctrl": true, "refresh": true}'}, view)
-    write.assert_called_once_with(7, b"\x0c")
+    _send({"text": "ls\r"}, view)
+    _send({"text": '{"resize": {"cols": 1}}'}, view)
+    _send({"text": "{not json"}, view)
+    assert [c.args[0] for c in _control(view).write.call_args_list] == [
+        b"ls\r", b'{"resize": {"cols": 1}}', b"{not json",
+    ]
 
 
 def test_ping_and_renderer_status_never_write() -> None:
     view = _external_view()
-    with patch("a_term.api.handlers.websocket_messages.os.write") as write:
-        _send({"text": '{"__ctrl": true, "ping": true}'}, view)
-        _send({"text": json.dumps({"__ctrl": True, "renderer_status": {"renderer": "webgl"}})}, view)
-    write.assert_not_called()
+    _send({"text": '{"__ctrl": true, "ping": true}'}, view)
+    _send({"text": json.dumps({"__ctrl": True, "renderer_status": {"renderer": "webgl"}})}, view)
+    _control(view).write.assert_not_called()
 
 
-def test_commit_feeds_backpressure() -> None:
-    backpressure = MagicMock()
-    view = _external_view(backpressure=backpressure)
-    _send({"text": '{"__ctrl": true, "commit": 4096}'}, view)
-    backpressure.record_commit.assert_called_once_with(4096)
-
-
-class _Socket:
-    def __init__(self) -> None:
-        self.sent: list[str] = []
-
-    async def send_text(self, text: str) -> None:
-        self.sent.append(text)
-
-
-def test_scroll_request_reads_the_sessions_own_socket() -> None:
-    socket = _Socket()
-    view = ViewContext(session_id="s", master_fd=7, tmux_session_name="tether-1", tmux_socket="/tmp/t.sock",
-                       kind="tether", websocket=socket)
-    with patch("a_term.services.scrollback_pager.get_scrollback_range", return_value=(["a", "b"], 10)) as rng:
-        _send({"text": json.dumps({"__ctrl": True, "scroll_request": {"from_line": 3, "count": 2}})}, view)
-    rng.assert_called_once_with("tether-1", 3, 2, "/tmp/t.sock")
-    assert json.loads(socket.sent[0])["scrollback_page"] == {"from_line": 3, "lines": ["a", "b"], "total_lines": 10}
-
-
-def test_latest_scroll_request_counts_back_from_the_end() -> None:
-    socket = _Socket()
-    view = ViewContext(session_id="s", master_fd=7, tmux_session_name="tether-1", tmux_socket="/tmp/t.sock",
-                       kind="tether", websocket=socket)
-    with (
-        patch("a_term.services.scrollback_pager.get_scrollback_line_count", return_value=500) as count,
-        patch("a_term.services.scrollback_pager.get_scrollback_range", return_value=(["x"], 500)) as rng,
-    ):
-        _send({"text": json.dumps({"__ctrl": True, "scroll_request": {"count": 100}})}, view)
-    count.assert_called_once_with("tether-1", "/tmp/t.sock")
-    rng.assert_called_once_with("tether-1", 400, 100, "/tmp/t.sock")
-
-
-def test_pane_mode_request_uses_the_sessions_socket() -> None:
-    socket = _Socket()
-    view = ViewContext(session_id="s", master_fd=7, tmux_session_name="tether-1", tmux_socket="/tmp/t.sock",
-                       kind="tether", websocket=socket)
-    with patch("a_term.services.scrollback_pager.get_pane_mode", return_value=(True, False)) as mode:
-        _send({"text": '{"__ctrl": true, "pane_mode_request": true}'}, view)
-    mode.assert_called_once_with("tether-1", "/tmp/t.sock")
-    assert json.loads(socket.sent[0])["pane_mode"] == {"alternate_screen": True, "mouse_reporting": False}
-
-
-def test_binary_input_frame_goes_to_the_pty() -> None:
+def test_binary_input_frame_goes_to_the_session() -> None:
     view = _external_view()
-    with patch("a_term.api.handlers.websocket_messages.os.write") as write:
-        _send({"bytes": b"\x01hello"}, view)
-    write.assert_called_once_with(7, b"hello")
+    _send({"bytes": b"\x01hello"}, view)
+    _control(view).write.assert_called_once_with(b"hello")
 
 
-def test_binary_control_frame_is_a_control_message(fake_tether: FakeTether, pty_resize) -> None:
+def test_binary_control_frame_is_a_control_message(fake_tether: FakeTether) -> None:
     view, _ = _tether_view(fake_tether)
     frame = b"\x02" + json.dumps({"__ctrl": True, "resize": {"cols": 70, "rows": 20}, "claim": True}).encode()
     assert _send({"bytes": frame}, view) == (70, 20)
@@ -296,52 +239,45 @@ def test_binary_control_frame_is_a_control_message(fake_tether: FakeTether, pty_
 
 def test_single_byte_binary_is_raw_input() -> None:
     view = _external_view()
-    with patch("a_term.api.handlers.websocket_messages.os.write") as write:
-        _send({"bytes": b"\x03"}, view)
-    write.assert_called_once_with(7, b"\x03")
+    _send({"bytes": b"\x03"}, view)
+    _control(view).write.assert_called_once_with(b"\x03")
 
 
 def test_empty_message_is_ignored() -> None:
     assert _send({"type": "websocket.receive"}, _external_view()) is None
 
 
+def test_input_before_the_control_client_exists_is_dropped() -> None:
+    view = ViewContext(session_id="s", tmux_session_name="t", kind="external")
+    assert _send({"text": "ls\r"}, view) is None
+
+
 # ---------------------------------------------------------------------------
-# Control-mode views: no PTY, input and size go to the tmux control client
+# Input, size, refresh and paste go to the tmux control client
 # ---------------------------------------------------------------------------
 
 
-def test_control_view_routes_input_resize_refresh_and_paste(pty_resize) -> None:
+def test_view_routes_input_resize_refresh_and_paste() -> None:
     control = MagicMock()
     control.paste = MagicMock(side_effect=lambda text: asyncio.sleep(0))
-    view = ViewContext(session_id="s", master_fd=-1, tmux_session_name="t", kind="external", control=control)
-    with patch("a_term.api.handlers.websocket_messages.os.write") as write:
-        _send({"text": "ls\r"}, view)
-        _send({"bytes": b"\x01" + b"q"}, view)
-        _send(_resize(100, 40), view)
-        _send({"text": json.dumps({"__ctrl": True, "refresh": True})}, view)
-        _send({"text": json.dumps({"__ctrl": True, "paste": "a\nb"})}, view)
-    write.assert_not_called()
-    pty_resize.assert_not_called()
+    view = ViewContext(session_id="s", tmux_session_name="t", kind="external", control=control)
+    _send({"text": "ls\r"}, view)
+    _send({"bytes": b"\x01" + b"q"}, view)
+    _send(_resize(100, 40), view)
+    _send({"text": json.dumps({"__ctrl": True, "refresh": True})}, view)
+    _send({"text": json.dumps({"__ctrl": True, "paste": "a\nb"})}, view)
     assert [c.args[0] for c in control.write.call_args_list] == [b"ls\r", b"q"]
     control.resize.assert_called_once_with(100, 40)
     control.reseed.assert_called_once_with()
     control.paste.assert_called_once_with("a\nb")
 
 
-def test_claim_before_the_control_client_exists_is_deferred(pty_resize) -> None:
-    view = ViewContext(session_id="s", master_fd=-1, tmux_session_name="t", kind="external")
+def test_claim_before_the_control_client_exists_is_deferred() -> None:
+    view = ViewContext(session_id="s", tmux_session_name="t", kind="external")
     with patch("a_term.api.handlers.websocket_messages._claim_window_size") as claim:
         assert _send(_resize(90, 28, claim=True), view) == (90, 28)
     claim.assert_not_called()
-    pty_resize.assert_not_called()
     assert view.pending_claim is True and view.last_resize == [90, 28]
-
-
-def test_paste_on_a_pty_view_is_bracketed() -> None:
-    view = ViewContext(session_id="s", master_fd=7, tmux_session_name="t")
-    with patch("a_term.api.handlers.websocket_messages.os.write") as write:
-        _send({"text": json.dumps({"__ctrl": True, "paste": "x"})}, view)
-    write.assert_called_once_with(7, b"\x1b[200~x\x1b[201~")
 
 
 # ---------------------------------------------------------------------------
@@ -356,47 +292,34 @@ def test_paste_on_a_pty_view_is_bracketed() -> None:
         {"resize": {"cols": 80, "rows": None}},
         {"resize": {"cols": [80], "rows": 24}},
         {"resize": "80x24"},
-        {"scroll_request": {"count": "lots"}},
-        {"scroll_request": {"from_line": "top", "count": 10}},
-        {"scroll_request": ["from_line", 3]},
-        {"commit": "lots"},
-        {"commit": {"bytes": 4096}},
+        {"paste": 5},
+        {"paste": ["a"]},
     ],
 )
-def test_malformed_control_message_is_ignored(ctrl: dict, pty_resize) -> None:
-    socket = _Socket()
-    backpressure = MagicMock()
-    view = _external_view(websocket=socket, backpressure=backpressure)
+def test_malformed_control_message_is_ignored(ctrl: dict) -> None:
+    view = _external_view()
     message = {"text": json.dumps({"__ctrl": True, **ctrl})}
-    with (
-        patch("a_term.api.handlers.websocket_messages.os.write") as write,
-        patch("a_term.services.scrollback_pager.get_scrollback_range") as rng,
-        patch("a_term.services.scrollback_pager.get_scrollback_line_count", return_value=50),
-    ):
-        assert _send(message, view) is None
-    pty_resize.assert_not_called()
-    write.assert_not_called()
-    rng.assert_not_called()
-    backpressure.record_commit.assert_not_called()
+    assert _send(message, view) is None
+    _control(view).resize.assert_not_called()
+    _control(view).write.assert_not_called()
+    _control(view).paste.assert_not_called()
     assert view.last_resize == [0, 0]
-    assert socket.sent == []
 
 
-def test_non_finite_dimension_is_ignored(pty_resize) -> None:
+def test_non_finite_dimension_is_ignored() -> None:
     view = _external_view()
     assert _send({"text": '{"__ctrl": true, "resize": {"cols": Infinity, "rows": NaN}}'}, view) is None
-    pty_resize.assert_not_called()
+    _control(view).resize.assert_not_called()
 
 
-def test_numeric_strings_still_resize(pty_resize) -> None:
+def test_numeric_strings_still_resize() -> None:
     view = _external_view()
     assert _send({"text": json.dumps({"__ctrl": True, "resize": {"cols": "100", "rows": "30"}})}, view) == (100, 30)
 
 
-def test_integer_past_the_digit_limit_is_input_not_a_crash(pty_resize) -> None:
+def test_integer_past_the_digit_limit_is_input_not_a_crash() -> None:
     view = _external_view()
-    text = '{"__ctrl": true, "commit": ' + "1" * 5000 + "}"
-    with patch("a_term.api.handlers.websocket_messages.os.write") as write:
-        assert _send({"text": text}, view) is None
-    pty_resize.assert_not_called()
-    assert write.call_args.args[1] == text.encode("utf-8")
+    text = '{"__ctrl": true, "ping": ' + "1" * 5000 + "}"
+    assert _send({"text": text}, view) is None
+    _control(view).resize.assert_not_called()
+    assert _control(view).write.call_args.args[0] == text.encode("utf-8")

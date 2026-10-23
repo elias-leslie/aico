@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ConnectionStatus } from '../../components/ATerm'
-import type { ScrollbackDelta } from '../a-term/line-cache'
 import { openWebSocketConnection } from './use-websocket-connection'
 
 interface UseATermWebSocketOptions {
@@ -17,36 +16,8 @@ interface UseATermWebSocketOptions {
   onMessage?: (data: string) => void
   /** Called when a-term should display a message */
   onATermMessage?: (message: string) => void
-  /** Called when backend sends an authoritative scrollback snapshot */
-  onScrollbackSync?: (
-    scrollback: string,
-    cursorPosition?: { x: number; y: number },
-  ) => void
-  /** Called when backend sends a scrollback delta (Phase 2) */
-  onScrollbackDelta?: (delta: ScrollbackDelta) => void
-  /** Called when backend sends viewport init for instant render (Phase 3) */
-  onViewportInit?: (data: {
-    lines: string
-    cursor_position?: { x: number; y: number }
-    total_lines: number
-    viewport_start_line: number
-  }) => void
-  /** Called when backend sends a scrollback page response (Phase 3) */
-  onScrollbackPage?: (data: {
-    from_line: number
-    lines: string[]
-    total_lines: number
-  }) => void
-  /** Called when the backend reports who owns the pane's scrollback */
-  onPaneMode?: (data: {
-    alternate_screen: boolean
-    mouse_reporting: boolean
-  }) => void
-  /** Called with the transport the server chose for this view (and, in
-   * control mode, how much history its seed carries) */
-  onTransport?: (transport: 'control' | 'attach', historyLines?: number) => void
-  /** Ask the server for the control-mode transport */
-  requestControl?: boolean
+  /** Called with how much history the server's seed carries (sent before the seed) */
+  onHistoryLines?: (historyLines: number) => void
   /** Called before reconnect data arrives — clear aTerm buffer to prevent duplicates */
   onBeforeReconnectData?: () => void
   /** Get current aTerm dimensions for resize message */
@@ -86,13 +57,7 @@ export function useATermWebSocket({
   onDisconnect,
   onMessage,
   onATermMessage,
-  onScrollbackSync,
-  onScrollbackDelta,
-  onViewportInit,
-  onScrollbackPage,
-  onPaneMode,
-  onTransport,
-  requestControl = false,
+  onHistoryLines,
   onBeforeReconnectData,
   getDimensions,
 }: UseATermWebSocketOptions): UseATermWebSocketReturn {
@@ -112,12 +77,7 @@ export function useATermWebSocket({
   const onDisconnectRef = useRef(onDisconnect)
   const onMessageRef = useRef(onMessage)
   const onATermMessageRef = useRef(onATermMessage)
-  const onScrollbackSyncRef = useRef(onScrollbackSync)
-  const onScrollbackDeltaRef = useRef(onScrollbackDelta)
-  const onViewportInitRef = useRef(onViewportInit)
-  const onScrollbackPageRef = useRef(onScrollbackPage)
-  const onPaneModeRef = useRef(onPaneMode)
-  const onTransportRef = useRef(onTransport)
+  const onHistoryLinesRef = useRef(onHistoryLines)
   const onBeforeReconnectDataRef = useRef(onBeforeReconnectData)
   const getDimensionsRef = useRef(getDimensions)
 
@@ -127,12 +87,7 @@ export function useATermWebSocket({
     onDisconnectRef.current = onDisconnect
     onMessageRef.current = onMessage
     onATermMessageRef.current = onATermMessage
-    onScrollbackSyncRef.current = onScrollbackSync
-    onScrollbackDeltaRef.current = onScrollbackDelta
-    onViewportInitRef.current = onViewportInit
-    onScrollbackPageRef.current = onScrollbackPage
-    onPaneModeRef.current = onPaneMode
-    onTransportRef.current = onTransport
+    onHistoryLinesRef.current = onHistoryLines
     onBeforeReconnectDataRef.current = onBeforeReconnectData
     getDimensionsRef.current = getDimensions
   }, [
@@ -140,12 +95,7 @@ export function useATermWebSocket({
     onDisconnect,
     onMessage,
     onATermMessage,
-    onScrollbackSync,
-    onScrollbackDelta,
-    onViewportInit,
-    onScrollbackPage,
-    onPaneMode,
-    onTransport,
+    onHistoryLines,
     onBeforeReconnectData,
     getDimensions,
   ])
@@ -184,23 +134,16 @@ export function useATermWebSocket({
       {
         onATermMessage: (msg) => onATermMessageRef.current?.(msg),
         onMessage: (data) => onMessageRef.current?.(data),
-        onScrollbackSync: (scrollback, cursorPosition) =>
-          onScrollbackSyncRef.current?.(scrollback, cursorPosition),
-        onScrollbackDelta: (delta) => onScrollbackDeltaRef.current?.(delta),
-        onViewportInit: (data) => onViewportInitRef.current?.(data),
-        onScrollbackPage: (data) => onScrollbackPageRef.current?.(data),
-        onPaneMode: (data) => onPaneModeRef.current?.(data),
-        onTransport: (transport, historyLines) =>
-          onTransportRef.current?.(transport, historyLines),
+        onHistoryLines: (historyLines) =>
+          onHistoryLinesRef.current?.(historyLines),
         onBeforeReconnectData: () => onBeforeReconnectDataRef.current?.(),
         onDisconnect: () => onDisconnectRef.current?.(),
         getDimensions: () => getDimensionsRef.current?.() ?? null,
         sendInitialResize,
-        requestControl,
         setStatus: (s) => setStatus(s as ConnectionStatus),
       },
     )
-  }, [requestControl, sendInitialResize, sessionId, workingDir])
+  }, [sendInitialResize, sessionId, workingDir])
 
   // Keep ref in sync for recursive timeout calls
   useEffect(() => {

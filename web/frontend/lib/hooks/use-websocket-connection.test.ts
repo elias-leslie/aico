@@ -55,7 +55,7 @@ function buildCallbacks() {
     onATermMessage: vi.fn(),
     onBeforeReconnectData: vi.fn(),
     onDisconnect: vi.fn(),
-    onScrollbackPage: vi.fn(),
+    onHistoryLines: vi.fn(),
     setStatus: vi.fn(),
   }
 }
@@ -93,32 +93,28 @@ describe('dispatchControlMessage', () => {
     const callbacks = buildCallbacks()
 
     expect(dispatchControlMessage('{"message":"hello"}', callbacks)).toBe(false)
-    expect(callbacks.onScrollbackPage).not.toHaveBeenCalled()
+    expect(callbacks.onHistoryLines).not.toHaveBeenCalled()
   })
 
-  it('swallows unknown control frames such as backpressure commits', () => {
+  it('swallows unknown control frames', () => {
     const callbacks = buildCallbacks()
 
     expect(
       dispatchControlMessage('{"__ctrl":true,"commit":262412}', callbacks),
     ).toBe(true)
-    expect(callbacks.onScrollbackPage).not.toHaveBeenCalled()
+    expect(callbacks.onHistoryLines).not.toHaveBeenCalled()
   })
 
-  it('dispatches known scrollback page control frames', () => {
+  it('reports how much history the seed carries', () => {
     const callbacks = buildCallbacks()
 
     expect(
       dispatchControlMessage(
-        '{"__ctrl":true,"scrollback_page":{"from_line":5,"lines":["a"],"total_lines":10}}',
+        '{"__ctrl":true,"transport":"control","history_lines":20000}',
         callbacks,
       ),
     ).toBe(true)
-    expect(callbacks.onScrollbackPage).toHaveBeenCalledWith({
-      from_line: 5,
-      lines: ['a'],
-      total_lines: 10,
-    })
+    expect(callbacks.onHistoryLines).toHaveBeenCalledWith(20000)
   })
 })
 
@@ -136,12 +132,7 @@ describe('openWebSocketConnection', () => {
     expect(sockets[0].sent).toHaveLength(1)
     expect(JSON.parse(sockets[0].sent[0] as string)).toEqual({
       __ctrl: true,
-      capabilities: [
-        'backpressure',
-        'diff_sync',
-        'binary_protocol',
-        'demand_paging',
-      ],
+      capabilities: ['binary_protocol'],
     })
   })
 
@@ -177,12 +168,7 @@ describe('openWebSocketConnection', () => {
     expect(callbacks.getDimensions).not.toHaveBeenCalled()
     expect(JSON.parse(sockets[0].sent[0] as string)).toEqual({
       __ctrl: true,
-      capabilities: [
-        'backpressure',
-        'diff_sync',
-        'binary_protocol',
-        'demand_paging',
-      ],
+      capabilities: ['binary_protocol'],
     })
   })
 
@@ -314,47 +300,22 @@ describe('openWebSocketConnection', () => {
   })
 })
 
-describe('control-mode transport', () => {
-  it('asks for control mode in the socket URL only when requested', () => {
-    vi.stubGlobal('WebSocket', MockWebSocket)
-    openWebSocketConnection('session-1', '/tmp', buildRefs(), {
-      ...buildCallbacks(),
-      requestControl: true,
-    })
-    openWebSocketConnection(
-      'session-2',
-      undefined,
-      buildRefs(),
-      buildCallbacks(),
-    )
-
-    expect(sockets[0].url).toMatch(
-      /\/ws\/a-term\/session-1\?working_dir=%2Ftmp&transport=control$/,
-    )
-    expect(sockets[1].url).toMatch(/\/ws\/a-term\/session-2$/)
-  })
-
-  it('reports the transport the server chose', () => {
-    const onTransport = vi.fn()
-    const callbacks = { ...buildCallbacks(), onTransport }
-    expect(
-      dispatchControlMessage('{"__ctrl":true,"transport":"attach"}', callbacks),
-    ).toBe(true)
-    expect(onTransport).toHaveBeenCalledWith('attach', undefined)
-  })
-
-  it('passes on how much history a control-mode seed carries', () => {
-    const onTransport = vi.fn()
-    const callbacks = { ...buildCallbacks(), onTransport }
-    dispatchControlMessage(
-      '{"__ctrl":true,"transport":"control","history_lines":20000}',
-      callbacks,
-    )
-    expect(onTransport).toHaveBeenCalledWith('control', 20000)
+describe('history lines', () => {
+  it('ignores a history size that is not a positive number', () => {
+    const callbacks = buildCallbacks()
     dispatchControlMessage(
       '{"__ctrl":true,"transport":"control","history_lines":"lots"}',
       callbacks,
     )
-    expect(onTransport).toHaveBeenLastCalledWith('control', undefined)
+    dispatchControlMessage('{"__ctrl":true,"transport":"control"}', callbacks)
+    expect(callbacks.onHistoryLines).not.toHaveBeenCalled()
+  })
+
+  it('connects without any transport query', () => {
+    vi.stubGlobal('WebSocket', MockWebSocket)
+    openWebSocketConnection('session-1', '/tmp', buildRefs(), buildCallbacks())
+    expect(sockets[0].url).toMatch(
+      /\/ws\/a-term\/session-1\?working_dir=%2Ftmp$/,
+    )
   })
 })

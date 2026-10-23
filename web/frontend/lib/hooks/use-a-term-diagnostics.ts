@@ -4,16 +4,8 @@ import { useCallback, useEffect, useRef } from 'react'
 import { buildApiUrl } from '@/lib/api-config'
 
 export interface DiagnosticCounters {
-  snapshotReceived: number
-  snapshotApplied: number
-  snapshotSkippedIdentical: number
-  snapshotSkippedPromptInput: number
-  deltaApplied: number
-  deltaSkippedStale: number
-  deltaSkippedInFlight: number
   writesEnqueued: number
   writesFlushed: number
-  fullResetApplied: number
 }
 
 export interface DiagnosticEntry {
@@ -60,16 +52,8 @@ export function useATermDiagnostics(
 ): UseATermDiagnosticsReturn {
   const enabled = useRef(isEnabled())
   const countersRef = useRef<DiagnosticCounters>({
-    snapshotReceived: 0,
-    snapshotApplied: 0,
-    snapshotSkippedIdentical: 0,
-    snapshotSkippedPromptInput: 0,
-    deltaApplied: 0,
-    deltaSkippedStale: 0,
-    deltaSkippedInFlight: 0,
     writesEnqueued: 0,
     writesFlushed: 0,
-    fullResetApplied: 0,
   })
   const logRef = useRef<DiagnosticEntry[]>([])
   const backendSummaryRef = useRef<BackendSummary | null>(null)

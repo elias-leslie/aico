@@ -126,7 +126,6 @@ function RenderHarness({
       isModeSwitching: false,
       fontFamily: 'monospace',
       fontSize: 14,
-      scrollback: 1000,
       cursorStyle: 'block',
       cursorBlink: true,
       theme: {

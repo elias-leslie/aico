@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useRef } from 'react'
 import type {
   ATermSearchDirection,
   ATermSearchOptions,
@@ -14,19 +14,11 @@ import {
   findATermSearchMatches,
   getATermSearchIndex,
 } from '../utils/a-term-search'
-import { isTuiSessionMode } from '../utils/session-mode'
 
 type XtermATerm = InstanceType<typeof import('@xterm/xterm').Terminal>
 
 interface UseATermSearchOptions {
   aTermRef: React.RefObject<XtermATerm | null>
-  sessionMode?: string
-  activateOverlay: () => void
-  getOverlayLines: () => string[]
-  overlaySearchVersion: number
-  /** Notify the overlay hook whether a search query is active so it can skip
-   * re-render-triggering version bumps when nothing consumes them. */
-  setOverlaySearchActive?: (active: boolean) => void
 }
 
 interface SearchState {
@@ -34,14 +26,8 @@ interface SearchState {
   activeIndex: number
 }
 
-interface OverlaySearchState {
-  query: string
-  activeIndex: number
-}
-
 interface UseATermSearchReturn {
   clearSearch: () => void
-  overlaySearchState: OverlaySearchState | null
   search: (query: string, options?: ATermSearchOptions) => ATermSearchResult
 }
 
@@ -52,23 +38,13 @@ const INITIAL_SEARCH_STATE: SearchState = {
 
 export function useATermSearch({
   aTermRef,
-  sessionMode,
-  activateOverlay,
-  getOverlayLines,
-  overlaySearchVersion,
-  setOverlaySearchActive,
 }: UseATermSearchOptions): UseATermSearchReturn {
-  const [overlaySearchState, setOverlaySearchState] =
-    useState<OverlaySearchState | null>(null)
   const searchStateRef = useRef<SearchState>(INITIAL_SEARCH_STATE)
-  const isTuiSession = isTuiSessionMode(sessionMode)
 
   const clearSearch = useCallback(() => {
     searchStateRef.current = INITIAL_SEARCH_STATE
-    setOverlaySearchState(null)
-    setOverlaySearchActive?.(false)
     aTermRef.current?.clearSelection()
-  }, [aTermRef, setOverlaySearchActive])
+  }, [aTermRef])
 
   const search = useCallback(
     (rawQuery: string, options?: ATermSearchOptions): ATermSearchResult => {
@@ -81,21 +57,13 @@ export function useATermSearch({
         return buildEmptyATermSearchResult()
       }
 
-      setOverlaySearchActive?.(true)
-
-      const overlayLines = isTuiSession ? getOverlayLines() : []
-      const lines =
-        overlayLines.length > 0
-          ? overlayLines
-          : getATermBufferLines(aTermRef.current)
-      const matches = findATermSearchMatches(lines, query)
+      const matches = findATermSearchMatches(
+        getATermBufferLines(aTermRef.current),
+        query,
+      )
 
       if (matches.length === 0) {
-        searchStateRef.current = {
-          query,
-          activeIndex: -1,
-        }
-        setOverlaySearchState(null)
+        searchStateRef.current = { query, activeIndex: -1 }
         aTermRef.current?.clearSelection()
         return buildEmptyATermSearchResult(query)
       }
@@ -106,70 +74,17 @@ export function useATermSearch({
         direction,
         reset,
       )
-      const match = matches[activeIndex]
 
-      searchStateRef.current = {
-        query,
-        activeIndex,
-      }
+      searchStateRef.current = { query, activeIndex }
 
-      if (isTuiSession) {
-        activateOverlay()
-        setOverlaySearchState({ query, activeIndex })
-      } else if (aTermRef.current) {
-        applyATermSearchSelection(aTermRef.current, match)
+      if (aTermRef.current) {
+        applyATermSearchSelection(aTermRef.current, matches[activeIndex])
       }
 
       return buildATermSearchResult(query, matches.length, activeIndex)
     },
-    [
-      activateOverlay,
-      clearSearch,
-      getOverlayLines,
-      isTuiSession,
-      aTermRef,
-      setOverlaySearchActive,
-    ],
+    [clearSearch, aTermRef],
   )
 
-  useEffect(() => {
-    if (!isTuiSession) return
-    const { query, activeIndex } = searchStateRef.current
-    if (!query) return
-
-    const overlayLines = getOverlayLines()
-    if (overlayLines.length === 0) {
-      if (overlaySearchVersion === 0) return
-      setOverlaySearchState(null)
-      return
-    }
-
-    const matches = findATermSearchMatches(overlayLines, query)
-    if (matches.length === 0) {
-      setOverlaySearchState(null)
-      searchStateRef.current = {
-        query,
-        activeIndex: -1,
-      }
-      return
-    }
-
-    const nextIndex =
-      activeIndex < 0 ? 0 : Math.min(activeIndex, matches.length - 1)
-
-    searchStateRef.current = {
-      query,
-      activeIndex: nextIndex,
-    }
-    setOverlaySearchState({
-      query,
-      activeIndex: nextIndex,
-    })
-  }, [getOverlayLines, isTuiSession, overlaySearchVersion])
-
-  return {
-    clearSearch,
-    overlaySearchState,
-    search,
-  }
+  return { clearSearch, search }
 }

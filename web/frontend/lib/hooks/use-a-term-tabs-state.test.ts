@@ -198,7 +198,6 @@ describe('useATermTabsState', () => {
       fontId: 'jetbrains-mono',
       fontSize: 14,
       fontFamily: "'JetBrains Mono', monospace",
-      scrollback: 10000,
       cursorStyle: 'block',
       cursorBlink: true,
       themeId:
@@ -210,7 +209,6 @@ describe('useATermTabsState', () => {
       theme: {},
       setFontId: vi.fn(),
       setFontSize: vi.fn(),
-      setScrollback: vi.fn(),
       setCursorStyle: vi.fn(),
       setCursorBlink: vi.fn(),
       setThemeId: vi.fn(),

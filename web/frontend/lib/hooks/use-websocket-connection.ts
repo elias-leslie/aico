@@ -1,10 +1,8 @@
 'use client'
 
 import type React from 'react'
-import type { ScrollbackDelta } from '../a-term/line-cache'
 import { getWsUrl } from '../api-config'
 import {
-  BACKPRESSURE_COMMIT_INTERVAL,
   CONNECTION_TIMEOUT,
   WS_CLIENT_PING_INTERVAL,
   WS_CLOSE_CODE_SESSION_DEAD,
@@ -25,52 +23,22 @@ export interface WebSocketConnectionRefs {
 export interface WebSocketConnectionCallbacks {
   onATermMessage?: (message: string) => void
   onMessage?: (data: string) => void
-  onScrollbackSync?: (
-    scrollback: string,
-    cursorPosition?: { x: number; y: number },
-  ) => void
-  onScrollbackDelta?: (delta: ScrollbackDelta) => void
-  onViewportInit?: (data: {
-    lines: string
-    cursor_position?: { x: number; y: number }
-    total_lines: number
-    viewport_start_line: number
-  }) => void
-  onScrollbackPage?: (data: {
-    from_line: number
-    lines: string[]
-    total_lines: number
-  }) => void
-  onPaneMode?: (data: {
-    alternate_screen: boolean
-    mouse_reporting: boolean
-  }) => void
-  /** The transport the server chose for this view (control or attach). In
-   * control mode `historyLines` is how much history the server's seed carries. */
-  onTransport?: (transport: 'control' | 'attach', historyLines?: number) => void
+  /** How much history the server's seed carries (sent before the seed). */
+  onHistoryLines?: (historyLines: number) => void
   onBeforeReconnectData?: () => void
   onDisconnect?: () => void
   getDimensions?: () => { cols: number; rows: number } | null
   sendInitialResize?: boolean
-  /** Ask for the control-mode transport (the server may refuse). */
-  requestControl?: boolean
   setStatus: (status: string) => void
 }
 
 // Binary protocol message types (must match backend)
 const MSG_OUTPUT = 0x01
-const MSG_INPUT = 0x01 // client→server input (same value as OUTPUT, different direction)
 const MSG_CONTROL = 0x02
 
 /** Client capabilities advertised in the initial resize message. */
-const CLIENT_CAPABILITIES = [
-  'backpressure',
-  'diff_sync',
-  'binary_protocol',
-  'demand_paging',
-]
+const CLIENT_CAPABILITIES = ['binary_protocol']
 
-const textEncoder = new TextEncoder()
 const textDecoder = new TextDecoder()
 const MAX_RECONNECT_ATTEMPTS = 30
 const INITIAL_RECONNECT_DELAY_MS = 250
@@ -108,7 +76,6 @@ export function openWebSocketConnection(
     onDisconnect,
     getDimensions,
     sendInitialResize = true,
-    requestControl = false,
     setStatus,
   } = callbacks
   const scheduleReconnect = (
@@ -152,7 +119,6 @@ export function openWebSocketConnection(
 
   const query = new URLSearchParams()
   if (workingDir) query.set('working_dir', workingDir)
-  if (requestControl) query.set('transport', 'control')
   const queryString = query.toString()
   const wsPath = `/ws/a-term/${sessionId}${queryString ? `?${queryString}` : ''}`
 
@@ -167,10 +133,6 @@ export function openWebSocketConnection(
     return
   }
   wsRef.current = ws
-
-  // Phase 1: Backpressure tracking
-  let bytesReceived = 0
-  let lastCommit = 0
 
   // Set up connection timeout with exponential-backoff retry
   timeoutIdRef.current = setTimeout(() => {
@@ -234,17 +196,10 @@ export function openWebSocketConnection(
     if (wsRef.current !== ws) return
     if (!mountedRef.current) return
     try {
-      // Phase 5: Binary protocol handling
+      // Binary protocol handling
       if (event.data instanceof ArrayBuffer) {
         const view = new Uint8Array(event.data)
         if (view.length < 1) return
-
-        // Phase 1: Track bytes for backpressure
-        bytesReceived += view.length
-        if (bytesReceived - lastCommit >= BACKPRESSURE_COMMIT_INTERVAL) {
-          lastCommit = bytesReceived
-          ws.send(JSON.stringify({ __ctrl: true, commit: bytesReceived }))
-        }
 
         const msgType = view[0]
         const payload = view.subarray(1)
@@ -265,13 +220,6 @@ export function openWebSocketConnection(
 
       // Text protocol (legacy / backward compat)
       if (typeof event.data === 'string') {
-        // Phase 1: Track bytes for backpressure
-        bytesReceived += new Blob([event.data]).size
-        if (bytesReceived - lastCommit >= BACKPRESSURE_COMMIT_INTERVAL) {
-          lastCommit = bytesReceived
-          ws.send(JSON.stringify({ __ctrl: true, commit: bytesReceived }))
-        }
-
         if (event.data.startsWith('{')) {
           if (dispatchControlMessage(event.data, callbacks)) {
             return
@@ -356,73 +304,11 @@ export function dispatchControlMessage(
     const control = JSON.parse(text) as Record<string, unknown>
     if (!control.__ctrl) return false
 
-    // Scrollback sync (legacy full snapshot)
-    if (typeof control.scrollback_sync === 'string') {
-      const hasCursorPosition =
-        Number.isInteger(control.scrollback_cursor_x) &&
-        Number.isInteger(control.scrollback_cursor_y)
-      callbacks.onScrollbackSync?.(
-        control.scrollback_sync,
-        hasCursorPosition
-          ? {
-              x: control.scrollback_cursor_x as number,
-              y: control.scrollback_cursor_y as number,
-            }
-          : undefined,
-      )
-      return true
-    }
-
-    // Phase 2: Scrollback delta
-    if (control.scrollback_delta) {
-      callbacks.onScrollbackDelta?.(control.scrollback_delta as ScrollbackDelta)
-      return true
-    }
-
-    // Phase 3: Viewport init
-    if (control.viewport_init) {
-      callbacks.onViewportInit?.(
-        control.viewport_init as {
-          lines: string
-          cursor_position?: { x: number; y: number }
-          total_lines: number
-          viewport_start_line: number
-        },
-      )
-      return true
-    }
-
-    // Phase 3: Scrollback page response
-    if (control.scrollback_page) {
-      callbacks.onScrollbackPage?.(
-        control.scrollback_page as {
-          from_line: number
-          lines: string[]
-          total_lines: number
-        },
-      )
-      return true
-    }
-
-    if (control.transport === 'control' || control.transport === 'attach') {
+    if (control.transport === 'control') {
       const historyLines = control.history_lines
-      callbacks.onTransport?.(
-        control.transport,
-        typeof historyLines === 'number' && historyLines > 0
-          ? historyLines
-          : undefined,
-      )
-      return true
-    }
-
-    // Who owns the pane's scrollback, straight from tmux.
-    if (control.pane_mode) {
-      callbacks.onPaneMode?.(
-        control.pane_mode as {
-          alternate_screen: boolean
-          mouse_reporting: boolean
-        },
-      )
+      if (typeof historyLines === 'number' && historyLines > 0) {
+        callbacks.onHistoryLines?.(historyLines)
+      }
       return true
     }
 
@@ -432,29 +318,4 @@ export function dispatchControlMessage(
   } catch {
     return false
   }
-}
-
-/**
- * Send input via binary protocol when available, text otherwise.
- */
-export function sendBinaryInput(ws: WebSocket, data: string): void {
-  const encoded = textEncoder.encode(data)
-  const frame = new Uint8Array(1 + encoded.length)
-  frame[0] = MSG_INPUT
-  frame.set(encoded, 1)
-  ws.send(frame)
-}
-
-/**
- * Send a control message via binary protocol.
- */
-export function sendBinaryControl(
-  ws: WebSocket,
-  payload: Record<string, unknown>,
-): void {
-  const encoded = textEncoder.encode(JSON.stringify(payload))
-  const frame = new Uint8Array(1 + encoded.length)
-  frame[0] = MSG_CONTROL
-  frame.set(encoded, 1)
-  ws.send(frame)
 }

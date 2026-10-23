@@ -143,7 +143,6 @@ describe('useATermScrolling', () => {
         wsRef: wsRef as never,
         aTermRef: aTermRef as unknown as { current: XtermATerm | null },
         isMobile: false,
-        sessionMode: 'shell',
       }),
     )
 
@@ -164,224 +163,6 @@ describe('useATermScrolling', () => {
     wheelCleanup()
   })
 
-  it.each([-80, 80])(
-    'keeps shell-hosted TUI wheel %s out of prompt history',
-    (deltaY) => {
-      const aTerm = {
-        buffer: { active: { type: 'alternate' } },
-        modes: { mouseTrackingMode: 'none' },
-        refresh: vi.fn(),
-        rows: 18,
-        scrollLines: vi.fn(),
-      }
-      const wsRef = {
-        current: { readyState: WebSocket.OPEN, send: vi.fn() },
-      }
-      const aTermRef = { current: aTerm }
-      const container = document.createElement('div')
-      const downstreamListener = vi.fn()
-      container.addEventListener('wheel', downstreamListener)
-      const requestOverlay = vi.fn()
-
-      const { result } = renderHook(() =>
-        useATermScrolling({
-          wsRef: wsRef as never,
-          aTermRef: aTermRef as unknown as { current: XtermATerm | null },
-          isMobile: false,
-          sessionMode: 'shell',
-          onRequestScrollbackOverlay: requestOverlay,
-        }),
-      )
-
-      const { wheelCleanup } = result.current.setupScrolling(container)
-      const event = new WheelEvent('wheel', {
-        deltaY,
-        bubbles: true,
-        cancelable: true,
-      })
-
-      container.dispatchEvent(event)
-
-      expect(event.defaultPrevented).toBe(true)
-      expect(aTerm.scrollLines).not.toHaveBeenCalled()
-      expect(downstreamListener).not.toHaveBeenCalled()
-      expect(wsRef.current.send).not.toHaveBeenCalled()
-      expect(requestOverlay).toHaveBeenCalledTimes(deltaY < 0 ? 1 : 0)
-
-      wheelCleanup()
-    },
-  )
-
-  it('opens scrollback overlay at the live bottom page for non-shell alternate-screen upward wheel events', () => {
-    const aTerm = {
-      buffer: { active: { type: 'alternate' } },
-      modes: { mouseTrackingMode: 'none' },
-      refresh: vi.fn(),
-      rows: 18,
-      scrollLines: vi.fn(),
-    }
-    const requestOverlay = vi.fn()
-    const wsRef = {
-      current: { readyState: WebSocket.OPEN, send: vi.fn() },
-    }
-    const aTermRef = { current: aTerm }
-    const container = document.createElement('div')
-    const downstreamListener = vi.fn()
-    container.addEventListener('wheel', downstreamListener)
-
-    const { result } = renderHook(() =>
-      useATermScrolling({
-        wsRef: wsRef as never,
-        aTermRef: aTermRef as unknown as { current: XtermATerm | null },
-        isMobile: false,
-        sessionMode: 'claude',
-        onRequestScrollbackOverlay: requestOverlay,
-        isScrollbackOverlayActive: false,
-      }),
-    )
-
-    const { wheelCleanup } = result.current.setupScrolling(container)
-    const event = new WheelEvent('wheel', {
-      deltaY: -80,
-      bubbles: true,
-      cancelable: true,
-    })
-
-    container.dispatchEvent(event)
-
-    expect(event.defaultPrevented).toBe(true)
-    expect(requestOverlay).toHaveBeenCalledWith()
-    expect(aTerm.scrollLines).not.toHaveBeenCalled()
-    expect(aTerm.refresh).not.toHaveBeenCalled()
-    expect(downstreamListener).not.toHaveBeenCalled()
-
-    wheelCleanup()
-  })
-
-  it('suppresses local wheel scrolling for non-shell alternate-screen downward wheel events', () => {
-    const aTerm = {
-      buffer: { active: { type: 'alternate' } },
-      modes: { mouseTrackingMode: 'none' },
-      refresh: vi.fn(),
-      rows: 18,
-      scrollLines: vi.fn(),
-    }
-    const requestOverlay = vi.fn()
-    const wsRef = {
-      current: { readyState: WebSocket.OPEN, send: vi.fn() },
-    }
-    const aTermRef = { current: aTerm }
-    const container = document.createElement('div')
-    const downstreamListener = vi.fn()
-    container.addEventListener('wheel', downstreamListener)
-
-    const { result } = renderHook(() =>
-      useATermScrolling({
-        wsRef: wsRef as never,
-        aTermRef: aTermRef as unknown as { current: XtermATerm | null },
-        isMobile: false,
-        sessionMode: 'claude',
-        onRequestScrollbackOverlay: requestOverlay,
-        isScrollbackOverlayActive: false,
-      }),
-    )
-
-    const { wheelCleanup } = result.current.setupScrolling(container)
-    const event = new WheelEvent('wheel', {
-      deltaY: 80,
-      bubbles: true,
-      cancelable: true,
-    })
-
-    container.dispatchEvent(event)
-
-    expect(event.defaultPrevented).toBe(true)
-    expect(requestOverlay).not.toHaveBeenCalled()
-    expect(aTerm.scrollLines).not.toHaveBeenCalled()
-    expect(aTerm.refresh).not.toHaveBeenCalled()
-    expect(downstreamListener).not.toHaveBeenCalled()
-
-    wheelCleanup()
-  })
-
-  it('opens scrollback overlay for non-shell downward touch drags on mobile', () => {
-    const aTerm = {
-      buffer: { active: { type: 'alternate' } },
-      modes: { mouseTrackingMode: 'none' },
-      refresh: vi.fn(),
-      rows: 18,
-      scrollLines: vi.fn(),
-    }
-    const requestOverlay = vi.fn()
-    const wsRef = {
-      current: { readyState: WebSocket.OPEN, send: vi.fn() },
-    }
-    const aTermRef = { current: aTerm }
-    const container = document.createElement('div')
-
-    const { result } = renderHook(() =>
-      useATermScrolling({
-        wsRef: wsRef as never,
-        aTermRef: aTermRef as unknown as { current: XtermATerm | null },
-        isMobile: true,
-        sessionMode: 'claude',
-        onRequestScrollbackOverlay: requestOverlay,
-        isScrollbackOverlayActive: false,
-      }),
-    )
-
-    const { wheelCleanup, touchCleanup } =
-      result.current.setupScrolling(container)
-
-    container.dispatchEvent(createTouchEvent('touchstart', 200))
-    container.dispatchEvent(createTouchEvent('touchmove', 260))
-
-    expect(requestOverlay).toHaveBeenCalledTimes(1)
-    expect(aTerm.scrollLines).not.toHaveBeenCalled()
-
-    touchCleanup()
-    wheelCleanup()
-  })
-
-  it('does not open scrollback overlay for non-shell upward touch drags on mobile', () => {
-    const aTerm = {
-      buffer: { active: { type: 'alternate' } },
-      modes: { mouseTrackingMode: 'none' },
-      refresh: vi.fn(),
-      rows: 18,
-      scrollLines: vi.fn(),
-    }
-    const requestOverlay = vi.fn()
-    const wsRef = {
-      current: { readyState: WebSocket.OPEN, send: vi.fn() },
-    }
-    const aTermRef = { current: aTerm }
-    const container = document.createElement('div')
-
-    const { result } = renderHook(() =>
-      useATermScrolling({
-        wsRef: wsRef as never,
-        aTermRef: aTermRef as unknown as { current: XtermATerm | null },
-        isMobile: true,
-        sessionMode: 'claude',
-        onRequestScrollbackOverlay: requestOverlay,
-        isScrollbackOverlayActive: false,
-      }),
-    )
-
-    const { wheelCleanup, touchCleanup } =
-      result.current.setupScrolling(container)
-
-    container.dispatchEvent(createTouchEvent('touchstart', 260))
-    container.dispatchEvent(createTouchEvent('touchmove', 200))
-
-    expect(requestOverlay).not.toHaveBeenCalled()
-    expect(aTerm.scrollLines).not.toHaveBeenCalled()
-
-    touchCleanup()
-    wheelCleanup()
-  })
-
   it('sends wheel reports instead of tmux copy-mode keys when the app tracks the mouse', () => {
     const aTerm = {
       buffer: { active: { type: 'alternate' } },
@@ -394,7 +175,6 @@ describe('useATermScrolling', () => {
     const send = vi.fn()
     const wsRef = { current: { readyState: WebSocket.OPEN, send } }
     const aTermRef = { current: aTerm }
-    const requestOverlay = vi.fn()
     const container = document.createElement('div')
 
     const { result } = renderHook(() =>
@@ -402,8 +182,6 @@ describe('useATermScrolling', () => {
         wsRef: wsRef as never,
         aTermRef: aTermRef as unknown as { current: XtermATerm | null },
         isMobile: true,
-        sessionMode: 'claude',
-        onRequestScrollbackOverlay: requestOverlay,
       }),
     )
 
@@ -428,144 +206,13 @@ describe('useATermScrolling', () => {
           payload.endsWith('M'),
       ),
     ).toBe(true)
-    expect(requestOverlay).not.toHaveBeenCalled()
 
     touchCleanup()
     wheelCleanup()
   })
-
-  it('sends wheel reports to the pane when the app tracks the mouse', () => {
-    const aTerm = {
-      buffer: { active: { type: 'alternate' } },
-      cols: 80,
-      modes: { mouseTrackingMode: 'any' },
-      refresh: vi.fn(),
-      rows: 30,
-      scrollLines: vi.fn(),
-    }
-    const send = vi.fn()
-    const wsRef = { current: { readyState: WebSocket.OPEN, send } }
-    const aTermRef = { current: aTerm }
-    const container = document.createElement('div')
-
-    const { result } = renderHook(() =>
-      useATermScrolling({
-        wsRef: wsRef as never,
-        aTermRef: aTermRef as unknown as { current: XtermATerm | null },
-        isMobile: false,
-        sessionMode: 'claude',
-      }),
-    )
-
-    const { wheelCleanup } = result.current.setupScrolling(container)
-    const event = new WheelEvent('wheel', {
-      deltaY: -120,
-      bubbles: true,
-      cancelable: true,
-    })
-
-    container.dispatchEvent(event)
-
-    const wheelUpPrefix = `${String.fromCharCode(27)}[<64;`
-    expect(send).toHaveBeenCalledTimes(9)
-    expect(
-      send.mock.calls.every(([payload]) => payload.startsWith(wheelUpPrefix)),
-    ).toBe(true)
-    expect(aTerm.scrollLines).not.toHaveBeenCalled()
-    expect(event.defaultPrevented).toBe(true)
-
-    wheelCleanup()
-  })
-
-  it('trusts tmux over xterm about who owns the scrollback', () => {
-    // xterm has not seen mouse tracking, but tmux says the program owns it.
-    const aTerm = {
-      buffer: { active: { type: 'alternate' } },
-      cols: 80,
-      modes: { mouseTrackingMode: 'none' },
-      refresh: vi.fn(),
-      rows: 30,
-      scrollLines: vi.fn(),
-    }
-    const send = vi.fn()
-    const wsRef = { current: { readyState: WebSocket.OPEN, send } }
-    const container = document.createElement('div')
-    const requestPaneMode = vi.fn()
-
-    const { result } = renderHook(() =>
-      useATermScrolling({
-        wsRef: wsRef as never,
-        aTermRef: { current: aTerm } as unknown as {
-          current: XtermATerm | null
-        },
-        isMobile: false,
-        sessionMode: 'claude',
-        paneOwnsScrollback: () => true,
-        requestPaneMode,
-      }),
-    )
-
-    const { wheelCleanup } = result.current.setupScrolling(container)
-    container.dispatchEvent(
-      new WheelEvent('wheel', {
-        deltaY: -120,
-        bubbles: true,
-        cancelable: true,
-      }),
-    )
-
-    expect(requestPaneMode).toHaveBeenCalled()
-    expect(send).toHaveBeenCalledTimes(9)
-    expect(aTerm.scrollLines).not.toHaveBeenCalled()
-
-    wheelCleanup()
-  })
-
-  it('keeps the overlay when tmux says tmux holds the history', () => {
-    // xterm still reports mouse tracking, but the pane's output is in tmux.
-    const aTerm = {
-      buffer: { active: { type: 'alternate' } },
-      cols: 80,
-      modes: { mouseTrackingMode: 'any' },
-      refresh: vi.fn(),
-      rows: 30,
-      scrollLines: vi.fn(),
-    }
-    const send = vi.fn()
-    const wsRef = { current: { readyState: WebSocket.OPEN, send } }
-    const container = document.createElement('div')
-    const onRequestScrollbackOverlay = vi.fn()
-
-    const { result } = renderHook(() =>
-      useATermScrolling({
-        wsRef: wsRef as never,
-        aTermRef: { current: aTerm } as unknown as {
-          current: XtermATerm | null
-        },
-        isMobile: false,
-        sessionMode: 'agy',
-        paneOwnsScrollback: () => false,
-        onRequestScrollbackOverlay,
-      }),
-    )
-
-    const { wheelCleanup } = result.current.setupScrolling(container)
-    container.dispatchEvent(
-      new WheelEvent('wheel', {
-        deltaY: -120,
-        bubbles: true,
-        cancelable: true,
-      }),
-    )
-
-    expect(send).not.toHaveBeenCalled()
-    expect(onRequestScrollbackOverlay).toHaveBeenCalled()
-
-    wheelCleanup()
-  })
 })
 
-describe('useATermScrolling in control mode', () => {
+describe('useATermScrolling wheel routing', () => {
   function setup(
     screen: 'normal' | 'alternate',
     mouseTrackingMode: string,
@@ -580,7 +227,6 @@ describe('useATermScrolling in control mode', () => {
       scrollLines: vi.fn(),
     }
     const send = vi.fn()
-    const onRequestScrollbackOverlay = vi.fn()
     const container = document.createElement('div')
     const { result } = renderHook(() =>
       useATermScrolling({
@@ -589,9 +235,7 @@ describe('useATermScrolling in control mode', () => {
           current: XtermATerm | null
         },
         isMobile: false,
-        controlMode: true,
         isSgrMouse: () => sgr,
-        onRequestScrollbackOverlay,
       }),
     )
     const { wheelCleanup } = result.current.setupScrolling(container)
@@ -602,18 +246,13 @@ describe('useATermScrolling in control mode', () => {
     })
     container.dispatchEvent(event)
     wheelCleanup()
-    return { aTerm, send, event, onRequestScrollbackOverlay }
+    return { aTerm, send, event }
   }
 
-  it('scrolls xterm history 14 lines a notch, never the overlay', () => {
-    const { aTerm, send, event, onRequestScrollbackOverlay } = setup(
-      'normal',
-      'none',
-      false,
-    )
+  it('scrolls xterm history 14 lines a notch', () => {
+    const { aTerm, send, event } = setup('normal', 'none', false)
     expect(aTerm.scrollLines).toHaveBeenCalledWith(-14)
     expect(send).not.toHaveBeenCalled()
-    expect(onRequestScrollbackOverlay).not.toHaveBeenCalled()
     expect(event.defaultPrevented).toBe(true)
   })
 

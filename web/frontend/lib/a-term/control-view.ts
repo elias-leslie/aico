@@ -60,16 +60,13 @@ export function trackSgrMouse(term: Terminal): {
 }
 
 /**
- * Stop xterm replying to terminal queries in the stream while `active()`.
+ * Stop xterm replying to terminal queries in the stream.
  * tmux answers them for the program; a second answer from xterm would arrive
  * as typed input. Kitty keyboard requests are dropped too, so keys keep the
  * encoding tmux told the program it supports.
  */
-export function swallowQueryReplies(
-  term: Terminal,
-  active: () => boolean,
-): () => void {
-  const drop = () => active()
+export function swallowQueryReplies(term: Terminal): () => void {
+  const drop = () => true
   const { parser } = term
   const disposables: IDisposable[] = [
     parser.registerCsiHandler({ final: 'c' }, drop), // DA1
@@ -91,7 +88,7 @@ export function swallowQueryReplies(
     parser.registerDcsHandler({ intermediates: '+', final: 'q' }, drop), // XTGETTCAP
     // Colour queries ("?") only; colour changes still apply.
     ...[4, 10, 11, 12, 17, 19].map((code) =>
-      parser.registerOscHandler(code, (data) => active() && data.includes('?')),
+      parser.registerOscHandler(code, (data) => data.includes('?')),
     ),
   ]
   return () => {

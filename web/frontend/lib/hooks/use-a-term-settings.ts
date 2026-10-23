@@ -51,28 +51,16 @@ export const A_TERM_FONTS = [
 
 export const A_TERM_FONT_SIZES = [10, 11, 12, 13, 14, 15, 16, 18, 20] as const
 
-// Scrollback buffer sizes (lines) - capped at 50K to avoid progressive slowdown
-export const A_TERM_SCROLLBACK_OPTIONS = [
-  { value: 1000, label: '1K lines' },
-  { value: 5000, label: '5K lines' },
-  { value: 10000, label: '10K lines' },
-  { value: 25000, label: '25K lines' },
-  { value: 50000, label: '50K lines' },
-] as const
-
 // Cursor styles supported by xterm.js
 export const A_TERM_CURSOR_STYLES = ['block', 'underline', 'bar'] as const
 
 export type ATermFontId = (typeof A_TERM_FONTS)[number]['id']
 export type ATermFontSize = (typeof A_TERM_FONT_SIZES)[number]
-export type ATermScrollback =
-  (typeof A_TERM_SCROLLBACK_OPTIONS)[number]['value']
 export type ATermCursorStyle = (typeof A_TERM_CURSOR_STYLES)[number]
 
 interface ATermSettings {
   fontId: ATermFontId
   fontSize: ATermFontSize
-  scrollback: ATermScrollback
   cursorStyle: ATermCursorStyle
   cursorBlink: boolean
   themeId: ATermThemeId
@@ -84,7 +72,6 @@ const STORAGE_KEY_PROJECT_PREFIX = 'a-term-settings-project-'
 const DEFAULT_SETTINGS: ATermSettings = {
   fontId: 'jetbrains-mono',
   fontSize: 14,
-  scrollback: 10000,
   cursorStyle: 'block',
   cursorBlink: true,
   themeId: 'phosphor',
@@ -128,11 +115,6 @@ function parseSettings(parsed: Record<string, unknown>): ATermSettings {
     fontSize: A_TERM_FONT_SIZES.includes(parsed.fontSize as ATermFontSize)
       ? (parsed.fontSize as ATermFontSize)
       : DEFAULT_SETTINGS.fontSize,
-    scrollback: A_TERM_SCROLLBACK_OPTIONS.some(
-      (o) => o.value === parsed.scrollback,
-    )
-      ? (parsed.scrollback as ATermScrollback)
-      : DEFAULT_SETTINGS.scrollback,
     cursorStyle: A_TERM_CURSOR_STYLES.includes(
       parsed.cursorStyle as ATermCursorStyle,
     )
@@ -163,7 +145,6 @@ function sameSettings(left: ATermSettings, right: ATermSettings): boolean {
   return (
     left.fontId === right.fontId &&
     left.fontSize === right.fontSize &&
-    left.scrollback === right.scrollback &&
     left.cursorStyle === right.cursorStyle &&
     left.cursorBlink === right.cursorBlink &&
     left.themeId === right.themeId
@@ -217,17 +198,6 @@ export function useATermSettings(projectId?: string) {
     [projectId],
   )
 
-  const setScrollback = useCallback(
-    (scrollback: ATermScrollback) => {
-      setSettings((prev) => {
-        const next = { ...prev, scrollback }
-        saveSettings(next, projectId)
-        return next
-      })
-    },
-    [projectId],
-  )
-
   const setCursorStyle = useCallback(
     (cursorStyle: ATermCursorStyle) => {
       setSettings((prev) => {
@@ -268,14 +238,12 @@ export function useATermSettings(projectId?: string) {
     fontId: settings.fontId,
     fontSize: settings.fontSize,
     fontFamily,
-    scrollback: settings.scrollback,
     cursorStyle: settings.cursorStyle,
     cursorBlink: settings.cursorBlink,
     themeId: settings.themeId,
     theme,
     setFontId,
     setFontSize,
-    setScrollback,
     setCursorStyle,
     setCursorBlink,
     setThemeId,

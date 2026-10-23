@@ -6,12 +6,10 @@ import {
   A_TERM_CURSOR_STYLES,
   A_TERM_FONT_SIZES,
   A_TERM_FONTS,
-  A_TERM_SCROLLBACK_OPTIONS,
   A_TERM_THEMES,
   type ATermCursorStyle,
   type ATermFontId,
   type ATermFontSize,
-  type ATermScrollback,
   type ATermThemeId,
 } from '@/lib/hooks/use-a-term-settings'
 import { useAppTheme } from '@/lib/hooks/use-app-theme'
@@ -22,12 +20,6 @@ import {
   getRendererPreference,
   setRendererPreference,
 } from '@/lib/utils/renderer-preference'
-import {
-  getScrollbackMode,
-  SCROLLBACK_MODE_OPTIONS,
-  type ScrollbackMode,
-  setScrollbackMode,
-} from '@/lib/utils/terminal-transport'
 import type {
   KeyboardSizePreset,
   KeyboardSpacingPreset,
@@ -44,13 +36,11 @@ import { SettingsPanel } from './settings/SettingsPanel'
 export interface SettingsDropdownProps {
   fontId: ATermFontId
   fontSize: ATermFontSize
-  scrollback: ATermScrollback
   cursorStyle: ATermCursorStyle
   cursorBlink: boolean
   themeId: ATermThemeId
   setFontId: (id: ATermFontId) => void
   setFontSize: (size: ATermFontSize) => void
-  setScrollback: (scrollback: ATermScrollback) => void
   setCursorStyle: (style: ATermCursorStyle) => void
   setCursorBlink: (blink: boolean) => void
   setThemeId: (id: ATermThemeId) => void
@@ -69,13 +59,11 @@ export interface SettingsDropdownProps {
 export function SettingsDropdown({
   fontId,
   fontSize,
-  scrollback,
   cursorStyle,
   cursorBlink,
   themeId,
   setFontId,
   setFontSize,
-  setScrollback,
   setCursorStyle,
   setCursorBlink,
   setThemeId,
@@ -104,19 +92,6 @@ export function SettingsDropdown({
       window.location.reload()
     },
     [renderer],
-  )
-  const [scrollbackMode, setScrollbackModeState] =
-    useState<ScrollbackMode>('new')
-  useEffect(() => setScrollbackModeState(getScrollbackMode()), [])
-  // Every pane reconnects on the other transport; tmux keeps the sessions.
-  const changeScrollbackMode = useCallback(
-    (value: ScrollbackMode) => {
-      if (value === scrollbackMode) return
-      setScrollbackModeState(value)
-      setScrollbackMode(value)
-      window.location.reload()
-    },
-    [scrollbackMode],
   )
   const buttonRef = useRef<HTMLButtonElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -152,11 +127,6 @@ export function SettingsDropdown({
   const appThemeOptions = APP_THEME_OPTIONS.map((option) => ({
     value: option.value,
     label: option.label,
-  }))
-
-  const scrollbackOptions = A_TERM_SCROLLBACK_OPTIONS.map((opt) => ({
-    value: opt.value,
-    label: opt.label,
   }))
 
   const showKeyboardSettings =
@@ -224,30 +194,6 @@ export function SettingsDropdown({
           checked={cursorBlink}
           onChange={setCursorBlink}
         />
-
-        <SettingButtonGroup
-          label="Scrollback Mode"
-          value={scrollbackMode}
-          options={SCROLLBACK_MODE_OPTIONS}
-          titles={{
-            new: '20K lines of history, native wheel scrolling',
-            classic: 'tmux attach with the scrollback overlay',
-          }}
-          onChange={changeScrollbackMode}
-        />
-
-        {/* New mode keeps the pane's own 20K-line history; the buffer size
-            applies to classic mode only. */}
-        {scrollbackMode === 'classic' && (
-          <div className="mb-4">
-            <SettingSelect
-              label="Scrollback Buffer"
-              value={scrollback}
-              onChange={(val) => setScrollback(val as ATermScrollback)}
-              options={scrollbackOptions}
-            />
-          </div>
-        )}
 
         <SettingButtonGroup
           label="Renderer"

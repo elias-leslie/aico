@@ -5,7 +5,7 @@ import type {
 
 type XtermATerm = InstanceType<typeof import('@xterm/xterm').Terminal>
 
-// Strips the ANSI sequences we keep in tmux-backed scrollback snapshots so
+// Strips ANSI sequences from buffer lines so
 // search coordinates line up with the visible xterm cells.
 const ANSI_SEARCH_ESCAPE_REGEX =
   // biome-ignore lint/complexity/useRegexLiterals: String escapes avoid control-character false positives for ANSI matching.

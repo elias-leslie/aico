@@ -27,7 +27,7 @@ Want the latest shipped changes? See [Releases](https://github.com/elias-leslie/
 
 **`persistent sessions`** — Sessions live in Tether, not in A-Term, so they survive browser closes, A-Term restarts, and network drops. Reconnect exactly where you left off. The same sessions show up in Aico, and sessions started there show up here.
 
-**`stable scrollback rendering`** — Live TUI panes and scrollback overlays share the same xterm.js WebGL renderer with DOM fallback, so opening history keeps font metrics, wrap points, and columns aligned.
+**`stable scrollback rendering`** — Terminal panes render with the xterm.js WebGL renderer with DOM fallback, so history keeps font metrics, wrap points, and columns aligned.
 
 **`multi-pane layouts`** — Up to 6 resizable panes. Put planning, implementation, review, release checks, and files on the same screen, detach any pane into its own browser window when you want to spread work across monitors, and use the pane menu's Refresh Layout action to remount a pane cleanly without restarting its session. Several views can show one session; the view you activate (focus) claims the session's window size, and the others keep their own size until you activate them.
 
@@ -47,13 +47,13 @@ On a phone, tap Talk to start dictating. Words appear while you speak, and pause
 
 **`agent presets and custom tools`** — Built-in profiles for Claude Code, Codex, Antigravity CLI, and Pi appear in Settings by default. Antigravity launches as `agy --dangerously-skip-permissions`, its explicit auto-approval mode. Pick a default tool, tune the launch command or process name, color-code panes, and add your own TUI agent commands when your workflow expands. The tool list is Tether's shared registry, so a change here also applies to sessions launched from Aico; Claude Code's slug is `claude-code` (`claude` still works as an alias). A-Term also lists agent sessions you started yourself on your default tmux server alongside your own panes, recognising any tool in that registry by its slug, aliases, process name or command; closing one in A-Term only closes the view.
 
-**`agent scrollback overlay`** — Scroll tmux-backed history for agent and TUI sessions without losing the live bottom page. First wheel-up or touch entry opens history at the current output, then normal scrolling carries you back through prior work.
+**`scrollback`** — Each pane is attached in tmux control mode, which seeds the pane's history into xterm.js. Scroll up and the view holds still while output keeps arriving; a Latest button returns you to the bottom.
 
 **`mobile workspace controls`** — On-screen keyboard with arrow keys, Ctrl, Esc, and modifier support for touch devices, visible-bottom-row viewport handling, plus a touch-friendly session switcher that can jump into any attached or detached session from your phone.
 
 Expand the arrow controls to find Enter, which activates a TUI selection without typing a draft. Terminal keys keep the phone keyboard and arrow controls open. With a draft focused, Left and Right move its caret; Up and Down navigate the terminal. Send submits the draft, while the toolbox's Enter sends only the Enter key and leaves the draft intact.
 
-**`terminal themes and tuning`** — Five built-in xterm color palettes (Phosphor, Dracula, Monokai, Solarized Dark, Tokyo Night) plus a system/light/dark app theme that respects `prefers-color-scheme`. Settings also configure font family, font size, cursor style, cursor blink, and scrollback buffer size — all persisted across sessions.
+**`terminal themes and tuning`** — Five built-in xterm color palettes (Phosphor, Dracula, Monokai, Solarized Dark, Tokyo Night) plus a system/light/dark app theme that respects `prefers-color-scheme`. Settings also configure font family, font size, cursor style, and cursor blink — all persisted across sessions.
 
 **`in-terminal search`** — Search the live buffer and scrollback for a string and step through matches, without leaving the pane.
 

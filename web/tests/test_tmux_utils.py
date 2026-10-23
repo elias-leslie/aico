@@ -10,8 +10,6 @@ from a_term.utils import tmux
 from a_term.utils.tmux import (
     apply_external_attach_options,
     build_tmux_command,
-    get_cursor_position,
-    get_scrollback_with_cursor,
     reset_tmux_window_size_policy,
     restore_external_attach_options,
     validate_session_name,
@@ -82,60 +80,6 @@ class TestValidateSocketName:
             socket_path,
             "list-sessions",
         ]
-
-
-def test_get_cursor_position_returns_coordinates() -> None:
-    with patch(
-        "a_term.utils.tmux.run_tmux_command",
-        return_value=(True, "12\t34"),
-    ):
-        assert get_cursor_position("codex-agent-hub") == (12, 34)
-
-
-def test_get_cursor_position_returns_none_on_invalid_output() -> None:
-    with patch(
-        "a_term.utils.tmux.run_tmux_command",
-        return_value=(True, "not-a-position"),
-    ):
-        assert get_cursor_position("codex-agent-hub") is None
-
-
-def test_get_scrollback_with_cursor_suppresses_missing_target_warning() -> None:
-    with (
-        patch(
-            "a_term.utils.tmux.run_tmux_command",
-            return_value=(False, "can't find pane: summitflow-missing"),
-        ),
-        patch("a_term.utils.tmux.scrollback.logger.warning") as mock_warning,
-        patch("a_term.utils.tmux.scrollback.logger.debug") as mock_debug,
-    ):
-        assert get_scrollback_with_cursor("summitflow-missing") == (None, None)
-
-    mock_warning.assert_not_called()
-    mock_debug.assert_called_once_with(
-        "tmux_scrollback_with_cursor_failed",
-        session="summitflow-missing",
-        error="can't find pane: summitflow-missing",
-    )
-
-
-def test_get_scrollback_with_cursor_warns_on_generic_failure() -> None:
-    with (
-        patch(
-            "a_term.utils.tmux.run_tmux_command",
-            return_value=(False, "permission denied"),
-        ),
-        patch("a_term.utils.tmux.scrollback.logger.warning") as mock_warning,
-        patch("a_term.utils.tmux.scrollback.logger.debug") as mock_debug,
-    ):
-        assert get_scrollback_with_cursor("summitflow-problem") == (None, None)
-
-    mock_debug.assert_not_called()
-    mock_warning.assert_called_once_with(
-        "tmux_scrollback_with_cursor_failed",
-        session="summitflow-problem",
-        error="permission denied",
-    )
 
 
 def test_reset_tmux_window_size_policy_sets_latest() -> None:

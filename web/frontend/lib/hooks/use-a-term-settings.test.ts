@@ -29,7 +29,8 @@ describe('useATermSettings', () => {
 
     expect(result.current.fontId).toBe('fira-code')
     expect(result.current.fontSize).toBe(16)
-    expect(result.current.scrollback).toBe(5000)
+    // A stored buffer size from the old settings is simply ignored.
+    expect(result.current).not.toHaveProperty('scrollback')
     expect(result.current.cursorStyle).toBe('underline')
     expect(result.current.cursorBlink).toBe(false)
     expect(result.current.themeId).toBe('dracula')
@@ -39,7 +40,6 @@ describe('useATermSettings', () => {
     writeSettings('a-term-settings', {
       fontId: 'jetbrains-mono',
       fontSize: 14,
-      scrollback: 10000,
       cursorStyle: 'block',
       cursorBlink: true,
       themeId: 'phosphor',
@@ -47,7 +47,6 @@ describe('useATermSettings', () => {
     writeSettings('a-term-settings-project-project-a', {
       fontId: 'fira-code',
       fontSize: 18,
-      scrollback: 25000,
       cursorStyle: 'bar',
       cursorBlink: false,
       themeId: 'dracula',
@@ -65,7 +64,6 @@ describe('useATermSettings', () => {
     await waitFor(() => {
       expect(result.current.fontId).toBe('fira-code')
       expect(result.current.fontSize).toBe(18)
-      expect(result.current.scrollback).toBe(25000)
       expect(result.current.cursorStyle).toBe('bar')
       expect(result.current.cursorBlink).toBe(false)
       expect(result.current.themeId).toBe('dracula')
@@ -76,7 +74,6 @@ describe('useATermSettings', () => {
     writeSettings('a-term-settings', {
       fontId: 'source-code-pro',
       fontSize: 15,
-      scrollback: 5000,
       cursorStyle: 'underline',
       cursorBlink: true,
       themeId: 'tokyo-night',
@@ -84,7 +81,6 @@ describe('useATermSettings', () => {
     writeSettings('a-term-settings-project-project-a', {
       fontId: 'fira-code',
       fontSize: 18,
-      scrollback: 25000,
       cursorStyle: 'bar',
       cursorBlink: false,
       themeId: 'dracula',
@@ -102,7 +98,6 @@ describe('useATermSettings', () => {
     await waitFor(() => {
       expect(result.current.fontId).toBe('source-code-pro')
       expect(result.current.fontSize).toBe(15)
-      expect(result.current.scrollback).toBe(5000)
       expect(result.current.cursorStyle).toBe('underline')
       expect(result.current.cursorBlink).toBe(true)
       expect(result.current.themeId).toBe('tokyo-night')

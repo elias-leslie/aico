@@ -18,7 +18,6 @@ export function ATermContent({
   aTermSlots,
   fontFamily,
   fontSize,
-  scrollback,
   cursorStyle,
   cursorBlink,
   theme,
@@ -27,7 +26,6 @@ export function ATermContent({
   showSettings,
   setFontId,
   setFontSize,
-  setScrollback,
   setCursorStyle,
   setCursorBlink,
   setThemeId,
@@ -110,13 +108,11 @@ export function ATermContent({
       <SettingsDropdown
         fontId={fontId}
         fontSize={fontSize}
-        scrollback={scrollback}
         cursorStyle={cursorStyle}
         cursorBlink={cursorBlink}
         themeId={themeId}
         setFontId={setFontId}
         setFontSize={setFontSize}
-        setScrollback={setScrollback}
         setCursorStyle={setCursorStyle}
         setCursorBlink={setCursorBlink}
         setThemeId={setThemeId}
@@ -137,7 +133,6 @@ export function ATermContent({
         aTermSlots={aTermSlots}
         fontFamily={fontFamily}
         fontSize={fontSize}
-        scrollback={scrollback}
         cursorStyle={cursorStyle}
         cursorBlink={cursorBlink}
         theme={theme}

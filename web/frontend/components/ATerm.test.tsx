@@ -1,7 +1,5 @@
 import { act, render, waitFor } from '@testing-library/react'
-import { createRef } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ATermHandle } from './ATerm'
 import { ATermComponent } from './ATerm'
 
 type ATermHookOptions = Parameters<
@@ -83,16 +81,6 @@ const fakeATerm = {
   dispose: vi.fn(),
 }
 
-const scrollbackOverlayState: Array<{
-  isActive: boolean
-  lines: string[]
-  totalLines: number
-  isLoading: boolean
-  initialScrollLineDelta: number
-  searchQuery: string
-  searchActiveIndex: number
-}> = []
-
 vi.mock('../lib/hooks/use-a-term-websocket', () => ({
   useATermWebSocket: (options: ATermHookOptions) => {
     websocketState.options = options
@@ -152,27 +140,9 @@ vi.mock('./ScrollToBottomPill', () => ({
   ScrollToBottomPill: () => null,
 }))
 
-vi.mock('./ScrollbackOverlay', () => ({
-  ScrollbackOverlay: (props: {
-    isActive: boolean
-    lines: string[]
-    totalLines: number
-    isLoading: boolean
-    initialScrollLineDelta: number
-    searchQuery: string
-    searchActiveIndex: number
-  }) => {
-    scrollbackOverlayState.push(props)
-    return null
-  },
-}))
-
 describe('ATermComponent', () => {
   beforeEach(() => {
     vi.spyOn(document, 'hasFocus').mockReturnValue(true)
-    // These cases cover the classic attach transport; control mode has its
-    // own block below.
-    window.localStorage.setItem('a-term-scrollback-mode', 'classic')
   })
 
   afterEach(() => {
@@ -193,7 +163,6 @@ describe('ATermComponent', () => {
     fakeATerm.reset.mockClear()
     fakeATerm.scrollToLine.mockClear()
     fakeATerm.write.mockClear()
-    scrollbackOverlayState.length = 0
     fakeATerm.buffer.active.baseY = 100
     fakeATerm.buffer.active.viewportY = 100
     fakeATerm.buffer.active.cursorY = 0
@@ -203,7 +172,6 @@ describe('ATermComponent', () => {
       translateToString: () => 'user@host:~$ ',
     })
     window.history.replaceState({}, '', '/')
-    window.localStorage.removeItem('a-term-scrollback-mode')
   })
 
   it('suppresses shared resize writes in observer mode', () => {
@@ -270,61 +238,6 @@ describe('ATermComponent', () => {
     expect(resizeHandle).not.toHaveBeenCalled()
   })
 
-  it('reserves a permanent scrollbar rail for TUI sessions so overlay activation does not steal columns', () => {
-    const { getByTestId } = render(
-      <ATermComponent sessionId="session-tui" sessionMode="claude" isVisible />,
-    )
-
-    expect(
-      getByTestId('a-term-live-container').getAttribute('style'),
-    ).toContain('width: calc(100% - 14px)')
-    expect(
-      getByTestId('a-term-scrollbar-rail').getAttribute('style'),
-    ).toContain('width: 14px')
-  })
-
-  it('does not reserve the overlay scrollbar rail for shell sessions', () => {
-    const { getByTestId, queryByTestId } = render(
-      <ATermComponent
-        sessionId="session-shell"
-        sessionMode="shell"
-        isVisible
-      />,
-    )
-
-    expect(
-      getByTestId('a-term-live-container').getAttribute('style'),
-    ).not.toContain('calc(100% - 14px)')
-    expect(queryByTestId('a-term-scrollbar-rail')).toBeNull()
-  })
-
-  it('serializes live output before applying scrollback snapshots', async () => {
-    render(<ATermComponent sessionId="session-1" />)
-
-    websocketState.options?.onMessage?.('live output')
-    websocketState.options?.onScrollbackSync?.('snapshot output')
-    await Promise.resolve()
-
-    expect(fakeATerm.write).toHaveBeenCalledTimes(1)
-    expect(fakeATerm.write).toHaveBeenNthCalledWith(
-      1,
-      'live output',
-      expect.any(Function),
-    )
-    expect(fakeATerm.reset).not.toHaveBeenCalled()
-
-    operationCallbacks.shift()?.()
-    await waitFor(() => {
-      expect(fakeATerm.reset).toHaveBeenCalledTimes(1)
-    })
-    expect(fakeATerm.write).toHaveBeenCalledTimes(2)
-    expect(fakeATerm.write).toHaveBeenNthCalledWith(
-      2,
-      'snapshot output\x1b[0m',
-      expect.any(Function),
-    )
-  })
-
   it('drops in-flight write side effects after resetting before reconnect sync', async () => {
     render(<ATermComponent sessionId="session-reset" />)
 
@@ -359,60 +272,6 @@ describe('ATermComponent', () => {
     await Promise.resolve()
 
     expect(fakeATerm.scrollToLine).not.toHaveBeenCalled()
-  })
-
-  it('retains live writes around the latest queued snapshot', async () => {
-    render(<ATermComponent sessionId="session-queue" />)
-
-    websocketState.options?.onMessage?.('live-1')
-    await Promise.resolve()
-
-    expect(fakeATerm.write).toHaveBeenCalledTimes(1)
-    expect(fakeATerm.write).toHaveBeenNthCalledWith(
-      1,
-      'live-1',
-      expect.any(Function),
-    )
-
-    websocketState.options?.onMessage?.('live-2')
-    websocketState.options?.onScrollbackSync?.('snapshot-1')
-    websocketState.options?.onMessage?.('live-3')
-    websocketState.options?.onScrollbackSync?.('snapshot-2')
-    websocketState.options?.onMessage?.('live-4')
-    await Promise.resolve()
-
-    expect(fakeATerm.write).toHaveBeenCalledTimes(1)
-
-    operationCallbacks.shift()?.()
-    await waitFor(() => {
-      expect(fakeATerm.write).toHaveBeenCalledTimes(2)
-    })
-    expect(fakeATerm.write).toHaveBeenNthCalledWith(
-      2,
-      'live-2live-3',
-      expect.any(Function),
-    )
-
-    operationCallbacks.shift()?.()
-    await waitFor(() => {
-      expect(fakeATerm.reset).toHaveBeenCalledTimes(1)
-      expect(fakeATerm.write).toHaveBeenCalledTimes(3)
-    })
-    expect(fakeATerm.write).toHaveBeenNthCalledWith(
-      3,
-      'snapshot-2\x1b[0m',
-      expect.any(Function),
-    )
-
-    operationCallbacks.shift()?.()
-    await waitFor(() => {
-      expect(fakeATerm.write).toHaveBeenCalledTimes(4)
-    })
-    expect(fakeATerm.write).toHaveBeenNthCalledWith(
-      4,
-      'live-4',
-      expect.any(Function),
-    )
   })
 
   it('leaves viewport following to xterm when a live write finishes', async () => {
@@ -450,29 +309,6 @@ describe('ATermComponent', () => {
     expect(fakeATerm.write).toHaveBeenCalledTimes(1)
   })
 
-  it('routes native a-term paste through bracketed chunked input', async () => {
-    vi.useFakeTimers()
-    try {
-      render(<ATermComponent sessionId="session-native-paste" />)
-
-      await act(async () => {
-        aTermInstanceOptions?.onPaste('x'.repeat(5_000))
-        await vi.runAllTimersAsync()
-      })
-
-      expect(websocketState.sendInput).toHaveBeenCalledTimes(7)
-      expect(websocketState.sendInput).toHaveBeenNthCalledWith(1, '\x1b[200~')
-      expect(websocketState.sendInput.mock.calls[1]?.[0]).toHaveLength(1_024)
-      expect(websocketState.sendInput.mock.calls[2]?.[0]).toHaveLength(1_024)
-      expect(websocketState.sendInput.mock.calls[3]?.[0]).toHaveLength(1_024)
-      expect(websocketState.sendInput.mock.calls[4]?.[0]).toHaveLength(1_024)
-      expect(websocketState.sendInput.mock.calls[5]?.[0]).toHaveLength(904)
-      expect(websocketState.sendInput).toHaveBeenNthCalledWith(7, '\x1b[201~')
-    } finally {
-      vi.useRealTimers()
-    }
-  })
-
   it('routes native a-term image paste to the session file handler', () => {
     const onFilePaste = vi.fn()
     const image = new File(['image'], 'pasted.png', { type: 'image/png' })
@@ -508,143 +344,6 @@ describe('ATermComponent', () => {
     })
 
     expect(websocketState.sendInput).toHaveBeenCalledWith('pwd')
-  })
-
-  it('skips snapshot replacement when it would erase locally typed prompt input', async () => {
-    fakeATerm.buffer.active.getLine.mockReturnValue({
-      translateToString: (): string => 'user@host:~$ ec',
-    })
-
-    render(<ATermComponent sessionId="session-2" />)
-
-    websocketState.options?.onScrollbackSync?.('user@host:~$ ')
-    await Promise.resolve()
-
-    expect(fakeATerm.reset).not.toHaveBeenCalled()
-    expect(fakeATerm.write).not.toHaveBeenCalled()
-  })
-
-  it('ignores agent-session scrollback sync snapshots and keeps live writes intact', async () => {
-    fakeATerm.buffer.active.type = 'normal'
-    fakeATerm.rows = 2
-
-    render(
-      <ATermComponent
-        sessionId="session-skipped-history"
-        sessionMode="agent-codex"
-      />,
-    )
-
-    websocketState.options?.onScrollbackSync?.(
-      'line-1\r\nline-2\r\nline-3\r\nline-4\r\n',
-    )
-    await Promise.resolve()
-
-    fakeATerm.reset.mockClear()
-    fakeATerm.write.mockClear()
-
-    websocketState.options?.onMessage?.('live-1')
-    await Promise.resolve()
-    websocketState.options?.onMessage?.('live-2')
-    websocketState.options?.onScrollbackSync?.(
-      'line-2\r\nline-3\r\nline-4\r\nline-5\r\n',
-    )
-    await Promise.resolve()
-
-    expect(fakeATerm.reset).not.toHaveBeenCalled()
-    expect(fakeATerm.write).toHaveBeenCalledTimes(1)
-    expect(fakeATerm.write).toHaveBeenNthCalledWith(
-      1,
-      'live-1',
-      expect.any(Function),
-    )
-
-    operationCallbacks.shift()?.()
-    await waitFor(() => {
-      expect(fakeATerm.write).toHaveBeenCalledTimes(2)
-    })
-    expect(fakeATerm.write).toHaveBeenNthCalledWith(
-      2,
-      'live-2',
-      expect.any(Function),
-    )
-
-    fakeATerm.reset.mockClear()
-    fakeATerm.write.mockClear()
-
-    websocketState.options?.onScrollbackSync?.(
-      'line-2\r\nline-3\r\nline-4\r\nline-5 updated\r\n',
-    )
-    await Promise.resolve()
-
-    expect(fakeATerm.reset).not.toHaveBeenCalled()
-    expect(fakeATerm.write).not.toHaveBeenCalled()
-  })
-
-  it('ignores agent-session scrollback sync snapshots for attached external panes', async () => {
-    fakeATerm.buffer.active.type = 'normal'
-    fakeATerm.rows = 2
-
-    render(
-      <ATermComponent
-        sessionId="session-external-attached"
-        sessionMode="agent-codex"
-      />,
-    )
-
-    websocketState.options?.onScrollbackSync?.(
-      'line-1\r\nline-2\r\nline-3\r\nline-4\r\n',
-    )
-    await Promise.resolve()
-
-    expect(fakeATerm.reset).not.toHaveBeenCalled()
-    expect(fakeATerm.write).not.toHaveBeenCalled()
-
-    fakeATerm.reset.mockClear()
-    fakeATerm.write.mockClear()
-
-    websocketState.options?.onScrollbackSync?.(
-      'line-1\r\nline-2\r\nline-3\r\nline-4 updated\r\n',
-    )
-    await Promise.resolve()
-
-    expect(fakeATerm.reset).not.toHaveBeenCalled()
-    expect(fakeATerm.write).not.toHaveBeenCalled()
-  })
-
-  it('routes TUI pane searches through overlay query and index state', async () => {
-    const ref = createRef<ATermHandle>()
-
-    render(
-      <ATermComponent
-        ref={ref}
-        sessionId="session-search-overlay"
-        sessionMode="agent-codex"
-      />,
-    )
-
-    websocketState.options?.onScrollbackSync?.(
-      'prefix\r\nvery long logical \r\nline with needle\r\nsuffix\r\n',
-    )
-    await Promise.resolve()
-
-    expect(
-      ref.current?.search('needle', { direction: 'next', reset: true }),
-    ).toEqual({
-      query: 'needle',
-      totalMatches: 1,
-      activeIndex: 0,
-      found: true,
-    })
-
-    await waitFor(() => {
-      expect(scrollbackOverlayState.at(-1)).toMatchObject({
-        isActive: true,
-        searchQuery: 'needle',
-        searchActiveIndex: 0,
-        lines: ['prefix', 'very long logical ', 'line with needle', 'suffix'],
-      })
-    })
   })
 
   it('waits for a-term init before connecting visible A-Term sessions', () => {
@@ -714,7 +413,6 @@ describe('ATermComponent', () => {
 describe('ATermComponent in control mode', () => {
   beforeEach(() => {
     vi.spyOn(document, 'hasFocus').mockReturnValue(true)
-    window.localStorage.removeItem('a-term-scrollback-mode')
     websocketState.wsRefCurrent = { readyState: WebSocket.OPEN, send: vi.fn() }
   })
 
@@ -724,14 +422,11 @@ describe('ATermComponent in control mode', () => {
     websocketState.wsRefCurrent = null
     websocketState.sendInput.mockClear()
     aTermInstanceOptions = null
-    scrollbackOverlayState.length = 0
   })
 
-  it('asks for control mode and keeps the pane history in xterm', () => {
+  it('keeps the pane history in xterm', () => {
     render(<ATermComponent sessionId="session-control" sessionMode="claude" />)
 
-    expect(websocketState.options?.requestControl).toBe(true)
-    expect(scrollbackOverlayState).toHaveLength(0)
     expect(fakeATerm.parser.registerCsiHandler).toHaveBeenCalled()
   })
 
@@ -742,11 +437,11 @@ describe('ATermComponent in control mode', () => {
         sessionMode="claude"
       />,
     )
-    // The user's scrollback setting until the server has said.
+    // The default until the server has said.
     expect(aTermInstanceOptions?.scrollback).toBe(10_000)
 
     act(() => {
-      websocketState.options?.onTransport?.('control', 1234)
+      websocketState.options?.onHistoryLines?.(1234)
     })
 
     expect(aTermInstanceOptions?.scrollback).toBe(1234)
@@ -764,21 +459,5 @@ describe('ATermComponent in control mode', () => {
     expect(websocketState.wsRefCurrent?.send).toHaveBeenCalledWith(
       JSON.stringify({ __ctrl: true, paste: 'a\nb' }),
     )
-  })
-
-  it('falls back to classic when the server keeps the attach transport', () => {
-    render(
-      <ATermComponent
-        sessionId="session-control-refused"
-        sessionMode="claude"
-      />,
-    )
-
-    act(() => {
-      websocketState.options?.onTransport?.('attach')
-    })
-
-    expect(aTermInstanceOptions?.scrollback).toBe(0)
-    expect(scrollbackOverlayState.length).toBeGreaterThan(0)
   })
 })

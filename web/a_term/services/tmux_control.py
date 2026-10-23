@@ -1,9 +1,8 @@
 """Control-mode terminal view: the browser's xterm reads the pane's own output.
 
-With a plain ``tmux attach``, xterm only ever sees a tmux client repainting
-its screen from inside the alternate screen, so it holds no scrollback and
-none of the program's modes; history had to come from tmux pages in an
-overlay. In control mode (``tmux -C``) tmux streams each pane's raw output
+A plain ``tmux attach`` client would repaint its screen from inside the
+alternate screen, leaving xterm with no scrollback and none of the program's
+modes. In control mode (``tmux -C``) tmux streams each pane's raw output
 (``%output``), so xterm parses exactly what the program wrote: native
 scrollback, native selection and the program's real mouse/alt-screen state.
 
@@ -21,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import os
 import re
 from collections.abc import Callable, Collection
 from dataclasses import dataclass, field
@@ -36,6 +36,7 @@ __all__ = [
     "ControlProtocol",
     "ControlTerminal",
     "SeedFlags",
+    "attach_environment",
     "build_seed",
     "control_argv",
     "decode_output_value",
@@ -56,6 +57,27 @@ INPUT_CHUNK_BYTES = 512
 FIRST_SEED_TIMEOUT_SECONDS = 5.0
 
 ESC = "\x1b"
+
+# Never let the client inherit a parent tmux or a colour veto. Tether's attach
+# ``unset`` list names these too (and may add more); external attaches, which
+# get no list from Tether, use this one.
+_DROPPED_ENV = ("TMUX", "TMUX_PANE", "TMUX_TMPDIR", "NO_COLOR")
+
+
+def attach_environment(
+    overrides: dict[str, str] | None = None, unset: list[str] | tuple[str, ...] | None = None
+) -> dict[str, str]:
+    """Client environment per Tether's attach contract.
+
+    ``overrides`` (Tether's ``env``) are set over our own environment, then
+    every key in ``unset`` and in the built-in list is removed.
+    """
+    env = dict(os.environ)
+    env.update(overrides or {})
+    for key in (*_DROPPED_ENV, *(unset or ())):
+        env.pop(key, None)
+    env.setdefault("TERM", "xterm-256color")
+    return env
 
 # Pane state read with every seed, in this order.
 SEED_FLAGS = (

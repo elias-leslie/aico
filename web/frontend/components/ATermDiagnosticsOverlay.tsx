@@ -35,21 +35,6 @@ function findLatest(
   return null
 }
 
-function findLatestAny(
-  log: DiagnosticEntry[],
-  events: string[],
-): DiagnosticEntry | null {
-  let latest: DiagnosticEntry | null = null
-  for (const event of events) {
-    const candidate = findLatest(log, event)
-    if (!candidate) continue
-    if (!latest || candidate.ts > latest.ts) {
-      latest = candidate
-    }
-  }
-  return latest
-}
-
 function formatProfileFromEntry(entry: DiagnosticEntry | null): string {
   const profile = entry?.details?.profile as AnsiColorProfile | undefined
   return profile ? formatAnsiColorProfile(profile) : 'none'
@@ -82,19 +67,10 @@ export function ATermDiagnosticsOverlay({
 
   const details = useMemo(() => {
     const lastLive = findLatest(snapshot.log, 'live_write_color_profile')
-    const lastSnapshot = findLatest(
-      snapshot.log,
-      'scrollback_sync_color_profile',
-    )
-    const lastApply = findLatestAny(snapshot.log, [
-      'snapshot_full_reset_applied',
-      'snapshot_tail_patch_applied',
-      'write_flushed',
-    ])
+    const lastApply = findLatest(snapshot.log, 'write_flushed')
 
     return {
       lastLive,
-      lastSnapshot,
       lastApply,
     }
   }, [snapshot.log])
@@ -116,13 +92,9 @@ export function ATermDiagnosticsOverlay({
       </div>
       <div>
         writes={snapshot.frontend.writesFlushed}/
-        {snapshot.frontend.writesEnqueued} snapshots=
-        {snapshot.frontend.snapshotReceived}/{snapshot.frontend.snapshotApplied}
+        {snapshot.frontend.writesEnqueued}
       </div>
-      <div>reset={snapshot.frontend.fullResetApplied}</div>
-      <div>skip(prompt)={snapshot.frontend.snapshotSkippedPromptInput}</div>
       <div>live {formatProfileFromEntry(details.lastLive)}</div>
-      <div>snap {formatProfileFromEntry(details.lastSnapshot)}</div>
       <div>
         last={details.lastApply?.event ?? 'none'}{' '}
         {formatEventAge(details.lastApply)}

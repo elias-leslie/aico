@@ -50,7 +50,6 @@ export function ATermTabs({
     aTermSlots,
     fontFamily,
     fontSize,
-    scrollback,
     cursorStyle,
     cursorBlink,
     theme,
@@ -59,7 +58,6 @@ export function ATermTabs({
     showSettings,
     setFontId,
     setFontSize,
-    setScrollback,
     setCursorStyle,
     setCursorBlink,
     setThemeId,
@@ -192,7 +190,6 @@ export function ATermTabs({
         aTermSlots={aTermSlots}
         fontFamily={fontFamily}
         fontSize={fontSize}
-        scrollback={scrollback}
         cursorStyle={cursorStyle}
         cursorBlink={cursorBlink}
         theme={theme}
@@ -201,7 +198,6 @@ export function ATermTabs({
         showSettings={showSettings}
         setFontId={setFontId}
         setFontSize={setFontSize}
-        setScrollback={setScrollback}
         setCursorStyle={setCursorStyle}
         setCursorBlink={setCursorBlink}
         setThemeId={setThemeId}

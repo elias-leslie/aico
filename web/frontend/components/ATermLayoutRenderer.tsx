@@ -26,7 +26,6 @@ interface ATermLayoutRendererProps {
   // A-Term settings
   fontFamily: string
   fontSize: number
-  scrollback: number
   cursorStyle: 'bar' | 'block' | 'underline'
   cursorBlink: boolean
   theme?: Parameters<typeof ATermComponent>[0]['theme']
@@ -88,7 +87,6 @@ export function ATermLayoutRenderer({
   aTermSlots,
   fontFamily,
   fontSize,
-  scrollback,
   cursorStyle,
   cursorBlink,
   theme,
@@ -128,7 +126,6 @@ export function ATermLayoutRenderer({
       slots={aTermSlots}
       fontFamily={fontFamily}
       fontSize={fontSize}
-      scrollback={scrollback}
       cursorStyle={cursorStyle}
       cursorBlink={cursorBlink}
       theme={theme}

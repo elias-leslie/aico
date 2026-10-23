@@ -2,7 +2,6 @@
 
 import { useCallback } from 'react'
 import { controlWheelAction } from '../a-term/control-view'
-import { prefersLocalViewportScrollForMode } from '../utils/session-mode'
 import {
   ARROW_DOWN,
   ARROW_UP,
@@ -12,7 +11,6 @@ import {
   isAlternateScreen,
   pointToCell,
   refreshATermViewport,
-  resolvesToAppOwnedScrollback,
   setupTouchHandlers,
 } from './a-term-scrolling-utils'
 
@@ -30,14 +28,7 @@ interface UseATermScrollingOptions {
   wsRef: React.RefObject<WebSocket | null>
   aTermRef: React.RefObject<XtermATerm | null>
   isMobile: boolean
-  sessionMode?: string
-  onRequestScrollbackOverlay?: (initialScrollLineDelta?: number) => void
-  isScrollbackOverlayActive?: boolean
-  paneOwnsScrollback?: () => boolean | null
-  requestPaneMode?: () => void
-  /** Control-mode transport: xterm holds the pane's history and real modes. */
-  controlMode?: boolean
-  /** Whether the program asked for SGR mouse reports (control mode). */
+  /** Whether the program asked for SGR mouse reports. */
   isSgrMouse?: () => boolean
 }
 
@@ -54,12 +45,6 @@ export function useATermScrolling({
   wsRef,
   aTermRef,
   isMobile,
-  sessionMode,
-  onRequestScrollbackOverlay,
-  isScrollbackOverlayActive = false,
-  paneOwnsScrollback,
-  requestPaneMode,
-  controlMode = false,
   isSgrMouse,
 }: UseATermScrollingOptions): UseATermScrollingReturn {
   const sendArrowKey = useCallback(
@@ -99,10 +84,12 @@ export function useATermScrolling({
         }
       }
 
-      // Control mode: the wheel is routed here, ahead of xterm, whose own
-      // viewport would otherwise scroll it (and skip any custom handler).
-      // Only a non-SGR mouse report is left to xterm, which encodes it.
-      const handleControlWheel = (aTerm: XtermATerm, e: WheelEvent) => {
+      // The wheel is routed here, ahead of xterm, whose own viewport would
+      // otherwise scroll it (and skip any custom handler). Only a non-SGR
+      // mouse report is left to xterm, which encodes it.
+      const handleWheel = (e: WheelEvent) => {
+        const aTerm = aTermRef.current
+        if (!aTerm || e.deltaY === 0) return
         const action = controlWheelAction({
           mouseTracking: aTerm.modes.mouseTrackingMode !== 'none',
           sgrMouse: isSgrMouse?.() ?? false,
@@ -117,60 +104,6 @@ export function useATermScrolling({
           aTerm.scrollLines(computeWheelLineDelta(e.deltaY))
           refreshATermViewport(aTerm)
         }
-      }
-
-      const handleWheel = (e: WheelEvent) => {
-        const aTerm = aTermRef.current
-        if (!aTerm || e.deltaY === 0) return
-        if (controlMode) {
-          handleControlWheel(aTerm, e)
-          return
-        }
-
-        // The application asked for mouse reporting, so it scrolls itself:
-        // an alternate-screen TUI has no tmux history to page through, and
-        // wheel reports are its only scrollback. xterm.js drops the wheel
-        // unless its render service has published device cell metrics, which
-        // these panes never get, so send the reports here instead.
-        requestPaneMode?.()
-        if (resolvesToAppOwnedScrollback(aTerm, paneOwnsScrollback)) {
-          e.preventDefault()
-          e.stopPropagation()
-          e.stopImmediatePropagation()
-          sendWheelReports(aTerm, e)
-          return
-        }
-
-        const prefersLocalViewportScroll =
-          prefersLocalViewportScrollForMode(sessionMode)
-        const isAltScreen = isAlternateScreen(aTerm)
-
-        // TUI sessions: first upward wheel tick should open the overlay
-        // anchored at the live bottom page. Do not also consume that tick
-        // as history movement or the user lands above the current output.
-        // Use sessionMode as the authoritative signal, not isAltScreen —
-        // after a page refresh xterm.js hasn't received the alt-screen-enter
-        // escape sequence yet, so isAltScreen is false even though the
-        // session is a TUI.
-        // Shell sessions can host agents too. The alternate screen has no
-        // local history, so letting xterm handle its wheel produces arrow keys
-        // and recalls prompts once the scrollback overlay has closed.
-        if (prefersLocalViewportScroll || isAltScreen) {
-          e.preventDefault()
-          e.stopPropagation()
-          e.stopImmediatePropagation()
-          if (e.deltaY < 0 && !isScrollbackOverlayActive) {
-            onRequestScrollbackOverlay?.()
-          }
-          return
-        }
-
-        e.preventDefault()
-        e.stopPropagation()
-        e.stopImmediatePropagation()
-
-        aTerm.scrollLines(computeWheelLineDelta(e.deltaY))
-        refreshATermViewport(aTerm)
       }
 
       container.addEventListener('wheel', handleWheel, {
@@ -188,29 +121,12 @@ export function useATermScrolling({
           aTermRef,
           sendArrowKey,
           sendMouseWheel,
-          sessionMode,
-          onRequestScrollbackOverlay,
-          isScrollbackOverlayActive,
-          paneOwnsScrollback,
-          requestPaneMode,
         })
       }
 
       return { wheelCleanup, touchCleanup }
     },
-    [
-      aTermRef,
-      controlMode,
-      isSgrMouse,
-      isMobile,
-      isScrollbackOverlayActive,
-      onRequestScrollbackOverlay,
-      sessionMode,
-      sendArrowKey,
-      sendMouseWheel,
-      paneOwnsScrollback,
-      requestPaneMode,
-    ],
+    [aTermRef, isSgrMouse, isMobile, sendArrowKey, sendMouseWheel],
   )
 
   return { setupScrolling }

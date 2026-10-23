@@ -5,7 +5,10 @@ import { useATermSearch } from './use-a-term-search'
 
 function createMockTerm(lines: string[]) {
   return {
+    rows: 24,
     clearSelection: vi.fn(),
+    select: vi.fn(),
+    scrollToLine: vi.fn(),
     buffer: {
       active: {
         baseY: lines.length - 1,
@@ -23,58 +26,48 @@ function createMockTerm(lines: string[]) {
 }
 
 describe('useATermSearch', () => {
-  it('re-syncs TUI search matches when fresh overlay scrollback arrives', () => {
-    let overlayLines: string[] = []
-    const activateOverlay = vi.fn()
-    const getOverlayLines = () => overlayLines
+  it('selects matches in the terminal buffer and steps through them', () => {
+    const term = createMockTerm(['project one', 'other', 'project two'])
     const aTermRef = {
-      current: createMockTerm(['current context', 'project flag']),
+      current: term,
     } as unknown as RefObject<InstanceType<
       typeof import('@xterm/xterm').Terminal
     > | null>
-
-    const { result, rerender } = renderHook(
-      ({ overlaySearchVersion }: { overlaySearchVersion: number }) =>
-        useATermSearch({
-          aTermRef,
-          sessionMode: 'agent-codex',
-          activateOverlay,
-          getOverlayLines,
-          overlaySearchVersion,
-        }),
-      {
-        initialProps: {
-          overlaySearchVersion: 0,
-        },
-      },
-    )
+    const { result } = renderHook(() => useATermSearch({ aTermRef }))
 
     act(() => {
-      expect(
-        result.current.search('project', { direction: 'next', reset: true }),
-      ).toEqual({
+      expect(result.current.search('project')).toEqual({
         query: 'project',
-        totalMatches: 1,
+        totalMatches: 2,
         activeIndex: 0,
         found: true,
       })
     })
-
-    expect(activateOverlay).toHaveBeenCalledTimes(1)
-    expect(result.current.overlaySearchState).toEqual({
-      query: 'project',
-      activeIndex: 0,
-    })
-
-    overlayLines = ['older context', 'earlier output', 'project flag']
+    expect(term.select).toHaveBeenLastCalledWith(0, 0, 7)
 
     act(() => {
-      rerender({ overlaySearchVersion: 1 })
+      expect(result.current.search('project', { direction: 'next' })).toEqual({
+        query: 'project',
+        totalMatches: 2,
+        activeIndex: 1,
+        found: true,
+      })
     })
+    expect(term.select).toHaveBeenLastCalledWith(0, 2, 7)
+  })
 
-    expect(result.current.overlaySearchState).toEqual({
-      query: 'project',
-      activeIndex: 0,
+  it('reports no match and clears the selection', () => {
+    const term = createMockTerm(['nothing here'])
+    const aTermRef = {
+      current: term,
+    } as unknown as RefObject<InstanceType<
+      typeof import('@xterm/xterm').Terminal
+    > | null>
+    const { result } = renderHook(() => useATermSearch({ aTermRef }))
+
+    act(() => {
+      expect(result.current.search('absent').found).toBe(false)
     })
+    expect(term.clearSelection).toHaveBeenCalled()
   })
 })

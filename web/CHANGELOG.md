@@ -22,6 +22,7 @@ Requires Tether API v1. Install and start Tether (`tether@default`) before A-Ter
 
 ### Other changes
 
+- Removed the classic terminal transport (plain `tmux attach` through a PTY, plus its scrollback overlay). Control mode, the default since 2026-10-15, is the only path. Gone with it: the Scrollback Mode and Scrollback Buffer settings (history size now comes from the server's seed), the scrollback overlay and scrollbar rail, `scrollback_sync`/`scrollback_page`/`pane_mode` messages, backpressure `commit` messages and the `A_TERM_TERMINAL_TRANSPORT` setting. A stored classic choice is ignored.
 - Removed notes and the prompt library: the Notes panel and `/notes` page, the `/api/notes` routes and SummitFlow notes proxy, note storage, and the `packages/notes-ui` workspace package. Agent Hub prompt cleaning is unchanged. Existing `a_term_notes*` tables are left in place for a later dump-and-drop.
 - Removed session recording: the JSONL recorder, the `/api/diagnostics/recordings` routes, and the `RECORDING_*` settings. Per-session diagnostics remain. Existing recording files under the cache directory are no longer read or written.
 - The root-launch tmux test now removes its private `-L` socket file after killing the server, so test runs no longer leave `a-term-root-test-*` sockets in the tmux socket directory.

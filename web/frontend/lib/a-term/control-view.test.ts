@@ -68,28 +68,24 @@ describe('swallowQueryReplies', () => {
 
   it('leaves the answers to tmux while active', async () => {
     const { term, replies, write } = terminal()
-    swallowQueryReplies(term, () => true)
+    swallowQueryReplies(term)
     for (const query of QUERIES) await write(query)
     expect(replies).toEqual([])
   })
 
-  it('answers again when inactive or removed', async () => {
+  it('answers again once removed', async () => {
     const { term, replies, write } = terminal()
-    let active = false
-    const stop = swallowQueryReplies(term, () => active)
+    const stop = swallowQueryReplies(term)
     await write('\x1b[c')
-    expect(replies.length).toBe(1)
-    active = true
-    await write('\x1b[c')
-    expect(replies.length).toBe(1)
+    expect(replies.length).toBe(0)
     stop()
     await write('\x1b[c')
-    expect(replies.length).toBe(2)
+    expect(replies.length).toBe(1)
   })
 
   it('still applies modes and text', async () => {
     const { term, write } = terminal()
-    swallowQueryReplies(term, () => true)
+    swallowQueryReplies(term)
     await write('\x1b[?1h\x1b]11;#102030\x07hello')
     expect(term.modes.applicationCursorKeysMode).toBe(true)
     expect(term.buffer.active.getLine(0)?.translateToString(true)).toBe('hello')

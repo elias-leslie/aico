@@ -8,10 +8,7 @@ import {
   UploadProgressToast,
 } from '@/components/UploadStatusToast'
 import type { LayoutMode } from '@/lib/constants/a-term'
-import type {
-  ATermFontSize,
-  ATermScrollback,
-} from '@/lib/hooks/use-a-term-settings'
+import type { ATermFontSize } from '@/lib/hooks/use-a-term-settings'
 import type { ATermSlot, PaneSlot } from '@/lib/utils/slot'
 import type { PaneLayout } from '@/types/pane-layout'
 
@@ -19,7 +16,6 @@ interface ATermFileSectionProps {
   aTermSlots: (ATermSlot | PaneSlot)[]
   fontFamily: string
   fontSize: ATermFontSize
-  scrollback: ATermScrollback
   cursorStyle: 'block' | 'underline' | 'bar'
   cursorBlink: boolean
   theme?: Parameters<typeof ATermLayoutRenderer>[0]['theme']
@@ -67,7 +63,6 @@ export function ATermFileSection({
   aTermSlots,
   fontFamily,
   fontSize,
-  scrollback,
   cursorStyle,
   cursorBlink,
   theme,
@@ -139,7 +134,6 @@ export function ATermFileSection({
           aTermSlots={aTermSlots}
           fontFamily={fontFamily}
           fontSize={fontSize}
-          scrollback={scrollback}
           cursorStyle={cursorStyle}
           cursorBlink={cursorBlink}
           theme={theme}

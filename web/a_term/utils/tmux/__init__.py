@@ -31,12 +31,6 @@ from .external import (
     restore_external_attach_options,
     set_tmux_session_option,
 )
-from .scrollback import (
-    _CURSOR_SENTINEL,  # noqa: F401
-    get_cursor_position,
-    get_scrollback,
-    get_scrollback_with_cursor,
-)
 from .window import reset_tmux_window_size_policy
 
 __all__ = [
@@ -44,9 +38,6 @@ __all__ = [
     "TmuxError",
     "apply_external_attach_options",
     "build_tmux_command",
-    "get_cursor_position",
-    "get_scrollback",
-    "get_scrollback_with_cursor",
     "get_tmux_session_option",
     "reset_tmux_window_size_policy",
     "restore_external_attach_options",

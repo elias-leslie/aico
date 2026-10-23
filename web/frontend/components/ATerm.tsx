@@ -11,7 +11,6 @@ import {
 } from 'react'
 import '@xterm/xterm/css/xterm.css'
 import { swallowQueryReplies, trackSgrMouse } from '../lib/a-term/control-view'
-import { LineCache } from '../lib/a-term/line-cache'
 import { keepReadingPlace } from '../lib/a-term/reading-place'
 import {
   A_TERM_THEMES,
@@ -27,17 +26,10 @@ import { useATermScrolling } from '../lib/hooks/use-a-term-scrolling'
 import { useATermSearch } from '../lib/hooks/use-a-term-search'
 import { useATermWebSocket } from '../lib/hooks/use-a-term-websocket'
 import { useATermWriteQueue } from '../lib/hooks/use-a-term-write-queue'
-import { useBracketedPaste } from '../lib/hooks/use-bracketed-paste'
-import { usePaneMode } from '../lib/hooks/use-pane-mode'
-import { useScrollbackOverlay } from '../lib/hooks/use-scrollback-overlay'
-import { useScrollbackPager } from '../lib/hooks/use-scrollback-pager'
 import { profileAnsiColors } from '../lib/utils/ansi-color-profile'
 import { isMobileDevice } from '../lib/utils/device'
-import { isTuiSessionMode } from '../lib/utils/session-mode'
-import { requestedTransport } from '../lib/utils/terminal-transport'
 import { ATermDiagnosticsOverlay } from './ATermDiagnosticsOverlay'
 import type { ATermHandle, ATermProps } from './a-term.types'
-import { ScrollbackOverlay } from './ScrollbackOverlay'
 import { ScrollToBottomPill } from './ScrollToBottomPill'
 
 export type {
@@ -70,12 +62,6 @@ function isObserverModeEnabled(search: string): boolean {
   return value === '1' || value === 'true'
 }
 
-// xterm's FitAddon subtracts 14px from available width whenever scrollback is
-// enabled. Our TUI overlay uses scrollback, while the live TUI terminal keeps
-// scrollback at 0 to avoid duplicate native history. Reserve the same rail in
-// the live view so opening the overlay does not suddenly drop columns.
-const TUI_SCROLLBAR_RAIL_WIDTH_PX = 14
-
 export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
   function ATermComponent(
     {
@@ -87,7 +73,6 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
       onStatusChange,
       fontFamily = "'JetBrains Mono', monospace",
       fontSize = 14,
-      scrollback = SCROLLBACK,
       cursorStyle = 'block',
       cursorBlink = true,
       theme = PHOSPHOR_THEME,
@@ -161,33 +146,22 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
       theme.red,
     ])
 
-    const lineCacheRef = useRef(new LineCache())
-    const isTuiSession = isTuiSessionMode(sessionMode)
-
-    // Control mode (the default): the backend streams the pane's own output,
-    // so this xterm holds the history and the program's real modes, and the
-    // classic overlay, pane-mode queries and snapshots stay out of the way.
-    // The server confirms the transport on connect and may refuse it.
-    const [requestControl] = useState(() => requestedTransport() === 'control')
-    const [controlMode, setControlMode] = useState(requestControl)
-    const controlModeRef = useRef(controlMode)
-    // How much history the server's control-mode seed carries (it says so
-    // with the transport, before the seed); null until it has.
+    // The backend streams the pane's own output, so this xterm holds the
+    // history and the program's real modes. The server says how much history
+    // its seed carries (with the transport message, before the seed); null
+    // until it has.
     const [controlHistoryLines, setControlHistoryLines] = useState<
       number | null
     >(null)
     const sgrMouseRef = useRef<() => boolean>(() => false)
     const isSgrMouse = useCallback(() => sgrMouseRef.current(), [])
-    const classicSessionMode = controlMode ? undefined : sessionMode
 
-    // The control-mode server repaints the whole pane on request; the write
-    // queue asks for it once a reader who held the old view is back at the
-    // bottom.
+    // The server repaints the whole pane on request; the write queue asks for
+    // it once a reader who held the old view is back at the bottom.
     const reseedWsRef = useRef<React.RefObject<WebSocket | null> | null>(null)
     const reseedSource = useMemo(
       () => ({
         available: () =>
-          controlModeRef.current &&
           reseedWsRef.current?.current?.readyState === WebSocket.OPEN,
         request: () => {
           reseedWsRef.current?.current?.send(
@@ -198,86 +172,34 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
       [],
     )
 
-    const { enqueueWrite, applySnapshot, restartStream, onViewportMoved } =
-      useATermWriteQueue({
+    const { enqueueWrite, restartStream, onViewportMoved } = useATermWriteQueue(
+      {
         aTermRef,
         isVisibleRef,
-        sessionMode: classicSessionMode,
         reseed: reseedSource,
         diagnostics: {
           enabled: diagnosticsEnabled,
           incrementCounter: incrementDiagnosticCounter,
           record: recordDiagnostic,
         },
-      })
-
-    // Refs for pager/overlay callbacks — breaks circular dep between WebSocket and consumer hooks
-    const viewportInitRef = useRef<
-      | ((
-          data: Parameters<
-            NonNullable<
-              Parameters<typeof useATermWebSocket>[0]['onViewportInit']
-            >
-          >[0],
-        ) => void)
-      | null
-    >(null)
-    const scrollbackPageRef = useRef<
-      | ((
-          data: Parameters<
-            NonNullable<
-              Parameters<typeof useATermWebSocket>[0]['onScrollbackPage']
-            >
-          >[0],
-        ) => void)
-      | null
-    >(null)
-    const overlayPageRef = useRef<
-      | ((
-          data: Parameters<
-            NonNullable<
-              Parameters<typeof useATermWebSocket>[0]['onScrollbackPage']
-            >
-          >[0],
-        ) => void)
-      | null
-    >(null)
-    const overlayCacheUpdateRef = useRef<((scrollback: string) => void) | null>(
-      null,
+      },
     )
-    const paneModeRef = useRef<
-      | ((
-          data: Parameters<
-            NonNullable<Parameters<typeof useATermWebSocket>[0]['onPaneMode']>
-          >[0],
-        ) => void)
-      | null
-    >(null)
 
     const { status, wsRef, reconnect, sendInput, connect, disconnect } =
       useATermWebSocket({
         sessionId,
         workingDir,
         sendInitialResize: !suppressSharedResize,
-        requestControl,
-        onTransport: (transport, historyLines) => {
-          const on = transport === 'control'
-          controlModeRef.current = on
-          setControlMode(on)
-          if (on && historyLines) {
-            // Size the buffer now, before the seed is written, not on the
-            // next render.
-            if (aTermRef.current)
-              aTermRef.current.options.scrollback = historyLines
-            setControlHistoryLines(historyLines)
-          }
+        onHistoryLines: (historyLines) => {
+          // Size the buffer now, before the seed is written, not on the
+          // next render.
+          if (aTermRef.current)
+            aTermRef.current.options.scrollback = historyLines
+          setControlHistoryLines(historyLines)
         },
         onStatusChange,
         onDisconnect,
-        onBeforeReconnectData: () => {
-          lineCacheRef.current.reset()
-          restartStream()
-        },
+        onBeforeReconnectData: restartStream,
         onMessage: (data) => {
           if (!aTermRef.current) return
           if (diagnosticsEnabled) {
@@ -291,43 +213,6 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
           }
           enqueueWrite(data)
         },
-        onScrollbackSync: (scrollback, cursorPosition) => {
-          incrementDiagnosticCounter('snapshotReceived')
-          if (diagnosticsEnabled) {
-            recordDiagnostic('scrollback_sync_color_profile', {
-              chars: scrollback.length,
-              profile: profileAnsiColors(scrollback),
-            })
-          }
-          // Full sync resets the line cache so delta tracking restarts clean
-          lineCacheRef.current.reset()
-          // For TUI sessions, applySnapshot is a no-op — feed the overlay
-          // cache instead so scroll-up history stays current.
-          overlayCacheUpdateRef.current?.(scrollback)
-          applySnapshot(scrollback, cursorPosition)
-        },
-        onScrollbackDelta: (delta) => {
-          if (!lineCacheRef.current.applyDelta(delta)) return
-          const content = lineCacheRef.current.toFullContent()
-          if (!content) return
-
-          const cursorPosition = delta.cursor
-            ? { x: delta.cursor[0], y: delta.cursor[1] }
-            : undefined
-
-          if (isTuiSession) {
-            overlayCacheUpdateRef.current?.(content)
-            return
-          }
-
-          applySnapshot(content, cursorPosition)
-        },
-        onViewportInit: (data) => viewportInitRef.current?.(data),
-        onScrollbackPage: (data) => {
-          overlayPageRef.current?.(data)
-          scrollbackPageRef.current?.(data)
-        },
-        onPaneMode: (data) => paneModeRef.current?.(data),
         onATermMessage: (message) => {
           enqueueWrite(`${message}\r\n`)
         },
@@ -369,65 +254,19 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
       )
     }, [status, wsRef])
 
-    const { handleViewportInit, handleScrollbackPage } = useScrollbackPager({
-      wsRef,
-      onWrite: enqueueWrite,
-    })
-    const overlay = useScrollbackOverlay({ wsRef, sessionMode })
-    const { clearSearch, overlaySearchState, search } = useATermSearch({
-      aTermRef,
-      sessionMode: classicSessionMode,
-      activateOverlay: overlay.activate,
-      getOverlayLines: overlay.getCachedLines,
-      overlaySearchVersion: overlay.searchVersion,
-      setOverlaySearchActive: overlay.setSearchActive,
-    })
-    useEffect(() => {
-      viewportInitRef.current = handleViewportInit
-      scrollbackPageRef.current = handleScrollbackPage
-      overlayPageRef.current = overlay.handleScrollbackPage
-      overlayCacheUpdateRef.current = overlay.updateCacheFromSync
-    }, [
-      handleViewportInit,
-      handleScrollbackPage,
-      overlay.handleScrollbackPage,
-      overlay.updateCacheFromSync,
-    ])
+    const { clearSearch, search } = useATermSearch({ aTermRef })
 
-    // Any user input returns the pane to the live view. The scrollback overlay
-    // covers the live terminal, so without this a keystroke typed while the
-    // overlay is open lands in the session with nothing on screen to show for
-    // it — the pane looks like it stopped accepting input.
-    const overlayActiveRef = useRef(false)
-    const deactivateOverlay = overlay.deactivate
-    useEffect(() => {
-      overlayActiveRef.current = overlay.isActive
-    }, [overlay.isActive])
-
-    const sendUserInput = useCallback(
-      (data: string) => {
-        if (overlayActiveRef.current) {
-          overlayActiveRef.current = false
-          deactivateOverlay()
-        }
-        sendInput(data)
-      },
-      [deactivateOverlay, sendInput],
-    )
-
-    const bracketedPaste = useBracketedPaste(sendUserInput)
-    // Control mode pastes through tmux, which brackets the text only when the
-    // program enabled bracketed paste.
+    // Paste goes through tmux, which brackets the text only when the program
+    // enabled bracketed paste.
     const pasteInput = useCallback(
       (data: string) => {
-        if (!controlModeRef.current) return bracketedPaste(data)
         const text = data.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
         if (text && wsRef.current?.readyState === WebSocket.OPEN) {
           wsRef.current.send(JSON.stringify({ __ctrl: true, paste: text }))
         }
         return Promise.resolve()
       },
-      [bracketedPaste, wsRef],
+      [wsRef],
     )
     const pasteFile = useCallback(
       (file: File) => {
@@ -438,23 +277,10 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
 
     const isMobile = useMemo(() => isMobileDevice(), [])
 
-    const { handlePaneMode, requestPaneMode, paneOwnsScrollback } =
-      usePaneMode(wsRef)
-
-    useEffect(() => {
-      paneModeRef.current = handlePaneMode
-    }, [handlePaneMode])
-
     const { setupScrolling } = useATermScrolling({
       wsRef,
       aTermRef,
       isMobile,
-      sessionMode: classicSessionMode,
-      onRequestScrollbackOverlay: controlMode ? undefined : overlay.activate,
-      isScrollbackOverlayActive: overlay.isActive,
-      paneOwnsScrollback: controlMode ? undefined : paneOwnsScrollback,
-      requestPaneMode: controlMode ? undefined : requestPaneMode,
-      controlMode,
       isSgrMouse,
     })
 
@@ -463,23 +289,11 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
       (data: string) => {
         if (!isFocusedRef.current) return
         if (wsRef.current?.readyState === WebSocket.OPEN) {
-          sendUserInput(data)
+          sendInput(data)
         }
       },
-      [sendUserInput],
+      [sendInput],
     )
-
-    // TUI/agent sessions: scrollback overlay handles all history via tmux.
-    // Setting scrollback to 0 prevents a duplicate native scrollbar from
-    // accumulating live writes alongside the overlay.
-    // Control mode: the pane's own history, as many lines as the seed carries
-    // (the user's setting until the server has said).
-    const effectiveScrollback = controlMode
-      ? (controlHistoryLines ?? scrollback)
-      : isTuiSession
-        ? 0
-        : scrollback
-    const showScrollbarRail = isTuiSession && !controlMode
 
     const { isReady } = useATermInstance(
       {
@@ -487,7 +301,7 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
         cursorStyle,
         fontSize,
         fontFamily,
-        scrollback: effectiveScrollback,
+        scrollback: controlHistoryLines ?? SCROLLBACK,
         theme,
         onData: handleATermData,
         onPaste: pasteInput,
@@ -503,10 +317,7 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
       if (!isReady || !term) return
       const sgr = trackSgrMouse(term)
       sgrMouseRef.current = sgr.isSgr
-      const stopSwallowing = swallowQueryReplies(
-        term,
-        () => controlModeRef.current,
-      )
+      const stopSwallowing = swallowQueryReplies(term)
       const scrolled = term.onScroll(onViewportMoved)
       const readingPlace = keepReadingPlace(term)
       return () => {
@@ -528,7 +339,7 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
 
     useATermHandle(ref, {
       reconnect,
-      sendInput: sendUserInput,
+      sendInput,
       status,
       aTermRef,
       search,
@@ -561,41 +372,9 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
           className="h-full min-h-0 min-w-0 overflow-hidden"
           style={{
             backgroundColor: theme.background,
-            width: showScrollbarRail
-              ? `calc(100% - ${TUI_SCROLLBAR_RAIL_WIDTH_PX}px)`
-              : '100%',
+            width: '100%',
           }}
         />
-        {showScrollbarRail && (
-          <div
-            data-testid="a-term-scrollbar-rail"
-            style={{
-              position: 'absolute',
-              top: 0,
-              right: 0,
-              bottom: 0,
-              width: `${TUI_SCROLLBAR_RAIL_WIDTH_PX}px`,
-              backgroundColor: theme.background,
-              borderLeft: `1px solid ${theme.brightBlack}26`,
-              pointerEvents: 'none',
-            }}
-          />
-        )}
-        {!controlMode && (
-          <ScrollbackOverlay
-            isActive={overlay.isActive}
-            lines={overlay.lines}
-            totalLines={overlay.totalLines}
-            isLoading={overlay.isLoading}
-            initialScrollLineDelta={overlay.initialScrollLineDelta}
-            searchQuery={overlaySearchState?.query ?? ''}
-            searchActiveIndex={overlaySearchState?.activeIndex ?? -1}
-            onDismiss={overlay.deactivate}
-            theme={theme}
-            fontFamily={fontFamily}
-            fontSize={fontSize}
-          />
-        )}
         <ScrollToBottomPill
           aTermRef={aTermRef}
           isReady={isReady}

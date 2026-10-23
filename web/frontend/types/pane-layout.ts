@@ -25,7 +25,6 @@ export interface ResizablePaneLayoutProps {
   slots: (ATermSlot | PaneSlot)[]
   fontFamily: string
   fontSize: number
-  scrollback?: number
   cursorStyle?: 'block' | 'underline' | 'bar'
   cursorBlink?: boolean
   theme?: Parameters<typeof ATermComponent>[0]['theme']
