@@ -8,9 +8,8 @@ import { delimiter, join } from 'node:path'
 // FILTERED_ENV_VARS are removed even if an operator allow-lists them.
 
 /**
- * A-Term's filter (a_term/utils/tmux/core.py FILTERED_ENV_VARS), applied to
- * every session regardless of which app asked for it. Keep this a superset of
- * A-Term's set.
+ * The Python web backend's filter (its FILTERED_ENV_VARS), applied to every
+ * session regardless of which app asked for it.
  */
 export const FILTERED_ENV_VARS: ReadonlySet<string> = new Set([
   'DATABASE_URL',

@@ -159,7 +159,7 @@ describe('getPaneId', () => {
 })
 
 // One session per kind, as the backend lists it: `source`, the informational
-// flags and the capability flags (a_term/services/session_capabilities.py).
+// flags and the capability flags (web/server/src/sessions.ts).
 const KINDS = {
   tether: { source: 'tether', ...TETHER_CAN },
   root: { source: 'tether', is_root: true, ...ROOT_CAN },

@@ -1,10 +1,10 @@
-# ty from the repo root (how `st check` runs it): resolve imports from the web
-# backend's environment, which also covers Tether's stdlib-only scripts.
+# ty from the repo root (how `st check` runs it), with the env of Tether's
+# stdlib-only operator scripts.
 [environment]
-python = "./web/.venv"
+python = "./tether/scripts/.venv"
 
 [src]
-include = ["web", "tether/scripts", "scripts"]
+include = ["tether/scripts", "scripts"]
 
 [rules]
 # Suppress beta-quality rules (ty 0.0.x false positives)

@@ -17,26 +17,25 @@ creates the `agent/…/out/` directories with mode 0755.
 
 ## Web app
 
-The web backend keeps the last 50 validated shares in memory, shared by the
-event watcher and the API. Restarting the backend clears them; dropping one from
-memory never removes its file. Run one backend worker so the watcher and the
-API share this list.
+The web server (`aico-web`) keeps the last 50 validated shares in memory, shared
+by its event watcher and the API. Restarting it clears them; dropping one from
+memory never removes its file.
 
 `GET /api/shows` returns `{ "shows": [...] }` in arrival order.
 `?since=<id>` returns the items after that ID; an unknown or expired ID returns
-the whole list. Both this route and `GET /api/shows/<id>/file` use the
-web app's normal authentication. The browser polls every ten seconds while it
+the whole list. Both this route and `GET /api/shows/<id>/file` pass the
+web server's Host and Origin checks like every other route. The browser polls every ten seconds while it
 is visible and again when it becomes visible. Notices stay until dismissed; a
 link share offers its text and Copy only.
 
-File reads use the backend's `tether_exchange_root` setting
+File reads use the server's exchange root
 (`TETHER_EXCHANGE_ROOT`, default `/srv/workspaces/exchange`, the same variable
 and default as Tether's), under `agent/<session-or-none>/out/`. Every path
 component is opened without following symlinks; only regular files up to
 25 MiB are streamed, with bounded reads. Files download as attachments unless
 PNG, JPEG, GIF or WebP magic is detected.
 
-Each new valid share runs `nightshift push` from the backend, with a ten-second
+Each new valid share runs `nightshift push` from the web server, with a ten-second
 timeout and key `show:<id>`. A failed push is logged and the share is kept. The
 project identity's `hosts.browser_frontend` gives the HTTPS origin for the
 `/?show=<id>` link; without it the push has no link. Opening the link selects

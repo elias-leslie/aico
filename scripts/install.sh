@@ -10,7 +10,7 @@
 #                                      linger/systemd checks; for clean-room runs)
 #
 # Installs (rerunning changes only what differs):
-#   node_modules, the desktop/Tether/web builds, web/.venv (uv sync)
+#   node_modules and the desktop/Tether/web builds
 #   ~/.local/lib/tether (Tether's bundle, CLI and shims), ~/.local/bin/tether
 #   user units from scripts/systemd/ plus tether/systemd/tether@.service
 #   ~/.local/share/applications/aico.desktop
@@ -55,7 +55,7 @@ PI_COORD_SOURCE="${ST_PI_COORD_EXTENSION:-$HOME/.summitflow/services/projects/su
 PI_COORD_LINK="$HOME/.pi/agent/extensions/st-coord.ts"
 # Started by --start. aico-shell.service is the desktop app's unit:
 # scripts/aico-launch.sh starts it.
-START_UNITS=(tether@default.service a-term-backend.service a-term-frontend.service)
+START_UNITS=(tether@default.service aico-web.service)
 
 fail() {
   echo "install: $*" >&2
@@ -129,10 +129,10 @@ install_link() { # source link
 
 check_prerequisites() {
   local missing=() command major
-  for command in node npm uv python3 git; do
+  for command in node npm python3 git; do
     command -v "$command" >/dev/null 2>&1 || missing+=("$command")
   done
-  [ ${#missing[@]} -eq 0 ] || fail "missing: ${missing[*]} (Node.js 22+ with npm, uv, Python 3, git)"
+  [ ${#missing[@]} -eq 0 ] || fail "missing: ${missing[*]} (Node.js 22+ with npm, Python 3, git)"
   major="$(node -p 'process.versions.node.split(".")[0]')"
   [ "$major" -ge 22 ] || fail "Node.js 22+ required (found $(node --version))"
   [ "$SKIP_SYSTEMD" = 1 ] && return 0
@@ -395,9 +395,6 @@ else
   ensure_electron_binary
 fi
 run npm run build
-
-step "Web backend (Python, until it moves to Node)"
-run uv sync --locked --directory web
 
 step "Tether"
 [ "$DRY_RUN" = 1 ] || [ -f tether/dist/tether.mjs ] || fail "tether/dist/tether.mjs is missing after the build"

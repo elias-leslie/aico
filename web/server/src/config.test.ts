@@ -12,7 +12,7 @@ function identity(content: unknown): string {
 }
 
 const ID = identity({
-  runtime: { frontend_port: 4321 },
+  runtime: { backend_port: 4321 },
   hosts: { browser_frontend: 'App.Example' },
 })
 
@@ -82,7 +82,7 @@ describe('loadConfig: uploads, shares and maintenance', () => {
         MAINTENANCE_INTERVAL_SECONDS: '30',
         MAINTENANCE_SESSION_PURGE_DAYS: '3',
       },
-      identity({ runtime: { frontend_port: 1 }, artifacts: { upload_dir_name: 'ignored' } }),
+      identity({ runtime: { backend_port: 1 }, artifacts: { upload_dir_name: 'ignored' } }),
     )
     expect(config.uploads).toEqual({
       dir: '/home/u/drops',

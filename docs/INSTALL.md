@@ -9,15 +9,14 @@ On Debian/Ubuntu-like systems, install the basics first:
 ```bash
 sudo apt-get update
 sudo apt-get install -y \
-  git curl ca-certificates build-essential tmux bubblewrap python3 make g++ \
+  git curl ca-certificates build-essential tmux python3 make g++ \
   libgtk-3-0 libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
   libgbm1 libasound2t64 libxss1 libxtst6 libxrandr2 libxdamage1 \
   libxcomposite1 libxkbcommon0 libxshmfence1 libpango-1.0-0 libcairo2
 ```
 
-Install Node.js 22+ and `uv` using the methods you trust for your system. The
-web backend needs Python 3.13+; `uv` can use an existing interpreter or a
-uv-managed one. Tether needs systemd 254+, cgroup v2 and tmux at `/usr/bin/tmux`.
+Install Node.js 22+ using the method you trust for your system. Tether needs
+systemd 254+, cgroup v2 and tmux at `/usr/bin/tmux`.
 
 ## Source install
 
@@ -30,13 +29,12 @@ scripts/install.sh --start
 
 `scripts/install.sh` installs the whole product from this checkout:
 
-- runs `npm ci` (one workspace: desktop, Tether, web front end), makes sure
-  Electron's binary is present, and runs `npm run build`;
-- runs `uv sync --locked` in `web/` for the web backend;
+- runs `npm ci` (one workspace: desktop, Tether, web server and front end),
+  makes sure Electron's binary is present, and runs `npm run build`;
 - installs Tether's bundle, CLI and agent shims into `~/.local/lib/tether`
   (`TETHER_LIB_DIR`) and links `~/.local/bin/tether` (`TETHER_BIN_DIR`);
 - renders the user units in `scripts/systemd/` for this checkout
-  (`aico-shell`, `a-term-backend`, `a-term-frontend`, `tether@default`) plus
+  (`aico-shell`, `aico-web`, `tether@default`) plus
   the `tether@.service` template into `${XDG_CONFIG_HOME:-~/.config}/systemd/user/`,
   then reloads the user manager;
 - writes `~/.local/share/applications/aico.desktop`;
@@ -44,8 +42,8 @@ scripts/install.sh --start
   extension, only when SummitFlow is installed;
 - turns on user linger so sessions survive logout.
 
-`--start` also enables and restarts `tether@default`, `a-term-backend` and
-`a-term-frontend`. The desktop's `aico-shell.service` is started by
+`--start` also enables and restarts `tether@default` and `aico-web`, the web
+app's one Node server on port 3002. The desktop's `aico-shell.service` is started by
 `scripts/aico-launch.sh`. `--skip-systemd` installs files only (no units, no
 systemd checks), for clean-room runs. The installer is safe to rerun: it
 rewrites only files whose content changed. Rerun it after moving the checkout.
@@ -93,9 +91,9 @@ history: [`INCIDENT-2026-07-PROCESS-ESCAPES.md`](INCIDENT-2026-07-PROCESS-ESCAPE
 ## Development loop
 
 ```bash
-npm run check                        # lint, type checks, TypeScript tests, build
-(cd web && uv sync --locked --extra dev)
-web/.venv/bin/pytest -q               # web backend and Tether script tests
+npm run check                                # lint, type checks, TypeScript tests, build
+uv sync --locked --directory tether/scripts  # Python env for Tether's operator scripts
+tether/scripts/.venv/bin/pytest -q            # their tests, from the repo root
 ```
 
 Check the capture listener of a running Aico:

@@ -1,4 +1,4 @@
-// Browser side of the control-mode transport (a_term/services/tmux_control.py).
+// Browser side of the control-mode transport (web/server/src/terminal.ts).
 //
 // The terminal parses the pane's own output, so it holds real scrollback and
 // knows the program's modes. tmux stays the terminal the program talks to: it

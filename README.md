@@ -26,7 +26,7 @@ scripts/install.sh --start   # build, install, start Tether and the web app
 scripts/aico-launch.sh       # the desktop app
 ```
 
-Then open <http://localhost:3002> for the web app. `scripts/install.sh --dry-run` shows what it would do first. It needs Node.js 22+, npm, uv, Python 3.13+, tmux and systemd 254+; [docs/INSTALL.md](docs/INSTALL.md) has the details, including the Electron sandbox steps it may ask `sudo` for.
+Then open <http://localhost:3002> for the web app. `scripts/install.sh --dry-run` shows what it would do first. It needs Node.js 22+, npm, Python 3, tmux and systemd 254+; [docs/INSTALL.md](docs/INSTALL.md) has the details, including the Electron sandbox steps it may ask `sudo` for.
 
 ## How it fits together
 
@@ -34,11 +34,11 @@ Then open <http://localhost:3002> for the web app. `scripts/install.sh --dry-run
 | --- | --- | --- |
 | Tether | `tether/` | The session daemon (`tether@default`). Owns tmux servers, agent launch, End, roots and the project list. Serves a private Unix socket only. |
 | Desktop | `electron/`, `extension/` | Floating windows (`aico-shell.service`). Listens on `127.0.0.1:8005` for browser captures and `st selection send`. |
-| Web app | `web/` | Browser and phone front end on port 3002, with its backend on 8002. |
+| Web app | `web/` | Browser and phone app: one Node server (`aico-web.service`, port 3002) serving the page, its API and the terminal sockets. |
 
 Tether is found at `$TETHER_SOCKET`, else `$XDG_RUNTIME_DIR/tether/${TETHER_INSTANCE:-default}/control.sock`. When it is down, open views keep their terminals and session actions say control is unavailable.
 
-The desktop keeps only window views and settings in `~/.local/state/aico/aico.db`; the web app keeps its panes in `~/.local/state/a-term/a-term.db`. Losing either loses layout, never a running session. AI provider credentials belong to each CLI. Captures are typed at the last-focused session's prompt or refused; none are stored.
+The desktop keeps only window views and settings in `~/.local/state/aico/aico.db`; the web app keeps its tabs in `~/.local/state/aico/web.db`. Losing either loses layout, never a running session. AI provider credentials belong to each CLI. Captures are typed at the last-focused session's prompt or refused; none are stored.
 
 ## Runtime, data, and integrations
 
@@ -46,17 +46,17 @@ Agent shares (`show.requested`) are accepted only from your own `tether@default`
 
 Provision the exchange root before use, with an `agent/` subtree Tether can write. The desktop can create `owner/` when the root belongs to you and only you can write it; otherwise create `owner/` yourself. Owner directories must have no group or other write permission. Set the same `TETHER_EXCHANGE_ROOT` for Tether and both front ends.
 
-The web app has no login of its own by default and listens on loopback only. Before exposing it beyond localhost, put it behind an identity-aware gateway or turn on its password mode; see [remote access](docs/remote-access.md).
+The web app has no login of its own and listens on loopback only. Before exposing it beyond localhost, put it behind an identity-aware gateway; see [remote access](docs/remote-access.md).
 
 ## Development and verification
 
 ```bash
 npm ci
-(cd web && uv sync --locked --extra dev)
 npm run check
+uv sync --locked --directory tether/scripts   # only for Tether's Python operator scripts
 ```
 
-`npm run check` runs lint, type checks, the TypeScript tests of the desktop, Tether and web front end, and the build. The web backend's tests and Tether's script tests run with `web/.venv/bin/pytest` from the root. The author runs everything through his workspace tool (`st check`). Avoid broad process-name cleanup.
+`npm run check` runs lint, type checks, the TypeScript tests of the desktop, Tether, the web server and front end, and the build. Tether's operator-script tests run with `tether/scripts/.venv/bin/pytest` from the root. The author runs everything through his workspace tool (`st check`). Avoid broad process-name cleanup.
 
 ## Documentation
 

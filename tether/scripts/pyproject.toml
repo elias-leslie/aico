@@ -1,0 +1,19 @@
+# Not a package: the check environment for Tether's operator scripts
+# (stdlib only) and their tests. `uv sync --locked --directory tether/scripts`
+# makes tether/scripts/.venv, which `st check` and CI run pytest, Ruff and ty from.
+[project]
+name = "tether-scripts"
+version = "0"
+requires-python = ">=3.13"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.15.6",
+    "ty>=0.0.23",
+]
+
+[tool.uv]
+package = false

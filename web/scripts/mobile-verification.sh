@@ -5,8 +5,8 @@ ANDROID_LAUNCHER="${ANDROID_EMULATOR_LAUNCHER:-$HOME/bin/start-a-term-android-em
 ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}"
 AVD_NAME="${ANDROID_AVD_NAME:-Pixel_8_API_latest}"
 CDP_PORT="${MOBILE_CDP_PORT:-9222}"
-# The frontend answers only localhost, 127.0.0.1 and its public host
-# (frontend/proxy.ts), so the emulator reaches it through `adb reverse` on
+# The web server answers only localhost, 127.0.0.1 and its public host
+# (web/server/src/guard.ts), so the emulator reaches it through `adb reverse` on
 # localhost, not the emulator's 10.0.2.2 host alias (that gets a 403).
 A_TERM_PORT="${A_TERM_MOBILE_PORT:-3002}"
 A_TERM_URL="${A_TERM_MOBILE_URL:-http://localhost:${A_TERM_PORT}}"

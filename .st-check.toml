@@ -1,20 +1,21 @@
 # One gate for the three parts of this repo: the desktop at the root, Tether in
-# tether/ and the web app in web/ (Python backend, web/server and web/frontend). Prepare once:
-# `npm ci` at the root and `uv sync --locked --extra dev` in web/.
+# tether/ and the web app in web/ (web/server and web/frontend). Prepare once:
+# `npm ci` at the root and `uv sync --locked --directory tether/scripts` for
+# the Python env of Tether's operator scripts and their tests.
 #
 # The tools run from the root: Ruff and Biome pick up each part's nested config,
-# ty reads ty.toml, pytest reads pytest.ini (web/tests and tether/scripts/tests),
+# ty reads ty.toml, pytest reads pytest.ini (tether/scripts/tests),
 # Vitest's root config runs the desktop, Tether, web/server and web/frontend
 # projects, and tsc checks the desktop. Tether, web/server and web/frontend each
 # have their own tsconfig, so they type-check in the native stages below.
 [paths]
-pytest = "web/.venv/bin"
-types = "web/.venv/bin"
-ruff = "web/.venv/bin"
+pytest = "tether/scripts/.venv/bin"
+types = "tether/scripts/.venv/bin"
+ruff = "tether/scripts/.venv/bin"
 
 [native]
 schema_version = 1
-locks = ["package-lock.json", "web/pyproject.toml", "web/uv.lock"]
+locks = ["package-lock.json", "tether/scripts/pyproject.toml", "tether/scripts/uv.lock"]
 paths = ["node_modules/.bin"]
 environment_inputs = ["node_modules"]
 legacy_tools = ["ruff", "types", "pytest", "biome", "tsc", "vitest", "security"]

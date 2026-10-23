@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  # Desktop, Tether and web/frontend: one npm workspace, one lockfile.
+  # Desktop, Tether, web/server and web/frontend: one npm workspace, one lockfile.
   js:
     runs-on: ubuntu-latest
     steps:
@@ -27,23 +27,20 @@ jobs:
       - name: Check
         run: npm run check
 
-  # The web backend (web/, until it moves to Node) and Tether's operator-script
-  # tests, both in web/.venv, run from the root like `st check` does.
+  # Tether's operator scripts and their tests: stdlib + pytest, in
+  # tether/scripts/.venv, run from the root like `st check` does.
   python:
     runs-on: ubuntu-latest
-    env:
-      A_TERM_BIND_HOST: 127.0.0.1
-      A_TERM_AUTH_MODE: none
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
       - name: Install Python dependencies
-        run: uv sync --locked --extra dev --directory web
+        run: uv sync --locked --directory tether/scripts
       - name: Ruff
-        run: web/.venv/bin/ruff check .
+        run: tether/scripts/.venv/bin/ruff check .
       - name: Ty
-        run: web/.venv/bin/ty check
+        run: tether/scripts/.venv/bin/ty check
       - name: Pytest
-        run: web/.venv/bin/pytest -q
+        run: tether/scripts/.venv/bin/pytest -q

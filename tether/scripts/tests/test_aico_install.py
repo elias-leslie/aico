@@ -28,7 +28,7 @@ def env(tmp_path: Path, home: Path) -> dict[str, str]:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     stub(bin_dir, "node", 'case "$1" in -p) echo 24 ;; *) echo v24.0.0 ;; esac')
-    for name in ("npm", "uv", "git"):
+    for name in ("npm", "git"):
         stub(bin_dir, name, f'echo "{name} must not run in a dry run" >&2; exit 99')
     stub(bin_dir, "systemctl", 'case "$1" in --version) echo "systemd 255 (255)" ;; *) exit 99 ;; esac')
     stub(bin_dir, "loginctl", "echo yes")
@@ -55,7 +55,6 @@ def test_dry_run_prints_each_step_and_writes_nothing(env: dict[str, str], home: 
     for line in (
         "would run: npm ci --no-audit --no-fund",
         "would run: npm run build",
-        "would run: uv sync --locked --directory web",
         f"would run: env TETHER_LIB_DIR={home}/.local/lib/tether tether/scripts/install-release.sh",
         f"would run: ln -sfn {home}/.local/lib/tether/bin/tether {home}/.local/bin/tether",
         f"would write {home}/.local/share/applications/aico.desktop",
@@ -76,7 +75,7 @@ def test_dry_run_lists_every_unit(env: dict[str, str], home: Path) -> None:
         assert f"would write {home}/.config/systemd/user/{unit}" in result.stdout
     assert "would run: systemctl --user daemon-reload" in result.stdout
     assert (
-        "would run: systemctl --user restart tether@default.service a-term-backend.service a-term-frontend.service"
+        "would run: systemctl --user restart tether@default.service aico-web.service"
         in result.stdout
     )
     assert files_under(home) == []

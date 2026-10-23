@@ -24,7 +24,7 @@ Required:
 - `tmux` (each window is a tmux client of its session)
 - Electron runtime libraries (`libgtk-3-0`, `libnss3`, `libatk1.0-0`, `libatk-bridge2.0-0`, `libcups2`, `libgbm1`, `libasound2t64`, and related X11/desktop libraries on Debian/Ubuntu)
 
-Source installs additionally need Node.js 22+, npm, Python 3.13+, and `uv`.
+Source installs additionally need Node.js 22+, npm and Python 3.
 
 Recommended for the full desktop experience:
 

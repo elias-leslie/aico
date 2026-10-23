@@ -6,9 +6,9 @@ Thanks for taking a look at Aico.
 
 ```bash
 scripts/install.sh
-(cd web && uv sync --locked --extra dev)
 npm run check
-web/.venv/bin/pytest -q
+uv sync --locked --directory tether/scripts   # Tether's operator-script tests
+tether/scripts/.venv/bin/pytest -q
 ```
 
 Use focused changes and keep the public install path working from a fresh clone.

@@ -13,7 +13,7 @@ One running terminal workload and its durable tmux state, owned by Tether and cr
 _Avoid_: Widget, attachment, pane, when naming the workload in the user interface
 
 **View**:
-A desktop window or a web app tab that shows an existing session. Several views may show the same session. The desktop stores one view row per session ID (geometry, open state, local name override) in `aico.db`; the web app keeps its panes in `~/.local/state/a-term/a-term.db`.
+A desktop window or a web app tab that shows an existing session. Several views may show the same session. The desktop stores one view row per session ID (geometry, open state, local name override) in `aico.db`; the web app keeps its tabs in `~/.local/state/aico/web.db`.
 _Avoid_: Session, when only the local display is being closed
 
 **Owner**:

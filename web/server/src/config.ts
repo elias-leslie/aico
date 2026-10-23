@@ -57,7 +57,7 @@ export const HISTORY_LINES = 20_000
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost'])
 
 interface Identity {
-  runtime?: { frontend_port?: unknown }
+  runtime?: { backend_port?: unknown }
   hosts?: { browser_frontend?: unknown }
   artifacts?: { upload_dir_name?: unknown }
 }
@@ -143,9 +143,9 @@ export function loadConfig(
   identityFile: string | null = findIdentityFile(HERE),
 ): WebConfig {
   const identity = readIdentity(env.AICO_IDENTITY_FILE || identityFile)
-  // The web app's port: today's frontend port, which Caddy and the tunnel point at.
-  const port = parsePort(env.AICO_WEB_PORT) ?? parsePort(identity.runtime?.frontend_port)
-  if (port === null) throw new Error('No port: set AICO_WEB_PORT or runtime.frontend_port')
+  // The web app's port: the backend port, which Caddy and the tunnel point at.
+  const port = parsePort(env.AICO_WEB_PORT) ?? parsePort(identity.runtime?.backend_port)
+  if (port === null) throw new Error('No port: set AICO_WEB_PORT or runtime.backend_port')
   const host = env.AICO_WEB_HOST?.trim() || '127.0.0.1'
   if (!LOOPBACK_HOSTS.has(host.toLowerCase()))
     throw new Error(`The web server binds loopback only (got ${host})`)

@@ -1,8 +1,8 @@
 /**
- * Test fixtures for sessions and Slots. The `*_CAN` rows are the backend's
- * capability flags per kind, read from session-capabilities.json, which
- * tests/test_session_capabilities.py checks against
- * a_term/services/session_capabilities.py.
+ * Test fixtures for sessions and Slots. The `*_CAN` rows are the server's
+ * capability flags per kind, read from session-capabilities.json; the tether
+ * and root rows are what web/server/src/sessions.ts sets (own_tmux sessions
+ * are no longer listed).
  */
 import type { ATermSession } from '@/lib/hooks/use-a-term-sessions'
 import type { SlotCapabilities } from '@/lib/utils/slot'

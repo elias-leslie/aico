@@ -12,7 +12,7 @@ scripts/install.sh --start
 
 Then open **http://localhost:3002**.
 
-The web app targets **Linux with systemd** and needs **Tether**, the session daemon that owns every session (API version 1 or newer, `tether@default.service`). `scripts/install.sh` builds the front end, sets up the backend's Python environment in `web/.venv` and installs Tether and the user units; `--start` starts Tether and both web units. There is no database server to install. See [install](INSTALL.md).
+The web app targets **Linux with systemd** and needs **Tether**, the session daemon that owns every session (API version 1 or newer, `tether@default.service`). One Node process, `aico-web.service`, serves the page, its API (`/api`), the terminal sockets (`/ws`) and `/health` on port 3002. `scripts/install.sh` builds the front end and the server and installs Tether and the user units; `--start` starts Tether and `aico-web`. There is no database server to install. See [install](INSTALL.md).
 
 Projects come from Tether: by default its local list (`~/.config/tether/projects.json`).
 
@@ -38,7 +38,7 @@ On a phone, tap Talk to start dictating. Words appear while you speak, and pause
 
 **`dual mode`** — Switch any session between raw shell and your configured AI agent with one click. Supports Claude Code, Codex, Antigravity CLI, and Pi out of the box.
 
-**`agent tools`** — New session offers the enabled tools in Tether's shared registry: Claude Code, Codex, Antigravity CLI and Pi by default, plus any you add there. Antigravity launches as `agy --dangerously-skip-permissions`, its explicit auto-approval mode. Claude Code's slug is `claude-code` (`claude` still works as an alias). The web app also lists agent sessions you started yourself on your default tmux server alongside your own sessions, recognising any tool in that registry by its slug, aliases, process name or command; closing one here only closes the view.
+**`agent tools`** — New session offers the enabled tools in Tether's shared registry: Claude Code, Codex, Antigravity CLI and Pi by default, plus any you add there. Antigravity launches as `agy --dangerously-skip-permissions`, its explicit auto-approval mode. Claude Code's slug is `claude-code` (`claude` still works as an alias).
 
 **`scrollback`** — Each session is attached in tmux control mode, which seeds its history into xterm.js. Scroll up and the view holds still while output keeps arriving; a Latest button returns you to the bottom.
 
@@ -58,55 +58,48 @@ Expand the arrow controls to find Enter, which activates a TUI selection without
 
 **`install as a PWA`** — The web app ships a manifest, so you can install it to your phone or desktop and run it standalone.
 
-**`auth modes for remote access`** — Ships loopback-only (`none`) by default, with built-in password auth (signed-cookie sessions) or `proxy` mode for an identity-aware reverse proxy. Security headers, a CSP with per-request nonces, CORS allowlisting, and per-route rate limiting are on by default.
+**`locked down by default`** — The server listens on loopback only and answers only `localhost`, `127.0.0.1` and the configured public host. Writes and terminal sockets must come from a trusted origin, uploads are rate limited, and pages carry a CSP that allows only the export's own scripts (by hash). There is no login of its own: put an identity-aware gateway such as Cloudflare Access in front of any public host.
 
-**`self-maintaining`** — A background loop drops pane links to sessions that ended, prunes long-empty panes, cleans up old uploads, and prunes settings for projects that no longer exist; it also follows Tether's event stream so an ended session leaves its pane promptly. `/health` reports Tether and tmux, and `/metrics` exposes runtime status.
+**`self-maintaining`** — A background loop drops tab links to sessions that ended, prunes long-empty tabs, cleans up old uploads, and prunes settings for projects that no longer exist; it also follows Tether's event stream so an ended session leaves its tab promptly. `/health` reports the server and Tether.
 
 ## Advanced Setup
 
 For install smoke or CI validation on Linux hosts without a user systemd session, run `scripts/install.sh --skip-systemd`.
 
-For any deployment beyond localhost, turn on browser auth first. `A_TERM_AUTH_MODE=password` is the built-in path. `A_TERM_AUTH_MODE=proxy` is for running behind an identity-aware reverse proxy.
+For any deployment beyond localhost, put an identity-aware gateway in front first (the web app has no login of its own); see [remote access](remote-access.md).
 
 <details>
 <summary><strong>Environment variables</strong></summary>
 
-Copy `web/.env.example` to `~/.config/credstore/a-term/env` (mode 0600, outside the repo) if you want to override settings; both web units read it when present. Everything is optional:
+Copy what you need from `web/.env.example` to `~/.config/credstore/a-term/env` (mode 0600, outside the repo); `aico-web.service` reads it when present. Everything is optional:
 
 ```bash
 # Tether control socket (default: $XDG_RUNTIME_DIR/tether/default/control.sock)
 TETHER_SOCKET=/run/user/1000/tether/default/control.sock
 
-# Where the web app keeps its view state (default: ~/.local/state/a-term/a-term.db)
-A_TERM_DB_PATH=/home/you/.local/state/a-term/a-term.db
+# Where the web app keeps its tabs and project settings (default: ~/.local/state/aico/web.db)
+AICO_WEB_DB=/home/you/.local/state/aico/web.db
 
-# Service tuning
-A_TERM_PORT=8002
-A_TERM_BIND_HOST=127.0.0.1
-A_TERM_FRONTEND_PORT=3002
-LOG_LEVEL=INFO
+# Listener (loopback only; the port defaults to runtime.backend_port, 3002)
+AICO_WEB_PORT=3002
 
-# Public auth
-A_TERM_AUTH_MODE=password
-A_TERM_AUTH_PASSWORD=change-me
-A_TERM_AUTH_SECRET=replace-with-a-long-random-string
-A_TERM_AUTH_COOKIE_SECURE=true
-
-# Maintenance
+# Uploads and maintenance
+MAX_FILE_SIZE_MB=10
 MAINTENANCE_INTERVAL_SECONDS=900
 MAINTENANCE_SESSION_PURGE_DAYS=7
 
-# Optional companion services (the web app works without these)
-NEXT_PUBLIC_AGENT_HUB_URL=http://localhost:8003
+# Optional Agent Hub (the web app works without it)
 AGENT_HUB_URL=http://localhost:8003
 ```
+
+On its first start the server copies the old Python backend's tabs and project settings from `~/.local/state/a-term/a-term.db` (`AICO_WEB_IMPORT_DB`) into `web.db`, once; later starts never import again.
 
 </details>
 
 <details>
 <summary><strong>Terminal launchers</strong></summary>
 
-`scripts/tclaude`, `scripts/tcodex` and `scripts/tsession` open a project's agent session from a terminal: they reuse the most recently used Tether session for that project and tool, or create one (it also appears in the web app and the desktop), then attach with `tether sessions attach`. Run outside tmux, it attaches directly. Inside a tmux client on the same Tether server it switches the client. Inside a different tmux server (for example your default one), tmux cannot switch across servers, so it attaches nested after printing a notice; detach the inner client with its prefix key then `d`. `tsession open --tool codex --project myapp --attach --print` prints Tether's attach target instead. The `tether` CLI must be on `PATH` (or set `TETHER_BIN`).
+`web/scripts/tclaude`, `tcodex` and `tsession` (Node, sharing the server's code and `web.db`) open a project's agent session from a terminal: they reuse the most recently used Tether session for that project and tool, or create one (it also appears in the web app and the desktop), then attach with `tether sessions attach`. Run outside tmux, it attaches directly. Inside a tmux client on the same Tether server it switches the client. Inside a different tmux server (for example your default one), tmux cannot switch across servers, so it attaches nested after printing a notice; detach the inner client with its prefix key then `d`. `tsession open --tool codex --project myapp --attach --print` prints Tether's attach target instead. The `tether` CLI must be on `PATH` (or set `TETHER_BIN`).
 
 </details>
 
@@ -114,41 +107,34 @@ AGENT_HUB_URL=http://localhost:8003
 <summary><strong>Daily commands</strong></summary>
 
 ```bash
-bash scripts/start.sh
-bash scripts/shutdown.sh
-journalctl --user -u a-term-backend.service -f
-journalctl --user -u a-term-frontend.service -f
+systemctl --user restart aico-web.service
+systemctl --user status aico-web.service
+journalctl --user -u aico-web.service -f
 ```
 
 </details>
 
 ## Remote Access
 
-The web app answers on `localhost`, plus one public hostname through a Cloudflare tunnel. LAN, Tailscale and other reverse-proxy setups are refused by the Host guard. See the [Remote Access guide](remote-access.md). Put Cloudflare Access or built-in auth (`password` or `proxy`) in front of the public host.
+The web app answers on `localhost`, plus one public hostname through a Cloudflare tunnel. LAN, Tailscale and other reverse-proxy setups are refused by the Host guard. See the [Remote Access guide](remote-access.md). Put Cloudflare Access in front of the public host.
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Backend | FastAPI, Python 3.13+, Uvicorn |
-| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 4 |
+| Server | Node.js 22+ (`node:http`, `ws`, `node:sqlite`), one esbuild bundle |
+| Frontend | Next.js 16 static export, React 19, TypeScript, Tailwind CSS 4 |
 | Terminal | xterm.js 6 with WebGL renderer (DOM fallback), tmux client attached to Tether's sessions |
 | Sessions | Tether (local daemon, Unix-socket HTTP API v1) |
-| View state | SQLite (`~/.local/state/a-term/a-term.db`) |
-| Quality | Ruff, Ty, pytest, Vitest, Biome |
+| View state | SQLite (`~/.local/state/aico/web.db`) |
+| Quality | Vitest, Biome, tsc |
 
 <details>
 <summary><strong>Architecture</strong></summary>
 
-- `a_term/api/` — REST and WebSocket endpoints
-- `a_term/tether/` — Tether API client (Unix socket, stdlib HTTP, NDJSON events)
-- `a_term/services/` — session lifecycle through Tether, view links, maintenance
-- `a_term/storage/` — local SQLite view state (panes, layout, session links, project settings)
-- `a_term/cli/` — `tsession` and the `a-term` cutover commands
-- `frontend/app/`, `frontend/components/`, `frontend/lib/` — Next.js UI
-- `web/scripts/` — start, stop, launchers and verification; the installer and units are in the root `scripts/`
-
-Full API schema available at `/openapi.json` when running.
+- `server/src/` — the Node server: `api.ts` (REST), `terminal.ts` (terminal WebSocket), `static.ts` (the page), `background.ts` (Tether events, maintenance), `db.ts` (tabs and project settings), `cli.ts` (`tsession`)
+- `frontend/app/`, `frontend/components/`, `frontend/lib/` — the Next.js UI, built as a static export into `frontend/out/`
+- `web/scripts/` — launchers and verification; the installer and units are in the root `scripts/`
 
 </details>
 
@@ -159,7 +145,7 @@ All core features work without any external service.
 
 **SummitFlow project catalog** — Tether reads SummitFlow's projects when SummitFlow is installed, and the web app shows those. Without SummitFlow, Tether uses its local list.
 
-**Agent Hub** (`NEXT_PUBLIC_AGENT_HUB_URL`, `AGENT_HUB_URL`) — Adds model catalog and prompt cleaning/refinement proxies. Browser-native voice input works standalone; Agent Hub provides an optional enhanced path.
+**Agent Hub** (`AGENT_HUB_URL`) — Adds model catalog and prompt cleaning/refinement proxies. Browser-native voice input works standalone; Agent Hub provides an optional enhanced path.
 
 </details>
 

@@ -69,7 +69,7 @@ tether [--instance NAME] [--json] <command>
 ```sh
 npm ci                              # at the repo root
 npm run check                       # biome, tsc, vitest, esbuild bundle (in tether/)
-web/.venv/bin/pytest tether/scripts/tests   # operator script tests, from the repo root
+tether/scripts/.venv/bin/pytest -q         # operator script tests, from the repo root (uv sync --locked --directory tether/scripts first)
 scripts/tether-lifecycle-harness.sh dev   # host integration tests against a running instance
 ```
 

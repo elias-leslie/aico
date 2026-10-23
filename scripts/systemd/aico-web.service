@@ -1,0 +1,33 @@
+# TEMPLATE — `__PROJECT_ROOT__` is a placeholder. scripts/install.sh (source
+# installs) and `st service rebuild aico` (managed hosts) render it with the
+# repo path and install the unit to ~/.config/systemd/user/; see docs/INSTALL.md.
+[Unit]
+Description=Aico web server (page, API and terminal sockets)
+# Sessions live in Tether. Wants (not Requires): the web server still starts
+# and reports Tether as down on /health, and restarting Tether never restarts it.
+Wants=tether@default.service
+After=network.target tether@default.service
+
+[Service]
+Type=simple
+WorkingDirectory=__PROJECT_ROOT__/web/server
+# ~/.local/bin holds nightshift, which agent shares push through. Node comes
+# from this PATH too (22+ for node:sqlite).
+Environment=PATH=%h/.claude/bin:%h/.codex/bin:%h/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=HOME=%h
+# Agent Hub, upload and maintenance settings; the names are the Python
+# backend's, read unchanged. Shares are accepted only from tether@default's
+# socket, so TETHER_SOCKET is deliberately not set here.
+EnvironmentFile=-%h/.config/credstore/a-term/env
+# Without the flag node:sqlite logs an ExperimentalWarning at every start.
+ExecStart=/usr/bin/env node --disable-warning=ExperimentalWarning __PROJECT_ROOT__/web/server/dist/aico-web.mjs
+Restart=always
+RestartSec=3
+KillSignal=SIGTERM
+TimeoutStopSec=15
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=aico-web
+
+[Install]
+WantedBy=default.target
