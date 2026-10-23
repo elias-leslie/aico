@@ -30,7 +30,7 @@ scripts/aico-launch.sh
 
 The installer refuses to continue until `tether --json version` reports API v1 or later, then installs the `aico-shell.service` user unit for this checkout. Electron's sandbox needs user namespaces. When the kernel restricts them, the installer offers an AppArmor profile. Only when namespaces stay unavailable (no profile installed, or the kernel turns them off) does it offer Electron's setuid `chrome-sandbox` helper. It prints these `sudo` steps and runs them only after an interactive yes or with `AICO_INSTALL_PRIVILEGED=1`. Configuration comes from environment variables, not a `.env` file.
 
-Source builds need Node.js 22+, npm, Python 3.13+, uv, and native `node-pty` build tools. The [project guide](docs/project-guide.md) has the installation details.
+Source builds need Node.js 22+, npm, Python 3.13+, and uv. The [project guide](docs/project-guide.md) has the installation details.
 
 ## Runtime, data, and integrations
 

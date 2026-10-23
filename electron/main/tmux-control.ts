@@ -14,20 +14,21 @@
 // and sends it ahead of the stream as a terminal reset plus repaint. Output
 // tmux sends before that command list completes is already in the captures and
 // is dropped; output after its last %end is newer and follows the seed.
-//
-// The link presents the slice of node-pty's IPty that the main process uses, so
-// the attach path and this one are interchangeable per window.
 
 import { type ChildProcessWithoutNullStreams, execFile, spawn } from 'node:child_process'
 import { TERMINAL_HISTORY_LINES } from '../shared/terminal-history'
 import { sandboxedTmux } from './tmux-sandbox'
 
-/** The IPty surface Aico's main process relies on. */
+/** What Aico's main process uses of a window's terminal link. */
 export interface TerminalLink {
   readonly pid: number
   readonly cols: number
   readonly rows: number
   write(data: string): void
+  /** Paste through tmux, bracketed when the program asked for it. */
+  paste(text: string): void
+  /** Re-read the pane from tmux and repaint the terminal from it. */
+  reseed(): void
   resize(cols: number, rows: number): void
   kill(): void
   onData(listener: (data: string) => void): void

@@ -1,13 +1,4 @@
-// View-side tmux helpers. Tether owns every tmux server, session and pane, and
-// answers the pane-mode question itself (GET /v1/sessions/:id/pane-mode). Aico
-// only runs `tmux attach` for its windows (the byte path) and, against the exact
-// socket and target Tether handed out for that attach, repaints its own
-// attached clients.
-
-export interface AttachedTarget {
-  socket: string
-  target: string
-}
+// Small async coalescing helpers shared by the terminal and the Tether link.
 
 /** Share one pending query without retaining a stale result. */
 export function coalesceAsync<T>(load: () => Promise<T>): () => Promise<T> {
@@ -42,23 +33,5 @@ export function coalesceTrailingAsync(work: () => Promise<void>): () => Promise<
       }
     })()
     return running
-  }
-}
-
-/** Repaint only clients attached to this session, stopping once the
- * initiating PTY is stale. */
-export async function refreshAttachedClients(
-  { socket, target }: AttachedTarget,
-  run: (args: string[]) => Promise<string>,
-  isCurrent: () => boolean,
-): Promise<void> {
-  if (!isCurrent()) return
-  const output = await run(['-S', socket, 'list-clients', '-t', target, '-F', '#{client_name}'])
-  for (const client of output
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)) {
-    if (!isCurrent()) return
-    await run(['-S', socket, 'refresh-client', '-t', client])
   }
 }

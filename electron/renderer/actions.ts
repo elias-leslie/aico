@@ -69,26 +69,6 @@ export function setCoordinatorAction(on: boolean): void {
   if (row && action) row.textContent = action.label
 }
 
-const TRANSPORT_ACTION = {
-  attach: {
-    label: 'Switch to terminal scrollback',
-    note: 'You are on plain tmux attach. Every window reloads and keeps its history in the terminal itself; sessions keep running.',
-  },
-  control: {
-    label: 'Switch to plain tmux attach',
-    note: 'You are on terminal scrollback. As a fallback, every window reloads as a plain tmux client with history in tmux copy mode; sessions keep running.',
-  },
-}
-
-/** Name the scrollback switch for the mode windows are in now. */
-export function setTransportAction(transport: 'attach' | 'control'): void {
-  const action = ACTIONS.find((a) => a.id === 'terminal-transport-toggle')
-  if (!action) return
-  Object.assign(action, TRANSPORT_ACTION[transport])
-  const row = document.querySelector('.aico-row[data-id="terminal-transport-toggle"] .aico-lbl')
-  if (row) row.textContent = action.label
-}
-
 export interface Action {
   id: string
   /** Group header in the menu, in first-seen order. */
@@ -183,14 +163,6 @@ export const ACTIONS: Action[] = [
     icon: '↻',
     note: 'Repaint the view from tmux if output looks garbled or duplicated.',
     run: () => window.dispatchEvent(new CustomEvent('aico:refresh')),
-  },
-  {
-    id: 'terminal-transport-toggle',
-    section: 'Session',
-    ...TRANSPORT_ACTION.control,
-    shortcut: '',
-    icon: '⇅',
-    run: () => window.aico.terminal.toggleTransport(),
   },
   {
     // Flyout-only host (no run): hovering opens the "Open workspace ▸" picker.

@@ -1,6 +1,6 @@
 // Every environment-derived setting of the main process, read once at start,
 // so no feature module reads process.env itself. The child processes features
-// start (terminal PTYs) get the environment handed in by the root.
+// start (terminal clients) get the environment handed in by the root.
 
 import { join } from 'node:path'
 import { DEFAULT_AGENT_TETHER_SOCKET, knownTetherSockets, tetherSocketPath } from './tether-client'
@@ -33,8 +33,6 @@ export interface AicoConfig {
    * shortcut to a CLI that poke this same grab path instead (follow-on).
    */
   readonly selectionHotkey: string
-  /** AICO_TERMINAL_TRANSPORT, when it forces a terminal transport over the setting. */
-  readonly forcedTransport: 'attach' | 'control' | undefined
   /** The Vite dev server, when running under it. */
   readonly rendererUrl: string | undefined
   readonly activationReadyFile: string | undefined
@@ -63,7 +61,6 @@ export function readConfig(
   uid: number | undefined,
 ): AicoConfig {
   const stateDir = env.AICO_STATE_DIR ?? join(home, '.local', 'state', 'aico')
-  const forced = env.AICO_TERMINAL_TRANSPORT
   const exchangeRoot = env.TETHER_EXCHANGE_ROOT || '/srv/workspaces/exchange'
   return Object.freeze({
     stateDir,
@@ -83,7 +80,6 @@ export function readConfig(
     nightshift: join(home, '.local/bin/nightshift'),
     atermUrl: (env.AICO_ATERM_URL ?? 'https://terminal.summitflow.dev').replace(/\/+$/, ''),
     selectionHotkey: env.AICO_SELECTION_HOTKEY ?? 'CommandOrControl+Shift+Space',
-    forcedTransport: forced === 'attach' || forced === 'control' ? forced : undefined,
     rendererUrl: env.ELECTRON_RENDERER_URL,
     activationReadyFile: env.AICO_ACTIVATION_READY_FILE,
     pidFile: env.AICO_PIDFILE,

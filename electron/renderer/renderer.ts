@@ -20,7 +20,6 @@ import {
   type AicoToastDetail,
   setCoordinatorAction,
   setGameActions,
-  setTransportAction,
 } from './actions'
 import { GAMES } from './arcade/games'
 import { type ArcadeWiring, wireArcade } from './arcade/wire'
@@ -50,19 +49,11 @@ let tuiSlug = 'shell'
 let terminalLayoutReady = false
 let terminalLayoutTimer: number | undefined
 // Control mode feeds xterm the pane's own output, so xterm keeps the history
-// and the program's modes itself; attach mode (the rollback, and A-Term
-// windows) is a plain tmux client. Fixed until the window reloads.
-const controlMode = (await window.aico.terminal.transport()) === 'control'
-// The palette names the mode every window switches to; A-Term windows stay
-// classic whatever the setting, so ask for the setting, not this window.
-void window.aico.terminal.transportSetting().then(setTransportAction)
-
+// and the program's modes itself.
 const term = new Terminal({
   fontFamily,
   fontSize,
-  // Attach mode: scrollback lives in tmux, not here — the live view is tmux's
-  // alternate screen, which has none.
-  scrollback: controlMode ? TERMINAL_HISTORY_LINES : 0,
+  scrollback: TERMINAL_HISTORY_LINES,
   // A blinking xterm cursor kept every large transparent widget repainting even
   // when its session was idle; three visible 4K-scale windows held Chromium's
   // GPU process near one-third of a core. A static cursor preserves location
@@ -109,15 +100,11 @@ host.addEventListener(
   { capture: true },
 )
 
-// Attach mode: xterm reports the wheel to tmux when tmux asked for the mouse;
-// otherwise the wheel is dropped, since the live tmux view has no local history
-// and xterm's fallback would type Up/Down into the pane. Control mode routes the
-// wheel in the capture handler below (controlWheel) and leaves xterm only the
-// mouse reports it encodes itself.
+// The wheel is routed in the capture handler below (controlWheel), leaving xterm
+// only the mouse reports it encodes itself.
 let sgrMouse = () => false
-term.attachCustomWheelEventHandler(() => controlMode || mouseReportingActive(term))
 
-/** Control mode: act on a wheel event, or return false to leave it to xterm. */
+/** Act on a wheel event, or return false to leave it to xterm. */
 function controlWheel(e: WheelEvent): boolean {
   const action = controlWheelAction({
     mouseTracking: mouseReportingActive(term),
@@ -491,10 +478,8 @@ try {
   webgl = undefined
 }
 fit.fit()
-if (controlMode) {
-  swallowQueryReplies(term)
-  sgrMouse = trackSgrMouse(term)
-}
+swallowQueryReplies(term)
+sgrMouse = trackSgrMouse(term)
 wireDraftInput(term, () => tuiSlug, scheduleTerminalLayoutFit)
 // Copies made inside the pane (Claude Code's own selection) arrive as OSC 52.
 term.parser.registerOscHandler(52, (data) => {
@@ -612,11 +597,8 @@ host.addEventListener('mouseup', (e) => {
 // which fails when it runs as another user with no display.
 const pasteFromClipboard = createPasteGuard(
   async () => (await window.aico.clipboard.read()) || (await window.aico.clipboard.imagePath()),
-  (text) => {
-    // tmux pastes for a control-mode window, bracketed when the program asked.
-    if (controlMode) window.aico.pty.paste(text)
-    else term.paste(text)
-  },
+  // tmux pastes, bracketed when the program asked.
+  (text) => window.aico.pty.paste(text),
 )
 
 host.addEventListener('contextmenu', (event) => {
@@ -666,17 +648,15 @@ function paneOwnsSelection(): boolean {
   })
 }
 
-// Control mode: the wheel is routed here, ahead of xterm, whose viewport
-// scrolls its history at its own speed.
-if (controlMode) {
-  host.addEventListener(
-    'wheel',
-    (e) => {
-      if (e.deltaY === 0 || !controlWheel(e)) return
-      e.preventDefault()
-      e.stopPropagation()
-      e.stopImmediatePropagation()
-    },
-    { passive: false, capture: true },
-  )
-}
+// The wheel is routed here, ahead of xterm, whose viewport scrolls its history
+// at its own speed.
+host.addEventListener(
+  'wheel',
+  (e) => {
+    if (e.deltaY === 0 || !controlWheel(e)) return
+    e.preventDefault()
+    e.stopPropagation()
+    e.stopImmediatePropagation()
+  },
+  { passive: false, capture: true },
+)

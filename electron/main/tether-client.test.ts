@@ -8,7 +8,6 @@ import { createSessionCatalog } from './session-catalog'
 import {
   applyStreamEvent,
   attachEnvironment,
-  attachSocketTarget,
   compatibleVersion,
   eventSession,
   eventStreamPath,
@@ -128,11 +127,6 @@ describe('attach target', () => {
     bad(['/usr/bin/tmux', '-S', socket, 'attach-session', '-t', '-d'])
     bad([...answer.argv, '-d'])
     expect(() => parseAttachTarget({ ...answer, env: { TERM: 1 } })).toThrow(TetherUnavailable)
-  })
-
-  it('names the socket and target for view queries', () => {
-    expect(attachSocketTarget(answer.argv)).toEqual({ socket, target: '$3' })
-    expect(attachSocketTarget(['/usr/bin/tmux', 'attach'])).toBeNull()
   })
 })
 

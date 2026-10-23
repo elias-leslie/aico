@@ -55,6 +55,8 @@ function fakeLink(size: { cols: number; rows: number }) {
     cols: size.cols,
     rows: size.rows,
     write: vi.fn(),
+    paste: vi.fn(),
+    reseed: vi.fn(),
     resize: vi.fn(function (this: { cols: number; rows: number }, cols: number, rows: number) {
       this.cols = cols
       this.rows = rows
@@ -101,7 +103,7 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
-function setup(o: { forced?: 'attach' | 'control'; setting?: string } = {}) {
+function setup() {
   const all: FakeWindow[] = [fakeWindow(1), fakeWindow(2), fakeWindow(3)]
   const registry = new WindowRegistry({
     fromId: (id) => (all.find((w) => w.id === id) ?? null) as unknown as BrowserWindow | null,
@@ -112,10 +114,7 @@ function setup(o: { forced?: 'attach' | 'control'; setting?: string } = {}) {
     getFocusedWindow: () => null,
   })
   const catalog = createSessionCatalog()
-  const settings = new Map<string, string>()
-  if (o.setting) settings.set('terminal-transport', o.setting)
   const links: FakeLink[] = []
-  const controls: FakeLink[] = []
   const tether = {
     createSession: vi.fn(async (_input: unknown) => descriptor('bbbbbbbb')),
     attach: vi.fn(async (_id: string) => target()),
@@ -138,27 +137,14 @@ function setup(o: { forced?: 'attach' | 'control'; setting?: string } = {}) {
     recentlyArranged: () => state.arranged,
     titles: vi.fn(),
     tray: vi.fn(),
-    getSetting: (key: string) => settings.get(key),
-    setSetting: vi.fn((key: string, value: string) => {
-      settings.set(key, value)
-    }),
-    forcedTransport: o.forced,
-    sandboxTmux: (argv: string[]) => argv,
     tmuxClientPid: async (pid: number) => pid,
-    spawnPty: vi.fn((_file: string, _args: string[], opts: { cols: number; rows: number }) => {
-      const link = fakeLink(opts)
+    controlTerminal: vi.fn((_argv: string[], _env: NodeJS.ProcessEnv, size) => {
+      const link = fakeLink(size)
       links.push(link)
       return link
     }),
-    controlTerminal: vi.fn((_argv: string[], _env: NodeJS.ProcessEnv, size) => {
-      const link = fakeLink(size)
-      controls.push(link)
-      return link
-    }),
-    execFileAsync: vi.fn(async (_file: string, _args: string[], _o: unknown) => ({ stdout: '' })),
     ensurePersonalWorkspaceRoot: () => '/home/o/Personal',
     isQuitting: () => state.quitting,
-    env: { HOME: '/home/o', PATH: '/usr/bin' } as NodeJS.ProcessEnv,
   }
   const terminal = createTerminal(deps as never)
   const on = new Map<string, (...args: unknown[]) => unknown>()
@@ -180,7 +166,6 @@ function setup(o: { forced?: 'attach' | 'control'; setting?: string } = {}) {
     registry,
     state,
     links,
-    controls,
     all,
     on,
     handle,
@@ -195,8 +180,8 @@ async function attached(s: Setup, size = { cols: 100, rows: 30 }) {
   s.catalog.upsert(descriptor('aaaaaaaa'))
   s.registry.bindSession(1, 'aaaaaaaa')
   s.on.get('pty:start')?.(s.from(s.all[0]), size)
-  await vi.waitFor(() => expect(s.links.length + s.controls.length).toBe(1))
-  return s.links[0] ?? s.controls[0]
+  await vi.waitFor(() => expect(s.links).toHaveLength(1))
+  return s.links[0]
 }
 
 describe('clampSize', () => {
@@ -211,8 +196,8 @@ describe('clampSize', () => {
   })
 })
 
-describe('terminal transport', () => {
-  it('registers its eight channels', () => {
+describe('terminal channels', () => {
+  it('registers its channels', () => {
     const { on, handle } = setup()
     expect([...on.keys(), ...handle.keys()].sort()).toEqual([
       'pty:input',
@@ -220,54 +205,17 @@ describe('terminal transport', () => {
       'pty:refresh',
       'pty:resize',
       'pty:start',
-      'terminal:toggle-transport',
-      'terminal:transport',
-      'terminal:transport-setting',
     ])
   })
 
-  it('tells every window the setting, and records it per window', async () => {
-    const s = setup()
-    expect(s.handle.get('terminal:transport')?.(s.from(s.all[0]))).toBe('control')
-    expect(s.handle.get('terminal:transport')?.({ sender: {} })).toBe('attach')
-    expect(s.handle.get('terminal:transport-setting')?.()).toBe('control')
-    // Window 1 was told control, so its link is a control-mode client.
-    await attached(s)
-    expect(s.controls).toHaveLength(1)
-    expect(s.links).toHaveLength(0)
-  })
-
-  it('a window never asked runs a PTY with the attach argv', async () => {
+  it('opens a control-mode client on the attach target', async () => {
     const s = setup()
     await attached(s)
-    expect(s.deps.spawnPty).toHaveBeenCalledWith(
-      '/usr/bin/tmux',
-      ['-S', '/run/t/sock', 'attach-session', '-t', '$1'],
-      expect.objectContaining({ name: 'xterm-256color', cols: 100, rows: 30, cwd: '/home/o' }),
+    expect(s.deps.controlTerminal).toHaveBeenCalledWith(
+      ['/usr/bin/tmux', '-S', '/run/t/sock', 'attach-session', '-t', '$1'],
+      {},
+      { cols: 100, rows: 30 },
     )
-  })
-
-  it('the attach setting and the forced environment both pick attach; forced wins', () => {
-    expect(setup({ setting: 'attach' }).handle.get('terminal:transport-setting')?.()).toBe('attach')
-    expect(
-      setup({ forced: 'attach', setting: 'control' }).handle.get('terminal:transport-setting')?.(),
-    ).toBe('attach')
-    expect(
-      setup({ forced: 'control', setting: 'attach' }).handle.get('terminal:transport-setting')?.(),
-    ).toBe('control')
-  })
-
-  it('switching the transport saves it and reloads only session windows', () => {
-    const s = setup()
-    s.registry.bindSession(1, 'aaaaaaaa')
-    s.registry.bindSession(2, 'bbbbbbbb')
-    s.on.get('terminal:toggle-transport')?.()
-    expect(s.deps.setSetting).toHaveBeenCalledWith('terminal-transport', 'attach')
-    expect(s.all[0].webContents.reload).toHaveBeenCalledTimes(1)
-    expect(s.all[1].webContents.reload).toHaveBeenCalledTimes(1)
-    expect(s.all[2].webContents.reload).not.toHaveBeenCalled()
-    s.on.get('terminal:toggle-transport')?.()
-    expect(s.deps.setSetting).toHaveBeenLastCalledWith('terminal-transport', 'control')
   })
 })
 
@@ -282,10 +230,12 @@ describe('terminal input', () => {
     s.on.get('pty:input')?.(s.from(s.all[0]), 'x')
     s.on.get('pty:paste')?.(s.from(s.all[0]), 'x')
     expect(link.write).not.toHaveBeenCalled()
+    expect(link.paste).not.toHaveBeenCalled()
     s.state.replacing.clear()
     s.on.get('pty:input')?.(s.from(s.all[0]), 'ls\r')
     s.on.get('pty:paste')?.(s.from(s.all[0]), 'pasted')
-    expect(link.write.mock.calls).toEqual([['ls\r'], ['pasted']])
+    expect(link.write.mock.calls).toEqual([['ls\r']])
+    expect(link.paste.mock.calls).toEqual([['pasted']])
   })
 
   it('sends terminal bytes to the window and claims the size on first output', async () => {
@@ -332,38 +282,28 @@ describe('terminal input', () => {
 })
 
 describe('manual refresh', () => {
+  it('claims the size, then reseeds the link from tmux', async () => {
+    const s = setup()
+    const link = await attached(s)
+    s.on.get('pty:refresh')?.(s.from(s.all[0]))
+    await vi.waitFor(() => expect(link.reseed).toHaveBeenCalledTimes(1))
+    expect(s.tether.resizeClaim).toHaveBeenCalledTimes(1)
+  })
+
   it('shares an in-flight refresh for the same link and generation', async () => {
     const s = setup()
-    await attached(s)
-    const listing = deferred<{ stdout: string }>()
-    s.deps.execFileAsync.mockReturnValueOnce(listing.promise)
+    const link = await attached(s)
+    const claim = deferred<{ applied: boolean }>()
+    s.tether.resizeClaim.mockReturnValueOnce(claim.promise)
     s.on.get('pty:refresh')?.(s.from(s.all[0]))
-    await vi.waitFor(() => expect(s.deps.execFileAsync).toHaveBeenCalledTimes(1))
     s.on.get('pty:refresh')?.(s.from(s.all[0]))
+    claim.resolve({ applied: true })
+    await vi.waitFor(() => expect(link.reseed).toHaveBeenCalledTimes(1))
     await new Promise((resolve) => setTimeout(resolve, 0))
-    expect(s.deps.execFileAsync).toHaveBeenCalledTimes(1)
-    expect(s.deps.execFileAsync.mock.calls[0][1]).toEqual([
-      '-S',
-      '/run/t/sock',
-      'list-clients',
-      '-t',
-      '$1',
-      '-F',
-      '#{client_name}',
-    ])
-    listing.resolve({ stdout: 'client-1\n' })
-    await vi.waitFor(() =>
-      expect(s.deps.execFileAsync).toHaveBeenLastCalledWith(
-        '/usr/bin/tmux',
-        ['-S', '/run/t/sock', 'refresh-client', '-t', 'client-1'],
-        expect.objectContaining({ timeout: 2000 }),
-      ),
-    )
+    expect(link.reseed).toHaveBeenCalledTimes(1)
     // Settled: the next Refresh runs again.
-    const calls = s.deps.execFileAsync.mock.calls.length
-    await new Promise((resolve) => setTimeout(resolve, 0))
     s.on.get('pty:refresh')?.(s.from(s.all[0]))
-    await vi.waitFor(() => expect(s.deps.execFileAsync.mock.calls.length).toBeGreaterThan(calls))
+    await vi.waitFor(() => expect(link.reseed).toHaveBeenCalledTimes(2))
   })
 
   it('re-pairs a drifted link size before repainting, and does nothing while replaced', async () => {

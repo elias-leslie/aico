@@ -21,7 +21,6 @@ function rendererCspMeta(): Plugin {
   }
 }
 
-// node-pty is a native module — keep it external (never bundled) in main.
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],

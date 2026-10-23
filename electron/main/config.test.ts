@@ -21,7 +21,6 @@ describe('readConfig', () => {
       nightshift: '/home/o/.local/bin/nightshift',
       atermUrl: 'https://terminal.summitflow.dev',
       selectionHotkey: 'CommandOrControl+Shift+Space',
-      forcedTransport: undefined,
       rendererUrl: undefined,
       activationReadyFile: undefined,
       pidFile: undefined,
@@ -48,7 +47,6 @@ describe('readConfig', () => {
         AICO_PASTED_IMAGES_KEEP_HOURS: '2',
         AICO_ATERM_URL: 'https://a.example',
         AICO_SELECTION_HOTKEY: 'F1',
-        AICO_TERMINAL_TRANSPORT: 'attach',
         ELECTRON_RENDERER_URL: 'http://localhost:5173',
         AICO_ACTIVATION_READY_FILE: '/r/ready',
         AICO_PIDFILE: '/r/pid',
@@ -69,14 +67,10 @@ describe('readConfig', () => {
       pastedImages: { dir: '/pasted', maxAgeMs: 7_200_000 },
       atermUrl: 'https://a.example',
       selectionHotkey: 'F1',
-      forcedTransport: 'attach',
       rendererUrl: 'http://localhost:5173',
       activationReadyFile: '/r/ready',
       pidFile: '/r/pid',
     })
-    expect(readConfig({ AICO_TERMINAL_TRANSPORT: 'control' }, '/h', 1).forcedTransport).toBe(
-      'control',
-    )
   })
 
   it('keeps pasted images a day unless the hours are a positive number', () => {
@@ -93,10 +87,6 @@ describe('readConfig', () => {
     }
     expect(readConfig({ AICO_SIDECAR_PORT: '1' }, '/h', 1).listenerPort).toBe(1)
     expect(readConfig({ AICO_SIDECAR_PORT: '65535' }, '/h', 1).listenerPort).toBe(65535)
-  })
-
-  it('ignores a terminal transport it does not know', () => {
-    expect(readConfig({ AICO_TERMINAL_TRANSPORT: 'pty' }, '/h', 1).forcedTransport).toBeUndefined()
   })
 
   it('strips trailing slashes from the a-term URL', () => {

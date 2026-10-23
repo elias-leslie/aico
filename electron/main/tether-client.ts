@@ -239,7 +239,7 @@ export function splitNdjson(buffer: string): { lines: string[]; rest: string } {
   return { lines: parts.map((line) => line.trim()).filter(Boolean), rest }
 }
 
-/** The environment for the `tmux attach` client: exactly the target's. Aico's
+/** The environment for the tmux client: exactly the target's. Aico's
  * own environment never reaches it, and neither do Tether's `unset` or any key
  * outside the allowlist (tmux-sandbox.ts). */
 export function attachEnvironment(target: Pick<AttachTarget, 'env'>): Record<string, string> {
@@ -267,16 +267,6 @@ export function parseAttachTarget(body: unknown): AttachTarget {
   } catch {
     throw new TetherUnavailable('Tether returned an invalid attach target')
   }
-}
-
-/** The tmux socket and target an attach argv names, for read-only view
- * queries (pane mode, client repaint) on the client Aico itself attached. */
-export function attachSocketTarget(argv: string[]): { socket: string; target: string } | null {
-  const socketAt = argv.indexOf('-S')
-  const targetAt = argv.lastIndexOf('-t')
-  const socket = socketAt > 0 ? argv[socketAt + 1] : undefined
-  const target = targetAt > 0 ? argv[targetAt + 1] : undefined
-  return socket?.startsWith('/') && target ? { socket, target } : null
 }
 
 interface RequestOptions {

@@ -1,30 +1,22 @@
-// Terminal byte path: one terminal link per open window. A link is either a
-// node-pty running Tether's exact `tmux attach` argv or a tmux control-mode
-// client (tmux-control.ts); the terminal-transport setting picks which. Killing
-// a link only detaches, so the session survives close, reload and Aico restarts.
+// Terminal byte path: one terminal link per open window, a tmux control-mode
+// client (tmux-control.ts). Killing a link only detaches, so the session
+// survives close, reload and Aico restarts.
 
 import type { BrowserWindow, IpcMain } from 'electron'
-import type { spawn } from 'node-pty'
 import { describeFailure, writeNotice } from './notices'
 import { PERSONAL_WORKSPACE_ID } from './project'
 import type { SessionCatalog } from './session-catalog'
 import {
   type AttachTarget,
   attachEnvironment,
-  attachSocketTarget,
   type SessionDescriptor,
   type TetherClient,
   TetherError,
   TetherUnavailable,
 } from './tether-client'
-import { ControlTerminal, type TerminalLink } from './tmux-control'
-import { coalesceTrailingAsync, refreshAttachedClients } from './tmux-view'
+import type { TerminalLink } from './tmux-control'
+import { coalesceTrailingAsync } from './tmux-view'
 import type { WindowRegistry } from './window-registry'
-
-const TMUX_QUERY_TIMEOUT_MS = 2_000
-const TRANSPORT_SETTING = 'terminal-transport'
-
-type TerminalTransport = 'attach' | 'control'
 
 interface PtySize {
   cols: number
@@ -68,31 +60,17 @@ interface TerminalDeps {
   recentlyArranged(winId: number): boolean
   titles(): void
   tray(): void
-  getSetting(key: string): string | undefined
-  setSetting(key: string, value: string): void
-  /** AICO_TERMINAL_TRANSPORT: wins over the setting when set. */
-  forcedTransport?: TerminalTransport
-  spawnPty: typeof spawn
-  /** The attach client's command under bubblewrap (tmux-sandbox.ts). */
-  sandboxTmux(tmuxArgv: string[]): string[]
   /** The tmux client's pid, given the pid of the bubblewrap that runs it. */
   tmuxClientPid(bwrapPid: number): Promise<number>
   controlTerminal(argv: string[], env: NodeJS.ProcessEnv, size: PtySize): TerminalLink
-  execFileAsync(
-    file: string,
-    args: string[],
-    options: { env: NodeJS.ProcessEnv; timeout: number; maxBuffer: number },
-  ): Promise<{ stdout: string }>
   ensurePersonalWorkspaceRoot(): string | null
   isQuitting(): boolean
-  env: NodeJS.ProcessEnv
 }
 
 export function createTerminal(deps: TerminalDeps) {
   const { tether, catalog, registry } = deps
-  // One terminal link per open window, and the attach target it was started from.
+  // One terminal link per open window.
   const ptys = new Map<number, TerminalLink>()
-  const attachTargets = new Map<number, AttachTarget>()
   const sizeClaims = new WeakMap<TerminalLink, () => Promise<void>>()
   const clientPids = new WeakMap<TerminalLink, Promise<number>>()
   function clientPidOf(link: TerminalLink): Promise<number> {
@@ -102,13 +80,6 @@ export function createTerminal(deps: TerminalDeps) {
       clientPids.set(link, known)
     }
     return known
-  }
-  // The transport each window's renderer was told at load, so its terminal and
-  // its link agree until the window reloads.
-  const transportOf = new Map<number, TerminalTransport>()
-  function configuredTransport(): TerminalTransport {
-    if (deps.forcedTransport) return deps.forcedTransport
-    return deps.getSetting(TRANSPORT_SETTING) === 'attach' ? 'attach' : 'control'
   }
   const ptyStartGenerations = new Map<number, number>()
   const ptyRefreshes = new Map<
@@ -123,20 +94,6 @@ export function createTerminal(deps: TerminalDeps) {
   // different generation (crash recovery, reboot restore), the same window
   // reattaches. One attempt per generation, so a failing attach cannot loop.
   const linkLost = new Map<number, { generation: string | undefined; size: PtySize }>()
-
-  async function runTmux(
-    target: AttachTarget,
-    args: string[],
-    maxBuffer = 1024 * 1024,
-  ): Promise<string> {
-    const [file, ...sandboxArgs] = deps.sandboxTmux([target.argv[0], ...args])
-    const { stdout } = await deps.execFileAsync(file, sandboxArgs, {
-      env: attachEnvironment(target),
-      timeout: TMUX_QUERY_TIMEOUT_MS,
-      maxBuffer,
-    })
-    return stdout
-  }
 
   function createRequest(pending: { tool: string; projectId: string }, size: PtySize) {
     if (pending.projectId === PERSONAL_WORKSPACE_ID) {
@@ -207,7 +164,7 @@ export function createTerminal(deps: TerminalDeps) {
     const id = widgetId
     let pty: TerminalLink
     try {
-      pty = openLink(winId, target, size)
+      pty = deps.controlTerminal(target.argv, attachEnvironment(target), size)
     } catch (error) {
       linkLost.set(winId, { generation: target.generation, size })
       writeNotice(win, describeFailure('Could not attach', error))
@@ -268,7 +225,6 @@ export function createTerminal(deps: TerminalDeps) {
       // re-attach can fire its exit after the replacement is stored.
       if (ptys.get(winId) === pty) {
         ptys.delete(winId)
-        attachTargets.delete(winId)
         if (!deps.isQuitting()) {
           if (!win.isDestroyed())
             linkLost.set(winId, {
@@ -280,23 +236,7 @@ export function createTerminal(deps: TerminalDeps) {
       }
     })
     ptys.set(winId, pty)
-    attachTargets.set(winId, target)
     if (win.isFocused()) void claimSize()
-  }
-
-  /** The window's terminal link: a control-mode client when its renderer runs
-   * the control transport, else a PTY running the `tmux attach` argv. */
-  function openLink(winId: number, target: AttachTarget, size: PtySize): TerminalLink {
-    const env = attachEnvironment(target)
-    if (transportOf.get(winId) === 'control') return deps.controlTerminal(target.argv, env, size)
-    const [file, ...args] = deps.sandboxTmux(target.argv)
-    return deps.spawnPty(file, args, {
-      name: 'xterm-256color',
-      cols: size.cols,
-      rows: size.rows,
-      cwd: deps.env.HOME,
-      env,
-    })
   }
 
   function resumeAwaitingAttaches(): void {
@@ -349,34 +289,13 @@ export function createTerminal(deps: TerminalDeps) {
       ptyFor(event.sender)?.write(data)
     })
 
-    // Control-mode windows paste through tmux, which brackets the paste only
-    // when the program asked for bracketed paste.
+    // Paste goes through tmux, which brackets it only when the program asked
+    // for bracketed paste.
     ipcMain.on('pty:paste', (event, text: unknown) => {
       if (typeof text !== 'string' || text.length === 0) return
       const widgetId = registry.senderSession(event.sender)
       if (!widgetId || deps.isReplacing(widgetId)) return
-      const link = ptyFor(event.sender)
-      if (link instanceof ControlTerminal) link.paste(text)
-      else link?.write(text)
-    })
-
-    // The renderer asks once, before it starts its terminal; the answer holds
-    // for this window until it reloads.
-    ipcMain.handle('terminal:transport', (event): TerminalTransport => {
-      const win = registry.senderWindow(event.sender)
-      if (!win) return 'attach'
-      const transport = configuredTransport()
-      transportOf.set(win.id, transport)
-      return transport
-    })
-    ipcMain.handle('terminal:transport-setting', () => configuredTransport())
-    // Switch every window: each reloads and reattaches on the other transport.
-    // Sessions are untouched; only the views reattach.
-    ipcMain.on('terminal:toggle-transport', () => {
-      deps.setSetting(TRANSPORT_SETTING, configuredTransport() === 'control' ? 'attach' : 'control')
-      for (const win of registry.all()) {
-        if (!win.isDestroyed() && registry.hasSession(win.id)) win.webContents.reload()
-      }
+      ptyFor(event.sender)?.paste(text)
     })
 
     ipcMain.on('pty:resize', (event, size: PtySize) => {
@@ -394,15 +313,15 @@ export function createTerminal(deps: TerminalDeps) {
       }
     })
 
-    // Manual Refresh: tmux holds the authoritative grid, so force every client
-    // attached to this session to repaint from it — recovering an xterm view that
-    // desynced (resize-reflow race, WebGL glitch, dropped/duped bytes).
-    // Best-effort: a missing session or no clients is a no-op, never a crash.
+    // Manual Refresh: tmux holds the authoritative grid, so reseed this window
+    // from it — recovering an xterm view that desynced (resize-reflow race,
+    // WebGL glitch, dropped/duped bytes). Best-effort: a missing session is a
+    // no-op, never a crash.
     ipcMain.on('pty:refresh', (event, size?: PtySize) => {
       const win = registry.senderWindow(event.sender)
       const widgetId = win ? registry.sessionOf(win.id) : undefined
       if (!win || !widgetId || deps.isQuitting() || deps.isReplacing(widgetId)) return
-      // Re-pair a drifted pty before the repaint: if the pty's size disagrees with
+      // Re-pair a drifted link before the repaint: if the pty's size disagrees with
       // the renderer's live grid, tmux paints for the wrong geometry.
       const pty = ptyFor(event.sender)
       if (pty && size) {
@@ -421,8 +340,6 @@ export function createTerminal(deps: TerminalDeps) {
       const generation = ptyStartGenerations.get(win.id)
       const pending = ptyRefreshes.get(win.id)
       if (pending && pending.pty === pty && pending.generation === generation) return
-      const target = attachTargets.get(win.id)
-      const attached = target ? attachSocketTarget(target.argv) : null
       const isCurrent = () =>
         !deps.isQuitting() &&
         !win.isDestroyed() &&
@@ -432,12 +349,7 @@ export function createTerminal(deps: TerminalDeps) {
         !deps.isReplacing(widgetId)
       const request = (async () => {
         if (pty) await sizeClaims.get(pty)?.()
-        if (pty instanceof ControlTerminal) {
-          if (isCurrent()) pty.reseed()
-          return
-        }
-        if (target && attached && isCurrent())
-          await refreshAttachedClients(attached, (args) => runTmux(target, args), isCurrent)
+        if (pty && isCurrent()) pty.reseed()
       })()
       ptyRefreshes.set(win.id, { pty, generation, request })
       void request
@@ -468,8 +380,6 @@ export function createTerminal(deps: TerminalDeps) {
       }
       awaitingTether.delete(winId)
       linkLost.delete(winId)
-      attachTargets.delete(winId)
-      transportOf.delete(winId)
       ptyStartGenerations.delete(winId)
     },
     registerIpc,

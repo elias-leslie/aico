@@ -94,10 +94,10 @@ require_tether
 
 npm ci
 # Some clean hosts have npm configured to skip lifecycle scripts. Make the
-# runtime native package explicit, then verify Electron's downloaded binary
+# runtime package explicit, then verify Electron's downloaded binary
 # exists; if the upstream installer leaves only package files behind, fetch the
 # zip with @electron/get and extract it with Python's zipfile.
-npm rebuild electron node-pty
+npm rebuild electron
 
 ensure_electron_binary() {
   local electron_dir="node_modules/electron"

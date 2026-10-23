@@ -5,11 +5,11 @@
 ## What it does
 
 - **Floating terminal widgets** — one or more compact Electron windows, each running a tmux-backed terminal with a WebGL renderer (DOM fallback), configurable font, animated "eyes" that track your cursor, and a "thinking" halo while the agent is working.
-- **Persistent sessions, owned by Tether** — every session lives in [Tether](https://github.com/elias-leslie/tether), the per-user session daemon; each widget is a view of one Tether session, keyed by its 8-hex session ID. Closing a widget only detaches its `tmux attach` client, so work reattaches across close/reopen/restart, and Aico restarts never touch sessions. Aico stores only window geometry and open state per session; titles (`displayTitle`, `Project — Task`) and the coordinator chip (`badge`) come from the Tether descriptor as they are.
+- **Persistent sessions, owned by Tether** — every session lives in [Tether](https://github.com/elias-leslie/tether), the per-user session daemon; each widget is a view of one Tether session, keyed by its 8-hex session ID. Closing a widget only detaches its tmux client, so work reattaches across close/reopen/restart, and Aico restarts never touch sessions. Aico stores only window geometry and open state per session; titles (`displayTitle`, `Project — Task`) and the coordinator chip (`badge`) come from the Tether descriptor as they are.
 - **Lifecycle diagnostics** — “Copy session diagnostics” copies Tether's report for the session: ownership, tmux target, command, scope, age, CPU time, memory, swap, process/task counts, and containment warnings.
 - **Agent launcher menu** — start any tool Tether has enabled (Claude Code, Codex, Antigravity, Pi, a plain shell, …) from the same lantern menu, choosing the TUI and the workspace to launch it into; "Restart with another tool" swaps the tool in the focused widget.
 - **Command palette & pinned controls** — a searchable command palette (`Ctrl+Shift+P`) and a pinned, drag-reorderable titlebar cluster, both driven by one action registry. A pin whose feature is unavailable (a tool or project Tether did not list, games not loaded) is hidden, not deleted, and comes back with it. Rename widgets inline.
-- **Native scrollback** — each widget is a tmux control-mode client, so the terminal itself holds the pane's history: wheel, drag-select and copy reach as far back as it goes. Plain `tmux attach` stays as a fallback (palette: "Switch to plain tmux attach", or `AICO_TERMINAL_TRANSPORT=attach`).
+- **Native scrollback** — each widget is a tmux control-mode client, so the terminal itself holds the pane's history: wheel, drag-select and copy reach as far back as it goes.
 - **Workspace picker** — always includes a local Personal Workspace, plus the projects Tether serves (SummitFlow's catalog when installed, else Tether's local list).
 - **Click-to-context capture** — Aico's loopback listener accepts captures from the browser extension and `st selection send` and types a compact reference at the last-focused widget's prompt (single, batch, or a capture package from `st ui grab`). Nothing is stored.
 - **Every session, one list** — the tray and **Open session** (in the lantern menu, the palette or as a pin) list every Tether session, whether started from Aico, A-Term, the `tether` CLI or a SummitFlow root, and open any of them as a widget.
@@ -24,7 +24,7 @@ Required:
 - `tmux` (each window is a tmux client of its session)
 - Electron runtime libraries (`libgtk-3-0`, `libnss3`, `libatk1.0-0`, `libatk-bridge2.0-0`, `libcups2`, `libgbm1`, `libasound2t64`, and related X11/desktop libraries on Debian/Ubuntu)
 
-Source installs additionally need Node.js 22+, npm, Python 3.13+, `uv`, and native `node-pty` build tools such as `make` and `g++`.
+Source installs additionally need Node.js 22+, npm, Python 3.13+, and `uv`.
 
 Recommended for the full desktop experience:
 
@@ -183,7 +183,7 @@ Electron main process (a Tether client)
   ├─ owns widget windows, global shortcuts, and tray
   ├─ mirrors Tether's session list and follows /v1/events (reconnects, resyncs on gaps)
   ├─ holds the GUI channel (/v1/gui/channel) and applies show/position/title/coordinator
-  ├─ runs a tmux control-mode client per window (plain `tmux attach` as a fallback) and claims resize on focus
+  ├─ runs a tmux control-mode client per window and claims resize on focus
   ├─ stores views (geometry, open state) and settings in aico.db
   ├─ writes ids-only `[aico:event]` journal lines (push results, retired sessions)
   └─ listens on 127.0.0.1:8005: /health, and captures typed at a session prompt

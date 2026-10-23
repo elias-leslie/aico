@@ -30,16 +30,8 @@ export interface AicoApi {
     refresh(size: { cols: number; rows: number }): void
     /** Subscribe to PTY output; returns an unsubscribe function. */
     onData(cb: (data: string) => void): () => void
-    /** Control-mode windows paste through tmux (bracketed when the program asks). */
+    /** Paste goes through tmux (bracketed when the program asks). */
     paste(text: string): void
-  }
-  terminal: {
-    /** This window's terminal transport, fixed until the window reloads. */
-    transport(): Promise<'attach' | 'control'>
-    /** The transport new windows (and reloads) will use. */
-    transportSetting(): Promise<'attach' | 'control'>
-    /** Switch every window to the other transport; each reloads and reattaches. */
-    toggleTransport(): void
   }
   links: {
     /** Open an http(s) URL in the default browser. */

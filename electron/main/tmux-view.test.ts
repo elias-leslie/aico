@@ -1,7 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { coalesceAsync, coalesceTrailingAsync, refreshAttachedClients } from './tmux-view'
-
-const attached = { socket: '/s/server.sock', target: '$3' }
+import { coalesceAsync, coalesceTrailingAsync } from './tmux-view'
 
 describe('coalescing', () => {
   it('shares one pending load and starts a fresh one afterwards', async () => {
@@ -30,25 +28,5 @@ describe('coalescing', () => {
     release()
     await first
     expect(work).toHaveBeenCalledTimes(2)
-  })
-})
-
-describe('client repaint', () => {
-  it('repaints only this session’s clients and stops once stale', async () => {
-    const calls: string[][] = []
-    let current = true
-    await refreshAttachedClients(
-      attached,
-      async (args) => {
-        calls.push(args)
-        if (args.includes('refresh-client')) current = false
-        return '/dev/pts/1\n/dev/pts/2\n'
-      },
-      () => current,
-    )
-    expect(calls).toEqual([
-      ['-S', '/s/server.sock', 'list-clients', '-t', '$3', '-F', '#{client_name}'],
-      ['-S', '/s/server.sock', 'refresh-client', '-t', '/dev/pts/1'],
-    ])
   })
 })

@@ -1,7 +1,6 @@
 import { execFile } from 'node:child_process'
 import { readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { promisify } from 'node:util'
 import {
   app,
   BrowserWindow,
@@ -14,7 +13,6 @@ import {
   session,
   shell,
 } from 'electron'
-import { spawn } from 'node-pty'
 import { version } from '../../package.json'
 import { createAmbient } from './ambient'
 import { createAttentionWiring } from './attention-wiring'
@@ -35,7 +33,7 @@ import { createTerminal } from './terminal'
 import { TetherPool } from './tether-client'
 import { createTetherLink } from './tether-link'
 import { ControlTerminal } from './tmux-control'
-import { sandboxedTmux, tmuxClientPid } from './tmux-sandbox'
+import { tmuxClientPid } from './tmux-sandbox'
 import { createTray, refreshTray, setNeedsYou, setWidgetActivity } from './tray'
 import {
   ensureView,
@@ -75,9 +73,9 @@ const lifecycle = createLifecycle({
 
 // Tether owns every session: tmux servers, panes, agent launch, End and the
 // root contract. Aico shows sessions in windows (views) and keeps their
-// geometry and its settings. A window's PTY runs the exact `tmux attach` argv
-// Tether hands out; killing that PTY only detaches, so the session survives
-// close, reload and Aico restarts.
+// geometry and its settings. A window's terminal is a tmux control-mode client on
+// the socket and target Tether hands out; killing it only detaches, so the
+// session survives close, reload and Aico restarts.
 const tether = new TetherPool([...config.tetherSockets])
 const catalog: SessionCatalog = createSessionCatalog()
 
@@ -244,7 +242,7 @@ const sessions = createSessionActions({
   personalWorkspace: { ensureRoot: ensurePersonalWorkspaceRoot, root: personalWorkspaceRoot },
 })
 
-// Terminal byte path: one terminal link per window, attach or control mode.
+// Terminal byte path: one control-mode terminal link per window.
 const terminal = createTerminal({
   tether,
   catalog,
@@ -257,17 +255,10 @@ const terminal = createTerminal({
   recentlyArranged: layout.recentlyArranged,
   titles: () => chrome.pushTitles(),
   tray: () => chrome.syncTray(),
-  getSetting,
-  setSetting,
-  forcedTransport: config.forcedTransport,
-  spawnPty: spawn,
-  sandboxTmux: sandboxedTmux,
   tmuxClientPid,
   controlTerminal: (argv, env, size) => new ControlTerminal(argv, env, size),
-  execFileAsync: promisify(execFile),
   ensurePersonalWorkspaceRoot,
   isQuitting: lifecycle.isQuitting,
-  env: process.env,
 })
 
 // The selection bus: where selections go and how they arrive.

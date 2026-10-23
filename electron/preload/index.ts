@@ -19,15 +19,6 @@ contextBridge.exposeInMainWorld('aico', {
       return () => ipcRenderer.removeListener('pty:data', listener)
     },
   },
-  terminal: {
-    /** This window's terminal transport, fixed until the window reloads. */
-    transport: (): Promise<'attach' | 'control'> => ipcRenderer.invoke('terminal:transport'),
-    /** The transport new windows (and reloads) will use. */
-    transportSetting: (): Promise<'attach' | 'control'> =>
-      ipcRenderer.invoke('terminal:transport-setting'),
-    /** Switch every window to the other transport; each reloads and reattaches. */
-    toggleTransport: () => ipcRenderer.send('terminal:toggle-transport'),
-  },
   links: {
     /** Open an http(s) URL in the default browser. */
     open: (url: string) => ipcRenderer.send('link:open', url),
