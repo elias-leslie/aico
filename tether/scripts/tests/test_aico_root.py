@@ -29,6 +29,11 @@ def invoke(monkeypatch, args, responses):
     return admin.main(["root", *args, *transport]), calls, output
 
 
+def test_surface_aico_is_still_accepted(monkeypatch):
+    code, calls, _output = invoke(monkeypatch, ["status", ROOT, "--surface", "aico"], [(200, DESCRIPTOR)])
+    assert code == 0 and calls == [("/fixture/gui.sock", f"/v1/roots/{ROOT}", None)]
+
+
 def test_status_projects_identity_only(monkeypatch):
     code, calls, output = invoke(monkeypatch, ["status", ROOT],
                                 [(200, {**DESCRIPTOR, "bounds": {"x": 1}, "role": "private"})])

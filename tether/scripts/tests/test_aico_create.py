@@ -79,8 +79,8 @@ def test_create_from_a_session_names_its_launcher(monkeypatch):
     ["--resume-session", ""], ["--resume-session", "id; echo unsafe"],
     ["--project-root", "/fixture/../project"],
     ["--role", "invalid role"], ["--lead-root", ""],
-    # The web app has no root route: neither option exists any more.
-    ["--root-url", "http://127.0.0.1:8002"], ["--surface", "a-term"], ["--surface", "aico"],
+    # The web app has no root route: --root-url is gone and --surface takes only aico.
+    ["--root-url", "http://127.0.0.1:8002"], ["--surface", "a-term"],
 ])
 def test_invalid_resume_or_metadata_never_contacts_owner(monkeypatch, extra):
     monkeypatch.setattr(admin.Collector, "receipt", lambda *_args, **_kwargs: pytest.fail("owner contacted"))

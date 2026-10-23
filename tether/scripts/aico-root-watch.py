@@ -854,6 +854,8 @@ def create_main(argv: list[str]) -> int:
     parser.add_argument("--daybreak", choices=("on", "off"), help="Daybreak for this launch; Pi supports openai/gpt-6-sol; leaves shared defaults alone")
     parser.add_argument("--agent-hub-context", choices=("on", "off"), help="Pi optional Agent Hub context; off retains required policy, native/project instructions and ingestion")
     parser.add_argument("--root-socket", type=socket_path)
+    # Older callers (SummitFlow before its a-term removal) still pass `--surface aico`.
+    parser.add_argument("--surface", choices=("aico",), default="aico", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     if args.work_role is not None and (not re.fullmatch(KEY, args.work_role) or args.work_role == "unknown"):
         parser.error("expected a declared work role ID; unknown is reserved for legacy sessions")
@@ -1120,6 +1122,7 @@ def root_main(argv: list[str]) -> int:
             for dimension in BOUNDS:
                 command.add_argument(dimension, type=int)
         command.add_argument("--root-socket", type=socket_path)
+        command.add_argument("--surface", choices=("aico",), default="aico", help=argparse.SUPPRESS)
         if operation == "end":
             command.add_argument("--owner-socket", type=socket_path)
     args = parser.parse_args(argv)
