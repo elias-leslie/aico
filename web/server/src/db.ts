@@ -264,6 +264,23 @@ export class WebStore {
     return Number(this.db.prepare('DELETE FROM panes WHERE id = ?').run(id).changes) > 0
   }
 
+  /** Deletes tabs created before `cutoff` that show no session; returns how many. */
+  deleteEmptyPanes(cutoff: Date): number {
+    const empty = this.db
+      .prepare(
+        `SELECT id, created_at FROM panes p
+         WHERE NOT EXISTS (SELECT 1 FROM session_links s WHERE s.pane_id = p.id)`,
+      )
+      .all() as Row[]
+    let deleted = 0
+    for (const row of empty) {
+      const created = Date.parse(String(row.created_at))
+      if (Number.isNaN(created) || created >= cutoff.getTime()) continue
+      if (this.deletePane(String(row.id))) deleted += 1
+    }
+    return deleted
+  }
+
   link(sessionId: string, paneId: string, mode: string): Link {
     const at = now()
     this.db
@@ -323,6 +340,16 @@ export class WebStore {
   allProjectSettings(): Map<string, ProjectSettings> {
     const rows = this.db.prepare('SELECT * FROM project_settings').all() as Row[]
     return new Map(rows.map((row) => [String(row.project_id), settings(row)]))
+  }
+
+  /** Deletes the settings of projects not in `projectIds` (never all of them: an empty list prunes nothing). */
+  pruneProjectSettings(projectIds: ReadonlySet<string>): number {
+    if (projectIds.size === 0) return 0
+    let deleted = 0
+    const remove = this.db.prepare('DELETE FROM project_settings WHERE project_id = ?')
+    for (const id of this.allProjectSettings().keys())
+      if (!projectIds.has(id)) deleted += Number(remove.run(id).changes)
+    return deleted
   }
 
   /** Create or update; only the given fields change on an existing row. */

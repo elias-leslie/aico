@@ -120,8 +120,7 @@ export function fromTether(descriptor: SessionDescriptor, link: Link | null): We
     generation: descriptor.generation ?? null,
     pane_id: link?.pane_id ?? null,
     activity: activity(descriptor.state),
-    // Tether sends the previous activity; the shared descriptor type does not name it yet.
-    activity_previous: activity((descriptor as { statePrevious?: unknown }).statePrevious),
+    activity_previous: activity(descriptor.statePrevious),
     activity_at: typeof descriptor.stateAt === 'number' ? descriptor.stateAt : null,
     activity_detail: typeof descriptor.stateDetail === 'string' ? descriptor.stateDetail : null,
     can_rename: true,
