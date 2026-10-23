@@ -21,6 +21,7 @@ import { useATermScrolling } from '../lib/hooks/use-a-term-scrolling'
 import { useATermSearch } from '../lib/hooks/use-a-term-search'
 import { useATermWebSocket } from '../lib/hooks/use-a-term-websocket'
 import { useATermWriteQueue } from '../lib/hooks/use-a-term-write-queue'
+import type { SizeHolderFrame } from '../lib/hooks/use-websocket-connection'
 import { isMobileDevice } from '../lib/utils/device'
 import type { ATermHandle, ATermProps } from './a-term.types'
 import { ScrollToBottomPill } from './ScrollToBottomPill'
@@ -33,6 +34,18 @@ export type {
 
 type XtermATerm = InstanceType<typeof import('@xterm/xterm').Terminal>
 type XtermFitAddon = InstanceType<typeof import('@xterm/addon-fit').FitAddon>
+
+/** Another device must hold the size this long before the notice shows, so a
+ * claim taken back at once never flashes it (as the desktop's size-holder.ts). */
+const SIZE_NOTICE_DELAY_MS = 600
+/** Typing takes the size back at most this often. */
+const RECLAIM_SPACING_MS = 1500
+
+/** How "Viewing on …" names the device holding the size. */
+export function sizeHolderName(viewer: SizeHolderFrame['viewer']): string {
+  if (viewer?.app === 'desktop') return 'Aico desktop'
+  return viewer?.device || 'another device'
+}
 
 function isObserverModeEnabled(search: string): boolean {
   const value = new URLSearchParams(search).get('observer')
@@ -50,6 +63,7 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
       fontSize = 14,
       isVisible = true,
       onFilePaste,
+      onSizeHolderChange,
     },
     ref,
   ) {
@@ -129,6 +143,13 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
       },
     )
 
+    // Another device holds the shared size: its name (null while this view
+    // holds it, or nobody has said). Typing takes the size back.
+    const [heldBy, setHeldBy] = useState<string | null>(null)
+    const heldElsewhereRef = useRef(false)
+    const lastReclaimRef = useRef(0)
+    const reclaimRef = useRef<() => void>(() => {})
+
     const { status, wsRef, reconnect, sendInput, connect, disconnect } =
       useATermWebSocket({
         sessionId,
@@ -148,8 +169,9 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
           if (!aTermRef.current) return
           enqueueWrite(data)
         },
-        onATermMessage: (message) => {
-          enqueueWrite(`${message}\r\n`)
+        onSizeHolder: ({ here, viewer }) => {
+          heldElsewhereRef.current = !here
+          setHeldBy(here ? null : sizeHolderName(viewer))
         },
         getDimensions: () =>
           ownsResize
@@ -224,6 +246,14 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
         if (!isFocusedRef.current) return
         if (wsRef.current?.readyState === WebSocket.OPEN) {
           sendInput(data)
+          const now = Date.now()
+          if (
+            heldElsewhereRef.current &&
+            now - lastReclaimRef.current >= RECLAIM_SPACING_MS
+          ) {
+            lastReclaimRef.current = now
+            reclaimRef.current()
+          }
         }
       },
       [sendInput],
@@ -267,14 +297,36 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
       sendBackendResize: ownsResize,
     })
 
+    reclaimRef.current = handleResize
+
     useATermHandle(ref, {
       reconnect,
       sendInput,
+      claimSize: handleResize,
       status,
       aTermRef,
       search,
       clearSearch,
     })
+
+    // A new connection hears the holder afresh.
+    useEffect(() => {
+      if (status === 'connected') return
+      heldElsewhereRef.current = false
+      setHeldBy(null)
+    }, [status])
+
+    useEffect(() => {
+      if (heldBy === null) {
+        onSizeHolderChange?.(null)
+        return
+      }
+      const timer = setTimeout(
+        () => onSizeHolderChange?.(heldBy),
+        SIZE_NOTICE_DELAY_MS,
+      )
+      return () => clearTimeout(timer)
+    }, [heldBy, onSizeHolderChange])
 
     useEffect(() => {
       if (isVisible && isReady) {

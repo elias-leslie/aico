@@ -35,6 +35,8 @@ import { findSession } from './tether'
 export const TERMINAL_PATH = /^\/ws\/([^/]+)$/
 /** The close code the page treats as "this session is gone" (no reconnect). */
 export const SESSION_DEAD_CODE = 4000
+/** Closed for a reason the page retries ("service restart"). */
+export const RECONNECT_CODE = 1012
 
 const SESSION_ID = /^[A-Za-z0-9_-]{1,128}$/
 const FIRST_MESSAGE_WAIT_MS = 5_000
@@ -315,7 +317,16 @@ export class TerminalHub {
         if (ws.readyState === WebSocket.OPEN) ws.send(frame, { binary: true }, done)
         else done()
       },
-      close: (code, reason) => ws.close(code, reason),
+      // The control client exited: when the session's process did too (the
+      // shell's `exit`), say the session ended so the page stops retrying.
+      // Otherwise the page reconnects and attaches again.
+      close: () => {
+        void sessionGone(tether, sessionId).then((gone) => {
+          if (!open) return
+          if (gone) dead('Session ended')
+          else ws.close(RECONNECT_CODE, 'reattach')
+        })
+      },
     })
     const view: View = {
       sizeHeld: (clientPid, label) => notice(clientPid === link.pid, label),
@@ -363,6 +374,19 @@ export class TerminalHub {
         // No holder notice: Tether will say on the next claim.
       }
     })
+  }
+}
+
+/** The session no longer runs: Tether doesn't know it, it ended, or its pane has no workload. */
+async function sessionGone(tether: TetherClient, sessionId: string): Promise<boolean> {
+  try {
+    const session = await findSession(tether, sessionId)
+    return !session || (session.status as string) === 'ended'
+  } catch (error) {
+    return (
+      error instanceof TetherError &&
+      (error.status === 410 || error.code === 'workload_unavailable')
+    )
   }
 }
 

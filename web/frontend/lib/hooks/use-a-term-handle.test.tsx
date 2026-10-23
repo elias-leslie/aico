@@ -12,6 +12,7 @@ const Harness = forwardRef<ATermHandle, { sendInput: (data: string) => void }>(
     useATermHandle(ref, {
       reconnect: vi.fn(),
       sendInput,
+      claimSize: vi.fn(),
       status: 'connected',
       aTermRef: { current: null },
       search,

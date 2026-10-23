@@ -8,6 +8,8 @@ export interface ATermProps {
   fontSize?: number
   isVisible?: boolean
   onFilePaste?: (file: File, sessionId: string) => void | Promise<void>
+  /** Another device holds the shared size: its name, or null when this view does. */
+  onSizeHolderChange?: (holder: string | null) => void
 }
 
 export type ConnectionStatus =
@@ -34,6 +36,8 @@ export interface ATermSearchResult {
 
 export interface ATermHandle {
   reconnect: () => void
+  /** Take the shared size for this view ("Use here"). */
+  claimSize: () => void
   getContent: () => string
   sendInput: (data: string) => void
   /** Send text wrapped in bracketed paste sequences — needed for TUI apps like Claude Code */

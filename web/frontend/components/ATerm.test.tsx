@@ -1,6 +1,6 @@
 import { act, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ATermComponent } from './ATerm'
+import { ATermComponent, sizeHolderName } from './ATerm'
 
 type ATermHookOptions = Parameters<
   typeof import('../lib/hooks/use-a-term-websocket')['useATermWebSocket']
@@ -174,6 +174,46 @@ describe('ATermComponent', () => {
     window.history.replaceState({}, '', '/')
   })
 
+  it('reports another device holding the size after a moment, and this view at once', () => {
+    vi.useFakeTimers()
+    const onSizeHolderChange = vi.fn()
+    render(
+      <ATermComponent
+        sessionId="session-size"
+        onSizeHolderChange={onSizeHolderChange}
+      />,
+    )
+    onSizeHolderChange.mockClear()
+
+    act(() => {
+      websocketState.options?.onSizeHolder?.({
+        here: false,
+        viewer: { app: 'web', device: 'Chrome on Android' },
+      })
+    })
+    expect(onSizeHolderChange).not.toHaveBeenCalled()
+    act(() => {
+      vi.advanceTimersByTime(600)
+    })
+    expect(onSizeHolderChange).toHaveBeenLastCalledWith('Chrome on Android')
+
+    act(() => {
+      websocketState.options?.onSizeHolder?.({ here: true, viewer: null })
+    })
+    expect(onSizeHolderChange).toHaveBeenLastCalledWith(null)
+    vi.useRealTimers()
+  })
+
+  it('names the size holder as the notice says it', () => {
+    expect(sizeHolderName({ app: 'desktop', device: 'workstation' })).toBe(
+      'Aico desktop',
+    )
+    expect(sizeHolderName({ app: 'web', device: 'Safari on iPhone' })).toBe(
+      'Safari on iPhone',
+    )
+    expect(sizeHolderName(null)).toBe('another device')
+  })
+
   it('suppresses shared resize writes in observer mode', () => {
     window.history.replaceState({}, '', '/?observer=1')
 
@@ -252,7 +292,7 @@ describe('ATermComponent', () => {
     )
 
     websocketState.options?.onBeforeReconnectData?.()
-    websocketState.options?.onATermMessage?.('fresh output')
+    websocketState.options?.onMessage?.('fresh output')
     await Promise.resolve()
 
     expect(fakeATerm.reset).toHaveBeenCalledTimes(1)
@@ -264,7 +304,7 @@ describe('ATermComponent', () => {
     })
     expect(fakeATerm.write).toHaveBeenNthCalledWith(
       2,
-      'fresh output\r\n',
+      'fresh output',
       expect.any(Function),
     )
 

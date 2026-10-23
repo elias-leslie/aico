@@ -7,6 +7,7 @@ import { createWebServer } from './server'
 import {
   deviceLabel,
   parseClientMessage,
+  RECONNECT_CODE,
   SESSION_DEAD_CODE,
   type Size,
   sizeOf,
@@ -301,6 +302,27 @@ describe('terminal socket', () => {
     await until(() => links.length === 1)
     hub.event({ seq: 2, bootId: 'b', type: 'session.ended', at: 0, data: { id: session.id } })
     expect((await view.closed).code).toBe(SESSION_DEAD_CODE)
+  })
+
+  it("closes 4000 when the session's process exits, and asks for a reattach otherwise", async () => {
+    const ending = tether.add()
+    const view = open(ending.id)
+    await view.next((f) => f.transport === 'control')
+    view.ws.send(ctrl({ resize: { cols: 80, rows: 24 } }))
+    await until(() => links.length === 1)
+    tether.sessions.delete(ending.id)
+    links[0].kill()
+    const ended = await view.closed
+    expect(ended.code).toBe(SESSION_DEAD_CODE)
+    expect(JSON.parse(ended.reason)).toMatchObject({ message: 'Session ended' })
+
+    const running = tether.add()
+    const again = open(running.id)
+    await again.next((f) => f.transport === 'control')
+    again.ws.send(ctrl({ resize: { cols: 80, rows: 24 } }))
+    await until(() => links.length === 2)
+    links[1].kill()
+    expect((await again.closed).code).toBe(RECONNECT_CODE)
   })
 
   it('refuses an upgrade from a foreign Origin before attaching', async () => {

@@ -15,6 +15,7 @@ type XtermATerm = InstanceType<typeof import('@xterm/xterm').Terminal>
 interface UseATermHandleOptions {
   reconnect: () => void
   sendInput: (data: string) => void
+  claimSize: () => void
   status: ConnectionStatus
   aTermRef: React.RefObject<XtermATerm | null>
   search: (query: string, options?: ATermSearchOptions) => ATermSearchResult
@@ -29,6 +30,7 @@ export function useATermHandle(
   {
     reconnect,
     sendInput,
+    claimSize,
     status,
     aTermRef,
     search,
@@ -42,6 +44,7 @@ export function useATermHandle(
     ref,
     () => ({
       reconnect,
+      claimSize,
       getContent: () => getATermContent(aTermRef.current),
       sendInput,
       pasteInput,
@@ -49,6 +52,6 @@ export function useATermHandle(
       clearSearch,
       status,
     }),
-    [clearSearch, pasteInput, reconnect, search, sendInput, status],
+    [clearSearch, pasteInput, reconnect, search, sendInput, status, claimSize],
   )
 }

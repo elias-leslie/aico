@@ -42,9 +42,6 @@ export interface SessionViewProps {
   /** The session list sits beside the session (desktop browsers), so the
    * bar shows the title without a switcher and keeps search open. */
   sideList?: boolean
-  /** Another device holds the shared terminal size: its name, and how to
-   * take the size back. */
-  sizeHolder?: { device: string; onUseHere: () => void } | null
 }
 
 /** The active session, or one of the user's own when none is chosen. */
@@ -84,7 +81,6 @@ export function SessionView({
   composeOpen,
   onToggleCompose,
   sideList = false,
-  sizeHolder,
 }: SessionViewProps) {
   const [refreshVersion, setRefreshVersion] = useState(0)
   const [filesPaneId, setFilesPaneId] = useState<string | null>(null)
@@ -95,6 +91,16 @@ export function SessionView({
   // Which terminal (session and redraw) has shown live output.
   const termKey = `${sessionId}:${refreshVersion}`
   const [connectedKey, setConnectedKey] = useState<string | null>(null)
+  // Another device holds this terminal's shared size ("Viewing on …").
+  const [sizeHolder, setSizeHolder] = useState<{
+    key: string
+    name: string
+  } | null>(null)
+  const onSizeHolderChange = useCallback(
+    (name: string | null) =>
+      setSizeHolder(name === null ? null : { key: termKey, name }),
+    [termKey],
+  )
   useEffect(() => {
     if (status === 'connected') setConnectedKey(termKey)
   }, [status, termKey])
@@ -200,6 +206,7 @@ export function SessionView({
                     }
                   : undefined
               }
+              onSizeHolderChange={onSizeHolderChange}
             />
           )}
           {sessionId && (
@@ -210,10 +217,10 @@ export function SessionView({
               onNewSession={onNewSession}
             />
           )}
-          {sizeHolder && (
+          {sizeHolder?.key === termKey && status === 'connected' && (
             <SizeHolderNotice
-              holder={sizeHolder.device}
-              onUseHere={sizeHolder.onUseHere}
+              holder={sizeHolder.name}
+              onUseHere={() => handleRef.current?.claimSize()}
               isMobile={isMobile}
             />
           )}

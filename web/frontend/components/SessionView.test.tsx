@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { ATermPane } from '@/lib/hooks/use-a-term-panes'
 import type { ATermSession } from '@/lib/hooks/use-a-term-sessions'
@@ -82,20 +82,37 @@ const aTermProps = vi.hoisted(
 )
 const headerProps = vi.hoisted(() => [] as Array<Record<string, unknown>>)
 
-vi.mock('@/components/ATerm', () => ({
-  ATermComponent: ({
-    sessionId,
-    sessionMode,
-    isVisible,
-  }: {
-    sessionId: string
-    sessionMode?: string
-    isVisible?: boolean
-  }) => {
-    aTermProps.push({ sessionId, sessionMode, isVisible })
-    return <div data-testid={`a-term-${sessionId}`} />
-  },
+const sizeHolderHooks = vi.hoisted(() => ({
+  change: null as ((holder: string | null) => void) | null,
+  claimSize: vi.fn(),
 }))
+
+vi.mock('@/components/ATerm', async () => {
+  const { forwardRef, useImperativeHandle } = await import('react')
+  return {
+    ATermComponent: forwardRef(function MockATerm(
+      {
+        sessionId,
+        sessionMode,
+        isVisible,
+        onSizeHolderChange,
+      }: {
+        sessionId: string
+        sessionMode?: string
+        isVisible?: boolean
+        onSizeHolderChange?: (holder: string | null) => void
+      },
+      ref,
+    ) {
+      useImperativeHandle(ref, () => ({
+        claimSize: sizeHolderHooks.claimSize,
+      }))
+      aTermProps.push({ sessionId, sessionMode, isVisible })
+      sizeHolderHooks.change = onSizeHolderChange ?? null
+      return <div data-testid={`a-term-${sessionId}`} />
+    }),
+  }
+})
 
 vi.mock('@/components/a-term-header', () => ({
   UnifiedATermHeaderContent: (props: Record<string, unknown>) => {
@@ -159,6 +176,20 @@ function ownSlot(id: string): PaneSlot {
 }
 
 describe('SessionView', () => {
+  it('names the device holding the size while connected, and Use here takes it back', () => {
+    const statuses = new Map([['session-1', 'connected' as const]])
+    renderView({ slots: [ownSlot('1')], aTermStatuses: statuses })
+    expect(screen.queryByTestId('size-holder-notice')).toBeNull()
+
+    act(() => sizeHolderHooks.change?.('Chrome on Android'))
+    expect(screen.getByText('Viewing on Chrome on Android')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Use here' }))
+    expect(sizeHolderHooks.claimSize).toHaveBeenCalledTimes(1)
+
+    act(() => sizeHolderHooks.change?.(null))
+    expect(screen.queryByTestId('size-holder-notice')).toBeNull()
+  })
+
   it('shows only the active session, with every session in its switcher', () => {
     const slots = [ownSlot('1'), ownSlot('2'), ownTmuxView()]
     renderView({ slots, activeSessionId: 'session-2' })

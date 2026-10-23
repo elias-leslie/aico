@@ -20,9 +20,16 @@ export interface WebSocketConnectionRefs {
   connectRef: React.MutableRefObject<(() => void) | undefined>
 }
 
+/** Who holds the session's one shared size (the server's `size_holder`
+ * notice): this view, or the app and device that claimed it last. */
+export interface SizeHolderFrame {
+  here: boolean
+  viewer: { app: string; device: string } | null
+}
+
 export interface WebSocketConnectionCallbacks {
-  onATermMessage?: (message: string) => void
   onMessage?: (data: string) => void
+  onSizeHolder?: (holder: SizeHolderFrame) => void
   /** How much history the server's seed carries (sent before the seed). */
   onHistoryLines?: (historyLines: number) => void
   onBeforeReconnectData?: () => void
@@ -70,7 +77,6 @@ export function openWebSocketConnection(
     connectRef,
   } = refs
   const {
-    onATermMessage,
     onMessage,
     onBeforeReconnectData,
     onDisconnect,
@@ -78,10 +84,9 @@ export function openWebSocketConnection(
     sendInitialResize = true,
     setStatus,
   } = callbacks
-  const scheduleReconnect = (
-    exhaustedStatus: string,
-    exhaustedMessage: string,
-  ) => {
+  // Out of retries, the status alone says so: the terminal area shows the
+  // notice for it (components/TerminalNotice.tsx).
+  const scheduleReconnect = (exhaustedStatus: string) => {
     if (retryCountRef.current < MAX_RECONNECT_ATTEMPTS) {
       const attempt = retryCountRef.current + 1
       const delay = getReconnectDelay(retryCountRef.current)
@@ -95,7 +100,6 @@ export function openWebSocketConnection(
     }
 
     setStatus(exhaustedStatus)
-    onATermMessage?.(exhaustedMessage)
     onDisconnect?.()
   }
 
@@ -129,7 +133,6 @@ export function openWebSocketConnection(
   } catch {
     connectingRef.current = false
     setStatus('error')
-    onATermMessage?.('\r\n\x1b[31mFailed to create WebSocket connection\x1b[0m')
     return
   }
   wsRef.current = ws
@@ -141,10 +144,7 @@ export function openWebSocketConnection(
     wsRef.current = null
     ws.close()
     if (!mountedRef.current) return
-    scheduleReconnect(
-      'timeout',
-      '\r\n\x1b[31mConnection timeout after maximum retries\x1b[0m',
-    )
+    scheduleReconnect('timeout')
   }, CONNECTION_TIMEOUT)
 
   ws.onopen = () => {
@@ -239,25 +239,11 @@ export function openWebSocketConnection(
     }
     if (!mountedRef.current) return
 
-    if (event.code === WS_CLOSE_CODE_SESSION_DEAD) {
-      setStatus('session_dead')
-      try {
-        const reason = JSON.parse(event.reason)
-        onATermMessage?.(
-          `\r\n\x1b[31m${reason.message || 'Session not found'}\x1b[0m`,
-        )
-      } catch {
-        onATermMessage?.(
-          '\r\n\x1b[31mSession not found or could not be restored\x1b[0m',
-        )
-      }
-    } else {
-      scheduleReconnect(
-        'disconnected',
-        '\r\n\x1b[31mDisconnected from a-term after maximum reconnect retries\x1b[0m',
-      )
+    if (event.code !== WS_CLOSE_CODE_SESSION_DEAD) {
+      scheduleReconnect('disconnected')
       return
     }
+    setStatus('session_dead')
     onDisconnect?.()
   }
 
@@ -277,10 +263,7 @@ export function openWebSocketConnection(
     ) {
       ws.close()
     }
-    scheduleReconnect(
-      'error',
-      '\r\n\x1b[31mConnection error after maximum reconnect retries\x1b[0m',
-    )
+    scheduleReconnect('error')
   }
 }
 
@@ -301,6 +284,25 @@ export function dispatchControlMessage(
       if (typeof historyLines === 'number' && historyLines > 0) {
         callbacks.onHistoryLines?.(historyLines)
       }
+      return true
+    }
+
+    const holder = control.size_holder as Record<string, unknown> | undefined
+    if (
+      holder &&
+      typeof holder === 'object' &&
+      typeof holder.here === 'boolean'
+    ) {
+      const viewer = holder.viewer as Record<string, unknown> | null | undefined
+      callbacks.onSizeHolder?.({
+        here: holder.here,
+        viewer:
+          viewer &&
+          typeof viewer.app === 'string' &&
+          typeof viewer.device === 'string'
+            ? { app: viewer.app, device: viewer.device }
+            : null,
+      })
       return true
     }
 

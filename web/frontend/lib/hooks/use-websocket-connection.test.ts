@@ -52,7 +52,8 @@ class MockWebSocket {
 function buildCallbacks() {
   return {
     getDimensions: vi.fn(() => null),
-    onATermMessage: vi.fn(),
+    onMessage: vi.fn(),
+    onSizeHolder: vi.fn(),
     onBeforeReconnectData: vi.fn(),
     onDisconnect: vi.fn(),
     onHistoryLines: vi.fn(),
@@ -278,7 +279,25 @@ describe('openWebSocketConnection', () => {
     sockets[0].emitError()
 
     expect(callbacks.setStatus).toHaveBeenCalledWith('connecting')
-    expect(callbacks.onATermMessage).not.toHaveBeenCalled()
+    expect(callbacks.onMessage).not.toHaveBeenCalled()
+  })
+
+  it('leaves the out-of-retries state to the notice, writing nothing into the terminal', () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('WebSocket', MockWebSocket)
+    const refs = buildRefs()
+    const callbacks = buildCallbacks()
+    refs.connectRef.current = () => connect(refs, callbacks)
+
+    connect(refs, callbacks)
+    for (let attempt = 0; attempt <= 30; attempt += 1) {
+      sockets[sockets.length - 1].emitError()
+      vi.advanceTimersByTime(2000)
+    }
+
+    expect(callbacks.setStatus).toHaveBeenLastCalledWith('error')
+    expect(callbacks.onDisconnect).toHaveBeenCalledTimes(1)
+    expect(callbacks.onMessage).not.toHaveBeenCalled()
   })
 
   it('clears any first-load retry residue when the socket eventually opens', () => {
@@ -295,8 +314,27 @@ describe('openWebSocketConnection', () => {
     sockets[1].emitOpen()
 
     expect(callbacks.onBeforeReconnectData).toHaveBeenCalledTimes(1)
-    expect(callbacks.onATermMessage).not.toHaveBeenCalled()
+    expect(callbacks.onMessage).not.toHaveBeenCalled()
     expect(callbacks.setStatus).toHaveBeenLastCalledWith('connected')
+  })
+})
+
+describe('size holder', () => {
+  it('reports who holds the shared size', () => {
+    const callbacks = buildCallbacks()
+    dispatchControlMessage(
+      '{"__ctrl":true,"size_holder":{"here":false,"viewer":{"app":"web","device":"Chrome on Android"}}}',
+      callbacks,
+    )
+    dispatchControlMessage(
+      '{"__ctrl":true,"size_holder":{"here":true,"viewer":{"app":1}}}',
+      callbacks,
+    )
+    dispatchControlMessage('{"__ctrl":true,"size_holder":{}}', callbacks)
+    expect(callbacks.onSizeHolder.mock.calls).toEqual([
+      [{ here: false, viewer: { app: 'web', device: 'Chrome on Android' } }],
+      [{ here: true, viewer: null }],
+    ])
   })
 })
 

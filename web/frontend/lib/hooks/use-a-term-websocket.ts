@@ -2,7 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ConnectionStatus } from '../../components/ATerm'
-import { openWebSocketConnection } from './use-websocket-connection'
+import {
+  openWebSocketConnection,
+  type SizeHolderFrame,
+} from './use-websocket-connection'
 
 interface UseATermWebSocketOptions {
   sessionId: string
@@ -14,8 +17,8 @@ interface UseATermWebSocketOptions {
   onDisconnect?: () => void
   /** Called when data is received from the server */
   onMessage?: (data: string) => void
-  /** Called when a-term should display a message */
-  onATermMessage?: (message: string) => void
+  /** Called when the server says who holds the shared size */
+  onSizeHolder?: (holder: SizeHolderFrame) => void
   /** Called with how much history the server's seed carries (sent before the seed) */
   onHistoryLines?: (historyLines: number) => void
   /** Called before reconnect data arrives — clear aTerm buffer to prevent duplicates */
@@ -56,7 +59,7 @@ export function useATermWebSocket({
   onStatusChange,
   onDisconnect,
   onMessage,
-  onATermMessage,
+  onSizeHolder,
   onHistoryLines,
   onBeforeReconnectData,
   getDimensions,
@@ -76,7 +79,7 @@ export function useATermWebSocket({
   const onStatusChangeRef = useRef(onStatusChange)
   const onDisconnectRef = useRef(onDisconnect)
   const onMessageRef = useRef(onMessage)
-  const onATermMessageRef = useRef(onATermMessage)
+  const onSizeHolderRef = useRef(onSizeHolder)
   const onHistoryLinesRef = useRef(onHistoryLines)
   const onBeforeReconnectDataRef = useRef(onBeforeReconnectData)
   const getDimensionsRef = useRef(getDimensions)
@@ -86,7 +89,7 @@ export function useATermWebSocket({
     onStatusChangeRef.current = onStatusChange
     onDisconnectRef.current = onDisconnect
     onMessageRef.current = onMessage
-    onATermMessageRef.current = onATermMessage
+    onSizeHolderRef.current = onSizeHolder
     onHistoryLinesRef.current = onHistoryLines
     onBeforeReconnectDataRef.current = onBeforeReconnectData
     getDimensionsRef.current = getDimensions
@@ -94,7 +97,7 @@ export function useATermWebSocket({
     onStatusChange,
     onDisconnect,
     onMessage,
-    onATermMessage,
+    onSizeHolder,
     onHistoryLines,
     onBeforeReconnectData,
     getDimensions,
@@ -132,7 +135,7 @@ export function useATermWebSocket({
         connectRef,
       },
       {
-        onATermMessage: (msg) => onATermMessageRef.current?.(msg),
+        onSizeHolder: (holder) => onSizeHolderRef.current?.(holder),
         onMessage: (data) => onMessageRef.current?.(data),
         onHistoryLines: (historyLines) =>
           onHistoryLinesRef.current?.(historyLines),
