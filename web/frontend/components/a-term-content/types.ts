@@ -54,7 +54,6 @@ export interface ATermContentProps {
   onSlotClose: (slot: ATermSlot | PaneSlot) => void
   onSlotCloseSession: (slot: ATermSlot | PaneSlot) => void
   onSlotRefresh?: (slot: ATermSlot | PaneSlot) => void
-  onSlotClean: (slot: ATermSlot | PaneSlot) => void
   canAddPane: boolean
   handleOpenSettings: () => void
   handleOpenATermManager?: () => void
@@ -80,16 +79,6 @@ export interface ATermContentProps {
   clearUploadError?: () => void
   handleFileInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void
   handleFileSelect: (file: File, targetSessionId?: string) => void
-
-  // Prompt cleaner
-  showCleaner: boolean
-  cleanerRawPrompt: string
-  handleCleanerSend: (cleaned: string) => void
-  handleCleanerCancel: () => void
-  cleanPrompt: (prompt: string, refinement?: string) => Promise<string>
-  cleanerError: string | null
-  clearCleanerError: () => void
-  isCleaningPrompt: boolean
 
   // Mobile keyboard
   sessions: Array<{ id: string }>

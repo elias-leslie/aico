@@ -7,7 +7,7 @@ import type {
   ATermSearchResult,
   ConnectionStatus,
 } from '../../components/a-term.types'
-import { getATermContent, getATermLastLine } from '../utils/a-term-buffer'
+import { getATermContent } from '../utils/a-term-buffer'
 import { useBracketedPaste } from './use-bracketed-paste'
 
 type XtermATerm = InstanceType<typeof import('@xterm/xterm').Terminal>
@@ -43,7 +43,6 @@ export function useATermHandle(
     () => ({
       reconnect,
       getContent: () => getATermContent(aTermRef.current),
-      getLastLine: () => getATermLastLine(aTermRef.current),
       sendInput,
       pasteInput,
       search,

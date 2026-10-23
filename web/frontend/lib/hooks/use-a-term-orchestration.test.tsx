@@ -32,7 +32,6 @@ vi.mock('./use-a-term-slot-handlers', () => ({
     handleSlotDetach: vi.fn(),
     handleSlotClose: vi.fn(),
     handleSlotCloseSession: vi.fn(),
-    handleSlotClean: vi.fn(),
     handleSlotModeSwitch: vi.fn(),
     isModeSwitching: false,
   }),
@@ -50,15 +49,6 @@ vi.mock('./use-a-term-navigation', () => ({
     handleNextATerm: vi.fn(),
     handlePrevATerm: vi.fn(),
     handleJumpToATerm: vi.fn(),
-  }),
-}))
-
-vi.mock('./use-prompt-cleaner', () => ({
-  usePromptCleaner: () => ({
-    cleanPrompt: vi.fn(),
-    error: null,
-    clearError: vi.fn(),
-    isLoading: false,
   }),
 }))
 

@@ -10,7 +10,6 @@ import type { ATermMode } from '../ModeToggle'
 export interface UnifiedATermHeaderProps {
   slot: ATermSlot | PaneSlot
   isActive?: boolean
-  showCleanButton?: boolean
   onSwitch?: () => void
   onSettings?: () => void
   onReset?: () => void
@@ -22,7 +21,6 @@ export interface UnifiedATermHeaderProps {
   onFiles?: () => void
   onUpload?: () => void
   onVoice?: () => void
-  onClean?: () => void
   /** Opens a-term manager modal - appears in ALL pane headers */
   onOpenModal?: () => void
   /** Whether new panes can be added (at limit = false) */

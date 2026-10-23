@@ -5,7 +5,6 @@ import {
   OWN_TMUX_CAN,
   ROOT_CAN,
   TETHER_CAN,
-  TETHER_LEGACY_CAN,
 } from '@/test-stubs/session-fixtures'
 import { useATermTabsState } from './use-a-term-tabs-state'
 
@@ -813,17 +812,6 @@ describe('useATermTabsState', () => {
       is_external: true,
       ...TETHER_CAN,
     }
-    const unloadedLegacy = {
-      ...base,
-      id: 'unloaded-legacy',
-      name: 'Project A — Old review',
-      mode: 'codex',
-      source: 'tether',
-      status: 'legacy',
-      is_legacy: true,
-      is_external: false,
-      ...TETHER_LEGACY_CAN,
-    }
     const unloadedTether = {
       ...base,
       id: 'unloaded-tether',
@@ -838,7 +826,7 @@ describe('useATermTabsState', () => {
       buildActiveSessionState({
         activeSessionId: freeTether.id,
         activeSession: freeTether,
-        sessions: [freeTether, unloadedLegacy, unloadedTether],
+        sessions: [freeTether, unloadedTether],
         externalSessions: [freeTether],
       }),
     )
@@ -855,13 +843,6 @@ describe('useATermTabsState', () => {
           projectName: 'Project A — Incident review',
           can: { rename: true, reset: false, end: true },
           showsSessionTitle: true,
-        }),
-        expect.objectContaining({
-          slotId: 'session-unloaded-legacy',
-          type: 'project',
-          projectName: 'Project A — Old review',
-          can: { rename: true, reset: false, end: true },
-          showsSessionTitle: false,
         }),
         expect.objectContaining({
           slotId: 'session-unloaded-tether',

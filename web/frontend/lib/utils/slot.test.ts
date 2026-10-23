@@ -7,7 +7,6 @@ import {
   SESSION_BASE,
   SLOT_BASE,
   TETHER_CAN,
-  TETHER_LEGACY_CAN,
 } from '@/test-stubs/session-fixtures'
 import type { AdHocSlot, ProjectSlot } from './slot'
 import {
@@ -164,12 +163,6 @@ describe('getPaneId', () => {
 const KINDS = {
   tether: { source: 'tether', ...TETHER_CAN },
   root: { source: 'tether', is_root: true, ...ROOT_CAN },
-  tetherLegacy: {
-    source: 'tether',
-    status: 'legacy',
-    is_legacy: true,
-    ...TETHER_LEGACY_CAN,
-  },
   ownTmux: { source: 'tmux_external', ...OWN_TMUX_CAN },
 } satisfies Record<string, Partial<ATermSession>>
 type Kind = keyof typeof KINDS
@@ -223,7 +216,6 @@ describe('sessionTitle', () => {
     // kind, pane, free-standing, linked to a pane not loaded here
     ['tether', 'Incident review', 'Incident review', 'Incident review'],
     ['root', 'Incident review', 'Incident review', 'Incident review'],
-    ['tetherLegacy', 'Incident review', 'Incident review', 'Incident review'],
     ['ownTmux', 'Pane name', 'Neri · Incident review', 'Neri'],
   ] as const)('titles a %s session by place', (kind, pane, free, unloaded) => {
     const session = makeSession(kind)
@@ -287,8 +279,6 @@ describe('sessionToSlot', () => {
     ['tether', 'unloaded', true, true, true],
     ['root', 'free', true, false, true],
     ['root', 'unloaded', true, false, true],
-    ['tetherLegacy', 'free', true, false, true],
-    ['tetherLegacy', 'unloaded', true, false, true],
     ['ownTmux', 'free', false, false, false],
   ] as const)(
     'maps a %s session shown %s to the backend capabilities',
@@ -318,7 +308,6 @@ describe('sessionToSlot', () => {
     ['tether', 'project', null, false],
     ['tether', 'project', 'Focus', true],
     ['tether', 'adhoc', 'Focus', true],
-    ['tetherLegacy', 'project', 'Focus', true],
     ['ownTmux', 'adhoc', 'Focus', false],
   ] as const)(
     'shows the session title for a %s %s slot with task %s: %s',

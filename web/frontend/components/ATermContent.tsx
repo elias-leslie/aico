@@ -4,7 +4,6 @@ import { ATermFileSection } from './a-term-content/ATermFileSection'
 import { ATermMobileSection } from './a-term-content/ATermMobileSection'
 import type { ATermContentProps } from './a-term-content/types'
 import { NativeKeyboardInput } from './keyboard/NativeKeyboardInput'
-import { PromptCleaner } from './PromptCleaner'
 import { SettingsDropdown } from './SettingsDropdown'
 import { VoiceTranscriptPanel } from './VoiceTranscriptPanel'
 
@@ -46,7 +45,6 @@ export function ATermContent({
   onSlotClose,
   onSlotCloseSession,
   onSlotRefresh,
-  onSlotClean,
   canAddPane,
   handleOpenSettings,
   handleOpenATermManager,
@@ -66,14 +64,6 @@ export function ATermContent({
   clearUploadError,
   handleFileInputChange,
   handleFileSelect,
-  showCleaner,
-  cleanerRawPrompt,
-  handleCleanerSend,
-  handleCleanerCancel,
-  cleanPrompt,
-  cleanerError,
-  clearCleanerError,
-  isCleaningPrompt,
   sessions,
   activeSessionId,
   storageScopeId,
@@ -145,7 +135,6 @@ export function ATermContent({
         onSlotClose={onSlotClose}
         onSlotCloseSession={onSlotCloseSession}
         onSlotRefresh={onSlotRefresh}
-        onSlotClean={onSlotClean}
         canAddPane={canAddPane}
         handleOpenSettings={handleOpenSettings}
         handleOpenATermManager={handleOpenATermManager}
@@ -207,20 +196,6 @@ export function ATermContent({
           storageScopeId={storageScopeId}
           connected={activeStatus === 'connected'}
           onCommit={handleComposeInput}
-        />
-      )}
-
-      {/* Prompt Cleaner Panel */}
-      {showCleaner && (
-        <PromptCleaner
-          rawPrompt={cleanerRawPrompt}
-          onSend={handleCleanerSend}
-          onCancel={handleCleanerCancel}
-          cleanPrompt={cleanPrompt}
-          errorMessage={cleanerError}
-          onClearError={clearCleanerError}
-          isCleaning={isCleaningPrompt}
-          showDiffToggle={true}
         />
       )}
 

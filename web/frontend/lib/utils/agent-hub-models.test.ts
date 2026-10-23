@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   clearAgentHubModelCache,
   getClaudeModelOptions,
-  getPromptCleanerAgentSlug,
 } from './agent-hub-models'
 import { getAgentHubProxyUrl } from './agent-hub-proxy'
 
@@ -57,7 +56,6 @@ describe('agent-hub-models', () => {
 
   it('always goes through the proxy, whatever the build saw', () => {
     expect(getAgentHubProxyUrl('models')).toBe('/api/agent-hub/models')
-    expect(getAgentHubProxyUrl('complete')).toBe('/api/agent-hub/complete')
   })
 
   it('uses the built-in aliases when the server has no Agent Hub', async () => {
@@ -86,9 +84,5 @@ describe('agent-hub-models', () => {
       { id: 'sonnet', label: 'Sonnet', command: '/model sonnet\r' },
       { id: 'haiku', label: 'Haiku', command: '/model haiku\r' },
     ])
-  })
-
-  it('routes prompt cleaning through a fixed agent slug', () => {
-    expect(getPromptCleanerAgentSlug()).toBe('prompt-builder')
   })
 })

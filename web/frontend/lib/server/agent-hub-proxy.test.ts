@@ -18,17 +18,11 @@ describe('proxyAgentHubRequest', () => {
     const fetchSpy = vi.fn().mockResolvedValue(new Response('{}'))
     vi.stubGlobal('fetch', fetchSpy)
 
-    await proxyAgentHubRequest({
-      method: 'POST',
-      path: '/api/complete',
-      headers: { 'content-type': 'application/json' },
-      body: '{}',
-    })
+    await proxyAgentHubRequest({ method: 'GET', path: '/api/models' })
 
     const sent = new Headers(fetchSpy.mock.calls[0][1].headers)
     expect(sent.get('x-request-source')).toBe('a-term')
     expect(sent.get('x-client-id')).toBe('11111111-2222-3333-4444-555555555555')
-    expect(sent.get('content-type')).toBe('application/json')
   })
 
   it('sends no client id when none is configured', async () => {
@@ -110,33 +104,19 @@ describe('proxyAgentHubRequest', () => {
     })
   })
 
-  it('forwards allowed headers for completion requests and hides network errors', async () => {
+  it('hides network errors', async () => {
     vi.mocked(getAgentHubServerUrl).mockReturnValue('http://agent-hub.test')
-    const fetchSpy = vi
-      .fn()
-      .mockRejectedValue(new Error('ECONNREFUSED 10.0.0.9'))
     vi.spyOn(console, 'error').mockImplementation(() => {})
-    vi.stubGlobal('fetch', fetchSpy)
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockRejectedValue(new Error('ECONNREFUSED 10.0.0.9')),
+    )
 
     const response = await proxyAgentHubRequest({
-      method: 'POST',
-      path: '/api/complete',
-      body: '{"model":"haiku"}',
-      headers: new Headers({
-        'content-type': 'application/json',
-        'x-source-client': 'a-term',
-        'x-source-path': 'frontend/lib/hooks/use-prompt-cleaner.ts',
-      }),
+      method: 'GET',
+      path: '/api/models',
     })
 
-    const call = fetchSpy.mock.calls[0]
-    const forwardedHeaders = new Headers(call?.[1]?.headers)
-
-    expect(forwardedHeaders.get('content-type')).toBe('application/json')
-    expect(forwardedHeaders.get('x-source-client')).toBe('a-term')
-    expect(forwardedHeaders.get('x-source-path')).toBe(
-      'frontend/lib/hooks/use-prompt-cleaner.ts',
-    )
     expect(response.status).toBe(502)
     await expect(response.json()).resolves.toEqual({
       detail: 'Failed to reach Agent Hub',

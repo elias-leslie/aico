@@ -1,12 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
-import {
-  type MutableRefObject,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from 'react'
-import type { ATermHandle } from '@/components/ATerm'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ATermMode } from '@/components/ModeToggle'
 import type {
   ATermSession,
@@ -26,7 +19,6 @@ import {
 } from '@/lib/utils/slot'
 
 interface UseATermSlotHandlersParams {
-  aTermRefs: MutableRefObject<Map<string, ATermHandle | null>>
   switchToSession: (sessionId: string) => void
   activeSessionId: string | null
   reset: (sessionId: string) => Promise<ATermSession>
@@ -36,8 +28,6 @@ interface UseATermSlotHandlersParams {
   // Pane-based operations (new architecture)
   detachPane?: (paneId: string) => Promise<unknown>
   removePane?: (paneId: string) => Promise<void>
-  setShowCleaner: (show: boolean) => void
-  setCleanerRawPrompt: (prompt: string) => void
   // For mode switching
   sessions: ATermSession[]
   visibleSlots: (ATermSlot | PaneSlot)[]
@@ -54,7 +44,6 @@ interface UseATermSlotHandlersParams {
 }
 
 export function useATermSlotHandlers({
-  aTermRefs,
   switchToSession,
   activeSessionId,
   reset,
@@ -63,8 +52,6 @@ export function useATermSlotHandlers({
   detachExternalSession,
   detachPane,
   removePane,
-  setShowCleaner,
-  setCleanerRawPrompt,
   sessions,
   visibleSlots,
   handleProjectModeChange,
@@ -309,22 +296,6 @@ export function useATermSlotHandlers({
     ],
   )
 
-  // Handler for opening prompt cleaner for a slot
-  const handleSlotClean = useCallback(
-    (slot: ATermSlot | PaneSlot) => {
-      const sessionId = getSlotSessionId(slot)
-      if (!sessionId) return
-
-      const aTermRef = aTermRefs.current.get(sessionId)
-      if (!aTermRef) return
-
-      const input = aTermRef.getLastLine()
-      setCleanerRawPrompt(input || '')
-      setShowCleaner(true)
-    },
-    [aTermRefs, setCleanerRawPrompt, setShowCleaner],
-  )
-
   // Handler for switching mode (shell <-> agent tool) on a slot
   const handleSlotModeSwitch = useCallback(
     async (slot: ATermSlot | PaneSlot, mode: ATermMode) => {
@@ -357,7 +328,6 @@ export function useATermSlotHandlers({
     handleSlotDetach,
     handleSlotClose,
     handleSlotCloseSession,
-    handleSlotClean,
     handleSlotModeSwitch,
     isModeSwitching,
   }

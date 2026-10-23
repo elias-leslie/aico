@@ -5,9 +5,6 @@ import { useFileUpload } from '@/lib/hooks/use-file-upload'
 interface UseATermActionHandlersParams {
   aTermRefs: MutableRefObject<Map<string, ATermHandle | null>>
   activeSessionId: string | null
-  showCleaner: boolean
-  setShowCleaner: (show: boolean) => void
-  setCleanerRawPrompt: (prompt: string) => void
   // Voice input
   setShowVoice: (show: boolean) => void
   voiceStartListening: () => void
@@ -39,8 +36,6 @@ function findActiveRef(
 export function useATermActionHandlers({
   aTermRefs,
   activeSessionId,
-  setShowCleaner,
-  setCleanerRawPrompt,
   setShowVoice,
   voiceStartListening,
   voiceStopListening,
@@ -94,26 +89,6 @@ export function useATermActionHandlers({
     },
     [handleFileSelect],
   )
-
-  // Prompt cleaner handlers
-  const handleCleanerSend = useCallback(
-    (cleanedPrompt: string) => {
-      const aTermRef = findActiveRef(aTermRefs.current, activeSessionId)
-      if (aTermRef) {
-        // Clear current line (send Ctrl+U) then paste cleaned prompt
-        aTermRef.sendInput('\x15') // Ctrl+U
-        aTermRef.pasteInput(cleanedPrompt)
-      }
-      setShowCleaner(false)
-      setCleanerRawPrompt('')
-    },
-    [activeSessionId, aTermRefs, setShowCleaner, setCleanerRawPrompt],
-  )
-
-  const handleCleanerCancel = useCallback(() => {
-    setShowCleaner(false)
-    setCleanerRawPrompt('')
-  }, [setShowCleaner, setCleanerRawPrompt])
 
   // Voice input handlers
   // Track which a-term pane triggered voice input
@@ -200,8 +175,6 @@ export function useATermActionHandlers({
     handleUploadClick,
     handleFileSelect,
     handleFileInputChange,
-    handleCleanerSend,
-    handleCleanerCancel,
     // Voice input
     handleVoiceOpen,
     handleVoiceSend,

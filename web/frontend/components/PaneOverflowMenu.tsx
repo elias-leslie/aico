@@ -10,7 +10,6 @@ import {
   Pencil,
   RefreshCw,
   Settings,
-  Sparkles,
   Trash2,
   X,
 } from 'lucide-react'
@@ -31,7 +30,6 @@ export interface PaneOverflowMenuProps {
   onSettings?: () => void
   onUpload?: () => void
   onVoice?: () => void
-  onClean?: () => void
   onResetAll?: () => void
   onCloseAll?: () => void
   onRename?: () => void
@@ -56,7 +54,6 @@ export function PaneOverflowMenu({
   onSettings,
   onUpload,
   onVoice,
-  onClean,
   onResetAll,
   onCloseAll,
   onRename,
@@ -131,11 +128,6 @@ export function PaneOverflowMenu({
     setIsOpen(false)
   }, [onVoice])
 
-  const handleClean = useCallback(() => {
-    onClean?.()
-    setIsOpen(false)
-  }, [onClean])
-
   const handleRename = useCallback(() => {
     onRename?.()
     setIsOpen(false)
@@ -159,7 +151,6 @@ export function PaneOverflowMenu({
     onSettings ||
     onUpload ||
     onVoice ||
-    onClean ||
     onRefresh
   )
   const hasBulkActions = !!(onResetAll || onCloseAll)
@@ -277,14 +268,6 @@ export function PaneOverflowMenu({
               onClick={handleRefresh}
               isMobile={isMobile}
               title="Refresh this pane layout without restarting the session"
-            />
-          )}
-          {onClean && (
-            <MenuItemButton
-              icon={<Sparkles className="w-3.5 h-3.5" />}
-              label="Clean Prompt"
-              onClick={handleClean}
-              isMobile={isMobile}
             />
           )}
           {onUpload && (

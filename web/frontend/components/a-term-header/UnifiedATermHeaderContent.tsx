@@ -37,7 +37,6 @@ export const UnifiedATermHeaderContent = memo(
   function UnifiedATermHeaderContent({
     slot,
     isActive = false,
-    showCleanButton = false,
     onSwitch,
     onSettings,
     onReset,
@@ -49,7 +48,6 @@ export const UnifiedATermHeaderContent = memo(
     onFiles,
     onUpload,
     onVoice,
-    onClean,
     onOpenModal,
     canAddPane = true,
     onModeSwitch,
@@ -87,10 +85,6 @@ export const UnifiedATermHeaderContent = memo(
       },
       [paneId, renamePane, sessionRenameId, updateSession],
     )
-    const isAgentMode =
-      (slot.type === 'project' && slot.activeMode !== 'shell') ||
-      (slot.type === 'adhoc' && slot.isExternal)
-    const shouldShowClean = showCleanButton && isAgentMode
     const slotId = getSlotPanelId(slot)
     const slotName = getSlotName(slot)
     // A project root, or a Tether session with a task or coordinator chip,
@@ -119,7 +113,6 @@ export const UnifiedATermHeaderContent = memo(
       [allSlots, isMobile, onSwapWith, slotId],
     )
     const hasPaneActions =
-      shouldShowClean ||
       !!onDetach ||
       !!onVoice ||
       !!onUpload ||
@@ -325,7 +318,6 @@ export const UnifiedATermHeaderContent = memo(
               onSettings={onSettings}
               onUpload={onUpload}
               onVoice={onVoice}
-              onClean={shouldShowClean ? onClean : undefined}
               onResetAll={onResetAll}
               onCloseAll={onCloseAll}
               onSwapWith={onSwapWith}

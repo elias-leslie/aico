@@ -1,10 +1,6 @@
 'use client'
 
 import { useCallback, useEffect, useRef } from 'react'
-import type {
-  DiagnosticCounters,
-  UseATermDiagnosticsReturn,
-} from './use-a-term-diagnostics'
 
 type XtermATerm = InstanceType<typeof import('@xterm/xterm').Terminal>
 const MAX_COALESCE_CHARS = 16_384
@@ -23,10 +19,6 @@ interface UseATermWriteQueueOptions {
   aTermRef: React.RefObject<XtermATerm | null>
   isVisibleRef: React.RefObject<boolean>
   reseed?: ATermReseedSource
-  diagnostics?: Pick<
-    UseATermDiagnosticsReturn,
-    'enabled' | 'incrementCounter' | 'record'
-  >
 }
 
 interface UseATermWriteQueueReturn {
@@ -44,7 +36,6 @@ export function useATermWriteQueue({
   aTermRef,
   isVisibleRef,
   reseed,
-  diagnostics,
 }: UseATermWriteQueueOptions): UseATermWriteQueueReturn {
   const pendingWritesRef = useRef<string[]>([])
   const isDrainingRef = useRef(false)
@@ -58,13 +49,6 @@ export function useATermWriteQueue({
   useEffect(() => {
     reseedRef.current = reseed
   }, [reseed])
-
-  const bumpCounter = useCallback(
-    (counter: keyof DiagnosticCounters, delta = 1) => {
-      diagnostics?.incrementCounter(counter, delta)
-    },
-    [diagnostics],
-  )
 
   const runWrite = useCallback(
     (data: string, generation: number) =>
@@ -94,9 +78,6 @@ export function useATermWriteQueue({
           const resetAt = data.indexOf(FULL_RESET)
           if (resetAt >= 0) {
             reseedHeldRef.current = true
-            diagnostics?.record('reseed_held_scrolled_up', {
-              chars: data.length - resetAt,
-            })
             data = data.slice(0, resetAt)
             if (!data) {
               resolve()
@@ -108,18 +89,9 @@ export function useATermWriteQueue({
         // xterm preserves the visible history rows itself, including when
         // scrollback trims or the reader scrolls during an async write.
         // Restoring distance from the growing bottom moves those rows.
-        term.write(data, () => {
-          if (!isStale()) {
-            bumpCounter('writesFlushed')
-            diagnostics?.record('write_flushed', {
-              chars: data.length,
-              scrolledUp: isScrolledUp,
-            })
-          }
-          resolve()
-        })
+        term.write(data, () => resolve())
       }),
-    [bumpCounter, diagnostics, isVisibleRef, aTermRef],
+    [isVisibleRef, aTermRef],
   )
 
   const drainQueue = useCallback(async () => {
@@ -160,7 +132,6 @@ export function useATermWriteQueue({
       // Never split a single message — arbitrary byte-boundary splits
       // bisect escape sequences and cause ghost-text corruption.
       // Drain-time coalescing merges queued writes before rendering.
-      bumpCounter('writesEnqueued')
       const last = pendingWritesRef.current.length - 1
       if (
         last >= 0 &&
@@ -173,7 +144,7 @@ export function useATermWriteQueue({
       }
       scheduleDrain()
     },
-    [bumpCounter, scheduleDrain],
+    [scheduleDrain],
   )
 
   const resetQueue = useCallback(() => {

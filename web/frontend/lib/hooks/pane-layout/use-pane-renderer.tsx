@@ -29,7 +29,6 @@ interface UsePaneRendererOptions {
     | 'onRefresh'
     | 'onUpload'
     | 'onFilePaste'
-    | 'onClean'
     | 'onOpenModal'
     | 'canAddPane'
     | 'onModeSwitch'
@@ -72,7 +71,6 @@ export function usePaneRenderer({
     onRefresh,
     onUpload,
     onFilePaste,
-    onClean,
     onOpenModal,
     canAddPane,
     onModeSwitch,
@@ -132,11 +130,7 @@ export function usePaneRenderer({
       const workingDir = getSlotWorkingDir(slot)
       const panelId = getSlotPanelId(slot)
       const paneId = isPaneSlot(slot) ? slot.paneId : null
-      const isExternalSlot = slot.type === 'adhoc' && slot.isExternal
       const refreshVersion = refreshVersions[panelId] ?? 0
-      const canCleanSlot =
-        (slot.type === 'project' && slot.activeMode !== 'shell') ||
-        isExternalSlot
       const canSwapByDrop = !!onSwapPanes && paneCount > 1
       const isDragTarget = dragTargetPanelId === panelId
 
@@ -183,7 +177,6 @@ export function usePaneRenderer({
         >
           <UnifiedATermHeader
             slot={slot}
-            showCleanButton={canCleanSlot}
             onSwitch={onSwitch ? () => onSwitch(slot) : undefined}
             onSettings={onSettings}
             onReset={
@@ -210,7 +203,6 @@ export function usePaneRenderer({
             onUpload={
               onUpload ? () => onUpload(sessionId ?? undefined) : undefined
             }
-            onClean={onClean ? () => onClean(slot) : undefined}
             onOpenModal={onOpenModal}
             canAddPane={canAddPane}
             onModeSwitch={
@@ -335,7 +327,6 @@ export function usePaneRenderer({
       onRefresh,
       onUpload,
       onFilePaste,
-      onClean,
       onOpenModal,
       canAddPane,
       onModeSwitch,

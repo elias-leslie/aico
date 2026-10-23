@@ -15,7 +15,6 @@ import {
   SESSION_BASE,
   SLOT_BASE,
   TETHER_CAN,
-  TETHER_LEGACY_CAN,
 } from '@/test-stubs/session-fixtures'
 import { usePaneRenderer } from './use-pane-renderer'
 
@@ -320,7 +319,6 @@ describe('usePaneRenderer', () => {
         isVisible: undefined,
       },
     ])
-    expect(headerProps[0]?.showCleanButton).toBe(true)
     expect(headerProps[0]?.onReset).toBeUndefined()
     // A-Term never ends an Own tmux session: closing it only closes the View.
     expect(headerProps[0]?.onCloseSession).toBeUndefined()
@@ -339,14 +337,6 @@ describe('usePaneRenderer', () => {
         pane_type: 'adhoc',
         project_id: null,
       }),
-      paneToSlot(
-        projectPane('pane-legacy', {
-          ...TETHER_LEGACY_CAN,
-          source: 'tether',
-          status: 'legacy',
-          is_legacy: true,
-        }),
-      ),
       // A desktop free-standing Tether View: the session can be respawned,
       // but a View that no pane shows never offers Reset.
       sessionToSlot(
@@ -370,10 +360,8 @@ describe('usePaneRenderer', () => {
       'undefined',
       'undefined',
       'undefined',
-      'undefined',
     ])
     expect(headerProps.map((props) => typeof props.onCloseSession)).toEqual([
-      'function',
       'function',
       'function',
       'function',

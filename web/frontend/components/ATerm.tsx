@@ -12,13 +12,8 @@ import {
 import '@xterm/xterm/css/xterm.css'
 import { swallowQueryReplies, trackSgrMouse } from '../lib/a-term/control-view'
 import { keepReadingPlace } from '../lib/a-term/reading-place'
-import {
-  A_TERM_THEMES,
-  PHOSPHOR_THEME,
-  SCROLLBACK,
-} from '../lib/constants/a-term'
+import { PHOSPHOR_THEME, SCROLLBACK } from '../lib/constants/a-term'
 import type { ATermRendererStatus } from '../lib/hooks/a-term-instance-utils'
-import { useATermDiagnostics } from '../lib/hooks/use-a-term-diagnostics'
 import { useATermHandle } from '../lib/hooks/use-a-term-handle'
 import { useATermInstance } from '../lib/hooks/use-a-term-instance'
 import { useATermResize } from '../lib/hooks/use-a-term-resize'
@@ -26,9 +21,7 @@ import { useATermScrolling } from '../lib/hooks/use-a-term-scrolling'
 import { useATermSearch } from '../lib/hooks/use-a-term-search'
 import { useATermWebSocket } from '../lib/hooks/use-a-term-websocket'
 import { useATermWriteQueue } from '../lib/hooks/use-a-term-write-queue'
-import { profileAnsiColors } from '../lib/utils/ansi-color-profile'
 import { isMobileDevice } from '../lib/utils/device'
-import { ATermDiagnosticsOverlay } from './ATermDiagnosticsOverlay'
 import type { ATermHandle, ATermProps } from './a-term.types'
 import { ScrollToBottomPill } from './ScrollToBottomPill'
 
@@ -41,22 +34,6 @@ export type {
 type XtermATerm = InstanceType<typeof import('@xterm/xterm').Terminal>
 type XtermFitAddon = InstanceType<typeof import('@xterm/addon-fit').FitAddon>
 
-function inferThemeId(theme: NonNullable<ATermProps['theme']>): string {
-  for (const [themeId, candidate] of Object.entries(A_TERM_THEMES)) {
-    if (
-      candidate.theme.background === theme.background &&
-      candidate.theme.foreground === theme.foreground &&
-      candidate.theme.red === theme.red &&
-      candidate.theme.green === theme.green &&
-      candidate.theme.brightRed === theme.brightRed &&
-      candidate.theme.brightGreen === theme.brightGreen
-    ) {
-      return themeId
-    }
-  }
-  return 'custom'
-}
-
 function isObserverModeEnabled(search: string): boolean {
   const value = new URLSearchParams(search).get('observer')
   return value === '1' || value === 'true'
@@ -66,7 +43,6 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
   function ATermComponent(
     {
       sessionId,
-      sessionMode,
       workingDir,
       className,
       onDisconnect,
@@ -87,12 +63,6 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
     const isFocusedRef = useRef(false)
     const isVisibleRef = useRef(isVisible)
     const rendererStatusRef = useRef<ATermRendererStatus | null>(null)
-    const diagnostics = useATermDiagnostics(sessionId)
-    const recordDiagnostic = diagnostics.record
-    const getDiagnostics = diagnostics.getDiagnostics
-    const diagnosticsEnabled = diagnostics.enabled
-    const incrementDiagnosticCounter = diagnostics.incrementCounter
-    const inferredThemeId = useMemo(() => inferThemeId(theme), [theme])
     const suppressSharedResize = useMemo(
       () =>
         typeof window !== 'undefined' &&
@@ -129,23 +99,6 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
       isVisibleRef.current = isVisible
     }, [isVisible])
 
-    useEffect(() => {
-      recordDiagnostic('theme_applied', {
-        themeId: inferredThemeId,
-        red: theme.red,
-        green: theme.green,
-        brightRed: theme.brightRed,
-        brightGreen: theme.brightGreen,
-      })
-    }, [
-      inferredThemeId,
-      recordDiagnostic,
-      theme.brightGreen,
-      theme.brightRed,
-      theme.green,
-      theme.red,
-    ])
-
     // The backend streams the pane's own output, so this xterm holds the
     // history and the program's real modes. The server says how much history
     // its seed carries (with the transport message, before the seed); null
@@ -177,11 +130,6 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
         aTermRef,
         isVisibleRef,
         reseed: reseedSource,
-        diagnostics: {
-          enabled: diagnosticsEnabled,
-          incrementCounter: incrementDiagnosticCounter,
-          record: recordDiagnostic,
-        },
       },
     )
 
@@ -202,15 +150,6 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
         onBeforeReconnectData: restartStream,
         onMessage: (data) => {
           if (!aTermRef.current) return
-          if (diagnosticsEnabled) {
-            const profile = profileAnsiColors(data)
-            if (profile.hasColor) {
-              recordDiagnostic('live_write_color_profile', {
-                chars: data.length,
-                profile,
-              })
-            }
-          }
           enqueueWrite(data)
         },
         onATermMessage: (message) => {
@@ -229,7 +168,6 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
     const sendRendererStatus = useCallback(
       (rendererStatus: ATermRendererStatus) => {
         rendererStatusRef.current = rendererStatus
-        recordDiagnostic('renderer_status', { ...rendererStatus })
         if (wsRef.current?.readyState !== WebSocket.OPEN) return
         wsRef.current.send(
           JSON.stringify({
@@ -238,7 +176,7 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
           }),
         )
       },
-      [recordDiagnostic, wsRef],
+      [wsRef],
     )
 
     useEffect(() => {
@@ -380,12 +318,6 @@ export const ATermComponent = forwardRef<ATermHandle, ATermProps>(
           isReady={isReady}
           theme={theme}
           fontFamily={fontFamily}
-        />
-        <ATermDiagnosticsOverlay
-          enabled={diagnosticsEnabled}
-          themeId={inferredThemeId}
-          sessionMode={sessionMode}
-          getDiagnostics={getDiagnostics}
         />
       </div>
     )

@@ -101,7 +101,6 @@ export function ATermTabs({
     handleSlotDetach,
     handleSlotClose,
     handleSlotCloseSession,
-    handleSlotClean,
     handleSlotModeSwitch,
     handleSlotProjectSwitch,
     isModeSwitching,
@@ -122,16 +121,6 @@ export function ATermTabs({
     handleUploadClick,
     handleFileSelect,
     handleFileInputChange,
-    handleCleanerSend,
-    handleCleanerCancel,
-    cleanPrompt,
-    cleanerError,
-    clearCleanerError,
-    isCleaningPrompt,
-
-    // Prompt cleaner state
-    showCleaner,
-    cleanerRawPrompt,
 
     // Voice input
     showVoice,
@@ -220,7 +209,6 @@ export function ATermTabs({
           setEndSessionError(null)
           setSessionToEnd(slot)
         }}
-        onSlotClean={handleSlotClean}
         canAddPane={canAddPane()}
         handleOpenSettings={() => setShowSettings(true)}
         handleOpenATermManager={handleOpenATermManager}
@@ -240,14 +228,6 @@ export function ATermTabs({
         clearUploadError={clearUploadError}
         handleFileInputChange={handleFileInputChange}
         handleFileSelect={handleFileSelect}
-        showCleaner={showCleaner}
-        cleanerRawPrompt={cleanerRawPrompt}
-        handleCleanerSend={handleCleanerSend}
-        handleCleanerCancel={handleCleanerCancel}
-        cleanPrompt={cleanPrompt}
-        cleanerError={cleanerError}
-        clearCleanerError={clearCleanerError}
-        isCleaningPrompt={isCleaningPrompt}
         sessions={sessions}
         activeSessionId={activeSessionId}
         storageScopeId={storageScopeId}

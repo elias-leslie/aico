@@ -10,8 +10,8 @@ import type { CoordinatorFields } from '../utils/coordinator-badge'
  * the Sessions and Panes APIs alike). Ids are Tether's 8-hex session ids; an
  * Own tmux session (`source: 'tmux_external'`) keeps its tmux session name.
  *
- * What the UI may offer comes from `can_*`; `source`, `is_root`, `is_legacy`
- * and `is_external` are informational.
+ * What the UI may offer comes from `can_*`; `source`, `is_root` and
+ * `is_external` are informational.
  */
 export interface ATermSession extends CoordinatorFields {
   id: string
@@ -38,10 +38,8 @@ export interface ATermSession extends CoordinatorFields {
   source?: string | null
   /** The app that created the session in Tether ('a-term', 'aico', ...). */
   origin?: string | null
-  /** Tether status: running | pending | uncertain | legacy. */
+  /** Tether status: running | pending | uncertain. */
   status?: string | null
-  /** A Tether session an older Tether started (status `legacy`): never respawned. */
-  is_legacy?: boolean
   generation?: string | null
   /** The A-Term pane this session belongs to, if any. */
   pane_id?: string | null

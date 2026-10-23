@@ -28,7 +28,6 @@ interface ATermFileSectionProps {
   onSlotClose: (slot: ATermSlot | PaneSlot) => void
   onSlotCloseSession: (slot: ATermSlot | PaneSlot) => void
   onSlotRefresh?: (slot: ATermSlot | PaneSlot) => void
-  onSlotClean: (slot: ATermSlot | PaneSlot) => void
   canAddPane: boolean
   handleOpenSettings: () => void
   handleOpenATermManager?: () => void
@@ -75,7 +74,6 @@ export function ATermFileSection({
   onSlotClose,
   onSlotCloseSession,
   onSlotRefresh,
-  onSlotClean,
   canAddPane,
   handleOpenSettings,
   handleOpenATermManager,
@@ -146,7 +144,6 @@ export function ATermFileSection({
           onSlotClose={onSlotClose}
           onSlotCloseSession={onSlotCloseSession}
           onSlotRefresh={onSlotRefresh}
-          onSlotClean={onSlotClean}
           canAddPane={canAddPane}
           onShowSettings={handleOpenSettings}
           onShowATermManager={handleOpenATermManager}

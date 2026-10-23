@@ -8,7 +8,7 @@
  *
  * Every Slot is built by `paneToSlot` or `sessionToSlot`. What a Slot may do
  * (`can`) comes from the backend's capability flags; the UI never derives a
- * permission from `source`, `is_root` or `is_legacy`.
+ * permission from `source` or `is_root`.
  */
 
 import type { ATermPane } from '@/lib/hooks/use-a-term-panes'

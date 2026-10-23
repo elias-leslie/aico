@@ -1,12 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getAgentHubServerUrl } from './agent-hub'
 
-export const AGENT_HUB_PROXY_PASSTHROUGH_HEADERS = [
-  'content-type',
-  'x-source-client',
-  'x-source-path',
-] as const
-
 function getSafeAgentHubErrorDetail(status: number): string {
   if (status === 400 || status === 422) {
     return 'Agent Hub rejected the request'
@@ -33,8 +27,8 @@ export async function proxyAgentHubRequest({
   body,
   headers,
 }: {
-  method: 'GET' | 'POST'
-  path: '/api/models' | '/api/complete'
+  method: 'GET'
+  path: '/api/models'
   body?: string
   headers?: HeadersInit
 }): Promise<NextResponse> {
@@ -46,8 +40,8 @@ export async function proxyAgentHubRequest({
     )
   }
 
-  // Agent Hub refuses /api/complete from a caller that does not name its
-  // registered client (AGENT_HUB_CLIENT_ID) and request source.
+  // Agent Hub logs the request source and the registered client
+  // (AGENT_HUB_CLIENT_ID) when one is configured.
   const upstreamHeaders = new Headers(headers)
   upstreamHeaders.set('X-Request-Source', 'a-term')
   const clientId = process.env.AGENT_HUB_CLIENT_ID?.trim()

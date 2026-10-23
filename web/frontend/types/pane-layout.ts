@@ -40,7 +40,6 @@ export interface ResizablePaneLayoutProps {
   onRefresh?: (slot: ATermSlot | PaneSlot) => void
   onUpload?: (sessionId?: string) => void
   onFilePaste?: (file: File, sessionId?: string) => void | Promise<void>
-  onClean?: (slot: ATermSlot | PaneSlot) => void
   onOpenModal?: () => void
   canAddPane?: boolean
   onModeSwitch?: (

@@ -221,7 +221,6 @@ FRONTEND_FIXTURE = Path(__file__).resolve().parents[1] / "frontend" / "test-stub
 FRONTEND_FIXTURE_FACTS = {
     "tether": TETHER,
     "root": TETHER_ROOT,
-    "tether_legacy": TETHER_STATUS_LEGACY,
     "own_tmux": SessionFacts("tmux_external", mode="codex"),
 }
 

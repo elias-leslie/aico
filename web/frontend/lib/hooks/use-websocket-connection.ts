@@ -218,18 +218,10 @@ export function openWebSocketConnection(
         return
       }
 
-      // Text protocol (legacy / backward compat)
+      // Text frames carry only control messages (the transport notice);
+      // output always arrives binary.
       if (typeof event.data === 'string') {
-        if (event.data.startsWith('{')) {
-          if (dispatchControlMessage(event.data, callbacks)) {
-            return
-          }
-        }
-        onMessage?.(event.data)
-      } else if (event.data instanceof Blob) {
-        event.data.text().then((text) => {
-          if (mountedRef.current && wsRef.current === ws) onMessage?.(text)
-        })
+        dispatchControlMessage(event.data, callbacks)
       }
     } catch (error) {
       console.error('Error handling WebSocket message:', error)

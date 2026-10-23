@@ -14,7 +14,6 @@ describe('PaneOverflowMenu', () => {
         onSettings={vi.fn()}
         onUpload={vi.fn()}
         onVoice={vi.fn()}
-        onClean={vi.fn()}
         onResetAll={vi.fn()}
         onCloseAll={vi.fn()}
       />,
@@ -43,9 +42,6 @@ describe('PaneOverflowMenu', () => {
     ).toBeInTheDocument()
     expect(
       screen.getByRole('menuitem', { name: 'Refresh Layout' }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole('menuitem', { name: 'Clean Prompt' }),
     ).toBeInTheDocument()
     expect(
       screen.getByRole('menuitem', { name: 'Upload File' }),

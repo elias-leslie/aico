@@ -59,9 +59,6 @@ describe('useATermActionHandlers', () => {
       useATermActionHandlers({
         aTermRefs,
         activeSessionId: 'native-session',
-        showCleaner: false,
-        setShowCleaner: vi.fn(),
-        setCleanerRawPrompt: vi.fn(),
         setShowVoice: vi.fn(),
         voiceStartListening: vi.fn(),
         voiceStopListening: vi.fn(),
@@ -117,9 +114,6 @@ describe('useATermActionHandlers', () => {
       useATermActionHandlers({
         aTermRefs,
         activeSessionId: 'native-session',
-        showCleaner: false,
-        setShowCleaner: vi.fn(),
-        setCleanerRawPrompt: vi.fn(),
         setShowVoice: vi.fn(),
         voiceStartListening: vi.fn(),
         voiceStopListening: vi.fn(),

@@ -24,7 +24,6 @@ import { useATermSlotHandlers } from './use-a-term-slot-handlers'
 import { useATermTabsState } from './use-a-term-tabs-state'
 import { useDetachedPaneWindow } from './use-detached-pane-window'
 import { useLayoutPersistence } from './use-layout-persistence'
-import { usePromptCleaner } from './use-prompt-cleaner'
 
 interface UseATermOrchestrationProps {
   projectId?: string
@@ -84,9 +83,6 @@ export function useATermOrchestration({
   const effectiveStorageScopeId =
     aTermState.storageScopeId ?? detachedWindow.storageScopeId
 
-  // Prompt cleaner state
-  const [showCleaner, setShowCleaner] = useState(false)
-  const [cleanerRawPrompt, setCleanerRawPrompt] = useState('')
   const [keyboardHelpState, setKeyboardHelpState] = useState(false)
   const visibleDetachedPaneIds = useMemo(
     () => new Set(aTermSlots.filter(isPaneSlot).map((slot) => slot.paneId)),
@@ -147,7 +143,6 @@ export function useATermOrchestration({
 
   // Slot handlers
   const slotHandlers = useATermSlotHandlers({
-    aTermRefs,
     switchToSession,
     activeSessionId,
     reset,
@@ -157,8 +152,6 @@ export function useATermOrchestration({
     detachedPaneId,
     detachPane,
     removePane,
-    setShowCleaner,
-    setCleanerRawPrompt,
     sessions,
     visibleSlots: aTermSlots,
     handleProjectModeChange,
@@ -182,19 +175,10 @@ export function useATermOrchestration({
     onSlotClose: slotHandlers.handleSlotClose,
   })
 
-  // File upload, prompt cleaner, and voice input
-  const {
-    cleanPrompt,
-    error: cleanerError,
-    clearError: clearCleanerError,
-    isLoading: isCleaningPrompt,
-  } = usePromptCleaner()
+  // File upload and voice input
   const actionHandlers = useATermActionHandlers({
     aTermRefs,
     activeSessionId,
-    showCleaner,
-    setShowCleaner,
-    setCleanerRawPrompt,
     setShowVoice,
     voiceStartListening: transcription.startListening,
     voiceStopListening: transcription.stopListening,
@@ -408,14 +392,6 @@ export function useATermOrchestration({
 
     // Action handlers
     ...actionHandlers,
-    cleanPrompt,
-    cleanerError,
-    clearCleanerError,
-    isCleaningPrompt,
-
-    // Prompt cleaner state
-    showCleaner,
-    cleanerRawPrompt,
 
     // Voice input state
     showVoice,

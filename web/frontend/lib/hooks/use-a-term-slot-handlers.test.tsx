@@ -66,7 +66,6 @@ describe('useATermSlotHandlers', () => {
     const { result } = renderHook(
       () =>
         useATermSlotHandlers({
-          aTermRefs: { current: new Map() },
           switchToSession,
           activeSessionId: 'session-a',
           reset: vi.fn(),
@@ -75,8 +74,6 @@ describe('useATermSlotHandlers', () => {
           detachExternalSession: vi.fn(),
           detachPane,
           removePane: vi.fn(),
-          setShowCleaner: vi.fn(),
-          setCleanerRawPrompt: vi.fn(),
           sessions: [],
           visibleSlots: [slot, otherSlot],
           handleProjectModeChange: vi.fn(),
@@ -119,14 +116,11 @@ describe('useATermSlotHandlers', () => {
       const { result } = renderHook(
         () =>
           useATermSlotHandlers({
-            aTermRefs: { current: new Map() },
             switchToSession,
             activeSessionId: 'session-a',
             reset,
             disableProject: vi.fn(),
             remove: vi.fn(),
-            setShowCleaner: vi.fn(),
-            setCleanerRawPrompt: vi.fn(),
             sessions: [],
             visibleSlots: [resetSlot],
             handleProjectModeChange: vi.fn(),
