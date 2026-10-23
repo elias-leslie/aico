@@ -166,7 +166,7 @@ export function useATermPanes() {
     queryFn: api.fetchPanes,
     refetchInterval: SESSION_REFRESH_MS,
   })
-  const { data: detachedData } = useQuery({
+  const { data: detachedData, isLoading: detachedLoading } = useQuery({
     queryKey: DETACHED_PANES_QUERY_KEY,
     queryFn: api.fetchDetachedPanes,
     refetchInterval: SESSION_REFRESH_MS,
@@ -242,9 +242,8 @@ export function useATermPanes() {
   return {
     panes,
     detachedPanes,
-    isLoading,
-    detachedLoadedOnce: detachedData !== undefined,
-    hasLoadedOnce: data !== undefined,
+    // New sessions are detached panes: a link to one waits for both lists.
+    isLoading: isLoading || detachedLoading,
     isError,
     error,
     createProjectPane,

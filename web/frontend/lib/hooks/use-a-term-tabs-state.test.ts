@@ -857,4 +857,53 @@ describe('useATermTabsState', () => {
       { detached: true },
     )
   })
+
+  it('keeps a linked session while the detached sessions are still loading', () => {
+    const switchToSession = vi.fn()
+    const ownPane = {
+      id: 'pane-own',
+      pane_type: 'project',
+      project_id: 'project-a',
+      pane_order: 0,
+      pane_name: 'Project A',
+      active_mode: 'shell',
+      is_detached: false,
+      created_at: null,
+      sessions: [{ ...buildActiveSessionState().sessions[0] }],
+      width_percent: 100,
+      height_percent: 100,
+      grid_row: 0,
+      grid_col: 0,
+    }
+    const linked = {
+      ...ownPane,
+      id: 'pane-linked',
+      is_detached: true,
+      sessions: [
+        { ...buildActiveSessionState().sessions[0], id: 'linked-session' },
+      ],
+    }
+    mockUseActiveSession.mockReturnValue(
+      buildActiveSessionState({
+        activeSessionId: 'linked-session',
+        activeSession: null,
+        switchToSession,
+      }),
+    )
+    let paneState = {
+      ...mockUseATermPanes(),
+      panes: [ownPane],
+      detachedPanes: [],
+      isLoading: true,
+    }
+    mockUseATermPanes.mockImplementation(() => paneState)
+
+    const { result, rerender } = renderHook(() => useATermTabsState({}))
+    expect(switchToSession).not.toHaveBeenCalled()
+
+    paneState = { ...paneState, detachedPanes: [linked], isLoading: false }
+    rerender()
+    expect(result.current.activeSessionId).toBe('linked-session')
+    expect(switchToSession).not.toHaveBeenCalled()
+  })
 })

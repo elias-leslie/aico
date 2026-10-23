@@ -131,7 +131,9 @@ export function useATermTabsState({
     ) {
       return
     }
-    if (activeSessionId || !isLoading) {
+    // Until every list has loaded, the chosen session may simply not be
+    // listed yet.
+    if (!isLoading) {
       switchToSession(resolvedActiveSessionId)
     }
   }, [activeSessionId, isLoading, resolvedActiveSessionId, switchToSession])
