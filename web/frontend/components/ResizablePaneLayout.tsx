@@ -1,0 +1,206 @@
+'use client'
+
+import { useMemo, useRef } from 'react'
+import { LAYOUT_MAX_PANES } from '@/lib/constants/a-term'
+import {
+  useLayoutChangeHandler,
+  useMinSizeCalculator,
+  usePaneRenderer,
+} from '@/lib/hooks/pane-layout'
+import { usePaneLayoutGroups } from '@/lib/hooks/use-pane-layout-groups'
+import { getScopedATermStorageKey } from '@/lib/utils/detached-pane-window'
+import { getSlotPanelId, isPaneSlot } from '@/lib/utils/slot'
+import type { ResizablePaneLayoutProps } from '@/types/pane-layout'
+import {
+  EmptyPaneState,
+  FourPaneLayout,
+  LinearPaneLayout,
+  MainSidePaneLayout,
+  SinglePaneLayout,
+  WidePaneLayout,
+} from './pane-layouts'
+
+/**
+ * Resizable pane layout using react-resizable-panels.
+ * Dynamically adapts between linear and grid layouts:
+ * - 1 pane: full size
+ * - 2-6 panes: side-by-side linear row
+ * - 2-3 panes: stacked linear column
+ * - 4 panes: 2x2 grid
+ * - 5-6 panes: 3x2 grid
+ *
+ * On mobile: always renders a single full-size pane (the active one).
+ */
+export function ResizablePaneLayout(props: ResizablePaneLayoutProps) {
+  const {
+    slots,
+    isMobile,
+    activeSessionId,
+    onLayoutChange,
+    onOpenModal,
+    layoutMode = 'split-horizontal',
+    storageScopeId,
+  } = props
+
+  // Mobile navigates one session at a time; the desktop grid limit must not
+  // truncate its switcher or prevent a later session from becoming active.
+  const displaySlots = useMemo(
+    () => (isMobile ? slots : slots.slice(0, LAYOUT_MAX_PANES)),
+    [slots, isMobile],
+  )
+  const paneCount = displaySlots.length
+  const containerRef = useRef<HTMLDivElement>(null)
+  const layoutStorageKey = getScopedATermStorageKey(
+    `a-term-layout-groups:${layoutMode}:${paneCount}`,
+    storageScopeId,
+  )
+
+  const getMinSizePercent = useMinSizeCalculator(containerRef)
+  const handleLayoutChange = useLayoutChangeHandler(
+    displaySlots,
+    paneCount,
+    onLayoutChange,
+  )
+  const { getGroupSizes, updateGroupSizes } =
+    usePaneLayoutGroups(layoutStorageKey)
+  const renderPane = usePaneRenderer({ props, displaySlots, paneCount })
+  const displaySlotPanelIds = useMemo(
+    () => new Set(displaySlots.map((slot) => getSlotPanelId(slot))),
+    [displaySlots],
+  )
+  const getStoredGroupLayout = useMemo(
+    () => (groupId: string, panelCountForGroup: number, defaultSize: number) =>
+      getGroupSizes(groupId, panelCountForGroup, defaultSize),
+    [getGroupSizes],
+  )
+  const createGroupLayoutChangeHandler = useMemo(
+    () =>
+      (groupId: string, panelIds: string[], persistPaneLayouts = false) =>
+      (layout: Record<string, number>) => {
+        const sizes = panelIds.map(
+          (panelId) => layout[panelId] ?? 100 / panelIds.length,
+        )
+        updateGroupSizes(groupId, sizes)
+
+        if (
+          persistPaneLayouts &&
+          panelIds.every((panelId) => displaySlotPanelIds.has(panelId))
+        ) {
+          handleLayoutChange(layout)
+        }
+      },
+    [displaySlotPanelIds, handleLayoutChange, updateGroupSizes],
+  )
+  const layoutHelpers = {
+    getStoredGroupLayout,
+    createGroupLayoutChangeHandler,
+  }
+
+  if (paneCount === 0) {
+    return (
+      <EmptyPaneState containerRef={containerRef} onOpenModal={onOpenModal} />
+    )
+  }
+
+  // Mobile: always show single full-size pane (the active one)
+  if (isMobile) {
+    const activeSlot = activeSessionId
+      ? displaySlots.find(
+          (s) =>
+            (s.type === 'project' && s.activeSessionId === activeSessionId) ||
+            (s.type === 'adhoc' && s.sessionId === activeSessionId),
+        )
+      : undefined
+
+    // With nothing chosen, show one of the user's own panes. A free-standing
+    // View opens only when chosen: it may be another agent's live session.
+    const slot = activeSlot ?? displaySlots.find(isPaneSlot)
+    if (!slot) {
+      return (
+        <EmptyPaneState containerRef={containerRef} onOpenModal={onOpenModal} />
+      )
+    }
+
+    return (
+      <SinglePaneLayout
+        containerRef={containerRef}
+        slot={slot}
+        renderPane={renderPane}
+      />
+    )
+  }
+
+  if (paneCount === 1) {
+    return (
+      <SinglePaneLayout
+        containerRef={containerRef}
+        slot={displaySlots[0]}
+        renderPane={renderPane}
+      />
+    )
+  }
+
+  if (paneCount <= 3 && layoutMode === 'split-main-side' && paneCount === 3) {
+    return (
+      <MainSidePaneLayout
+        containerRef={containerRef}
+        displaySlots={displaySlots}
+        getMinSizePercent={getMinSizePercent}
+        {...layoutHelpers}
+        renderPane={renderPane}
+      />
+    )
+  }
+
+  if (paneCount <= 3) {
+    return (
+      <LinearPaneLayout
+        containerRef={containerRef}
+        displaySlots={displaySlots}
+        getMinSizePercent={getMinSizePercent}
+        {...layoutHelpers}
+        renderPane={renderPane}
+        orientation={
+          layoutMode === 'split-vertical' ? 'vertical' : 'horizontal'
+        }
+      />
+    )
+  }
+
+  if (layoutMode === 'split-horizontal') {
+    return (
+      <LinearPaneLayout
+        containerRef={containerRef}
+        displaySlots={displaySlots}
+        getMinSizePercent={getMinSizePercent}
+        {...layoutHelpers}
+        renderPane={renderPane}
+        orientation="horizontal"
+      />
+    )
+  }
+
+  if (paneCount <= 4) {
+    return (
+      <FourPaneLayout
+        containerRef={containerRef}
+        displaySlots={displaySlots}
+        getMinSizePercent={getMinSizePercent}
+        {...layoutHelpers}
+        renderPane={renderPane}
+      />
+    )
+  }
+
+  return (
+    <WidePaneLayout
+      containerRef={containerRef}
+      displaySlots={displaySlots}
+      getMinSizePercent={getMinSizePercent}
+      {...layoutHelpers}
+      renderPane={renderPane}
+    />
+  )
+}
+
+export type { PaneLayout, ResizablePaneLayoutProps } from '@/types/pane-layout'

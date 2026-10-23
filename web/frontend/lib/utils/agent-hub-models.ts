@@ -1,0 +1,107 @@
+'use client'
+
+import { getAgentHubProxyUrl } from './agent-hub-proxy'
+
+export interface AgentHubCatalogModel {
+  id: string
+  name: string
+  alias: string
+  provider: string
+  speed_tier?: string
+}
+
+export interface ClaudeModelOption {
+  id: string
+  label: string
+  command: string
+}
+
+interface AgentHubModelsResponse {
+  models: AgentHubCatalogModel[]
+}
+
+const CLAUDE_MODEL_ALIASES = ['opus', 'sonnet', 'haiku'] as const
+const PROMPT_CLEANER_AGENT_SLUG = 'prompt-builder'
+
+let cachedModels: AgentHubCatalogModel[] | null = null
+let fetchPromise: Promise<AgentHubCatalogModel[]> | null = null
+
+function formatClaudeLabel(model: AgentHubCatalogModel): string {
+  return capitalize(model.alias)
+}
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1)
+}
+
+function getFallbackClaudeModelOptions(): ClaudeModelOption[] {
+  return CLAUDE_MODEL_ALIASES.map((alias) => ({
+    id: alias,
+    label: capitalize(alias),
+    command: `/model ${alias}\r`,
+  }))
+}
+
+async function fetchModelsFromApi(): Promise<AgentHubCatalogModel[]> {
+  try {
+    const response = await fetch(getAgentHubProxyUrl('models'))
+    // 503: the server has no Agent Hub configured; use the built-in aliases.
+    if (response.status === 503) return []
+    if (!response.ok)
+      throw new Error(`Failed to fetch models: ${response.status}`)
+    const data: AgentHubModelsResponse = await response.json()
+    return data.models || []
+  } catch (error) {
+    console.error('Failed to fetch agent hub models', error)
+    return []
+  }
+}
+
+export async function getAgentHubModels(): Promise<AgentHubCatalogModel[]> {
+  if (cachedModels) return cachedModels
+  if (!fetchPromise) {
+    fetchPromise = fetchModelsFromApi().then((models) => {
+      cachedModels = models
+      fetchPromise = null
+      return models
+    })
+  }
+  return fetchPromise
+}
+
+export async function getClaudeModelOptions(): Promise<ClaudeModelOption[]> {
+  const models = await getAgentHubModels()
+  const options = models
+    .filter(
+      (model) =>
+        model.provider === 'claude' &&
+        CLAUDE_MODEL_ALIASES.includes(
+          model.alias as (typeof CLAUDE_MODEL_ALIASES)[number],
+        ),
+    )
+    .sort(
+      (a, b) =>
+        CLAUDE_MODEL_ALIASES.indexOf(
+          a.alias as (typeof CLAUDE_MODEL_ALIASES)[number],
+        ) -
+        CLAUDE_MODEL_ALIASES.indexOf(
+          b.alias as (typeof CLAUDE_MODEL_ALIASES)[number],
+        ),
+    )
+    .map((model) => ({
+      id: model.id,
+      label: formatClaudeLabel(model),
+      command: `/model ${model.alias}\r`,
+    }))
+
+  return options.length > 0 ? options : getFallbackClaudeModelOptions()
+}
+
+export function getPromptCleanerAgentSlug(): string {
+  return PROMPT_CLEANER_AGENT_SLUG
+}
+
+export function clearAgentHubModelCache(): void {
+  cachedModels = null
+  fetchPromise = null
+}

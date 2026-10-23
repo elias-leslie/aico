@@ -1,0 +1,2402 @@
+{
+  "captured_at": "3c6422e17308506b96fc84b1e4c11a514c055022",
+  "components": {
+    "schemas": {
+      "ATermSessionListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ATermSessionResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "ATermSessionListResponse",
+        "type": "object"
+      },
+      "ATermSessionResponse": {
+        "description": "A-Term session response model.",
+        "properties": {
+          "activity": {
+            "default": "unknown",
+            "title": "Activity",
+            "type": "string"
+          },
+          "activity_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activity At"
+          },
+          "activity_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activity Detail"
+          },
+          "activity_previous": {
+            "default": "unknown",
+            "title": "Activity Previous",
+            "type": "string"
+          },
+          "agent_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent State"
+          },
+          "badge": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Badge"
+          },
+          "claude_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claude State"
+          },
+          "coordinator_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coordinator Id"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "display_order": {
+            "default": 0,
+            "title": "Display Order",
+            "type": "integer"
+          },
+          "generation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generation"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "is_alive": {
+            "default": true,
+            "title": "Is Alive",
+            "type": "boolean"
+          },
+          "is_coordinator": {
+            "default": false,
+            "title": "Is Coordinator",
+            "type": "boolean"
+          },
+          "is_external": {
+            "default": false,
+            "title": "Is External",
+            "type": "boolean"
+          },
+          "is_legacy": {
+            "default": false,
+            "title": "Is Legacy",
+            "type": "boolean"
+          },
+          "is_root": {
+            "default": false,
+            "title": "Is Root",
+            "type": "boolean"
+          },
+          "last_accessed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Accessed At"
+          },
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "origin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Origin"
+          },
+          "pane_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pane Id"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "session_number": {
+            "default": 1,
+            "title": "Session Number",
+            "type": "integer"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "task": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task"
+          },
+          "tmux_pane_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tmux Pane Id"
+          },
+          "tmux_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tmux Session Id"
+          },
+          "tmux_session_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tmux Session Name"
+          },
+          "tmux_socket": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tmux Socket"
+          },
+          "tmux_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tmux Source"
+          },
+          "tmux_source_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tmux Source Label"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          },
+          "working_dir": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Working Dir"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "mode"
+        ],
+        "title": "ATermSessionResponse",
+        "type": "object"
+      },
+      "AgentStateResponse": {
+        "description": "Agent state for a session.",
+        "properties": {
+          "agent_state": {
+            "enum": [
+              "not_started",
+              "starting",
+              "running",
+              "stopped",
+              "error"
+            ],
+            "title": "Agent State",
+            "type": "string"
+          },
+          "claude_state": {
+            "enum": [
+              "not_started",
+              "starting",
+              "running",
+              "stopped",
+              "error"
+            ],
+            "title": "Claude State",
+            "type": "string"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "agent_state",
+          "claude_state"
+        ],
+        "title": "AgentStateResponse",
+        "type": "object"
+      },
+      "AttachPaneRequest": {
+        "description": "Request to attach a detached pane into a specific slot.",
+        "properties": {
+          "grid_col": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grid Col"
+          },
+          "grid_row": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grid Row"
+          },
+          "height_percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Height Percent"
+          },
+          "pane_order": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pane Order"
+          },
+          "width_percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Width Percent"
+          }
+        },
+        "title": "AttachPaneRequest",
+        "type": "object"
+      },
+      "BulkLayoutUpdateRequest": {
+        "description": "Request to update layout for all panes at once.",
+        "properties": {
+          "layouts": {
+            "items": {
+              "$ref": "#/components/schemas/PaneLayoutItem"
+            },
+            "title": "Layouts",
+            "type": "array"
+          }
+        },
+        "required": [
+          "layouts"
+        ],
+        "title": "BulkLayoutUpdateRequest",
+        "type": "object"
+      },
+      "CreatePaneRequest": {
+        "description": "Request to create a a_term pane.",
+        "properties": {
+          "agent_tool_slug": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[a-z0-9_-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Tool Slug"
+          },
+          "detached": {
+            "default": false,
+            "title": "Detached",
+            "type": "boolean"
+          },
+          "grid_col": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grid Col"
+          },
+          "grid_row": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grid Row"
+          },
+          "height_percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Height Percent"
+          },
+          "pane_name": {
+            "title": "Pane Name",
+            "type": "string"
+          },
+          "pane_order": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pane Order"
+          },
+          "pane_type": {
+            "enum": [
+              "project",
+              "adhoc"
+            ],
+            "title": "Pane Type",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "width_percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Width Percent"
+          },
+          "working_dir": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Working Dir"
+          }
+        },
+        "required": [
+          "pane_type",
+          "pane_name"
+        ],
+        "title": "CreatePaneRequest",
+        "type": "object"
+      },
+      "FileContentResponse": {
+        "properties": {
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          },
+          "extension": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extension"
+          },
+          "is_binary": {
+            "title": "Is Binary",
+            "type": "boolean"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "lines": {
+            "title": "Lines",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "path",
+          "name",
+          "content",
+          "size",
+          "lines",
+          "extension",
+          "is_binary",
+          "language",
+          "truncated"
+        ],
+        "title": "FileContentResponse",
+        "type": "object"
+      },
+      "FileTreeEntryResponse": {
+        "properties": {
+          "children_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Children Count"
+          },
+          "extension": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extension"
+          },
+          "is_directory": {
+            "title": "Is Directory",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          }
+        },
+        "required": [
+          "name",
+          "path",
+          "is_directory"
+        ],
+        "title": "FileTreeEntryResponse",
+        "type": "object"
+      },
+      "FileTreeResponse": {
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/FileTreeEntryResponse"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "entries",
+          "path",
+          "total"
+        ],
+        "title": "FileTreeResponse",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "PaneLayoutItem": {
+        "description": "Single pane layout for bulk update.",
+        "properties": {
+          "grid_col": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grid Col"
+          },
+          "grid_row": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grid Row"
+          },
+          "height_percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Height Percent"
+          },
+          "pane_id": {
+            "title": "Pane Id",
+            "type": "string"
+          },
+          "width_percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Width Percent"
+          }
+        },
+        "required": [
+          "pane_id"
+        ],
+        "title": "PaneLayoutItem",
+        "type": "object"
+      },
+      "PaneListResponse": {
+        "description": "Response for listing a_term panes.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PaneResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "max_panes": {
+            "title": "Max Panes",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "max_panes"
+        ],
+        "title": "PaneListResponse",
+        "type": "object"
+      },
+      "PaneResponse": {
+        "description": "A-Term pane response model.",
+        "properties": {
+          "active_mode": {
+            "title": "Active Mode",
+            "type": "string"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "grid_col": {
+            "default": 0,
+            "title": "Grid Col",
+            "type": "integer"
+          },
+          "grid_row": {
+            "default": 0,
+            "title": "Grid Row",
+            "type": "integer"
+          },
+          "height_percent": {
+            "default": 100.0,
+            "title": "Height Percent",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "is_detached": {
+            "default": false,
+            "title": "Is Detached",
+            "type": "boolean"
+          },
+          "pane_name": {
+            "title": "Pane Name",
+            "type": "string"
+          },
+          "pane_order": {
+            "title": "Pane Order",
+            "type": "integer"
+          },
+          "pane_type": {
+            "title": "Pane Type",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "sessions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SessionInPaneResponse"
+            },
+            "title": "Sessions",
+            "type": "array"
+          },
+          "width_percent": {
+            "default": 100.0,
+            "title": "Width Percent",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "pane_type",
+          "project_id",
+          "pane_order",
+          "pane_name",
+          "active_mode",
+          "created_at"
+        ],
+        "title": "PaneResponse",
+        "type": "object"
+      },
+      "SessionInPaneResponse": {
+        "description": "Session data within a pane response.",
+        "properties": {
+          "agent_state": {
+            "default": "not_started",
+            "title": "Agent State",
+            "type": "string"
+          },
+          "badge": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Badge"
+          },
+          "claude_state": {
+            "default": "not_started",
+            "title": "Claude State",
+            "type": "string"
+          },
+          "coordinator_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coordinator Id"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "is_alive": {
+            "title": "Is Alive",
+            "type": "boolean"
+          },
+          "is_coordinator": {
+            "default": false,
+            "title": "Is Coordinator",
+            "type": "boolean"
+          },
+          "is_legacy": {
+            "default": false,
+            "title": "Is Legacy",
+            "type": "boolean"
+          },
+          "is_root": {
+            "default": false,
+            "title": "Is Root",
+            "type": "boolean"
+          },
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "origin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Origin"
+          },
+          "session_number": {
+            "title": "Session Number",
+            "type": "integer"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "task": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task"
+          },
+          "working_dir": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Working Dir"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "mode",
+          "session_number",
+          "is_alive",
+          "working_dir"
+        ],
+        "title": "SessionInPaneResponse",
+        "type": "object"
+      },
+      "StartAgentResponse": {
+        "description": "Result of an explicit agent start.",
+        "properties": {
+          "agent_state": {
+            "enum": [
+              "not_started",
+              "starting",
+              "running",
+              "stopped",
+              "error"
+            ],
+            "title": "Agent State",
+            "type": "string"
+          },
+          "claude_state": {
+            "enum": [
+              "not_started",
+              "starting",
+              "running",
+              "stopped",
+              "error"
+            ],
+            "title": "Claude State",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "started": {
+            "title": "Started",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "session_id",
+          "started",
+          "message",
+          "agent_state",
+          "claude_state"
+        ],
+        "title": "StartAgentResponse",
+        "type": "object"
+      },
+      "SwapPanesRequest": {
+        "description": "Request to swap two pane positions.",
+        "properties": {
+          "pane_id_a": {
+            "title": "Pane Id A",
+            "type": "string"
+          },
+          "pane_id_b": {
+            "title": "Pane Id B",
+            "type": "string"
+          }
+        },
+        "required": [
+          "pane_id_a",
+          "pane_id_b"
+        ],
+        "title": "SwapPanesRequest",
+        "type": "object"
+      },
+      "SwitchAgentToolRequest": {
+        "description": "Request to switch the agent tool on a pane.",
+        "properties": {
+          "agent_tool_slug": {
+            "minLength": 1,
+            "pattern": "^[a-z0-9_-]+$",
+            "title": "Agent Tool Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_tool_slug"
+        ],
+        "title": "SwitchAgentToolRequest",
+        "type": "object"
+      },
+      "UpdatePaneLayoutRequest": {
+        "description": "Request to update a single pane's layout.",
+        "properties": {
+          "grid_col": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grid Col"
+          },
+          "grid_row": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grid Row"
+          },
+          "height_percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Height Percent"
+          },
+          "width_percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Width Percent"
+          }
+        },
+        "title": "UpdatePaneLayoutRequest",
+        "type": "object"
+      },
+      "UpdatePaneOrderRequest": {
+        "description": "Request to update pane ordering.",
+        "properties": {
+          "pane_orders": {
+            "items": {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "type": "array"
+            },
+            "title": "Pane Orders",
+            "type": "array"
+          }
+        },
+        "required": [
+          "pane_orders"
+        ],
+        "title": "UpdatePaneOrderRequest",
+        "type": "object"
+      },
+      "UpdatePaneRequest": {
+        "description": "Request to update a a_term pane.",
+        "properties": {
+          "active_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Mode"
+          },
+          "pane_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pane Name"
+          }
+        },
+        "title": "UpdatePaneRequest",
+        "type": "object"
+      },
+      "UpdateSessionRequest": {
+        "properties": {
+          "display_order": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Order"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "title": "UpdateSessionRequest",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "paths": {
+    "/api/a-term/layout": {
+      "put": {
+        "description": "Bulk update layout for all panes at once.",
+        "operationId": "update_all_pane_layouts_api_a_term_layout_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkLayoutUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PaneResponse"
+                  },
+                  "title": "Response Update All Pane Layouts Api A Term Layout Put",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update All Pane Layouts",
+        "tags": [
+          "A-Term Panes"
+        ]
+      }
+    },
+    "/api/a-term/panes": {
+      "get": {
+        "description": "List all a_term panes with their sessions.",
+        "operationId": "list_panes_api_a_term_panes_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaneListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Panes",
+        "tags": [
+          "A-Term Panes"
+        ]
+      },
+      "post": {
+        "description": "Create a new a_term pane with sessions.\n\nFor project panes: creates shell + default agent sessions.\nFor adhoc panes: creates shell session only.",
+        "operationId": "create_pane_api_a_term_panes_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePaneRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaneResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Pane",
+        "tags": [
+          "A-Term Panes"
+        ]
+      }
+    },
+    "/api/a-term/panes/count": {
+      "get": {
+        "description": "Get current pane count and max limit.",
+        "operationId": "get_pane_count_api_a_term_panes_count_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Pane Count Api A Term Panes Count Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Pane Count",
+        "tags": [
+          "A-Term Panes"
+        ]
+      }
+    },
+    "/api/a-term/panes/detached": {
+      "get": {
+        "description": "List detached panes that can be reattached.",
+        "operationId": "list_detached_panes_api_a_term_panes_detached_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaneListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Detached Panes",
+        "tags": [
+          "A-Term Panes"
+        ]
+      }
+    },
+    "/api/a-term/panes/order": {
+      "put": {
+        "description": "Batch update pane ordering.",
+        "operationId": "update_pane_order_api_a_term_panes_order_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePaneOrderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update Pane Order Api A Term Panes Order Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Pane Order",
+        "tags": [
+          "A-Term Panes"
+        ]
+      }
+    },
+    "/api/a-term/panes/swap": {
+      "post": {
+        "description": "Swap positions of two panes.",
+        "operationId": "swap_panes_api_a_term_panes_swap_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SwapPanesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Swap Panes Api A Term Panes Swap Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Swap Panes",
+        "tags": [
+          "A-Term Panes"
+        ]
+      }
+    },
+    "/api/a-term/panes/{pane_id}": {
+      "delete": {
+        "description": "Delete a pane: End its sessions in Tether, then remove the view.",
+        "operationId": "delete_pane_api_a_term_panes__pane_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pane_id",
+            "required": true,
+            "schema": {
+              "title": "Pane Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Delete Pane Api A Term Panes  Pane Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Pane",
+        "tags": [
+          "A-Term Panes"
+        ]
+      },
+      "get": {
+        "description": "Get a single a_term pane with its sessions.",
+        "operationId": "get_pane_api_a_term_panes__pane_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pane_id",
+            "required": true,
+            "schema": {
+              "title": "Pane Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaneResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Pane",
+        "tags": [
+          "A-Term Panes"
+        ]
+      },
+      "patch": {
+        "description": "Update a_term pane metadata (pane_name, active_mode).",
+        "operationId": "update_pane_api_a_term_panes__pane_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pane_id",
+            "required": true,
+            "schema": {
+              "title": "Pane Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePaneRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaneResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Pane",
+        "tags": [
+          "A-Term Panes"
+        ]
+      }
+    },
+    "/api/a-term/panes/{pane_id}/agent-tool": {
+      "put": {
+        "description": "Switch the agent tool on a pane.\n\nFinds the agent session on the pane, kills its tmux session,\nupdates the session mode, recreates tmux, and returns the updated pane.",
+        "operationId": "switch_agent_tool_api_a_term_panes__pane_id__agent_tool_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pane_id",
+            "required": true,
+            "schema": {
+              "title": "Pane Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SwitchAgentToolRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaneResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Switch Agent Tool",
+        "tags": [
+          "A-Term Panes"
+        ]
+      }
+    },
+    "/api/a-term/panes/{pane_id}/attach": {
+      "post": {
+        "description": "Attach a detached pane back into the visible layout.",
+        "operationId": "attach_pane_api_a_term_panes__pane_id__attach_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pane_id",
+            "required": true,
+            "schema": {
+              "title": "Pane Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/AttachPaneRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Request"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaneResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Attach Pane",
+        "tags": [
+          "A-Term Panes"
+        ]
+      }
+    },
+    "/api/a-term/panes/{pane_id}/detach": {
+      "post": {
+        "description": "Detach a pane from the visible layout while preserving its sessions.",
+        "operationId": "detach_pane_api_a_term_panes__pane_id__detach_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pane_id",
+            "required": true,
+            "schema": {
+              "title": "Pane Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaneResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Detach Pane",
+        "tags": [
+          "A-Term Panes"
+        ]
+      }
+    },
+    "/api/a-term/panes/{pane_id}/files/content": {
+      "get": {
+        "operationId": "get_pane_file_content_api_a_term_panes__pane_id__files_content_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pane_id",
+            "required": true,
+            "schema": {
+              "title": "Pane Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "title": "Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileContentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Pane File Content",
+        "tags": [
+          "A-Term Files"
+        ]
+      }
+    },
+    "/api/a-term/panes/{pane_id}/files/tree": {
+      "get": {
+        "operationId": "get_pane_file_tree_api_a_term_panes__pane_id__files_tree_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pane_id",
+            "required": true,
+            "schema": {
+              "title": "Pane Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "path",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileTreeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Pane File Tree",
+        "tags": [
+          "A-Term Files"
+        ]
+      }
+    },
+    "/api/a-term/panes/{pane_id}/layout": {
+      "patch": {
+        "description": "Update a single pane's layout (position and size).",
+        "operationId": "update_pane_layout_api_a_term_panes__pane_id__layout_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pane_id",
+            "required": true,
+            "schema": {
+              "title": "Pane Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePaneLayoutRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaneResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Pane Layout",
+        "tags": [
+          "A-Term Panes"
+        ]
+      }
+    },
+    "/api/a-term/projects/{project_id}/reset": {
+      "post": {
+        "description": "Respawn the project's shell and default-agent sessions (creating missing ones).\n\nUses the project root from Tether's catalog and resets the tab to shell mode.",
+        "operationId": "reset_project_api_a_term_projects__project_id__reset_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Reset Project Api A Term Projects  Project Id  Reset Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reset Project",
+        "tags": [
+          "A-Term Projects"
+        ]
+      }
+    },
+    "/api/a-term/reset-all": {
+      "post": {
+        "description": "Respawn every Tether session A-Term panes show.",
+        "operationId": "reset_all_sessions_api_a_term_reset_all_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Reset All Sessions Api A Term Reset All Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Reset All Sessions",
+        "tags": [
+          "A-Term Sessions"
+        ]
+      }
+    },
+    "/api/a-term/sessions": {
+      "get": {
+        "description": "List live sessions. Sessions shown by a detached pane are hidden unless asked for.",
+        "operationId": "list_sessions_api_a_term_sessions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "include_detached",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Detached",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ATermSessionListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Sessions",
+        "tags": [
+          "A-Term Sessions"
+        ]
+      }
+    },
+    "/api/a-term/sessions/{session_id}": {
+      "delete": {
+        "description": "End a session in Tether. Idempotent: an already-ended session reports success.",
+        "operationId": "delete_session_api_a_term_sessions__session_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Delete Session Api A Term Sessions  Session Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Session",
+        "tags": [
+          "A-Term Sessions"
+        ]
+      },
+      "get": {
+        "operationId": "get_session_api_a_term_sessions__session_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ATermSessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Session",
+        "tags": [
+          "A-Term Sessions"
+        ]
+      },
+      "patch": {
+        "description": "Rename a Tether session (in Tether, visible in Aico too) or reorder its view.",
+        "operationId": "update_session_api_a_term_sessions__session_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSessionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ATermSessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Session",
+        "tags": [
+          "A-Term Sessions"
+        ]
+      }
+    },
+    "/api/a-term/sessions/{session_id}/agent-state": {
+      "get": {
+        "operationId": "get_agent_state_endpoint_api_a_term_sessions__session_id__agent_state_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentStateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Agent State Endpoint",
+        "tags": [
+          "Agent Integration"
+        ]
+      }
+    },
+    "/api/a-term/sessions/{session_id}/reset": {
+      "post": {
+        "description": "Respawn the session's workload: same session and tool, new generation.",
+        "operationId": "reset_session_api_a_term_sessions__session_id__reset_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ATermSessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reset Session",
+        "tags": [
+          "A-Term Sessions"
+        ]
+      }
+    },
+    "/api/a-term/sessions/{session_id}/start-agent": {
+      "post": {
+        "description": "Restart the agent of a session whose workload is not running.",
+        "operationId": "start_agent_api_a_term_sessions__session_id__start_agent_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartAgentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Agent",
+        "tags": [
+          "Agent Integration"
+        ]
+      }
+    }
+  }
+}

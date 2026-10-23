@@ -1,0 +1,395 @@
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { MobileKeyboard } from './MobileKeyboard'
+
+describe('MobileKeyboard native utility controls', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+  })
+
+  it('keeps Shift+Tab available without the custom typing keyboard', () => {
+    const onSend = vi.fn()
+    render(
+      <MobileKeyboard
+        onSend={onSend}
+        sessionId="native-utility-test"
+        onCompose={vi.fn().mockResolvedValue(true)}
+        keyboardMode="native"
+        connectionStatus="connected"
+      />,
+    )
+
+    const shift = screen.getByRole('button', { name: 'Shift' })
+    const tab = screen.getByRole('button', { name: 'Tab' })
+    fireEvent.click(shift)
+    fireEvent.click(tab)
+    fireEvent.click(tab)
+
+    expect(onSend.mock.calls).toEqual([['\x1b[Z'], ['\t']])
+    expect(shift).toHaveAttribute('aria-pressed', 'false')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show arrow keys' }))
+    fireEvent.click(shift)
+    fireEvent.click(screen.getByRole('button', { name: '←' }))
+    expect(onSend).toHaveBeenLastCalledWith('\x1b[1;2D')
+  })
+
+  it('opens one compose field over the terminal, preserves its draft when collapsed, and sends once', async () => {
+    const onCommit = vi.fn().mockResolvedValue(true)
+    const onSend = vi.fn()
+    render(
+      <MobileKeyboard
+        onSend={onSend}
+        sessionId="native-overlay-test"
+        onCompose={onCommit}
+        keyboardMode="native"
+        connectionStatus="connected"
+      />,
+    )
+
+    const field = screen.getByLabelText('Compose') as HTMLTextAreaElement
+    const overlay = field.closest('[hidden]') as HTMLElement
+    expect(overlay).toHaveStyle({ display: 'none' })
+    expect(screen.queryByText('Compose')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show keyboard' }))
+    expect(overlay).not.toHaveAttribute('hidden')
+    expect(field).toHaveFocus()
+
+    fireEvent.change(field, { target: { value: 'please receive the file' } })
+    expect(
+      screen.getByRole('button', { name: /Hide keyboard, unsent draft/ }),
+    ).toBeInTheDocument()
+    fireEvent.click(
+      screen.getByRole('button', { name: /Hide keyboard, unsent draft/ }),
+    )
+    expect(overlay).toHaveStyle({ display: 'none' })
+    expect(field).toHaveValue('please receive the file')
+    expect(onSend).not.toHaveBeenCalled()
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /Show keyboard, unsent draft/ }),
+    )
+    expect(field).toHaveFocus()
+    fireEvent.keyDown(field, { key: 'Enter' })
+
+    await waitFor(() => {
+      expect(onCommit).toHaveBeenCalledTimes(1)
+      expect(onCommit).toHaveBeenCalledWith(
+        'native-overlay-test',
+        'please receive the file',
+        'send',
+      )
+      expect(field).toHaveValue('')
+    })
+  })
+
+  it('keeps the overlay focused while a terminal control acts', () => {
+    const onSend = vi.fn()
+    render(
+      <MobileKeyboard
+        onSend={onSend}
+        sessionId="native-control-test"
+        onCompose={vi.fn().mockResolvedValue(true)}
+        keyboardMode="native"
+        connectionStatus="connected"
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show keyboard' }))
+    const field = screen.getByLabelText('Compose') as HTMLTextAreaElement
+    fireEvent.change(field, { target: { value: 'draft' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Tab' }))
+
+    expect(field).toBeVisible()
+    expect(field).toHaveFocus()
+    expect(onSend).toHaveBeenCalledWith('\t')
+    expect(field).toHaveValue('draft')
+  })
+
+  it('keeps the keyboard and toolbox open across repeated TUI arrows and Enter', () => {
+    const onSend = vi.fn()
+    const onCompose = vi.fn().mockResolvedValue(true)
+    render(
+      <MobileKeyboard
+        onSend={onSend}
+        sessionId="native-tui-navigation"
+        onCompose={onCompose}
+        keyboardMode="native"
+        connectionStatus="connected"
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Show keyboard' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Show arrow keys' }))
+    const field = screen.getByLabelText('Compose')
+    for (const name of ['↓', '↓', '↑', '←', '→', 'Enter']) {
+      const button = screen.getByRole('button', { name })
+      expect(fireEvent.pointerDown(button)).toBe(false)
+      fireEvent.click(button)
+      expect(field).toBeVisible()
+      expect(field).toHaveFocus()
+      expect(
+        screen.getByRole('button', { name: 'Hide arrow keys' }),
+      ).toHaveAttribute('aria-expanded', 'true')
+    }
+    expect(onSend.mock.calls).toEqual([
+      ['\x1b[B'],
+      ['\x1b[B'],
+      ['\x1b[A'],
+      ['\x1b[D'],
+      ['\x1b[C'],
+      ['\r'],
+    ])
+    expect(onCompose).not.toHaveBeenCalled()
+  })
+
+  it('allows Enter with the keyboard hidden and preserves an unsent draft', () => {
+    const onSend = vi.fn()
+    const onCompose = vi.fn().mockResolvedValue(true)
+    render(
+      <MobileKeyboard
+        onSend={onSend}
+        sessionId="native-tui-enter"
+        onCompose={onCompose}
+        keyboardMode="native"
+        connectionStatus="connected"
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Show keyboard' }))
+    const field = screen.getByLabelText('Compose')
+    fireEvent.change(field, { target: { value: 'unsent' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Show arrow keys' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Enter' }))
+    expect(onSend).toHaveBeenCalledExactlyOnceWith('\r')
+    expect(field).toHaveValue('unsent')
+    expect(field).toHaveFocus()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Hide keyboard, unsent draft' }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Show arrow keys' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Enter' }))
+    expect(onSend).toHaveBeenCalledTimes(2)
+    expect(field).not.toBeVisible()
+    expect(onCompose).not.toHaveBeenCalled()
+  })
+
+  it('keeps draft caret edits and TUI navigation open together', () => {
+    const onSend = vi.fn()
+    render(
+      <MobileKeyboard
+        onSend={onSend}
+        sessionId="native-draft-navigation"
+        onCompose={vi.fn().mockResolvedValue(true)}
+        keyboardMode="native"
+        connectionStatus="connected"
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Show keyboard' }))
+    const field = screen.getByLabelText('Compose') as HTMLTextAreaElement
+    fireEvent.change(field, { target: { value: 'draft' } })
+    field.setSelectionRange(5, 5)
+    fireEvent.click(screen.getByRole('button', { name: 'Show arrow keys' }))
+    fireEvent.click(screen.getByRole('button', { name: '←' }))
+    expect(field.selectionStart).toBe(4)
+    fireEvent.click(screen.getByRole('button', { name: '→' }))
+    expect(field.selectionStart).toBe(5)
+    expect(onSend).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '↓' }))
+    fireEvent.click(screen.getByRole('button', { name: '↑' }))
+    expect(onSend.mock.calls).toEqual([['\x1b[B'], ['\x1b[A']])
+    expect(field).toHaveFocus()
+    expect(field).toBeVisible()
+    expect(field).toHaveValue('draft')
+    expect(
+      screen.getByRole('button', { name: 'Hide arrow keys' }),
+    ).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('restores the unsent badge after switching away from and back to a session', () => {
+    const props = {
+      onSend: vi.fn(),
+      onCompose: vi.fn().mockResolvedValue(true),
+      keyboardMode: 'native' as const,
+      connectionStatus: 'connected' as const,
+    }
+    const view = render(<MobileKeyboard {...props} sessionId="saved-one" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Show keyboard' }))
+    fireEvent.change(screen.getByLabelText('Compose'), {
+      target: { value: 'saved text' },
+    })
+
+    view.rerender(<MobileKeyboard {...props} sessionId="saved-two" />)
+    expect(
+      screen.getByRole('button', { name: 'Show keyboard' }),
+    ).toBeInTheDocument()
+    view.rerender(<MobileKeyboard {...props} sessionId="saved-one" />)
+    expect(
+      screen.getByRole('button', { name: 'Show keyboard, unsent draft' }),
+    ).toBeInTheDocument()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Show keyboard, unsent draft' }),
+    )
+    expect(screen.getByLabelText('Compose')).toHaveValue('saved text')
+  })
+
+  it('sends native Ctrl+C without inserting C into the draft', () => {
+    const onSend = vi.fn()
+    render(
+      <MobileKeyboard
+        onSend={onSend}
+        sessionId="native-ctrl-test"
+        onCompose={vi.fn().mockResolvedValue(true)}
+        keyboardMode="native"
+        connectionStatus="connected"
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Show keyboard' }))
+    const field = screen.getByLabelText('Compose') as HTMLTextAreaElement
+    fireEvent.change(field, { target: { value: 'draft' } })
+    fireEvent.click(screen.getByRole('button', { name: 'CTRL' }))
+    fireEvent.change(field, { target: { value: 'draftc' } })
+
+    expect(onSend).toHaveBeenCalledExactlyOnceWith('\x03')
+    expect(field).toHaveValue('draft')
+    expect(screen.getByRole('button', { name: 'CTRL' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+  })
+
+  it('does not interleave a terminal shortcut with a pending compose paste', async () => {
+    let finish!: (success: boolean) => void
+    const onCompose = vi.fn().mockImplementation(
+      () =>
+        new Promise<boolean>((resolve) => {
+          finish = resolve
+        }),
+    )
+    const onSend = vi.fn()
+    const onVoice = vi.fn()
+    render(
+      <MobileKeyboard
+        onSend={onSend}
+        onVoice={onVoice}
+        sessionId="native-busy-test"
+        onCompose={onCompose}
+        keyboardMode="native"
+        connectionStatus="connected"
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Show keyboard' }))
+    const field = screen.getByLabelText('Compose') as HTMLTextAreaElement
+    fireEvent.change(field, { target: { value: 'draft' } })
+    fireEvent.keyDown(field, { key: 'Enter' })
+    fireEvent.click(screen.getByRole('button', { name: 'Tab' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Show arrow keys' }))
+    fireEvent.click(screen.getByRole('button', { name: '↓' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Enter' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Voice input' }))
+    expect(onSend).not.toHaveBeenCalled()
+    expect(onVoice).not.toHaveBeenCalled()
+    expect(field).toBeVisible()
+    finish(false)
+    await waitFor(() => expect(field).toHaveValue('draft'))
+    fireEvent.click(screen.getByRole('button', { name: 'Voice input' }))
+    expect(onVoice).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps pending sends isolated across A to B to A session switches', async () => {
+    const finish = new Map<string, (success: boolean) => void>()
+    const onCompose = vi.fn().mockImplementation(
+      (sessionId: string) =>
+        new Promise<boolean>((resolve) => {
+          finish.set(sessionId, resolve)
+        }),
+    )
+    const onSend = vi.fn()
+    const props = {
+      onSend,
+      onCompose,
+      keyboardMode: 'native' as const,
+      connectionStatus: 'connected' as const,
+    }
+    const view = render(<MobileKeyboard {...props} sessionId="pending-a" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Show keyboard' }))
+    fireEvent.change(screen.getByLabelText('Compose'), {
+      target: { value: 'draft A' },
+    })
+    fireEvent.keyDown(screen.getByLabelText('Compose'), { key: 'Enter' })
+
+    view.rerender(<MobileKeyboard {...props} sessionId="pending-b" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Show keyboard' }))
+    fireEvent.change(screen.getByLabelText('Compose'), {
+      target: { value: 'draft B' },
+    })
+    fireEvent.keyDown(screen.getByLabelText('Compose'), { key: 'Enter' })
+    expect(onCompose).toHaveBeenCalledTimes(2)
+
+    view.rerender(<MobileKeyboard {...props} sessionId="pending-a" />)
+    expect(
+      screen.getByRole('button', { name: 'Show keyboard, unsent draft' }),
+    ).toBeInTheDocument()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Show keyboard, unsent draft' }),
+    )
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled()
+    fireEvent.keyDown(screen.getByLabelText('Compose'), { key: 'Enter' })
+    fireEvent.click(screen.getByRole('button', { name: 'Tab' }))
+    expect(onCompose).toHaveBeenCalledTimes(2)
+    expect(onSend).not.toHaveBeenCalled()
+
+    finish.get('pending-a')?.(true)
+    await waitFor(() =>
+      expect(screen.getByLabelText('Compose')).toHaveValue(''),
+    )
+    view.rerender(<MobileKeyboard {...props} sessionId="pending-b" />)
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Show keyboard, unsent draft' }),
+    )
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Tab' }))
+    expect(onSend).not.toHaveBeenCalled()
+
+    finish.get('pending-b')?.(false)
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled(),
+    )
+    expect(screen.getByLabelText('Compose')).toHaveValue('draft B')
+  })
+
+  it('blocks custom keyboard keys while a native Compose send is pending', async () => {
+    let finish!: (success: boolean) => void
+    const onCompose = vi.fn().mockImplementation(
+      () =>
+        new Promise<boolean>((resolve) => {
+          finish = resolve
+        }),
+    )
+    const onSend = vi.fn()
+    const props = {
+      onSend,
+      sessionId: 'pending-mode-switch',
+      onCompose,
+      connectionStatus: 'connected' as const,
+    }
+    const view = render(<MobileKeyboard {...props} keyboardMode="native" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Show keyboard' }))
+    fireEvent.change(screen.getByLabelText('Compose'), {
+      target: { value: 'draft' },
+    })
+    fireEvent.keyDown(screen.getByLabelText('Compose'), { key: 'Enter' })
+
+    view.rerender(<MobileKeyboard {...props} keyboardMode="custom" />)
+    const letter = screen.getByText('q').closest('.hg-button') as HTMLElement
+    fireEvent.mouseDown(letter)
+    fireEvent.mouseUp(letter)
+    fireEvent.click(letter)
+    expect(onSend).not.toHaveBeenCalled()
+
+    await act(async () => finish(false))
+    fireEvent.mouseDown(letter)
+    fireEvent.mouseUp(letter)
+    fireEvent.click(letter)
+    expect(onSend).toHaveBeenCalledWith('q')
+  })
+})

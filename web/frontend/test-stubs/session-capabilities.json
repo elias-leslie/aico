@@ -1,0 +1,22 @@
+{
+  "tether": {
+    "can_rename": true,
+    "can_respawn": true,
+    "can_end": true
+  },
+  "root": {
+    "can_rename": true,
+    "can_respawn": false,
+    "can_end": true
+  },
+  "tether_legacy": {
+    "can_rename": true,
+    "can_respawn": false,
+    "can_end": true
+  },
+  "own_tmux": {
+    "can_rename": false,
+    "can_respawn": false,
+    "can_end": false
+  }
+}

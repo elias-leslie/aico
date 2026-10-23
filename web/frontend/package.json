@@ -1,0 +1,51 @@
+{
+  "name": "a-term-frontend",
+  "version": "0.2.11",
+  "private": true,
+  "license": "Apache-2.0",
+  "funding": "https://github.com/sponsors/elias-leslie",
+  "scripts": {
+    "dev": "next dev --turbopack --port 3002",
+    "build": "node scripts/build-with-runtime.mjs",
+    "start": "node .next/standalone/server.js",
+    "lint": "biome lint .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "test": "vitest run",
+    "prepare:branding": "node scripts/generate-project-branding.mjs",
+    "prebuild": "pnpm prepare:branding",
+    "predev": "pnpm prepare:branding"
+  },
+  "dependencies": {
+    "@radix-ui/react-dialog": "^1.1.23",
+    "@tanstack/react-query": "5.102.8",
+    "@xterm/addon-clipboard": "0.2.0",
+    "@xterm/addon-fit": "0.11.0",
+    "@xterm/addon-web-links": "0.12.0",
+    "@xterm/addon-webgl": "0.19.0",
+    "@xterm/xterm": "6.0.0",
+    "clsx": "2.1.1",
+    "lucide-react": "0.577.0",
+    "motion": "^12.43.0",
+    "next": "16.4.1",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-resizable-panels": "4.12.3",
+    "simple-keyboard": "3.8.177"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.11",
+    "@tailwindcss/postcss": "4",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "22.20.1",
+    "@types/react": "19",
+    "@types/react-dom": "19",
+    "@vitejs/plugin-react": "^4.7.0",
+    "jsdom": "^26.1.0",
+    "tailwindcss": "4",
+    "typescript": "5",
+    "vite": "7.3.7",
+    "vitest": "^4.1.12"
+  }
+}

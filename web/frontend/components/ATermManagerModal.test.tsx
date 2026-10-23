@@ -1,0 +1,510 @@
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import type { ComponentProps } from 'react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  OWN_TMUX_CAN,
+  SESSION_BASE,
+  TETHER_CAN,
+} from '@/test-stubs/session-fixtures'
+import { ATermManagerModal } from './ATermManagerModal'
+
+const mockUseProjectSettings = vi.fn()
+
+vi.mock('@/lib/hooks/use-project-settings', () => ({
+  useProjectSettings: () => mockUseProjectSettings(),
+}))
+
+vi.mock('@/lib/hooks/use-agent-tools', () => ({
+  useAgentTools: () => ({
+    agentTools: [{ slug: 'codex', name: 'Codex', color: '#123456' }],
+  }),
+}))
+
+function buildProject(id: string, name: string, rootPath: string) {
+  return {
+    id,
+    name,
+    root_path: rootPath,
+    a_term_enabled: true,
+    mode: 'shell',
+    display_order: 0,
+  }
+}
+
+function renderModal(
+  overrides: Partial<ComponentProps<typeof ATermManagerModal>> = {},
+) {
+  return render(
+    <ATermManagerModal
+      isOpen={true}
+      onClose={vi.fn()}
+      onCreateGenericATerm={vi.fn()}
+      onCreateProjectATerm={vi.fn()}
+      externalSessions={[]}
+      detachedPanes={[]}
+      onAttachExternalSession={vi.fn()}
+      onAttachDetachedPane={vi.fn()}
+      panes={[]}
+      {...overrides}
+    />,
+  )
+}
+
+function buildProjectSettingsState(overrides: Record<string, unknown> = {}) {
+  const projects = [
+    buildProject('proj-agent-hub', 'Agent Hub', '/workspace/agent-hub'),
+    buildProject('proj-a-term', 'A-Term', '/workspace/a-term'),
+    buildProject('proj-portfolio', 'Portfolio AI', '/workspace/portfolio-ai'),
+  ]
+
+  return {
+    projects,
+    enabledProjects: projects,
+    canRegisterProjects: false,
+    projectRegistrySource: 'companion',
+    registerProject: vi.fn(),
+    isLoading: false,
+    isError: false,
+    error: null,
+    refetch: vi.fn(),
+    isUpdating: false,
+    ...overrides,
+  }
+}
+
+describe('ATermManagerModal', () => {
+  beforeEach(() => {
+    mockUseProjectSettings.mockReturnValue(buildProjectSettingsState())
+  })
+
+  it('filters projects by project name and attachable session metadata', () => {
+    renderModal({
+      externalSessions: [
+        {
+          id: 'codex-a-term',
+          name: 'codex-a-term',
+          user_id: null,
+          project_id: 'proj-a-term',
+          working_dir: '/workspace/a-term',
+          mode: 'codex',
+          display_order: 0,
+          is_alive: true,
+          created_at: null,
+          last_accessed_at: null,
+          is_external: true,
+          source: 'tmux_external',
+          ...OWN_TMUX_CAN,
+        },
+      ],
+    })
+
+    fireEvent.change(screen.getByPlaceholderText(/filter by project/i), {
+      target: { value: 'codex-a-term' },
+    })
+
+    expect(screen.getByText('A-Term')).toBeInTheDocument()
+    expect(screen.queryByText('Agent Hub')).not.toBeInTheDocument()
+  })
+
+  it('uses a full-height mobile layout with a shared scroll region', () => {
+    renderModal()
+
+    expect(screen.getByTestId('a-term-manager-modal').className).toContain(
+      'top-3',
+    )
+    expect(screen.getByTestId('a-term-manager-modal').className).toContain(
+      'bottom-3',
+    )
+    expect(
+      screen.getByTestId('a-term-manager-scroll-region').className,
+    ).toContain('flex-1')
+    expect(
+      screen.getByTestId('a-term-manager-scroll-region').className,
+    ).toContain('overflow-y-auto')
+  })
+
+  it('creates an ad-hoc A-Term from quick start', () => {
+    const onCreateGenericATerm = vi.fn()
+
+    renderModal({ onCreateGenericATerm })
+
+    const quickStart = screen.getByRole('button', {
+      name: /New session outside a project/,
+    })
+    const shellMark = quickStart.querySelector('[data-agent-icon="shell"]')
+    expect(shellMark).toHaveAttribute('aria-hidden', 'true')
+
+    fireEvent.click(screen.getByText('New session outside a project'))
+
+    expect(onCreateGenericATerm).toHaveBeenCalledTimes(1)
+  })
+
+  it('attaches a single existing project session without closing the modal directly', () => {
+    const onAttachExternalSession = vi.fn()
+    const onClose = vi.fn()
+
+    renderModal({
+      onAttachExternalSession,
+      onClose,
+      externalSessions: [
+        {
+          id: 'codex-a-term',
+          name: 'codex-a-term',
+          user_id: null,
+          project_id: 'proj-a-term',
+          working_dir: '/workspace/a-term',
+          mode: 'codex',
+          display_order: 0,
+          is_alive: true,
+          created_at: null,
+          last_accessed_at: null,
+          is_external: true,
+          source: 'tmux_external',
+          ...OWN_TMUX_CAN,
+        },
+      ],
+    })
+
+    const openButton = screen.getByRole('button', { name: 'Open' })
+    expect(
+      openButton.parentElement?.querySelector('[data-agent-icon="codex"]'),
+    ).toBeInTheDocument()
+    fireEvent.click(openButton)
+
+    expect(onAttachExternalSession).toHaveBeenCalledWith('codex-a-term')
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('lets the user choose between multiple project sessions before attaching', () => {
+    const onAttachExternalSession = vi.fn()
+
+    renderModal({
+      onAttachExternalSession,
+      externalSessions: [
+        {
+          id: 'claude-agent-hub',
+          name: 'claude-agent-hub',
+          user_id: null,
+          project_id: 'proj-agent-hub',
+          working_dir: '/workspace/agent-hub',
+          mode: 'claude',
+          display_order: 0,
+          is_alive: true,
+          created_at: null,
+          last_accessed_at: null,
+          is_external: true,
+          source: 'tmux_external',
+          ...OWN_TMUX_CAN,
+        },
+        {
+          id: 'codex-agent-hub',
+          name: 'codex-agent-hub',
+          user_id: null,
+          project_id: 'proj-agent-hub',
+          working_dir: '/workspace/agent-hub',
+          mode: 'codex',
+          display_order: 0,
+          is_alive: true,
+          created_at: null,
+          last_accessed_at: null,
+          is_external: true,
+          source: 'tmux_external',
+          ...OWN_TMUX_CAN,
+        },
+      ],
+    })
+
+    fireEvent.change(
+      screen.getByLabelText('Select existing session for Agent Hub'),
+      {
+        target: { value: 'codex-agent-hub' },
+      },
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }))
+
+    expect(onAttachExternalSession).toHaveBeenCalledWith('codex-agent-hub')
+  })
+
+  it('shows Tether session names as Aico does, without a project prefix', () => {
+    const aicoSession = {
+      id: '0a1b2c3d',
+      user_id: null,
+      project_id: 'proj-a-term',
+      working_dir: '/workspace/a-term',
+      mode: 'codex',
+      display_order: 0,
+      is_alive: true,
+      created_at: null,
+      last_accessed_at: null,
+      is_external: true,
+      source: 'tether',
+      ...TETHER_CAN,
+      origin: 'aico',
+      tmux_session_name: 'aico-0a1b2c3d',
+      tmux_source: 'tether',
+    }
+    renderModal({
+      externalSessions: [
+        { ...aicoSession, name: 'A-Term' },
+        {
+          ...aicoSession,
+          id: '87654321',
+          name: 'Incident review',
+          tmux_session_name: 'aico-87654321',
+        },
+      ],
+    })
+
+    expect(
+      screen.getByRole('option', { name: 'A-Term (codex)' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('option', { name: 'Incident review (codex)' }),
+    ).toBeInTheDocument()
+  })
+
+  it('starts a fresh project A-Term even when attachable sessions exist', () => {
+    const onCreateProjectATerm = vi.fn()
+
+    renderModal({
+      onCreateProjectATerm,
+      externalSessions: [
+        {
+          id: 'codex-a-term',
+          name: 'codex-a-term',
+          user_id: null,
+          project_id: 'proj-a-term',
+          working_dir: '/workspace/a-term',
+          mode: 'codex',
+          display_order: 0,
+          is_alive: true,
+          created_at: null,
+          last_accessed_at: null,
+          is_external: true,
+          source: 'tmux_external',
+          ...OWN_TMUX_CAN,
+        },
+      ],
+    })
+
+    const newButtons = screen.getAllByRole('button', { name: 'New' })
+    fireEvent.click(newButtons[0])
+
+    expect(onCreateProjectATerm).toHaveBeenCalledWith(
+      'proj-agent-hub',
+      '/workspace/agent-hub',
+    )
+  })
+
+  it('shows unmatched attachables in an other sessions fallback section', () => {
+    renderModal({
+      externalSessions: [
+        {
+          id: 'codex-unknown',
+          name: 'codex-unknown',
+          user_id: null,
+          project_id: 'proj-missing',
+          working_dir: '/workspace/missing',
+          mode: 'codex',
+          display_order: 0,
+          is_alive: true,
+          created_at: null,
+          last_accessed_at: null,
+          is_external: true,
+          source: 'tmux_external',
+          ...OWN_TMUX_CAN,
+        },
+      ],
+    })
+
+    expect(screen.getByText('Other sessions')).toBeInTheDocument()
+    const row = screen.getByRole('button', { name: /codex-unknown/i })
+    const mark = row.querySelector('[data-agent-icon="codex"]')
+    expect(mark).toHaveAttribute('aria-hidden', 'true')
+    // The tool's configured color wins over the built-in default.
+    expect(mark?.querySelector('svg')).toHaveAttribute('fill', '#123456')
+  })
+
+  it('reattaches a detached managed pane from the matching project row', () => {
+    const onAttachDetachedPane = vi.fn()
+
+    renderModal({
+      onAttachDetachedPane,
+      detachedPanes: [
+        {
+          id: 'pane-a-term',
+          pane_type: 'project',
+          project_id: 'proj-a-term',
+          pane_order: 0,
+          pane_name: 'A-Term',
+          active_mode: 'codex',
+          is_detached: true,
+          created_at: null,
+          sessions: [
+            {
+              id: 'shell-a-term',
+              name: 'A-Term Shell',
+              mode: 'shell',
+              ...SESSION_BASE,
+              session_number: 1,
+              is_alive: true,
+              working_dir: '/workspace/a-term',
+              claude_state: 'not_started',
+            },
+            {
+              id: 'codex-a-term',
+              name: 'A-Term Codex',
+              mode: 'codex',
+              ...SESSION_BASE,
+              session_number: 1,
+              is_alive: true,
+              working_dir: '/workspace/a-term',
+              claude_state: 'running',
+            },
+          ],
+          width_percent: 100,
+          height_percent: 100,
+          grid_row: 0,
+          grid_col: 0,
+        },
+      ],
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }))
+
+    expect(onAttachDetachedPane).toHaveBeenCalledWith('pane-a-term')
+  })
+
+  it('shows a shared no-match summary when the search has no results', () => {
+    renderModal()
+
+    fireEvent.change(screen.getByPlaceholderText(/filter by project/i), {
+      target: { value: 'missing-workspace' },
+    })
+
+    expect(
+      screen.getByText(/No sessions match "missing-workspace"/),
+    ).toBeInTheDocument()
+  })
+
+  it('shows a loading state while project workspaces are loading', () => {
+    mockUseProjectSettings.mockReturnValue(
+      buildProjectSettingsState({
+        projects: [],
+        enabledProjects: [],
+        isLoading: true,
+      }),
+    )
+
+    renderModal()
+
+    expect(screen.getByText(/Loading project workspaces/)).toBeInTheDocument()
+    expect(screen.getByTestId('a-term-manager-scroll-region')).toHaveAttribute(
+      'aria-busy',
+      'true',
+    )
+  })
+
+  it('hides project registration when SummitFlow supplies the projects', () => {
+    renderModal()
+
+    expect(screen.getByTestId('project-registry-note')).toHaveTextContent(
+      'Projects come from SummitFlow.',
+    )
+    expect(
+      screen.queryByPlaceholderText('/absolute/path/to/project'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('registers a local project and opens it immediately in standalone mode', async () => {
+    const registerProject = vi.fn().mockResolvedValue({
+      id: 'my-app',
+      name: 'My App',
+      root_path: '/workspace/my-app',
+      a_term_enabled: false,
+      mode: 'shell',
+      display_order: 0,
+    })
+    const onCreateProjectATerm = vi.fn()
+    mockUseProjectSettings.mockReturnValue(
+      buildProjectSettingsState({
+        canRegisterProjects: true,
+        projectRegistrySource: 'local',
+        registerProject,
+      }),
+    )
+
+    renderModal({ onCreateProjectATerm })
+
+    expect(
+      screen.queryByTestId('project-registry-note'),
+    ).not.toBeInTheDocument()
+    fireEvent.change(screen.getByPlaceholderText('/absolute/path/to/project'), {
+      target: { value: '/workspace/my-app' },
+    })
+    fireEvent.change(screen.getByPlaceholderText('Name (optional)'), {
+      target: { value: 'My App' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+
+    await waitFor(() => {
+      expect(registerProject).toHaveBeenCalledWith({
+        root_path: '/workspace/my-app',
+        name: 'My App',
+      })
+      expect(onCreateProjectATerm).toHaveBeenCalledWith(
+        'my-app',
+        '/workspace/my-app',
+      )
+    })
+  })
+
+  it('shows an error state with retry when project loading fails', () => {
+    const refetch = vi.fn()
+    mockUseProjectSettings.mockReturnValue(
+      buildProjectSettingsState({
+        projects: [],
+        enabledProjects: [],
+        isError: true,
+        error: new Error('SummitFlow projects are unavailable'),
+        refetch,
+      }),
+    )
+
+    renderModal()
+
+    expect(
+      screen.getByText('SummitFlow projects are unavailable'),
+    ).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+
+    expect(refetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows the Claude mark for claude-code sessions', () => {
+    renderModal({
+      externalSessions: [
+        {
+          id: 'aico-claude',
+          name: 'aico-claude',
+          user_id: null,
+          project_id: 'proj-missing',
+          working_dir: '/workspace/missing',
+          mode: 'claude-code',
+          display_order: 0,
+          is_alive: true,
+          created_at: null,
+          last_accessed_at: null,
+          is_external: true,
+          source: 'tmux_external',
+          ...OWN_TMUX_CAN,
+        },
+      ],
+    })
+
+    const row = screen.getByRole('button', { name: /aico-claude/i })
+    const svg = row.querySelector('[data-agent-icon="claude-code"] svg')
+    expect(svg).toHaveAttribute('fill', '#D97757')
+  })
+})

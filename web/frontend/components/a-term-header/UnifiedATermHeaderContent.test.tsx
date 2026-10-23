@@ -1,0 +1,383 @@
+import { fireEvent, render, screen } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { AdHocSlot, PaneSlot } from '@/lib/utils/slot'
+import { SLOT_BASE } from '@/test-stubs/session-fixtures'
+import { UnifiedATermHeaderContent } from './UnifiedATermHeaderContent'
+
+const { renamePane, updateSession } = vi.hoisted(() => ({
+  renamePane: vi.fn(),
+  updateSession: vi.fn(),
+}))
+
+vi.mock('@/lib/hooks/use-agent-tools', () => ({
+  useAgentTools: () => ({ enabledTools: [] }),
+}))
+
+vi.mock('@/lib/hooks/use-a-term-panes', () => ({
+  useATermPanes: () => ({ renamePane }),
+}))
+
+vi.mock('@/lib/hooks/use-a-term-sessions', () => ({
+  useATermSessions: () => ({ update: updateSession }),
+}))
+
+vi.mock('@/components/LayoutModeButton', () => ({
+  LayoutModeButtons: () => <div data-testid="layout-mode-buttons" />,
+}))
+
+vi.mock('../ModeToggle', () => ({
+  ModeToggle: () => null,
+}))
+
+vi.mock('../PaneOverflowMenu', () => ({
+  PaneOverflowMenu: ({ onRename }: { onRename?: () => void }) => (
+    <div data-testid="pane-overflow-menu">
+      <button type="button" onClick={onRename}>
+        Rename
+      </button>
+    </div>
+  ),
+}))
+
+vi.mock('./AddATermButton', () => ({
+  AddATermButton: () => null,
+}))
+
+vi.mock('./PaneProjectSwitcher', () => ({
+  PaneProjectSwitcher: () => <div data-testid="pane-project-switcher" />,
+}))
+
+vi.mock('./HeaderIconButton', () => ({
+  HeaderIconButton: ({
+    tooltip,
+    onClick,
+  }: {
+    tooltip: string
+    onClick: () => void
+  }) => (
+    <button type="button" onClick={onClick}>
+      {tooltip}
+    </button>
+  ),
+}))
+
+vi.mock('./PaneStatusBadge', () => ({
+  PaneStatusBadge: () => null,
+  shouldShowPaneStatus: () => false,
+}))
+
+vi.mock('./PaneSearchControl', () => ({
+  PaneSearchControl: () => <div data-testid="pane-search-control" />,
+}))
+
+function makeProjectSlot(
+  id: string,
+  name: string,
+): Extract<PaneSlot, { type: 'project' }> {
+  return {
+    type: 'project',
+    ...SLOT_BASE,
+    paneId: id,
+    projectId: `${id}-project`,
+    projectName: name,
+    rootPath: `/workspace/${id}`,
+    activeMode: 'shell',
+    activeSessionId: `${id}-session`,
+    sessionBadge: null,
+  }
+}
+
+function createDataTransfer() {
+  const data = new Map<string, string>()
+  return {
+    effectAllowed: 'move',
+    dropEffect: 'move',
+    setData: (type: string, value: string) => {
+      data.set(type, value)
+    },
+    getData: (type: string) => data.get(type) ?? '',
+    clearData: () => data.clear(),
+  }
+}
+
+describe('UnifiedATermHeaderContent', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it.each([false, true])(
+    'routes a rename by the backend rename flag: can.rename=%s',
+    (canRename) => {
+      const base = makeProjectSlot('a', 'Alpha · Focus')
+      const slot = { ...base, can: { ...base.can, rename: canRename } }
+      render(<UnifiedATermHeaderContent slot={slot} onCloseSession={vi.fn()} />)
+      fireEvent.click(screen.getByRole('button', { name: 'Rename' }))
+      const input = screen.getByRole('textbox')
+      fireEvent.change(input, { target: { value: 'Alpha · Next focus' } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+      if (canRename) {
+        expect(updateSession).toHaveBeenCalledWith('a-session', {
+          name: 'Alpha · Next focus',
+        })
+        expect(renamePane).not.toHaveBeenCalled()
+      } else {
+        expect(renamePane).toHaveBeenCalledWith('a', 'Alpha · Next focus')
+        expect(updateSession).not.toHaveBeenCalled()
+      }
+    },
+  )
+
+  it('shows a lane title and chip in place of the project switcher', () => {
+    render(
+      <UnifiedATermHeaderContent
+        slot={{
+          ...makeProjectSlot('a', 'Alpha — Focus'),
+          can: { rename: true, reset: true, end: true },
+          showsSessionTitle: true,
+          task: 'Focus',
+          badge: { label: '↳ Lead', color: '#6fa8ff' },
+        }}
+        onProjectSwitch={vi.fn()}
+      />,
+    )
+    expect(screen.getByText('Focus')).toBeInTheDocument()
+    expect(screen.getByTestId('coordinator-badge')).toHaveTextContent('↳ Lead')
+    expect(
+      screen.queryByTestId('pane-project-switcher'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('keeps the project switcher for a session with no task or chip', () => {
+    render(
+      <UnifiedATermHeaderContent
+        slot={{
+          ...makeProjectSlot('a', 'Alpha'),
+          can: { rename: true, reset: true, end: true },
+        }}
+        onProjectSwitch={vi.fn()}
+      />,
+    )
+    expect(screen.getByTestId('pane-project-switcher')).toBeInTheDocument()
+  })
+
+  it('renames a free-standing View in Tether when the backend allows it', () => {
+    const slot: AdHocSlot = {
+      type: 'adhoc',
+      sessionId: 'free-session',
+      name: 'Alpha — Focus',
+      workingDir: '/workspace/a',
+      isExternal: true,
+      task: 'Focus',
+      can: { rename: true, reset: false, end: true },
+      showsSessionTitle: true,
+    }
+    render(<UnifiedATermHeaderContent slot={slot} onCloseSession={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Rename' }))
+    const input = screen.getByRole('textbox')
+    expect(input).toHaveValue('Focus')
+    fireEvent.change(input, { target: { value: 'Next focus' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(updateSession).toHaveBeenCalledWith('free-session', {
+      name: 'Next focus',
+    })
+    expect(renamePane).not.toHaveBeenCalled()
+  })
+
+  it('offers no rename on a free-standing View the backend will not rename', () => {
+    const slot: AdHocSlot = {
+      type: 'adhoc',
+      sessionId: 'own-tmux',
+      name: 'codex-agent-hub',
+      workingDir: '/workspace/a',
+      isExternal: true,
+      can: { rename: false, reset: false, end: false },
+      showsSessionTitle: false,
+    }
+    render(<UnifiedATermHeaderContent slot={slot} onCloseSession={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Rename' }))
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+    expect(updateSession).not.toHaveBeenCalled()
+    expect(renamePane).not.toHaveBeenCalled()
+  })
+
+  it('swaps panes when one header is dropped onto another header', () => {
+    const slotA = makeProjectSlot('a', 'Alpha')
+    const slotB = makeProjectSlot('b', 'Beta')
+    const onSwapA = vi.fn()
+    const onSwapB = vi.fn()
+
+    render(
+      <>
+        <UnifiedATermHeaderContent
+          slot={slotA}
+          allSlots={[slotA, slotB]}
+          onSwapWith={onSwapA}
+        />
+        <UnifiedATermHeaderContent
+          slot={slotB}
+          allSlots={[slotA, slotB]}
+          onSwapWith={onSwapB}
+        />
+      </>,
+    )
+
+    const dragHandleA = screen.getByTestId('pane-drag-handle-pane-a')
+    const headerB = screen.getByTestId('a-term-header-pane-b')
+
+    const dataTransfer = createDataTransfer()
+
+    fireEvent.dragStart(dragHandleA, { dataTransfer })
+    fireEvent.dragOver(headerB, { dataTransfer })
+    fireEvent.drop(headerB, { dataTransfer })
+
+    expect(onSwapA).not.toHaveBeenCalled()
+    expect(onSwapB).toHaveBeenCalledWith('pane-a')
+  })
+
+  it('renders the pane actions menu when close session is the only available action', () => {
+    render(
+      <UnifiedATermHeaderContent
+        slot={makeProjectSlot('a', 'Alpha')}
+        onCloseSession={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByTestId('pane-overflow-menu')).toBeInTheDocument()
+  })
+
+  it('renders search control directly in the header when search is available', () => {
+    render(
+      <UnifiedATermHeaderContent
+        slot={makeProjectSlot('a', 'Alpha')}
+        onSearch={() => ({
+          query: 'alpha',
+          totalMatches: 1,
+          activeIndex: 0,
+          found: true,
+        })}
+        onClearSearch={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByTestId('pane-search-control')).toBeInTheDocument()
+  })
+
+  it('renders a direct files action in the header when files are available', () => {
+    const onFiles = vi.fn()
+
+    render(
+      <UnifiedATermHeaderContent
+        slot={makeProjectSlot('a', 'Alpha')}
+        onFiles={onFiles}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Files' }))
+
+    expect(onFiles).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not render the swap dropdown on desktop when drag-swap is available', () => {
+    const slotA = makeProjectSlot('a', 'Alpha')
+    const slotB = makeProjectSlot('b', 'Beta')
+
+    render(
+      <UnifiedATermHeaderContent
+        slot={slotA}
+        allSlots={[slotA, slotB]}
+        onSwapWith={vi.fn()}
+      />,
+    )
+
+    expect(screen.queryByTestId('pane-swap-dropdown')).not.toBeInTheDocument()
+    expect(screen.getByTestId('pane-drag-handle-pane-a')).toBeInTheDocument()
+  })
+
+  it('renders the pane title as static text on desktop even when onSwitch exists', () => {
+    const slot = makeProjectSlot('a', 'Alpha')
+
+    render(<UnifiedATermHeaderContent slot={slot} onSwitch={vi.fn()} />)
+
+    expect(screen.getByText('Alpha')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Alpha' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('hides the pane title when the project switcher is shown', () => {
+    const slot = makeProjectSlot('a', 'Alpha')
+
+    render(<UnifiedATermHeaderContent slot={slot} onProjectSwitch={vi.fn()} />)
+
+    expect(screen.getByTestId('pane-project-switcher')).toBeInTheDocument()
+    expect(screen.queryByText('Alpha')).not.toBeInTheDocument()
+  })
+
+  it('keeps the project switcher desktop-only on mobile', () => {
+    const slot = makeProjectSlot('a', 'Alpha')
+
+    render(
+      <UnifiedATermHeaderContent
+        slot={slot}
+        onProjectSwitch={vi.fn()}
+        isMobile={true}
+        allSlots={[slot]}
+        onSwitchTo={vi.fn()}
+      />,
+    )
+
+    expect(
+      screen.queryByTestId('pane-project-switcher'),
+    ).not.toBeInTheDocument()
+    expect(screen.getByTestId('pane-swap-dropdown')).toBeInTheDocument()
+  })
+
+  it('uses the pane switcher on mobile when multiple panes exist', () => {
+    const slotA = makeProjectSlot('a', 'Alpha')
+    const slotB = makeProjectSlot('b', 'Beta')
+
+    render(
+      <UnifiedATermHeaderContent
+        slot={slotA}
+        allSlots={[slotA, slotB]}
+        onSwitchTo={vi.fn()}
+        onProjectSwitch={vi.fn()}
+        isMobile={true}
+      />,
+    )
+
+    expect(
+      screen.queryByTestId('pane-project-switcher'),
+    ).not.toBeInTheDocument()
+    expect(screen.getByTestId('pane-swap-dropdown')).toBeInTheDocument()
+  })
+
+  it('hides layout controls on mobile', () => {
+    const slot = makeProjectSlot('a', 'Alpha')
+
+    render(
+      <UnifiedATermHeaderContent
+        slot={slot}
+        isMobile={true}
+        layoutMode="split-horizontal"
+        availableLayouts={['split-horizontal', 'split-vertical']}
+        onLayoutModeChange={vi.fn()}
+      />,
+    )
+
+    expect(screen.queryByTestId('layout-mode-buttons')).not.toBeInTheDocument()
+  })
+
+  it('renders layout controls on desktop when multiple layouts exist', () => {
+    const slot = makeProjectSlot('a', 'Alpha')
+
+    render(
+      <UnifiedATermHeaderContent
+        slot={slot}
+        layoutMode="split-horizontal"
+        availableLayouts={['split-horizontal', 'split-vertical']}
+        onLayoutModeChange={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByTestId('layout-mode-buttons')).toBeInTheDocument()
+  })
+})
