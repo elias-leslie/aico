@@ -140,9 +140,9 @@ export class RateLimiter {
 export function registerUploadRoutes(router: Router, config: UploadConfig): void {
   const limiter = new RateLimiter()
 
-  router.on('GET', '/api/a-term/files/limits', () => ({ max_bytes: config.maxBytes }))
+  router.on('GET', '/api/files/limits', () => ({ max_bytes: config.maxBytes }))
 
-  router.on('POST', '/api/a-term/files', async (ctx) => {
+  router.on('POST', '/api/files', async (ctx) => {
     if (!limiter.allow(ctx.req.socket.remoteAddress ?? '')) {
       sendJson(ctx.res, 429, { detail: `Rate limit exceeded: ${RATE_LIMIT} per 1 minute` })
       ctx.req.resume()

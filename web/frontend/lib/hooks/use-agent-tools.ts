@@ -45,11 +45,7 @@ export function isAgentTool(tool: Pick<AgentTool, 'slug'>): boolean {
 // ============================================================================
 
 async function fetchAgentTools(): Promise<AgentTool[]> {
-  return apiFetch(
-    '/api/a-term/agent-tools',
-    undefined,
-    'Failed to fetch agent tools',
-  )
+  return apiFetch('/api/agent-tools', undefined, 'Failed to fetch agent tools')
 }
 
 async function switchPaneAgentTool(
@@ -57,7 +53,7 @@ async function switchPaneAgentTool(
   agentToolSlug: string,
 ): Promise<ATermPane> {
   return apiFetch(
-    `/api/a-term/panes/${paneId}/agent-tool`,
+    `/api/panes/${paneId}/agent-tool`,
     {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },

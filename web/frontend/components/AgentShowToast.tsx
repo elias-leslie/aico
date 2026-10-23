@@ -2,7 +2,6 @@
 
 import { Copy, ExternalLink, X } from 'lucide-react'
 import { useState } from 'react'
-import { buildApiUrl } from '@/lib/api-config'
 import { type AgentShow, useAgentShows } from '@/lib/hooks/use-agent-shows'
 
 /** The shared file's own name, without its exchange folder. */
@@ -76,7 +75,7 @@ export function AgentShowToast({
         {show.kind === 'file' ? (
           <a
             className="lantern-btn primary flex-1"
-            href={buildApiUrl(`/api/a-term/shows/${show.id}/file`)}
+            href={`/api/shows/${show.id}/file`}
             target="_blank"
             rel="noopener noreferrer"
           >

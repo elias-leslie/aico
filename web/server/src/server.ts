@@ -1,11 +1,12 @@
 // One HTTP server for the web app: the guard and headers on every request,
-// the JSON API, and the terminal WebSocket upgrade.
+// the JSON API, the page (static.ts), and the terminal WebSocket upgrade.
 
 import { createServer, type Server } from 'node:http'
 import type { Duplex } from 'node:stream'
 import { WebSocketServer } from 'ws'
 import { applySecurityHeaders, checkRequest, checkUpgrade, type GuardConfig } from './guard'
 import { type Router, sendJson } from './http'
+import type { StaticSite } from './static'
 import { TERMINAL_PATH, type TerminalHub } from './terminal'
 
 /** Answer an upgrade we will not accept, then drop the socket. */
@@ -20,6 +21,7 @@ export function createWebServer(
   guard: GuardConfig,
   router: Router,
   terminals: TerminalHub,
+  site?: StaticSite,
 ): Server {
   const sockets = new WebSocketServer({ noServer: true, maxPayload: 4 << 20 })
   const server = createServer((req, res) => {
@@ -30,7 +32,9 @@ export function createWebServer(
     router
       .handle(req, res, url)
       .then((handled) => {
-        if (!handled) sendJson(res, 404, { detail: 'Not Found' })
+        if (handled) return
+        if (!url.pathname.startsWith('/api/') && site?.handle(req, res, url)) return
+        sendJson(res, 404, { detail: 'Not Found' })
       })
       .catch((error) => {
         console.error('[aico-web] request failed:', error)

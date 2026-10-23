@@ -58,7 +58,7 @@ describe('upload routes', () => {
   function upload(content: Buffer | string, filename: string, type: string) {
     const form = new FormData()
     form.append('file', new Blob([content], { type }), filename)
-    return fetch(`${server.base}/api/a-term/files`, { method: 'POST', body: form })
+    return fetch(`${server.base}/api/files`, { method: 'POST', body: form })
   }
 
   beforeEach(async () => {
@@ -76,7 +76,7 @@ describe('upload routes', () => {
   })
 
   it('serves the size limit from the config', async () => {
-    const response = await fetch(`${server.base}/api/a-term/files/limits`)
+    const response = await fetch(`${server.base}/api/files/limits`)
     expect(await response.json()).toEqual({ max_bytes: 1024 })
   })
 
@@ -111,7 +111,7 @@ describe('upload routes', () => {
   it('wants a file part', async () => {
     const form = new FormData()
     form.append('other', 'x')
-    const response = await fetch(`${server.base}/api/a-term/files`, { method: 'POST', body: form })
+    const response = await fetch(`${server.base}/api/files`, { method: 'POST', body: form })
     expect(response.status).toBe(422)
   })
 

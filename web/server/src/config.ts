@@ -18,6 +18,8 @@ export interface WebConfig {
   allowedHostnames: string[]
   /** Browser origins allowed to open the terminal WebSocket and to change state. */
   allowedOrigins: string[]
+  /** web/frontend's static export, served at `/`. */
+  staticDir: string
   dbPath: string
   /** The Python backend's database, read once into `dbPath` and never written. */
   importDbPath: string
@@ -26,6 +28,8 @@ export interface WebConfig {
   trustShows: boolean
   agentHubUrl: string | null
   agentHubClientId: string | null
+  /** Agent Hub's port on the page's host: the browser's voice socket without a configured URL. */
+  agentHubPort: number
   uploads: UploadConfig
   /** Where the default Tether copies shared files (`<root>/agent/…`); Tether's variable and default. */
   exchangeRoot: string
@@ -65,6 +69,8 @@ const DEFAULT_UPLOAD_MAX_AGE_SECONDS = 24 * 60 * 60
 const DEFAULT_MAINTENANCE_INTERVAL_SECONDS = 15 * 60
 const DEFAULT_EMPTY_PANE_DAYS = 7
 const DEFAULT_EXCHANGE_ROOT = '/srv/workspaces/exchange'
+// The browser's own fallback (web/frontend lib/api-config.ts PORTS.agentHub).
+const DEFAULT_AGENT_HUB_PORT = 8003
 
 /** The nearest project.identity.json above `from` (the repo root's). */
 export function findIdentityFile(from: string): string | null {
@@ -129,9 +135,12 @@ function stateDir(env: NodeJS.ProcessEnv): string {
   return env.XDG_STATE_HOME || join(env.HOME || homedir(), '.local', 'state')
 }
 
+// src/ and dist/ both sit in web/server, so the export is two levels up either way.
+const HERE = dirname(fileURLToPath(import.meta.url))
+
 export function loadConfig(
   env: NodeJS.ProcessEnv = process.env,
-  identityFile: string | null = findIdentityFile(dirname(fileURLToPath(import.meta.url))),
+  identityFile: string | null = findIdentityFile(HERE),
 ): WebConfig {
   const identity = readIdentity(env.AICO_IDENTITY_FILE || identityFile)
   // The web app's port: today's frontend port, which Caddy and the tunnel point at.
@@ -164,12 +173,14 @@ export function loadConfig(
       `http://127.0.0.1:${port}`,
       ...(publicHost ? [`https://${publicHost}`] : []),
     ],
+    staticDir: resolve(env.AICO_WEB_STATIC_DIR || join(HERE, '..', '..', 'frontend', 'out')),
     dbPath: webDbPath(env),
     importDbPath: env.AICO_WEB_IMPORT_DB || join(stateDir(env), 'a-term', 'a-term.db'),
     tetherSocket,
     trustShows: tetherSocket === defaultTetherSocketPath(env, uid),
     agentHubUrl: env.AGENT_HUB_URL?.trim() || env.NEXT_PUBLIC_AGENT_HUB_URL?.trim() || null,
     agentHubClientId: env.AGENT_HUB_CLIENT_ID?.trim() || null,
+    agentHubPort: DEFAULT_AGENT_HUB_PORT,
     uploads: {
       dir: resolve(expandHome(env.UPLOAD_DIR?.trim() || join(home, uploadDirName), home)),
       maxBytes: positiveInt(env.MAX_FILE_SIZE_MB, DEFAULT_MAX_UPLOAD_MB) * 1024 * 1024,

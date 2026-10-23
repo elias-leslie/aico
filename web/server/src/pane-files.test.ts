@@ -53,7 +53,7 @@ afterEach(async () => {
 describe('pane file routes', () => {
   it("browses the shell's working directory, never naming the root", async () => {
     const id = pane(shellDir, agentDir)
-    const tree = await get(`/api/a-term/panes/${id}/files/tree`)
+    const tree = await get(`/api/panes/${id}/files/tree`)
     expect(tree).toEqual({
       status: 200,
       body: {
@@ -64,7 +64,7 @@ describe('pane file routes', () => {
         total: 1,
       },
     })
-    const content = await get(`/api/a-term/panes/${id}/files/content?path=README.md`)
+    const content = await get(`/api/panes/${id}/files/content?path=README.md`)
     expect(content.status).toBe(200)
     expect(content.body).toMatchObject({
       path: 'README.md',
@@ -76,31 +76,32 @@ describe('pane file routes', () => {
 
   it("falls back to the active session's working directory", async () => {
     const id = pane(null, agentDir)
-    const tree = await get(`/api/a-term/panes/${id}/files/tree`)
+    const tree = await get(`/api/panes/${id}/files/tree`)
     const { entries } = tree.body as { entries: { name: string }[] }
     expect(entries.map((entry) => entry.name)).toEqual(['other.txt'])
   })
 
   it('answers missing, bad and refused requests as the Python backend did', async () => {
-    expect(await get('/api/a-term/panes/not-a-uuid/files/tree')).toEqual({
+    expect(await get('/api/panes/not-a-uuid/files/tree')).toEqual({
       status: 400,
       body: { detail: 'Invalid UUID' },
     })
-    expect((await get(`/api/a-term/panes/${crypto.randomUUID()}/files/tree`)).status).toBe(404)
-    expect(await get(`/api/a-term/panes/${pane(null, null)}/files/tree`)).toEqual({
+    expect((await get(`/api/panes/${crypto.randomUUID()}/files/tree`)).status).toBe(404)
+    expect(await get(`/api/panes/${pane(null, null)}/files/tree`)).toEqual({
       status: 400,
       body: { detail: 'Pane has no working directory' },
     })
-    expect(await get(`/api/a-term/panes/${pane(join(shellDir, 'gone'), null)}/files/tree`)).toEqual(
-      { status: 404, body: { detail: 'Pane working directory does not exist' } },
-    )
+    expect(await get(`/api/panes/${pane(join(shellDir, 'gone'), null)}/files/tree`)).toEqual({
+      status: 404,
+      body: { detail: 'Pane working directory does not exist' },
+    })
     const id = pane(shellDir, agentDir)
-    expect(await get(`/api/a-term/panes/${id}/files/tree?path=.git`)).toEqual({
+    expect(await get(`/api/panes/${id}/files/tree?path=.git`)).toEqual({
       status: 403,
       body: { detail: 'Access denied: .git' },
     })
-    expect((await get(`/api/a-term/panes/${id}/files/content`)).status).toBe(422)
-    expect((await get(`/api/a-term/panes/${id}/files/content?path=missing.txt`)).status).toBe(404)
+    expect((await get(`/api/panes/${id}/files/content`)).status).toBe(422)
+    expect((await get(`/api/panes/${id}/files/content?path=missing.txt`)).status).toBe(404)
   })
 
   it('answers an unreadable directory 403', async () => {
@@ -108,7 +109,7 @@ describe('pane file routes', () => {
     mkdirSync(join(shellDir, 'locked'))
     chmodSync(join(shellDir, 'locked'), 0o000)
     try {
-      const locked = await get(`/api/a-term/panes/${id}/files/tree?path=locked`)
+      const locked = await get(`/api/panes/${id}/files/tree?path=locked`)
       // Root reads anything; everyone else is refused.
       expect(locked.status).toBe(process.getuid?.() === 0 ? 200 : 403)
     } finally {

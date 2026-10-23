@@ -66,7 +66,7 @@ export function useAgentShows() {
       polling = true
       try {
         const query = cursor.current ? `?since=${cursor.current}` : ''
-        const payload = await apiFetch<unknown>(`/api/a-term/shows${query}`, {
+        const payload = await apiFetch<unknown>(`/api/shows${query}`, {
           signal: controller.signal,
           cache: 'no-store',
         })

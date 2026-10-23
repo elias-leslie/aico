@@ -5,11 +5,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ROOT_CAN, TETHER_CAN } from '@/test-stubs/session-fixtures'
 import { useATermSessions } from './use-a-term-sessions'
 
-// Mock the api-config module
-vi.mock('../api-config', () => ({
-  buildApiUrl: (path: string) => `http://localhost:8002${path}`,
-}))
-
 // Mock global fetch
 const mockFetch = vi.fn()
 global.fetch = mockFetch
@@ -86,10 +81,7 @@ describe('useATermSessions', () => {
     expect(result.current.sessions[1].id).toBe('session-2')
 
     // Verify fetch was called with the correct URL
-    expect(mockFetch).toHaveBeenCalledWith(
-      'http://localhost:8002/api/a-term/sessions',
-      undefined,
-    )
+    expect(mockFetch).toHaveBeenCalledWith('/api/sessions', undefined)
   })
 
   it('handles API errors gracefully', async () => {
@@ -131,7 +123,7 @@ describe('useATermSessions', () => {
     })
 
     expect(mockFetch).toHaveBeenCalledWith(
-      'http://localhost:8002/api/a-term/sessions?include_detached=true',
+      '/api/sessions?include_detached=true',
       undefined,
     )
   })

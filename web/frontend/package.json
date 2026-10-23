@@ -6,8 +6,7 @@
   "funding": "https://github.com/sponsors/elias-leslie",
   "scripts": {
     "dev": "next dev --turbopack --port 3002",
-    "build": "node scripts/build-with-runtime.mjs",
-    "start": "node .next/standalone/web/frontend/server.js",
+    "build": "next build && node scripts/csp-hashes.mjs",
     "lint": "biome lint .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",

@@ -46,9 +46,7 @@ describe('useAgentShows', () => {
     expect(result.current.show).toBeUndefined()
 
     await act(async () => vi.advanceTimersByTimeAsync(10_000))
-    expect(fetchMock.mock.calls[1]?.[0]).toBe(
-      `/api/a-term/shows?since=${first.id}`,
-    )
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(`/api/shows?since=${first.id}`)
     expect(result.current.show).toEqual(second)
     act(() => result.current.dismiss())
     expect(result.current.show).toBeUndefined()

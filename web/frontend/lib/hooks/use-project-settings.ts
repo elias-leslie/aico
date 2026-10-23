@@ -22,7 +22,7 @@ export interface ProjectSetting {
 // ============================================================================
 
 async function fetchProjects(): Promise<ProjectSetting[]> {
-  return apiFetch('/api/a-term/projects', undefined, 'Failed to fetch projects')
+  return apiFetch('/api/projects', undefined, 'Failed to fetch projects')
 }
 
 async function switchProjectMode(
@@ -30,7 +30,7 @@ async function switchProjectMode(
   mode: string,
 ): Promise<ProjectSetting> {
   return apiFetch(
-    `/api/a-term/projects/${projectId}/mode`,
+    `/api/projects/${projectId}/mode`,
     {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },

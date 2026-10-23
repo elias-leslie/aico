@@ -57,7 +57,7 @@ function translate(error: unknown): HttpError {
 }
 
 export function registerPaneFileRoutes(router: Router, life: Lifecycle): void {
-  router.on('GET', '/api/a-term/panes/:paneId/files/tree', async (ctx) => {
+  router.on('GET', '/api/panes/:paneId/files/tree', async (ctx) => {
     validateUuid(ctx.params.paneId)
     const root = await paneRoot(life, ctx.params.paneId)
     try {
@@ -67,7 +67,7 @@ export function registerPaneFileRoutes(router: Router, life: Lifecycle): void {
     }
   })
 
-  router.on('GET', '/api/a-term/panes/:paneId/files/content', async (ctx) => {
+  router.on('GET', '/api/panes/:paneId/files/content', async (ctx) => {
     validateUuid(ctx.params.paneId)
     const path = ctx.query.get('path')
     if (path === null) throw new HttpError(422, 'path is required')

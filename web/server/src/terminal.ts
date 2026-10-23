@@ -1,4 +1,4 @@
-// The web terminal: `WS /ws/a-term/:sessionId`, one tmux control-mode client
+// The web terminal: `WS /ws/:sessionId`, one tmux control-mode client
 // (tether/term's ControlTerminal) per open socket, speaking the frames the web
 // UI already speaks. The page sends text frames (typed input, or `{__ctrl:
 // true, …}` JSON) or binary 0x01/0x02 frames; the server sends 0x01 pane text
@@ -32,7 +32,7 @@ import {
 import { WebSocket } from 'ws'
 import { findSession } from './tether'
 
-export const TERMINAL_PATH = /^\/ws\/a-term\/([^/]+)$/
+export const TERMINAL_PATH = /^\/ws\/([^/]+)$/
 /** The close code the page treats as "this session is gone" (no reconnect). */
 export const SESSION_DEAD_CODE = 4000
 

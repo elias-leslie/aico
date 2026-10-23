@@ -206,11 +206,11 @@ export function registerShowRoutes(
   shows: Shows,
   hooks: { headerRead?: () => void } = {},
 ): void {
-  router.on('GET', '/api/a-term/shows', (ctx) => ({
+  router.on('GET', '/api/shows', (ctx) => ({
     shows: shows.store.recent(ctx.query.get('since')).map(metadata),
   }))
 
-  router.on('GET', '/api/a-term/shows/:showId/file', async (ctx) => {
+  router.on('GET', '/api/shows/:showId/file', async (ctx) => {
     const show = shows.store.get(ctx.params.showId)
     if (show?.kind !== 'file') throw new HttpError(404, 'Shared file not found')
     let file: fsp.FileHandle

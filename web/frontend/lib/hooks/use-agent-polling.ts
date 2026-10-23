@@ -2,7 +2,6 @@
 
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { buildApiUrl } from '../api-config'
 import { getAgentState } from '../utils/agent-state'
 
 /** Poll interval for agent state check (500ms) */
@@ -72,7 +71,7 @@ export function useAgentPolling(): UseAgentPollingReturn {
 
         try {
           const stateRes = await fetch(
-            buildApiUrl(`/api/a-term/sessions/${sessionId}/agent-state`),
+            `/api/sessions/${sessionId}/agent-state`,
             { signal: controller.signal },
           )
           if (stateRes.ok) {
@@ -99,10 +98,9 @@ export function useAgentPolling(): UseAgentPollingReturn {
     async (sessionId: string): Promise<boolean> => {
       try {
         stopPolling()
-        const res = await fetch(
-          buildApiUrl(`/api/a-term/sessions/${sessionId}/start-agent`),
-          { method: 'POST' },
-        )
+        const res = await fetch(`/api/sessions/${sessionId}/start-agent`, {
+          method: 'POST',
+        })
 
         if (!res.ok) {
           console.error('Failed to start agent:', await res.text())

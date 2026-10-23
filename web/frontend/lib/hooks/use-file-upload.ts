@@ -2,7 +2,6 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { buildApiUrl } from '../api-config'
 import { apiFetch } from '../api-fetch'
 
 interface UploadResult {
@@ -62,7 +61,7 @@ export function useFileUpload(): UseFileUploadReturn {
     queryKey: UPLOAD_LIMITS_QUERY_KEY,
     queryFn: () =>
       apiFetch<UploadLimits>(
-        '/api/a-term/files/limits',
+        '/api/files/limits',
         undefined,
         'Failed to read the upload limit',
       ),
@@ -137,7 +136,7 @@ export function useFileUpload(): UseFileUploadReturn {
           resolve(null)
         })
 
-        xhr.open('POST', buildApiUrl('/api/a-term/files'))
+        xhr.open('POST', '/api/files')
         xhr.send(formData)
       })
     },

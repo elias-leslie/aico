@@ -57,9 +57,7 @@ describe('useFileUpload', () => {
     expect(result.current.error?.message).toBe(
       'File too large (3MB). Maximum size: 2MB',
     )
-    expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
-      '/api/a-term/files/limits',
-    )
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain('/api/files/limits')
     expect(xhrOpen).not.toHaveBeenCalled()
   })
 

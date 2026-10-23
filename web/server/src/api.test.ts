@@ -76,7 +76,7 @@ describe('guard and headers', () => {
     expect(ok.headers.get('x-frame-options')).toBe('DENY')
     expect(ok.headers.get('content-security-policy')).toContain("default-src 'none'")
 
-    const foreign = await call('POST', '/api/a-term/reset-all', undefined, {
+    const foreign = await call('POST', '/api/reset-all', undefined, {
       Origin: 'https://evil.example',
     })
     expect(foreign).toMatchObject({ status: 403, body: { error: 'origin_not_allowed' } })
@@ -85,7 +85,7 @@ describe('guard and headers', () => {
 
   it('answers unknown paths 404 and wrong methods 405', async () => {
     expect((await call('GET', '/api/nope')).status).toBe(404)
-    expect((await call('DELETE', '/api/a-term/projects')).status).toBe(405)
+    expect((await call('DELETE', '/api/projects')).status).toBe(405)
     expect((await call('POST', '/api/auth/login', {})).status).toBe(404)
   })
 })
@@ -96,7 +96,7 @@ describe('sessions', () => {
     const linked = tether.add({ tool: 'shell' })
     store.link(linked.id, pane.id, 'shell')
     const other = tether.add({ tool: 'claude', origin: 'aico', statePrevious: 'working' } as never)
-    const { body } = await call('GET', '/api/a-term/sessions?include_detached=true')
+    const { body } = await call('GET', '/api/sessions?include_detached=true')
     expect(body.total).toBe(2)
     const byId = Object.fromEntries(body.items.map((s: { id: string }) => [s.id, s]))
     expect(byId[linked.id]).toMatchObject({ pane_id: pane.id, is_external: false, mode: 'shell' })
@@ -113,7 +113,7 @@ describe('sessions', () => {
     const pane = store.createPane({ projectId: null, name: 'Shell', activeMode: 'shell' })
     const session = tether.add()
     store.link(session.id, pane.id, 'shell')
-    const { status, body } = await call('PATCH', `/api/a-term/sessions/${session.id}`, {
+    const { status, body } = await call('PATCH', `/api/sessions/${session.id}`, {
       name: '  Build  ',
       display_order: 4,
     })
@@ -123,7 +123,7 @@ describe('sessions', () => {
   })
 
   it('404s a session Tether no longer has', async () => {
-    const { status, body } = await call('GET', '/api/a-term/sessions/gone1234')
+    const { status, body } = await call('GET', '/api/sessions/gone1234')
     expect(status).toBe(404)
     expect(body.detail).toBe('Session gone1234 not found')
   })
@@ -134,7 +134,7 @@ describe('sessions', () => {
     const agent = tether.add({ tool: 'claude' })
     store.link(shell.id, pane.id, 'shell')
     store.link(agent.id, pane.id, 'claude')
-    const { body } = await call('DELETE', `/api/a-term/sessions/${agent.id}`)
+    const { body } = await call('DELETE', `/api/sessions/${agent.id}`)
     expect(body).toEqual({
       deleted: true,
       id: agent.id,
@@ -153,27 +153,25 @@ describe('sessions', () => {
     const agent = tether.add({ tool: 'claude' })
     store.link(shell.id, pane.id, 'shell')
     store.link(agent.id, pane.id, 'claude')
-    const { body } = await call('DELETE', `/api/a-term/sessions/${shell.id}`)
+    const { body } = await call('DELETE', `/api/sessions/${shell.id}`)
     expect(body).toMatchObject({ next_session_id: agent.id, pane_deleted: false })
     expect(store.getPane(pane.id)?.active_mode).toBe('claude')
   })
 
   it('closing a session another app started only ends it', async () => {
     const session = tether.add()
-    expect((await call('DELETE', `/api/a-term/sessions/${session.id}`)).body).toMatchObject({
+    expect((await call('DELETE', `/api/sessions/${session.id}`)).body).toMatchObject({
       is_external: true,
     })
     // Already gone: still reported as deleted.
-    expect((await call('DELETE', `/api/a-term/sessions/${session.id}`)).status).toBe(200)
+    expect((await call('DELETE', `/api/sessions/${session.id}`)).status).toBe(200)
   })
 
   it('resets by respawn, refusing a root', async () => {
     const session = tether.add({ tool: 'claude' })
     const root = tether.add({ tool: 'claude', rootRequestId: 'r1' })
-    expect((await call('POST', `/api/a-term/sessions/${session.id}/reset`)).body.generation).toBe(
-      'g1+',
-    )
-    expect((await call('POST', `/api/a-term/sessions/${root.id}/reset`)).status).toBe(409)
+    expect((await call('POST', `/api/sessions/${session.id}/reset`)).body.generation).toBe('g1+')
+    expect((await call('POST', `/api/sessions/${root.id}/reset`)).status).toBe(409)
   })
 
   it('reset-all respawns linked sessions and skips refusals', async () => {
@@ -183,28 +181,29 @@ describe('sessions', () => {
     store.link(one.id, pane.id, 'shell')
     store.link(root.id, pane.id, 'shell')
     store.link('vanished', pane.id, 'shell')
-    expect((await call('POST', '/api/a-term/reset-all')).body).toEqual({ reset_count: 1 })
+    expect((await call('POST', '/api/reset-all')).body).toEqual({ reset_count: 1 })
   })
 
   it('reports agent state and starts a stopped agent', async () => {
     const stopped = tether.add({ tool: 'claude', status: 'stopped' as never })
     const shell = tether.add({ tool: 'shell' })
     const root = tether.add({ tool: 'claude', rootRequestId: 'r' })
-    expect((await call('GET', `/api/a-term/sessions/${stopped.id}/agent-state`)).body).toEqual({
+    expect((await call('GET', `/api/sessions/${stopped.id}/agent-state`)).body).toEqual({
       session_id: stopped.id,
       agent_state: 'not_started',
       claude_state: 'not_started',
     })
-    expect(
-      (await call('POST', `/api/a-term/sessions/${stopped.id}/start-agent`)).body,
-    ).toMatchObject({ started: true, message: 'Agent restarted', agent_state: 'running' })
-    expect(
-      (await call('POST', `/api/a-term/sessions/${stopped.id}/start-agent`)).body,
-    ).toMatchObject({ started: false, message: 'Agent is already running' })
-    expect((await call('POST', `/api/a-term/sessions/${shell.id}/start-agent`)).status).toBe(400)
-    expect((await call('POST', `/api/a-term/sessions/${root.id}/start-agent`)).body.started).toBe(
-      false,
-    )
+    expect((await call('POST', `/api/sessions/${stopped.id}/start-agent`)).body).toMatchObject({
+      started: true,
+      message: 'Agent restarted',
+      agent_state: 'running',
+    })
+    expect((await call('POST', `/api/sessions/${stopped.id}/start-agent`)).body).toMatchObject({
+      started: false,
+      message: 'Agent is already running',
+    })
+    expect((await call('POST', `/api/sessions/${shell.id}/start-agent`)).status).toBe(400)
+    expect((await call('POST', `/api/sessions/${root.id}/start-agent`)).body.started).toBe(false)
   })
 
   it('answers Tether being down as 503', async () => {
@@ -212,7 +211,7 @@ describe('sessions', () => {
       const { TetherUnavailable } = await import('tether/client')
       throw new TetherUnavailable('down')
     }
-    const { status, body } = await call('GET', '/api/a-term/sessions')
+    const { status, body } = await call('GET', '/api/sessions')
     expect(status).toBe(503)
     expect(body.detail).toMatch(/Tether is not reachable/)
   })
@@ -220,7 +219,7 @@ describe('sessions', () => {
 
 describe('panes', () => {
   it('creates a project tab with a shell and the default agent, and remembers the project', async () => {
-    const { status, body } = await call('POST', '/api/a-term/panes', {
+    const { status, body } = await call('POST', '/api/panes', {
       pane_type: 'project',
       pane_name: 'Aico',
       project_id: 'aico',
@@ -253,14 +252,14 @@ describe('panes', () => {
       active_mode: 'claude',
     })
 
-    const list = await call('GET', '/api/a-term/panes')
+    const list = await call('GET', '/api/panes')
     expect(list.body.total).toBe(1)
-    expect((await call('GET', '/api/a-term/panes/detached')).body).toMatchObject({ total: 0 })
+    expect((await call('GET', '/api/panes/detached')).body).toMatchObject({ total: 0 })
   })
 
   it('ends what it created and drops the tab when Tether refuses a session', async () => {
     tether.failTool = 'claude'
-    const { status } = await call('POST', '/api/a-term/panes', {
+    const { status } = await call('POST', '/api/panes', {
       pane_type: 'project',
       pane_name: 'Aico',
       project_id: 'aico',
@@ -272,11 +271,11 @@ describe('panes', () => {
 
   it('validates the request and the tool', async () => {
     expect(
-      (await call('POST', '/api/a-term/panes', { pane_type: 'project', pane_name: 'x' })).status,
+      (await call('POST', '/api/panes', { pane_type: 'project', pane_name: 'x' })).status,
     ).toBe(400)
     expect(
       (
-        await call('POST', '/api/a-term/panes', {
+        await call('POST', '/api/panes', {
           pane_type: 'adhoc',
           pane_name: 'x',
           project_id: 'a',
@@ -285,7 +284,7 @@ describe('panes', () => {
     ).toBe(400)
     expect(
       (
-        await call('POST', '/api/a-term/panes', {
+        await call('POST', '/api/panes', {
           pane_type: 'project',
           pane_name: 'x',
           project_id: 'a',
@@ -295,7 +294,7 @@ describe('panes', () => {
     ).toBe(400)
     expect(
       (
-        await call('POST', '/api/a-term/panes', {
+        await call('POST', '/api/panes', {
           pane_type: 'project',
           pane_name: 'x',
           project_id: 'a',
@@ -303,35 +302,35 @@ describe('panes', () => {
         })
       ).status,
     ).toBe(404)
-    expect(
-      (await call('POST', '/api/a-term/panes', { pane_type: 'grid', pane_name: 'x' })).status,
-    ).toBe(422)
+    expect((await call('POST', '/api/panes', { pane_type: 'grid', pane_name: 'x' })).status).toBe(
+      422,
+    )
   })
 
   it('creates an ad hoc shell tab named after the tab', async () => {
-    const { body } = await call('POST', '/api/a-term/panes', {
+    const { body } = await call('POST', '/api/panes', {
       pane_type: 'adhoc',
       pane_name: 'Scratch',
     })
     expect(body.sessions).toHaveLength(1)
     expect(body.sessions[0]).toMatchObject({ mode: 'shell', task: 'Scratch' })
-    expect(
-      (await call('PATCH', `/api/a-term/panes/${body.id}`, { active_mode: 'claude' })).status,
-    ).toBe(400)
+    expect((await call('PATCH', `/api/panes/${body.id}`, { active_mode: 'claude' })).status).toBe(
+      400,
+    )
   })
 
   it('switches mode, recreating a missing shell, and renames', async () => {
     const pane = store.createPane({ projectId: 'aico', name: 'Aico', activeMode: 'claude' })
     const agent = tether.add({ tool: 'claude', projectRoot: '/p' })
     store.link(agent.id, pane.id, 'claude')
-    const { body } = await call('PATCH', `/api/a-term/panes/${pane.id}`, {
+    const { body } = await call('PATCH', `/api/panes/${pane.id}`, {
       active_mode: 'shell',
       pane_name: 'New',
     })
     expect(body).toMatchObject({ active_mode: 'shell', pane_name: 'New' })
     expect(body.sessions.map((s: { mode: string }) => s.mode)).toEqual(['claude', 'shell'])
     expect(
-      (await call('PATCH', `/api/a-term/panes/${pane.id}`, { active_mode: 'codex' })).body.detail,
+      (await call('PATCH', `/api/panes/${pane.id}`, { active_mode: 'codex' })).body.detail,
     ).toBe("Mode 'codex' not available on this pane")
   })
 
@@ -339,7 +338,7 @@ describe('panes', () => {
     const pane = store.createPane({ projectId: 'aico', name: 'Aico', activeMode: 'shell' })
     const agent = tether.add({ tool: 'codex' })
     store.link(agent.id, pane.id, 'codex')
-    const { body } = await call('PUT', `/api/a-term/panes/${pane.id}/agent-tool`, {
+    const { body } = await call('PUT', `/api/panes/${pane.id}/agent-tool`, {
       agent_tool_slug: 'cc',
     })
     expect(tether.callsOf('loadTui')).toEqual([[agent.id, 'g1', 'claude']])
@@ -351,12 +350,12 @@ describe('panes', () => {
     const pane = store.createPane({ projectId: null, name: 'x', activeMode: 'shell' })
     const shell = tether.add()
     store.link(shell.id, pane.id, 'shell')
-    expect((await call('DELETE', `/api/a-term/panes/${pane.id}`)).body).toEqual({
+    expect((await call('DELETE', `/api/panes/${pane.id}`)).body).toEqual({
       deleted: true,
       id: pane.id,
     })
     expect(tether.sessions.size).toBe(0)
-    expect((await call('DELETE', `/api/a-term/panes/${pane.id}`)).status).toBe(404)
+    expect((await call('DELETE', `/api/panes/${pane.id}`)).status).toBe(404)
   })
 })
 
@@ -364,7 +363,7 @@ describe('projects, tools, Agent Hub, health', () => {
   it('merges Tether projects with tab settings and sets a mode', async () => {
     tether.projectList.push({ id: 'zeta', name: 'Zeta', root: '/z' })
     store.upsertProjectSettings('zeta', { enabled: true, displayOrder: -1, activeMode: 'claude' })
-    expect((await call('GET', '/api/a-term/projects')).body).toEqual([
+    expect((await call('GET', '/api/projects')).body).toEqual([
       {
         id: 'zeta',
         name: 'Zeta',
@@ -382,19 +381,15 @@ describe('projects, tools, Agent Hub, health', () => {
         display_order: 0,
       },
     ])
-    expect(
-      (await call('PUT', '/api/a-term/projects/aico/mode', { mode: 'codex' })).body,
-    ).toMatchObject({
+    expect((await call('PUT', '/api/projects/aico/mode', { mode: 'codex' })).body).toMatchObject({
       id: 'aico',
       mode: 'codex',
     })
-    expect((await call('PUT', '/api/a-term/projects/aico/mode', { mode: 'Bad Mode' })).status).toBe(
-      422,
-    )
+    expect((await call('PUT', '/api/projects/aico/mode', { mode: 'Bad Mode' })).status).toBe(422)
   })
 
   it('lists agent tools in the old shape', async () => {
-    const all = (await call('GET', '/api/a-term/agent-tools')).body
+    const all = (await call('GET', '/api/agent-tools')).body
     expect(all.map((t: { slug: string }) => t.slug)).toEqual(['shell', 'claude', 'codex'])
     expect(all[1]).toMatchObject({
       id: 'claude',
@@ -402,7 +397,7 @@ describe('projects, tools, Agent Hub, health', () => {
       is_default: true,
       aliases: ['cc'],
     })
-    const enabled = (await call('GET', '/api/a-term/agent-tools?enabled_only=true')).body
+    const enabled = (await call('GET', '/api/agent-tools?enabled_only=true')).body
     expect(enabled.map((t: { slug: string }) => t.slug)).toEqual(['shell', 'claude'])
   })
 

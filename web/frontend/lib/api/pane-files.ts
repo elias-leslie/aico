@@ -41,7 +41,7 @@ export function fetchPaneFileTree(
   path = '',
 ): Promise<PaneFileTreeResponse> {
   return apiFetch<PaneFileTreeResponse>(
-    `/api/a-term/panes/${paneId}/files/tree${buildQueryString({
+    `/api/panes/${paneId}/files/tree${buildQueryString({
       path: path || undefined,
     })}`,
     undefined,
@@ -54,7 +54,7 @@ export function fetchPaneFileContent(
   path: string,
 ): Promise<PaneFileContentResponse> {
   return apiFetch<PaneFileContentResponse>(
-    `/api/a-term/panes/${paneId}/files/content${buildQueryString({ path })}`,
+    `/api/panes/${paneId}/files/content${buildQueryString({ path })}`,
     undefined,
     'Failed to load file contents',
   )

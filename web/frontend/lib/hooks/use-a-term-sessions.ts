@@ -94,29 +94,29 @@ const fetchSessions = async (
     params.set('include_detached', 'true')
   }
   const query = params.toString()
-  const path = query ? `/api/a-term/sessions?${query}` : '/api/a-term/sessions'
+  const path = query ? `/api/sessions?${query}` : '/api/sessions'
   return (await apiFetch<SessionListResponse>(path)).items
 }
 
 const updateSession = (sessionId: string, req: UpdateSessionRequest) =>
-  apiFetch<ATermSession>(`/api/a-term/sessions/${sessionId}`, {
+  apiFetch<ATermSession>(`/api/sessions/${sessionId}`, {
     method: 'PATCH',
     headers: jsonHeaders,
     body: JSON.stringify(req),
   })
 
 const deleteSession = (sessionId: string) =>
-  apiFetch<DeleteSessionResult>(`/api/a-term/sessions/${sessionId}`, {
+  apiFetch<DeleteSessionResult>(`/api/sessions/${sessionId}`, {
     method: 'DELETE',
   })
 
 const resetSession = (sessionId: string) =>
-  apiFetch<ATermSession>(`/api/a-term/sessions/${sessionId}/reset`, {
+  apiFetch<ATermSession>(`/api/sessions/${sessionId}/reset`, {
     method: 'POST',
   })
 
 const resetAllSessions = () =>
-  apiFetch<{ reset_count: number }>('/api/a-term/reset-all', { method: 'POST' })
+  apiFetch<{ reset_count: number }>('/api/reset-all', { method: 'POST' })
 
 const invalidatePanesAndSessions = (
   queryClient: ReturnType<typeof useQueryClient>,

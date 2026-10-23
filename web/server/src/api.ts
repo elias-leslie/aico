@@ -71,7 +71,7 @@ export function buildApi(deps: ApiDeps): Router {
     }
   }
 
-  router.on('GET', '/api/a-term/panes', async () => {
+  router.on('GET', '/api/panes', async () => {
     const known = await sessionsById()
     const items = store
       .listPanes()
@@ -82,9 +82,9 @@ export function buildApi(deps: ApiDeps): Router {
   })
 
   // Tabs are never detached any more; the UI still asks.
-  router.on('GET', '/api/a-term/panes/detached', () => ({ items: [], total: 0 }))
+  router.on('GET', '/api/panes/detached', () => ({ items: [], total: 0 }))
 
-  router.on('POST', '/api/a-term/panes', async (ctx) => {
+  router.on('POST', '/api/panes', async (ctx) => {
     const body = objectBody(await ctx.body())
     const paneType = requiredString(body, 'pane_type')
     if (paneType !== 'project' && paneType !== 'adhoc')
@@ -103,12 +103,12 @@ export function buildApi(deps: ApiDeps): Router {
     return paneResponse(view, order)
   })
 
-  router.on('GET', '/api/a-term/panes/:paneId', async (ctx) => {
+  router.on('GET', '/api/panes/:paneId', async (ctx) => {
     const { pane, order } = await paneById(ctx.params.paneId)
     return paneResponse(pane, order)
   })
 
-  router.on('PATCH', '/api/a-term/panes/:paneId', async (ctx) => {
+  router.on('PATCH', '/api/panes/:paneId', async (ctx) => {
     const id = ctx.params.paneId
     const body = objectBody(await ctx.body())
     const name = optionalString(body, 'pane_name', { max: 255 })
@@ -138,7 +138,7 @@ export function buildApi(deps: ApiDeps): Router {
     return paneResponse(view, order)
   })
 
-  router.on('DELETE', '/api/a-term/panes/:paneId', async (ctx) => {
+  router.on('DELETE', '/api/panes/:paneId', async (ctx) => {
     const id = ctx.params.paneId
     if (!store.getPane(id)) throw new HttpError(404, `Pane ${id} not found`)
     for (const link of store.linksForPane(id)) await endSession(link.session_id)
@@ -146,7 +146,7 @@ export function buildApi(deps: ApiDeps): Router {
     return { deleted: true, id }
   })
 
-  router.on('PUT', '/api/a-term/panes/:paneId/agent-tool', async (ctx) => {
+  router.on('PUT', '/api/panes/:paneId/agent-tool', async (ctx) => {
     const id = ctx.params.paneId
     const body = objectBody(await ctx.body())
     const ref = requiredString(body, 'agent_tool_slug', { max: 100, pattern: SLUG })
@@ -177,15 +177,15 @@ export function buildApi(deps: ApiDeps): Router {
 
   // -- Sessions -----------------------------------------------------------------
 
-  router.on('GET', '/api/a-term/sessions', async () => {
+  router.on('GET', '/api/sessions', async () => {
     // Tabs are never detached any more, so include_detached changes nothing.
     const items = await listSessions()
     return { items, total: items.length }
   })
 
-  router.on('GET', '/api/a-term/sessions/:sessionId', (ctx) => getSession(ctx.params.sessionId))
+  router.on('GET', '/api/sessions/:sessionId', (ctx) => getSession(ctx.params.sessionId))
 
-  router.on('PATCH', '/api/a-term/sessions/:sessionId', async (ctx) => {
+  router.on('PATCH', '/api/sessions/:sessionId', async (ctx) => {
     const id = ctx.params.sessionId
     const body = objectBody(await ctx.body())
     const name = optionalString(body, 'name', { max: MAX_SESSION_NAME })
@@ -200,7 +200,7 @@ export function buildApi(deps: ApiDeps): Router {
     return getSession(id)
   })
 
-  router.on('DELETE', '/api/a-term/sessions/:sessionId', async (ctx) => {
+  router.on('DELETE', '/api/sessions/:sessionId', async (ctx) => {
     const id = ctx.params.sessionId
     const result = (fields: Partial<Record<string, unknown>> = {}) => ({
       deleted: true,
@@ -228,11 +228,11 @@ export function buildApi(deps: ApiDeps): Router {
     return result({ next_session_id: next.session_id, pane_id: pane.id })
   })
 
-  router.on('POST', '/api/a-term/sessions/:sessionId/reset', async (ctx) =>
+  router.on('POST', '/api/sessions/:sessionId/reset', async (ctx) =>
     respawn(await getSession(ctx.params.sessionId)),
   )
 
-  router.on('POST', '/api/a-term/reset-all', async () => {
+  router.on('POST', '/api/reset-all', async () => {
     const known = await sessionsById()
     let count = 0
     for (const link of store.listLinks()) {
@@ -249,7 +249,7 @@ export function buildApi(deps: ApiDeps): Router {
     return { reset_count: count }
   })
 
-  router.on('GET', '/api/a-term/sessions/:sessionId/agent-state', async (ctx) => {
+  router.on('GET', '/api/sessions/:sessionId/agent-state', async (ctx) => {
     const session = await getSession(ctx.params.sessionId)
     return {
       session_id: session.id,
@@ -258,7 +258,7 @@ export function buildApi(deps: ApiDeps): Router {
     }
   })
 
-  router.on('POST', '/api/a-term/sessions/:sessionId/start-agent', async (ctx) => {
+  router.on('POST', '/api/sessions/:sessionId/start-agent', async (ctx) => {
     const session = await getSession(ctx.params.sessionId)
     const result = await life.startAgent(session)
     return {
@@ -288,7 +288,7 @@ export function buildApi(deps: ApiDeps): Router {
     }
   }
 
-  router.on('GET', '/api/a-term/projects', async () => {
+  router.on('GET', '/api/projects', async () => {
     const projects = await tetherCall(() => tether.projects())
     const settings = store.allProjectSettings()
     return projects
@@ -297,7 +297,7 @@ export function buildApi(deps: ApiDeps): Router {
       .sort((a, b) => a.display_order - b.display_order || byText(a.name, b.name))
   })
 
-  router.on('PUT', '/api/a-term/projects/:projectId/mode', async (ctx) => {
+  router.on('PUT', '/api/projects/:projectId/mode', async (ctx) => {
     const id = ctx.params.projectId
     const body = objectBody(await ctx.body())
     const mode = requiredString(body, 'mode', { max: 100, pattern: SLUG })
@@ -310,7 +310,7 @@ export function buildApi(deps: ApiDeps): Router {
     )
   })
 
-  router.on('GET', '/api/a-term/agent-tools', async (ctx) => {
+  router.on('GET', '/api/agent-tools', async (ctx) => {
     const enabledOnly = ctx.query.get('enabled_only') === 'true'
     const { items } = await tetherCall(() => listTools(tether))
     const iso = (ms: unknown) =>

@@ -52,7 +52,7 @@ describe('AgentShowToast', () => {
     expect(document.querySelector('script')).toBeNull()
     expect(screen.getByRole('link', { name: 'Open' })).toHaveAttribute(
       'href',
-      `/api/a-term/shows/${metadata.id}/file`,
+      `/api/shows/${metadata.id}/file`,
     )
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss shared item' }))
     expect(dismiss).toHaveBeenCalledOnce()

@@ -112,7 +112,7 @@ interface Frames {
 }
 
 function open(id: string, headers: Record<string, string> = { Origin: ORIGIN }): Frames {
-  const ws = new WebSocket(`ws://127.0.0.1:${port}/ws/a-term/${id}`, { headers })
+  const ws = new WebSocket(`ws://127.0.0.1:${port}/ws/${id}`, { headers })
   const controls: Record<string, unknown>[] = []
   const data: string[] = []
   const waiters: [

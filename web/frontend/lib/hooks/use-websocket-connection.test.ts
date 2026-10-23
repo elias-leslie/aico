@@ -314,8 +314,6 @@ describe('history lines', () => {
   it('connects without any transport query', () => {
     vi.stubGlobal('WebSocket', MockWebSocket)
     openWebSocketConnection('session-1', '/tmp', buildRefs(), buildCallbacks())
-    expect(sockets[0].url).toMatch(
-      /\/ws\/a-term\/session-1\?working_dir=%2Ftmp$/,
-    )
+    expect(sockets[0].url).toMatch(/\/ws\/session-1\?working_dir=%2Ftmp$/)
   })
 })

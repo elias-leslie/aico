@@ -1,13 +1,10 @@
 import type { Metadata, Viewport } from 'next'
-import { headers } from 'next/headers'
-import Script from 'next/script'
 import { LANTERN_RIM } from '@/lib/constants/lantern'
 import {
   PRODUCT_DESCRIPTION,
   PRODUCT_NAME,
   PRODUCT_SHORT_NAME,
 } from '@/lib/project-branding'
-import { PWA_REGISTER_SCRIPT } from '@/lib/runtime-scripts'
 import './globals.css'
 import { Providers } from './providers'
 
@@ -39,13 +36,11 @@ export const viewport: Viewport = {
   interactiveWidget: 'resizes-content',
 }
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
-  const nonce = (await headers()).get('x-nonce') ?? undefined
-
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -56,9 +51,6 @@ export default async function RootLayout({
           href="/manifest.webmanifest"
           crossOrigin="use-credentials"
         />
-        <Script id="pwa-register" nonce={nonce} strategy="afterInteractive">
-          {PWA_REGISTER_SCRIPT}
-        </Script>
       </head>
       <body>
         <Providers>{children}</Providers>

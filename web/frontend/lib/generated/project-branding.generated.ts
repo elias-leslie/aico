@@ -4,8 +4,4 @@ export const PRODUCT_NAME = 'Aico' as const
 export const PRODUCT_SHORT_NAME = 'Aico' as const
 export const PRODUCT_DESCRIPTION =
   'Floating-widget desktop AI companion with a browser and phone view, all over Tether-owned tmux sessions.' as const
-export const PRODUCT_PORTS = {
-  backend: 8002,
-  frontend: 3002,
-} as const
 export const PRODUCT_PUBLIC_HOST = 'aico.summitflow.dev' as const

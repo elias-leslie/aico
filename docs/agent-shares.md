@@ -22,9 +22,9 @@ event watcher and the API. Restarting the backend clears them; dropping one from
 memory never removes its file. Run one backend worker so the watcher and the
 API share this list.
 
-`GET /api/a-term/shows` returns `{ "shows": [...] }` in arrival order.
+`GET /api/shows` returns `{ "shows": [...] }` in arrival order.
 `?since=<id>` returns the items after that ID; an unknown or expired ID returns
-the whole list. Both this route and `GET /api/a-term/shows/<id>/file` use the
+the whole list. Both this route and `GET /api/shows/<id>/file` use the
 web app's normal authentication. The browser polls every ten seconds while it
 is visible and again when it becomes visible. Notices stay until dismissed; a
 link share offers its text and Copy only.

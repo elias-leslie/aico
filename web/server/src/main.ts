@@ -10,6 +10,7 @@ import { HISTORY_LINES, loadConfig } from './config'
 import { WebStore } from './db'
 import { createWebServer } from './server'
 import { Shows } from './shows'
+import { createStaticSite } from './static'
 import { TerminalHub } from './terminal'
 
 function serve(): void {
@@ -41,6 +42,10 @@ function serve(): void {
     config,
     buildApi({ tether, store, config, uploads: config.uploads, shows }),
     terminals,
+    createStaticSite(config.staticDir, {
+      agentHubUrl: config.agentHubUrl,
+      agentHubPort: config.agentHubPort,
+    }),
   )
 
   background.start()

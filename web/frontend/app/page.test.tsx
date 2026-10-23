@@ -1,9 +1,15 @@
 import { render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import Home from './page'
 
-const mockATermTabs = vi.fn(
-  ({
+const searchParams = { current: new URLSearchParams() }
+
+vi.mock('next/navigation', () => ({
+  useSearchParams: () => searchParams.current,
+}))
+
+vi.mock('@/components/ATermTabs', () => ({
+  ATermTabs: ({
     projectId,
     projectPath,
     className,
@@ -19,56 +25,39 @@ const mockATermTabs = vi.fn(
       data-project-path={projectPath ?? ''}
     />
   ),
-)
-
-vi.mock('@/components/ATermTabs', () => ({
-  ATermTabs: (props: {
-    projectId?: string
-    projectPath?: string
-    className?: string
-  }) => mockATermTabs(props),
 }))
 
 describe('Home page', () => {
-  it('forwards resolved search params to ATermTabs', async () => {
-    const view = await Home({
-      searchParams: Promise.resolve({
-        project: 'agent-hub',
-        dir: '/home/demo/projects/agent-hub',
-      }),
-    })
+  beforeEach(() => {
+    searchParams.current = new URLSearchParams()
+  })
 
-    render(view)
-
-    expect(screen.getByTestId('a-term-tabs')).toHaveAttribute(
-      'data-project-id',
-      'agent-hub',
+  it('passes the query to ATermTabs', () => {
+    searchParams.current = new URLSearchParams(
+      'project=agent-hub&dir=/home/demo/projects/agent-hub',
     )
-    expect(screen.getByTestId('a-term-tabs')).toHaveAttribute(
+
+    render(<Home />)
+
+    const tabs = screen.getByTestId('a-term-tabs')
+    expect(tabs).toHaveAttribute('data-project-id', 'agent-hub')
+    expect(tabs).toHaveAttribute(
       'data-project-path',
       '/home/demo/projects/agent-hub',
     )
-    expect(screen.getByTestId('a-term-tabs')).toHaveAttribute(
-      'data-class-name',
-      'flex-1 min-h-0',
-    )
+    expect(tabs).toHaveAttribute('data-class-name', 'flex-1 min-h-0')
   })
 
-  it('uses the first non-empty value when search params are arrays', async () => {
-    const view = await Home({
-      searchParams: Promise.resolve({
-        project: ['', 'portfolio-ai'],
-        dir: ['', '/home/demo/projects/portfolio-ai'],
-      }),
-    })
-
-    render(view)
-
-    expect(screen.getByTestId('a-term-tabs')).toHaveAttribute(
-      'data-project-id',
-      'portfolio-ai',
+  it('uses the first non-empty value of a repeated parameter', () => {
+    searchParams.current = new URLSearchParams(
+      'project=&project=portfolio-ai&dir=&dir=/home/demo/projects/portfolio-ai',
     )
-    expect(screen.getByTestId('a-term-tabs')).toHaveAttribute(
+
+    render(<Home />)
+
+    const tabs = screen.getByTestId('a-term-tabs')
+    expect(tabs).toHaveAttribute('data-project-id', 'portfolio-ai')
+    expect(tabs).toHaveAttribute(
       'data-project-path',
       '/home/demo/projects/portfolio-ai',
     )

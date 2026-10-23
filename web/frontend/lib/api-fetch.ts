@@ -1,5 +1,3 @@
-import { buildApiUrl } from './api-config'
-
 /**
  * Fetch wrapper with standard error handling for A-Term API calls.
  * Parses error details from JSON responses and throws with the detail message.
@@ -9,7 +7,7 @@ export async function apiFetch<T>(
   options?: RequestInit,
   defaultError = 'Request failed',
 ): Promise<T> {
-  const res = await fetch(buildApiUrl(url), options)
+  const res = await fetch(url, options)
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: defaultError }))
     throw new Error(error.detail || defaultError)

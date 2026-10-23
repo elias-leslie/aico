@@ -120,7 +120,7 @@ export function openWebSocketConnection(
   const query = new URLSearchParams()
   if (workingDir) query.set('working_dir', workingDir)
   const queryString = query.toString()
-  const wsPath = `/ws/a-term/${sessionId}${queryString ? `?${queryString}` : ''}`
+  const wsPath = `/ws/${sessionId}${queryString ? `?${queryString}` : ''}`
 
   let ws: WebSocket
   try {

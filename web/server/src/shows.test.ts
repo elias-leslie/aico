@@ -193,7 +193,7 @@ describe('share routes', () => {
   let server: Awaited<ReturnType<typeof serveRoutes>>
 
   const get = (path: string) => fetch(`${server.base}${path}`)
-  const fileUrl = `/api/a-term/shows/${SHOW_ID}/file`
+  const fileUrl = `/api/shows/${SHOW_ID}/file`
   const bytes = async (response: Response) => Buffer.from(await response.arrayBuffer())
 
   beforeEach(async () => {
@@ -218,13 +218,13 @@ describe('share routes', () => {
     const second = show({ id: 'bbbbbbbbbbbb', title: null })
     shows.store.add(first)
     shows.store.add(second)
-    const response = await get('/api/a-term/shows')
+    const response = await get('/api/shows')
     expect(response.headers.get('cache-control')).toBe('no-store')
     expect(await response.json()).toEqual({ shows: [metadata(first), metadata(second)] })
-    expect(await (await get(`/api/a-term/shows?since=${first.id}`)).json()).toEqual({
+    expect(await (await get(`/api/shows?since=${first.id}`)).json()).toEqual({
       shows: [metadata(second)],
     })
-    expect(await (await get(`/api/a-term/shows?since=${second.id}`)).json()).toEqual({ shows: [] })
+    expect(await (await get(`/api/shows?since=${second.id}`)).json()).toEqual({ shows: [] })
   })
 
   it('serves a file as a no-store, nosniff attachment', async () => {
