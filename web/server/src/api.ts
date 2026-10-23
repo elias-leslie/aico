@@ -17,6 +17,7 @@ import {
 } from './http'
 import {
   agentStateFor,
+  byText,
   fromTether,
   numberSessions,
   requireRespawnable,
@@ -99,7 +100,7 @@ export function buildApi(deps: ApiDeps): Router {
       .linksForPane(pane.id)
       .map((link) => known.get(link.session_id))
       .filter((session): session is WebSession => session !== undefined)
-      .sort((a, b) => a.mode.localeCompare(b.mode))
+      .sort((a, b) => byText(a.mode, b.mode))
     return { ...pane, sessions }
   }
 
@@ -212,11 +213,11 @@ export function buildApi(deps: ApiDeps): Router {
       .map((pane, order) => ({ pane: withSessions(pane, known), order }))
       .filter(({ pane }) => pane.sessions.length > 0)
       .map(({ pane, order }) => paneResponse(pane, order))
-    return { items, total: items.length, max_panes: null }
+    return { items, total: items.length }
   })
 
   // Tabs are never detached any more; the UI still asks.
-  router.on('GET', '/api/a-term/panes/detached', () => ({ items: [], total: 0, max_panes: null }))
+  router.on('GET', '/api/a-term/panes/detached', () => ({ items: [], total: 0 }))
 
   router.on('POST', '/api/a-term/panes', async (ctx) => {
     const body = objectBody(await ctx.body())
@@ -467,7 +468,7 @@ export function buildApi(deps: ApiDeps): Router {
     return projects
       .filter((project) => project.id)
       .map((project) => projectResponse(project.id, project, settings))
-      .sort((a, b) => a.display_order - b.display_order || a.name.localeCompare(b.name))
+      .sort((a, b) => a.display_order - b.display_order || byText(a.name, b.name))
   })
 
   router.on('PUT', '/api/a-term/projects/:projectId/mode', async (ctx) => {
@@ -508,9 +509,7 @@ export function buildApi(deps: ApiDeps): Router {
         updated_at: iso(tool.updatedAt),
       }))
       .filter((tool) => !enabledOnly || tool.enabled)
-      .sort(
-        (a, b) => a.display_order - b.display_order || String(a.name).localeCompare(String(b.name)),
-      )
+      .sort((a, b) => a.display_order - b.display_order || byText(String(a.name), String(b.name)))
   })
 
   // -- Agent Hub, auth, health ------------------------------------------------------

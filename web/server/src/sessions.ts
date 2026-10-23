@@ -130,10 +130,13 @@ export function fromTether(descriptor: SessionDescriptor, link: Link | null): We
   }
 }
 
+/** Code-point order, as the Python backend sorted (not the locale's). */
+export const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
+
 /** Numbers each project's sessions of one mode by age (1, 2, …), as the UI labels them. */
 export function numberSessions(sessions: WebSession[]): void {
   const counters = new Map<string, number>()
-  const byAge = [...sessions].sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? ''))
+  const byAge = [...sessions].sort((a, b) => byText(a.created_at ?? '', b.created_at ?? ''))
   for (const session of byAge) {
     const key = `${session.project_id ?? ''}\0${session.mode}`
     const next = (counters.get(key) ?? 0) + 1
@@ -144,8 +147,7 @@ export function numberSessions(sessions: WebSession[]): void {
 
 export function sortSessions(sessions: WebSession[]): WebSession[] {
   return sessions.sort(
-    (a, b) =>
-      a.display_order - b.display_order || (a.created_at ?? '').localeCompare(b.created_at ?? ''),
+    (a, b) => a.display_order - b.display_order || byText(a.created_at ?? '', b.created_at ?? ''),
   )
 }
 
