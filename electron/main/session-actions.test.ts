@@ -288,7 +288,7 @@ describe('session actions', () => {
     expect(windows.focusOrReopen).toHaveBeenCalledWith('bbbbbbbb')
   })
 
-  it('rejects an old pre-Tether A-Term id', async () => {
+  it('rejects an old pre-Tether web app id', async () => {
     const { handle, windows, tether } = setup()
     const open = handle.get('session:open')
     await expect(

@@ -7,7 +7,7 @@ The script now launches the emulator directly from the SDK, uses `sg kvm` automa
 ## Prerequisites
 
 - Local frontend running at `http://localhost:3002`
-- Android emulator launcher, created at `~/bin/start-a-term-android-emulator` by `scripts/install-android-emulator.sh` (override with `ANDROID_EMULATOR_LAUNCHER`)
+- Android emulator launcher, created at `~/bin/start-aico-android-emulator` by `scripts/install-android-emulator.sh` (override with `ANDROID_EMULATOR_LAUNCHER`)
 - `adb` installed
 - `agent-browser` (a Chrome DevTools Protocol automation CLI) for scripted inspection; optional for `workflow`
 
@@ -46,7 +46,7 @@ Overrides:
 ```bash
 MOBILE_EMULATOR_HEADLESS=0 bash ./scripts/mobile-verification.sh start-emulator
 MOBILE_CDP_PORT=9333 bash ./scripts/mobile-verification.sh forward-cdp
-A_TERM_MOBILE_PORT=3002 bash ./scripts/mobile-verification.sh open-app
+AICO_MOBILE_PORT=3002 bash ./scripts/mobile-verification.sh open-app
 ```
 
 ## What To Verify

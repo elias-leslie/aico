@@ -162,8 +162,8 @@ See [`extension/README.md`](../extension/README.md) for details.
 
 Every session is a tmux session on a Tether-managed absolute socket, so any
 tmux-capable client on the same machine can attach: `tether sessions attach <id>`
-(or `--print` for the exact argv). [A-term](../web) is another Tether
-client with an authenticated WebSocket, so opening the A-term PWA on a phone
+(or `--print` for the exact argv). The [web app](../web) is another Tether
+client with an authenticated WebSocket, so opening its PWA on a phone
 gives live, two-way access to the same sessions Aico shows.
 
 What you get on mobile is the terminal itself; Aico's desktop chrome (eyes, lantern menu, capture gestures) stays on the desktop.

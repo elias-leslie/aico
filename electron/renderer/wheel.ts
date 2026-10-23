@@ -1,4 +1,4 @@
-// Wheel-to-lines mapping, matched to A-Term's overlay feel: a typical notch
+// Wheel-to-lines mapping, matched to the web app's overlay feel: a typical notch
 // (~100px deltaY) moves ~14 lines — about half a page — which is the snappy
 // scroll speed we want. Chromium gives pixel deltas (deltaMode 0).
 const WHEEL_LINE_HEIGHT_PX = 14

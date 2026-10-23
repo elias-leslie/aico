@@ -196,7 +196,7 @@ Aico now:
 7. Requires `Linger=yes` before creating durable work, so graphical logout does
    not tear down the user manager or intended tmux sessions.
 
-A-Term discovers both the historical socket and validated active generation
+The web app discovers both the historical socket and validated active generation
 sockets through read-only SQLite access. Generation-qualified source IDs prevent
 same-name sessions on different sockets from colliding.
 

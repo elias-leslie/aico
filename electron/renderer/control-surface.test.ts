@@ -41,7 +41,7 @@ describe('openable session discovery', () => {
       {
         origin: 'a-term',
         id: '0a1b2c3d',
-        label: 'A-Term new',
+        label: 'Web new',
         project: null,
         tool: null,
         status: 'running',

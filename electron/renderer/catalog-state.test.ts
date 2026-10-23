@@ -3,10 +3,10 @@ import type { OpenableSession } from '../types'
 import { allActions, pinnedActions, setProjectActions, setTuiActions } from './actions'
 import { createCatalogState, type TuiInfo } from './catalog-state'
 
-const aTermSession = (id: string): OpenableSession => ({
+const webSession = (id: string): OpenableSession => ({
   origin: 'a-term',
   id,
-  label: `A-Term ${id}`,
+  label: `Web ${id}`,
   project: 'Aico',
   tool: 'Codex',
   status: 'running',
@@ -47,7 +47,7 @@ describe('picker catalog state', () => {
     expect(listOpenableSessions).toHaveBeenCalledOnce()
 
     projects.resolve([{ id: 'workspace-1', name: 'Workspace', current: true }])
-    sessions.resolve([aTermSession('0a1b2c01')])
+    sessions.resolve([webSession('0a1b2c01')])
     await Promise.resolve()
     expect(finished).toBe(false)
 
@@ -75,9 +75,9 @@ describe('picker catalog state', () => {
     })
     const oldRefresh = catalogs.refreshSessions()
     const newRefresh = catalogs.refreshSessions()
-    second.resolve([aTermSession('new')])
+    second.resolve([webSession('new')])
     await newRefresh
-    first.resolve([aTermSession('old')])
+    first.resolve([webSession('old')])
     await oldRefresh
 
     expect(catalogs.sessions.map((session) => session.id)).toEqual(['new'])
@@ -114,7 +114,7 @@ describe('picker catalog state', () => {
           status: 'running',
           locallyOpen: false,
         },
-        aTermSession('0a1b2c02'),
+        webSession('0a1b2c02'),
       ],
     })
 

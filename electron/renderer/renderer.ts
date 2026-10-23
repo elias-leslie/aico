@@ -113,7 +113,7 @@ function controlWheel(e: WheelEvent): boolean {
   })
   if (action === 'xterm-report') return false
   if (action === 'forward-sgr') forwardWheel(e)
-  // xterm's own speed is ~3 lines a notch; this matches A-Term's.
+  // xterm's own speed is ~3 lines a notch; this matches the web app's.
   else if (action === 'scroll') term.scrollLines(wheelLineDelta(e.deltaY))
   return true
 }

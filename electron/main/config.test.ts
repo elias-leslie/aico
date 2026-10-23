@@ -87,7 +87,7 @@ describe('readConfig', () => {
     expect(readConfig({ AICO_SIDECAR_PORT: '65535' }, '/h', 1).listenerPort).toBe(65535)
   })
 
-  it('strips trailing slashes from the a-term URL', () => {
+  it('strips trailing slashes from the web app URL', () => {
     expect(readConfig({ AICO_WEB_URL: 'https://a.example///' }, '/h', 1).webUrl).toBe(
       'https://a.example',
     )

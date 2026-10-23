@@ -27,7 +27,7 @@ describe('tray session catalog', () => {
     menus.length = 0
     const onSelect = vi.fn()
     const onRefreshSessions = vi.fn(() => {
-      refreshTray([{ id: '0a1b2c3d', label: 'A-Term session', open: false }], [], [])
+      refreshTray([{ id: '0a1b2c3d', label: 'Web session', open: false }], [], [])
     })
     createTray(
       {
@@ -47,7 +47,7 @@ describe('tray session catalog', () => {
     expect(onRefreshSessions).toHaveBeenCalledOnce()
     const after = menus.at(-1) ?? []
     item(after, 'Idle')
-    const open = item(after, '○ A-Term session')
+    const open = item(after, '○ Web session')
     ;(open.click as () => void)()
     expect(onSelect).toHaveBeenCalledWith('0a1b2c3d')
   })
