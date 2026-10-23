@@ -30,35 +30,37 @@ export function PaneStatusBadge({ status, onReconnect }: PaneStatusBadgeProps) {
   const meta = STATUS_META[status]
   if (!meta) return null
 
-  if (RECONNECTABLE.has(status) && onReconnect) {
-    return (
-      <button
-        type="button"
-        onClick={onReconnect}
-        className="lantern-btn primary flex-none"
-        style={{ height: 28, padding: '0 10px', fontSize: 12 }}
-        title={`${meta.label}. Reconnect`}
-        aria-label="Reconnect session"
-      >
-        Reconnect
-      </button>
-    )
-  }
-
+  const canReconnect = RECONNECTABLE.has(status) && onReconnect !== undefined
   return (
-    <span
-      role="status"
-      data-testid="connection-status"
-      className="inline-flex flex-none items-center gap-[5px] whitespace-nowrap text-xs"
-      style={{ color: 'var(--mist)' }}
-      title={`Connection: ${meta.label}`}
-    >
+    <span className="inline-flex flex-none items-center gap-2">
       <span
-        aria-hidden="true"
-        className="h-1.5 w-1.5 rounded-full"
-        style={{ backgroundColor: meta.dot }}
-      />
-      {meta.label}
+        role="status"
+        data-testid="connection-status"
+        className="inline-flex items-center gap-[5px] whitespace-nowrap text-xs"
+        style={{ color: 'var(--mist)' }}
+        title={`Connection: ${meta.label}`}
+      >
+        <span
+          aria-hidden="true"
+          className="h-1.5 w-1.5 rounded-full"
+          style={{ backgroundColor: meta.dot }}
+        />
+        {/* Next to Reconnect a narrow bar keeps only the dot. */}
+        <span className={canReconnect ? 'max-sm:sr-only' : undefined}>
+          {meta.label}
+        </span>
+      </span>
+      {canReconnect && (
+        <button
+          type="button"
+          onClick={onReconnect}
+          className="lantern-btn primary flex-none"
+          style={{ height: 28, padding: '0 10px', fontSize: 12 }}
+          aria-label="Reconnect session"
+        >
+          Reconnect
+        </button>
+      )}
     </span>
   )
 }

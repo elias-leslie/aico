@@ -17,6 +17,7 @@ describe('PaneStatusBadge', () => {
   it('offers Reconnect after a transient failure', () => {
     const onReconnect = vi.fn()
     render(<PaneStatusBadge status="disconnected" onReconnect={onReconnect} />)
+    expect(screen.getByRole('status')).toHaveTextContent('Disconnected')
     fireEvent.click(screen.getByRole('button', { name: 'Reconnect session' }))
     expect(onReconnect).toHaveBeenCalledTimes(1)
   })
