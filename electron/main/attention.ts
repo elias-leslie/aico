@@ -301,9 +301,9 @@ export function agentName(
   return tool?.name ?? fallback
 }
 
-/** The phone push body, e.g. "Claude in tether is waiting for you". */
-export function pushBody(agent: string, title: string): string {
-  return `${agent} in ${title} is waiting for you`
+/** The phone push title, e.g. "Claude Code waiting in tether". */
+export function pushTitle(agent: string, title: string): string {
+  return `${agent} waiting in ${title}`
 }
 
 /** What became of one `nightshift push`. `suppressed` is Nightshift keeping a

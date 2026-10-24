@@ -10,9 +10,9 @@ import {
   type AttentionMode,
   type AttentionStage,
   agentName,
-  pushBody,
   pushEventLine,
   pushOutcome,
+  pushTitle,
 } from './attention'
 import { sessionTitle, toolDisplayName } from './session-catalog'
 import type { WindowRegistry } from './window-registry'
@@ -73,9 +73,9 @@ export function createAttentionWiring(deps: AttentionWiringDeps) {
         deps.nightshift,
         [
           'push',
-          pushBody(agent, title),
+          'Open it in Aico to answer.',
           '--title',
-          'Aico: waiting for you',
+          pushTitle(agent, title),
           '--severity',
           'warning',
           '--open',

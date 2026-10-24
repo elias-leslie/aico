@@ -18,6 +18,7 @@ import {
   MAX_SHOW_BYTES,
   metadata,
   pushArgv,
+  pushTitle,
   registerShowRoutes,
   type Show,
   Shows,
@@ -140,7 +141,7 @@ describe('Shows', () => {
           'nightshift',
           'push',
           '--title',
-          'Agent shared something',
+          'Shared: $(never execute); <title>', // argv, never a shell
           '--severity',
           'info',
           '--key',
@@ -160,13 +161,22 @@ describe('Shows', () => {
       'nightshift',
       'push',
       '--title',
-      'Agent shared something',
+      'Shared: Report',
       '--severity',
       'info',
       '--key',
       `show:${SHOW_ID}`,
       'Open Aico to see it.',
     ])
+  })
+
+  it('titles the push with what was shared, never a URL', () => {
+    expect(pushTitle(show())).toBe('Shared: Report')
+    expect(pushTitle(show({ title: null }))).toBe(
+      `Shared: ${NAME.slice(NAME.lastIndexOf('/') + 1)}`,
+    )
+    const url = 'https://untrusted.example/a?b=1'
+    expect(pushTitle(show({ kind: 'url', name: url, url, title: null }))).toBe('Shared a link')
   })
 
   it('keeps a show whose push fails', async () => {

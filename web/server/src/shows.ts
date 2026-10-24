@@ -114,13 +114,21 @@ const runPush: RunPush = (argv) =>
     )
   })
 
-/** The Nightshift notice argv: fixed text, so nothing the agent wrote reaches the push. */
+/** The push title says what was shared: the share's title (checked plain text) or the file's name. A URL never
+ * goes into the push; a link without a title is just "a link". */
+export function pushTitle(show: Show): string {
+  const what =
+    show.title ?? (show.kind === 'file' ? show.name.slice(show.name.lastIndexOf('/') + 1) : null)
+  return what ? `Shared: ${what}` : 'Shared a link'
+}
+
+/** The Nightshift notice argv. */
 export function pushArgv(show: Show, publicHost: string | null): string[] {
   const argv = [
     'nightshift',
     'push',
     '--title',
-    'Agent shared something',
+    pushTitle(show),
     '--severity',
     'info',
     '--key',

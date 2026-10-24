@@ -7,9 +7,9 @@ import {
   formatAge,
   groupRows,
   PUSH_AFTER_MS,
-  pushBody,
   pushEventLine,
   pushOutcome,
+  pushTitle,
   RISE_AFTER_MS,
 } from './attention'
 
@@ -183,8 +183,8 @@ describe('Attention', () => {
       { slug: 'codex', name: 'Codex', processName: 'codex', aliases: [] },
       { slug: 'pi', name: 'Pi', processName: 'pi-coding-agent' },
     ]
-    expect(pushBody(agentName('claude-status', tools, 'Shell'), 'tether')).toBe(
-      'Claude Code in tether is waiting for you',
+    expect(pushTitle(agentName('claude-status', tools, 'Shell'), 'tether')).toBe(
+      'Claude Code waiting in tether',
     )
     expect(agentName('claude-hook', tools, 'Shell')).toBe('Claude Code')
     expect(agentName('codex-rollout', tools, 'Shell')).toBe('Codex')

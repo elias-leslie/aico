@@ -153,9 +153,9 @@ describe('attention wiring', () => {
       '/usr/local/bin/nightshift',
       [
         'push',
-        'Claude Code in Docs is waiting for you',
+        'Open it in Aico to answer.',
         '--title',
-        'Aico: waiting for you',
+        'Claude Code waiting in Docs',
         '--severity',
         'warning',
         '--open',
@@ -177,7 +177,7 @@ describe('attention wiring', () => {
     catalog.upsert(d)
     wiring.update(d)
     vi.advanceTimersByTime(PUSH_AFTER_MS)
-    expect(execFile.mock.calls[0]?.[1][1]).toBe('Codex in Docs is waiting for you')
+    expect(execFile.mock.calls[0]?.[1][3]).toBe('Codex waiting in Docs')
   })
 
   it("names the agent by Aico's built-in name while Tether's tool list is unavailable", () => {
@@ -192,7 +192,7 @@ describe('attention wiring', () => {
     catalog.upsert(d)
     wiring.update(d)
     vi.advanceTimersByTime(PUSH_AFTER_MS)
-    expect(execFile.mock.calls[0]?.[1][1]).toBe('Claude Code in Docs is waiting for you')
+    expect(execFile.mock.calls[0]?.[1][3]).toBe('Claude Code waiting in Docs')
   })
 
   it('a sent push goes to the journal', () => {
