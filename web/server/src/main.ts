@@ -16,11 +16,6 @@ import { TerminalHub } from './terminal'
 function serve(): void {
   const config = loadConfig()
   const store = new WebStore(config.dbPath)
-  const imported = store.importOnce(config.importDbPath)
-  if (imported)
-    console.log(
-      `[aico-web] imported ${imported.projects} project settings, ${imported.panes} tabs, ${imported.links} session links from ${imported.source}`,
-    )
 
   const tether = new TetherClient(config.tetherSocket)
   const terminals = new TerminalHub({

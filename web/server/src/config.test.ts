@@ -28,7 +28,6 @@ describe('loadConfig', () => {
       'https://app.example',
     ])
     expect(config.dbPath).toBe('/home/u/.local/state/aico/web.db')
-    expect(config.importDbPath).toBe('/home/u/.local/state/a-term/a-term.db')
   })
 
   it('lets the environment override port, origins, paths and Agent Hub', () => {
@@ -38,7 +37,6 @@ describe('loadConfig', () => {
         XDG_STATE_HOME: '/state',
         AICO_WEB_PORT: '5555',
         AICO_WEB_ALLOWED_ORIGINS: 'http://127.0.0.1:6000, https://x.example',
-        AICO_WEB_IMPORT_DB: '/old.db',
         NEXT_PUBLIC_AGENT_HUB_URL: 'http://hub.local',
         AGENT_HUB_CLIENT_ID: ' client ',
       },
@@ -47,7 +45,6 @@ describe('loadConfig', () => {
     expect(config.port).toBe(5555)
     expect(config.allowedOrigins).toEqual(['http://127.0.0.1:6000', 'https://x.example'])
     expect(config.dbPath).toBe('/state/aico/web.db')
-    expect(config.importDbPath).toBe('/old.db')
     expect(config.agentHubUrl).toBe('http://hub.local')
     expect(config.agentHubClientId).toBe('client')
   })

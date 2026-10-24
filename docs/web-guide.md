@@ -92,7 +92,6 @@ MAINTENANCE_SESSION_PURGE_DAYS=7
 AGENT_HUB_URL=http://localhost:8003
 ```
 
-On its first start the server copies the old Python backend's tabs and project settings from `~/.local/state/a-term/a-term.db` (`AICO_WEB_IMPORT_DB`) into `web.db`, once; later starts never import again.
 
 </details>
 

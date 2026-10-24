@@ -22,7 +22,6 @@ export interface WebConfig {
   staticDir: string
   dbPath: string
   /** The Python backend's database, read once into `dbPath` and never written. */
-  importDbPath: string
   tetherSocket: string
   /** Agent shares are taken only from this user's tether@default (the owner's own socket). */
   trustShows: boolean
@@ -176,7 +175,6 @@ export function loadConfig(
     ],
     staticDir: resolve(env.AICO_WEB_STATIC_DIR || join(HERE, '..', '..', 'frontend', 'out')),
     dbPath: webDbPath(env),
-    importDbPath: env.AICO_WEB_IMPORT_DB || join(stateDir(env), 'a-term', 'a-term.db'),
     tetherSocket,
     trustShows: tetherSocket === defaultTetherSocketPath(env, uid),
     agentHubUrl: env.AGENT_HUB_URL?.trim() || env.NEXT_PUBLIC_AGENT_HUB_URL?.trim() || null,

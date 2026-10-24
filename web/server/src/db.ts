@@ -2,8 +2,6 @@
 // started belongs to, grouped as a project tab (a shell and an agent session
 // toggled by `active_mode`), and each project's tab settings. Tether owns the
 // sessions; losing this file loses only that grouping, never a session.
-//
-// The first open imports the Python backend's a-term.db once (read-only).
 
 import { randomUUID } from 'node:crypto'
 import { chmodSync, existsSync, mkdirSync } from 'node:fs'
@@ -72,13 +70,6 @@ export interface ProjectSettings {
   active_mode: string
 }
 
-export interface ImportResult {
-  source: string
-  projects: number
-  panes: number
-  links: number
-}
-
 type Row = Record<string, unknown>
 
 const now = () => new Date().toISOString()
@@ -128,107 +119,6 @@ export class WebStore {
         'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value',
       )
       .run(key, value)
-  }
-
-  private transaction<T>(work: () => T): T {
-    this.db.exec('BEGIN IMMEDIATE')
-    try {
-      const result = work()
-      this.db.exec('COMMIT')
-      return result
-    } catch (error) {
-      this.db.exec('ROLLBACK')
-      throw error
-    }
-  }
-
-  // -- One-time import ------------------------------------------------------
-
-  /**
-   * Copy the Python backend's project settings and the tabs that still show a
-   * session, once. The old file is opened read-only and never changed; a
-   * missing one counts as imported (nothing to bring over).
-   */
-  importOnce(source: string): ImportResult | null {
-    if (this.meta('imported_from') !== null) return null
-    const result: ImportResult = { source, projects: 0, panes: 0, links: 0 }
-    if (existsSync(source)) {
-      const old = new DatabaseSync(source, { readOnly: true })
-      try {
-        this.transaction(() => {
-          const projects = old
-            .prepare(
-              'SELECT project_id, enabled, display_order, active_mode, created_at, updated_at FROM project_settings',
-            )
-            .all() as Row[]
-          const insertProject = this.db.prepare(
-            `INSERT OR IGNORE INTO project_settings
-               (project_id, enabled, display_order, active_mode, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?)`,
-          )
-          for (const row of projects)
-            result.projects += Number(
-              insertProject.run(
-                String(row.project_id),
-                Number(row.enabled) === 1 ? 1 : 0,
-                Number(row.display_order) || 0,
-                String(row.active_mode || 'shell'),
-                String(row.created_at),
-                String(row.updated_at),
-              ).changes,
-            )
-          const panes = old
-            .prepare(
-              `SELECT id, project_id, pane_name, active_mode, created_at FROM panes p
-               WHERE EXISTS (SELECT 1 FROM pane_sessions s WHERE s.pane_id = p.id AND s.kind = 'tether')`,
-            )
-            .all() as Row[]
-          const insertPane = this.db.prepare(
-            'INSERT OR IGNORE INTO panes (id, project_id, name, active_mode, created_at) VALUES (?, ?, ?, ?, ?)',
-          )
-          for (const row of panes)
-            result.panes += Number(
-              insertPane.run(
-                String(row.id),
-                row.project_id === null ? null : String(row.project_id),
-                String(row.pane_name),
-                String(row.active_mode || 'shell'),
-                String(row.created_at),
-              ).changes,
-            )
-          const links = old
-            .prepare(
-              `SELECT session_id, pane_id, mode, display_order, created_at, last_accessed_at
-               FROM pane_sessions WHERE kind = 'tether'`,
-            )
-            .all() as Row[]
-          const insertLink = this.db.prepare(
-            `INSERT OR IGNORE INTO session_links
-               (session_id, pane_id, mode, display_order, created_at, last_accessed_at)
-             VALUES (?, ?, ?, ?, ?, ?)`,
-          )
-          for (const row of links)
-            result.links += Number(
-              insertLink.run(
-                String(row.session_id),
-                String(row.pane_id),
-                String(row.mode),
-                Number(row.display_order) || 0,
-                String(row.created_at),
-                row.last_accessed_at === null ? null : String(row.last_accessed_at),
-              ).changes,
-            )
-          this.setMeta('imported_from', source)
-          this.setMeta('imported_at', now())
-        })
-      } finally {
-        old.close()
-      }
-    } else {
-      this.setMeta('imported_from', source)
-      this.setMeta('imported_at', now())
-    }
-    return result
   }
 
   // -- Tabs and links --------------------------------------------------------
