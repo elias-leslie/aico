@@ -526,7 +526,7 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
   if (context.continuity) registerRebootRoutes(router, context.continuity)
   if (context.recovery) registerRecoveryRoutes(router, context.recovery)
   const { store, events, gui } = context
-  const rootHandler = createRootHandler(rootOperations(context), { ownerFromOrigin: true })
+  const rootHandler = createRootHandler(rootOperations(context))
   const root = (req: IncomingMessage, res: ServerResponse) => rootHandler(req, res)
 
   router

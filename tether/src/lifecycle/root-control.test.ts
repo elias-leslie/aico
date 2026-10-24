@@ -1,7 +1,7 @@
 import { execFile, execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { mkdtempSync, rmSync, statSync } from 'node:fs'
-import { request } from 'node:http'
+import { createServer, request } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -25,8 +25,7 @@ import {
 import { LifecycleOwnerLock, type ManagedGateState } from './lifecycle-guard'
 import { sessionGeneration } from './owner-retirement'
 import {
-  createRootServer,
-  guiSocketPath,
+  createRootHandler,
   isProjectRootPath,
   parseRootCreate,
   rootRequestDigest,
@@ -70,7 +69,7 @@ describe('private root workload control', () => {
   const status = vi.fn(async (row: WidgetRow) =>
     running.has(row.id) ? ('running' as const) : ('uncertain' as const),
   )
-  const server = createRootServer({
+  const handle = createRootHandler({
     available: () => available,
     validate: (input) => input.projectRoot !== '/missing',
     resumeOwner: (resumeSessionId) =>
@@ -88,6 +87,9 @@ describe('private root workload control', () => {
           : mutation.kind === 'coordinator'
             ? coordinator(widgetId, generation, mutation.coordinator)
             : title(widgetId, generation, mutation.label),
+  })
+  const server = createServer((req, res) => {
+    void handle(req, res)
   })
   beforeAll(async () => {
     registerBuiltinTuis()
@@ -129,13 +131,9 @@ describe('private root workload control', () => {
       client.end(payload === undefined ? undefined : encode(payload))
     })
 
-  it('uses owner-only socket permissions and a separate GUI locator', () => {
+  it('uses owner-only socket permissions', () => {
     expect(statSync(socket).mode & 0o777).toBe(0o600)
     expect(statSync(join(fixture, 'aico')).mode & 0o777).toBe(0o700)
-    expect(guiSocketPath(undefined, '/run/user/1000', 1000)).toBe(
-      '/run/user/1000/aico/gui-control.sock',
-    )
-    expect(() => guiSocketPath('/tmp/../unsafe.sock')).toThrow()
   })
 
   it('coalesces concurrent retries and rejects a changed request digest', async () => {

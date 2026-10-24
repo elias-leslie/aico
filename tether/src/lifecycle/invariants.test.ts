@@ -462,7 +462,7 @@ describe('INV-13b pane PATH puts the agent shims first', () => {
 })
 
 describe('INV-14 instances never touch each other’s units, sockets or markers', () => {
-  it('unit namespaces are disjoint and legacy sockets belong to default only', () => {
+  it('unit namespaces are disjoint', () => {
     expect(ownsTmuxServerUnit('dev', `aico-tmux-server-${SERVER}.service`)).toBe(false)
     expect(ownsTmuxServerUnit(DEFAULT_INSTANCE, `tether-dev-tmux-server-${SERVER}.service`)).toBe(
       false,
@@ -470,8 +470,6 @@ describe('INV-14 instances never touch each other’s units, sockets or markers'
     expect(ownsTmuxServerUnit('dev', `tether-devx-tmux-server-${SERVER}.service`)).toBe(false)
     configure('invtest')
     expect(ownsServerRow(server({}))).toBe(false)
-    expect(paths.legacyControlSocket).toBeNull()
-    expect(paths.legacyGuiSocket).toBeNull()
   })
 })
 

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import { isAbsolute, normalize } from 'node:path'
 import {
   allocateWidgetId,
@@ -11,7 +11,6 @@ import {
   type WidgetRow,
 } from './catalog'
 import type { LifecycleOwnerToken, ManagedGateState } from './lifecycle-guard'
-import { ownerSocketPath } from './owner-control'
 import type { RetirementResult } from './owner-retirement'
 import { sessionGeneration } from './owner-retirement'
 import { isBoundedTerminalText } from './tmux'
@@ -182,18 +181,6 @@ function parseAdmin(value: unknown): RootAdminRequest | null {
   return value.kind === 'clear'
     ? { ...pin, kind: 'clear' }
     : { ...pin, kind: 'submit', text: value.text as string }
-}
-
-export function guiSocketPath(
-  override = process.env.AICO_GUI_CONTROL_SOCKET,
-  runtime = process.env.XDG_RUNTIME_DIR,
-  uid = process.getuid?.(),
-): string {
-  return ownerSocketPath(
-    override ?? `${runtime || `/run/user/${uid}`}/aico/gui-control.sock`,
-    runtime,
-    uid,
-  )
 }
 
 function object(value: unknown): value is Record<string, unknown> {
@@ -486,16 +473,8 @@ const terminalAdmin = {
   missing: ['current_thread_fence', 'idle_empty_draft_input_fence', 'idempotent_native_receipt'],
 } as const
 
-export interface RootHandlerOptions {
-  /** v1 API: root `owner` follows the requesting app and `?origin=` filters
-   * the list. The legacy gui-control.sock keeps Aico's wire format (`aico`). */
-  ownerFromOrigin?: boolean
-}
-
-export function createRootHandler(
-  operations: RootControlOperations,
-  options: RootHandlerOptions = {},
-) {
+/** A root's `owner` is its stored origin, and `?origin=` filters the list. */
+export function createRootHandler(operations: RootControlOperations) {
   // A failed or disconnected request retains its reservation. Subsequent calls
   // reconcile that exact widget through Aico's existing launch gate.
   const pending = new Map<string, Promise<void>>()
@@ -512,8 +491,8 @@ export function createRootHandler(
   const describe = async (root: RootRequestRow) => {
     const row = getWidget(root.widgetId)
     return {
-      owner: options.ownerFromOrigin ? root.origin : 'aico',
-      ...(options.ownerFromOrigin ? { origin: root.origin } : {}),
+      owner: root.origin,
+      origin: root.origin,
       requestId: root.requestId,
       digest: root.digest,
       hostIdentity: root.widgetId,
@@ -627,9 +606,9 @@ export function createRootHandler(
       }
       if (path === '/v1/roots' && request.method === 'GET') {
         const query = new URLSearchParams(request.url?.split('?')[1] ?? '')
-        const origin = options.ownerFromOrigin ? query.get('origin') : null
+        const origin = query.get('origin')
         // `ended=0` leaves out ended tombstones (they stay readable by
-        // request ID). Served on both sockets: the list grows with every root.
+        // request ID): the list grows with every root.
         const ended = query.get('ended')
         if (
           (origin !== null && origin !== 'aico' && origin !== 'a-term') ||
@@ -887,12 +866,4 @@ export function createRootHandler(
       if (!response.headersSent) json(response, 500, { error: 'owner_failure' })
     }
   }
-}
-
-/** Aico's GUI control socket server around the shared handler. */
-export function createRootServer(operations: RootControlOperations) {
-  const handle = createRootHandler(operations, { ownerFromOrigin: false })
-  return createServer((request, response) => {
-    void handle(request, response)
-  })
 }

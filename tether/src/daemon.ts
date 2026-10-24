@@ -15,7 +15,6 @@ import { setPersonalWorkspaceRoot } from './lifecycle/display'
 import {
   cachedSessionStatus,
   configureEngine,
-  endSession,
   flushSessionEvents,
   notifySessionChanged,
   onAbandonedScope,
@@ -26,9 +25,7 @@ import {
   stopLifecycle,
   verifiedCurrentManagedPane,
 } from './lifecycle/engine'
-import { createOwnerServer } from './lifecycle/owner-control'
 import { setLifecycleInstance } from './lifecycle/ownership'
-import { createRootServer } from './lifecycle/root-control'
 import { configureTmuxPaths } from './lifecycle/tmux'
 import { bindToolSource } from './lifecycle/tui/registry'
 import {
@@ -36,7 +33,6 @@ import {
   foregroundPaneScope,
   generationOf,
   learnProjects,
-  rootOperations,
   sessionSnapshot,
 } from './lifecycle-api'
 import { startMemoryGuard } from './memory-guard'
@@ -166,7 +162,6 @@ export async function startDaemon(
     context.recovery = recovery
   }
   const server = createTetherServer(context)
-  const legacyServers: Server[] = []
   try {
     await listenPrivateSocket(server, paths.socket)
   } catch (error) {
@@ -208,24 +203,6 @@ export async function startDaemon(
   projectNames.unref()
   void context.continuity?.start()
   void ready.then(() => context.recovery?.start()).catch(() => {})
-  // Default instance only: Aico's exact legacy sockets, sharing the one
-  // lifecycle lock and End path with the v1 API.
-  if (paths.legacy && paths.legacyControlSocket && paths.legacyGuiSocket) {
-    try {
-      const owner = createOwnerServer({
-        verifiedCurrentPane: async (row) => Boolean(await verifiedCurrentManagedPane(row)),
-        end: endSession,
-      })
-      await listenPrivateSocket(owner, paths.legacyControlSocket)
-      legacyServers.push(owner)
-      const guiShim = createRootServer(rootOperations(context))
-      await listenPrivateSocket(guiShim, paths.legacyGuiSocket)
-      legacyServers.push(guiShim)
-    } catch (error) {
-      console.error('[tether] legacy Aico sockets unavailable:', error)
-    }
-  }
-
   console.log(`[tether] ${VERSION} instance=${paths.instance} listening on ${paths.socket}`)
   return {
     server,
@@ -244,7 +221,7 @@ export async function startDaemon(
       onAbandonedScope(null)
       setLaunchGuard(null)
       gui.close()
-      await Promise.all([...legacyServers, server].map(closeServer))
+      await closeServer(server)
       // Let in-flight reconciliation settle before the database closes.
       await ready.catch(() => {})
       await flushSessionEvents()

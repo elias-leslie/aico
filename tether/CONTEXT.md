@@ -78,4 +78,4 @@ The working directory and identity a session starts in. It comes from SummitFlow
 _Avoid_: Workspace
 
 **Owner** (retired):
-The former cross-app authority to end a session. Tether is now the only authority, so this term only appears in compatibility fields: `owner: "aico"` on the legacy sockets, and a root's origin on Tether's API.
+The former cross-app authority to end a session. Tether is now the only authority, so this term only appears in compatibility fields: `owner: "aico"` on widget descriptors, and a root's origin as its `owner`.

@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Removed
+
+- Tether no longer serves the old `/run/user/<uid>/aico/control.sock` and
+  `gui-control.sock`. `st aico` and SummitFlow use Tether's own socket
+  (`TETHER_SOCKET`, else `$XDG_RUNTIME_DIR/tether/${TETHER_INSTANCE:-default}/control.sock`);
+  `AICO_CONTROL_SOCKET` and `AICO_GUI_CONTROL_SOCKET` are no longer read.
+
 ## 0.2.0 - 2026-10-23
 
 Aico, A-Term and Tether are now one product, Aico, in one repository. The web

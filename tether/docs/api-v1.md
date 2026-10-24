@@ -5,7 +5,6 @@ Tether serves one versioned HTTP/1.1 API per instance over a private Unix socket
 | Instance | Socket |
 | --- | --- |
 | any | `$XDG_RUNTIME_DIR/tether/<instance>/control.sock` (directory 0700, socket 0600) |
-| `default` only | also `/run/user/<uid>/aico/control.sock` (legacy owner contract) and `/run/user/<uid>/aico/gui-control.sock` (legacy GUI shim); see [compat-contract.md](compat-contract.md) |
 
 The socket's file permissions are the only authentication: any process running as the same uid may call the API. Apps that put Tether behind their own HTTP surface keep their own auth in front of it. The web app in particular must never treat loopback as authenticated, because proxied traffic arrives from loopback.
 
@@ -217,7 +216,7 @@ A root is a session created through the root contract with a stable caller `requ
 
 | Method and route | Body | Result |
 | --- | --- | --- |
-| `GET /v1/roots` | query `origin=aico\|a-term` *(3a)*, `ended=0\|1` *(post-cutover)* | `{owner, available, directedDelivery, roots: Descriptor[]}`. `owner` is the `origin` filter, else `"aico"`. `ended=0` leaves out ended tombstones (they stay readable at `GET /v1/roots/:requestId`); the legacy `gui-control.sock` accepts it too. `400 invalid_query` for another origin or `ended` value. |
+| `GET /v1/roots` | query `origin=aico\|a-term` *(3a)*, `ended=0\|1` *(post-cutover)* | `{owner, available, directedDelivery, roots: Descriptor[]}`. `owner` is the `origin` filter, else `"aico"`. `ended=0` leaves out ended tombstones (they stay readable at `GET /v1/roots/:requestId`). `400 invalid_query` for another origin or `ended` value. |
 | `POST /v1/roots` | `{requestId, tool, projectId, projectRoot, initialPrompt, role, leadRootReference?, facetCapsuleRef?, resumeSessionId?, origin?, aTermSessionId?, launchedBy?}` | Existing or reserved root descriptor. `200` for running or ended, `202` for pending or uncertain. `400 unsupported_tool` with `supported: slug[]` for a tool that can't start a root (`rootCapable: false`). `409 request_conflict` if the same key arrives with a different digest. `409 recovery_pending` with `widgetId` when a new request's `resumeSessionId` is a conversation that [crash recovery](crash-recovery.md) is about to resume, or holds, in that session. |
 | `GET /v1/roots/:requestId` | none | Current descriptor, including ended tombstones (`status: "ended"`, `generation: null`) |
 | `POST /v1/roots/:requestId/show` | `{generation}` | Forwarded to the GUI |
@@ -233,7 +232,7 @@ A root is a session created through the root contract with a stable caller `requ
 
 The root descriptor keeps Aico's fields: `owner`, `hostIdentity`, `generation`, `logicalSessionId`, `surfaceLocator`, metadata, `bounds` and `status`. `bounds` is always `null` from Tether: window geometry belongs to the GUI.
 
-Root origin *(3a)*: `origin` is `"aico"` (default) or `"a-term"`; `aTermSessionId` (a UUID) is accepted only with `"a-term"` and becomes the pane's `A_TERM_SESSION_ID`. Neither is part of the request digest. On `/v1`, a root's `owner` is its stored origin and the descriptor also carries `origin`. The legacy sockets on the default instance (`/run/user/<uid>/aico/control.sock` and `gui-control.sock`) keep Aico's wire format exactly: `owner: "aico"` and no `origin` field, so `st aico` and SummitFlow fleet are unaffected.
+Root origin *(3a)*: `origin` is `"aico"` (default) or `"a-term"`; `aTermSessionId` (a UUID) is accepted only with `"a-term"` and becomes the pane's `A_TERM_SESSION_ID`. Neither is part of the request digest. A root's `owner` is its stored origin and the descriptor also carries `origin`. The pre-Tether sockets `/run/user/<uid>/aico/control.sock` and `gui-control.sock` were removed on 2026-10-24; `st aico` and SummitFlow fleet use this socket.
 
 Root window *(post-cutover)*: once a new root is running, Tether asks the connected GUI to show it only when the desktop or `st aico create` requested it (session origin `root`). A root the web app started (origin `a-term`) joins the desktop catalog and tray without a window, so no window layout is written for it.
 

@@ -173,8 +173,7 @@ What you get on mobile is the terminal itself; Aico's desktop chrome (eyes, lant
 ```text
 Tether (separate daemon; owns sessions)
   ├─ tmux servers, panes, agent launch, admission, End, roots, context hooks
-  ├─ API v1 on $XDG_RUNTIME_DIR/tether/<instance>/control.sock
-  └─ legacy /run/user/<uid>/aico/{control,gui-control}.sock for `st aico` and SummitFlow
+  └─ API v1 on $XDG_RUNTIME_DIR/tether/<instance>/control.sock (also `st aico` and SummitFlow)
 
 Electron main process (a Tether client)
   ├─ owns widget windows, global shortcuts, and tray

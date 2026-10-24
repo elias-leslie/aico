@@ -6,7 +6,7 @@ Renaming `AICO_*` across other repos is out of scope. A change to anything in th
 
 ## Instances
 
-Only the `default` instance keeps the Aico names, serves the legacy sockets and adopts historical servers.
+Only the `default` instance keeps the Aico names and adopts historical servers.
 
 Every other instance:
 
@@ -36,13 +36,13 @@ The `systemd-run` flags are part of the containment model and must be kept: `--u
 | Historical shared socket | `/tmp/tmux-<uid>/aico`, adopted read-only and never respawned | none | `tmux.ts` `resolveInternalTmuxSocket` |
 | Pane-exit marker | `/run/user/<uid>/aico/pane-exited-<serverId>` | `$XDG_RUNTIME_DIR/tether/<i>/pane-exits/pane-exited-<serverId>` | `tmux.ts` `paneExitedEventPath` |
 | Pane-exit hook bytes | `set-hook -g pane-exited 'run-shell "/usr/bin/touch <marker>"'`, compared byte for byte before every launch | same form | `tmux.ts` `paneExitedHookCommand` |
-| Legacy owner socket | `/run/user/<uid>/aico/control.sock`, serving exactly `GET /v1/sessions/<widgetId>` and `POST /v1/sessions/<widgetId>/end {generation}` with Aico's response bodies | none | `owner-control.ts` |
-| Legacy GUI socket | `/run/user/<uid>/aico/gui-control.sock` shim, serving `/v1/roots*` and `/v1/widgets*` with Aico's bodies and forwarding view mutations to the GUI channel | none | `root-control.ts` `guiSocketPath`, [root-control.md](../../docs/root-control.md) |
 | Tether socket | `$XDG_RUNTIME_DIR/tether/default/control.sock` | `$XDG_RUNTIME_DIR/tether/<i>/control.sock` | n/a |
 | State | `~/.local/state/tether/default/tether.db` | `~/.local/state/tether/<i>/tether.db` | n/a |
 | Aico catalog | `~/.local/state/aico/aico.db`. Aico keeps its own views and settings there; its pre-Tether tables stay as a backup after import. No other app reads it: the web app dropped its read-only reader (`A_TERM_AICO_STATE_DIR` in `utils/tmux/external.py`) when it moved to the Tether API (A-Term `e4d1f16`), and `tether import-aico` reads only the path given with `--from`. | none | none |
 
-Overrides that the Aico process honours and that Tether must not break: `AICO_STATE_DIR`, `AICO_TMUX_SOCKET` (a test or recovery override of the historical socket), `AICO_CONTROL_SOCKET`, `AICO_GUI_CONTROL_SOCKET`.
+Overrides that the Aico process honours and that Tether must not break: `AICO_STATE_DIR`, `AICO_TMUX_SOCKET` (a test or recovery override of the historical socket).
+
+Removed 2026-10-24, once `st aico` and SummitFlow had moved to the Tether socket ([ADR 0001](../../docs/adr/0001-tether-owns-sessions.md), Phase 5): the legacy owner socket `/run/user/<uid>/aico/control.sock`, the legacy GUI shim `/run/user/<uid>/aico/gui-control.sock`, and their overrides `AICO_CONTROL_SOCKET` and `AICO_GUI_CONTROL_SOCKET`.
 
 ## tmux identity
 
@@ -96,7 +96,7 @@ Correction to the migration plan: `AICO_TMUX_SOCKET` is not a pane marker. Aico 
 
 ## Wire contracts
 
-- `owner: "aico"` stays in every body served on the legacy sockets (`control.sock`, `gui-control.sock`) and in widget descriptors, for `st aico` and SummitFlow fleet. On Tether's own `/v1` socket a root's `owner` is its stored `origin` (`aico` or `a-term`) and the descriptor adds `origin`.
+- `owner: "aico"` stays in widget descriptors, for `st aico` and SummitFlow fleet. A root's `owner` is its stored `origin` (`aico` or `a-term`) and the descriptor adds `origin`.
 - Aico's `contracts/view-mutation-vectors.json` pins the title, bounds and body validation rules. Tether carries it in `contracts/` and both the Vitest and pytest suites run every vector.
 - Error codes from Aico's owner and root routes are kept verbatim: `not_found`, `invalid_body`, `invalid_generation`, `stale_generation`, `busy`, `blocked`, `workload_unavailable`, `ended`, `gui_unavailable`, `request_conflict`, `outcome_uncertain`, `directed_delivery_unavailable`, `identity_changed`.
 - Agent admission follows Nightshift's `$XDG_RUNTIME_DIR/nightshift/admission.json` (v1; `TETHER_NIGHTSHIFT_ADMISSION` names another absolute path, for a Tether running as a different user than Nightshift) while it is fresh: `admit: false` defers, `admit: true` replaces the thresholds below; missing, unparsable or expired state falls back to them. Agent admission env names are kept as `AICO_AGENT_MAX_ACTIVE`, `AICO_AGENT_MIN_AVAILABLE_GIB`, `AICO_AGENT_MAX_PSI_SOME_AVG60`, `AICO_AGENT_MAX_PSI_FULL_AVG60`, `AICO_AGENT_MAX_PSI_FULL_AVG10` and `AICO_AGENT_ADMISSION_OVERRIDE`.

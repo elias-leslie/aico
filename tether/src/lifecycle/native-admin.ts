@@ -3,7 +3,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { lstatSync, mkdirSync, mkdtempSync } from 'node:fs'
 import { createConnection } from 'node:net'
 import { dirname, join } from 'node:path'
-import { ownerSocketPath } from './owner-control'
+import { assertSocketPath } from '../config'
 
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/
 const SHA256 = /^[0-9a-f]{64}$/
@@ -45,7 +45,7 @@ export function nativeAdminEnvironment(
   mkdirSync(base, { recursive: true, mode: 0o700 })
   if (!privatePath(base)) throw new Error('native admin runtime is not private')
   const parent = mkdtempSync(join(base, 'n-'))
-  const socket = ownerSocketPath(join(parent, 'admin.sock'))
+  const socket = assertSocketPath(join(parent, 'admin.sock'), 'native admin')
   return {
     CODEX_TERMINAL_ADMIN_SOCKET: socket,
     CODEX_TERMINAL_ADMIN_ID: randomBytes(32).toString('hex'),
@@ -59,7 +59,7 @@ export function nativeAdminBinding(environment: Map<string, string> | null): Nat
   if (!socket || !launchId || !SHA256.test(launchId)) return null
   try {
     if (
-      ownerSocketPath(socket) !== socket ||
+      assertSocketPath(socket, 'native admin') !== socket ||
       !privatePath(dirname(socket)) ||
       !privatePath(socket, true)
     )

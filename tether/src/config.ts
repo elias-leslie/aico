@@ -5,7 +5,7 @@ import { isAbsolute, join } from 'node:path'
  * 2: resize claims carry a viewer label (still accepted without one). */
 export const API_VERSION = 2
 
-/** The one instance that serves Aico's legacy sockets and adopts historical servers. */
+/** The one instance that keeps Aico's names and adopts historical servers. */
 export const DEFAULT_INSTANCE = 'default'
 
 export interface ShowConfig {
@@ -39,7 +39,7 @@ const GENERATION_HEX_LENGTH = 32
 
 export interface TetherPaths {
   instance: string
-  /** True only for `default`: legacy sockets, historical adoption, `aico-*` unit names. */
+  /** True only for `default`: Aico's runtime layout, historical adoption, `aico-*` unit names. */
   legacy: boolean
   stateDir: string
   dbPath: string
@@ -51,10 +51,6 @@ export interface TetherPaths {
   socket: string
   /** Directory the generation-specific tmux `pane-exited` hook touches. */
   paneExitMarkerDir: string
-  /** Aico's legacy headless owner socket (`/v1/sessions/<widgetId>[/end]`). Default only. */
-  legacyControlSocket: string | null
-  /** Shim for Aico's GUI control socket (`/v1/roots`, `/v1/widgets`). Default only. */
-  legacyGuiSocket: string | null
   /** Historical shared tmux socket, adopted read-only. Default only. */
   historicalTmuxSocket: string | null
   /** Optional local project list for the fallback provider. */
@@ -142,12 +138,6 @@ export function resolvePaths(options: ResolveOptions = {}): TetherPaths {
     socketDir,
     socket,
     paneExitMarkerDir,
-    legacyControlSocket: legacy
-      ? assertSocketPath(join(userRuntime, 'aico', 'control.sock'), 'legacy control')
-      : null,
-    legacyGuiSocket: legacy
-      ? assertSocketPath(join(userRuntime, 'aico', 'gui-control.sock'), 'legacy GUI')
-      : null,
     historicalTmuxSocket: legacy ? `/tmp/tmux-${uid}/aico` : null,
     localProjectsFile: join(configDir, 'projects.json'),
     configDir,

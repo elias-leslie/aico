@@ -12,18 +12,12 @@ lifecycle. Tether owns it.
 ## Where it is served
 
 Every instance serves `/v1/roots*` and `/v1/widgets*` on its own socket,
-`$XDG_RUNTIME_DIR/tether/<instance>/control.sock`. The `default` instance also
-serves the legacy user-private Unix sockets that `st aico` and SummitFlow fleet
-use, with Aico's exact wire format (`owner: "aico"`, no `origin` field):
-
-- `$XDG_RUNTIME_DIR/aico/gui-control.sock`: roots and widgets
-- `$XDG_RUNTIME_DIR/aico/control.sock`: session End,
-  `GET /v1/sessions/<widgetId>` and `POST /v1/sessions/<widgetId>/end`
-
-Both fall back to `/run/user/<uid>/aico/`. `AICO_GUI_CONTROL_SOCKET` and
-`AICO_CONTROL_SOCKET` override the paths for the `st aico` client. The
-directory is mode 0700 and the sockets mode 0600. Other instances (for example
-`tether@dev`) do not serve the legacy sockets.
+`$XDG_RUNTIME_DIR/tether/<instance>/control.sock` (directory 0700, socket 0600).
+`st aico` and SummitFlow fleet use that socket: `TETHER_SOCKET` names another,
+else `TETHER_INSTANCE` picks the instance (default `default`). A root's `owner`
+is its stored origin (`aico` or `a-term`) and the descriptor carries `origin`.
+The old `$XDG_RUNTIME_DIR/aico/control.sock` and `gui-control.sock` are gone
+(2026-10-24).
 
 The `st aico` client and its tests live in this repo
 (`tether/scripts/aico-root-watch.py`, also installed to
@@ -131,7 +125,7 @@ The direct facade uses `AICO_WIDGET_ID` for the current widget, with an explicit
 st aico widget status
 st aico widget title 'Investigation'
 st aico widget position -10 20 900 560
-st aico widget status --widget-id aabbcc01 --root-socket /run/user/1000/aico/gui-control.sock
+st aico widget status --widget-id aabbcc01 --root-socket /run/user/1000/tether/default/control.sock
 ```
 
 All three commands accept `--widget-id` and `--root-socket`. Mutations fetch the
@@ -159,8 +153,7 @@ st aico root position recovery-root-1 -10 20 900 560
 st aico root end recovery-root-1
 ```
 
-Each command accepts `--root-socket` (default `AICO_GUI_CONTROL_SOCKET`) for Aico's
-GUI socket. There is no `--surface` or `--root-url`: the web app has no root route,
+Each command accepts `--root-socket` to pin an exact Tether socket. There is no `--surface` or `--root-url`: the web app has no root route,
 so `st aico` only talks to Aico and Tether. A stored root whose owner is `a-term`
 (requested through the web app before it dropped the route) is still read: the client
 accepts Tether's 8-hex host identity at `aico://widget/<id>` with `owner: "a-term"`, and
@@ -169,9 +162,9 @@ Show, title and position read `GET /v1/roots/<requestId>`, require a qualified
 `running` descriptor, pin its generation, then send one request and require the
 same identity, generation and `running` status in the receipt. End reads the exact descriptor and pins its generation, but
 does not require a running workload: it can contain a pending or uncertain root
-with a generation. On Aico, it uses the headless `/v1/sessions/<widgetId>/end`
-containment contract on `--owner-socket` (default `AICO_CONTROL_SOCKET`) and
-accepts only the exact `{status: "ended"}` receipt. An already ended tombstone returns
+with a generation. It uses Tether's `/v1/sessions/<widgetId>/end` containment
+contract (`--owner-socket` pins an exact socket) and accepts only a
+`status: "ended"` receipt; Tether may add `contextFinalization`. An already ended tombstone returns
 `applied: false` with exit 0 and sends nothing. A root without a generation
 cannot authorize End. These commands work for direct and fleet-started roots;
 for fleet roots, prefer `st sessions close` so the fleet ledger records the

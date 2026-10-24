@@ -18,8 +18,6 @@ describe('resolvePaths', () => {
     expect(paths.dbPath).toBe('/home/u/.local/state/tether/default/tether.db')
     expect(paths.socket).toBe('/run/user/1000/tether/default/control.sock')
     expect(paths.paneExitMarkerDir).toBe('/run/user/1000/aico')
-    expect(paths.legacyControlSocket).toBe('/run/user/1000/aico/control.sock')
-    expect(paths.legacyGuiSocket).toBe('/run/user/1000/aico/gui-control.sock')
     expect(paths.historicalTmuxSocket).toBe('/tmp/tmux-1000/aico')
     expect(tmuxServerSocketPath(paths, id)).toBe(
       `/home/u/.local/state/tether/default/tmux/${id}/server.sock`,
@@ -33,8 +31,6 @@ describe('resolvePaths', () => {
     expect(paths.stateDir).toBe('/home/u/.local/state/tether/dev')
     expect(paths.socket).toBe('/run/user/1000/tether/dev/control.sock')
     expect(paths.paneExitMarkerDir).toBe('/run/user/1000/tether/dev/pane-exits')
-    expect(paths.legacyControlSocket).toBeNull()
-    expect(paths.legacyGuiSocket).toBeNull()
     expect(paths.historicalTmuxSocket).toBeNull()
   })
 
