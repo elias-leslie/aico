@@ -127,6 +127,8 @@ KEY = r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}"
 THREAD = r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}"
 GENERATION = r"[0-9a-f]{64}"
 WIDGET = r"[0-9a-f]{8}"
+# Tether reports a root's stored origin as its owner; web app roots are only read.
+ROOT_OWNERS = ("aico", "a-term")
 # Agent tool slugs, as Tether's registry spells them (src/tools.ts SLUG_RE).
 TOOL_SLUG = r"[a-z0-9_-]{1,50}"
 # Owner rejections that are definitive before any view or lifecycle effect.
@@ -213,15 +215,7 @@ def runtime_dir() -> str:
     return os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
 
 
-# Raw environment defaults; each command keeps its own validation and error path.
-def default_gui_socket() -> str:
-    return os.environ.get("AICO_GUI_CONTROL_SOCKET", f"{runtime_dir()}/aico/gui-control.sock")
-
-
-def default_owner_socket() -> str:
-    return os.environ.get("AICO_CONTROL_SOCKET", f"{runtime_dir()}/aico/control.sock")
-
-
+# Raw environment default; each command keeps its own validation and error path.
 def tether_socket() -> str:
     """Tether's control socket: $TETHER_SOCKET, else $XDG_RUNTIME_DIR/tether/<instance>/control.sock."""
     configured = os.environ.get("TETHER_SOCKET", "").strip()
@@ -233,7 +227,7 @@ def tether_socket() -> str:
 
 def owner_endpoint(root_socket: str | None) -> str:
     """An explicit --root-socket, else the validated environment default; raises ArgumentTypeError."""
-    return root_socket or socket_path(default_gui_socket())
+    return root_socket or socket_path(tether_socket())
 
 
 def classify_claude(raw: bytes) -> tuple[dict, str]:
@@ -424,11 +418,25 @@ class Collector:
             if client is not None:
                 client.close()
 
+    def session(self, widget: str) -> tuple[int, dict]:
+        """Tether's session descriptor, projected onto the owner receipt fields."""
+        # Tether live-verifies the pane before answering.
+        status, data = self.receipt(self.owner_socket, f"/v1/sessions/{widget}", timeout=1)
+        tmux = data.get("tmux")
+        if status != 200 or not isinstance(tmux, dict):
+            return status, data
+        return status, {"owner": "aico", "widgetId": data.get("id"), "sessionId": data.get("ownershipId"),
+                        "generation": data.get("generation"), "tmuxSessionId": tmux.get("sessionId"),
+                        "paneId": tmux.get("paneId"), "tmuxServerId": tmux.get("serverId"),
+                        "tmuxSocket": tmux.get("socket"), "tool": data.get("tool")}
+
     def owners(self, pin: Pin) -> None:
         status, root = self.receipt(self.root_socket, f"/v1/roots/{quote(pin.requestId)}")
         if status != 200:
             raise Unavailable("root_unavailable")
-        expected = {"owner": "aico", "requestId": pin.requestId,
+        if root.get("owner") not in ROOT_OWNERS:
+            raise IdentityChanged()
+        expected = {"requestId": pin.requestId,
                     "hostIdentity": pin.widgetId, "logicalSessionId": pin.logicalSessionId,
                     "surfaceLocator": f"aico://widget/{pin.widgetId}"}
         if any(root.get(k) != v for k, v in expected.items()):
@@ -441,7 +449,7 @@ class Collector:
             raise Unavailable("root_not_running")
         if self.discovered and root.get("tool") != self.profile:
             raise IdentityChanged()
-        status, owner = self.receipt(self.owner_socket, f"/v1/sessions/{pin.widgetId}")
+        status, owner = self.session(pin.widgetId)
         if status != 200:
             raise Unavailable("pane_unavailable")
         expected = {"owner": "aico", "widgetId": pin.widgetId, "generation": pin.generation,
@@ -460,7 +468,7 @@ class Collector:
             status, root = self.receipt(self.root_socket, f"/v1/roots/{quote(request_id)}")
             if status == 404:
                 roots: object = []
-            elif status == 200 and root.get("owner") == "aico":
+            elif status == 200 and root.get("owner") in ROOT_OWNERS:
                 roots = [root]
             else:
                 raise Unavailable("catalog_unavailable")
@@ -505,7 +513,7 @@ class Collector:
                 widget = root.get("hostIdentity")
                 if not isinstance(widget, str) or not re.fullmatch(WIDGET, widget):
                     raise Unavailable("receipt_invalid")
-                status, owner = self.receipt(self.owner_socket, f"/v1/sessions/{widget}")
+                status, owner = self.session(widget)
                 if status != 200:
                     raise Unavailable("pane_unavailable")
                 pin = Pin.parse(json.dumps({
@@ -760,7 +768,7 @@ def admin_main(argv: list[str]) -> int:
     parser.add_argument("--thread", help="expected current native thread UUID")
     parser.add_argument("--request-key", help="stable operation identity; reuse after uncertain response")
     parser.add_argument("--stdin", action="store_true", help="required for submit; <=2000 UTF-8 bytes, no framing controls")
-    parser.add_argument("--root-socket", type=socket_path, default=default_gui_socket())
+    parser.add_argument("--root-socket", type=socket_path, default=tether_socket())
     args = parser.parse_args(argv)
     if not re.fullmatch(KEY, args.request_id):
         parser.error("invalid root request ID")
@@ -1131,7 +1139,7 @@ def root_main(argv: list[str]) -> int:
     payload = view_payload(parser, args)
     try:
         endpoint = owner_endpoint(args.root_socket)
-        control = getattr(args, "owner_socket", None) or socket_path(default_owner_socket())
+        control = getattr(args, "owner_socket", None) or socket_path(tether_socket())
     except argparse.ArgumentTypeError as error:
         parser.error(f"invalid owner transport configuration: {error}")
     collector = Collector(endpoint, control, "", time.monotonic() + 10, threading.Event())
@@ -1157,11 +1165,11 @@ def root_main(argv: list[str]) -> int:
         payload["generation"] = pinned["generation"]
         sent = True
         if args.operation == "end":
-            # Exact containment retirement remains the headless owner's contract.
+            # Exact containment retirement: Tether's session End (it may add accounting fields).
             status, data = collector.receipt(control, f"/v1/sessions/{pinned['hostIdentity']}/end", payload,
                                              timeout=10)
             owner_reply(status, data, "end_receipt_unqualified")
-            if data != {"status": "ended"}:
+            if data.get("status") != "ended":
                 raise Unavailable("end_receipt_unqualified")
             output.update(status="ended", generation=None)
         else:
@@ -1199,8 +1207,8 @@ def roots_main(argv: list[str]) -> int:
     parser.add_argument("request_id", nargs="?", help="exact retained Aico catalog request ID")
     parser.add_argument("--watch", type=float, help="change-only JSONL seconds, >0 and <=3600")
     parser.add_argument("--interval", type=float, default=2, help="poll seconds, >=0.1")
-    parser.add_argument("--root-socket", type=socket_path, default=default_gui_socket())
-    parser.add_argument("--owner-socket", type=socket_path, default=default_owner_socket())
+    parser.add_argument("--root-socket", type=socket_path, default=tether_socket())
+    parser.add_argument("--owner-socket", type=socket_path, default=tether_socket())
     args = parser.parse_args(argv)
     if args.request_id and not re.fullmatch(KEY, args.request_id):
         parser.error("invalid request ID")

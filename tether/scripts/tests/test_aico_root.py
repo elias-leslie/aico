@@ -92,10 +92,16 @@ def test_aico_end_uses_exact_headless_containment_contract(monkeypatch):
     assert output == [{**DESCRIPTOR, "generation": None, "status": "ended", "operation": "end", "applied": True}]
 
 
+def test_aico_end_accepts_tether_accounting_fields(monkeypatch):
+    ended = {"status": "ended", "contextFinalization": "completed"}
+    code, _, output = invoke(monkeypatch, ["end", ROOT], [(200, DESCRIPTOR), (200, ended)])
+    assert code == 0 and output[0]["status"] == "ended" and output[0]["applied"] is True
+
+
 @pytest.mark.parametrize("reply,applied", [
     ((409, {"error": "stale_generation"}), False), ((409, {"error": "busy"}), False),
     ((409, {"error": "blocked", "reason": "tmux state after stop is unknown"}), None),
-    ((200, {"status": "ended", "extra": True}), None),
+    ((200, {"status": "uncertain"}), None),
 ])
 def test_aico_end_blocked_cleanup_is_uncertain(monkeypatch, reply, applied):
     code, _, output = invoke(monkeypatch, ["end", ROOT], [(200, DESCRIPTOR), reply])

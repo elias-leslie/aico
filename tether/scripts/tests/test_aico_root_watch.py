@@ -355,6 +355,14 @@ def pane_receipt():
                                 ("widgetId", "generation", "sessionId", "tmuxSessionId", "paneId")}}
 
 
+def tether_session(owner):
+    """Tether's GET /v1/sessions/:id descriptor carrying the given owner receipt fields."""
+    return {"id": owner["widgetId"], "ownershipId": owner["sessionId"], "generation": owner["generation"],
+            "status": "running", "tool": owner.get("tool"),
+            "tmux": {"sessionId": owner["tmuxSessionId"], "paneId": owner["paneId"],
+                     "serverId": owner.get("tmuxServerId"), "socket": owner.get("tmuxSocket")}}
+
+
 def discovery_receipts(monkeypatch, instance, roots=None, mutate=None):
     root = {**root_receipt(), "tool": "codex"}
     if roots and len(roots) == 1 and roots[0].get("tool") in ("claude-code", "pi"):
@@ -363,14 +371,14 @@ def discovery_receipts(monkeypatch, instance, roots=None, mutate=None):
              "tmuxSocket": "/fixture/tmux", "tool": root["tool"]}
     calls = []
 
-    def receipt(self, path, route):
+    def receipt(self, path, route, **_):
         calls.append((path, route))
         if route == "/v1/roots?ended=0":
             return 200, {"owner": "aico", "roots": [root] if roots is None else roots}
         data = dict(root if "/roots/" in route else owner)
         if mutate:
             mutate(route, data)
-        return 200, data
+        return 200, data if "/roots/" in route else tether_session(data)
 
     monkeypatch.setattr(watcher.Collector, "receipt", receipt)
     monkeypatch.setattr(watcher.Collector, "pane", lambda self, pin: None)
@@ -504,7 +512,7 @@ def test_exact_selection_reports_an_ended_tombstone(monkeypatch):
     instance = collector()
     ended = {**root_receipt(), "status": "ended", "generation": None, "tool": "codex"}
 
-    def receipt(self, path, route):
+    def receipt(self, path, route, **_):
         assert route == "/v1/roots/fixture-root"
         return 200, ended
 
@@ -518,7 +526,7 @@ def test_exact_selection_reports_an_ended_tombstone(monkeypatch):
 def test_exact_selection_of_an_unknown_root_is_not_found(monkeypatch):
     instance = collector()
     monkeypatch.setattr(watcher.Collector, "receipt",
-                        lambda self, path, route: (404, {"error": "not_found"}))
+                        lambda self, path, route, **_: (404, {"error": "not_found"}))
     assert instance.discover("gone")[1] == [{"requestId": "gone", "observation": "unavailable",
                                              "identity": "unresolved", "reason": "root_not_found"}]
 
@@ -573,9 +581,9 @@ def fake_commands(monkeypatch, instance, screen=b"Worked for 15s\n\xe2\x80\xba \
 def fake_receipts(monkeypatch, instance):
     calls = []
 
-    def receipt(path, route):
+    def receipt(path, route, **_):
         calls.append((path, route))
-        return 200, root_receipt() if "/roots/" in route else pane_receipt()
+        return 200, root_receipt() if "/roots/" in route else tether_session(pane_receipt())
 
     monkeypatch.setattr(instance, "receipt", receipt)
     return calls
@@ -599,10 +607,10 @@ def test_generation_change_during_capture_discards_evidence(monkeypatch):
     captures = fake_commands(monkeypatch, instance)
     count = 0
 
-    def receipt(path, route):
+    def receipt(path, route, **_):
         nonlocal count
         count += 1
-        data = root_receipt() if "/roots/" in route else pane_receipt()
+        data = root_receipt() if "/roots/" in route else tether_session(pane_receipt())
         if count >= 3:
             data["generation"] = "c" * 64
         return 200, data
@@ -764,7 +772,7 @@ def owner_server(tmp_path, state):
 
 def test_private_socket_transient_failure_and_exact_recovery(tmp_path, monkeypatch):
     state = {"routes": [], "answer": lambda route: (
-        200, root_receipt() if "/roots/" in route else pane_receipt())}
+        200, root_receipt() if "/roots/" in route else tether_session(pane_receipt()))}
     instance = collector()
     output = []
     with ExitStack() as stack:
