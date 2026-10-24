@@ -27,4 +27,4 @@ hostnamectl    prepend           --no-ask-password
 localectl      prepend           --no-ask-password
 machinectl     prepend           --no-ask-password
 udisksctl      after-subcommand  --no-user-interaction  mount,unmount,unlock,lock,loop-setup,loop-delete,power-off,smart-simulate
-pkexec         refuse            pkexec is blocked for agents; use nightshift request/bypass
+pkexec         refuse            pkexec is blocked for agents; use sudo

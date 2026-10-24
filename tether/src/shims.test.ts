@@ -114,7 +114,7 @@ describe('agent shims', () => {
     const result = run('pkexec', ['id'])
     expect(result.code).toBe(126)
     expect(result.out).toBe('')
-    expect(result.err).toBe('pkexec is blocked for agents; use nightshift request/bypass\n')
+    expect(result.err).toBe('pkexec is blocked for agents; use sudo\n')
   })
 
   it('skips the shim directory even when it is reached through another path', () => {
