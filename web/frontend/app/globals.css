@@ -9,7 +9,7 @@
   color-scheme: dark;
   /* The web's mono is JetBrains Mono (lib/constants/lantern.ts), not the
      desktop's Iosevka. */
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-mono: "JetBrains Mono", "FreeMono Symbols", ui-monospace, monospace;
   --terminal-viewport-height: 100dvh;
 
   --term-bg-deep: var(--ink);

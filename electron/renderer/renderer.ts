@@ -12,6 +12,8 @@ import {
   fontFamilyFor,
   fontLoadFaceFor,
   parseTerminalFontSettings,
+  SYMBOLS_FACE,
+  SYMBOLS_SAMPLE,
 } from '../shared/font-settings'
 import { BONE, INK } from '../shared/palette'
 import { TERMINAL_HISTORY_LINES } from '../shared/terminal-history'
@@ -454,7 +456,10 @@ void initControlSurface()
 // The selected font must be loaded before xterm measures its glyph cell, or the
 // live view renders at fallback metrics and misaligns once the webfont swaps in.
 async function loadTerminalFont(settings: AicoTerminalFontSettings): Promise<void> {
-  await document.fonts.load(`${settings.fontSize}px ${fontLoadFaceFor(settings.fontId)}`)
+  await Promise.all([
+    document.fonts.load(`${settings.fontSize}px ${fontLoadFaceFor(settings.fontId)}`),
+    document.fonts.load(`${settings.fontSize}px ${SYMBOLS_FACE}`, SYMBOLS_SAMPLE),
+  ])
 }
 
 await loadTerminalFont(terminalFontSettings)

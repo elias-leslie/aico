@@ -1,38 +1,44 @@
+/** Vendored fallback for the agent-TUI symbols (⎿ ✻ ✢ ⏺ …) no terminal font
+ * here draws; every family lists it right after its own face. */
+export const SYMBOLS_FACE = "'FreeMono Symbols'"
+/** A character the symbols face draws, so `document.fonts.load` fetches it. */
+export const SYMBOLS_SAMPLE = '⎿'
+
 export const AICO_FONTS = [
   {
     id: 'iosevka',
     name: 'Iosevka',
-    family: "'Iosevka', ui-monospace, monospace",
+    family: "'Iosevka', 'FreeMono Symbols', ui-monospace, monospace",
     loadFace: "'Iosevka'",
   },
   {
     id: 'system-mono',
     name: 'System Mono',
-    family: "ui-monospace, 'SF Mono', Menlo, Consolas, monospace",
+    family: "ui-monospace, 'SF Mono', Menlo, Consolas, 'FreeMono Symbols', monospace",
     loadFace: 'monospace',
   },
   {
     id: 'jetbrains-mono',
     name: 'JetBrains Mono',
-    family: "'JetBrains Mono', ui-monospace, monospace",
+    family: "'JetBrains Mono', 'FreeMono Symbols', ui-monospace, monospace",
     loadFace: "'JetBrains Mono'",
   },
   {
     id: 'fira-code',
     name: 'Fira Code',
-    family: "'Fira Code', ui-monospace, monospace",
+    family: "'Fira Code', 'FreeMono Symbols', ui-monospace, monospace",
     loadFace: "'Fira Code'",
   },
   {
     id: 'source-code-pro',
     name: 'Source Code Pro',
-    family: "'Source Code Pro', ui-monospace, monospace",
+    family: "'Source Code Pro', 'FreeMono Symbols', ui-monospace, monospace",
     loadFace: "'Source Code Pro'",
   },
   {
     id: 'cascadia',
     name: 'Cascadia Code',
-    family: "'Cascadia Code', 'Cascadia Mono', ui-monospace, monospace",
+    family: "'Cascadia Code', 'Cascadia Mono', 'FreeMono Symbols', ui-monospace, monospace",
     loadFace: "'Cascadia Code'",
   },
 ] as const

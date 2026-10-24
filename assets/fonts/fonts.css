@@ -1,6 +1,7 @@
 /* Lantern typefaces — vendored woff2 (Latin subsets). See README.md for sources.
    Fraunces = display (variable wght+ital), Pretendard = UI, Iosevka = desktop
-   mono, JetBrains Mono = web terminal (full glyph set, incl. box drawing). */
+   mono, JetBrains Mono = web terminal (full glyph set, incl. box drawing),
+   FreeMono Symbols = the agent-TUI symbols (⎿ ✻ ✢ ⏺ …) the monos lack. */
 
 @font-face {
   font-family: 'Fraunces';
@@ -53,4 +54,14 @@
   font-weight: 700;
   font-display: swap;
   src: url('./JetBrainsMono-Bold.woff2') format('woff2');
+}
+
+/* Listed after the terminal face in every family; only these code points. */
+@font-face {
+  font-family: 'FreeMono Symbols';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./FreeMono-Symbols.woff2') format('woff2');
+  unicode-range: U+21AF, U+21BA-21BB, U+21E1, U+21E3, U+23BE-23BF, U+23CF, U+23F4-23F5, U+23F8-23FA, U+25D0-25D3, U+2714, U+2718, U+2722, U+2733, U+2737-273B, U+273D, U+29C9;
 }

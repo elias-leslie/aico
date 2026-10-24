@@ -7,4 +7,6 @@ export const LANTERN_RIM = '#1c1f24'
  * Iosevka default and easier to read on a phone. Named as the desktop's
  * JetBrains Mono setting names it. */
 export const LANTERN_MONO_FACE = 'JetBrains Mono'
-export const LANTERN_MONO_FAMILY = `'${LANTERN_MONO_FACE}', ui-monospace, monospace`
+/** The agent-TUI symbols JetBrains Mono lacks (⎿ ✻ ✢ ⏺ …); assets/fonts. */
+export const LANTERN_SYMBOLS_FACE = 'FreeMono Symbols'
+export const LANTERN_MONO_FAMILY = `'${LANTERN_MONO_FACE}', '${LANTERN_SYMBOLS_FACE}', ui-monospace, monospace`

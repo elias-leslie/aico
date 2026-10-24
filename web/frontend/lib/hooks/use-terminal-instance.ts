@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { LANTERN_MONO_FACE } from '../constants/lantern'
+import { LANTERN_MONO_FACE, LANTERN_SYMBOLS_FACE } from '../constants/lantern'
 import { setupMobileNativeSelection } from './mobile-native-selection'
 import {
   collectTerminalRendererStatus,
@@ -90,6 +90,10 @@ export function useTerminalInstance(
           document.fonts?.load(`${opts.fontSize}px '${LANTERN_MONO_FACE}'`),
           document.fonts?.load(
             `bold ${opts.fontSize}px '${LANTERN_MONO_FACE}'`,
+          ),
+          document.fonts?.load(
+            `${opts.fontSize}px '${LANTERN_SYMBOLS_FACE}'`,
+            '⎿',
           ),
         ])
       } catch {
