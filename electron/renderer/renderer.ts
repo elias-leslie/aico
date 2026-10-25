@@ -455,11 +455,15 @@ void initControlSurface()
 
 // The selected font must be loaded before xterm measures its glyph cell, or the
 // live view renders at fallback metrics and misaligns once the webfont swaps in.
+// A face that fails to load only costs its glyphs: the terminal still opens.
 async function loadTerminalFont(settings: AicoTerminalFontSettings): Promise<void> {
-  await Promise.all([
+  const results = await Promise.allSettled([
     document.fonts.load(`${settings.fontSize}px ${fontLoadFaceFor(settings.fontId)}`),
     document.fonts.load(`${settings.fontSize}px ${SYMBOLS_FACE}`, SYMBOLS_SAMPLE),
   ])
+  for (const result of results)
+    if (result.status === 'rejected')
+      console.warn('[aico] terminal font failed to load:', result.reason)
 }
 
 await loadTerminalFont(terminalFontSettings)

@@ -49,6 +49,9 @@ export default defineConfig({
     plugins: [rendererCspMeta()],
     build: {
       outDir: 'out/renderer',
+      // Fonts ship as files: the CSP's font-src 'self' blocks data: fonts, and
+      // Vite would inline the small symbols face as one.
+      assetsInlineLimit: (file) => (/\.(woff2?|ttf|otf)$/.test(file) ? false : undefined),
       rollupOptions: { input: resolve(__dirname, 'electron/renderer/index.html') },
     },
   },
