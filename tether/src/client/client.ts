@@ -385,7 +385,7 @@ export class TetherPool extends TetherClient {
     body?: unknown,
     options: RequestOptions = {},
   ): Promise<{ status: number; body: T }> {
-    const route = path.split('?')[0].replace(/\/+$/, '')
+    const route = trimTrailingSlashes(path.split('?')[0])
     if (route === '/v1/sessions' && method === 'GET') return this.mergedSessions(path, options)
     if (/^\/v1\/(sessions|widgets)\/[^/]/.test(route))
       return this.byOwner(method, path, body, options)
@@ -602,4 +602,12 @@ export function holdGuiChannel(
     }
   })()
   return () => controller.abort()
+}
+
+/** Drops trailing slashes. Not /\/+$/: it backtracks on a long run of '/'
+ * (CodeQL js/polynomial-redos). */
+export function trimTrailingSlashes(text: string): string {
+  let end = text.length
+  while (end > 0 && text.charCodeAt(end - 1) === 47) end--
+  return text.slice(0, end)
 }

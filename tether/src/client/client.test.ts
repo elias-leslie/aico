@@ -22,6 +22,7 @@ import {
   TetherPool,
   TetherUnavailable,
   tetherSocketPath,
+  trimTrailingSlashes,
 } from './index'
 
 type Handler = (req: IncomingMessage, res: ServerResponse) => void
@@ -546,5 +547,19 @@ describe('two Tether instances', () => {
     await expect(pool.listSessions()).rejects.toMatchObject({ status: 500, code: 'broken' })
     pool.instances()[0].request = () => Promise.reject(new TetherUnavailable('active down'))
     await expect(pool.listSessions()).rejects.toBeInstanceOf(TetherUnavailable)
+  })
+})
+
+describe('trimTrailingSlashes', () => {
+  it('drops only trailing slashes', () => {
+    expect(trimTrailingSlashes('/v1/sessions//')).toBe('/v1/sessions')
+    expect(trimTrailingSlashes('/v1/sessions')).toBe('/v1/sessions')
+    expect(trimTrailingSlashes('///')).toBe('')
+  })
+
+  it('stays linear on a long run of slashes', () => {
+    const started = performance.now()
+    expect(trimTrailingSlashes(`${'/'.repeat(200_000)}x`)).toHaveLength(200_001)
+    expect(performance.now() - started).toBeLessThan(200)
   })
 })

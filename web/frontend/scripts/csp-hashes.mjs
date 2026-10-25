@@ -7,7 +7,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const outDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'out')
-const SCRIPT = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi
+// The end tag allows what HTML does (`</script >`, `</script foo>`).
+const SCRIPT = /<script\b([^>]*)>([\s\S]*?)<\/script\b[^>]*>/gi
 
 async function htmlFiles(dir) {
   const entries = await readdir(dir, { withFileTypes: true })

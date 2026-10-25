@@ -1980,6 +1980,12 @@ export type EnsureFailure =
   | { code: 'outcome_uncertain'; reason: string }
 const ensureFailures = new Map<string, EnsureFailure>()
 
+/** A thrown value's message for API callers. A non-Error is not stringified:
+ * it may carry anything, a stack included (CodeQL js/stack-trace-exposure). */
+function failureReason(error: unknown): string {
+  return error instanceof Error ? error.message : 'unexpected failure'
+}
+
 function fail(widgetId: string, failure: EnsureFailure): false {
   ensureFailures.set(widgetId, failure)
   return false
@@ -2141,7 +2147,7 @@ async function ensureOwnedInternalSession(widgetId: string, size: PtySize): Prom
     console.error(`[tether] failed to create tmux session for ${widgetId}:`, e)
     return fail(widgetId, {
       code: 'outcome_uncertain',
-      reason: e instanceof Error ? e.message : String(e),
+      reason: failureReason(e),
     })
   } finally {
     admission?.release()
@@ -2493,7 +2499,7 @@ export async function respawnAndRelaunch(
         console.error(`[tether] failed to respawn pane for ${widgetId}:`, error)
         result = {
           status: 'outcome_uncertain',
-          reason: error instanceof Error ? error.message : String(error),
+          reason: failureReason(error),
         }
       }
 
