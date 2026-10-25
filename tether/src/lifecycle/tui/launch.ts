@@ -120,11 +120,13 @@ export function paneCommand(line: string | null, agentExitDir: string | null = n
   // group as the kernel would (to the agent alone when this shell leads no
   // group), wait for the agent, then record `signal NAME`
   // and exit. The shell ignores INT and QUIT while the agent runs (a ^C is
-  // the agent's); the agent gets them back, with the terminal as stdin.
+  // the agent's); the agent gets them back, with the terminal as stdin. The
+  // shell starts ignoring them only after forking the agent: from bash 5.3 an
+  // async subshell's `trap -` cannot undo a disposition its parent ignored.
   const dir = shellQuote(agentExitDir)
   const markStart = `tether_cg=; tether_mark=; { while read -r tether_l; do case $tether_l in 0::*) tether_cg=\${tether_l#0::} ;; esac; done </proc/self/cgroup; } 2>/dev/null; [ -n "\${tether_cg##*/}" ] && tether_mark=${dir}/\${tether_cg##*/} && { printf 'started\\n' >"$tether_mark"; } 2>/dev/null`
-  const stop = `tether_stop() { trap '' "$1"; kill -"$1" -$$ 2>/dev/null || kill -"$1" "$tether_pid" 2>/dev/null; wait; [ -n "$tether_mark" ] && { printf 'signal %s\\n' "$1" >"$tether_mark"; } 2>/dev/null; exit "$2"; }; trap 'tether_stop HUP 129' HUP; trap 'tether_stop TERM 143' TERM; trap '' INT QUIT`
-  const run = `( trap - INT QUIT; ${line} ) <&0 & tether_pid=$!; wait "$tether_pid"; export ${AGENT_EXIT_ENV}=$?`
+  const stop = `tether_stop() { trap '' "$1"; kill -"$1" -$$ 2>/dev/null || kill -"$1" "$tether_pid" 2>/dev/null; wait; [ -n "$tether_mark" ] && { printf 'signal %s\\n' "$1" >"$tether_mark"; } 2>/dev/null; exit "$2"; }; trap 'tether_stop HUP 129' HUP; trap 'tether_stop TERM 143' TERM`
+  const run = `( trap - INT QUIT; ${line} ) <&0 & tether_pid=$!; trap '' INT QUIT; wait "$tether_pid"; export ${AGENT_EXIT_ENV}=$?`
   const markEnd = `{ [ -n "$tether_mark" ] && printf 'exit %s\\n' "$${AGENT_EXIT_ENV}" >"$tether_mark"; } 2>/dev/null; trap - HUP TERM INT QUIT`
   const supervisorScript = `${clearTypedLauncher}; ${lowerOomScore}; ${markStart}; ${stop}; ${run}; ${markEnd}; ${restoreOomScore}; ${interactiveShell}`
   return `exec /bin/bash --noprofile --norc -c ${shellQuote(supervisorScript)}`
