@@ -239,15 +239,26 @@ describe('windows: opening', () => {
     })
   })
 
+  it('fits a remembered place that overhangs the work area inside it', () => {
+    const tall = { ...view('aaaaaaaa', true), bounds: { x: 600, y: -10, width: 700, height: 900 } }
+    const { windows, layout } = setup({ views: [tall], live: ['aaaaaaaa'] })
+    windows.restoreOnLaunch()
+    expect(layout.present).toHaveBeenLastCalledWith(FakeWindow.all[0], {
+      tile: false,
+      saved: { x: 300, y: 0, width: 700, height: 800 },
+    })
+    expect(FakeWindow.all[0]?.options).toMatchObject({ width: 700, height: 800 })
+  })
+
   it('converts a remembered size to DIP with the compositor scale', () => {
     const remembered = {
       ...view('aaaaaaaa', true),
-      bounds: { x: 0, y: 0, width: 1250, height: 800 },
+      bounds: { x: 0, y: 0, width: 875, height: 800 },
     }
     const { windows, comp } = setup({ views: [remembered], live: ['aaaaaaaa'] })
     comp.state.scale = 1.25
     windows.restoreOnLaunch()
-    expect(FakeWindow.all[0]?.options).toMatchObject({ width: 1000, height: 640 })
+    expect(FakeWindow.all[0]?.options).toMatchObject({ width: 700, height: 640 })
   })
 
   it('opens a new session window as a pending create', () => {

@@ -91,16 +91,25 @@ export function createWindows(deps: WindowsDeps) {
     )
   }
 
-  // Restore a saved rect only if it still lands on a connected display; otherwise
-  // keep just the size and let the compositor place it (avoids off-screen windows).
+  // Restore a saved rect only if it still lands on a connected display, fitted inside
+  // that display's work area (a rect saved under another scale or panel can be larger);
+  // otherwise keep just the size and let the compositor place it (avoids off-screen windows).
   function savedPlace(b: Bounds | null): Bounds | null {
     if (!b) return null
-    const onScreen = compositor.monitors().some(({ workArea: w }) => {
+    const area = compositor.monitors().find(({ workArea: w }) => {
       return (
         b.x < w.x + w.width && b.x + b.width > w.x && b.y < w.y + w.height && b.y + b.height > w.y
       )
-    })
-    return onScreen ? b : null
+    })?.workArea
+    if (!area) return null
+    const width = Math.min(b.width, area.width)
+    const height = Math.min(b.height, area.height)
+    return {
+      x: Math.min(Math.max(b.x, area.x), area.x + area.width - width),
+      y: Math.min(Math.max(b.y, area.y), area.y + area.height - height),
+      width,
+      height,
+    }
   }
 
   // Window size for the constructor, in DIP: the saved size (logical px), else a default.
@@ -138,7 +147,7 @@ export function createWindows(deps: WindowsDeps) {
     const row = { id: view?.id ?? 'new' }
     const saved = savedPlace(view?.bounds ?? null)
     const win = new deps.BrowserWindow({
-      ...initialSize(view?.bounds ?? null),
+      ...initialSize(saved ?? view?.bounds ?? null),
       // Shown once the compositor has the window's place (below), so it never
       // appears somewhere else first.
       show: false,
