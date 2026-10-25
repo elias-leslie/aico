@@ -61,6 +61,17 @@ const RESEED_AFTER_RESIZE_MS = 300
  */
 const INPUT_QUIET_MS = 400
 const INPUT_HOLD_MAX_MS = 3000
+/**
+ * Output that hides the cursor and has not shown it again is half a frame: a
+ * TUI redraw larger than one pty read (4 KiB) reaches tmux in pieces, and a
+ * viewer that paints between them shows the cursor jumping back with the line
+ * half drawn. Hold such output this long, at most, for the rest of the frame.
+ * Claude Code inside tmux gets no synchronized-output (DEC 2026) reply from
+ * tmux 3.4, so it brackets its frames only by hiding the cursor.
+ */
+const FRAME_HOLD_MS = 10
+const HIDE_CURSOR = '\x1b[?25l'
+const SHOW_CURSOR = '\x1b[?25h'
 
 type Phase = 'starting' | 'seeding' | 'live' | 'closed'
 
@@ -118,6 +129,9 @@ export class ControlTerminal implements TerminalLink {
   private exited = false
   private outstanding = 0
   private stalled = false
+  /** Live output from the current stdout read, emitted as one piece. */
+  private pendingOutput = ''
+  private frameTimer: NodeJS.Timeout | undefined
   cols: number
   rows: number
 
@@ -142,7 +156,10 @@ export class ControlTerminal implements TerminalLink {
       },
       exit: () => this.kill(),
     })
-    this.child.stdout.on('data', (chunk: Buffer) => this.protocol.feed(chunk))
+    this.child.stdout.on('data', (chunk: Buffer) => {
+      this.protocol.feed(chunk)
+      this.flushOutput(false)
+    })
     this.child.stderr.on('data', () => {})
     this.child.stdin.on('error', () => {})
     this.child.on('exit', () => this.finish())
@@ -287,6 +304,7 @@ export class ControlTerminal implements TerminalLink {
     if (this.phase === 'closed') return
     this.phase = 'closed'
     if (this.reseedTimer) clearTimeout(this.reseedTimer)
+    if (this.frameTimer) clearTimeout(this.frameTimer)
     this.markReady()
     try {
       this.child.stdin.end()
@@ -299,6 +317,7 @@ export class ControlTerminal implements TerminalLink {
   private goLive(seed: string): void {
     if (this.phase === 'closed') return
     this.decoder = new TextDecoder('utf-8')
+    this.flushOutput(true)
     if (seed) this.emit(seed)
     this.options.onReseed?.({
       reason: this.seedReason,
@@ -317,9 +336,25 @@ export class ControlTerminal implements TerminalLink {
   private output(paneId: string, bytes: Buffer): void {
     // While seeding, these bytes are already in the captures being read.
     if (this.phase === 'live' && paneId === this.paneId) {
-      const text = this.decoder.decode(bytes, { stream: true })
-      if (text) this.emit(text)
+      this.pendingOutput += this.decoder.decode(bytes, { stream: true })
     }
+  }
+
+  /** Emit this read's output in one piece, unless it ends inside a frame. */
+  private flushOutput(force: boolean): void {
+    const text = this.pendingOutput
+    if (!text) return
+    if (!force && text.lastIndexOf(HIDE_CURSOR) > text.lastIndexOf(SHOW_CURSOR)) {
+      this.frameTimer ??= setTimeout(() => {
+        this.frameTimer = undefined
+        this.flushOutput(true)
+      }, FRAME_HOLD_MS)
+      return
+    }
+    if (this.frameTimer) clearTimeout(this.frameTimer)
+    this.frameTimer = undefined
+    this.pendingOutput = ''
+    if (this.phase !== 'closed') this.emit(text)
   }
 
   private emit(data: string): void {
@@ -351,6 +386,7 @@ export class ControlTerminal implements TerminalLink {
   private finish(): void {
     if (this.exited) return
     this.exited = true
+    this.flushOutput(true)
     this.phase = 'closed'
     if (this.reseedTimer) clearTimeout(this.reseedTimer)
     this.markReady()

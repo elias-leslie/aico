@@ -129,6 +129,58 @@ describe('ControlTerminal seed', () => {
   })
 })
 
+describe('ControlTerminal frames', () => {
+  it('emits one stdout read as one piece', async () => {
+    const { tmux, data } = link()
+    tmux.reply([], [flagsLine()], [], [], [])
+    await flush()
+    data.length = 0
+    tmux.stdout.write('%output %5 one\n%output %5 two\n')
+    await flush()
+    expect(data).toEqual(['onetwo'])
+  })
+
+  it('holds a redraw split across reads until the cursor is shown again', async () => {
+    vi.useFakeTimers()
+    try {
+      const { tmux, data } = link()
+      tmux.reply([], [flagsLine()], [], [], [])
+      await vi.advanceTimersByTimeAsync(0)
+      data.length = 0
+      // Claude Code's busy redraw, cut where the pty read ended (\033 is ESC).
+      tmux.output('%5', '\\033[?25l\\033[H\\033[58Bhalf')
+      await vi.advanceTimersByTimeAsync(0)
+      expect(data).toEqual([])
+      tmux.output('%5', ' drawn\\033[65;9H\\033[?25h')
+      await vi.advanceTimersByTimeAsync(0)
+      expect(data).toEqual([`${ESC}[?25l${ESC}[H${ESC}[58Bhalf drawn${ESC}[65;9H${ESC}[?25h`])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('a frame that never shows the cursor again still arrives after a moment', async () => {
+    vi.useFakeTimers()
+    try {
+      const { tmux, data } = link()
+      tmux.reply([], [flagsLine()], [], [], [])
+      await vi.advanceTimersByTimeAsync(0)
+      data.length = 0
+      tmux.output('%5', '\\033[?25lspinner')
+      await vi.advanceTimersByTimeAsync(5)
+      expect(data).toEqual([])
+      await vi.advanceTimersByTimeAsync(10)
+      expect(data).toEqual([`${ESC}[?25lspinner`])
+      // Hidden from earlier, no new hide: nothing to wait for.
+      tmux.output('%5', 'more')
+      await vi.advanceTimersByTimeAsync(0)
+      expect(data.at(-1)).toBe('more')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
 describe('ControlTerminal input', () => {
   it('types into the pane only once the first seed named it', async () => {
     const { term, tmux } = link()
