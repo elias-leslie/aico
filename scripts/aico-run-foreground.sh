@@ -132,4 +132,6 @@ export AICO_PIDFILE="$PIDFILE"
 # not honor those operations; use Electron's supported Xwayland backend while
 # leaving the actual desktop/session environment intact for terminal children.
 # An explicit override is useful for native-Wayland compatibility testing.
-exec ./node_modules/electron/dist/electron . "--ozone-platform=${AICO_OZONE_PLATFORM:-x11}"
+# AICO_CHROMIUM_FLAGS adds Chromium switches (space-separated); the unit sets it.
+read -r -a chromium_flags <<<"${AICO_CHROMIUM_FLAGS:-}"
+exec ./node_modules/electron/dist/electron . "--ozone-platform=${AICO_OZONE_PLATFORM:-x11}" "${chromium_flags[@]}"
