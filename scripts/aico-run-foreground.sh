@@ -128,15 +128,13 @@ export AICO_ACTIVATION_READY_FILE="$READYFILE"
 # Electron keeps this shell's PID across exec; it clears the pidfile on a clean
 # quit while the file still names it.
 export AICO_PIDFILE="$PIDFILE"
-# Aico tiles and restores windows by absolute position. Native Wayland does
-# not honor those operations; use Electron's supported Xwayland backend while
-# leaving the actual desktop/session environment intact for terminal children.
-# An explicit override is useful for native-Wayland compatibility testing.
-# AICO_CHROMIUM_FLAGS adds Chromium switches (space-separated); the unit sets it.
+# Aico is a native Wayland client: under Xwayland (before explicit sync) NVIDIA
+# showed stale frames, so typed text vanished and came back. AICO_OZONE_PLATFORM=x11
+# forces Xwayland. AICO_CHROMIUM_FLAGS adds Chromium switches (space-separated).
 read -r -a chromium_flags <<<"${AICO_CHROMIUM_FLAGS:-}"
 # Xwayland hands GNOME's text scaling to Chromium as Xft.dpi; native Wayland
 # Chromium ignores it. Apply it as the device scale so text keeps its size.
-if [ "${AICO_OZONE_PLATFORM:-x11}" = wayland ]; then
+if [ "${AICO_OZONE_PLATFORM:-wayland}" = wayland ]; then
   text_scale="$(gsettings get org.gnome.desktop.interface text-scaling-factor 2>/dev/null || echo 1.0)"
   case "$text_scale" in
     1 | 1.0) ;;
@@ -144,4 +142,4 @@ if [ "${AICO_OZONE_PLATFORM:-x11}" = wayland ]; then
     *) chromium_flags+=("--force-device-scale-factor=$text_scale") ;;
   esac
 fi
-exec ./node_modules/electron/dist/electron . "--ozone-platform=${AICO_OZONE_PLATFORM:-x11}" "${chromium_flags[@]}"
+exec ./node_modules/electron/dist/electron . "--ozone-platform=${AICO_OZONE_PLATFORM:-wayland}" "${chromium_flags[@]}"

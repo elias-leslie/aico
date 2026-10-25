@@ -177,8 +177,8 @@ if [ -z "$UNIT_FRAGMENT" ] || [ ! -f "$UNIT_FRAGMENT" ]; then
   echo "aico-launch: managed unit $RUNTIME_UNIT is not installed; run scripts/install.sh" >&2
   exit 1
 fi
-if [ -z "${DISPLAY:-}" ]; then
-  echo "aico-launch: DISPLAY is missing; refusing graphical launch" >&2
+if [ -z "${WAYLAND_DISPLAY:-}" ]; then
+  echo "aico-launch: WAYLAND_DISPLAY is missing; refusing graphical launch" >&2
   exit 1
 fi
 
@@ -186,8 +186,8 @@ fi
 # be in the user manager. Import only display/session routing values supplied by
 # this already-running desktop process; never import arbitrary project or agent
 # environment into the service or durable tmux sessions.
-declare -a graphical_environment=(DISPLAY)
-for name in XAUTHORITY WAYLAND_DISPLAY XDG_SESSION_TYPE; do
+declare -a graphical_environment=(WAYLAND_DISPLAY)
+for name in DISPLAY XAUTHORITY XDG_SESSION_TYPE; do
   if [ -n "${!name:-}" ]; then graphical_environment+=("$name"); fi
 done
 systemctl --user import-environment "${graphical_environment[@]}"

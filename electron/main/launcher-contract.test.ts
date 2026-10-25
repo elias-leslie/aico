@@ -28,10 +28,10 @@ describe('desktop launcher ownership contract', () => {
     expect(launcher).toContain('systemctl --user start "$RUNTIME_UNIT"')
   })
 
-  it('gates early boot on DISPLAY and conflicts with nothing', () => {
+  it('gates early boot on WAYLAND_DISPLAY and conflicts with nothing', () => {
     const unit = projectFile('scripts/systemd/aico-shell.service')
 
-    expect(unit).toContain('ConditionEnvironment=DISPLAY')
+    expect(unit).toContain('ConditionEnvironment=WAYLAND_DISPLAY')
     expect(unit).toContain('Environment=AICO_WORKLOAD_CLASS=desktop-runtime')
     expect(unit).not.toMatch(/^Conflicts=/m)
   })
@@ -125,8 +125,6 @@ describe('foreground runner build step', () => {
 
 describe('desktop display backend', () => {
   // Exercise the runner's actual exec command with a fake Electron binary.
-  // Native Wayland cannot provide the absolute window positioning the tiler
-  // needs, even when Electron's cached getBounds appears to accept a move.
   const runner = projectFile('scripts/aico-run-foreground.sh')
   const command = runner.match(/^exec \.\/node_modules\/electron\/dist\/electron .*$/m)?.[0]
 
@@ -151,11 +149,11 @@ describe('desktop display backend', () => {
     }
   }
 
-  it('requests Xwayland for window tiling by default on a Wayland desktop', () => {
-    expect(argumentsFor()).toEqual(['.', '--ozone-platform=x11'])
+  it('runs as a native Wayland client by default', () => {
+    expect(argumentsFor()).toEqual(['.', '--ozone-platform=wayland'])
   })
 
-  it('allows an explicit display backend override', () => {
-    expect(argumentsFor('wayland')).toEqual(['.', '--ozone-platform=wayland'])
+  it('allows forcing Xwayland', () => {
+    expect(argumentsFor('x11')).toEqual(['.', '--ozone-platform=x11'])
   })
 })

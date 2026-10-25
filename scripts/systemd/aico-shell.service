@@ -5,12 +5,12 @@
 [Unit]
 Description=Aico desktop shell
 After=graphical-session.target
-# Start at login with the graphical session: GNOME imports DISPLAY into the
-# user manager before graphical-session.target, but after default.target, so a
-# default.target install was always skipped and Aico never opened after a
-# reboot. The condition still guards a manual start without X11; the desktop
+# Start at login with the graphical session: GNOME imports WAYLAND_DISPLAY into
+# the user manager before graphical-session.target, but after default.target, so
+# a default.target install was always skipped and Aico never opened after a
+# reboot. The condition still guards a manual start without a desktop; the
 # launcher imports its display variables and starts this same unit.
-ConditionEnvironment=DISPLAY
+ConditionEnvironment=WAYLAND_DISPLAY
 
 [Service]
 Type=simple
@@ -36,16 +36,11 @@ TasksAccounting=yes
 Environment=AICO_OWNER=aico
 Environment=AICO_WORKLOAD_CLASS=desktop-runtime
 Environment=AICO_RUNTIME_UNIT=aico-shell.service
-# Inherit DISPLAY/XAUTHORITY from the graphical user manager. Hard-coding :0
-# prevents the shell from starting when GDM assigns the active session :1.
+# Inherit WAYLAND_DISPLAY (and DISPLAY/XAUTHORITY for Xwayland children) from
+# the graphical user manager; never hard-code them.
 # Optional local agent launcher wrappers may live in %h/.claude/bin and
 # %h/.codex/bin. Keep common user bin paths ahead of system paths.
 Environment=PATH=%h/.claude/bin:%h/.codex/bin:%h/bin:%h/.local/bin:%h/.cargo/bin:/usr/local/bin:/usr/bin:/bin
-# Xwayland before 24.1 has no explicit sync, so on NVIDIA it can show a GPU
-# client's older frame: typed text vanishes for a moment and comes back, or the
-# window flickers. Software compositing hands Xwayland finished images instead;
-# WebGL still draws the terminal on the GPU. Drop it once Xwayland is 24.1+.
-Environment=AICO_CHROMIUM_FLAGS=--disable-gpu-compositing
 ExecStart=__PROJECT_ROOT__/scripts/aico-run-foreground.sh
 # No ExecStop wrapper: systemd applies KillMode=mixed directly to this
 # exact unit. scripts/aico-stop.sh is the guarded operator-facing stop path;
