@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { LANTERN_MONO_FACE, LANTERN_SYMBOLS_FACE } from '../constants/lantern'
+import { isMobileDevice } from '../utils/device'
 import { setupMobileNativeSelection } from './mobile-native-selection'
 import {
   collectTerminalRendererStatus,
@@ -115,6 +116,10 @@ export function useTerminalInstance(
       mouseCleanupRef.current = setupTerminalMouseHandling(
         term,
         containerRef.current,
+        {
+          sessionMode: () => optionsRef.current.sessionMode,
+          isMobile: isMobileDevice(),
+        },
       )
       terminalRef.current = term
       fitAddonRef.current = fitAddon

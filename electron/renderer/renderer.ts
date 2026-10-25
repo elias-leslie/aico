@@ -15,6 +15,7 @@ import {
   SYMBOLS_FACE,
   SYMBOLS_SAMPLE,
 } from '../shared/font-settings'
+import { mouseReportingActive, programOwnsSelection, setupMouseShim } from '../shared/mouse-shim'
 import { BONE, INK } from '../shared/palette'
 import { TERMINAL_HISTORY_LINES } from '../shared/terminal-history'
 import {
@@ -31,7 +32,6 @@ import { controlWheelAction, swallowQueryReplies, trackSgrMouse } from './contro
 import { wireDraftInput } from './draft-input'
 import { Eyes } from './eyes'
 import { urlAt } from './links'
-import { mouseReportingActive, programOwnsSelection, setupMouseShim } from './mouse-shim'
 import { pointToCell, sgrWheelSequence, wheelMouseTicks } from './mouse-wheel'
 import { osc52Text } from './osc52'
 import { terminalShouldTakeFocus } from './terminal-focus'

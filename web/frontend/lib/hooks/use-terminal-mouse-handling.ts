@@ -1,91 +1,54 @@
+import {
+  mouseReportingActive,
+  programOwnsSelection,
+  setupMouseShim,
+} from '../../../../electron/shared/mouse-shim'
+
 type XtermTerminal = InstanceType<typeof import('@xterm/xterm').Terminal>
 
-/** Typed subset of xterm's internal core API used for mouse reporting detection. */
-interface XtermCoreInternal {
-  _core?: {
-    coreMouseService?: {
-      areMouseEventsActive: boolean
-    }
-  }
-}
-
 /**
- * Sets up mouse event handling for a terminal to enable local text selection
- * when mouse reporting is active in programs like tmux.
+ * Mouse selection and copy, as on the desktop.
  *
- * When mouse reporting is enabled (detected via xterm's internal coreMouseService),
- * this intercepts mouse events and re-dispatches them with shiftKey=true to force
- * local selection instead of sending to the application.
- *
- * @param terminal - The xterm instance
- * @param container - The DOM element containing the terminal
- * @returns Cleanup function to remove event listeners
+ * Claude Code and a shell's full-screen program get the drag when they track
+ * the mouse: Claude Code selects across its whole transcript, copies on
+ * release (OSC 52, which the clipboard addon writes) and says so itself.
+ * Every other drag is xterm's local selection, which a mouse-reporting
+ * program would otherwise eat, and is copied on release. Right-click never
+ * reaches the program (Claude Code would paste the host's clipboard); the
+ * browser's own menu pastes here. Phones keep the local selection: their taps
+ * reach the program from the touch handlers, and copy is the native layer's.
  */
 export function setupTerminalMouseHandling(
   terminal: XtermTerminal,
   container: HTMLElement,
+  options: { sessionMode: () => string | undefined; isMobile: boolean },
 ): () => void {
-  const forceLocalMouseHandling = (e: MouseEvent) => {
-    if (e.shiftKey) return // Already has shift (including our synthetic events), let it through
-    if (!e.isTrusted) return // Skip synthetic events to prevent loops
-
-    // Check if mouse reporting is enabled via xterm internal API
-    const core = (terminal as unknown as XtermCoreInternal)._core
-    const mouseService = core?.coreMouseService
-    const mouseActive = mouseService?.areMouseEventsActive
-
-    if (!mouseActive) {
-      // Mouse reporting not enabled, let event pass through normally
-      return
+  let forceDrag = true
+  const stopShim = setupMouseShim(terminal, container, (e) => {
+    if (e.type === 'mousedown') {
+      forceDrag =
+        options.isMobile ||
+        !programOwnsSelection({
+          tuiSlug: options.sessionMode() ?? '',
+          alternateScreen: terminal.buffer.active.type === 'alternate',
+          mouseReporting: mouseReportingActive(terminal),
+        })
     }
+    return forceDrag
+  })
+  if (options.isMobile) return stopShim
 
-    // Mouse reporting is enabled - intercept and force local handling
-    e.stopPropagation()
-    e.preventDefault()
-
-    // Create new event with shiftKey=true
-    const newEvent = new MouseEvent(e.type, {
-      bubbles: e.bubbles,
-      cancelable: e.cancelable,
-      view: e.view,
-      detail: e.detail,
-      screenX: e.screenX,
-      screenY: e.screenY,
-      clientX: e.clientX,
-      clientY: e.clientY,
-      ctrlKey: e.ctrlKey,
-      altKey: e.altKey,
-      shiftKey: true, // Force shiftKey for local selection
-      metaKey: e.metaKey,
-      button: e.button,
-      buttons: e.buttons,
-      relatedTarget: e.relatedTarget,
-    })
-
-    e.target?.dispatchEvent(newEvent)
+  // On release, not per selection change: that fires per cell mid-drag. The
+  // shim re-dispatches a shifted mouseup, so this fires inside TUIs too.
+  const copySelection = (e: MouseEvent) => {
+    if (e.button !== 0) return
+    const selection = terminal.getSelection()
+    if (selection)
+      void navigator.clipboard?.writeText(selection).catch(() => {})
   }
-
-  // Attach listeners in capture phase to intercept before xterm processes them
-  container.addEventListener('mousedown', forceLocalMouseHandling, {
-    capture: true,
-  })
-  container.addEventListener('mouseup', forceLocalMouseHandling, {
-    capture: true,
-  })
-  container.addEventListener('mousemove', forceLocalMouseHandling, {
-    capture: true,
-  })
-
-  // Return cleanup function
+  container.addEventListener('mouseup', copySelection)
   return () => {
-    container.removeEventListener('mousedown', forceLocalMouseHandling, {
-      capture: true,
-    })
-    container.removeEventListener('mouseup', forceLocalMouseHandling, {
-      capture: true,
-    })
-    container.removeEventListener('mousemove', forceLocalMouseHandling, {
-      capture: true,
-    })
+    stopShim()
+    container.removeEventListener('mouseup', copySelection)
   }
 }

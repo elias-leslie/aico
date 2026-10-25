@@ -59,6 +59,7 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
   function TerminalComponent(
     {
       sessionId,
+      sessionMode,
       workingDir,
       className,
       onDisconnect,
@@ -263,6 +264,7 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
 
     const { isReady } = useTerminalInstance(
       {
+        sessionMode,
         fontSize,
         scrollback: controlHistoryLines ?? SCROLLBACK,
         onData: handleTerminalData,

@@ -132,6 +132,8 @@ export function createTerminalWithAddons(
 // ---------------------------------------------------------------------------
 
 export interface TerminalInstanceOptions {
+  /** The session's tool slug: Claude Code and shells run their own drag. */
+  sessionMode?: string
   fontSize: number
   scrollback: number
   onData: (data: string) => void
