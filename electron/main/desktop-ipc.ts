@@ -1,10 +1,11 @@
 // The generic renderer channels that need only Electron and the settings
-// store: the clipboard, opening links, the window buttons and drag-resize, and
+// store: the clipboard, opening links, the window buttons, and
 // the shared pinned actions and terminal font, broadcast to every window.
 
 import type { Clipboard, IpcMain, Shell } from 'electron'
 import { parseTerminalFontSettings } from '../shared/font-settings'
-import { parseBoundsRequest, parsePins } from './ipc-validation'
+import type { Compositor } from './compositor'
+import { parsePins } from './ipc-validation'
 import { type PastedImageStore, savePastedImage } from './pasted-image'
 import type { WindowRegistry } from './window-registry'
 
@@ -13,6 +14,7 @@ interface DesktopIpcDeps {
   pastedImages: PastedImageStore
   shell: Pick<Shell, 'openExternal'>
   registry: Pick<WindowRegistry, 'senderWindow' | 'all'>
+  compositor: Pick<Compositor, 'isMaximized'>
   getSetting(key: string): string | undefined
   setSetting(key: string, value: string): void
 }
@@ -54,17 +56,13 @@ export function registerDesktopIpc(
   ipcMain.on('win:toggle-maximize', (event) => {
     const win = deps.registry.senderWindow(event.sender)
     if (!win) return
-    if (win.isMaximized()) {
+    if (deps.compositor.isMaximized(win)) {
       win.unmaximize()
     } else {
       win.maximize()
     }
   })
   ipcMain.on('win:close', (event) => deps.registry.senderWindow(event.sender)?.close())
-  ipcMain.on('win:set-bounds', (event, b: unknown) => {
-    const bounds = parseBoundsRequest(b)
-    if (bounds) deps.registry.senderWindow(event.sender)?.setBounds(bounds)
-  })
 
   // Global pinned-action set (one row in aico.db, shared across widgets). A
   // setPins from any widget persists and broadcasts so every cluster updates.

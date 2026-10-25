@@ -6,7 +6,7 @@ import type { AicoConfig } from './config'
 interface HotkeysDeps {
   /** The selection bus's indicate harvest. */
   grab(): Promise<void>
-  config: Pick<AicoConfig, 'selectionHotkey'>
+  config: Pick<AicoConfig, 'selectionHotkey' | 'displayBackend'>
   globalShortcut: Pick<GlobalShortcut, 'register' | 'unregisterAll'>
   app: Pick<App, 'isReady'>
 }
@@ -16,14 +16,24 @@ export function createHotkeys(deps: HotkeysDeps) {
   /** The indicate accelerator that actually took; null before or when it did not. */
   let selection: string | null = null
   return {
+    /** The indicate action itself: the GNOME shortcut's second launch ends up here (lifecycle). */
+    indicate: (): void => void deps.grab(),
     registerSelection: (): void => {
-      // System-wide indicate hotkey (X11). Logs whether the grab actually took, so
-      // a silent Wayland no-op is visible in the launcher log.
+      // Wayland: no globalShortcut. Electron 42 would open an xdg-desktop-portal
+      // GlobalShortcuts session and report success at once, whether or not GNOME
+      // ever binds the key (it asks the owner per app and matches the app id),
+      // and nothing here could tell. A GNOME custom shortcut running
+      // `aico-launch.sh --indicate` is deterministic: scripts/aico-hotkey.sh.
+      if (config.displayBackend === 'wayland') {
+        console.log('[aico] selection hotkey: GNOME custom shortcut (scripts/aico-hotkey.sh)')
+        return
+      }
+      // X11: the system-wide indicate hotkey. Logs whether the grab actually took.
       const hotkeyOk = globalShortcut.register(config.selectionHotkey, () => void deps.grab())
       selection = hotkeyOk ? config.selectionHotkey : null
       console.log(
         `[aico] selection hotkey ${config.selectionHotkey}: ${
-          hotkeyOk ? 'registered' : 'unavailable (Wayland, or another app holds it)'
+          hotkeyOk ? 'registered' : 'unavailable (another app holds it)'
         }`,
       )
     },

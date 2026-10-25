@@ -8,6 +8,7 @@ import {
   type SessionDescriptor,
 } from 'tether/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { PlaceResult } from './compositor'
 import { createGuiChannel } from './gui-channel'
 import { sessionTitle } from './session-catalog'
 import { createWindowChrome } from './window-chrome'
@@ -57,6 +58,7 @@ function setup(o: { listed?: SessionDescriptor[] } = {}) {
   const deps = {
     layout: vi.fn(() => ({
       v: 1 as const,
+      boundsReliable: true,
       pid: 4242,
       startTime: null,
       updatedAt: 'now',
@@ -70,7 +72,8 @@ function setup(o: { listed?: SessionDescriptor[] } = {}) {
     }),
     focusOrReopen: vi.fn(),
     forSession: vi.fn((_id: string): BrowserWindow | undefined => undefined),
-    arrange: vi.fn(),
+    arrange: vi.fn(async (): Promise<PlaceResult> => ({ ok: true })),
+    canPlace: vi.fn(() => true),
     saveBounds: vi.fn(),
     displayIdFor: vi.fn(() => '7'),
     titles: vi.fn(),
@@ -176,6 +179,25 @@ describe('applyGuiCommand', () => {
     expect(deps.saveBounds).toHaveBeenCalledTimes(1)
   })
 
+  it('says so when the compositor cannot place windows, and when a placement fails', async () => {
+    const { gui, deps, win } = setup()
+    const bounds = { x: 10, y: 20, width: 800, height: 600 }
+    deps.canPlace.mockReturnValue(false)
+    expect(await gui(command({ kind: 'position', bounds }))).toEqual({
+      applied: false,
+      error: 'compositor_unavailable',
+    })
+    expect(deps.arrange).not.toHaveBeenCalled()
+    expect(deps.saveBounds).not.toHaveBeenCalled()
+    deps.canPlace.mockReturnValue(true)
+    deps.forSession.mockReturnValue(win)
+    deps.arrange.mockResolvedValueOnce({ ok: false, error: 'placement_unconfirmed' })
+    expect(await gui(command({ kind: 'position', bounds }))).toEqual({
+      applied: false,
+      error: 'placement_unconfirmed',
+    })
+  })
+
   it('shows a coordinator mark at once and refreshes titles only', async () => {
     const { gui, deps, catalog } = setup()
     expect(await gui(command({ kind: 'coordinator', coordinator: true }))).toEqual({
@@ -221,6 +243,7 @@ describe('a GUI title reaches layout.json', () => {
       isReady: () => true,
       isQuitting: () => false,
       collect: () => ({
+        boundsReliable: true,
         displays: [],
         windows: ['aaaaaaaa'].map((id) => ({
           id,
@@ -255,6 +278,7 @@ describe('a GUI title reaches layout.json', () => {
       focusOrReopen: vi.fn(),
       forSession: registry.forSession,
       arrange: vi.fn(),
+      canPlace: () => true,
       saveBounds: vi.fn(),
       displayIdFor: () => '1',
       titles: () => chrome.pushTitles(),

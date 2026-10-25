@@ -3,8 +3,9 @@
 // looks at a window waiting too long, and which window shows which game
 // (arcade.ts). They share the cursor pump, so they live together.
 
-import type { BrowserWindow, IpcMain, Screen } from 'electron'
+import type { BrowserWindow, IpcMain } from 'electron'
 import { cursorNearTitlebar, nextArcade, parseArcadeKeys, pickArcade } from './arcade'
+import type { Compositor } from './compositor'
 import {
   allLookAt,
   DEFAULT_EYE_ANCHOR,
@@ -17,10 +18,6 @@ import type { WindowRegistry } from './window-registry'
 
 /** Every ~20 s, the other windows' eyes turn to each window waiting 2+ minutes. */
 const URGENT_LOOK_EVERY_MS = 20_000
-
-/** Someone can see this window: shown and not minimized. */
-export const onScreen = (win: { isVisible(): boolean; isMinimized(): boolean }): boolean =>
-  win.isVisible() && !win.isMinimized()
 
 /**
  * How often the cursor pump runs: every 100 ms while any window has a game,
@@ -36,7 +33,11 @@ interface AmbientDeps {
     WindowRegistry,
     'sessionOf' | 'forSession' | 'sessionWindows' | 'senderWindow' | 'byId' | 'all' | 'focused'
   >
-  screen: Pick<Screen, 'getCursorScreenPoint'>
+  /** Positions come from the compositor; points go to each window in its own CSS px. */
+  compositor: Pick<
+    Compositor,
+    'cursor' | 'bounds' | 'isMinimized' | 'toClient' | 'fromClient' | 'scale'
+  >
   getSetting(key: string): string | undefined
   setSetting(key: string, value: string): void
   /** Sessions blocked two minutes unseen (attention.ts `urgent`). */
@@ -46,13 +47,17 @@ interface AmbientDeps {
 }
 
 export function createAmbient(deps: AmbientDeps) {
-  const { registry, screen } = deps
+  const { registry, compositor } = deps
+  /** Someone can see this window: shown and not minimized. */
+  const onScreen = (win: BrowserWindow): boolean => win.isVisible() && !compositor.isMinimized(win)
   const random = deps.random ?? Math.random
 
   // Eyes-follow-cursor: while any widget is unfocused, broadcast the global cursor
   // position so those widgets' eyes can track it. One shared interval feeds every
   // window; the focused window ignores it and stares ahead. Hidden and minimized
-  // windows are skipped, and showing or restoring one resyncs. Windows running the
+  // windows are skipped, and showing or restoring one resyncs. Every point a window
+  // receives is in its own CSS px (compositor.toClient): its renderer cannot know
+  // where it sits on screen under Wayland. Windows running the
   // titlebar arcade also get the cursor (window coordinates, focused or not) while
   // it is near their titlebar: the titlebar is the OS drag region, so the page
   // itself never sees the pointer there. Runs only while someone needs it.
@@ -65,15 +70,30 @@ export function createAmbient(deps: AmbientDeps) {
   let cursorTimer: NodeJS.Timeout | undefined
   let cursorPeriod = 0
   let lastCursorPt: { x: number; y: number } | null = null
-  function pumpCursor(): void {
-    const pt = screen.getCursorScreenPoint()
-    if (lastCursorPt && pt.x === lastCursorPt.x && pt.y === lastCursorPt.y) return
+  let polling = false
+  async function pumpCursor(): Promise<void> {
+    if (polling) return // the compositor is slow: skip this tick rather than queue
+    polling = true
+    let pt: { x: number; y: number } | null
+    try {
+      pt = await compositor.cursor()
+    } finally {
+      polling = false
+    }
+    if (!pt || (lastCursorPt && pt.x === lastCursorPt.x && pt.y === lastCursorPt.y)) return
     lastCursorPt = pt
-    for (const win of watchers()) win.webContents.send('win:cursor', pt)
+    for (const win of watchers()) win.webContents.send('win:cursor', compositor.toClient(win, pt))
     for (const id of arcadeOf.keys()) {
       const win = registry.byId(id)
       if (!win || win.isDestroyed() || !win.isVisible()) continue
-      const near = cursorNearTitlebar(pt, win.getContentBounds())
+      const rect = compositor.bounds(win)
+      const scale = compositor.scale()
+      const near = cursorNearTitlebar(compositor.toClient(win, pt), {
+        x: 0,
+        y: 0,
+        width: rect.width / scale,
+        height: rect.height / scale,
+      })
       if (near) arcadeNear.add(id)
       else if (!arcadeNear.delete(id)) continue // already told it the cursor left
       win.webContents.send('arcade:cursor', near)
@@ -90,7 +110,7 @@ export function createAmbient(deps: AmbientDeps) {
     const period = cursorPumpPeriod(arcadeOf.size, watchers().length)
     if (period === cursorPeriod) return
     if (cursorTimer) clearInterval(cursorTimer)
-    cursorTimer = period ? setInterval(pumpCursor, period) : undefined
+    cursorTimer = period ? setInterval(() => void pumpCursor(), period) : undefined
     cursorPeriod = period
   }
 
@@ -106,9 +126,10 @@ export function createAmbient(deps: AmbientDeps) {
       .sessionWindows()
       .filter(onScreen)
       .map((w) => {
-        const b = w.getContentBounds()
         const a = eyeAnchors.get(w.id) ?? DEFAULT_EYE_ANCHOR
-        return { winId: w.id, eye: { x: b.x + a.x, y: b.y + a.y }, focused: w === focused }
+        // Global point: the anchor is the renderer's CSS px.
+        const eye = compositor.fromClient(w, a)
+        return { winId: w.id, eye, focused: w === focused }
       })
   }
 
@@ -121,16 +142,15 @@ export function createAmbient(deps: AmbientDeps) {
       const who = (winId: number) => registry.sessionOf(winId) ?? String(winId)
       console.log(`[aico:gaze] scene ${scene.map((g) => who(g.winId)).join(' ')}`)
     }
-    for (const g of scene) {
-      const win = registry.byId(g.winId)
-      if (!win || win.isDestroyed()) continue
-      win.webContents.send('eyes:look', {
-        x: g.target.x,
-        y: g.target.y,
-        delay: g.delay,
-        hold: g.hold,
-      })
-    }
+    for (const g of scene) sendLook(g)
+  }
+
+  /** Tell a window where to look: the target is global, the window wants its own CSS px. */
+  function sendLook(g: { winId: number; target: Point; delay: number; hold: number }): void {
+    const win = registry.byId(g.winId)
+    if (!win || win.isDestroyed()) return
+    const { x, y } = compositor.toClient(win, g.target)
+    win.webContents.send('eyes:look', { x, y, delay: g.delay, hold: g.hold })
   }
 
   function scheduleGaze(): void {
@@ -151,14 +171,7 @@ export function createAmbient(deps: AmbientDeps) {
       const win = registry.forSession(id)
       const star = win && all.find((f) => f.winId === win.id)
       if (!star) continue
-      for (const g of allLookAt(star, all, random, false)) {
-        registry.byId(g.winId)?.webContents.send('eyes:look', {
-          x: g.target.x,
-          y: g.target.y,
-          delay: g.delay,
-          hold: g.hold,
-        })
-      }
+      for (const g of allLookAt(star, all, random, false)) sendLook(g)
     }
   }
 

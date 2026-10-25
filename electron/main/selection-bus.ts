@@ -3,7 +3,7 @@
 // extension, `st selection send`); the indicate hotkey re-sends the newest
 // capture, which is kept in memory only.
 
-import type { IpcMain } from 'electron'
+import type { BrowserWindow, IpcMain } from 'electron'
 import { type SessionCatalog, type TetherClient, TetherError } from 'tether/client'
 import { compactRef, type SelectionRecord } from './selection'
 import type { ViewRow } from './views'
@@ -25,6 +25,8 @@ interface SelectionBusDeps {
   tether: Pick<TetherClient, 'inject'>
   isReplacing(id: string): boolean
   isQuitting(): boolean
+  /** Show, unminimize and focus the window the selection went to. */
+  raise(win: BrowserWindow): void
 }
 
 const refused = (reason: string): SelectionDelivery => ({ delivered: false, reason })
@@ -99,8 +101,7 @@ export function createSelectionBus(deps: SelectionBusDeps) {
       inFlight.delete(targetId)
     }
     if (isCurrent()) {
-      win.show()
-      win.focus()
+      deps.raise(win)
       const head = usable[0]
       win.webContents.send('selection:toast', {
         kind: usable.length > 1 ? `${usable.length} items` : head.kind,

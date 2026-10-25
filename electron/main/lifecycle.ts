@@ -6,10 +6,8 @@ import type { AicoConfig } from './config'
 
 interface AppLike {
   requestSingleInstanceLock(): boolean
-  on(
-    event: 'before-quit' | 'second-instance' | 'activate' | 'window-all-closed',
-    listener: () => void,
-  ): unknown
+  on(event: 'before-quit' | 'activate' | 'window-all-closed', listener: () => void): unknown
+  on(event: 'second-instance', listener: (event: unknown, argv: string[]) => void): unknown
   exit(code: number): void
   quit(): void
 }
@@ -39,6 +37,8 @@ export interface Lifecycle {
   onQuit(fn: () => void): void
   /** What a desktop activation does once startup is done. */
   setActivationHandler(fn: () => void): void
+  /** What a second launch with --aico-indicate (the GNOME shortcut) does; dropped before startup is done. */
+  setIndicateHandler(fn: () => void): void
   /** Startup is done: runs an activation that arrived meanwhile. */
   markReady(): void
   failStartup(error: unknown): void
@@ -56,6 +56,7 @@ export function createLifecycle(deps: LifecycleDeps): Lifecycle {
   let quitting = false
   const quitFns: (() => void)[] = []
   let activationHandler: (() => void) | null = null
+  let indicateHandler: (() => void) | null = null
 
   let signalQuitRequested = false
   function requestGracefulSignalQuit(signal: NodeJS.Signals): void {
@@ -71,7 +72,10 @@ export function createLifecycle(deps: LifecycleDeps): Lifecycle {
   // fight over the listener port :8005 and re-adopt the same widget catalog). The
   // secondary quits immediately; the primary handles the desktop activation.
   const gotSingleInstanceLock = app.requestSingleInstanceLock()
-  const activationOnly = deps.argv.includes('--aico-activate')
+  // --aico-activate (a launcher click) and --aico-indicate (the GNOME shortcut) are
+  // messages to the running runtime, never a runtime of their own.
+  const activationOnly =
+    deps.argv.includes('--aico-activate') || deps.argv.includes('--aico-indicate')
   const runtimeOwner = gotSingleInstanceLock && !activationOnly
 
   app.on('before-quit', () => {
@@ -95,7 +99,13 @@ export function createLifecycle(deps: LifecycleDeps): Lifecycle {
     activationHandler?.()
   }
 
-  app.on('second-instance', activate)
+  app.on('second-instance', (_event, argv = []) => {
+    if (argv.includes('--aico-indicate')) {
+      if (activationReady) indicateHandler?.()
+      return
+    }
+    activate()
+  })
   app.on('activate', activate)
 
   const activationReadyFile = deps.config.activationReadyFile
@@ -143,6 +153,9 @@ export function createLifecycle(deps: LifecycleDeps): Lifecycle {
     },
     setActivationHandler: (fn) => {
       activationHandler = fn
+    },
+    setIndicateHandler: (fn) => {
+      indicateHandler = fn
     },
     markReady: () => {
       activationReady = true

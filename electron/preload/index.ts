@@ -124,8 +124,6 @@ contextBridge.exposeInMainWorld('aico', {
     toggleMaximize: () => ipcRenderer.send('win:toggle-maximize'),
     close: () => ipcRenderer.send('win:close'),
     /** Set the window's outer bounds (px); used by the custom resize handles. */
-    setBounds: (x: number, y: number, w: number, h: number) =>
-      ipcRenderer.send('win:set-bounds', { x, y, w, h }),
     /** Report thinking-state transitions so the tray icon can reflect activity. */
     setThinking: (on: boolean) => ipcRenderer.send('win:thinking', on),
     /** Set this widget's title-bar name (empty clears it back to `Widget ${seq}`). */

@@ -24,7 +24,6 @@ function fakeWindow(id: number) {
     maximize: vi.fn(),
     unmaximize: vi.fn(),
     close: vi.fn(),
-    setBounds: vi.fn(),
     webContents: { send: vi.fn() },
   }
 }
@@ -70,6 +69,7 @@ function setup(stored: Record<string, string> = {}) {
       clipboard: clipboard as never,
       pastedImages,
       shell,
+      compositor: { isMaximized: (win) => (win as unknown as { maximized: boolean }).maximized },
       registry: {
         senderWindow: (wc) =>
           (all.find((w) => w.webContents === (wc as unknown)) ??
@@ -85,7 +85,7 @@ function setup(stored: Record<string, string> = {}) {
 }
 
 describe('desktop IPC', () => {
-  it('registers its twelve channels', () => {
+  it('registers its eleven channels', () => {
     const { on, handle } = setup()
     expect([...handle.keys()].sort()).toEqual([
       'clipboard:image-path',
@@ -100,7 +100,6 @@ describe('desktop IPC', () => {
       'settings:set-terminal-font',
       'win:close',
       'win:minimize',
-      'win:set-bounds',
       'win:toggle-maximize',
     ])
   })
@@ -161,7 +160,7 @@ describe('desktop IPC', () => {
     ])
   })
 
-  it('drives the sending window: minimize, maximize toggle, close and checked bounds', () => {
+  it('drives the sending window: minimize, maximize toggle and close', () => {
     const { on, win1, win2, event } = setup()
     on.get('win:minimize')?.(event)
     expect(win1.minimize).toHaveBeenCalledTimes(1)
@@ -172,10 +171,6 @@ describe('desktop IPC', () => {
     expect(win1.unmaximize).toHaveBeenCalledTimes(1)
     on.get('win:close')?.(event)
     expect(win1.close).toHaveBeenCalledTimes(1)
-    on.get('win:set-bounds')?.(event, { x: 1, y: 2, w: 0, h: 5 })
-    expect(win1.setBounds).not.toHaveBeenCalled()
-    on.get('win:set-bounds')?.(event, { x: 1.4, y: 2, w: 300, h: 200 })
-    expect(win1.setBounds).toHaveBeenCalledWith({ x: 1, y: 2, width: 300, height: 200 })
     expect(win2.minimize).not.toHaveBeenCalled()
     // A sender with no window is ignored.
     expect(() => on.get('win:close')?.({ sender: {} })).not.toThrow()

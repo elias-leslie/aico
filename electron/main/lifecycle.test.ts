@@ -12,15 +12,15 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createLifecycle } from './lifecycle'
 
-type Listener = () => void
+type Listener = (...args: never[]) => void
 
 function fakeApp(lock = true) {
   const listeners: [string, Listener][] = []
   return {
     listeners,
     of: (event: string) => listeners.filter(([e]) => e === event).map(([, fn]) => fn),
-    emit(event: string) {
-      for (const [e, fn] of listeners) if (e === event) fn()
+    emit(event: string, ...args: unknown[]) {
+      for (const [e, fn] of listeners) if (e === event) (fn as (...a: unknown[]) => void)(...args)
     },
     requestSingleInstanceLock: vi.fn(() => lock),
     on: vi.fn((event: string, fn: Listener) => {
@@ -232,6 +232,28 @@ describe('lifecycle: activation', () => {
     app.emit('second-instance')
     app.emit('activate')
     expect(activate).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('lifecycle: indicate shortcut', () => {
+  it('a second launch with --aico-indicate runs the indicate handler, not an activation', () => {
+    const { app, lifecycle } = setup()
+    const activate = vi.fn()
+    const indicate = vi.fn()
+    lifecycle.setActivationHandler(activate)
+    lifecycle.setIndicateHandler(indicate)
+    app.emit('second-instance', {}, ['electron', '.', '--aico-indicate'])
+    expect(indicate).not.toHaveBeenCalled() // not ready: dropped, never queued
+    lifecycle.markReady()
+    app.emit('second-instance', {}, ['electron', '.', '--aico-indicate'])
+    expect(indicate).toHaveBeenCalledTimes(1)
+    expect(activate).not.toHaveBeenCalled()
+  })
+
+  it('the --aico-indicate helper never becomes the runtime', () => {
+    const { app, lifecycle } = setup({ lock: false, argv: ['electron', '.', '--aico-indicate'] })
+    expect(lifecycle.runtimeOwner).toBe(false)
+    expect(app.quit).toHaveBeenCalledTimes(1)
   })
 })
 

@@ -1,6 +1,7 @@
 import type { BrowserWindow, IpcMainEvent, IpcMainInvokeEvent } from 'electron'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createAmbient, cursorPumpPeriod, onScreen } from './ambient'
+import { createAmbient, cursorPumpPeriod } from './ambient'
+import { fakeCompositor } from './compositor.fake'
 import { WindowRegistry } from './window-registry'
 
 function fakeWindow(id: number, bounds = { x: id * 1000, y: 0, width: 800, height: 600 }) {
@@ -13,7 +14,6 @@ function fakeWindow(id: number, bounds = { x: id * 1000, y: 0, width: 800, heigh
     isDestroyed: () => win.destroyed,
     isVisible: () => win.visible,
     isMinimized: () => win.minimized,
-    getContentBounds: () => win.bounds,
     webContents: { send: vi.fn() },
   }
   return win
@@ -43,13 +43,17 @@ function setup(o: { windows?: FakeWindow[]; arcade?: string; urgent?: string[] }
     urgent: o.urgent ?? [],
     cursor: { x: 0, y: 0 },
   }
-  const screen = { getCursorScreenPoint: vi.fn(() => ({ ...state.cursor })) }
+  const comp = fakeCompositor()
+  for (const w of windows) comp.rects.set(w.id, w.bounds)
+  comp.compositor.isMinimized = (w) => byId(w.id)?.minimized ?? false
+  comp.compositor.cursor = vi.fn(async () => ({ ...state.cursor }))
+  const screen = { getCursorScreenPoint: comp.compositor.cursor as ReturnType<typeof vi.fn> }
   const setSetting = vi.fn((key: string, value: string) => {
     settings.set(key, value)
   })
   const ambient = createAmbient({
     registry,
-    screen: screen as never,
+    compositor: comp.compositor,
     getSetting: (key) => settings.get(key),
     setSetting,
     urgent: () => state.urgent,
@@ -100,84 +104,76 @@ describe('IPC', () => {
 })
 
 describe('cursor pump', () => {
-  it('runs every 100 ms while any window has a game', () => {
+  it('runs every 100 ms while any window has a game', async () => {
     const win = fakeWindow(1)
     const { call, screen } = setup({ windows: [win] })
     call('arcade:assign', win, KEYS)
-    vi.advanceTimersByTime(300)
+    await vi.advanceTimersByTimeAsync(300)
     expect(screen.getCursorScreenPoint).toHaveBeenCalledTimes(3)
   })
 
-  it('runs every 250 ms with only unfocused windows', () => {
+  it('runs every 250 ms with only unfocused windows', async () => {
     const win = fakeWindow(1)
     const { ambient, screen, state } = setup({ windows: [win], arcade: 'off' })
     ambient.blurred(1)
-    vi.advanceTimersByTime(249)
+    await vi.advanceTimersByTimeAsync(249)
     expect(screen.getCursorScreenPoint).not.toHaveBeenCalled()
-    vi.advanceTimersByTime(1)
+    await vi.advanceTimersByTimeAsync(1)
     expect(screen.getCursorScreenPoint).toHaveBeenCalledTimes(1)
-    expect(win.webContents.send).toHaveBeenCalledWith('win:cursor', { x: 0, y: 0 })
+    expect(win.webContents.send).toHaveBeenCalledWith('win:cursor', { x: -1000, y: 0 })
     // An unmoved cursor is not resent.
-    vi.advanceTimersByTime(250)
+    await vi.advanceTimersByTimeAsync(250)
     expect(win.webContents.send).toHaveBeenCalledTimes(1)
     state.cursor = { x: 5, y: 6 }
-    vi.advanceTimersByTime(250)
-    expect(win.webContents.send).toHaveBeenLastCalledWith('win:cursor', { x: 5, y: 6 })
+    await vi.advanceTimersByTimeAsync(250)
+    expect(win.webContents.send).toHaveBeenLastCalledWith('win:cursor', { x: -995, y: 6 })
   })
 
-  it('stops when nothing needs it', () => {
+  it('stops when nothing needs it', async () => {
     const win = fakeWindow(1)
     const { ambient, screen } = setup({ windows: [win] })
-    vi.advanceTimersByTime(1000)
+    await vi.advanceTimersByTimeAsync(1000)
     expect(screen.getCursorScreenPoint).not.toHaveBeenCalled()
     ambient.blurred(1)
     ambient.focused(1)
     expect(vi.getTimerCount()).toBe(0)
   })
 
-  it('a focus change forces one fresh send of an unmoved cursor', () => {
+  it('a focus change forces one fresh send of an unmoved cursor', async () => {
     const win1 = fakeWindow(1)
     const win2 = fakeWindow(2)
     const { ambient } = setup({ windows: [win1, win2] })
     ambient.blurred(1)
-    vi.advanceTimersByTime(250)
+    await vi.advanceTimersByTimeAsync(250)
     ambient.blurred(2)
-    vi.advanceTimersByTime(250)
+    await vi.advanceTimersByTimeAsync(250)
     expect(win1.webContents.send).toHaveBeenCalledTimes(2)
     expect(win2.webContents.send).toHaveBeenCalledTimes(1)
   })
 
-  it('tells a game window when the cursor is near its titlebar, and once when it leaves', () => {
+  it('tells a game window when the cursor is near its titlebar, and once when it leaves', async () => {
     const win = fakeWindow(1, { x: 100, y: 100, width: 800, height: 600 })
     const { call, state } = setup({ windows: [win] })
     call('arcade:assign', win, KEYS)
     state.cursor = { x: 150, y: 110 }
-    vi.advanceTimersByTime(100)
+    await vi.advanceTimersByTimeAsync(100)
     expect(win.webContents.send).toHaveBeenLastCalledWith('arcade:cursor', { x: 50, y: 10 })
     state.cursor = { x: 1500, y: 1500 }
-    vi.advanceTimersByTime(100)
+    await vi.advanceTimersByTimeAsync(100)
     expect(win.webContents.send).toHaveBeenLastCalledWith('arcade:cursor', null)
     state.cursor = { x: 1600, y: 1600 }
-    vi.advanceTimersByTime(100)
+    await vi.advanceTimersByTimeAsync(100)
     expect(win.webContents.send).toHaveBeenCalledTimes(2)
   })
 
-  it('picks its period from games and unfocused windows someone can see', () => {
+  it('picks its period from games and unfocused windows', async () => {
     expect(cursorPumpPeriod(1, 0)).toBe(100)
     expect(cursorPumpPeriod(2, 3)).toBe(100)
     expect(cursorPumpPeriod(0, 1)).toBe(250)
     expect(cursorPumpPeriod(0, 0)).toBe(0)
-    const win = (visible: boolean, minimized: boolean) => ({
-      isVisible: () => visible,
-      isMinimized: () => minimized,
-    })
-    expect(onScreen(win(true, false))).toBe(true)
-    expect(onScreen(win(false, false))).toBe(false)
-    expect(onScreen(win(true, true))).toBe(false)
-    expect(onScreen(win(false, true))).toBe(false)
   })
 
-  it('skips hidden and minimized unfocused windows', () => {
+  it('skips hidden and minimized unfocused windows', async () => {
     const shown = fakeWindow(1)
     const minimized = fakeWindow(2)
     const hidden = fakeWindow(3)
@@ -186,32 +182,32 @@ describe('cursor pump', () => {
     const { ambient, state } = setup({ windows: [shown, minimized, hidden], arcade: 'off' })
     for (const w of [1, 2, 3]) ambient.blurred(w)
     state.cursor = { x: 5, y: 6 }
-    vi.advanceTimersByTime(250)
-    expect(shown.webContents.send).toHaveBeenCalledWith('win:cursor', { x: 5, y: 6 })
+    await vi.advanceTimersByTimeAsync(250)
+    expect(shown.webContents.send).toHaveBeenCalledWith('win:cursor', { x: -995, y: 6 })
     expect(minimized.webContents.send).not.toHaveBeenCalled()
     expect(hidden.webContents.send).not.toHaveBeenCalled()
   })
 
-  it('stops while every unfocused window is minimized; restoring one resumes with a fresh send', () => {
+  it('stops while every unfocused window is minimized; restoring one resumes with a fresh send', async () => {
     const win = fakeWindow(1)
     const { ambient, screen } = setup({ windows: [win], arcade: 'off' })
     ambient.blurred(1)
-    vi.advanceTimersByTime(250)
+    await vi.advanceTimersByTimeAsync(250)
     expect(win.webContents.send).toHaveBeenCalledTimes(1)
     win.minimized = true
     ambient.visibilityChanged()
     expect(vi.getTimerCount()).toBe(0)
-    vi.advanceTimersByTime(1000)
+    await vi.advanceTimersByTimeAsync(1000)
     expect(screen.getCursorScreenPoint).toHaveBeenCalledTimes(1)
     win.minimized = false
     ambient.visibilityChanged()
-    vi.advanceTimersByTime(250)
+    await vi.advanceTimersByTimeAsync(250)
     // The cursor has not moved, but a restored window gets it once.
     expect(win.webContents.send).toHaveBeenCalledTimes(2)
-    expect(win.webContents.send).toHaveBeenLastCalledWith('win:cursor', { x: 0, y: 0 })
+    expect(win.webContents.send).toHaveBeenLastCalledWith('win:cursor', { x: -1000, y: 0 })
   })
 
-  it('keeps the 100 ms game pump while every window is minimized, as before', () => {
+  it('keeps the 100 ms game pump while every window is minimized, as before', async () => {
     const win = fakeWindow(1)
     const { ambient, call, screen } = setup({ windows: [win] })
     call('arcade:assign', win, KEYS)
@@ -219,19 +215,19 @@ describe('cursor pump', () => {
     win.minimized = true
     win.visible = false
     ambient.visibilityChanged()
-    vi.advanceTimersByTime(300)
+    await vi.advanceTimersByTimeAsync(300)
     expect(screen.getCursorScreenPoint).toHaveBeenCalledTimes(3)
     expect(win.webContents.send).not.toHaveBeenCalled()
   })
 
-  it('a closed window frees its game and the pump stops', () => {
+  it('a closed window frees its game and the pump stops', async () => {
     const win = fakeWindow(1)
     const { ambient, call, screen } = setup({ windows: [win] })
     call('arcade:assign', win, KEYS)
     ambient.blurred(1)
     ambient.forget(1)
     expect(vi.getTimerCount()).toBe(0)
-    vi.advanceTimersByTime(1000)
+    await vi.advanceTimersByTimeAsync(1000)
     expect(screen.getCursorScreenPoint).not.toHaveBeenCalled()
   })
 })
@@ -356,8 +352,8 @@ describe('gaze scenes', () => {
 
     vi.advanceTimersByTime(20_000) // SCENE_EVERY_MS low end, random() = 0
 
-    expect(looks(win1)).toEqual([{ x: 2010, y: 6, delay: 0, hold: 1500 }])
-    expect(looks(win2)).toEqual([{ x: 1036, y: 16, delay: 450, hold: 1050 }])
+    expect(looks(win1)).toEqual([{ x: 1010, y: 6, delay: 0, hold: 1500 }])
+    expect(looks(win2)).toEqual([{ x: -964, y: 16, delay: 450, hold: 1050 }])
     expect(looks(hidden)).toEqual([])
     expect(log).toHaveBeenCalledWith('[aico:gaze] scene s1 s2')
   })
@@ -373,7 +369,7 @@ describe('gaze scenes', () => {
     call('eyes:anchor', win2, null)
     ambient.start()
     vi.advanceTimersByTime(20_000)
-    expect(looks(win1)).toEqual([{ x: 2036, y: 16, delay: 0, hold: 1500 }])
+    expect(looks(win1)).toEqual([{ x: 1036, y: 16, delay: 0, hold: 1500 }])
   })
 
   it('nothing is sent with fewer than two visible windows', () => {
@@ -423,8 +419,8 @@ describe('urgent looks', () => {
     expect(looks(wins[1])).toEqual([])
     vi.advanceTimersByTime(1)
     expect(looks(wins[0])).toEqual([])
-    expect(looks(wins[1])).toEqual([{ x: 1036, y: 16, delay: 0, hold: 1700 }])
-    expect(looks(wins[2])).toEqual([{ x: 1036, y: 16, delay: 140, hold: 1700 }])
+    expect(looks(wins[1])).toEqual([{ x: -964, y: 16, delay: 0, hold: 1700 }])
+    expect(looks(wins[2])).toEqual([{ x: -1964, y: 16, delay: 140, hold: 1700 }])
   })
 
   it('skips an urgent session whose window is not visible', () => {

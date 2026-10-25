@@ -294,11 +294,11 @@ export class Eyes {
     }
   }
 
-  /** Global cursor (screen px); followed while unfocused or hovered. */
-  cursor(screenX: number, screenY: number): void {
+  /** The cursor in this window's CSS px (main converts: a Wayland window cannot know where it sits on screen); followed while unfocused or hovered. */
+  cursor(x: number, y: number): void {
     if (this.reading || this.lookingDown || this.performing) return
     if (this.focused && !this.hovering) return
-    this.aimAt(screenX, screenY)
+    this.aimAt(x, y)
   }
 
   /** A titlebar character to follow (client px), or null when none moves.
@@ -306,14 +306,14 @@ export class Eyes {
   watch(pt: { x: number; y: number } | null): void {
     if (!this.focused || this.hovering || this.reading || this.lookingDown || this.performing)
       return
-    if (pt) this.aimAt(window.screenX + pt.x, window.screenY + pt.y)
+    if (pt) this.aimAt(pt.x, pt.y)
     else this.look(0, 0)
   }
 
   /** Pointer moving over the titlebar: they watch it even when focused. */
   hover(e: MouseEvent | null): void {
     this.hovering = e !== null
-    if (e) this.cursor(e.screenX, e.screenY)
+    if (e) this.cursor(e.clientX, e.clientY)
     else if (this.focused && !this.reading) this.look(0, 0)
   }
 
@@ -438,12 +438,12 @@ export class Eyes {
   /** Another Aico window is the one to look at (screen px): turn to it after
    * `delay`, hold, then go back to what they were doing. Even reading eyes
    * glance up from the work; typing, hovered or sleeping eyes stay put. */
-  lookAtPeer(screenX: number, screenY: number, delay: number, hold: number): void {
+  lookAtPeer(x: number, y: number, delay: number, hold: number): void {
     const turn = ++this.peerTurn
     this.later(() => {
       if (turn !== this.peerTurn || !this.canGlanceAtPeer()) return
       this.peerUntil = Date.now() + hold
-      this.aimAt(screenX, screenY)
+      this.aimAt(x, y)
       this.later(() => {
         if (turn !== this.peerTurn) return
         this.peerUntil = 0
@@ -515,14 +515,12 @@ export class Eyes {
     )
   }
 
-  private aimAt(screenX: number, screenY: number): void {
+  /** Aim at a point in this window's CSS px. */
+  private aimAt(x: number, y: number): void {
     // Both eyes converge on one point, aimed from the face's centre so they
     // never go cross-eyed on a cursor parked between them.
     const r = this.root.getBoundingClientRect()
-    const o = aimOffset(
-      screenX - (window.screenX + r.left + r.width / 2),
-      screenY - (window.screenY + r.top + r.height / 2),
-    )
+    const o = aimOffset(x - (r.left + r.width / 2), y - (r.top + r.height / 2))
     this.look(o.x, o.y)
   }
 

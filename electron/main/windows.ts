@@ -3,9 +3,10 @@
 // focuses, blurs or goes away arrives as hooks, in the order the root fixes.
 
 import { join } from 'node:path'
-import type { BrowserWindow, Menu, Screen } from 'electron'
+import type { BrowserWindow, Menu } from 'electron'
 import type { SessionDescriptor } from 'tether/client'
 import { INK } from '../shared/palette'
+import { type Compositor, toDip } from './compositor'
 import { PERSONAL_WORKSPACE_ID } from './project'
 import type { Bounds, ViewRow } from './views'
 import type { PendingCreate, WindowRegistry } from './window-registry'
@@ -40,20 +41,31 @@ interface WindowsDeps {
     'bindSession' | 'setPending' | 'clearPending' | 'sessionOf' | 'forSession' | 'forget'
   >
   layout: {
-    /** Where a new window goes when tiling is on; null leaves it to the caller. */
-    placeNew(): Bounds | null
+    /** Gets a new, not yet shown window onto its tile (`tile`), its remembered place or nowhere in particular. */
+    present(win: BrowserWindow, o: { tile: boolean; saved: Bounds | null }): Promise<void>
     persist(win: BrowserWindow): void
     scheduleWrite(): void
-    retileDisplay(displayId: number): void
+    retileDisplay(monitorId: string): void
   }
+  /** Where windows are and how to move them (compositor.ts). */
+  compositor: Pick<
+    Compositor,
+    | 'attach'
+    | 'detach'
+    | 'onChange'
+    | 'bounds'
+    | 'isMinimized'
+    | 'monitors'
+    | 'monitorFor'
+    | 'raise'
+    | 'scale'
+  >
   views: {
     ensureView(id: string, open?: boolean): ViewRow
     setOpen(id: string, open: boolean): void
     getView(id: string): ViewRow | undefined
     listViews(): ViewRow[]
   }
-  /** Read only after the app is ready. */
-  screen: Pick<Screen, 'getAllDisplays' | 'getDisplayMatching'>
   /** Tether currently lists this session. */
   isLive(id: string): boolean
   upsert(descriptor: SessionDescriptor): void
@@ -67,7 +79,7 @@ interface WindowsDeps {
 }
 
 export function createWindows(deps: WindowsDeps) {
-  const { registry, layout, views, screen, hooks } = deps
+  const { registry, layout, views, compositor, hooks } = deps
   const boundsTimers = new Map<number, NodeJS.Timeout>()
 
   function scheduleBoundsSave(win: BrowserWindow): void {
@@ -80,18 +92,41 @@ export function createWindows(deps: WindowsDeps) {
   }
 
   // Restore a saved rect only if it still lands on a connected display; otherwise
-  // keep just the size and let the OS place it (avoids off-screen windows).
-  function placement(b: Bounds | null): Electron.BrowserWindowConstructorOptions {
-    if (!b) return { width: 900, height: 560 }
-    const onScreen = screen.getAllDisplays().some(({ workArea: w }) => {
+  // keep just the size and let the compositor place it (avoids off-screen windows).
+  function savedPlace(b: Bounds | null): Bounds | null {
+    if (!b) return null
+    const onScreen = compositor.monitors().some(({ workArea: w }) => {
       return (
         b.x < w.x + w.width && b.x + b.width > w.x && b.y < w.y + w.height && b.y + b.height > w.y
       )
     })
-    return onScreen
-      ? { x: b.x, y: b.y, width: b.width, height: b.height }
-      : { width: b.width, height: b.height }
+    return onScreen ? b : null
   }
+
+  // Window size for the constructor, in DIP: the saved size (logical px), else a default.
+  function initialSize(b: Bounds | null): { width: number; height: number } {
+    if (!b) return { width: 900, height: 560 }
+    return {
+      width: toDip(b.width, compositor.scale()),
+      height: toDip(b.height, compositor.scale()),
+    }
+  }
+
+  // Rect changes (a drag, a resize, Aico's own placement) save the place and
+  // refresh layout.json; a minimize or restore also resyncs the eyes. Electron's
+  // own move/resize/minimize events are not reliable on Wayland, so the
+  // compositor reports them.
+  compositor.onChange((change) => {
+    if (change.kind === 'monitors' || change.kind === 'availability') {
+      layout.scheduleWrite()
+      return
+    }
+    const win = deps.BrowserWindow.fromId(change.winId)
+    if (!win || win.isDestroyed()) return
+    if (change.kind === 'rect') scheduleBoundsSave(win)
+    else hooks.visibility(win)
+    layout.scheduleWrite()
+  })
 
   /** One frameless widget window, bound to a session now (`view`) or once
    * Tether creates it (`pending`). */
@@ -101,10 +136,12 @@ export function createWindows(deps: WindowsDeps) {
     restore = false,
   ): BrowserWindow {
     const row = { id: view?.id ?? 'new' }
-    // Opened after startup: tile in on the screen under the pointer.
-    const tiled = !(restore && view?.bounds) ? layout.placeNew() : null
+    const saved = savedPlace(view?.bounds ?? null)
     const win = new deps.BrowserWindow({
-      ...(tiled ?? placement(view?.bounds ?? null)),
+      ...initialSize(view?.bounds ?? null),
+      // Shown once the compositor has the window's place (below), so it never
+      // appears somewhere else first.
+      show: false,
       minWidth: 360,
       minHeight: 240,
       // Keep the frameless Lantern chrome, but make the native surface opaque.
@@ -128,6 +165,18 @@ export function createWindows(deps: WindowsDeps) {
         backgroundThrottling: true,
       },
     })
+
+    // The compositor tags the title so it can find this window, before first show.
+    compositor.attach(win)
+
+    // Opened after startup: tile in on the screen under the pointer.
+    const tile = !(restore && view?.bounds)
+    void layout
+      .present(win, { tile, saved })
+      .catch((error: unknown) => console.warn('[aico] window placement failed:', error))
+      .finally(() => {
+        if (!win.isDestroyed()) win.show()
+      })
 
     // Fixed local UI: no popups, and never navigate the frame away from the
     // renderer. Defense-in-depth so a renderer compromise can't open or redirect
@@ -216,25 +265,15 @@ export function createWindows(deps: WindowsDeps) {
       hooks.blurred(win)
     })
 
-    win.on('move', () => scheduleBoundsSave(win))
-    win.on('resize', () => scheduleBoundsSave(win))
-    for (const change of [
-      'move',
-      'resize',
-      'focus',
-      'blur',
-      'show',
-      'hide',
-      'minimize',
-      'restore',
-    ] as const)
-      win.on(change as 'move', layout.scheduleWrite)
-    for (const change of ['show', 'hide', 'minimize', 'restore'] as const)
+    for (const change of ['focus', 'blur', 'show', 'hide'] as const)
+      win.on(change as 'show', layout.scheduleWrite)
+    for (const change of ['show', 'hide'] as const)
       win.on(change as 'show', () => hooks.visibility(win))
     let closingBounds: Bounds | null = null
     win.on('close', () => {
       layout.persist(win) // final flush while bounds are still valid
-      closingBounds = win.isVisible() && !win.isMinimized() ? win.getBounds() : null
+      closingBounds =
+        win.isVisible() && !compositor.isMinimized(win) ? compositor.bounds(win) : null
     })
 
     win.on('closed', () => {
@@ -249,10 +288,11 @@ export function createWindows(deps: WindowsDeps) {
         boundsTimers.delete(winId)
       }
       registry.forget(winId)
+      compositor.detach(winId)
       // Neighbours grow into the space this window leaves (not on quit: the
       // whole arrangement is coming back next launch).
-      if (!deps.isQuitting() && closingBounds)
-        layout.retileDisplay(screen.getDisplayMatching(closingBounds).id)
+      const freedOn = closingBounds && compositor.monitorFor(closingBounds)
+      if (!deps.isQuitting() && freedOn) layout.retileDisplay(freedOn.id)
       layout.scheduleWrite()
       // On quit, leave `open` as-is so live views restore next launch; on an
       // explicit close, mark it closed (it moves to the tray's reopen list).
@@ -278,8 +318,7 @@ export function createWindows(deps: WindowsDeps) {
   function focusOrReopen(id: string): void {
     const win = registry.forSession(id)
     if (win) {
-      win.show()
-      win.focus()
+      void compositor.raise(win)
       return
     }
     openWidget(id)
@@ -310,7 +349,7 @@ export function createWindows(deps: WindowsDeps) {
       const windows = deps.BrowserWindow.getAllWindows()
       if (windows.length > 0) {
         for (const win of windows) win.show()
-        windows[0].focus()
+        void compositor.raise(windows[0])
         return
       }
       const oldest = views.listViews().find((view) => deps.isLive(view.id)) ?? deps.catalogList()[0]
@@ -338,12 +377,11 @@ export function createWindows(deps: WindowsDeps) {
       // destroy() skips the 'close' event, so take the space it leaves here and
       // let neighbours grow into it once the window is gone.
       const win = registry.forSession(id)
-      const freed = win?.isVisible() && !win.isMinimized() ? win.getBounds() : null
+      const freed = win?.isVisible() && !compositor.isMinimized(win) ? compositor.bounds(win) : null
+      const freedOn = freed && compositor.monitorFor(freed)
+      if (win) compositor.detach(win.id)
       win?.destroy()
-      if (freed && !deps.isQuitting()) {
-        const displayId = screen.getDisplayMatching(freed).id
-        setImmediate(() => layout.retileDisplay(displayId))
-      }
+      if (freedOn && !deps.isQuitting()) setImmediate(() => layout.retileDisplay(freedOn.id))
     },
   }
 }

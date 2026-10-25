@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { readConfig } from './config'
+import { displayBackend, readConfig } from './config'
 
 describe('readConfig', () => {
   it('uses the defaults with an empty environment', () => {
@@ -18,6 +18,7 @@ describe('readConfig', () => {
       nightshift: '/home/o/.local/bin/nightshift',
       webUrl: 'https://aico.summitflow.dev',
       selectionHotkey: 'CommandOrControl+Shift+Space',
+      displayBackend: 'x11',
       rendererUrl: undefined,
       activationReadyFile: undefined,
       pidFile: undefined,
@@ -102,5 +103,24 @@ describe('readConfig', () => {
 
   it('is frozen', () => {
     expect(Object.isFrozen(readConfig({}, '/h', 1))).toBe(true)
+  })
+})
+
+describe('displayBackend', () => {
+  it('follows the Wayland display unless told otherwise', () => {
+    expect(displayBackend([], {})).toBe('x11')
+    expect(displayBackend([], { WAYLAND_DISPLAY: 'wayland-0' })).toBe('wayland')
+    expect(displayBackend([], { WAYLAND_DISPLAY: 'wayland-0', AICO_OZONE_PLATFORM: 'x11' })).toBe(
+      'x11',
+    )
+    expect(displayBackend([], { AICO_OZONE_PLATFORM: 'wayland' })).toBe('wayland')
+  })
+
+  it('lets --ozone-platform on the command line win', () => {
+    const env = { WAYLAND_DISPLAY: 'wayland-0', AICO_OZONE_PLATFORM: 'wayland' }
+    expect(displayBackend(['electron', '--ozone-platform=x11'], env)).toBe('x11')
+    expect(displayBackend(['--ozone-platform=wayland'], { AICO_OZONE_PLATFORM: 'x11' })).toBe(
+      'wayland',
+    )
   })
 })

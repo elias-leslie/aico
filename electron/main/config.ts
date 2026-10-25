@@ -5,6 +5,19 @@
 import { join } from 'node:path'
 import { defaultTetherSocketPath, knownTetherSockets, tetherSocketPath } from 'tether/client'
 
+export type DisplayBackend = 'wayland' | 'x11'
+
+/** `--ozone-platform=` on the command line, else AICO_OZONE_PLATFORM (the launcher's own switch), else Wayland when a Wayland display is set. */
+export function displayBackend(argv: readonly string[], env: NodeJS.ProcessEnv): DisplayBackend {
+  const flag = argv
+    .find((a) => a.startsWith('--ozone-platform='))
+    ?.slice('--ozone-platform='.length)
+  const value = flag || env.AICO_OZONE_PLATFORM
+  if (value === 'x11') return 'x11'
+  if (value === 'wayland') return 'wayland'
+  return env.WAYLAND_DISPLAY ? 'wayland' : 'x11'
+}
+
 export interface AicoConfig {
   readonly stateDir: string
   readonly dbPath: string
@@ -29,11 +42,13 @@ export interface AicoConfig {
   /** The web app (AICO_WEB_URL): a tap on the push opens the waiting session there on the owner's phone (Nightshift allowlists the origin). */
   readonly webUrl: string
   /**
-   * System-wide "indicate" hotkey. Works on X11 today; on Wayland (GNOME 46, no
-   * GlobalShortcuts portal) globalShortcut silently no-ops — bind a GNOME custom
-   * shortcut to a CLI that poke this same grab path instead (follow-on).
+   * System-wide "indicate" hotkey as an Electron accelerator. Registered with
+   * globalShortcut only under X11; on Wayland the GNOME custom shortcut that
+   * runs `aico-launch.sh --indicate` carries it (scripts/aico-hotkey.sh).
    */
   readonly selectionHotkey: string
+  /** The display protocol Electron runs on: window geometry comes from the compositor bridge on Wayland. */
+  readonly displayBackend: DisplayBackend
   /** The Vite dev server, when running under it. */
   readonly rendererUrl: string | undefined
   readonly activationReadyFile: string | undefined
@@ -60,6 +75,7 @@ export function readConfig(
   env: NodeJS.ProcessEnv,
   home: string,
   uid: number | undefined,
+  argv: readonly string[] = [],
 ): AicoConfig {
   const stateDir = env.AICO_STATE_DIR ?? join(home, '.local', 'state', 'aico')
   const exchangeRoot = env.TETHER_EXCHANGE_ROOT || '/srv/workspaces/exchange'
@@ -81,6 +97,7 @@ export function readConfig(
     nightshift: join(home, '.local/bin/nightshift'),
     webUrl: (env.AICO_WEB_URL ?? 'https://aico.summitflow.dev').replace(/\/+$/, ''),
     selectionHotkey: env.AICO_SELECTION_HOTKEY ?? 'CommandOrControl+Shift+Space',
+    displayBackend: displayBackend(argv, env),
     rendererUrl: env.ELECTRON_RENDERER_URL,
     activationReadyFile: env.AICO_ACTIVATION_READY_FILE,
     pidFile: env.AICO_PIDFILE,

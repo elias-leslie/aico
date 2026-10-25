@@ -161,8 +161,6 @@ function face(opts: { focused?: boolean; reducedMotion?: boolean } = {}) {
     setTimeout: (fn: () => void, ms?: number) => setTimeout(fn, ms),
     clearTimeout: (id?: number) => clearTimeout(id),
     setInterval: (fn: () => void, ms?: number) => setInterval(fn, ms),
-    screenX: 0,
-    screenY: 0,
   })
   const eyes = new Eyes(root as unknown as HTMLElement, null)
   const motion = (): Motion | null =>

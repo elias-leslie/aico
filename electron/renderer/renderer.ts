@@ -152,7 +152,7 @@ function scheduleTerminalLayoutFit(): void {
   }, 60)
 }
 
-// Window chrome: controls, focus state, custom SE resize. Independent of the
+// Window chrome: controls and focus state. Independent of the
 // terminal, so wire it up before the (async) font-gated terminal open.
 function wireChrome(): void {
   document.querySelector('.ctl.min')?.addEventListener('click', () => window.aico.win.minimize())
@@ -165,60 +165,8 @@ function wireChrome(): void {
     document.body.classList.toggle('unfocused', !focused)
   })
 
-  // Frameless windows have no native edge resize, so each handle drags the
-  // window's bounds. West/north edges move the origin too (setBounds, not just
-  // size); on pure Wayland the compositor may ignore origin moves.
-  const MIN_W = 360
-  const MIN_H = 240
-  const dirs: Record<string, { n?: boolean; s?: boolean; e?: boolean; w?: boolean }> = {
-    n: { n: true },
-    s: { s: true },
-    e: { e: true },
-    w: { w: true },
-    ne: { n: true, e: true },
-    nw: { n: true, w: true },
-    se: { s: true, e: true },
-    sw: { s: true, w: true },
-  }
-  for (const [name, d] of Object.entries(dirs)) {
-    const el = document.querySelector<HTMLElement>(`.rz.${name}`)
-    el?.addEventListener('pointerdown', (e: PointerEvent) => {
-      e.preventDefault()
-      const px = e.screenX
-      const py = e.screenY
-      const bx = window.screenX
-      const by = window.screenY
-      const bw = window.outerWidth
-      const bh = window.outerHeight
-      el.setPointerCapture(e.pointerId)
-      const move = (ev: PointerEvent): void => {
-        const dx = ev.screenX - px
-        const dy = ev.screenY - py
-        let x = bx
-        let y = by
-        let w = bw
-        let h = bh
-        if (d.e) w = Math.max(MIN_W, bw + dx)
-        if (d.s) h = Math.max(MIN_H, bh + dy)
-        if (d.w) {
-          w = Math.max(MIN_W, bw - dx)
-          x = bx + (bw - w)
-        }
-        if (d.n) {
-          h = Math.max(MIN_H, bh - dy)
-          y = by + (bh - h)
-        }
-        window.aico.win.setBounds(x, y, w, h)
-      }
-      const up = (ev: PointerEvent): void => {
-        el.releasePointerCapture(ev.pointerId)
-        el.removeEventListener('pointermove', move)
-        el.removeEventListener('pointerup', up)
-      }
-      el.addEventListener('pointermove', move)
-      el.addEventListener('pointerup', up)
-    })
-  }
+  // Edge resize is the compositor's: Chromium's frameless windows resize from
+  // the window edge natively on Wayland and X11 (no handles of our own).
 }
 
 wireChrome()

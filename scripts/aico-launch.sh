@@ -21,6 +21,11 @@
 # code"; the PTY's `env: process.env` then forwards a clean env, no code needed.
 set -euo pipefail
 
+# `--indicate` (the GNOME shortcut, scripts/aico-hotkey.sh) asks the running Aico
+# to show where its windows are; it never starts a runtime.
+ACTIVATION_FLAG=--aico-activate
+if [ "${1:-}" = --indicate ]; then ACTIVATION_FLAG=--aico-indicate; fi
+
 # GNOME launches .desktop entries with a minimal PATH; node/npm live here.
 # Use only trusted system locations for containment and identity commands. The
 # managed unit defines Electron's runtime PATH itself.
@@ -92,7 +97,7 @@ activate_runtime() {
         current_state="$(systemctl --user show "$RUNTIME_UNIT" --property=ActiveState --value 2>/dev/null || true)"
         [ "$current_pid" = "$pid" ] && [ "$current_state" = active ] || return 1
         # A wedged secondary must not leave the desktop launcher waiting forever.
-        if ( cd "$RUNTIME_ROOT" && timeout --foreground --kill-after=2s 10s "$expected_exe" . --aico-activate ); then
+        if ( cd "$RUNTIME_ROOT" && timeout --foreground --kill-after=2s 10s "$expected_exe" . "$ACTIVATION_FLAG" ); then
           echo "aico-launch: activated managed runtime (pid $pid)" >&2
           return 0
         fi
@@ -164,6 +169,11 @@ if [ -f "$PIDFILE" ]; then
     echo "aico-launch: clearing stale pidfile for exited pid $PID" >&2
     rm -f "$PIDFILE"
   fi
+fi
+
+if [ "$ACTIVATION_FLAG" = --aico-indicate ]; then
+  echo "aico-launch: Aico is not running; nothing to indicate" >&2
+  exit 1
 fi
 
 # The installed managed unit is the only supported desktop runtime. Refuse a

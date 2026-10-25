@@ -84,6 +84,10 @@ function setup() {
     tether: tether as never,
     isReplacing: (id) => state.replacing.has(id),
     isQuitting: () => state.quitting,
+    raise: (win) => {
+      win.show()
+      win.focus()
+    },
   })
   const on = new Map<string, (...args: unknown[]) => unknown>()
   bus.registerIpc({

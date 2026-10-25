@@ -24,6 +24,8 @@ import { version } from '../../package.json'
 import { TERMINAL_HISTORY_LINES } from '../shared/terminal-history'
 import { createAmbient } from './ambient'
 import { createAttentionWiring } from './attention-wiring'
+import { createBridgeTransport } from './bridge-transport'
+import { createBridgeCompositor, createNativeCompositor } from './compositor'
 import { readConfig } from './config'
 import { registerDesktopIpc } from './desktop-ipc'
 import { createGuiChannel } from './gui-channel'
@@ -60,7 +62,7 @@ import { createWindows } from './windows'
 // imports another, not even for a type (each declares what it needs of the
 // others structurally); this file is the only place they meet.
 
-const config = readConfig(process.env, homedir(), process.getuid?.())
+const config = readConfig(process.env, homedir(), process.getuid?.(), process.argv)
 // The single-instance lock and the process listeners, before anything else.
 const lifecycle = createLifecycle({
   app,
@@ -88,9 +90,21 @@ const catalog: SessionCatalog = createSessionCatalog()
 // (terminal, window chrome, ambient, attention, selection) do when a window
 // loads, focuses, blurs or goes away.
 const registry = new WindowRegistry(BrowserWindow)
+// Where windows are and how they are moved: the desktop bridge on Wayland, where
+// Electron cannot say or move them; Electron's own calls on X11. Nothing else
+// knows which (compositor.ts). `scale` is logical px per DIP: Chromium's forced
+// device scale factor, which the launcher sets from GNOME's text scaling.
+const compositor =
+  config.displayBackend === 'wayland'
+    ? createBridgeCompositor({
+        transport: createBridgeTransport(),
+        pid: process.pid,
+        scale: () => screen.getPrimaryDisplay().scaleFactor,
+      })
+    : createNativeCompositor({ screen })
 const layout = createWindowLayout({
   registry,
-  screen,
+  compositor,
   isCoordinator: (id) => catalog.get(id)?.coordinator ?? false,
   sessionName: (id) => {
     const descriptor = catalog.get(id)
@@ -106,7 +120,7 @@ const windows = createWindows({
   registry,
   layout,
   views: { ensureView, setOpen, getView, listViews },
-  screen,
+  compositor,
   isLive: (id) => Boolean(catalog.get(id)),
   upsert: (descriptor) => catalog.upsert(descriptor),
   catalogList: () => catalog.list(),
@@ -184,6 +198,7 @@ const link = createTetherLink({
 
 const attention = createAttentionWiring({
   registry,
+  compositor,
   catalog,
   tools: link.tools,
   setNeedsYou,
@@ -195,7 +210,7 @@ const attention = createAttentionWiring({
 // The eyes and the titlebar arcade: cursor pump, gaze scenes, urgent looks.
 const ambient = createAmbient({
   registry,
-  screen,
+  compositor,
   getSetting,
   setSetting,
   urgent: attention.urgent,
@@ -227,8 +242,9 @@ const applyGuiCommand = createGuiChannel({
   focusOrReopen: windows.focusOrReopen,
   forSession: registry.forSession,
   arrange: layout.arrange,
+  canPlace: () => compositor.ready(),
   saveBounds,
-  displayIdFor: (bounds) => String(screen.getDisplayMatching(bounds).id),
+  displayIdFor: (bounds) => compositor.monitorFor(bounds)?.id ?? '',
   titles: () => chrome.pushTitles(),
   tray: () => chrome.syncTray(),
 })
@@ -282,6 +298,7 @@ const selection = createSelectionBus({
   tether,
   isReplacing: sessions.isReplacing,
   isQuitting: lifecycle.isQuitting,
+  raise: (win) => void compositor.raise(win),
 })
 
 const previews = new Set<BrowserWindow>()
@@ -340,12 +357,14 @@ const hotkeys = createHotkeys({ grab: selection.grab, config, globalShortcut, ap
 
 lifecycle.onQuit(() => {
   link.stop()
+  compositor.stop()
   hotkeys.stop()
   listener.stop()
   ambient.stop()
   layout.stop({ removeFile: lifecycle.runtimeOwner })
 })
 lifecycle.setActivationHandler(windows.activate)
+lifecycle.setIndicateHandler(hotkeys.indicate)
 
 const startup = app.whenReady().then(async () => {
   if (!lifecycle.runtimeOwner) return // no runtime initialization
@@ -354,6 +373,9 @@ const startup = app.whenReady().then(async () => {
   denyAllPermissions(session.defaultSession)
   // Fire-and-forget: windows work without capture; the result is logged.
   void listener.start()
+  // The bridge may appear later (the extension loads after us): the compositor
+  // watches the bus name and fills its cache whenever it does.
+  compositor.start()
 
   // No application menu — the Lantern chrome owns window controls, and the
   // default Edit menu's paste role mangled bracketed paste (handled in renderer).
@@ -361,6 +383,7 @@ const startup = app.whenReady().then(async () => {
 
   terminal.registerIpc(ipcMain)
   registerDesktopIpc(ipcMain, {
+    compositor,
     clipboard,
     pastedImages: config.pastedImages,
     shell,

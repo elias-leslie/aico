@@ -4,6 +4,7 @@
 
 import type { BrowserWindow } from 'electron'
 import type { GuiCommand, GuiVerdict, SessionCatalog } from 'tether/client'
+import type { PlaceResult } from './compositor'
 import type { Bounds } from './views'
 import type { Layout } from './window-layout'
 
@@ -15,10 +16,12 @@ interface GuiChannelDeps {
   refresh(): Promise<void>
   focusOrReopen(id: string): void
   forSession(id: string): BrowserWindow | undefined
-  /** Set an open window's bounds and remember them. */
-  arrange(win: BrowserWindow, bounds: Bounds): void
+  /** Place an open window and remember its bounds once it is there. */
+  arrange(win: BrowserWindow, bounds: Bounds): Promise<PlaceResult>
+  /** The compositor can place windows right now (the desktop bridge is up). */
+  canPlace(): boolean
   saveBounds(id: string, bounds: Bounds, displayId: string): void
-  /** The display a closed window's bounds land on. Read only after the app is ready. */
+  /** The display a closed window's bounds land on. */
   displayIdFor(bounds: Bounds): string
   titles(): void
   tray(): void
@@ -45,9 +48,12 @@ export function createGuiChannel(deps: GuiChannelDeps) {
     if (command.kind === 'show') {
       deps.focusOrReopen(id)
     } else if (command.kind === 'position' && command.bounds) {
+      // Without the compositor there is nowhere to verify a position: say so.
+      if (!deps.canPlace()) return { applied: false, error: 'compositor_unavailable' }
       const win = deps.forSession(id)
       if (win) {
-        deps.arrange(win, command.bounds)
+        const placed = await deps.arrange(win, command.bounds)
+        if (!placed.ok) return { applied: false, error: placed.error }
       } else {
         deps.saveBounds(id, command.bounds, deps.displayIdFor(command.bounds))
       }

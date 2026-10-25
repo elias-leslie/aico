@@ -10,7 +10,10 @@ const fixtures: string[] = []
 
 interface Fixture {
   electron: string
-  launch: () => { child: ChildProcess; completed: Promise<{ code: number | null; stderr: string }> }
+  launch: (...args: string[]) => {
+    child: ChildProcess
+    completed: Promise<{ code: number | null; stderr: string }>
+  }
   marker: string
   activations: string
   timeoutArgs: string
@@ -82,7 +85,7 @@ timeout() {
   command timeout "$@"
 }
 export -f systemctl readlink awk timeout
-exec bash "$1"
+exec bash "$@"
 `
   const env = {
     ...process.env,
@@ -106,8 +109,8 @@ exec bash "$1"
     timeoutArgs,
     pid,
     starttime,
-    launch: () => {
-      const child = spawn('bash', ['-c', shell, 'launcher-fixture', launcher], {
+    launch: (...args: string[]) => {
+      const child = spawn('bash', ['-c', shell, 'launcher-fixture', launcher, ...args], {
         env,
         stdio: ['ignore', 'ignore', 'pipe'],
       })
@@ -144,6 +147,14 @@ describe('desktop launcher activation readiness', () => {
     const result = await completed
     expect(result).toMatchObject({ code: 0 })
     expect(readFileSync(setup.activations, 'utf8')).toBe('. --aico-activate\n')
+  }, 10_000)
+
+  it('--indicate asks the running Aico to show its windows, with the same checks', async () => {
+    const setup = fixture()
+    writeFileSync(setup.marker, `${setup.pid} ${setup.starttime}\n`)
+    const result = await setup.launch('--indicate').completed
+    expect(result.code).toBe(0)
+    expect(readFileSync(setup.activations, 'utf8')).toBe('. --aico-indicate\n')
   }, 10_000)
 
   it('rejects a marker from an earlier incarnation of the same PID', async () => {

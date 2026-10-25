@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { BrowserWindow } from 'electron'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { fakeCompositor } from './compositor.fake'
 import type { Rect } from './tiling'
 import { createLayoutFile, createWindowLayout, layoutSnapshot } from './window-layout'
 import { WindowRegistry } from './window-registry'
@@ -47,9 +48,8 @@ describe('layoutSnapshot', () => {
   })
 })
 
-// The window and screen fakes the tiler and layout.json writer read.
-function fakeWindow(id: number, bounds: Rect, o: { visible?: boolean; minimized?: boolean } = {}) {
-  let current = bounds
+// The window fake and the compositor state the tiler and layout.json writer read.
+function fakeWindow(id: number, o: { visible?: boolean } = {}) {
   let destroyed = false
   return {
     id,
@@ -58,30 +58,11 @@ function fakeWindow(id: number, bounds: Rect, o: { visible?: boolean; minimized?
       destroyed = true
     },
     isVisible: () => o.visible ?? true,
-    isMinimized: () => o.minimized ?? false,
-    isMaximized: () => false,
-    getBounds: () => current,
-    setBounds: vi.fn((b: Rect) => {
-      current = b
-    }),
   }
 }
 type FakeWindow = ReturnType<typeof fakeWindow>
 
 const WORK_AREA = { x: 0, y: 0, width: 1024, height: 800 }
-const display = {
-  id: 1,
-  bounds: WORK_AREA,
-  workArea: WORK_AREA,
-  scaleFactor: 1,
-}
-const fakeScreen = {
-  getAllDisplays: () => [display],
-  getCursorScreenPoint: () => ({ x: 10, y: 10 }),
-  getDisplayMatching: () => display,
-  getDisplayNearestPoint: () => display,
-  getPrimaryDisplay: () => display,
-}
 
 let dir: string
 let path: string
@@ -106,7 +87,7 @@ describe('layout.json writing and removal at quit', () => {
     file = createLayoutFile({
       path,
       owner,
-      collect: () => ({ displays: [], windows: [] }),
+      collect: () => ({ displays: [], windows: [], boundsReliable: true }),
       isReady: () => ready,
       isQuitting: () => quitting,
     })
@@ -191,21 +172,36 @@ describe('layout.json writing and removal at quit', () => {
 })
 
 describe('createWindowLayout: the tiler and the window picture', () => {
-  function setup(windows: FakeWindow[], o: { coordinators?: string[] } = {}) {
-    const all = [...windows]
+  type Spec = { win: FakeWindow; rect: Rect; minimized?: boolean }
+  const spec = (
+    id: number,
+    rect: Rect,
+    o: { visible?: boolean; minimized?: boolean } = {},
+  ): Spec => ({ win: fakeWindow(id, o), rect, minimized: o.minimized })
+
+  function setup(
+    specs: Spec[],
+    o: { coordinators?: string[]; ready?: boolean; cursor?: { x: number; y: number } | null } = {},
+  ) {
+    const comp = fakeCompositor({ ready: o.ready, cursor: o.cursor })
+    const all = specs.map((x) => x.win)
+    for (const x of specs) {
+      comp.rects.set(x.win.id, x.rect)
+      if (x.minimized) comp.minimized.add(x.win.id)
+    }
     const registry = new WindowRegistry({
       fromId: (id) => (all.find((w) => w.id === id) ?? null) as unknown as BrowserWindow | null,
       fromWebContents: () => null,
       getAllWindows: () => all as unknown as BrowserWindow[],
-      getFocusedWindow: () => (windows[0] ?? null) as unknown as BrowserWindow | null,
+      getFocusedWindow: () => (all[0] ?? null) as unknown as BrowserWindow | null,
     })
-    for (const w of windows) registry.bindSession(w.id, `s${w.id}`)
+    for (const w of all) registry.bindSession(w.id, `s${w.id}`)
     const coordinators = new Set(o.coordinators)
     const saveBounds = vi.fn()
     const state = { quitting: false, ready: true }
     const layout = createWindowLayout({
       registry,
-      screen: fakeScreen as unknown as Parameters<typeof createWindowLayout>[0]['screen'],
+      compositor: comp.compositor,
       isCoordinator: (id) => coordinators.has(id),
       sessionName: (id) => `name of ${id}`,
       saveBounds,
@@ -215,19 +211,26 @@ describe('createWindowLayout: the tiler and the window picture', () => {
       owner: { pid: 4242, startTime: '777' },
     })
     const win = (w: FakeWindow) => w as unknown as BrowserWindow
-    return { layout, registry, saveBounds, state, coordinators, win, all }
+    return { layout, comp, registry, saveBounds, state, coordinators, win, all }
   }
 
+  const rect = (x: number, y: number, width: number, height: number): Rect => ({
+    x,
+    y,
+    width,
+    height,
+  })
+
   it('collects live bounds without writing a file, and refuses before ready or during quit', () => {
-    const window = fakeWindow(1, WORK_AREA)
-    const { layout, state } = setup([window])
+    const { layout, state, comp, all } = setup([spec(1, WORK_AREA)])
     expect(layout.snapshot()).toMatchObject({
       v: 1,
       pid: 4242,
+      boundsReliable: true,
       windows: [{ id: 's1', bounds: WORK_AREA }],
     })
     const moved = { ...WORK_AREA, x: 73 }
-    window.setBounds(moved)
+    comp.rects.set(all[0]?.id ?? 0, moved)
     expect(layout.snapshot()?.windows[0]?.bounds).toEqual(moved)
     expect(existsSync(path)).toBe(false)
     state.ready = false
@@ -237,52 +240,107 @@ describe('createWindowLayout: the tiler and the window picture', () => {
     expect(layout.snapshot()).toBeNull()
   })
 
-  it('places nothing before tiling is live', () => {
-    const a = fakeWindow(1, { x: 500, y: 0, width: 300, height: 800 })
-    const { layout } = setup([a])
-    expect(layout.placeNew()).toBeNull()
-    expect(a.setBounds).not.toHaveBeenCalled()
+  it('marks the layout unreliable while the compositor cannot say where windows are', () => {
+    const { layout } = setup([spec(1, WORK_AREA)], { ready: false })
+    const snapshot = layout.snapshot()
+    expect(snapshot?.boundsReliable).toBe(false)
+    expect(snapshot?.displays).toEqual([])
   })
 
-  it('moves a neighbour aside and gives the new window the free slot', () => {
-    const a = fakeWindow(1, { x: 500, y: 0, width: 300, height: 800 })
-    const { layout, saveBounds } = setup([a])
+  it('places nothing before tiling is live', async () => {
+    const a = spec(1, rect(500, 0, 300, 800))
+    const { layout, comp } = setup([a])
+    const fresh = fakeWindow(2)
+    await layout.present(fresh as unknown as BrowserWindow, { tile: true, saved: null })
+    expect(comp.prepare).not.toHaveBeenCalled()
+    expect(comp.place).not.toHaveBeenCalled()
+  })
+
+  it('a window with a saved place and no tiling goes there', async () => {
+    const { layout, comp } = setup([])
+    const fresh = fakeWindow(2)
+    const saved = rect(40, 50, 600, 400)
+    await layout.present(fresh as unknown as BrowserWindow, { tile: false, saved })
+    expect(comp.prepare).toHaveBeenCalledWith(fresh, saved)
+  })
+
+  it('moves a neighbour aside and gives the new window the free slot', async () => {
+    const a = spec(1, rect(500, 0, 300, 800))
+    const { layout, comp, saveBounds } = setup([a])
     layout.enableTiling()
-    expect(layout.placeNew()).toEqual({ x: 0, y: 0, width: 289, height: 800 })
-    expect(a.setBounds).toHaveBeenCalledWith({ x: 735, y: 0, width: 289, height: 800 })
-    expect(saveBounds).toHaveBeenCalledWith('s1', { x: 735, y: 0, width: 289, height: 800 }, '1')
+    const fresh = fakeWindow(2)
+    await layout.present(fresh as unknown as BrowserWindow, { tile: true, saved: null })
+    expect(comp.prepare).toHaveBeenCalledWith(fresh, rect(0, 0, 289, 800))
+    expect(comp.place).toHaveBeenCalledWith(a.win, rect(735, 0, 289, 800))
+    expect(saveBounds).toHaveBeenCalledWith('s1', rect(735, 0, 289, 800), '1')
     // Aico just resized it: its next terminal resize claims the tmux size.
     expect(layout.recentlyArranged(1)).toBe(true)
     vi.advanceTimersByTime(3001)
     expect(layout.recentlyArranged(1)).toBe(false)
   })
 
-  it('leaves windows already in their slot alone', () => {
-    const a = fakeWindow(1, { x: 289, y: 0, width: 446, height: 800 })
-    const { layout, saveBounds } = setup([a])
-    layout.retileDisplay(1)
-    expect(a.setBounds).not.toHaveBeenCalled()
+  it('tiles on the screen under the pointer and sees windows still opening', async () => {
+    const { layout, comp, all, registry } = setup([])
+    layout.enableTiling()
+    const first = fakeWindow(1, { visible: false })
+    const second = fakeWindow(2, { visible: false })
+    // Both are bound to their sessions by the time their turn comes.
+    all.push(first, second)
+    registry.bindSession(1, 's1')
+    registry.bindSession(2, 's2')
+    // Opened together: neither is visible yet, but each one's slot is taken in turn.
+    await Promise.all([
+      layout.present(first as unknown as BrowserWindow, { tile: true, saved: null }),
+      layout.present(second as unknown as BrowserWindow, { tile: true, saved: null }),
+    ])
+    const slots = comp.prepare.mock.calls.map(([, r]) => r)
+    expect(slots).toHaveLength(2)
+    expect(slots[0]).not.toEqual(slots[1])
+  })
+
+  it('leaves windows already in their slot alone, within a pixel', () => {
+    const a = spec(1, rect(289, 0, 446, 800))
+    const { layout, comp, saveBounds } = setup([a])
+    layout.retileDisplay('1')
+    expect(comp.place).not.toHaveBeenCalled()
     expect(saveBounds).not.toHaveBeenCalled()
-    layout.retileDisplay(99) // no such display
-    expect(a.setBounds).not.toHaveBeenCalled()
+    // Device-scale rounding leaves a window a pixel off its tile: that is in place.
+    comp.rects.set(1, rect(290, -1, 445, 801))
+    layout.retileDisplay('1')
+    expect(comp.place).not.toHaveBeenCalled()
+    layout.retileDisplay('99') // no such display
+    expect(comp.place).not.toHaveBeenCalled()
+  })
+
+  it('does not tile, and keeps remembered places, while the compositor is unavailable', async () => {
+    const a = spec(1, rect(500, 0, 300, 800))
+    const { layout, comp, saveBounds } = setup([a], { ready: false })
+    layout.enableTiling()
+    const fresh = fakeWindow(2)
+    const saved = rect(1, 2, 300, 200)
+    await layout.present(fresh as unknown as BrowserWindow, { tile: true, saved })
+    expect(comp.prepare).toHaveBeenCalledWith(fresh, saved) // size only, the compositor places it
+    layout.retileDisplay('1')
+    layout.persist(a.win as unknown as BrowserWindow)
+    expect(comp.place).not.toHaveBeenCalled()
+    expect(saveBounds).not.toHaveBeenCalled()
   })
 
   it('re-tiles once when a coordinator mark changes, never on first sight', () => {
-    const a = fakeWindow(1, { x: 0, y: 0, width: 289, height: 800 })
-    const b = fakeWindow(2, { x: 735, y: 0, width: 289, height: 800 })
-    const { layout, coordinators, win } = setup([a, b])
-    layout.noteCoordinator(win(a), false)
-    layout.noteCoordinator(win(b), false)
-    layout.noteCoordinator(win(a), false)
-    expect(a.setBounds).not.toHaveBeenCalled()
-    expect(b.setBounds).not.toHaveBeenCalled()
+    const a = spec(1, rect(0, 0, 289, 800))
+    const b = spec(2, rect(735, 0, 289, 800))
+    const { layout, coordinators, win, comp } = setup([a, b])
+    layout.noteCoordinator(win(a.win), false)
+    layout.noteCoordinator(win(b.win), false)
+    layout.noteCoordinator(win(a.win), false)
+    expect(comp.place).not.toHaveBeenCalled()
 
     coordinators.add('s1')
-    layout.noteCoordinator(win(a), true)
-    expect(a.setBounds).toHaveBeenCalledWith({ x: 289, y: 0, width: 446, height: 800 })
-    expect(b.setBounds).toHaveBeenCalledWith({ x: 0, y: 0, width: 289, height: 800 })
-    layout.noteCoordinator(win(a), true)
-    expect(a.setBounds).toHaveBeenCalledTimes(1)
+    layout.noteCoordinator(win(a.win), true)
+    expect(comp.place).toHaveBeenCalledWith(a.win, rect(289, 0, 446, 800))
+    expect(comp.place).toHaveBeenCalledWith(b.win, rect(0, 0, 289, 800))
+    layout.noteCoordinator(win(a.win), true)
+    expect(comp.place).toHaveBeenCalledTimes(2)
     // The re-tile reaches layout.json too.
     vi.advanceTimersByTime(300)
     expect(JSON.parse(readFileSync(path, 'utf8')).windows[1]).toMatchObject({
@@ -292,57 +350,79 @@ describe('createWindowLayout: the tiler and the window picture', () => {
   })
 
   it('does not re-tile while quitting', () => {
-    const a = fakeWindow(1, { x: 0, y: 0, width: 289, height: 800 })
-    const b = fakeWindow(2, { x: 735, y: 0, width: 289, height: 800 })
-    const { layout, coordinators, state, win } = setup([a, b])
-    layout.noteCoordinator(win(a), false)
+    const a = spec(1, rect(0, 0, 289, 800))
+    const b = spec(2, rect(735, 0, 289, 800))
+    const { layout, coordinators, state, win, comp } = setup([a, b])
+    layout.noteCoordinator(win(a.win), false)
     state.quitting = true
     coordinators.add('s1')
-    layout.noteCoordinator(win(a), true)
-    expect(a.setBounds).not.toHaveBeenCalled()
+    layout.noteCoordinator(win(a.win), true)
+    expect(comp.place).not.toHaveBeenCalled()
   })
 
-  it('skips hidden and minimized windows when tiling', () => {
-    const a = fakeWindow(1, { x: 500, y: 0, width: 300, height: 800 }, { minimized: true })
-    const b = fakeWindow(2, { x: 500, y: 0, width: 300, height: 800 }, { visible: false })
-    const { layout } = setup([a, b])
+  it('skips hidden and minimized windows when tiling', async () => {
+    const a = spec(1, rect(500, 0, 300, 800), { minimized: true })
+    const b = spec(2, rect(500, 0, 300, 800), { visible: false })
+    const { layout, comp } = setup([a, b])
     layout.enableTiling()
+    const fresh = fakeWindow(3)
+    await layout.present(fresh as unknown as BrowserWindow, { tile: true, saved: null })
     // Alone on screen: the new window takes the centre.
-    expect(layout.placeNew()).toEqual({ x: 289, y: 0, width: 446, height: 800 })
-    expect(a.setBounds).not.toHaveBeenCalled()
-    expect(b.setBounds).not.toHaveBeenCalled()
+    expect(comp.prepare).toHaveBeenCalledWith(fresh, rect(289, 0, 446, 800))
+    expect(comp.place).not.toHaveBeenCalled()
   })
 
-  it('an agent position sets the bounds and remembers them', () => {
-    const a = fakeWindow(1, { x: 0, y: 0, width: 289, height: 800 })
-    const { layout, saveBounds, win } = setup([a])
-    const bounds = { x: 10, y: 20, width: 400, height: 300 }
-    layout.arrange(win(a), bounds)
-    expect(a.setBounds).toHaveBeenCalledWith(bounds)
+  it('an agent position places the window and remembers the bounds once it is there', async () => {
+    const a = spec(1, rect(0, 0, 289, 800))
+    const { layout, saveBounds, win, comp } = setup([a])
+    const bounds = rect(10, 20, 400, 300)
+    await expect(layout.arrange(win(a.win), bounds)).resolves.toEqual({ ok: true })
+    expect(comp.place).toHaveBeenCalledWith(a.win, bounds)
     expect(saveBounds).toHaveBeenCalledWith('s1', bounds, '1')
     expect(layout.recentlyArranged(1)).toBe(true)
     layout.forget(1)
     expect(layout.recentlyArranged(1)).toBe(false)
   })
 
+  it('an agent position is an explicit error without the compositor, or when it is refused', async () => {
+    const a = spec(1, rect(0, 0, 289, 800))
+    const down = setup([a], { ready: false })
+    await expect(down.layout.arrange(down.win(a.win), rect(10, 20, 400, 300))).resolves.toEqual({
+      ok: false,
+      error: 'compositor_unavailable',
+    })
+    expect(down.saveBounds).not.toHaveBeenCalled()
+
+    const b = spec(1, rect(0, 0, 289, 800))
+    const refused = setup([b])
+    refused.comp.place.mockResolvedValueOnce({ ok: false, error: 'placement_unconfirmed' })
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    await expect(
+      refused.layout.arrange(refused.win(b.win), rect(10, 20, 400, 300)),
+    ).resolves.toEqual({ ok: false, error: 'placement_unconfirmed' })
+    expect(refused.saveBounds).not.toHaveBeenCalled()
+  })
+
   it('persists only windows bound to a session and still open', () => {
-    const a = fakeWindow(1, { x: 0, y: 0, width: 289, height: 800 })
-    const stray = fakeWindow(7, { x: 0, y: 0, width: 289, height: 800 })
+    const a = spec(1, rect(0, 0, 289, 800))
+    const stray = fakeWindow(7)
     const { layout, saveBounds, win } = setup([a])
     layout.persist(win(stray))
-    a.destroy()
-    layout.persist(win(a))
+    a.win.destroy()
+    layout.persist(win(a.win))
     expect(saveBounds).not.toHaveBeenCalled()
   })
 
   it('writes every session window with its name, display and state', () => {
-    const a = fakeWindow(1, { x: 0, y: 0, width: 289, height: 800 })
-    const b = fakeWindow(2, { x: 735, y: 0, width: 289, height: 800 }, { minimized: true })
-    const { layout, all } = setup([a, b])
-    all.push(fakeWindow(9, { x: 0, y: 0, width: 10, height: 10 })) // not a session window
+    const a = spec(1, rect(0, 0, 289, 800))
+    const b = spec(2, rect(735, 0, 289, 800), { minimized: true })
+    const { layout, all, comp } = setup([a, b])
+    all.push(fakeWindow(9)) // not a session window
+    comp.rects.set(9, rect(0, 0, 10, 10))
     layout.scheduleWrite()
     vi.advanceTimersByTime(300)
     const written = JSON.parse(readFileSync(path, 'utf8'))
+    expect(written.boundsReliable).toBe(true)
     expect(written.displays).toEqual([
       { id: '1', primary: true, bounds: WORK_AREA, workArea: WORK_AREA, scaleFactor: 1 },
     ])

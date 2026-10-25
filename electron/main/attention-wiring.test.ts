@@ -85,6 +85,7 @@ function setup(windows: FakeWindow[] = [], tools: TetherTool[] = [claudeCode, co
   )
   const wiring = createAttentionWiring({
     registry,
+    compositor: { isFocused: (w) => windows.find((f) => f.id === w.id)?.focused ?? false },
     catalog,
     tools: () => tools,
     setNeedsYou,

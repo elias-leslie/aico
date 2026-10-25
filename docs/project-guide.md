@@ -98,12 +98,42 @@ Important variables:
 | `AICO_PASTED_IMAGES_DIR` | `/srv/workspaces/handoffs/pasted-images` | Where Aico writes a pasted clipboard image (`paste-<time>-<random>.png`, mode `0640` in a `0750` folder) so a program running as another user, such as the agent's Tether instance, can read it. The pasted text is the file's path. Must be readable by that user. |
 | `AICO_PASTED_IMAGES_KEEP_HOURS` | `24` | Pasted images older than this are deleted whenever a new one is written. |
 | `AICO_EXTENSION_IDS` | `oejadbpdecaenbbihglcnchnkmlilmjf` | Comma-separated Chrome extension IDs the listener trusts as browser origins. A malformed ID leaves the listener off. The default is the stable ID derived from the `key` in `extension/manifest.json`; set this only for a fork or re-keyed extension. |
-| `AICO_SELECTION_HOTKEY` | `CommandOrControl+Shift+Space` | Electron global shortcut for Indicate selection, which sends the newest capture again to the last-focused widget. |
-| `AICO_OZONE_PLATFORM` | `wayland` | Electron display backend used by the managed foreground runner. Native Wayland keeps typing smooth on NVIDIA; `x11` forces Xwayland. Window placement on native Wayland needs the desktop bridge extension (in progress). Does not change the desktop session or terminal environment. |
+| `AICO_SELECTION_HOTKEY` | `CommandOrControl+Shift+Space` | Accelerator for Indicate selection, which sends the newest capture again to the last-focused widget. On X11 Aico registers it as an Electron global shortcut; on Wayland run `scripts/aico-hotkey.sh install` to bind it as a GNOME custom shortcut (see Desktop bridge). |
+| `AICO_OZONE_PLATFORM` | `wayland` | Electron display backend used by the managed foreground runner. Native Wayland keeps typing smooth on NVIDIA; `x11` forces Xwayland. Window placement on native Wayland needs the desktop bridge extension (see Desktop bridge). Does not change the desktop session or terminal environment. |
 | `TETHER_SOCKET` | unset | Tether control socket. Wins over `TETHER_INSTANCE`. |
 | `TETHER_INSTANCE` | `default` | Tether instance; the socket is `$XDG_RUNTIME_DIR/tether/<instance>/control.sock`. |
 
 Aico intentionally does not store third-party AI provider secrets. Authenticate each AI CLI with its own documented login/config flow.
+
+### Desktop bridge (native Wayland)
+
+GNOME never tells a Wayland client where its windows are, and Electron's own
+position, cursor and always-on-top calls do nothing there. Aico gets geometry,
+placement, raise and the pointer from the desktop bridge GNOME Shell extension
+(`dev.summitflow.DesktopBridge` on the session bus; the desktop-automation
+repo's `docs/desktop-bridge.md` is the contract). All of it lives behind
+`electron/main/compositor.ts`; no other module knows which compositor runs.
+With `AICO_OZONE_PLATFORM=x11` the same interface uses Electron's own calls.
+
+- Coordinates are global logical pixels (what layout.json, `st aico widget
+  position` and saved bounds use). Electron sizes are DIP, which are logical
+  pixels divided by the device scale factor the launcher sets from GNOME's text
+  scaling; `toDip` and `fromDip` are the only conversion.
+- Every window's title carries a token, `[aico w<id>]`, set before its first
+  show. The bridge finds the window by process id and that token, so a new
+  window is placed (`Expect`) before it is mapped and never jumps.
+- The cache refreshes on the bridge's signals and resyncs when the extension
+  appears. Without the bridge Aico still runs: windows open where GNOME puts
+  them, tiling is off, `st aico widget position` fails with
+  `compositor_unavailable`, and `layout.json` has `"boundsReliable": false`.
+- Indicate selection: `scripts/aico-hotkey.sh install` adds a GNOME custom
+  shortcut that runs `scripts/aico-launch.sh --indicate`; the launcher hands
+  `--aico-indicate` to the running Aico (second instance), and never starts one.
+  Chosen over Electron's portal `globalShortcut` because GNOME asks per app to
+  bind that and Aico cannot see whether it did. `scripts/aico-hotkey.sh remove`
+  undoes it; `GSETTINGS_BACKEND=keyfile` runs it against a scratch file.
+- Window edges resize through Chromium's own frameless handling on Wayland (the
+  custom edge handles were removed).
 
 ### Agent launch admission
 

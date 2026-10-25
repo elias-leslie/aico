@@ -14,11 +14,13 @@ import {
   pushOutcome,
   pushTitle,
 } from './attention'
+import type { Compositor } from './compositor'
 import { sessionTitle, toolDisplayName } from './session-catalog'
 import type { WindowRegistry } from './window-registry'
 
 interface AttentionWiringDeps {
   registry: Pick<WindowRegistry, 'forSession' | 'sessionOf'>
+  compositor: Pick<Compositor, 'isFocused'>
   catalog: Pick<SessionCatalog, 'get'>
   tools(): TetherTool[]
   /** The tray's "needs you" icon. */
@@ -48,7 +50,10 @@ export function createAttentionWiring(deps: AttentionWiringDeps) {
   const attention = new Attention({
     setTimer: (fn, ms) => setTimeout(fn, ms),
     clearTimer: (handle) => clearTimeout(handle as NodeJS.Timeout),
-    isFocused: (id) => registry.forSession(id)?.isFocused() ?? false,
+    isFocused: (id) => {
+      const win = registry.forSession(id)
+      return win ? deps.compositor.isFocused(win) : false
+    },
     flash: (id, on) => registry.forSession(id)?.flashFrame(on),
     needsYou: (on) => deps.setNeedsYou(on),
     attend: (id, mode, stage) => {

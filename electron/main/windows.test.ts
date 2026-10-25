@@ -1,6 +1,7 @@
 import type { BrowserWindow } from 'electron'
 import type { SessionDescriptor } from 'tether/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { fakeCompositor } from './compositor.fake'
 import { PERSONAL_WORKSPACE_ID } from './project'
 import type { ViewRow } from './views'
 import { WindowRegistry } from './window-registry'
@@ -90,11 +91,26 @@ function setup(o: { views?: ViewRow[]; live?: string[]; catalog?: string[] } = {
     forget(winId)
   }
   const layout = {
-    placeNew: vi.fn((): null => null),
+    present: vi.fn(async (_win: BrowserWindow, _o: unknown) => {}),
     persist: vi.fn((win: BrowserWindow) => calls.push(`persist ${win.id}`)),
     scheduleWrite: vi.fn(),
-    retileDisplay: vi.fn((id: number) => calls.push(`retile ${id}`)),
+    retileDisplay: vi.fn((id: string) => calls.push(`retile ${id}`)),
   }
+  const comp = fakeCompositor({
+    monitors: [
+      {
+        id: '7',
+        primary: true,
+        bounds: { x: 0, y: 0, width: 1000, height: 800 },
+        workArea: { x: 0, y: 0, width: 1000, height: 800 },
+        scale: 1,
+      },
+    ],
+  })
+  // The stand-in windows own their rect and minimized flag.
+  comp.compositor.bounds = (w) =>
+    FakeWindow.fromId(w.id)?.bounds ?? { x: 0, y: 0, width: 0, height: 0 }
+  comp.compositor.isMinimized = (w) => FakeWindow.fromId(w.id)?.minimized ?? false
   const views = {
     ensureView: vi.fn((id: string, open = false) => {
       calls.push(`ensureView ${id} ${open}`)
@@ -117,12 +133,11 @@ function setup(o: { views?: ViewRow[]; live?: string[]; catalog?: string[] } = {
     changed: vi.fn(),
   }
   const upsert = vi.fn((d: SessionDescriptor) => calls.push(`upsert ${d.id}`))
-  const display = { id: 7, workArea: { x: 0, y: 0, width: 1000, height: 800 } }
   const windows = createWindows({
     registry,
     layout,
     views,
-    screen: { getAllDisplays: () => [display], getDisplayMatching: () => display },
+    compositor: comp.compositor,
     isLive: (id: string) => live.has(id),
     upsert,
     catalogList: () => (o.catalog ?? []).map((id) => ({ id }) as SessionDescriptor),
@@ -135,7 +150,7 @@ function setup(o: { views?: ViewRow[]; live?: string[]; catalog?: string[] } = {
     expect(FakeWindow.all).toHaveLength(1)
     return FakeWindow.all[0] as FakeWindow
   }
-  return { windows, registry, layout, views, hooks, upsert, calls, state, only }
+  return { windows, registry, layout, views, hooks, upsert, calls, state, only, comp }
 }
 
 beforeEach(() => {
@@ -145,6 +160,9 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers()
 })
+
+/** Lets a window's placement settle so it shows. */
+const settle = () => new Promise((resolve) => setImmediate(resolve))
 
 describe('windows: opening', () => {
   it('opens a session window, binds it and marks its view open', () => {
@@ -157,19 +175,42 @@ describe('windows: opening', () => {
     expect(win.options).toMatchObject({
       width: 900,
       height: 560,
+      show: false,
       frame: false,
       webPreferences: { contextIsolation: true, sandbox: true },
     })
     expect(hooks.changed).toHaveBeenCalledTimes(1)
   })
 
+  it('tags the window for the compositor and shows it only once placed', async () => {
+    const { windows, layout, comp, only } = setup()
+    let release: () => void = () => {}
+    layout.present.mockReturnValueOnce(new Promise<void>((resolve) => (release = resolve)))
+    windows.openNew('shell', 'p')
+    const win = only()
+    expect(comp.attach).toHaveBeenCalledWith(win)
+    await settle()
+    expect(win.show).not.toHaveBeenCalled()
+    release()
+    await settle()
+    expect(win.show).toHaveBeenCalledTimes(1)
+  })
+
+  it('still shows the window when placement fails', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { windows, layout, only } = setup()
+    layout.present.mockRejectedValueOnce(new Error('no bridge'))
+    windows.openNew('shell', 'p')
+    await settle()
+    expect(only().show).toHaveBeenCalledTimes(1)
+  })
+
   it('focuses an open window instead of opening another', () => {
-    const { windows, only } = setup()
+    const { windows, comp, only } = setup()
     windows.focusOrReopen('aaaaaaaa')
     windows.focusOrReopen('aaaaaaaa')
     const win = only()
-    expect(win.show).toHaveBeenCalled()
-    expect(win.focus).toHaveBeenCalled()
+    expect(comp.raise).toHaveBeenCalledWith(win)
   })
 
   it('tiles a new window in, or restores at the remembered place on restore', () => {
@@ -178,12 +219,35 @@ describe('windows: opening', () => {
       bounds: { x: 5, y: 6, width: 700, height: 500 },
     }
     const { windows, layout } = setup({ views: [remembered], live: ['aaaaaaaa'] })
-    layout.placeNew.mockReturnValue({ x: 1, y: 2, width: 3, height: 4 } as never)
     windows.restoreOnLaunch()
-    expect(layout.placeNew).not.toHaveBeenCalled()
-    expect(FakeWindow.all[0]?.options).toMatchObject({ x: 5, y: 6, width: 700, height: 500 })
+    expect(layout.present).toHaveBeenLastCalledWith(FakeWindow.all[0], {
+      tile: false,
+      saved: remembered.bounds,
+    })
+    expect(FakeWindow.all[0]?.options).toMatchObject({ width: 700, height: 500, show: false })
     windows.openNew('shell', 'p')
-    expect(FakeWindow.all[1]?.options).toMatchObject({ x: 1, y: 2, width: 3, height: 4 })
+    expect(layout.present).toHaveBeenLastCalledWith(FakeWindow.all[1], { tile: true, saved: null })
+  })
+
+  it('keeps a remembered place only where a monitor still is', () => {
+    const away = { ...view('aaaaaaaa', true), bounds: { x: 5000, y: 6, width: 700, height: 500 } }
+    const { windows, layout } = setup({ views: [away], live: ['aaaaaaaa'] })
+    windows.restoreOnLaunch()
+    expect(layout.present).toHaveBeenLastCalledWith(FakeWindow.all[0], {
+      tile: false,
+      saved: null,
+    })
+  })
+
+  it('converts a remembered size to DIP with the compositor scale', () => {
+    const remembered = {
+      ...view('aaaaaaaa', true),
+      bounds: { x: 0, y: 0, width: 1250, height: 800 },
+    }
+    const { windows, comp } = setup({ views: [remembered], live: ['aaaaaaaa'] })
+    comp.state.scale = 1.25
+    windows.restoreOnLaunch()
+    expect(FakeWindow.all[0]?.options).toMatchObject({ width: 1000, height: 640 })
   })
 
   it('opens a new session window as a pending create', () => {
@@ -226,11 +290,14 @@ describe('windows: focus and blur', () => {
   })
 
   it('tells the root when the window is shown, hidden, minimized or restored', () => {
-    const { windows, hooks, only } = setup()
+    const { windows, hooks, comp, only } = setup()
     windows.focusOrReopen('aaaaaaaa')
     const win = only()
-    for (const change of ['show', 'hide', 'minimize', 'restore', 'move', 'focus']) win.emit(change)
-    expect(hooks.visibility).toHaveBeenCalledTimes(4)
+    for (const change of ['show', 'hide', 'focus']) win.emit(change)
+    expect(hooks.visibility).toHaveBeenCalledTimes(2)
+    // Minimize and restore come from the compositor, not Electron's events.
+    comp.emit({ kind: 'state', winId: win.id })
+    expect(hooks.visibility).toHaveBeenCalledTimes(3)
     expect(hooks.visibility).toHaveBeenCalledWith(win)
   })
 
@@ -293,7 +360,7 @@ describe('windows: renderer gone', () => {
 
 describe('windows: closing', () => {
   it('disposes before the registry forgets, re-tiles the screen and marks the view closed', () => {
-    const { windows, calls, hooks, layout, only } = setup()
+    const { windows, calls, hooks, layout, comp, only } = setup()
     windows.focusOrReopen('aaaaaaaa')
     const win = only()
     calls.length = 0
@@ -307,6 +374,7 @@ describe('windows: closing', () => {
       'setOpen aaaaaaaa false',
     ])
     expect(layout.scheduleWrite).toHaveBeenCalled()
+    expect(comp.detach).toHaveBeenCalledWith(win.id)
     expect(hooks.changed).toHaveBeenCalledTimes(2)
   })
 
@@ -337,24 +405,25 @@ describe('windows: closing', () => {
 
   it('drops a pending bounds save when the window closes', () => {
     vi.useFakeTimers()
-    const { windows, layout, only } = setup()
+    const { windows, layout, comp, only } = setup()
     windows.focusOrReopen('aaaaaaaa')
     const win = only()
-    win.emit('move')
+    comp.emit({ kind: 'rect', winId: win.id })
     win.emit('closed')
     layout.persist.mockClear()
     vi.advanceTimersByTime(1000)
     expect(layout.persist).not.toHaveBeenCalled()
   })
 
-  it('saves bounds 400 ms after the last move', () => {
+  it('saves bounds 400 ms after the last move and refreshes layout.json', () => {
     vi.useFakeTimers()
-    const { windows, layout, only } = setup()
+    const { windows, layout, comp, only } = setup()
     windows.focusOrReopen('aaaaaaaa')
     const win = only()
-    win.emit('move')
+    comp.emit({ kind: 'rect', winId: win.id })
+    expect(layout.scheduleWrite).toHaveBeenCalledTimes(1)
     vi.advanceTimersByTime(300)
-    win.emit('resize')
+    comp.emit({ kind: 'rect', winId: win.id })
     vi.advanceTimersByTime(399)
     expect(layout.persist).not.toHaveBeenCalled()
     vi.advanceTimersByTime(1)
@@ -369,7 +438,7 @@ describe('windows: closing', () => {
     expect(win.destroyed).toBe(true)
     expect(layout.retileDisplay).not.toHaveBeenCalled()
     await new Promise((resolve) => setImmediate(resolve))
-    expect(layout.retileDisplay).toHaveBeenCalledWith(7)
+    expect(layout.retileDisplay).toHaveBeenCalledWith('7')
   })
 
   it('closes an ended session window without re-tiling while quitting', async () => {
@@ -411,13 +480,15 @@ describe('windows: restore and activation', () => {
     expect(registry.sessionOf(only().id)).toBe('bbbbbbbb')
   })
 
-  it('activation shows every window and focuses the first', () => {
-    const { windows } = setup()
+  it('activation shows every window and raises the first', async () => {
+    const { windows, comp } = setup()
     windows.focusOrReopen('aaaaaaaa')
     windows.focusOrReopen('bbbbbbbb')
+    await settle()
+    for (const w of FakeWindow.all) w.show.mockClear()
     windows.activate()
     expect(FakeWindow.all.map((w) => w.show.mock.calls.length)).toEqual([1, 1])
-    expect(FakeWindow.all[0]?.focus).toHaveBeenCalled()
+    expect(comp.raise).toHaveBeenCalledWith(FakeWindow.all[0])
     windows.showAll()
     expect(FakeWindow.all.map((w) => w.show.mock.calls.length)).toEqual([2, 2])
   })
