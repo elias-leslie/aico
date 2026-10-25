@@ -134,4 +134,14 @@ export AICO_PIDFILE="$PIDFILE"
 # An explicit override is useful for native-Wayland compatibility testing.
 # AICO_CHROMIUM_FLAGS adds Chromium switches (space-separated); the unit sets it.
 read -r -a chromium_flags <<<"${AICO_CHROMIUM_FLAGS:-}"
+# Xwayland hands GNOME's text scaling to Chromium as Xft.dpi; native Wayland
+# Chromium ignores it. Apply it as the device scale so text keeps its size.
+if [ "${AICO_OZONE_PLATFORM:-x11}" = wayland ]; then
+  text_scale="$(gsettings get org.gnome.desktop.interface text-scaling-factor 2>/dev/null || echo 1.0)"
+  case "$text_scale" in
+    1 | 1.0) ;;
+    *[!0-9.]* | '') echo "aico-run-foreground: ignoring text scale '$text_scale'" >&2 ;;
+    *) chromium_flags+=("--force-device-scale-factor=$text_scale") ;;
+  esac
+fi
 exec ./node_modules/electron/dist/electron . "--ozone-platform=${AICO_OZONE_PLATFORM:-x11}" "${chromium_flags[@]}"
