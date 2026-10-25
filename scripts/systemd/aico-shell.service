@@ -40,7 +40,7 @@ Environment=AICO_RUNTIME_UNIT=aico-shell.service
 # prevents the shell from starting when GDM assigns the active session :1.
 # Optional local agent launcher wrappers may live in %h/.claude/bin and
 # %h/.codex/bin. Keep common user bin paths ahead of system paths.
-Environment=PATH=%h/.claude/bin:%h/.codex/bin:%h/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PATH=%h/.claude/bin:%h/.codex/bin:%h/bin:%h/.local/bin:%h/.cargo/bin:/usr/local/bin:/usr/bin:/bin
 ExecStart=__PROJECT_ROOT__/scripts/aico-run-foreground.sh
 # No ExecStop wrapper: systemd applies KillMode=mixed directly to this
 # exact unit. scripts/aico-stop.sh is the guarded operator-facing stop path;

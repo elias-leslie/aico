@@ -13,7 +13,7 @@ Type=simple
 WorkingDirectory=__PROJECT_ROOT__/web/server
 # ~/.local/bin holds nightshift, which agent shares push through. Node comes
 # from this PATH too (22+ for node:sqlite).
-Environment=PATH=%h/.claude/bin:%h/.codex/bin:%h/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PATH=%h/.claude/bin:%h/.codex/bin:%h/bin:%h/.local/bin:%h/.cargo/bin:/usr/local/bin:/usr/bin:/bin
 Environment=HOME=%h
 # Agent Hub, upload and maintenance settings; the names are the Python
 # backend's, read unchanged. Shares are accepted only from tether@default's

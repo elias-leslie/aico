@@ -19,7 +19,7 @@ ExecStart=%h/.local/lib/tether/bin/tether --instance default serve
 Restart=on-failure
 RestartSec=2
 UMask=0077
-Environment=PATH=%h/.claude/bin:%h/.codex/bin:%h/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PATH=%h/.claude/bin:%h/.codex/bin:%h/bin:%h/.local/bin:%h/.cargo/bin:/usr/local/bin:/usr/bin:/bin
 # Sibling checkouts (agent-hub, codex-config) live here, not ~/projects.
 Environment=TETHER_PROJECTS_DIR=/srv/workspaces/projects
 # Read the host verdict Nightshift publishes in /run/nightshift, and keep this
