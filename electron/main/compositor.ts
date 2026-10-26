@@ -138,6 +138,28 @@ export function sameRect(a: Rect, b: Rect, tolerance = RECT_TOLERANCE): boolean 
   )
 }
 
+/**
+ * Resolves once geometry reads are real, or after `timeoutMs` without them (no bridge):
+ * restoring windows before the bridge's first sync would skip their saved places.
+ */
+export function whenReady(
+  c: Pick<Compositor, 'ready' | 'onChange'>,
+  timeoutMs: number,
+): Promise<void> {
+  if (c.ready()) return Promise.resolve()
+  return new Promise((resolve) => {
+    const done = (): void => {
+      clearTimeout(timer)
+      off()
+      resolve()
+    }
+    const timer = setTimeout(done, timeoutMs)
+    const off = c.onChange((change) => {
+      if (change.kind === 'availability' && c.ready()) done()
+    })
+  })
+}
+
 /** Logical px to Electron DIP. */
 export const toDip = (logical: number, scale: number): number => Math.round(logical / scale)
 /** Electron DIP to logical px. */

@@ -25,7 +25,7 @@ import { TERMINAL_HISTORY_LINES } from '../shared/terminal-history'
 import { createAmbient } from './ambient'
 import { createAttentionWiring } from './attention-wiring'
 import { createBridgeTransport } from './bridge-transport'
-import { createBridgeCompositor, createNativeCompositor } from './compositor'
+import { createBridgeCompositor, createNativeCompositor, whenReady } from './compositor'
 import { readConfig } from './config'
 import { registerDesktopIpc } from './desktop-ipc'
 import { createGuiChannel } from './gui-channel'
@@ -102,6 +102,8 @@ const compositor =
         scale: () => screen.getPrimaryDisplay().scaleFactor,
       })
     : createNativeCompositor({ screen })
+// Launch restore waits this long for the bridge's first sync (normally well under it).
+const RESTORE_WAIT_MS = 2000
 const layout = createWindowLayout({
   registry,
   compositor,
@@ -183,7 +185,8 @@ const link = createTetherLink({
     destroyWindow: (id) => windows.destroyFor(id),
     closeEnded: (id) => windows.closeEnded(id),
     retired: (id) => removeView(id),
-    firstList: () => windows.restoreOnLaunch(),
+    firstList: () =>
+      void whenReady(compositor, RESTORE_WAIT_MS).then(() => windows.restoreOnLaunch()),
     titles: () => chrome.pushTitles(),
     tray: () => chrome.syncTray(),
     connected: () => terminal.resumeAwaiting(),

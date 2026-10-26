@@ -17,6 +17,7 @@ import {
   rectTolerance,
   sameRect,
   toDip,
+  whenReady,
   windowToken,
 } from './compositor'
 
@@ -190,6 +191,54 @@ beforeEach(() => {
 })
 afterEach(() => {
   vi.useRealTimers()
+})
+
+describe('whenReady', () => {
+  function fake(ready: boolean) {
+    const listeners = new Set<(c: CompositorChange) => void>()
+    const state = { ready }
+    return {
+      state,
+      ready: () => state.ready,
+      onChange: (l: (c: CompositorChange) => void) => {
+        listeners.add(l)
+        return () => listeners.delete(l)
+      },
+      emit: (c: CompositorChange) => {
+        for (const l of listeners) l(c)
+      },
+      listeners,
+    }
+  }
+
+  it('resolves when the bridge comes up, or after the wait without it', async () => {
+    vi.useFakeTimers()
+    try {
+      const c = fake(false)
+      let resolved = false
+      void whenReady(c, 2000).then(() => {
+        resolved = true
+      })
+      c.emit({ kind: 'monitors' })
+      c.state.ready = true
+      c.emit({ kind: 'availability' })
+      await vi.advanceTimersByTimeAsync(0)
+      expect(resolved).toBe(true)
+      expect(c.listeners.size).toBe(0)
+
+      const absent = fake(false)
+      let gaveUp = false
+      void whenReady(absent, 2000).then(() => {
+        gaveUp = true
+      })
+      await vi.advanceTimersByTimeAsync(1999)
+      expect(gaveUp).toBe(false)
+      await vi.advanceTimersByTimeAsync(1)
+      expect(gaveUp).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
 
 describe('units', () => {
