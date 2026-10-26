@@ -291,12 +291,14 @@ The session's workspace is a new empty directory,
 `~/.local/share/aico/blank-slate/<id>` (the request ID for a root). Tether keys
 the mode on that path, so restarts, tool replacement, crash recovery and reboot
 restore keep it. It launches through `scripts/aico-blank-slate`, which execs the
-native harness, never the Agent Hub launcher:
+native harness, never the Agent Hub launcher. For Claude it also marks the Blank
+Slate directory trusted in `~/.claude.json` (what accepting Claude's folder
+trust prompt records), so a new empty workspace does not stop at that prompt.
 
 | Tool | Off | Kept |
 | --- | --- | --- |
 | Claude Code | Agent Hub launcher, CLAUDE.md files (user, project, added dirs), auto-memory, user settings (plugins, output style, status line, every hook but PreToolUse), MCP servers, slash commands/skills | PreToolUse guards from `~/.claude/settings.json` |
-| Codex | Agent Hub launcher and `developer_instructions`, AGENTS.md, skills list, plugins, apps, memories, MCP servers, extra sandbox writable roots, every `hooks.json` handler but PreToolUse | PreToolUse guards and their trust |
+| Codex | Agent Hub launcher and `developer_instructions`, AGENTS.md, skills list, plugins (and their MCP servers), apps, memories, each `config.toml` MCP server, extra sandbox writable roots, every `hooks.json` handler but PreToolUse | PreToolUse guards and their trust |
 | Pi | Agent Hub and st-coord extensions, skills, AGENTS.md/context files, prompt templates, MCP | none (Pi's guards are extension code) |
 
 What the model still receives, measured on captured requests (2026-10-26):

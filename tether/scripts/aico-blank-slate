@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import tomllib
 from pathlib import Path
@@ -53,7 +54,30 @@ def read_json(path: Path) -> dict:
     return value if isinstance(value, dict) else {}
 
 
+def trust_workspace(env: dict[str, str]) -> None:
+    """Record the Blank Slate directory as trusted, as accepting Claude's folder
+    trust prompt would; Claude honours a trusted parent for each new workspace."""
+    config_dir = env.get("CLAUDE_CONFIG_DIR")
+    state = Path(config_dir) / ".claude.json" if config_dir else HOME / ".claude.json"
+    base = str(Path.cwd().parent)
+    data = read_json(state)
+    if not data:
+        return  # no Claude state yet: Claude asks once and remembers
+    projects = data.setdefault("projects", {})
+    if not isinstance(projects, dict) or projects.get(base, {}).get("hasTrustDialogAccepted") is True:
+        return
+    projects.setdefault(base, {})["hasTrustDialogAccepted"] = True
+    temporary = state.with_name(f"{state.name}.blank-slate-{os.getpid()}")
+    try:
+        temporary.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        temporary.chmod(state.stat().st_mode & 0o777)
+        temporary.replace(state)
+    except OSError:
+        temporary.unlink(missing_ok=True)
+
+
 def claude(argv: list[str], env: dict[str, str]) -> list[str]:
+    trust_workspace(env)
     config = Path(env.get("CLAUDE_CONFIG_DIR") or HOME / ".claude")
     hooks = read_json(config / "settings.json").get("hooks")
     guards = hooks.get("PreToolUse") if isinstance(hooks, dict) else None
@@ -76,11 +100,9 @@ def codex_hook_state(env: dict[str, str]) -> list[str]:
     """
     home = Path(env.get("CODEX_HOME") or HOME / ".codex")
     path = home / "hooks.json"
-    try:
-        state = tomllib.loads((home / "config.toml").read_text(encoding="utf-8")).get("hooks", {}).get("state", {})
-    except (OSError, ValueError, AttributeError):
-        state = {}
-    state = {key: dict(value) for key, value in state.items() if isinstance(value, dict)}
+    hooks_config = codex_config(env).get("hooks")
+    state = hooks_config.get("state", {}) if isinstance(hooks_config, dict) else {}
+    state = {key: dict(value) for key, value in state.items() if isinstance(value, dict)} if isinstance(state, dict) else {}
     hooks = read_json(path).get("hooks")
     for event, groups in (hooks.items() if isinstance(hooks, dict) else ()):
         if event == "PreToolUse" or not isinstance(groups, list):
@@ -97,9 +119,27 @@ def codex_hook_state(env: dict[str, str]) -> list[str]:
     return ["-c", f"hooks.state={{{table}}}"]
 
 
+def codex_config(env: dict[str, str]) -> dict:
+    try:
+        return tomllib.loads((Path(env.get("CODEX_HOME") or HOME / ".codex") / "config.toml").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def codex_mcp_off(env: dict[str, str]) -> list[str]:
+    """Turn off each MCP server config.toml defines (`-c` merges tables, so an
+    empty `mcp_servers` would not remove them); plugin servers go with plugins."""
+    servers = codex_config(env).get("mcp_servers")
+    flags: list[str] = []
+    for name in servers if isinstance(servers, dict) else ():
+        key = name if re.fullmatch(r"[A-Za-z0-9_-]+", name) else json.dumps(name)
+        flags += ["-c", f"mcp_servers.{key}.enabled=false"]
+    return flags
+
+
 def codex(argv: list[str], env: dict[str, str]) -> list[str]:
     # writable_roots: a user's extra sandbox roots are listed to the model.
-    blank = ["-c", "project_doc_max_bytes=0", "-c", "mcp_servers={}", "-c", "skills.include_instructions=false",
+    blank = ["-c", "project_doc_max_bytes=0", *codex_mcp_off(env), "-c", "skills.include_instructions=false",
              "-c", "sandbox_workspace_write.writable_roots=[]",
              "--disable", "plugins", "--disable", "apps", "--disable", "memories",
              *codex_hook_state(env)]

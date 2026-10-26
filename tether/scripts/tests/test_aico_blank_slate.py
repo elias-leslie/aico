@@ -38,8 +38,13 @@ def run(monkeypatch, tmp_path):
     return invoke
 
 
-def test_claude_keeps_only_pretooluse_guards(run, tmp_path):
+def test_claude_keeps_only_pretooluse_guards(run, tmp_path, monkeypatch):
     (tmp_path / "claude-home").mkdir()
+    workspace = tmp_path / "blank-slate" / "one"
+    workspace.mkdir(parents=True)
+    monkeypatch.chdir(workspace)
+    state = tmp_path / "claude-home/.claude.json"
+    state.write_text(json.dumps({"projects": {"/other": {"hasTrustDialogAccepted": True}}, "keep": 1}))
     guard = [{"matcher": "Bash", "hooks": [{"type": "command", "command": "guard"}]}]
     (tmp_path / "claude-home/settings.json").write_text(json.dumps({"hooks": {
         "PreToolUse": guard, "SessionStart": [{"hooks": [{"type": "command", "command": "inject"}]}]}}))
@@ -48,6 +53,9 @@ def test_claude_keeps_only_pretooluse_guards(run, tmp_path):
     assert argv[5:] == ["--strict-mcp-config", "--disable-slash-commands", "--permission-mode", "auto"]
     assert env["CLAUDE_CODE_DISABLE_CLAUDE_MDS"] == env["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] == "1"
     assert "AGENT_HUB_CONTEXT_PREINJECTED_TEXT" not in env
+    trusted = json.loads(state.read_text())
+    assert trusted["projects"][str(tmp_path / "blank-slate")] == {"hasTrustDialogAccepted": True}
+    assert trusted["keep"] == 1 and trusted["projects"]["/other"]["hasTrustDialogAccepted"] is True
 
 
 def test_codex_turns_off_every_hook_but_pretooluse_and_keeps_trust(run, tmp_path):
@@ -58,7 +66,8 @@ def test_codex_turns_off_every_hook_but_pretooluse_and_keeps_trust(run, tmp_path
         "PreToolUse": [{"hooks": [{"command": "guard"}]}],
         "SessionStart": [{"hooks": [{"command": "a"}, {"command": "b"}]}],
         "UserPromptSubmit": [{"hooks": [{"command": "c"}]}]}}))
-    (home / "config.toml").write_text(f'[hooks.state."{hooks}:session_start:0:0"]\ntrusted_hash = "sha256:x"\n')
+    (home / "config.toml").write_text(f'[hooks.state."{hooks}:session_start:0:0"]\ntrusted_hash = "sha256:x"\n'
+                                      '[mcp_servers.docs]\nurl = "https://example.test"\n[mcp_servers."a.b"]\ncommand = "x"\n')
     argv, _ = run("codex", "--model", "m", "resume", "abc")
     assert argv[1:4] == ["--model", "m", "resume"]
     assert argv[-1] == "abc"
@@ -67,7 +76,8 @@ def test_codex_turns_off_every_hook_but_pretooluse_and_keeps_trust(run, tmp_path
     assert f'"{hooks}:session_start:0:1" = {{enabled = false}}' in state
     assert f'"{hooks}:user_prompt_submit:0:0" = {{enabled = false}}' in state
     assert "pre_tool_use" not in state
-    for flag in ("project_doc_max_bytes=0", "mcp_servers={}", "skills.include_instructions=false"):
+    for flag in ("project_doc_max_bytes=0", "mcp_servers.docs.enabled=false", 'mcp_servers."a.b".enabled=false',
+                 "skills.include_instructions=false"):
         assert flag in argv
 
 
