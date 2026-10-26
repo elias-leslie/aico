@@ -443,7 +443,8 @@ function instructionsRow(chosen: ChosenInstructions | null): HTMLElement {
   const name = make('span', 'aico-sub-value-name')
   name.textContent = chosen ? chosen.name : 'None'
   value.append(name)
-  if (chosen) value.append(` · ${chosen.revision.slice(0, 8)}`)
+  // Non-breaking spaces: a flex item drops plain leading whitespace.
+  if (chosen) value.append(`\u00a0·\u00a0${chosen.revision.slice(0, 8)}`)
   item.title = chosen
     ? `${chosen.prompt}@${chosen.revision.slice(0, 8)}, added to the agent's instructions`
     : "Add an Agent Hub prompt to the agent's instructions"
