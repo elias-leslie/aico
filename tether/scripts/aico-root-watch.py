@@ -285,7 +285,7 @@ def codex_daybreak_unavailable(model: str | None) -> str | None:
 
     if not any(entry.get("slug") == model and daybreak(entry) is False for entry in models):
         return None
-    ready = ", ".join(str(entry.get("slug")) for entry in models if daybreak(entry))
+    ready = ", ".join(str(entry.get("slug")) for entry in models if daybreak(entry) and entry.get("visibility") != "hide")
     return f"Codex does not offer Daybreak on {model}; pass --model {ready or '<a Daybreak model>'} or --daybreak off"
 
 

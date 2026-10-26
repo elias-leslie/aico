@@ -237,7 +237,8 @@ def test_codex_daybreak_on_a_model_without_it_is_refused_before_tether(monkeypat
     (tmp_path / ".codex/config.toml").write_text('model = "gpt-6.1-sol"\n')
     (tmp_path / ".codex/models_cache.json").write_text(json.dumps({"models": [
         {"slug": "gpt-6.1-sol", "available_access_programs": {"cyber": ["standard"]}},
-        {"slug": "gpt-6-sol", "available_access_programs": {"cyber": ["standard", "daybreak_blue"]}}]}))
+        {"slug": "gpt-6-sol", "available_access_programs": {"cyber": ["standard", "daybreak_blue"]}},
+        {"slug": "internal", "visibility": "hide", "available_access_programs": {"cyber": ["daybreak_blue"]}}]}))
     monkeypatch.setattr(admin.Path, "home", lambda: tmp_path)
     calls = []
 
