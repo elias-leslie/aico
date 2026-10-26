@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import datetime
 import fcntl
 import hashlib
 import http.client
@@ -484,7 +485,7 @@ class Collector:
         return remaining
 
     def receipt(self, path: str, route: str, payload: dict | None = None,
-                *, timeout: float = .25) -> tuple[int, dict]:
+                *, timeout: float = .25, method: str | None = None) -> tuple[int, dict]:
         limit = CATALOG_LIMIT if route.split("?")[0] in ("/v1/roots", "/v1/sessions", "/v1/gui/layout") else RECEIPT_LIMIT
         connection = http.client.HTTPConnection("localhost", timeout=min(timeout, self.remaining()))
         client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -492,7 +493,7 @@ class Collector:
         try:
             client.settimeout(min(timeout, self.remaining()))
             client.connect(path)
-            connection.request("GET" if payload is None else "POST", route,
+            connection.request(method or ("GET" if payload is None else "POST"), route,
                                body=None if payload is None else json.dumps(
                                    payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
                                headers={"Connection": "close", "Content-Type": "application/json"})
@@ -1511,6 +1512,100 @@ def sessions_main(argv: list[str]) -> int:
         return 0
 
 
+WAKE_ID = r"[0-9a-f]{12}"
+WAKE_REFUSALS = {
+    "wake_unsupported": "this session's tool does not report when it is idle; check-ins need Claude Code or Codex",
+    "too_many_wakes": "this session already has its maximum number of check-ins; cancel one first",
+    "not_found": "no such session or check-in",
+}
+
+
+def wake_time(value: str, now: datetime.datetime | None = None) -> int:
+    """Epoch ms for HH:MM (next occurrence), +2h / +30m / +1h30m, or ISO 8601 (local when no zone)."""
+    now = now or datetime.datetime.now().astimezone()
+    relative = re.fullmatch(r"\+(?:(\d{1,4})h)?(?:(\d{1,5})m)?", value)
+    if relative and any(relative.groups()):
+        hours, minutes = (int(part or 0) for part in relative.groups())
+        return int((now + datetime.timedelta(hours=hours, minutes=minutes)).timestamp() * 1000)
+    clock = re.fullmatch(r"([01]?\d|2[0-3]):([0-5]\d)", value)
+    if clock:
+        at = now.replace(hour=int(clock[1]), minute=int(clock[2]), second=0, microsecond=0)
+        if at <= now:
+            at += datetime.timedelta(days=1)
+        return int(at.timestamp() * 1000)
+    try:
+        at = datetime.datetime.fromisoformat(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError("expected HH:MM, +2h / +30m / +1h30m, or ISO 8601") from None
+    return int((at if at.tzinfo else at.astimezone()).timestamp() * 1000)
+
+
+def wake_item(wake: dict) -> dict:
+    due = wake.get("dueAt")
+    local = (datetime.datetime.fromtimestamp(due / 1000).astimezone().isoformat(timespec="minutes")
+             if isinstance(due, int) else None)
+    return {"id": wake.get("id"), "due": local, "note": wake.get("note"), "createdBy": wake.get("createdBy")}
+
+
+def wake_main(argv: list[str]) -> int:
+    operation = argv[0] if argv and argv[0] in ("set", "list", "cancel") else "set"
+    if argv and argv[0] == operation:
+        argv = argv[1:]
+    parser = argparse.ArgumentParser(prog=f"st aico wake {operation}", description=(
+        "Schedule a check-in on this Aico session: Tether pastes the note into the agent at the time, once it is "
+        "idle. See st aico wake --help."))
+    parser.add_argument("--widget-id", default=caller_widget_id())
+    parser.add_argument("--owner-socket", type=socket_path, default=tether_socket())
+    if operation == "set":
+        parser.add_argument("time", type=wake_time)
+        parser.add_argument("note")
+    elif operation == "cancel":
+        parser.add_argument("wake_id")
+    args = parser.parse_args(argv)
+    if not isinstance(args.widget_id, str) or not re.fullmatch(WIDGET, args.widget_id):
+        parser.error("expected --widget-id or AICO_WIDGET_ID with exactly eight lowercase hex characters")
+    if operation == "cancel" and not re.fullmatch(WAKE_ID, args.wake_id):
+        parser.error("expected a check-in ID from st aico wake list (12 lowercase hex characters)")
+    collector = Collector("", args.owner_socket, "", time.monotonic() + 10, threading.Event())
+    route = f"/v1/sessions/{args.widget_id}/wakes"
+    output: dict = {"owner": "aico", "widgetId": args.widget_id, "operation": operation}
+    try:
+        if operation == "set":
+            status, data = collector.receipt(args.owner_socket, route, {"dueAt": args.time, "note": args.note},
+                                             timeout=2)
+            if status != 201:
+                if data.get("field") in ("dueAt", "note"):
+                    output["field"] = data["field"]
+                raise Refused(data.get("error") if isinstance(data.get("error"), str) else "wake_unavailable")
+            output.update(applied=True, wake=wake_item(data))
+        else:
+            status, data = collector.receipt(args.owner_socket, route, timeout=2)
+            if status != 200 or not isinstance(data.get("items"), list):
+                raise Refused(data.get("error") if isinstance(data.get("error"), str) else "wake_unavailable")
+            items = [wake_item(item) for item in data["items"] if isinstance(item, dict)]
+            if operation == "list":
+                output["items"] = items
+            else:
+                if not any(item["id"] == args.wake_id for item in items):
+                    raise Refused("not_found")
+                status, data = collector.receipt(args.owner_socket, f"/v1/wakes/{args.wake_id}", timeout=2,
+                                                 method="DELETE")
+                if status != 200:
+                    raise Refused(data.get("error") if isinstance(data.get("error"), str) else "wake_unavailable")
+                output.update(applied=True, wakeId=args.wake_id)
+        emit_json(collector, output)
+        return 0
+    except (Unavailable, Stopped) as error:
+        reason = str(error) if isinstance(error, Unavailable) else "deadline"
+        output.update(applied=False if isinstance(error, Refused) else None, reason=reason)
+        if reason in WAKE_REFUSALS:
+            output["detail"] = WAKE_REFUSALS[reason]
+        emit_unless_stopped(collector, output)
+        return 1
+    except BrokenPipeError:
+        return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     import sys
 
@@ -1529,6 +1624,8 @@ def main(argv: list[str] | None = None) -> int:
         return root_main(argv[1:])
     if argv and argv[0] == "layout":
         return layout_main(argv[1:])
+    if argv and argv[0] == "wake":
+        return wake_main(argv[1:])
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("root", "owner", "tmux"):
         parser.add_argument(f"--{name}-socket", required=True, type=socket_path)
