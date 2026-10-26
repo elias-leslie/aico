@@ -194,8 +194,12 @@ export function SessionList({
         ? teamMembers(row).flatMap((member) => member.entry.slot.checkIns ?? [])
         : slot.checkIns
     const meta = [
+      // A team row leads with its summary (the icon names the agent), after
+      // the coordinator's own wait or finish.
       isTeam
-        ? `${agentName(mode)} · ${row.summary}`
+        ? group === 'needs-you' || group === 'finished'
+          ? `${rowMeta(agentName(mode), state)} · ${row.summary}`
+          : row.summary
         : rowMeta(agentName(mode), state),
       row.orphaned ? 'coordinator ended' : null,
     ]
