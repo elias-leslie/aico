@@ -36,7 +36,7 @@ import time
 import typing
 from collections.abc import Callable
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 CAPTURE_LIMIT = 32 * 1024
 RECEIPT_LIMIT = 16 * 1024
@@ -230,6 +230,37 @@ def socket_path(value: str) -> str:
 # Agent shells may filter the environment (Codex inherit = "core" keeps only
 # HOME, PATH and the like), so fall back to the nearest ancestor that has it.
 PROC = Path("/proc")
+
+
+def opencode_go_quota_block(model: str | None) -> str | None:
+    """`<window> resets <time>` while Agent Hub reports an opencode-go window rate-limited, else None.
+
+    Best effort: without the ST context's Agent Hub URL, the approved client id
+    (~/.env.local SUMMITFLOW_CLIENT_ID) or a known reply, the launch goes ahead.
+    """
+    if not model or not model.startswith("opencode-go/"):
+        return None
+    try:
+        base = urlsplit(json.loads(os.environ.get("ST_EXTENSION_CONTEXT") or "{}").get("agent_hub_url") or "")
+        client = next((line.partition("=")[2].strip().strip("\"'")
+                       for line in (Path.home() / ".env.local").read_text().splitlines()
+                       if line.startswith("SUMMITFLOW_CLIENT_ID=")), "")
+        if base.scheme != "http" or not base.hostname or not client:
+            return None
+        connection = http.client.HTTPConnection(base.hostname, base.port or 80, timeout=3)
+        try:
+            connection.request("GET", "/api/analytics/subscriptions/opencode-go/usage",
+                               headers={"X-Client-Id": client, "X-Request-Source": "cli"})
+            response = connection.getresponse()
+            data = json.loads(response.read(65536)) if response.status == 200 else {}
+        finally:
+            connection.close()
+    except (OSError, ValueError, AttributeError, http.client.HTTPException):
+        return None
+    for window in (data.get("windows") if isinstance(data, dict) else None) or []:
+        if isinstance(window, dict) and window.get("status") == "rate-limited":
+            return f"{window.get('label') or window.get('key')} window resets {window.get('resets_at') or 'later'}"
+    return None
 
 
 def caller_widget_id() -> str | None:
@@ -951,6 +982,9 @@ def create_main(argv: list[str]) -> int:
             # Never echo the match: it may be the credential itself.
             parser.error("prompt looks like it contains a credential (e.g. password=..., Bearer ..., "
                          "a token or private key); remove it or rephrase")
+        if args.tool == "pi" and (block := opencode_go_quota_block(args.model)):
+            # Nothing reaches Tether, so the same request id can be retried after the reset.
+            parser.error(f"opencode-go quota is used up ({block}); pick another model or launch after the reset")
         payload = {"requestId": args.request_id, "tool": args.tool, "projectId": args.project,
                    "projectRoot": args.project_root, "initialPrompt": prompt, "role": args.role,
                    "leadRootReference": args.lead_root, "facetCapsuleRef": args.facet}

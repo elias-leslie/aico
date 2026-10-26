@@ -344,3 +344,70 @@ def test_legacy_create_retry_keeps_its_original_digest(monkeypatch):
     monkeypatch.setattr(admin, "emit_json", lambda *_: None)
     assert admin.main(fresh("codex")) == 0
     assert "workRole" not in calls[0]
+
+
+PI = ["create", "pi-1", "Read the brief.", "--tool", "pi", "--project", "sample-app",
+      "--project-root", "/fixture/project", "--work-role", "implementation", "--model", "opencode-go/sample-model"]
+
+
+def usage_server(windows, seen):
+    class Usage(BaseHTTPRequestHandler):
+        def do_GET(self):
+            seen.append((self.path, self.headers.get("X-Client-Id")))
+            body = json.dumps({"state": "ok", "windows": windows}).encode()
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, format, *args):
+            pass
+
+    server = socketserver.TCPServer(("127.0.0.1", 0), Usage)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
+
+
+@pytest.fixture
+def agent_hub(monkeypatch, tmp_path):
+    def start(windows):
+        seen: list = []
+        server = usage_server(windows, seen)
+        (tmp_path / ".env.local").write_text('SUMMITFLOW_CLIENT_ID="client-fixture"\n')
+        monkeypatch.setattr(admin.Path, "home", lambda: tmp_path)
+        monkeypatch.setenv("ST_EXTENSION_CONTEXT", json.dumps({"agent_hub_url": f"http://127.0.0.1:{server.server_address[1]}"}))
+        return server, seen
+    return start
+
+
+def test_pi_launch_waits_out_a_rate_limited_opencode_go_window(monkeypatch, agent_hub, capsys):
+    server, seen = agent_hub([{"key": "rolling", "label": "5 hours", "status": "rate-limited", "percent": 100,
+                               "resets_at": "2026-10-26T22:19:40+00:00"}])
+    monkeypatch.setattr(admin.Collector, "receipt", lambda *_args, **_kwargs: pytest.fail("owner contacted"))
+    with pytest.raises(SystemExit):
+        admin.main(PI)
+    server.shutdown()
+    error = capsys.readouterr().err
+    assert "opencode-go quota is used up (5 hours window resets 2026-10-26T22:19:40+00:00)" in error
+    assert "client-fixture" not in error
+    assert seen == [("/api/analytics/subscriptions/opencode-go/usage", "client-fixture")]
+
+
+def test_pi_launch_goes_ahead_with_quota_left_or_without_agent_hub(monkeypatch, agent_hub):
+    calls = []
+    monkeypatch.setattr(admin.Collector, "receipt", lambda *_args, **_kwargs: (calls.append(1) or (409, {"error": "request_conflict"})))
+    monkeypatch.setattr(admin, "emit_json", lambda *_: None)
+    server, _ = agent_hub([{"key": "weekly", "label": "Week", "status": "ok", "percent": 85}])
+    assert admin.main(PI) == 1
+    server.shutdown()
+    server.server_close()
+    assert admin.main(PI) == 1  # Agent Hub unreachable: launch as before
+    monkeypatch.delenv("ST_EXTENSION_CONTEXT")
+    assert admin.main(PI) == 1
+    assert calls == [1, 1, 1]
+
+
+def test_quota_is_only_checked_for_opencode_go_models(monkeypatch):
+    monkeypatch.setattr(admin.http.client, "HTTPConnection", lambda *_a, **_k: pytest.fail("quota checked"))
+    assert admin.opencode_go_quota_block("openai/gpt-6-sol") is None
+    assert admin.opencode_go_quota_block(None) is None
