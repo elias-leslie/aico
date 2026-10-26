@@ -14,6 +14,7 @@ import type { LifecycleOwnerToken, ManagedGateState } from './lifecycle-guard'
 import type { RetirementResult } from './owner-retirement'
 import { sessionGeneration } from './owner-retirement'
 import { isBoundedTerminalText } from './tmux'
+import { isBlankSlateRoot, supportsBlankSlate } from './tui/blank-slate'
 import { isResumeSessionId } from './tui/launch'
 import { getTui, isRootTool, ROOT_TOOLS } from './tui/registry'
 
@@ -278,6 +279,12 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     (daybreak !== null && !getTui(tool)?.modelSelection?.daybreak) ||
     (tool === 'pi' && daybreak !== null && model !== 'openai/gpt-6-sol') ||
     (agentHubContext !== null && (typeof agentHubContext !== 'boolean' || tool !== 'pi')) ||
+    // Blank Slate runs without extensions or Agent Hub, which carry these options.
+    (typeof projectRoot === 'string' &&
+      isBlankSlateRoot(projectRoot) &&
+      (!supportsBlankSlate(tool as string) ||
+        agentHubContext !== null ||
+        (tool === 'pi' && daybreak !== null))) ||
     (getTui(tool)?.modelSelection?.modelProvider !== undefined &&
       (typeof model !== 'string' ||
         !/^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._:/-]*$/.test(model))) ||

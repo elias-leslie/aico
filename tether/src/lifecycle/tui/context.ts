@@ -32,8 +32,15 @@ function unknownCheckout(override: string, name: string): ContextStatus {
   }
 }
 
+const BLANK_SLATE_STATUS: ContextStatus = {
+  state: 'not_applicable',
+  detail:
+    'Blank Slate: no Agent Hub, project, memory, skill, plugin, MCP or launch-hook context is added.',
+}
+
 /** The answer for a TUI with no context hook, known without probing. */
 export function staticContextStatus(spec: TuiSpec): ContextStatus | null {
+  if (spec.context?.kind === 'blank-slate') return BLANK_SLATE_STATUS
   if (spec.context) return null
   return spec.command.length
     ? {
@@ -57,6 +64,8 @@ export async function ensureContext(spec: TuiSpec): Promise<ContextStatus> {
       return piExtension()
     case 'canonical-retrieval':
       return canonicalRetrieval(spec.context.surface)
+    case 'blank-slate':
+      return BLANK_SLATE_STATUS
   }
 }
 

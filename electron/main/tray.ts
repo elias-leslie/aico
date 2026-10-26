@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import { app, Menu, nativeImage, Tray } from 'electron'
 import { ATTENTION_GROUPS, type AttentionGroup } from './attention'
+import { BLANK_SLATE_ID, BLANK_SLATE_NAME } from './project'
 
 // Lantern orb tray icon, three states: muted idle / amber active (at least one
 // widget is thinking) / amber with a red badge, "needs you" (a session is
@@ -25,6 +26,8 @@ export interface TrayWidget {
 export interface NewWidgetTool {
   slug: string
   label: string
+  /** Offer a Blank Slate session above its workspaces. */
+  blankSlate?: boolean
 }
 
 /** A workspace the New-widget submenu can launch into (slug + display name). */
@@ -91,9 +94,14 @@ function buildMenu(widgets: TrayWidget[]): Menu {
       label: 'New session',
       submenu: tools.map((t) => ({
         label: t.label,
-        submenu: projects.length
-          ? projects.map((p) => ({ label: p.name, click: () => h.onNewWidget(t.slug, p.id) }))
-          : [{ label: 'No projects', enabled: false }],
+        submenu: [
+          ...(t.blankSlate
+            ? [{ label: BLANK_SLATE_NAME, click: () => h.onNewWidget(t.slug, BLANK_SLATE_ID) }]
+            : []),
+          ...(projects.length
+            ? projects.map((p) => ({ label: p.name, click: () => h.onNewWidget(t.slug, p.id) }))
+            : [{ label: 'No projects', enabled: false }]),
+        ],
       })),
     },
     {

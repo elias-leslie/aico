@@ -39,6 +39,7 @@ import {
   withRootPrompt,
 } from './root-launch'
 import { codexTui, initStore, registerBuiltinTuis } from './testing'
+import { blankSlateBase } from './tui/blank-slate'
 import { getTui } from './tui/registry'
 
 const ROOT_WATCH = fileURLToPath(new URL('../../scripts/aico-root-watch.py', import.meta.url))
@@ -1052,6 +1053,19 @@ describe('private root workload control', () => {
         )
     },
   )
+
+  it('refuses root options a Blank Slate launch cannot honour', () => {
+    const input = { ...create('blank-1'), projectRoot: join(blankSlateBase(), 'blank-1') }
+    expect(parseRootCreate(input)).not.toBeNull()
+    expect(parseRootCreate({ ...input, tool: 'antigravity' })).toBeNull()
+    expect(
+      parseRootCreate({ ...input, tool: 'pi', model: 'openai/gpt-6-sol', agentHubContext: false }),
+    ).toBeNull()
+    expect(
+      parseRootCreate({ ...input, tool: 'pi', model: 'openai/gpt-6-sol', daybreak: true }),
+    ).toBeNull()
+    expect(parseRootCreate({ ...input, tool: 'pi', model: 'openai/gpt-6-sol' })).not.toBeNull()
+  })
 
   it('carries Pi Daybreak and optional context for fresh and resumed launches without leaking the prompt', async () => {
     const input = {

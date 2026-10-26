@@ -153,6 +153,7 @@ import {
   type TmuxServerRuntimeState,
   type TmuxServerUnitEvidence,
 } from './tmux-server-state'
+import { ensureBlankSlateWorkspace, forWorkspace, isBlankSlateRoot } from './tui/blank-slate'
 import { ensureContext, finalizeContext } from './tui/context'
 import { detectTuiFromProcessNames, parseProcessTable, processTreeNames } from './tui/detect'
 import { launchLine, paneCommand, paneGatePath } from './tui/launch'
@@ -1674,7 +1675,7 @@ async function recoverInterruptedManagedPane(
       const dispatchedRow = markManagedGateDispatched(intentRow)
       if (!dispatchedRow) return 'blocked'
       current = dispatchedRow
-      const tool = getTui(current.tool ?? 'shell')
+      const tool = forWorkspace(getTui(current.tool ?? 'shell'), current.projectRoot)
       const line = tool ? initialLaunchLine(current.id, tool) : null
       // Re-observe immediately before the one-time transition out of the gate.
       const immediatelyCurrent = await verifiedCurrentManagedPane(current)
@@ -1925,6 +1926,7 @@ export async function sessionDiagnostics(widgetId: string): Promise<Record<strin
 export function cwdForWidget(widgetId: string): string {
   const row = getWidget(widgetId)
   const root = row?.projectRoot
+  if (root && isBlankSlateRoot(root)) ensureBlankSlateWorkspace(root)
   if (root && isDir(root)) return root
   return cfg().env.HOME ?? homedir()
 }
@@ -2063,7 +2065,7 @@ async function ensureOwnedInternalSession(widgetId: string, size: PtySize): Prom
   // into its dedicated cgroup, then launch the TUI through that contained shell.
   // Embedding the TUI in new-session lets it fork before tmux's asynchronous
   // cgroup move and was the path that put every tool in app-aico-9189.scope.
-  const tool = getTui(rowBeforeCreate.tool ?? 'shell')
+  const tool = forWorkspace(getTui(rowBeforeCreate.tool ?? 'shell'), rowBeforeCreate.projectRoot)
   const line = tool ? initialLaunchLine(widgetId, tool) : null
   if (hasPersistedScopeCleanupEvidence(rowBeforeCreate)) {
     console.error(
@@ -2243,7 +2245,7 @@ async function probeRunningContexts(): Promise<void> {
   for (const row of listWidgets()) {
     if (quitting) return
     if (cachedSessionStatus(row) !== 'running') continue
-    const tool = getTui(row.tool)
+    const tool = forWorkspace(getTui(row.tool), row.projectRoot)
     if (tool) await probeContext(row.id, tool)
   }
 }
@@ -2414,10 +2416,11 @@ export async function respawnAndRelaunch(
       const expected = getWidget(widgetId)
       if (!expected?.pendingScopeUnit) return { status: 'stale' }
 
-      const line = tool
+      const launched = forWorkspace(tool, options.cwd ?? previous.projectRoot)
+      const line = launched
         ? options.initialLaunch
-          ? initialLaunchLine(widgetId, tool)
-          : launchLine(tool)
+          ? initialLaunchLine(widgetId, launched)
+          : launchLine(launched)
         : null
       let promoted: ManagedPaneProcess | null = null
       let sameScopeReplacementProven = false
@@ -2492,7 +2495,7 @@ export async function respawnAndRelaunch(
         )
         admission?.commit(promoted?.scopeUnit ?? null)
         options.commitMetadata?.()
-        if (tool && line) reportContext(widgetId, tool)
+        if (launched && line) reportContext(widgetId, launched)
       } catch (error) {
         // Never kill an unrecorded gate: its markers + tmux identity are the
         // recovery handle. The old exact scope remains pending until promotion.

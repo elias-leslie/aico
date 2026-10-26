@@ -157,6 +157,8 @@ export class TetherClient {
     tool: string
     projectId?: string
     projectRoot?: string
+    /** Start in a new empty workspace with no first-party context (docs/root-control.md). */
+    blankSlate?: true
     size: { cols: number; rows: number }
   }): Promise<SessionDescriptor> {
     return this.json('POST', '/v1/sessions', { ...input, origin: 'aico' }, { timeoutMs: 60_000 })

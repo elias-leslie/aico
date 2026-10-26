@@ -1,0 +1,143 @@
+#!/usr/bin/env python3
+"""Start an agent with only its own harness prompt and the user's words.
+
+Tether runs this, instead of the tool's usual command, for a session whose
+workspace is a Blank Slate directory: `aico-blank-slate SLUG [ARGS...]`. It
+execs the native harness directly, so the Agent Hub launchers never deliver
+context, and turns off everything else that would add first-party text to
+the model's context: project and user instruction files, skills, plugins,
+MCP servers, memory, and every hook except the user's silent PreToolUse
+guards (they speak only when they refuse a tool call). The workspace is
+empty, so there are no project files either. Docs: docs/root-control.md.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+import tomllib
+from pathlib import Path
+from typing import NoReturn
+
+HOME = Path.home()
+# Codex config keys whose value the subcommand parser, not the top level, reads
+# (the same placement the Codex launcher uses).
+CODEX_SUBCOMMANDS = {"exec", "e", "review", "resume", "fork"}
+CODEX_VALUE_OPTIONS = {"-a", "--ask-for-approval", "-C", "--cd", "-c", "--config", "-i", "--image",
+                       "-m", "--model", "-p", "--profile", "-s", "--sandbox", "--add-dir",
+                       "--local-provider", "--remote", "--remote-auth-token-env"}
+# Environment the normal launchers leave for their hooks; never carried into a blank session.
+DROPPED_ENV = ("AGENT_HUB_CONTEXT_PREINJECTED_HASH", "AGENT_HUB_CONTEXT_PREINJECTED_CONTRACT",
+               "AGENT_HUB_CONTEXT_PREINJECTED_TEXT", "AICO_ROOT_AGENT_HUB_CONTEXT")
+
+
+def fail(message: str) -> NoReturn:
+    sys.stderr.write(f"aico-blank-slate: {message}\n")
+    raise SystemExit(64)
+
+
+def native(variable: str, default: Path) -> str:
+    """The real harness binary, found the way its Agent Hub launcher finds it."""
+    candidate = os.environ.get(variable) or str(default)
+    if not os.access(candidate, os.X_OK):
+        fail(f"native binary not found: {candidate} (set {variable})")
+    return candidate
+
+
+def read_json(path: Path) -> dict:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def claude(argv: list[str], env: dict[str, str]) -> list[str]:
+    config = Path(env.get("CLAUDE_CONFIG_DIR") or HOME / ".claude")
+    hooks = read_json(config / "settings.json").get("hooks")
+    guards = hooks.get("PreToolUse") if isinstance(hooks, dict) else None
+    settings = {"hooks": {"PreToolUse": guards}} if guards else {}
+    # User settings are skipped whole (their other hooks, plugins, output style,
+    # status line); the flag settings put back only the PreToolUse guards.
+    env["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] = "1"
+    env["CLAUDE_CODE_DISABLE_CLAUDE_MDS"] = "1"
+    return [native("CLAUDE_REAL", HOME / ".local/bin/claude"),
+            "--setting-sources", "project,local", "--settings", json.dumps(settings),
+            "--strict-mcp-config", "--disable-slash-commands", *argv]
+
+
+def codex_hook_state(env: dict[str, str]) -> list[str]:
+    """A `hooks.state` override that turns off every hooks.json handler but PreToolUse ones.
+
+    Codex keys a handler's state by file, snake_case event and position, and
+    its `-c` parser splits dotted keys, so the whole table is replaced: the
+    user's entries (trust hashes included) are kept and only `enabled` changes.
+    """
+    home = Path(env.get("CODEX_HOME") or HOME / ".codex")
+    path = home / "hooks.json"
+    try:
+        state = tomllib.loads((home / "config.toml").read_text(encoding="utf-8")).get("hooks", {}).get("state", {})
+    except (OSError, ValueError, AttributeError):
+        state = {}
+    state = {key: dict(value) for key, value in state.items() if isinstance(value, dict)}
+    hooks = read_json(path).get("hooks")
+    for event, groups in (hooks.items() if isinstance(hooks, dict) else ()):
+        if event == "PreToolUse" or not isinstance(groups, list):
+            continue
+        snake = "".join(f"_{c.lower()}" if c.isupper() else c for c in event).lstrip("_")
+        for group_index, group in enumerate(groups):
+            handlers = group.get("hooks") if isinstance(group, dict) else None
+            for handler_index in range(len(handlers) if isinstance(handlers, list) else 0):
+                state.setdefault(f"{path}:{snake}:{group_index}:{handler_index}", {})["enabled"] = False
+    # JSON string and boolean literals are valid TOML for these values.
+    table = ", ".join(
+        f"{json.dumps(key)} = {{{', '.join(f'{name} = {json.dumps(value)}' for name, value in entry.items() if isinstance(value, (str, bool)))}}}"
+        for key, entry in state.items())
+    return ["-c", f"hooks.state={{{table}}}"]
+
+
+def codex(argv: list[str], env: dict[str, str]) -> list[str]:
+    # writable_roots: a user's extra sandbox roots are listed to the model.
+    blank = ["-c", "project_doc_max_bytes=0", "-c", "mcp_servers={}", "-c", "skills.include_instructions=false",
+             "-c", "sandbox_workspace_write.writable_roots=[]",
+             "--disable", "plugins", "--disable", "apps", "--disable", "memories",
+             *codex_hook_state(env)]
+    index, skip = 0, False
+    for index, value in enumerate(argv):
+        if skip:
+            skip = False
+        elif value in CODEX_VALUE_OPTIONS:
+            skip = True
+        elif value == "--" or not value.startswith("-"):
+            break
+    else:
+        index = len(argv)
+    if index < len(argv) and argv[index] in CODEX_SUBCOMMANDS:
+        index += 1
+    else:
+        index = 0
+    return [native("CODEX_REAL", HOME / ".local/bin/codex-real"), *argv[:index], *blank, *argv[index:]]
+
+
+def pi(argv: list[str], env: dict[str, str]) -> list[str]:
+    del env
+    return ["pi", "--no-extensions", "--no-skills", "--no-context-files", "--no-prompt-templates", "--no-mcp", *argv]
+
+
+ADAPTERS = {"claude-code": claude, "codex": codex, "pi": pi}
+
+
+def main(argv: list[str]) -> NoReturn:
+    if not argv or argv[0] not in ADAPTERS:
+        fail(f"Blank Slate supports {', '.join(sorted(ADAPTERS))}; got {argv[0] if argv else 'nothing'}")
+    env = {key: value for key, value in os.environ.items() if key not in DROPPED_ENV}
+    command = ADAPTERS[argv[0]](argv[1:], env)
+    try:
+        os.execvpe(command[0], command, env)
+    except OSError as error:
+        fail(f"cannot start {command[0]}: {error}")
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

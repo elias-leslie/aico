@@ -4,6 +4,7 @@ import type { EventBus, TetherEvent } from './events'
 import type { GuiChannel } from './gui-channel'
 import { HttpError, Router, readJsonObject, sendError, sendJson } from './http'
 import { lifecycleStatus } from './lifecycle/engine'
+import { supportsBlankSlate } from './lifecycle/tui/blank-slate'
 import { isRootTool } from './lifecycle/tui/registry'
 import { learnProjects, registerLifecycleRoutes } from './lifecycle-api'
 import type { MemoryPolicyService } from './memory-guard'
@@ -42,9 +43,10 @@ export interface ServerContext {
   show?: ShowConfig
 }
 
-/** `rootCapable`: the tool can be started as a root (`POST /v1/roots`). */
+/** `rootCapable`: the tool can be started as a root (`POST /v1/roots`).
+ * `blankSlate`: it can start a Blank Slate session. */
 function toolJson(tool: AgentTool): Record<string, unknown> {
-  return { ...tool, rootCapable: isRootTool(tool.slug) }
+  return { ...tool, rootCapable: isRootTool(tool.slug), blankSlate: supportsBlankSlate(tool.slug) }
 }
 
 function str(body: Record<string, unknown>, key: string): string | undefined {

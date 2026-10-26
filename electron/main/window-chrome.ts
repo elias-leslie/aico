@@ -37,8 +37,12 @@ export function createWindowChrome(deps: WindowChromeDeps) {
   const { registry, catalog, projects, attention, layout, tray } = deps
   const now = deps.now ?? Date.now
 
-  function trayTools(): { slug: string; label: string }[] {
-    return deps.tools().map((tool) => ({ slug: tool.slug, label: tool.name }))
+  function trayTools(): { slug: string; label: string; blankSlate: boolean }[] {
+    return deps.tools().map((tool) => ({
+      slug: tool.slug,
+      label: tool.name,
+      blankSlate: tool.blankSlate === true,
+    }))
   }
 
   function syncTray(): void {

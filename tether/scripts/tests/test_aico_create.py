@@ -5,6 +5,7 @@ import json
 import socketserver
 import threading
 from http.server import BaseHTTPRequestHandler
+from pathlib import Path
 
 import pytest
 from test_aico_admin import admin
@@ -444,3 +445,24 @@ def test_quota_is_only_checked_for_opencode_go_models(monkeypatch):
     monkeypatch.setattr(admin.http.client, "HTTPConnection", lambda *_a, **_k: pytest.fail("quota checked"))
     assert admin.opencode_go_quota_block("openai/gpt-6-sol") is None
     assert admin.opencode_go_quota_block(None) is None
+
+
+def test_blank_slate_creates_in_its_own_empty_workspace(monkeypatch):
+    calls = []
+    def receipt(_, path, route, payload, **kwargs):
+        calls.append(payload)
+        return 200, descriptor(payload)
+    monkeypatch.setattr(admin.Collector, "receipt", receipt)
+    monkeypatch.setattr(admin, "emit_json", lambda *_: None)
+    assert admin.main(["create", "review-1", "Review the attached brief.", "--tool", "claude-code", "--blank-slate"]) == 0
+    assert calls[0]["projectRoot"] == str(Path.home() / ".local/share/aico/blank-slate/review-1")
+    assert calls[0]["projectId"] == "blank-slate"
+    assert "agentHubContext" not in calls[0] or calls[0]["agentHubContext"] is None
+
+
+@pytest.mark.parametrize("extra", [["--project-root", "/fixture/project"], ["--agent-hub-context", "off"],
+                                   ["--resume-session", THREAD]])
+def test_blank_slate_refuses_project_resume_and_context_options(monkeypatch, extra):
+    monkeypatch.setattr(admin.Collector, "receipt", lambda *a, **k: pytest.fail("contacted owner"))
+    with pytest.raises(SystemExit):
+        admin.main(["create", "review-1", "Review.", "--tool", "pi", "--blank-slate", *extra])

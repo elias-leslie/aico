@@ -258,7 +258,13 @@ export function createSessionActions(deps: SessionActionsDeps) {
       if (!link.tools().length) await link.refreshTools().catch(() => {})
       return link.tools().map((tool) => {
         const mark = toolMark(tool.slug, tool.color)
-        return { slug: tool.slug, displayName: tool.name, accent: mark.accent, icon: mark.icon }
+        return {
+          slug: tool.slug,
+          displayName: tool.name,
+          accent: mark.accent,
+          icon: mark.icon,
+          blankSlate: tool.blankSlate === true,
+        }
       })
     })
 

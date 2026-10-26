@@ -261,7 +261,7 @@ describe('tray', () => {
         },
         { id: 'aaaaaaaa', label: 'Docs · Codex', open: true, group: 'idle', detail: 'idle' },
       ],
-      [{ slug: 'codex', label: 'Codex' }],
+      [{ slug: 'codex', label: 'Codex', blankSlate: false }],
       [{ id: 'p1', name: 'Docs', root: '/srv/docs', current: false }],
       'Tether is not reachable. Sessions keep running.',
     )
@@ -285,7 +285,7 @@ describe('tray', () => {
     chrome.createTray(handlers)
     expect(tray.createTray).toHaveBeenCalledWith(
       handlers,
-      [{ slug: 'codex', label: 'Codex' }],
+      [{ slug: 'codex', label: 'Codex', blankSlate: false }],
       [{ id: 'p1', name: 'Docs', root: '/srv/docs', current: false }],
     )
   })

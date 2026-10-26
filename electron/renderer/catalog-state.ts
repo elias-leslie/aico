@@ -1,7 +1,14 @@
 import type { OpenableSession } from '../types'
 import { setProjectActions, setTuiActions } from './actions'
 
-export type TuiInfo = { slug: string; displayName: string; accent: string; icon: string }
+export type TuiInfo = {
+  slug: string
+  displayName: string
+  accent: string
+  icon: string
+  /** It can start a Blank Slate session (offered above the workspaces). */
+  blankSlate?: boolean
+}
 export type ProjectInfo = { id: string; name: string; current: boolean }
 export type SessionCatalogStatus = 'ready' | 'empty' | 'unavailable'
 

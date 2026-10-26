@@ -937,6 +937,12 @@ def tool_slug(value: str) -> str:
     return value
 
 
+def blank_slate_workspace(request_id: str) -> str:
+    """The Blank Slate workspace for this request: fixed per request ID so a retry
+    sends the same body; Tether creates it (tether/src/lifecycle/tui/blank-slate.ts)."""
+    return str(Path.home() / ".local" / "share" / "aico" / "blank-slate" / request_id)
+
+
 def create_main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="st aico create", description=(
         "Create one exact owner root; native resume uses an adapter-validated session ID in a new root. "
@@ -946,8 +952,8 @@ def create_main(argv: list[str]) -> int:
         f"short sanitized initial/recovery prompt (<={PROMPT_BYTES} UTF-8 bytes); put a longer brief "
         "in a file and name its path here"))
     parser.add_argument("--stdin", action="store_true", help=f"read prompt from stdin instead (same {PROMPT_BYTES}-byte limit)")
-    parser.add_argument("--project", required=True)
-    parser.add_argument("--project-root", required=True)
+    parser.add_argument("--project", help="required unless --blank-slate (default blank-slate)")
+    parser.add_argument("--project-root", help="required unless --blank-slate")
     # No default: the caller picks the agent on purpose. No local list either:
     # Tether decides which tools can start a root (`rootCapable` in /v1/tools)
     # and its refusal names them.
@@ -964,6 +970,9 @@ def create_main(argv: list[str]) -> int:
     parser.add_argument("--reasoning-effort", choices=("none", "off", "minimal", "low", "medium", "high", "xhigh", "max"))
     parser.add_argument("--daybreak", choices=("on", "off"), help="Daybreak for this launch; Pi supports openai/gpt-6-sol; leaves shared defaults alone")
     parser.add_argument("--agent-hub-context", choices=("on", "off"), help="Pi optional Agent Hub context; off retains required policy, native/project instructions and ingestion")
+    parser.add_argument("--blank-slate", action="store_true", help=(
+        "fresh session in a new empty workspace with no Agent Hub, project, memory, skill, plugin, MCP or "
+        "context hook; only the harness's own prompt and yours (claude-code, codex, pi; docs/root-control.md)"))
     parser.add_argument("--root-socket", type=socket_path)
     # Older callers (SummitFlow before it dropped the web app surface) still pass `--surface aico`.
     parser.add_argument("--surface", choices=("aico",), default="aico", help=argparse.SUPPRESS)
@@ -973,9 +982,19 @@ def create_main(argv: list[str]) -> int:
     if args.work_role_name is not None and (not args.work_role or not args.work_role_name.strip()
             or len(args.work_role_name) > 128 or re.search(r"[\x00-\x1f\x7f]", args.work_role_name)):
         parser.error("work role name must be 1-128 characters of single-line text")
+    if args.blank_slate:
+        if args.project_root is not None or args.resume_session is not None or args.agent_hub_context is not None:
+            parser.error("--blank-slate starts fresh in its own empty workspace; drop --project-root, "
+                         "--resume-session and --agent-hub-context")
+        if args.project is None:
+            args.project = "blank-slate"
+    elif args.project is None or args.project_root is None:
+        parser.error("--project and --project-root are required unless --blank-slate")
     if any(not re.fullmatch(KEY, value) for value in
            (args.request_id, args.project, args.role, *(v for v in (args.lead_root, args.facet) if v is not None))):
         parser.error("invalid root metadata")
+    if args.blank_slate:
+        args.project_root = blank_slate_workspace(args.request_id)
     if (not os.path.isabs(args.project_root) or os.path.normpath(args.project_root) != args.project_root
             or "\0" in args.project_root):
         parser.error("project root must be an exact normalized absolute path")

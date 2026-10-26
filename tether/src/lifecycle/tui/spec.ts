@@ -18,6 +18,8 @@ export type ContextHook =
   | { kind: 'codex-hooks' }
   | { kind: 'pi-extension' }
   | { kind: 'canonical-retrieval'; surface: 'antigravity' }
+  /** A Blank Slate session (blank-slate.ts): no supplemental context by design. */
+  | { kind: 'blank-slate' }
 
 /** Outcome of verifying/ensuring a TUI's context hook. */
 export type ContextState = 'available' | 'missing' | 'unsupported' | 'not_applicable'

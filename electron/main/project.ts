@@ -4,10 +4,19 @@
 
 import { mkdirSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 
 export const PERSONAL_WORKSPACE_ID = '__aico_personal_workspace__'
 export const PERSONAL_WORKSPACE_NAME = 'Personal Workspace'
+/** New session only: Tether makes a new empty workspace and launches the tool
+ * with no first-party context. Not a catalog entry, so never a switch target. */
+export const BLANK_SLATE_ID = '__aico_blank_slate__'
+export const BLANK_SLATE_NAME = 'Blank Slate'
+
+/** Tether's parent of Blank Slate workspaces (tether/src/lifecycle/tui/blank-slate.ts). */
+export function isBlankSlateRoot(root: string, home = homedir()): boolean {
+  return dirname(root) === join(home, '.local', 'share', 'aico', 'blank-slate')
+}
 
 /** Aico-local workspace for assistant/chat sessions that should not start in a
  * repo. A cwd only: it is sent to Tether as `projectRoot`, never as a project. */
@@ -121,6 +130,7 @@ export class ProjectCatalog {
     if (byId) return byId.name
     if (!projectRoot) return null
     if (projectRoot === personalWorkspaceRoot()) return PERSONAL_WORKSPACE_NAME
+    if (isBlankSlateRoot(projectRoot)) return BLANK_SLATE_NAME
     return this.cached.find((p) => p.root === projectRoot)?.name ?? null
   }
 }

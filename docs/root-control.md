@@ -268,6 +268,52 @@ before starting new sessions. Existing Pi processes must reload extensions (or
 start fresh) to use updated source; a source checkpoint alone does not qualify
 provider access or prove delivery to a live model.
 
+### Blank Slate
+
+A Blank Slate session starts with the harness's own prompt and the user's
+words, and nothing first-party. Pick **Blank Slate** at the top of a tool's
+workspace list under New session (control surface or tray), or create a root
+with `--blank-slate` instead of `--project`/`--project-root`:
+
+```bash
+st aico create review-1 'Read /abs/brief.md and follow it.' --tool claude-code --work-role review --blank-slate
+```
+
+Claude Code, Codex and Pi support it; Antigravity does not (its context comes
+from a user-level plugin no launch flag skips), and Aico offers no Blank Slate
+row for it. `--blank-slate` refuses `--project-root`, `--resume-session` and
+`--agent-hub-context`; Pi also refuses `--daybreak` (that comes from the Agent
+Hub extension). `--project` defaults to `blank-slate`. The HTTP form is
+`POST /v1/sessions {"tool", "blankSlate": true, ...}` or a `/v1/roots` create
+whose `projectRoot` is a Blank Slate workspace.
+
+The session's workspace is a new empty directory,
+`~/.local/share/aico/blank-slate/<id>` (the request ID for a root). Tether keys
+the mode on that path, so restarts, tool replacement, crash recovery and reboot
+restore keep it. It launches through `scripts/aico-blank-slate`, which execs the
+native harness, never the Agent Hub launcher:
+
+| Tool | Off | Kept |
+| --- | --- | --- |
+| Claude Code | Agent Hub launcher, CLAUDE.md files (user, project, added dirs), auto-memory, user settings (plugins, output style, status line, every hook but PreToolUse), MCP servers, slash commands/skills | PreToolUse guards from `~/.claude/settings.json` |
+| Codex | Agent Hub launcher and `developer_instructions`, AGENTS.md, skills list, plugins, apps, memories, MCP servers, extra sandbox writable roots, every `hooks.json` handler but PreToolUse | PreToolUse guards and their trust |
+| Pi | Agent Hub and st-coord extensions, skills, AGENTS.md/context files, prompt templates, MCP | none (Pi's guards are extension code) |
+
+What the model still receives, measured on captured requests (2026-10-26):
+
+- the provider/harness system prompt and tool definitions (Claude ~4K
+  characters; Pi ~2.9K; Codex base instructions, permissions, collaboration
+  and multi-agent blocks, and `environment_context` naming the empty cwd);
+- Claude Code's own reminders (the signed-in account email and git attribution);
+- the opening prompt, plus a guard's refusal text if a PreToolUse guard blocks a
+  tool call (they are silent otherwise).
+
+Not added: Agent Hub policy or mandates, memory, project or repo files,
+skills, MCP tools, Aico/SummitFlow hook output. Agent Hub does not ingest or
+bind these sessions. The pane environment still carries `AICO_*`/`ST_*`
+variables (not in the prompt; a tool call could read them). Aico's context
+column reports `not_applicable` with "Blank Slate: ...".
+
 Exact UUID resume uses Pi's `--session` in the original working directory, without
 a picker. Use the original `projectRoot`: a UUID from another directory enters
 Pi's native fork confirmation and creates a new UUID if confirmed. Automatic Pi conversation

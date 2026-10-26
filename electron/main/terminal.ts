@@ -18,7 +18,7 @@ import {
   type TerminalLink,
 } from 'tether/term'
 import { describeFailure, writeNotice } from './notices'
-import { PERSONAL_WORKSPACE_ID } from './project'
+import { BLANK_SLATE_ID, PERSONAL_WORKSPACE_ID } from './project'
 import { ACTIVE_WITHIN_MS, createSizeHolder, type SizeHolder } from './size-holder'
 import type { WindowRegistry } from './window-registry'
 
@@ -93,6 +93,8 @@ export function createTerminal(deps: TerminalDeps) {
   const linkLost = new Map<number, { generation: string | undefined; size: PtySize }>()
 
   function createRequest(pending: { tool: string; projectId: string }, size: PtySize) {
+    if (pending.projectId === BLANK_SLATE_ID)
+      return { tool: pending.tool, blankSlate: true as const, size }
     if (pending.projectId === PERSONAL_WORKSPACE_ID) {
       const root = deps.ensurePersonalWorkspaceRoot()
       return { tool: pending.tool, ...(root ? { projectRoot: root } : {}), size }

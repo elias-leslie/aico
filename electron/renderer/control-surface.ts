@@ -367,6 +367,12 @@ function populateNewProjects(slug: string, withBack: boolean): void {
     })
     submenuEl.append(back)
   }
+  if (catalogs.tuis.find((t) => t.slug === slug)?.blankSlate) {
+    // The main process's BLANK_SLATE_ID: a new empty workspace, not a project.
+    submenuEl.append(
+      newProjectRow(slug, { id: '__aico_blank_slate__', name: 'Blank Slate', current: false }),
+    )
+  }
   if (catalogs.projects.length) {
     for (const p of catalogs.projects) submenuEl.append(newProjectRow(slug, p))
   } else {

@@ -80,6 +80,13 @@ import {
   sessionName,
   type TmuxTarget,
 } from './lifecycle/tmux'
+import {
+  createBlankSlateWorkspace,
+  ensureBlankSlateWorkspace,
+  forWorkspace,
+  isBlankSlateRoot,
+  supportsBlankSlate,
+} from './lifecycle/tui/blank-slate'
 import { staticContextStatus } from './lifecycle/tui/context'
 import { getTui } from './lifecycle/tui/registry'
 import { paneModeArgs, parsePaneMode } from './pane-mode'
@@ -172,7 +179,7 @@ export function contextHookOf(row: WidgetRow): Record<string, unknown> {
       checkedAt: status.checkedAt,
     }
   }
-  const spec = getTui(row.tool)
+  const spec = forWorkspace(getTui(row.tool), row.projectRoot)
   const fixed = spec ? staticContextStatus(spec) : null
   return {
     state: fixed?.state ?? 'unknown',
@@ -439,7 +446,10 @@ export function rootOperations(context: LifecycleApiContext): RootControlOperati
       for (const id of recordLauncher(widgetId, launchedBy))
         notifySessionChanged(id, { force: true })
     },
-    validate: (request) => Boolean(getTui(request.tool)?.enabled && isDir(request.projectRoot)),
+    validate: (request) => {
+      if (isBlankSlateRoot(request.projectRoot)) ensureBlankSlateWorkspace(request.projectRoot)
+      return Boolean(getTui(request.tool)?.enabled && isDir(request.projectRoot))
+    },
     resumeOwner: (resumeSessionId) => context.recovery?.resumeOwner(resumeSessionId) ?? null,
     ensure: async (widgetId, prompt, resumeSessionId, options) => {
       await whenReady()
@@ -554,7 +564,16 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
     })
     .add('POST', '/v1/sessions', async (req, res) => {
       const body = await readJsonObject(req)
-      only(body, ['tool', 'projectId', 'projectRoot', 'name', 'origin', 'aTermSessionId', 'size'])
+      only(body, [
+        'tool',
+        'projectId',
+        'projectRoot',
+        'blankSlate',
+        'name',
+        'origin',
+        'aTermSessionId',
+        'size',
+      ])
       const origin = body.origin
       if (typeof origin !== 'string' || !ORIGINS.includes(origin as SessionOrigin)) {
         throw new HttpError(400, 'invalid_body', { field: 'origin' })
@@ -593,9 +612,16 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
         projectRoot = await resolveProject(context, projectId)
         if (!projectRoot) throw new HttpError(400, 'unknown_project')
       }
+      // Blank Slate: a fresh empty workspace instead of a project (blank-slate.ts).
+      if (body.blankSlate !== undefined && body.blankSlate !== false) {
+        if (body.blankSlate !== true || projectId || projectRoot)
+          throw new HttpError(400, 'invalid_body', { field: 'blankSlate' })
+        if (!supportsBlankSlate(tool.slug)) throw new HttpError(400, 'blank_slate_unsupported')
+      }
       await whenReady()
       if (!lingerEnabled()) throw new HttpError(503, 'linger_required')
 
+      if (body.blankSlate === true) projectRoot = createBlankSlateWorkspace()
       const id = allocateWidgetId()
       insertWidget(id, tool.slug, Date.now(), { origin: origin as SessionOrigin, aTermSessionId })
       if (projectId || projectRoot) setWidgetProject(id, projectId, projectRoot)
@@ -680,6 +706,12 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
       if (!spec) throw new HttpError(400, 'unknown_tool')
       const row = requireSession(params.id)
       fence(row, generation)
+      if (
+        isBlankSlateRoot(row.projectRoot) &&
+        !supportsBlankSlate(spec.slug) &&
+        spec.command.length
+      )
+        throw new HttpError(400, 'blank_slate_unsupported')
       await whenReady()
       await answerReplacement(
         res,

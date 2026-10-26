@@ -93,6 +93,8 @@ export interface TetherTool {
   displayOrder: number
   isDefault: boolean
   enabled: boolean
+  /** It can start a Blank Slate session (`createSession({ blankSlate: true })`). */
+  blankSlate?: boolean
 }
 
 export interface TetherProject {
