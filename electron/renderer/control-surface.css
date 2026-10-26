@@ -290,10 +290,14 @@
   color: var(--mist);
 }
 .aico-sub-value {
-  max-width: 190px;
+  display: flex;
+  max-width: 210px;
+  white-space: nowrap;
+}
+.aico-sub-value-name {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 /* Type-to-filter field above the prompt list (palette's input, compact). */
 .aico-sub-filter {

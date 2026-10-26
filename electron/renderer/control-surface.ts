@@ -439,7 +439,11 @@ function instructionsRow(chosen: ChosenInstructions | null): HTMLElement {
   const dot = make('span', 'aico-sub-dot project')
   dot.classList.toggle('current', chosen !== null)
   const value = make('span', 'aico-sub-time aico-sub-note aico-sub-value')
-  value.textContent = chosen ? `${chosen.name} · ${chosen.revision.slice(0, 8)}` : 'None'
+  // A long name is cut short; the revision always shows.
+  const name = make('span', 'aico-sub-value-name')
+  name.textContent = chosen ? chosen.name : 'None'
+  value.append(name)
+  if (chosen) value.append(` · ${chosen.revision.slice(0, 8)}`)
   item.title = chosen
     ? `${chosen.prompt}@${chosen.revision.slice(0, 8)}, added to the agent's instructions`
     : "Add an Agent Hub prompt to the agent's instructions"
