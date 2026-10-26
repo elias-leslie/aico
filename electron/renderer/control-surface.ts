@@ -61,6 +61,8 @@ const catalogs = createCatalogState({
 })
 let submenuEl: HTMLElement
 let submenuKind: FlyoutKind | null = null
+// The workspace picker the flyout shows, if any (populateNewProjects).
+let picker: { slug: string; withBack: boolean } | null = null
 
 /** Requery Tether's sessions whenever the "Open session" flyout appears. */
 export function refreshSessions(): Promise<{ status: 'ready' | 'empty' | 'unavailable' }> {
@@ -354,6 +356,7 @@ function newProjectRow(slug: string, p: ProjectInfo): HTMLElement {
 // drill-down, absent in the standalone popup (pinned icon / palette), which has
 // nothing to go back to.
 function populateNewProjects(slug: string, withBack: boolean): void {
+  picker = { slug, withBack }
   submenuEl.innerHTML = ''
   if (withBack) {
     const back = make('div', 'aico-sub-row aico-sub-back runnable')
@@ -427,6 +430,7 @@ export function sessionSubmenuLabel(
 // (`project:<id>`). 'replace'/'project' rows carry a pin button.
 function populateSubmenu(kind: FlyoutKind): void {
   submenuKind = kind
+  picker = null
   submenuEl.innerHTML = ''
   if (kind === 'new') {
     if (catalogs.tuis.length) {
@@ -518,12 +522,26 @@ function replaceSubmenu(): void {
   submenuEl.scrollTop = 0
 }
 
+// Requery the tools behind a tool list or workspace picker, then redraw it if it
+// is still showing, so a window loaded before a Tether update still offers
+// what the tools now support.
+function refreshTuisThen(): void {
+  void catalogs.refreshTuis().then(() => {
+    if (submenuEl.hidden) return
+    if (picker) populateNewProjects(picker.slug, picker.withBack)
+    else if (submenuKind === 'new' || submenuKind === 'replace') populateSubmenu(submenuKind)
+    else return
+    replaceSubmenu()
+  })
+}
+
 // Open a `kind` flyout from its menu row (part of the lantern menu).
 function showSubmenu(row: HTMLElement, kind: FlyoutKind): void {
   submenuStandalone = false
   populateSubmenu(kind)
   submenuEl.hidden = false // unhide before measuring
   placeSubmenu(row, 'left')
+  if (kind === 'new' || kind === 'replace') refreshTuisThen()
   if (kind === 'sessions') {
     void refreshSessions().then(() => {
       if (submenuEl.hidden || submenuKind !== kind) return
@@ -546,6 +564,7 @@ function showStandaloneSubmenu(
   submenuEl.hidden = false
   submenuStandalone = true
   placeSubmenu(anchor, place)
+  if (kind === 'new' || kind === 'replace') refreshTuisThen()
   if (kind === 'sessions') {
     void refreshSessions().then(() => {
       if (submenuEl.hidden || submenuKind !== kind) return
@@ -564,11 +583,13 @@ function showProjectPicker(slug: string, anchor: HTMLElement, place: 'left' | 'b
   submenuEl.hidden = false
   submenuStandalone = true
   placeSubmenu(anchor, place)
+  refreshTuisThen()
 }
 
 function hideSubmenu(): void {
   if (submenuEl) submenuEl.hidden = true
   submenuKind = null
+  picker = null
   submenuStandalone = false
 }
 

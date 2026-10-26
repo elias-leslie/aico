@@ -46,6 +46,18 @@ export function createCatalogState(loaders: CatalogLoaders) {
     return { status: sessionStatus }
   }
 
+  /** Requery the tools: one can gain an option (Blank Slate) after this window
+   * loaded, e.g. when Tether restarts on a newer release. A failed query keeps
+   * the last list. */
+  async function refreshTuis(): Promise<void> {
+    try {
+      tuis = await loaders.listTuis()
+    } catch {
+      return
+    }
+    setTuiActions(tuis)
+  }
+
   async function loadInitial(): Promise<void> {
     await Promise.all([
       (async () => {
@@ -71,6 +83,7 @@ export function createCatalogState(loaders: CatalogLoaders) {
   return {
     loadInitial,
     refreshSessions,
+    refreshTuis,
     get tuis() {
       return tuis
     },
