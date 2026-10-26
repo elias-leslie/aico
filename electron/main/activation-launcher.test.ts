@@ -87,6 +87,8 @@ timeout() {
 export -f systemctl readlink awk timeout
 exec bash "$@"
 `
+  const harness = join(root, 'launcher-fixture.sh')
+  writeFileSync(harness, shell)
   const env = {
     ...process.env,
     AICO_REPO_ROOT: repo,
@@ -110,7 +112,7 @@ exec bash "$@"
     pid,
     starttime,
     launch: (...args: string[]) => {
-      const child = spawn('bash', ['-c', shell, 'launcher-fixture', launcher, ...args], {
+      const child = spawn('bash', [harness, launcher, ...args], {
         env,
         stdio: ['ignore', 'ignore', 'pipe'],
       })
