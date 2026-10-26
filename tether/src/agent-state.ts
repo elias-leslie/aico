@@ -110,6 +110,23 @@ const ESCALATED = /sandbox_permissions\W+require_escalated/
 /** First read of an existing rollout: enough tail for the current turn. */
 const ROLLOUT_TAIL_BYTES = 512 * 1024
 const ROLLOUT_MAX_STEP_BYTES = 4 * 1024 * 1024
+/** A long turn's start can sit far before the tail: the first read walks back
+ * this far at most, step by step, to find the latest turn boundary. */
+const ROLLOUT_SCAN_STEP_BYTES = 1024 * 1024
+const ROLLOUT_SCAN_MAX_BYTES = 256 * 1024 * 1024
+const TURN_BOUNDARIES = new Set(['task_started', 'task_complete', 'turn_aborted'])
+const MAYBE_BOUNDARY = /"(task_started|task_complete|turn_aborted)"/
+
+/** The line is a turn start or end (not a tool output quoting one). */
+function isTurnBoundary(line: string): boolean {
+  if (!MAYBE_BOUNDARY.test(line)) return false
+  try {
+    const item = JSON.parse(line)
+    return item?.type === 'event_msg' && TURN_BOUNDARIES.has(item.payload?.type)
+  } catch {
+    return false
+  }
+}
 
 /** The user thread's rollout (not a subagent's) a Codex process holds open:
  * the first with a UUID thread ID, the thread reboot continuity resumes
@@ -134,6 +151,8 @@ export class CodexTurn {
   private asksUser = false
   /** Timestamp of the last line that changed the state. */
   at: number | null = null
+  /** Turn starts and ends seen. */
+  boundaries = 0
 
   constructor(readonly threadId: string | null = null) {}
 
@@ -158,7 +177,8 @@ export class CodexTurn {
       return
     }
     if (item.type === 'event_msg') {
-      if (kind === 'task_started' || kind === 'task_complete' || kind === 'turn_aborted') {
+      if (typeof kind === 'string' && TURN_BOUNDARIES.has(kind)) {
+        this.boundaries += 1
         this.active = kind === 'task_started'
         this.approval = false
         this.questions.clear()
@@ -218,6 +238,8 @@ export interface FileTail {
   /** Bytes appended since `offset` (at most `max`, ending at a newline), and
    * the new offset. A shrunk file restarts from 0. */
   read(path: string, offset: number, max: number): { text: string; offset: number; size: number }
+  /** Bytes `[start, end)` of the file. */
+  range(path: string, start: number, end: number): Buffer
 }
 
 export const nodeFileTail: FileTail = {
@@ -241,6 +263,15 @@ export const nodeFileTail: FileTail = {
       closeSync(fd)
     }
   },
+  range(path, start, end) {
+    const fd = openSync(path, 'r')
+    try {
+      const buffer = Buffer.alloc(Math.max(0, end - start))
+      return buffer.subarray(0, readSync(fd, buffer, 0, buffer.length, start))
+    } finally {
+      closeSync(fd)
+    }
+  },
 }
 
 /** Incremental reader of one rollout file. */
@@ -248,6 +279,9 @@ export class CodexRollout {
   private offset = 0
   private readonly turn: CodexTurn
   private started = false
+  /** Set when the first read found no turn boundary it could trust: the state
+   * stays unknown until the next one is appended. */
+  private blindUntil: number | null = null
 
   constructor(
     readonly path: string,
@@ -262,13 +296,20 @@ export class CodexRollout {
     try {
       if (!this.started) {
         const probe = this.tail.read(this.path, 0, ROLLOUT_TAIL_BYTES)
-        const lines = probe.text.split('\n')
+        let lines = probe.text.split('\n')
+        let start = probe.offset - Buffer.byteLength(probe.text)
         // A tail that starts mid-file begins with a partial line.
-        if (probe.offset - Buffer.byteLength(probe.text) > 0) lines.shift()
+        if (start > 0) start += Buffer.byteLength(lines.shift() ?? '') + 1
+        if (start > 0 && !lines.some(isTurnBoundary)) {
+          // The turn began before the tail: without its start it reads as idle.
+          const earlier = this.fromLastBoundary(start)
+          if (earlier) lines = [...earlier, ...lines]
+          else this.blindUntil = this.turn.boundaries
+        }
         for (const line of lines) if (line) this.turn.apply(line)
         this.offset = probe.offset
         this.started = true
-        return this.turn.signal()
+        return this.signal()
       }
       chunk = this.tail.read(this.path, this.offset, ROLLOUT_MAX_STEP_BYTES)
     } catch {
@@ -276,7 +317,40 @@ export class CodexRollout {
     }
     this.offset = chunk.offset
     for (const line of chunk.text.split('\n')) if (line) this.turn.apply(line)
+    return this.signal()
+  }
+
+  private signal(): AgentSignal | null {
+    if (this.blindUntil !== null && this.turn.boundaries === this.blindUntil) return null
+    this.blindUntil = null
     return this.turn.signal()
+  }
+
+  /** Complete lines from the latest turn boundary before `end` (a line start)
+   * to the end of the step that holds it; [] when the file has none, null when
+   * the scan gave up (the state is then unknown, never a guessed idle). */
+  private fromLastBoundary(end: number): string[] | null {
+    let carry = Buffer.alloc(0)
+    for (let at = end; at > 0; ) {
+      if (end - at >= ROLLOUT_SCAN_MAX_BYTES) return null
+      const start = Math.max(0, at - ROLLOUT_SCAN_STEP_BYTES)
+      let chunk = Buffer.concat([this.tail.range(this.path, start, at), carry])
+      at = start
+      if (start > 0) {
+        // Up to the first newline is the end of a line that starts earlier.
+        const newline = chunk.indexOf(10)
+        if (newline < 0) {
+          carry = chunk
+          continue
+        }
+        carry = chunk.subarray(0, newline + 1)
+        chunk = chunk.subarray(newline + 1)
+      }
+      const lines = chunk.toString('utf8').split('\n')
+      for (let i = lines.length - 1; i >= 0; i--)
+        if (isTurnBoundary(lines[i] as string)) return lines.slice(i)
+    }
+    return []
   }
 }
 

@@ -227,26 +227,84 @@ describe('Codex rollout', () => {
     },
   )
 
-  it('reads the tail first, then only appended complete lines', () => {
-    let content = ''
+  /** A rollout file in memory, read like nodeFileTail reads one. */
+  function memoryTail(initial = '') {
+    const file = { content: initial, ranges: 0 }
     const tail: FileTail = {
       read(_path, offset, max) {
-        const bytes = Buffer.from(content)
+        const bytes = Buffer.from(file.content)
         let start = offset > bytes.length ? 0 : offset
         if (bytes.length - start > max) start = bytes.length - max
         const text = bytes.subarray(start).toString()
         const end = text.lastIndexOf('\n') + 1
-        return { text: text.slice(0, end), offset: start + end, size: bytes.length }
+        return {
+          text: text.slice(0, end),
+          offset: start + Buffer.byteLength(text.slice(0, end)),
+          size: bytes.length,
+        }
+      },
+      range(_path, start, end) {
+        file.ranges += 1
+        return Buffer.from(file.content).subarray(start, end)
       },
     }
-    content = `${line('session_meta', { id: CODEX })}\n${line('event_msg', { type: 'task_started' })}\n`
+    return { file, tail }
+  }
+
+  /** About `bytes` of a busy turn's tool calls, including an output that quotes a turn end. */
+  function busyLines(bytes: number): string {
+    const call = line('response_item', {
+      type: 'function_call',
+      name: 'exec',
+      call_id: 'c',
+      arguments: 'x'.repeat(4000),
+    })
+    const quote = line('response_item', {
+      type: 'function_call_output',
+      call_id: 'c',
+      output: '{"type":"task_complete"}',
+    })
+    let text = ''
+    while (text.length < bytes) text += `${call}\n${quote}\n`
+    return text
+  }
+
+  it('finds a long turn that started before the tail it first reads', () => {
+    const started = line('event_msg', { type: 'task_started' }, '2026-10-12T09:00:00.000Z')
+    const { file, tail } = memoryTail(
+      `${line('session_meta', { id: CODEX })}\n${line('event_msg', { type: 'task_complete' })}\n${started}\n${busyLines(3 * 1024 * 1024)}`,
+    )
+    const rollout = new CodexRollout(ROLLOUT, CODEX, tail)
+    expect(rollout.poll()).toMatchObject({
+      state: 'working',
+      at: Date.parse('2026-10-12T09:00:00.000Z'),
+    })
+    expect(file.ranges).toBeGreaterThan(1)
+    file.content += `${line('event_msg', { type: 'task_complete' })}\n`
+    expect(rollout.poll()?.state).toBe('idle')
+  })
+
+  it('reads a long file with no turn yet as idle, and a boundary in the tail needs no scan', () => {
+    const quiet = memoryTail(`${line('session_meta', { id: CODEX })}\n${busyLines(1024 * 1024)}`)
+    expect(new CodexRollout(ROLLOUT, CODEX, quiet.tail).poll()?.state).toBe('idle')
+    const recent = memoryTail(
+      `${busyLines(1024 * 1024)}${line('event_msg', { type: 'task_started' })}\n`,
+    )
+    expect(new CodexRollout(ROLLOUT, CODEX, recent.tail).poll()?.state).toBe('working')
+    expect(recent.file.ranges).toBe(0)
+  })
+
+  it('reads the tail first, then only appended complete lines', () => {
+    const { file, tail } = memoryTail(
+      `${line('session_meta', { id: CODEX })}\n${line('event_msg', { type: 'task_started' })}\n`,
+    )
     const rollout = new CodexRollout(ROLLOUT, CODEX, tail)
     expect(rollout.poll()?.state).toBe('working')
     // A partial line is held back until it is complete.
     const done = line('event_msg', { type: 'task_complete' })
-    content += done.slice(0, 10)
+    file.content += done.slice(0, 10)
     expect(rollout.poll()?.state).toBe('working')
-    content += `${done.slice(10)}\n`
+    file.content += `${done.slice(10)}\n`
     expect(rollout.poll()?.state).toBe('idle')
   })
 })
