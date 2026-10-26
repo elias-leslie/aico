@@ -4,12 +4,6 @@ import { clsx } from 'clsx'
 import { ChevronDown } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import {
-  ATTENTION_GROUPS,
-  type Attention,
-  compareAttention,
-} from '@/lib/attention'
-import { useAgentTools } from '@/lib/hooks/use-agent-tools'
 import { useClickOutside } from '@/lib/hooks/use-click-outside'
 import type { SessionAttention } from '@/lib/hooks/use-session-attention'
 import {
@@ -18,154 +12,10 @@ import {
   type PaneSlot,
   type TerminalSlot,
 } from '@/lib/utils/slot'
-import { AgentIcon, getAgentColor } from './AgentIcon'
 import { NeedsYouCount } from './AttentionBadge'
-import { CheckInBadge } from './CheckInBadge'
 import { CoordinatorBadge } from './CoordinatorBadge'
-import { KeptCheckIns } from './KeptCheckIns'
+import { SessionList, sessionsHeading } from './SessionList'
 import { SessionTitle } from './SessionTitle'
-
-function getSlotMode(slot: TerminalSlot | PaneSlot): string {
-  if (slot.type === 'project') {
-    return slot.activeMode
-  }
-  return slot.sessionMode ?? 'shell'
-}
-
-interface SessionListEntry {
-  id: string
-  label: string
-  mode: string
-  slot: TerminalSlot | PaneSlot
-  state: Attention | null
-}
-
-/** Sessions most urgent first (Aico's tray order), alphabetical within equal
- * state; the same name with the same agent is numbered. */
-export function sortSessionEntries(
-  slots: Array<TerminalSlot | PaneSlot>,
-  attention?: SessionAttention,
-): SessionListEntry[] {
-  const key = (slot: TerminalSlot | PaneSlot) =>
-    `${getSlotName(slot)} [${getSlotMode(slot)}]`
-  const sorted = [...slots].sort((slotA, slotB) => {
-    const labelCompare = key(slotA).localeCompare(key(slotB), undefined, {
-      sensitivity: 'base',
-    })
-    if (labelCompare !== 0) {
-      return labelCompare
-    }
-    return getSlotPanelId(slotA).localeCompare(getSlotPanelId(slotB))
-  })
-  const seenCounts = new Map<string, number>()
-  return sorted
-    .map((slot) => {
-      const count = (seenCounts.get(key(slot)) ?? 0) + 1
-      seenCounts.set(key(slot), count)
-      const name = getSlotName(slot)
-      return {
-        id: getSlotPanelId(slot),
-        label: count > 1 ? `${name} #${count}` : name,
-        mode: getSlotMode(slot),
-        slot,
-        state: attention?.forSlot(slot) ?? null,
-      }
-    })
-    .sort((a, b) =>
-      a.state && b.state ? compareAttention(a.state, b.state) : 0,
-    )
-}
-
-/** What a row says under its name: who it waits on, or just its agent. */
-function rowMeta(agent: string, state: Attention | null): string {
-  if (state?.group === 'needs-you') return `${agent} is waiting for you`
-  if (state?.group === 'finished') return `${agent} finished · not opened yet`
-  return agent
-}
-
-interface SessionListProps {
-  slots: Array<TerminalSlot | PaneSlot>
-  currentId?: string
-  attention?: SessionAttention
-  onSelect: (slot: TerminalSlot | PaneSlot) => void
-}
-
-/** Every session, grouped Needs you / Finished / Working / Idle. */
-export function SessionList({
-  slots,
-  currentId,
-  attention,
-  onSelect,
-}: SessionListProps) {
-  const { agentTools } = useAgentTools()
-  const entries = useMemo(
-    () => sortSessionEntries(slots, attention),
-    [slots, attention],
-  )
-  const agentName = (mode: string) =>
-    agentTools.find((tool) => tool.slug === mode)?.name ??
-    (mode === 'shell' ? 'Shell' : mode)
-  const groupSize = (group: string) =>
-    entries.filter((entry) => entry.state?.group === group).length
-  return (
-    <>
-      {entries.map(({ id, label, mode, slot, state }, index) => {
-        const isCurrent = id === currentId
-        const group = state?.group
-        const header =
-          group && group !== entries[index - 1]?.state?.group
-            ? ATTENTION_GROUPS.find((g) => g.group === group)?.title
-            : null
-        const tool = agentTools.find((t) => t.slug === mode)
-        return (
-          <div key={id}>
-            {header && (
-              <h3
-                data-testid="session-group-header"
-                className="lantern-sec mx-2.5 mt-3.5 mb-1.5"
-              >
-                {header}
-                {group && <span className="n">{groupSize(group)}</span>}
-              </h3>
-            )}
-            <button
-              type="button"
-              onClick={() => onSelect(slot)}
-              aria-current={isCurrent ? 'true' : undefined}
-              className={clsx('lantern-row', group === 'needs-you' && 'needs')}
-            >
-              <AgentIcon
-                slug={mode}
-                size={16}
-                color={getAgentColor(mode, tool?.color)}
-              />
-              <span className="name">{label}</span>
-              <span className="when">{state?.age ?? ''}</span>
-              <span className="meta">
-                {(group === 'needs-you' || group === 'finished') && (
-                  <span
-                    aria-hidden="true"
-                    className="h-[7px] w-[7px] flex-none rounded-full"
-                    style={{
-                      backgroundColor:
-                        group === 'needs-you' ? 'var(--beacon)' : 'var(--jade)',
-                    }}
-                  />
-                )}
-                <CoordinatorBadge badge={slot.badge} ownLine />
-                <span className="truncate">
-                  {rowMeta(agentName(mode), state)}
-                </span>
-                <CheckInBadge checkIns={slot.checkIns} />
-              </span>
-            </button>
-          </div>
-        )
-      })}
-      <KeptCheckIns />
-    </>
-  )
-}
 
 export interface SessionSwitcherProps {
   /** The session on screen */
@@ -196,6 +46,8 @@ export function SessionSwitcher({
   const currentName = getSlotName(currentSlot)
   const currentId = getSlotPanelId(currentSlot)
   const needsYouCount = attention?.needsYouCount ?? 0
+  /** The open session's state and age, `working 3m`. */
+  const currentState = attention?.forSlot(currentSlot)?.detail ?? null
 
   const close = useCallback(() => setIsOpen(false), [])
   const clickOutsideRefs = useMemo(() => [triggerRef, listRef], [])
@@ -235,6 +87,7 @@ export function SessionSwitcher({
         currentId={currentId}
         attention={attention}
         onSelect={select}
+        phone={isMobile}
       />
     </div>
   )
@@ -261,6 +114,15 @@ export function SessionSwitcher({
       >
         <CoordinatorBadge badge={currentSlot.badge} dot={isMobile} />
         <SessionTitle name={currentName} task={currentSlot.task} />
+        {isMobile && currentState && (
+          <span
+            data-testid="session-state"
+            className="shrink-0 whitespace-nowrap"
+            style={{ color: 'var(--mist)', font: '400 12px/1 var(--font-ui)' }}
+          >
+            {currentState}
+          </span>
+        )}
         <NeedsYouCount count={needsYouCount} />
         <ChevronDown
           aria-hidden="true"
@@ -314,7 +176,7 @@ export function SessionSwitcher({
                 className="flex-none px-[18px] pt-3 pb-1"
                 style={{ font: '500 18px/1.2 var(--font-display)' }}
               >
-                Sessions
+                {sessionsHeading(allSlots.length, needsYouCount)}
               </h2>
               {list}
             </div>

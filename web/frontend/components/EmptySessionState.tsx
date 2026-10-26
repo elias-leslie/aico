@@ -4,7 +4,7 @@ import { Plus, RotateCcw } from 'lucide-react'
 import { useSessionAttention } from '@/lib/hooks/use-session-attention'
 import { usePaneListError } from '@/lib/hooks/use-terminal-panes'
 import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
-import { SessionList } from './SessionSwitcher'
+import { SessionList } from './SessionList'
 
 interface EmptySessionStateProps {
   /** Running sessions the user can open. */

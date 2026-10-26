@@ -252,22 +252,26 @@ describe('tray', () => {
     chrome.syncTray()
     expect(tray.refreshTray).toHaveBeenCalledWith(
       [
-        {
+        expect.objectContaining({
           id: 'bbbbbbbb',
           label: 'Site · Shell',
+          title: 'Site',
+          tool: 'Shell',
           open: false,
           group: 'needs-you',
           detail: 'waiting <1m',
+          coordinator: false,
+          coordinatorId: null,
           checkIns: [],
-        },
-        {
+        }),
+        expect.objectContaining({
           id: 'aaaaaaaa',
           label: 'Docs · Codex',
           open: true,
           group: 'idle',
           detail: 'idle',
           checkIns: [],
-        },
+        }),
       ],
       [{ slug: 'codex', label: 'Codex', blankSlate: false }],
       [{ id: 'p1', name: 'Docs', root: '/srv/docs', current: false }],

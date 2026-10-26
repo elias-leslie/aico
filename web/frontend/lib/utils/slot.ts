@@ -39,6 +39,10 @@ interface SlotSessionFields {
   badge?: CoordinatorBadgeInfo | null
   /** The session's pending check-ins, oldest first. */
   checkIns?: SessionCheckIn[]
+  /** Coordinator lineage: the session coordinates lanes, or names the
+   * coordinator that launched it (the session list folds teams). */
+  coordinator?: boolean
+  coordinatorId?: string | null
   can: SlotCapabilities
   /** The header shows the session title (`Project — Task`) in place of the
    * project switcher. */
@@ -233,6 +237,8 @@ function slotFields(
     task: session.task,
     badge,
     checkIns: session.check_ins ?? [],
+    coordinator: session.is_coordinator === true,
+    coordinatorId: session.coordinator_id ?? null,
     can: {
       rename: session.can_rename,
       // A free-standing View never offers Reset: closing it only detaches.

@@ -14,16 +14,18 @@ function setHeadTitle(text: string) {
 describe('useAttentionTitle', () => {
   afterEach(() => setHeadTitle(''))
 
-  it('keeps the needs-you count when the page title is re-rendered', async () => {
+  it('says how many need you, also when the page title is re-rendered', async () => {
     setHeadTitle('Aico')
     const { rerender, unmount } = renderHook(
       ({ count }) => useAttentionTitle(count),
       { initialProps: { count: 2 } },
     )
-    expect(document.title).toBe('(2) Aico')
-    // Next re-renders its metadata <title>, dropping the prefix.
+    expect(document.title).toBe('Aico · 2 need you')
+    // Next re-renders its metadata <title>, dropping the suffix.
     setHeadTitle('Aico')
-    await waitFor(() => expect(document.title).toBe('(2) Aico'))
+    await waitFor(() => expect(document.title).toBe('Aico · 2 need you'))
+    rerender({ count: 1 })
+    expect(document.title).toBe('Aico · 1 needs you')
     rerender({ count: 0 })
     expect(document.title).toBe('Aico')
     unmount()

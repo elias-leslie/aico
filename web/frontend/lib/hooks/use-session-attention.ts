@@ -112,16 +112,23 @@ export function useMarkActiveSeen(activeSessionId: string | null): void {
   }, [ids, stamps])
 }
 
-/** Prefix the tab/app title with the needs-you count: `(2) Aico`. */
+/** The tab/app title says when anything waits on the owner: `Aico · 1 needs
+ * you`, else `Aico`. */
+export function attentionTitle(base: string, count: number): string {
+  const plain = base.replace(/ · \d+ needs? you$/, '')
+  return count > 0
+    ? `${plain} · ${count} need${count === 1 ? 's' : ''} you`
+    : plain
+}
+
 export function useAttentionTitle(count: number): void {
   useEffect(() => {
     const apply = () => {
-      const base = document.title.replace(/^\(\d+\) /, '')
-      const title = count > 0 ? `(${count}) ${base}` : base
+      const title = attentionTitle(document.title, count)
       if (document.title !== title) document.title = title
     }
     apply()
-    // Next re-renders its metadata <title> and drops the prefix: re-apply it.
+    // Next re-renders its metadata <title> and drops the suffix: re-apply it.
     const observer = new MutationObserver(apply)
     observer.observe(document.head, {
       subtree: true,

@@ -428,6 +428,59 @@ select {
   white-space: nowrap;
 }
 
+/* Coordinator teams: the lead row keeps room for its fold button; lanes
+   sit indented under it on a quiet hairline. */
+.lantern-team {
+  position: relative;
+}
+
+.lantern-row.lead {
+  padding-right: 44px;
+}
+
+.lantern-fold {
+  position: absolute;
+  top: 12px;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--mist);
+  transition:
+    background 0.15s var(--ease-arrival),
+    transform 0.15s var(--ease-arrival);
+}
+
+.lantern-fold:hover {
+  background: var(--paper-veil);
+  color: var(--bone);
+}
+
+.lantern-fold svg {
+  transition: transform 0.15s var(--ease-arrival);
+}
+
+.lantern-fold[aria-expanded="true"] svg {
+  transform: rotate(90deg);
+}
+
+.lantern-lanes {
+  margin: 2px 0 4px 19px;
+  padding-left: 6px;
+  border-left: 1px solid rgb(var(--glass-rgb) / 0.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lantern-fold svg {
+    transition: none;
+  }
+}
+
 /* Mist on the veil is under 4.5:1. */
 .lantern-row[aria-current="true"] .meta,
 .lantern-row[aria-current="true"] .when {

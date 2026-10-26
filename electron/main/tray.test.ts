@@ -147,6 +147,91 @@ describe('tray attention groups', () => {
   })
 })
 
+describe('tray coordinator teams', () => {
+  it('folds lanes into one submenu per coordinator with its summary', () => {
+    const onSelect = vi.fn()
+    createTray(
+      {
+        onSelect,
+        onDiscard: vi.fn(),
+        onCancelCheckIn: vi.fn(),
+        onNewWidget: vi.fn(),
+        onRefreshSessions: vi.fn(),
+        onHubView: vi.fn(),
+      },
+      [],
+      [],
+    )
+    menus.length = 0
+    const session = (id: string, title: string, extra: Record<string, unknown>) => ({
+      id,
+      label: `${title} · Codex`,
+      title,
+      tool: 'Codex',
+      open: false,
+      ...extra,
+    })
+    refreshTray(
+      [
+        session('lead', 'Neri — Daybreak lead', {
+          coordinator: true,
+          group: 'working',
+          detail: 'working 2m',
+          at: 1,
+          checkIns: [{ id: 'w2', time: '6:00 PM', dueAt: 600 }],
+        }),
+        session('ask', 'Neri — Matomo pair lead', {
+          coordinatorId: 'lead',
+          group: 'needs-you',
+          detail: 'waiting 1m',
+          at: 2,
+        }),
+        session('busy', 'Neri — Scanner', {
+          coordinatorId: 'lead',
+          group: 'working',
+          detail: 'working 5m',
+          at: 3,
+          checkIns: [{ id: 'w1', time: '5:30 PM', dueAt: 500 }],
+        }),
+        session('done', 'Aico — Tray', {
+          coordinatorId: 'lead',
+          group: 'finished',
+          detail: 'done 1m',
+          at: 4,
+        }),
+        session('left', 'Docs — Notes', {
+          coordinatorId: 'ended',
+          group: 'idle',
+          detail: 'idle 1h',
+          at: 5,
+        }),
+      ],
+      [],
+      [],
+    )
+    const menu = menus.at(-1) ?? []
+    const labels = menu.map((entry) => entry.label)
+    expect(labels.slice(0, 4)).toEqual([
+      'Needs you',
+      '○ Neri — Daybreak lead · Codex — working 2m · 1 working, 1 needs you, 1 idle · check-in 5:30 PM',
+      'Idle',
+      '○ Docs — Notes · Codex — idle 1h · coordinator ended',
+    ])
+    // Each session appears once in the session rows.
+    expect(labels).not.toContain('Working')
+    const team = menu[1].submenu as Record<string, unknown>[]
+    expect(team.map((entry) => entry.label ?? entry.type)).toEqual([
+      '○ Neri — Daybreak lead · Codex — working 2m · check-in 6:00 PM',
+      'separator',
+      '○ Matomo pair lead · Codex — waiting 1m',
+      '○ Scanner · Codex — working 5m · check-in 5:30 PM',
+      '○ Aico — Tray · Codex — done 1m',
+    ])
+    ;(team[0].click as () => void)()
+    expect(onSelect).toHaveBeenCalledWith('lead')
+  })
+})
+
 describe('tray icon', () => {
   it('shows needs-you over active over idle', async () => {
     const { setNeedsYou, setWidgetActivity, trayIcon } = await import('./tray')

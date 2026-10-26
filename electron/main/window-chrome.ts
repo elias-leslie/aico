@@ -54,20 +54,27 @@ export function createWindowChrome(deps: WindowChromeDeps) {
   function syncTray(): void {
     if (deps.isQuitting()) return
     const rows = groupRows(catalog.list(), attention, now())
-    const widgets: TrayWidget[] = rows.map(({ item: descriptor, group, detail }) => ({
-      id: descriptor.id,
-      label: traySessionLabel(
-        sessionTitle(descriptor),
-        toolDisplayName(descriptor.tool, deps.tools()),
-      ),
-      open: registry.forSession(descriptor.id) !== undefined,
-      group,
-      detail,
-      checkIns: (descriptor.wakes ?? []).map((wake) => ({
-        id: wake.id,
-        time: wakeClock(wake.dueAt, now()),
-      })),
-    }))
+    const widgets: TrayWidget[] = rows.map(({ item: descriptor, group, detail, at }) => {
+      const title = sessionTitle(descriptor)
+      const tool = toolDisplayName(descriptor.tool, deps.tools())
+      return {
+        id: descriptor.id,
+        label: traySessionLabel(title, tool),
+        title,
+        tool,
+        open: registry.forSession(descriptor.id) !== undefined,
+        group,
+        detail,
+        at,
+        coordinator: descriptor.coordinator === true,
+        coordinatorId: descriptor.coordinatorId ?? null,
+        checkIns: (descriptor.wakes ?? []).map((wake) => ({
+          id: wake.id,
+          time: wakeClock(wake.dueAt, now()),
+          dueAt: wake.dueAt,
+        })),
+      }
+    })
     tray.refreshTray(widgets, trayTools(), projects.list(), deps.notice())
   }
 

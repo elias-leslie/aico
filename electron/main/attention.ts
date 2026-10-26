@@ -265,6 +265,8 @@ export interface AttentionRow<T> {
   item: T
   group: AttentionGroup
   detail: string | null
+  /** When the state began (ms), or null. */
+  at: number | null
 }
 
 /** Sessions grouped most-urgent first. Needs-you rows wait longest first;
@@ -285,7 +287,7 @@ export function groupRows<T extends { id: string }>(
     const bx = b.at ?? 0
     return a.group === 'needs-you' ? ax - bx : bx - ax
   })
-  return rows.map(({ item, group, detail }) => ({ item, group, detail }))
+  return rows
 }
 
 /** Which agent a state came from, for the push text (`Claude Code`, `Codex`):

@@ -3,7 +3,7 @@
 import { Plus } from 'lucide-react'
 import { useSessionAttention } from '@/lib/hooks/use-session-attention'
 import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
-import { SessionList } from './SessionSwitcher'
+import { SessionList, sessionsHeading } from './SessionList'
 
 interface SessionSidebarProps {
   slots: Array<TerminalSlot | PaneSlot>
@@ -29,19 +29,24 @@ export function SessionSidebar({
       style={{ borderRight: '1px solid rgb(var(--glass-rgb) / 0.05)' }}
     >
       <header className="flex h-12 flex-none items-center gap-2 pr-1.5 pl-3">
-        {/* biome-ignore lint/performance/noImgElement: a static SVG mark */}
-        <img src="/icons/icon.svg" alt="" width={24} height={24} />
-        <span style={{ font: '500 18px/1 var(--font-display)' }}>Aico</span>
-        <div className="flex-1" />
+        <h2
+          data-testid="session-list-heading"
+          className="min-w-0 flex-1 truncate"
+          style={{ font: '500 15px/1 var(--font-display)' }}
+        >
+          {sessionsHeading(slots.length, attention.needsYouCount)}
+        </h2>
         {onNewSession && (
           <button
             type="button"
             className="lantern-btn primary"
             onClick={onNewSession}
             data-testid="new-session-btn"
+            aria-label="New session"
+            title="New session"
+            style={{ width: 32, height: 32, padding: 0 }}
           >
             <Plus className="h-4 w-4" strokeWidth={1.7} />
-            New session
           </button>
         )}
       </header>

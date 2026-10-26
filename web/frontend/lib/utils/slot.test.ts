@@ -348,6 +348,8 @@ describe('sessionToSlot', () => {
       task: undefined,
       badge: null,
       checkIns: [],
+      coordinator: false,
+      coordinatorId: null,
       can: { rename: false, reset: false, end: false },
       showsSessionTitle: false,
     })
@@ -369,6 +371,8 @@ describe('sessionToSlot', () => {
       task: undefined,
       badge: null,
       checkIns: [],
+      coordinator: false,
+      coordinatorId: null,
       can: { rename: false, reset: false, end: false },
       showsSessionTitle: false,
     })

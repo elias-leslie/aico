@@ -1,7 +1,9 @@
 import { join } from 'node:path'
 import { app, Menu, nativeImage, Tray } from 'electron'
+import { foldTeams, laneTitle, type TeamMember, type TeamRow, teamMembers } from 'tether/client'
 import { ATTENTION_GROUPS, type AttentionGroup } from './attention'
 import { BLANK_SLATE_ID, BLANK_SLATE_NAME } from './project'
+import { traySessionLabel } from './session-catalog'
 
 // Lantern orb tray icon, three states: muted idle / amber active (at least one
 // widget is thinking) / amber with a red badge, "needs you" (a session is
@@ -21,7 +23,16 @@ export interface TrayWidget {
   /** State and age, e.g. `waiting 3m`. */
   detail?: string | null
   /** Pending check-ins, soonest first, with their times (`5:30 PM`). */
-  checkIns?: { id: string; time: string }[]
+  checkIns?: { id: string; time: string; dueAt?: number }[]
+  /** Coordinator lineage (tether/client teams.ts): lanes fold under their coordinator. */
+  coordinator?: boolean
+  coordinatorId?: string | null
+  /** When the state began (ms), for ordering within a team. */
+  at?: number | null
+  /** The session title and tool the label is made of; a lane drops the
+   * project its coordinator already names. */
+  title?: string
+  tool?: string
 }
 
 /** A launchable TUI as the tray sees it (slug + menu label), from the registry. */
@@ -66,6 +77,50 @@ let agentsWorking = false
  * unchanged catalog must not republish it. */
 let menuKey = ''
 
+type TeamWidget = TrayWidget & TeamMember
+
+function rowLabel(
+  w: TrayWidget,
+  lead: TrayWidget | null,
+  extra: (string | null | undefined)[],
+): string {
+  const name =
+    lead && w.title !== undefined && lead.title !== undefined
+      ? traySessionLabel(laneTitle(w.title, lead.title), w.tool ?? '')
+      : w.label
+  const detail = [w.detail, ...extra].filter(Boolean).join(' · ')
+  return `${w.open ? '●' : '○'} ${name}${detail ? ` — ${detail}` : ''}`
+}
+
+/** One session row, or a coordinator's submenu with its team summary and the
+ * team's earliest check-in. */
+function teamItem(
+  row: TeamRow<TeamWidget>,
+  lead: TrayWidget | null,
+  h: TrayHandlers,
+): Electron.MenuItemConstructorOptions {
+  const w = row.item
+  const own = w.checkIns?.[0] ? `check-in ${w.checkIns[0].time}` : null
+  const ended = row.orphaned ? 'coordinator ended' : null
+  if (!row.children.length) {
+    return { label: rowLabel(w, lead, [own, ended]), click: () => h.onSelect(w.id) }
+  }
+  const first = teamMembers(row)
+    .flatMap((m) => m.checkIns ?? [])
+    .reduce<{ time: string; dueAt?: number } | null>(
+      (best, c) => (!best || (c.dueAt ?? Infinity) < (best.dueAt ?? Infinity) ? c : best),
+      null,
+    )
+  return {
+    label: rowLabel(w, lead, [row.summary, first ? `check-in ${first.time}` : null, ended]),
+    submenu: [
+      { label: rowLabel(w, lead, [own]), click: () => h.onSelect(w.id) },
+      { type: 'separator' },
+      ...row.children.map((child) => teamItem(child, w, h)),
+    ],
+  }
+}
+
 function buildMenu(widgets: TrayWidget[]): Menu {
   const h = handlers
   if (!h) return Menu.buildFromTemplate([])
@@ -75,19 +130,22 @@ function buildMenu(widgets: TrayWidget[]): Menu {
       : []),
   ]
   // Every session, grouped most-urgent first (widgets arrive sorted). A row
-  // opens or focuses its window; ● marks an open window, ○ a closed one.
+  // opens or focuses its window; ● marks an open window, ○ a closed one. A
+  // coordinator with lanes is a submenu: itself, then its lanes.
+  const teams = foldTeams(
+    widgets.map((w) => ({
+      ...w,
+      coordinator: w.coordinator ?? false,
+      coordinatorId: w.coordinatorId ?? null,
+      group: w.group ?? 'no-status',
+      at: w.at ?? null,
+    })),
+  )
   for (const { group, title } of ATTENTION_GROUPS) {
-    const rows = widgets.filter((w) => (w.group ?? 'no-status') === group)
+    const rows = teams.filter((row) => row.group === group)
     if (!rows.length) continue
     template.push({ label: title, enabled: false })
-    for (const w of rows) {
-      const checkIn = w.checkIns?.[0] ? `check-in ${w.checkIns[0].time}` : null
-      const detail = [w.detail, checkIn].filter(Boolean).join(' · ')
-      template.push({
-        label: `${w.open ? '●' : '○'} ${w.label}${detail ? ` — ${detail}` : ''}`,
-        click: () => h.onSelect(w.id),
-      })
-    }
+    for (const row of rows) template.push(teamItem(row, null, h))
   }
   if (!widgets.length) template.push({ label: 'No sessions', enabled: false })
   template.push({ type: 'separator' })
