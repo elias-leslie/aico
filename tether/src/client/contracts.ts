@@ -112,6 +112,43 @@ export interface WakeList {
   policy: WakePolicy
 }
 
+/** The note of a check-in the owner sets from a menu (the agent reads it). */
+export const OWNER_CHECK_IN_NOTE =
+  'The owner asked for this check-in: say where this stands, then carry on if there is more to do.'
+
+/** `5:30 PM`, with the weekday when it is not today. */
+export function wakeClock(at: number, now: number = Date.now()): string {
+  const time = new Date(at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  if (new Date(at).toDateString() === new Date(now).toDateString()) return time
+  return `${new Date(at).toLocaleDateString('en-US', { weekday: 'short' })} ${time}`
+}
+
+/** The menus' quick choices from the policy: "In 1 hour", "Tonight" (this
+ * hour today, tomorrow once it has passed) and "Tomorrow morning". */
+export function wakeChoices(
+  policy: Pick<WakePolicy, 'laterMinutes' | 'tonightHour' | 'morningHour'>,
+  now: number = Date.now(),
+): { label: string; dueAt: number }[] {
+  const at = (hour: number, days: number) => {
+    const date = new Date(now)
+    date.setDate(date.getDate() + days)
+    date.setHours(hour, 0, 0, 0)
+    return date.getTime()
+  }
+  const minutes = policy.laterMinutes
+  const later =
+    minutes % 60 === 0 ? `In ${minutes / 60} hour${minutes === 60 ? '' : 's'}` : `In ${minutes} min`
+  const tonight = at(policy.tonightHour, at(policy.tonightHour, 0) > now ? 0 : 1)
+  // Before the morning hour (say 2 AM), "morning" is the coming one.
+  const morning = at(policy.morningHour, at(policy.morningHour, 0) > now ? 0 : 1)
+  const today = (time: number) => new Date(time).toDateString() === new Date(now).toDateString()
+  return [
+    { label: later, dueAt: now + minutes * 60_000 },
+    { label: today(tonight) ? 'Tonight' : 'Tomorrow night', dueAt: tonight },
+    { label: today(morning) ? 'This morning' : 'Tomorrow morning', dueAt: morning },
+  ]
+}
+
 /** `GET /v1/sessions/:id/attach` as Tether answered it, shape-checked only.
  * The caller builds its own tmux argv and environment from it. */
 export interface AttachAnswer {

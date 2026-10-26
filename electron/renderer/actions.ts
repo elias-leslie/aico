@@ -50,6 +50,29 @@ export async function copySessionDiagnostics(): Promise<void> {
   }
 }
 
+/** Set a check-in on this session; the toast says when, or why not. */
+export async function checkInLater(dueAt: number): Promise<void> {
+  try {
+    const time = await window.aico.actions.checkIn(dueAt)
+    showToast({ kind: 'Check-in', snippet: `Set for ${time}` })
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
+        : ''
+    showToast({ kind: 'Error', snippet: message || 'Could not set the check-in' })
+  }
+}
+
+export async function cancelCheckIn(wakeId: string, time: string): Promise<void> {
+  try {
+    await window.aico.actions.cancelCheckIn(wakeId)
+    showToast({ kind: 'Check-in', snippet: `Cancelled ${time}` })
+  } catch {
+    showToast({ kind: 'Error', snippet: 'Could not cancel the check-in' })
+  }
+}
+
 async function endCurrentSession(): Promise<void> {
   try {
     await window.aico.actions.endSession()
@@ -182,6 +205,17 @@ export const ACTIONS: Action[] = [
     label: 'Open session',
     shortcut: '',
     icon: '⇱',
+    opensFlyout: true,
+  },
+  {
+    // Flyout-only host (no run): the quick times from Tether's wake policy and
+    // this session's pending check-ins, each with Cancel.
+    id: 'check-in-later',
+    section: 'Session',
+    label: 'Check in later',
+    shortcut: '',
+    icon: '◷',
+    note: 'At that time the agent is asked where things stand, once it is idle and you are not typing.',
     opensFlyout: true,
   },
   {

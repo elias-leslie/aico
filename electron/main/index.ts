@@ -241,6 +241,7 @@ const applyGuiCommand = createGuiChannel({
   catalog,
   refresh: link.refresh,
   focusOrReopen: windows.focusOrReopen,
+  reopenIfViewed: windows.reopenIfViewed,
   forSession: registry.forSession,
   arrange: layout.arrange,
   canPlace: () => compositor.ready(),
@@ -396,6 +397,7 @@ const startup = app.whenReady().then(async () => {
   chrome.createTray({
     onSelect: windows.focusOrReopen,
     onDiscard: (id) => void sessions.confirmTrayDiscard(id),
+    onCancelCheckIn: sessions.cancelCheckIn,
     onNewWidget: windows.openNew,
     onRefreshSessions: () => {
       projects.invalidate()

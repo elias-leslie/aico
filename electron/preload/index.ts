@@ -93,6 +93,12 @@ contextBridge.exposeInMainWorld('aico', {
     endSession: (): Promise<void> => ipcRenderer.invoke('session:end-self'),
     /** Mark or unmark this session as a coordinator (titlebar label, centre tile). */
     toggleCoordinator: () => ipcRenderer.send('widget:toggle-coordinator'),
+    /** "Check in later": the quick choices and this session's pending check-ins. */
+    checkInMenu: () => ipcRenderer.invoke('session:check-in-menu'),
+    /** Set a check-in at `dueAt` (epoch ms); resolves to its time. */
+    checkIn: (dueAt: number): Promise<string> => ipcRenderer.invoke('session:check-in', dueAt),
+    cancelCheckIn: (wakeId: string): Promise<void> =>
+      ipcRenderer.invoke('session:cancel-check-in', wakeId),
   },
   settings: {
     /** Global pinned-action ids, or null if never set (first run). */

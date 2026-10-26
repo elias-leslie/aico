@@ -3,7 +3,13 @@
 // workspaces. Both change only on Tether events and Aico actions.
 
 import type { BrowserWindow, IpcMain } from 'electron'
-import type { ContextHook, SessionCatalog, SessionDescriptor, TetherTool } from 'tether/client'
+import {
+  type ContextHook,
+  type SessionCatalog,
+  type SessionDescriptor,
+  type TetherTool,
+  wakeClock,
+} from 'tether/client'
 import { type Attention, groupRows } from './attention'
 import type { ProjectCatalog } from './project'
 import { coordinatorChip, sessionTitle, toolDisplayName, traySessionLabel } from './session-catalog'
@@ -57,6 +63,10 @@ export function createWindowChrome(deps: WindowChromeDeps) {
       open: registry.forSession(descriptor.id) !== undefined,
       group,
       detail,
+      checkIns: (descriptor.wakes ?? []).map((wake) => ({
+        id: wake.id,
+        time: wakeClock(wake.dueAt, now()),
+      })),
     }))
     tray.refreshTray(widgets, trayTools(), projects.list(), deps.notice())
   }

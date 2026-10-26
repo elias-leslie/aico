@@ -269,6 +269,13 @@
   font-size: 12px;
   margin-bottom: 2px;
 }
+/* "Check in later": the clock time a choice lands on, in the secondary tone. */
+.aico-sub-time {
+  margin-left: auto;
+  padding-left: 12px;
+  color: var(--mist);
+  font-variant-numeric: tabular-nums;
+}
 /* Empty/disabled flyout row (e.g. "No workspaces"): not clickable, no hover fill. */
 .aico-sub-row.empty {
   color: var(--mist);

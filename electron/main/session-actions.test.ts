@@ -84,6 +84,15 @@ function setup() {
     switchProject: vi.fn(async (id: string) => descriptor(id)),
     rename: vi.fn(async (id: string, _g: string, name: string | null) => descriptor(id, { name })),
     diagnostics: vi.fn(async (id: string) => ({ sessionId: id })),
+    sessionWakes: vi.fn(async () => ({
+      items: [],
+      policy: { laterMinutes: 60, tonightHour: 21, morningHour: 8 },
+    })),
+    addWake: vi.fn(async (_id: string, input: { dueAt: number }) => ({
+      id: '5f1c0a9b2e7d',
+      dueAt: input.dueAt,
+    })),
+    cancelWake: vi.fn(async () => ({ deleted: true })),
   }
   const link = {
     tools: () => [codex],
@@ -142,7 +151,7 @@ function setup() {
 }
 
 describe('session actions', () => {
-  it('registers its twelve channels', () => {
+  it('registers its fifteen channels', () => {
     const { on, handle } = setup()
     expect([...on.keys()].sort()).toEqual([
       'widget:hub',
@@ -154,6 +163,9 @@ describe('session actions', () => {
     ])
     expect([...handle.keys()].sort()).toEqual([
       'project:list',
+      'session:cancel-check-in',
+      'session:check-in',
+      'session:check-in-menu',
       'session:diagnostics',
       'session:end-self',
       'session:list-openable',
@@ -321,7 +333,65 @@ describe('session actions', () => {
     expect(dialog.showMessageBox).toHaveBeenLastCalledWith(
       expect.objectContaining({ title: 'End session?', message: 'End Session 4 · Codex?' }),
     )
-    await vi.waitFor(() => expect(tether.end).toHaveBeenCalledWith('aaaaaaaa', 'g1'))
+    await vi.waitFor(() =>
+      expect(tether.end).toHaveBeenCalledWith('aaaaaaaa', 'g1', { keepWakes: false }),
+    )
+  })
+
+  it('an End of a session with check-ins names them and can keep them', async () => {
+    const { sessions, dialog, tether, catalog, handle, event } = setup()
+    const dueAt = new Date(2026, 9, 26, 17, 30).getTime()
+    catalog.upsert(
+      descriptor('aaaaaaaa', {
+        wakes: [{ id: '5f1c0a9b2e7d', dueAt, note: 'n', createdBy: 'agent' }],
+      }),
+    )
+    dialog.showMessageBox.mockResolvedValueOnce({ response: 1 })
+    await sessions.confirmTrayDiscard('aaaaaaaa')
+    expect(dialog.showMessageBox).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        buttons: ['Cancel', 'End, keep check-in', 'End session'],
+        detail: expect.stringMatching(/^This also cancels its check-in at (\w+ )?5:30 PM\./),
+      }),
+    )
+    await vi.waitFor(() =>
+      expect(tether.end).toHaveBeenCalledWith('aaaaaaaa', 'g1', { keepWakes: true }),
+    )
+    // In the window, a cancelled dialog ends nothing.
+    tether.end.mockClear()
+    dialog.showMessageBox.mockResolvedValueOnce({ response: 0 })
+    await handle.get('session:end-self')?.(event)
+    expect(tether.end).not.toHaveBeenCalled()
+  })
+
+  it('sets and cancels the window’s own check-ins', async () => {
+    const { handle, tether, event, catalog } = setup()
+    catalog.upsert(descriptor('aaaaaaaa', { state: 'idle' }))
+    const menu = (await handle.get('session:check-in-menu')?.(event)) as {
+      status: string
+      choices: { label: string }[]
+    }
+    expect(menu.status).toBe('ready')
+    expect(menu.choices.map((choice) => choice.label)).toHaveLength(3)
+    tether.addWake.mockRejectedValueOnce(new TetherError(409, 'wake_unsupported', {}))
+    await expect(handle.get('session:check-in')?.(event, Date.now() + 60_000)).rejects.toThrow(
+      'Only Claude Code and Codex sessions take check-ins',
+    )
+    expect(await handle.get('session:check-in')?.(event, Date.now() + 60_000)).toMatch(/\d:\d\d/)
+    expect(tether.addWake).toHaveBeenLastCalledWith(
+      'aaaaaaaa',
+      expect.objectContaining({ createdBy: 'owner' }),
+    )
+    // Only a check-in of this window's session.
+    await handle.get('session:cancel-check-in')?.(event, '5f1c0a9b2e7d')
+    expect(tether.cancelWake).not.toHaveBeenCalled()
+    catalog.upsert(
+      descriptor('aaaaaaaa', {
+        wakes: [{ id: '5f1c0a9b2e7d', dueAt: 1, note: 'n', createdBy: 'owner' }],
+      }),
+    )
+    await handle.get('session:cancel-check-in')?.(event, '5f1c0a9b2e7d')
+    expect(tether.cancelWake).toHaveBeenCalledWith('5f1c0a9b2e7d')
   })
 
   it('diagnostics without a session, and a failure, answer in plain words', async () => {

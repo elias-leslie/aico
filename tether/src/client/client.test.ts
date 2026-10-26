@@ -23,6 +23,8 @@ import {
   TetherUnavailable,
   tetherSocketPath,
   trimTrailingSlashes,
+  wakeChoices,
+  wakeClock,
 } from './index'
 
 type Handler = (req: IncomingMessage, res: ServerResponse) => void
@@ -322,6 +324,34 @@ describe('event stream', () => {
     await expect.poll(() => resyncs).toBe(2)
     expect(seen).toEqual(['session.ended:0a1b2c3d'])
     expect(urls).toEqual(['/v1/events', '/v1/events?since=4&bootId=boot-a'])
+  })
+})
+
+describe('wake quick choices', () => {
+  const policy = { laterMinutes: 60, tonightHour: 21, morningHour: 8 }
+  it('offers in an hour, tonight and tomorrow morning', () => {
+    const now = new Date(2026, 9, 26, 17, 0).getTime()
+    expect(wakeChoices(policy, now)).toEqual([
+      { label: 'In 1 hour', dueAt: now + 3600_000 },
+      { label: 'Tonight', dueAt: new Date(2026, 9, 26, 21, 0).getTime() },
+      { label: 'Tomorrow morning', dueAt: new Date(2026, 9, 27, 8, 0).getTime() },
+    ])
+    expect(wakeClock(new Date(2026, 9, 26, 21, 0).getTime(), now)).toBe('9:00 PM')
+    expect(wakeClock(new Date(2026, 9, 27, 8, 0).getTime(), now)).toBe('Tue 8:00 AM')
+  })
+
+  it('moves past hours to the next day', () => {
+    const late = new Date(2026, 9, 26, 23, 0).getTime()
+    expect(wakeChoices({ ...policy, laterMinutes: 90 }, late).map((c) => c.label)).toEqual([
+      'In 90 min',
+      'Tomorrow night',
+      'Tomorrow morning',
+    ])
+    const early = new Date(2026, 9, 26, 2, 0).getTime()
+    expect(wakeChoices(policy, early)[2]).toEqual({
+      label: 'This morning',
+      dueAt: new Date(2026, 9, 26, 8, 0).getTime(),
+    })
   })
 })
 

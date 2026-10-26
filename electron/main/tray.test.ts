@@ -33,6 +33,7 @@ describe('tray session catalog', () => {
       {
         onSelect,
         onDiscard: vi.fn(),
+        onCancelCheckIn: vi.fn(),
         onNewWidget: vi.fn(),
         onRefreshSessions,
         onHubView: vi.fn(),
@@ -50,6 +51,51 @@ describe('tray session catalog', () => {
     const open = item(after, '○ Web session')
     ;(open.click as () => void)()
     expect(onSelect).toHaveBeenCalledWith('0a1b2c3d')
+  })
+
+  it('shows the next check-in on the row and cancels one from Check-ins', () => {
+    const onCancelCheckIn = vi.fn()
+    createTray(
+      {
+        onSelect: vi.fn(),
+        onDiscard: vi.fn(),
+        onCancelCheckIn,
+        onNewWidget: vi.fn(),
+        onRefreshSessions: vi.fn(),
+        onHubView: vi.fn(),
+      },
+      [],
+      [],
+    )
+    menus.length = 0
+    refreshTray(
+      [
+        {
+          id: '0a1b2c3d',
+          label: 'Docs · Codex',
+          open: true,
+          group: 'idle',
+          detail: 'idle',
+          checkIns: [
+            { id: '5f1c0a9b2e7d', time: '5:30 PM' },
+            { id: '5f1c0a9b2e7e', time: 'Tue 9:00 AM' },
+          ],
+        },
+      ],
+      [],
+      [],
+    )
+    const menu = menus.at(-1) ?? []
+    item(menu, '● Docs · Codex — idle · check-in 5:30 PM')
+    const checkIns = item(menu, 'Check-ins').submenu as Record<string, unknown>[]
+    expect(checkIns.map((entry) => entry.label)).toEqual([
+      'Docs · Codex — 5:30 PM',
+      'Docs · Codex — Tue 9:00 AM',
+    ])
+    const second = checkIns[1] as Record<string, unknown>
+    const cancel = item(second.submenu as Record<string, unknown>[], 'Cancel check-in')
+    ;(cancel.click as () => void)()
+    expect(onCancelCheckIn).toHaveBeenCalledWith('5f1c0a9b2e7e')
   })
 
   it('names an unreachable Tether at the top of the menu', () => {

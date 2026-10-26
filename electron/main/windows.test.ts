@@ -28,6 +28,7 @@ class FakeWindow {
   readonly listeners = new Map<string, Listener[]>()
   readonly contentListeners = new Map<string, Listener[]>()
   readonly show = vi.fn()
+  readonly showInactive = vi.fn()
   readonly focus = vi.fn()
   readonly loadURL = vi.fn()
   readonly loadFile = vi.fn()
@@ -203,6 +204,19 @@ describe('windows: opening', () => {
     windows.openNew('shell', 'p')
     await settle()
     expect(only().show).toHaveBeenCalledTimes(1)
+  })
+
+  it('reopens a closed window for a due check-in only when this desktop showed it, unfocused', async () => {
+    const { windows, only } = setup({ views: [view('aaaaaaaa', false)] })
+    expect(windows.reopenIfViewed('bbbbbbbb')).toBe('no_view')
+    expect(FakeWindow.all).toHaveLength(0)
+    expect(windows.reopenIfViewed('aaaaaaaa')).toBe('reopened')
+    await settle()
+    const win = only()
+    expect(win.showInactive).toHaveBeenCalledTimes(1)
+    expect(win.show).not.toHaveBeenCalled()
+    expect(windows.reopenIfViewed('aaaaaaaa')).toBe('open')
+    expect(FakeWindow.all).toHaveLength(1)
   })
 
   it('focuses an open window instead of opening another', () => {

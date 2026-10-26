@@ -143,6 +143,7 @@ export function createWindows(deps: WindowsDeps) {
     view: ViewRow | null,
     pending: PendingCreate | null,
     restore = false,
+    inactive = false,
   ): BrowserWindow {
     const row = { id: view?.id ?? 'new' }
     const saved = savedPlace(view?.bounds ?? null)
@@ -184,7 +185,9 @@ export function createWindows(deps: WindowsDeps) {
       .present(win, { tile, saved })
       .catch((error: unknown) => console.warn('[aico] window placement failed:', error))
       .finally(() => {
-        if (!win.isDestroyed()) win.show()
+        if (win.isDestroyed()) return
+        if (inactive) win.showInactive()
+        else win.show()
       })
 
     // Fixed local UI: no popups, and never navigate the frame away from the
@@ -333,9 +336,21 @@ export function createWindows(deps: WindowsDeps) {
     openWidget(id)
   }
 
+  /** A due check-in: reopen a closed window of a session this desktop has
+   * shown, at its remembered place and without taking focus. An open window is
+   * left as it is; a session never shown here gets no window. */
+  function reopenIfViewed(id: string): 'open' | 'reopened' | 'no_view' {
+    if (registry.forSession(id)) return 'open'
+    const view = views.getView(id)
+    if (!view) return 'no_view'
+    createWidgetWindow(view, null, true, true)
+    return 'reopened'
+  }
+
   return {
     openNew: newWidget,
     focusOrReopen,
+    reopenIfViewed,
 
     restoreOnLaunch: (): void => {
       const live = views.listViews().filter((view) => deps.isLive(view.id))

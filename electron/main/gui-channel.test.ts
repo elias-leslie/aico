@@ -71,6 +71,7 @@ function setup(o: { listed?: SessionDescriptor[] } = {}) {
       if (o.listed) catalog.replace(o.listed)
     }),
     focusOrReopen: vi.fn(),
+    reopenIfViewed: vi.fn((_id: string): 'open' | 'reopened' | 'no_view' => 'no_view'),
     forSession: vi.fn((_id: string): BrowserWindow | undefined => undefined),
     arrange: vi.fn(async (): Promise<PlaceResult> => ({ ok: true })),
     canPlace: vi.fn(() => true),
@@ -127,6 +128,17 @@ describe('applyGuiCommand', () => {
     expect(await gui(command({ kind: 'show', generation: 'g2' }))).toEqual({ applied: true })
     expect(deps.refresh).toHaveBeenCalledTimes(1)
     expect(deps.focusOrReopen).toHaveBeenCalledWith('aaaaaaaa')
+  })
+
+  it('reopens only a viewed session for a check-in, never focusing it', async () => {
+    const { gui, deps } = setup()
+    expect(await gui(command({ kind: 'show', ifViewed: true }))).toEqual({
+      applied: false,
+      error: 'no_view',
+    })
+    deps.reopenIfViewed.mockReturnValue('reopened')
+    expect(await gui(command({ kind: 'show', ifViewed: true }))).toEqual({ applied: true })
+    expect(deps.focusOrReopen).not.toHaveBeenCalled()
   })
 
   it('answers not_found for a session Tether no longer lists, and survives a failed re-list', async () => {
@@ -276,6 +288,7 @@ describe('a GUI title reaches layout.json', () => {
       catalog,
       refresh: async () => {},
       focusOrReopen: vi.fn(),
+      reopenIfViewed: vi.fn(() => 'open' as const),
       forSession: registry.forSession,
       arrange: vi.fn(),
       canPlace: () => true,

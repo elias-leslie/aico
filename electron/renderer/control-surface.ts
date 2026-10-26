@@ -14,11 +14,13 @@ import {
   DEFAULT_TERMINAL_FONT_SETTINGS,
   parseTerminalFontSettings,
 } from '../shared/font-settings'
-import type { OpenableSession } from '../types'
+import type { CheckInMenu, OpenableSession } from '../types'
 import {
   ACTIONS,
   type Action,
   allActions,
+  cancelCheckIn,
+  checkInLater,
   DEFAULT_PINS,
   findAction,
   isPinnable,
@@ -277,13 +279,14 @@ function menuRow(a: Action): HTMLElement {
 
 // The flyout-bearing menu rows and the launcher action-id prefix each uses
 // (`<kind>:<slug>` for TUIs, `project:<id>` for workspaces).
-type FlyoutKind = 'new' | 'replace' | 'project' | 'sessions' | 'game'
+type FlyoutKind = 'new' | 'replace' | 'project' | 'sessions' | 'game' | 'checkin'
 const FLYOUTS: Partial<Record<string, FlyoutKind>> = {
   'arcade-pick': 'game',
   'new-widget': 'new',
   'replace-tui': 'replace',
   'switch-project': 'project',
   'attach-tmux': 'sessions', // the id predates Tether; kept so existing pins resolve
+  'check-in-later': 'checkin',
 }
 
 // One flyout row: the launcher id, the bare display label (the fuller action
@@ -401,6 +404,60 @@ function sessionRow(session: OpenableSession): HTMLElement {
   return item
 }
 
+// "Check in later": read fresh each time the flyout opens, since the times
+// move with the clock and the pending list changes from elsewhere.
+let checkIns: CheckInMenu | null = null
+
+function refreshCheckIns(): Promise<void> {
+  return window.aico.actions
+    .checkInMenu()
+    .then((menu) => {
+      checkIns = menu
+    })
+    .catch(() => {
+      checkIns = { status: 'unavailable', choices: [], pending: [] }
+    })
+}
+
+// A check-in row runs at once: setting one is not destructive, and a pending
+// one says what Cancel removes. Neither is pinnable (times change).
+function checkInRow(label: string, time: string, run: () => void): HTMLElement {
+  const item = make('div', 'aico-sub-row runnable')
+  const dot = make('span', 'aico-sub-dot project')
+  const lbl = make('span', 'aico-lbl')
+  lbl.textContent = label
+  const when = make('span', 'aico-sub-time')
+  when.textContent = time
+  item.append(dot, lbl, when)
+  item.addEventListener('click', () => {
+    closeMenu()
+    run()
+  })
+  return item
+}
+
+function populateCheckIns(): void {
+  if (!checkIns) {
+    submenuEl.append(emptySubmenuRow('Loading…'))
+    return
+  }
+  if (checkIns.status === 'ready')
+    for (const choice of checkIns.choices)
+      submenuEl.append(checkInRow(choice.label, choice.time, () => void checkInLater(choice.dueAt)))
+  else
+    submenuEl.append(
+      emptySubmenuRow(
+        checkIns.status === 'unsupported'
+          ? 'Only Claude Code and Codex sessions take check-ins'
+          : 'Check-ins unavailable',
+      ),
+    )
+  for (const wake of checkIns.pending)
+    submenuEl.append(
+      checkInRow('Cancel check-in', wake.time, () => void cancelCheckIn(wake.id, wake.time)),
+    )
+}
+
 function emptySubmenuRow(label: string): HTMLElement {
   const empty = make('div', 'aico-sub-row empty')
   empty.textContent = label
@@ -461,6 +518,8 @@ function populateSubmenu(kind: FlyoutKind): void {
         }),
       )
     }
+  } else if (kind === 'checkin') {
+    populateCheckIns()
   } else if (kind === 'sessions') {
     if (catalogs.sessions.length) {
       for (const session of catalogs.sessions) submenuEl.append(sessionRow(session))
@@ -535,6 +594,14 @@ function refreshTuisThen(): void {
   })
 }
 
+function refreshCheckInsThen(anchor: HTMLElement, place: 'left' | 'below'): void {
+  void refreshCheckIns().then(() => {
+    if (submenuEl.hidden || submenuKind !== 'checkin') return
+    populateSubmenu('checkin')
+    placeSubmenu(anchor, place)
+  })
+}
+
 // Open a `kind` flyout from its menu row (part of the lantern menu).
 function showSubmenu(row: HTMLElement, kind: FlyoutKind): void {
   submenuStandalone = false
@@ -542,6 +609,7 @@ function showSubmenu(row: HTMLElement, kind: FlyoutKind): void {
   submenuEl.hidden = false // unhide before measuring
   placeSubmenu(row, 'left')
   if (kind === 'new' || kind === 'replace') refreshTuisThen()
+  if (kind === 'checkin') refreshCheckInsThen(row, 'left')
   if (kind === 'sessions') {
     void refreshSessions().then(() => {
       if (submenuEl.hidden || submenuKind !== kind) return
@@ -565,6 +633,7 @@ function showStandaloneSubmenu(
   submenuStandalone = true
   placeSubmenu(anchor, place)
   if (kind === 'new' || kind === 'replace') refreshTuisThen()
+  if (kind === 'checkin') refreshCheckInsThen(anchor, place)
   if (kind === 'sessions') {
     void refreshSessions().then(() => {
       if (submenuEl.hidden || submenuKind !== kind) return

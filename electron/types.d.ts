@@ -8,6 +8,12 @@ export interface SelectionToast {
   action?: { kind: 'file'; id: string } | { kind: 'copy'; text: string }
 }
 
+export interface CheckInMenu {
+  status: 'ready' | 'unsupported' | 'unavailable'
+  choices: { label: string; time: string; dueAt: number }[]
+  pending: { id: string; time: string }[]
+}
+
 export interface OpenableSession {
   /** Tether session id (8 lowercase hex). */
   id: string
@@ -91,6 +97,11 @@ export interface AicoApi {
     endSession(): Promise<void>
     /** Mark or unmark this session as a coordinator (titlebar label, centre tile). */
     toggleCoordinator(): void
+    /** "Check in later": the quick choices and this session's pending check-ins. */
+    checkInMenu(): Promise<CheckInMenu>
+    /** Set a check-in; resolves to its time (`5:30 PM`), rejects with the owner's wording. */
+    checkIn(dueAt: number): Promise<string>
+    cancelCheckIn(wakeId: string): Promise<void>
   }
   settings: {
     /** Global pinned-action ids, or null if never set (first run). */

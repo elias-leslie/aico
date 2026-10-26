@@ -199,6 +199,11 @@ export class TetherClient {
     return this.json('GET', '/v1/wakes')
   }
 
+  /** One session's wakes, with the policy (the menus' quick choices). */
+  sessionWakes(id: string): Promise<WakeList> {
+    return this.json('GET', `/v1/sessions/${encodeURIComponent(id)}/wakes`)
+  }
+
   addWake(
     id: string,
     input: { dueAt: number; note: string; createdBy?: 'agent' | 'owner' },

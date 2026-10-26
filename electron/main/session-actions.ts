@@ -5,11 +5,14 @@
 
 import type { IpcMain } from 'electron'
 import {
+  OWNER_CHECK_IN_NOTE,
   type SessionCatalog,
   type SessionDescriptor,
   type TetherClient,
   TetherError,
   type TetherTool,
+  wakeChoices,
+  wakeClock,
 } from 'tether/client'
 import { describeFailure, writeNotice } from './notices'
 import { PERSONAL_WORKSPACE_ID, type ProjectCatalog } from './project'
@@ -18,11 +21,41 @@ import { toolMark } from './tool-marks'
 import type { WindowRegistry } from './window-registry'
 
 const SESSION_ID = /^[0-9a-f]{8}$/
+const WAKE_ID = /^[0-9a-f]{12}$/
+
+/** What the window menu's "Check in later" shows. */
+export interface CheckInMenu {
+  status: 'ready' | 'unsupported' | 'unavailable'
+  choices: { label: string; time: string; dueAt: number }[]
+  pending: { id: string; time: string }[]
+}
+
+/** Tether's refusals of a check-in, worded for the owner. */
+const CHECK_IN_REFUSALS: Record<string, string> = {
+  wake_unsupported: 'Only Claude Code and Codex sessions take check-ins',
+  too_many_wakes: 'This session has as many check-ins as it can take',
+}
+
+/** `5:30 PM` or `5:30 PM and Tue 9:00 AM`. */
+function timesLabel(times: string[]): string {
+  return times.length > 1
+    ? `${times.slice(0, -1).join(', ')} and ${times.at(-1)}`
+    : (times[0] ?? '')
+}
 
 interface SessionActionsDeps {
   tether: Pick<
     TetherClient,
-    'getSession' | 'end' | 'setCoordinator' | 'loadTui' | 'switchProject' | 'rename' | 'diagnostics'
+    | 'getSession'
+    | 'end'
+    | 'setCoordinator'
+    | 'loadTui'
+    | 'switchProject'
+    | 'rename'
+    | 'diagnostics'
+    | 'sessionWakes'
+    | 'addWake'
+    | 'cancelWake'
   >
   catalog: Pick<SessionCatalog, 'get' | 'upsert' | 'list'>
   link: {
@@ -75,7 +108,7 @@ export function createSessionActions(deps: SessionActionsDeps) {
 
   /** End a session: re-read its exact generation, then ask Tether to End it.
    * Repeat requests for the same session share one attempt. */
-  function endSession(id: string): Promise<void> {
+  function endSession(id: string, options: { keepWakes?: boolean } = {}): Promise<void> {
     const current = endsInFlight.get(id)
     if (current) return current
     const attempt = (async () => {
@@ -90,7 +123,7 @@ export function createSessionActions(deps: SessionActionsDeps) {
         throw error
       }
       try {
-        await tether.end(id, descriptor.generation)
+        await tether.end(id, descriptor.generation, options)
       } catch (error) {
         if (error instanceof TetherError && error.code === 'not_found') {
           link.sessionEnded(id, 'absent')
@@ -104,27 +137,97 @@ export function createSessionActions(deps: SessionActionsDeps) {
     return attempt
   }
 
-  function discardWidget(id: string): void {
-    void endSession(id).catch((error) => {
+  function discardWidget(id: string, options: { keepWakes?: boolean } = {}): void {
+    void endSession(id, options).catch((error) => {
       console.error(`[aico] End failed widget=${id}:`, error)
       writeNotice(registry.forSession(id), describeFailure('End failed', error))
     })
   }
 
-  async function confirmTrayDiscard(id: string): Promise<void> {
+  /** Ask before an End. A session with check-ins says End cancels them and
+   * offers to keep them instead. */
+  async function askEnd(id: string): Promise<'cancel' | 'end' | 'keep'> {
     const descriptor = catalog.get(id)
-    if (!descriptor) return
+    if (!descriptor) return 'cancel'
+    const message = `End ${traySessionLabel(sessionTitle(descriptor), toolDisplayName(descriptor.tool, link.tools()))}?`
+    const wakes = descriptor.wakes ?? []
+    if (!wakes.length) {
+      const response = await dialog.showMessageBox({
+        type: 'warning',
+        buttons: ['Cancel', 'End session'],
+        defaultId: 0,
+        cancelId: 0,
+        noLink: true,
+        title: 'End session?',
+        message,
+        detail: 'Tether stops only this session’s verified workload. This cannot be undone.',
+      })
+      return response.response === 1 ? 'end' : 'cancel'
+    }
+    const several = wakes.length > 1
     const response = await dialog.showMessageBox({
       type: 'warning',
-      buttons: ['Cancel', 'End session'],
+      buttons: ['Cancel', several ? 'End, keep check-ins' : 'End, keep check-in', 'End session'],
       defaultId: 0,
       cancelId: 0,
       noLink: true,
       title: 'End session?',
-      message: `End ${traySessionLabel(sessionTitle(descriptor), toolDisplayName(descriptor.tool, link.tools()))}?`,
-      detail: 'Tether stops only this session’s verified workload. This cannot be undone.',
+      message,
+      detail: `This also cancels its check-in${several ? 's' : ''} at ${timesLabel(wakes.map((wake) => wakeClock(wake.dueAt)))}. Keep ${several ? 'them' : 'it'}, and the conversation comes back in a new session then.`,
     })
-    if (response.response === 1) discardWidget(id)
+    return response.response === 2 ? 'end' : response.response === 1 ? 'keep' : 'cancel'
+  }
+
+  async function confirmTrayDiscard(id: string): Promise<void> {
+    const choice = await askEnd(id)
+    if (choice !== 'cancel') discardWidget(id, { keepWakes: choice === 'keep' })
+  }
+
+  async function checkInMenu(id: string): Promise<CheckInMenu> {
+    try {
+      const { items, policy } = await tether.sessionWakes(id)
+      const now = Date.now()
+      const state = catalog.get(id)?.state
+      return {
+        // Tether can only tell when Claude Code or Codex is idle.
+        status: state && state !== 'unknown' ? 'ready' : 'unsupported',
+        choices: wakeChoices(policy, now).map((choice) => ({
+          ...choice,
+          time: wakeClock(choice.dueAt, now),
+        })),
+        pending: items.map((wake) => ({ id: wake.id, time: wakeClock(wake.dueAt, now) })),
+      }
+    } catch {
+      return { status: 'unavailable', choices: [], pending: [] }
+    }
+  }
+
+  /** Set an owner check-in; answers its time, or throws the owner's wording. */
+  async function checkInLater(id: string, dueAt: number): Promise<string> {
+    try {
+      const wake = await tether.addWake(id, {
+        dueAt,
+        note: OWNER_CHECK_IN_NOTE,
+        createdBy: 'owner',
+      })
+      return wakeClock(wake.dueAt)
+    } catch (error) {
+      const refusal = error instanceof TetherError ? CHECK_IN_REFUSALS[error.code] : undefined
+      throw new Error(refusal ?? describeFailure('Could not set the check-in', error))
+    }
+  }
+
+  async function cancelCheckIn(wakeId: string): Promise<void> {
+    try {
+      await tether.cancelWake(wakeId)
+    } catch (error) {
+      if (!(error instanceof TetherError && error.code === 'not_found')) {
+        console.warn(`[aico] could not cancel check-in ${wakeId}:`, error)
+        throw new Error(describeFailure('Could not cancel the check-in', error))
+      }
+    } finally {
+      link.requestRefresh()
+    }
   }
 
   /** Run a pane replacement with the generation Aico last read. Input is held
@@ -222,11 +325,36 @@ export function createSessionActions(deps: SessionActionsDeps) {
     ipcMain.handle('session:end-self', async (event) => {
       const id = registry.senderSession(event.sender)
       if (!id) throw new Error('Session view is unavailable')
+      // The menu already asked once; a session with check-ins asks which End.
+      let keepWakes = false
+      if (catalog.get(id)?.wakes?.length) {
+        const choice = await askEnd(id)
+        if (choice === 'cancel') return
+        keepWakes = choice === 'keep'
+      }
       try {
-        await endSession(id)
+        await endSession(id, { keepWakes })
       } catch (error) {
         throw new Error(describeFailure('End failed', error))
       }
+    })
+
+    ipcMain.handle('session:check-in-menu', async (event): Promise<CheckInMenu> => {
+      const id = registry.senderSession(event.sender)
+      return id ? checkInMenu(id) : { status: 'unavailable', choices: [], pending: [] }
+    })
+    ipcMain.handle('session:check-in', async (event, dueAt: unknown) => {
+      const id = registry.senderSession(event.sender)
+      if (!id || typeof dueAt !== 'number' || !Number.isSafeInteger(dueAt))
+        throw new Error('Could not set the check-in')
+      return checkInLater(id, dueAt)
+    })
+    // Only this window's own session's check-ins.
+    ipcMain.handle('session:cancel-check-in', async (event, wakeId: unknown) => {
+      const id = registry.senderSession(event.sender)
+      if (!id || typeof wakeId !== 'string' || !WAKE_ID.test(wakeId)) return
+      if (!catalog.get(id)?.wakes?.some((wake) => wake.id === wakeId)) return
+      await cancelCheckIn(wakeId)
     })
 
     ipcMain.on('widget:toggle-coordinator', (event) => {
@@ -302,6 +430,8 @@ export function createSessionActions(deps: SessionActionsDeps) {
     end: endSession,
     /** The tray's End: ask first, then End; a failure shows in the session's terminal. */
     confirmTrayDiscard,
+    /** The tray's Cancel on a check-in. */
+    cancelCheckIn: (wakeId: string): void => void cancelCheckIn(wakeId).catch(() => {}),
     requestCoordinator,
     /** Tether is replacing this session's pane: renderer input and deliveries wait. */
     isReplacing: (id: string): boolean => replacing.has(id),

@@ -15,6 +15,8 @@ interface GuiChannelDeps {
   /** Re-list every session (the link's one shared refresh). */
   refresh(): Promise<void>
   focusOrReopen(id: string): void
+  /** Reopen a closed window only if this desktop has shown the session, unfocused. */
+  reopenIfViewed(id: string): 'open' | 'reopened' | 'no_view'
   forSession(id: string): BrowserWindow | undefined
   /** Place an open window and remember its bounds once it is there. */
   arrange(win: BrowserWindow, bounds: Bounds): Promise<PlaceResult>
@@ -46,7 +48,8 @@ export function createGuiChannel(deps: GuiChannelDeps) {
       return { applied: false, error: 'stale_generation' }
     const id = command.sessionId
     if (command.kind === 'show') {
-      deps.focusOrReopen(id)
+      if (!command.ifViewed) deps.focusOrReopen(id)
+      else if (deps.reopenIfViewed(id) === 'no_view') return { applied: false, error: 'no_view' }
     } else if (command.kind === 'position' && command.bounds) {
       // Without the compositor there is nowhere to verify a position: say so.
       if (!deps.canPlace()) return { applied: false, error: 'compositor_unavailable' }

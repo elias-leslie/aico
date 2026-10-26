@@ -20,6 +20,8 @@ export interface TrayWidget {
   group?: AttentionGroup
   /** State and age, e.g. `waiting 3m`. */
   detail?: string | null
+  /** Pending check-ins, soonest first, with their times (`5:30 PM`). */
+  checkIns?: { id: string; time: string }[]
 }
 
 /** A launchable TUI as the tray sees it (slug + menu label), from the registry. */
@@ -41,6 +43,8 @@ export interface TrayHandlers {
   onSelect: (id: string) => void
   /** End the session through Tether (after confirmation). */
   onDiscard: (id: string) => void
+  /** Cancel one check-in. */
+  onCancelCheckIn: (wakeId: string) => void
   /** Create a new widget running the chosen TUI in the chosen workspace. */
   onNewWidget: (tool: string, projectId: string) => void
   /** Re-list sessions from Tether and rebuild the menu. */
@@ -77,8 +81,10 @@ function buildMenu(widgets: TrayWidget[]): Menu {
     if (!rows.length) continue
     template.push({ label: title, enabled: false })
     for (const w of rows) {
+      const checkIn = w.checkIns?.[0] ? `check-in ${w.checkIns[0].time}` : null
+      const detail = [w.detail, checkIn].filter(Boolean).join(' · ')
       template.push({
-        label: `${w.open ? '●' : '○'} ${w.label}${w.detail ? ` — ${w.detail}` : ''}`,
+        label: `${w.open ? '●' : '○'} ${w.label}${detail ? ` — ${detail}` : ''}`,
         click: () => h.onSelect(w.id),
       })
     }
@@ -112,14 +118,27 @@ function buildMenu(widgets: TrayWidget[]): Menu {
     { label: 'Show windows', click: () => h.onHubView() },
   )
 
-  if (widgets.length) {
+  const checkIns = widgets.flatMap((w) =>
+    (w.checkIns ?? []).map((checkIn) => ({ ...checkIn, label: w.label })),
+  )
+  if (checkIns.length) {
     template.push(
       { type: 'separator' },
       {
-        label: 'End session',
-        submenu: widgets.map((w) => ({ label: w.label, click: () => h.onDiscard(w.id) })),
+        label: 'Check-ins',
+        submenu: checkIns.map((checkIn) => ({
+          label: `${checkIn.label} — ${checkIn.time}`,
+          submenu: [{ label: 'Cancel check-in', click: () => h.onCancelCheckIn(checkIn.id) }],
+        })),
       },
     )
+  }
+
+  if (widgets.length) {
+    template.push(...(checkIns.length ? [] : [{ type: 'separator' as const }]), {
+      label: 'End session',
+      submenu: widgets.map((w) => ({ label: w.label, click: () => h.onDiscard(w.id) })),
+    })
   }
 
   template.push(
