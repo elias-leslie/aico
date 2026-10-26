@@ -50,7 +50,7 @@ def test_claude_keeps_only_pretooluse_guards(run, tmp_path, monkeypatch):
         "PreToolUse": guard, "SessionStart": [{"hooks": [{"type": "command", "command": "inject"}]}]}}))
     argv, env = run("claude-code", "--permission-mode", "auto")
     assert argv[1:5] == ["--setting-sources", "project,local", "--settings", json.dumps({"hooks": {"PreToolUse": guard}})]
-    assert argv[5:] == ["--strict-mcp-config", "--disable-slash-commands", "--permission-mode", "auto"]
+    assert argv[5:] == ["--strict-mcp-config", "--disable-slash-commands", "--no-chrome", "--permission-mode", "auto"]
     assert env["CLAUDE_CODE_DISABLE_CLAUDE_MDS"] == env["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] == "1"
     assert "AGENT_HUB_CONTEXT_PREINJECTED_TEXT" not in env
     trusted = json.loads(state.read_text())

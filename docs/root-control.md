@@ -299,7 +299,7 @@ no one wrote it since it was read, with its mode kept.
 
 | Tool | Off | Kept |
 | --- | --- | --- |
-| Claude Code | Agent Hub launcher, CLAUDE.md files (user, project, added dirs), auto-memory, user settings (plugins, output style, status line, every hook but PreToolUse), MCP servers, slash commands/skills | PreToolUse guards from `~/.claude/settings.json` |
+| Claude Code | Agent Hub launcher, CLAUDE.md files (user, project, added dirs), auto-memory, user settings (plugins, output style, status line, every hook but PreToolUse), MCP servers, slash commands/skills, Claude in Chrome | PreToolUse guards from `~/.claude/settings.json` |
 | Codex | Agent Hub launcher and `developer_instructions`, AGENTS.md, skills list, plugins (and their MCP servers), apps, memories, each `config.toml` MCP server, extra sandbox writable roots, every `hooks.json` handler but PreToolUse | PreToolUse guards and their trust |
 | Pi | Agent Hub and st-coord extensions, skills, AGENTS.md/context files, prompt templates, MCP | none (Pi's guards are extension code) |
 
@@ -308,7 +308,9 @@ What the model still receives, measured on captured requests (2026-10-26):
 - the provider/harness system prompt and tool definitions (Claude ~4K
   characters; Pi ~2.9K; Codex base instructions, permissions, collaboration
   and multi-agent blocks, and `environment_context` naming the empty cwd);
-- Claude Code's own reminders (the signed-in account email and git attribution);
+- Claude Code's own reminders (the signed-in account email and git attribution)
+  and, when signed in to claude.ai, its account features' tool instructions
+  (Artifact, Workflow and similar), which no launch option turns off;
 - the opening prompt, plus a guard's refusal text if a PreToolUse guard blocks a
   tool call (they are silent otherwise).
 
