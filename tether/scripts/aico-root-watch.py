@@ -96,15 +96,16 @@ SECRET = re.compile(
     r"\b(?:gh[pousr]_[\w]+|AKIA[0-9A-Z]{16})\b|"
     r"\b[a-z][a-z0-9+.-]*://[^\s/@]+:[^\s/@]+@[^\s]+)"
 )
-# Refusing a launch prompt needs a value that looks like a credential, so prose
-# such as "Bearer token auth" or "password: the field is masked" passes;
+# Refusing a launch prompt needs an assignment (password=...) or a value that
+# looks like a credential, so prose such as "Bearer token auth" or
+# "password: the field is masked" passes;
 # SECRET stays broad because over-redacting a screen sample is harmless.
 _TOKEN = r"(?=[\w.~+/=-]*[\d.~+/=])[\w.~+/=-]{8,}"
 _VALUE = r"(?=\S*[\d_./+=~!@#$%^&*-])[^\s,;]{4,}|[^\s,;]{20,}"
 PROMPT_SECRET = re.compile(
     r"(?is)-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----|"
     r"\b(?:api[_-]?key|access[_-]?token|password|secret|authorization)[\"']?"
-    rf"\s*[:=]\s*(?:Bearer\s+{_TOKEN}|\"[^\"]+\"|'[^']+'|{_VALUE})|"
+    rf"(?:\s*=\s*\S|:(?=\S)|\s*:\s*(?:Bearer\s+{_TOKEN}|\"[^\"]+\"|'[^']+'|{_VALUE}))|"
     rf"\bBearer\s+{_TOKEN}|\bsk-[\w-]{{16,}}|"
     r"\b(?:gh[pousr]_[\w]+|AKIA[0-9A-Z]{16})\b|"
     r"\b[a-z][a-z0-9+.-]*://[^\s/@]+:[^\s/@]+@[^\s]+"

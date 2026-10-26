@@ -335,7 +335,7 @@ def test_quoted_and_multiline_credentials_are_redacted():
 def test_launch_prompt_refuses_credential_values_but_not_prose():
     prose = ("Uses Bearer token auth on the API", "The login form posts a password: the field is masked",
              "authorization: required for admin routes", "secret: none needed", "use sk-learn style")
-    credentials = ("password=hunter2", "api_key=abc123", "Authorization: Bearer eyJhbGciOi.x",
+    credentials = ("password=hunter2", "password=private", "secret:private", "api_key=abc123", "Authorization: Bearer eyJhbGciOi.x",
                    '"password": "private phrase"', "sk-proj-0123456789abcdefXYZ", "ghp_abcdefABCDEF0123",
                    "see https://user:pw@host/x", "-----BEGIN " + "PRIVATE KEY-----")
     assert not [text for text in prose if watcher.PROMPT_SECRET.search(text)]
