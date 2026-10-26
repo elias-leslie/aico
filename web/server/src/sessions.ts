@@ -2,7 +2,7 @@
 // session response, kept field for field), and what the UI may do to each.
 // Every session is a Tether session; Tether words the title and badge.
 
-import type { SessionDescriptor } from 'tether/client'
+import { type SessionDescriptor, wakeClock } from 'tether/client'
 import type { Link } from './db'
 import { HttpError } from './tether'
 
@@ -40,6 +40,8 @@ export interface WebSession {
   /** No tab of this app shows it (a session another app started). */
   is_external: boolean
   is_root: boolean
+  /** Pending check-ins, oldest first; `time` reads `5:30 PM` (weekday when not today). */
+  check_ins: { id: string; due_at: number; time: string }[]
   is_legacy: false
   source: 'tether'
   origin: string | null
@@ -113,6 +115,11 @@ export function fromTether(descriptor: SessionDescriptor, link: Link | null): We
     tmux_source_label: 'Tether',
     is_external: link === null,
     is_root: isRoot,
+    check_ins: (descriptor.wakes ?? []).map((wake) => ({
+      id: wake.id,
+      due_at: wake.dueAt,
+      time: wakeClock(wake.dueAt),
+    })),
     is_legacy: false,
     source: 'tether',
     origin: descriptor.origin ?? null,

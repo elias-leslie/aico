@@ -79,7 +79,7 @@ describe('useTerminalSlotHandlers', () => {
       await result.current.handleSlotCloseSession(a)
     })
 
-    expect(remove).toHaveBeenCalledWith('session-a')
+    expect(remove).toHaveBeenCalledWith('session-a', {})
     expect(switchToSession).toHaveBeenCalledWith('session-b')
   })
 

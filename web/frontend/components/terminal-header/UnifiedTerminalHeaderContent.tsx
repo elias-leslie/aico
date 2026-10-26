@@ -143,6 +143,7 @@ export const UnifiedTerminalHeaderContent = memo(
           {hasSessionActions && (
             <PaneOverflowMenu
               onRename={canRename ? () => setIsRenaming(true) : undefined}
+              checkInSessionId={getSlotSessionId(slot)}
               onCloseSession={onCloseSession}
               onRefresh={onRefresh}
               onReset={onReset}

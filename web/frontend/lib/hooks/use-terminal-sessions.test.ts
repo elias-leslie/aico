@@ -167,4 +167,32 @@ describe('useTerminalSessions', () => {
       queryClient.getQueryState(['terminal-detached-panes'])?.isInvalidated,
     ).toBe(true)
   })
+
+  it('ends a session, keeping its check-ins only when asked', async () => {
+    mockFetch.mockImplementation(
+      async (_url: string, options?: RequestInit) => ({
+        ok: true,
+        text: async () =>
+          JSON.stringify(
+            options?.method === 'DELETE'
+              ? { deleted: true, id: 'session-1' }
+              : { items: mockSessions, total: 2 },
+          ),
+      }),
+    )
+    const { result } = renderHook(() => useTerminalSessions(), {
+      wrapper: createWrapper(),
+    })
+    await act(async () => {
+      await result.current.remove('session-1')
+      await result.current.remove('session-2', { keepCheckIns: true })
+    })
+    const deletes = mockFetch.mock.calls
+      .filter(([, options]) => options?.method === 'DELETE')
+      .map(([url]) => url)
+    expect(deletes).toEqual([
+      '/api/sessions/session-1',
+      '/api/sessions/session-2?keepWakes=true',
+    ])
+  })
 })

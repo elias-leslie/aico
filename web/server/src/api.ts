@@ -4,6 +4,7 @@
 
 import { compatibleVersion, type TetherClient } from 'tether/client'
 import { AGENT_HUB_PATHS, type AgentHubConfig, proxyAgentHub } from './agent-hub'
+import { registerCheckInRoutes } from './check-ins'
 import type { UploadConfig } from './config'
 import type { WebStore } from './db'
 import {
@@ -212,7 +213,9 @@ export function buildApi(deps: ApiDeps): Router {
       ...fields,
     })
     const link = store.getLink(id)
-    await endSession(id)
+    // "End, keep check-in": its check-ins outlive the session (Tether starts a new one then).
+    const keepWakes = ctx.query.get('keepWakes') === 'true'
+    await endSession(id, { keepWakes })
     if (!link) return result({ is_external: true })
     const pane = store.getPane(link.pane_id)
     if (!pane) return result()
@@ -343,6 +346,7 @@ export function buildApi(deps: ApiDeps): Router {
   registerUploadRoutes(router, deps.uploads)
   registerPaneFileRoutes(router, life)
   registerShowRoutes(router, deps.shows)
+  registerCheckInRoutes(router, life, tether)
 
   // -- Agent Hub, auth, health ------------------------------------------------------
 

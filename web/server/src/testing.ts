@@ -8,6 +8,7 @@ import {
   type TetherClient,
   TetherError,
   type ViewerLabel,
+  type Wake,
 } from 'tether/client'
 import { Router } from './http'
 
@@ -115,11 +116,66 @@ export class FakeTether {
     return session
   }
 
-  async end(id: string, generation: string) {
-    this.record('end', id, generation)
+  async end(id: string, generation: string, options: { keepWakes?: boolean } = {}) {
+    this.record('end', id, generation, ...(options.keepWakes ? [options] : []))
     this.need(id)
     this.sessions.delete(id)
     return { status: 'ended' as const }
+  }
+
+  /** The wakes Tether lists, kept ones (`sessionId` null) included. */
+  wakeRows: Wake[] = []
+  wakePolicy = {
+    laterMinutes: 60,
+    tonightHour: 21,
+    morningHour: 8,
+    maxPerSession: 5,
+    noteMaxChars: 500,
+    quietSeconds: 15,
+    lateNoticeMinutes: 5,
+    relaunchAttempts: 15,
+  }
+  /** Fail the next `addWake` with this Tether refusal. */
+  failWake: TetherError | null = null
+
+  async wakes() {
+    this.record('wakes')
+    return { items: this.wakeRows, policy: this.wakePolicy }
+  }
+
+  async sessionWakes(id: string) {
+    this.record('sessionWakes', id)
+    this.need(id)
+    return {
+      items: this.wakeRows.filter((wake) => wake.sessionId === id),
+      policy: this.wakePolicy,
+    }
+  }
+
+  async addWake(id: string, input: { dueAt: number; note: string; createdBy?: 'agent' | 'owner' }) {
+    this.record('addWake', id, input)
+    this.need(id)
+    if (this.failWake) throw this.failWake
+    const wake: Wake = {
+      id: String(this.wakeRows.length + 1).padStart(12, '0'),
+      sessionId: id,
+      dueAt: input.dueAt,
+      note: input.note,
+      createdBy: input.createdBy ?? 'agent',
+      createdAt: Date.now(),
+      kept: false,
+      attempts: 0,
+      lastError: null,
+    }
+    this.wakeRows.push(wake)
+    return wake
+  }
+
+  async cancelWake(wakeId: string) {
+    this.record('cancelWake', wakeId)
+    if (!this.wakeRows.some((wake) => wake.id === wakeId)) throw notFound()
+    this.wakeRows = this.wakeRows.filter((wake) => wake.id !== wakeId)
+    return { deleted: true as const }
   }
 
   async loadTui(id: string, generation: string, tool: string) {

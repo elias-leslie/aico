@@ -9,6 +9,9 @@ interface ConfirmationDialogProps {
   title: string
   message: string
   confirmText?: string
+  /** A second way to confirm, between Cancel and the main button. */
+  secondaryText?: string
+  onSecondary?: () => void
   cancelText?: string
   variant?: 'danger' | 'warning'
   isPending?: boolean
@@ -26,6 +29,8 @@ export function ConfirmationDialog({
   title,
   message,
   confirmText = 'Confirm',
+  secondaryText,
+  onSecondary,
   cancelText = 'Cancel',
   variant = 'danger',
   isPending = false,
@@ -96,7 +101,7 @@ export function ConfirmationDialog({
               </div>
             </div>
 
-            <div className="mt-5 flex justify-end gap-2">
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
               <button
                 type="button"
                 data-testid="confirm-dialog-cancel"
@@ -106,6 +111,17 @@ export function ConfirmationDialog({
               >
                 {cancelText}
               </button>
+              {secondaryText && onSecondary && (
+                <button
+                  type="button"
+                  data-testid="confirm-dialog-secondary"
+                  onClick={onSecondary}
+                  disabled={isPending}
+                  className="lantern-btn"
+                >
+                  {secondaryText}
+                </button>
+              )}
               <button
                 type="button"
                 ref={confirmButtonRef}

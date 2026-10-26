@@ -161,15 +161,16 @@ export function createLifecycle(deps: LifecycleDeps) {
     return fromTether(descriptor, link)
   }
 
-  /** Tether's End, fenced by the generation read just before it; false when already gone. */
-  async function endSession(id: string): Promise<boolean> {
+  /** Tether's End, fenced by the generation read just before it; false when already gone.
+   * `keepWakes` keeps the session's check-ins past the End. */
+  async function endSession(id: string, options: { keepWakes?: boolean } = {}): Promise<boolean> {
     const ended = await tetherCall(async () => {
       const descriptor = await findSession(tether, id)
       if (!descriptor) return false
       if (typeof descriptor.generation !== 'string')
         throw new HttpError(409, 'The session has no generation yet; refresh and try again')
       try {
-        await tether.end(id, descriptor.generation)
+        await tether.end(id, descriptor.generation, options)
         return true
       } catch (error) {
         if (error instanceof TetherError && error.status === 404) return false

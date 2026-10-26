@@ -13,6 +13,13 @@ import type { CoordinatorFields } from '../utils/coordinator-badge'
  * What the UI may offer comes from `can_*`; `source`, `is_root` and
  * `is_external` are informational.
  */
+/** A pending check-in; `time` reads `5:30 PM`, with the weekday when not today. */
+export interface SessionCheckIn {
+  id: string
+  due_at: number
+  time: string
+}
+
 export interface TerminalSession extends CoordinatorFields {
   id: string
   /** `Project — Task`, the title Aico shows; `task` is Tether's name alone. */
@@ -35,6 +42,8 @@ export interface TerminalSession extends CoordinatorFields {
   tmux_source_label?: string | null
   is_external?: boolean
   is_root?: boolean
+  /** Pending check-ins, oldest first. */
+  check_ins?: SessionCheckIn[]
   source?: string | null
   /** The app that created the session in Tether ('a-term', 'aico', ...). */
   origin?: string | null
@@ -105,10 +114,17 @@ const updateSession = (sessionId: string, req: UpdateSessionRequest) =>
     body: JSON.stringify(req),
   })
 
-const deleteSession = (sessionId: string) =>
-  apiFetch<DeleteSessionResult>(`/api/sessions/${sessionId}`, {
-    method: 'DELETE',
-  })
+export interface EndSessionRequest {
+  sessionId: string
+  /** "End, keep check-in": its check-ins outlive the session. */
+  keepCheckIns?: boolean
+}
+
+const deleteSession = ({ sessionId, keepCheckIns }: EndSessionRequest) =>
+  apiFetch<DeleteSessionResult>(
+    `/api/sessions/${sessionId}${keepCheckIns ? '?keepWakes=true' : ''}`,
+    { method: 'DELETE' },
+  )
 
 const resetSession = (sessionId: string) =>
   apiFetch<TerminalSession>(`/api/sessions/${sessionId}/reset`, {
@@ -158,7 +174,11 @@ export function useTerminalSessions(options: UseTerminalSessionsOptions = {}) {
 
   const deleteMutation = useMutation({
     mutationFn: deleteSession,
-    onSuccess: () => invalidatePanesAndSessions(queryClient),
+    onSuccess: () => {
+      invalidatePanesAndSessions(queryClient)
+      // A kept check-in outlives the session it was set on.
+      queryClient.invalidateQueries({ queryKey: ['kept-check-ins'] })
+    },
   })
 
   const resetMutation = useMutation({
@@ -199,7 +219,8 @@ export function useTerminalSessions(options: UseTerminalSessionsOptions = {}) {
   )
 
   const remove = useCallback(
-    (sessionId: string) => deleteMutation.mutateAsync(sessionId),
+    (sessionId: string, options: { keepCheckIns?: boolean } = {}) =>
+      deleteMutation.mutateAsync({ sessionId, ...options }),
     [deleteMutation],
   )
 

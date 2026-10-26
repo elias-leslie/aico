@@ -347,6 +347,7 @@ describe('sessionToSlot', () => {
       claudeState: 'running',
       task: undefined,
       badge: null,
+      checkIns: [],
       can: { rename: false, reset: false, end: false },
       showsSessionTitle: false,
     })
@@ -367,6 +368,7 @@ describe('sessionToSlot', () => {
       isExternal: true,
       task: undefined,
       badge: null,
+      checkIns: [],
       can: { rename: false, reset: false, end: false },
       showsSessionTitle: false,
     })

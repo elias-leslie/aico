@@ -5,6 +5,7 @@ import type { PaneSlot } from '@/lib/utils/slot'
 import { SLOT_BASE } from '@/test-stubs/session-fixtures'
 import { SessionSwitcher } from './SessionSwitcher'
 
+vi.mock('./KeptCheckIns', () => ({ KeptCheckIns: () => null }))
 vi.mock('@/lib/hooks/use-agent-tools', () => ({
   useAgentTools: () => ({ agentTools: [] }),
 }))
@@ -192,5 +193,27 @@ describe('SessionSwitcher attention', () => {
 
     expect(onSwitchTo).toHaveBeenCalledWith(slotB)
     expect(screen.queryByRole('dialog', { name: 'Sessions' })).toBeNull()
+  })
+
+  it("shows a session's next check-in on its row", () => {
+    const slotA = makeProjectSlot('a', 'Alpha')
+    const slotB = {
+      ...makeProjectSlot('b', 'Beta'),
+      checkIns: [{ id: 'x', due_at: 1, time: 'Tue 5:30 PM' }],
+    } as PaneSlot
+    render(
+      <SessionSwitcher
+        currentSlot={slotA}
+        allSlots={[slotA, slotB]}
+        onSwitchTo={vi.fn()}
+        isMobile
+      />,
+    )
+    fireEvent.click(screen.getByTestId('session-switcher'))
+    const chips = within(screen.getByTestId('session-sheet')).getAllByTestId(
+      'check-in-badge',
+    )
+    expect(chips).toHaveLength(1)
+    expect(chips[0]).toHaveTextContent('Check-in Tue 5:30 PM')
   })
 })

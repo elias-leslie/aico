@@ -9,6 +9,7 @@ const { renamePane, updateSession } = vi.hoisted(() => ({
   updateSession: vi.fn(),
 }))
 
+vi.mock('../KeptCheckIns', () => ({ KeptCheckIns: () => null }))
 vi.mock('@/lib/hooks/use-agent-tools', () => ({
   useAgentTools: () => ({ enabledTools: [], agentTools: [] }),
 }))

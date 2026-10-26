@@ -1,6 +1,7 @@
 'use client'
 
 import {
+  Clock,
   MoreHorizontal,
   Paperclip,
   Pencil,
@@ -15,6 +16,7 @@ import {
   TERMINAL_FONT_SIZES,
   type TerminalFontSize,
 } from '@/lib/hooks/use-terminal-settings'
+import { CheckInPanel } from './CheckInPanel'
 import { MenuItemButton } from './MenuItemButton'
 
 export interface PaneOverflowMenuProps {
@@ -23,6 +25,8 @@ export interface PaneOverflowMenuProps {
   onReset?: () => void
   onUpload?: () => void
   onRename?: () => void
+  /** The session "Check in later" sets check-ins on; hidden without it. */
+  checkInSessionId?: string | null
   /** Text size, the one type setting; shown as a stepper when given. */
   fontSize?: TerminalFontSize
   onFontSizeChange?: (size: TerminalFontSize) => void
@@ -41,33 +45,38 @@ export function PaneOverflowMenu({
   onReset,
   onUpload,
   onRename,
+  checkInSessionId,
   fontSize,
   onFontSizeChange,
   isMobile = false,
 }: PaneOverflowMenuProps) {
   const [isOpen, setIsOpen] = useState(false)
+  const [view, setView] = useState<'menu' | 'check-in'>('menu')
   const menuRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
 
-  const closeMenu = useCallback(() => setIsOpen(false), [])
+  const closeMenu = useCallback(() => {
+    setIsOpen(false)
+    setView('menu')
+  }, [])
   const clickOutsideRefs = useMemo(() => [buttonRef, menuRef], [])
   useClickOutside(clickOutsideRefs, closeMenu, isOpen)
 
   useEffect(() => {
     if (!isOpen) return
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setIsOpen(false)
+      if (e.key === 'Escape') closeMenu()
     }
     document.addEventListener('keydown', handleEscape)
     return () => document.removeEventListener('keydown', handleEscape)
-  }, [isOpen])
+  }, [isOpen, closeMenu])
 
   const run = useCallback(
     (action?: () => void) => () => {
       action?.()
-      setIsOpen(false)
+      closeMenu()
     },
-    [],
+    [closeMenu],
   )
 
   const sizeIndex =
@@ -84,7 +93,7 @@ export function PaneOverflowMenu({
         ref={buttonRef}
         type="button"
         data-testid="pane-overflow-menu"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => (isOpen ? closeMenu() : setIsOpen(true))}
         className={isMobile ? 'lantern-icon-btn' : 'lantern-icon-btn compact'}
         title="Session menu"
         aria-label="Session menu"
@@ -100,101 +109,121 @@ export function PaneOverflowMenu({
           role="menu"
           aria-label="Session menu"
           data-testid="pane-overflow-menu-items"
-          className="lantern-sheet lantern-enter absolute right-0 top-full z-50 mt-1.5 min-w-[232px] rounded-xl p-1.5"
+          className={`lantern-sheet lantern-enter absolute right-0 top-full z-50 mt-1.5 rounded-xl p-1.5 ${view === 'check-in' ? 'w-[min(300px,calc(100vw-16px))]' : 'min-w-[232px]'}`}
         >
-          {onUpload && (
-            <MenuItemButton
-              icon={<Paperclip className={ICON} strokeWidth={1.7} />}
-              label="Upload a file"
-              onClick={run(onUpload)}
+          {view === 'check-in' && checkInSessionId ? (
+            <CheckInPanel
+              sessionId={checkInSessionId}
               isMobile={isMobile}
+              onBack={() => setView('menu')}
+              onDone={closeMenu}
             />
-          )}
-          {fontSize !== undefined && onFontSizeChange && (
-            <div
-              role="group"
-              aria-label="Text size"
-              className="lantern-menu-item"
-              style={{ minHeight: isMobile ? 44 : 38 }}
-            >
-              <Type className={ICON} strokeWidth={1.7} aria-hidden="true" />
-              Text size
-              <span className="ml-auto inline-flex items-center gap-0.5">
-                <button
-                  type="button"
-                  className="lantern-btn"
-                  style={{ width: 30, height: 30, padding: 0 }}
-                  aria-label="Smaller text"
-                  disabled={sizeIndex <= 0}
-                  onClick={() => stepSize(-1)}
-                >
-                  −
-                </button>
-                <span
-                  aria-live="polite"
-                  className="w-[30px] text-center text-xs"
-                  style={{
-                    fontFamily: 'var(--font-mono)',
-                    color: 'var(--mist)',
-                  }}
-                >
-                  {fontSize}
-                </span>
-                <button
-                  type="button"
-                  className="lantern-btn"
-                  style={{ width: 30, height: 30, padding: 0 }}
-                  aria-label="Larger text"
-                  disabled={sizeIndex >= TERMINAL_FONT_SIZES.length - 1}
-                  onClick={() => stepSize(1)}
-                >
-                  +
-                </button>
-              </span>
-            </div>
-          )}
-          {onRename && (
-            <MenuItemButton
-              icon={<Pencil className={ICON} strokeWidth={1.7} />}
-              label="Rename"
-              onClick={run(onRename)}
-              isMobile={isMobile}
-              title="Rename this session"
-            />
-          )}
-          {onReset && (
-            <MenuItemButton
-              icon={<RotateCcw className={ICON} strokeWidth={1.7} />}
-              label="Reset session"
-              onClick={run(onReset)}
-              isMobile={isMobile}
-            />
-          )}
-          {onRefresh && (
-            <MenuItemButton
-              icon={<RefreshCw className={ICON} strokeWidth={1.7} />}
-              label="Redraw"
-              onClick={run(onRefresh)}
-              isMobile={isMobile}
-              title="Redraw this session's screen without restarting it"
-            />
-          )}
-          {onCloseSession && (
+          ) : (
             <>
-              {(onUpload || onFontSizeChange || hasSessionActions) && (
-                <hr
-                  className="mx-1.5 my-1 border-0 border-t"
-                  style={{ borderColor: 'rgb(var(--glass-rgb) / 0.06)' }}
+              {onUpload && (
+                <MenuItemButton
+                  icon={<Paperclip className={ICON} strokeWidth={1.7} />}
+                  label="Upload a file"
+                  onClick={run(onUpload)}
+                  isMobile={isMobile}
                 />
               )}
-              <MenuItemButton
-                icon={<Square className={ICON} strokeWidth={1.7} />}
-                label="End session"
-                onClick={run(onCloseSession)}
-                isMobile={isMobile}
-                variant="danger"
-                title="End session: stop its process everywhere it is open."
-              />
+              {fontSize !== undefined && onFontSizeChange && (
+                <div
+                  role="group"
+                  aria-label="Text size"
+                  className="lantern-menu-item"
+                  style={{ minHeight: isMobile ? 44 : 38 }}
+                >
+                  <Type className={ICON} strokeWidth={1.7} aria-hidden="true" />
+                  Text size
+                  <span className="ml-auto inline-flex items-center gap-0.5">
+                    <button
+                      type="button"
+                      className="lantern-btn"
+                      style={{ width: 30, height: 30, padding: 0 }}
+                      aria-label="Smaller text"
+                      disabled={sizeIndex <= 0}
+                      onClick={() => stepSize(-1)}
+                    >
+                      −
+                    </button>
+                    <span
+                      aria-live="polite"
+                      className="w-[30px] text-center text-xs"
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        color: 'var(--mist)',
+                      }}
+                    >
+                      {fontSize}
+                    </span>
+                    <button
+                      type="button"
+                      className="lantern-btn"
+                      style={{ width: 30, height: 30, padding: 0 }}
+                      aria-label="Larger text"
+                      disabled={sizeIndex >= TERMINAL_FONT_SIZES.length - 1}
+                      onClick={() => stepSize(1)}
+                    >
+                      +
+                    </button>
+                  </span>
+                </div>
+              )}
+              {onRename && (
+                <MenuItemButton
+                  icon={<Pencil className={ICON} strokeWidth={1.7} />}
+                  label="Rename"
+                  onClick={run(onRename)}
+                  isMobile={isMobile}
+                  title="Rename this session"
+                />
+              )}
+              {checkInSessionId && (
+                <MenuItemButton
+                  icon={<Clock className={ICON} strokeWidth={1.7} />}
+                  label="Check in later"
+                  onClick={() => setView('check-in')}
+                  isMobile={isMobile}
+                  title="Have the agent report back at a time you pick"
+                />
+              )}
+              {onReset && (
+                <MenuItemButton
+                  icon={<RotateCcw className={ICON} strokeWidth={1.7} />}
+                  label="Reset session"
+                  onClick={run(onReset)}
+                  isMobile={isMobile}
+                />
+              )}
+              {onRefresh && (
+                <MenuItemButton
+                  icon={<RefreshCw className={ICON} strokeWidth={1.7} />}
+                  label="Redraw"
+                  onClick={run(onRefresh)}
+                  isMobile={isMobile}
+                  title="Redraw this session's screen without restarting it"
+                />
+              )}
+              {onCloseSession && (
+                <>
+                  {(onUpload || onFontSizeChange || hasSessionActions) && (
+                    <hr
+                      className="mx-1.5 my-1 border-0 border-t"
+                      style={{ borderColor: 'rgb(var(--glass-rgb) / 0.06)' }}
+                    />
+                  )}
+                  <MenuItemButton
+                    icon={<Square className={ICON} strokeWidth={1.7} />}
+                    label="End session"
+                    onClick={run(onCloseSession)}
+                    isMobile={isMobile}
+                    variant="danger"
+                    title="End session: stop its process everywhere it is open."
+                  />
+                </>
+              )}
             </>
           )}
         </div>

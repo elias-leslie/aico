@@ -16,7 +16,10 @@ interface UseTerminalSlotHandlersParams {
   switchToSession: (sessionId: string) => void
   activeSessionId: string | null
   reset: (sessionId: string) => Promise<TerminalSession>
-  remove: (sessionId: string) => Promise<DeleteSessionResult>
+  remove: (
+    sessionId: string,
+    options?: { keepCheckIns?: boolean },
+  ) => Promise<DeleteSessionResult>
   sessions: TerminalSession[]
   slots: (TerminalSlot | PaneSlot)[]
   handleProjectModeChange: (
@@ -85,13 +88,16 @@ export function useTerminalSlotHandlers({
   )
 
   const handleSlotCloseSession = useCallback(
-    async (slot: TerminalSlot | PaneSlot) => {
+    async (
+      slot: TerminalSlot | PaneSlot,
+      options: { keepCheckIns?: boolean } = {},
+    ) => {
       const sessionId = getSlotSessionId(slot)
       if (!sessionId) return
 
       const nextSessionId =
         activeSessionId === sessionId ? findNextOwnSessionId(slot) : null
-      const result = await remove(sessionId)
+      const result = await remove(sessionId, options)
       const target = result.next_session_id ?? nextSessionId
       if (target) {
         switchToSession(target)

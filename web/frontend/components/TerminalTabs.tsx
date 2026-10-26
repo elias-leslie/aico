@@ -2,6 +2,7 @@
 
 import { clsx } from 'clsx'
 import { useState } from 'react'
+import { timesLabel } from '@/lib/hooks/use-check-ins'
 import {
   useAttentionTitle,
   useMarkActiveSeen,
@@ -86,12 +87,12 @@ export function TerminalTabs({
   useMarkActiveSeen(activeSessionId)
   useAttentionTitle(useSessionAttention().needsYouCount)
 
-  const confirmEndSession = async () => {
+  const confirmEndSession = async (keepCheckIns = false) => {
     if (!sessionToEnd || endSessionPending) return
     setEndSessionPending(true)
     setEndSessionError(null)
     try {
-      await handleSlotCloseSession(sessionToEnd)
+      await handleSlotCloseSession(sessionToEnd, { keepCheckIns })
       setSessionToEnd(null)
     } catch (error) {
       setEndSessionError(
@@ -107,6 +108,16 @@ export function TerminalTabs({
   const pendingSessionName = sessionToEnd
     ? (sessions.find((session) => session.id === pendingSessionId)?.name ??
       getSlotName(sessionToEnd))
+    : ''
+
+  // Ending a session cancels its check-ins unless the owner keeps them.
+  const pendingCheckIns = sessionToEnd
+    ? (sessions.find((session) => session.id === pendingSessionId)?.check_ins ??
+      [])
+    : []
+  const severalCheckIns = pendingCheckIns.length > 1
+  const checkInNote = pendingCheckIns.length
+    ? ` This also cancels its check-in${severalCheckIns ? 's' : ''} at ${timesLabel(pendingCheckIns.map((checkIn) => checkIn.time))}. Keep ${severalCheckIns ? 'them' : 'it'}, and the conversation comes back in a new session then.`
     : ''
 
   // Loading state - show skeleton
@@ -167,8 +178,16 @@ export function TerminalTabs({
       <ConfirmationDialog
         isOpen={sessionToEnd !== null}
         title="End session?"
-        message={`End “${pendingSessionName}”? This stops its process in every view.`}
+        message={`End “${pendingSessionName}”? This stops its process in every view.${checkInNote}`}
         confirmText="End session"
+        secondaryText={
+          pendingCheckIns.length
+            ? `End, keep check-in${severalCheckIns ? 's' : ''}`
+            : undefined
+        }
+        onSecondary={() => {
+          void confirmEndSession(true)
+        }}
         isPending={endSessionPending}
         error={endSessionError}
         onConfirm={() => {

@@ -12,7 +12,10 @@
  */
 
 import type { TerminalPane } from '@/lib/hooks/use-terminal-panes'
-import type { TerminalSession } from '@/lib/hooks/use-terminal-sessions'
+import type {
+  SessionCheckIn,
+  TerminalSession,
+} from '@/lib/hooks/use-terminal-sessions'
 import { getAgentState } from './agent-state'
 import {
   type CoordinatorBadgeInfo,
@@ -34,6 +37,8 @@ interface SlotSessionFields {
   task?: string | null
   /** Coordinator or lane chip, as Aico shows it. */
   badge?: CoordinatorBadgeInfo | null
+  /** The session's pending check-ins, oldest first. */
+  checkIns?: SessionCheckIn[]
   can: SlotCapabilities
   /** The header shows the session title (`Project — Task`) in place of the
    * project switcher. */
@@ -227,6 +232,7 @@ function slotFields(
   return {
     task: session.task,
     badge,
+    checkIns: session.check_ins ?? [],
     can: {
       rename: session.can_rename,
       // A free-standing View never offers Reset: closing it only detaches.

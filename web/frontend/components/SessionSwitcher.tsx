@@ -20,7 +20,9 @@ import {
 } from '@/lib/utils/slot'
 import { AgentIcon, getAgentColor } from './AgentIcon'
 import { NeedsYouCount } from './AttentionBadge'
+import { CheckInBadge } from './CheckInBadge'
 import { CoordinatorBadge } from './CoordinatorBadge'
+import { KeptCheckIns } from './KeptCheckIns'
 import { SessionTitle } from './SessionTitle'
 
 function getSlotMode(slot: TerminalSlot | PaneSlot): string {
@@ -154,11 +156,13 @@ export function SessionList({
                 <span className="truncate">
                   {rowMeta(agentName(mode), state)}
                 </span>
+                <CheckInBadge checkIns={slot.checkIns} />
               </span>
             </button>
           </div>
         )
       })}
+      <KeptCheckIns />
     </>
   )
 }

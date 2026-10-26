@@ -123,6 +123,7 @@ vi.mock('@/components/terminal-header', () => ({
   },
 }))
 
+vi.mock('./KeptCheckIns', () => ({ KeptCheckIns: () => null }))
 vi.mock('@/lib/hooks/use-agent-tools', () => ({
   useAgentTools: () => ({ agentTools: [] }),
 }))

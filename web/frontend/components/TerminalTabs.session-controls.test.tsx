@@ -5,6 +5,11 @@ import { SLOT_BASE } from '@/test-stubs/session-fixtures'
 import { TerminalTabs } from './TerminalTabs'
 
 const endSession = vi.hoisted(() => vi.fn())
+const sessions = vi.hoisted(() => ({
+  list: [{ id: 'session-a', name: 'Work shell' }] as Array<
+    Record<string, unknown>
+  >,
+}))
 const slot: TerminalSlot = {
   type: 'adhoc',
   ...SLOT_BASE,
@@ -17,7 +22,7 @@ const slot: TerminalSlot = {
 vi.mock('@/lib/hooks/use-terminal-orchestration', () => ({
   useTerminalOrchestration: () => ({
     isLoading: false,
-    sessions: [{ id: 'session-a', name: 'Work shell' }],
+    sessions: sessions.list,
     handleSlotCloseSession: endSession,
   }),
 }))
@@ -44,7 +49,10 @@ vi.mock('./TerminalContent', () => ({
 vi.mock('./NewSessionDialog', () => ({ NewSessionDialog: () => null }))
 
 describe('TerminalTabs session controls', () => {
-  beforeEach(() => endSession.mockReset())
+  beforeEach(() => {
+    endSession.mockReset()
+    sessions.list = [{ id: 'session-a', name: 'Work shell' }]
+  })
 
   it('requires confirmation and leaves the view available on a failed end request', async () => {
     endSession.mockRejectedValueOnce(new Error('Session owner unavailable'))
@@ -77,5 +85,61 @@ describe('TerminalTabs session controls', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(endSession).not.toHaveBeenCalled()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('offers no keep option when the session has no check-ins', () => {
+    render(<TerminalTabs />)
+    fireEvent.click(screen.getByRole('button', { name: 'End control' }))
+    expect(screen.queryByText(/check-in/)).not.toBeInTheDocument()
+  })
+
+  it('says ending cancels a check-in and offers to keep it', async () => {
+    sessions.list = [
+      {
+        id: 'session-a',
+        name: 'Work shell',
+        check_ins: [{ id: 'aaaaaaaaaaaa', due_at: 1, time: '5:30 PM' }],
+      },
+    ]
+    endSession.mockResolvedValue(undefined)
+    render(<TerminalTabs />)
+    fireEvent.click(screen.getByRole('button', { name: 'End control' }))
+    expect(
+      screen.getByText(/This also cancels its check-in at 5:30 PM\./),
+    ).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'End, keep check-in' }))
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+    )
+    expect(endSession).toHaveBeenCalledWith(slot, { keepCheckIns: true })
+
+    fireEvent.click(screen.getByRole('button', { name: 'End control' }))
+    fireEvent.click(screen.getByRole('button', { name: 'End session' }))
+    await waitFor(() => expect(endSession).toHaveBeenCalledTimes(2))
+    expect(endSession).toHaveBeenLastCalledWith(slot, { keepCheckIns: false })
+  })
+
+  it('uses plurals for several check-ins', () => {
+    sessions.list = [
+      {
+        id: 'session-a',
+        name: 'Work shell',
+        check_ins: [
+          { id: 'a', due_at: 1, time: '5:30 PM' },
+          { id: 'b', due_at: 2, time: 'Tue 9:00 AM' },
+        ],
+      },
+    ]
+    render(<TerminalTabs />)
+    fireEvent.click(screen.getByRole('button', { name: 'End control' }))
+    expect(
+      screen.getByText(
+        /cancels its check-ins at 5:30 PM and Tue 9:00 AM\. Keep them/,
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'End, keep check-ins' }),
+    ).toBeInTheDocument()
   })
 })

@@ -1,5 +1,6 @@
 import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
+import { TetherError } from 'tether/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildApi } from './api'
 import { WebStore } from './db'
@@ -87,6 +88,149 @@ describe('guard and headers', () => {
     expect((await call('GET', '/api/nope')).status).toBe(404)
     expect((await call('DELETE', '/api/projects')).status).toBe(405)
     expect((await call('POST', '/api/auth/login', {})).status).toBe(404)
+  })
+})
+
+describe('check-ins', () => {
+  const agent = () => tether.add({ tool: 'claude', state: 'idle' } as never)
+  const wakeRow = (id: string, sessionId: string | null, dueAt: number, extra = {}) => ({
+    id,
+    sessionId,
+    dueAt,
+    note: 'n',
+    createdBy: 'owner' as const,
+    createdAt: 1,
+    kept: sessionId === null,
+    attempts: 0,
+    lastError: null,
+    ...extra,
+  })
+
+  it("carries a session's check-ins in the session list", async () => {
+    const at = Date.now() + 3_600_000
+    const session = tether.add({
+      tool: 'claude',
+      wakes: [{ id: 'aaaaaaaaaaaa', dueAt: at, note: 'n', createdBy: 'agent' }],
+    } as never)
+    const { body } = await call('GET', `/api/sessions/${session.id}`)
+    expect(body.check_ins).toEqual([{ id: 'aaaaaaaaaaaa', due_at: at, time: expect.any(String) }])
+    const plain = tether.add()
+    expect((await call('GET', `/api/sessions/${plain.id}`)).body.check_ins).toEqual([])
+  })
+
+  it('offers the quick choices and the pending check-ins', async () => {
+    const session = agent()
+    const at = Date.now() + 7_200_000
+    tether.wakeRows = [
+      wakeRow('aaaaaaaaaaaa', session.id, at),
+      wakeRow('bbbbbbbbbbbb', 'other000', at),
+    ]
+    const { status, body } = await call('GET', `/api/sessions/${session.id}/check-ins`)
+    expect(status).toBe(200)
+    expect(body.status).toBe('ready')
+    expect(body.choices.map((choice: { label: string }) => choice.label)).toEqual([
+      'In 1 hour',
+      'Tonight',
+      'Tomorrow morning',
+    ])
+    expect(body.choices[0]).toMatchObject({ dueAt: expect.any(Number), time: expect.any(String) })
+    expect(body.pending).toEqual([{ id: 'aaaaaaaaaaaa', dueAt: at, time: expect.any(String) }])
+  })
+
+  it('says a session whose state Tether cannot read is unsupported', async () => {
+    const shell = tether.add({ tool: 'shell' })
+    const { body } = await call('GET', `/api/sessions/${shell.id}/check-ins`)
+    expect(body.status).toBe('unsupported')
+    expect((await call('GET', '/api/sessions/gone1234/check-ins')).status).toBe(404)
+  })
+
+  it('sets an owner check-in with the owner note', async () => {
+    const session = agent()
+    const dueAt = Date.now() + 600_000
+    const { status, body } = await call('POST', `/api/sessions/${session.id}/check-ins`, {
+      dueAt,
+    })
+    expect(status).toBe(200)
+    expect(body).toMatchObject({ dueAt, time: expect.any(String) })
+    expect(tether.callsOf('addWake')).toEqual([
+      [session.id, { dueAt, note: expect.stringContaining('owner asked'), createdBy: 'owner' }],
+    ])
+    expect((await call('POST', `/api/sessions/${session.id}/check-ins`, {})).status).toBe(422)
+    expect(
+      (await call('POST', `/api/sessions/${session.id}/check-ins`, { dueAt: 'soon' })).status,
+    ).toBe(422)
+  })
+
+  it("words Tether's refusals plainly", async () => {
+    const session = agent()
+    const dueAt = Date.now() + 600_000
+    tether.failWake = new TetherError(409, 'wake_unsupported', {})
+    expect(await call('POST', `/api/sessions/${session.id}/check-ins`, { dueAt })).toMatchObject({
+      status: 409,
+      body: { detail: 'Only Claude Code and Codex sessions take check-ins' },
+    })
+    tether.failWake = new TetherError(409, 'too_many_wakes', { max: 5 })
+    expect(await call('POST', `/api/sessions/${session.id}/check-ins`, { dueAt })).toMatchObject({
+      status: 409,
+      body: { detail: 'This session has as many check-ins as it can take' },
+    })
+    tether.failWake = new TetherError(400, 'invalid_body', {})
+    expect(await call('POST', `/api/sessions/${session.id}/check-ins`, { dueAt })).toMatchObject({
+      status: 400,
+      body: { detail: 'Pick a time from now to a year ahead' },
+    })
+  })
+
+  it('cancels only a check-in Tether lists', async () => {
+    tether.wakeRows = [wakeRow('aaaaaaaaaaaa', 's1', Date.now() + 1000)]
+    expect((await call('DELETE', '/api/check-ins/bbbbbbbbbbbb')).status).toBe(404)
+    expect((await call('DELETE', '/api/check-ins/not-an-id')).status).toBe(404)
+    expect(tether.callsOf('cancelWake')).toEqual([])
+    expect((await call('DELETE', '/api/check-ins/aaaaaaaaaaaa')).body).toEqual({
+      deleted: true,
+      id: 'aaaaaaaaaaaa',
+    })
+    expect(tether.callsOf('cancelWake')).toEqual([['aaaaaaaaaaaa']])
+  })
+
+  it('lists check-ins kept past an End', async () => {
+    const at = Date.now() + 86_400_000
+    tether.wakeRows = [
+      wakeRow('aaaaaaaaaaaa', 's1', at),
+      wakeRow('bbbbbbbbbbbb', null, at, {
+        endedSession: { id: 's0', name: 'Fix login', tool: 'claude', projectId: 'aico' },
+      }),
+      wakeRow('cccccccccccc', null, at, {
+        endedSession: { id: 's2', name: null, tool: 'codex', projectId: null },
+        lastError: 'admission refused',
+      }),
+    ]
+    const { body } = await call('GET', '/api/check-ins/kept')
+    expect(body.items).toEqual([
+      {
+        id: 'bbbbbbbbbbbb',
+        dueAt: at,
+        time: expect.any(String),
+        session: 'Aico — Fix login',
+        failed: false,
+      },
+      {
+        id: 'cccccccccccc',
+        dueAt: at,
+        time: expect.any(String),
+        session: 'codex',
+        failed: true,
+      },
+    ])
+  })
+
+  it('ends a session keeping its check-ins only when asked', async () => {
+    const first = agent()
+    await call('DELETE', `/api/sessions/${first.id}`)
+    expect(tether.callsOf('end')).toEqual([[first.id, 'g1']])
+    const second = agent()
+    await call('DELETE', `/api/sessions/${second.id}?keepWakes=true`)
+    expect(tether.callsOf('end')[1]).toEqual([second.id, 'g1', { keepWakes: true }])
   })
 })
 
