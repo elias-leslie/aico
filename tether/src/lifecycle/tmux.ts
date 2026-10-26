@@ -527,8 +527,15 @@ export function newDetachedTargetArgs(
   ]
   for (const [key, value] of Object.entries(environment)) args.push('-e', `${key}=${value}`)
   args.push(PANE_GATE_COMMAND)
+  // `new-session -e` also stores each value in the session environment for the
+  // session's life. The pane already has its copy; drop the launch prompt there.
+  for (const key of TRANSIENT_SESSION_ENV)
+    if (key in environment) args.push(';', 'set-environment', '-u', '-t', `=${target.session}`, key)
   return args
 }
+
+/** Launch-only pane variables the session environment must not keep. */
+export const TRANSIENT_SESSION_ENV = ['AICO_ROOT_INITIAL_PROMPT'] as const
 
 /**
  * `tmux` argv that respawns the session's pane in `cwd`, killing whatever is

@@ -129,6 +129,21 @@ def test_invalid_prompt_is_content_free_and_never_sent(monkeypatch, prompt, caps
     assert prompt not in capsys.readouterr().err if prompt else True
 
 
+@pytest.mark.parametrize(("prompt", "reason"), [
+    ("x" * 2001, "prompt is 2001 bytes; the limit is 2000. Write the brief to a file"),
+    ("   ", "missing prompt"),
+    ("x\x1bframing", "control characters"),
+    ("password=hunter2xyz", "looks like it contains a credential"),
+])
+def test_each_prompt_rejection_names_its_cause(monkeypatch, prompt, reason, capsys):
+    monkeypatch.setattr(admin.Collector, "receipt", lambda *_args, **_kwargs: pytest.fail("owner contacted"))
+    with pytest.raises(SystemExit):
+        admin.main([*BASE[:2], prompt, *BASE[3:]])
+    error = capsys.readouterr().err
+    assert reason in error
+    assert "hunter2xyz" not in error
+
+
 @pytest.mark.parametrize("response", [
     (409, {"error": "request_conflict"}), (401, {"error": "private-auth-data"}),
     (200, {"owner": "aico", "requestId": "other", "text": "private-content"}),

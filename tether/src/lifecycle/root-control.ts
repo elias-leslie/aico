@@ -22,6 +22,19 @@ const MAX_BODY_BYTES = 128 * 1024
 // 2000 UTF-8 bytes can occupy 12000 bytes with JSON \uXXXX escaping,
 // plus the fixed fields and bounded request key. Accept either JSON encoding.
 const MAX_ADMIN_BODY_BYTES = 16 * 1024
+// A fresh prompt rides one tmux `-e` value, and tmux 3.6 refuses a client
+// command over 16 KiB ("command too long"). The rest of a launch command
+// (pane environment, conf, cwd) measured about 1.4 KiB. Resume prompts keep
+// the 2000-byte terminal text bound.
+export const MAX_FRESH_PROMPT_BYTES = 14 * 1024
+const MAX_RESUME_PROMPT_BYTES = 2000
+
+/** The byte limit a create body's prompt exceeds, if it is a string that does. */
+export function promptOverLimit(value: unknown): number | null {
+  if (!object(value) || typeof value.initialPrompt !== 'string') return null
+  const limit = value.resumeSessionId ? MAX_RESUME_PROMPT_BYTES : MAX_FRESH_PROMPT_BYTES
+  return Buffer.byteLength(value.initialPrompt) > limit ? limit : null
+}
 
 /** Window bounds a view mutation carries. Views belong to the GUI client;
  * Tether validates and forwards them, it never stores them. */
@@ -283,7 +296,7 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     typeof initialPrompt !== 'string' ||
     !initialPrompt.trim() ||
     initialPrompt.includes('\0') ||
-    Buffer.byteLength(initialPrompt) > 64 * 1024 ||
+    Buffer.byteLength(initialPrompt) > MAX_FRESH_PROMPT_BYTES ||
     (resumeSessionId !== undefined &&
       resumeSessionId !== null &&
       (!isResumeSessionId(getTui(tool), resumeSessionId) ||
@@ -634,16 +647,24 @@ export function createRootHandler(operations: RootControlOperations) {
       if (path === '/v1/roots' && request.method === 'POST') {
         let parsed: RootCreateRequest | null
         let unsupportedTool = false
+        let promptLimit: number | null = null
         try {
           const value = await body(request)
           unsupportedTool =
             object(value) && typeof value.tool === 'string' && !isRootTool(value.tool)
+          promptLimit = promptOverLimit(value)
           parsed = parseRootCreate(value)
         } catch {
           parsed = null
         }
         if (unsupportedTool) {
           json(response, 400, { error: 'unsupported_tool', supported: ROOT_TOOLS })
+          return
+        }
+        // Refuse here: a launch this long would fail in tmux and come back
+        // only as an uncertain receipt.
+        if (promptLimit !== null) {
+          json(response, 400, { error: 'prompt_too_long', limit: promptLimit })
           return
         }
         if (!parsed) {

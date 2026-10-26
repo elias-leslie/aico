@@ -27,6 +27,7 @@ import { sessionGeneration } from './owner-retirement'
 import {
   createRootHandler,
   isProjectRootPath,
+  MAX_FRESH_PROMPT_BYTES,
   parseRootCreate,
   rootRequestDigest,
   widgetMutationOperation,
@@ -1199,6 +1200,28 @@ describe('private root workload control', () => {
     expect(getRootRequest('resume-pending')).toBeUndefined()
     expect(listWidgets()).toHaveLength(widgets)
     expect(ensure.mock.calls).toHaveLength(before)
+  })
+
+  it('refuses a prompt over its launch limit before reserving anything', async () => {
+    const fresh = create('prompt-limit')
+    const fits = { ...fresh, initialPrompt: 'x'.repeat(MAX_FRESH_PROMPT_BYTES) }
+    expect(parseRootCreate(fits)).not.toBeNull()
+    expect(
+      await call('/v1/roots', 'POST', { ...fits, initialPrompt: `${fits.initialPrompt}x` }),
+    ).toEqual({
+      status: 400,
+      body: { error: 'prompt_too_long', limit: MAX_FRESH_PROMPT_BYTES },
+    })
+    const resumed = {
+      ...fresh,
+      resumeSessionId: '00000000-0000-4000-8000-000000000003',
+      initialPrompt: 'x'.repeat(2001),
+    }
+    expect(await call('/v1/roots', 'POST', resumed)).toEqual({
+      status: 400,
+      body: { error: 'prompt_too_long', limit: 2000 },
+    })
+    expect(getRootRequest('prompt-limit')).toBeUndefined()
   })
 
   it('validates exact native resume and retains idempotency across resume conflicts', async () => {

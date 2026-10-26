@@ -124,6 +124,8 @@ LABEL_TRIM = ("\t\n\x0b\x0c\r \xa0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u20
 LABEL_INVALID = re.compile(r"[\x00-\x1f\x7f-\x9f\ud800-\udfff\u2028\u2029]")
 BOUNDS = ("x", "y", "width", "height")
 KEY = r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}"
+# Launch prompts from this facade; the owner allows more for fresh roots.
+PROMPT_BYTES = 2000
 THREAD = r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}"
 GENERATION = r"[0-9a-f]{64}"
 WIDGET = r"[0-9a-f]{8}"
@@ -867,10 +869,12 @@ def tool_slug(value: str) -> str:
 def create_main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="st aico create", description=(
         "Create one exact owner root; native resume uses an adapter-validated session ID in a new root. "
-        "Reuse the same request ID and complete body on retry. No prompt is retained."))
+        "Reuse the same request ID and complete body on retry. The catalog keeps no prompt."))
     parser.add_argument("request_id")
-    parser.add_argument("prompt", nargs="?", help="short sanitized initial/recovery prompt (<=2000 UTF-8 bytes)")
-    parser.add_argument("--stdin", action="store_true", help="read prompt from bounded stdin instead")
+    parser.add_argument("prompt", nargs="?", help=(
+        f"short sanitized initial/recovery prompt (<={PROMPT_BYTES} UTF-8 bytes); put a longer brief "
+        "in a file and name its path here"))
+    parser.add_argument("--stdin", action="store_true", help=f"read prompt from stdin instead (same {PROMPT_BYTES}-byte limit)")
     parser.add_argument("--project", required=True)
     parser.add_argument("--project-root", required=True)
     # No default: the caller picks the agent on purpose. No local list either:
@@ -920,9 +924,19 @@ def create_main(argv: list[str]) -> int:
         prompt = admin_stdin(collector) if args.stdin else args.prompt
         if prompt is None and args.resume_session:
             prompt = "Resume this exact saved session. Reconcile current state after the crash before continuing."
-        if (not isinstance(prompt, str) or not prompt.strip() or len(prompt.encode("utf-8")) > 2000
-                or re.search(r"[\x00-\x08\x0b-\x1f\x7f-\x9f\ud800-\udfff]", prompt) or SECRET.search(prompt)):
-            parser.error("expected a short sanitized prompt or --stdin; no secrets or framing controls")
+        if not isinstance(prompt, str) or not prompt.strip():
+            parser.error("missing prompt: pass PROMPT or --stdin")
+        size = len(prompt.encode("utf-8"))
+        if size > PROMPT_BYTES:
+            parser.error(f"prompt is {size} bytes; the limit is {PROMPT_BYTES}. Write the brief to a file and "
+                         "pass a short prompt naming its path (not \"$(cat FILE)\"): "
+                         "'Read /path/to/brief.md and do the work it describes.'")
+        if re.search(r"[\x00-\x08\x0b-\x1f\x7f-\x9f\ud800-\udfff]", prompt):
+            parser.error("prompt contains control characters; only tab and newline are allowed")
+        if SECRET.search(prompt):
+            # Never echo the match: it may be the credential itself.
+            parser.error("prompt looks like it contains a credential (e.g. password=..., Bearer ..., "
+                         "a token or private key); remove it or rephrase")
         payload = {"requestId": args.request_id, "tool": args.tool, "projectId": args.project,
                    "projectRoot": args.project_root, "initialPrompt": prompt, "role": args.role,
                    "leadRootReference": args.lead_root, "facetCapsuleRef": args.facet}
@@ -948,7 +962,7 @@ def create_main(argv: list[str]) -> int:
             fields.append({"workRole": args.work_role, "workRoleDisplayName": args.work_role_name})
         digest = hashlib.sha256(json.dumps(fields, ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()
         status, data = collector.receipt(endpoint, "/v1/roots", payload, timeout=10)
-        errors = {400: ("invalid_body", "unsupported_tool", "work_role_required"), 409: ("request_conflict", "recovery_pending"),
+        errors = {400: ("invalid_body", "unsupported_tool", "work_role_required", "prompt_too_long"), 409: ("request_conflict", "recovery_pending"),
                   422: ("launch_unavailable",), 503: ("gui_unavailable",)}
         if status not in (200, 202):
             reason = data.get("error")

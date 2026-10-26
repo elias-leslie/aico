@@ -321,7 +321,10 @@ session ID validated by the selected tool's resume adapter. The adapters are
 code (`src/lifecycle/tui/registry.ts` `RESUME_ADAPTERS`), never editable through
 the API. Codex and Claude Code each require a canonical lowercase UUID. Resume
 requires a sanitized nonempty `initialPrompt` of at most 2000 UTF-8 bytes,
-allowing only tab/newline controls. It launches the configured command followed
+allowing only tab/newline controls. A fresh `initialPrompt` may be up to 14 KiB:
+it travels as one tmux `-e` value, and tmux refuses a client command over
+16 KiB. A longer prompt returns 400 `prompt_too_long` with the `limit` it
+exceeded, before anything is reserved. It launches the configured command followed
 by the adapter's fixed arguments, the session ID and `-- <initialPrompt>`:
 `resume --no-daemon <UUID>` for Codex (standalone mode avoids the incompatible
 shared-server menu; fresh launches keep their configured daemon behavior) and
@@ -349,7 +352,11 @@ launcher replay.
 
 Prompt bytes enter the pane's process environment and expand as one quoted
 initial argv argument at the verified launch gate. They are never pasted into a
-running agent. The unique logical session identity overrides the center's
+running agent. Copies outside the catalog remain: the agent's argv and its pane
+shell's environment for the workload's life, and, when the launch starts a new
+tmux server, that server's transient systemd unit command line until the server
+exits. Session creation drops the prompt from the tmux session environment in
+the same tmux command, so new windows do not inherit it. The unique logical session identity overrides the center's
 `ST_SESSION_ID`. A descriptor returns `owner`, opaque `hostIdentity`, the
 current exact `generation`, `logicalSessionId`, `surfaceLocator`, metadata,
 bounds, and `status` (`running`, `pending`, `uncertain`, or `ended`). Pending or
@@ -359,7 +366,7 @@ headless `/v1/sessions/<hostIdentity>/end` owns exact containment retirement.
 
 The direct facade (`st` is the author's workspace tool; `st aico` runs this
 repo's `tether/scripts/aico-root-watch.py`) creates one root without a fleet ledger or
-prompt retention:
+catalog prompt retention:
 
 ```sh
 st aico create recovery-root-1 'Reconcile current state after the crash before continuing.' --tool codex --work-role implementation --project myapp --project-root ~/projects/myapp --resume-session 00000000-0000-4000-8000-000000000001
@@ -367,8 +374,10 @@ st aico create recovery-root-1 'Reconcile current state after the crash before c
 
 Use the exact saved UUID, a new stable request ID, and the same complete body on
 retry. Omit the prompt for the fixed recovery prompt, or use `--stdin` for
-bounded UTF-8 input. The facade rejects secrets/framing controls and caps all
-prompts at 2000 UTF-8 bytes. `--role`, `--lead-root` and `--facet` carry generic
+bounded UTF-8 input. The facade caps all prompts at 2000 UTF-8 bytes and
+rejects secrets and framing controls, naming which check failed. Put a longer
+brief in a file and pass a short prompt naming its path; inlining it with
+`"$(cat FILE)"` hits the same cap. `--role`, `--lead-root` and `--facet` carry generic
 metadata. `--root-socket` selects Aico's GUI socket. Tether must already be
 running; the command does not start it.
 

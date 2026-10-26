@@ -181,6 +181,22 @@ describe('tmux model', () => {
     ])
   })
 
+  it('drops the launch prompt from the session environment after the pane gets it', () => {
+    const args = newDetachedArgs('7', 200, 50, '/state/tmux.conf', '/home/me', {
+      AICO_OWNER: 'aico',
+      AICO_ROOT_INITIAL_PROMPT: 'Do the work.',
+    })
+    expect(args.slice(args.indexOf(PANE_GATE_COMMAND))).toEqual([
+      PANE_GATE_COMMAND,
+      ';',
+      'set-environment',
+      '-u',
+      '-t',
+      '=aico-7',
+      'AICO_ROOT_INITIAL_PROMPT',
+    ])
+  })
+
   it('injects ownership metadata before the fixed gate command', () => {
     expect(
       newDetachedArgs('7', 200, 50, '/state/tmux.conf', '/home/me', {
