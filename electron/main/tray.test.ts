@@ -47,7 +47,7 @@ describe('tray session catalog', () => {
     ;(item(before, 'Refresh sessions').click as () => void)()
     expect(onRefreshSessions).toHaveBeenCalledOnce()
     const after = menus.at(-1) ?? []
-    item(after, 'Idle')
+    item(after, 'No status')
     const open = item(after, '○ Web session')
     ;(open.click as () => void)()
     expect(onSelect).toHaveBeenCalledWith('0a1b2c3d')

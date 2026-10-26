@@ -211,7 +211,8 @@ describe('attention groups', () => {
     h.attention.update('done', 'idle', now - 60_000)
     h.attention.update('wait-new', 'blocked', now - 60_000)
     h.attention.update('wait-old', 'blocked', now - 180_000)
-    const ids = ['idle', 'work', 'done', 'wait-new', 'wait-old'].map((id) => ({ id }))
+    h.attention.update('pi', 'unknown', null)
+    const ids = ['pi', 'idle', 'work', 'done', 'wait-new', 'wait-old', 'new'].map((id) => ({ id }))
     const rows = groupRows(ids, h.attention, now)
     expect(rows.map((r) => [r.item.id, r.group, r.detail])).toEqual([
       ['wait-old', 'needs-you', 'waiting 3m'],
@@ -219,6 +220,9 @@ describe('attention groups', () => {
       ['done', 'finished', 'done 1m'],
       ['work', 'working', 'working 1m'],
       ['idle', 'idle', 'idle 1h'],
+      // No state from Tether (a shell, Pi, or not seen yet) is not idle.
+      ['pi', 'no-status', null],
+      ['new', 'no-status', null],
     ])
     h.attention.focused('wait-old')
     h.attention.focused('done')
@@ -229,6 +233,8 @@ describe('attention groups', () => {
       ['done', 'idle', 'idle 1m'],
       ['wait-old', 'idle', 'waiting 3m'],
       ['idle', 'idle', 'idle 1h'],
+      ['pi', 'no-status', null],
+      ['new', 'no-status', null],
     ])
   })
 

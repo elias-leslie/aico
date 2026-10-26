@@ -1,6 +1,7 @@
 // Which sessions need the owner, from Tether's per-session agent state
 // (`activity` on each session; tether docs/agent-state.md). The grouping and
-// order match Aico's tray menu: Needs you, Finished, Working, Idle.
+// order match Aico's tray menu: Needs you, Finished, Working, Idle, No status
+// (Tether reads no state for the session, e.g. a shell or Pi).
 //
 // "Seen" is this browser's own record of when the owner last had each session
 // open (localStorage). A blocked session is "needs you" until it is opened; a
@@ -9,7 +10,12 @@
 import type { TerminalSession } from './hooks/use-terminal-sessions'
 
 export type Activity = 'working' | 'idle' | 'blocked' | 'unknown'
-export type AttentionGroup = 'needs-you' | 'finished' | 'working' | 'idle'
+export type AttentionGroup =
+  | 'needs-you'
+  | 'finished'
+  | 'working'
+  | 'idle'
+  | 'no-status'
 
 export const ATTENTION_GROUPS: readonly {
   group: AttentionGroup
@@ -19,6 +25,7 @@ export const ATTENTION_GROUPS: readonly {
   { group: 'finished', title: 'Finished' },
   { group: 'working', title: 'Working' },
   { group: 'idle', title: 'Idle' },
+  { group: 'no-status', title: 'No status' },
 ]
 
 export interface Attention {
@@ -65,6 +72,7 @@ export function attentionOf(
   )
     group = 'finished'
   else if (activity === 'working') group = 'working'
+  else if (activity === 'unknown') group = 'no-status'
   const word =
     activity === 'blocked'
       ? 'waiting'

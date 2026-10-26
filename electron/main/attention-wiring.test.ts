@@ -260,7 +260,7 @@ describe('attention wiring', () => {
       mode: 'none',
       stage: 'fresh',
     })
-    expect(wiring.group('aaaaaaaa').group).toBe('idle')
+    expect(wiring.group('aaaaaaaa').group).toBe('no-status')
   })
 
   it('a reloaded window gets what it shows, or nothing to show', () => {

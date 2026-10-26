@@ -61,8 +61,9 @@ describe('attentionOf', () => {
       group: 'working',
       detail: 'working 2h',
     })
+    // No state from Tether (a shell, Pi) is not idle.
     expect(attentionOf({}, 0, NOW)).toMatchObject({
-      group: 'idle',
+      group: 'no-status',
       activity: 'unknown',
       detail: null,
       age: null,

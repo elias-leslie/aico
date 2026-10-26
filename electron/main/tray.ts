@@ -77,7 +77,7 @@ function buildMenu(widgets: TrayWidget[]): Menu {
   // Every session, grouped most-urgent first (widgets arrive sorted). A row
   // opens or focuses its window; ● marks an open window, ○ a closed one.
   for (const { group, title } of ATTENTION_GROUPS) {
-    const rows = widgets.filter((w) => (w.group ?? 'idle') === group)
+    const rows = widgets.filter((w) => (w.group ?? 'no-status') === group)
     if (!rows.length) continue
     template.push({ label: title, enabled: false })
     for (const w of rows) {

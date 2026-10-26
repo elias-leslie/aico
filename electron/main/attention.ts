@@ -147,14 +147,16 @@ export class Attention {
   /** The session's tray group and the time its state began. */
   group(id: string): { group: AttentionGroup; state: AgentState; at: number | null } {
     const entry = this.entries.get(id)
-    if (!entry) return { group: 'idle', state: 'unknown', at: null }
+    if (!entry) return { group: 'no-status', state: 'unknown', at: null }
     const group: AttentionGroup = entry.needsYou
       ? 'needs-you'
       : entry.finished
         ? 'finished'
         : entry.state === 'working'
           ? 'working'
-          : 'idle'
+          : entry.state === 'unknown'
+            ? 'no-status'
+            : 'idle'
     return { group, state: entry.state, at: entry.at }
   }
 
@@ -214,7 +216,9 @@ export class Attention {
   }
 }
 
-export type AttentionGroup = 'needs-you' | 'finished' | 'working' | 'idle'
+/** `no-status`: Tether reads no state for the session (a shell, Pi), so it is
+ * not shown as idle. */
+export type AttentionGroup = 'needs-you' | 'finished' | 'working' | 'idle' | 'no-status'
 
 /** Most urgent first; the tray menu lists its groups under these titles. */
 export const ATTENTION_GROUPS: readonly { group: AttentionGroup; title: string }[] = [
@@ -222,6 +226,7 @@ export const ATTENTION_GROUPS: readonly { group: AttentionGroup; title: string }
   { group: 'finished', title: 'Finished' },
   { group: 'working', title: 'Working' },
   { group: 'idle', title: 'Idle' },
+  { group: 'no-status', title: 'No status' },
 ]
 
 /** Compact age: `<1m`, `3m`, `2h`, `4d`. */
