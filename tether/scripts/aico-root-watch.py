@@ -211,6 +211,34 @@ def socket_path(value: str) -> str:
     return value
 
 
+# Agent shells may filter the environment (Codex inherit = "core" keeps only
+# HOME, PATH and the like), so fall back to the nearest ancestor that has it.
+PROC = Path("/proc")
+
+
+def caller_widget_id() -> str | None:
+    """The Aico widget this process runs in: AICO_WIDGET_ID, else an ancestor's."""
+    value = os.environ.get("AICO_WIDGET_ID")
+    if value:
+        return value
+    pid = os.getppid()
+    for _ in range(64):
+        if pid <= 1:
+            return None
+        try:
+            environ = (PROC / str(pid) / "environ").read_bytes()
+            stat = (PROC / str(pid) / "stat").read_text()
+            parent = int(stat.rsplit(")", 1)[1].split()[1])
+        except (OSError, ValueError, IndexError):
+            return None
+        for entry in environ.split(b"\0"):
+            if entry.startswith(b"AICO_WIDGET_ID="):
+                value = entry.split(b"=", 1)[1].decode("ascii", "replace")
+                return value if re.fullmatch(WIDGET, value) else None
+        pid = parent
+    return None
+
+
 def runtime_dir() -> str:
     return os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
 
@@ -900,7 +928,7 @@ def create_main(argv: list[str]) -> int:
                    "leadRootReference": args.lead_root, "facetCapsuleRef": args.facet}
         # Run from an Aico session: Tether records it as the
         # launcher, so the root joins its coordinator (or makes it one).
-        creator = os.environ.get("AICO_WIDGET_ID")
+        creator = caller_widget_id()
         if isinstance(creator, str) and re.fullmatch(WIDGET, creator):
             payload["launchedBy"] = creator
         fields = [args.tool, args.project, args.project_root, prompt, args.role, args.lead_root, args.facet]
@@ -986,12 +1014,12 @@ def widget_descriptor(data: dict, widget_id: str) -> dict:
 
 def widget_main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="st aico widget", description=(
-        "Inspect or change one exact Aico widget. Defaults to AICO_WIDGET_ID; "
+        "Inspect or change one exact Aico widget. Defaults to AICO_WIDGET_ID, else an ancestor process's; "
         "title, position and coordinator pin its owner generation before one mutation."))
     commands = parser.add_subparsers(dest="operation", required=True)
     for operation in ("status", "title", "position", "coordinator"):
         command = commands.add_parser(operation)
-        command.add_argument("--widget-id", default=os.environ.get("AICO_WIDGET_ID"))
+        command.add_argument("--widget-id", default=caller_widget_id())
         command.add_argument("--root-socket", type=socket_path)
         if operation == "title":
             command.add_argument("label")

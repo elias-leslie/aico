@@ -15,9 +15,16 @@ BASE = ["create", "recovery-1", "Reconcile after crash.", "--tool", "codex", "--
 
 
 @pytest.fixture(autouse=True)
-def outside_aico(monkeypatch):
+def outside_aico(monkeypatch, tmp_path):
     """Run as if launched outside an Aico widget unless a test says otherwise."""
     monkeypatch.delenv("AICO_WIDGET_ID", raising=False)
+    monkeypatch.setattr(admin, "PROC", tmp_path)
+
+
+def fake_process(proc, pid, ppid, environ):
+    (proc / str(pid)).mkdir()
+    (proc / str(pid) / "stat").write_text(f"{pid} (codex (x) y) S {ppid} 1 1 0\n")
+    (proc / str(pid) / "environ").write_bytes(b"\0".join(f"{k}={v}".encode() for k, v in environ.items()) + b"\0")
 
 
 def descriptor(payload, owner="aico"):
@@ -73,6 +80,31 @@ def test_create_from_a_session_names_its_launcher(monkeypatch):
     assert [route for route, _ in calls] == ["/v1/roots"]
     assert calls[0][1]["launchedBy"] == "abcdef01"
     assert output[0]["launchedBy"] == "abcdef01"
+
+
+def test_create_from_a_filtered_agent_shell_names_its_ancestor_widget(monkeypatch, tmp_path):
+    """Codex inherit = "core" drops AICO_WIDGET_ID from exec shells; its codex parent keeps it."""
+    calls, output = [], []
+    fake_process(tmp_path, 300, 200, {"HOME": "/home/fixture"})
+    fake_process(tmp_path, 200, 100, {"AICO_WIDGET_ID": "e96c7f15"})
+    fake_process(tmp_path, 100, 1, {"AICO_WIDGET_ID": "0f442411"})
+    monkeypatch.setattr(admin.os, "getppid", lambda: 300)
+    monkeypatch.setattr(admin.Collector, "receipt", lambda _, path, route, payload=None, **kw: (calls.append(payload), (200, descriptor(payload)))[1])
+    monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
+    assert admin.main([*BASE, "--root-socket", "/fixture/gui.sock"]) == 0
+    assert calls[0]["launchedBy"] == "e96c7f15"
+    assert output[0]["launchedBy"] == "e96c7f15"
+
+
+@pytest.mark.parametrize("ancestor", [{"AICO_WIDGET_ID": "E96C7F15"}, {"PATH": "/usr/bin"}])
+def test_create_outside_aico_or_with_an_invalid_ancestor_id_names_no_launcher(monkeypatch, tmp_path, ancestor):
+    calls = []
+    fake_process(tmp_path, 300, 1, ancestor)
+    monkeypatch.setattr(admin.os, "getppid", lambda: 300)
+    monkeypatch.setattr(admin.Collector, "receipt", lambda _, path, route, payload=None, **kw: (calls.append(payload), (200, descriptor(payload)))[1])
+    monkeypatch.setattr(admin, "emit_json", lambda *_: None)
+    assert admin.main([*BASE, "--root-socket", "/fixture/gui.sock"]) == 0
+    assert "launchedBy" not in calls[0]
 
 
 @pytest.mark.parametrize("extra", [

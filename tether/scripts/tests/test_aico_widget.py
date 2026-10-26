@@ -58,8 +58,9 @@ def test_status_is_content_free_and_explicit_widget_overrides_environment(monkey
     ["status"], ["status", "--widget-id", ""], ["status", "--widget-id", "AABBCC01"],
     ["status", "--widget-id", "aabbcc01/title"],
 ])
-def test_missing_or_invalid_widget_id_has_no_active_view_fallback(monkeypatch, args):
+def test_missing_or_invalid_widget_id_has_no_active_view_fallback(monkeypatch, tmp_path, args):
     monkeypatch.delenv("AICO_WIDGET_ID", raising=False)
+    monkeypatch.setattr(admin, "PROC", tmp_path)
     monkeypatch.setattr(admin.Collector, "receipt", lambda *_: pytest.fail("owner contacted"))
     with pytest.raises(SystemExit) as error:
         admin.main(["widget", *args])
