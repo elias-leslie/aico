@@ -150,7 +150,7 @@ export class WakeService {
   }
 
   /** Whether wakes can be delivered to this session: an agent whose state
-   * Tether reads (a shell or Pi reports none, so idle would never come). */
+   * Tether reads (a shell reports none, so idle would never come). */
   supports(row: WidgetRow): boolean {
     return isAgent(row.tool) && agentStateOf(row.id).state !== 'unknown'
   }

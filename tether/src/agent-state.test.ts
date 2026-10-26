@@ -9,7 +9,9 @@ import {
   type FileTail,
   findClaude,
   findCodexRollout,
+  findPiSession,
   hookState,
+  PiSession,
 } from './agent-state'
 import { observeCodex, type ProcFs } from './continuity'
 import { parseHookReport } from './lifecycle-api'
@@ -442,5 +444,128 @@ describe('AgentStatePoller', () => {
     sessions = []
     await poller.poll()
     expect(t.ids()).toEqual([])
+  })
+})
+
+describe('Pi session file', () => {
+  const PI = '4edd5953-950d-4415-93ad-3273312e73a4'
+  const DIR = '/h/.pi/agent/sessions/--srv-p--'
+  const PATH = `${DIR}/2026-10-26T22-19-58-537Z_${PI}.jsonl`
+  const header = JSON.stringify({ type: 'session', version: 3, id: PI })
+  const msg = (
+    role: string,
+    extra: Record<string, unknown> = {},
+    at = '2026-10-26T22:22:18.044Z',
+  ) => JSON.stringify({ type: 'message', timestamp: at, message: { role, content: [], ...extra } })
+  const reply = (stopReason: string, content: unknown[] = [{ type: 'text' }]) =>
+    msg('assistant', { stopReason, content })
+
+  function fileTail(initial: string) {
+    const file = { content: initial }
+    const tail: FileTail = {
+      read(_path, offset, max) {
+        const bytes = Buffer.from(file.content)
+        let start = offset > bytes.length ? 0 : offset
+        if (bytes.length - start > max) start = bytes.length - max
+        const text = bytes.subarray(start).toString()
+        const end = text.lastIndexOf('\n') + 1
+        return {
+          text: text.slice(0, end),
+          offset: start + Buffer.byteLength(text.slice(0, end)),
+          size: bytes.length,
+        }
+      },
+      range: () => Buffer.alloc(0),
+    }
+    return { file, tail }
+  }
+  const state = (text: string) => new PiSession(PATH, PI, fileTail(text).tail).poll()?.state
+
+  it('is idle after a finished reply and working while the turn runs', () => {
+    expect(state(`${header}\n${msg('user')}\n${reply('stop')}\n`)).toBe('idle')
+    expect(state(`${header}\n${msg('user')}\n`)).toBe('working')
+    expect(state(`${header}\n${reply('toolUse', [{ type: 'toolCall' }])}\n`)).toBe('working')
+    expect(state(`${header}\n${reply('toolUse')}\n${msg('toolResult')}\n`)).toBe('working')
+    expect(state(`${header}\n${reply('pending')}\n`)).toBe('working')
+    expect(state(`${header}\n${msg('user')}\n${reply('aborted')}\n`)).toBe('idle')
+    expect(state(`${header}\n${msg('user')}\n${reply('error')}\n`)).toBe('idle')
+    expect(state(`${header}\n${reply('length')}\n`)).toBe('idle')
+    expect(state(`${header}\n${reply('length', [{ type: 'toolCall' }])}\n`)).toBe('working')
+    // Entries that are not messages, and other roles, leave the state alone.
+    expect(state(`${header}\n${reply('stop')}\n${msg('bashExecution')}\n{"type":"label"}\n`)).toBe(
+      'idle',
+    )
+    expect(state(`${header}\n`)).toBeUndefined()
+  })
+
+  it('reads appended complete lines and holds back a partial one', () => {
+    const { file, tail } = fileTail(`${header}\n${msg('user')}\n`)
+    const session = new PiSession(PATH, PI, tail)
+    expect(session.poll()).toMatchObject({
+      state: 'working',
+      source: 'pi-session',
+      agentSessionId: PI,
+      at: Date.parse('2026-10-26T22:22:18.044Z'),
+    })
+    const done = reply('stop')
+    file.content += done.slice(0, 20)
+    expect(session.poll()?.state).toBe('working')
+    file.content += `${done.slice(20)}\n`
+    expect(session.poll()?.state).toBe('idle')
+  })
+
+  it('reads a missing file as no signal', () => {
+    const missing: FileTail = {
+      read: () => {
+        throw new Error('ENOENT')
+      },
+      range: () => Buffer.alloc(0),
+    }
+    expect(new PiSession(PATH, PI, missing).poll()).toBeNull()
+  })
+
+  it("finds the file named by the pane's chosen session ID, never another", () => {
+    const environ = `PATH=/bin\0TETHER_AGENT_SESSION_ID=${PI}\0`
+    const files = {
+      '/proc/40/environ': environ,
+      [`${DIR}/2026-10-26T23-00-00-000Z_${OTHER}.jsonl`]: header,
+      '/h/.pi/agent/sessions/--other--/x.jsonl': header,
+    }
+    expect(findPiSession(procfs(files), '/h', [40])).toEqual({ pid: 40, sessionId: PI, path: null })
+    expect(findPiSession(procfs({ ...files, [PATH]: header }), '/h', [40])).toEqual({
+      pid: 40,
+      sessionId: PI,
+      path: PATH,
+    })
+    expect(findPiSession(procfs({ [PATH]: header }), '/h', [40])).toBeNull()
+  })
+
+  it('feeds the tracker from the poller', async () => {
+    const files: Record<string, string> = {
+      '/proc/10/task/10/children': '40',
+      '/proc/40/task/40/children': '',
+      '/proc/40/stat': '40 (pi)',
+      '/proc/40/environ': `TETHER_AGENT_SESSION_ID=${PI}\0`,
+    }
+    const { file, tail } = fileTail(`${header}\n${msg('toolResult')}\n`)
+    const { t } = tracker()
+    let now = 0
+    const poller = new AgentStatePoller(
+      t,
+      { sessions: () => [{ id: 'p', generation: 'g', panePid: async () => 10 }] },
+      procfs(files),
+      '/h',
+      { now: () => now, tail },
+    )
+    await poller.poll()
+    // Pi writes no file until the first prompt.
+    expect(t.get('p').state).toBe('unknown')
+    files[PATH] = header
+    now = 20_000
+    await poller.poll()
+    expect(t.get('p')).toMatchObject({ state: 'working', stateSource: 'pi-session' })
+    file.content += `${reply('stop')}\n`
+    await poller.poll()
+    expect(t.get('p').state).toBe('idle')
   })
 })
