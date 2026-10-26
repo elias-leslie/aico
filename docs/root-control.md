@@ -344,6 +344,14 @@ Codex `-c developer_instructions='''...'''`; the Agent Hub launchers merge it
 with their own context. Antigravity takes none. Content must be 1 byte to
 64 KiB, without control characters other than tab and newline, or `'''`.
 
+On the desktop, a tool that takes instructions shows **Instructions** at the
+top of its New session workspace picker: choose a prompt (type to filter the
+enabled ones), then a revision from its 100 most recent, newest first (the one
+marked current holds the prompt's content now; one Tether can't take shows as
+"can't be used"). The choice applies to the next session started from that
+picker; Aico reads the revision through `st prompt` when the session is
+created, and a failed read starts nothing and says why in the window.
+
 After launch the revision shows as `· prompt@revision` at the end of the
 session title (desktop, web, `st`), as `instructions` on the session
 descriptor, and in the context detail.

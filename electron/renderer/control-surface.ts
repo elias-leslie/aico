@@ -14,7 +14,13 @@ import {
   DEFAULT_TERMINAL_FONT_SETTINGS,
   parseTerminalFontSettings,
 } from '../shared/font-settings'
-import type { CheckInMenu, OpenableSession } from '../types'
+import type {
+  CheckInMenu,
+  InstructionPrompt,
+  InstructionRevision,
+  Listing,
+  OpenableSession,
+} from '../types'
 import {
   ACTIONS,
   type Action,
@@ -63,8 +69,15 @@ const catalogs = createCatalogState({
 })
 let submenuEl: HTMLElement
 let submenuKind: FlyoutKind | null = null
-// The workspace picker the flyout shows, if any (populateNewProjects).
-let picker: { slug: string; withBack: boolean } | null = null
+// The workspace picker the flyout shows, if any (populateNewProjects), with the
+// instructions chosen for its next launch and which of its lists is showing.
+type ChosenInstructions = { prompt: string; name: string; revision: string }
+let picker: {
+  slug: string
+  withBack: boolean
+  instructions: ChosenInstructions | null
+  view: 'workspaces' | 'prompts' | InstructionPrompt
+} | null = null
 
 /** Requery Tether's sessions whenever the "Open session" flyout appears. */
 export function refreshSessions(): Promise<{ status: 'ready' | 'empty' | 'unavailable' }> {
@@ -348,8 +361,13 @@ function newProjectRow(slug: string, p: ProjectInfo): HTMLElement {
   lbl.textContent = p.name
   item.append(dot, lbl)
   item.addEventListener('click', () => {
+    const chosen = picker?.instructions
     closeMenu() // tidies up in both the drilled-menu and standalone-popup cases
-    window.aico.actions.newWidget(slug, p.id)
+    window.aico.actions.newWidget(
+      slug,
+      p.id,
+      chosen ? { prompt: chosen.prompt, revision: chosen.revision } : undefined,
+    )
   })
   return item
 }
@@ -359,7 +377,9 @@ function newProjectRow(slug: string, p: ProjectInfo): HTMLElement {
 // drill-down, absent in the standalone popup (pinned icon / palette), which has
 // nothing to go back to.
 function populateNewProjects(slug: string, withBack: boolean): void {
-  picker = { slug, withBack }
+  // A choice made for this tool stays while its picker is open.
+  const instructions = picker?.slug === slug ? picker.instructions : null
+  picker = { slug, withBack, instructions, view: 'workspaces' }
   submenuEl.innerHTML = ''
   if (withBack) {
     const back = make('div', 'aico-sub-row aico-sub-back runnable')
@@ -373,7 +393,9 @@ function populateNewProjects(slug: string, withBack: boolean): void {
     })
     submenuEl.append(back)
   }
-  if (catalogs.tuis.find((t) => t.slug === slug)?.blankSlate) {
+  const tool = catalogs.tuis.find((t) => t.slug === slug)
+  if (tool?.instructions) submenuEl.append(instructionsRow(instructions))
+  if (tool?.blankSlate) {
     // The main process's BLANK_SLATE_ID: a new empty workspace, not a project.
     submenuEl.append(
       newProjectRow(slug, { id: '__aico_blank_slate__', name: 'Blank Slate', current: false }),
@@ -386,6 +408,199 @@ function populateNewProjects(slug: string, withBack: boolean): void {
     empty.textContent = 'No projects'
     submenuEl.append(empty)
   }
+}
+
+// ---- chosen instructions ----------------------------------------------------
+// The workspace picker's top row picks an Agent Hub prompt revision for the
+// next launch (docs/root-control.md "Chosen instructions"): prompts, then that
+// prompt's revisions, then back to the workspaces with the choice shown.
+// Rows here redraw the flyout, so their clicks stop propagation (newTuiRow).
+
+function drillRow(label: string, onClick: () => void, cls = ''): HTMLElement {
+  const item = make('div', `aico-sub-row runnable ${cls}`.trim())
+  const lbl = make('span', 'aico-lbl')
+  lbl.textContent = label
+  item.append(lbl)
+  item.addEventListener('click', (e) => {
+    e.stopPropagation()
+    onClick()
+  })
+  return item
+}
+
+function backToWorkspaces(): void {
+  if (!picker) return
+  populateNewProjects(picker.slug, picker.withBack)
+  replaceSubmenu()
+}
+
+function instructionsRow(chosen: ChosenInstructions | null): HTMLElement {
+  const item = drillRow('Instructions', () => showInstructionPrompts(), 'aico-sub-instructions')
+  const dot = make('span', 'aico-sub-dot project')
+  dot.classList.toggle('current', chosen !== null)
+  const value = make('span', 'aico-sub-time aico-sub-value')
+  value.textContent = chosen ? `${chosen.name} · ${chosen.revision.slice(0, 8)}` : 'None'
+  item.title = chosen
+    ? `${chosen.prompt}@${chosen.revision.slice(0, 8)}, added to the agent's instructions`
+    : "Add an Agent Hub prompt to the agent's instructions"
+  const caret = make('span', 'aico-caret')
+  caret.textContent = '▸'
+  item.prepend(dot)
+  item.append(value, caret)
+  return item
+}
+
+// The prompt list is read each time it opens; a newer read wins.
+let promptListing: Listing<InstructionPrompt> | null = null
+let promptRead = 0
+let promptFilter = ''
+
+function showInstructionPrompts(): void {
+  if (!picker) return
+  picker.view = 'prompts'
+  promptListing = null
+  promptFilter = ''
+  const read = ++promptRead
+  renderInstructionPrompts()
+  void window.aico.actions
+    .instructionPrompts()
+    .catch((): Listing<InstructionPrompt> => ({ status: 'unavailable', items: [] }))
+    .then((listing) => {
+      if (read !== promptRead) return
+      promptListing = listing
+      if (!submenuEl.hidden && picker?.view === 'prompts') renderPromptRows()
+    })
+}
+
+function renderInstructionPrompts(): void {
+  submenuEl.innerHTML = ''
+  submenuEl.append(drillRow('‹ Workspaces', backToWorkspaces, 'aico-sub-back'))
+  const filter = make('input', 'aico-sub-filter')
+  filter.type = 'search'
+  filter.placeholder = 'Filter prompts'
+  filter.setAttribute('aria-label', 'Filter prompts')
+  filter.value = promptFilter
+  filter.addEventListener('input', () => {
+    promptFilter = filter.value
+    renderPromptRows()
+  })
+  filter.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return
+    e.preventDefault()
+    const first = filteredPrompts()[0]
+    if (first) showInstructionRevisions(first)
+  })
+  submenuEl.append(filter, make('div', 'aico-sub-list'))
+  renderPromptRows()
+  replaceSubmenu()
+  filter.focus()
+}
+
+function filteredPrompts(): InstructionPrompt[] {
+  const needle = promptFilter.trim().toLowerCase()
+  return (promptListing?.items ?? []).filter(
+    (p) =>
+      !needle ||
+      p.name.toLowerCase().includes(needle) ||
+      p.slug.toLowerCase().includes(needle) ||
+      p.description.toLowerCase().includes(needle),
+  )
+}
+
+function renderPromptRows(): void {
+  const list = submenuEl.querySelector<HTMLElement>('.aico-sub-list')
+  if (!list || !picker) return
+  list.innerHTML = ''
+  if (picker.instructions)
+    list.append(
+      drillRow('None', () => {
+        if (picker) picker.instructions = null
+        backToWorkspaces()
+      }),
+    )
+  if (!promptListing) {
+    list.append(emptySubmenuRow('Loading prompts…'))
+    return
+  }
+  if (promptListing.status === 'unavailable') {
+    list.append(emptySubmenuRow("Couldn't load prompts from Agent Hub"))
+    return
+  }
+  const prompts = filteredPrompts()
+  if (!prompts.length) {
+    list.append(emptySubmenuRow(promptListing.items.length ? 'No prompts match' : 'No prompts'))
+    return
+  }
+  for (const p of prompts) {
+    const row = drillRow(p.name, () => showInstructionRevisions(p), 'has-flyout')
+    row.title = p.description ? `${p.slug}: ${p.description}` : p.slug
+    const caret = make('span', 'aico-caret')
+    caret.textContent = '▸'
+    row.append(caret)
+    list.append(row)
+  }
+}
+
+let revisionRead = 0
+
+function showInstructionRevisions(prompt: InstructionPrompt): void {
+  if (!picker) return
+  picker.view = prompt
+  const read = ++revisionRead
+  const render = (listing: Listing<InstructionRevision> | null): void => {
+    submenuEl.innerHTML = ''
+    submenuEl.append(drillRow(`‹ ${prompt.name}`, showInstructionPromptsAgain, 'aico-sub-back'))
+    if (!listing) submenuEl.append(emptySubmenuRow('Loading revisions…'))
+    else if (listing.status === 'unavailable')
+      submenuEl.append(emptySubmenuRow("Couldn't load revisions from Agent Hub"))
+    else if (!listing.items.length) submenuEl.append(emptySubmenuRow('No saved revisions'))
+    else for (const r of listing.items) submenuEl.append(revisionRow(prompt, r))
+    replaceSubmenu()
+  }
+  render(null)
+  void window.aico.actions
+    .instructionRevisions(prompt.slug)
+    .catch((): Listing<InstructionRevision> => ({ status: 'unavailable', items: [] }))
+    .then((listing) => {
+      if (read === revisionRead && !submenuEl.hidden && picker?.view === prompt) render(listing)
+    })
+}
+
+// Back from revisions keeps the filter and the list already read.
+function showInstructionPromptsAgain(): void {
+  if (!picker) return
+  picker.view = 'prompts'
+  if (!promptListing) showInstructionPrompts()
+  else renderInstructionPrompts()
+}
+
+function revisionDate(iso: string | null): string {
+  const date = iso ? new Date(iso) : null
+  return date && !Number.isNaN(date.getTime())
+    ? date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+    : 'Undated'
+}
+
+function revisionRow(prompt: InstructionPrompt, r: InstructionRevision): HTMLElement {
+  const short = r.id.slice(0, 8)
+  const label = `${revisionDate(r.createdAt)} · ${short}`
+  const tag = make('span', 'aico-sub-time')
+  tag.textContent = r.usable ? (r.current ? 'current' : '') : "can't be used"
+  if (!r.usable) {
+    const row = emptySubmenuRow(label)
+    row.title = 'Empty, over 64 KiB, or holds text the tools can’t take'
+    row.append(tag)
+    return row
+  }
+  const row = drillRow(label, () => {
+    if (!picker) return
+    picker.instructions = { prompt: prompt.slug, name: prompt.name, revision: r.id }
+    backToWorkspaces()
+  })
+  row.classList.toggle('current', r.current)
+  if (r.reason) row.title = r.reason
+  row.append(tag)
+  return row
 }
 
 // A row in the "Open session" flyout: opens that Tether session in a window.
@@ -587,7 +802,8 @@ function replaceSubmenu(): void {
 function refreshTuisThen(): void {
   void catalogs.refreshTuis().then(() => {
     if (submenuEl.hidden) return
-    if (picker) populateNewProjects(picker.slug, picker.withBack)
+    if (picker?.view === 'workspaces') populateNewProjects(picker.slug, picker.withBack)
+    else if (picker) return
     else if (submenuKind === 'new' || submenuKind === 'replace') populateSubmenu(submenuKind)
     else return
     replaceSubmenu()

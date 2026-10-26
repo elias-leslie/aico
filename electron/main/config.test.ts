@@ -16,6 +16,7 @@ describe('readConfig', () => {
       exchangeRoot: '/srv/workspaces/exchange',
       pastedImages: { dir: '/srv/workspaces/exchange/owner/pasted-images', maxAgeMs: 86_400_000 },
       nightshift: '/home/o/.local/bin/nightshift',
+      st: '/home/o/bin/st',
       webUrl: 'https://aico.summitflow.dev',
       displayBackend: 'x11',
       rendererUrl: undefined,

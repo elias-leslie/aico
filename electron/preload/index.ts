@@ -1,5 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { OpenableSession, SelectionToast } from '../types'
+import type {
+  InstructionPrompt,
+  InstructionRevision,
+  InstructionsChoice,
+  Listing,
+  OpenableSession,
+  SelectionToast,
+} from '../types'
 
 // Minimal, explicit bridge — no nodeIntegration in the renderer. The renderer
 // talks to the tmux-backed PTY only through these channels.
@@ -67,7 +74,14 @@ contextBridge.exposeInMainWorld('aico', {
   actions: {
     /** Create a new widget running `tool` (TUI slug) in workspace `projectId`.
      * Both are explicit — a launch always names its tool and workspace. */
-    newWidget: (tool: string, projectId: string) => ipcRenderer.send('widget:new', tool, projectId),
+    newWidget: (tool: string, projectId: string, instructions?: InstructionsChoice) =>
+      ipcRenderer.send('widget:new', tool, projectId, instructions),
+    /** Enabled Agent Hub prompts a new session can take as instructions. */
+    instructionPrompts: (): Promise<Listing<InstructionPrompt>> =>
+      ipcRenderer.invoke('instructions:prompts'),
+    /** A prompt's recent revisions, newest first. */
+    instructionRevisions: (slug: string): Promise<Listing<InstructionRevision>> =>
+      ipcRenderer.invoke('instructions:revisions', slug),
     /** Enabled TUIs (slug + label + accent + SVG mark), in registry order, for the picker. */
     listTuis: (): Promise<{ slug: string; displayName: string; accent: string; icon: string }[]> =>
       ipcRenderer.invoke('tui:list'),

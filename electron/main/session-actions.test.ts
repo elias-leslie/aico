@@ -289,6 +289,19 @@ describe('session actions', () => {
     expect(windows.openNew).toHaveBeenCalledWith('codex', 'p1')
   })
 
+  it('widget:new passes chosen instructions and refuses malformed ones', () => {
+    const { on, windows } = setup()
+    const revision = '20110df2-9d3f-4e0d-85af-38d9b844a282'
+    on.get('widget:new')?.({}, 'codex', 'p1', { prompt: 'code-reviewer', revision: 'abc' })
+    on.get('widget:new')?.({}, 'codex', 'p1', { prompt: '../x', revision })
+    expect(windows.openNew).not.toHaveBeenCalled()
+    on.get('widget:new')?.({}, 'codex', 'p1', { prompt: 'code-reviewer', revision })
+    expect(windows.openNew).toHaveBeenCalledWith('codex', 'p1', {
+      prompt: 'code-reviewer',
+      revision,
+    })
+  })
+
   it('session:open rejects a bad id and opens a running session', async () => {
     const { handle, windows, tether } = setup()
     const open = handle.get('session:open')

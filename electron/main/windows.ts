@@ -323,8 +323,12 @@ export function createWindows(deps: WindowsDeps) {
 
   // A new session is always an explicit (tool, workspace) pair. Its window opens
   // at once; Tether creates the session at that window's first grid size.
-  function newWidget(tool: string, projectId: string): void {
-    createWidgetWindow(null, { tool, projectId })
+  function newWidget(
+    tool: string,
+    projectId: string,
+    instructions?: PendingCreate['instructions'],
+  ): void {
+    createWidgetWindow(null, { tool, projectId, ...(instructions ? { instructions } : {}) })
   }
 
   function focusOrReopen(id: string): void {

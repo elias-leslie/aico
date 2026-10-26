@@ -20,7 +20,7 @@ import {
 import { describeFailure, writeNotice } from './notices'
 import { BLANK_SLATE_ID, PERSONAL_WORKSPACE_ID } from './project'
 import { ACTIVE_WITHIN_MS, createSizeHolder, type SizeHolder } from './size-holder'
-import type { WindowRegistry } from './window-registry'
+import type { PendingCreate, WindowRegistry } from './window-registry'
 
 interface PtySize {
   cols: number
@@ -66,6 +66,15 @@ interface TerminalDeps {
   tray(): void
   controlTerminal(argv: string[], env: NodeJS.ProcessEnv, size: PtySize): TerminalLink
   ensurePersonalWorkspaceRoot(): string | null
+  /** The snapshot of a chosen prompt revision; throws the owner-facing reason. */
+  instructionsSnapshot(choice: { prompt: string; revision: string }): Promise<{
+    prompt: string
+    name: string
+    revision: string
+    contentHash: string | null
+    createdAt: string | null
+    content: string
+  }>
   isQuitting(): boolean
   /** Names this app and device on its size claims ("Viewing on …" elsewhere). */
   viewer: ViewerLabel
@@ -92,14 +101,18 @@ export function createTerminal(deps: TerminalDeps) {
   // reattaches. One attempt per generation, so a failing attach cannot loop.
   const linkLost = new Map<number, { generation: string | undefined; size: PtySize }>()
 
-  function createRequest(pending: { tool: string; projectId: string }, size: PtySize) {
+  async function createRequest(pending: PendingCreate, size: PtySize) {
+    // The chosen revision is read now, so the session keeps what was picked.
+    const instructions = pending.instructions
+      ? { instructions: await deps.instructionsSnapshot(pending.instructions) }
+      : {}
     if (pending.projectId === BLANK_SLATE_ID)
-      return { tool: pending.tool, blankSlate: true as const, size }
+      return { tool: pending.tool, blankSlate: true as const, ...instructions, size }
     if (pending.projectId === PERSONAL_WORKSPACE_ID) {
       const root = deps.ensurePersonalWorkspaceRoot()
-      return { tool: pending.tool, ...(root ? { projectRoot: root } : {}), size }
+      return { tool: pending.tool, ...(root ? { projectRoot: root } : {}), ...instructions, size }
     }
-    return { tool: pending.tool, projectId: pending.projectId, size }
+    return { tool: pending.tool, projectId: pending.projectId, ...instructions, size }
   }
 
   async function startPty(win: BrowserWindow, size: PtySize): Promise<void> {
@@ -122,7 +135,7 @@ export function createTerminal(deps: TerminalDeps) {
       if (!pending) return
       let created: SessionDescriptor
       try {
-        created = await tether.createSession(createRequest(pending, size))
+        created = await tether.createSession(await createRequest(pending, size))
       } catch (error) {
         if (error instanceof TetherUnavailable) awaitingTether.set(winId, size)
         if (stillCurrent()) writeNotice(win, describeFailure('Could not start the session', error))

@@ -16,6 +16,8 @@ interface WindowLookup {
 export interface PendingCreate {
   tool: string
   projectId: string
+  /** An Agent Hub prompt revision added to the tool's instructions. */
+  instructions?: { prompt: string; revision: string }
 }
 
 export class WindowRegistry {

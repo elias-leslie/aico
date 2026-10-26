@@ -14,6 +14,7 @@ import {
   wakeChoices,
   wakeClock,
 } from 'tether/client'
+import { type InstructionsChoice, parseChoice } from './instructions'
 import { describeFailure, writeNotice } from './notices'
 import { PERSONAL_WORKSPACE_ID, type ProjectCatalog } from './project'
 import { sessionTitle, toolDisplayName, traySessionLabel } from './session-catalog'
@@ -67,7 +68,7 @@ interface SessionActionsDeps {
   }
   registry: Pick<WindowRegistry, 'forSession' | 'senderSession'>
   windows: {
-    openNew(tool: string, projectId: string): unknown
+    openNew(tool: string, projectId: string, instructions?: InstructionsChoice): unknown
     showAll(): void
     focusOrReopen(id: string): void
   }
@@ -313,11 +314,18 @@ export function createSessionActions(deps: SessionActionsDeps) {
     // Control-surface actions: same handlers the tray uses. A new session is
     // always an explicit (tool, workspace) pair from the picker — both required,
     // both checked (untrusted renderer input), so a malformed call is ignored.
-    ipcMain.on('widget:new', (_event, tool?: unknown, projectId?: unknown) => {
-      if (typeof tool === 'string' && tool && typeof projectId === 'string' && projectId) {
-        windows.openNew(tool, projectId)
-      }
-    })
+    // Chosen instructions are optional; malformed ones refuse the launch.
+    ipcMain.on(
+      'widget:new',
+      (_event, tool?: unknown, projectId?: unknown, instructions?: unknown) => {
+        const choice = instructions == null ? undefined : parseChoice(instructions)
+        if (choice === null) return
+        if (typeof tool === 'string' && tool && typeof projectId === 'string' && projectId) {
+          if (choice) windows.openNew(tool, projectId, choice)
+          else windows.openNew(tool, projectId)
+        }
+      },
+    )
     ipcMain.on('widget:hub', windows.showAll)
 
     // End this session from the widget itself: Tether ends the workload and the
@@ -392,6 +400,7 @@ export function createSessionActions(deps: SessionActionsDeps) {
           accent: mark.accent,
           icon: mark.icon,
           blankSlate: tool.blankSlate === true,
+          instructions: tool.instructions === true,
         }
       })
     })

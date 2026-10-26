@@ -26,6 +26,8 @@ export function describeFailure(action: string, error: unknown): string {
         return `${action}: another change to this session is in progress. Try again shortly.`
       case 'workload_unavailable':
         return `${action}: the session is not running${error.reason ? ` (${error.reason})` : ''}.`
+      case 'instructions_unsupported':
+        return `${action}: this tool can't take instructions. Nothing was started.`
       case 'outcome_uncertain':
         return `${action}: the outcome is unknown. Check the session before trying again.`
       default:

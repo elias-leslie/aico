@@ -7,7 +7,7 @@ import {
   TetherUnavailable,
 } from 'tether/client'
 import { describe, expect, it, vi } from 'vitest'
-import { PERSONAL_WORKSPACE_ID } from './project'
+import { BLANK_SLATE_ID, PERSONAL_WORKSPACE_ID } from './project'
 import { OVERLAY_DELAY_MS, RECLAIM_SPACING_MS } from './size-holder'
 import { clampSize, createTerminal } from './terminal'
 import { WindowRegistry } from './window-registry'
@@ -148,6 +148,13 @@ function setup() {
       return link
     }),
     ensurePersonalWorkspaceRoot: () => '/home/o/Personal',
+    instructionsSnapshot: vi.fn(async (choice: { prompt: string; revision: string }) => ({
+      ...choice,
+      name: 'Code Reviewer',
+      contentHash: null,
+      createdAt: null,
+      content: 'Review carefully.',
+    })),
     isQuitting: () => state.quitting,
     viewer: { app: 'desktop', device: 'test-host' },
   }
@@ -346,6 +353,53 @@ describe('starting a session', () => {
     expect(s.deps.bind).toHaveBeenCalledTimes(1)
     expect(s.tether.attach).toHaveBeenCalledWith('bbbbbbbb')
     await vi.waitFor(() => expect(s.deps.titles).toHaveBeenCalledTimes(1))
+  })
+
+  it('sends the chosen revision as a snapshot, also for Blank Slate', async () => {
+    const s = setup()
+    const revision = '20110df2-9d3f-4e0d-85af-38d9b844a282'
+    s.registry.setPending(1, {
+      tool: 'codex',
+      projectId: BLANK_SLATE_ID,
+      instructions: { prompt: 'code-reviewer', revision },
+    })
+    s.on.get('pty:start')?.(s.from(s.all[0]), { cols: 100, rows: 30 })
+    await vi.waitFor(() => expect(s.links).toHaveLength(1))
+    expect(s.tether.createSession).toHaveBeenCalledWith({
+      tool: 'codex',
+      blankSlate: true,
+      instructions: {
+        prompt: 'code-reviewer',
+        revision,
+        name: 'Code Reviewer',
+        contentHash: null,
+        createdAt: null,
+        content: 'Review carefully.',
+      },
+      size: { cols: 100, rows: 30 },
+    })
+  })
+
+  it('starts nothing when the chosen revision cannot be read, and says why', async () => {
+    const s = setup()
+    s.deps.instructionsSnapshot.mockRejectedValueOnce(
+      new Error("Couldn't read code-reviewer from Agent Hub"),
+    )
+    s.registry.setPending(1, {
+      tool: 'codex',
+      projectId: 'p1',
+      instructions: { prompt: 'code-reviewer', revision: '20110df2-9d3f-4e0d-85af-38d9b844a282' },
+    })
+    s.on.get('pty:start')?.(s.from(s.all[0]), { cols: 100, rows: 30 })
+    await vi.waitFor(() =>
+      expect(s.all[0].webContents.send).toHaveBeenCalledWith(
+        'pty:data',
+        expect.stringContaining(
+          "Could not start the session: Couldn't read code-reviewer from Agent Hub",
+        ),
+      ),
+    )
+    expect(s.tether.createSession).not.toHaveBeenCalled()
   })
 
   it('a window closed during the create keeps the session as a closed view, unbound', async () => {

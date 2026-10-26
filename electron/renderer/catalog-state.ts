@@ -8,6 +8,8 @@ export type TuiInfo = {
   icon: string
   /** It can start a Blank Slate session (offered above the workspaces). */
   blankSlate?: boolean
+  /** It can take chosen instructions (offered above the workspaces). */
+  instructions?: boolean
 }
 export type ProjectInfo = { id: string; name: string; current: boolean }
 export type SessionCatalogStatus = 'ready' | 'empty' | 'unavailable'

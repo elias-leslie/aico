@@ -39,6 +39,8 @@ export interface AicoConfig {
   /** Where a pasted clipboard image is written for the terminal program to read (AICO_PASTED_IMAGES_DIR, AICO_PASTED_IMAGES_KEEP_HOURS). */
   readonly pastedImages: { readonly dir: string; readonly maxAgeMs: number }
   readonly nightshift: string
+  /** ST, for the Agent Hub prompts a new session can take as instructions. */
+  readonly st: string
   /** The web app (AICO_WEB_URL): a tap on the push opens the waiting session there on the owner's phone (Nightshift allowlists the origin). */
   readonly webUrl: string
   /** The display protocol Electron runs on: window geometry comes from the compositor bridge on Wayland. */
@@ -89,6 +91,7 @@ export function readConfig(
       maxAgeMs: pastedImageMaxAgeMs(env.AICO_PASTED_IMAGES_KEEP_HOURS),
     },
     nightshift: join(home, '.local/bin/nightshift'),
+    st: join(home, 'bin/st'),
     webUrl: (env.AICO_WEB_URL ?? 'https://aico.summitflow.dev').replace(/\/+$/, ''),
     displayBackend: displayBackend(argv, env),
     rendererUrl: env.ELECTRON_RENDERER_URL,

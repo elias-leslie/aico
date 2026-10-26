@@ -276,6 +276,45 @@
   color: var(--mist);
   font-variant-numeric: tabular-nums;
 }
+/* Workspace picker's "Instructions" row: the chosen prompt revision (or None)
+   on the right, cut short; a hairline sets it apart from the workspaces. */
+.aico-sub-instructions {
+  margin-bottom: 4px;
+  box-shadow: 0 1px 0 rgb(var(--glass-rgb) / 0.06);
+  border-radius: 8px 8px 0 0;
+}
+.aico-sub-value {
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Type-to-filter field above the prompt list (palette's input, compact). */
+.aico-sub-filter {
+  display: block;
+  box-sizing: border-box;
+  width: calc(100% - 4px);
+  margin: 2px 2px 4px;
+  padding: 6px 9px;
+  border: 1px solid rgb(var(--glass-rgb) / 0.08);
+  border-radius: 7px;
+  background: var(--paper);
+  color: var(--bone);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  outline: none;
+}
+.aico-sub-filter::placeholder {
+  color: var(--mist);
+}
+.aico-sub-filter:focus-visible {
+  border-color: var(--frame-edge);
+  box-shadow: 0 0 0 1px var(--lantern);
+}
+/* The revision holding the prompt's content now. */
+.aico-sub-row.current .aico-sub-time {
+  color: var(--lantern);
+}
 /* Empty/disabled flyout row (e.g. "No workspaces"): not clickable, no hover fill. */
 .aico-sub-row.empty {
   color: var(--mist);

@@ -28,6 +28,7 @@ import { createBridgeCompositor, createNativeCompositor, whenReady } from './com
 import { readConfig } from './config'
 import { registerDesktopIpc } from './desktop-ipc'
 import { createGuiChannel } from './gui-channel'
+import { createInstructions } from './instructions'
 import { createLifecycle } from './lifecycle'
 import { denyAllPermissions } from './permissions'
 import { ownStartTime, removeOwnPidFile } from './process-identity'
@@ -265,6 +266,9 @@ const sessions = createSessionActions({
   personalWorkspace: { ensureRoot: ensurePersonalWorkspaceRoot, root: personalWorkspaceRoot },
 })
 
+// The Agent Hub prompt revisions a new session can take as instructions.
+const instructions = createInstructions({ st: config.st, execFile })
+
 // Terminal byte path: one control-mode terminal link per window.
 const terminal = createTerminal({
   tether,
@@ -288,6 +292,7 @@ const terminal = createTerminal({
         ),
     }),
   ensurePersonalWorkspaceRoot,
+  instructionsSnapshot: instructions.snapshot,
   isQuitting: lifecycle.isQuitting,
   viewer: { app: 'desktop', device: hostname() },
 })
@@ -391,6 +396,7 @@ const startup = app.whenReady().then(async () => {
   ambient.registerIpc(ipcMain)
   chrome.registerIpc(ipcMain)
   sessions.registerIpc(ipcMain)
+  instructions.registerIpc(ipcMain)
   selection.registerIpc(ipcMain)
   shares.registerIpc(ipcMain)
 

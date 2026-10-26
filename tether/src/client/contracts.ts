@@ -179,6 +179,8 @@ export interface TetherTool {
   enabled: boolean
   /** It can start a Blank Slate session (`createSession({ blankSlate: true })`). */
   blankSlate?: boolean
+  /** It can take chosen instructions (`createSession({ instructions })`). */
+  instructions?: boolean
 }
 
 export interface TetherProject {

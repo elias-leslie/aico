@@ -14,6 +14,30 @@ export interface CheckInMenu {
   pending: { id: string; time: string }[]
 }
 
+/** An Agent Hub prompt a new session can take as instructions. */
+export interface InstructionPrompt {
+  slug: string
+  name: string
+  description: string
+}
+
+/** One revision of such a prompt, newest first. `current` holds the prompt's
+ * content now; an unusable one can't be sent. */
+export interface InstructionRevision {
+  id: string
+  createdAt: string | null
+  reason: string
+  current: boolean
+  usable: boolean
+}
+
+export interface InstructionsChoice {
+  prompt: string
+  revision: string
+}
+
+export type Listing<T> = { status: 'ready'; items: T[] } | { status: 'unavailable'; items: [] }
+
 export interface OpenableSession {
   /** Tether session id (8 lowercase hex). */
   id: string
@@ -73,8 +97,11 @@ export interface AicoApi {
     ): () => void
   }
   actions: {
-    /** Create a new widget running `tool` (TUI slug) in workspace `projectId`. */
-    newWidget(tool: string, projectId: string): void
+    /** Create a new widget running `tool` (TUI slug) in workspace `projectId`,
+     * optionally with a chosen Agent Hub prompt revision as instructions. */
+    newWidget(tool: string, projectId: string, instructions?: InstructionsChoice): void
+    instructionPrompts(): Promise<Listing<InstructionPrompt>>
+    instructionRevisions(slug: string): Promise<Listing<InstructionRevision>>
     /** Enabled TUIs (slug + label + accent + SVG mark), in registry order, for the picker. */
     listTuis(): Promise<{ slug: string; displayName: string; accent: string; icon: string }[]>
     /** Replace the focused widget's running TUI with `tool` (respawns the pane). */
