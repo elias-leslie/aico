@@ -96,6 +96,19 @@ SECRET = re.compile(
     r"\b(?:gh[pousr]_[\w]+|AKIA[0-9A-Z]{16})\b|"
     r"\b[a-z][a-z0-9+.-]*://[^\s/@]+:[^\s/@]+@[^\s]+)"
 )
+# Refusing a launch prompt needs a value that looks like a credential, so prose
+# such as "Bearer token auth" or "password: the field is masked" passes;
+# SECRET stays broad because over-redacting a screen sample is harmless.
+_TOKEN = r"(?=[\w.~+/=-]*[\d.~+/=])[\w.~+/=-]{8,}"
+_VALUE = r"(?=\S*[\d_./+=~!@#$%^&*-])[^\s,;]{4,}|[^\s,;]{20,}"
+PROMPT_SECRET = re.compile(
+    r"(?is)-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----|"
+    r"\b(?:api[_-]?key|access[_-]?token|password|secret|authorization)[\"']?"
+    rf"\s*[:=]\s*(?:Bearer\s+{_TOKEN}|\"[^\"]+\"|'[^']+'|{_VALUE})|"
+    rf"\bBearer\s+{_TOKEN}|\bsk-[\w-]{{16,}}|"
+    r"\b(?:gh[pousr]_[\w]+|AKIA[0-9A-Z]{16})\b|"
+    r"\b[a-z][a-z0-9+.-]*://[^\s/@]+:[^\s/@]+@[^\s]+"
+)
 
 
 class Unavailable(Exception):
@@ -933,7 +946,7 @@ def create_main(argv: list[str]) -> int:
                          "'Read /path/to/brief.md and do the work it describes.'")
         if re.search(r"[\x00-\x08\x0b-\x1f\x7f-\x9f\ud800-\udfff]", prompt):
             parser.error("prompt contains control characters; only tab and newline are allowed")
-        if SECRET.search(prompt):
+        if PROMPT_SECRET.search(prompt):
             # Never echo the match: it may be the credential itself.
             parser.error("prompt looks like it contains a credential (e.g. password=..., Bearer ..., "
                          "a token or private key); remove it or rephrase")
