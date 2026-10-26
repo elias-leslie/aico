@@ -15,6 +15,9 @@ export interface GuiMutationCommand {
   bounds?: { x: number; y: number; width: number; height: number }
   label?: string
   coordinator?: boolean
+  /** `show` only: reopen a closed window only if this GUI has shown the
+   * session before, without taking focus; an open window is left alone. */
+  ifViewed?: boolean
 }
 
 export type GuiCommand = GuiMutationCommand | { kind: 'layout' }

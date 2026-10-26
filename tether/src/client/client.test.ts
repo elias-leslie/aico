@@ -81,12 +81,13 @@ describe('Tether socket path', () => {
 })
 
 describe('version compatibility', () => {
-  it('needs API 2 or later that still accepts this Aico', () => {
-    const v = { name: 'tether', version: '0.0.1', apiVersion: 2, minApiVersion: 1 }
+  it('needs API 3 or later that still accepts this Aico', () => {
+    const v = { name: 'tether', version: '0.0.1', apiVersion: 3, minApiVersion: 1 }
     expect(compatibleVersion(v)).toBe(true)
     expect(compatibleVersion({ ...v, apiVersion: 1 })).toBe(false)
     expect(compatibleVersion({ ...v, apiVersion: 3, minApiVersion: 2 })).toBe(false)
-    expect(compatibleVersion({ ...v, apiVersion: 2, minApiVersion: 1 })).toBe(true)
+    expect(compatibleVersion({ ...v, apiVersion: 2 })).toBe(false)
+    expect(compatibleVersion({ ...v, apiVersion: 4 })).toBe(true)
   })
 })
 
@@ -337,6 +338,12 @@ describe('GUI channel', () => {
       sessionId: '0a1b2c3d',
       generation: 'g',
     })
+    expect(parseGuiCommand({ ...base, kind: 'show', ifViewed: true })).toMatchObject({
+      ifViewed: true,
+    })
+    expect(parseGuiCommand({ ...base, kind: 'show', ifViewed: 'yes' })).not.toHaveProperty(
+      'ifViewed',
+    )
     expect(
       parseGuiCommand({
         ...base,

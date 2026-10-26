@@ -157,7 +157,7 @@ export class FakeTether {
   }
 
   async version() {
-    return { name: 'tether', version: '0.0.0-test', apiVersion: 2, minApiVersion: 1 }
+    return { name: 'tether', version: '0.0.0-test', apiVersion: 3, minApiVersion: 1 }
   }
 
   async request(method: string, path: string, body?: unknown) {

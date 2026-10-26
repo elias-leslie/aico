@@ -14,6 +14,7 @@ import {
   SESSIONS_TABLE_SQL,
   SETTINGS_SQL,
   TMUX_SERVERS_TABLE_SQL,
+  WAKES_SQL,
 } from './schema'
 import {
   type AgentTool,
@@ -242,6 +243,13 @@ export class Store {
         this.db
           .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
           .run(9, now)
+      }
+      if (current < 10) {
+        // v10: session wakes (scheduled check-ins).
+        this.db.exec(WAKES_SQL)
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(10, now)
       }
     })
   }

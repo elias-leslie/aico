@@ -8,14 +8,14 @@ Tether serves one versioned HTTP/1.1 API per instance over a private Unix socket
 
 The socket's file permissions are the only authentication: any process running as the same uid may call the API. Apps that put Tether behind their own HTTP surface keep their own auth in front of it. The web app in particular must never treat loopback as authenticated, because proxied traffic arrives from loopback.
 
-Status: every route below is implemented (Phase 3a). Additions made for the web app during 3a are additive v1 changes and are marked *(3a)*. Additions made after the live cutover are marked *(post-cutover)*. Schema version 3.
+Status: every route below is implemented (Phase 3a). Additions made for the web app during 3a are additive v1 changes and are marked *(3a)*. Additions made after the live cutover are marked *(post-cutover)*. Schema version 10.
 
 ## Conventions
 
 - Bodies are JSON (`content-type: application/json`, at most 128 KiB) and must be objects. Unknown fields are rejected with `400 invalid_body`, never ignored. Field names are camelCase.
 - Errors are `{"error": "<code>", ...}` and the codes are stable API. A 4xx or 503 means nothing was applied. A 2xx or `409 outcome_uncertain` may have applied.
 - No route retries anything on the caller's behalf. Clients must not retry an uncertain mutation with a different identity.
-- Versioning: `apiVersion` is an integer. v1 only grows additively: new routes, new optional request fields, new response fields, new event types. Clients ignore unknown response fields and event types. A breaking change ships as `/v2` next to `/v1`. Apps declare the minimum `apiVersion` they need and compare it with `GET /v1/version`; an addition an app depends on (a request field an older Tether would refuse) raises `apiVersion`. 2 *(post-cutover)*: the resize claim's `viewer`.
+- Versioning: `apiVersion` is an integer. v1 only grows additively: new routes, new optional request fields, new response fields, new event types. Clients ignore unknown response fields and event types. A breaking change ships as `/v2` next to `/v1`. Apps declare the minimum `apiVersion` they need and compare it with `GET /v1/version`; an addition an app depends on (a request field an older Tether would refuse) raises `apiVersion`. 2 *(post-cutover)*: the resize claim's `viewer`. 3 *(post-cutover)*: session wakes and End's `keepWakes`.
 - Times are Unix epoch milliseconds.
 
 ## Identity
@@ -67,6 +67,7 @@ Status: every route below is implemented (Phase 3a). Additions made for the web 
   "stateAt": 1791690000000,
   "stateDetail": "permission prompt",
   "statePrevious": "working",
+  "wakes": [{"id": "5f1c0a9b2e7d", "dueAt": 1791693000000, "note": "check the lane reports", "createdBy": "agent"}],
   "createdAt": 1791686790237
 }
 ```
@@ -87,6 +88,8 @@ Status: every route below is implemented (Phase 3a). Additions made for the web 
 
 `state` is the agent's state: `working`, `idle`, `blocked` (waiting on the user: a permission prompt or a question) or `unknown` (no agent found, or the session is not running). `stateSource` names what said so (`claude-status`, `claude-hook`, `codex-rollout`, `none`), `stateAt` is when the state last changed (null while unknown), `stateDetail` says why it is blocked, and `statePrevious` is the state before (so `working` → `idle` is a finished turn, while `unknown` → `idle` is an agent Tether only just found). A change publishes `session.updated`. See [agent-state.md](agent-state.md).
 
+`wakes` *(post-cutover)* lists the session's scheduled check-ins, oldest first; see [Wakes](#wakes).
+
 ## Sessions
 
 | Method and route | Body | Result |
@@ -95,7 +98,7 @@ Status: every route below is implemented (Phase 3a). Additions made for the web 
 | `POST /v1/sessions` | `{tool?, projectId?, projectRoot?, name?, origin, aTermSessionId?, size: {cols, rows}}` | `201` running or `202` pending/uncertain descriptor. A `202` also carries `failure: {code, reason} \| null` (`workload_unavailable`, `outcome_uncertain`). `origin` is `aico`, `a-term` or `cli`; `aTermSessionId` (a UUID) is accepted only with `a-term`. `projectRoot` follows the `POST /v1/roots` path rule (absolute, normalized: no `.`/`..` segments or repeated `/`, no NUL; otherwise `400 invalid_body` with `field: projectRoot`) and must be an existing directory (`400 unknown_project`). With both `projectId` and `projectRoot`, the root is used as given and is not compared with the project's registered root. |
 | `GET /v1/sessions/:id` | none | live-verified descriptor. Rechecks the generation after the async verification and returns `409 identity_changed` if it moved. |
 | `PATCH /v1/sessions/:id` | `{generation, name}` | rename. `name: null` clears to the default label. The label follows the root title rules (trimmed, 1–160 UTF-8 bytes, no control characters). |
-| `POST /v1/sessions/:id/end` | `{generation}` | `200 {status:"ended"}`. Exact containment retirement: stops only the owned pane scope and uses `cgroup.kill` fallback. |
+| `POST /v1/sessions/:id/end` | `{generation, keepWakes?}` | `200 {status:"ended", keptWakes}`. Exact containment retirement: stops only the owned pane scope and uses `cgroup.kill` fallback. End cancels the session's wakes; `keepWakes: true` *(apiVersion 3)* keeps them, and they relaunch the conversation when due (see [Wakes](#wakes)). |
 | `POST /v1/sessions/:id/respawn` | `{generation}` | Replaces the pane workload with the session's stored tool. Returns the new descriptor and generation. A lifecycle-v0 session is refused with `409 workload_unavailable`. |
 | `POST /v1/sessions/:id/load-tui` | `{generation, tool}` | Respawns with another tool and stores it on success |
 | `POST /v1/sessions/:id/switch-project` | `{generation, projectId}` or `{generation, projectRoot}` *(post-cutover)* | With `projectId`: resolves the project root once, respawns there with the same tool, and stores `projectId`/`projectRoot`. With `projectRoot` (an existing directory under the same path rule as on create; Aico's Personal Workspace): respawns there and stores `projectId: null`. Exactly one of the two; a root that is not a directory is `400 unknown_project`. |
@@ -268,7 +271,7 @@ Tether names every session once, and the desktop, the web app and `st` show thes
 
 Show, position, title and coordinator change views, and views belong to the app. Tether forwards them to one connected Aico GUI client:
 
-1. The Aico GUI opens `GET /v1/gui/channel` with header `x-tether-client: aico-gui`. This is a long-lived NDJSON stream of `{commandId, kind, sessionId, generation, bounds?, label?, coordinator?}`. Only one GUI channel is active per instance. A second one replaces the first, which receives `{type:"superseded"}` and is closed.
+1. The Aico GUI opens `GET /v1/gui/channel` with header `x-tether-client: aico-gui`. This is a long-lived NDJSON stream of `{commandId, kind, sessionId, generation, bounds?, label?, coordinator?, ifViewed?}`. `ifViewed: true` on `show` (sent for a due wake) reopens the session's window only if the desktop has shown that session before, without taking focus; an open window is left as it is, and a session the desktop never showed answers `no_view`. Only one GUI channel is active per instance. A second one replaces the first, which receives `{type:"superseded"}` and is closed.
 2. For each command, the GUI verifies and applies the change (Aico `widgetMutationOperation`). It then posts `POST /v1/gui/results/:commandId` with `{applied: true}` or `{applied: false, error}`.
 3. Tether answers the original caller with the GUI's result. A command that gets no result within 5 s answers `409 outcome_uncertain`.
 
@@ -373,6 +376,7 @@ Event types:
 - `tools.changed` (`{slug|ref, change}`)
 - `projects.changed` (`{id, change: "registered"}`)
 - `gui.connected`, `gui.disconnected`
+- `wakes.changed` (`{sessionId}`; null for a kept wake of an ended session)
 
 `session.created` and `session.updated` carry `session` *(post-cutover)*: the session descriptor as `GET /v1/sessions` would list it, with a status verified for the exact generation the event announces. Clients can apply it instead of fetching the descriptor; one that sees no `session` (an older Tether) re-reads. Session events are published in order through one queue. `session.ended` carries the ID (and generation) only; `session.resized` adds the size holder as above.
 
@@ -411,6 +415,53 @@ the agent user's unit uses to keep the record in its state dir where Nightshift 
 `$XDG_RUNTIME_DIR/tether/default/memory-guard.json` (`v, ts, pid, host_state, critical_since, last_kill_at,
 kill_enabled, kill_candidate`) tells Nightshift whether a job it may stop exists and that the guard is alive.
 
+## Wakes *(post-cutover)*
+
+A wake is a scheduled check-in on a session: a time and a short note. Agents set their own with `st aico wake`; the
+owner sets and cancels them from the desktop tray and the web app. Tether is the only scheduler, and the `wakes` table
+survives Tether restarts and reboots. The design is in `docs/plans/session-wakes.md` at the repository root.
+
+When a wake is due, Tether asks the desktop to reopen the session's window (`show` with `ifViewed`) and waits until
+the agent is `idle`, no attached client has sent a key for `quietSeconds`, and the agent's input line holds no draft.
+It then pastes one message for all of the session's due wakes, oldest first, and submits it:
+`[Scheduled check-in for 5:30 PM, 12 min late] check the lane reports`. Each wake goes out at most once. A wake that
+was due while Tether or the host was down goes out when the gates next pass. Closing a window does not cancel a wake.
+
+End cancels the session's wakes unless the End request says `keepWakes: true`. A kept wake outlives the session: when
+due, Tether starts a new session with the ended session's tool, project, name and coordinator lineage, resuming its
+conversation when Tether saw its conversation ID (the message then adds `resumed after End`). If a running session
+already holds that conversation, the wake moves to it instead. A relaunch the host refuses for now (admission, linger)
+waits a minute and tries again; one that fails counts an attempt, and after `relaunchAttempts` the wake stays listed
+with its `lastError` until the owner moves or cancels it.
+
+Wakes need an agent whose state Tether reads (Claude Code, Codex). Pi and the shell report no state, so setting a wake
+on them is `409 wake_unsupported`.
+
+| Route | Request | Response |
+|---|---|---|
+| `GET /v1/wakes` | | `{items, policy}`, every wake, soonest first |
+| `GET /v1/sessions/:id/wakes` | | `{items, policy}` for one session |
+| `POST /v1/sessions/:id/wakes` | `{dueAt, note, createdBy?}` | `201` the wake. `dueAt` is epoch ms, at most 5 minutes past and 366 days ahead; `note` is one line (line breaks become spaces) of at most `noteMaxChars`; `createdBy` is `agent` (default) or `owner`. `409 wake_unsupported`, `409 too_many_wakes {max}` |
+| `PATCH /v1/wakes/:wakeId` | `{dueAt?, note?}` | `200` the wake; resets a kept wake's failed attempts |
+| `DELETE /v1/wakes/:wakeId` | | `200 {deleted: true}` |
+| `GET /v1/wake-policy` | | `{policy}` |
+| `PUT /v1/wake-policy` | any subset of `policy` | `{policy}`; a bad field is `400 invalid_body` with `field` and `detail` |
+
+A wake is `{id, sessionId, dueAt, note, createdAt, createdBy, kept, attempts, lastError}`. A kept wake whose session
+ended has `sessionId: null` and `endedSession: {id, name, tool, projectId}`. Every change publishes `wakes.changed`,
+and `session.updated` for the session it belongs to.
+
+| Policy field | Default | Meaning |
+|---|---|---|
+| `laterMinutes` | 60 | the apps' "In 1 hour" quick choice (5-1440) |
+| `tonightHour` | 21 | "Tonight": this hour today, or tomorrow once passed (0-23) |
+| `morningHour` | 8 | "Tomorrow morning" (0-23) |
+| `maxPerSession` | 5 | wakes one session may hold (1-20) |
+| `noteMaxChars` | 500 | (20-1500) |
+| `quietSeconds` | 15 | no key from an attached client for this long before a delivery (0-300) |
+| `lateNoticeMinutes` | 5 | a later delivery says how late it is (1-1440) |
+| `relaunchAttempts` | 15 | failed relaunches of a kept wake before it waits for the owner (1-100) |
+
 ## Crash recovery
 
 | Method and route | Body | Result |
@@ -425,7 +476,7 @@ Absent when the daemon runs with `TETHER_RECONCILE=off`.
 `GET /v1/health` never touches tmux. It returns:
 
 ```json
-{"status":"ok","name":"tether","instance":"default","version":"0.1.0","apiVersion":2,"schemaVersion":3,
+{"status":"ok","name":"tether","instance":"default","version":"0.1.0","apiVersion":3,"schemaVersion":10,
  "uptimeMs":966,"bootId":"uuid","eventSeq":0,"catalog":{"sessions":0,"tmuxServersActive":0,"rootRequests":0},
  "gui":{"connected":false},"lifecycle":"ready"}
 ```

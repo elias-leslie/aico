@@ -3,7 +3,7 @@
 // copies rows byte for byte. The only widening is the tmux_servers unit CHECK,
 // which additionally admits non-default instance unit names.
 
-export const SCHEMA_VERSION = 9
+export const SCHEMA_VERSION = 10
 
 /** Aico's tmux_servers table (electron/main/store.ts TMUX_SERVERS_TABLE_SQL),
  * plus `tether-<instance>-tmux-server-<id>.service` for non-default instances. */
@@ -195,4 +195,36 @@ export const SETTINGS_SQL = `
 export const ROOT_WORK_ROLE_SQL = `
   ALTER TABLE root_requests ADD COLUMN work_role TEXT;
   ALTER TABLE root_requests ADD COLUMN work_role_display_name TEXT;
+`
+
+/**
+ * v10: session wakes (scheduled check-ins, src/wakes.ts). A wake names its
+ * session while the session exists. There is no foreign key: a wake the owner
+ * kept past End survives the row, detached (`session_id` NULL) with the
+ * ended session's snapshot in `ended_session`. Every other wake goes with its
+ * session, whichever path deleted the row.
+ */
+export const WAKES_SQL = `
+  CREATE TABLE IF NOT EXISTS wakes (
+    id            TEXT PRIMARY KEY
+                    CHECK(length(id) = 12 AND id NOT GLOB '*[^0-9a-f]*'),
+    session_id    TEXT
+                    CHECK(session_id IS NULL OR (length(session_id) = 8 AND session_id NOT GLOB '*[^0-9a-f]*')),
+    due_at        INTEGER NOT NULL CHECK(due_at >= 0),
+    note          TEXT NOT NULL CHECK(length(note) BETWEEN 1 AND 2000),
+    created_at    INTEGER NOT NULL CHECK(created_at >= 0),
+    created_by    TEXT NOT NULL CHECK(created_by IN ('agent', 'owner')),
+    kept          INTEGER NOT NULL DEFAULT 0 CHECK(kept IN (0, 1)),
+    ended_session TEXT CHECK(ended_session IS NULL OR json_valid(ended_session)),
+    attempts      INTEGER NOT NULL DEFAULT 0 CHECK(attempts >= 0),
+    last_error    TEXT,
+    CHECK(session_id IS NOT NULL OR (kept = 1 AND ended_session IS NOT NULL))
+  );
+  CREATE INDEX IF NOT EXISTS wakes_due_at ON wakes(due_at);
+  CREATE INDEX IF NOT EXISTS wakes_session_id ON wakes(session_id);
+  CREATE TRIGGER IF NOT EXISTS sessions_end_wakes AFTER DELETE ON sessions
+  BEGIN
+    DELETE FROM wakes WHERE session_id = old.id AND kept = 0;
+    UPDATE wakes SET session_id = NULL WHERE session_id = old.id;
+  END;
 `

@@ -412,7 +412,7 @@ describe('projects, tools, Agent Hub, health', () => {
   it('reports health from Tether', async () => {
     expect((await call('GET', '/health')).body).toMatchObject({
       status: 'healthy',
-      tether: { status: 'healthy', apiVersion: 2 },
+      tether: { status: 'healthy', apiVersion: 3 },
     })
     tether.version = async () => {
       throw new Error('down')

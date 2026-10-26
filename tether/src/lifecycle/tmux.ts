@@ -780,6 +780,11 @@ export function captureVisibleTargetArgs(target: TmuxTarget, escapes: boolean): 
   ])
 }
 
+/** Tether: when each attached client last sent a key (epoch seconds, one per line). */
+export function clientActivityTargetArgs(target: TmuxTarget): string[] {
+  return targetArgs(target, ['list-clients', '-t', target.session, '-F', '#{client_activity}'])
+}
+
 /** Tether: one bracketed-paste event, optionally followed by one Enter. Same
  * framing and text bound as `bracketedSubmitTextTargetArgs`. */
 export function bracketedPasteTargetArgs(

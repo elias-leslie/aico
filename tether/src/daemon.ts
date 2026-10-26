@@ -42,6 +42,7 @@ import { Recovery } from './recovery'
 import { createTetherServer } from './server'
 import { Store } from './store'
 import { VERSION } from './version'
+import { bindWakeStore, WakeService } from './wake-runtime'
 
 export interface RunningDaemon {
   server: Server
@@ -132,6 +133,7 @@ export async function startDaemon(
     startedAt: Date.now(),
     continuity: undefined as Continuity | undefined,
     recovery: undefined as Recovery | undefined,
+    wakes: undefined as WakeService | undefined,
     memoryPolicy: startMemoryGuard(paths, store, env, {
       foreground: foregroundPaneScope,
       sessionOf: () =>
@@ -161,6 +163,9 @@ export async function startDaemon(
     context.continuity = continuity
     context.recovery = recovery
   }
+  const wakes = new WakeService(context)
+  context.wakes = wakes
+  bindWakeStore(wakes.store)
   const server = createTetherServer(context)
   try {
     await listenPrivateSocket(server, paths.socket)
@@ -170,7 +175,10 @@ export async function startDaemon(
   }
   const ready = startLifecycle({ reconcile: reconcileEnabled(env) })
   // Agent state: hook reports always; the poll only where Tether observes tmux.
-  const agentStates = new AgentStateTracker((id) => notifySessionChanged(id, { force: true }))
+  const agentStates = new AgentStateTracker((id) => {
+    notifySessionChanged(id, { force: true })
+    wakes.scheduler.nudge()
+  })
   bindAgentStates(agentStates)
   const agentPoller = new AgentStatePoller(
     agentStates,
@@ -188,6 +196,8 @@ export async function startDaemon(
     env.HOME ?? homedir(),
   )
   if (reconcileEnabled(env)) void ready.then(() => agentPoller.start()).catch(() => {})
+  // Wakes paste into sessions, so only where Tether observes tmux.
+  if (reconcileEnabled(env)) void ready.then(() => wakes.scheduler.start()).catch(() => {})
   // Display titles name each session's project: learn names now and keep
   // up with renames in SummitFlow.
   setPersonalWorkspaceRoot(
@@ -215,6 +225,8 @@ export async function startDaemon(
       context.memoryPolicy.stop()
       clearInterval(projectNames)
       agentPoller.stop()
+      wakes.scheduler.stop()
+      bindWakeStore(null)
       bindAgentStates(null)
       context.continuity?.stop()
       context.recovery?.stop()

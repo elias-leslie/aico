@@ -11,8 +11,8 @@ import type { SizeHolder, ViewerLabel } from '../size-holder'
 export type { ResizeRefusal, SessionOrigin, SessionStatus, SizeHolder, ViewerLabel }
 
 /** Lowest Tether API version these clients need (GET /v1/version): 2 accepts
- * the resize claim's viewer label. */
-export const MIN_TETHER_API_VERSION = 2
+ * the resize claim's viewer label, 3 session wakes and End's `keepWakes`. */
+export const MIN_TETHER_API_VERSION = 3
 /** The API version Aico's clients speak; Tether must still accept it. */
 export const AICO_TETHER_API_VERSION = 1
 
@@ -70,8 +70,46 @@ export interface SessionDescriptor {
   displayTitle?: string
   /** The titlebar chip, worded and coloured by Tether. */
   badge?: { kind: 'coordinator' | 'child'; text: string; color: string } | null
+  /** Pending wakes (scheduled check-ins), oldest first; absent from an older Tether. */
+  wakes?: SessionWake[]
   /** Present on a 202 create: why the session is not running yet. */
   failure?: { code: string; reason?: string } | null
+}
+
+/** A session's pending wake as its descriptor carries it. */
+export interface SessionWake {
+  id: string
+  dueAt: number
+  note: string
+  createdBy: 'agent' | 'owner'
+}
+
+/** A wake as `GET /v1/wakes` lists it. A kept wake (`sessionId` null)
+ * outlived its session's End and names the ended session. */
+export interface Wake extends SessionWake {
+  sessionId: string | null
+  createdAt: number
+  kept: boolean
+  endedSession?: { id: string; name: string | null; tool: string; projectId: string | null }
+  attempts: number
+  lastError: string | null
+}
+
+/** Tether's wake policy: the apps' quick choices and the limits. */
+export interface WakePolicy {
+  laterMinutes: number
+  tonightHour: number
+  morningHour: number
+  maxPerSession: number
+  noteMaxChars: number
+  quietSeconds: number
+  lateNoticeMinutes: number
+  relaunchAttempts: number
+}
+
+export interface WakeList {
+  items: Wake[]
+  policy: WakePolicy
 }
 
 /** `GET /v1/sessions/:id/attach` as Tether answered it, shape-checked only.
@@ -285,5 +323,6 @@ export function parseGuiCommand(value: unknown): GuiCommand | null {
     if (typeof line.coordinator !== 'boolean') return null
     command.coordinator = line.coordinator
   }
+  if (line.kind === 'show' && line.ifViewed === true) command.ifViewed = true
   return command
 }

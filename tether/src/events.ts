@@ -20,6 +20,7 @@ export type EventType =
   | 'gui.connected'
   | 'gui.disconnected'
   | 'show.requested'
+  | 'wakes.changed'
 
 export interface TetherEvent {
   seq: number

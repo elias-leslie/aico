@@ -95,6 +95,7 @@ import { type Continuity, registerRebootRoutes } from './reboot'
 import { type Recovery, registerRecoveryRoutes } from './recovery'
 import { parseViewerLabel, recordSizeHolder, sizeHolderOf } from './size-holder'
 import type { Store } from './store'
+import { registerWakeRoutes, sessionWakes, type WakeService } from './wake-runtime'
 
 const execFileAsync = promisify(execFile)
 const TMUX_BIN = '/usr/bin/tmux'
@@ -137,6 +138,8 @@ export interface LifecycleApiContext {
   continuity?: Continuity
   /** Crash recovery; absent when reconciliation is off. */
   recovery?: Recovery
+  /** Session wakes (scheduled check-ins); absent in route-only tests. */
+  wakes?: WakeService
 }
 
 /** The daemon's agent-state tracker; unbound in tests and scratch instances. */
@@ -223,6 +226,7 @@ export function descriptor(row: WidgetRow, status: SessionStatus): Record<string
     },
     contextHook: contextHookOf(row),
     ...agentStateOf(row.id),
+    wakes: sessionWakes(row.id),
     createdAt: row.createdAt,
   }
 }
@@ -535,6 +539,7 @@ export function learnProjects(
 export function registerLifecycleRoutes(router: Router, context: LifecycleApiContext): void {
   if (context.continuity) registerRebootRoutes(router, context.continuity)
   if (context.recovery) registerRecoveryRoutes(router, context.recovery)
+  if (context.wakes) registerWakeRoutes(router, context.wakes)
   const { store, events, gui } = context
   const rootHandler = createRootHandler(rootOperations(context))
   const root = (req: IncomingMessage, res: ServerResponse) => rootHandler(req, res)
@@ -672,12 +677,26 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
     })
     .add('POST', '/v1/sessions/:id/end', async (req, res, params) => {
       const body = await readJsonObject(req)
-      only(body, ['generation'])
+      only(body, ['generation', 'keepWakes'])
       const generation = requireGeneration(body)
-      requireSession(params.id)
+      if (body.keepWakes !== undefined && typeof body.keepWakes !== 'boolean')
+        throw new HttpError(400, 'invalid_body', { field: 'keepWakes' })
+      const row = requireSession(params.id)
       await whenReady()
+      // Kept wakes outlive the row (the End trigger drops every other one);
+      // an End that does not happen takes the mark back.
+      let kept = 0
+      if (body.keepWakes === true && context.wakes && generationOf(row) === generation) {
+        const wakes = context.wakes
+        if (wakes.store.forSession(row.id).length)
+          kept = wakes.store.keep(row.id, await wakes.endedSnapshot(row))
+      }
       const result = await endSession(params.id as string, generation)
-      if (result.status === 'ended') sendJson(res, 200, result)
+      if (kept) {
+        if (result.status === 'ended') context.wakes?.changed(null)
+        else if (getWidget(row.id)) context.wakes?.store.unkeep(row.id)
+      }
+      if (result.status === 'ended') sendJson(res, 200, { ...result, keptWakes: kept })
       else if (result.status === 'absent') throw new HttpError(404, 'not_found')
       else if (result.status === 'stale') throw new HttpError(409, 'stale_generation')
       else if (result.status === 'busy') throw new HttpError(409, 'busy')

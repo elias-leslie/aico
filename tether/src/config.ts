@@ -2,8 +2,9 @@ import { homedir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
 
 /** Tether's own API contract version. Clients declare the minimum they need.
- * 2: resize claims carry a viewer label (still accepted without one). */
-export const API_VERSION = 2
+ * 2: resize claims carry a viewer label (still accepted without one).
+ * 3: session wakes; End takes `keepWakes`. */
+export const API_VERSION = 3
 
 /** The one instance that keeps Aico's names and adopts historical servers. */
 export const DEFAULT_INSTANCE = 'default'

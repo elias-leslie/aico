@@ -81,7 +81,7 @@ function setup(
     listSessions: vi.fn(async () => o.list ?? []),
     tools: vi.fn(async () => ({ items: [tool('b', 2), tool('a', 1), tool('off', 0, false)] })),
     version: vi.fn(async () => {
-      const v = o.version ?? { name: 'tether', version: '1.0.0', apiVersion: 2, minApiVersion: 1 }
+      const v = o.version ?? { name: 'tether', version: '1.0.0', apiVersion: 3, minApiVersion: 1 }
       if (v instanceof Error) throw v
       return v
     }),

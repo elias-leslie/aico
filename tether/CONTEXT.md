@@ -30,6 +30,10 @@ _Avoid_: Kill, close, delete
 Replacing the workload inside an existing session, which gives it a new generation.
 _Avoid_: Restart, recreate
 
+**Wake**:
+A scheduled check-in on a session: a time and a note Tether pastes into the idle agent when due. End cancels it unless the owner keeps it; a kept wake starts the conversation again in a new session, never the ended one.
+_Avoid_: Reminder, alarm, timer
+
 **Legacy session**:
 A session created before the managed lifecycle (lifecycle v0). It is kept read-only.
 

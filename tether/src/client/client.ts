@@ -28,6 +28,8 @@ import {
   TetherUnavailable,
   type TetherVersion,
   type ViewerLabel,
+  type Wake,
+  type WakeList,
 } from './contracts'
 
 const DEFAULT_TIMEOUT_MS = 5_000
@@ -177,13 +179,39 @@ export class TetherClient {
     })
   }
 
-  end(id: string, generation: string): Promise<{ status: 'ended' }> {
+  /** End the session. Its wakes go with it unless `keepWakes`: then they
+   * outlive it and relaunch its conversation at their time. */
+  end(
+    id: string,
+    generation: string,
+    options: { keepWakes?: boolean } = {},
+  ): Promise<{ status: 'ended'; keptWakes?: number }> {
     return this.json(
       'POST',
       `/v1/sessions/${encodeURIComponent(id)}/end`,
-      { generation },
+      options.keepWakes ? { generation, keepWakes: true } : { generation },
       { timeoutMs: 30_000 },
     )
+  }
+
+  /** Every wake, kept ones included, with Tether's wake policy. */
+  wakes(): Promise<WakeList> {
+    return this.json('GET', '/v1/wakes')
+  }
+
+  addWake(
+    id: string,
+    input: { dueAt: number; note: string; createdBy?: 'agent' | 'owner' },
+  ): Promise<Wake> {
+    return this.json('POST', `/v1/sessions/${encodeURIComponent(id)}/wakes`, input)
+  }
+
+  moveWake(wakeId: string, dueAt: number): Promise<Wake> {
+    return this.json('PATCH', `/v1/wakes/${encodeURIComponent(wakeId)}`, { dueAt })
+  }
+
+  cancelWake(wakeId: string): Promise<{ deleted: true }> {
+    return this.json('DELETE', `/v1/wakes/${encodeURIComponent(wakeId)}`)
   }
 
   loadTui(id: string, generation: string, tool: string): Promise<SessionDescriptor> {

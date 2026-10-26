@@ -68,6 +68,7 @@ describe('Store schema', () => {
       'sessions',
       'settings',
       'tmux_servers',
+      'wakes',
     ])
   })
 
@@ -145,7 +146,7 @@ describe('Store schema', () => {
     old.close()
 
     const migrated = open(path)
-    expect(migrated.schemaVersion()).toBe(9)
+    expect(migrated.schemaVersion()).toBe(SCHEMA_VERSION)
     expect(migrated.listTools().map((tool) => tool.slug)).toEqual([
       'claude-code',
       'codex',

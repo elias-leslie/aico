@@ -58,13 +58,13 @@ describe('control socket', () => {
     expect(health.body).toMatchObject({
       status: 'ok',
       instance: 'test',
-      apiVersion: 2,
-      schemaVersion: 9,
+      apiVersion: 3,
+      schemaVersion: 10,
       lifecycle: 'disabled',
       gui: { connected: false },
     })
     const version = await call('GET', '/v1/version')
-    expect(version.body).toMatchObject({ name: 'tether', apiVersion: 2, minApiVersion: 1 })
+    expect(version.body).toMatchObject({ name: 'tether', apiVersion: 3, minApiVersion: 1 })
   })
 
   it('returns 404 and 405 with stable error codes', async () => {
@@ -406,7 +406,7 @@ describe('event stream', () => {
     await call('PATCH', '/v1/tools/pi', { enabled: false })
     await new Promise((resolve) => setTimeout(resolve, 50))
     req.destroy()
-    expect(lines[0]).toMatchObject({ type: 'hello', data: { apiVersion: 2, instance: 'test' } })
+    expect(lines[0]).toMatchObject({ type: 'hello', data: { apiVersion: 3, instance: 'test' } })
     expect(lines[1]).toMatchObject({ type: 'tools.changed', seq: 1, data: { slug: 'pi' } })
 
     const gap = await new Promise<string>((resolve) => {
@@ -461,5 +461,88 @@ describe('memory policy', () => {
     expect((await call('GET', '/v1/memory-policy')).body).toMatchObject({
       policy: { paneMemoryMaxGib: 12 },
     })
+  })
+})
+
+describe('session wakes API', () => {
+  const at = () => Date.now() + 3600_000
+  const idle = () =>
+    call('POST', '/v1/sessions/0a1b2c3d/agent-event', { event: 'Stop', agent: 'codex' })
+
+  it('sets, lists, moves and cancels a session’s wakes', async () => {
+    insertWidget('0a1b2c3d', 'codex', 1_000, { origin: 'cli' })
+    const add = (body: Record<string, unknown>) => call('POST', '/v1/sessions/0a1b2c3d/wakes', body)
+    // No agent state yet: Tether could never tell it is idle.
+    expect((await add({ dueAt: at(), note: 'check' })).body).toEqual({ error: 'wake_unsupported' })
+    await idle()
+    expect((await add({ dueAt: Date.now() - 3600_000, note: 'x' })).body).toEqual({
+      error: 'invalid_body',
+      field: 'dueAt',
+    })
+    expect((await add({ dueAt: at(), note: '' })).body).toMatchObject({ field: 'note' })
+    expect((await add({ dueAt: at(), note: 'x', extra: 1 })).status).toBe(400)
+    expect(
+      (await call('POST', '/v1/sessions/ffffffff/wakes', { dueAt: at(), note: 'x' })).status,
+    ).toBe(404)
+    const created = await add({ dueAt: at(), note: 'check\nthe lanes', createdBy: 'owner' })
+    expect(created.status).toBe(201)
+    const wake = created.body as { id: string; dueAt: number }
+    expect(wake).toMatchObject({
+      sessionId: '0a1b2c3d',
+      note: 'check the lanes',
+      createdBy: 'owner',
+    })
+    const session = (await call('GET', '/v1/sessions/0a1b2c3d')).body as Record<string, unknown>
+    expect(session.wakes).toEqual([
+      { id: wake.id, dueAt: wake.dueAt, note: 'check the lanes', createdBy: 'owner' },
+    ])
+    const all = (await call('GET', '/v1/wakes')).body as { items: unknown[]; policy: unknown }
+    expect(all.items).toHaveLength(1)
+    expect(all.policy).toMatchObject({ laterMinutes: 60, tonightHour: 21, morningHour: 8 })
+    const moved = await call('PATCH', `/v1/wakes/${wake.id}`, { dueAt: wake.dueAt + 60_000 })
+    expect(moved.body).toMatchObject({ dueAt: wake.dueAt + 60_000 })
+    expect((await call('PATCH', '/v1/wakes/000000000000', { dueAt: at() })).status).toBe(404)
+    expect((await call('PUT', '/v1/wake-policy', { maxPerSession: 1 })).body).toMatchObject({
+      policy: { maxPerSession: 1 },
+    })
+    expect((await call('PUT', '/v1/wake-policy', { maxPerSession: 0 })).body).toMatchObject({
+      field: 'maxPerSession',
+    })
+    expect((await add({ dueAt: at(), note: 'two' })).body).toEqual({
+      error: 'too_many_wakes',
+      max: 1,
+    })
+    expect((await call('DELETE', `/v1/wakes/${wake.id}`)).body).toEqual({ deleted: true })
+    expect((await call('GET', '/v1/sessions/0a1b2c3d/wakes')).body).toMatchObject({ items: [] })
+  })
+
+  it('End cancels wakes unless asked to keep them', async () => {
+    insertWidget('0a1b2c3d', 'codex', 1_000, { origin: 'cli' })
+    await idle()
+    await call('POST', '/v1/sessions/0a1b2c3d/wakes', { dueAt: at(), note: 'later' })
+    const { generation } = (await call('GET', '/v1/sessions/0a1b2c3d')).body as {
+      generation: string
+    }
+    expect(
+      (await call('POST', '/v1/sessions/0a1b2c3d/end', { generation, keepWakes: 1 })).status,
+    ).toBe(400)
+    const ended = await call('POST', '/v1/sessions/0a1b2c3d/end', { generation, keepWakes: true })
+    expect(ended.body).toMatchObject({ status: 'ended', keptWakes: 1 })
+    const [kept] = ((await call('GET', '/v1/wakes')).body as { items: Record<string, unknown>[] })
+      .items
+    expect(kept).toMatchObject({
+      sessionId: null,
+      kept: true,
+      endedSession: { id: '0a1b2c3d', tool: 'codex' },
+    })
+
+    insertWidget('0a1b2c3e', 'codex', 1_000, { origin: 'cli' })
+    await call('POST', '/v1/sessions/0a1b2c3e/agent-event', { event: 'Stop', agent: 'codex' })
+    await call('POST', '/v1/sessions/0a1b2c3e/wakes', { dueAt: at(), note: 'dropped' })
+    const second = (await call('GET', '/v1/sessions/0a1b2c3e')).body as { generation: string }
+    expect(
+      (await call('POST', '/v1/sessions/0a1b2c3e/end', { generation: second.generation })).body,
+    ).toMatchObject({ status: 'ended', keptWakes: 0 })
+    expect(((await call('GET', '/v1/wakes')).body as { items: unknown[] }).items).toHaveLength(1)
   })
 })
