@@ -1,6 +1,6 @@
 import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { TetherError } from 'tether/client'
+import { TetherError, wakeChoices } from 'tether/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildApi } from './api'
 import { WebStore } from './db'
@@ -128,11 +128,11 @@ describe('check-ins', () => {
     const { status, body } = await call('GET', `/api/sessions/${session.id}/check-ins`)
     expect(status).toBe(200)
     expect(body.status).toBe('ready')
-    expect(body.choices.map((choice: { label: string }) => choice.label)).toEqual([
-      'In 1 hour',
-      'Tonight',
-      'Tomorrow morning',
-    ])
+    // Worded on the server's clock ('Tonight' or 'Tomorrow night' depends on the hour).
+    expect(body.choices.map((choice: { label: string }) => choice.label)).toEqual(
+      wakeChoices(tether.wakePolicy, Date.now()).map((choice) => choice.label),
+    )
+    expect(body.choices[0].label).toBe('In 1 hour')
     expect(body.choices[0]).toMatchObject({ dueAt: expect.any(Number), time: expect.any(String) })
     expect(body.pending).toEqual([{ id: 'aaaaaaaaaaaa', dueAt: at, time: expect.any(String) }])
   })
