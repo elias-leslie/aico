@@ -224,6 +224,38 @@ def test_requested_model_and_effort_are_digest_bound(monkeypatch):
     assert calls[0]["daybreak"] is False
 
 
+@pytest.mark.parametrize("args, refused", [
+    (["--daybreak", "on"], True),  # configured default lacks Daybreak
+    (["--model", "gpt-6.1-sol", "--daybreak", "on"], True),
+    (["--model", "gpt-6-sol", "--daybreak", "on"], False),
+    (["--model", "gpt-6.1-sol", "--daybreak", "off"], False),
+    (["--model", "unlisted", "--daybreak", "on"], False),
+])
+def test_codex_daybreak_on_a_model_without_it_is_refused_before_tether(monkeypatch, tmp_path, capsys, args, refused):
+    """Codex rejects that pair before the first turn, which would leave an idle root."""
+    (tmp_path / ".codex").mkdir()
+    (tmp_path / ".codex/config.toml").write_text('model = "gpt-6.1-sol"\n')
+    (tmp_path / ".codex/models_cache.json").write_text(json.dumps({"models": [
+        {"slug": "gpt-6.1-sol", "available_access_programs": {"cyber": ["standard"]}},
+        {"slug": "gpt-6-sol", "available_access_programs": {"cyber": ["standard", "daybreak_blue"]}}]}))
+    monkeypatch.setattr(admin.Path, "home", lambda: tmp_path)
+    calls = []
+
+    def receipt(_, endpoint, route, payload, **kwargs):
+        calls.append(payload)
+        return 200, descriptor(payload)
+
+    monkeypatch.setattr(admin.Collector, "receipt", receipt)
+    if refused:
+        with pytest.raises(SystemExit):
+            admin.main([*BASE, *args])
+        assert not calls
+        assert "--model gpt-6-sol or --daybreak off" in capsys.readouterr().err
+    else:
+        assert admin.main([*BASE, *args]) == 0
+        assert len(calls) == 1
+
+
 def fresh(tool):
     return ["create", "fresh-1", "Start.", "--tool", tool, "--project", "sample-app",
             "--project-root", "/fixture/project"]

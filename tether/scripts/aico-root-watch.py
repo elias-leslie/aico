@@ -33,6 +33,7 @@ import socket
 import subprocess
 import threading
 import time
+import tomllib
 import typing
 from collections.abc import Callable
 from pathlib import Path
@@ -261,6 +262,31 @@ def opencode_go_quota_block(model: str | None) -> str | None:
         if isinstance(window, dict) and window.get("status") == "rate-limited":
             return f"{window.get('label') or window.get('key')} window resets {window.get('resets_at') or 'later'}"
     return None
+
+
+def codex_daybreak_unavailable(model: str | None) -> str | None:
+    """Why a Codex Daybreak launch on this model (or the configured default) cannot start, else None.
+
+    Codex rejects a model its cache lists without Daybreak before the first turn,
+    which leaves a TUI root idle with no turn. Best effort: an unreadable
+    config/cache or an unknown model launches.
+    """
+    codex = Path.home() / ".codex"
+    try:
+        model = model or tomllib.loads((codex / "config.toml").read_text()).get("model")
+        models = [entry for entry in json.loads((codex / "models_cache.json").read_text()).get("models") or []
+                  if isinstance(entry, dict)]
+    except (OSError, ValueError, AttributeError):
+        return None
+
+    def daybreak(entry: dict) -> bool | None:
+        access = (entry.get("available_access_programs") or {}).get("cyber")
+        return "daybreak_blue" in access if isinstance(access, list) else None
+
+    if not any(entry.get("slug") == model and daybreak(entry) is False for entry in models):
+        return None
+    ready = ", ".join(str(entry.get("slug")) for entry in models if daybreak(entry))
+    return f"Codex does not offer Daybreak on {model}; pass --model {ready or '<a Daybreak model>'} or --daybreak off"
 
 
 def caller_widget_id() -> str | None:
@@ -985,6 +1011,8 @@ def create_main(argv: list[str]) -> int:
         if args.tool == "pi" and (block := opencode_go_quota_block(args.model)):
             # Nothing reaches Tether, so the same request id can be retried after the reset.
             parser.error(f"opencode-go quota is used up ({block}); pick another model or launch after the reset")
+        if args.tool == "codex" and args.daybreak == "on" and (reason := codex_daybreak_unavailable(args.model)):
+            parser.error(reason)
         payload = {"requestId": args.request_id, "tool": args.tool, "projectId": args.project,
                    "projectRoot": args.project_root, "initialPrompt": prompt, "role": args.role,
                    "leadRootReference": args.lead_root, "facetCapsuleRef": args.facet}
