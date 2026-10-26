@@ -320,6 +320,34 @@ bind these sessions. The pane environment still carries `AICO_*`/`ST_*`
 variables (not in the prompt; a tool call could read them). Aico's context
 column reports `not_applicable` with "Blank Slate: ...".
 
+### Chosen instructions
+
+Any new session can start with a versioned instruction set: an Agent Hub
+prompt revision. A Blank Slate session gets only these; any other session gets
+them on top of its usual context.
+
+```bash
+st aico create review-1 'Read /abs/brief.md and follow it.' --tool codex --work-role review \
+  --blank-slate --instructions code-reviewer@20110df2
+```
+
+`PROMPT@REVISION` takes a revision ID or a unique prefix of one from the 100
+most recent (`st prompt revisions PROMPT`); bare `PROMPT` takes the revision
+holding its current content and refuses when there is none. `st aico create`
+reads the revision through `st prompt` and sends Tether an immutable snapshot
+(`instructions` on `/v1/roots` or `/v1/sessions`). The root digest covers the
+revision ID. Tether keeps it at `~/.local/share/aico/instructions/<widget>.md`
+(plus `.json` naming the revision), so restarts, resume, crash recovery and
+reboot restore launch with the same text even if the prompt changes later.
+Each launch reads that file: Claude Code and Pi get `--append-system-prompt`,
+Codex `-c developer_instructions='''...'''`; the Agent Hub launchers merge it
+with their own context. Antigravity takes none. Content must be 1 byte to
+64 KiB, without control characters other than tab and newline, or `'''`.
+
+After launch the revision shows as `· prompt@revision` at the end of the
+session title (desktop, web, `st`), as `instructions` on the session
+descriptor, and in the context detail.
+
 Exact UUID resume uses Pi's `--session` in the original working directory, without
 a picker. Use the original `projectRoot`: a UUID from another directory enters
 Pi's native fork confirmation and creates a new UUID if confirmed. Automatic Pi conversation

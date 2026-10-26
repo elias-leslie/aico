@@ -88,7 +88,13 @@ import {
   supportsBlankSlate,
 } from './lifecycle/tui/blank-slate'
 import { staticContextStatus } from './lifecycle/tui/context'
-import { getTui } from './lifecycle/tui/registry'
+import {
+  parseInstructions,
+  saveInstructions,
+  sessionInstructions,
+  withInstructions,
+} from './lifecycle/tui/instructions'
+import { getTui, supportsInstructions } from './lifecycle/tui/registry'
 import { paneModeArgs, parsePaneMode } from './pane-mode'
 import type { Project, ProjectProvider } from './projects'
 import { type Continuity, registerRebootRoutes } from './reboot'
@@ -182,7 +188,7 @@ export function contextHookOf(row: WidgetRow): Record<string, unknown> {
       checkedAt: status.checkedAt,
     }
   }
-  const spec = forWorkspace(getTui(row.tool), row.projectRoot)
+  const spec = withInstructions(forWorkspace(getTui(row.tool), row.projectRoot), row.id)
   const fixed = spec ? staticContextStatus(spec) : null
   return {
     state: fixed?.state ?? 'unknown',
@@ -225,6 +231,7 @@ export function descriptor(row: WidgetRow, status: SessionStatus): Record<string
       sessionName: sessionName(row.id),
     },
     contextHook: contextHookOf(row),
+    instructions: sessionInstructions(row.id),
     ...agentStateOf(row.id),
     wakes: sessionWakes(row.id),
     createdAt: row.createdAt,
@@ -574,6 +581,7 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
         'projectId',
         'projectRoot',
         'blankSlate',
+        'instructions',
         'name',
         'origin',
         'aTermSessionId',
@@ -623,6 +631,15 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
           throw new HttpError(400, 'invalid_body', { field: 'blankSlate' })
         if (!supportsBlankSlate(tool.slug)) throw new HttpError(400, 'blank_slate_unsupported')
       }
+      // An Agent Hub prompt revision the caller resolved (tui/instructions.ts).
+      const instructions =
+        body.instructions === undefined || body.instructions === null
+          ? null
+          : parseInstructions(body.instructions)
+      if (body.instructions != null && !instructions)
+        throw new HttpError(400, 'invalid_body', { field: 'instructions' })
+      if (instructions && !supportsInstructions(tool.slug))
+        throw new HttpError(400, 'instructions_unsupported')
       await whenReady()
       if (!lingerEnabled()) throw new HttpError(503, 'linger_required')
 
@@ -631,6 +648,7 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
       insertWidget(id, tool.slug, Date.now(), { origin: origin as SessionOrigin, aTermSessionId })
       if (projectId || projectRoot) setWidgetProject(id, projectId, projectRoot)
       if (name) setWidgetName(id, name)
+      if (instructions) saveInstructions(id, instructions)
       const started = await ensureSessionSerialized(id, grid)
       if (!started) {
         const failure = lastEnsureFailure(id)
@@ -785,7 +803,7 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
     })
     .add('POST', '/v1/sessions/:id/context-check', async (_req, res, params) => {
       const row = requireSession(params.id)
-      const spec = getTui(row.tool)
+      const spec = withInstructions(forWorkspace(getTui(row.tool), row.projectRoot), row.id)
       if (spec) await probeContext(row.id, spec)
       const latest = requireSession(row.id)
       sendJson(res, 200, { generation: generationOf(latest), contextHook: contextHookOf(latest) })

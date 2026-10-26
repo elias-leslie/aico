@@ -51,6 +51,15 @@ export interface SessionDescriptor {
   createdAt: number
   /** Absent from a Tether older than the context-hook field. */
   contextHook?: ContextHook
+  /** The Agent Hub prompt revision chosen at creation, or null; absent from
+   * an older Tether. Never the content. */
+  instructions?: {
+    prompt: string
+    name: string
+    revision: string
+    contentHash: string | null
+    createdAt: string | null
+  } | null
   /** The agent's state (tether docs/agent-state.md); absent from an older Tether. */
   state?: 'working' | 'idle' | 'blocked' | 'unknown'
   /** The state before the last change; absent from an older Tether. */

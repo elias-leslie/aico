@@ -69,6 +69,12 @@ export interface TuiSpec {
      * picks, for a tool whose running process names no session (Pi). */
     freshArguments?: string[]
   }
+  /** Fixed CLI flags that add a session's chosen instructions (instructions.ts)
+   * to the tool's own prompt: `arguments` then the content, or with `key`,
+   * `arguments` then `key='''content'''` (a TOML literal string). */
+  instructions?: { arguments: string[]; key?: string }
+  /** Set per session by `withInstructions`: the snapshot file each launch reads. */
+  chosenInstructions?: { file: string; label: string }
   /** Fixed CLI flags for per-launch model overrides; never caller-supplied argv. */
   modelSelection?: {
     model: string[]

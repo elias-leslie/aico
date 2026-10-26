@@ -6,6 +6,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { Project } from '../projects'
 import { getWidget, type WidgetRow } from './catalog'
+import { instructionsLabel, sessionInstructions } from './tui/instructions'
 
 export const PERSONAL_WORKSPACE_NAME = 'Personal Workspace'
 /** A coordinator or lane from before colours were recorded. */
@@ -52,11 +53,14 @@ function task(row: WidgetRow, project: string | null): string | null {
   return name
 }
 
-/** `Project — Task`; either alone when the other is missing; else `Session <n>`. */
+/** `Project — Task`; either alone when the other is missing; else `Session <n>`.
+ * Chosen instructions follow as `· prompt@revision`. */
 export function displayTitle(row: WidgetRow): string {
   const project = projectName(row)
   const parts = [project, task(row, project)].filter(Boolean)
-  return parts.length ? parts.join(' — ') : `Session ${row.seq}`
+  const title = parts.length ? parts.join(' — ') : `Session ${row.seq}`
+  const instructions = sessionInstructions(row.id)
+  return instructions ? `${title} · ${instructionsLabel(instructions)}` : title
 }
 
 /** `Coordinator` on a coordinator; `↳ <coordinator>` on a session it launched. */

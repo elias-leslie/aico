@@ -161,6 +161,15 @@ export class TetherClient {
     projectRoot?: string
     /** Start in a new empty workspace with no first-party context (docs/root-control.md). */
     blankSlate?: true
+    /** An Agent Hub prompt revision snapshot added to the tool's prompt. */
+    instructions?: {
+      prompt: string
+      name: string
+      revision: string
+      contentHash?: string | null
+      createdAt?: string | null
+      content: string
+    }
     size: { cols: number; rows: number }
   }): Promise<SessionDescriptor> {
     return this.json('POST', '/v1/sessions', { ...input, origin: 'aico' }, { timeoutMs: 60_000 })

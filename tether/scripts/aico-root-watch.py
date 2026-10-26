@@ -944,6 +944,54 @@ def blank_slate_workspace(request_id: str) -> str:
     return str(Path.home() / ".local" / "share" / "aico" / "blank-slate" / request_id)
 
 
+INSTRUCTIONS_BYTES = 64 * 1024  # Tether's limit (tether/src/lifecycle/tui/instructions.ts)
+
+
+def st_prompt(*args: str) -> typing.Any:
+    """`st prompt ...` as JSON: Agent Hub's prompt store through ST's own client."""
+    try:
+        result = subprocess.run(["st", "--no-compact", "prompt", *args], capture_output=True, text=True,
+                                timeout=30, check=False)
+        if result.returncode == 0:
+            return json.loads(result.stdout)
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        pass
+    raise ValueError(f"st prompt {' '.join(args)} failed; check the prompt slug and that Agent Hub is up")
+
+
+def resolve_instructions(selection: str) -> dict:
+    """The Agent Hub prompt revision `PROMPT[@REVISION]` names, as the snapshot
+    Tether keeps for the session. REVISION is a revision id or a unique prefix
+    of one; without it, the revision holding the prompt's current content."""
+    slug, _, wanted = selection.partition("@")
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}", slug) or (
+            wanted and not re.fullmatch(r"[0-9a-f-]{4,36}", wanted)):
+        raise ValueError("expected --instructions PROMPT or PROMPT@REVISION (see st prompt revisions PROMPT)")
+    listing = st_prompt("revisions", slug, "--limit", "100")
+    revisions = [r for r in (listing.get("revisions") if isinstance(listing, dict) else None) or []
+                 if isinstance(r, dict) and isinstance(r.get("content"), str) and isinstance(r.get("id"), str)]
+    if wanted:
+        matches = [r for r in revisions if r["id"].startswith(wanted)]
+        if len(matches) != 1:
+            raise ValueError(f"{'more than one' if matches else 'no'} recent revision of {slug} starts with "
+                             f"{wanted} (see st prompt revisions {slug})")
+    else:
+        current = st_prompt("get", slug)
+        matches = [r for r in revisions if r["content"] == (current or {}).get("content")][:1]
+        if not matches:
+            raise ValueError(f"{slug} has no saved revision of its current content; pick one with "
+                             f"--instructions {slug}@REVISION (see st prompt revisions {slug})")
+    revision = matches[0]
+    content = revision["content"]
+    if (not content.strip() or len(content.encode("utf-8")) > INSTRUCTIONS_BYTES or "'''" in content
+            or re.search(r"[\x00-\x08\x0b-\x1f\x7f]", content)):
+        raise ValueError(f"revision {revision['id']} of {slug} can't be used as instructions: it is empty, over "
+                         f"{INSTRUCTIONS_BYTES} bytes, or holds control characters or three single quotes")
+    return {"prompt": slug, "name": revision.get("prompt_name") or slug, "revision": revision["id"],
+            "contentHash": revision.get("content_hash"), "createdAt": revision.get("created_at"),
+            "content": content}
+
+
 def create_main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="st aico create", description=(
         "Create one exact owner root; native resume uses an adapter-validated session ID in a new root. "
@@ -974,6 +1022,9 @@ def create_main(argv: list[str]) -> int:
     parser.add_argument("--blank-slate", action="store_true", help=(
         "fresh session in a new empty workspace with no Agent Hub, project, memory, skill, plugin, MCP or "
         "context hook; only the harness's own prompt and yours (claude-code, codex, pi; docs/root-control.md)"))
+    parser.add_argument("--instructions", metavar="PROMPT[@REVISION]", help=(
+        "add this Agent Hub prompt revision to the agent's instructions, kept for the session's restarts; "
+        "default revision: the prompt's current one. A Blank Slate session gets only these"))
     parser.add_argument("--root-socket", type=socket_path)
     # Older callers (SummitFlow before it dropped the web app surface) still pass `--surface aico`.
     parser.add_argument("--surface", choices=("aico",), default="aico", help=argparse.SUPPRESS)
@@ -1033,6 +1084,12 @@ def create_main(argv: list[str]) -> int:
             parser.error(f"opencode-go quota is used up ({block}); pick another model or launch after the reset")
         if args.tool == "codex" and args.daybreak == "on" and (reason := codex_daybreak_unavailable(args.model)):
             parser.error(reason)
+        instructions = None
+        if args.instructions is not None:
+            try:
+                instructions = resolve_instructions(args.instructions)
+            except ValueError as error:
+                parser.error(str(error))
         payload = {"requestId": args.request_id, "tool": args.tool, "projectId": args.project,
                    "projectRoot": args.project_root, "initialPrompt": prompt, "role": args.role,
                    "leadRootReference": args.lead_root, "facetCapsuleRef": args.facet}
@@ -1056,6 +1113,10 @@ def create_main(argv: list[str]) -> int:
         if args.work_role:
             payload.update(workRole=args.work_role, workRoleDisplayName=args.work_role_name)
             fields.append({"workRole": args.work_role, "workRoleDisplayName": args.work_role_name})
+        if instructions:
+            payload["instructions"] = instructions
+            fields.append({"instructions": instructions["revision"]})
+            output["instructions"] = {key: instructions[key] for key in ("prompt", "name", "revision")}
         digest = hashlib.sha256(json.dumps(fields, ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()
         status, data = collector.receipt(endpoint, "/v1/roots", payload, timeout=10)
         errors = {400: ("invalid_body", "unsupported_tool", "work_role_required", "prompt_too_long"), 409: ("request_conflict", "recovery_pending"),

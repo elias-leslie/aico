@@ -62,7 +62,19 @@ export function launchLine(spec: TuiSpec): string | null {
     'NO_COLOR',
     ...Object.entries(env).map(([k, v]) => `${k}=${shellQuote(v)}`),
   ]
-  return [...prefix, ...spec.command.map(shellQuote)].join(' ')
+  return [...prefix, ...spec.command.map(shellQuote), ...instructionArguments(spec)].join(' ')
+}
+
+/** The chosen instructions as shell words read from the snapshot file at
+ * launch, so the content never travels through tmux. Fixed adapter flags only. */
+function instructionArguments(spec: TuiSpec): string[] {
+  const chosen = spec.chosenInstructions
+  if (!chosen || !spec.instructions) return []
+  const content = `$(cat ${shellQuote(chosen.file)})`
+  const value = spec.instructions.key
+    ? `"${spec.instructions.key}='''${content}'''"`
+    : `"${content}"`
+  return [...spec.instructions.arguments.map(shellQuote), value]
 }
 
 /** Native ID semantics belong to the selected TUI adapter, never the caller. */
@@ -73,7 +85,7 @@ export function isResumeSessionId(spec: TuiSpec | undefined, value: unknown): va
 /** Fixed adapter argv prefix; the launch gate supplies one quoted session ID. */
 export function resumeLaunchLine(spec: TuiSpec): string | null {
   if (!spec.resume) return null
-  return launchLine({ ...spec, command: [...spec.command, ...spec.resume.arguments] })
+  return `${launchLine(spec)} ${spec.resume.arguments.map(shellQuote).join(' ')}`
 }
 
 /**

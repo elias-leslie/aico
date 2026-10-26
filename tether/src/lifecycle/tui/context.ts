@@ -8,7 +8,7 @@ import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { effectiveTuiPath } from './launch'
-import type { ContextStatus, TuiSpec } from './spec'
+import type { ContextHook, ContextStatus, TuiSpec } from './spec'
 
 /** A sibling checkout (agent-hub, codex-config): `$<override>` when set, else
  * `$TETHER_PROJECTS_DIR/<name>`. With neither set there is no guess (the old
@@ -38,9 +38,21 @@ const BLANK_SLATE_STATUS: ContextStatus = {
     'Blank Slate: no Agent Hub, project, memory, skill, plugin, MCP or launch-hook context is added.',
 }
 
+/** The status with the session's chosen instructions named, if it has some. */
+function withChosen(spec: TuiSpec, status: ContextStatus): ContextStatus {
+  const chosen = spec.chosenInstructions
+  if (!chosen) return status
+  if (spec.context?.kind === 'blank-slate')
+    return {
+      state: status.state,
+      detail: `Blank Slate with chosen instructions ${chosen.label}; no Agent Hub, project, memory, skill, plugin, MCP or launch-hook context is added.`,
+    }
+  return { state: status.state, detail: `${status.detail}. Chosen instructions: ${chosen.label}.` }
+}
+
 /** The answer for a TUI with no context hook, known without probing. */
 export function staticContextStatus(spec: TuiSpec): ContextStatus | null {
-  if (spec.context?.kind === 'blank-slate') return BLANK_SLATE_STATUS
+  if (spec.context?.kind === 'blank-slate') return withChosen(spec, BLANK_SLATE_STATUS)
   if (spec.context) return null
   return spec.command.length
     ? {
@@ -55,7 +67,11 @@ export function staticContextStatus(spec: TuiSpec): ContextStatus | null {
 export async function ensureContext(spec: TuiSpec): Promise<ContextStatus> {
   const fixed = staticContextStatus(spec)
   if (fixed || !spec.context) return fixed as ContextStatus
-  switch (spec.context.kind) {
+  return withChosen(spec, await probeHook(spec, spec.context))
+}
+
+async function probeHook(spec: TuiSpec, context: ContextHook): Promise<ContextStatus> {
+  switch (context.kind) {
     case 'claude-session-start':
       return claudeSessionStart(spec)
     case 'codex-hooks':
@@ -63,7 +79,7 @@ export async function ensureContext(spec: TuiSpec): Promise<ContextStatus> {
     case 'pi-extension':
       return piExtension()
     case 'canonical-retrieval':
-      return canonicalRetrieval(spec.context.surface)
+      return canonicalRetrieval(context.surface)
     case 'blank-slate':
       return BLANK_SLATE_STATUS
   }

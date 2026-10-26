@@ -15,8 +15,14 @@ import type { RetirementResult } from './owner-retirement'
 import { sessionGeneration } from './owner-retirement'
 import { isBoundedTerminalText } from './tmux'
 import { isBlankSlateRoot, supportsBlankSlate } from './tui/blank-slate'
+import {
+  type InstructionsSnapshot,
+  parseInstructions,
+  saveInstructions,
+  sessionInstructions,
+} from './tui/instructions'
 import { isResumeSessionId } from './tui/launch'
-import { getTui, isRootTool, ROOT_TOOLS } from './tui/registry'
+import { getTui, isRootTool, ROOT_TOOLS, supportsInstructions } from './tui/registry'
 
 const KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/
 const MAX_BODY_BYTES = 128 * 1024
@@ -72,6 +78,9 @@ export interface RootCreateRequest {
   daybreak?: boolean | null
   /** Pi optional context only; required shared and native context is retained. */
   agentHubContext?: boolean | null
+  /** An Agent Hub prompt revision added to the tool's prompt (tui/instructions.ts).
+   * The digest covers its revision id. */
+  instructions?: InstructionsSnapshot | null
   /** Tether: which app requested the root. Not part of the digest. */
   origin: 'aico' | 'a-term'
   /** Tether: A-Term's session UUID (pane `A_TERM_SESSION_ID`); a-term only. */
@@ -235,6 +244,7 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
           'reasoningEffort',
           'daybreak',
           'agentHubContext',
+          'instructions',
           'origin',
           'aTermSessionId',
           'launchedBy',
@@ -258,11 +268,14 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     reasoningEffort = null,
     daybreak = null,
     agentHubContext = null,
+    instructions: rawInstructions = null,
     origin = 'aico',
     aTermSessionId = null,
     launchedBy = null,
   } = value
+  const instructions = rawInstructions === null ? null : parseInstructions(rawInstructions)
   if (
+    (rawInstructions !== null && (!instructions || !supportsInstructions(tool as string))) ||
     (origin !== 'aico' && origin !== 'a-term') ||
     (launchedBy !== null &&
       (typeof launchedBy !== 'string' || !/^[0-9a-f]{8}$/.test(launchedBy))) ||
@@ -344,6 +357,7 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     reasoningEffort: reasoningEffort as string | null,
     daybreak: daybreak as boolean | null,
     agentHubContext: agentHubContext as boolean | null,
+    instructions,
     origin,
     aTermSessionId: (aTermSessionId as string | null) ?? null,
     launchedBy: (launchedBy as string | null) ?? null,
@@ -385,6 +399,7 @@ export function rootRequestDigest(request: RootCreateRequest): string {
               },
             ]
           : []),
+        ...(request.instructions ? [{ instructions: request.instructions.revision }] : []),
       ]),
     )
     .digest('hex')
@@ -730,6 +745,9 @@ export function createRootHandler(operations: RootControlOperations) {
             if (input.launchedBy) operations.launched?.(root.widgetId, input.launchedBy)
           }
           if (getWidget(root.widgetId)) {
+            // Before the first launch; the digest already pins the revision.
+            if (input.instructions && !sessionInstructions(root.widgetId))
+              saveInstructions(root.widgetId, input.instructions)
             // Do not disclose the launch error or prompt; identity/state is the
             // reconciliation receipt, including an ambiguous launch outcome.
             try {

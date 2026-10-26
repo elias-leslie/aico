@@ -5,7 +5,7 @@ import type { GuiChannel } from './gui-channel'
 import { HttpError, Router, readJsonObject, sendError, sendJson } from './http'
 import { lifecycleStatus } from './lifecycle/engine'
 import { supportsBlankSlate } from './lifecycle/tui/blank-slate'
-import { isRootTool } from './lifecycle/tui/registry'
+import { isRootTool, supportsInstructions } from './lifecycle/tui/registry'
 import { learnProjects, registerLifecycleRoutes } from './lifecycle-api'
 import type { MemoryPolicyService } from './memory-guard'
 import {
@@ -44,9 +44,15 @@ export interface ServerContext {
 }
 
 /** `rootCapable`: the tool can be started as a root (`POST /v1/roots`).
- * `blankSlate`: it can start a Blank Slate session. */
+ * `blankSlate`: it can start a Blank Slate session. `instructions`: it can
+ * take chosen instructions (`instructions` on create). */
 function toolJson(tool: AgentTool): Record<string, unknown> {
-  return { ...tool, rootCapable: isRootTool(tool.slug), blankSlate: supportsBlankSlate(tool.slug) }
+  return {
+    ...tool,
+    rootCapable: isRootTool(tool.slug),
+    blankSlate: supportsBlankSlate(tool.slug),
+    instructions: supportsInstructions(tool.slug),
+  }
 }
 
 function str(body: Record<string, unknown>, key: string): string | undefined {

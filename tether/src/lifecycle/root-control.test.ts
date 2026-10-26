@@ -40,6 +40,7 @@ import {
 } from './root-launch'
 import { codexTui, initStore, registerBuiltinTuis } from './testing'
 import { blankSlateBase } from './tui/blank-slate'
+import { sessionInstructions } from './tui/instructions'
 import { getTui } from './tui/registry'
 
 const ROOT_WATCH = fileURLToPath(new URL('../../scripts/aico-root-watch.py', import.meta.url))
@@ -1065,6 +1066,37 @@ describe('private root workload control', () => {
       parseRootCreate({ ...input, tool: 'pi', model: 'openai/gpt-6-sol', daybreak: true }),
     ).toBeNull()
     expect(parseRootCreate({ ...input, tool: 'pi', model: 'openai/gpt-6-sol' })).not.toBeNull()
+  })
+
+  it('keeps chosen instructions for the root and pins their revision in the digest', async () => {
+    vi.stubEnv('HOME', fixture)
+    try {
+      const instructions = {
+        prompt: 'code-reviewer',
+        name: 'Code Reviewer',
+        revision: '20110df2-9d3f-4e0d-85af-38d9b844a282',
+        content: 'Review carefully.',
+      }
+      const input = { ...create('with-instructions'), instructions }
+      expect(parseRootCreate({ ...input, tool: 'antigravity' })).toBeNull()
+      expect(
+        parseRootCreate({ ...input, instructions: { ...instructions, content: '' } }),
+      ).toBeNull()
+      const plain = present(parseRootCreate(create('with-instructions')))
+      expect(rootRequestDigest(present(parseRootCreate(input)))).not.toBe(rootRequestDigest(plain))
+      const first = await call('/v1/roots', 'POST', input)
+      expect(first.status).toBe(200)
+      const root = present(getRootRequest(input.requestId))
+      expect(sessionInstructions(root.widgetId)).toMatchObject({
+        prompt: 'code-reviewer',
+        revision: instructions.revision,
+      })
+      expect((await call('/v1/roots', 'POST', input)).body.digest).toBe(first.body.digest)
+      const other = { ...instructions, revision: '30110df2-9d3f-4e0d-85af-38d9b844a282' }
+      expect((await call('/v1/roots', 'POST', { ...input, instructions: other })).status).toBe(409)
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 
   it('carries Pi Daybreak and optional context for fresh and resumed launches without leaking the prompt', async () => {

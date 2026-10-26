@@ -23,6 +23,19 @@ export const RESUME_ADAPTERS: Readonly<Record<string, NonNullable<TuiSpec['resum
   },
 }
 
+/** How each tool takes a session's chosen instructions on top of its own
+ * prompt. The Agent Hub launchers merge these with the context they deliver. */
+export const INSTRUCTION_ADAPTERS: Readonly<Record<string, NonNullable<TuiSpec['instructions']>>> =
+  {
+    'claude-code': { arguments: ['--append-system-prompt'] },
+    codex: { arguments: ['-c'], key: 'developer_instructions' },
+    pi: { arguments: ['--append-system-prompt'] },
+  }
+
+export function supportsInstructions(slug: string): boolean {
+  return Object.hasOwn(INSTRUCTION_ADAPTERS, slug)
+}
+
 /** Tools Tether can start as a root: exactly the slugs with a resume adapter,
  * since a root must be resumable after a crash. Canonical slugs only, as the
  * root digest covers the tool string as sent. */
@@ -62,6 +75,8 @@ export function toolSpec(tool: AgentTool): TuiSpec {
   if (context) spec.context = context
   const resume = RESUME_ADAPTERS[tool.slug]
   if (resume) spec.resume = resume
+  const instructions = INSTRUCTION_ADAPTERS[tool.slug]
+  if (instructions) spec.instructions = instructions
   if (tool.slug === 'codex')
     spec.modelSelection = {
       model: ['--model'],

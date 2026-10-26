@@ -38,6 +38,8 @@ def descriptor(payload, owner="aico"):
                        **({"agentHubContext": payload["agentHubContext"]} if payload.get("agentHubContext") is not None else {})})
     if payload.get("workRole"):
         fields.append({"workRole": payload.get("workRole"), "workRoleDisplayName": payload.get("workRoleDisplayName")})
+    if payload.get("instructions"):
+        fields.append({"instructions": payload["instructions"]["revision"]})
     return {"owner": owner, "requestId": payload["requestId"],
             "digest": hashlib.sha256(json.dumps(fields, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest(),
             "hostIdentity": "12345678",
@@ -466,3 +468,51 @@ def test_blank_slate_refuses_project_resume_and_context_options(monkeypatch, ext
     monkeypatch.setattr(admin.Collector, "receipt", lambda *a, **k: pytest.fail("contacted owner"))
     with pytest.raises(SystemExit):
         admin.main(["create", "review-1", "Review.", "--tool", "pi", "--blank-slate", *extra])
+
+
+REVISIONS = {"revisions": [
+    {"id": "20110df2-9d3f-4e0d-85af-38d9b844a282", "prompt_name": "Code Reviewer", "content": "Review v2.",
+     "content_hash": "b2", "created_at": "2026-10-26T10:00:00Z"},
+    {"id": "20220df2-9d3f-4e0d-85af-38d9b844a282", "prompt_name": "Code Reviewer", "content": "Review v1.",
+     "content_hash": "b1", "created_at": "2026-10-25T10:00:00Z"},
+]}
+
+
+def fake_st_prompt(current="Review v2."):
+    def st_prompt(*args):
+        return REVISIONS if args[0] == "revisions" else {"slug": args[1], "content": current}
+    return st_prompt
+
+
+@pytest.mark.parametrize(("selection", "revision"), [
+    ("code-reviewer", "20110df2-9d3f-4e0d-85af-38d9b844a282"),
+    ("code-reviewer@2022", "20220df2-9d3f-4e0d-85af-38d9b844a282"),
+])
+def test_instructions_send_one_revision_snapshot_and_pin_it_in_the_digest(monkeypatch, selection, revision):
+    calls, outputs = [], []
+    def receipt(_, path, route, payload, **kwargs):
+        calls.append(payload)
+        return 200, descriptor(payload)
+    monkeypatch.setattr(admin, "st_prompt", fake_st_prompt())
+    monkeypatch.setattr(admin.Collector, "receipt", receipt)
+    monkeypatch.setattr(admin, "emit_json", lambda _, value: outputs.append(value))
+    assert admin.main(["create", "review-2", "Review.", "--tool", "codex", "--project", "sample-app",
+                       "--project-root", "/fixture/project", "--work-role", "review",
+                       "--instructions", selection]) == 0
+    sent = calls[0]["instructions"]
+    assert sent["prompt"] == "code-reviewer" and sent["revision"] == revision
+    assert sent["content"] == next(r["content"] for r in REVISIONS["revisions"] if r["id"] == revision)
+    assert outputs[0]["instructions"] == {"prompt": "code-reviewer", "name": "Code Reviewer", "revision": revision}
+
+
+@pytest.mark.parametrize(("selection", "current"), [
+    ("code-reviewer@20", "Review v2."),     # ambiguous prefix
+    ("code-reviewer@9999", "Review v2."),   # no such revision
+    ("code-reviewer", "Edited, unsaved."),  # current content has no revision
+    ("../x", "Review v2."),
+])
+def test_instructions_refuse_an_unclear_revision_before_contacting_the_owner(monkeypatch, selection, current):
+    monkeypatch.setattr(admin, "st_prompt", fake_st_prompt(current))
+    monkeypatch.setattr(admin.Collector, "receipt", lambda *a, **k: pytest.fail("contacted owner"))
+    with pytest.raises(SystemExit):
+        admin.main(["create", "review-3", "Review.", "--tool", "pi", "--blank-slate", "--instructions", selection])
