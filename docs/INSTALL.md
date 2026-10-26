@@ -44,7 +44,8 @@ scripts/install.sh --start
 
 `--start` also enables and restarts `tether@default` and `aico-web`, the web
 app's one Node server on port 3002. The desktop's `aico-shell.service` is started by
-`scripts/aico-launch.sh`. `--skip-systemd` installs files only (no units, no
+`scripts/aico-launch.sh`. `st service rebuild aico` restarts it only while it runs, so
+once you quit the desktop app, deploys leave it off. `--skip-systemd` installs files only (no units, no
 systemd checks), for clean-room runs. The installer is safe to rerun: it
 rewrites only files whose content changed. Rerun it after moving the checkout.
 A test Tether instance runs with `systemctl --user start tether@dev` and is never
