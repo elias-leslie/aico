@@ -291,9 +291,11 @@ The session's workspace is a new empty directory,
 `~/.local/share/aico/blank-slate/<id>` (the request ID for a root). Tether keys
 the mode on that path, so restarts, tool replacement, crash recovery and reboot
 restore keep it. It launches through `scripts/aico-blank-slate`, which execs the
-native harness, never the Agent Hub launcher. For Claude it also marks the Blank
-Slate directory trusted in `~/.claude.json` (what accepting Claude's folder
-trust prompt records), so a new empty workspace does not stop at that prompt.
+native harness, never the Agent Hub launcher. For Claude it also records that
+one workspace as trusted in `~/.claude.json` (what accepting Claude's folder
+trust prompt records; Claude has no launch option that skips it), so a new
+empty workspace does not stop at that prompt. The file is replaced only when
+no one wrote it since it was read, with its mode kept.
 
 | Tool | Off | Kept |
 | --- | --- | --- |

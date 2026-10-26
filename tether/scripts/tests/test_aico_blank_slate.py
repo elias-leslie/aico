@@ -54,7 +54,8 @@ def test_claude_keeps_only_pretooluse_guards(run, tmp_path, monkeypatch):
     assert env["CLAUDE_CODE_DISABLE_CLAUDE_MDS"] == env["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] == "1"
     assert "AGENT_HUB_CONTEXT_PREINJECTED_TEXT" not in env
     trusted = json.loads(state.read_text())
-    assert trusted["projects"][str(tmp_path / "blank-slate")] == {"hasTrustDialogAccepted": True}
+    assert trusted["projects"][str(workspace)] == {"hasTrustDialogAccepted": True}
+    assert str(tmp_path / "blank-slate") not in trusted["projects"]
     assert trusted["keep"] == 1 and trusted["projects"]["/other"]["hasTrustDialogAccepted"] is True
 
 

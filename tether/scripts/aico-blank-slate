@@ -55,24 +55,37 @@ def read_json(path: Path) -> dict:
 
 
 def trust_workspace(env: dict[str, str]) -> None:
-    """Record the Blank Slate directory as trusted, as accepting Claude's folder
-    trust prompt would; Claude honours a trusted parent for each new workspace."""
+    """Record this workspace, and only it, as trusted, as accepting Claude's folder
+    trust prompt would. Claude has no launch option that skips the prompt.
+
+    The file is replaced only if no one wrote it since it was read, with its
+    mode kept; a lost race just leaves Claude to ask.
+    """
     config_dir = env.get("CLAUDE_CONFIG_DIR")
     state = Path(config_dir) / ".claude.json" if config_dir else HOME / ".claude.json"
-    base = str(Path.cwd().parent)
-    data = read_json(state)
-    if not data:
+    workspace = os.getcwd()
+    try:
+        before = state.stat()
+        data = json.loads(state.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
         return  # no Claude state yet: Claude asks once and remembers
-    projects = data.setdefault("projects", {})
-    if not isinstance(projects, dict) or projects.get(base, {}).get("hasTrustDialogAccepted") is True:
+    projects = data.get("projects") if isinstance(data, dict) else None
+    if not isinstance(projects, dict) or not isinstance(projects.get(workspace, {}), dict):
         return
-    projects.setdefault(base, {})["hasTrustDialogAccepted"] = True
+    if projects.get(workspace, {}).get("hasTrustDialogAccepted") is True:
+        return
+    projects.setdefault(workspace, {})["hasTrustDialogAccepted"] = True
     temporary = state.with_name(f"{state.name}.blank-slate-{os.getpid()}")
     try:
-        temporary.write_text(json.dumps(data, indent=2), encoding="utf-8")
-        temporary.chmod(state.stat().st_mode & 0o777)
-        temporary.replace(state)
+        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, before.st_mode & 0o777)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            json.dump(data, handle, indent=2, ensure_ascii=False)
+        current = state.stat()
+        if (current.st_mtime_ns, current.st_size) == (before.st_mtime_ns, before.st_size):
+            temporary.replace(state)
     except OSError:
+        pass
+    finally:
         temporary.unlink(missing_ok=True)
 
 
