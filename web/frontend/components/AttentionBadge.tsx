@@ -9,6 +9,7 @@ const TONE: Record<AttentionGroup, string> = {
   finished: 'var(--jade)',
   working: 'var(--mist)',
   idle: 'var(--mist)',
+  'no-status': 'var(--mist)',
 }
 
 /** A session's state and age as a small pill: `waiting 3m`, `done 1m`. */

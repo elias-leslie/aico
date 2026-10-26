@@ -91,6 +91,7 @@ const RANK: Record<AttentionGroup, number> = {
   finished: 1,
   working: 2,
   idle: 3,
+  'no-status': 4,
 }
 
 /** The most urgent of several (a pane's shell and agent sessions). */
