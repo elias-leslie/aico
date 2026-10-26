@@ -6,7 +6,6 @@ import {
   BrowserWindow,
   clipboard,
   dialog,
-  globalShortcut,
   ipcMain,
   Menu,
   screen,
@@ -29,7 +28,6 @@ import { createBridgeCompositor, createNativeCompositor, whenReady } from './com
 import { readConfig } from './config'
 import { registerDesktopIpc } from './desktop-ipc'
 import { createGuiChannel } from './gui-channel'
-import { createHotkeys } from './hotkeys'
 import { createLifecycle } from './lifecycle'
 import { denyAllPermissions } from './permissions'
 import { ownStartTime, removeOwnPidFile } from './process-identity'
@@ -355,19 +353,14 @@ const listener = createSelectionListener({
   deliver: selection.deliver,
 })
 
-// Global shortcuts.
-const hotkeys = createHotkeys({ grab: selection.grab, config, globalShortcut, app })
-
 lifecycle.onQuit(() => {
   link.stop()
   compositor.stop()
-  hotkeys.stop()
   listener.stop()
   ambient.stop()
   layout.stop({ removeFile: lifecycle.runtimeOwner })
 })
 lifecycle.setActivationHandler(windows.activate)
-lifecycle.setIndicateHandler(hotkeys.indicate)
 
 const startup = app.whenReady().then(async () => {
   if (!lifecycle.runtimeOwner) return // no runtime initialization
@@ -399,7 +392,6 @@ const startup = app.whenReady().then(async () => {
   sessions.registerIpc(ipcMain)
   selection.registerIpc(ipcMain)
   shares.registerIpc(ipcMain)
-  hotkeys.registerIpc(ipcMain)
 
   chrome.createTray({
     onSelect: windows.focusOrReopen,
@@ -419,8 +411,6 @@ const startup = app.whenReady().then(async () => {
   // Linux does not provide a reliable async hook before its cached tray menu opens.
   app.on('browser-window-focus', chrome.syncTray)
   app.on('activate', chrome.syncTray)
-
-  hotkeys.registerSelection()
 
   link.connect(applyGuiCommand)
   chrome.syncTray()

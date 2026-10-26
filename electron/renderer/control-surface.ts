@@ -30,7 +30,6 @@ import {
   runAction,
   sections,
   setPaletteOpener,
-  setSelectionHotkey,
   togglePin,
 } from './actions'
 import { createArmGuard } from './arm-guard'
@@ -891,11 +890,7 @@ export async function initControlSurface(): Promise<void> {
 
   // Independent catalogs load together, so their pinned launchers show on the
   // first render.
-  // Independent catalogs and the indicate hotkey's label load together.
-  await Promise.all([
-    catalogs.loadInitial(),
-    window.aico.actions.selectionHotkey().then(setSelectionHotkey, () => setSelectionHotkey(null)),
-  ])
+  await catalogs.loadInitial()
   submenuEl = make('div', 'aico-submenu')
   submenuEl.hidden = true
   submenuEl.addEventListener('mouseleave', (e) => {

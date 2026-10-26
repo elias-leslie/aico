@@ -1,6 +1,6 @@
 // The selection bus, main's half: the session a selection goes to, and typing
 // it there through Tether. Sends arrive from the loopback listener (browser
-// extension, `st selection send`); the indicate hotkey re-sends the newest
+// extension, `st selection send`); Indicate selection re-sends the newest
 // capture, which is kept in memory only.
 
 import type { BrowserWindow, IpcMain } from 'electron'
@@ -39,7 +39,7 @@ export function createSelectionBus(deps: SelectionBusDeps) {
   // focused. (During a browser send the *browser* holds OS focus, so "active
   // session" means most-recently-focused widget, not focused-now.)
   let lastFocusedAico: string | null = null
-  // The newest capture, for the indicate hotkey. Never written to disk.
+  // The newest capture, for Indicate selection. Never written to disk.
   let newest: SelectionRecord | null = null
 
   // The last-focused session if its window is still open, else the most
@@ -111,7 +111,7 @@ export function createSelectionBus(deps: SelectionBusDeps) {
     return { delivered: true, reason: null }
   }
 
-  // "Indicate" (hotkey or menu): send the newest capture again, to whichever
+  // "Indicate" (menu): send the newest capture again, to whichever
   // session is the target now.
   async function selectionGrab(): Promise<void> {
     if (newest) await deliver([newest])
@@ -120,7 +120,7 @@ export function createSelectionBus(deps: SelectionBusDeps) {
   return {
     /** Type captures at the target session; resolves what became of them. */
     deliver,
-    /** The indicate hotkey and menu item: re-send the newest capture. */
+    /** The Indicate selection menu item: re-send the newest capture. */
     grab: selectionGrab,
     /** The session a selection goes to. */
     target: selectionTarget,

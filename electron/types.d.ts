@@ -87,8 +87,6 @@ export interface AicoApi {
     hub(): void
     /** Harvest the freshest selection-bus capture and deliver it. */
     indicate(): void
-    /** The indicate hotkey main registered (an Electron accelerator), or null when none took. */
-    selectionHotkey(): Promise<string | null>
     /** Retire this widget: close the window AND end its tmux session. */
     endSession(): Promise<void>
     /** Mark or unmark this session as a coordinator (titlebar label, centre tile). */

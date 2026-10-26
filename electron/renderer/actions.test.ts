@@ -11,7 +11,6 @@ import {
   pinnedActions,
   prunePins,
   setGameActions,
-  setSelectionHotkey,
   setTuiActions,
   togglePin,
 } from './actions'
@@ -36,13 +35,6 @@ describe('action registry', () => {
     for (const id of ['palette', 'hub', 'refresh', 'copy', 'paste'] as const) {
       expect(findAction(id)?.shortcut).toBe(chordLabel(id))
     }
-  })
-
-  it('labels Indicate selection with the hotkey main registered, or none', () => {
-    setSelectionHotkey('CommandOrControl+Shift+Space')
-    expect(findAction('indicate')?.shortcut).toBe('Ctrl+Shift+Space')
-    setSelectionHotkey(null)
-    expect(findAction('indicate')?.shortcut).toBe('')
   })
 
   it('gives every action a non-empty label and icon', () => {

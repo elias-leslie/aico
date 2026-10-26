@@ -25,31 +25,3 @@ export function windowChord(
 export function chordLabel(chord: WindowChord): string {
   return `Ctrl+Shift+${WINDOW_CHORDS[chord].replace(/^Key/, '')}`
 }
-
-const MODIFIER_LABELS: Record<string, string> = {
-  commandorcontrol: 'Ctrl',
-  cmdorctrl: 'Ctrl',
-  control: 'Ctrl',
-  ctrl: 'Ctrl',
-  command: 'Super',
-  cmd: 'Super',
-  super: 'Super',
-  meta: 'Super',
-  alt: 'Alt',
-  option: 'Alt',
-  altgr: 'AltGr',
-  shift: 'Shift',
-}
-
-/** How an Electron accelerator main registered reads (`CommandOrControl+Shift+Space`
- * reads `Ctrl+Shift+Space`); '' when none is registered. */
-export function acceleratorLabel(accelerator: string | null | undefined): string {
-  if (!accelerator) return ''
-  return accelerator
-    .split('+')
-    .map(
-      (part) =>
-        MODIFIER_LABELS[part.toLowerCase()] ?? (part.length === 1 ? part.toUpperCase() : part),
-    )
-    .join('+')
-}

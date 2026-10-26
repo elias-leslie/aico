@@ -41,12 +41,6 @@ export interface AicoConfig {
   readonly nightshift: string
   /** The web app (AICO_WEB_URL): a tap on the push opens the waiting session there on the owner's phone (Nightshift allowlists the origin). */
   readonly webUrl: string
-  /**
-   * System-wide "indicate" hotkey as an Electron accelerator. Registered with
-   * globalShortcut only under X11; on Wayland the GNOME custom shortcut that
-   * runs `aico-launch.sh --indicate` carries it (scripts/aico-hotkey.sh).
-   */
-  readonly selectionHotkey: string
   /** The display protocol Electron runs on: window geometry comes from the compositor bridge on Wayland. */
   readonly displayBackend: DisplayBackend
   /** The Vite dev server, when running under it. */
@@ -96,7 +90,6 @@ export function readConfig(
     },
     nightshift: join(home, '.local/bin/nightshift'),
     webUrl: (env.AICO_WEB_URL ?? 'https://aico.summitflow.dev').replace(/\/+$/, ''),
-    selectionHotkey: env.AICO_SELECTION_HOTKEY ?? 'CommandOrControl+Shift+Space',
     displayBackend: displayBackend(argv, env),
     rendererUrl: env.ELECTRON_RENDERER_URL,
     activationReadyFile: env.AICO_ACTIVATION_READY_FILE,

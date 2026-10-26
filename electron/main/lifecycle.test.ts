@@ -235,28 +235,6 @@ describe('lifecycle: activation', () => {
   })
 })
 
-describe('lifecycle: indicate shortcut', () => {
-  it('a second launch with --aico-indicate runs the indicate handler, not an activation', () => {
-    const { app, lifecycle } = setup()
-    const activate = vi.fn()
-    const indicate = vi.fn()
-    lifecycle.setActivationHandler(activate)
-    lifecycle.setIndicateHandler(indicate)
-    app.emit('second-instance', {}, ['electron', '.', '--aico-indicate'])
-    expect(indicate).not.toHaveBeenCalled() // not ready: dropped, never queued
-    lifecycle.markReady()
-    app.emit('second-instance', {}, ['electron', '.', '--aico-indicate'])
-    expect(indicate).toHaveBeenCalledTimes(1)
-    expect(activate).not.toHaveBeenCalled()
-  })
-
-  it('the --aico-indicate helper never becomes the runtime', () => {
-    const { app, lifecycle } = setup({ lock: false, argv: ['electron', '.', '--aico-indicate'] })
-    expect(lifecycle.runtimeOwner).toBe(false)
-    expect(app.quit).toHaveBeenCalledTimes(1)
-  })
-})
-
 describe('lifecycle: failed startup', () => {
   it('logs, says why and exits so the next launch starts clean', () => {
     const { app, dialog, lifecycle } = setup()

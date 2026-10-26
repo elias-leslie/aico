@@ -83,7 +83,7 @@ drop-in, then restart Aico:
 ```bash
 systemctl --user edit aico-shell.service
 # [Service]
-# Environment=AICO_SELECTION_HOTKEY=CommandOrControl+Shift+F9
+# Environment=AICO_PASTED_IMAGES_KEEP_HOURS=48
 ```
 
 For `npm start`, export the variables in the launching shell.
@@ -98,7 +98,6 @@ Important variables:
 | `AICO_PASTED_IMAGES_DIR` | `/srv/workspaces/handoffs/pasted-images` | Where Aico writes a pasted clipboard image (`paste-<time>-<random>.png`, mode `0640` in a `0750` folder) so a program running as another user, such as the agent's Tether instance, can read it. The pasted text is the file's path. Must be readable by that user. |
 | `AICO_PASTED_IMAGES_KEEP_HOURS` | `24` | Pasted images older than this are deleted whenever a new one is written. |
 | `AICO_EXTENSION_IDS` | `oejadbpdecaenbbihglcnchnkmlilmjf` | Comma-separated Chrome extension IDs the listener trusts as browser origins. A malformed ID leaves the listener off. The default is the stable ID derived from the `key` in `extension/manifest.json`; set this only for a fork or re-keyed extension. |
-| `AICO_SELECTION_HOTKEY` | `CommandOrControl+Shift+Space` | Accelerator for Indicate selection, which sends the newest capture again to the last-focused widget. On X11 Aico registers it as an Electron global shortcut; on Wayland run `scripts/aico-hotkey.sh install` to bind it as a GNOME custom shortcut (see Desktop bridge). |
 | `AICO_OZONE_PLATFORM` | `wayland` | Electron display backend used by the managed foreground runner. Native Wayland keeps typing smooth on NVIDIA; `x11` forces Xwayland. Window placement on native Wayland needs the desktop bridge extension (see Desktop bridge). Does not change the desktop session or terminal environment. |
 | `TETHER_SOCKET` | unset | Tether control socket. Wins over `TETHER_INSTANCE`. |
 | `TETHER_INSTANCE` | `default` | Tether instance; the socket is `$XDG_RUNTIME_DIR/tether/<instance>/control.sock`. |
@@ -126,12 +125,6 @@ With `AICO_OZONE_PLATFORM=x11` the same interface uses Electron's own calls.
   appears. Without the bridge Aico still runs: windows open where GNOME puts
   them, tiling is off, `st aico widget position` fails with
   `compositor_unavailable`, and `layout.json` has `"boundsReliable": false`.
-- Indicate selection: `scripts/aico-hotkey.sh install` adds a GNOME custom
-  shortcut that runs `scripts/aico-launch.sh --indicate`; the launcher hands
-  `--aico-indicate` to the running Aico (second instance), and never starts one.
-  Chosen over Electron's portal `globalShortcut` because GNOME asks per app to
-  bind that and Aico cannot see whether it did. `scripts/aico-hotkey.sh remove`
-  undoes it; `GSETTINGS_BACKEND=keyfile` runs it against a scratch file.
 - Window edges resize through Chromium's own frameless handling on Wayland (the
   custom edge handles were removed).
 
@@ -173,7 +166,7 @@ Endpoints:
 - `GET /health` — liveness and identity; SummitFlow's health check reads it.
 - `POST /selection/send` — `{"items": [{"kind": "dom"|"a11y"|"region", "snippet", "meta"}]}`, 1-50 items. The captures are typed as one compact reference at the last-focused widget's prompt. The reply is `{records, count, delivered, reason}`: `delivered` says whether the reference reached a session; when it is false, `reason` is one of `no_session`, `busy`, `session_changing`, `stale_generation` or `insert_failed`.
 
-Nothing is stored. The Indicate selection hotkey sends the newest capture again from memory.
+Nothing is stored. Indicate selection in the lantern menu sends the newest capture again from memory.
 
 The listener has no authentication. It binds only to a loopback host, answers `403` to a request whose `Host` header is not `localhost` or a loopback IP such as `127.0.0.1` or `[::1]` (DNS rebinding), answers `403` to a write from any browser origin except the trusted extension IDs (`AICO_EXTENSION_IDS`), local pages included, sends CORS headers only to those IDs, answers `415` to a write whose `Content-Type` is set but is not `application/json`, and refuses bodies over 1 MiB with `413`. A blank or malformed `AICO_SIDECAR_PORT` (anything but digits 1-65535) leaves the listener off with a log line.
 

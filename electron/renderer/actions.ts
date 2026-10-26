@@ -9,7 +9,7 @@
 // chords); they still show their shortcut so users learn them.
 
 import type { SelectionToast } from '../types'
-import { acceleratorLabel, chordLabel } from './chords'
+import { chordLabel } from './chords'
 
 // Late-bound so the `palette` action can open the palette without this module
 // importing the control surface (which imports this module).
@@ -103,7 +103,7 @@ export const ACTIONS: Action[] = [
     id: 'indicate',
     section: 'Capture',
     label: 'Indicate selection',
-    shortcut: '', // the global hotkey main registered (setSelectionHotkey)
+    shortcut: '',
     icon: '⊹',
     note: 'Pull the latest captured text or image into this session.',
     run: () => window.aico.actions.indicate(),
@@ -262,13 +262,6 @@ export const ACTIONS: Action[] = [
     run: () => window.aico.arcade.toggle(),
   },
 ]
-
-/** Label "Indicate selection" with the global hotkey main registered for it,
- * or none when it could not register one (Wayland, or another app holds it). */
-export function setSelectionHotkey(accelerator: string | null): void {
-  const indicate = ACTIONS.find((a) => a.id === 'indicate')
-  if (indicate) indicate.shortcut = acceleratorLabel(accelerator)
-}
 
 // Per-TUI launch actions, built from the registry at init (the TUI list lives in
 // the main process, fetched over IPC). They are runnable ⇒ pinnable and palette-

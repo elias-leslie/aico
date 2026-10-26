@@ -89,8 +89,6 @@ contextBridge.exposeInMainWorld('aico', {
     hub: () => ipcRenderer.send('widget:hub'),
     /** Send the newest capture again to the last-focused widget (same path as the hotkey). */
     indicate: () => ipcRenderer.send('selection:grab'),
-    /** The indicate hotkey main registered (an Electron accelerator), or null when none took. */
-    selectionHotkey: (): Promise<string | null> => ipcRenderer.invoke('hotkeys:selection'),
     /** End the current session through Tether. */
     endSession: (): Promise<void> => ipcRenderer.invoke('session:end-self'),
     /** Mark or unmark this session as a coordinator (titlebar label, centre tile). */

@@ -149,14 +149,6 @@ describe('desktop launcher activation readiness', () => {
     expect(readFileSync(setup.activations, 'utf8')).toBe('. --aico-activate\n')
   }, 10_000)
 
-  it('--indicate asks the running Aico to show its windows, with the same checks', async () => {
-    const setup = fixture()
-    writeFileSync(setup.marker, `${setup.pid} ${setup.starttime}\n`)
-    const result = await setup.launch('--indicate').completed
-    expect(result.code).toBe(0)
-    expect(readFileSync(setup.activations, 'utf8')).toBe('. --aico-indicate\n')
-  }, 10_000)
-
   it('rejects a marker from an earlier incarnation of the same PID', async () => {
     const setup = fixture()
     writeFileSync(setup.marker, `${setup.pid} 0\n`)
