@@ -438,7 +438,7 @@ function instructionsRow(chosen: ChosenInstructions | null): HTMLElement {
   const item = drillRow('Instructions', () => showInstructionPrompts(), 'aico-sub-instructions')
   const dot = make('span', 'aico-sub-dot project')
   dot.classList.toggle('current', chosen !== null)
-  const value = make('span', 'aico-sub-time aico-sub-value')
+  const value = make('span', 'aico-sub-time aico-sub-note aico-sub-value')
   value.textContent = chosen ? `${chosen.name} · ${chosen.revision.slice(0, 8)}` : 'None'
   item.title = chosen
     ? `${chosen.prompt}@${chosen.revision.slice(0, 8)}, added to the agent's instructions`
@@ -476,7 +476,7 @@ function renderInstructionPrompts(): void {
   submenuEl.innerHTML = ''
   submenuEl.append(drillRow('‹ Workspaces', backToWorkspaces, 'aico-sub-back'))
   const filter = make('input', 'aico-sub-filter')
-  filter.type = 'search'
+  filter.type = 'text'
   filter.placeholder = 'Filter prompts'
   filter.setAttribute('aria-label', 'Filter prompts')
   filter.value = promptFilter
@@ -584,12 +584,14 @@ function revisionDate(iso: string | null): string {
 function revisionRow(prompt: InstructionPrompt, r: InstructionRevision): HTMLElement {
   const short = r.id.slice(0, 8)
   const label = `${revisionDate(r.createdAt)} · ${short}`
-  const tag = make('span', 'aico-sub-time')
+  const tag = make('span', 'aico-sub-time aico-sub-note')
   tag.textContent = r.usable ? (r.current ? 'current' : '') : "can't be used"
   if (!r.usable) {
-    const row = emptySubmenuRow(label)
+    const row = make('div', 'aico-sub-row empty')
+    const lbl = make('span', 'aico-lbl')
+    lbl.textContent = label
     row.title = 'Empty, over 64 KiB, or holds text the tools can’t take'
-    row.append(tag)
+    row.append(lbl, tag)
     return row
   }
   const row = drillRow(label, () => {
