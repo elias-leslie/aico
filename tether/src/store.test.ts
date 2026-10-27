@@ -67,6 +67,7 @@ describe('Store schema', () => {
       'schema_version',
       'sessions',
       'settings',
+      'shares',
       'tmux_servers',
       'wakes',
     ])

@@ -9,7 +9,7 @@ Aico is a Linux companion for people working with terminal AI tools. Your agent 
 - Runs Claude Code, Codex, Antigravity, Pi and shells in sessions that survive closed windows, browser restarts and app updates.
 - On the desktop: movable session windows that remember their place, a command palette, a workspace picker, browser selection capture, and optional arcade-style title bar scenes.
 - In the browser and on the phone: the same sessions with a phone keyboard, file browsing, uploads and search, installable as an app.
-- Agents can share a file or link with you (`tether show`); it shows up in both.
+- Agents can share files, folders or a link with you (`tether share`): links to where the files are, opened under Files › Shared. File paths in the web terminal are clickable too.
 
 ## Current scope
 
@@ -42,7 +42,7 @@ The desktop keeps only window views and settings in `~/.local/state/aico/aico.db
 
 ## Runtime, data, and integrations
 
-Agent shares (`show.requested`) are accepted only from your own `tether@default`. On the desktop a notification offers **Show file**, or shows the URL with **Copy**. Files are copied on click into `$TETHER_EXCHANGE_ROOT/owner/shown/<id>-<name>` (root default `/srv/workspaces/exchange`). Previews show raster images or escaped text; other files open in the file manager. The web app lists recent shares and can push a notification through Nightshift. See [agent shares](docs/agent-shares.md).
+Agent shares (`show.requested`) are accepted only from your own `tether@default`. A share links to files where they already are; nothing is copied. The web app opens them under **Files › Shared**, and the desktop notice's **Open** goes there. See [agent shares](docs/agent-shares.md).
 
 Provision the exchange root before use, with an `agent/` subtree Tether can write. The desktop can create `owner/` when the root belongs to you and only you can write it; otherwise create `owner/` yourself. Owner directories must have no group or other write permission. Set the same `TETHER_EXCHANGE_ROOT` for Tether and both front ends.
 

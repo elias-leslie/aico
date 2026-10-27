@@ -4,6 +4,7 @@ import {
   LANTERN_TERMINAL_THEME,
   TERMINAL_FONT_FAMILY,
 } from '../constants/terminal'
+import { registerPathLinks } from '../terminal-path-links'
 import { isMobileDevice } from '../utils/device'
 import { applyMobileTerminalTouchStyles } from '../utils/mobile-terminal-touch'
 import { shouldUseWebglRenderer } from '../utils/webgl-renderer'
@@ -123,6 +124,7 @@ export function createTerminalWithAddons(
   term.loadAddon(fitAddon)
   term.loadAddon(new modules.WebLinksAddon())
   term.loadAddon(new modules.ClipboardAddon())
+  registerPathLinks(term)
 
   return { term, fitAddon }
 }

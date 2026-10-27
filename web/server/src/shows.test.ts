@@ -1,163 +1,87 @@
-import { execFileSync } from 'node:child_process'
-import {
-  appendFileSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  symlinkSync,
-  truncateSync,
-  unlinkSync,
-  writeFileSync,
-} from 'node:fs'
-import { tmpdir } from 'node:os'
-import { basename, dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  MAX_SHOW_BYTES,
-  metadata,
-  pushArgv,
-  pushTitle,
-  registerShowRoutes,
-  type Show,
-  Shows,
-  validateShow,
-} from './shows'
+import { pushArgv, pushTitle, registerShowRoutes, type Share, Shows, validateShare } from './shows'
 import { serveRoutes } from './testing'
 
 const SHOW_ID = 'ab12cd34ef56'
-const NAME = `ab12cd34/out/${SHOW_ID}-report.pdf`
 
 function payload(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     id: SHOW_ID,
     session: 'ab12cd34',
-    kind: 'file',
+    kind: 'files',
     title: 'Report',
-    name: NAME,
+    createdAt: '2026-10-27T10:00:00.000Z',
+    paths: ['/srv/workspaces/projects/aico/report.md'],
     ...overrides,
   }
 }
 
-function show(overrides: Record<string, unknown> = {}): Show {
-  const valid = validateShow(payload(overrides))
-  if (!valid) throw new Error('fixture show is invalid')
+function share(overrides: Record<string, unknown> = {}): Share {
+  const valid = validateShare(payload(overrides))
+  if (!valid) throw new Error('fixture share is invalid')
   return valid
 }
 
-const hexId = (value: number) => value.toString(16).padStart(12, '0')
+function tetherWith(items: unknown) {
+  return {
+    request: vi.fn(async () => ({ status: 200, body: { items } as never })),
+  }
+}
 
-describe('validateShow', () => {
-  it.each([null, '', 'Résumé', 'x'.repeat(120)])('accepts file metadata titled %j', (title) => {
-    expect(metadata(show({ title }))).toEqual(payload({ title }))
+describe('validateShare', () => {
+  it.each([null, 'Résumé', 'x'.repeat(120)])('accepts files titled %j', (title) => {
+    expect(validateShare(payload({ title }))).toEqual(payload({ title }))
   })
 
-  it('accepts a file without a session, and a URL', () => {
-    expect(
-      validateShow(payload({ session: null, name: `none/out/${SHOW_ID}-file` })),
-    ).not.toBeNull()
+  it('accepts several paths without a session, and a URL', () => {
+    expect(validateShare(payload({ session: null, paths: ['/a/b.png', '/a/c'] }))).not.toBeNull()
     const url = 'https://example.com/report?a=1&b=2'
-    expect(show({ kind: 'url', name: url, url, session: null, title: null })).toMatchObject({ url })
+    expect(share({ kind: 'url', url, paths: undefined, session: null, title: null })).toMatchObject(
+      { url },
+    )
   })
 
   it.each([
     { id: 'not-hex' },
-    { id: '' },
-    { id: 'a'.repeat(65) },
-    { id: 12 },
-    { kind: 'image' },
+    { id: 'ab12' },
+    { kind: 'file' },
     { session: '../owner' },
-    { session: 123 },
+    { session: undefined },
     { title: 'x'.repeat(121) },
-    { title: 123 },
     { title: 'line\nbreak' },
-    { title: 'null\x00' },
     { title: 'bidi‮' },
-    { title: 'line ' },
-    { title: 'surrogate\ud800' },
-    { name: '../owner/secrets' },
-    { name: '/ab12cd34/out/report.pdf' },
-    { name: 'ab12cd34/out/../../secrets' },
-    { name: 'ab12cd34/out/report\n' },
-    { name: 'ab12cd34/out/hello world' },
-    { name: `ab12cd34/out/${'x'.repeat(121)}` },
-    { name: 'ab12cd34/out/..' },
-    { name: 'ab12cd34/out/.' },
-    { name: 'none/out/report' },
-    { url: 'https://example.com' },
-    { name: null },
+    { createdAt: 'yesterday' },
+    { paths: [] },
+    { paths: ['relative/path'] },
+    { paths: ['/a/../etc/passwd'] },
+    { paths: ['/a\nb'] },
+    { paths: '/a' },
+    { paths: Array.from({ length: 21 }, (_, index) => `/a/${index}`) },
   ])('rejects %j', (overrides) => {
-    expect(validateShow(payload(overrides))).toBeNull()
+    expect(validateShare(payload(overrides))).toBeNull()
   })
 
   it.each([
     'javascript:alert(1)',
     'file:///etc/passwd',
-    'ftp://example.com/a',
     'https:///',
-    'https://[',
-    'https://example.com:bad/',
     'https://example.com/\n',
     ' https://example.com',
-    'https://example.com/‮',
     `https://example.com/${'x'.repeat(2000)}`,
   ])('rejects the URL %j', (url) => {
-    expect(validateShow(payload({ kind: 'url', name: url, url }))).toBeNull()
+    expect(validateShare(payload({ kind: 'url', url, paths: undefined }))).toBeNull()
   })
 })
 
 describe('Shows', () => {
-  it('keeps the last 50 in arrival order and resumes after an id', async () => {
-    const shows = new Shows({ exchangeRoot: '/nonexistent', publicHost: null, run: async () => {} })
-    // Ids are not chronological.
-    for (let index = 0; index < 55; index += 1)
-      await shows.receive(payload({ id: hexId(100 - index) }))
-    const items = shows.store.recent()
-    expect(items).toHaveLength(50)
-    expect(items[0].id).toBe(hexId(95))
-    expect(shows.store.recent(items[48].id)).toEqual([items[49]])
-    expect(shows.store.recent(items[49].id)).toEqual([])
-    expect(shows.store.recent('expired')).toEqual(items)
-  })
-
-  it('pushes a fixed notice once per valid show, with the public host when set', async () => {
-    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
-    const run = vi.fn(async (_argv: string[]) => {})
-    const shows = new Shows({
-      exchangeRoot: '/nonexistent',
-      publicHost: 'terminal.example.test',
-      run,
-    })
-    await shows.receive(payload({ name: '../escape' }))
-    await shows.receive('malformed')
-    expect(shows.store.recent()).toEqual([])
-    await shows.receive(payload({ title: '$(never execute); <title>' }))
-    await shows.receive(payload()) // a reconnect replay
-    expect(shows.store.recent()).toHaveLength(1)
-    expect(run.mock.calls).toEqual([
-      [
-        [
-          'nightshift',
-          'push',
-          '--title',
-          'Shared: $(never execute); <title>', // argv, never a shell
-          '--severity',
-          'info',
-          '--key',
-          `show:${SHOW_ID}`,
-          '--open',
-          `https://terminal.example.test/?show=${SHOW_ID}`,
-          'Open Aico to see it.',
-        ],
-      ],
-    ])
-    log.mockRestore()
-  })
-
-  it('leaves the URL out of the notice and omits --open without a public host', () => {
-    const url = 'https://untrusted.example/a?b=1'
-    expect(pushArgv(show({ kind: 'url', name: url, url }), null)).toEqual([
+  it('pushes a fixed notice once per share, with the public host when set', async () => {
+    const run = vi.fn(async () => {})
+    const shows = new Shows({ tether: tetherWith([]), publicHost: 'aico.example.dev', run })
+    await shows.receive(payload())
+    await shows.receive(payload())
+    await shows.receive({ ...payload(), id: 'not valid' })
+    expect(run).toHaveBeenCalledTimes(1)
+    expect(run).toHaveBeenCalledWith([
       'nightshift',
       'push',
       '--title',
@@ -166,163 +90,72 @@ describe('Shows', () => {
       'info',
       '--key',
       `show:${SHOW_ID}`,
+      '--open',
+      `https://aico.example.dev/?show=${SHOW_ID}`,
       'Open Aico to see it.',
     ])
   })
 
-  it('titles the push with what was shared, never a URL', () => {
-    expect(pushTitle(show())).toBe('Shared: Report')
-    expect(pushTitle(show({ title: null }))).toBe(
-      `Shared: ${NAME.slice(NAME.lastIndexOf('/') + 1)}`,
+  it('names what was shared and never puts a URL in the notice', () => {
+    expect(pushTitle(share({ title: null, paths: ['/a/image.png', '/a/prompt.md'] }))).toBe(
+      'Shared: image.png and 1 more',
     )
-    const url = 'https://untrusted.example/a?b=1'
-    expect(pushTitle(show({ kind: 'url', name: url, url, title: null }))).toBe('Shared a link')
+    expect(pushTitle(share({ title: null, paths: ['/a/out/'] }))).toBe('Shared: out')
+    const link = share({
+      kind: 'url',
+      url: 'https://secret.example',
+      paths: undefined,
+      title: null,
+    })
+    expect(pushTitle(link)).toBe('Shared a link')
+    expect(pushArgv(link, null).join(' ')).not.toContain('secret.example')
+    expect(pushArgv(link, null)).not.toContain('--open')
   })
 
-  it('keeps a show whose push fails', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  it('keeps going when a push fails', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
     const shows = new Shows({
-      exchangeRoot: '/nonexistent',
+      tether: tetherWith([]),
       publicHost: null,
       run: async () => {
-        throw new Error('nightshift missing')
+        throw new Error('offline')
       },
     })
-    await shows.receive(payload())
-    expect(shows.store.get(SHOW_ID)).toBeDefined()
-    expect(warn).toHaveBeenCalledOnce()
-    warn.mockRestore()
+    await expect(shows.receive(payload())).resolves.toBeUndefined()
+  })
+
+  it("lists Tether's shares, leaving out any that fail the checks", async () => {
+    const shows = new Shows({
+      tether: tetherWith([payload(), { ...payload(), id: 'bad' }, payload({ id: 'bbbbbbbbbbbb' })]),
+      publicHost: null,
+    })
+    expect((await shows.list()).map((item) => item.id)).toEqual([SHOW_ID, 'bbbbbbbbbbbb'])
   })
 })
 
 describe('share routes', () => {
-  let root: string
-  let file: string
-  let shows: Shows
-  let headerRead: (() => void) | undefined
   let server: Awaited<ReturnType<typeof serveRoutes>>
 
-  const get = (path: string) => fetch(`${server.base}${path}`)
-  const fileUrl = `/api/shows/${SHOW_ID}/file`
-  const bytes = async (response: Response) => Buffer.from(await response.arrayBuffer())
-
   beforeEach(async () => {
-    root = mkdtempSync(join(tmpdir(), 'aico-exchange-'))
-    file = join(root, 'agent', NAME)
-    mkdirSync(dirname(file), { recursive: true })
-    writeFileSync(file, 'private report contents')
-    shows = new Shows({ exchangeRoot: root, publicHost: null, run: async () => {} })
-    headerRead = undefined
-    server = await serveRoutes((router) =>
-      registerShowRoutes(router, shows, { headerRead: () => headerRead?.() }),
-    )
+    const shows = new Shows({
+      tether: tetherWith([payload(), payload({ id: 'bbbbbbbbbbbb', title: null })]),
+      publicHost: null,
+    })
+    server = await serveRoutes((router) => registerShowRoutes(router, shows))
   })
 
   afterEach(async () => {
     await server.close()
-    rmSync(root, { recursive: true, force: true })
   })
 
-  it('lists metadata without contents and honours the cursor', async () => {
-    const first = show()
-    const second = show({ id: 'bbbbbbbbbbbb', title: null })
-    shows.store.add(first)
-    shows.store.add(second)
-    const response = await get('/api/shows')
-    expect(response.headers.get('cache-control')).toBe('no-store')
-    expect(await response.json()).toEqual({ shows: [metadata(first), metadata(second)] })
-    expect(await (await get(`/api/shows?since=${first.id}`)).json()).toEqual({
-      shows: [metadata(second)],
-    })
-    expect(await (await get(`/api/shows?since=${second.id}`)).json()).toEqual({ shows: [] })
-  })
-
-  it('serves a file as a no-store, nosniff attachment', async () => {
-    shows.store.add(show())
-    const response = await get(fileUrl)
-    expect(response.status).toBe(200)
-    expect(await bytes(response)).toEqual(readFileSync(file))
-    expect(Object.fromEntries(response.headers)).toMatchObject({
-      'content-type': 'application/octet-stream',
-      'x-content-type-options': 'nosniff',
-      'cache-control': 'no-store',
-      'content-disposition': `attachment; filename="${basename(file)}"`,
-    })
-  })
-
-  it.each([
-    ['\x89PNG\r\n\x1a\nrest', 'image/png'],
-    ['\xff\xd8\xffrest', 'image/jpeg'],
-    ['GIF87arest', 'image/gif'],
-    ['GIF89arest', 'image/gif'],
-    ['RIFFabcdWEBPrest', 'image/webp'],
-  ])('serves images inline by their magic bytes, whatever the name (%#)', async (text, mime) => {
-    const content = Buffer.from(text, 'latin1')
-    writeFileSync(file, content)
-    shows.store.add(show())
-    const response = await get(fileUrl)
-    expect(await bytes(response)).toEqual(content)
-    expect(response.headers.get('content-type')).toBe(mime)
-    expect(response.headers.get('content-disposition')).toMatch(/^inline;/)
-    expect(response.headers.get('x-content-type-options')).toBe('nosniff')
-  })
-
-  it.each(["<svg onload='alert(1)'>", '<html>active</html>', 'RIFFabcdWAVE', 'not a PNG'])(
-    'serves active or unknown contents as attachments: %s',
-    async (content) => {
-      writeFileSync(file, content)
-      shows.store.add(show())
-      const response = await get(fileUrl)
-      expect(response.headers.get('content-type')).toBe('application/octet-stream')
-      expect(response.headers.get('content-disposition')).toMatch(/^attachment;/)
-    },
-  )
-
-  it('has no file for unknown or URL shares', async () => {
-    expect((await get(fileUrl)).status).toBe(404)
-    shows.store.add(show({ kind: 'url', name: 'https://example.com', url: 'https://example.com' }))
-    expect((await get(fileUrl)).status).toBe(404)
-  })
-
-  it.each(['missing', 'symlink', 'directory', 'fifo', 'large'])(
-    'refuses a %s in place of the file',
-    async (replacement) => {
-      unlinkSync(file)
-      if (replacement === 'symlink') symlinkSync('/etc/passwd', file)
-      else if (replacement === 'directory') mkdirSync(file)
-      else if (replacement === 'fifo') execFileSync('mkfifo', [file])
-      else if (replacement === 'large') {
-        writeFileSync(file, '')
-        truncateSync(file, MAX_SHOW_BYTES + 1)
-      }
-      shows.store.add(show())
-      expect((await get(fileUrl)).status).toBe(replacement === 'large' ? 413 : 404)
-    },
-  )
-
-  it.each([0, 1, 2, 3])('refuses a symlinked parent %i levels up', async (level) => {
-    let parent = dirname(file)
-    for (let index = 0; index < level; index += 1) parent = dirname(parent)
-    renameSync(parent, `${parent}-moved`)
-    symlinkSync(`${parent}-moved`, parent)
-    shows.store.add(show())
-    expect((await get(fileUrl)).status).toBe(404)
-  })
-
-  it('reads the opened file even if the path is swapped meanwhile', async () => {
-    const original = readFileSync(file)
-    headerRead = () => {
-      unlinkSync(file)
-      symlinkSync('/etc/passwd', file)
-    }
-    shows.store.add(show())
-    expect(await bytes(await get(fileUrl))).toEqual(original)
-  })
-
-  it('stops at the checked size if the agent appends meanwhile', async () => {
-    const original = readFileSync(file)
-    headerRead = () => appendFileSync(file, 'extra bytes')
-    shows.store.add(show())
-    expect(await bytes(await get(fileUrl))).toEqual(original)
+  it('lists shares and honours the cursor', async () => {
+    const list = async (query = '') =>
+      (
+        (await (await fetch(`${server.base}/api/shows${query}`)).json()) as { shows: Share[] }
+      ).shows.map((item) => item.id)
+    expect(await list()).toEqual([SHOW_ID, 'bbbbbbbbbbbb'])
+    expect(await list(`?since=${SHOW_ID}`)).toEqual(['bbbbbbbbbbbb'])
+    expect(await list('?since=bbbbbbbbbbbb')).toEqual([])
+    expect(await list('?since=cccccccccccc')).toEqual([SHOW_ID, 'bbbbbbbbbbbb'])
   })
 })

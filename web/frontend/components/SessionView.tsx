@@ -2,15 +2,17 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { EmptySessionState } from '@/components/EmptySessionState'
-import { PaneFilesDialog } from '@/components/files/PaneFilesDialog'
+import { FilesDialog } from '@/components/files/FilesDialog'
 import type { TerminalMode } from '@/components/ModeToggle'
 import { TerminalComponent, type TerminalHandle } from '@/components/Terminal'
 import { ConnectionNotice, SizeHolderNotice } from '@/components/TerminalNotice'
 import type { ConnectionStatus } from '@/components/terminal.types'
 import { UnifiedTerminalHeaderContent as UnifiedTerminalHeader } from '@/components/terminal-header'
+import { type FilesRequest, setFilesOpener } from '@/lib/files-opener'
 import type { TerminalFontSize } from '@/lib/hooks/use-terminal-settings'
 import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
 import {
+  getSlotName,
   getSlotSessionId,
   getSlotWorkingDir,
   isPaneSlot,
@@ -83,10 +85,26 @@ export function SessionView({
   sideList = false,
 }: SessionViewProps) {
   const [refreshVersion, setRefreshVersion] = useState(0)
-  const [filesPaneId, setFilesPaneId] = useState<string | null>(null)
+  // Files is open, on what it was asked to show.
+  const [files, setFiles] = useState<{ request: FilesRequest | null } | null>(
+    null,
+  )
   const handleRef = useRef<TerminalHandle | null>(null)
   const slot = getShownSlot(slots, activeSessionId)
   const sessionId = slot ? getSlotSessionId(slot) : null
+  const paneId = slot && isPaneSlot(slot) ? slot.paneId : null
+  // Shares and clicked paths open in this view's Files.
+  useEffect(() => {
+    if (!sessionId) return
+    setFilesOpener((request) => setFiles({ request }))
+    return () => setFilesOpener(null)
+  }, [sessionId])
+  const sessionName = (session: string) => {
+    const match = slots.find((candidate) =>
+      getSlotSessionId(candidate)?.startsWith(session),
+    )
+    return match ? getSlotName(match) : null
+  }
   const status = sessionId ? terminalStatuses?.get(sessionId) : undefined
   // Which terminal (session and redraw) has shown live output.
   const termKey = `${sessionId}:${refreshVersion}`
@@ -125,7 +143,6 @@ export function SessionView({
   }
 
   const workingDir = getSlotWorkingDir(slot)
-  const paneId = isPaneSlot(slot) ? slot.paneId : null
 
   return (
     <div className="h-full w-full" style={{ backgroundColor: 'var(--rim)' }}>
@@ -142,9 +159,7 @@ export function SessionView({
               : undefined
           }
           onRefresh={refresh}
-          onFiles={
-            paneId && sessionId ? () => setFilesPaneId(paneId) : undefined
-          }
+          onFiles={sessionId ? () => setFiles({ request: null }) : undefined}
           onUpload={
             onUpload ? () => onUpload(sessionId ?? undefined) : undefined
           }
@@ -225,12 +240,14 @@ export function SessionView({
             />
           )}
         </div>
-        {paneId && filesPaneId === paneId && sessionId && (
-          <PaneFilesDialog
+        {files && sessionId && (
+          <FilesDialog
             isOpen={true}
             paneId={paneId}
-            onClose={() => setFilesPaneId(null)}
+            request={files.request}
+            onClose={() => setFiles(null)}
             onInsertPath={(path) => handleRef.current?.pasteInput(path)}
+            sessionName={sessionName}
           />
         )}
       </div>

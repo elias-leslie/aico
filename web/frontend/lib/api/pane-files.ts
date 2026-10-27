@@ -27,6 +27,17 @@ export interface PaneFileContentResponse {
   truncated: boolean
 }
 
+/** Where the browser reads: a tab's working folder, or any folder by its path (a share or a clicked path). */
+export type FilesSource =
+  | { kind: 'pane'; paneId: string }
+  | { kind: 'location'; root: string }
+
+export interface PathInfo {
+  /** The real absolute path. */
+  path: string
+  kind: 'file' | 'folder'
+}
+
 function buildQueryString(params: Record<string, string | undefined>): string {
   const search = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {
@@ -36,26 +47,53 @@ function buildQueryString(params: Record<string, string | undefined>): string {
   return query ? `?${query}` : ''
 }
 
-export function fetchPaneFileTree(
-  paneId: string,
+function filesUrl(
+  source: FilesSource,
+  route: 'tree' | 'content',
+  path: string | undefined,
+): string {
+  return source.kind === 'pane'
+    ? `/api/panes/${source.paneId}/files/${route}${buildQueryString({ path })}`
+    : `/api/files/${route}${buildQueryString({ root: source.root, path })}`
+}
+
+/** A stable cache key for a source. */
+export function sourceKey(source: FilesSource): string {
+  return source.kind === 'pane' ? `pane:${source.paneId}` : `at:${source.root}`
+}
+
+export function fetchFileTree(
+  source: FilesSource,
   path = '',
 ): Promise<PaneFileTreeResponse> {
   return apiFetch<PaneFileTreeResponse>(
-    `/api/panes/${paneId}/files/tree${buildQueryString({
-      path: path || undefined,
-    })}`,
+    filesUrl(source, 'tree', path || undefined),
     undefined,
-    'Failed to load pane files',
+    "Couldn't load the files",
   )
 }
 
-export function fetchPaneFileContent(
-  paneId: string,
+export function fetchFileContent(
+  source: FilesSource,
   path: string,
 ): Promise<PaneFileContentResponse> {
   return apiFetch<PaneFileContentResponse>(
-    `/api/panes/${paneId}/files/content${buildQueryString({ path })}`,
+    filesUrl(source, 'content', path),
     undefined,
-    'Failed to load file contents',
+    "Couldn't open this file",
+  )
+}
+
+/** The file itself, read where it is: text and images open in the browser, anything else downloads. */
+export function rawFileUrl(root: string, path: string): string {
+  return `/api/files/raw${buildQueryString({ root, path })}`
+}
+
+/** What a path names: its real location and whether it is a file or a folder. */
+export function fetchPathInfo(path: string): Promise<PathInfo> {
+  return apiFetch<PathInfo>(
+    `/api/files/stat${buildQueryString({ path })}`,
+    undefined,
+    'This file was moved or deleted',
   )
 }

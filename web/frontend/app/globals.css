@@ -861,6 +861,28 @@ div.xterm .xterm-viewport {
   color: rgb(var(--bone-rgb) / 0.72);
 }
 
+/* Agent shares in Files: one group per share; the folder line gives way to the name. */
+.lantern-share {
+  border-bottom: 1px solid rgb(var(--glass-rgb) / 0.06);
+  border-radius: 8px;
+  padding-bottom: 4px;
+}
+
+.lantern-share[aria-current="true"] {
+  background: var(--paper);
+}
+
+.lantern-share .lantern-file-row {
+  grid-template-columns: 18px minmax(0, max-content) minmax(0, 1fr);
+  padding-left: 10px;
+}
+
+.lantern-share .lantern-file-row .s {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .files-state {
   margin: 0;
   padding: 16px 10px;

@@ -1,50 +1,52 @@
 # Agent shares
 
-An agent shares a file or a link with `tether show` (Tether's `POST /v1/show`).
-Tether copies a shared file into the exchange and publishes a `show.requested`
-event; both front ends pick it up from there.
+An agent hands you files, folders or a link with `tether share` (Tether's
+`POST /v1/show`). A share is a link to where the files already are; nothing is
+copied. You open it in Aico under **Files › Shared**.
 
-## Where shares come from
+```
+tether share /srv/out/report.md ./prompt.md --title "Report and prompt"
+tether share --url https://example.com/run/42
+```
+
+Relative paths are taken from the current folder. The session comes from
+`AICO_WIDGET_ID`, so the share says which session made it.
+
+## Tether
+
+Tether checks each path exists and is a file or folder, and records its real
+path (symlinks resolved, duplicates dropped; a folder ends in `/`). Up to 20
+paths per share. Shares live in Tether's database (`shares`, schema v11) and
+are listed by `GET /v1/shares` (newest 200, oldest first). Records older than
+`TETHER_SHARE_RETENTION_DAYS` (default 30) are dropped when a new share comes
+in; the files themselves are never touched. Each share publishes a
+`show.requested` event with the same data.
 
 Shares are accepted only from the owner's default Tether, `tether@default`
-(`$XDG_RUNTIME_DIR/tether/default/control.sock`, a socket in the owner's private
-runtime directory). Events from any other instance are ignored. Agents run as
-the owner, so `tether show` from any session reaches `tether@default`.
-
-Tether writes files under `$TETHER_EXCHANGE_ROOT/agent/<session-or-none>/out/`
-(default root `/srv/workspaces/exchange`). The root must already exist; Tether
-creates the `agent/…/out/` directories with mode 0755.
+(`$XDG_RUNTIME_DIR/tether/default/control.sock`). Agents run as the owner, so
+`tether share` from any session reaches it.
 
 ## Web app
 
-The web server (`aico-web`) keeps the last 50 validated shares in memory, shared
-by its event watcher and the API. Restarting it clears them; dropping one from
-memory never removes its file.
+`GET /api/shows` lists Tether's shares, checked again field by field;
+`?since=<id>` returns those after that ID (an unknown ID returns the whole list).
+The page polls every ten seconds while visible. A notice pops up for each new
+share; on opening the app, up to three made since it was last open pop up too.
+**Open** shows the share in Files › Shared. A link share offers Copy only.
 
-`GET /api/shows` returns `{ "shows": [...] }` in arrival order.
-`?since=<id>` returns the items after that ID; an unknown or expired ID returns
-the whole list. Both this route and `GET /api/shows/<id>/file` pass the
-web server's Host and Origin checks like every other route. The browser polls every ten seconds while it
-is visible and again when it becomes visible. Notices stay until dismissed; a
-link share offers its text and Copy only.
+Files reads by location: `/api/files/{stat,tree,content,raw}?root=&path=`. Reads
+stay inside the folder and refuse secrets and hidden folders (the same rules as
+the project file browser). `raw` serves images and text inline and anything
+else as a download, up to 25 MiB, with `nosniff` and a sandbox CSP. A path that
+is gone answers 404, shown as "This file was moved or deleted".
 
-File reads use the server's exchange root
-(`TETHER_EXCHANGE_ROOT`, default `/srv/workspaces/exchange`, the same variable
-and default as Tether's), under `agent/<session-or-none>/out/`. Every path
-component is opened without following symlinks; only regular files up to
-25 MiB are streamed, with bounded reads. Files download as attachments unless
-PNG, JPEG, GIF or WebP magic is detected.
+File paths in the terminal (absolute, or starting with `~/`) are clickable and
+open in the same viewer.
 
-Each new valid share runs `nightshift push` from the web server, with a ten-second
-timeout and key `show:<id>`. A failed push is logged and the share is kept. The
-project identity's `hosts.browser_frontend` gives the HTTPS origin for the
-`/?show=<id>` link; without it the push has no link. Opening the link selects
-that share first while it is still in the list; it never visits the agent's URL.
-
-The web app never creates, writes or cleans up exchange directories.
+Each new share runs `nightshift push` (ten-second timeout, key `show:<id>`). Its
+link `https://<hosts.browser_frontend>/?show=<id>` opens the share in Files.
 
 ## Desktop
 
-The desktop shows a notification with **Show file**, or the URL with **Copy**.
-Files are copied on click into `$TETHER_EXCHANGE_ROOT/owner/shown/<id>-<name>`.
-See the [README](../README.md#runtime-data-and-integrations).
+The desktop shows a notice with **Open**, which opens the share in the web app,
+or a link share's URL with **Copy**.

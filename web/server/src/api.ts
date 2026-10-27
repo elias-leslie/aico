@@ -7,6 +7,7 @@ import { AGENT_HUB_PATHS, type AgentHubConfig, proxyAgentHub } from './agent-hub
 import { registerCheckInRoutes } from './check-ins'
 import type { UploadConfig } from './config'
 import type { WebStore } from './db'
+import { registerFileLocationRoutes } from './file-locations'
 import {
   objectBody,
   optionalInt,
@@ -345,6 +346,7 @@ export function buildApi(deps: ApiDeps): Router {
 
   registerUploadRoutes(router, deps.uploads)
   registerPaneFileRoutes(router, life)
+  registerFileLocationRoutes(router)
   registerShowRoutes(router, deps.shows)
   registerCheckInRoutes(router, life, tether)
 

@@ -30,6 +30,8 @@ See the [Changelog](../CHANGELOG.md) for shipped changes.
 
 **`files browser`** — Browse the session's working directory. Preview files, copy paths, insert paths into prompts — without leaving the terminal.
 
+**`files and shares`** — The session bar's Files opens Shared and Project. Shared lists what agents handed you with `tether share`, newest first: each file opens in a preview (text and images) and each folder opens to browse, read where they are, never copied. Project browses the session's folder. A file path in the terminal (absolute or starting with `~/`) is a link: click it to open that file or folder in Files. A notice pops up for each new share; its Open goes to the share in Shared.
+
 **`prompt cleaning`** — With Agent Hub connected, the web app can clean a draft prompt, show an original-vs-cleaned diff, take follow-up refinement instructions, let you edit the result before sending, and fall back to the original prompt if the cleaner is unavailable.
 
 **`voice input`** — Dictate commands and prompts via browser speech-to-text when your browser and microphone permissions support it. It merges cumulative browser speech chunks so dictated phrases do not repeat as interim text becomes final.

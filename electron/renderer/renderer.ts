@@ -311,7 +311,7 @@ function wireSelectionToast(): void {
     toast.classList.toggle('actionable', Boolean(action))
     actionButton.hidden = !action
     dismissButton.hidden = !action
-    actionButton.textContent = action?.kind === 'copy' ? 'Copy' : 'Show file'
+    actionButton.textContent = action?.kind === 'copy' ? 'Copy' : 'Open'
     // Reflow so the .show transition replays on a back-to-back capture.
     void toast.offsetWidth
     toast.classList.add('show')

@@ -1,35 +1,27 @@
 import { homedir } from 'node:os'
-import { isAbsolute, join } from 'node:path'
+import { join } from 'node:path'
 
 /** Tether's own API contract version. Clients declare the minimum they need.
  * 2: resize claims carry a viewer label (still accepted without one).
- * 3: session wakes; End takes `keepWakes`. */
-export const API_VERSION = 3
+ * 3: session wakes; End takes `keepWakes`.
+ * 4: shares link files where they are (`paths`); GET /v1/shares lists them. */
+export const API_VERSION = 4
 
 /** The one instance that keeps Aico's names and adopts historical servers. */
 export const DEFAULT_INSTANCE = 'default'
 
 export interface ShowConfig {
-  exchangeRoot: string
-  maxBytes: number
+  /** Shares older than this are dropped when the next one arrives. */
+  retentionDays: number
 }
 
-/** File handoffs use an install-created exchange root, never a daemon-created root. */
 export function resolveShowConfig(env: NodeJS.ProcessEnv = process.env): ShowConfig {
-  const exchangeRoot = env.TETHER_EXCHANGE_ROOT ?? '/srv/workspaces/exchange'
-  if (!isAbsolute(exchangeRoot) || exchangeRoot.includes('\0')) {
-    throw new Error('TETHER_EXCHANGE_ROOT must be an absolute path without NUL')
+  const raw = env.TETHER_SHARE_RETENTION_DAYS
+  const retentionDays = raw === undefined ? 30 : Number(raw)
+  if ((raw !== undefined && !/^\d+$/.test(raw)) || !(retentionDays >= 1)) {
+    throw new Error('TETHER_SHARE_RETENTION_DAYS must be a whole number of days, at least 1')
   }
-  const raw = env.TETHER_SHOW_MAX_BYTES
-  const maxBytes = raw === undefined ? 25 * 1024 * 1024 : Number(raw)
-  if (
-    (raw !== undefined && !/^\d+$/.test(raw)) ||
-    !Number.isSafeInteger(maxBytes) ||
-    maxBytes < 1
-  ) {
-    throw new Error('TETHER_SHOW_MAX_BYTES must be a positive safe integer')
-  }
-  return { exchangeRoot, maxBytes }
+  return { retentionDays }
 }
 
 const INSTANCE_RE = /^[a-z0-9][a-z0-9-]{0,31}$/

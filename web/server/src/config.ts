@@ -4,7 +4,7 @@
 
 import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defaultTetherSocketPath, tetherSocketPath } from 'tether/client'
 
@@ -30,8 +30,6 @@ export interface WebConfig {
   /** Agent Hub's port on the page's host: the browser's voice socket without a configured URL. */
   agentHubPort: number
   uploads: UploadConfig
-  /** Where the default Tether copies shared files (`<root>/agent/…`); Tether's variable and default. */
-  exchangeRoot: string
   maintenance: MaintenanceConfig
 }
 
@@ -68,7 +66,6 @@ const DEFAULT_MAX_UPLOAD_MB = 10
 const DEFAULT_UPLOAD_MAX_AGE_SECONDS = 24 * 60 * 60
 const DEFAULT_MAINTENANCE_INTERVAL_SECONDS = 15 * 60
 const DEFAULT_EMPTY_PANE_DAYS = 7
-const DEFAULT_EXCHANGE_ROOT = '/srv/workspaces/exchange'
 // The browser's own fallback (web/frontend lib/api-config.ts PORTS.agentHub).
 const DEFAULT_AGENT_HUB_PORT = 8003
 
@@ -158,9 +155,6 @@ export function loadConfig(
     typeof identity.artifacts?.upload_dir_name === 'string' && identity.artifacts.upload_dir_name
       ? identity.artifacts.upload_dir_name
       : DEFAULT_UPLOAD_DIR_NAME
-  const exchangeRoot = env.TETHER_EXCHANGE_ROOT || DEFAULT_EXCHANGE_ROOT
-  if (!isAbsolute(exchangeRoot) || exchangeRoot.includes('\0'))
-    throw new Error('TETHER_EXCHANGE_ROOT must be an absolute path without NUL')
   const uid = process.getuid?.()
   const tetherSocket = tetherSocketPath(env, uid)
   return {
@@ -185,7 +179,6 @@ export function loadConfig(
       maxBytes: positiveInt(env.MAX_FILE_SIZE_MB, DEFAULT_MAX_UPLOAD_MB) * 1024 * 1024,
       maxAgeMs: positiveInt(env.UPLOAD_MAX_AGE_SECONDS, DEFAULT_UPLOAD_MAX_AGE_SECONDS) * 1000,
     },
-    exchangeRoot,
     maintenance: {
       enabled: flag(env.MAINTENANCE_ENABLED, true),
       intervalMs:

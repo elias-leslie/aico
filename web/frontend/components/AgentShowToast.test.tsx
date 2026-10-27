@@ -1,12 +1,18 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { setFilesOpener } from '@/lib/files-opener'
 import { AgentShowToast } from './AgentShowToast'
 
 const metadata = {
   id: 'ab12cd34ef56',
   session: 'ab12cd34',
   title: 'Report',
-  name: 'ab12cd34/out/report.pdf',
+  createdAt: '2026-10-27T10:00:00.000Z',
+}
+const files = {
+  ...metadata,
+  kind: 'files' as const,
+  paths: ['/srv/out/report.pdf'],
 }
 
 const originalClipboard = Object.getOwnPropertyDescriptor(
@@ -16,6 +22,7 @@ const originalClipboard = Object.getOwnPropertyDescriptor(
 
 afterEach(() => {
   cleanup()
+  setFilesOpener(null)
   vi.restoreAllMocks()
   if (originalClipboard) {
     Object.defineProperty(navigator, 'clipboard', originalClipboard)
@@ -28,7 +35,7 @@ describe('AgentShowToast', () => {
   it('names the session that shared it', () => {
     render(
       <AgentShowToast
-        show={{ ...metadata, kind: 'file' }}
+        show={files}
         onDismiss={vi.fn()}
         sessionName="SlopMiner — web look"
       />,
@@ -38,22 +45,43 @@ describe('AgentShowToast', () => {
     expect(screen.getByText('report.pdf')).toBeVisible()
   })
 
-  it('opens only the authenticated file route and supports dismissal', () => {
+  it('opens the share in Files, and says how many files it holds', () => {
     const dismiss = vi.fn()
+    const opened = vi.fn()
+    setFilesOpener(opened)
     render(
       <AgentShowToast
-        show={{ ...metadata, kind: 'file', title: '<script>literal</script>' }}
+        show={{
+          ...files,
+          title: '<script>literal</script>',
+          paths: [...files.paths, '/srv/out/notes'],
+        }}
         onDismiss={dismiss}
       />,
     )
     expect(screen.getByRole('status')).toHaveTextContent(
-      'Shared by an agent<script>literal</script>report.pdf',
+      'Shared by an agent<script>literal</script>report.pdf and 1 more',
     )
     expect(document.querySelector('script')).toBeNull()
-    expect(screen.getByRole('link', { name: 'Open' })).toHaveAttribute(
-      'href',
-      `/api/shows/${metadata.id}/file`,
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }))
+    expect(opened).toHaveBeenCalledWith({ kind: 'shared', showId: metadata.id })
+    expect(dismiss).toHaveBeenCalledOnce()
+  })
+
+  it('opens the first file by itself when no session is open', () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null)
+    render(<AgentShowToast show={files} onDismiss={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }))
+    expect(open).toHaveBeenCalledWith(
+      '/api/files/raw?root=%2Fsrv%2Fout&path=report.pdf',
+      '_blank',
+      'noopener',
     )
+  })
+
+  it('can be dismissed', () => {
+    const dismiss = vi.fn()
+    render(<AgentShowToast show={files} onDismiss={dismiss} />)
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss shared item' }))
     expect(dismiss).toHaveBeenCalledOnce()
   })
@@ -68,7 +96,7 @@ describe('AgentShowToast', () => {
     })
     render(
       <AgentShowToast
-        show={{ ...metadata, kind: 'url', name: url, url }}
+        show={{ ...metadata, kind: 'url', url }}
         onDismiss={vi.fn()}
       />,
     )
@@ -80,7 +108,7 @@ describe('AgentShowToast', () => {
     expect(open).not.toHaveBeenCalled()
   })
 
-  it('falls back to the name and reports a failed copy', async () => {
+  it('falls back to the link and reports a failed copy', async () => {
     Object.defineProperty(navigator, 'clipboard', {
       value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) },
       configurable: true,
@@ -91,7 +119,6 @@ describe('AgentShowToast', () => {
           ...metadata,
           title: null,
           kind: 'url',
-          name: 'https://agent.example',
           url: 'https://agent.example',
         }}
         onDismiss={vi.fn()}

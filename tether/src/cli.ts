@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process'
+import { isAbsolute, resolve } from 'node:path'
 import { callSocket } from './client'
 import { resolvePaths, type TetherPaths } from './config'
 import { startDaemon } from './daemon'
@@ -28,6 +29,12 @@ Commands:
                                 it switches the current client.
   sessions diagnostics <id>
   roots [list | show <requestId>]
+  share <path>... [--title T]  show the owner files or folders where they are
+                                (Aico: Files > Shared; nothing is copied);
+                                relative paths are from here
+  share --url <url> [--title T]
+                                the session is this pane's own; --session ID
+                                overrides it
   import-aico --from PATH [--apply]
                                 copy a pre-Tether Aico catalog (an archived
                                 aico.db; dry-run unless --apply; opened
@@ -126,6 +133,41 @@ async function api(
       `tether (${paths.instance}) is not reachable at ${paths.socket}: ${(error as Error).message}`,
     )
     return 2
+  }
+}
+
+/**
+ * The `/v1/show` body for `tether share`. Its session is the pane's own Aico
+ * widget (`AICO_WIDGET_ID=aico-widget-<id>`) unless `--session` names one.
+ */
+export function shareBody(
+  args: string[],
+  env: NodeJS.ProcessEnv,
+  cwd: string,
+): Record<string, unknown> | string {
+  const files: string[] = []
+  let title: string | undefined
+  let url: string | undefined
+  let session = /^aico-widget-([0-9a-f]{8})$/.exec(env.AICO_WIDGET_ID ?? '')?.[1]
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index] as string
+    const option = /^--(title|url|session)(?:=(.*))?$/.exec(arg)
+    if (!option) {
+      files.push(isAbsolute(arg) ? arg : resolve(cwd, arg))
+      continue
+    }
+    if (option[2] === undefined) index += 1
+    const value = option[2] ?? args[index]
+    if (value === undefined) return `--${option[1]} needs a value`
+    if (option[1] === 'title') title = value
+    else if (option[1] === 'url') url = value
+    else session = value
+  }
+  if ((url === undefined) === (files.length === 0)) return 'give files to share, or --url'
+  return {
+    ...(session ? { session } : {}),
+    ...(title === undefined ? {} : { title }),
+    ...(url === undefined ? { paths: files } : { url }),
   }
 }
 
@@ -419,6 +461,22 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
         if (sub === 'show' && rest[0])
           return api(io, paths, json, 'GET', `/v1/roots/${encodeURIComponent(rest[0])}`)
         break
+      case 'share': {
+        const body = shareBody(parsed.args.slice(1), process.env, process.cwd())
+        if (typeof body === 'string') {
+          io.err(`tether share: ${body}`)
+          return 2
+        }
+        const response = await callSocket(paths.socket, 'POST', '/v1/show', body)
+        if (json || response.status !== 201) return render(io, json, response.status, response.body)
+        const shared = response.body as { paths?: string[] }
+        io.out(
+          shared.paths
+            ? `Shared ${shared.paths.length === 1 ? '1 path' : `${shared.paths.length} paths`} as links (nothing copied); the owner opens them in Aico under Files > Shared.`
+            : 'Shared the link; the owner sees it in Aico.',
+        )
+        return 0
+      }
       case 'tools':
         if (!sub || sub === 'list') return api(io, paths, json, 'GET', '/v1/tools')
         if (sub === 'get') return api(io, paths, json, 'GET', slugPath(rest[0]))

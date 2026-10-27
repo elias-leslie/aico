@@ -308,9 +308,8 @@ const selection = createSelectionBus({
   raise: (win) => void compositor.raise(win),
 })
 
-const previews = new Set<BrowserWindow>()
 const shares = createAgentShares({
-  exchangeRoot: config.exchangeRoot,
+  webUrl: config.webUrl,
   windowFor: (id) => (id ? registry.forSession(id) : undefined) ?? registry.sessionWindows()[0],
   sessionName: (id) => {
     const descriptor = id ? catalog.get(id) : undefined
@@ -319,32 +318,6 @@ const shares = createAgentShares({
   clipboard,
   shell,
   dialog,
-  preview: async (path, title) => {
-    const win = new BrowserWindow({
-      width: 900,
-      height: 680,
-      title,
-      backgroundColor: '#0b0d11',
-      autoHideMenuBar: true,
-      webPreferences: {
-        nodeIntegration: false,
-        contextIsolation: true,
-        sandbox: true,
-        webSecurity: true,
-        javascript: false,
-      },
-    })
-    previews.add(win)
-    win.on('closed', () => previews.delete(win))
-    win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
-    win.webContents.on('will-navigate', (event) => event.preventDefault())
-    try {
-      await win.loadFile(path)
-    } catch (error) {
-      win.destroy()
-      throw error
-    }
-  },
 })
 
 // The loopback listener: /health, and sends from the browser extension and

@@ -2,16 +2,24 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiFetch } from '@/lib/api-fetch'
+import { openFiles } from '@/lib/files-opener'
 
 type ShowMetadata = {
   id: string
   session: string | null
   title: string | null
-  name: string
+  createdAt: string
 }
 
+/** An agent's share: links to files or folders where they are, or a web link. */
 export type AgentShow = ShowMetadata &
-  ({ kind: 'file' } | { kind: 'url'; url: string })
+  ({ kind: 'files'; paths: string[] } | { kind: 'url'; url: string })
+
+/** The most shares the server lists. */
+const MAX_SHOWS = 200
+/** On opening the app, at most this many shares made while it was closed pop up. */
+const MAX_CATCH_UP = 3
+const SEEN_KEY = 'aico:shares-seen-at'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
@@ -21,15 +29,21 @@ function isShow(value: unknown): value is AgentShow {
   if (
     !isRecord(value) ||
     typeof value.id !== 'string' ||
-    !/^[0-9a-f]{1,64}$/.test(value.id) ||
+    !/^[0-9a-f]{12}$/.test(value.id) ||
     !(value.session === null || typeof value.session === 'string') ||
     !(value.title === null || typeof value.title === 'string') ||
-    typeof value.name !== 'string'
+    typeof value.createdAt !== 'string'
   ) {
     return false
   }
-  if (value.kind === 'file') {
-    return /^([0-9a-f]{8}|none)\/out\/[A-Za-z0-9._-]{1,120}$/.test(value.name)
+  if (value.kind === 'files') {
+    return (
+      Array.isArray(value.paths) &&
+      value.paths.length > 0 &&
+      value.paths.every(
+        (path) => typeof path === 'string' && path.startsWith('/'),
+      )
+    )
   }
   return (
     value.kind === 'url' &&
@@ -38,11 +52,11 @@ function isShow(value: unknown): value is AgentShow {
   )
 }
 
-function parseShows(value: unknown): AgentShow[] {
+export function parseShows(value: unknown): AgentShow[] {
   if (
     !isRecord(value) ||
     !Array.isArray(value.shows) ||
-    value.shows.length > 50
+    value.shows.length > MAX_SHOWS
   ) {
     throw new Error('Invalid shared items')
   }
@@ -51,40 +65,72 @@ function parseShows(value: unknown): AgentShow[] {
   return items
 }
 
+export function fetchShows(since?: string, signal?: AbortSignal) {
+  return apiFetch<unknown>(`/api/shows${since ? `?since=${since}` : ''}`, {
+    signal,
+    cache: 'no-store',
+  }).then(parseShows)
+}
+
+function readSeenAt(): string | null {
+  try {
+    return window.localStorage.getItem(SEEN_KEY)
+  } catch {
+    return null
+  }
+}
+
+function writeSeenAt(value: string): void {
+  try {
+    window.localStorage.setItem(SEEN_KEY, value)
+  } catch {
+    // Without storage, shares made while the app was closed just don't pop up.
+  }
+}
+
+/**
+ * New shares, one notice at a time. On opening the app, the few made since it
+ * was last open pop up too; a push link (`?show=<id>`) opens its share in Files.
+ */
 export function useAgentShows() {
   const [pending, setPending] = useState<AgentShow[]>([])
   const cursor = useRef<string | undefined>(undefined)
-  const seen = useRef(new Set<string>())
 
   useEffect(() => {
     const controller = new AbortController()
     let polling = false
-    const requested = new URLSearchParams(window.location.search).get('show')
+    let requested = new URLSearchParams(window.location.search).get('show')
 
     async function poll() {
       if (document.visibilityState !== 'visible' || polling) return
       polling = true
       try {
-        const query = cursor.current ? `?since=${cursor.current}` : ''
-        const payload = await apiFetch<unknown>(`/api/shows${query}`, {
-          signal: controller.signal,
-          cache: 'no-store',
-        })
-        const items = parseShows(payload)
+        const first = cursor.current === undefined
+        const items = await fetchShows(cursor.current, controller.signal)
         if (controller.signal.aborted) return
-        const fresh = items.filter((item) => !seen.current.has(item.id))
         const last = items.at(-1)
         if (last) cursor.current = last.id
-        seen.current = new Set(
-          [...seen.current, ...items.map((item) => item.id)].slice(-50),
+        else if (first) cursor.current = ''
+        const seenAt = readSeenAt()
+        // Only shares newer than any seen before: an expired cursor lists everything again.
+        let fresh = items.filter((item) =>
+          seenAt === null ? !first : item.createdAt > seenAt,
         )
-        const selected = fresh.find((item) => item.id === requested)
-        const ordered = selected
-          ? [selected, ...fresh.filter((item) => item !== selected)]
-          : fresh
-        setPending((queue) => [...queue, ...ordered].slice(-50))
+        if (first) fresh = fresh.slice(-MAX_CATCH_UP)
+        if (last && (!seenAt || last.createdAt > seenAt))
+          writeSeenAt(last.createdAt)
+        const asked = requested
+          ? items.find((item) => item.id === requested)
+          : undefined
+        if (asked) {
+          requested = null
+          if (openFiles({ kind: 'shared', showId: asked.id }))
+            fresh = fresh.filter((item) => item !== asked)
+          else fresh = [asked, ...fresh.filter((item) => item !== asked)]
+        }
+        if (fresh.length) setPending((queue) => [...queue, ...fresh].slice(-20))
       } catch {
-        // Retain pending handoffs and retry on the next visible-page poll.
+        // Retry on the next visible-page poll.
       } finally {
         polling = false
       }

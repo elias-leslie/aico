@@ -13,6 +13,7 @@ vi.mock('tether/client', async (original) => ({
 let tether: FakeTether
 let store: WebStore
 let shows: Shows
+let pushes: string[][]
 let paneId: string
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -46,7 +47,14 @@ beforeEach(() => {
   vi.spyOn(console, 'log').mockImplementation(() => {})
   tether = new FakeTether()
   store = new WebStore(':memory:')
-  shows = new Shows({ exchangeRoot: '/nonexistent', publicHost: null, run: async () => {} })
+  pushes = []
+  shows = new Shows({
+    tether: tether.client,
+    publicHost: null,
+    run: async (argv) => {
+      pushes.push(argv)
+    },
+  })
   paneId = store.createPane({ projectId: 'aico', name: 'Aico', activeMode: 'codex' }).id
 })
 
@@ -130,14 +138,15 @@ describe('events', () => {
     const share = {
       id: 'ab12cd34ef56',
       session: 'ab12cd34',
-      kind: 'file',
+      kind: 'files',
       title: null,
-      name: 'ab12cd34/out/a.txt',
+      createdAt: '2026-10-27T10:00:00.000Z',
+      paths: ['/srv/a.txt'],
     }
     await background(false).event(event('show.requested', share))
-    expect(shows.store.recent()).toEqual([])
+    expect(pushes).toEqual([])
     await background(true).event(event('show.requested', share))
-    expect(shows.store.recent()).toHaveLength(1)
+    expect(pushes).toHaveLength(1)
   })
 })
 

@@ -47,7 +47,7 @@ beforeEach(async () => {
     config: { agentHubUrl: null, agentHubClientId: null },
     uploads: { dir: '/nonexistent/uploads', maxBytes: 1024, maxAgeMs: 1000 },
     shows: new Shows({
-      exchangeRoot: '/nonexistent/exchange',
+      tether: tether.client,
       publicHost: null,
       run: async () => {},
     }),

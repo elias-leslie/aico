@@ -1,37 +1,39 @@
 import { useQuery } from '@tanstack/react-query'
 import {
-  fetchPaneFileContent,
-  fetchPaneFileTree,
+  type FilesSource,
+  fetchFileContent,
+  fetchFileTree,
   type PaneFileContentResponse,
   type PaneFileTreeResponse,
+  sourceKey,
 } from '@/lib/api/pane-files'
 
 const fileQueryKeys = {
   all: ['pane-files'] as const,
-  tree: (paneId: string, path: string) =>
-    [...fileQueryKeys.all, 'tree', paneId, path] as const,
-  content: (paneId: string, path: string) =>
-    [...fileQueryKeys.all, 'content', paneId, path] as const,
+  tree: (source: FilesSource, path: string) =>
+    [...fileQueryKeys.all, 'tree', sourceKey(source), path] as const,
+  content: (source: FilesSource, path: string) =>
+    [...fileQueryKeys.all, 'content', sourceKey(source), path] as const,
 }
 
-export function usePaneFileTree(paneId: string, path = '', enabled = true) {
+export function useFileTree(source: FilesSource, path = '', enabled = true) {
   return useQuery<PaneFileTreeResponse>({
-    queryKey: fileQueryKeys.tree(paneId, path),
-    queryFn: () => fetchPaneFileTree(paneId, path),
-    enabled: enabled && !!paneId,
+    queryKey: fileQueryKeys.tree(source, path),
+    queryFn: () => fetchFileTree(source, path),
+    enabled,
     staleTime: 10_000,
   })
 }
 
-export function usePaneFileContent(
-  paneId: string,
+export function useFileContent(
+  source: FilesSource,
   path: string | null,
   enabled = true,
 ) {
   return useQuery<PaneFileContentResponse>({
-    queryKey: fileQueryKeys.content(paneId, path ?? ''),
-    queryFn: () => fetchPaneFileContent(paneId, path!),
-    enabled: enabled && !!paneId && !!path,
+    queryKey: fileQueryKeys.content(source, path ?? ''),
+    queryFn: () => fetchFileContent(source, path!),
+    enabled: enabled && !!path,
     staleTime: 10_000,
   })
 }

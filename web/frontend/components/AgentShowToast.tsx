@@ -1,12 +1,28 @@
 'use client'
 
-import { Copy, ExternalLink, X } from 'lucide-react'
+import { Copy, FolderOpen, X } from 'lucide-react'
 import { useState } from 'react'
+import { rawFileUrl } from '@/lib/api/pane-files'
+import { openFiles } from '@/lib/files-opener'
 import { type AgentShow, useAgentShows } from '@/lib/hooks/use-agent-shows'
 
-/** The shared file's own name, without its exchange folder. */
-function fileName(name: string): string {
-  return name.slice(name.lastIndexOf('/') + 1)
+/** A path's last part; a shared folder's path ends in `/`. */
+export function baseName(path: string): string {
+  return (
+    path
+      .replace(/(?<=.)\/$/, '')
+      .split('/')
+      .pop() || path
+  )
+}
+
+/** What a share holds, in a few words: its first file's name, and how many more. */
+export function shareSummary(show: AgentShow): string {
+  if (show.kind === 'url') return show.url
+  const [first, ...rest] = show.paths
+  return rest.length
+    ? `${baseName(first)} and ${rest.length} more`
+    : baseName(first)
 }
 
 export function AgentShowToast({
@@ -33,7 +49,18 @@ export function AgentShowToast({
     }
   }
 
-  const target = show.kind === 'file' ? fileName(show.name) : show.url
+  function open() {
+    if (show.kind !== 'files') return
+    if (!openFiles({ kind: 'shared', showId: show.id })) {
+      // No session open to show Files in: open the first file by itself.
+      const first = show.paths[0]
+      const folder = first.slice(0, first.lastIndexOf('/')) || '/'
+      window.open(rawFileUrl(folder, baseName(first)), '_blank', 'noopener')
+    }
+    onDismiss()
+  }
+
+  const target = shareSummary(show)
 
   return (
     <section
@@ -72,16 +99,15 @@ export function AgentShowToast({
         </button>
       </div>
       <div className="mt-3 flex">
-        {show.kind === 'file' ? (
-          <a
+        {show.kind === 'files' ? (
+          <button
+            type="button"
             className="lantern-btn primary flex-1"
-            href={`/api/shows/${show.id}/file`}
-            target="_blank"
-            rel="noopener noreferrer"
+            onClick={open}
           >
-            <ExternalLink className="h-4 w-4" strokeWidth={1.7} />
+            <FolderOpen className="h-4 w-4" strokeWidth={1.7} />
             Open
-          </a>
+          </button>
         ) : (
           <button
             type="button"

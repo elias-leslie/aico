@@ -43,7 +43,7 @@ async function paneRoot(life: Lifecycle, paneId: string): Promise<string> {
   return realpath(root)
 }
 
-function translate(error: unknown): HttpError {
+export function translate(error: unknown): HttpError {
   if (error instanceof HttpError) return error
   if (error instanceof AccessDenied) return new HttpError(403, error.message)
   if (error instanceof InvalidPath) return new HttpError(400, error.message)

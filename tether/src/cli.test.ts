@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { attachPlan, main, parseArgs } from './cli'
+import { attachPlan, main, parseArgs, shareBody } from './cli'
 import { resolvePaths } from './config'
 import { type RunningDaemon, startDaemon } from './daemon'
 import { VERSION } from './version'
@@ -27,6 +27,38 @@ describe('parseArgs', () => {
       instance: 'dev',
     })
   })
+})
+
+describe('shareBody', () => {
+  const env = { AICO_WIDGET_ID: 'aico-widget-0123abcd' }
+
+  it("shares files from the pane's own session, relative paths from here", () => {
+    expect(
+      shareBody(['notes.md', '/tmp/prompt.txt', '--title', 'Image and prompt'], env, '/work'),
+    ).toEqual({
+      session: '0123abcd',
+      title: 'Image and prompt',
+      paths: ['/work/notes.md', '/tmp/prompt.txt'],
+    })
+  })
+
+  it('shares a link, and takes an explicit session', () => {
+    expect(shareBody(['--url=https://example.com', '--session', 'ffffffff'], env, '/')).toEqual({
+      session: 'ffffffff',
+      url: 'https://example.com',
+    })
+  })
+
+  it('leaves the session out outside an Aico pane', () => {
+    expect(shareBody(['a.txt'], {}, '/w')).toEqual({ paths: ['/w/a.txt'] })
+  })
+
+  it.each([[[]], [['a.txt', '--url', 'https://example.com']], [['--title']]])(
+    'refuses %j',
+    (args) => {
+      expect(typeof shareBody(args, env, '/')).toBe('string')
+    },
+  )
 })
 
 describe('attachPlan', () => {

@@ -135,7 +135,8 @@ Session errors:
 
 | Method and route | Body | Result |
 | --- | --- | --- |
-| `POST /v1/show` | `{session?, title?, url?, path?}`; exactly one of `url` and `path` | `201 {id, session, kind, title, name, url?}` after copying a file or accepting a link, and a `show.requested` event with the same data. |
+| `POST /v1/show` | `{session?, title?, url?, path?, paths?}`; exactly one of `url`, `path` and `paths` (absolute, existing files or folders, up to 20) | `201 {id, session, title, createdAt, kind: 'files', paths}` (real paths; a folder ends in `/`; nothing copied) or `{…, kind: 'url', url}`, and a `show.requested` event with the same data. |
+| `GET /v1/shares` | — | `200 {items}`: the newest 200 shares, oldest first, kept for `TETHER_SHARE_RETENTION_DAYS` (default 30). |
 
 This hands a file or link to the owner's apps through `GET /v1/events`.
 It is independent of `POST /v1/sessions/:id/show`, which focuses a session view.

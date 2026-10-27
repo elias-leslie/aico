@@ -3,7 +3,7 @@
 // copies rows byte for byte. The only widening is the tmux_servers unit CHECK,
 // which additionally admits non-default instance unit names.
 
-export const SCHEMA_VERSION = 10
+export const SCHEMA_VERSION = 11
 
 /** Aico's tmux_servers table (electron/main/store.ts TMUX_SERVERS_TABLE_SQL),
  * plus `tether-<instance>-tmux-server-<id>.service` for non-default instances. */
@@ -227,4 +227,24 @@ export const WAKES_SQL = `
     DELETE FROM wakes WHERE session_id = old.id AND kept = 0;
     UPDATE wakes SET session_id = NULL WHERE session_id = old.id;
   END;
+`
+
+/**
+ * v11: agent shares (src/show.ts). A share points at files or folders where
+ * they already are (`paths`, a JSON array of absolute real paths) or at a
+ * link (`url`); nothing is copied. Rows past the retention are dropped.
+ */
+export const SHARES_SQL = `
+  CREATE TABLE IF NOT EXISTS shares (
+    id         TEXT PRIMARY KEY
+                 CHECK(length(id) = 12 AND id NOT GLOB '*[^0-9a-f]*'),
+    session_id TEXT
+                 CHECK(session_id IS NULL OR (length(session_id) = 8 AND session_id NOT GLOB '*[^0-9a-f]*')),
+    title      TEXT CHECK(title IS NULL OR length(title) BETWEEN 1 AND 120),
+    paths      TEXT CHECK(paths IS NULL OR json_valid(paths)),
+    url        TEXT,
+    created_at INTEGER NOT NULL CHECK(created_at >= 0),
+    CHECK((paths IS NULL) <> (url IS NULL))
+  );
+  CREATE INDEX IF NOT EXISTS shares_created_at ON shares(created_at);
 `

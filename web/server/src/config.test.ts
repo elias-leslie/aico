@@ -63,7 +63,6 @@ describe('loadConfig: uploads, shares and maintenance', () => {
       maxBytes: 10 * 1024 * 1024,
       maxAgeMs: 86_400_000,
     })
-    expect(config.exchangeRoot).toBe('/srv/workspaces/exchange')
     expect(config.maintenance).toEqual({ enabled: true, intervalMs: 900_000, emptyPaneDays: 7 })
   })
 
@@ -74,7 +73,6 @@ describe('loadConfig: uploads, shares and maintenance', () => {
         UPLOAD_DIR: '~/drops',
         MAX_FILE_SIZE_MB: '2',
         UPLOAD_MAX_AGE_SECONDS: '60',
-        TETHER_EXCHANGE_ROOT: '/exchange',
         MAINTENANCE_ENABLED: 'false',
         MAINTENANCE_INTERVAL_SECONDS: '30',
         MAINTENANCE_SESSION_PURGE_DAYS: '3',
@@ -86,9 +84,7 @@ describe('loadConfig: uploads, shares and maintenance', () => {
       maxBytes: 2 * 1024 * 1024,
       maxAgeMs: 60_000,
     })
-    expect(config.exchangeRoot).toBe('/exchange')
     expect(config.maintenance).toEqual({ enabled: false, intervalMs: 30_000, emptyPaneDays: 3 })
-    expect(() => loadConfig({ TETHER_EXCHANGE_ROOT: 'relative' }, ID)).toThrow(/absolute/)
   })
 
   it("trusts agent shares only from the owner's default Tether", () => {

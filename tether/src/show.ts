@@ -1,21 +1,34 @@
 import { randomBytes } from 'node:crypto'
-import { constants } from 'node:fs'
-import { chmod, lstat, mkdir, open, unlink } from 'node:fs/promises'
-import { basename, isAbsolute, join } from 'node:path'
+import { realpath, stat } from 'node:fs/promises'
+import { isAbsolute } from 'node:path'
+import type { DatabaseSync } from 'node:sqlite'
 import type { ShowConfig } from './config'
 import type { EventBus } from './events'
 import { HttpError, type Router, readJsonObject, sendJson } from './http'
 
+/** The most files and folders one share may name. */
+export const MAX_SHARE_PATHS = 20
+/** The most shares listed at once (newest kept). */
+export const MAX_LISTED_SHARES = 200
+
+/** An agent's share: links to files or folders where they already are, or a web link. */
+export type Share = {
+  id: string
+  session: string | null
+  title: string | null
+  createdAt: string
+} & ({ kind: 'files'; paths: string[] } | { kind: 'url'; url: string })
+
 type ShowRequest = {
   session: string | null
   title: string | null
-} & ({ kind: 'url'; url: string } | { kind: 'file'; path: string })
+} & ({ kind: 'url'; url: string } | { kind: 'files'; paths: string[] })
 
 const CONTROLS = /[\p{Cc}\p{Cf}\u2028\u2029]/u
 
 function parseShow(body: Record<string, unknown>): ShowRequest {
   const unknown = Object.keys(body).filter(
-    (key) => !['session', 'title', 'url', 'path'].includes(key),
+    (key) => !['session', 'title', 'url', 'path', 'paths'].includes(key),
   )
   if (unknown.length) throw new HttpError(400, 'invalid_body', { fields: unknown })
   for (const key of ['session', 'title', 'url', 'path']) {
@@ -28,11 +41,17 @@ function parseShow(body: Record<string, unknown>): ShowRequest {
     throw new HttpError(400, 'invalid_body', { field: 'session' })
   }
   const title = (body.title as string | undefined) ?? null
-  if (title !== null && (Array.from(title).length > 120 || CONTROLS.test(title))) {
+  if (
+    title !== null &&
+    (title.length === 0 || Array.from(title).length > 120 || CONTROLS.test(title))
+  ) {
     throw new HttpError(400, 'invalid_body', { field: 'title' })
   }
-  if ((body.url === undefined) === (body.path === undefined)) {
-    throw new HttpError(400, 'invalid_body', { detail: 'provide exactly one of url or path' })
+  const given = ['url', 'path', 'paths'].filter((key) => body[key] !== undefined)
+  if (given.length !== 1) {
+    throw new HttpError(400, 'invalid_body', {
+      detail: 'provide exactly one of url, path or paths',
+    })
   }
   if (typeof body.url === 'string') {
     const url = body.url
@@ -53,118 +72,122 @@ function parseShow(body: Record<string, unknown>): ShowRequest {
     }
     return { session, title, kind: 'url', url }
   }
-  const path = body.path as string
-  if (!isAbsolute(path) || path.includes('\0')) {
-    throw new HttpError(400, 'invalid_body', { field: 'path' })
+  const paths = body.paths === undefined ? [body.path] : body.paths
+  if (
+    !Array.isArray(paths) ||
+    paths.length < 1 ||
+    paths.length > MAX_SHARE_PATHS ||
+    !paths.every(
+      (path) =>
+        typeof path === 'string' && isAbsolute(path) && path.length <= 4096 && !CONTROLS.test(path),
+    )
+  ) {
+    throw new HttpError(400, 'invalid_body', { field: body.paths === undefined ? 'path' : 'paths' })
   }
-  return { session, title, kind: 'file', path }
+  return { session, title, kind: 'files', paths: paths as string[] }
 }
 
-function errno(error: unknown): string | undefined {
-  return (error as NodeJS.ErrnoException).code
-}
-
-async function exchangeDirectory(root: string, session: string | null): Promise<string> {
-  try {
-    if (!(await lstat(root)).isDirectory()) throw new Error('not a directory')
-  } catch {
-    throw new HttpError(503, 'exchange_unavailable', {
-      detail: `Exchange root ${root} must already exist as a directory; install it before showing files`,
-    })
-  }
-  let directory = root
-  for (const part of ['agent', session ?? 'none', 'out']) {
-    directory = join(directory, part)
+/** Each path as it really is on disk: it must exist and be a file or a folder; a folder ends in `/`. */
+async function realPaths(paths: string[]): Promise<string[]> {
+  const resolved: string[] = []
+  for (const path of paths) {
+    let real: string
     try {
-      await mkdir(directory, { mode: 0o755 })
-      // The daemon's umask may be private; owner apps still need to traverse these.
-      await chmod(directory, 0o755)
-    } catch (error) {
-      if (errno(error) !== 'EEXIST') throw error
-    }
-    if (!(await lstat(directory)).isDirectory()) {
-      throw new HttpError(503, 'exchange_unavailable', {
-        detail: 'Exchange handoff directories must be directories, not symlinks',
+      real = await realpath(path)
+      const info = await stat(real)
+      if (info.isDirectory()) real = real.endsWith('/') ? real : `${real}/`
+      else if (!info.isFile()) throw new Error('not a file or folder')
+    } catch {
+      throw new HttpError(400, 'invalid_path', {
+        detail: `Not an existing file or folder: ${path}`,
       })
     }
+    if (!resolved.includes(real)) resolved.push(real)
   }
-  return directory
+  return resolved
 }
 
-async function copyFile(config: ShowConfig, request: ShowRequest & { kind: 'file' }, id: string) {
-  // O_NONBLOCK prevents a FIFO from hanging open before fstat can refuse it.
-  const source = await open(
-    request.path,
-    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
-  ).catch((error: unknown) => {
-    throw new HttpError(400, 'invalid_file', {
-      detail: `Cannot open a regular file without following symlinks (${errno(error) ?? 'unknown'})`,
-    })
-  })
-  try {
-    const stat = await source.stat()
-    if (!stat.isFile())
-      throw new HttpError(400, 'invalid_file', { detail: 'A regular file is required' })
-    if (stat.size > config.maxBytes)
-      throw new HttpError(413, 'file_too_large', { maxBytes: config.maxBytes })
-    const directory = await exchangeDirectory(config.exchangeRoot, request.session)
-    const safeName = basename(request.path)
-      .replace(/[^A-Za-z0-9._-]/g, '_')
-      .slice(0, 80)
-    const filename = `${id}-${safeName}`
-    const targetPath = join(directory, filename)
-    const target = await open(
-      targetPath,
-      constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
-      0o644,
-    )
-    let complete = false
-    try {
-      const buffer = Buffer.alloc(64 * 1024)
-      let total = 0
-      for (;;) {
-        const { bytesRead } = await source.read(
-          buffer,
-          0,
-          Math.min(buffer.length, config.maxBytes - total + 1),
-          null,
-        )
-        if (!bytesRead) break
-        total += bytesRead
-        if (total > config.maxBytes)
-          throw new HttpError(413, 'file_too_large', { maxBytes: config.maxBytes })
-        let written = 0
-        while (written < bytesRead) {
-          const result = await target.write(buffer, written, bytesRead - written, null)
-          written += result.bytesWritten
-        }
-      }
-      await target.chmod(0o644)
-      complete = true
-    } finally {
-      await target.close()
-      if (!complete) await unlink(targetPath)
-    }
-    return `${request.session ?? 'none'}/out/${filename}`
-  } finally {
-    await source.close()
-  }
+interface ShareRow {
+  id: string
+  session_id: string | null
+  title: string | null
+  paths: string | null
+  url: string | null
+  created_at: number
 }
 
-export function registerShowRoute(router: Router, events: EventBus, config: ShowConfig): void {
-  router.add('POST', '/v1/show', async (req, res) => {
-    const request = parseShow(await readJsonObject(req))
+function fromRow(row: ShareRow): Share {
+  const base = {
+    id: row.id,
+    session: row.session_id,
+    title: row.title,
+    createdAt: new Date(row.created_at).toISOString(),
+  }
+  return row.paths === null
+    ? { ...base, kind: 'url', url: row.url ?? '' }
+    : { ...base, kind: 'files', paths: JSON.parse(row.paths) as string[] }
+}
+
+/** The shares table (schema v11). One daemon writes it. */
+export class ShareStore {
+  constructor(
+    private readonly db: DatabaseSync,
+    private readonly config: ShowConfig,
+  ) {}
+
+  /** Record a share and drop those past the retention. */
+  add(request: ShowRequest, now = Date.now()): Share {
     const id = randomBytes(6).toString('hex')
-    const name = request.kind === 'file' ? await copyFile(config, request, id) : request.url
-    const data = {
-      id,
-      session: request.session,
-      kind: request.kind,
-      title: request.title,
-      name,
-      ...(request.kind === 'url' ? { url: request.url } : {}),
-    }
-    events.publish('show.requested', data)
-    sendJson(res, 201, data)
-  })
+    this.db
+      .prepare(
+        'INSERT INTO shares (id, session_id, title, paths, url, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+      )
+      .run(
+        id,
+        request.session,
+        request.title,
+        request.kind === 'files' ? JSON.stringify(request.paths) : null,
+        request.kind === 'url' ? request.url : null,
+        now,
+      )
+    this.db
+      .prepare('DELETE FROM shares WHERE created_at < ?')
+      .run(now - this.config.retentionDays * 24 * 60 * 60 * 1000)
+    return this.get(id) as Share
+  }
+
+  get(id: string): Share | undefined {
+    const row = this.db.prepare('SELECT * FROM shares WHERE id = ?').get(id) as unknown as
+      | ShareRow
+      | undefined
+    return row && fromRow(row)
+  }
+
+  /** The newest shares, oldest first. */
+  list(): Share[] {
+    const rows = this.db
+      .prepare('SELECT * FROM shares ORDER BY created_at DESC, rowid DESC LIMIT ?')
+      .all(MAX_LISTED_SHARES) as unknown as ShareRow[]
+    return rows.reverse().map(fromRow)
+  }
+}
+
+export function registerShowRoute(
+  router: Router,
+  events: EventBus,
+  store: { db: DatabaseSync },
+  config: ShowConfig,
+): void {
+  const shares = new ShareStore(store.db, config)
+  router
+    .add('POST', '/v1/show', async (req, res) => {
+      const request = parseShow(await readJsonObject(req))
+      if (request.kind === 'files') request.paths = await realPaths(request.paths)
+      const share = shares.add(request)
+      events.publish('show.requested', share)
+      sendJson(res, 201, share)
+    })
+    .add('GET', '/v1/shares', (_req, res) => {
+      sendJson(res, 200, { items: shares.list() })
+    })
 }

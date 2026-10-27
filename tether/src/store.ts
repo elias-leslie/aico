@@ -13,6 +13,7 @@ import {
   SCHEMA_VERSION,
   SESSIONS_TABLE_SQL,
   SETTINGS_SQL,
+  SHARES_SQL,
   TMUX_SERVERS_TABLE_SQL,
   WAKES_SQL,
 } from './schema'
@@ -250,6 +251,13 @@ export class Store {
         this.db
           .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
           .run(10, now)
+      }
+      if (current < 11) {
+        // v11: agent shares, as references to files where they are.
+        this.db.exec(SHARES_SQL)
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(11, now)
       }
     })
   }

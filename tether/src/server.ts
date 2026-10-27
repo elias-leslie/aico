@@ -345,7 +345,7 @@ export function buildRouter(context: ServerContext): Router {
     })
 
   registerLifecycleRoutes(router, context)
-  registerShowRoute(router, events, context.show ?? resolveShowConfig({}))
+  registerShowRoute(router, events, context.store, context.show ?? resolveShowConfig({}))
 
   return router
 }

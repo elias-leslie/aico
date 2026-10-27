@@ -23,7 +23,7 @@ function serve(): void {
     historyLines: HISTORY_LINES,
     touched: (id) => store.touchLink(id),
   })
-  const shows = new Shows({ exchangeRoot: config.exchangeRoot, publicHost: config.publicHost })
+  const shows = new Shows({ tether, publicHost: config.publicHost })
   const background = new Background({
     tether,
     store,
