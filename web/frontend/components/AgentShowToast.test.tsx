@@ -37,10 +37,10 @@ describe('AgentShowToast', () => {
       <AgentShowToast
         show={files}
         onDismiss={vi.fn()}
-        sessionName="SlopMiner — web look"
+        sessionName="uilint — web look"
       />,
     )
-    expect(screen.getByText('Shared by SlopMiner — web look')).toBeVisible()
+    expect(screen.getByText('Shared by uilint — web look')).toBeVisible()
     expect(screen.getByText('Report')).toBeVisible()
     expect(screen.getByText('report.pdf')).toBeVisible()
   })
