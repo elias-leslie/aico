@@ -148,7 +148,10 @@ describe('SessionList teams', () => {
   })
 
   it('moves nothing for working and idle changes, and has no headings then', () => {
-    const quiet = { ...states, ask: state('working', 2) }
+    const quiet: Record<string, Attention> = {
+      ...states,
+      ask: state('working', 2),
+    }
     const { container, rerender } = render(
       <SessionList
         slots={slots}
@@ -169,7 +172,7 @@ describe('SessionList teams', () => {
     expect(
       container.querySelector('[data-testid="session-group-header"]'),
     ).toBeNull()
-    const flipped = {
+    const flipped: Record<string, Attention> = {
       ...quiet,
       left: state('working', 7),
       solo: state('idle', 8),
