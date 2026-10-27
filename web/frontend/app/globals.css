@@ -469,6 +469,104 @@ select {
   transform: rotate(90deg);
 }
 
+/* The session list folded to a rail: one agent mark per row. */
+.lantern-rail-item {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  transition: background 0.15s var(--ease-arrival);
+}
+
+.lantern-rail-item:hover {
+  background: var(--paper);
+}
+
+.lantern-rail-item[aria-current="true"] {
+  background: var(--paper-veil);
+}
+
+.lantern-rail-item[aria-current="true"]::before {
+  content: "";
+  position: absolute;
+  left: -6px;
+  top: 10px;
+  bottom: 10px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--lantern);
+}
+
+.lantern-rail-item.needs {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--beacon) 35%, transparent);
+  background: color-mix(in srgb, var(--beacon) 6%, transparent);
+}
+
+.lantern-rail-item .dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.lantern-rail-count {
+  position: absolute;
+  top: 1px;
+  right: 0;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--beacon);
+  color: var(--ink);
+  font: 600 10px / 16px var(--font-mono);
+  text-align: center;
+}
+
+/* The open list's right edge: a wide grab area, a thin line on hover. */
+.lantern-resize {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  bottom: 0;
+  z-index: 5;
+  width: 8px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.lantern-resize::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 2px;
+  background: transparent;
+  transition: background 0.15s var(--ease-arrival);
+}
+
+.lantern-resize:hover::after,
+.lantern-resize:focus-visible::after,
+[data-resizing="true"] > .lantern-resize::after {
+  background: var(--lantern);
+}
+
+.lantern-resize:focus-visible {
+  outline: none;
+}
+
+[data-resizing="true"] {
+  user-select: none;
+}
+
 .lantern-lanes {
   margin: 2px 0 4px 19px;
   padding-left: 6px;

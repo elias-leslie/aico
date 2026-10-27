@@ -8,17 +8,28 @@ vi.mock('@/lib/hooks/use-media-query', () => ({
   useMediaQuery: () => media.wide,
 }))
 vi.mock('./SessionSidebar', () => ({
+  SIDE_LIST_WIDTH: { initial: 320 },
   SessionSidebar: ({
     currentId,
-    onHide,
+    collapsed,
+    onCollapsedChange,
+    width,
+    onWidthChange,
   }: {
     currentId?: string
-    onHide?: () => void
+    collapsed?: boolean
+    onCollapsedChange?: (collapsed: boolean) => void
+    width?: number
+    onWidthChange?: (width: number) => void
   }) => (
     <nav aria-label="Session list">
       {currentId}
-      <button type="button" onClick={onHide}>
-        Hide session list
+      <p>{collapsed ? 'Rail' : `List ${width}px`}</p>
+      <button type="button" onClick={() => onCollapsedChange?.(!collapsed)}>
+        {collapsed ? 'Expand' : 'Collapse'}
+      </button>
+      <button type="button" onClick={() => onWidthChange?.(400)}>
+        Widen
       </button>
     </nav>
   ),
@@ -32,12 +43,10 @@ vi.mock('./terminal-content/TerminalFileSection', () => ({
     composeOpen,
     onToggleCompose,
     sideList,
-    onShowSideList,
   }: {
     composeOpen?: boolean
     onToggleCompose?: () => void
     sideList?: boolean
-    onShowSideList?: () => void
   }) => (
     <>
       {onToggleCompose && (
@@ -47,11 +56,6 @@ vi.mock('./terminal-content/TerminalFileSection', () => ({
           onClick={onToggleCompose}
         >
           Compose
-        </button>
-      )}
-      {onShowSideList && (
-        <button type="button" onClick={onShowSideList}>
-          Show session list
         </button>
       )}
       {sideList && <p>Bar without its own switcher</p>}
@@ -142,35 +146,30 @@ describe('TerminalContent compose box', () => {
     ).toBeNull()
   })
 
-  it('hides the session list, remembers that, and shows it again from the bar', () => {
+  it('folds the list to its rail and keeps its width, remembered on this device', () => {
     media.wide = true
     const { unmount } = render(<TerminalContent {...props} />)
+    expect(screen.getByText('List 320px')).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Widen' }))
+    expect(screen.getByText('List 400px')).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse' }))
+    expect(screen.getByText('Rail')).toBeVisible()
+    // The rail switches sessions, so the bar still has no switcher.
     expect(screen.getByText('Bar without its own switcher')).toBeVisible()
-    fireEvent.click(screen.getByRole('button', { name: 'Hide session list' }))
+    unmount()
+
+    render(<TerminalContent {...props} />)
+    expect(screen.getByText('Rail')).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Expand' }))
+    expect(screen.getByText('List 400px')).toBeVisible()
+  })
+
+  it('shows no list or rail when the window is too narrow, folded or not', () => {
+    window.localStorage.setItem('aico-side-list-hidden', 'true')
+    render(<TerminalContent {...props} />)
     expect(
       screen.queryByRole('navigation', { name: 'Session list' }),
     ).toBeNull()
     expect(screen.queryByText('Bar without its own switcher')).toBeNull()
-    unmount()
-
-    render(<TerminalContent {...props} />)
-    expect(
-      screen.queryByRole('navigation', { name: 'Session list' }),
-    ).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Show session list' }))
-    expect(
-      screen.getByRole('navigation', { name: 'Session list' }),
-    ).toBeVisible()
-    expect(
-      screen.queryByRole('button', { name: 'Show session list' }),
-    ).toBeNull()
-  })
-
-  it('offers no Show button when the window is too narrow for the list', () => {
-    window.localStorage.setItem('aico-side-list-hidden', 'true')
-    render(<TerminalContent {...props} />)
-    expect(
-      screen.queryByRole('button', { name: 'Show session list' }),
-    ).toBeNull()
   })
 })

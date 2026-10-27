@@ -41,8 +41,6 @@ export interface UnifiedTerminalHeaderProps {
   composeOpen?: boolean
   /** Desktop: show or hide the compose box */
   onToggleCompose?: () => void
-  /** Desktop browsers: shows the hidden session list again */
-  onShowSideList?: () => void
 }
 
 export interface IconButtonProps {

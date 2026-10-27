@@ -1,9 +1,9 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Attention } from '@/lib/attention'
-import type { AdHocSlot } from '@/lib/utils/slot'
+import { type AdHocSlot, getSlotPanelId } from '@/lib/utils/slot'
 import { SLOT_BASE } from '@/test-stubs/session-fixtures'
-import { SessionList, sessionsHeading } from './SessionList'
+import { SessionList, SessionRail, sessionsHeading } from './SessionList'
 
 vi.mock('./KeptCheckIns', () => ({ KeptCheckIns: () => null }))
 vi.mock('@/lib/hooks/use-agent-tools', () => ({
@@ -211,6 +211,33 @@ describe('SessionList teams', () => {
         .getByRole('button', { name: 'Show Neri — Daybreak lead team' })
         .getAttribute('aria-expanded'),
     ).toBe('false')
+  })
+})
+
+describe('SessionRail', () => {
+  it("shows the list's rows as marks: teams folded, Needs you first, a lane's team current", () => {
+    const onSelect = vi.fn()
+    const { container } = render(
+      <SessionRail
+        slots={slots}
+        currentId={getSlotPanelId(ask)}
+        attention={attention}
+        onSelect={onSelect}
+      />,
+    )
+    const items = [...container.querySelectorAll('.lantern-rail-item')]
+    expect(items.map((el) => el.getAttribute('aria-label'))).toEqual([
+      'Neri — Daybreak lead · codex · working · 1 working, 1 needs you, 1 idle',
+      'Docs — Notes · codex · idle',
+      'Aico — Tray · codex · working',
+    ])
+    const team = items[0] as HTMLElement
+    expect(team.className).toContain('needs')
+    expect(team.getAttribute('aria-current')).toBe('true')
+    expect(team.querySelector('.dot')).not.toBeNull()
+    expect(items[2].getAttribute('aria-current')).toBeNull()
+    fireEvent.click(items[2])
+    expect(onSelect).toHaveBeenCalledWith(solo)
   })
 })
 

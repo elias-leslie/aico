@@ -287,6 +287,62 @@ export function SessionList({
   )
 }
 
+/** The collapsed list: one agent mark per row, in the list's order and with
+ * its teams folded, so the rail never disagrees with the list. A row holding
+ * the session on screen is marked current, even when that session is a lane. */
+export function SessionRail({
+  slots,
+  currentId,
+  attention,
+  onSelect,
+}: Omit<SessionListProps, 'phone'>) {
+  const { agentTools } = useAgentTools()
+  const teams = useMemo(
+    () => foldSessionEntries(sortSessionEntries(slots, attention)),
+    [slots, attention],
+  )
+  return (
+    <>
+      {teams.map((row) => {
+        const { id, label, mode, slot, state } = row.item.entry
+        const tool = agentTools.find((t) => t.slug === mode)
+        const agent = tool?.name ?? (mode === 'shell' ? 'Shell' : mode)
+        const needs = row.group === 'needs-you'
+        const current = teamMembers(row).some((m) => m.id === currentId)
+        const name = [label, rowMeta(agent, state), row.summary]
+          .filter(Boolean)
+          .join(' · ')
+        return (
+          <button
+            key={id}
+            type="button"
+            onClick={() => onSelect(slot)}
+            aria-current={current ? 'true' : undefined}
+            aria-label={name}
+            title={name}
+            className={clsx('lantern-rail-item', needs && 'needs')}
+          >
+            <AgentIcon
+              slug={mode}
+              size={18}
+              color={getAgentColor(mode, tool?.color)}
+            />
+            {(needs || state?.group === 'finished') && (
+              <span
+                aria-hidden="true"
+                className="dot"
+                style={{
+                  backgroundColor: needs ? 'var(--beacon)' : 'var(--jade)',
+                }}
+              />
+            )}
+          </button>
+        )
+      })}
+    </>
+  )
+}
+
 /** The list's heading: `Sessions · 5`, and `· 1 needs you` when anything waits. */
 export function sessionsHeading(count: number, needsYou: number): string {
   return [
