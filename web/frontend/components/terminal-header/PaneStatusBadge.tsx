@@ -14,11 +14,17 @@ const STATUS_META: Record<ConnectionStatus, { label: string; dot: string }> = {
 
 interface PaneStatusBadgeProps {
   status?: ConnectionStatus
+  /** Phone: Live is the dot alone, leaving the room to the session name;
+   * every other state keeps its word. */
+  compact?: boolean
 }
 
 /** The session's connection state in the session bar. After a dropped
  * connection the terminal area offers Reconnect. */
-export function PaneStatusBadge({ status }: PaneStatusBadgeProps) {
+export function PaneStatusBadge({
+  status,
+  compact = false,
+}: PaneStatusBadgeProps) {
   if (!status) return null
   const meta = STATUS_META[status]
   if (!meta) return null
@@ -30,13 +36,14 @@ export function PaneStatusBadge({ status }: PaneStatusBadgeProps) {
       className="inline-flex flex-none items-center gap-[5px] whitespace-nowrap text-xs"
       style={{ color: 'var(--mist)' }}
       title={`Connection: ${meta.label}`}
+      aria-label={`Connection: ${meta.label}`}
     >
       <span
         aria-hidden="true"
         className="h-1.5 w-1.5 rounded-full"
         style={{ backgroundColor: meta.dot }}
       />
-      {meta.label}
+      {!(compact && status === 'connected') && meta.label}
     </span>
   )
 }

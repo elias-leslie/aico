@@ -8,6 +8,14 @@ describe('PaneStatusBadge', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Live')
   })
 
+  it('shows Live as the dot alone on a phone, and names any other state', () => {
+    const { rerender } = render(<PaneStatusBadge status="connected" compact />)
+    expect(screen.getByRole('status')).toHaveTextContent('')
+    expect(screen.getByRole('status')).toHaveAccessibleName('Connection: Live')
+    rerender(<PaneStatusBadge status="disconnected" compact />)
+    expect(screen.getByRole('status')).toHaveTextContent('Disconnected')
+  })
+
   it('says Connecting while it connects', () => {
     render(<PaneStatusBadge status="connecting" />)
     expect(screen.getByRole('status')).toHaveTextContent('Connecting')

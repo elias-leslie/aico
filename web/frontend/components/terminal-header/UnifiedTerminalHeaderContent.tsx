@@ -98,7 +98,7 @@ export const UnifiedTerminalHeaderContent = memo(
           />
         </div>
 
-        <PaneStatusBadge status={connectionStatus} />
+        <PaneStatusBadge status={connectionStatus} compact={isMobile} />
 
         <div className="min-w-1 flex-1" />
 
