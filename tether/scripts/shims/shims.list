@@ -13,6 +13,10 @@
 #                                             subcommands (udisksctl options are
 #                                             per subcommand)
 #   refuse            <message>               print the message, exit 126
+#   refuse-args       <word,word,...> <message>
+#                                             the same, when the arguments hold
+#                                             these words in this order; a name
+#                                             may have several such lines
 #
 # Why: a system-bus polkit check from an agent process otherwise falls back to
 # the owner's desktop session and pops a password dialog. With
@@ -28,3 +32,17 @@ localectl      prepend           --no-ask-password
 machinectl     prepend           --no-ask-password
 udisksctl      after-subcommand  --no-user-interaction  mount,unmount,unlock,lock,loop-setup,loop-delete,power-off,smart-simulate
 pkexec         refuse            pkexec is blocked for agents; use sudo
+#
+# Commands whose job is to print a stored credential. Whatever an agent prints
+# lands in its transcript and goes to its model provider, so these never run
+# from an agent pane (2026-10-27: `git credential fill` in a research probe
+# printed the owner's GitHub token). git and gh otherwise run unchanged; git's
+# own credential helper still answers git push/fetch.
+git            refuse-args       credential,fill             git credential fill prints stored credentials; blocked for agents
+git            refuse-args       credential-store,get        git credential-store get prints stored credentials; blocked for agents
+git            refuse-args       credential-cache,get        git credential-cache get prints stored credentials; blocked for agents
+gh             refuse-args       auth,token                  gh auth token prints the GitHub token; blocked for agents
+gh             refuse-args       auth,git-credential         gh auth git-credential prints the GitHub token; blocked for agents
+gh             refuse-args       auth,status,--show-token    gh auth status --show-token prints the GitHub token; blocked for agents
+gh             refuse-args       auth,status,-t              gh auth status -t prints the GitHub token; blocked for agents
+secret-tool    refuse-args       lookup                      secret-tool lookup prints a stored secret; blocked for agents

@@ -24,6 +24,7 @@ const rules = readFileSync(join(source, 'shims.list'), 'utf8')
   .split('\n')
   .filter((line) => line.trim() && !line.startsWith('#'))
   .map((line) => line.trim().split(/\s+/))
+const names = [...new Set(rules.map(([name]) => name as string))]
 
 let root: string
 let shimDir: string
@@ -38,9 +39,9 @@ beforeAll(() => {
   copyFileSync(join(source, 'tether-shim'), join(shimDir, 'tether-shim'))
   copyFileSync(join(source, 'shims.list'), join(shimDir, 'shims.list'))
   chmodSync(join(shimDir, 'tether-shim'), 0o755)
-  for (const [name] of rules) {
-    symlinkSync('tether-shim', join(shimDir, name as string))
-    const stub = join(realDir, name as string)
+  for (const name of names) {
+    symlinkSync('tether-shim', join(shimDir, name))
+    const stub = join(realDir, name)
     writeFileSync(
       stub,
       `#!/bin/sh\nfor a in "$@"; do printf '[%s]' "$a"; done\nexit \${STUB_EXIT:-0}\n`,
@@ -117,6 +118,38 @@ describe('agent shims', () => {
     expect(result.err).toBe('pkexec is blocked for agents; use sudo\n')
   })
 
+  it('refuses the commands that print a stored credential, wherever their words sit', () => {
+    for (const [name, args] of [
+      ['git', ['credential', 'fill']],
+      ['git', ['-c', 'credential.helper=!cat >&2', 'credential', 'fill']],
+      ['git', ['credential-store', '--file', 'x', 'get']],
+      ['gh', ['auth', 'token']],
+      ['gh', ['auth', 'token', '--hostname', 'github.com']],
+      ['gh', ['auth', 'git-credential', 'get']],
+      ['gh', ['auth', 'status', '--show-token']],
+      ['gh', ['auth', 'status', '-t']],
+      ['secret-tool', ['lookup', 'service', 'gh:github.com']],
+    ] as const) {
+      const result = run(name, [...args])
+      expect(result.code, `${name} ${args.join(' ')}`).toBe(126)
+      expect(result.out).toBe('')
+      expect(result.err).toMatch(/blocked for agents\n$/)
+    }
+  })
+
+  it('runs every other git, gh and secret-tool command unchanged', () => {
+    expect(run('git', ['credential', 'approve']).out).toBe('[credential][approve]')
+    expect(run('git', ['commit', '-m', 'credential fill']).out).toBe(
+      '[commit][-m][credential fill]',
+    )
+    expect(run('git', ['push', 'origin', 'main']).out).toBe('[push][origin][main]')
+    expect(run('gh', ['auth', 'status']).out).toBe('[auth][status]')
+    expect(run('gh', ['api', 'repos/o/r', '-t']).out).toBe('[api][repos/o/r][-t]')
+    expect(run('gh', ['run', 'view', '1', '--log-failed']).out).toBe('[run][view][1][--log-failed]')
+    expect(run('secret-tool', ['search', 'service', 'x']).out).toBe('[search][service][x]')
+    expect(run('git', [], { STUB_EXIT: '3' }).code).toBe(3)
+  })
+
   it('skips the shim directory even when it is reached through another path', () => {
     const alias = join(root, 'alias')
     symlinkSync(shimDir, alias)
@@ -148,10 +181,8 @@ describe('install-shims.sh', () => {
         { encoding: 'utf8' },
       )
     expect(install().status).toBe(0)
-    const names = readdirSync(join(lib, 'shims')).sort()
-    expect(names).toEqual(
-      [...rules.map(([name]) => name as string), 'shims.list', 'tether-shim'].sort(),
-    )
+    const installed = readdirSync(join(lib, 'shims')).sort()
+    expect(installed).toEqual([...names, 'shims.list', 'tether-shim'].sort())
     symlinkSync('tether-shim', join(lib, 'shims', 'oldcmd'))
     symlinkSync('/usr/bin/true', join(lib, 'shims', 'foreign'))
     const second = install()

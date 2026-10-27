@@ -10,12 +10,34 @@ here=${0%/*}
 [ "$here" = "$0" ] && here=.
 shim_dir=$(cd -P -- "$here" 2>/dev/null && pwd -P) || exit 127
 
+# The comma-separated words in $1 appear among the remaining arguments, in order.
+args_match() {
+  want=$1
+  shift
+  for arg in "$@"; do
+    word=${want%%,*}
+    [ "$arg" = "$word" ] || continue
+    [ "$want" = "$word" ] && return 0
+    want=${want#*,}
+  done
+  return 1
+}
+
+# Every refuse-args line for this name is checked; the first other line is
+# the action.
 action= flag= rest=
 while read -r rule_name rule_action rule_flag rule_rest || [ -n "$rule_name" ]; do
   case $rule_name in '' | '#'*) continue ;; esac
   [ "$rule_name" = "$name" ] || continue
+  if [ "$rule_action" = refuse-args ]; then
+    if args_match "$rule_flag" "$@"; then
+      printf '%s\n' "$rule_rest" >&2
+      exit 126
+    fi
+    continue
+  fi
+  [ -n "$action" ] && continue
   action=$rule_action flag=$rule_flag rest=$rule_rest
-  break
 done <"$shim_dir/shims.list"
 
 if [ "$action" = refuse ]; then
