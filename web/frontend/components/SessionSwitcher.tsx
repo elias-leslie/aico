@@ -117,7 +117,7 @@ export function SessionSwitcher({
         {isMobile && currentState && (
           <span
             data-testid="session-state"
-            className="shrink-0 whitespace-nowrap"
+            className="min-w-[3ch] truncate whitespace-nowrap"
             style={{ color: 'var(--mist)', font: '400 12px/1 var(--font-ui)' }}
           >
             {currentState}
