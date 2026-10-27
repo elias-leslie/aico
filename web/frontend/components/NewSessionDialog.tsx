@@ -32,7 +32,8 @@ function matchesProject(project: ProjectSetting, query: string): boolean {
 }
 
 /**
- * Start a session: pick a project, then an agent or a shell.
+ * Start a session: pick an agent or a shell, then a project. The picker
+ * stays put above the project list, which scrolls on its own.
  */
 export function NewSessionDialog({
   isOpen,
@@ -126,6 +127,45 @@ export function NewSessionDialog({
             </Dialog.Close>
           </div>
 
+          <div className="flex-none pb-1">
+            <SectionTitle>Start</SectionTitle>
+            <div className="px-[18px]">
+              {enabledTools.length > 0 && (
+                <fieldset aria-label="Session kind" className="lantern-seg">
+                  {(['agent', 'shell'] as const).map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      aria-pressed={kind === value}
+                      onClick={() => setKind(value)}
+                    >
+                      {value === 'agent' ? 'Agent' : 'Shell'}
+                    </button>
+                  ))}
+                </fieldset>
+              )}
+              {kind === 'agent' && enabledTools.length > 0 && (
+                <fieldset aria-label="Agent" className="lantern-tools mt-2.5">
+                  {enabledTools.map((t) => (
+                    <button
+                      key={t.slug}
+                      type="button"
+                      aria-pressed={t.slug === tool?.slug}
+                      onClick={() => setPickedToolSlug(t.slug)}
+                      className="lantern-tool"
+                    >
+                      <AgentIcon
+                        slug={t.slug}
+                        color={getAgentColor(t.slug, t.color)}
+                      />
+                      <span className="truncate">{t.name}</span>
+                    </button>
+                  ))}
+                </fieldset>
+              )}
+            </div>
+          </div>
+
           <div className="flex-1 overflow-y-auto overscroll-contain pb-2">
             <SectionTitle>Project</SectionTitle>
             <div className="px-[18px]">
@@ -187,43 +227,6 @@ export function NewSessionDialog({
                 ))}
               </div>
             )}
-
-            <SectionTitle>Start</SectionTitle>
-            <div className="px-[18px]">
-              {enabledTools.length > 0 && (
-                <fieldset aria-label="Session kind" className="lantern-seg">
-                  {(['agent', 'shell'] as const).map((value) => (
-                    <button
-                      key={value}
-                      type="button"
-                      aria-pressed={kind === value}
-                      onClick={() => setKind(value)}
-                    >
-                      {value === 'agent' ? 'Agent' : 'Shell'}
-                    </button>
-                  ))}
-                </fieldset>
-              )}
-              {kind === 'agent' && enabledTools.length > 0 && (
-                <fieldset aria-label="Agent" className="lantern-tools mt-2.5">
-                  {enabledTools.map((t) => (
-                    <button
-                      key={t.slug}
-                      type="button"
-                      aria-pressed={t.slug === tool?.slug}
-                      onClick={() => setPickedToolSlug(t.slug)}
-                      className="lantern-tool"
-                    >
-                      <AgentIcon
-                        slug={t.slug}
-                        color={getAgentColor(t.slug, t.color)}
-                      />
-                      <span className="truncate">{t.name}</span>
-                    </button>
-                  ))}
-                </fieldset>
-              )}
-            </div>
           </div>
 
           <div

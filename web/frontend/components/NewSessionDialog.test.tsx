@@ -58,6 +58,17 @@ describe('NewSessionDialog', () => {
     expect(onClose).toHaveBeenCalled()
   })
 
+  it('puts the agent picker above the project list, outside its scroll', () => {
+    renderDialog()
+
+    const agents = screen.getByRole('group', { name: 'Agent' })
+    const list = screen.getByRole('radiogroup', { name: 'Project' })
+    expect(
+      agents.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    expect(list.closest('.overflow-y-auto')?.contains(agents)).toBe(false)
+  })
+
   it('starts the chosen agent, or a shell, in the chosen project', () => {
     const { onStart } = renderDialog()
 
