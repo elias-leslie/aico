@@ -165,7 +165,7 @@ describe('PaneOverflowMenu', () => {
       }
       open()
       expect(
-        screen.getByText(/Only Claude Code and Codex sessions take check-ins/),
+        screen.getByText(/Aico can't tell when this session is idle/),
       ).toBeInTheDocument()
       expect(screen.queryByLabelText('Pick a time')).not.toBeInTheDocument()
     })

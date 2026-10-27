@@ -167,7 +167,7 @@ describe('check-ins', () => {
     tether.failWake = new TetherError(409, 'wake_unsupported', {})
     expect(await call('POST', `/api/sessions/${session.id}/check-ins`, { dueAt })).toMatchObject({
       status: 409,
-      body: { detail: 'Only Claude Code and Codex sessions take check-ins' },
+      body: { detail: "Aico can't tell when this session is idle, so it can't take check-ins" },
     })
     tether.failWake = new TetherError(409, 'too_many_wakes', { max: 5 })
     expect(await call('POST', `/api/sessions/${session.id}/check-ins`, { dueAt })).toMatchObject({

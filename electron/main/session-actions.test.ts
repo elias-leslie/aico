@@ -388,7 +388,7 @@ describe('session actions', () => {
     expect(menu.choices.map((choice) => choice.label)).toHaveLength(3)
     tether.addWake.mockRejectedValueOnce(new TetherError(409, 'wake_unsupported', {}))
     await expect(handle.get('session:check-in')?.(event, Date.now() + 60_000)).rejects.toThrow(
-      'Only Claude Code and Codex sessions take check-ins',
+      "Aico can't tell when this session is idle, so it can't take check-ins",
     )
     expect(await handle.get('session:check-in')?.(event, Date.now() + 60_000)).toMatch(/\d:\d\d/)
     expect(tether.addWake).toHaveBeenLastCalledWith(

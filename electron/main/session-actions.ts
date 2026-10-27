@@ -33,7 +33,7 @@ export interface CheckInMenu {
 
 /** Tether's refusals of a check-in, worded for the owner. */
 const CHECK_IN_REFUSALS: Record<string, string> = {
-  wake_unsupported: 'Only Claude Code and Codex sessions take check-ins',
+  wake_unsupported: "Aico can't tell when this session is idle, so it can't take check-ins",
   too_many_wakes: 'This session has as many check-ins as it can take',
 }
 
@@ -190,7 +190,7 @@ export function createSessionActions(deps: SessionActionsDeps) {
       const now = Date.now()
       const state = catalog.get(id)?.state
       return {
-        // Tether can only tell when Claude Code or Codex is idle.
+        // Tether wakes only agent sessions whose idle state it can read.
         status: state && state !== 'unknown' ? 'ready' : 'unsupported',
         choices: wakeChoices(policy, now).map((choice) => ({
           ...choice,

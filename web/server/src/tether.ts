@@ -102,7 +102,7 @@ const DETAILS: Record<string, [number, string]> = {
   unknown_tool: [400, 'Unknown agent tool'],
   unknown_project: [400, 'Unknown project'],
   invalid_body: [400, 'Invalid request'],
-  wake_unsupported: [409, 'Only Claude Code and Codex sessions take check-ins'],
+  wake_unsupported: [409, "Aico can't tell when this session is idle, so it can't take check-ins"],
   too_many_wakes: [409, 'This session has as many check-ins as it can take'],
 }
 

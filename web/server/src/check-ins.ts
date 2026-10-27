@@ -24,7 +24,7 @@ export function registerCheckInRoutes(router: Router, life: Lifecycle, tether: T
     )
     const now = Date.now()
     return {
-      // Tether can only tell when Claude Code or Codex is idle.
+      // Tether wakes only agent sessions whose idle state it can read.
       status: session.activity === 'unknown' ? 'unsupported' : 'ready',
       choices: wakeChoices(policy, now).map((choice) => ({
         label: choice.label,

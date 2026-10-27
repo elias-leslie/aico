@@ -663,14 +663,17 @@ function populateCheckIns(): void {
     submenuEl.append(emptySubmenuRow('Loading…'))
     return
   }
-  if (checkIns.status === 'ready')
+  if (checkIns.status === 'ready') {
     for (const choice of checkIns.choices)
       submenuEl.append(checkInRow(choice.label, choice.time, () => void checkInLater(choice.dueAt)))
-  else
+    const pick = drillRow('Pick a time', showCheckInTime)
+    pick.prepend(make('span', 'aico-sub-dot project'))
+    submenuEl.append(pick)
+  } else
     submenuEl.append(
       emptySubmenuRow(
         checkIns.status === 'unsupported'
-          ? 'Only Claude Code and Codex sessions take check-ins'
+          ? "Aico can't tell when this session is idle, so it can't take check-ins"
           : 'Check-ins unavailable',
       ),
     )
@@ -678,6 +681,63 @@ function populateCheckIns(): void {
     submenuEl.append(
       checkInRow('Cancel check-in', wake.time, () => void cancelCheckIn(wake.id, wake.time)),
     )
+}
+
+// "Pick a time": a time of the owner's own, as in the web menu. While it shows,
+// a late check-in read leaves it alone (refreshCheckInsThen).
+let pickingCheckInTime = false
+
+/** `at` as a datetime-local input value, in local time. */
+function localTimeInputValue(at: number): string {
+  const date = new Date(at - new Date(at).getTimezoneOffset() * 60_000)
+  return date.toISOString().slice(0, 16)
+}
+
+function showCheckInTime(): void {
+  pickingCheckInTime = true
+  submenuEl.innerHTML = ''
+  submenuEl.append(
+    drillRow(
+      '‹ Check in later',
+      () => {
+        populateSubmenu('checkin')
+        replaceSubmenu()
+      },
+      'aico-sub-back',
+    ),
+  )
+  const form = make('div', 'aico-sub-time-pick')
+  const input = make('input', 'aico-sub-filter')
+  input.type = 'datetime-local'
+  input.setAttribute('aria-label', 'Check-in time')
+  input.min = localTimeInputValue(Date.now())
+  const set = make('button', 'aico-sub-set')
+  set.type = 'button'
+  set.textContent = 'Set'
+  set.disabled = true
+  const dueAt = () => (input.value ? new Date(input.value).getTime() : Number.NaN)
+  const submit = () => {
+    const at = dueAt()
+    if (Number.isNaN(at)) return
+    closeMenu()
+    void checkInLater(at)
+  }
+  input.addEventListener('input', () => {
+    set.disabled = Number.isNaN(dueAt())
+  })
+  input.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return
+    e.preventDefault()
+    submit()
+  })
+  set.addEventListener('click', (e) => {
+    e.stopPropagation()
+    submit()
+  })
+  form.append(input, set)
+  submenuEl.append(form)
+  replaceSubmenu()
+  input.focus()
 }
 
 function emptySubmenuRow(label: string): HTMLElement {
@@ -710,6 +770,7 @@ export function sessionSubmenuLabel(
 function populateSubmenu(kind: FlyoutKind): void {
   submenuKind = kind
   picker = null
+  pickingCheckInTime = false
   submenuEl.innerHTML = ''
   if (kind === 'new') {
     if (catalogs.tuis.length) {
@@ -819,7 +880,7 @@ function refreshTuisThen(): void {
 
 function refreshCheckInsThen(anchor: HTMLElement, place: 'left' | 'below'): void {
   void refreshCheckIns().then(() => {
-    if (submenuEl.hidden || submenuKind !== 'checkin') return
+    if (submenuEl.hidden || submenuKind !== 'checkin' || pickingCheckInTime) return
     populateSubmenu('checkin')
     placeSubmenu(anchor, place)
   })

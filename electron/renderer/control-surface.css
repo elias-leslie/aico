@@ -321,6 +321,44 @@
   border-color: var(--frame-edge);
   box-shadow: 0 0 0 1px var(--lantern);
 }
+/* "Pick a time" under Check in later: the time field and its Set button. */
+.aico-sub-time-pick {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 2px 4px;
+}
+.aico-sub-time-pick .aico-sub-filter {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+  margin: 0;
+  color-scheme: dark;
+}
+.aico-sub-set {
+  padding: 6px 12px;
+  border: 1px solid rgb(var(--lantern-rgb) / 0.35);
+  border-radius: 7px;
+  background: rgb(var(--lantern-rgb) / 0.1);
+  color: var(--lantern);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.aico-sub-set:hover:not(:disabled) {
+  background: rgb(var(--lantern-rgb) / 0.2);
+  border-color: var(--lantern);
+}
+.aico-sub-set:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px var(--lantern);
+}
+.aico-sub-set:disabled {
+  border-color: rgb(var(--glass-rgb) / 0.08);
+  background: transparent;
+  color: var(--mist);
+  cursor: default;
+}
 /* The revision holding the prompt's content now. */
 .aico-sub-row.current .aico-sub-time {
   color: var(--lantern);

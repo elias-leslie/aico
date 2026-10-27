@@ -72,7 +72,7 @@ export function CheckInPanel({
 
       {menu.data?.status === 'unsupported' && (
         <p className="px-2.5 py-2 text-[13px]" style={{ color: 'var(--mist)' }}>
-          Only Claude Code and Codex sessions take check-ins.
+          Aico can't tell when this session is idle, so it can't take check-ins.
         </p>
       )}
 
