@@ -20,6 +20,8 @@ const COMPOSE_OPEN_KEY = 'a-term-compose-open'
 /** Wide enough for the session list beside a readable terminal. Narrower
  * desktop windows open the list from the title, as phones do. */
 const SIDE_LIST_QUERY = '(min-width: 1024px)'
+/** The session list hidden beside the session, remembered on this device. */
+const SIDE_LIST_HIDDEN_KEY = 'aico-side-list-hidden'
 
 /**
  * Renders the terminal content area with all modals and overlays
@@ -69,7 +71,12 @@ export function TerminalContent({
     COMPOSE_OPEN_KEY,
     false,
   )
-  const sideList = useMediaQuery(SIDE_LIST_QUERY) && !isMobile
+  const wide = useMediaQuery(SIDE_LIST_QUERY) && !isMobile
+  const [sideListHidden, setSideListHidden] = useLocalStorageState(
+    SIDE_LIST_HIDDEN_KEY,
+    false,
+  )
+  const sideList = wide && !sideListHidden
   const shownSlot = getShownSlot(terminalSlots, activeSessionId)
   const sessionName = (session: string) => {
     const slot = terminalSlots.find((candidate) =>
@@ -104,6 +111,7 @@ export function TerminalContent({
           currentId={shownSlot ? getSlotPanelId(shownSlot) : undefined}
           onSelect={onSlotSwitch}
           onNewSession={handleOpenTerminalManager}
+          onHide={() => setSideListHidden(true)}
         />
       )}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-visible">
@@ -132,6 +140,9 @@ export function TerminalContent({
           activeSessionId={activeSessionId}
           isMobile={isMobile}
           sideList={sideList}
+          onShowSideList={
+            wide && sideListHidden ? () => setSideListHidden(false) : undefined
+          }
           composeOpen={composeOpen}
           onToggleCompose={isMobile ? undefined : toggleCompose}
         />

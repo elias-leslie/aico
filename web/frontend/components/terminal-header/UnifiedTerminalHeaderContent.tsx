@@ -1,7 +1,7 @@
 'use client'
 
 import { clsx } from 'clsx'
-import { Folder, Pencil } from 'lucide-react'
+import { Folder, PanelLeftOpen, Pencil } from 'lucide-react'
 import { memo, useCallback, useState } from 'react'
 import { useAgentTools } from '@/lib/hooks/use-agent-tools'
 import { useTerminalPanes } from '@/lib/hooks/use-terminal-panes'
@@ -39,6 +39,7 @@ export const UnifiedTerminalHeaderContent = memo(
     onClearSearch,
     composeOpen = false,
     onToggleCompose,
+    onShowSideList,
   }: UnifiedTerminalHeaderProps) {
     const { enabledTools } = useAgentTools()
     const { renamePane } = useTerminalPanes()
@@ -73,6 +74,17 @@ export const UnifiedTerminalHeaderContent = memo(
           isMobile ? 'pr-1 pl-1.5' : 'pr-1.5 pl-2.5',
         )}
       >
+        {onShowSideList && (
+          <HeaderIconButton
+            icon={
+              <PanelLeftOpen className="h-[18px] w-[18px]" strokeWidth={1.7} />
+            }
+            onClick={onShowSideList}
+            tooltip="Show session list"
+            isMobile={isMobile}
+          />
+        )}
+
         {/* The session's tool mark; switches shell <-> agent on a project */}
         {slot.type === 'project' && onModeSwitch && (
           <ModeToggle

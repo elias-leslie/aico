@@ -1,6 +1,6 @@
 'use client'
 
-import { Plus } from 'lucide-react'
+import { PanelLeftClose, Plus } from 'lucide-react'
 import { useSessionAttention } from '@/lib/hooks/use-session-attention'
 import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
 import { SessionList, sessionsHeading } from './SessionList'
@@ -11,6 +11,8 @@ interface SessionSidebarProps {
   currentId?: string
   onSelect: (slot: TerminalSlot | PaneSlot) => void
   onNewSession?: () => void
+  /** Hides the list; the session bar's button shows it again */
+  onHide?: () => void
 }
 
 /** Desktop browsers: every session in a list beside the one on screen,
@@ -20,6 +22,7 @@ export function SessionSidebar({
   currentId,
   onSelect,
   onNewSession,
+  onHide,
 }: SessionSidebarProps) {
   const attention = useSessionAttention()
   return (
@@ -36,6 +39,17 @@ export function SessionSidebar({
         >
           {sessionsHeading(slots.length, attention.needsYouCount)}
         </h2>
+        {onHide && (
+          <button
+            type="button"
+            className="lantern-icon-btn compact"
+            onClick={onHide}
+            aria-label="Hide session list"
+            title="Hide session list"
+          >
+            <PanelLeftClose className="h-[18px] w-[18px]" strokeWidth={1.7} />
+          </button>
+        )}
         {onNewSession && (
           <button
             type="button"

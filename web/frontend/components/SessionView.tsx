@@ -44,6 +44,8 @@ export interface SessionViewProps {
   /** The session list sits beside the session (desktop browsers), so the
    * bar shows the title without a switcher and keeps search open. */
   sideList?: boolean
+  /** Shows the hidden session list again */
+  onShowSideList?: () => void
 }
 
 /** The active session, or one of the user's own when none is chosen. */
@@ -83,6 +85,7 @@ export function SessionView({
   composeOpen,
   onToggleCompose,
   sideList = false,
+  onShowSideList,
 }: SessionViewProps) {
   const [refreshVersion, setRefreshVersion] = useState(0)
   // Files is open, on what it was asked to show.
@@ -174,6 +177,7 @@ export function SessionView({
           allSlots={sideList ? undefined : slots}
           onSwitchTo={sideList ? undefined : onSwitch}
           searchAlwaysOpen={sideList}
+          onShowSideList={onShowSideList}
           connectionStatus={status}
           onSearch={
             sessionId
