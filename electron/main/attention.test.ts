@@ -202,7 +202,7 @@ describe('Attention', () => {
 })
 
 describe('attention groups', () => {
-  it('groups most-urgent first, with ages, and re-sorts after focus', () => {
+  it('puts Needs you first and keeps the rest oldest first, with ages', () => {
     const h = harness()
     const now = 10 * 60_000
     h.attention.update('idle', 'idle', now - 3_600_000)
@@ -212,28 +212,32 @@ describe('attention groups', () => {
     h.attention.update('wait-new', 'blocked', now - 60_000)
     h.attention.update('wait-old', 'blocked', now - 180_000)
     h.attention.update('pi', 'unknown', null)
-    const ids = ['pi', 'idle', 'work', 'done', 'wait-new', 'wait-old', 'new'].map((id) => ({ id }))
+    const ids = ['pi', 'idle', 'work', 'done', 'wait-new', 'wait-old', 'new'].map((id, i) => ({
+      id,
+      createdAt: i,
+    }))
     const rows = groupRows(ids, h.attention, now)
     expect(rows.map((r) => [r.item.id, r.group, r.detail])).toEqual([
       ['wait-old', 'needs-you', 'waiting 3m'],
       ['wait-new', 'needs-you', 'waiting 1m'],
-      ['done', 'finished', 'done 1m'],
-      ['work', 'working', 'working 1m'],
-      ['idle', 'idle', 'idle 1h'],
-      // No state from Tether (a shell, Pi, or not seen yet) is not idle.
+      // No state from Tether (a shell, or not seen yet) is not idle.
       ['pi', 'no-status', null],
+      ['idle', 'idle', 'idle 1h'],
+      ['work', 'working', 'working 1m'],
+      ['done', 'finished', 'done 1m'],
       ['new', 'no-status', null],
     ])
     h.attention.focused('wait-old')
     h.attention.focused('done')
+    h.attention.update('work', 'idle', now)
     const after = groupRows(ids, h.attention, now)
     expect(after.map((r) => [r.item.id, r.group, r.detail])).toEqual([
       ['wait-new', 'needs-you', 'waiting 1m'],
-      ['work', 'working', 'working 1m'],
+      ['pi', 'no-status', null],
+      ['idle', 'idle', 'idle 1h'],
+      ['work', 'finished', 'done <1m'],
       ['done', 'idle', 'idle 1m'],
       ['wait-old', 'idle', 'waiting 3m'],
-      ['idle', 'idle', 'idle 1h'],
-      ['pi', 'no-status', null],
       ['new', 'no-status', null],
     ])
   })

@@ -4,11 +4,7 @@ import { clsx } from 'clsx'
 import { ChevronRight } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
 import { foldTeams, laneTitle, type TeamRow, teamMembers } from 'tether/teams'
-import {
-  ATTENTION_GROUPS,
-  type Attention,
-  compareAttention,
-} from '@/lib/attention'
+import type { Attention } from '@/lib/attention'
 import { useAgentTools } from '@/lib/hooks/use-agent-tools'
 import { useLocalStorageState } from '@/lib/hooks/use-local-storage-state'
 import type { SessionAttention } from '@/lib/hooks/use-session-attention'
@@ -39,40 +35,34 @@ interface SessionListEntry {
   state: Attention | null
 }
 
-/** Sessions most urgent first (Aico's tray order), alphabetical within equal
- * state; the same name with the same agent is numbered. */
+/** Sessions oldest first, so a state change never moves one (foldSessionEntries
+ * lifts Needs you to the top); the same name with the same agent is numbered. */
 export function sortSessionEntries(
   slots: Array<TerminalSlot | PaneSlot>,
   attention?: SessionAttention,
 ): SessionListEntry[] {
   const key = (slot: TerminalSlot | PaneSlot) =>
     `${getSlotName(slot)} [${getSlotMode(slot)}]`
-  const sorted = [...slots].sort((slotA, slotB) => {
-    const labelCompare = key(slotA).localeCompare(key(slotB), undefined, {
-      sensitivity: 'base',
-    })
-    if (labelCompare !== 0) {
-      return labelCompare
-    }
-    return getSlotPanelId(slotA).localeCompare(getSlotPanelId(slotB))
-  })
+  // No start time sorts last.
+  const created = (slot: TerminalSlot | PaneSlot) => slot.createdAt || '\uffff'
+  const sorted = [...slots].sort(
+    (slotA, slotB) =>
+      created(slotA).localeCompare(created(slotB)) ||
+      getSlotPanelId(slotA).localeCompare(getSlotPanelId(slotB)),
+  )
   const seenCounts = new Map<string, number>()
-  return sorted
-    .map((slot) => {
-      const count = (seenCounts.get(key(slot)) ?? 0) + 1
-      seenCounts.set(key(slot), count)
-      const name = getSlotName(slot)
-      return {
-        id: getSlotPanelId(slot),
-        label: count > 1 ? `${name} #${count}` : name,
-        mode: getSlotMode(slot),
-        slot,
-        state: attention?.forSlot(slot) ?? null,
-      }
-    })
-    .sort((a, b) =>
-      a.state && b.state ? compareAttention(a.state, b.state) : 0,
-    )
+  return sorted.map((slot) => {
+    const count = (seenCounts.get(key(slot)) ?? 0) + 1
+    seenCounts.set(key(slot), count)
+    const name = getSlotName(slot)
+    return {
+      id: getSlotPanelId(slot),
+      label: count > 1 ? `${name} #${count}` : name,
+      mode: getSlotMode(slot),
+      slot,
+      state: attention?.forSlot(slot) ?? null,
+    }
+  })
 }
 
 /** A list entry as a team member (tether/teams): lineage by row id. */
@@ -111,10 +101,13 @@ export function foldSessionEntries(
   )
 }
 
-/** What a row says under its name: who it waits on, or just its agent. */
+/** What a row says under its name: its agent and what it is doing. The
+ * list no longer groups by state, so the row says it. */
 function rowMeta(agent: string, state: Attention | null): string {
   if (state?.group === 'needs-you') return `${agent} is waiting for you`
   if (state?.group === 'finished') return `${agent} finished · not opened yet`
+  if (state?.group === 'working' || state?.group === 'idle')
+    return `${agent} · ${state.group}`
   return agent
 }
 
@@ -150,8 +143,8 @@ interface SessionListProps {
   phone?: boolean
 }
 
-/** Every session, grouped Needs you / Finished / Working / Idle, with each
- * coordinator's lanes folded under it. */
+/** Every session oldest first, with Needs you on top, and each coordinator's
+ * lanes folded under it. */
 export function SessionList({
   slots,
   currentId,
@@ -168,11 +161,9 @@ export function SessionList({
   const agentName = (mode: string) =>
     agentTools.find((tool) => tool.slug === mode)?.name ??
     (mode === 'shell' ? 'Shell' : mode)
-  // Group headers only when states are known (no attention: alphabetical).
-  const headerGroup = (row: TeamRow<TeamEntry>) =>
-    row.item.entry.state ? row.group : null
-  const groupSize = (group: string) =>
-    teams.filter((row) => headerGroup(row) === group).length
+  // Headings only while something needs you: Needs you, then the rest.
+  const waiting = teams.filter((row) => row.group === 'needs-you').length
+  const headings = waiting > 0 && waiting < teams.length
 
   const renderRow = (
     row: TeamRow<TeamEntry>,
@@ -270,11 +261,13 @@ export function SessionList({
   return (
     <>
       {teams.map((row, index) => {
-        const group = headerGroup(row)
-        const header =
-          group && group !== (index > 0 ? headerGroup(teams[index - 1]) : null)
-            ? ATTENTION_GROUPS.find((g) => g.group === group)?.title
-            : null
+        const header = !headings
+          ? null
+          : index === 0
+            ? 'Needs you'
+            : index === waiting
+              ? 'Other sessions'
+              : null
         return (
           <div key={row.item.id}>
             {header && (
@@ -283,7 +276,9 @@ export function SessionList({
                 className="lantern-sec mx-2.5 mt-3.5 mb-1.5"
               >
                 {header}
-                {group && <span className="n">{groupSize(group)}</span>}
+                <span className="n">
+                  {index === 0 ? waiting : teams.length - waiting}
+                </span>
               </h3>
             )}
             {renderRow(row, null)}

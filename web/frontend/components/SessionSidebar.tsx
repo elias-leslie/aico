@@ -14,7 +14,7 @@ interface SessionSidebarProps {
 }
 
 /** Desktop browsers: every session in a list beside the one on screen,
- * grouped by what needs the owner. Phones open the same list as a sheet. */
+ * oldest first with Needs you on top. Phones open the same list as a sheet. */
 export function SessionSidebar({
   slots,
   currentId,

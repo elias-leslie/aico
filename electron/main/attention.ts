@@ -220,15 +220,6 @@ export class Attention {
  * not shown as idle. */
 export type AttentionGroup = 'needs-you' | 'finished' | 'working' | 'idle' | 'no-status'
 
-/** Most urgent first; the tray menu lists its groups under these titles. */
-export const ATTENTION_GROUPS: readonly { group: AttentionGroup; title: string }[] = [
-  { group: 'needs-you', title: 'Needs you' },
-  { group: 'finished', title: 'Finished' },
-  { group: 'working', title: 'Working' },
-  { group: 'idle', title: 'Idle' },
-  { group: 'no-status', title: 'No status' },
-]
-
 /** Compact age: `<1m`, `3m`, `2h`, `4d`. */
 export function formatAge(ms: number): string {
   const minutes = Math.floor(Math.max(0, ms) / 60_000)
@@ -269,9 +260,9 @@ export interface AttentionRow<T> {
   at: number | null
 }
 
-/** Sessions grouped most-urgent first. Needs-you rows wait longest first;
- * the others show the most recent change first. */
-export function groupRows<T extends { id: string }>(
+/** Sessions oldest first (`createdAt`), except Needs you, which comes first,
+ * waiting longest first. Working and idle changes never move a row. */
+export function groupRows<T extends { id: string; createdAt?: number }>(
   items: readonly T[],
   attention: Pick<Attention, 'group'>,
   now: number,
@@ -280,12 +271,13 @@ export function groupRows<T extends { id: string }>(
     const { group, state, at } = attention.group(item.id)
     return { item, group, at, detail: stateAge(state, group, at, now) }
   })
-  const rank = (group: AttentionGroup) => ATTENTION_GROUPS.findIndex((g) => g.group === group)
+  const created = (row: AttentionRow<T>) => row.item.createdAt ?? Number.MAX_SAFE_INTEGER
   rows.sort((a, b) => {
-    if (a.group !== b.group) return rank(a.group) - rank(b.group)
-    const ax = a.at ?? 0
-    const bx = b.at ?? 0
-    return a.group === 'needs-you' ? ax - bx : bx - ax
+    const aw = a.group === 'needs-you'
+    const bw = b.group === 'needs-you'
+    if (aw !== bw) return aw ? -1 : 1
+    if (aw) return (a.at ?? 0) - (b.at ?? 0)
+    return created(a) - created(b)
   })
   return rows
 }

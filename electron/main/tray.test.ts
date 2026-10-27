@@ -47,7 +47,6 @@ describe('tray session catalog', () => {
     ;(item(before, 'Refresh sessions').click as () => void)()
     expect(onRefreshSessions).toHaveBeenCalledOnce()
     const after = menus.at(-1) ?? []
-    item(after, 'No status')
     const open = item(after, '○ Web session')
     ;(open.click as () => void)()
     expect(onSelect).toHaveBeenCalledWith('0a1b2c3d')
@@ -123,7 +122,7 @@ describe('tray session catalog', () => {
 })
 
 describe('tray attention groups', () => {
-  it('lists groups most-urgent first with state and age', () => {
+  it('heads the menu with Needs you and keeps the other sessions in order', () => {
     menus.length = 0
     refreshTray(
       [
@@ -135,15 +134,28 @@ describe('tray attention groups', () => {
       [],
     )
     const labels = (menus.at(-1) ?? []).map((entry) => entry.label)
-    expect(labels.slice(0, 6)).toEqual([
+    expect(labels.slice(0, 5)).toEqual([
       'Needs you',
       '● aico — waiting 3m',
-      'Finished',
+      'Other sessions',
       '○ tether — done 1m',
-      'Working',
       '● neri — working 9m',
     ])
-    expect(labels).not.toContain('Idle')
+  })
+
+  it('has no headings when nothing needs you', () => {
+    menus.length = 0
+    refreshTray(
+      [
+        { id: 'b', label: 'tether', open: false, group: 'idle', detail: 'idle 1m' },
+        { id: 'c', label: 'neri', open: true, group: 'working', detail: 'working 9m' },
+      ],
+      [],
+      [],
+    )
+    const labels = (menus.at(-1) ?? []).map((entry) => entry.label)
+    expect(labels.slice(0, 2)).toEqual(['○ tether — idle 1m', '● neri — working 9m'])
+    expect(labels).not.toContain('Other sessions')
   })
 })
 
@@ -214,7 +226,7 @@ describe('tray coordinator teams', () => {
     expect(labels.slice(0, 4)).toEqual([
       'Needs you',
       '○ Neri — Daybreak lead · Codex — working 2m · 1 working, 1 needs you, 1 idle · check-in 5:30 PM',
-      'Idle',
+      'Other sessions',
       '○ Docs — Notes · Codex — idle 1h · coordinator ended',
     ])
     // Each session appears once in the session rows.

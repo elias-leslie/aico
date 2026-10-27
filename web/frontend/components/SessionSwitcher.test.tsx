@@ -98,7 +98,7 @@ describe('SessionSwitcher attention', () => {
     expect(sheet.textContent).toContain('↳ Badge check lead')
   })
 
-  it('groups the mobile switcher most-urgent first with badges and a needs-you count', () => {
+  it('puts Needs you first in the mobile switcher, the rest in order, with a needs-you count', () => {
     const slots = [
       makeProjectSlot('a', 'Alpha'),
       makeProjectSlot('b', 'Beta'),
@@ -155,15 +155,15 @@ describe('SessionSwitcher attention', () => {
       [...sheet.querySelectorAll('[data-testid="session-group-header"]')].map(
         (el) => el.textContent,
       ),
-    ).toEqual(['Needs you1', 'Finished1', 'Working1', 'Idle1'])
+    ).toEqual(['Needs you1', 'Other sessions3'])
     const rows = [...sheet.querySelectorAll('button[type="button"]')]
       .map((el) => el.textContent ?? '')
       .filter((text) => /Alpha|Beta|Gamma|Delta/.test(text))
     expect(rows).toEqual([
       'Gamma3mShell is waiting for you',
+      'Alpha2hShell · idle',
+      'Beta4mShell · working',
       'Delta1mShell finished · not opened yet',
-      'Beta4mShell',
-      'Alpha2hShell',
     ])
     expect(
       screen

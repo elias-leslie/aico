@@ -329,7 +329,8 @@ describe('sessionToSlot', () => {
   })
 
   it('builds a project slot for a linked session whose pane is not loaded here', () => {
-    const slot = sessionToSlot(makeSession('ownTmux', { mode: 'shell' }), {
+    const session = makeSession('ownTmux', { mode: 'shell' })
+    const slot = sessionToSlot(session, {
       as: 'project',
       place: 'unloaded',
       projectName: 'Neri',
@@ -350,13 +351,15 @@ describe('sessionToSlot', () => {
       checkIns: [],
       coordinator: false,
       coordinatorId: null,
+      createdAt: session.created_at,
       can: { rename: false, reset: false, end: false },
       showsSessionTitle: false,
     })
   })
 
   it('builds a free-standing ad hoc View', () => {
-    const slot = sessionToSlot(makeSession('ownTmux', { is_external: true }), {
+    const session = makeSession('ownTmux', { is_external: true })
+    const slot = sessionToSlot(session, {
       as: 'adhoc',
       place: 'free',
       projectName: 'Neri',
@@ -373,6 +376,7 @@ describe('sessionToSlot', () => {
       checkIns: [],
       coordinator: false,
       coordinatorId: null,
+      createdAt: session.created_at,
       can: { rename: false, reset: false, end: false },
       showsSessionTitle: false,
     })

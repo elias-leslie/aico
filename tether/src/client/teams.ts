@@ -1,8 +1,9 @@
 // Coordinator teams in a session list (the desktop tray and the web list).
 // Top level holds coordinators and standalone sessions; a coordinator's lanes
-// fold under it. A team sits in Needs you only when a lane waits on the owner;
-// a lane working or finishing never moves it, so otherwise the coordinator's
-// own state places it. Every session appears exactly once: a lane whose
+// fold under it. Rows keep the order they arrive in (oldest first); only Needs
+// you moves a row, to the top, so working and idle changes never reshuffle the
+// list. A team sits in Needs you when it or a lane waits on the owner. Every
+// session appears exactly once: a lane whose
 // coordinator has ended returns to the top level, marked `orphaned`, and a
 // lane that is itself a coordinator folds its own lanes one level further.
 //
@@ -24,9 +25,9 @@ export interface TeamMember {
 
 export interface TeamRow<T extends TeamMember> {
   item: T
-  /** Where the row sits: Needs you when a lane waits on the owner, else its own group. */
+  /** Needs you when a lane waits on the owner, else its own group. */
   group: TeamGroup
-  /** Folded lanes, Needs you > Working > Idle and Finished > No status. */
+  /** Folded lanes, Needs you first, then in arrival order. */
   children: TeamRow<T>[]
   /** `6 working, 1 needs you`; null for a row without lanes. */
   summary: string | null
@@ -34,31 +35,12 @@ export interface TeamRow<T extends TeamMember> {
   orphaned: boolean
 }
 
-const TOP_RANK: Record<TeamGroup, number> = {
-  'needs-you': 0,
-  finished: 1,
-  working: 2,
-  idle: 3,
-  'no-status': 4,
-}
-
-// Lanes: a finished lane is just idle to the owner (the coordinator reads its report).
-const LANE_RANK: Record<TeamGroup, number> = {
-  'needs-you': 0,
-  working: 1,
-  finished: 2,
-  idle: 2,
-  'no-status': 3,
-}
-
-function compareBy(rank: Record<TeamGroup, number>) {
-  return <T extends TeamMember>(a: TeamRow<T>, b: TeamRow<T>): number => {
-    if (rank[a.group] !== rank[b.group]) return rank[a.group] - rank[b.group]
-    const ax = sortAt(a)
-    const bx = sortAt(b)
-    // Needs you waits longest first; the others show the latest change first.
-    return a.group === 'needs-you' ? ax - bx : bx - ax
-  }
+/** Needs you first, waiting longest first; the rest keep their order. */
+function compareRows<T extends TeamMember>(a: TeamRow<T>, b: TeamRow<T>): number {
+  const aw = a.group === 'needs-you'
+  const bw = b.group === 'needs-you'
+  if (aw !== bw) return aw ? -1 : 1
+  return aw ? sortAt(a) - sortAt(b) : 0
 }
 
 /** A team in Needs you because of a lane sorts by that lane's wait. */
@@ -86,7 +68,7 @@ export function teamSummary(children: readonly { group: TeamGroup }[]): string {
   return children.length === 1 ? '1 session' : `${children.length} sessions`
 }
 
-/** Fold sessions into teams. Input order is kept between equal rows. */
+/** Fold sessions into teams. Input order is kept outside Needs you. */
 export function foldTeams<T extends TeamMember>(items: readonly T[]): TeamRow<T>[] {
   const byId = new Map(items.map((item) => [item.id, item]))
   // A lane's parent is its coordinator when listed; a loop in the lineage
@@ -111,7 +93,7 @@ export function foldTeams<T extends TeamMember>(items: readonly T[]): TeamRow<T>
     else top.push(item)
   }
   const build = (item: T): TeamRow<T> => {
-    const children = (lanes.get(item.id) ?? []).map(build).sort(compareBy(LANE_RANK))
+    const children = (lanes.get(item.id) ?? []).map(build).sort(compareRows)
     const waiting = children.some((c) => c.group === 'needs-you')
     return {
       item,
@@ -121,7 +103,7 @@ export function foldTeams<T extends TeamMember>(items: readonly T[]): TeamRow<T>
       orphaned: !!item.coordinatorId && !byId.has(item.coordinatorId),
     }
   }
-  return top.map(build).sort(compareBy(TOP_RANK))
+  return top.map(build).sort(compareRows)
 }
 
 /** Every session in a row and its folded lanes. */

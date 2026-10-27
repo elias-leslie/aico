@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import { app, Menu, nativeImage, Tray } from 'electron'
 import { foldTeams, laneTitle, type TeamMember, type TeamRow, teamMembers } from 'tether/client'
-import { ATTENTION_GROUPS, type AttentionGroup } from './attention'
+import type { AttentionGroup } from './attention'
 import { BLANK_SLATE_ID, BLANK_SLATE_NAME } from './project'
 import { traySessionLabel } from './session-catalog'
 
@@ -18,7 +18,7 @@ export interface TrayWidget {
   id: string
   label: string
   open: boolean
-  /** Attention group (attention.ts); the menu lists groups most-urgent first. */
+  /** Attention group (attention.ts); Needs you rows head the menu. */
   group?: AttentionGroup
   /** State and age, e.g. `waiting 3m`. */
   detail?: string | null
@@ -129,9 +129,10 @@ function buildMenu(widgets: TrayWidget[]): Menu {
       ? [{ label: unavailable, enabled: false }, { type: 'separator' as const }]
       : []),
   ]
-  // Every session, grouped most-urgent first (widgets arrive sorted). A row
-  // opens or focuses its window; ● marks an open window, ○ a closed one. A
-  // coordinator with lanes is a submenu: itself, then its lanes.
+  // Every session oldest first, with Needs you on top (widgets arrive sorted;
+  // working and idle changes never move a row). A row opens or focuses its
+  // window; ● marks an open window, ○ a closed one. A coordinator with lanes is
+  // a submenu: itself, then its lanes.
   const teams = foldTeams(
     widgets.map((w) => ({
       ...w,
@@ -141,12 +142,14 @@ function buildMenu(widgets: TrayWidget[]): Menu {
       at: w.at ?? null,
     })),
   )
-  for (const { group, title } of ATTENTION_GROUPS) {
-    const rows = teams.filter((row) => row.group === group)
-    if (!rows.length) continue
-    template.push({ label: title, enabled: false })
-    for (const row of rows) template.push(teamItem(row, null, h))
+  const waiting = teams.filter((row) => row.group === 'needs-you')
+  const rest = teams.filter((row) => row.group !== 'needs-you')
+  if (waiting.length) {
+    template.push({ label: 'Needs you', enabled: false })
+    for (const row of waiting) template.push(teamItem(row, null, h))
+    if (rest.length) template.push({ label: 'Other sessions', enabled: false })
   }
+  for (const row of rest) template.push(teamItem(row, null, h))
   if (!widgets.length) template.push({ label: 'No sessions', enabled: false })
   template.push({ type: 'separator' })
 

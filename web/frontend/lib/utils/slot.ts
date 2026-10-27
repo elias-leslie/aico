@@ -43,6 +43,8 @@ interface SlotSessionFields {
    * coordinator that launched it (the session list folds teams). */
   coordinator?: boolean
   coordinatorId?: string | null
+  /** When the session (or its pane) began: the session list's order. */
+  createdAt?: string | null
   can: SlotCapabilities
   /** The header shows the session title (`Project — Task`) in place of the
    * project switcher. */
@@ -239,6 +241,7 @@ function slotFields(
     checkIns: session.check_ins ?? [],
     coordinator: session.is_coordinator === true,
     coordinatorId: session.coordinator_id ?? null,
+    createdAt: session.created_at,
     can: {
       rename: session.can_rename,
       // A free-standing View never offers Reset: closing it only detaches.
@@ -336,6 +339,8 @@ export function paneToSlot(pane: TerminalPane): PaneSlot {
       sessionBadge: null, // Badge is now part of pane_name
       claudeState: getAgentState(agentSession),
       ...slotFields(activeSession, 'project'),
+      // The pane's start, so switching agent and shell never moves the row.
+      createdAt: pane.created_at,
     }
   }
 
@@ -351,6 +356,7 @@ export function paneToSlot(pane: TerminalPane): PaneSlot {
     workingDir: session?.working_dir ?? null,
     sessionMode: session?.mode,
     ...slotFields(session, 'adhoc'),
+    createdAt: pane.created_at ?? session?.created_at,
   }
 }
 

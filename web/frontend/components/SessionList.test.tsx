@@ -10,13 +10,18 @@ vi.mock('@/lib/hooks/use-agent-tools', () => ({
   useAgentTools: () => ({ agentTools: [] }),
 }))
 
+// Slots start in the order they are made.
+let started = 0
+
 function slot(
   id: string,
   name: string,
   extra: Partial<AdHocSlot> = {},
 ): AdHocSlot {
+  started += 1
   return {
     ...SLOT_BASE,
+    createdAt: `2026-10-27T00:00:${String(started).padStart(2, '0')}Z`,
     type: 'adhoc',
     sessionId: id,
     name,
@@ -75,7 +80,7 @@ function rowNames(root: HTMLElement): string[] {
 describe('SessionList teams', () => {
   beforeEach(() => localStorage.clear())
 
-  it('folds lanes on a phone: the team sits in Needs you with its summary and earliest check-in', () => {
+  it('folds lanes on a phone: the team heads the list in Needs you with its summary and earliest check-in', () => {
     const { container } = render(
       <SessionList
         slots={slots}
@@ -88,11 +93,12 @@ describe('SessionList teams', () => {
       [
         ...container.querySelectorAll('[data-testid="session-group-header"]'),
       ].map((el) => el.textContent),
-    ).toEqual(['Needs you1', 'Working1', 'Idle1'])
+    ).toEqual(['Needs you1', 'Other sessions2'])
+    // The rest keep the order they started in, whatever their state.
     expect(rowNames(container)).toEqual([
       'Neri — Daybreak lead',
-      'Aico — Tray',
       'Docs — Notes',
+      'Aico — Tray',
     ])
     const team = container.querySelector('.lantern-row.lead') as HTMLElement
     expect(team.className).toContain('needs')
@@ -139,6 +145,50 @@ describe('SessionList teams', () => {
     expect(rowNames(container)).toHaveLength(slots.length)
     fireEvent.click(within(lanes).getByRole('button', { name: /Scanner/ }))
     expect(onSelect).toHaveBeenCalledWith(busy)
+  })
+
+  it('moves nothing for working and idle changes, and has no headings then', () => {
+    const quiet = { ...states, ask: state('working', 2) }
+    const { container, rerender } = render(
+      <SessionList
+        slots={slots}
+        attention={{
+          forSlot: (s: unknown) => quiet[(s as AdHocSlot).sessionId] ?? null,
+          needsYouCount: 0,
+        }}
+        onSelect={vi.fn()}
+        phone
+      />,
+    )
+    const before = rowNames(container)
+    expect(before).toEqual([
+      'Neri — Daybreak lead',
+      'Docs — Notes',
+      'Aico — Tray',
+    ])
+    expect(
+      container.querySelector('[data-testid="session-group-header"]'),
+    ).toBeNull()
+    const flipped = {
+      ...quiet,
+      left: state('working', 7),
+      solo: state('idle', 8),
+    }
+    rerender(
+      <SessionList
+        slots={slots}
+        attention={{
+          forSlot: (s: unknown) => flipped[(s as AdHocSlot).sessionId] ?? null,
+          needsYouCount: 0,
+        }}
+        onSelect={vi.fn()}
+        phone
+      />,
+    )
+    expect(rowNames(container)).toEqual(before)
+    expect(
+      screen.getByRole('button', { name: /Aico — Tray/ }).textContent,
+    ).toContain('codex · idle')
   })
 
   it('remembers a folded team per coordinator on a desktop', () => {

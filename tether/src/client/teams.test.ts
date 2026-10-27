@@ -22,8 +22,8 @@ describe('foldTeams', () => {
       member('b', 'finished', { coordinatorId: 'lead' }),
       member('solo', 'working'),
     ])
-    expect(ids(rows)).toEqual(['solo', 'lead'])
-    const lead = rows[1]
+    expect(ids(rows)).toEqual(['lead', 'solo'])
+    const lead = rows[0]
     expect(ids(lead.children)).toEqual(['a', 'b'])
     expect(
       rows
@@ -52,7 +52,7 @@ describe('foldTeams', () => {
     ])
   })
 
-  it('sorts lanes Needs you, Working, then Idle and Finished together', () => {
+  it('puts lanes that need you first and keeps the rest in arrival order', () => {
     const [lead] = foldTeams([
       member('lead', 'working', { coordinator: true }),
       member('idle', 'idle', { coordinatorId: 'lead', at: 30 }),
@@ -61,8 +61,15 @@ describe('foldTeams', () => {
       member('busy', 'working', { coordinatorId: 'lead', at: 10 }),
       member('ask', 'needs-you', { coordinatorId: 'lead', at: 5 }),
     ])
-    expect(ids(lead.children)).toEqual(['ask', 'busy', 'idle', 'done', 'none'])
+    expect(ids(lead.children)).toEqual(['ask', 'idle', 'done', 'none', 'busy'])
     expect(lead.summary).toBe('1 working, 1 needs you, 2 idle')
+  })
+
+  it('never reorders rows for working, idle or finished changes', () => {
+    const before = foldTeams([member('a', 'idle', { at: 1 }), member('b', 'working', { at: 2 })])
+    const after = foldTeams([member('a', 'working', { at: 3 }), member('b', 'finished', { at: 4 })])
+    expect(ids(before)).toEqual(['a', 'b'])
+    expect(ids(after)).toEqual(['a', 'b'])
   })
 
   it('returns lanes of an ended coordinator to the top level, marked', () => {

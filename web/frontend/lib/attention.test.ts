@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
   attentionOf,
-  compareAttention,
   formatAge,
   markSeen,
   mostUrgent,
@@ -72,19 +71,13 @@ describe('attentionOf', () => {
 })
 
 describe('ordering', () => {
-  it('sorts most urgent first; longest wait first among needs-you', () => {
+  it('picks the most urgent of several', () => {
     const items = [
       attentionOf({ activity: 'idle', activity_at: at(1) }, 0, NOW),
       attentionOf({ activity: 'blocked', activity_at: at(1) }, 0, NOW),
       attentionOf({ activity: 'working', activity_at: at(1) }, 0, NOW),
       attentionOf({ activity: 'blocked', activity_at: at(9) }, 0, NOW),
     ]
-    expect([...items].sort(compareAttention).map((a) => a.detail)).toEqual([
-      'waiting 9m',
-      'waiting 1m',
-      'working 1m',
-      'idle 1m',
-    ])
     expect(mostUrgent(items)?.detail).toBe('waiting 1m')
     expect(mostUrgent([])).toBeNull()
   })
