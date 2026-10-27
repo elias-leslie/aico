@@ -20,8 +20,13 @@ paths = ["node_modules/.bin"]
 environment_inputs = ["node_modules"]
 legacy_tools = ["ruff", "types", "pytest", "biome", "tsc", "vitest", "security"]
 
+# uilint runs from its checkout (st uilint is the same CLI); its package is a
+# prepared input so isolated acceptance can import it.
+managed_environment_inputs = ["/srv/workspaces/projects/uilint/bin", "/srv/workspaces/projects/uilint/uilint"]
+
 [native.tools]
 node = "/usr/local/bin/node"
+python3 = "/usr/bin/python3"
 
 [[native.stages]]
 id = "tether-tsc"
@@ -40,3 +45,11 @@ id = "web-server-tsc"
 kind = "check"
 coverage = "full"
 argv = ["node_modules/.bin/tsc", "--noEmit", "-p", "web/server"]
+
+# Mechanical UI copy rules from ui-spec.json (uilint). A pass is not a copy review.
+[[native.stages]]
+id = "ui-spec"
+kind = "check"
+coverage = "full"
+argv = ["python3", "/srv/workspaces/projects/uilint/bin/uilint", "check-source", "--spec", "ui-spec.json"]
+timeout_seconds = 120

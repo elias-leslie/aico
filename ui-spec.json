@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "product": "aico",
+  "copy": {
+    "banned": [
+      {
+        "id": "old-product-name",
+        "regex": "\\bA[- ]?Term\\b",
+        "ignore_case": true,
+        "in": ["text", "attr"],
+        "message": "The product is Aico; never A-Term."
+      },
+      {
+        "id": "old-product-name-message",
+        "regex": "\\bA[- ]Term\\b",
+        "in": ["string"],
+        "message": "The product is Aico; never A-Term (storage keys and ids like a-term-settings are fine)."
+      },
+      {
+        "id": "terminal-as-product",
+        "regex": "\\bterminal\\b",
+        "ignore_case": true,
+        "in": ["text", "attr"],
+        "message": "Nothing user-facing says terminal; name the session or the action."
+      },
+      {
+        "id": "implementation-terms",
+        "regex": "\\b(tmux|websockets?|panes?|resize claim)\\b",
+        "ignore_case": true,
+        "in": ["text", "attr"],
+        "message": "Implementation term in UI copy; name the session, device or action the owner recognises."
+      }
+    ],
+    "names": [{"name": "Aico", "in": ["text", "attr"]}]
+  },
+  "visual": {
+    "max_page_luminance": 0.02,
+    "fonts": ["Pretendard", "Fraunces", "Iosevka", "JetBrains Mono"]
+  },
+  "source": {
+    "include": [
+      "web/frontend/app/**/*.tsx",
+      "web/frontend/components/**/*.tsx",
+      "web/frontend/lib/**/*.ts",
+      "web/frontend/lib/**/*.tsx"
+    ],
+    "exclude": ["**/*.test.tsx", "**/*.test.ts", "web/frontend/lib/generated/**"]
+  }
+}
