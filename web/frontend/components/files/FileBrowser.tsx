@@ -242,10 +242,14 @@ export function FileBrowser({
     if (!content.data) return []
     return [
       `${formatSize(content.data.size)}`,
-      content.data.is_binary ? 'binary' : `${content.data.lines} lines`,
+      image
+        ? 'image'
+        : content.data.is_binary
+          ? 'binary'
+          : `${content.data.lines} lines`,
       content.data.language,
     ].filter(Boolean)
-  }, [content.data])
+  }, [content.data, image])
 
   return (
     <div className="flex min-h-0 flex-1 flex-col md:grid md:grid-cols-[320px_minmax(0,1fr)]">
