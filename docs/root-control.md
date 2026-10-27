@@ -151,6 +151,7 @@ st aico root show recovery-root-1
 st aico root title recovery-root-1 'Investigation'
 st aico root position recovery-root-1 -10 20 900 560
 st aico root end recovery-root-1
+st aico root send recovery-root-1 'Also run the focused tests.' --generation SHA256
 ```
 
 Each command accepts `--root-socket` to pin an exact Tether socket. There is no `--surface` or `--root-url`: the web app has no root route,
@@ -170,6 +171,28 @@ cannot authorize End. These commands work for direct and fleet-started roots;
 for fleet roots, prefer `st sessions close` so the fleet ledger records the
 outcome. `st sessions title` remains a compatibility alias of
 `st aico root title`.
+
+Send queues one follow-up into the exact running root a coordinator created,
+including Blank Slate roots of any tool. `--generation` is required and is the
+generation the coordinator last read from `root status`: a root that restarted,
+was replaced or ended no longer matches, and send refuses with `applied: false`
+before any input. Text is `TEXT` or `--stdin`, under the create prompt rules
+(at most 2000 UTF-8 bytes, tab and newline only, no credentials). Send reads
+`GET /v1/roots/<requestId>`, requires `running` and the pinned generation, reads
+the host session `GET /v1/sessions/<widgetId>` and requires the same widget and
+generation, then makes one `POST /v1/sessions/<widgetId>/inject` (`mode: paste`,
+`submit: true`). Tether fences the generation again under the session's
+lifecycle lock and sends one bracketed paste and one Enter; a busy Claude Code,
+Codex or Pi TUI queues it as steering, an idle one starts a turn. The success
+receipt adds `operation: "send"`, `applied: true`, `delivered: true` and the
+byte count, never the text. Delivered means the pane received it, not that the
+agent consumed it: watch `st aico roots REQUEST_ID`. A refusal (`not_found`,
+`stale_generation`, `workload_unavailable`, `invalid_text`) is `applied: false`
+and safe to correct and resend. `applied: null` (transport loss or an
+unqualified reply after the inject was sent) may have delivered: check the
+root's transcript or screen before sending again, because a paste has no
+idempotency key. The model, reasoning effort and context are unchanged. Paste
+framing does not exclude a human typing in the same pane at that moment.
 
 Roots created by direct `st aico create` are owner roots without SummitFlow
 fleet event streams; title, position and widget controls do not create an event
@@ -191,7 +214,9 @@ st aico root title review-1 'Review'
 st aico roots review-1
 ```
 
-For an ordinary followup, use `st sessions send AGENT 'instruction'
+For a followup to a root the coordinator created with `st aico create`, use
+`st aico root send REQUEST_ID 'instruction' --generation SHA256` (above). For
+other agents, use `st sessions send AGENT 'instruction'
 --source-key REVISION`; the recipient acknowledges it and the sender confirms
 the exchange. An exact native Codex UUID can instead use `--delivery
 native-thread`; `st -P PROJECT sessions verify UUID --source-key REVISION`
@@ -361,7 +386,8 @@ a picker. Use the original `projectRoot`: a UUID from another directory enters
 Pi's native fork confirmation and creates a new UUID if confirmed. Automatic Pi conversation
 discovery for reboot/crash recovery is unavailable; no new runtime state is installed.
 Pi terminal observation remains `unsupported_profile`, and atomic follow-up submission
-is unavailable. Use exact root status/end and a new create request for a fresh instruction.
+is unavailable. `st aico root send` queues a generation-fenced follow-up in the
+running Pi root; end it and create a new request when the instruction needs fresh context.
 
 New roots require an explicit `workRole` from Agent Hub’s canonical work-role registry:
 `coordinator`, `implementation`, `research`, `review`, `recon`, `hunting`,

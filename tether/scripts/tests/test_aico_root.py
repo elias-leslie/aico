@@ -24,7 +24,7 @@ def invoke(monkeypatch, args, responses):
     monkeypatch.setattr(admin.Collector, "receipt", receipt)
     monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
     transport = ["--root-socket", "/fixture/gui.sock"]
-    if args[0] == "end":
+    if args[0] in ("end", "send"):
         transport += ["--owner-socket", "/fixture/control.sock"]
     return admin.main(["root", *args, *transport]), calls, output
 
@@ -148,3 +148,98 @@ def test_stored_web_app_tether_root_ends_through_the_owner_socket(monkeypatch):
 def test_surface_identity_refuses_mixed_shapes(monkeypatch, descriptor):
     code, _, output = invoke(monkeypatch, ["status", ROOT], [(200, descriptor)])
     assert code == 1 and output[0]["reason"] == "root_receipt_unqualified"
+
+
+# root send: one follow-up into the exact running root the coordinator pinned.
+FOLLOWUP = "Private follow-up: also run the focused tests."
+SESSION = {"id": "aabbcc01", "generation": GENERATION, "status": "running", "tool": "pi"}
+PI_BLANK_SLATE = {**DESCRIPTOR, "tool": "pi"}
+
+
+def test_send_queues_one_fenced_followup_into_the_pinned_root(monkeypatch):
+    code, calls, output = invoke(monkeypatch, ["send", ROOT, FOLLOWUP, "--generation", GENERATION], [
+        (200, PI_BLANK_SLATE), (200, SESSION), (200, {"generation": GENERATION, "delivered": True})])
+    assert code == 0
+    assert calls == [
+        ("/fixture/gui.sock", f"/v1/roots/{ROOT}", None),
+        ("/fixture/control.sock", "/v1/sessions/aabbcc01", None),
+        ("/fixture/control.sock", "/v1/sessions/aabbcc01/inject",
+         {"generation": GENERATION, "text": FOLLOWUP, "mode": "paste", "submit": True}),
+    ]
+    assert output == [{**DESCRIPTOR, "operation": "send", "applied": True, "delivered": True,
+                       "bytes": len(FOLLOWUP)}]
+    assert "Private" not in json.dumps(output)
+
+
+def test_send_reads_the_followup_from_stdin(monkeypatch):
+    monkeypatch.setattr(admin, "admin_stdin", lambda _: FOLLOWUP)
+    code, calls, _ = invoke(monkeypatch, ["send", ROOT, "--stdin", "--generation", GENERATION], [
+        (200, DESCRIPTOR), (200, SESSION), (200, {"generation": GENERATION, "delivered": True})])
+    assert code == 0 and calls[2][2]["text"] == FOLLOWUP
+
+
+@pytest.mark.parametrize("descriptor,reason", [
+    # A restarted or replaced root has a new generation: the coordinator's pin is stale.
+    ({**DESCRIPTOR, "generation": "b" * 64}, "stale_generation"),
+    ({**DESCRIPTOR, "generation": None, "status": "ended"}, "workload_unavailable"),
+    ({**DESCRIPTOR, "status": "pending"}, "workload_unavailable"),
+    # Pre-Tether web roots have no Tether session to deliver into.
+    (PRE_TETHER_WEB_ROOT, "workload_unavailable"),
+])
+def test_send_to_a_stale_or_unavailable_root_sends_nothing(monkeypatch, descriptor, reason):
+    code, calls, output = invoke(monkeypatch, ["send", ROOT, FOLLOWUP, "--generation", GENERATION],
+                                 [(200, descriptor)])
+    assert code == 1 and len(calls) == 1
+    assert output[0]["reason"] == reason and output[0]["applied"] is False
+    assert output[0]["requestId"] == ROOT and output[0]["operation"] == "send"
+
+
+@pytest.mark.parametrize("reply,reason", [
+    ((404, {"error": "not_found"}), "not_found"),
+    ((200, {**SESSION, "generation": "b" * 64}), "stale_generation"),
+    ((200, {**SESSION, "id": "aabbcc02"}), "stale_generation"),
+])
+def test_send_refuses_when_the_host_session_is_not_the_pinned_workload(monkeypatch, reply, reason):
+    code, calls, output = invoke(monkeypatch, ["send", ROOT, FOLLOWUP, "--generation", GENERATION],
+                                 [(200, DESCRIPTOR), reply])
+    assert code == 1 and len(calls) == 2
+    assert output[0]["reason"] == reason and output[0]["applied"] is False
+
+
+def test_send_to_an_unknown_root_sends_nothing(monkeypatch):
+    code, calls, output = invoke(monkeypatch, ["send", "root-other", FOLLOWUP, "--generation", GENERATION],
+                                 [(404, {"error": "not_found"})])
+    assert code == 1 and len(calls) == 1
+    assert output[0] == {"owner": "aico", "requestId": "root-other", "operation": "send",
+                         "reason": "not_found", "applied": False}
+
+
+@pytest.mark.parametrize("reply,applied", [
+    ((409, {"error": "stale_generation"}), False), ((409, {"error": "workload_unavailable"}), False),
+    ((400, {"error": "invalid_text"}), False),
+    ((500, {"error": "owner_failure"}), None), ((200, {"generation": GENERATION}), None),
+    ((200, {"generation": "b" * 64, "delivered": True}), None),
+])
+def test_send_inject_refusal_is_not_applied_but_unqualified_reply_is_uncertain(monkeypatch, reply, applied):
+    code, calls, output = invoke(monkeypatch, ["send", ROOT, FOLLOWUP, "--generation", GENERATION],
+                                 [(200, DESCRIPTOR), (200, SESSION), reply])
+    assert code == 1 and len(calls) == 3
+    assert output[0]["applied"] is applied and "delivered" not in output[0]
+    assert "Private" not in json.dumps(output)
+
+
+@pytest.mark.parametrize("args", [
+    ["send", ROOT, FOLLOWUP],
+    ["send", ROOT, FOLLOWUP, "--generation", "a" * 63],
+    ["send", ROOT, "--generation", GENERATION],
+    ["send", ROOT, "   ", "--generation", GENERATION],
+    ["send", ROOT, "x" * 2001, "--generation", GENERATION],
+    ["send", ROOT, "bad\x1b[201~escape", "--generation", GENERATION],
+    ["send", ROOT, "use password=hunter2-secret", "--generation", GENERATION],
+    ["send", ROOT, FOLLOWUP, "--stdin", "--generation", GENERATION],
+])
+def test_send_invalid_input_never_contacts_owner(monkeypatch, args, capsys):
+    with pytest.raises(SystemExit) as error:
+        invoke(monkeypatch, args, [])
+    assert error.value.code == 2
+    assert "hunter2" not in capsys.readouterr().err

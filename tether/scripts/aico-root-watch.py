@@ -150,7 +150,7 @@ ROOT_OWNERS = ("aico", "a-term")
 # Agent tool slugs, as Tether's registry spells them (src/tools.ts SLUG_RE).
 TOOL_SLUG = r"[a-z0-9_-]{1,50}"
 # Owner rejections that are definitive before any view or lifecycle effect.
-OWNER_REFUSALS = {400: {"invalid_body", "invalid_generation"}, 404: {"not_found"},
+OWNER_REFUSALS = {400: {"invalid_body", "invalid_generation", "invalid_text"}, 404: {"not_found"},
                   409: {"stale_generation", "workload_unavailable", "busy"}, 410: {"ended"},
                   503: {"gui_unavailable", "position_unavailable"}}
 
@@ -992,6 +992,24 @@ def resolve_instructions(selection: str) -> dict:
             "content": content}
 
 
+def prompt_error(prompt: object) -> str | None:
+    """Why `prompt` cannot be sent to an agent, else None. Never echoes the text."""
+    if not isinstance(prompt, str) or not prompt.strip():
+        return "missing prompt: pass PROMPT or --stdin"
+    size = len(prompt.encode("utf-8"))
+    if size > PROMPT_BYTES:
+        return (f"prompt is {size} bytes; the limit is {PROMPT_BYTES}. Write the brief to a file and "
+                "pass a short prompt naming its path (not \"$(cat FILE)\"): "
+                "'Read /path/to/brief.md and do the work it describes.'")
+    if re.search(r"[\x00-\x08\x0b-\x1f\x7f-\x9f\ud800-\udfff]", prompt):
+        return "prompt contains control characters; only tab and newline are allowed"
+    if PROMPT_SECRET.search(prompt):
+        # Never echo the match: it may be the credential itself.
+        return ("prompt looks like it contains a credential (e.g. password=..., Bearer ..., "
+                "a token or private key); remove it or rephrase")
+    return None
+
+
 def create_main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="st aico create", description=(
         "Create one exact owner root; native resume uses an adapter-validated session ID in a new root. "
@@ -1066,19 +1084,8 @@ def create_main(argv: list[str]) -> int:
         prompt = admin_stdin(collector) if args.stdin else args.prompt
         if prompt is None and args.resume_session:
             prompt = "Resume this exact saved session. Reconcile current state after the crash before continuing."
-        if not isinstance(prompt, str) or not prompt.strip():
-            parser.error("missing prompt: pass PROMPT or --stdin")
-        size = len(prompt.encode("utf-8"))
-        if size > PROMPT_BYTES:
-            parser.error(f"prompt is {size} bytes; the limit is {PROMPT_BYTES}. Write the brief to a file and "
-                         "pass a short prompt naming its path (not \"$(cat FILE)\"): "
-                         "'Read /path/to/brief.md and do the work it describes.'")
-        if re.search(r"[\x00-\x08\x0b-\x1f\x7f-\x9f\ud800-\udfff]", prompt):
-            parser.error("prompt contains control characters; only tab and newline are allowed")
-        if PROMPT_SECRET.search(prompt):
-            # Never echo the match: it may be the credential itself.
-            parser.error("prompt looks like it contains a credential (e.g. password=..., Bearer ..., "
-                         "a token or private key); remove it or rephrase")
+        if (problem := prompt_error(prompt)) is not None:
+            parser.error(problem)
         if args.tool == "pi" and (block := opencode_go_quota_block(args.model)):
             # Nothing reaches Tether, so the same request id can be retried after the reset.
             parser.error(f"opencode-go quota is used up ({block}); pick another model or launch after the reset")
@@ -1320,7 +1327,7 @@ def root_main(argv: list[str]) -> int:
         "Inspect or control one exact retained owner root by request ID. Mutations pin its "
         "current generation, send one request and qualify the receipt. No retry or owner startup."))
     commands = parser.add_subparsers(dest="operation", required=True)
-    for operation in ("status", "show", "title", "position", "end"):
+    for operation in ("status", "show", "title", "position", "end", "send"):
         command = commands.add_parser(operation)
         command.add_argument("request_id")
         if operation == "title":
@@ -1328,13 +1335,20 @@ def root_main(argv: list[str]) -> int:
         elif operation == "position":
             for dimension in BOUNDS:
                 command.add_argument(dimension, type=int)
+        elif operation == "send":
+            command.add_argument("text", nargs="?", help=f"follow-up, <={PROMPT_BYTES} sanitized UTF-8 bytes")
+            command.add_argument("--generation", required=True,
+                                 help="exact generation from root status; a restarted or changed root refuses")
+            command.add_argument("--stdin", action="store_true", help="read the follow-up from stdin instead")
         command.add_argument("--root-socket", type=socket_path)
         command.add_argument("--surface", choices=("aico",), default="aico", help=argparse.SUPPRESS)
-        if operation == "end":
+        if operation in ("end", "send"):
             command.add_argument("--owner-socket", type=socket_path)
     args = parser.parse_args(argv)
     if not re.fullmatch(KEY, args.request_id):
         parser.error("invalid root request ID")
+    if args.operation == "send":
+        return root_send(parser, args)
     payload = view_payload(parser, args)
     try:
         endpoint = owner_endpoint(args.root_socket)
@@ -1389,6 +1403,66 @@ def root_main(argv: list[str]) -> int:
         output.update(status="uncertain", reason=str(error) if isinstance(error, Unavailable) else "deadline")
         if args.operation != "status":
             output.update(operation=args.operation, applied=applied(sent, error))
+        emit_unless_stopped(collector, output)
+        return 1
+    except BrokenPipeError:
+        return 0
+
+
+def root_send(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
+    """Queue one follow-up into the exact running root the caller pinned.
+
+    The caller's generation must still be the root's and its Tether session's;
+    Tether's inject route fences it again under the lifecycle lock and sends one
+    bracketed paste plus Enter, which a busy harness queues as steering. Delivered
+    means the pane received it, not that the agent consumed it. Never retried."""
+    if not re.fullmatch(GENERATION, args.generation):
+        parser.error("--generation expects the root's exact SHA-256 generation")
+    if args.stdin and args.text is not None:
+        parser.error("conflicting follow-up options")
+    try:
+        endpoint = owner_endpoint(args.root_socket)
+        control = args.owner_socket or socket_path(tether_socket())
+    except argparse.ArgumentTypeError as error:
+        parser.error(f"invalid owner transport configuration: {error}")
+    collector = Collector(endpoint, control, "", time.monotonic() + 10, threading.Event())
+    text = args.text
+    if args.stdin:
+        try:
+            text = admin_stdin(collector)
+        except (ValueError, Stopped):
+            parser.error(f"invalid follow-up; expected <={PROMPT_BYTES} UTF-8 bytes without framing controls")
+    if (problem := prompt_error(text)) is not None:
+        parser.error(problem.replace("prompt", "follow-up").replace("PROMPT", "TEXT"))
+    output: dict = {"owner": "aico", "requestId": args.request_id, "operation": "send"}
+    sent = False
+    try:
+        status, data = collector.receipt(endpoint, f"/v1/roots/{args.request_id}")
+        owner_reply(status, data, "root_receipt_unqualified")
+        pinned = root_descriptor(data, args.request_id)
+        output.update(pinned)
+        widget = pinned["hostIdentity"]
+        if pinned["status"] != "running" or not re.fullmatch(WIDGET, widget):
+            raise Refused("workload_unavailable")
+        if pinned["generation"] != args.generation:
+            raise Refused("stale_generation")
+        # The root's host session must be the same workload before any input.
+        status, session = collector.receipt(control, f"/v1/sessions/{widget}", timeout=1)
+        owner_reply(status, session, "session_receipt_unqualified")
+        if session.get("id") != widget or session.get("generation") != args.generation:
+            raise Refused("stale_generation")
+        sent = True
+        status, data = collector.receipt(control, f"/v1/sessions/{widget}/inject", {
+            "generation": args.generation, "text": text, "mode": "paste", "submit": True}, timeout=5)
+        owner_reply(status, data, "send_receipt_unqualified")
+        if data.get("generation") != args.generation or data.get("delivered") is not True:
+            raise Unavailable("send_receipt_unqualified")
+        output.update(applied=True, delivered=True, bytes=len(text.encode("utf-8")))
+        emit_json(collector, output)
+        return 0
+    except (Unavailable, Stopped) as error:
+        output.update(reason=str(error) if isinstance(error, Unavailable) else "deadline",
+                      applied=applied(sent, error))
         emit_unless_stopped(collector, output)
         return 1
     except BrokenPipeError:
