@@ -138,7 +138,7 @@ async function api(
 
 /**
  * The `/v1/show` body for `tether share`. Its session is the pane's own Aico
- * widget (`AICO_WIDGET_ID=aico-widget-<id>`) unless `--session` names one.
+ * session (`AICO_WIDGET_ID`, `<id>` or `aico-widget-<id>`) unless `--session` names one.
  */
 export function shareBody(
   args: string[],
@@ -148,7 +148,7 @@ export function shareBody(
   const files: string[] = []
   let title: string | undefined
   let url: string | undefined
-  let session = /^aico-widget-([0-9a-f]{8})$/.exec(env.AICO_WIDGET_ID ?? '')?.[1]
+  let session = /^(?:aico-widget-)?([0-9a-f]{8})$/.exec(env.AICO_WIDGET_ID ?? '')?.[1]
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index] as string
     const option = /^--(title|url|session)(?:=(.*))?$/.exec(arg)

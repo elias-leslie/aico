@@ -42,6 +42,12 @@ describe('shareBody', () => {
     })
   })
 
+  it('reads the session from a bare widget id, as panes set it', () => {
+    expect(shareBody(['/tmp/a'], { AICO_WIDGET_ID: '0f442411' }, '/')).toMatchObject({
+      session: '0f442411',
+    })
+  })
+
   it('shares a link, and takes an explicit session', () => {
     expect(shareBody(['--url=https://example.com', '--session', 'ffffffff'], env, '/')).toEqual({
       session: 'ffffffff',
