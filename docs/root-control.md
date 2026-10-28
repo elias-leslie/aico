@@ -440,7 +440,12 @@ as `external_id`, and posts `initialPrompt` as the first turn; `st aico root sen
 follow-up (queued while a turn runs), `st aico roots` reports `busy` while a turn runs and
 `turn_finished` when idle, and `st aico root end` cancels the turn and closes the Agent Hub
 session. It shows as a child of the coordinator that launched it like any other root.
-Resume, reasoning effort, Daybreak, Agent Hub context and Blank Slate do not apply.
+Aico opens it as a native chat window (the shared `@agent-hub/chat-ui`: streaming text,
+thinking and tool blocks, Stop, a follow-up typed during a turn shown as queued) instead of a
+terminal. Tether makes every Agent Hub call; the window's main process asks Tether over its
+private socket for that window's own session, so the owner token and the Agent Hub address
+never reach the page. `show` and `position` reach the desktop for these roots; `title` and
+`coordinator` stay catalog-only. Resume, reasoning effort, Daybreak, Agent Hub context and Blank Slate do not apply.
 [api-v1.md](../tether/docs/api-v1.md#agent-hub-sessions) has the session behavior.
 
 A tmux tool is root-capable exactly when it has a resume adapter; `GET /v1/tools`
