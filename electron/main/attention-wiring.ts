@@ -4,8 +4,9 @@
 
 import type { ExecFileException } from 'node:child_process'
 import type { BrowserWindow } from 'electron'
-import type { SessionCatalog, SessionDescriptor, TetherTool } from 'tether/client'
+import type { RunMember, SessionCatalog, SessionDescriptor, TetherTool } from 'tether/client'
 import {
+  type AgentState,
   Attention,
   type AttentionMode,
   type AttentionStage,
@@ -22,6 +23,8 @@ interface AttentionWiringDeps {
   registry: Pick<WindowRegistry, 'forSession' | 'sessionOf'>
   compositor: Pick<Compositor, 'isFocused'>
   catalog: Pick<SessionCatalog, 'get'>
+  /** A workflow run Tether lists, by its member id (`run:<id>`). */
+  run?(id: string): RunMember | undefined
   tools(): TetherTool[]
   /** The tray's "needs you" icon. */
   setNeedsYou(on: boolean): void
@@ -63,6 +66,28 @@ export function createAttentionWiring(deps: AttentionWiringDeps) {
       if (win) sendAttention(win)
     },
     push: (id) => {
+      const run = deps.run?.(id)
+      if (run) {
+        // A workflow run asking for an answer: the same push, opening its page.
+        deps.execFile(
+          deps.nightshift,
+          [
+            'push',
+            'Open the run to answer.',
+            '--title',
+            `Workflow waiting: ${run.title.slice(0, 80)}`,
+            '--severity',
+            'warning',
+            '--open',
+            run.url,
+          ],
+          { timeout: 30_000 },
+          (error, stdout) => {
+            console.log(pushEventLine(id, pushOutcome(error, String(stdout ?? ''))))
+          },
+        )
+        return
+      }
       const descriptor = catalog.get(id)
       if (!descriptor) return
       const title = sessionTitle(descriptor)
@@ -103,6 +128,9 @@ export function createAttentionWiring(deps: AttentionWiringDeps) {
     update: (descriptor: SessionDescriptor): void => {
       attention.update(descriptor.id, descriptor.state ?? 'unknown', descriptor.stateAt ?? null)
     },
+    /** A workflow run's state (it has no descriptor or window). */
+    updateId: (id: string, state: AgentState, at: number | null): void =>
+      attention.update(id, state, at),
     removed: (id: string): void => attention.removed(id),
     focused: (id: string): void => attention.focused(id),
     /** Resend a (re)loaded window what it shows on itself. */

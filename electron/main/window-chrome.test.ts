@@ -276,6 +276,7 @@ describe('tray', () => {
       [{ slug: 'codex', label: 'Codex', blankSlate: false }],
       [{ id: 'p1', name: 'Docs', root: '/srv/docs', current: false }],
       'Tether is not reachable. Sessions keep running.',
+      null,
     )
   })
 

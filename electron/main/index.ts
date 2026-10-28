@@ -33,6 +33,7 @@ import { createLifecycle } from './lifecycle'
 import { denyAllPermissions } from './permissions'
 import { ownStartTime, removeOwnPidFile } from './process-identity'
 import { ensurePersonalWorkspaceRoot, ProjectCatalog, personalWorkspaceRoot } from './project'
+import { createRuns } from './runs'
 import { createSelectionBus } from './selection-bus'
 import { createSelectionListener } from './selection-listener'
 import { createSessionActions } from './session-actions'
@@ -188,6 +189,7 @@ const link = createTetherLink({
       void whenReady(compositor, RESTORE_WAIT_MS).then(() => windows.restoreOnLaunch()),
     titles: () => chrome.pushTitles(),
     tray: () => chrome.syncTray(),
+    runs: (answer) => runs.apply(answer),
     connected: () => terminal.resumeAwaiting(),
     shared: (data) => shares.notify(data),
     sizeHeld: (id, clientPid) => terminal.sizeHeldBy(id, clientPid),
@@ -207,6 +209,18 @@ const attention = createAttentionWiring({
   execFile,
   nightshift: config.nightshift,
   webUrl: config.webUrl,
+  run: (id) => runs.member(id),
+})
+
+// Workflow runs of the sessions (Tether lists them): tray rows, the same
+// needs-you signal sessions raise, and the owner's answers.
+const runs = createRuns({
+  attention,
+  tray: () => chrome.syncTray(),
+  tether,
+  refresh: () => link.refreshRuns(),
+  openExternal: (url) => shell.openExternal(url),
+  dialog,
 })
 
 // The eyes and the titlebar arcade: cursor pump, gaze scenes, urgent looks.
@@ -230,6 +244,7 @@ const chrome = createWindowChrome({
   notice: link.notice,
   projects,
   attention,
+  runs,
   layout,
   contextCheck: (id) => tether.contextCheck(id),
   isQuitting: lifecycle.isQuitting,
@@ -384,6 +399,7 @@ const startup = app.whenReady().then(async () => {
       void link.refreshTools().catch(() => {})
     },
     onHubView: windows.showAll,
+    onRun: (action) => void runs.handle(action),
   })
   ambient.start()
   layout.scheduleWrite()

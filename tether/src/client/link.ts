@@ -10,6 +10,7 @@ import {
   eventSession,
   type GuiCommand,
   type GuiVerdict,
+  type RunsAnswer,
   type SessionDescriptor,
   type TetherEvent,
   type TetherTool,
@@ -55,6 +56,8 @@ interface LinkHooks {
   firstList(): void
   titles(): void
   tray(): void
+  /** The workflow runs of the sessions changed (or were read again). */
+  runs(answer: RunsAnswer): void
   /** The event stream came back after being down (or connected the first time). */
   connected(): void
   /** A handoff received from the agent's socket only; payload is still untrusted. */
@@ -114,6 +117,18 @@ export function createTetherLink(deps: TetherLinkDeps) {
     })
   }
 
+  /** The workflow runs, as Tether last listed them. */
+  let runsAnswer: RunsAnswer | null = null
+  const refreshRuns = coalesceAsync(async () => {
+    runsAnswer = await tether.runs()
+    hooks.runs(runsAnswer)
+  })
+  function requestRunsRefresh(): void {
+    void refreshRuns().catch((error) => {
+      if (!(error instanceof TetherUnavailable)) console.warn('[aico] runs refresh failed:', error)
+    })
+  }
+
   const refreshTools = coalesceAsync(async () => {
     tools = (await tether.tools()).items
       .filter((tool) => tool.enabled)
@@ -164,6 +179,9 @@ export function createTetherLink(deps: TetherLinkDeps) {
         break
       case 'root.updated':
         requestSessionRefresh()
+        break
+      case 'runs.changed':
+        requestRunsRefresh()
         break
       case 'tools.changed':
         void refreshTools().catch(() => {})
@@ -237,6 +255,7 @@ export function createTetherLink(deps: TetherLinkDeps) {
           console.log(`[aico:tether] connected at ${tether.socketPath}`)
           void checkTetherVersion()
           void refreshTools().catch(() => {})
+          requestRunsRefresh()
           void projects.refresh()
           hooks.connected()
         }
@@ -246,7 +265,10 @@ export function createTetherLink(deps: TetherLinkDeps) {
         tetherConnected = false
         hooks.tray()
       },
-      onResync: requestSessionRefresh,
+      onResync: () => {
+        requestSessionRefresh()
+        requestRunsRefresh()
+      },
       onEvent: (event) => onTetherEvent(event, active.socketPath),
     })
     const stopActiveGui = holdGuiChannel(active, applyGuiCommand, (message, error) =>
@@ -276,6 +298,9 @@ export function createTetherLink(deps: TetherLinkDeps) {
     /** `refresh` in the background; an unreachable Tether is not worth a warning. */
     requestRefresh: requestSessionRefresh,
     refreshTools,
+    /** The workflow runs as Tether last listed them; null before the first look. */
+    runs: (): RunsAnswer | null => runsAnswer,
+    refreshRuns,
     /** Tether ended this session (or it is absent): forget it everywhere. */
     sessionEnded,
     /** Follow the event stream and hold the GUI channel, applying its commands with `applyGui`. */

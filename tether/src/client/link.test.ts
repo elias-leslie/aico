@@ -80,6 +80,12 @@ function setup(
     instances: (): unknown[] => (o.other ? [tether, o.other] : [tether]),
     listSessions: vi.fn(async () => o.list ?? []),
     tools: vi.fn(async () => ({ items: [tool('b', 2), tool('a', 1), tool('off', 0, false)] })),
+    runs: vi.fn(async () => ({
+      status: 'ok' as const,
+      error: null,
+      updatedAt: 1,
+      items: [],
+    })),
     version: vi.fn(async () => {
       const v = o.version ?? { name: 'tether', version: '1.0.0', apiVersion: 3, minApiVersion: 1 }
       if (v instanceof Error) throw v
@@ -103,6 +109,7 @@ function setup(
     firstList: vi.fn(() => calls.push('firstList')),
     titles: vi.fn(() => calls.push('titles')),
     tray: vi.fn(() => calls.push('tray')),
+    runs: vi.fn(),
     connected: vi.fn(() => calls.push('connected')),
     shared: vi.fn(),
     sizeHeld: vi.fn(),
@@ -293,6 +300,22 @@ describe('refresh', () => {
     expect(calls).toEqual(['removed cccccccc', 'closeEnded cccccccc', 'retired cccccccc', 'tray'])
     expect(log).not.toHaveBeenCalled()
     log.mockRestore()
+  })
+})
+
+describe('workflow runs', () => {
+  it('reads the runs on connect, on a gap and on runs.changed, and hands each answer to the hook', async () => {
+    const { connect, hooks, tether, link } = setup()
+    const subscriber = connect()
+    expect(link.runs()).toBeNull()
+    subscriber.onConnected?.()
+    await vi.waitFor(() => expect(hooks.runs).toHaveBeenCalledTimes(1))
+    expect(link.runs()).toMatchObject({ status: 'ok', items: [] })
+    subscriber.onEvent?.(event('runs.changed'))
+    await vi.waitFor(() => expect(hooks.runs).toHaveBeenCalledTimes(2))
+    subscriber.onResync?.()
+    await vi.waitFor(() => expect(hooks.runs).toHaveBeenCalledTimes(3))
+    expect(tether.runs).toHaveBeenCalledTimes(3)
   })
 })
 

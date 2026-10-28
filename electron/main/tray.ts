@@ -1,7 +1,17 @@
 import { join } from 'node:path'
 import { app, Menu, nativeImage, Tray } from 'electron'
-import { foldTeams, laneTitle, type TeamMember, type TeamRow, teamMembers } from 'tether/client'
-import type { AttentionGroup } from './attention'
+import {
+  DECISION_LABEL,
+  DECISIONS,
+  foldTeams,
+  laneTitle,
+  type RunDecision,
+  type RunMember,
+  type TeamMember,
+  type TeamRow,
+  teamMembers,
+} from 'tether/client'
+import { type AttentionGroup, formatAge } from './attention'
 import { BLANK_SLATE_ID, BLANK_SLATE_NAME } from './project'
 import { traySessionLabel } from './session-catalog'
 
@@ -33,7 +43,19 @@ export interface TrayWidget {
    * project its coordinator already names. */
   title?: string
   tool?: string
+  /** A workflow run or step (tether/client `RunMember`); it has no window. */
+  run?: RunMember
+  kind?: TeamMember['kind']
+  /** A run's step counts in its own words, in place of the generated team line. */
+  summary?: string | null
 }
+
+/** What the owner asks of a workflow run or step from the tray. */
+export type RunAction =
+  | { type: 'open'; url: string }
+  | { type: 'resume'; runId: string; stepKey: string | null; action: RunDecision }
+  | { type: 'cancel'; runId: string; stepKey: string | null }
+  | { type: 'dismiss'; runId: string }
 
 /** A launchable TUI as the tray sees it (slug + menu label), from the registry. */
 export interface NewWidgetTool {
@@ -61,6 +83,8 @@ export interface TrayHandlers {
   /** Re-list sessions from Tether and rebuild the menu. */
   onRefreshSessions: () => void
   onHubView: () => void
+  /** Open, answer, cancel or dismiss a workflow run or step. */
+  onRun?: (action: RunAction) => void
 }
 
 let tray: Tray | null = null
@@ -68,6 +92,8 @@ let handlers: TrayHandlers | null = null
 let tools: NewWidgetTool[] = []
 let projects: NewWidgetProject[] = []
 let unavailable: string | null = null
+/** Why the workflow runs may be out of date, or null. */
+let runsNotice: string | null = null
 const thinking = new Set<number>()
 let needsYou = false
 /** Some session's agent is working (Tether's state). */
@@ -78,6 +104,67 @@ let agentsWorking = false
 let menuKey = ''
 
 type TeamWidget = TrayWidget & TeamMember
+
+const RUN_TITLE_MAX = 48
+
+function clip(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text
+}
+
+/** `◇ goal — running 4m · 1 working, 2 done` for a run, `· step — tool bash · model · try 1 of 2`. */
+function runLabel(w: TeamWidget, run: RunMember, extra: (string | null | undefined)[]): string {
+  const age = run.kind === 'run' && w.at ? formatAge(Date.now() - w.at) : null
+  const detail = [w.detail ? (age ? `${w.detail} ${age}` : w.detail) : null, ...extra]
+    .filter(Boolean)
+    .join(' · ')
+  return `${run.kind === 'run' ? '◇' : '·'} ${clip(run.title, RUN_TITLE_MAX)}${detail ? ` — ${detail}` : ''}`
+}
+
+/** What the owner can do to a run or step: answer a waiting one, cancel, dismiss. */
+function runControls(run: RunMember, h: TrayHandlers): Electron.MenuItemConstructorOptions[] {
+  const act = (action: RunAction) => () => h.onRun?.(action)
+  const what = run.kind === 'run' ? 'run' : 'step'
+  const items: Electron.MenuItemConstructorOptions[] = []
+  if (run.can.decide) {
+    for (const decision of DECISIONS)
+      items.push({
+        label: `${DECISION_LABEL[decision]} ${what}`,
+        click: act({ type: 'resume', runId: run.runId, stepKey: run.stepKey, action: decision }),
+      })
+  }
+  if (run.can.cancel)
+    items.push({
+      label: `Cancel ${what}`,
+      click: act({ type: 'cancel', runId: run.runId, stepKey: run.stepKey }),
+    })
+  if (run.can.dismiss)
+    items.push({ label: 'Dismiss run', click: act({ type: 'dismiss', runId: run.runId }) })
+  return items
+}
+
+/** A workflow run (a submenu of its steps and controls) or a step. */
+function runItem(row: TeamRow<TeamWidget>, h: TrayHandlers): Electron.MenuItemConstructorOptions {
+  const w = row.item
+  const run = w.run as RunMember
+  const open = () => h.onRun?.({ type: 'open', url: run.url })
+  const label = runLabel(w, run, [row.summary, row.orphaned ? 'coordinator ended' : null])
+  const controls = runControls(run, h)
+  if (!row.children.length && !controls.length) return { label, click: open }
+  const hint: Electron.MenuItemConstructorOptions[] = run.hint
+    ? [{ label: run.hint, enabled: false }]
+    : []
+  return {
+    label,
+    submenu: [
+      { label: 'Open in Agent Hub', click: open },
+      ...(row.children.length
+        ? [{ type: 'separator' as const }, ...row.children.map((child) => runItem(child, h))]
+        : []),
+      ...(controls.length ? [{ type: 'separator' as const }, ...controls] : []),
+      ...(hint.length ? [{ type: 'separator' as const }, ...hint] : []),
+    ],
+  }
+}
 
 function rowLabel(
   w: TrayWidget,
@@ -100,6 +187,7 @@ function teamItem(
   h: TrayHandlers,
 ): Electron.MenuItemConstructorOptions {
   const w = row.item
+  if (w.run) return runItem(row, h)
   const own = w.checkIns?.[0] ? `check-in ${w.checkIns[0].time}` : null
   const ended = row.orphaned ? 'coordinator ended' : null
   if (!row.children.length) {
@@ -128,6 +216,7 @@ function buildMenu(widgets: TrayWidget[]): Menu {
     ...(unavailable
       ? [{ label: unavailable, enabled: false }, { type: 'separator' as const }]
       : []),
+    ...(runsNotice ? [{ label: runsNotice, enabled: false }, { type: 'separator' as const }] : []),
   ]
   // Every session oldest first, with Needs you on top (widgets arrive sorted;
   // working and idle changes never move a row). A row opens or focuses its
@@ -140,6 +229,8 @@ function buildMenu(widgets: TrayWidget[]): Menu {
       coordinatorId: w.coordinatorId ?? null,
       group: w.group ?? 'no-status',
       at: w.at ?? null,
+      kind: w.kind,
+      summary: w.summary ?? null,
     })),
   )
   const waiting = teams.filter((row) => row.group === 'needs-you')
@@ -179,7 +270,8 @@ function buildMenu(widgets: TrayWidget[]): Menu {
     { label: 'Show windows', click: () => h.onHubView() },
   )
 
-  const checkIns = widgets.flatMap((w) =>
+  const sessions = widgets.filter((w) => !w.run)
+  const checkIns = sessions.flatMap((w) =>
     (w.checkIns ?? []).map((checkIn) => ({ ...checkIn, label: w.label })),
   )
   if (checkIns.length) {
@@ -195,10 +287,10 @@ function buildMenu(widgets: TrayWidget[]): Menu {
     )
   }
 
-  if (widgets.length) {
+  if (sessions.length) {
     template.push(...(checkIns.length ? [] : [{ type: 'separator' as const }]), {
       label: 'End session',
-      submenu: widgets.map((w) => ({ label: w.label, click: () => h.onDiscard(w.id) })),
+      submenu: sessions.map((w) => ({ label: w.label, click: () => h.onDiscard(w.id) })),
     })
   }
 
@@ -237,12 +329,14 @@ export function refreshTray(
   newWidgetTools: NewWidgetTool[],
   newWidgetProjects: NewWidgetProject[],
   notice: string | null = null,
+  runsNote: string | null = null,
 ): void {
   tools = newWidgetTools
   projects = newWidgetProjects
   unavailable = notice
+  runsNotice = runsNote
   agentsWorking = widgets.some((w) => w.group === 'working')
-  const key = JSON.stringify([widgets, tools, projects, unavailable])
+  const key = JSON.stringify([widgets, tools, projects, unavailable, runsNotice])
   if (key !== menuKey) {
     menuKey = key
     tray?.setContextMenu(buildMenu(widgets))

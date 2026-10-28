@@ -18,6 +18,8 @@ import {
   parseContextHook,
   parseGuiCommand,
   type ResizeClaimAnswer,
+  type RunDecision,
+  type RunsAnswer,
   type SessionDescriptor,
   type SizeHolder,
   splitNdjson,
@@ -201,6 +203,39 @@ export class TetherClient {
       options.keepWakes ? { generation, keepWakes: true } : { generation },
       { timeoutMs: 30_000 },
     )
+  }
+
+  /** The workflow runs the sessions launched, as team members (docs/api-v1.md
+   * "Workflow runs"). An older Tether has none: an empty, healthy answer. */
+  async runs(): Promise<RunsAnswer> {
+    try {
+      return await this.json<RunsAnswer>('GET', '/v1/runs')
+    } catch (error) {
+      if (isMissing(error)) return { status: 'ok', error: null, updatedAt: null, items: [] }
+      throw error
+    }
+  }
+
+  /** Answer a run (or one step) waiting on the owner. */
+  resumeRun(runId: string, action: RunDecision, stepKey?: string | null): Promise<{ ok: true }> {
+    return this.json('POST', `/v1/runs/${encodeURIComponent(runId)}/resume`, {
+      action,
+      ...(stepKey ? { stepKey } : {}),
+    })
+  }
+
+  /** Stop a run, or one of its steps. */
+  cancelRun(runId: string, stepKey?: string | null): Promise<{ ok: true }> {
+    const run = `/v1/runs/${encodeURIComponent(runId)}`
+    return this.json(
+      'POST',
+      stepKey ? `${run}/steps/${encodeURIComponent(stepKey)}/cancel` : `${run}/cancel`,
+    )
+  }
+
+  /** Drop an ended run from the lists. */
+  dismissRun(runId: string): Promise<{ ok: true }> {
+    return this.json('POST', `/v1/runs/${encodeURIComponent(runId)}/dismiss`)
   }
 
   /** Every wake, kept ones included, with Tether's wake policy. */
@@ -431,7 +466,8 @@ export class TetherPool extends TetherClient {
   ): Promise<{ status: number; body: T }> {
     const route = trimTrailingSlashes(path.split('?')[0])
     if (route === '/v1/sessions' && method === 'GET') return this.mergedSessions(path, options)
-    if (/^\/v1\/(sessions|widgets)\/[^/]/.test(route))
+    if (route === '/v1/runs' && method === 'GET') return this.mergedRuns(path, options)
+    if (/^\/v1\/(sessions|widgets|runs)\/[^/]/.test(route))
       return this.byOwner(method, path, body, options)
     return this.all[0].request<T>(method, path, body, options)
   }
@@ -456,6 +492,44 @@ export class TetherPool extends TetherClient {
     }
     const head = first as { status: number; body: T }
     return { status: head.status, body: { ...head.body, items: [...merged.values()] } }
+  }
+
+  /** Each instance follows the runs of its own sessions. An instance that
+   * cannot be asked marks the whole answer stale rather than hide its runs. */
+  private async mergedRuns<T>(
+    path: string,
+    options: RequestOptions,
+  ): Promise<{ status: number; body: T }> {
+    const answers: RunsAnswer[] = []
+    let skipped = false
+    for (const client of this.candidates()) {
+      try {
+        answers.push((await client.request<RunsAnswer>('GET', path, undefined, options)).body)
+      } catch (error) {
+        if (client === this.all[0]) throw error
+        if (error instanceof TetherUnavailable) skipped = true
+        else if (!isMissing(error)) throw error
+      }
+    }
+    const worst = (a: RunsAnswer['status'], b: RunsAnswer['status']): RunsAnswer['status'] =>
+      a === 'unavailable' || b === 'unavailable'
+        ? 'unavailable'
+        : a === 'stale' || b === 'stale'
+          ? 'stale'
+          : 'ok'
+    const times = answers.map((a) => a.updatedAt).filter((t): t is number => typeof t === 'number')
+    const body: RunsAnswer = {
+      status: answers.reduce<RunsAnswer['status']>(
+        (all, a) => worst(all, a.status),
+        skipped ? 'stale' : 'ok',
+      ),
+      error:
+        answers.find((a) => a.error)?.error ??
+        (skipped ? 'The other Tether is not reachable' : null),
+      updatedAt: times.length ? Math.min(...times) : null,
+      items: answers.flatMap((a) => a.items ?? []),
+    }
+    return { status: 200, body: body as T }
   }
 
   private async byOwner<T>(

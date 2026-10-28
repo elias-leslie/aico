@@ -196,6 +196,41 @@ describe('attention wiring', () => {
     expect(execFile.mock.calls[0]?.[1][3]).toBe('Claude Code waiting in Docs')
   })
 
+  it('pushes a workflow run that needs the owner with its page to open', () => {
+    const { execFile } = setup()
+    const run = { id: 'run:r1', title: 'Ship it', url: 'http://hub.test/workflow-runs/r1' }
+    const withRun = createAttentionWiring({
+      registry: new WindowRegistry({
+        fromId: () => null,
+        fromWebContents: () => null,
+        getAllWindows: () => [],
+        getFocusedWindow: () => null,
+      }),
+      compositor: { isFocused: () => false },
+      catalog: createSessionCatalog(),
+      run: (id) => (id === run.id ? (run as never) : undefined),
+      tools: () => [],
+      setNeedsYou: vi.fn(),
+      execFile,
+      nightshift: '/usr/local/bin/nightshift',
+      webUrl: 'http://web.test',
+    })
+    withRun.updateId('run:r1', 'blocked', 5)
+    vi.advanceTimersByTime(PUSH_AFTER_MS)
+    expect(execFile).toHaveBeenCalledTimes(1)
+    expect(execFile.mock.calls[0]?.[1]).toEqual([
+      'push',
+      'Open the run to answer.',
+      '--title',
+      'Workflow waiting: Ship it',
+      '--severity',
+      'warning',
+      '--open',
+      'http://hub.test/workflow-runs/r1',
+    ])
+    expect(withRun.group('run:r1').group).toBe('needs-you')
+  })
+
   it('a sent push goes to the journal', () => {
     const { wiring, catalog, pushes } = setup()
     const d = descriptor('aaaaaaaa', { state: 'blocked' })

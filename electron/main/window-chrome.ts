@@ -25,6 +25,8 @@ interface WindowChromeDeps {
   notice(): string | null
   projects: Pick<ProjectCatalog, 'list'>
   attention: Pick<Attention, 'group'>
+  /** Workflow runs and steps as tray rows, and why they may be out of date. */
+  runs?: { widgets(): TrayWidget[]; notice(): string | null }
   layout: {
     noteCoordinator(win: BrowserWindow, coordinator: boolean): void
     scheduleWrite(): void
@@ -75,7 +77,13 @@ export function createWindowChrome(deps: WindowChromeDeps) {
         })),
       }
     })
-    tray.refreshTray(widgets, trayTools(), projects.list(), deps.notice())
+    tray.refreshTray(
+      [...widgets, ...(deps.runs?.widgets() ?? [])],
+      trayTools(),
+      projects.list(),
+      deps.notice(),
+      deps.runs?.notice() ?? null,
+    )
   }
 
   // No periodic rebuild: republishing the native menu collapses it while the
