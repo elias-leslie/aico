@@ -19,6 +19,16 @@ vi.mock('./use-terminal-sessions', () => ({
   }),
 }))
 
+vi.mock('./use-workflow-runs', () => ({
+  useWorkflowRuns: () => ({
+    items: [],
+    state: 'ok',
+    notice: null,
+    needsYouCount: 0,
+    act: async () => {},
+  }),
+}))
+
 describe('useSessionAttention', () => {
   it('knows the state of sessions started from the web', () => {
     const { result } = renderHook(() => useSessionAttention())

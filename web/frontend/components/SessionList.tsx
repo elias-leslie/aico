@@ -1,13 +1,15 @@
 'use client'
 
 import { clsx } from 'clsx'
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, Workflow } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
+import type { RunMember } from 'tether/client'
 import { foldTeams, laneTitle, type TeamRow, teamMembers } from 'tether/teams'
 import type { Attention } from '@/lib/attention'
 import { useAgentTools } from '@/lib/hooks/use-agent-tools'
 import { useLocalStorageState } from '@/lib/hooks/use-local-storage-state'
 import type { SessionAttention } from '@/lib/hooks/use-session-attention'
+import type { RunAct } from '@/lib/hooks/use-workflow-runs'
 import {
   getSlotName,
   getSlotPanelId,
@@ -19,6 +21,7 @@ import { AgentIcon, getAgentColor } from './AgentIcon'
 import { CheckInBadge } from './CheckInBadge'
 import { CoordinatorBadge } from './CoordinatorBadge'
 import { KeptCheckIns } from './KeptCheckIns'
+import { pageUrl, RunRow, runMeta } from './RunRow'
 
 function getSlotMode(slot: TerminalSlot | PaneSlot): string {
   if (slot.type === 'project') {
@@ -65,40 +68,61 @@ export function sortSessionEntries(
   })
 }
 
-/** A list entry as a team member (tether/teams): lineage by row id. */
+/** A list entry as a team member (tether/teams): lineage by row id. A row is
+ * a session (`entry`) or a workflow run or step (`run`). */
 interface TeamEntry {
   id: string
   coordinator: boolean
   coordinatorId: string | null
   group: Attention['group']
   at: number | null
-  entry: SessionListEntry
+  kind?: RunMember['kind']
+  summary?: string | null
+  entry: SessionListEntry | null
+  run: RunMember | null
 }
 
 /** Fold entries into coordinator teams. A lane names its coordinator by
- * session id; rows are keyed by slot. */
+ * session id; rows are keyed by slot. A workflow run folds under the session
+ * that launched it, and its steps under the run. */
 export function foldSessionEntries(
   entries: readonly SessionListEntry[],
+  runs: readonly RunMember[] = [],
 ): TeamRow<TeamEntry>[] {
   const rowOf = new Map<string, string>()
   for (const entry of entries) {
     const sessionId = getSlotSessionId(entry.slot)
     if (sessionId) rowOf.set(sessionId, entry.id)
   }
-  return foldTeams(
-    entries.map((entry) => {
-      const lead = entry.slot.coordinatorId ?? null
-      return {
-        id: entry.id,
-        coordinator: entry.slot.coordinator === true,
-        // A coordinator that is not listed here has ended.
-        coordinatorId: lead ? (rowOf.get(lead) ?? lead) : null,
-        group: entry.state?.group ?? 'no-status',
-        at: entry.state?.at ?? null,
-        entry,
-      }
-    }),
-  )
+  const sessions: TeamEntry[] = entries.map((entry) => {
+    const lead = entry.slot.coordinatorId ?? null
+    return {
+      id: entry.id,
+      coordinator: entry.slot.coordinator === true,
+      // A coordinator that is not listed here has ended.
+      coordinatorId: lead ? (rowOf.get(lead) ?? lead) : null,
+      group: entry.state?.group ?? 'no-status',
+      at: entry.state?.at ?? null,
+      entry,
+      run: null,
+    }
+  })
+  const members: TeamEntry[] = runs.map((run) => ({
+    id: run.id,
+    coordinator: false,
+    // A run names its launcher by session id; a step names its run.
+    coordinatorId:
+      run.kind === 'run'
+        ? (rowOf.get(run.coordinatorId ?? '') ?? run.coordinatorId)
+        : run.coordinatorId,
+    group: run.group,
+    at: run.at,
+    kind: run.kind,
+    summary: run.summary,
+    entry: null,
+    run,
+  }))
+  return foldTeams([...sessions, ...members])
 }
 
 /** What a row says under its name: its agent and what it is doing. The
@@ -111,6 +135,10 @@ function rowMeta(agent: string, state: Attention | null): string {
   return agent
 }
 
+/** Without the runs list there are no run rows to act on. */
+const noRunControls = (_action: RunAct): Promise<void> =>
+  Promise.reject(new Error('Workflow runs are not available'))
+
 const TEAMS_OPEN_KEY = 'aico:teams-open'
 
 /** Which teams show their lanes. A desktop remembers each coordinator in
@@ -120,14 +148,17 @@ function useTeamFolds(phone: boolean) {
     Record<string, boolean>
   >(TEAMS_OPEN_KEY, {})
   const [onPhone, setOnPhone] = useState<Record<string, boolean>>({})
+  // `fallback`: whether a team the owner has not folded or opened shows its
+  // lanes (sessions and going runs do; ended runs start folded).
   const isOpen = useCallback(
-    (id: string) => (phone ? onPhone[id] === true : remembered[id] !== false),
+    (id: string, fallback = true) =>
+      phone ? onPhone[id] === true : (remembered[id] ?? fallback),
     [phone, onPhone, remembered],
   )
   const toggle = useCallback(
-    (id: string) => {
+    (id: string, fallback = true) => {
       if (phone) setOnPhone((open) => ({ ...open, [id]: !open[id] }))
-      else setRemembered((open) => ({ ...open, [id]: open[id] === false }))
+      else setRemembered((open) => ({ ...open, [id]: !(open[id] ?? fallback) }))
     },
     [phone, setRemembered],
   )
@@ -153,9 +184,10 @@ export function SessionList({
   phone = false,
 }: SessionListProps) {
   const { agentTools } = useAgentTools()
+  const runs = attention?.runs
   const teams = useMemo(
-    () => foldSessionEntries(sortSessionEntries(slots, attention)),
-    [slots, attention],
+    () => foldSessionEntries(sortSessionEntries(slots, attention), runs?.items),
+    [slots, attention, runs?.items],
   )
   const folds = useTeamFolds(phone)
   const agentName = (mode: string) =>
@@ -165,10 +197,40 @@ export function SessionList({
   const waiting = teams.filter((row) => row.group === 'needs-you').length
   const headings = waiting > 0 && waiting < teams.length
 
+  const renderRun = (
+    row: TeamRow<TeamEntry>,
+    member: RunMember,
+  ): React.ReactNode => {
+    const isTeam = row.children.length > 0
+    // A run that is going shows its steps; an ended one starts folded.
+    const fallback =
+      member.status === 'running' || member.status === 'needs_owner'
+    const open = isTeam && folds.isOpen(member.id, fallback)
+    return (
+      <RunRow
+        key={member.id}
+        member={member}
+        isTeam={isTeam}
+        open={open}
+        onToggle={() => folds.toggle(member.id, fallback)}
+        summary={row.summary}
+        orphaned={row.orphaned}
+        act={runs?.act ?? noRunControls}
+        needs={
+          member.group === 'needs-you' ||
+          (isTeam && !open && row.group === 'needs-you')
+        }
+      >
+        {row.children.map((child) => renderRow(child, null))}
+      </RunRow>
+    )
+  }
+
   const renderRow = (
     row: TeamRow<TeamEntry>,
     lead: SessionListEntry | null,
   ): React.ReactNode => {
+    if (!row.item.entry) return renderRun(row, row.item.run as RunMember)
     const { id, label, mode, slot, state } = row.item.entry
     const isTeam = row.children.length > 0
     const sessionKey = getSlotSessionId(slot) ?? id
@@ -182,7 +244,9 @@ export function SessionList({
     const name = lead ? laneTitle(label, lead.label) : label
     const checkIns =
       isTeam && !teamOpen
-        ? teamMembers(row).flatMap((member) => member.entry.slot.checkIns ?? [])
+        ? teamMembers(row).flatMap(
+            (member) => member.entry?.slot.checkIns ?? [],
+          )
         : slot.checkIns
     const meta = [
       // A team row: the coordinator's own state, then its team summary.
@@ -257,6 +321,11 @@ export function SessionList({
 
   return (
     <>
+      {runs?.notice && (
+        <p role="status" className="lantern-run-notice">
+          {runs.notice}
+        </p>
+      )}
       {teams.map((row, index) => {
         const header = !headings
           ? null
@@ -297,13 +366,46 @@ export function SessionRail({
   onSelect,
 }: Omit<SessionListProps, 'phone'>) {
   const { agentTools } = useAgentTools()
+  const runs = attention?.runs
   const teams = useMemo(
-    () => foldSessionEntries(sortSessionEntries(slots, attention)),
-    [slots, attention],
+    () => foldSessionEntries(sortSessionEntries(slots, attention), runs?.items),
+    [slots, attention, runs?.items],
   )
   return (
     <>
       {teams.map((row) => {
+        if (!row.item.entry) {
+          // A run whose session has ended: its page is all there is to open.
+          const run = row.item.run as RunMember
+          const url = pageUrl(run.url)
+          const needs = row.group === 'needs-you'
+          const name = `Workflow run ${run.title}: ${runMeta(run, [row.summary])}`
+          return (
+            <a
+              key={run.id}
+              href={url ?? undefined}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`${name}. Opens in Agent Hub`}
+              title={name}
+              className={clsx('lantern-rail-item', needs && 'needs')}
+            >
+              <Workflow
+                aria-hidden="true"
+                className="h-[18px] w-[18px]"
+                strokeWidth={1.7}
+                style={{ color: 'var(--mist)' }}
+              />
+              {needs && (
+                <span
+                  aria-hidden="true"
+                  className="dot"
+                  style={{ backgroundColor: 'var(--beacon)' }}
+                />
+              )}
+            </a>
+          )
+        }
         const { id, label, mode, slot, state } = row.item.entry
         const tool = agentTools.find((t) => t.slug === mode)
         const agent = tool?.name ?? (mode === 'shell' ? 'Shell' : mode)

@@ -15,6 +15,7 @@ import {
   type TerminalSession,
   useTerminalSessions,
 } from './use-terminal-sessions'
+import { useWorkflowRuns, type WorkflowRuns } from './use-workflow-runs'
 
 const EMPTY_SEEN: Record<string, number> = {}
 const AGE_TICK_MS = 30_000
@@ -44,8 +45,10 @@ export function slotSessions(
 export interface SessionAttention {
   /** A slot's most urgent session state, or null when unknown. */
   forSlot(slot: TerminalSlot | PaneSlot): Attention | null
-  /** Sessions that need the owner now. */
+  /** Sessions, and workflow runs, that need the owner now. */
   needsYouCount: number
+  /** The workflow runs sessions launched, shown under them. */
+  runs?: WorkflowRuns
 }
 
 const NO_SESSIONS: TerminalSession[] = []
@@ -59,6 +62,7 @@ export function useSessionAttention(): SessionAttention {
     () => EMPTY_SEEN,
   )
   const now = useNow(AGE_TICK_MS)
+  const runs = useWorkflowRuns()
   return useMemo(() => {
     const byId = new Map(
       sessions.map(
@@ -73,10 +77,12 @@ export function useSessionAttention(): SessionAttention {
             return item ? [item] : []
           }),
         ),
-      needsYouCount: [...byId.values()].filter((a) => a.group === 'needs-you')
-        .length,
+      needsYouCount:
+        [...byId.values()].filter((a) => a.group === 'needs-you').length +
+        runs.needsYouCount,
+      runs,
     }
-  }, [sessions, seen, now])
+  }, [sessions, seen, now, runs])
 }
 
 /**

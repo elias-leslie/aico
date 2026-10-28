@@ -148,6 +148,12 @@ select {
   cursor: not-allowed;
 }
 
+.lantern-btn.small {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
 .lantern-btn.primary {
   border-color: var(--lantern);
   background: rgb(var(--lantern-rgb) / 0.14);
@@ -467,6 +473,42 @@ select {
 
 .lantern-fold[aria-expanded="true"] svg {
   transform: rotate(90deg);
+}
+
+/* Workflow runs and steps among the sessions. A row is a link to the run's
+   page; its controls and notes sit under it, aligned with the name. */
+.lantern-row.run {
+  min-height: 48px;
+  text-decoration: none;
+}
+
+.lantern-row.is-step {
+  min-height: 44px;
+}
+
+.lantern-run-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 10px 8px 40px;
+}
+
+.lantern-run-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--mist);
+}
+
+.lantern-run-note.error {
+  color: var(--ember);
+}
+
+.lantern-run-notice {
+  margin: 0 10px 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--mist);
 }
 
 /* The session list folded to a rail: one agent mark per row. */
