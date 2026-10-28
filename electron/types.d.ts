@@ -51,6 +51,30 @@ export interface OpenableSession {
   locallyOpen: boolean
 }
 
+/** What the renderer is told about its window's chat. */
+export interface ChatInfo {
+  /** The Agent Hub session id the chat panel opens. */
+  sessionId: string
+  agentSlug: string
+  requestedModel: string | null
+}
+
+/** A failure as the renderer rebuilds it into an SDK-shaped error. */
+export interface ChatFailure {
+  message: string
+  /** Tether's or Agent Hub's code (`agent_hub_unavailable`, `turn_running`, ...). */
+  code: string
+  status?: number
+}
+
+export type ChatCallResult = { ok: true; value: unknown } | { ok: false; error: ChatFailure }
+
+/** One item of a stream: a turn event as Agent Hub sent it, or how the stream ended. */
+export type ChatStreamItem =
+  | { kind: 'event'; event: Record<string, unknown> }
+  | { kind: 'end' }
+  | { kind: 'error'; error: ChatFailure }
+
 export interface AicoApi {
   pty: {
     start(size: { cols: number; rows: number }): void
@@ -68,6 +92,16 @@ export interface AicoApi {
     onSizeOther(cb: (other: boolean) => void): () => void
     /** Take the size back: deliberate for the Use here button, else a click in the terminal. */
     claimSize(deliberate?: boolean): void
+  }
+  chat: {
+    /** The Agent Hub session this window shows as a chat, or null for a terminal window. */
+    info(): Promise<ChatInfo | null>
+    /** One request for this window's own chat session (methods: session, queue, send,
+     * cancel, models); main answers it through Tether. Never throws. */
+    call(method: string, args: Record<string, unknown>): Promise<ChatCallResult>
+    /** Follow the running turn from `afterSeq`: items arrive until the turn ends or the
+     * returned function closes the stream. */
+    openStream(afterSeq: number, onItem: (item: ChatStreamItem) => void): Promise<() => void>
   }
   links: {
     /** Open an http(s) URL in the default browser. */

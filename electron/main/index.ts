@@ -24,6 +24,7 @@ import { TERMINAL_HISTORY_LINES } from '../shared/terminal-history'
 import { createAmbient } from './ambient'
 import { createAttentionWiring } from './attention-wiring'
 import { createBridgeTransport } from './bridge-transport'
+import { createChatBridge } from './chat-bridge'
 import { createBridgeCompositor, createNativeCompositor, whenReady } from './compositor'
 import { readConfig } from './config'
 import { registerDesktopIpc } from './desktop-ipc'
@@ -284,6 +285,10 @@ const sessions = createSessionActions({
 // The Agent Hub prompt revisions a new session can take as instructions.
 const instructions = createInstructions({ st: config.st, execFile })
 
+// The native chat of an Agent Hub session window: every call goes to Tether,
+// which holds the Agent Hub credentials (chat-bridge.ts).
+const chatBridge = createChatBridge({ tether, catalog, registry })
+
 // Terminal byte path: one control-mode terminal link per window.
 const terminal = createTerminal({
   tether,
@@ -372,6 +377,7 @@ const startup = app.whenReady().then(async () => {
   Menu.setApplicationMenu(null)
 
   terminal.registerIpc(ipcMain)
+  chatBridge.registerIpc(ipcMain)
   registerDesktopIpc(ipcMain, {
     compositor,
     clipboard,

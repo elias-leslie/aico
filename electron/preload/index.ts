@@ -1,5 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type {
+  ChatCallResult,
+  ChatInfo,
+  ChatStreamItem,
   InstructionPrompt,
   InstructionRevision,
   InstructionsChoice,
@@ -33,6 +36,40 @@ contextBridge.exposeInMainWorld('aico', {
     },
     /** Take the size back: deliberate for the Use here button, else a click in the terminal. */
     claimSize: (deliberate = false) => ipcRenderer.send('pty:claim-size', deliberate),
+  },
+  chat: {
+    /** The Agent Hub session this window shows as a chat, or null for a terminal window. */
+    info: (): Promise<ChatInfo | null> => ipcRenderer.invoke('chat:info'),
+    /** One request for this window's own chat session; main answers it through Tether. */
+    call: (method: string, args: Record<string, unknown>): Promise<ChatCallResult> =>
+      ipcRenderer.invoke('chat:call', method, args),
+    /** Follow the running turn from `afterSeq`; items arrive until the turn ends or the
+     * returned function closes the stream. */
+    openStream: async (
+      afterSeq: number,
+      onItem: (item: ChatStreamItem) => void,
+    ): Promise<() => void> => {
+      // Items can arrive before the invoke answers; keep them until the id is known.
+      const early: [string, ChatStreamItem][] = []
+      let id: string | null = null
+      const listener = (_event: unknown, streamId: string, item: ChatStreamItem) => {
+        if (id === null) early.push([streamId, item])
+        else if (streamId === id) onItem(item)
+      }
+      ipcRenderer.on('chat:event', listener)
+      const opened = await ipcRenderer.invoke('chat:stream-open', afterSeq)
+      if (typeof opened !== 'string') {
+        ipcRenderer.removeListener('chat:event', listener)
+        onItem({ kind: 'error', error: opened })
+        return () => undefined
+      }
+      id = opened
+      for (const [streamId, item] of early) if (streamId === id) onItem(item)
+      return () => {
+        ipcRenderer.removeListener('chat:event', listener)
+        ipcRenderer.send('chat:stream-close', opened)
+      }
+    },
   },
   links: {
     /** Open an http(s) URL in the default browser. */
