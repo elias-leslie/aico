@@ -61,6 +61,8 @@ describe('Store schema', () => {
       }[]
     ).map((row) => row.name)
     expect(tables).toEqual([
+      'agent_hub_queue',
+      'agent_hub_sessions',
       'agent_tools',
       'retired_session_ids',
       'root_requests',

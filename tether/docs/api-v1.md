@@ -92,6 +92,19 @@ Status: every route below is implemented (Phase 3a). Additions made for the web 
 
 `wakes` *(post-cutover)* lists the session's scheduled check-ins, oldest first; see [Wakes](#wakes).
 
+### Agent Hub sessions
+
+A session of tool `agent-hub` is a chat on an Agent Hub agent, not a terminal. Tether holds the Agent Hub session id instead of a pane, so there is no tmux session. Its descriptor adds `backend: "agent-hub"` (tmux sessions carry no `backend` field) and `agentHub: {sessionId, agentSlug, requestedModel, model, turnState, turnPhase, queued, reachable, created, promptSent}` (`sessionId` is the Agent Hub session id, `model` the one Agent Hub last reported, `turnState` `running`, `idle` or null before the first look, `turnPhase` Agent Hub's phase of a running turn, `queued` the follow-ups waiting for the turn to end, `reachable` whether Agent Hub answered the last poll). The `tmux` object keeps its shape with null fields, so existing readers do not break. `status` is `running` while Agent Hub reports the session active, `pending` until the Agent Hub session exists and the first prompt is posted (Agent Hub down at create; Tether keeps retrying), and `uncertain` when Agent Hub cannot be reached or has closed it. The agent state is `working` while a turn runs, `idle` between turns and `unknown` when Agent Hub is unreachable (`stateSource: "agent-hub"`).
+
+What differs from a tmux session:
+
+- `inject` needs `mode: "paste"` and `submit: true` (`400` otherwise) and posts the text as a turn. If a turn is running, or earlier follow-ups are queued, it is queued instead and the answer carries `queued: true`; one queued follow-up goes out each time the session goes idle, oldest first. `409 workload_unavailable` before the first prompt was posted, `503 agent_hub_unavailable` when Agent Hub cannot be reached (nothing queued).
+- `attach`, `capture`, `scrollback`, `pane-mode`, `resize-claim` and `show` answer `409 workload_unavailable` (no pane; a native chat view is a later step). `respawn`, `load-tui`, `switch-project`, `agent-event` and `context-check` answer `409 unsupported_backend`.
+- Naming, title, coordinator marks and wakes work as for any session. A wake delivers its note as a follow-up turn. A kept wake does not relaunch an ended Agent Hub session.
+- End cancels a running turn, then closes the Agent Hub session, then drops the row (a queued follow-up goes with it). If Agent Hub cannot close it, End answers `blocked` and the session stays.
+- After a Tether restart the session is found again by its stored Agent Hub id; a follow-up queued before the restart still goes out.
+- Tether calls Agent Hub from its own process with the owner token read from `AGENT_HUB_OWNER_TOKEN_FILE` (or `TETHER_AGENT_HUB_OWNER_TOKEN_FILE`); the token never reaches a client, a log or this API. `TETHER_AGENT_HUB_URL` (default `http://localhost:8003`), `TETHER_AGENT_HUB_CLIENT_ID` (else `SUMMITFLOW_CLIENT_ID`) and `TETHER_AGENT_HUB_REQUEST_SOURCE` (default `aico-tether`) set the rest; `~/.env.local` supplies the fallbacks.
+
 ## Sessions
 
 | Method and route | Body | Result |
@@ -186,7 +199,7 @@ Apps keep their own byte path: a PTY that runs `tmux attach` against the session
 | `GET /v1/sessions/:id/attach` | none | `{generation, argv: ["/usr/bin/tmux","-S","<socket>","attach-session","-t","$3"], env, unset}`. `argv` is the exact client argv. |
 | `GET /v1/sessions/:id/capture` | query `escapes=1` | `{generation, text}`: the visible screen |
 | `GET /v1/sessions/:id/scrollback` | query `fromLine`, `count` (at most 5000, default 5000), `escapes=1` | `{generation, fromLine, totalLines, historySize, text}`. One bounded page of pane history (Aico `scrollback-page.ts`); line `historySize + r` is visible row `r`. Without `fromLine`, the last page. `400 invalid_query` for a non-integer. |
-| `POST /v1/sessions/:id/inject` | `{generation, text, mode: "type" \| "paste", submit?: bool}` | `{generation, delivered: true}` |
+| `POST /v1/sessions/:id/inject` | `{generation, text, mode: "type" \| "paste", submit?: bool}` | `{generation, delivered: true}`; an `agent-hub` session adds `queued: bool` ([Agent Hub sessions](#agent-hub-sessions)) |
 | `GET /v1/sessions/:id/pane-mode` *(post-cutover)* | none | `{generation, alternateScreen, mouseReporting, historySize, inMode, mode}`: whether the pane shows its alternate screen, whether the program asked for mouse reporting, the history line count, and whether tmux shows a mode over the pane (`mode` is its name, such as `copy-mode`, else null). Read-only `display-message`. `409 workload_unavailable` when tmux cannot answer. |
 
 Attach `env` holds **overrides only**, not a full environment: set exactly `TERM=xterm-256color`, `COLORTERM=truecolor` and `CLICOLOR=1` over the client's own environment, then remove every key in `unset` (`TMUX`, `TMUX_PANE`, `TMUX_TMPDIR`, `NO_COLOR`). Both lists may grow additively.
@@ -223,7 +236,7 @@ A root is a session created through the root contract with a stable caller `requ
 | Method and route | Body | Result |
 | --- | --- | --- |
 | `GET /v1/roots` | query `origin=aico\|a-term` *(3a)*, `ended=0\|1` *(post-cutover)* | `{owner, available, directedDelivery, roots: Descriptor[]}`. `owner` is the `origin` filter, else `"aico"`. `ended=0` leaves out ended tombstones (they stay readable at `GET /v1/roots/:requestId`). `400 invalid_query` for another origin or `ended` value. |
-| `POST /v1/roots` | `{requestId, tool, projectId, projectRoot, initialPrompt, role, leadRootReference?, facetCapsuleRef?, resumeSessionId?, origin?, aTermSessionId?, launchedBy?}` | Existing or reserved root descriptor. `200` for running or ended, `202` for pending or uncertain. `400 unsupported_tool` with `supported: slug[]` for a tool that can't start a root (`rootCapable: false`). `400 prompt_too_long` with `limit` when `initialPrompt` exceeds 14 KiB fresh or 2000 bytes on resume ([root-control.md](../../docs/root-control.md)). `409 request_conflict` if the same key arrives with a different digest. `409 recovery_pending` with `widgetId` when a new request's `resumeSessionId` is a conversation that [crash recovery](crash-recovery.md) is about to resume, or holds, in that session. |
+| `POST /v1/roots` | `{requestId, tool, projectId, projectRoot, initialPrompt, role, leadRootReference?, facetCapsuleRef?, resumeSessionId?, model?, agentSlug?, origin?, aTermSessionId?, launchedBy?}` | Existing or reserved root descriptor. Tool `agent-hub` starts an Agent Hub chat session ([Agent Hub sessions](#agent-hub-sessions)): `agentSlug` is required for it (and refused for any other tool), `model` is optional, `resumeSessionId`, `reasoningEffort` and `daybreak` are refused, and `projectRoot` only has to be an existing directory. `422 unknown_agent` or `unknown_model` when Agent Hub does not know the agent or model, `503 agent_hub_unavailable` when it cannot be reached (nothing is reserved). `200` for running or ended, `202` for pending or uncertain. `400 unsupported_tool` with `supported: slug[]` for a tool that can't start a root (`rootCapable: false`). `400 prompt_too_long` with `limit` when `initialPrompt` exceeds 14 KiB fresh or 2000 bytes on resume ([root-control.md](../../docs/root-control.md)). `409 request_conflict` if the same key arrives with a different digest. `409 recovery_pending` with `widgetId` when a new request's `resumeSessionId` is a conversation that [crash recovery](crash-recovery.md) is about to resume, or holds, in that session. |
 | `GET /v1/roots/:requestId` | none | Current descriptor, including ended tombstones (`status: "ended"`, `generation: null`) |
 | `POST /v1/roots/:requestId/show` | `{generation}` | Forwarded to the GUI |
 | `POST /v1/roots/:requestId/position` | `{generation, bounds: {x, y, width, height}}` | Forwarded to the GUI |
@@ -440,6 +453,10 @@ with its `lastError` until the owner moves or cancels it.
 Wakes need an agent whose state Tether reads (Claude Code, Codex). Pi and the shell report no state, so setting a wake
 on them is `409 wake_unsupported`.
 
+An Agent Hub session ([Agent Hub sessions](#agent-hub-sessions)) takes wakes too. It has no window, keys or draft, so
+the only gate is that its turn is `idle`; the message then goes out as a follow-up turn. A kept wake of an ended Agent
+Hub session is not relaunched: it stays listed with a `lastError` until the owner moves or cancels it.
+
 | Route | Request | Response |
 |---|---|---|
 | `GET /v1/wakes` | | `{items, policy}`, every wake, soonest first |
@@ -479,7 +496,7 @@ Absent when the daemon runs with `TETHER_RECONCILE=off`.
 `GET /v1/health` never touches tmux. It returns:
 
 ```json
-{"status":"ok","name":"tether","instance":"default","version":"0.1.0","apiVersion":3,"schemaVersion":10,
+{"status":"ok","name":"tether","instance":"default","version":"0.1.0","apiVersion":3,"schemaVersion":12,
  "uptimeMs":966,"bootId":"uuid","eventSeq":0,"catalog":{"sessions":0,"tmuxServersActive":0,"rootRequests":0},
  "gui":{"connected":false},"lifecycle":"ready"}
 ```

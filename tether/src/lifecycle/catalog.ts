@@ -13,6 +13,8 @@ import { durableTmuxServerUnit, MANAGED_LIFECYCLE_VERSION } from './ownership'
 
 export type TmuxAllocationState = 'unallocated' | 'legacy-unclassified' | 'bound' | 'external'
 export type LaunchState = 'none' | 'gated' | 'dispatched'
+/** What holds the session: a tmux pane, or an Agent Hub session (no pane). */
+export type SessionBackend = 'tmux' | 'agent-hub'
 
 export interface WidgetRow {
   id: string
@@ -76,6 +78,9 @@ export interface WidgetRow {
   coordinatorId: string | null
   /** Tether: the coordinator's palette colour (its own, or its launcher's). */
   coordinatorColor: string | null
+  /** Tether: `agent-hub` rows have no pane; every tmux field stays at its
+   * never-allocated default and no tmux loop sees the row (`listWidgets`). */
+  backend: SessionBackend
 }
 
 export type SessionOrigin = 'aico' | 'a-term' | 'root' | 'cli'
@@ -105,6 +110,7 @@ interface Raw {
   coordinator: number | null
   coordinator_id: string | null
   coordinator_color: string | null
+  backend: SessionBackend | null
 }
 
 let db: DatabaseSync
@@ -142,6 +148,7 @@ function toRow(r: Raw): WidgetRow {
     coordinator: r.coordinator === 1,
     coordinatorId: r.coordinator_id ?? null,
     coordinatorColor: r.coordinator_color ?? null,
+    backend: r.backend ?? 'tmux',
   }
 }
 
@@ -542,11 +549,32 @@ export function clearCrashedTmuxServerBinding(id: string, expectedTmuxServerId: 
   return result.changes === 1
 }
 
-/** All widgets, oldest first. */
+/** Every tmux-backed widget, oldest first. Reconciliation, recovery, reboot
+ * continuity, the agent-state poll and the memory guard iterate this list, so
+ * an Agent Hub row (no pane) never reaches them. */
 export function listWidgets(): WidgetRow[] {
+  return (
+    db
+      .prepare("SELECT * FROM sessions WHERE backend = 'tmux' ORDER BY created_at ASC")
+      .all() as unknown[]
+  ).map((r) => toRow(r as Raw))
+}
+
+/** Every session of either backend, oldest first: the API list, session
+ * events and project-name retitling. */
+export function listSessions(): WidgetRow[] {
   return (db.prepare('SELECT * FROM sessions ORDER BY created_at ASC').all() as unknown[]).map(
     (r) => toRow(r as Raw),
   )
+}
+
+/** Every Agent Hub session, oldest first. */
+export function listAgentHubSessions(): WidgetRow[] {
+  return (
+    db
+      .prepare("SELECT * FROM sessions WHERE backend = 'agent-hub' ORDER BY created_at ASC")
+      .all() as unknown[]
+  ).map((r) => toRow(r as Raw))
 }
 
 export function getWidget(id: string): WidgetRow | undefined {
@@ -586,6 +614,7 @@ function nextSeq(): number {
 export interface SessionInsertOptions {
   origin?: SessionOrigin
   aTermSessionId?: string | null
+  backend?: SessionBackend
 }
 
 function insertInternalWidget(
@@ -597,8 +626,8 @@ function insertInternalWidget(
 ): WidgetRow {
   db.prepare(
     `INSERT INTO sessions (
-       id, seq, created_at, tool, session_id, tmux_allocation_state, origin, a_term_session_id
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+       id, seq, created_at, tool, session_id, tmux_allocation_state, origin, a_term_session_id, backend
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id,
     nextSeq(),
@@ -608,6 +637,7 @@ function insertInternalWidget(
     allocationState,
     options.origin ?? 'aico',
     options.aTermSessionId ?? null,
+    options.backend ?? 'tmux',
   )
   return getWidget(id) as WidgetRow
 }
@@ -678,6 +708,7 @@ export function reserveRootRequest(
   projectId: string,
   projectRoot: string,
   aTermSessionId: string | null = null,
+  agentHub: NewAgentHubSession | null = null,
 ): RootRequestRow {
   db.exec('BEGIN IMMEDIATE')
   try {
@@ -689,7 +720,9 @@ export function reserveRootRequest(
     insertWidget(request.widgetId, tool, request.createdAt, {
       origin: request.origin === 'a-term' ? 'a-term' : 'root',
       aTermSessionId: request.origin === 'a-term' ? aTermSessionId : null,
+      ...(agentHub ? { backend: 'agent-hub' as const } : {}),
     })
+    if (agentHub) insertAgentHubSession(request.widgetId, agentHub)
     setWidgetProject(request.widgetId, projectId, projectRoot)
     db.prepare(`INSERT INTO root_requests
       (request_id, digest, widget_id, logical_session_id, role, lead_root_reference, facet_capsule_ref, created_at, origin, work_role, work_role_display_name)
@@ -1064,4 +1097,95 @@ export function removeWidgetIfOwnership(id: string, expected: WidgetOwnershipGen
 
 export function removeWidget(id: string): void {
   db.prepare('DELETE FROM sessions WHERE id = ?').run(id)
+}
+
+// --- Agent Hub sessions (src/agent-hub/) -------------------------------------
+
+export interface NewAgentHubSession {
+  /** The Agent Hub session id, chosen here before Agent Hub creates it so a
+   * restart can always find the session again. */
+  hubSessionId: string
+  agentSlug: string
+  /** A catalog model that overrides the agent's own routing, if asked for. */
+  model: string | null
+}
+
+export interface AgentHubSessionRow extends NewAgentHubSession {
+  sessionId: string
+  /** Agent Hub has the session (creation is idempotent, so a retry is safe). */
+  created: boolean
+  /** The first prompt was accepted as a turn. */
+  promptSent: boolean
+}
+
+interface RawAgentHubSession {
+  session_id: string
+  hub_session_id: string
+  agent_slug: string
+  model: string | null
+  created: number
+  prompt_sent: number
+}
+
+function agentHubRow(r: RawAgentHubSession): AgentHubSessionRow {
+  return {
+    sessionId: r.session_id,
+    hubSessionId: r.hub_session_id,
+    agentSlug: r.agent_slug,
+    model: r.model ?? null,
+    created: r.created === 1,
+    promptSent: r.prompt_sent === 1,
+  }
+}
+
+export function insertAgentHubSession(sessionId: string, input: NewAgentHubSession): void {
+  db.prepare(
+    'INSERT INTO agent_hub_sessions (session_id, hub_session_id, agent_slug, model) VALUES (?, ?, ?, ?)',
+  ).run(sessionId, input.hubSessionId, input.agentSlug, input.model)
+}
+
+export function getAgentHubSession(sessionId: string): AgentHubSessionRow | undefined {
+  const r = db.prepare('SELECT * FROM agent_hub_sessions WHERE session_id = ?').get(sessionId) as
+    | RawAgentHubSession
+    | undefined
+  return r ? agentHubRow(r) : undefined
+}
+
+export function markAgentHubCreated(sessionId: string): void {
+  db.prepare('UPDATE agent_hub_sessions SET created = 1 WHERE session_id = ?').run(sessionId)
+}
+
+export function markAgentHubPromptSent(sessionId: string): void {
+  db.prepare('UPDATE agent_hub_sessions SET prompt_sent = 1 WHERE session_id = ?').run(sessionId)
+}
+
+export interface AgentHubQueued {
+  id: number
+  text: string
+}
+
+export function enqueueAgentHubText(sessionId: string, text: string, now = Date.now()): void {
+  db.prepare('INSERT INTO agent_hub_queue (session_id, text, created_at) VALUES (?, ?, ?)').run(
+    sessionId,
+    text,
+    now,
+  )
+}
+
+/** The oldest queued follow-up, if any. */
+export function peekAgentHubQueue(sessionId: string): AgentHubQueued | undefined {
+  return db
+    .prepare('SELECT id, text FROM agent_hub_queue WHERE session_id = ? ORDER BY id LIMIT 1')
+    .get(sessionId) as AgentHubQueued | undefined
+}
+
+export function removeAgentHubQueued(id: number): void {
+  db.prepare('DELETE FROM agent_hub_queue WHERE id = ?').run(id)
+}
+
+export function agentHubQueueLength(sessionId: string): number {
+  const r = db
+    .prepare('SELECT COUNT(*) AS n FROM agent_hub_queue WHERE session_id = ?')
+    .get(sessionId) as { n: number }
+  return r.n
 }

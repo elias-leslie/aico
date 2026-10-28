@@ -425,13 +425,25 @@ or a fitting existing one. Tether's logical root ID is provenance, never the
 native UUID. Existing owner-created sessions and imported roots stay Unknown.
 
 Create accepts exactly `requestId`, `tool` (a root-capable slug, today
-`claude-code`, `codex` or `pi`),
+`claude-code`, `codex`, `pi` or `agent-hub`),
 `projectId`, absolute normalized `projectRoot`, nonempty `initialPrompt`, `role`, `workRole`, optional `workRoleDisplayName`,
 and optional opaque `leadRootReference`, `facetCapsuleRef`, and
-`resumeSessionId`, `model`, `reasoningEffort`, and `daybreak`. On `/v1` it also accepts `origin`, `aTermSessionId` and
+`resumeSessionId`, `model`, `reasoningEffort`, `daybreak` and `agentSlug` (`agent-hub` only). On `/v1` it also accepts `origin`, `aTermSessionId` and
 `launchedBy` ([api-v1.md](../tether/docs/api-v1.md#roots)); none of them is part of the digest.
 
-A tool is root-capable exactly when it has a resume adapter; `GET /v1/tools`
+`agent-hub` is the one root kind with no terminal: a chat session on an Agent Hub agent
+(`st aico create REQ PROMPT --tool agent-hub --agent SLUG --project P --project-root PATH
+--work-role R [--model M]`). `agentSlug` is required for it and refused for every other tool;
+it is appended to the digest (`{agentSlug}`) only when present, so existing digests do not
+change. Tether creates the Agent Hub session under its own id, with the root's ownership id
+as `external_id`, and posts `initialPrompt` as the first turn; `st aico root send` posts a
+follow-up (queued while a turn runs), `st aico roots` reports `busy` while a turn runs and
+`turn_finished` when idle, and `st aico root end` cancels the turn and closes the Agent Hub
+session. It shows as a child of the coordinator that launched it like any other root.
+Resume, reasoning effort, Daybreak, Agent Hub context and Blank Slate do not apply.
+[api-v1.md](../tether/docs/api-v1.md#agent-hub-sessions) has the session behavior.
+
+A tmux tool is root-capable exactly when it has a resume adapter; `GET /v1/tools`
 reports it as `rootCapable`. Any other tool string, aliases included, returns
 400 `unsupported_tool` with `supported` listing the root-capable slugs. The
 `st aico create` client keeps no tool list of its own: it sends `--tool` as
@@ -441,6 +453,9 @@ Observation is different: `st aico roots` reads each root's terminal through a
 per-tool status profile (codex and claude-code today) and reports a root of any
 other tool as `unsupported_profile`, so a new root tool needs no change to
 `create` but does need a profile before `roots` can observe it.
+An `agent-hub` root needs no profile: `roots` reads its turn state from Tether's session
+descriptor (`terminal: busy` for a running turn, `turn_finished` when idle, `ambiguous` when
+Agent Hub cannot be reached) and reports `backend: "agent-hub"`.
 
 `resumeSessionId` is either absent/null (a fresh launch) or an exact native
 session ID validated by the selected tool's resume adapter. The adapters are

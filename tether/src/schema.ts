@@ -3,7 +3,7 @@
 // copies rows byte for byte. The only widening is the tmux_servers unit CHECK,
 // which additionally admits non-default instance unit names.
 
-export const SCHEMA_VERSION = 11
+export const SCHEMA_VERSION = 12
 
 /** Aico's tmux_servers table (electron/main/store.ts TMUX_SERVERS_TABLE_SQL),
  * plus `tether-<instance>-tmux-server-<id>.service` for non-default instances. */
@@ -247,4 +247,44 @@ export const SHARES_SQL = `
     CHECK((paths IS NULL) <> (url IS NULL))
   );
   CREATE INDEX IF NOT EXISTS shares_created_at ON shares(created_at);
+`
+
+/**
+ * v12: Agent Hub sessions (src/agent-hub/). `sessions.backend` says what holds
+ * the session: a tmux pane (`tmux`, every earlier row) or an Agent Hub session
+ * (`agent-hub`, no pane, so every tmux column stays at its never-allocated
+ * default). `agent_hub_sessions` keeps what Tether needs to find that session
+ * again after a restart: the Agent Hub session id Tether picked before it
+ * created it, the agent, and whether it was created and its first prompt
+ * posted. `agent_hub_queue` holds follow-ups waiting for the running turn to
+ * end. Both go with the session row, whichever path deleted it.
+ */
+export const AGENT_HUB_BACKEND_SQL = `
+  ALTER TABLE sessions ADD COLUMN backend TEXT NOT NULL DEFAULT 'tmux'
+    CHECK(backend IN ('tmux', 'agent-hub'));
+`
+
+export const AGENT_HUB_SQL = `
+  CREATE TABLE IF NOT EXISTS agent_hub_sessions (
+    session_id     TEXT PRIMARY KEY
+                     CHECK(length(session_id) = 8 AND session_id NOT GLOB '*[^0-9a-f]*'),
+    hub_session_id TEXT NOT NULL UNIQUE CHECK(length(hub_session_id) BETWEEN 8 AND 64),
+    agent_slug     TEXT NOT NULL CHECK(length(agent_slug) BETWEEN 1 AND 100),
+    model          TEXT CHECK(model IS NULL OR length(model) BETWEEN 1 AND 128),
+    created        INTEGER NOT NULL DEFAULT 0 CHECK(created IN (0, 1)),
+    prompt_sent    INTEGER NOT NULL DEFAULT 0 CHECK(prompt_sent IN (0, 1))
+  );
+  CREATE TABLE IF NOT EXISTS agent_hub_queue (
+    id         INTEGER PRIMARY KEY,
+    session_id TEXT NOT NULL
+                 CHECK(length(session_id) = 8 AND session_id NOT GLOB '*[^0-9a-f]*'),
+    text       TEXT NOT NULL CHECK(length(text) > 0),
+    created_at INTEGER NOT NULL CHECK(created_at >= 0)
+  );
+  CREATE INDEX IF NOT EXISTS agent_hub_queue_session ON agent_hub_queue(session_id, id);
+  CREATE TRIGGER IF NOT EXISTS sessions_end_agent_hub AFTER DELETE ON sessions
+  BEGIN
+    DELETE FROM agent_hub_queue WHERE session_id = old.id;
+    DELETE FROM agent_hub_sessions WHERE session_id = old.id;
+  END;
 `

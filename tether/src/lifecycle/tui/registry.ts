@@ -45,6 +45,18 @@ export function isRootTool(slug: unknown): slug is string {
   return typeof slug === 'string' && Object.hasOwn(RESUME_ADAPTERS, slug)
 }
 
+/** The Agent Hub session kind: a root with no pane, held in Agent Hub (src/agent-hub/).
+ * Not an `agent_tools` row and not resumable through a native adapter, so it
+ * is a root tool of its own rather than one of `ROOT_TOOLS`. */
+export const AGENT_HUB_TOOL = 'agent-hub'
+
+/** Every tool `POST /v1/roots` accepts: the resumable tmux tools and Agent Hub. */
+export const ROOT_CREATE_TOOLS: readonly string[] = [...ROOT_TOOLS, AGENT_HUB_TOOL].sort()
+
+export function isRootCreateTool(slug: unknown): slug is string {
+  return isRootTool(slug) || slug === AGENT_HUB_TOOL
+}
+
 function contextHook(hook: ToolContextHook | null): ContextHook | undefined {
   switch (hook) {
     case 'claude-session-start':

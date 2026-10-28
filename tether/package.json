@@ -23,6 +23,9 @@
     "lint": "biome check .",
     "check": "npm run lint && npm run typecheck && npm test && npm run build"
   },
+  "dependencies": {
+    "@agent-hub/sdk": "file:vendor/agent-hub-sdk-0.1.0.tgz"
+  },
   "devDependencies": {
     "@types/node": "^22.19.7",
     "@xterm/headless": "6.0.0",

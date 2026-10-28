@@ -10,6 +10,10 @@ Tether is the per-user authority for durable terminal sessions. The Aico desktop
 One running terminal workload and its durable tmux state, owned by Tether whichever app created it. Closing a view does not end it.
 _Avoid_: Widget, pane, attachment, when naming the workload
 
+**Agent Hub session**:
+A session of tool `agent-hub`: a chat on an Agent Hub agent with no tmux workload. Tether stores the Agent Hub session id, posts turns to it and reads its turn state; Agent Hub holds the conversation. Ending it cancels the turn and closes the Agent Hub session.
+_Avoid_: Chat window, hub pane
+
 **Session ID**:
 The eight-character lowercase hexadecimal identity of a session (`AICO_WIDGET_ID` inside its pane). It is never reused.
 _Avoid_: Widget ID, outside Aico compatibility surfaces

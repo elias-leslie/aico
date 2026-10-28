@@ -3,6 +3,8 @@ import { chmodSync, mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import {
+  AGENT_HUB_BACKEND_SQL,
+  AGENT_HUB_SQL,
   AGENT_TOOLS_TABLE_SQL,
   COORDINATOR_SQL,
   INDEXES_SQL,
@@ -258,6 +260,17 @@ export class Store {
         this.db
           .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
           .run(11, now)
+      }
+      if (current < 12) {
+        // v12: Agent Hub sessions (backend column, session ids, follow-up queue).
+        const hasBackend = this.db
+          .prepare("SELECT 1 FROM pragma_table_info('sessions') WHERE name = 'backend'")
+          .get()
+        if (!hasBackend) this.db.exec(AGENT_HUB_BACKEND_SQL)
+        this.db.exec(AGENT_HUB_SQL)
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(12, now)
       }
     })
   }

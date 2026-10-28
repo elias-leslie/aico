@@ -41,7 +41,7 @@ import { terminalClientEnv } from './lifecycle/terminal-env'
 import { captureVisibleTargetArgs, clientActivityTargetArgs } from './lifecycle/tmux'
 import { ensureBlankSlateWorkspace, isBlankSlateRoot } from './lifecycle/tui/blank-slate'
 import { isResumeSessionId } from './lifecycle/tui/launch'
-import { getTui } from './lifecycle/tui/registry'
+import { AGENT_HUB_TOOL, getTui } from './lifecycle/tui/registry'
 import {
   agentStateOf,
   generationOf,
@@ -85,6 +85,11 @@ async function runTmux(args: string[]): Promise<string> {
 
 function isAgent(tool: string): boolean {
   return (getTui(tool)?.command.length ?? 0) > 0
+}
+
+/** An Agent Hub session is an agent with no pane (src/agent-hub/). */
+function isHub(row: WidgetRow | undefined): boolean {
+  return row?.backend === 'agent-hub'
 }
 
 /** The session's wakes for its descriptor (`wakes`), oldest first. */
@@ -152,18 +157,21 @@ export class WakeService {
   /** Whether wakes can be delivered to this session: an agent whose state
    * Tether reads (a shell reports none, so idle would never come). */
   supports(row: WidgetRow): boolean {
+    if (isHub(row)) return true
     return isAgent(row.tool) && agentStateOf(row.id).state !== 'unknown'
   }
 
   private async idle(sessionId: string): Promise<boolean> {
     const row = getWidget(sessionId)
-    if (!row || !isAgent(row.tool)) return false
+    if (!row || !(isHub(row) || isAgent(row.tool))) return false
     if (agentStateOf(sessionId).state !== 'idle') return false
     return (await verifySessionStatus(row).catch(() => 'uncertain')) === 'running'
   }
 
   private async inputEmpty(sessionId: string): Promise<boolean> {
     const row = getWidget(sessionId)
+    // No input line: a follow-up is a turn, not typing.
+    if (isHub(row)) return true
     try {
       return inputLineEmpty(
         await runTmux(captureVisibleTargetArgs(tmuxPaneTargetForWidget(sessionId), true)),
@@ -175,6 +183,7 @@ export class WakeService {
   }
 
   private async lastKeyAt(sessionId: string): Promise<number | null> {
+    if (isHub(getWidget(sessionId))) return null
     let stdout: string
     try {
       stdout = await runTmux(clientActivityTargetArgs(tmuxTargetForWidget(sessionId)))
@@ -193,7 +202,7 @@ export class WakeService {
    * the desktop decides, and answers `no_view` for a session it never showed. */
   private reopen(sessionId: string): void {
     const row = getWidget(sessionId)
-    if (!row || !this.context.gui.connected()) return
+    if (!row || isHub(row) || !this.context.gui.connected()) return
     void this.context.gui
       .send({ kind: 'show', sessionId, generation: generationOf(row), ifViewed: true })
       .catch(() => {})
@@ -209,6 +218,7 @@ export class WakeService {
   /** What a kept wake needs to start this session's conversation again. */
   async endedSnapshot(row: WidgetRow): Promise<EndedSession> {
     let resumeId: string | null = null
+    if (isHub(row)) return endedSnapshotOf(row, null)
     const tool = getTui(row.tool)
     const pane = await verifiedCurrentManagedPane(row).catch(() => null)
     const agent = pane ? observeAgent(nodeProcFs, this.home, pane.pid) : null
@@ -221,17 +231,7 @@ export class WakeService {
       const seen = snapshot?.sessions.find((session) => session.id === row.id)?.resumeId ?? null
       if (seen && isResumeSessionId(tool, seen)) resumeId = seen
     }
-    return {
-      id: row.id,
-      tool: row.tool,
-      projectId: row.projectId,
-      projectRoot: row.projectRoot,
-      name: row.name,
-      origin: row.origin,
-      coordinator: row.coordinator,
-      coordinatorId: row.coordinatorId,
-      resumeId,
-    }
+    return endedSnapshotOf(row, resumeId)
   }
 
   /** A new session for a kept wake: the ended session's tool, project, name
@@ -241,6 +241,10 @@ export class WakeService {
     message: string,
   ): Promise<{ status: 'started'; id: string } | { status: 'retry' | 'failed'; reason: string }> {
     await whenReady()
+    // A kept wake has no Agent Hub conversation to start again: the session
+    // was closed with its End.
+    if (ended.tool === AGENT_HUB_TOOL)
+      return { status: 'failed', reason: 'an ended Agent Hub session cannot be started again' }
     if (!lingerEnabled()) return { status: 'retry', reason: 'linger is not enabled' }
     const tool = this.context.store.resolveTool(ended.tool)
     const spec = tool?.enabled ? getTui(tool.slug) : undefined
@@ -289,6 +293,20 @@ export class WakeService {
         .send({ kind: 'show', sessionId: id, generation: generationOf(latest) })
         .catch(() => {})
     return { status: 'started', id }
+  }
+}
+
+function endedSnapshotOf(row: WidgetRow, resumeId: string | null): EndedSession {
+  return {
+    id: row.id,
+    tool: row.tool,
+    projectId: row.projectId,
+    projectRoot: row.projectRoot,
+    name: row.name,
+    origin: row.origin,
+    coordinator: row.coordinator,
+    coordinatorId: row.coordinatorId,
+    resumeId,
   }
 }
 

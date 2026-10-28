@@ -3,6 +3,9 @@ import { chmodSync, mkdirSync } from 'node:fs'
 import type { Server } from 'node:http'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { createHubApi } from './agent-hub/client'
+import { resolveAgentHubConfig } from './agent-hub/config'
+import { AgentHubRuntime, type HubApi } from './agent-hub/runtime'
 import { AgentStatePoller, AgentStateTracker } from './agent-state'
 import { agentExitMarkerDir, resolveShowConfig, type TetherPaths } from './config'
 import { nodeProcFs } from './continuity'
@@ -19,16 +22,19 @@ import {
   notifySessionChanged,
   onAbandonedScope,
   setGenerationFunction,
+  setHubBackend,
   setLaunchGuard,
   setSessionSnapshotFunction,
   startLifecycle,
   stopLifecycle,
   verifiedCurrentManagedPane,
+  verifySessionStatus,
 } from './lifecycle/engine'
 import { setLifecycleInstance } from './lifecycle/ownership'
 import { configureTmuxPaths } from './lifecycle/tmux'
 import { bindToolSource } from './lifecycle/tui/registry'
 import {
+  bindAgentHub,
   bindAgentStates,
   foregroundPaneScope,
   generationOf,
@@ -49,6 +55,8 @@ export interface RunningDaemon {
   store: Store
   events: EventBus
   gui: GuiChannel
+  /** The Agent Hub session kind's runtime (polls only where Tether observes sessions). */
+  agentHub: AgentHubRuntime
   /** Resolves when startup reconciliation has finished (or was skipped). */
   ready: Promise<void>
   close(): Promise<void>
@@ -180,6 +188,26 @@ export async function startDaemon(
     wakes.scheduler.nudge()
   })
   bindAgentStates(agentStates)
+  // Agent Hub sessions have no pane: their own state tracker, runtime and
+  // poll, none of which the tmux machinery above ever sees.
+  let hubApi: HubApi | null = null
+  const hubRuntime = new AgentHubRuntime({
+    api: () => {
+      hubApi ??= createHubApi(resolveAgentHubConfig(env))
+      return hubApi
+    },
+    states: new AgentStateTracker((id) => {
+      notifySessionChanged(id, { force: true })
+      wakes.scheduler.nudge()
+    }),
+    notify: (id) => notifySessionChanged(id, { force: true }),
+    verifyStatus: verifySessionStatus,
+  })
+  bindAgentHub(hubRuntime)
+  setHubBackend({
+    verify: (row) => hubRuntime.verify(row),
+    end: (id, generation) => hubRuntime.end(id, generation),
+  })
   const agentPoller = new AgentStatePoller(
     agentStates,
     {
@@ -196,6 +224,7 @@ export async function startDaemon(
     env.HOME ?? homedir(),
   )
   if (reconcileEnabled(env)) void ready.then(() => agentPoller.start()).catch(() => {})
+  if (reconcileEnabled(env)) void ready.then(() => hubRuntime.start()).catch(() => {})
   // Wakes paste into sessions, so only where Tether observes tmux.
   if (reconcileEnabled(env)) void ready.then(() => wakes.scheduler.start()).catch(() => {})
   // Display titles name each session's project: learn names now and keep
@@ -219,12 +248,16 @@ export async function startDaemon(
     store,
     events,
     gui,
+    agentHub: hubRuntime,
     ready,
     close: async () => {
       stopLifecycle()
       context.memoryPolicy.stop()
       clearInterval(projectNames)
       agentPoller.stop()
+      hubRuntime.stop()
+      bindAgentHub(null)
+      setHubBackend(null)
       wakes.scheduler.stop()
       bindWakeStore(null)
       bindAgentStates(null)

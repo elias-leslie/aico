@@ -60,6 +60,7 @@ import {
   insertLegacyUnclassifiedWidget,
   insertProvisioningTmuxServer,
   listLanes,
+  listSessions,
   listTmuxServers,
   listWidgets,
   markTmuxServerDead,
@@ -2596,6 +2597,7 @@ const retireRequests = new Map<
  * for the lifecycle token and otherwise gets `busy` with nothing applied.
  */
 export function endSession(widgetId: string, generation?: string): Promise<EndResult> {
+  if (getWidget(widgetId)?.backend === 'agent-hub') return endAgentHubSession(widgetId, generation)
   if (retireRequests.has(widgetId)) return Promise.resolve({ status: 'busy' })
   return new Promise<EndResult>((resolve) => {
     const request = {
@@ -2615,6 +2617,19 @@ export function endSession(widgetId: string, generation?: string): Promise<EndRe
     widgetRetireIntents.request(widgetId)
     drainWidgetRetire(widgetId)
   })
+}
+
+async function endAgentHubSession(
+  widgetId: string,
+  generation: string | undefined,
+): Promise<EndResult> {
+  if (!hubBackend) return { status: 'blocked', reason: 'Agent Hub is not available' }
+  const result = await hubBackend.end(widgetId, generation)
+  if (result.status === 'ended') {
+    statusCache.delete(widgetId)
+    publishSession(widgetId, { ended: true })
+  }
+  return result
 }
 
 function drainWidgetRetire(id: string): void {
@@ -3013,9 +3028,26 @@ export function setGenerationFunction(fn: (row: WidgetRow) => string): void {
   generationOf = fn
 }
 
+/** What the engine asks of the Agent Hub kind (src/agent-hub/): a session with
+ * no pane is verified and ended there, never through tmux. */
+export interface HubBackend {
+  verify(row: WidgetRow): Promise<SessionStatus>
+  end(widgetId: string, generation: string | undefined): Promise<EndResult>
+}
+
+let hubBackend: HubBackend | null = null
+
+export function setHubBackend(backend: HubBackend | null): void {
+  hubBackend = backend
+}
+
 export async function verifySessionStatus(row: WidgetRow): Promise<SessionStatus> {
   let status: SessionStatus
-  if (isNeverAllocatedWidget(row)) status = 'pending'
+  if (row.backend === 'agent-hub') {
+    status = hubBackend
+      ? await hubBackend.verify(row).catch(() => 'uncertain' as const)
+      : 'uncertain'
+  } else if (isNeverAllocatedWidget(row)) status = 'pending'
   else if (
     row.lifecycleVersion >= MANAGED_LIFECYCLE_VERSION &&
     row.launchState === 'dispatched' &&
@@ -3030,6 +3062,7 @@ export async function verifySessionStatus(row: WidgetRow): Promise<SessionStatus
 export function cachedSessionStatus(row: WidgetRow): SessionStatus {
   const cached = statusCache.get(row.id)
   if (cached && cached.generation === generationOf(row)) return cached.status
+  if (row.backend === 'agent-hub') return 'uncertain'
   if (isNeverAllocatedWidget(row)) return 'pending'
   return 'uncertain'
 }
@@ -3119,7 +3152,7 @@ export function flushSessionEvents(): Promise<void> {
 
 function publishCatalogChanges(): void {
   const live = new Set<string>()
-  for (const row of listWidgets()) {
+  for (const row of listSessions()) {
     live.add(row.id)
     publishSession(row.id)
   }
@@ -3165,7 +3198,7 @@ export function startLifecycle(options: { reconcile: boolean }): Promise<void> {
       durableUserManager ? 'linger enabled' : 'unavailable; new sessions blocked'
     }`,
   )
-  for (const row of listWidgets()) publishedGenerations.set(row.id, generationOf(row))
+  for (const row of listSessions()) publishedGenerations.set(row.id, generationOf(row))
   if (!options.reconcile) {
     lifecycleState = 'disabled'
     console.warn('[tether:lifecycle] reconciliation disabled (TETHER_RECONCILE=off)')

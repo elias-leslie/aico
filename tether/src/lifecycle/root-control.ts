@@ -22,9 +22,16 @@ import {
   sessionInstructions,
 } from './tui/instructions'
 import { isResumeSessionId } from './tui/launch'
-import { getTui, isRootTool, ROOT_TOOLS, supportsInstructions } from './tui/registry'
+import {
+  AGENT_HUB_TOOL,
+  getTui,
+  isRootCreateTool,
+  ROOT_CREATE_TOOLS,
+  supportsInstructions,
+} from './tui/registry'
 
 const KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/
+const AGENT_SLUG = /^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/
 const MAX_BODY_BYTES = 128 * 1024
 // 2000 UTF-8 bytes can occupy 12000 bytes with JSON \uXXXX escaping,
 // plus the fixed fields and bounded request key. Accept either JSON encoding.
@@ -61,7 +68,7 @@ export interface RootLaunchOptions {
 
 export interface RootCreateRequest {
   requestId: string
-  /** A root-capable tool slug (`ROOT_TOOLS`). */
+  /** A root-capable tool slug (`ROOT_CREATE_TOOLS`). */
   tool: string
   projectId: string
   projectRoot: string
@@ -78,6 +85,8 @@ export interface RootCreateRequest {
   daybreak?: boolean | null
   /** Pi optional context only; required shared and native context is retained. */
   agentHubContext?: boolean | null
+  /** The Agent Hub agent an `agent-hub` root runs (and only that tool takes it). */
+  agentSlug?: string | null
   /** An Agent Hub prompt revision added to the tool's prompt (tui/instructions.ts).
    * The digest covers its revision id. */
   instructions?: InstructionsSnapshot | null
@@ -107,6 +116,9 @@ export type MutationRejection = { status: number; error: string }
 export interface RootControlOperations {
   available(): boolean
   validate(request: RootCreateRequest): boolean
+  /** Tether: an async refusal before the root is reserved (Agent Hub: unknown
+   * agent, Agent Hub unreachable). `null` lets the create go ahead. */
+  refuse?(request: RootCreateRequest): Promise<MutationRejection | null>
   ensure(
     widgetId: string,
     initialPrompt: string,
@@ -244,6 +256,7 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
           'reasoningEffort',
           'daybreak',
           'agentHubContext',
+          'agentSlug',
           'instructions',
           'origin',
           'aTermSessionId',
@@ -268,12 +281,14 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     reasoningEffort = null,
     daybreak = null,
     agentHubContext = null,
+    agentSlug = null,
     instructions: rawInstructions = null,
     origin = 'aico',
     aTermSessionId = null,
     launchedBy = null,
   } = value
   const instructions = rawInstructions === null ? null : parseInstructions(rawInstructions)
+  const hub = tool === AGENT_HUB_TOOL
   if (
     (rawInstructions !== null && (!instructions || !supportsInstructions(tool as string))) ||
     (origin !== 'aico' && origin !== 'a-term') ||
@@ -285,8 +300,18 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
         !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(aTermSessionId))) ||
     typeof requestId !== 'string' ||
     !KEY.test(requestId) ||
-    !isRootTool(tool) ||
-    ((model !== null || reasoningEffort !== null || daybreak !== null) &&
+    !isRootCreateTool(tool) ||
+    // An Agent Hub root names its agent and may override the model; it has no
+    // native conversation to resume and no reasoning or daybreak switches.
+    (hub
+      ? typeof agentSlug !== 'string' ||
+        !AGENT_SLUG.test(agentSlug) ||
+        resumeSessionId != null ||
+        reasoningEffort !== null ||
+        daybreak !== null
+      : agentSlug !== null) ||
+    (!hub &&
+      (model !== null || reasoningEffort !== null || daybreak !== null) &&
       !getTui(tool)?.modelSelection) ||
     (daybreak !== null && typeof daybreak !== 'boolean') ||
     (daybreak !== null && !getTui(tool)?.modelSelection?.daybreak) ||
@@ -357,6 +382,7 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     reasoningEffort: reasoningEffort as string | null,
     daybreak: daybreak as boolean | null,
     agentHubContext: agentHubContext as boolean | null,
+    ...(hub ? { agentSlug: agentSlug as string } : {}),
     instructions,
     origin,
     aTermSessionId: (aTermSessionId as string | null) ?? null,
@@ -400,6 +426,7 @@ export function rootRequestDigest(request: RootCreateRequest): string {
             ]
           : []),
         ...(request.instructions ? [{ instructions: request.instructions.revision }] : []),
+        ...(request.agentSlug ? [{ agentSlug: request.agentSlug }] : []),
       ]),
     )
     .digest('hex')
@@ -673,14 +700,14 @@ export function createRootHandler(operations: RootControlOperations) {
         try {
           const value = await body(request)
           unsupportedTool =
-            object(value) && typeof value.tool === 'string' && !isRootTool(value.tool)
+            object(value) && typeof value.tool === 'string' && !isRootCreateTool(value.tool)
           promptLimit = promptOverLimit(value)
           parsed = parseRootCreate(value)
         } catch {
           parsed = null
         }
         if (unsupportedTool) {
-          json(response, 400, { error: 'unsupported_tool', supported: ROOT_TOOLS })
+          json(response, 400, { error: 'unsupported_tool', supported: ROOT_CREATE_TOOLS })
           return
         }
         // Refuse here: a launch this long would fail in tmux and come back
@@ -719,6 +746,11 @@ export function createRootHandler(operations: RootControlOperations) {
               json(response, 422, { error: 'launch_unavailable' })
               return
             }
+            const refused = await operations.refuse?.(input)
+            if (refused) {
+              json(response, refused.status, { error: refused.error })
+              return
+            }
             root = reserveRootRequest(
               {
                 requestId: input.requestId,
@@ -737,6 +769,13 @@ export function createRootHandler(operations: RootControlOperations) {
               input.projectId,
               input.projectRoot,
               input.aTermSessionId,
+              input.tool === AGENT_HUB_TOOL && input.agentSlug
+                ? {
+                    hubSessionId: randomUUID(),
+                    agentSlug: input.agentSlug,
+                    model: input.model ?? null,
+                  }
+                : null,
             )
             if (root.digest !== digest) {
               json(response, 409, { error: 'request_conflict' })

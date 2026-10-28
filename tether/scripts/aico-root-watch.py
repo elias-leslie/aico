@@ -221,6 +221,16 @@ class Pin:
         return cls(**data)
 
 
+@dataclasses.dataclass(frozen=True)
+class HubPin:
+    """An Agent Hub chat root: pinned by its Tether session, with no pane to read."""
+    requestId: str
+    widgetId: str
+    logicalSessionId: str
+    generation: str
+    sessionId: str
+
+
 def socket_path(value: str) -> str:
     if (not isinstance(value, str) or not value.startswith("/") or len(value.encode()) > 107
             or any(p in ("", ".", "..") for p in value[1:].split("/"))
@@ -668,7 +678,24 @@ class Collector:
         if any(owner.get(k) != v for k, v in expected.items()):
             raise IdentityChanged()
 
-    def discover(self, request_id: str | None) -> tuple[list[tuple[Pin, Collector]], list[dict]]:
+    def hub_pin(self, root: dict) -> tuple[HubPin, Collector]:
+        """Pin one agent-hub root to its Tether session (identity, no pane)."""
+        widget = root.get("hostIdentity")
+        if not isinstance(widget, str) or not re.fullmatch(WIDGET, widget):
+            raise Unavailable("receipt_invalid")
+        status, session = self.receipt(self.owner_socket, f"/v1/sessions/{widget}", timeout=1)
+        if status != 200 or session.get("backend") != "agent-hub":
+            raise Unavailable("session_unavailable")
+        if session.get("generation") != root.get("generation"):
+            raise IdentityChanged()
+        pin = HubPin(root.get("requestId"), widget, root.get("logicalSessionId"),  # type: ignore[arg-type]
+                     root.get("generation"), session.get("ownershipId"))  # type: ignore[arg-type]
+        if any(not isinstance(v, str) for v in dataclasses.astuple(pin)) \
+                or not re.fullmatch(GENERATION, pin.generation) or not re.fullmatch(KEY, pin.sessionId):
+            raise ValueError("invalid root identity")
+        return pin, HubCollector(self.root_socket, self.owner_socket, self.deadline, self.cancel)
+
+    def discover(self, request_id: str | None) -> tuple[list[tuple[Pin | HubPin, Collector]], list[dict]]:
         if request_id:
             # Exact selection reads one root, so a retained tombstone still
             # reports its ended identity without listing every tombstone.
@@ -710,6 +737,16 @@ class Collector:
             record = {"requestId": key, "observation": "unavailable", "identity": "unresolved"}
             if root.get("status") != "running":
                 unavailable.append({**record, "reason": "root_not_running"})
+                continue
+            if root.get("tool") == "agent-hub":
+                try:
+                    resolved.append(self.hub_pin(root))
+                except IdentityChanged:
+                    unavailable.append({**record, "identity": "changed"})
+                except (ValueError, TypeError):
+                    unavailable.append({**record, "reason": "receipt_invalid"})
+                except Unavailable as error:
+                    unavailable.append({**record, "reason": str(error)})
                 continue
             # Observation is per status profile (classify), unlike create, which
             # sends any tool and lets Tether refuse it.
@@ -812,7 +849,8 @@ class Collector:
                 f"{pin.tmuxSessionId}\t{pin.paneId}\taico-{pin.widgetId}\t0"):
             raise IdentityChanged()
 
-    def sample(self, pin: Pin) -> dict:
+    def sample(self, pin: Pin | HubPin) -> dict:
+        assert isinstance(pin, Pin)
         try:
             self.owners(pin)
             self.pane(pin)
@@ -831,10 +869,53 @@ class Collector:
             return {"observation": "unavailable", "identity": "pinned", "reason": str(error)}
 
 
-def watch(collector: Collector, pins: list[Pin], interval: float, failures: int,
+class HubCollector(Collector):
+    """Observes an Agent Hub chat root through Tether: its turn state, not a screen."""
+
+    def __init__(self, root_socket: str, owner_socket: str, deadline: float, cancel: threading.Event):
+        super().__init__(root_socket, owner_socket, "", deadline, cancel, discovered=True)
+
+    def sample(self, pin: Pin | HubPin) -> dict:
+        assert isinstance(pin, HubPin)
+        try:
+            status, root = self.receipt(self.root_socket, f"/v1/roots/{quote(pin.requestId)}")
+            if status != 200:
+                raise Unavailable("root_unavailable")
+            if any(root.get(k) != v for k, v in (
+                    ("requestId", pin.requestId), ("hostIdentity", pin.widgetId),
+                    ("logicalSessionId", pin.logicalSessionId))):
+                raise IdentityChanged()
+            if root.get("status") == "ended" and root.get("generation") is None:
+                raise Ended()
+            if root.get("generation") != pin.generation:
+                raise IdentityChanged()
+            if root.get("status") != "running":
+                raise Unavailable("root_not_running")
+            status, session = self.receipt(self.owner_socket, f"/v1/sessions/{pin.widgetId}", timeout=1)
+            if status != 200:
+                raise Unavailable("session_unavailable")
+            if (session.get("id") != pin.widgetId or session.get("generation") != pin.generation
+                    or session.get("ownershipId") != pin.sessionId):
+                raise IdentityChanged()
+            self.remaining()
+            # Turn state from Agent Hub: a running turn is busy, an idle session
+            # has finished its turn, anything else (Agent Hub down) is unknown.
+            terminal = {"working": "busy", "idle": "turn_finished"}.get(session.get("state"), "ambiguous")
+            return {"observation": "available", "identity": "pinned", "backend": "agent-hub",
+                    "terminal": terminal, "draft_present": False, "low_context": False,
+                    "banners": [], "markers": [] if terminal != "ambiguous" else ["agent_hub_state_unknown"]}
+        except IdentityChanged:
+            return {"observation": "unavailable", "identity": "changed"}
+        except Ended:
+            return {"observation": "unavailable", "identity": "ended"}
+        except Unavailable as error:
+            return {"observation": "unavailable", "identity": "pinned", "reason": str(error)}
+
+
+def watch(collector: Collector, pins: list[Pin | HubPin], interval: float, failures: int,
           emit: Callable[[dict], None]) -> str:
-    previous: dict[Pin, dict] = {}
-    pending: dict[Pin, tuple[dict, int]] = {}
+    previous: dict[Pin | HubPin, dict] = {}
+    pending: dict[Pin | HubPin, tuple[dict, int]] = {}
     failed = {pin: 0 for pin in pins}
     identities = {pin: dataclasses.asdict(pin) if collector.discovered else {
         "requestId": pin.requestId, "widgetId": pin.widgetId, "generation": pin.generation,
@@ -929,12 +1010,12 @@ def emit_unless_stopped(collector: Collector, record: dict) -> None:
 class ResolvedCollector(Collector):
     """Dispatch only to immutable, already verified per-root server locators."""
 
-    def __init__(self, discovery: Collector, resolved: list[tuple[Pin, Collector]]):
+    def __init__(self, discovery: Collector, resolved: list[tuple[Pin | HubPin, Collector]]):
         super().__init__(discovery.root_socket, discovery.owner_socket, "",
                          discovery.deadline, discovery.cancel, discovered=True)
         self.resolved = dict(resolved)
 
-    def sample(self, pin: Pin) -> dict:
+    def sample(self, pin: Pin | HubPin) -> dict:
         return self.resolved[pin].sample(pin)
 
 
@@ -1130,7 +1211,9 @@ def create_main(argv: list[str]) -> int:
     # Tether decides which tools can start a root (`rootCapable` in /v1/tools)
     # and its refusal names them.
     parser.add_argument("--tool", type=tool_slug, required=True, help=(
-        "required. Agent tool slug: claude-code, codex or pi."))
+        "required. Agent tool slug: claude-code, codex or pi; agent-hub starts an Agent Hub chat session instead of a terminal (needs --agent)."))
+    parser.add_argument("--agent", metavar="SLUG", help=(
+        "Agent Hub agent slug; required with --tool agent-hub, refused with any other tool"))
     parser.add_argument("--role", default="portfolio-root", help="opaque orchestration metadata")
     parser.add_argument("--work-role",
                         help="required for a new root: coordinator, implementation, research, review, recon, hunting, operations, selection, verification, reporting or other; fixed including resume")
@@ -1159,6 +1242,17 @@ def create_main(argv: list[str]) -> int:
     if args.work_role_name is not None and (not args.work_role or not args.work_role_name.strip()
             or len(args.work_role_name) > 128 or re.search(r"[\x00-\x1f\x7f]", args.work_role_name)):
         parser.error("work role name must be 1-128 characters of single-line text")
+    if args.tool == "agent-hub":
+        if args.agent is None:
+            parser.error("--tool agent-hub needs --agent SLUG")
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,99}", args.agent):
+            parser.error("invalid agent slug")
+        if (args.blank_slate or args.resume_session is not None or args.reasoning_effort is not None
+                or args.daybreak is not None or args.agent_hub_context is not None):
+            parser.error("--tool agent-hub is a chat session: drop --blank-slate, --resume-session, "
+                         "--reasoning-effort, --daybreak and --agent-hub-context")
+    elif args.agent is not None:
+        parser.error("--agent only goes with --tool agent-hub")
     if args.blank_slate:
         if args.project_root is not None or args.resume_session is not None or args.agent_hub_context is not None:
             parser.error("--blank-slate starts fresh in its own empty workspace; drop --project-root, "
@@ -1237,10 +1331,14 @@ def create_main(argv: list[str]) -> int:
             payload["instructions"] = instructions
             fields.append({"instructions": instructions["revision"]})
             output["instructions"] = {key: instructions[key] for key in ("prompt", "name", "revision")}
+        if args.agent:
+            payload["agentSlug"] = args.agent
+            fields.append({"agentSlug": args.agent})
         digest = hashlib.sha256(json.dumps(fields, ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()
         status, data = collector.receipt(endpoint, "/v1/roots", payload, timeout=10)
         errors = {400: ("invalid_body", "unsupported_tool", "work_role_required", "prompt_too_long"), 409: ("request_conflict", "recovery_pending"),
-                  422: ("launch_unavailable",), 503: ("gui_unavailable",)}
+                  422: ("launch_unavailable", "unknown_agent", "unknown_model"),
+                  503: ("gui_unavailable", "agent_hub_unavailable")}
         if status not in (200, 202):
             reason = data.get("error")
             if reason not in errors.get(status, ()):
@@ -1528,7 +1626,8 @@ def root_send(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
     The caller's generation must still be the root's and its Tether session's;
     Tether's inject route fences it again under the lifecycle lock and sends one
     bracketed paste plus Enter, which a busy harness queues as steering. Delivered
-    means the pane received it, not that the agent consumed it. Never retried."""
+    means the pane received it, not that the agent consumed it. An Agent Hub chat
+    root takes it as a turn (`queued` when one was running). Never retried."""
     if not re.fullmatch(GENERATION, args.generation):
         parser.error("--generation expects the root's exact SHA-256 generation")
     if args.stdin and args.text is not None:
@@ -1571,6 +1670,9 @@ def root_send(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
         if data.get("generation") != args.generation or data.get("delivered") is not True:
             raise Unavailable("send_receipt_unqualified")
         output.update(applied=True, delivered=True, bytes=len(text.encode("utf-8")))
+        if data.get("queued") is True:
+            # Agent Hub chat root with a turn running: held until it is idle.
+            output["queued"] = True
         emit_json(collector, output)
         return 0
     except (Unavailable, Stopped) as error:
