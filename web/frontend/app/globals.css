@@ -482,6 +482,16 @@ select {
   text-decoration: none;
 }
 
+.lantern-row.run .meta {
+  align-items: flex-start;
+  overflow: visible;
+  white-space: normal;
+}
+
+.lantern-row.run .meta > span[aria-hidden="true"] {
+  margin-top: 5px;
+}
+
 .lantern-row.is-step {
   min-height: 44px;
 }

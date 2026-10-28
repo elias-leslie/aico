@@ -190,6 +190,8 @@ export function SessionList({
     [slots, attention, runs?.items],
   )
   const folds = useTeamFolds(phone)
+  // Where a going run's plan is changed, said once for the list, not per run.
+  const planHint = runs?.items.find((member) => member.hint)?.hint ?? null
   const agentName = (mode: string) =>
     agentTools.find((tool) => tool.slug === mode)?.name ??
     (mode === 'shell' ? 'Shell' : mode)
@@ -326,6 +328,7 @@ export function SessionList({
           {runs.notice}
         </p>
       )}
+      {planHint && <p className="lantern-run-notice">{planHint}</p>}
       {teams.map((row, index) => {
         const header = !headings
           ? null

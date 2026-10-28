@@ -262,7 +262,7 @@ describe('workflow runs in the session list', () => {
     )
   })
 
-  it('shows where the plan changes on a going run, and a hint-free ended run with Dismiss', async () => {
+  it('says once where the plan of a going run changes, and gives an ended run Dismiss', async () => {
     const ended = member({
       id: 'run:r9',
       runId: 'r9',

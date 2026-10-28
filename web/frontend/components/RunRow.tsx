@@ -68,8 +68,11 @@ function RunControls({
     }
   }
 
-  const { decide, cancel, dismiss } = member.can
-  if (!decide && !cancel && !dismiss && !error && !member.hint) return null
+  const { decide, dismiss } = member.can
+  // A step that has not started goes with its run; only live work gets its own Cancel.
+  const cancel =
+    member.can.cancel && (member.kind === 'run' || member.status === 'running')
+  if (!decide && !cancel && !dismiss && !error) return null
   const cancelCopy =
     what === 'step'
       ? 'The step stops. The rest of the run carries on.'
@@ -127,7 +130,6 @@ function RunControls({
           {error}
         </p>
       )}
-      {member.hint && <p className="lantern-run-note">{member.hint}</p>}
       <ConfirmationDialog
         isOpen={confirming !== null}
         title={
@@ -213,7 +215,9 @@ export function RunRow({
         strokeWidth={1.7}
         style={{ color: 'var(--mist)' }}
       />
-      <span className="name">{member.title}</span>
+      <span className="name" title={member.title}>
+        {member.title}
+      </span>
       <span className="when">{age}</span>
       <span className="meta">
         {dot && (
@@ -223,7 +227,7 @@ export function RunRow({
             style={{ backgroundColor: dot }}
           />
         )}
-        <span className="truncate">{meta}</span>
+        <span className="line-clamp-2 min-w-0 whitespace-normal">{meta}</span>
       </span>
     </>
   )
