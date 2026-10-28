@@ -290,6 +290,71 @@ def codex_daybreak_unavailable(model: str | None) -> str | None:
     return f"Codex does not offer Daybreak on {model}; pass --model {ready or '<a Daybreak model>'} or --daybreak off"
 
 
+PI_ENV_KEY_PROBE = """
+import { readFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+const [modulePath, provider] = process.argv.slice(1);
+const keys = await import(pathToFileURL(modulePath).href);
+const everyVar = new Proxy({}, { get: () => "1", has: () => true });
+process.stdout.write(JSON.stringify({
+  known: !!keys.findEnvKeys(provider, everyVar),
+  found: !!keys.getEnvApiKey(provider, process.env),
+}));
+"""
+
+
+def pi_provider_unavailable(model: str | None) -> str | None:
+    """Why Pi cannot authenticate this model's provider, else None.
+
+    Pi opens the session and only then fails "No API key found for <provider>",
+    so a wrong alias (opencode for opencode-go) leaves an empty root. Mirrors Pi:
+    an auth.json entry under the exact provider name, a models.json custom
+    provider, or a key Pi's own env resolver finds in the launch env or
+    ~/.env.local. Best effort: a bare model, a provider Pi has no key variable
+    for, or a missing Pi install or node launches.
+    """
+    provider = model.partition("/")[0] if model and "/" in model else ""
+    if not provider:
+        return None
+    agent_dir = Path(os.environ.get("PI_CODING_AGENT_DIR") or Path.home() / ".pi" / "agent").expanduser()
+    try:
+        saved = json.loads((agent_dir / "auth.json").read_text())
+    except FileNotFoundError:
+        saved = {}
+    except (OSError, ValueError):
+        return None
+    try:
+        custom = json.loads((agent_dir / "models.json").read_text()).get("providers") or {}
+    except FileNotFoundError:
+        custom = {}
+    except (OSError, ValueError, AttributeError):
+        return None
+    if not isinstance(saved, dict) or provider in saved or provider in custom:
+        return None
+    install = Path(os.environ.get("PI_MANAGED_INSTALL_ROOT") or agent_dir / "install")
+    try:
+        version = (install / "current-version").read_text().strip()
+        env = dict(os.environ)
+        env_local = Path.home() / ".env.local"
+        for line in env_local.read_text().splitlines() if env_local.exists() else []:
+            name, sep, value = line.partition("=")
+            name = name.strip().removeprefix("export ").strip()
+            if sep and name and not name.startswith("#"):
+                env.setdefault(name, value.strip().strip("\"'"))
+        module = install / "releases" / version / "node_modules/@earendil-works/pi-ai/dist/env-api-keys.js"
+        probe = subprocess.run(["node", "--input-type=module", "-e", PI_ENV_KEY_PROBE, str(module), provider],
+                               env=env, capture_output=True, text=True, timeout=5, check=True)
+        result = json.loads(probe.stdout)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+    if not result.get("known") or result.get("found"):
+        return None
+    logins = ", ".join(sorted(name for name in saved if isinstance(name, str))) or "none"
+    # Provider names only: auth.json values are credentials.
+    return (f"Pi has no credential for provider {provider} (--model {model}): no {provider} login in auth.json "
+            f"and no key in the environment; saved logins: {logins}")
+
+
 def caller_widget_id() -> str | None:
     """The Aico widget this process runs in: AICO_WIDGET_ID, else an ancestor's."""
     value = os.environ.get("AICO_WIDGET_ID")
@@ -1086,6 +1151,9 @@ def create_main(argv: list[str]) -> int:
             prompt = "Resume this exact saved session. Reconcile current state after the crash before continuing."
         if (problem := prompt_error(prompt)) is not None:
             parser.error(problem)
+        if args.tool == "pi" and (reason := pi_provider_unavailable(args.model)):
+            # Nothing reaches Tether, so the same request id can be retried with the right provider.
+            parser.error(reason)
         if args.tool == "pi" and (block := opencode_go_quota_block(args.model)):
             # Nothing reaches Tether, so the same request id can be retried after the reset.
             parser.error(f"opencode-go quota is used up ({block}); pick another model or launch after the reset")

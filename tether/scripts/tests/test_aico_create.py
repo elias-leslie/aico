@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import shutil
 import socketserver
 import threading
 from http.server import BaseHTTPRequestHandler
@@ -20,6 +21,9 @@ def outside_aico(monkeypatch, tmp_path):
     """Run as if launched outside an Aico widget unless a test says otherwise."""
     monkeypatch.delenv("AICO_WIDGET_ID", raising=False)
     monkeypatch.setattr(admin, "PROC", tmp_path)
+    # No Pi install here, so the Pi credential check never reads the host's ~/.pi.
+    monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / "pi-agent"))
+    monkeypatch.setenv("PI_MANAGED_INSTALL_ROOT", str(tmp_path / "pi-install"))
 
 
 def fake_process(proc, pid, ppid, environ):
@@ -447,6 +451,64 @@ def test_quota_is_only_checked_for_opencode_go_models(monkeypatch):
     monkeypatch.setattr(admin.http.client, "HTTPConnection", lambda *_a, **_k: pytest.fail("quota checked"))
     assert admin.opencode_go_quota_block("openai/gpt-6-sol") is None
     assert admin.opencode_go_quota_block(None) is None
+
+
+FAKE_ENV_API_KEYS = """
+const vars = { opencode: "OPENCODE_API_KEY", "opencode-go": "OPENCODE_API_KEY" };
+export function findEnvKeys(provider, env) { const name = vars[provider]; return name && env[name] ? [name] : undefined; }
+export function getEnvApiKey(provider, env) { const name = vars[provider]; return name ? env[name] : undefined; }
+"""
+
+
+@pytest.fixture
+def pi_home(monkeypatch, tmp_path):
+    """A Pi install whose key resolver knows opencode and opencode-go, logged in to opencode-go only."""
+    if shutil.which("node") is None:
+        pytest.skip("node is required to run Pi's key resolver")
+    agent = tmp_path / "pi-agent"
+    agent.mkdir()
+    (agent / "auth.json").write_text(json.dumps({"opencode-go": {"type": "api_key", "key": "secret-fixture"}}))
+    install = tmp_path / "pi-install"
+    module = install / "releases/9.9.9/node_modules/@earendil-works/pi-ai/dist/env-api-keys.js"
+    module.parent.mkdir(parents=True)
+    module.write_text(FAKE_ENV_API_KEYS)
+    (install / "current-version").write_text("9.9.9\n")
+    monkeypatch.setattr(admin.Path, "home", lambda: tmp_path)
+    monkeypatch.delenv("OPENCODE_API_KEY", raising=False)
+    return agent
+
+
+def test_pi_launch_refuses_a_provider_pi_has_no_credential_for(monkeypatch, pi_home, capsys):
+    monkeypatch.setattr(admin.Collector, "receipt", lambda *_args, **_kwargs: pytest.fail("owner contacted"))
+    with pytest.raises(SystemExit):
+        admin.main([*PI[:-1], "opencode/sample-model"])
+    error = capsys.readouterr().err
+    assert "Pi has no credential for provider opencode (--model opencode/sample-model)" in error
+    assert "saved logins: opencode-go" in error
+    assert "secret-fixture" not in error
+
+
+def test_pi_credential_check_accepts_every_source_pi_reads(monkeypatch, pi_home, tmp_path):
+    check = admin.pi_provider_unavailable
+    assert check("opencode-go/sample-model") is None  # auth.json login under the exact name
+    assert check("madeup/sample-model") is None  # Pi has no key variable for it: Pi decides
+    assert check("sample-model") is None and check(None) is None
+    assert check("opencode/sample-model") is not None
+    monkeypatch.setenv("OPENCODE_API_KEY", "env-fixture")
+    assert check("opencode/sample-model") is None
+    monkeypatch.delenv("OPENCODE_API_KEY")
+    (tmp_path / ".env.local").write_text('export OPENCODE_API_KEY="env-local-fixture"\n')
+    assert check("opencode/sample-model") is None
+    (tmp_path / ".env.local").unlink()
+    (pi_home / "models.json").write_text(json.dumps({"providers": {"opencode": {"baseUrl": "http://fixture"}}}))
+    assert check("opencode/sample-model") is None
+
+
+def test_pi_credential_check_launches_when_pi_cannot_be_asked(monkeypatch, pi_home, tmp_path):
+    (tmp_path / "pi-install/current-version").write_text("0.0.0\n")  # resolver module missing
+    assert admin.pi_provider_unavailable("opencode/sample-model") is None
+    (pi_home / "auth.json").write_text("{not json")
+    assert admin.pi_provider_unavailable("opencode/sample-model") is None
 
 
 def test_blank_slate_creates_in_its_own_empty_workspace(monkeypatch):
