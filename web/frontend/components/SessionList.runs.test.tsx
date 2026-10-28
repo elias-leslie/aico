@@ -5,7 +5,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
-import type { RunMember } from 'tether/client'
+import type { RunMember } from 'tether/teams'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Attention } from '@/lib/attention'
 import type { WorkflowRuns } from '@/lib/hooks/use-workflow-runs'

@@ -10,13 +10,13 @@ import {
   eventSession,
   type GuiCommand,
   type GuiVerdict,
-  type RunsAnswer,
   type SessionDescriptor,
   type TetherEvent,
   type TetherTool,
   TetherUnavailable,
   type ViewerLabel,
 } from './contracts'
+import type { RunsAnswer } from './run-text'
 
 /** The holder's label from a `session.resized` event (Tether checked it on the claim). */
 function viewerOf(value: unknown): ViewerLabel | null {

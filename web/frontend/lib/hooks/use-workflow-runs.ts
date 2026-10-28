@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useMemo } from 'react'
-import type { RunDecision, RunMember, RunsAnswer } from 'tether/client'
+import type { RunDecision, RunMember, RunsAnswer } from 'tether/teams'
 import { apiFetch } from '../api-fetch'
 
 /** How often the open page asks for the workflow runs while it is visible. */

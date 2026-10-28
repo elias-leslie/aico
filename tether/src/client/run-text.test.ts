@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { RunMember } from './contracts'
+import type { RunMember } from './run-text'
 import { attemptText, modelLine, runDetail, shortModel } from './run-text'
 
 const step = (extra: Partial<RunMember>): RunMember =>

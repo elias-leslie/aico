@@ -3,7 +3,7 @@
 import { clsx } from 'clsx'
 import { ChevronRight, CornerDownRight, Workflow } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
-import type { RunMember } from 'tether/client'
+import type { RunMember } from 'tether/teams'
 import { DECISION_LABEL, DECISIONS, runDetail } from 'tether/teams'
 import { formatAge } from '@/lib/attention'
 import type { RunAct } from '@/lib/hooks/use-workflow-runs'

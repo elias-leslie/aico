@@ -3,7 +3,7 @@
 import { clsx } from 'clsx'
 import { ChevronRight, Workflow } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
-import type { RunMember } from 'tether/client'
+import type { RunMember } from 'tether/teams'
 import { foldTeams, laneTitle, type TeamRow, teamMembers } from 'tether/teams'
 import type { Attention } from '@/lib/attention'
 import { useAgentTools } from '@/lib/hooks/use-agent-tools'

@@ -18,8 +18,6 @@ import {
   parseContextHook,
   parseGuiCommand,
   type ResizeClaimAnswer,
-  type RunDecision,
-  type RunsAnswer,
   type SessionDescriptor,
   type SizeHolder,
   splitNdjson,
@@ -33,6 +31,7 @@ import {
   type Wake,
   type WakeList,
 } from './contracts'
+import type { RunDecision, RunsAnswer } from './run-text'
 
 const DEFAULT_TIMEOUT_MS = 5_000
 /** Tether sends a heartbeat every 15 s; three missed ones mean a half-open stream. */
