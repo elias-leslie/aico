@@ -2,9 +2,10 @@
 // Hub: create, lineage, state, follow-ups, tmux-only routes, End.
 
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { request } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { callSocket } from '../client'
 import { resolvePaths, type TetherPaths } from '../config'
 import { type RunningDaemon, startDaemon } from '../daemon'
@@ -186,8 +187,10 @@ describe('agent-hub sessions over the control socket', () => {
       expect((await call('GET', `/v1/sessions/${id}/${route}`)).body, route).toMatchObject({
         error: 'workload_unavailable',
       })
+    // Its view is a chat window the desktop opens; with no desktop connected
+    // there is nothing to show.
     expect((await call('POST', `/v1/sessions/${id}/show`, { generation })).body).toMatchObject({
-      error: 'workload_unavailable',
+      error: 'gui_unavailable',
     })
     const extra: Record<string, Record<string, unknown>> = {
       respawn: {},
@@ -207,6 +210,46 @@ describe('agent-hub sessions over the control socket', () => {
       note: 'check the helper',
     })
     expect(wake.status).toBe(201)
+  })
+
+  it('asks the desktop to open the chat window, on create and on show', async () => {
+    const commands: Array<Record<string, unknown>> = []
+    const channel = request({
+      socketPath: paths.socket,
+      path: '/v1/gui/channel',
+      headers: { 'x-tether-client': 'aico-gui' },
+    })
+    await new Promise<void>((resolve) => {
+      channel.on('response', (res) => {
+        let tail = ''
+        res.on('data', (chunk) => {
+          tail += chunk.toString()
+          const lines = tail.split('\n')
+          tail = lines.pop() ?? ''
+          for (const line of lines) {
+            const value = JSON.parse(line)
+            if (value.type === 'hello') resolve()
+            if (value.type === 'command') {
+              commands.push(value)
+              void call('POST', `/v1/gui/results/${value.commandId}`, { applied: true })
+            }
+          }
+        })
+      })
+      channel.end()
+    })
+    try {
+      const id = ((await create()).body as Body).hostIdentity as string
+      await vi.waitFor(() => expect(commands).toHaveLength(1))
+      expect(commands[0]).toMatchObject({ kind: 'show', sessionId: id })
+      const generation = ((await call('GET', `/v1/sessions/${id}`)).body as Body).generation
+      expect((await call('POST', `/v1/sessions/${id}/show`, { generation })).body).toEqual({
+        shown: true,
+      })
+      expect(commands).toHaveLength(2)
+    } finally {
+      channel.destroy()
+    }
   })
 
   it('ends by cancelling the turn, closing the Agent Hub session and dropping the row', async () => {

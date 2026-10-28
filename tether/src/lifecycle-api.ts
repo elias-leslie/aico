@@ -479,15 +479,30 @@ export function forwardViewMutation(
   return async (widgetId, generation, mutation) => {
     const hubRow = getWidget(widgetId)
     if (hubRow?.backend === 'agent-hub') {
-      // No pane to show or place: only the catalog's title and coordinator
-      // mark apply, on the exact running generation.
-      if (mutation.kind !== 'title' && mutation.kind !== 'coordinator') return false
+      // The view is a native chat window: the GUI opens and places it. The
+      // catalog's title and coordinator mark apply on the exact running generation.
+      const view = mutation.kind === 'show' || mutation.kind === 'position'
+      if (!view && mutation.kind !== 'title' && mutation.kind !== 'coordinator') return false
       if (generationOf(hubRow) !== generation || (await verifySessionStatus(hubRow)) !== 'running')
         return false
+      if (view) {
+        if (!gui.connected()) return { status: 503, error: 'gui_unavailable' }
+        const command: GuiMutationCommand = {
+          kind: mutation.kind,
+          sessionId: hubRow.id,
+          generation,
+        }
+        if (mutation.kind === 'position') command.bounds = mutation.bounds as Bounds
+        const outcome = await gui.send(command)
+        if (outcome.status === 'unavailable') return { status: 503, error: 'gui_unavailable' }
+        if (outcome.status === 'timeout') return { status: 409, error: 'outcome_uncertain' }
+        if (outcome.status === 'rejected') return { status: 409, error: outcome.error }
+        return true
+      }
       if (mutation.kind === 'title') {
         setWidgetName(hubRow.id, mutation.label)
         notifySessionChanged(hubRow.id, { force: true })
-      } else applyCoordinator(hubRow.id, mutation.coordinator)
+      } else if (mutation.kind === 'coordinator') applyCoordinator(hubRow.id, mutation.coordinator)
       return true
     }
     if (!gui.connected()) {
@@ -560,7 +575,15 @@ export function rootOperations(context: LifecycleApiContext): RootControlOperati
       if (row?.backend === 'agent-hub') {
         await agentHub?.ensure(widgetId, prompt)
         const latest = getWidget(widgetId)
-        if (latest) await verifySessionStatus(latest).catch(() => undefined)
+        const status = latest ? await verifySessionStatus(latest).catch(() => undefined) : undefined
+        if (latest && status === 'running' && opensRootWindow(latest) && context.gui.connected()) {
+          // The new chat gets its window, as a terminal root does. Best effort: the GUI decides.
+          void context.gui.send({
+            kind: 'show',
+            sessionId: latest.id,
+            generation: generationOf(latest),
+          })
+        }
         context.events.publish('root.updated', { id: widgetId })
         return
       }
