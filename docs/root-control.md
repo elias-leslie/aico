@@ -245,9 +245,14 @@ copy into the pane.
 are passed literally, without a hardcoded model catalog. Native Codex validates
 availability and whether the selected model supports the effort. The options
 apply to fresh and exact-resume launches, are included in the request digest,
-and do not alter persistent defaults. Use `--daybreak off` when the connected
-server cannot confirm Daybreak support for the requested model; omit it to
-inherit the user's setting. A nonempty selection appends
+and do not alter persistent defaults. Codex Daybreak is per model and per
+account: Codex's own catalog (`~/.codex/models_cache.json`, a model's
+`available_access_programs.cyber` containing `daybreak_blue`) decides, and
+Codex itself fails the first turn with "Daybreak is unavailable for model ..."
+otherwise. `st aico create --tool codex --daybreak on` checks that catalog first
+and refuses a model it lists without Daybreak, naming the models that have it;
+pick one of those or pass `--daybreak off`. Omit `--daybreak` to inherit the
+user's setting. A nonempty selection appends
 `{model: string|null, reasoningEffort: string|null, daybreak?: boolean, agentHubContext?: boolean}` after the existing digest
 fields, preserving digests for callers that omit both fields.
 

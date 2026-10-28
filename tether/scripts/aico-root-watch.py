@@ -287,7 +287,7 @@ def codex_daybreak_unavailable(model: str | None) -> str | None:
     if not any(entry.get("slug") == model and daybreak(entry) is False for entry in models):
         return None
     ready = ", ".join(str(entry.get("slug")) for entry in models if daybreak(entry) and entry.get("visibility") != "hide")
-    return f"Codex does not offer Daybreak on {model}; pass --model {ready or '<a Daybreak model>'} or --daybreak off"
+    return f"Codex's model catalog for this account does not offer Daybreak on {model}; pass --model {ready or '<a Daybreak model>'} or --daybreak off"
 
 
 PI_ENV_KEY_PROBE = """
@@ -1100,7 +1100,9 @@ def create_main(argv: list[str]) -> int:
     parser.add_argument("--resume-session", help="exact native session ID: Claude/Codex/Pi UUID; owner adapter validates format/support")
     parser.add_argument("--model", help="per-launch model; Pi requires provider/model")
     parser.add_argument("--reasoning-effort", choices=("none", "off", "minimal", "low", "medium", "high", "xhigh", "max"))
-    parser.add_argument("--daybreak", choices=("on", "off"), help="Daybreak for this launch; Pi supports openai/gpt-6-sol; leaves shared defaults alone")
+    parser.add_argument("--daybreak", choices=("on", "off"), help="Daybreak for this launch; leaves shared defaults alone. Codex: only models its catalog lists with "
+                        "Daybreak for this account (on any other, create refuses and names the ones that have it); "
+                        "Pi: openai/gpt-6-sol only")
     parser.add_argument("--agent-hub-context", choices=("on", "off"), help="Pi optional Agent Hub context; off retains required policy, native/project instructions and ingestion")
     parser.add_argument("--blank-slate", action="store_true", help=(
         "fresh session in a new empty workspace with no Agent Hub, project, memory, skill, plugin, MCP or "
