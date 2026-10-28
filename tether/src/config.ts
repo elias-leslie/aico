@@ -5,8 +5,9 @@ import { join } from 'node:path'
  * 2: resize claims carry a viewer label (still accepted without one).
  * 3: session wakes; End takes `keepWakes`.
  * 4: shares link files where they are (`paths`); GET /v1/shares lists them.
- * 5: Agent Hub chat routes (`/chat`, `/chat/stream`, `/chat/cancel`, `/v1/chat/models`). */
-export const API_VERSION = 5
+ * 5: Agent Hub chat routes (`/chat`, `/chat/stream`, `/chat/cancel`, `/v1/chat/models`).
+ * 6: an Agent Hub session's `inject` takes `model` (a catalog model for that turn; null for the agent's own routing). */
+export const API_VERSION = 6
 
 /** The one instance that keeps Aico's names and adopts historical servers. */
 export const DEFAULT_INSTANCE = 'default'

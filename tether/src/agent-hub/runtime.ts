@@ -39,6 +39,7 @@ import {
   removeAgentHubQueued,
   removeWidgetIfOwnership,
   rootRequestForWidget,
+  setAgentHubModel,
   type WidgetRow,
 } from '../lifecycle/catalog'
 import type { EndResult, SessionStatus } from '../lifecycle/engine'
@@ -262,7 +263,12 @@ export class AgentHubRuntime {
   /** Post one user message as a turn and return once Agent Hub has accepted it
    * (its `connected` event). The turn runs on the server and does not need
    * this connection, so it is closed straight away. */
-  private async startTurn(row: WidgetRow, hub: AgentHubSessionRow, text: string): Promise<void> {
+  private async startTurn(
+    row: WidgetRow,
+    hub: AgentHubSessionRow,
+    text: string,
+    model: string | null = hub.model,
+  ): Promise<void> {
     const controller = new AbortController()
     this.inflight.add(controller)
     const timeout = setTimeout(() => controller.abort(), CONNECT_TIMEOUT_MS)
@@ -271,7 +277,7 @@ export class AgentHubRuntime {
         messages: [{ role: 'user', content: text }],
         project_id: row.projectId ?? '',
         agent_slug: hub.agentSlug,
-        ...(hub.model ? { model: hub.model } : {}),
+        ...(model ? { model } : {}),
         session_id: hub.hubSessionId,
         external_id: row.sessionId,
         working_dir: row.projectRoot,
@@ -307,33 +313,43 @@ export class AgentHubRuntime {
   /**
    * Deliver a follow-up: now when the session is idle, else queued until it
    * is. Refuses while the session is not started or Agent Hub is unreachable.
+   * `model` is the catalog model for this turn (null: the agent's own routing);
+   * left out, the turn takes the session's model. A queued follow-up keeps the
+   * model it was sent with, and the choice is remembered as the session's.
    */
-  send(widgetId: string, text: string): Promise<{ queued: boolean }> {
+  send(widgetId: string, text: string, model?: string | null): Promise<{ queued: boolean }> {
     return this.serial(widgetId, async () => {
       const row = getWidget(widgetId)
       const hub = getAgentHubSession(widgetId)
       if (!row || !hub || row.backend !== 'agent-hub') throw new HubError('not_started', 'gone')
       if (!hub.created || !hub.promptSent)
         throw new HubError('not_started', 'the first prompt has not been posted')
+      const turnModel = model === undefined ? hub.model : model
+      if (turnModel && turnModel !== hub.model) await this.resolve(hub.agentSlug, turnModel)
       const observed = await this.observe(row, hub)
       if (!observed.reachable)
         throw new HubError('agent_hub_unavailable', 'Agent Hub is not reachable')
       if (observed.missing || observed.hubStatus !== LIVE_STATUS)
         throw new HubError('not_started', 'the Agent Hub session is closed')
-      if (observed.turnState === 'running' || agentHubQueueLength(widgetId) > 0) {
-        enqueueAgentHubText(widgetId, text, this.now())
+      const remember = () => {
+        if (turnModel !== hub.model) setAgentHubModel(widgetId, turnModel)
         this.options.notify(widgetId)
+      }
+      if (observed.turnState === 'running' || agentHubQueueLength(widgetId) > 0) {
+        enqueueAgentHubText(widgetId, text, this.now(), turnModel)
+        remember()
         return { queued: true }
       }
       try {
-        await this.startTurn(row, hub, text)
+        await this.startTurn(row, hub, text, turnModel)
       } catch (error) {
         const failure = classifyHubError(error)
         if (failure.code !== 'turn_running') throw failure
-        enqueueAgentHubText(widgetId, text, this.now())
-        this.options.notify(widgetId)
+        enqueueAgentHubText(widgetId, text, this.now(), turnModel)
+        remember()
         return { queued: true }
       }
+      if (turnModel !== hub.model) remember()
       return { queued: false }
     })
   }
@@ -524,7 +540,7 @@ export class AgentHubRuntime {
       const next = peekAgentHubQueue(widgetId)
       if (!row || !hub || !next) return
       try {
-        await this.startTurn(row, hub, next.text)
+        await this.startTurn(row, hub, next.text, next.model === undefined ? hub.model : next.model)
       } catch (error) {
         const failure = classifyHubError(error)
         if (failure.code === 'agent_hub_refused') {

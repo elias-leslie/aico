@@ -211,6 +211,57 @@ describe('AgentHubRuntime', () => {
     expect(session?.messages.at(-1)).toBe('Fourth.')
   })
 
+  it('sends each turn with the model chosen for it, queued ones included', async () => {
+    hub.models.push({ id: 'other-model', provider: 'fake', routable: true })
+    hub.models.push({ id: 'third-model', provider: 'fake', routable: true })
+    const row = root()
+    await runtime.ensure(row.id, 'First.')
+    const session = hub.sessions.get(hubId(row))
+    const turns = () =>
+      hub.requests
+        .filter((r) => r.method === 'POST' && r.path === '/api/complete')
+        .map((r) => (r.body as { model?: string }).model)
+    expect(turns()).toEqual([undefined])
+    // Queued while the first turn runs: each keeps the model it was sent with.
+    await runtime.send(row.id, 'Second.', 'other-model')
+    await runtime.send(row.id, 'Third.', 'third-model')
+    expect(getAgentHubSession(row.id)?.model).toBe('third-model')
+    hub.finishTurn(hubId(row))
+    await runtime.tick()
+    hub.finishTurn(hubId(row))
+    await runtime.tick()
+    expect(session?.messages).toEqual(['First.', 'Second.', 'Third.'])
+    expect(turns()).toEqual([undefined, 'other-model', 'third-model'])
+    // Sent with no model: the session's last choice. Null: the agent's own routing.
+    hub.finishTurn(hubId(row))
+    await runtime.send(row.id, 'Fourth.')
+    hub.finishTurn(hubId(row))
+    await runtime.send(row.id, 'Fifth.', null)
+    expect(turns().slice(3)).toEqual(['third-model', undefined])
+    expect(getAgentHubSession(row.id)?.model).toBeNull()
+  })
+
+  it('refuses a model Agent Hub cannot route, and queues nothing for it', async () => {
+    const row = root()
+    await runtime.ensure(row.id, 'First.')
+    await expect(runtime.send(row.id, 'Second.', 'nope')).rejects.toMatchObject({
+      code: 'unknown_model',
+    })
+    expect(agentHubQueueLength(row.id)).toBe(0)
+    expect(getAgentHubSession(row.id)?.model).toBeNull()
+  })
+
+  it('sends a follow-up queued before models were kept with the session model', async () => {
+    const row = root('r1', 'cheap-model')
+    await runtime.ensure(row.id, 'First.')
+    await runtime.send(row.id, 'Second.')
+    store.db.exec('UPDATE agent_hub_queue SET model = NULL')
+    hub.finishTurn(hubId(row))
+    await runtime.tick()
+    const bodies = hub.requests.filter((r) => r.path === '/api/complete').map((r) => r.body)
+    expect(bodies.at(-1)).toMatchObject({ model: 'cheap-model' })
+  })
+
   it('refuses a follow-up before the first prompt, or while Agent Hub is down', async () => {
     const row = root()
     await expect(runtime.send(row.id, 'Too early.')).rejects.toMatchObject({

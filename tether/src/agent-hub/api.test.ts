@@ -180,6 +180,31 @@ describe('agent-hub sessions over the control socket', () => {
     ).toBe(400)
   })
 
+  it('takes a model with a follow-up, and refuses a bad or unroutable one', async () => {
+    hub.models.push({ id: 'other-model', provider: 'fake', routable: true })
+    const id = ((await create()).body as Body).hostIdentity as string
+    const generation = ((await call('GET', `/v1/sessions/${id}`)).body as Body).generation
+    const send = (extra: Record<string, unknown>) =>
+      call('POST', `/v1/sessions/${id}/inject`, {
+        generation,
+        text: 'Next.',
+        mode: 'paste',
+        submit: true,
+        ...extra,
+      })
+    const [hubSession] = [...hub.sessions.values()]
+    hub.finishTurn(hubSession.id)
+    expect((await send({ model: 'other-model' })).body).toMatchObject({ queued: false })
+    const last = hub.requests.filter((r) => r.path === '/api/complete').at(-1)
+    expect(last?.body).toMatchObject({ model: 'other-model' })
+    expect(((await call('GET', `/v1/sessions/${id}`)).body as Body).agentHub).toMatchObject({
+      requestedModel: 'other-model',
+    })
+    expect((await send({ model: 'nope' })).body).toMatchObject({ error: 'workload_unavailable' })
+    expect((await send({ model: 5 })).status).toBe(400)
+    expect((await send({ model: '' })).status).toBe(400)
+  })
+
   it('refuses the pane-only routes and keeps naming and wakes working', async () => {
     const id = ((await create()).body as Body).hostIdentity as string
     const generation = ((await call('GET', `/v1/sessions/${id}`)).body as Body).generation

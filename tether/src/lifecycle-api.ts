@@ -430,6 +430,7 @@ async function deliverToAgentHub(
   row: WidgetRow,
   generation: string,
   text: string,
+  model?: string | null,
 ): Promise<{ queued: boolean }> {
   if (!agentHub) throw new HttpError(503, 'agent_hub_unavailable')
   const current = getWidget(row.id)
@@ -437,7 +438,7 @@ async function deliverToAgentHub(
   if ((await verifySessionStatus(current)) !== 'running')
     throw new HttpError(409, 'workload_unavailable')
   try {
-    return await agentHub.send(row.id, text)
+    return await agentHub.send(row.id, text, model)
   } catch (error) {
     if (!(error instanceof HubError)) throw error
     if (error.code === 'agent_hub_unavailable') throw new HttpError(503, 'agent_hub_unavailable')
@@ -1031,7 +1032,7 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
     })
     .add('POST', '/v1/sessions/:id/inject', async (req, res, params) => {
       const body = await readJsonObject(req)
-      only(body, ['generation', 'text', 'mode', 'submit'])
+      only(body, ['generation', 'text', 'mode', 'submit', 'model'])
       const generation = requireGeneration(body)
       if (!isBoundedTerminalText(body.text)) throw new HttpError(400, 'invalid_text')
       const text = body.text
@@ -1041,14 +1042,24 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
         throw new HttpError(400, 'invalid_body', { field: 'submit' })
       if (body.mode === 'type' && body.submit)
         throw new HttpError(400, 'invalid_body', { field: 'submit' })
+      // The catalog model for this turn of an Agent Hub session; null asks for the agent's own routing.
+      const model = body.model
+      if (
+        model !== undefined &&
+        model !== null &&
+        (typeof model !== 'string' || model.length < 1 || model.length > 128)
+      )
+        throw new HttpError(400, 'invalid_body', { field: 'model' })
       const row = requireSession(params.id)
       fence(row, generation)
       await whenReady()
+      if (model !== undefined && row.backend !== 'agent-hub')
+        throw new HttpError(400, 'invalid_body', { field: 'model' })
       if (row.backend === 'agent-hub') {
         // A follow-up is a turn; typing keystrokes has no meaning here.
         if (body.mode !== 'paste' || body.submit !== true)
           throw new HttpError(400, 'invalid_body', { field: 'mode' })
-        const { queued } = await deliverToAgentHub(row, generation, text)
+        const { queued } = await deliverToAgentHub(row, generation, text, model)
         sendJson(res, 200, { generation, delivered: true, queued })
         return
       }

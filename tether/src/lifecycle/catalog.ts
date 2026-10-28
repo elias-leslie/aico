@@ -1162,21 +1162,40 @@ export function markAgentHubPromptSent(sessionId: string): void {
 export interface AgentHubQueued {
   id: number
   text: string
+  /** The model the follow-up was sent with: a catalog model id, null for the
+   * agent's own routing, undefined for a row queued before models were kept
+   * (it takes the session's model). */
+  model: string | null | undefined
 }
 
-export function enqueueAgentHubText(sessionId: string, text: string, now = Date.now()): void {
-  db.prepare('INSERT INTO agent_hub_queue (session_id, text, created_at) VALUES (?, ?, ?)').run(
-    sessionId,
-    text,
-    now,
-  )
+/** Queue a follow-up with the model it was sent with (null: the agent's own routing). */
+export function enqueueAgentHubText(
+  sessionId: string,
+  text: string,
+  now = Date.now(),
+  model: string | null = null,
+): void {
+  db.prepare(
+    'INSERT INTO agent_hub_queue (session_id, text, created_at, model) VALUES (?, ?, ?, ?)',
+  ).run(sessionId, text, now, model ?? '')
 }
 
 /** The oldest queued follow-up, if any. */
 export function peekAgentHubQueue(sessionId: string): AgentHubQueued | undefined {
-  return db
-    .prepare('SELECT id, text FROM agent_hub_queue WHERE session_id = ? ORDER BY id LIMIT 1')
-    .get(sessionId) as AgentHubQueued | undefined
+  const row = db
+    .prepare('SELECT id, text, model FROM agent_hub_queue WHERE session_id = ? ORDER BY id LIMIT 1')
+    .get(sessionId) as { id: number; text: string; model: string | null } | undefined
+  if (!row) return undefined
+  return {
+    id: row.id,
+    text: row.text,
+    model: row.model === null ? undefined : row.model === '' ? null : row.model,
+  }
+}
+
+/** Remember the model the owner last chose for the session (null: the agent's own routing). */
+export function setAgentHubModel(sessionId: string, model: string | null): void {
+  db.prepare('UPDATE agent_hub_sessions SET model = ? WHERE session_id = ?').run(model, sessionId)
 }
 
 /** Every queued follow-up text, oldest first. */
