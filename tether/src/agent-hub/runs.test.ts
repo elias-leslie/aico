@@ -84,7 +84,7 @@ describe('runMembers', () => {
         {
           pause: {
             reason: 'step_failed',
-            at: '2026-10-28T11:30:00Z',
+            at: '2026-10-28T11:30:00Z' as never, // older Agent Hub text time; the SDK now types epoch seconds
             waiting: { b: { reason: 'step_failed' } },
           },
         },
@@ -115,7 +115,7 @@ describe('runMembers', () => {
         pause: {
           reason: 'step_failed',
           step_key: 'make',
-          at: 1793230241.99 as never, // Agent Hub sends epoch seconds; the SDK types it as text
+          at: 1793230241.99,
           failed: {
             make: { status: 'failed', reason: 'max_attempts: acceptance_failed', error: null },
           },
@@ -137,7 +137,7 @@ describe('runMembers', () => {
   it('decides a pause that names no step on the run, and nothing for blocked dependencies', () => {
     const integration = runMembers(
       view('r3', 'needs_owner', [step('a', 'completed')], {
-        pause: { reason: 'integration_conflict', at: '2026-10-28T11:30:00Z' },
+        pause: { reason: 'integration_conflict', at: '2026-10-28T11:30:00Z' as never },
       }),
       CTX,
     )
