@@ -24,6 +24,8 @@ def outside_aico(monkeypatch, tmp_path):
     # No Pi install here, so the Pi credential check never reads the host's ~/.pi.
     monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / "pi-agent"))
     monkeypatch.setenv("PI_MANAGED_INSTALL_ROOT", str(tmp_path / "pi-install"))
+    # Nor the Codex model checks the host's ~/.codex.
+    monkeypatch.setattr(admin.Path, "home", lambda: tmp_path)
 
 
 def fake_process(proc, pid, ppid, environ):
@@ -262,6 +264,57 @@ def test_codex_daybreak_on_a_model_without_it_is_refused_before_tether(monkeypat
     else:
         assert admin.main([*BASE, *args]) == 0
         assert len(calls) == 1
+
+
+@pytest.mark.parametrize("args, error", [
+    (["--model", "openai/gpt-6.1-sol"], "pass --model gpt-6.1-sol, not openai/gpt-6.1-sol"),
+    (["--model", "openai/gpt-6-sol", "--daybreak", "on"], "pass --model gpt-6-sol, not openai/gpt-6-sol"),
+    (["--model", "gpt-9"], "has no gpt-9; pass --model with one of: gpt-6.1-sol, gpt-6-sol"),
+    (["--model", "gpt-6.1-sol", "--reasoning-effort", "xhigh", "--daybreak", "off"], None),
+    (["--model", "internal"], None),  # hidden from the picker, still served
+    ([], None),
+])
+def test_codex_model_missing_from_its_catalog_is_refused_before_tether(monkeypatch, tmp_path, capsys, args, error):
+    """Codex sends the slug as given, so a name the account lacks fails the first turn with model_not_found."""
+    (tmp_path / ".codex").mkdir()
+    (tmp_path / ".codex/config.toml").write_text('model = "gpt-6.1-sol"\n')
+    (tmp_path / ".codex/auth.json").write_text(json.dumps({"auth_mode": "chatgpt"}))
+    (tmp_path / ".codex/models_cache.json").write_text(json.dumps({"models": [
+        {"slug": "gpt-6.1-sol", "available_access_programs": {"cyber": ["standard"]}},
+        {"slug": "gpt-6-sol", "available_access_programs": {"cyber": ["standard", "daybreak_blue"]}},
+        {"slug": "internal", "visibility": "hide", "available_access_programs": {"cyber": ["daybreak_blue"]}}]}))
+    calls = []
+
+    def receipt(_, endpoint, route, payload, **kwargs):
+        calls.append(payload)
+        return 200, descriptor(payload)
+
+    monkeypatch.setattr(admin.Collector, "receipt", receipt)
+    if error:
+        with pytest.raises(SystemExit):
+            admin.main([*BASE, *args])
+        assert not calls
+        assert error in capsys.readouterr().err
+    else:
+        assert admin.main([*BASE, *args]) == 0
+        assert len(calls) == 1
+
+
+@pytest.mark.parametrize("config, auth", [
+    ('model_provider = "ollama"\n', {"auth_mode": "chatgpt"}),
+    ('profile = "local"\n[profiles.local]\nmodel_provider = "ollama"\n', {"auth_mode": "chatgpt"}),
+    ("", {"auth_mode": "apikey"}),
+    ("", None),
+])
+def test_codex_model_check_leaves_other_providers_and_logins_alone(tmp_path, config, auth):
+    """The cached catalog is the ChatGPT login's; API keys and custom providers serve other names."""
+    (tmp_path / ".codex").mkdir()
+    (tmp_path / ".codex/config.toml").write_text(config)
+    if auth is not None:
+        (tmp_path / ".codex/auth.json").write_text(json.dumps(auth))
+    (tmp_path / ".codex/models_cache.json").write_text(json.dumps({"models": [{"slug": "gpt-6.1-sol"}]}))
+    assert admin.codex_model_unavailable("qwen3-coder") is None
+    assert admin.codex_model_unavailable(None) is None
 
 
 def fresh(tool):

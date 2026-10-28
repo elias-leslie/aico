@@ -265,6 +265,48 @@ def opencode_go_quota_block(model: str | None) -> str | None:
     return None
 
 
+def codex_catalog() -> tuple[dict, list[dict]] | None:
+    """Codex's config.toml and the model catalog it caches for this account, or None if unreadable."""
+    codex = Path.home() / ".codex"
+    try:
+        config = tomllib.loads((codex / "config.toml").read_text())
+        models = [entry for entry in json.loads((codex / "models_cache.json").read_text()).get("models") or []
+                  if isinstance(entry, dict)]
+    except (OSError, ValueError, AttributeError):
+        return None
+    return config, models
+
+
+def codex_model_unavailable(model: str | None) -> str | None:
+    """Why Codex's catalog for this account has no model by this name, else None.
+
+    Codex sends the slug as given, so a name its ChatGPT login lacks
+    (openai/gpt-6.1-sol for gpt-6.1-sol) fails the first turn with 400
+    model_not_found and leaves an idle root. Best effort: no --model, an
+    unreadable config/cache, an empty catalog, an API key login or a custom
+    model provider launches.
+    """
+    catalog = codex_catalog()
+    if not model or catalog is None or not catalog[1]:
+        return None
+    config, models = catalog
+    profiles = config.get("profiles")
+    profile = profiles.get(str(config.get("profile"))) if isinstance(profiles, dict) else None
+    provider = (profile if isinstance(profile, dict) else {}).get("model_provider") or config.get("model_provider") or "openai"
+    try:
+        login = json.loads((Path.home() / ".codex" / "auth.json").read_text()).get("auth_mode")
+    except (OSError, ValueError, AttributeError):
+        login = None
+    slugs = [str(entry.get("slug")) for entry in models if entry.get("slug")]
+    if provider != "openai" or login != "chatgpt" or model in slugs:
+        return None
+    bare = model.rpartition("/")[2]
+    if bare in slugs:
+        return f"Codex takes bare model names: pass --model {bare}, not {model}"
+    listed = ", ".join(str(entry.get("slug")) for entry in models if entry.get("slug") and entry.get("visibility") != "hide")
+    return f"Codex's model catalog for this account has no {model}; pass --model with one of: {listed}"
+
+
 def codex_daybreak_unavailable(model: str | None) -> str | None:
     """Why a Codex Daybreak launch on this model (or the configured default) cannot start, else None.
 
@@ -272,13 +314,11 @@ def codex_daybreak_unavailable(model: str | None) -> str | None:
     which leaves a TUI root idle with no turn. Best effort: an unreadable
     config/cache or an unknown model launches.
     """
-    codex = Path.home() / ".codex"
-    try:
-        model = model or tomllib.loads((codex / "config.toml").read_text()).get("model")
-        models = [entry for entry in json.loads((codex / "models_cache.json").read_text()).get("models") or []
-                  if isinstance(entry, dict)]
-    except (OSError, ValueError, AttributeError):
+    catalog = codex_catalog()
+    if catalog is None:
         return None
+    config, models = catalog
+    model = model or config.get("model")
 
     def daybreak(entry: dict) -> bool | None:
         access = (entry.get("available_access_programs") or {}).get("cyber")
@@ -1098,7 +1138,7 @@ def create_main(argv: list[str]) -> int:
     parser.add_argument("--lead-root")
     parser.add_argument("--facet")
     parser.add_argument("--resume-session", help="exact native session ID: Claude/Codex/Pi UUID; owner adapter validates format/support")
-    parser.add_argument("--model", help="per-launch model; Pi requires provider/model")
+    parser.add_argument("--model", help="per-launch model; Pi requires provider/model, Codex a bare name from its catalog (gpt-6.1-sol)")
     parser.add_argument("--reasoning-effort", choices=("none", "off", "minimal", "low", "medium", "high", "xhigh", "max"))
     parser.add_argument("--daybreak", choices=("on", "off"), help="Daybreak for this launch; leaves shared defaults alone. Codex: only models its catalog lists with "
                         "Daybreak for this account (on any other, create refuses and names the ones that have it); "
@@ -1159,6 +1199,9 @@ def create_main(argv: list[str]) -> int:
         if args.tool == "pi" and (block := opencode_go_quota_block(args.model)):
             # Nothing reaches Tether, so the same request id can be retried after the reset.
             parser.error(f"opencode-go quota is used up ({block}); pick another model or launch after the reset")
+        if args.tool == "codex" and (reason := codex_model_unavailable(args.model)):
+            # Nothing reaches Tether, so the same request id can be retried with the right model.
+            parser.error(reason)
         if args.tool == "codex" and args.daybreak == "on" and (reason := codex_daybreak_unavailable(args.model)):
             parser.error(reason)
         instructions = None

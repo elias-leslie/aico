@@ -251,7 +251,12 @@ account: Codex's own catalog (`~/.codex/models_cache.json`, a model's
 Codex itself fails the first turn with "Daybreak is unavailable for model ..."
 otherwise. `st aico create --tool codex --daybreak on` checks that catalog first
 and refuses a model it lists without Daybreak, naming the models that have it;
-pick one of those or pass `--daybreak off`. Omit `--daybreak` to inherit the
+pick one of those or pass `--daybreak off`. Codex takes a bare model name
+(`gpt-6.1-sol`) and sends it as given, so a name the ChatGPT login's catalog
+lacks (`openai/gpt-6.1-sol`) fails the first turn with 400 `model_not_found`;
+`st aico create --tool codex --model` refuses such a name before creating the
+root, naming the bare slug or the listed models. An API key login, a custom
+`model_provider` or an unreadable catalog skips that check. Omit `--daybreak` to inherit the
 user's setting. A nonempty selection appends
 `{model: string|null, reasoningEffort: string|null, daybreak?: boolean, agentHubContext?: boolean}` after the existing digest
 fields, preserving digests for callers that omit both fields.
