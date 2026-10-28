@@ -23,8 +23,11 @@ export const isActiveRun = (state: string | undefined | null): boolean =>
   ACTIVE_RUN.has(state ?? '')
 export const isEndedRun = (state: string | undefined | null): boolean => ENDED_RUN.has(state ?? '')
 
-/** Agent Hub sends ISO times, sometimes without a zone (UTC). */
+/** Agent Hub sends ISO times, sometimes without a zone (UTC), and a pause's
+ * time as epoch seconds. */
 export function parseTime(value: unknown): number | null {
+  if (typeof value === 'number')
+    return Number.isFinite(value) ? (value < 1e11 ? value * 1000 : value) : null
   if (typeof value !== 'string' || !value) return null
   const zoned = /(Z|[+-]\d\d:?\d\d)$/.test(value) ? value : `${value}Z`
   const at = Date.parse(zoned)
@@ -110,15 +113,18 @@ const SUMMARY_ORDER = [
 export const runMemberId = (runId: string): string => `run:${runId}`
 export const stepMemberId = (runId: string, key: string): string => `step:${runId}:${key}`
 
-/** The steps the owner is asked about, with the time each began waiting. */
+/** The steps the owner is asked about, with the time each began waiting.
+ * A step that failed is listed in `pause.failed`, not `pause.waiting`; a pause
+ * saved before either existed names its one step itself. */
 function waitingSteps(view: RunView): Map<string, { at: number | null; reason: string | null }> {
   const pause = view.pause
   const out = new Map<string, { at: number | null; reason: string | null }>()
   if (view.state !== 'needs_owner' || !pause) return out
-  // A pause saved before the list existed names its one step itself.
   const stepKey = typeof pause.step_key === 'string' ? pause.step_key : null
+  const failed = pause.reason === 'step_failed' ? asEntries(pause.failed) : null
   const listed =
-    pause.waiting ??
+    asEntries(pause.waiting) ??
+    failed ??
     (stepKey && pause.reason !== 'step_failed' && pause.reason !== 'blocked_dependencies'
       ? { [stepKey]: null }
       : {})
@@ -129,6 +135,12 @@ function waitingSteps(view: RunView): Map<string, { at: number | null; reason: s
     })
   }
   return out
+}
+
+function asEntries(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null
 }
 
 /** The attempt the step is on now (the latest), if it has one. */

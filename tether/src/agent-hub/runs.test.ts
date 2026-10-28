@@ -109,6 +109,31 @@ describe('runMembers', () => {
     })
   })
 
+  it('decides a failed step Agent Hub lists in the pause failed list, with a time in epoch seconds', () => {
+    const [run, make, after] = runMembers(
+      view('r6', 'needs_owner', [step('make', 'failed'), step('after', 'pending')], {
+        pause: {
+          reason: 'step_failed',
+          step_key: 'make',
+          at: 1793230241.99,
+          failed: {
+            make: { status: 'failed', reason: 'max_attempts: acceptance_failed', error: null },
+          },
+          blocked: { after: { state: 'blocked', reason: 'blocked by make (failed)' } },
+        },
+      }),
+      CTX,
+    )
+    expect(run).toMatchObject({ group: 'needs-you', at: 1793230241990, can: { decide: false } })
+    expect(make).toMatchObject({
+      group: 'needs-you',
+      word: 'waiting for you',
+      reason: 'max attempts: acceptance failed',
+      can: { decide: true },
+    })
+    expect(after).toMatchObject({ group: 'idle', can: { decide: false } })
+  })
+
   it('decides a pause that names no step on the run, and nothing for blocked dependencies', () => {
     const integration = runMembers(
       view('r3', 'needs_owner', [step('a', 'completed')], {
