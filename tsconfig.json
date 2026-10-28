@@ -13,8 +13,9 @@
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
     "forceConsistentCasingInFileNames": true,
+    "jsx": "react-jsx",
     "types": ["node"]
   },
-  "include": ["electron/**/*.ts", "vitest.config.ts", "electron.vite.config.ts"],
+  "include": ["electron/**/*.ts", "electron/**/*.tsx", "vitest.config.ts", "electron.vite.config.ts"],
   "exclude": ["node_modules", "dist", "out"]
 }

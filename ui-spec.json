@@ -42,7 +42,8 @@
       "web/frontend/app/**/*.tsx",
       "web/frontend/components/**/*.tsx",
       "web/frontend/lib/**/*.ts",
-      "web/frontend/lib/**/*.tsx"
+      "web/frontend/lib/**/*.tsx",
+      "electron/renderer/chat/**/*.tsx"
     ],
     "exclude": ["**/*.test.tsx", "**/*.test.ts", "web/frontend/lib/generated/**"]
   }
