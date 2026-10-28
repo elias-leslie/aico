@@ -1179,6 +1179,14 @@ export function peekAgentHubQueue(sessionId: string): AgentHubQueued | undefined
     .get(sessionId) as AgentHubQueued | undefined
 }
 
+/** Every queued follow-up text, oldest first. */
+export function listAgentHubQueue(sessionId: string): string[] {
+  const rows = db
+    .prepare('SELECT text FROM agent_hub_queue WHERE session_id = ? ORDER BY id')
+    .all(sessionId) as { text: string }[]
+  return rows.map((row) => row.text)
+}
+
 export function removeAgentHubQueued(id: number): void {
   db.prepare('DELETE FROM agent_hub_queue WHERE id = ?').run(id)
 }

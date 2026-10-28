@@ -15,7 +15,7 @@ Status: every route below is implemented (Phase 3a). Additions made for the web 
 - Bodies are JSON (`content-type: application/json`, at most 128 KiB) and must be objects. Unknown fields are rejected with `400 invalid_body`, never ignored. Field names are camelCase.
 - Errors are `{"error": "<code>", ...}` and the codes are stable API. A 4xx or 503 means nothing was applied. A 2xx or `409 outcome_uncertain` may have applied.
 - No route retries anything on the caller's behalf. Clients must not retry an uncertain mutation with a different identity.
-- Versioning: `apiVersion` is an integer. v1 only grows additively: new routes, new optional request fields, new response fields, new event types. Clients ignore unknown response fields and event types. A breaking change ships as `/v2` next to `/v1`. Apps declare the minimum `apiVersion` they need and compare it with `GET /v1/version`; an addition an app depends on (a request field an older Tether would refuse) raises `apiVersion`. 2 *(post-cutover)*: the resize claim's `viewer`. 3 *(post-cutover)*: session wakes and End's `keepWakes`.
+- Versioning: `apiVersion` is an integer. v1 only grows additively: new routes, new optional request fields, new response fields, new event types. Clients ignore unknown response fields and event types. A breaking change ships as `/v2` next to `/v1`. Apps declare the minimum `apiVersion` they need and compare it with `GET /v1/version`; an addition an app depends on (a request field an older Tether would refuse) raises `apiVersion`. 2 *(post-cutover)*: the resize claim's `viewer`. 3 *(post-cutover)*: session wakes and End's `keepWakes`. 4: shares link files where they are. 5: the Agent Hub chat routes ([Agent Hub sessions](#agent-hub-sessions)).
 - Times are Unix epoch milliseconds.
 
 ## Identity
@@ -99,11 +99,24 @@ A session of tool `agent-hub` is a chat on an Agent Hub agent, not a terminal. T
 What differs from a tmux session:
 
 - `inject` needs `mode: "paste"` and `submit: true` (`400` otherwise) and posts the text as a turn. If a turn is running, or earlier follow-ups are queued, it is queued instead and the answer carries `queued: true`; one queued follow-up goes out each time the session goes idle, oldest first. `409 workload_unavailable` before the first prompt was posted, `503 agent_hub_unavailable` when Agent Hub cannot be reached (nothing queued).
-- `attach`, `capture`, `scrollback`, `pane-mode`, `resize-claim` and `show` answer `409 workload_unavailable` (no pane; a native chat view is a later step). `respawn`, `load-tui`, `switch-project`, `agent-event` and `context-check` answer `409 unsupported_backend`.
+- `attach`, `capture`, `scrollback`, `pane-mode`, `resize-claim` and `show` answer `409 workload_unavailable` (no pane; the native chat view uses the chat routes below). `respawn`, `load-tui`, `switch-project`, `agent-event` and `context-check` answer `409 unsupported_backend`.
 - Naming, title, coordinator marks and wakes work as for any session. A wake delivers its note as a follow-up turn. A kept wake does not relaunch an ended Agent Hub session.
 - End cancels a running turn, then closes the Agent Hub session, then drops the row (a queued follow-up goes with it). If Agent Hub cannot close it, End answers `blocked` and the session stays.
 - After a Tether restart the session is found again by its stored Agent Hub id; a follow-up queued before the restart still goes out.
 - Tether calls Agent Hub from its own process with the owner token read from `AGENT_HUB_OWNER_TOKEN_FILE` (or `TETHER_AGENT_HUB_OWNER_TOKEN_FILE`); the token never reaches a client, a log or this API. `TETHER_AGENT_HUB_URL` (default `http://localhost:8003`), `TETHER_AGENT_HUB_CLIENT_ID` (else `SUMMITFLOW_CLIENT_ID`) and `TETHER_AGENT_HUB_REQUEST_SOURCE` (default `aico-tether`) set the rest; `~/.env.local` supplies the fallbacks.
+
+#### Chat routes *(apiVersion 5)*
+
+A GUI shows a native chat for an Agent Hub session with these routes. All are for `agent-hub` sessions only: any other session, or one whose Agent Hub session is not created yet, answers `409 workload_unavailable`; an unknown session `404 not_found`; Agent Hub unreachable `503 agent_hub_unavailable`; a refusal from Agent Hub `409 workload_unavailable` with `reason`. None of them ever carries the owner token.
+
+| Route | Request | Answer |
+|---|---|---|
+| `GET /v1/sessions/:id/chat` | query `messages=false` (optional, default true) | `200 {session, queued}`. `session` is the Agent Hub session JSON exactly as the SDK's `sessions.get` returns it, including `messages` (with `messages=false` it is the summary only, so the follow-up queue can be polled cheaply). `queued` is the follow-up texts waiting in Tether's durable queue, oldest first, always present. |
+| `GET /v1/sessions/:id/chat/stream` | query `afterSeq=N` (optional integer, default 0; else `400 invalid_query`) | `200 application/x-ndjson`, one JSON object per line: each turn event or `idle` event from the SDK's `turns.attach(hubSessionId, {afterSeq})` as it is (events carry `seq`; `idle` does not), plus `{"type":"heartbeat"}` every 15 s while open. The stream ends after the turn's last event (`done`, `error`, `cancel_acknowledged`) or `idle`. The SDK reconnects a dropped Agent Hub connection by itself; if it gives up after headers were sent, the last line is `{"type":"stream_error","code":<SDK code or "stream_interrupted">,"message":<short text>}`. A failure before the first event is a normal error answer. Closing the connection stops the attach only; the turn keeps running. |
+| `POST /v1/sessions/:id/chat/cancel` | `{generation}` | `200 {cancelled: boolean}`. `false` when no turn was running. `409 stale_generation` for another generation. |
+| `GET /v1/chat/models` | none | `200 {items}`, the Agent Hub model catalog (the SDK's `models.list()` result), for a model picker. |
+
+Sending a message uses the existing `inject` route (`mode: "paste"`, `submit: true`); its `queued` answer says whether the text waits for the running turn.
 
 ## Sessions
 
@@ -520,7 +533,7 @@ Absent when the daemon runs with `TETHER_RECONCILE=off`.
 `GET /v1/health` never touches tmux. It returns:
 
 ```json
-{"status":"ok","name":"tether","instance":"default","version":"0.1.0","apiVersion":3,"schemaVersion":12,
+{"status":"ok","name":"tether","instance":"default","version":"0.1.0","apiVersion":5,"schemaVersion":12,
  "uptimeMs":966,"bootId":"uuid","eventSeq":0,"catalog":{"sessions":0,"tmuxServersActive":0,"rootRequests":0},
  "gui":{"connected":false},"lifecycle":"ready"}
 ```

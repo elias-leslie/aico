@@ -15,7 +15,15 @@
 // Nothing here touches tmux. `AgentHubRuntime` only needs the structural
 // `HubApi`, which the SDK client satisfies and a test can fake.
 
-import type { AgentsApi, ModelsApi, SessionsApi, TurnsApi, WorkflowRunsApi } from '@agent-hub/sdk'
+import type {
+  AgentsApi,
+  IdleEvent,
+  ModelsApi,
+  SessionsApi,
+  TurnEvent,
+  TurnsApi,
+  WorkflowRunsApi,
+} from '@agent-hub/sdk'
 import type { AgentStateRecord, AgentStateTracker } from '../agent-state'
 import {
   type AgentHubSessionRow,
@@ -23,6 +31,7 @@ import {
   enqueueAgentHubText,
   getAgentHubSession,
   getWidget,
+  listAgentHubQueue,
   listAgentHubSessions,
   markAgentHubCreated,
   markAgentHubPromptSent,
@@ -38,7 +47,7 @@ import { ownershipGeneration, sessionGeneration } from '../lifecycle/owner-retir
 /** The slice of the SDK client Tether uses. */
 export interface HubApi {
   sessions: Pick<SessionsApi, 'create' | 'get' | 'close'>
-  turns: Pick<TurnsApi, 'stream' | 'cancel'>
+  turns: Pick<TurnsApi, 'stream' | 'cancel' | 'attach'>
   agents: Pick<AgentsApi, 'list'>
   models: Pick<ModelsApi, 'list'>
   /** Workflow runs (runs.ts follows the ones this machine's sessions launch). */
@@ -327,6 +336,62 @@ export class AgentHubRuntime {
       }
       return { queued: false }
     })
+  }
+
+  // --- chat view ----------------------------------------------------------------
+
+  /** The Agent Hub session id of a started chat; refuses one not created yet. */
+  private startedHubId(widgetId: string): string {
+    const hub = getAgentHubSession(widgetId)
+    if (!getWidget(widgetId) || !hub) throw new HubError('not_started', 'gone')
+    if (!hub.created) throw new HubError('not_started', 'the Agent Hub session is not created yet')
+    return hub.hubSessionId
+  }
+
+  /** The chat as Agent Hub holds it (messages unless `includeMessages` is
+   * false) and the follow-ups waiting in Tether's queue, oldest first. */
+  async chat(
+    widgetId: string,
+    includeMessages: boolean,
+  ): Promise<{ session: Awaited<ReturnType<SessionsApi['get']>>; queued: string[] }> {
+    const hubId = this.startedHubId(widgetId)
+    try {
+      const session = await this.options.api().sessions.get(hubId, { includeMessages })
+      return { session, queued: listAgentHubQueue(widgetId) }
+    } catch (error) {
+      throw classifyHubError(error)
+    }
+  }
+
+  /** Follow the session's turn from `afterSeq` (the SDK reconnects itself).
+   * Aborting `signal` closes the connection; the turn keeps running. */
+  attach(
+    widgetId: string,
+    afterSeq: number,
+    signal: AbortSignal,
+  ): AsyncGenerator<TurnEvent | IdleEvent, void, undefined> {
+    return this.options.api().turns.attach(this.startedHubId(widgetId), { afterSeq, signal })
+  }
+
+  /** Ask Agent Hub to stop the running turn. False when none was running. */
+  async cancelTurn(widgetId: string): Promise<boolean> {
+    const hubId = this.startedHubId(widgetId)
+    try {
+      return (await this.options.api().turns.cancel(hubId)).cancelled === true
+    } catch (error) {
+      const status = (error as SdkErrorShape).status
+      if (status === 404 || status === 409) return false
+      throw classifyHubError(error)
+    }
+  }
+
+  /** The model catalog, for the chat's model picker. */
+  async models(): Promise<Awaited<ReturnType<ModelsApi['list']>>> {
+    try {
+      return await this.options.api().models.list()
+    } catch (error) {
+      throw classifyHubError(error)
+    }
   }
 
   // --- state --------------------------------------------------------------------

@@ -5,6 +5,7 @@
 import { execFile } from 'node:child_process'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { promisify } from 'node:util'
+import { registerChatRoutes } from './agent-hub/chat-api'
 import { type AgentHubRuntime, HubError } from './agent-hub/runtime'
 import type { AgentStateTracker, HookReport } from './agent-state'
 import type { TetherPaths } from './config'
@@ -646,6 +647,14 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
   if (context.continuity) registerRebootRoutes(router, context.continuity)
   if (context.recovery) registerRecoveryRoutes(router, context.recovery)
   if (context.wakes) registerWakeRoutes(router, context.wakes)
+  registerChatRoutes(router, {
+    runtime: () => agentHub,
+    requireSession,
+    fence,
+    requireGeneration,
+    only,
+    whenReady,
+  })
   const { store, events, gui } = context
   const rootHandler = createRootHandler(rootOperations(context))
   const root = (req: IncomingMessage, res: ServerResponse) => rootHandler(req, res)

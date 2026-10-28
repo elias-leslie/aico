@@ -4,8 +4,9 @@ import { join } from 'node:path'
 /** Tether's own API contract version. Clients declare the minimum they need.
  * 2: resize claims carry a viewer label (still accepted without one).
  * 3: session wakes; End takes `keepWakes`.
- * 4: shares link files where they are (`paths`); GET /v1/shares lists them. */
-export const API_VERSION = 4
+ * 4: shares link files where they are (`paths`); GET /v1/shares lists them.
+ * 5: Agent Hub chat routes (`/chat`, `/chat/stream`, `/chat/cancel`, `/v1/chat/models`). */
+export const API_VERSION = 5
 
 /** The one instance that keeps Aico's names and adopts historical servers. */
 export const DEFAULT_INSTANCE = 'default'
