@@ -147,13 +147,14 @@ describe('workflow runs in the session list', () => {
     })
     const rows = within(steps).getAllByTestId('run-step')
     expect(rows.map((el) => el.querySelector('.name')?.textContent)).toEqual([
-      'build',
       'test',
+      'build',
     ])
-    expect(rows[0]?.textContent).toContain(
+    // The step waiting on the owner comes first.
+    expect(rows[0]?.textContent).toContain('waiting for you · step failed')
+    expect(rows[1]?.textContent).toContain(
       'tool bash · deepseek-v4.1-flash → other · fallback · try 2 of 3',
     )
-    expect(rows[1]?.textContent).toContain('waiting for you · step failed')
   })
 
   it('opens the run in Agent Hub from its row, and only for a web address', () => {
