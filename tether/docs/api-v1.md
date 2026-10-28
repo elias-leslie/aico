@@ -370,6 +370,29 @@ There is no `aider` row, on purpose: Aider isn't installed and no session has ru
 
 `POST /v1/projects` *(3a)* with `{id, root, name?}` registers a project in local mode: it appends to `projects.json` atomically (temp file and rename, mode 0600), refreshes the list, returns `201 {id, name, root, lifecycle: null}` and publishes `projects.changed`. Errors: `400 invalid_project_id` (`[A-Za-z0-9][A-Za-z0-9._-]{0,127}`), `400 invalid_project_root` (not an absolute directory), `409 project_exists`, `409 local_projects_unreadable`, and `409 projects_managed_by_summitflow` when the source is SummitFlow (register the project there).
 
+## Workflow runs
+
+Agent Hub workflow runs (`st workflow create`) show as children of the session that launched them. A run records `launched_by`, the launching session's `ownershipId` (`AICO_SESSION_ID`). Tether asks Agent Hub through the SDK for the runs of each live session by that id and keeps them as team members: a **run** folds under the session, its **steps** under the run. A run started outside Aico has no `launched_by` and is never listed. Tether calls Agent Hub with the same owner token and settings as an Agent Hub session (above); the token never reaches a client.
+
+`GET /v1/runs` answers `{status, error, updatedAt, items}`. `status` is `ok`, `stale` (the last look failed; `items` is the last answer) or `unavailable` (no look has worked since Tether started); `error` says why in plain words; `updatedAt` is the last good look (ms). Each item is a team member (`id`, `coordinator: false`, `coordinatorId`, `group`, `at`, `kind`, `summary`; see the clients' `foldTeams`) with:
+
+- `kind` `run` or `step`; `id` `run:<runId>` or `step:<runId>:<key>`; `runId`, `stepKey` (null on a run);
+- `coordinatorId`: the launching session's id for a run (a session that has ended leaves the run top level while it is active), the run's `id` for a step;
+- `group`: run `running` is `working`, `needs_owner` `needs-you`, `completed` `finished`, `failed` and `cancelled` `no-status` (ended); step `running` is `working`, a step waiting on the owner `needs-you`, pending and done `idle`, failed, refused and cancelled `no-status`. `word` is the state in words (`thinking`, `writing`, `tool bash`, `provider retry` for a running step; `waiting for you`; `failed`); `status` is Agent Hub's own;
+- `title` (the run's goal, the step's key), `url` (the run page in Agent Hub), `agent`, `requestedModel` and `servedModel`, `fallback` (another model answered), `attempt` and `attemptLimit`, `reason` (why it waits or failed), `cancelling`, `summary` (a run's steps counted: `2 done · 1 working`), `hint` (on a live run: plan changes stay with the coordinator);
+- `can`: `decide` (a step waiting on the owner, or a pause that names no step on the run; not `blocked_dependencies`), `cancel`, `dismiss` (an ended run).
+
+Controls, each `{ok: true}` or an error; Tether controls only a run it lists (`404 unknown_run`, `404 unknown_step`, `409 not_allowed`, `409 agent_hub_refused` with `reason`, `503 agent_hub_unavailable`):
+
+| Method and route | Body | Result |
+| --- | --- | --- |
+| `POST /v1/runs/:runId/resume` | `{action: "retry" \| "skip" \| "fail", stepKey?}` | answer the waiting step (or the run) |
+| `POST /v1/runs/:runId/cancel` | none | stop the run |
+| `POST /v1/runs/:runId/steps/:key/cancel` | none | stop one step |
+| `POST /v1/runs/:runId/dismiss` | none | drop an ended run from the lists (kept across restarts) |
+
+Following a run (settings, as data): `TETHER_AGENT_HUB_RUNS_POLL_MS` (default 3000), `TETHER_AGENT_HUB_RUNS_ENDED_MS` (an ended run stays listed this long after its last activity unless dismissed; default 6 hours), `TETHER_AGENT_HUB_RUNS_LIMIT` (30) and `TETHER_AGENT_HUB_RUNS_CONCURRENCY` (4). The run page address is `TETHER_AGENT_HUB_FRONTEND_URL`, else `AGENT_HUB_FRONTEND_URL` (as `st workflow` reads it), else the API host on port 3003. Plan changes (follow-up) are not an Aico control: the coordinator makes them with `st workflow add-step`, `revise` and `remove-step`.
+
 ## Events
 
 `GET /v1/events?since=<seq>&bootId=<id>` streams NDJSON (`application/x-ndjson`), one event per line:
@@ -393,6 +416,7 @@ Event types:
 - `projects.changed` (`{id, change: "registered"}`)
 - `gui.connected`, `gui.disconnected`
 - `wakes.changed` (`{sessionId}`; null for a kept wake of an ended session)
+- `runs.changed` (`{}`; the listed workflow runs changed, re-read `GET /v1/runs`)
 
 `session.created` and `session.updated` carry `session` *(post-cutover)*: the session descriptor as `GET /v1/sessions` would list it, with a status verified for the exact generation the event announces. Clients can apply it instead of fetching the descriptor; one that sees no `session` (an older Tether) re-reads. Session events are published in order through one queue. `session.ended` carries the ID (and generation) only; `session.resized` adds the size holder as above.
 

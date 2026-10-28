@@ -15,7 +15,7 @@
 // Nothing here touches tmux. `AgentHubRuntime` only needs the structural
 // `HubApi`, which the SDK client satisfies and a test can fake.
 
-import type { AgentsApi, ModelsApi, SessionsApi, TurnsApi } from '@agent-hub/sdk'
+import type { AgentsApi, ModelsApi, SessionsApi, TurnsApi, WorkflowRunsApi } from '@agent-hub/sdk'
 import type { AgentStateRecord, AgentStateTracker } from '../agent-state'
 import {
   type AgentHubSessionRow,
@@ -41,6 +41,8 @@ export interface HubApi {
   turns: Pick<TurnsApi, 'stream' | 'cancel'>
   agents: Pick<AgentsApi, 'list'>
   models: Pick<ModelsApi, 'list'>
+  /** Workflow runs (runs.ts follows the ones this machine's sessions launch). */
+  workflowRuns: Pick<WorkflowRunsApi, 'list' | 'get' | 'resume' | 'cancel' | 'cancelStep'>
 }
 
 export type HubErrorCode =

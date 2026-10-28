@@ -7,6 +7,7 @@ import type { SessionStatus } from '../lifecycle/engine'
 import type { ResizeRefusal } from '../lifecycle/interactive-tmux'
 import type { SessionOrigin } from '../markers'
 import type { SizeHolder, ViewerLabel } from '../size-holder'
+import type { TeamMember } from './teams'
 
 export type { ResizeRefusal, SessionOrigin, SessionStatus, SizeHolder, ViewerLabel }
 
@@ -382,3 +383,56 @@ export function parseGuiCommand(value: unknown): GuiCommand | null {
   if (line.kind === 'show' && line.ifViewed === true) command.ifViewed = true
   return command
 }
+
+// --- Workflow runs (docs/api-v1.md "Workflow runs") ----------------------------
+
+/**
+ * A workflow run or one of its steps as a team member: the run folds under the
+ * session that launched it (`coordinatorId` is that session's id), a step
+ * under its run. Tether words the state; clients show it.
+ */
+export interface RunMember extends TeamMember {
+  kind: 'run' | 'step'
+  coordinator: false
+  coordinatorId: string
+  runId: string
+  /** The step's key; null on a run. */
+  stepKey: string | null
+  /** The run's goal, or the step's key. */
+  title: string
+  /** What the row is doing: `thinking`, `tool bash`, `waiting for you`, `failed`. */
+  word: string
+  /** The run's state or the step's status as Agent Hub names it. */
+  status: string
+  /** The run page in Agent Hub. */
+  url: string
+  agent: string | null
+  /** The model asked for and the one that answered; both null on a run. */
+  requestedModel: string | null
+  servedModel: string | null
+  /** A different model answered than the one asked for. */
+  fallback: boolean
+  /** The current attempt and how many the step may use. */
+  attempt: number | null
+  attemptLimit: number | null
+  /** Why it waits or failed, in plain words. */
+  reason: string | null
+  /** What the owner may do here; Tether checks again when asked. */
+  can: { decide: boolean; cancel: boolean; dismiss: boolean }
+  cancelling: boolean
+  /** How to change the plan (it stays with the coordinator); on a live run. */
+  hint: string | null
+}
+
+/** `GET /v1/runs`: `stale` shows the last answer after a failed look,
+ * `unavailable` means Agent Hub was never reached since Tether started. */
+export interface RunsAnswer {
+  status: 'ok' | 'stale' | 'unavailable'
+  /** Why the last look failed, in plain words; null when it worked. */
+  error: string | null
+  /** When the last look succeeded (ms), or null. */
+  updatedAt: number | null
+  items: RunMember[]
+}
+
+export type RunDecision = 'retry' | 'skip' | 'fail'

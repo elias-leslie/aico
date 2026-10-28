@@ -4,7 +4,8 @@ import type { Server } from 'node:http'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { createHubApi } from './agent-hub/client'
-import { resolveAgentHubConfig } from './agent-hub/config'
+import { resolveAgentHubConfig, resolveRunsConfig } from './agent-hub/config'
+import { RunTracker } from './agent-hub/runs'
 import { AgentHubRuntime, type HubApi } from './agent-hub/runtime'
 import { AgentStatePoller, AgentStateTracker } from './agent-state'
 import { agentExitMarkerDir, resolveShowConfig, type TetherPaths } from './config'
@@ -69,6 +70,20 @@ export function reconcileEnabled(env: NodeJS.ProcessEnv): boolean {
 }
 
 const PROJECT_NAMES_MS = 300_000
+
+/** The dismissed workflow runs, kept as one JSON setting (run id to when). */
+const DISMISSED_RUNS_KEY = 'dismissed_runs'
+
+function readDismissedRuns(raw: string | null): Record<string, number> {
+  try {
+    const value = JSON.parse(raw ?? '{}') as Record<string, unknown>
+    return Object.fromEntries(
+      Object.entries(value).filter(([, at]) => typeof at === 'number' && Number.isFinite(at)),
+    ) as Record<string, number>
+  } catch {
+    return {}
+  }
+}
 
 /** The desktop variables the graphical session imported into the user
  * manager; empty before login or when systemctl cannot answer. */
@@ -142,6 +157,7 @@ export async function startDaemon(
     continuity: undefined as Continuity | undefined,
     recovery: undefined as Recovery | undefined,
     wakes: undefined as WakeService | undefined,
+    runs: undefined as RunTracker | undefined,
     memoryPolicy: startMemoryGuard(paths, store, env, {
       foreground: foregroundPaneScope,
       sessionOf: () =>
@@ -174,6 +190,24 @@ export async function startDaemon(
   const wakes = new WakeService(context)
   context.wakes = wakes
   bindWakeStore(wakes.store)
+  // One Agent Hub client for the session kind and for the workflow runs.
+  let hubApi: HubApi | null = null
+  const hub = (): HubApi => {
+    hubApi ??= createHubApi(resolveAgentHubConfig(env))
+    return hubApi
+  }
+  const runs = new RunTracker({
+    api: () => hub().workflowRuns,
+    launchers: () => listWidgets().map((row) => ({ id: row.id, ownershipId: row.sessionId })),
+    config: resolveRunsConfig(env),
+    dismissed: {
+      read: () => readDismissedRuns(store.getSetting(DISMISSED_RUNS_KEY)),
+      write: (dismissed) =>
+        store.putSetting(DISMISSED_RUNS_KEY, JSON.stringify(dismissed), Date.now()),
+    },
+    notify: () => events.publish('runs.changed', {}),
+  })
+  context.runs = runs
   const server = createTetherServer(context)
   try {
     await listenPrivateSocket(server, paths.socket)
@@ -190,12 +224,8 @@ export async function startDaemon(
   bindAgentStates(agentStates)
   // Agent Hub sessions have no pane: their own state tracker, runtime and
   // poll, none of which the tmux machinery above ever sees.
-  let hubApi: HubApi | null = null
   const hubRuntime = new AgentHubRuntime({
-    api: () => {
-      hubApi ??= createHubApi(resolveAgentHubConfig(env))
-      return hubApi
-    },
+    api: hub,
     states: new AgentStateTracker((id) => {
       notifySessionChanged(id, { force: true })
       wakes.scheduler.nudge()
@@ -225,6 +255,7 @@ export async function startDaemon(
   )
   if (reconcileEnabled(env)) void ready.then(() => agentPoller.start()).catch(() => {})
   if (reconcileEnabled(env)) void ready.then(() => hubRuntime.start()).catch(() => {})
+  if (reconcileEnabled(env)) void ready.then(() => runs.start()).catch(() => {})
   // Wakes paste into sessions, so only where Tether observes tmux.
   if (reconcileEnabled(env)) void ready.then(() => wakes.scheduler.start()).catch(() => {})
   // Display titles name each session's project: learn names now and keep
@@ -256,6 +287,7 @@ export async function startDaemon(
       clearInterval(projectNames)
       agentPoller.stop()
       hubRuntime.stop()
+      runs.stop()
       bindAgentHub(null)
       setHubBackend(null)
       wakes.scheduler.stop()

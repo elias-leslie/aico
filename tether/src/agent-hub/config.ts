@@ -63,3 +63,64 @@ export function resolveAgentHubConfig(
     ownerTokenFile: pick(env.TETHER_AGENT_HUB_OWNER_TOKEN_FILE, local.AGENT_HUB_OWNER_TOKEN_FILE),
   }
 }
+
+/** How Tether follows the workflow runs its sessions launch. */
+export interface RunsConfig {
+  /** How often the runs are looked at (ms). */
+  pollMs: number
+  /** How long an ended run stays listed, from its last activity (ms). */
+  endedRetentionMs: number
+  /** Runs asked for per launching session. */
+  listLimit: number
+  /** Launching sessions asked at once. */
+  concurrency: number
+  /** The Agent Hub web app, where a run's page lives. */
+  frontendUrl: string
+}
+
+export const DEFAULT_RUNS_POLL_MS = 3_000
+export const DEFAULT_RUNS_ENDED_RETENTION_MS = 6 * 3_600_000
+export const DEFAULT_RUNS_LIST_LIMIT = 30
+export const DEFAULT_RUNS_CONCURRENCY = 4
+/** The web app's port on the API's host, as `st workflow` assumes. */
+export const DEFAULT_FRONTEND_PORT = '3003'
+
+function positive(value: string | undefined, fallback: number): number {
+  const n = Number(value)
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback
+}
+
+/** `TETHER_AGENT_HUB_RUNS_POLL_MS`, `..._RUNS_ENDED_MS`, `..._RUNS_LIMIT`,
+ * `..._RUNS_CONCURRENCY` and the page address: `TETHER_AGENT_HUB_FRONTEND_URL`,
+ * else `AGENT_HUB_FRONTEND_URL` (env or `~/.env.local`, as `st workflow` reads
+ * it), else the API's host on the web app's port. */
+export function resolveRunsConfig(
+  env: NodeJS.ProcessEnv = process.env,
+  home: string = env.HOME ?? homedir(),
+  read: (path: string) => string = (path) => readFileSync(path, 'utf8'),
+  hub: Pick<AgentHubConfig, 'baseUrl'> = resolveAgentHubConfig(env, home, read),
+): RunsConfig {
+  const local = readEnvLocal(home, read)
+  const configured = [
+    env.TETHER_AGENT_HUB_FRONTEND_URL,
+    env.AGENT_HUB_FRONTEND_URL,
+    local.AGENT_HUB_FRONTEND_URL,
+  ].find((value) => value?.trim())
+  let frontendUrl = configured?.trim().replace(/\/+$/, '') ?? ''
+  if (!frontendUrl) {
+    try {
+      const api = new URL(hub.baseUrl)
+      const port = env.AGENT_HUB_FRONTEND_PORT?.trim() || DEFAULT_FRONTEND_PORT
+      frontendUrl = `${api.protocol}//${api.hostname.includes(':') ? `[${api.hostname}]` : api.hostname}:${port}`
+    } catch {
+      frontendUrl = `http://localhost:${DEFAULT_FRONTEND_PORT}`
+    }
+  }
+  return {
+    pollMs: positive(env.TETHER_AGENT_HUB_RUNS_POLL_MS, DEFAULT_RUNS_POLL_MS),
+    endedRetentionMs: positive(env.TETHER_AGENT_HUB_RUNS_ENDED_MS, DEFAULT_RUNS_ENDED_RETENTION_MS),
+    listLimit: Math.min(200, positive(env.TETHER_AGENT_HUB_RUNS_LIMIT, DEFAULT_RUNS_LIST_LIMIT)),
+    concurrency: positive(env.TETHER_AGENT_HUB_RUNS_CONCURRENCY, DEFAULT_RUNS_CONCURRENCY),
+    frontendUrl,
+  }
+}

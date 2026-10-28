@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
+import type { RunTracker } from './agent-hub/runs'
 import { API_VERSION, resolveShowConfig, type ShowConfig, type TetherPaths } from './config'
 import type { EventBus, TetherEvent } from './events'
 import type { GuiChannel } from './gui-channel'
@@ -20,6 +21,7 @@ import {
   registerLocalProject,
   withActiveProject,
 } from './projects'
+import { registerRunRoutes } from './runs-api'
 import { registerShowRoute } from './show'
 import type { Store, ToolPatch } from './store'
 import { type AgentTool, parseCommand, type ToolSeed, ToolValidationError } from './tools'
@@ -41,6 +43,8 @@ export interface ServerContext {
   /** Agent-pane memory policy (pane cap, runaway job kills). */
   memoryPolicy?: MemoryPolicyService
   show?: ShowConfig
+  /** Workflow runs launched by sessions (`/v1/runs`); absent in scratch instances. */
+  runs?: RunTracker
 }
 
 /** `rootCapable`: the tool can be started as a root (`POST /v1/roots`).
@@ -345,6 +349,7 @@ export function buildRouter(context: ServerContext): Router {
     })
 
   registerLifecycleRoutes(router, context)
+  if (context.runs) registerRunRoutes(router, context.runs)
   registerShowRoute(router, events, context.store, context.show ?? resolveShowConfig({}))
 
   return router
