@@ -7,7 +7,8 @@ execs the native harness directly, so the Agent Hub launchers never deliver
 context, and turns off everything else that would add first-party text to
 the model's context: project and user instruction files, skills, plugins,
 MCP servers, memory, and every hook except the user's silent PreToolUse
-guards (they speak only when they refuse a tool call). The workspace is
+guards (they speak only when they refuse a tool call). Claude keeps the
+user's model, effort and status line settings. The workspace is
 empty, so there are no project files either. Docs: docs/root-control.md.
 """
 
@@ -28,6 +29,8 @@ CODEX_SUBCOMMANDS = {"exec", "e", "review", "resume", "fork"}
 CODEX_VALUE_OPTIONS = {"-a", "--ask-for-approval", "-C", "--cd", "-c", "--config", "-i", "--image",
                        "-m", "--model", "-p", "--profile", "-s", "--sandbox", "--add-dir",
                        "--local-provider", "--remote", "--remote-auth-token-env"}
+# User settings a Blank Slate Claude keeps: none of them reach the model's context.
+CLAUDE_KEPT_SETTINGS = ("model", "effortLevel", "modelSettings", "alwaysThinkingEnabled", "statusLine")
 # Environment the normal launchers leave for their hooks; never carried into a blank session.
 DROPPED_ENV = ("AGENT_HUB_CONTEXT_PREINJECTED_HASH", "AGENT_HUB_CONTEXT_PREINJECTED_CONTRACT",
                "AGENT_HUB_CONTEXT_PREINJECTED_TEXT", "AICO_ROOT_AGENT_HUB_CONTEXT")
@@ -92,11 +95,15 @@ def trust_workspace(env: dict[str, str]) -> None:
 def claude(argv: list[str], env: dict[str, str]) -> list[str]:
     trust_workspace(env)
     config = Path(env.get("CLAUDE_CONFIG_DIR") or HOME / ".claude")
-    hooks = read_json(config / "settings.json").get("hooks")
+    user = read_json(config / "settings.json")
+    hooks = user.get("hooks")
     guards = hooks.get("PreToolUse") if isinstance(hooks, dict) else None
-    settings = {"hooks": {"PreToolUse": guards}} if guards else {}
-    # User settings are skipped whole (their other hooks, plugins, output style,
-    # status line); the flag settings put back only the PreToolUse guards.
+    settings: dict = {"hooks": {"PreToolUse": guards}} if guards else {}
+    # User settings are skipped whole (their other hooks, plugins, output style);
+    # the flag settings put back only the PreToolUse guards and settings that add
+    # no text to the model's context: model choice and effort (as Codex keeps
+    # config.toml's) and the status line, which only the terminal shows.
+    settings.update({key: user[key] for key in CLAUDE_KEPT_SETTINGS if key in user})
     env["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] = "1"
     env["CLAUDE_CODE_DISABLE_CLAUDE_MDS"] = "1"
     return [native("CLAUDE_REAL", HOME / ".local/bin/claude"),

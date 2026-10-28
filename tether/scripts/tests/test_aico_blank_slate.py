@@ -38,7 +38,7 @@ def run(monkeypatch, tmp_path):
     return invoke
 
 
-def test_claude_keeps_only_pretooluse_guards(run, tmp_path, monkeypatch):
+def test_claude_keeps_only_pretooluse_guards_model_effort_and_status_line(run, tmp_path, monkeypatch):
     (tmp_path / "claude-home").mkdir()
     workspace = tmp_path / "blank-slate" / "one"
     workspace.mkdir(parents=True)
@@ -46,10 +46,14 @@ def test_claude_keeps_only_pretooluse_guards(run, tmp_path, monkeypatch):
     state = tmp_path / "claude-home/.claude.json"
     state.write_text(json.dumps({"projects": {"/other": {"hasTrustDialogAccepted": True}}, "keep": 1}))
     guard = [{"matcher": "Bash", "hooks": [{"type": "command", "command": "guard"}]}]
-    (tmp_path / "claude-home/settings.json").write_text(json.dumps({"hooks": {
+    status_line = {"type": "command", "command": "bash statusline.sh", "padding": 1}
+    (tmp_path / "claude-home/settings.json").write_text(json.dumps({
+        "statusLine": status_line, "outputStyle": "Concise", "model": "opus", "effortLevel": "high", "hooks": {
         "PreToolUse": guard, "SessionStart": [{"hooks": [{"type": "command", "command": "inject"}]}]}}))
     argv, env = run("claude-code", "--permission-mode", "auto")
-    assert argv[1:5] == ["--setting-sources", "project,local", "--settings", json.dumps({"hooks": {"PreToolUse": guard}})]
+    assert argv[1:5] == ["--setting-sources", "project,local", "--settings",
+                         json.dumps({"hooks": {"PreToolUse": guard}, "model": "opus", "effortLevel": "high",
+                                     "statusLine": status_line})]
     assert argv[5:] == ["--strict-mcp-config", "--disable-slash-commands", "--no-chrome", "--permission-mode", "auto"]
     assert env["CLAUDE_CODE_DISABLE_CLAUDE_MDS"] == env["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] == "1"
     assert "AGENT_HUB_CONTEXT_PREINJECTED_TEXT" not in env
