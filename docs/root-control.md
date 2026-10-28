@@ -401,7 +401,7 @@ running Pi root; end it and create a new request when the instruction needs fres
 
 New roots require an explicit `workRole` from Agent Hub’s canonical work-role registry:
 `coordinator`, `implementation`, `research`, `review`, `recon`, `hunting`,
-`operations`, or `other`. Use `--work-role implementation`.
+`operations`, `selection`, `verification`, `reporting`, or `other`. Use `--work-role implementation`.
 `--work-role-name Builder` optionally
 sets a human display name. The opaque `--role` field keeps its existing meaning.
 Work roles never come from titles, prompts, coordinator membership, or a parent.
@@ -411,7 +411,9 @@ The declaration and optional name are immutable root creation metadata. They
 append `{workRole, workRoleDisplayName}` to the digest after all existing fields.
 The pane receives `ST_WORK_ROLE`, `ST_WORK_ROLE_SOURCE` (the immutable root
 logical identity prefixed by `tether:root:`), and `ST_WORK_ROLE_DISPLAY_NAME`.
-No launch prompt text is added. Same-request retries and tombstones retain the
+No launch prompt text is added. Agent Hub context delivery reads the same
+variables and selects context for the root with the audience tag
+`work-role:<id>`; Blank Slate roots run no delivery. Same-request retries and tombstones retain the
 original declaration; changing either declaration field conflicts. Legacy
 requests can still retry with their original body/digest and remain Unknown;
 a new request without a work role returns `400 work_role_required`.

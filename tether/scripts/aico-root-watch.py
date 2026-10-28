@@ -1133,7 +1133,7 @@ def create_main(argv: list[str]) -> int:
         "required. Agent tool slug: claude-code, codex or pi."))
     parser.add_argument("--role", default="portfolio-root", help="opaque orchestration metadata")
     parser.add_argument("--work-role",
-                        help="required for a new root: coordinator, implementation, research, review, recon, hunting, operations or other; fixed including resume")
+                        help="required for a new root: coordinator, implementation, research, review, recon, hunting, operations, selection, verification, reporting or other; fixed including resume")
     parser.add_argument("--work-role-name", help="optional display name (1-128 characters)")
     parser.add_argument("--lead-root")
     parser.add_argument("--facet")
