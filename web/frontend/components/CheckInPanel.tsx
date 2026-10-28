@@ -2,7 +2,11 @@
 
 import { ChevronLeft } from 'lucide-react'
 import { useState } from 'react'
-import { useCheckInActions, useCheckInMenu } from '@/lib/hooks/use-check-ins'
+import {
+  pendingCheckInTime,
+  useCheckInActions,
+  useCheckInMenu,
+} from '@/lib/hooks/use-check-ins'
 
 const ICON = 'h-[18px] w-[18px]'
 
@@ -146,7 +150,9 @@ export function CheckInPanel({
                 className="flex items-center gap-2 px-2.5"
                 style={{ minHeight: rowHeight }}
               >
-                <span className="text-[13px]">Check-in {wake.time}</span>
+                <span className="text-[13px]">
+                  Check-in {pendingCheckInTime(wake.time, wake.dueAt)}
+                </span>
                 <button
                   type="button"
                   className="lantern-btn ghost ml-auto"

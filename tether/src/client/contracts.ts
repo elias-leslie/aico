@@ -132,6 +132,14 @@ export function wakeClock(at: number, now: number = Date.now()): string {
   return `${new Date(at).toLocaleDateString('en-US', { weekday: 'short' })} ${time}`
 }
 
+/** A pending check-in's time: `5:30 PM` ahead, `waiting since 2:27 PM` once
+ * due, since Tether holds a due one until the session is idle with nothing
+ * typed. */
+export function wakePendingTime(at: number, now: number = Date.now()): string {
+  const clock = wakeClock(at, now)
+  return at <= now ? `waiting since ${clock}` : clock
+}
+
 /** The menus' quick choices from the policy: "In 1 hour", "Tonight" (this
  * hour today, tomorrow once it has passed) and "Tomorrow morning". */
 export function wakeChoices(

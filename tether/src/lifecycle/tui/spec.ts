@@ -75,6 +75,10 @@ export interface TuiSpec {
   instructions?: { arguments: string[]; key?: string }
   /** Set per session by `withInstructions`: the snapshot file each launch reads. */
   chosenInstructions?: { file: string; label: string }
+  /** How the agent draws its input line, for reading whether it holds a draft
+   * (wakes.ts `inputLineEmpty`): a prompt mark (`❯`, `›`, `>`) by default, or
+   * `ruled` for an editor drawn between two full-width rules with no mark (Pi). */
+  inputLine?: 'prompt' | 'ruled'
   /** Fixed CLI flags for per-launch model overrides; never caller-supplied argv. */
   modelSelection?: {
     model: string[]

@@ -25,6 +25,7 @@ import {
   trimTrailingSlashes,
   wakeChoices,
   wakeClock,
+  wakePendingTime,
 } from './index'
 
 type Handler = (req: IncomingMessage, res: ServerResponse) => void
@@ -338,6 +339,18 @@ describe('wake quick choices', () => {
     ])
     expect(wakeClock(new Date(2026, 9, 26, 21, 0).getTime(), now)).toBe('9:00 PM')
     expect(wakeClock(new Date(2026, 9, 27, 8, 0).getTime(), now)).toBe('Tue 8:00 AM')
+  })
+
+  it('words a due check-in as waiting, not as a time ahead', () => {
+    const now = new Date(2026, 9, 28, 16, 20).getTime()
+    expect(wakePendingTime(new Date(2026, 9, 28, 14, 27).getTime(), now)).toBe(
+      'waiting since 2:27 PM',
+    )
+    expect(wakePendingTime(new Date(2026, 9, 27, 14, 27).getTime(), now)).toBe(
+      'waiting since Tue 2:27 PM',
+    )
+    expect(wakePendingTime(new Date(2026, 9, 29, 14, 27).getTime(), now)).toBe('Thu 2:27 PM')
+    expect(wakePendingTime(now + 60_000, now)).toBe('4:21 PM')
   })
 
   it('moves past hours to the next day', () => {

@@ -345,6 +345,9 @@ const ESCAPE = /\x1b\[([0-9;:?]*)([A-Za-z])|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x
 /** Claude Code draws `❯`, Codex `›`, older Claude Code `│ >`. */
 const PROMPT = /^[\s│]*(?:❯|›|>(?=\s))/
 const RULE = /^[\s│╭╰╮╯]*[─━]{8,}/
+/** A line that is only a rule: Pi's editor borders. A border carrying text
+ * (Pi's `── ⠧ Working ──`, `─── ↑ 2 more ───`) is not one. */
+const BARE_RULE = /^\s*[─━]{8,}\s*$/
 
 /** One captured line (with escapes) as plain text, dim runs left out: the
  * agents draw their input placeholders dim. */
@@ -356,9 +359,14 @@ function visibleText(line: string): string {
     if (!dim) out += line.slice(last, match.index)
     last = (match.index ?? 0) + match[0].length
     if (match[2] !== 'm') continue
-    const codes = (match[1] ?? '').split(/[;:]/).map((code) => (code === '' ? 0 : Number(code)))
-    for (const code of codes) {
-      if (code === 2) dim = true
+    // A `38:2:r:g:b` group is one parameter; in `38;2;r;g;b` and `38;5;n` the
+    // color's numbers follow as their own parameters and are not attributes.
+    const codes = (match[1] ?? '').split(';')
+    for (let index = 0; index < codes.length; index += 1) {
+      const code = codes[index] === '' ? 0 : Number(codes[index])
+      if (code === 38 || code === 48 || code === 58)
+        index += codes[index + 1] === '5' ? 2 : codes[index + 1] === '2' ? 4 : 0
+      else if (code === 2) dim = true
       else if (code === 0 || code === 22) dim = false
     }
   }
@@ -368,12 +376,14 @@ function visibleText(line: string): string {
 
 /**
  * True when the agent's input line on this screen (`capture-pane -p -e`) holds
- * no draft. The input is the last prompt line and the lines under it up to a
- * rule or a blank line. No prompt line at all counts as a draft: Tether cannot
- * tell, so it waits.
+ * no draft. With a prompt mark, the input is the last prompt line and the lines
+ * under it up to a rule or a blank line. `ruled` (Pi) has no mark: the input is
+ * every line between the last two bare rules, at least one. A screen without
+ * that shape counts as a draft: Tether cannot tell, so it waits.
  */
-export function inputLineEmpty(screen: string): boolean {
+export function inputLineEmpty(screen: string, shape: 'prompt' | 'ruled' = 'prompt'): boolean {
   const lines = screen.split('\n')
+  if (shape === 'ruled') return ruledInputEmpty(lines.map(visibleText))
   let start = -1
   for (let index = lines.length - 1; index >= 0; index -= 1) {
     if (PROMPT.test(visibleText(lines[index] ?? ''))) {
@@ -389,6 +399,13 @@ export function inputLineEmpty(screen: string): boolean {
     if (content.replace(/[\s│]/g, '')) return false
   }
   return true
+}
+
+function ruledInputEmpty(texts: readonly string[]): boolean {
+  const bottom = texts.findLastIndex((text) => BARE_RULE.test(text))
+  const top = texts.slice(0, Math.max(bottom, 0)).findLastIndex((text) => BARE_RULE.test(text))
+  if (top < 0 || bottom - top < 2) return false
+  return texts.slice(top + 1, bottom).every((text) => !text.trim())
 }
 
 // --- the scheduler -------------------------------------------------------------------
@@ -525,6 +542,8 @@ export class WakeScheduler {
     if (fresh.length) {
       for (const wake of fresh) this.reopened.add(wake.id)
       this.ops.reopen(sessionId)
+      // Now due: the apps word it as waiting rather than as a time ahead.
+      this.ops.changed(sessionId)
     }
     if (!(await this.ops.idle(sessionId))) return
     const quietMs = this.ops.policy().quietSeconds * 1000

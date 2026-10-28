@@ -11,7 +11,8 @@ export interface SelectionToast {
 export interface CheckInMenu {
   status: 'ready' | 'unsupported' | 'unavailable'
   choices: { label: string; time: string; dueAt: number }[]
-  pending: { id: string; time: string }[]
+  /** `due`: its time has passed and Tether holds it until the session is idle. */
+  pending: { id: string; time: string; due: boolean }[]
 }
 
 /** An Agent Hub prompt a new session can take as instructions. */

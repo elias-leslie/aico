@@ -40,7 +40,7 @@ function state(group: Attention['group'], at: number, age = '1m'): Attention {
 const lead = slot('lead', 'Neri — Daybreak lead', {
   coordinator: true,
   badge: { label: 'Coordinator', color: '#6fa8ff' },
-  checkIns: [{ id: 'w2', due_at: 600, time: '6:00 PM' }],
+  checkIns: [{ id: 'w2', due_at: 4_102_444_800_600, time: '6:00 PM' }],
 })
 const ask = slot('ask', 'Neri — Matomo pair lead', {
   coordinatorId: 'lead',
@@ -48,7 +48,7 @@ const ask = slot('ask', 'Neri — Matomo pair lead', {
 })
 const busy = slot('busy', 'Neri — Scanner', {
   coordinatorId: 'lead',
-  checkIns: [{ id: 'w1', due_at: 500, time: '5:30 PM' }],
+  checkIns: [{ id: 'w1', due_at: 4_102_444_800_500, time: '5:30 PM' }],
 })
 const done = slot('done', 'Neri — Report', { coordinatorId: 'lead' })
 const left = slot('left', 'Docs — Notes', {

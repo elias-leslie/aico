@@ -386,6 +386,18 @@ describe('session actions', () => {
     }
     expect(menu.status).toBe('ready')
     expect(menu.choices.map((choice) => choice.label)).toHaveLength(3)
+    // A pending one past its time is marked due, so the menu says it is waiting.
+    tether.sessionWakes.mockResolvedValueOnce({
+      items: [
+        { id: '5f1c0a9b2e7d', dueAt: Date.now() - 60_000 },
+        { id: '5f1c0a9b2e7e', dueAt: Date.now() + 3_600_000 },
+      ],
+      policy: { laterMinutes: 60, tonightHour: 21, morningHour: 8 },
+    } as never)
+    const due = (await handle.get('session:check-in-menu')?.(event)) as {
+      pending: { due: boolean }[]
+    }
+    expect(due.pending.map((wake) => wake.due)).toEqual([true, false])
     tether.addWake.mockRejectedValueOnce(new TetherError(409, 'wake_unsupported', {}))
     await expect(handle.get('session:check-in')?.(event, Date.now() + 60_000)).rejects.toThrow(
       "Aico can't tell when this session is idle, so it can't take check-ins",

@@ -22,6 +22,17 @@ export interface KeptCheckIn {
   failed: boolean
 }
 
+/** A pending check-in's time: `5:30 PM` ahead, `waiting since 2:27 PM` once
+ * due, since Tether holds a due one until the session is idle with nothing
+ * typed. */
+export function pendingCheckInTime(
+  time: string,
+  dueAt: number,
+  now: number = Date.now(),
+): string {
+  return dueAt <= now ? `waiting since ${time}` : time
+}
+
 const KEPT_REFRESH_MS = 15_000
 
 export function useCheckInMenu(sessionId: string) {

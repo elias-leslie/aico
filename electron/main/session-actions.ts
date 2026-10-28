@@ -196,7 +196,11 @@ export function createSessionActions(deps: SessionActionsDeps) {
           ...choice,
           time: wakeClock(choice.dueAt, now),
         })),
-        pending: items.map((wake) => ({ id: wake.id, time: wakeClock(wake.dueAt, now) })),
+        pending: items.map((wake) => ({
+          id: wake.id,
+          time: wakeClock(wake.dueAt, now),
+          due: wake.dueAt <= now,
+        })),
       }
     } catch {
       return { status: 'unavailable', choices: [], pending: [] }

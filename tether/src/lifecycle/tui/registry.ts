@@ -83,13 +83,15 @@ export function toolSpec(tool: AgentTool): TuiSpec {
       reasoningEffort: { arguments: ['-c'], key: 'model_reasoning_effort' },
       daybreak: { arguments: ['-c'], key: 'daybreak' },
     }
-  if (tool.slug === 'pi')
+  if (tool.slug === 'pi') {
+    spec.inputLine = 'ruled'
     spec.modelSelection = {
       model: ['--model'],
       modelProvider: ['--provider'],
       reasoningEffort: { arguments: ['--thinking'] },
       daybreak: { environment: true },
     }
+  }
   return spec
 }
 

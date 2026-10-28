@@ -8,7 +8,7 @@ import {
   type SessionCatalog,
   type SessionDescriptor,
   type TetherTool,
-  wakeClock,
+  wakePendingTime,
 } from 'tether/client'
 import { type Attention, groupRows } from './attention'
 import type { ProjectCatalog } from './project'
@@ -70,7 +70,7 @@ export function createWindowChrome(deps: WindowChromeDeps) {
         coordinatorId: descriptor.coordinatorId ?? null,
         checkIns: (descriptor.wakes ?? []).map((wake) => ({
           id: wake.id,
-          time: wakeClock(wake.dueAt, now()),
+          time: wakePendingTime(wake.dueAt, now()),
           dueAt: wake.dueAt,
         })),
       }

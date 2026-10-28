@@ -163,9 +163,11 @@ export class WakeService {
   }
 
   private async inputEmpty(sessionId: string): Promise<boolean> {
+    const row = getWidget(sessionId)
     try {
       return inputLineEmpty(
         await runTmux(captureVisibleTargetArgs(tmuxPaneTargetForWidget(sessionId), true)),
+        (row && getTui(row.tool)?.inputLine) ?? 'prompt',
       )
     } catch {
       return false

@@ -199,7 +199,7 @@ describe('SessionSwitcher attention', () => {
     const slotA = makeProjectSlot('a', 'Alpha')
     const slotB = {
       ...makeProjectSlot('b', 'Beta'),
-      checkIns: [{ id: 'x', due_at: 1, time: 'Tue 5:30 PM' }],
+      checkIns: [{ id: 'x', due_at: 4_102_444_800_000, time: 'Tue 5:30 PM' }],
     } as PaneSlot
     render(
       <SessionSwitcher

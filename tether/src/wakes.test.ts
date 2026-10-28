@@ -203,6 +203,13 @@ describe('input line', () => {
     expect(inputLineEmpty(claude('\x1b[2mTry "fix lint errors"\x1b[0m'))).toBe(true)
   })
 
+  it('does not take a truecolor or 256-color draft for a dim placeholder', () => {
+    expect(inputLineEmpty(codex('\x1b[38;2;176;176;176mhalf a thought\x1b[0m'))).toBe(false)
+    expect(inputLineEmpty(codex('\x1b[38;5;2mhalf a thought\x1b[0m'))).toBe(false)
+    expect(inputLineEmpty(codex('\x1b[38:2::176:2:176mhalf a thought\x1b[0m'))).toBe(false)
+    expect(inputLineEmpty(codex('\x1b[38;2;1;2;3;2mplaceholder\x1b[0m'))).toBe(true)
+  })
+
   it('sees a draft, including one wrapped onto more lines', () => {
     expect(inputLineEmpty(codex('half a thought'))).toBe(false)
     expect(inputLineEmpty(claude('first line', ['  second line']))).toBe(false)
@@ -212,6 +219,36 @@ describe('input line', () => {
   it('waits when there is no prompt line', () => {
     expect(inputLineEmpty('Working… (esc to interrupt)')).toBe(false)
     expect(inputLineEmpty('')).toBe(false)
+  })
+
+  // Pi draws its editor between two truecolor rules, with no prompt mark and
+  // a reverse-video cursor; the top rule carries `Working` while it runs.
+  const rule = (label = '') =>
+    `\x1b[38;2;143;106;225m${label ? `── ${label} ` : ''}${'─'.repeat(60)}`
+  const pi = (input: string[], top = rule()) =>
+    [
+      ' \x1b[38;2;162;144;213m- \x1b[1m\x1b[39mDone\x1b[0m: verdict submit.',
+      '   \x1b[38;2;150;159;164m────────────────────────────────\x1b[39m',
+      '',
+      top,
+      ...input,
+      rule(),
+      '\x1b[38;2;119;129;135m~/.local/share/aico/blank-slate/neri-gitlab-r1\x1b[39m',
+      '\x1b[38;2;119;129;135m↑52k ↓19k 5.2%/1.0M (auto)      (opencode-go) deepseek-v4.1-flash • high',
+    ].join('\n')
+
+  it('reads Pi’s ruled editor: empty only with nothing between the rules', () => {
+    expect(inputLineEmpty(pi(['\x1b[7m\x1b[39m \x1b[0m']), 'ruled')).toBe(true)
+    // The same screen read for a prompt mark finds none and waits: the old bug.
+    expect(inputLineEmpty(pi(['\x1b[7m\x1b[39m \x1b[0m']))).toBe(false)
+    expect(inputLineEmpty(pi(['half a thought\x1b[7m \x1b[0m']), 'ruled')).toBe(false)
+    expect(inputLineEmpty(pi(['first line', '\x1b[7m \x1b[0m']), 'ruled')).toBe(false)
+    expect(inputLineEmpty(pi(['more\x1b[7m \x1b[0m'], rule('↑ 2 more')), 'ruled')).toBe(false)
+    expect(
+      inputLineEmpty(pi(['\x1b[7m\x1b[39m \x1b[0m'], rule('\x1b[39m⠧ Working')), 'ruled'),
+    ).toBe(false)
+    expect(inputLineEmpty(`${rule()}\n${rule()}`, 'ruled')).toBe(false)
+    expect(inputLineEmpty('', 'ruled')).toBe(false)
   })
 })
 
@@ -279,8 +316,9 @@ describe('wake scheduler', () => {
     await scheduler.tick()
     expect(log.delivered).toEqual([])
     expect(wakes.list()).toHaveLength(1)
-    // Asked to reopen the window only once while it waits.
+    // Asked to reopen the window, and republished as due, only once while it waits.
     expect(log.reopened).toEqual([SESSION])
+    expect(log.changed).toEqual([SESSION])
     state.empty = true
     await scheduler.tick()
     expect(log.delivered).toHaveLength(1)

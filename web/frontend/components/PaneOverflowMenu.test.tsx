@@ -8,7 +8,8 @@ const checkIns = vi.hoisted(() => ({
   cancel: vi.fn(),
 }))
 
-vi.mock('@/lib/hooks/use-check-ins', () => ({
+vi.mock('@/lib/hooks/use-check-ins', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/hooks/use-check-ins')>()),
   useCheckInMenu: () => checkIns.menu,
   useCheckInActions: () => ({
     set: { mutate: checkIns.set, isPending: false, error: null },
@@ -93,7 +94,9 @@ describe('PaneOverflowMenu', () => {
           { label: 'Tonight', time: '9:00 PM', dueAt: 222 },
           { label: 'Tomorrow morning', time: 'Tue 8:00 AM', dueAt: 333 },
         ],
-        pending: [{ id: 'aaaaaaaaaaaa', time: '5:30 PM', dueAt: 100 }],
+        pending: [
+          { id: 'aaaaaaaaaaaa', time: '5:30 PM', dueAt: 4_102_444_800_000 },
+        ],
       },
     }
     const open = () => {

@@ -679,7 +679,11 @@ function populateCheckIns(): void {
     )
   for (const wake of checkIns.pending)
     submenuEl.append(
-      checkInRow('Cancel check-in', wake.time, () => void cancelCheckIn(wake.id, wake.time)),
+      checkInRow(
+        wake.due ? 'Cancel waiting check-in' : 'Cancel check-in',
+        wake.due ? `since ${wake.time}` : wake.time,
+        () => void cancelCheckIn(wake.id, wake.time),
+      ),
     )
 }
 
