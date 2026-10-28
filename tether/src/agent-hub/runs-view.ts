@@ -10,7 +10,7 @@
 //         failed, refused or cancelled -> ended.
 
 import type { RunView, StepAttempt, StepView } from '@agent-hub/sdk'
-import type { RunMember, TeamGroup } from '../client'
+import type { RunMember, TeamGroup } from '../client/index'
 
 /** Where plan changes happen. They stay with the coordinator. */
 export const FOLLOW_UP_HINT =

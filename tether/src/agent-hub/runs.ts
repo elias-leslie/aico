@@ -17,7 +17,7 @@
 // Runs started outside Aico have no `launched_by` and are never listed.
 
 import type { RunAction, RunList, RunListItem, RunView } from '@agent-hub/sdk'
-import type { RunDecision, RunMember, RunsAnswer } from '../client'
+import type { RunDecision, RunMember, RunsAnswer } from '../client/index'
 import type { RunsConfig } from './config'
 import { isActiveRun, parseTime, runMembers } from './runs-view'
 import { classifyHubError, type HubApi } from './runtime'
