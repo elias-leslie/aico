@@ -4,6 +4,7 @@ import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { homedir } from 'node:os'
 import {
+  type RunsAnswer,
   type SessionDescriptor,
   type TetherClient,
   TetherError,
@@ -210,6 +211,33 @@ export class FakeTether {
 
   async projects() {
     return this.projectList
+  }
+
+  /** What `runs()` answers, and the run controls Tether is to refuse. */
+  runsAnswer: RunsAnswer = { status: 'ok', error: null, updatedAt: null, items: [] }
+  failRun: TetherError | null = null
+
+  async runs() {
+    this.record('runs')
+    return this.runsAnswer
+  }
+
+  async resumeRun(runId: string, action: string, stepKey?: string | null) {
+    this.record('resumeRun', runId, action, stepKey ?? null)
+    if (this.failRun) throw this.failRun
+    return { ok: true as const }
+  }
+
+  async cancelRun(runId: string, stepKey?: string | null) {
+    this.record('cancelRun', runId, stepKey ?? null)
+    if (this.failRun) throw this.failRun
+    return { ok: true as const }
+  }
+
+  async dismissRun(runId: string) {
+    this.record('dismissRun', runId)
+    if (this.failRun) throw this.failRun
+    return { ok: true as const }
   }
 
   async version() {

@@ -104,6 +104,11 @@ const DETAILS: Record<string, [number, string]> = {
   invalid_body: [400, 'Invalid request'],
   wake_unsupported: [409, "Aico can't tell when this session is idle, so it can't take check-ins"],
   too_many_wakes: [409, 'This session has as many check-ins as it can take'],
+  unknown_run: [404, 'That run is no longer listed; it may have ended'],
+  unknown_step: [404, 'That step is no longer listed; it may have ended'],
+  not_allowed: [409, 'That is not possible now'],
+  agent_hub_unavailable: [503, 'Agent Hub is not reachable'],
+  agent_hub_refused: [409, 'Agent Hub did not accept it'],
 }
 
 export const UNAVAILABLE_DETAIL =
@@ -120,7 +125,13 @@ export function toHttpError(error: unknown, notFound?: string): HttpError {
       `Tether error: ${error.code}`,
     ]
     let detail = error.code === 'not_found' && notFound ? notFound : knownDetail
-    if ((error.code === 'blocked' || error.code === 'admission_denied') && error.reason)
+    if (
+      (error.code === 'blocked' ||
+        error.code === 'admission_denied' ||
+        error.code === 'agent_hub_refused' ||
+        error.code === 'not_allowed') &&
+      error.reason
+    )
       detail = `${detail} (${error.reason})`
     return new HttpError(status, detail, error)
   }

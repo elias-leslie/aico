@@ -19,6 +19,7 @@ import {
 } from './http'
 import { createLifecycle, type PaneView, tetherCall } from './lifecycle'
 import { registerPaneFileRoutes } from './pane-files'
+import { registerRunRoutes } from './runs'
 import { byText, SHELL_MODE } from './sessions'
 import { registerShowRoutes, type Shows } from './shows'
 import { HttpError, listTools } from './tether'
@@ -349,6 +350,7 @@ export function buildApi(deps: ApiDeps): Router {
   registerFileLocationRoutes(router)
   registerShowRoutes(router, deps.shows)
   registerCheckInRoutes(router, life, tether)
+  registerRunRoutes(router, tether)
 
   // -- Agent Hub, auth, health ------------------------------------------------------
 
