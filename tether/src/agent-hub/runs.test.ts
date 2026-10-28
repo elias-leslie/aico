@@ -180,6 +180,7 @@ describe('runMembers', () => {
     expect(run?.at).toBe(Date.parse('2026-10-28T11:55:00Z'))
     expect(phaseWord('provider_retry')).toBe('provider retry')
     expect(phaseWord('thinking')).toBe('thinking')
+    expect(phaseWord('waiting')).toBe('waiting for output')
     expect(phaseWord(undefined)).toBeNull()
     expect(stepSummary([])).toBeNull()
   })

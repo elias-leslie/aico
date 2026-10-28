@@ -38,6 +38,9 @@ export function parseTime(value: unknown): number | null {
 export function phaseWord(phase: unknown): string | null {
   if (typeof phase !== 'string' || !phase) return null
   if (phase.startsWith('tool:')) return `tool ${phase.slice(5)}`
+  // Agent Hub's phase before the harness has said anything; "waiting" alone
+  // would read as waiting for the owner.
+  if (phase === 'waiting') return 'waiting for output'
   return phase.replaceAll('_', ' ')
 }
 
