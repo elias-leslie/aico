@@ -84,6 +84,28 @@ export interface SessionDescriptor {
   wakes?: SessionWake[]
   /** Present on a 202 create: why the session is not running yet. */
   failure?: { code: string; reason?: string } | null
+  /** `agent-hub` for a chat on an Agent Hub agent (no pane); absent on a tmux session. */
+  backend?: 'agent-hub'
+  /** The Agent Hub side of such a session (tether docs/api-v1.md "Agent Hub sessions"). */
+  agentHub?: AgentHubInfo | null
+}
+
+/** What Tether holds and last saw of an Agent Hub session. */
+export interface AgentHubInfo {
+  /** The Agent Hub session id (not the Tether session id). */
+  sessionId: string
+  agentSlug: string
+  /** The catalog model the root asked for, if it overrode the agent's own. */
+  requestedModel: string | null
+  /** The model Agent Hub last reported. */
+  model: string | null
+  turnState: 'running' | 'idle' | null
+  turnPhase: string | null
+  /** Follow-ups waiting for the turn to end. */
+  queued: number
+  reachable: boolean | null
+  created: boolean
+  promptSent: boolean
 }
 
 /** A session's pending wake as its descriptor carries it. */
