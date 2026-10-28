@@ -115,7 +115,7 @@ describe('runMembers', () => {
         pause: {
           reason: 'step_failed',
           step_key: 'make',
-          at: 1793230241.99,
+          at: 1793230241.99 as never, // Agent Hub sends epoch seconds; the SDK types it as text
           failed: {
             make: { status: 'failed', reason: 'max_attempts: acceptance_failed', error: null },
           },
