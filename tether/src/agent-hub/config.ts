@@ -64,6 +64,13 @@ export function resolveAgentHubConfig(
   }
 }
 
+/** How long a new turn is watched for an immediate failure (ms): `TETHER_AGENT_HUB_SETTLE_MS`,
+ * else null (the runtime's own default). */
+export function resolveSettleMs(env: NodeJS.ProcessEnv = process.env): number | null {
+  const value = Number(env.TETHER_AGENT_HUB_SETTLE_MS)
+  return env.TETHER_AGENT_HUB_SETTLE_MS && Number.isFinite(value) && value >= 0 ? value : null
+}
+
 /** How Tether follows the workflow runs its sessions launch. */
 export interface RunsConfig {
   /** How often the runs are looked at (ms). */

@@ -95,6 +95,11 @@ export function classifyHubError(error: unknown): HubError {
   return new HubError('agent_hub_refused', e.message ?? `Agent Hub refused the request (${status})`)
 }
 
+/** The refusal a turn's `error` event stands for; Agent Hub's own words, never the prompt. */
+function refusedTurn(event: { error?: string }): HubError {
+  return new HubError('agent_hub_refused', event.error ?? 'Agent Hub refused the turn')
+}
+
 /** What the last look at the Agent Hub session found. */
 interface Observation {
   at: number
@@ -109,6 +114,8 @@ interface Observation {
 
 const LIVE_STATUS = 'active'
 const CONNECT_TIMEOUT_MS = 30_000
+/** How long a new turn gets to fail at once before it counts as started. */
+const SETTLE_MS = 3_000
 const SOURCE_METADATA = { transport: 'tether', surface: 'aico', source_client: 'aico-tether' }
 
 export interface AgentHubRuntimeOptions {
@@ -122,6 +129,8 @@ export interface AgentHubRuntimeOptions {
   verifyStatus: (row: WidgetRow) => Promise<SessionStatus>
   now?: () => number
   pollMs?: number
+  /** How long to watch a new turn for an immediate failure (default 3 s). */
+  settleMs?: number
   log?: (message: string) => void
 }
 
@@ -138,6 +147,8 @@ export interface HubDescription {
   reachable: boolean | null
   created: boolean
   promptSent: boolean
+  /** The last thing that stopped a turn from starting or finishing, until the next turn starts. */
+  error: { code: HubErrorCode; message: string } | null
 }
 
 export class AgentHubRuntime {
@@ -146,6 +157,8 @@ export class AgentHubRuntime {
   private readonly chains = new Map<string, Promise<unknown>>()
   private readonly now: () => number
   private readonly pollMs: number
+  private readonly settleMs: number
+  private readonly failures = new Map<string, { code: HubErrorCode; message: string }>()
   private readonly log: (message: string) => void
   private timer: ReturnType<typeof setInterval> | null = null
   private ticking = false
@@ -155,6 +168,7 @@ export class AgentHubRuntime {
   constructor(private readonly options: AgentHubRuntimeOptions) {
     this.now = options.now ?? Date.now
     this.pollMs = options.pollMs ?? 2_000
+    this.settleMs = options.settleMs ?? SETTLE_MS
     this.log = options.log ?? ((message) => console.log(`[tether:agent-hub] ${message}`))
   }
 
@@ -244,8 +258,13 @@ export class AgentHubRuntime {
           markAgentHubCreated(widgetId)
         }
         if (!hub.promptSent) {
-          const existing = await api.sessions.get(hub.hubSessionId, { includeMessages: false })
-          if ((existing.message_count ?? 0) > 0 || existing.turn_state === 'running') {
+          // Posted before a crash only if its turn is running or has answered: a prompt Agent Hub
+          // stored and then failed to run (a refused turn) is posted again.
+          const existing = await api.sessions.get(hub.hubSessionId, { includeMessages: true })
+          if (
+            existing.turn_state === 'running' ||
+            (existing.messages ?? []).some((message) => message.role === 'assistant')
+          ) {
             markAgentHubPromptSent(widgetId)
           } else {
             await this.startTurn(row, hub, prompt)
@@ -255,6 +274,7 @@ export class AgentHubRuntime {
         await this.observe(row, getAgentHubSession(widgetId) ?? hub)
       } catch (error) {
         const failure = classifyHubError(error)
+        this.failures.set(widgetId, { code: failure.code, message: failure.message })
         this.log(`create ${widgetId} not finished: ${failure.code}`)
       }
       this.options.notify(widgetId)
@@ -263,9 +283,13 @@ export class AgentHubRuntime {
 
   // --- turns --------------------------------------------------------------------
 
-  /** Post one user message as a turn and return once Agent Hub has accepted it
-   * (its `connected` event). The turn runs on the server and does not need
-   * this connection, so it is closed straight away. */
+  /** Post one user message as a turn and return once Agent Hub is running it.
+   * `connected` only says the prompt is stored: a turn that cannot run (a
+   * working directory it refuses, a model it cannot route) answers with an
+   * `error` event right after, so the stream is watched for `settleMs` and
+   * that failure is thrown to the caller. The turn runs on the server and does
+   * not need this connection; the rest of the stream is read in the background
+   * only to record a later failure (see `describe().error`). */
   private async startTurn(
     row: WidgetRow,
     hub: AgentHubSessionRow,
@@ -291,20 +315,33 @@ export class AgentHubRuntime {
       },
       { signal: controller.signal, reattach: false },
     )
+    let handedOff = false
+    let settle: ReturnType<typeof setTimeout> | undefined
     try {
       const first = await events.next()
       if (first.done) throw new HubError('agent_hub_refused', 'Agent Hub ended the turn at once')
-      if (first.value.type === 'error') {
-        const message = (first.value as { error?: string }).error
-        throw new HubError('agent_hub_refused', message ?? 'Agent Hub refused the turn')
-      }
+      if (first.value.type === 'error') throw refusedTurn(first.value)
+      const pending = events.next()
+      const early = await Promise.race([
+        pending,
+        new Promise<null>((resolve) => {
+          settle = setTimeout(() => resolve(null), this.settleMs)
+        }),
+      ])
+      if (early && !early.done && early.value.type === 'error') throw refusedTurn(early.value)
+      this.failures.delete(row.id)
+      handedOff = true
+      this.watch(row.id, controller, events, pending)
     } catch (error) {
       throw classifyHubError(error)
     } finally {
       clearTimeout(timeout)
-      this.inflight.delete(controller)
-      controller.abort()
-      await events.return(undefined).catch(() => undefined)
+      clearTimeout(settle)
+      if (!handedOff) {
+        this.inflight.delete(controller)
+        controller.abort()
+        await events.return(undefined).catch(() => undefined)
+      }
     }
     this.options.states.observe(row.id, {
       state: 'working',
@@ -313,6 +350,36 @@ export class AgentHubRuntime {
       at: null,
       agentSessionId: null,
     })
+  }
+
+  /** Read a started turn's stream to its end, keeping an `error` event as the
+   * session's failure. A dropped connection says nothing: the poll shows the turn. */
+  private watch(
+    widgetId: string,
+    controller: AbortController,
+    events: AsyncGenerator<TurnEvent, void, undefined>,
+    pending: Promise<IteratorResult<TurnEvent, void>>,
+  ): void {
+    void (async () => {
+      try {
+        let step = await pending
+        while (!step.done) {
+          if (step.value.type === 'error') {
+            const failure = refusedTurn(step.value)
+            this.failures.set(widgetId, { code: failure.code, message: failure.message })
+            this.options.notify(widgetId)
+            return
+          }
+          step = await events.next()
+        }
+      } catch {
+        // The connection ended; the turn itself is unaffected.
+      } finally {
+        this.inflight.delete(controller)
+        controller.abort()
+        await events.return(undefined).catch(() => undefined)
+      }
+    })()
   }
 
   /**
@@ -531,6 +598,7 @@ export class AgentHubRuntime {
       reachable: observation ? observation.reachable : null,
       created: hub.created,
       promptSent: hub.promptSent,
+      error: this.failures.get(id) ?? null,
     }
   }
 
@@ -581,6 +649,7 @@ export class AgentHubRuntime {
         if (failure.code === 'agent_hub_refused') {
           // It can never succeed; do not retry it every poll.
           removeAgentHubQueued(next.id)
+          this.failures.set(widgetId, { code: failure.code, message: failure.message })
           this.log(`queued follow-up for ${widgetId} dropped: ${failure.message}`)
           this.options.notify(widgetId)
         }
@@ -638,6 +707,7 @@ export class AgentHubRuntime {
   private forget(id: string): void {
     this.observations.delete(id)
     this.lastStatus.delete(id)
+    this.failures.delete(id)
     this.options.states.forget(id)
   }
 

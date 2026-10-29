@@ -88,6 +88,7 @@ import {
   ensureBlankSlateWorkspace,
   forWorkspace,
   isBlankSlateRoot,
+  isHubBlankSlateRoot,
   supportsBlankSlate,
 } from './lifecycle/tui/blank-slate'
 import { staticContextStatus } from './lifecycle/tui/context'
@@ -554,7 +555,10 @@ export function rootOperations(context: LifecycleApiContext): RootControlOperati
         notifySessionChanged(id, { force: true })
     },
     validate: (request) => {
-      if (request.tool === AGENT_HUB_TOOL) return isDir(request.projectRoot)
+      if (request.tool === AGENT_HUB_TOOL) {
+        if (isHubBlankSlateRoot(request.projectRoot)) ensureBlankSlateWorkspace(request.projectRoot)
+        return isDir(request.projectRoot)
+      }
       if (isBlankSlateRoot(request.projectRoot)) ensureBlankSlateWorkspace(request.projectRoot)
       return Boolean(getTui(request.tool)?.enabled && isDir(request.projectRoot))
     },

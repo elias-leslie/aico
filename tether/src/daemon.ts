@@ -4,7 +4,7 @@ import type { Server } from 'node:http'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { createHubApi } from './agent-hub/client'
-import { resolveAgentHubConfig, resolveRunsConfig } from './agent-hub/config'
+import { resolveAgentHubConfig, resolveRunsConfig, resolveSettleMs } from './agent-hub/config'
 import { RunTracker, sessionLaunchers } from './agent-hub/runs'
 import { AgentHubRuntime, type HubApi } from './agent-hub/runtime'
 import { AgentStatePoller, AgentStateTracker } from './agent-state'
@@ -282,6 +282,7 @@ export async function startDaemon(
     }),
     notify: (id) => notifySessionChanged(id, { force: true }),
     verifyStatus: verifySessionStatus,
+    ...(resolveSettleMs(env) !== null ? { settleMs: resolveSettleMs(env) as number } : {}),
   })
   bindAgentHub(hubRuntime)
   setHubBackend({

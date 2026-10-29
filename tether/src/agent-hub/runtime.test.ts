@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgentStateTracker } from '../agent-state'
 import {
   agentHubQueueLength,
@@ -39,6 +39,7 @@ function build(): AgentHubRuntime {
     notify: (id) => notified.push(id),
     verifyStatus: async (row) => runtime.verify(row),
     pollMs: 60_000,
+    settleMs: 20,
     log: () => {},
   })
 }
@@ -127,6 +128,53 @@ describe('AgentHubRuntime', () => {
     await runtime.ensure(row.id, 'Say hello.')
     expect(hub.count('POST', /^\/api\/complete$/)).toBe(1)
     expect(hub.count('POST', /^\/api\/sessions$/)).toBe(1)
+  })
+
+  it('reports a first prompt Agent Hub stored but could not run, and posts it again on a repeat', async () => {
+    const row = root()
+    hub.failNextTurn = "working_dir '/x' is outside the known project roots and scratch"
+    await runtime.ensure(row.id, 'Say hello.')
+    // The prompt is not marked sent, and the failure is on the description.
+    expect(getAgentHubSession(row.id)).toMatchObject({ created: true, promptSent: false })
+    expect(runtime.describe(row.id)?.error).toEqual({
+      code: 'agent_hub_refused',
+      message: "working_dir '/x' is outside the known project roots and scratch",
+    })
+    expect(hub.sessions.get(hubId(row))?.messages).toEqual(['Say hello.'])
+    // A repeat of the create (same request) runs the turn this time and clears the failure.
+    await runtime.ensure(row.id, 'Say hello.')
+    expect(getAgentHubSession(row.id)).toMatchObject({ promptSent: true })
+    expect(runtime.describe(row.id)?.error).toBeNull()
+    expect(hub.sessions.get(hubId(row))?.turnRunning).toBe(true)
+    expect(hub.count('POST', /^\/api\/complete$/)).toBe(2)
+  })
+
+  it('throws a follow-up Agent Hub cannot run, and queues nothing for it', async () => {
+    const row = root()
+    await runtime.ensure(row.id, 'First.')
+    hub.finishTurn(hubId(row))
+    hub.failNextTurn = 'the route is unavailable'
+    await expect(runtime.send(row.id, 'Second.')).rejects.toMatchObject({
+      code: 'agent_hub_refused',
+      message: 'the route is unavailable',
+    })
+    expect(agentHubQueueLength(row.id)).toBe(0)
+  })
+
+  it('records an error that arrives after the turn has started', async () => {
+    const row = root()
+    hub.failNextTurnLate = { error: 'provider said no', afterMs: 120 }
+    await runtime.ensure(row.id, 'First.')
+    // Started: the settle window passed without a failure.
+    expect(getAgentHubSession(row.id)).toMatchObject({ promptSent: true })
+    expect(runtime.describe(row.id)?.error).toBeNull()
+    await vi.waitFor(() =>
+      expect(runtime.describe(row.id)?.error).toEqual({
+        code: 'agent_hub_refused',
+        message: 'provider said no',
+      }),
+    )
+    expect(notified).toContain(row.id)
   })
 
   it('sends the requested model with each turn', async () => {

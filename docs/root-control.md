@@ -445,7 +445,18 @@ thinking and tool blocks, Stop, a follow-up typed during a turn shown as queued)
 terminal. Tether makes every Agent Hub call; the window's main process asks Tether over its
 private socket for that window's own session, so the owner token and the Agent Hub address
 never reach the page. `show` and `position` reach the desktop for these roots; `title` and
-`coordinator` stay catalog-only. Resume, reasoning effort, Daybreak, Agent Hub context and Blank Slate do not apply.
+`coordinator` stay catalog-only. Resume, reasoning effort, Daybreak and Agent Hub context do not apply.
+
+A turn counts as started only once Agent Hub is running it: Agent Hub stores the prompt and
+sends `connected` first, then an `error` event if it cannot run the turn (a working
+directory outside its known roots and scratch, a model it cannot route). Tether watches the
+stream for a few seconds (`TETHER_AGENT_HUB_SETTLE_MS`) and keeps the failure on the session
+(`agentHub.error`). A create then exits nonzero with `reason: turn_not_started` and `detail`
+(the same request ID posts the prompt again), a `root send` exits nonzero with the reason
+and detail, and `st aico root status` shows `turnState` (`running`, `idle`, `unknown`),
+`queued` and the last `error`. `--blank-slate` gives the chat an empty workspace under
+`/tmp/aico-blank-slate/<request id>` (the scratch Agent Hub accepts as a working directory)
+and needs no `--project-root`.
 [api-v1.md](../tether/docs/api-v1.md#agent-hub-sessions) has the session behavior.
 
 A tmux tool is root-capable exactly when it has a resume adapter; `GET /v1/tools`

@@ -33,6 +33,17 @@ export function isBlankSlateRoot(
   return Boolean(root) && dirname(root as string) === blankSlateBase(env)
 }
 
+/** Parent of the empty workspaces of Blank Slate Agent Hub chats. An Agent Hub
+ * chat runs its tools inside Agent Hub, which only accepts a known project root,
+ * its own run directory or the system temp directory (scratch) as a working
+ * directory, so these live under /tmp, not beside the terminal workspaces.
+ * `st aico create --tool agent-hub --blank-slate` uses the same path. */
+export const HUB_BLANK_SLATE_BASE = '/tmp/aico-blank-slate'
+
+export function isHubBlankSlateRoot(root: string | null | undefined): boolean {
+  return Boolean(root) && dirname(root as string) === HUB_BLANK_SLATE_BASE
+}
+
 /** A new empty workspace for one Blank Slate session. */
 export function createBlankSlateWorkspace(env: NodeJS.ProcessEnv = process.env): string {
   const root = join(blankSlateBase(env), randomUUID())

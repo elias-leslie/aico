@@ -41,10 +41,17 @@ def hub_descriptor(payload):
             "digest": hashlib.sha256(json.dumps(fields, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()}
 
 
-def run_create(monkeypatch, args):
+HUB_SESSION = {"id": "12345678", "backend": "agent-hub", "agentHub": {
+    "turnState": "running", "turnPhase": "waiting_for_model", "queued": 0, "reachable": True,
+    "created": True, "promptSent": True, "error": None}}
+
+
+def run_create(monkeypatch, args, agent_hub=None):
     calls, output = [], []
 
-    def receipt(_, path, route, payload, **kwargs):
+    def receipt(_, path, route, payload=None, **kwargs):
+        if route.startswith("/v1/sessions/"):
+            return 200, {**HUB_SESSION, "agentHub": {**HUB_SESSION["agentHub"], **(agent_hub or {})}}
         calls.append(payload)
         return 200, hub_descriptor(payload)
 
@@ -58,6 +65,39 @@ def test_create_sends_the_agent_slug_and_binds_it_into_the_digest(monkeypatch):
     assert code == 0
     assert calls[0]["tool"] == "agent-hub" and calls[0]["agentSlug"] == "chat"
     assert output[0]["status"] == "running" and output[0]["requestId"] == "hub-1"
+
+
+def test_create_reports_the_turn_it_started(monkeypatch):
+    code, _, output = run_create(monkeypatch, [*HUB, "--root-socket", "/fixture/gui.sock"],
+                                 {"turnState": "running", "queued": 0})
+    assert code == 0 and output[0]["turnState"] == "running" and output[0]["queued"] == 0
+
+
+def test_create_fails_with_the_reason_when_the_first_turn_did_not_start(monkeypatch):
+    refusal = "working_dir '/x' is outside the known project roots and scratch"
+    code, _, output = run_create(
+        monkeypatch, [*HUB, "--root-socket", "/fixture/gui.sock"],
+        {"promptSent": False, "turnState": "idle",
+         "error": {"code": "agent_hub_refused", "message": refusal}})
+    assert code == 1
+    assert output[0]["status"] == "uncertain" and output[0]["reason"] == "turn_not_started"
+    assert output[0]["detail"] == refusal and output[0]["promptSent"] is False
+
+
+def test_create_fails_when_agent_hub_could_not_be_reached_for_the_first_turn(monkeypatch):
+    code, _, output = run_create(
+        monkeypatch, [*HUB, "--root-socket", "/fixture/gui.sock"],
+        {"created": False, "promptSent": False, "turnState": None, "reachable": None,
+         "error": {"code": "agent_hub_unavailable", "message": "Agent Hub is not reachable"}})
+    assert code == 1 and output[0]["reason"] == "turn_not_started"
+
+
+def test_blank_slate_chat_gets_an_empty_workspace_agent_hub_accepts(monkeypatch):
+    args = [a for a in HUB if a not in ("--project", "sample-app", "--project-root", "/fixture/project")]
+    code, calls, _ = run_create(monkeypatch, [*args, "--blank-slate", "--root-socket", "/fixture/gui.sock"])
+    assert code == 0
+    assert calls[0]["projectRoot"] == "/tmp/aico-blank-slate/hub-1" and calls[0]["projectId"] == "blank-slate"
+    assert calls[0]["tool"] == "agent-hub"
 
 
 def test_create_passes_a_model_override(monkeypatch):
@@ -85,7 +125,7 @@ def test_other_tools_never_send_an_agent_slug(monkeypatch):
 
 @pytest.mark.parametrize("args", [
     [a for a in HUB if a not in ("--agent", "chat")],              # no agent
-    [*HUB, "--reasoning-effort", "high"], [*HUB, "--daybreak", "on"], [*HUB, "--blank-slate"],
+    [*HUB, "--reasoning-effort", "high"], [*HUB, "--daybreak", "on"],
     [*HUB, "--resume-session", "00000000-0000-4000-8000-000000000001"],
     ["create", "cx-2", "Go.", "--tool", "codex", "--agent", "chat", "--project", "sample-app",
      "--project-root", "/fixture/project", "--work-role", "implementation"],
@@ -187,3 +227,62 @@ def test_a_session_that_is_not_an_agent_hub_one_is_not_pinned(monkeypatch):
     serve(monkeypatch, "idle", backend="tmux")
     resolved, unavailable = hub_collector().discover(None)
     assert resolved == [] and unavailable[0]["reason"] == "session_unavailable"
+
+
+# send errors and status: nothing is "delivered" unless Tether started or queued the turn.
+def serve_send(monkeypatch, inject):
+    calls = []
+
+    def receipt(_, endpoint, route, payload=None, **_o):
+        calls.append(route)
+        if route.endswith("/inject"):
+            return inject
+        return (200, ROOT) if "/roots/" in route else (200, SESSION)
+
+    output = []
+    monkeypatch.setattr(admin.Collector, "receipt", receipt)
+    monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
+    return calls, output
+
+
+def test_send_fails_with_agent_hubs_reason_when_the_turn_cannot_run(monkeypatch):
+    refusal = "ProviderError: route unavailable"
+    _, output = serve_send(monkeypatch, (409, {"error": "workload_unavailable", "reason": refusal}))
+    assert admin.main(["root", "send", "hub-1", "More.", "--generation", GENERATION,
+                       "--root-socket", "/fixture/gui.sock", "--owner-socket", "/fixture/control.sock"]) == 1
+    assert output[0]["reason"] == "workload_unavailable" and output[0]["detail"] == refusal
+    assert output[0]["applied"] is False and "delivered" not in output[0]
+
+
+def test_send_fails_when_agent_hub_is_unreachable(monkeypatch):
+    _, output = serve_send(monkeypatch, (503, {"error": "agent_hub_unavailable"}))
+    assert admin.main(["root", "send", "hub-1", "More.", "--generation", GENERATION,
+                       "--root-socket", "/fixture/gui.sock", "--owner-socket", "/fixture/control.sock"]) == 1
+    assert output[0]["applied"] is None and "delivered" not in output[0]
+
+
+@pytest.mark.parametrize(("hub", "expected"), [
+    ({"turnState": "running", "queued": 2, "reachable": True, "promptSent": True}, ("running", 2)),
+    ({"turnState": "idle", "queued": 0, "reachable": True, "promptSent": True}, ("idle", 0)),
+    ({"turnState": "running", "queued": 0, "reachable": False, "promptSent": True}, ("unknown", 0)),
+    ({"turnState": None, "queued": 0, "reachable": None, "promptSent": True}, ("unknown", 0)),
+])
+def test_status_reports_the_turn_state_of_a_chat_root(monkeypatch, hub, expected):
+    output = []
+    monkeypatch.setattr(admin.Collector, "receipt", lambda _, endpoint, route, payload=None, **_o: (
+        (200, ROOT) if "/roots/" in route else (200, {**SESSION, "agentHub": hub})))
+    monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
+    assert admin.main(["root", "status", "hub-1", "--root-socket", "/fixture/gui.sock"]) == 0
+    assert (output[0]["turnState"], output[0]["queued"]) == expected and output[0]["backend"] == "agent-hub"
+
+
+def test_status_shows_why_a_turn_did_not_start(monkeypatch):
+    output = []
+    hub = {"turnState": "idle", "queued": 0, "reachable": True, "promptSent": False,
+           "error": {"code": "agent_hub_refused", "message": "no route"}}
+    monkeypatch.setattr(admin.Collector, "receipt", lambda _, endpoint, route, payload=None, **_o: (
+        (200, ROOT) if "/roots/" in route else (200, {**SESSION, "agentHub": hub})))
+    monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
+    assert admin.main(["root", "status", "hub-1", "--root-socket", "/fixture/gui.sock"]) == 0
+    assert output[0]["error"] == {"code": "agent_hub_refused", "message": "no route"}
+    assert output[0]["promptSent"] is False

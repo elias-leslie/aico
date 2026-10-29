@@ -117,6 +117,8 @@ PROMPT_SECRET = re.compile(
 class Unavailable(Exception):
     """Only a closed reason code leaves this exception boundary."""
 
+    detail: str | None = None
+
 
 class IdentityChanged(Exception):
     pass
@@ -132,6 +134,18 @@ class Stopped(Exception):
 
 class Refused(Unavailable):
     """A qualified owner rejection: the owner reports that nothing was applied."""
+
+    def __init__(self, reason: str, detail: str | None = None):
+        super().__init__(reason)
+        self.detail = detail
+
+
+def reason_detail(text: object) -> str | None:
+    """Agent Hub's own words for why a chat turn did not run (one printable line, bounded)."""
+    if not isinstance(text, str):
+        return None
+    line = " ".join(re.sub(r"[\x00-\x1f\x7f]", " ", text).split())[:300]
+    return line or None
 
 
 # ECMAScript TrimString whitespace and line terminators, matching the owner.
@@ -183,8 +197,9 @@ def owner_reply(status: int, data: dict, unqualified: str) -> None:
     if status == 200:
         return
     reason = data.get("error")
+    detail = reason_detail(data.get("reason"))
     if isinstance(reason, str) and reason in OWNER_REFUSALS.get(status, ()):
-        raise Refused(reason)
+        raise Refused(reason, detail)
     raise Unavailable(reason if reason in ("outcome_uncertain", "blocked", "close_uncertain")
                       else unqualified)
 
@@ -1124,10 +1139,19 @@ def tool_slug(value: str) -> str:
     return value
 
 
+HUB_BLANK_SLATE_BASE = "/tmp/aico-blank-slate"
+
+
 def blank_slate_workspace(request_id: str) -> str:
     """The Blank Slate workspace for this request: fixed per request ID so a retry
     sends the same body; Tether creates it (tether/src/lifecycle/tui/blank-slate.ts)."""
     return str(Path.home() / ".local" / "share" / "aico" / "blank-slate" / request_id)
+
+
+def hub_blank_slate_workspace(request_id: str) -> str:
+    """The empty workspace of a Blank Slate Agent Hub chat: under the system temp directory,
+    the scratch Agent Hub accepts as a working directory (tether/src/lifecycle/tui/blank-slate.ts)."""
+    return f"{HUB_BLANK_SLATE_BASE}/{request_id}"
 
 
 INSTRUCTIONS_BYTES = 64 * 1024  # Tether's limit (tether/src/lifecycle/tui/instructions.ts)
@@ -1196,6 +1220,30 @@ def prompt_error(prompt: object) -> str | None:
     return None
 
 
+def hub_view(collector: Collector, control: str, widget: str) -> dict:
+    """What an Agent Hub chat root's session says about its turn: the state Agent Hub reported
+    (running, idle or unknown when it cannot be reached), the follow-ups waiting, and the last
+    failure to start or finish a turn. Empty when the session cannot be read."""
+    try:
+        status, session = collector.receipt(control, f"/v1/sessions/{widget}", timeout=2)
+    except (Unavailable, Stopped):
+        return {}
+    hub = session.get("agentHub") if status == 200 else None
+    if not isinstance(hub, dict):
+        return {}
+    turn = hub.get("turnState") if hub.get("reachable") is not False else None
+    view: dict = {"backend": "agent-hub", "turnState": turn if turn in ("running", "idle") else "unknown",
+                  "queued": hub.get("queued") if type(hub.get("queued")) is int else 0,
+                  "promptSent": hub.get("promptSent") is True}
+    if isinstance(hub.get("turnPhase"), str) and re.fullmatch(r"[a-z_]{1,40}", hub["turnPhase"]):
+        view["turnPhase"] = hub["turnPhase"]
+    error = hub.get("error")
+    if isinstance(error, dict):
+        view["error"] = {"code": error.get("code") if isinstance(error.get("code"), str) else "agent_hub_refused",
+                         "message": reason_detail(error.get("message"))}
+    return view
+
+
 def create_main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="st aico create", description=(
         "Create one exact owner root; native resume uses an adapter-validated session ID in a new root. "
@@ -1247,9 +1295,9 @@ def create_main(argv: list[str]) -> int:
             parser.error("--tool agent-hub needs --agent SLUG")
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,99}", args.agent):
             parser.error("invalid agent slug")
-        if (args.blank_slate or args.resume_session is not None or args.reasoning_effort is not None
+        if (args.resume_session is not None or args.reasoning_effort is not None
                 or args.daybreak is not None or args.agent_hub_context is not None):
-            parser.error("--tool agent-hub is a chat session: drop --blank-slate, --resume-session, "
+            parser.error("--tool agent-hub is a chat session: drop --resume-session, "
                          "--reasoning-effort, --daybreak and --agent-hub-context")
     elif args.agent is not None:
         parser.error("--agent only goes with --tool agent-hub")
@@ -1265,7 +1313,8 @@ def create_main(argv: list[str]) -> int:
            (args.request_id, args.project, args.role, *(v for v in (args.lead_root, args.facet) if v is not None))):
         parser.error("invalid root metadata")
     if args.blank_slate:
-        args.project_root = blank_slate_workspace(args.request_id)
+        args.project_root = (hub_blank_slate_workspace(args.request_id) if args.tool == "agent-hub"
+                             else blank_slate_workspace(args.request_id))
     if (not os.path.isabs(args.project_root) or os.path.normpath(args.project_root) != args.project_root
             or "\0" in args.project_root):
         parser.error("project root must be an exact normalized absolute path")
@@ -1373,6 +1422,20 @@ def create_main(argv: list[str]) -> int:
         output.update(workRole=args.work_role, workRoleDisplayName=args.work_role_name)
         if "launchedBy" in payload:
             output["launchedBy"] = payload["launchedBy"]
+        if args.tool == "agent-hub":
+            # Tether posts the first prompt before it answers: a chat whose turn did not start is a
+            # failed create, not a running root. The same request ID tries the prompt again.
+            hub = hub_view(Collector(endpoint, "", "", time.monotonic() + 3, threading.Event()),
+                           socket_path(tether_socket()), host)
+            if hub:
+                output.update(turnState=hub["turnState"], queued=hub["queued"])
+            if hub.get("error") or (hub and not hub["promptSent"] and state == "running"):
+                error = hub.get("error") or {}
+                output.update(status="uncertain", reason="turn_not_started", promptSent=False)
+                if error.get("message"):
+                    output["detail"] = error["message"]
+                emit_json(collector, output)
+                return 1
         emit_json(collector, output)
         return 0
     except (ValueError, UnicodeError):
@@ -1593,6 +1656,8 @@ def root_main(argv: list[str]) -> int:
         pinned = root_descriptor(data, args.request_id)
         output.update(pinned)
         if args.operation == "status":
+            if data.get("tool") == "agent-hub" and pinned["status"] != "ended":
+                output.update(hub_view(collector, control, pinned["hostIdentity"]))
             emit_json(collector, output)
             return 0
         output["operation"] = args.operation
@@ -1695,6 +1760,8 @@ def root_send(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
     except (Unavailable, Stopped) as error:
         output.update(reason=str(error) if isinstance(error, Unavailable) else "deadline",
                       applied=applied(sent, error))
+        if isinstance(error, Unavailable) and error.detail:
+            output["detail"] = error.detail
         emit_unless_stopped(collector, output)
         return 1
     except BrokenPipeError:

@@ -41,6 +41,11 @@ export class FakeHub {
   down: number | null = null
   /** Answer attach (stream) requests with this status instead. */
   attachStatus: number | null = null
+  /** Answer the next turn like Agent Hub does when it cannot run it: the prompt is stored,
+   * `connected` is sent, then an `error` event ends the turn. */
+  failNextTurn: string | null = null
+  /** Like `failNextTurn`, but the `error` event comes this many ms after `connected`. */
+  failNextTurnLate: { error: string; afterMs: number } | null = null
   /** Attach connections currently open. */
   readonly streams = new Map<ServerResponse, string>()
   private server: Server | null = null
@@ -182,6 +187,19 @@ export class FakeHub {
         return json(409, { error: 'turn_running', message: 'a turn is already running' })
       const message = (body.messages as { content: string }[])[0]
       session.messages.push(message.content)
+      if (this.failNextTurn !== null) {
+        const error = this.failNextTurn
+        this.failNextTurn = null
+        res.writeHead(200, { 'content-type': 'text/event-stream' })
+        res.write(
+          `data: ${JSON.stringify({ type: 'connected', seq: 1, session_id: session.id, turn_id: 'turn-1' })}\n\n`,
+        )
+        res.write(`data: ${JSON.stringify({ type: 'error', seq: 2, error })}\n\n`)
+        res.write('data: [DONE]\n\n')
+        return void res.end()
+      }
+      const late = this.failNextTurnLate
+      this.failNextTurnLate = null
       session.turnRunning = true
       session.turnPhase = 'waiting_for_model'
       session.events = [{ type: 'connected', seq: 1, session_id: session.id, turn_id: 'turn-1' }]
@@ -191,6 +209,13 @@ export class FakeHub {
       )
       this.open.add(res)
       res.on('close', () => this.open.delete(res))
+      if (late)
+        setTimeout(() => {
+          session.turnRunning = false
+          if (res.destroyed) return
+          res.write(`data: ${JSON.stringify({ type: 'error', seq: 2, error: late.error })}\n\n`)
+          res.end('data: [DONE]\n\n')
+        }, late.afterMs)
       return
     }
     if (route === 'POST /api/complete/cancel' && body) {

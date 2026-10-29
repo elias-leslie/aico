@@ -1,7 +1,7 @@
 // The agent-hub session kind through the control socket, against a fake Agent
 // Hub: create, lineage, state, follow-ups, tmux-only routes, End.
 
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { request } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -40,6 +40,7 @@ beforeEach(async () => {
     HOME: dir,
     TETHER_AGENT_HUB_URL: baseUrl,
     TETHER_AGENT_HUB_CLIENT_ID: 'client-1',
+    TETHER_AGENT_HUB_SETTLE_MS: '20',
     TETHER_AGENT_HUB_OWNER_TOKEN_FILE: join(dir, 'owner-token'),
   })
   await daemon.ready
@@ -105,6 +106,25 @@ describe('agent-hub sessions over the control socket', () => {
     expect(listed.items.map((s) => s.id)).toContain(id)
   })
 
+  it('makes the empty workspace of a Blank Slate chat under the system temp directory', async () => {
+    const root = '/tmp/aico-blank-slate/test-hub-blank'
+    rmSync(root, { recursive: true, force: true })
+    try {
+      const created = await create({
+        requestId: 'bs-1',
+        projectId: 'blank-slate',
+        projectRoot: root,
+      })
+      expect(created.status).toBe(200)
+      expect(existsSync(root)).toBe(true)
+      expect(hub.requests.find((r) => r.path === '/api/complete')?.body).toMatchObject({
+        working_dir: root,
+      })
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('refuses an unknown agent, an unknown model and a hub root without a slug', async () => {
     expect(await create({ requestId: 'x1', agentSlug: 'missing' })).toMatchObject({
       status: 422,
@@ -132,6 +152,42 @@ describe('agent-hub sessions over the control socket', () => {
     expect(getWidget('aabbcc01')?.coordinator).toBe(true)
     expect(getWidget(id)?.coordinatorId).toBe('aabbcc01')
     expect(getWidget(id)?.coordinator).toBe(false)
+  })
+
+  it('shows why the first turn did not start, and a repeat of the create starts it', async () => {
+    hub.failNextTurn = 'working_dir is outside the known project roots and scratch'
+    const first = await create()
+    const id = (first.body as Body).hostIdentity as string
+    const failed = (await call('GET', `/v1/sessions/${id}`)).body as Body
+    expect(failed.agentHub).toMatchObject({
+      promptSent: false,
+      turnState: 'idle',
+      error: {
+        code: 'agent_hub_refused',
+        message: 'working_dir is outside the known project roots and scratch',
+      },
+    })
+    expect((await create()).status).toBe(200)
+    const started = (await call('GET', `/v1/sessions/${id}`)).body as Body
+    expect(started.agentHub).toMatchObject({ promptSent: true, turnState: 'running', error: null })
+  })
+
+  it('answers a follow-up Agent Hub cannot run with its reason, never delivered', async () => {
+    const id = ((await create()).body as Body).hostIdentity as string
+    const generation = ((await call('GET', `/v1/sessions/${id}`)).body as Body).generation
+    const [hubSession] = [...hub.sessions.values()]
+    hub.finishTurn(hubSession.id)
+    hub.failNextTurn = 'the model route is unavailable'
+    const refused = await call('POST', `/v1/sessions/${id}/inject`, {
+      generation,
+      text: 'More.',
+      mode: 'paste',
+      submit: true,
+    })
+    expect(refused).toMatchObject({
+      status: 409,
+      body: { error: 'workload_unavailable', reason: 'the model route is unavailable' },
+    })
   })
 
   it('queues a follow-up while a turn runs and delivers it once idle', async () => {
