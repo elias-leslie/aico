@@ -76,6 +76,24 @@ export function attentionOf(
   return { group, activity, at, detail, age }
 }
 
+/** A running workflow step as an agent's state: working, or waiting for the
+ * owner (the session list shows only those). */
+export function stepAttention(
+  step: { group: AttentionGroup; at: number | null },
+  now: number,
+): Attention {
+  const blocked = step.group === 'needs-you'
+  const word = blocked ? 'waiting' : 'working'
+  const age = step.at ? formatAge(now - step.at) : null
+  return {
+    group: blocked ? 'needs-you' : 'working',
+    activity: blocked ? 'blocked' : 'working',
+    at: step.at,
+    detail: age ? `${word} ${age}` : word,
+    age,
+  }
+}
+
 const RANK: Record<AttentionGroup, number> = {
   'needs-you': 0,
   finished: 1,

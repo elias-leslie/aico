@@ -1,21 +1,16 @@
-// Workflow runs in the desktop: the runs and steps Tether lists (a run under the
-// session that launched it, its steps under the run) as tray rows, the signal a
-// run raises when it needs the owner, and what the owner can do to one.
+// Workflow runs in the desktop: Tether lists the runs the sessions launched.
+// A step that is running or waiting for the owner is a child agent of the
+// session that launched the run (a tray row like any other); a run itself is
+// not listed. A run that needs the owner raises the signal sessions raise
+// (tray icon, phone push). Opening a step reads its latest attempt, read-only.
 //
 // Run state belongs to Agent Hub and is read by Tether; this holds the last
-// answer, feeds it to the same attention tracker sessions use (a run that
-// needs the owner lights the tray icon and sends the same phone push), and
-// turns a tray choice into a Tether call.
+// answer and feeds the attention tracker.
 
-import {
-  type RunMember,
-  type RunsAnswer,
-  runDetail,
-  TetherError,
-  TetherUnavailable,
-} from 'tether/client'
-import type { AgentState } from './attention'
-import type { RunAction, TrayWidget } from './tray'
+import { childAgents, type RunMember, type RunsAnswer } from 'tether/client'
+import { type AgentState, stateAge } from './attention'
+import { toolDisplayName, traySessionLabel } from './session-catalog'
+import type { TrayWidget } from './tray'
 
 interface RunsDeps {
   attention: {
@@ -24,43 +19,11 @@ interface RunsDeps {
   }
   /** Rebuild the tray. */
   tray(): void
-  tether: {
-    resumeRun(
-      runId: string,
-      action: 'retry' | 'skip' | 'fail',
-      stepKey?: string | null,
-    ): Promise<unknown>
-    cancelRun(runId: string, stepKey?: string | null): Promise<unknown>
-  }
-  /** Read the runs again now. */
-  refresh(): Promise<unknown>
-  openExternal(url: string): Promise<unknown>
+  /** Aico's agent tools, for the names on step rows. */
+  tools(): readonly { slug: string; name: string }[]
   /** Read a step's latest attempt in a window with no input. */
   openStep(viewer: { runId: string; stepKey: string; title: string }): void
-  dialog: {
-    showMessageBox(options: Electron.MessageBoxOptions): Promise<{ response: number }>
-    showErrorBox(title: string, content: string): void
-  }
-}
-
-/** A tray choice's failure in the owner's words. */
-export function runFailure(error: unknown): string {
-  if (error instanceof TetherUnavailable) return 'Tether is not reachable.'
-  if (error instanceof TetherError) {
-    const reason = error.reason
-    switch (error.code) {
-      case 'agent_hub_unavailable':
-        return 'Agent Hub is not reachable.'
-      case 'agent_hub_refused':
-        return reason ? `Agent Hub did not accept it: ${reason}` : 'Agent Hub did not accept it.'
-      case 'unknown_run':
-      case 'unknown_step':
-        return 'That run is no longer listed. It may have ended.'
-      case 'not_allowed':
-        return reason ?? 'That is not possible now.'
-    }
-  }
-  return 'Something went wrong; the run was not changed.'
+  now?: () => number
 }
 
 /** The app state a run member gives the attention tracker. */
@@ -91,21 +54,27 @@ export function createRuns(deps: RunsDeps) {
     deps.tray()
   }
 
-  /** Runs and steps as tray rows. */
+  /** The steps to list, as tray rows under the session that launched the run. */
   function widgets(): TrayWidget[] {
-    return (answer?.items ?? []).map((member) => ({
-      id: member.id,
-      label: member.title,
-      open: false,
-      group: member.group,
-      detail: runDetail(member),
-      at: member.at,
-      coordinator: false,
-      coordinatorId: member.coordinatorId,
-      kind: member.kind,
-      summary: member.summary ?? null,
-      run: member,
-    }))
+    const now = (deps.now ?? Date.now)()
+    return childAgents(answer?.items ?? []).map((member) => {
+      const tool =
+        member.tool === 'agent-hub' ? 'Agent Hub' : toolDisplayName(member.tool ?? '', deps.tools())
+      const state = member.group === 'needs-you' ? 'blocked' : 'working'
+      return {
+        id: member.id,
+        label: traySessionLabel(member.title, tool),
+        title: member.title,
+        tool,
+        open: false,
+        group: member.group,
+        detail: stateAge(state, member.group, member.at, now),
+        at: member.at,
+        coordinator: false,
+        coordinatorId: member.coordinatorId,
+        run: member,
+      }
+    })
   }
 
   /** A line for the top of the tray when the runs may be out of date; null when fresh. */
@@ -117,89 +86,20 @@ export function createRuns(deps: RunsDeps) {
       : `Workflow runs unavailable: ${why}`
   }
 
-  async function confirm(message: string, detail: string, button: string): Promise<boolean> {
-    const response = await deps.dialog.showMessageBox({
-      type: 'warning',
-      buttons: ['Keep going', button],
-      defaultId: 0,
-      cancelId: 0,
-      noLink: true,
-      title: button,
-      message,
-      detail,
-    })
-    return response.response === 1
-  }
-
-  function find(runId: string, stepKey: string | null): RunMember | undefined {
-    return answer?.items.find((m) => m.runId === runId && m.stepKey === stepKey)
-  }
-
-  async function handle(action: RunAction): Promise<void> {
-    try {
-      switch (action.type) {
-        case 'open': {
-          const url = new URL(action.url)
-          if (url.protocol !== 'http:' && url.protocol !== 'https:') return
-          await deps.openExternal(url.toString())
-          return
-        }
-        case 'openStep': {
-          const step = find(action.runId, action.stepKey)
-          const run = find(action.runId, null)
-          if (!step?.session) return
-          deps.openStep({
-            runId: action.runId,
-            stepKey: action.stepKey,
-            title: run ? `${step.title} — ${run.title}` : step.title,
-          })
-          return
-        }
-        case 'resume': {
-          const target = find(action.runId, action.stepKey)
-          const name = target?.title ?? 'this'
-          if (
-            action.action === 'fail' &&
-            !(await confirm(
-              `Fail ${target?.kind === 'step' ? 'step' : 'run'} ${name}?`,
-              'The workflow records it as failed and carries on without it.',
-              'Fail it',
-            ))
-          )
-            return
-          await deps.tether.resumeRun(action.runId, action.action, action.stepKey)
-          break
-        }
-        case 'cancel': {
-          const target = find(action.runId, action.stepKey)
-          const what = action.stepKey ? 'step' : 'run'
-          if (
-            !(await confirm(
-              `Cancel ${what} ${target?.title ?? ''}?`.replace('  ', ' '),
-              action.stepKey
-                ? 'The step stops. The rest of the run carries on.'
-                : 'The run and its steps stop. This cannot be undone.',
-              `Cancel ${what}`,
-            ))
-          )
-            return
-          await deps.tether.cancelRun(action.runId, action.stepKey)
-          break
-        }
-      }
-      await deps.refresh()
-    } catch (error) {
-      deps.dialog.showErrorBox('Workflow run', runFailure(error))
-      await deps.refresh().catch(() => undefined)
-    }
+  /** Open a step's current attempt, read-only. */
+  function openStep(runId: string, stepKey: string): void {
+    const step = answer?.items.find((m) => m.runId === runId && m.stepKey === stepKey)
+    if (!step?.session) return
+    const run = answer?.items.find((m) => m.runId === runId && m.kind === 'run')
+    deps.openStep({ runId, stepKey, title: run ? `${step.title} — ${run.title}` : step.title })
   }
 
   return {
     apply,
     widgets,
     notice,
-    handle,
-    /** A listed run or step by its member id. */
+    openStep,
+    /** A listed run by its member id. */
     member: (id: string): RunMember | undefined => answer?.items.find((m) => m.id === id),
   }
 }

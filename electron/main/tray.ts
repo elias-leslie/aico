@@ -1,11 +1,8 @@
 import { join } from 'node:path'
 import { app, Menu, nativeImage, Tray } from 'electron'
 import {
-  DECISION_LABEL,
-  DECISIONS,
   foldTeams,
   laneTitle,
-  type RunDecision,
   type RunMember,
   type TeamMember,
   type TeamRow,
@@ -43,19 +40,9 @@ export interface TrayWidget {
    * project its coordinator already names. */
   title?: string
   tool?: string
-  /** A workflow run or step (tether/client `RunMember`); it has no window. */
+  /** A running workflow step (tether/client `RunMember`); it has no window. */
   run?: RunMember
-  kind?: TeamMember['kind']
-  /** A run's step counts in its own words, in place of the generated team line. */
-  summary?: string | null
 }
-
-/** What the owner asks of a workflow run or step from the tray. */
-export type RunAction =
-  | { type: 'open'; url: string }
-  | { type: 'resume'; runId: string; stepKey: string | null; action: RunDecision }
-  | { type: 'cancel'; runId: string; stepKey: string | null }
-  | { type: 'openStep'; runId: string; stepKey: string }
 
 /** A launchable TUI as the tray sees it (slug + menu label), from the registry. */
 export interface NewWidgetTool {
@@ -83,8 +70,8 @@ export interface TrayHandlers {
   /** Re-list sessions from Tether and rebuild the menu. */
   onRefreshSessions: () => void
   onHubView: () => void
-  /** Open a run's page or a step's attempt, answer, or cancel a workflow run. */
-  onRun?: (action: RunAction) => void
+  /** Read a running workflow step's current attempt. */
+  onOpenStep?: (runId: string, stepKey: string) => void
 }
 
 let tray: Tray | null = null
@@ -104,86 +91,6 @@ let agentsWorking = false
 let menuKey = ''
 
 type TeamWidget = TrayWidget & TeamMember
-
-const RUN_TITLE_MAX = 48
-
-function clip(text: string, max: number): string {
-  return text.length > max ? `${text.slice(0, max - 1)}…` : text
-}
-
-/** `◇ goal — 2 of 5 done · lint-fix needs a decision` for a run (`◆` when it waits for you),
- * `· step — model → model · fallback · state` for a step. */
-function runLabel(w: TeamWidget, run: RunMember, extra: (string | null | undefined)[]): string {
-  const detail = [w.detail, ...extra].filter(Boolean).join(' · ')
-  const mark = run.kind === 'step' ? '·' : run.group === 'needs-you' ? '◆' : '◇'
-  return `${mark} ${clip(run.title, RUN_TITLE_MAX)}${detail ? ` — ${detail}` : ''}`
-}
-
-/** The answers to a paused run or step. The coordinator takes them; only a run whose
- * coordinator has ended offers them here, since nobody else can ask the owner. */
-function decisionItems(
-  run: RunMember,
-  orphaned: boolean,
-  h: TrayHandlers,
-): Electron.MenuItemConstructorOptions[] {
-  if (!orphaned || !run.can.decide) return []
-  const what = run.kind === 'run' ? 'run' : 'step'
-  return DECISIONS.map((decision) => ({
-    label: `${DECISION_LABEL[decision]} ${what}`,
-    click: () =>
-      h.onRun?.({ type: 'resume', runId: run.runId, stepKey: run.stepKey, action: decision }),
-  }))
-}
-
-/** A step: one line; a click reads its latest attempt. A waiting step of a run whose
- * coordinator has ended also offers the decisions. */
-function stepItem(
-  row: TeamRow<TeamWidget>,
-  orphaned: boolean,
-  h: TrayHandlers,
-): Electron.MenuItemConstructorOptions {
-  const step = row.item.run as RunMember
-  const label = runLabel(row.item, step, [])
-  const read = () => h.onRun?.({ type: 'openStep', runId: step.runId, stepKey: step.stepKey ?? '' })
-  const decisions = decisionItems(step, orphaned, h)
-  if (!decisions.length) return { label, enabled: step.session, click: read }
-  return {
-    label,
-    submenu: [
-      { label: 'Read the attempt', enabled: step.session, click: read },
-      { type: 'separator' },
-      ...decisions,
-    ],
-  }
-}
-
-/** A workflow run: one line under its coordinator; its submenu lists the steps as one
- * line each, then Details (the run page) and Cancel run. */
-function runItem(row: TeamRow<TeamWidget>, h: TrayHandlers): Electron.MenuItemConstructorOptions {
-  const w = row.item
-  const run = w.run as RunMember
-  const label = runLabel(w, run, [row.orphaned ? 'coordinator ended' : null])
-  const tail: Electron.MenuItemConstructorOptions[] = [
-    { label: 'Details', click: () => h.onRun?.({ type: 'open', url: run.url }) },
-    ...decisionItems(run, row.orphaned, h),
-    ...(run.can.cancel
-      ? [
-          {
-            label: 'Cancel run',
-            click: () => h.onRun?.({ type: 'cancel', runId: run.runId, stepKey: null }),
-          },
-        ]
-      : []),
-  ]
-  return {
-    label,
-    submenu: [
-      ...row.children.map((child) => stepItem(child, row.orphaned, h)),
-      ...(row.children.length ? [{ type: 'separator' as const }] : []),
-      ...tail,
-    ],
-  }
-}
 
 function rowLabel(
   w: TrayWidget,
@@ -206,7 +113,15 @@ function teamItem(
   h: TrayHandlers,
 ): Electron.MenuItemConstructorOptions {
   const w = row.item
-  if (w.run) return runItem(row, h)
+  const step = w.run
+  if (step) {
+    // A running step is a child agent like a lane; a click reads its attempt.
+    return {
+      label: rowLabel(w, lead, [row.orphaned ? 'coordinator ended' : null]),
+      enabled: step.session,
+      click: () => h.onOpenStep?.(step.runId, step.stepKey ?? ''),
+    }
+  }
   const own = w.checkIns?.[0] ? `check-in ${w.checkIns[0].time}` : null
   const ended = row.orphaned ? 'coordinator ended' : null
   if (!row.children.length) {
@@ -248,8 +163,6 @@ function buildMenu(widgets: TrayWidget[]): Menu {
       coordinatorId: w.coordinatorId ?? null,
       group: w.group ?? 'no-status',
       at: w.at ?? null,
-      kind: w.kind,
-      summary: w.summary ?? null,
     })),
   )
   const waiting = teams.filter((row) => row.group === 'needs-you')

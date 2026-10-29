@@ -1,19 +1,14 @@
 'use client'
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useCallback, useMemo } from 'react'
-import type { RunDecision, RunMember, RunsAnswer } from 'tether/teams'
+import { useQuery } from '@tanstack/react-query'
+import { useMemo } from 'react'
+import type { RunMember, RunsAnswer } from 'tether/teams'
 import { apiFetch } from '../api-fetch'
 
 /** How often the open page asks for the workflow runs while it is visible. */
 export const RUNS_POLL_MS = 3_000
 
 const NO_ITEMS: RunMember[] = []
-
-/** What the owner asks of a run or one of its steps. */
-export type RunAct =
-  | { type: 'resume'; member: RunMember; action: RunDecision }
-  | { type: 'cancel'; member: RunMember }
 
 /**
  * - `loading`: not asked yet, so nothing is known about runs.
@@ -30,21 +25,7 @@ export interface WorkflowRuns {
   notice: string | null
   /** Runs (not steps) waiting on the owner. */
   needsYouCount: number
-  /** Throws the refusal's words when the answer did not go through. */
-  act(action: RunAct): Promise<void>
 }
-
-const post = (path: string, body?: unknown) =>
-  apiFetch<{ ok: true }>(
-    path,
-    {
-      method: 'POST',
-      headers:
-        body === undefined ? undefined : { 'Content-Type': 'application/json' },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    },
-    'Could not change the run',
-  )
 
 /** The words for a notice about the runs, or null when they are fine. */
 export function runsNotice(
@@ -59,7 +40,6 @@ export function runsNotice(
 }
 
 export function useWorkflowRuns(): WorkflowRuns {
-  const queryClient = useQueryClient()
   const query = useQuery({
     queryKey: ['workflow-runs'],
     queryFn: ({ signal }) =>
@@ -72,24 +52,6 @@ export function useWorkflowRuns(): WorkflowRuns {
     refetchIntervalInBackground: false,
     retry: false,
   })
-
-  const mutation = useMutation({
-    mutationFn: (action: RunAct) => {
-      const { runId, stepKey } = action.member
-      const run = `/api/runs/${encodeURIComponent(runId)}`
-      if (action.type === 'resume')
-        return post(`${run}/resume`, { action: action.action, stepKey })
-      return post(`${run}/cancel`, { stepKey })
-    },
-    // Whatever the answer, read the runs again so the list shows the truth.
-    onSettled: () =>
-      queryClient.invalidateQueries({ queryKey: ['workflow-runs'] }),
-  })
-  const { mutateAsync } = mutation
-  const act = useCallback(
-    (action: RunAct) => mutateAsync(action).then(() => {}),
-    [mutateAsync],
-  )
 
   const answer = query.data
   return useMemo(() => {
@@ -115,7 +77,6 @@ export function useWorkflowRuns(): WorkflowRuns {
       needsYouCount: items.filter(
         (member) => member.kind === 'run' && member.group === 'needs-you',
       ).length,
-      act,
     }
-  }, [answer, query.isError, query.error, act])
+  }, [answer, query.isError, query.error])
 }

@@ -234,16 +234,13 @@ const attention = createAttentionWiring({
   run: (id) => runs.member(id),
 })
 
-// Workflow runs of the sessions (Tether lists them): tray rows, the same
-// needs-you signal sessions raise, and the owner's answers.
+// Workflow runs of the sessions (Tether lists them): running steps as tray rows,
+// and the same needs-you signal sessions raise.
 const runs = createRuns({
   attention,
   tray: () => chrome.syncTray(),
-  tether,
-  refresh: () => link.refreshRuns(),
-  openExternal: (url) => shell.openExternal(url),
+  tools: link.tools,
   openStep: (viewer) => windows.openStepViewer(viewer),
-  dialog,
 })
 
 // The eyes and the titlebar arcade: cursor pump, gaze scenes, urgent looks.
@@ -428,7 +425,7 @@ const startup = app.whenReady().then(async () => {
       void link.refreshTools().catch(() => {})
     },
     onHubView: windows.showAll,
-    onRun: (action) => void runs.handle(action),
+    onOpenStep: (runId, stepKey) => runs.openStep(runId, stepKey),
   })
   ambient.start()
   layout.scheduleWrite()

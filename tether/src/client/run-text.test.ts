@@ -1,46 +1,29 @@
 import { describe, expect, it } from 'vitest'
 import type { RunMember } from './run-text'
-import { attemptText, modelLine, runDetail, shortModel } from './run-text'
+import { childAgents, executorTool } from './run-text'
 
-const step = (extra: Partial<RunMember>): RunMember =>
-  ({
-    kind: 'step',
-    word: 'writing',
-    requestedModel: 'opencode-go/deepseek-v4.1-flash',
-    servedModel: null,
-    fallback: false,
-    attempt: 2,
-    attemptLimit: 3,
-    ...extra,
-  }) as RunMember
+const member = (extra: Partial<RunMember>): RunMember =>
+  ({ kind: 'step', group: 'working', ...extra }) as RunMember
 
-describe('run text', () => {
-  it('shortens model ids and shows both models when another one answered', () => {
-    expect(shortModel('opencode-go/deepseek-v4.1-flash')).toBe('deepseek-v4.1-flash')
-    expect(shortModel(null)).toBeNull()
-    expect(modelLine(step({}))).toBe('deepseek-v4.1-flash')
-    expect(modelLine(step({ servedModel: 'x/other' }))).toBe('deepseek-v4.1-flash → other')
-    expect(modelLine(step({ requestedModel: null }))).toBeNull()
+describe('child agents of a workflow run', () => {
+  it('names the tool of a step by its executor', () => {
+    expect(executorTool('pi')).toBe('pi')
+    expect(executorTool('codex')).toBe('codex')
+    expect(executorTool('claude_code')).toBe('claude-code')
+    expect(executorTool('agent_hub')).toBe('agent-hub')
+    expect(executorTool(undefined)).toBe('agent-hub')
+    expect(executorTool('something-new')).toBe('agent-hub')
   })
 
-  it('counts attempts only once a step started', () => {
-    expect(attemptText(step({}))).toBe('try 2 of 3')
-    expect(attemptText(step({ attempt: 0 }))).toBeNull()
-    expect(attemptText(step({ attemptLimit: null }))).toBe('try 2')
-  })
-
-  it('says a step in one line and a run by its state', () => {
-    expect(runDetail(step({ fallback: true, servedModel: 'x/other' }))).toBe(
-      'deepseek-v4.1-flash → other · fallback · writing · try 2 of 3',
-    )
-    expect(
-      runDetail({
-        kind: 'run',
-        word: 'running',
-        progress: '2 of 5 done',
-        headline: 'lint-fix needs a decision',
-      } as RunMember),
-    ).toBe('2 of 5 done · lint-fix needs a decision')
-    expect(runDetail({ kind: 'run', word: 'running' } as RunMember)).toBe('running')
+  it('lists steps that are working or waiting for the owner, and nothing else', () => {
+    const items = [
+      member({ kind: 'run', group: 'needs-you', id: 'run' }),
+      member({ id: 'working', group: 'working' }),
+      member({ id: 'waiting', group: 'needs-you' }),
+      member({ id: 'pending', group: 'idle' }),
+      member({ id: 'done', group: 'idle' }),
+      member({ id: 'failed', group: 'no-status' }),
+    ]
+    expect(childAgents(items).map((m) => m.id)).toEqual(['working', 'waiting'])
   })
 })

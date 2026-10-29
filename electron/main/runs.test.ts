@@ -1,6 +1,6 @@
-import { type RunMember, type RunsAnswer, TetherError, TetherUnavailable } from 'tether/client'
+import type { RunMember, RunsAnswer } from 'tether/client'
 import { describe, expect, it, vi } from 'vitest'
-import { createRuns, runFailure } from './runs'
+import { createRuns } from './runs'
 
 const URL = 'http://hub.test/workflow-runs/r1'
 
@@ -19,6 +19,7 @@ function member(extra: Partial<RunMember>): RunMember {
     status: 'running',
     url: URL,
     agent: null,
+    tool: null,
     requestedModel: null,
     servedModel: null,
     fallback: false,
@@ -29,7 +30,6 @@ function member(extra: Partial<RunMember>): RunMember {
     can: { decide: false, cancel: true, dismiss: false },
     cancelling: false,
     hint: null,
-    summary: '1 of 2 done',
     progress: '1 of 2 done',
     headline: 'build working',
     ...extra,
@@ -40,9 +40,11 @@ const step = (extra: Partial<RunMember> = {}) =>
   member({
     id: 'step:r1:build',
     kind: 'step',
-    coordinatorId: 'run:r1',
+    coordinatorId: 'c0d0ae59',
     stepKey: 'build',
     title: 'build',
+    tool: 'pi',
+    group: 'working',
     word: 'tool bash',
     requestedModel: 'opencode-go/a',
     servedModel: 'opencode-go/b',
@@ -50,7 +52,6 @@ const step = (extra: Partial<RunMember> = {}) =>
     attempt: 2,
     attemptLimit: 3,
     session: true,
-    summary: null,
     progress: null,
     headline: null,
     ...extra,
@@ -64,22 +65,16 @@ const answer = (items: RunMember[], extra: Partial<RunsAnswer> = {}): RunsAnswer
   ...extra,
 })
 
-function setup(response = 1) {
+function setup() {
   const attention = { updateId: vi.fn(), removed: vi.fn() }
   const tray = vi.fn()
-  const tether = {
-    resumeRun: vi.fn(async () => ({})),
-    cancelRun: vi.fn(async () => ({})),
-  }
-  const refresh = vi.fn(async () => undefined)
-  const openExternal = vi.fn(async () => undefined)
   const openStep = vi.fn()
-  const dialog = {
-    showMessageBox: vi.fn(async () => ({ response })),
-    showErrorBox: vi.fn(),
-  }
-  const runs = createRuns({ attention, tray, tether, refresh, openExternal, openStep, dialog })
-  return { runs, attention, tray, tether, refresh, openExternal, openStep, dialog }
+  const tools = [
+    { slug: 'pi', name: 'Pi' },
+    { slug: 'claude-code', name: 'Claude Code' },
+  ]
+  const runs = createRuns({ attention, tray, tools: () => tools, openStep, now: () => 181_000 })
+  return { runs, attention, tray, openStep }
 }
 
 describe('runs in the desktop', () => {
@@ -108,18 +103,44 @@ describe('runs in the desktop', () => {
     expect(attention.removed).toHaveBeenCalledWith('run:r1')
   })
 
-  it('lists runs and steps as tray rows without a window', () => {
+  it('lists only running and waiting steps, as child agents of the launcher, never a run', () => {
     const { runs } = setup()
-    runs.apply(answer([member({}), step()]))
+    runs.apply(
+      answer([
+        member({ group: 'needs-you' }),
+        step({ at: 61_000 }),
+        step({
+          id: 'step:r1:ask',
+          stepKey: 'ask',
+          title: 'ask',
+          group: 'needs-you',
+          tool: 'claude-code',
+          at: 1_000,
+        }),
+        step({ id: 'step:r1:later', stepKey: 'later', title: 'later', group: 'idle' }),
+        step({
+          id: 'step:r1:done',
+          stepKey: 'done',
+          title: 'done',
+          group: 'idle',
+          status: 'completed',
+        }),
+        step({
+          id: 'step:r1:bad',
+          stepKey: 'bad',
+          title: 'bad',
+          group: 'no-status',
+          status: 'cancelled',
+        }),
+      ]),
+    )
     const rows = runs.widgets()
-    expect(rows.map((w) => [w.id, w.kind, w.open, w.coordinatorId])).toEqual([
-      ['run:r1', 'run', false, 'c0d0ae59'],
-      ['step:r1:build', 'step', false, 'run:r1'],
+    expect(rows.map((w) => [w.id, w.label, w.group, w.open, w.coordinatorId, w.detail])).toEqual([
+      ['step:r1:build', 'build · Pi', 'working', false, 'c0d0ae59', 'working 2m'],
+      ['step:r1:ask', 'ask · Claude Code', 'needs-you', false, 'c0d0ae59', 'waiting 3m'],
     ])
-    expect(rows[1]?.detail).toBe('a → b · fallback · tool bash · try 2 of 3')
-    expect(rows[0]?.detail).toBe('1 of 2 done · build working')
-    expect(rows[0]?.summary).toBe('1 of 2 done')
-    expect(runs.member('step:r1:build')?.stepKey).toBe('build')
+    // The run itself still feeds attention, by its member id.
+    expect(runs.member('run:r1')?.kind).toBe('run')
   })
 
   it('says when the runs may be out of date', () => {
@@ -133,61 +154,10 @@ describe('runs in the desktop', () => {
     expect(runs.notice()).toBe('Workflow runs unavailable: Agent Hub is not reachable')
   })
 
-  it('opens only web pages', async () => {
-    const { runs, openExternal } = setup()
-    await runs.handle({ type: 'open', url: 'file:///etc/passwd' })
-    expect(openExternal).not.toHaveBeenCalled()
-    await runs.handle({ type: 'open', url: URL })
-    expect(openExternal).toHaveBeenCalledWith(URL)
-  })
-
-  it('retries and skips without asking, then reads the runs again', async () => {
-    const { runs, tether, dialog, refresh } = setup()
-    await runs.handle({ type: 'resume', runId: 'r1', stepKey: 'build', action: 'retry' })
-    await runs.handle({ type: 'resume', runId: 'r1', stepKey: 'build', action: 'skip' })
-    expect(dialog.showMessageBox).not.toHaveBeenCalled()
-    expect(tether.resumeRun).toHaveBeenNthCalledWith(1, 'r1', 'retry', 'build')
-    expect(tether.resumeRun).toHaveBeenNthCalledWith(2, 'r1', 'skip', 'build')
-    expect(refresh).toHaveBeenCalledTimes(2)
-  })
-
-  it('confirms before failing a step and does nothing when the owner keeps it going', async () => {
-    const kept = setup(0)
-    kept.runs.apply(answer([member({}), step()]))
-    await kept.runs.handle({ type: 'resume', runId: 'r1', stepKey: 'build', action: 'fail' })
-    expect(kept.dialog.showMessageBox).toHaveBeenCalledOnce()
-    expect(kept.tether.resumeRun).not.toHaveBeenCalled()
-
-    const failed = setup(1)
-    failed.runs.apply(answer([member({}), step()]))
-    await failed.runs.handle({ type: 'resume', runId: 'r1', stepKey: 'build', action: 'fail' })
-    expect(failed.dialog.showMessageBox).toHaveBeenCalledWith(
-      expect.objectContaining({ message: 'Fail step build?', buttons: ['Keep going', 'Fail it'] }),
-    )
-    expect(failed.tether.resumeRun).toHaveBeenCalledWith('r1', 'fail', 'build')
-  })
-
-  it('confirms before cancelling a run or a step', async () => {
-    const { runs, tether, dialog } = setup()
-    runs.apply(answer([member({}), step()]))
-    await runs.handle({ type: 'cancel', runId: 'r1', stepKey: null })
-    await runs.handle({ type: 'cancel', runId: 'r1', stepKey: 'build' })
-    expect(dialog.showMessageBox).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({ message: 'Cancel run Ship the thing?' }),
-    )
-    expect(dialog.showMessageBox).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({ message: 'Cancel step build?' }),
-    )
-    expect(tether.cancelRun).toHaveBeenNthCalledWith(1, 'r1', null)
-    expect(tether.cancelRun).toHaveBeenNthCalledWith(2, 'r1', 'build')
-  })
-
-  it('reads a step’s latest attempt in its own window, named for the step and its run', async () => {
+  it('reads a step’s latest attempt in its own window, named for the step and its run', () => {
     const { runs, openStep } = setup()
     runs.apply(answer([member({}), step()]))
-    await runs.handle({ type: 'openStep', runId: 'r1', stepKey: 'build' })
+    runs.openStep('r1', 'build')
     expect(openStep).toHaveBeenCalledWith({
       runId: 'r1',
       stepKey: 'build',
@@ -195,37 +165,11 @@ describe('runs in the desktop', () => {
     })
   })
 
-  it('opens nothing for a step that has no attempt yet or a run that is not listed', async () => {
+  it('opens nothing for a step that has no attempt yet or a run that is not listed', () => {
     const { runs, openStep } = setup()
     runs.apply(answer([member({}), step({ session: false })]))
-    await runs.handle({ type: 'openStep', runId: 'r1', stepKey: 'build' })
-    await runs.handle({ type: 'openStep', runId: 'zzz', stepKey: 'build' })
+    runs.openStep('r1', 'build')
+    runs.openStep('zzz', 'build')
     expect(openStep).not.toHaveBeenCalled()
-  })
-
-  it('shows a failed choice as an error and still reads the runs again', async () => {
-    const { runs, tether, dialog, refresh } = setup()
-    tether.cancelRun.mockRejectedValueOnce(new TetherUnavailable('down'))
-    runs.apply(answer([member({})]))
-    await runs.handle({ type: 'cancel', runId: 'r1', stepKey: null })
-    expect(dialog.showErrorBox).toHaveBeenCalledWith('Workflow run', 'Tether is not reachable.')
-    expect(refresh).toHaveBeenCalledOnce()
-  })
-})
-
-describe('runFailure', () => {
-  const err = (code: string, reason?: string) =>
-    new TetherError(409, code, reason ? { reason } : {})
-
-  it('puts each failure in the owner words', () => {
-    expect(runFailure(new TetherUnavailable('x'))).toBe('Tether is not reachable.')
-    expect(runFailure(err('agent_hub_unavailable'))).toBe('Agent Hub is not reachable.')
-    expect(runFailure(err('agent_hub_refused', 'step is running'))).toBe(
-      'Agent Hub did not accept it: step is running',
-    )
-    expect(runFailure(err('agent_hub_refused'))).toBe('Agent Hub did not accept it.')
-    expect(runFailure(err('unknown_run'))).toBe('That run is no longer listed. It may have ended.')
-    expect(runFailure(err('not_allowed', 'Nope'))).toBe('Nope')
-    expect(runFailure(new Error('boom'))).toBe('Something went wrong; the run was not changed.')
   })
 })

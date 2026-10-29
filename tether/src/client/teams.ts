@@ -21,12 +21,6 @@ export interface TeamMember {
   group: TeamGroup
   /** When its state began (ms), or null. */
   at: number | null
-  /** What the member is; a session when absent. A workflow run's steps fold
-   * under the run, and the run under the session that launched it. */
-  kind?: 'session' | 'run' | 'step'
-  /** The line a row with children shows in place of the generated count
-   * (a run counts its steps in its own words: `2 done · 1 working`). */
-  summary?: string | null
 }
 
 export interface TeamRow<T extends TeamMember> {
@@ -60,9 +54,7 @@ function sortAt<T extends TeamMember>(row: TeamRow<T>): number {
 
 /** One line for a coordinator row: `6 working, 1 needs you, 2 idle`. No
  * finished count; sessions with no status are left out. */
-export function teamSummary(
-  children: readonly { group: TeamGroup; kind?: TeamMember['kind'] }[],
-): string {
+export function teamSummary(children: readonly { group: TeamGroup }[]): string {
   const count = (groups: TeamGroup[]) => children.filter((c) => groups.includes(c.group)).length
   const counts = [
     [count(['working']), 'working'],
@@ -73,8 +65,7 @@ export function teamSummary(
     .filter(([n]) => n > 0)
     .map(([n, word]) => `${n} ${n > 1 && word === 'needs you' ? 'need you' : word}`)
   if (parts.length) return parts.join(', ')
-  const noun = children.every((c) => c.kind === 'run') ? 'run' : 'session'
-  return children.length === 1 ? `1 ${noun}` : `${children.length} ${noun}s`
+  return children.length === 1 ? '1 session' : `${children.length} sessions`
 }
 
 /** Fold sessions into teams. Input order is kept outside Needs you. */
@@ -108,7 +99,7 @@ export function foldTeams<T extends TeamMember>(items: readonly T[]): TeamRow<T>
       item,
       group: waiting ? 'needs-you' : item.group,
       children,
-      summary: children.length ? (item.summary ?? teamSummary(children)) : null,
+      summary: children.length ? teamSummary(children) : null,
       orphaned: !!item.coordinatorId && !byId.has(item.coordinatorId),
     }
   }

@@ -1,12 +1,14 @@
 'use client'
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import type { RunMember } from 'tether/teams'
 import {
   type Attention,
   attentionOf,
   markSeen,
   mostUrgent,
   seenSnapshot,
+  stepAttention,
   subscribeSeen,
 } from '../attention'
 import type { PaneSlot, TerminalSlot } from '../utils/slot'
@@ -45,9 +47,11 @@ export function slotSessions(
 export interface SessionAttention {
   /** A slot's most urgent session state, or null when unknown. */
   forSlot(slot: TerminalSlot | PaneSlot): Attention | null
+  /** A running workflow step's state, shown as a child agent. */
+  forStep?(step: RunMember): Attention
   /** Sessions, and workflow runs, that need the owner now. */
   needsYouCount: number
-  /** The workflow runs sessions launched, shown under them. */
+  /** The workflow runs sessions launched, whose running steps show under them. */
   runs?: WorkflowRuns
 }
 
@@ -77,6 +81,7 @@ export function useSessionAttention(): SessionAttention {
             return item ? [item] : []
           }),
         ),
+      forStep: (step) => stepAttention(step, now),
       needsYouCount:
         [...byId.values()].filter((a) => a.group === 'needs-you').length +
         runs.needsYouCount,

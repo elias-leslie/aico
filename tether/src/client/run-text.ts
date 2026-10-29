@@ -1,14 +1,16 @@
-// The words a row says about a workflow run or step, shared by the desktop tray
-// and the web list. Pure.
+// A workflow run or step as Tether lists it, and which steps the session lists
+// show: only a step that is running or waiting for the owner, as a child agent
+// of the session that launched the run. Shared by the desktop tray and the web
+// list. Pure.
 
 import type { TeamMember } from './teams'
 
 // --- Workflow runs (docs/api-v1.md "Workflow runs"), types shared with clients
 
 /**
- * A workflow run or one of its steps as a team member: the run folds under the
- * session that launched it (`coordinatorId` is that session's id), a step
- * under its run. Tether words the state; clients show it.
+ * A workflow run or one of its steps as a team member. A run names the session
+ * that launched it (`coordinatorId`); so does a step, which shows under that
+ * session as a child agent. Tether words the state; clients show it.
  */
 export interface RunMember extends TeamMember {
   kind: 'run' | 'step'
@@ -26,6 +28,9 @@ export interface RunMember extends TeamMember {
   /** The run page in Agent Hub. */
   url: string
   agent: string | null
+  /** A step: the Aico tool slug of what runs it (`pi`, `codex`, `claude-code`,
+   * `agent-hub`); null on a run. */
+  tool: string | null
   /** The model asked for and the one that answered; both null on a run. */
   requestedModel: string | null
   servedModel: string | null
@@ -62,45 +67,25 @@ export interface RunsAnswer {
 
 export type RunDecision = 'retry' | 'skip' | 'fail'
 
-/** `opencode-go/deepseek-v4.1-flash` -> `deepseek-v4.1-flash`. */
-export function shortModel(id: string | null): string | null {
-  if (!id) return null
-  return id.slice(id.lastIndexOf('/') + 1) || id
+/** Agent Hub's step executors as Aico tool slugs (the marks the session lists use). */
+const EXECUTOR_TOOL: Record<string, string> = {
+  pi: 'pi',
+  codex: 'codex',
+  claude_code: 'claude-code',
+  agent_hub: 'agent-hub',
 }
 
-/** The model a step asked for and the one that answered: `a`, or
- * `a → b` when another model answered. Null before any model is known. */
-export function modelLine(
-  member: Pick<RunMember, 'requestedModel' | 'servedModel'>,
-): string | null {
-  const asked = shortModel(member.requestedModel)
-  const answered = shortModel(member.servedModel)
-  if (asked && answered && asked !== answered) return `${asked} → ${answered}`
-  return answered ?? asked
+/** The tool slug for a step's executor; a step with none known is an Agent Hub step. */
+export function executorTool(executor: unknown): string {
+  return (typeof executor === 'string' && EXECUTOR_TOOL[executor]) || 'agent-hub'
 }
 
-/** `try 2 of 3` once a step has started, else null. */
-export function attemptText(member: Pick<RunMember, 'attempt' | 'attemptLimit'>): string | null {
-  const { attempt, attemptLimit } = member
-  if (!attempt || attempt < 1) return null
-  return attemptLimit ? `try ${attempt} of ${attemptLimit}` : `try ${attempt}`
+/** The steps a session list shows, as child agents of the session that launched
+ * the run: those running or waiting for the owner (a failed step that paused the
+ * run waits for a decision). Pending, finished, skipped, cancelled and failed
+ * steps do not show, and neither does a run. */
+export function childAgents(items: readonly RunMember[]): RunMember[] {
+  return items.filter(
+    (m) => m.kind === 'step' && (m.group === 'working' || m.group === 'needs-you'),
+  )
 }
-
-/** What a row says after its name. A run: its progress and state
- * (`2 of 5 done · lint-fix needs a decision`). A step: model, a fallback
- * mark, state and attempt (`a → b · fallback · done`). */
-export function runDetail(member: RunMember): string {
-  const parts: (string | null)[] =
-    member.kind === 'step'
-      ? [modelLine(member), member.fallback ? 'fallback' : null, member.word, attemptText(member)]
-      : [member.progress, member.headline ?? member.word]
-  return parts.filter(Boolean).join(' · ')
-}
-
-export const DECISION_LABEL: Record<RunDecision, string> = {
-  retry: 'Retry',
-  skip: 'Skip',
-  fail: 'Fail',
-}
-
-export const DECISIONS: readonly RunDecision[] = ['retry', 'skip', 'fail']

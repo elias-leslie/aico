@@ -14,7 +14,7 @@ vi.mock('electron', () => ({
   },
 }))
 
-import { type RunMember, runDetail } from 'tether/client'
+import type { RunMember } from 'tether/client'
 import { createTray, refreshTray } from './tray'
 
 function item(menu: Record<string, unknown>[], label: string): Record<string, unknown> {
@@ -264,15 +264,9 @@ describe('tray icon', () => {
   })
 })
 
-describe('tray workflow runs', () => {
-  function click(items: Record<string, unknown>[], label: string): void {
-    const found = items.find((e) => e.label === label)
-    if (!found) throw new Error(`Missing tray item ${label}`)
-    ;(found.click as () => void)()
-  }
-
+describe('tray workflow steps', () => {
   function open() {
-    const onRun = vi.fn()
+    const onOpenStep = vi.fn()
     createTray(
       {
         onSelect: vi.fn(),
@@ -281,177 +275,95 @@ describe('tray workflow runs', () => {
         onNewWidget: vi.fn(),
         onRefreshSessions: vi.fn(),
         onHubView: vi.fn(),
-        onRun,
+        onOpenStep,
       },
       [],
       [],
     )
     menus.length = 0
-    return onRun
+    return onOpenStep
   }
-  const run = (extra: Partial<RunMember>): RunMember => ({
-    id: 'run:r1',
-    kind: 'run',
-    coordinator: false,
-    coordinatorId: 'lead',
-    runId: 'r1',
-    stepKey: null,
-    title: 'Ship it',
-    group: 'working',
-    at: null,
-    word: 'running',
-    status: 'running',
-    url: 'http://hub.test/workflow-runs/r1',
-    agent: null,
-    requestedModel: null,
-    servedModel: null,
-    fallback: false,
-    attempt: null,
-    attemptLimit: null,
-    reason: null,
-    session: false,
-    can: { decide: false, cancel: true, dismiss: false },
-    cancelling: false,
-    hint: 'Change the plan from the coordinator.',
-    summary: '1 of 2 done',
-    progress: '1 of 2 done',
-    headline: 'build working',
-    ...extra,
-  })
-  const widget = (m: RunMember) => ({
+  const step = (extra: Partial<RunMember> = {}) =>
+    ({
+      id: 'step:r1:build',
+      kind: 'step',
+      coordinator: false,
+      coordinatorId: 'lead',
+      runId: 'r1',
+      stepKey: 'build',
+      group: 'working',
+      session: true,
+      ...extra,
+    }) as RunMember
+  const widget = (m: RunMember, detail: string) => ({
     id: m.id,
-    label: m.title,
+    label: 'build · Pi',
+    title: 'build',
+    tool: 'Pi',
     open: false,
     group: m.group,
-    detail: runDetail(m),
+    detail,
     at: m.at,
     coordinator: false,
     coordinatorId: m.coordinatorId,
-    kind: m.kind,
-    summary: m.summary,
     run: m,
   })
+  const lead = {
+    id: 'lead',
+    label: 'Lead · Codex',
+    open: true,
+    coordinator: true,
+    group: 'idle' as const,
+  }
+  const teamOf = (menu: Record<string, unknown>[]) =>
+    menu.find((entry) => String(entry.label).includes('Lead')) as Record<string, unknown>
 
-  const waitingStep = (extra: Partial<RunMember> = {}) =>
-    run({
-      id: 'step:r1:build',
-      kind: 'step',
-      coordinatorId: 'run:r1',
-      stepKey: 'build',
-      title: 'build',
-      group: 'needs-you',
-      word: 'waiting for you',
-      requestedModel: 'a/m1',
-      servedModel: 'b/m2',
-      fallback: true,
-      session: true,
-      hint: null,
-      summary: null,
-      progress: null,
-      headline: null,
-      can: { decide: true, cancel: true, dismiss: false },
-      ...extra,
-    })
-  const waitingRun = () =>
-    run({ group: 'needs-you', word: 'waiting for you', headline: 'build needs a decision' })
-  const rowOf = (menu: Record<string, unknown>[], start: string) =>
-    menu.find((entry) => String(entry.label).startsWith(start)) as Record<string, unknown>
+  it('shows a running step under its coordinator like any other child agent, and a click reads it', () => {
+    const onOpenStep = open()
+    refreshTray([lead, widget(step(), 'working 2m')], [], [])
+    const team = teamOf(menus.at(-1) ?? [])
+    expect(team.label).toContain('1 working')
+    const row = (team.submenu as Record<string, unknown>[]).find((e) =>
+      String(e.label).includes('build'),
+    ) as Record<string, unknown>
+    expect(row.label).toBe('○ build · Pi — working 2m')
+    expect(row.enabled).toBe(true)
+    ;(row.click as () => void)()
+    expect(onOpenStep).toHaveBeenCalledWith('r1', 'build')
+    expect(JSON.stringify(menus.at(-1))).not.toMatch(/Retry|Skip|Fail|Dismiss|Cancel run|Details/)
+  })
 
-  it('shows a run as one line under its coordinator, with its steps one level down', () => {
-    const onRun = open()
-    refreshTray(
-      [
-        { id: 'lead', label: 'Lead · Codex', open: true, coordinator: true, group: 'idle' },
-        widget(waitingRun()),
-        widget(waitingStep()),
-      ],
-      [],
-      [],
-    )
+  it('puts the coordinator of a waiting step in Needs you', () => {
+    open()
+    refreshTray([lead, widget(step({ group: 'needs-you' }), 'waiting 1m')], [], [])
     const menu = menus.at(-1) ?? []
-    const team = menu.find((entry) => String(entry.label).includes('Lead')) as Record<
-      string,
-      unknown
-    >
-    const runRow = rowOf(team.submenu as Record<string, unknown>[], '◆ Ship it')
-    expect(runRow.label).toBe('◆ Ship it — 1 of 2 done · build needs a decision')
-    const inner = runRow.submenu as Record<string, unknown>[]
-    // The step is one line: model (asked → answered), a fallback mark, state. A click reads it.
-    const stepRow = rowOf(inner, '· build')
-    expect(stepRow.label).toBe('· build — m1 → m2 · fallback · waiting for you')
-    expect(stepRow.enabled).toBe(true)
-    ;(stepRow.click as () => void)()
-    expect(onRun).toHaveBeenCalledWith({ type: 'openStep', runId: 'r1', stepKey: 'build' })
-    // The coordinator is alive, so it asks and answers: no Retry, Skip, Fail and no Dismiss.
-    const all = JSON.stringify(menu)
-    expect(all).not.toMatch(/Retry|Skip|Fail|Dismiss/)
-    click(inner, 'Details')
-    expect(onRun).toHaveBeenCalledWith({ type: 'open', url: 'http://hub.test/workflow-runs/r1' })
-    click(inner, 'Cancel run')
-    expect(onRun).toHaveBeenCalledWith({ type: 'cancel', runId: 'r1', stepKey: null })
+    expect(menu[0]?.label).toBe('Needs you')
+    expect(String(menu[1]?.label)).toContain('1 needs you')
   })
 
-  it('keeps the decisions on the opened run when its coordinator has ended', () => {
-    const onRun = open()
-    refreshTray([widget(waitingRun()), widget(waitingStep())], [], [])
-    const runRow = rowOf(menus.at(-1) ?? [], '◆ Ship it')
-    expect(runRow.label).toContain('coordinator ended')
-    const stepRow = rowOf(runRow.submenu as Record<string, unknown>[], '· build')
-    const items = stepRow.submenu as Record<string, unknown>[]
-    expect(items.map((e) => e.label)).toEqual(
-      expect.arrayContaining(['Read the attempt', 'Retry step', 'Skip step', 'Fail step']),
-    )
-    click(items, 'Retry step')
-    expect(onRun).toHaveBeenCalledWith({
-      type: 'resume',
-      runId: 'r1',
-      stepKey: 'build',
-      action: 'retry',
-    })
-  })
-
-  it('leaves a step with no attempt yet unclickable, and an ended run with Details only', () => {
+  it('leaves a step with no attempt yet unclickable, and keeps steps out of End session', () => {
     open()
-    const ended = run({
-      group: 'finished',
-      word: 'completed',
-      status: 'completed',
-      headline: 'finished',
-      hint: null,
-      can: { decide: false, cancel: false, dismiss: true },
-    })
-    refreshTray(
-      [
-        widget(ended),
-        widget(
-          waitingStep({ session: false, can: { decide: false, cancel: false, dismiss: false } }),
-        ),
-      ],
-      [],
-      [],
-    )
-    const row = rowOf(menus.at(-1) ?? [], '◇ Ship it')
-    const items = row.submenu as Record<string, unknown>[]
-    expect(rowOf(items, '· build').enabled).toBe(false)
-    expect(items.map((e) => e.label)).toContain('Details')
-    expect(JSON.stringify(items)).not.toMatch(/Dismiss|Cancel run/)
+    refreshTray([lead, widget(step({ session: false }), 'working')], [], [])
+    const menu = menus.at(-1) ?? []
+    const row = (teamOf(menu).submenu as Record<string, unknown>[]).find((e) =>
+      String(e.label).includes('build'),
+    ) as Record<string, unknown>
+    expect(row.enabled).toBe(false)
+    const end = menu.find((e) => e.label === 'End session') as Record<string, unknown>
+    expect((end.submenu as Record<string, unknown>[]).map((e) => e.label)).toEqual(['Lead · Codex'])
   })
 
-  it('keeps runs out of End session and Check-ins, and shows the runs notice', () => {
+  it('shows the runs notice at the top', () => {
     open()
     refreshTray(
-      [
-        { id: 'lead', label: 'Lead · Codex', open: true, coordinator: true, group: 'idle' },
-        widget(run({})),
-      ],
+      [lead],
       [],
       [],
       null,
       'Workflow runs may be out of date: Agent Hub is not reachable',
     )
-    const menu = menus.at(-1) ?? []
-    expect(menu[0]?.label).toBe('Workflow runs may be out of date: Agent Hub is not reachable')
-    const end = menu.find((e) => e.label === 'End session') as Record<string, unknown>
-    expect((end.submenu as Record<string, unknown>[]).map((e) => e.label)).toEqual(['Lead · Codex'])
+    expect((menus.at(-1) ?? [])[0]?.label).toBe(
+      'Workflow runs may be out of date: Agent Hub is not reachable',
+    )
   })
 })

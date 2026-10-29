@@ -1,6 +1,7 @@
 // A workflow run as Aico shows it: one member for the run and one per step
 // (contracts.ts `RunMember`). Pure: the tracker (runs.ts) feeds it Agent Hub's
-// run view and the session that launched the run.
+// run view and the session that launched the run. Both name that session as
+// their coordinator; the session lists show only the steps (client `childAgents`).
 //
 // State words, in the owner's terms:
 //   run   running -> working, needs_owner -> needs you, completed -> finished,
@@ -10,7 +11,7 @@
 //         failed, refused or cancelled -> ended.
 
 import type { RunView, StepAttempt, StepView } from '@agent-hub/sdk'
-import type { RunMember, TeamGroup } from '../client/index'
+import { executorTool, type RunMember, type TeamGroup } from '../client/index'
 
 /** Where plan changes happen. They stay with the coordinator. */
 export const FOLLOW_UP_HINT =
@@ -168,20 +169,25 @@ function stepMember(
     id: stepMemberId(view.id, step.key),
     kind: 'step',
     coordinator: false,
-    coordinatorId: runMemberId(view.id),
+    // A step shows under the session that launched the run.
+    coordinatorId: ctx.launcherId,
     runId: view.id,
     stepKey: step.key,
     title: step.key,
     group: wait ? 'needs-you' : (STEP_GROUP[status] ?? 'no-status'),
-    at: wait?.at ?? runAt,
+    at: wait?.at ?? (running ? parseTime(attempt?.started_at) : null) ?? runAt,
     word,
     status,
     url: ctx.url,
     agent: step.agent_slug ?? null,
+    tool: executorTool(attempt?.executor ?? step.executor),
     requestedModel: requested,
     servedModel: served,
+    // Agent Hub's own answer wins; names are compared only when it gives none (ids come in several spellings).
     fallback:
-      attempt?.fallback_used === true || Boolean(requested && served && requested !== served),
+      typeof attempt?.fallback_used === 'boolean'
+        ? attempt.fallback_used
+        : Boolean(requested && served && requested !== served),
     attempt: typeof step.attempts === 'number' ? step.attempts : null,
     attemptLimit: typeof step.attempt_limit === 'number' ? step.attempt_limit : null,
     reason: wait?.reason ?? (status === 'failed' || status === 'refused' ? outcomeReason : null),
@@ -193,7 +199,6 @@ function stepMember(
     },
     cancelling,
     hint: null,
-    summary: null,
     progress: null,
     headline: null,
   }
@@ -270,6 +275,7 @@ export function runMembers(view: RunView, ctx: Context): RunMember[] {
     status: state,
     url: ctx.url,
     agent: null,
+    tool: null,
     requestedModel: null,
     servedModel: null,
     fallback: false,
@@ -290,7 +296,6 @@ export function runMembers(view: RunView, ctx: Context): RunMember[] {
     session: false,
     cancelling,
     hint: isActiveRun(state) ? FOLLOW_UP_HINT : null,
-    summary: progress,
     progress,
     headline: runHeadline(view, steps, waiting, blocked),
   }

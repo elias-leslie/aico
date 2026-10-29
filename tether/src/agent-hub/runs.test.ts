@@ -47,7 +47,13 @@ describe('runMembers', () => {
           attempt_limit: 3,
           live: { phase: 'tool:bash' },
           attempt_history: [
-            { attempt: 2, requested_model: 'a/m1', served_model: 'b/m2', fallback_used: true },
+            {
+              attempt: 2,
+              requested_model: 'a/m1',
+              served_model: 'b/m2',
+              fallback_used: true,
+              executor: 'pi',
+            },
           ],
         } as Partial<StepView>),
         step('three', 'pending'),
@@ -62,15 +68,21 @@ describe('runMembers', () => {
       group: 'working',
       word: 'running',
       title: 'Goal of r1',
-      summary: '1 of 3 done',
       progress: '1 of 3 done',
       headline: 'two working',
       can: { cancel: true, dismiss: false, decide: false },
     })
     expect(run?.hint).toContain('st workflow')
-    expect(one).toMatchObject({ coordinatorId: 'run:r1', group: 'idle', word: 'done' })
+    expect(one).toMatchObject({
+      coordinatorId: 'c0d0ae59',
+      group: 'idle',
+      word: 'done',
+      tool: 'agent-hub',
+    })
     expect(two).toMatchObject({
       id: 'step:r1:two',
+      coordinatorId: 'c0d0ae59',
+      tool: 'pi',
       group: 'working',
       word: 'tool bash',
       requestedModel: 'a/m1',
@@ -81,6 +93,29 @@ describe('runMembers', () => {
       can: { cancel: true },
     })
     expect(three).toMatchObject({ group: 'idle', word: 'pending' })
+  })
+
+  it("takes Agent Hub's word on a fallback over differently spelled model ids", () => {
+    const [, said, unsaid] = runMembers(
+      view('r9', 'completed', [
+        step('said', 'completed', {
+          attempt_history: [
+            {
+              attempt: 1,
+              requested_model: 'opencode-go/m1',
+              served_model: 'm1',
+              fallback_used: false,
+            },
+          ],
+        } as Partial<StepView>),
+        step('unsaid', 'completed', {
+          attempt_history: [{ attempt: 1, requested_model: 'a/m1', served_model: 'b/m2' }],
+        } as Partial<StepView>),
+      ]),
+      CTX,
+    )
+    expect(said?.fallback).toBe(false)
+    expect(unsaid?.fallback).toBe(true)
   })
 
   it('puts the steps the owner is asked about in needs you, with the time they began waiting', () => {

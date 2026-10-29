@@ -247,49 +247,6 @@ describe('workflow runs', () => {
       body: { status: 'stale', error: 'Agent Hub is not reachable', items: [] },
     })
   })
-
-  it('answers a waiting step, cancels a run or a step, and dismisses an ended run', async () => {
-    expect(
-      (await call('POST', '/api/runs/r1/resume', { action: 'retry', stepKey: 'build' })).body,
-    ).toEqual({ ok: true })
-    expect((await call('POST', '/api/runs/r1/cancel', {})).status).toBe(200)
-    expect((await call('POST', '/api/runs/r1/cancel', { stepKey: 'build' })).status).toBe(200)
-    expect((await call('POST', '/api/runs/r1/dismiss')).status).toBe(200)
-    expect(tether.callsOf('resumeRun')).toEqual([['r1', 'retry', 'build']])
-    expect(tether.callsOf('cancelRun')).toEqual([
-      ['r1', null],
-      ['r1', 'build'],
-    ])
-    expect(tether.callsOf('dismissRun')).toEqual([['r1']])
-  })
-
-  it('refuses a decision it does not know or an id that is not a run id', async () => {
-    expect((await call('POST', '/api/runs/r1/resume', { action: 'destroy' })).status).toBe(422)
-    expect((await call('POST', '/api/runs/r1/resume', {})).status).toBe(422)
-    expect(
-      (await call('POST', '/api/runs/r1/resume', { action: 'skip', stepKey: '../x' })).status,
-    ).toBe(422)
-    expect((await call('POST', `/api/runs/${'x'.repeat(100)}/dismiss`)).status).toBe(404)
-    expect(tether.callsOf('resumeRun')).toEqual([])
-  })
-
-  it("words Tether's and Agent Hub's refusals plainly", async () => {
-    tether.failRun = new TetherError(404, 'unknown_run', {})
-    expect(await call('POST', '/api/runs/r1/dismiss')).toMatchObject({
-      status: 404,
-      body: { detail: 'That run is no longer listed; it may have ended' },
-    })
-    tether.failRun = new TetherError(409, 'agent_hub_refused', { reason: 'step is running' })
-    expect(await call('POST', '/api/runs/r1/cancel', {})).toMatchObject({
-      status: 409,
-      body: { detail: 'Agent Hub did not accept it (step is running)' },
-    })
-    tether.failRun = new TetherError(503, 'agent_hub_unavailable', {})
-    expect(await call('POST', '/api/runs/r1/dismiss')).toMatchObject({
-      status: 503,
-      body: { detail: 'Agent Hub is not reachable' },
-    })
-  })
 })
 
 describe('sessions', () => {
