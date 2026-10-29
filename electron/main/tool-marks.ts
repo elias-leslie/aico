@@ -39,7 +39,7 @@ export const TOOL_MARKS: Readonly<Record<string, BuiltinTool>> = {
   },
   'agent-hub': {
     name: 'Agent Hub',
-    icon: '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M12 12 12 3.6M12 12 12 20.4M12 12 4.7 7.8M12 12 19.3 7.8M12 12 4.7 16.2M12 12 19.3 16.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/><circle cx="12" cy="12" r="3.4"/><circle cx="12" cy="3.6" r="2"/><circle cx="12" cy="20.4" r="2"/><circle cx="4.7" cy="7.8" r="2"/><circle cx="19.3" cy="7.8" r="2"/><circle cx="4.7" cy="16.2" r="2"/><circle cx="19.3" cy="16.2" r="2"/></svg>',
+    icon: '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"><circle cx="12" cy="13" r="3.6"/><path d="M12 9.4V5.6M8.9 14.8 5.6 16.7M15.1 14.8 18.4 16.7"/></g><g fill="currentColor"><circle cx="12" cy="3.8" r="2.4"/><circle cx="4" cy="17.6" r="2.4"/><circle cx="20" cy="17.6" r="2.4"/></g></svg>',
     accent: '#7C83F6',
   },
   shell: {
