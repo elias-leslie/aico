@@ -22,6 +22,9 @@ export interface ChatAnswer {
 /** `POST /v1/sessions/:id/chat/cancel` */
 export interface ChatCancelAnswer {
   cancelled: boolean
+  /** Follow-ups that were waiting behind the stopped turn, oldest first. They are
+   * not sent: the caller puts them back in the composer. */
+  restored: string[]
 }
 
 /** `GET /v1/chat/models` */
@@ -176,8 +179,8 @@ export function registerChatRoutes(router: Router, deps: ChatApiDeps): void {
       deps.fence(row, generation)
       await deps.whenReady()
       const runtime = hubRuntime(deps)
-      const cancelled = await guarded(() => runtime.cancelTurn(row.id))
-      const answer: ChatCancelAnswer = { cancelled }
+      const { cancelled, restored } = await guarded(() => runtime.cancelTurn(row.id))
+      const answer: ChatCancelAnswer = { cancelled, restored }
       sendJson(res, 200, answer)
     })
     .add('GET', '/v1/chat/models', async (_req, res) => {

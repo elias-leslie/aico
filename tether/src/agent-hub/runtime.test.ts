@@ -241,6 +241,31 @@ describe('AgentHubRuntime', () => {
     expect(getAgentHubSession(row.id)?.model).toBeNull()
   })
 
+  it('sends each turn with the thinking level chosen for it, queued ones included', async () => {
+    const row = root()
+    await runtime.ensure(row.id, 'First.')
+    const levels = () =>
+      hub.requests
+        .filter((r) => r.method === 'POST' && r.path === '/api/complete')
+        .map((r) => (r.body as { thinking_level?: string }).thinking_level)
+    expect(levels()).toEqual([undefined])
+    // Queued while the first turn runs: each keeps the level it was sent with.
+    await runtime.send(row.id, 'Second.', undefined, 'high')
+    await runtime.send(row.id, 'Third.')
+    await runtime.send(row.id, 'Fourth.', undefined, 'low')
+    hub.finishTurn(hubId(row))
+    await runtime.tick()
+    hub.finishTurn(hubId(row))
+    await runtime.tick()
+    hub.finishTurn(hubId(row))
+    await runtime.tick()
+    expect(levels()).toEqual([undefined, 'high', undefined, 'low'])
+    // Not kept for the session: the next message without one asks for none.
+    hub.finishTurn(hubId(row))
+    await runtime.send(row.id, 'Fifth.')
+    expect(levels().at(-1)).toBeUndefined()
+  })
+
   it('refuses a model Agent Hub cannot route, and queues nothing for it', async () => {
     const row = root()
     await runtime.ensure(row.id, 'First.')
@@ -273,6 +298,45 @@ describe('AgentHubRuntime', () => {
       code: 'agent_hub_unavailable',
     })
     expect(agentHubQueueLength(row.id)).toBe(0)
+  })
+
+  it('Stop does not send the follow-ups waiting behind the turn: they come back as text, unsent', async () => {
+    const row = root()
+    await runtime.ensure(row.id, 'Work.')
+    await runtime.send(row.id, 'Second.', undefined, 'high')
+    await runtime.send(row.id, 'Third.')
+    expect(agentHubQueueLength(row.id)).toBe(2)
+    expect(await runtime.cancelTurn(row.id)).toEqual({
+      cancelled: true,
+      restored: ['Second.', 'Third.'],
+    })
+    expect(agentHubQueueLength(row.id)).toBe(0)
+    // The turn is over and the session goes idle: nothing is posted after the stopped turn.
+    const turns = () =>
+      hub.requests.filter((r) => r.method === 'POST' && r.path === '/api/complete')
+    const before = turns().length
+    await runtime.tick()
+    await runtime.tick()
+    expect(turns()).toHaveLength(before)
+    expect(hub.sessions.get(hubId(row))?.messages).toEqual(['Work.'])
+    // Nothing waiting: Stop returns nothing to restore.
+    expect(await runtime.cancelTurn(row.id)).toEqual({ cancelled: false, restored: [] })
+  })
+
+  it('keeps the queue when Agent Hub cannot be asked to stop the turn', async () => {
+    const row = root()
+    await runtime.ensure(row.id, 'Work.')
+    await runtime.send(row.id, 'Second.', undefined, 'low')
+    hub.down = 503
+    await expect(runtime.cancelTurn(row.id)).rejects.toMatchObject({
+      code: 'agent_hub_unavailable',
+    })
+    hub.down = null
+    expect(agentHubQueueLength(row.id)).toBe(1)
+    hub.finishTurn(hubId(row))
+    await runtime.tick()
+    const last = hub.requests.filter((r) => r.path === '/api/complete').at(-1)
+    expect(last?.body).toMatchObject({ thinking_level: 'low' })
   })
 
   it('ends a session by cancelling its turn, closing it in Agent Hub and dropping the row', async () => {

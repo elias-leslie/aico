@@ -285,7 +285,10 @@ describe('chat cancel and models', () => {
     expect((await cancel({})).status).toBe(400)
     expect((await cancel({ generation, extra: 1 })).status).toBe(400)
     expect(hub.count('POST', /^\/api\/complete\/cancel$/)).toBe(0)
-    expect(await cancel({ generation })).toMatchObject({ status: 200, body: { cancelled: true } })
+    expect(await cancel({ generation })).toMatchObject({
+      status: 200,
+      body: { cancelled: true, restored: [] },
+    })
     expect(hubSession.turnRunning).toBe(false)
     expect(await cancel({ generation })).toMatchObject({ status: 200, body: { cancelled: false } })
     hub.down = 503

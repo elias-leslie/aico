@@ -37,7 +37,7 @@ class ChatTether extends FakeTether {
     if (/^\/v1\/sessions\/[^/]+\/chat$/.test(path))
       return ok({ session: { id: 'hub-1', messages: [] }, queued: [] })
     if (/\/inject$/.test(path)) return ok({ queued: true })
-    if (/\/chat\/cancel$/.test(path)) return ok({ cancelled: true })
+    if (/\/chat\/cancel$/.test(path)) return ok({ cancelled: true, restored: ['queued one'] })
     if (path === '/v1/runs/run1/steps/build/chat/info')
       return ok({ sessionId: 'att-2', agentSlug: 'pi', requestedModel: null, attempt: 2 })
     if (/^\/v1\/runs\/run1\/steps\/build\/chat\?session=/.test(path))
@@ -185,7 +185,12 @@ describe('chat info', () => {
       status: 200,
       body: {
         ok: true,
-        value: { sessionId: 'hub-1', agentSlug: 'coder', requestedModel: 'deepseek' },
+        value: {
+          sessionId: 'hub-1',
+          agentSlug: 'coder',
+          requestedModel: 'deepseek',
+          answeredModel: 'deepseek',
+        },
       },
     })
   })
@@ -233,7 +238,10 @@ describe('chat calls', () => {
       path: `/v1/sessions/${chatId}/inject`,
       body: { generation: 'g1', text: 'hello', mode: 'paste', submit: true, model: 'm1' },
     })
-    expect((await callChat('cancel')).body).toEqual({ ok: true, value: { cancelled: true } })
+    expect((await callChat('cancel')).body).toEqual({
+      ok: true,
+      value: { cancelled: true, restored: ['queued one'] },
+    })
     expect(tether.requests.at(-1)).toMatchObject({
       path: `/v1/sessions/${chatId}/chat/cancel`,
       body: { generation: 'g1' },

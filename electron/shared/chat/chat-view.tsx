@@ -1,13 +1,17 @@
 // The Agent Hub chat view, drawn the same in the desktop window and the web app:
 // the shared chat component (transcript layout) on a client that reaches Agent
-// Hub only through a chat transport, plus the model select in its composer.
+// Hub only through a chat transport, plus the model and effort selects in its composer.
 
 import '@agent-hub/chat-ui/chat-ui.css'
 import './chat.css'
 import { ChatClientProvider, ChatPanel } from '@agent-hub/chat-ui'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { Component, type ReactNode, useMemo, useRef, useState } from 'react'
+import { Component, type ReactNode, useCallback, useMemo, useRef, useState } from 'react'
 import { createBridgeClient } from './bridge-client'
+import { restoreDraft } from './draft'
+import { effortChoices, effortFor } from './effort'
+import { EffortPicker } from './effort-picker'
+import { useModelCatalog } from './model-catalog'
 import { ModelPicker } from './model-picker'
 import type { ChatInfo, ChatTransport } from './types'
 
@@ -50,6 +54,13 @@ function ChatView({
   const [model, setModel] = useState(info.requestedModel ?? '')
   const chosen = useRef(model)
   chosen.current = model
+  // The effort for the next message. It is only ever a level the model in use takes (the
+  // choices come from the catalog); a model that takes none sends none.
+  const [effortPicked, setEffort] = useState('')
+  const effortNow = useRef('')
+  // Stop gives the follow-ups that were waiting back: they go into the message box, unsent.
+  const host = useRef<HTMLDivElement>(null)
+  const restore = useCallback((texts: string[]) => restoreDraft(host.current, texts), [])
   const readOnly = info.readOnly === true
   const client = useMemo(
     () =>
@@ -60,27 +71,43 @@ function ChatView({
           ? {}
           : {
               model: () => chosen.current || null,
+              effort: () => effortNow.current || null,
               onBusy,
+              onRestore: restore,
             },
       ),
-    [transport, info, readOnly, onBusy],
+    [transport, info, readOnly, onBusy, restore],
   )
+  const catalog = useModelCatalog(client)
+  const modelInUse = model || info.answeredModel || ''
+  const choices = useMemo(
+    () => effortChoices((catalog.data ?? []).find((entry) => entry.id === modelInUse)),
+    [catalog.data, modelInUse],
+  )
+  const effort = effortFor(choices, effortPicked)
+  effortNow.current = effort
   return (
     <ChatClientProvider client={client}>
-      <ChatPanel
-        agentSlug={info.agentSlug}
-        sessionId={info.sessionId}
-        layout="transcript"
-        toolsEnabled
-        allowModelMentions={false}
-        branch={info.branch ?? null}
-        config={{ model: model || null }}
-        renderComposerControls={
-          readOnly
-            ? undefined
-            : () => <ModelPicker client={client} value={model} onChange={setModel} />
-        }
-      />
+      <div ref={host} className="chat-host">
+        <ChatPanel
+          agentSlug={info.agentSlug}
+          sessionId={info.sessionId}
+          layout="transcript"
+          toolsEnabled
+          allowModelMentions={false}
+          branch={info.branch ?? null}
+          config={{ model: model || null }}
+          renderComposerControls={
+            readOnly
+              ? undefined
+              : () => (
+                  <ModelPicker client={client} value={model} onChange={setModel}>
+                    <EffortPicker choices={choices} value={effort} onChange={setEffort} />
+                  </ModelPicker>
+                )
+          }
+        />
+      </div>
     </ChatClientProvider>
   )
 }

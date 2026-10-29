@@ -108,6 +108,7 @@ describe('chat bridge info', () => {
       sessionId: 'hub-1',
       agentSlug: 'coder',
       requestedModel: 'deepseek-v4',
+      answeredModel: 'deepseek-v4',
     })
   })
 
@@ -175,6 +176,28 @@ describe('chat bridge calls', () => {
     ])
   })
 
+  it('sends the chosen effort with a message: a level word, or none for the model’s default', async () => {
+    const { bridge, request } = setup()
+    request.mockResolvedValue({ status: 200, body: { delivered: true, queued: false } })
+    const who = sender().contents
+    await bridge.call(who, 'send', { sessionId: 'hub-1', text: 'a', thinkingLevel: 'high' })
+    await bridge.call(who, 'send', { sessionId: 'hub-1', text: 'b', thinkingLevel: null })
+    await bridge.call(who, 'send', { sessionId: 'hub-1', text: 'c', thinkingLevel: '' })
+    await bridge.call(who, 'send', { sessionId: 'hub-1', text: 'd' })
+    expect(request.mock.calls.map((call) => call[2])).toEqual([
+      { generation: 'g1', text: 'a', mode: 'paste', submit: true, thinkingLevel: 'high' },
+      { generation: 'g1', text: 'b', mode: 'paste', submit: true, thinkingLevel: null },
+      { generation: 'g1', text: 'c', mode: 'paste', submit: true, thinkingLevel: null },
+      { generation: 'g1', text: 'd', mode: 'paste', submit: true },
+    ])
+    request.mockClear()
+    for (const thinkingLevel of [5, 'High', 'x'.repeat(17), 'high; drop'])
+      expect(
+        await bridge.call(who, 'send', { sessionId: 'hub-1', text: 'e', thinkingLevel }),
+      ).toMatchObject({ ok: false, error: { code: 'invalid_effort' } })
+    expect(request).not.toHaveBeenCalled()
+  })
+
   it('refuses a model that is not text, and says so when Agent Hub cannot use it', async () => {
     const { bridge, request } = setup()
     const who = sender().contents
@@ -198,15 +221,23 @@ describe('chat bridge calls', () => {
 
   it('cancels the turn and lists models', async () => {
     const { bridge, request } = setup()
-    request.mockResolvedValueOnce({ status: 200, body: { cancelled: true } })
+    request.mockResolvedValueOnce({ status: 200, body: { cancelled: true, restored: [] } })
     await expect(bridge.call(sender().contents, 'cancel', { sessionId: 'hub-1' })).resolves.toEqual(
-      { ok: true, value: { cancelled: true } },
+      { ok: true, value: { cancelled: true, restored: [] } },
     )
     expect(request.mock.calls[0].slice(0, 3)).toEqual([
       'POST',
       '/v1/sessions/ab12cd34/chat/cancel',
       { generation: 'g1' },
     ])
+    // Follow-ups Stop took out of the queue come back as text; nothing else passes through.
+    request.mockResolvedValueOnce({
+      status: 200,
+      body: { cancelled: true, restored: ['and then?', 7, 'again'], token: 'x' },
+    })
+    await expect(bridge.call(sender().contents, 'cancel', { sessionId: 'hub-1' })).resolves.toEqual(
+      { ok: true, value: { cancelled: true, restored: ['and then?', 'again'] } },
+    )
     request.mockResolvedValueOnce({ status: 200, body: { items: [{ id: 'm' }] } })
     await expect(bridge.call(sender().contents, 'models', {})).resolves.toEqual({
       ok: true,

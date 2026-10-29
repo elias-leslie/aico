@@ -20,6 +20,7 @@ import type {
   IdleEvent,
   ModelsApi,
   SessionsApi,
+  ThinkingLevel,
   TurnEvent,
   TurnsApi,
   WorkflowRunsApi,
@@ -38,8 +39,10 @@ import {
   peekAgentHubQueue,
   removeAgentHubQueued,
   removeWidgetIfOwnership,
+  returnAgentHubQueue,
   rootRequestForWidget,
   setAgentHubModel,
+  takeAgentHubQueue,
   type WidgetRow,
 } from '../lifecycle/catalog'
 import type { EndResult, SessionStatus } from '../lifecycle/engine'
@@ -268,6 +271,7 @@ export class AgentHubRuntime {
     hub: AgentHubSessionRow,
     text: string,
     model: string | null = hub.model,
+    thinkingLevel: string | null = null,
   ): Promise<void> {
     const controller = new AbortController()
     this.inflight.add(controller)
@@ -278,6 +282,7 @@ export class AgentHubRuntime {
         project_id: row.projectId ?? '',
         agent_slug: hub.agentSlug,
         ...(model ? { model } : {}),
+        ...(thinkingLevel ? { thinking_level: thinkingLevel as ThinkingLevel } : {}),
         session_id: hub.hubSessionId,
         external_id: row.sessionId,
         working_dir: row.projectRoot,
@@ -316,8 +321,15 @@ export class AgentHubRuntime {
    * `model` is the catalog model for this turn (null: the agent's own routing);
    * left out, the turn takes the session's model. A queued follow-up keeps the
    * model it was sent with, and the choice is remembered as the session's.
+   * `thinkingLevel` is the effort for this turn only (null or left out: the
+   * model's own default); a queued follow-up keeps the one it was sent with.
    */
-  send(widgetId: string, text: string, model?: string | null): Promise<{ queued: boolean }> {
+  send(
+    widgetId: string,
+    text: string,
+    model?: string | null,
+    thinkingLevel: string | null = null,
+  ): Promise<{ queued: boolean }> {
     return this.serial(widgetId, async () => {
       const row = getWidget(widgetId)
       const hub = getAgentHubSession(widgetId)
@@ -336,16 +348,16 @@ export class AgentHubRuntime {
         this.options.notify(widgetId)
       }
       if (observed.turnState === 'running' || agentHubQueueLength(widgetId) > 0) {
-        enqueueAgentHubText(widgetId, text, this.now(), turnModel)
+        enqueueAgentHubText(widgetId, text, this.now(), turnModel, thinkingLevel)
         remember()
         return { queued: true }
       }
       try {
-        await this.startTurn(row, hub, text, turnModel)
+        await this.startTurn(row, hub, text, turnModel, thinkingLevel)
       } catch (error) {
         const failure = classifyHubError(error)
         if (failure.code !== 'turn_running') throw failure
-        enqueueAgentHubText(widgetId, text, this.now(), turnModel)
+        enqueueAgentHubText(widgetId, text, this.now(), turnModel, thinkingLevel)
         remember()
         return { queued: true }
       }
@@ -389,16 +401,33 @@ export class AgentHubRuntime {
     return this.options.api().turns.attach(this.startedHubId(widgetId), { afterSeq, signal })
   }
 
-  /** Ask Agent Hub to stop the running turn. False when none was running. */
-  async cancelTurn(widgetId: string): Promise<boolean> {
-    const hubId = this.startedHubId(widgetId)
-    try {
-      return (await this.options.api().turns.cancel(hubId)).cancelled === true
-    } catch (error) {
-      const status = (error as SdkErrorShape).status
-      if (status === 404 || status === 409) return false
-      throw classifyHubError(error)
-    }
+  /**
+   * Ask Agent Hub to stop the running turn. `cancelled` is false when none was
+   * running. Stop also takes the follow-ups waiting behind the turn out of the
+   * queue and hands their texts back (`restored`, oldest first), so none is
+   * sent after the turn that was stopped: the caller puts them back in the
+   * composer for the owner to send or edit. They go back into the queue if
+   * Agent Hub cannot be asked.
+   */
+  cancelTurn(widgetId: string): Promise<{ cancelled: boolean; restored: string[] }> {
+    return this.serial(widgetId, async () => {
+      const hubId = this.startedHubId(widgetId)
+      const taken = takeAgentHubQueue(widgetId)
+      const restored = taken.map((item) => item.text)
+      try {
+        const cancelled = (await this.options.api().turns.cancel(hubId)).cancelled === true
+        if (taken.length) this.options.notify(widgetId)
+        return { cancelled, restored }
+      } catch (error) {
+        const status = (error as SdkErrorShape).status
+        if (status === 404 || status === 409) {
+          if (taken.length) this.options.notify(widgetId)
+          return { cancelled: false, restored }
+        }
+        returnAgentHubQueue(widgetId, taken)
+        throw classifyHubError(error)
+      }
+    })
   }
 
   /** The model catalog, for the chat's model picker. */
@@ -540,7 +569,13 @@ export class AgentHubRuntime {
       const next = peekAgentHubQueue(widgetId)
       if (!row || !hub || !next) return
       try {
-        await this.startTurn(row, hub, next.text, next.model === undefined ? hub.model : next.model)
+        await this.startTurn(
+          row,
+          hub,
+          next.text,
+          next.model === undefined ? hub.model : next.model,
+          next.thinkingLevel,
+        )
       } catch (error) {
         const failure = classifyHubError(error)
         if (failure.code === 'agent_hub_refused') {

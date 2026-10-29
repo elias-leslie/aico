@@ -8,6 +8,9 @@ export interface ChatInfo {
   sessionId: string
   agentSlug: string
   requestedModel: string | null
+  /** The model Agent Hub last reported answering: the one an agent-routed message
+   * goes to, so the Effort choices follow it when no model is picked. */
+  answeredModel?: string | null
   /** The git branch the session's folder has checked out, when it has one. */
   branch?: string
   /** A workflow step's attempt, read only: the view offers no message box. */

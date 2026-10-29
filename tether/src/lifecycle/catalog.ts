@@ -1166,6 +1166,8 @@ export interface AgentHubQueued {
    * agent's own routing, undefined for a row queued before models were kept
    * (it takes the session's model). */
   model: string | null | undefined
+  /** The thinking level the follow-up was sent with; null for the model's own default. */
+  thinkingLevel: string | null
 }
 
 /** Queue a follow-up with the model it was sent with (null: the agent's own routing). */
@@ -1174,23 +1176,69 @@ export function enqueueAgentHubText(
   text: string,
   now = Date.now(),
   model: string | null = null,
+  thinkingLevel: string | null = null,
 ): void {
   db.prepare(
-    'INSERT INTO agent_hub_queue (session_id, text, created_at, model) VALUES (?, ?, ?, ?)',
-  ).run(sessionId, text, now, model ?? '')
+    'INSERT INTO agent_hub_queue (session_id, text, created_at, model, thinking_level) VALUES (?, ?, ?, ?, ?)',
+  ).run(sessionId, text, now, model ?? '', thinkingLevel ?? '')
 }
 
 /** The oldest queued follow-up, if any. */
 export function peekAgentHubQueue(sessionId: string): AgentHubQueued | undefined {
   const row = db
-    .prepare('SELECT id, text, model FROM agent_hub_queue WHERE session_id = ? ORDER BY id LIMIT 1')
-    .get(sessionId) as { id: number; text: string; model: string | null } | undefined
+    .prepare(
+      'SELECT id, text, model, thinking_level FROM agent_hub_queue WHERE session_id = ? ORDER BY id LIMIT 1',
+    )
+    .get(sessionId) as
+    | { id: number; text: string; model: string | null; thinking_level: string | null }
+    | undefined
   if (!row) return undefined
   return {
     id: row.id,
     text: row.text,
     model: row.model === null ? undefined : row.model === '' ? null : row.model,
+    thinkingLevel: row.thinking_level || null,
   }
+}
+
+/** Take every queued follow-up out of the queue, oldest first, and return them. */
+export function takeAgentHubQueue(sessionId: string): AgentHubQueued[] {
+  const rows = db
+    .prepare(
+      'SELECT id, text, model, thinking_level FROM agent_hub_queue WHERE session_id = ? ORDER BY id',
+    )
+    .all(sessionId) as {
+    id: number
+    text: string
+    model: string | null
+    thinking_level: string | null
+  }[]
+  db.prepare('DELETE FROM agent_hub_queue WHERE session_id = ?').run(sessionId)
+  return rows.map((row) => ({
+    id: row.id,
+    text: row.text,
+    model: row.model === null ? undefined : row.model === '' ? null : row.model,
+    thinkingLevel: row.thinking_level || null,
+  }))
+}
+
+/** Put follow-ups taken out with `takeAgentHubQueue` back, in their order, with what they were sent with. */
+export function returnAgentHubQueue(
+  sessionId: string,
+  items: readonly AgentHubQueued[],
+  now = Date.now(),
+): void {
+  const insert = db.prepare(
+    'INSERT INTO agent_hub_queue (session_id, text, created_at, model, thinking_level) VALUES (?, ?, ?, ?, ?)',
+  )
+  for (const item of items)
+    insert.run(
+      sessionId,
+      item.text,
+      now,
+      item.model === undefined ? null : (item.model ?? ''),
+      item.thinkingLevel ?? '',
+    )
 }
 
 /** Remember the model the owner last chose for the session (null: the agent's own routing). */

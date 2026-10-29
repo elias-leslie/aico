@@ -205,6 +205,27 @@ describe('agent-hub sessions over the control socket', () => {
     expect((await send({ model: '' })).status).toBe(400)
   })
 
+  it('takes a thinking level with a follow-up and refuses a malformed one', async () => {
+    const id = ((await create()).body as Body).hostIdentity as string
+    const generation = ((await call('GET', `/v1/sessions/${id}`)).body as Body).generation
+    const send = (extra: Record<string, unknown>) =>
+      call('POST', `/v1/sessions/${id}/inject`, {
+        generation,
+        text: 'Next.',
+        mode: 'paste',
+        submit: true,
+        ...extra,
+      })
+    const [hubSession] = [...hub.sessions.values()]
+    hub.finishTurn(hubSession.id)
+    expect((await send({ thinkingLevel: 'high' })).body).toMatchObject({ queued: false })
+    const last = hub.requests.filter((r) => r.path === '/api/complete').at(-1)
+    expect(last?.body).toMatchObject({ thinking_level: 'high' })
+    expect((await send({ thinkingLevel: 5 })).status).toBe(400)
+    expect((await send({ thinkingLevel: '' })).status).toBe(400)
+    expect((await send({ thinkingLevel: 'High; drop' })).status).toBe(400)
+  })
+
   it('refuses the pane-only routes and keeps naming and wakes working', async () => {
     const id = ((await create()).body as Body).hostIdentity as string
     const generation = ((await call('GET', `/v1/sessions/${id}`)).body as Body).generation

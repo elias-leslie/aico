@@ -1,28 +1,25 @@
 // The model for the next message in an Agent Hub chat, a select in the
 // composer's bar. Empty means the agent's own routing, as on Agent Hub's chat
 // page; a choice rides on the next message and on any follow-up queued behind
-// a running turn (bridge-client.ts). Effort and Tools selects are not here:
-// Agent Hub's turn API takes a thinking level, but Tether does not carry one
-// per turn (and its read-only flag is a label, not a tool limit), so a select
-// would change nothing.
+// a running turn (bridge-client.ts). The Effort select sits next to it
+// (effort-picker.tsx). There is no Tools select: Tether's read-only flag is a
+// label, not a tool limit, so a select would change nothing.
 
 import type { ChatHubClient } from '@agent-hub/chat-ui'
-import { useQuery } from '@tanstack/react-query'
+import type { ReactNode } from 'react'
+import { useModelCatalog } from './model-catalog'
 
 interface ModelPickerProps {
   client: ChatHubClient
   /** The chosen model id; empty for the agent's own routing. */
   value: string
   onChange(model: string): void
+  /** More controls for the same bar (the effort select). */
+  children?: ReactNode
 }
 
-export function ModelPicker({ client, value, onChange }: ModelPickerProps) {
-  const catalog = useQuery({
-    queryKey: ['aico-chat', 'models', client.baseUrl ?? ''],
-    queryFn: () => client.models.list(),
-    staleTime: 5 * 60_000,
-    retry: false,
-  })
+export function ModelPicker({ client, value, onChange, children }: ModelPickerProps) {
+  const catalog = useModelCatalog(client)
   const routable = (catalog.data ?? [])
     .filter((model) => model.routable)
     .sort((a, b) => a.name.localeCompare(b.name))
@@ -42,6 +39,7 @@ export function ModelPicker({ client, value, onChange }: ModelPickerProps) {
           ))}
         </select>
       </label>
+      {children}
       {catalog.isError ? (
         <span role="status" className="chat-model-failed">
           The model list did not load.{' '}

@@ -8,6 +8,7 @@
 import type { ChatHubClient } from '@agent-hub/chat-ui'
 import type {
   AgentHubError,
+  CancelResult,
   IdleEvent,
   StreamOptions,
   TurnEvent,
@@ -95,8 +96,13 @@ interface FollowOptions {
 export interface BridgeClientOptions {
   /** The model for a message sent now: a catalog model, or null for the agent's own routing. */
   model?: () => string | null
+  /** The effort for a message sent now: a level, or null for the model's own default. */
+  effort?: () => string | null
   /** A turn is running (its events are arriving), or none is. Fires on a change only. */
   onBusy?: (busy: boolean) => void
+  /** Stop took follow-ups that were waiting behind the turn out of the queue. They were
+   * not sent: the view puts their text back in the message box, oldest first. */
+  onRestore?: (texts: string[]) => void
 }
 
 export function createBridgeClient(
@@ -113,9 +119,12 @@ export function createBridgeClient(
     if (running > 0 !== was) hooks.onBusy?.(running > 0)
   }
 
-  /** A message to send: its text, and the model chosen for it when the window has a picker. */
-  const outgoing = (text: string): Record<string, unknown> =>
-    hooks.model ? { text, model: hooks.model() } : { text }
+  /** A message to send: its text, and the model and effort chosen for it when the window has pickers. */
+  const outgoing = (text: string): Record<string, unknown> => ({
+    text,
+    ...(hooks.model ? { model: hooks.model() } : {}),
+    ...(hooks.effort ? { thinkingLevel: hooks.effort() } : {}),
+  })
 
   async function call<T>(method: string, args: Record<string, unknown> = {}): Promise<T> {
     const answer = await bridge.call(method, { sessionId: info.sessionId, ...args })
@@ -223,7 +232,11 @@ export function createBridgeClient(
         yield* follow(0, options ?? {}) as AsyncGenerator<TurnEvent>
       },
       attach: (_sessionId, options) => follow(options?.afterSeq ?? 0, options ?? {}),
-      cancel: (sessionId) => call('cancel', { sessionId }),
+      cancel: async (sessionId) => {
+        const answer = await call<CancelResult & { restored?: string[] }>('cancel', { sessionId })
+        if (answer.restored?.length) hooks.onRestore?.(answer.restored)
+        return answer
+      },
     },
     sessions: {
       get: (sessionId) => call('session', { sessionId }),

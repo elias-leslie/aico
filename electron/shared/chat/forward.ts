@@ -22,6 +22,8 @@ import type { ChatCallResult, ChatFailure, ChatInfo, ChatStreamItem } from './ty
 export const MAX_CHAT_TEXT = 60_000
 /** Tether's bound on a model id. */
 const MAX_MODEL_ID = 128
+/** A thinking level is one lowercase word (Tether holds the same shape). */
+const THINKING_LEVEL = /^[a-z]{1,16}$/
 export const CHAT_METHODS: ReadonlySet<string> = new Set([
   'session',
   'queue',
@@ -104,6 +106,7 @@ export function sessionTarget(
       sessionId: descriptor.agentHub.sessionId,
       agentSlug: descriptor.agentHub.agentSlug,
       requestedModel: descriptor.agentHub.requestedModel,
+      answeredModel: descriptor.agentHub.model,
       ...(branch ? { branch } : {}),
     },
   }
@@ -206,6 +209,15 @@ export async function chatCall(
         (typeof model !== 'string' || model.length > MAX_MODEL_ID)
       )
         throw new ChatRefusal('invalid_model', 'That model cannot be used.')
+      // The effort for this message: a level word, or null (or empty) for the model's own default.
+      const level = input.thinkingLevel
+      if (
+        level !== undefined &&
+        level !== null &&
+        level !== '' &&
+        (typeof level !== 'string' || !THINKING_LEVEL.test(level))
+      )
+        throw new ChatRefusal('invalid_effort', 'That effort cannot be used.')
       const { body } = await tether.request<{ queued?: boolean }>(
         'POST',
         `/v1/sessions/${encodeURIComponent(now.id)}/inject`,
@@ -215,18 +227,22 @@ export async function chatCall(
           mode: 'paste',
           submit: true,
           ...(model === undefined ? {} : { model: model || null }),
+          ...(level === undefined ? {} : { thinkingLevel: level || null }),
         },
         { timeoutMs: 45_000 },
       )
       return { ok: true, value: { queued: body.queued === true } }
     }
-    const { body } = await tether.request<{ cancelled?: boolean }>(
+    const { body } = await tether.request<{ cancelled?: boolean; restored?: unknown }>(
       'POST',
       sessionPath(now, '/cancel'),
       { generation: now.generation },
       { timeoutMs: 20_000 },
     )
-    return { ok: true, value: { cancelled: body.cancelled === true } }
+    const restored = Array.isArray(body.restored)
+      ? body.restored.filter((text): text is string => typeof text === 'string')
+      : []
+    return { ok: true, value: { cancelled: body.cancelled === true, restored } }
   } catch (error) {
     return { ok: false, error: failure(error) }
   }

@@ -59,6 +59,11 @@
   display: none;
 }
 
+.chat-host,
+.chat-host > * {
+  height: 100%;
+}
+
 .chat-failed {
   padding: 16px;
   color: var(--mist);

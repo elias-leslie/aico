@@ -3,7 +3,7 @@
 // copies rows byte for byte. The only widening is the tmux_servers unit CHECK,
 // which additionally admits non-default instance unit names.
 
-export const SCHEMA_VERSION = 13
+export const SCHEMA_VERSION = 14
 
 /** Aico's tmux_servers table (electron/main/store.ts TMUX_SERVERS_TABLE_SQL),
  * plus `tether-<instance>-tmux-server-<id>.service` for non-default instances. */
@@ -271,6 +271,15 @@ export const AGENT_HUB_BACKEND_SQL = `
  */
 export const AGENT_HUB_QUEUE_MODEL_SQL = `
   ALTER TABLE agent_hub_queue ADD COLUMN model TEXT;
+`
+
+/**
+ * v14: a queued follow-up keeps the thinking level chosen when it was sent:
+ * NULL or '' for the model's own default, anything else a level Agent Hub's
+ * turn API takes.
+ */
+export const AGENT_HUB_QUEUE_THINKING_SQL = `
+  ALTER TABLE agent_hub_queue ADD COLUMN thinking_level TEXT;
 `
 
 export const AGENT_HUB_SQL = `

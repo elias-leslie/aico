@@ -5,6 +5,7 @@ import { DatabaseSync } from 'node:sqlite'
 import {
   AGENT_HUB_BACKEND_SQL,
   AGENT_HUB_QUEUE_MODEL_SQL,
+  AGENT_HUB_QUEUE_THINKING_SQL,
   AGENT_HUB_SQL,
   AGENT_TOOLS_TABLE_SQL,
   COORDINATOR_SQL,
@@ -282,6 +283,18 @@ export class Store {
         this.db
           .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
           .run(13, now)
+      }
+      if (current < 14) {
+        // v14: a queued follow-up keeps the thinking level it was sent with.
+        const hasLevel = this.db
+          .prepare(
+            "SELECT 1 FROM pragma_table_info('agent_hub_queue') WHERE name = 'thinking_level'",
+          )
+          .get()
+        if (!hasLevel) this.db.exec(AGENT_HUB_QUEUE_THINKING_SQL)
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(14, now)
       }
     })
   }

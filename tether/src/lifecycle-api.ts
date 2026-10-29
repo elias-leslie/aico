@@ -431,6 +431,7 @@ async function deliverToAgentHub(
   generation: string,
   text: string,
   model?: string | null,
+  thinkingLevel: string | null = null,
 ): Promise<{ queued: boolean }> {
   if (!agentHub) throw new HttpError(503, 'agent_hub_unavailable')
   const current = getWidget(row.id)
@@ -438,7 +439,7 @@ async function deliverToAgentHub(
   if ((await verifySessionStatus(current)) !== 'running')
     throw new HttpError(409, 'workload_unavailable')
   try {
-    return await agentHub.send(row.id, text, model)
+    return await agentHub.send(row.id, text, model, thinkingLevel)
   } catch (error) {
     if (!(error instanceof HubError)) throw error
     if (error.code === 'agent_hub_unavailable') throw new HttpError(503, 'agent_hub_unavailable')
@@ -1037,7 +1038,7 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
     })
     .add('POST', '/v1/sessions/:id/inject', async (req, res, params) => {
       const body = await readJsonObject(req)
-      only(body, ['generation', 'text', 'mode', 'submit', 'model'])
+      only(body, ['generation', 'text', 'mode', 'submit', 'model', 'thinkingLevel'])
       const generation = requireGeneration(body)
       if (!isBoundedTerminalText(body.text)) throw new HttpError(400, 'invalid_text')
       const text = body.text
@@ -1055,16 +1056,33 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
         (typeof model !== 'string' || model.length < 1 || model.length > 128)
       )
         throw new HttpError(400, 'invalid_body', { field: 'model' })
+      // The thinking level (effort) for this turn; null or left out is the model's own default.
+      // Agent Hub holds the list of levels a model takes and refuses any other.
+      const thinkingLevel = body.thinkingLevel
+      if (
+        thinkingLevel !== undefined &&
+        thinkingLevel !== null &&
+        (typeof thinkingLevel !== 'string' || !/^[a-z]{1,16}$/.test(thinkingLevel))
+      )
+        throw new HttpError(400, 'invalid_body', { field: 'thinkingLevel' })
       const row = requireSession(params.id)
       fence(row, generation)
       await whenReady()
       if (model !== undefined && row.backend !== 'agent-hub')
         throw new HttpError(400, 'invalid_body', { field: 'model' })
+      if (thinkingLevel !== undefined && row.backend !== 'agent-hub')
+        throw new HttpError(400, 'invalid_body', { field: 'thinkingLevel' })
       if (row.backend === 'agent-hub') {
         // A follow-up is a turn; typing keystrokes has no meaning here.
         if (body.mode !== 'paste' || body.submit !== true)
           throw new HttpError(400, 'invalid_body', { field: 'mode' })
-        const { queued } = await deliverToAgentHub(row, generation, text, model)
+        const { queued } = await deliverToAgentHub(
+          row,
+          generation,
+          text,
+          model,
+          thinkingLevel ?? null,
+        )
         sendJson(res, 200, { generation, delivered: true, queued })
         return
       }

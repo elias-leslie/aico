@@ -166,7 +166,7 @@ describe('bridge client', () => {
     const client = createBridgeClient(bridge, INFO)
     expect(await client.followUps?.send('hub-1', 'and then?')).toEqual({ queued: true })
     expect(await client.followUps?.pending('hub-1')).toEqual(['next'])
-    expect(await client.turns.cancel('hub-1')).toEqual({ cancelled: true })
+    expect(await client.turns.cancel('hub-1')).toMatchObject({ cancelled: true })
     expect(await client.sessions.get('hub-1')).toMatchObject({ id: 'hub-1' })
     expect(calls.map(([method]) => method)).toEqual(['send', 'queue', 'cancel', 'session'])
     expect(calls.every(([, args]) => args.sessionId === 'hub-1')).toBe(true)
@@ -194,6 +194,47 @@ describe('bridge client', () => {
       ['send', { sessionId: 'hub-1', text: 'second', model: null }],
       ['send', { sessionId: 'hub-1', text: 'third', model: 'deepseek-flash' }],
     ])
+  })
+
+  it('sends the window’s chosen effort with a message, and none when the window has no effort', async () => {
+    const { bridge, opened, calls } = fakeBridge({
+      send: () => ({ ok: true, value: { queued: false } }),
+    })
+    let effort: string | null = 'high'
+    const client = createBridgeClient(bridge, INFO, { model: () => 'm', effort: () => effort })
+    const done = collect(
+      client.turns.stream({ messages: [{ role: 'user', content: 'first' }] } as never),
+    )
+    await vi.waitFor(() => expect(opened).toHaveLength(1))
+    opened[0].push(event('done', 1))
+    await done
+    effort = null
+    await client.followUps?.send('hub-1', 'second')
+    expect(calls).toEqual([
+      ['send', { sessionId: 'hub-1', text: 'first', model: 'm', thinkingLevel: 'high' }],
+      ['send', { sessionId: 'hub-1', text: 'second', model: 'm', thinkingLevel: null }],
+    ])
+  })
+
+  it('hands the follow-ups Stop took back to the window, unsent', async () => {
+    const { bridge, calls } = fakeBridge({
+      cancel: () => ({ ok: true, value: { cancelled: true, restored: ['one', 'two'] } }),
+    })
+    const restored: string[][] = []
+    const client = createBridgeClient(bridge, INFO, { onRestore: (texts) => restored.push(texts) })
+    expect(await client.turns.cancel('hub-1')).toMatchObject({ cancelled: true })
+    expect(restored).toEqual([['one', 'two']])
+    // Nothing was waiting: nothing to hand back.
+    const quiet = fakeBridge({
+      cancel: () => ({ ok: true, value: { cancelled: true, restored: [] } }),
+    })
+    const other: string[][] = []
+    const second = createBridgeClient(quiet.bridge, INFO, {
+      onRestore: (texts) => other.push(texts),
+    })
+    await second.turns.cancel('hub-1')
+    expect(other).toEqual([])
+    expect(calls.map(([method]) => method)).toEqual(['cancel'])
   })
 
   it('says when a turn is running: from its first event to its end, once', async () => {
