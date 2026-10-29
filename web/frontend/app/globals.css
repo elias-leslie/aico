@@ -502,10 +502,17 @@ select {
   pointer-events: none;
 }
 
+.lantern-row.is-run .name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .lantern-row.is-run .lantern-run-details {
   pointer-events: auto;
-  flex: none;
-  margin-left: auto;
+  margin-left: 6px;
   color: var(--mist);
   font-size: 12px;
   text-decoration: underline;

@@ -211,18 +211,20 @@ export function RunRow({
               style={{ backgroundColor: dot }}
             />
           )}
-          <span className="line-clamp-2 min-w-0 whitespace-normal">{meta}</span>
-          {url && (
-            <a
-              href={url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="lantern-run-details"
-              aria-label={`Details of workflow run ${member.title}, opens in Agent Hub`}
-            >
-              details
-            </a>
-          )}
+          <span className="line-clamp-3 min-w-0 whitespace-normal">
+            {meta}
+            {url && (
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="lantern-run-details"
+                aria-label={`Details of workflow run ${member.title}, opens in Agent Hub`}
+              >
+                details
+              </a>
+            )}
+          </span>
         </span>
         <ChevronRight
           aria-hidden="true"
