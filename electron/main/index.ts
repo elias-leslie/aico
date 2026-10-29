@@ -122,7 +122,7 @@ const layout = createWindowLayout({
 })
 // Whether the owner works on this desktop or in the web app: Tether's own
 // shows open windows here only in the first case (owner-surface.ts).
-const ownerSurface = createOwnerSurface()
+const ownerSurface = createOwnerSurface({ getSetting, setSetting })
 const windows = createWindows({
   registry,
   layout,
