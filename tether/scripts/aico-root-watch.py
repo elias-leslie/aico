@@ -1306,7 +1306,8 @@ def create_main(argv: list[str]) -> int:
             parser.error("--blank-slate starts fresh in its own empty workspace; drop --project-root, "
                          "--resume-session and --agent-hub-context")
         if args.project is None:
-            args.project = "blank-slate"
+            # Agent Hub only knows registered projects; a chat's blank slate is its empty workspace.
+            args.project = "agent-hub" if args.tool == "agent-hub" else "blank-slate"
     elif args.project is None or args.project_root is None:
         parser.error("--project and --project-root are required unless --blank-slate")
     if any(not re.fullmatch(KEY, value) for value in

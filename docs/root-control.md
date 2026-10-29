@@ -456,7 +456,7 @@ stream for a few seconds (`TETHER_AGENT_HUB_SETTLE_MS`) and keeps the failure on
 and detail, and `st aico root status` shows `turnState` (`running`, `idle`, `unknown`),
 `queued` and the last `error`. `--blank-slate` gives the chat an empty workspace under
 `/tmp/aico-blank-slate/<request id>` (the scratch Agent Hub accepts as a working directory)
-and needs no `--project-root`.
+and needs no `--project-root`; its project is `agent-hub` unless `--project` names another registered project (Agent Hub refuses an unknown project id, which `blank-slate` is).
 [api-v1.md](../tether/docs/api-v1.md#agent-hub-sessions) has the session behavior.
 
 A tmux tool is root-capable exactly when it has a resume adapter; `GET /v1/tools`

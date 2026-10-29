@@ -92,11 +92,11 @@ def test_create_fails_when_agent_hub_could_not_be_reached_for_the_first_turn(mon
     assert code == 1 and output[0]["reason"] == "turn_not_started"
 
 
-def test_blank_slate_chat_gets_an_empty_workspace_agent_hub_accepts(monkeypatch):
+def test_blank_slate_chat_gets_an_empty_workspace_in_a_project_agent_hub_knows(monkeypatch):
     args = [a for a in HUB if a not in ("--project", "sample-app", "--project-root", "/fixture/project")]
     code, calls, _ = run_create(monkeypatch, [*args, "--blank-slate", "--root-socket", "/fixture/gui.sock"])
     assert code == 0
-    assert calls[0]["projectRoot"] == "/tmp/aico-blank-slate/hub-1" and calls[0]["projectId"] == "blank-slate"
+    assert calls[0]["projectRoot"] == "/tmp/aico-blank-slate/hub-1" and calls[0]["projectId"] == "agent-hub"
     assert calls[0]["tool"] == "agent-hub"
 
 
