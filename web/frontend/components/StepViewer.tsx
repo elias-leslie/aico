@@ -97,6 +97,13 @@ export function StepView({
             Read only
           </span>
         </div>
+        <p
+          className="mx-3 mb-1.5 flex-shrink-0"
+          style={{ color: 'var(--mist)', font: '400 12px/1.4 var(--font-ui)' }}
+        >
+          The conversation is recorded when the step ends, so a running step can
+          look empty until then.
+        </p>
         <div
           className="relative mx-1 mb-1 min-h-0 min-w-0 flex-1 overflow-hidden rounded"
           style={{
