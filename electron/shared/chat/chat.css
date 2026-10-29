@@ -181,3 +181,11 @@
     flex: 1 1 100%;
   }
 }
+
+/* A read-only step view that could not refresh: says the page may be behind, without hiding it. */
+.aico-chat .chat-stale {
+  margin: 0;
+  padding: 4px 12px;
+  color: var(--mist);
+  font: 400 12px / 1.4 var(--font-ui);
+}

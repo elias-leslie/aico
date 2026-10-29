@@ -80,7 +80,7 @@ describe('the step viewer', () => {
     fireEvent.click(screen.getByRole('button', { name: /^build/ }))
     expect(screen.getByTestId('step-view')).toBeInTheDocument()
     expect(screen.getByText('Read only')).toBeInTheDocument()
-    expect(screen.getByText(/recorded when the step ends/)).toBeInTheDocument()
+    expect(screen.queryByText(/recorded when the step ends/)).toBeNull()
     expect(screen.getByTestId('chat-stub').textContent).toBe(
       JSON.stringify({ run: 'r1', step: 'build' }),
     )

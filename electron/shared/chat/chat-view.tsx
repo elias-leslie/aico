@@ -11,6 +11,7 @@ import { createBridgeClient } from './bridge-client'
 import { restoreDraft } from './draft'
 import { effortChoices, effortFor } from './effort'
 import { EffortPicker } from './effort-picker'
+import { useLiveVersion } from './live'
 import { useModelCatalog } from './model-catalog'
 import { ModelPicker } from './model-picker'
 import type { ChatInfo, ChatTransport } from './types'
@@ -86,10 +87,17 @@ function ChatView({
   )
   const effort = effortFor(choices, effortPicked)
   effortNow.current = effort
+  const live = useLiveVersion(info, transport)
   return (
     <ChatClientProvider client={client}>
       <div ref={host} className="chat-host">
+        {live.stale && (
+          <p role="status" className="chat-stale">
+            Couldn’t refresh the step. Showing what was read last.
+          </p>
+        )}
         <ChatPanel
+          key={live.version}
           agentSlug={info.agentSlug}
           sessionId={info.sessionId}
           layout="transcript"
