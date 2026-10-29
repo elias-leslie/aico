@@ -14,7 +14,7 @@ import { parseGraphicalEnvironment } from './env'
 import { EventBus } from './events'
 import { GuiChannel } from './gui-channel'
 import { listenPrivateSocket } from './http'
-import { bindCatalog, listWidgets } from './lifecycle/catalog'
+import { bindCatalog, getWidget, listWidgets } from './lifecycle/catalog'
 import { setPersonalWorkspaceRoot } from './lifecycle/display'
 import {
   cachedSessionStatus,
@@ -50,6 +50,7 @@ import { createTetherServer } from './server'
 import { Store } from './store'
 import { VERSION } from './version'
 import { bindWakeStore, WakeService } from './wake-runtime'
+import { cleanNote } from './wakes'
 
 export interface RunningDaemon {
   server: Server
@@ -73,6 +74,24 @@ const PROJECT_NAMES_MS = 300_000
 
 /** The dismissed workflow runs, kept as one JSON setting (run id to when). */
 const DISMISSED_RUNS_KEY = 'dismissed_runs'
+
+/** The run pauses already told to their launching session (run id to the
+ * pause's key and when), so a restart does not tell one again. */
+const TOLD_PAUSES_KEY = 'told_run_pauses'
+
+function readTold(raw: string | null): Record<string, { key: string; at: number }> {
+  try {
+    const value = JSON.parse(raw ?? '{}') as Record<string, unknown>
+    return Object.fromEntries(
+      Object.entries(value).filter(([, entry]) => {
+        const e = entry as { key?: unknown; at?: unknown } | null
+        return typeof e?.key === 'string' && typeof e.at === 'number' && Number.isFinite(e.at)
+      }),
+    ) as Record<string, { key: string; at: number }>
+  } catch {
+    return {}
+  }
+}
 
 function readDismissedRuns(raw: string | null): Record<string, number> {
   try {
@@ -205,9 +224,32 @@ export async function startDaemon(
       write: (dismissed) =>
         store.putSetting(DISMISSED_RUNS_KEY, JSON.stringify(dismissed), Date.now()),
     },
+    // A run that waits for the owner is told to the session that launched it
+    // as a check-in that is due now, delivered when the agent is idle.
+    pauses: {
+      store: {
+        read: () => readTold(store.getSetting(TOLD_PAUSES_KEY)),
+        write: (told) => store.putSetting(TOLD_PAUSES_KEY, JSON.stringify(told), Date.now()),
+      },
+      maxChars: () => wakes.policy().noteMaxChars,
+      tell: (launcherId, notice) => {
+        const row = getWidget(launcherId)
+        if (!row || !wakes.supports(row)) return false
+        const note = cleanNote(notice.text, wakes.policy().noteMaxChars)
+        if (note === null) return false
+        const now = Date.now()
+        wakes.store.add({ sessionId: row.id, dueAt: now, note, createdBy: 'agent', now })
+        wakes.changed(row.id)
+        return true
+      },
+    },
     notify: () => events.publish('runs.changed', {}),
   })
   context.runs = runs
+  context.stepChats = {
+    session: (id) => hub().sessions.get(id, { includeMessages: true }),
+    attach: (id, afterSeq, signal) => hub().turns.attach(id, { afterSeq, signal }),
+  }
   const server = createTetherServer(context)
   try {
     await listenPrivateSocket(server, paths.socket)

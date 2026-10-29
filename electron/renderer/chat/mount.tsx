@@ -47,13 +47,20 @@ function ChatView({ info }: { info: ChatInfo }) {
   const [model, setModel] = useState(info.requestedModel ?? '')
   const chosen = useRef(model)
   chosen.current = model
+  const readOnly = info.readOnly === true
   const client = useMemo(
     () =>
-      createBridgeClient(window.aico.chat, info, {
-        model: () => chosen.current || null,
-        onBusy: showBusy,
-      }),
-    [info],
+      createBridgeClient(
+        window.aico.chat,
+        info,
+        readOnly
+          ? {}
+          : {
+              model: () => chosen.current || null,
+              onBusy: showBusy,
+            },
+      ),
+    [info, readOnly],
   )
   return (
     <ChatClientProvider client={client}>
@@ -65,9 +72,11 @@ function ChatView({ info }: { info: ChatInfo }) {
         allowModelMentions={false}
         branch={info.branch ?? null}
         config={{ model: model || null }}
-        renderComposerControls={() => (
-          <ModelPicker client={client} value={model} onChange={setModel} />
-        )}
+        renderComposerControls={
+          readOnly
+            ? undefined
+            : () => <ModelPicker client={client} value={model} onChange={setModel} />
+        }
       />
     </ChatClientProvider>
   )
@@ -80,6 +89,8 @@ export async function mountChat(info: ChatInfo): Promise<void> {
   if (terminal) terminal.hidden = true
   host.hidden = false
   document.documentElement.dataset.view = 'chat'
+  // A workflow step's attempt is read, not written to: the stylesheet drops the message box.
+  if (info.readOnly) host.dataset.readonly = 'true'
 
   const queries = new QueryClient({
     defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false, staleTime: 60_000 } },
@@ -95,7 +106,9 @@ export async function mountChat(info: ChatInfo): Promise<void> {
 
   // A window that comes forward types into the message box without a click, and the
   // palette and menu hand focus back to it when they close.
-  const focusInput = () => host.querySelector<HTMLTextAreaElement>('textarea')?.focus()
+  const focusInput = () => {
+    if (!info.readOnly) host.querySelector<HTMLTextAreaElement>('textarea')?.focus()
+  }
   window.addEventListener('aico:refocus', focusInput)
   window.aico.win.onFocusChange((focused) => {
     if (focused) focusInput()

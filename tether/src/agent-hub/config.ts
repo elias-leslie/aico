@@ -79,7 +79,8 @@ export interface RunsConfig {
 }
 
 export const DEFAULT_RUNS_POLL_MS = 3_000
-export const DEFAULT_RUNS_ENDED_RETENTION_MS = 6 * 3_600_000
+/** An ended run drops off the lists on its own this long after its last activity. */
+export const DEFAULT_RUNS_ENDED_RETENTION_MS = 30 * 60_000
 export const DEFAULT_RUNS_LIST_LIMIT = 30
 export const DEFAULT_RUNS_CONCURRENCY = 4
 /** The web app's port on the API's host, as `st workflow` assumes. */

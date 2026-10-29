@@ -31,11 +31,12 @@ interface RunsDeps {
       stepKey?: string | null,
     ): Promise<unknown>
     cancelRun(runId: string, stepKey?: string | null): Promise<unknown>
-    dismissRun(runId: string): Promise<unknown>
   }
   /** Read the runs again now. */
   refresh(): Promise<unknown>
   openExternal(url: string): Promise<unknown>
+  /** Read a step's latest attempt in a window with no input. */
+  openStep(viewer: { runId: string; stepKey: string; title: string }): void
   dialog: {
     showMessageBox(options: Electron.MessageBoxOptions): Promise<{ response: number }>
     showErrorBox(title: string, content: string): void
@@ -143,6 +144,17 @@ export function createRuns(deps: RunsDeps) {
           await deps.openExternal(url.toString())
           return
         }
+        case 'openStep': {
+          const step = find(action.runId, action.stepKey)
+          const run = find(action.runId, null)
+          if (!step?.session) return
+          deps.openStep({
+            runId: action.runId,
+            stepKey: action.stepKey,
+            title: run ? `${step.title} — ${run.title}` : step.title,
+          })
+          return
+        }
         case 'resume': {
           const target = find(action.runId, action.stepKey)
           const name = target?.title ?? 'this'
@@ -174,9 +186,6 @@ export function createRuns(deps: RunsDeps) {
           await deps.tether.cancelRun(action.runId, action.stepKey)
           break
         }
-        case 'dismiss':
-          await deps.tether.dismissRun(action.runId)
-          break
       }
       await deps.refresh()
     } catch (error) {

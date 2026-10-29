@@ -59,6 +59,8 @@ export interface ChatInfo {
   requestedModel: string | null
   /** The git branch the session's folder has checked out, when it has one. */
   branch?: string
+  /** A workflow step's attempt, read only: the window offers no message box. */
+  readOnly?: boolean
 }
 
 /** A failure as the renderer rebuilds it into an SDK-shaped error. */

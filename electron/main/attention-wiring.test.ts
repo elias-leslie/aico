@@ -198,7 +198,12 @@ describe('attention wiring', () => {
 
   it('pushes a workflow run that needs the owner with its page to open', () => {
     const { execFile } = setup()
-    const run = { id: 'run:r1', title: 'Ship it', url: 'http://hub.test/workflow-runs/r1' }
+    const run = {
+      id: 'run:r1',
+      title: 'Ship it',
+      headline: 'build needs a decision',
+      url: 'http://hub.test/workflow-runs/r1',
+    }
     const withRun = createAttentionWiring({
       registry: new WindowRegistry({
         fromId: () => null,
@@ -220,7 +225,7 @@ describe('attention wiring', () => {
     expect(execFile).toHaveBeenCalledTimes(1)
     expect(execFile.mock.calls[0]?.[1]).toEqual([
       'push',
-      'Open the run to answer.',
+      'build needs a decision',
       '--title',
       'Workflow waiting: Ship it',
       '--severity',

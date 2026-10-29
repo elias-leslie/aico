@@ -475,11 +475,57 @@ select {
   transform: rotate(90deg);
 }
 
-/* Workflow runs and steps among the sessions. A row is a link to the run's
-   page; its controls and notes sit under it, aligned with the name. */
+/* Workflow runs and steps among the sessions. A run is one line that opens its
+   steps; a small link opens its page. Its controls and notes sit under it,
+   aligned with the name. */
 .lantern-row.run {
   min-height: 48px;
   text-decoration: none;
+}
+
+.lantern-row.is-run {
+  padding-right: 40px;
+}
+
+/* The whole run line toggles its steps; the details link sits above it. */
+.lantern-run-hit {
+  position: absolute;
+  inset: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.lantern-row.is-run > :not(.lantern-run-hit) {
+  position: relative;
+  pointer-events: none;
+}
+
+.lantern-row.is-run .lantern-run-details {
+  pointer-events: auto;
+  flex: none;
+  margin-left: auto;
+  color: var(--mist);
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.lantern-row.is-run .lantern-run-details:hover {
+  color: var(--bone);
+}
+
+.lantern-run-chevron {
+  position: absolute !important;
+  top: 16px;
+  right: 14px;
+  color: var(--mist);
+  transition: transform 0.15s var(--ease-arrival);
+}
+
+.lantern-run-chevron[data-open="true"] {
+  transform: rotate(90deg);
 }
 
 .lantern-row.run .meta {
@@ -493,7 +539,9 @@ select {
 }
 
 .lantern-row.is-step {
-  min-height: 44px;
+  min-height: 36px;
+  padding-top: 5px;
+  padding-bottom: 5px;
 }
 
 .lantern-run-controls {
@@ -626,7 +674,8 @@ select {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .lantern-fold svg {
+  .lantern-fold svg,
+  .lantern-run-chevron {
     transition: none;
   }
 }

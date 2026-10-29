@@ -9,7 +9,7 @@ import { INK } from '../shared/palette'
 import { type Compositor, toDip } from './compositor'
 import { PERSONAL_WORKSPACE_ID } from './project'
 import type { Bounds, ViewRow } from './views'
-import type { PendingCreate, WindowRegistry } from './window-registry'
+import type { PendingCreate, StepViewer, WindowRegistry } from './window-registry'
 
 /** A window's renderer is reloaded after it dies at most this often. */
 export const RELOAD_INTERVAL_MS = 10_000
@@ -41,7 +41,14 @@ interface WindowHooks {
 interface WindowsDeps {
   registry: Pick<
     WindowRegistry,
-    'bindSession' | 'setPending' | 'clearPending' | 'sessionOf' | 'forSession' | 'forget'
+    | 'bindSession'
+    | 'setPending'
+    | 'clearPending'
+    | 'sessionOf'
+    | 'forSession'
+    | 'forget'
+    | 'bindViewer'
+    | 'forStep'
   >
   layout: {
     /** Gets a new, not yet shown window onto its tile (`tile`), its remembered place or nowhere in particular. */
@@ -149,8 +156,9 @@ export function createWindows(deps: WindowsDeps) {
     pending: PendingCreate | null,
     restore = false,
     inactive = false,
+    viewer: StepViewer | null = null,
   ): BrowserWindow {
-    const row = { id: view?.id ?? 'new' }
+    const row = { id: view?.id ?? (viewer ? `step:${viewer.runId}:${viewer.stepKey}` : 'new') }
     const saved = savedPlace(view?.bounds ?? null)
     const win = new deps.BrowserWindow({
       ...initialSize(saved ?? view?.bounds ?? null),
@@ -264,9 +272,26 @@ export function createWindows(deps: WindowsDeps) {
       views.setOpen(view.id, true)
     } else if (pending) {
       registry.setPending(winId, pending)
+    } else if (viewer) {
+      registry.bindViewer(winId, viewer)
     }
 
-    win.webContents.on('did-finish-load', () => hooks.loaded(win))
+    win.webContents.on('did-finish-load', () => {
+      hooks.loaded(win)
+      // A window reading a step has no session to name it: name it for what it reads.
+      if (viewer && !win.isDestroyed())
+        win.webContents.send('win:title', {
+          label: viewer.title,
+          name: null,
+          icon: '',
+          accent: '',
+          tuiName: 'Workflow step, read-only',
+          tuiSlug: 'agent-hub',
+          sessionId: null,
+          coordinator: false,
+          chip: null,
+        })
+    })
     win.webContents.on('before-input-event', (_event, input) => {
       if (input.type === 'keyDown') hooks.input(win)
     })
@@ -346,6 +371,17 @@ export function createWindows(deps: WindowsDeps) {
     createWidgetWindow(null, { tool, projectId, ...(instructions ? { instructions } : {}) })
   }
 
+  /** Read a workflow step's latest attempt in a window of its own (no input).
+   * The step's window comes forward if it is already open. */
+  function openStepViewer(viewer: StepViewer): void {
+    const open = registry.forStep(viewer.runId, viewer.stepKey)
+    if (open) {
+      void compositor.raise(open)
+      return
+    }
+    createWidgetWindow(null, null, false, false, viewer)
+  }
+
   function focusOrReopen(id: string): void {
     const win = registry.forSession(id)
     if (win) {
@@ -368,6 +404,7 @@ export function createWindows(deps: WindowsDeps) {
 
   return {
     openNew: newWidget,
+    openStepViewer,
     focusOrReopen,
     reopenIfViewed,
 

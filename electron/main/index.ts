@@ -242,6 +242,7 @@ const runs = createRuns({
   tether,
   refresh: () => link.refreshRuns(),
   openExternal: (url) => shell.openExternal(url),
+  openStep: (viewer) => windows.openStepViewer(viewer),
   dialog,
 })
 

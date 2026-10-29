@@ -31,6 +31,12 @@ export interface RunMember extends TeamMember {
   servedModel: string | null
   /** A different model answered than the one asked for. */
   fallback: boolean
+  /** A step: its latest attempt has a session to read. */
+  session: boolean
+  /** A run: `2 of 5 done`. */
+  progress: string | null
+  /** A run's state in words: `lint-fix needs a decision`. */
+  headline: string | null
   /** The current attempt and how many the step may use. */
   attempt: number | null
   attemptLimit: number | null
@@ -80,12 +86,14 @@ export function attemptText(member: Pick<RunMember, 'attempt' | 'attemptLimit'>)
   return attemptLimit ? `try ${attempt} of ${attemptLimit}` : `try ${attempt}`
 }
 
-/** What a row says after its name: a step's state, models and attempts; a run's state. */
+/** What a row says after its name. A run: its progress and state
+ * (`2 of 5 done · lint-fix needs a decision`). A step: model, a fallback
+ * mark, state and attempt (`a → b · fallback · done`). */
 export function runDetail(member: RunMember): string {
   const parts: (string | null)[] =
     member.kind === 'step'
-      ? [member.word, modelLine(member), member.fallback ? 'fallback' : null, attemptText(member)]
-      : [member.word]
+      ? [modelLine(member), member.fallback ? 'fallback' : null, member.word, attemptText(member)]
+      : [member.progress, member.headline ?? member.word]
   return parts.filter(Boolean).join(' · ')
 }
 

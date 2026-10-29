@@ -62,8 +62,11 @@ function member(extra: Partial<RunMember>): RunMember {
     reason: null,
     can: { decide: false, cancel: true, dismiss: false },
     cancelling: false,
-    hint: 'Change the plan from the coordinator.',
-    summary: '1 working · 1 waiting for you',
+    hint: null,
+    summary: '1 of 3 done',
+    progress: '1 of 3 done',
+    headline: 'test needs a decision',
+    session: false,
     ...extra,
   }
 }
@@ -83,6 +86,9 @@ const build = member({
   attemptLimit: 3,
   hint: null,
   summary: null,
+  progress: null,
+  headline: null,
+  session: true,
 })
 const test = member({
   id: 'step:r1:test',
@@ -96,6 +102,9 @@ const test = member({
   reason: 'step failed',
   hint: null,
   summary: null,
+  progress: null,
+  headline: null,
+  session: true,
   can: { decide: true, cancel: true, dismiss: false },
 })
 
@@ -123,8 +132,11 @@ const attention = (r: WorkflowRuns, slots: AdHocSlot[] = [lead]) => ({
 
 beforeEach(() => localStorage.clear())
 
+const open = (name: string) =>
+  fireEvent.click(screen.getByRole('button', { name: new RegExp(name) }))
+
 describe('workflow runs in the session list', () => {
-  it('folds a going run under the session that launched it, with its steps open', () => {
+  it('folds a run under the session that launched it as one line, steps hidden', () => {
     const r = runs([
       member({ group: 'needs-you', word: 'waiting for you' }),
       build,
@@ -140,24 +152,51 @@ describe('workflow runs in the session list', () => {
     const team = screen.getByRole('group', { name: 'Aico — Lead team' })
     const run = within(team).getByTestId('run-run')
     expect(run.textContent).toContain('Ship the thing')
-    expect(run.textContent).toContain('1 working · 1 waiting for you')
+    expect(run.textContent).toContain('1 of 3 done · test needs a decision')
     expect(run.textContent).toContain('2m')
-    const steps = within(run).getByRole('group', {
-      name: 'Steps of Ship the thing',
-    })
+    expect(
+      within(run).queryByRole('group', { name: 'Steps of Ship the thing' }),
+    ).toBeNull()
+    expect(within(run).queryAllByTestId('run-step')).toHaveLength(0)
+    expect(screen.queryByText(/Dismiss/)).toBeNull()
+    expect(run.querySelector('.lantern-row')?.className).toContain('needs')
+  })
+
+  it('opens a run to its steps, the waiting one first, and folds it again', () => {
+    const r = runs([
+      member({ group: 'needs-you', word: 'waiting for you' }),
+      build,
+      test,
+    ])
+    render(
+      <SessionList
+        slots={[lead]}
+        attention={attention(r)}
+        onSelect={vi.fn()}
+      />,
+    )
+    const toggle = screen.getByRole('button', { name: /Show steps\./ })
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(toggle)
+    const steps = screen.getByRole('group', { name: 'Steps of Ship the thing' })
     const rows = within(steps).getAllByTestId('run-step')
     expect(rows.map((el) => el.querySelector('.name')?.textContent)).toEqual([
       'test',
       'build',
     ])
-    // The step waiting on the owner comes first.
     expect(rows[0]?.textContent).toContain('waiting for you · step failed')
     expect(rows[1]?.textContent).toContain(
-      'tool bash · deepseek-v4.1-flash → other · fallback · try 2 of 3',
+      'deepseek-v4.1-flash → other · fallback · tool bash · try 2 of 3',
     )
+    const hide = screen.getByRole('button', { name: /Hide steps\./ })
+    expect(hide.getAttribute('aria-expanded')).toBe('true')
+    fireEvent.click(hide)
+    expect(
+      screen.queryByRole('group', { name: 'Steps of Ship the thing' }),
+    ).toBeNull()
   })
 
-  it('opens the run in Agent Hub from its row, and only for a web address', () => {
+  it('opens the run in Agent Hub from a small details link, and only for a web address', () => {
     const r = runs([
       member({}),
       member({ id: 'run:r2', runId: 'r2', url: 'javascript:alert(1)' }),
@@ -170,8 +209,9 @@ describe('workflow runs in the session list', () => {
       />,
     )
     const link = screen.getByRole('link', {
-      name: /Ship the thing.*Opens in Agent Hub/,
+      name: /Details of workflow run Ship the thing/,
     })
+    expect(link.textContent).toBe('details')
     expect(link.getAttribute('href')).toBe(URL)
     expect(link.getAttribute('target')).toBe('_blank')
     expect(link.getAttribute('rel')).toContain('noopener')
@@ -196,7 +236,7 @@ describe('workflow runs in the session list', () => {
     )
   })
 
-  it('answers a waiting step: Retry and Skip at once, Fail after a confirmation', async () => {
+  it('leaves the answers to the coordinator while it lives: no Retry, Skip, Fail or Dismiss', () => {
     const r = runs([
       member({ group: 'needs-you', word: 'waiting for you' }),
       test,
@@ -208,6 +248,35 @@ describe('workflow runs in the session list', () => {
         onSelect={vi.fn()}
       />,
     )
+    fireEvent.click(screen.getByRole('button', { name: /Show steps\./ }))
+    expect(screen.getAllByTestId('run-step')).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: /Retry/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Skip/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Fail/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Dismiss/ })).toBeNull()
+    // Cancel stays on the opened run.
+    expect(
+      screen.getByRole('button', { name: 'Cancel run Ship the thing' }),
+    ).toBeTruthy()
+  })
+
+  it('answers a waiting step once its coordinator has ended: Retry and Skip at once, Fail after a confirmation', async () => {
+    const r = runs([
+      member({
+        coordinatorId: 'gone',
+        group: 'needs-you',
+        word: 'waiting for you',
+      }),
+      test,
+    ])
+    render(
+      <SessionList
+        slots={[]}
+        attention={attention(r, [])}
+        onSelect={vi.fn()}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /Show steps\./ }))
     fireEvent.click(screen.getByRole('button', { name: 'Retry step test' }))
     await waitFor(() =>
       expect(r.act).toHaveBeenCalledWith({
@@ -238,7 +307,7 @@ describe('workflow runs in the session list', () => {
   })
 
   it('cancels a run only after a confirmation, and says when Agent Hub refuses', async () => {
-    const r = runs([member({})])
+    const r = runs([member({}), build])
     r.act.mockRejectedValueOnce(
       new Error('Agent Hub did not accept it (step is running)'),
     )
@@ -249,6 +318,7 @@ describe('workflow runs in the session list', () => {
         onSelect={vi.fn()}
       />,
     )
+    fireEvent.click(screen.getByRole('button', { name: /Show steps\./ }))
     fireEvent.click(
       screen.getByRole('button', { name: 'Cancel run Ship the thing' }),
     )
@@ -262,7 +332,7 @@ describe('workflow runs in the session list', () => {
     )
   })
 
-  it('says once where the plan of a going run changes, and gives an ended run Dismiss', async () => {
+  it('gives an ended run no controls, only its steps and details', () => {
     const ended = member({
       id: 'run:r9',
       runId: 'r9',
@@ -270,8 +340,9 @@ describe('workflow runs in the session list', () => {
       group: 'finished',
       word: 'completed',
       status: 'completed',
-      hint: null,
-      summary: '2 done',
+      progress: '2 of 2 done',
+      headline: 'finished',
+      summary: '2 of 2 done',
       can: { decide: false, cancel: false, dismiss: true },
     })
     const endedStep = member({
@@ -286,9 +357,12 @@ describe('workflow runs in the session list', () => {
       status: 'completed',
       hint: null,
       summary: null,
+      progress: null,
+      headline: null,
+      session: true,
       can: { decide: false, cancel: false, dismiss: false },
     })
-    const r = runs([member({}), ended, endedStep])
+    const r = runs([ended, endedStep])
     render(
       <SessionList
         slots={[lead]}
@@ -296,18 +370,13 @@ describe('workflow runs in the session list', () => {
         onSelect={vi.fn()}
       />,
     )
-    expect(
-      screen.getByText('Change the plan from the coordinator.'),
-    ).toBeTruthy()
-    // An ended run starts folded; its steps are one click away.
-    expect(
-      screen.getByRole('button', { name: 'Show steps of Old run' }),
-    ).toBeTruthy()
-    expect(screen.queryByRole('group', { name: 'Steps of Old run' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Dismiss run Old run' }))
-    await waitFor(() =>
-      expect(r.act).toHaveBeenCalledWith({ type: 'dismiss', member: ended }),
+    expect(screen.getByTestId('run-run').textContent).toContain(
+      '2 of 2 done · finished',
     )
+    open('Show steps')
+    expect(screen.getAllByTestId('run-step')).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: /Dismiss/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Cancel/ })).toBeNull()
   })
 
   it('keeps a run whose session ended at the top, marked', () => {

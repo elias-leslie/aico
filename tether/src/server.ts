@@ -21,7 +21,7 @@ import {
   registerLocalProject,
   withActiveProject,
 } from './projects'
-import { registerRunRoutes } from './runs-api'
+import { registerRunRoutes, type StepChatSource } from './runs-api'
 import { registerShowRoute } from './show'
 import type { Store, ToolPatch } from './store'
 import { type AgentTool, parseCommand, type ToolSeed, ToolValidationError } from './tools'
@@ -45,6 +45,8 @@ export interface ServerContext {
   show?: ShowConfig
   /** Workflow runs launched by sessions (`/v1/runs`); absent in scratch instances. */
   runs?: RunTracker
+  /** Reads a step's attempt session for the read-only chat view. */
+  stepChats?: StepChatSource
 }
 
 /** `rootCapable`: the tool can be started as a root (`POST /v1/roots`).
@@ -349,7 +351,7 @@ export function buildRouter(context: ServerContext): Router {
     })
 
   registerLifecycleRoutes(router, context)
-  if (context.runs) registerRunRoutes(router, context.runs)
+  if (context.runs) registerRunRoutes(router, context.runs, context.stepChats)
   registerShowRoute(router, events, context.store, context.show ?? resolveShowConfig({}))
 
   return router

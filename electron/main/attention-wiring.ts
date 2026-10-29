@@ -68,12 +68,13 @@ export function createAttentionWiring(deps: AttentionWiringDeps) {
     push: (id) => {
       const run = deps.run?.(id)
       if (run) {
-        // A workflow run asking for an answer: the same push, opening its page.
+        // A workflow run asking for an answer: the same push, opening its page. Its coordinator
+        // has been told too and will ask here.
         deps.execFile(
           deps.nightshift,
           [
             'push',
-            'Open the run to answer.',
+            run.headline ?? 'The run is waiting for your answer.',
             '--title',
             `Workflow waiting: ${run.title.slice(0, 80)}`,
             '--severity',

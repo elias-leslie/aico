@@ -58,7 +58,10 @@ function sender(id = 7) {
   return { contents, sent, listeners }
 }
 
-function setup(session: SessionDescriptor | undefined = descriptor()) {
+function setup(
+  session: SessionDescriptor | undefined = descriptor(),
+  viewer?: { runId: string; stepKey: string; title: string },
+) {
   const request = vi.fn()
   const lines: { path: string; headers: Record<string, string>; signal: AbortSignal }[] = []
   let feed: (line: unknown) => void = () => undefined
@@ -82,7 +85,10 @@ function setup(session: SessionDescriptor | undefined = descriptor()) {
   const bridge = createChatBridge({
     tether: { request, stream } as never,
     catalog,
-    registry: { senderSession: () => 'ab12cd34' },
+    registry: {
+      senderSession: () => (viewer ? undefined : 'ab12cd34'),
+      senderViewer: () => viewer,
+    },
   })
   return {
     bridge,
@@ -398,5 +404,76 @@ describe('gitBranch', () => {
     expect(gitBranch(dir)).toBeNull()
     expect(gitBranch(folder())).toBeNull()
     expect(gitBranch(null)).toBeNull()
+  })
+})
+
+describe('chat bridge reading a workflow step', () => {
+  const viewer = { runId: 'r1', stepKey: 'lint-fix', title: 'lint-fix — Proof run' }
+  const attempt = { sessionId: 'attempt-9', agentSlug: 'coder', requestedModel: 'x/m', attempt: 2 }
+
+  it('opens read only on the step’s latest attempt session, asking Tether once', async () => {
+    const { bridge, request } = setup(descriptor(), viewer)
+    request.mockResolvedValue({ status: 200, body: attempt })
+    const window = sender(11).contents
+    await expect(bridge.info(window)).resolves.toEqual({
+      sessionId: 'attempt-9',
+      agentSlug: 'coder',
+      requestedModel: 'x/m',
+      readOnly: true,
+    })
+    await bridge.info(window)
+    expect(request).toHaveBeenCalledTimes(1)
+    expect(request.mock.calls[0].slice(0, 2)).toEqual([
+      'GET',
+      '/v1/runs/r1/steps/lint-fix/chat/info',
+    ])
+  })
+
+  it('reads the attempt through the run route, pinned to the session it opened with', async () => {
+    const { bridge, request } = setup(descriptor(), viewer)
+    request.mockResolvedValueOnce({ status: 200, body: attempt })
+    const window = sender(12).contents
+    await bridge.info(window)
+    request.mockResolvedValueOnce({
+      status: 200,
+      body: { session: { id: 'attempt-9' }, queued: [] },
+    })
+    await expect(bridge.call(window, 'session', { sessionId: 'attempt-9' })).resolves.toEqual({
+      ok: true,
+      value: { id: 'attempt-9' },
+    })
+    expect(request.mock.calls[1][1]).toBe('/v1/runs/r1/steps/lint-fix/chat?session=attempt-9')
+    await expect(bridge.call(window, 'queue', { sessionId: 'attempt-9' })).resolves.toEqual({
+      ok: true,
+      value: [],
+    })
+  })
+
+  it('never sends a message or stops a turn, and refuses another session', async () => {
+    const { bridge, request } = setup(descriptor(), viewer)
+    request.mockResolvedValueOnce({ status: 200, body: attempt })
+    const window = sender(13).contents
+    await bridge.info(window)
+    for (const method of ['send', 'cancel'])
+      await expect(
+        bridge.call(window, method, { sessionId: 'attempt-9', text: 'hello' }),
+      ).resolves.toMatchObject({ ok: false, error: { code: 'read_only' } })
+    await expect(bridge.call(window, 'session', { sessionId: 'hub-1' })).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'session_mismatch' },
+    })
+    expect(request).toHaveBeenCalledTimes(1)
+  })
+
+  it('follows the attempt’s events through the run route', async () => {
+    const { bridge, request, lines } = setup(descriptor(), viewer)
+    request.mockResolvedValueOnce({ status: 200, body: attempt })
+    const window = sender(14)
+    const id = await bridge.open(window.contents, 5)
+    expect(typeof id).toBe('string')
+    expect(lines[0]?.path).toBe(
+      '/v1/runs/r1/steps/lint-fix/chat/stream?session=attempt-9&afterSeq=5',
+    )
+    bridge.close(14, id as string)
   })
 })

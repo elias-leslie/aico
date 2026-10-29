@@ -21,7 +21,7 @@ import { AgentIcon, getAgentColor } from './AgentIcon'
 import { CheckInBadge } from './CheckInBadge'
 import { CoordinatorBadge } from './CoordinatorBadge'
 import { KeptCheckIns } from './KeptCheckIns'
-import { pageUrl, RunRow, runMeta } from './RunRow'
+import { pageUrl, RunRow, runMeta, StepRow } from './RunRow'
 
 function getSlotMode(slot: TerminalSlot | PaneSlot): string {
   if (slot.type === 'project') {
@@ -190,8 +190,6 @@ export function SessionList({
     [slots, attention, runs?.items],
   )
   const folds = useTeamFolds(phone)
-  // Where a going run's plan is changed, said once for the list, not per run.
-  const planHint = runs?.items.find((member) => member.hint)?.hint ?? null
   const agentName = (mode: string) =>
     agentTools.find((tool) => tool.slug === mode)?.name ??
     (mode === 'shell' ? 'Shell' : mode)
@@ -203,27 +201,27 @@ export function SessionList({
     row: TeamRow<TeamEntry>,
     member: RunMember,
   ): React.ReactNode => {
-    const isTeam = row.children.length > 0
-    // A run that is going shows its steps; an ended one starts folded.
-    const fallback =
-      member.status === 'running' || member.status === 'needs_owner'
-    const open = isTeam && folds.isOpen(member.id, fallback)
+    // A run is one line; its steps show when the owner opens it.
+    const open = row.children.length > 0 && folds.isOpen(member.id, false)
+    const act = runs?.act ?? noRunControls
     return (
       <RunRow
         key={member.id}
         member={member}
-        isTeam={isTeam}
         open={open}
-        onToggle={() => folds.toggle(member.id, fallback)}
-        summary={row.summary}
+        onToggle={() => folds.toggle(member.id, false)}
         orphaned={row.orphaned}
-        act={runs?.act ?? noRunControls}
-        needs={
-          member.group === 'needs-you' ||
-          (isTeam && !open && row.group === 'needs-you')
-        }
+        act={act}
+        needs={member.group === 'needs-you' || row.group === 'needs-you'}
       >
-        {row.children.map((child) => renderRow(child, null))}
+        {row.children.map((child) => (
+          <StepRow
+            key={child.item.id}
+            member={child.item.run as RunMember}
+            orphaned={row.orphaned}
+            act={act}
+          />
+        ))}
       </RunRow>
     )
   }
@@ -328,7 +326,6 @@ export function SessionList({
           {runs.notice}
         </p>
       )}
-      {planHint && <p className="lantern-run-notice">{planHint}</p>}
       {teams.map((row, index) => {
         const header = !headings
           ? null
@@ -382,7 +379,7 @@ export function SessionRail({
           const run = row.item.run as RunMember
           const url = pageUrl(run.url)
           const needs = row.group === 'needs-you'
-          const name = `Workflow run ${run.title}: ${runMeta(run, [row.summary])}`
+          const name = `Workflow run ${run.title}: ${runMeta(run)}`
           return (
             <a
               key={run.id}

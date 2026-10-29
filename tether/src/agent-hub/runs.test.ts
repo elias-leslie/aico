@@ -2,8 +2,14 @@ import type { RunList, RunListItem, RunView, StepView } from '@agent-hub/sdk'
 import { describe, expect, it } from 'vitest'
 import type { RunsConfig } from './config'
 import { resolveRunsConfig } from './config'
-import { type DismissedStore, RunControlError, type RunsApi, RunTracker } from './runs'
-import { phaseWord, runMembers, stepSummary } from './runs-view'
+import {
+  type DismissedStore,
+  type PauseNoticeStore,
+  RunControlError,
+  type RunsApi,
+  RunTracker,
+} from './runs'
+import { pauseNotice, phaseWord, runMembers, runProgress } from './runs-view'
 
 const NOW = Date.parse('2026-10-28T12:00:00Z')
 const CTX = { launcherId: 'c0d0ae59', url: 'http://hub/workflow-runs/r1' }
@@ -56,7 +62,9 @@ describe('runMembers', () => {
       group: 'working',
       word: 'running',
       title: 'Goal of r1',
-      summary: '1 working · 1 pending · 1 done',
+      summary: '1 of 3 done',
+      progress: '1 of 3 done',
+      headline: 'two working',
       can: { cancel: true, dismiss: false, decide: false },
     })
     expect(run?.hint).toContain('st workflow')
@@ -97,6 +105,8 @@ describe('runMembers', () => {
       word: 'waiting for you',
       reason: 'step failed',
       at: Date.parse('2026-10-28T11:30:00Z'),
+      progress: '1 of 3 done',
+      headline: 'b needs a decision',
       can: { decide: false, cancel: true },
     })
     // `a` is marked needs_owner by Agent Hub but is not in the waiting map: only the map decides.
@@ -182,7 +192,7 @@ describe('runMembers', () => {
     expect(phaseWord('thinking')).toBe('thinking')
     expect(phaseWord('waiting')).toBe('waiting for output')
     expect(phaseWord(undefined)).toBeNull()
-    expect(stepSummary([])).toBeNull()
+    expect(runProgress([])).toBeNull()
   })
 })
 
@@ -405,6 +415,210 @@ describe('RunTracker', () => {
   })
 })
 
+describe('a run as one line', () => {
+  it('says progress and state in words, naming the steps that need a decision', () => {
+    const [run] = runMembers(
+      view(
+        'r9',
+        'needs_owner',
+        [
+          step('lint-fix', 'failed'),
+          step('a', 'completed'),
+          step('b', 'skipped'),
+          step('c', 'pending'),
+          step('d', 'pending'),
+        ],
+        { pause: { reason: 'step_failed', at: 1793230241, waiting: { 'lint-fix': {} } } },
+      ),
+      CTX,
+    )
+    expect(run).toMatchObject({
+      progress: '2 of 5 done',
+      headline: 'lint-fix needs a decision',
+      group: 'needs-you',
+    })
+    const finished = runMembers(view('r10', 'completed', [step('a', 'completed')]), CTX)[0]
+    expect(finished).toMatchObject({ progress: '1 of 1 done', headline: 'finished' })
+    const failed = runMembers(
+      view('r11', 'failed', [step('a', 'failed')], { failure: { reason: 'step_failed' } }),
+      CTX,
+    )[0]
+    expect(failed?.headline).toBe('failed: step failed')
+  })
+
+  it('marks a step that has an attempt session to read, without naming it', () => {
+    const [, started, fresh] = runMembers(
+      view('r12', 'running', [
+        step('a', 'running', { attempt_history: [{ attempt: 1, session_id: 'sess-1' }] }),
+        step('b', 'pending'),
+      ]),
+      CTX,
+    )
+    expect(started?.session).toBe(true)
+    expect(fresh?.session).toBe(false)
+    expect(JSON.stringify(started)).not.toContain('sess-1')
+  })
+
+  it('opens the latest attempt of a step of a listed run, or a named attempt of it, and no other', async () => {
+    const fake = new FakeRuns()
+    fake.runs.set(
+      'r1',
+      view('r1', 'running', [
+        step('a', 'running', {
+          agent_slug: 'coder',
+          attempt_history: [
+            { attempt: 1, session_id: 'old', requested_model: 'x/m' },
+            { attempt: 2, session_id: 'new', requested_model: 'x/m2' },
+          ],
+        }),
+        step('b', 'pending'),
+      ]),
+    )
+    const { instance } = tracker(fake, LAUNCHER)
+    await instance.tick()
+    expect(instance.stepSession('r1', 'a')).toMatchObject({
+      sessionId: 'new',
+      agentSlug: 'coder',
+      requestedModel: 'x/m2',
+      attempt: 2,
+    })
+    expect(instance.stepSession('r1', 'a', 'old').sessionId).toBe('old')
+    expect(() => instance.stepSession('r1', 'a', 'elsewhere')).toThrow(RunControlError)
+    expect(() => instance.stepSession('r1', 'b')).toThrow(/not started/)
+    expect(() => instance.stepSession('r1', 'zzz')).toThrow(RunControlError)
+    expect(() => instance.stepSession('other', 'a')).toThrow(RunControlError)
+  })
+
+  it('drops an ended run on its own once the delay has passed, and keeps a going one', async () => {
+    const fake = new FakeRuns()
+    fake.runs.set('done', view('done', 'completed', [step('a', 'completed')]))
+    fake.runs.set('live', view('live', 'running', [step('a', 'running')]))
+    const t = tracker(fake, LAUNCHER, { now: NOW })
+    await t.instance.tick()
+    expect(t.instance.snapshot().items.map((m) => m.runId)).toContain('done')
+    t.clock.now = NOW + CONFIG.endedRetentionMs - 10 * 60_000 // its last activity was 5 min before NOW
+    await t.instance.tick()
+    expect(t.instance.snapshot().items.map((m) => m.runId)).toContain('done')
+    t.clock.now = NOW + CONFIG.endedRetentionMs + 10 * 60_000
+    const before = t.notified.length
+    await t.instance.tick()
+    expect(t.instance.snapshot().items.map((m) => m.runId)).toEqual(['live', 'live'])
+    expect(t.notified.length).toBeGreaterThan(before)
+  })
+})
+
+describe('telling the coordinator about a pause', () => {
+  const paused = (at: number, waiting = 'a') =>
+    view('r1', 'needs_owner', [step(waiting, 'failed')], {
+      goal: 'Proof run',
+      pause: { reason: 'step_failed', at, waiting: { [waiting]: { reason: 'step_failed' } } },
+    })
+
+  function pausing(fake: FakeRuns, launchers: { id: string; ownershipId: string }[]) {
+    let told: Record<string, { key: string; at: number }> = {}
+    const store: PauseNoticeStore = { read: () => told, write: (t) => (told = { ...t }) }
+    const sent: { to: string; text: string }[] = []
+    let accept = true
+    const make = () =>
+      new RunTracker({
+        api: () => fake.api,
+        launchers: () => launchers,
+        config: CONFIG,
+        dismissed: { read: () => ({}), write: () => {} },
+        pauses: {
+          store,
+          maxChars: () => 500,
+          tell: (to, notice) => {
+            if (!accept) return false
+            sent.push({ to, text: notice.text })
+            return true
+          },
+        },
+        notify: () => {},
+        now: () => NOW,
+        log: () => {},
+      })
+    return { make, sent, refuse: () => (accept = false), allow: () => (accept = true) }
+  }
+
+  it('says which run and step, why, and the exact command', () => {
+    const notice = pauseNotice(paused(1793230241), 500)
+    expect(notice?.text).toBe(
+      'Workflow run "Proof run" (r1) needs the owner to decide: step a (step failed). ' +
+        'Ask the owner, then run only their answer: st workflow resume r1 --step a --action retry|skip|fail',
+    )
+    expect(pauseNotice(view('r2', 'running', []), 500)).toBeNull()
+    const long = pauseNotice(
+      view('r3', 'needs_owner', [step('a', 'failed')], {
+        goal: 'g'.repeat(300),
+        pause: { reason: 'step_failed', at: 1, waiting: { a: { reason: 'r'.repeat(300) } } },
+      }),
+      200,
+    )
+    expect(long?.text.length).toBeLessThanOrEqual(200)
+    expect(long?.text).toContain('st workflow resume r3 --step a')
+  })
+
+  it('tells once per pause, again for a new pause, and not again after a restart', async () => {
+    const fake = new FakeRuns()
+    fake.runs.set('r1', paused(1000))
+    const p = pausing(fake, LAUNCHER)
+    const first = p.make()
+    await first.tick()
+    await first.tick()
+    await first.tick()
+    expect(p.sent).toHaveLength(1)
+    expect(p.sent[0]).toMatchObject({ to: 'c0d0ae59' })
+    expect(p.sent[0]?.text).toContain('--step a')
+
+    // Tether restarts: the same pause is not told again.
+    const restarted = p.make()
+    await restarted.tick()
+    expect(p.sent).toHaveLength(1)
+
+    // The owner answers, the run goes on, then it pauses again on another step.
+    fake.runs.set('r1', view('r1', 'running', [step('a', 'running')]))
+    await restarted.tick()
+    fake.runs.set('r1', paused(2000, 'b'))
+    await restarted.tick()
+    await restarted.tick()
+    expect(p.sent).toHaveLength(2)
+    expect(p.sent[1]?.text).toContain('--step b')
+  })
+
+  it('tells a new pause on the same run even when the run was not seen going in between', async () => {
+    const fake = new FakeRuns()
+    fake.runs.set('r1', paused(1000))
+    const p = pausing(fake, LAUNCHER)
+    const t = p.make()
+    await t.tick()
+    fake.runs.set('r1', paused(2000))
+    await t.tick()
+    expect(p.sent).toHaveLength(2)
+  })
+
+  it('keeps trying while the session cannot take a note, and tells no ended session', async () => {
+    const fake = new FakeRuns()
+    fake.runs.set('r1', paused(1000))
+    const p = pausing(fake, LAUNCHER)
+    p.refuse()
+    const t = p.make()
+    await t.tick()
+    await t.tick()
+    expect(p.sent).toHaveLength(0)
+    p.allow()
+    await t.tick()
+    expect(p.sent).toHaveLength(1)
+
+    // The coordinator has ended: nobody is told; the owner answers from the run.
+    const gone = pausing(fake, [])
+    const orphan = gone.make()
+    await orphan.tick()
+    await orphan.tick()
+    expect(gone.sent).toHaveLength(0)
+  })
+})
+
 describe('resolveRunsConfig', () => {
   const none = () => {
     throw new Error('ENOENT')
@@ -422,6 +636,14 @@ describe('resolveRunsConfig', () => {
         { baseUrl: 'http://box:8003' },
       ),
     ).toMatchObject({ frontendUrl: 'https://agent.example', pollMs: 500 })
+    expect(resolveRunsConfig({}, '/h', none, { baseUrl: 'http://box:8003' }).endedRetentionMs).toBe(
+      1_800_000,
+    )
+    expect(
+      resolveRunsConfig({ TETHER_AGENT_HUB_RUNS_ENDED_MS: '60000' }, '/h', none, {
+        baseUrl: 'http://box:8003',
+      }).endedRetentionMs,
+    ).toBe(60_000)
     expect(
       resolveRunsConfig({ TETHER_AGENT_HUB_RUNS_POLL_MS: 'x' }, '/h', none, {
         baseUrl: 'http://box:8003',

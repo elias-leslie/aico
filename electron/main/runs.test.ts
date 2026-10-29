@@ -25,10 +25,13 @@ function member(extra: Partial<RunMember>): RunMember {
     attempt: null,
     attemptLimit: null,
     reason: null,
+    session: false,
     can: { decide: false, cancel: true, dismiss: false },
     cancelling: false,
     hint: null,
-    summary: '1 working',
+    summary: '1 of 2 done',
+    progress: '1 of 2 done',
+    headline: 'build working',
     ...extra,
   }
 }
@@ -46,7 +49,10 @@ const step = (extra: Partial<RunMember> = {}) =>
     fallback: true,
     attempt: 2,
     attemptLimit: 3,
+    session: true,
     summary: null,
+    progress: null,
+    headline: null,
     ...extra,
   })
 
@@ -64,16 +70,16 @@ function setup(response = 1) {
   const tether = {
     resumeRun: vi.fn(async () => ({})),
     cancelRun: vi.fn(async () => ({})),
-    dismissRun: vi.fn(async () => ({})),
   }
   const refresh = vi.fn(async () => undefined)
   const openExternal = vi.fn(async () => undefined)
+  const openStep = vi.fn()
   const dialog = {
     showMessageBox: vi.fn(async () => ({ response })),
     showErrorBox: vi.fn(),
   }
-  const runs = createRuns({ attention, tray, tether, refresh, openExternal, dialog })
-  return { runs, attention, tray, tether, refresh, openExternal, dialog }
+  const runs = createRuns({ attention, tray, tether, refresh, openExternal, openStep, dialog })
+  return { runs, attention, tray, tether, refresh, openExternal, openStep, dialog }
 }
 
 describe('runs in the desktop', () => {
@@ -110,8 +116,9 @@ describe('runs in the desktop', () => {
       ['run:r1', 'run', false, 'c0d0ae59'],
       ['step:r1:build', 'step', false, 'run:r1'],
     ])
-    expect(rows[1]?.detail).toBe('tool bash · a → b · fallback · try 2 of 3')
-    expect(rows[0]?.summary).toBe('1 working')
+    expect(rows[1]?.detail).toBe('a → b · fallback · tool bash · try 2 of 3')
+    expect(rows[0]?.detail).toBe('1 of 2 done · build working')
+    expect(rows[0]?.summary).toBe('1 of 2 done')
     expect(runs.member('step:r1:build')?.stepKey).toBe('build')
   })
 
@@ -177,17 +184,30 @@ describe('runs in the desktop', () => {
     expect(tether.cancelRun).toHaveBeenNthCalledWith(2, 'r1', 'build')
   })
 
-  it('dismisses an ended run without asking', async () => {
-    const { runs, tether, dialog } = setup()
-    await runs.handle({ type: 'dismiss', runId: 'r1' })
-    expect(tether.dismissRun).toHaveBeenCalledWith('r1')
-    expect(dialog.showMessageBox).not.toHaveBeenCalled()
+  it('reads a step’s latest attempt in its own window, named for the step and its run', async () => {
+    const { runs, openStep } = setup()
+    runs.apply(answer([member({}), step()]))
+    await runs.handle({ type: 'openStep', runId: 'r1', stepKey: 'build' })
+    expect(openStep).toHaveBeenCalledWith({
+      runId: 'r1',
+      stepKey: 'build',
+      title: 'build — Ship the thing',
+    })
+  })
+
+  it('opens nothing for a step that has no attempt yet or a run that is not listed', async () => {
+    const { runs, openStep } = setup()
+    runs.apply(answer([member({}), step({ session: false })]))
+    await runs.handle({ type: 'openStep', runId: 'r1', stepKey: 'build' })
+    await runs.handle({ type: 'openStep', runId: 'zzz', stepKey: 'build' })
+    expect(openStep).not.toHaveBeenCalled()
   })
 
   it('shows a failed choice as an error and still reads the runs again', async () => {
     const { runs, tether, dialog, refresh } = setup()
-    tether.dismissRun.mockRejectedValueOnce(new TetherUnavailable('down'))
-    await runs.handle({ type: 'dismiss', runId: 'r1' })
+    tether.cancelRun.mockRejectedValueOnce(new TetherUnavailable('down'))
+    runs.apply(answer([member({})]))
+    await runs.handle({ type: 'cancel', runId: 'r1', stepKey: null })
     expect(dialog.showErrorBox).toHaveBeenCalledWith('Workflow run', 'Tether is not reachable.')
     expect(refresh).toHaveBeenCalledOnce()
   })

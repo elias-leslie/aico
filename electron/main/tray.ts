@@ -11,7 +11,7 @@ import {
   type TeamRow,
   teamMembers,
 } from 'tether/client'
-import { type AttentionGroup, formatAge } from './attention'
+import type { AttentionGroup } from './attention'
 import { BLANK_SLATE_ID, BLANK_SLATE_NAME } from './project'
 import { traySessionLabel } from './session-catalog'
 
@@ -55,7 +55,7 @@ export type RunAction =
   | { type: 'open'; url: string }
   | { type: 'resume'; runId: string; stepKey: string | null; action: RunDecision }
   | { type: 'cancel'; runId: string; stepKey: string | null }
-  | { type: 'dismiss'; runId: string }
+  | { type: 'openStep'; runId: string; stepKey: string }
 
 /** A launchable TUI as the tray sees it (slug + menu label), from the registry. */
 export interface NewWidgetTool {
@@ -83,7 +83,7 @@ export interface TrayHandlers {
   /** Re-list sessions from Tether and rebuild the menu. */
   onRefreshSessions: () => void
   onHubView: () => void
-  /** Open, answer, cancel or dismiss a workflow run or step. */
+  /** Open a run's page or a step's attempt, answer, or cancel a workflow run. */
   onRun?: (action: RunAction) => void
 }
 
@@ -111,57 +111,76 @@ function clip(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text
 }
 
-/** `◇ goal — running 4m · 1 working, 2 done` for a run, `· step — tool bash · model · try 1 of 2`. */
+/** `◇ goal — 2 of 5 done · lint-fix needs a decision` for a run (`◆` when it waits for you),
+ * `· step — model → model · fallback · state` for a step. */
 function runLabel(w: TeamWidget, run: RunMember, extra: (string | null | undefined)[]): string {
-  const age = run.kind === 'run' && w.at ? formatAge(Date.now() - w.at) : null
-  const detail = [w.detail ? (age ? `${w.detail} ${age}` : w.detail) : null, ...extra]
-    .filter(Boolean)
-    .join(' · ')
-  return `${run.kind === 'run' ? '◇' : '·'} ${clip(run.title, RUN_TITLE_MAX)}${detail ? ` — ${detail}` : ''}`
+  const detail = [w.detail, ...extra].filter(Boolean).join(' · ')
+  const mark = run.kind === 'step' ? '·' : run.group === 'needs-you' ? '◆' : '◇'
+  return `${mark} ${clip(run.title, RUN_TITLE_MAX)}${detail ? ` — ${detail}` : ''}`
 }
 
-/** What the owner can do to a run or step: answer a waiting one, cancel, dismiss. */
-function runControls(run: RunMember, h: TrayHandlers): Electron.MenuItemConstructorOptions[] {
-  const act = (action: RunAction) => () => h.onRun?.(action)
+/** The answers to a paused run or step. The coordinator takes them; only a run whose
+ * coordinator has ended offers them here, since nobody else can ask the owner. */
+function decisionItems(
+  run: RunMember,
+  orphaned: boolean,
+  h: TrayHandlers,
+): Electron.MenuItemConstructorOptions[] {
+  if (!orphaned || !run.can.decide) return []
   const what = run.kind === 'run' ? 'run' : 'step'
-  const items: Electron.MenuItemConstructorOptions[] = []
-  if (run.can.decide) {
-    for (const decision of DECISIONS)
-      items.push({
-        label: `${DECISION_LABEL[decision]} ${what}`,
-        click: act({ type: 'resume', runId: run.runId, stepKey: run.stepKey, action: decision }),
-      })
-  }
-  if (run.can.cancel)
-    items.push({
-      label: `Cancel ${what}`,
-      click: act({ type: 'cancel', runId: run.runId, stepKey: run.stepKey }),
-    })
-  if (run.can.dismiss)
-    items.push({ label: 'Dismiss run', click: act({ type: 'dismiss', runId: run.runId }) })
-  return items
+  return DECISIONS.map((decision) => ({
+    label: `${DECISION_LABEL[decision]} ${what}`,
+    click: () =>
+      h.onRun?.({ type: 'resume', runId: run.runId, stepKey: run.stepKey, action: decision }),
+  }))
 }
 
-/** A workflow run (a submenu of its steps and controls) or a step. */
-function runItem(row: TeamRow<TeamWidget>, h: TrayHandlers): Electron.MenuItemConstructorOptions {
-  const w = row.item
-  const run = w.run as RunMember
-  const open = () => h.onRun?.({ type: 'open', url: run.url })
-  const label = runLabel(w, run, [row.summary, row.orphaned ? 'coordinator ended' : null])
-  const controls = runControls(run, h)
-  if (!row.children.length && !controls.length) return { label, click: open }
-  const hint: Electron.MenuItemConstructorOptions[] = run.hint
-    ? [{ label: run.hint, enabled: false }]
-    : []
+/** A step: one line; a click reads its latest attempt. A waiting step of a run whose
+ * coordinator has ended also offers the decisions. */
+function stepItem(
+  row: TeamRow<TeamWidget>,
+  orphaned: boolean,
+  h: TrayHandlers,
+): Electron.MenuItemConstructorOptions {
+  const step = row.item.run as RunMember
+  const label = runLabel(row.item, step, [])
+  const read = () => h.onRun?.({ type: 'openStep', runId: step.runId, stepKey: step.stepKey ?? '' })
+  const decisions = decisionItems(step, orphaned, h)
+  if (!decisions.length) return { label, enabled: step.session, click: read }
   return {
     label,
     submenu: [
-      { label: 'Open in Agent Hub', click: open },
-      ...(row.children.length
-        ? [{ type: 'separator' as const }, ...row.children.map((child) => runItem(child, h))]
-        : []),
-      ...(controls.length ? [{ type: 'separator' as const }, ...controls] : []),
-      ...(hint.length ? [{ type: 'separator' as const }, ...hint] : []),
+      { label: 'Read the attempt', enabled: step.session, click: read },
+      { type: 'separator' },
+      ...decisions,
+    ],
+  }
+}
+
+/** A workflow run: one line under its coordinator; its submenu lists the steps as one
+ * line each, then Details (the run page) and Cancel run. */
+function runItem(row: TeamRow<TeamWidget>, h: TrayHandlers): Electron.MenuItemConstructorOptions {
+  const w = row.item
+  const run = w.run as RunMember
+  const label = runLabel(w, run, [row.orphaned ? 'coordinator ended' : null])
+  const tail: Electron.MenuItemConstructorOptions[] = [
+    { label: 'Details', click: () => h.onRun?.({ type: 'open', url: run.url }) },
+    ...decisionItems(run, row.orphaned, h),
+    ...(run.can.cancel
+      ? [
+          {
+            label: 'Cancel run',
+            click: () => h.onRun?.({ type: 'cancel', runId: run.runId, stepKey: null }),
+          },
+        ]
+      : []),
+  ]
+  return {
+    label,
+    submenu: [
+      ...row.children.map((child) => stepItem(child, row.orphaned, h)),
+      ...(row.children.length ? [{ type: 'separator' as const }] : []),
+      ...tail,
     ],
   }
 }

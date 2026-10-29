@@ -52,7 +52,7 @@ export interface ChatApiDeps {
 }
 
 /** Map an Agent Hub failure to the status deliverToAgentHub gives it. */
-function hubHttpError(error: unknown): HttpError {
+export function hubHttpError(error: unknown): HttpError {
   if (error instanceof HttpError) return error
   const failure = classifyHubError(error)
   if (failure.code === 'agent_hub_unavailable') return new HttpError(503, 'agent_hub_unavailable')
@@ -75,7 +75,7 @@ function requireHubSession(deps: ChatApiDeps, id: string | undefined): WidgetRow
 }
 
 /** Run an operation, turning any Agent Hub failure into the API's answer. */
-async function guarded<T>(work: () => Promise<T>): Promise<T> {
+export async function guarded<T>(work: () => Promise<T>): Promise<T> {
   try {
     return await work()
   } catch (error) {
@@ -85,7 +85,7 @@ async function guarded<T>(work: () => Promise<T>): Promise<T> {
   }
 }
 
-function parseAfterSeq(query: URLSearchParams): number {
+export function parseAfterSeq(query: URLSearchParams): number {
   const raw = query.get('afterSeq')
   if (raw === null) return 0
   const value = /^\d{1,15}$/.test(raw) ? Number(raw) : Number.NaN
@@ -93,10 +93,10 @@ function parseAfterSeq(query: URLSearchParams): number {
   return value
 }
 
-async function streamTurn(
-  runtime: AgentHubRuntime,
-  row: WidgetRow,
-  afterSeq: number,
+/** Follow a turn as NDJSON on a response (`attach` opens the event source; the
+ * SDK reconnects itself). A failure before the first event is an HTTP answer. */
+export async function streamTurn(
+  attach: (signal: AbortSignal) => AsyncGenerator<TurnEvent | IdleEvent, void, undefined>,
   req: IncomingMessage,
   res: ServerResponse,
 ): Promise<void> {
@@ -106,7 +106,7 @@ async function streamTurn(
     if (!res.writableEnded) abort()
   })
   res.once('close', abort)
-  const iterator = runtime.attach(row.id, afterSeq, controller.signal)
+  const iterator = attach(controller.signal)
   const line = (value: ChatStreamLine) => {
     if (!res.destroyed) res.write(`${JSON.stringify(value)}\n`)
   }
@@ -164,7 +164,9 @@ export function registerChatRoutes(router: Router, deps: ChatApiDeps): void {
       const row = requireHubSession(deps, params.id)
       const afterSeq = parseAfterSeq(query)
       const runtime = hubRuntime(deps)
-      await guarded(() => streamTurn(runtime, row, afterSeq, req, res))
+      await guarded(() =>
+        streamTurn((signal) => runtime.attach(row.id, afterSeq, signal), req, res),
+      )
     })
     .add('POST', '/v1/sessions/:id/chat/cancel', async (req, res, params) => {
       const body = await readJsonObject(req)

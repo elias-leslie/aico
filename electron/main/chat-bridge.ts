@@ -61,8 +61,20 @@ interface ChatBridgeDeps {
   branchOf?: (root: string | null) => string | null
   tether: Pick<TetherClient, 'request' | 'stream'>
   catalog: Pick<SessionCatalog, 'get'>
-  registry: Pick<WindowRegistry, 'senderSession'>
+  registry: Pick<WindowRegistry, 'senderSession' | 'senderViewer'>
 }
+
+/** The attempt session of a step, as Tether names it for the read-only view. */
+interface StepAttempt {
+  sessionId: string
+  agentSlug: string
+  requestedModel: string | null
+}
+
+/** What a window's chat reads: its own session, or a step's attempt (no input). */
+type Target =
+  | { kind: 'session'; descriptor: SessionDescriptor; info: ChatInfo }
+  | { kind: 'step'; runId: string; stepKey: string; info: ChatInfo }
 
 /** The words the owner sees for a failure; never a token, address or stack. */
 function failure(error: unknown): ChatFailure {
@@ -104,10 +116,41 @@ export function createChatBridge(deps: ChatBridgeDeps) {
   // webContents id -> stream id -> abort
   const streams = new Map<number, Map<string, AbortController>>()
 
-  /** The session the sender's window shows, if it is an Agent Hub chat. */
-  async function chatSession(
-    sender: WebContents,
-  ): Promise<{ descriptor: SessionDescriptor; info: ChatInfo } | null> {
+  // webContents id -> the attempt session its window opened on. A retry makes a new
+  // attempt; the window stays on the one it opened with.
+  const stepInfos = new Map<number, ChatInfo>()
+
+  const stepPath = (runId: string, stepKey: string, tail: string, session: string): string =>
+    `/v1/runs/${encodeURIComponent(runId)}/steps/${encodeURIComponent(stepKey)}/chat${tail}` +
+    (tail === '/info'
+      ? ''
+      : `${tail.includes('?') ? '&' : '?'}session=${encodeURIComponent(session)}`)
+
+  /** What the sender's window reads, if it is an Agent Hub chat or a step reader. */
+  async function chatSession(sender: WebContents): Promise<Target | null> {
+    const viewer = registry.senderViewer(sender)
+    if (viewer) {
+      let info = stepInfos.get(sender.id)
+      if (!info) {
+        try {
+          const { body } = await tether.request<StepAttempt & { attempt: number | null }>(
+            'GET',
+            stepPath(viewer.runId, viewer.stepKey, '/info', ''),
+          )
+          info = {
+            sessionId: body.sessionId,
+            agentSlug: body.agentSlug,
+            requestedModel: body.requestedModel,
+            readOnly: true,
+          }
+          stepInfos.set(sender.id, info)
+          sender.once('destroyed', () => stepInfos.delete(sender.id))
+        } catch {
+          return null
+        }
+      }
+      return { kind: 'step', runId: viewer.runId, stepKey: viewer.stepKey, info }
+    }
     const id = registry.senderSession(sender)
     if (!id) return null
     let descriptor = catalog.get(id)
@@ -125,6 +168,7 @@ export function createChatBridge(deps: ChatBridgeDeps) {
     if (descriptor.backend !== 'agent-hub' || !descriptor.agentHub) return null
     const branch = branchOf(descriptor.projectRoot)
     return {
+      kind: 'session',
       descriptor,
       info: {
         sessionId: descriptor.agentHub.sessionId,
@@ -161,6 +205,19 @@ export function createChatBridge(deps: ChatBridgeDeps) {
       }
       if (input.sessionId !== target.info.sessionId)
         throw new ChatRefusal('session_mismatch', 'That is not this window’s session.')
+      if (target.kind === 'step') {
+        // A step's attempt is read, never written: no message, no stop.
+        if (method === 'send' || method === 'cancel')
+          throw new ChatRefusal('read_only', 'This view is read-only.')
+        if (method === 'queue') return { ok: true, value: [] }
+        const { body } = await tether.request<{ session: unknown }>(
+          'GET',
+          stepPath(target.runId, target.stepKey, '', target.info.sessionId),
+          undefined,
+          { timeoutMs: 20_000 },
+        )
+        return { ok: true, value: body.session }
+      }
       if (method === 'session' || method === 'queue') {
         const { body } = await tether.request<{ session: unknown; queued: string[] }>(
           'GET',
@@ -241,9 +298,13 @@ export function createChatBridge(deps: ChatBridgeDeps) {
         webContents.send('chat:event', streamId, item)
     }
     let ended = false
+    const streamPath =
+      target.kind === 'step'
+        ? `${stepPath(target.runId, target.stepKey, '/stream', target.info.sessionId)}&afterSeq=${after}`
+        : `${sessionPath(target.descriptor, '/stream')}?afterSeq=${after}`
     void tether
       .stream(
-        `${sessionPath(target.descriptor, '/stream')}?afterSeq=${after}`,
+        streamPath,
         {},
         (line) => {
           const item = line as Record<string, unknown> | null

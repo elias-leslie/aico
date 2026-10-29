@@ -404,7 +404,7 @@ Controls, each `{ok: true}` or an error; Tether controls only a run it lists (`4
 | `POST /v1/runs/:runId/steps/:key/cancel` | none | stop one step |
 | `POST /v1/runs/:runId/dismiss` | none | drop an ended run from the lists (kept across restarts) |
 
-Following a run (settings, as data): `TETHER_AGENT_HUB_RUNS_POLL_MS` (default 3000), `TETHER_AGENT_HUB_RUNS_ENDED_MS` (an ended run stays listed this long after its last activity unless dismissed; default 6 hours), `TETHER_AGENT_HUB_RUNS_LIMIT` (30) and `TETHER_AGENT_HUB_RUNS_CONCURRENCY` (4). The run page address is `TETHER_AGENT_HUB_FRONTEND_URL`, else `AGENT_HUB_FRONTEND_URL` (as `st workflow` reads it), else the API host on port 3003. Plan changes (follow-up) are not an Aico control: the coordinator makes them with `st workflow add-step`, `revise` and `remove-step`.
+Following a run (settings, as data): `TETHER_AGENT_HUB_RUNS_POLL_MS` (default 3000), `TETHER_AGENT_HUB_RUNS_ENDED_MS` (an ended run stays listed this long after its last activity unless dismissed; default 30 minutes), `TETHER_AGENT_HUB_RUNS_LIMIT` (30) and `TETHER_AGENT_HUB_RUNS_CONCURRENCY` (4). The run page address is `TETHER_AGENT_HUB_FRONTEND_URL`, else `AGENT_HUB_FRONTEND_URL` (as `st workflow` reads it), else the API host on port 3003. Plan changes (follow-up) are not an Aico control: the coordinator makes them with `st workflow add-step`, `revise` and `remove-step`.
 
 ## Events
 

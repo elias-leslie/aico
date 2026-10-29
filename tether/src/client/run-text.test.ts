@@ -31,8 +31,16 @@ describe('run text', () => {
 
   it('says a step in one line and a run by its state', () => {
     expect(runDetail(step({ fallback: true, servedModel: 'x/other' }))).toBe(
-      'writing · deepseek-v4.1-flash → other · fallback · try 2 of 3',
+      'deepseek-v4.1-flash → other · fallback · writing · try 2 of 3',
     )
+    expect(
+      runDetail({
+        kind: 'run',
+        word: 'running',
+        progress: '2 of 5 done',
+        headline: 'lint-fix needs a decision',
+      } as RunMember),
+    ).toBe('2 of 5 done · lint-fix needs a decision')
     expect(runDetail({ kind: 'run', word: 'running' } as RunMember)).toBe('running')
   })
 })

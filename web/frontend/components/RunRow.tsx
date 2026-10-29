@@ -21,31 +21,38 @@ export function pageUrl(url: string): string | null {
   }
 }
 
-/** What a row says under its name. A run: its state and its steps; a step: its
- * state, models and tries. The reason follows when the owner has something to
- * decide or a run failed. */
+/** What a row says under its name. A run: its progress and state
+ * (`2 of 5 done · lint-fix needs a decision`); a step: model, a fallback mark,
+ * state and tries. The reason follows when the owner has something to decide
+ * or a run failed. */
 export function runMeta(
   member: RunMember,
   extra: (string | null | undefined)[] = [],
 ): string {
   const waiting = member.group === 'needs-you'
   const failed = member.status === 'failed' || member.status === 'refused'
-  return [runDetail(member), waiting || failed ? member.reason : null, ...extra]
+  return [
+    runDetail(member),
+    member.kind === 'step' && (waiting || failed) ? member.reason : null,
+    ...extra,
+  ]
     .filter(Boolean)
     .join(' · ')
 }
 
 type Confirming = 'fail' | 'cancel' | null
 
-/** Retry, Skip and Fail for a step waiting on the owner, Cancel while it is
- * going, Dismiss once the run has ended; a run also says where its plan is
- * changed. Nothing renders when there is nothing to do. */
+/** Cancel for a going run; Retry, Skip and Fail only when the coordinator has
+ * ended (while it lives it asks the owner and answers for them). Nothing
+ * renders when there is nothing to do. */
 function RunControls({
   member,
   act,
+  orphaned,
 }: {
   member: RunMember
   act: (action: RunAct) => Promise<void>
+  orphaned: boolean
 }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -68,18 +75,12 @@ function RunControls({
     }
   }
 
-  const { decide, dismiss } = member.can
-  // A step that has not started goes with its run; only live work gets its own Cancel.
-  const cancel =
-    member.can.cancel && (member.kind === 'run' || member.status === 'running')
-  if (!decide && !cancel && !dismiss && !error) return null
-  const cancelCopy =
-    what === 'step'
-      ? 'The step stops. The rest of the run carries on.'
-      : 'The run and its steps stop. This cannot be undone.'
+  const decide = member.can.decide && orphaned
+  const cancel = member.can.cancel && member.kind === 'run'
+  if (!decide && !cancel && !error) return null
   return (
     <div className="lantern-run-controls">
-      {(decide || cancel || dismiss) && (
+      {(decide || cancel) && (
         <div className="flex flex-wrap items-center gap-1.5">
           {decide &&
             DECISIONS.map((decision) => (
@@ -109,18 +110,7 @@ function RunControls({
               aria-label={label('Cancel')}
               onClick={() => setConfirming('cancel')}
             >
-              Cancel {what}
-            </button>
-          )}
-          {dismiss && (
-            <button
-              type="button"
-              className="lantern-btn small ghost"
-              disabled={busy}
-              aria-label={label('Dismiss')}
-              onClick={() => void send({ type: 'dismiss', member })}
-            >
-              Dismiss
+              Cancel run
             </button>
           )}
         </div>
@@ -140,7 +130,7 @@ function RunControls({
         message={
           confirming === 'fail'
             ? 'The workflow records it as failed and carries on without it.'
-            : cancelCopy
+            : 'The run and its steps stop. This cannot be undone.'
         }
         confirmText={confirming === 'fail' ? 'Fail it' : `Cancel ${what}`}
         cancelText="Keep going"
@@ -164,121 +154,141 @@ function RunControls({
 
 interface RunRowProps {
   member: RunMember
-  /** The run's steps with their rows, when it has any. */
+  /** The run's steps, as their rows, when it has any. */
   children?: ReactNode
-  isTeam: boolean
   open: boolean
   onToggle: () => void
-  /** Step counts for a run: `1 working · 2 done`. */
-  summary: string | null
+  /** The run's coordinator has ended: the owner answers it from here. */
   orphaned: boolean
   act: (action: RunAct) => Promise<void>
   /** Needs the owner, itself or (while folded) a step. */
   needs: boolean
 }
 
-/** A workflow run or one of its steps in the session list. The row opens the
- * run's page in Agent Hub; its controls sit under it. */
+/** A workflow run in the session list: one line (goal, progress, state), steps
+ * hidden until the row is opened. A small link opens the run's page. */
 export function RunRow({
   member,
   children,
-  isTeam,
   open,
   onToggle,
-  summary,
   orphaned,
   act,
   needs,
 }: RunRowProps) {
-  const isRun = member.kind === 'run'
   const url = pageUrl(member.url)
-  const meta = runMeta(member, [
-    isRun ? summary : null,
-    orphaned ? 'coordinator ended' : null,
-  ])
+  const meta = runMeta(member, [orphaned ? 'coordinator ended' : null])
   const age = member.at ? formatAge(Date.now() - member.at) : ''
-  const failed = member.status === 'failed' || member.status === 'refused'
+  const failed = member.status === 'failed'
   const dot = needs ? 'var(--beacon)' : failed ? 'var(--ember)' : null
-  const Icon = isRun ? Workflow : CornerDownRight
-  const rowClass = clsx(
-    'lantern-row',
-    'run',
-    isRun ? 'is-run' : 'is-step',
-    needs && 'needs',
-    isTeam && 'lead',
-  )
-  const body = (
-    <>
-      <Icon
-        aria-hidden="true"
-        className="h-4 w-4"
-        strokeWidth={1.7}
-        style={{ color: 'var(--mist)' }}
-      />
-      <span className="name" title={member.title}>
-        {member.title}
-      </span>
-      <span className="when">{age}</span>
-      <span className="meta">
-        {dot && (
-          <span
-            aria-hidden="true"
-            className="h-[7px] w-[7px] flex-none rounded-full"
-            style={{ backgroundColor: dot }}
-          />
-        )}
-        <span className="line-clamp-2 min-w-0 whitespace-normal">{meta}</span>
-      </span>
-    </>
-  )
-  const description = `${isRun ? 'Workflow run' : 'Step'} ${member.title}: ${meta}`
+  const description = `Workflow run ${member.title}: ${meta}`
   return (
-    <div
-      className={clsx(isTeam && 'lantern-team')}
-      data-testid={`run-${member.kind}`}
-    >
-      {url ? (
-        <a
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={rowClass}
-          aria-label={`${description}. Opens in Agent Hub`}
-          title="Open in Agent Hub"
-        >
-          {body}
-        </a>
-      ) : (
-        <div className={rowClass} role="group" aria-label={description}>
-          {body}
-        </div>
-      )}
-      {isTeam && (
+    <div className="lantern-team" data-testid="run-run">
+      <div className={clsx('lantern-row', 'run', 'is-run', needs && 'needs')}>
         <button
           type="button"
-          className="lantern-fold"
+          className="lantern-run-hit"
           aria-expanded={open}
-          aria-label={`${open ? 'Hide' : 'Show'} steps of ${member.title}`}
+          aria-label={`${open ? 'Hide' : 'Show'} steps. ${description}`}
           title={open ? 'Hide steps' : 'Show steps'}
           onClick={onToggle}
-        >
-          <ChevronRight
-            aria-hidden="true"
-            className="h-4 w-4"
-            strokeWidth={1.7}
-          />
-        </button>
-      )}
-      <RunControls member={member} act={act} />
-      {isTeam && open && (
+        />
+        <Workflow
+          aria-hidden="true"
+          className="h-4 w-4"
+          strokeWidth={1.7}
+          style={{ color: 'var(--mist)' }}
+        />
+        <span className="name" title={member.title}>
+          {member.title}
+        </span>
+        <span className="when">{age}</span>
+        <span className="meta">
+          {dot && (
+            <span
+              aria-hidden="true"
+              className="h-[7px] w-[7px] flex-none rounded-full"
+              style={{ backgroundColor: dot }}
+            />
+          )}
+          <span className="line-clamp-2 min-w-0 whitespace-normal">{meta}</span>
+          {url && (
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="lantern-run-details"
+              aria-label={`Details of workflow run ${member.title}, opens in Agent Hub`}
+            >
+              details
+            </a>
+          )}
+        </span>
+        <ChevronRight
+          aria-hidden="true"
+          className="lantern-run-chevron h-4 w-4"
+          data-open={open}
+          strokeWidth={1.7}
+        />
+      </div>
+      {open && (
         <div
           role="group"
           aria-label={`Steps of ${member.title}`}
           className="lantern-lanes"
         >
           {children}
+          <RunControls member={member} act={act} orphaned={orphaned} />
         </div>
       )}
+    </div>
+  )
+}
+
+/** A step in an opened run: one line, its key, model and state. When the
+ * coordinator has ended and the step waits, Retry, Skip and Fail sit under it. */
+export function StepRow({
+  member,
+  orphaned,
+  act,
+}: {
+  member: RunMember
+  orphaned: boolean
+  act: (action: RunAct) => Promise<void>
+}) {
+  const meta = runMeta(member)
+  const waiting = member.group === 'needs-you'
+  const failed = member.status === 'failed' || member.status === 'refused'
+  return (
+    <div data-testid="run-step">
+      <div
+        role="group"
+        aria-label={`Step ${member.title}: ${meta}`}
+        className={clsx('lantern-row', 'run', 'is-step', waiting && 'needs')}
+      >
+        <CornerDownRight
+          aria-hidden="true"
+          className="h-4 w-4"
+          strokeWidth={1.7}
+          style={{ color: 'var(--mist)' }}
+        />
+        <span className="name" title={member.title}>
+          {member.title}
+        </span>
+        <span className="meta">
+          {(waiting || failed) && (
+            <span
+              aria-hidden="true"
+              className="h-[7px] w-[7px] flex-none rounded-full"
+              style={{
+                backgroundColor: waiting ? 'var(--beacon)' : 'var(--ember)',
+              }}
+            />
+          )}
+          <span className="line-clamp-2 min-w-0 whitespace-normal">{meta}</span>
+        </span>
+      </div>
+      <RunControls member={member} act={act} orphaned={orphaned} />
     </div>
   )
 }

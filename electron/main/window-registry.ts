@@ -20,11 +20,20 @@ export interface PendingCreate {
   instructions?: { prompt: string; revision: string }
 }
 
+/** A window that reads one workflow step's latest attempt, with no session of its own. */
+export interface StepViewer {
+  runId: string
+  stepKey: string
+  /** The window's name: the step and its run. */
+  title: string
+}
+
 export class WindowRegistry {
   // BrowserWindow.id -> Tether session id. A window opened for a new session has
   // no id until Tether creates it at the window's first grid size.
   private readonly widgetOf = new Map<number, string>()
   private readonly pendingCreates = new Map<number, PendingCreate>()
+  private readonly viewerOf = new Map<number, StepViewer>()
 
   constructor(private readonly bw: WindowLookup) {}
 
@@ -40,6 +49,29 @@ export class WindowRegistry {
 
   clearPending = (winId: number): void => {
     this.pendingCreates.delete(winId)
+  }
+
+  bindViewer = (winId: number, viewer: StepViewer): void => {
+    this.viewerOf.set(winId, viewer)
+  }
+
+  /** What a step-reading window shows, by its BrowserWindow id. */
+  viewerFor = (winId: number): StepViewer | undefined => this.viewerOf.get(winId)
+
+  /** What the sender's window reads, if it is a step-reading window (untrusted IPC sender). */
+  senderViewer = (sender: WebContents): StepViewer | undefined => {
+    const win = this.bw.fromWebContents(sender)
+    return win ? this.viewerOf.get(win.id) : undefined
+  }
+
+  /** The window already reading this step, if any. */
+  forStep = (runId: string, stepKey: string): BrowserWindow | undefined => {
+    for (const [winId, viewer] of this.viewerOf) {
+      if (viewer.runId !== runId || viewer.stepKey !== stepKey) continue
+      const win = this.bw.fromId(winId)
+      if (win && !win.isDestroyed()) return win
+    }
+    return undefined
   }
 
   sessionOf = (winId: number): string | undefined => this.widgetOf.get(winId)
@@ -82,5 +114,6 @@ export class WindowRegistry {
   forget = (winId: number): void => {
     this.widgetOf.delete(winId)
     this.pendingCreates.delete(winId)
+    this.viewerOf.delete(winId)
   }
 }

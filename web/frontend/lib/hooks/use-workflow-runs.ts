@@ -14,7 +14,6 @@ const NO_ITEMS: RunMember[] = []
 export type RunAct =
   | { type: 'resume'; member: RunMember; action: RunDecision }
   | { type: 'cancel'; member: RunMember }
-  | { type: 'dismiss'; member: RunMember }
 
 /**
  * - `loading`: not asked yet, so nothing is known about runs.
@@ -80,8 +79,7 @@ export function useWorkflowRuns(): WorkflowRuns {
       const run = `/api/runs/${encodeURIComponent(runId)}`
       if (action.type === 'resume')
         return post(`${run}/resume`, { action: action.action, stepKey })
-      if (action.type === 'cancel') return post(`${run}/cancel`, { stepKey })
-      return post(`${run}/dismiss`)
+      return post(`${run}/cancel`, { stepKey })
     },
     // Whatever the answer, read the runs again so the list shows the truth.
     onSettled: () =>

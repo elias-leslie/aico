@@ -56,6 +56,11 @@
   font-family: var(--font-mono);
 }
 
+/* A workflow step's attempt, read only: no message box. The status line under it stays. */
+#chat-root[data-readonly] [data-testid="composer"] {
+  display: none;
+}
+
 .chat-failed {
   padding: 16px;
   color: var(--mist);

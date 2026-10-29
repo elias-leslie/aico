@@ -7,8 +7,8 @@
 // once), and keeps the result as team members (runs-view.ts).
 //
 // - Active runs are read on every poll, for their live phase.
-// - An ended run stays listed for `endedRetentionMs` after its last activity,
-//   or until the owner dismisses it; dismissals are kept across restarts.
+// - An ended run drops off on its own `endedRetentionMs` after its last activity
+//   (or at once when dismissed through the API; dismissals are kept across restarts).
 // - A run whose launching session has ended stays while it is active, so a
 //   decision it asks of the owner is not lost with the coordinator.
 // - A failed look keeps the last answer, marked stale; before any look has
@@ -19,7 +19,7 @@
 import type { RunAction, RunList, RunListItem, RunView } from '@agent-hub/sdk'
 import type { RunDecision, RunMember, RunsAnswer } from '../client/index'
 import type { RunsConfig } from './config'
-import { isActiveRun, parseTime, runMembers } from './runs-view'
+import { isActiveRun, type PauseNotice, parseTime, pauseNotice, runMembers } from './runs-view'
 import { classifyHubError, type HubApi } from './runtime'
 
 /** The slice of the SDK's workflow API Tether uses. */
@@ -33,7 +33,7 @@ export interface Launcher {
   ownershipId: string
 }
 
-export type RunControlCode = 'unknown_run' | 'unknown_step' | 'not_allowed'
+export type RunControlCode = 'unknown_run' | 'unknown_step' | 'not_allowed' | 'no_session'
 
 /** A control Tether refuses before asking Agent Hub. */
 export class RunControlError extends Error {
@@ -51,12 +51,40 @@ export interface DismissedStore {
   write(dismissed: Record<string, number>): void
 }
 
+/** The pauses already told to the launching session (run id to the pause's key
+ * and when), kept by the caller across restarts so a pause is told once. */
+export interface PauseNoticeStore {
+  read(): Record<string, { key: string; at: number }>
+  write(told: Record<string, { key: string; at: number }>): void
+}
+
+/** Where a pause is told to the session that launched the run. */
+export interface PauseNotices {
+  store: PauseNoticeStore
+  /** The longest note the session takes. */
+  maxChars: () => number
+  /** Hand the note to the session; true once it is queued for it, false when
+   * the session cannot take one now (tried again at the next look). */
+  tell(launcherId: string, notice: PauseNotice): boolean | Promise<boolean>
+}
+
+/** What the read-only view of a step's attempt needs. */
+export interface StepSession {
+  sessionId: string
+  agentSlug: string
+  requestedModel: string | null
+  attempt: number | null
+  title: string
+}
+
 export interface RunTrackerOptions {
   api: () => RunsApi
   /** The sessions to look for runs of. */
   launchers: () => Launcher[]
   config: RunsConfig
   dismissed: DismissedStore
+  /** Tell the launching session when a run waits for the owner. */
+  pauses?: PauseNotices
   /** The listed runs changed. */
   notify: () => void
   now?: () => number
@@ -82,6 +110,7 @@ export class RunTracker {
   private readonly now: () => number
   private readonly log: (message: string) => void
   private dismissed: Record<string, number>
+  private told: Record<string, { key: string; at: number }>
   private timer: ReturnType<typeof setInterval> | null = null
   private ticking = false
   private stopped = false
@@ -93,6 +122,7 @@ export class RunTracker {
     this.now = options.now ?? Date.now
     this.log = options.log ?? ((message) => console.log(`[tether:runs] ${message}`))
     this.dismissed = options.dismissed.read()
+    this.told = options.pauses?.store.read() ?? {}
   }
 
   start(): void {
@@ -228,6 +258,7 @@ export class RunTracker {
     }
     await Promise.all(reads)
     this.pruneDismissed()
+    await this.tellPauses(live)
 
     if (failure) this.fail(failure)
     else {
@@ -239,6 +270,66 @@ export class RunTracker {
   private accept(launcherId: string, view: RunView): void {
     const ctx = { launcherId, url: this.pageUrl(view.id) }
     this.tracked.set(view.id, { launcherId, view, members: runMembers(view, ctx) })
+  }
+
+  /** Once per pause, tell the session that launched a run waiting for the
+   * owner. A run that is not waiting forgets its last pause, so the next one
+   * is told again; a launcher that has ended is not told (the owner answers
+   * from the expanded run). */
+  private async tellPauses(live: Set<string>): Promise<void> {
+    const pauses = this.options.pauses
+    if (!pauses) return
+    let changed = false
+    for (const [runId, entry] of this.tracked) {
+      const notice =
+        entry.view.state === 'needs_owner' ? pauseNotice(entry.view, pauses.maxChars()) : null
+      if (!notice) {
+        if (this.told[runId]) {
+          delete this.told[runId]
+          changed = true
+        }
+        continue
+      }
+      if (this.told[runId]?.key === notice.key || !live.has(entry.launcherId)) continue
+      let told = false
+      try {
+        told = await pauses.tell(entry.launcherId, notice)
+      } catch (error) {
+        this.log(`could not tell the session about a paused run: ${(error as Error).message}`)
+      }
+      if (!told) continue
+      this.told[runId] = { key: notice.key, at: this.now() }
+      changed = true
+    }
+    const cutoff = this.now() - DISMISSED_KEEP_MS
+    for (const [runId, { at }] of Object.entries(this.told))
+      if (at < cutoff) {
+        delete this.told[runId]
+        changed = true
+      }
+    if (changed) pauses.store.write(this.told)
+  }
+
+  /** The session of a step's latest attempt, for reading it (or, with
+   * `sessionId`, that one of the step's attempts). Only a step of a run
+   * Tether lists. */
+  stepSession(runId: string, stepKey: string, sessionId?: string): StepSession {
+    const entry = this.run(runId)
+    const step = entry.view.steps?.find((candidate) => candidate.key === stepKey)
+    if (!step) throw new RunControlError('unknown_step', `The run has no step ${stepKey}`)
+    const history = step.attempt_history ?? []
+    const attempt = sessionId
+      ? history.find((candidate) => candidate.session_id === sessionId)
+      : history[history.length - 1]
+    if (!attempt?.session_id)
+      throw new RunControlError('no_session', 'That step has not started an attempt yet')
+    return {
+      sessionId: attempt.session_id,
+      agentSlug: step.agent_slug ?? '',
+      requestedModel: attempt.requested_model ?? step.chain?.[0] ?? step.chosen_model ?? null,
+      attempt: typeof attempt.attempt === 'number' ? attempt.attempt : null,
+      title: stepKey,
+    }
   }
 
   private pageUrl(runId: string): string {

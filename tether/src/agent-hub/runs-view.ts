@@ -102,17 +102,6 @@ const STEP_GROUP: Record<string, TeamGroup> = {
   refused: 'no-status',
 }
 
-const SUMMARY_ORDER = [
-  'running',
-  'waiting for you',
-  'pending',
-  'done',
-  'skipped',
-  'failed',
-  'refused',
-  'cancelled',
-] as const
-
 export const runMemberId = (runId: string): string => `run:${runId}`
 export const stepMemberId = (runId: string, key: string): string => `step:${runId}:${key}`
 
@@ -149,7 +138,7 @@ function asEntries(value: unknown): Record<string, unknown> | null {
 /** The attempt the step is on now (the latest), if it has one. */
 function latestAttempt(step: StepView): StepAttempt | null {
   const history = step.attempt_history
-  return history && history.length ? (history[history.length - 1] ?? null) : null
+  return history?.length ? (history[history.length - 1] ?? null) : null
 }
 
 function stepMember(
@@ -196,6 +185,7 @@ function stepMember(
     attempt: typeof step.attempts === 'number' ? step.attempts : null,
     attemptLimit: typeof step.attempt_limit === 'number' ? step.attempt_limit : null,
     reason: wait?.reason ?? (status === 'failed' || status === 'refused' ? outcomeReason : null),
+    session: Boolean(attempt?.session_id),
     can: {
       decide: Boolean(wait) && decidable,
       cancel: !ended && !cancelling && !finished && !['failed', 'refused'].includes(status),
@@ -204,29 +194,51 @@ function stepMember(
     cancelling,
     hint: null,
     summary: null,
+    progress: null,
+    headline: null,
   }
 }
 
-/** `2 done · 1 working`, counting the steps in the owner's words. */
-export function stepSummary(steps: readonly RunMember[]): string | null {
+/** `2 of 5 done`: the steps that are over (done or skipped) of all of them. */
+export function runProgress(steps: readonly RunMember[]): string | null {
   if (!steps.length) return null
-  const counts = new Map<string, number>()
-  for (const step of steps) {
-    const key =
-      step.status === 'running'
-        ? 'running'
-        : step.group === 'needs-you'
-          ? 'waiting for you'
-          : (STEP_WORD[step.status] ?? step.status)
-    counts.set(key, (counts.get(key) ?? 0) + 1)
+  const over = steps.filter((s) => s.status === 'completed' || s.status === 'skipped').length
+  return `${over} of ${steps.length} done`
+}
+
+/** `lint-fix needs a decision`: the run's state in words, naming the steps
+ * that need the owner or are working. */
+function runHeadline(
+  view: RunView,
+  steps: readonly RunMember[],
+  waiting: ReturnType<typeof waitingSteps>,
+  blocked: boolean,
+): string {
+  const state = String(view.state)
+  const names = (keys: string[], one: string, many: string): string =>
+    keys.length === 1
+      ? `${keys[0]} ${one}`
+      : keys.length <= 3
+        ? `${keys.join(', ')} ${many}`
+        : `${keys.length} steps ${many}`
+  if (view.cancelling === true) return 'cancelling'
+  if (state === 'needs_owner') {
+    if (blocked) return 'blocked by a step that did not finish'
+    if (waiting.size) return names([...waiting.keys()], 'needs a decision', 'need a decision')
+    const why = plain(view.pause?.reason)
+    return why ? `needs a decision: ${why}` : 'needs a decision'
   }
-  const known = SUMMARY_ORDER.filter((word) => counts.has(word))
-  const other = [...counts.keys()].filter(
-    (word) => !(SUMMARY_ORDER as readonly string[]).includes(word),
-  )
-  return [...known, ...other]
-    .map((word) => `${counts.get(word)} ${word === 'running' ? 'working' : word}`)
-    .join(' · ')
+  if (state === 'running') {
+    const working = steps.filter((s) => s.status === 'running').map((s) => s.title)
+    return working.length ? names(working, 'working', 'working') : 'running'
+  }
+  if (state === 'completed') return 'finished'
+  if (state === 'failed') {
+    const why = failureText(view.failure)
+    return why ? `failed: ${why}` : 'failed'
+  }
+  if (state === 'cancelled') return 'cancelled'
+  return RUN_WORD[state] ?? state
 }
 
 /** The run, then its steps in plan order. */
@@ -242,6 +254,7 @@ export function runMembers(view: RunView, ctx: Context): RunMember[] {
     .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
     .map((step) => stepMember(view, step, waiting, runAt, !blocked, ctx))
   const cancelling = view.cancelling === true
+  const progress = runProgress(steps)
   const goal = typeof view.goal === 'string' && view.goal ? view.goal : 'Workflow run'
   const run: RunMember = {
     id: runMemberId(view.id),
@@ -274,9 +287,71 @@ export function runMembers(view: RunView, ctx: Context): RunMember[] {
       cancel: isActiveRun(state) && !cancelling,
       dismiss: isEndedRun(state),
     },
+    session: false,
     cancelling,
     hint: isActiveRun(state) ? FOLLOW_UP_HINT : null,
-    summary: stepSummary(steps),
+    summary: progress,
+    progress,
+    headline: runHeadline(view, steps, waiting, blocked),
   }
   return [run, ...steps]
+}
+
+// --- the note to the coordinator ----------------------------------------------------
+
+/** What the launching session is told when a run waits for the owner. */
+export interface PauseNotice {
+  /** Names this pause; a new pause on the same run has another key. */
+  key: string
+  /** One line, at most `maxChars` characters. */
+  text: string
+}
+
+const MAX_STEP_COMMANDS = 3
+
+/**
+ * The note for a run that has just paused: which run and step, why, and the
+ * exact command that answers it. The coordinator asks the owner and runs it
+ * only on their word. Null while the run is not waiting for the owner.
+ */
+export function pauseNotice(view: RunView, maxChars: number): PauseNotice | null {
+  if (view.state !== 'needs_owner') return null
+  const waiting = waitingSteps(view)
+  const blocked = view.pause?.reason === 'blocked_dependencies'
+  const keys = [...waiting.keys()]
+  const key = `${view.pause?.at ?? ''}|${view.pause?.reason ?? ''}|${[...keys].sort().join(',')}`
+  const resume = (stepKey: string | null) =>
+    `st workflow resume ${view.id}${stepKey ? ` --step ${stepKey}` : ''} --action retry|skip|fail`
+  const build = (goalMax: number, withReasons: boolean): string => {
+    const goal = clipText(
+      typeof view.goal === 'string' && view.goal ? view.goal : 'Workflow run',
+      goalMax,
+    )
+    const head = `Workflow run "${goal}" (${view.id})`
+    if (blocked)
+      return `${head} is blocked: a step depends on one that did not finish. Change the plan (st workflow revise or remove-step) or ask the owner.`
+    const shown = keys.slice(0, MAX_STEP_COMMANDS)
+    const why = (stepKey: string): string => {
+      const reason = withReasons ? waiting.get(stepKey)?.reason : null
+      return reason ? ` (${clipText(reason, 60)})` : ''
+    }
+    const what = keys.length
+      ? `needs the owner to decide: ${shown.map((k) => `step ${k}${why(k)}`).join(', ')}${keys.length > shown.length ? ` and ${keys.length - shown.length} more` : ''}`
+      : `needs the owner to decide${withReasons && plain(view.pause?.reason) ? ` (${plain(view.pause?.reason)})` : ''}`
+    const commands = keys.length ? shown.map(resume) : [resume(null)]
+    return `${head} ${what}. Ask the owner, then run only their answer: ${commands.join(' ; ')}`
+  }
+  let text = build(60, true)
+  if (text.length > maxChars) text = build(60, false)
+  if (text.length > maxChars) text = build(24, false)
+  if (text.length > maxChars) text = text.slice(0, maxChars)
+  // One line of plain characters, as a wake note must be.
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping them is the point
+  text = text.replace(/[\u0000-\u001f\u007f-\u009f]+/g, ' ').trim()
+  return { key, text }
+}
+
+function clipText(text: string, max: number): string {
+  const flat = text.replace(/\s+/g, ' ').trim()
+  return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat
 }
