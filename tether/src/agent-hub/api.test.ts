@@ -200,7 +200,7 @@ describe('agent-hub sessions over the control socket', () => {
     expect(((await call('GET', `/v1/sessions/${id}`)).body as Body).agentHub).toMatchObject({
       requestedModel: 'other-model',
     })
-    expect((await send({ model: 'nope' })).body).toMatchObject({ error: 'workload_unavailable' })
+    expect((await send({ model: 'nope' })).body).toMatchObject({ error: 'unknown_model' })
     expect((await send({ model: 5 })).status).toBe(400)
     expect((await send({ model: '' })).status).toBe(400)
   })

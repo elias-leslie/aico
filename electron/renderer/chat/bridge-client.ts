@@ -91,7 +91,31 @@ interface FollowOptions {
   onReattach?: StreamOptions['onReattach']
 }
 
-export function createBridgeClient(bridge: ChatBridge, info: ChatInfo): ChatHubClient {
+export interface BridgeClientOptions {
+  /** The model for a message sent now: a catalog model, or null for the agent's own routing. */
+  model?: () => string | null
+  /** A turn is running (its events are arriving), or none is. Fires on a change only. */
+  onBusy?: (busy: boolean) => void
+}
+
+export function createBridgeClient(
+  bridge: ChatBridge,
+  info: ChatInfo,
+  hooks: BridgeClientOptions = {},
+): ChatHubClient {
+  // Followers that have seen a turn event and not yet its end; more than one can be
+  // open at once (a send's stream and the chat's own attach).
+  let running = 0
+  const track = (delta: number): void => {
+    const was = running > 0
+    running = Math.max(0, running + delta)
+    if (running > 0 !== was) hooks.onBusy?.(running > 0)
+  }
+
+  /** A message to send: its text, and the model chosen for it when the window has a picker. */
+  const outgoing = (text: string): Record<string, unknown> =>
+    hooks.model ? { text, model: hooks.model() } : { text }
+
   async function call<T>(method: string, args: Record<string, unknown> = {}): Promise<T> {
     const answer = await bridge.call(method, { sessionId: info.sessionId, ...args })
     if (!answer.ok) throw hubError(answer.error)
@@ -100,6 +124,24 @@ export function createBridgeClient(bridge: ChatBridge, info: ChatInfo): ChatHubC
 
   /** The turn's events after `afterSeq`, each once, reconnecting when the stream drops. */
   async function* follow(afterSeq: number, options: FollowOptions): AsyncGenerator<AnyEvent> {
+    let live = false
+    const mark = (on: boolean): void => {
+      if (on === live) return
+      live = on
+      track(on ? 1 : -1)
+    }
+    try {
+      yield* followEvents(afterSeq, options, mark)
+    } finally {
+      mark(false)
+    }
+  }
+
+  async function* followEvents(
+    afterSeq: number,
+    options: FollowOptions,
+    mark: (on: boolean) => void,
+  ): AsyncGenerator<AnyEvent> {
     let last = afterSeq
     let failures = 0
     for (;;) {
@@ -126,6 +168,7 @@ export function createBridgeClient(bridge: ChatBridge, info: ChatInfo): ChatHubC
               last = seq
             }
             failures = 0
+            mark(!isTerminal(event))
             yield event
             if (isTerminal(event)) return
           } else if (item.kind === 'end') {
@@ -175,7 +218,7 @@ export function createBridgeClient(bridge: ChatBridge, info: ChatInfo): ChatHubC
       // session busy still shows that turn instead of failing.
       async *stream(request, options) {
         if (options?.signal?.aborted) throw aborted()
-        await call('send', { text: lastUserText(request) })
+        await call('send', outgoing(lastUserText(request)))
         yield* follow(0, options ?? {}) as AsyncGenerator<TurnEvent>
       },
       attach: (_sessionId, options) => follow(options?.afterSeq ?? 0, options ?? {}),
@@ -190,7 +233,7 @@ export function createBridgeClient(bridge: ChatBridge, info: ChatInfo): ChatHubC
     },
     models: { list: () => call('models') },
     followUps: {
-      send: (sessionId, text) => call('send', { sessionId, text }),
+      send: (sessionId, text) => call('send', { sessionId, ...outgoing(text) }),
       pending: (sessionId) => call('queue', { sessionId }),
     },
   }

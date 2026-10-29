@@ -442,6 +442,7 @@ async function deliverToAgentHub(
   } catch (error) {
     if (!(error instanceof HubError)) throw error
     if (error.code === 'agent_hub_unavailable') throw new HttpError(503, 'agent_hub_unavailable')
+    if (error.code === 'unknown_model') throw new HttpError(409, 'unknown_model')
     throw new HttpError(409, 'workload_unavailable', { reason: error.message })
   }
 }

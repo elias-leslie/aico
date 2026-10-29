@@ -150,6 +150,43 @@ describe('chat bridge calls', () => {
     ])
   })
 
+  it('sends the chosen model with a message: an id, or null for the agent’s own routing', async () => {
+    const { bridge, request } = setup()
+    request.mockResolvedValue({ status: 200, body: { delivered: true, queued: false } })
+    const who = sender().contents
+    await bridge.call(who, 'send', { sessionId: 'hub-1', text: 'a', model: 'gemini-flash' })
+    await bridge.call(who, 'send', { sessionId: 'hub-1', text: 'b', model: null })
+    await bridge.call(who, 'send', { sessionId: 'hub-1', text: 'c', model: '' })
+    await bridge.call(who, 'send', { sessionId: 'hub-1', text: 'd' })
+    expect(request.mock.calls.map((call) => call[2])).toEqual([
+      { generation: 'g1', text: 'a', mode: 'paste', submit: true, model: 'gemini-flash' },
+      { generation: 'g1', text: 'b', mode: 'paste', submit: true, model: null },
+      { generation: 'g1', text: 'c', mode: 'paste', submit: true, model: null },
+      { generation: 'g1', text: 'd', mode: 'paste', submit: true },
+    ])
+  })
+
+  it('refuses a model that is not text, and says so when Agent Hub cannot use it', async () => {
+    const { bridge, request } = setup()
+    const who = sender().contents
+    for (const model of [5, { id: 'x' }, 'm'.repeat(129)])
+      expect(
+        await bridge.call(who, 'send', { sessionId: 'hub-1', text: 'a', model }),
+      ).toMatchObject({ ok: false, error: { code: 'invalid_model' } })
+    expect(request).not.toHaveBeenCalled()
+    request.mockRejectedValueOnce(new TetherError(409, 'unknown_model', {}))
+    expect(
+      await bridge.call(who, 'send', { sessionId: 'hub-1', text: 'a', model: 'nope' }),
+    ).toEqual({
+      ok: false,
+      error: {
+        code: 'unknown_model',
+        status: 409,
+        message: 'Agent Hub cannot use that model. Pick another.',
+      },
+    })
+  })
+
   it('cancels the turn and lists models', async () => {
     const { bridge, request } = setup()
     request.mockResolvedValueOnce({ status: 200, body: { cancelled: true } })

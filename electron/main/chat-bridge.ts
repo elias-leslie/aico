@@ -29,6 +29,8 @@ import type { WindowRegistry } from './window-registry'
 
 /** A follow-up is typed text; this is the same bound Tether's inject route holds. */
 export const MAX_CHAT_TEXT = 60_000
+/** Tether's bound on a model id. */
+const MAX_MODEL_ID = 128
 const MAX_STREAMS_PER_WINDOW = 4
 const METHODS: ReadonlySet<string> = new Set(['session', 'queue', 'send', 'cancel', 'models'])
 
@@ -51,7 +53,9 @@ function failure(error: unknown): ChatFailure {
           ? 'This session changed. Reopen the window.'
           : error.code === 'workload_unavailable'
             ? 'This session is not ready yet.'
-            : `Aico's session service refused the request (${error.code}).`,
+            : error.code === 'unknown_model'
+              ? 'Agent Hub cannot use that model. Pick another.'
+              : `Aico's session service refused the request (${error.code}).`,
     }
   }
   if (error instanceof TetherUnavailable)
@@ -144,10 +148,25 @@ export function createChatBridge(deps: ChatBridgeDeps) {
         const text = input.text
         if (typeof text !== 'string' || !text.trim() || text.length > MAX_CHAT_TEXT)
           throw new ChatRefusal('invalid_text', 'That message cannot be sent.')
+        // The model chosen for this message: an id, or null (or empty) for the agent's own
+        // routing. A call that names none leaves the session's model alone.
+        const model = input.model
+        if (
+          model !== undefined &&
+          model !== null &&
+          (typeof model !== 'string' || model.length > MAX_MODEL_ID)
+        )
+          throw new ChatRefusal('invalid_model', 'That model cannot be used.')
         const { body } = await tether.request<{ queued?: boolean }>(
           'POST',
           `/v1/sessions/${encodeURIComponent(current.id)}/inject`,
-          { generation: current.generation, text, mode: 'paste', submit: true },
+          {
+            generation: current.generation,
+            text,
+            mode: 'paste',
+            submit: true,
+            ...(model === undefined ? {} : { model: model || null }),
+          },
           { timeoutMs: 45_000 },
         )
         return { ok: true, value: { queued: body.queued === true } }

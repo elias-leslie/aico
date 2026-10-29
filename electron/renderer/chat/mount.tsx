@@ -5,10 +5,12 @@ import '@agent-hub/chat-ui/chat-ui.css'
 import './chat.css'
 import { ChatClientProvider, ChatPanel } from '@agent-hub/chat-ui'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { Component, type ReactNode } from 'react'
+import { Component, type ReactNode, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { ChatInfo } from '../../types'
+import { arcade, eyes } from '../window-frame'
 import { createBridgeClient } from './bridge-client'
+import { ModelPicker } from './model-picker'
 
 /** A crash in the chat view says so; it never leaves a blank window. */
 class ChatBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
@@ -33,6 +35,41 @@ class ChatBoundary extends Component<{ children: ReactNode }, { failed: boolean 
   }
 }
 
+/** The eyes read along and the tray goes amber while a turn runs, as for a terminal that prints. */
+function showBusy(busy: boolean): void {
+  eyes?.setBusy(busy)
+  arcade?.output(busy)
+  window.aico.win.setThinking(busy)
+}
+
+function ChatView({ info }: { info: ChatInfo }) {
+  // The session's own model to start with (what it was created or last sent with).
+  const [model, setModel] = useState(info.requestedModel ?? '')
+  const chosen = useRef(model)
+  chosen.current = model
+  const client = useMemo(
+    () =>
+      createBridgeClient(window.aico.chat, info, {
+        model: () => chosen.current || null,
+        onBusy: showBusy,
+      }),
+    [info],
+  )
+  return (
+    <ChatClientProvider client={client}>
+      <ChatPanel
+        agentSlug={info.agentSlug}
+        sessionId={info.sessionId}
+        layout="compact"
+        toolsEnabled
+        allowModelMentions={false}
+        config={{ model: model || null }}
+        renderBanner={() => <ModelPicker client={client} value={model} onChange={setModel} />}
+      />
+    </ChatClientProvider>
+  )
+}
+
 export async function mountChat(info: ChatInfo): Promise<void> {
   const host = document.getElementById('chat-root')
   const terminal = document.getElementById('terminal')
@@ -41,7 +78,6 @@ export async function mountChat(info: ChatInfo): Promise<void> {
   host.hidden = false
   document.documentElement.dataset.view = 'chat'
 
-  const client = createBridgeClient(window.aico.chat, info)
   const queries = new QueryClient({
     defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false, staleTime: 60_000 } },
   })
@@ -49,15 +85,7 @@ export async function mountChat(info: ChatInfo): Promise<void> {
   createRoot(host).render(
     <ChatBoundary>
       <QueryClientProvider client={queries}>
-        <ChatClientProvider client={client}>
-          <ChatPanel
-            agentSlug={info.agentSlug}
-            sessionId={info.sessionId}
-            layout="compact"
-            toolsEnabled
-            allowModelMentions={false}
-          />
-        </ChatClientProvider>
+        <ChatView info={info} />
       </QueryClientProvider>
     </ChatBoundary>,
   )

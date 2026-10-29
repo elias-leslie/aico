@@ -174,6 +174,65 @@ describe('bridge client', () => {
     await nextTick()
   })
 
+  it('sends the window’s chosen model with a message and with a queued follow-up', async () => {
+    const { bridge, opened, calls } = fakeBridge({
+      send: () => ({ ok: true, value: { queued: false } }),
+    })
+    let model: string | null = 'gemini-flash'
+    const client = createBridgeClient(bridge, INFO, { model: () => model })
+    const done = collect(
+      client.turns.stream({ messages: [{ role: 'user', content: 'first' }] } as never),
+    )
+    await vi.waitFor(() => expect(opened).toHaveLength(1))
+    opened[0].push(event('done', 1))
+    await done
+    model = null
+    await client.followUps?.send('hub-1', 'second')
+    model = 'deepseek-flash'
+    await client.followUps?.send('hub-1', 'third')
+    expect(calls).toEqual([
+      ['send', { sessionId: 'hub-1', text: 'first', model: 'gemini-flash' }],
+      ['send', { sessionId: 'hub-1', text: 'second', model: null }],
+      ['send', { sessionId: 'hub-1', text: 'third', model: 'deepseek-flash' }],
+    ])
+  })
+
+  it('says when a turn is running: from its first event to its end, once', async () => {
+    const { bridge, opened } = fakeBridge({})
+    const busy: boolean[] = []
+    const client = createBridgeClient(bridge, INFO, { onBusy: (on) => busy.push(on) })
+    const done = collect(client.turns.attach('hub-1', { afterSeq: 0 }))
+    await vi.waitFor(() => expect(opened).toHaveLength(1))
+    expect(busy).toEqual([])
+    opened[0].push(event('connected', 1))
+    opened[0].push(event('content', 2))
+    opened[0].push(event('done', 3))
+    await done
+    expect(busy).toEqual([true, false])
+  })
+
+  it('does not call an idle session busy, and a dropped or aborted stream is not busy', async () => {
+    const { bridge, opened } = fakeBridge({})
+    const busy: boolean[] = []
+    const client = createBridgeClient(bridge, INFO, { onBusy: (on) => busy.push(on) })
+    const idle = collect(client.turns.attach('hub-1', { afterSeq: 0 }))
+    await vi.waitFor(() => expect(opened).toHaveLength(1))
+    opened[0].push(event('idle'))
+    await idle
+    expect(busy).toEqual([])
+
+    const controller = new AbortController()
+    const running = collect(
+      client.turns.attach('hub-1', { afterSeq: 0, signal: controller.signal }),
+    )
+    await vi.waitFor(() => expect(opened).toHaveLength(2))
+    opened[1].push(event('content', 1))
+    await vi.waitFor(() => expect(busy).toEqual([true]))
+    controller.abort()
+    await expect(running).rejects.toMatchObject({ name: 'AbortError' })
+    expect(busy).toEqual([true, false])
+  })
+
   it('turns a failed call into an error with its code and status', async () => {
     const { bridge } = fakeBridge({
       queue: () => ({
