@@ -9,7 +9,7 @@ import {
   type RunsApi,
   RunTracker,
 } from './runs'
-import { pauseNotice, phaseWord, runMembers, runProgress } from './runs-view'
+import { executorTool, pauseNotice, phaseWord, runMembers, runProgress } from './runs-view'
 
 const NOW = Date.parse('2026-10-28T12:00:00Z')
 const CTX = { launcherId: 'c0d0ae59', url: 'http://hub/workflow-runs/r1' }
@@ -30,6 +30,17 @@ function view(id: string, state: string, steps: StepView[], extra: Partial<RunVi
     ...extra,
   } as RunView
 }
+
+describe('executorTool', () => {
+  it('names the tool of a step by its executor', () => {
+    expect(executorTool('pi')).toBe('pi')
+    expect(executorTool('codex')).toBe('codex')
+    expect(executorTool('claude_code')).toBe('claude-code')
+    expect(executorTool('agent_hub')).toBe('agent-hub')
+    expect(executorTool(undefined)).toBe('agent-hub')
+    expect(executorTool('something-new')).toBe('agent-hub')
+  })
+})
 
 describe('runMembers', () => {
   it('maps a running run and its steps, with the live phase and both models', () => {

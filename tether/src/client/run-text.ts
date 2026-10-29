@@ -67,19 +67,6 @@ export interface RunsAnswer {
 
 export type RunDecision = 'retry' | 'skip' | 'fail'
 
-/** Agent Hub's step executors as Aico tool slugs (the marks the session lists use). */
-const EXECUTOR_TOOL: Record<string, string> = {
-  pi: 'pi',
-  codex: 'codex',
-  claude_code: 'claude-code',
-  agent_hub: 'agent-hub',
-}
-
-/** The tool slug for a step's executor; a step with none known is an Agent Hub step. */
-export function executorTool(executor: unknown): string {
-  return (typeof executor === 'string' && EXECUTOR_TOOL[executor]) || 'agent-hub'
-}
-
 /** The steps a session list shows, as child agents of the session that launched
  * the run: those running or waiting for the owner (a failed step that paused the
  * run waits for a decision). Pending, finished, skipped, cancelled and failed
