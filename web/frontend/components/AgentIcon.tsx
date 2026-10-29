@@ -99,6 +99,34 @@ function ShellIcon({ size, color }: MarkProps) {
   )
 }
 
+/** Agent Hub — a hub node with six spokes to outer dots (its app logo, one colour) */
+function AgentHubIcon({ size, color }: MarkProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill={color}
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M12 12 12 3.6M12 12 12 20.4M12 12 4.7 7.8M12 12 19.3 7.8M12 12 4.7 16.2M12 12 19.3 16.2"
+        stroke={color}
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        fill="none"
+      />
+      <circle cx="12" cy="12" r="3.4" />
+      <circle cx="12" cy="3.6" r="2" />
+      <circle cx="12" cy="20.4" r="2" />
+      <circle cx="4.7" cy="7.8" r="2" />
+      <circle cx="19.3" cy="7.8" r="2" />
+      <circle cx="4.7" cy="16.2" r="2" />
+      <circle cx="19.3" cy="16.2" r="2" />
+    </svg>
+  )
+}
+
 /** Gemini — twin faceted diamonds */
 function GeminiIcon({ size, color }: { size: number; color: string }) {
   return (
@@ -232,6 +260,7 @@ function GenericAgentIcon({ size, color }: { size: number; color: string }) {
 
 const ICON_MAP: Record<string, (props: MarkProps) => JSX.Element> = {
   agy: AntigravityIcon,
+  'agent-hub': AgentHubIcon,
   'claude-code': ClaudeIcon,
   codex: CodexIcon,
   gemini: GeminiIcon,
@@ -244,6 +273,7 @@ const ICON_MAP: Record<string, (props: MarkProps) => JSX.Element> = {
  *  Spectrally distinct on a dark terminal canvas. */
 export const AGENT_DEFAULT_COLORS: Record<string, string> = {
   agy: '#3186FF', // Antigravity blue
+  'agent-hub': '#7C83F6', // Agent Hub blue-violet
   'claude-code': '#D97757', // Claude terracotta
   codex: '#9B8CFF', // Codex lavender
   gemini: '#A78BFA', // Soft violet — dual/twin energy

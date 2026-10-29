@@ -10,6 +10,8 @@ export type TuiInfo = {
   blankSlate?: boolean
   /** It can take chosen instructions (offered above the workspaces). */
   instructions?: boolean
+  /** A chat, not a command in a pane: it can start new, but cannot replace a pane's tool. */
+  chat?: boolean
 }
 export type ProjectInfo = { id: string; name: string; current: boolean }
 export type SessionCatalogStatus = 'ready' | 'empty' | 'unavailable'

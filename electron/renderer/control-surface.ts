@@ -818,8 +818,9 @@ function populateSubmenu(kind: FlyoutKind): void {
       )
     }
   } else {
-    if (catalogs.tuis.length) {
-      for (const t of catalogs.tuis) {
+    const replaceable = catalogs.tuis.filter((t) => !t.chat)
+    if (replaceable.length) {
+      for (const t of replaceable) {
         submenuEl.append(
           submenuRow(`replace:${t.slug}`, t.displayName, (dot) => {
             dot.className = 'aico-mark'

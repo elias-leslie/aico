@@ -37,6 +37,11 @@ export const TOOL_MARKS: Readonly<Record<string, BuiltinTool>> = {
     icon: '<svg viewBox="-28 -28 616 616" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M420 280H280V140H0V0H420ZM560 560H420V280H560ZM140 560H0V140H140V280H280V420H140Z"/></svg>',
     accent: '#C16A8A',
   },
+  'agent-hub': {
+    name: 'Agent Hub',
+    icon: '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M12 12 12 3.6M12 12 12 20.4M12 12 4.7 7.8M12 12 19.3 7.8M12 12 4.7 16.2M12 12 19.3 16.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/><circle cx="12" cy="12" r="3.4"/><circle cx="12" cy="3.6" r="2"/><circle cx="12" cy="20.4" r="2"/><circle cx="4.7" cy="7.8" r="2"/><circle cx="19.3" cy="7.8" r="2"/><circle cx="4.7" cy="16.2" r="2"/><circle cx="19.3" cy="16.2" r="2"/></svg>',
+    accent: '#7C83F6',
+  },
   shell: {
     name: 'Shell',
     icon: '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path fill-rule="evenodd" d="M6 3h12a4 4 0 0 1 4 4v10a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V7a4 4 0 0 1 4-4Zm.9 6.2a1 1 0 0 0-.1 1.4L8.7 12.5l-1.9 1.9a1 1 0 1 0 1.4 1.4l2.6-2.6a1 1 0 0 0 0-1.4L8.2 9.2a1 1 0 0 0-1.3 0ZM12.5 14.5a1 1 0 1 0 0 2h4.5a1 1 0 1 0 0-2Z"/></svg>',

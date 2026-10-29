@@ -296,6 +296,24 @@ export class Store {
           .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
           .run(14, now)
       }
+      if (current < 15) {
+        // v15: the Agent Hub chat joins the tool registry, so the new-session
+        // menus list it like any tool. An existing registry keeps what the
+        // owner set: nothing is added if the slug or alias is already taken.
+        const chat = DEFAULT_TOOLS.find((tool) => tool.slug === 'agent-hub')
+        if (chat && !this.getTool(chat.slug)) {
+          try {
+            this.assertNamesFree(chat.slug, chat.aliases, null)
+            this.insertTool(chat, now)
+          } catch (error) {
+            if (!(error instanceof ToolValidationError)) throw error
+            this.insertTool({ ...chat, aliases: [] }, now)
+          }
+        }
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(15, now)
+      }
     })
   }
 

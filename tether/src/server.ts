@@ -6,7 +6,7 @@ import type { GuiChannel } from './gui-channel'
 import { HttpError, Router, readJsonObject, sendError, sendJson } from './http'
 import { lifecycleStatus } from './lifecycle/engine'
 import { supportsBlankSlate } from './lifecycle/tui/blank-slate'
-import { isRootTool, supportsInstructions } from './lifecycle/tui/registry'
+import { isRootCreateTool, supportsInstructions } from './lifecycle/tui/registry'
 import { learnProjects, registerLifecycleRoutes } from './lifecycle-api'
 import type { MemoryPolicyService } from './memory-guard'
 import {
@@ -55,7 +55,7 @@ export interface ServerContext {
 function toolJson(tool: AgentTool): Record<string, unknown> {
   return {
     ...tool,
-    rootCapable: isRootTool(tool.slug),
+    rootCapable: isRootCreateTool(tool.slug),
     blankSlate: supportsBlankSlate(tool.slug),
     instructions: supportsInstructions(tool.slug),
   }

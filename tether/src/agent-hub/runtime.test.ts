@@ -337,6 +337,32 @@ describe('AgentHubRuntime', () => {
     expect(bodies.at(-1)).toMatchObject({ model: 'cheap-model' })
   })
 
+  it('opens a chat with no first message, then takes the first one from the owner', async () => {
+    const row = root('r-empty')
+    await runtime.ensure(row.id, '')
+    expect(hub.count('POST', /^\/api\/sessions$/)).toBe(1)
+    expect(hub.count('POST', /^\/api\/complete$/)).toBe(0)
+    expect(getAgentHubSession(row.id)).toMatchObject({ created: true, promptSent: true })
+    expect(await runtime.verify(row)).toBe('running')
+    expect(runtime.describe(row.id)?.error).toBeNull()
+    await runtime.send(row.id, 'First message.')
+    expect(hub.sessions.get(hubId(row))?.messages).toEqual(['First message.'])
+  })
+
+  it("keeps Agent Hub's field-level reason when it refuses the session", async () => {
+    const row = root('r-422')
+    hub.rejectNextCreate = {
+      loc: ['body', 'work_role', 'id'],
+      msg: 'Value error, Unknown work role ID',
+    }
+    await runtime.ensure(row.id, 'Say hello.')
+    expect(runtime.describe(row.id)?.error).toEqual({
+      code: 'agent_hub_refused',
+      message: expect.stringContaining('work_role.id: Value error, Unknown work role ID'),
+    })
+    expect(runtime.describe(row.id)?.error?.message).toContain('Request validation failed')
+  })
+
   it('refuses a follow-up before the first prompt, or while Agent Hub is down', async () => {
     const row = root()
     await expect(runtime.send(row.id, 'Too early.')).rejects.toMatchObject({

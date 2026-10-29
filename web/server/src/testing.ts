@@ -76,6 +76,7 @@ export class FakeTether {
       aliases: ['cc'],
     },
     { slug: 'codex', name: 'Codex', enabled: false, displayOrder: 2, isDefault: false },
+    { slug: 'agent-hub', name: 'Agent Hub', enabled: true, displayOrder: 3, isDefault: false },
   ]
   projectList = [{ id: 'aico', name: 'Aico', root: '/srv/workspaces/projects/aico' }]
   /** Fail `createSession` for this tool. */

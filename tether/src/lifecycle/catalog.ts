@@ -747,6 +747,35 @@ export function reserveRootRequest(
   }
 }
 
+/** A chat started from a menu rather than a root request: the widget row, its
+ * Agent Hub session and its project, in one step. */
+export function insertAgentHubChat(
+  id: string,
+  input: {
+    origin: SessionOrigin
+    aTermSessionId: string | null
+    projectId: string
+    projectRoot: string
+    hub: NewAgentHubSession
+  },
+  createdAt = Date.now(),
+): void {
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    insertWidget(id, 'agent-hub', createdAt, {
+      origin: input.origin,
+      aTermSessionId: input.aTermSessionId,
+      backend: 'agent-hub',
+    })
+    insertAgentHubSession(id, input.hub)
+    setWidgetProject(id, input.projectId, input.projectRoot)
+    db.exec('COMMIT')
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+}
+
 /** Insert a row observed in a pre-catalog tmux roster. A crash before the
  * subsequent generation bind remains fail-closed rather than turning live
  * orphaned work into an apparently fresh widget. */

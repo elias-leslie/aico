@@ -158,7 +158,14 @@ const spec = (over: Partial<TuiSpec> = {}): TuiSpec => ({
 describe('registry', () => {
   it('serves the seeded agent tools in display order', () => {
     registerBuiltinTuis()
-    expect(listTuis().map((t) => t.slug)).toEqual(['claude-code', 'codex', 'agy', 'pi', 'shell'])
+    expect(listTuis().map((t) => t.slug)).toEqual([
+      'claude-code',
+      'codex',
+      'agy',
+      'pi',
+      'agent-hub',
+      'shell',
+    ])
   })
 
   it('defaults to the registry default (Codex, owner decision)', () => {

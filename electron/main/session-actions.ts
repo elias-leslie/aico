@@ -14,6 +14,7 @@ import {
   wakeChoices,
   wakeClock,
 } from 'tether/client'
+import { CHAT_TOOL } from './chat-launch'
 import { type InstructionsChoice, parseChoice } from './instructions'
 import { describeFailure, writeNotice } from './notices'
 import { PERSONAL_WORKSPACE_ID, type ProjectCatalog } from './project'
@@ -405,6 +406,7 @@ export function createSessionActions(deps: SessionActionsDeps) {
           icon: mark.icon,
           blankSlate: tool.blankSlate === true,
           instructions: tool.instructions === true,
+          chat: tool.slug === CHAT_TOOL,
         }
       })
     })

@@ -155,6 +155,7 @@ describe('Store schema', () => {
       'codex',
       'agy',
       'pi',
+      'agent-hub',
       'shell',
     ])
     expect(migrated.defaultTool()?.slug).toBe('codex')
@@ -253,7 +254,14 @@ describe('agent tools', () => {
   it('seeds the merged registry with codex as default', () => {
     const store = open()
     const tools = store.listTools()
-    expect(tools.map((tool) => tool.slug)).toEqual(['claude-code', 'codex', 'agy', 'pi', 'shell'])
+    expect(tools.map((tool) => tool.slug)).toEqual([
+      'claude-code',
+      'codex',
+      'agy',
+      'pi',
+      'agent-hub',
+      'shell',
+    ])
     expect(store.defaultTool()?.slug).toBe('codex')
     expect(store.getTool('codex')?.command).toBe('codex --yolo')
     expect(store.getTool('shell')?.argv).toEqual([])

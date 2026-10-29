@@ -3,9 +3,11 @@
 // parse, fence and map results; every lifecycle decision is the engine's.
 
 import { execFile } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { promisify } from 'node:util'
 import { registerChatRoutes } from './agent-hub/chat-api'
+import { resolveDefaultChatAgent } from './agent-hub/config'
 import { type AgentHubRuntime, HubError } from './agent-hub/runtime'
 import type { AgentStateTracker, HookReport } from './agent-state'
 import type { TetherPaths } from './config'
@@ -16,6 +18,7 @@ import {
   allocateWidgetId,
   getTmuxServer,
   getWidget,
+  insertAgentHubChat,
   insertWidget,
   joinCoordinator,
   listSessions,
@@ -677,6 +680,68 @@ export function learnProjects(
     for (const row of listSessions()) notifySessionChanged(row.id, { force: true })
 }
 
+const AGENT_SLUG = /^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/
+const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/
+
+/**
+ * A chat on an Agent Hub agent, started from a menu: no terminal and no first
+ * message. The agent is the caller's `agentSlug`, else the configured default;
+ * the model is the agent's own unless the caller names one. Agent Hub is asked
+ * first, so an unknown agent or model, or Agent Hub being down, is refused
+ * before anything exists. A project root Agent Hub will not accept shows up
+ * with the first message (the chat reports Agent Hub's reason).
+ */
+async function createAgentHubChat(
+  res: ServerResponse,
+  body: Record<string, unknown>,
+  input: {
+    origin: SessionOrigin
+    aTermSessionId: string | null
+    name: string | null
+    projectId: string | null
+    projectRoot: string | null
+    hasInstructions: boolean
+  },
+): Promise<void> {
+  const { projectId, projectRoot } = input
+  if (body.blankSlate !== undefined && body.blankSlate !== false)
+    throw new HttpError(400, 'blank_slate_unsupported')
+  if (input.hasInstructions) throw new HttpError(400, 'instructions_unsupported')
+  if (!projectId || !projectRoot) throw new HttpError(400, 'invalid_body', { field: 'projectId' })
+  const agentSlug = body.agentSlug === undefined ? resolveDefaultChatAgent() : body.agentSlug
+  if (typeof agentSlug !== 'string' || !AGENT_SLUG.test(agentSlug))
+    throw new HttpError(400, 'invalid_body', { field: 'agentSlug' })
+  const model = body.model ?? null
+  if (model !== null && (typeof model !== 'string' || !MODEL_ID.test(model)))
+    throw new HttpError(400, 'invalid_body', { field: 'model' })
+  if (!agentHub) throw new HttpError(503, 'agent_hub_unavailable')
+  try {
+    await agentHub.check(agentSlug, model)
+  } catch (error) {
+    if (!(error instanceof HubError)) throw error
+    if (error.code === 'unknown_agent' || error.code === 'unknown_model')
+      throw new HttpError(422, error.code, { reason: error.message })
+    throw new HttpError(503, 'agent_hub_unavailable', { reason: error.message })
+  }
+  await whenReady()
+  const id = allocateWidgetId()
+  insertAgentHubChat(id, {
+    origin: input.origin,
+    aTermSessionId: input.aTermSessionId,
+    projectId,
+    projectRoot,
+    hub: { hubSessionId: randomUUID(), agentSlug, model },
+  })
+  if (input.name) setWidgetName(id, input.name)
+  await agentHub.ensure(id, '')
+  const row = getWidget(id)
+  if (!row) throw new HttpError(404, 'not_found')
+  const status = await verifySessionStatus(row).catch(() => cachedSessionStatus(row))
+  const latest = getWidget(id) ?? row
+  notifySessionChanged(id, { force: true })
+  sendJson(res, status === 'running' ? 201 : 202, descriptor(latest, status))
+}
+
 export function registerLifecycleRoutes(router: Router, context: LifecycleApiContext): void {
   if (context.continuity) registerRebootRoutes(router, context.continuity)
   if (context.recovery) registerRecoveryRoutes(router, context.recovery)
@@ -728,6 +793,8 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
         'origin',
         'aTermSessionId',
         'size',
+        'agentSlug',
+        'model',
       ])
       const origin = body.origin
       if (typeof origin !== 'string' || !ORIGINS.includes(origin as SessionOrigin)) {
@@ -782,6 +849,19 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
         throw new HttpError(400, 'invalid_body', { field: 'instructions' })
       if (instructions && !supportsInstructions(tool.slug))
         throw new HttpError(400, 'instructions_unsupported')
+      if (tool.slug === AGENT_HUB_TOOL) {
+        await createAgentHubChat(res, body, {
+          origin: origin as SessionOrigin,
+          aTermSessionId,
+          name,
+          projectId,
+          projectRoot,
+          hasInstructions: instructions !== null,
+        })
+        return
+      }
+      if (body.agentSlug !== undefined || body.model !== undefined)
+        throw new HttpError(400, 'invalid_body', { field: 'agentSlug' })
       await whenReady()
       if (!lingerEnabled()) throw new HttpError(503, 'linger_required')
 
@@ -884,6 +964,8 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
       const tool = store.resolveTool(body.tool)
       const spec = tool?.enabled ? getTui(tool.slug) : undefined
       if (!spec) throw new HttpError(400, 'unknown_tool')
+      // A chat has no terminal to put in a pane.
+      if (tool?.slug === AGENT_HUB_TOOL) throw new HttpError(400, 'unsupported_tool')
       const row = requireSession(params.id)
       requireTmuxBackend(row)
       fence(row, generation)

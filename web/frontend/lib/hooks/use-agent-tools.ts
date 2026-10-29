@@ -36,6 +36,9 @@ export interface AgentTool {
 /** The Tether slug of the bare-shell registry entry. */
 export const SHELL_TOOL_SLUG = 'shell'
 
+/** The Tether slug of the Agent Hub chat entry: a chat, not a command in a pane. */
+export const CHAT_TOOL_SLUG = 'agent-hub'
+
 export function isAgentTool(tool: Pick<AgentTool, 'slug'>): boolean {
   return tool.slug !== SHELL_TOOL_SLUG
 }

@@ -144,6 +144,76 @@ describe('agent-hub sessions over the control socket', () => {
     expect(hub.sessions.size).toBe(0)
   })
 
+  it('starts a chat from the new-session menu with no first message', async () => {
+    const chat = (extra: Record<string, unknown> = {}) =>
+      call('POST', '/v1/sessions', {
+        origin: 'aico',
+        tool: 'agent-hub',
+        agentSlug: 'chat',
+        projectId: 'sample-app',
+        projectRoot,
+        size: { cols: 80, rows: 24 },
+        ...extra,
+      })
+    const created = await chat()
+    expect(created.status).toBe(201)
+    const session = created.body as Body
+    expect(session).toMatchObject({
+      tool: 'agent-hub',
+      backend: 'agent-hub',
+      status: 'running',
+      projectId: 'sample-app',
+      state: 'idle',
+      agentHub: { agentSlug: 'chat', created: true, promptSent: true },
+    })
+    const [hubSession] = [...hub.sessions.values()]
+    expect(hubSession.messages).toEqual([])
+    expect(hub.count('POST', /^\/api\/complete$/)).toBe(0)
+    // The owner types the first message in the chat.
+    const sent = await call('POST', `/v1/sessions/${session.id}/inject`, {
+      generation: session.generation,
+      text: 'reply with the single word ready',
+      mode: 'paste',
+      submit: true,
+    })
+    expect(sent.body).toMatchObject({ delivered: true, queued: false })
+    expect(hubSession.messages).toEqual(['reply with the single word ready'])
+
+    // Agent and model come from Agent Hub, not from the caller's code: an agent
+    // Agent Hub does not know, or a project path the body does not carry, is refused.
+    expect(await chat({ agentSlug: 'missing' })).toMatchObject({
+      status: 422,
+      body: { error: 'unknown_agent' },
+    })
+    expect(await chat({ model: 'nope' })).toMatchObject({
+      status: 422,
+      body: { error: 'unknown_model' },
+    })
+    expect((await chat({ projectId: undefined, projectRoot: undefined })).status).toBe(400)
+    // The default agent is configured, `coder` unless set otherwise.
+    expect(await chat({ agentSlug: undefined })).toMatchObject({
+      status: 422,
+      body: { error: 'unknown_agent' },
+    })
+    process.env.TETHER_AGENT_HUB_DEFAULT_AGENT = 'chat'
+    try {
+      expect((await chat({ agentSlug: undefined })).status).toBe(201)
+    } finally {
+      delete process.env.TETHER_AGENT_HUB_DEFAULT_AGENT
+    }
+    // Not for a terminal tool, and no replacing a pane with a chat.
+    expect((await chat({ tool: 'codex' })).status).toBe(400)
+  })
+
+  it('also lets a root start with no first message', async () => {
+    const created = await create({ requestId: 'empty-1', initialPrompt: '' })
+    expect(created.status).toBe(200)
+    expect([...hub.sessions.values()][0].messages).toEqual([])
+    expect((await create({ requestId: 'empty-2', tool: 'codex', initialPrompt: '' })).status).toBe(
+      400,
+    )
+  })
+
   it('makes the launching session the coordinator, never the child', async () => {
     insertWidget('aabbcc01', 'claude-code', 1_000, { origin: 'cli' })
     const created = await create({ launchedBy: 'aabbcc01' })

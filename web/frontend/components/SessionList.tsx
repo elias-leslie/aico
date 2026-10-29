@@ -149,7 +149,7 @@ const toolName = (
   mode: string,
 ): string =>
   tools.find((tool) => tool.slug === mode)?.name ??
-  (mode === 'shell' ? 'Shell' : mode === 'agent-hub' ? 'Agent Hub' : mode)
+  (mode === 'shell' ? 'Shell' : mode)
 
 /** What a row says under its name: its agent and what it is doing. The
  * list no longer groups by state, so the row says it. */

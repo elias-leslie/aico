@@ -76,6 +76,57 @@ describe('addProjectPaneAction', () => {
     expect(startAgent).toHaveBeenCalledWith('session-codex')
   })
 
+  it('opens an Agent Hub chat as it is: no terminal to wait for, no agent to start', async () => {
+    const createProjectPane = vi.fn().mockResolvedValue({
+      id: 'pane-chat',
+      pane_type: 'project',
+      project_id: 'project-a',
+      pane_order: 1,
+      pane_name: 'Project-a',
+      active_mode: 'agent-hub',
+      created_at: '2026-03-13T00:00:00Z',
+      sessions: [
+        {
+          id: 'session-chat',
+          name: 'Project A chat',
+          mode: 'agent-hub',
+          backend: 'agent-hub',
+          session_number: 1,
+          is_alive: true,
+          working_dir: '/workspace/project-a',
+          claude_state: 'running',
+        },
+      ],
+      width_percent: 100,
+      height_percent: 100,
+      grid_row: 0,
+      grid_col: 0,
+    })
+    const navigateToSession = vi.fn()
+    const startAgent = vi.fn().mockResolvedValue(true)
+
+    await addProjectPaneAction(
+      'project-a',
+      'agent-hub',
+      '/workspace/project-a',
+      [],
+      [],
+      createProjectPane,
+      navigateToSession,
+      startAgent,
+    )
+
+    expect(createProjectPane).toHaveBeenCalledWith(
+      'Project-a',
+      'project-a',
+      '/workspace/project-a',
+      'agent-hub',
+    )
+    expect(navigateToSession).toHaveBeenCalledWith('session-chat')
+    expect(waitForTmuxInit).not.toHaveBeenCalled()
+    expect(startAgent).not.toHaveBeenCalled()
+  })
+
   it('opens new project panes in shell mode when no explicit mode is requested', async () => {
     const createProjectPane = vi.fn().mockResolvedValue({
       id: 'pane-project-b',

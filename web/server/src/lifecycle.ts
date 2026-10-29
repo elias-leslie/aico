@@ -43,6 +43,9 @@ export interface StartAgentResult {
 
 const DEFAULT_SIZE = { cols: 120, rows: 30 }
 
+/** The tool slug of an Agent Hub chat (Tether's AGENT_HUB_TOOL). */
+const CHAT_MODE = 'agent-hub'
+
 /** Run a Tether call, answering its refusals as the API's errors. */
 export async function tetherCall<T>(work: () => Promise<T>, notFound?: string): Promise<T> {
   try {
@@ -205,7 +208,9 @@ export function createLifecycle(deps: LifecycleDeps) {
     const modes = [SHELL_MODE]
     if (paneType === 'project') {
       const agent = input.agentMode ?? (await defaultAgentSlug())
-      if (agent !== SHELL_MODE) modes.push(agent)
+      // A chat has no terminal, so its tab holds the chat alone.
+      if (agent === CHAT_MODE) modes.splice(0, 1, agent)
+      else if (agent !== SHELL_MODE) modes.push(agent)
     }
     const pane = store.createPane({
       projectId,
@@ -234,7 +239,12 @@ export function createLifecycle(deps: LifecycleDeps) {
     }
     const activeMode = created[created.length - 1].mode
     store.updatePane(pane.id, { activeMode })
-    if (projectId) store.upsertProjectSettings(projectId, { enabled: true, activeMode })
+    // A project's remembered mode is a terminal mode; a chat leaves it alone.
+    if (projectId)
+      store.upsertProjectSettings(
+        projectId,
+        activeMode === CHAT_MODE ? { enabled: true } : { enabled: true, activeMode },
+      )
     return (await paneById(pane.id, false)).pane
   }
 
@@ -246,6 +256,7 @@ export function createLifecycle(deps: LifecycleDeps) {
       state,
     })
     if (session.is_root) return answer(false, 'Root launch is owned by its retained request')
+    if (session.backend === 'agent-hub') return answer(false, 'The chat needs no start')
     if (session.mode === SHELL_MODE)
       throw new HttpError(400, 'Session is in shell mode, not agent mode')
     if (session.status === 'running') return answer(false, 'Agent is already running')

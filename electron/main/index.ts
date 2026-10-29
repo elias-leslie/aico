@@ -25,6 +25,7 @@ import { createAmbient } from './ambient'
 import { createAttentionWiring } from './attention-wiring'
 import { createBridgeTransport } from './bridge-transport'
 import { createChatBridge } from './chat-bridge'
+import { CHAT_TOOL, createChatLauncher } from './chat-launch'
 import { createBridgeCompositor, createNativeCompositor, whenReady } from './compositor'
 import { readConfig } from './config'
 import { registerDesktopIpc } from './desktop-ipc'
@@ -288,13 +289,26 @@ const applyGuiCommand = createGuiChannel({
   tray: () => chrome.syncTray(),
 })
 
+// A new Agent Hub chat is created first and its window opens on it; every other
+// tool opens its window first and Tether creates the session at its grid size.
+const launchChat = createChatLauncher({
+  tether,
+  catalog,
+  show: windows.focusOrReopen,
+  fail: (message) => void dialog.showMessageBox({ type: 'error', message, buttons: ['OK'] }),
+})
+const newSession: typeof windows.openNew = (tool, projectId, instructions) => {
+  if (tool === CHAT_TOOL) void launchChat(projectId)
+  else windows.openNew(tool, projectId, instructions)
+}
+
 // What the owner can do to a session, all through Tether.
 const sessions = createSessionActions({
   tether,
   catalog,
   link,
   registry,
-  windows,
+  windows: { ...windows, openNew: newSession },
   projects,
   titles: () => chrome.pushTitles(),
   tray: () => chrome.syncTray(),
@@ -418,7 +432,7 @@ const startup = app.whenReady().then(async () => {
     onSelect: windows.focusOrReopen,
     onDiscard: (id) => void sessions.confirmTrayDiscard(id),
     onCancelCheckIn: sessions.cancelCheckIn,
-    onNewWidget: windows.openNew,
+    onNewWidget: newSession,
     onRefreshSessions: () => {
       projects.invalidate()
       link.requestRefresh()

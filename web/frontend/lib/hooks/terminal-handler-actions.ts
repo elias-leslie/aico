@@ -55,7 +55,8 @@ export async function addProjectPaneAction(
 
     navigateToSession(targetSession.id)
 
-    if (targetMode !== 'shell') {
+    // A chat is running from the start: nothing to wait for or start.
+    if (targetMode !== 'shell' && targetSession.backend !== 'agent-hub') {
       await waitForTmuxInit()
       await startAgent(targetSession.id)
     }

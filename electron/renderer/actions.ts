@@ -308,7 +308,7 @@ let tuiActions: Action[] = []
  * "Replace with <TUI>" launcher (runs in the focused widget, replacing whatever's there).
  * Both are pinnable. */
 export function setTuiActions(
-  tuis: { slug: string; displayName: string; accent: string; icon?: string }[],
+  tuis: { slug: string; displayName: string; accent: string; icon?: string; chat?: boolean }[],
 ): void {
   tuiActions = tuis.flatMap((t) => [
     {
@@ -323,16 +323,21 @@ export function setTuiActions(
       // icon), which calls newWidget(slug, projectId) once a project is chosen.
       picksProject: true,
     },
-    {
-      id: `replace:${t.slug}`,
-      section: 'Session',
-      label: `Restart with ${t.displayName}`,
-      shortcut: '', // destructive (ends the current pane) — no chord
-      icon: '⟳',
-      accent: t.accent,
-      svg: t.icon,
-      run: () => window.aico.actions.loadTui(t.slug),
-    },
+    // A chat has no pane to restart in.
+    ...(t.chat
+      ? []
+      : [
+          {
+            id: `replace:${t.slug}`,
+            section: 'Session' as const,
+            label: `Restart with ${t.displayName}`,
+            shortcut: '', // destructive (ends the current pane) — no chord
+            icon: '⟳',
+            accent: t.accent,
+            svg: t.icon,
+            run: () => window.aico.actions.loadTui(t.slug),
+          },
+        ]),
   ])
 }
 

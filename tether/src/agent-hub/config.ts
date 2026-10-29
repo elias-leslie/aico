@@ -64,6 +64,14 @@ export function resolveAgentHubConfig(
   }
 }
 
+/** The Agent Hub agent a chat started from the new-session menu talks to:
+ * `TETHER_AGENT_HUB_DEFAULT_AGENT`, else `coder`. A caller can name another. */
+export const DEFAULT_CHAT_AGENT = 'coder'
+
+export function resolveDefaultChatAgent(env: NodeJS.ProcessEnv = process.env): string {
+  return env.TETHER_AGENT_HUB_DEFAULT_AGENT?.trim() || DEFAULT_CHAT_AGENT
+}
+
 /** How long a new turn is watched for an immediate failure (ms): `TETHER_AGENT_HUB_SETTLE_MS`,
  * else null (the runtime's own default). */
 export function resolveSettleMs(env: NodeJS.ProcessEnv = process.env): number | null {

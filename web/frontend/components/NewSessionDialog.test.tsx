@@ -9,14 +9,21 @@ const projectState = vi.hoisted(() => ({
   refetch: vi.fn(),
 }))
 const tools = [
-  { slug: 'claude-code', name: 'Claude Code', color: null },
-  { slug: 'codex', name: 'Codex', color: null },
+  { slug: 'claude-code', name: 'Claude Code', color: null, description: null },
+  { slug: 'codex', name: 'Codex', color: null, description: null },
+  {
+    slug: 'agent-hub',
+    name: 'Agent Hub',
+    color: '#7C83F6',
+    description: 'Any model',
+  },
 ]
 
 vi.mock('@/lib/hooks/use-project-settings', () => ({
   useProjectSettings: () => projectState,
 }))
 vi.mock('@/lib/hooks/use-agent-tools', () => ({
+  CHAT_TOOL_SLUG: 'agent-hub',
   useAgentTools: () => ({ enabledTools: tools, defaultTool: tools[0] }),
 }))
 
@@ -87,6 +94,19 @@ describe('NewSessionDialog', () => {
       screen.getByRole('button', { name: 'Start a shell in Aico' }),
     )
     expect(onStart).toHaveBeenCalledWith('aico', '/srv/aico', 'shell')
+  })
+
+  it('lists Agent Hub with its note and starts it as the chosen agent', () => {
+    const { onStart } = renderDialog('neri')
+
+    fireEvent.click(screen.getByRole('button', { name: /Agent Hub/ }))
+    expect(screen.getByTestId('new-session-tool-note')).toHaveTextContent(
+      'Any model',
+    )
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Start Agent Hub in Neri' }),
+    )
+    expect(onStart).toHaveBeenCalledWith('neri', '/srv/neri', 'agent-hub')
   })
 
   it('filters projects by name or path', () => {

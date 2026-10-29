@@ -56,7 +56,10 @@ export function failure(error: unknown): ChatFailure {
         : error.code === 'stale_generation' || error.code === 'identity_changed'
           ? 'This session changed. Reopen the window.'
           : error.code === 'workload_unavailable'
-            ? 'This session is not ready yet.'
+            ? // Agent Hub's own reason for a refused message (a folder it will not work in).
+              error.reason
+              ? `Agent Hub refused: ${error.reason}`
+              : 'This session is not ready yet.'
             : error.code === 'unknown_model'
               ? 'Agent Hub cannot use that model. Pick another.'
               : `Aico's session service refused the request (${error.code}).`,

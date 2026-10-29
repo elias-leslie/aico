@@ -352,7 +352,8 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     !KEY.test(projectId) ||
     !isProjectRootPath(projectRoot) ||
     typeof initialPrompt !== 'string' ||
-    !initialPrompt.trim() ||
+    // An Agent Hub chat may start with no first message; every other root needs one.
+    (!hub && !initialPrompt.trim()) ||
     initialPrompt.includes('\0') ||
     Buffer.byteLength(initialPrompt) > MAX_FRESH_PROMPT_BYTES ||
     (resumeSessionId !== undefined &&

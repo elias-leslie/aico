@@ -116,7 +116,9 @@ export interface AicoApi {
     instructionPrompts(): Promise<Listing<InstructionPrompt>>
     instructionRevisions(slug: string): Promise<Listing<InstructionRevision>>
     /** Enabled TUIs (slug + label + accent + SVG mark), in registry order, for the picker. */
-    listTuis(): Promise<{ slug: string; displayName: string; accent: string; icon: string }[]>
+    listTuis(): Promise<
+      { slug: string; displayName: string; accent: string; icon: string; chat?: boolean }[]
+    >
     /** Replace the focused widget's running TUI with `tool` (respawns the pane). */
     loadTui(tool: string): void
     /** Aico workspace catalog for the "Open workspace" picker. */

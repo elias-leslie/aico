@@ -46,6 +46,9 @@ export class FakeHub {
   failNextTurn: string | null = null
   /** Like `failNextTurn`, but the `error` event comes this many ms after `connected`. */
   failNextTurnLate: { error: string; afterMs: number } | null = null
+  /** Answer the next session create with a 422 like Agent Hub's validation errors do: a generic
+   * message and the field-level reason in `details`. */
+  rejectNextCreate: { loc: string[]; msg: string } | null = null
   /** Attach connections currently open. */
   readonly streams = new Map<ServerResponse, string>()
   private server: Server | null = null
@@ -117,6 +120,15 @@ export class FakeHub {
     if (route === 'GET /api/agents')
       return json(200, { agents: this.agents, total: this.agents.length })
     if (route === 'GET /api/models') return json(200, { models: this.models })
+    if (route === 'POST /api/sessions' && body && this.rejectNextCreate) {
+      const detail = this.rejectNextCreate
+      this.rejectNextCreate = null
+      return json(422, {
+        error: 'validation_error',
+        message: 'Request validation failed',
+        details: [{ ...detail, type: 'value_error' }],
+      })
+    }
     if (route === 'POST /api/sessions' && body) {
       const id = String(body.session_id)
       if (!this.sessions.has(id))

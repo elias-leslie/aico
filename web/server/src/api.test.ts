@@ -416,6 +416,33 @@ describe('panes', () => {
     expect((await call('GET', '/api/panes/detached')).body).toMatchObject({ total: 0 })
   })
 
+  it('opens an Agent Hub chat as a tab of its own, with no shell, and keeps the project mode', async () => {
+    const { status, body } = await call('POST', '/api/panes', {
+      pane_type: 'project',
+      pane_name: 'Aico',
+      project_id: 'aico',
+      working_dir: '/srv/workspaces/projects/aico',
+      agent_tool_slug: 'agent-hub',
+    })
+    expect(status).toBe(200)
+    expect(body).toMatchObject({ active_mode: 'agent-hub' })
+    expect(body.sessions.map((s: { mode: string }) => s.mode)).toEqual(['agent-hub'])
+    const creates = tether
+      .callsOf('request')
+      .filter(([method, path]) => method === 'POST' && path === '/v1/sessions')
+      .map(([, , input]) => input)
+    expect(creates).toEqual([
+      expect.objectContaining({
+        tool: 'agent-hub',
+        projectId: 'aico',
+        projectRoot: '/srv/workspaces/projects/aico',
+      }),
+    ])
+    // The project's remembered mode stays a terminal mode.
+    expect(store.allProjectSettings().get('aico')).toMatchObject({ enabled: true })
+    expect(store.allProjectSettings().get('aico')?.active_mode).not.toBe('agent-hub')
+  })
+
   it('ends what it created and drops the tab when Tether refuses a session', async () => {
     tether.failTool = 'claude'
     const { status } = await call('POST', '/api/panes', {
@@ -549,7 +576,12 @@ describe('projects, tools, Agent Hub, health', () => {
 
   it('lists agent tools in the old shape', async () => {
     const all = (await call('GET', '/api/agent-tools')).body
-    expect(all.map((t: { slug: string }) => t.slug)).toEqual(['shell', 'claude', 'codex'])
+    expect(all.map((t: { slug: string }) => t.slug)).toEqual([
+      'shell',
+      'claude',
+      'codex',
+      'agent-hub',
+    ])
     expect(all[1]).toMatchObject({
       id: 'claude',
       name: 'Claude',
@@ -557,7 +589,7 @@ describe('projects, tools, Agent Hub, health', () => {
       aliases: ['cc'],
     })
     const enabled = (await call('GET', '/api/agent-tools?enabled_only=true')).body
-    expect(enabled.map((t: { slug: string }) => t.slug)).toEqual(['shell', 'claude'])
+    expect(enabled.map((t: { slug: string }) => t.slug)).toEqual(['shell', 'claude', 'agent-hub'])
   })
 
   it('answers 503 when Agent Hub is not configured', async () => {

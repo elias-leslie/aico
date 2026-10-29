@@ -58,8 +58,7 @@ export function createRuns(deps: RunsDeps) {
   function widgets(): TrayWidget[] {
     const now = (deps.now ?? Date.now)()
     return childAgents(answer?.items ?? []).map((member) => {
-      const tool =
-        member.tool === 'agent-hub' ? 'Agent Hub' : toolDisplayName(member.tool ?? '', deps.tools())
+      const tool = toolDisplayName(member.tool ?? '', deps.tools())
       const state = member.group === 'needs-you' ? 'blocked' : 'working'
       return {
         id: member.id,

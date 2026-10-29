@@ -433,7 +433,7 @@ and optional opaque `leadRootReference`, `facetCapsuleRef`, and
 
 `agent-hub` is the one root kind with no terminal: a chat session on an Agent Hub agent
 (`st aico create REQ PROMPT --tool agent-hub --agent SLUG --project P --project-root PATH
---work-role R [--model M]`). `agentSlug` is required for it and refused for every other tool;
+--work-role R [--model M]`). `agentSlug` is required for it and refused for every other tool; its `initialPrompt` may be empty (the chat opens with no first message and the owner types it), while every other root needs one;
 it is appended to the digest (`{agentSlug}`) only when present, so existing digests do not
 change. Tether creates the Agent Hub session under its own id, with the root's ownership id
 as `external_id`, and posts `initialPrompt` as the first turn; `st aico root send` posts a
@@ -446,6 +446,8 @@ terminal. Tether makes every Agent Hub call; the window's main process asks Teth
 private socket for that window's own session, so the owner token and the Agent Hub address
 never reach the page. `show` and `position` reach the desktop for these roots; `title` and
 `coordinator` stay catalog-only. Resume, reasoning effort, Daybreak and Agent Hub context do not apply.
+
+When Agent Hub refuses to create the session (for example a work role it does not know), the failure carries its field-level reason from the response's `details` (`work_role.id: Value error, Unknown work role ID`), not just "Request validation failed"; it shows in `agentHub.error`, `st aico create` and `st aico root status`, and in the chat.
 
 A turn counts as started only once Agent Hub is running it: Agent Hub stores the prompt and
 sends `connected` first, then an `error` event if it cannot run the turn (a working

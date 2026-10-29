@@ -4,7 +4,7 @@ import * as Dialog from '@radix-ui/react-dialog'
 import { clsx } from 'clsx'
 import { Search, X } from 'lucide-react'
 import { type ReactNode, useMemo, useState } from 'react'
-import { useAgentTools } from '@/lib/hooks/use-agent-tools'
+import { CHAT_TOOL_SLUG, useAgentTools } from '@/lib/hooks/use-agent-tools'
 import {
   type ProjectSetting,
   useProjectSettings,
@@ -162,6 +162,15 @@ export function NewSessionDialog({
                     </button>
                   ))}
                 </fieldset>
+              )}
+              {tool?.slug === CHAT_TOOL_SLUG && tool.description && (
+                <p
+                  className="mt-2 text-xs"
+                  style={{ color: 'var(--mist)' }}
+                  data-testid="new-session-tool-note"
+                >
+                  {tool.description}
+                </p>
               )}
             </div>
           </div>

@@ -120,8 +120,9 @@ contextBridge.exposeInMainWorld('aico', {
     instructionRevisions: (slug: string): Promise<Listing<InstructionRevision>> =>
       ipcRenderer.invoke('instructions:revisions', slug),
     /** Enabled TUIs (slug + label + accent + SVG mark), in registry order, for the picker. */
-    listTuis: (): Promise<{ slug: string; displayName: string; accent: string; icon: string }[]> =>
-      ipcRenderer.invoke('tui:list'),
+    listTuis: (): Promise<
+      { slug: string; displayName: string; accent: string; icon: string; chat?: boolean }[]
+    > => ipcRenderer.invoke('tui:list'),
     /** Replace the focused widget's running TUI with `tool` (respawns the pane). */
     loadTui: (tool: string) => ipcRenderer.send('widget:load-tui', tool),
     /** Aico workspace catalog for the "Open workspace" picker. */

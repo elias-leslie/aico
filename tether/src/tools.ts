@@ -90,6 +90,21 @@ export const DEFAULT_TOOLS: readonly ToolSeed[] = [
     contextHook: 'pi-extension',
   },
   {
+    // The Agent Hub chat: no command and no terminal (see AGENT_HUB_TOOL). The
+    // name here is the one label every Aico screen shows for it.
+    slug: 'agent-hub',
+    name: 'Agent Hub',
+    argv: [],
+    processName: '',
+    description: 'Any model',
+    color: '#7C83F6',
+    displayOrder: 4,
+    isDefault: false,
+    enabled: true,
+    aliases: [],
+    contextHook: null,
+  },
+  {
     slug: 'shell',
     name: 'Shell',
     argv: [],

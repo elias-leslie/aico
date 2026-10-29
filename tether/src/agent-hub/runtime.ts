@@ -81,6 +81,33 @@ interface SdkErrorShape {
   status?: number
   code?: string
   message?: string
+  /** The server's `details`: a validation error's list of `{loc, msg}`, or text. */
+  details?: unknown
+}
+
+const MAX_DETAIL_CHARS = 400
+
+/** Agent Hub's field-level reason in plain words, from a validation error's
+ * `details` (`work_role.id: Value error, Unknown work role ID`). Only the
+ * field path and message are read, never the submitted value. Empty when
+ * there is nothing to say. */
+export function describeHubDetails(details: unknown): string {
+  const items = Array.isArray(details) ? details : details == null ? [] : [details]
+  const lines: string[] = []
+  for (const item of items) {
+    if (typeof item === 'string') {
+      if (item.trim()) lines.push(item.trim())
+      continue
+    }
+    if (!item || typeof item !== 'object') continue
+    const { loc, msg } = item as { loc?: unknown; msg?: unknown }
+    if (typeof msg !== 'string' || !msg.trim()) continue
+    const field = Array.isArray(loc)
+      ? loc.filter((part) => part !== 'body' && typeof part !== 'object').join('.')
+      : ''
+    lines.push(field ? `${field}: ${msg.trim()}` : msg.trim())
+  }
+  return lines.join('; ').slice(0, MAX_DETAIL_CHARS)
 }
 
 /** Sort an SDK failure into what Tether does about it. */
@@ -92,7 +119,9 @@ export function classifyHubError(error: unknown): HubError {
     return new HubError('turn_running', 'a turn is already running')
   if (status === 0 || status >= 500 || status === 429)
     return new HubError('agent_hub_unavailable', e.message ?? 'Agent Hub is not reachable')
-  return new HubError('agent_hub_refused', e.message ?? `Agent Hub refused the request (${status})`)
+  const reason = e.message ?? `Agent Hub refused the request (${status})`
+  const detail = describeHubDetails(e.details)
+  return new HubError('agent_hub_refused', detail ? `${reason}: ${detail}` : reason)
 }
 
 /** The refusal a turn's `error` event stands for; Agent Hub's own words, never the prompt. */
@@ -257,7 +286,10 @@ export class AgentHubRuntime {
           })
           markAgentHubCreated(widgetId)
         }
-        if (!hub.promptSent) {
+        if (!hub.promptSent && !prompt.trim()) {
+          // A chat opened with no first message: the owner types it in the chat.
+          markAgentHubPromptSent(widgetId)
+        } else if (!hub.promptSent) {
           // Posted before a crash only if its turn is running or has answered: a prompt Agent Hub
           // stored and then failed to run (a refused turn) is posted again.
           const existing = await api.sessions.get(hub.hubSessionId, { includeMessages: true })
