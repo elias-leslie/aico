@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { LANTERN_MONO_FACE, LANTERN_SYMBOLS_FACE } from '../constants/lantern'
+import { fitTerminal } from '../terminal/fit'
 import { isMobileDevice } from '../utils/device'
 import { setupMobileNativeSelection } from './mobile-native-selection'
 import {
@@ -141,7 +142,7 @@ export function useTerminalInstance(
         containerRef.current,
         { onPaste: opts.onPaste, onFilePaste: opts.onFilePaste },
       )
-      fitAddon.fit()
+      fitTerminal(fitAddon)
       window.setTimeout(() => {
         if (!mounted || terminalRef.current !== term) return
         opts.onRendererStatus?.(
@@ -212,7 +213,7 @@ export function useTerminalInstance(
     if (!terminalRef.current) return
     terminalRef.current.options.fontSize = options.fontSize
     terminalRef.current.options.scrollback = options.scrollback
-    fitAddonRef.current?.fit()
+    if (fitAddonRef.current) fitTerminal(fitAddonRef.current)
   }, [options.fontSize, options.scrollback, terminalRef, fitAddonRef])
 
   return { isReady }

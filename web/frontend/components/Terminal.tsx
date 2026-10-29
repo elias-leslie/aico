@@ -24,6 +24,7 @@ import {
   swallowQueryReplies,
   trackSgrMouse,
 } from '../lib/terminal/control-view'
+import { usableDimensions } from '../lib/terminal/fit'
 import { keepReadingPlace } from '../lib/terminal/reading-place'
 import { isMobileDevice } from '../lib/utils/device'
 import { ScrollToBottomPill } from './ScrollToBottomPill'
@@ -177,8 +178,8 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
           setHeldBy(here ? null : sizeHolderName(viewer))
         },
         getDimensions: () =>
-          ownsResize
-            ? (fitAddonRef.current?.proposeDimensions() ?? null)
+          ownsResize && fitAddonRef.current
+            ? usableDimensions(fitAddonRef.current)
             : null,
       })
 
@@ -293,7 +294,7 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
       }
     }, [isReady, onViewportMoved])
 
-    const { handleResize } = useTerminalResize({
+    const { handleResize, requestClaim } = useTerminalResize({
       terminalRef,
       fitAddonRef,
       containerRef,
@@ -342,8 +343,8 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
 
     useEffect(() => {
       if (!ownsResize || !isReady || status !== 'connected') return
-      handleResize()
-    }, [handleResize, isReady, ownsResize, status])
+      requestClaim()
+    }, [requestClaim, isReady, ownsResize, status])
 
     return (
       <div

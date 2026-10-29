@@ -1,4 +1,5 @@
-import type { IBufferLine, ILink, Terminal } from '@xterm/xterm'
+import type { IBuffer, IBufferLine, ILink, Terminal } from '@xterm/xterm'
+import { MAX_LINK_SCAN_CHARS } from '@/lib/constants/terminal'
 import { openFiles } from '@/lib/files-opener'
 
 /** An absolute or home path, starting where a word starts (so not the `//` of a URL). */
@@ -30,22 +31,44 @@ export function findPaths(text: string): FoundPath[] {
 }
 
 /**
+ * The wrapped rows that read as one line around `row` (0-based), at most
+ * `maxChars` of text either side, and never past the rows the buffer holds.
+ *
+ * xterm's `getLine` answers past the last row too: its rows wrap around, so a
+ * screen where every row is marked wrapped (a full-screen program painting
+ * wider than the pane, as in the middle of a resize) never reached the end of
+ * the chain, and this loop built rows until the page ran out of memory.
+ */
+export function wrappedRows(
+  buffer: Pick<IBuffer, 'length' | 'getLine'>,
+  row: number,
+  cols: number,
+  maxChars: number = MAX_LINK_SCAN_CHARS,
+): { first: number; lines: IBufferLine[] } {
+  if (row < 0 || row >= buffer.length) return { first: row, lines: [] }
+  const span = Math.max(1, Math.ceil(maxChars / Math.max(cols, 1)))
+  let first = row
+  const floor = Math.max(0, first - span)
+  while (first > floor && buffer.getLine(first)?.isWrapped) first -= 1
+  const end = Math.min(buffer.length, row + 1 + span)
+  const lines: IBufferLine[] = []
+  for (let y = first; y < end; y += 1) {
+    const line = buffer.getLine(y)
+    if (!line || (y > first && !line.isWrapped)) break
+    lines.push(line)
+  }
+  return { first, lines }
+}
+
+/**
  * Makes file paths in the terminal clickable: a click opens the path in the
  * Files viewer. Rows wrapped from one long line are read as one line.
  */
 export function registerPathLinks(term: Terminal): { dispose(): void } {
   return term.registerLinkProvider({
     provideLinks(row, callback) {
-      const buffer = term.buffer.active
-      let first = row - 1
-      while (first > 0 && buffer.getLine(first)?.isWrapped) first -= 1
-      const lines: IBufferLine[] = []
-      for (let y = first; ; y += 1) {
-        const line = buffer.getLine(y)
-        if (!line || (y > first && !line.isWrapped)) break
-        lines.push(line)
-      }
       const cols = term.cols
+      const { first, lines } = wrappedRows(term.buffer.active, row - 1, cols)
       const text = lines
         .map((line, index) =>
           line.translateToString(index === lines.length - 1),

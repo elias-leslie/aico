@@ -119,7 +119,7 @@ vi.mock('../lib/hooks/use-terminal-resize', () => ({
     resizeHookOptions = options as Parameters<
       typeof import('../lib/hooks/use-terminal-resize')['useTerminalResize']
     >[0]
-    return { handleResize: resizeHandle }
+    return { handleResize: resizeHandle, requestClaim: resizeHandle }
   }),
 }))
 

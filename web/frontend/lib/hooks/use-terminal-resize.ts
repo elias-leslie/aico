@@ -1,6 +1,11 @@
 import type { FitAddon } from '@xterm/addon-fit'
 import { useCallback, useEffect, useRef } from 'react'
-import { FIT_DEBOUNCE_MS, PTY_RESIZE_DEBOUNCE_MS } from '../constants/terminal'
+import {
+  FIT_COST_RATIO,
+  FIT_DEBOUNCE_MS,
+  PTY_RESIZE_DEBOUNCE_MS,
+} from '../constants/terminal'
+import { fitTerminal, usableDimensions } from '../terminal/fit'
 
 type XtermTerminal = InstanceType<typeof import('@xterm/xterm').Terminal>
 
@@ -40,11 +45,15 @@ export function attachViewportResizeListeners(
 /**
  * Hook to manage terminal resizing with ResizeObserver and WebSocket dimension updates.
  *
- * Two-stage debounce: the local xterm fit runs on a short debounce so the visual
- * keeps up with window drags, but the backend message only fires on the
- * trailing edge — SIGWINCH mid-drag causes shells with fancy prompts and heavy
- * TUIs (Claude Code, Codex CLI) to redraw repeatedly, which the user perceives
- * as flicker and slow resize. The shell only cares about the final size.
+ * Two stages: the local xterm fit is throttled (at most one pending fit,
+ * reading the container's size when it runs, spaced by FIT_COST_RATIO times
+ * what the last fit cost) so a window that keeps changing size cannot keep the
+ * page refitting, and the backend message only fires on the trailing edge —
+ * SIGWINCH mid-drag causes shells with fancy prompts and heavy TUIs (Claude
+ * Code, Codex CLI) to redraw their whole transcript repeatedly. The shell only
+ * cares about the final size. The claim waits for the pending fit and sends
+ * the size it just fitted. A container too small to be a terminal is neither
+ * fitted nor claimed.
  *
  * Only the active view (visible, focused, connected: `sendBackendResize`)
  * sends anything, and every size it sends is also a claim on the shared tmux
@@ -75,7 +84,9 @@ export function useTerminalResize(options: TerminalResizeOptions) {
       if (!sendBackendResize) return
       const ws = wsRef.current
       if (ws?.readyState !== WebSocket.OPEN) return
-      const dims = fitAddonRef.current?.proposeDimensions()
+      const dims = fitAddonRef.current
+        ? usableDimensions(fitAddonRef.current)
+        : null
       if (!dims) return
       const last = lastClaimRef.current
       if (
@@ -102,9 +113,20 @@ export function useTerminalResize(options: TerminalResizeOptions) {
   // if the size equals the last claim (another client may have claimed since).
   const handleResize = useCallback(() => {
     if (!fitAddonRef.current || !terminalRef.current) return
-    fitAddonRef.current.fit()
+    if (!fitTerminal(fitAddonRef.current)) return
     sendClaim(true)
   }, [terminalRef, fitAddonRef, sendClaim])
+
+  // Claim again once the layout has settled (the view became active): a window
+  // that regains focus is usually mid-resize (the focus event can arrive
+  // before the resize that caused it, and an immediate fit would claim the
+  // old size, then the new one 150 ms later, redrawing the program twice).
+  const scheduleRef = useRef<(() => void) | null>(null)
+  const forceClaimRef = useRef(false)
+  const requestClaim = useCallback(() => {
+    forceClaimRef.current = true
+    scheduleRef.current?.()
+  }, [])
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -112,24 +134,42 @@ export function useTerminalResize(options: TerminalResizeOptions) {
     let ptyTimer: ReturnType<typeof setTimeout> | null = null
     let lastWidth = 0
     let lastHeight = 0
+    let lastFitMs = 0
+
+    const fitNow = () => {
+      if (!fitAddonRef.current || !terminalRef.current) return
+      const started = performance.now()
+      fitTerminal(fitAddonRef.current)
+      lastFitMs = performance.now() - started
+    }
 
     const flushPtyResize = () => {
       ptyTimer = null
-      sendClaim(false)
+      if (fitTimer) {
+        clearTimeout(fitTimer)
+        fitTimer = null
+        fitNow()
+      }
+      const force = forceClaimRef.current
+      forceClaimRef.current = false
+      sendClaim(force)
     }
 
     const scheduleResize = () => {
-      if (fitTimer) clearTimeout(fitTimer)
-      fitTimer = setTimeout(() => {
-        fitTimer = null
-        if (fitAddonRef.current && terminalRef.current) {
-          fitAddonRef.current.fit()
-        }
-        if (ptyTimer) clearTimeout(ptyTimer)
-        ptyTimer = setTimeout(flushPtyResize, PTY_RESIZE_DEBOUNCE_MS)
-      }, FIT_DEBOUNCE_MS)
+      if (!fitTimer) {
+        fitTimer = setTimeout(
+          () => {
+            fitTimer = null
+            fitNow()
+          },
+          Math.max(FIT_DEBOUNCE_MS, lastFitMs * FIT_COST_RATIO),
+        )
+      }
+      if (ptyTimer) clearTimeout(ptyTimer)
+      ptyTimer = setTimeout(flushPtyResize, PTY_RESIZE_DEBOUNCE_MS)
     }
 
+    scheduleRef.current = scheduleResize
     const resizeObserver = new ResizeObserver((entries) => {
       const entry = entries[0]
       if (!entry) return
@@ -144,6 +184,7 @@ export function useTerminalResize(options: TerminalResizeOptions) {
     const viewportCleanup = attachViewportResizeListeners(scheduleResize)
 
     return () => {
+      scheduleRef.current = null
       if (fitTimer) clearTimeout(fitTimer)
       if (ptyTimer) clearTimeout(ptyTimer)
       viewportCleanup()
@@ -151,5 +192,5 @@ export function useTerminalResize(options: TerminalResizeOptions) {
     }
   }, [terminalRef, containerRef, fitAddonRef, sendClaim])
 
-  return { handleResize }
+  return { handleResize, requestClaim }
 }
