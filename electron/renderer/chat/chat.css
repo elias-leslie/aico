@@ -21,6 +21,9 @@
   --input: rgb(var(--glass-rgb) / 0.16);
   --ring: var(--lantern);
   --radius: 0.5rem;
+  --chat-ui-thinking: var(
+    --helm
+  ); /* the thinking block's accent: cool, so it never reads as the lantern accent */
 
   isolation: isolate;
   flex: 1;

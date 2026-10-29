@@ -178,6 +178,7 @@ describe('windows: opening', () => {
       height: 560,
       show: false,
       frame: false,
+      hasShadow: false,
       webPreferences: { contextIsolation: true, sandbox: true },
     })
     expect(hooks.changed).toHaveBeenCalledTimes(1)

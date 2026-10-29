@@ -159,6 +159,10 @@ export function createWindows(deps: WindowsDeps) {
       // transparent surface made Chromium alpha-composite every terminal repaint
       // across tens of millions of pixels even though only the 8px rim used alpha.
       frame: false,
+      // No native drop shadow. On a fractionally scaled Wayland display the shadow's
+      // insets get re-rounded on every focus change, so each window grew 1-3 px a
+      // time (terminal and chat windows alike). Lantern draws its own rim.
+      hasShadow: false,
       transparent: false,
       backgroundColor: INK,
       icon: join(__dirname, '../../assets/icon.png'),
