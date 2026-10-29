@@ -127,6 +127,7 @@ function setup(o: { views?: ViewRow[]; live?: string[]; catalog?: string[] } = {
     loaded: vi.fn(),
     focused: vi.fn(),
     blurred: vi.fn(),
+    input: vi.fn(),
     visibility: vi.fn(),
     disposing: vi.fn((winId: number) => {
       calls.push(`disposing ${winId} bound=${registry.sessionOf(winId) ?? '-'}`)
@@ -496,6 +497,23 @@ describe('windows: restore and activation', () => {
     expect(FakeWindow.all.map((w) => registry.sessionOf(w.id))).toEqual(['aaaaaaaa'])
     windows.restoreOnLaunch() // already open: no second window
     expect(FakeWindow.all).toHaveLength(1)
+  })
+
+  it("reports the owner's keys, clicks and scrolls, not Aico's own focus or pointer moves", () => {
+    const { windows, hooks, only } = setup()
+    windows.openNew('shell', 'p')
+    const win = only()
+    const content = (event: string, data: unknown) => {
+      for (const fn of win.contentListeners.get(event) ?? []) fn({}, data)
+    }
+    win.emit('focus')
+    content('before-mouse-event', { type: 'mouseMove' })
+    content('before-input-event', { type: 'keyUp' })
+    expect(hooks.input).not.toHaveBeenCalled()
+    content('before-input-event', { type: 'keyDown' })
+    content('before-mouse-event', { type: 'mouseDown' })
+    content('before-mouse-event', { type: 'mouseWheel' })
+    expect(hooks.input).toHaveBeenCalledTimes(3)
   })
 
   it('restores open windows without taking focus', async () => {

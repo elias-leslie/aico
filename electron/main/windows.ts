@@ -27,6 +27,9 @@ interface WindowHooks {
   focused(win: BrowserWindow, sessionId: string | undefined): void
   /** Runs after the window is told it lost focus. */
   blurred(win: BrowserWindow): void
+  /** The owner pressed a key, clicked or scrolled in the window. Focus alone
+   * does not say that: GNOME focuses windows Aico itself shows. */
+  input(win: BrowserWindow): void
   /** The window was shown, hidden, minimized or restored. */
   visibility(win: BrowserWindow): void
   /** The window is gone: detach its terminal first, then drop per-window state. */
@@ -264,6 +267,12 @@ export function createWindows(deps: WindowsDeps) {
     }
 
     win.webContents.on('did-finish-load', () => hooks.loaded(win))
+    win.webContents.on('before-input-event', (_event, input) => {
+      if (input.type === 'keyDown') hooks.input(win)
+    })
+    win.webContents.on('before-mouse-event', (_event, mouse) => {
+      if (mouse.type === 'mouseDown' || mouse.type === 'mouseWheel') hooks.input(win)
+    })
 
     if (deps.rendererUrl) {
       win.loadURL(deps.rendererUrl)

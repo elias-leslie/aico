@@ -10,7 +10,7 @@ function holder(claimedAt: string, viewer: SizeHolder['viewer']): SizeHolder {
 }
 
 describe('owner surface', () => {
-  it('is the desktop until the web app claims a size, and again once an Aico window has focus', () => {
+  it('is the desktop until the web app claims a size, and again once the owner uses an Aico window', () => {
     const surface = createOwnerSurface()
     expect(surface.onDesktop()).toBe(true)
     surface.sizeHeld(web)
@@ -19,7 +19,7 @@ describe('owner surface', () => {
     surface.sizeHeld(desktop)
     surface.sizeHeld(null)
     expect(surface.onDesktop()).toBe(false)
-    surface.focused()
+    surface.used()
     expect(surface.onDesktop()).toBe(true)
   })
 
@@ -49,7 +49,7 @@ describe('owner surface', () => {
     const surface = createOwnerSurface()
     let answer: (holders: SizeHolder[]) => void = () => {}
     const seeding = surface.seed(() => new Promise((resolve) => (answer = resolve)))
-    surface.focused()
+    surface.used()
     answer([holder('2026-10-29T12:30:00.000Z', web)])
     await seeding
     expect(surface.onDesktop()).toBe(true)

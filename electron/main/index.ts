@@ -142,7 +142,6 @@ const windows = createWindows({
       attention.sendTo(win)
     },
     focused: (win, widgetId) => {
-      ownerSurface.focused()
       selection.noteFocus(widgetId)
       if (widgetId) {
         attention.focused(widgetId)
@@ -152,6 +151,7 @@ const windows = createWindows({
       ambient.focused(win.id)
     },
     blurred: (win) => ambient.blurred(win.id),
+    input: () => ownerSurface.used(),
     visibility: () => ambient.visibilityChanged(),
     disposing: (winId) => {
       // Terminal: detach first; the session persists (close = keep, reopenable).

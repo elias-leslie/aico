@@ -8,19 +8,20 @@
 import type { SizeHolder, ViewerLabel } from 'tether/client'
 
 export function createOwnerSurface() {
-  // Unknown until a claim or a focus says otherwise: the desktop, as before.
+  // Unknown until a claim or the owner's input says otherwise: the desktop, as before.
   let onDesktop = true
   // Bumped by every live signal, so a slower seed never overrides one.
   let seen = 0
   return {
-    /** An Aico window gained focus. */
-    focused(): void {
+    /** The owner pressed a key, clicked or scrolled in an Aico window. */
+    used(): void {
       onDesktop = true
       seen += 1
     },
     /** A client claimed a session's size. The web app claims only while its
      * terminal has focus or takes typing; the desktop also claims for windows
-     * it arranges, so only its focus (above) brings the owner back here. */
+     * it shows or arranges itself, so only the owner's input (above) brings
+     * the owner back here. */
     sizeHeld(viewer: ViewerLabel | null): void {
       if (viewer?.app !== 'web') return
       onDesktop = false
