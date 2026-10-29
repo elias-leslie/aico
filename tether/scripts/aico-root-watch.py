@@ -1369,6 +1369,7 @@ def create_main(argv: list[str]) -> int:
                 or state == "ended" and generation is not None):
             raise Unavailable("create_receipt_unqualified")
         output.update({key: data[key] for key in ("digest", "hostIdentity", "logicalSessionId", "generation", "surfaceLocator", "status")})
+        output.update(launch_deferral(data))
         output.update(workRole=args.work_role, workRoleDisplayName=args.work_role_name)
         if "launchedBy" in payload:
             output["launchedBy"] = payload["launchedBy"]
@@ -1514,6 +1515,22 @@ def view_payload(parser: argparse.ArgumentParser, args: argparse.Namespace) -> d
     return {}
 
 
+ISO_TIME = r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z"
+
+
+def launch_deferral(data: dict) -> dict:
+    """Why a pending root has not started (host admission deferred it) and when Aico tries again."""
+    launch = data.get("launch")
+    if (data.get("status") not in ("pending", "uncertain") or not isinstance(launch, dict)
+            or launch.get("state") != "deferred"
+            or not isinstance(launch.get("reason"), str) or not re.fullmatch(r"[\x20-\x7e]{1,300}", launch["reason"])
+            or not all(isinstance(launch.get(key), str) and re.fullmatch(ISO_TIME, launch[key])
+                       for key in ("checkedAt", "nextRetryAt"))
+            or type(launch.get("attempts")) is not int or not 0 < launch["attempts"] < 1_000_000):
+        return {}
+    return {"launch": {key: launch[key] for key in ("state", "reason", "checkedAt", "nextRetryAt", "attempts")}}
+
+
 def root_descriptor(data: dict, request_id: str) -> dict:
     """Project only a qualified exact retained-root identity and status."""
     host = data.get("hostIdentity")
@@ -1530,7 +1547,7 @@ def root_descriptor(data: dict, request_id: str) -> dict:
             or state == "running" and generation is None
             or state == "ended" and generation is not None):
         raise Unavailable("root_receipt_unqualified")
-    return {key: data[key] for key in (*ROOT_IDENTITY, "generation", "status")}
+    return {**{key: data[key] for key in (*ROOT_IDENTITY, "generation", "status")}, **launch_deferral(data)}
 
 
 def root_main(argv: list[str]) -> int:

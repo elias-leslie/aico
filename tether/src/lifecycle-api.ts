@@ -571,6 +571,10 @@ export function rootOperations(context: LifecycleApiContext): RootControlOperati
       return null
     },
     resumeOwner: (resumeSessionId) => context.recovery?.resumeOwner(resumeSessionId) ?? null,
+    launchDeferral: (widgetId) => {
+      const failure = lastEnsureFailure(widgetId)
+      return failure?.code === 'admission_denied' ? failure.reason : null
+    },
     ensure: async (widgetId, prompt, resumeSessionId, options) => {
       await whenReady()
       const row = getWidget(widgetId)

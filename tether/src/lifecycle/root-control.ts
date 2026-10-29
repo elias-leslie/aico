@@ -138,6 +138,19 @@ export interface RootControlOperations {
   /** Tether: the session whose pending or held crash recovery will resume
    * this native conversation, if any. */
   resumeOwner?(resumeSessionId: string): string | null
+  /** Tether: why host admission deferred this widget's last launch, if it did. */
+  launchDeferral?(widgetId: string): string | null
+}
+
+/** How often a launch host admission deferred is tried again. */
+export const DEFERRED_LAUNCH_RETRY_MS = 30_000
+
+interface DeferredLaunch {
+  reason: string
+  checkedAt: number
+  nextRetryAt: number
+  attempts: number
+  timer: ReturnType<typeof setTimeout>
 }
 
 /**
@@ -536,7 +549,10 @@ const terminalAdmin = {
 } as const
 
 /** A root's `owner` is its stored origin, and `?origin=` filters the list. */
-export function createRootHandler(operations: RootControlOperations) {
+export function createRootHandler(
+  operations: RootControlOperations,
+  retryMs: number = DEFERRED_LAUNCH_RETRY_MS,
+) {
   // A failed or disconnected request retains its reservation. Subsequent calls
   // reconcile that exact widget through Aico's existing launch gate.
   const pending = new Map<string, Promise<void>>()
@@ -549,6 +565,68 @@ export function createRootHandler(operations: RootControlOperations) {
     } finally {
       if (pending.get(key) === next) pending.delete(key)
     }
+  }
+  // A launch host admission deferred is tried again on its own, by the same
+  // path as repeating the create, until it starts or the root ends.
+  const deferredLaunches = new Map<string, DeferredLaunch>()
+  const launchRoot = async (widgetId: string, input: RootCreateRequest) => {
+    // Do not disclose the launch error or prompt; identity/state is the
+    // reconciliation receipt, including an ambiguous launch outcome.
+    try {
+      if (
+        input.model ||
+        input.reasoningEffort ||
+        input.daybreak != null ||
+        input.agentHubContext != null
+      )
+        await operations.ensure(widgetId, input.initialPrompt, input.resumeSessionId, {
+          model: input.model ?? null,
+          reasoningEffort: input.reasoningEffort ?? null,
+          ...(input.daybreak != null ? { daybreak: input.daybreak } : {}),
+          ...(input.agentHubContext != null ? { agentHubContext: input.agentHubContext } : {}),
+        })
+      else await operations.ensure(widgetId, input.initialPrompt, input.resumeSessionId)
+    } catch {
+      /* reconcile below */
+    }
+    const prior = deferredLaunches.get(input.requestId)
+    if (prior) clearTimeout(prior.timer)
+    const reason = getWidget(widgetId) ? (operations.launchDeferral?.(widgetId) ?? null) : null
+    if (!reason) {
+      deferredLaunches.delete(input.requestId)
+      return
+    }
+    const now = Date.now()
+    const timer = setTimeout(() => {
+      void serialize(input.requestId, async () => {
+        if (deferredLaunches.get(input.requestId)?.timer !== timer) return
+        if (getRootRequest(input.requestId)?.widgetId !== widgetId || !getWidget(widgetId)) {
+          deferredLaunches.delete(input.requestId)
+          return
+        }
+        await launchRoot(widgetId, input)
+      }).catch(() => {})
+    }, retryMs)
+    timer.unref?.()
+    deferredLaunches.set(input.requestId, {
+      reason,
+      checkedAt: now,
+      nextRetryAt: now + retryMs,
+      attempts: (prior?.attempts ?? 0) + 1,
+      timer,
+    })
+  }
+  const describeLaunch = (requestId: string) => {
+    const deferred = deferredLaunches.get(requestId)
+    return deferred
+      ? {
+          state: 'deferred' as const,
+          reason: deferred.reason,
+          checkedAt: new Date(deferred.checkedAt).toISOString(),
+          nextRetryAt: new Date(deferred.nextRetryAt).toISOString(),
+          attempts: deferred.attempts,
+        }
+      : null
   }
   const describe = async (root: RootRequestRow) => {
     const row = getWidget(root.widgetId)
@@ -567,6 +645,8 @@ export function createRootHandler(operations: RootControlOperations) {
       leadRootReference: root.leadRootReference,
       facetCapsuleRef: root.facetCapsuleRef,
       status: row ? await operations.status(row) : 'ended',
+      // Why a pending root has not started yet, and when it is tried again.
+      launch: row ? describeLaunch(root.requestId) : null,
       tool: row?.tool ?? null,
       // Tether: bounds belong to the GUI's view, not the session catalog.
       bounds: null,
@@ -787,28 +867,7 @@ export function createRootHandler(operations: RootControlOperations) {
             // Before the first launch; the digest already pins the revision.
             if (input.instructions && !sessionInstructions(root.widgetId))
               saveInstructions(root.widgetId, input.instructions)
-            // Do not disclose the launch error or prompt; identity/state is the
-            // reconciliation receipt, including an ambiguous launch outcome.
-            try {
-              if (
-                input.model ||
-                input.reasoningEffort ||
-                input.daybreak != null ||
-                input.agentHubContext != null
-              )
-                await operations.ensure(root.widgetId, input.initialPrompt, input.resumeSessionId, {
-                  model: input.model ?? null,
-                  reasoningEffort: input.reasoningEffort ?? null,
-                  ...(input.daybreak != null ? { daybreak: input.daybreak } : {}),
-                  ...(input.agentHubContext != null
-                    ? { agentHubContext: input.agentHubContext }
-                    : {}),
-                })
-              else
-                await operations.ensure(root.widgetId, input.initialPrompt, input.resumeSessionId)
-            } catch {
-              /* reconcile below */
-            }
+            await launchRoot(root.widgetId, input)
           }
           const descriptor = await describe(root)
           json(

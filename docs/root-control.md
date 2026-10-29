@@ -506,7 +506,11 @@ the same tmux command, so new windows do not inherit it. The unique logical sess
 `ST_SESSION_ID`. A descriptor returns `owner`, opaque `hostIdentity`, the
 current exact `generation`, `logicalSessionId`, `surfaceLocator`, metadata,
 bounds, and `status` (`running`, `pending`, `uncertain`, or `ended`). Pending or
-uncertain create results use HTTP 202. Ended descriptors have null generation.
+uncertain create results use HTTP 202. A pending root whose launch host
+admission deferred also carries `launch` (the reason, when it was checked, the
+next retry and the attempt count); Tether retries it every 30 s until it starts
+or the root ends, and `st aico create` and `st aico root status` show it.
+Ended descriptors have null generation.
 View mutations require the current generation and reject stale requests. The
 headless `/v1/sessions/<hostIdentity>/end` owns exact containment retirement.
 

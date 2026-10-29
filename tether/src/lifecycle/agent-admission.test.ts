@@ -422,7 +422,7 @@ describe('Nightshift admission state', () => {
       state: host,
       records,
     } = harness({
-      verdict: { admit: false, reason: 'swap 80%' },
+      verdict: { admit: false, state: 'red', reason: 'swap 80%' },
     })
     const denied = await denial(admission.reserve({ widgetId: 'abcd1234', kind: 'launch' }))
     expect(denied.reason).toBe('Nightshift has closed agent admission (swap 80%).')
@@ -431,11 +431,28 @@ describe('Nightshift admission state', () => {
     await expect(admission.reserve({ widgetId: 'abcd1234', kind: 'launch' })).resolves.toBeTruthy()
   })
 
+  it("leaves an amber launch to Tether's own thresholds", async () => {
+    const amber = { admit: false, state: 'amber' as const, reason: 'Memory is tight: 8.0 GiB' }
+    // 8 GiB available, no stalls: an agent launch still fits.
+    const healthy = harness({ mem: meminfo(8), verdict: amber })
+    await expect(
+      healthy.admission.reserve({ widgetId: 'abcd1234', kind: 'launch' }),
+    ).resolves.toBeTruthy()
+    const low = harness({ mem: meminfo(4), verdict: amber })
+    expect(
+      (await denial(low.admission.reserve({ widgetId: 'abcd1234', kind: 'launch' }))).reason,
+    ).toContain('available memory')
+    const stalled = harness({ mem: meminfo(8), pressure: psi(0, 0, 5), verdict: amber })
+    expect(
+      (await denial(stalled.admission.reserve({ widgetId: 'abcd1234', kind: 'launch' }))).reason,
+    ).toContain('full avg10')
+  })
+
   it("lets a fresh Nightshift admit replace Tether's own thresholds", async () => {
     const { admission } = harness({
       mem: meminfo(2),
       pressure: psi(50, 3, 6),
-      verdict: { admit: true, reason: 'green' },
+      verdict: { admit: true, state: 'green', reason: 'green' },
     })
     await expect(admission.reserve({ widgetId: 'abcd1234', kind: 'launch' })).resolves.toBeTruthy()
   })
@@ -449,10 +466,16 @@ describe('Nightshift admission state', () => {
   })
 
   it('parses contract v1 and ignores stale, unknown or malformed state', () => {
-    expect(parseNightshiftAdmission(state({}), now)).toEqual({ admit: false, reason: 'swap 80%' })
-    expect(parseNightshiftAdmission(state({ admit: true, reason: '' }), now)).toEqual({
-      admit: true,
-      reason: 'no reason given',
+    expect(parseNightshiftAdmission(state({}), now)).toEqual({
+      admit: false,
+      state: 'red',
+      reason: 'swap 80%',
+    })
+    expect(
+      parseNightshiftAdmission(state({ state: 'green', admit: true, reason: '' }), now),
+    ).toEqual({ admit: true, state: 'green', reason: 'no reason given' })
+    expect(parseNightshiftAdmission(state({ state: 'purple' }), now)).toMatchObject({
+      state: null,
     })
     expect(parseNightshiftAdmission(state({ expires_at: now / 1000 - 1 }), now)).toBeNull()
     expect(parseNightshiftAdmission(state({ v: 2 }), now)).toBeNull()
@@ -482,6 +505,10 @@ describe('Nightshift admission state', () => {
     const file = join(dir, 'admission.json')
     expect(await readNightshiftAdmission(file, now)).toBeNull()
     writeFileSync(file, state({}))
-    expect(await readNightshiftAdmission(file, now)).toEqual({ admit: false, reason: 'swap 80%' })
+    expect(await readNightshiftAdmission(file, now)).toEqual({
+      admit: false,
+      state: 'red',
+      reason: 'swap 80%',
+    })
   })
 })

@@ -41,6 +41,31 @@ def test_status_projects_identity_only(monkeypatch):
     assert output == [DESCRIPTOR]
 
 
+LAUNCH = {"state": "deferred", "reason": "Nightshift has closed agent admission (Memory is tight).",
+          "checkedAt": "2026-10-29T13:46:13.000Z", "nextRetryAt": "2026-10-29T13:46:43.000Z", "attempts": 1}
+PENDING = {**DESCRIPTOR, "generation": None, "status": "pending"}
+
+
+def test_status_shows_why_a_pending_root_has_not_started(monkeypatch):
+    code, _calls, output = invoke(monkeypatch, ["status", ROOT],
+                                  [(200, {**PENDING, "launch": {**LAUNCH, "extra": "dropped"}})])
+    assert code == 0 and output == [{**PENDING, "launch": LAUNCH}]
+
+
+@pytest.mark.parametrize("launch", [
+    None, {**LAUNCH, "state": "failed"}, {**LAUNCH, "reason": "line\nbreak"}, {**LAUNCH, "reason": ""},
+    {**LAUNCH, "nextRetryAt": "soon"}, {**LAUNCH, "attempts": True}, {**LAUNCH, "attempts": 0}, "deferred",
+])
+def test_status_drops_an_unqualified_launch(monkeypatch, launch):
+    code, _calls, output = invoke(monkeypatch, ["status", ROOT], [(200, {**PENDING, "launch": launch})])
+    assert code == 0 and output == [PENDING]
+
+
+def test_refusing_a_pending_root_says_why_it_has_not_started(monkeypatch):
+    code, _calls, output = invoke(monkeypatch, ["show", ROOT], [(200, {**PENDING, "launch": LAUNCH})])
+    assert code == 1 and output[0]["reason"] == "workload_unavailable" and output[0]["launch"] == LAUNCH
+
+
 @pytest.mark.parametrize("args,payload", [
     (["show", ROOT], {"generation": GENERATION}),
     (["title", ROOT, "﻿ Private label "], {"generation": GENERATION, "label": "Private label"}),

@@ -5,8 +5,11 @@
  * MemAvailable or memory PSI shows an unhealthy host. A numeric ceiling on
  * concurrently active agents exists solely as an opt-in emergency brake and is
  * disabled unless configured. When Nightshift's memory controller publishes a
- * fresh verdict (admission.json), that verdict replaces Tether's own memory
- * thresholds; a missing, unparsable or expired file falls back to them. Host
+ * fresh verdict (admission.json), green replaces Tether's own memory thresholds
+ * and red defers. Amber ("defer heavy work", from 8 GiB available) is meant for
+ * builds: an agent launch needs well under 1 GiB, so on amber it still passes
+ * when Tether's own thresholds do. A missing, unparsable or expired file falls
+ * back to them. Host
  * observations are injected so the policy is testable without Electron,
  * systemd or /proc.
  */
@@ -212,6 +215,8 @@ export interface AgentAdmissionObservations {
 
 export interface NightshiftVerdict {
   admit: boolean
+  /** green, amber or red; null when the file names none. */
+  state: 'green' | 'amber' | 'red' | null
   reason: string
 }
 
@@ -236,11 +241,15 @@ export function parseNightshiftAdmission(text: string, nowMs: number): Nightshif
     return null
   }
   if (!state || typeof state !== 'object') return null
-  const { v, admit, reason, expires_at: expiresAt } = state as Record<string, unknown>
+  const { v, admit, reason, expires_at: expiresAt, state: level } = state as Record<string, unknown>
   if (v !== 1 || typeof admit !== 'boolean' || typeof expiresAt !== 'number') return null
   if (expiresAt * 1000 <= nowMs) return null
   const clean = typeof reason === 'string' ? reason.replace(/[^\x20-\x7e]/g, '').trim() : ''
-  return { admit, reason: clean.slice(0, 200) || 'no reason given' }
+  return {
+    admit,
+    state: level === 'green' || level === 'amber' || level === 'red' ? level : null,
+    reason: clean.slice(0, 200) || 'no reason given',
+  }
 }
 
 export async function readNightshiftAdmission(
@@ -375,7 +384,9 @@ export class AgentAdmission {
     let psi: MemoryPressure | null = null
     let failure: string | null = null
     const verdict = (await this.observations.nightshiftVerdict?.().catch(() => null)) ?? null
-    if (verdict && !verdict.admit)
+    // Amber leaves the launch to Tether's own thresholds below.
+    const amber = verdict !== null && !verdict.admit && verdict.state === 'amber'
+    if (verdict && !verdict.admit && !amber)
       failure = `Nightshift has closed agent admission (${verdict.reason}).`
     try {
       available = parseMemAvailable(await this.observations.meminfo())
@@ -413,7 +424,7 @@ export class AgentAdmission {
     }
     if (failure) return defer(failure)
     // A fresh Nightshift admit replaces Tether's own memory thresholds.
-    const ownThresholds = !verdict
+    const ownThresholds = !verdict || amber
     if (ownThresholds && available !== null && available < limits.minAvailableBytes)
       return defer(
         `available memory ${round(available / 1024 ** 3)} GiB is below ${round(limits.minAvailableBytes / 1024 ** 3)} GiB.`,

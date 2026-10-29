@@ -43,6 +43,7 @@ import { blankSlateBase } from './tui/blank-slate'
 import { sessionInstructions } from './tui/instructions'
 import { getTui } from './tui/registry'
 
+const RETRY_MS = 40
 const ROOT_WATCH = fileURLToPath(new URL('../../scripts/aico-root-watch.py', import.meta.url))
 
 function present<T>(value: T | null | undefined): T {
@@ -56,11 +57,19 @@ describe('private root workload control', () => {
   const database = join(fixture, 'catalog.db')
   let available = true
   let uncertain = false
+  // Host admission's answer for the next launch; null admits it.
+  let admission: string | null = null
+  const deferrals = new Map<string, string>()
   const running = new Set<string>()
   const launches = new Set<string>()
   const ensure = vi.fn(async (widgetId: string) => {
     launches.add(widgetId)
     if (uncertain) throw new Error('lost response')
+    if (admission) {
+      deferrals.set(widgetId, admission)
+      return
+    }
+    deferrals.delete(widgetId)
     running.add(widgetId)
   })
   const show = vi.fn(async (_widgetId: string, _generation: string) => true)
@@ -72,25 +81,29 @@ describe('private root workload control', () => {
   const status = vi.fn(async (row: WidgetRow) =>
     running.has(row.id) ? ('running' as const) : ('uncertain' as const),
   )
-  const handle = createRootHandler({
-    available: () => available,
-    validate: (input) => input.projectRoot !== '/missing',
-    resumeOwner: (resumeSessionId) =>
-      resumeSessionId === '00000000-0000-4000-8000-0000000000aa' ? 'c0ffee01' : null,
-    launched: (widgetId, launchedBy) => {
-      recordLauncher(widgetId, launchedBy)
+  const handle = createRootHandler(
+    {
+      available: () => available,
+      validate: (input) => input.projectRoot !== '/missing',
+      resumeOwner: (resumeSessionId) =>
+        resumeSessionId === '00000000-0000-4000-8000-0000000000aa' ? 'c0ffee01' : null,
+      launched: (widgetId, launchedBy) => {
+        recordLauncher(widgetId, launchedBy)
+      },
+      ensure,
+      status,
+      mutate: (widgetId, generation, mutation) =>
+        mutation.kind === 'show'
+          ? show(widgetId, generation)
+          : mutation.kind === 'position'
+            ? position(widgetId, generation, mutation.bounds)
+            : mutation.kind === 'coordinator'
+              ? coordinator(widgetId, generation, mutation.coordinator)
+              : title(widgetId, generation, mutation.label),
+      launchDeferral: (widgetId) => deferrals.get(widgetId) ?? null,
     },
-    ensure,
-    status,
-    mutate: (widgetId, generation, mutation) =>
-      mutation.kind === 'show'
-        ? show(widgetId, generation)
-        : mutation.kind === 'position'
-          ? position(widgetId, generation, mutation.bounds)
-          : mutation.kind === 'coordinator'
-            ? coordinator(widgetId, generation, mutation.coordinator)
-            : title(widgetId, generation, mutation.label),
-  })
+    RETRY_MS,
+  )
   const server = createServer((req, res) => {
     void handle(req, res)
   })
@@ -1429,5 +1442,45 @@ describe('private root workload control', () => {
     const root = present(getRootRequest('target-1'))
     const ids = [root.widgetId, 'deadbeef']
     expect(allocateWidgetId(() => ids.shift() ?? 'unused00')).toBe('deadbeef')
+  })
+
+  it('retries a launch host admission deferred and shows why until it starts', async () => {
+    const reason = 'Nightshift has closed agent admission (memory is tight).'
+    admission = reason
+    const first = await call('/v1/roots', 'POST', create('deferred-1'))
+    const widgetId = String(first.body.hostIdentity)
+    expect(running.has(widgetId)).toBe(false)
+    expect(first.body.launch).toMatchObject({ state: 'deferred', reason, attempts: 1 })
+    const launch = first.body.launch as { checkedAt: string; nextRetryAt: string }
+    expect(Date.parse(launch.nextRetryAt) - Date.parse(launch.checkedAt)).toBe(RETRY_MS)
+    // Still deferred: it keeps trying and counts the attempts.
+    await vi.waitFor(async () =>
+      expect((await call('/v1/roots/deferred-1')).body.launch).toMatchObject({ attempts: 2 }),
+    )
+    admission = null
+    await vi.waitFor(async () =>
+      expect((await call('/v1/roots/deferred-1')).body).toMatchObject({
+        status: 'running',
+        launch: null,
+      }),
+    )
+    const calls = ensure.mock.calls.filter(([id]) => id === widgetId).length
+    await new Promise((resolve) => setTimeout(resolve, RETRY_MS * 3))
+    expect(ensure.mock.calls.filter(([id]) => id === widgetId)).toHaveLength(calls)
+  })
+
+  it('stops retrying a deferred launch once its root ends', async () => {
+    admission = 'Nightshift has closed agent admission (memory is tight).'
+    const first = await call('/v1/roots', 'POST', create('deferred-ended'))
+    const widgetId = String(first.body.hostIdentity)
+    removeWidget(widgetId)
+    const calls = ensure.mock.calls.filter(([id]) => id === widgetId).length
+    await new Promise((resolve) => setTimeout(resolve, RETRY_MS * 3))
+    admission = null
+    expect(ensure.mock.calls.filter(([id]) => id === widgetId)).toHaveLength(calls)
+    expect((await call('/v1/roots/deferred-ended')).body).toMatchObject({
+      status: 'ended',
+      launch: null,
+    })
   })
 })

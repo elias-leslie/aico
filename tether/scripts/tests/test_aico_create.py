@@ -74,6 +74,20 @@ def test_exact_create_is_one_content_free_request_with_no_fleet_ledger(monkeypat
     assert "private-owner-content" not in json.dumps(output)
 
 
+def test_a_deferred_create_says_why_and_when_it_is_tried_again(monkeypatch):
+    launch = {"state": "deferred", "reason": "Nightshift has closed agent admission (Memory is tight).",
+              "checkedAt": "2026-10-29T13:46:13.000Z", "nextRetryAt": "2026-10-29T13:46:43.000Z", "attempts": 1}
+    output = []
+
+    def receipt(_, path, route, payload, **kwargs):
+        return 202, {**descriptor(payload), "status": "pending", "generation": None, "launch": launch}
+
+    monkeypatch.setattr(admin.Collector, "receipt", receipt)
+    monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
+    assert admin.main([*BASE, "--root-socket", "/fixture/gui.sock"]) == 0
+    assert output[0]["status"] == "pending" and output[0]["launch"] == launch
+
+
 def test_create_from_a_session_names_its_launcher(monkeypatch):
     """Tether makes the launcher a coordinator; the CLI only names it."""
     calls, output = [], []
