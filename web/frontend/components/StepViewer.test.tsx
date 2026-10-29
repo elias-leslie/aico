@@ -14,8 +14,16 @@ vi.mock('@/lib/hooks/use-agent-tools', () => ({
   }),
 }))
 vi.mock('./AgentHubChat', () => ({
-  AgentHubChat: ({ source }: { source: unknown }) => (
-    <div data-testid="chat-stub">{JSON.stringify(source)}</div>
+  AgentHubChat: ({
+    source,
+    running,
+  }: {
+    source: unknown
+    running?: boolean
+  }) => (
+    <div data-testid="chat-stub" data-running={String(running)}>
+      {JSON.stringify(source)}
+    </div>
   ),
 }))
 
@@ -86,6 +94,43 @@ describe('the step viewer', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Back to the session' }))
     expect(screen.queryByTestId('step-view')).toBeNull()
+  })
+
+  it('tells the chat whether the step is still running, from the step it was opened with', () => {
+    function Open({ member }: { member: RunMember }) {
+      const viewer = useStepViewer()
+      return (
+        <>
+          <button type="button" onClick={() => viewer.open(member)}>
+            open
+          </button>
+          {viewer.step && <StepView step={viewer.step} onBack={viewer.close} />}
+        </>
+      )
+    }
+    const running = render(
+      <StepViewerProvider>
+        <Open member={build} />
+      </StepViewerProvider>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'open' }))
+    expect(screen.getByTestId('chat-stub')).toHaveAttribute(
+      'data-running',
+      'true',
+    )
+    running.unmount()
+
+    const done = { ...build, status: 'completed', group: 'idle' } as RunMember
+    render(
+      <StepViewerProvider>
+        <Open member={done} />
+      </StepViewerProvider>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'open' }))
+    expect(screen.getByTestId('chat-stub')).toHaveAttribute(
+      'data-running',
+      'false',
+    )
   })
 
   it('closes the step when a session is picked', () => {

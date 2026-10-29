@@ -54,7 +54,7 @@ describe('the live version of a step view', () => {
     ])
     const { result } = renderHook(() => useLiveVersion(info(true), transport))
     await settle()
-    expect(result.current).toEqual({ version: 0, stale: false }) // the first read is what the view loaded
+    expect(result.current).toEqual({ version: 0, stale: false, ended: false }) // the first read is what the view loaded
     await wait(liveTiming.firstMs)
     expect(result.current.version).toBe(0) // nothing new
     await wait(liveTiming.firstMs * liveTiming.growth)
@@ -68,8 +68,10 @@ describe('the live version of a step view', () => {
     ])
     const { result } = renderHook(() => useLiveVersion(info(true), transport))
     await settle()
+    expect(result.current.ended).toBe(false) // still running on the first read
     await wait(liveTiming.firstMs)
     expect(result.current.version).toBe(1)
+    expect(result.current.ended).toBe(true)
     const before = calls()
     await wait(liveTiming.maxMs * 3)
     expect(calls()).toBe(before)
@@ -90,7 +92,7 @@ describe('the live version of a step view', () => {
     await wait(liveTiming.firstMs)
     expect(result.current.stale).toBe(true)
     await wait(liveTiming.maxMs)
-    expect(result.current).toEqual({ version: 0, stale: false })
+    expect(result.current).toEqual({ version: 0, stale: false, ended: false })
   })
 
   it('reads nothing for a chat the owner can talk to', async () => {

@@ -46,10 +46,12 @@ function ChatView({
   info,
   transport,
   onBusy,
+  running,
 }: {
   info: ChatInfo
   transport: ChatTransport
   onBusy?: (busy: boolean) => void
+  running?: boolean
 }) {
   // The session's own model to start with (what it was created or last sent with).
   const [model, setModel] = useState(info.requestedModel ?? '')
@@ -103,6 +105,7 @@ function ChatView({
           layout="transcript"
           toolsEnabled
           allowModelMentions={false}
+          running={running === true && !live.ended}
           branch={info.branch ?? null}
           config={{ model: model || null }}
           renderComposerControls={
@@ -132,15 +135,19 @@ export interface ChatRootProps {
   onBusy?: (busy: boolean) => void
   /** What the owner does when the view crashes (the host's own words). */
   recovery: string
+  /** A read-only step view of a step that is still running: the status says Running, not Ready,
+   * and the note about a missing final answer waits until the step is over. The view stops
+   * saying so by itself when its own refresh finds the step ended. */
+  running?: boolean
 }
 
 /** The chat view with its own query cache and crash guard. Give it a stable `transport` and `onBusy`. */
-export function ChatRoot({ info, transport, onBusy, recovery }: ChatRootProps) {
+export function ChatRoot({ info, transport, onBusy, recovery, running }: ChatRootProps) {
   const queries = useMemo(newQueries, [])
   return (
     <ChatBoundary recovery={recovery}>
       <QueryClientProvider client={queries}>
-        <ChatView info={info} transport={transport} onBusy={onBusy} />
+        <ChatView info={info} transport={transport} onBusy={onBusy} running={running} />
       </QueryClientProvider>
     </ChatBoundary>
   )

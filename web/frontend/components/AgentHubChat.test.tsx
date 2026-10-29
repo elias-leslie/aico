@@ -7,9 +7,17 @@ import type {
 } from '../../../electron/shared/chat/types'
 import { AgentHubChat } from './AgentHubChat'
 
-const seen: { info: ChatInfo; transport: ChatTransport }[] = []
+const seen: {
+  info: ChatInfo
+  transport: ChatTransport
+  running?: boolean
+}[] = []
 vi.mock('../../../electron/shared/chat/chat-view', () => ({
-  ChatRoot: (props: { info: ChatInfo; transport: ChatTransport }) => {
+  ChatRoot: (props: {
+    info: ChatInfo
+    transport: ChatTransport
+    running?: boolean
+  }) => {
     seen.push(props)
     return <div data-testid="chat-root">{props.info.agentSlug}</div>
   },
@@ -21,13 +29,16 @@ const answer = (body: unknown, status = 200) =>
     headers: { 'Content-Type': 'application/json' },
   })
 
-function renderChat(source: Parameters<typeof AgentHubChat>[0]['source']) {
+function renderChat(
+  source: Parameters<typeof AgentHubChat>[0]['source'],
+  running?: boolean,
+) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
   return render(
     <QueryClientProvider client={client}>
-      <AgentHubChat source={source} />
+      <AgentHubChat source={source} running={running} />
     </QueryClientProvider>,
   )
 }
@@ -83,6 +94,26 @@ describe('AgentHubChat', () => {
       step: 'build',
       attempt: 'att-2',
     })
+  })
+
+  it('hands the view whether the step is still running', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        answer({
+          ok: true,
+          value: {
+            sessionId: 'att-2',
+            agentSlug: 'pi',
+            requestedModel: null,
+            readOnly: true,
+          },
+        }),
+      ),
+    )
+    renderChat({ run: 'r1', step: 'build' }, true)
+    await screen.findByTestId('chat-root')
+    expect(seen.at(-1)?.running).toBe(true)
   })
 
   it('does not rebuild the transport when the parent renders again', async () => {

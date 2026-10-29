@@ -58,14 +58,14 @@ export async function readSession(transport: ChatTransport, sessionId: string): 
 /**
  * A read-only step view while its step runs: reads the session again on a slowing timer and
  * counts a new version whenever it changed, so the view reloads what the step has done so far.
- * `stale` is set while a read fails, so the view says it may be behind. A session the owner can talk
+ * `stale` is set while a read fails, so the view says it may be behind. `ended` is set once a read finds the step over. A session the owner can talk
  * to streams its own turns and is never read this way; a step that is over is read once more and left.
  */
 export function useLiveVersion(
   info: ChatInfo,
   transport: ChatTransport,
-): { version: number; stale: boolean } {
-  const [state, setState] = useState({ version: 0, stale: false })
+): { version: number; stale: boolean; ended: boolean } {
+  const [state, setState] = useState({ version: 0, stale: false, ended: false })
   const watch = info.readOnly === true
   useEffect(() => {
     if (!watch) return
@@ -83,8 +83,11 @@ export function useLiveVersion(
         // The first read is what the view itself just loaded; later ones that differ reload it.
         const changed = seen !== null && read.fingerprint !== seen
         seen = read.fingerprint
+        const ended = !read.running
         setState((now) =>
-          changed || now.stale ? { version: now.version + (changed ? 1 : 0), stale: false } : now,
+          changed || now.stale || now.ended !== ended
+            ? { version: now.version + (changed ? 1 : 0), stale: false, ended }
+            : now,
         )
         if (!read.running) return // the step is over: this read was the last
         delay = nextDelay(delay, changed)

@@ -19,6 +19,8 @@ interface OpenStep {
   stepKey: string
   title: string
   tool: string
+  /** The step was running when it was opened. */
+  running: boolean
 }
 
 interface StepViewer {
@@ -41,6 +43,7 @@ export function StepViewerProvider({ children }: { children: ReactNode }) {
       stepKey: member.stepKey,
       title: member.title,
       tool: member.tool ?? 'agent-hub',
+      running: member.status === 'running',
     })
   }, [])
   const close = useCallback(() => setStep(null), [])
@@ -107,6 +110,7 @@ export function StepView({
           <AgentHubChat
             key={`${step.runId}:${step.stepKey}`}
             source={{ run: step.runId, step: step.stepKey }}
+            running={step.running}
           />
         </div>
       </div>

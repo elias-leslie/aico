@@ -22,7 +22,14 @@ function openFailure(error: unknown): string {
  * step (`run` and `step`) shows its latest attempt read-only. The view asks
  * this app's server, which asks Tether; no token reaches the page.
  */
-export function AgentHubChat({ source }: { source: ChatSource }) {
+export function AgentHubChat({
+  source,
+  running,
+}: {
+  source: ChatSource
+  /** A step view: the step is still running (see `ChatRoot`). */
+  running?: boolean
+}) {
   // A caller builds `source` each render; the view follows what it names.
   const key = JSON.stringify(source)
   const named = useMemo<ChatSource>(() => JSON.parse(key), [key])
@@ -89,6 +96,7 @@ export function AgentHubChat({ source }: { source: ChatSource }) {
         info={info}
         transport={transport}
         recovery="Reload the page to open it again."
+        running={running}
       />
     </div>
   )
