@@ -151,7 +151,7 @@ ROOT_OWNERS = ("aico", "a-term")
 TOOL_SLUG = r"[a-z0-9_-]{1,50}"
 # Owner rejections that are definitive before any view or lifecycle effect.
 OWNER_REFUSALS = {400: {"invalid_body", "invalid_generation", "invalid_text"}, 404: {"not_found"},
-                  409: {"stale_generation", "workload_unavailable", "busy"}, 410: {"ended"},
+                  409: {"stale_generation", "workload_unavailable", "busy", "owner_on_web"}, 410: {"ended"},
                   503: {"gui_unavailable", "position_unavailable"}}
 
 

@@ -76,7 +76,7 @@ def test_non_running_root_is_not_mutated(monkeypatch, state):
 
 @pytest.mark.parametrize("reply,applied", [
     ((409, {"error": "stale_generation"}), False), ((410, {"error": "ended"}), False),
-    ((503, {"error": "gui_unavailable"}), False), ((500, {"error": "owner_failure"}), None),
+    ((409, {"error": "owner_on_web"}), False), ((503, {"error": "gui_unavailable"}), False), ((500, {"error": "owner_failure"}), None),
     ((200, {**DESCRIPTOR, "generation": "b" * 64}), None), ((200, {**DESCRIPTOR, "status": "uncertain"}), None),
 ])
 def test_refusal_is_not_applied_but_unqualified_reply_is_uncertain(monkeypatch, reply, applied):
