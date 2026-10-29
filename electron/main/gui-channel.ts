@@ -14,6 +14,8 @@ interface GuiChannelDeps {
   catalog: Pick<SessionCatalog, 'get' | 'upsert'>
   /** Re-list every session (the link's one shared refresh). */
   refresh(): Promise<void>
+  /** The owner is working on this desktop, not in the web app (owner-surface.ts). */
+  ownerOnDesktop(): boolean
   focusOrReopen(id: string): void
   /** Reopen a closed window only if this desktop has shown the session, unfocused. */
   reopenIfViewed(id: string): 'open' | 'reopened' | 'no_view'
@@ -48,6 +50,9 @@ export function createGuiChannel(deps: GuiChannelDeps) {
       return { applied: false, error: 'stale_generation' }
     const id = command.sessionId
     if (command.kind === 'show') {
+      // The owner is in the web app, which lists the session already: no
+      // window opens or comes forward here.
+      if (!deps.ownerOnDesktop()) return { applied: false, error: 'owner_on_web' }
       if (!command.ifViewed) deps.focusOrReopen(id)
       else if (deps.reopenIfViewed(id) === 'no_view') return { applied: false, error: 'no_view' }
     } else if (command.kind === 'position' && command.bounds) {

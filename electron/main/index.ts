@@ -31,6 +31,7 @@ import { registerDesktopIpc } from './desktop-ipc'
 import { createGuiChannel } from './gui-channel'
 import { createInstructions } from './instructions'
 import { createLifecycle } from './lifecycle'
+import { createOwnerSurface } from './owner-surface'
 import { denyAllPermissions } from './permissions'
 import { ownStartTime, removeOwnPidFile } from './process-identity'
 import { ensurePersonalWorkspaceRoot, ProjectCatalog, personalWorkspaceRoot } from './project'
@@ -119,12 +120,16 @@ const layout = createWindowLayout({
   path: config.layoutPath,
   owner: lifecycle.ownProcess,
 })
+// Whether the owner works on this desktop or in the web app: Tether's own
+// shows open windows here only in the first case (owner-surface.ts).
+const ownerSurface = createOwnerSurface()
 const windows = createWindows({
   registry,
   layout,
   views: { ensureView, setOpen, getView, listViews },
   compositor,
   isLive: (id) => Boolean(catalog.get(id)),
+  ownerOnDesktop: ownerSurface.onDesktop,
   upsert: (descriptor) => catalog.upsert(descriptor),
   catalogList: () => catalog.list(),
   isQuitting: lifecycle.isQuitting,
@@ -137,6 +142,7 @@ const windows = createWindows({
       attention.sendTo(win)
     },
     focused: (win, widgetId) => {
+      ownerSurface.focused()
       selection.noteFocus(widgetId)
       if (widgetId) {
         attention.focused(widgetId)
@@ -187,13 +193,28 @@ const link = createTetherLink({
     closeEnded: (id) => windows.closeEnded(id),
     retired: (id) => removeView(id),
     firstList: () =>
-      void whenReady(compositor, RESTORE_WAIT_MS).then(() => windows.restoreOnLaunch()),
+      void Promise.all([
+        whenReady(compositor, RESTORE_WAIT_MS),
+        ownerSurface.seed(() =>
+          Promise.all(
+            catalog.list().map((descriptor) =>
+              tether.resizeHolder(descriptor.id).then(
+                (answer) => answer.holder,
+                () => null,
+              ),
+            ),
+          ),
+        ),
+      ]).then(() => windows.restoreOnLaunch()),
     titles: () => chrome.pushTitles(),
     tray: () => chrome.syncTray(),
     runs: (answer) => runs.apply(answer),
     connected: () => terminal.resumeAwaiting(),
     shared: (data) => shares.notify(data),
-    sizeHeld: (id, clientPid) => terminal.sizeHeldBy(id, clientPid),
+    sizeHeld: (id, clientPid, viewer) => {
+      ownerSurface.sizeHeld(viewer)
+      terminal.sizeHeldBy(id, clientPid)
+    },
   },
 })
 
@@ -257,6 +278,7 @@ const applyGuiCommand = createGuiChannel({
   isQuitting: lifecycle.isQuitting,
   catalog,
   refresh: link.refresh,
+  ownerOnDesktop: ownerSurface.onDesktop,
   focusOrReopen: windows.focusOrReopen,
   reopenIfViewed: windows.reopenIfViewed,
   forSession: registry.forSession,

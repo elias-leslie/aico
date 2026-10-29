@@ -68,6 +68,8 @@ interface WindowsDeps {
   }
   /** Tether currently lists this session. */
   isLive(id: string): boolean
+  /** The owner is working on this desktop, not in the web app (owner-surface.ts). */
+  ownerOnDesktop(): boolean
   upsert(descriptor: SessionDescriptor): void
   catalogList(): SessionDescriptor[]
   isQuitting(): boolean
@@ -365,9 +367,16 @@ export function createWindows(deps: WindowsDeps) {
       const open = live.filter((view) => view.open)
       if (open.length) {
         // Restore runs after the first session list, by which time tiling is
-        // live; each window still goes back to where it was.
-        for (const view of open) if (!registry.forSession(view.id)) openWidget(view.id, true)
-      } else if (live.length && deps.BrowserWindow.getAllWindows().length === 0) {
+        // live; each window still goes back to where it was. A restart (a
+        // redeploy, say) does not take focus from whatever the owner is using.
+        for (const view of open)
+          if (!registry.forSession(view.id))
+            createWidgetWindow(views.ensureView(view.id), null, true, true)
+      } else if (
+        live.length &&
+        deps.BrowserWindow.getAllWindows().length === 0 &&
+        deps.ownerOnDesktop()
+      ) {
         openWidget(live[0].id) // nothing was open: bring back the oldest view
       }
     },

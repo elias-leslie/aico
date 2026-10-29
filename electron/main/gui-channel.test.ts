@@ -70,6 +70,7 @@ function setup(o: { listed?: SessionDescriptor[] } = {}) {
     refresh: vi.fn(async () => {
       if (o.listed) catalog.replace(o.listed)
     }),
+    ownerOnDesktop: vi.fn(() => true),
     focusOrReopen: vi.fn(),
     reopenIfViewed: vi.fn((_id: string): 'open' | 'reopened' | 'no_view' => 'no_view'),
     forSession: vi.fn((_id: string): BrowserWindow | undefined => undefined),
@@ -139,6 +140,18 @@ describe('applyGuiCommand', () => {
     deps.reopenIfViewed.mockReturnValue('reopened')
     expect(await gui(command({ kind: 'show', ifViewed: true }))).toEqual({ applied: true })
     expect(deps.focusOrReopen).not.toHaveBeenCalled()
+  })
+
+  it('opens, reopens and raises no window while the owner is in the web app', async () => {
+    const { gui, deps } = setup()
+    deps.ownerOnDesktop.mockReturnValue(false)
+    deps.reopenIfViewed.mockReturnValue('reopened')
+    for (const show of [command({ kind: 'show' }), command({ kind: 'show', ifViewed: true })])
+      expect(await gui(show)).toEqual({ applied: false, error: 'owner_on_web' })
+    expect(deps.focusOrReopen).not.toHaveBeenCalled()
+    expect(deps.reopenIfViewed).not.toHaveBeenCalled()
+    // Titles still apply: they are the session's, not a window's.
+    expect(await gui(command({ label: 'Renamed' }))).toEqual({ applied: true })
   })
 
   it('answers not_found for a session Tether no longer lists, and survives a failed re-list', async () => {
@@ -287,6 +300,7 @@ describe('a GUI title reaches layout.json', () => {
       isQuitting: () => false,
       catalog,
       refresh: async () => {},
+      ownerOnDesktop: () => true,
       focusOrReopen: vi.fn(),
       reopenIfViewed: vi.fn(() => 'open' as const),
       forSession: registry.forSession,

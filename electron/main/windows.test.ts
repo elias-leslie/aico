@@ -79,7 +79,7 @@ function setup(o: { views?: ViewRow[]; live?: string[]; catalog?: string[] } = {
   const calls: string[] = []
   const rows = new Map((o.views ?? []).map((v) => [v.id, v]))
   const live = new Set(o.live ?? [])
-  const state = { quitting: false }
+  const state = { quitting: false, onDesktop: true }
   const registry = new WindowRegistry({
     fromId: (id) => FakeWindow.fromId(id) as unknown as BrowserWindow | null,
     fromWebContents: () => null,
@@ -140,6 +140,7 @@ function setup(o: { views?: ViewRow[]; live?: string[]; catalog?: string[] } = {
     views,
     compositor: comp.compositor,
     isLive: (id: string) => live.has(id),
+    ownerOnDesktop: () => state.onDesktop,
     upsert,
     catalogList: () => (o.catalog ?? []).map((id) => ({ id }) as SessionDescriptor),
     isQuitting: () => state.quitting,
@@ -495,6 +496,21 @@ describe('windows: restore and activation', () => {
     expect(FakeWindow.all.map((w) => registry.sessionOf(w.id))).toEqual(['aaaaaaaa'])
     windows.restoreOnLaunch() // already open: no second window
     expect(FakeWindow.all).toHaveLength(1)
+  })
+
+  it('restores open windows without taking focus', async () => {
+    const { windows, only } = setup({ views: [view('aaaaaaaa', true)], live: ['aaaaaaaa'] })
+    windows.restoreOnLaunch()
+    await settle()
+    expect(only().showInactive).toHaveBeenCalledTimes(1)
+    expect(only().show).not.toHaveBeenCalled()
+  })
+
+  it('brings back no window when none was open and the owner is in the web app', () => {
+    const { windows, state } = setup({ views: [view('aaaaaaaa')], live: ['aaaaaaaa'] })
+    state.onDesktop = false
+    windows.restoreOnLaunch()
+    expect(FakeWindow.all).toHaveLength(0)
   })
 
   it('brings back the oldest live view when none was open and no window exists', () => {
