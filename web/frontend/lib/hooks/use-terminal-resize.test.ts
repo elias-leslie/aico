@@ -92,10 +92,11 @@ describe('useTerminalResize shared-size claim', () => {
     } as unknown as typeof ResizeObserver
     let dims = { cols: 80, rows: 24 }
     const send = vi.fn()
+    const fit = vi.fn()
     const options = {
       terminalRef: { current: {} as never },
       fitAddonRef: {
-        current: { fit: vi.fn(), proposeDimensions: () => dims } as never,
+        current: { fit, proposeDimensions: () => dims } as never,
       },
       containerRef: { current: document.createElement('div') },
       wsRef: { current: { readyState: WebSocket.OPEN, send } as never },
@@ -111,7 +112,7 @@ describe('useTerminalResize shared-size claim', () => {
     }
     const messages = () =>
       send.mock.calls.map(([raw]) => JSON.parse(raw as string))
-    return { result, observe, messages }
+    return { result, observe, messages, fit }
   }
 
   it('re-claims the shared size whenever the active view refits', () => {
@@ -185,5 +186,86 @@ describe('useTerminalResize shared-size claim', () => {
     vi.advanceTimersByTime(1000)
 
     expect(messages()).toEqual([])
+  })
+
+  it('neither fits nor claims a container too small to be a terminal', () => {
+    vi.useFakeTimers()
+    const { result, observe, messages, fit } = setup()
+
+    // A layout in transit (window mid-resize, container not laid out): fitting
+    // it reflows the whole scrollback into a few columns and the program
+    // redraws its transcript at that width.
+    observe(30, 600, { cols: 4, rows: 35 })
+    vi.advanceTimersByTime(1000)
+    result.current.handleResize()
+    expect(fit).not.toHaveBeenCalled()
+    expect(messages()).toEqual([])
+
+    observe(900, 700, { cols: 120, rows: 40 })
+    vi.advanceTimersByTime(1000)
+    expect(fit).toHaveBeenCalledTimes(1)
+    expect(messages()).toEqual([
+      { __ctrl: true, resize: { cols: 120, rows: 40 }, claim: true },
+    ])
+  })
+
+  it('keeps refits to a fraction of the time while the window keeps changing, and settles on the last size', () => {
+    vi.useFakeTimers()
+    // Each fit "costs" 100 ms (a reflow of a long scrollback).
+    let clock = 0
+    const now = vi.spyOn(performance, 'now').mockImplementation(() => {
+      clock += 100
+      return clock
+    })
+    const { observe, messages, fit } = setup()
+
+    // A tiling extension or drag changing the size every 5 ms for 2 s.
+    for (let t = 0; t < 2000; t += 5) {
+      observe(800 + t, 600, { cols: 60 + (t % 40), rows: 30 })
+      vi.advanceTimersByTime(5)
+    }
+    const duringStorm = fit.mock.calls.length
+    // 100 ms per fit, FIT_COST_RATIO x that between fits: about 2000/300 fits,
+    // against 2000/16 = 125 with a fixed debounce.
+    expect(duringStorm).toBeLessThanOrEqual(8)
+    expect(messages()).toEqual([])
+
+    vi.advanceTimersByTime(PTY_RESIZE_DEBOUNCE_MS + 1000)
+    // Exactly one claim, of the size the window ended at.
+    expect(messages()).toEqual([
+      {
+        __ctrl: true,
+        resize: { cols: 60 + (1995 % 40), rows: 30 },
+        claim: true,
+      },
+    ])
+    now.mockRestore()
+  })
+
+  it('claims on activation only after the layout settles, so a resize that follows is not preceded by a stale claim', () => {
+    vi.useFakeTimers()
+    const { result, observe, messages } = setup()
+
+    // The window regained focus; its resize arrives a few ms later.
+    result.current.requestClaim()
+    expect(messages()).toEqual([])
+    vi.advanceTimersByTime(3)
+    observe(600, 700, { cols: 107, rows: 64 })
+    vi.advanceTimersByTime(PTY_RESIZE_DEBOUNCE_MS + 1000)
+
+    expect(messages()).toEqual([
+      { __ctrl: true, resize: { cols: 107, rows: 64 }, claim: true },
+    ])
+  })
+
+  it('still claims on activation when the size did not change', () => {
+    vi.useFakeTimers()
+    const { result, messages } = setup()
+
+    result.current.handleResize()
+    result.current.requestClaim()
+    vi.advanceTimersByTime(PTY_RESIZE_DEBOUNCE_MS + 1000)
+
+    expect(messages()).toHaveLength(2)
   })
 })
