@@ -1,10 +1,13 @@
-// The model for the next message in an Agent Hub chat. Empty means the agent's
-// own routing, as on Agent Hub's chat page; a choice rides on the next message
-// and on any follow-up queued behind a running turn (bridge-client.ts).
+// The model for the next message in an Agent Hub chat, a select in the
+// composer's bar. Empty means the agent's own routing, as on Agent Hub's chat
+// page; a choice rides on the next message and on any follow-up queued behind
+// a running turn (bridge-client.ts). Effort and Tools selects are not here:
+// Agent Hub's turn API takes a thinking level, but Tether does not carry one
+// per turn (and its read-only flag is a label, not a tool limit), so a select
+// would change nothing.
 
 import type { ChatHubClient } from '@agent-hub/chat-ui'
 import { useQuery } from '@tanstack/react-query'
-import { useId } from 'react'
 
 interface ModelPickerProps {
   client: ChatHubClient
@@ -14,7 +17,6 @@ interface ModelPickerProps {
 }
 
 export function ModelPicker({ client, value, onChange }: ModelPickerProps) {
-  const selectId = useId()
   const catalog = useQuery({
     queryKey: ['aico-chat', 'models', client.baseUrl ?? ''],
     queryFn: () => client.models.list(),
@@ -28,16 +30,18 @@ export function ModelPicker({ client, value, onChange }: ModelPickerProps) {
   const listed = routable.some((model) => model.id === value)
   return (
     <div className="chat-model">
-      <label htmlFor={selectId}>Model</label>
-      <select id={selectId} value={value} onChange={(event) => onChange(event.target.value)}>
-        <option value="">{catalog.isLoading ? 'Loading models…' : 'Agent routing'}</option>
-        {value && !listed ? <option value={value}>{value}</option> : null}
-        {routable.map((model) => (
-          <option key={model.id} value={model.id}>
-            {model.name} ({model.provider})
-          </option>
-        ))}
-      </select>
+      <label className="chat-model-pick">
+        <span>Model</span>
+        <select value={value} onChange={(event) => onChange(event.target.value)}>
+          <option value="">{catalog.isLoading ? 'Loading models…' : 'Agent routing'}</option>
+          {value && !listed ? <option value={value}>{value}</option> : null}
+          {routable.map((model) => (
+            <option key={model.id} value={model.id}>
+              {model.name} ({model.provider})
+            </option>
+          ))}
+        </select>
+      </label>
       {catalog.isError ? (
         <span role="status" className="chat-model-failed">
           The model list did not load.{' '}

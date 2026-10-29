@@ -60,11 +60,14 @@ function ChatView({ info }: { info: ChatInfo }) {
       <ChatPanel
         agentSlug={info.agentSlug}
         sessionId={info.sessionId}
-        layout="compact"
+        layout="transcript"
         toolsEnabled
         allowModelMentions={false}
+        branch={info.branch ?? null}
         config={{ model: model || null }}
-        renderBanner={() => <ModelPicker client={client} value={model} onChange={setModel} />}
+        renderComposerControls={() => (
+          <ModelPicker client={client} value={model} onChange={setModel} />
+        )}
       />
     </ChatClientProvider>
   )

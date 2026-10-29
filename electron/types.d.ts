@@ -57,6 +57,8 @@ export interface ChatInfo {
   sessionId: string
   agentSlug: string
   requestedModel: string | null
+  /** The git branch the session's folder has checked out, when it has one. */
+  branch?: string
 }
 
 /** A failure as the renderer rebuilds it into an SDK-shaped error. */

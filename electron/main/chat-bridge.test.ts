@@ -1,8 +1,11 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { WebContents } from 'electron'
 import { type SessionDescriptor, TetherError, TetherUnavailable } from 'tether/client'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ChatStreamItem } from '../types'
-import { createChatBridge } from './chat-bridge'
+import { createChatBridge, gitBranch } from './chat-bridge'
 
 const SECRET = 'owner-token-0123456789abcdef'
 
@@ -357,5 +360,43 @@ describe('the renderer side holds no credential', () => {
       const source = readFileSync(file, 'utf8')
       expect(source, file).not.toMatch(/owner[-_ ]?token|OWNER_TOKEN|AGENT_HUB_URL|:8003/i)
     }
+  })
+})
+
+describe('gitBranch', () => {
+  const made: string[] = []
+  const folder = () => {
+    const dir = mkdtempSync(join(tmpdir(), 'aico-branch-'))
+    made.push(dir)
+    return dir
+  }
+  afterEach(() => {
+    for (const dir of made.splice(0)) rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('reads the checked-out branch of a repository', () => {
+    const dir = folder()
+    mkdirSync(join(dir, '.git'))
+    writeFileSync(join(dir, '.git', 'HEAD'), 'ref: refs/heads/fix/order-total\n')
+    expect(gitBranch(dir)).toBe('fix/order-total')
+  })
+
+  it('follows a linked worktree to its own HEAD', () => {
+    const dir = folder()
+    const real = join(dir, 'gitdirs', 'wt')
+    mkdirSync(real, { recursive: true })
+    writeFileSync(join(real, 'HEAD'), 'ref: refs/heads/feature\n')
+    mkdirSync(join(dir, 'wt'))
+    writeFileSync(join(dir, 'wt', '.git'), `gitdir: ${real}\n`)
+    expect(gitBranch(join(dir, 'wt'))).toBe('feature')
+  })
+
+  it('is null for a detached HEAD, a plain folder and no folder', () => {
+    const dir = folder()
+    mkdirSync(join(dir, '.git'))
+    writeFileSync(join(dir, '.git', 'HEAD'), '0123456789abcdef\n')
+    expect(gitBranch(dir)).toBeNull()
+    expect(gitBranch(folder())).toBeNull()
+    expect(gitBranch(null)).toBeNull()
   })
 })

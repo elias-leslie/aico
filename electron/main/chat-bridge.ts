@@ -10,12 +10,14 @@
 // names no session: main answers for the session the sender's window shows.
 //
 // Channels (preload `window.aico.chat`):
-//   chat:info         invoke -> {sessionId, agentSlug, requestedModel} or null
+//   chat:info         invoke -> {sessionId, agentSlug, requestedModel, branch?} or null
 //   chat:call         invoke (method, args) -> {ok, value} | {ok: false, error}
 //   chat:stream-open  invoke (afterSeq) -> stream id; events arrive as chat:event
 //   chat:stream-close send   (stream id)
 //   chat:event        main -> renderer (stream id, item)
 
+import { readFileSync, statSync } from 'node:fs'
+import { isAbsolute, join, resolve } from 'node:path'
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent, WebContents } from 'electron'
 import {
   type SessionCatalog,
@@ -34,7 +36,29 @@ const MAX_MODEL_ID = 128
 const MAX_STREAMS_PER_WINDOW = 4
 const METHODS: ReadonlySet<string> = new Set(['session', 'queue', 'send', 'cancel', 'models'])
 
+/**
+ * The branch a project folder has checked out, read from its git files (also in a linked worktree, where `.git`
+ * is a file pointing at the real directory). Null when it is not a repository or HEAD is detached.
+ */
+export function gitBranch(root: string | null | undefined): string | null {
+  if (!root) return null
+  try {
+    let gitDir = join(root, '.git')
+    if (statSync(gitDir).isFile()) {
+      const pointer = /^gitdir:\s*(.+)$/m.exec(readFileSync(gitDir, 'utf8'))?.[1]?.trim()
+      if (!pointer) return null
+      gitDir = isAbsolute(pointer) ? pointer : resolve(root, pointer)
+    }
+    const head = /^ref:\s*refs\/heads\/(.+)$/m.exec(readFileSync(join(gitDir, 'HEAD'), 'utf8'))
+    return head?.[1]?.trim() || null
+  } catch {
+    return null
+  }
+}
+
 interface ChatBridgeDeps {
+  /** The branch of a folder, for the status line. Default reads the folder's git files. */
+  branchOf?: (root: string | null) => string | null
   tether: Pick<TetherClient, 'request' | 'stream'>
   catalog: Pick<SessionCatalog, 'get'>
   registry: Pick<WindowRegistry, 'senderSession'>
@@ -75,6 +99,7 @@ class ChatRefusal extends Error {
 
 export function createChatBridge(deps: ChatBridgeDeps) {
   const { tether, catalog, registry } = deps
+  const branchOf = deps.branchOf ?? gitBranch
   let nextStream = 1
   // webContents id -> stream id -> abort
   const streams = new Map<number, Map<string, AbortController>>()
@@ -98,12 +123,14 @@ export function createChatBridge(deps: ChatBridgeDeps) {
       }
     }
     if (descriptor.backend !== 'agent-hub' || !descriptor.agentHub) return null
+    const branch = branchOf(descriptor.projectRoot)
     return {
       descriptor,
       info: {
         sessionId: descriptor.agentHub.sessionId,
         agentSlug: descriptor.agentHub.agentSlug,
         requestedModel: descriptor.agentHub.requestedModel,
+        ...(branch ? { branch } : {}),
       },
     }
   }
