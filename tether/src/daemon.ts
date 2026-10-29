@@ -46,6 +46,7 @@ import { startMemoryGuard } from './memory-guard'
 import { activeProjectFileFromEnv, ProjectProvider, summitflowUrlFromEnv } from './projects'
 import { Continuity } from './reboot'
 import { Recovery } from './recovery'
+import type { StepChatSource } from './runs-api'
 import { createTetherServer } from './server'
 import { Store } from './store'
 import { VERSION } from './version'
@@ -177,6 +178,7 @@ export async function startDaemon(
     recovery: undefined as Recovery | undefined,
     wakes: undefined as WakeService | undefined,
     runs: undefined as RunTracker | undefined,
+    stepChats: undefined as StepChatSource | undefined,
     memoryPolicy: startMemoryGuard(paths, store, env, {
       foreground: foregroundPaneScope,
       sessionOf: () =>
