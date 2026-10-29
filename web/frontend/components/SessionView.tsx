@@ -1,9 +1,11 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { AgentHubChat } from '@/components/AgentHubChat'
 import { EmptySessionState } from '@/components/EmptySessionState'
 import { FilesDialog } from '@/components/files/FilesDialog'
 import type { TerminalMode } from '@/components/ModeToggle'
+import { StepView, useStepViewer } from '@/components/StepViewer'
 import { TerminalComponent, type TerminalHandle } from '@/components/Terminal'
 import { ConnectionNotice, SizeHolderNotice } from '@/components/TerminalNotice'
 import type { ConnectionStatus } from '@/components/terminal.types'
@@ -84,6 +86,7 @@ export function SessionView({
   onToggleCompose,
   sideList = false,
 }: SessionViewProps) {
+  const stepViewer = useStepViewer()
   const [refreshVersion, setRefreshVersion] = useState(0)
   // Files is open, on what it was asked to show.
   const [files, setFiles] = useState<{ request: FilesRequest | null } | null>(
@@ -132,6 +135,11 @@ export function SessionView({
     }
   }, [])
 
+  // A workflow step opened from the list replaces the session until it is closed.
+  if (stepViewer.step) {
+    return <StepView step={stepViewer.step} onBack={stepViewer.close} />
+  }
+
   if (!slot) {
     return (
       <EmptySessionState
@@ -143,6 +151,8 @@ export function SessionView({
   }
 
   const workingDir = getSlotWorkingDir(slot)
+  // An Agent Hub session is a chat; it has no terminal to refit, search or type keys into.
+  const chat = slot.chat === true
 
   return (
     <div className="h-full w-full" style={{ backgroundColor: 'var(--rim)' }}>
@@ -151,17 +161,23 @@ export function SessionView({
           slot={slot}
           isActive={true}
           fontSize={fontSize}
-          onFontSizeChange={onFontSizeChange}
-          onReset={onReset && slot.can.reset ? () => onReset(slot) : undefined}
+          onFontSizeChange={chat ? undefined : onFontSizeChange}
+          onReset={
+            onReset && slot.can.reset && !chat ? () => onReset(slot) : undefined
+          }
           onCloseSession={
             onCloseSession && slot.can.end
               ? () => onCloseSession(slot)
               : undefined
           }
-          onRefresh={refresh}
-          onFiles={sessionId ? () => setFiles({ request: null }) : undefined}
+          onRefresh={chat ? undefined : refresh}
+          onFiles={
+            sessionId && !chat ? () => setFiles({ request: null }) : undefined
+          }
           onUpload={
-            onUpload ? () => onUpload(sessionId ?? undefined) : undefined
+            onUpload && !chat
+              ? () => onUpload(sessionId ?? undefined)
+              : undefined
           }
           onOpenModal={sideList ? undefined : onNewSession}
           onModeSwitch={
@@ -169,14 +185,14 @@ export function SessionView({
           }
           isModeSwitching={isModeSwitching}
           composeOpen={composeOpen}
-          onToggleCompose={onToggleCompose}
+          onToggleCompose={chat ? undefined : onToggleCompose}
           isMobile={isMobile}
           allSlots={sideList ? undefined : slots}
           onSwitchTo={sideList ? undefined : onSwitch}
           searchAlwaysOpen={sideList}
-          connectionStatus={status}
+          connectionStatus={chat ? undefined : status}
           onSearch={
-            sessionId
+            sessionId && !chat
               ? (query, options) =>
                   handleRef.current?.search(query, options) ?? {
                     query,
@@ -187,7 +203,9 @@ export function SessionView({
               : undefined
           }
           onClearSearch={
-            sessionId ? () => handleRef.current?.clearSearch() : undefined
+            sessionId && !chat
+              ? () => handleRef.current?.clearSearch()
+              : undefined
           }
         />
 
@@ -199,7 +217,10 @@ export function SessionView({
             boxShadow: 'inset 0 0 0 1px var(--frame-edge)',
           }}
         >
-          {sessionId && (
+          {sessionId && chat && (
+            <AgentHubChat key={sessionId} source={{ session: sessionId }} />
+          )}
+          {sessionId && !chat && (
             <TerminalComponent
               key={`${sessionId}:${refreshVersion}`}
               ref={(handle) => {
@@ -224,7 +245,7 @@ export function SessionView({
               onSizeHolderChange={onSizeHolderChange}
             />
           )}
-          {sessionId && (
+          {sessionId && !chat && (
             <ConnectionNotice
               status={status}
               hasConnected={connectedKey === termKey}
@@ -232,7 +253,7 @@ export function SessionView({
               onNewSession={onNewSession}
             />
           )}
-          {sizeHolder?.key === termKey && status === 'connected' && (
+          {!chat && sizeHolder?.key === termKey && status === 'connected' && (
             <SizeHolderNotice
               holder={sizeHolder.name}
               onUseHere={() => handleRef.current?.claimSize()}

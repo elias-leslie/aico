@@ -7,6 +7,7 @@ import { AgentShows } from './AgentShowToast'
 import { NativeKeyboardInput } from './keyboard/NativeKeyboardInput'
 import { SessionSidebar, SIDE_LIST_WIDTH } from './SessionSidebar'
 import { getShownSlot } from './SessionView'
+import { StepViewerProvider, useStepViewer } from './StepViewer'
 import { TerminalFileSection } from './terminal-content/TerminalFileSection'
 import { TerminalMobileSection } from './terminal-content/TerminalMobileSection'
 import type { TerminalContentProps } from './terminal-content/types'
@@ -28,7 +29,15 @@ const SIDE_LIST_WIDTH_KEY = 'aico-side-list-width'
  * Renders the terminal content area with all modals and overlays
  * Extracted from TerminalTabs to reduce component size
  */
-export function TerminalContent({
+export function TerminalContent(props: TerminalContentProps) {
+  return (
+    <StepViewerProvider>
+      <TerminalContentBody {...props} />
+    </StepViewerProvider>
+  )
+}
+
+function TerminalContentBody({
   terminalSlots,
   fontSize,
   setFontSize,
@@ -82,6 +91,8 @@ export function TerminalContent({
     SIDE_LIST_WIDTH.initial,
   )
   const shownSlot = getShownSlot(terminalSlots, activeSessionId)
+  // A chat (an Agent Hub session, or a workflow step opened read-only) has no terminal to type keys into.
+  const chatShown = useStepViewer().step !== null || shownSlot?.chat === true
   const sessionName = (session: string) => {
     const slot = terminalSlots.find((candidate) =>
       getSlotSessionId(candidate)?.startsWith(session),
@@ -152,37 +163,43 @@ export function TerminalContent({
         />
 
         {/* Mobile keyboard + voice panel */}
-        <TerminalMobileSection
-          sessions={sessions}
-          activeSessionId={activeSessionId}
-          activeStatus={activeStatus}
-          activeMode={activeMode}
-          handleKeyboardInput={handleKeyboardInput}
-          handleComposeInput={handleComposeInput}
-          isVoiceSupported={isVoiceSupported}
-          handleVoiceOpen={handleVoiceOpen}
-          showVoice={showVoice}
-          voiceFinalTranscript={voiceFinalTranscript}
-          voiceInterimTranscript={voiceInterimTranscript}
-          voiceStatus={voiceStatus}
-          voiceError={voiceError}
-          handleVoiceSend={handleVoiceSend}
-          handleVoiceCancel={handleVoiceCancel}
-          handleVoiceToggle={handleVoiceToggle}
-          isMobile={isMobile}
-        />
-
-        {!isMobile && composeOpen && activeSessionId && sessions.length > 0 && (
-          <div className="order-3">
-            <NativeKeyboardInput
-              key={activeSessionId}
-              inputRef={composeInputRef}
-              sessionId={activeSessionId}
-              connected={activeStatus === 'connected'}
-              onCommit={handleComposeInput}
-            />
-          </div>
+        {!chatShown && (
+          <TerminalMobileSection
+            sessions={sessions}
+            activeSessionId={activeSessionId}
+            activeStatus={activeStatus}
+            activeMode={activeMode}
+            handleKeyboardInput={handleKeyboardInput}
+            handleComposeInput={handleComposeInput}
+            isVoiceSupported={isVoiceSupported}
+            handleVoiceOpen={handleVoiceOpen}
+            showVoice={showVoice}
+            voiceFinalTranscript={voiceFinalTranscript}
+            voiceInterimTranscript={voiceInterimTranscript}
+            voiceStatus={voiceStatus}
+            voiceError={voiceError}
+            handleVoiceSend={handleVoiceSend}
+            handleVoiceCancel={handleVoiceCancel}
+            handleVoiceToggle={handleVoiceToggle}
+            isMobile={isMobile}
+          />
         )}
+
+        {!chatShown &&
+          !isMobile &&
+          composeOpen &&
+          activeSessionId &&
+          sessions.length > 0 && (
+            <div className="order-3">
+              <NativeKeyboardInput
+                key={activeSessionId}
+                inputRef={composeInputRef}
+                sessionId={activeSessionId}
+                connected={activeStatus === 'connected'}
+                onCommit={handleComposeInput}
+              />
+            </div>
+          )}
       </div>
     </div>
   )

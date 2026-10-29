@@ -4,6 +4,7 @@
 
 import { compatibleVersion, type TetherClient } from 'tether/client'
 import { AGENT_HUB_PATHS, type AgentHubConfig, proxyAgentHub } from './agent-hub'
+import { registerChatRoutes } from './chat'
 import { registerCheckInRoutes } from './check-ins'
 import type { UploadConfig } from './config'
 import type { WebStore } from './db'
@@ -351,6 +352,7 @@ export function buildApi(deps: ApiDeps): Router {
   registerShowRoutes(router, deps.shows)
   registerCheckInRoutes(router, life, tether)
   registerRunRoutes(router, tether)
+  registerChatRoutes(router, tether)
 
   // -- Agent Hub, auth, health ------------------------------------------------------
 

@@ -26,6 +26,7 @@ import { AgentIcon, getAgentColor } from './AgentIcon'
 import { CheckInBadge } from './CheckInBadge'
 import { CoordinatorBadge } from './CoordinatorBadge'
 import { KeptCheckIns } from './KeptCheckIns'
+import { useStepViewer } from './StepViewer'
 
 function getSlotMode(slot: TerminalSlot | PaneSlot): string {
   if (slot.type === 'project') {
@@ -160,6 +161,24 @@ function rowMeta(agent: string, state: Attention | null): string {
   return agent
 }
 
+/** What clicking a row does: a session opens as the main view (closing any step
+ * open there), a running step opens read-only through `onOpenStep` or else the
+ * main view's step viewer. */
+function useRowOpener(
+  onSelect: (slot: TerminalSlot | PaneSlot) => void,
+  onOpenStep: ((step: RunMember) => void) | undefined,
+) {
+  const viewer = useStepViewer()
+  return (slot: TerminalSlot | PaneSlot | null, step: RunMember | null) => {
+    if (slot) {
+      viewer.close()
+      onSelect(slot)
+    } else if (step) {
+      ;(onOpenStep ?? viewer.open)(step)
+    }
+  }
+}
+
 const TEAMS_OPEN_KEY = 'aico:teams-open'
 
 /** Which teams show their lanes. A desktop remembers each coordinator in
@@ -205,6 +224,7 @@ export function SessionList({
   phone = false,
 }: SessionListProps) {
   const { agentTools } = useAgentTools()
+  const open = useRowOpener(onSelect, onOpenStep)
   const runs = attention?.runs
   const teams = useMemo(
     () => foldSessionEntries(sortSessionEntries(slots, attention), runs?.items),
@@ -251,9 +271,7 @@ export function SessionList({
       <div key={id} className={clsx(isTeam && 'lantern-team')}>
         <button
           type="button"
-          onClick={() =>
-            slot ? onSelect(slot) : onOpenStep?.(row.item.step as RunMember)
-          }
+          onClick={() => open(slot, row.item.step)}
           aria-current={id === currentId ? 'true' : undefined}
           className={clsx('lantern-row', needs && 'needs', isTeam && 'lead')}
         >
@@ -359,6 +377,7 @@ export function SessionRail({
   onOpenStep,
 }: Omit<SessionListProps, 'phone'>) {
   const { agentTools } = useAgentTools()
+  const open = useRowOpener(onSelect, onOpenStep)
   const runs = attention?.runs
   const teams = useMemo(
     () => foldSessionEntries(sortSessionEntries(slots, attention), runs?.items),
@@ -380,9 +399,7 @@ export function SessionRail({
           <button
             key={id}
             type="button"
-            onClick={() =>
-              slot ? onSelect(slot) : onOpenStep?.(row.item.step as RunMember)
-            }
+            onClick={() => open(slot, row.item.step)}
             aria-current={current ? 'true' : undefined}
             aria-label={name}
             title={name}

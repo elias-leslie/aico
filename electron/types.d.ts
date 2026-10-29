@@ -1,5 +1,6 @@
 // Shape of the preload bridge, shared by renderer code and the global Window.
 
+import type { ChatCallResult, ChatInfo, ChatStreamItem } from './shared/chat/types'
 import type { AicoTerminalFontSettings } from './shared/font-settings'
 
 export interface SelectionToast {
@@ -51,34 +52,7 @@ export interface OpenableSession {
   locallyOpen: boolean
 }
 
-/** What the renderer is told about its window's chat. */
-export interface ChatInfo {
-  /** The Agent Hub session id the chat panel opens. */
-  sessionId: string
-  agentSlug: string
-  requestedModel: string | null
-  /** The git branch the session's folder has checked out, when it has one. */
-  branch?: string
-  /** A workflow step's attempt, read only: the window offers no message box. */
-  readOnly?: boolean
-}
-
-/** A failure as the renderer rebuilds it into an SDK-shaped error. */
-export interface ChatFailure {
-  message: string
-  /** Tether's or Agent Hub's code (`agent_hub_unavailable`, `turn_running`, ...). */
-  code: string
-  status?: number
-}
-
-export type ChatCallResult = { ok: true; value: unknown } | { ok: false; error: ChatFailure }
-
-/** One item of a stream: a turn event as Agent Hub sent it, or how the stream ended. */
-export type ChatStreamItem =
-  | { kind: 'event'; event: Record<string, unknown> }
-  | { kind: 'end' }
-  | { kind: 'error'; error: ChatFailure }
-
+export type { ChatCallResult, ChatFailure, ChatInfo, ChatStreamItem } from './shared/chat/types'
 export interface AicoApi {
   pty: {
     start(size: { cols: number; rows: number }): void

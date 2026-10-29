@@ -645,6 +645,14 @@ body {
   color: var(--bone);
 }
 
+/* The chat view fills the window under the title bar, as the terminal does. */
+#chat-root {
+  flex: 1;
+  min-height: 0;
+  margin: 0 4px 4px 4px;
+  border-radius: 4px;
+}
+
 /* Terminal: solid --ink, inner radius, framed by the frosted padding. */
 #terminal {
   /* Keep the terminal's layers below the shell menus and palette. */

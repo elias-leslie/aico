@@ -46,6 +46,8 @@ interface SlotSessionFields {
   /** When the session (or its pane) began: the session list's order. */
   createdAt?: string | null
   can: SlotCapabilities
+  /** An Agent Hub chat: the view shows its transcript, not a terminal. */
+  chat?: boolean
   /** The header shows the session title (`Project — Task`) in place of the
    * project switcher. */
   showsSessionTitle: boolean
@@ -242,6 +244,7 @@ function slotFields(
     coordinator: session.is_coordinator === true,
     coordinatorId: session.coordinator_id ?? null,
     createdAt: session.created_at,
+    ...(session.backend === 'agent-hub' ? { chat: true } : {}),
     can: {
       rename: session.can_rename,
       // A free-standing View never offers Reset: closing it only detaches.

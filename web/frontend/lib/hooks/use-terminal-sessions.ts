@@ -65,6 +65,8 @@ export interface TerminalSession extends CoordinatorFields {
   can_respawn: boolean
   /** The session can be ended from the web app. */
   can_end: boolean
+  /** `agent-hub`: a chat on an Agent Hub agent, shown as a chat, not a terminal. */
+  backend?: 'agent-hub' | null
 }
 
 interface SessionListResponse {

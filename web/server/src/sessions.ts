@@ -55,6 +55,8 @@ export interface WebSession {
   can_rename: boolean
   can_respawn: boolean
   can_end: boolean
+  /** `agent-hub` for a chat on an Agent Hub agent (no terminal); null on a tmux session. */
+  backend: 'agent-hub' | null
 }
 
 /** Tether's lifecycle status as the UI's agent badge. */
@@ -133,6 +135,7 @@ export function fromTether(descriptor: SessionDescriptor, link: Link | null): We
     can_rename: true,
     can_respawn: !isRoot,
     can_end: true,
+    backend: descriptor.backend === 'agent-hub' && descriptor.agentHub ? 'agent-hub' : null,
   }
 }
 
