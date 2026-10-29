@@ -31,6 +31,26 @@ export interface Launcher {
   id: string
   /** The id runs record as `launched_by`. */
   ownershipId: string
+  /** Other ids the same session's runs may record. An Agent Hub chat session
+   * launches from Agent Hub's own shell, which names the chat's Agent Hub
+   * session id (`AGENT_HUB_SESSION_ID`); a terminal session names its Aico id. */
+  alsoOwnedAs?: string[]
+}
+
+/** The sessions to look for runs of: every terminal session by its Aico id,
+ * and every Agent Hub chat session by its Aico id and its Agent Hub session id. */
+export function sessionLaunchers(
+  rows: readonly { id: string; sessionId: string; backend: string }[],
+  hubSessionIdOf: (id: string) => string | undefined,
+): Launcher[] {
+  return rows.map((row) => {
+    const hubId = row.backend === 'agent-hub' ? hubSessionIdOf(row.id) : undefined
+    return {
+      id: row.id,
+      ownershipId: row.sessionId,
+      ...(hubId && hubId !== row.sessionId ? { alsoOwnedAs: [hubId] } : {}),
+    }
+  })
 }
 
 export type RunControlCode = 'unknown_run' | 'unknown_step' | 'not_allowed' | 'no_session'
@@ -186,26 +206,36 @@ export class RunTracker {
     const live = new Set(launchers.map((launcher) => launcher.id))
     const listed = new Map<string, { item: RunListItem; launcherId: string }>()
     const reached = new Set<string>()
+    const missed = new Set<string>()
     let failure: unknown = null
 
-    const queue = [...launchers]
+    const queue = launchers.flatMap((launcher) =>
+      [launcher.ownershipId, ...(launcher.alsoOwnedAs ?? [])].map((ownedAs) => ({
+        launcherId: launcher.id,
+        ownedAs,
+      })),
+    )
     await Promise.all(
       Array.from({ length: Math.min(config.concurrency, queue.length) }, async () => {
-        for (let launcher = queue.shift(); launcher; launcher = queue.shift()) {
+        for (let look = queue.shift(); look; look = queue.shift()) {
           if (this.stopped) return
           try {
             const answer: RunList = await api.list({
-              launched_by: launcher.ownershipId,
+              launched_by: look.ownedAs,
               limit: config.listLimit,
             })
-            reached.add(launcher.id)
-            for (const item of answer.runs) listed.set(item.id, { item, launcherId: launcher.id })
+            reached.add(look.launcherId)
+            for (const item of answer.runs)
+              listed.set(item.id, { item, launcherId: look.launcherId })
           } catch (error) {
+            missed.add(look.launcherId)
             failure ??= error
           }
         }
       }),
     )
+    // A launcher is reached only when every id of it answered.
+    for (const id of missed) reached.delete(id)
     if (this.stopped) return
 
     const reads: Promise<void>[] = []

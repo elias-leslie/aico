@@ -5,7 +5,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { createHubApi } from './agent-hub/client'
 import { resolveAgentHubConfig, resolveRunsConfig } from './agent-hub/config'
-import { RunTracker } from './agent-hub/runs'
+import { RunTracker, sessionLaunchers } from './agent-hub/runs'
 import { AgentHubRuntime, type HubApi } from './agent-hub/runtime'
 import { AgentStatePoller, AgentStateTracker } from './agent-state'
 import { agentExitMarkerDir, resolveShowConfig, type TetherPaths } from './config'
@@ -14,7 +14,13 @@ import { parseGraphicalEnvironment } from './env'
 import { EventBus } from './events'
 import { GuiChannel } from './gui-channel'
 import { listenPrivateSocket } from './http'
-import { bindCatalog, getWidget, listWidgets } from './lifecycle/catalog'
+import {
+  bindCatalog,
+  getAgentHubSession,
+  getWidget,
+  listSessions,
+  listWidgets,
+} from './lifecycle/catalog'
 import { setPersonalWorkspaceRoot } from './lifecycle/display'
 import {
   cachedSessionStatus,
@@ -219,7 +225,7 @@ export async function startDaemon(
   }
   const runs = new RunTracker({
     api: () => hub().workflowRuns,
-    launchers: () => listWidgets().map((row) => ({ id: row.id, ownershipId: row.sessionId })),
+    launchers: () => sessionLaunchers(listSessions(), (id) => getAgentHubSession(id)?.hubSessionId),
     config: resolveRunsConfig(env),
     dismissed: {
       read: () => readDismissedRuns(store.getSetting(DISMISSED_RUNS_KEY)),

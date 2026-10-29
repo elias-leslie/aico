@@ -1,13 +1,16 @@
 import type { RunList, RunListItem, RunView, StepView } from '@agent-hub/sdk'
 import { describe, expect, it } from 'vitest'
+import { childAgents } from '../client/run-text'
 import type { RunsConfig } from './config'
 import { resolveRunsConfig } from './config'
 import {
   type DismissedStore,
+  type Launcher,
   type PauseNoticeStore,
   RunControlError,
   type RunsApi,
   RunTracker,
+  sessionLaunchers,
 } from './runs'
 import { executorTool, pauseNotice, phaseWord, runMembers, runProgress } from './runs-view'
 
@@ -297,11 +300,7 @@ class FakeRuns {
   }
 }
 
-function tracker(
-  fake: FakeRuns,
-  launchers: { id: string; ownershipId: string }[],
-  clock: { now: number } = { now: NOW },
-) {
+function tracker(fake: FakeRuns, launchers: Launcher[], clock: { now: number } = { now: NOW }) {
   let dismissed: Record<string, number> = {}
   const store: DismissedStore = { read: () => dismissed, write: (d) => (dismissed = { ...d }) }
   const notified: number[] = []
@@ -553,6 +552,78 @@ describe('a run as one line', () => {
   })
 })
 
+describe('an Agent Hub chat session as a launcher', () => {
+  const rows = [
+    { id: 'c0d0ae59', sessionId: 'aico-widget-c0d0ae59', backend: 'tmux' },
+    { id: 'chat1', sessionId: 'aico-widget-chat1', backend: 'agent-hub' },
+  ]
+  const hubIds: Record<string, string> = { chat1: 'hub-session-1', c0d0ae59: 'ignored' }
+  const CHAT = sessionLaunchers(rows, (id) => hubIds[id])
+
+  it('names a chat session by its Aico id and its Agent Hub session id, a terminal session by its Aico id', () => {
+    expect(CHAT).toEqual([
+      { id: 'c0d0ae59', ownershipId: 'aico-widget-c0d0ae59' },
+      { id: 'chat1', ownershipId: 'aico-widget-chat1', alsoOwnedAs: ['hub-session-1'] },
+    ])
+    expect(sessionLaunchers([rows[1] as (typeof rows)[number]], () => undefined)).toEqual([
+      { id: 'chat1', ownershipId: 'aico-widget-chat1' },
+    ])
+  })
+
+  it('shows the running and waiting steps of a run the chat launched as its child agents, and no run row', async () => {
+    const fake = new FakeRuns()
+    fake.runs.set(
+      'r1',
+      view(
+        'r1',
+        'running',
+        [step('one', 'completed'), step('two', 'running'), step('three', 'pending')],
+        {
+          launched_by: 'hub-session-1',
+        },
+      ),
+    )
+    fake.runs.set('r2', view('r2', 'running', [step('x', 'running')], { launched_by: 'other' }))
+    const { instance } = tracker(fake, CHAT)
+    await instance.tick()
+    expect(fake.listCalls.sort()).toEqual([
+      'aico-widget-c0d0ae59',
+      'aico-widget-chat1',
+      'hub-session-1',
+    ])
+    const children = childAgents(instance.snapshot().items)
+    expect(children.map((m) => [m.kind, m.stepKey, m.coordinatorId])).toEqual([
+      ['step', 'two', 'chat1'],
+    ])
+    // Over: the step leaves the list.
+    fake.runs.set(
+      'r1',
+      view('r1', 'completed', [step('two', 'completed')], { launched_by: 'hub-session-1' }),
+    )
+    await instance.tick()
+    expect(childAgents(instance.snapshot().items)).toEqual([])
+  })
+
+  it('keeps a run when one of its launcher ids could not be asked', async () => {
+    const fake = new FakeRuns()
+    fake.runs.set(
+      'r1',
+      view('r1', 'running', [step('a', 'running')], { launched_by: 'hub-session-1' }),
+    )
+    const { instance } = tracker(fake, CHAT)
+    await instance.tick()
+    const list = fake.api.list
+    fake.api.list = async (params) => {
+      if (params?.launched_by === 'aico-widget-chat1')
+        throw Object.assign(new Error('down'), { status: 500 })
+      return list(params)
+    }
+    await instance.tick()
+    expect(instance.snapshot().items.map((m) => m.id)).toEqual(['run:r1', 'step:r1:a'])
+    expect(instance.snapshot().status).toBe('stale')
+  })
+})
+
 describe('telling the coordinator about a pause', () => {
   const paused = (at: number, waiting = 'a') =>
     view('r1', 'needs_owner', [step(waiting, 'failed')], {
@@ -560,7 +631,7 @@ describe('telling the coordinator about a pause', () => {
       pause: { reason: 'step_failed', at, waiting: { [waiting]: { reason: 'step_failed' } } },
     })
 
-  function pausing(fake: FakeRuns, launchers: { id: string; ownershipId: string }[]) {
+  function pausing(fake: FakeRuns, launchers: Launcher[]) {
     let told: Record<string, { key: string; at: number }> = {}
     const store: PauseNoticeStore = { read: () => told, write: (t) => (told = { ...t }) }
     const sent: { to: string; text: string }[] = []
@@ -586,6 +657,29 @@ describe('telling the coordinator about a pause', () => {
       })
     return { make, sent, refuse: () => (accept = false), allow: () => (accept = true) }
   }
+
+  it('tells the chat session once when its run waits for the owner', async () => {
+    const fake = new FakeRuns()
+    fake.runs.set(
+      'r1',
+      view('r1', 'needs_owner', [step('a', 'failed')], {
+        launched_by: 'hub-session-1',
+        goal: 'Proof run',
+        pause: { reason: 'step_failed', at: 1000, waiting: { a: { reason: 'step_failed' } } },
+      }),
+    )
+    const p = pausing(fake, [
+      { id: 'chat1', ownershipId: 'aico-widget-chat1', alsoOwnedAs: ['hub-session-1'] },
+    ])
+    const t = p.make()
+    await t.tick()
+    await t.tick()
+    expect(p.sent).toHaveLength(1)
+    expect(p.sent[0]).toMatchObject({ to: 'chat1' })
+    expect(childAgents(t.snapshot().items).map((m) => [m.stepKey, m.group])).toEqual([
+      ['a', 'needs-you'],
+    ])
+  })
 
   it('says which run and step, why, and the exact command', () => {
     const notice = pauseNotice(paused(1793230241), 500)
