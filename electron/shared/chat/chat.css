@@ -130,3 +130,54 @@
   text-decoration: underline;
   cursor: pointer;
 }
+
+/* Effort sits beside Model, same bordered label and select. */
+.chat-effort-pick select {
+  max-width: 120px;
+}
+
+/* The status line keeps the model route whole: it wraps, it never ends in an ellipsis. */
+.aico-chat [data-testid="status-model"] {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* A phone: the model and effort get the whole first row of the composer's bar, and Stop and
+   Send / Queue sit together at the right of the row under it. */
+@media (max-width: 520px) {
+  .chat-model {
+    flex: 1 1 100%;
+    flex-wrap: nowrap;
+  }
+
+  .chat-model-pick {
+    flex: 1 1 0;
+  }
+
+  .chat-model-pick select {
+    width: 100%;
+    max-width: none;
+  }
+
+  .chat-effort-pick {
+    flex: 0 1 140px;
+  }
+
+  .chat-model-failed {
+    flex: 1 1 100%;
+  }
+
+  .chat-model:has(.chat-model-failed) {
+    flex-wrap: wrap;
+  }
+
+  .aico-chat [data-testid="status-line"] {
+    column-gap: 12px;
+  }
+
+  .aico-chat [data-testid="status-model"] {
+    flex: 1 1 100%;
+  }
+}
