@@ -276,6 +276,9 @@ export class AgentHubRuntime {
         const failure = classifyHubError(error)
         this.failures.set(widgetId, { code: failure.code, message: failure.message })
         this.log(`create ${widgetId} not finished: ${failure.code}`)
+        // Say what the session is doing now (a refused turn leaves it idle).
+        const created = getAgentHubSession(widgetId)
+        if (created?.created) await this.observe(row, created).catch(() => undefined)
       }
       this.options.notify(widgetId)
     })

@@ -141,6 +141,8 @@ describe('AgentHubRuntime', () => {
       message: "working_dir '/x' is outside the known project roots and scratch",
     })
     expect(hub.sessions.get(hubId(row))?.messages).toEqual(['Say hello.'])
+    // The turn state is the session's real one: nothing is running.
+    expect(runtime.describe(row.id)?.turnState).toBe('idle')
     // A repeat of the create (same request) runs the turn this time and clears the failure.
     await runtime.ensure(row.id, 'Say hello.')
     expect(getAgentHubSession(row.id)).toMatchObject({ promptSent: true })
