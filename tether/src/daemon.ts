@@ -5,7 +5,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { createHubApi } from './agent-hub/client'
 import { resolveAgentHubConfig, resolveRunsConfig, resolveSettleMs } from './agent-hub/config'
-import { RunTracker, sessionLaunchers } from './agent-hub/runs'
+import { RunTracker, sessionLaunchers, type ToldPause } from './agent-hub/runs'
 import { AgentHubRuntime, type HubApi } from './agent-hub/runtime'
 import { AgentStatePoller, AgentStateTracker } from './agent-state'
 import { agentExitMarkerDir, resolveShowConfig, type TetherPaths } from './config'
@@ -86,15 +86,21 @@ const DISMISSED_RUNS_KEY = 'dismissed_runs'
  * pause's key and when), so a restart does not tell one again. */
 const TOLD_PAUSES_KEY = 'told_run_pauses'
 
-function readTold(raw: string | null): Record<string, { key: string; at: number }> {
+function readTold(raw: string | null): Record<string, ToldPause> {
   try {
     const value = JSON.parse(raw ?? '{}') as Record<string, unknown>
     return Object.fromEntries(
       Object.entries(value).filter(([, entry]) => {
-        const e = entry as { key?: unknown; at?: unknown } | null
-        return typeof e?.key === 'string' && typeof e.at === 'number' && Number.isFinite(e.at)
+        const e = entry as { key?: unknown; at?: unknown; to?: unknown; note?: unknown } | null
+        return (
+          typeof e?.key === 'string' &&
+          typeof e.at === 'number' &&
+          Number.isFinite(e.at) &&
+          (e.to === undefined || typeof e.to === 'string') &&
+          (e.note === undefined || typeof e.note === 'string')
+        )
       }),
-    ) as Record<string, { key: string; at: number }>
+    ) as Record<string, ToldPause>
   } catch {
     return {}
   }
@@ -246,9 +252,19 @@ export async function startDaemon(
         const note = cleanNote(notice.text, wakes.policy().noteMaxChars)
         if (note === null) return false
         const now = Date.now()
-        wakes.store.add({ sessionId: row.id, dueAt: now, note, createdBy: 'agent', now })
+        const wake = wakes.store.add({
+          sessionId: row.id,
+          dueAt: now,
+          note,
+          createdBy: 'agent',
+          now,
+        })
         wakes.changed(row.id)
-        return true
+        return wake.id
+      },
+      withdraw: (_launcherId, noteId) => {
+        const wake = wakes.store.get(noteId)
+        if (wake && wakes.store.remove(noteId)) wakes.changed(wake.sessionId)
       },
     },
     notify: () => events.publish('runs.changed', {}),

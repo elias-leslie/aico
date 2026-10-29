@@ -71,11 +71,20 @@ export interface DismissedStore {
   write(dismissed: Record<string, number>): void
 }
 
-/** The pauses already told to the launching session (run id to the pause's key
- * and when), kept by the caller across restarts so a pause is told once. */
+/** A pause told to the launching session: the pause's key, when, and the
+ * session and queued note it went to, so the note can be withdrawn. */
+export interface ToldPause {
+  key: string
+  at: number
+  to?: string
+  note?: string
+}
+
+/** The pauses already told to the launching session (run id to the told
+ * pause), kept by the caller across restarts so a pause is told once. */
 export interface PauseNoticeStore {
-  read(): Record<string, { key: string; at: number }>
-  write(told: Record<string, { key: string; at: number }>): void
+  read(): Record<string, ToldPause>
+  write(told: Record<string, ToldPause>): void
 }
 
 /** Where a pause is told to the session that launched the run. */
@@ -83,9 +92,11 @@ export interface PauseNotices {
   store: PauseNoticeStore
   /** The longest note the session takes. */
   maxChars: () => number
-  /** Hand the note to the session; true once it is queued for it, false when
-   * the session cannot take one now (tried again at the next look). */
-  tell(launcherId: string, notice: PauseNotice): boolean | Promise<boolean>
+  /** Hand the note to the session; the queued note's id once it is queued for
+   * it, false when the session cannot take one now (tried again at the next look). */
+  tell(launcherId: string, notice: PauseNotice): string | false | Promise<string | false>
+  /** Take back a note not yet delivered: the pause it told of is over. */
+  withdraw(launcherId: string, noteId: string): void
 }
 
 /** What the read-only view of a step's attempt needs. */
@@ -130,7 +141,7 @@ export class RunTracker {
   private readonly now: () => number
   private readonly log: (message: string) => void
   private dismissed: Record<string, number>
-  private told: Record<string, { key: string; at: number }>
+  private told: Record<string, ToldPause>
   private timer: ReturnType<typeof setInterval> | null = null
   private ticking = false
   private stopped = false
@@ -305,32 +316,49 @@ export class RunTracker {
   /** Once per pause, tell the session that launched a run waiting for the
    * owner. A run that is not waiting forgets its last pause, so the next one
    * is told again; a launcher that has ended is not told (the owner answers
-   * from the expanded run). */
+   * from the expanded run). A note not yet delivered is taken back once its
+   * pause is over (answered, cancelled, replaced by a new pause, or the run
+   * gone from a launcher that still answers), so no stale ask arrives late. */
   private async tellPauses(live: Set<string>): Promise<void> {
     const pauses = this.options.pauses
     if (!pauses) return
     let changed = false
+    const forget = (runId: string) => {
+      const told = this.told[runId]
+      if (!told) return
+      if (told.to && told.note) {
+        try {
+          pauses.withdraw(told.to, told.note)
+        } catch (error) {
+          this.log(`could not take back a note about a paused run: ${(error as Error).message}`)
+        }
+      }
+      delete this.told[runId]
+      changed = true
+    }
     for (const [runId, entry] of this.tracked) {
       const notice =
         entry.view.state === 'needs_owner' ? pauseNotice(entry.view, pauses.maxChars()) : null
       if (!notice) {
-        if (this.told[runId]) {
-          delete this.told[runId]
-          changed = true
-        }
+        forget(runId)
         continue
       }
       if (this.told[runId]?.key === notice.key || !live.has(entry.launcherId)) continue
-      let told = false
+      forget(runId)
+      let note: string | false = false
       try {
-        told = await pauses.tell(entry.launcherId, notice)
+        note = await pauses.tell(entry.launcherId, notice)
       } catch (error) {
         this.log(`could not tell the session about a paused run: ${(error as Error).message}`)
       }
-      if (!told) continue
-      this.told[runId] = { key: notice.key, at: this.now() }
+      if (!note) continue
+      this.told[runId] = { key: notice.key, at: this.now(), to: entry.launcherId, note }
       changed = true
     }
+    // A run no longer followed whose launcher is still here has ended or was
+    // dismissed: its pause is over too.
+    for (const [runId, told] of Object.entries(this.told))
+      if (!this.tracked.has(runId) && told.to && live.has(told.to)) forget(runId)
     const cutoff = this.now() - DISMISSED_KEEP_MS
     for (const [runId, { at }] of Object.entries(this.told))
       if (at < cutoff) {

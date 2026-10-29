@@ -11,6 +11,7 @@ import {
   type RunsApi,
   RunTracker,
   sessionLaunchers,
+  type ToldPause,
 } from './runs'
 import { executorTool, pauseNotice, phaseWord, runMembers, runProgress } from './runs-view'
 
@@ -632,9 +633,10 @@ describe('telling the coordinator about a pause', () => {
     })
 
   function pausing(fake: FakeRuns, launchers: Launcher[]) {
-    let told: Record<string, { key: string; at: number }> = {}
+    let told: Record<string, ToldPause> = {}
     const store: PauseNoticeStore = { read: () => told, write: (t) => (told = { ...t }) }
     const sent: { to: string; text: string }[] = []
+    const withdrawn: { to: string; note: string }[] = []
     let accept = true
     const make = () =>
       new RunTracker({
@@ -648,14 +650,17 @@ describe('telling the coordinator about a pause', () => {
           tell: (to, notice) => {
             if (!accept) return false
             sent.push({ to, text: notice.text })
-            return true
+            return `note-${sent.length}`
+          },
+          withdraw: (to, note) => {
+            withdrawn.push({ to, note })
           },
         },
         notify: () => {},
         now: () => NOW,
         log: () => {},
       })
-    return { make, sent, refuse: () => (accept = false), allow: () => (accept = true) }
+    return { make, sent, withdrawn, refuse: () => (accept = false), allow: () => (accept = true) }
   }
 
   it('tells the chat session once when its run waits for the owner', async () => {
@@ -756,6 +761,106 @@ describe('telling the coordinator about a pause', () => {
     await orphan.tick()
     await orphan.tick()
     expect(gone.sent).toHaveLength(0)
+  })
+})
+
+describe('taking back a note whose pause is over', () => {
+  const paused = (at: number, waiting = 'a') =>
+    view('r1', 'needs_owner', [step(waiting, 'failed')], {
+      goal: 'Proof run',
+      pause: { reason: 'step_failed', at, waiting: { [waiting]: { reason: 'step_failed' } } },
+    })
+
+  function pausing(fake: FakeRuns, launchers: () => Launcher[]) {
+    let told: Record<string, ToldPause> = {}
+    const store: PauseNoticeStore = { read: () => told, write: (t) => (told = { ...t }) }
+    const sent: string[] = []
+    const withdrawn: { to: string; note: string }[] = []
+    const make = () =>
+      new RunTracker({
+        api: () => fake.api,
+        launchers,
+        config: CONFIG,
+        dismissed: { read: () => ({}), write: () => {} },
+        pauses: {
+          store,
+          maxChars: () => 500,
+          tell: (_to, notice) => {
+            sent.push(notice.text)
+            return `note-${sent.length}`
+          },
+          withdraw: (to, note) => {
+            withdrawn.push({ to, note })
+          },
+        },
+        notify: () => {},
+        now: () => NOW,
+        log: () => {},
+      })
+    return { make, sent, withdrawn, told: () => told }
+  }
+
+  it('takes the note back when the run is cancelled before the coordinator reads it', async () => {
+    const fake = new FakeRuns()
+    fake.runs.set('r1', paused(1000))
+    const p = pausing(fake, () => LAUNCHER)
+    const t = p.make()
+    await t.tick()
+    expect(p.sent).toHaveLength(1)
+    fake.runs.set('r1', view('r1', 'cancelled', [step('a', 'failed')]))
+    await t.tick()
+    expect(p.withdrawn).toEqual([{ to: 'c0d0ae59', note: 'note-1' }])
+    expect(p.told()).toEqual({})
+    await t.tick()
+    expect(p.withdrawn).toHaveLength(1)
+  })
+
+  it('takes the note back when the owner answers and the run goes on', async () => {
+    const fake = new FakeRuns()
+    fake.runs.set('r1', paused(1000))
+    const p = pausing(fake, () => LAUNCHER)
+    const t = p.make()
+    await t.tick()
+    fake.runs.set('r1', view('r1', 'running', [step('a', 'running')]))
+    await t.tick()
+    expect(p.withdrawn).toEqual([{ to: 'c0d0ae59', note: 'note-1' }])
+  })
+
+  it('replaces the note when a new pause follows, and after a restart', async () => {
+    const fake = new FakeRuns()
+    fake.runs.set('r1', paused(1000))
+    const p = pausing(fake, () => LAUNCHER)
+    await p.make().tick()
+    const restarted = p.make()
+    fake.runs.set('r1', paused(2000, 'b'))
+    await restarted.tick()
+    expect(p.withdrawn).toEqual([{ to: 'c0d0ae59', note: 'note-1' }])
+    expect(p.sent).toHaveLength(2)
+    expect(p.told().r1).toMatchObject({ to: 'c0d0ae59', note: 'note-2' })
+  })
+
+  it('takes the note back when a launcher that still answers no longer lists the run', async () => {
+    const fake = new FakeRuns()
+    fake.runs.set('r1', paused(1000))
+    const p = pausing(fake, () => LAUNCHER)
+    const t = p.make()
+    await t.tick()
+    fake.runs.delete('r1')
+    await t.tick()
+    expect(p.withdrawn).toEqual([{ to: 'c0d0ae59', note: 'note-1' }])
+  })
+
+  it('leaves the note of a coordinator that has ended for its relaunch', async () => {
+    const fake = new FakeRuns()
+    fake.runs.set('r1', paused(1000))
+    let launchers = LAUNCHER
+    const p = pausing(fake, () => launchers)
+    const t = p.make()
+    await t.tick()
+    launchers = []
+    fake.runs.delete('r1')
+    await t.tick()
+    expect(p.withdrawn).toHaveLength(0)
   })
 })
 
