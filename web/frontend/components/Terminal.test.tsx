@@ -1,11 +1,7 @@
 import { act, render, waitFor } from '@testing-library/react'
 import { createRef } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  isAutomatedBrowser,
-  TerminalComponent,
-  type TerminalHandle,
-} from './Terminal'
+import { TerminalComponent, type TerminalHandle } from './Terminal'
 
 type TerminalHookOptions = Parameters<
   typeof import('../lib/hooks/use-terminal-websocket')['useTerminalWebSocket']
@@ -307,39 +303,6 @@ describe('TerminalComponent', () => {
     void ref.current?.pasteInput('y')
     expect(resizeHandle).toHaveBeenCalledTimes(2)
     vi.useRealTimers()
-  })
-
-  it('an automated browser only looks: no size, no claim, even when typing', () => {
-    Object.defineProperty(window.navigator, 'webdriver', {
-      value: true,
-      configurable: true,
-    })
-    websocketState.wsRefCurrent = { readyState: WebSocket.OPEN, send: vi.fn() }
-
-    try {
-      render(<TerminalComponent sessionId="session-agent" isVisible />)
-      act(() => terminalInstanceOptions?.onData('x'))
-
-      expect(websocketState.options?.sendInitialResize).toBe(false)
-      expect(resizeHookOptions?.canClaim).toBe(false)
-      expect(resizeHandle).not.toHaveBeenCalled()
-    } finally {
-      Reflect.deleteProperty(window.navigator, 'webdriver')
-    }
-  })
-
-  it('tells an agent browser from the owner by webdriver or a headless user agent', () => {
-    const chrome =
-      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36'
-    const nav = (userAgent: string, webdriver: boolean) =>
-      ({ userAgent, webdriver }) as Navigator
-    expect(isAutomatedBrowser(nav(chrome, false))).toBe(false)
-    expect(isAutomatedBrowser(nav(chrome, true))).toBe(true)
-    expect(
-      isAutomatedBrowser(
-        nav(chrome.replace('Chrome/', 'HeadlessChrome/'), false),
-      ),
-    ).toBe(true)
   })
 
   it("takes the size back from the owner's other tab on opening, with no notice", () => {

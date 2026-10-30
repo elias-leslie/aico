@@ -82,6 +82,12 @@ export function browserViewerId(): string {
   }
 }
 
+/** An agent's automated browser (headless or driven Chrome). The server never
+ * lets it take the size from a real view. */
+export function isAutomatedBrowser(nav: Navigator): boolean {
+  return nav.webdriver === true || /HeadlessChrome\//.test(nav.userAgent)
+}
+
 function getReconnectDelay(attemptIndex: number): number {
   return Math.min(
     INITIAL_RECONNECT_DELAY_MS * 1.5 ** attemptIndex,
@@ -218,6 +224,7 @@ export function openWebSocketConnection(
         ...(dims ? { resize: { cols: dims.cols, rows: dims.rows } } : {}),
         capabilities: CLIENT_CAPABILITIES,
         viewer_id: browserViewerId(),
+        ...(isAutomatedBrowser(navigator) ? { automated: true } : {}),
       }),
     )
   }

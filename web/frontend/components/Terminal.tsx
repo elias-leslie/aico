@@ -50,12 +50,6 @@ function isObserverModeEnabled(search: string): boolean {
   return value === '1' || value === 'true'
 }
 
-/** An agent's automated browser (headless or driven Chrome) only looks: it
- * must never take the size from the owner's view. */
-export function isAutomatedBrowser(nav: Navigator): boolean {
-  return nav.webdriver === true || /HeadlessChrome\//.test(nav.userAgent)
-}
-
 /** The owner is looking at this page now (the focused, visible window). */
 function isPageActive(): boolean {
   return document.visibilityState === 'visible' && document.hasFocus()
@@ -84,13 +78,11 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
     const isFocusedRef = useRef(false)
     const isVisibleRef = useRef(isVisible)
     const rendererStatusRef = useRef<TerminalRendererStatus | null>(null)
-    // An observer (`?observer=1`, or an automated browser) never sizes the
-    // session, even when typing.
+    // An observer (`?observer=1`) never sizes the session, even when typing.
     const isObserver = useMemo(
       () =>
         typeof window !== 'undefined' &&
-        (isObserverModeEnabled(window.location.search) ||
-          isAutomatedBrowser(window.navigator)),
+        isObserverModeEnabled(window.location.search),
       [],
     )
 

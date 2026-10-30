@@ -18,7 +18,11 @@
 // its tabs) in its first control message: a holder that is another socket of
 // the same browser is flagged `same_browser`, so the window the owner is
 // looking at takes the size back from their own other tab. An automated
-// browser (an agent's headless Chrome) only looks: it never sizes or claims.
+// browser (an agent's headless or driven Chrome: its user agent, or the page's
+// `automated` flag) never takes the size from a real view: it attaches
+// unsized, and its claims count only while nobody holds the size or another
+// automated view does. A real view opening a session an automated view holds
+// takes it back.
 
 import type { IncomingMessage } from 'node:http'
 import {
@@ -169,6 +173,8 @@ export function deviceLabel(userAgent: string | undefined): string {
 interface View {
   /** The page's browser (viewer_id); null when it sent none. */
   browser: string | null
+  /** An agent's automated browser. */
+  automated: boolean
   /** This socket's tmux client pid; null while it has no link. */
   pid(): number | null
   sizeHeld(clientPid: number, viewer: ViewerLabel | null, size: Size | null): void
@@ -265,6 +271,14 @@ export class TerminalHub {
     return false
   }
 
+  /** An open automated socket's tmux client holds the session's size. */
+  private heldByAutomated(id: string, holderPid: number | undefined): boolean {
+    if (holderPid === undefined) return false
+    for (const other of this.views.get(id) ?? [])
+      if (other.automated && other.pid() === holderPid) return true
+    return false
+  }
+
   private remove(id: string, view: View): void {
     const views = this.views.get(id)
     views?.delete(view)
@@ -275,7 +289,7 @@ export class TerminalHub {
   async serve(ws: WebSocket, req: IncomingMessage, sessionId: string): Promise<void> {
     const { tether } = this.deps
     const viewer: ViewerLabel = { app: 'web', device: deviceLabel(req.headers['user-agent']) }
-    const automated = isAutomatedViewer(req.headers['user-agent'])
+    let automated = isAutomatedViewer(req.headers['user-agent'])
     const dead = (message: string) =>
       ws.close(SESSION_DEAD_CODE, JSON.stringify({ error: 'session_dead', message }))
     if (!SESSION_ID.test(sessionId)) return dead('Invalid session id')
@@ -348,6 +362,7 @@ export class TerminalHub {
       if (message.kind !== 'control') continue
       size = sizeOf(message.message) ?? size
       browser = viewerIdOf(message.message) ?? browser
+      if (message.message.automated === true) automated = true
     }
     // An automated browser attaches unsized, as an observer does.
     if (automated) size = null
@@ -360,6 +375,9 @@ export class TerminalHub {
     let generation = descriptor.generation ?? ''
     let detach = () => {}
     let claimed = false
+    // An automated socket may claim: nobody holds the size, an automated
+    // view does, or this one does.
+    let mayClaim = !automated
     let lastNotice = ''
     let lastHostState = ''
     let retries = 0
@@ -512,8 +530,11 @@ export class TerminalHub {
             link: current,
           })
           if (claimed || !isCurrent() || link !== current) return
-          // An unsized socket (an observer) never claims.
-          if (at.claim && current.cols > 0) {
+          const fromAutomated = this.heldByAutomated(sessionId, at.holder?.clientPid)
+          if (automated) mayClaim = at.claim || fromAutomated
+          // An unsized socket (an observer) never claims; a real view takes
+          // the size from an automated one.
+          if ((at.claim || fromAutomated) && current.cols > 0) {
             claimed = true
             void claim()
           } else if (at.holder)
@@ -530,11 +551,14 @@ export class TerminalHub {
 
     const view: View = {
       browser,
+      automated,
       pid: () => link?.pid ?? null,
       sizeHeld: (clientPid, label, held) => {
         if (!link) return
         // Another client took the size: a reattach no longer claims it back.
         if (clientPid !== link.pid) claimed = false
+        if (automated)
+          mayClaim = clientPid === link.pid || this.heldByAutomated(sessionId, clientPid)
         notice(clientPid === link.pid, label, held, clientPid)
       },
       ended: () => {
@@ -563,8 +587,9 @@ export class TerminalHub {
 
     const handle = (message: ClientMessage) => {
       const control = message.kind === 'control' ? message.message : null
-      // An automated browser neither sizes nor claims.
-      const sizing = control !== null && !automated
+      // An automated browser sizes and claims only when that takes nothing
+      // from a real view.
+      const sizing = control !== null && mayClaim
       if (sizing && 'resize' in control) size = sizeOf(control) ?? size
       // A claim made while the host is away applies once a link is back.
       if (sizing && control.claim === true) claimed = true

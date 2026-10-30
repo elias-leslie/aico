@@ -416,21 +416,101 @@ describe('terminal socket', () => {
     for (const view of [tab, main, phone]) view.ws.close()
   })
 
-  it('an automated browser watches unsized and never claims', async () => {
+  it('an automated browser opens unsized and claims only a size no real view holds', async () => {
+    const session = tether.add()
+    const headless = {
+      Origin: ORIGIN,
+      'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) HeadlessChrome/147.0.0.0 Safari/537.36',
+    }
+    // Nobody holds it: opening takes nothing; Use here does.
+    const agent = open(session.id, headless)
+    await agent.next((f) => f.transport === 'control')
+    agent.ws.send(ctrl({ resize: { cols: 46, rows: 37 }, viewer_id: 'agent-browser' }))
+    const held = await agent.next((f) => 'size_holder' in f)
+    expect(held.size_holder).toEqual({ here: false, viewer: null, size: { cols: 80, rows: 24 } })
+    expect(links[0].size).toBeNull()
+    expect(tether.callsOf('resizeClaim')).toHaveLength(0)
+    agent.ws.send(ctrl({ resize: { cols: 46, rows: 37 }, claim: true }))
+    await until(() => tether.callsOf('resizeClaim').length === 1)
+    expect(tether.callsOf('resizeClaim')[0].slice(2, 5)).toEqual([4242, 46, 37])
+    const agentHolds = (pid: number) =>
+      hub.event({
+        seq: 1,
+        bootId: 'b',
+        type: 'session.resized',
+        at: 0,
+        data: {
+          id: session.id,
+          generation: 'g1',
+          clientPid: pid,
+          cols: 46,
+          rows: 37,
+          changed: true,
+          viewer: { app: 'web', device: 'Chrome on Linux' },
+        },
+      })
+    agentHolds(4242)
+    tether.holder = {
+      generation: 'g1',
+      holder: {
+        clientPid: 4242,
+        cols: 46,
+        rows: 37,
+        generation: 'g1',
+        claimedAt: '',
+        viewer: { app: 'web', device: 'Chrome on Linux' },
+      },
+    }
+    windowState = { cols: 46, rows: 37, pinned: true, clients: [4242, 4243] }
+
+    // The owner opens the session: a real view takes it from the agent's.
+    const owner = open(session.id, {
+      Origin: ORIGIN,
+      'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) Chrome/141.0',
+    })
+    await owner.next((f) => f.transport === 'control')
+    owner.ws.send(ctrl({ resize: { cols: 150, rows: 50 }, viewer_id: 'owner-desk' }))
+    await until(() => tether.callsOf('resizeClaim').length === 2)
+    expect(tether.callsOf('resizeClaim')[1].slice(2, 5)).toEqual([4243, 150, 50])
+    hub.event({
+      seq: 2,
+      bootId: 'b',
+      type: 'session.resized',
+      at: 0,
+      data: {
+        id: session.id,
+        generation: 'g1',
+        clientPid: 4243,
+        cols: 150,
+        rows: 50,
+        changed: true,
+        viewer: { app: 'web', device: 'Chrome on Linux' },
+      },
+    })
+    await agent.next(
+      (f) => (f.size_holder as { size?: { cols: number } } | undefined)?.size?.cols === 150,
+    )
+
+    // Now a real view holds it: the agent's typing, resizes and Use here take nothing.
+    agent.ws.send(ctrl({ resize: { cols: 46, rows: 30 }, claim: true }))
+    agent.ws.send('typed')
+    await until(() => links[0].written.length === 1)
+    expect(links[0].resized).toEqual([{ cols: 46, rows: 37 }])
+    expect(tether.callsOf('resizeClaim')).toHaveLength(2)
+    agent.ws.close()
+    owner.ws.close()
+  })
+
+  it("the page's automated flag counts as a headless user agent", async () => {
     const session = tether.add()
     const view = open(session.id, {
       Origin: ORIGIN,
-      'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) HeadlessChrome/147.0.0.0 Safari/537.36',
+      'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) Chrome/141.0',
     })
     await view.next((f) => f.transport === 'control')
-    view.ws.send(ctrl({ resize: { cols: 46, rows: 37 }, viewer_id: 'agent-browser' }))
-    const held = await view.next((f) => 'size_holder' in f)
-    expect(held.size_holder).toEqual({ here: false, viewer: null, size: { cols: 80, rows: 24 } })
+    view.ws.send(ctrl({ resize: { cols: 46, rows: 37 }, automated: true }))
+    await view.next((f) => 'size_holder' in f)
     expect(links[0].size).toBeNull()
-    view.ws.send(ctrl({ resize: { cols: 46, rows: 37 }, claim: true }))
-    view.ws.send('typed')
-    await until(() => links[0].written.length === 1)
-    expect(links[0].resized).toEqual([])
     expect(tether.callsOf('resizeClaim')).toHaveLength(0)
     view.ws.close()
   })

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   browserViewerId,
   dispatchControlMessage,
+  isAutomatedBrowser,
   openWebSocketConnection,
   type WebSocketConnectionCallbacks,
   type WebSocketConnectionRefs,
@@ -173,6 +174,38 @@ describe('openWebSocketConnection', () => {
       capabilities: ['binary_protocol'],
       viewer_id: expect.any(String),
     })
+  })
+
+  it('says so when it is an automated browser', () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('WebSocket', MockWebSocket)
+    Object.defineProperty(window.navigator, 'webdriver', {
+      value: true,
+      configurable: true,
+    })
+    try {
+      connect(buildRefs(), buildCallbacks())
+      sockets[0].emitOpen()
+      expect(JSON.parse(sockets[0].sent[0] as string)).toMatchObject({
+        automated: true,
+      })
+    } finally {
+      Reflect.deleteProperty(window.navigator, 'webdriver')
+    }
+  })
+
+  it('tells an agent browser from the owner by webdriver or a headless user agent', () => {
+    const chrome =
+      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36'
+    const nav = (userAgent: string, webdriver: boolean) =>
+      ({ userAgent, webdriver }) as Navigator
+    expect(isAutomatedBrowser(nav(chrome, false))).toBe(false)
+    expect(isAutomatedBrowser(nav(chrome, true))).toBe(true)
+    expect(
+      isAutomatedBrowser(
+        nav(chrome.replace('Chrome/', 'HeadlessChrome/'), false),
+      ),
+    ).toBe(true)
   })
 
   it('negotiates observer capabilities without reading terminal dimensions', () => {
