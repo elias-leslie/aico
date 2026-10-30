@@ -1,7 +1,11 @@
 import { act, render, waitFor } from '@testing-library/react'
 import { createRef } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { TerminalComponent, type TerminalHandle } from './Terminal'
+import {
+  isAutomatedBrowser,
+  TerminalComponent,
+  type TerminalHandle,
+} from './Terminal'
 
 type TerminalHookOptions = Parameters<
   typeof import('../lib/hooks/use-terminal-websocket')['useTerminalWebSocket']
@@ -191,6 +195,7 @@ describe('TerminalComponent', () => {
         here: false,
         viewer: { app: 'web', device: 'Chrome on Android' },
         size: null,
+        sameBrowser: false,
       })
     })
     expect(onSizeHolderChange).not.toHaveBeenCalled()
@@ -204,6 +209,7 @@ describe('TerminalComponent', () => {
         here: true,
         viewer: null,
         size: null,
+        sameBrowser: false,
       })
     })
     expect(onSizeHolderChange).toHaveBeenLastCalledWith(null)
@@ -245,6 +251,7 @@ describe('TerminalComponent', () => {
         here: false,
         viewer: { app: 'desktop', device: 'box' },
         size: { cols: 200, rows: 60 },
+        sameBrowser: false,
       }),
     )
     expect(resizeHookOptions?.viewSize).toEqual({ cols: 200, rows: 60 })
@@ -255,6 +262,7 @@ describe('TerminalComponent', () => {
         here: true,
         viewer: null,
         size: null,
+        sameBrowser: false,
       }),
     )
     expect(resizeHookOptions?.viewSize).toBeNull()
@@ -271,6 +279,7 @@ describe('TerminalComponent', () => {
         here: false,
         viewer: null,
         size: { cols: 200, rows: 60 },
+        sameBrowser: false,
       }),
     )
 
@@ -290,6 +299,7 @@ describe('TerminalComponent', () => {
         here: true,
         viewer: null,
         size: null,
+        sameBrowser: false,
       }),
     )
     act(() => vi.advanceTimersByTime(1600))
@@ -297,6 +307,109 @@ describe('TerminalComponent', () => {
     void ref.current?.pasteInput('y')
     expect(resizeHandle).toHaveBeenCalledTimes(2)
     vi.useRealTimers()
+  })
+
+  it('an automated browser only looks: no size, no claim, even when typing', () => {
+    Object.defineProperty(window.navigator, 'webdriver', {
+      value: true,
+      configurable: true,
+    })
+    websocketState.wsRefCurrent = { readyState: WebSocket.OPEN, send: vi.fn() }
+
+    try {
+      render(<TerminalComponent sessionId="session-agent" isVisible />)
+      act(() => terminalInstanceOptions?.onData('x'))
+
+      expect(websocketState.options?.sendInitialResize).toBe(false)
+      expect(resizeHookOptions?.canClaim).toBe(false)
+      expect(resizeHandle).not.toHaveBeenCalled()
+    } finally {
+      Reflect.deleteProperty(window.navigator, 'webdriver')
+    }
+  })
+
+  it('tells an agent browser from the owner by webdriver or a headless user agent', () => {
+    const chrome =
+      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36'
+    const nav = (userAgent: string, webdriver: boolean) =>
+      ({ userAgent, webdriver }) as Navigator
+    expect(isAutomatedBrowser(nav(chrome, false))).toBe(false)
+    expect(isAutomatedBrowser(nav(chrome, true))).toBe(true)
+    expect(
+      isAutomatedBrowser(
+        nav(chrome.replace('Chrome/', 'HeadlessChrome/'), false),
+      ),
+    ).toBe(true)
+  })
+
+  it("takes the size back from the owner's other tab on opening, with no notice", () => {
+    vi.useFakeTimers()
+    const onSizeHolderChange = vi.fn()
+    render(
+      <TerminalComponent
+        sessionId="session-mine"
+        isVisible
+        onSizeHolderChange={onSizeHolderChange}
+      />,
+    )
+    act(() =>
+      websocketState.options?.onSizeHolder?.({
+        here: false,
+        viewer: { app: 'web', device: 'Chrome on Linux' },
+        size: { cols: 120, rows: 40 },
+        sameBrowser: true,
+      }),
+    )
+    act(() => vi.advanceTimersByTime(1000))
+    expect(resizeHandle).toHaveBeenCalledTimes(1)
+    expect(resizeHookOptions?.viewSize).toBeNull()
+    expect(onSizeHolderChange).not.toHaveBeenCalledWith('Chrome on Linux')
+    vi.useRealTimers()
+  })
+
+  it('a background window leaves the size with the tab in front until it gains focus', () => {
+    vi.spyOn(document, 'hasFocus').mockReturnValue(false)
+    render(<TerminalComponent sessionId="session-behind" isVisible />)
+    act(() =>
+      websocketState.options?.onSizeHolder?.({
+        here: false,
+        viewer: { app: 'web', device: 'Chrome on Linux' },
+        size: { cols: 120, rows: 40 },
+        sameBrowser: true,
+      }),
+    )
+    expect(resizeHandle).not.toHaveBeenCalled()
+    expect(resizeHookOptions?.viewSize).toEqual({ cols: 120, rows: 40 })
+
+    vi.spyOn(document, 'hasFocus').mockReturnValue(true)
+    act(() => window.dispatchEvent(new Event('focus')))
+    expect(resizeHandle).toHaveBeenCalledTimes(1)
+  })
+
+  it("another device's hold is left alone on focus, and so is the owner's other tab taking it later", () => {
+    render(<TerminalComponent sessionId="session-shared" isVisible />)
+    act(() =>
+      websocketState.options?.onSizeHolder?.({
+        here: false,
+        viewer: { app: 'web', device: 'Chrome on Android' },
+        size: { cols: 46, rows: 37 },
+        sameBrowser: false,
+      }),
+    )
+    act(() => window.dispatchEvent(new Event('focus')))
+    expect(resizeHandle).not.toHaveBeenCalled()
+
+    // The owner typed in their other tab: this one does not snatch it back
+    // from the notice alone (two windows would trade it forever).
+    act(() =>
+      websocketState.options?.onSizeHolder?.({
+        here: false,
+        viewer: { app: 'web', device: 'Chrome on Linux' },
+        size: { cols: 120, rows: 40 },
+        sameBrowser: true,
+      }),
+    )
+    expect(resizeHandle).not.toHaveBeenCalled()
   })
 
   it('Use here claims at once', () => {

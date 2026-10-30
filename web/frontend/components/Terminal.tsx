@@ -50,6 +50,17 @@ function isObserverModeEnabled(search: string): boolean {
   return value === '1' || value === 'true'
 }
 
+/** An agent's automated browser (headless or driven Chrome) only looks: it
+ * must never take the size from the owner's view. */
+export function isAutomatedBrowser(nav: Navigator): boolean {
+  return nav.webdriver === true || /HeadlessChrome\//.test(nav.userAgent)
+}
+
+/** The owner is looking at this page now (the focused, visible window). */
+function isPageActive(): boolean {
+  return document.visibilityState === 'visible' && document.hasFocus()
+}
+
 export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
   function TerminalComponent(
     {
@@ -73,11 +84,13 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
     const isFocusedRef = useRef(false)
     const isVisibleRef = useRef(isVisible)
     const rendererStatusRef = useRef<TerminalRendererStatus | null>(null)
-    // An observer (`?observer=1`) never sizes the session, even when typing.
+    // An observer (`?observer=1`, or an automated browser) never sizes the
+    // session, even when typing.
     const isObserver = useMemo(
       () =>
         typeof window !== 'undefined' &&
-        isObserverModeEnabled(window.location.search),
+        (isObserverModeEnabled(window.location.search) ||
+          isAutomatedBrowser(window.navigator)),
       [],
     )
 
@@ -130,6 +143,10 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
     } | null>(null)
     const lastReclaimRef = useRef(0)
     const reclaimRef = useRef<() => void>(() => {})
+    // The owner's own other tab or window holds the size: the one they are
+    // looking at takes it back, on connecting and when it gains focus.
+    const sameBrowserHolderRef = useRef(false)
+    const heardHolderRef = useRef(false)
     // A remote session's host is away: the terminal shows no output and
     // takes no input until it is live again.
     const hostAwayRef = useRef(false)
@@ -155,8 +172,20 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
           if (!terminalRef.current) return
           enqueueWrite(data)
         },
-        onSizeHolder: ({ here, viewer, size }) => {
+        onSizeHolder: ({ here, viewer, size, sameBrowser }) => {
+          const first = !heardHolderRef.current
+          heardHolderRef.current = true
           holdsSizeRef.current = here
+          sameBrowserHolderRef.current = !here && sameBrowser
+          if (
+            first &&
+            sameBrowserHolderRef.current &&
+            !isObserver &&
+            isPageActive()
+          ) {
+            reclaimRef.current()
+            return
+          }
           setHoldsSize(here)
           setHeldBy(here ? null : sizeHolderName(viewer))
           setViewSize(here ? null : size)
@@ -333,9 +362,25 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
       clearSearch,
     })
 
+    // Back to this window while the owner's other tab holds the size.
+    useEffect(() => {
+      if (isObserver) return
+      const takeBack = () => {
+        if (sameBrowserHolderRef.current && isPageActive()) reclaimRef.current()
+      }
+      window.addEventListener('focus', takeBack)
+      document.addEventListener('visibilitychange', takeBack)
+      return () => {
+        window.removeEventListener('focus', takeBack)
+        document.removeEventListener('visibilitychange', takeBack)
+      }
+    }, [isObserver])
+
     // A new connection hears the holder afresh.
     useEffect(() => {
       if (status === 'connected') return
+      heardHolderRef.current = false
+      sameBrowserHolderRef.current = false
       holdsSizeRef.current = false
       setHoldsSize(false)
       setHeldBy(null)

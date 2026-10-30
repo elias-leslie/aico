@@ -13,6 +13,12 @@
 // device}`; whenever the holder changes, the page gets a `size_holder` notice
 // saying whether this socket holds it and, if not, which app and device does
 // ("Viewing on …") and the session's size, which the page then shows.
+//
+// The page names its browser with a `viewer_id` (one per browser profile, all
+// its tabs) in its first control message: a holder that is another socket of
+// the same browser is flagged `same_browser`, so the window the owner is
+// looking at takes the size back from their own other tab. An automated
+// browser (an agent's headless Chrome) only looks: it never sizes or claims.
 
 import type { IncomingMessage } from 'node:http'
 import {
@@ -44,6 +50,7 @@ export const SESSION_DEAD_CODE = 4000
 export const RECONNECT_CODE = 1012
 
 const SESSION_ID = /^[A-Za-z0-9_-]{1,128}$/
+const VIEWER_ID = /^[A-Za-z0-9_-]{8,64}$/
 const FIRST_MESSAGE_WAIT_MS = 5_000
 const HEARTBEAT_MS = 30_000
 const MAX_COLS = 512
@@ -120,6 +127,17 @@ export function sizeOf(message: Record<string, unknown>): Size | null {
   return { cols: clamp(cols, MAX_COLS), rows: clamp(rows, MAX_ROWS) }
 }
 
+/** An agent's headless Chrome: it may watch a session but never takes its size. */
+export function isAutomatedViewer(userAgent: string | undefined): boolean {
+  return /HeadlessChrome\//.test(userAgent ?? '')
+}
+
+/** The page's browser id from its first control message, or null. */
+export function viewerIdOf(message: Record<string, unknown>): string | null {
+  const id = message.viewer_id
+  return typeof id === 'string' && VIEWER_ID.test(id) ? id : null
+}
+
 /** "Chrome on Android": how other views name this device in "Viewing on …". */
 export function deviceLabel(userAgent: string | undefined): string {
   const ua = userAgent ?? ''
@@ -149,6 +167,10 @@ export function deviceLabel(userAgent: string | undefined): string {
 }
 
 interface View {
+  /** The page's browser (viewer_id); null when it sent none. */
+  browser: string | null
+  /** This socket's tmux client pid; null while it has no link. */
+  pid(): number | null
   sizeHeld(clientPid: number, viewer: ViewerLabel | null, size: Size | null): void
   ended(): void
   close(code: number, reason: string): void
@@ -234,6 +256,15 @@ export class TerminalHub {
     this.views.set(id, views)
   }
 
+  /** Another open socket of the same browser holds the session's size with
+   * this tmux client. */
+  private sameBrowser(id: string, view: View, holderPid: number | undefined): boolean {
+    if (!view.browser || holderPid === undefined) return false
+    for (const other of this.views.get(id) ?? [])
+      if (other !== view && other.browser === view.browser && other.pid() === holderPid) return true
+    return false
+  }
+
   private remove(id: string, view: View): void {
     const views = this.views.get(id)
     views?.delete(view)
@@ -244,6 +275,7 @@ export class TerminalHub {
   async serve(ws: WebSocket, req: IncomingMessage, sessionId: string): Promise<void> {
     const { tether } = this.deps
     const viewer: ViewerLabel = { app: 'web', device: deviceLabel(req.headers['user-agent']) }
+    const automated = isAutomatedViewer(req.headers['user-agent'])
     const dead = (message: string) =>
       ws.close(SESSION_DEAD_CODE, JSON.stringify({ error: 'session_dead', message }))
     if (!SESSION_ID.test(sessionId)) return dead('Invalid session id')
@@ -311,9 +343,14 @@ export class TerminalHub {
     if (!open) return
 
     let size: Size | null = null
+    let browser: string | null = null
     for (const message of early) {
-      if (message.kind === 'control') size = sizeOf(message.message) ?? size
+      if (message.kind !== 'control') continue
+      size = sizeOf(message.message) ?? size
+      browser = viewerIdOf(message.message) ?? browser
     }
+    // An automated browser attaches unsized, as an observer does.
+    if (automated) size = null
 
     // A session on a remote host can lose its link (the host went down, or
     // ssh dropped) while this socket stays open: the page then shows the
@@ -334,11 +371,17 @@ export class TerminalHub {
       lastHostState = state
       ws.send(controlFrame({ __ctrl: true, host_state: { host, state } }))
     }
-    const notice = (here: boolean, label: ViewerLabel | null, held: Size | null = null) => {
+    const notice = (
+      here: boolean,
+      label: ViewerLabel | null,
+      held: Size | null = null,
+      holderPid?: number,
+    ) => {
       const holder = {
         here,
         viewer: here ? viewer : label,
         ...(!here && held ? { size: { cols: held.cols, rows: held.rows } } : {}),
+        ...(!here && this.sameBrowser(sessionId, view, holderPid) ? { same_browser: true } : {}),
       }
       const key = JSON.stringify(holder)
       if (!isCurrent() || key === lastNotice) return
@@ -474,18 +517,25 @@ export class TerminalHub {
             claimed = true
             void claim()
           } else if (at.holder)
-            notice(at.holder.clientPid === current.pid, at.holder.viewer, at.size)
+            notice(
+              at.holder.clientPid === current.pid,
+              at.holder.viewer,
+              at.size,
+              at.holder.clientPid,
+            )
           else if (at.size) notice(false, null, at.size)
         })
       }
     }
 
     const view: View = {
+      browser,
+      pid: () => link?.pid ?? null,
       sizeHeld: (clientPid, label, held) => {
         if (!link) return
         // Another client took the size: a reattach no longer claims it back.
         if (clientPid !== link.pid) claimed = false
-        notice(clientPid === link.pid, label, held)
+        notice(clientPid === link.pid, label, held, clientPid)
       },
       ended: () => {
         if (open) dead('Session ended')
@@ -513,9 +563,11 @@ export class TerminalHub {
 
     const handle = (message: ClientMessage) => {
       const control = message.kind === 'control' ? message.message : null
-      if (control && 'resize' in control) size = sizeOf(control) ?? size
+      // An automated browser neither sizes nor claims.
+      const sizing = control !== null && !automated
+      if (sizing && 'resize' in control) size = sizeOf(control) ?? size
       // A claim made while the host is away applies once a link is back.
-      if (control?.claim === true) claimed = true
+      if (sizing && control.claim === true) claimed = true
       // The page came back to the foreground and asks whether this socket
       // still carries frames: answer even while the host is away.
       if (control?.probe === true && ws.readyState === WebSocket.OPEN)
@@ -532,8 +584,8 @@ export class TerminalHub {
         return
       }
       if (!control) return
-      if ('resize' in control && size) link.resize(size.cols, size.rows)
-      if (control.claim === true) claimWhenReady()
+      if (sizing && 'resize' in control && size) link.resize(size.cols, size.rows)
+      if (sizing && control.claim === true) claimWhenReady()
       if (typeof control.paste === 'string' && control.paste) link.paste(control.paste)
       if (control.refresh) link.reseed()
     }

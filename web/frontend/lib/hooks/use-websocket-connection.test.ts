@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  browserViewerId,
   dispatchControlMessage,
   openWebSocketConnection,
   type WebSocketConnectionCallbacks,
@@ -152,6 +153,7 @@ describe('openWebSocketConnection', () => {
     expect(JSON.parse(sockets[0].sent[0] as string)).toEqual({
       __ctrl: true,
       capabilities: ['binary_protocol'],
+      viewer_id: expect.any(String),
     })
   })
 
@@ -169,6 +171,7 @@ describe('openWebSocketConnection', () => {
       __ctrl: true,
       resize: { cols: 120, rows: 40 },
       capabilities: ['binary_protocol'],
+      viewer_id: expect.any(String),
     })
   })
 
@@ -188,6 +191,7 @@ describe('openWebSocketConnection', () => {
     expect(JSON.parse(sockets[0].sent[0] as string)).toEqual({
       __ctrl: true,
       capabilities: ['binary_protocol'],
+      viewer_id: expect.any(String),
     })
   })
 
@@ -348,6 +352,10 @@ describe('size holder', () => {
       '{"__ctrl":true,"size_holder":{"here":true,"viewer":{"app":1},"size":{"cols":0,"rows":4}}}',
       callbacks,
     )
+    dispatchControlMessage(
+      '{"__ctrl":true,"size_holder":{"here":false,"viewer":null,"same_browser":true}}',
+      callbacks,
+    )
     dispatchControlMessage('{"__ctrl":true,"size_holder":{}}', callbacks)
     expect(callbacks.onSizeHolder.mock.calls).toEqual([
       [
@@ -355,10 +363,32 @@ describe('size holder', () => {
           here: false,
           viewer: { app: 'web', device: 'Chrome on Android' },
           size: { cols: 120, rows: 40 },
+          sameBrowser: false,
         },
       ],
-      [{ here: true, viewer: null, size: null }],
+      [{ here: true, viewer: null, size: null, sameBrowser: false }],
+      [{ here: false, viewer: null, size: null, sameBrowser: true }],
     ])
+  })
+})
+
+describe('browser viewer id', () => {
+  it("is one id for the browser's tabs, kept in storage", () => {
+    localStorage.removeItem('aico.viewer-id')
+    const id = browserViewerId()
+    expect(id).toMatch(/^[A-Za-z0-9_-]{8,64}$/)
+    expect(localStorage.getItem('aico.viewer-id')).toBe(id)
+    expect(browserViewerId()).toBe(id)
+  })
+
+  it('falls back to one id for this page without storage', () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('blocked')
+    })
+    const id = browserViewerId()
+    expect(id).toMatch(/^[A-Za-z0-9_-]{8,64}$/)
+    expect(browserViewerId()).toBe(id)
+    vi.restoreAllMocks()
   })
 })
 

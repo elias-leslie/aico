@@ -95,6 +95,7 @@ beforeEach(async () => {
     retryDelay: () => 5,
     openLink: (argv, _env, size) => {
       const link = new FakeLink(argv, size)
+      link.pid = 4242 + links.length
       links.push(link)
       return link as unknown as TerminalLink
     },
@@ -364,6 +365,74 @@ describe('terminal socket', () => {
     second.ws.send(ctrl({ resize: { cols: 44, rows: 30 } }))
     await until(() => tether.callsOf('resizeClaim').length === 1)
     second.ws.close()
+  })
+
+  it("flags a holder that is another socket of this browser, not another device's", async () => {
+    const session = tether.add()
+    const chrome = { Origin: ORIGIN, 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) Chrome/141.0' }
+    // The owner's other tab took the size (it attached first, so nobody held it).
+    const tab = open(session.id, chrome)
+    await tab.next((f) => f.transport === 'control')
+    tab.ws.send(ctrl({ resize: { cols: 120, rows: 40 }, viewer_id: 'browser-one' }))
+    await tab.next((f) => 'size_holder' in f)
+    tether.holder = {
+      generation: 'g1',
+      holder: {
+        clientPid: 4242,
+        cols: 120,
+        rows: 40,
+        generation: 'g1',
+        claimedAt: '',
+        viewer: { app: 'web', device: 'Chrome on Linux' },
+      },
+    }
+    windowState = { cols: 120, rows: 40, pinned: true, clients: [4242, 4243, 4244] }
+
+    const main = open(session.id, chrome)
+    await main.next((f) => f.transport === 'control')
+    main.ws.send(ctrl({ resize: { cols: 150, rows: 50 }, viewer_id: 'browser-one' }))
+    const mine = await main.next((f) => 'size_holder' in f)
+    expect(mine.size_holder).toEqual({
+      here: false,
+      viewer: { app: 'web', device: 'Chrome on Linux' },
+      size: { cols: 120, rows: 40 },
+      same_browser: true,
+    })
+
+    // Another device (its own browser id) is told who holds it, nothing more.
+    const phone = open(session.id, {
+      Origin: ORIGIN,
+      'User-Agent': 'Mozilla/5.0 (Linux; Android 14) Chrome/141.0 Mobile',
+    })
+    await phone.next((f) => f.transport === 'control')
+    phone.ws.send(ctrl({ resize: { cols: 46, rows: 37 }, viewer_id: 'phone-two' }))
+    const theirs = await phone.next((f) => 'size_holder' in f)
+    expect(theirs.size_holder).toEqual({
+      here: false,
+      viewer: { app: 'web', device: 'Chrome on Linux' },
+      size: { cols: 120, rows: 40 },
+    })
+    expect(tether.callsOf('resizeClaim')).toHaveLength(1)
+    for (const view of [tab, main, phone]) view.ws.close()
+  })
+
+  it('an automated browser watches unsized and never claims', async () => {
+    const session = tether.add()
+    const view = open(session.id, {
+      Origin: ORIGIN,
+      'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) HeadlessChrome/147.0.0.0 Safari/537.36',
+    })
+    await view.next((f) => f.transport === 'control')
+    view.ws.send(ctrl({ resize: { cols: 46, rows: 37 }, viewer_id: 'agent-browser' }))
+    const held = await view.next((f) => 'size_holder' in f)
+    expect(held.size_holder).toEqual({ here: false, viewer: null, size: { cols: 80, rows: 24 } })
+    expect(links[0].size).toBeNull()
+    view.ws.send(ctrl({ resize: { cols: 46, rows: 37 }, claim: true }))
+    view.ws.send('typed')
+    await until(() => links[0].written.length === 1)
+    expect(links[0].resized).toEqual([])
+    expect(tether.callsOf('resizeClaim')).toHaveLength(0)
+    view.ws.close()
   })
 
   it('closes 4000 for a session Tether does not have, and when it ends', async () => {

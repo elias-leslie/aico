@@ -27,6 +27,9 @@ export interface SizeHolderFrame {
   here: boolean
   viewer: { app: string; device: string } | null
   size: { cols: number; rows: number } | null
+  /** The holder is another view in this browser: another tab or window, or
+   * this view's previous connection. */
+  sameBrowser: boolean
 }
 
 /** The host a remote session runs on and whether it can be reached (the
@@ -60,6 +63,24 @@ const textDecoder = new TextDecoder()
 const MAX_RECONNECT_ATTEMPTS = 30
 const INITIAL_RECONNECT_DELAY_MS = 250
 const MAX_RECONNECT_DELAY_MS = 2000
+
+const VIEWER_ID_KEY = 'aico.viewer-id'
+let pageViewerId: string | null = null
+
+/** One id for this browser, shared by its tabs, so the server can tell the
+ * owner's own other tab from another device. Without storage, this page's. */
+export function browserViewerId(): string {
+  try {
+    const stored = localStorage.getItem(VIEWER_ID_KEY)
+    if (stored) return stored
+    const id = crypto.randomUUID()
+    localStorage.setItem(VIEWER_ID_KEY, id)
+    return id
+  } catch {
+    pageViewerId ??= Math.random().toString(36).slice(2, 14).padEnd(12, '0')
+    return pageViewerId
+  }
+}
 
 function getReconnectDelay(attemptIndex: number): number {
   return Math.min(
@@ -196,6 +217,7 @@ export function openWebSocketConnection(
         __ctrl: true,
         ...(dims ? { resize: { cols: dims.cols, rows: dims.rows } } : {}),
         capabilities: CLIENT_CAPABILITIES,
+        viewer_id: browserViewerId(),
       }),
     )
   }
@@ -319,6 +341,7 @@ export function dispatchControlMessage(
           (size.rows as number) > 0
             ? { cols: size.cols as number, rows: size.rows as number }
             : null,
+        sameBrowser: holder.same_browser === true,
       })
       return true
     }
