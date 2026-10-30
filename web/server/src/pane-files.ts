@@ -20,6 +20,9 @@ function validateUuid(value: string): void {
 
 async function paneRoot(life: Lifecycle, paneId: string): Promise<string> {
   const { pane } = await life.paneById(paneId, false)
+  // Its folder is on that host; this computer's copy at the same path would be the wrong files.
+  const host = pane.sessions.find((session) => session.host)?.host
+  if (host) throw new HttpError(409, `Files on ${host} can’t be shown here yet.`)
   const withDir = pane.sessions.filter((session) => session.working_dir)
   const workingDir = (
     withDir.find((session) => session.mode === SHELL_MODE) ??

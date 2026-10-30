@@ -104,6 +104,21 @@ describe('pane file routes', () => {
     expect((await get(`/api/panes/${id}/files/content?path=missing.txt`)).status).toBe(404)
   })
 
+  it("shows no files for a tab on another host, not this computer's at the same path", async () => {
+    const created = store.createPane({ projectId: 'aico', name: 'Aico', activeMode: 'shell' })
+    const shell = tether.add({
+      host: 'agent-work',
+      tool: 'shell',
+      projectId: 'aico',
+      projectRoot: shellDir,
+    })
+    store.link(shell.id, created.id, 'shell')
+    expect(await get(`/api/panes/${created.id}/files/tree`)).toEqual({
+      status: 409,
+      body: { detail: 'Files on agent-work can’t be shown here yet.' },
+    })
+  })
+
   it('answers an unreadable directory 403', async () => {
     const id = pane(shellDir, agentDir)
     mkdirSync(join(shellDir, 'locked'))
