@@ -184,3 +184,95 @@ describe('pane file routes', () => {
     }
   })
 })
+
+describe('session file routes', () => {
+  it('browses a session outside any tab in its own working directory', async () => {
+    const session = tether.add({
+      id: 'ab12cd34',
+      tool: 'pi',
+      projectId: 'aico',
+      projectRoot: shellDir,
+    })
+    expect(await get(`/api/sessions/${session.id}/files/tree`)).toMatchObject({
+      status: 200,
+      body: { entries: [{ name: 'README.md', path: 'README.md' }], path: '', total: 1 },
+    })
+    const content = await get(`/api/sessions/${session.id}/files/content?path=README.md`)
+    expect(content.status).toBe(200)
+    expect(content.body).toMatchObject({ path: 'README.md', content: 'hello' })
+  })
+
+  it('answers missing, bad and refused requests as the tab routes do', async () => {
+    expect(await get('/api/sessions/not-an-id/files/tree')).toEqual({
+      status: 400,
+      body: { detail: 'Invalid session id' },
+    })
+    expect((await get('/api/sessions/0000dead/files/tree')).status).toBe(404)
+    const bare = tether.add({ id: 'ab12cd35', tool: 'pi', projectRoot: null })
+    expect(await get(`/api/sessions/${bare.id}/files/tree`)).toEqual({
+      status: 400,
+      body: { detail: 'Session has no working directory' },
+    })
+    const gone = tether.add({ id: 'ab12cd36', tool: 'pi', projectRoot: join(shellDir, 'gone') })
+    expect(await get(`/api/sessions/${gone.id}/files/tree`)).toEqual({
+      status: 404,
+      body: { detail: 'Session working directory does not exist' },
+    })
+    const id = tether.add({ id: 'ab12cd37', tool: 'pi', projectRoot: shellDir }).id
+    expect(await get(`/api/sessions/${id}/files/tree?path=..`)).toMatchObject({ status: 403 })
+    expect(await get(`/api/sessions/${id}/files/content?path=.git/config`)).toMatchObject({
+      status: 403,
+    })
+    expect((await get(`/api/sessions/${id}/files/content`)).status).toBe(422)
+  })
+
+  it('reads a session on another host there, with its refusals', async () => {
+    const session = tether.add({
+      id: 'ab12cd38',
+      host: 'agent-work',
+      tool: 'pi',
+      projectId: 'aico',
+      projectRoot: shellDir,
+    })
+    const remote = `/v1/sessions/${session.id}/files`
+    tether.hostAnswers.set(`GET ${remote}/content?path=far.txt`, {
+      status: 200,
+      body: { path: 'far.txt', content: 'far away', host: 'agent-work' },
+    })
+    expect(await get(`/api/sessions/${session.id}/files/content?path=far.txt`)).toEqual({
+      status: 200,
+      body: { path: 'far.txt', content: 'far away' },
+    })
+    tether.hostAnswers.set(
+      `GET ${remote}/content?path=.env`,
+      new TetherError(403, 'access_denied', {
+        error: 'access_denied',
+        detail: 'Access denied: .env',
+      }),
+    )
+    expect(await get(`/api/sessions/${session.id}/files/content?path=.env`)).toEqual({
+      status: 403,
+      body: { detail: 'Access denied: .env' },
+    })
+    tether.hostAnswers.set(
+      `GET ${remote}/tree`,
+      new TetherError(409, 'host_unavailable', {
+        error: 'host_unavailable',
+        host: 'agent-work',
+        state: 'powered_off',
+      }),
+    )
+    expect(await get(`/api/sessions/${session.id}/files/tree`)).toEqual({
+      status: 503,
+      body: { detail: 'agent-work is powered off, so its files can’t be shown.' },
+    })
+    tether.hostAnswers.set(
+      `GET ${remote}/tree?path=old`,
+      new TetherError(404, 'not_found', { error: 'not_found' }),
+    )
+    expect(await get(`/api/sessions/${session.id}/files/tree?path=old`)).toEqual({
+      status: 409,
+      body: { detail: 'agent-work needs an update before its files can be shown here.' },
+    })
+  })
+})

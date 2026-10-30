@@ -131,14 +131,29 @@ export const UnifiedTerminalHeaderContent = memo(
             </button>
           )}
 
-          {onFiles && (
-            <HeaderIconButton
-              icon={<Folder className="h-[18px] w-[18px]" strokeWidth={1.7} />}
-              onClick={onFiles}
-              tooltip="Files"
-              isMobile={isMobile}
-            />
-          )}
+          {/* Phone: icon only, so the bar fits with the keyboard open. */}
+          {onFiles &&
+            (isMobile ? (
+              <HeaderIconButton
+                icon={
+                  <Folder className="h-[18px] w-[18px]" strokeWidth={1.7} />
+                }
+                onClick={onFiles}
+                tooltip="Files"
+                isMobile={isMobile}
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={onFiles}
+                title="Files: this session's project folder and what agents shared"
+                className="lantern-btn ghost"
+                style={{ height: 34, padding: '0 10px' }}
+              >
+                <Folder className="h-4 w-4" strokeWidth={1.7} />
+                Files
+              </button>
+            ))}
 
           {hasSessionActions && (
             <PaneOverflowMenu

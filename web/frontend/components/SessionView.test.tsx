@@ -131,6 +131,14 @@ vi.mock('@/components/terminal-header', () => ({
   },
 }))
 
+const filesProps = vi.hoisted(() => [] as Array<Record<string, unknown>>)
+vi.mock('@/components/files/FilesDialog', () => ({
+  FilesDialog: (props: Record<string, unknown>) => {
+    filesProps.push(props)
+    return null
+  },
+}))
+
 vi.mock('./KeptCheckIns', () => ({ KeptCheckIns: () => null }))
 vi.mock('@/lib/hooks/use-agent-tools', () => ({
   useAgentTools: () => ({ agentTools: [] }),
@@ -288,6 +296,29 @@ describe('SessionView', () => {
     ])
     ;(headers[0]?.onReset as () => void)?.()
     expect(onReset).toHaveBeenCalledWith(slots[0])
+  })
+
+  it("opens Files on the tab's folder, or a session's own outside any tab", () => {
+    const free = sessionToSlot(session('ab12cd34', { mode: 'pi' }), {
+      as: 'project',
+      place: 'free',
+    })
+    const projects = [paneToSlot(projectPane('pane-1')), free].map((slot) => {
+      filesProps.length = 0
+      const view = renderView({
+        slots: [slot],
+        activeSessionId: getSlotSessionId(slot),
+      })
+      const onFiles = headerProps[headerProps.length - 1]?.onFiles as () => void
+      act(() => onFiles())
+      const project = filesProps[filesProps.length - 1]?.project
+      view.unmount()
+      return project
+    })
+    expect(projects).toEqual([
+      { kind: 'pane', paneId: 'pane-1' },
+      { kind: 'session', sessionId: 'ab12cd34' },
+    ])
   })
 
   it('routes upload to the session and offers redraw without a parent callback', () => {

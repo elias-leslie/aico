@@ -1,7 +1,8 @@
 // The file browser's routes (the Python backend's api/pane_files.py): a tab's
 // root is its shell's working directory (else its active session's, else any
-// session's); tether/files keeps every read inside it. A session on another
-// host is read there: Tether's hub forwards its files routes to that host.
+// session's); a session outside any tab (`st aico create`) is rooted at its own
+// working directory. tether/files keeps every read inside it. A session on
+// another host is read there: Tether's hub forwards its files routes to that host.
 
 import { statSync } from 'node:fs'
 import { realpath } from 'node:fs/promises'
@@ -9,31 +10,30 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { type TetherClient, TetherError } from 'tether/client'
 import { AccessDenied, InvalidPath, listDirectory, NotFound, readFile } from 'tether/files'
-import type { Router } from './http'
+import type { RequestContext, Router } from './http'
 import type { Lifecycle } from './lifecycle'
-import { SHELL_MODE } from './sessions'
+import { SHELL_MODE, type WebSession } from './sessions'
 import { HttpError, toHttpError } from './tether'
 
+const SESSION_ID = /^[0-9a-f]{8}$/
 const UUID = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32})$/i
 
 function validateUuid(value: string): void {
   if (!UUID.test(value)) throw new HttpError(400, 'Invalid UUID')
 }
 
-/** Where a tab's files are: a folder here, or a session's folder on its host. */
+/** Where a tab's or session's files are: a folder here, or a session's folder on its host. */
 type PaneFolder = { root: string } | { host: string; sessionId: string }
 
-async function paneFolder(life: Lifecycle, paneId: string): Promise<PaneFolder> {
-  const { pane } = await life.paneById(paneId, false)
-  const withDir = pane.sessions.filter((session) => session.working_dir)
-  const chosen =
-    withDir.find((session) => session.mode === SHELL_MODE) ??
-    withDir.find((session) => session.mode === pane.active_mode) ??
-    withDir[0]
+/** A session's folder; `what` names it in a refusal ("Pane", "Session"). */
+async function folderOf(
+  session: WebSession | undefined,
+  what: 'Pane' | 'Session',
+): Promise<PaneFolder> {
   // Its folder is on that host; this computer's copy at the same path would be the wrong files.
-  if (chosen?.host) return { host: chosen.host, sessionId: chosen.id }
-  const workingDir = chosen?.working_dir
-  if (!workingDir) throw new HttpError(400, 'Pane has no working directory')
+  if (session?.host) return { host: session.host, sessionId: session.id }
+  const workingDir = session?.working_dir
+  if (!workingDir) throw new HttpError(400, `${what} has no working directory`)
   const root =
     workingDir === '~'
       ? homedir()
@@ -44,10 +44,26 @@ async function paneFolder(life: Lifecycle, paneId: string): Promise<PaneFolder> 
   try {
     isDir = statSync(root).isDirectory()
   } catch {
-    throw new HttpError(404, 'Pane working directory does not exist')
+    throw new HttpError(404, `${what} working directory does not exist`)
   }
-  if (!isDir) throw new HttpError(400, 'Pane working directory is not a directory')
+  if (!isDir) throw new HttpError(400, `${what} working directory is not a directory`)
   return { root: await realpath(root) }
+}
+
+async function paneFolder(life: Lifecycle, paneId: string): Promise<PaneFolder> {
+  const { pane } = await life.paneById(paneId, false)
+  const withDir = pane.sessions.filter((session) => session.working_dir)
+  const chosen =
+    withDir.find((session) => session.mode === SHELL_MODE) ??
+    withDir.find((session) => session.mode === pane.active_mode) ??
+    withDir[0]
+  return folderOf(chosen, 'Pane')
+}
+
+/** A session outside any tab (one `st aico create` started): its own working directory. */
+async function sessionFolder(life: Lifecycle, sessionId: string): Promise<PaneFolder> {
+  if (!SESSION_ID.test(sessionId)) throw new HttpError(400, 'Invalid session id')
+  return folderOf(await life.getSession(sessionId), 'Session')
 }
 
 /** The host's answer to `GET /v1/sessions/:id/files/<route>`, its refusals in plain words. */
@@ -93,14 +109,17 @@ export function translate(error: unknown): HttpError {
   return new HttpError(500, 'Failed to browse pane files')
 }
 
-export function registerPaneFileRoutes(
+type Folders = (ctx: RequestContext) => Promise<PaneFolder>
+
+/** `tree` and `content` under `base`, read from the folder `folders` resolves. */
+function registerFolderRoutes(
   router: Router,
-  life: Lifecycle,
   tether: TetherClient,
+  base: string,
+  folders: Folders,
 ): void {
-  router.on('GET', '/api/panes/:paneId/files/tree', async (ctx) => {
-    validateUuid(ctx.params.paneId)
-    const folder = await paneFolder(life, ctx.params.paneId)
+  router.on('GET', `${base}/tree`, async (ctx) => {
+    const folder = await folders(ctx)
     const path = ctx.query.get('path') ?? ''
     if ('host' in folder) return remoteFiles(tether, folder, 'tree', path)
     try {
@@ -110,11 +129,10 @@ export function registerPaneFileRoutes(
     }
   })
 
-  router.on('GET', '/api/panes/:paneId/files/content', async (ctx) => {
-    validateUuid(ctx.params.paneId)
+  router.on('GET', `${base}/content`, async (ctx) => {
     const path = ctx.query.get('path')
     if (path === null) throw new HttpError(422, 'path is required')
-    const folder = await paneFolder(life, ctx.params.paneId)
+    const folder = await folders(ctx)
     if ('host' in folder) return remoteFiles(tether, folder, 'content', path)
     try {
       return readFile(folder.root, path)
@@ -122,4 +140,18 @@ export function registerPaneFileRoutes(
       throw translate(error)
     }
   })
+}
+
+export function registerPaneFileRoutes(
+  router: Router,
+  life: Lifecycle,
+  tether: TetherClient,
+): void {
+  registerFolderRoutes(router, tether, '/api/panes/:paneId/files', (ctx) => {
+    validateUuid(ctx.params.paneId)
+    return paneFolder(life, ctx.params.paneId)
+  })
+  registerFolderRoutes(router, tether, '/api/sessions/:sessionId/files', (ctx) =>
+    sessionFolder(life, ctx.params.sessionId),
+  )
 }

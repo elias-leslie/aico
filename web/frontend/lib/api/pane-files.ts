@@ -27,10 +27,13 @@ export interface PaneFileContentResponse {
   truncated: boolean
 }
 
-/** Where the browser reads: a tab's working folder, or any folder by its path (a share or a clicked path). */
-export type FilesSource =
+/** Where the browser reads: a tab's or a session's working folder, or any folder by its path (a share or a clicked path). */
+export type FilesSource = ProjectSource | { kind: 'location'; root: string }
+
+/** A session's project folder: its tab's, or (outside any tab) its own. */
+export type ProjectSource =
   | { kind: 'pane'; paneId: string }
-  | { kind: 'location'; root: string }
+  | { kind: 'session'; sessionId: string }
 
 export interface PathInfo {
   /** The real absolute path. */
@@ -52,14 +55,19 @@ function filesUrl(
   route: 'tree' | 'content',
   path: string | undefined,
 ): string {
-  return source.kind === 'pane'
-    ? `/api/panes/${source.paneId}/files/${route}${buildQueryString({ path })}`
-    : `/api/files/${route}${buildQueryString({ root: source.root, path })}`
+  const query = buildQueryString({ path })
+  if (source.kind === 'pane')
+    return `/api/panes/${source.paneId}/files/${route}${query}`
+  if (source.kind === 'session')
+    return `/api/sessions/${source.sessionId}/files/${route}${query}`
+  return `/api/files/${route}${buildQueryString({ root: source.root, path })}`
 }
 
 /** A stable cache key for a source. */
 export function sourceKey(source: FilesSource): string {
-  return source.kind === 'pane' ? `pane:${source.paneId}` : `at:${source.root}`
+  if (source.kind === 'pane') return `pane:${source.paneId}`
+  if (source.kind === 'session') return `session:${source.sessionId}`
+  return `at:${source.root}`
 }
 
 export function fetchFileTree(

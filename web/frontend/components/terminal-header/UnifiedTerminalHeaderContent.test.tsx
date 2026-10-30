@@ -216,6 +216,18 @@ describe('UnifiedTerminalHeaderContent', () => {
     expect(onFiles).toHaveBeenCalledTimes(1)
   })
 
+  it('labels the files action Files on desktop, with a tooltip', () => {
+    render(
+      <UnifiedTerminalHeaderContent
+        slot={makeProjectSlot('a', 'Alpha')}
+        onFiles={vi.fn()}
+      />,
+    )
+    const button = screen.getByRole('button', { name: 'Files' })
+    expect(button).toHaveTextContent('Files')
+    expect(button).toHaveAttribute('title')
+  })
+
   it.each([false, true])(
     'opens the session list from the title (phone: %s)',
     (isMobile) => {

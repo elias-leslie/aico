@@ -3,7 +3,11 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import { ChevronLeft, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { fetchPathInfo } from '@/lib/api/pane-files'
+import {
+  fetchPathInfo,
+  type ProjectSource,
+  sourceKey,
+} from '@/lib/api/pane-files'
 import type { FilesRequest } from '@/lib/files-opener'
 import { FileBrowser, type FileChoice } from './FileBrowser'
 import { SharedFiles } from './SharedFiles'
@@ -23,12 +27,12 @@ type View =
 
 function initialView(
   request: FilesRequest | null,
-  paneId: string | null,
+  project: ProjectSource | null,
 ): View {
   if (request?.kind === 'shared')
     return { kind: 'shared', highlight: request.showId }
   if (request?.kind === 'path') return { kind: 'opening', path: request.path }
-  return paneId ? { kind: 'project' } : { kind: 'shared' }
+  return project ? { kind: 'project' } : { kind: 'shared' }
 }
 
 /**
@@ -38,22 +42,22 @@ function initialView(
  */
 export function FilesDialog({
   isOpen,
-  paneId,
+  project,
   request,
   onClose,
   onInsertPath,
   sessionName,
 }: {
   isOpen: boolean
-  /** The session's tab, whose folder the Project view shows */
-  paneId: string | null
+  /** The session's folder (its tab's, or its own), which the Project view shows */
+  project: ProjectSource | null
   /** What to show on opening; a new request reopens on it */
   request: FilesRequest | null
   onClose: () => void
   onInsertPath: (path: string) => void
   sessionName?: (session: string) => string | null
 }) {
-  const [view, setView] = useState<View>(() => initialView(request, paneId))
+  const [view, setView] = useState<View>(() => initialView(request, project))
   const opening = useRef(0)
 
   async function openPath(path: string, fromShared: boolean) {
@@ -87,7 +91,7 @@ export function FilesDialog({
   // biome-ignore lint/correctness/useExhaustiveDependencies: only a new request reopens the view
   useEffect(() => {
     if (!isOpen) return
-    const next = initialView(request, paneId)
+    const next = initialView(request, project)
     setView(next)
     if (next.kind === 'opening') void openPath(next.path, false)
   }, [request, isOpen])
@@ -139,7 +143,7 @@ export function FilesDialog({
               >
                 Shared
               </button>
-              {paneId && (
+              {project && (
                 <button
                   type="button"
                   aria-pressed={tab === 'project'}
@@ -157,10 +161,10 @@ export function FilesDialog({
               sessionName={sessionName}
               onOpenPath={(path) => void openPath(path, true)}
             />
-          ) : view.kind === 'project' && paneId ? (
+          ) : view.kind === 'project' && project ? (
             <FileBrowser
-              key={`pane:${paneId}`}
-              source={{ kind: 'pane', paneId }}
+              key={sourceKey(project)}
+              source={project}
               onInsertPath={insert}
             />
           ) : view.kind === 'opening' ? (

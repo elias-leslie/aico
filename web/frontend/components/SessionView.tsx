@@ -14,6 +14,7 @@ import {
 } from '@/components/TerminalNotice'
 import type { ConnectionStatus, HostAway } from '@/components/terminal.types'
 import { UnifiedTerminalHeaderContent as UnifiedTerminalHeader } from '@/components/terminal-header'
+import type { ProjectSource } from '@/lib/api/pane-files'
 import { type FilesRequest, setFilesOpener } from '@/lib/files-opener'
 import { powerHost } from '@/lib/hooks/use-host-admin'
 import type { TerminalFontSize } from '@/lib/hooks/use-terminal-settings'
@@ -102,7 +103,13 @@ export function SessionView({
   const handleRef = useRef<TerminalHandle | null>(null)
   const slot = getShownSlot(slots, activeSessionId)
   const sessionId = slot ? getSlotSessionId(slot) : null
-  const paneId = slot && isPaneSlot(slot) ? slot.paneId : null
+  // Its tab's folder, or (a session outside any tab) its own.
+  const project: ProjectSource | null =
+    slot && isPaneSlot(slot)
+      ? { kind: 'pane', paneId: slot.paneId }
+      : sessionId
+        ? { kind: 'session', sessionId }
+        : null
   // Shares and clicked paths open in this view's Files.
   useEffect(() => {
     if (!sessionId) return
@@ -303,7 +310,7 @@ export function SessionView({
         {files && sessionId && (
           <FilesDialog
             isOpen={true}
-            paneId={paneId}
+            project={project}
             request={files.request}
             onClose={() => setFiles(null)}
             onInsertPath={(path) => handleRef.current?.pasteInput(path)}

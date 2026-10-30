@@ -253,7 +253,9 @@ export function FileBrowser({
   }, [content.data, image])
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col md:grid md:grid-cols-[320px_minmax(0,1fr)]">
+    // max-md: keeps a plain `flex` off this element: the chat view's own
+    // stylesheet (@agent-hub/chat-ui) loads later with a `.flex` that beat md:grid.
+    <div className="min-h-0 flex-1 max-md:flex max-md:flex-col md:grid md:grid-cols-[320px_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)]">
       <div
         className={clsx(
           'min-h-0 overflow-auto overscroll-contain px-2 pb-2',

@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { ProjectSource } from '@/lib/api/pane-files'
 import type { FilesRequest } from '@/lib/files-opener'
 import { FilesDialog } from './FilesDialog'
 
@@ -52,6 +53,20 @@ function serve(url: string) {
           ]
     return json({ entries, path: '', total: entries.length })
   }
+  if (pathname === '/api/sessions/ab12cd34/files/tree')
+    return json({
+      entries: [
+        {
+          name: 'README.md',
+          path: 'README.md',
+          is_directory: false,
+          size: 5,
+          extension: '.md',
+        },
+      ],
+      path: '',
+      total: 1,
+    })
   if (pathname === '/api/files/content')
     return json({
       path: searchParams.get('path'),
@@ -69,7 +84,7 @@ function serve(url: string) {
 
 function renderDialog(
   request: FilesRequest | null,
-  paneId: string | null = null,
+  project: ProjectSource | null = null,
 ) {
   vi.stubGlobal(
     'fetch',
@@ -83,7 +98,7 @@ function renderDialog(
     <QueryClientProvider client={client}>
       <FilesDialog
         isOpen
-        paneId={paneId}
+        project={project}
         request={request}
         onClose={vi.fn()}
         onInsertPath={onInsertPath}
@@ -128,7 +143,13 @@ describe('FilesDialog', () => {
   })
 
   it('opens a clicked path, and says when it is gone', async () => {
-    renderDialog({ kind: 'path', path: '/srv/gone.txt' }, 'pane-1')
+    renderDialog(
+      { kind: 'path', path: '/srv/gone.txt' },
+      {
+        kind: 'pane',
+        paneId: 'pane-1',
+      },
+    )
     expect(
       await screen.findByText('This file was moved or deleted'),
     ).toBeVisible()
@@ -143,6 +164,16 @@ describe('FilesDialog', () => {
     )
   })
 
+  it("opens on the Project view of a session's own folder", async () => {
+    renderDialog(null, { kind: 'session', sessionId: 'ab12cd34' })
+    expect(await screen.findByText('README.md')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Project' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    expect(screen.getByRole('button', { name: 'Shared' })).toBeVisible()
+  })
+
   it('says when nothing is shared yet', async () => {
     vi.stubGlobal(
       'fetch',
@@ -155,7 +186,7 @@ describe('FilesDialog', () => {
       <QueryClientProvider client={client}>
         <FilesDialog
           isOpen
-          paneId={null}
+          project={null}
           request={null}
           onClose={vi.fn()}
           onInsertPath={vi.fn()}
@@ -183,7 +214,7 @@ describe('FilesDialog', () => {
       <QueryClientProvider client={client}>
         <FilesDialog
           isOpen
-          paneId="pane-remote"
+          project={{ kind: 'pane', paneId: 'pane-remote' }}
           request={null}
           onClose={vi.fn()}
           onInsertPath={vi.fn()}
