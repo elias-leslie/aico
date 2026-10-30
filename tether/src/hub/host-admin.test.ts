@@ -208,7 +208,8 @@ describe('sign in and out', () => {
       peer: (method, path) => {
         if (path === '/v1/sessions')
           return { status: 201, body: { id: 'abcd1234', generation: 'g1', status: 'running' } }
-        if (method === 'GET') return { status: 200, body: { generation: 'g1', status } }
+        if (method === 'GET')
+          return { status: 200, body: { generation: status === 'running' ? 'g1' : 'g2', status } }
         return { status: 200, body: { status: 'ended' } }
       },
     })
@@ -226,19 +227,19 @@ describe('sign in and out', () => {
     expect(peerCalls.at(-1)).toEqual({
       method: 'POST',
       path: '/v1/sessions/abcd1234/end',
-      body: { generation: 'g1' },
+      body: { generation: 'g2' },
     })
     expect(sessions).toHaveBeenCalled()
     expect(timers).toHaveLength(0)
   })
 
-  it('stops following a sign-in session that was replaced or ended elsewhere', async () => {
+  it('stops following a sign-in session that was ended elsewhere', async () => {
     const { admin, peerCalls, timers } = setup({
       peer: (method, path) =>
         path === '/v1/sessions'
           ? { status: 201, body: { id: 'abcd1234', generation: 'g1', status: 'running' } }
           : method === 'GET'
-            ? { status: 200, body: { generation: 'g2', status: 'uncertain' } }
+            ? { status: 404, body: { error: 'not_found' } }
             : { status: 200, body: {} },
     })
     await admin.signInOut('vm-1', 'codex', { action: 'sign_in' })
