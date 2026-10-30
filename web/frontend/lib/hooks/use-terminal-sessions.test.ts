@@ -195,4 +195,39 @@ describe('useTerminalSessions', () => {
       '/api/sessions/session-2?keepWakes=true',
     ])
   })
+
+  it('unlists an ended session at once, before the refetch', async () => {
+    let release: () => void = () => {}
+    let listed = 0
+    mockFetch.mockImplementation(
+      async (_url: string, options?: RequestInit) => {
+        if (options?.method === 'DELETE')
+          return {
+            ok: true,
+            text: async () => JSON.stringify({ deleted: true }),
+          }
+        // The first list answers at once; the refetch after the end hangs.
+        if (listed++ > 0) await new Promise<void>((done) => (release = done))
+        return {
+          ok: true,
+          text: async () => JSON.stringify({ items: mockSessions, total: 2 }),
+        }
+      },
+    )
+    const { result } = renderHook(() => useTerminalSessions(), {
+      wrapper: createWrapper(),
+    })
+    await waitFor(() => expect(result.current.sessions).toHaveLength(2))
+
+    await act(async () => {
+      await result.current.remove('session-1')
+    })
+
+    await waitFor(() =>
+      expect(result.current.sessions.map((session) => session.id)).toEqual([
+        'session-2',
+      ]),
+    )
+    release()
+  })
 })

@@ -180,7 +180,13 @@ export function useTerminalSessions(options: UseTerminalSessionsOptions = {}) {
 
   const deleteMutation = useMutation({
     mutationFn: deleteSession,
-    onSuccess: () => {
+    onSuccess: (_result, { sessionId }) => {
+      // Unlisted at once: until the refetch lands, the ended session would
+      // still be found as the one this browser had open and shown again.
+      queryClient.setQueriesData<TerminalSession[]>(
+        { queryKey: ['terminal-sessions'] },
+        (old) => old?.filter((session) => session.id !== sessionId),
+      )
       invalidatePanesAndSessions(queryClient)
       // A kept check-in outlives the session it was set on.
       queryClient.invalidateQueries({ queryKey: ['kept-check-ins'] })
