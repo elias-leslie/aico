@@ -144,6 +144,14 @@ vi.mock('@/lib/hooks/use-agent-tools', () => ({
   useAgentTools: () => ({ agentTools: [] }),
 }))
 
+vi.mock('./asks/NeedsYou', () => ({
+  NeedsYouLauncher: () => <button type="button">Needs you</button>,
+}))
+vi.mock('./health/HealthButton', () => ({
+  HealthLauncher: () => <button type="button">Health</button>,
+}))
+vi.mock('./HostsButton', () => ({ HostsLauncher: () => null }))
+
 vi.mock('@/lib/hooks/use-terminal-panes', () => ({
   usePaneListError: () => ({ isError: false, retry: vi.fn() }),
 }))
@@ -207,6 +215,33 @@ describe('SessionView', () => {
 
     act(() => sizeHolderHooks.change?.(null))
     expect(screen.queryByTestId('size-holder-notice')).toBeNull()
+  })
+
+  it('on a phone, docks the size bar above the session, clear of its prompt', () => {
+    const statuses = new Map([['session-1', 'connected' as const]])
+    renderView({
+      slots: [ownSlot('1')],
+      terminalStatuses: statuses,
+      isMobile: true,
+    })
+    act(() => sizeHolderHooks.change?.('Aico desktop'))
+    const notice = screen.getByTestId('size-holder-notice')
+    const frame = screen.getByTestId('terminal-session-1').parentElement
+    expect(frame?.contains(notice)).toBe(false)
+    expect(notice.nextElementSibling).toBe(frame)
+  })
+
+  it('with no session open and no list beside it, offers Needs you and Health', () => {
+    const { rerender } = render(
+      <SessionView fontSize={14} slots={[]} activeSessionId={null} />,
+    )
+    expect(screen.getByText('No session open.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Needs you' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Health' })).toBeVisible()
+    rerender(
+      <SessionView fontSize={14} slots={[]} activeSessionId={null} sideList />,
+    )
+    expect(screen.queryByRole('button', { name: 'Needs you' })).toBeNull()
   })
 
   it("while the session's host is away, the bar says so instead of Live", () => {

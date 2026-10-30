@@ -86,10 +86,7 @@ export function ControlBar({
   return (
     <div
       className="flex min-w-0 items-center"
-      style={{
-        gap: KEY_ROW_METRICS.keyGap,
-        padding: `0 ${KEY_ROW_METRICS.paddingX}px ${KEY_ROW_METRICS.paddingY}px`,
-      }}
+      style={{ paddingBottom: KEY_ROW_METRICS.paddingY }}
     >
       {key(
         keyboardOpen ? 'Hide keyboard' : 'Show keyboard',

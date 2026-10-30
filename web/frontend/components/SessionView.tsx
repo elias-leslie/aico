@@ -169,6 +169,7 @@ export function SessionView({
         slots={slots}
         onOpen={onSwitch}
         onNewSession={onNewSession}
+        showLaunchers={!sideList}
       />
     )
   }
@@ -180,6 +181,17 @@ export function SessionView({
     !chat && hostAway?.key === termKey && status === 'connected'
       ? hostAway
       : null
+
+  const sizeNotice = !chat &&
+    !awayHere &&
+    sizeHolder?.key === termKey &&
+    status === 'connected' && (
+      <SizeHolderNotice
+        holder={sizeHolder.name}
+        onUseHere={() => handleRef.current?.claimSize()}
+        isMobile={isMobile}
+      />
+    )
 
   return (
     <div className="h-full w-full" style={{ backgroundColor: 'var(--rim)' }}>
@@ -244,6 +256,9 @@ export function SessionView({
           }
         />
 
+        {/* On a phone the bar sits above the session, clear of its prompt. */}
+        {isMobile && sizeNotice}
+
         {/* Ink terminal inside one steady frame-edge hairline */}
         <div
           className="relative mx-1 mb-1 min-h-0 min-w-0 flex-1 overflow-hidden rounded"
@@ -296,16 +311,7 @@ export function SessionView({
               onPowerOn={() => powerHost(awayHere.host, 'on')}
             />
           )}
-          {!chat &&
-            !awayHere &&
-            sizeHolder?.key === termKey &&
-            status === 'connected' && (
-              <SizeHolderNotice
-                holder={sizeHolder.name}
-                onUseHere={() => handleRef.current?.claimSize()}
-                isMobile={isMobile}
-              />
-            )}
+          {!isMobile && sizeNotice}
         </div>
         {files && sessionId && (
           <FilesDialog

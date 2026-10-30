@@ -832,6 +832,15 @@ div.xterm .xterm-viewport {
   color: var(--mist);
 }
 
+/* Phone: docked above the session, so the prompt line stays visible. */
+.lantern-size-bar.docked {
+  position: static;
+  justify-content: space-between;
+  max-width: none;
+  margin: 0 4px 4px;
+  box-shadow: none;
+}
+
 /* Connecting for the first time: a word on the empty terminal, no cover. */
 .lantern-term-notice.quiet {
   background: transparent;
@@ -907,14 +916,18 @@ div.xterm .xterm-viewport {
   color: var(--mist);
 }
 
-/* Phone key row. A held Ctrl or open keyboard is an amber outline. */
+/* Phone key row. A held Ctrl or open keyboard is an amber outline. Keys
+   touch, so each tap target is a full share of the row; the clear side
+   borders draw the gap between the visible keys. */
 .lantern-key {
   display: grid;
   place-items: center;
   min-width: 0;
-  border: 1px solid var(--paper-veil);
-  border-radius: 6px;
-  background: var(--paper);
+  border: solid transparent;
+  border-width: 0 2px;
+  border-radius: 8px;
+  background: var(--paper) padding-box;
+  box-shadow: inset 0 0 0 1px var(--paper-veil);
   color: var(--bone);
   font: 12px var(--font-mono);
   letter-spacing: 0.04em;
@@ -924,7 +937,7 @@ div.xterm .xterm-viewport {
 }
 
 .lantern-key:active:not(:disabled) {
-  background: var(--paper-veil);
+  background: var(--paper-veil) padding-box;
 }
 
 .lantern-key:disabled {
@@ -933,8 +946,8 @@ div.xterm .xterm-viewport {
 
 .lantern-key[aria-pressed="true"],
 .lantern-key[aria-expanded="true"] {
-  border-color: var(--lantern);
-  background: rgb(var(--lantern-rgb) / 0.14);
+  box-shadow: inset 0 0 0 1px var(--lantern);
+  background: rgb(var(--lantern-rgb) / 0.14) padding-box;
   color: var(--lantern);
 }
 
@@ -1091,7 +1104,7 @@ div.xterm .xterm-viewport {
   border: 1px solid var(--paper-veil);
   border-radius: 8px;
   background: var(--paper);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .lantern-ask[data-blocking="true"] {
@@ -1108,7 +1121,7 @@ div.xterm .xterm-viewport {
   border-radius: 6px;
   background: transparent;
   color: var(--bone);
-  font-size: 12.5px;
+  font-size: 13.5px;
   text-align: left;
   transition: background 0.15s var(--ease-arrival);
 }
@@ -1125,7 +1138,7 @@ div.xterm .xterm-viewport {
 .lantern-ask-option em {
   margin-left: auto;
   color: var(--lantern);
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
   white-space: nowrap;
 }
@@ -1147,11 +1160,30 @@ div.xterm .xterm-viewport {
   border: 1px solid var(--paper-veil);
   border-radius: 6px;
   background: rgb(var(--ink-rgb) / 0.86);
-  font: 11.5px / 1.5 var(--font-mono);
+  font: 12.5px / 1.5 var(--font-mono);
 }
 
 .lantern-ask-cmd code {
   max-height: 8.5em;
   overflow: auto;
   overflow-wrap: anywhere;
+}
+
+.lantern-ask-note {
+  height: 32px;
+}
+
+/* On the phone every control in the drawer and the session sheet's tool row is
+   a full 44px touch target. */
+@media (max-width: 767px) {
+  [data-testid="needs-you-drawer"] .lantern-btn,
+  [data-testid="needs-you-drawer"] .lantern-icon-btn,
+  .lantern-sheet-tools .lantern-btn {
+    min-height: 44px;
+  }
+
+  [data-testid="needs-you-drawer"] .lantern-ask-option,
+  [data-testid="needs-you-drawer"] .lantern-ask-note {
+    min-height: 44px;
+  }
 }

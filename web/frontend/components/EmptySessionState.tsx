@@ -5,6 +5,9 @@ import { useSearchParams } from 'next/navigation'
 import { useSessionAttention } from '@/lib/hooks/use-session-attention'
 import { usePaneListError } from '@/lib/hooks/use-terminal-panes'
 import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
+import { NeedsYouLauncher } from './asks/NeedsYou'
+import { HostsLauncher } from './HostsButton'
+import { HealthLauncher } from './health/HealthButton'
 import { SessionList } from './SessionList'
 
 interface EmptySessionStateProps {
@@ -12,6 +15,9 @@ interface EmptySessionStateProps {
   slots: Array<TerminalSlot | PaneSlot>
   onOpen?: (slot: TerminalSlot | PaneSlot) => void
   onNewSession?: () => void
+  /** No session list beside this (a phone or a narrow window): show Needs
+   * you, Health and Hosts here, as the session sheet does. */
+  showLaunchers?: boolean
 }
 
 /**
@@ -21,6 +27,7 @@ export function EmptySessionState({
   slots,
   onOpen,
   onNewSession,
+  showLaunchers = false,
 }: EmptySessionStateProps) {
   const attention = useSessionAttention()
   const { isError, retry } = usePaneListError()
@@ -32,6 +39,13 @@ export function EmptySessionState({
       className="h-full w-full overflow-y-auto p-4"
       style={{ backgroundColor: 'var(--rim)' }}
     >
+      {showLaunchers && (
+        <header className="lantern-sheet-tools mx-auto flex max-w-md flex-wrap items-center justify-end gap-2">
+          <NeedsYouLauncher variant="row" />
+          <HealthLauncher variant="row" />
+          <HostsLauncher />
+        </header>
+      )}
       <div className="mx-auto flex max-w-md flex-col items-center gap-3 pt-[12vh] text-center">
         {failed ? (
           <>

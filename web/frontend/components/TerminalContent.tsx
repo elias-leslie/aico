@@ -156,8 +156,8 @@ function TerminalContentBody({
           onToggleCompose={isMobile ? undefined : toggleCompose}
         />
 
-        {/* Phone typing and key row */}
-        {!chatShown && (
+        {/* Phone typing and key row, while a session is open */}
+        {!chatShown && shownSlot && (
           <TerminalMobileSection
             sessions={sessions}
             activeSessionId={activeSessionId}

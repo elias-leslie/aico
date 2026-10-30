@@ -36,7 +36,7 @@ vi.mock('./SessionSidebar', () => ({
 }))
 vi.mock('./AgentShowToast', () => ({ AgentShows: () => null }))
 vi.mock('./terminal-content/TerminalMobileSection', () => ({
-  TerminalMobileSection: () => null,
+  TerminalMobileSection: () => <div data-testid="phone-key-row" />,
 }))
 vi.mock('./terminal-content/TerminalFileSection', () => ({
   TerminalFileSection: ({
@@ -125,6 +125,23 @@ describe('TerminalContent compose box', () => {
     render(<TerminalContent {...props} isMobile />)
     expect(screen.queryByRole('button', { name: 'Compose' })).toBeNull()
     expect(screen.queryByRole('textbox', { name: 'Compose box' })).toBeNull()
+  })
+
+  it('on a phone, shows the key row only while a session is open', () => {
+    const { rerender } = render(<TerminalContent {...props} isMobile />)
+    expect(screen.queryByTestId('phone-key-row')).toBeNull()
+    rerender(
+      <TerminalContent
+        {...props}
+        isMobile
+        terminalSlots={
+          [
+            { type: 'terminal', sessionId: 'session-a' },
+          ] as unknown as TerminalContentProps['terminalSlots']
+        }
+      />,
+    )
+    expect(screen.getByTestId('phone-key-row')).toBeInTheDocument()
   })
 
   it('puts the session list beside the session in a wide desktop window', () => {

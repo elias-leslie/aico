@@ -1,12 +1,12 @@
 // Terminal input handler type
 export type TerminalInputHandler = (sequence: string) => void
 
-// Sizes of the key row, in design pixels.
+// Sizes of the key row, in design pixels. The keys touch (no gap or side
+// padding) so each tap target is as wide as the row allows; the key's own
+// clear side borders draw the visible gap.
 export const KEY_ROW_METRICS = {
   buttonSize: 44,
   iconSize: 18,
-  keyGap: 4,
-  paddingX: 4,
   paddingY: 6,
 } as const
 
