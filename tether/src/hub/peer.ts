@@ -627,7 +627,15 @@ export class Peer {
   private async bridge(message: Record<string, unknown>): Promise<void> {
     const { type: _type, commandId, ...command } = message
     if (typeof commandId !== 'string' || !GUI_KINDS.has(command.kind as string)) return
-    const outcome = await this.deps.gui.send(command as unknown as GuiCommand)
+    let outcome = await this.deps.gui.send(command as unknown as GuiCommand)
+    // No window on this desktop (the web app only): a title or coordinator mark
+    // is session metadata, which the host records itself on an applied verdict,
+    // as its Tether does when it has no GUI at all.
+    if (
+      outcome.status === 'unavailable' &&
+      (command.kind === 'title' || command.kind === 'coordinator')
+    )
+      outcome = { status: 'applied' }
     const verdict =
       outcome.status === 'applied'
         ? { applied: true, ...(outcome.layout ? { layout: outcome.layout } : {}) }

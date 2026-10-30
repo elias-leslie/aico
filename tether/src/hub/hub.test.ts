@@ -604,6 +604,19 @@ describe('hub', () => {
     peer.gui?.write(`${JSON.stringify({ type: 'command', commandId: 'c2', kind: 'layout' })}\n`)
     await vi.waitFor(() => expect(peer.guiResults).toHaveLength(2))
     expect(peer.guiResults[1]?.body).toEqual({ applied: false, error: 'gui_unavailable' })
+    // No window here: the host records a title or coordinator mark itself.
+    guiSend.mockResolvedValueOnce({ status: 'unavailable' })
+    peer.gui?.write(
+      `${JSON.stringify({ type: 'command', commandId: 'c3', kind: 'title', sessionId: 'aaaa0001', generation: 'g', label: 'Lab' })}\n`,
+    )
+    await vi.waitFor(() => expect(peer.guiResults).toHaveLength(3))
+    expect(peer.guiResults[2]?.body).toEqual({ applied: true })
+    guiSend.mockResolvedValueOnce({ status: 'unavailable' })
+    peer.gui?.write(
+      `${JSON.stringify({ type: 'command', commandId: 'c4', kind: 'show', sessionId: 'aaaa0001', generation: 'g' })}\n`,
+    )
+    await vi.waitFor(() => expect(peer.guiResults).toHaveLength(4))
+    expect(peer.guiResults[3]?.body).toEqual({ applied: false, error: 'gui_unavailable' })
   })
 
   it('merges runs and routes a run to its host', async () => {
