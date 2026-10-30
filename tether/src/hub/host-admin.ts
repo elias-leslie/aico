@@ -109,6 +109,9 @@ const COMMAND_TIMEOUT_MS = 30_000
 const SLEEP_TIMEOUT_MS = 120_000
 const CREATE_TIMEOUT_MS = 60_000
 const AGENT_HUB_TIMEOUT_MS = 10_000
+/** How often the hub looks at a sign-in session it opened, to end it once its
+ * shell has exited. */
+const SIGN_IN_FOLLOW_MS = 5_000
 const TOOL = /^[a-z0-9][a-z0-9-]{0,39}$/
 
 /** What host-admin needs from the hub. */
@@ -128,6 +131,8 @@ export interface HostAdminDeps {
   fetch?: typeof fetch
   readFile?: (path: string) => string
   log?: (message: string) => void
+  /** One-shot timer, injectable for tests. */
+  setTimer?: (fn: () => void, ms: number) => unknown
 }
 
 function shellQuote(word: string): string {
@@ -418,7 +423,31 @@ export class HostAdmin {
         code: 'inject_failed',
         reason: String(record(injected.body)?.reason ?? 'the command was not typed in'),
       }
+    else this.follow(name, socket, id, String(descriptor.generation))
     return [201, { host: name, session }]
+  }
+
+  /** A shell that exits leaves its session `uncertain`, still listed and
+   * keeping the host from idling off. Once the sign-in's shell has gone, end
+   * the session through the host's Tether so every client sees it end. Stops
+   * when the session ended, changed or the host went away. */
+  private follow(name: string, socket: string, id: string, generation: string): void {
+    const setTimer = this.deps.setTimer ?? ((fn, ms) => setTimeout(fn, ms).unref())
+    const path = `/v1/sessions/${encodeURIComponent(id)}`
+    const look = async () => {
+      const current = await this.peer(socket, 'GET', path, undefined)
+      const row = record(current.body)
+      if (current.status !== 200 || !row || row.generation !== generation) return
+      if (row.status === 'running' || row.status === 'pending') {
+        setTimer(() => void look().catch(() => undefined), SIGN_IN_FOLLOW_MS)
+        return
+      }
+      if (row.status !== 'uncertain') return
+      const ended = await this.peer(socket, 'POST', `${path}/end`, { generation })
+      this.log(`sign-in session ${id} on ${name} exited; ended it (${ended.status})`)
+      await this.deps.hub.sessions()
+    }
+    setTimer(() => void look().catch(() => undefined), SIGN_IN_FOLLOW_MS)
   }
 }
 

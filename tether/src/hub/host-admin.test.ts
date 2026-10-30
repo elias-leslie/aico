@@ -45,7 +45,9 @@ function setup(
   const fetches: { url: string; method: string; headers: Record<string, string> }[] = []
   const wakeHost = vi.fn(async () => {})
   const sessions = vi.fn(async () => options.sessions ?? [])
+  const timers: (() => void)[] = []
   const deps: HostAdminDeps = {
+    setTimer: (fn) => timers.push(fn),
     hub: {
       hosts: () => [{ name: 'vm-1', state: options.state ?? 'connected', control: CONTROL }],
       hostEntry: (name) => (name === 'vm-1' ? ENTRY : null),
@@ -86,7 +88,15 @@ function setup(
     },
     log: () => {},
   }
-  return { admin: new HostAdmin(deps), runs, peerCalls, fetches, wakeHost, sessions }
+  return {
+    timers,
+    admin: new HostAdmin(deps),
+    runs,
+    peerCalls,
+    fetches,
+    wakeHost,
+    sessions,
+  }
 }
 
 async function refusal(promise: Promise<unknown>): Promise<HttpError> {
@@ -192,6 +202,52 @@ describe('power', () => {
 })
 
 describe('sign in and out', () => {
+  it('ends a sign-in session once its shell has exited, and only then', async () => {
+    let status = 'running'
+    const { admin, peerCalls, sessions, timers } = setup({
+      peer: (method, path) => {
+        if (path === '/v1/sessions')
+          return { status: 201, body: { id: 'abcd1234', generation: 'g1', status: 'running' } }
+        if (method === 'GET') return { status: 200, body: { generation: 'g1', status } }
+        return { status: 200, body: { status: 'ended' } }
+      },
+    })
+    await admin.signInOut('vm-1', 'codex', { action: 'sign_in' })
+    const tick = async () => {
+      timers.shift()?.()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    }
+    await tick()
+    expect(peerCalls.map((call) => call.path)).not.toContain('/v1/sessions/abcd1234/end')
+    expect(timers).toHaveLength(1)
+    status = 'uncertain'
+    sessions.mockClear()
+    await tick()
+    expect(peerCalls.at(-1)).toEqual({
+      method: 'POST',
+      path: '/v1/sessions/abcd1234/end',
+      body: { generation: 'g1' },
+    })
+    expect(sessions).toHaveBeenCalled()
+    expect(timers).toHaveLength(0)
+  })
+
+  it('stops following a sign-in session that was replaced or ended elsewhere', async () => {
+    const { admin, peerCalls, timers } = setup({
+      peer: (method, path) =>
+        path === '/v1/sessions'
+          ? { status: 201, body: { id: 'abcd1234', generation: 'g1', status: 'running' } }
+          : method === 'GET'
+            ? { status: 200, body: { generation: 'g2', status: 'uncertain' } }
+            : { status: 200, body: {} },
+    })
+    await admin.signInOut('vm-1', 'codex', { action: 'sign_in' })
+    timers.shift()?.()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(peerCalls.map((call) => call.path)).not.toContain('/v1/sessions/abcd1234/end')
+    expect(timers).toHaveLength(0)
+  })
+
   it('signs in with a shell session on the host running the tool login', async () => {
     const { admin, peerCalls, sessions, fetches } = setup()
     const [status, answer] = await admin.signInOut('vm-1', 'codex', {
