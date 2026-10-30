@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  attachArgs,
-  attachTargetArgs,
   bracketedSubmitTextTargetArgs,
   captureArgs,
   capturePageTargetArgs,
@@ -9,12 +7,12 @@ import {
   HISTORY_LIMIT,
   hasSessionArgs,
   hasTargetArgs,
+  internalTarget,
   isDefinitiveTmuxAbsence,
   isTmuxTransportUnavailable,
   killArgs,
   killTargetArgs,
   listArgs,
-  listClientsArgs,
   listClientsTargetArgs,
   listSessionPanesArgs,
   listSessionPanesTargetArgs,
@@ -246,10 +244,6 @@ describe('tmux model', () => {
     ])
   })
 
-  it('attaches the client to an existing session (no relaunch)', () => {
-    expect(attachArgs('7')).toEqual([...INTERNAL_SOCKET_ARGS, 'attach-session', '-t', 'aico-7'])
-  })
-
   it('uses validated -S paths and rejects unsafe target socket references', () => {
     expect(hasTargetArgs({ socket: '/tmp/aico-test/tmux.sock', session: 'aico-7' })).toEqual([
       '-S',
@@ -269,7 +263,6 @@ describe('tmux model', () => {
 
   it('builds target commands for externally-owned default-socket sessions', () => {
     const target = { socket: null, session: EXTERNAL_WEB_SESSION }
-    expect(attachTargetArgs(target)).toEqual(['attach-session', '-t', EXTERNAL_WEB_SESSION])
     expect(captureTargetArgs(target).slice(0, 3)).toEqual([
       'capture-pane',
       '-t',
@@ -545,7 +538,7 @@ describe('tmux model', () => {
   })
 
   it("lists a session's attached clients and refreshes one for the manual Refresh", () => {
-    expect(listClientsArgs('7')).toEqual([
+    expect(listClientsTargetArgs(internalTarget('7'))).toEqual([
       ...INTERNAL_SOCKET_ARGS,
       'list-clients',
       '-t',

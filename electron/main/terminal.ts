@@ -28,8 +28,8 @@ interface PtySize {
 }
 
 // Clamp renderer-supplied terminal geometry to sane integers before it reaches
-// tmux (-x/-y) and node-pty: a non-integer, negative, NaN, or absurd value would
-// otherwise create a degenerate session or throw deep inside pty.resize.
+// tmux (-x/-y): a non-integer, negative, NaN, or absurd value would otherwise
+// create a degenerate session or a failed resize.
 const MAX_TERM_DIM = 1000
 function clampDim(n: number, fallback: number): number {
   return Number.isFinite(n) ? Math.min(MAX_TERM_DIM, Math.max(1, Math.floor(n))) : fallback

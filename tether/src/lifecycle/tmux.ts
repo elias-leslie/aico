@@ -1,4 +1,4 @@
-// tmux session model. Pure helpers (no electron/node-pty imports) so they
+// tmux session model. Pure helpers (no electron imports) so they
 // unit-test cheaply. Aico addresses its private server by an absolute socket
 // path, never by tmux's ambient TMUX_TMPDIR-dependent label resolution.
 
@@ -515,7 +515,7 @@ export function newDetachedTargetArgs(
     '-f',
     confPath,
     'new-session',
-    '-d', // detached; the node-pty client attaches separately
+    '-d', // detached; clients attach separately
     '-s',
     target.session,
     '-x',
@@ -644,24 +644,10 @@ export function isBoundedTerminalText(text: unknown): text is string {
   return true
 }
 
-/** `tmux` argv that attaches the node-pty client to an existing session. */
-export function attachArgs(widgetId: string): string[] {
-  return attachTargetArgs(internalTarget(widgetId))
-}
-
-export function attachTargetArgs(target: TmuxTarget): string[] {
-  return targetArgs(target, ['attach-session', '-t', target.session])
-}
-
 /**
- * `tmux` argv listing the client names attached to a widget's session, one per
- * line. Normally a single node-pty client; the refresh path iterates them so it
- * works even if more than one is somehow attached.
+ * `tmux` argv listing the clients attached to a session, one per line. The
+ * refresh path iterates them so it works whichever clients are attached.
  */
-export function listClientsArgs(widgetId: string): string[] {
-  return listClientsTargetArgs(internalTarget(widgetId))
-}
-
 export function listClientsTargetArgs(target: TmuxTarget, format = '#{client_name}'): string[] {
   return targetArgs(target, ['list-clients', '-t', target.session, '-F', format])
 }
