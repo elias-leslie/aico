@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import {
   ConnectionNotice,
@@ -97,5 +97,43 @@ describe('HostNotice', () => {
       />,
     )
     expect(screen.queryByTestId('host-notice')).toBeNull()
+  })
+
+  it('offers Power on for a host that is off, and says why it did not start', async () => {
+    let fail: (error: Error) => void = () => {}
+    const onPowerOn = vi.fn(
+      () =>
+        new Promise((_, reject) => {
+          fail = reject
+        }),
+    )
+    const onReconnect = vi.fn()
+    const { rerender } = render(
+      <HostNotice
+        away={{ host: 'agent-work', state: 'powered_off' }}
+        onReconnect={onReconnect}
+        onPowerOn={onPowerOn}
+      />,
+    )
+    expect(screen.getByText('agent-work is powered off')).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Reconnect' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Power on' }))
+    expect(onPowerOn).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: 'Powering on…' })).toBeDisabled()
+    await act(async () => fail(new Error('hosts.json has no wake command')))
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'hosts.json has no wake command',
+    )
+    expect(screen.getByRole('button', { name: 'Power on' })).toBeEnabled()
+    // Once the host is coming up, the notice says so.
+    rerender(
+      <HostNotice
+        away={{ host: 'agent-work', state: 'connecting' }}
+        onReconnect={onReconnect}
+        onPowerOn={onPowerOn}
+      />,
+    )
+    expect(screen.getByText('Connecting to agent-work…')).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Power on' })).toBeNull()
   })
 })

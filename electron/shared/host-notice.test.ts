@@ -22,5 +22,15 @@ describe('hostNoticeCopy', () => {
     expect(hostNoticeCopy('w', 'refused')?.reconnect).toBe(true)
     expect(hostNoticeCopy('w', 'connecting')?.reconnect).toBe(false)
     expect(hostNoticeCopy('w', 'identity_changed')?.reconnect).toBe(false)
+    expect(hostNoticeCopy('w', 'offline')?.powerOn).toBe(false)
+  })
+
+  it('offers Power on, not Reconnect, for a host that is powered off', () => {
+    expect(hostNoticeCopy('agent-work', 'powered_off')).toEqual({
+      title: 'agent-work is powered off',
+      detail: 'Power it on to get back to this session.',
+      reconnect: false,
+      powerOn: true,
+    })
   })
 })

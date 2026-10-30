@@ -15,6 +15,7 @@ import {
 import type { ConnectionStatus, HostAway } from '@/components/terminal.types'
 import { UnifiedTerminalHeaderContent as UnifiedTerminalHeader } from '@/components/terminal-header'
 import { type FilesRequest, setFilesOpener } from '@/lib/files-opener'
+import { powerHost } from '@/lib/hooks/use-host-admin'
 import type { TerminalFontSize } from '@/lib/hooks/use-terminal-settings'
 import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
 import {
@@ -285,6 +286,7 @@ export function SessionView({
             <HostNotice
               away={awayHere}
               onReconnect={() => handleRef.current?.reconnectHost()}
+              onPowerOn={() => powerHost(awayHere.host, 'on')}
             />
           )}
           {!chat &&

@@ -236,17 +236,41 @@ const hostNotice = document.getElementById('host-notice') as HTMLElement
 const hostTitle = document.getElementById('host-notice-title') as HTMLElement
 const hostDetail = document.getElementById('host-notice-detail') as HTMLElement
 const hostReconnect = document.getElementById('host-notice-reconnect') as HTMLButtonElement
+const hostPower = document.getElementById('host-notice-power') as HTMLButtonElement
+const hostError = document.getElementById('host-notice-error') as HTMLElement
+let noticeHost: string | null = null
 window.aico.pty.onHost(({ host, state }) => {
   const copy = host ? hostNoticeCopy(host, state) : null
   hostNotice.hidden = !copy
+  // A new state: Power on is fresh again (the host is coming up, back, or off).
+  hostPower.disabled = false
+  hostPower.textContent = 'Power on'
+  hostError.hidden = true
   if (!copy) return
+  noticeHost = host
   hostTitle.textContent = copy.title
   hostDetail.textContent = copy.detail
   hostReconnect.hidden = !copy.reconnect
+  hostPower.hidden = !copy.powerOn
 })
 hostReconnect.addEventListener('click', (event) => {
   event.stopPropagation()
   window.aico.pty.reconnect()
+})
+hostPower.addEventListener('click', (event) => {
+  event.stopPropagation()
+  const host = noticeHost
+  if (!host) return
+  hostPower.disabled = true
+  hostPower.textContent = 'Powering on…'
+  hostError.hidden = true
+  void window.aico.hosts.power(host, 'on').then((answer) => {
+    if (answer.ok) return
+    hostPower.disabled = false
+    hostPower.textContent = 'Power on'
+    hostError.textContent = answer.message || `Couldn’t power on ${host}.`
+    hostError.hidden = false
+  })
 })
 
 // (Re)attach the tmux session for this window at the current viewport size.

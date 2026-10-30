@@ -2,14 +2,23 @@
 // same on the desktop and the web app. `live` (or an unknown state) shows
 // nothing: the terminal is in use.
 
+type Notice = Omit<HostNoticeCopy, 'powerOn'> & { powerOn?: boolean }
+
 export interface HostNoticeCopy {
   title: string
   detail: string
   /** Offer Reconnect (try again now). */
   reconnect: boolean
+  /** Offer Power on instead (the host is off; Reconnect can't help). */
+  powerOn: boolean
 }
 
 export function hostNoticeCopy(host: string, state: string): HostNoticeCopy | null {
+  const copy = noticeFor(host, state)
+  return copy ? { ...copy, powerOn: copy.powerOn ?? false } : null
+}
+
+function noticeFor(host: string, state: string): Notice | null {
   switch (state) {
     case 'connecting':
       return {
@@ -26,8 +35,9 @@ export function hostNoticeCopy(host: string, state: string): HostNoticeCopy | nu
     case 'powered_off':
       return {
         title: `${host} is powered off`,
-        detail: 'Aico reconnects when the host is back on.',
-        reconnect: true,
+        detail: 'Power it on to get back to this session.',
+        reconnect: false,
+        powerOn: true,
       }
     case 'identity_changed':
       return {

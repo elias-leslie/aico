@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import type { ConnectionStatus, HostAway } from '@/components/terminal.types'
 import { hostNoticeCopy } from '../../../electron/shared/host-notice'
 
@@ -127,13 +128,36 @@ export function SizeHolderNotice({
 interface HostNoticeProps {
   away: HostAway
   onReconnect: () => void
+  /** Power the host on (it is off); rejects with the reason it didn't. */
+  onPowerOn?: () => Promise<unknown>
 }
 
 /** A remote session's host can't be reached: say which host and why, keep
- * the session's last output covered, and offer Reconnect where it helps. */
-export function HostNotice({ away, onReconnect }: HostNoticeProps) {
+ * the session's last output covered, and offer Reconnect where it helps, or
+ * Power on when the host is off. */
+export function HostNotice({ away, onReconnect, onPowerOn }: HostNoticeProps) {
   const copy = hostNoticeCopy(away.host, away.state)
+  const [powering, setPowering] = useState(false)
+  const [failure, setFailure] = useState<string | null>(null)
+  // The host moved on (connecting, back, or off again): the button is fresh.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset on a state change
+  useEffect(() => {
+    setPowering(false)
+  }, [away.state])
   if (!copy) return null
+  const powerOn = () => {
+    if (!onPowerOn) return
+    setPowering(true)
+    setFailure(null)
+    onPowerOn().catch((error: unknown) => {
+      setPowering(false)
+      setFailure(
+        error instanceof Error && error.message
+          ? error.message
+          : `Couldn’t power on ${away.host}.`,
+      )
+    })
+  }
   return (
     <div
       className="lantern-term-notice"
@@ -151,6 +175,21 @@ export function HostNotice({ away, onReconnect }: HostNoticeProps) {
         >
           Reconnect
         </button>
+      )}
+      {copy.powerOn && onPowerOn && (
+        <button
+          type="button"
+          className="lantern-btn primary"
+          disabled={powering}
+          onClick={powerOn}
+        >
+          {powering ? 'Powering on…' : 'Power on'}
+        </button>
+      )}
+      {failure && (
+        <p className="d" role="alert">
+          {failure}
+        </p>
       )}
     </div>
   )
