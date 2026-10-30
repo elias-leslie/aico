@@ -6,13 +6,14 @@ import { pillState, TONE_COLOR } from '@/lib/health'
 import { useHealth } from '@/lib/hooks/use-health'
 import { HealthSheet } from './HealthSheet'
 
-type Variant = 'icon' | 'pill' | 'row'
+type Variant = 'icon' | 'row'
 
-/** The Health entry: a square icon (rail), a short pill (session list
- * header) or a labelled row (phone list). Its colour is Nightshift's state. */
+/** The Health entry: a square icon with a problem count (session list header
+ * and rail) or a labelled row (session switcher). Its colour is Nightshift's
+ * state; the tooltip says it in words. */
 export function HealthButton({
   onClick,
-  variant = 'pill',
+  variant = 'icon',
 }: {
   onClick: () => void
   variant?: Variant
@@ -47,24 +48,10 @@ export function HealthButton({
         )}
       </button>
     )
-  const short =
-    variant === 'pill' && pill.count > 0 ? `Health ${pill.count}` : pill.label
   return (
     <button
       type="button"
-      className={
-        variant === 'row'
-          ? 'lantern-btn ghost small'
-          : 'inline-flex h-7 flex-none items-center gap-1.5 rounded-full px-2.5 text-[12px] transition-colors hover:bg-[var(--paper-veil)]'
-      }
-      style={
-        variant === 'pill'
-          ? {
-              border: `1px solid color-mix(in srgb, ${color} 40%, transparent)`,
-              color: pill.tone === 'quiet' ? 'var(--mist)' : color,
-            }
-          : undefined
-      }
+      className="lantern-btn ghost small"
       onClick={onClick}
       aria-label={pill.title}
       title={pill.title}
@@ -76,13 +63,13 @@ export function HealthButton({
         className="h-1.5 w-1.5 flex-none rounded-full"
         style={{ backgroundColor: color }}
       />
-      {variant === 'row' ? pill.label : short}
+      {pill.label}
     </button>
   )
 }
 
 /** The Health entry with its sheet, for places that stay mounted. */
-export function HealthLauncher({ variant = 'pill' }: { variant?: Variant }) {
+export function HealthLauncher({ variant = 'icon' }: { variant?: Variant }) {
   const [open, setOpen] = useState(false)
   return (
     <>
