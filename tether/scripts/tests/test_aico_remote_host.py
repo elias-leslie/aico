@@ -1,6 +1,7 @@
 """st aico on a remote host (hosts.json): create --host and the hub's remote roots."""
 
 import shlex
+import time
 
 import pytest
 from aico_cli_fixtures import admin, descriptor
@@ -48,7 +49,29 @@ def test_create_on_a_host_sends_the_host_outside_the_digest_and_waits_for_it(mon
     assert payload["host"] == "agent-work" and timeout == admin.HOST_CREATE_SECONDS
     # The digest the fixture computes ignores host, and the receipt matched it.
     assert output[0]["status"] == "running" and output[0]["host"] == "agent-work"
-    assert "power on" in capsys.readouterr().err
+    # The host answered at once: no word about powering on.
+    assert "power on" not in capsys.readouterr().err
+
+
+def test_a_slow_host_is_said_to_be_powering_on(monkeypatch, capsys):
+    monkeypatch.setattr(admin, "HOST_WAIT_NOTICE_SECONDS", 0.01)
+    monkeypatch.setattr(admin.Collector, "receipt", owner([], create=lambda payload: (
+        time.sleep(0.3), (200, descriptor(payload)))[1]))
+    monkeypatch.setattr(admin, "emit_json", lambda *_: None)
+    assert admin.main(on_host()) == 0
+    assert "st aico create: starting on agent-work; if it is off this waits for it to power on" in \
+        capsys.readouterr().err
+
+
+def test_a_create_the_host_refuses_says_refused(monkeypatch, capsys):
+    output = []
+    refusal = (422, {"error": "unknown_model", "reason": "pi on agent-work has no model nope/nope (pi --list-models)"})
+    monkeypatch.setattr(admin.Collector, "receipt", owner([], create=lambda _: refusal))
+    monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
+    assert admin.main(on_host()) == 1
+    assert output[0]["status"] == "refused" and output[0]["reason"] == "unknown_model"
+    assert output[0]["detail"] == "pi on agent-work has no model nope/nope (pi --list-models)"
+    assert capsys.readouterr().err == ""
 
 
 def test_a_tool_the_host_cannot_start_is_refused_before_the_create(monkeypatch, capsys):
@@ -84,7 +107,7 @@ def test_a_host_that_does_not_come_up_says_why(monkeypatch):
     monkeypatch.setattr(admin.Collector, "receipt", owner(calls, create=lambda _: refusal))
     monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
     assert admin.main(on_host()) == 1
-    assert output[0]["reason"] == "host_unavailable"
+    assert output[0]["status"] == "uncertain" and output[0]["reason"] == "host_unavailable"
     assert output[0]["detail"] == "agent-work did not come up within 240 s"
 
 

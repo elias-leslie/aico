@@ -563,6 +563,14 @@ def test_an_agent_host_is_known_by_its_credential_shims(monkeypatch, tmp_path):
     assert admin.agent_host() == "agent-work"
 
 
+def test_pi_without_a_model_is_refused_in_one_line(monkeypatch, capsys):
+    monkeypatch.setattr(admin.Collector, "receipt", lambda *_args, **_kwargs: pytest.fail("owner contacted"))
+    with pytest.raises(SystemExit) as exit_info:
+        admin.main(["create", "pi-1", "Read the brief.", "--tool", "pi", "--blank-slate", "--work-role", "review"])
+    assert exit_info.value.code == 2
+    assert capsys.readouterr().err == "st aico create: error: pi needs --model provider/model\n"
+
+
 def test_create_on_an_agent_host_refuses_another_host(monkeypatch, capsys):
     monkeypatch.setattr(admin.Collector, "receipt", lambda *_args, **_kwargs: pytest.fail("owner contacted"))
     monkeypatch.setenv("ST_AGENT_HOST", "agent-work")

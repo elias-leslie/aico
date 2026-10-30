@@ -139,7 +139,11 @@ owner returned a qualified refusal (`invalid_body`, `not_found`,
 loss or deadline after sending, `outcome_uncertain`, blocked End cleanup,
 `close_uncertain`, or any unqualified reply. A failure receipt reports
 `status: "uncertain"` because it does not vouch for the workload's current state,
-plus a content-free `reason`. No failed request is automatically retried. Exit
+plus a content-free `reason`. A create the owner refused outright (any `400` or
+`422`, `request_conflict`, `recovery_pending`, `agent_hub_unavailable`) created
+nothing and reports `status: "refused"`, with the owner's words in `detail`. A
+refusal before anything is sent is one `error:` line, without the usage. With
+`--host`, create says the host may be powering on only after 3 s without an answer. No failed request is automatically retried. Exit
 codes are 0 for a qualified receipt, 1 for owner/identity failure, and 2 for
 invalid input.
 

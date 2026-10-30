@@ -33,6 +33,7 @@ import shlex
 import signal
 import socket
 import subprocess
+import sys
 import threading
 import time
 import tomllib
@@ -119,6 +120,8 @@ class Unavailable(Exception):
     """Only a closed reason code leaves this exception boundary."""
 
     detail: str | None = None
+    # The owner answered with a refusal: nothing was created or changed.
+    refused: bool = False
 
 
 class IdentityChanged(Exception):
@@ -173,6 +176,10 @@ PGREP = "/usr/bin/pgrep"
 # A create on a host may first power it on and wait for it (hosts.json wakeTimeoutSec,
 # 240 s by default), then waits for the host's own create (tether/src/hub/hub.ts).
 HOST_CREATE_SECONDS = 420
+# How long a --host create waits for an answer before saying the host may be powering on.
+HOST_WAIT_NOTICE_SECONDS = 3
+# Refusals besides every 400 and 422: the owner created nothing.
+REFUSED_CREATES = frozenset({"request_conflict", "recovery_pending", "agent_hub_unavailable"})
 # Owner rejections that are definitive before any view or lifecycle effect.
 OWNER_REFUSALS = {400: {"invalid_body", "invalid_generation", "invalid_text"}, 404: {"not_found"},
                   409: {"stale_generation", "workload_unavailable", "busy", "owner_on_web",
@@ -1157,7 +1164,6 @@ TERMINAL_ADMIN = {
 
 
 def admin_stdin(collector: Collector) -> str:
-    import sys
 
     parts = bytearray()
     while True:
@@ -1426,59 +1432,64 @@ def create_main(argv: list[str]) -> int:
     # Older callers (SummitFlow before it dropped the web app surface) still pass `--surface aico`.
     parser.add_argument("--surface", choices=("aico",), default="aico", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
+
+    def refuse(message: str) -> typing.NoReturn:
+        """The options parsed: a refusal from here on is one line, without the usage."""
+        parser.exit(2, f"{parser.prog}: error: {message}\n")
+
     if args.work_role is not None and (not re.fullmatch(KEY, args.work_role) or args.work_role == "unknown"):
-        parser.error("expected a declared work role ID; unknown is reserved for legacy sessions")
+        refuse("expected a declared work role ID; unknown is reserved for legacy sessions")
     if args.work_role_name is not None and (not args.work_role or not args.work_role_name.strip()
             or len(args.work_role_name) > 128 or re.search(r"[\x00-\x1f\x7f]", args.work_role_name)):
-        parser.error("work role name must be 1-128 characters of single-line text")
+        refuse("work role name must be 1-128 characters of single-line text")
     if args.tool == "agent-hub":
         if args.agent is None:
-            parser.error("--tool agent-hub needs --agent SLUG")
+            refuse("--tool agent-hub needs --agent SLUG")
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,99}", args.agent):
-            parser.error("invalid agent slug")
+            refuse("invalid agent slug")
         if (args.resume_session is not None or args.reasoning_effort is not None
                 or args.daybreak is not None or args.agent_hub_context is not None):
-            parser.error("--tool agent-hub is a chat session: drop --resume-session, "
+            refuse("--tool agent-hub is a chat session: drop --resume-session, "
                          "--reasoning-effort, --daybreak and --agent-hub-context")
     elif args.agent is not None:
-        parser.error("--agent only goes with --tool agent-hub")
+        refuse("--agent only goes with --tool agent-hub")
     if args.blank_slate:
         if args.project_root is not None or args.resume_session is not None or args.agent_hub_context is not None:
-            parser.error("--blank-slate starts fresh in its own empty workspace; drop --project-root, "
+            refuse("--blank-slate starts fresh in its own empty workspace; drop --project-root, "
                          "--resume-session and --agent-hub-context")
         if args.project is None:
             # Agent Hub only knows registered projects; a chat's blank slate is its empty workspace.
             args.project = "agent-hub" if args.tool == "agent-hub" else "blank-slate"
     elif args.project is None or args.project_root is None:
-        parser.error("--project and --project-root are required unless --blank-slate")
+        refuse("--project and --project-root are required unless --blank-slate")
     if any(not re.fullmatch(KEY, value) for value in
            (args.request_id, args.project, args.role, *(v for v in (args.lead_root, args.facet) if v is not None))):
-        parser.error("invalid root metadata")
+        refuse("invalid root metadata")
     if args.blank_slate:
         args.project_root = (hub_blank_slate_workspace(args.request_id) if args.tool == "agent-hub"
                              else blank_slate_workspace(args.request_id))
     if (not os.path.isabs(args.project_root) or os.path.normpath(args.project_root) != args.project_root
             or "\0" in args.project_root):
-        parser.error("project root must be an exact normalized absolute path")
+        refuse("project root must be an exact normalized absolute path")
     if args.resume_session is not None and not re.fullmatch(KEY, args.resume_session):
-        parser.error("resume requires a bounded exact native session ID")
+        refuse("resume requires a bounded exact native session ID")
     if args.model is not None and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}", args.model):
-        parser.error("invalid model identifier")
+        refuse("invalid model identifier")
     if args.tool == "pi" and not (args.model and re.fullmatch(PI_MODEL, args.model)):
         # Pi has no default model to fall back on, here or on a host: Tether would answer invalid_body.
-        parser.error(PI_MODEL_REASON)
+        refuse(PI_MODEL_REASON)
     if args.stdin and args.prompt is not None:
-        parser.error("conflicting prompt options")
+        refuse("conflicting prompt options")
     if args.host is not None and not re.fullmatch(HOST_NAME, args.host):
-        parser.error("--host expects a host name from ~/.config/tether/hosts.json")
+        refuse("--host expects a host name from ~/.config/tether/hosts.json")
     if args.host is not None and (here := agent_host()):
         # A host's Tether reaches no other host; the workstation's hub does.
-        parser.error(f"--host works from the workstation only; on agent host {here}, "
+        refuse(f"--host works from the workstation only; on agent host {here}, "
                      "st aico create without --host starts the session on this host")
     try:
         endpoint = owner_endpoint(args.root_socket)
     except argparse.ArgumentTypeError as error:
-        parser.error(f"invalid owner transport configuration: {error}")
+        refuse(f"invalid owner transport configuration: {error}")
     receipt_seconds = HOST_CREATE_SECONDS if args.host else 10
     collector = Collector(endpoint, "", "", time.monotonic() + receipt_seconds + 5, threading.Event())
     output = {"owner": "aico", "requestId": args.request_id}
@@ -1489,29 +1500,29 @@ def create_main(argv: list[str]) -> int:
         if prompt is None and args.resume_session:
             prompt = "Resume this exact saved session. Reconcile current state after the crash before continuing."
         if (problem := prompt_error(prompt)) is not None:
-            parser.error(problem)
+            refuse(problem)
         if args.host:
             # This computer's Codex and Pi logins say nothing about the host's; ask its Tether.
             if (reason := host_tool_unavailable(collector, endpoint, args.host, args.tool)):
-                parser.error(reason)
+                refuse(reason)
         elif args.tool == "pi" and (reason := pi_provider_unavailable(args.model)):
             # Nothing reaches Tether, so the same request id can be retried with the right provider.
-            parser.error(reason)
+            refuse(reason)
         if not args.host and args.tool == "pi" and (block := opencode_go_quota_block(args.model)):
             # Nothing reaches Tether, so the same request id can be retried after the reset.
-            parser.error(f"opencode-go quota is used up ({block}); pick another model or launch after the reset")
+            refuse(f"opencode-go quota is used up ({block}); pick another model or launch after the reset")
         if not args.host and args.tool == "codex" and (reason := codex_model_unavailable(args.model)):
             # Nothing reaches Tether, so the same request id can be retried with the right model.
-            parser.error(reason)
+            refuse(reason)
         if (not args.host and args.tool == "codex" and args.daybreak == "on"
                 and (reason := codex_daybreak_unavailable(args.model))):
-            parser.error(reason)
+            refuse(reason)
         instructions = None
         if args.instructions is not None:
             try:
                 instructions = resolve_instructions(args.instructions)
             except ValueError as error:
-                parser.error(str(error))
+                refuse(str(error))
         payload = {"requestId": args.request_id, "tool": args.tool, "projectId": args.project,
                    "projectRoot": args.project_root, "initialPrompt": prompt, "role": args.role,
                    "leadRootReference": args.lead_root, "facetCapsuleRef": args.facet}
@@ -1546,11 +1557,17 @@ def create_main(argv: list[str]) -> int:
             payload["agentSlug"] = args.agent
             fields.append({"agentSlug": args.agent})
         digest = hashlib.sha256(json.dumps(fields, ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()
+        # Said only once the host is slow to answer (powering on): a refusal comes back at once.
+        waiting = threading.Timer(HOST_WAIT_NOTICE_SECONDS, lambda: print(
+            f"st aico create: starting on {args.host}; if it is off this waits for it to power on "
+            f"(up to {HOST_CREATE_SECONDS // 60} min)", file=sys.stderr, flush=True))
         if args.host:
-            import sys
-            print(f"st aico create: starting on {args.host}; if it is off this waits for it to power on "
-                  f"(up to {HOST_CREATE_SECONDS // 60} min)", file=sys.stderr, flush=True)
-        status, data = collector.receipt(endpoint, "/v1/roots", payload, timeout=receipt_seconds)
+            waiting.daemon = True
+            waiting.start()
+        try:
+            status, data = collector.receipt(endpoint, "/v1/roots", payload, timeout=receipt_seconds)
+        finally:
+            waiting.cancel()
         errors = {400: ("invalid_body", "unsupported_tool", "work_role_required", "prompt_too_long", "unknown_host"),
                   409: ("request_conflict", "recovery_pending", "host_unavailable", "outcome_uncertain"),
                   422: ("launch_unavailable", "unknown_agent", "unknown_model"),
@@ -1570,6 +1587,7 @@ def create_main(argv: list[str]) -> int:
             refusal = Unavailable(reason)
             # The hub's own words for why the host could not take it (host_unavailable).
             refusal.detail = reason_detail(data.get("reason"))
+            refusal.refused = status in (400, 422) or reason in REFUSED_CREATES
             raise refusal
         host = data.get("hostIdentity")
         generation = data.get("generation")
@@ -1609,9 +1627,11 @@ def create_main(argv: list[str]) -> int:
         emit_json(collector, output)
         return 0
     except (ValueError, UnicodeError):
-        parser.error("invalid prompt or UTF-8 input")
+        refuse("invalid prompt or UTF-8 input")
     except (Unavailable, Stopped) as error:
-        output.update(status="uncertain", reason=str(error) if isinstance(error, Unavailable) else "deadline")
+        refused = isinstance(error, Unavailable) and error.refused
+        output.update(status="refused" if refused else "uncertain",
+                      reason=str(error) if isinstance(error, Unavailable) else "deadline")
         if isinstance(error, Unavailable) and error.detail:
             output["detail"] = error.detail
         emit_unless_stopped(collector, output)
@@ -2265,7 +2285,6 @@ def wake_main(argv: list[str]) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    import sys
 
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] == "sessions":
