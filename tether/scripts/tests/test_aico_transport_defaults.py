@@ -4,8 +4,7 @@ import json
 import os
 
 import pytest
-from test_aico_admin import admin
-from test_aico_create import BASE, descriptor
+from aico_cli_fixtures import BASE, admin, descriptor
 
 WIDGET = "aabbcc01"
 GENERATION = "a" * 64

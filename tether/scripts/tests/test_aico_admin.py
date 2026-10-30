@@ -1,26 +1,16 @@
 """Private owner protocol fixtures only; no existing Aico or tmux connections."""
 
-import importlib.util
 import json
 import os
 import socketserver
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler
-from pathlib import Path
 
 import pytest
-
-SPEC = importlib.util.spec_from_file_location(
-    "aico_admin_fixture", Path(__file__).resolve().parents[1] / "aico-root-watch.py"
-)
-assert SPEC is not None and SPEC.loader is not None
-admin = importlib.util.module_from_spec(SPEC)
-sys.modules[SPEC.name] = admin
-SPEC.loader.exec_module(admin)
+from aico_cli_fixtures import THREAD, admin
 
 GENERATION = "a" * 64
-THREAD = "00000000-0000-4000-8000-000000000001"
 CAPABILITY = {
     "available": False, "reason": "native_tui_atomic_compare_and_apply_unavailable",
     "operations": ["clear", "submit"], "framing": "bracketed_paste",

@@ -3,7 +3,7 @@
 import datetime
 
 import pytest
-from test_aico_admin import admin
+from aico_cli_fixtures import admin
 
 NOW = datetime.datetime(2026, 10, 26, 17, 0, tzinfo=datetime.timezone(datetime.timedelta(hours=-4)))
 

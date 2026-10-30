@@ -6,7 +6,7 @@ import threading
 from http.server import BaseHTTPRequestHandler
 
 import pytest
-from test_aico_admin import admin
+from aico_cli_fixtures import admin
 
 WIDGET = "aabbcc01"
 GENERATION = "a" * 64

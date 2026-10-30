@@ -1,23 +1,12 @@
 """Agent Hub chat roots through the Aico CLI: create, send and roots status, fixtures only."""
 
 import hashlib
-import importlib.util
 import json
-import sys
 import threading
 import time
-from pathlib import Path
 
 import pytest
-from test_aico_admin import admin
-from test_aico_create import descriptor
-
-SPEC = importlib.util.spec_from_file_location(
-    "aico_root_watch_hub", Path(__file__).resolve().parents[1] / "aico-root-watch.py")
-assert SPEC is not None and SPEC.loader is not None
-watcher = importlib.util.module_from_spec(SPEC)
-sys.modules[SPEC.name] = watcher
-SPEC.loader.exec_module(watcher)
+from aico_cli_fixtures import admin, descriptor
 
 HUB = ["create", "hub-1", "Say hello.", "--tool", "agent-hub", "--agent", "chat", "--project", "sample-app",
        "--project-root", "/fixture/project", "--work-role", "implementation"]
@@ -177,7 +166,7 @@ def test_send_reports_whether_the_follow_up_was_queued(monkeypatch, queued):
 
 # roots status: no pane; the turn state stands in for the screen.
 def hub_collector():
-    return watcher.Collector("/fixture/root", "/fixture/owner", "/fixture/tmux", time.monotonic() + 2, threading.Event())
+    return admin.Collector("/fixture/root", "/fixture/owner", "/fixture/tmux", time.monotonic() + 2, threading.Event())
 
 
 def serve(monkeypatch, state="working", **override):
@@ -188,7 +177,7 @@ def serve(monkeypatch, state="working", **override):
             return 200, {"owner": "aico", "roots": [ROOT]}
         return (200, ROOT) if "/roots/" in route else (200, session)
 
-    monkeypatch.setattr(watcher.Collector, "receipt", receipt)
+    monkeypatch.setattr(admin.Collector, "receipt", receipt)
     return session
 
 
@@ -199,7 +188,7 @@ def test_roots_reports_the_turn_state_of_an_agent_hub_root(monkeypatch, state, t
     resolved, unavailable = hub_collector().discover(None)
     assert unavailable == [] and len(resolved) == 1
     pin, child = resolved[0]
-    assert isinstance(pin, watcher.HubPin) and pin.widgetId == "aabbcc01"
+    assert isinstance(pin, admin.HubPin) and pin.widgetId == "aabbcc01"
     sample = child.sample(pin)
     assert sample["observation"] == "available" and sample["identity"] == "pinned"
     assert sample["terminal"] == terminal and sample["backend"] == "agent-hub"
@@ -209,8 +198,8 @@ def test_roots_reports_the_turn_state_of_an_agent_hub_root(monkeypatch, state, t
 def test_roots_snapshot_emits_the_agent_hub_record(monkeypatch):
     serve(monkeypatch, "idle")
     output = []
-    monkeypatch.setattr(watcher, "emit_json", lambda _, row: output.append(row))
-    assert watcher.roots_main(["--root-socket", "/fixture/root", "--owner-socket", "/fixture/owner"]) == 0
+    monkeypatch.setattr(admin, "emit_json", lambda _, row: output.append(row))
+    assert admin.roots_main(["--root-socket", "/fixture/root", "--owner-socket", "/fixture/owner"]) == 0
     [record] = output[0]["roots"]
     assert record["requestId"] == "hub-1" and record["terminal"] == "turn_finished"
 

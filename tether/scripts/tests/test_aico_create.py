@@ -1,6 +1,5 @@
 """Exact root create, with private owner fixtures only; no running panes."""
 
-import hashlib
 import json
 import shutil
 import socketserver
@@ -9,11 +8,7 @@ from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 
 import pytest
-from test_aico_admin import admin
-
-THREAD = "00000000-0000-4000-8000-000000000001"
-BASE = ["create", "recovery-1", "Reconcile after crash.", "--tool", "codex", "--project", "sample-app",
-        "--project-root", "/fixture/project", "--work-role", "implementation", "--resume-session", THREAD]
+from aico_cli_fixtures import BASE, THREAD, admin, descriptor
 
 
 @pytest.fixture(autouse=True)
@@ -32,28 +27,6 @@ def fake_process(proc, pid, ppid, environ):
     (proc / str(pid)).mkdir()
     (proc / str(pid) / "stat").write_text(f"{pid} (codex (x) y) S {ppid} 1 1 0\n")
     (proc / str(pid) / "environ").write_bytes(b"\0".join(f"{k}={v}".encode() for k, v in environ.items()) + b"\0")
-
-
-def descriptor(payload, owner="aico"):
-    fields = [payload[k] for k in ("tool", "projectId", "projectRoot", "initialPrompt", "role", "leadRootReference", "facetCapsuleRef")]
-    if payload.get("resumeSessionId"):
-        fields.append(payload["resumeSessionId"])
-    if payload.get("model") or payload.get("reasoningEffort") or payload.get("daybreak") is not None or payload.get("agentHubContext") is not None:
-        fields.append({"model": payload.get("model"), "reasoningEffort": payload.get("reasoningEffort"),
-                       **({"daybreak": payload["daybreak"]} if payload.get("daybreak") is not None else {}),
-                       **({"agentHubContext": payload["agentHubContext"]} if payload.get("agentHubContext") is not None else {})})
-    if payload.get("workRole"):
-        fields.append({"workRole": payload.get("workRole"), "workRoleDisplayName": payload.get("workRoleDisplayName")})
-    if payload.get("instructions"):
-        fields.append({"instructions": payload["instructions"]["revision"]})
-    return {"owner": owner, "requestId": payload["requestId"],
-            "digest": hashlib.sha256(json.dumps(fields, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest(),
-            "hostIdentity": "12345678",
-            "logicalSessionId": "aico-root-" + THREAD, "generation": "a" * 64,
-            "surfaceLocator": "aico://widget/12345678",
-            "status": "running", "role": payload["role"],
-            "workRole": payload.get("workRole"), "workRoleDisplayName": payload.get("workRoleDisplayName"),
-            "leadRootReference": payload["leadRootReference"], "facetCapsuleRef": payload["facetCapsuleRef"]}
 
 
 def test_exact_create_is_one_content_free_request_with_no_fleet_ledger(monkeypatch):

@@ -3,7 +3,7 @@
 import json
 
 import pytest
-from test_aico_admin import admin
+from aico_cli_fixtures import admin
 
 ROOT = "root-fixture"
 GENERATION = "a" * 64

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import os
 import signal
@@ -12,17 +11,9 @@ import threading
 import time
 from contextlib import ExitStack, contextmanager
 from http.server import BaseHTTPRequestHandler
-from pathlib import Path
 
 import pytest
-
-SPEC = importlib.util.spec_from_file_location(
-    "aico_root_watch", Path(__file__).resolve().parents[1] / "aico-root-watch.py"
-)
-assert SPEC is not None and SPEC.loader is not None
-watcher = importlib.util.module_from_spec(SPEC)
-sys.modules[SPEC.name] = watcher
-SPEC.loader.exec_module(watcher)
+from aico_cli_fixtures import admin as watcher
 
 PIN_DATA = {
     "requestId": "fixture-root",
