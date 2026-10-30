@@ -585,8 +585,33 @@ export class TerminalHub {
       detach()
     }
 
+    // An automated socket's claim while it may not claim: the real holder may
+    // have left since (closing claims nothing), so ask again before ignoring it.
+    let rechecking = false
+    const recheck = async (message: Record<string, unknown>) => {
+      const current = link
+      if (!current || rechecking) return
+      rechecking = true
+      try {
+        const at = await sizeAtAttach({
+          tether,
+          id: sessionId,
+          generation: () => generation,
+          link: current,
+        })
+        if (link !== current || !isCurrent()) return
+        if (!at.claim && !this.heldByAutomated(sessionId, at.holder?.clientPid)) return
+        mayClaim = true
+        handle({ kind: 'control', message })
+      } finally {
+        rechecking = false
+      }
+    }
+
     const handle = (message: ClientMessage) => {
       const control = message.kind === 'control' ? message.message : null
+      if (automated && !mayClaim && control?.claim === true && isCurrent())
+        return void recheck(control)
       // An automated browser sizes and claims only when that takes nothing
       // from a real view.
       const sizing = control !== null && mayClaim

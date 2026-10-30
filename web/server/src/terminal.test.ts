@@ -490,15 +490,60 @@ describe('terminal socket', () => {
     await agent.next(
       (f) => (f.size_holder as { size?: { cols: number } } | undefined)?.size?.cols === 150,
     )
+    tether.holder = {
+      generation: 'g1',
+      holder: {
+        clientPid: 4243,
+        cols: 150,
+        rows: 50,
+        generation: 'g1',
+        claimedAt: '',
+        viewer: { app: 'web', device: 'Chrome on Linux' },
+      },
+    }
 
     // Now a real view holds it: the agent's typing, resizes and Use here take nothing.
     agent.ws.send(ctrl({ resize: { cols: 46, rows: 30 }, claim: true }))
     agent.ws.send('typed')
     await until(() => links[0].written.length === 1)
+    await until(() => tether.callsOf('resizeHolder').length === 3)
     expect(links[0].resized).toEqual([{ cols: 46, rows: 37 }])
     expect(tether.callsOf('resizeClaim')).toHaveLength(2)
     agent.ws.close()
     owner.ws.close()
+  })
+
+  it('an automated claim counts once the real holder has left', async () => {
+    const session = tether.add()
+    tether.holder = {
+      generation: 'g1',
+      holder: {
+        clientPid: 7,
+        cols: 150,
+        rows: 50,
+        generation: 'g1',
+        claimedAt: '',
+        viewer: { app: 'web', device: 'Chrome on Linux' },
+      },
+    }
+    windowState = { cols: 150, rows: 50, pinned: true, clients: [4242, 7] }
+    const agent = open(session.id, {
+      Origin: ORIGIN,
+      'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) HeadlessChrome/147.0.0.0 Safari/537.36',
+    })
+    await agent.next((f) => f.transport === 'control')
+    agent.ws.send(ctrl({ resize: { cols: 46, rows: 37 } }))
+    await agent.next((f) => 'size_holder' in f)
+    agent.ws.send(ctrl({ resize: { cols: 46, rows: 37 }, claim: true }))
+    await until(() => tether.callsOf('resizeHolder').length === 2)
+    expect(tether.callsOf('resizeClaim')).toHaveLength(0)
+
+    // The owner's view closed (its client is gone): Use here takes the size.
+    windowState = { cols: 150, rows: 50, pinned: true, clients: [4242] }
+    agent.ws.send(ctrl({ resize: { cols: 46, rows: 37 }, claim: true }))
+    await until(() => tether.callsOf('resizeClaim').length === 1)
+    expect(tether.callsOf('resizeClaim')[0].slice(2, 5)).toEqual([4242, 46, 37])
+    agent.ws.close()
   })
 
   it("the page's automated flag counts as a headless user agent", async () => {
